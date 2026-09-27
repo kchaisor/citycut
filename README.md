@@ -32,7 +32,7 @@ Building height, in order:
 
 Building colour follows use: residential, office/commercial, retail, industrial, education, civic/community, mixed-use, and other/unknown. The tags are `building`, `building:use`, `amenity`, `shop`, and `office`, with `landuse` only when the building tag itself does not say. The 3D view has a legend and a switch back to the single off-white. glTF keeps one material per use. The Rhino file puts each use on a sublayer such as `Buildings::Residential`.
 
-Roads are asphalt, `#3a3a3a`, with local streets and footways a step lighter. On a heightfield they are split so a long run follows the surface, and they sit in a fixed stack a few centimetres above the terrain, parks, and water so those faces do not flicker.
+Roads are asphalt, `#3a3a3a`, with local streets and footways a step lighter. The ribbon faces upward whichever way the OSM way was drawn. On a heightfield it is split so a long run follows the surface, and it sits a few centimetres above the terrain, parks, and water. Roads do not use a depth bias: a large one clips the ribbon when the camera is low, and the street disappears.
 
 Heights are capped between 3 m and 420 m. With Terrain off, the ground is a flat slab and exports match that flat model. With Terrain on, buildings are extruded from the lowest DEM sample on the footprint, trees sit on the sample at the trunk, and roads, rail, parks, and water are draped a few centimetres above the surface. Multipolygon buildings, parks, and water bodies are stitched when the relation is small enough to assemble (80 members or fewer).
 

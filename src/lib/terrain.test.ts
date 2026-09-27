@@ -294,13 +294,22 @@ describe("terrain in the model", () => {
       const roadPosition = roads.geometry.getAttribute("position");
       let sawLow = false;
       let sawHigh = false;
-      for (let i = 0; i < roadPosition.count; i++) {
-        const y = roadPosition.getY(i);
-        if (y < base + 1) sawLow = true;
-        if (y > sampleTerrain(field, 40, 0, 100)) sawHigh = true;
+      let minNormalY = Infinity;
+      for (let i = 0; i + 2 < roadPosition.count; i += 3) {
+        for (const vertex of [i, i + 1, i + 2]) {
+          const y = roadPosition.getY(vertex);
+          if (y < base + 1) sawLow = true;
+          if (y > sampleTerrain(field, 40, 0, 100)) sawHigh = true;
+        }
+        const e1z = roadPosition.getZ(i + 1) - roadPosition.getZ(i);
+        const e1x = roadPosition.getX(i + 1) - roadPosition.getX(i);
+        const e2z = roadPosition.getZ(i + 2) - roadPosition.getZ(i);
+        const e2x = roadPosition.getX(i + 2) - roadPosition.getX(i);
+        minNormalY = Math.min(minNormalY, e1z * e2x - e1x * e2z);
       }
       expect(sawLow).toBe(true);
       expect(sawHigh).toBe(true);
+      expect(minNormalY).toBeGreaterThan(0);
     } finally {
       disposeObject(group);
     }
