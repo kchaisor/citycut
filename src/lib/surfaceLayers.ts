@@ -3,8 +3,10 @@ import type { RoadGrade } from "../types";
 /**
  * Draw order for surfaces that share the ground plane.
  * `lift` is metres above the terrain sample (or above the flat slab top).
- * Negative polygon offset pulls a surface toward the camera so it wins
- * a depth test against the layer below. `renderOrder` draws later layers after.
+ * A small negative polygon offset pulls a broad surface toward the camera.
+ * Roads and rail leave it at zero: a large bias clips a near-horizontal
+ * ribbon when the camera is low, so the street vanishes. Their lift is
+ * what keeps them above the ground. `renderOrder` draws later layers after.
  * Bottom to top: terrain, green, water, paths, local streets, arterials, rail.
  * Building floors sit just above the terrain so their underside is not coplanar with it.
  */
@@ -20,10 +22,10 @@ export const SURFACE = {
   ground: { lift: 0, polygonOffsetFactor: 1, polygonOffsetUnits: 1, renderOrder: 0 },
   green: { lift: 0.045, polygonOffsetFactor: -1, polygonOffsetUnits: -2, renderOrder: 1 },
   water: { lift: 0.09, polygonOffsetFactor: -2, polygonOffsetUnits: -4, renderOrder: 2 },
-  path: { lift: 0.14, polygonOffsetFactor: -3, polygonOffsetUnits: -6, renderOrder: 3 },
-  local: { lift: 0.17, polygonOffsetFactor: -4, polygonOffsetUnits: -8, renderOrder: 4 },
-  arterial: { lift: 0.2, polygonOffsetFactor: -5, polygonOffsetUnits: -10, renderOrder: 5 },
-  rail: { lift: 0.24, polygonOffsetFactor: -6, polygonOffsetUnits: -12, renderOrder: 6 },
+  path: { lift: 0.14, polygonOffsetFactor: 0, polygonOffsetUnits: 0, renderOrder: 3 },
+  local: { lift: 0.17, polygonOffsetFactor: 0, polygonOffsetUnits: 0, renderOrder: 4 },
+  arterial: { lift: 0.2, polygonOffsetFactor: 0, polygonOffsetUnits: 0, renderOrder: 5 },
+  rail: { lift: 0.24, polygonOffsetFactor: 0, polygonOffsetUnits: 0, renderOrder: 6 },
   building: { lift: 0.03, polygonOffsetFactor: -2, polygonOffsetUnits: -4, renderOrder: 8 },
 } as const satisfies Record<string, SurfaceLayer>;
 

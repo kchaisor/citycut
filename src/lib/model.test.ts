@@ -126,6 +126,20 @@ describe("parse", () => {
     expect(parsed.roads).toHaveLength(1);
     expect(parsed.roadKm).toBeGreaterThan(0.3);
     expect(parsed.roadKm).toBeLessThan(0.5);
+
+    const roadGroup = buildCityGroup({ ...parsed, placeLabel: "Test" });
+    try {
+      const roadMesh = roadGroup.getObjectByName("Roads") as THREE.Mesh;
+      expect(roadMesh).toBeTruthy();
+      const stats = roadSurface(roadMesh);
+      expect(stats.triangles).toBeGreaterThan(0);
+      expect(stats.area).toBeGreaterThan(400 * 5.5 * 0.8);
+      expect(stats.minNormalY).toBeGreaterThan(0);
+      expect(stats.minY).toBeGreaterThan(0.1);
+      expect(stats.maxY).toBeLessThan(0.4);
+    } finally {
+      disposeObject(roadGroup);
+    }
     const back = toLocal(parsed.center.lat, parsed.center.lon, origin);
     expect(back[0]).toBeCloseTo(0);
     expect(back[1]).toBeCloseTo(0);
@@ -182,7 +196,114 @@ describe("parse", () => {
     expect(parsed.areas).toHaveLength(1);
     expect(parsed.areas[0].kind).toBe("water");
   });
+
+  it("builds upward, non-degenerate road ribbons from sample OSM ways", () => {
+    const parsed = parseCity(
+      {
+        elements: [
+          {
+            type: "way",
+            id: 1,
+            tags: { highway: "primary" },
+            geometry: geom([
+              [-80, -40],
+              [-80, 60],
+            ]),
+          },
+          {
+            type: "way",
+            id: 2,
+            tags: { highway: "residential" },
+            geometry: geom([
+              [-40, 10],
+              [70, 10],
+            ]),
+          },
+          {
+            type: "way",
+            id: 3,
+            tags: { highway: "footway" },
+            geometry: geom([
+              [20, -50],
+              [-30, -50],
+            ]),
+          },
+        ],
+      },
+      origin,
+      200,
+      { buildings: false, roads: true, waterGreen: false, trees: false },
+    );
+    expect(parsed.roads.map((road) => road.grade).sort()).toEqual(["arterial", "local", "path"]);
+    const group = buildCityGroup({ ...parsed, placeLabel: "Test" });
+    try {
+      const meshes: THREE.Mesh[] = [];
+      group.traverse((object) => {
+        const mesh = object as THREE.Mesh;
+        if (mesh.isMesh && mesh.name === "Roads") meshes.push(mesh);
+      });
+      expect(meshes).toHaveLength(3);
+      let area = 0;
+      const colors = new Set<string>();
+      for (const mesh of meshes) {
+        const stats = roadSurface(mesh);
+        expect(stats.vertices).toBeGreaterThanOrEqual(6);
+        expect(stats.minNormalY).toBeGreaterThan(0);
+        expect(stats.minY).toBeGreaterThan(0.1);
+        expect(stats.maxY).toBeLessThan(0.35);
+        area += stats.area;
+        const material = mesh.material as THREE.MeshStandardMaterial;
+        expect(material.polygonOffset).toBe(false);
+        const hex = material.color.getHexString();
+        expect(hex).not.toBe("e6e0d4");
+        colors.add(hex);
+      }
+      expect(colors).toEqual(new Set(["3a3a3a", "4a4a4a", "5c5c5c"]));
+      // 100 m × 12 m + 110 m × 5.5 m + 50 m × 1.8 m
+      expect(area).toBeGreaterThan(1800);
+      expect(area).toBeLessThan(2000);
+    } finally {
+      disposeObject(group);
+    }
+  });
 });
+
+function roadSurface(mesh: THREE.Mesh) {
+  const position = mesh.geometry.getAttribute("position");
+  let area = 0;
+  let triangles = 0;
+  let minNormalY = Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (let i = 0; i + 2 < position.count; i += 3) {
+    const ax = position.getX(i);
+    const ay = position.getY(i);
+    const az = position.getZ(i);
+    const bx = position.getX(i + 1);
+    const by = position.getY(i + 1);
+    const bz = position.getZ(i + 1);
+    const cx = position.getX(i + 2);
+    const cy = position.getY(i + 2);
+    const cz = position.getZ(i + 2);
+    const e1x = bx - ax;
+    const e1y = by - ay;
+    const e1z = bz - az;
+    const e2x = cx - ax;
+    const e2y = cy - ay;
+    const e2z = cz - az;
+    const nx = e1y * e2z - e1z * e2y;
+    const ny = e1z * e2x - e1x * e2z;
+    const nz = e1x * e2y - e1y * e2x;
+    const tri = 0.5 * Math.hypot(nx, ny, nz);
+    area += tri;
+    triangles += 1;
+    minNormalY = Math.min(minNormalY, ny);
+    minY = Math.min(minY, ay, by, cy);
+    maxY = Math.max(maxY, ay, by, cy);
+    expect(tri).toBeGreaterThan(0.5);
+  }
+  return { area, triangles, minNormalY, minY, maxY, vertices: position.count };
+}
 
 describe("exports", () => {
   const model: CityModel = {
@@ -217,7 +338,7 @@ describe("exports", () => {
     expect(roads).toBeTruthy();
     const roadMaterial = (roads as THREE.Mesh).material as THREE.MeshStandardMaterial;
     expect(roadMaterial.color.getHexString()).toBe("4a4a4a");
-    expect(roadMaterial.polygonOffset).toBe(true);
+    expect(roadMaterial.polygonOffset).toBe(false);
     buildings!.updateWorldMatrix(true, true);
     const position = (buildings as { geometry?: { attributes?: { position?: { count: number } } } }).geometry;
     expect(position?.attributes?.position?.count).toBeGreaterThan(0);

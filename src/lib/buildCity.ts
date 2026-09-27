@@ -95,7 +95,16 @@ function ribbonPositions(
     const aR = corner(a[0] - px, a[1] - py);
     const bL = corner(b[0] + px, b[1] + py);
     const bR = corner(b[0] - px, b[1] - py);
-    positions.push(...aL, ...bL, ...bR, ...aL, ...bR, ...aR);
+    // Y is up. OSM ways run either direction, and a draped quad can twist,
+    // so each triangle is flipped until its normal points at the sky.
+    // Otherwise FrontSide culls about half the carriageways.
+    const pushUp = (p: [number, number, number], q: [number, number, number], r: [number, number, number]) => {
+      const ny = (q[2] - p[2]) * (r[0] - p[0]) - (q[0] - p[0]) * (r[2] - p[2]);
+      if (ny >= 0) positions.push(...p, ...q, ...r);
+      else positions.push(...p, ...r, ...q);
+    };
+    pushUp(aL, bL, bR);
+    pushUp(aL, bR, aR);
   }
   return positions;
 }
@@ -228,6 +237,7 @@ function drapedAreaGeometry(
 }
 
 function paint(material: THREE.MeshStandardMaterial, layer: { polygonOffsetFactor: number; polygonOffsetUnits: number }) {
+  if (layer.polygonOffsetFactor === 0 && layer.polygonOffsetUnits === 0) return material;
   material.polygonOffset = true;
   material.polygonOffsetFactor = layer.polygonOffsetFactor;
   material.polygonOffsetUnits = layer.polygonOffsetUnits;

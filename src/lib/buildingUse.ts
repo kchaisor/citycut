@@ -14,18 +14,23 @@ export const BUILDING_USES = [
 /** Previous single colour, used when the use colours are turned off. */
 export const UNIFORM_BUILDING_COLOR = "#f6f3ec";
 
+/**
+ * Named uses are separate hues at moderate saturation, so they stay readable
+ * on dark asphalt and on park green. Other/unknown stays a pale neutral grey:
+ * it is most of the stock, and it should not compete with the named uses.
+ */
 export const BUILDING_USE_META: Record<
   BuildingUse,
   { label: string; color: string; layer: string }
 > = {
-  residential: { label: "Residential", color: "#d7c4a3", layer: "Residential" },
-  office: { label: "Office / commercial", color: "#b7c3ce", layer: "Office" },
-  retail: { label: "Retail", color: "#e0b39a", layer: "Retail" },
-  industrial: { label: "Industrial", color: "#a9a6a1", layer: "Industrial" },
-  education: { label: "Education", color: "#c5d2b4", layer: "Education" },
-  civic: { label: "Civic / community", color: "#c3bdd2", layer: "Civic" },
-  mixed: { label: "Mixed-use", color: "#d2b8a4", layer: "Mixed-use" },
-  unknown: { label: "Other / unknown", color: "#e4d9c8", layer: "Other" },
+  residential: { label: "Residential", color: "#d1a35a", layer: "Residential" },
+  office: { label: "Office / commercial", color: "#5f8eb8", layer: "Office" },
+  retail: { label: "Retail", color: "#d26558", layer: "Retail" },
+  industrial: { label: "Industrial", color: "#8a6a4a", layer: "Industrial" },
+  education: { label: "Education", color: "#3f8f86", layer: "Education" },
+  civic: { label: "Civic / community", color: "#8d78b8", layer: "Civic" },
+  mixed: { label: "Mixed-use", color: "#c77b9a", layer: "Mixed-use" },
+  unknown: { label: "Other / unknown", color: "#cfcbc4", layer: "Other" },
 };
 
 /**
