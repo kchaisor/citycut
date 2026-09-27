@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import * as THREE from "three";
 import { buildCityGroup, disposeObject } from "./buildCity";
 import { clipPolygon, clipSegment } from "./clip";
 import { fromLocal, squareBBox, toLocal } from "./geo";
@@ -118,6 +119,8 @@ describe("parse", () => {
 
     expect(parsed.buildings).toHaveLength(1);
     expect(parsed.buildings[0].height).toBe(18);
+    expect(parsed.buildings[0].use).toBe("unknown");
+    expect(parsed.roads[0].grade).toBe("local");
     expect(parsed.areas).toHaveLength(1);
     expect(parsed.areas[0].kind).toBe("green");
     expect(parsed.roads).toHaveLength(1);
@@ -126,6 +129,24 @@ describe("parse", () => {
     const back = toLocal(parsed.center.lat, parsed.center.lon, origin);
     expect(back[0]).toBeCloseTo(0);
     expect(back[1]).toBeCloseTo(0);
+  });
+
+  it("drops a duplicate footprint and keeps the more specific use", () => {
+    const footprint = geom(square([0, 0], 30));
+    const parsed = parseCity(
+      {
+        elements: [
+          { type: "way", id: 1, tags: { building: "yes" }, geometry: footprint },
+          { type: "way", id: 2, tags: { building: "apartments", shop: "yes" }, geometry: footprint },
+        ],
+      },
+      origin,
+      200,
+      { buildings: true, roads: false, waterGreen: false, trees: false },
+    );
+    expect(parsed.buildings).toHaveLength(1);
+    expect(parsed.buildings[0].use).toBe("mixed");
+    expect(parsed.buildings[0].id).toBe(2);
   });
 
   it("reads a multipolygon water relation", () => {
@@ -169,7 +190,7 @@ describe("exports", () => {
     center: origin,
     sideM: 200,
     layers: { buildings: true, roads: true, waterGreen: true, trees: false },
-    buildings: [{ id: 1, ring: square([0, 0], 40), holes: [], height: 12 }],
+    buildings: [{ id: 1, ring: square([0, 0], 40), holes: [], height: 12, use: "unknown" }],
     roads: [{ id: 2, line: [[-80, 10], [80, 10]], width: 6, kind: "road" }],
     areas: [{ id: 3, ring: square([-40, -40], 30), holes: [], kind: "green" }],
     trees: [],
@@ -187,10 +208,16 @@ describe("exports", () => {
 
   it("extrudes a building mesh above the ground", () => {
     const group = buildCityGroup(model);
-    const buildings = group.getObjectByName("Buildings");
+    let buildings: THREE.Object3D | undefined;
+    group.traverse((object) => {
+      if (object.name.startsWith("Buildings")) buildings = object;
+    });
     const roads = group.getObjectByName("Roads");
     expect(buildings).toBeTruthy();
     expect(roads).toBeTruthy();
+    const roadMaterial = (roads as THREE.Mesh).material as THREE.MeshStandardMaterial;
+    expect(roadMaterial.color.getHexString()).toBe("4a4a4a");
+    expect(roadMaterial.polygonOffset).toBe(true);
     buildings!.updateWorldMatrix(true, true);
     const position = (buildings as { geometry?: { attributes?: { position?: { count: number } } } }).geometry;
     expect(position?.attributes?.position?.count).toBeGreaterThan(0);

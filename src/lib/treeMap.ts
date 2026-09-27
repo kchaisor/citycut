@@ -83,3 +83,16 @@ export function resolveArchetype(tags: TreeIdentity): string {
 export function mappedArchetypeIds(): string[] {
   return [...Object.values(map.species), ...Object.values(map.genus), ...Object.values(map.leafType), ...Object.values(map.leafCycle)];
 }
+
+export type ArchetypeSize = {
+  height_m: number;
+  crown_diameter_m: number;
+  trunk_diameter_m: number;
+};
+
+const SIZES = map.sizes as Record<string, ArchetypeSize>;
+
+/** Mature massing size for an archetype. Unknown ids use the generic broadleaf. */
+export function archetypeSize(id: string): ArchetypeSize {
+  return SIZES[id] ?? SIZES.generic;
+}

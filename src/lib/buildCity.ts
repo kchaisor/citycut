@@ -1,9 +1,16 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { BUILDING_USE_META, UNIFORM_BUILDING_COLOR, buildingLayerName } from "./buildingUse";
 import { buildTreeGroup } from "./treeArchetypes";
 import { openRing, signedArea } from "./geo";
+import { hexRgb, overlapLift, ROAD_COLOR, ROAD_RGB, roadGradeLayer, SURFACE } from "./surfaceLayers";
 import { footprintBase, sampleTerrain, terrainBuffers } from "./terrain";
-import type { AreaFeat, CityModel, Pt, Ring, TerrainField } from "../types";
+import type { AreaFeat, BuildingUse, CityModel, Pt, Ring, RoadGrade, TerrainField } from "../types";
+
+export type CityBuildOptions = {
+  /** Viewport only. Exports keep one material, and one Rhino sublayer, per use. */
+  uniformBuildings?: boolean;
+};
 
 function orient(ring: Ring, ccw: boolean): Pt[] {
   const points = openRing(ring);
@@ -220,6 +227,20 @@ function drapedAreaGeometry(
   return geometry;
 }
 
+function paint(material: THREE.MeshStandardMaterial, layer: { polygonOffsetFactor: number; polygonOffsetUnits: number }) {
+  material.polygonOffset = true;
+  material.polygonOffsetFactor = layer.polygonOffsetFactor;
+  material.polygonOffsetUnits = layer.polygonOffsetUnits;
+  return material;
+}
+
+function order(object: THREE.Object3D, renderOrder: number) {
+  object.renderOrder = renderOrder;
+  object.traverse((child) => {
+    child.renderOrder = renderOrder;
+  });
+}
+
 function terrainMesh(field: TerrainField, sideM: number): THREE.Mesh {
   const buffers = terrainBuffers(field, sideM);
   const geometry = new THREE.BufferGeometry();
@@ -227,13 +248,17 @@ function terrainMesh(field: TerrainField, sideM: number): THREE.Mesh {
   geometry.setAttribute("color", new THREE.BufferAttribute(buffers.colors, 3));
   geometry.setIndex(new THREE.BufferAttribute(buffers.indices, 1));
   geometry.computeVertexNormals();
-  const material = new THREE.MeshStandardMaterial({
-    vertexColors: true,
-    roughness: 0.96,
-    side: THREE.DoubleSide,
-  });
+  const material = paint(
+    new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.96,
+      side: THREE.DoubleSide,
+    }),
+    SURFACE.terrain,
+  );
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = "Terrain";
+  order(mesh, SURFACE.terrain.renderOrder);
   return mesh;
 }
 
@@ -243,7 +268,7 @@ function elevationAt(model: CityModel): ((east: number, north: number) => number
   return (east, north) => sampleTerrain(field, east, north, model.sideM);
 }
 
-export function buildCityGroup(model: CityModel): THREE.Group {
+export function buildCityGroup(model: CityModel, options: CityBuildOptions = {}): THREE.Group {
   const group = new THREE.Group();
   group.name = "CityCut";
   group.userData = {
@@ -258,29 +283,39 @@ export function buildCityGroup(model: CityModel): THREE.Group {
   } else {
     const slabGeo = new THREE.BoxGeometry(model.sideM, 8, model.sideM);
     const sideMat = new THREE.MeshStandardMaterial({ color: "#c9c0b0", roughness: 0.92 });
-    const topMat = new THREE.MeshStandardMaterial({ color: "#e6e0d4", roughness: 0.95 });
+    const topMat = paint(
+      new THREE.MeshStandardMaterial({ color: "#e6e0d4", roughness: 0.95 }),
+      SURFACE.ground,
+    );
     const bottomMat = new THREE.MeshStandardMaterial({ color: "#b7ad9e", roughness: 1 });
     const slab = new THREE.Mesh(slabGeo, [sideMat, sideMat, topMat, bottomMat, sideMat, sideMat]);
     slab.position.y = -4;
     slab.name = "Ground";
+    order(slab, SURFACE.ground.renderOrder);
     group.add(slab);
   }
 
-  const greenMat = new THREE.MeshStandardMaterial({ color: "#7f9a62", roughness: 1 });
-  const waterMat = new THREE.MeshStandardMaterial({
-    color: "#8ebfc8",
-    roughness: 0.35,
-    metalness: 0.04,
-  });
+  const greenMat = paint(new THREE.MeshStandardMaterial({ color: "#7f9a62", roughness: 1 }), SURFACE.green);
+  const waterMat = paint(
+    new THREE.MeshStandardMaterial({
+      color: "#8ebfc8",
+      roughness: 0.35,
+      metalness: 0.04,
+    }),
+    SURFACE.water,
+  );
   const greenGeos: THREE.BufferGeometry[] = [];
   const waterGeos: THREE.BufferGeometry[] = [];
-  for (const area of model.areas) {
+  for (let index = 0; index < model.areas.length; index++) {
+    const area = model.areas[index];
+    const lift =
+      (area.kind === "water" ? SURFACE.water.lift : SURFACE.green.lift) + overlapLift(index);
     if (sample && model.terrain) {
       try {
         const geometry = drapedAreaGeometry(
           area,
           sample,
-          area.kind === "water" ? 0.08 : 0.04,
+          lift,
           model.terrain.spacingM,
         );
         if (!geometry) continue;
@@ -294,7 +329,7 @@ export function buildCityGroup(model: CityModel): THREE.Group {
     const shape = shapeFromRing(area.ring, area.holes);
     if (!shape) continue;
     try {
-      const geometry = layFlat(new THREE.ShapeGeometry(shape), area.kind === "water" ? 0.08 : 0.04);
+      const geometry = layFlat(new THREE.ShapeGeometry(shape), lift);
       if (area.kind === "water") waterGeos.push(geometry);
       else greenGeos.push(geometry);
     } catch {
@@ -303,56 +338,68 @@ export function buildCityGroup(model: CityModel): THREE.Group {
   }
   const green = mergeMeshes(greenGeos, greenMat, "Green");
   const water = mergeMeshes(waterGeos, waterMat, "Water");
-  if (green) group.add(green);
-  if (water) group.add(water);
-
-  const roadMat = new THREE.MeshStandardMaterial({ color: "#4e4943", roughness: 0.95 });
-  const railMat = new THREE.MeshStandardMaterial({ color: "#8d6244", roughness: 0.8 });
-  if (sample) {
-    roadMat.polygonOffset = true;
-    roadMat.polygonOffsetFactor = -1;
-    roadMat.polygonOffsetUnits = -4;
-    railMat.polygonOffset = true;
-    railMat.polygonOffsetFactor = -1;
-    railMat.polygonOffsetUnits = -4;
+  if (green) {
+    order(green, SURFACE.green.renderOrder);
+    group.add(green);
   }
-  const segment = model.terrain?.spacingM;
-  const roadGeo = ribbonGeometry(
-    model.roads.filter((road) => road.kind === "road"),
-    0.12,
-    sample ?? undefined,
-    segment,
-  );
-  const railGeo = ribbonGeometry(
-    model.roads.filter((road) => road.kind === "rail"),
-    0.18,
-    sample ?? undefined,
-    segment,
-  );
-  if (roadGeo) {
-    const mesh = new THREE.Mesh(roadGeo, roadMat);
+  if (water) {
+    order(water, SURFACE.water.renderOrder);
+    group.add(water);
+  }
+
+  const railMat = paint(new THREE.MeshStandardMaterial({ color: "#8d6244", roughness: 0.8 }), SURFACE.rail);
+  const segment = model.terrain ? Math.min(model.terrain.spacingM, 8) : undefined;
+  const grades: RoadGrade[] = ["path", "local", "arterial"];
+  for (const grade of grades) {
+    const layer = roadGradeLayer(grade);
+    const lines = model.roads.filter((road) => road.kind === "road" && (road.grade ?? "local") === grade);
+    const geometry = ribbonGeometry(lines, layer.lift, sample ?? undefined, segment);
+    if (!geometry) continue;
+    const material = paint(
+      new THREE.MeshStandardMaterial({ color: ROAD_COLOR[grade], roughness: 0.94 }),
+      layer,
+    );
+    material.name = "Roads";
+    const mesh = new THREE.Mesh(geometry, material);
     mesh.name = "Roads";
+    mesh.userData.layerColor = ROAD_RGB.arterial;
+    mesh.userData.objectColor = ROAD_RGB[grade];
+    order(mesh, layer.renderOrder);
     group.add(mesh);
   }
+  const railGeo = ribbonGeometry(
+    model.roads.filter((road) => road.kind === "rail"),
+    SURFACE.rail.lift,
+    sample ?? undefined,
+    segment,
+  );
   if (railGeo) {
     const mesh = new THREE.Mesh(railGeo, railMat);
     mesh.name = "Rail";
+    order(mesh, SURFACE.rail.renderOrder);
     group.add(mesh);
   }
 
-  const buildingMat = new THREE.MeshStandardMaterial({ color: "#f6f3ec", roughness: 0.78 });
-  const buildingGeos: THREE.BufferGeometry[] = [];
+  const buckets = new Map<string, THREE.BufferGeometry[]>();
+  const bucketName = (use: BuildingUse) =>
+    options.uniformBuildings ? "Buildings" : buildingLayerName(use);
   for (const building of model.buildings) {
     const shape = shapeFromRing(building.ring, building.holes);
-    const base = model.terrain ? footprintBase(model.terrain, building.ring, model.sideM) : 0;
+    const base = (model.terrain ? footprintBase(model.terrain, building.ring, model.sideM) : 0) + SURFACE.building.lift;
     if (!shape) continue;
+    const name = bucketName(building.use);
+    const push = (geometry: THREE.BufferGeometry) => {
+      const list = buckets.get(name);
+      if (list) list.push(geometry);
+      else buckets.set(name, [geometry]);
+    };
     try {
       const geometry = new THREE.ExtrudeGeometry(shape, {
         depth: building.height,
         bevelEnabled: false,
       });
       layFlat(geometry, base);
-      buildingGeos.push(geometry);
+      push(geometry);
     } catch {
       try {
         const fallback = shapeFromRing(building.ring, []);
@@ -362,14 +409,33 @@ export function buildCityGroup(model: CityModel): THREE.Group {
           bevelEnabled: false,
         });
         layFlat(geometry, base);
-        buildingGeos.push(geometry);
+        push(geometry);
       } catch {
         /* Ignore footprints Three.js cannot extrude. */
       }
     }
   }
-  const buildings = mergeMeshes(buildingGeos, buildingMat, "Buildings");
-  if (buildings) group.add(buildings);
+  for (const [name, geometries] of buckets) {
+    const use = (Object.keys(BUILDING_USE_META) as BuildingUse[]).find(
+      (key) => buildingLayerName(key) === name,
+    );
+    const color = options.uniformBuildings || !use ? UNIFORM_BUILDING_COLOR : BUILDING_USE_META[use].color;
+    const material = paint(
+      new THREE.MeshStandardMaterial({ color, roughness: 0.78 }),
+      SURFACE.building,
+    );
+    material.name = name;
+    const buildings = mergeMeshes(geometries, material, name);
+    if (!buildings) continue;
+    if (use && !options.uniformBuildings) {
+      const layerColor = hexRgb(BUILDING_USE_META[use].color);
+      buildings.traverse((child) => {
+        child.userData.layerColor = layerColor;
+      });
+    }
+    order(buildings, SURFACE.building.renderOrder);
+    group.add(buildings);
+  }
 
   const trees = buildTreeGroup(model.trees, sample ?? undefined);
   if (trees) group.add(trees);

@@ -11,11 +11,13 @@ import {
   MELBOURNE,
   MELBOURNE_LABEL,
 } from "./content/constants";
+import { applyComTreeSizes, fetchComTrees } from "./lib/comTrees";
 import { fetchTerrainForCut } from "./lib/fetchTerrain";
 import { M_PER_DEG_LAT, mPerDegLon, squareBBox } from "./lib/geo";
 import { buildOverpassQuery, fetchOverpass, overpassBBox } from "./lib/overpass";
 import { FLAT_GROUND_NOTE, parseCity } from "./lib/parseOsm";
 import { TERRAIN_UNAVAILABLE, terrainNote } from "./lib/terrain";
+import { replaceTreeNote } from "./lib/trees";
 import type { Basemap, CityModel, PlaceHit, UiLayers, ViewState } from "./types";
 
 const ModelPage = lazy(() => import("./components/ModelPage").then((mod) => ({ default: mod.ModelPage })));
@@ -137,17 +139,45 @@ export default function App() {
               return { field: null, error: message };
             })
         : Promise.resolve({ field: null, error: null as string | null });
+      const bounds = squareBBox(view, sideM);
       const osmTask = wantsOsm
-        ? fetchOverpass(buildOverpassQuery(overpassBBox(squareBBox(view, sideM)), modelLayers), controller.signal)
+        ? fetchOverpass(buildOverpassQuery(overpassBBox(bounds), modelLayers), controller.signal)
         : Promise.resolve({ elements: [] });
-      const [data, terrainResult] = await Promise.all([osmTask, terrainTask]);
+      const comTask = modelLayers.trees
+        ? (() => {
+            const comAbort = new AbortController();
+            const comTimer = window.setTimeout(() => comAbort.abort(), 20000);
+            const stopCom = () => comAbort.abort();
+            controller.signal.addEventListener("abort", stopCom);
+            return fetchComTrees(bounds, comAbort.signal)
+              .then((rows) => ({ rows, error: null as string | null }))
+              .catch((err: unknown) => {
+                if (controller.signal.aborted) throw err;
+                const message = comAbort.signal.aborted
+                  ? "City of Melbourne tree records took too long, so sizes fall back to species and generic defaults."
+                  : err instanceof Error
+                    ? err.message
+                    : "City of Melbourne tree records could not be loaded.";
+                return { rows: [], error: message };
+              })
+              .finally(() => {
+                window.clearTimeout(comTimer);
+                controller.signal.removeEventListener("abort", stopCom);
+              });
+          })()
+        : Promise.resolve({ rows: [], error: null as string | null });
+      const [data, terrainResult, comResult] = await Promise.all([osmTask, terrainTask, comTask]);
       const parsed = parseCity(data, center, sideM, modelLayers);
+      const trees = modelLayers.trees ? applyComTreeSizes(parsed.trees, comResult.rows, center) : parsed.trees;
       const contours = Boolean(layers.contours && terrainResult.field);
-      const sourceNote = terrainResult.field
+      let sourceNote = terrainResult.field
         ? parsed.sourceNote.replace(FLAT_GROUND_NOTE, terrainNote(terrainResult.field, contours))
         : parsed.sourceNote;
+      if (modelLayers.trees) sourceNote = replaceTreeNote(sourceNote, trees);
+      if (comResult.error) sourceNote = `${sourceNote} ${comResult.error}`;
       setModel({
         ...parsed,
+        trees,
         placeLabel,
         sourceNote,
         terrain: terrainResult.field,

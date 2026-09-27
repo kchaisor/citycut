@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { FAQ } from "../content/faq";
+import { BUILDING_USES, BUILDING_USE_META, countUses } from "../lib/buildingUse";
 import { CRS_NOTE, mgaCrs } from "../lib/crs";
 import { formatCoord, formatLengthKm } from "../lib/geo";
 import { download3dm, downloadGlb, downloadSvg } from "../lib/download";
+import { treeSizeSummary } from "../lib/trees";
 import type { CityModel } from "../types";
 import { DrawingPlan } from "./DrawingPlan";
 import { SatellitePane } from "./SatellitePane";
@@ -15,6 +17,7 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [tab, setTab] = useState<Tab>("3d");
   const [exportError, setExportError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"glb" | "svg" | "3dm" | null>(null);
+  const [colourByUse, setColourByUse] = useState(true);
   const crs = mgaCrs(model.center.lon);
   const sideKm = model.sideM / 1000;
   const layerBits = [
@@ -61,6 +64,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     }
   }
 
+  const useCounts = countUses(model.buildings);
   const hint =
     tab === "3d"
       ? "Drag to orbit · scroll to zoom · right-drag to pan"
@@ -144,12 +148,46 @@ export function ModelPage({ model }: { model: CityModel }) {
           <div className="fill">
             {tab === "3d" && (
               <SceneBoundary>
-                <Scene3D model={model} />
+                <Scene3D model={model} uniformBuildings={!colourByUse} />
               </SceneBoundary>
             )}
             {tab === "drawing" && <DrawingPlan model={model} />}
             {tab === "satellite" && <SatellitePane model={model} />}
           </div>
+          {tab === "3d" && (model.layers.buildings || model.layers.trees) && (
+            <div className="hud">
+              {model.layers.trees && model.trees.length > 0 && (
+                <p className="tree-sizes">{treeSizeSummary(model.trees)}</p>
+              )}
+              {model.layers.buildings && model.buildings.length > 0 && (
+                <aside className="legend" aria-label="Building use">
+                  <div className="legend-head">
+                    <span>Buildings</span>
+                    <button
+                      type="button"
+                      aria-pressed={colourByUse}
+                      onClick={() => setColourByUse((on) => !on)}
+                    >
+                      {colourByUse ? "Uniform colour" : "Colour by use"}
+                    </button>
+                  </div>
+                  <ul>
+                    {BUILDING_USES.filter((use) => useCounts[use] > 0).map((use) => (
+                      <li key={use}>
+                        <i
+                          style={{
+                            background: colourByUse ? BUILDING_USE_META[use].color : "#f6f3ec",
+                          }}
+                        />
+                        <span>{BUILDING_USE_META[use].label}</span>
+                        <b>{useCounts[use].toLocaleString()}</b>
+                      </li>
+                    ))}
+                  </ul>
+                </aside>
+              )}
+            </div>
+          )}
           <p className="viewport-hint">{hint}</p>
         </div>
 

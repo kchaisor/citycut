@@ -1,16 +1,41 @@
 import { parseMeters } from "./height";
+import { archetypeSize, resolveArchetype } from "./treeMap";
+import type { TreeDimensions, TreeSizeSource } from "../types";
 
-/** Typical Melbourne street tree when OSM has no size tags. */
-export const DEFAULT_TREE_HEIGHT = 10;
-export const DEFAULT_CROWN_DIAMETER = 6;
+const generic = archetypeSize("generic");
+
+/** Typical Melbourne street tree when nothing else is known. Matches `treeMap.json` generic. */
+export const DEFAULT_TREE_HEIGHT = generic.height_m;
+export const DEFAULT_CROWN_DIAMETER = generic.crown_diameter_m;
+export const DEFAULT_TRUNK_DIAMETER = generic.trunk_diameter_m;
 
 const MIN_HEIGHT = 2;
-const MAX_HEIGHT = 50;
-const MIN_CROWN = 1.5;
-const MAX_CROWN = 36;
-const CROWN_PER_HEIGHT = DEFAULT_CROWN_DIAMETER / DEFAULT_TREE_HEIGHT;
+const MAX_HEIGHT = 40;
+const MIN_CROWN = 1;
+const MAX_CROWN = 25;
+const MIN_TRUNK = 0.05;
+const MAX_TRUNK = 2;
+/** Derived crowns stay within this multiple of height. Measured crowns are only hard-clamped. */
+const CROWN_PER_HEIGHT = 1.35;
 
 const CROWN_KEYS = ["diameter_crown", "crown_diameter", "diameter:crown"];
+const CIRCUMFERENCE_KEYS = ["circumference", "circumference:breast", "trunk:circumference"];
+const TRUNK_KEYS = ["diameter", "diameter_breast_height"];
+
+/** City of Melbourne age classes, as a fraction of the mature archetype size. */
+const AGE_SCALE: { test: RegExp; factor: number }[] = [
+  { test: /over[-\s]?mature/, factor: 1.08 },
+  { test: /semi[-\s]?mature/, factor: 0.78 },
+  { test: /\bmature\b/, factor: 1 },
+  { test: /juvenile/, factor: 0.55 },
+  { test: /\b(new|sapling|young)\b/, factor: 0.38 },
+];
+
+export type ComMeasure = {
+  /** Centimetres, as published. */
+  dbh_cm: number | null;
+  age: string | null;
+};
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -24,23 +49,165 @@ function firstMeters(tags: Record<string, string>, keys: readonly string[]): num
   return null;
 }
 
-export type TreeSize = {
-  height: number;
-  crownDiameter: number;
+/** Mixed urban canopy. Metres of height from centimetres of trunk diameter. Not species-specific. */
+export function heightFromDbhCm(dbhCm: number): number {
+  return 1.35 + 3.15 * Math.pow(Math.max(dbhCm, 1), 0.42);
+}
+
+export function ageFactor(age: string | null | undefined): number | null {
+  if (!age) return null;
+  const text = age.toLowerCase().replace(/[_]+/g, " ").replace(/\s+/g, " ").trim();
+  for (const entry of AGE_SCALE) {
+    if (entry.test.test(text)) return entry.factor;
+  }
+  return null;
+}
+
+function trunkMeters(tags: Record<string, string>): number | null {
+  const girth = firstMeters(tags, CIRCUMFERENCE_KEYS);
+  if (girth !== null) return girth / Math.PI;
+  return firstMeters(tags, TRUNK_KEYS);
+}
+
+type PartialSize = {
+  height: number | null;
+  crown: number | null;
+  trunk: number | null;
+  crownMeasured: boolean;
+  trunkMeasured: boolean;
+  sizeSource: TreeSizeSource;
 };
 
-/** Height and crown diameter from OSM tags, otherwise a Melbourne street-tree default. */
-export function treeSize(tags: Record<string, string>): TreeSize {
-  const taggedHeight = firstMeters(tags, ["height"]);
-  const taggedCrown = firstMeters(tags, CROWN_KEYS);
-  if (taggedHeight === null && taggedCrown === null) {
-    return { height: DEFAULT_TREE_HEIGHT, crownDiameter: DEFAULT_CROWN_DIAMETER };
-  }
+function finish(partial: PartialSize, archetype: string): TreeDimensions {
+  const spec = archetypeSize(archetype);
+  const ratio = spec.crown_diameter_m / spec.height_m;
+  let height = partial.height;
+  let crown = partial.crown;
+  let trunk = partial.trunk;
 
-  const height = taggedHeight ?? (taggedCrown as number) / CROWN_PER_HEIGHT;
-  const crown = taggedCrown ?? height * CROWN_PER_HEIGHT;
+  if (height === null && trunk !== null) height = heightFromDbhCm(trunk * 100);
+  if (height === null && crown !== null) height = crown / ratio;
+  if (height === null) height = spec.height_m;
+  height = clamp(height, MIN_HEIGHT, MAX_HEIGHT);
+
+  if (crown === null) crown = height * ratio;
+  if (!partial.crownMeasured) crown = Math.min(crown, height * CROWN_PER_HEIGHT);
+  crown = clamp(crown, MIN_CROWN, MAX_CROWN);
+
+  if (trunk === null) trunk = spec.trunk_diameter_m * (height / spec.height_m);
+  if (!partial.trunkMeasured) trunk = Math.min(trunk, Math.max(MIN_TRUNK, crown * 0.28));
+  trunk = clamp(trunk, MIN_TRUNK, MAX_TRUNK);
+
   return {
-    height: clamp(height, MIN_HEIGHT, MAX_HEIGHT),
-    crownDiameter: clamp(crown, MIN_CROWN, MAX_CROWN),
+    height_m: height,
+    crown_diameter_m: crown,
+    trunk_diameter_m: trunk,
+    sizeSource: partial.sizeSource,
   };
+}
+
+function fromCom(archetype: string, com: ComMeasure): TreeDimensions | null {
+  const spec = archetypeSize(archetype);
+  const factor = ageFactor(com.age);
+  if (com.dbh_cm !== null && com.dbh_cm > 0) {
+    const trunk = com.dbh_cm / 100;
+    const height = heightFromDbhCm(com.dbh_cm);
+    return finish(
+      {
+        height,
+        crown: height * (spec.crown_diameter_m / spec.height_m),
+        trunk,
+        crownMeasured: false,
+        trunkMeasured: true,
+        sizeSource: "com",
+      },
+      archetype,
+    );
+  }
+  if (factor === null) return null;
+  return finish(
+    {
+      height: spec.height_m * factor,
+      crown: spec.crown_diameter_m * factor,
+      trunk: spec.trunk_diameter_m * Math.max(factor, 0.35),
+      crownMeasured: false,
+      trunkMeasured: false,
+      sizeSource: "com",
+    },
+    archetype,
+  );
+}
+
+/**
+ * Height, crown, and trunk for one tree.
+ * OSM measurements win, then a City of Melbourne DBH or age, then the archetype, then the generic tree.
+ */
+export function treeSize(tags: Record<string, string>, com?: ComMeasure | null): TreeDimensions {
+  const archetype = resolveArchetype({
+    genus: tags.genus,
+    species: tags.species,
+    taxon: tags.taxon,
+    leafType: tags.leaf_type,
+    leafCycle: tags.leaf_cycle,
+  });
+  const height = firstMeters(tags, ["height", "est_height"]);
+  const crown = firstMeters(tags, CROWN_KEYS);
+  const trunk = trunkMeters(tags);
+  if (height !== null || crown !== null || trunk !== null) {
+    return finish(
+      {
+        height,
+        crown,
+        trunk,
+        crownMeasured: crown !== null,
+        trunkMeasured: trunk !== null,
+        sizeSource: "osm",
+      },
+      archetype,
+    );
+  }
+  if (com) {
+    const sized = fromCom(archetype, com);
+    if (sized) return sized;
+  }
+  return finish(
+    {
+      height: null,
+      crown: null,
+      trunk: null,
+      crownMeasured: false,
+      trunkMeasured: false,
+      sizeSource: archetype === "generic" ? "default" : "species",
+    },
+    archetype,
+  );
+}
+
+export function treeSizeCounts(trees: { sizeSource: TreeSizeSource }[]): Record<TreeSizeSource, number> {
+  const counts: Record<TreeSizeSource, number> = { osm: 0, com: 0, species: 0, default: 0 };
+  for (const tree of trees) counts[tree.sizeSource] += 1;
+  return counts;
+}
+
+/** Short UI line. Generic defaults are included when any tree used them. */
+export function treeSizeSummary(trees: { sizeSource: TreeSizeSource }[]): string {
+  const counts = treeSizeCounts(trees);
+  const data = counts.osm + counts.com;
+  const parts = [`${data} from data`, `${counts.species} from species defaults`];
+  if (counts.default > 0) parts.push(`${counts.default} generic`);
+  return `Tree sizes: ${parts.join(", ")}`;
+}
+
+export function replaceTreeNote(note: string, trees: { sizeSource: TreeSizeSource }[]): string {
+  const next = describeTrees(trees);
+  if (!note.includes("Trees:")) return `${note} ${next}`;
+  return note
+    .replace(/Trees:.*?(?=Building count was capped|Tree count was capped|$)/, `${next} `)
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+export function describeTrees(trees: { sizeSource: TreeSizeSource }[]): string {
+  const counts = treeSizeCounts(trees);
+  return `Trees: ${treeSizeSummary(trees)} (${counts.osm} OpenStreetMap, ${counts.com} City of Melbourne). OpenStreetMap height, est_height, crown diameter, circumference, and trunk diameter are used when present. Inside the City of Melbourne, a match to the urban-forest inventory (diameter at breast height and age) is used when those tags are missing. Otherwise the species archetype, otherwise 10 m tall and 6 m across.`;
 }

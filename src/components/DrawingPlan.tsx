@@ -102,7 +102,7 @@ export function DrawingPlan({ model }: { model: CityModel }) {
           key={`r${index}`}
           d={road.d}
           fill="none"
-          stroke="#c3b6a4"
+          stroke={road.stroke}
           strokeWidth={road.width}
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -119,8 +119,8 @@ export function DrawingPlan({ model }: { model: CityModel }) {
           strokeLinecap="butt"
         />
       ))}
-      {paths.buildings.map((d, index) => (
-        <path key={`b${index}`} d={d} fill="#1c1b17" fillRule="evenodd" />
+      {paths.buildings.map((building, index) => (
+        <path key={`b${index}`} d={building.d} fill={building.fill} fillRule="evenodd" />
       ))}
       {paths.trees.map((tree, index) => (
         <circle

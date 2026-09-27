@@ -6,11 +6,13 @@ import { CRS_NOTE, mgaCrs, projectLocal, projectLonLat } from "./crs";
 import { TERRAIN_SKIRT_M } from "./terrain";
 import type { CityModel } from "../types";
 
+type Rgb = { r: number; g: number; b: number };
+
 type Rhino = Awaited<ReturnType<typeof rhino3dm>>;
 
 const LAYER_COLORS: Record<string, { r: number; g: number; b: number }> = {
   Buildings: { r: 246, g: 243, b: 236 },
-  Roads: { r: 78, g: 73, b: 67 },
+  Roads: { r: 58, g: 58, b: 58 },
   Rail: { r: 141, g: 98, b: 68 },
   Water: { r: 142, g: 191, b: 200 },
   Green: { r: 127, g: 154, b: 98 },
@@ -44,6 +46,28 @@ export function loadRhino(): Promise<Rhino> {
 
 function layerName(mesh: THREE.Mesh): string {
   return mesh.name || mesh.parent?.name || "Mesh";
+}
+
+function ensureLayer(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  name: string,
+  color: Rgb,
+): number {
+  const cached = layers.get(name);
+  if (cached !== undefined) return cached;
+  const parts = name.split("::");
+  const layer = new rhino.Layer();
+  layer.name = parts.length === 2 ? parts[1] : name;
+  layer.color = color;
+  if (parts.length === 2) {
+    const parentIndex = ensureLayer(rhino, doc, layers, parts[0], LAYER_COLORS[parts[0]] ?? { r: 246, g: 243, b: 236 });
+    layer.parentLayerId = doc.layers().get(parentIndex).id;
+  }
+  const index = doc.layers().add(layer);
+  layers.set(name, index);
+  return index;
 }
 
 function release(object: object) {
@@ -117,14 +141,16 @@ function addMesh(
   rhinoMesh.normals().computeNormals();
 
   const name = layerName(mesh);
-  let layerIndex = layers.get(name);
-  if (layerIndex === undefined) {
-    layerIndex = doc.layers().addLayer(name, LAYER_COLORS[name] ?? { r: 180, g: 180, b: 180 });
-    layers.set(name, layerIndex);
-  }
+  const layerColor = (mesh.userData.layerColor as Rgb | undefined) ?? LAYER_COLORS[name] ?? { r: 180, g: 180, b: 180 };
+  const layerIndex = ensureLayer(rhino, doc, layers, name, layerColor);
   const attributes = new rhino.ObjectAttributes();
   attributes.name = name;
   attributes.layerIndex = layerIndex;
+  const objectColor = mesh.userData.objectColor as Rgb | undefined;
+  if (objectColor) {
+    attributes.colorSource = rhino.ObjectColorSource.ColorFromObject;
+    attributes.objectColor = objectColor;
+  }
   doc.objects().addMesh(rhinoMesh, attributes);
   release(rhinoMesh);
   release(attributes);
