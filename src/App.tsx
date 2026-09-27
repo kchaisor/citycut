@@ -11,9 +11,11 @@ import {
   MELBOURNE,
   MELBOURNE_LABEL,
 } from "./content/constants";
+import { fetchTerrainForCut } from "./lib/fetchTerrain";
 import { M_PER_DEG_LAT, mPerDegLon, squareBBox } from "./lib/geo";
 import { buildOverpassQuery, fetchOverpass, overpassBBox } from "./lib/overpass";
-import { parseCity } from "./lib/parseOsm";
+import { FLAT_GROUND_NOTE, parseCity } from "./lib/parseOsm";
+import { TERRAIN_UNAVAILABLE, terrainNote } from "./lib/terrain";
 import type { Basemap, CityModel, PlaceHit, UiLayers, ViewState } from "./types";
 
 const ModelPage = lazy(() => import("./components/ModelPage").then((mod) => ({ default: mod.ModelPage })));
@@ -109,8 +111,10 @@ export default function App() {
       waterGreen: layers.waterGreen,
       trees: layers.trees,
     };
-    if (!modelLayers.buildings && !modelLayers.roads && !modelLayers.waterGreen && !modelLayers.trees) {
-      setError("Turn on Buildings, Roads and rail, Water and green, or Trees.");
+    const wantsOsm =
+      modelLayers.buildings || modelLayers.roads || modelLayers.waterGreen || modelLayers.trees;
+    if (!wantsOsm && !layers.terrain) {
+      setError("Turn on Buildings, Roads and rail, Water and green, Trees, or Terrain.");
       return;
     }
     if (sideM * sideM > MAX_AREA_M2 + 1) {
@@ -123,10 +127,33 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      const query = buildOverpassQuery(overpassBBox(squareBBox(view, sideM)), modelLayers);
-      const data = await fetchOverpass(query, controller.signal);
-      const parsed = parseCity(data, { lon: view.lon, lat: view.lat }, sideM, modelLayers);
-      setModel({ ...parsed, placeLabel });
+      const center = { lon: view.lon, lat: view.lat };
+      const terrainTask = layers.terrain
+        ? fetchTerrainForCut(center, sideM, controller.signal)
+            .then((field) => ({ field, error: null as string | null }))
+            .catch((err: unknown) => {
+              if (controller.signal.aborted) throw err;
+              const message = err instanceof Error ? err.message : TERRAIN_UNAVAILABLE;
+              return { field: null, error: message };
+            })
+        : Promise.resolve({ field: null, error: null as string | null });
+      const osmTask = wantsOsm
+        ? fetchOverpass(buildOverpassQuery(overpassBBox(squareBBox(view, sideM)), modelLayers), controller.signal)
+        : Promise.resolve({ elements: [] });
+      const [data, terrainResult] = await Promise.all([osmTask, terrainTask]);
+      const parsed = parseCity(data, center, sideM, modelLayers);
+      const contours = Boolean(layers.contours && terrainResult.field);
+      const sourceNote = terrainResult.field
+        ? parsed.sourceNote.replace(FLAT_GROUND_NOTE, terrainNote(terrainResult.field, contours))
+        : parsed.sourceNote;
+      setModel({
+        ...parsed,
+        placeLabel,
+        sourceNote,
+        terrain: terrainResult.field,
+        terrainError: terrainResult.error,
+        contours,
+      });
       setPhase("model");
     } catch (err) {
       if (controller.signal.aborted) return;

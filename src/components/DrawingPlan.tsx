@@ -86,6 +86,17 @@ export function DrawingPlan({ model }: { model: CityModel }) {
       {paths.water.map((d, index) => (
         <path key={`w${index}`} d={d} fill="#9ec9d1" />
       ))}
+      {paths.contours.map((d, index) => (
+        <path
+          key={`c${index}`}
+          d={d}
+          fill="none"
+          stroke="#7a6248"
+          strokeWidth={Math.max(model.sideM * 0.0012, 0.35)}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      ))}
       {paths.roads.map((road, index) => (
         <path
           key={`r${index}`}

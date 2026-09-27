@@ -52,6 +52,27 @@ export type TreeFeat = {
   archetype?: string;
 };
 
+/**
+ * Regular heightfield in the cut's local east/north frame.
+ * `heights` are DEM elevations in metres (AHD where the source is the
+ * Geoscience Australia lidar; otherwise the Copernicus geoid height).
+ * Row 0 is the south edge. Samples include both edges of the square.
+ */
+export type TerrainField = {
+  cols: number;
+  rows: number;
+  heights: Float32Array;
+  min: number;
+  max: number;
+  /** Metres between adjacent samples. */
+  spacingM: number;
+  /** XYZ zoom of the Mapterhorn tiles that were sampled. */
+  zoom: number;
+  /** Ground metres per source pixel at the cut centre. */
+  metresPerPixel: number;
+  source: string;
+};
+
 export type CityModel = {
   placeLabel: string;
   center: LonLat;
@@ -64,6 +85,12 @@ export type CityModel = {
   roadKm: number;
   buildingCapHit: boolean;
   sourceNote: string;
+  /** Set when the Terrain layer was built. Absent or null keeps the flat slab. */
+  terrain?: TerrainField | null;
+  /** Set when Terrain was requested and the tiles could not be read. */
+  terrainError?: string | null;
+  /** Draw contour lines on the SVG plan. Ignored unless `terrain` is set. */
+  contours?: boolean;
 };
 
 export type ViewState = {

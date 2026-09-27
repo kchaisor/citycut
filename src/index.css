@@ -336,6 +336,7 @@ input[type="range"]::-moz-range-thumb {
 .primary:not(:disabled):hover { background: #2c2a24; }
 .hint { margin: 10px 0 0; }
 .attrib { margin: 10px 0 0; font-size: 11.5px; }
+.attrib a, .page-foot a { color: inherit; }
 .error { color: var(--danger); font-size: 13px; margin: 0 0 8px; }
 
 .model { flex: 1; min-height: 0; overflow: auto; background: #f7f6f3; }

@@ -5,7 +5,7 @@ export const FAQ = [
   },
   {
     q: "Where does the geometry come from?",
-    a: "OpenStreetMap, read through the Overpass API. Place search uses Nominatim. The street map uses OpenFreeMap. The satellite view uses Esri World Imagery. This version does not use lidar — the ground is a flat slab.",
+    a: "OpenStreetMap, read through the Overpass API. Place search uses Nominatim. The street map uses OpenFreeMap. The satellite view uses Esri World Imagery. Terrain, when that layer is on, is a heightfield from Mapterhorn tiles (https://tiles.mapterhorn.com, Terrarium WebP). Around Melbourne those tiles resolve Geoscience Australia’s 5 m lidar DEM (CC BY 4.0); elsewhere they fall back to Copernicus GLO-30. Elevations are metres from that DEM, not a survey. Turn Terrain off and the ground is the flat slab.",
   },
   {
     q: "How are building heights chosen?",
@@ -13,7 +13,7 @@ export const FAQ = [
   },
   {
     q: "Which layers are real?",
-    a: "Buildings, roads and rail, water and green, and trees are queried and drawn. Terrain and contours can be toggled so the list is honest about what is missing; they are not in the file. Satellite image only changes the basemap preview.",
+    a: "Buildings, roads and rail, water and green, and trees are queried and drawn. Terrain is on by default and replaces the flat ground; if the tiles fail, the model falls back to the flat slab and says so. Each building sits on the lowest terrain sample along its footprint, and each tree sits on the sample at its trunk. Roads, rail, parks, and water are draped just above the surface. Contours, when that option is on and terrain loaded, are drawn on the site plan at 1, 2, 5, or 10 m depending on the relief. Satellite image only changes the basemap preview.",
   },
   {
     q: "How are trees drawn?",
@@ -21,7 +21,7 @@ export const FAQ = [
   },
   {
     q: "What can I download?",
-    a: "A binary glTF (.glb), a Rhino 3DM, and an SVG site plan. Trees, when that layer is on, are in all three: meshes in the glTF and 3DM, circles on the plan. The 3DM is meshes in GDA2020 / MGA metres, Z-up. WGS84 is projected as GDA2020 without a datum shift, about a metre off for site work, and the zone follows the block longitude (west of 144°E is zone 54). DXF, DAE, and JPG are not in this version.",
+    a: "A binary glTF (.glb), a Rhino 3DM, and an SVG site plan. Trees, when that layer is on, are in all three: meshes in the glTF and 3DM, circles on the plan. With Terrain on, the glTF includes a mesh named Terrain, and the 3DM adds a Terrain layer in the same GDA2020 / MGA metres, Z-up, with absolute DEM elevations. The SVG can include contour lines. With Terrain off, those files match the flat-ground export. The 3DM projects WGS84 as GDA2020 without a datum shift, about a metre off for site work, and the zone follows the block longitude (west of 144°E is zone 54). DXF, DAE, and JPG are not in this version.",
   },
   {
     q: "How large can the frame be?",

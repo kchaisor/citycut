@@ -5,15 +5,15 @@ import * as THREE from "three";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import type { CityModel } from "../types";
 
-function CameraRig({ side }: { side: number }) {
+function CameraRig({ side, lift }: { side: number; lift: number }) {
   const camera = useThree((state) => state.camera);
   useLayoutEffect(() => {
-    camera.position.set(side * 0.78, side * 0.62, side * 0.86);
+    camera.position.set(side * 0.78, lift + side * 0.62, side * 0.86);
     camera.near = Math.max(0.1, side / 400);
     camera.far = side * 40;
-    camera.lookAt(0, side * 0.03, 0);
+    camera.lookAt(0, lift + side * 0.03, 0);
     camera.updateProjectionMatrix();
-  }, [camera, side]);
+  }, [camera, side, lift]);
   return null;
 }
 
@@ -21,7 +21,7 @@ function City({ model }: { model: CityModel }) {
   const group = useMemo(() => {
     const city = buildCityGroup(model);
     const ground = city.getObjectByName("Ground");
-    if (ground && ground instanceof THREE.Mesh) {
+    if (ground && ground instanceof THREE.Mesh && ground.name === "Ground") {
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(ground.geometry),
         new THREE.LineBasicMaterial({ color: "#2c2924" }),
@@ -37,6 +37,7 @@ function City({ model }: { model: CityModel }) {
 }
 
 export function Scene3D({ model }: { model: CityModel }) {
+  const lift = model.terrain ? (model.terrain.min + model.terrain.max) / 2 : 0;
   return (
     <Canvas
       className="scene-canvas"
@@ -49,12 +50,12 @@ export function Scene3D({ model }: { model: CityModel }) {
       <ambientLight intensity={0.28} />
       <directionalLight position={[model.sideM * 0.4, model.sideM, model.sideM * 0.2]} intensity={1.35} />
       <City model={model} />
-      <CameraRig side={model.sideM} />
+      <CameraRig side={model.sideM} lift={lift} />
       <OrbitControls
         makeDefault
         enableDamping
         dampingFactor={0.08}
-        target={[0, model.sideM * 0.02, 0]}
+        target={[0, lift + model.sideM * 0.02, 0]}
         maxPolarAngle={Math.PI / 2.02}
         minDistance={model.sideM * 0.2}
         maxDistance={model.sideM * 3.4}

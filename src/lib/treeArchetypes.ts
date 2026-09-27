@@ -105,7 +105,10 @@ export function archetypeGeometry(id: string): THREE.BufferGeometry {
  * One InstancedMesh per archetype. Local forms are 1 m tall with a crown radius
  * of 0.5, so instance scale is (crown diameter, height, crown diameter).
  */
-export function buildTreeGroup(trees: TreeFeat[]): THREE.Group | null {
+export function buildTreeGroup(
+  trees: TreeFeat[],
+  elevationAt: (east: number, north: number) => number = () => 0,
+): THREE.Group | null {
   if (trees.length === 0) return null;
   const buckets = new Map<string, TreeFeat[]>();
   for (const tree of trees) {
@@ -133,7 +136,7 @@ export function buildTreeGroup(trees: TreeFeat[]): THREE.Group | null {
     mesh.name = "Trees";
     mesh.userData.archetype = id;
     bucket.forEach((tree, index) => {
-      position.set(tree.at[0], 0, -tree.at[1]);
+      position.set(tree.at[0], elevationAt(tree.at[0], tree.at[1]), -tree.at[1]);
       quaternion.setFromAxisAngle(up, ((tree.id % 12) * Math.PI) / 6);
       scale.set(tree.crownDiameter, tree.height, tree.crownDiameter);
       matrix.compose(position, quaternion, scale);

@@ -3,6 +3,7 @@ import rhino3dm from "rhino3dm/rhino3dm.module.js";
 import type { RhinoModuleOptions } from "rhino3dm";
 import { buildCityGroup, disposeObject } from "./buildCity";
 import { CRS_NOTE, mgaCrs, projectLocal, projectLonLat } from "./crs";
+import { TERRAIN_SKIRT_M } from "./terrain";
 import type { CityModel } from "../types";
 
 type Rhino = Awaited<ReturnType<typeof rhino3dm>>;
@@ -14,6 +15,7 @@ const LAYER_COLORS: Record<string, { r: number; g: number; b: number }> = {
   Water: { r: 142, g: 191, b: 200 },
   Green: { r: 127, g: 154, b: 98 },
   Ground: { r: 230, g: 224, b: 212 },
+  Terrain: { r: 214, g: 206, b: 190 },
   Trees: { r: 62, g: 138, b: 72 },
 };
 
@@ -144,6 +146,12 @@ export async function cityModelTo3dm(model: CityModel): Promise<Uint8Array> {
     doc.settings().pageUnitSystem = rhino.UnitSystem.Meters;
     doc.strings().set("CRS", crs.name);
     doc.strings().set("CRS note", CRS_NOTE);
+    if (model.terrain) {
+      doc.strings().set(
+        "Vertical",
+        `DEM metres from Mapterhorn zoom ${model.terrain.zoom}. Surface ${model.terrain.min.toFixed(2)} to ${model.terrain.max.toFixed(2)} m. The Terrain mesh skirt extends ${TERRAIN_SKIRT_M} m below that surface.`,
+      );
+    }
 
     const [easting, northing] = projectLonLat(model.center.lon, model.center.lat, crs.zone);
     const anchor = doc.settings().earthAnchorPoint;
