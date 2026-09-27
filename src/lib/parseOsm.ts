@@ -1,9 +1,11 @@
+import { classify } from "./buildingUse";
 import { clipPolygon, clipPolyline } from "./clip";
+import { dedupeAreas, dedupeBuildings, dedupeRoads } from "./footprints";
 import { dedupeConsecutive, openRing, polylineLength, signedArea, toLocal } from "./geo";
 import { buildingHeight } from "./height";
 import type { OverpassElement, OverpassResponse } from "./overpass";
 import { resolveArchetype } from "./treeMap";
-import { DEFAULT_CROWN_DIAMETER, DEFAULT_TREE_HEIGHT, treeSize } from "./trees";
+import { describeTrees, treeSize } from "./trees";
 import type {
   AreaFeat,
   BuildingFeat,
@@ -12,6 +14,7 @@ import type {
   ModelLayers,
   Pt,
   RoadFeat,
+  RoadGrade,
   TreeFeat,
 } from "../types";
 
@@ -40,6 +43,21 @@ const SKIP_HIGHWAY = new Set([
   "escape",
   "bus_guideway",
 ]);
+
+const ARTERIAL = new Set([
+  "motorway",
+  "trunk",
+  "primary",
+  "secondary",
+  "tertiary",
+  "motorway_link",
+  "trunk_link",
+  "primary_link",
+  "secondary_link",
+  "tertiary_link",
+]);
+
+const PATH = new Set(["footway", "path", "cycleway", "steps", "pedestrian", "bridleway", "track"]);
 
 const ROAD_WIDTH: Record<string, number> = {
   motorway: 16,
@@ -194,7 +212,14 @@ function hidden(tags: Record<string, string>): boolean {
   return tags.tunnel === "yes" || tags.tunnel === "culvert" || tags.location === "underground" || tags.indoor === "yes";
 }
 
-function roadWidth(tags: Record<string, string>): { width: number; kind: "road" | "rail" } | null {
+function roadGrade(highway: string): RoadGrade {
+  const base = highway.split(";")[0];
+  if (PATH.has(base)) return "path";
+  if (ARTERIAL.has(base)) return "arterial";
+  return "local";
+}
+
+function roadWidth(tags: Record<string, string>): { width: number; kind: "road" | "rail"; grade?: RoadGrade } | null {
   if (tags.railway) {
     const kind = tags.railway;
     if (!["rail", "light_rail", "tram", "subway", "narrow_gauge"].includes(kind)) return null;
@@ -203,7 +228,7 @@ function roadWidth(tags: Record<string, string>): { width: number; kind: "road" 
   const highway = tags.highway;
   if (!highway || SKIP_HIGHWAY.has(highway)) return null;
   const base = highway.split(";")[0];
-  return { width: ROAD_WIDTH[base] ?? 4.2, kind: "road" };
+  return { width: ROAD_WIDTH[base] ?? 4.2, kind: "road", grade: roadGrade(base) };
 }
 
 function ringCentroid(points: Pt[]): Pt | null {
@@ -263,8 +288,10 @@ function pushTree(trees: TreeFeat[], id: number, at: Pt, tags: Record<string, st
   trees.push({
     id,
     at,
-    height: size.height,
-    crownDiameter: size.crownDiameter,
+    height_m: size.height_m,
+    crown_diameter_m: size.crown_diameter_m,
+    trunk_diameter_m: size.trunk_diameter_m,
+    sizeSource: size.sizeSource,
     ...(genus ? { genus } : {}),
     ...(species ? { species } : {}),
     ...(taxon ? { taxon } : {}),
@@ -294,7 +321,7 @@ function collectTrees(elements: OverpassElement[], origin: LonLat, half: number)
       continue;
     }
     const size = treeSize(tags);
-    const spacing = Math.min(14, Math.max(6, size.crownDiameter));
+    const spacing = Math.min(14, Math.max(6, size.crown_diameter_m));
     for (const part of clipPolyline(line, -half, half)) {
       for (const point of pointsAlong(part, spacing)) {
         pushTree(trees, element.id, point, tags, half);
@@ -358,7 +385,6 @@ export function parseCity(
   const roads: RoadFeat[] = [];
   const areas: AreaFeat[] = [];
   const consumedWays = new Set<number>();
-  let roadMeters = 0;
 
   const elements = data.elements ?? [];
   let trees = layers.trees ? collectTrees(elements, origin, half) : [];
@@ -395,6 +421,7 @@ export function parseCity(
             ring: clipped,
             holes: holes.map((hole) => clipRing(hole, half)).filter((hole) => hole.length >= 3),
             height: buildingHeight(tags),
+            use: classify(tags),
           });
         }
       } else if (kind) {
@@ -419,6 +446,7 @@ export function parseCity(
         ring: clipped,
         holes: [],
         height: buildingHeight(tags),
+        use: classify(tags),
       });
       continue;
     }
@@ -437,32 +465,36 @@ export function parseCity(
       const parts = clipPolyline(line, -half, half);
       for (const part of parts) {
         if (polylineLength(part) < 1) continue;
-        roads.push({ id: element.id, line: part, width: spec.width, kind: spec.kind });
-        roadMeters += polylineLength(part);
+        roads.push({
+          id: element.id,
+          line: part,
+          width: spec.width,
+          kind: spec.kind,
+          ...(spec.grade ? { grade: spec.grade } : {}),
+        });
       }
     }
   }
 
   let buildingCapHit = false;
-  let kept = buildings;
-  if (buildings.length > MAX_BUILDINGS) {
+  let kept = dedupeBuildings(buildings);
+  if (kept.length > MAX_BUILDINGS) {
     buildingCapHit = true;
-    kept = buildings
+    kept = kept
       .slice()
       .sort((a, b) => Math.abs(signedArea(b.ring)) - Math.abs(signedArea(a.ring)))
       .slice(0, MAX_BUILDINGS);
   }
+  const roadsKept = dedupeRoads(roads);
+  const areasKept = dedupeAreas(areas);
 
   const notes = [
     "OpenStreetMap via Overpass.",
     "Building height uses the height tag, otherwise building:levels × 3 m, otherwise 9 m.",
+    "Building colour follows building, building:use, amenity, shop, and office tags.",
     FLAT_GROUND_NOTE,
   ];
-  if (layers.trees) {
-    notes.push(
-      `Trees use height and crown diameter tags when present, otherwise ${DEFAULT_TREE_HEIGHT} m tall and ${DEFAULT_CROWN_DIAMETER} m across. Genus, species, taxon, and leaf tags choose a massing archetype.`,
-    );
-  }
+  if (layers.trees) notes.push(describeTrees(trees));
   if (buildingCapHit) notes.push(`Building count was capped at ${MAX_BUILDINGS}.`);
   if (treeCapHit) notes.push(`Tree count was capped at ${MAX_TREES}.`);
 
@@ -471,10 +503,10 @@ export function parseCity(
     sideM,
     layers,
     buildings: kept,
-    roads,
-    areas,
+    roads: roadsKept.roads,
+    areas: areasKept,
     trees,
-    roadKm: roadMeters / 1000,
+    roadKm: roadsKept.metres / 1000,
     buildingCapHit,
     sourceNote: notes.join(" "),
   };

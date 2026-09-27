@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import * as THREE from "three";
 import { buildCityGroup, disposeObject } from "./buildCity";
+import { SURFACE } from "./surfaceLayers";
 import { sitePlanSvg } from "./svgPlan";
 import {
   contourInterval,
@@ -191,6 +192,7 @@ function slopedModel(): CityModel {
         ],
         holes: [],
         height: 12,
+        use: "unknown",
       },
     ],
     roads: [{ id: 2, line: [[-40, 0], [40, 0]], width: 6, kind: "road" }],
@@ -208,7 +210,17 @@ function slopedModel(): CityModel {
         kind: "green",
       },
     ],
-    trees: [{ id: 4, at: [10, 0], height: 14, crownDiameter: 6, archetype: "generic" }],
+    trees: [
+      {
+        id: 4,
+        at: [10, 0],
+        height_m: 14,
+        crown_diameter_m: 6,
+        trunk_diameter_m: 0.3,
+        sizeSource: "osm",
+        archetype: "generic",
+      },
+    ],
     roadKm: 0.08,
     buildingCapHit: false,
     sourceNote: "test",
@@ -247,9 +259,15 @@ describe("terrain in the model", () => {
       expect(maxY).toBeCloseTo(20, 4);
       expect(minY).toBeCloseTo(0 - TERRAIN_SKIRT_M, 4);
 
-      const buildings = group.getObjectByName("Buildings") as THREE.Mesh;
-      buildings.updateWorldMatrix(true, true);
-      const buildingPosition = buildings.geometry.getAttribute("position");
+      let buildings: THREE.Mesh | undefined;
+      group.traverse((object) => {
+        const mesh = object as THREE.Mesh;
+        if (mesh.isMesh && mesh.name.startsWith("Buildings")) buildings = mesh;
+      });
+      expect(buildings).toBeTruthy();
+      const buildingMesh = buildings as THREE.Mesh;
+      buildingMesh.updateWorldMatrix(true, true);
+      const buildingPosition = buildingMesh.geometry.getAttribute("position");
       let buildingMin = Infinity;
       let buildingMax = -Infinity;
       for (let i = 0; i < buildingPosition.count; i++) {
@@ -257,8 +275,8 @@ describe("terrain in the model", () => {
         buildingMin = Math.min(buildingMin, y);
         buildingMax = Math.max(buildingMax, y);
       }
-      expect(buildingMin).toBeCloseTo(base, 4);
-      expect(buildingMax).toBeCloseTo(base + 12, 4);
+      expect(buildingMin).toBeCloseTo(base + SURFACE.building.lift, 4);
+      expect(buildingMax).toBeCloseTo(base + 12 + SURFACE.building.lift, 4);
 
       let trees: THREE.InstancedMesh | null = null;
       group.traverse((object) => {

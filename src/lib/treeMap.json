@@ -229,5 +229,28 @@
     "evergreen": "broadleaf-round",
     "semi deciduous": "broadleaf-oval",
     "semi evergreen": "broadleaf-round"
+  },
+  "sizes": {
+    "generic": { "height_m": 10, "crown_diameter_m": 6, "trunk_diameter_m": 0.35 },
+    "broadleaf-round": { "height_m": 9, "crown_diameter_m": 7, "trunk_diameter_m": 0.4 },
+    "broadleaf-spreading": { "height_m": 16, "crown_diameter_m": 12, "trunk_diameter_m": 0.55 },
+    "broadleaf-vase": { "height_m": 14, "crown_diameter_m": 10, "trunk_diameter_m": 0.5 },
+    "broadleaf-oval": { "height_m": 12, "crown_diameter_m": 7, "trunk_diameter_m": 0.4 },
+    "gum-open": { "height_m": 18, "crown_diameter_m": 8, "trunk_diameter_m": 0.45 },
+    "gum-broad": { "height_m": 20, "crown_diameter_m": 12, "trunk_diameter_m": 0.7 },
+    "columnar": { "height_m": 16, "crown_diameter_m": 4, "trunk_diameter_m": 0.4 },
+    "conifer-cone": { "height_m": 14, "crown_diameter_m": 6, "trunk_diameter_m": 0.4 },
+    "conifer-column": { "height_m": 12, "crown_diameter_m": 3, "trunk_diameter_m": 0.35 },
+    "pine-tiered": { "height_m": 16, "crown_diameter_m": 8, "trunk_diameter_m": 0.5 },
+    "palm": { "height_m": 10, "crown_diameter_m": 4, "trunk_diameter_m": 0.3 },
+    "palm-date": { "height_m": 12, "crown_diameter_m": 7, "trunk_diameter_m": 0.7 },
+    "weeping": { "height_m": 12, "crown_diameter_m": 10, "trunk_diameter_m": 0.45 },
+    "small-round": { "height_m": 6, "crown_diameter_m": 4, "trunk_diameter_m": 0.2 },
+    "shrub": { "height_m": 2.5, "crown_diameter_m": 2, "trunk_diameter_m": 0.08 },
+    "open-canopy": { "height_m": 8, "crown_diameter_m": 7, "trunk_diameter_m": 0.3 },
+    "fig-spreading": { "height_m": 14, "crown_diameter_m": 16, "trunk_diameter_m": 1.1 },
+    "mallee": { "height_m": 6, "crown_diameter_m": 5, "trunk_diameter_m": 0.15 },
+    "sheoak": { "height_m": 10, "crown_diameter_m": 6, "trunk_diameter_m": 0.3 },
+    "leafless": { "height_m": 10, "crown_diameter_m": 6, "trunk_diameter_m": 0.35 }
   }
 }

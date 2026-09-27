@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { buildCityGroup, disposeObject } from "./buildCity";
 import { ARCHETYPE_CATALOG, archetypeGltf, isArchetypeId } from "./treeForms";
 import { archetypeGeometry } from "./treeArchetypes";
-import { mappedArchetypeIds, resolveArchetype } from "./treeMap";
+import { archetypeSize, mappedArchetypeIds, resolveArchetype } from "./treeMap";
 import type { CityModel } from "../types";
 
 const gltfSources = import.meta.glob("../assets/trees/*.gltf", {
@@ -17,6 +17,12 @@ describe("tree archetype library", () => {
     expect(ARCHETYPE_CATALOG.length).toBeGreaterThanOrEqual(15);
     expect(ARCHETYPE_CATALOG.length).toBeLessThanOrEqual(40);
     expect(new Set(ARCHETYPE_CATALOG.map((item) => item.id)).size).toBe(ARCHETYPE_CATALOG.length);
+    for (const info of ARCHETYPE_CATALOG) {
+      const size = archetypeSize(info.id);
+      expect(size.height_m).toBeGreaterThanOrEqual(2);
+      expect(size.crown_diameter_m).toBeGreaterThanOrEqual(1);
+      expect(size.trunk_diameter_m).toBeGreaterThan(0);
+    }
   });
 
   it("keeps the glTF files in step with the form builder", () => {
@@ -101,9 +107,9 @@ describe("tree archetype mapping", () => {
       roads: [],
       areas: [],
       trees: [
-        { id: 1, at: [0, 0], height: 10, crownDiameter: 6, genus: "Ulmus" },
-        { id: 2, at: [8, 1], height: 12, crownDiameter: 3, genus: "Ulmus" },
-        { id: 3, at: [20, 4], height: 16, crownDiameter: 5, genus: "Phoenix", species: "canariensis" },
+        { id: 1, at: [0, 0], height_m: 10, crown_diameter_m: 6, trunk_diameter_m: 0.4, sizeSource: "species", genus: "Ulmus" },
+        { id: 2, at: [8, 1], height_m: 12, crown_diameter_m: 3, trunk_diameter_m: 0.4, sizeSource: "osm", genus: "Ulmus" },
+        { id: 3, at: [20, 4], height_m: 16, crown_diameter_m: 5, trunk_diameter_m: 0.6, sizeSource: "osm", genus: "Phoenix", species: "canariensis" },
       ],
       roadKm: 0,
       buildingCapHit: false,

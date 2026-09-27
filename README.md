@@ -30,6 +30,10 @@ Building height, in order:
 - otherwise `building:levels` × 3 m
 - otherwise 9 m
 
+Building colour follows use: residential, office/commercial, retail, industrial, education, civic/community, mixed-use, and other/unknown. The tags are `building`, `building:use`, `amenity`, `shop`, and `office`, with `landuse` only when the building tag itself does not say. The 3D view has a legend and a switch back to the single off-white. glTF keeps one material per use. The Rhino file puts each use on a sublayer such as `Buildings::Residential`.
+
+Roads are asphalt, `#3a3a3a`, with local streets and footways a step lighter. On a heightfield they are split so a long run follows the surface, and they sit in a fixed stack a few centimetres above the terrain, parks, and water so those faces do not flicker.
+
 Heights are capped between 3 m and 420 m. With Terrain off, the ground is a flat slab and exports match that flat model. With Terrain on, buildings are extruded from the lowest DEM sample on the footprint, trees sit on the sample at the trunk, and roads, rail, parks, and water are draped a few centimetres above the surface. Multipolygon buildings, parks, and water bodies are stitched when the relation is small enough to assemble (80 members or fewer).
 
 ## Terrain
@@ -53,12 +57,17 @@ A Victorian DEM was not added. These endpoints were checked from the browser’s
 
 Mapterhorn’s Melbourne tiles already use the 5 m Geoscience Australia lidar, which is finer than the Vicmap 10 m DEM, so this version stays on Mapterhorn for every site. A direct Vicmap or City of Melbourne surface is a follow-up if a CORS-friendly height grid appears.
 
-Tree size, in order:
+Tree size, in order. Height is clamped to 2–40 m, crown diameter to 1–25 m, and trunk diameter to 0.05–2 m. A derived crown is kept from growing past about 1.35 times the height.
 
-- OSM `height` (feet are converted to meters), capped between 2 m and 50 m
-- crown diameter from `diameter_crown`, `crown_diameter`, or `diameter:crown`, capped between 1.5 m and 36 m
-- if only one of those is present, the other follows a crown that is about 0.6 of the height
-- if neither is present, 10 m tall and 6 m across
+- OSM `height` or `est_height` (feet are converted to meters)
+- crown diameter from `diameter_crown`, `crown_diameter`, or `diameter:crown`
+- trunk diameter from `circumference` (metres of girth, divided by π) or `diameter`
+- if a measurement is missing, the others follow the species archetype, or a crown about 0.6 of the height for a generic tree
+- inside the City of Melbourne, an OpenStreetMap tree with no size tags can take diameter at breast height and age from the [urban forest inventory](https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/) (CC BY). Age scales the archetype; DBH sets the trunk and a simple height curve. The match is the nearest inventory tree, within about 8 m, or 12 m when the genus agrees. It does not add trees that are not already in OpenStreetMap
+- otherwise the mature size of the species archetype in `treeMap.json`
+- otherwise 10 m tall, 6 m across, and a 0.35 m trunk
+
+The model page counts how many trees took a measurement and how many used a species default. Each instance is scaled vertically by height and horizontally by crown. The archetype is one mesh, so the trunk thickens with the crown; the trunk diameter is still stored on the tree.
 
 A `natural=tree` area uses its centre. A `natural=tree_row` is sampled about one crown apart (6–14 m).
 
@@ -142,7 +151,11 @@ CityCut is an original interface. Kelvin Chai, Melbourne.
 - `src/App.tsx` — select screen and model screen
 - `src/lib/overpass.ts` — query and endpoint fallback
 - `src/lib/parseOsm.ts` — footprints, roads, water, green, trees
-- `src/lib/trees.ts` — tree height and crown diameter
+- `src/lib/trees.ts` — tree height, crown, and trunk, and where each size came from
+- `src/lib/comTrees.ts` — City of Melbourne urban-forest match
+- `src/lib/buildingUse.ts` — building program and colours
+- `src/lib/surfaceLayers.ts` — draped layer stack
+- `src/lib/footprints.ts` — duplicate footprints
 - `src/lib/treeMap.ts` — OSM genus, species, taxon, and leaf tags to an archetype id
 - `src/lib/treeForms.ts` — low-poly archetype meshes and their glTF
 - `src/assets/trees/` — curated archetype glTF library

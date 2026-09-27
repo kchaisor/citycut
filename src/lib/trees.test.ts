@@ -20,6 +20,7 @@ import { fromLocal } from "./geo";
 import { buildOverpassQuery, overpassBBox } from "./overpass";
 import { parseCity } from "./parseOsm";
 import { sitePlanSvg } from "./svgPlan";
+import { applyComTreeSizes } from "./comTrees";
 import { DEFAULT_CROWN_DIAMETER, DEFAULT_TREE_HEIGHT, treeSize } from "./trees";
 import type { CityModel, Pt } from "../types";
 
@@ -44,41 +45,105 @@ function geom(points: Pt[]) {
 
 describe("tree size", () => {
   it("uses height and crown tags when they are present", () => {
-    expect(treeSize({ height: "18", diameter_crown: "8" })).toEqual({
-      height: 18,
-      crownDiameter: 8,
-    });
-    expect(treeSize({ height: "12", crown_diameter: "7.5" })).toEqual({
-      height: 12,
-      crownDiameter: 7.5,
-    });
-    expect(treeSize({ height: "30 ft", "diameter:crown": "20 ft" })).toEqual({
-      height: 9.144,
-      crownDiameter: 6.096,
-    });
+    const sized = treeSize({ height: "18", diameter_crown: "8" });
+    expect(sized.height_m).toBe(18);
+    expect(sized.crown_diameter_m).toBe(8);
+    expect(sized.sizeSource).toBe("osm");
+    expect(treeSize({ height: "12", crown_diameter: "7.5" }).crown_diameter_m).toBe(7.5);
+    const feet = treeSize({ height: "30 ft", "diameter:crown": "20 ft" });
+    expect(feet.height_m).toBeCloseTo(9.144);
+    expect(feet.crown_diameter_m).toBeCloseTo(6.096);
+    expect(feet.sizeSource).toBe("osm");
   });
 
-  it("fills the missing dimension from the one that is tagged", () => {
-    expect(treeSize({ height: "20" })).toEqual({ height: 20, crownDiameter: 12 });
-    expect(treeSize({ crown_diameter: "9" })).toEqual({ height: 15, crownDiameter: 9 });
+  it("turns trunk girth into diameter and fills the other dimensions", () => {
+    const girth = treeSize({ circumference: "1.2" });
+    expect(girth.trunk_diameter_m).toBeCloseTo(1.2 / Math.PI);
+    expect(girth.sizeSource).toBe("osm");
+    expect(girth.crown_diameter_m).toBeLessThanOrEqual(girth.height_m * 1.35);
+    const heightOnly = treeSize({ height: "20" });
+    expect(heightOnly.height_m).toBe(20);
+    expect(heightOnly.crown_diameter_m).toBeCloseTo(12);
+    expect(heightOnly.sizeSource).toBe("osm");
+    const crownOnly = treeSize({ crown_diameter: "9" });
+    expect(crownOnly.crown_diameter_m).toBe(9);
+    expect(crownOnly.height_m).toBeCloseTo(15);
   });
 
-  it("uses Melbourne street-tree defaults when size tags are missing", () => {
-    expect(treeSize({})).toEqual({
-      height: DEFAULT_TREE_HEIGHT,
-      crownDiameter: DEFAULT_CROWN_DIAMETER,
+  it("uses species archetype sizes, then the generic tree", () => {
+    const gum = treeSize({ species: "Corymbia maculata" });
+    expect(gum).toMatchObject({ height_m: 18, crown_diameter_m: 8, trunk_diameter_m: 0.45, sizeSource: "species" });
+    expect(treeSize({})).toMatchObject({
+      height_m: DEFAULT_TREE_HEIGHT,
+      crown_diameter_m: DEFAULT_CROWN_DIAMETER,
+      trunk_diameter_m: 0.35,
+      sizeSource: "default",
     });
-    expect(treeSize({ natural: "tree", species: "Platanus × hispanica" })).toEqual({
-      height: DEFAULT_TREE_HEIGHT,
-      crownDiameter: DEFAULT_CROWN_DIAMETER,
-    });
+    expect(treeSize({ natural: "tree", species: "Nope" }).sizeSource).toBe("default");
+  });
+
+  it("uses City of Melbourne DBH and age when OSM has no measurements", () => {
+    const measured = treeSize({ species: "Corymbia maculata" }, { dbh_cm: 40, age: "Mature" });
+    expect(measured.sizeSource).toBe("com");
+    expect(measured.trunk_diameter_m).toBeCloseTo(0.4);
+    expect(measured.height_m).toBeGreaterThan(10);
+    expect(measured.crown_diameter_m).toBeLessThanOrEqual(measured.height_m * 1.35);
+    const young = treeSize({ species: "Corymbia maculata" }, { dbh_cm: null, age: "Juvenile" });
+    expect(young.sizeSource).toBe("com");
+    expect(young.height_m).toBeCloseTo(18 * 0.55);
+    expect(young.crown_diameter_m).toBeCloseTo(8 * 0.55);
   });
 
   it("clamps absurd tags", () => {
-    expect(treeSize({ height: "400", diameter_crown: "0.2" })).toEqual({
-      height: 50,
-      crownDiameter: 1.5,
-    });
+    const sized = treeSize({ height: "400", diameter_crown: "0.2" });
+    expect(sized.height_m).toBe(40);
+    expect(sized.crown_diameter_m).toBe(1);
+    expect(sized.trunk_diameter_m).toBeGreaterThanOrEqual(0.05);
+    expect(sized.trunk_diameter_m).toBeLessThanOrEqual(2);
+  });
+});
+
+describe("City of Melbourne match", () => {
+  it("sizes an unmeasured tree from a nearby inventory record and leaves a measured one", () => {
+    const at = fromLocal([4, -2], origin);
+    const sized = applyComTreeSizes(
+      [
+        {
+          id: 1,
+          at: [4, -2],
+          height_m: 10,
+          crown_diameter_m: 6,
+          trunk_diameter_m: 0.35,
+          sizeSource: "default",
+          archetype: "generic",
+        },
+        {
+          id: 2,
+          at: [4, -2],
+          height_m: 22,
+          crown_diameter_m: 9,
+          trunk_diameter_m: 0.4,
+          sizeSource: "osm",
+          archetype: "generic",
+        },
+      ],
+      [
+        {
+          lat: at.lat,
+          lon: at.lon,
+          dbh_cm: 50,
+          age: "Mature",
+          genus: "Eucalyptus",
+          scientific: "Eucalyptus camaldulensis",
+        },
+      ],
+      origin,
+    );
+    expect(sized[0].sizeSource).toBe("com");
+    expect(sized[0].trunk_diameter_m).toBeCloseTo(0.5);
+    expect(sized[0].archetype).toBe("gum-broad");
+    expect(sized[1].sizeSource).toBe("osm");
+    expect(sized[1].height_m).toBe(22);
   });
 });
 
@@ -112,8 +177,9 @@ describe("tree parse", () => {
     expect(parsed.trees).toHaveLength(1);
     expect(parsed.trees[0].at[0]).toBeCloseTo(25);
     expect(parsed.trees[0].at[1]).toBeCloseTo(-15);
-    expect(parsed.trees[0].height).toBe(16);
-    expect(parsed.trees[0].crownDiameter).toBe(9);
+    expect(parsed.trees[0].height_m).toBe(16);
+    expect(parsed.trees[0].crown_diameter_m).toBe(9);
+    expect(parsed.trees[0].sizeSource).toBe("osm");
     expect(parsed.trees[0].species).toBe("Corymbia maculata");
     expect(parsed.trees[0].archetype).toBe("gum-open");
   });
@@ -130,8 +196,9 @@ describe("tree parse", () => {
       200,
       layersOn,
     );
-    expect(parsed.trees[0].height).toBe(DEFAULT_TREE_HEIGHT);
-    expect(parsed.trees[0].crownDiameter).toBe(DEFAULT_CROWN_DIAMETER);
+    expect(parsed.trees[0].height_m).toBe(DEFAULT_TREE_HEIGHT);
+    expect(parsed.trees[0].crown_diameter_m).toBe(DEFAULT_CROWN_DIAMETER);
+    expect(parsed.trees[0].sizeSource).toBe("default");
     expect(parsed.trees[0].archetype).toBe("generic");
     expect(parsed.sourceNote).toContain("10 m tall");
   });
@@ -179,7 +246,7 @@ describe("tree parse", () => {
     const area = parsed.trees.find((tree) => tree.id === 3);
     expect(area?.at[0]).toBeCloseTo(20);
     expect(area?.at[1]).toBeCloseTo(30);
-    expect(area?.height).toBe(14);
+    expect(area?.height_m).toBe(14);
     const row = parsed.trees.filter((tree) => tree.id === 4);
     expect(row.length).toBeGreaterThan(10);
     expect(row[0].at[0]).toBeCloseTo(-80);
@@ -187,7 +254,7 @@ describe("tree parse", () => {
     expect(row.every((tree) => Math.abs(tree.at[0]) <= 100.2 && Math.abs(tree.at[1] - 10) < 0.05)).toBe(
       true,
     );
-    expect(row[0].crownDiameter).toBe(8);
+    expect(row[0].crown_diameter_m).toBe(8);
   });
 
   it("caps a very large tree set", () => {
@@ -233,7 +300,7 @@ describe("tree exports", () => {
     buildings: [],
     roads: [],
     areas: [],
-    trees: [{ id: 9, at: [20, 30], height: 14, crownDiameter: 8 }],
+    trees: [{ id: 9, at: [20, 30], height_m: 14, crown_diameter_m: 8, trunk_diameter_m: 0.3, sizeSource: "osm" }],
     roadKm: 0,
     buildingCapHit: false,
     sourceNote: "test",

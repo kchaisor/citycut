@@ -138,7 +138,9 @@ export function buildTreeGroup(
     bucket.forEach((tree, index) => {
       position.set(tree.at[0], elevationAt(tree.at[0], tree.at[1]), -tree.at[1]);
       quaternion.setFromAxisAngle(up, ((tree.id % 12) * Math.PI) / 6);
-      scale.set(tree.crownDiameter, tree.height, tree.crownDiameter);
+      // One mesh holds trunk and crown, so the horizontal scale is the crown.
+      // Trunk diameter is stored on the tree; it is not a second instance scale.
+      scale.set(tree.crown_diameter_m, tree.height_m, tree.crown_diameter_m);
       matrix.compose(position, quaternion, scale);
       mesh.setMatrixAt(index, matrix);
     });

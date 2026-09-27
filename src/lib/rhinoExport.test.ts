@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { projectLocal } from "./crs";
 import { cityModelTo3dm, loadRhino } from "./rhinoExport";
+import { SURFACE } from "./surfaceLayers";
 import { footprintBase } from "./terrain";
 import type { CityModel, Pt, TerrainField } from "../types";
 
@@ -22,7 +23,7 @@ const model: CityModel = {
   center: origin,
   sideM: 200,
   layers: { buildings: true, roads: true, waterGreen: true, trees: false },
-  buildings: [{ id: 1, ring: square([0, 0], 40), holes: [], height: 12 }],
+  buildings: [{ id: 1, ring: square([0, 0], 40), holes: [], height: 12, use: "unknown" }],
   roads: [{ id: 2, line: [[-80, 10], [80, 10]], width: 6, kind: "road" }],
   areas: [{ id: 3, ring: square([-40, -40], 30), holes: [], kind: "green" }],
   trees: [],
@@ -74,7 +75,10 @@ describe("rhino export", () => {
           points.push(geometry.vertices().point3dAt(v));
         }
       }
-      expect(names).toEqual(expect.arrayContaining(["Buildings", "Roads", "Green", "Ground"]));
+      expect(names).toEqual(expect.arrayContaining(["Buildings::Other", "Roads", "Green", "Ground"]));
+      const paths: string[] = [];
+      for (let i = 0; i < doc.layers().count; i++) paths.push(doc.layers().get(i).fullPath);
+      expect(paths).toContain("Buildings::Other");
 
       const top = projectLocal([20, 20], origin, 55);
       const south = projectLocal([20, -20], origin, 55);
@@ -97,7 +101,7 @@ describe("rhino export", () => {
     const bytes = await cityModelTo3dm({
       ...model,
       layers: { ...model.layers, trees: true },
-      trees: [{ id: 9, at: [20, 30], height: 14, crownDiameter: 8 }],
+      trees: [{ id: 9, at: [20, 30], height_m: 14, crown_diameter_m: 8, trunk_diameter_m: 0.3, sizeSource: "osm" }],
     });
     const rhino = await loadRhino();
     const doc = rhino.File3dm.fromByteArray(bytes);
@@ -169,7 +173,7 @@ describe("rhino export", () => {
             terrainMin = Math.min(terrainMin, point[2]);
             terrainMax = Math.max(terrainMax, point[2]);
           }
-          if (name === "Buildings") buildingMin = Math.min(buildingMin, point[2]);
+          if (name.startsWith("Buildings")) buildingMin = Math.min(buildingMin, point[2]);
         }
       }
       expect(names).toContain("Terrain");
@@ -177,7 +181,7 @@ describe("rhino export", () => {
       expect(terrainVertices).toBeGreaterThan(4);
       expect(terrainMax).toBeCloseTo(24, 2);
       expect(terrainMin).toBeCloseTo(7, 2);
-      expect(buildingMin).toBeCloseTo(base, 2);
+      expect(buildingMin).toBeCloseTo(base + SURFACE.building.lift, 2);
       const layers: string[] = [];
       for (let i = 0; i < doc.layers().count; i++) layers.push(doc.layers().get(i).name);
       expect(layers).toContain("Terrain");

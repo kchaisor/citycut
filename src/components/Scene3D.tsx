@@ -17,9 +17,9 @@ function CameraRig({ side, lift }: { side: number; lift: number }) {
   return null;
 }
 
-function City({ model }: { model: CityModel }) {
+function City({ model, uniformBuildings }: { model: CityModel; uniformBuildings: boolean }) {
   const group = useMemo(() => {
-    const city = buildCityGroup(model);
+    const city = buildCityGroup(model, { uniformBuildings });
     const ground = city.getObjectByName("Ground");
     if (ground && ground instanceof THREE.Mesh && ground.name === "Ground") {
       const edges = new THREE.LineSegments(
@@ -31,12 +31,12 @@ function City({ model }: { model: CityModel }) {
       city.add(edges);
     }
     return city;
-  }, [model]);
+  }, [model, uniformBuildings]);
   useEffect(() => () => disposeObject(group), [group]);
   return <primitive object={group} />;
 }
 
-export function Scene3D({ model }: { model: CityModel }) {
+export function Scene3D({ model, uniformBuildings }: { model: CityModel; uniformBuildings: boolean }) {
   const lift = model.terrain ? (model.terrain.min + model.terrain.max) / 2 : 0;
   return (
     <Canvas
@@ -49,7 +49,7 @@ export function Scene3D({ model }: { model: CityModel }) {
       <hemisphereLight args={["#f7f4ee", "#c9c0b2", 0.7]} />
       <ambientLight intensity={0.28} />
       <directionalLight position={[model.sideM * 0.4, model.sideM, model.sideM * 0.2]} intensity={1.35} />
-      <City model={model} />
+      <City model={model} uniformBuildings={uniformBuildings} />
       <CameraRig side={model.sideM} lift={lift} />
       <OrbitControls
         makeDefault

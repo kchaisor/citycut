@@ -1,4 +1,6 @@
+import { BUILDING_USE_META } from "./buildingUse";
 import { openRing } from "./geo";
+import { roadStroke } from "./surfaceLayers";
 import { contourInterval, contourLines } from "./terrain";
 import type { CityModel, Pt } from "../types";
 
@@ -33,9 +35,9 @@ function polygonPath(ring: Pt[], holes: Pt[][]): string {
 export type PlanPaths = {
   green: string[];
   water: string[];
-  roads: { d: string; width: number }[];
+  roads: { d: string; width: number; stroke: string }[];
   rails: { d: string; width: number }[];
-  buildings: string[];
+  buildings: { d: string; fill: string }[];
   trees: { x: number; y: number; r: number }[];
   contours: string[];
   contourInterval: number | null;
@@ -57,15 +59,18 @@ export function planPaths(model: CityModel): PlanPaths {
     if (!d) continue;
     const width = Math.max(road.width, road.kind === "rail" ? 2.4 : 2.2);
     if (road.kind === "rail") rails.push({ d, width });
-    else roads.push({ d, width });
+    else roads.push({ d, width, stroke: roadStroke(road.grade) });
   }
   const buildings = model.buildings
-    .map((building) => polygonPath(building.ring, building.holes))
-    .filter(Boolean);
+    .map((building) => ({
+      d: polygonPath(building.ring, building.holes),
+      fill: BUILDING_USE_META[building.use].color,
+    }))
+    .filter((building) => building.d);
   const trees = model.trees.map((tree) => ({
     x: tree.at[0],
     y: -tree.at[1],
-    r: tree.crownDiameter / 2,
+    r: tree.crown_diameter_m / 2,
   }));
   const interval = model.terrain && model.contours ? contourInterval(model.terrain.max - model.terrain.min) : null;
   const contours =
@@ -92,7 +97,7 @@ export function sitePlanSvg(model: CityModel): string {
   const roads = paths.roads
     .map(
       (road) =>
-        `<path d="${road.d}" fill="none" stroke="#c3b6a4" stroke-width="${round(road.width)}" stroke-linecap="round" stroke-linejoin="round"/>`,
+        `<path d="${road.d}" fill="none" stroke="${road.stroke}" stroke-width="${round(road.width)}" stroke-linecap="round" stroke-linejoin="round"/>`,
     )
     .join("");
   const rails = paths.rails
@@ -102,7 +107,7 @@ export function sitePlanSvg(model: CityModel): string {
     )
     .join("");
   const buildings = paths.buildings
-    .map((d) => `<path d="${d}" fill="#1c1b17" fill-rule="evenodd"/>`)
+    .map((building) => `<path d="${building.d}" fill="${building.fill}" fill-rule="evenodd"/>`)
     .join("");
   const treeStroke = round(Math.max(model.sideM * 0.0015, 0.4));
   const trees = paths.trees

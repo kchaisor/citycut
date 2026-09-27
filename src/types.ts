@@ -15,18 +15,38 @@ export type ModelLayers = {
   trees: boolean;
 };
 
+/**
+ * Program of a building, from OSM tags.
+ * `office` is office and other commercial. `civic` is civic and community.
+ * `unknown` is `building=yes` and anything still untagged.
+ */
+export type BuildingUse =
+  | "residential"
+  | "office"
+  | "retail"
+  | "industrial"
+  | "education"
+  | "civic"
+  | "mixed"
+  | "unknown";
+
 export type BuildingFeat = {
   id: number;
   ring: Ring;
   holes: Ring[];
   height: number;
+  use: BuildingUse;
 };
+
+/** Highway class used for width and asphalt colour. Rail leaves this unset. */
+export type RoadGrade = "arterial" | "local" | "path";
 
 export type RoadFeat = {
   id: number;
   line: Ring;
   width: number;
   kind: "road" | "rail";
+  grade?: RoadGrade;
 };
 
 export type AreaFeat = {
@@ -36,12 +56,21 @@ export type AreaFeat = {
   kind: "water" | "green";
 };
 
-export type TreeFeat = {
+/** Where a tree's height, crown, and trunk came from. */
+export type TreeSizeSource = "osm" | "com" | "species" | "default";
+
+/** Metres. `sizeSource` records which dataset supplied the numbers. */
+export type TreeDimensions = {
+  height_m: number;
+  crown_diameter_m: number;
+  trunk_diameter_m: number;
+  sizeSource: TreeSizeSource;
+};
+
+export type TreeFeat = TreeDimensions & {
   id: number;
   /** East / north meters relative to the cut center. */
   at: Pt;
-  height: number;
-  crownDiameter: number;
   /** Copied from OSM when the element already has them. */
   genus?: string;
   species?: string;
