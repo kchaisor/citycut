@@ -20,6 +20,9 @@ const MAX_TREES = 6000;
 const MAX_RELATION_MEMBERS = 80;
 const MIN_AREA = 4;
 
+/** Replaced when a terrain heightfield is attached to the model. */
+export const FLAT_GROUND_NOTE = "Ground is flat — no lidar or terrain in this version.";
+
 const SKIP_HIGHWAY = new Set([
   "proposed",
   "construction",
@@ -453,7 +456,7 @@ export function parseCity(
   const notes = [
     "OpenStreetMap via Overpass.",
     "Building height uses the height tag, otherwise building:levels × 3 m, otherwise 9 m.",
-    "Ground is flat — no lidar or terrain in this version.",
+    FLAT_GROUND_NOTE,
   ];
   if (layers.trees) {
     notes.push(

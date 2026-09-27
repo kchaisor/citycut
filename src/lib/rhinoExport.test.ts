@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { projectLocal } from "./crs";
 import { cityModelTo3dm, loadRhino } from "./rhinoExport";
-import type { CityModel, Pt } from "../types";
+import { footprintBase } from "./terrain";
+import type { CityModel, Pt, TerrainField } from "../types";
 
 const origin = { lon: 144.9631, lat: -37.8136 };
 
@@ -123,6 +124,63 @@ describe("rhino export", () => {
       });
       expect(hasTip).toBe(true);
       expect(hasCrown).toBe(true);
+    } finally {
+      doc.destroy();
+    }
+  });
+
+  it("puts the terrain mesh on a Terrain layer in DEM metres", async () => {
+    const heights = Float32Array.of(15, 18, 21, 24);
+    const terrain: TerrainField = {
+      cols: 2,
+      rows: 2,
+      heights,
+      min: 15,
+      max: 24,
+      spacingM: 200,
+      zoom: 14,
+      metresPerPixel: 4,
+      source: "Mapterhorn",
+    };
+    const sloped: CityModel = {
+      ...model,
+      terrain,
+      contours: false,
+    };
+    const bytes = await cityModelTo3dm(sloped);
+    const rhino = await loadRhino();
+    const doc = rhino.File3dm.fromByteArray(bytes);
+    try {
+      const names: string[] = [];
+      let terrainMin = Infinity;
+      let terrainMax = -Infinity;
+      let terrainVertices = 0;
+      const base = footprintBase(terrain, model.buildings[0].ring, model.sideM);
+      let buildingMin = Infinity;
+      for (let i = 0; i < doc.objects().count; i++) {
+        const object = doc.objects().get(i);
+        const name = object.attributes().name;
+        names.push(name);
+        const geometry = object.geometry() as unknown as ReadMesh;
+        for (let v = 0; v < geometry.vertices().count; v++) {
+          const point = geometry.vertices().point3dAt(v);
+          if (name === "Terrain") {
+            terrainVertices += 1;
+            terrainMin = Math.min(terrainMin, point[2]);
+            terrainMax = Math.max(terrainMax, point[2]);
+          }
+          if (name === "Buildings") buildingMin = Math.min(buildingMin, point[2]);
+        }
+      }
+      expect(names).toContain("Terrain");
+      expect(names).not.toContain("Ground");
+      expect(terrainVertices).toBeGreaterThan(4);
+      expect(terrainMax).toBeCloseTo(24, 2);
+      expect(terrainMin).toBeCloseTo(7, 2);
+      expect(buildingMin).toBeCloseTo(base, 2);
+      const layers: string[] = [];
+      for (let i = 0; i < doc.layers().count; i++) layers.push(doc.layers().get(i).name);
+      expect(layers).toContain("Terrain");
     } finally {
       doc.destroy();
     }

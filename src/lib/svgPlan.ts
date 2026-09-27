@@ -1,4 +1,5 @@
 import { openRing } from "./geo";
+import { contourInterval, contourLines } from "./terrain";
 import type { CityModel, Pt } from "../types";
 
 const round = (value: number) => Math.round(value * 10) / 10;
@@ -9,6 +10,17 @@ function move(points: Pt[]): string {
   return opened
     .map((point, index) => `${index === 0 ? "M" : "L"}${round(point[0])} ${round(-point[1])}`)
     .join(" ");
+}
+
+function linePath(points: Pt[]): string {
+  if (points.length < 2) return "";
+  const closed = Math.hypot(points[0][0] - points[points.length - 1][0], points[0][1] - points[points.length - 1][1]) < 1;
+  const drawn = closed ? points.slice(0, -1) : points;
+  if (drawn.length < 2) return "";
+  const body = drawn
+    .map((point, index) => `${index === 0 ? "M" : "L"}${round(point[0])} ${round(-point[1])}`)
+    .join(" ");
+  return closed ? `${body} Z` : body;
 }
 
 function polygonPath(ring: Pt[], holes: Pt[][]): string {
@@ -25,6 +37,8 @@ export type PlanPaths = {
   rails: { d: string; width: number }[];
   buildings: string[];
   trees: { x: number; y: number; r: number }[];
+  contours: string[];
+  contourInterval: number | null;
 };
 
 export function planPaths(model: CityModel): PlanPaths {
@@ -53,7 +67,12 @@ export function planPaths(model: CityModel): PlanPaths {
     y: -tree.at[1],
     r: tree.crownDiameter / 2,
   }));
-  return { green, water, roads, rails, buildings, trees };
+  const interval = model.terrain && model.contours ? contourInterval(model.terrain.max - model.terrain.min) : null;
+  const contours =
+    model.terrain && interval
+      ? contourLines(model.terrain, model.sideM, interval).map((line) => linePath(line)).filter(Boolean)
+      : [];
+  return { green, water, roads, rails, buildings, trees, contours, contourInterval: contours.length > 0 ? interval : null };
 }
 
 export function sitePlanSvg(model: CityModel): string {
@@ -63,6 +82,13 @@ export function sitePlanSvg(model: CityModel): string {
   const paths = planPaths(model);
   const green = paths.green.map((d) => `<path d="${d}" fill="#b7d39a"/>`).join("");
   const water = paths.water.map((d) => `<path d="${d}" fill="#9ec9d1"/>`).join("");
+  const contourWidth = round(Math.max(model.sideM * 0.0012, 0.35));
+  const contours = paths.contours
+    .map(
+      (d) =>
+        `<path d="${d}" fill="none" stroke="#7a6248" stroke-width="${contourWidth}" stroke-linejoin="round" stroke-linecap="round"/>`,
+    )
+    .join("");
   const roads = paths.roads
     .map(
       (road) =>
@@ -86,14 +112,19 @@ export function sitePlanSvg(model: CityModel): string {
     )
     .join("");
   const title = `CityCut ${model.placeLabel} ${model.center.lat.toFixed(5)}, ${model.center.lon.toFixed(5)}`;
+  const contourNote =
+    paths.contourInterval && model.terrain
+      ? ` Contours every ${paths.contourInterval} m, elevations ${model.terrain.min.toFixed(1)}–${model.terrain.max.toFixed(1)} m. Terrain © Mapterhorn.`
+      : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="${view}" width="1400" height="1400">
   <title>${escapeXml(title)}</title>
-  <desc>${escapeXml(model.sourceNote)} © OpenStreetMap contributors.</desc>
+  <desc>${escapeXml(model.sourceNote)} © OpenStreetMap contributors.${escapeXml(contourNote)}</desc>
   <rect x="${round(-half - pad)}" y="${round(-half - pad)}" width="${round(model.sideM + pad * 2)}" height="${round(model.sideM + pad * 2)}" fill="#e7e2d8"/>
   <rect x="${round(-half)}" y="${round(-half)}" width="${round(model.sideM)}" height="${round(model.sideM)}" fill="#f6f3ec"/>
   ${green}
   ${water}
+  ${contours}
   ${roads}
   ${rails}
   ${buildings}

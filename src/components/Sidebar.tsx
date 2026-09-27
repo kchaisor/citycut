@@ -7,8 +7,8 @@ import type { PlaceHit, UiLayers } from "../types";
 const ROWS: { key: keyof UiLayers; label: string; soon?: boolean; hint?: string }[] = [
   { key: "buildings", label: "Buildings" },
   { key: "roads", label: "Roads and rail" },
-  { key: "terrain", label: "Terrain", soon: true },
-  { key: "contours", label: "Contours", soon: true },
+  { key: "terrain", label: "Terrain" },
+  { key: "contours", label: "Contours", hint: "Site plan" },
   { key: "waterGreen", label: "Water and green" },
   { key: "trees", label: "Trees" },
   { key: "satellite", label: "Satellite image", hint: "Basemap only" },
@@ -83,7 +83,6 @@ export function Sidebar({
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
-  const soonOn = (["terrain", "contours"] as const).filter((key) => layers[key]);
   const area = sideKm * sideKm;
 
   return (
@@ -188,15 +187,11 @@ export function Sidebar({
               </li>
             ))}
           </ul>
-          {soonOn.length > 0 && (
-            <p className="field-note">
-              {soonOn
-                .map((key) => ROWS.find((row) => row.key === key)?.label)
-                .filter(Boolean)
-                .join(", ")}{" "}
-              {soonOn.length === 1 ? "is" : "are"} not exported in this version.
-            </p>
-          )}
+          <p className="field-note">
+            {layers.terrain
+              ? "Elevation from Mapterhorn. Contours, when on, are added to the site plan."
+              : "Terrain is off, so the ground stays a flat slab. Contours need Terrain."}
+          </p>
         </div>
       </div>
 
@@ -210,7 +205,15 @@ export function Sidebar({
           {loading ? "Reading the map…" : "Create model"}
         </button>
         <p className="hint">Pan and zoom until the block you want sits inside the frame.</p>
-        <p className="attrib">© OpenStreetMap contributors</p>
+        <p className="attrib">
+          © OpenStreetMap contributors
+          {layers.terrain && (
+            <>
+              {" · "}
+              <a href="https://mapterhorn.com/attribution">Terrain © Mapterhorn</a>
+            </>
+          )}
+        </p>
       </div>
     </aside>
   );

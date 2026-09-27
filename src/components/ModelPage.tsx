@@ -22,6 +22,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     model.layers.roads ? "roads and rail" : null,
     model.layers.waterGreen ? "water and green" : null,
     model.layers.trees ? "trees" : null,
+    model.terrain ? "terrain" : null,
   ].filter(Boolean);
 
   async function saveGlb() {
@@ -78,6 +79,11 @@ export function ModelPage({ model }: { model: CityModel }) {
               {Math.round(model.sideM)} × {Math.round(model.sideM)} m
             </p>
             <p className="meta">{model.sourceNote}</p>
+            {model.terrainError && (
+              <p className="error" role="alert">
+                {model.terrainError}
+              </p>
+            )}
           </div>
           <dl className="stats">
             {model.layers.buildings && (
@@ -96,6 +102,14 @@ export function ModelPage({ model }: { model: CityModel }) {
               <div>
                 <dt>Trees</dt>
                 <dd>{model.trees.length.toLocaleString()}</dd>
+              </div>
+            )}
+            {model.terrain && (
+              <div>
+                <dt>Elevation, m</dt>
+                <dd>
+                  {model.terrain.min.toFixed(0)}–{model.terrain.max.toFixed(0)}
+                </dd>
               </div>
             )}
             <div>
@@ -145,7 +159,11 @@ export function ModelPage({ model }: { model: CityModel }) {
               <h2>
                 glTF <span>.glb</span>
               </h2>
-              <p>Buildings, roads, water, green, and trees as meshes. Flat ground, no textures.</p>
+              <p>
+                {model.terrain
+                  ? "Buildings, roads, water, green, trees, and a Terrain mesh."
+                  : "Buildings, roads, water, green, and trees as meshes. Flat ground, no textures."}
+              </p>
             </div>
             <button className="ghost" type="button" disabled={busy !== null} onClick={saveGlb}>
               {busy === "glb" ? "Preparing…" : "Download"}
@@ -167,7 +185,11 @@ export function ModelPage({ model }: { model: CityModel }) {
               <h2>
                 Site plan <span>.svg</span>
               </h2>
-              <p>The same block as vectors: building fills, road lines, water, green, and tree symbols.</p>
+              <p>
+                {model.contours && model.terrain
+                  ? "The same block as vectors, plus contour lines."
+                  : "The same block as vectors: building fills, road lines, water, green, and tree symbols."}
+              </p>
             </div>
             <button className="ghost" type="button" disabled={busy !== null} onClick={saveSvg}>
               {busy === "svg" ? "Preparing…" : "Download"}
@@ -198,7 +220,15 @@ export function ModelPage({ model }: { model: CityModel }) {
         </section>
         <footer className="page-foot">
           Map data © OpenStreetMap contributors. Satellite imagery © Esri, Maxar, Earthstar
-          Geographics, and the GIS User Community. CityCut · Kelvin Chai.
+          Geographics, and the GIS User Community.
+          {model.terrain && (
+            <>
+              {" "}
+              Terrain{" "}
+              <a href="https://mapterhorn.com/attribution">© Mapterhorn</a>.
+            </>
+          )}{" "}
+          CityCut · Kelvin Chai.
         </footer>
       </div>
     </div>

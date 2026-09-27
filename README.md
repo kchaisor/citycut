@@ -2,7 +2,7 @@
 
 CityCut cuts a square out of a city and exports it as a 3D model and a 2D site plan. The default view opens on the Melbourne CBD.
 
-It is a study tool for early architectural work: OpenStreetMap footprints, estimated heights, and a flat ground slab. It is not a survey and it does not use lidar.
+It is a study tool for early architectural work: OpenStreetMap footprints, estimated heights, and a terrain heightfield. It is not a survey. Turn Terrain off and the ground is a flat slab.
 
 ## Live site
 
@@ -16,8 +16,8 @@ GitHub Pages still needs **Settings → Pages → Source: GitHub Actions** turne
 
 1. **Choose a block.** A MapLibre map fills the screen. A fixed frame stays centered while you pan and zoom. The frame is a true square on the ground, from 0.25 km to 1.4 km on a side (about 2 km² at the top of the slider).
 2. **Search.** Nominatim pans the map to a place. The frame still marks the area that will be exported.
-3. **Choose layers.** Buildings, roads and rail, and water and green are on by default and are sent to Overpass. Trees is off until you turn it on; it then queries `natural=tree` and `natural=tree_row` and draws instanced archetype silhouettes. Terrain and contours are listed as **Soon** and are not in the file. Satellite image only switches the basemap.
-4. **Create model.** CityCut queries Overpass for that bounding box, clips every feature to the square, and opens the result. Trees, when that layer is on, are drawn as instanced massing forms rather than one mesh per tree.
+3. **Choose layers.** Buildings, roads and rail, water and green, and terrain are on by default. Buildings, roads, water, and green are sent to Overpass. Trees is off until you turn it on; it then queries `natural=tree` and `natural=tree_row` and draws instanced archetype silhouettes. Contours is on by default and, when terrain loads, adds lines to the site plan only. Satellite image only switches the basemap.
+4. **Create model.** CityCut queries Overpass for that bounding box, clips every feature to the square, and opens the result. Trees, when that layer is on, are drawn as instanced massing forms rather than one mesh per tree. Terrain, when that layer is on, fetches Mapterhorn tiles for the square and builds a heightfield in the same local metre frame.
 5. **Review.** Three views of the same block:
    - **3D model** — extruded footprints in the browser (Three.js)
    - **Drawing** — SVG site plan, pan and zoom
@@ -30,7 +30,28 @@ Building height, in order:
 - otherwise `building:levels` × 3 m
 - otherwise 9 m
 
-Heights are capped between 3 m and 420 m. The ground is a flat slab. Multipolygon buildings, parks, and water bodies are stitched when the relation is small enough to assemble (80 members or fewer).
+Heights are capped between 3 m and 420 m. With Terrain off, the ground is a flat slab and exports match that flat model. With Terrain on, buildings are extruded from the lowest DEM sample on the footprint, trees sit on the sample at the trunk, and roads, rail, parks, and water are draped a few centimetres above the surface. Multipolygon buildings, parks, and water bodies are stitched when the relation is small enough to assemble (80 members or fewer).
+
+## Terrain
+
+Terrain is on by default. The tiles are [Mapterhorn](https://mapterhorn.com/) Terrarium WebP, 512 px, from `https://tiles.mapterhorn.com/{z}/{x}/{y}.webp` ([TileJSON](https://tiles.mapterhorn.com/tilejson.json), `encoding: terrarium`). Height is `R * 256 + G + B / 256 − 32768` metres. The host sends `Access-Control-Allow-Origin: *`. The TileJSON does not publish a max zoom; [data access](https://mapterhorn.com/data-access/) describes planet tiles through z12 and regional archives through z17 where a finer source exists.
+
+CityCut asks for about 5 m per pixel (zoom 14 at Melbourne’s latitude, about 3.8 m on the ground) and steps down while a zoom returns 404. A square is resampled onto a grid of at most 193 samples on a side. Around Melbourne, z15 is 404 and z14 is served, which is the zoom that resolves Geoscience Australia’s [5 m lidar DEM](https://pid.geoscience.gov.au/dataset/ga/89644) (CC BY 4.0). Where that coverage is missing, Mapterhorn uses Copernicus GLO-30 (about 30 m). Attribution for the whole mosaic is [© Mapterhorn](https://mapterhorn.com/attribution).
+
+Elevations in the viewport, the glTF mesh named `Terrain`, and the Rhino `Terrain` layer are those DEM metres (AHD for the Geoscience Australia lidar, geoid height for Copernicus). They are not a survey, and they share the file with buildings and trees: a 12 m building on a 30 m sample runs from Z 30 to Z 42. The mesh has an 8 m skirt under the surface, the same thickness as the old slab. If the tiles fail, the model keeps the flat slab and shows “Terrain tiles could not be loaded, so the ground is flat.”
+
+Contours use marching squares on that grid. The interval is 1 m when the relief is under 8 m, 2 m under 25 m, 5 m under 80 m, and 10 m otherwise. They are drawn on the site plan when Contours is on. They are not a separate 3D layer.
+
+## Victorian elevation
+
+A Victorian DEM was not added. These endpoints were checked from the browser’s point of view (no server, no API key):
+
+- The Vicmap 10 m DEM ImageServer at `https://vicmap.land.vic.gov.au/agsimage/rest/services/elevation/vicmap_dem10m_v5m_ahd_epsg7844/ImageServer` returns HTTP 404 (`Service not found`). The parent `elevation` folder lists no services. The catalogue page still describes a 10 m AHD raster, but there is no live raster to sample. Even a working `exportImage` would be a float GeoTIFF or LERC, which needs a decoder this app does not carry.
+- DataVic’s Vicmap Elevation DEM 10 m record (CC BY 4.0) links to `datashare.maps.vic.gov.au` search pages for ECW, GeoTIFF, and JPEG 2000 downloads of the state grid. That is a file portal, not a tile URL, and the host did not send `Access-Control-Allow-Origin`.
+- [ELVIS](https://elevation.fsdf.org.au/) answers with the web app HTML, including CORS `*`, not a WCS coverage document.
+- Vicmap’s metro 1–5 m contours FeatureServer (`https://services-ap1.arcgis.com/P744lA0wf4LlBZ84/ArcGIS/rest/services/Vicmap_Elevation_METRO_1_to_5_metre/FeatureServer`) does send CORS `*`. It is contour polylines plus a sparse ground-point layer, with `maxRecordCount` 2000. A 0.5 km box in Eltham already returns about 2,000 features, so a cut needs paging, and building a heightfield from contour lines is a separate interpolation. The City of Melbourne open-data catalogue does not expose a DEM tile or a contour grid the page can read as elevations.
+
+Mapterhorn’s Melbourne tiles already use the 5 m Geoscience Australia lidar, which is finer than the Vicmap 10 m DEM, so this version stays on Mapterhorn for every site. A direct Vicmap or City of Melbourne surface is a follow-up if a CORS-friendly height grid appears.
 
 Tree size, in order:
 
@@ -89,11 +110,11 @@ Nominatim’s usage policy asks for an identifying User-Agent. Browsers set that
 | SVG download | Real |
 | Satellite basemap and satellite tab | Real preview. Not embedded in the glTF or SVG |
 | Trees | Real when the toggle is on. OpenStreetMap `natural=tree` and `tree_row`. Instanced massing archetypes in the 3D view, glTF, and Rhino; circles on the SVG plan |
-| Terrain | Stub. Toggle is labeled Soon and does not affect the model |
-| Contours | Stub, same as terrain |
-| Relief / terrain stats | Omitted. The ground is flat |
+| Terrain | Real when the toggle is on (the default). Mapterhorn Terrarium tiles, heightfield mesh named Terrain in the glTF and on a Terrain layer in the 3DM. Off falls back to the flat slab |
+| Contours | Real on the SVG plan when Terrain loaded and the toggle is on. Interval 1 / 2 / 5 / 10 m from the relief |
+| Relief / terrain stats | The model page shows the DEM elevation range when terrain loaded |
 | DXF, DAE, JPG | Not in this version. No placeholder downloads |
-| Lidar, terrain mesh, detected trees | Not in this version |
+| Site lidar, detected trees | Not in this version. Terrain is the Mapterhorn DEM, not a scan of this block |
 
 ## Limits
 
@@ -107,10 +128,12 @@ Nominatim’s usage policy asks for an identifying User-Agent. Browsers set that
 - Road kilometres are clipped centerline length, including rail and tram, not lane area.
 - Relation holes are kept when a multipolygon stitches to a single outer ring.
 - The Rhino file projects WGS84 as GDA2020 with no datum shift (about a metre). The MGA zone follows the block’s longitude: zone 55 (EPSG:7855) from 144°E, zone 54 (EPSG:7854) west of that. It is not a survey.
+- Terrain is a DEM, not lidar collected for the block. Vertical datum follows the Mapterhorn source (AHD for the Australian 5 m lidar, geoid height for Copernicus). The skirt under the mesh is 8 m and is not ground elevation.
+- A large park is subdivided so its interior follows the heightfield, down to about the grid spacing or about 24,000 triangles, whichever comes first. A road is split to that same spacing. Buildings are not draped: the whole footprint uses the minimum sample, so the uphill wall can meet the slope part-way up.
 
 ## Attribution
 
-Map data © OpenStreetMap contributors. Vector tiles © OpenFreeMap / OpenStreetMap. Satellite imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community.
+Map data © OpenStreetMap contributors. Vector tiles © OpenFreeMap / OpenStreetMap. Satellite imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community. Terrain © [Mapterhorn](https://mapterhorn.com/attribution), including Geoscience Australia’s 5 m DEM (CC BY 4.0) and Copernicus GLO-30 where the 5 m grid is absent.
 
 CityCut is an original interface. Kelvin Chai, Melbourne.
 
@@ -128,3 +151,5 @@ CityCut is an original interface. Kelvin Chai, Melbourne.
 - `src/lib/crs.ts` — MGA zone and proj4 projection for the `.3dm`
 - `src/lib/rhinoExport.ts` — Rhino `.3dm` meshes
 - `src/lib/svgPlan.ts` — drawing tab and SVG download
+- `src/lib/terrain.ts` — Terrarium decode, height sampling, contours, terrain mesh
+- `src/lib/fetchTerrain.ts` — Mapterhorn tile fetch

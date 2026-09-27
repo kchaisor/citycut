@@ -11,8 +11,8 @@ export const MAX_AREA_M2 = 2_000_000;
 export const DEFAULT_LAYERS: UiLayers = {
   buildings: true,
   roads: true,
-  terrain: false,
-  contours: false,
+  terrain: true,
+  contours: true,
   waterGreen: true,
   trees: false,
   satellite: false,
