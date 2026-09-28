@@ -57,7 +57,7 @@ export function CollapsiblePanel({
           <ChevronIcon />
         </button>
       </div>
-      <div id={bodyId} className="panel-body" aria-hidden={collapsed || undefined} inert={collapsed || undefined}>
+      <div id={bodyId} className="panel-body" hidden={collapsed}>
         <div className="panel-body-inner">{children}</div>
       </div>
     </aside>
