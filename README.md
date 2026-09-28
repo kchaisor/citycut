@@ -96,7 +96,7 @@ Copy `.env.example` if you want to override the public endpoints. Both variables
 
 | Variable | Default | Role |
 | --- | --- | --- |
-| `VITE_OVERPASS_URL` | `https://overpass.openstreetmap.fr/api/interpreter` | First Overpass interpreter. On failure CityCut tries `overpass.kumi.systems`, then the Mail.ru public instance. |
+| `VITE_OVERPASS_URL` | unset | Optional first Overpass interpreter. By default CityCut tries `overpass.kumi.systems`, then the Mail.ru public instance. |
 | `VITE_NOMINATIM_URL` | `https://nominatim.openstreetmap.org` | Place search. |
 
 Map tiles:
