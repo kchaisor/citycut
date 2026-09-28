@@ -21,7 +21,6 @@ export type OverpassResponse = {
 };
 
 const DEFAULT_ENDPOINTS = [
-  "https://overpass.openstreetmap.fr/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
   "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ];
