@@ -8,8 +8,10 @@ import {
   DEFAULT_SIDE_KM,
   DEFAULT_ZOOM,
   MAX_AREA_M2,
+  MAX_SIDE_KM,
   MELBOURNE,
   MELBOURNE_LABEL,
+  MIN_SIDE_KM,
 } from "./content/constants";
 import { applyComTreeSizes, fetchComTrees } from "./lib/comTrees";
 import { fetchTerrainForCut } from "./lib/fetchTerrain";
@@ -18,22 +20,39 @@ import { buildOverpassQuery, fetchOverpass, overpassBBox } from "./lib/overpass"
 import { FLAT_GROUND_NOTE, parseCity } from "./lib/parseOsm";
 import { TERRAIN_UNAVAILABLE, terrainNote } from "./lib/terrain";
 import { replaceTreeNote } from "./lib/trees";
-import type { Basemap, CityModel, PlaceHit, UiLayers, ViewState } from "./types";
+import { assignExternalUses, loadUseTiers } from "./lib/useCascade";
+import type { Basemap, CityModel, PlaceHit, UiLayers, UseTierFailure, ViewState } from "./types";
+
+function frameFromQuery(): { view: ViewState; sideKm: number; label: string } | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  const lat = Number(params.get("lat"));
+  const lon = Number(params.get("lon"));
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const km = Number(params.get("km"));
+  const sideKm = Number.isFinite(km) ? Math.min(MAX_SIDE_KM, Math.max(MIN_SIDE_KM, km)) : DEFAULT_SIDE_KM;
+  return {
+    view: { lat, lon, zoom: DEFAULT_ZOOM },
+    sideKm,
+    label: params.get("label") || "Selected frame",
+  };
+}
 
 const ModelPage = lazy(() => import("./components/ModelPage").then((mod) => ({ default: mod.ModelPage })));
 
 export default function App() {
-  const initialView: ViewState = { ...MELBOURNE, zoom: DEFAULT_ZOOM };
+  const queried = frameFromQuery();
+  const initialView: ViewState = queried?.view ?? { ...MELBOURNE, zoom: DEFAULT_ZOOM };
   const viewRef = useRef<ViewState>(initialView);
-  const pinRef = useRef(MELBOURNE);
-  const pinLabelRef = useRef(MELBOURNE_LABEL);
+  const pinRef = useRef({ lon: initialView.lon, lat: initialView.lat });
+  const pinLabelRef = useRef(queried?.label ?? MELBOURNE_LABEL);
   const driftedRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  const [sideKm, setSideKm] = useState(DEFAULT_SIDE_KM);
+  const [sideKm, setSideKm] = useState(queried?.sideKm ?? DEFAULT_SIDE_KM);
   const [layers, setLayers] = useState<UiLayers>(DEFAULT_LAYERS);
   const [basemap, setBasemap] = useState<Basemap>("map");
-  const [placeLabel, setPlaceLabel] = useState(MELBOURNE_LABEL);
+  const [placeLabel, setPlaceLabel] = useState(queried?.label ?? MELBOURNE_LABEL);
   const [fly, setFly] = useState<FlyRequest | null>(null);
   const [phase, setPhase] = useState<"select" | "model">("select");
   const [model, setModel] = useState<CityModel | null>(null);
@@ -143,6 +162,16 @@ export default function App() {
       const osmTask = wantsOsm
         ? fetchOverpass(buildOverpassQuery(overpassBBox(bounds), modelLayers), controller.signal)
         : Promise.resolve({ elements: [] });
+      const useTierTask = modelLayers.buildings
+        ? loadUseTiers(bounds, center, { signal: controller.signal }).catch((err: unknown) => {
+            if (controller.signal.aborted) throw err;
+            const failures: UseTierFailure[] = [
+              { tier: "clue", message: "clue unavailable" },
+              { tier: "zone", message: "zones unavailable" },
+            ];
+            return { clue: null, zones: null, failures };
+          })
+        : Promise.resolve({ clue: null, zones: null, failures: [] as UseTierFailure[] });
       const comTask = modelLayers.trees
         ? (() => {
             const comAbort = new AbortController();
@@ -166,8 +195,16 @@ export default function App() {
               });
           })()
         : Promise.resolve({ rows: [], error: null as string | null });
-      const [data, terrainResult, comResult] = await Promise.all([osmTask, terrainTask, comTask]);
+      const [data, terrainResult, comResult, useTiers] = await Promise.all([
+        osmTask,
+        terrainTask,
+        comTask,
+        useTierTask,
+      ]);
       const parsed = parseCity(data, center, sideM, modelLayers);
+      const buildings = modelLayers.buildings
+        ? assignExternalUses(parsed.buildings, center, useTiers)
+        : parsed.buildings;
       const trees = modelLayers.trees ? applyComTreeSizes(parsed.trees, comResult.rows, center) : parsed.trees;
       const contours = Boolean(layers.contours && terrainResult.field);
       let sourceNote = terrainResult.field
@@ -175,13 +212,20 @@ export default function App() {
         : parsed.sourceNote;
       if (modelLayers.trees) sourceNote = replaceTreeNote(sourceNote, trees);
       if (comResult.error) sourceNote = `${sourceNote} ${comResult.error}`;
+      if (useTiers.failures.length > 0) {
+        sourceNote = `${sourceNote} ${useTiers.failures
+          .map((failure) => failure.message.charAt(0).toUpperCase() + failure.message.slice(1))
+          .join(". ")}.`;
+      }
       setModel({
         ...parsed,
+        buildings,
         trees,
         placeLabel,
         sourceNote,
         terrain: terrainResult.field,
         terrainError: terrainResult.error,
+        useTierFailures: useTiers.failures,
         contours,
       });
       setPhase("model");

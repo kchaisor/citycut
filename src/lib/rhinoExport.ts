@@ -151,6 +151,10 @@ function addMesh(
     attributes.colorSource = rhino.ObjectColorSource.ColorFromObject;
     attributes.objectColor = objectColor;
   }
+  const use = mesh.userData.use;
+  const typologySource = mesh.userData.typologySource;
+  if (typeof use === "string") attributes.setUserString("use", use);
+  if (typeof typologySource === "string") attributes.setUserString("typology_source", typologySource);
   doc.objects().addMesh(rhinoMesh, attributes);
   release(rhinoMesh);
   release(attributes);
@@ -160,7 +164,7 @@ function addMesh(
 export async function cityModelTo3dm(model: CityModel): Promise<Uint8Array> {
   const rhino = await loadRhino();
   const crs = mgaCrs(model.center.lon);
-  const group = buildCityGroup(model);
+  const group = buildCityGroup(model, { splitBuildings: true });
   const doc = new rhino.File3dm();
   try {
     group.updateMatrixWorld(true);

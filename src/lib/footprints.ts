@@ -74,7 +74,7 @@ function nearby<T>(buckets: Map<string, T[]>, point: Pt, size: number): T[] {
 }
 
 function buildingScore(building: BuildingFeat): number {
-  const known = building.use === "unknown" ? 0 : 1_000_000;
+  const known = building.source === "none" ? 0 : 1_000_000;
   return known + building.height * 100 + Math.abs(signedArea(building.ring));
 }
 

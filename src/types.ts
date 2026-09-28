@@ -16,19 +16,28 @@ export type ModelLayers = {
 };
 
 /**
- * Program of a building, from OSM tags.
- * `office` is office and other commercial. `civic` is civic and community.
- * `unknown` is `building=yes` and anything still untagged.
+ * Program of a building. `unclassified` is what remains after the cascade.
+ * `mixed_use` is residential together with retail or commercial.
  */
 export type BuildingUse =
   | "residential"
-  | "office"
+  | "commercial"
   | "retail"
+  | "mixed_use"
   | "industrial"
-  | "education"
   | "civic"
-  | "mixed"
-  | "unknown";
+  | "recreation"
+  | "outbuilding"
+  | "unclassified";
+
+/** Which cascade tier named the use. `none` is unclassified. */
+export type TypologySource = "osm_tag" | "osm_poi" | "clue" | "zone" | "heuristic" | "none";
+
+export type UseTierFailure = {
+  tier: "clue" | "zone";
+  /** Short UI line, for example "zones unavailable". */
+  message: string;
+};
 
 export type BuildingFeat = {
   id: number;
@@ -36,6 +45,7 @@ export type BuildingFeat = {
   holes: Ring[];
   height: number;
   use: BuildingUse;
+  source: TypologySource;
 };
 
 /** Highway class used for width and asphalt colour. Rail leaves this unset. */
@@ -118,6 +128,8 @@ export type CityModel = {
   terrain?: TerrainField | null;
   /** Set when Terrain was requested and the tiles could not be read. */
   terrainError?: string | null;
+  /** CLUE or Vicmap zones skipped after a hard failure. */
+  useTierFailures?: UseTierFailure[];
   /** Draw contour lines on the SVG plan. Ignored unless `terrain` is set. */
   contours?: boolean;
 };

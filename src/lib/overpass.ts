@@ -48,6 +48,17 @@ export function buildOverpassQuery(bbox: string, layers: ModelLayers): string {
   if (layers.buildings) {
     parts.push(`way["building"]["building"!="no"]${bbox};`);
     parts.push(`relation["building"]["building"!="no"]${bbox};`);
+    parts.push(`node["amenity"]${bbox};`);
+    parts.push(`node["shop"]${bbox};`);
+    parts.push(`node["office"]${bbox};`);
+    parts.push(`node["leisure"]${bbox};`);
+    parts.push(`node["craft"]${bbox};`);
+    parts.push(
+      `way["landuse"~"^(residential|commercial|retail|industrial|education|institutional|recreation_ground)$"]${bbox};`,
+    );
+    parts.push(
+      `relation["landuse"~"^(residential|commercial|retail|industrial|education|institutional|recreation_ground)$"]${bbox};`,
+    );
   }
   if (layers.roads) {
     parts.push(`way["highway"]${bbox};`);
@@ -86,12 +97,19 @@ function endpoints(): string[] {
   return [custom, ...DEFAULT_ENDPOINTS.filter((url) => url !== custom)];
 }
 
+const MIRROR_TIMEOUT_MS = 70_000;
+
 export async function fetchOverpass(
   query: string,
   signal?: AbortSignal,
 ): Promise<OverpassResponse> {
   let lastError = "OpenStreetMap did not return this block.";
   for (const url of endpoints()) {
+    if (signal?.aborted) throw signal.reason ?? new DOMException("Aborted", "AbortError");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), MIRROR_TIMEOUT_MS);
+    const onAbort = () => controller.abort();
+    signal?.addEventListener("abort", onAbort);
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -100,7 +118,7 @@ export async function fetchOverpass(
           Accept: "application/json",
         },
         body: new URLSearchParams({ data: query }),
-        signal,
+        signal: controller.signal,
       });
       if (response.status === 429 || response.status >= 500) {
         lastError = `The map service was busy (${response.status}).`;
@@ -122,7 +140,12 @@ export async function fetchOverpass(
       return json;
     } catch (error) {
       if (signal?.aborted) throw error;
-      lastError = "The map service could not be reached.";
+      lastError = controller.signal.aborted
+        ? "The map service was busy."
+        : "The map service could not be reached.";
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
     }
   }
   throw new OverpassError(

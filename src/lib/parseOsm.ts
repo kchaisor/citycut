@@ -1,4 +1,4 @@
-import { classify } from "./buildingUse";
+import { classify, useFromLanduseTag } from "./buildingUse";
 import { clipPolygon, clipPolyline } from "./clip";
 import { dedupeAreas, dedupeBuildings, dedupeRoads } from "./footprints";
 import { dedupeConsecutive, openRing, polylineLength, signedArea, toLocal } from "./geo";
@@ -6,6 +6,7 @@ import { buildingHeight } from "./height";
 import type { OverpassElement, OverpassResponse } from "./overpass";
 import { resolveArchetype } from "./treeMap";
 import { describeTrees, treeSize } from "./trees";
+import { applyOsmContext, collectOsmUseFeatures, landFeature, type LandFeat } from "./useCascade";
 import type {
   AreaFeat,
   BuildingFeat,
@@ -331,6 +332,30 @@ function collectTrees(elements: OverpassElement[], origin: LonLat, half: number)
   return trees;
 }
 
+function buildingFeat(
+  id: number,
+  ring: Pt[],
+  holes: Pt[][],
+  tags: Record<string, string>,
+): BuildingFeat {
+  const tagged = classify(tags);
+  return {
+    id,
+    ring,
+    holes,
+    height: buildingHeight(tags),
+    use: tagged ?? "unclassified",
+    source: tagged ? "osm_tag" : "none",
+  };
+}
+
+function pushLanduse(landuse: LandFeat[], tags: Record<string, string>, ring: Pt[], holes: Pt[][]) {
+  const use = useFromLanduseTag(tags.landuse);
+  if (!use) return;
+  const feature = landFeature(ring, holes, use);
+  if (feature) landuse.push(feature);
+}
+
 function clipRing(points: Pt[], half: number): Pt[] {
   const clipped = clipPolygon(points, -half, half);
   if (clipped.length < 3) return [];
@@ -384,9 +409,10 @@ export function parseCity(
   const buildings: BuildingFeat[] = [];
   const roads: RoadFeat[] = [];
   const areas: AreaFeat[] = [];
+  const landuse: LandFeat[] = [];
   const consumedWays = new Set<number>();
-
   const elements = data.elements ?? [];
+  const { pois } = layers.buildings ? collectOsmUseFeatures(elements, origin) : { pois: [] };
   let trees = layers.trees ? collectTrees(elements, origin, half) : [];
   let treeCapHit = false;
   if (trees.length > MAX_TREES) {
@@ -405,24 +431,30 @@ export function parseCity(
       const tags = element.tags ?? {};
       const buildingRel = layers.buildings && tags.building && tags.building !== "no" && tags.building !== "entrance";
       const kind = layers.waterGreen ? areaKind(tags) : null;
-      if (!buildingRel && !kind) continue;
+      const landUse = layers.buildings ? useFromLanduseTag(tags.landuse) : null;
+      if (!buildingRel && !kind && !landUse) continue;
       const stitched = relationRings(element, origin);
       if (!stitched) continue;
       const rings = stitchRings(stitched.outers);
       const holes = rings.length === 1 ? stitchRings(stitched.inners) : [];
       if (rings.length === 0) continue;
+      if (landUse && !buildingRel) {
+        for (const ring of rings) pushLanduse(landuse, tags, ring, rings.length === 1 ? holes : []);
+      }
+      if (!buildingRel && !kind) continue;
       for (const ref of stitched.used) consumedWays.add(ref);
       if (buildingRel) {
         for (const ring of rings) {
           const clipped = clipRing(ring, half);
           if (clipped.length < 3) continue;
-          buildings.push({
-            id: element.id,
-            ring: clipped,
-            holes: holes.map((hole) => clipRing(hole, half)).filter((hole) => hole.length >= 3),
-            height: buildingHeight(tags),
-            use: classify(tags),
-          });
+          buildings.push(
+            buildingFeat(
+              element.id,
+              clipped,
+              holes.map((hole) => clipRing(hole, half)).filter((hole) => hole.length >= 3),
+              tags,
+            ),
+          );
         }
       } else if (kind) {
         for (const ring of rings) pushArea(areas, element.id, kind, ring, holes, half);
@@ -436,18 +468,14 @@ export function parseCity(
     const line = pointsFromGeom(element.geometry, origin);
     if (line.length < 2) continue;
 
+    if (layers.buildings && isClosed(line)) pushLanduse(landuse, tags, line, []);
+
     if (layers.buildings && tags.building && tags.building !== "no" && tags.building !== "entrance" && !tags["building:part"]) {
       if (consumedWays.has(element.id)) continue;
       if (!isClosed(line)) continue;
       const clipped = clipRing(line, half);
       if (clipped.length < 3) continue;
-      buildings.push({
-        id: element.id,
-        ring: clipped,
-        holes: [],
-        height: buildingHeight(tags),
-        use: classify(tags),
-      });
+      buildings.push(buildingFeat(element.id, clipped, [], tags));
       continue;
     }
 
@@ -478,6 +506,7 @@ export function parseCity(
 
   let buildingCapHit = false;
   let kept = dedupeBuildings(buildings);
+  if (layers.buildings) kept = applyOsmContext(kept, pois, landuse);
   if (kept.length > MAX_BUILDINGS) {
     buildingCapHit = true;
     kept = kept
@@ -491,7 +520,7 @@ export function parseCity(
   const notes = [
     "OpenStreetMap via Overpass.",
     "Building height uses the height tag, otherwise building:levels × 3 m, otherwise 9 m.",
-    "Building colour follows building, building:use, amenity, shop, and office tags.",
+    "Building use follows OSM tags, then POIs and landuse, City of Melbourne CLUE, Vicmap zones, then footprint size.",
     FLAT_GROUND_NOTE,
   ];
   if (layers.trees) notes.push(describeTrees(trees));
