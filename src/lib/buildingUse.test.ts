@@ -6,7 +6,9 @@ import {
   normaliseZoneCode,
   useFromClue,
   useFromHeuristic,
+  useFromLanduseTag,
   useFromZone,
+  usesFromPoi,
   votePoi,
 } from "./buildingUse";
 
@@ -139,11 +141,54 @@ describe("tier tables", () => {
     expect(useFromHeuristic(30, 3)).toBe("outbuilding");
   });
 
+  it("maps landuse polygons and ignores values outside that list", () => {
+    expect(useFromLanduseTag("residential")).toBe("residential");
+    expect(useFromLanduseTag("commercial")).toBe("commercial");
+    expect(useFromLanduseTag("retail")).toBe("retail");
+    expect(useFromLanduseTag("industrial")).toBe("industrial");
+    expect(useFromLanduseTag("institutional")).toBe("civic");
+    expect(useFromLanduseTag("education")).toBeNull();
+    expect(useFromLanduseTag("recreation_ground")).toBeNull();
+    expect(useFromLanduseTag("civic")).toBeNull();
+  });
+
+  it("keeps the POI list to amenity, shop, office, and leisure", () => {
+    expect(usesFromPoi({ amenity: "school" })).toEqual(["civic"]);
+    expect(usesFromPoi({ amenity: "university" })).toEqual(["civic"]);
+    expect(usesFromPoi({ amenity: "college" })).toEqual(["civic"]);
+    expect(usesFromPoi({ amenity: "kindergarten" })).toEqual(["civic"]);
+    expect(usesFromPoi({ amenity: "hospital" })).toEqual(["civic"]);
+    expect(usesFromPoi({ amenity: "clinic" })).toEqual(["civic"]);
+    expect(usesFromPoi({ amenity: "doctors" })).toEqual(["civic"]);
+    expect(usesFromPoi({ amenity: "place_of_worship" })).toEqual(["civic"]);
+    expect(usesFromPoi({ amenity: "library" })).toEqual(["civic"]);
+    expect(usesFromPoi({ amenity: "community_centre" })).toEqual(["civic"]);
+    expect(usesFromPoi({ amenity: "pharmacy" })).toEqual(["retail"]);
+    expect(usesFromPoi({ amenity: "restaurant" })).toEqual(["retail"]);
+    expect(usesFromPoi({ amenity: "cafe" })).toEqual(["retail"]);
+    expect(usesFromPoi({ amenity: "bar" })).toEqual(["retail"]);
+    expect(usesFromPoi({ amenity: "pub" })).toEqual(["retail"]);
+    expect(usesFromPoi({ amenity: "fast_food" })).toEqual(["retail"]);
+    expect(usesFromPoi({ shop: "bakery" })).toEqual(["retail"]);
+    expect(usesFromPoi({ office: "lawyer" })).toEqual(["commercial"]);
+    expect(usesFromPoi({ leisure: "sports_centre" })).toEqual(["recreation"]);
+    expect(usesFromPoi({ leisure: "fitness_centre" })).toEqual(["recreation"]);
+    expect(usesFromPoi({ craft: "brewery" })).toEqual([]);
+    expect(usesFromPoi({ amenity: "police" })).toEqual([]);
+    expect(usesFromPoi({ amenity: "townhall" })).toEqual([]);
+    expect(usesFromPoi({ amenity: "bench" })).toEqual([]);
+    expect(usesFromPoi({ leisure: "swimming_pool" })).toEqual([]);
+    expect(usesFromPoi({ leisure: "park" })).toEqual([]);
+    expect(votePoi(usesFromPoi({ shop: "bakery", building: "apartments" }))).toBe("mixed_use");
+    expect(votePoi(usesFromPoi({ office: "yes", building: "residential" }))).toBe("mixed_use");
+  });
+
   it("stops the cascade at the first matching tier", () => {
     expect(
       cascadeUse({
         tags: { building: "house" },
         poiVotes: ["retail"],
+        landuse: "industrial",
         clueValues: ["Office"],
         zoneCode: "IN1Z",
         heightM: 4,
@@ -154,6 +199,7 @@ describe("tier tables", () => {
       cascadeUse({
         tags: { building: "yes" },
         poiVotes: ["retail"],
+        landuse: "industrial",
         clueValues: ["Office"],
         zoneCode: "IN1Z",
         heightM: 4,
@@ -169,7 +215,17 @@ describe("tier tables", () => {
         heightM: 4,
         areaM2: 20,
       }),
-    ).toEqual({ use: "industrial", source: "osm_poi" });
+    ).toEqual({ use: "industrial", source: "osm_landuse" });
+    expect(
+      cascadeUse({
+        tags: { building: "yes" },
+        landuse: "institutional",
+        clueValues: ["Office"],
+        zoneCode: "GRZ1",
+        heightM: 4,
+        areaM2: 20,
+      }),
+    ).toEqual({ use: "civic", source: "osm_landuse" });
     expect(
       cascadeUse({
         tags: { building: "yes" },

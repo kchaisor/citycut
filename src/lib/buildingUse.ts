@@ -15,6 +15,7 @@ export const BUILDING_USES = [
 export const TYPOLOGY_SOURCES = [
   "osm_tag",
   "osm_poi",
+  "osm_landuse",
   "clue",
   "zone",
   "heuristic",
@@ -53,6 +54,7 @@ export const SOURCE_META: Record<
 > = {
   osm_tag: { label: "OSM tag", color: "#1F4E79", inferred: false },
   osm_poi: { label: "OSM POI", color: "#C46B1A", inferred: false },
+  osm_landuse: { label: "OSM landuse", color: "#7A3E9D", inferred: false },
   clue: { label: "CLUE", color: "#1E7A46", inferred: false },
   zone: { label: "Zone", color: "#A9C4DE", inferred: true },
   heuristic: { label: "Heuristic", color: "#D9C7A6", inferred: true },
@@ -63,6 +65,7 @@ export const SOURCE_META: Record<
 export const SOURCE_COUNT_KEYS = [
   "osm_tag",
   "osm_poi",
+  "osm_landuse",
   "clue",
   "zone",
   "heuristic",
@@ -161,45 +164,44 @@ const ELEMENT_AMENITY_USE: Record<string, BuildingUse> = {
 };
 
 /**
- * Landuse values on a separate polygon. Education and institutional land
- * are civic. A landuse tag on the building element uses the same table.
+ * Landuse polygons around a building. Key order is the Overpass alternation.
+ * Institutional land is civic. A landuse tag on the building element uses
+ * the same table and still counts as an OSM tag.
  */
 export const LANDUSE_POLYGON_USE: Record<string, BuildingUse> = {
   residential: "residential",
   commercial: "commercial",
   retail: "retail",
   industrial: "industrial",
-  education: "civic",
   institutional: "civic",
-  recreation_ground: "recreation",
-  civic: "civic",
 };
 
-/** Amenity values on a POI node. */
+/**
+ * Amenity values on a POI node. Key order is the Overpass alternation.
+ * Other amenities, including craft, are not POIs.
+ */
 export const POI_AMENITY_USE: Record<string, BuildingUse> = {
   school: "civic",
-  college: "civic",
   university: "civic",
+  college: "civic",
   kindergarten: "civic",
   hospital: "civic",
   clinic: "civic",
-  library: "civic",
-  townhall: "civic",
-  police: "civic",
-  fire_station: "civic",
-  place_of_worship: "civic",
-  community_centre: "civic",
+  doctors: "civic",
+  pharmacy: "retail",
   restaurant: "retail",
   cafe: "retail",
   bar: "retail",
   pub: "retail",
   fast_food: "retail",
+  place_of_worship: "civic",
+  library: "civic",
+  community_centre: "civic",
 };
 
 export const POI_LEISURE_USE: Record<string, BuildingUse> = {
   sports_centre: "recreation",
   fitness_centre: "recreation",
-  swimming_pool: "recreation",
 };
 
 const TAG_PRIORITY: BuildingUse[] = [
@@ -320,20 +322,25 @@ export function useFromLanduseTag(value: string | undefined): BuildingUse | null
   return null;
 }
 
-/** Categories implied by one amenity, shop, office, leisure, or craft node. */
+/** Categories implied by one allowed amenity, shop, office, or leisure node. */
 export function usesFromPoi(tags: Record<string, string>): BuildingUse[] {
-  const found = new Set<BuildingUse>();
-  if (tokens(tags.shop).length > 0) found.add("retail");
-  if (tokens(tags.office).length > 0) found.add("commercial");
-  if (tokens(tags.craft).length > 0) found.add("industrial");
-  for (const value of tokens(tags.leisure)) {
-    const use = POI_LEISURE_USE[value];
-    if (use) found.add(use);
-  }
-  for (const value of tokens(tags.amenity)) {
+  const amenityHits = tokens(tags.amenity).flatMap((value) => {
     const use = POI_AMENITY_USE[value];
-    if (use) found.add(use);
-  }
+    return use ? [use] : [];
+  });
+  const leisureHits = tokens(tags.leisure).flatMap((value) => {
+    const use = POI_LEISURE_USE[value];
+    return use ? [use] : [];
+  });
+  const shop = tokens(tags.shop).length > 0;
+  const office = tokens(tags.office).length > 0;
+  if (amenityHits.length === 0 && leisureHits.length === 0 && !shop && !office) return [];
+
+  const found = new Set<BuildingUse>();
+  if (shop) found.add("retail");
+  if (office) found.add("commercial");
+  for (const use of leisureHits) found.add(use);
+  for (const use of amenityHits) found.add(use);
   const buildingish = [...tokens(tags.building), ...tokens(tags["building:use"])];
   if (buildingish.some((value) => OSM_BUILDING_USE[value] === "residential")) found.add("residential");
   return [...found];
@@ -433,7 +440,7 @@ export function cascadeUse(signals: CascadeSignals): { use: BuildingUse; source:
   if (fromPoi) return { use: fromPoi, source: "osm_poi" };
   if (signals.landuse) {
     const fromLand = useFromLanduseTag(signals.landuse);
-    if (fromLand) return { use: fromLand, source: "osm_poi" };
+    if (fromLand) return { use: fromLand, source: "osm_landuse" };
   }
   const clueVotes = (signals.clueValues ?? [])
     .map((value) => useFromClue(value))
