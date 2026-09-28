@@ -168,35 +168,49 @@ function pending(buildings: BuildingFeat[]): boolean {
   return buildings.some((building) => building.source === "none");
 }
 
-/** POI nodes inside the footprint, otherwise the landuse polygon under the centroid. */
-export function applyOsmContext(
-  buildings: BuildingFeat[],
-  pois: PoiFeat[],
-  landuse: LandFeat[],
-): BuildingFeat[] {
-  if (!pending(buildings) || (pois.length === 0 && landuse.length === 0)) return buildings;
+/** POI nodes inside the footprint. A grid index skips point-in-polygon tests outside the footprint box. */
+function applyOsmPois(buildings: BuildingFeat[], pois: PoiFeat[]): BuildingFeat[] {
+  if (!pending(buildings) || pois.length === 0) return buildings;
   const poiIndex = new GridIndex<PoiFeat>(48);
   for (const poi of pois) poiIndex.insert(ringBBox([poi.at, poi.at]), poi);
+
+  return buildings.map((building) => {
+    if (building.source !== "none") return building;
+    const votes = poiIndex
+      .queryBox(ringBBox(building.ring))
+      .filter((poi) => pointInPolygon(poi.at, building.ring, building.holes))
+      .flatMap((poi) => poi.votes);
+    const fromPoi = votePoi(votes);
+    if (!fromPoi) return building;
+    return { ...building, use: fromPoi, source: "osm_poi" as const };
+  });
+}
+
+/** Smallest landuse polygon that contains the building centroid. */
+function applyOsmLanduse(buildings: BuildingFeat[], landuse: LandFeat[]): BuildingFeat[] {
+  if (!pending(buildings) || landuse.length === 0) return buildings;
   const landIndex = new GridIndex<LandFeat>(80);
   for (const poly of landuse) landIndex.insert(ringBBox(poly.ring), poly);
 
   return buildings.map((building) => {
     if (building.source !== "none") return building;
-    const box = ringBBox(building.ring);
-    const votes = poiIndex
-      .queryBox(box)
-      .filter((poi) => pointInPolygon(poi.at, building.ring, building.holes))
-      .flatMap((poi) => poi.votes);
-    const fromPoi = votePoi(votes);
-    if (fromPoi) return { ...building, use: fromPoi, source: "osm_poi" as const };
     const at = interiorPoint(building.ring, building.holes);
     const covers = landIndex
       .queryPoint(at)
       .filter((poly) => pointInPolygon(at, poly.ring, poly.holes))
       .sort((a, b) => a.area - b.area);
-    if (covers.length > 0) return { ...building, use: covers[0].use, source: "osm_poi" as const };
-    return building;
+    if (covers.length === 0) return building;
+    return { ...building, use: covers[0].use, source: "osm_landuse" as const };
   });
+}
+
+/** OSM tags are already applied. POIs run next, then landuse polygons. */
+export function applyOsmContext(
+  buildings: BuildingFeat[],
+  pois: PoiFeat[],
+  landuse: LandFeat[],
+): BuildingFeat[] {
+  return applyOsmLanduse(applyOsmPois(buildings, pois), landuse);
 }
 
 export function collectOsmUseFeatures(

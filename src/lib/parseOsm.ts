@@ -6,7 +6,14 @@ import { buildingHeight } from "./height";
 import type { OverpassElement, OverpassResponse } from "./overpass";
 import { resolveArchetype } from "./treeMap";
 import { describeTrees, treeSize } from "./trees";
-import { applyOsmContext, collectOsmUseFeatures, landFeature, type LandFeat } from "./useCascade";
+import {
+  applyOsmContext,
+  collectOsmUseFeatures,
+  interiorPoint,
+  landFeature,
+  pointInRing,
+  type LandFeat,
+} from "./useCascade";
 import type {
   AreaFeat,
   BuildingFeat,
@@ -439,7 +446,12 @@ export function parseCity(
       const holes = rings.length === 1 ? stitchRings(stitched.inners) : [];
       if (rings.length === 0) continue;
       if (landUse && !buildingRel) {
-        for (const ring of rings) pushLanduse(landuse, tags, ring, rings.length === 1 ? holes : []);
+        const inners = rings.length === 1 ? holes : stitchRings(stitched.inners);
+        for (const ring of rings) {
+          const ringHoles =
+            rings.length === 1 ? inners : inners.filter((hole) => pointInRing(interiorPoint(hole), ring));
+          pushLanduse(landuse, tags, ring, ringHoles);
+        }
       }
       if (!buildingRel && !kind) continue;
       for (const ref of stitched.used) consumedWays.add(ref);
@@ -520,7 +532,7 @@ export function parseCity(
   const notes = [
     "OpenStreetMap via Overpass.",
     "Building height uses the height tag, otherwise building:levels × 3 m, otherwise 9 m.",
-    "Building use follows OSM tags, then POIs and landuse, City of Melbourne CLUE, Vicmap zones, then footprint size.",
+    "Building use follows OSM tags, then POIs, then landuse polygons, City of Melbourne CLUE, Vicmap zones, then footprint size.",
     FLAT_GROUND_NOTE,
   ];
   if (layers.trees) notes.push(describeTrees(trees));

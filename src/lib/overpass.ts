@@ -1,4 +1,5 @@
 import type { ModelLayers } from "../types";
+import { LANDUSE_POLYGON_USE, POI_AMENITY_USE, POI_LEISURE_USE } from "./buildingUse";
 
 export type OverpassElement = {
   type: "node" | "way" | "relation";
@@ -47,17 +48,15 @@ export function buildOverpassQuery(bbox: string, layers: ModelLayers): string {
   if (layers.buildings) {
     parts.push(`way["building"]["building"!="no"]${bbox};`);
     parts.push(`relation["building"]["building"!="no"]${bbox};`);
-    parts.push(`node["amenity"]${bbox};`);
+    const amenity = Object.keys(POI_AMENITY_USE).join("|");
+    const leisure = Object.keys(POI_LEISURE_USE).join("|");
+    const landuse = Object.keys(LANDUSE_POLYGON_USE).join("|");
+    parts.push(`node["amenity"~"^(${amenity})$"]${bbox};`);
     parts.push(`node["shop"]${bbox};`);
     parts.push(`node["office"]${bbox};`);
-    parts.push(`node["leisure"]${bbox};`);
-    parts.push(`node["craft"]${bbox};`);
-    parts.push(
-      `way["landuse"~"^(residential|commercial|retail|industrial|education|institutional|recreation_ground)$"]${bbox};`,
-    );
-    parts.push(
-      `relation["landuse"~"^(residential|commercial|retail|industrial|education|institutional|recreation_ground)$"]${bbox};`,
-    );
+    parts.push(`node["leisure"~"^(${leisure})$"]${bbox};`);
+    parts.push(`way["landuse"~"^(${landuse})$"]${bbox};`);
+    parts.push(`relation["landuse"~"^(${landuse})$"]${bbox};`);
   }
   if (layers.roads) {
     parts.push(`way["highway"]${bbox};`);

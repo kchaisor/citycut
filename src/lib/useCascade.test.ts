@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fromLocal, squareBBox } from "./geo";
+import { buildOverpassQuery } from "./overpass";
 import { parseCity } from "./parseOsm";
 import type { BuildingFeat, Pt } from "../types";
 import {
@@ -42,9 +43,15 @@ describe("osm context", () => {
         elements: [
           { type: "way", id: 1, tags: { building: "yes" }, geometry: footprint },
           { type: "way", id: 2, tags: { building: "house" }, geometry: geom(square([80, 0], 20)) },
-          { type: "node", id: 3, lat: origin.lat, lon: origin.lon, tags: { shop: "bakery" } },
+          {
+            type: "node",
+            id: 3,
+            lat: origin.lat,
+            lon: origin.lon,
+            tags: { shop: "bakery", building: "apartments" },
+          },
           { type: "node", id: 4, lat: outside.lat, lon: outside.lon, tags: { shop: "bakery" } },
-          { type: "node", id: 5, lat: origin.lat, lon: origin.lon, tags: { building: "apartments" } },
+          { type: "node", id: 5, lat: origin.lat, lon: origin.lon, tags: { craft: "carpenter" } },
         ],
       },
       origin,
@@ -69,7 +76,119 @@ describe("osm context", () => {
       400,
       { buildings: true, roads: false, waterGreen: false, trees: false },
     );
-    expect(parsed.buildings[0]).toMatchObject({ use: "residential", source: "osm_poi" });
+    expect(parsed.buildings[0]).toMatchObject({ use: "residential", source: "osm_landuse" });
+  });
+
+  it("picks the smallest landuse polygon under the centroid", () => {
+    const parsed = parseCity(
+      {
+        elements: [
+          { type: "way", id: 1, tags: { building: "yes" }, geometry: geom(square([0, 0], 12)) },
+          { type: "way", id: 2, tags: { building: "yes" }, geometry: geom(square([70, 0], 12)) },
+          { type: "way", id: 8, tags: { landuse: "residential" }, geometry: geom(square([0, 0], 160)) },
+          { type: "way", id: 9, tags: { landuse: "commercial" }, geometry: geom(square([0, 0], 36)) },
+        ],
+      },
+      origin,
+      400,
+      { buildings: true, roads: false, waterGreen: false, trees: false },
+    );
+    expect(parsed.buildings.find((building) => building.id === 1)).toMatchObject({
+      use: "commercial",
+      source: "osm_landuse",
+    });
+    expect(parsed.buildings.find((building) => building.id === 2)).toMatchObject({
+      use: "residential",
+      source: "osm_landuse",
+    });
+  });
+
+  it("does not classify a building whose centroid sits in a landuse hole", () => {
+    const parsed = parseCity(
+      {
+        elements: [
+          { type: "way", id: 1, tags: { building: "yes" }, geometry: geom(square([0, 0], 10)) },
+          { type: "way", id: 2, tags: { building: "yes" }, geometry: geom(square([35, 0], 10)) },
+          {
+            type: "relation",
+            id: 9,
+            tags: { landuse: "institutional", type: "multipolygon" },
+            members: [
+              { type: "way", ref: 11, role: "outer", geometry: geom(square([0, 0], 100)) },
+              { type: "way", ref: 12, role: "inner", geometry: geom(square([0, 0], 40)) },
+            ],
+          },
+        ],
+      },
+      origin,
+      400,
+      { buildings: true, roads: false, waterGreen: false, trees: false },
+    );
+    expect(parsed.buildings.find((building) => building.id === 1)).toMatchObject({
+      use: "unclassified",
+      source: "none",
+    });
+    expect(parsed.buildings.find((building) => building.id === 2)).toMatchObject({
+      use: "civic",
+      source: "osm_landuse",
+    });
+  });
+
+  it("lets a POI beat landuse and drops amenities outside the POI list", () => {
+    const parsed = parseCity(
+      {
+        elements: [
+          { type: "way", id: 1, tags: { building: "yes" }, geometry: geom(square([0, 0], 16)) },
+          { type: "way", id: 2, tags: { building: "yes" }, geometry: geom(square([40, 0], 16)) },
+          { type: "way", id: 3, tags: { building: "yes" }, geometry: geom(square([80, 0], 16)) },
+          { type: "way", id: 9, tags: { landuse: "residential" }, geometry: geom(square([40, 0], 200)) },
+          { type: "node", id: 4, lat: origin.lat, lon: origin.lon, tags: { amenity: "doctors" } },
+          { type: "node", id: 5, ...fromLocal([40, 0], origin), tags: { amenity: "police" } },
+          { type: "node", id: 6, ...fromLocal([80, 0], origin), tags: { leisure: "fitness_centre" } },
+        ],
+      },
+      origin,
+      400,
+      { buildings: true, roads: false, waterGreen: false, trees: false },
+    );
+    expect(parsed.buildings.find((building) => building.id === 1)).toMatchObject({
+      use: "civic",
+      source: "osm_poi",
+    });
+    expect(parsed.buildings.find((building) => building.id === 2)).toMatchObject({
+      use: "residential",
+      source: "osm_landuse",
+    });
+    expect(parsed.buildings.find((building) => building.id === 3)).toMatchObject({
+      use: "recreation",
+      source: "osm_poi",
+    });
+  });
+
+  it("asks Overpass only for the POI and landuse values the cascade reads", () => {
+    const query = buildOverpassQuery("(1,2,3,4)", {
+      buildings: true,
+      roads: false,
+      waterGreen: false,
+      trees: false,
+    });
+    expect(query).toContain(
+      'node["amenity"~"^(school|university|college|kindergarten|hospital|clinic|doctors|pharmacy|restaurant|cafe|bar|pub|fast_food|place_of_worship|library|community_centre)$"]',
+    );
+    expect(query).toContain('node["shop"]');
+    expect(query).toContain('node["office"]');
+    expect(query).toContain('node["leisure"~"^(sports_centre|fitness_centre)$"]');
+    expect(query).toContain(
+      'way["landuse"~"^(residential|commercial|retail|industrial|institutional)$"]',
+    );
+    expect(query).toContain(
+      'relation["landuse"~"^(residential|commercial|retail|industrial|institutional)$"]',
+    );
+    expect(query).not.toMatch(/node\["amenity"\]\(/);
+    expect(query).not.toMatch(/node\["leisure"\]\(/);
+    expect(query).not.toContain("craft");
+    expect(query).not.toContain("education");
+    expect(query).not.toContain("recreation_ground");
   });
 });
 

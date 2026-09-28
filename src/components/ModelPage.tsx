@@ -231,7 +231,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                         <i
                           className={SOURCE_META[source].inferred ? "hatch" : undefined}
                           style={{
-                            background: showSource ? SOURCE_META[source].color : "#f6f3ec",
+                            backgroundColor: showSource ? SOURCE_META[source].color : "#f6f3ec",
                           }}
                         />
                         <span>{SOURCE_META[source].label}</span>

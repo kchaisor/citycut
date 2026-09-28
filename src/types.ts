@@ -31,7 +31,14 @@ export type BuildingUse =
   | "unclassified";
 
 /** Which cascade tier named the use. `none` is unclassified. */
-export type TypologySource = "osm_tag" | "osm_poi" | "clue" | "zone" | "heuristic" | "none";
+export type TypologySource =
+  | "osm_tag"
+  | "osm_poi"
+  | "osm_landuse"
+  | "clue"
+  | "zone"
+  | "heuristic"
+  | "none";
 
 export type UseTierFailure = {
   tier: "clue" | "zone";

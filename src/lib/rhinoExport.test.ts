@@ -43,7 +43,13 @@ function latin1(bytes: Uint8Array): string {
 
 describe("rhino export", () => {
   it("writes a Z-up .3dm in MGA zone 55 metres", async () => {
-    const bytes = await cityModelTo3dm(model);
+    const bytes = await cityModelTo3dm({
+      ...model,
+      buildings: [
+        ...model.buildings,
+        { id: 8, ring: square([60, 0], 16), holes: [], height: 10, use: "civic", source: "osm_landuse" },
+      ],
+    });
     const header = latin1(bytes);
     expect(header.startsWith("3D Geometry File Format")).toBe(true);
     expect(header).toContain("EPSG:7855");
@@ -89,6 +95,13 @@ describe("rhino export", () => {
       }
       expect(use).toBe("unclassified");
       expect(typologySource).toBe("none");
+      let landuseSource = "";
+      for (let i = 0; i < doc.objects().count; i++) {
+        const attributes = doc.objects().get(i).attributes();
+        if (attributes.name !== "Buildings::Civic") continue;
+        landuseSource = attributes.getUserString("typology_source");
+      }
+      expect(landuseSource).toBe("osm_landuse");
 
       const top = projectLocal([20, 20], origin, 55);
       const south = projectLocal([20, -20], origin, 55);
