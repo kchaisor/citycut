@@ -11,8 +11,10 @@ import {
 import { CRS_NOTE, mgaCrs } from "../lib/crs";
 import { formatCoord, formatLengthKm } from "../lib/geo";
 import { download3dm, downloadGlb, downloadSvg } from "../lib/download";
+import { BUILDINGS_LEGEND_COLLAPSED_KEY, TREES_LEGEND_COLLAPSED_KEY } from "../lib/panelCollapse";
 import { treeSizeSummary } from "../lib/trees";
 import type { CityModel } from "../types";
+import { CollapsiblePanel } from "./CollapsiblePanel";
 import { DrawingPlan } from "./DrawingPlan";
 import { SatellitePane } from "./SatellitePane";
 import { Scene3D } from "./Scene3D";
@@ -170,32 +172,45 @@ export function ModelPage({ model }: { model: CityModel }) {
           {tab === "3d" && (model.layers.buildings || model.layers.trees) && (
             <div className="hud">
               {model.layers.trees && model.trees.length > 0 && (
-                <p className="tree-sizes">{treeSizeSummary(model.trees)}</p>
+                <CollapsiblePanel
+                  storageKey={TREES_LEGEND_COLLAPSED_KEY}
+                  title="Tree sizes"
+                  controlsLabel="tree sizes"
+                  className="tree-sizes"
+                  ariaLabel="Tree sizes"
+                >
+                  <p className="tree-readout">{treeSizeSummary(model.trees)}</p>
+                </CollapsiblePanel>
               )}
               {model.layers.buildings && model.buildings.length > 0 && (
-                <aside className="legend" aria-label="Building use">
-                  <div className="legend-head">
-                    <span>Buildings</span>
-                  </div>
-                  <div className="legend-toggles">
-                    <button
-                      type="button"
-                      aria-pressed={colourByUse && !showSource}
-                      onClick={() => {
-                        setShowSource(false);
-                        setColourByUse((on) => !on);
-                      }}
-                    >
-                      {colourByUse ? "Uniform colour" : "Colour by use"}
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={showSource}
-                      onClick={() => setShowSource((on) => !on)}
-                    >
-                      {showSource ? "Showing source" : "Show source"}
-                    </button>
-                  </div>
+                <CollapsiblePanel
+                  storageKey={BUILDINGS_LEGEND_COLLAPSED_KEY}
+                  title="Buildings"
+                  controlsLabel="Buildings legend"
+                  className="legend"
+                  ariaLabel="Building use"
+                  toolbar={
+                    <>
+                      <button
+                        type="button"
+                        aria-pressed={colourByUse && !showSource}
+                        onClick={() => {
+                          setShowSource(false);
+                          setColourByUse((on) => !on);
+                        }}
+                      >
+                        {colourByUse ? "Uniform colour" : "Colour by use"}
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={showSource}
+                        onClick={() => setShowSource((on) => !on)}
+                      >
+                        {showSource ? "Showing source" : "Show source"}
+                      </button>
+                    </>
+                  }
+                >
                   <ul>
                     {BUILDING_USES.filter((use) => useCounts[use] > 0).map((use) => (
                       <li key={use}>
@@ -229,7 +244,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                       {failure.message}
                     </p>
                   ))}
-                </aside>
+                </CollapsiblePanel>
               )}
             </div>
           )}
