@@ -119,7 +119,8 @@ describe("parse", () => {
 
     expect(parsed.buildings).toHaveLength(1);
     expect(parsed.buildings[0].height).toBe(18);
-    expect(parsed.buildings[0].use).toBe("unknown");
+    expect(parsed.buildings[0].use).toBe("unclassified");
+    expect(parsed.buildings[0].source).toBe("none");
     expect(parsed.roads[0].grade).toBe("local");
     expect(parsed.areas).toHaveLength(1);
     expect(parsed.areas[0].kind).toBe("green");
@@ -159,7 +160,8 @@ describe("parse", () => {
       { buildings: true, roads: false, waterGreen: false, trees: false },
     );
     expect(parsed.buildings).toHaveLength(1);
-    expect(parsed.buildings[0].use).toBe("mixed");
+    expect(parsed.buildings[0].use).toBe("mixed_use");
+    expect(parsed.buildings[0].source).toBe("osm_tag");
     expect(parsed.buildings[0].id).toBe(2);
   });
 
@@ -311,7 +313,7 @@ describe("exports", () => {
     center: origin,
     sideM: 200,
     layers: { buildings: true, roads: true, waterGreen: true, trees: false },
-    buildings: [{ id: 1, ring: square([0, 0], 40), holes: [], height: 12, use: "unknown" }],
+    buildings: [{ id: 1, ring: square([0, 0], 40), holes: [], height: 12, use: "unclassified", source: "none" }],
     roads: [{ id: 2, line: [[-80, 10], [80, 10]], width: 6, kind: "road" }],
     areas: [{ id: 3, ring: square([-40, -40], 30), holes: [], kind: "green" }],
     trees: [],

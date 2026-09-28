@@ -1,15 +1,19 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { BUILDING_USE_META, UNIFORM_BUILDING_COLOR, buildingLayerName } from "./buildingUse";
+import { BUILDING_USE_META, SOURCE_META, UNIFORM_BUILDING_COLOR, buildingLayerName } from "./buildingUse";
 import { buildTreeGroup } from "./treeArchetypes";
 import { openRing, signedArea } from "./geo";
 import { hexRgb, overlapLift, ROAD_COLOR, ROAD_RGB, roadGradeLayer, SURFACE } from "./surfaceLayers";
 import { footprintBase, sampleTerrain, terrainBuffers } from "./terrain";
-import type { AreaFeat, BuildingUse, CityModel, Pt, Ring, RoadGrade, TerrainField } from "../types";
+import type { AreaFeat, BuildingFeat, BuildingUse, CityModel, Pt, Ring, RoadGrade, TerrainField } from "../types";
 
 export type CityBuildOptions = {
   /** Viewport only. Exports keep one material, and one Rhino sublayer, per use. */
   uniformBuildings?: boolean;
+  /** Viewport only. Recolour by typology source. Inferred tiers are hatched. */
+  colourBySource?: boolean;
+  /** One mesh per building so a Rhino object can carry use and typology_source. */
+  splitBuildings?: boolean;
 };
 
 function orient(ring: Ring, ccw: boolean): Pt[] {
@@ -236,12 +240,71 @@ function drapedAreaGeometry(
   return geometry;
 }
 
+let stripeMap: THREE.CanvasTexture | null | undefined;
+
+/** Diagonal stripes so a zone or heuristic colour reads as a guess. */
+function inferredStripeMap(): THREE.CanvasTexture | null {
+  if (stripeMap !== undefined) return stripeMap;
+  if (typeof document === "undefined") {
+    stripeMap = null;
+    return null;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    stripeMap = null;
+    return null;
+  }
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, 64, 64);
+  context.strokeStyle = "#7d7d7d";
+  context.lineWidth = 7;
+  context.beginPath();
+  for (let offset = -64; offset <= 64; offset += 16) {
+    context.moveTo(offset, 64);
+    context.lineTo(offset + 64, 0);
+  }
+  context.stroke();
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(5, 5);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  stripeMap = texture;
+  return texture;
+}
+
 function paint(material: THREE.MeshStandardMaterial, layer: { polygonOffsetFactor: number; polygonOffsetUnits: number }) {
   if (layer.polygonOffsetFactor === 0 && layer.polygonOffsetUnits === 0) return material;
   material.polygonOffset = true;
   material.polygonOffsetFactor = layer.polygonOffsetFactor;
   material.polygonOffsetUnits = layer.polygonOffsetUnits;
   return material;
+}
+
+function extrudeFootprint(building: BuildingFeat, base: number): THREE.BufferGeometry | null {
+  const build = (shape: THREE.Shape): THREE.BufferGeometry => {
+    const geometry = new THREE.ExtrudeGeometry(shape, {
+      depth: building.height,
+      bevelEnabled: false,
+    });
+    return layFlat(geometry, base);
+  };
+  const shape = shapeFromRing(building.ring, building.holes);
+  if (!shape) return null;
+  try {
+    return build(shape);
+  } catch {
+    const fallback = shapeFromRing(building.ring, []);
+    if (!fallback) return null;
+    try {
+      return build(fallback);
+    } catch {
+      return null;
+    }
+  }
 }
 
 function order(object: THREE.Object3D, renderOrder: number) {
@@ -390,61 +453,71 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     group.add(mesh);
   }
 
-  const buckets = new Map<string, THREE.BufferGeometry[]>();
-  const bucketName = (use: BuildingUse) =>
-    options.uniformBuildings ? "Buildings" : buildingLayerName(use);
-  for (const building of model.buildings) {
-    const shape = shapeFromRing(building.ring, building.holes);
-    const base = (model.terrain ? footprintBase(model.terrain, building.ring, model.sideM) : 0) + SURFACE.building.lift;
-    if (!shape) continue;
-    const name = bucketName(building.use);
-    const push = (geometry: THREE.BufferGeometry) => {
+  const bySource = Boolean(options.colourBySource) && !options.splitBuildings;
+  const uniform = Boolean(options.uniformBuildings) && !bySource && !options.splitBuildings;
+  if (options.splitBuildings) {
+    for (const building of model.buildings) {
+      const base = (model.terrain ? footprintBase(model.terrain, building.ring, model.sideM) : 0) + SURFACE.building.lift;
+      const geometry = extrudeFootprint(building, base);
+      if (!geometry) continue;
+      const name = buildingLayerName(building.use);
+      const color = BUILDING_USE_META[building.use].color;
+      const material = paint(
+        new THREE.MeshStandardMaterial({ color, roughness: 0.78 }),
+        SURFACE.building,
+      );
+      material.name = name;
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.name = name;
+      mesh.userData.layerColor = hexRgb(color);
+      mesh.userData.use = building.use;
+      mesh.userData.typologySource = building.source;
+      order(mesh, SURFACE.building.renderOrder);
+      group.add(mesh);
+    }
+  } else {
+    const buckets = new Map<string, THREE.BufferGeometry[]>();
+    const bucketName = (building: BuildingFeat) => {
+      if (bySource) return `source:${building.source}`;
+      if (uniform) return "Buildings";
+      return buildingLayerName(building.use);
+    };
+    for (const building of model.buildings) {
+      const base = (model.terrain ? footprintBase(model.terrain, building.ring, model.sideM) : 0) + SURFACE.building.lift;
+      const geometry = extrudeFootprint(building, base);
+      if (!geometry) continue;
+      const name = bucketName(building);
       const list = buckets.get(name);
       if (list) list.push(geometry);
       else buckets.set(name, [geometry]);
-    };
-    try {
-      const geometry = new THREE.ExtrudeGeometry(shape, {
-        depth: building.height,
-        bevelEnabled: false,
-      });
-      layFlat(geometry, base);
-      push(geometry);
-    } catch {
-      try {
-        const fallback = shapeFromRing(building.ring, []);
-        if (!fallback) continue;
-        const geometry = new THREE.ExtrudeGeometry(fallback, {
-          depth: building.height,
-          bevelEnabled: false,
-        });
-        layFlat(geometry, base);
-        push(geometry);
-      } catch {
-        /* Ignore footprints Three.js cannot extrude. */
+    }
+    for (const [name, geometries] of buckets) {
+      const sourceKey = name.startsWith("source:") ? name.slice("source:".length) : "";
+      const sourceMeta = bySource ? SOURCE_META[sourceKey as keyof typeof SOURCE_META] : undefined;
+      const use = (Object.keys(BUILDING_USE_META) as BuildingUse[]).find(
+        (key) => buildingLayerName(key) === name,
+      );
+      const color = sourceMeta?.color ?? (uniform || !use ? UNIFORM_BUILDING_COLOR : BUILDING_USE_META[use].color);
+      const material = paint(
+        new THREE.MeshStandardMaterial({ color, roughness: sourceMeta?.inferred ? 0.92 : 0.78 }),
+        SURFACE.building,
+      );
+      if (sourceMeta?.inferred) {
+        const map = inferredStripeMap();
+        if (map) material.map = map;
       }
+      material.name = name;
+      const buildings = mergeMeshes(geometries, material, name);
+      if (!buildings) continue;
+      const layerColor = use && !uniform ? hexRgb(BUILDING_USE_META[use].color) : undefined;
+      if (layerColor) {
+        buildings.traverse((child) => {
+          child.userData.layerColor = layerColor;
+        });
+      }
+      order(buildings, SURFACE.building.renderOrder);
+      group.add(buildings);
     }
-  }
-  for (const [name, geometries] of buckets) {
-    const use = (Object.keys(BUILDING_USE_META) as BuildingUse[]).find(
-      (key) => buildingLayerName(key) === name,
-    );
-    const color = options.uniformBuildings || !use ? UNIFORM_BUILDING_COLOR : BUILDING_USE_META[use].color;
-    const material = paint(
-      new THREE.MeshStandardMaterial({ color, roughness: 0.78 }),
-      SURFACE.building,
-    );
-    material.name = name;
-    const buildings = mergeMeshes(geometries, material, name);
-    if (!buildings) continue;
-    if (use && !options.uniformBuildings) {
-      const layerColor = hexRgb(BUILDING_USE_META[use].color);
-      buildings.traverse((child) => {
-        child.userData.layerColor = layerColor;
-      });
-    }
-    order(buildings, SURFACE.building.renderOrder);
-    group.add(buildings);
   }
 
   const trees = buildTreeGroup(model.trees, sample ?? undefined);

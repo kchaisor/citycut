@@ -23,7 +23,7 @@ const model: CityModel = {
   center: origin,
   sideM: 200,
   layers: { buildings: true, roads: true, waterGreen: true, trees: false },
-  buildings: [{ id: 1, ring: square([0, 0], 40), holes: [], height: 12, use: "unknown" }],
+  buildings: [{ id: 1, ring: square([0, 0], 40), holes: [], height: 12, use: "unclassified", source: "none" }],
   roads: [{ id: 2, line: [[-80, 10], [80, 10]], width: 6, kind: "road" }],
   areas: [{ id: 3, ring: square([-40, -40], 30), holes: [], kind: "green" }],
   trees: [],
@@ -75,10 +75,20 @@ describe("rhino export", () => {
           points.push(geometry.vertices().point3dAt(v));
         }
       }
-      expect(names).toEqual(expect.arrayContaining(["Buildings::Other", "Roads", "Green", "Ground"]));
+      expect(names).toEqual(expect.arrayContaining(["Buildings::Unclassified", "Roads", "Green", "Ground"]));
       const paths: string[] = [];
       for (let i = 0; i < doc.layers().count; i++) paths.push(doc.layers().get(i).fullPath);
-      expect(paths).toContain("Buildings::Other");
+      expect(paths).toContain("Buildings::Unclassified");
+      let use = "";
+      let typologySource = "";
+      for (let i = 0; i < doc.objects().count; i++) {
+        const attributes = doc.objects().get(i).attributes();
+        if (attributes.name !== "Buildings::Unclassified") continue;
+        use = attributes.getUserString("use");
+        typologySource = attributes.getUserString("typology_source");
+      }
+      expect(use).toBe("unclassified");
+      expect(typologySource).toBe("none");
 
       const top = projectLocal([20, 20], origin, 55);
       const south = projectLocal([20, -20], origin, 55);

@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { FAQ } from "../content/faq";
-import { BUILDING_USES, BUILDING_USE_META, countUses } from "../lib/buildingUse";
+import {
+  BUILDING_USES,
+  BUILDING_USE_META,
+  SOURCE_COUNT_KEYS,
+  SOURCE_META,
+  countSources,
+  countUses,
+} from "../lib/buildingUse";
 import { CRS_NOTE, mgaCrs } from "../lib/crs";
 import { formatCoord, formatLengthKm } from "../lib/geo";
 import { download3dm, downloadGlb, downloadSvg } from "../lib/download";
@@ -18,6 +25,7 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [exportError, setExportError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"glb" | "svg" | "3dm" | null>(null);
   const [colourByUse, setColourByUse] = useState(true);
+  const [showSource, setShowSource] = useState(false);
   const crs = mgaCrs(model.center.lon);
   const sideKm = model.sideM / 1000;
   const layerBits = [
@@ -65,6 +73,7 @@ export function ModelPage({ model }: { model: CityModel }) {
   }
 
   const useCounts = countUses(model.buildings);
+  const sourceCounts = countSources(model.buildings);
   const hint =
     tab === "3d"
       ? "Drag to orbit · scroll to zoom · right-drag to pan"
@@ -148,7 +157,11 @@ export function ModelPage({ model }: { model: CityModel }) {
           <div className="fill">
             {tab === "3d" && (
               <SceneBoundary>
-                <Scene3D model={model} uniformBuildings={!colourByUse} />
+                <Scene3D
+                  model={model}
+                  uniformBuildings={!colourByUse && !showSource}
+                  colourBySource={showSource}
+                />
               </SceneBoundary>
             )}
             {tab === "drawing" && <DrawingPlan model={model} />}
@@ -163,12 +176,24 @@ export function ModelPage({ model }: { model: CityModel }) {
                 <aside className="legend" aria-label="Building use">
                   <div className="legend-head">
                     <span>Buildings</span>
+                  </div>
+                  <div className="legend-toggles">
                     <button
                       type="button"
-                      aria-pressed={colourByUse}
-                      onClick={() => setColourByUse((on) => !on)}
+                      aria-pressed={colourByUse && !showSource}
+                      onClick={() => {
+                        setShowSource(false);
+                        setColourByUse((on) => !on);
+                      }}
                     >
                       {colourByUse ? "Uniform colour" : "Colour by use"}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={showSource}
+                      onClick={() => setShowSource((on) => !on)}
+                    >
+                      {showSource ? "Showing source" : "Show source"}
                     </button>
                   </div>
                   <ul>
@@ -176,7 +201,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                       <li key={use}>
                         <i
                           style={{
-                            background: colourByUse ? BUILDING_USE_META[use].color : "#f6f3ec",
+                            background: colourByUse && !showSource ? BUILDING_USE_META[use].color : "#f6f3ec",
                           }}
                         />
                         <span>{BUILDING_USE_META[use].label}</span>
@@ -184,6 +209,26 @@ export function ModelPage({ model }: { model: CityModel }) {
                       </li>
                     ))}
                   </ul>
+                  <p className="legend-sub">Source</p>
+                  <ul>
+                    {SOURCE_COUNT_KEYS.map((source) => (
+                      <li key={source}>
+                        <i
+                          className={SOURCE_META[source].inferred ? "hatch" : undefined}
+                          style={{
+                            background: showSource ? SOURCE_META[source].color : "#f6f3ec",
+                          }}
+                        />
+                        <span>{SOURCE_META[source].label}</span>
+                        <b>{sourceCounts[source].toLocaleString()}</b>
+                      </li>
+                    ))}
+                  </ul>
+                  {model.useTierFailures?.map((failure) => (
+                    <p key={failure.tier} className="legend-note">
+                      {failure.message}
+                    </p>
+                  ))}
                 </aside>
               )}
             </div>
