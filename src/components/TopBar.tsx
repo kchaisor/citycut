@@ -4,12 +4,10 @@ export function TopBar({
   showNewCut,
   onHome,
   onNewCut,
-  onFaq,
 }: {
   showNewCut: boolean;
   onHome: () => void;
   onNewCut: () => void;
-  onFaq: () => void;
 }) {
   return (
     <header className="topbar">
@@ -17,16 +15,13 @@ export function TopBar({
         <Mark />
         <span>CityCut</span>
       </button>
-      <nav className="top-actions">
-        {showNewCut && (
+      {showNewCut && (
+        <nav className="top-actions">
           <button className="text-btn" type="button" onClick={onNewCut}>
             New cut
           </button>
-        )}
-        <button className="text-btn" type="button" onClick={onFaq}>
-          FAQ
-        </button>
-      </nav>
+        </nav>
+      )}
     </header>
   );
 }
