@@ -242,7 +242,7 @@ function drapedAreaGeometry(
 
 let stripeMap: THREE.CanvasTexture | null | undefined;
 
-/** Diagonal stripes so a zone or heuristic colour reads as a guess. */
+/** Diagonal stripes so a zone colour reads as a guess. */
 function inferredStripeMap(): THREE.CanvasTexture | null {
   if (stripeMap !== undefined) return stripeMap;
   if (typeof document === "undefined") {

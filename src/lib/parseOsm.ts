@@ -1,4 +1,4 @@
-import { classify, useFromLanduseTag } from "./buildingUse";
+import { classify } from "./buildingUse";
 import { clipPolygon, clipPolyline } from "./clip";
 import { dedupeAreas, dedupeBuildings, dedupeRoads } from "./footprints";
 import { dedupeConsecutive, openRing, polylineLength, signedArea, toLocal } from "./geo";
@@ -6,14 +6,6 @@ import { buildingHeight } from "./height";
 import type { OverpassElement, OverpassResponse } from "./overpass";
 import { resolveArchetype } from "./treeMap";
 import { describeTrees, treeSize } from "./trees";
-import {
-  applyOsmContext,
-  collectOsmUseFeatures,
-  interiorPoint,
-  landFeature,
-  pointInRing,
-  type LandFeat,
-} from "./useCascade";
 import type {
   AreaFeat,
   BuildingFeat,
@@ -356,13 +348,6 @@ function buildingFeat(
   };
 }
 
-function pushLanduse(landuse: LandFeat[], tags: Record<string, string>, ring: Pt[], holes: Pt[][]) {
-  const use = useFromLanduseTag(tags.landuse);
-  if (!use) return;
-  const feature = landFeature(ring, holes, use);
-  if (feature) landuse.push(feature);
-}
-
 function clipRing(points: Pt[], half: number): Pt[] {
   const clipped = clipPolygon(points, -half, half);
   if (clipped.length < 3) return [];
@@ -416,10 +401,8 @@ export function parseCity(
   const buildings: BuildingFeat[] = [];
   const roads: RoadFeat[] = [];
   const areas: AreaFeat[] = [];
-  const landuse: LandFeat[] = [];
   const consumedWays = new Set<number>();
   const elements = data.elements ?? [];
-  const { pois } = layers.buildings ? collectOsmUseFeatures(elements, origin) : { pois: [] };
   let trees = layers.trees ? collectTrees(elements, origin, half) : [];
   let treeCapHit = false;
   if (trees.length > MAX_TREES) {
@@ -438,22 +421,12 @@ export function parseCity(
       const tags = element.tags ?? {};
       const buildingRel = layers.buildings && tags.building && tags.building !== "no" && tags.building !== "entrance";
       const kind = layers.waterGreen ? areaKind(tags) : null;
-      const landUse = layers.buildings ? useFromLanduseTag(tags.landuse) : null;
-      if (!buildingRel && !kind && !landUse) continue;
+      if (!buildingRel && !kind) continue;
       const stitched = relationRings(element, origin);
       if (!stitched) continue;
       const rings = stitchRings(stitched.outers);
       const holes = rings.length === 1 ? stitchRings(stitched.inners) : [];
       if (rings.length === 0) continue;
-      if (landUse && !buildingRel) {
-        const inners = rings.length === 1 ? holes : stitchRings(stitched.inners);
-        for (const ring of rings) {
-          const ringHoles =
-            rings.length === 1 ? inners : inners.filter((hole) => pointInRing(interiorPoint(hole), ring));
-          pushLanduse(landuse, tags, ring, ringHoles);
-        }
-      }
-      if (!buildingRel && !kind) continue;
       for (const ref of stitched.used) consumedWays.add(ref);
       if (buildingRel) {
         for (const ring of rings) {
@@ -479,8 +452,6 @@ export function parseCity(
     const tags = element.tags ?? {};
     const line = pointsFromGeom(element.geometry, origin);
     if (line.length < 2) continue;
-
-    if (layers.buildings && isClosed(line)) pushLanduse(landuse, tags, line, []);
 
     if (layers.buildings && tags.building && tags.building !== "no" && tags.building !== "entrance" && !tags["building:part"]) {
       if (consumedWays.has(element.id)) continue;
@@ -518,7 +489,6 @@ export function parseCity(
 
   let buildingCapHit = false;
   let kept = dedupeBuildings(buildings);
-  if (layers.buildings) kept = applyOsmContext(kept, pois, landuse);
   if (kept.length > MAX_BUILDINGS) {
     buildingCapHit = true;
     kept = kept
@@ -532,7 +502,7 @@ export function parseCity(
   const notes = [
     "OpenStreetMap via Overpass.",
     "Building height uses the height tag, otherwise building:levels × 3 m, otherwise 9 m.",
-    "Building use follows OSM tags, then POIs, then landuse polygons, City of Melbourne CLUE, Vicmap zones, then footprint size.",
+    "Building use follows OSM tags on the building, then Vicmap planning zones.",
     FLAT_GROUND_NOTE,
   ];
   if (layers.trees) notes.push(describeTrees(trees));
