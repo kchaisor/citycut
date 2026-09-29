@@ -133,7 +133,7 @@ describe("building edges", () => {
   it("uses one line object per colour batch and one when the colour is uniform", () => {
     const buildings = [
       building(1, [-20, 0], "residential", "osm_tag"),
-      building(2, [20, 0], "civic", "osm_landuse"),
+      building(2, [20, 0], "civic", "zone"),
     ];
     const byUse = buildCityGroup(model(buildings));
     const uniform = buildCityGroup(model(buildings), { uniformBuildings: true });
