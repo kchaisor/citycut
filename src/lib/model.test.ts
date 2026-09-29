@@ -29,6 +29,8 @@ function geom(points: Pt[]) {
 describe("heights", () => {
   it("prefers the height tag, then levels, then 9 m", () => {
     expect(buildingHeight({ height: "24.5" })).toBe(24.5);
+    expect(buildingHeight({ height: "12 m" })).toBe(12);
+    expect(buildingHeight({ height: "1500 cm" })).toBe(15);
     expect(buildingHeight({ height: "30 ft" })).toBeCloseTo(9.144, 2);
     expect(buildingHeight({ "building:levels": "4" })).toBe(12);
     expect(buildingHeight({ building: "yes" })).toBe(9);
