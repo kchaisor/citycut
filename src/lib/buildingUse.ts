@@ -12,15 +12,7 @@ export const BUILDING_USES = [
   "unclassified",
 ] as const satisfies readonly BuildingUse[];
 
-export const TYPOLOGY_SOURCES = [
-  "osm_tag",
-  "osm_poi",
-  "osm_landuse",
-  "clue",
-  "zone",
-  "heuristic",
-  "none",
-] as const satisfies readonly TypologySource[];
+export const TYPOLOGY_SOURCES = ["osm_tag", "zone", "none"] as const satisfies readonly TypologySource[];
 
 /** Previous single colour, used when the use colours are turned off. */
 export const UNIFORM_BUILDING_COLOR = "#f6f3ec";
@@ -45,32 +37,20 @@ export const BUILDING_USE_META: Record<
 };
 
 /**
- * Viewport colours for the source toggle. Observed tiers are solid.
- * Zone and heuristic are inferred, so they stay lighter and are hatched.
+ * Viewport colours for the source toggle. An OSM tag is solid.
+ * A zone is inferred, so it stays lighter and is hatched.
  */
 export const SOURCE_META: Record<
   TypologySource,
   { label: string; color: string; inferred: boolean }
 > = {
   osm_tag: { label: "OSM tag", color: "#1F4E79", inferred: false },
-  osm_poi: { label: "OSM POI", color: "#C46B1A", inferred: false },
-  osm_landuse: { label: "OSM landuse", color: "#7A3E9D", inferred: false },
-  clue: { label: "CLUE", color: "#1E7A46", inferred: false },
   zone: { label: "Zone", color: "#A9C4DE", inferred: true },
-  heuristic: { label: "Heuristic", color: "#D9C7A6", inferred: true },
   none: { label: "Unclassified", color: "#B8B8B8", inferred: false },
 };
 
 /** Legend order for source counts. `none` is shown as unclassified. */
-export const SOURCE_COUNT_KEYS = [
-  "osm_tag",
-  "osm_poi",
-  "osm_landuse",
-  "clue",
-  "zone",
-  "heuristic",
-  "none",
-] as const satisfies readonly TypologySource[];
+export const SOURCE_COUNT_KEYS = ["osm_tag", "zone", "none"] as const satisfies readonly TypologySource[];
 
 /**
  * `building` and `building:use` values. `yes` is omitted on purpose: a bare
@@ -164,44 +144,15 @@ const ELEMENT_AMENITY_USE: Record<string, BuildingUse> = {
 };
 
 /**
- * Landuse polygons around a building. Key order is the Overpass alternation.
- * Institutional land is civic. A landuse tag on the building element uses
- * the same table and still counts as an OSM tag.
+ * `landuse` values already on the building element. Institutional land is
+ * civic. This is still an OSM tag: it is not a separate area query.
  */
-export const LANDUSE_POLYGON_USE: Record<string, BuildingUse> = {
+const ELEMENT_LANDUSE_USE: Record<string, BuildingUse> = {
   residential: "residential",
   commercial: "commercial",
   retail: "retail",
   industrial: "industrial",
   institutional: "civic",
-};
-
-/**
- * Amenity values on a POI node. Key order is the Overpass alternation.
- * Other amenities, including craft, are not POIs.
- */
-export const POI_AMENITY_USE: Record<string, BuildingUse> = {
-  school: "civic",
-  university: "civic",
-  college: "civic",
-  kindergarten: "civic",
-  hospital: "civic",
-  clinic: "civic",
-  doctors: "civic",
-  pharmacy: "retail",
-  restaurant: "retail",
-  cafe: "retail",
-  bar: "retail",
-  pub: "retail",
-  fast_food: "retail",
-  place_of_worship: "civic",
-  library: "civic",
-  community_centre: "civic",
-};
-
-export const POI_LEISURE_USE: Record<string, BuildingUse> = {
-  sports_centre: "recreation",
-  fitness_centre: "recreation",
 };
 
 const TAG_PRIORITY: BuildingUse[] = [
@@ -246,29 +197,6 @@ export const ZONE_USE: Record<string, BuildingUse> = {
 /** C1Z below this resolved height is retail. At 15 m and above it stays commercial. */
 export const C1Z_RETAIL_BELOW_M = 15;
 
-const CLUE_EXACT: Record<string, BuildingUse> = {
-  "house/townhouse": "residential",
-  "residential apartment": "residential",
-  "student accommodation": "residential",
-  "institutional accommodation": "residential",
-  office: "commercial",
-  "commercial accommodation": "commercial",
-  manufacturing: "industrial",
-  wholesale: "industrial",
-  storage: "industrial",
-  "workshop/studio": "industrial",
-  "equipment installation": "industrial",
-  transport: "industrial",
-  warehouse: "industrial",
-  "educational/research": "civic",
-  "hospital/clinic": "civic",
-  "community use": "civic",
-  "public display area": "civic",
-  "performances, conferences, ceremonies": "civic",
-  "performances conferences ceremonies": "civic",
-  "entertainment/recreation - indoor": "recreation",
-};
-
 function tokens(value: string | undefined): string[] {
   if (!value) return [];
   return value
@@ -287,8 +215,8 @@ function collect(values: string[], table: Record<string, BuildingUse>, into: Set
 
 /**
  * OSM tags on the building element. Returns null when nothing names a use,
- * including a bare `building=yes`, so a later tier can run.
- * Landuse on this same element is the old fallback and counts as osm_tag.
+ * including a bare `building=yes`, so the zone tier can run.
+ * A `landuse` value on this same element still counts as an OSM tag.
  */
 export function classify(tags: Record<string, string>): BuildingUse | null {
   const building = tokens(tags.building);
@@ -308,82 +236,10 @@ export function classify(tags: Record<string, string>): BuildingUse | null {
   }
 
   for (const value of tokens(tags.landuse)) {
-    const fromLand = LANDUSE_POLYGON_USE[value];
+    const fromLand = ELEMENT_LANDUSE_USE[value];
     if (fromLand) return fromLand;
   }
   return null;
-}
-
-export function useFromLanduseTag(value: string | undefined): BuildingUse | null {
-  for (const token of tokens(value)) {
-    const use = LANDUSE_POLYGON_USE[token];
-    if (use) return use;
-  }
-  return null;
-}
-
-/** Categories implied by one allowed amenity, shop, office, or leisure node. */
-export function usesFromPoi(tags: Record<string, string>): BuildingUse[] {
-  const amenityHits = tokens(tags.amenity).flatMap((value) => {
-    const use = POI_AMENITY_USE[value];
-    return use ? [use] : [];
-  });
-  const leisureHits = tokens(tags.leisure).flatMap((value) => {
-    const use = POI_LEISURE_USE[value];
-    return use ? [use] : [];
-  });
-  const shop = tokens(tags.shop).length > 0;
-  const office = tokens(tags.office).length > 0;
-  if (amenityHits.length === 0 && leisureHits.length === 0 && !shop && !office) return [];
-
-  const found = new Set<BuildingUse>();
-  if (shop) found.add("retail");
-  if (office) found.add("commercial");
-  for (const use of leisureHits) found.add(use);
-  for (const use of amenityHits) found.add(use);
-  const buildingish = [...tokens(tags.building), ...tokens(tags["building:use"])];
-  if (buildingish.some((value) => OSM_BUILDING_USE[value] === "residential")) found.add("residential");
-  return [...found];
-}
-
-function majority(votes: BuildingUse[]): BuildingUse | null {
-  if (votes.length === 0) return null;
-  const counts = new Map<BuildingUse, number>();
-  for (const vote of votes) counts.set(vote, (counts.get(vote) ?? 0) + 1);
-  let best: BuildingUse | null = null;
-  let bestN = 0;
-  for (const category of TAG_PRIORITY) {
-    const n = counts.get(category) ?? 0;
-    if (n > bestN) {
-      best = category;
-      bestN = n;
-    }
-  }
-  return best;
-}
-
-/** POI votes inside one footprint. Retail or commercial plus residential is mixed use. */
-export function votePoi(votes: BuildingUse[]): BuildingUse | null {
-  const unique = new Set(votes);
-  if (unique.size === 0) return null;
-  if (unique.has("residential") && (unique.has("retail") || unique.has("commercial"))) return "mixed_use";
-  return majority(votes);
-}
-
-/** CLUE points are a plain majority. Unmapped values are dropped by the caller. */
-export function voteClue(votes: BuildingUse[]): BuildingUse | null {
-  return majority(votes);
-}
-
-/** City of Melbourne predominant_space_use. Unoccupied and unknown values do not match. */
-export function useFromClue(value: string | null | undefined): BuildingUse | null {
-  if (!value) return null;
-  const text = value.trim().toLowerCase().replace(/\s+/g, " ");
-  if (!text || text.startsWith("unoccupied")) return null;
-  if (text.startsWith("retail")) return "retail";
-  if (text.startsWith("parking")) return "commercial";
-  if (text.startsWith("entertainment/recreation")) return "recreation";
-  return CLUE_EXACT[text] ?? null;
 }
 
 /**
@@ -408,49 +264,20 @@ export function useFromZone(code: string | null | undefined, heightM: number): B
   return ZONE_USE[normalised] ?? null;
 }
 
-/**
- * Footprint area is square metres in the cut's local east/north frame, the
- * same projected metres the extruder uses. Height is the resolved height above.
- * The first matching threshold wins.
- */
-export function useFromHeuristic(areaM2: number, heightM: number): BuildingUse | null {
-  if (areaM2 < 45) return "outbuilding";
-  if (areaM2 < 350 && heightM < 10) return "residential";
-  if (areaM2 > 1500 && heightM < 12) return "industrial";
-  return null;
-}
-
 export type CascadeSignals = {
   tags?: Record<string, string> | null;
-  poiVotes?: BuildingUse[];
-  landuse?: string | null;
-  clueValues?: string[];
   zoneCode?: string | null;
   heightM: number;
-  areaM2: number;
 };
 
-/** Stop at the first tier that names a use. */
+/** OSM tags, then a Vicmap zone, then unclassified. */
 export function cascadeUse(signals: CascadeSignals): { use: BuildingUse; source: TypologySource } {
   if (signals.tags) {
     const tagged = classify(signals.tags);
     if (tagged) return { use: tagged, source: "osm_tag" };
   }
-  const fromPoi = votePoi(signals.poiVotes ?? []);
-  if (fromPoi) return { use: fromPoi, source: "osm_poi" };
-  if (signals.landuse) {
-    const fromLand = useFromLanduseTag(signals.landuse);
-    if (fromLand) return { use: fromLand, source: "osm_landuse" };
-  }
-  const clueVotes = (signals.clueValues ?? [])
-    .map((value) => useFromClue(value))
-    .filter((use): use is BuildingUse => use !== null);
-  const fromClue = voteClue(clueVotes);
-  if (fromClue) return { use: fromClue, source: "clue" };
   const fromZone = useFromZone(signals.zoneCode, signals.heightM);
   if (fromZone) return { use: fromZone, source: "zone" };
-  const fromSize = useFromHeuristic(signals.areaM2, signals.heightM);
-  if (fromSize) return { use: fromSize, source: "heuristic" };
   return { use: "unclassified", source: "none" };
 }
 

@@ -47,7 +47,7 @@ describe("rhino export", () => {
       ...model,
       buildings: [
         ...model.buildings,
-        { id: 8, ring: square([60, 0], 16), holes: [], height: 10, use: "civic", source: "osm_landuse" },
+        { id: 8, ring: square([60, 0], 16), holes: [], height: 10, use: "civic", source: "zone" },
       ],
     });
     const header = latin1(bytes);
@@ -95,13 +95,13 @@ describe("rhino export", () => {
       }
       expect(use).toBe("unclassified");
       expect(typologySource).toBe("none");
-      let landuseSource = "";
+      let civicSource = "";
       for (let i = 0; i < doc.objects().count; i++) {
         const attributes = doc.objects().get(i).attributes();
         if (attributes.name !== "Buildings::Civic") continue;
-        landuseSource = attributes.getUserString("typology_source");
+        civicSource = attributes.getUserString("typology_source");
       }
-      expect(landuseSource).toBe("osm_landuse");
+      expect(civicSource).toBe("zone");
 
       const top = projectLocal([20, 20], origin, 55);
       const south = projectLocal([20, -20], origin, 55);

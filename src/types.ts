@@ -31,17 +31,10 @@ export type BuildingUse =
   | "unclassified";
 
 /** Which cascade tier named the use. `none` is unclassified. */
-export type TypologySource =
-  | "osm_tag"
-  | "osm_poi"
-  | "osm_landuse"
-  | "clue"
-  | "zone"
-  | "heuristic"
-  | "none";
+export type TypologySource = "osm_tag" | "zone" | "none";
 
 export type UseTierFailure = {
-  tier: "clue" | "zone";
+  tier: "zone";
   /** Short UI line, for example "zones unavailable". */
   message: string;
 };
@@ -135,7 +128,7 @@ export type CityModel = {
   terrain?: TerrainField | null;
   /** Set when Terrain was requested and the tiles could not be read. */
   terrainError?: string | null;
-  /** CLUE or Vicmap zones skipped after a hard failure. */
+  /** Vicmap zones skipped after a hard failure. */
   useTierFailures?: UseTierFailure[];
   /** Draw contour lines on the SVG plan. Ignored unless `terrain` is set. */
   contours?: boolean;

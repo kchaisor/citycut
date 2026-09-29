@@ -1,34 +1,15 @@
-import { useFromClue, useFromHeuristic, useFromZone, usesFromPoi, voteClue, votePoi } from "./buildingUse";
+import { useFromZone } from "./buildingUse";
 import { openRing, signedArea, toLocal } from "./geo";
-import type { OverpassElement } from "./overpass";
-import type { BuildingFeat, BuildingUse, LonLat, Pt, UseTierFailure } from "../types";
+import type { BuildingFeat, LonLat, Pt, UseTierFailure } from "../types";
 
 export type FrameBBox = { south: number; west: number; north: number; east: number };
 
-/** Padded City of Melbourne extent. CLUE is only requested when the frame meets this box. */
-export const CITY_OF_MELBOURNE_BBOX: FrameBBox = {
-  south: -37.86,
-  west: 144.89,
-  north: -37.77,
-  east: 145,
-};
-
 export const TIER_TIMEOUT_MS = 15_000;
-const CLUE_LIMIT = 5000;
 const ZONE_LIMIT = 2000;
 
-const CLUE_DATASET = "buildings-with-name-age-size-accessibility-and-bicycle-facilities";
-
-export type PoiFeat = { at: Pt; votes: BuildingUse[] };
-export type LandFeat = { ring: Pt[]; holes: Pt[][]; use: BuildingUse; area: number };
-export type CluePoint = { lat: number; lon: number; spaceUse: string };
 export type ZonePolygon = { code: string; outer: Pt[]; holes: Pt[][]; area: number };
 
 type BBox2 = { minX: number; minY: number; maxX: number; maxY: number };
-
-export function bboxesIntersect(a: FrameBBox, b: FrameBBox): boolean {
-  return a.west <= b.east && a.east >= b.west && a.south <= b.north && a.north >= b.south;
-}
 
 export function footprintArea(ring: Pt[], holes: Pt[][]): number {
   let area = Math.abs(signedArea(ring));
@@ -140,116 +121,6 @@ class GridIndex<T> {
     if (this.overflow.length === 0) return bucket;
     return bucket.concat(this.overflow);
   }
-
-  queryBox(bbox: BBox2): T[] {
-    const x0 = Math.floor(bbox.minX / this.cell);
-    const x1 = Math.floor(bbox.maxX / this.cell);
-    const y0 = Math.floor(bbox.minY / this.cell);
-    const y1 = Math.floor(bbox.maxY / this.cell);
-    const seen = new Set<T>();
-    const found: T[] = [];
-    const push = (item: T) => {
-      if (seen.has(item)) return;
-      seen.add(item);
-      found.push(item);
-    };
-    for (let y = y0; y <= y1; y++) {
-      for (let x = x0; x <= x1; x++) {
-        const bucket = this.buckets.get(`${x}:${y}`);
-        if (bucket) bucket.forEach(push);
-      }
-    }
-    this.overflow.forEach(push);
-    return found;
-  }
-}
-
-function pending(buildings: BuildingFeat[]): boolean {
-  return buildings.some((building) => building.source === "none");
-}
-
-/** POI nodes inside the footprint. A grid index skips point-in-polygon tests outside the footprint box. */
-function applyOsmPois(buildings: BuildingFeat[], pois: PoiFeat[]): BuildingFeat[] {
-  if (!pending(buildings) || pois.length === 0) return buildings;
-  const poiIndex = new GridIndex<PoiFeat>(48);
-  for (const poi of pois) poiIndex.insert(ringBBox([poi.at, poi.at]), poi);
-
-  return buildings.map((building) => {
-    if (building.source !== "none") return building;
-    const votes = poiIndex
-      .queryBox(ringBBox(building.ring))
-      .filter((poi) => pointInPolygon(poi.at, building.ring, building.holes))
-      .flatMap((poi) => poi.votes);
-    const fromPoi = votePoi(votes);
-    if (!fromPoi) return building;
-    return { ...building, use: fromPoi, source: "osm_poi" as const };
-  });
-}
-
-/** Smallest landuse polygon that contains the building centroid. */
-function applyOsmLanduse(buildings: BuildingFeat[], landuse: LandFeat[]): BuildingFeat[] {
-  if (!pending(buildings) || landuse.length === 0) return buildings;
-  const landIndex = new GridIndex<LandFeat>(80);
-  for (const poly of landuse) landIndex.insert(ringBBox(poly.ring), poly);
-
-  return buildings.map((building) => {
-    if (building.source !== "none") return building;
-    const at = interiorPoint(building.ring, building.holes);
-    const covers = landIndex
-      .queryPoint(at)
-      .filter((poly) => pointInPolygon(at, poly.ring, poly.holes))
-      .sort((a, b) => a.area - b.area);
-    if (covers.length === 0) return building;
-    return { ...building, use: covers[0].use, source: "osm_landuse" as const };
-  });
-}
-
-/** OSM tags are already applied. POIs run next, then landuse polygons. */
-export function applyOsmContext(
-  buildings: BuildingFeat[],
-  pois: PoiFeat[],
-  landuse: LandFeat[],
-): BuildingFeat[] {
-  return applyOsmLanduse(applyOsmPois(buildings, pois), landuse);
-}
-
-export function collectOsmUseFeatures(
-  elements: OverpassElement[],
-  origin: LonLat,
-): { pois: PoiFeat[]; landuse: LandFeat[] } {
-  const pois: PoiFeat[] = [];
-  const landuse: LandFeat[] = [];
-  for (const element of elements) {
-    if (element.type !== "node" || element.lat === undefined || element.lon === undefined) continue;
-    const votes = usesFromPoi(element.tags ?? {});
-    if (votes.length === 0) continue;
-    pois.push({ at: toLocal(element.lat, element.lon, origin), votes });
-  }
-  return { pois, landuse };
-}
-
-export function landFeature(ring: Pt[], holes: Pt[][], use: BuildingUse): LandFeat | null {
-  if (ring.length < 4) return null;
-  const area = footprintArea(ring, holes);
-  if (area < 1) return null;
-  return { ring, holes, use, area };
-}
-
-/**
- * One CLUE request. `census_year` is selected so the newest year in the
- * response can be kept without a second query and without hard-coding 2024.
- * `in_bbox` is lat1,lon1,lat2,lon2.
- */
-export function clueExportUrl(bounds: FrameBBox): string {
-  const where = `in_bbox(location,${bounds.south},${bounds.west},${bounds.north},${bounds.east})`;
-  const url = new URL(
-    `https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets/${CLUE_DATASET}/exports/json`,
-  );
-  url.searchParams.set("select", "predominant_space_use,latitude,longitude,census_year");
-  url.searchParams.set("where", where);
-  url.searchParams.set("order_by", "census_year desc");
-  url.searchParams.set("limit", String(CLUE_LIMIT));
-  return url.toString();
 }
 
 /**
@@ -313,35 +184,6 @@ export async function fetchTierJson(url: string, options: TierFetchOptions = {})
   }
 }
 
-function censusYear(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
-  if (typeof value !== "string") return null;
-  const match = value.match(/\d{4}/);
-  return match ? Number(match[0]) : null;
-}
-
-function parseClue(body: unknown): CluePoint[] {
-  if (!Array.isArray(body)) return [];
-  const rows = body.slice(0, CLUE_LIMIT).flatMap((row) => {
-    if (!row || typeof row !== "object") return [];
-    const record = row as {
-      predominant_space_use?: unknown;
-      latitude?: unknown;
-      longitude?: unknown;
-      census_year?: unknown;
-    };
-    const lat = Number(record.latitude);
-    const lon = Number(record.longitude);
-    const spaceUse = typeof record.predominant_space_use === "string" ? record.predominant_space_use : "";
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return [];
-    return [{ lat, lon, spaceUse, year: censusYear(record.census_year) }];
-  });
-  let max = -Infinity;
-  for (const row of rows) if (row.year !== null && row.year > max) max = row.year;
-  const kept = Number.isFinite(max) && max > 0 ? rows.filter((row) => row.year === max) : rows;
-  return kept.map(({ lat, lon, spaceUse }) => ({ lat, lon, spaceUse }));
-}
-
 function asLonLat(coord: unknown): Pt | null {
   if (!Array.isArray(coord) || coord.length < 2) return null;
   const a = Number(coord[0]);
@@ -398,70 +240,20 @@ function parseZones(body: unknown, origin: LonLat): ZonePolygon[] {
   return polygons;
 }
 
-function tierFailure(tier: "clue" | "zone"): UseTierFailure {
-  return { tier, message: tier === "zone" ? "zones unavailable" : "clue unavailable" };
-}
-
 export type LoadedTiers = {
-  clue: CluePoint[] | null;
   zones: ZonePolygon[] | null;
   failures: UseTierFailure[];
 };
 
-/** One request per source. A failed tier is skipped. No retries. */
+/** One Vicmap request. A failed response is skipped. No retries. */
 export async function loadUseTiers(
   bounds: FrameBBox,
   origin: LonLat,
   options: TierFetchOptions = {},
 ): Promise<LoadedTiers> {
-  const wantClue = bboxesIntersect(bounds, CITY_OF_MELBOURNE_BBOX);
-  const [clueBody, zoneBody] = await Promise.all([
-    wantClue ? fetchTierJson(clueExportUrl(bounds), options) : Promise.resolve(null),
-    fetchTierJson(zoneWfsUrl(bounds), options),
-  ]);
-  const failures: UseTierFailure[] = [];
-  let clue: CluePoint[] | null = null;
-  let zones: ZonePolygon[] | null = null;
-  if (wantClue) {
-    if (clueBody && clueBody.ok) clue = parseClue(clueBody.body);
-    else {
-      failures.push(tierFailure("clue"));
-      clue = null;
-    }
-  }
-  if (zoneBody.ok) zones = parseZones(zoneBody.body, origin);
-  else {
-    failures.push(tierFailure("zone"));
-    zones = null;
-  }
-  return { clue, zones, failures };
-}
-
-function applyClue(buildings: BuildingFeat[], origin: LonLat, points: CluePoint[]): BuildingFeat[] {
-  const open = buildings.map((building, index) => ({ building, index, area: footprintArea(building.ring, building.holes) }));
-  const index = new GridIndex<(typeof open)[number]>(48);
-  for (const item of open) {
-    if (item.building.source !== "none") continue;
-    index.insert(ringBBox(item.building.ring), item);
-  }
-  const votes = buildings.map(() => [] as BuildingUse[]);
-  for (const point of points) {
-    const at = toLocal(point.lat, point.lon, origin);
-    let best: (typeof open)[number] | null = null;
-    for (const item of index.queryPoint(at)) {
-      if (!pointInPolygon(at, item.building.ring, item.building.holes)) continue;
-      if (!best || item.area < best.area) best = item;
-    }
-    if (!best) continue;
-    const use = useFromClue(point.spaceUse);
-    if (use) votes[best.index].push(use);
-  }
-  return buildings.map((building, i) => {
-    if (building.source !== "none") return building;
-    const use = voteClue(votes[i]);
-    if (!use) return building;
-    return { ...building, use, source: "clue" as const };
-  });
+  const zoneBody = await fetchTierJson(zoneWfsUrl(bounds), options);
+  if (zoneBody.ok) return { zones: parseZones(zoneBody.body, origin), failures: [] };
+  return { zones: null, failures: [{ tier: "zone", message: "zones unavailable" }] };
 }
 
 function applyZones(buildings: BuildingFeat[], zones: ZonePolygon[]): BuildingFeat[] {
@@ -481,22 +273,9 @@ function applyZones(buildings: BuildingFeat[], zones: ZonePolygon[]): BuildingFe
   });
 }
 
-function applyHeuristic(building: BuildingFeat): BuildingFeat {
-  if (building.source !== "none") return building;
-  const use = useFromHeuristic(footprintArea(building.ring, building.holes), building.height);
-  if (!use) return building;
-  return { ...building, use, source: "heuristic" };
-}
-
-export function assignExternalUses(
-  buildings: BuildingFeat[],
-  origin: LonLat,
-  loaded: { clue: CluePoint[] | null; zones: ZonePolygon[] | null },
-): BuildingFeat[] {
-  let next = buildings;
-  if (loaded.clue && loaded.clue.length > 0) next = applyClue(next, origin, loaded.clue);
-  if (loaded.zones && loaded.zones.length > 0) next = applyZones(next, loaded.zones);
-  return next.map(applyHeuristic);
+export function assignExternalUses(buildings: BuildingFeat[], zones: ZonePolygon[] | null): BuildingFeat[] {
+  if (!zones || zones.length === 0) return buildings;
+  return applyZones(buildings, zones);
 }
 
 export async function refineBuildingUses(
@@ -507,7 +286,7 @@ export async function refineBuildingUses(
 ): Promise<{ buildings: BuildingFeat[]; failures: UseTierFailure[] }> {
   const loaded = await loadUseTiers(bounds, origin, options);
   return {
-    buildings: assignExternalUses(buildings, origin, loaded),
+    buildings: assignExternalUses(buildings, loaded.zones),
     failures: loaded.failures,
   };
 }

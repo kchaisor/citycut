@@ -1,16 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  OSM_BUILDING_USE,
-  cascadeUse,
-  classify,
-  normaliseZoneCode,
-  useFromClue,
-  useFromHeuristic,
-  useFromLanduseTag,
-  useFromZone,
-  usesFromPoi,
-  votePoi,
-} from "./buildingUse";
+import { OSM_BUILDING_USE, cascadeUse, classify, normaliseZoneCode, useFromZone } from "./buildingUse";
 
 describe("classify building use", () => {
   it("maps the common building tags", () => {
@@ -76,24 +65,6 @@ describe("tier tables", () => {
     expect(OSM_BUILDING_USE.yes).toBeUndefined();
   });
 
-  it("maps CLUE space use, and drops unoccupied or unknown values", () => {
-    expect(useFromClue("House/Townhouse")).toBe("residential");
-    expect(useFromClue("Student Accommodation")).toBe("residential");
-    expect(useFromClue("Office")).toBe("commercial");
-    expect(useFromClue("Commercial Accommodation")).toBe("commercial");
-    expect(useFromClue("Retail - Shop")).toBe("retail");
-    expect(useFromClue("Workshop/Studio")).toBe("industrial");
-    expect(useFromClue("Warehouse")).toBe("industrial");
-    expect(useFromClue("Educational/Research")).toBe("civic");
-    expect(useFromClue("Performances, Conferences, Ceremonies")).toBe("civic");
-    expect(useFromClue("Entertainment/Recreation - Indoor")).toBe("recreation");
-    expect(useFromClue("Parking - Private Covered")).toBe("commercial");
-    expect(useFromClue("Parking - Commercial Covered")).toBe("commercial");
-    expect(useFromClue("Unoccupied - Unused")).toBeNull();
-    expect(useFromClue("Unoccupied - Under Construction")).toBeNull();
-    expect(useFromClue("Not a real use")).toBeNull();
-  });
-
   it("normalises schedule digits and leaves C1Z and IN3Z intact", () => {
     expect(normaliseZoneCode("GRZ1")).toBe("GRZ");
     expect(normaliseZoneCode("NRZ12")).toBe("NRZ");
@@ -128,136 +99,45 @@ describe("tier tables", () => {
     expect(useFromZone("C2Z", 9)).toBe("commercial");
   });
 
-  it("applies the footprint heuristic in order", () => {
-    expect(useFromHeuristic(44.9, 20)).toBe("outbuilding");
-    expect(useFromHeuristic(45, 4)).toBe("residential");
-    expect(useFromHeuristic(45, 10)).toBeNull();
-    expect(useFromHeuristic(349, 9.9)).toBe("residential");
-    expect(useFromHeuristic(349, 10)).toBeNull();
-    expect(useFromHeuristic(350, 8)).toBeNull();
-    expect(useFromHeuristic(1500, 11)).toBeNull();
-    expect(useFromHeuristic(1500.1, 11.9)).toBe("industrial");
-    expect(useFromHeuristic(2000, 12)).toBeNull();
-    expect(useFromHeuristic(30, 3)).toBe("outbuilding");
-  });
-
-  it("maps landuse polygons and ignores values outside that list", () => {
-    expect(useFromLanduseTag("residential")).toBe("residential");
-    expect(useFromLanduseTag("commercial")).toBe("commercial");
-    expect(useFromLanduseTag("retail")).toBe("retail");
-    expect(useFromLanduseTag("industrial")).toBe("industrial");
-    expect(useFromLanduseTag("institutional")).toBe("civic");
-    expect(useFromLanduseTag("education")).toBeNull();
-    expect(useFromLanduseTag("recreation_ground")).toBeNull();
-    expect(useFromLanduseTag("civic")).toBeNull();
-  });
-
-  it("keeps the POI list to amenity, shop, office, and leisure", () => {
-    expect(usesFromPoi({ amenity: "school" })).toEqual(["civic"]);
-    expect(usesFromPoi({ amenity: "university" })).toEqual(["civic"]);
-    expect(usesFromPoi({ amenity: "college" })).toEqual(["civic"]);
-    expect(usesFromPoi({ amenity: "kindergarten" })).toEqual(["civic"]);
-    expect(usesFromPoi({ amenity: "hospital" })).toEqual(["civic"]);
-    expect(usesFromPoi({ amenity: "clinic" })).toEqual(["civic"]);
-    expect(usesFromPoi({ amenity: "doctors" })).toEqual(["civic"]);
-    expect(usesFromPoi({ amenity: "place_of_worship" })).toEqual(["civic"]);
-    expect(usesFromPoi({ amenity: "library" })).toEqual(["civic"]);
-    expect(usesFromPoi({ amenity: "community_centre" })).toEqual(["civic"]);
-    expect(usesFromPoi({ amenity: "pharmacy" })).toEqual(["retail"]);
-    expect(usesFromPoi({ amenity: "restaurant" })).toEqual(["retail"]);
-    expect(usesFromPoi({ amenity: "cafe" })).toEqual(["retail"]);
-    expect(usesFromPoi({ amenity: "bar" })).toEqual(["retail"]);
-    expect(usesFromPoi({ amenity: "pub" })).toEqual(["retail"]);
-    expect(usesFromPoi({ amenity: "fast_food" })).toEqual(["retail"]);
-    expect(usesFromPoi({ shop: "bakery" })).toEqual(["retail"]);
-    expect(usesFromPoi({ office: "lawyer" })).toEqual(["commercial"]);
-    expect(usesFromPoi({ leisure: "sports_centre" })).toEqual(["recreation"]);
-    expect(usesFromPoi({ leisure: "fitness_centre" })).toEqual(["recreation"]);
-    expect(usesFromPoi({ craft: "brewery" })).toEqual([]);
-    expect(usesFromPoi({ amenity: "police" })).toEqual([]);
-    expect(usesFromPoi({ amenity: "townhall" })).toEqual([]);
-    expect(usesFromPoi({ amenity: "bench" })).toEqual([]);
-    expect(usesFromPoi({ leisure: "swimming_pool" })).toEqual([]);
-    expect(usesFromPoi({ leisure: "park" })).toEqual([]);
-    expect(votePoi(usesFromPoi({ shop: "bakery", building: "apartments" }))).toBe("mixed_use");
-    expect(votePoi(usesFromPoi({ office: "yes", building: "residential" }))).toBe("mixed_use");
-  });
-
-  it("stops the cascade at the first matching tier", () => {
+  it("stops at an OSM tag, then a zone, then unclassified", () => {
     expect(
       cascadeUse({
         tags: { building: "house" },
-        poiVotes: ["retail"],
-        landuse: "industrial",
-        clueValues: ["Office"],
         zoneCode: "IN1Z",
         heightM: 4,
-        areaM2: 20,
       }),
     ).toEqual({ use: "residential", source: "osm_tag" });
     expect(
       cascadeUse({
         tags: { building: "yes" },
-        poiVotes: ["retail"],
-        landuse: "industrial",
-        clueValues: ["Office"],
-        zoneCode: "IN1Z",
-        heightM: 4,
-        areaM2: 20,
-      }),
-    ).toEqual({ use: "retail", source: "osm_poi" });
-    expect(
-      cascadeUse({
-        tags: { building: "yes" },
-        landuse: "industrial",
-        clueValues: ["Office"],
-        zoneCode: "GRZ1",
-        heightM: 4,
-        areaM2: 20,
-      }),
-    ).toEqual({ use: "industrial", source: "osm_landuse" });
-    expect(
-      cascadeUse({
-        tags: { building: "yes" },
-        landuse: "institutional",
-        clueValues: ["Office"],
-        zoneCode: "GRZ1",
-        heightM: 4,
-        areaM2: 20,
-      }),
-    ).toEqual({ use: "civic", source: "osm_landuse" });
-    expect(
-      cascadeUse({
-        tags: { building: "yes" },
-        clueValues: ["Office", "Office", "Retail - Shop"],
-        zoneCode: "IN1Z",
-        heightM: 4,
-        areaM2: 20,
-      }),
-    ).toEqual({ use: "commercial", source: "clue" });
-    expect(
-      cascadeUse({
-        tags: { building: "yes" },
-        clueValues: ["Unoccupied - Unused"],
         zoneCode: "IN3Z",
         heightM: 4,
-        areaM2: 20,
       }),
     ).toEqual({ use: "industrial", source: "zone" });
     expect(
       cascadeUse({
         tags: { building: "yes" },
+        zoneCode: "C1Z",
+        heightM: 9,
+      }),
+    ).toEqual({ use: "retail", source: "zone" });
+    expect(
+      cascadeUse({
+        tags: { building: "yes" },
+        zoneCode: "C1Z",
+        heightM: 18,
+      }),
+    ).toEqual({ use: "commercial", source: "zone" });
+    expect(
+      cascadeUse({
+        tags: { building: "yes" },
         zoneCode: "DDO1",
         heightM: 4,
-        areaM2: 20,
       }),
-    ).toEqual({ use: "outbuilding", source: "heuristic" });
-    expect(cascadeUse({ tags: { building: "yes" }, heightM: 20, areaM2: 400 })).toEqual({
+    ).toEqual({ use: "unclassified", source: "none" });
+    expect(cascadeUse({ tags: { building: "yes" }, heightM: 20 })).toEqual({
       use: "unclassified",
       source: "none",
     });
-    expect(votePoi(["retail", "residential"])).toBe("mixed_use");
-    expect(votePoi(["commercial", "residential"])).toBe("mixed_use");
-    expect(votePoi(["retail", "retail", "commercial"])).toBe("retail");
   });
 });

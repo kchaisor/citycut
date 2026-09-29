@@ -163,13 +163,10 @@ export default function App() {
       const useTierTask = modelLayers.buildings
         ? loadUseTiers(bounds, center, { signal: controller.signal }).catch((err: unknown) => {
             if (controller.signal.aborted) throw err;
-            const failures: UseTierFailure[] = [
-              { tier: "clue", message: "clue unavailable" },
-              { tier: "zone", message: "zones unavailable" },
-            ];
-            return { clue: null, zones: null, failures };
+            const failures: UseTierFailure[] = [{ tier: "zone", message: "zones unavailable" }];
+            return { zones: null, failures };
           })
-        : Promise.resolve({ clue: null, zones: null, failures: [] as UseTierFailure[] });
+        : Promise.resolve({ zones: null, failures: [] as UseTierFailure[] });
       const comTask = modelLayers.trees
         ? (() => {
             const comAbort = new AbortController();
@@ -201,7 +198,7 @@ export default function App() {
       ]);
       const parsed = parseCity(data, center, sideM, modelLayers);
       const buildings = modelLayers.buildings
-        ? assignExternalUses(parsed.buildings, center, useTiers)
+        ? assignExternalUses(parsed.buildings, useTiers.zones)
         : parsed.buildings;
       const trees = modelLayers.trees ? applyComTreeSizes(parsed.trees, comResult.rows, center) : parsed.trees;
       const contours = Boolean(layers.contours && terrainResult.field);
