@@ -2,6 +2,7 @@ import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import { useEffect, useLayoutEffect, useMemo } from "react";
 import * as THREE from "three";
+import { addBuildingEdges } from "../lib/buildingEdges";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import type { CityModel } from "../types";
 
@@ -38,6 +39,7 @@ function City({
       edges.name = "GroundEdge";
       city.add(edges);
     }
+    addBuildingEdges(city);
     return city;
   }, [model, uniformBuildings, colourBySource]);
   useEffect(() => () => disposeObject(group), [group]);
