@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { FAQ } from "../content/faq";
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -305,17 +304,6 @@ export function ModelPage({ model }: { model: CityModel }) {
           </p>
         )}
 
-        <section className="faq-block" aria-labelledby="model-faq">
-          <h2 id="model-faq">FAQ</h2>
-          <div className="faq-list">
-            {FAQ.map((item) => (
-              <details key={item.q}>
-                <summary>{item.q}</summary>
-                <p>{item.a}</p>
-              </details>
-            ))}
-          </div>
-        </section>
         <footer className="page-foot">
           Map data © OpenStreetMap contributors. Satellite imagery © Esri, Maxar, Earthstar
           Geographics, and the GIS User Community.

@@ -1,5 +1,4 @@
 import { lazy, Suspense, useRef, useState } from "react";
-import { FaqDialog } from "./components/FaqDialog";
 import { MapStage, type FlyRequest } from "./components/MapStage";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
@@ -58,7 +57,6 @@ export default function App() {
   const [model, setModel] = useState<CityModel | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [faq, setFaq] = useState(false);
 
   function onView(view: ViewState) {
     viewRef.current = view;
@@ -246,7 +244,6 @@ export default function App() {
         showNewCut={phase === "model"}
         onHome={onHome}
         onNewCut={() => setPhase("select")}
-        onFaq={() => setFaq(true)}
       />
       {phase === "select" ? (
         <div className="select">
@@ -277,7 +274,6 @@ export default function App() {
           <ModelPage model={model} />
         </Suspense>
       ) : null}
-      <FaqDialog open={faq} onClose={() => setFaq(false)} />
     </div>
   );
 }

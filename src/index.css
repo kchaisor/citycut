@@ -560,17 +560,6 @@ input[type="range"]::-moz-range-thumb {
 .ghost:disabled { opacity: 0.5; cursor: progress; }
 .v2 { margin: 10px 0 0; }
 
-.faq-block { margin-top: 36px; }
-.faq-block h2, .modal h2 { margin: 0; font-family: var(--serif); font-weight: 500; font-size: 28px; }
-.faq-list { margin-top: 8px; }
-.faq-list details { border-top: 1px solid var(--line); }
-.faq-list summary {
-  cursor: pointer;
-  padding: 12px 0;
-  font-weight: 560;
-}
-.faq-list p { margin: 0 0 14px; color: #3f3b34; max-width: 68ch; }
-
 .page-foot {
   margin-top: 28px;
   padding-top: 12px;
@@ -578,26 +567,6 @@ input[type="range"]::-moz-range-thumb {
   color: var(--muted);
   font-size: 12px;
 }
-
-.modal-back {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
-  background: rgba(28, 24, 18, 0.38);
-  display: grid;
-  place-items: center;
-  padding: 20px;
-}
-.modal {
-  width: min(560px, 100%);
-  max-height: min(80vh, 720px);
-  overflow: auto;
-  background: var(--panel);
-  border-radius: 14px;
-  padding: 18px 18px 8px;
-  box-shadow: var(--shadow);
-}
-.modal-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 
 .maplibregl-ctrl-attrib { font-size: 11px; }
 .maplibregl-ctrl-bottom-right { z-index: 2; }
