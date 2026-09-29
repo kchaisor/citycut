@@ -61,7 +61,7 @@ Tree size, in order. Height is clamped to 2–40 m, crown diameter to 1–25 m, 
 
 - OSM `height` or `est_height` (feet are converted to meters)
 - crown diameter from `diameter_crown`, `crown_diameter`, or `diameter:crown`
-- trunk diameter from `circumference` (metres of girth, divided by π) or `diameter`
+- trunk diameter from `circumference` (metres of girth, divided by π) or `diameter`. A `cm` or `mm` suffix is converted. A bare diameter of 2 or more (or a bare girth wider than a 2 m trunk) is read as centimetres, which is how street-tree imports write diameter at breast height
 - if a measurement is missing, the others follow the species archetype, or a crown about 0.6 of the height for a generic tree
 - inside the City of Melbourne, an OpenStreetMap tree with no size tags can take diameter at breast height and age from the [urban forest inventory](https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/) (CC BY). Age scales the archetype; DBH sets the trunk and a simple height curve. The match is the nearest inventory tree, within about 8 m, or 12 m when the genus agrees. It does not add trees that are not already in OpenStreetMap
 - otherwise the mature size of the species archetype in `treeMap.json`

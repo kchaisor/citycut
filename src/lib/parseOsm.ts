@@ -5,7 +5,7 @@ import { dedupeConsecutive, openRing, polylineLength, signedArea, toLocal } from
 import { buildingHeight } from "./height";
 import type { OverpassElement, OverpassResponse } from "./overpass";
 import { resolveArchetype } from "./treeMap";
-import { describeTrees, treeSize } from "./trees";
+import { describeTrees, treeSize, trunkTaggedAsCentimetres } from "./trees";
 import type {
   AreaFeat,
   BuildingFeat,
@@ -303,11 +303,16 @@ function pushTree(trees: TreeFeat[], id: number, at: Pt, tags: Record<string, st
 
 function collectTrees(elements: OverpassElement[], origin: LonLat, half: number): TreeFeat[] {
   const trees: TreeFeat[] = [];
+  let centimetreTrunks = 0;
+  const noteTrunk = (tags: Record<string, string>) => {
+    if (trunkTaggedAsCentimetres(tags)) centimetreTrunks += 1;
+  };
   for (const element of elements) {
     const tags = element.tags ?? {};
     if (hidden(tags)) continue;
     if (element.type === "node") {
       if (tags.natural !== "tree" || element.lat == null || element.lon == null) continue;
+      noteTrunk(tags);
       pushTree(trees, element.id, toLocal(element.lat, element.lon, origin), tags, half);
       continue;
     }
@@ -315,6 +320,7 @@ function collectTrees(elements: OverpassElement[], origin: LonLat, half: number)
     if (tags.natural !== "tree" && tags.natural !== "tree_row") continue;
     const line = pointsFromGeom(element.geometry, origin);
     if (line.length < 2) continue;
+    noteTrunk(tags);
     if (tags.natural === "tree" && isClosed(line)) {
       const at = ringCentroid(line);
       if (at) pushTree(trees, element.id, at, tags, half);
@@ -327,6 +333,11 @@ function collectTrees(elements: OverpassElement[], origin: LonLat, half: number)
         pushTree(trees, element.id, point, tags, half);
       }
     }
+  }
+  if (centimetreTrunks > 0) {
+    console.info(
+      `CityCut corrected ${centimetreTrunks} tree trunk ${centimetreTrunks === 1 ? "measurement" : "measurements"} that were in centimetres.`,
+    );
   }
   return trees;
 }

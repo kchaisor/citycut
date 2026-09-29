@@ -1,4 +1,4 @@
-import { parseMeters } from "./height";
+import { explicitLengthUnit, parseLooseNumber, parseMeters } from "./height";
 import { archetypeSize, resolveArchetype } from "./treeMap";
 import type { TreeDimensions, TreeSizeSource } from "../types";
 
@@ -15,6 +15,14 @@ const MIN_CROWN = 1;
 const MAX_CROWN = 25;
 const MIN_TRUNK = 0.05;
 const MAX_TRUNK = 2;
+/**
+ * A bare `diameter` this wide is not a metre measurement. Street-tree imports
+ * write DBH in centimetres (4, 40, 72). A real trunk at this cap is already
+ * the widest one we keep.
+ */
+const BARE_DIAMETER_IS_CM = MAX_TRUNK;
+/** Matching girth cap: a bare circumference wider than a MAX_TRUNK circle is centimetres too. */
+const BARE_GIRTH_IS_CM = MAX_TRUNK * Math.PI;
 /** Derived crowns stay within this multiple of height. Measured crowns are only hard-clamped. */
 const CROWN_PER_HEIGHT = 1.35;
 
@@ -63,10 +71,45 @@ export function ageFactor(age: string | null | undefined): number | null {
   return null;
 }
 
+type TrunkRead = { meters: number; centimetres: boolean };
+
+function bareCentimetres(raw: string, metres: number, cap: number): boolean {
+  return explicitLengthUnit(raw) === null && metres >= cap;
+}
+
+function readLength(raw: string | undefined, bareCap: number): TrunkRead | null {
+  if (!raw) return null;
+  const metres = parseMeters(raw);
+  if (metres === null || metres <= 0) return null;
+  const unit = explicitLengthUnit(raw);
+  if (unit === "cm" || unit === "mm") return { meters: metres, centimetres: true };
+  if (bareCentimetres(raw, metres, bareCap)) {
+    const asCentimetres = parseLooseNumber(raw);
+    if (asCentimetres === null || asCentimetres <= 0) return null;
+    return { meters: asCentimetres / 100, centimetres: true };
+  }
+  return { meters: metres, centimetres: false };
+}
+
+function readTrunk(tags: Record<string, string>): TrunkRead | null {
+  for (const key of CIRCUMFERENCE_KEYS) {
+    const read = readLength(tags[key], BARE_GIRTH_IS_CM);
+    if (read) return { meters: read.meters / Math.PI, centimetres: read.centimetres };
+  }
+  for (const key of TRUNK_KEYS) {
+    const read = readLength(tags[key], BARE_DIAMETER_IS_CM);
+    if (read) return read;
+  }
+  return null;
+}
+
 function trunkMeters(tags: Record<string, string>): number | null {
-  const girth = firstMeters(tags, CIRCUMFERENCE_KEYS);
-  if (girth !== null) return girth / Math.PI;
-  return firstMeters(tags, TRUNK_KEYS);
+  return readTrunk(tags)?.meters ?? null;
+}
+
+/** True when a trunk tag was in centimetres: an explicit cm/mm suffix, or a bare number too wide to be metres. */
+export function trunkTaggedAsCentimetres(tags: Record<string, string>): boolean {
+  return readTrunk(tags)?.centimetres ?? false;
 }
 
 type PartialSize = {

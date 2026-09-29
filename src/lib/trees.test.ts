@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 if (typeof globalThis.FileReader === "undefined") {
   class FileReaderPolyfill {
@@ -21,7 +21,7 @@ import { buildOverpassQuery, overpassBBox } from "./overpass";
 import { parseCity } from "./parseOsm";
 import { sitePlanSvg } from "./svgPlan";
 import { applyComTreeSizes } from "./comTrees";
-import { DEFAULT_CROWN_DIAMETER, DEFAULT_TREE_HEIGHT, treeSize } from "./trees";
+import { DEFAULT_CROWN_DIAMETER, DEFAULT_TREE_HEIGHT, heightFromDbhCm, treeSize } from "./trees";
 import type { CityModel, Pt } from "../types";
 
 const origin = { lon: 144.9631, lat: -37.8136 };
@@ -100,6 +100,41 @@ describe("tree size", () => {
     expect(sized.crown_diameter_m).toBe(1);
     expect(sized.trunk_diameter_m).toBeGreaterThanOrEqual(0.05);
     expect(sized.trunk_diameter_m).toBeLessThanOrEqual(2);
+  });
+
+  it("reads centimetre trunk tags instead of stretching the tree to the height cap", () => {
+    // North Melbourne OSM: Ulmus 7816484197 diameter=72, river red gum 7816482682
+    // diameter=79, Agathis 7816484203 diameter=4, and node 10895346193 circumference=311 cm.
+    // Those bare numbers and the cm suffix were treated as metres, so heightFromDbh hit 40 m.
+    const elm = treeSize({ genus: "Ulmus", diameter: "72" });
+    expect(elm.trunk_diameter_m).toBeCloseTo(0.72);
+    expect(elm.height_m).toBeCloseTo(heightFromDbhCm(72));
+    expect(elm.height_m).toBeGreaterThan(15);
+    expect(elm.height_m).toBeLessThan(30);
+    expect(elm.crown_diameter_m).toBeGreaterThan(8);
+    expect(elm.crown_diameter_m).toBeLessThanOrEqual(elm.height_m * 1.35);
+
+    const gum = treeSize({ genus: "Eucalyptus", species: "Eucalyptus camaldulensis", diameter: "79" });
+    expect(gum.trunk_diameter_m).toBeCloseTo(0.79);
+    expect(gum.height_m).toBeCloseTo(heightFromDbhCm(79));
+    expect(gum.height_m).toBeLessThan(30);
+    expect(gum.crown_diameter_m / gum.height_m).toBeLessThanOrEqual(1.35);
+
+    const kauri = treeSize({ genus: "Agathis", diameter: "4" });
+    expect(kauri.trunk_diameter_m).toBeCloseTo(0.05);
+    expect(kauri.height_m).toBeCloseTo(heightFromDbhCm(4));
+    expect(kauri.height_m).toBeLessThan(10);
+    expect(kauri.crown_diameter_m).toBeGreaterThanOrEqual(1);
+    expect(kauri.crown_diameter_m).toBeLessThan(kauri.height_m);
+
+    const labelled = treeSize({ circumference: "311 cm" });
+    expect(labelled.trunk_diameter_m).toBeCloseTo(3.11 / Math.PI);
+    expect(labelled.height_m).toBeCloseTo(heightFromDbhCm(311 / Math.PI));
+    expect(labelled.height_m).toBeLessThan(30);
+
+    expect(treeSize({ diameter: "0.45" }).trunk_diameter_m).toBeCloseTo(0.45);
+    expect(treeSize({ diameter: "2 m" }).trunk_diameter_m).toBeCloseTo(2);
+    expect(treeSize({ circumference: "1.2" }).trunk_diameter_m).toBeCloseTo(1.2 / Math.PI);
   });
 });
 
@@ -312,6 +347,68 @@ describe("tree exports", () => {
     expect(svg).toContain('cx="20"');
     expect(svg).toContain('cy="-30"');
     expect(svg).toContain('r="4"');
+  });
+
+  it("keeps a centimetre trunk from scaling the tree mesh into a spike", () => {
+    const at = fromLocal([20, 30], origin);
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const parsed = parseCity(
+      {
+        elements: [
+          {
+            type: "node",
+            id: 7816484197,
+            lat: at.lat,
+            lon: at.lon,
+            tags: { natural: "tree", genus: "Ulmus", species: "Ulmus procera", diameter: "72" },
+          },
+          {
+            type: "node",
+            id: 7816484203,
+            lat: at.lat,
+            lon: at.lon,
+            tags: { natural: "tree", genus: "Agathis", diameter: "4" },
+          },
+          {
+            type: "node",
+            id: 10895346193,
+            lat: at.lat,
+            lon: at.lon,
+            tags: { natural: "tree", circumference: "311 cm" },
+          },
+        ],
+      },
+      origin,
+      200,
+      layersOn,
+    );
+    expect(info).toHaveBeenCalledWith(
+      "CityCut corrected 3 tree trunk measurements that were in centimetres.",
+    );
+    info.mockRestore();
+    expect(parsed.trees.map((tree) => tree.height_m).every((height) => height < 30)).toBe(true);
+    const group = buildCityGroup({ ...model, trees: parsed.trees });
+    try {
+      group.traverse((object) => {
+        const mesh = object as THREE.InstancedMesh;
+        if (!mesh.isInstancedMesh) return;
+        const matrix = new THREE.Matrix4();
+        const position = new THREE.Vector3();
+        const quaternion = new THREE.Quaternion();
+        const scale = new THREE.Vector3();
+        for (let index = 0; index < mesh.count; index++) {
+          mesh.getMatrixAt(index, matrix);
+          matrix.decompose(position, quaternion, scale);
+          expect(scale.y).toBeGreaterThanOrEqual(2);
+          expect(scale.y).toBeLessThan(30);
+          expect(scale.x).toBeGreaterThanOrEqual(1);
+          expect(scale.x).toBeLessThanOrEqual(25);
+          expect(scale.z).toBe(scale.x);
+        }
+      });
+    } finally {
+      disposeObject(group);
+    }
   });
 
   it("instances one archetype and scales it to the tree height and crown", () => {
