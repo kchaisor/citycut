@@ -7,13 +7,12 @@ import {
   DEFAULT_SIDE_KM,
   DEFAULT_ZOOM,
   MAX_AREA_M2,
-  MAX_SIDE_KM,
   MELBOURNE,
   MELBOURNE_LABEL,
-  MIN_SIDE_KM,
 } from "./content/constants";
 import { applyComTreeSizes, fetchComTrees } from "./lib/comTrees";
 import { fetchTerrainForCut } from "./lib/fetchTerrain";
+import { frameFromSearch, type FrameQuery } from "./lib/frameQuery";
 import { M_PER_DEG_LAT, mPerDegLon, squareBBox } from "./lib/geo";
 import { buildOverpassQuery, fetchOverpass, overpassBBox } from "./lib/overpass";
 import { FLAT_GROUND_NOTE, parseCity } from "./lib/parseOsm";
@@ -22,19 +21,9 @@ import { replaceTreeNote } from "./lib/trees";
 import { assignExternalUses, loadUseTiers } from "./lib/useCascade";
 import type { Basemap, CityModel, PlaceHit, UiLayers, UseTierFailure, ViewState } from "./types";
 
-function frameFromQuery(): { view: ViewState; sideKm: number; label: string } | null {
+function frameFromQuery(): FrameQuery | null {
   if (typeof window === "undefined") return null;
-  const params = new URLSearchParams(window.location.search);
-  const lat = Number(params.get("lat"));
-  const lon = Number(params.get("lon"));
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-  const km = Number(params.get("km"));
-  const sideKm = Number.isFinite(km) ? Math.min(MAX_SIDE_KM, Math.max(MIN_SIDE_KM, km)) : DEFAULT_SIDE_KM;
-  return {
-    view: { lat, lon, zoom: DEFAULT_ZOOM },
-    sideKm,
-    label: params.get("label") || "Selected frame",
-  };
+  return frameFromSearch(window.location.search);
 }
 
 const ModelPage = lazy(() => import("./components/ModelPage").then((mod) => ({ default: mod.ModelPage })));
