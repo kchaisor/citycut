@@ -17,6 +17,7 @@ import { clipEdge, viewAi, VIEW_LAYER_ORDER, VIEW_OUTLINE_MM, type ScreenTri } f
 import { shotFromCamera } from "./cameraShot";
 import * as download from "./download";
 import * as figureGround from "./figureGround";
+import { DEFAULT_LINE_STYLES, cloneLineStyles } from "./drawingStyle";
 import { CONTOUR_DASH_MM, CONTOUR_GAP_MM, LINE_MM, pdfPt } from "./lineweights";
 import * as svgPlan from "./svgPlan";
 import type { CityModel, Pt, TerrainField } from "../types";
@@ -151,6 +152,7 @@ async function inspect(bytes: Uint8Array) {
   const raw = pageBytes(doc, page);
   const content = new TextDecoder("latin1").decode(raw);
   const counts = new Map<string, number>();
+  const bodies = new Map<string, string>();
   const blocks = content.split("EMC");
   for (const block of blocks) {
     const mark = block.match(/\/OC\s+\/(L\d+)\s+BDC/);
@@ -160,6 +162,7 @@ async function inspect(bytes: Uint8Array) {
     const body = block.slice(block.indexOf("BDC") + 3);
     const operators = body.match(/\b(?:m|l|c|re|Tj)\b/g)?.length ?? 0;
     counts.set(name, (counts.get(name) ?? 0) + operators);
+    bodies.set(name, `${bodies.get(name) ?? ""}\n${body}`);
   }
   const widths = [...content.matchAll(/([\d.]+)\s+w\b/g)].map((item) => Number(item[1]));
   return {
@@ -168,6 +171,7 @@ async function inspect(bytes: Uint8Array) {
     heightMm: (page.getHeight() * 25.4) / 72,
     layers,
     counts,
+    bodies,
     text: decodeText(raw),
     widthsMm: widths.map((pt) => (pt * 25.4) / 72),
     xobject,
@@ -216,6 +220,24 @@ describe("Illustrator plans", () => {
     expect(widths).toContain(LINE_MM.annotation);
     expect(info.content).toContain(`${pdfPt(CONTOUR_DASH_MM)} ${pdfPt(CONTOUR_GAP_MM)}`);
     expect(info.content).not.toMatch(/\/Image/);
+    const roads = info.bodies.get("Roads") ?? "";
+    const paints = roads.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g) ?? [];
+    expect(paints).toEqual(["B*"]);
+  });
+
+  it("draws the kerb only when the toggle is on, and reads an edited contour style", async () => {
+    const off = cloneLineStyles(DEFAULT_LINE_STYLES);
+    off.kerbOn = false;
+    const bare = await inspect(await sitePlanAi(model(), 1000, off));
+    const bareRoads = bare.bodies.get("Roads") ?? "";
+    expect(bareRoads.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g)).toEqual(["f*"]);
+    expect(bare.widthsMm.map((mm) => Math.round(mm * 100) / 100)).not.toContain(LINE_MM.propertyRoad);
+
+    const dotted = cloneLineStyles(DEFAULT_LINE_STYLES);
+    dotted.contour = { ...dotted.contour, color: "#FF0000", dash: "0 0.6" };
+    const edited = await inspect(await sitePlanAi(model(), 1000, dotted));
+    expect(edited.content).toContain(`${pdfPt(0)} ${pdfPt(0.6)}`);
+    expect(edited.content).toContain("1 0 0 RG");
   });
 
   it("writes figure-ground with frame, footprints, and annotation only", async () => {

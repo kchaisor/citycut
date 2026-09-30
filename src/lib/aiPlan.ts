@@ -1,5 +1,13 @@
-import type { PdfChunk, Rgb } from "./aiDocument";
+import type { PdfChunk, PdfPath, Rgb } from "./aiDocument";
 import { buildLayeredPdf } from "./aiDocument";
+import {
+  dashIsDotted,
+  dashPair,
+  haloMm,
+  readDrawingStyle,
+  type LineStyles,
+  type StrokeStyle,
+} from "./drawingStyle";
 import {
   figureGround,
   layoutSheet,
@@ -7,13 +15,7 @@ import {
   type SheetLayout,
 } from "./figureGround";
 import { formatCoord, openRing } from "./geo";
-import {
-  CONTOUR_COLOR,
-  CONTOUR_DASH_MM,
-  CONTOUR_GAP_MM,
-  LINE_MM,
-  hexRgb,
-} from "./lineweights";
+import { LINE_MM, hexRgb } from "./lineweights";
 import { planPaths } from "./svgPlan";
 import type { CityModel, Pt } from "../types";
 
@@ -32,13 +34,25 @@ export const SITE_LAYER_ORDER = [
 
 export const FIGURE_LAYER_ORDER = ["Frame", "Buildings", "Annotation"] as const;
 
-const INK = hexRgb("#1c1b17");
 const BLACK: Rgb = [0, 0, 0];
+/** Sheet colour. A path or rail casing uses this so it vanishes on the page and reads on the road fill. */
 const PAPER = hexRgb("#f4f1ea");
 const GREEN = hexRgb("#b7d39a");
 const WATER = hexRgb("#9ec9d1");
 const TREE = hexRgb("#6ea35a");
-const TREE_EDGE = hexRgb("#245232");
+
+function pen(style: StrokeStyle, join: "miter" | "round" = "round"): Partial<PdfPath> | null {
+  if (!(style.mm > 0)) return null;
+  const dash = dashPair(style.dash);
+  const dotted = dashIsDotted(style.dash);
+  return {
+    stroke: hexRgb(style.color),
+    strokeMm: style.mm,
+    ...(dash ? { dashMm: dash } : {}),
+    cap: dotted ? "round" : "butt",
+    join,
+  };
+}
 
 function sheetPoint(east: number, north: number, sideM: number, layout: SheetLayout): [number, number] {
   const half = sideM / 2;
@@ -66,7 +80,8 @@ function creditLine(layout: SheetLayout, interval: number | null): string {
   return parts.join(" ");
 }
 
-function annotation(model: CityModel, layout: SheetLayout, interval: number | null): PdfChunk {
+function annotation(model: CityModel, layout: SheetLayout, interval: number | null, style: StrokeStyle): PdfChunk {
+  const ink = hexRgb(style.color);
   const page = layout.pageHeightMm;
   const tip: [number, number] = [layout.northX, yUp(layout.northTipY, page)];
   const base: [number, number] = [layout.northX, yUp(layout.northBaseY, page)];
@@ -81,26 +96,29 @@ function annotation(model: CityModel, layout: SheetLayout, interval: number | nu
     paths: [
       {
         rings: [[[layout.barX, barBottom], [layout.barX + layout.barMm / 2, barBottom], [layout.barX + layout.barMm / 2, barBottom + layout.barHeightMm], [layout.barX, barBottom + layout.barHeightMm]]],
-        fill: INK,
+        fill: ink,
         close: true,
         evenOdd: false,
       },
       {
         rings: [[[layout.barX, barBottom], [layout.barX + layout.barMm, barBottom], [layout.barX + layout.barMm, barBottom + layout.barHeightMm], [layout.barX, barBottom + layout.barHeightMm]]],
-        stroke: INK,
-        strokeMm: LINE_MM.annotation,
+        stroke: ink,
+        strokeMm: style.mm,
+        ...(dashPair(style.dash) ? { dashMm: dashPair(style.dash)! } : {}),
+        cap: dashIsDotted(style.dash) ? "round" : "butt",
         close: true,
       },
       {
         rings: [[base, shaft]],
         close: false,
-        stroke: INK,
-        strokeMm: LINE_MM.annotation,
-        cap: "butt",
+        stroke: ink,
+        strokeMm: style.mm,
+        ...(dashPair(style.dash) ? { dashMm: dashPair(style.dash)! } : {}),
+        cap: dashIsDotted(style.dash) ? "round" : "butt",
       },
       {
         rings: [[tip, headL, headR]],
-        fill: INK,
+        fill: ink,
         close: true,
         evenOdd: false,
       },
@@ -111,52 +129,58 @@ function annotation(model: CityModel, layout: SheetLayout, interval: number | nu
         y: yUp(layout.barY + layout.barHeightMm * 0.82, page),
         sizeMm: 2.3,
         text: `${layout.barMetres} m`,
-        color: INK,
+        color: ink,
       },
       {
         x: layout.northX + 1.8,
         y: yUp(layout.northTipY + 3.2, page),
         sizeMm: 2.6,
         text: "N",
-        color: INK,
+        color: ink,
       },
       {
         x: layout.edgeMm,
         y: yUp(layout.titleY, page),
         sizeMm: 2.6,
         text: label,
-        color: INK,
+        color: ink,
       },
       {
         x: layout.edgeMm,
         y: yUp(layout.creditY, page),
         sizeMm: 2.2,
         text: credit,
-        color: INK,
+        color: ink,
       },
     ],
   };
 }
 
-function frameStroke(layout: SheetLayout, color: Rgb): PdfChunk {
+function frameStroke(layout: SheetLayout, style: StrokeStyle): PdfChunk {
   const page = layout.pageHeightMm;
   const bottom = yUp(layout.frameY + layout.frameMm, page);
   const x = layout.frameX;
   const top = bottom + layout.frameMm;
+  const drawn = pen(style, "miter");
   return {
     name: "Frame",
     paths: [
       {
         rings: [[[x, bottom], [x + layout.frameMm, bottom], [x + layout.frameMm, top], [x, top]]],
-        stroke: color,
-        strokeMm: LINE_MM.frame,
+        ...(drawn ?? { stroke: hexRgb(style.color), strokeMm: style.mm }),
         close: true,
       },
     ],
   };
 }
 
-export function sitePlanChunks(model: CityModel, scale: number): PdfChunk[] {
+/**
+ * Site-plan layers. Colours, weights, and dashes come from `style`, which
+ * `readDrawingStyle` fills from `getComputedStyle(document.documentElement)`
+ * at export time. That computed style is the drawing-style.css cascade, plus
+ * any inline variables the Line styles editor has set.
+ */
+export function sitePlanChunks(model: CityModel, scale: number, style: LineStyles = readDrawingStyle()): PdfChunk[] {
   const layout = layoutSheet(model.sideM, scale);
   const plan = planPaths(model);
   const page = layout.pageHeightMm;
@@ -180,72 +204,77 @@ export function sitePlanChunks(model: CityModel, scale: number): PdfChunk[] {
     },
   ];
 
+  const greenPen = pen(style.green);
   const green = plan.green.map((rings) => mapRings(rings, model.sideM, layout)).filter((rings) => rings.length > 0);
   if (green.length > 0) {
     chunks.push({
       name: "Green",
-      paths: green.map((rings) => ({ rings, fill: GREEN, evenOdd: true, close: true })),
+      paths: green.map((rings) => ({
+        rings,
+        fill: GREEN,
+        evenOdd: true,
+        close: true,
+        ...(greenPen ?? {}),
+      })),
     });
   }
+  const waterPen = pen(style.water);
   const water = plan.water.map((rings) => mapRings(rings, model.sideM, layout)).filter((rings) => rings.length > 0);
   if (water.length > 0) {
     chunks.push({
       name: "Water",
-      paths: water.map((rings) => ({ rings, fill: WATER, evenOdd: true, close: true })),
+      paths: water.map((rings) => ({
+        rings,
+        fill: WATER,
+        evenOdd: true,
+        close: true,
+        ...(waterPen ?? {}),
+      })),
     });
   }
-  if (plan.contours.length > 0) {
+  const roadRings = plan.roadFill.flatMap((polygon) => mapRings(polygon, model.sideM, layout));
+  if (roadRings.length > 0) {
+    const kerb = style.kerbOn ? pen(style.kerb) : null;
+    chunks.push({
+      name: "Roads",
+      paths: [
+        {
+          rings: roadRings,
+          fill: hexRgb(style.roadFill),
+          evenOdd: true,
+          close: true,
+          join: "round",
+          ...(kerb ?? {}),
+        },
+      ],
+    });
+  }
+  const contourPen = pen(style.contour);
+  if (plan.contours.length > 0 && contourPen) {
     chunks.push({
       name: "Contours",
       paths: plan.contours.map((line) => ({
         rings: [mapRing(line, model.sideM, layout)],
         close: false,
-        stroke: hexRgb(CONTOUR_COLOR),
-        strokeMm: LINE_MM.contour,
-        dashMm: [CONTOUR_DASH_MM, CONTOUR_GAP_MM] as const,
-        cap: "butt" as const,
+        ...contourPen,
       })),
     });
   }
-  if (plan.rails.length > 0) {
+  const railPen = pen(style.rail);
+  if (plan.rails.length > 0 && railPen) {
     chunks.push({
       name: "Rail",
-      paths: plan.rails.map((rail) => ({
-        rings: [mapRing(rail.line, model.sideM, layout)],
-        close: false,
-        stroke: hexRgb(rail.stroke),
-        strokeMm: LINE_MM.secondary,
-        cap: "round" as const,
-        join: "round" as const,
-      })),
+      paths: plan.rails.flatMap((line) => casedLine(mapRing(line, model.sideM, layout), style.rail, railPen)),
     });
   }
-  if (plan.paths.length > 0) {
+  const pathPen = pen(style.path);
+  if (plan.paths.length > 0 && pathPen) {
     chunks.push({
       name: "Paths",
-      paths: plan.paths.map((path) => ({
-        rings: [mapRing(path.line, model.sideM, layout)],
-        close: false,
-        stroke: hexRgb(path.stroke),
-        strokeMm: LINE_MM.secondary,
-        cap: "round" as const,
-        join: "round" as const,
-      })),
+      paths: plan.paths.flatMap((line) => casedLine(mapRing(line, model.sideM, layout), style.path, pathPen)),
     });
   }
-  if (plan.roadEdges.length > 0) {
-    chunks.push({
-      name: "Roads",
-      paths: plan.roadEdges.map((edge) => ({
-        rings: [mapRing(edge.line, model.sideM, layout)],
-        close: false,
-        stroke: hexRgb(edge.stroke),
-        strokeMm: LINE_MM.propertyRoad,
-        cap: "round" as const,
-        join: "round" as const,
-      })),
-    });
-  }
+  const treePen = pen(style.tree);
   if (plan.trees.length > 0) {
     chunks.push({
       name: "Trees",
@@ -259,29 +288,38 @@ export function sitePlanChunks(model: CityModel, scale: number): PdfChunk[] {
           rx: radius,
           ry: radius,
           fill: TREE,
-          stroke: TREE_EDGE,
-          strokeMm: LINE_MM.secondary,
+          ...(treePen ?? {}),
         };
       }),
     });
   }
+  const buildingPen = pen(style.building, "miter");
   if (plan.buildings.length > 0) {
     chunks.push({
       name: "Buildings",
       paths: plan.buildings.map((building) => ({
         rings: mapRings(building.rings, model.sideM, layout),
         fill: hexRgb(building.fill),
-        stroke: INK,
-        strokeMm: LINE_MM.buildingCut,
         evenOdd: true,
         close: true,
-        join: "miter" as const,
+        ...(buildingPen ?? {}),
       })),
     });
   }
-  chunks.push(frameStroke(layout, INK));
-  chunks.push(annotation(model, layout, plan.contourInterval));
+  chunks.push(frameStroke(layout, style.frame));
+  chunks.push(annotation(model, layout, plan.contourInterval, style.annotation));
   return chunks;
+}
+
+/** A paper casing under the stroke, so the line still shows on the dark road fill. */
+function casedLine(ring: number[][], style: StrokeStyle, drawn: Partial<PdfPath>): PdfPath[] {
+  const casing = haloMm(style.mm);
+  const line: PdfPath = { rings: [ring], close: false, ...drawn, cap: "round", join: "round" };
+  if (!(casing > style.mm)) return [line];
+  return [
+    { rings: [ring], close: false, stroke: PAPER, strokeMm: casing, cap: "round", join: "round" },
+    line,
+  ];
 }
 
 function mapRings(rings: Pt[][], sideM: number, layout: SheetLayout): number[][][] {
@@ -302,14 +340,19 @@ export function figureGroundChunks(model: CityModel, scale: number): PdfChunk[] 
       close: true,
     }));
   if (paths.length > 0) chunks.push({ name: "Buildings", paths });
-  chunks.push(frameStroke(layout, BLACK));
-  chunks.push(annotation(model, layout, null));
+  chunks.push(frameStroke(layout, { mm: LINE_MM.frame, color: "#000000", dash: "none" }));
+  chunks.push(annotation(model, layout, null, { mm: LINE_MM.annotation, color: "#1C1B17", dash: "none" }));
   return chunks;
 }
 
-export function sitePlanAi(model: CityModel, scale: number): Promise<Uint8Array> {
+export function sitePlanAi(model: CityModel, scale: number, style?: LineStyles): Promise<Uint8Array> {
   const layout = layoutSheet(model.sideM, scale);
-  return buildLayeredPdf(layout.pageWidthMm, layout.pageHeightMm, sitePlanChunks(model, scale), SITE_LAYER_ORDER);
+  return buildLayeredPdf(
+    layout.pageWidthMm,
+    layout.pageHeightMm,
+    sitePlanChunks(model, scale, style ?? readDrawingStyle()),
+    SITE_LAYER_ORDER,
+  );
 }
 
 export function figureGroundAi(model: CityModel, scale: number): Promise<Uint8Array> {

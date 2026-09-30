@@ -324,10 +324,10 @@ describe("exports", () => {
     sourceNote: "test",
   };
 
-  it("keeps building footprints and road edges for the plan", () => {
+  it("keeps building footprints and a road fill for the plan", () => {
     const plan = planPaths(model);
     expect(plan.buildings.length).toBeGreaterThan(0);
-    expect(plan.roadEdges.length).toBeGreaterThan(0);
+    expect(plan.roadFill.length).toBeGreaterThan(0);
     expect(plan.buildings[0].rings[0].length).toBeGreaterThan(2);
   });
 

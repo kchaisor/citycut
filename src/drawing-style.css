@@ -1,0 +1,64 @@
+/*
+  Site plan lines.
+  Kelvin: this file is the pens for the site plan, on screen and in the
+  Illustrator download. Weights are millimetres on the printed sheet.
+  A dash is two millimetre lengths, on then off. "none" is a solid line.
+  "0 0.6" is a dotted line (round dots). See THEME.md.
+*/
+
+:root {
+  /* Building outline. The cut line around a footprint. */
+  --building-stroke-mm: 0.4;
+  --building-stroke: #1C1B17;
+  --building-dash: none;
+
+  /* Carriageway fill. One solid shape for every road. #333333 is a darker option. */
+  --road-fill: #4A4A4A;
+
+  /* Kerb outline. "on" draws it on the outer edge of the road fill. "off" hides it. */
+  --road-kerb: on;
+  /* Thin edge of the carriageway. Mid grey so it reads on the fill and on #EBEBEB. */
+  --road-kerb-mm: 0.22;
+  --road-kerb-stroke: #8D8983;
+  --road-kerb-dash: none;
+
+  /* Footways, cycleways, and other paths. A thin centreline, not a fill. */
+  --path-stroke-mm: 0.15;
+  --path-stroke: #5C5C5C;
+  --path-dash: none;
+
+  /* Rail, drawn as a line on top of the road fill where they cross. */
+  --rail-stroke-mm: 0.15;
+  --rail-stroke: #8D6244;
+  --rail-dash: none;
+
+  /* Edge of a park or other green area. 0 hides the edge and leaves the fill. */
+  --green-stroke-mm: 0;
+  --green-stroke: #5E8A45;
+  --green-dash: none;
+
+  /* Edge of water. 0 hides the edge and leaves the fill. */
+  --water-stroke-mm: 0;
+  --water-stroke: #3E7C86;
+  --water-dash: none;
+
+  /* Contours. Dashed, and drawn on top of the road fill so they stay visible. */
+  --contour-stroke-mm: 0.1;
+  --contour-stroke: #B0B0B0;
+  --contour-dash: 1.5 0.75;
+
+  /* The square frame around the plan. */
+  --frame-stroke-mm: 0.35;
+  --frame-stroke: #1C1B17;
+  --frame-dash: none;
+
+  /* Scale bar, north arrow, title, and the on-screen N. The weight is the stroke. */
+  --annotation-stroke-mm: 0.13;
+  --annotation-stroke: #1C1B17;
+  --annotation-dash: none;
+
+  /* Outline of a tree crown. The green fill of the crown is not set here. */
+  --tree-stroke-mm: 0.15;
+  --tree-stroke: #245232;
+  --tree-dash: none;
+}

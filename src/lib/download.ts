@@ -1,4 +1,5 @@
 import { figureGroundAi, sitePlanAi } from "./aiPlan";
+import type { LineStyles } from "./drawingStyle";
 import { viewAi, type ViewStyle } from "./aiView";
 import type { CameraShot } from "./cameraShot";
 import type { CityModel } from "../types";
@@ -48,8 +49,8 @@ export async function download3dm(model: CityModel): Promise<void> {
   downloadBytes(`${fileStem(model)}.3dm`, bytes, "application/octet-stream");
 }
 
-export async function downloadSiteAi(model: CityModel, scale: number): Promise<void> {
-  const bytes = await sitePlanAi(model, scale);
+export async function downloadSiteAi(model: CityModel, scale: number, style?: LineStyles): Promise<void> {
+  const bytes = await sitePlanAi(model, scale, style);
   downloadBytes(aiFilename(model, "site", scale), bytes, "application/pdf");
 }
 

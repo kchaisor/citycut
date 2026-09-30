@@ -1,7 +1,9 @@
 /**
- * Pen weights for the site plan and figure-ground.
- * Values are millimetres on the printed sheet. They do not scale with the
- * drawing scale: a 0.4 mm cut line is 0.4 mm on the page at 1:500 and at 1:5000.
+ * Fallback pen weights. The site plan, on screen and in the Illustrator
+ * file, reads src/drawing-style.css (see readDrawingStyle). These numbers
+ * are used only when a CSS variable is missing, and for the figure-ground
+ * sheet, which stays black. They do not scale with the drawing scale: a
+ * 0.4 mm cut line is 0.4 mm on the page at 1:500 and at 1:5000.
  *
  * | Role                         | mm   |
  * | ---------------------------- | ---- |
