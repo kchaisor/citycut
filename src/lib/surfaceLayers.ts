@@ -2,7 +2,7 @@ import type { RoadGrade } from "../types";
 
 /**
  * Draw order for surfaces that share the ground plane.
- * `lift` is metres above the terrain sample (or above the flat slab top).
+ * `lift` is metres above the terrain sample (or above the flat ground).
  * A small negative polygon offset pulls a broad surface toward the camera.
  * Roads and rail leave it at zero: a large bias clips a near-horizontal
  * ribbon when the camera is low, so the street vanishes. Their lift is

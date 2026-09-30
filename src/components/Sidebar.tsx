@@ -190,7 +190,7 @@ export function Sidebar({
           <p className="field-note">
             {layers.terrain
               ? "Elevation from Mapterhorn. Contours, when on, are added to the site plan."
-              : "Terrain is off, so the ground stays a flat slab. Contours need Terrain."}
+              : "Terrain is off, so the ground stays a flat surface. Contours need Terrain."}
           </p>
         </div>
       </div>

@@ -354,18 +354,20 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   if (model.terrain) {
     group.add(terrainMesh(model.terrain, model.sideM));
   } else {
-    const slabGeo = new THREE.BoxGeometry(model.sideM, 8, model.sideM);
-    const sideMat = new THREE.MeshStandardMaterial({ color: "#c9c0b0", roughness: 0.92 });
-    const topMat = paint(
-      new THREE.MeshStandardMaterial({ color: "#e6e0d4", roughness: 0.95 }),
+    const groundGeo = new THREE.PlaneGeometry(model.sideM, model.sideM);
+    groundGeo.rotateX(-Math.PI / 2);
+    const groundMat = paint(
+      new THREE.MeshStandardMaterial({
+        color: "#e6e0d4",
+        roughness: 0.95,
+        side: THREE.DoubleSide,
+      }),
       SURFACE.ground,
     );
-    const bottomMat = new THREE.MeshStandardMaterial({ color: "#b7ad9e", roughness: 1 });
-    const slab = new THREE.Mesh(slabGeo, [sideMat, sideMat, topMat, bottomMat, sideMat, sideMat]);
-    slab.position.y = -4;
-    slab.name = "Ground";
-    order(slab, SURFACE.ground.renderOrder);
-    group.add(slab);
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.name = "Ground";
+    order(ground, SURFACE.ground.renderOrder);
+    group.add(ground);
   }
 
   const greenMat = paint(new THREE.MeshStandardMaterial({ color: "#7f9a62", roughness: 1 }), SURFACE.green);

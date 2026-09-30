@@ -2,7 +2,7 @@
 
 CityCut cuts a square out of a city and exports it as a 3D model and a 2D site plan. The default view opens on the Melbourne CBD.
 
-It is a study tool for early architectural work: OpenStreetMap footprints, estimated heights, and a terrain heightfield. It is not a survey. Turn Terrain off and the ground is a flat slab.
+It is a study tool for early architectural work: OpenStreetMap footprints, estimated heights, and a terrain heightfield. It is not a survey. Turn Terrain off and the ground is a flat surface.
 
 ## Live site
 
@@ -34,7 +34,7 @@ Building colour follows a cascade, stopping at the first match: OSM tags already
 
 Roads are asphalt, `#3a3a3a`, with local streets and footways a step lighter. The ribbon faces upward whichever way the OSM way was drawn. On a heightfield it is split so a long run follows the surface, and it sits a few centimetres above the terrain, parks, and water. Roads do not use a depth bias: a large one clips the ribbon when the camera is low, and the street disappears.
 
-Heights are capped between 3 m and 420 m. With Terrain off, the ground is a flat slab and exports match that flat model. With Terrain on, buildings are extruded from the lowest DEM sample on the footprint, trees sit on the sample at the trunk, and roads, rail, parks, and water are draped a few centimetres above the surface. Multipolygon buildings, parks, and water bodies are stitched when the relation is small enough to assemble (80 members or fewer).
+Heights are capped between 3 m and 420 m. With Terrain off, the ground is a flat surface and exports match that flat model. With Terrain on, buildings are extruded from the lowest DEM sample on the footprint, trees sit on the sample at the trunk, and roads, rail, parks, and water are draped a few centimetres above the surface. Multipolygon buildings, parks, and water bodies are stitched when the relation is small enough to assemble (80 members or fewer).
 
 ## Terrain
 
@@ -42,7 +42,7 @@ Terrain is on by default. The tiles are [Mapterhorn](https://mapterhorn.com/) Te
 
 CityCut asks for about 5 m per pixel (zoom 14 at Melbourne’s latitude, about 3.8 m on the ground) and steps down while a zoom returns 404. A square is resampled onto a grid of at most 193 samples on a side. Around Melbourne, z15 is 404 and z14 is served, which is the zoom that resolves Geoscience Australia’s [5 m lidar DEM](https://pid.geoscience.gov.au/dataset/ga/89644) (CC BY 4.0). Where that coverage is missing, Mapterhorn uses Copernicus GLO-30 (about 30 m). Attribution for the whole mosaic is [© Mapterhorn](https://mapterhorn.com/attribution).
 
-Elevations in the viewport, the glTF mesh named `Terrain`, and the Rhino `Terrain` layer are those DEM metres (AHD for the Geoscience Australia lidar, geoid height for Copernicus). They are not a survey, and they share the file with buildings and trees: a 12 m building on a 30 m sample runs from Z 30 to Z 42. The mesh has an 8 m skirt under the surface, the same thickness as the old slab. If the tiles fail, the model keeps the flat slab and shows “Terrain tiles could not be loaded, so the ground is flat.”
+Elevations in the viewport, the glTF mesh named `Terrain`, and the Rhino `Terrain` layer are those DEM metres (AHD for the Geoscience Australia lidar, geoid height for Copernicus). They are not a survey, and they share the file with buildings and trees: a 12 m building on a 30 m sample runs from Z 30 to Z 42. The terrain mesh is that surface only: no skirt, side walls, or base. With Terrain off, the ground export is the same flat surface, not a thick slab. If the tiles fail, the model keeps the flat surface and shows “Terrain tiles could not be loaded, so the ground is flat.”
 
 Contours use marching squares on that grid. The interval is 1 m when the relief is under 8 m, 2 m under 25 m, 5 m under 80 m, and 10 m otherwise. They are drawn on the site plan when Contours is on. They are not a separate 3D layer.
 
@@ -119,7 +119,7 @@ Nominatim’s usage policy asks for an identifying User-Agent. Browsers set that
 | SVG download | Real |
 | Satellite basemap and satellite tab | Real preview. Not embedded in the glTF or SVG |
 | Trees | Real when the toggle is on. OpenStreetMap `natural=tree` and `tree_row`. Instanced massing archetypes in the 3D view, glTF, and Rhino; circles on the SVG plan |
-| Terrain | Real when the toggle is on (the default). Mapterhorn Terrarium tiles, heightfield mesh named Terrain in the glTF and on a Terrain layer in the 3DM. Off falls back to the flat slab |
+| Terrain | Real when the toggle is on (the default). Mapterhorn Terrarium tiles, heightfield mesh named Terrain in the glTF and on a Terrain layer in the 3DM. Off falls back to a flat ground surface |
 | Contours | Real on the SVG plan when Terrain loaded and the toggle is on. Interval 1 / 2 / 5 / 10 m from the relief |
 | Relief / terrain stats | The model page shows the DEM elevation range when terrain loaded |
 | DXF, DAE, JPG | Not in this version. No placeholder downloads |
@@ -137,7 +137,7 @@ Nominatim’s usage policy asks for an identifying User-Agent. Browsers set that
 - Road kilometres are clipped centerline length, including rail and tram, not lane area.
 - Relation holes are kept when a multipolygon stitches to a single outer ring.
 - The Rhino file projects WGS84 as GDA2020 with no datum shift (about a metre). The MGA zone follows the block’s longitude: zone 55 (EPSG:7855) from 144°E, zone 54 (EPSG:7854) west of that. It is not a survey.
-- Terrain is a DEM, not lidar collected for the block. Vertical datum follows the Mapterhorn source (AHD for the Australian 5 m lidar, geoid height for Copernicus). The skirt under the mesh is 8 m and is not ground elevation.
+- Terrain is a DEM, not lidar collected for the block. Vertical datum follows the Mapterhorn source (AHD for the Australian 5 m lidar, geoid height for Copernicus). The mesh is the surface itself, with no thickness under it.
 - A large park is subdivided so its interior follows the heightfield, down to about the grid spacing or about 24,000 triangles, whichever comes first. A road is split to that same spacing. Buildings are not draped: the whole footprint uses the minimum sample, so the uphill wall can meet the slope part-way up.
 
 ## Attribution

@@ -124,7 +124,7 @@ export type CityModel = {
   roadKm: number;
   buildingCapHit: boolean;
   sourceNote: string;
-  /** Set when the Terrain layer was built. Absent or null keeps the flat slab. */
+  /** Set when the Terrain layer was built. Absent or null keeps the flat ground surface. */
   terrain?: TerrainField | null;
   /** Set when Terrain was requested and the tiles could not be read. */
   terrainError?: string | null;

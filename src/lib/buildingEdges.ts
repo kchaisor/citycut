@@ -82,7 +82,7 @@ function pushFillBehindLines(mesh: THREE.Mesh) {
 
 /**
  * The fill used to sit closer than the terrain by a tuned bias. After it
- * moves behind the outlines, the terrain and the flat slab top move back by
+ * moves behind the outlines, the terrain and the flat ground move back by
  * the same step so that gap stays put. Roads are left alone: a polygon
  * offset on those ribbons makes them vanish at a low camera.
  */

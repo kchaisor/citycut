@@ -16,7 +16,6 @@ import {
   sampleTerrain,
   terrariumHeight,
   terrainBuffers,
-  TERRAIN_SKIRT_M,
   TERRAIN_TILE_SIZE,
   tilesForBBox,
   webMercatorPixel,
@@ -258,7 +257,8 @@ describe("terrain in the model", () => {
         maxY = Math.max(maxY, position.getY(i));
       }
       expect(maxY).toBeCloseTo(20, 4);
-      expect(minY).toBeCloseTo(0 - TERRAIN_SKIRT_M, 4);
+      expect(minY).toBeCloseTo(0, 4);
+      expect(position.count).toBe(field.cols * field.rows);
 
       let buildings: THREE.Mesh | undefined;
       group.traverse((object) => {
@@ -316,7 +316,7 @@ describe("terrain in the model", () => {
     }
   });
 
-  it("keeps the flat ground slab when terrain is absent", () => {
+  it("keeps a single flat ground surface when terrain is absent", () => {
     const model = slopedModel();
     model.terrain = null;
     model.contours = true;
@@ -325,7 +325,10 @@ describe("terrain in the model", () => {
       const ground = group.getObjectByName("Ground") as THREE.Mesh;
       expect(ground).toBeTruthy();
       expect(group.getObjectByName("Terrain")).toBeUndefined();
-      expect(ground.position.y).toBe(-4);
+      expect(ground.position.y).toBe(0);
+      const groundPosition = ground.geometry.getAttribute("position");
+      expect(groundPosition.count).toBe(4);
+      for (let i = 0; i < groundPosition.count; i++) expect(groundPosition.getY(i)).toBeCloseTo(0, 5);
       const svg = sitePlanSvg(model);
       expect(svg).not.toContain("#7a6248");
     } finally {
@@ -396,5 +399,11 @@ describe("terrain in the model", () => {
     geometry.computeVertexNormals();
     const normal = geometry.getAttribute("normal");
     expect(normal.getY(0)).toBeGreaterThan(0.9);
+    expect(buffers.positions.length / 3).toBe(field.cols * field.rows);
+    expect(buffers.indices.length).toBe((field.cols - 1) * (field.rows - 1) * 6);
+    for (let i = 0; i < buffers.positions.length; i += 3) {
+      expect(buffers.positions[i + 1]).toBeGreaterThanOrEqual(field.min - 1e-4);
+      expect(buffers.positions[i + 1]).toBeLessThanOrEqual(field.max + 1e-4);
+    }
   });
 });

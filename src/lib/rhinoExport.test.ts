@@ -201,9 +201,9 @@ describe("rhino export", () => {
       }
       expect(names).toContain("Terrain");
       expect(names).not.toContain("Ground");
-      expect(terrainVertices).toBeGreaterThan(4);
+      expect(terrainVertices).toBe(4);
       expect(terrainMax).toBeCloseTo(24, 2);
-      expect(terrainMin).toBeCloseTo(7, 2);
+      expect(terrainMin).toBeCloseTo(15, 2);
       expect(buildingMin).toBeCloseTo(base + SURFACE.building.lift, 2);
       const layers: string[] = [];
       for (let i = 0; i < doc.layers().count; i++) layers.push(doc.layers().get(i).name);
