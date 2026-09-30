@@ -145,7 +145,7 @@ export function ModelPage({ model }: { model: CityModel }) {
   return (
     <div className="model">
       <h1 className="sr-only">Your model is ready.</h1>
-      <div className="viewport">
+      <div className={tab === "drawing" ? "viewport is-drawing" : "viewport"}>
         <div className="fill">
           {tab === "3d" && (
             <SceneBoundary>
