@@ -697,12 +697,7 @@ input[type="range"]::-moz-range-thumb {
   .select-chrome .icon-rail { max-width: calc(100% - 168px); }
   .model-chrome .icon-rail { max-width: calc(100% - 20px); }
   .rail-btn { width: 42px; height: 42px; }
-  .rail-tip {
-    left: 50%;
-    top: auto;
-    bottom: calc(100% + 8px);
-    transform: translateX(-50%);
-  }
+  .rail-tip { display: none; }
   .drawer {
     top: auto;
     left: 8px;
