@@ -3,7 +3,6 @@ import rhino3dm from "rhino3dm/rhino3dm.module.js";
 import type { RhinoModuleOptions } from "rhino3dm";
 import { buildCityGroup, disposeObject } from "./buildCity";
 import { CRS_NOTE, mgaCrs, projectLocal, projectLonLat } from "./crs";
-import { TERRAIN_SKIRT_M } from "./terrain";
 import type { CityModel } from "../types";
 
 type Rgb = { r: number; g: number; b: number };
@@ -179,7 +178,7 @@ export async function cityModelTo3dm(model: CityModel): Promise<Uint8Array> {
     if (model.terrain) {
       doc.strings().set(
         "Vertical",
-        `DEM metres from Mapterhorn zoom ${model.terrain.zoom}. Surface ${model.terrain.min.toFixed(2)} to ${model.terrain.max.toFixed(2)} m. The Terrain mesh skirt extends ${TERRAIN_SKIRT_M} m below that surface.`,
+        `DEM metres from Mapterhorn zoom ${model.terrain.zoom}. The Terrain mesh is the surface only, ${model.terrain.min.toFixed(2)} to ${model.terrain.max.toFixed(2)} m, with no skirt or thickness.`,
       );
     }
 

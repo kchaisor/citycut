@@ -28,8 +28,6 @@ export const TERRAIN_UNAVAILABLE = "Terrain tiles could not be loaded, so the gr
 
 /** Nodes along one side of the heightfield, including both edges. */
 const MAX_GRID_NODES = 193;
-/** Vertical skirt, matching the old 8 m ground slab. */
-export const TERRAIN_SKIRT_M = 8;
 
 const EARTH_M = 2 * Math.PI * 6378137;
 
@@ -403,7 +401,7 @@ function shadeHeight(t: number, darken: number): [number, number, number] {
   return [red, green, blue];
 }
 
-/** Heightfield plus an 8 m skirt, in Three.js coordinates (x east, y up, z = −north). */
+/** One heightfield surface, in Three.js coordinates (x east, y up, z = −north). No skirt or base. */
 export function terrainBuffers(field: TerrainField, sideM: number): {
   positions: Float32Array;
   indices: Uint32Array;
@@ -412,26 +410,19 @@ export function terrainBuffers(field: TerrainField, sideM: number): {
   const { cols, rows } = field;
   const half = sideM / 2;
   const relief = Math.max(field.max - field.min, 0.001);
-  const surfaceCount = cols * rows;
-  const edgeQuads = (cols - 1) * 2 + (rows - 1) * 2;
-  const vertexCount = surfaceCount + edgeQuads * 4;
-  const positions = new Float32Array(vertexCount * 3);
-  const colors = new Float32Array(vertexCount * 3);
-  const indexCount = (cols - 1) * (rows - 1) * 6 + edgeQuads * 6;
-  const indices = new Uint32Array(indexCount);
+  const positions = new Float32Array(cols * rows * 3);
+  const colors = new Float32Array(cols * rows * 3);
+  const indices = new Uint32Array((cols - 1) * (rows - 1) * 6);
   let index = 0;
-  const vertex = (col: number, row: number): [number, number, number] => {
-    const east = -half + col * field.spacingM;
-    const north = -half + row * field.spacingM;
-    return [east, field.heights[row * cols + col], -north];
-  };
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
-      const [x, y, z] = vertex(col, row);
+      const east = -half + col * field.spacingM;
+      const north = -half + row * field.spacingM;
+      const y = field.heights[row * cols + col];
       const offset = (row * cols + col) * 3;
-      positions[offset] = x;
+      positions[offset] = east;
       positions[offset + 1] = y;
-      positions[offset + 2] = z;
+      positions[offset + 2] = -north;
       const tint = shadeHeight((y - field.min) / relief, 1);
       colors[offset] = tint[0];
       colors[offset + 1] = tint[1];
@@ -452,70 +443,5 @@ export function terrainBuffers(field: TerrainField, sideM: number): {
       indices[index++] = nw;
     }
   }
-
-  let cursor = surfaceCount;
-  const push = (point: [number, number, number], tint: [number, number, number]) => {
-    const offset = cursor * 3;
-    positions[offset] = point[0];
-    positions[offset + 1] = point[1];
-    positions[offset + 2] = point[2];
-    colors[offset] = tint[0];
-    colors[offset + 1] = tint[1];
-    colors[offset + 2] = tint[2];
-    cursor += 1;
-    return cursor - 1;
-  };
-  const addQuad = (
-    a: [number, number, number],
-    b: [number, number, number],
-    outward: [number, number, number],
-  ) => {
-    const tintA = shadeHeight((a[1] - field.min) / relief, 0.82);
-    const tintB = shadeHeight((b[1] - field.min) / relief, 0.82);
-    const dropped = (point: [number, number, number]): [number, number, number] => [
-      point[0],
-      point[1] - TERRAIN_SKIRT_M,
-      point[2],
-    ];
-    const ia = push(a, tintA);
-    const ib = push(b, tintB);
-    const ic = push(dropped(b), tintB);
-    const id = push(dropped(a), tintA);
-    const ab: [number, number, number] = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
-    const ac: [number, number, number] = [b[0] - a[0], b[1] - TERRAIN_SKIRT_M - a[1], b[2] - a[2]];
-    const normalZ = ab[0] * ac[1] - ab[1] * ac[0];
-    const normalX = ab[1] * ac[2] - ab[2] * ac[1];
-    const normalY = ab[2] * ac[0] - ab[0] * ac[2];
-    const dot = normalX * outward[0] + normalY * outward[1] + normalZ * outward[2];
-    if (dot >= 0) {
-      indices[index++] = ia;
-      indices[index++] = ib;
-      indices[index++] = ic;
-      indices[index++] = ia;
-      indices[index++] = ic;
-      indices[index++] = id;
-    } else {
-      indices[index++] = ia;
-      indices[index++] = ic;
-      indices[index++] = ib;
-      indices[index++] = ia;
-      indices[index++] = id;
-      indices[index++] = ic;
-    }
-  };
-
-  for (let col = 0; col < cols - 1; col++) {
-    addQuad(vertex(col, 0), vertex(col + 1, 0), [0, 0, 1]);
-    addQuad(vertex(col, rows - 1), vertex(col + 1, rows - 1), [0, 0, -1]);
-  }
-  for (let row = 0; row < rows - 1; row++) {
-    addQuad(vertex(0, row), vertex(0, row + 1), [-1, 0, 0]);
-    addQuad(vertex(cols - 1, row), vertex(cols - 1, row + 1), [1, 0, 0]);
-  }
-
-  return {
-    positions: positions.subarray(0, cursor * 3),
-    indices: indices.subarray(0, index),
-    colors: colors.subarray(0, cursor * 3),
-  };
+  return { positions, indices, colors };
 }
