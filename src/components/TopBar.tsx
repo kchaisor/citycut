@@ -2,10 +2,12 @@ import { Mark } from "./Mark";
 
 export function TopBar({
   showNewCut,
+  note,
   onHome,
   onNewCut,
 }: {
   showNewCut: boolean;
+  note?: string;
   onHome: () => void;
   onNewCut: () => void;
 }) {
@@ -15,13 +17,14 @@ export function TopBar({
         <Mark />
         <span>CityCut</span>
       </button>
-      {showNewCut && (
-        <nav className="top-actions">
+      {note ? <p className="top-note">{note}</p> : <span />}
+      <nav className="top-actions">
+        {showNewCut && (
           <button className="text-btn" type="button" onClick={onNewCut}>
             New cut
           </button>
-        </nav>
-      )}
+        )}
+      </nav>
     </header>
   );
 }

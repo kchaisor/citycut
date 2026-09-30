@@ -99,7 +99,7 @@ Copy `.env.example` if you want to override the public endpoints. Both variables
 Map tiles:
 
 - **Map** — [OpenFreeMap](https://openfreemap.org/) Positron style (`https://tiles.openfreemap.org/styles/positron`). No key.
-- **Satellite** — Esri World Imagery raster tiles. No key. The app must keep the Esri, Maxar, and Earthstar Geographics attribution, which the map control and the page footer both show.
+- **Satellite** — Esri World Imagery raster tiles. No key. The app must keep the Esri, Vantor, and Earthstar Geographics attribution, which the map control and the page footer both show.
 
 Nominatim’s usage policy asks for an identifying User-Agent. Browsers set that themselves and will not let the page replace it. Fine for light use; put a small proxy in front of Nominatim if you expect real traffic.
 
@@ -139,7 +139,7 @@ Nominatim’s usage policy asks for an identifying User-Agent. Browsers set that
 
 ## Attribution
 
-Map data © OpenStreetMap contributors. Vector tiles © OpenFreeMap / OpenStreetMap. Satellite imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community. Terrain © [Mapterhorn](https://mapterhorn.com/attribution), including Geoscience Australia’s 5 m DEM (CC BY 4.0) and Copernicus GLO-30 where the 5 m grid is absent. City of Melbourne urban forest © City of Melbourne, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Vicmap Vegetation Tree Urban © State of Victoria (Department of Transport and Planning), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+Map data © OpenStreetMap contributors. Vector tiles © OpenFreeMap / OpenStreetMap. Satellite imagery © Esri, Vantor, Earthstar Geographics, and the GIS User Community. Terrain © [Mapterhorn](https://mapterhorn.com/attribution), including Geoscience Australia’s 5 m DEM (CC BY 4.0) and Copernicus GLO-30 where the 5 m grid is absent. City of Melbourne urban forest © City of Melbourne, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Vicmap Vegetation Tree Urban © State of Victoria (Department of Transport and Planning), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 CityCut is an original interface. Kelvin Chai, Melbourne.
 
