@@ -9,7 +9,14 @@ import {
   countUses,
 } from "../lib/buildingUse";
 import { CRS_NOTE, mgaCrs } from "../lib/crs";
-import { download3dm, downloadBlob, downloadFigureGround, downloadGlb, downloadSvg, pngFilename } from "../lib/download";
+import {
+  download3dm,
+  downloadBlob,
+  downloadFigureAi,
+  downloadSiteAi,
+  downloadViewAi,
+  pngFilename,
+} from "../lib/download";
 import { FIGURE_SCALES, preferredFigureScale, sheetFitMessage } from "../lib/figureGround";
 import { formatCoord, formatLengthKm } from "../lib/geo";
 import { ISO_CORNERS, type IsoCorner } from "../lib/isoCamera";
@@ -28,7 +35,7 @@ import { Drawer } from "./Drawer";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
 import { IconRail, type RailItem } from "./IconRail";
 import { SatellitePane } from "./SatellitePane";
-import { Scene3D, type PngExporter } from "./Scene3D";
+import { Scene3D, type SceneExporter } from "./Scene3D";
 import { SceneBoundary } from "./SceneBoundary";
 
 type Tab = "3d" | "drawing" | "satellite";
@@ -66,7 +73,7 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [drawing, setDrawing] = useState<DrawingKind>("site");
   const [figureScale, setFigureScale] = useState<number>(() => preferredFigureScale(model.sideM));
   const [exportError, setExportError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"glb" | "svg" | "3dm" | "fg-svg" | "fg-pdf" | "png" | null>(null);
+  const [busy, setBusy] = useState<"3dm" | "png" | "ai-view" | "ai-site" | "ai-figure" | null>(null);
   const [colourByUse, setColourByUse] = useState(true);
   const [showSource, setShowSource] = useState(false);
   const [preferred, setPreferred] = useState<string | null>(() => loadModelDrawer());
@@ -74,8 +81,8 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [fitToken, setFitToken] = useState(0);
   const [view, setView] = useState<ViewMemory>(loadView);
   const [snapId, setSnapId] = useState(0);
-  const exportRef = useRef<PngExporter | null>(null);
-  const onExportReady = useCallback((exporter: PngExporter | null) => {
+  const exportRef = useRef<SceneExporter | null>(null);
+  const onExportReady = useCallback((exporter: SceneExporter | null) => {
     exportRef.current = exporter;
   }, []);
   const onScale = useCallback((widthM: number) => setPlanWidth(widthM), []);
@@ -128,18 +135,6 @@ export function ModelPage({ model }: { model: CityModel }) {
     if (snap) setSnapId((id) => id + 1);
   }
 
-  async function saveGlb() {
-    setExportError(null);
-    setBusy("glb");
-    try {
-      await downloadGlb(model);
-    } catch {
-      setExportError("The glTF file could not be written.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
   async function save3dm() {
     setExportError(null);
     setBusy("3dm");
@@ -152,25 +147,43 @@ export function ModelPage({ model }: { model: CityModel }) {
     }
   }
 
-  function saveSvg() {
+  async function saveSiteAi() {
     setExportError(null);
-    setBusy("svg");
+    setBusy("ai-site");
     try {
-      downloadSvg(model);
+      await downloadSiteAi(model, figureScale);
     } catch {
-      setExportError("The SVG file could not be written.");
+      setExportError("The site plan could not be written.");
     } finally {
       setBusy(null);
     }
   }
 
-  function saveFigure(extension: "svg" | "pdf") {
+  async function saveFigureAi() {
     setExportError(null);
-    setBusy(extension === "svg" ? "fg-svg" : "fg-pdf");
+    setBusy("ai-figure");
     try {
-      downloadFigureGround(model, figureScale, extension);
+      await downloadFigureAi(model, figureScale);
     } catch {
       setExportError("The figure-ground file could not be written.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function saveViewAi() {
+    setExportError(null);
+    setBusy("ai-view");
+    try {
+      const exporter = exportRef.current;
+      if (!exporter) throw new Error("The 3D view is not ready.");
+      await downloadViewAi(model, exporter.shot(), {
+        uniformBuildings: !colourByUse && !showSource,
+        colourBySource: showSource,
+      });
+    } catch (error) {
+      console.error(error);
+      setExportError("The 3D view could not be written.");
     } finally {
       setBusy(null);
     }
@@ -182,7 +195,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     try {
       const exporter = exportRef.current;
       if (!exporter) throw new Error("The 3D view is not ready.");
-      const blob = await exporter();
+      const blob = await exporter.png();
       downloadBlob(pngFilename(model), blob);
     } catch {
       setExportError("The PNG image could not be written.");
@@ -203,7 +216,7 @@ export function ModelPage({ model }: { model: CityModel }) {
           : "Drag to pan · scroll to zoom"
       : tab === "drawing"
         ? "Scroll to zoom · drag to pan · double-click to fit"
-        : "Satellite preview of this frame. It is not saved in the glTF.";
+        : "Satellite preview of this frame. It is not included in the downloads.";
 
   return (
     <div className="model">
@@ -458,22 +471,21 @@ export function ModelPage({ model }: { model: CityModel }) {
                   Figure-ground
                 </button>
               </div>
-              {drawing === "figure-ground" && (
-                <label className="scale-field">
-                  Scale
-                  <select
-                    value={figureScale}
-                    aria-label="Figure-ground scale"
-                    onChange={(event) => setFigureScale(Number(event.target.value))}
-                  >
-                    {FIGURE_SCALES.map((scale) => (
-                      <option key={scale} value={scale}>
-                        1:{scale}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
+              <label className="scale-field">
+                Plan scale
+                <select
+                  value={figureScale}
+                  aria-label="Plan scale"
+                  onChange={(event) => setFigureScale(Number(event.target.value))}
+                >
+                  {FIGURE_SCALES.map((scale) => (
+                    <option key={scale} value={scale}>
+                      1:{scale}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {figureFit && <p className="fit-note">{figureFit}</p>}
               {tab === "drawing" && (
                 <div className="field">
                   <div className="field-head">
@@ -489,7 +501,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                 </div>
               )}
               {tab === "satellite" && (
-                <p className="field-note">Satellite is a preview of this frame. It is not saved in the glTF.</p>
+                <p className="field-note">Satellite is a preview of this frame. It is not included in the downloads.</p>
               )}
             </div>
 
@@ -502,23 +514,8 @@ export function ModelPage({ model }: { model: CityModel }) {
                     </h3>
                     <p>The current 3D view, in perspective or isometric, at twice the canvas resolution.</p>
                   </div>
-                  <button className="ghost" type="button" disabled={busy !== null} onClick={savePng}>
+                  <button className="ghost" type="button" data-autofocus="true" disabled={busy !== null} onClick={savePng} aria-label="Download PNG">
                     {busy === "png" ? "Preparing…" : "Download"}
-                  </button>
-                </article>
-                <article className="card">
-                  <div>
-                    <h3>
-                      glTF <span>.glb</span>
-                    </h3>
-                    <p>
-                      {model.terrain
-                        ? "Buildings, roads, water, green, trees, and a Terrain mesh."
-                        : "Buildings, roads, water, green, and trees as meshes. Flat ground, no textures."}
-                    </p>
-                  </div>
-                  <button className="ghost" type="button" data-autofocus="true" disabled={busy !== null} onClick={saveGlb}>
-                    {busy === "glb" ? "Preparing…" : "Download"}
                   </button>
                 </article>
                 <article className="card">
@@ -526,47 +523,66 @@ export function ModelPage({ model }: { model: CityModel }) {
                     <h3>
                       Rhino <span>.3dm</span>
                     </h3>
-                    <p>The same meshes in {crs.name}, metres, Z-up, plus figure-ground curves.</p>
+                    <p>The same meshes in {crs.name}, metres, Z-up, plus a FigureGround layer.</p>
                   </div>
-                  <button className="ghost" type="button" disabled={busy !== null} onClick={save3dm}>
+                  <button className="ghost" type="button" disabled={busy !== null} onClick={save3dm} aria-label="Download Rhino">
                     {busy === "3dm" ? "Preparing…" : "Download"}
                   </button>
                 </article>
                 <article className="card">
                   <div>
                     <h3>
-                      Site plan <span>.svg</span>
+                      3D view <span>.ai</span>
                     </h3>
-                    <p>
-                      {model.contours && model.terrain
-                        ? "The same block as vectors, plus contour lines."
-                        : "The same block as vectors: building fills, road lines, water, green, and tree symbols."}
-                    </p>
+                    <p>The current camera as vectors: filled faces, visible edges, and simplified trees. Not to scale.</p>
                   </div>
-                  <button className="ghost" type="button" disabled={busy !== null} onClick={saveSvg}>
-                    {busy === "svg" ? "Preparing…" : "Download"}
+                  <button className="ghost" type="button" disabled={busy !== null} onClick={saveViewAi} aria-label="Download 3D view Illustrator">
+                    {busy === "ai-view" ? "Preparing…" : "Download"}
                   </button>
                 </article>
-                <article className="card figure-card">
+                <label className="scale-field">
+                  Plan scale
+                  <select
+                    value={figureScale}
+                    aria-label="Export plan scale"
+                    onChange={(event) => setFigureScale(Number(event.target.value))}
+                  >
+                    {FIGURE_SCALES.map((scale) => (
+                      <option key={scale} value={scale}>
+                        1:{scale}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {figureFit && (
+                  <p className="fit-note" id="figure-fit">
+                    {figureFit}
+                  </p>
+                )}
+                <article className="card">
                   <div>
                     <h3>
-                      Figure-ground <span>.svg .pdf</span>
+                      Site plan <span>.ai</span>
+                    </h3>
+                    <p>
+                      True scale at 1:{figureScale}. Building cut, road edges, contours, and the frame keep their pen
+                      weights on the sheet.
+                    </p>
+                  </div>
+                  <button className="ghost" type="button" disabled={busy !== null} onClick={saveSiteAi} aria-label="Download site plan Illustrator">
+                    {busy === "ai-site" ? "Preparing…" : "Download"}
+                  </button>
+                </article>
+                <article className="card">
+                  <div>
+                    <h3>
+                      Figure-ground <span>.ai</span>
                     </h3>
                     <p>Black footprints on white, true scale. A3 landscape or portrait, whichever fits the frame.</p>
                   </div>
-                  <div className="figure-export">
-                    <button className="ghost" type="button" disabled={busy !== null} onClick={() => saveFigure("svg")}>
-                      {busy === "fg-svg" ? "Preparing…" : "SVG"}
-                    </button>
-                    <button className="ghost" type="button" disabled={busy !== null} onClick={() => saveFigure("pdf")}>
-                      {busy === "fg-pdf" ? "Preparing…" : "PDF"}
-                    </button>
-                  </div>
-                  {figureFit && (
-                    <p className="fit-note" id="figure-fit">
-                      {figureFit}
-                    </p>
-                  )}
+                  <button className="ghost" type="button" disabled={busy !== null} onClick={saveFigureAi} aria-label="Download figure-ground Illustrator">
+                    {busy === "ai-figure" ? "Preparing…" : "Download"}
+                  </button>
                 </article>
               </div>
               <p className="v2">

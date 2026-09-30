@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { figureGroundModelPaths, scaleBarMetres } from "../lib/figureGround";
-import { planPaths } from "../lib/svgPlan";
+import {
+  CONTOUR_COLOR,
+  CONTOUR_DASH_MM,
+  CONTOUR_GAP_MM,
+  LINE_MM,
+  screenDashPx,
+  screenPx,
+} from "../lib/lineweights";
+import { planPaths, svgPolyline, svgRings } from "../lib/svgPlan";
+import { themeColor } from "../lib/themeColor";
 import type { CityModel } from "../types";
 
 type View = { x: number; y: number; w: number; h: number };
@@ -83,8 +92,13 @@ export function DrawingPlan({
   const half = model.sideM / 2;
   const empty = figure
     ? figurePaths.length === 0
-    : model.buildings.length === 0 && model.roads.length === 0 && model.areas.length === 0 && model.trees.length === 0;
-  const stroke = Math.max(model.sideM * 0.0015, 0.35);
+    : model.buildings.length === 0 &&
+      model.roads.length === 0 &&
+      model.areas.length === 0 &&
+      model.trees.length === 0 &&
+      (paths?.contours.length ?? 0) === 0;
+  const framePx = screenPx(LINE_MM.frame);
+  const notePx = screenPx(LINE_MM.annotation);
   const barMetres = scaleBarMetres(model.sideM);
   const barThickness = Math.max(model.sideM * 0.005, 0.6);
   const barY = half + model.sideM * 0.028;
@@ -92,6 +106,7 @@ export function DrawingPlan({
   const arrowTip = -half - model.sideM * 0.055;
   const arrowBase = -half - model.sideM * 0.016;
   const head = model.sideM * 0.01;
+  const canvas = useMemo(() => themeColor("--drawing-bg", "#EBEBEB"), []);
 
   return (
     <svg
@@ -118,16 +133,33 @@ export function DrawingPlan({
         drag.current = null;
       }}
     >
-      <rect x={view.x} y={view.y} width={view.w} height={view.h} fill={figure ? "#fff" : "#e7e2d8"} />
-      <rect x={-half} y={-half} width={model.sideM} height={model.sideM} fill={figure ? "#fff" : "#f4f1ea"} />
+      <rect x={view.x} y={view.y} width={view.w} height={view.h} fill={canvas} />
+      <rect x={-half} y={-half} width={model.sideM} height={model.sideM} fill={canvas} />
       {figure ? (
         <>
           {figurePaths.map((d, index) => (
             <path key={`f${index}`} d={d} fill="#000" fillRule="evenodd" />
           ))}
-          <rect x={-half} y={-half} width={model.sideM} height={model.sideM} fill="none" stroke="#000" strokeWidth={stroke} />
+          <rect
+            x={-half}
+            y={-half}
+            width={model.sideM}
+            height={model.sideM}
+            fill="none"
+            stroke="#000"
+            strokeWidth={framePx}
+            vectorEffect="non-scaling-stroke"
+          />
           <g aria-hidden="true">
-            <line x1={arrowX} y1={arrowBase} x2={arrowX} y2={arrowTip + head * 1.6} stroke="#000" strokeWidth={stroke} />
+            <line
+              x1={arrowX}
+              y1={arrowBase}
+              x2={arrowX}
+              y2={arrowTip + head * 1.6}
+              stroke="#000"
+              strokeWidth={notePx}
+              vectorEffect="non-scaling-stroke"
+            />
             <polygon
               points={`${arrowX},${arrowTip} ${arrowX - head},${arrowTip + head * 1.7} ${arrowX + head},${arrowTip + head * 1.7}`}
               fill="#000"
@@ -151,7 +183,8 @@ export function DrawingPlan({
               height={barThickness}
               fill="none"
               stroke="#000"
-              strokeWidth={stroke * 0.7}
+              strokeWidth={notePx}
+              vectorEffect="non-scaling-stroke"
             />
             <text
               x={-half + barMetres + model.sideM * 0.012}
@@ -167,57 +200,83 @@ export function DrawingPlan({
       ) : (
         paths && (
           <>
-            {paths.green.map((d, index) => (
-              <path key={`g${index}`} d={d} fill="#b7d39a" />
+            {paths.green.map((rings, index) => (
+              <path key={`g${index}`} d={svgRings(rings)} fill="#b7d39a" />
             ))}
-            {paths.water.map((d, index) => (
-              <path key={`w${index}`} d={d} fill="#9ec9d1" />
+            {paths.water.map((rings, index) => (
+              <path key={`w${index}`} d={svgRings(rings)} fill="#9ec9d1" />
             ))}
-            {paths.contours.map((d, index) => (
+            {paths.contours.map((line, index) => (
               <path
                 key={`c${index}`}
-                d={d}
+                d={svgPolyline(line, false)}
                 fill="none"
-                stroke="#7a6248"
-                strokeWidth={Math.max(model.sideM * 0.0012, 0.35)}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-              />
-            ))}
-            {paths.roads.map((road, index) => (
-              <path
-                key={`r${index}`}
-                d={road.d}
-                fill="none"
-                stroke={road.stroke}
-                strokeWidth={road.width}
-                strokeLinecap="round"
-                strokeLinejoin="round"
+                stroke={CONTOUR_COLOR}
+                strokeWidth={screenPx(LINE_MM.contour)}
+                strokeDasharray={`${screenDashPx(CONTOUR_DASH_MM)} ${screenDashPx(CONTOUR_GAP_MM)}`}
+                strokeLinejoin="miter"
+                strokeLinecap="butt"
+                vectorEffect="non-scaling-stroke"
               />
             ))}
             {paths.rails.map((rail, index) => (
               <path
                 key={`l${index}`}
-                d={rail.d}
+                d={svgPolyline(rail.line, false)}
                 fill="none"
-                stroke="#8d6244"
-                strokeWidth={rail.width}
-                strokeDasharray={`${rail.width * 1.6} ${rail.width}`}
-                strokeLinecap="butt"
+                stroke={rail.stroke}
+                strokeWidth={screenPx(LINE_MM.secondary)}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+            {paths.paths.map((path, index) => (
+              <path
+                key={`p${index}`}
+                d={svgPolyline(path.line, false)}
+                fill="none"
+                stroke={path.stroke}
+                strokeWidth={screenPx(LINE_MM.secondary)}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+            {paths.roadEdges.map((road, index) => (
+              <path
+                key={`r${index}`}
+                d={svgPolyline(road.line, false)}
+                fill="none"
+                stroke={road.stroke}
+                strokeWidth={screenPx(LINE_MM.propertyRoad)}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
               />
             ))}
             {paths.buildings.map((building, index) => (
-              <path key={`b${index}`} d={building.d} fill={building.fill} fillRule="evenodd" />
+              <path
+                key={`b${index}`}
+                d={svgRings(building.rings)}
+                fill={building.fill}
+                fillRule="evenodd"
+                stroke="#1c1b17"
+                strokeWidth={screenPx(LINE_MM.buildingCut)}
+                strokeLinejoin="miter"
+                vectorEffect="non-scaling-stroke"
+              />
             ))}
             {paths.trees.map((tree, index) => (
               <circle
                 key={`t${index}`}
-                cx={tree.x}
-                cy={tree.y}
+                cx={tree.east}
+                cy={-tree.north}
                 r={tree.r}
                 fill="#6ea35a"
                 stroke="#245232"
-                strokeWidth={Math.max(model.sideM * 0.0015, 0.4)}
+                strokeWidth={screenPx(LINE_MM.secondary)}
+                vectorEffect="non-scaling-stroke"
               />
             ))}
             <rect
@@ -227,7 +286,8 @@ export function DrawingPlan({
               height={model.sideM}
               fill="none"
               stroke="#1c1b17"
-              strokeWidth={model.sideM * 0.004}
+              strokeWidth={framePx}
+              vectorEffect="non-scaling-stroke"
             />
             <text x={0} y={-half + model.sideM * 0.04} textAnchor="middle" fontSize={model.sideM * 0.03} fill="#1c1b17">
               N

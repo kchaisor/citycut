@@ -13,13 +13,12 @@ if (typeof globalThis.FileReader === "undefined") {
   }
   globalThis.FileReader = FileReaderPolyfill as unknown as typeof FileReader;
 }
-import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import * as THREE from "three";
 import { buildCityGroup, disposeObject } from "./buildCity";
 import { fromLocal } from "./geo";
 import { buildOverpassQuery, overpassBBox } from "./overpass";
 import { parseCity } from "./parseOsm";
-import { sitePlanSvg } from "./svgPlan";
+import { planPaths } from "./svgPlan";
 import { applyComTreeSizes, comRecordsToTrees } from "./comTrees";
 import { DEFAULT_CROWN_DIAMETER, DEFAULT_TREE_HEIGHT, heightFromDbhCm, treeSize } from "./trees";
 import type { CityModel, Pt } from "../types";
@@ -386,11 +385,8 @@ describe("tree exports", () => {
   };
 
   it("draws a plan circle for each tree", () => {
-    const svg = sitePlanSvg(model);
-    expect(svg).toContain("<circle");
-    expect(svg).toContain('cx="20"');
-    expect(svg).toContain('cy="-30"');
-    expect(svg).toContain('r="4"');
+    const plan = planPaths(model);
+    expect(plan.trees).toEqual([{ east: 20, north: 30, r: 4 }]);
   });
 
   it("keeps a centimetre trunk from scaling the tree mesh into a spike", () => {
@@ -501,27 +497,4 @@ describe("tree exports", () => {
     disposeObject(group);
   });
 
-  it("includes the tree mesh in the binary glTF", async () => {
-    const group = buildCityGroup(model);
-    try {
-      const exporter = new GLTFExporter();
-      const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-        exporter.parse(
-          group,
-          (result) => {
-            if (result instanceof ArrayBuffer) resolve(result);
-            else reject(new Error("expected binary glTF"));
-          },
-          (error) => reject(error),
-          { binary: true },
-        );
-      });
-      const text = new TextDecoder().decode(buffer);
-      expect(text).toContain("Trees");
-      expect(text).toContain("EXT_mesh_gpu_instancing");
-      expect(text).toContain("generic");
-    } finally {
-      disposeObject(group);
-    }
-  });
 });

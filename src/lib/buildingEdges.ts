@@ -11,7 +11,7 @@ export const BUILDING_EDGE_THRESHOLD_DEG = 25;
 
 /**
  * Ink, not a second gray. Roads are already #3a3a3a, and the paper background
- * is #e7e4dc, so a pure black line stays crisp and reads as the massing edge.
+ * sits on the model clear colour, so a pure black line stays crisp and reads as the massing edge.
  */
 export const BUILDING_EDGE_COLOR = "#000000";
 

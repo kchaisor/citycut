@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import * as THREE from "three";
 import { buildCityGroup, disposeObject } from "./buildCity";
 import { SURFACE } from "./surfaceLayers";
-import { sitePlanSvg } from "./svgPlan";
+import { planPaths } from "./svgPlan";
 import {
   clampHeightOutliers,
   contourInterval,
@@ -449,55 +448,16 @@ describe("terrain in the model", () => {
       const groundPosition = ground.geometry.getAttribute("position");
       expect(groundPosition.count).toBe(4);
       for (let i = 0; i < groundPosition.count; i++) expect(groundPosition.getY(i)).toBeCloseTo(0, 5);
-      const svg = sitePlanSvg(model);
-      expect(svg).not.toContain("#7a6248");
+      expect(planPaths(model).contours).toHaveLength(0);
     } finally {
       disposeObject(group);
     }
   });
 
-  it("adds contour strokes to the SVG only when requested", () => {
+  it("adds contour lines only when requested", () => {
     const model = slopedModel();
-    const withContours = sitePlanSvg(model);
-    expect(withContours).toContain("#7a6248");
-    expect(withContours).toContain("Mapterhorn");
-    const without = sitePlanSvg({ ...model, contours: false });
-    expect(without).not.toContain("#7a6248");
-    expect(without).toContain("OpenStreetMap");
-  });
-
-  it("names the terrain mesh Terrain in the binary glTF", async () => {
-    if (typeof globalThis.FileReader === "undefined") {
-      class Reader {
-        result: ArrayBuffer | null = null;
-        onloadend: null | (() => void) = null;
-        readAsArrayBuffer(blob: Blob) {
-          void blob.arrayBuffer().then((buffer) => {
-            this.result = buffer;
-            this.onloadend?.();
-          });
-        }
-      }
-      globalThis.FileReader = Reader as unknown as typeof FileReader;
-    }
-    const group = buildCityGroup(slopedModel());
-    try {
-      const exporter = new GLTFExporter();
-      const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-        exporter.parse(
-          group,
-          (result) => {
-            if (result instanceof ArrayBuffer) resolve(result);
-            else reject(new Error("expected binary glTF"));
-          },
-          (error) => reject(error),
-          { binary: true },
-        );
-      });
-      expect(new TextDecoder().decode(buffer)).toContain("Terrain");
-    } finally {
-      disposeObject(group);
-    }
+    expect(planPaths(model).contours.length).toBeGreaterThan(0);
+    expect(planPaths({ ...model, contours: false }).contours).toHaveLength(0);
   });
 
   it("points the heightfield normal upward", () => {
