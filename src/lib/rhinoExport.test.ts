@@ -33,8 +33,16 @@ const model: CityModel = {
 };
 
 type ReadMesh = {
+  objectType: number;
   vertices: () => { count: number; point3dAt: (index: number) => number[] };
   faces: () => { count: number };
+};
+
+type ReadCurve = {
+  objectType: number;
+  pointCount: number;
+  point: (index: number) => number[];
+  isClosed: boolean;
 };
 
 function latin1(bytes: Uint8Array): string {
@@ -76,6 +84,7 @@ describe("rhino export", () => {
         const object = doc.objects().get(i);
         names.push(object.attributes().name);
         const geometry = object.geometry() as unknown as ReadMesh;
+        if (geometry.objectType !== rhino.ObjectType.Mesh) continue;
         expect(geometry.faces().count).toBeGreaterThan(0);
         for (let v = 0; v < geometry.vertices().count; v++) {
           points.push(geometry.vertices().point3dAt(v));
@@ -135,6 +144,7 @@ describe("rhino export", () => {
         const object = doc.objects().get(i);
         names.push(object.attributes().name);
         const geometry = object.geometry() as unknown as ReadMesh;
+        if (geometry.objectType !== rhino.ObjectType.Mesh) continue;
         for (let v = 0; v < geometry.vertices().count; v++) {
           points.push(geometry.vertices().point3dAt(v));
         }
@@ -189,6 +199,7 @@ describe("rhino export", () => {
         const name = object.attributes().name;
         names.push(name);
         const geometry = object.geometry() as unknown as ReadMesh;
+        if (geometry.objectType !== rhino.ObjectType.Mesh) continue;
         for (let v = 0; v < geometry.vertices().count; v++) {
           const point = geometry.vertices().point3dAt(v);
           if (name === "Terrain") {
@@ -208,6 +219,106 @@ describe("rhino export", () => {
       const layers: string[] = [];
       for (let i = 0; i < doc.layers().count; i++) layers.push(doc.layers().get(i).name);
       expect(layers).toContain("Terrain");
+    } finally {
+      doc.destroy();
+    }
+  });
+
+  it("writes unioned figure-ground curves on a FigureGround layer", async () => {
+    const bytes = await cityModelTo3dm({
+      ...model,
+      buildings: [
+        { id: 1, ring: square([0, 0], 20), holes: [], height: 12, use: "unclassified", source: "none" },
+        { id: 8, ring: square([10, 0], 20), holes: [], height: 9, use: "residential", source: "osm_tag" },
+      ],
+    });
+    const rhino = await loadRhino();
+    const doc = rhino.File3dm.fromByteArray(bytes);
+    try {
+      const layers: string[] = [];
+      for (let i = 0; i < doc.layers().count; i++) layers.push(doc.layers().get(i).name);
+      expect(layers).toContain("FigureGround");
+      const curves: number[][][] = [];
+      for (let i = 0; i < doc.objects().count; i++) {
+        const object = doc.objects().get(i);
+        if (object.attributes().name !== "FigureGround") continue;
+        const curve = object.geometry() as unknown as ReadCurve;
+        expect(curve.objectType).toBe(rhino.ObjectType.Curve);
+        expect(curve.isClosed).toBe(true);
+        const points: number[][] = [];
+        for (let p = 0; p < curve.pointCount; p++) points.push(curve.point(p));
+        expect(points.length).toBeGreaterThanOrEqual(4);
+        for (const point of points) expect(point[2]).toBeCloseTo(0, 5);
+        curves.push(points);
+      }
+      expect(curves).toHaveLength(1);
+      const west = projectLocal([-10, -10], origin, 55);
+      const east = projectLocal([20, 10], origin, 55);
+      const hasWest = curves[0].some((point) => Math.hypot(point[0] - west[0], point[1] - west[1]) < 0.05);
+      const hasEast = curves[0].some((point) => Math.hypot(point[0] - east[0], point[1] - east[1]) < 0.05);
+      expect(hasWest).toBe(true);
+      expect(hasEast).toBe(true);
+    } finally {
+      doc.destroy();
+    }
+  });
+
+  it("keeps a courtyard ring and sits figure-ground on the terrain datum", async () => {
+    const bytes = await cityModelTo3dm({
+      ...model,
+      terrain: {
+        cols: 2,
+        rows: 2,
+        heights: Float32Array.of(15, 18, 21, 24),
+        min: 15,
+        max: 24,
+        spacingM: 200,
+        zoom: 14,
+        metresPerPixel: 4,
+        source: "Mapterhorn",
+      },
+      buildings: [
+        {
+          id: 1,
+          ring: square([0, 0], 40),
+          holes: [square([0, 0], 8)],
+          height: 12,
+          use: "unclassified",
+          source: "none",
+        },
+      ],
+    });
+    const rhino = await loadRhino();
+    const doc = rhino.File3dm.fromByteArray(bytes);
+    try {
+      const curves: number[][][] = [];
+      for (let i = 0; i < doc.objects().count; i++) {
+        const object = doc.objects().get(i);
+        if (object.attributes().name !== "FigureGround") continue;
+        const curve = object.geometry() as unknown as ReadCurve;
+        const points: number[][] = [];
+        for (let p = 0; p < curve.pointCount; p++) points.push(curve.point(p));
+        for (const point of points) expect(point[2]).toBeCloseTo(15, 5);
+        curves.push(points);
+      }
+      expect(curves).toHaveLength(2);
+      const span = (points: number[][]) => {
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let minY = Infinity;
+        let maxY = -Infinity;
+        for (const point of points) {
+          minX = Math.min(minX, point[0]);
+          maxX = Math.max(maxX, point[0]);
+          minY = Math.min(minY, point[1]);
+          maxY = Math.max(maxY, point[1]);
+        }
+        return Math.max(maxX - minX, maxY - minY);
+      };
+      const spans = curves.map(span).sort((a, b) => a - b);
+      expect(spans[0]).toBeGreaterThan(6);
+      expect(spans[0]).toBeLessThan(12);
+      expect(spans[1]).toBeGreaterThan(35);
     } finally {
       doc.destroy();
     }

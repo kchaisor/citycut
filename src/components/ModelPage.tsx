@@ -8,13 +8,14 @@ import {
   countUses,
 } from "../lib/buildingUse";
 import { CRS_NOTE, mgaCrs } from "../lib/crs";
+import { download3dm, downloadFigureGround, downloadGlb, downloadSvg } from "../lib/download";
+import { FIGURE_SCALES, preferredFigureScale, sheetFitMessage } from "../lib/figureGround";
 import { formatCoord, formatLengthKm } from "../lib/geo";
-import { download3dm, downloadGlb, downloadSvg } from "../lib/download";
 import { BUILDINGS_LEGEND_COLLAPSED_KEY, TREES_LEGEND_COLLAPSED_KEY } from "../lib/panelCollapse";
 import { treeSizeSummary } from "../lib/trees";
 import type { CityModel } from "../types";
 import { CollapsiblePanel } from "./CollapsiblePanel";
-import { DrawingPlan } from "./DrawingPlan";
+import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
 import { SatellitePane } from "./SatellitePane";
 import { Scene3D } from "./Scene3D";
 import { SceneBoundary } from "./SceneBoundary";
@@ -23,8 +24,10 @@ type Tab = "3d" | "drawing" | "satellite";
 
 export function ModelPage({ model }: { model: CityModel }) {
   const [tab, setTab] = useState<Tab>("3d");
+  const [drawing, setDrawing] = useState<DrawingKind>("site");
+  const [figureScale, setFigureScale] = useState<number>(() => preferredFigureScale(model.sideM));
   const [exportError, setExportError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"glb" | "svg" | "3dm" | null>(null);
+  const [busy, setBusy] = useState<"glb" | "svg" | "3dm" | "fg-svg" | "fg-pdf" | null>(null);
   const [colourByUse, setColourByUse] = useState(true);
   const [showSource, setShowSource] = useState(false);
   const crs = mgaCrs(model.center.lon);
@@ -73,6 +76,19 @@ export function ModelPage({ model }: { model: CityModel }) {
     }
   }
 
+  function saveFigure(extension: "svg" | "pdf") {
+    setExportError(null);
+    setBusy(extension === "svg" ? "fg-svg" : "fg-pdf");
+    try {
+      downloadFigureGround(model, figureScale, extension);
+    } catch {
+      setExportError("The figure-ground file could not be written.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const figureFit = sheetFitMessage(model.sideM, figureScale);
   const useCounts = countUses(model.buildings);
   const sourceCounts = countSources(model.buildings);
   const hint =
@@ -154,6 +170,21 @@ export function ModelPage({ model }: { model: CityModel }) {
           ))}
         </div>
 
+        {tab === "drawing" && (
+          <div className="plan-switch" role="group" aria-label="Drawing type">
+            <button type="button" aria-pressed={drawing === "site"} onClick={() => setDrawing("site")}>
+              Site plan
+            </button>
+            <button
+              type="button"
+              aria-pressed={drawing === "figure-ground"}
+              onClick={() => setDrawing("figure-ground")}
+            >
+              Figure-ground
+            </button>
+          </div>
+        )}
+
         <div className="viewport">
           <div className="fill">
             {tab === "3d" && (
@@ -165,7 +196,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                 />
               </SceneBoundary>
             )}
-            {tab === "drawing" && <DrawingPlan model={model} />}
+            {tab === "drawing" && <DrawingPlan model={model} kind={drawing} />}
             {tab === "satellite" && <SatellitePane model={model} />}
           </div>
           {tab === "3d" && (model.layers.buildings || model.layers.trees) && (
@@ -271,7 +302,7 @@ export function ModelPage({ model }: { model: CityModel }) {
               <h2>
                 Rhino <span>.3dm</span>
               </h2>
-              <p>The same meshes in {crs.name}, metres, Z-up.</p>
+              <p>The same meshes in {crs.name}, metres, Z-up, plus figure-ground curves.</p>
             </div>
             <button className="ghost" type="button" disabled={busy !== null} onClick={save3dm}>
               {busy === "3dm" ? "Preparing…" : "Download"}
@@ -291,6 +322,42 @@ export function ModelPage({ model }: { model: CityModel }) {
             <button className="ghost" type="button" disabled={busy !== null} onClick={saveSvg}>
               {busy === "svg" ? "Preparing…" : "Download"}
             </button>
+          </article>
+          <article className="card figure-card">
+            <div>
+              <h2>
+                Figure-ground <span>.svg .pdf</span>
+              </h2>
+              <p>Black footprints on white, true scale. A3 landscape or portrait, whichever fits the frame.</p>
+            </div>
+            <div className="figure-export">
+              <label>
+                Scale
+                <select
+                  value={figureScale}
+                  aria-label="Figure-ground scale"
+                  disabled={busy !== null}
+                  onChange={(event) => setFigureScale(Number(event.target.value))}
+                >
+                  {FIGURE_SCALES.map((scale) => (
+                    <option key={scale} value={scale}>
+                      1:{scale}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button className="ghost" type="button" disabled={busy !== null} onClick={() => saveFigure("svg")}>
+                {busy === "fg-svg" ? "Preparing…" : "SVG"}
+              </button>
+              <button className="ghost" type="button" disabled={busy !== null} onClick={() => saveFigure("pdf")}>
+                {busy === "fg-pdf" ? "Preparing…" : "PDF"}
+              </button>
+            </div>
+            {figureFit && (
+              <p className="fit-note" id="figure-fit">
+                {figureFit}
+              </p>
+            )}
           </article>
         </div>
         <p className="v2">

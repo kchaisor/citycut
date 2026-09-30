@@ -377,6 +377,19 @@ input[type="range"]::-moz-range-thumb {
   color: var(--ink);
 }
 .tabs button.active { background: var(--ink); color: #fff; }
+.plan-switch { display: flex; gap: 6px; margin: -4px 0 12px; }
+.plan-switch button {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 13px;
+}
+.plan-switch button[aria-pressed="true"] {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
 
 .viewport {
   position: relative;
@@ -397,6 +410,7 @@ input[type="range"]::-moz-range-thumb {
   color: var(--muted);
 }
 .plan { touch-action: none; cursor: grab; background: #e7e2d8; }
+.plan.figure-ground { background: #fff; }
 .plan:active { cursor: grabbing; }
 .hud {
   position: absolute;
@@ -531,7 +545,7 @@ input[type="range"]::-moz-range-thumb {
 
 .exports {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 12px;
   margin-top: 12px;
 }
@@ -545,6 +559,23 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 12px;
   padding: 14px 16px;
 }
+.figure-card { flex-wrap: wrap; align-items: flex-start; }
+.figure-export { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.figure-export label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.figure-export select {
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #fff;
+  padding: 0 8px;
+}
+.fit-note { flex: 1 0 100%; margin: 0; color: var(--muted); font-size: 13px; }
 .card h2 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.02em; }
 .card h2 span { color: var(--muted); font-weight: 500; }
 .card p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }

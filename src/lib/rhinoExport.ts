@@ -3,6 +3,7 @@ import rhino3dm from "rhino3dm/rhino3dm.module.js";
 import type { RhinoModuleOptions } from "rhino3dm";
 import { buildCityGroup, disposeObject } from "./buildCity";
 import { CRS_NOTE, mgaCrs, projectLocal, projectLonLat } from "./crs";
+import { figureGround, figureGroundDatum } from "./figureGround";
 import type { CityModel } from "../types";
 
 type Rgb = { r: number; g: number; b: number };
@@ -159,6 +160,43 @@ function addMesh(
   release(attributes);
 }
 
+/** Unioned footprints as closed polylines on FigureGround, at the ground datum. */
+function addFigureGround(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  model: CityModel,
+  zone: number,
+) {
+  const ground = figureGround(model.buildings, model.sideM);
+  if (ground.polygons.length === 0) return;
+  const z = figureGroundDatum(model);
+  const layerIndex = ensureLayer(rhino, doc, layers, "FigureGround", { r: 0, g: 0, b: 0 });
+  for (const polygon of ground.polygons) {
+    for (const ring of polygon) {
+      const points: number[][] = [];
+      const limit =
+        ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]
+          ? ring.length - 1
+          : ring.length;
+      for (let i = 0; i < limit; i++) {
+        const [easting, northing] = projectLocal([ring[i][0], ring[i][1]], model.center, zone);
+        const last = points[points.length - 1];
+        if (last && Math.hypot(last[0] - easting, last[1] - northing) < 0.001) continue;
+        points.push([easting, northing, z]);
+      }
+      if (points.length < 3) continue;
+      const first = points[0];
+      points.push([first[0], first[1], first[2]]);
+      const attributes = new rhino.ObjectAttributes();
+      attributes.name = "FigureGround";
+      attributes.layerIndex = layerIndex;
+      doc.objects().addPolyline(points, attributes);
+      release(attributes);
+    }
+  }
+}
+
 /** Current city meshes as a Rhino .3dm in MGA metres, Z-up. */
 export async function cityModelTo3dm(model: CityModel): Promise<Uint8Array> {
   const rhino = await loadRhino();
@@ -200,6 +238,7 @@ export async function cityModelTo3dm(model: CityModel): Promise<Uint8Array> {
       if (!mesh.isMesh) return;
       addMesh(rhino, doc, layers, mesh, model, crs.zone);
     });
+    addFigureGround(rhino, doc, layers, model, crs.zone);
 
     return doc.toByteArray();
   } finally {
