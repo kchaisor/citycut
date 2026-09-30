@@ -16,6 +16,10 @@ declare module "node:module" {
   };
 }
 
+declare module "node:url" {
+  export function fileURLToPath(url: URL | string): string;
+}
+
 interface ImportMetaEnv {
   readonly VITE_OVERPASS_URL?: string;
   readonly VITE_NOMINATIM_URL?: string;

@@ -54,6 +54,111 @@ export function decodeTerrarium(rgba: ArrayLike<number>, width: number, height: 
   return out;
 }
 
+/**
+ * Victorian ground, loosely. A downward Terrarium glitch of one red count is
+ * −256 m and falls through the floor. An upward one can still sit under 2,000 m
+ * around Melbourne, so the neighbourhood test below is what removes those needles.
+ */
+export const TERRAIN_ELEVATION_MIN_M = -50;
+export const TERRAIN_ELEVATION_MAX_M = 2000;
+/**
+ * At about 5 m spacing, 15 m is a slope steeper than 70 degrees.
+ * A plane of any grade matches the median of its neighbours, so a hillside stays.
+ */
+export const TERRAIN_SPIKE_M = 15;
+
+export type HeightClampCounts = {
+  /** Samples replaced because they jumped away from their neighbours. */
+  spikes: number;
+  /** Samples pulled back into the Victorian elevation band. */
+  clamped: number;
+};
+
+function medianOf(values: number[], count: number): number {
+  for (let i = 1; i < count; i++) {
+    const value = values[i];
+    let j = i - 1;
+    while (j >= 0 && values[j] > value) {
+      values[j + 1] = values[j];
+      j -= 1;
+    }
+    values[j + 1] = value;
+  }
+  const mid = count >> 1;
+  if (count % 2 === 1) return values[mid];
+  return (values[mid - 1] + values[mid]) / 2;
+}
+
+function clampToVictoria(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  if (value < TERRAIN_ELEVATION_MIN_M) return TERRAIN_ELEVATION_MIN_M;
+  if (value > TERRAIN_ELEVATION_MAX_M) return TERRAIN_ELEVATION_MAX_M;
+  return value;
+}
+
+/**
+ * Replace single-vertex spikes, then pull anything still outside the Victorian
+ * band onto the nearest edge of it. Neighbours are read from the original
+ * samples, so one bad pixel cannot talk the others into following it.
+ * Writes into `heights` and returns how many samples changed.
+ */
+export function clampHeightOutliers(
+  heights: Float32Array,
+  cols: number,
+  rows: number,
+  spikeM = TERRAIN_SPIKE_M,
+): HeightClampCounts {
+  const source = new Float32Array(heights);
+  const neighbours = new Array<number>(8);
+  let spikes = 0;
+  let clamped = 0;
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const index = row * cols + col;
+      const value = source[index];
+      let count = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        const y = row + dy;
+        if (y < 0 || y >= rows) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const x = col + dx;
+          if (x < 0 || x >= cols) continue;
+          const sample = source[y * cols + x];
+          if (Number.isFinite(sample)) neighbours[count++] = sample;
+        }
+      }
+      const median = count > 0 ? medianOf(neighbours, count) : 0;
+      if (!Number.isFinite(value) || (count >= 3 && Math.abs(value - median) > spikeM)) {
+        heights[index] = clampToVictoria(count > 0 ? median : 0);
+        spikes += 1;
+        continue;
+      }
+      if (value < TERRAIN_ELEVATION_MIN_M || value > TERRAIN_ELEVATION_MAX_M) {
+        heights[index] = clampToVictoria(value);
+        clamped += 1;
+      }
+    }
+  }
+  return { spikes, clamped };
+}
+
+function terrainOutlierNote(spikes: number, clamped: number): string | null {
+  const parts: string[] = [];
+  if (spikes > 0) {
+    parts.push(
+      `${spikes} sample${spikes === 1 ? "" : "s"} more than ${TERRAIN_SPIKE_M} m from the neighbourhood median`,
+    );
+  }
+  if (clamped > 0) {
+    parts.push(
+      `${clamped} sample${clamped === 1 ? "" : "s"} outside ${TERRAIN_ELEVATION_MIN_M}–${TERRAIN_ELEVATION_MAX_M} m`,
+    );
+  }
+  if (parts.length === 0) return null;
+  return `CityCut adjusted terrain elevations: ${parts.join(", ")}.`;
+}
+
 /** Ground metres per pixel at `zoom`. Tiles are 512 px over one XYZ tile. */
 export function metresPerPixel(lat: number, zoom: number): number {
   return (EARTH_M * Math.cos((lat * Math.PI) / 180)) / (TERRAIN_TILE_SIZE * 2 ** zoom);
@@ -155,12 +260,19 @@ export function heightFieldFromTiles(
   zoom: number,
 ): TerrainField {
   if (decoded.length === 0) throw new Error(TERRAIN_UNAVAILABLE);
-  const tiles = new Map(decoded.map((tile) => [`${tile.x}/${tile.y}`, tile]));
+  let spikes = 0;
+  let clamped = 0;
+  const tiles = new Map<string, DecodedTile>();
+  for (const tile of decoded) {
+    const heights = new Float32Array(tile.heights);
+    const counts = clampHeightOutliers(heights, tile.width, tile.height);
+    spikes += counts.spikes;
+    clamped += counts.clamped;
+    tiles.set(`${tile.x}/${tile.y}`, { ...tile, heights });
+  }
   const grid = terrainGridSize(center.lat, sideM, zoom);
   const heights = new Float32Array(grid.cols * grid.rows);
   const half = sideM / 2;
-  let min = Infinity;
-  let max = -Infinity;
   for (let row = 0; row < grid.rows; row++) {
     const north = -half + row * grid.spacingM;
     for (let col = 0; col < grid.cols; col++) {
@@ -169,10 +281,20 @@ export function heightFieldFromTiles(
       const height = sampleTiles(tiles, geographic.lon, geographic.lat, zoom);
       if (!Number.isFinite(height)) throw new Error(TERRAIN_UNAVAILABLE);
       heights[row * grid.cols + col] = height;
-      if (height < min) min = height;
-      if (height > max) max = height;
     }
   }
+  const fieldCounts = clampHeightOutliers(heights, grid.cols, grid.rows);
+  spikes += fieldCounts.spikes;
+  clamped += fieldCounts.clamped;
+  let min = Infinity;
+  let max = -Infinity;
+  for (let i = 0; i < heights.length; i++) {
+    const height = heights[i];
+    if (height < min) min = height;
+    if (height > max) max = height;
+  }
+  const note = terrainOutlierNote(spikes, clamped);
+  if (note) console.info(note);
   return {
     cols: grid.cols,
     rows: grid.rows,
