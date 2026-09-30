@@ -154,7 +154,7 @@ export function SelectChrome({
                   event.preventDefault();
                   choose(hits[0]);
                 }
-                if (event.key === "Escape" && resultsOpen) {
+                if (event.key === "Escape" && resultsOpen && query.trim().length >= 2) {
                   event.stopPropagation();
                   setResultsOpen(false);
                 }
