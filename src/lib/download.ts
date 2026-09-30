@@ -10,6 +10,10 @@ export function fileStem(model: CityModel): string {
   return `citycut-${lat}-${lon}-${Math.round(model.sideM)}m`;
 }
 
+export function pngFilename(model: CityModel): string {
+  return `${fileStem(model)}.png`;
+}
+
 export function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
