@@ -7,8 +7,8 @@
 */
 
 :root {
-  /* Building outline. The cut line around a footprint. */
-  --building-stroke-mm: 0.4;
+  /* Building outline. 0 hides the cut line and leaves the fill. */
+  --building-stroke-mm: 0;
   --building-stroke: #1C1B17;
   --building-dash: none;
 

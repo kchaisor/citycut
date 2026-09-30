@@ -16,6 +16,7 @@ import {
   parseColor,
   parseMm,
   readStoredOverrides,
+  screenPenAttrs,
   styleFromProperties,
   writeStoredOverrides,
   type StorageLike,
@@ -121,5 +122,16 @@ describe("drawing style css", () => {
     expect(text).not.toContain("--building-stroke");
     expect(changedVariables(DEFAULT_LINE_STYLES, DEFAULT_LINE_STYLES)).toEqual({});
     expect(copyCssText(DEFAULT_LINE_STYLES, DEFAULT_LINE_STYLES)).toBe("/* No line-style changes to paste. */\n");
+  });
+
+  it("draws no on-screen stroke when a weight is 0, and brings a building outline back above 0", () => {
+    expect(DEFAULT_LINE_STYLES.building.mm).toBe(0);
+    expect(screenPenAttrs(DEFAULT_LINE_STYLES.building)).toEqual({ stroke: "none" });
+    expect(screenPenAttrs(DEFAULT_LINE_STYLES.green)).toEqual({ stroke: "none" });
+    expect(screenPenAttrs(DEFAULT_LINE_STYLES.water)).toEqual({ stroke: "none" });
+    const restored = screenPenAttrs({ ...DEFAULT_LINE_STYLES.building, mm: 0.4 }, "miter");
+    expect(restored.stroke).toBe(DEFAULT_LINE_STYLES.building.color);
+    expect(restored.strokeWidth).toBeGreaterThan(0);
+    expect(restored.strokeLinejoin).toBe("miter");
   });
 });

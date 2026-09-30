@@ -4,6 +4,7 @@ import {
   CONTOUR_GAP_MM,
   LINE_MM,
   screenDashPx,
+  screenPx,
 } from "./lineweights";
 
 /**
@@ -214,6 +215,23 @@ export function dashPair(dash: string): readonly [number, number] | null {
   const [on, off] = norm.split(" ").map(Number);
   if (!Number.isFinite(on) || !Number.isFinite(off)) return null;
   return [on, off];
+}
+
+/**
+ * SVG stroke for a pen. A weight of 0 is `stroke="none"` and does not set a
+ * width, so the 0.6 px screen floor never turns a hidden edge into a line.
+ */
+export function screenPenAttrs(stroke: StrokeStyle, join: "miter" | "round" = "round") {
+  if (!(stroke.mm > 0)) return { stroke: "none" as const };
+  const dash = dashScreen(stroke.dash);
+  return {
+    stroke: stroke.color,
+    strokeWidth: screenPx(stroke.mm),
+    strokeDasharray: dash.array,
+    strokeLinecap: dash.cap as "round" | "butt",
+    strokeLinejoin: join,
+    vectorEffect: "non-scaling-stroke" as const,
+  };
 }
 
 /** On-screen dash array. Dots use round caps so a zero-length dash is a dot. */

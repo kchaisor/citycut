@@ -94,7 +94,7 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 
 | Name | What it controls | Default | Units |
 | --- | --- | --- | --- |
-| `--building-stroke-mm` | Weight of the building outline | `0.4` | mm |
+| `--building-stroke-mm` | Weight of the building outline. `0` leaves the fill with no edge | `0` | mm |
 | `--building-stroke` | Colour of the building outline | `#1C1B17` | colour |
 | `--building-dash` | Dash of the building outline | `none` | mm, on then off |
 | `--road-fill` | Fill of the unioned carriageway | `#4A4A4A` | colour |

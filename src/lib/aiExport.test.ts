@@ -212,7 +212,7 @@ describe("Illustrator plans", () => {
     expect(info.text).toContain("N");
     for (const name of info.layers) expect(info.counts.get(name) ?? 0).toBeGreaterThan(0);
     const widths = info.widthsMm.map((mm) => Math.round(mm * 100) / 100);
-    expect(widths).toContain(LINE_MM.buildingCut);
+    expect(widths).not.toContain(0);
     expect(widths).toContain(LINE_MM.propertyRoad);
     expect(widths).toContain(LINE_MM.secondary);
     expect(widths).toContain(LINE_MM.contour);
@@ -240,6 +240,35 @@ describe("Illustrator plans", () => {
     expect(edited.content).toContain("1 0 0 RG");
   });
 
+  it("paints a zero weight as fill only, including buildings, green, and water", async () => {
+    const paintsOf = (body: string) => body.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g) ?? [];
+    const info = await inspect(await sitePlanAi(model(), 1000));
+    expect(paintsOf(info.bodies.get("Buildings") ?? "")).toEqual(["f*"]);
+    expect(paintsOf(info.bodies.get("Green") ?? "")).toEqual(["f*"]);
+    expect(paintsOf(info.bodies.get("Water") ?? "")).toEqual(["f*"]);
+    expect(info.content).not.toMatch(/(?:^|[\s[])0(?:\.0+)? w/);
+
+    const hidden = cloneLineStyles(DEFAULT_LINE_STYLES);
+    for (const key of ["building", "kerb", "path", "rail", "green", "water", "contour", "frame", "annotation", "tree"] as const) {
+      hidden[key] = { ...hidden[key], mm: 0 };
+    }
+    const bare = await inspect(await sitePlanAi(model(), 1000, hidden));
+    expect(bare.content).not.toMatch(/(?:^|[\s[])0(?:\.0+)? w/);
+    expect(paintsOf(bare.bodies.get("Buildings") ?? "")).toEqual(["f*"]);
+    expect(paintsOf(bare.bodies.get("Green") ?? "")).toEqual(["f*"]);
+    expect(paintsOf(bare.bodies.get("Water") ?? "")).toEqual(["f*"]);
+    expect(paintsOf(bare.bodies.get("Roads") ?? "")).toEqual(["f*"]);
+    expect(bare.bodies.has("Paths")).toBe(false);
+    expect(bare.bodies.has("Rail")).toBe(false);
+    expect(bare.bodies.has("Contours")).toBe(false);
+
+    const restored = cloneLineStyles(DEFAULT_LINE_STYLES);
+    restored.building = { ...restored.building, mm: 0.4 };
+    const outlined = await inspect(await sitePlanAi(model(), 1000, restored));
+    expect(paintsOf(outlined.bodies.get("Buildings") ?? "")).toEqual(["B*"]);
+    expect(outlined.widthsMm.map((mm) => Math.round(mm * 100) / 100)).toContain(0.4);
+  });
+
   it("writes figure-ground with frame, footprints, and annotation only", async () => {
     const fitted = await inspect(await figureGroundAi(model(), 1000));
     expect(fitted.layers).toEqual([...FIGURE_LAYER_ORDER]);
@@ -248,6 +277,9 @@ describe("Illustrator plans", () => {
     expect(fitted.text).toContain("OpenStreetMap");
     expect(fitted.image).toBe(false);
     expect(fitted.widthsMm.map((mm) => Math.round(mm * 100) / 100)).toContain(LINE_MM.frame);
+    const figureBuildings = fitted.bodies.get("Buildings") ?? "";
+    expect(figureBuildings.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g)).toEqual(["f*"]);
+    expect(figureBuildings).not.toMatch(/\bw\b/);
     const wide = await inspect(await figureGroundAi({ ...model(), sideM: 1000, buildings: [] }, 2500));
     expect(wide.text).toContain("Does not fit on A3");
     expect(wide.text).toContain("1:2500");
