@@ -44,11 +44,11 @@ export function overpassBBox(bounds: {
 
 export function buildOverpassQuery(bbox: string, layers: ModelLayers): string {
   const parts: string[] = [];
-  if (layers.buildings) {
+  if (layers.buildings || layers.trees) {
     parts.push(`way["building"]["building"!="no"]${bbox};`);
     parts.push(`relation["building"]["building"!="no"]${bbox};`);
   }
-  if (layers.roads) {
+  if (layers.roads || layers.trees) {
     parts.push(`way["highway"]${bbox};`);
     parts.push(`way["railway"~"^(rail|light_rail|tram|subway|narrow_gauge)$"]${bbox};`);
   }
@@ -56,6 +56,18 @@ export function buildOverpassQuery(bbox: string, layers: ModelLayers): string {
     parts.push(`node["natural"="tree"]${bbox};`);
     parts.push(`way["natural"="tree"]${bbox};`);
     parts.push(`way["natural"="tree_row"]${bbox};`);
+    parts.push(`relation["natural"="scrub"]${bbox};`);
+    if (!layers.waterGreen) {
+      parts.push(`way["natural"="wood"]${bbox};`);
+      parts.push(`way["natural"="scrub"]${bbox};`);
+      parts.push(`way["landuse"="forest"]${bbox};`);
+      parts.push(`relation["natural"="wood"]${bbox};`);
+      parts.push(`relation["landuse"="forest"]${bbox};`);
+      parts.push(`way["natural"="water"]${bbox};`);
+      parts.push(`way["waterway"~"^(riverbank|dock)$"]${bbox};`);
+      parts.push(`way["landuse"="reservoir"]${bbox};`);
+      parts.push(`relation["natural"="water"]${bbox};`);
+    }
   }
   if (layers.waterGreen) {
     parts.push(`way["natural"="water"]${bbox};`);

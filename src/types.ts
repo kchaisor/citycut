@@ -67,7 +67,13 @@ export type AreaFeat = {
 };
 
 /** Where a tree's height, crown, and trunk came from. */
-export type TreeSizeSource = "osm" | "com" | "species" | "default";
+export type TreeSizeSource = "osm" | "com" | "species" | "default" | "vicmap";
+
+/**
+ * Which dataset placed the tree. City of Melbourne wins, then OpenStreetMap,
+ * then Vicmap, then canopy infill.
+ */
+export type TreeTier = "com" | "osm" | "vicmap" | "canopy";
 
 /** Metres. `sizeSource` records which dataset supplied the numbers. */
 export type TreeDimensions = {
@@ -89,6 +95,8 @@ export type TreeFeat = TreeDimensions & {
   leafCycle?: string;
   /** Massing form chosen from the tags above. */
   archetype?: string;
+  /** Dataset that placed this tree. Older fixtures leave this unset. */
+  tier?: TreeTier;
 };
 
 /**
@@ -123,6 +131,8 @@ export type CityModel = {
   trees: TreeFeat[];
   roadKm: number;
   buildingCapHit: boolean;
+  /** Set when the combined tree tiers were trimmed to the instance cap. */
+  treeCapHit?: boolean;
   sourceNote: string;
   /** Set when the Terrain layer was built. Absent or null keeps the flat ground surface. */
   terrain?: TerrainField | null;
