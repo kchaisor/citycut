@@ -385,9 +385,13 @@ function capsules(pts: Pt[], half: number): Polygon[] {
   return polygons;
 }
 
-/** One buffered carriageway. A closed centreline keeps the island as a hole. */
-export function bufferCentreline(line: Pt[], width: number): Polygon[] {
-  const half = Math.max(width, 0.4) / 2;
+/**
+ * One buffered centreline. `width` is the full strip, so half of it lies on each side.
+ * Roads keep a 0.4 m minimum. Footpaths pass `minWidth` 0 so 1.2 m stays 0.6 m each side.
+ * A closed centreline keeps the island as a hole.
+ */
+export function bufferCentreline(line: Pt[], width: number, minWidth = 0.4): Polygon[] {
+  const half = Math.max(width, minWidth) / 2;
   const simplified = simplify(dedupe(line), SIMPLIFY_M);
   if (simplified.length < 2) return [];
   if (isLoop(simplified)) {
@@ -451,24 +455,55 @@ function tidy(polygons: MultiPolygon): MultiPolygon {
   return kept;
 }
 
+function unionStrips(
+  roads: { line: Pt[]; width: number }[],
+  sideM: number,
+  minWidth: number,
+): RoadFill {
+  const started = performance.now();
+  const inputs: Polygon[] = [];
+  for (const road of roads) {
+    if (road.line.length < 2 || !(road.width > 0)) continue;
+    inputs.push(...bufferCentreline(road.line, road.width, minWidth));
+  }
+  const merged = tidy(clipToFrame(unionFast(inputs), sideM));
+  return { polygons: merged, ms: performance.now() - started, inputs: inputs.length };
+}
+
 /**
  * Buffer every carriageway by its stored width and union the result.
  * Paths and rail are not included; callers pass carriageways only.
  * The union removes the internal edges that used to cross at junctions.
  */
 export function unionCarriageways(roads: { line: Pt[]; width: number }[], sideM: number): RoadFill {
-  const started = performance.now();
-  const inputs: Polygon[] = [];
-  for (const road of roads) {
-    if (road.line.length < 2 || !(road.width > 0)) continue;
-    inputs.push(...bufferCentreline(road.line, road.width));
-  }
-  const merged = tidy(clipToFrame(unionFast(inputs), sideM));
-  return { polygons: merged, ms: performance.now() - started, inputs: inputs.length };
+  return unionStrips(roads, sideM, 0.4);
 }
 
 export function carriagewaysOf(roads: RoadFeat[]): { line: Pt[]; width: number }[] {
   return roads
     .filter((road) => road.kind !== "rail" && road.grade !== "path")
     .map((road) => ({ line: road.line, width: road.width }));
+}
+
+/**
+ * Centreline of every way the path layer already draws:
+ * highway=footway (including footway=sidewalk and footway=crossing),
+ * path, cycleway, steps, pedestrian, bridleway, and track.
+ */
+export function footpathLines(roads: RoadFeat[]): Pt[][] {
+  return roads.filter((road) => road.kind !== "rail" && road.grade === "path").map((road) => road.line);
+}
+
+/**
+ * Buffer each footpath by `widthM` metres (half on each side of the centreline)
+ * and union the strips. A width of 0 leaves no geometry. The union is one shape,
+ * so joins have no seams and a crossing is covered by the road drawn above it.
+ */
+export function unionFootpaths(lines: Pt[][], widthM: number, sideM: number): RoadFill {
+  if (!(widthM > 0)) return { polygons: [], ms: 0, inputs: 0 };
+  return unionStrips(
+    lines.map((line) => ({ line, width: widthM })),
+    sideM,
+    0,
+  );
 }

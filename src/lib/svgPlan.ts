@@ -1,7 +1,8 @@
 import { BUILDING_USE_META } from "./buildingUse";
 import { clipPolygon, clipPolyline } from "./clip";
 import { openRing } from "./geo";
-import { carriagewaysOf, unionCarriageways } from "./roadFill";
+import { PATH_WIDTH_M } from "./lineweights";
+import { carriagewaysOf, footpathLines, unionCarriageways, unionFootpaths } from "./roadFill";
 import { contourInterval, contourLines } from "./terrain";
 import type { CityModel, Pt } from "../types";
 
@@ -29,7 +30,10 @@ export type PlanPaths = {
   roadFill: Pt[][][];
   /** Buffer and union time for the carriageway, in milliseconds. */
   roadUnionMs: number;
-  paths: Pt[][];
+  /** Unioned footpath strip. Outer rings plus holes, in local east/north metres. */
+  pathFill: Pt[][][];
+  /** Buffer and union time for the footpath strip, in milliseconds. */
+  pathUnionMs: number;
   rails: Pt[][];
   buildings: { rings: Pt[][]; fill: string }[];
   trees: { east: number; north: number; r: number }[];
@@ -108,7 +112,7 @@ function clipLines(line: Pt[], half: number): Pt[][] {
   return clipPolyline(dedupe(line), -half, half).map(dedupe).filter((part) => part.length >= 2);
 }
 
-export function planPaths(model: CityModel): PlanPaths {
+export function planPaths(model: CityModel, pathWidthM = PATH_WIDTH_M): PlanPaths {
   const half = model.sideM / 2;
   const green: Pt[][][] = [];
   const water: Pt[][][] = [];
@@ -119,17 +123,13 @@ export function planPaths(model: CityModel): PlanPaths {
     else green.push(rings);
   }
 
-  const paths: PlanPaths["paths"] = [];
   const rails: PlanPaths["rails"] = [];
   for (const road of model.roads) {
     if (road.kind === "rail") {
       for (const line of clipLines(road.line, half)) rails.push(line);
-      continue;
-    }
-    if (road.grade === "path") {
-      for (const line of clipLines(road.line, half)) paths.push(line);
     }
   }
+  const footpaths = unionFootpaths(footpathLines(model.roads), pathWidthM, model.sideM);
   const carriageway = unionCarriageways(carriagewaysOf(model.roads), model.sideM);
 
   const buildings = model.buildings
@@ -159,7 +159,8 @@ export function planPaths(model: CityModel): PlanPaths {
     water,
     roadFill: carriageway.polygons,
     roadUnionMs: carriageway.ms,
-    paths,
+    pathFill: footpaths.polygons,
+    pathUnionMs: footpaths.ms,
     rails,
     buildings,
     trees,

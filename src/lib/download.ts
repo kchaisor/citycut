@@ -54,8 +54,8 @@ export async function downloadSiteAi(model: CityModel, scale: number, style?: Li
   downloadBytes(aiFilename(model, "site", scale), bytes, "application/pdf");
 }
 
-export async function downloadFigureAi(model: CityModel, scale: number): Promise<void> {
-  const bytes = await figureGroundAi(model, scale);
+export async function downloadFigureAi(model: CityModel, scale: number, style?: LineStyles): Promise<void> {
+  const bytes = await figureGroundAi(model, scale, style);
   downloadBytes(aiFilename(model, "figure", scale), bytes, "application/pdf");
 }
 

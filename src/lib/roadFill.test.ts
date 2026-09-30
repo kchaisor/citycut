@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MultiPolygon, Pair } from "polygon-clipping";
-import { unionCarriageways } from "./roadFill";
+import { unionCarriageways, unionFootpaths } from "./roadFill";
 
 function openRing(ring: Pair[]): Pair[] {
   if (
@@ -98,5 +98,25 @@ describe("road union", () => {
     expect(inside(fill.polygons, 18, 0)).toBe(true);
     expect(inside(fill.polygons, 30, 0)).toBe(true);
     expect(hasInternalSeam(fill.polygons)).toBe(false);
+  });
+
+  it("buffers a footpath 0.6 m each side of the centreline and unions a join", () => {
+    const single = unionFootpaths([[[0, 0], [40, 0]]], 1.2, 200);
+    expect(inside(single.polygons, 20, 0.5)).toBe(true);
+    expect(inside(single.polygons, 20, -0.5)).toBe(true);
+    expect(inside(single.polygons, 20, 0.8)).toBe(false);
+    expect(inside(single.polygons, 20, -0.8)).toBe(false);
+    const joined = unionFootpaths(
+      [
+        [[0, 0], [40, 0]],
+        [[20, -20], [20, 20]],
+      ],
+      1.2,
+      200,
+    );
+    expect(joined.polygons).toHaveLength(1);
+    expect(inside(joined.polygons, 20, 0)).toBe(true);
+    expect(hasInternalSeam(joined.polygons)).toBe(false);
+    expect(unionFootpaths([[[0, 0], [40, 0]]], 0, 200).polygons).toHaveLength(0);
   });
 });

@@ -22,10 +22,17 @@
   --road-kerb-stroke: #8D8983;
   --road-kerb-dash: none;
 
-  /* Footways, cycleways, and other paths. A thin centreline, not a fill. */
-  --path-stroke-mm: 0.15;
-  --path-stroke: #5C5C5C;
-  --path-dash: none;
+  /* Footpath strips. Metres on the ground, 0.6 m each side of the centreline, then unioned.
+     #DADADA sits just under the #EBEBEB page and well above the #4A4A4A road. */
+  --path-width-m: 1.2;
+  --path-fill: #DADADA;
+
+  /* Optional edge on the unioned outline only. "off" leaves the fill with no edge.
+     The old --path-stroke* names are the same edge, if a saved edit still uses them. */
+  --path-edge: off;
+  --path-edge-mm: 0.15;
+  --path-edge-stroke: #5C5C5C;
+  --path-edge-dash: none;
 
   /* Rail, drawn as a line on top of the road fill where they cross. */
   --rail-stroke-mm: 0.15;

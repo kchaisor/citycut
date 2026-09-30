@@ -9,7 +9,7 @@
  * | ---------------------------- | ---- |
  * | Building outlines / cut      | 0    |
  * | Property and road edges      | 0.22 |
- * | Secondary detail (paths, rail) | 0.15 |
+ * | Path edge and rail          | 0.15 |
  * | Contours                     | 0.10 |
  * | Frame                        | 0.35 |
  * | Text and annotation strokes  | 0.13 |
@@ -35,6 +35,14 @@ export const LINE_MM = {
 } as const;
 
 export type LineRole = keyof typeof LINE_MM;
+
+/**
+ * Footpath strip on the ground. 1.2 m is 0.6 m each side of the centreline.
+ * The width is metres in map space, so it scales with zoom and with the sheet scale.
+ * `#DADADA` is only slightly darker than the `#EBEBEB` page and clearly lighter than the `#4A4A4A` road.
+ */
+export const PATH_WIDTH_M = 1.2;
+export const PATH_FILL = "#DADADA";
 
 export const CONTOUR_COLOR = "#B0B0B0";
 export const CONTOUR_DASH_MM = 1.5;

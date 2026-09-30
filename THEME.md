@@ -88,7 +88,7 @@ A name the app does not load, such as a font from your computer only, will show 
 
 `src/drawing-style.css` is the only place the site plan’s pens are written down. The on-screen drawing and the site-plan Illustrator file both read it.
 
-When you download a site plan, the exporter calls `getComputedStyle` on the page’s `:root` at that moment. Whatever the variables currently resolve to — the file, or a live edit from the Line styles panel — is what goes into the file. A weight is millimetres on the printed sheet. It does not change when you zoom.
+When you download a site plan or a figure-ground, the exporter calls `getComputedStyle` on the page’s `:root` at that moment. Whatever the variables currently resolve to — the file, or a live edit from the Line styles panel — is what goes into the file. A weight is millimetres on the printed sheet. It does not change when you zoom. Footpath width is different: it is metres on the ground, so the strip grows when you zoom in and when the drawing scale gets larger.
 
 A dash is two lengths in millimetres: how long the mark is, then how long the gap is. `none` is a solid line. `1.5 0.75` is a dash of 1.5 mm with a 0.75 mm gap. `0 0.6` is a dotted line. A dot uses round caps, so the zero-length mark is drawn as a dot.
 
@@ -102,9 +102,12 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--road-kerb-mm` | Weight of the kerb, on the outer edge of the road fill | `0.22` | mm |
 | `--road-kerb-stroke` | Colour of the kerb. Mid grey, so it shows on the road fill and on the page | `#8D8983` | colour |
 | `--road-kerb-dash` | Dash of the kerb | `none` | mm, on then off |
-| `--path-stroke-mm` | Weight of a path or footway centreline | `0.15` | mm |
-| `--path-stroke` | Colour of a path | `#5C5C5C` | colour |
-| `--path-dash` | Dash of a path | `none` | mm, on then off |
+| `--path-width-m` | Width of a footpath strip, centred on the way. `1.2` is 0.6 m each side | `1.2` | m on the ground |
+| `--path-fill` | Fill of the unioned footpath. Slightly darker than the page, lighter than the road | `#DADADA` | colour |
+| `--path-edge` | Whether the footpath outline is drawn. `on` or `off` | `off` | on or off |
+| `--path-edge-mm` | Weight of that outline, on the unioned edge only. `0` leaves the fill | `0.15` | mm |
+| `--path-edge-stroke` | Colour of the footpath outline | `#5C5C5C` | colour |
+| `--path-edge-dash` | Dash of the footpath outline | `none` | mm, on then off |
 | `--rail-stroke-mm` | Weight of a rail line | `0.15` | mm |
 | `--rail-stroke` | Colour of a rail line | `#8D6244` | colour |
 | `--rail-dash` | Dash of a rail line | `none` | mm, on then off |
@@ -127,7 +130,11 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--tree-stroke` | Colour of a tree-crown outline | `#245232` | colour |
 | `--tree-dash` | Dash of a tree-crown outline | `none` | mm, on then off |
 
-Green fills, water fills, and tree fills are not in this list. Only their edges are.
+Green fills, water fills, and tree fills are not in this list. Only their edges are. The footpath fill is in the list because the strip is the line.
+
+The ways in the footpath strip are the ones the path layer already took from OpenStreetMap: `highway=footway` (including `footway=sidewalk` and `footway=crossing`), `path`, `cycleway`, `steps`, `pedestrian`, `bridleway`, and `track`. They are buffered in metres, unioned into one shape, and drawn under the road fill. Buildings stay on top. Figure-ground uses the same strip and the same `#DADADA` fill, which reads as a light grey on the white sheet.
+
+`--path-stroke-mm`, `--path-stroke`, and `--path-dash` were the old centreline. They are now the footpath edge. A saved edit that still uses those names is read as `--path-edge-mm`, `--path-edge-stroke`, and `--path-edge-dash`.
 
 ## Try a change, then paste it into the file
 
@@ -135,7 +142,7 @@ You can try a pen on the site before you edit the file.
 
 1. Open a model and switch to the Drawing view. Open the Drawing drawer.
 2. Open **Line styles**. It starts collapsed so it does not fill the drawer. On a phone it is in the same bottom sheet, and the sheet scrolls.
-3. Change a weight, a colour, or a dash. The site plan updates straight away. The choices are Solid, Dashed 1.5 0.75, Fine dash 0.75 0.4, Dotted, and Custom. Road fill has its own colour. Kerb outline turns the kerb on or off.
+3. Change a weight, a colour, or a dash. The site plan updates straight away. The choices are Solid, Dashed 1.5 0.75, Fine dash 0.75 0.4, Dotted, and Custom. Road fill and footpath fill have their own colours. Kerb outline and Footpath edge turn those outlines on or off. Footpath width is metres on the ground, in steps of 0.1.
 4. The browser remembers the edits (`citycut.lineStyles`). A site-plan download after an edit uses the edited pens.
 5. Click **Copy CSS**. It copies only the variables you changed, ready to paste. A short note confirms the copy.
 6. Open `src/drawing-style.css` on github.com, click the pencil, and paste those lines over the matching ones. Do not delete the semicolon.

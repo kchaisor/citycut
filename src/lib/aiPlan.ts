@@ -16,6 +16,7 @@ import {
 } from "./figureGround";
 import { formatCoord, openRing } from "./geo";
 import { LINE_MM, hexRgb } from "./lineweights";
+import { footpathLines, unionFootpaths } from "./roadFill";
 import { planPaths } from "./svgPlan";
 import type { CityModel, Pt } from "../types";
 
@@ -32,7 +33,7 @@ export const SITE_LAYER_ORDER = [
   "Annotation",
 ] as const;
 
-export const FIGURE_LAYER_ORDER = ["Frame", "Buildings", "Annotation"] as const;
+export const FIGURE_LAYER_ORDER = ["Frame", "Buildings", "Paths", "Annotation"] as const;
 
 const BLACK: Rgb = [0, 0, 0];
 /** Sheet colour. A path or rail casing uses this so it vanishes on the page and reads on the road fill. */
@@ -180,9 +181,28 @@ function frameStroke(layout: SheetLayout, style: StrokeStyle): PdfChunk {
  * at export time. That computed style is the drawing-style.css cascade, plus
  * any inline variables the Line styles editor has set.
  */
+function pathStrip(polygons: Pt[][][], model: CityModel, layout: SheetLayout, style: LineStyles): PdfChunk | null {
+  const rings = polygons.flatMap((polygon) => mapRings(polygon, model.sideM, layout));
+  if (rings.length === 0) return null;
+  const edge = style.pathEdgeOn ? pen(style.path) : null;
+  return {
+    name: "Paths",
+    paths: [
+      {
+        rings,
+        fill: hexRgb(style.pathFill),
+        evenOdd: true,
+        close: true,
+        join: "round",
+        ...(edge ?? {}),
+      },
+    ],
+  };
+}
+
 export function sitePlanChunks(model: CityModel, scale: number, style: LineStyles = readDrawingStyle()): PdfChunk[] {
   const layout = layoutSheet(model.sideM, scale);
-  const plan = planPaths(model);
+  const plan = planPaths(model, style.pathWidthM);
   const page = layout.pageHeightMm;
   const bottom = yUp(layout.frameY + layout.frameMm, page);
   const chunks: PdfChunk[] = [
@@ -232,6 +252,8 @@ export function sitePlanChunks(model: CityModel, scale: number, style: LineStyle
       })),
     });
   }
+  const footpaths = pathStrip(plan.pathFill, model, layout, style);
+  if (footpaths) chunks.push(footpaths);
   const roadRings = plan.roadFill.flatMap((polygon) => mapRings(polygon, model.sideM, layout));
   if (roadRings.length > 0) {
     const kerb = style.kerbOn ? pen(style.kerb) : null;
@@ -265,13 +287,6 @@ export function sitePlanChunks(model: CityModel, scale: number, style: LineStyle
     chunks.push({
       name: "Rail",
       paths: plan.rails.flatMap((line) => casedLine(mapRing(line, model.sideM, layout), style.rail, railPen)),
-    });
-  }
-  const pathPen = pen(style.path);
-  if (plan.paths.length > 0 && pathPen) {
-    chunks.push({
-      name: "Paths",
-      paths: plan.paths.flatMap((line) => casedLine(mapRing(line, model.sideM, layout), style.path, pathPen)),
     });
   }
   const treePen = pen(style.tree);
@@ -326,10 +341,13 @@ function mapRings(rings: Pt[][], sideM: number, layout: SheetLayout): number[][]
   return rings.map((ring) => mapRing(ring, sideM, layout)).filter((ring) => ring.length >= 3);
 }
 
-export function figureGroundChunks(model: CityModel, scale: number): PdfChunk[] {
+export function figureGroundChunks(model: CityModel, scale: number, style: LineStyles = readDrawingStyle()): PdfChunk[] {
   const layout = layoutSheet(model.sideM, scale);
   const ground = figureGround(model.buildings, model.sideM);
   const chunks: PdfChunk[] = [];
+  const foot = unionFootpaths(footpathLines(model.roads), style.pathWidthM, model.sideM);
+  const strip = pathStrip(foot.polygons, model, layout, style);
+  if (strip) chunks.push(strip);
   const paths = ground.polygons
     .map((polygon) => mapRings(polygon, model.sideM, layout))
     .filter((rings) => rings.length > 0)
@@ -355,12 +373,12 @@ export function sitePlanAi(model: CityModel, scale: number, style?: LineStyles):
   );
 }
 
-export function figureGroundAi(model: CityModel, scale: number): Promise<Uint8Array> {
+export function figureGroundAi(model: CityModel, scale: number, style?: LineStyles): Promise<Uint8Array> {
   const layout = layoutSheet(model.sideM, scale);
   return buildLayeredPdf(
     layout.pageWidthMm,
     layout.pageHeightMm,
-    figureGroundChunks(model, scale),
+    figureGroundChunks(model, scale, style ?? readDrawingStyle()),
     FIGURE_LAYER_ORDER,
   );
 }

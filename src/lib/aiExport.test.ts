@@ -12,13 +12,14 @@ import {
 } from "pdf-lib";
 import * as THREE from "three";
 import { buildLayeredPdf } from "./aiDocument";
-import { FIGURE_LAYER_ORDER, figureGroundAi, sitePlanAi, SITE_LAYER_ORDER } from "./aiPlan";
+import { FIGURE_LAYER_ORDER, figureGroundAi, figureGroundChunks, sitePlanAi, sitePlanChunks, SITE_LAYER_ORDER } from "./aiPlan";
 import { clipEdge, viewAi, VIEW_LAYER_ORDER, VIEW_OUTLINE_MM, type ScreenTri } from "./aiView";
 import { shotFromCamera } from "./cameraShot";
 import * as download from "./download";
 import * as figureGround from "./figureGround";
 import { DEFAULT_LINE_STYLES, cloneLineStyles } from "./drawingStyle";
-import { CONTOUR_DASH_MM, CONTOUR_GAP_MM, LINE_MM, pdfPt } from "./lineweights";
+import { paperMillimetres } from "./figureGround";
+import { CONTOUR_DASH_MM, CONTOUR_GAP_MM, hexRgb, LINE_MM, PATH_FILL, PATH_WIDTH_M, pdfPt } from "./lineweights";
 import * as svgPlan from "./svgPlan";
 import type { CityModel, Pt, TerrainField } from "../types";
 
@@ -258,7 +259,7 @@ describe("Illustrator plans", () => {
     expect(paintsOf(bare.bodies.get("Green") ?? "")).toEqual(["f*"]);
     expect(paintsOf(bare.bodies.get("Water") ?? "")).toEqual(["f*"]);
     expect(paintsOf(bare.bodies.get("Roads") ?? "")).toEqual(["f*"]);
-    expect(bare.bodies.has("Paths")).toBe(false);
+    expect(paintsOf(bare.bodies.get("Paths") ?? "")).toEqual(["f*"]);
     expect(bare.bodies.has("Rail")).toBe(false);
     expect(bare.bodies.has("Contours")).toBe(false);
 
@@ -267,6 +268,40 @@ describe("Illustrator plans", () => {
     const outlined = await inspect(await sitePlanAi(model(), 1000, restored));
     expect(paintsOf(outlined.bodies.get("Buildings") ?? "")).toEqual(["B*"]);
     expect(outlined.widthsMm.map((mm) => Math.round(mm * 100) / 100)).toContain(0.4);
+  });
+
+  it("draws the footpath layer as one filled strip whose width is metres on the sheet", async () => {
+    const paintsOf = (body: string) => body.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g) ?? [];
+    const info = await inspect(await sitePlanAi(model(), 1000));
+    expect(paintsOf(info.bodies.get("Paths") ?? "")).toEqual(["f*"]);
+    const strip = sitePlanChunks(model(), 1000).find((chunk) => chunk.name === "Paths");
+    expect(strip?.paths).toHaveLength(1);
+    expect(strip?.paths?.[0]?.fill).toEqual(hexRgb(PATH_FILL));
+    const widthMm = (scale: number) => {
+      const rings = sitePlanChunks(model(), scale).find((chunk) => chunk.name === "Paths")?.paths?.[0]?.rings ?? [];
+      let min = Infinity;
+      let max = -Infinity;
+      for (const ring of rings) {
+        for (const point of ring) {
+          min = Math.min(min, point[1]);
+          max = Math.max(max, point[1]);
+        }
+      }
+      return max - min;
+    };
+    expect(widthMm(1000)).toBeCloseTo(paperMillimetres(PATH_WIDTH_M, 1000), 1);
+    expect(widthMm(500)).toBeCloseTo(paperMillimetres(PATH_WIDTH_M, 500), 1);
+    const hidden = cloneLineStyles(DEFAULT_LINE_STYLES);
+    hidden.pathWidthM = 0;
+    const gone = await inspect(await sitePlanAi(model(), 1000, hidden));
+    expect(gone.bodies.has("Paths")).toBe(false);
+    const edged = cloneLineStyles(DEFAULT_LINE_STYLES);
+    edged.pathEdgeOn = true;
+    const withEdge = await inspect(await sitePlanAi(model(), 1000, edged));
+    expect(paintsOf(withEdge.bodies.get("Paths") ?? "")).toEqual(["B*"]);
+    const figure = figureGroundChunks(model(), 1000).find((chunk) => chunk.name === "Paths");
+    expect(figure?.paths).toHaveLength(1);
+    expect(figure?.paths?.[0]?.fill).toEqual(hexRgb(PATH_FILL));
   });
 
   it("writes figure-ground with frame, footprints, and annotation only", async () => {
@@ -285,7 +320,9 @@ describe("Illustrator plans", () => {
     expect(wide.text).toContain("1:2500");
     expect(wide.widthMm).toBeCloseTo(420, 1);
     expect(wide.heightMm).toBeCloseTo(428, 1);
-    expect(wide.layers).toEqual(["Frame", "Annotation"]);
+    expect(wide.layers).toEqual(["Frame", "Paths", "Annotation"]);
+    const figurePaths = fitted.bodies.get("Paths") ?? "";
+    expect(figurePaths.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g)).toEqual(["f*"]);
   });
 });
 

@@ -3,6 +3,8 @@ import {
   CONTOUR_DASH_MM,
   CONTOUR_GAP_MM,
   LINE_MM,
+  PATH_FILL,
+  PATH_WIDTH_M,
   screenDashPx,
   screenPx,
 } from "./lineweights";
@@ -51,6 +53,11 @@ export type LineStyles = {
   roadFill: string;
   /** Drawn on the boundary of the unioned carriageway. */
   kerbOn: boolean;
+  /** Full footpath width in metres on the ground. Half lies each side of the centreline. */
+  pathWidthM: number;
+  pathFill: string;
+  /** Stroke on the unioned footpath outline only. */
+  pathEdgeOn: boolean;
 };
 
 export const STROKE_KEYS = [
@@ -69,7 +76,7 @@ export const STROKE_KEYS = [
 export const STROKE_LABELS: Record<StrokeKey, string> = {
   building: "Building outlines",
   kerb: "Road kerb",
-  path: "Paths",
+  path: "Footpath edge",
   rail: "Rail",
   green: "Green edges",
   water: "Water edges",
@@ -84,7 +91,7 @@ type VarNames = { mm: string; color: string; dash: string };
 export const STROKE_VARS: Record<StrokeKey, VarNames> = {
   building: { mm: "--building-stroke-mm", color: "--building-stroke", dash: "--building-dash" },
   kerb: { mm: "--road-kerb-mm", color: "--road-kerb-stroke", dash: "--road-kerb-dash" },
-  path: { mm: "--path-stroke-mm", color: "--path-stroke", dash: "--path-dash" },
+  path: { mm: "--path-edge-mm", color: "--path-edge-stroke", dash: "--path-edge-dash" },
   rail: { mm: "--rail-stroke-mm", color: "--rail-stroke", dash: "--rail-dash" },
   green: { mm: "--green-stroke-mm", color: "--green-stroke", dash: "--green-dash" },
   water: { mm: "--water-stroke-mm", color: "--water-stroke", dash: "--water-dash" },
@@ -96,7 +103,17 @@ export const STROKE_VARS: Record<StrokeKey, VarNames> = {
 
 export const ROAD_FILL_VAR = "--road-fill";
 export const ROAD_KERB_VAR = "--road-kerb";
+export const PATH_WIDTH_VAR = "--path-width-m";
+export const PATH_FILL_VAR = "--path-fill";
+export const PATH_EDGE_VAR = "--path-edge";
 export const LINE_STYLES_KEY = "citycut.lineStyles";
+
+/** Previous centreline names. Read as the footpath edge when the new names are absent. */
+const LEGACY_PATH_VARS: Record<string, string> = {
+  "--path-stroke-mm": "--path-edge-mm",
+  "--path-stroke": "--path-edge-stroke",
+  "--path-dash": "--path-edge-dash",
+};
 
 export const DASH_PRESETS = [
   { id: "solid", label: "Solid", value: "none" },
@@ -122,6 +139,9 @@ export const DEFAULT_LINE_STYLES: LineStyles = {
   tree: { mm: LINE_MM.secondary, color: "#245232", dash: "none" },
   roadFill: "#4A4A4A",
   kerbOn: true,
+  pathWidthM: PATH_WIDTH_M,
+  pathFill: PATH_FILL,
+  pathEdgeOn: false,
 };
 
 export function allStyleVariables(): string[] {
@@ -130,7 +150,7 @@ export function allStyleVariables(): string[] {
     const vars = STROKE_VARS[key];
     names.push(vars.mm, vars.color, vars.dash);
   }
-  names.push(ROAD_FILL_VAR, ROAD_KERB_VAR);
+  names.push(ROAD_FILL_VAR, ROAD_KERB_VAR, PATH_WIDTH_VAR, PATH_FILL_VAR, PATH_EDGE_VAR);
   return names;
 }
 
@@ -150,6 +170,9 @@ export function cloneLineStyles(style: LineStyles = DEFAULT_LINE_STYLES): LineSt
     tree: { ...style.tree },
     roadFill: style.roadFill,
     kerbOn: style.kerbOn,
+    pathWidthM: style.pathWidthM,
+    pathFill: style.pathFill,
+    pathEdgeOn: style.pathEdgeOn,
   };
 }
 
@@ -170,6 +193,20 @@ export function parseColor(raw: string | undefined | null): string | null {
       .padStart(2, "0")
       .toUpperCase();
   return `#${channel(rgb[1])}${channel(rgb[2])}${channel(rgb[3])}`;
+}
+
+/** Ground metres. Rounded to 0.1 m, the editor step. */
+export function parseMetres(raw: string | undefined | null): number | null {
+  if (raw == null) return null;
+  const text = raw.trim().toLowerCase().replace(/m$/, "").trim();
+  if (!text) return null;
+  const value = Number(text);
+  if (!Number.isFinite(value)) return null;
+  return Math.min(30, Math.max(0, Math.round(value * 10) / 10));
+}
+
+export function formatMetres(metres: number): string {
+  return String(Math.round(metres * 10) / 10);
 }
 
 export function parseMm(raw: string | undefined | null): number | null {
@@ -281,6 +318,25 @@ export function styleFromProperties(
   if (fill) next.roadFill = fill;
   const kerb = parseKerb(read(ROAD_KERB_VAR));
   if (kerb != null) next.kerbOn = kerb;
+  const width = parseMetres(read(PATH_WIDTH_VAR));
+  if (width != null) next.pathWidthM = width;
+  const pathFill = parseColor(read(PATH_FILL_VAR));
+  if (pathFill) next.pathFill = pathFill;
+  const edge = parseKerb(read(PATH_EDGE_VAR));
+  if (edge != null) next.pathEdgeOn = edge;
+  const pathVars = STROKE_VARS.path;
+  if (parseMm(read(pathVars.mm)) == null) {
+    const legacyMm = parseMm(read("--path-stroke-mm"));
+    if (legacyMm != null) next.path.mm = legacyMm;
+  }
+  if (!parseColor(read(pathVars.color))) {
+    const legacyColor = parseColor(read("--path-stroke"));
+    if (legacyColor) next.path.color = legacyColor;
+  }
+  if (!normalizeDash(read(pathVars.dash))) {
+    const legacyDash = normalizeDash(read("--path-dash"));
+    if (legacyDash) next.path.dash = legacyDash;
+  }
   return next;
 }
 
@@ -311,8 +367,10 @@ export function readStoredOverrides(storage: StorageLike): Record<string, string
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
     const out: Record<string, string> = {};
     for (const [key, value] of Object.entries(parsed)) {
-      if (!KNOWN.has(key) || typeof value !== "string" || !value.trim()) continue;
-      out[key] = value.trim();
+      const name = LEGACY_PATH_VARS[key] ?? key;
+      if (!KNOWN.has(name) || typeof value !== "string" || !value.trim()) continue;
+      if (out[name] && LEGACY_PATH_VARS[key]) continue;
+      out[name] = value.trim();
     }
     return out;
   } catch {
@@ -343,6 +401,9 @@ export function changedVariables(current: LineStyles, baseline: LineStyles): Rec
   }
   if (current.roadFill.toUpperCase() !== baseline.roadFill.toUpperCase()) out[ROAD_FILL_VAR] = current.roadFill.toUpperCase();
   if (current.kerbOn !== baseline.kerbOn) out[ROAD_KERB_VAR] = current.kerbOn ? "on" : "off";
+  if (formatMetres(current.pathWidthM) !== formatMetres(baseline.pathWidthM)) out[PATH_WIDTH_VAR] = formatMetres(current.pathWidthM);
+  if (current.pathFill.toUpperCase() !== baseline.pathFill.toUpperCase()) out[PATH_FILL_VAR] = current.pathFill.toUpperCase();
+  if (current.pathEdgeOn !== baseline.pathEdgeOn) out[PATH_EDGE_VAR] = current.pathEdgeOn ? "on" : "off";
   return out;
 }
 

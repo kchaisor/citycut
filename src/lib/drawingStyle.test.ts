@@ -4,6 +4,9 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_LINE_STYLES,
   LINE_STYLES_KEY,
+  PATH_EDGE_VAR,
+  PATH_FILL_VAR,
+  PATH_WIDTH_VAR,
   ROAD_FILL_VAR,
   ROAD_KERB_VAR,
   STROKE_KEYS,
@@ -13,7 +16,9 @@ import {
   dashIsDotted,
   dashPresetId,
   normalizeDash,
+  formatMetres,
   parseColor,
+  parseMetres,
   parseMm,
   readStoredOverrides,
   screenPenAttrs,
@@ -76,6 +81,11 @@ describe("drawing style css", () => {
     const css = await cssFileValues();
     expect(css.get(ROAD_FILL_VAR)?.toUpperCase()).toBe(DEFAULT_LINE_STYLES.roadFill);
     expect(css.get(ROAD_KERB_VAR)).toBe(DEFAULT_LINE_STYLES.kerbOn ? "on" : "off");
+    expect(css.get(PATH_WIDTH_VAR)).toBe(formatMetres(DEFAULT_LINE_STYLES.pathWidthM));
+    expect(css.get(PATH_FILL_VAR)?.toUpperCase()).toBe(DEFAULT_LINE_STYLES.pathFill);
+    expect(css.get(PATH_EDGE_VAR)).toBe(DEFAULT_LINE_STYLES.pathEdgeOn ? "on" : "off");
+    expect(DEFAULT_LINE_STYLES.pathFill).toBe("#DADADA");
+    expect(DEFAULT_LINE_STYLES.pathWidthM).toBe(1.2);
     for (const key of STROKE_KEYS) {
       const vars = STROKE_VARS[key];
       expect(css.get(vars.mm)).toBe(String(DEFAULT_LINE_STYLES[key].mm));
@@ -122,6 +132,25 @@ describe("drawing style css", () => {
     expect(text).not.toContain("--building-stroke");
     expect(changedVariables(DEFAULT_LINE_STYLES, DEFAULT_LINE_STYLES)).toEqual({});
     expect(copyCssText(DEFAULT_LINE_STYLES, DEFAULT_LINE_STYLES)).toBe("/* No line-style changes to paste. */\n");
+  });
+
+  it("persists footpath width and still reads the old path stroke names as the edge", () => {
+    const storage = memoryStorage();
+    const wider = { ...DEFAULT_LINE_STYLES, pathWidthM: 2.4 };
+    writeStoredOverrides(storage, changedVariables(wider, DEFAULT_LINE_STYLES));
+    const stored = readStoredOverrides(storage);
+    expect(stored[PATH_WIDTH_VAR]).toBe("2.4");
+    const style = styleFromProperties((name) => stored[name] ?? "");
+    expect(style.pathWidthM).toBe(2.4);
+    const legacyStore = memoryStorage(JSON.stringify({ "--path-width-m": "1.8", "--path-stroke-mm": "0.3" }));
+    const legacyStored = readStoredOverrides(legacyStore);
+    expect(legacyStored["--path-edge-mm"]).toBe("0.3");
+    expect(legacyStored["--path-stroke-mm"]).toBeUndefined();
+    expect(styleFromProperties((name) => legacyStored[name] ?? "").path.mm).toBe(0.3);
+    expect(parseMetres("1.25m")).toBe(1.3);
+    const legacy = styleFromProperties((name) => (name === "--path-stroke" ? "#112233" : ""));
+    expect(legacy.path.color).toBe("#112233");
+    expect(legacy.pathWidthM).toBe(DEFAULT_LINE_STYLES.pathWidthM);
   });
 
   it("draws no on-screen stroke when a weight is 0, and brings a building outline back above 0", () => {
