@@ -1,5 +1,6 @@
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { buildCityGroup, disposeObject } from "./buildCity";
+import { figureGroundPdf, figureGroundSvg } from "./figureGround";
 import { sitePlanSvg } from "./svgPlan";
 import type { CityModel } from "../types";
 
@@ -34,6 +35,23 @@ export function downloadSvg(model: CityModel) {
     `${fileStem(model)}.svg`,
     new Blob([svg], { type: "image/svg+xml;charset=utf-8" }),
   );
+}
+
+export function figureGroundStem(model: CityModel, scale: number, extension: "svg" | "pdf"): string {
+  return `${fileStem(model)}-figure-ground-1-${scale}.${extension}`;
+}
+
+/** True-scale figure-ground sheet. A variant of the site-plan SVG, on A3 when the frame fits. */
+export function downloadFigureGround(model: CityModel, scale: number, extension: "svg" | "pdf") {
+  const name = figureGroundStem(model, scale, extension);
+  if (extension === "svg") {
+    downloadBlob(name, new Blob([figureGroundSvg(model, scale)], { type: "image/svg+xml;charset=utf-8" }));
+    return;
+  }
+  const bytes = figureGroundPdf(model, scale);
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  downloadBlob(name, new Blob([copy], { type: "application/pdf" }));
 }
 
 export async function downloadGlb(model: CityModel): Promise<void> {

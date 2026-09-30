@@ -1,18 +1,40 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { figureGroundModelPaths, scaleBarMetres } from "../lib/figureGround";
 import { planPaths } from "../lib/svgPlan";
 import type { CityModel } from "../types";
 
 type View = { x: number; y: number; w: number; h: number };
 
-export function DrawingPlan({ model }: { model: CityModel }) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const drag = useRef<{ px: number; py: number; view: View } | null>(null);
-  const paths = useMemo(() => planPaths(model), [model]);
-  const fitted = useMemo<View>(() => {
+export type DrawingKind = "site" | "figure-ground";
+
+function fittedView(model: CityModel, kind: DrawingKind): View {
+  const half = model.sideM / 2;
+  if (kind === "site") {
     const pad = model.sideM * 0.045;
     const size = model.sideM + pad * 2;
-    return { x: -model.sideM / 2 - pad, y: -model.sideM / 2 - pad, w: size, h: size };
-  }, [model]);
+    return { x: -half - pad, y: -half - pad, w: size, h: size };
+  }
+  const padX = model.sideM * 0.06;
+  const padTop = model.sideM * 0.09;
+  const padBottom = model.sideM * 0.11;
+  return {
+    x: -half - padX,
+    y: -half - padTop,
+    w: model.sideM + padX * 2,
+    h: model.sideM + padTop + padBottom,
+  };
+}
+
+export function DrawingPlan({ model, kind = "site" }: { model: CityModel; kind?: DrawingKind }) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const drag = useRef<{ px: number; py: number; view: View } | null>(null);
+  const figure = kind === "figure-ground";
+  const paths = useMemo(() => (figure ? null : planPaths(model)), [figure, model]);
+  const figurePaths = useMemo(
+    () => (figure ? figureGroundModelPaths(model.buildings, model.sideM) : []),
+    [figure, model],
+  );
+  const fitted = useMemo(() => fittedView(model, kind), [model, kind]);
   const [view, setView] = useState<View>(fitted);
 
   useEffect(() => {
@@ -47,19 +69,25 @@ export function DrawingPlan({ model }: { model: CityModel }) {
   }, [model.sideM]);
 
   const half = model.sideM / 2;
-  const empty =
-    model.buildings.length === 0 &&
-    model.roads.length === 0 &&
-    model.areas.length === 0 &&
-    model.trees.length === 0;
+  const empty = figure
+    ? figurePaths.length === 0
+    : model.buildings.length === 0 && model.roads.length === 0 && model.areas.length === 0 && model.trees.length === 0;
+  const stroke = Math.max(model.sideM * 0.0015, 0.35);
+  const barMetres = scaleBarMetres(model.sideM);
+  const barThickness = Math.max(model.sideM * 0.005, 0.6);
+  const barY = half + model.sideM * 0.028;
+  const arrowX = half - model.sideM * 0.02;
+  const arrowTip = -half - model.sideM * 0.055;
+  const arrowBase = -half - model.sideM * 0.016;
+  const head = model.sideM * 0.01;
 
   return (
     <svg
       ref={svgRef}
-      className="plan"
+      className={figure ? "plan figure-ground" : "plan"}
       viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
       role="img"
-      aria-label="Vector site plan"
+      aria-label={figure ? "Figure-ground plan" : "Vector site plan"}
       onDoubleClick={() => setView(fitted)}
       onPointerDown={(event) => {
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -78,82 +106,126 @@ export function DrawingPlan({ model }: { model: CityModel }) {
         drag.current = null;
       }}
     >
-      <rect x={view.x} y={view.y} width={view.w} height={view.h} fill="#e7e2d8" />
-      <rect x={-half} y={-half} width={model.sideM} height={model.sideM} fill="#f4f1ea" />
-      {paths.green.map((d, index) => (
-        <path key={`g${index}`} d={d} fill="#b7d39a" />
-      ))}
-      {paths.water.map((d, index) => (
-        <path key={`w${index}`} d={d} fill="#9ec9d1" />
-      ))}
-      {paths.contours.map((d, index) => (
-        <path
-          key={`c${index}`}
-          d={d}
-          fill="none"
-          stroke="#7a6248"
-          strokeWidth={Math.max(model.sideM * 0.0012, 0.35)}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-      ))}
-      {paths.roads.map((road, index) => (
-        <path
-          key={`r${index}`}
-          d={road.d}
-          fill="none"
-          stroke={road.stroke}
-          strokeWidth={road.width}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      ))}
-      {paths.rails.map((rail, index) => (
-        <path
-          key={`l${index}`}
-          d={rail.d}
-          fill="none"
-          stroke="#8d6244"
-          strokeWidth={rail.width}
-          strokeDasharray={`${rail.width * 1.6} ${rail.width}`}
-          strokeLinecap="butt"
-        />
-      ))}
-      {paths.buildings.map((building, index) => (
-        <path key={`b${index}`} d={building.d} fill={building.fill} fillRule="evenodd" />
-      ))}
-      {paths.trees.map((tree, index) => (
-        <circle
-          key={`t${index}`}
-          cx={tree.x}
-          cy={tree.y}
-          r={tree.r}
-          fill="#6ea35a"
-          stroke="#245232"
-          strokeWidth={Math.max(model.sideM * 0.0015, 0.4)}
-        />
-      ))}
-      <rect
-        x={-half}
-        y={-half}
-        width={model.sideM}
-        height={model.sideM}
-        fill="none"
-        stroke="#1c1b17"
-        strokeWidth={model.sideM * 0.004}
-      />
-      <text
-        x={0}
-        y={-half + model.sideM * 0.04}
-        textAnchor="middle"
-        fontSize={model.sideM * 0.03}
-        fill="#1c1b17"
-      >
-        N
-      </text>
+      <rect x={view.x} y={view.y} width={view.w} height={view.h} fill={figure ? "#fff" : "#e7e2d8"} />
+      <rect x={-half} y={-half} width={model.sideM} height={model.sideM} fill={figure ? "#fff" : "#f4f1ea"} />
+      {figure ? (
+        <>
+          {figurePaths.map((d, index) => (
+            <path key={`f${index}`} d={d} fill="#000" fillRule="evenodd" />
+          ))}
+          <rect x={-half} y={-half} width={model.sideM} height={model.sideM} fill="none" stroke="#000" strokeWidth={stroke} />
+          <g aria-hidden="true">
+            <line x1={arrowX} y1={arrowBase} x2={arrowX} y2={arrowTip + head * 1.6} stroke="#000" strokeWidth={stroke} />
+            <polygon
+              points={`${arrowX},${arrowTip} ${arrowX - head},${arrowTip + head * 1.7} ${arrowX + head},${arrowTip + head * 1.7}`}
+              fill="#000"
+            />
+            <text
+              x={arrowX + head * 1.5}
+              y={arrowTip + head * 1.15}
+              fontSize={model.sideM * 0.026}
+              fill="#000"
+              fontFamily="Helvetica, Arial, sans-serif"
+            >
+              N
+            </text>
+          </g>
+          <g aria-hidden="true">
+            <rect x={-half} y={barY} width={barMetres / 2} height={barThickness} fill="#000" />
+            <rect
+              x={-half}
+              y={barY}
+              width={barMetres}
+              height={barThickness}
+              fill="none"
+              stroke="#000"
+              strokeWidth={stroke * 0.7}
+            />
+            <text
+              x={-half + barMetres + model.sideM * 0.012}
+              y={barY + barThickness * 0.85}
+              fontSize={model.sideM * 0.02}
+              fill="#000"
+              fontFamily="Helvetica, Arial, sans-serif"
+            >
+              {barMetres} m
+            </text>
+          </g>
+        </>
+      ) : (
+        paths && (
+          <>
+            {paths.green.map((d, index) => (
+              <path key={`g${index}`} d={d} fill="#b7d39a" />
+            ))}
+            {paths.water.map((d, index) => (
+              <path key={`w${index}`} d={d} fill="#9ec9d1" />
+            ))}
+            {paths.contours.map((d, index) => (
+              <path
+                key={`c${index}`}
+                d={d}
+                fill="none"
+                stroke="#7a6248"
+                strokeWidth={Math.max(model.sideM * 0.0012, 0.35)}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+            ))}
+            {paths.roads.map((road, index) => (
+              <path
+                key={`r${index}`}
+                d={road.d}
+                fill="none"
+                stroke={road.stroke}
+                strokeWidth={road.width}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ))}
+            {paths.rails.map((rail, index) => (
+              <path
+                key={`l${index}`}
+                d={rail.d}
+                fill="none"
+                stroke="#8d6244"
+                strokeWidth={rail.width}
+                strokeDasharray={`${rail.width * 1.6} ${rail.width}`}
+                strokeLinecap="butt"
+              />
+            ))}
+            {paths.buildings.map((building, index) => (
+              <path key={`b${index}`} d={building.d} fill={building.fill} fillRule="evenodd" />
+            ))}
+            {paths.trees.map((tree, index) => (
+              <circle
+                key={`t${index}`}
+                cx={tree.x}
+                cy={tree.y}
+                r={tree.r}
+                fill="#6ea35a"
+                stroke="#245232"
+                strokeWidth={Math.max(model.sideM * 0.0015, 0.4)}
+              />
+            ))}
+            <rect
+              x={-half}
+              y={-half}
+              width={model.sideM}
+              height={model.sideM}
+              fill="none"
+              stroke="#1c1b17"
+              strokeWidth={model.sideM * 0.004}
+            />
+            <text x={0} y={-half + model.sideM * 0.04} textAnchor="middle" fontSize={model.sideM * 0.03} fill="#1c1b17">
+              N
+            </text>
+          </>
+        )
+      )}
       {empty && (
         <text x={0} y={0} textAnchor="middle" fontSize={model.sideM * 0.04} fill="#6d675e">
-          Nothing mapped in this frame
+          {figure ? "No building footprints in this frame" : "Nothing mapped in this frame"}
         </text>
       )}
     </svg>
