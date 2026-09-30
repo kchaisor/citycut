@@ -268,18 +268,17 @@ export function clipEdge(a: V2, b: V2, occluders: Occ[], faceId: number): Array<
 
 function gridIndex(occ: Occ[], pageW: number, pageH: number): Occ[][] {
   const cells: Occ[][] = Array.from({ length: GRID * GRID }, () => []);
-  const put = (x: number, y: number, tri: Occ) => {
-    const cx = Math.min(GRID - 1, Math.max(0, Math.floor((x / pageW) * GRID)));
-    const cy = Math.min(GRID - 1, Math.max(0, Math.floor((y / pageH) * GRID)));
-    cells[cy * GRID + cx].push(tri);
-  };
   for (const tri of occ) {
-    const x0 = Math.floor((tri.minX / pageW) * GRID);
-    const x1 = Math.floor((tri.maxX / pageW) * GRID);
-    const y0 = Math.floor((tri.minY / pageH) * GRID);
-    const y1 = Math.floor((tri.maxY / pageH) * GRID);
+    if (!Number.isFinite(tri.minX) || !Number.isFinite(tri.maxX) || !Number.isFinite(tri.minY) || !Number.isFinite(tri.maxY)) {
+      continue;
+    }
+    if (tri.maxX < 0 || tri.minX > pageW || tri.maxY < 0 || tri.minY > pageH) continue;
+    const x0 = Math.max(0, Math.floor((tri.minX / pageW) * GRID));
+    const x1 = Math.min(GRID - 1, Math.floor((tri.maxX / pageW) * GRID));
+    const y0 = Math.max(0, Math.floor((tri.minY / pageH) * GRID));
+    const y1 = Math.min(GRID - 1, Math.floor((tri.maxY / pageH) * GRID));
     for (let y = y0; y <= y1; y++) {
-      for (let x = x0; x <= x1; x++) put((x + 0.5) * (pageW / GRID), (y + 0.5) * (pageH / GRID), tri);
+      for (let x = x0; x <= x1; x++) cells[y * GRID + x].push(tri);
     }
   }
   return cells;

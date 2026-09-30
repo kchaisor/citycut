@@ -181,7 +181,8 @@ export function ModelPage({ model }: { model: CityModel }) {
         uniformBuildings: !colourByUse && !showSource,
         colourBySource: showSource,
       });
-    } catch {
+    } catch (error) {
+      console.error(error);
       setExportError("The 3D view could not be written.");
     } finally {
       setBusy(null);

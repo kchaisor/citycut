@@ -11,6 +11,7 @@ import {
   PDFString,
 } from "pdf-lib";
 import * as THREE from "three";
+import { buildLayeredPdf } from "./aiDocument";
 import { FIGURE_LAYER_ORDER, figureGroundAi, sitePlanAi, SITE_LAYER_ORDER } from "./aiPlan";
 import { clipEdge, viewAi, VIEW_LAYER_ORDER, VIEW_OUTLINE_MM, type ScreenTri } from "./aiView";
 import { shotFromCamera } from "./cameraShot";
@@ -256,6 +257,20 @@ describe("Illustrator 3D view", () => {
     for (const name of info.layers) expect(info.counts.get(name) ?? 0).toBeGreaterThan(0);
     const widths = info.widthsMm.map((mm) => Math.round(mm * 1000) / 1000);
     expect(widths).toContain(VIEW_OUTLINE_MM);
+  });
+
+  it("writes a layer whose operator list is too long to spread in one call", async () => {
+    const paths = Array.from({ length: 15000 }, (_, index) => ({
+      rings: [[[index * 0.01, 0], [index * 0.01 + 0.2, 1]]],
+      close: false as const,
+      stroke: [0.1, 0.1, 0.1] as const,
+      strokeMm: 0.18,
+    }));
+    const info = await inspect(await buildLayeredPdf(220, 80, [{ name: "Outlines", paths }], ["Outlines"]));
+    expect(info.header.startsWith("%PDF-1.6")).toBe(true);
+    expect(info.layers).toEqual(["Outlines"]);
+    expect(info.counts.get("Outlines") ?? 0).toBeGreaterThan(15000);
+    expect(info.image).toBe(false);
   });
 
   it("clips an edge where a nearer face covers it", () => {

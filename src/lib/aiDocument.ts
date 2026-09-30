@@ -244,7 +244,12 @@ export async function buildLayeredPdf(
       );
     }
     ops.push(endMarked());
-    if (ops.length > 2) page.pushOperators(...ops);
+    if (ops.length <= 2) continue;
+    // One layer can hold every visible edge. Spreading that list into a single
+    // call blows the argument limit, so the stream is filled in batches.
+    // Consecutive batches stay in one content stream and concatenate in order.
+    const batch = 800;
+    for (let i = 0; i < ops.length; i += batch) page.pushOperators(...ops.slice(i, i + batch));
   }
 
   const bytes = await doc.save({ useObjectStreams: false });
