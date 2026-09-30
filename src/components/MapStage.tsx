@@ -54,7 +54,7 @@ export function MapStage({
       zoom: initialView.zoom,
       attributionControl: { compact: true },
     });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     mapRef.current = map;
 
     const update = () => {
@@ -133,7 +133,7 @@ export function MapStage({
   const label = `${formatKmSide(sideKm)} × ${formatKmSide(sideKm)} km`;
 
   return (
-    <div className="map-wrap">
+    <div className={loading ? "map-wrap is-loading" : "map-wrap"}>
       <div ref={containerRef} className="map-canvas" />
       <div className="basemap" role="group" aria-label="Basemap">
         <button
@@ -161,10 +161,10 @@ export function MapStage({
             className="frame-label"
             style={{
               left: Math.min(
-                Math.max(frame.left + frame.width / 2, 70),
-                (containerRef.current?.clientWidth ?? 800) - 70,
+                Math.max(frame.left + frame.width / 2, 88),
+                (containerRef.current?.clientWidth ?? 800) - 150,
               ),
-              top: Math.max(frame.top, 12),
+              top: Math.max(frame.top, 16),
             }}
           >
             {label}

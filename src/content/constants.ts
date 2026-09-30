@@ -30,7 +30,7 @@ export const SATELLITE_STYLE = {
       ],
       tileSize: 256,
       attribution:
-        "Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+        "Imagery © Esri, Vantor, Earthstar Geographics, and the GIS User Community",
       maxzoom: 19,
     },
   },

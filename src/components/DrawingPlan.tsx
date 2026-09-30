@@ -25,7 +25,15 @@ function fittedView(model: CityModel, kind: DrawingKind): View {
   };
 }
 
-export function DrawingPlan({ model, kind = "site" }: { model: CityModel; kind?: DrawingKind }) {
+export function DrawingPlan({
+  model,
+  kind = "site",
+  onScale,
+}: {
+  model: CityModel;
+  kind?: DrawingKind;
+  onScale?: (widthM: number) => void;
+}) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: View } | null>(null);
   const figure = kind === "figure-ground";
@@ -40,6 +48,10 @@ export function DrawingPlan({ model, kind = "site" }: { model: CityModel; kind?:
   useEffect(() => {
     setView(fitted);
   }, [fitted]);
+
+  useEffect(() => {
+    onScale?.(view.w);
+  }, [onScale, view.w]);
 
   useEffect(() => {
     const svg = svgRef.current;

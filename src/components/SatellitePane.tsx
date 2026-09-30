@@ -19,7 +19,7 @@ export function SatellitePane({ model }: { model: CityModel }) {
       attributionControl: { compact: true },
       dragRotate: false,
     });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     const ring: [number, number][] = [
       [bounds.west, bounds.south],
       [bounds.east, bounds.south],

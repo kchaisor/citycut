@@ -1,6 +1,6 @@
 import { lazy, Suspense, useRef, useState } from "react";
 import { MapStage, type FlyRequest } from "./components/MapStage";
-import { Sidebar } from "./components/Sidebar";
+import { SelectChrome } from "./components/SelectChrome";
 import { TopBar } from "./components/TopBar";
 import {
   DEFAULT_LAYERS,
@@ -269,6 +269,11 @@ export default function App() {
     <div className="app">
       <TopBar
         showNewCut={phase === "model"}
+        note={
+          phase === "model" && model
+            ? `${model.placeLabel} · ${Math.round(model.sideM)} × ${Math.round(model.sideM)} m`
+            : placeLabel
+        }
         onHome={onHome}
         onNewCut={() => setPhase("select")}
       />
@@ -284,7 +289,7 @@ export default function App() {
             onView={onView}
             onBasemap={onBasemap}
           />
-          <Sidebar
+          <SelectChrome
             placeLabel={placeLabel}
             sideKm={sideKm}
             layers={layers}
