@@ -7,6 +7,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { captureViewPng } from "../lib/capturePng";
+import { flushControlInertia, holdControlPose } from "../lib/controlInertia";
 import {
   eyeDistance,
   fitOrthoZoom,
@@ -65,6 +66,9 @@ function publishCamera(camera: THREE.Camera, target: THREE.Vector3, element: HTM
   if (ortho.isOrthographicCamera) {
     element.dataset.camNear = ortho.near.toFixed(2);
     element.dataset.camFar = ortho.far.toFixed(2);
+  } else {
+    delete element.dataset.camNear;
+    delete element.dataset.camFar;
   }
 }
 
@@ -201,6 +205,7 @@ function IsoSnap({
     const distance = eyeDistance(bounds);
     const eye = isoEye(centre, corner, distance);
     const planes = orthoNearFar(bounds, eye, centre);
+    flushControlInertia(controls);
     camera.position.set(eye[0], eye[1], eye[2]);
     camera.near = planes.near;
     camera.far = planes.far;
@@ -273,6 +278,24 @@ function CameraReadout({
   return null;
 }
 
+function HoldPoseWhenInactive({
+  controlsRef,
+  active,
+}: {
+  controlsRef: RefObject<OrbitControlsImpl | null>;
+  active: boolean;
+}) {
+  const previous = useRef(active);
+  useFrame(() => {
+    if (previous.current && !active) {
+      const controls = controlsRef.current;
+      if (controls) holdControlPose(controls);
+    }
+    previous.current = active;
+  });
+  return null;
+}
+
 function ExportBridge({ onExportReady }: { onExportReady: (exporter: PngExporter | null) => void }) {
   const gl = useThree((state) => state.gl);
   const scene = useThree((state) => state.scene);
@@ -330,6 +353,8 @@ function Cameras({
           <BindCamera camera={iso ? ortho : persp} />
           <FrameCameras persp={persp} ortho={ortho} />
           <PerspectiveSetup camera={persp} controlsRef={perspControls} side={side} lift={lift} />
+          <HoldPoseWhenInactive controlsRef={perspControls} active={!iso} />
+          <HoldPoseWhenInactive controlsRef={orthoControls} active={iso} />
           <IsoSnap
             camera={ortho}
             controlsRef={orthoControls}
