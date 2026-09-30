@@ -1,0 +1,125 @@
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import {
+  DEFAULT_LINE_STYLES,
+  LINE_STYLES_KEY,
+  ROAD_FILL_VAR,
+  ROAD_KERB_VAR,
+  STROKE_KEYS,
+  STROKE_VARS,
+  changedVariables,
+  copyCssText,
+  dashIsDotted,
+  dashPresetId,
+  normalizeDash,
+  parseColor,
+  parseMm,
+  readStoredOverrides,
+  styleFromProperties,
+  writeStoredOverrides,
+  type StorageLike,
+} from "./drawingStyle";
+
+function memoryStorage(initial = ""): StorageLike & { snapshot(): string | null } {
+  let value: string | null = initial || null;
+  return {
+    getItem: (key) => (key === LINE_STYLES_KEY ? value : null),
+    setItem: (key, next) => {
+      if (key === LINE_STYLES_KEY) value = next;
+    },
+    removeItem: (key) => {
+      if (key === LINE_STYLES_KEY) value = null;
+    },
+    snapshot: () => value,
+  };
+}
+
+async function cssFileValues(): Promise<Map<string, string>> {
+  const bytes = await readFile(fileURLToPath(new URL("../drawing-style.css", import.meta.url)));
+  const css = new TextDecoder().decode(bytes);
+  const values = new Map<string, string>();
+  for (const match of css.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)) {
+    values.set(match[1], match[2].trim());
+  }
+  return values;
+}
+
+describe("drawing style css", () => {
+  it("reads a stylesheet value over the typescript default", () => {
+    const style = styleFromProperties((name) => {
+      if (name === "--contour-stroke") return "#ff0000";
+      if (name === "--contour-dash") return "0 0.6";
+      if (name === "--building-stroke-mm") return "0.55";
+      if (name === "--road-fill") return "#333333";
+      if (name === "--road-kerb") return "off";
+      return "";
+    });
+    expect(style.contour.color).toBe("#FF0000");
+    expect(style.contour.dash).toBe("0 0.6");
+    expect(dashIsDotted(style.contour.dash)).toBe(true);
+    expect(style.contour.mm).toBe(DEFAULT_LINE_STYLES.contour.mm);
+    expect(style.building.mm).toBe(0.55);
+    expect(style.building.color).toBe(DEFAULT_LINE_STYLES.building.color);
+    expect(style.roadFill).toBe("#333333");
+    expect(style.kerbOn).toBe(false);
+    expect(parseColor("rgb(74, 74, 74)")).toBe("#4A4A4A");
+    expect(parseMm("0.22mm")).toBe(0.22);
+    expect(normalizeDash("1.50, 0.75")).toBe("1.5 0.75");
+    expect(dashPresetId("none")).toBe("solid");
+    expect(dashPresetId("0 0.6")).toBe("dotted");
+    expect(dashPresetId("2 1")).toBe("custom");
+  });
+
+  it("matches every variable in drawing-style.css to the defaults", async () => {
+    const css = await cssFileValues();
+    expect(css.get(ROAD_FILL_VAR)?.toUpperCase()).toBe(DEFAULT_LINE_STYLES.roadFill);
+    expect(css.get(ROAD_KERB_VAR)).toBe(DEFAULT_LINE_STYLES.kerbOn ? "on" : "off");
+    for (const key of STROKE_KEYS) {
+      const vars = STROKE_VARS[key];
+      expect(css.get(vars.mm)).toBe(String(DEFAULT_LINE_STYLES[key].mm));
+      expect(css.get(vars.color)?.toUpperCase()).toBe(DEFAULT_LINE_STYLES[key].color);
+      expect(normalizeDash(css.get(vars.dash))).toBe(normalizeDash(DEFAULT_LINE_STYLES[key].dash));
+    }
+  });
+
+  it("persists overrides in localStorage and drops unknown keys", () => {
+    const storage = memoryStorage();
+    writeStoredOverrides(storage, {
+      "--contour-stroke": "#FF0000",
+      "--contour-dash": "0 0.6",
+      "--road-kerb": "off",
+      "--not-a-pen": "12",
+    });
+    expect(storage.snapshot()).toContain(LINE_STYLES_KEY === "citycut.lineStyles" ? "--contour-stroke" : "");
+    const stored = readStoredOverrides(storage);
+    expect(stored).toEqual({
+      "--contour-stroke": "#FF0000",
+      "--contour-dash": "0 0.6",
+      "--road-kerb": "off",
+    });
+    const style = styleFromProperties((name) => stored[name] ?? "");
+    expect(style.contour.color).toBe("#FF0000");
+    expect(style.kerbOn).toBe(false);
+    writeStoredOverrides(storage, {});
+    expect(storage.snapshot()).toBeNull();
+    expect(readStoredOverrides(memoryStorage("{"))).toEqual({});
+  });
+
+  it("copies only the variables that differ from the baseline", () => {
+    const current = {
+      ...DEFAULT_LINE_STYLES,
+      contour: { ...DEFAULT_LINE_STYLES.contour, color: "#FF0000", dash: "0 0.6" },
+      kerbOn: false,
+    };
+    const text = copyCssText(current, DEFAULT_LINE_STYLES);
+    expect(text).toContain("/* Paste into src/drawing-style.css */");
+    expect(text).toContain("--contour-stroke: #FF0000;");
+    expect(text).toContain("--contour-dash: 0 0.6;");
+    expect(text).toContain("--road-kerb: off;");
+    expect(text).not.toContain("--road-fill");
+    expect(text).not.toContain("--building-stroke");
+    expect(changedVariables(DEFAULT_LINE_STYLES, DEFAULT_LINE_STYLES)).toEqual({});
+    expect(copyCssText(DEFAULT_LINE_STYLES, DEFAULT_LINE_STYLES)).toBe("/* No line-style changes to paste. */\n");
+  });
+});

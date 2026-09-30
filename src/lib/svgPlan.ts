@@ -1,7 +1,7 @@
 import { BUILDING_USE_META } from "./buildingUse";
 import { clipPolygon, clipPolyline } from "./clip";
 import { openRing } from "./geo";
-import { roadStroke } from "./surfaceLayers";
+import { carriagewaysOf, unionCarriageways } from "./roadFill";
 import { contourInterval, contourLines } from "./terrain";
 import type { CityModel, Pt } from "../types";
 
@@ -25,10 +25,12 @@ export function svgRings(rings: Pt[][]): string {
 export type PlanPaths = {
   green: Pt[][][];
   water: Pt[][][];
-  /** Carriageway edges, two polylines per road, in local east/north metres. */
-  roadEdges: { line: Pt[]; stroke: string }[];
-  paths: { line: Pt[]; stroke: string }[];
-  rails: { line: Pt[]; stroke: string }[];
+  /** Unioned carriageway, outer rings plus block holes, in local east/north metres. */
+  roadFill: Pt[][][];
+  /** Buffer and union time for the carriageway, in milliseconds. */
+  roadUnionMs: number;
+  paths: Pt[][];
+  rails: Pt[][];
   buildings: { rings: Pt[][]; fill: string }[];
   trees: { east: number; north: number; r: number }[];
   contours: Pt[][];
@@ -117,24 +119,18 @@ export function planPaths(model: CityModel): PlanPaths {
     else green.push(rings);
   }
 
-  const roadEdges: PlanPaths["roadEdges"] = [];
   const paths: PlanPaths["paths"] = [];
   const rails: PlanPaths["rails"] = [];
   for (const road of model.roads) {
     if (road.kind === "rail") {
-      for (const line of clipLines(road.line, half)) rails.push({ line, stroke: "#8d6244" });
+      for (const line of clipLines(road.line, half)) rails.push(line);
       continue;
     }
     if (road.grade === "path") {
-      for (const line of clipLines(road.line, half)) paths.push({ line, stroke: roadStroke("path") });
-      continue;
-    }
-    const stroke = roadStroke(road.grade);
-    const width = Math.max(road.width, 2.2);
-    for (const side of [width / 2, -width / 2]) {
-      for (const line of clipLines(offsetPolyline(road.line, side), half)) roadEdges.push({ line, stroke });
+      for (const line of clipLines(road.line, half)) paths.push(line);
     }
   }
+  const carriageway = unionCarriageways(carriagewaysOf(model.roads), model.sideM);
 
   const buildings = model.buildings
     .map((building) => {
@@ -161,7 +157,8 @@ export function planPaths(model: CityModel): PlanPaths {
   return {
     green,
     water,
-    roadEdges,
+    roadFill: carriageway.polygons,
+    roadUnionMs: carriageway.ms,
     paths,
     rails,
     buildings,

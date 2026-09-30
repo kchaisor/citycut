@@ -815,3 +815,63 @@ input[type="range"]::-moz-range-thumb {
   .model .drawer-body { max-height: 34vh; }
   .model .maplibregl-ctrl-bottom-right { bottom: 200px; right: 8px; left: auto; }
 }
+
+.line-styles { margin: 2px 0 12px; min-width: 0; }
+.line-styles-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 0;
+  border: 0;
+  border-top: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 560;
+  text-align: left;
+}
+.line-styles-chevron { color: var(--muted-text); font-weight: 500; font-size: 12px; }
+.line-styles-panel { display: grid; gap: 8px; min-width: 0; }
+.line-style-fill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+.line-style-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 4.5rem 2rem;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+.line-style-name { font-size: 13px; min-width: 0; }
+.line-style-row select,
+.line-style-custom { grid-column: 1 / -1; width: 100%; min-width: 0; max-width: 100%; }
+.line-style-row input[type="number"],
+.line-style-row select,
+.line-style-custom {
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font-size: 13px;
+}
+.line-style-row input[type="number"] { width: 100%; height: 32px; padding: 0 6px; }
+.line-style-row input[type="color"],
+.line-style-fill input[type="color"] {
+  width: 2rem;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: #fff;
+}
+.line-style-row select,
+.line-style-custom { height: 32px; padding: 0 6px; }
+.line-styles-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.line-styles-notice { margin: 0; color: var(--muted-text); font-size: 13px; }

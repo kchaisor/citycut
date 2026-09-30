@@ -10,6 +10,13 @@ import {
 } from "../lib/buildingUse";
 import { CRS_NOTE, mgaCrs } from "../lib/crs";
 import {
+  commitLineStyles,
+  lineStyleBaseline,
+  readDrawingStyle,
+  resetStoredLineStyles,
+  type LineStyles,
+} from "../lib/drawingStyle";
+import {
   download3dm,
   downloadBlob,
   downloadFigureAi,
@@ -33,6 +40,7 @@ import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import type { CityModel } from "../types";
 import { Drawer } from "./Drawer";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
+import { LineStylesEditor } from "./LineStyles";
 import { IconRail, type RailItem } from "./IconRail";
 import { SatellitePane } from "./SatellitePane";
 import { Scene3D, type SceneExporter } from "./Scene3D";
@@ -71,6 +79,7 @@ const TITLES: Record<string, string> = {
 export function ModelPage({ model }: { model: CityModel }) {
   const [tab, setTab] = useState<Tab>("3d");
   const [drawing, setDrawing] = useState<DrawingKind>("site");
+  const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
   const [figureScale, setFigureScale] = useState<number>(() => preferredFigureScale(model.sideM));
   const [exportError, setExportError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"3dm" | "png" | "ai-view" | "ai-site" | "ai-figure" | null>(null);
@@ -151,7 +160,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     setExportError(null);
     setBusy("ai-site");
     try {
-      await downloadSiteAi(model, figureScale);
+      await downloadSiteAi(model, figureScale, lineStyles);
     } catch {
       setExportError("The site plan could not be written.");
     } finally {
@@ -238,7 +247,7 @@ export function ModelPage({ model }: { model: CityModel }) {
         </div>
         {tab === "drawing" && (
           <div className="fill is-plan">
-            <DrawingPlan key={fitToken} model={model} kind={drawing} onScale={onScale} />
+            <DrawingPlan key={fitToken} model={model} kind={drawing} onScale={onScale} lineStyle={lineStyles} />
           </div>
         )}
         {tab === "satellite" && (
@@ -486,6 +495,12 @@ export function ModelPage({ model }: { model: CityModel }) {
                 </select>
               </label>
               {figureFit && <p className="fit-note">{figureFit}</p>}
+              <LineStylesEditor
+                style={lineStyles}
+                baseline={lineStyleBaseline()}
+                onChange={(next) => setLineStyles(commitLineStyles(next, lineStyleBaseline()))}
+                onReset={() => setLineStyles(resetStoredLineStyles())}
+              />
               {tab === "drawing" && (
                 <div className="field">
                   <div className="field-head">
@@ -565,8 +580,8 @@ export function ModelPage({ model }: { model: CityModel }) {
                       Site plan <span>.ai</span>
                     </h3>
                     <p>
-                      True scale at 1:{figureScale}. Building cut, road edges, contours, and the frame keep their pen
-                      weights on the sheet.
+                      True scale at 1:{figureScale}. Building outlines, the road fill and kerb, contours, and the
+                      frame use the line styles on the sheet.
                     </p>
                   </div>
                   <button className="ghost" type="button" disabled={busy !== null} onClick={saveSiteAi} aria-label="Download site plan Illustrator">

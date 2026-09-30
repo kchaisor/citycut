@@ -1,8 +1,12 @@
 # Changing CityCut’s fonts and colours
 
-You do not need to write code. Fonts, font sizes, and the main colours live in one file:
+You do not need to write code. Fonts, font sizes, and the main colours of the app live in one file:
 
 `src/theme.css`
+
+The site plan uses a second file for its pens. Line weights, line colours, dash patterns, and the road fill live in:
+
+`src/drawing-style.css`
 
 Each line has a name, then a value. Change the value. Leave the name alone, including the two dashes at the start.
 
@@ -37,7 +41,7 @@ The name is `--background`. The value is `#EBEBEB`.
 
 `var(--background)` means “use whatever `--background` is set to”. That is why one edit recolours the page, the header, the model, and the drawing together.
 
-Downloaded Illustrator and PNG files do not use these colours. They keep the colours they had before this file existed.
+Downloaded Illustrator and PNG files do not use the colours in this file. The site plan, both on screen and in the site-plan Illustrator download, uses `src/drawing-style.css` instead. That file is described below.
 
 ## How to edit it on GitHub
 
@@ -79,3 +83,62 @@ A name the app does not load, such as a font from your computer only, will show 
 3. Open the last good version of the file.
 4. Click the pencil, copy that version’s values back if you need to, or use GitHub’s revert on that history entry if you are comfortable with it. The simple way is to edit the file again and put the old value back, then commit to `main` as above.
 5. Wait about 2 minutes and hard-refresh the site.
+
+## Site plan lines
+
+`src/drawing-style.css` is the only place the site plan’s pens are written down. The on-screen drawing and the site-plan Illustrator file both read it.
+
+When you download a site plan, the exporter calls `getComputedStyle` on the page’s `:root` at that moment. Whatever the variables currently resolve to — the file, or a live edit from the Line styles panel — is what goes into the file. A weight is millimetres on the printed sheet. It does not change when you zoom.
+
+A dash is two lengths in millimetres: how long the mark is, then how long the gap is. `none` is a solid line. `1.5 0.75` is a dash of 1.5 mm with a 0.75 mm gap. `0 0.6` is a dotted line. A dot uses round caps, so the zero-length mark is drawn as a dot.
+
+| Name | What it controls | Default | Units |
+| --- | --- | --- | --- |
+| `--building-stroke-mm` | Weight of the building outline | `0.4` | mm |
+| `--building-stroke` | Colour of the building outline | `#1C1B17` | colour |
+| `--building-dash` | Dash of the building outline | `none` | mm, on then off |
+| `--road-fill` | Fill of the unioned carriageway | `#4A4A4A` | colour |
+| `--road-kerb` | Whether the kerb outline is drawn. `on` or `off` | `on` | on or off |
+| `--road-kerb-mm` | Weight of the kerb, on the outer edge of the road fill | `0.22` | mm |
+| `--road-kerb-stroke` | Colour of the kerb. Mid grey, so it shows on the road fill and on the page | `#8D8983` | colour |
+| `--road-kerb-dash` | Dash of the kerb | `none` | mm, on then off |
+| `--path-stroke-mm` | Weight of a path or footway centreline | `0.15` | mm |
+| `--path-stroke` | Colour of a path | `#5C5C5C` | colour |
+| `--path-dash` | Dash of a path | `none` | mm, on then off |
+| `--rail-stroke-mm` | Weight of a rail line | `0.15` | mm |
+| `--rail-stroke` | Colour of a rail line | `#8D6244` | colour |
+| `--rail-dash` | Dash of a rail line | `none` | mm, on then off |
+| `--green-stroke-mm` | Weight of the edge around green. `0` leaves the fill with no edge | `0` | mm |
+| `--green-stroke` | Colour of the green edge | `#5E8A45` | colour |
+| `--green-dash` | Dash of the green edge | `none` | mm, on then off |
+| `--water-stroke-mm` | Weight of the edge around water. `0` leaves the fill with no edge | `0` | mm |
+| `--water-stroke` | Colour of the water edge | `#3E7C86` | colour |
+| `--water-dash` | Dash of the water edge | `none` | mm, on then off |
+| `--contour-stroke-mm` | Weight of a contour | `0.1` | mm |
+| `--contour-stroke` | Colour of a contour | `#B0B0B0` | colour |
+| `--contour-dash` | Dash of a contour | `1.5 0.75` | mm, on then off |
+| `--frame-stroke-mm` | Weight of the square frame | `0.35` | mm |
+| `--frame-stroke` | Colour of the frame | `#1C1B17` | colour |
+| `--frame-dash` | Dash of the frame | `none` | mm, on then off |
+| `--annotation-stroke-mm` | Weight of the scale bar and north arrow | `0.13` | mm |
+| `--annotation-stroke` | Colour of the scale bar, north arrow, title, and the on-screen N | `#1C1B17` | colour |
+| `--annotation-dash` | Dash of the annotation strokes | `none` | mm, on then off |
+| `--tree-stroke-mm` | Weight of a tree-crown outline | `0.15` | mm |
+| `--tree-stroke` | Colour of a tree-crown outline | `#245232` | colour |
+| `--tree-dash` | Dash of a tree-crown outline | `none` | mm, on then off |
+
+Green fills, water fills, and tree fills are not in this list. Only their edges are.
+
+## Try a change, then paste it into the file
+
+You can try a pen on the site before you edit the file.
+
+1. Open a model and switch to the Drawing view. Open the Drawing drawer.
+2. Open **Line styles**. It starts collapsed so it does not fill the drawer. On a phone it is in the same bottom sheet, and the sheet scrolls.
+3. Change a weight, a colour, or a dash. The site plan updates straight away. The choices are Solid, Dashed 1.5 0.75, Fine dash 0.75 0.4, Dotted, and Custom. Road fill has its own colour. Kerb outline turns the kerb on or off.
+4. The browser remembers the edits (`citycut.lineStyles`). A site-plan download after an edit uses the edited pens.
+5. Click **Copy CSS**. It copies only the variables you changed, ready to paste. A short note confirms the copy.
+6. Open `src/drawing-style.css` on github.com, click the pencil, and paste those lines over the matching ones. Do not delete the semicolon.
+7. Commit to `main`, wait about 2 minutes, and hard-refresh. Then click **Reset to defaults** in Line styles so the browser is not still covering the file with the old edit.
+
+**Reset to defaults** clears the remembered edits and shows the file again.

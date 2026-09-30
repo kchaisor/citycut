@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { figureGroundModelPaths, scaleBarMetres } from "../lib/figureGround";
 import {
-  CONTOUR_COLOR,
-  CONTOUR_DASH_MM,
-  CONTOUR_GAP_MM,
-  LINE_MM,
-  screenDashPx,
-  screenPx,
-} from "../lib/lineweights";
+  dashScreen,
+  haloMm,
+  readDrawingStyle,
+  type LineStyles,
+  type StrokeStyle,
+} from "../lib/drawingStyle";
+import { figureGroundModelPaths, scaleBarMetres } from "../lib/figureGround";
+import { LINE_MM, screenPx } from "../lib/lineweights";
 import { planPaths, svgPolyline, svgRings } from "../lib/svgPlan";
 import { themeColor } from "../lib/themeColor";
 import type { CityModel } from "../types";
@@ -34,18 +34,56 @@ function fittedView(model: CityModel, kind: DrawingKind): View {
   };
 }
 
+function CasedLine({ d, stroke, paper }: { d: string; stroke: StrokeStyle; paper: string }) {
+  if (!(stroke.mm > 0) || !d) return null;
+  const halo = haloMm(stroke.mm);
+  return (
+    <g>
+      {halo > stroke.mm && (
+        <path
+          d={d}
+          fill="none"
+          stroke={paper}
+          strokeWidth={screenPx(halo)}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      )}
+      <path d={d} fill="none" {...penAttrs(stroke)} strokeLinecap="round" strokeLinejoin="round" />
+    </g>
+  );
+}
+
+function penAttrs(stroke: StrokeStyle, join: "miter" | "round" = "round") {
+  if (!(stroke.mm > 0)) return { stroke: "none" as const };
+  const dash = dashScreen(stroke.dash);
+  return {
+    stroke: stroke.color,
+    strokeWidth: screenPx(stroke.mm),
+    strokeDasharray: dash.array,
+    strokeLinecap: dash.cap as "round" | "butt",
+    strokeLinejoin: join,
+    vectorEffect: "non-scaling-stroke" as const,
+  };
+}
+
 export function DrawingPlan({
   model,
   kind = "site",
   onScale,
+  lineStyle,
 }: {
   model: CityModel;
   kind?: DrawingKind;
   onScale?: (widthM: number) => void;
+  /** Resolved site-plan pens. Omit to read the current CSS cascade. */
+  lineStyle?: LineStyles;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: View } | null>(null);
   const figure = kind === "figure-ground";
+  const style = lineStyle ?? readDrawingStyle();
   const paths = useMemo(() => (figure ? null : planPaths(model)), [figure, model]);
   const figurePaths = useMemo(
     () => (figure ? figureGroundModelPaths(model.buildings, model.sideM) : []),
@@ -201,59 +239,27 @@ export function DrawingPlan({
         paths && (
           <>
             {paths.green.map((rings, index) => (
-              <path key={`g${index}`} d={svgRings(rings)} fill="#b7d39a" />
+              <path key={`g${index}`} d={svgRings(rings)} fill="#b7d39a" {...penAttrs(style.green)} />
             ))}
             {paths.water.map((rings, index) => (
-              <path key={`w${index}`} d={svgRings(rings)} fill="#9ec9d1" />
+              <path key={`w${index}`} d={svgRings(rings)} fill="#9ec9d1" {...penAttrs(style.water)} />
             ))}
-            {paths.contours.map((line, index) => (
+            {paths.roadFill.length > 0 && (
               <path
-                key={`c${index}`}
-                d={svgPolyline(line, false)}
-                fill="none"
-                stroke={CONTOUR_COLOR}
-                strokeWidth={screenPx(LINE_MM.contour)}
-                strokeDasharray={`${screenDashPx(CONTOUR_DASH_MM)} ${screenDashPx(CONTOUR_GAP_MM)}`}
-                strokeLinejoin="miter"
-                strokeLinecap="butt"
-                vectorEffect="non-scaling-stroke"
+                d={paths.roadFill.map((polygon) => svgRings(polygon)).join(" ")}
+                fill={style.roadFill}
+                fillRule="evenodd"
+                {...(style.kerbOn ? penAttrs(style.kerb) : { stroke: "none" })}
               />
+            )}
+            {paths.contours.map((line, index) => (
+              <path key={`c${index}`} d={svgPolyline(line, false)} fill="none" {...penAttrs(style.contour, "miter")} />
             ))}
             {paths.rails.map((rail, index) => (
-              <path
-                key={`l${index}`}
-                d={svgPolyline(rail.line, false)}
-                fill="none"
-                stroke={rail.stroke}
-                strokeWidth={screenPx(LINE_MM.secondary)}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                vectorEffect="non-scaling-stroke"
-              />
+              <CasedLine key={`l${index}`} d={svgPolyline(rail, false)} stroke={style.rail} paper={canvas} />
             ))}
             {paths.paths.map((path, index) => (
-              <path
-                key={`p${index}`}
-                d={svgPolyline(path.line, false)}
-                fill="none"
-                stroke={path.stroke}
-                strokeWidth={screenPx(LINE_MM.secondary)}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                vectorEffect="non-scaling-stroke"
-              />
-            ))}
-            {paths.roadEdges.map((road, index) => (
-              <path
-                key={`r${index}`}
-                d={svgPolyline(road.line, false)}
-                fill="none"
-                stroke={road.stroke}
-                strokeWidth={screenPx(LINE_MM.propertyRoad)}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                vectorEffect="non-scaling-stroke"
-              />
+              <CasedLine key={`p${index}`} d={svgPolyline(path, false)} stroke={style.path} paper={canvas} />
             ))}
             {paths.buildings.map((building, index) => (
               <path
@@ -261,10 +267,7 @@ export function DrawingPlan({
                 d={svgRings(building.rings)}
                 fill={building.fill}
                 fillRule="evenodd"
-                stroke="#1c1b17"
-                strokeWidth={screenPx(LINE_MM.buildingCut)}
-                strokeLinejoin="miter"
-                vectorEffect="non-scaling-stroke"
+                {...penAttrs(style.building, "miter")}
               />
             ))}
             {paths.trees.map((tree, index) => (
@@ -274,9 +277,7 @@ export function DrawingPlan({
                 cy={-tree.north}
                 r={tree.r}
                 fill="#6ea35a"
-                stroke="#245232"
-                strokeWidth={screenPx(LINE_MM.secondary)}
-                vectorEffect="non-scaling-stroke"
+                {...penAttrs(style.tree)}
               />
             ))}
             <rect
@@ -285,11 +286,15 @@ export function DrawingPlan({
               width={model.sideM}
               height={model.sideM}
               fill="none"
-              stroke="#1c1b17"
-              strokeWidth={framePx}
-              vectorEffect="non-scaling-stroke"
+              {...penAttrs(style.frame, "miter")}
             />
-            <text x={0} y={-half + model.sideM * 0.04} textAnchor="middle" fontSize={model.sideM * 0.03} fill="#1c1b17">
+            <text
+              x={0}
+              y={-half + model.sideM * 0.04}
+              textAnchor="middle"
+              fontSize={model.sideM * 0.03}
+              fill={style.annotation.color}
+            >
               N
             </text>
           </>
