@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Building2, Download, DraftingCompass, Info, Trees } from "lucide-react";
 import {
   BUILDING_USES,
@@ -9,10 +9,18 @@ import {
   countUses,
 } from "../lib/buildingUse";
 import { CRS_NOTE, mgaCrs } from "../lib/crs";
-import { download3dm, downloadFigureGround, downloadGlb, downloadSvg } from "../lib/download";
+import { download3dm, downloadBlob, downloadFigureGround, downloadGlb, downloadSvg, pngFilename } from "../lib/download";
 import { FIGURE_SCALES, preferredFigureScale, sheetFitMessage } from "../lib/figureGround";
 import { formatCoord, formatLengthKm } from "../lib/geo";
+import { ISO_CORNERS, type IsoCorner } from "../lib/isoCamera";
 import { drawerIsAvailable, loadModelDrawer, reduceRail, saveModelDrawer } from "../lib/railState";
+import {
+  resolveView,
+  VIEW_STORAGE_KEY,
+  writeStoredView,
+  writeViewSearch,
+  type ViewMemory,
+} from "../lib/viewMemory";
 import { treeSizeSummary, treeTierCounts } from "../lib/trees";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import type { CityModel } from "../types";
@@ -20,13 +28,30 @@ import { Drawer } from "./Drawer";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
 import { IconRail, type RailItem } from "./IconRail";
 import { SatellitePane } from "./SatellitePane";
-import { Scene3D } from "./Scene3D";
+import { Scene3D, type PngExporter } from "./Scene3D";
 import { SceneBoundary } from "./SceneBoundary";
 
 type Tab = "3d" | "drawing" | "satellite";
 
 const DRAWER_ID = "model-drawer";
 const iconProps = { size: 18, strokeWidth: 1.75, "aria-hidden": true as const };
+
+const CORNER_LABEL: Record<IsoCorner, string> = {
+  ne: "NE",
+  nw: "NW",
+  se: "SE",
+  sw: "SW",
+};
+
+function loadView(): ViewMemory {
+  let stored: string | null = null;
+  try {
+    stored = window.localStorage.getItem(VIEW_STORAGE_KEY);
+  } catch {
+    stored = null;
+  }
+  return resolveView(stored, window.location.search);
+}
 
 const TITLES: Record<string, string> = {
   summary: "Model details",
@@ -41,13 +66,22 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [drawing, setDrawing] = useState<DrawingKind>("site");
   const [figureScale, setFigureScale] = useState<number>(() => preferredFigureScale(model.sideM));
   const [exportError, setExportError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"glb" | "svg" | "3dm" | "fg-svg" | "fg-pdf" | null>(null);
+  const [busy, setBusy] = useState<"glb" | "svg" | "3dm" | "fg-svg" | "fg-pdf" | "png" | null>(null);
   const [colourByUse, setColourByUse] = useState(true);
   const [showSource, setShowSource] = useState(false);
   const [preferred, setPreferred] = useState<string | null>(() => loadModelDrawer());
   const [planWidth, setPlanWidth] = useState<number | null>(null);
   const [fitToken, setFitToken] = useState(0);
+  const [view, setView] = useState<ViewMemory>(loadView);
+  const [snapId, setSnapId] = useState(0);
+  const exportRef = useRef<PngExporter | null>(null);
+  const onExportReady = useCallback((exporter: PngExporter | null) => {
+    exportRef.current = exporter;
+  }, []);
   const onScale = useCallback((widthM: number) => setPlanWidth(widthM), []);
+  useEffect(() => {
+    writeStoredView(window.localStorage, loadView());
+  }, []);
   const crs = mgaCrs(model.center.lon);
   const sideKm = model.sideM / 1000;
   const tierCounts = treeTierCounts(model.trees);
@@ -82,6 +116,16 @@ export function ModelPage({ model }: { model: CityModel }) {
     const next = reduceRail(preferred, { type: "close" });
     saveModelDrawer(next);
     setPreferred(next);
+  }
+
+  function commitView(next: ViewMemory, snap: boolean) {
+    setView(next);
+    writeStoredView(window.localStorage, next);
+    const search = writeViewSearch(window.location.search, next);
+    const nextUrl = `${window.location.pathname}${search}${window.location.hash}`;
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (nextUrl !== current) window.history.replaceState(window.history.state, "", nextUrl);
+    if (snap) setSnapId((id) => id + 1);
   }
 
   async function saveGlb() {
@@ -132,12 +176,31 @@ export function ModelPage({ model }: { model: CityModel }) {
     }
   }
 
+  async function savePng() {
+    setExportError(null);
+    setBusy("png");
+    try {
+      const exporter = exportRef.current;
+      if (!exporter) throw new Error("The 3D view is not ready.");
+      const blob = await exporter();
+      downloadBlob(pngFilename(model), blob);
+    } catch {
+      setExportError("The PNG image could not be written.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const figureFit = sheetFitMessage(model.sideM, figureScale);
   const useCounts = countUses(model.buildings);
   const sourceCounts = countSources(model.buildings);
   const hint =
     tab === "3d"
-      ? "Drag to orbit · scroll to zoom · right-drag to pan"
+      ? view.projection === "perspective"
+        ? "Drag to orbit · scroll to zoom · right-drag to pan"
+        : view.freeRotate
+          ? "Drag to orbit · scroll to zoom · right-drag to pan · not true isometric"
+          : "Drag to pan · scroll to zoom"
       : tab === "drawing"
         ? "Scroll to zoom · drag to pan · double-click to fit"
         : "Satellite preview of this frame. It is not saved in the glTF.";
@@ -146,17 +209,30 @@ export function ModelPage({ model }: { model: CityModel }) {
     <div className="model">
       <h1 className="sr-only">Your model is ready.</h1>
       <div className={tab === "drawing" ? "viewport is-drawing" : "viewport"}>
-        <div className="fill">
-          {tab === "3d" && (
-            <SceneBoundary>
-              <Scene3D model={model} uniformBuildings={!colourByUse && !showSource} colourBySource={showSource} />
-            </SceneBoundary>
-          )}
-          {tab === "drawing" && (
-            <DrawingPlan key={fitToken} model={model} kind={drawing} onScale={onScale} />
-          )}
-          {tab === "satellite" && <SatellitePane model={model} />}
+        <div className={tab === "3d" ? "fill" : "fill is-parked"}>
+          <SceneBoundary>
+            <Scene3D
+              model={model}
+              uniformBuildings={!colourByUse && !showSource}
+              colourBySource={showSource}
+              projection={view.projection}
+              corner={view.corner}
+              freeRotate={view.freeRotate}
+              snapId={snapId}
+              onExportReady={onExportReady}
+            />
+          </SceneBoundary>
         </div>
+        {tab === "drawing" && (
+          <div className="fill is-plan">
+            <DrawingPlan key={fitToken} model={model} kind={drawing} onScale={onScale} />
+          </div>
+        )}
+        {tab === "satellite" && (
+          <div className="fill">
+            <SatellitePane model={model} />
+          </div>
+        )}
         <div className="chrome model-chrome">
           <IconRail items={items} openId={open} onToggle={toggle} label="Model tools" drawerId={DRAWER_ID} />
           <Drawer id={DRAWER_ID} open={open !== null} title={TITLES[open ?? "summary"] ?? "Model details"} onClose={close}>
@@ -305,6 +381,61 @@ export function ModelPage({ model }: { model: CityModel }) {
                   </button>
                 ))}
               </div>
+              {tab === "3d" && (
+                <div className="projection-block">
+                  <p className="kicker">Projection</p>
+                  <div className="plan-switch" role="group" aria-label="Projection">
+                    <button
+                      type="button"
+                      aria-pressed={view.projection === "perspective"}
+                      onClick={() => commitView({ ...view, projection: "perspective" }, false)}
+                    >
+                      Perspective
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={view.projection === "iso"}
+                      onClick={() => commitView({ ...view, projection: "iso" }, false)}
+                    >
+                      Isometric
+                    </button>
+                  </div>
+                  {view.projection === "iso" && (
+                    <>
+                      <p className="kicker">Corner</p>
+                      <div className="plan-switch" role="group" aria-label="Isometric corner">
+                        {ISO_CORNERS.map((corner) => (
+                          <button
+                            key={corner}
+                            type="button"
+                            aria-pressed={view.corner === corner && !view.freeRotate}
+                            onClick={() => commitView({ projection: "iso", corner, freeRotate: false }, true)}
+                          >
+                            {CORNER_LABEL[corner]}
+                          </button>
+                        ))}
+                      </div>
+                      <label className="check-field">
+                        <input
+                          type="checkbox"
+                          checked={view.freeRotate}
+                          onChange={(event) => {
+                            const freeRotate = event.target.checked;
+                            commitView({ ...view, projection: "iso", freeRotate }, !freeRotate);
+                          }}
+                        />
+                        Free rotate (axonometric)
+                      </label>
+                      {view.freeRotate && (
+                        <p className="iso-warning">
+                          Free rotate is on, so this is no longer a true isometric view. Turn it off, or pick a
+                          corner, to lock the true angles again.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
               <div className="plan-switch" role="group" aria-label="Drawing type">
                 <button
                   type="button"
@@ -357,17 +488,24 @@ export function ModelPage({ model }: { model: CityModel }) {
                   </button>
                 </div>
               )}
-              {tab !== "drawing" && (
-                <p className="field-note">
-                  {tab === "3d"
-                    ? "The 3D model fills the screen. Orbit from the hint along the bottom."
-                    : "Satellite is a preview of this frame. It is not saved in the glTF."}
-                </p>
+              {tab === "satellite" && (
+                <p className="field-note">Satellite is a preview of this frame. It is not saved in the glTF.</p>
               )}
             </div>
 
             <div className="drawer-section" hidden={open !== "exports"}>
               <div className="exports">
+                <article className="card">
+                  <div>
+                    <h3>
+                      PNG image <span>.png</span>
+                    </h3>
+                    <p>The current 3D view, in perspective or isometric, at twice the canvas resolution.</p>
+                  </div>
+                  <button className="ghost" type="button" disabled={busy !== null} onClick={savePng}>
+                    {busy === "png" ? "Preparing…" : "Download"}
+                  </button>
+                </article>
                 <article className="card">
                   <div>
                     <h3>

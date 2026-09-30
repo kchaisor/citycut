@@ -28,6 +28,15 @@ describe("frameFromSearch", () => {
     expect(frameFromSearch("?lon=144.94944&km=1")).toEqual({ ...melbourne, sideKm: 1 });
   });
 
+  it("keeps a shared frame when a camera view param is also present", () => {
+    expect(frameFromSearch("?lat=-37.8041&lon=144.94944&km=1&label=North%20Melbourne&view=iso-sw")).toEqual({
+      view: { lat: -37.8041, lon: 144.94944, zoom: DEFAULT_ZOOM },
+      sideKm: 1,
+      label: "North Melbourne",
+    });
+    expect(frameFromSearch("?view=iso-ne")).toEqual(melbourne);
+  });
+
   it("keeps a valid shared frame, including a real 0,0", () => {
     expect(frameFromSearch("?lat=-37.8041&lon=144.94944&km=1")).toEqual({
       view: { lat: -37.8041, lon: 144.94944, zoom: DEFAULT_ZOOM },
