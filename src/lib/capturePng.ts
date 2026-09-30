@@ -10,11 +10,16 @@ export async function captureViewPng(
   scene: THREE.Scene,
   camera: THREE.Camera,
 ): Promise<Blob> {
+  // The on-screen clear colour comes from the theme. The PNG keeps the
+  // previous backdrop so a theme edit does not change the download.
+  const PNG_BACKGROUND = "#e7e4dc";
+  const previousBackground = scene.background;
   const sourceWidth = gl.domElement.width;
   const sourceHeight = gl.domElement.height;
   if (sourceWidth < 2 || sourceHeight < 2) {
     throw new Error("The 3D view is not on screen.");
   }
+  scene.background = new THREE.Color(PNG_BACKGROUND);
   const width = sourceWidth * 2;
   const height = sourceHeight * 2;
   const target = new THREE.WebGLRenderTarget(width, height, {
@@ -30,6 +35,7 @@ export async function captureViewPng(
     gl.render(scene, camera);
     gl.readRenderTargetPixels(target, 0, 0, width, height, pixels);
   } finally {
+    scene.background = previousBackground;
     gl.setRenderTarget(previous);
     target.dispose();
   }

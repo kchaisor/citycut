@@ -9,6 +9,7 @@ import {
   screenPx,
 } from "../lib/lineweights";
 import { planPaths, svgPolyline, svgRings } from "../lib/svgPlan";
+import { themeColor } from "../lib/themeColor";
 import type { CityModel } from "../types";
 
 type View = { x: number; y: number; w: number; h: number };
@@ -105,6 +106,7 @@ export function DrawingPlan({
   const arrowTip = -half - model.sideM * 0.055;
   const arrowBase = -half - model.sideM * 0.016;
   const head = model.sideM * 0.01;
+  const canvas = useMemo(() => themeColor("--drawing-bg", "#EBEBEB"), []);
 
   return (
     <svg
@@ -131,8 +133,8 @@ export function DrawingPlan({
         drag.current = null;
       }}
     >
-      <rect x={view.x} y={view.y} width={view.w} height={view.h} fill={figure ? "#fff" : "#e7e2d8"} />
-      <rect x={-half} y={-half} width={model.sideM} height={model.sideM} fill={figure ? "#fff" : "#f4f1ea"} />
+      <rect x={view.x} y={view.y} width={view.w} height={view.h} fill={canvas} />
+      <rect x={-half} y={-half} width={model.sideM} height={model.sideM} fill={canvas} />
       {figure ? (
         <>
           {figurePaths.map((d, index) => (

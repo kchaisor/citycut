@@ -7,6 +7,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { shotFromCamera, type CameraShot } from "../lib/cameraShot";
+import { themeColor } from "../lib/themeColor";
 import { captureViewPng } from "../lib/capturePng";
 import { flushControlInertia, holdControlPose } from "../lib/controlInertia";
 import {
@@ -446,9 +447,10 @@ export function Scene3D({
     boundsRef.current = bounds;
   }, []);
   const lift = model.terrain ? (model.terrain.min + model.terrain.max) / 2 : 0;
+  const modelBg = useMemo(() => themeColor("--model-bg", "#EBEBEB"), []);
   return (
     <Canvas className="scene-canvas" dpr={[1, 1.75]} gl={{ antialias: true, alpha: false }}>
-      <color attach="background" args={["#e7e4dc"]} />
+      <color attach="background" args={[modelBg]} />
       <hemisphereLight args={["#f7f4ee", "#c9c0b2", 0.7]} />
       <ambientLight intensity={0.28} />
       <directionalLight position={[model.sideM * 0.4, model.sideM, model.sideM * 0.2]} intensity={1.35} />

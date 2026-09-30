@@ -1,0 +1,62 @@
+/*
+  CityCut theme.
+  Kelvin: this is the only file you need for fonts and the main colours.
+  Each setting is a name on the left and a value on the right.
+  Change the value, keep the name. See THEME.md at the top of the project.
+*/
+
+:root {
+  /* The grey behind the whole app. The page, the header, the map surround, the 3D view, and the drawing all use this unless you give one of them its own colour below. */
+  --background: #EBEBEB;
+
+  /* Colour of the page itself, behind the header and the map. */
+  --page-bg: var(--background);
+
+  /* Landing page header, and the bar across the top of the model. */
+  --landing-bg: var(--background);
+
+  /* Colour behind the map while the streets are still loading. */
+  --map-bg: var(--background);
+
+  /* Sky colour of the 3D model. The model reads this when it opens. Downloads do not use it. */
+  --model-bg: var(--background);
+
+  /* On-screen site plan and figure-ground. The downloaded drawing files do not use it. */
+  --drawing-bg: var(--background);
+
+  /* Fill of drawers, panels, and cards. Near-white so they sit clearly on the grey page. */
+  --panel-bg: #FFFCF8;
+
+  /* Line around panels, cards, inputs, and the header. Dark enough to show on the grey page. */
+  --panel-border: #C8C8C8;
+
+  /* Main text, icons, and the Create model button. */
+  --text: #1A1916;
+
+  /* Notes, credits, labels, and other secondary text. */
+  --muted-text: #6E685E;
+
+  /* Font for buttons, labels, and body text. Outfit is already loaded. Avenir Next, Segoe UI, and sans-serif are safe fallbacks. */
+  --font-sans: "Outfit", "Avenir Next", "Segoe UI", sans-serif;
+
+  /* Font for the large “Your model is ready” title. Fraunces is already loaded. Georgia is the safe fallback. */
+  --font-serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+
+  /* Size of ordinary text. */
+  --font-size: 15px;
+
+  /* Size of the CityCut name in the top bar. */
+  --font-size-brand: 18px;
+
+  /* Size of a drawer title, such as “Exports” or “Drawing”. */
+  --font-size-drawer: 15px;
+
+  /* Size of an export card title, such as “Site plan”. */
+  --font-size-card: 16px;
+
+  /* Size of the big numbers in the model summary. */
+  --font-size-stat: 22px;
+
+  /* Size of the large title in the model summary. */
+  --font-size-title: 28px;
+}
