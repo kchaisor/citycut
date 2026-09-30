@@ -19,7 +19,6 @@ import type {
 } from "../types";
 
 const MAX_BUILDINGS = 4000;
-const MAX_TREES = 6000;
 const MAX_RELATION_MEMBERS = 80;
 const MIN_AREA = 4;
 
@@ -298,6 +297,7 @@ function pushTree(trees: TreeFeat[], id: number, at: Pt, tags: Record<string, st
     ...(leafType ? { leafType } : {}),
     ...(leafCycle ? { leafCycle } : {}),
     archetype: resolveArchetype({ genus, species, taxon, leafType, leafCycle }),
+    tier: "osm",
   });
 }
 
@@ -402,6 +402,98 @@ function relationRings(
   return { outers, inners, used };
 }
 
+export type CanopyKind = "wood" | "forest" | "scrub";
+
+export type CanopyPatch = {
+  ring: Pt[];
+  holes: Pt[][];
+  kind: CanopyKind;
+};
+
+export type TreeContext = {
+  canopy: CanopyPatch[];
+  buildings: { ring: Pt[]; holes: Pt[][] }[];
+  water: { ring: Pt[]; holes: Pt[][] }[];
+  roads: { line: Pt[]; width: number }[];
+};
+
+function canopyKind(tags: Record<string, string>): CanopyKind | null {
+  if (tags.natural === "scrub") return "scrub";
+  if (tags.natural === "wood") return "wood";
+  if (tags.landuse === "forest") return "forest";
+  return null;
+}
+
+/** Canopy polygons and the masks that keep infill off roads, buildings, and water. */
+export function collectTreeContext(elements: OverpassElement[], origin: LonLat, half: number): TreeContext {
+  const canopy: CanopyPatch[] = [];
+  const buildings: TreeContext["buildings"] = [];
+  const water: TreeContext["water"] = [];
+  const roads: TreeContext["roads"] = [];
+  const consumed = new Set<number>();
+
+  for (const element of elements) {
+    if (element.type !== "relation") continue;
+    const tags = element.tags ?? {};
+    const kind = canopyKind(tags);
+    const buildingRel = Boolean(tags.building && tags.building !== "no" && tags.building !== "entrance");
+    const waterRel = areaKind(tags) === "water";
+    if (!kind && !buildingRel && !waterRel) continue;
+    const stitched = relationRings(element, origin);
+    if (!stitched) continue;
+    const rings = stitchRings(stitched.outers);
+    const holes = rings.length === 1 ? stitchRings(stitched.inners) : [];
+    if (rings.length === 0) continue;
+    for (const ref of stitched.used) consumed.add(ref);
+    for (const ring of rings) {
+      const clipped = clipRing(ring, half);
+      if (clipped.length < 3) continue;
+      const clippedHoles = holes.map((hole) => clipRing(hole, half)).filter((hole) => hole.length >= 3);
+      if (kind) canopy.push({ ring: clipped, holes: clippedHoles, kind });
+      else if (buildingRel) buildings.push({ ring: clipped, holes: clippedHoles });
+      else water.push({ ring: clipped, holes: clippedHoles });
+    }
+  }
+
+  for (const element of elements) {
+    if (element.type !== "way" || consumed.has(element.id)) continue;
+    const tags = element.tags ?? {};
+    if (hidden(tags)) continue;
+    const line = pointsFromGeom(element.geometry, origin);
+    if (line.length < 2) continue;
+    const kind = canopyKind(tags);
+    if (kind && isClosed(line)) {
+      const clipped = clipRing(line, half);
+      if (clipped.length >= 3) canopy.push({ ring: clipped, holes: [], kind });
+      continue;
+    }
+    if (
+      tags.building &&
+      tags.building !== "no" &&
+      tags.building !== "entrance" &&
+      !tags["building:part"] &&
+      isClosed(line)
+    ) {
+      const clipped = clipRing(line, half);
+      if (clipped.length >= 3) buildings.push({ ring: clipped, holes: [] });
+      continue;
+    }
+    if (areaKind(tags) === "water" && isClosed(line)) {
+      const clipped = clipRing(line, half);
+      if (clipped.length >= 3) water.push({ ring: clipped, holes: [] });
+      continue;
+    }
+    const spec = roadWidth(tags);
+    if (!spec) continue;
+    for (const part of clipPolyline(line, -half, half)) {
+      if (polylineLength(part) < 1) continue;
+      roads.push({ line: part, width: spec.width });
+    }
+  }
+
+  return { canopy, buildings, water, roads };
+}
+
 export function parseCity(
   data: OverpassResponse,
   origin: LonLat,
@@ -414,17 +506,7 @@ export function parseCity(
   const areas: AreaFeat[] = [];
   const consumedWays = new Set<number>();
   const elements = data.elements ?? [];
-  let trees = layers.trees ? collectTrees(elements, origin, half) : [];
-  let treeCapHit = false;
-  if (trees.length > MAX_TREES) {
-    treeCapHit = true;
-    const step = trees.length / MAX_TREES;
-    const kept: TreeFeat[] = [];
-    for (let i = 0; i < MAX_TREES; i++) {
-      kept.push(trees[Math.min(trees.length - 1, Math.floor(i * step))]);
-    }
-    trees = kept;
-  }
+  const trees = layers.trees ? collectTrees(elements, origin, half) : [];
 
   if (layers.buildings || layers.waterGreen) {
     for (const element of elements) {
@@ -518,7 +600,6 @@ export function parseCity(
   ];
   if (layers.trees) notes.push(describeTrees(trees));
   if (buildingCapHit) notes.push(`Building count was capped at ${MAX_BUILDINGS}.`);
-  if (treeCapHit) notes.push(`Tree count was capped at ${MAX_TREES}.`);
 
   return {
     center: origin,

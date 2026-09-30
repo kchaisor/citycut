@@ -20,7 +20,7 @@ import { fromLocal } from "./geo";
 import { buildOverpassQuery, overpassBBox } from "./overpass";
 import { parseCity } from "./parseOsm";
 import { sitePlanSvg } from "./svgPlan";
-import { applyComTreeSizes } from "./comTrees";
+import { applyComTreeSizes, comRecordsToTrees } from "./comTrees";
 import { DEFAULT_CROWN_DIAMETER, DEFAULT_TREE_HEIGHT, heightFromDbhCm, treeSize } from "./trees";
 import type { CityModel, Pt } from "../types";
 
@@ -94,12 +94,25 @@ describe("tree size", () => {
     expect(young.crown_diameter_m).toBeCloseTo(8 * 0.55);
   });
 
-  it("clamps absurd tags", () => {
+  it("clamps absurd tags and lifts a needle crown toward the archetype", () => {
     const sized = treeSize({ height: "400", diameter_crown: "0.2" });
     expect(sized.height_m).toBe(40);
-    expect(sized.crown_diameter_m).toBe(1);
+    expect(sized.crown_diameter_m).toBeCloseTo(12);
+    expect(sized.crown_diameter_m).toBeLessThanOrEqual(40 * 1.4);
+    expect(sized.crown_diameter_m).toBeLessThanOrEqual(25);
+    expect(sized.crown_diameter_m).toBeGreaterThanOrEqual(1);
     expect(sized.trunk_diameter_m).toBeGreaterThanOrEqual(0.05);
     expect(sized.trunk_diameter_m).toBeLessThanOrEqual(2);
+
+    const gum = treeSize({ species: "Corymbia maculata", height: "36", diameter_crown: "1" });
+    expect(gum.height_m).toBe(36);
+    expect(gum.crown_diameter_m / gum.height_m).toBeGreaterThanOrEqual(8 / 18 * 0.5 - 0.001);
+    expect(gum.crown_diameter_m).toBeLessThanOrEqual(36 * 1.4);
+    expect(gum.crown_diameter_m).toBeGreaterThan(1);
+
+    const wide = treeSize({ height: "10", diameter_crown: "30" });
+    expect(wide.crown_diameter_m).toBeCloseTo(14);
+    expect(wide.crown_diameter_m).toBeLessThanOrEqual(wide.height_m * 1.4);
   });
 
   it("reads centimetre trunk tags instead of stretching the tree to the height cap", () => {
@@ -179,6 +192,31 @@ describe("City of Melbourne match", () => {
     expect(sized[0].archetype).toBe("gum-broad");
     expect(sized[1].sizeSource).toBe("osm");
     expect(sized[1].height_m).toBe(22);
+  });
+
+  it("places an inventory record as its own tree from species and DBH", () => {
+    const at = fromLocal([12, -6], origin);
+    const trees = comRecordsToTrees(
+      [
+        {
+          lat: at.lat,
+          lon: at.lon,
+          dbh_cm: 40,
+          age: "Mature",
+          genus: "Eucalyptus",
+          scientific: "Eucalyptus camaldulensis",
+        },
+      ],
+      origin,
+      100,
+    );
+    expect(trees).toHaveLength(1);
+    expect(trees[0].tier).toBe("com");
+    expect(trees[0].archetype).toBe("gum-broad");
+    expect(trees[0].sizeSource).toBe("com");
+    expect(trees[0].trunk_diameter_m).toBeCloseTo(0.4);
+    expect(trees[0].at[0]).toBeCloseTo(12);
+    expect(trees[0].at[1]).toBeCloseTo(-6);
   });
 });
 
@@ -292,7 +330,7 @@ describe("tree parse", () => {
     expect(row[0].crown_diameter_m).toBe(8);
   });
 
-  it("caps a very large tree set", () => {
+  it("keeps every OpenStreetMap tree for the later tier cap", () => {
     const at = fromLocal([0, 0], origin);
     const elements = Array.from({ length: 6001 }, (_, index) => ({
       type: "node" as const,
@@ -302,8 +340,9 @@ describe("tree parse", () => {
       tags: { natural: "tree" },
     }));
     const parsed = parseCity({ elements }, origin, 200, layersOn);
-    expect(parsed.trees).toHaveLength(6000);
-    expect(parsed.sourceNote).toContain("capped at 6000");
+    expect(parsed.trees).toHaveLength(6001);
+    expect(parsed.trees[0].tier).toBe("osm");
+    expect(parsed.sourceNote).not.toContain("capped");
   });
 });
 
@@ -312,7 +351,12 @@ describe("tree query", () => {
     const on = buildOverpassQuery(bbox, layersOn);
     expect(on).toContain('node["natural"="tree"]');
     expect(on).toContain('way["natural"="tree_row"]');
-    expect(on).not.toContain("highway");
+    expect(on).toContain('way["natural"="wood"]');
+    expect(on).toContain('way["landuse"="forest"]');
+    expect(on).toContain('way["natural"="scrub"]');
+    expect(on).toContain('relation["natural"="scrub"]');
+    expect(on).toContain("highway");
+    expect(on).toContain('way["building"]');
     const off = buildOverpassQuery(bbox, {
       buildings: true,
       roads: false,

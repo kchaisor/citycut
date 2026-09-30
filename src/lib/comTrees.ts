@@ -1,6 +1,6 @@
 import { toLocal } from "./geo";
 import { resolveArchetype } from "./treeMap";
-import { ageFactor, treeSize, type ComMeasure } from "./trees";
+import { ageFactor, logDroppedTreeValues, treeSize, type ComMeasure } from "./trees";
 import type { LonLat, TreeFeat } from "../types";
 
 /**
@@ -60,7 +60,7 @@ async function readPage(
   where: string,
   offset: number,
   signal?: AbortSignal,
-): Promise<{ total: number; rows: ComTree[] }> {
+): Promise<{ total: number; rows: ComTree[]; dropped: number }> {
   const url = new URL(ENDPOINT);
   url.searchParams.set("limit", String(PAGE));
   url.searchParams.set("offset", String(offset));
@@ -72,8 +72,16 @@ async function readPage(
   const response = await fetch(url, { signal, headers: { Accept: "application/json" } });
   if (!response.ok) throw new Error(`City of Melbourne tree records answered ${response.status}.`);
   const json = (await response.json()) as { total_count?: number; results?: ApiRow[] };
-  const rows = (json.results ?? []).map(parseRow).filter((row): row is ComTree => row !== null);
-  return { total: json.total_count ?? rows.length, rows };
+  let dropped = 0;
+  const rows: ComTree[] = [];
+  for (const row of json.results ?? []) {
+    const dbh = row.diameter_breast_height;
+    if (typeof dbh === "number" && !(dbh > 0)) dropped += 1;
+    const parsed = parseRow(row);
+    if (!parsed) dropped += 1;
+    else rows.push(parsed);
+  }
+  return { total: json.total_count ?? rows.length, rows, dropped };
 }
 
 /** Trees inside the frame. An empty list outside the City of Melbourne, or when the request fails upstream. */
@@ -82,15 +90,54 @@ export async function fetchComTrees(bounds: BBox, signal?: AbortSignal): Promise
   const where = `latitude>=${bounds.south.toFixed(6)} AND latitude<=${bounds.north.toFixed(6)} AND longitude>=${bounds.west.toFixed(6)} AND longitude<=${bounds.east.toFixed(6)}`;
   const first = await readPage(where, 0, signal);
   const rows = first.rows.slice();
+  let dropped = first.dropped;
   const total = Math.min(first.total, MAX_RECORDS);
   const offsets: number[] = [];
   for (let offset = PAGE; offset < total; offset += PAGE) offsets.push(offset);
   const concurrency = 4;
   for (let i = 0; i < offsets.length; i += concurrency) {
     const pages = await Promise.all(offsets.slice(i, i + concurrency).map((offset) => readPage(where, offset, signal)));
-    for (const page of pages) rows.push(...page.rows);
+    for (const page of pages) {
+      rows.push(...page.rows);
+      dropped += page.dropped;
+    }
   }
+  logDroppedTreeValues(dropped, "City of Melbourne");
   return rows;
+}
+
+/**
+ * Inventory rows become trees. The dataset is the City of Melbourne urban forest,
+ * so a record is already inside that boundary. Crown and height are not published;
+ * species, DBH, and age size the archetype.
+ */
+export function comRecordsToTrees(records: ComTree[], origin: LonLat, half: number): TreeFeat[] {
+  const trees: TreeFeat[] = [];
+  records.forEach((record, index) => {
+    if (!Number.isFinite(record.lat) || !Number.isFinite(record.lon)) return;
+    const at = toLocal(record.lat, record.lon, origin);
+    if (Math.abs(at[0]) > half + 0.2 || Math.abs(at[1]) > half + 0.2) return;
+    const genus = record.genus ?? undefined;
+    const species = record.scientific ?? undefined;
+    const archetype = resolveArchetype({ genus, species });
+    const sized = treeSize(
+      {
+        ...(genus ? { genus } : {}),
+        ...(species ? { species } : {}),
+      },
+      { dbh_cm: record.dbh_cm, age: record.age },
+    );
+    trees.push({
+      id: index + 1,
+      at,
+      ...sized,
+      tier: "com",
+      archetype,
+      ...(genus ? { genus } : {}),
+      ...(species ? { species } : {}),
+    });
+  });
+  return trees;
 }
 
 function genusOf(value: string | null | undefined): string {

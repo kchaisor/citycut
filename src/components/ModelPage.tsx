@@ -11,7 +11,8 @@ import { CRS_NOTE, mgaCrs } from "../lib/crs";
 import { formatCoord, formatLengthKm } from "../lib/geo";
 import { download3dm, downloadGlb, downloadSvg } from "../lib/download";
 import { BUILDINGS_LEGEND_COLLAPSED_KEY, TREES_LEGEND_COLLAPSED_KEY } from "../lib/panelCollapse";
-import { treeSizeSummary } from "../lib/trees";
+import { treeSizeSummary, treeTierCounts } from "../lib/trees";
+import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import type { CityModel } from "../types";
 import { CollapsiblePanel } from "./CollapsiblePanel";
 import { DrawingPlan } from "./DrawingPlan";
@@ -29,6 +30,7 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [showSource, setShowSource] = useState(false);
   const crs = mgaCrs(model.center.lon);
   const sideKm = model.sideM / 1000;
+  const tierCounts = treeTierCounts(model.trees);
   const layerBits = [
     model.layers.buildings ? "buildings" : null,
     model.layers.roads ? "roads and rail" : null,
@@ -178,7 +180,28 @@ export function ModelPage({ model }: { model: CityModel }) {
                   className="tree-sizes"
                   ariaLabel="Tree sizes"
                 >
+                  <ul className="tree-tiers">
+                    {(
+                      [
+                        ["com", "City of Melbourne"],
+                        ["osm", "OpenStreetMap"],
+                        ["vicmap", "Vicmap"],
+                        ["canopy", "Canopy infill"],
+                      ] as const
+                    ).map(([tier, label]) => (
+                      <li key={tier}>
+                        <span>{label}</span>
+                        <b>{tierCounts[tier].toLocaleString()}</b>
+                      </li>
+                    ))}
+                  </ul>
                   <p className="tree-readout">{treeSizeSummary(model.trees)}</p>
+                  {model.treeCapHit && (
+                    <p className="legend-note">
+                      Tree count was capped at 8,000. Canopy infill was trimmed first, then Vicmap.
+                    </p>
+                  )}
+                  {tierCounts.vicmap > 0 && <p className="tree-credit">{VICMAP_ATTRIBUTION}</p>}
                 </CollapsiblePanel>
               )}
               {model.layers.buildings && model.buildings.length > 0 && (
@@ -312,6 +335,16 @@ export function ModelPage({ model }: { model: CityModel }) {
               {" "}
               Terrain{" "}
               <a href="https://mapterhorn.com/attribution">© Mapterhorn</a>.
+            </>
+          )}
+          {tierCounts.vicmap > 0 && (
+            <>
+              {" "}
+              <a href="https://discover.data.vic.gov.au/dataset/vicmap-vegetation-tree-urban-point">
+                Vicmap Vegetation Tree Urban
+              </a>{" "}
+              © State of Victoria (Department of Transport and Planning),{" "}
+              <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.
             </>
           )}{" "}
           CityCut · Kelvin Chai.
