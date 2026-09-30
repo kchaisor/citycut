@@ -1,7 +1,7 @@
 import type { LonLat, TerrainField } from "../types";
+import { decodeTerrariumWebp } from "./decodeWebp";
 import {
   TERRAIN_UNAVAILABLE,
-  decodeTerrarium,
   heightFieldFromTiles,
   preferredTerrainZoom,
   terrainFetchBBox,
@@ -9,26 +9,6 @@ import {
   tilesForBBox,
   type DecodedTile,
 } from "./terrain";
-
-async function decodeWebp(blob: Blob): Promise<{ width: number; height: number; heights: Float32Array }> {
-  const bitmap = await createImageBitmap(blob);
-  try {
-    const canvas = document.createElement("canvas");
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    if (!context) throw new Error(TERRAIN_UNAVAILABLE);
-    context.drawImage(bitmap, 0, 0);
-    const image = context.getImageData(0, 0, bitmap.width, bitmap.height);
-    return {
-      width: image.width,
-      height: image.height,
-      heights: decodeTerrarium(image.data, image.width, image.height),
-    };
-  } finally {
-    bitmap.close();
-  }
-}
 
 /** null means this zoom has no coverage (HTTP 404) and the caller should step down. */
 async function loadZoom(
@@ -44,7 +24,7 @@ async function loadZoom(
       const response = await fetch(terrainTileUrl(zoom, x, y), { signal });
       if (response.status === 404) return null;
       if (!response.ok) throw new Error(TERRAIN_UNAVAILABLE);
-      const decoded = await decodeWebp(await response.blob());
+      const decoded = await decodeTerrariumWebp(await response.arrayBuffer());
       return { x, y, ...decoded };
     }),
   );

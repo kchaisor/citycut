@@ -9,7 +9,7 @@ export default defineConfig({
     port: 5173,
   },
   optimizeDeps: {
-    exclude: ["rhino3dm"],
+    exclude: ["rhino3dm", "@jsquash/webp"],
   },
   test: {
     environment: "node",

@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import * as THREE from "three";
 import { buildCityGroup, disposeObject } from "./buildCity";
 import { SURFACE } from "./surfaceLayers";
 import { sitePlanSvg } from "./svgPlan";
 import {
+  clampHeightOutliers,
   contourInterval,
   contourLevels,
   contourLines,
@@ -14,6 +15,9 @@ import {
   metresPerPixel,
   preferredTerrainZoom,
   sampleTerrain,
+  TERRAIN_ELEVATION_MAX_M,
+  TERRAIN_ELEVATION_MIN_M,
+  TERRAIN_SPIKE_M,
   terrariumHeight,
   terrainBuffers,
   TERRAIN_TILE_SIZE,
@@ -39,6 +43,122 @@ describe("terrarium decoding", () => {
     const heights = decodeTerrarium(rgba, 2, 1);
     expect(heights[0]).toBe(0);
     expect(heights[1]).toBe(10);
+  });
+
+  it("turns one noised red byte into a 256 m spike before the filter", () => {
+    const rgba = new Uint8ClampedArray(5 * 5 * 4);
+    for (let i = 0; i < 25; i++) {
+      rgba[i * 4] = 128;
+      rgba[i * 4 + 1] = 20;
+      rgba[i * 4 + 2] = 0;
+      rgba[i * 4 + 3] = 255;
+    }
+    rgba[(2 * 5 + 2) * 4] = 128 ^ 1;
+    const heights = decodeTerrarium(rgba, 5, 5);
+    expect(heights[12]).toBeCloseTo(276, 5);
+    const counts = clampHeightOutliers(heights, 5, 5);
+    expect(counts.spikes).toBe(1);
+    expect(counts.clamped).toBe(0);
+    for (const height of heights) expect(height).toBeCloseTo(20, 5);
+  });
+});
+
+describe("elevation outliers", () => {
+  it("removes isolated ±256 m and ±512 m needles and keeps a plane", () => {
+    const cols = 9;
+    const rows = 7;
+    const heights = new Float32Array(cols * rows);
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) heights[row * cols + col] = col * 4;
+    }
+    const at = (col: number, row: number) => row * cols + col;
+    heights[at(2, 1)] = 8 + 256;
+    heights[at(2, 5)] = 8 - 256;
+    heights[at(6, 3)] = 24 + 512;
+    const counts = clampHeightOutliers(heights, cols, rows);
+    expect(counts.spikes).toBe(3);
+    expect(heights[at(2, 1)]).toBeCloseTo(8, 5);
+    expect(heights[at(2, 5)]).toBeCloseTo(8, 5);
+    expect(heights[at(6, 3)]).toBeCloseTo(24, 5);
+    for (let col = 0; col < cols; col++) {
+      expect(heights[at(col, 0)]).toBeCloseTo(col * 4, 5);
+      expect(heights[at(col, 6)]).toBeCloseTo(col * 4, 5);
+    }
+  });
+
+  it("keeps a modest bump and a real slope, and drops a single vertex past the threshold", () => {
+    const gentle = Float32Array.of(10, 10, 10, 10, 10 + 14, 10, 10, 10, 10);
+    expect(clampHeightOutliers(gentle, 3, 3)).toEqual({ spikes: 0, clamped: 0 });
+    expect(gentle[4]).toBe(24);
+
+    const slope = new Float32Array(5 * 3);
+    for (let row = 0; row < 3; row++) {
+      for (let col = 0; col < 5; col++) slope[row * 5 + col] = col * 12;
+    }
+    expect(clampHeightOutliers(slope, 5, 3)).toEqual({ spikes: 0, clamped: 0 });
+    expect(slope[4]).toBe(48);
+
+    const steep = new Float32Array(5 * 3);
+    for (let row = 0; row < 3; row++) {
+      for (let col = 0; col < 5; col++) steep[row * 5 + col] = col * 40;
+    }
+    clampHeightOutliers(steep, 5, 3);
+    expect(steep[5 + 2]).toBe(80);
+
+    const needle = Float32Array.of(10, 10, 10, 10, 10 + TERRAIN_SPIKE_M + 1, 10, 10, 10, 10);
+    expect(clampHeightOutliers(needle, 3, 3).spikes).toBe(1);
+    expect(needle[4]).toBe(10);
+  });
+
+  it("floors a smooth hollow at the Victorian minimum without calling it a spike", () => {
+    const hollow = new Float32Array(4 * 4).fill(-80);
+    const counts = clampHeightOutliers(hollow, 4, 4);
+    expect(counts.spikes).toBe(0);
+    expect(counts.clamped).toBe(16);
+    for (const height of hollow) expect(height).toBe(TERRAIN_ELEVATION_MIN_M);
+    const peak = new Float32Array(3 * 3).fill(TERRAIN_ELEVATION_MAX_M + 40);
+    expect(clampHeightOutliers(peak, 3, 3).clamped).toBe(9);
+    expect(peak[4]).toBe(TERRAIN_ELEVATION_MAX_M);
+  });
+
+  it("does not let noised tile pixels into the heightfield or the mesh", () => {
+    const zoom = 14;
+    const pixel = webMercatorPixel(melbourne.lon, melbourne.lat, zoom);
+    const tileHeights = new Float32Array(TERRAIN_TILE_SIZE * TERRAIN_TILE_SIZE).fill(20);
+    let planted = 0;
+    for (let row = 2; row < TERRAIN_TILE_SIZE - 2; row += 4) {
+      for (let col = 2; col < TERRAIN_TILE_SIZE - 2; col += 4) {
+        tileHeights[row * TERRAIN_TILE_SIZE + col] = row % 8 === 2 ? 20 + 256 : 20 - 256;
+        planted += 1;
+      }
+    }
+    const tile: DecodedTile = {
+      x: Math.floor(pixel.x / TERRAIN_TILE_SIZE),
+      y: Math.floor(pixel.y / TERRAIN_TILE_SIZE),
+      width: TERRAIN_TILE_SIZE,
+      height: TERRAIN_TILE_SIZE,
+      heights: tileHeights,
+    };
+    const spy = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const field = heightFieldFromTiles([tile], melbourne, 400, zoom);
+      expect(field.max).toBeLessThan(30);
+      expect(field.min).toBeGreaterThan(10);
+      const buffers = terrainBuffers(field, 400);
+      let maxY = -Infinity;
+      let minY = Infinity;
+      for (let i = 1; i < buffers.positions.length; i += 3) {
+        maxY = Math.max(maxY, buffers.positions[i]);
+        minY = Math.min(minY, buffers.positions[i]);
+      }
+      expect(maxY).toBeLessThan(30);
+      expect(minY).toBeGreaterThan(10);
+      const logged = spy.mock.calls.map((call) => String(call[0])).join(" ");
+      expect(logged).toContain(String(planted));
+      expect(logged).toContain("neighbourhood median");
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
