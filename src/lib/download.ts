@@ -1,8 +1,12 @@
-import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
-import { buildCityGroup, disposeObject } from "./buildCity";
-import { figureGroundPdf, figureGroundSvg } from "./figureGround";
-import { sitePlanSvg } from "./svgPlan";
+import { figureGroundAi, sitePlanAi } from "./aiPlan";
+import { viewAi, type ViewStyle } from "./aiView";
+import type { CameraShot } from "./cameraShot";
 import type { CityModel } from "../types";
+
+/** Downloads the drawer still offers. glTF, SVG, and figure-ground PDF are gone. */
+export const EXPORT_IDS = ["png", "3dm", "ai-view", "ai-site", "ai-figure"] as const;
+
+export type ExportId = (typeof EXPORT_IDS)[number];
 
 export function fileStem(model: CityModel): string {
   const lat = `${Math.abs(model.center.lat).toFixed(4)}${model.center.lat < 0 ? "S" : "N"}`;
@@ -12,6 +16,13 @@ export function fileStem(model: CityModel): string {
 
 export function pngFilename(model: CityModel): string {
   return `${fileStem(model)}.png`;
+}
+
+export function aiFilename(model: CityModel, kind: "view" | "site" | "figure", scale?: number): string {
+  const stem = fileStem(model);
+  if (kind === "view") return `${stem}-view.ai`;
+  if (kind === "site") return `${stem}-site-1-${scale}.ai`;
+  return `${stem}-figure-ground-1-${scale}.ai`;
 }
 
 export function downloadBlob(filename: string, blob: Blob) {
@@ -25,59 +36,29 @@ export function downloadBlob(filename: string, blob: Blob) {
   URL.revokeObjectURL(url);
 }
 
+function downloadBytes(filename: string, bytes: Uint8Array, type: string) {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  downloadBlob(filename, new Blob([copy], { type }));
+}
+
 export async function download3dm(model: CityModel): Promise<void> {
   const { cityModelTo3dm } = await import("./rhinoExport");
   const bytes = await cityModelTo3dm(model);
-  const copy = new Uint8Array(bytes.byteLength);
-  copy.set(bytes);
-  downloadBlob(`${fileStem(model)}.3dm`, new Blob([copy], { type: "application/octet-stream" }));
+  downloadBytes(`${fileStem(model)}.3dm`, bytes, "application/octet-stream");
 }
 
-export function downloadSvg(model: CityModel) {
-  const svg = sitePlanSvg(model);
-  downloadBlob(
-    `${fileStem(model)}.svg`,
-    new Blob([svg], { type: "image/svg+xml;charset=utf-8" }),
-  );
+export async function downloadSiteAi(model: CityModel, scale: number): Promise<void> {
+  const bytes = await sitePlanAi(model, scale);
+  downloadBytes(aiFilename(model, "site", scale), bytes, "application/pdf");
 }
 
-export function figureGroundStem(model: CityModel, scale: number, extension: "svg" | "pdf"): string {
-  return `${fileStem(model)}-figure-ground-1-${scale}.${extension}`;
+export async function downloadFigureAi(model: CityModel, scale: number): Promise<void> {
+  const bytes = await figureGroundAi(model, scale);
+  downloadBytes(aiFilename(model, "figure", scale), bytes, "application/pdf");
 }
 
-/** True-scale figure-ground sheet. A variant of the site-plan SVG, on A3 when the frame fits. */
-export function downloadFigureGround(model: CityModel, scale: number, extension: "svg" | "pdf") {
-  const name = figureGroundStem(model, scale, extension);
-  if (extension === "svg") {
-    downloadBlob(name, new Blob([figureGroundSvg(model, scale)], { type: "image/svg+xml;charset=utf-8" }));
-    return;
-  }
-  const bytes = figureGroundPdf(model, scale);
-  const copy = new Uint8Array(bytes.byteLength);
-  copy.set(bytes);
-  downloadBlob(name, new Blob([copy], { type: "application/pdf" }));
-}
-
-export async function downloadGlb(model: CityModel): Promise<void> {
-  const group = buildCityGroup(model);
-  try {
-    const exporter = new GLTFExporter();
-    const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-      exporter.parse(
-        group,
-        (result) => {
-          if (result instanceof ArrayBuffer) resolve(result);
-          else reject(new Error("CityCut expected a binary glTF."));
-        },
-        (error) => reject(error),
-        { binary: true },
-      );
-    });
-    downloadBlob(
-      `${fileStem(model)}.glb`,
-      new Blob([buffer], { type: "model/gltf-binary" }),
-    );
-  } finally {
-    disposeObject(group);
-  }
+export async function downloadViewAi(model: CityModel, shot: CameraShot, style: ViewStyle): Promise<void> {
+  const bytes = await viewAi(model, shot, style);
+  downloadBytes(aiFilename(model, "view"), bytes, "application/pdf");
 }

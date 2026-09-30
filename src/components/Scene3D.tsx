@@ -6,6 +6,7 @@ import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
+import { shotFromCamera, type CameraShot } from "../lib/cameraShot";
 import { captureViewPng } from "../lib/capturePng";
 import { flushControlInertia, holdControlPose } from "../lib/controlInertia";
 import {
@@ -22,7 +23,10 @@ import {
 import type { ProjectionMode } from "../lib/viewMemory";
 import type { CityModel } from "../types";
 
-export type PngExporter = () => Promise<Blob>;
+export type SceneExporter = {
+  png: () => Promise<Blob>;
+  shot: () => CameraShot;
+};
 
 type FiberCamera = (THREE.OrthographicCamera | THREE.PerspectiveCamera) & { manual?: boolean };
 
@@ -296,12 +300,15 @@ function HoldPoseWhenInactive({
   return null;
 }
 
-function ExportBridge({ onExportReady }: { onExportReady: (exporter: PngExporter | null) => void }) {
+function ExportBridge({ onExportReady }: { onExportReady: (exporter: SceneExporter | null) => void }) {
   const gl = useThree((state) => state.gl);
   const scene = useThree((state) => state.scene);
   const get = useThree((state) => state.get);
   useLayoutEffect(() => {
-    onExportReady(() => captureViewPng(gl, scene, get().camera));
+    onExportReady({
+      png: () => captureViewPng(gl, scene, get().camera),
+      shot: () => shotFromCamera(get().camera, gl.domElement.clientWidth, gl.domElement.clientHeight),
+    });
     return () => onExportReady(null);
   }, [gl, scene, get, onExportReady]);
   return null;
@@ -324,7 +331,7 @@ function Cameras({
   freeRotate: boolean;
   snapId: number;
   boundsRef: RefObject<Aabb | null>;
-  onExportReady: (exporter: PngExporter | null) => void;
+  onExportReady: (exporter: SceneExporter | null) => void;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
@@ -432,7 +439,7 @@ export function Scene3D({
   corner: IsoCorner;
   freeRotate: boolean;
   snapId: number;
-  onExportReady: (exporter: PngExporter | null) => void;
+  onExportReady: (exporter: SceneExporter | null) => void;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {

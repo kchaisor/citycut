@@ -5,7 +5,7 @@ import { clipPolygon, clipSegment } from "./clip";
 import { fromLocal, squareBBox, toLocal } from "./geo";
 import { buildingHeight } from "./height";
 import { parseCity, stitchRings } from "./parseOsm";
-import { sitePlanSvg } from "./svgPlan";
+import { planPaths } from "./svgPlan";
 import type { CityModel, Pt } from "../types";
 
 const origin = { lon: 144.9631, lat: -37.8136 };
@@ -324,11 +324,11 @@ describe("exports", () => {
     sourceNote: "test",
   };
 
-  it("writes an svg plan with building and road geometry", () => {
-    const svg = sitePlanSvg(model);
-    expect(svg).toContain("<path");
-    expect(svg).toContain("OpenStreetMap");
-    expect(svg).toContain("evenodd");
+  it("keeps building footprints and road edges for the plan", () => {
+    const plan = planPaths(model);
+    expect(plan.buildings.length).toBeGreaterThan(0);
+    expect(plan.roadEdges.length).toBeGreaterThan(0);
+    expect(plan.buildings[0].rings[0].length).toBeGreaterThan(2);
   });
 
   it("extrudes a building mesh above the ground", () => {

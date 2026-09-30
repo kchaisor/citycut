@@ -4,8 +4,6 @@ import {
   A3_LONG_MM,
   A3_SHORT_MM,
   figureGround,
-  figureGroundPdf,
-  figureGroundSvg,
   layoutSheet,
   maxFrameMm,
   paperMillimetres,
@@ -13,8 +11,8 @@ import {
   scaleBarMetres,
   sheetFitMessage,
 } from "./figureGround";
-import { mmToPt } from "./pdfSheet";
-import type { BuildingFeat, CityModel, Pt } from "../types";
+import { mmToPt } from "./lineweights";
+import type { BuildingFeat, Pt } from "../types";
 
 function square(minX: number, minY: number, maxX: number, maxY: number): Pt[] {
   return [
@@ -232,102 +230,5 @@ describe("figure-ground scale", () => {
     expect(layout.frameX).toBeGreaterThanOrEqual(layout.edgeMm - 1e-6);
     expect(layout.frameX + layout.frameMm).toBeLessThanOrEqual(layout.pageWidthMm - layout.edgeMm + 1e-6);
     expect(scaleBarMetres(1000)).toBe(200);
-  });
-});
-
-function model(): CityModel {
-  return {
-    placeLabel: "Test Block",
-    center: { lon: 144.9631, lat: -37.8136 },
-    sideM: 200,
-    layers: { buildings: true, roads: true, waterGreen: true, trees: true },
-    buildings: [footprint(square(-20, -20, 20, 20), [square(-5, -5, 5, 5)])],
-    roads: [{ id: 2, line: [[-80, 0], [80, 0]], width: 8, kind: "road", grade: "arterial" }],
-    areas: [{ id: 3, ring: square(-40, -40, -30, -30), holes: [], kind: "green" }],
-    trees: [{ id: 4, at: [20, 30], height_m: 10, crown_diameter_m: 8, trunk_diameter_m: 0.3, sizeSource: "osm" }],
-    roadKm: 0.16,
-    buildingCapHit: false,
-    sourceNote: "OpenStreetMap via Overpass.",
-    contours: true,
-  };
-}
-
-function pathBox(svg: string): { width: number; height: number } {
-  const match = svg.match(/<path d="([^"]+)"/);
-  expect(match).toBeTruthy();
-  const values = match![1].match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
-  const xs: number[] = [];
-  const ys: number[] = [];
-  for (let i = 0; i < values.length; i += 2) {
-    xs.push(values[i]);
-    ys.push(values[i + 1]);
-  }
-  return { width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
-}
-
-describe("figure-ground sheet", () => {
-  it("draws the footprint at true scale and leaves roads, trees, and colour off the sheet", () => {
-    const svg = figureGroundSvg(model(), 1000);
-    const box = pathBox(svg);
-    expect(box.width).toBeCloseTo(40, 2);
-    expect(box.height).toBeCloseTo(40, 2);
-    expect(svg).toContain('width="420mm"');
-    expect(svg).toContain('height="297mm"');
-    expect(svg).toContain('id="cut"');
-    expect(svg).toMatch(/id="cut"[^>]*width="200"/);
-    expect(svg).toContain("Test Block");
-    expect(svg).toContain("-37.81360, 144.96310");
-    expect(svg).toContain("1:1000");
-    expect(svg).toContain("A3 landscape");
-    expect(svg).toContain("OpenStreetMap");
-    expect(svg).toContain('id="scale-bar"');
-    expect(svg).toContain('id="north-arrow"');
-    expect(svg).not.toContain("<circle");
-    expect(svg).not.toContain("#b7d39a");
-    expect(svg).not.toContain("#3a3a3a");
-    const cut = svg.match(/id="cut" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"/);
-    const notes = svg.match(/id="sheet-title" x="[\d.]+" y="([\d.]+)"/);
-    const bar = svg.match(/id="scale-bar">\s*<rect x="[\d.]+" y="([\d.]+)"/);
-    expect(cut).toBeTruthy();
-    expect(notes).toBeTruthy();
-    expect(bar).toBeTruthy();
-    const frameBottom = Number(cut![2]) + Number(cut![4]);
-    expect(Number(notes![1])).toBeGreaterThan(frameBottom);
-    expect(Number(bar![1])).toBeGreaterThanOrEqual(frameBottom - 0.01);
-  });
-
-  it("scales the same footprint to 16 mm at 1:2500 and warns that 1 km does not fit", () => {
-    const svg = figureGroundSvg(model(), 2500);
-    const box = pathBox(svg);
-    expect(box.width).toBeCloseTo(16, 2);
-    expect(box.height).toBeCloseTo(16, 2);
-    const wide = figureGroundSvg({ ...model(), sideM: 1000, buildings: [] }, 2500);
-    expect(wide).toContain("Does not fit on A3");
-    expect(wide).toContain("1:2500");
-    expect(wide).toContain('width="420mm"');
-    expect(wide).toContain('height="428mm"');
-  });
-
-  it("writes a PDF with the same scale, name, centre, and attribution", () => {
-    const pdf = figureGroundPdf(model(), 1000);
-    const text = new TextDecoder("latin1").decode(pdf);
-    expect(text.startsWith("%PDF-1.4")).toBe(true);
-    expect(text).toContain("/BaseFont /Helvetica");
-    expect(text).toContain("Test Block");
-    expect(text).toContain("1:1000");
-    expect(text).toContain("-37.81360, 144.96310");
-    expect(text).toContain("OpenStreetMap");
-    expect(text).toContain(`/MediaBox [0 0 ${Math.round(mmToPt(420) * 100) / 100} ${Math.round(mmToPt(297) * 100) / 100}]`);
-    const start = text.match(/startxref\n(\d+)\n%%EOF/);
-    expect(start).toBeTruthy();
-    expect(text.slice(Number(start![1]), Number(start![1]) + 5)).toBe("xref\n");
-    const length = text.match(/\/Length (\d+)/);
-    const streamAt = text.indexOf("stream\n") + "stream\n".length;
-    const streamEnd = text.indexOf("endstream", streamAt);
-    expect(streamEnd - streamAt).toBe(Number(length![1]));
-    const overflow = figureGroundPdf({ ...model(), sideM: 1000 }, 2500);
-    const overflowText = new TextDecoder("latin1").decode(overflow);
-    expect(overflowText).toContain("Does not fit on A3");
-    expect(overflowText).toContain("1:2500");
   });
 });
