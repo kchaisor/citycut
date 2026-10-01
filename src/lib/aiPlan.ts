@@ -217,7 +217,14 @@ function pathStrip(polygons: Pt[][][], model: CityModel, layout: SheetLayout, st
 
 export function sitePlanChunks(model: CityModel, scale: number, style: LineStyles = readDrawingStyle()): PdfChunk[] {
   const layout = layoutSheet(model.sideM, scale);
-  const plan = planPaths(model, style.pathWidthM, style.contourIndexEvery);
+  const plan = planPaths(
+    model,
+    style.pathWidthM,
+    style.contourIndexEvery,
+    scale,
+    style.contourCoarseIntervalM,
+    style.contourCoarseFromScale,
+  );
   const page = layout.pageHeightMm;
   const bottom = yUp(layout.frameY + layout.frameMm, page);
   const chunks: PdfChunk[] = [

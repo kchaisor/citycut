@@ -60,20 +60,38 @@ export function DrawingPlan({
   kind = "site",
   onScale,
   lineStyle,
+  planScale = 1000,
 }: {
   model: CityModel;
   kind?: DrawingKind;
   onScale?: (widthM: number) => void;
   /** Resolved site-plan pens. Omit to read the current CSS cascade. */
   lineStyle?: LineStyles;
+  /** Drawing drawer plan scale. 2500 and smaller thin metro 1 m contours to 5 m. */
+  planScale?: number;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: View } | null>(null);
   const figure = kind === "figure-ground";
   const style = lineStyle ?? readDrawingStyle();
   const plan = useMemo(
-    () => planPaths(model, style.pathWidthM, style.contourIndexEvery),
-    [model, style.pathWidthM, style.contourIndexEvery],
+    () =>
+      planPaths(
+        model,
+        style.pathWidthM,
+        style.contourIndexEvery,
+        planScale,
+        style.contourCoarseIntervalM,
+        style.contourCoarseFromScale,
+      ),
+    [
+      model,
+      style.pathWidthM,
+      style.contourIndexEvery,
+      style.contourCoarseIntervalM,
+      style.contourCoarseFromScale,
+      planScale,
+    ],
   );
   const figurePaths = useMemo(
     () => (figure ? figureGroundModelPaths(model.buildings, model.sideM) : []),

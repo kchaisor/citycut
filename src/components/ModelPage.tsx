@@ -36,6 +36,7 @@ import {
   type ViewMemory,
 } from "../lib/viewMemory";
 import { treeSizeSummary, treeTierCounts } from "../lib/trees";
+import { contourDrawerLabel } from "../lib/vicmapContours";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import type { CityModel } from "../types";
 import { Drawer } from "./Drawer";
@@ -247,7 +248,14 @@ export function ModelPage({ model }: { model: CityModel }) {
         </div>
         {tab === "drawing" && (
           <div className="fill is-plan">
-            <DrawingPlan key={fitToken} model={model} kind={drawing} onScale={onScale} lineStyle={lineStyles} />
+            <DrawingPlan
+              key={fitToken}
+              model={model}
+              kind={drawing}
+              onScale={onScale}
+              lineStyle={lineStyles}
+              planScale={figureScale}
+            />
           </div>
         )}
         {tab === "satellite" && (
@@ -503,8 +511,20 @@ export function ModelPage({ model }: { model: CityModel }) {
                   data-contour-lines={model.contourLayer.lines.length}
                   data-contour-ms={model.contourLayer.fetchMs}
                   data-contour-interval={model.contourLayer.interval}
+                  data-contour-drawn={contourDrawerLabel(
+                    model.contourLayer,
+                    figureScale,
+                    lineStyles.contourCoarseIntervalM,
+                    lineStyles.contourCoarseFromScale,
+                  )}
                 >
-                  Contours: {model.contourLayer.label}
+                  Contours:{" "}
+                  {contourDrawerLabel(
+                    model.contourLayer,
+                    figureScale,
+                    lineStyles.contourCoarseIntervalM,
+                    lineStyles.contourCoarseFromScale,
+                  )}
                 </p>
               )}
               <LineStylesEditor

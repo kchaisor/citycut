@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  CONTOUR_COARSE_FROM_SCALE_VAR,
+  CONTOUR_COARSE_INTERVAL_VAR,
   CONTOUR_INDEX_EVERY_VAR,
   CONTOUR_INDEX_MM_VAR,
   DEFAULT_LINE_STYLES,
@@ -90,6 +92,8 @@ describe("drawing style css", () => {
     expect(DEFAULT_LINE_STYLES.pathWidthM).toBe(1.2);
     expect(css.get(CONTOUR_INDEX_MM_VAR)).toBe(String(DEFAULT_LINE_STYLES.contourIndexMm));
     expect(css.get(CONTOUR_INDEX_EVERY_VAR)).toBe(String(DEFAULT_LINE_STYLES.contourIndexEvery));
+    expect(css.get(CONTOUR_COARSE_INTERVAL_VAR)).toBe(String(DEFAULT_LINE_STYLES.contourCoarseIntervalM));
+    expect(css.get(CONTOUR_COARSE_FROM_SCALE_VAR)).toBe(String(DEFAULT_LINE_STYLES.contourCoarseFromScale));
     for (const key of STROKE_KEYS) {
       const vars = STROKE_VARS[key];
       expect(css.get(vars.mm)).toBe(String(DEFAULT_LINE_STYLES[key].mm));

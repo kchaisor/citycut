@@ -60,8 +60,12 @@ export type LineStyles = {
   pathEdgeOn: boolean;
   /** Printed millimetres for every Nth contour. Same colour and dash as `contour`. */
   contourIndexMm: number;
-  /** Index every Nth interval. 5 is 5 m on 1 m data and 50 m on 10 m data. */
+  /** Index every Nth drawn contour. 5 is 5 m on 1 m lines and 25 m once those lines are drawn at 5 m. */
   contourIndexEvery: number;
+  /** Metres between metro contours once the plan scale is small enough to thin them. */
+  contourCoarseIntervalM: number;
+  /** Scale denominator at which that coarser interval starts. 2500 is 1:2500 and smaller. */
+  contourCoarseFromScale: number;
 };
 
 export const STROKE_KEYS = [
@@ -112,6 +116,8 @@ export const PATH_FILL_VAR = "--path-fill";
 export const PATH_EDGE_VAR = "--path-edge";
 export const CONTOUR_INDEX_MM_VAR = "--contour-index-mm";
 export const CONTOUR_INDEX_EVERY_VAR = "--contour-index-every";
+export const CONTOUR_COARSE_INTERVAL_VAR = "--contour-coarse-interval-m";
+export const CONTOUR_COARSE_FROM_SCALE_VAR = "--contour-coarse-from-scale";
 export const LINE_STYLES_KEY = "citycut.lineStyles";
 
 /** Previous centreline names. Read as the footpath edge when the new names are absent. */
@@ -150,6 +156,8 @@ export const DEFAULT_LINE_STYLES: LineStyles = {
   pathEdgeOn: false,
   contourIndexMm: 0.18,
   contourIndexEvery: 5,
+  contourCoarseIntervalM: 5,
+  contourCoarseFromScale: 2500,
 };
 
 export function allStyleVariables(): string[] {
@@ -166,6 +174,8 @@ export function allStyleVariables(): string[] {
     PATH_EDGE_VAR,
     CONTOUR_INDEX_MM_VAR,
     CONTOUR_INDEX_EVERY_VAR,
+    CONTOUR_COARSE_INTERVAL_VAR,
+    CONTOUR_COARSE_FROM_SCALE_VAR,
   );
   return names;
 }
@@ -191,6 +201,8 @@ export function cloneLineStyles(style: LineStyles = DEFAULT_LINE_STYLES): LineSt
     pathEdgeOn: style.pathEdgeOn,
     contourIndexMm: style.contourIndexMm,
     contourIndexEvery: style.contourIndexEvery,
+    contourCoarseIntervalM: style.contourCoarseIntervalM,
+    contourCoarseFromScale: style.contourCoarseFromScale,
   };
 }
 
@@ -238,6 +250,21 @@ export function parseMm(raw: string | undefined | null): number | null {
 
 export function formatMm(mm: number): string {
   return String(Math.round(mm * 100) / 100);
+}
+
+/** Ground metres between thinned contours. 0 leaves the native interval. */
+export function parseCoarseInterval(raw: string | undefined | null): number | null {
+  return parseMetres(raw);
+}
+
+/** Plan-scale denominator, such as 2500 for 1:2500. */
+export function parseScaleDenominator(raw: string | undefined | null): number | null {
+  if (raw == null) return null;
+  const text = raw.trim().toLowerCase().replace(/^1\s*:\s*/, "");
+  if (!text) return null;
+  const value = Number(text);
+  if (!Number.isFinite(value)) return null;
+  return Math.min(100000, Math.max(1, Math.round(value)));
 }
 
 /** Whole intervals, from 1 to 20. 1 draws every contour as an index line. */
@@ -356,6 +383,10 @@ export function styleFromProperties(
   if (indexMm != null) next.contourIndexMm = indexMm;
   const indexEvery = parseIndexEvery(read(CONTOUR_INDEX_EVERY_VAR));
   if (indexEvery != null) next.contourIndexEvery = indexEvery;
+  const coarseInterval = parseCoarseInterval(read(CONTOUR_COARSE_INTERVAL_VAR));
+  if (coarseInterval != null) next.contourCoarseIntervalM = coarseInterval;
+  const coarseFrom = parseScaleDenominator(read(CONTOUR_COARSE_FROM_SCALE_VAR));
+  if (coarseFrom != null) next.contourCoarseFromScale = coarseFrom;
   const pathVars = STROKE_VARS.path;
   if (parseMm(read(pathVars.mm)) == null) {
     const legacyMm = parseMm(read("--path-stroke-mm"));
@@ -441,6 +472,12 @@ export function changedVariables(current: LineStyles, baseline: LineStyles): Rec
   }
   if (current.contourIndexEvery !== baseline.contourIndexEvery) {
     out[CONTOUR_INDEX_EVERY_VAR] = String(current.contourIndexEvery);
+  }
+  if (formatMetres(current.contourCoarseIntervalM) !== formatMetres(baseline.contourCoarseIntervalM)) {
+    out[CONTOUR_COARSE_INTERVAL_VAR] = formatMetres(current.contourCoarseIntervalM);
+  }
+  if (current.contourCoarseFromScale !== baseline.contourCoarseFromScale) {
+    out[CONTOUR_COARSE_FROM_SCALE_VAR] = String(current.contourCoarseFromScale);
   }
   return out;
 }

@@ -1,4 +1,5 @@
 import { clipPolyline } from "./clip";
+import { FIGURE_SCALES } from "./figureGround";
 import { polylineLength, toLocal } from "./geo";
 import { contourInterval, leveledContourLines } from "./terrain";
 import type { ContourLayer, ContourSourceId, LonLat, Pt, StoredContour, TerrainField } from "../types";
@@ -173,6 +174,62 @@ export function contourIsIndex(z: number, interval: number, every: number): bool
   const step = interval * every;
   const nearest = Math.round(z / step) * step;
   return Math.abs(z - nearest) <= Math.max(0.05, interval * 0.05);
+}
+
+/** True when `z` is a multiple of `interval`, within a small tolerance. */
+export function altitudeOnInterval(z: number, interval: number): boolean {
+  if (!(interval > 0)) return false;
+  const nearest = Math.round(z / interval) * interval;
+  return Math.abs(z - nearest) <= Math.max(0.05, interval * 0.05);
+}
+
+export const DEFAULT_COARSE_INTERVAL_M = 5;
+export const DEFAULT_COARSE_FROM_SCALE = 2500;
+
+/**
+ * Interval actually drawn at a plan scale.
+ * Metro data finer than the coarse step thins to that step at 1:2500 and
+ * smaller. Statewide 10/20 m and DEM contours are already coarser, so they stay.
+ */
+export function drawnContourInterval(
+  source: ContourSourceId,
+  nativeInterval: number,
+  planScale: number,
+  coarseIntervalM = DEFAULT_COARSE_INTERVAL_M,
+  coarseFromScale = DEFAULT_COARSE_FROM_SCALE,
+): number {
+  if (source !== "vicmap-metro") return nativeInterval;
+  if (!(coarseIntervalM > nativeInterval) || !(planScale >= coarseFromScale)) return nativeInterval;
+  return coarseIntervalM;
+}
+
+/** Largest built-in plan scale that still draws the native interval. 2500 → 1000. */
+export function finestContourScale(coarseFromScale: number, scales: readonly number[] = FIGURE_SCALES): number {
+  let best = 0;
+  for (const scale of scales) {
+    if (scale < coarseFromScale && scale > best) best = scale;
+  }
+  return best > 0 ? best : coarseFromScale;
+}
+
+function intervalText(interval: number): string {
+  return Number.isInteger(interval) ? String(interval) : interval.toFixed(1);
+}
+
+/**
+ * Drawer line for the interval in use. Coarsened metro data names both steps,
+ * for example "Vicmap Elevation 5 m (1 m at 1:1000)".
+ */
+export function contourDrawerLabel(
+  layer: Pick<ContourLayer, "source" | "label" | "interval">,
+  planScale: number,
+  coarseIntervalM = DEFAULT_COARSE_INTERVAL_M,
+  coarseFromScale = DEFAULT_COARSE_FROM_SCALE,
+): string {
+  const drawn = drawnContourInterval(layer.source, layer.interval, planScale, coarseIntervalM, coarseFromScale);
+  if (layer.source !== "vicmap-metro" || drawn === layer.interval) return layer.label;
+  const fine = finestContourScale(coarseFromScale);
+  return `Vicmap Elevation ${intervalText(drawn)} m (${intervalText(layer.interval)} m at 1:${fine})`;
 }
 
 export function formatContourElevation(z: number): string {

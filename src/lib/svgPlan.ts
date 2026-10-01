@@ -3,7 +3,14 @@ import { clipPolygon, clipPolyline } from "./clip";
 import { openRing } from "./geo";
 import { PATH_WIDTH_M } from "./lineweights";
 import { carriagewaysOf, footpathLines, unionCarriageways, unionFootpaths } from "./roadFill";
-import { demContourLayer, drawContours } from "./vicmapContours";
+import {
+  DEFAULT_COARSE_FROM_SCALE,
+  DEFAULT_COARSE_INTERVAL_M,
+  altitudeOnInterval,
+  demContourLayer,
+  drawContours,
+  drawnContourInterval,
+} from "./vicmapContours";
 import type { CityModel, Pt } from "../types";
 
 const round = (value: number) => Math.round(value * 10) / 10;
@@ -117,7 +124,14 @@ function clipLines(line: Pt[], half: number): Pt[][] {
   return clipPolyline(dedupe(line), -half, half).map(dedupe).filter((part) => part.length >= 2);
 }
 
-export function planPaths(model: CityModel, pathWidthM = PATH_WIDTH_M, contourIndexEvery = 5): PlanPaths {
+export function planPaths(
+  model: CityModel,
+  pathWidthM = PATH_WIDTH_M,
+  contourIndexEvery = 5,
+  planScale = 1000,
+  coarseIntervalM = DEFAULT_COARSE_INTERVAL_M,
+  coarseFromScale = DEFAULT_COARSE_FROM_SCALE,
+): PlanPaths {
   const half = model.sideM / 2;
   const green: Pt[][][] = [];
   const water: Pt[][][] = [];
@@ -164,7 +178,14 @@ export function planPaths(model: CityModel, pathWidthM = PATH_WIDTH_M, contourIn
   const clipped = layer
     ? layer.lines.flatMap((line) => clipLines(line.points, half).map((points) => ({ points, z: line.z })))
     : [];
-  const drawn = layer && clipped.length > 0 ? drawContours(clipped, layer.interval, contourIndexEvery) : null;
+  const drawnInterval = layer
+    ? drawnContourInterval(layer.source, layer.interval, planScale, coarseIntervalM, coarseFromScale)
+    : 0;
+  const visible =
+    layer && drawnInterval > layer.interval
+      ? clipped.filter((line) => altitudeOnInterval(line.z, drawnInterval))
+      : clipped;
+  const drawn = layer && visible.length > 0 ? drawContours(visible, drawnInterval, contourIndexEvery) : null;
 
   return {
     green,
@@ -179,7 +200,7 @@ export function planPaths(model: CityModel, pathWidthM = PATH_WIDTH_M, contourIn
     contours: drawn ? drawn.lines.map((line) => line.points) : [],
     contourIndex: drawn ? drawn.lines.map((line) => line.index) : [],
     contourLabels: drawn?.labels ?? [],
-    contourInterval: drawn && layer ? layer.interval : null,
+    contourInterval: drawn && layer ? drawnInterval : null,
     contourSource: drawn && layer ? layer.source : null,
   };
 }
