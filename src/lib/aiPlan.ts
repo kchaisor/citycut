@@ -400,7 +400,7 @@ export function figureGroundChunks(model: CityModel, scale: number, style: LineS
 
 function sitePlanLayerOrder(chunks: PdfChunk[]): string[] {
   const order: string[] = [...SITE_LAYER_ORDER];
-  if (chunks.some((chunk) => chunk.name === "Contour labels")) {
+  if (!order.includes("Contour labels") && chunks.some((chunk) => chunk.name === "Contour labels")) {
     const at = order.indexOf("Contours");
     order.splice(at + 1, 0, "Contour labels");
   }

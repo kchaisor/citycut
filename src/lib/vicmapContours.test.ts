@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { squareBBox } from "./geo";
-import { sitePlanChunks } from "./aiPlan";
+import { sitePlanAi8, sitePlanChunks } from "./aiPlan";
+import { parseNativeAiLayers } from "./aiNative";
 import { planPaths } from "./svgPlan";
 import { contourInterval } from "./terrain";
 import {
@@ -435,5 +436,11 @@ describe("contour fallback", () => {
     const fine = sitePlanChunks(model, 1000);
     expect(fine.find((chunk) => chunk.name === "Contours")?.paths).toHaveLength(4);
     expect(fine.find((chunk) => chunk.name === "Annotation")?.texts?.some((text) => text.text.includes("Contours every 1 m"))).toBe(true);
+  });
+
+  it("writes each site-plan layer once when contour labels are present", () => {
+    const layers = parseNativeAiLayers(sitePlanAi8(metroModel([1, 5, 6, 25]), 5000));
+    expect(layers.filter((name) => name === "Contour labels")).toHaveLength(1);
+    expect(new Set(layers).size).toBe(layers.length);
   });
 });
