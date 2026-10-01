@@ -10,10 +10,10 @@
   /* Paper and ground */
 
   /* Illustrator site-plan page, and the casing under a rail so the line still reads on the road. */
-  --sheet-fill: #f4f1ea;
+  --sheet-fill: #E7E6E6;
 
   /* Flat 3D ground when the frame has no terrain, the ground on the 3D-view Illustrator sheet, and the Rhino Ground layer. */
-  --ground-fill: #e6e0d4;
+  --ground-fill: #FFFFFF;
 
   /* Backdrop of the 3D PNG download, and the page behind the 3D-view Illustrator drawing. */
   --export-backdrop: #e7e4dc;
@@ -25,33 +25,33 @@
   --plan-empty: #6d675e;
 
   /* Elevation numbers drawn on the site-plan contours. */
-  --contour-label: #6A6A6A;
+  --contour-label: #FFFFFF;
 
   /* Building use */
 
   /* Buildings when colour-by-use is off, the legend swatch in that state, and the Rhino Buildings layer. */
-  --building-uniform: #f6f3ec;
+  --building-uniform: #A4A5A8;
 
   /* Residential footprints, legend swatch, and the Residential Rhino layer. */
-  --use-residential: #E06C75;
+  --use-residential: #A4A5A8;
 
   /* Commercial footprints, legend swatch, and the Commercial Rhino layer. */
-  --use-commercial: #61AFEF;
+  --use-commercial: #89533D;
 
   /* Retail footprints, legend swatch, and the Retail Rhino layer. */
   --use-retail: #E5C07B;
 
   /* Mixed-use footprints, legend swatch, and the MixedUse Rhino layer. */
-  --use-mixed: #C678DD;
+  --use-mixed: #2D3F6D;
 
   /* Industrial footprints, legend swatch, and the Industrial Rhino layer. */
-  --use-industrial: #D19A66;
+  --use-industrial: #8228FF;
 
   /* Civic footprints, legend swatch, and the Civic Rhino layer. */
-  --use-civic: #98C379;
+  --use-civic: #FBAE3C;
 
   /* Recreation footprints, legend swatch, and the Recreation Rhino layer. */
-  --use-recreation: #56B6C2;
+  --use-recreation: #EA4089;
 
   /* Outbuilding footprints, legend swatch, and the Outbuilding Rhino layer. */
   --use-outbuilding: #5C6370;
@@ -73,7 +73,7 @@
   /* Roads and paths */
 
   /* Unioned carriageway on the site plan and the figure-ground, on screen and in the Illustrator file. */
-  --road-fill: #4A4A4A;
+  --road-fill: #FFFFFF;
 
   /* Unioned footpath on the site plan and the figure-ground, on screen and in the Illustrator file. */
   --path-fill: #DADADA;
@@ -90,35 +90,35 @@
   /* Green */
 
   /* Parks and other green on the site plan, on screen and in the Illustrator file. */
-  --green-fill: #b7d39a;
+  --green-fill: #D2D7BE;
 
   /* Green mesh in the 3D view, the 3D-view Illustrator green, and the Rhino Green layer. */
-  --green-3d: #7f9a62;
+  --green-3d: #D2D7BE;
 
   /* Water */
 
   /* Water on the site plan, on screen and in the Illustrator file. */
-  --water-fill: #9ec9d1;
+  --water-fill: #7FBFFF;
 
   /* Water mesh in the 3D view, the 3D-view Illustrator water, and the Rhino Water layer. */
-  --water-3d: #8ebfc8;
+  --water-3d: #7FBFFF;
 
   /* Trees */
 
   /* Tree-crown fill on the site plan, on screen and in the Illustrator file. */
-  --tree-fill: #6ea35a;
+  --tree-fill: #478C33;
 
   /* Tree-crown fill on the 3D-view Illustrator sheet. */
-  --tree-crown: #5d8a45;
+  --tree-crown: #478C33;
 
   /* Outline around that 3D-view crown. */
-  --tree-crown-edge: #2c4a28;
+  --tree-crown-edge: #478C33;
 
   /* Trunk on the 3D-view Illustrator sheet. */
   --tree-trunk: #3e3428;
 
   /* Rhino Trees layer. */
-  --tree-layer: #3e8a48;
+  --tree-layer: #478C33;
 
   /* Rail */
 
