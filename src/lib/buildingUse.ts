@@ -1,4 +1,5 @@
 import type { BuildingUse, TypologySource } from "../types";
+import { getColour, type ColourKey } from "./colours";
 
 export const BUILDING_USES = [
   "residential",
@@ -15,38 +16,64 @@ export const BUILDING_USES = [
 export const TYPOLOGY_SOURCES = ["osm_tag", "zone", "none"] as const satisfies readonly TypologySource[];
 
 /** Previous single colour, used when the use colours are turned off. */
-export const UNIFORM_BUILDING_COLOR = "#f6f3ec";
+export function uniformBuildingColor(): string {
+  return getColour("--building-uniform");
+}
 
 /**
  * One hue per category. Unclassified stays neutral so a guess from a later
  * tier can still stand out when the view is coloured by source.
  */
+function useSwatch(label: string, key: ColourKey, layer: string): { label: string; layer: string; readonly color: string } {
+  return {
+    label,
+    layer,
+    get color() {
+      return getColour(key);
+    },
+  };
+}
+
 export const BUILDING_USE_META: Record<
   BuildingUse,
   { label: string; color: string; layer: string }
 > = {
-  residential: { label: "Residential", color: "#E06C75", layer: "Residential" },
-  commercial: { label: "Commercial", color: "#61AFEF", layer: "Commercial" },
-  retail: { label: "Retail", color: "#E5C07B", layer: "Retail" },
-  mixed_use: { label: "Mixed use", color: "#C678DD", layer: "MixedUse" },
-  industrial: { label: "Industrial", color: "#D19A66", layer: "Industrial" },
-  civic: { label: "Civic", color: "#98C379", layer: "Civic" },
-  recreation: { label: "Recreation", color: "#56B6C2", layer: "Recreation" },
-  outbuilding: { label: "Outbuilding", color: "#5C6370", layer: "Outbuilding" },
-  unclassified: { label: "Unclassified", color: "#B8B8B8", layer: "Unclassified" },
+  residential: useSwatch("Residential", "--use-residential", "Residential"),
+  commercial: useSwatch("Commercial", "--use-commercial", "Commercial"),
+  retail: useSwatch("Retail", "--use-retail", "Retail"),
+  mixed_use: useSwatch("Mixed use", "--use-mixed", "MixedUse"),
+  industrial: useSwatch("Industrial", "--use-industrial", "Industrial"),
+  civic: useSwatch("Civic", "--use-civic", "Civic"),
+  recreation: useSwatch("Recreation", "--use-recreation", "Recreation"),
+  outbuilding: useSwatch("Outbuilding", "--use-outbuilding", "Outbuilding"),
+  unclassified: useSwatch("Unclassified", "--use-unclassified", "Unclassified"),
 };
 
 /**
  * Viewport colours for the source toggle. An OSM tag is solid.
  * A zone is inferred, so it stays lighter and is hatched.
  */
+function sourceSwatch(
+  label: string,
+  key: ColourKey,
+  inferred: boolean,
+): { label: string; inferred: boolean; readonly color: string } {
+  return {
+    label,
+    inferred,
+    get color() {
+      return getColour(key);
+    },
+  };
+}
+
 export const SOURCE_META: Record<
   TypologySource,
   { label: string; color: string; inferred: boolean }
 > = {
-  osm_tag: { label: "OSM tag", color: "#1F4E79", inferred: false },
-  zone: { label: "Zone", color: "#A9C4DE", inferred: true },
-  none: { label: "Unclassified", color: "#B8B8B8", inferred: false },
+  osm_tag: sourceSwatch("OSM tag", "--source-osm", false),
+  zone: sourceSwatch("Zone", "--source-zone", true),
+  none: sourceSwatch("Unclassified", "--source-none", false),
 };
 
 /** Legend order for source counts. `none` is shown as unclassified. */

@@ -12,8 +12,8 @@
   --building-stroke: #1C1B17;
   --building-dash: none;
 
-  /* Carriageway fill. One solid shape for every road. #333333 is a darker option. */
-  --road-fill: #4A4A4A;
+  /* Carriageway fill is --road-fill in colours.css. The name is unchanged, so a saved
+     line-style edit still sets it. #333333 is a darker option. */
 
   /* Kerb outline. "on" draws it on the outer edge of the road fill. "off" hides it. */
   --road-kerb: on;
@@ -23,9 +23,8 @@
   --road-kerb-dash: none;
 
   /* Footpath strips. Metres on the ground, 0.6 m each side of the centreline, then unioned.
-     #DADADA sits just under the #EBEBEB page and well above the #4A4A4A road. */
+     The fill is --path-fill in colours.css: just under the page and well above the road. */
   --path-width-m: 1.2;
-  --path-fill: #DADADA;
 
   /* Optional edge on the unioned outline only. "off" leaves the fill with no edge.
      The old --path-stroke* names are the same edge, if a saved edit still uses them. */
@@ -73,8 +72,11 @@
   --annotation-stroke: #1C1B17;
   --annotation-dash: none;
 
-  /* Outline of a tree crown. The green fill of the crown is not set here. */
+  /* Outline of a tree crown. The green fill of the crown is --tree-fill in colours.css. */
   --tree-stroke-mm: 0.15;
   --tree-stroke: #245232;
   --tree-dash: none;
+
+  /* Massing edge in the 3D view. Black, so the volume reads against the roads and the sky. */
+  --building-edge: #000000;
 }

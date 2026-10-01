@@ -7,7 +7,9 @@ import {
   SOURCE_META,
   countSources,
   countUses,
+  uniformBuildingColor,
 } from "../lib/buildingUse";
+import { useColourRevision } from "../lib/useColourRevision";
 import { CRS_NOTE, mgaCrs } from "../lib/crs";
 import {
   commitLineStyles,
@@ -39,6 +41,7 @@ import { treeSizeSummary, treeTierCounts } from "../lib/trees";
 import { contourDrawerLabel } from "../lib/vicmapContours";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import type { CityModel } from "../types";
+import { ColoursEditor } from "./Colours";
 import { Drawer } from "./Drawer";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
 import { LineStylesEditor } from "./LineStyles";
@@ -81,6 +84,8 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [tab, setTab] = useState<Tab>("3d");
   const [drawing, setDrawing] = useState<DrawingKind>("site");
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
+  useColourRevision();
+  const uniform = uniformBuildingColor();
   const [figureScale, setFigureScale] = useState<number>(() => preferredFigureScale(model.sideM));
   const [exportError, setExportError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"3dm" | "png" | "ai-view" | "ai-site" | "ai-figure" | null>(null);
@@ -331,7 +336,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                     <li key={use}>
                       <i
                         style={{
-                          background: colourByUse && !showSource ? BUILDING_USE_META[use].color : "#f6f3ec",
+                          background: colourByUse && !showSource ? BUILDING_USE_META[use].color : uniform,
                         }}
                       />
                       <span>{BUILDING_USE_META[use].label}</span>
@@ -346,7 +351,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                       <i
                         className={SOURCE_META[source].inferred ? "hatch" : undefined}
                         style={{
-                          backgroundColor: showSource ? SOURCE_META[source].color : "#f6f3ec",
+                          backgroundColor: showSource ? SOURCE_META[source].color : uniform,
                         }}
                       />
                       <span>{SOURCE_META[source].label}</span>
@@ -533,6 +538,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                 onChange={(next) => setLineStyles(commitLineStyles(next, lineStyleBaseline()))}
                 onReset={() => setLineStyles(resetStoredLineStyles())}
               />
+              <ColoursEditor onChange={() => setLineStyles(readDrawingStyle())} />
               {tab === "drawing" && (
                 <div className="field">
                   <div className="field-head">

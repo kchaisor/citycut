@@ -1,3 +1,6 @@
+import { COLOUR_FALLBACK } from "./colours";
+import { drawingSheetColor } from "./drawingSheet";
+
 /**
  * Fallback pen weights. The site plan, on screen and in the Illustrator
  * file, reads src/drawing-style.css (see readDrawingStyle). These numbers
@@ -18,7 +21,7 @@
  * In a PDF a line width of 0 is a device hairline, so callers omit the stroke
  * and paint a fill only (`f` / `f*`) instead of writing `0 w`.
  *
- * Contours are #B0B0B0, dashed 1.5 mm with a 0.75 mm gap, at print scale.
+ * Contours use the contour stroke from drawing-style.css, dashed 1.5 mm with a 0.75 mm gap, at print scale.
  * On screen, 1 mm is 96/25.4 CSS pixels at 100% zoom. The whole set is lifted
  * when the contour pen would fall under 0.6 px, and stroke widths are capped
  * at 2.4 px so a thick pen stays a line. Dash lengths use the same lift and
@@ -39,12 +42,12 @@ export type LineRole = keyof typeof LINE_MM;
 /**
  * Footpath strip on the ground. 1.2 m is 0.6 m each side of the centreline.
  * The width is metres in map space, so it scales with zoom and with the sheet scale.
- * `#DADADA` is only slightly darker than the `#EBEBEB` page and clearly lighter than the `#4A4A4A` road.
+ * The footpath fill in colours.css is only slightly darker than the page and clearly lighter than the road.
  */
 export const PATH_WIDTH_M = 1.2;
-export const PATH_FILL = "#DADADA";
+export const PATH_FILL = COLOUR_FALLBACK["--path-fill"];
 
-export const CONTOUR_COLOR = "#B0B0B0";
+export const CONTOUR_COLOR = drawingSheetColor("--contour-stroke");
 export const CONTOUR_DASH_MM = 1.5;
 export const CONTOUR_GAP_MM = 0.75;
 

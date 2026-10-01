@@ -9,7 +9,9 @@ import {
 import { figureGroundModelPaths, scaleBarMetres } from "../lib/figureGround";
 import { LINE_MM, screenPx } from "../lib/lineweights";
 import { planPaths, svgPolyline, svgRings } from "../lib/svgPlan";
+import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
+import { useColourRevision } from "../lib/useColourRevision";
 import type { CityModel } from "../types";
 
 type View = { x: number; y: number; w: number; h: number };
@@ -152,7 +154,14 @@ export function DrawingPlan({
   const arrowTip = -half - model.sideM * 0.055;
   const arrowBase = -half - model.sideM * 0.016;
   const head = model.sideM * 0.01;
-  const canvas = useMemo(() => themeColor("--drawing-bg", "#EBEBEB"), []);
+  const colourTick = useColourRevision();
+  const canvas = useMemo(() => themeColor("--drawing-bg"), [colourTick]);
+  const figureFill = getColour("--figure-fill");
+  const greenFill = getColour("--green-fill");
+  const waterFill = getColour("--water-fill");
+  const treeFill = getColour("--tree-fill");
+  const contourLabel = getColour("--contour-label");
+  const planEmpty = getColour("--plan-empty");
 
   return (
     <svg
@@ -192,7 +201,7 @@ export function DrawingPlan({
             />
           )}
           {figurePaths.map((d, index) => (
-            <path key={`f${index}`} d={d} fill="#000" fillRule="evenodd" />
+            <path key={`f${index}`} d={d} fill={figureFill} fillRule="evenodd" />
           ))}
           <rect
             x={-half}
@@ -200,7 +209,7 @@ export function DrawingPlan({
             width={model.sideM}
             height={model.sideM}
             fill="none"
-            stroke="#000"
+            stroke={figureFill}
             strokeWidth={framePx}
             vectorEffect="non-scaling-stroke"
           />
@@ -210,33 +219,33 @@ export function DrawingPlan({
               y1={arrowBase}
               x2={arrowX}
               y2={arrowTip + head * 1.6}
-              stroke="#000"
+              stroke={figureFill}
               strokeWidth={notePx}
               vectorEffect="non-scaling-stroke"
             />
             <polygon
               points={`${arrowX},${arrowTip} ${arrowX - head},${arrowTip + head * 1.7} ${arrowX + head},${arrowTip + head * 1.7}`}
-              fill="#000"
+              fill={figureFill}
             />
             <text
               x={arrowX + head * 1.5}
               y={arrowTip + head * 1.15}
               fontSize={model.sideM * 0.026}
-              fill="#000"
+              fill={figureFill}
               fontFamily="Helvetica, Arial, sans-serif"
             >
               N
             </text>
           </g>
           <g aria-hidden="true">
-            <rect x={-half} y={barY} width={barMetres / 2} height={barThickness} fill="#000" />
+            <rect x={-half} y={barY} width={barMetres / 2} height={barThickness} fill={figureFill} />
             <rect
               x={-half}
               y={barY}
               width={barMetres}
               height={barThickness}
               fill="none"
-              stroke="#000"
+              stroke={figureFill}
               strokeWidth={notePx}
               vectorEffect="non-scaling-stroke"
             />
@@ -244,7 +253,7 @@ export function DrawingPlan({
               x={-half + barMetres + model.sideM * 0.012}
               y={barY + barThickness * 0.85}
               fontSize={model.sideM * 0.02}
-              fill="#000"
+              fill={figureFill}
               fontFamily="Helvetica, Arial, sans-serif"
             >
               {barMetres} m
@@ -254,10 +263,10 @@ export function DrawingPlan({
       ) : (
         <>
             {plan.green.map((rings, index) => (
-              <path key={`g${index}`} d={svgRings(rings)} fill="#b7d39a" {...screenPenAttrs(style.green)} />
+              <path key={`g${index}`} d={svgRings(rings)} fill={greenFill} {...screenPenAttrs(style.green)} />
             ))}
             {plan.water.map((rings, index) => (
-              <path key={`w${index}`} d={svgRings(rings)} fill="#9ec9d1" {...screenPenAttrs(style.water)} />
+              <path key={`w${index}`} d={svgRings(rings)} fill={waterFill} {...screenPenAttrs(style.water)} />
             ))}
             {plan.pathFill.length > 0 && (
               <path
@@ -294,7 +303,7 @@ export function DrawingPlan({
                 textAnchor="middle"
                 dominantBaseline="central"
                 fontSize={model.sideM * 0.014}
-                fill="#6A6A6A"
+                fill={contourLabel}
                 fontFamily="Helvetica, Arial, sans-serif"
               >
                 {label.text}
@@ -318,7 +327,7 @@ export function DrawingPlan({
                 cx={tree.east}
                 cy={-tree.north}
                 r={tree.r}
-                fill="#6ea35a"
+                fill={treeFill}
                 {...screenPenAttrs(style.tree)}
               />
             ))}
@@ -342,7 +351,7 @@ export function DrawingPlan({
         </>
       )}
       {empty && (
-        <text x={0} y={0} textAnchor="middle" fontSize={model.sideM * 0.04} fill="#6d675e">
+        <text x={0} y={0} textAnchor="middle" fontSize={model.sideM * 0.04} fill={planEmpty}>
           {figure ? "No building footprints in this frame" : "Nothing mapped in this frame"}
         </text>
       )}

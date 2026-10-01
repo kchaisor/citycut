@@ -7,7 +7,9 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { shotFromCamera, type CameraShot } from "../lib/cameraShot";
+import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
+import { useColourRevision } from "../lib/useColourRevision";
 import { captureViewPng } from "../lib/capturePng";
 import { flushControlInertia, holdControlPose } from "../lib/controlInertia";
 import {
@@ -90,13 +92,14 @@ function City({
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
+  const colourTick = useColourRevision();
   const group = useMemo(() => {
     const city = buildCityGroup(model, { uniformBuildings, colourBySource });
     const ground = city.getObjectByName("Ground");
     if (ground && ground instanceof THREE.Mesh && ground.name === "Ground") {
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(ground.geometry),
-        new THREE.LineBasicMaterial({ color: "#2c2924" }),
+        new THREE.LineBasicMaterial({ color: getColour("--ground-edge") }),
       );
       edges.position.copy(ground.position);
       edges.name = "GroundEdge";
@@ -104,7 +107,7 @@ function City({
     }
     addBuildingEdges(city);
     return city;
-  }, [model, uniformBuildings, colourBySource]);
+  }, [model, uniformBuildings, colourBySource, colourTick]);
   useLayoutEffect(() => {
     onBoundsRef.current(measureCity(group));
   }, [group]);
@@ -447,11 +450,14 @@ export function Scene3D({
     boundsRef.current = bounds;
   }, []);
   const lift = model.terrain ? (model.terrain.min + model.terrain.max) / 2 : 0;
-  const modelBg = useMemo(() => themeColor("--model-bg", "#EBEBEB"), []);
+  const colourTick = useColourRevision();
+  const modelBg = useMemo(() => themeColor("--model-bg"), [colourTick]);
+  const sky = getColour("--light-sky");
+  const groundLight = getColour("--light-ground");
   return (
     <Canvas className="scene-canvas" dpr={[1, 1.75]} gl={{ antialias: true, alpha: false }}>
       <color attach="background" args={[modelBg]} />
-      <hemisphereLight args={["#f7f4ee", "#c9c0b2", 0.7]} />
+      <hemisphereLight args={[sky, groundLight, 0.7]} />
       <ambientLight intensity={0.28} />
       <directionalLight position={[model.sideM * 0.4, model.sideM, model.sideM * 0.2]} intensity={1.35} />
       <City model={model} uniformBuildings={uniformBuildings} colourBySource={colourBySource} onBounds={onBounds} />

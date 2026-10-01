@@ -46,11 +46,13 @@ function memoryStorage(initial = ""): StorageLike & { snapshot(): string | null 
 }
 
 async function cssFileValues(): Promise<Map<string, string>> {
-  const bytes = await readFile(fileURLToPath(new URL("../drawing-style.css", import.meta.url)));
-  const css = new TextDecoder().decode(bytes);
   const values = new Map<string, string>();
-  for (const match of css.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)) {
-    values.set(match[1], match[2].trim());
+  for (const file of ["../drawing-style.css", "../colours.css"]) {
+    const bytes = await readFile(fileURLToPath(new URL(file, import.meta.url)));
+    const css = new TextDecoder().decode(bytes);
+    for (const match of css.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)) {
+      values.set(match[1], match[2].trim());
+    }
   }
   return values;
 }

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { getColour } from "./colours";
 
 /**
  * Renders the current view into a target twice the canvas bitmap on each side
@@ -12,7 +13,7 @@ export async function captureViewPng(
 ): Promise<Blob> {
   // The on-screen clear colour comes from the theme. The PNG keeps the
   // previous backdrop so a theme edit does not change the download.
-  const PNG_BACKGROUND = "#e7e4dc";
+  const PNG_BACKGROUND = getColour("--export-backdrop");
   const previousBackground = scene.background;
   const sourceWidth = gl.domElement.width;
   const sourceHeight = gl.domElement.height;
