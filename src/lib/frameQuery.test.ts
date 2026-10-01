@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SIDE_KM, DEFAULT_ZOOM, MAX_SIDE_KM, MIN_SIDE_KM } from "../content/constants";
-import { frameFromSearch } from "./frameQuery";
+import { explicitLabel, frameFromSearch, writeFrameSearch } from "./frameQuery";
 
 const melbourne = {
   view: { lat: -37.8136, lon: 144.9631, zoom: DEFAULT_ZOOM },
@@ -61,5 +61,25 @@ describe("frameFromSearch", () => {
     expect(frameFromSearch("?lat=-37.8041&lon=144.94944&km=lots").sideKm).toBe(DEFAULT_SIDE_KM);
     expect(frameFromSearch("?lat=-37.8041&lon=144.94944&km=0").sideKm).toBe(MIN_SIDE_KM);
     expect(frameFromSearch("?lat=-37.8041&lon=144.94944&km=9").sideKm).toBe(MAX_SIDE_KM);
+  });
+});
+
+describe("writeFrameSearch", () => {
+  it("round-trips a full address label and keeps the view param", () => {
+    const label = "1–9 Gertrude St, Fitzroy VIC 3065";
+    const search = writeFrameSearch("?view=iso-sw", {
+      lat: -37.8052929,
+      lon: 144.9746389,
+      sideKm: 1,
+      label,
+    });
+    expect(explicitLabel(search)).toBe(label);
+    expect(frameFromSearch(search)).toMatchObject({
+      view: { lat: -37.80529, lon: 144.97464 },
+      sideKm: 1,
+      label,
+    });
+    expect(new URLSearchParams(search.slice(1)).get("view")).toBe("iso-sw");
+    expect(explicitLabel("?lat=-37.8041&lon=144.94944&km=1")).toBeNull();
   });
 });

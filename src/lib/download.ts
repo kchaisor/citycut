@@ -2,6 +2,7 @@ import { figureGroundAi, sitePlanAi } from "./aiPlan";
 import type { LineStyles } from "./drawingStyle";
 import { viewAi, type ViewStyle } from "./aiView";
 import type { CameraShot } from "./cameraShot";
+import { slugifyPlace } from "./placeLabel";
 import type { CityModel } from "../types";
 
 /** Downloads the drawer still offers. glTF, SVG, and figure-ground PDF are gone. */
@@ -12,7 +13,9 @@ export type ExportId = (typeof EXPORT_IDS)[number];
 export function fileStem(model: CityModel): string {
   const lat = `${Math.abs(model.center.lat).toFixed(4)}${model.center.lat < 0 ? "S" : "N"}`;
   const lon = `${Math.abs(model.center.lon).toFixed(4)}${model.center.lon < 0 ? "W" : "E"}`;
-  return `citycut-${lat}-${lon}-${Math.round(model.sideM)}m`;
+  const tail = `${lat}-${lon}-${Math.round(model.sideM)}m`;
+  const slug = slugifyPlace(model.placeLabel);
+  return slug ? `citycut-${slug}-${tail}` : `citycut-${tail}`;
 }
 
 export function pngFilename(model: CityModel): string {

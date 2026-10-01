@@ -185,6 +185,10 @@ export async function buildLayeredPdf(
   doc.context.header = PDFHeader.forVersion(1, 6);
   doc.setCreator("CityCut");
   doc.setProducer("CityCut");
+  const title = chunks
+    .find((chunk) => chunk.name === "Annotation")
+    ?.texts?.find((text) => text.text.includes(" · "))?.text;
+  if (title) doc.setTitle(title);
   const page = doc.addPage([pdfPt(widthMm), pdfPt(heightMm)]);
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const fontKey = page.node.newFontDictionary(font.name, font.ref);
