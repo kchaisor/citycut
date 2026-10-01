@@ -4,9 +4,13 @@ You do not need to write code. Fonts, font sizes, and the main colours of the ap
 
 `src/theme.css`
 
-The site plan uses a second file for its pens. Line weights, line colours, dash patterns, and the road fill live in:
+The site plan uses a second file for its pens. Line weights, line colours, and dash patterns live in:
 
 `src/drawing-style.css`
+
+Every fill lives in a third file. The site plan, the figure-ground, the 3D view, the PNG download, the Illustrator files, and the Rhino layer colours all read it:
+
+`src/colours.css`
 
 Each line has a name, then a value. Change the value. Leave the name alone, including the two dashes at the start.
 
@@ -41,7 +45,7 @@ The name is `--background`. The value is `#EBEBEB`.
 
 `var(--background)` means “use whatever `--background` is set to”. That is why one edit recolours the page, the header, the model, and the drawing together.
 
-Downloaded Illustrator and PNG files do not use the colours in this file. The site plan, both on screen and in the site-plan Illustrator download, uses `src/drawing-style.css` instead. That file is described below.
+Downloaded Illustrator and PNG files do not use the colours in this file. Pens for the site plan, both on screen and in the site-plan Illustrator download, use `src/drawing-style.css`. Fills for the plan, the 3D view, and every download use `src/colours.css`. Both files are described below.
 
 ## How to edit it on GitHub
 
@@ -84,6 +88,60 @@ A name the app does not load, such as a font from your computer only, will show 
 4. Click the pencil, copy that version’s values back if you need to, or use GitHub’s revert on that history entry if you are comfortable with it. The simple way is to edit the file again and put the old value back, then commit to `main` as above.
 5. Wait about 2 minutes and hard-refresh the site.
 
+## Fills
+
+`src/colours.css` is the only place a fill is written down. The on-screen plan, the 3D view, the PNG, the Illustrator files, and the Rhino layer colours all read these names through one helper. A live edit in the Colours panel is stored as `citycut.colours` and covers the file until you reset it.
+
+`--road-fill` and `--path-fill` keep the names they already had. The Line styles panel can still change them. Paste those two into `src/colours.css`, not into the pens file.
+
+| Variable | Default | What it controls |
+| --- | --- | --- |
+| `--sheet-fill` | `#f4f1ea` | Illustrator site-plan page, and the casing under a rail so the line still reads on the road. |
+| `--ground-fill` | `#e6e0d4` | Flat 3D ground, the ground on the 3D-view Illustrator sheet, and the Rhino Ground layer. |
+| `--export-backdrop` | `#e7e4dc` | Backdrop of the 3D PNG, and the page behind the 3D-view Illustrator drawing. |
+| `--figure-fill` | `#000000` | Figure-ground buildings, the black frame, north mark, and scale bar on that drawing, on screen and in the Illustrator file, and the Rhino FigureGround layer. |
+| `--plan-empty` | `#6d675e` | The sentence shown when a plan has nothing in the frame. |
+| `--contour-label` | `#6A6A6A` | Elevation numbers on the site plan, on screen and in the Illustrator file. |
+| `--building-uniform` | `#f6f3ec` | Buildings when colour-by-use is off, that legend swatch, and the Rhino Buildings layer. |
+| `--use-residential` | `#E06C75` | Residential footprints, legend swatch, 3D massing, and the Residential Rhino layer. |
+| `--use-commercial` | `#61AFEF` | Commercial footprints, legend swatch, 3D massing, and the Commercial Rhino layer. |
+| `--use-retail` | `#E5C07B` | Retail footprints, legend swatch, 3D massing, and the Retail Rhino layer. |
+| `--use-mixed` | `#C678DD` | Mixed-use footprints, legend swatch, 3D massing, and the MixedUse Rhino layer. |
+| `--use-industrial` | `#D19A66` | Industrial footprints, legend swatch, 3D massing, and the Industrial Rhino layer. |
+| `--use-civic` | `#98C379` | Civic footprints, legend swatch, 3D massing, and the Civic Rhino layer. |
+| `--use-recreation` | `#56B6C2` | Recreation footprints, legend swatch, 3D massing, and the Recreation Rhino layer. |
+| `--use-outbuilding` | `#5C6370` | Outbuilding footprints, legend swatch, 3D massing, and the Outbuilding Rhino layer. |
+| `--use-unclassified` | `#B8B8B8` | Unclassified footprints, legend swatch, 3D massing, and the Unclassified Rhino layer. |
+| `--source-osm` | `#1F4E79` | Buildings whose use came from an OpenStreetMap tag, and that legend swatch. |
+| `--source-zone` | `#A9C4DE` | Buildings whose use was inferred from a planning zone, and that legend swatch. |
+| `--source-none` | `#B8B8B8` | Buildings with no tag and no zone, and that legend swatch. |
+| `--road-fill` | `#4A4A4A` | Unioned carriageway on the site plan and the figure-ground, on screen and in the Illustrator file. |
+| `--path-fill` | `#DADADA` | Unioned footpath on the site plan and the figure-ground, on screen and in the Illustrator file. |
+| `--road-arterial` | `#3a3a3a` | Arterial ribbons in the 3D view and the 3D-view Illustrator file, and the Rhino Roads layer. |
+| `--road-local` | `#4a4a4a` | Local-street ribbons in the 3D view and the 3D-view Illustrator file. |
+| `--road-path` | `#5c5c5c` | Path ribbons in the 3D view and the 3D-view Illustrator file. |
+| `--green-fill` | `#b7d39a` | Parks and other green on the site plan, on screen and in the Illustrator file. |
+| `--green-3d` | `#7f9a62` | Green mesh in the 3D view, the 3D-view Illustrator green, and the Rhino Green layer. |
+| `--water-fill` | `#9ec9d1` | Water on the site plan, on screen and in the Illustrator file. |
+| `--water-3d` | `#8ebfc8` | Water mesh in the 3D view, the 3D-view Illustrator water, and the Rhino Water layer. |
+| `--tree-fill` | `#6ea35a` | Tree-crown fill on the site plan, on screen and in the Illustrator file. |
+| `--tree-crown` | `#5d8a45` | Tree-crown fill on the 3D-view Illustrator sheet. |
+| `--tree-crown-edge` | `#2c4a28` | Outline around that 3D-view crown. |
+| `--tree-trunk` | `#3e3428` | Trunk on the 3D-view Illustrator sheet. |
+| `--tree-layer` | `#3e8a48` | Rhino Trees layer. The 3D crowns themselves are the shipped tree models. |
+| `--rail-fill` | `#8d6244` | Rail ribbon in the 3D view and the Rhino Rail layer. The site-plan rail line stays a pen. |
+| `--ground-edge` | `#2c2924` | Outline drawn around the flat ground slab in the 3D view. |
+| `--hatch-paper` | `#ffffff` | Light band of the hatch on a zone-inferred building. |
+| `--hatch-ink` | `#7d7d7d` | Dark band of the hatch on a zone-inferred building. |
+| `--terrain-layer` | `#d6cebe` | Rhino Terrain layer. The mesh itself is shaded by elevation. |
+| `--rhino-fallback` | `#b4b4b4` | Rhino layer used when a mesh has no colour of its own. |
+| `--view-ink` | `#24221c` | Outlines and the title plate text on the 3D-view Illustrator sheet. |
+| `--light-sky` | `#f7f4ee` | Sky side of the 3D hemisphere light. |
+| `--light-ground` | `#c9c0b2` | Ground side of the 3D hemisphere light. |
+| `--cut-line` | `#f7f4ee` | Frame drawn around the cut on the satellite preview. |
+
+The contour lines in Rhino use the pen `--contour-stroke` from `src/drawing-style.css`, not a fill.
+
 ## Site plan lines
 
 `src/drawing-style.css` is the only place the site plan’s pens are written down. The on-screen drawing and the site-plan Illustrator file both read it.
@@ -97,13 +155,13 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--building-stroke-mm` | Weight of the building outline. `0` leaves the fill with no edge | `0` | mm |
 | `--building-stroke` | Colour of the building outline | `#1C1B17` | colour |
 | `--building-dash` | Dash of the building outline | `none` | mm, on then off |
-| `--road-fill` | Fill of the unioned carriageway | `#4A4A4A` | colour |
+| `--road-fill` | Fill of the unioned carriageway. Defined in `src/colours.css` | `#4A4A4A` | colour |
 | `--road-kerb` | Whether the kerb outline is drawn. `on` or `off` | `on` | on or off |
 | `--road-kerb-mm` | Weight of the kerb, on the outer edge of the road fill | `0.22` | mm |
 | `--road-kerb-stroke` | Colour of the kerb. Mid grey, so it shows on the road fill and on the page | `#8D8983` | colour |
 | `--road-kerb-dash` | Dash of the kerb | `none` | mm, on then off |
 | `--path-width-m` | Width of a footpath strip, centred on the way. `1.2` is 0.6 m each side | `1.2` | m on the ground |
-| `--path-fill` | Fill of the unioned footpath. Slightly darker than the page, lighter than the road | `#DADADA` | colour |
+| `--path-fill` | Fill of the unioned footpath. Defined in `src/colours.css`. Slightly darker than the page, lighter than the road | `#DADADA` | colour |
 | `--path-edge` | Whether the footpath outline is drawn. `on` or `off` | `off` | on or off |
 | `--path-edge-mm` | Weight of that outline, on the unioned edge only. `0` leaves the fill | `0.15` | mm |
 | `--path-edge-stroke` | Colour of the footpath outline | `#5C5C5C` | colour |
@@ -133,8 +191,9 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--tree-stroke-mm` | Weight of a tree-crown outline | `0.15` | mm |
 | `--tree-stroke` | Colour of a tree-crown outline | `#245232` | colour |
 | `--tree-dash` | Dash of a tree-crown outline | `none` | mm, on then off |
+| `--building-edge` | Colour of the massing edge in the 3D view | `#000000` | colour |
 
-Green fills, water fills, and tree fills are not in this list. Only their edges are. The footpath fill is in the list because the strip is the line.
+Green fills, water fills, tree fills, and the other fills are in the Fills table above. This list is the pens. The footpath fill stays named here because the Line styles panel still edits it, and the value itself is in `src/colours.css`.
 
 The ways in the footpath strip are the ones the path layer already took from OpenStreetMap: `highway=footway` (including `footway=sidewalk` and `footway=crossing`), `path`, `cycleway`, `steps`, `pedestrian`, `bridleway`, and `track`. They are buffered in metres, unioned into one shape, and drawn under the road fill. Buildings stay on top. Figure-ground uses the same strip and the same `#DADADA` fill, which reads as a light grey on the white sheet.
 
@@ -149,7 +208,15 @@ You can try a pen on the site before you edit the file.
 3. Change a weight, a colour, or a dash. The site plan updates straight away. The choices are Solid, Dashed 1.5 0.75, Fine dash 0.75 0.4, Dotted, and Custom. Road fill and footpath fill have their own colours. Kerb outline and Footpath edge turn those outlines on or off. Footpath width is metres on the ground, in steps of 0.1.
 4. The browser remembers the edits (`citycut.lineStyles`). A site-plan download after an edit uses the edited pens.
 5. Click **Copy CSS**. It copies only the variables you changed, ready to paste. A short note confirms the copy.
-6. Open `src/drawing-style.css` on github.com, click the pencil, and paste those lines over the matching ones. Do not delete the semicolon.
+6. Open `src/drawing-style.css` on github.com, click the pencil, and paste those lines over the matching ones. If the copy also names `src/colours.css`, paste that block into the fills file instead. Do not delete the semicolon.
 7. Commit to `main`, wait about 2 minutes, and hard-refresh. Then click **Reset to defaults** in Line styles so the browser is not still covering the file with the old edit.
 
 **Reset to defaults** clears the remembered edits and shows the file again.
+
+The same drawer has **Colours**, under Line styles. It lists every fill, with a swatch and a picker, in the same groups as `src/colours.css`.
+
+1. Open **Colours**. It starts collapsed.
+2. Change a swatch. The plan, the 3D view, and the next download use the new fill straight away.
+3. The browser remembers the edits (`citycut.colours`).
+4. Click **Copy CSS**. It copies only the fills you changed, ready to paste into `src/colours.css`.
+5. Paste those lines over the matching ones, commit, and hard-refresh. Then click **Reset to defaults** so the browser is not still covering the file.

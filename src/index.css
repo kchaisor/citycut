@@ -889,7 +889,8 @@ input[type="range"]::-moz-range-thumb {
 }
 .line-style-row input[type="number"] { width: 100%; height: 32px; padding: 0 6px; }
 .line-style-row input[type="color"],
-.line-style-fill input[type="color"] {
+.line-style-fill input[type="color"],
+.colour-row input[type="color"] {
   width: 2rem;
   height: 32px;
   padding: 2px;
@@ -916,5 +917,39 @@ input[type="range"]::-moz-range-thumb {
 }
 .line-style-row select,
 .line-style-custom { height: 32px; padding: 0 6px; }
+.colour-group {
+  margin: 0;
+  padding: 8px 0 0;
+  border: 0;
+  border-top: 1px solid var(--panel-border);
+  min-width: 0;
+}
+.colour-group legend {
+  padding: 0;
+  font-size: 12px;
+  font-weight: 560;
+  color: var(--muted-text);
+}
+.colour-row {
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr) 2rem;
+  gap: 8px;
+  align-items: center;
+  min-height: 32px;
+  font-size: 13px;
+}
+.colour-swatch {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 4px;
+  border: 1px solid var(--panel-border);
+}
+.colour-name { display: grid; min-width: 0; }
+.colour-key {
+  color: var(--muted-text);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .line-styles-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .line-styles-notice { margin: 0; color: var(--muted-text); font-size: 13px; }

@@ -1,0 +1,156 @@
+/*
+  CityCut fills.
+  Kelvin: this file is every fill. The site plan, the figure-ground, the 3D
+  view, the PNG download, the Illustrator files, and the Rhino layer colours
+  all read these names. Line weights, dashes, and strokes stay in
+  drawing-style.css. Change a value, keep the name. See THEME.md.
+*/
+
+:root {
+  /* Paper and ground */
+
+  /* Illustrator site-plan page, and the casing under a rail so the line still reads on the road. */
+  --sheet-fill: #f4f1ea;
+
+  /* Flat 3D ground when the frame has no terrain, the ground on the 3D-view Illustrator sheet, and the Rhino Ground layer. */
+  --ground-fill: #e6e0d4;
+
+  /* Backdrop of the 3D PNG download, and the page behind the 3D-view Illustrator drawing. */
+  --export-backdrop: #e7e4dc;
+
+  /* Figure-ground buildings, and the black frame, north mark, and scale bar on that drawing. */
+  --figure-fill: #000000;
+
+  /* The sentence shown when a plan has nothing in the frame. */
+  --plan-empty: #6d675e;
+
+  /* Elevation numbers drawn on the site-plan contours. */
+  --contour-label: #6A6A6A;
+
+  /* Building use */
+
+  /* Buildings when colour-by-use is off, the legend swatch in that state, and the Rhino Buildings layer. */
+  --building-uniform: #f6f3ec;
+
+  /* Residential footprints, legend swatch, and the Residential Rhino layer. */
+  --use-residential: #E06C75;
+
+  /* Commercial footprints, legend swatch, and the Commercial Rhino layer. */
+  --use-commercial: #61AFEF;
+
+  /* Retail footprints, legend swatch, and the Retail Rhino layer. */
+  --use-retail: #E5C07B;
+
+  /* Mixed-use footprints, legend swatch, and the MixedUse Rhino layer. */
+  --use-mixed: #C678DD;
+
+  /* Industrial footprints, legend swatch, and the Industrial Rhino layer. */
+  --use-industrial: #D19A66;
+
+  /* Civic footprints, legend swatch, and the Civic Rhino layer. */
+  --use-civic: #98C379;
+
+  /* Recreation footprints, legend swatch, and the Recreation Rhino layer. */
+  --use-recreation: #56B6C2;
+
+  /* Outbuilding footprints, legend swatch, and the Outbuilding Rhino layer. */
+  --use-outbuilding: #5C6370;
+
+  /* Unclassified footprints, legend swatch, and the Unclassified Rhino layer. */
+  --use-unclassified: #B8B8B8;
+
+  /* Source badges */
+
+  /* Buildings whose use came from an OpenStreetMap tag, and that legend swatch. */
+  --source-osm: #1F4E79;
+
+  /* Buildings whose use was inferred from a planning zone, and that legend swatch. */
+  --source-zone: #A9C4DE;
+
+  /* Buildings with no tag and no zone, and that legend swatch. */
+  --source-none: #B8B8B8;
+
+  /* Roads and paths */
+
+  /* Unioned carriageway on the site plan and the figure-ground, on screen and in the Illustrator file. */
+  --road-fill: #4A4A4A;
+
+  /* Unioned footpath on the site plan and the figure-ground, on screen and in the Illustrator file. */
+  --path-fill: #DADADA;
+
+  /* Arterial ribbons in the 3D view and the 3D-view Illustrator file, and the Rhino Roads layer. */
+  --road-arterial: #3a3a3a;
+
+  /* Local-street ribbons in the 3D view and the 3D-view Illustrator file. */
+  --road-local: #4a4a4a;
+
+  /* Path ribbons in the 3D view and the 3D-view Illustrator file. */
+  --road-path: #5c5c5c;
+
+  /* Green */
+
+  /* Parks and other green on the site plan, on screen and in the Illustrator file. */
+  --green-fill: #b7d39a;
+
+  /* Green mesh in the 3D view, the 3D-view Illustrator green, and the Rhino Green layer. */
+  --green-3d: #7f9a62;
+
+  /* Water */
+
+  /* Water on the site plan, on screen and in the Illustrator file. */
+  --water-fill: #9ec9d1;
+
+  /* Water mesh in the 3D view, the 3D-view Illustrator water, and the Rhino Water layer. */
+  --water-3d: #8ebfc8;
+
+  /* Trees */
+
+  /* Tree-crown fill on the site plan, on screen and in the Illustrator file. */
+  --tree-fill: #6ea35a;
+
+  /* Tree-crown fill on the 3D-view Illustrator sheet. */
+  --tree-crown: #5d8a45;
+
+  /* Outline around that 3D-view crown. */
+  --tree-crown-edge: #2c4a28;
+
+  /* Trunk on the 3D-view Illustrator sheet. */
+  --tree-trunk: #3e3428;
+
+  /* Rhino Trees layer. */
+  --tree-layer: #3e8a48;
+
+  /* Rail */
+
+  /* Rail ribbon in the 3D view and the Rhino Rail layer. The site-plan rail line stays in drawing-style.css. */
+  --rail-fill: #8d6244;
+
+  /* 3D-only materials */
+
+  /* Outline drawn around the flat ground slab. */
+  --ground-edge: #2c2924;
+
+  /* Light band of the hatch on a zone-inferred building. */
+  --hatch-paper: #ffffff;
+
+  /* Dark band of the hatch on a zone-inferred building. */
+  --hatch-ink: #7d7d7d;
+
+  /* Rhino Terrain layer. The mesh itself is shaded by elevation. */
+  --terrain-layer: #d6cebe;
+
+  /* Rhino layer used when a mesh has no colour of its own. */
+  --rhino-fallback: #b4b4b4;
+
+  /* Outlines and the title plate text on the 3D-view Illustrator sheet. */
+  --view-ink: #24221c;
+
+  /* Sky side of the 3D hemisphere light. */
+  --light-sky: #f7f4ee;
+
+  /* Ground side of the 3D hemisphere light. */
+  --light-ground: #c9c0b2;
+
+  /* Frame drawn around the cut on the satellite preview. */
+  --cut-line: #f7f4ee;
+}

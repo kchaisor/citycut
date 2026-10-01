@@ -2,7 +2,8 @@ import * as THREE from "three";
 import type { PdfChunk, Rgb } from "./aiDocument";
 import { buildLayeredPdf } from "./aiDocument";
 import type { CameraShot } from "./cameraShot";
-import { BUILDING_USE_META, SOURCE_META, UNIFORM_BUILDING_COLOR } from "./buildingUse";
+import { BUILDING_USE_META, SOURCE_META, uniformBuildingColor } from "./buildingUse";
+import { getColour, type ColourKey } from "./colours";
 import { formatCoord, openRing, signedArea } from "./geo";
 import { hexRgb } from "./lineweights";
 import { ROAD_COLOR, SURFACE } from "./surfaceLayers";
@@ -24,15 +25,11 @@ export const VIEW_LAYER_ORDER = [
 export const VIEW_OUTLINE_MM = 0.18;
 
 const PAGE_LONG_MM = 340;
-const INK = hexRgb("#24221c");
-const BACKDROP = hexRgb("#e7e4dc");
-const GROUND = hexRgb("#e6e0d4");
-const GREEN = hexRgb("#7f9a62");
-const WATER = hexRgb("#8ebfc8");
-const CROWN = hexRgb("#5d8a45");
-const CROWN_EDGE = hexRgb("#2c4a28");
-const TRUNK = hexRgb("#3e3428");
 const LIGHT: Vec3 = normalize([0.4, 1, 0.2]);
+
+function fillOf(name: ColourKey): Rgb {
+  return hexRgb(getColour(name));
+}
 
 type Vec3 = [number, number, number];
 export type ScreenPoint = { x: number; y: number; z: number };
@@ -141,7 +138,7 @@ function orient(ring: Ring, ccw: boolean): Pt[] {
 
 function buildingColor(building: BuildingFeat, style: ViewStyle): Rgb {
   if (style.colourBySource) return hexRgb(SOURCE_META[building.source].color);
-  if (style.uniformBuildings) return hexRgb(UNIFORM_BUILDING_COLOR);
+  if (style.uniformBuildings) return hexRgb(uniformBuildingColor());
   return hexRgb(BUILDING_USE_META[building.use].color);
 }
 
@@ -421,6 +418,12 @@ function collect(
 ): { fills: Fill[]; edges: Edge[]; trees: Fill[] } {
   const forward = shot.forward;
   const half = model.sideM / 2;
+  const groundFill = fillOf("--ground-fill");
+  const greenFill = fillOf("--green-3d");
+  const waterFill = fillOf("--water-3d");
+  const crownFill = fillOf("--tree-crown");
+  const crownEdge = fillOf("--tree-crown-edge");
+  const trunkFill = fillOf("--tree-trunk");
   const field = model.terrain;
   const sample = field ? (east: number, north: number) => sampleTerrain(field, east, north, model.sideM) : null;
   const fills: Fill[] = [];
@@ -473,7 +476,7 @@ function collect(
         worldOf(half, half, y),
         worldOf(-half, half, y),
       ]),
-      GROUND,
+      groundFill,
       "Ground",
       0,
       false,
@@ -494,7 +497,7 @@ function collect(
 
   model.areas.forEach((area, index) => {
     const lift = (area.kind === "water" ? SURFACE.water.lift : SURFACE.green.lift) + (index % 4) * 0.008;
-    const color = area.kind === "water" ? WATER : GREEN;
+    const color = area.kind === "water" ? waterFill : greenFill;
     const layer = area.kind === "water" ? "Water" : "Green";
     const rank = area.kind === "water" ? 2 : 3;
     if (!sample) {
@@ -633,7 +636,7 @@ function collect(
             {
               rings: [[[base.x, base.y], [trunk.x, trunk.y]]],
               close: false,
-              stroke: TRUNK,
+              stroke: trunkFill,
               strokeMm: 0.22,
               cap: "round" as const,
             },
@@ -653,8 +656,8 @@ function collect(
             cy: centre.y,
             rx,
             ry,
-            fill: CROWN,
-            stroke: CROWN_EDGE,
+            fill: crownFill,
+            stroke: crownEdge,
             strokeMm: 0.12,
           },
         ],
@@ -667,6 +670,8 @@ function collect(
 
 export function viewChunks(model: CityModel, shot: CameraShot, style: ViewStyle): PdfChunk[] {
   const page = viewPageMm(shot.width, shot.height);
+  const ink = fillOf("--view-ink");
+  const backdrop = fillOf("--export-backdrop");
   const { fills, edges, trees } = collect(model, shot, style, page.widthMm, page.heightMm);
   const ordered = [...fills, ...trees].sort((a, b) => b.depth - a.depth || a.rank - b.rank);
   const occ = fills.flatMap((fill) => fill.occ);
@@ -682,7 +687,7 @@ export function viewChunks(model: CityModel, shot: CameraShot, style: ViewStyle)
       outlinePaths.push({
         rings: [[[a.x, a.y], [b.x, b.y]]],
         close: false,
-        stroke: INK,
+        stroke: ink,
         strokeMm: VIEW_OUTLINE_MM,
         cap: "round",
         join: "round",
@@ -696,7 +701,7 @@ export function viewChunks(model: CityModel, shot: CameraShot, style: ViewStyle)
       paths: [
         {
           rings: [[[0, 0], [page.widthMm, 0], [page.widthMm, page.heightMm], [0, page.heightMm]]],
-          fill: BACKDROP,
+          fill: backdrop,
           close: true,
           evenOdd: false,
         },
@@ -713,15 +718,15 @@ export function viewChunks(model: CityModel, shot: CameraShot, style: ViewStyle)
       {
         rings: [[[3, 2.4], [3 + plate, 2.4], [3 + plate, 12.4], [3, 12.4]]],
         fill: [0.98, 0.97, 0.95],
-        stroke: INK,
+        stroke: ink,
         strokeMm: 0.13,
         close: true,
         evenOdd: false,
       },
     ],
     texts: [
-      { x: 4.2, y: 8.4, sizeMm: 2.6, text: label, color: INK },
-      { x: 4.2, y: 4.2, sizeMm: 2.8, text: "not to scale", color: INK },
+      { x: 4.2, y: 8.4, sizeMm: 2.6, text: label, color: ink },
+      { x: 4.2, y: 4.2, sizeMm: 2.8, text: "not to scale", color: ink },
     ],
   });
   return chunks;

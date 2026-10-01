@@ -1,11 +1,14 @@
 import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import { SATELLITE_STYLE } from "../content/constants";
+import { getColour } from "../lib/colours";
 import { squareBBox } from "../lib/geo";
+import { useColourRevision } from "../lib/useColourRevision";
 import type { CityModel } from "../types";
 
 export function SatellitePane({ model }: { model: CityModel }) {
   const ref = useRef<HTMLDivElement>(null);
+  const colourTick = useColourRevision();
 
   useEffect(() => {
     const container = ref.current;
@@ -36,7 +39,7 @@ export function SatellitePane({ model }: { model: CityModel }) {
         id: "cut-line",
         type: "line",
         source: "cut",
-        paint: { "line-color": "#f7f4ee", "line-width": 2 },
+        paint: { "line-color": getColour("--cut-line"), "line-width": 2 },
       });
       map.fitBounds(
         [
@@ -47,7 +50,7 @@ export function SatellitePane({ model }: { model: CityModel }) {
       );
     });
     return () => map.remove();
-  }, [model]);
+  }, [model, colourTick]);
 
   return <div ref={ref} className="map-canvas" />;
 }

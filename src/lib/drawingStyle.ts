@@ -1,9 +1,11 @@
+import { COLOUR_FALLBACK } from "./colours";
+import { cssColorToHex } from "./cssVars";
+import { drawingSheetColor } from "./drawingSheet";
 import {
   CONTOUR_COLOR,
   CONTOUR_DASH_MM,
   CONTOUR_GAP_MM,
   LINE_MM,
-  PATH_FILL,
   PATH_WIDTH_M,
   screenDashPx,
   screenPx,
@@ -33,7 +35,7 @@ export type StrokeKey =
 export type StrokeStyle = {
   /** Printed millimetres. */
   mm: number;
-  /** #RRGGBB */
+  /** Six-digit hex. */
   color: string;
   /** `none`, or two millimetre lengths "on off". `0 0.6` is a dotted line. */
   dash: string;
@@ -136,23 +138,23 @@ export const DASH_PRESETS = [
 
 export type DashPresetId = (typeof DASH_PRESETS)[number]["id"] | "custom";
 
-const INK = "#1C1B17";
+const INK = drawingSheetColor("--frame-stroke");
 
 export const DEFAULT_LINE_STYLES: LineStyles = {
-  building: { mm: LINE_MM.buildingCut, color: INK, dash: "none" },
-  kerb: { mm: LINE_MM.propertyRoad, color: "#8D8983", dash: "none" },
-  path: { mm: LINE_MM.secondary, color: "#5C5C5C", dash: "none" },
-  rail: { mm: LINE_MM.secondary, color: "#8D6244", dash: "none" },
-  green: { mm: 0, color: "#5E8A45", dash: "none" },
-  water: { mm: 0, color: "#3E7C86", dash: "none" },
+  building: { mm: LINE_MM.buildingCut, color: drawingSheetColor("--building-stroke"), dash: "none" },
+  kerb: { mm: LINE_MM.propertyRoad, color: drawingSheetColor("--road-kerb-stroke"), dash: "none" },
+  path: { mm: LINE_MM.secondary, color: drawingSheetColor("--path-edge-stroke"), dash: "none" },
+  rail: { mm: LINE_MM.secondary, color: drawingSheetColor("--rail-stroke"), dash: "none" },
+  green: { mm: 0, color: drawingSheetColor("--green-stroke"), dash: "none" },
+  water: { mm: 0, color: drawingSheetColor("--water-stroke"), dash: "none" },
   contour: { mm: LINE_MM.contour, color: CONTOUR_COLOR.toUpperCase(), dash: `${CONTOUR_DASH_MM} ${CONTOUR_GAP_MM}` },
   frame: { mm: LINE_MM.frame, color: INK, dash: "none" },
-  annotation: { mm: LINE_MM.annotation, color: INK, dash: "none" },
-  tree: { mm: LINE_MM.secondary, color: "#245232", dash: "none" },
-  roadFill: "#4A4A4A",
+  annotation: { mm: LINE_MM.annotation, color: drawingSheetColor("--annotation-stroke"), dash: "none" },
+  tree: { mm: LINE_MM.secondary, color: drawingSheetColor("--tree-stroke"), dash: "none" },
+  roadFill: COLOUR_FALLBACK["--road-fill"],
   kerbOn: true,
   pathWidthM: PATH_WIDTH_M,
-  pathFill: PATH_FILL,
+  pathFill: COLOUR_FALLBACK["--path-fill"],
   pathEdgeOn: false,
   contourIndexMm: 0.18,
   contourIndexEvery: 5,
@@ -207,22 +209,9 @@ export function cloneLineStyles(style: LineStyles = DEFAULT_LINE_STYLES): LineSt
 }
 
 export function parseColor(raw: string | undefined | null): string | null {
-  if (!raw) return null;
-  const text = raw.trim();
-  const hex = text.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
-  if (hex) {
-    const body = hex[1];
-    const full = body.length === 3 ? body.split("").map((char) => char + char).join("") : body;
-    return `#${full.toUpperCase()}`;
-  }
-  const rgb = text.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
-  if (!rgb) return null;
-  const channel = (value: string) =>
-    Math.max(0, Math.min(255, Math.round(Number(value))))
-      .toString(16)
-      .padStart(2, "0")
-      .toUpperCase();
-  return `#${channel(rgb[1])}${channel(rgb[2])}${channel(rgb[3])}`;
+  const hex = cssColorToHex(raw);
+  if (!hex) return null;
+  return hex.length === 9 ? hex.slice(0, 7) : hex;
 }
 
 /** Ground metres. Rounded to 0.1 m, the editor step. */
@@ -482,13 +471,23 @@ export function changedVariables(current: LineStyles, baseline: LineStyles): Rec
   return out;
 }
 
-/** A block Kelvin can paste into src/drawing-style.css. Only changed variables. */
+/** Changed variables, split so fills are pasted into colours.css and pens into drawing-style.css. */
 export function copyCssText(current: LineStyles, baseline: LineStyles): string {
   const changed = changedVariables(current, baseline);
   const names = Object.keys(changed);
   if (names.length === 0) return "/* No line-style changes to paste. */\n";
-  const body = names.map((name) => `${name}: ${changed[name]};`).join("\n");
-  return `/* Paste into src/drawing-style.css */\n${body}\n`;
+  const fills = names.filter((name) => name === ROAD_FILL_VAR || name === PATH_FILL_VAR);
+  const strokes = names.filter((name) => name !== ROAD_FILL_VAR && name !== PATH_FILL_VAR);
+  const blocks: string[] = [];
+  if (strokes.length > 0) {
+    const body = strokes.map((name) => `${name}: ${changed[name]};`).join("\n");
+    blocks.push(`/* Paste into src/drawing-style.css */\n${body}`);
+  }
+  if (fills.length > 0) {
+    const body = fills.map((name) => `${name}: ${changed[name]};`).join("\n");
+    blocks.push(`/* Paste into src/colours.css */\n${body}`);
+  }
+  return `${blocks.join("\n")}\n`;
 }
 
 let fileBaseline: LineStyles | null = null;

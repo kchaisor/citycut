@@ -2,6 +2,7 @@ import * as THREE from "three";
 import rhino3dm from "rhino3dm/rhino3dm.module.js";
 import type { RhinoModuleOptions } from "rhino3dm";
 import { buildCityGroup, disposeObject } from "./buildCity";
+import { colourRgb } from "./colours";
 import { CRS_NOTE, mgaCrs, projectLocal, projectLonLat } from "./crs";
 import { readDrawingStyle } from "./drawingStyle";
 import { figureGround, figureGroundDatum } from "./figureGround";
@@ -12,17 +13,27 @@ type Rgb = { r: number; g: number; b: number };
 
 type Rhino = Awaited<ReturnType<typeof rhino3dm>>;
 
-const LAYER_COLORS: Record<string, { r: number; g: number; b: number }> = {
-  Buildings: { r: 246, g: 243, b: 236 },
-  Roads: { r: 58, g: 58, b: 58 },
-  Rail: { r: 141, g: 98, b: 68 },
-  Water: { r: 142, g: 191, b: 200 },
-  Green: { r: 127, g: 154, b: 98 },
-  Ground: { r: 230, g: 224, b: 212 },
-  Terrain: { r: 214, g: 206, b: 190 },
-  Trees: { r: 62, g: 138, b: 72 },
-  Contours: { r: 176, g: 176, b: 176 },
-};
+function contourLayerColor(): Rgb {
+  const hex = readDrawingStyle().contour.color;
+  const value = Number.parseInt(hex.slice(1), 16);
+  return { r: (value >> 16) & 255, g: (value >> 8) & 255, b: value & 255 };
+}
+
+/** Layer swatches, read when the file is written so a live colour edit is included. */
+function layerColors(): Record<string, Rgb> {
+  return {
+    Buildings: colourRgb("--building-uniform"),
+    Roads: colourRgb("--road-arterial"),
+    Rail: colourRgb("--rail-fill"),
+    Water: colourRgb("--water-3d"),
+    Green: colourRgb("--green-3d"),
+    Ground: colourRgb("--ground-fill"),
+    Terrain: colourRgb("--terrain-layer"),
+    Trees: colourRgb("--tree-layer"),
+    Contours: contourLayerColor(),
+    FigureGround: colourRgb("--figure-fill"),
+  };
+}
 
 let rhinoPromise: Promise<Rhino> | null = null;
 
@@ -65,7 +76,8 @@ function ensureLayer(
   layer.name = parts.length === 2 ? parts[1] : name;
   layer.color = color;
   if (parts.length === 2) {
-    const parentIndex = ensureLayer(rhino, doc, layers, parts[0], LAYER_COLORS[parts[0]] ?? { r: 246, g: 243, b: 236 });
+    const palette = layerColors();
+    const parentIndex = ensureLayer(rhino, doc, layers, parts[0], palette[parts[0]] ?? colourRgb("--building-uniform"));
     layer.parentLayerId = doc.layers().get(parentIndex).id;
   }
   const index = doc.layers().add(layer);
@@ -144,7 +156,8 @@ function addMesh(
   rhinoMesh.normals().computeNormals();
 
   const name = layerName(mesh);
-  const layerColor = (mesh.userData.layerColor as Rgb | undefined) ?? LAYER_COLORS[name] ?? { r: 180, g: 180, b: 180 };
+  const palette = layerColors();
+  const layerColor = (mesh.userData.layerColor as Rgb | undefined) ?? palette[name] ?? colourRgb("--rhino-fallback");
   const layerIndex = ensureLayer(rhino, doc, layers, name, layerColor);
   const attributes = new rhino.ObjectAttributes();
   attributes.name = name;
@@ -174,7 +187,7 @@ function addFigureGround(
   const ground = figureGround(model.buildings, model.sideM);
   if (ground.polygons.length === 0) return;
   const z = figureGroundDatum(model);
-  const layerIndex = ensureLayer(rhino, doc, layers, "FigureGround", { r: 0, g: 0, b: 0 });
+  const layerIndex = ensureLayer(rhino, doc, layers, "FigureGround", layerColors().FigureGround);
   for (const polygon of ground.polygons) {
     for (const ring of polygon) {
       const points: number[][] = [];
@@ -216,7 +229,7 @@ function addContours(
   const layer = model.contourLayer ?? (model.contours && model.terrain ? demContourLayer(model.terrain, model.sideM) : null);
   if (!layer || layer.lines.length === 0) return;
   const every = readDrawingStyle().contourIndexEvery;
-  const layerIndex = ensureLayer(rhino, doc, layers, "Contours", LAYER_COLORS.Contours);
+  const layerIndex = ensureLayer(rhino, doc, layers, "Contours", layerColors().Contours);
   for (const line of layer.lines) {
     const points: number[][] = [];
     for (const point of line.points) {

@@ -8,6 +8,17 @@ declare module "rhino3dm/rhino3dm.module.js" {
 
 declare module "node:fs/promises" {
   export function readFile(path: string): Promise<Uint8Array>;
+  export function readFile(path: string, encoding: "utf8"): Promise<string>;
+  export function readdir(
+    path: string,
+    options: { withFileTypes: true },
+  ): Promise<Array<{ name: string; isDirectory(): boolean; isFile(): boolean }>>;
+}
+
+declare module "node:path" {
+  export function join(...parts: string[]): string;
+  export function relative(from: string, to: string): string;
+  export const sep: string;
 }
 
 declare module "node:module" {

@@ -1,4 +1,5 @@
 import type { RoadGrade } from "../types";
+import { getColour, type ColourKey } from "./colours";
 
 /**
  * Draw order for surfaces that share the ground plane.
@@ -34,17 +35,35 @@ export function overlapLift(index: number): number {
   return (Math.abs(index) % 4) * 0.008;
 }
 
+const ROAD_KEYS = {
+  arterial: "--road-arterial",
+  local: "--road-local",
+  path: "--road-path",
+} as const satisfies Record<RoadGrade, ColourKey>;
+
 /** Asphalt. Minor streets and footways are a step lighter than the carriageway. */
 export const ROAD_COLOR: Record<RoadGrade, string> = {
-  arterial: "#3a3a3a",
-  local: "#4a4a4a",
-  path: "#5c5c5c",
+  get arterial() {
+    return getColour(ROAD_KEYS.arterial);
+  },
+  get local() {
+    return getColour(ROAD_KEYS.local);
+  },
+  get path() {
+    return getColour(ROAD_KEYS.path);
+  },
 };
 
 export const ROAD_RGB: Record<RoadGrade, { r: number; g: number; b: number }> = {
-  arterial: { r: 0x3a, g: 0x3a, b: 0x3a },
-  local: { r: 0x4a, g: 0x4a, b: 0x4a },
-  path: { r: 0x5c, g: 0x5c, b: 0x5c },
+  get arterial() {
+    return hexRgb(ROAD_COLOR.arterial);
+  },
+  get local() {
+    return hexRgb(ROAD_COLOR.local);
+  },
+  get path() {
+    return hexRgb(ROAD_COLOR.path);
+  },
 };
 
 export function roadGradeLayer(grade: RoadGrade | undefined): SurfaceLayer {

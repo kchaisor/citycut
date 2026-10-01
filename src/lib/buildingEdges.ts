@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { drawingSheetColor } from "./drawingSheet";
 import { SURFACE } from "./surfaceLayers";
 
 /**
@@ -10,10 +11,10 @@ import { SURFACE } from "./surfaceLayers";
 export const BUILDING_EDGE_THRESHOLD_DEG = 25;
 
 /**
- * Ink, not a second gray. Roads are already #3a3a3a, and the paper background
- * sits on the model clear colour, so a pure black line stays crisp and reads as the massing edge.
+ * Ink for the massing edge. The value is --building-edge in drawing-style.css.
+ * A black line stays crisp against the roads and the model background.
  */
-export const BUILDING_EDGE_COLOR = "#000000";
+export const BUILDING_EDGE_COLOR = drawingSheetColor("--building-edge");
 
 /**
  * Pushes filled faces away from the camera so edge lines, left on the

@@ -1,5 +1,6 @@
 import type { PdfChunk, PdfPath, Rgb } from "./aiDocument";
 import { buildLayeredPdf } from "./aiDocument";
+import { getColour, type ColourKey } from "./colours";
 import {
   dashIsDotted,
   dashPair,
@@ -36,12 +37,10 @@ export const SITE_LAYER_ORDER = [
 
 export const FIGURE_LAYER_ORDER = ["Frame", "Buildings", "Paths", "Annotation"] as const;
 
-const BLACK: Rgb = [0, 0, 0];
 /** Sheet colour. A path or rail casing uses this so it vanishes on the page and reads on the road fill. */
-const PAPER = hexRgb("#f4f1ea");
-const GREEN = hexRgb("#b7d39a");
-const WATER = hexRgb("#9ec9d1");
-const TREE = hexRgb("#6ea35a");
+function fillOf(name: ColourKey): Rgb {
+  return hexRgb(getColour(name));
+}
 
 function pen(style: StrokeStyle, join: "miter" | "round" = "round"): Partial<PdfPath> | null {
   if (!(style.mm > 0)) return null;
@@ -238,7 +237,7 @@ export function sitePlanChunks(model: CityModel, scale: number, style: LineStyle
             [layout.frameX + layout.frameMm, bottom + layout.frameMm],
             [layout.frameX, bottom + layout.frameMm],
           ]],
-          fill: PAPER,
+          fill: fillOf("--sheet-fill"),
           close: true,
           evenOdd: false,
         },
@@ -253,7 +252,7 @@ export function sitePlanChunks(model: CityModel, scale: number, style: LineStyle
       name: "Green",
       paths: green.map((rings) => ({
         rings,
-        fill: GREEN,
+        fill: fillOf("--green-fill"),
         evenOdd: true,
         close: true,
         ...(greenPen ?? {}),
@@ -267,7 +266,7 @@ export function sitePlanChunks(model: CityModel, scale: number, style: LineStyle
       name: "Water",
       paths: water.map((rings) => ({
         rings,
-        fill: WATER,
+        fill: fillOf("--water-fill"),
         evenOdd: true,
         close: true,
         ...(waterPen ?? {}),
@@ -310,7 +309,7 @@ export function sitePlanChunks(model: CityModel, scale: number, style: LineStyle
       name: "Contour labels",
       texts: plan.contourLabels.map((label) => {
         const [x, y] = sheetPoint(label.east, label.north, model.sideM, layout);
-        return { x, y, sizeMm: 1.6, text: label.text, color: hexRgb("#6A6A6A") };
+        return { x, y, sizeMm: 1.6, text: label.text, color: fillOf("--contour-label") };
       }),
     });
   }
@@ -334,7 +333,7 @@ export function sitePlanChunks(model: CityModel, scale: number, style: LineStyle
           cy,
           rx: radius,
           ry: radius,
-          fill: TREE,
+          fill: fillOf("--tree-fill"),
           ...(treePen ?? {}),
         };
       }),
@@ -364,7 +363,7 @@ function casedLine(ring: number[][], style: StrokeStyle, drawn: Partial<PdfPath>
   const line: PdfPath = { rings: [ring], close: false, ...drawn, cap: "round", join: "round" };
   if (!(casing > style.mm)) return [line];
   return [
-    { rings: [ring], close: false, stroke: PAPER, strokeMm: casing, cap: "round", join: "round" },
+    { rings: [ring], close: false, stroke: fillOf("--sheet-fill"), strokeMm: casing, cap: "round", join: "round" },
     line,
   ];
 }
@@ -385,13 +384,13 @@ export function figureGroundChunks(model: CityModel, scale: number, style: LineS
     .filter((rings) => rings.length > 0)
     .map((rings) => ({
       rings,
-      fill: BLACK,
+      fill: fillOf("--figure-fill"),
       evenOdd: true,
       close: true,
     }));
   if (paths.length > 0) chunks.push({ name: "Buildings", paths });
-  chunks.push(frameStroke(layout, { mm: LINE_MM.frame, color: "#000000", dash: "none" }));
-  chunks.push(annotation(model, layout, null, { mm: LINE_MM.annotation, color: "#1C1B17", dash: "none" }));
+  chunks.push(frameStroke(layout, { mm: LINE_MM.frame, color: getColour("--figure-fill"), dash: "none" }));
+  chunks.push(annotation(model, layout, null, { mm: LINE_MM.annotation, color: style.annotation.color, dash: "none" }));
   return chunks;
 }
 

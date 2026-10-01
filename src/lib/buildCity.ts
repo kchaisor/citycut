@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { BUILDING_USE_META, SOURCE_META, UNIFORM_BUILDING_COLOR, buildingLayerName } from "./buildingUse";
+import { BUILDING_USE_META, SOURCE_META, buildingLayerName, uniformBuildingColor } from "./buildingUse";
+import { getColour } from "./colours";
 import { buildTreeGroup } from "./treeArchetypes";
 import { openRing, signedArea } from "./geo";
 import { hexRgb, overlapLift, ROAD_COLOR, ROAD_RGB, roadGradeLayer, SURFACE } from "./surfaceLayers";
@@ -240,13 +241,17 @@ function drapedAreaGeometry(
   return geometry;
 }
 
-let stripeMap: THREE.CanvasTexture | null | undefined;
+const stripeMaps = new Map<string, THREE.CanvasTexture | null>();
 
 /** Diagonal stripes so a zone colour reads as a guess. */
 function inferredStripeMap(): THREE.CanvasTexture | null {
-  if (stripeMap !== undefined) return stripeMap;
+  const paper = getColour("--hatch-paper");
+  const ink = getColour("--hatch-ink");
+  const key = `${paper}|${ink}`;
+  const cached = stripeMaps.get(key);
+  if (cached !== undefined) return cached;
   if (typeof document === "undefined") {
-    stripeMap = null;
+    stripeMaps.set(key, null);
     return null;
   }
   const canvas = document.createElement("canvas");
@@ -254,12 +259,12 @@ function inferredStripeMap(): THREE.CanvasTexture | null {
   canvas.height = 64;
   const context = canvas.getContext("2d");
   if (!context) {
-    stripeMap = null;
+    stripeMaps.set(key, null);
     return null;
   }
-  context.fillStyle = "#ffffff";
+  context.fillStyle = paper;
   context.fillRect(0, 0, 64, 64);
-  context.strokeStyle = "#7d7d7d";
+  context.strokeStyle = ink;
   context.lineWidth = 7;
   context.beginPath();
   for (let offset = -64; offset <= 64; offset += 16) {
@@ -272,7 +277,7 @@ function inferredStripeMap(): THREE.CanvasTexture | null {
   texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(5, 5);
   texture.colorSpace = THREE.SRGBColorSpace;
-  stripeMap = texture;
+  stripeMaps.set(key, texture);
   return texture;
 }
 
@@ -358,7 +363,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     groundGeo.rotateX(-Math.PI / 2);
     const groundMat = paint(
       new THREE.MeshStandardMaterial({
-        color: "#e6e0d4",
+        color: getColour("--ground-fill"),
         roughness: 0.95,
         side: THREE.DoubleSide,
       }),
@@ -370,10 +375,10 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     group.add(ground);
   }
 
-  const greenMat = paint(new THREE.MeshStandardMaterial({ color: "#7f9a62", roughness: 1 }), SURFACE.green);
+  const greenMat = paint(new THREE.MeshStandardMaterial({ color: getColour("--green-3d"), roughness: 1 }), SURFACE.green);
   const waterMat = paint(
     new THREE.MeshStandardMaterial({
-      color: "#8ebfc8",
+      color: getColour("--water-3d"),
       roughness: 0.35,
       metalness: 0.04,
     }),
@@ -422,7 +427,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     group.add(water);
   }
 
-  const railMat = paint(new THREE.MeshStandardMaterial({ color: "#8d6244", roughness: 0.8 }), SURFACE.rail);
+  const railMat = paint(new THREE.MeshStandardMaterial({ color: getColour("--rail-fill"), roughness: 0.8 }), SURFACE.rail);
   const segment = model.terrain ? Math.min(model.terrain.spacingM, 8) : undefined;
   const grades: RoadGrade[] = ["path", "local", "arterial"];
   for (const grade of grades) {
@@ -499,7 +504,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
       const use = (Object.keys(BUILDING_USE_META) as BuildingUse[]).find(
         (key) => buildingLayerName(key) === name,
       );
-      const color = sourceMeta?.color ?? (uniform || !use ? UNIFORM_BUILDING_COLOR : BUILDING_USE_META[use].color);
+      const color = sourceMeta?.color ?? (uniform || !use ? uniformBuildingColor() : BUILDING_USE_META[use].color);
       const material = paint(
         new THREE.MeshStandardMaterial({ color, roughness: sourceMeta?.inferred ? 0.92 : 0.78 }),
         SURFACE.building,
