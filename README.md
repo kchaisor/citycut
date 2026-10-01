@@ -10,8 +10,6 @@ The production build is set up to publish to [https://kchaisor.github.io/citycut
 
 Pushes to `main` build `dist` and deploy it with GitHub Actions (`.github/workflows/pages.yml`). Vite’s `base` is `/citycut-export/`, so the built HTML, scripts, styles, and favicon resolve under that project path. The app has no client-side router, so there is no extra basename to set.
 
-GitHub Pages still needs **Settings → Pages → Source: GitHub Actions** turned on once for this repo (the site source is not enabled yet). After that, the address above is the live app.
-
 ## Pipeline
 
 1. **Choose a block.** A MapLibre map fills the screen. A fixed frame stays centered while you pan and zoom. The frame is a true square on the ground, from 0.25 km to 1.4 km on a side (about 2 km² at the top of the slider).
@@ -23,7 +21,7 @@ GitHub Pages still needs **Settings → Pages → Source: GitHub Actions** turne
    - **3D model** — extruded footprints in the browser (Three.js)
    - **Drawing** — SVG site plan, pan and zoom
    - **Satellite** — Esri imagery of the frame, preview only
-6. **Download.** glTF binary (`.glb`), Rhino (`.3dm`), and SVG. DXF, DAE, and JPG are not offered.
+6. **Download.** PNG, Rhino (`.3dm`), and Illustrator (`.ai`). glTF (`.glb`), SVG, DXF, DAE, and JPG are not offered.
 
 Building height, in order:
 
@@ -112,9 +110,9 @@ Nominatim’s usage policy asks for an identifying User-Agent. Browsers set that
 | Buildings, roads and rail, water and green | Real, from Overpass, clipped to the frame |
 | 3D orbit view | Real |
 | Drawing tab (SVG, pan/zoom) | Real |
-| glTF `.glb` download | Real |
+| glTF `.glb` download | Not offered |
 | Rhino `.3dm` download | Real. Meshes in GDA2020 / MGA metres, Z-up |
-| SVG download | Real |
+| SVG download | Not offered |
 | Satellite basemap and satellite tab | Real preview. Not embedded in the glTF or SVG |
 | Trees | Real when the toggle is on. City of Melbourne urban forest, OpenStreetMap trees, Vicmap Tree Urban, and canopy infill. Instanced massing archetypes in the 3D view, glTF, and Rhino; circles on the SVG plan |
 | Terrain | Real when the toggle is on (the default). Mapterhorn Terrarium tiles, heightfield mesh named Terrain in the glTF and on a Terrain layer in the 3DM. Off falls back to a flat ground surface |
@@ -166,3 +164,9 @@ CityCut is an original interface. Kelvin Chai, Melbourne.
 - `src/lib/svgPlan.ts` — drawing tab and SVG download
 - `src/lib/terrain.ts` — Terrarium decode, height sampling, contours, terrain mesh
 - `src/lib/fetchTerrain.ts` — Mapterhorn tile fetch
+- `src/colours.css` — every fill, read through `getColour`
+- `src/drawing-style.css` — site-plan line weights, dashes, and line colours
+- `src/lib/aiPlan.ts` — site-plan and figure-ground Illustrator `.ai`
+- `src/lib/aiView.ts` — 3D-view Illustrator `.ai`
+- `src/lib/aiDocument.ts` — layered PDF written out as `.ai`
+- `src/lib/capturePng.ts` — PNG of the 3D view
