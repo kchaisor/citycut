@@ -235,7 +235,7 @@ describe("removed exports", () => {
 describe("Illustrator plans", () => {
   it("writes the site plan as layered PDF 1.6 with true pen weights and dashed contours", async () => {
     const info = await inspect(await sitePlanPdf(model(), 1000));
-    expect(info.header.startsWith("%PDF")).toBe(true);
+    expect(info.header.startsWith("%PDF-1.6")).toBe(true);
     expect(info.layers.length).toBeGreaterThan(0);
     expect(info.layers[0]).toBe("Frame/Sheet");
     expect(info.widthMm).toBeCloseTo(420, 0);
@@ -376,10 +376,10 @@ describe("Illustrator 3D view", () => {
     const shot = shotFromCamera(camera, 640, 400);
     const bytes = await viewAi(model(), shot, { uniformBuildings: false, colourBySource: false });
     const info = await inspect(bytes);
-    expect(info.header.startsWith("%!PS-Adobe-3.0")).toBe(true);
+    expect(info.header.startsWith("%PDF-1.6")).toBe(true);
     expect(info.layers.length).toBe(VIEW_LAYER_ORDER.length);
     expect(info.widthMm / info.heightMm).toBeCloseTo(640 / 400, 2);
-    expect(info.content).toContain("not to scale");
+    expect(info.text).toContain("not to scale");
     expect(info.text).toContain("Test Block");
     expect(info.text).toContain("-37.81360, 144.96310");
     expect(info.image).toBe(false);

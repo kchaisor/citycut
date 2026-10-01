@@ -139,11 +139,11 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--light-sky` | `#f7f4ee` | Sky side of the 3D hemisphere light. |
 | `--light-ground` | `#c9c0b2` | Ground side of the 3D hemisphere light. |
 | `--cut-line` | `#f7f4ee` | Frame drawn around the cut on the satellite preview. |
-| `--sun-arc-summer` | `#e8a040` | Summer-solstice sun path in the 3D heliodon (screen only). |
-| `--sun-arc-equinox` | `#d4c4a8` | Equinox sun path in the 3D heliodon (screen only). |
-| `--sun-arc-winter` | `#8eb8d8` | Winter-solstice sun path in the 3D heliodon (screen only). |
-| `--sun-marker` | `#ffd54a` | Active sun marker in the 3D heliodon (screen only). |
-| `--sun-compass` | `#6e685e` | Compass ring and north pointer in the 3D heliodon (screen only). |
+| `--sun-arc-summer` | `#e8742a` | Summer-solstice sun path in the 3D heliodon (screen only). |
+| `--sun-arc-equinox` | `#2f9e5a` | Equinox sun path in the 3D heliodon (screen only). |
+| `--sun-arc-winter` | `#2f6fd6` | Winter-solstice sun path in the 3D heliodon (screen only). |
+| `--sun-marker` | `#ffc400` | Active sun marker in the 3D heliodon (screen only). |
+| `--sun-compass` | `#3a3630` | Compass ring and north pointer in the 3D heliodon (screen only). |
 | `--sun-compass-label` | `#1a1916` | N/S/E/W labels on the compass ring (screen only). |
 
 The contour lines in Rhino use the pen `--contour-stroke` from `src/drawing-style.css`, not a fill.

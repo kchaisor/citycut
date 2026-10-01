@@ -6,7 +6,7 @@ import {
   nativeAiLooksLikeEps,
   parseNativeAiLayers,
 } from "./aiNative";
-import { SITE_LAYER_ORDER, sitePlanAi } from "./aiPlan";
+import { SITE_LAYER_ORDER, sitePlanAi, sitePlanAi8 } from "./aiPlan";
 import type { CityModel } from "../types";
 
 function model(): CityModel {
@@ -45,8 +45,14 @@ function model(): CityModel {
 }
 
 describe("native Illustrator layers", () => {
-  it("writes AI8 EPS with %AI5_BeginLayer blocks in site-plan order", async () => {
+  it("keeps the PDF writer as the default site-plan export", async () => {
     const bytes = await sitePlanAi(model(), 1000);
+    expect(new TextDecoder("latin1").decode(bytes.subarray(0, 5))).toBe("%PDF-");
+    expect(nativeAiLooksLikeEps(bytes)).toBe(false);
+  });
+
+  it("writes AI8 EPS with %AI5_BeginLayer blocks in site-plan order", () => {
+    const bytes = sitePlanAi8(model(), 1000);
     const text = new TextDecoder("latin1").decode(bytes);
     expect(nativeAiLooksLikeEps(bytes)).toBe(true);
     expect(text).toContain("%%Creator: Adobe Illustrator(R) 8.0");

@@ -1,7 +1,15 @@
 import { ChevronDown } from "lucide-react";
 import { useId, useState } from "react";
 import { SOLAR_PRESETS, dayOfYear, dateFromDayOfYear, type SolarPresetId } from "../lib/solar";
+import { getColour, type ColourKey } from "../lib/colours";
+import { useColourRevision } from "../lib/useColourRevision";
 import type { SolarViewSettings } from "./SolarHeliodon";
+
+const SOLAR_LEGEND: { key: ColourKey; label: string }[] = [
+  { key: "--sun-arc-summer", label: "21 Dec (summer solstice)" },
+  { key: "--sun-arc-equinox", label: "22 Sep (equinox)" },
+  { key: "--sun-arc-winter", label: "21 Jun (winter solstice)" },
+];
 
 export function SolarPanel({
   settings,
@@ -11,6 +19,7 @@ export function SolarPanel({
   onChange: (next: SolarViewSettings) => void;
 }) {
   const [open, setOpen] = useState(true);
+  useColourRevision();
   const panelId = useId();
   const doy = dayOfYear(settings.year, settings.month, settings.day);
   const minutes = settings.hour * 60 + settings.minute;
@@ -94,6 +103,24 @@ export function SolarPanel({
             </button>
           ))}
         </div>
+        {settings.showPath && (
+          <ul className="solar-legend" aria-label="Sun path legend">
+            {SOLAR_LEGEND.map((entry) => (
+              <li key={entry.key}>
+                <span className="solar-legend-swatch" style={{ background: getColour(entry.key) }} aria-hidden />
+                {entry.label}
+              </li>
+            ))}
+            <li>
+              <span
+                className="solar-legend-swatch solar-legend-dot"
+                style={{ background: getColour("--sun-marker") }}
+                aria-hidden
+              />
+              Sun now
+            </li>
+          </ul>
+        )}
         {settings.showPath && (
           <p className="field-note solar-compass-note" aria-hidden>
             Compass at ground level: N toward −Z (true north). E +X, S +Z, W −X.

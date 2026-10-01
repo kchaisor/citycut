@@ -155,19 +155,19 @@
   --cut-line: #f7f4ee;
 
   /* Summer-solstice sun path in the 3D heliodon (screen only). */
-  --sun-arc-summer: #e8a040;
+  --sun-arc-summer: #e8742a;
 
   /* Equinox sun path. */
-  --sun-arc-equinox: #d4c4a8;
+  --sun-arc-equinox: #2f9e5a;
 
   /* Winter-solstice sun path. */
-  --sun-arc-winter: #8eb8d8;
+  --sun-arc-winter: #2f6fd6;
 
   /* Active sun marker sphere. */
-  --sun-marker: #ffd54a;
+  --sun-marker: #ffc400;
 
   /* Compass ring and north pointer in the heliodon. */
-  --sun-compass: #6e685e;
+  --sun-compass: #3a3630;
 
   /* N/S/E/W labels on the compass ring. */
   --sun-compass-label: #1a1916;

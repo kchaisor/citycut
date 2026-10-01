@@ -118,10 +118,17 @@ function City({
 
 function RendererShadows({ enabled }: { enabled: boolean }) {
   const gl = useThree((state) => state.gl);
+  const scene = useThree((state) => state.scene);
   useLayoutEffect(() => {
     gl.shadowMap.enabled = enabled;
     gl.shadowMap.type = THREE.PCFSoftShadowMap;
-  }, [enabled, gl]);
+    gl.shadowMap.needsUpdate = true;
+    // Programs compiled before the toggle lack shadow code until they are rebuilt.
+    scene.traverse((object) => {
+      const material = (object as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      for (const item of Array.isArray(material) ? material : material ? [material] : []) item.needsUpdate = true;
+    });
+  }, [enabled, gl, scene]);
   return null;
 }
 
@@ -470,9 +477,15 @@ export function Scene3D({
   const sunSample = useMelbourneSunSample(model.center.lat, model.center.lon, solar);
   const [glEpoch, setGlEpoch] = useState(0);
   const fillKeyLight = solar.castShadows ? 0 : 1.35;
-  const fillAmbient = solar.castShadows ? 0.06 : 0.28;
-  const fillHemi = solar.castShadows ? 0.22 : 0.7;
-  const shadowTargetY = groundY + (model.terrain ? 0.02 : 0);
+  const fillAmbient = solar.castShadows ? 0.15 : 0.28;
+  const fillHemi = solar.castShadows ? 0.55 : 0.7;
+  const shadowTargetY = groundY;
+  const siteTopY = useMemo(() => {
+    let top = model.terrain ? model.terrain.max : 0;
+    const base = model.terrain ? model.terrain.max : 0;
+    for (const building of model.buildings) top = Math.max(top, base + building.height);
+    return top;
+  }, [model]);
   return (
     <Canvas
       key={glEpoch}
@@ -500,6 +513,7 @@ export function Scene3D({
         sideM={model.sideM}
         enabled={solar.castShadows}
         targetY={shadowTargetY}
+        topY={siteTopY}
       />
       <City model={model} uniformBuildings={uniformBuildings} colourBySource={colourBySource} onBounds={onBounds} />
       <SolarHeliodon

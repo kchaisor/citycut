@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { PdfChunk, Rgb } from "./aiDocument";
-import { usePdfIllustratorExport } from "./aiExportFormat";
+import { useNativeAi8Export } from "./aiExportFormat";
 import { buildLayeredNativeAi } from "./aiNative";
 import { buildLayeredNativeAiPdfOps } from "./aiNativePdfFallback";
 import { buildLayeredPdf } from "./aiDocument";
@@ -750,11 +750,11 @@ export async function viewAi(model: CityModel, shot: CameraShot, style: ViewStyl
   const page = viewPageMm(shot.width, shot.height);
   const title = `${model.placeLabel} · 3D view · ${formatCoord(model.center.lat)}, ${formatCoord(model.center.lon)}`;
   const chunks = viewChunks(model, shot, style);
-  if (usePdfIllustratorExport()) {
-    return buildLayeredPdf(page.widthMm, page.heightMm, chunks, VIEW_LAYER_ORDER);
+  if (useNativeAi8Export()) {
+    return buildLayeredNativeAi(page.widthMm, page.heightMm, chunks, VIEW_LAYER_ORDER, title);
   }
   if (import.meta.env.VITE_CITYCUT_AI_PDF_OPS === "true") {
     return buildLayeredNativeAiPdfOps(page.widthMm, page.heightMm, chunks, VIEW_LAYER_ORDER, title);
   }
-  return buildLayeredNativeAi(page.widthMm, page.heightMm, chunks, VIEW_LAYER_ORDER, title);
+  return buildLayeredPdf(page.widthMm, page.heightMm, chunks, VIEW_LAYER_ORDER);
 }
