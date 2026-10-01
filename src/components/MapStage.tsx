@@ -23,6 +23,7 @@ export function MapStage({
   onCancel,
   onView,
   onBasemap,
+  onFlyLanded,
 }: {
   basemap: Basemap;
   sideM: number;
@@ -32,17 +33,21 @@ export function MapStage({
   onCancel: () => void;
   onView: (view: ViewState) => void;
   onBasemap: (basemap: Basemap) => void;
+  /** The search or home camera animation has stopped. */
+  onFlyLanded: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const sideRef = useRef(sideM);
   const onViewRef = useRef(onView);
+  const onFlyLandedRef = useRef(onFlyLanded);
   const appliedBasemap = useRef<Basemap>(basemap);
   const mountedFly = useRef(fly?.token ?? null);
   const [frame, setFrame] = useState<Frame | null>(null);
   const [ready, setReady] = useState(false);
   sideRef.current = sideM;
   onViewRef.current = onView;
+  onFlyLandedRef.current = onFlyLanded;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -112,6 +117,14 @@ export function MapStage({
     if (!map || !fly || !ready) return;
     if (fly.token === mountedFly.current) return;
     mountedFly.current = fly.token;
+    let landed = false;
+    const finish = () => {
+      if (landed) return;
+      landed = true;
+      map.off("moveend", finish);
+      onFlyLandedRef.current();
+    };
+    map.on("moveend", finish);
     if (fly.bounds) {
       map.fitBounds(
         [
@@ -127,6 +140,15 @@ export function MapStage({
         duration: 1100,
       });
     }
+    // fitBounds starts on the next frame. If it never moves, land anyway so a later
+    // pan is not stuck on the searched point.
+    const frame = window.requestAnimationFrame(() => {
+      if (!map.isMoving()) finish();
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      map.off("moveend", finish);
+    };
   }, [fly, ready]);
 
   const sideKm = sideM / 1000;

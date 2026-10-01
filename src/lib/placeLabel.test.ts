@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { aiFilename, fileStem, pngFilename } from "./download";
+import { writeFrameSearch } from "./frameQuery";
 import {
   addressStillApplies,
   coordinateLabel,
@@ -8,8 +9,10 @@ import {
   formatLocality,
   labelFromGeocoder,
   localityName,
+  resolveSearchedCut,
   slugifyPlace,
   type GeocoderAddress,
+  type PlaceAnchor,
 } from "./placeLabel";
 import type { CityModel } from "../types";
 
@@ -92,6 +95,53 @@ describe("addressStillApplies", () => {
   it("switches when the searched point sits outside the cut, even under 50 m", () => {
     const outside = { lat: anchor.lat + 30 / 111_132, lon: anchor.lon };
     expect(addressStillApplies(anchor, outside, 40)).toBe(false);
+  });
+});
+
+describe("resolveSearchedCut", () => {
+  const address = "1–9 Gertrude St, Fitzroy VIC 3065";
+  const anchor: PlaceAnchor = { lat: -37.8052929, lon: 144.9746389, label: address };
+  const melbourne = { lat: -37.8136, lon: 144.9631 };
+  const sideM = 1000;
+
+  it("keeps the searched address when Create model runs before the fly leaves Melbourne", () => {
+    const cut = resolveSearchedCut(melbourne, anchor, sideM, false);
+    expect(cut.label).toBe(address);
+    expect(cut.center).toEqual({ lat: anchor.lat, lon: anchor.lon });
+    const model = { placeLabel: cut.label, center: cut.center, sideM } as CityModel;
+    expect(pngFilename(model)).toBe(
+      "citycut-1-9-gertrude-st-fitzroy-vic-3065-37.8053S-144.9746E-1000m.png",
+    );
+    const share = writeFrameSearch("", {
+      lat: cut.center.lat,
+      lon: cut.center.lon,
+      sideKm: sideM / 1000,
+      label: cut.label ?? "",
+    });
+    const params = new URLSearchParams(share.slice(1));
+    expect(params.get("label")).toBe(address);
+    expect(params.get("lat")).toBe("-37.80529");
+    expect(params.get("lon")).toBe("144.97464");
+    expect(params.get("km")).toBe("1");
+  });
+
+  it("keeps the address after the fly lands on the point, and after a small pan", () => {
+    const landed = resolveSearchedCut(anchor, anchor, sideM, true);
+    expect(landed.label).toBe(address);
+    const panned = {
+      lat: anchor.lat + 30 / 111_132,
+      lon: anchor.lon,
+    };
+    const kept = resolveSearchedCut(panned, anchor, sideM, true);
+    expect(kept.label).toBe(address);
+    expect(kept.center).toEqual(panned);
+  });
+
+  it("drops the address once the landed cut is more than about 50 m from the search", () => {
+    const moved = { lat: anchor.lat + 80 / 111_132, lon: anchor.lon };
+    const cut = resolveSearchedCut(moved, anchor, sideM, true);
+    expect(cut.label).toBeNull();
+    expect(cut.center).toEqual(moved);
   });
 });
 

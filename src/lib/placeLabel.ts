@@ -192,6 +192,28 @@ export function cutSizeLabel(sideM: number): string {
   return `${metres} × ${metres} m`;
 }
 
+export type PlaceAnchor = LonLat & { label: string };
+
+/**
+ * The block Create model should cut, and the searched address when it still names that block.
+ * A null label means the centre has left the search, so the caller reverse-geocodes `center`.
+ *
+ * Until the search fly lands, the cut is the searched point. The camera can still be on the
+ * previous centre (Melbourne CBD for a fresh visit). That centre is far enough for the 50 m
+ * rule to drop the address and name the cut from a reverse lookup of the old centre.
+ * After the fly lands, the camera is the cut, and a small move keeps the address.
+ */
+export function resolveSearchedCut(
+  camera: LonLat,
+  anchor: PlaceAnchor | null,
+  sideM: number,
+  flyLanded: boolean,
+): { center: LonLat; label: string | null } {
+  const center = anchor && !flyLanded ? { lat: anchor.lat, lon: anchor.lon } : { lat: camera.lat, lon: camera.lon };
+  const label = anchor && addressStillApplies(anchor, center, sideM) ? anchor.label : null;
+  return { center, label };
+}
+
 /**
  * The searched point still names the cut while it sits within about 50 m
  * and inside the square. Past either limit the address no longer applies.

@@ -21,6 +21,7 @@ import {
   addressStillApplies,
   coordinateLabel,
   cutSizeLabel,
+  resolveSearchedCut,
 } from "./lib/placeLabel";
 import { TERRAIN_UNAVAILABLE, terrainNote } from "./lib/terrain";
 import { MAX_TREE_INSTANCES, assembleTreeTiers } from "./lib/treeTiers";
@@ -52,6 +53,8 @@ export default function App() {
   const phaseRef = useRef<"select" | "model">("select");
   const settleTimer = useRef<number | null>(null);
   const lookupGen = useRef(0);
+  /** False while a search fly is still travelling from the previous centre. */
+  const flyLandedRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
 
   const [sideKm, setSideKm] = useState(queried?.sideKm ?? DEFAULT_SIDE_KM);
@@ -90,14 +93,11 @@ export default function App() {
     lookupGen.current += 1;
   }
 
-  async function labelFor(view: ViewState): Promise<string> {
-    const anchor = anchorRef.current;
-    const sideM = sideRef.current * 1000;
-    if (anchor && addressStillApplies(anchor, view, sideM)) return anchor.label;
+  async function localityOrCoordinates(lat: number, lon: number): Promise<string> {
     try {
-      return await reverseLocality(view.lat, view.lon);
+      return await reverseLocality(lat, lon);
     } catch {
-      return coordinateLabel(view.lat, view.lon);
+      return coordinateLabel(lat, lon);
     }
   }
 
@@ -138,7 +138,15 @@ export default function App() {
   function onView(view: ViewState) {
     viewRef.current = view;
     if (phaseRef.current !== "select") return;
+    // Positions along the search fly are not the cut. A reverse lookup of one of
+    // them would replace the address with whatever suburb the camera is passing.
+    if (anchorRef.current && !flyLandedRef.current) return;
     scheduleSettle();
+  }
+
+  function onFlyLanded() {
+    flyLandedRef.current = true;
+    if (phaseRef.current === "select") scheduleSettle();
   }
 
   useEffect(() => {
@@ -165,6 +173,11 @@ export default function App() {
 
   function onPlace(place: PlaceHit) {
     anchorRef.current = { lon: place.lon, lat: place.lat, label: place.label };
+    flyLandedRef.current = false;
+    if (settleTimer.current != null) {
+      window.clearTimeout(settleTimer.current);
+      settleTimer.current = null;
+    }
     invalidateLookup();
     publishLabel(place.label);
     setFly({
@@ -231,7 +244,11 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      const label = await labelFor(view);
+      const decided = resolveSearchedCut(view, anchorRef.current, sideM, flyLandedRef.current);
+      view.lat = decided.center.lat;
+      view.lon = decided.center.lon;
+      viewRef.current = view;
+      const label = decided.label ?? (await localityOrCoordinates(view.lat, view.lon));
       if (controller.signal.aborted) return;
       publishLabel(label);
       const center = { lon: view.lon, lat: view.lat };
@@ -407,6 +424,7 @@ export default function App() {
             onCancel={cancel}
             onView={onView}
             onBasemap={onBasemap}
+            onFlyLanded={onFlyLanded}
           />
           <SelectChrome
             placeLabel={placeLabel}
