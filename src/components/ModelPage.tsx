@@ -49,6 +49,8 @@ import { IconRail, type RailItem } from "./IconRail";
 import { SatellitePane } from "./SatellitePane";
 import { Scene3D, type SceneExporter } from "./Scene3D";
 import { SceneBoundary } from "./SceneBoundary";
+import { SolarPanel } from "./SolarPanel";
+import type { SolarViewSettings } from "./SolarHeliodon";
 
 type Tab = "3d" | "drawing" | "satellite";
 
@@ -96,6 +98,15 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [fitToken, setFitToken] = useState(0);
   const [view, setView] = useState<ViewMemory>(loadView);
   const [snapId, setSnapId] = useState(0);
+  const [solar, setSolar] = useState<SolarViewSettings>(() => ({
+    showPath: false,
+    castShadows: false,
+    year: 2026,
+    month: 9,
+    day: 22,
+    hour: 15,
+    minute: 0,
+  }));
   const exportRef = useRef<SceneExporter | null>(null);
   const onExportReady = useCallback((exporter: SceneExporter | null) => {
     exportRef.current = exporter;
@@ -238,6 +249,7 @@ export function ModelPage({ model }: { model: CityModel }) {
       <h1 className="sr-only">Your model is ready.</h1>
       <div className={tab === "drawing" ? "viewport is-drawing" : "viewport"}>
         <div className={tab === "3d" ? "fill" : "fill is-parked"}>
+          {tab === "3d" && <SolarPanel settings={solar} onChange={setSolar} />}
           <SceneBoundary>
             <Scene3D
               model={model}
@@ -247,6 +259,7 @@ export function ModelPage({ model }: { model: CityModel }) {
               corner={view.corner}
               freeRotate={view.freeRotate}
               snapId={snapId}
+              solar={solar}
               onExportReady={onExportReady}
             />
           </SceneBoundary>

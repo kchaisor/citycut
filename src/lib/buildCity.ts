@@ -530,6 +530,19 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   const trees = buildTreeGroup(model.trees, sample ?? undefined);
   if (trees) group.add(trees);
 
+  group.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    if (mesh.name === "Terrain" || mesh.name === "Ground") {
+      mesh.receiveShadow = true;
+      return;
+    }
+    const instanced = mesh as THREE.InstancedMesh;
+    if (mesh.name.startsWith("Buildings") || mesh.name === "Trees" || instanced.isInstancedMesh) {
+      mesh.castShadow = true;
+    }
+  });
+
   return group;
 }
 

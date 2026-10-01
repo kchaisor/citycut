@@ -52,6 +52,12 @@ export const COLOUR_KEYS = [
   "--light-sky",
   "--light-ground",
   "--cut-line",
+  "--sun-arc-summer",
+  "--sun-arc-equinox",
+  "--sun-arc-winter",
+  "--sun-marker",
+  "--sun-compass",
+  "--sun-compass-label",
 ] as const;
 
 export type ColourKey = (typeof COLOUR_KEYS)[number];
@@ -123,6 +129,18 @@ export const COLOUR_GROUPS = [
       "--cut-line",
     ],
   },
+  {
+    id: "solar",
+    title: "Solar heliodon (3D screen only)",
+    keys: [
+      "--sun-arc-summer",
+      "--sun-arc-equinox",
+      "--sun-arc-winter",
+      "--sun-marker",
+      "--sun-compass",
+      "--sun-compass-label",
+    ],
+  },
 ] as const satisfies readonly { id: string; title: string; keys: readonly ColourKey[] }[];
 
 export const COLOUR_LABELS: Record<ColourKey, string> = {
@@ -169,6 +187,12 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--light-sky": "Sky light",
   "--light-ground": "Ground light",
   "--cut-line": "Satellite frame",
+  "--sun-arc-summer": "Sun path, summer",
+  "--sun-arc-equinox": "Sun path, equinox",
+  "--sun-arc-winter": "Sun path, winter",
+  "--sun-marker": "Sun marker",
+  "--sun-compass": "Compass ring",
+  "--sun-compass-label": "Compass labels",
 };
 
 const parsed = resolveSheet(parseCustomProperties(coloursCss));

@@ -24,6 +24,7 @@ import {
   type Vec3,
 } from "../lib/isoCamera";
 import type { ProjectionMode } from "../lib/viewMemory";
+import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
 import type { CityModel } from "../types";
 
 export type SceneExporter = {
@@ -434,6 +435,7 @@ export function Scene3D({
   corner,
   freeRotate,
   snapId,
+  solar,
   onExportReady,
 }: {
   model: CityModel;
@@ -443,6 +445,7 @@ export function Scene3D({
   corner: IsoCorner;
   freeRotate: boolean;
   snapId: number;
+  solar: SolarViewSettings;
   onExportReady: (exporter: SceneExporter | null) => void;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
@@ -454,13 +457,28 @@ export function Scene3D({
   const modelBg = useMemo(() => themeColor("--model-bg"), [colourTick]);
   const sky = getColour("--light-sky");
   const groundLight = getColour("--light-ground");
+  const groundY = model.terrain ? model.terrain.min : 0;
+  const sunSample = useMelbourneSunSample(model.center.lat, model.center.lon, solar);
   return (
-    <Canvas className="scene-canvas" dpr={[1, 1.75]} gl={{ antialias: true, alpha: false }}>
+    <Canvas
+      className="scene-canvas"
+      dpr={[1, 1.75]}
+      gl={{ antialias: true, alpha: false }}
+      shadows={solar.castShadows}
+    >
       <color attach="background" args={[modelBg]} />
       <hemisphereLight args={[sky, groundLight, 0.7]} />
       <ambientLight intensity={0.28} />
       <directionalLight position={[model.sideM * 0.4, model.sideM, model.sideM * 0.2]} intensity={1.35} />
+      <SolarLight sample={sunSample} sideM={model.sideM} enabled={solar.castShadows} />
       <City model={model} uniformBuildings={uniformBuildings} colourBySource={colourBySource} onBounds={onBounds} />
+      <SolarHeliodon
+        lat={model.center.lat}
+        lon={model.center.lon}
+        sideM={model.sideM}
+        groundY={groundY}
+        settings={solar}
+      />
       <Cameras
         side={model.sideM}
         lift={lift}

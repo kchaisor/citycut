@@ -153,4 +153,22 @@
 
   /* Frame drawn around the cut on the satellite preview. */
   --cut-line: #f7f4ee;
+
+  /* Summer-solstice sun path in the 3D heliodon (screen only). */
+  --sun-arc-summer: #e8a040;
+
+  /* Equinox sun path. */
+  --sun-arc-equinox: #d4c4a8;
+
+  /* Winter-solstice sun path. */
+  --sun-arc-winter: #8eb8d8;
+
+  /* Active sun marker sphere. */
+  --sun-marker: #ffd54a;
+
+  /* Compass ring and north pointer in the heliodon. */
+  --sun-compass: #6e685e;
+
+  /* N/S/E/W labels on the compass ring. */
+  --sun-compass-label: #1a1916;
 }

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { PdfChunk, Rgb } from "./aiDocument";
-import { buildLayeredPdf } from "./aiDocument";
+import { buildLayeredNativeAi } from "./aiNative";
 import type { CameraShot } from "./cameraShot";
 import { BUILDING_USE_META, SOURCE_META, uniformBuildingColor } from "./buildingUse";
 import { getColour, type ColourKey } from "./colours";
@@ -745,5 +745,8 @@ function edgeKey(a: V2, b: V2): string {
 
 export function viewAi(model: CityModel, shot: CameraShot, style: ViewStyle): Promise<Uint8Array> {
   const page = viewPageMm(shot.width, shot.height);
-  return buildLayeredPdf(page.widthMm, page.heightMm, viewChunks(model, shot, style), VIEW_LAYER_ORDER);
+  const title = `${model.placeLabel} · 3D view · ${formatCoord(model.center.lat)}, ${formatCoord(model.center.lon)}`;
+  return Promise.resolve(
+    buildLayeredNativeAi(page.widthMm, page.heightMm, viewChunks(model, shot, style), VIEW_LAYER_ORDER, title),
+  );
 }

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { getColour } from "./colours";
+import { withScreenOnlyHidden } from "./screenOnly";
 
 /**
  * Renders the current view into a target twice the canvas bitmap on each side
@@ -33,7 +34,9 @@ export async function captureViewPng(
   const pixels = new Uint8Array(width * height * 4);
   try {
     gl.setRenderTarget(target);
-    gl.render(scene, camera);
+    withScreenOnlyHidden(scene, () => {
+      gl.render(scene, camera);
+    });
     gl.readRenderTargetPixels(target, 0, 0, width, height, pixels);
   } finally {
     scene.background = previousBackground;

@@ -1,5 +1,5 @@
 import type { PdfChunk, PdfPath, Rgb } from "./aiDocument";
-import { buildLayeredPdf } from "./aiDocument";
+import { buildLayeredNativeAi } from "./aiNative";
 import { getColour, type ColourKey } from "./colours";
 import {
   dashIsDotted,
@@ -24,14 +24,15 @@ import type { CityModel, Pt } from "../types";
 
 export const SITE_LAYER_ORDER = [
   "Frame",
-  "Buildings",
-  "Roads",
-  "Rail",
-  "Paths",
-  "Water",
   "Green",
-  "Contours",
+  "Water",
+  "Roads",
+  "Paths",
+  "Rail",
+  "Buildings",
   "Trees",
+  "Contours",
+  "Contour labels",
   "Annotation",
 ] as const;
 
@@ -402,15 +403,22 @@ export function sitePlanAi(model: CityModel, scale: number, style?: LineStyles):
     const at = order.indexOf("Contours");
     order.splice(at + 1, 0, "Contour labels");
   }
-  return buildLayeredPdf(layout.pageWidthMm, layout.pageHeightMm, chunks, order);
+  const title = titleLine(model, layout);
+  return Promise.resolve(
+    buildLayeredNativeAi(layout.pageWidthMm, layout.pageHeightMm, chunks, order, title),
+  );
 }
 
 export function figureGroundAi(model: CityModel, scale: number, style?: LineStyles): Promise<Uint8Array> {
   const layout = layoutSheet(model.sideM, scale);
-  return buildLayeredPdf(
-    layout.pageWidthMm,
-    layout.pageHeightMm,
-    figureGroundChunks(model, scale, style ?? readDrawingStyle()),
-    FIGURE_LAYER_ORDER,
+  const title = titleLine(model, layout);
+  return Promise.resolve(
+    buildLayeredNativeAi(
+      layout.pageWidthMm,
+      layout.pageHeightMm,
+      figureGroundChunks(model, scale, style ?? readDrawingStyle()),
+      FIGURE_LAYER_ORDER,
+      title,
+    ),
   );
 }

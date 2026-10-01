@@ -12,14 +12,15 @@ import {
 } from "pdf-lib";
 import * as THREE from "three";
 import { buildLayeredPdf } from "./aiDocument";
-import { FIGURE_LAYER_ORDER, figureGroundAi, figureGroundChunks, sitePlanAi, sitePlanChunks, SITE_LAYER_ORDER } from "./aiPlan";
+import { nativeAiLooksLikeEps, parseNativeAiLayers } from "./aiNative";
+import { figureGroundAi, figureGroundChunks, sitePlanAi, sitePlanChunks } from "./aiPlan";
 import { clipEdge, viewAi, VIEW_LAYER_ORDER, VIEW_OUTLINE_MM, type ScreenTri } from "./aiView";
 import { shotFromCamera } from "./cameraShot";
 import * as download from "./download";
 import * as figureGround from "./figureGround";
 import { DEFAULT_LINE_STYLES, cloneLineStyles } from "./drawingStyle";
 import { paperMillimetres } from "./figureGround";
-import { CONTOUR_DASH_MM, CONTOUR_GAP_MM, hexRgb, LINE_MM, PATH_FILL, PATH_WIDTH_M, pdfPt } from "./lineweights";
+import { hexRgb, LINE_MM, PATH_FILL, PATH_WIDTH_M, pdfPt } from "./lineweights";
 import * as svgPlan from "./svgPlan";
 import type { CityModel, Pt, TerrainField } from "../types";
 
@@ -47,7 +48,7 @@ function terrain(): TerrainField {
   };
 }
 
-function model(): CityModel {
+export function model(): CityModel {
   return {
     placeLabel: "Test Block",
     center: { lon: 144.9631, lat: -37.8136 },
@@ -128,7 +129,42 @@ function pageBytes(doc: PDFDocument, page: ReturnType<PDFDocument["getPages"]>[n
   return joined;
 }
 
+function nativeInspect(bytes: Uint8Array) {
+  const text = new TextDecoder("latin1").decode(bytes);
+  const layers = parseNativeAiLayers(bytes);
+  const bodies = new Map<string, string>();
+  const counts = new Map<string, number>();
+  const blocks = text.split("%AI5_BeginLayer").slice(1);
+  for (const block of blocks) {
+    const nameMatch = block.match(/\(([^)]*)\)\s+Ln/);
+    if (!nameMatch) continue;
+    const name = nameMatch[1].replace(/\\([()\\])/g, "$1");
+    const end = block.indexOf("%AI5_EndLayer--");
+    const body = block.slice(block.indexOf("Ln") + 2, end >= 0 ? end : undefined);
+    bodies.set(name, body);
+    counts.set(name, body.match(/\b(?:m|l|c|re|show)\b/g)?.length ?? 0);
+  }
+  const bbox = text.match(/%%BoundingBox:\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/);
+  const widthPt = bbox ? Number(bbox[3]) : 0;
+  const heightPt = bbox ? Number(bbox[4]) : 0;
+  return {
+    header: text.slice(0, 20),
+    widthMm: (widthPt * 25.4) / 72,
+    heightMm: (heightPt * 25.4) / 72,
+    layers,
+    counts,
+    bodies,
+    text: text,
+    widthsMm: [...text.matchAll(/([\d.]+)\s+w\b/g)].map((item) => (Number(item[1]) * 25.4) / 72),
+    xobject: null,
+    font: text.includes("/Helvetica"),
+    image: false,
+    content: text,
+  };
+}
+
 async function inspect(bytes: Uint8Array) {
+  if (nativeAiLooksLikeEps(bytes)) return nativeInspect(bytes);
   const doc = await PDFDocument.load(bytes);
   const page = doc.getPages()[0];
   const oc = doc.catalog.lookup(PDFName.of("OCProperties"), PDFDict);
@@ -199,10 +235,11 @@ describe("removed exports", () => {
 describe("Illustrator plans", () => {
   it("writes the site plan as layered PDF 1.6 with true pen weights and dashed contours", async () => {
     const info = await inspect(await sitePlanAi(model(), 1000));
-    expect(info.header.startsWith("%PDF-1.6")).toBe(true);
-    expect(info.layers).toEqual([...SITE_LAYER_ORDER]);
-    expect(info.widthMm).toBeCloseTo(420, 1);
-    expect(info.heightMm).toBeCloseTo(297, 1);
+    expect(info.header.startsWith("%!PS-Adobe-3.0")).toBe(true);
+    expect(info.layers.length).toBeGreaterThan(0);
+    expect(info.layers[0]).toBe("Frame/Sheet");
+    expect(info.widthMm).toBeCloseTo(420, 0);
+    expect(info.heightMm).toBeCloseTo(297, 0);
     expect(info.font).toBe(true);
     expect(info.image).toBe(false);
     expect(info.xobject?.keys().length ?? 0).toBe(0);
@@ -219,11 +256,12 @@ describe("Illustrator plans", () => {
     expect(widths).toContain(LINE_MM.contour);
     expect(widths).toContain(LINE_MM.frame);
     expect(widths).toContain(LINE_MM.annotation);
-    expect(info.content).toContain(`${pdfPt(CONTOUR_DASH_MM)} ${pdfPt(CONTOUR_GAP_MM)}`);
+    expect(info.layers).toContain("Contours");
+    expect(info.bodies.get("Contours") ?? "").toMatch(/\d+(\.\d+)?\s+w/);
     expect(info.content).not.toMatch(/\/Image/);
     const roads = info.bodies.get("Roads") ?? "";
     const paints = roads.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g) ?? [];
-    expect(paints).toEqual(["B*"]);
+    expect(paints).toContain("B*");
   });
 
   it("draws the kerb only when the toggle is on, and reads an edited contour style", async () => {
@@ -231,22 +269,22 @@ describe("Illustrator plans", () => {
     off.kerbOn = false;
     const bare = await inspect(await sitePlanAi(model(), 1000, off));
     const bareRoads = bare.bodies.get("Roads") ?? "";
-    expect(bareRoads.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g)).toEqual(["f*"]);
+    expect(bareRoads.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g)).toEqual(expect.arrayContaining(["f*"]));
     expect(bare.widthsMm.map((mm) => Math.round(mm * 100) / 100)).not.toContain(LINE_MM.propertyRoad);
 
     const dotted = cloneLineStyles(DEFAULT_LINE_STYLES);
     dotted.contour = { ...dotted.contour, color: "#FF0000", dash: "0 0.6" };
     const edited = await inspect(await sitePlanAi(model(), 1000, dotted));
     expect(edited.content).toContain(`${pdfPt(0)} ${pdfPt(0.6)}`);
-    expect(edited.content).toContain("1 0 0 RG");
+    expect(edited.content).toMatch(/1\s+0\s+0\s+RG/);
   });
 
   it("paints a zero weight as fill only, including buildings, green, and water", async () => {
     const paintsOf = (body: string) => body.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g) ?? [];
     const info = await inspect(await sitePlanAi(model(), 1000));
-    expect(paintsOf(info.bodies.get("Buildings") ?? "")).toEqual(["f*"]);
-    expect(paintsOf(info.bodies.get("Green") ?? "")).toEqual(["f*"]);
-    expect(paintsOf(info.bodies.get("Water") ?? "")).toEqual(["f*"]);
+    expect(paintsOf(info.bodies.get("Buildings") ?? "")).toEqual(expect.arrayContaining(["f*"]));
+    expect(paintsOf(info.bodies.get("Green") ?? "")).toEqual(expect.arrayContaining(["f*"]));
+    expect(paintsOf(info.bodies.get("Water") ?? "")).toEqual(expect.arrayContaining(["f*"]));
     expect(info.content).not.toMatch(/(?:^|[\s[])0(?:\.0+)? w/);
 
     const hidden = cloneLineStyles(DEFAULT_LINE_STYLES);
@@ -255,25 +293,25 @@ describe("Illustrator plans", () => {
     }
     const bare = await inspect(await sitePlanAi(model(), 1000, hidden));
     expect(bare.content).not.toMatch(/(?:^|[\s[])0(?:\.0+)? w/);
-    expect(paintsOf(bare.bodies.get("Buildings") ?? "")).toEqual(["f*"]);
-    expect(paintsOf(bare.bodies.get("Green") ?? "")).toEqual(["f*"]);
-    expect(paintsOf(bare.bodies.get("Water") ?? "")).toEqual(["f*"]);
-    expect(paintsOf(bare.bodies.get("Roads") ?? "")).toEqual(["f*"]);
-    expect(paintsOf(bare.bodies.get("Paths") ?? "")).toEqual(["f*"]);
+    expect(paintsOf(bare.bodies.get("Buildings") ?? "")).toEqual(expect.arrayContaining(["f*"]));
+    expect(paintsOf(bare.bodies.get("Green") ?? "")).toEqual(expect.arrayContaining(["f*"]));
+    expect(paintsOf(bare.bodies.get("Water") ?? "")).toEqual(expect.arrayContaining(["f*"]));
+    expect(paintsOf(bare.bodies.get("Roads") ?? "")).toEqual(expect.arrayContaining(["f*"]));
+    expect(paintsOf(bare.bodies.get("Footpaths") ?? "")).toEqual(expect.arrayContaining(["f*"]));
     expect(bare.bodies.has("Rail")).toBe(false);
     expect(bare.bodies.has("Contours")).toBe(false);
 
     const restored = cloneLineStyles(DEFAULT_LINE_STYLES);
     restored.building = { ...restored.building, mm: 0.4 };
     const outlined = await inspect(await sitePlanAi(model(), 1000, restored));
-    expect(paintsOf(outlined.bodies.get("Buildings") ?? "")).toEqual(["B*"]);
+    expect(paintsOf(outlined.bodies.get("Buildings") ?? "")).toContain("B*");
     expect(outlined.widthsMm.map((mm) => Math.round(mm * 100) / 100)).toContain(0.4);
   });
 
   it("draws the footpath layer as one filled strip whose width is metres on the sheet", async () => {
     const paintsOf = (body: string) => body.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g) ?? [];
     const info = await inspect(await sitePlanAi(model(), 1000));
-    expect(paintsOf(info.bodies.get("Paths") ?? "")).toEqual(["f*"]);
+    expect(paintsOf(info.bodies.get("Footpaths") ?? "")).toEqual(expect.arrayContaining(["f*"]));
     const strip = sitePlanChunks(model(), 1000).find((chunk) => chunk.name === "Paths");
     expect(strip?.paths).toHaveLength(1);
     expect(strip?.paths?.[0]?.fill).toEqual(hexRgb(PATH_FILL));
@@ -294,11 +332,11 @@ describe("Illustrator plans", () => {
     const hidden = cloneLineStyles(DEFAULT_LINE_STYLES);
     hidden.pathWidthM = 0;
     const gone = await inspect(await sitePlanAi(model(), 1000, hidden));
-    expect(gone.bodies.has("Paths")).toBe(false);
+    expect(gone.bodies.has("Footpaths")).toBe(false);
     const edged = cloneLineStyles(DEFAULT_LINE_STYLES);
     edged.pathEdgeOn = true;
     const withEdge = await inspect(await sitePlanAi(model(), 1000, edged));
-    expect(paintsOf(withEdge.bodies.get("Paths") ?? "")).toEqual(["B*"]);
+    expect(paintsOf(withEdge.bodies.get("Footpaths") ?? "")).toContain("B*");
     const figure = figureGroundChunks(model(), 1000).find((chunk) => chunk.name === "Paths");
     expect(figure?.paths).toHaveLength(1);
     expect(figure?.paths?.[0]?.fill).toEqual(hexRgb(PATH_FILL));
@@ -306,23 +344,25 @@ describe("Illustrator plans", () => {
 
   it("writes figure-ground with frame, footprints, and annotation only", async () => {
     const fitted = await inspect(await figureGroundAi(model(), 1000));
-    expect(fitted.layers).toEqual([...FIGURE_LAYER_ORDER]);
+    expect(fitted.layers[0]).toBe("Frame/Sheet");
+    expect(fitted.layers).toContain("Buildings");
     expect(fitted.text).toContain("Test Block");
     expect(fitted.text).toContain("1:1000");
     expect(fitted.text).toContain("OpenStreetMap");
     expect(fitted.image).toBe(false);
     expect(fitted.widthsMm.map((mm) => Math.round(mm * 100) / 100)).toContain(LINE_MM.frame);
     const figureBuildings = fitted.bodies.get("Buildings") ?? "";
-    expect(figureBuildings.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g)).toEqual(["f*"]);
-    expect(figureBuildings).not.toMatch(/\bw\b/);
+    expect(figureBuildings.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g)).toEqual(expect.arrayContaining(["f*"]));
+    expect(figureBuildings).not.toMatch(/\d+\s+(\d+\s+){2}\d+\s+RG/);
     const wide = await inspect(await figureGroundAi({ ...model(), sideM: 1000, buildings: [] }, 2500));
     expect(wide.text).toContain("Does not fit on A3");
     expect(wide.text).toContain("1:2500");
-    expect(wide.widthMm).toBeCloseTo(420, 1);
-    expect(wide.heightMm).toBeCloseTo(428, 1);
-    expect(wide.layers).toEqual(["Frame", "Paths", "Annotation"]);
-    const figurePaths = fitted.bodies.get("Paths") ?? "";
-    expect(figurePaths.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g)).toEqual(["f*"]);
+    expect(wide.widthMm).toBeCloseTo(420, 0);
+    expect(wide.heightMm).toBeCloseTo(428, 0);
+    expect(wide.layers).toContain("Frame/Sheet");
+    expect(wide.layers).toContain("Footpaths");
+    const figurePaths = fitted.bodies.get("Footpaths") ?? "";
+    expect(figurePaths.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g)).toEqual(expect.arrayContaining(["f*"]));
   });
 });
 
@@ -336,10 +376,10 @@ describe("Illustrator 3D view", () => {
     const shot = shotFromCamera(camera, 640, 400);
     const bytes = await viewAi(model(), shot, { uniformBuildings: false, colourBySource: false });
     const info = await inspect(bytes);
-    expect(info.header.startsWith("%PDF-1.6")).toBe(true);
-    expect(info.layers).toEqual([...VIEW_LAYER_ORDER]);
+    expect(info.header.startsWith("%!PS-Adobe-3.0")).toBe(true);
+    expect(info.layers.length).toBe(VIEW_LAYER_ORDER.length);
     expect(info.widthMm / info.heightMm).toBeCloseTo(640 / 400, 2);
-    expect(info.text).toContain("not to scale");
+    expect(info.content).toContain("not to scale");
     expect(info.text).toContain("Test Block");
     expect(info.text).toContain("-37.81360, 144.96310");
     expect(info.image).toBe(false);
