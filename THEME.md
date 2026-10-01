@@ -139,12 +139,12 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--light-sky` | `#f7f4ee` | Sky side of the 3D hemisphere light. |
 | `--light-ground` | `#c9c0b2` | Ground side of the 3D hemisphere light. |
 | `--cut-line` | `#f7f4ee` | Frame drawn around the cut on the satellite preview. |
-| `--sun-arc-summer` | `#e8742a` | Summer-solstice sun path in the 3D heliodon (screen only). |
-| `--sun-arc-equinox` | `#2f9e5a` | Equinox sun path in the 3D heliodon (screen only). |
-| `--sun-arc-winter` | `#2f6fd6` | Winter-solstice sun path in the 3D heliodon (screen only). |
-| `--sun-marker` | `#ffc400` | Active sun marker in the 3D heliodon (screen only). |
-| `--sun-compass` | `#3a3630` | Compass ring and north pointer in the 3D heliodon (screen only). |
-| `--sun-compass-label` | `#1a1916` | N/S/E/W labels on the compass ring (screen only). |
+| `--sun-arc-summer` | `#1a1916` | Dec 21 sun path in the 3D heliodon, solid line (screen only). Black or grey only. |
+| `--sun-arc-equinox` | `#1a1916` | Sep/Mar sun path in the 3D heliodon, dashed line (screen only). Black or grey only. |
+| `--sun-arc-winter` | `#1a1916` | Jun 21 sun path in the 3D heliodon, dash-dot line (screen only). Black or grey only. |
+| `--sun-marker` | `#ffcc1a` | Sun icon at the current time in the 3D heliodon (screen only). The only yellow in the heliodon. |
+| `--sun-compass` | `#5c5850` | Compass ring, degree ticks and numbers, dashed axes and E/S/W labels in the 3D heliodon (screen only). |
+| `--sun-compass-label` | `#1a1916` | N label, hour labels, arc labels and hour-dot outlines in the 3D heliodon (screen only). |
 
 The contour lines in Rhino use the pen `--contour-stroke` from `src/drawing-style.css`, not a fill.
 

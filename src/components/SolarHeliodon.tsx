@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { getColour } from "../lib/colours";
 import { markScreenOnly } from "../lib/screenOnly";
 import { useColourRevision } from "../lib/useColourRevision";
@@ -8,6 +9,7 @@ import {
   SOLAR_SUMMER,
   SOLAR_WINTER,
   daylightArcSamples,
+  daylightHourMarks,
   melbourneLocalToUtc,
   sunSample,
   type SolarSample,
@@ -36,6 +38,15 @@ export const HELIODON_DOME_FRACTION = 0.36;
 /** Ground compass ring radius as a fraction of the cut side. Labels sit just inside it so all four stay in the default frame. */
 export const HELIODON_RING_FRACTION = 0.55;
 
+/** Dash patterns as fractions of the cut side: on, off, on, off… `null` is a solid line. */
+export const SUN_PATH_STYLES = [
+  { date: SOLAR_SUMMER, label: "Dec 21", key: "--sun-arc-summer", pattern: null },
+  { date: SOLAR_EQUINOX, label: "Sep/Mar", key: "--sun-arc-equinox", pattern: [0.018, 0.011] },
+  { date: SOLAR_WINTER, label: "Jun 21", key: "--sun-arc-winter", pattern: [0.024, 0.009, 0.004, 0.009] },
+] as const;
+
+const LABELLED_HOURS = new Set([6, 9, 12, 15, 18]);
+
 function overlayMaterial(color: string): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({ color, depthTest: false, depthWrite: false, toneMapped: false });
 }
@@ -47,36 +58,137 @@ function overlayMesh(geometry: THREE.BufferGeometry, material: THREE.Material, o
   return mesh;
 }
 
-function tubeAlong(points: THREE.Vector3[], tubeRadius: number, closed = false): THREE.TubeGeometry | null {
+function polylineTube(points: THREE.Vector3[], radius: number): THREE.TubeGeometry | null {
   if (points.length < 2) return null;
-  const curve = new THREE.CatmullRomCurve3(points, closed, "centripetal");
-  return new THREE.TubeGeometry(curve, Math.max(32, points.length * 4), tubeRadius, 6, closed);
+  const path = new THREE.CurvePath<THREE.Vector3>();
+  for (let i = 1; i < points.length; i++) path.add(new THREE.LineCurve3(points[i - 1], points[i]));
+  return new THREE.TubeGeometry(path, Math.max(2, (points.length - 1) * 2), radius, 5, false);
 }
 
-function labelSprite(text: string, ink: string, halo: string, size: number): THREE.Sprite | null {
+/** A thin tube along `points`, cut into dashes when `pattern` (metres) is given. */
+function strokeGeometry(points: THREE.Vector3[], radius: number, pattern: readonly number[] | null): THREE.BufferGeometry | null {
+  if (!pattern) return polylineTube(points, radius);
+  const pieces: THREE.BufferGeometry[] = [];
+  let step = 0;
+  let left = pattern[0];
+  let current: THREE.Vector3[] = [points[0].clone()];
+  for (let i = 1; i < points.length; i++) {
+    const from = points[i - 1];
+    const to = points[i];
+    let travelled = 0;
+    const length = from.distanceTo(to);
+    while (length - travelled > left) {
+      travelled += left;
+      const at = from.clone().lerp(to, travelled / length);
+      if (step % 2 === 0) {
+        current.push(at);
+        const piece = polylineTube(current, radius);
+        if (piece) pieces.push(piece);
+      }
+      current = [at.clone()];
+      step += 1;
+      left = pattern[step % pattern.length];
+    }
+    left -= length - travelled;
+    if (step % 2 === 0) current.push(to.clone());
+    else current = [to.clone()];
+  }
+  if (step % 2 === 0) {
+    const piece = polylineTube(current, radius);
+    if (piece) pieces.push(piece);
+  }
+  if (pieces.length === 0) return null;
+  const merged = mergeGeometries(pieces, false);
+  for (const piece of pieces) piece.dispose();
+  return merged;
+}
+
+function textSprite(
+  text: string,
+  options: { ink: string; halo: string; heightM: number; weight?: number },
+): THREE.Sprite | null {
   if (typeof document === "undefined") return null;
   const canvas = document.createElement("canvas");
-  canvas.width = 128;
-  canvas.height = 128;
   const context = canvas.getContext("2d");
   if (!context) return null;
-  context.font = "bold 92px system-ui, sans-serif";
+  const px = 64;
+  const font = `${options.weight ?? 500} ${px}px system-ui, sans-serif`;
+  context.font = font;
+  const pad = 14;
+  canvas.width = Math.ceil(context.measureText(text).width + pad * 2);
+  canvas.height = px + pad * 2;
+  context.font = font;
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.lineJoin = "round";
-  context.lineWidth = 16;
-  context.strokeStyle = halo;
-  context.strokeText(text, 64, 68);
-  context.fillStyle = ink;
-  context.fillText(text, 64, 68);
+  context.lineWidth = 12;
+  context.strokeStyle = options.halo;
+  context.strokeText(text, canvas.width / 2, canvas.height / 2 + 3);
+  context.fillStyle = options.ink;
+  context.fillText(text, canvas.width / 2, canvas.height / 2 + 3);
+  const sprite = canvasSprite(canvas, OVERLAY_ORDER + 2);
+  sprite.scale.set((options.heightM * canvas.width) / canvas.height, options.heightM, 1);
+  return sprite;
+}
+
+function canvasSprite(canvas: HTMLCanvasElement, order: number): THREE.Sprite {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   const material = new THREE.SpriteMaterial({ map: texture, depthTest: false, depthWrite: false, toneMapped: false });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(size, size, 1);
-  sprite.renderOrder = OVERLAY_ORDER + 2;
+  sprite.renderOrder = order;
   sprite.frustumCulled = false;
   return sprite;
+}
+
+function hourDotMaterial(ink: string, fill: string): THREE.SpriteMaterial | null {
+  if (typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  context.beginPath();
+  context.arc(32, 32, 22, 0, Math.PI * 2);
+  context.fillStyle = fill;
+  context.fill();
+  context.lineWidth = 9;
+  context.strokeStyle = ink;
+  context.stroke();
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.SpriteMaterial({ map: texture, depthTest: false, depthWrite: false, toneMapped: false });
+}
+
+function sunIcon(core: string, ink: string): THREE.Sprite | null {
+  if (typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 256;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  context.translate(128, 128);
+  context.lineCap = "round";
+  for (let i = 0; i < 12; i++) {
+    const t = (i / 12) * Math.PI * 2;
+    context.beginPath();
+    context.moveTo(Math.cos(t) * 64, Math.sin(t) * 64);
+    context.lineTo(Math.cos(t) * 110, Math.sin(t) * 110);
+    context.lineWidth = 22;
+    context.strokeStyle = ink;
+    context.stroke();
+    context.lineWidth = 12;
+    context.strokeStyle = core;
+    context.stroke();
+  }
+  context.beginPath();
+  context.arc(0, 0, 50, 0, Math.PI * 2);
+  context.fillStyle = core;
+  context.fill();
+  context.lineWidth = 6;
+  context.strokeStyle = ink;
+  context.stroke();
+  return canvasSprite(canvas, OVERLAY_ORDER + 5);
 }
 
 function disposeTree(root: THREE.Object3D) {
@@ -107,6 +219,109 @@ export function useMelbourneSunSample(lat: number, lon: number, settings: SolarV
   );
 }
 
+function buildSunPaths(group: THREE.Group, lat: number, lon: number, year: number, sideM: number, groundY: number) {
+  const dome = sideM * HELIODON_DOME_FRACTION;
+  const ink = getColour("--sun-compass-label");
+  const halo = getColour("--sheet-fill");
+  const dots = hourDotMaterial(ink, halo);
+  const outward = (point: THREE.Vector3, by: number) => {
+    const centre = new THREE.Vector3(0, groundY, 0);
+    return point.clone().sub(centre).normalize().multiplyScalar(by).add(point);
+  };
+  for (const style of SUN_PATH_STYLES) {
+    const { month, day } = style.date;
+    const samples = daylightArcSamples(lat, lon, year, month, day, 5).filter((sample) => sample.aboveHorizon);
+    const points = samples.map((sample) => sampleToPoint(sample.direction, dome, groundY));
+    const pattern = style.pattern?.map((fraction) => fraction * sideM) ?? null;
+    const stroke = strokeGeometry(points, sideM * 0.0013, pattern);
+    if (stroke) group.add(overlayMesh(stroke, overlayMaterial(getColour(style.key))));
+
+    for (const mark of daylightHourMarks(lat, lon, year, month, day)) {
+      const at = sampleToPoint(mark.sample.direction, dome, groundY);
+      if (dots) {
+        const dot = new THREE.Sprite(dots);
+        dot.renderOrder = OVERLAY_ORDER + 1;
+        dot.frustumCulled = false;
+        dot.position.copy(at);
+        dot.scale.setScalar(sideM * 0.011);
+        group.add(dot);
+      }
+      if (!LABELLED_HOURS.has(mark.hour)) continue;
+      const label = textSprite(`${mark.hour}h`, { ink, halo, heightM: sideM * 0.024 });
+      if (!label) continue;
+      label.position.copy(outward(at, sideM * 0.022));
+      group.add(label);
+    }
+
+    const end = points[points.length - 1];
+    if (end) {
+      const name = textSprite(style.label, { ink, halo, heightM: sideM * 0.028, weight: 650 });
+      if (name) {
+        name.position.copy(outward(end, sideM * 0.04));
+        name.position.y = groundY + sideM * 0.035;
+        group.add(name);
+      }
+    }
+  }
+}
+
+function buildCompass(group: THREE.Group, sideM: number, groundY: number) {
+  const ring = sideM * HELIODON_RING_FRACTION;
+  const y = groundY + 0.5;
+  const grey = overlayMaterial(getColour("--sun-compass"));
+  const ink = getColour("--sun-compass-label");
+  const halo = getColour("--sheet-fill");
+  const at = (deg: number, radius: number) => {
+    const t = (deg * Math.PI) / 180;
+    return new THREE.Vector3(Math.sin(t) * radius, y, -Math.cos(t) * radius);
+  };
+
+  const ringPoints: THREE.Vector3[] = [];
+  for (let deg = 0; deg <= 360; deg += 2) ringPoints.push(at(deg, ring));
+  const ringGeometry = polylineTube(ringPoints, sideM * 0.0011);
+  if (ringGeometry) group.add(overlayMesh(ringGeometry, grey, OVERLAY_ORDER - 1));
+
+  const ticks: THREE.BufferGeometry[] = [];
+  for (let deg = 0; deg < 360; deg += 10) {
+    const major = deg % 30 === 0;
+    const length = sideM * (major ? 0.03 : 0.014);
+    const tick = polylineTube([at(deg, ring), at(deg, ring + length)], sideM * (major ? 0.0014 : 0.0009));
+    if (tick) ticks.push(tick);
+  }
+  const tickGeometry = mergeGeometries(ticks, false);
+  for (const tick of ticks) tick.dispose();
+  if (tickGeometry) group.add(overlayMesh(tickGeometry, grey, OVERLAY_ORDER - 1));
+
+  const axisPattern = [sideM * 0.016, sideM * 0.012];
+  for (const deg of [0, 90]) {
+    const axis = strokeGeometry([at(deg + 180, ring), at(deg, ring)], sideM * 0.0008, axisPattern);
+    if (axis) group.add(overlayMesh(axis, grey, OVERLAY_ORDER - 2));
+  }
+
+  for (let deg = 30; deg < 360; deg += 30) {
+    if (deg % 90 === 0) continue;
+    const number = textSprite(`${deg}°`, { ink: getColour("--sun-compass"), halo, heightM: sideM * 0.022 });
+    if (!number) continue;
+    number.position.copy(at(deg, ring + sideM * 0.055));
+    group.add(number);
+  }
+
+  const labelAt = sideM * 0.5;
+  for (const [text, deg] of [["N", 0], ["E", 90], ["S", 180], ["W", 270]] as const) {
+    const north = text === "N";
+    const label = textSprite(text, {
+      ink: north ? ink : getColour("--sun-compass"),
+      halo,
+      heightM: sideM * (north ? 0.07 : 0.05),
+      weight: north ? 800 : 600,
+    });
+    if (!label) continue;
+    label.position.copy(at(deg, labelAt));
+    label.position.y = groundY + sideM * 0.03;
+    group.add(label);
+  }
+}
+
 function HeliodonStatic({
   lat,
   lon,
@@ -124,54 +339,8 @@ function HeliodonStatic({
   const root = useDisposable(() => {
     const group = new THREE.Group();
     group.name = "Heliodon";
-    const dome = sideM * HELIODON_DOME_FRACTION;
-    const ring = sideM * HELIODON_RING_FRACTION;
-    const arcs = [
-      { date: SOLAR_SUMMER, key: "--sun-arc-summer" },
-      { date: SOLAR_EQUINOX, key: "--sun-arc-equinox" },
-      { date: SOLAR_WINTER, key: "--sun-arc-winter" },
-    ] as const;
-    for (const arc of arcs) {
-      const points = daylightArcSamples(lat, lon, year, arc.date.month, arc.date.day, 20)
-        .filter((sample) => sample.aboveHorizon)
-        .map((sample) => sampleToPoint(sample.direction, dome, groundY));
-      const geometry = tubeAlong(points, sideM * 0.0035);
-      if (geometry) group.add(overlayMesh(geometry, overlayMaterial(getColour(arc.key))));
-    }
-
-    const compass = getColour("--sun-compass");
-    const ringPoints: THREE.Vector3[] = [];
-    for (let i = 0; i < 96; i++) {
-      const t = (i / 96) * Math.PI * 2;
-      ringPoints.push(new THREE.Vector3(Math.sin(t) * ring, groundY + 0.5, -Math.cos(t) * ring));
-    }
-    const ringGeometry = tubeAlong(ringPoints, sideM * 0.0025, true);
-    if (ringGeometry) group.add(overlayMesh(ringGeometry, overlayMaterial(compass), OVERLAY_ORDER - 1));
-
-    const tick = sideM * 0.04;
-    for (let i = 0; i < 4; i++) {
-      const t = (i / 4) * Math.PI * 2;
-      const inner = new THREE.Vector3(Math.sin(t) * (ring - tick), groundY + 0.5, -Math.cos(t) * (ring - tick));
-      const outer = new THREE.Vector3(Math.sin(t) * (ring + tick), groundY + 0.5, -Math.cos(t) * (ring + tick));
-      const geometry = tubeAlong([inner, outer], sideM * (i === 0 ? 0.005 : 0.003));
-      if (geometry) group.add(overlayMesh(geometry, overlayMaterial(compass), OVERLAY_ORDER - 1));
-    }
-
-    const ink = getColour("--sun-compass-label");
-    const halo = getColour("--sheet-fill");
-    const labelAt = sideM * 0.5;
-    const labels: [string, number, number][] = [
-      ["N", 0, -1],
-      ["E", 1, 0],
-      ["S", 0, 1],
-      ["W", -1, 0],
-    ];
-    for (const [text, x, z] of labels) {
-      const sprite = labelSprite(text, ink, halo, sideM * 0.075);
-      if (!sprite) continue;
-      sprite.position.set(x * labelAt, groundY + sideM * 0.03, z * labelAt);
-      group.add(sprite);
-    }
+    buildCompass(group, sideM, groundY);
+    buildSunPaths(group, lat, lon, year, sideM, groundY);
     markScreenOnly(group);
     return group;
   }, [lat, lon, year, sideM, groundY, colourTick]);
@@ -182,24 +351,11 @@ function SunMarker({ sample, sideM, groundY }: { sample: SolarSample; sideM: num
   const colourTick = useColourRevision();
   const marker = useDisposable(() => {
     const group = new THREE.Group();
-    const size = sideM * 0.018;
-    const outline = overlayMesh(
-      new THREE.SphereGeometry(size * 1.3, 20, 14),
-      new THREE.MeshBasicMaterial({
-        color: getColour("--sun-compass"),
-        side: THREE.BackSide,
-        depthTest: false,
-        depthWrite: false,
-        toneMapped: false,
-      }),
-      OVERLAY_ORDER + 3,
-    );
-    const core = overlayMesh(
-      new THREE.SphereGeometry(size, 20, 14),
-      overlayMaterial(getColour("--sun-marker")),
-      OVERLAY_ORDER + 4,
-    );
-    group.add(outline, core);
+    const icon = sunIcon(getColour("--sun-marker"), getColour("--sun-compass-label"));
+    if (icon) {
+      icon.scale.setScalar(sideM * 0.075);
+      group.add(icon);
+    }
     markScreenOnly(group);
     return group;
   }, [sideM, colourTick]);

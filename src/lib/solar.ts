@@ -138,6 +138,18 @@ export function daylightArcSamples(
   return out;
 }
 
+export type HourMark = { hour: number; sample: SolarSample };
+
+/** Whole Melbourne clock hours (AEST or AEDT, as the date falls) when the sun is above the horizon. */
+export function daylightHourMarks(lat: number, lon: number, year: number, month: number, day: number): HourMark[] {
+  const marks: HourMark[] = [];
+  for (let hour = 0; hour < 24; hour++) {
+    const sample = sunAtMelbourneLocal(lat, lon, year, month, day, hour, 0);
+    if (sample.aboveHorizon) marks.push({ hour, sample });
+  }
+  return marks;
+}
+
 export function dayOfYear(year: number, month: number, day: number): number {
   const utc = Date.UTC(year, month - 1, day);
   const start = Date.UTC(year, 0, 0);

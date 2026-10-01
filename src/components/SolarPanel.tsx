@@ -5,10 +5,10 @@ import { getColour, type ColourKey } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
 import type { SolarViewSettings } from "./SolarHeliodon";
 
-const SOLAR_LEGEND: { key: ColourKey; label: string }[] = [
-  { key: "--sun-arc-summer", label: "21 Dec (summer solstice)" },
-  { key: "--sun-arc-equinox", label: "22 Sep (equinox)" },
-  { key: "--sun-arc-winter", label: "21 Jun (winter solstice)" },
+const SOLAR_LEGEND: { key: ColourKey; label: string; dash?: string }[] = [
+  { key: "--sun-arc-summer", label: "Dec 21 (summer solstice)" },
+  { key: "--sun-arc-equinox", label: "Sep/Mar (equinox)", dash: "4 3" },
+  { key: "--sun-arc-winter", label: "Jun 21 (winter solstice)", dash: "6 2.5 1.2 2.5" },
 ];
 
 export function SolarPanel({
@@ -107,18 +107,30 @@ export function SolarPanel({
           <ul className="solar-legend" aria-label="Sun path legend">
             {SOLAR_LEGEND.map((entry) => (
               <li key={entry.key}>
-                <span className="solar-legend-swatch" style={{ background: getColour(entry.key) }} aria-hidden />
+                <svg className="solar-legend-swatch" viewBox="0 0 24 6" aria-hidden>
+                  <line x1="0" y1="3" x2="24" y2="3" stroke={getColour(entry.key)} strokeWidth="1.4" strokeDasharray={entry.dash} />
+                </svg>
                 {entry.label}
               </li>
             ))}
             <li>
-              <span
-                className="solar-legend-swatch solar-legend-dot"
-                style={{ background: getColour("--sun-marker") }}
-                aria-hidden
-              />
+              <svg className="solar-legend-swatch" viewBox="0 0 24 12" aria-hidden>
+                <circle cx="12" cy="6" r="3.2" fill={getColour("--sun-marker")} stroke={getColour("--sun-compass-label")} strokeWidth="0.8" />
+                {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => (
+                  <line
+                    key={deg}
+                    x1={12 + Math.cos((deg * Math.PI) / 180) * 4.2}
+                    y1={6 + Math.sin((deg * Math.PI) / 180) * 4.2}
+                    x2={12 + Math.cos((deg * Math.PI) / 180) * 5.8}
+                    y2={6 + Math.sin((deg * Math.PI) / 180) * 5.8}
+                    stroke={getColour("--sun-compass-label")}
+                    strokeWidth="0.9"
+                  />
+                ))}
+              </svg>
               Sun now
             </li>
+            <li className="solar-legend-note">Dots mark each clock hour (AEST/AEDT).</li>
           </ul>
         )}
         {settings.showPath && (
