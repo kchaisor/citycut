@@ -33,8 +33,8 @@ const OVERLAY_ORDER = 1000;
 
 /** Dome radius as a fraction of the cut side. Sized so the summer arc stays in the default 3D frame. */
 export const HELIODON_DOME_FRACTION = 0.36;
-/** Ground compass ring radius as a fraction of the cut side. */
-export const HELIODON_RING_FRACTION = 0.6;
+/** Ground compass ring radius as a fraction of the cut side. Labels sit just inside it so all four stay in the default frame. */
+export const HELIODON_RING_FRACTION = 0.55;
 
 function overlayMaterial(color: string): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({ color, depthTest: false, depthWrite: false, toneMapped: false });
@@ -159,7 +159,7 @@ function HeliodonStatic({
 
     const ink = getColour("--sun-compass-label");
     const halo = getColour("--sheet-fill");
-    const labelAt = ring + sideM * 0.075;
+    const labelAt = sideM * 0.5;
     const labels: [string, number, number][] = [
       ["N", 0, -1],
       ["E", 1, 0],
@@ -182,7 +182,7 @@ function SunMarker({ sample, sideM, groundY }: { sample: SolarSample; sideM: num
   const colourTick = useColourRevision();
   const marker = useDisposable(() => {
     const group = new THREE.Group();
-    const size = sideM * 0.022;
+    const size = sideM * 0.018;
     const outline = overlayMesh(
       new THREE.SphereGeometry(size * 1.3, 20, 14),
       new THREE.MeshBasicMaterial({
@@ -286,7 +286,7 @@ export function SolarLight({
       <object3D ref={targetRef} />
       <directionalLight
         ref={lightRef}
-        intensity={on ? 1.6 : 0}
+        intensity={on ? 2.6 : 0}
         castShadow={on}
         shadow-mapSize={[2048, 2048]}
       />

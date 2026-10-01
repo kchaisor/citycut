@@ -477,8 +477,8 @@ export function Scene3D({
   const sunSample = useMelbourneSunSample(model.center.lat, model.center.lon, solar);
   const [glEpoch, setGlEpoch] = useState(0);
   const fillKeyLight = solar.castShadows ? 0 : 1.35;
-  const fillAmbient = solar.castShadows ? 0.15 : 0.28;
-  const fillHemi = solar.castShadows ? 0.55 : 0.7;
+  const fillAmbient = solar.castShadows ? 0.08 : 0.28;
+  const fillHemi = solar.castShadows ? 0.34 : 0.7;
   const shadowTargetY = groundY;
   const siteTopY = useMemo(() => {
     let top = model.terrain ? model.terrain.max : 0;
