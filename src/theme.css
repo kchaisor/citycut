@@ -37,10 +37,10 @@
   --muted-text: #6E685E;
 
   /* Font for buttons, labels, and body text. Outfit is already loaded. Avenir Next, Segoe UI, and sans-serif are safe fallbacks. */
-  --font-sans: "Outfit", "Avenir Next", "Segoe UI", sans-serif;
+  --font-sans: "Geist", "Avenir Next", "Segoe UI", sans-serif;
 
   /* Font for the large “Your model is ready” title. Fraunces is already loaded. Georgia is the safe fallback. */
-  --font-serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --font-serif: "Geist", "Iowan Old Style", Georgia, serif;
 
   /* Size of ordinary text. */
   --font-size: 15px;
