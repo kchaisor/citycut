@@ -65,6 +65,12 @@ function visibleMaterial(color: string, opacity = 1): THREE.MeshBasicMaterial {
   });
 }
 
+/** The flat dial is a plan overlay, so it paints over the city like the reference chart. */
+function overlay<T extends THREE.Material>(material: T): T {
+  material.depthTest = false;
+  return material;
+}
+
 function ghostMaterial<T extends THREE.Material>(material: T, opacity = GHOST_OPACITY): T {
   const ghost = material.clone();
   ghost.depthFunc = THREE.GreaterDepth;
@@ -317,6 +323,28 @@ function dialRay(ground: Ground, deg: number, from: number, to: number, steps = 
   return points;
 }
 
+/** Flat annulus in the background colour behind the tick ring: the dial's casing. */
+function tickBand(ground: Ground, inner: number, outer: number): THREE.BufferGeometry {
+  const positions: number[] = [];
+  const index: number[] = [];
+  const steps = 180;
+  for (let i = 0; i <= steps; i++) {
+    const deg = (i / steps) * 360;
+    for (const radius of [inner, outer]) {
+      const point = dialPoint(ground, deg, radius);
+      positions.push(point.x, point.y, point.z);
+    }
+    if (i < steps) {
+      const a = i * 2;
+      index.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(index);
+  return geometry;
+}
+
 function buildDial(root: HeliodonRoot, palette: HeliodonPalette, sideM: number, ground: Ground) {
   const R = sideM * HELIODON_DOME_FRACTION;
   const fine = new SegmentBatch();
@@ -346,19 +374,22 @@ function buildDial(root: HeliodonRoot, palette: HeliodonPalette, sideM: number, 
     }
   }
 
-  const fineLines = fine.build(lineMaterial(palette.grey, 0.32));
-  if (fineLines) addTwoPass(root, fineLines, OVERLAY_ORDER - 10);
-  const mediumLines = medium.build(lineMaterial(palette.grey, 0.7));
-  if (mediumLines) addTwoPass(root, mediumLines, OVERLAY_ORDER - 9);
-  const axisLines = axes.build(dashedLineMaterial(palette.ink, 0.75, sideM * 0.012, sideM * 0.008));
-  if (axisLines) addTwoPass(root, axisLines, OVERLAY_ORDER - 8);
+  const band = tickBand(ground, R - sideM * 0.004, R + sideM * 0.068);
+  const bandMaterial = overlay(visibleMaterial(palette.casing, 0.82));
+  bandMaterial.side = THREE.DoubleSide;
+  addTwoPass(root, new THREE.Mesh(band, bandMaterial), OVERLAY_ORDER - 12, false);
+
+  const fineLines = fine.build(overlay(lineMaterial(palette.grey, 0.5)));
+  if (fineLines) addTwoPass(root, fineLines, OVERLAY_ORDER - 10, false);
+  const mediumLines = medium.build(overlay(lineMaterial(palette.ink, 0.7)));
+  if (mediumLines) addTwoPass(root, mediumLines, OVERLAY_ORDER - 9, false);
+  const axisLines = axes.build(overlay(dashedLineMaterial(palette.ink, 0.8, sideM * 0.012, sideM * 0.008)));
+  if (axisLines) addTwoPass(root, axisLines, OVERLAY_ORDER - 8, false);
 
   const horizon = polylineTube(dialCircle(ground, R, 1), sideM * 0.0012);
-  const horizonCasing = polylineTube(dialCircle(ground, R, 1), sideM * 0.0026);
-  if (horizonCasing) addTwoPass(root, new THREE.Mesh(horizonCasing, visibleMaterial(palette.casing)), OVERLAY_ORDER - 7, false);
-  if (horizon) addTwoPass(root, new THREE.Mesh(horizon, visibleMaterial(palette.ink)), OVERLAY_ORDER - 6);
+  if (horizon) addTwoPass(root, new THREE.Mesh(horizon, overlay(visibleMaterial(palette.ink))), OVERLAY_ORDER - 6, false);
   const ticks = mergeAndDispose(majorTicks);
-  if (ticks) addTwoPass(root, new THREE.Mesh(ticks, visibleMaterial(palette.ink)), OVERLAY_ORDER - 6);
+  if (ticks) addTwoPass(root, new THREE.Mesh(ticks, overlay(visibleMaterial(palette.ink))), OVERLAY_ORDER - 6, false);
 
   for (let deg = 10; deg < 360; deg += 10) {
     if (deg % 90 === 0) continue;
@@ -488,7 +519,7 @@ function screenBox(position: THREE.Vector3, scale: THREE.Vector3, camera: THREE.
   return { x, y, w: Math.abs(ex - x), h: Math.abs(ey - y) };
 }
 
-function overlaps(a: ScreenBox, b: ScreenBox, margin = 2): boolean {
+function overlaps(a: ScreenBox, b: ScreenBox, margin = 6): boolean {
   return Math.abs(a.x - b.x) < a.w + b.w + margin && Math.abs(a.y - b.y) < a.h + b.h + margin;
 }
 

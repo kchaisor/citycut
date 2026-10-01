@@ -637,6 +637,30 @@ input[type="range"]::-moz-range-thumb {
 }
 .solar-panel-body[hidden] { display: none; }
 .solar-panel .field input[type="range"] { width: 100%; }
+.solar-standards { display: grid; gap: 6px; }
+.solar-standards .panel-toolbar { margin: 0; }
+.solar-stepper { display: grid; gap: 4px; }
+.solar-stepper-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.solar-stepper .field-note { margin: 0; }
+.solar-hour,
+.solar-step {
+  min-width: 26px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.solar-step:disabled { opacity: 0.35; }
+.solar-hour[aria-pressed="true"] {
+  background: var(--panel-border);
+  font-weight: 600;
+}
 .solar-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12px; }
 .solar-legend li { display: flex; align-items: center; gap: 8px; }
 .solar-legend-swatch { flex: none; width: 24px; height: 12px; }

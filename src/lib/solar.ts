@@ -19,6 +19,47 @@ export const SOLAR_PRESETS: Record<
   "winter-12": { label: "Winter solstice 12pm", month: SOLAR_WINTER.month, day: SOLAR_WINTER.day, hour: 12, minute: 0 },
 };
 
+/** Victorian planning shadow tests, stepped hourly in Melbourne clock time. */
+export type ShadowStandardId = "rescode-sep" | "winter-jun-public";
+
+export const SHADOW_STANDARDS: Record<
+  ShadowStandardId,
+  { label: string; source: string; month: number; day: number; hours: readonly number[] }
+> = {
+  "rescode-sep": {
+    label: "ResCode 22 Sep",
+    source: "Clause 54.04-5 / 55.04-5, 9am to 3pm",
+    month: 9,
+    day: 22,
+    hours: [9, 10, 11, 12, 13, 14, 15],
+  },
+  "winter-jun-public": {
+    label: "Winter 22 Jun (public spaces)",
+    source: "Public open space, 11am to 2pm",
+    month: 6,
+    day: 22,
+    hours: [11, 12, 13, 14],
+  },
+};
+
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+const melbourneZone = new Intl.DateTimeFormat("en-AU", { timeZone: MELBOURNE_TZ, timeZoneName: "short" });
+
+/** "AEST" or "AEDT" for the instant, from the same Melbourne time zone the clock conversion uses. */
+export function melbourneZoneName(when: Date): string {
+  return melbourneZone.formatToParts(when).find((part) => part.type === "timeZoneName")?.value ?? "";
+}
+
+/** For example "22 Sep, 10:00 AEST (2 of 7)". */
+export function shadowStandardStepLabel(id: ShadowStandardId, year: number, index: number): string {
+  const standard = SHADOW_STANDARDS[id];
+  const hour = standard.hours[index];
+  const zone = melbourneZoneName(melbourneLocalToUtc(year, standard.month, standard.day, hour, 0));
+  const clock = `${String(hour).padStart(2, "0")}:00`;
+  return `${standard.day} ${MONTH_SHORT[standard.month - 1]}, ${clock} ${zone} (${index + 1} of ${standard.hours.length})`;
+}
+
 export type Vec3 = [number, number, number];
 
 export type SolarSample = {
