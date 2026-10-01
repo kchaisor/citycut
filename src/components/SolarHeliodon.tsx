@@ -1,4 +1,4 @@
-import { Line } from "@react-three/drei";
+import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { getColour } from "../lib/colours";
@@ -32,6 +32,39 @@ function decimate(samples: SolarSample[], every: number): SolarSample[] {
   return samples.filter((_, index) => index % every === 0 || index === samples.length - 1);
 }
 
+function HeliodonPolyline({
+  points,
+  color,
+}: {
+  points: THREE.Vector3[] | null;
+  color: string;
+  lineWidth?: number;
+}) {
+  const line = useMemo(() => {
+    if (!points || points.length < 2) return null;
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 1,
+      depthTest: false,
+      depthWrite: false,
+    });
+    const line = new THREE.Line(geometry, material);
+    line.renderOrder = 1000;
+    return line;
+  }, [points, color]);
+  useEffect(() => {
+    return () => {
+      if (!line) return;
+      line.geometry.dispose();
+      (line.material as THREE.Material).dispose();
+    };
+  }, [line]);
+  if (!line) return null;
+  return <primitive object={line} />;
+}
+
 function ArcLine({
   samples,
   color,
@@ -51,28 +84,27 @@ function ArcLine({
     if (visible.length < 2) return null;
     return visible.map((sample) => sampleToPoint(sample.direction, radius, groundY));
   }, [samples, radius, groundY]);
-  if (!points) return null;
-  return <Line points={points} color={color} lineWidth={1} transparent opacity={0.85} />;
+  return <HeliodonPolyline points={points} color={color} />;
 }
 
 function CompassRing({ radius, groundY }: { radius: number; groundY: number }) {
   const ringColor = getColour("--sun-compass");
-  const points = useMemo(() => {
-    const pts: THREE.Vector3[] = [];
+  const { ring, north } = useMemo(() => {
+    const ringPts: THREE.Vector3[] = [];
     for (let i = 0; i <= 48; i++) {
       const t = (i / 48) * Math.PI * 2;
-      pts.push(new THREE.Vector3(Math.sin(t) * radius, groundY + 0.05, -Math.cos(t) * radius));
+      ringPts.push(new THREE.Vector3(Math.sin(t) * radius, groundY + 0.05, -Math.cos(t) * radius));
     }
-    return pts;
+    const northPts = [
+      new THREE.Vector3(0, groundY + 0.06, -radius * 1.05),
+      new THREE.Vector3(0, groundY + radius * 0.3, -radius * 0.95),
+    ];
+    return { ring: ringPts, north: northPts };
   }, [radius, groundY]);
-  const north = useMemo(
-    () => [new THREE.Vector3(0, groundY + 0.06, -radius * 1.05), new THREE.Vector3(0, groundY + radius * 0.3, -radius * 0.95)],
-    [radius, groundY],
-  );
   return (
     <group>
-      <Line points={points} color={ringColor} lineWidth={1} />
-      <Line points={north} color={ringColor} lineWidth={2} />
+      <HeliodonPolyline points={ring} color={ringColor} />
+      <HeliodonPolyline points={north} color={ringColor} lineWidth={2} />
     </group>
   );
 }
@@ -133,7 +165,7 @@ export function SolarHeliodon({
       {melbourneActive.aboveHorizon && (
         <mesh position={marker}>
           <sphereGeometry args={[sideM * 0.012, 10, 10]} />
-          <meshBasicMaterial color={markerColor} />
+          <meshBasicMaterial color={markerColor} depthWrite={false} />
         </mesh>
       )}
     </group>
@@ -144,33 +176,52 @@ export function SolarLight({
   sample,
   sideM,
   enabled,
+  targetY,
 }: {
   sample: SolarSample;
   sideM: number;
   enabled: boolean;
+  targetY: number;
 }) {
   const lightRef = useRef<THREE.DirectionalLight>(null);
+  const targetRef = useRef<THREE.Object3D>(null);
   useEffect(() => {
     if (lightRef.current) markScreenOnly(lightRef.current);
   }, []);
+  useEffect(() => {
+    const light = lightRef.current;
+    const target = targetRef.current;
+    if (!light || !target) return;
+    light.target = target;
+    target.position.set(0, targetY, 0);
+    light.target.updateMatrixWorld();
+  }, [targetY]);
   const on = enabled && sample.aboveHorizon;
   const distance = sideM * 2.4;
   const [dx, dy, dz] = sample.direction;
+  useFrame(() => {
+    const light = lightRef.current;
+    if (!light?.castShadow) return;
+    light.shadow.updateMatrices(light);
+  });
   return (
-    <directionalLight
-      ref={lightRef}
-      position={[dx * distance, dy * distance, dz * distance]}
-      intensity={on ? 1.05 : 0}
-      castShadow={on}
-      shadow-mapSize={[1024, 1024]}
-      shadow-bias={-0.0005}
-      shadow-normalBias={0.02}
-      shadow-camera-near={sideM * 0.05}
-      shadow-camera-far={sideM * 4}
-      shadow-camera-left={-sideM * 0.65}
-      shadow-camera-right={sideM * 0.65}
-      shadow-camera-top={sideM * 0.65}
-      shadow-camera-bottom={-sideM * 0.65}
-    />
+    <>
+      <object3D ref={targetRef} />
+      <directionalLight
+        ref={lightRef}
+        position={[dx * distance, dy * distance + targetY, dz * distance]}
+        intensity={on ? 1.85 : 0}
+        castShadow={on}
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0002}
+        shadow-normalBias={0.015}
+        shadow-camera-near={sideM * 0.05}
+        shadow-camera-far={sideM * 5}
+        shadow-camera-left={-sideM * 0.75}
+        shadow-camera-right={sideM * 0.75}
+        shadow-camera-top={sideM * 0.75}
+        shadow-camera-bottom={-sideM * 0.75}
+      />
+    </>
   );
 }

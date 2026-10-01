@@ -1,6 +1,9 @@
 import * as THREE from "three";
 import type { PdfChunk, Rgb } from "./aiDocument";
+import { usePdfIllustratorExport } from "./aiExportFormat";
 import { buildLayeredNativeAi } from "./aiNative";
+import { buildLayeredNativeAiPdfOps } from "./aiNativePdfFallback";
+import { buildLayeredPdf } from "./aiDocument";
 import type { CameraShot } from "./cameraShot";
 import { BUILDING_USE_META, SOURCE_META, uniformBuildingColor } from "./buildingUse";
 import { getColour, type ColourKey } from "./colours";
@@ -743,10 +746,15 @@ function edgeKey(a: V2, b: V2): string {
   return left < right ? `${left}|${right}` : `${right}|${left}`;
 }
 
-export function viewAi(model: CityModel, shot: CameraShot, style: ViewStyle): Promise<Uint8Array> {
+export async function viewAi(model: CityModel, shot: CameraShot, style: ViewStyle): Promise<Uint8Array> {
   const page = viewPageMm(shot.width, shot.height);
   const title = `${model.placeLabel} · 3D view · ${formatCoord(model.center.lat)}, ${formatCoord(model.center.lon)}`;
-  return Promise.resolve(
-    buildLayeredNativeAi(page.widthMm, page.heightMm, viewChunks(model, shot, style), VIEW_LAYER_ORDER, title),
-  );
+  const chunks = viewChunks(model, shot, style);
+  if (usePdfIllustratorExport()) {
+    return buildLayeredPdf(page.widthMm, page.heightMm, chunks, VIEW_LAYER_ORDER);
+  }
+  if (import.meta.env.VITE_CITYCUT_AI_PDF_OPS === "true") {
+    return buildLayeredNativeAiPdfOps(page.widthMm, page.heightMm, chunks, VIEW_LAYER_ORDER, title);
+  }
+  return buildLayeredNativeAi(page.widthMm, page.heightMm, chunks, VIEW_LAYER_ORDER, title);
 }

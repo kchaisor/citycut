@@ -371,21 +371,26 @@ describe("rhino export", () => {
     const bytes = await cityModelTo3dm({
       ...model,
       buildings: [
-        ...model.buildings,
+        { id: 1, ring: square([0, 0], 40), holes: [], height: 12, use: "unclassified", source: "none" },
         { id: 8, ring: square([60, 0], 16), holes: [], height: 10, use: "civic", source: "zone" },
+        { id: 10, ring: square([-50, 40], 14), holes: [], height: 8, use: "retail", source: "osm_tag" },
       ],
       areas: [...model.areas, { id: 9, ring: square([30, 30], 20), holes: [], kind: "water" }],
+      layers: { ...model.layers, trees: true },
+      trees: [{ id: 9, at: [20, 30], height_m: 14, crown_diameter_m: 8, trunk_diameter_m: 0.3, sizeSource: "osm" }],
     });
     const rhino = await loadRhino();
     const doc = rhino.File3dm.fromByteArray(bytes);
     try {
       const keys = rhinoLayerColourKeys();
+      const seen = new Set<string>();
       for (let i = 0; i < doc.layers().count; i++) {
         const layer = doc.layers().get(i);
         const path = layer.fullPath;
+        seen.add(path);
         const key = keys[path];
-        if (!key) continue;
-        const expected = key === "contour" ? null : colourRgb(key);
+        expect(key, `missing colour key for layer ${path}`).toBeTruthy();
+        const expected = key === "contour" ? null : colourRgb(key!);
         if (expected) {
           const swatch = layer.color as { r: number; g: number; b: number; a: number };
           expect(swatch.r).toBe(expected.r);
@@ -395,6 +400,20 @@ describe("rhino export", () => {
           expect(layer.renderMaterialIndex).toBeGreaterThanOrEqual(0);
         }
       }
+      const optionalLayers = new Set(["Rail", "Terrain", "Contours", "FigureGround"]);
+      for (const path of Object.keys(keys)) {
+        if (path.startsWith("Buildings::") && !seen.has(path)) continue;
+        if (optionalLayers.has(path) && !seen.has(path)) continue;
+        expect(seen.has(path), `expected layer ${path}`).toBe(true);
+      }
+      expect(seen.has("Buildings::Unclassified")).toBe(true);
+      expect(seen.has("Buildings::Civic")).toBe(true);
+      expect(seen.has("Buildings::Retail")).toBe(true);
+      expect(seen.has("Roads")).toBe(true);
+      expect(seen.has("Green")).toBe(true);
+      expect(seen.has("Water")).toBe(true);
+      expect(seen.has("Ground")).toBe(true);
+      expect(seen.has("Trees")).toBe(true);
       for (let i = 0; i < doc.objects().count; i++) {
         const attributes = doc.objects().get(i).attributes();
         expect(attributes.colorSource).toBe(rhino.ObjectColorSource.ColorFromLayer);

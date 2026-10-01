@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import rhino3dm from "rhino3dm/rhino3dm.module.js";
 import type { RhinoModuleOptions } from "rhino3dm";
+import { BUILDING_USE_META, BUILDING_USES } from "./buildingUse";
 import { buildCityGroup, disposeObject } from "./buildCity";
 import { colourRgb, type ColourKey } from "./colours";
 import { CRS_NOTE, mgaCrs, projectLocal, projectLonLat } from "./crs";
@@ -20,8 +21,21 @@ function contourLayerColor(): Rgb {
 }
 
 /** Layer swatches, read when the file is written so a live colour edit is included. */
+const BUILDING_LAYER_KEYS: Record<string, ColourKey> = {
+  Residential: "--use-residential",
+  Commercial: "--use-commercial",
+  Retail: "--use-retail",
+  MixedUse: "--use-mixed",
+  Industrial: "--use-industrial",
+  Civic: "--use-civic",
+  Recreation: "--use-recreation",
+  Outbuilding: "--use-outbuilding",
+  Unclassified: "--use-unclassified",
+};
+
+/** Full layer path → theme key (or contour pen) for every Rhino layer CityCut writes. */
 export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
-  return {
+  const keys: Record<string, ColourKey | "contour"> = {
     Buildings: "--building-uniform",
     Roads: "--road-arterial",
     Rail: "--rail-fill",
@@ -33,6 +47,11 @@ export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
     Contours: "contour",
     FigureGround: "--figure-fill",
   };
+  for (const use of BUILDING_USES) {
+    const layer = BUILDING_USE_META[use].layer;
+    keys[`Buildings::${layer}`] = BUILDING_LAYER_KEYS[layer];
+  }
+  return keys;
 }
 
 function layerColors(): Record<string, Rgb> {

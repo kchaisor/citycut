@@ -116,6 +116,15 @@ function City({
   return <primitive object={group} />;
 }
 
+function RendererShadows({ enabled }: { enabled: boolean }) {
+  const gl = useThree((state) => state.gl);
+  useLayoutEffect(() => {
+    gl.shadowMap.enabled = enabled;
+    gl.shadowMap.type = THREE.PCFSoftShadowMap;
+  }, [enabled, gl]);
+  return null;
+}
+
 function BindCamera({ camera }: { camera: THREE.PerspectiveCamera | THREE.OrthographicCamera }) {
   const set = useThree((state) => state.set);
   useLayoutEffect(() => {
@@ -459,18 +468,39 @@ export function Scene3D({
   const groundLight = getColour("--light-ground");
   const groundY = model.terrain ? model.terrain.min : 0;
   const sunSample = useMelbourneSunSample(model.center.lat, model.center.lon, solar);
+  const [glEpoch, setGlEpoch] = useState(0);
+  const fillKeyLight = solar.castShadows ? 0 : 1.35;
+  const fillAmbient = solar.castShadows ? 0.06 : 0.28;
+  const fillHemi = solar.castShadows ? 0.22 : 0.7;
+  const shadowTargetY = groundY + (model.terrain ? 0.02 : 0);
   return (
     <Canvas
+      key={glEpoch}
       className="scene-canvas"
       dpr={[1, 1.75]}
       gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
       shadows={solar.castShadows}
+      onCreated={({ gl }) => {
+        const canvas = gl.domElement;
+        const onLost = (event: Event) => {
+          event.preventDefault();
+        };
+        const onRestored = () => setGlEpoch((value) => value + 1);
+        canvas.addEventListener("webglcontextlost", onLost);
+        canvas.addEventListener("webglcontextrestored", onRestored);
+      }}
     >
+      <RendererShadows enabled={solar.castShadows} />
       <color attach="background" args={[modelBg]} />
-      <hemisphereLight args={[sky, groundLight, 0.7]} />
-      <ambientLight intensity={0.28} />
-      <directionalLight position={[model.sideM * 0.4, model.sideM, model.sideM * 0.2]} intensity={1.35} />
-      <SolarLight sample={sunSample} sideM={model.sideM} enabled={solar.castShadows} />
+      <hemisphereLight args={[sky, groundLight, fillHemi]} />
+      <ambientLight intensity={fillAmbient} />
+      <directionalLight position={[model.sideM * 0.4, model.sideM, model.sideM * 0.2]} intensity={fillKeyLight} />
+      <SolarLight
+        sample={sunSample}
+        sideM={model.sideM}
+        enabled={solar.castShadows}
+        targetY={shadowTargetY}
+      />
       <City model={model} uniformBuildings={uniformBuildings} colourBySource={colourBySource} onBounds={onBounds} />
       <SolarHeliodon
         lat={model.center.lat}

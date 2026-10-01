@@ -21,54 +21,76 @@ function psNum(value: number): string {
   return Number.isInteger(rounded) ? String(rounded) : String(rounded);
 }
 
-function psRgb(color: Rgb): string {
+function aiRgb(color: Rgb): string {
   return `${psNum(color[0])} ${psNum(color[1])} ${psNum(color[2])}`;
 }
 
-function pathOps(path: PdfPath): string[] {
+function escapePs(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+
+function strokeState(path: PdfPath): string[] {
+  const ops: string[] = [];
+  if (path.stroke && (path.strokeMm ?? 0) > 0) {
+    ops.push(`${aiRgb(path.stroke)} XA`);
+    ops.push(`${psNum(pdfPt(path.strokeMm ?? 0.1))} w`);
+    if (path.dashMm) ops.push(`[${psNum(pdfPt(path.dashMm[0]))} ${psNum(pdfPt(path.dashMm[1]))}] 0 d`);
+    ops.push(path.cap === "round" ? "1 J" : "0 J");
+    ops.push(path.join === "round" ? "1 j" : "0 j");
+    ops.push("4 M");
+  }
+  return ops;
+}
+
+function ringOps(ring: number[][], close: boolean): string[] {
+  if (ring.length < 2) return [];
+  const ops: string[] = [`${psNum(pdfPt(ring[0][0]))} ${psNum(pdfPt(ring[0][1]))} m`];
+  for (let i = 1; i < ring.length; i++) {
+    ops.push(`${psNum(pdfPt(ring[i][0]))} ${psNum(pdfPt(ring[i][1]))} l`);
+  }
+  if (close && ring.length >= 3) ops.push(`${psNum(pdfPt(ring[0][0]))} ${psNum(pdfPt(ring[0][1]))} L`);
+  return ops;
+}
+
+function paintPath(path: PdfPath): string[] {
   const rings = path.rings.filter((ring) => ring.length >= 2);
   if (rings.length === 0) return [];
   const hasFill = Boolean(path.fill);
   const hasStroke = Boolean(path.stroke) && (path.strokeMm ?? 0) > 0;
   if (!hasFill && !hasStroke) return [];
-  const ops: string[] = ["q"];
-  if (hasFill && path.fill) ops.push(`${psRgb(path.fill)} rg`);
-  if (hasStroke && path.stroke) {
-    ops.push(`${psRgb(path.stroke)} RG`);
-    ops.push(`${psNum(pdfPt(path.strokeMm ?? 0.1))} w`);
-    if (path.dashMm) ops.push(`[${psNum(pdfPt(path.dashMm[0]))} ${psNum(pdfPt(path.dashMm[1]))}] 0 d`);
-    ops.push(path.cap === "round" ? "1 J" : "0 J");
-    ops.push(path.join === "round" ? "1 j" : "0 j");
-  }
-  for (const ring of rings) {
-    ops.push(`${psNum(pdfPt(ring[0][0]))} ${psNum(pdfPt(ring[0][1]))} m`);
-    for (let i = 1; i < ring.length; i++) {
-      ops.push(`${psNum(pdfPt(ring[i][0]))} ${psNum(pdfPt(ring[i][1]))} l`);
-    }
-    if (path.close !== false && ring.length >= 3) ops.push("h");
-  }
-  if (hasFill && hasStroke) ops.push(path.evenOdd !== false && hasFill ? "B*" : "B");
-  else if (hasFill) ops.push(path.evenOdd !== false ? "f*" : "f");
-  else ops.push("S");
-  ops.push("Q");
+
+  const ops: string[] = [];
+  if (hasFill && path.fill) ops.push(`${aiRgb(path.fill)} Xa`);
+  if (hasStroke) ops.push(...strokeState(path));
+
+  const close = path.close !== false;
+  const compound = rings.length > 1 || path.evenOdd !== false;
+  if (compound) ops.push("*u");
+  for (const ring of rings) ops.push(...ringOps(ring, close));
+  if (compound) ops.push("*U");
+
+  if (hasFill && hasStroke) ops.push(close ? "b" : "B");
+  else if (hasFill) ops.push(close ? "f" : "F");
+  else ops.push(close ? "s" : "S");
   return ops;
 }
 
-function ellipseOps(ellipse: PdfEllipse): string[] {
+function paintEllipse(ellipse: PdfEllipse): string[] {
   const hasFill = Boolean(ellipse.fill);
   const hasStroke = Boolean(ellipse.stroke) && (ellipse.strokeMm ?? 0) > 0;
   if (!hasFill && !hasStroke) return [];
   if (!(ellipse.rx > 0) || !(ellipse.ry > 0)) return [];
+
   const cx = pdfPt(ellipse.cx);
   const cy = pdfPt(ellipse.cy);
   const rx = pdfPt(ellipse.rx);
   const ry = pdfPt(ellipse.ry);
   const kx = rx * KAPPA;
   const ky = ry * KAPPA;
-  const ops: string[] = ["q"];
-  if (hasFill && ellipse.fill) ops.push(`${psRgb(ellipse.fill)} rg`);
+  const ops: string[] = [];
+  if (hasFill && ellipse.fill) ops.push(`${aiRgb(ellipse.fill)} Xa`);
   if (hasStroke && ellipse.stroke) {
-    ops.push(`${psRgb(ellipse.stroke)} RG`);
+    ops.push(`${aiRgb(ellipse.stroke)} XA`);
     ops.push(`${psNum(pdfPt(ellipse.strokeMm ?? 0.1))} w`);
   }
   ops.push(`${psNum(cx + rx)} ${psNum(cy)} m`);
@@ -84,36 +106,42 @@ function ellipseOps(ellipse: PdfEllipse): string[] {
   ops.push(
     `${psNum(cx + kx)} ${psNum(cy - ry)} ${psNum(cx + rx)} ${psNum(cy - ky)} ${psNum(cx + rx)} ${psNum(cy)} c`,
   );
-  ops.push("h");
-  if (hasFill && hasStroke) ops.push("B");
+  ops.push(`${psNum(cx + rx)} ${psNum(cy)} L`);
+  if (hasFill && hasStroke) ops.push("b");
   else if (hasFill) ops.push("f");
-  else ops.push("S");
-  ops.push("Q");
+  else ops.push("s");
   return ops;
 }
 
-function textOps(text: PdfText): string[] {
+/** Point text (type 0): revisable block only; final-form Tx omitted. */
+function pointTextOps(text: PdfText): string[] {
   if (!text.text) return [];
   const size = pdfPt(text.sizeMm);
+  const x = psNum(pdfPt(text.x));
+  const y = psNum(pdfPt(text.y));
+  const label = escapePs(text.text);
   return [
-    "q",
-    `${psRgb(text.color)} rg`,
-    `/Helvetica findfont ${psNum(size)} scalefont setfont`,
-    `${psNum(pdfPt(text.x))} ${psNum(pdfPt(text.y))} moveto`,
-    `(${escapePs(text.text)}) show`,
-    "Q",
+    "0 To",
+    "0 Ta",
+    "0 Tw",
+    "0 Tc",
+    "100 Tz",
+    "0 TL",
+    "0 Ts",
+    `${aiRgb(text.color)} Xa`,
+    `/Helvetica 0 Tf`,
+    `${size} 0 Tp`,
+    `${x} ${y} Td`,
+    `(${label}) TO`,
+    "TO",
   ];
-}
-
-function escapePs(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 }
 
 function chunkOps(chunk: PdfChunk): string[] {
   const ops: string[] = [];
-  for (const path of chunk.paths ?? []) ops.push(...pathOps(path));
-  for (const ellipse of chunk.ellipses ?? []) ops.push(...ellipseOps(ellipse));
-  for (const text of chunk.texts ?? []) ops.push(...textOps(text));
+  for (const path of chunk.paths ?? []) ops.push(...paintPath(path));
+  for (const ellipse of chunk.ellipses ?? []) ops.push(...paintEllipse(ellipse));
+  for (const text of chunk.texts ?? []) ops.push(...pointTextOps(text));
   return ops;
 }
 
@@ -133,9 +161,22 @@ function layerBlock(label: string, ops: string[], layerIndex: number): string {
   return [...header, ...ops, "LB", "%AI5_EndLayer--"].join("\n");
 }
 
+const AI8_PROLOG = [
+  "%%BeginProlog",
+  "%%IncludeResource: procset Adobe_level2_AI5 1.0 0",
+  "%%AI5_BeginProcSet: 1 1 0",
+  "%%AI5_EndProcSet",
+  "%%EndProlog",
+] as const;
+
 /**
- * Illustrator 8–compatible EPS with %AI5_BeginLayer blocks.
- * Coordinates on the chunks are millimetres, y up. Illustrator opens these as named layers.
+ * Illustrator 8 EPS with %AI5_BeginLayer blocks and AI paint operators (Xa/XA, m/l/c, *u/*U).
+ * Coordinates on the chunks are millimetres, y up.
+ *
+ * Reference structure compared to Adobe Illustrator EPS conventions:
+ * - Adobe Illustrator File Format Specification 3.0 (operators through AI8 EPS):
+ *   https://www.moon-soft.com/program/format/graphics/ai30.pdf
+ * - Operator summary (Xa, *u, layers): https://docs.aspose.com/page/net/what-is-ai-file/
  */
 export function buildLayeredNativeAi(
   widthMm: number,
@@ -172,26 +213,25 @@ export function buildLayeredNativeAi(
 
   const header = [
     "%!PS-Adobe-3.0 EPSF-3.0",
-    `%%Creator: CityCut`,
+    "%%Creator: Adobe Illustrator(R) 8.0",
+    "%%AI8_CreatorVersion: 8.0",
     ...(title ? [`%%Title: ${title}`] : []),
     `%%BoundingBox: 0 0 ${Math.ceil(widthPt)} ${Math.ceil(heightPt)}`,
     `%%HiResBoundingBox: 0 0 ${psNum(widthPt)} ${psNum(heightPt)}`,
+    "%%DocumentProcessColors: Cyan Magenta Yellow Black Red Green Blue",
+    "%%DocumentNeededResources: procset Adobe_level2_AI5 1.0 0",
+    "%%DocumentSuppliedResources: procset Adobe_level2_AI5 1.0 0",
+    "%%DocumentProcSets: Adobe_level2_AI5 1.0 0",
     "%%EndComments",
-    "%%BeginProlog",
-    "%%EndProlog",
+    ...AI8_PROLOG,
     "%%BeginSetup",
     "%AI3_ColorUsage: Color",
-    "%AI5_FileFormat 2.0",
+    "%AI5_FileFormat 8.0",
     "%%EndSetup",
+    "%%Page: 1 1",
   ];
 
-  const script = [
-    ...header,
-    ...body,
-    "%%Trailer",
-    "%%EOF",
-  ].join("\n");
-
+  const script = [...header, ...body, "%%PageTrailer", "%%Trailer", "%%EOF"].join("\n");
   return new TextEncoder().encode(script);
 }
 
@@ -206,6 +246,33 @@ export function parseNativeAiLayers(bytes: Uint8Array): string[] {
 }
 
 export function nativeAiLooksLikeEps(bytes: Uint8Array): boolean {
-  const head = new TextDecoder("latin1").decode(bytes.subarray(0, 32));
-  return head.startsWith("%!PS-Adobe");
+  const head = new TextDecoder("latin1").decode(bytes.subarray(0, 64));
+  return head.startsWith("%!PS-Adobe") && head.includes("Adobe Illustrator");
+}
+
+const PDF_ONLY_OP =
+  /(^|\n)\s*(q|Q|rg|RG|re|h|B\*|f\*|moveto|show|findfont|scalefont|setfont)\s*($|\n)/m;
+
+/** Body script must not use PDF graphics operators (Illustrator uses Xa/m/f and procsets). */
+export function nativeAiBodyUsesPdfOperators(bytes: Uint8Array): boolean {
+  const text = new TextDecoder("latin1").decode(bytes);
+  const prologEnd = text.indexOf("%%EndProlog");
+  const setupEnd = text.indexOf("%%EndSetup");
+  const bodyStart = Math.max(prologEnd, setupEnd);
+  if (bodyStart < 0) return true;
+  const body = text.slice(bodyStart);
+  if (/(^|\n)\s*q\s/m.test(body) || /(^|\n)\s*Q\s/m.test(body)) return true;
+  if (/(^|\n)[0-9. -]+ rg\s/m.test(body)) return true;
+  if (/(^|\n)[0-9. -]+ RG\s/m.test(body)) return true;
+  if (/(^|\n)\s*h\s/m.test(body)) return true;
+  if (/(^|\n)[0-9. -]+ re\s/m.test(body)) return true;
+  if (/(^|\n)\s*B\*\s/m.test(body)) return true;
+  if (/(^|\n)\s*f\*\s/m.test(body)) return true;
+  if (PDF_ONLY_OP.test(body)) return true;
+  return false;
+}
+
+export function nativeAiHeaderExcerpt(bytes: Uint8Array, maxLines = 24): string {
+  const text = new TextDecoder("latin1").decode(bytes);
+  return text.split("\n").slice(0, maxLines).join("\n");
 }

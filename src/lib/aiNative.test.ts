@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { aiLayerLabel, buildLayeredNativeAi, nativeAiLooksLikeEps, parseNativeAiLayers } from "./aiNative";
+import {
+  aiLayerLabel,
+  buildLayeredNativeAi,
+  nativeAiBodyUsesPdfOperators,
+  nativeAiLooksLikeEps,
+  parseNativeAiLayers,
+} from "./aiNative";
 import { SITE_LAYER_ORDER, sitePlanAi } from "./aiPlan";
 import type { CityModel } from "../types";
 
@@ -39,9 +45,16 @@ function model(): CityModel {
 }
 
 describe("native Illustrator layers", () => {
-  it("writes EPS with %AI5_BeginLayer blocks in site-plan order", async () => {
+  it("writes AI8 EPS with %AI5_BeginLayer blocks in site-plan order", async () => {
     const bytes = await sitePlanAi(model(), 1000);
+    const text = new TextDecoder("latin1").decode(bytes);
     expect(nativeAiLooksLikeEps(bytes)).toBe(true);
+    expect(text).toContain("%%Creator: Adobe Illustrator(R) 8.0");
+    expect(text).toContain("%%AI8_CreatorVersion");
+    expect(text).toContain("%AI5_FileFormat");
+    expect(text).toContain("%%DocumentProcSets");
+    expect(text).toContain("%%BeginProlog");
+    expect(nativeAiBodyUsesPdfOperators(bytes)).toBe(false);
     const layers = parseNativeAiLayers(bytes);
     expect(layers[0]).toBe(aiLayerLabel("Frame"));
     expect(layers).toContain(aiLayerLabel("Green"));
@@ -53,5 +66,37 @@ describe("native Illustrator layers", () => {
   it("keeps empty layers out of the file", () => {
     const bytes = buildLayeredNativeAi(100, 80, [{ name: "Only", paths: [] }], ["Only"]);
     expect(parseNativeAiLayers(bytes)).toEqual([]);
+  });
+
+  it("uses Illustrator paint operators in the body", () => {
+    const bytes = buildLayeredNativeAi(
+      100,
+      80,
+      [
+        {
+          name: "Ink",
+          paths: [
+            {
+              rings: [
+                [
+                  [10, 10],
+                  [40, 10],
+                  [40, 30],
+                  [10, 30],
+                ],
+              ],
+              fill: [0.2, 0.4, 0.6],
+              close: true,
+            },
+          ],
+        },
+      ],
+      ["Ink"],
+    );
+    const text = new TextDecoder("latin1").decode(bytes);
+    expect(text).toMatch(/[\d.]+ [\d.]+ [\d.]+ Xa/);
+    expect(text).toContain("*u");
+    expect(text).toContain("*U");
+    expect(nativeAiBodyUsesPdfOperators(bytes)).toBe(false);
   });
 });

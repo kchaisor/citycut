@@ -13,7 +13,7 @@ import {
 import * as THREE from "three";
 import { buildLayeredPdf } from "./aiDocument";
 import { nativeAiLooksLikeEps, parseNativeAiLayers } from "./aiNative";
-import { figureGroundAi, figureGroundChunks, sitePlanAi, sitePlanChunks } from "./aiPlan";
+import { figureGroundChunks, figureGroundPdf, sitePlanChunks, sitePlanPdf } from "./aiPlan";
 import { clipEdge, viewAi, VIEW_LAYER_ORDER, VIEW_OUTLINE_MM, type ScreenTri } from "./aiView";
 import { shotFromCamera } from "./cameraShot";
 import * as download from "./download";
@@ -234,8 +234,8 @@ describe("removed exports", () => {
 
 describe("Illustrator plans", () => {
   it("writes the site plan as layered PDF 1.6 with true pen weights and dashed contours", async () => {
-    const info = await inspect(await sitePlanAi(model(), 1000));
-    expect(info.header.startsWith("%!PS-Adobe-3.0")).toBe(true);
+    const info = await inspect(await sitePlanPdf(model(), 1000));
+    expect(info.header.startsWith("%PDF")).toBe(true);
     expect(info.layers.length).toBeGreaterThan(0);
     expect(info.layers[0]).toBe("Frame/Sheet");
     expect(info.widthMm).toBeCloseTo(420, 0);
@@ -267,21 +267,21 @@ describe("Illustrator plans", () => {
   it("draws the kerb only when the toggle is on, and reads an edited contour style", async () => {
     const off = cloneLineStyles(DEFAULT_LINE_STYLES);
     off.kerbOn = false;
-    const bare = await inspect(await sitePlanAi(model(), 1000, off));
+    const bare = await inspect(await sitePlanPdf(model(), 1000, off));
     const bareRoads = bare.bodies.get("Roads") ?? "";
     expect(bareRoads.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g)).toEqual(expect.arrayContaining(["f*"]));
     expect(bare.widthsMm.map((mm) => Math.round(mm * 100) / 100)).not.toContain(LINE_MM.propertyRoad);
 
     const dotted = cloneLineStyles(DEFAULT_LINE_STYLES);
     dotted.contour = { ...dotted.contour, color: "#FF0000", dash: "0 0.6" };
-    const edited = await inspect(await sitePlanAi(model(), 1000, dotted));
+    const edited = await inspect(await sitePlanPdf(model(), 1000, dotted));
     expect(edited.content).toContain(`${pdfPt(0)} ${pdfPt(0.6)}`);
     expect(edited.content).toMatch(/1\s+0\s+0\s+RG/);
   });
 
   it("paints a zero weight as fill only, including buildings, green, and water", async () => {
     const paintsOf = (body: string) => body.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g) ?? [];
-    const info = await inspect(await sitePlanAi(model(), 1000));
+    const info = await inspect(await sitePlanPdf(model(), 1000));
     expect(paintsOf(info.bodies.get("Buildings") ?? "")).toEqual(expect.arrayContaining(["f*"]));
     expect(paintsOf(info.bodies.get("Green") ?? "")).toEqual(expect.arrayContaining(["f*"]));
     expect(paintsOf(info.bodies.get("Water") ?? "")).toEqual(expect.arrayContaining(["f*"]));
@@ -291,7 +291,7 @@ describe("Illustrator plans", () => {
     for (const key of ["building", "kerb", "path", "rail", "green", "water", "contour", "frame", "annotation", "tree"] as const) {
       hidden[key] = { ...hidden[key], mm: 0 };
     }
-    const bare = await inspect(await sitePlanAi(model(), 1000, hidden));
+    const bare = await inspect(await sitePlanPdf(model(), 1000, hidden));
     expect(bare.content).not.toMatch(/(?:^|[\s[])0(?:\.0+)? w/);
     expect(paintsOf(bare.bodies.get("Buildings") ?? "")).toEqual(expect.arrayContaining(["f*"]));
     expect(paintsOf(bare.bodies.get("Green") ?? "")).toEqual(expect.arrayContaining(["f*"]));
@@ -303,14 +303,14 @@ describe("Illustrator plans", () => {
 
     const restored = cloneLineStyles(DEFAULT_LINE_STYLES);
     restored.building = { ...restored.building, mm: 0.4 };
-    const outlined = await inspect(await sitePlanAi(model(), 1000, restored));
+    const outlined = await inspect(await sitePlanPdf(model(), 1000, restored));
     expect(paintsOf(outlined.bodies.get("Buildings") ?? "")).toContain("B*");
     expect(outlined.widthsMm.map((mm) => Math.round(mm * 100) / 100)).toContain(0.4);
   });
 
   it("draws the footpath layer as one filled strip whose width is metres on the sheet", async () => {
     const paintsOf = (body: string) => body.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g) ?? [];
-    const info = await inspect(await sitePlanAi(model(), 1000));
+    const info = await inspect(await sitePlanPdf(model(), 1000));
     expect(paintsOf(info.bodies.get("Footpaths") ?? "")).toEqual(expect.arrayContaining(["f*"]));
     const strip = sitePlanChunks(model(), 1000).find((chunk) => chunk.name === "Paths");
     expect(strip?.paths).toHaveLength(1);
@@ -331,11 +331,11 @@ describe("Illustrator plans", () => {
     expect(widthMm(500)).toBeCloseTo(paperMillimetres(PATH_WIDTH_M, 500), 1);
     const hidden = cloneLineStyles(DEFAULT_LINE_STYLES);
     hidden.pathWidthM = 0;
-    const gone = await inspect(await sitePlanAi(model(), 1000, hidden));
+    const gone = await inspect(await sitePlanPdf(model(), 1000, hidden));
     expect(gone.bodies.has("Footpaths")).toBe(false);
     const edged = cloneLineStyles(DEFAULT_LINE_STYLES);
     edged.pathEdgeOn = true;
-    const withEdge = await inspect(await sitePlanAi(model(), 1000, edged));
+    const withEdge = await inspect(await sitePlanPdf(model(), 1000, edged));
     expect(paintsOf(withEdge.bodies.get("Footpaths") ?? "")).toContain("B*");
     const figure = figureGroundChunks(model(), 1000).find((chunk) => chunk.name === "Paths");
     expect(figure?.paths).toHaveLength(1);
@@ -343,7 +343,7 @@ describe("Illustrator plans", () => {
   });
 
   it("writes figure-ground with frame, footprints, and annotation only", async () => {
-    const fitted = await inspect(await figureGroundAi(model(), 1000));
+    const fitted = await inspect(await figureGroundPdf(model(), 1000));
     expect(fitted.layers[0]).toBe("Frame/Sheet");
     expect(fitted.layers).toContain("Buildings");
     expect(fitted.text).toContain("Test Block");
@@ -354,7 +354,7 @@ describe("Illustrator plans", () => {
     const figureBuildings = fitted.bodies.get("Buildings") ?? "";
     expect(figureBuildings.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g)).toEqual(expect.arrayContaining(["f*"]));
     expect(figureBuildings).not.toMatch(/\d+\s+(\d+\s+){2}\d+\s+RG/);
-    const wide = await inspect(await figureGroundAi({ ...model(), sideM: 1000, buildings: [] }, 2500));
+    const wide = await inspect(await figureGroundPdf({ ...model(), sideM: 1000, buildings: [] }, 2500));
     expect(wide.text).toContain("Does not fit on A3");
     expect(wide.text).toContain("1:2500");
     expect(wide.widthMm).toBeCloseTo(420, 0);
