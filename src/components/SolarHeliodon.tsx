@@ -40,9 +40,9 @@ export const HELIODON_RING_FRACTION = 0.55;
 
 /** Dash patterns as fractions of the cut side: on, off, on, off… `null` is a solid line. */
 export const SUN_PATH_STYLES = [
-  { date: SOLAR_SUMMER, label: "Dec 21", key: "--sun-arc-summer", pattern: null },
-  { date: SOLAR_EQUINOX, label: "Sep/Mar", key: "--sun-arc-equinox", pattern: [0.018, 0.011] },
-  { date: SOLAR_WINTER, label: "Jun 21", key: "--sun-arc-winter", pattern: [0.024, 0.009, 0.004, 0.009] },
+  { date: SOLAR_SUMMER, label: "Dec 21", key: "--sun-arc-summer", pattern: null, labelSide: 1 },
+  { date: SOLAR_EQUINOX, label: "Sep/Mar", key: "--sun-arc-equinox", pattern: [0.018, 0.011], labelSide: -1 },
+  { date: SOLAR_WINTER, label: "Jun 21", key: "--sun-arc-winter", pattern: [0.024, 0.009, 0.004, 0.009], labelSide: -1 },
 ] as const;
 
 const LABELLED_HOURS = new Set([6, 9, 12, 15, 18]);
@@ -224,6 +224,7 @@ function buildSunPaths(group: THREE.Group, lat: number, lon: number, year: numbe
   const ink = getColour("--sun-compass-label");
   const halo = getColour("--sheet-fill");
   const dots = hourDotMaterial(ink, halo);
+  const casingMaterial = overlayMaterial(halo);
   const outward = (point: THREE.Vector3, by: number) => {
     const centre = new THREE.Vector3(0, groundY, 0);
     return point.clone().sub(centre).normalize().multiplyScalar(by).add(point);
@@ -235,6 +236,8 @@ function buildSunPaths(group: THREE.Group, lat: number, lon: number, year: numbe
     const pattern = style.pattern?.map((fraction) => fraction * sideM) ?? null;
     const stroke = strokeGeometry(points, sideM * 0.0013, pattern);
     if (stroke) group.add(overlayMesh(stroke, overlayMaterial(getColour(style.key))));
+    const casing = strokeGeometry(points, sideM * 0.0028, pattern);
+    if (casing) group.add(overlayMesh(casing, casingMaterial, OVERLAY_ORDER - 1));
 
     for (const mark of daylightHourMarks(lat, lon, year, month, day)) {
       const at = sampleToPoint(mark.sample.direction, dome, groundY);
@@ -249,7 +252,8 @@ function buildSunPaths(group: THREE.Group, lat: number, lon: number, year: numbe
       if (!LABELLED_HOURS.has(mark.hour)) continue;
       const label = textSprite(`${mark.hour}h`, { ink, halo, heightM: sideM * 0.024 });
       if (!label) continue;
-      label.position.copy(outward(at, sideM * 0.022));
+      // Dec 21 labels sit outside its arc and the lower arcs label inside, so the noon labels do not collide.
+      label.position.copy(outward(at, style.labelSide * sideM * 0.024));
       group.add(label);
     }
 
