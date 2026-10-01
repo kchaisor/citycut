@@ -1,4 +1,4 @@
-import { lazy, Suspense, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { MapStage, type FlyRequest } from "./components/MapStage";
 import { SelectChrome } from "./components/SelectChrome";
 import { TopBar } from "./components/TopBar";
@@ -8,21 +8,27 @@ import {
   DEFAULT_ZOOM,
   MAX_AREA_M2,
   MELBOURNE,
-  MELBOURNE_LABEL,
 } from "./content/constants";
 import { comRecordsToTrees, fetchComTrees } from "./lib/comTrees";
 import { fetchTerrainForCut } from "./lib/fetchTerrain";
-import { frameFromSearch, type FrameQuery } from "./lib/frameQuery";
-import { M_PER_DEG_LAT, mPerDegLon, squareBBox } from "./lib/geo";
+import { explicitLabel, frameFromSearch, writeFrameSearch, type FrameQuery } from "./lib/frameQuery";
+import { squareBBox } from "./lib/geo";
+import { localityCacheKey, reverseLocality } from "./lib/nominatim";
 import { buildOverpassQuery, fetchOverpass, overpassBBox } from "./lib/overpass";
 import { collectTreeContext, FLAT_GROUND_NOTE, parseCity } from "./lib/parseOsm";
+import {
+  REVERSE_DEBOUNCE_MS,
+  addressStillApplies,
+  coordinateLabel,
+  cutSizeLabel,
+} from "./lib/placeLabel";
 import { TERRAIN_UNAVAILABLE, terrainNote } from "./lib/terrain";
 import { MAX_TREE_INSTANCES, assembleTreeTiers } from "./lib/treeTiers";
 import { replaceTreeNote, treeTierCounts } from "./lib/trees";
 import { fetchVicmapTrees, vicmapPointsToTrees, VICMAP_ATTRIBUTION } from "./lib/vicmapTrees";
 import { loadContoursForCut } from "./lib/vicmapContours";
 import { assignExternalUses, loadUseTiers } from "./lib/useCascade";
-import type { Basemap, CityModel, PlaceHit, UiLayers, UseTierFailure, ViewState } from "./types";
+import type { Basemap, CityModel, LonLat, PlaceHit, UiLayers, UseTierFailure, ViewState } from "./types";
 
 function frameFromQuery(): FrameQuery | null {
   if (typeof window === "undefined") return null;
@@ -31,35 +37,120 @@ function frameFromQuery(): FrameQuery | null {
 
 const ModelPage = lazy(() => import("./components/ModelPage").then((mod) => ({ default: mod.ModelPage })));
 
+type PlaceAnchor = LonLat & { label: string };
+
 export default function App() {
   const queried = frameFromQuery();
   const initialView: ViewState = queried?.view ?? { ...MELBOURNE, zoom: DEFAULT_ZOOM };
+  const sharedLabel = typeof window === "undefined" ? null : explicitLabel(window.location.search);
   const viewRef = useRef<ViewState>(initialView);
-  const pinRef = useRef({ lon: initialView.lon, lat: initialView.lat });
-  const pinLabelRef = useRef(queried?.label ?? MELBOURNE_LABEL);
-  const driftedRef = useRef(false);
+  const anchorRef = useRef<PlaceAnchor | null>(
+    sharedLabel ? { lon: initialView.lon, lat: initialView.lat, label: sharedLabel } : null,
+  );
+  const placeLabelRef = useRef(sharedLabel ?? coordinateLabel(initialView.lat, initialView.lon));
+  const sideRef = useRef(queried?.sideKm ?? DEFAULT_SIDE_KM);
+  const phaseRef = useRef<"select" | "model">("select");
+  const settleTimer = useRef<number | null>(null);
+  const lookupGen = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
 
   const [sideKm, setSideKm] = useState(queried?.sideKm ?? DEFAULT_SIDE_KM);
   const [layers, setLayers] = useState<UiLayers>(DEFAULT_LAYERS);
   const [basemap, setBasemap] = useState<Basemap>("map");
-  const [placeLabel, setPlaceLabel] = useState(queried?.label ?? MELBOURNE_LABEL);
+  const [placeLabel, setPlaceLabel] = useState(placeLabelRef.current);
   const [fly, setFly] = useState<FlyRequest | null>(null);
   const [phase, setPhase] = useState<"select" | "model">("select");
   const [model, setModel] = useState<CityModel | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  sideRef.current = sideKm;
+  phaseRef.current = phase;
+  placeLabelRef.current = placeLabel;
+
+  function writeUrl() {
+    const view = viewRef.current;
+    const search = writeFrameSearch(window.location.search, {
+      lat: view.lat,
+      lon: view.lon,
+      sideKm: sideRef.current,
+      label: placeLabelRef.current,
+    });
+    const nextUrl = `${window.location.pathname}${search}${window.location.hash}`;
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (nextUrl !== current) window.history.replaceState(window.history.state, "", nextUrl);
+  }
+
+  function publishLabel(label: string) {
+    placeLabelRef.current = label;
+    setPlaceLabel(label);
+    writeUrl();
+  }
+
+  function invalidateLookup() {
+    lookupGen.current += 1;
+  }
+
+  async function labelFor(view: ViewState): Promise<string> {
+    const anchor = anchorRef.current;
+    const sideM = sideRef.current * 1000;
+    if (anchor && addressStillApplies(anchor, view, sideM)) return anchor.label;
+    try {
+      return await reverseLocality(view.lat, view.lon);
+    } catch {
+      return coordinateLabel(view.lat, view.lon);
+    }
+  }
+
+  async function applyLocality(view: ViewState) {
+    if (phaseRef.current !== "select") return;
+    const anchor = anchorRef.current;
+    if (anchor && addressStillApplies(anchor, view, sideRef.current * 1000)) {
+      if (placeLabelRef.current !== anchor.label) publishLabel(anchor.label);
+      else writeUrl();
+      return;
+    }
+    const gen = ++lookupGen.current;
+    let label: string;
+    try {
+      label = await reverseLocality(view.lat, view.lon);
+    } catch {
+      label = coordinateLabel(view.lat, view.lon);
+    }
+    if (gen !== lookupGen.current || phaseRef.current !== "select") return;
+    const current = viewRef.current;
+    if (localityCacheKey(view.lat, view.lon) !== localityCacheKey(current.lat, current.lon)) return;
+    const still = anchorRef.current;
+    if (still && addressStillApplies(still, current, sideRef.current * 1000)) {
+      publishLabel(still.label);
+      return;
+    }
+    publishLabel(label);
+  }
+
+  function scheduleSettle() {
+    if (settleTimer.current != null) window.clearTimeout(settleTimer.current);
+    settleTimer.current = window.setTimeout(() => {
+      settleTimer.current = null;
+      void applyLocality(viewRef.current);
+    }, REVERSE_DEBOUNCE_MS);
+  }
 
   function onView(view: ViewState) {
     viewRef.current = view;
-    const dx = (view.lon - pinRef.current.lon) * mPerDegLon(view.lat);
-    const dy = (view.lat - pinRef.current.lat) * M_PER_DEG_LAT;
-    const drifted = Math.hypot(dx, dy) > 450;
-    if (drifted !== driftedRef.current) {
-      driftedRef.current = drifted;
-      setPlaceLabel(drifted ? "Selected frame" : pinLabelRef.current);
-    }
+    if (phaseRef.current !== "select") return;
+    scheduleSettle();
   }
+
+  useEffect(() => {
+    writeUrl();
+  }, [placeLabel, sideKm]);
+
+  useEffect(() => {
+    return () => {
+      if (settleTimer.current != null) window.clearTimeout(settleTimer.current);
+      lookupGen.current += 1;
+    };
+  }, []);
 
   function onLayer(key: keyof UiLayers, on: boolean) {
     setLayers((current) => ({ ...current, [key]: on }));
@@ -73,10 +164,9 @@ export default function App() {
   }
 
   function onPlace(place: PlaceHit) {
-    pinRef.current = { lon: place.lon, lat: place.lat };
-    pinLabelRef.current = place.label;
-    driftedRef.current = false;
-    setPlaceLabel(place.label);
+    anchorRef.current = { lon: place.lon, lat: place.lat, label: place.label };
+    invalidateLookup();
+    publishLabel(place.label);
     setFly({
       token: Date.now(),
       lon: place.lon,
@@ -86,10 +176,9 @@ export default function App() {
   }
 
   function focusMelbourne() {
-    pinRef.current = MELBOURNE;
-    pinLabelRef.current = MELBOURNE_LABEL;
-    driftedRef.current = false;
-    setPlaceLabel(MELBOURNE_LABEL);
+    anchorRef.current = null;
+    invalidateLookup();
+    publishLabel(coordinateLabel(MELBOURNE.lat, MELBOURNE.lon));
     setFly({
       token: Date.now(),
       lon: MELBOURNE.lon,
@@ -132,12 +221,19 @@ export default function App() {
       setError("That frame is over the 2 km² limit for this version.");
       return;
     }
+    if (settleTimer.current != null) {
+      window.clearTimeout(settleTimer.current);
+      settleTimer.current = null;
+    }
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setLoading(true);
     setError(null);
     try {
+      const label = await labelFor(view);
+      if (controller.signal.aborted) return;
+      publishLabel(label);
       const center = { lon: view.lon, lat: view.lat };
       const terrainTask = layers.terrain
         ? fetchTerrainForCut(center, sideM, controller.signal)
@@ -263,7 +359,7 @@ export default function App() {
         buildings,
         trees,
         treeCapHit: assembled?.capHit ?? false,
-        placeLabel,
+        placeLabel: label,
         sourceNote,
         terrain: terrainResult.field,
         terrainError: terrainResult.error,
@@ -283,15 +379,20 @@ export default function App() {
     }
   }
 
+  const headerPlace = phase === "model" && model ? model.placeLabel : placeLabel;
+  const headerSide = phase === "model" && model ? model.sideM : sideKm * 1000;
+  const headerSize = cutSizeLabel(headerSide);
+
+  useEffect(() => {
+    document.title = `CityCut — ${headerPlace} · ${headerSize}`;
+  }, [headerPlace, headerSize]);
+
   return (
     <div className="app">
       <TopBar
         showNewCut={phase === "model"}
-        note={
-          phase === "model" && model
-            ? `${model.placeLabel} · ${Math.round(model.sideM)} × ${Math.round(model.sideM)} m`
-            : placeLabel
-        }
+        place={headerPlace}
+        size={headerSize}
         onHome={onHome}
         onNewCut={() => setPhase("select")}
       />

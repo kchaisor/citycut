@@ -52,3 +52,35 @@ export function frameFromSearch(search: string): FrameQuery {
     label: params.get("label") || "Selected frame",
   };
 }
+
+/** A shared link named the cut. Missing and blank labels do not. */
+export function explicitLabel(search: string): string | null {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  const label = params.get("label");
+  if (label == null || label.trim() === "") return null;
+  return label;
+}
+
+function trimCoord(value: number): string {
+  return value.toFixed(5).replace(/\.?0+$/, "");
+}
+
+function trimKm(km: number): string {
+  return String(Math.round(km * 1000) / 1000);
+}
+
+/**
+ * Writes `lat`, `lon`, `km`, and `label`, and leaves other params (such as `view`) in place.
+ */
+export function writeFrameSearch(
+  search: string,
+  frame: { lat: number; lon: number; sideKm: number; label: string },
+): string {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  params.set("lat", trimCoord(frame.lat));
+  params.set("lon", trimCoord(frame.lon));
+  params.set("km", trimKm(frame.sideKm));
+  params.set("label", frame.label);
+  const next = params.toString();
+  return next ? `?${next}` : "";
+}

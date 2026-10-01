@@ -38,8 +38,11 @@ button { cursor: pointer; }
   height: 56px;
   flex: none;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
+  column-gap: 8px;
+  width: 100%;
+  min-width: 0;
   padding: 0 16px 0 14px;
   background: var(--landing-bg);
   border-bottom: 1px solid var(--panel-border);
@@ -50,6 +53,7 @@ button { cursor: pointer; }
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-width: max-content;
   border: 0;
   background: transparent;
   padding: 6px 8px;
@@ -60,17 +64,39 @@ button { cursor: pointer; }
 }
 .mark { width: 18px; height: 18px; display: block; }
 .top-note {
-  margin: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
   min-width: 0;
-  max-width: 46vw;
+  margin: 0;
   color: var(--muted-text);
   font-size: 13px;
-  text-align: center;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.top-note-place {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.top-actions { justify-self: end; display: flex; align-items: center; gap: 4px; min-height: 36px; }
+.top-note-size {
+  flex: none;
+  white-space: nowrap;
+}
+/* A leading space in this span is collapsed by the flex item, so the gap is margin. */
+.top-note-size::before {
+  content: "·";
+  margin-inline: 0.35em;
+}
+.top-actions {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: max-content;
+  min-height: 36px;
+}
 .text-btn {
   border: 0;
   background: transparent;
@@ -576,7 +602,6 @@ input[type="range"]::-moz-range-thumb {
 .plan:active { cursor: grabbing; }
 
 .model .drawer { max-height: calc(100% - 108px); }
-.model .viewport.is-drawing .fill.is-plan { bottom: 96px; }
 .panel-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -736,7 +761,9 @@ input[type="range"]::-moz-range-thumb {
 .model .maplibregl-ctrl-bottom-right { bottom: 88px; right: 12px; }
 
 @media (max-width: 640px) {
-  .top-note { max-width: 42vw; font-size: 12px; }
+  .topbar { padding: 0 8px 0 6px; column-gap: 6px; }
+  .brand { padding: 6px 4px; }
+  .top-note { font-size: 12px; }
   .icon-rail {
     flex-direction: row;
     top: auto;
@@ -790,7 +817,6 @@ input[type="range"]::-moz-range-thumb {
     max-width: 100%;
   }
   .select .maplibregl-ctrl-top-right { top: 56px; }
-  .model .viewport.is-drawing .fill.is-plan { bottom: 196px; }
   .model .viewport-hint {
     left: 12px;
     right: 12px;
