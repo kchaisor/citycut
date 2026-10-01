@@ -521,6 +521,7 @@ export function Scene3D({
         lon={model.center.lon}
         sideM={model.sideM}
         groundY={groundY}
+        terrain={model.terrain ?? undefined}
         settings={solar}
       />
       <Cameras

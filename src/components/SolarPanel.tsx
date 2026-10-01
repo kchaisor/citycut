@@ -130,7 +130,15 @@ export function SolarPanel({
               </svg>
               Sun now
             </li>
-            <li className="solar-legend-note">Dots mark each clock hour (AEST/AEDT).</li>
+            <li>
+              <svg className="solar-legend-swatch" viewBox="0 0 24 6" aria-hidden>
+                <line x1="0" y1="3" x2="24" y2="3" stroke={getColour("--sun-compass")} strokeWidth="1" strokeDasharray="1.2 1.2" />
+              </svg>
+              Same clock hour across the three dates
+            </li>
+            <li className="solar-legend-note">
+              Dots mark each clock hour (AEST/AEDT). Dial rings are sun altitude every 10°. Lines behind buildings are ghosted.
+            </li>
           </ul>
         )}
         {settings.showPath && (
