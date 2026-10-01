@@ -55,11 +55,11 @@ export const SUN_PATH_STYLES = [
 
 const LABELLED_HOURS = new Set([6, 9, 12, 15, 18]);
 /** Opacity of the second pass that draws heliodon lines where buildings hide them. */
-const GHOST_OPACITY = 0.22;
+const GHOST_OPACITY = 0.38;
 /** Labels on the ground keep more of their ink when hidden, so they stay legible. */
 const LABEL_GHOST_OPACITY = 0.35;
 /** Extra screen pixels of background-coloured casing around each dial hairline. */
-const CASING_PX = 2;
+const CASING_PX = 1.5;
 
 const vec = (point: Vec3) => new THREE.Vector3(point[0], point[1], point[2]);
 
@@ -85,7 +85,11 @@ function addTwoPass(root: HeliodonRoot, object: THREE.Mesh | LineSegments2, orde
   const hidden = object.clone();
   const material = ghostMaterial(object.material as THREE.Material);
   hidden.material = material;
-  if ((material as LineMaterial).isLineMaterial) root.userData.lineMaterials.push(material as LineMaterial);
+  if ((material as LineMaterial).isLineMaterial) {
+    // Overlapping segment caps would blend twice and read as beads along the line.
+    material.depthWrite = true;
+    root.userData.lineMaterials.push(material as LineMaterial);
+  }
   hidden.renderOrder = order + 20;
   root.add(hidden);
 }
@@ -348,27 +352,27 @@ function buildDial(root: HeliodonRoot, palette: HeliodonPalette, sideM: number, 
   }
   strong.polyline(circle(R, ground));
   for (let deg = 0; deg < 360; deg += 1) {
-    if (deg % 90 === 0) strong.segment(dialPoint(deg, R, ground), dialPoint(deg, R + sideM * 0.045, ground));
-    else if (deg % 10 === 0) major.segment(dialPoint(deg, R, ground), dialPoint(deg, R + sideM * 0.028, ground));
-    else if (deg % 5 === 0) medium.segment(dialPoint(deg, R, ground), dialPoint(deg, R + sideM * 0.018, ground));
-    else minor.segment(dialPoint(deg, R, ground), dialPoint(deg, R + sideM * 0.01, ground));
+    if (deg % 90 === 0) strong.segment(dialPoint(deg, R, ground), dialPoint(deg, R + sideM * 0.05, ground));
+    else if (deg % 10 === 0) major.segment(dialPoint(deg, R, ground), dialPoint(deg, R + sideM * 0.034, ground));
+    else if (deg % 5 === 0) medium.segment(dialPoint(deg, R, ground), dialPoint(deg, R + sideM * 0.022, ground));
+    else minor.segment(dialPoint(deg, R, ground), dialPoint(deg, R + sideM * 0.012, ground));
   }
 
   const { ink, grey, casing } = palette;
-  altitude.addTo(root, { color: grey, widthPx: 1.4 }, casing, OVERLAY_ORDER - 20);
-  radials.addTo(root, { color: grey, widthPx: 1.2 }, casing, OVERLAY_ORDER - 18);
-  axes.addTo(root, { color: ink, widthPx: 1.4, dash: [sideM * 0.012, sideM * 0.008] }, casing, OVERLAY_ORDER - 16);
-  minor.addTo(root, { color: grey, widthPx: 1, opacity: 0.85 }, casing, OVERLAY_ORDER - 14);
-  medium.addTo(root, { color: ink, widthPx: 1.3 }, casing, OVERLAY_ORDER - 12);
-  major.addTo(root, { color: ink, widthPx: 1.8 }, casing, OVERLAY_ORDER - 10);
-  strong.addTo(root, { color: ink, widthPx: 2.6 }, casing, OVERLAY_ORDER - 8);
+  altitude.addTo(root, { color: grey, widthPx: 2 }, casing, OVERLAY_ORDER - 20);
+  radials.addTo(root, { color: grey, widthPx: 1.75 }, casing, OVERLAY_ORDER - 18);
+  axes.addTo(root, { color: ink, widthPx: 2, dash: [sideM * 0.012, sideM * 0.008] }, casing, OVERLAY_ORDER - 16);
+  minor.addTo(root, { color: grey, widthPx: 1.5 }, casing, OVERLAY_ORDER - 14);
+  medium.addTo(root, { color: ink, widthPx: 2 }, casing, OVERLAY_ORDER - 12);
+  major.addTo(root, { color: ink, widthPx: 2.75 }, casing, OVERLAY_ORDER - 10);
+  strong.addTo(root, { color: ink, widthPx: 4 }, casing, OVERLAY_ORDER - 8);
 
   const lift = (sprite: THREE.Sprite, point: Vec3) => sprite.position.set(point[0], point[1] + sprite.scale.y * 0.6, point[2]);
   for (let deg = 10; deg < 360; deg += 10) {
     if (deg % 90 === 0) continue;
     const number = textSprite(`${deg}°`, { ink: grey, halo: palette.halo, heightM: sideM * 0.017, weight: 600 });
     if (!number) continue;
-    lift(groundLabel(number), dialPoint(deg, R + sideM * 0.046, ground));
+    lift(groundLabel(number), dialPoint(deg, R + sideM * 0.056, ground));
     root.userData.degreeLabels.push(number);
     root.add(number);
   }
@@ -383,7 +387,7 @@ function buildDial(root: HeliodonRoot, palette: HeliodonPalette, sideM: number, 
     });
     if (!label) continue;
     label.renderOrder = OVERLAY_ORDER + 50;
-    lift(groundLabel(label), dialPoint(deg, R + sideM * 0.082, ground));
+    lift(groundLabel(label), dialPoint(deg, R + sideM * 0.088, ground));
     root.userData.cardinals.push(label);
     root.add(label);
   }

@@ -166,9 +166,9 @@
   /* Active sun marker sphere. */
   --sun-marker: #ffcc1a;
 
-  /* Compass ring and north pointer in the heliodon. */
-  --sun-compass: #5c5850;
+  /* Heliodon dial greys: altitude rings, radials, 1° ticks, degree numbers, hour lines. */
+  --sun-compass: #45423c;
 
-  /* N/S/E/W labels on the compass ring. */
+  /* Heliodon dial ink: horizon ring, 5° and 10° ticks, axes, N/E/S/W, hour and arc labels. */
   --sun-compass-label: #1a1916;
 }
