@@ -145,6 +145,8 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-marker` | `#ffcc1a` | Sun icon at the current time in the 3D heliodon (screen only). The only yellow in the heliodon. |
 | `--sun-compass` | `#45423c` | Dark grey of the 3D heliodon dial: 10° altitude rings, azimuth radials, 1° ticks, degree numbers and hour lines (screen only). |
 | `--sun-compass-label` | `#1a1916` | Ink of the 3D heliodon dial: horizon ring, 5° and 10° ticks, cardinal ticks, dashed axes, N/E/S/W, hour labels, arc labels and hour-dot outlines (screen only). |
+| `--building-solar-neutral` | `#c2bdb4` | Single neutral building fill in the 3D viewport while the sun path and compass are on (screen only). |
+| `--heliodon-dial-disc` | `#e8e2d8` | Faint ground disc under the heliodon dial at about 35% opacity (screen only). |
 
 The contour lines in Rhino use the pen `--contour-stroke` from `src/drawing-style.css`, not a fill.
 

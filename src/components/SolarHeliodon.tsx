@@ -14,6 +14,7 @@ import {
   horizonArcDirections,
   type GroundHeight,
 } from "../lib/heliodonGeometry";
+import { dialPixelsPerDegree, dialTickLodOpacity } from "../lib/dialLod";
 import { heliodonPalette, type HeliodonPalette } from "../lib/heliodonPalette";
 import { sampleTerrain } from "../lib/terrain";
 import type { TerrainField } from "../types";
@@ -76,11 +77,25 @@ function ghostMaterial<T extends THREE.Material>(material: T, opacity = GHOST_OP
   return ghost;
 }
 
+type DialLodTier = "minor" | "medium" | "inner";
+
+function registerDialLod(root: HeliodonRoot, material: LineMaterial, tier: DialLodTier, baseOpacity: number) {
+  root.userData.lodMaterials.push({ tier, material, baseOpacity });
+}
+
 /** Adds a visible pass and, unless it is a casing, a ghosted pass that only paints where something is in front. */
-function addTwoPass(root: HeliodonRoot, object: THREE.Mesh | LineSegments2, order: number, ghost = true) {
+function addTwoPass(
+  root: HeliodonRoot,
+  object: THREE.Mesh | LineSegments2,
+  order: number,
+  ghost = true,
+  lod?: { tier: DialLodTier; baseOpacity: number },
+) {
   object.renderOrder = order;
   object.frustumCulled = false;
   root.add(object);
+  const visible = object.material as LineMaterial;
+  if (lod && visible.isLineMaterial) registerDialLod(root, visible, lod.tier, lod.baseOpacity);
   if (!ghost) return;
   const hidden = object.clone();
   const material = ghostMaterial(object.material as THREE.Material);
@@ -89,6 +104,7 @@ function addTwoPass(root: HeliodonRoot, object: THREE.Mesh | LineSegments2, orde
     // Overlapping segment caps would blend twice and read as beads along the line.
     material.depthWrite = true;
     root.userData.lineMaterials.push(material as LineMaterial);
+    if (lod) registerDialLod(root, material as LineMaterial, lod.tier, lod.baseOpacity * GHOST_OPACITY);
   }
   hidden.renderOrder = order + 20;
   root.add(hidden);
@@ -150,10 +166,11 @@ class LineBatch {
   polyline(points: Vec3[]) {
     for (let i = 1; i < points.length; i++) this.segment(points[i - 1], points[i]);
   }
-  addTo(root: HeliodonRoot, weight: LineWeight, casing: string, order: number) {
+  addTo(root: HeliodonRoot, weight: LineWeight, casing: string, order: number, lodTier?: DialLodTier) {
     if (this.positions.length === 0) return;
     const geometry = new LineSegmentsGeometry();
     geometry.setPositions(this.positions);
+    const lod = lodTier ? { tier: lodTier, baseOpacity: weight.opacity ?? 1 } : undefined;
     const make = (color: string, widthPx: number, opacity: number, dash?: [number, number]) => {
       const material = new LineMaterial({
         color,
@@ -172,7 +189,7 @@ class LineBatch {
       return lines;
     };
     if (weight.cased !== false) addTwoPass(root, make(casing, weight.widthPx + CASING_PX, 1), order - 1, false);
-    addTwoPass(root, make(weight.color, weight.widthPx, weight.opacity ?? 1, weight.dash), order);
+    addTwoPass(root, make(weight.color, weight.widthPx, weight.opacity ?? 1, weight.dash), order, true, lod);
   }
 }
 
@@ -319,8 +336,28 @@ type HeliodonRoot = THREE.Group & {
     degreeLabels: THREE.Sprite[];
     movable: MovableLabel[];
     lineMaterials: LineMaterial[];
+    lodMaterials: { tier: DialLodTier; material: LineMaterial; baseOpacity: number }[];
   };
 };
+
+function buildDialDisc(root: HeliodonRoot, radius: number, ground: GroundHeight) {
+  const geometry = new THREE.CircleGeometry(radius * 1.01, 96);
+  geometry.rotateX(-Math.PI / 2);
+  const mesh = new THREE.Mesh(
+    geometry,
+    new THREE.MeshBasicMaterial({
+      color: getColour("--heliodon-dial-disc"),
+      transparent: true,
+      opacity: 0.36,
+      depthWrite: false,
+      toneMapped: false,
+    }),
+  );
+  mesh.position.y = ground(0, 0) + 0.06;
+  mesh.renderOrder = OVERLAY_ORDER - 45;
+  mesh.frustumCulled = false;
+  root.add(mesh);
+}
 
 function circle(radius: number, ground: GroundHeight, stepDeg = 1): Vec3[] {
   const points: Vec3[] = [];
@@ -336,6 +373,7 @@ function ray(deg: number, from: number, to: number, ground: GroundHeight, steps 
 
 function buildDial(root: HeliodonRoot, palette: HeliodonPalette, sideM: number, ground: GroundHeight) {
   const R = sideM * HELIODON_DOME_FRACTION;
+  buildDialDisc(root, R, ground);
   const minor = new LineBatch();
   const medium = new LineBatch();
   const major = new LineBatch();
@@ -359,11 +397,11 @@ function buildDial(root: HeliodonRoot, palette: HeliodonPalette, sideM: number, 
   }
 
   const { ink, grey, casing } = palette;
-  altitude.addTo(root, { color: grey, widthPx: 2 }, casing, OVERLAY_ORDER - 20);
-  radials.addTo(root, { color: grey, widthPx: 1.75 }, casing, OVERLAY_ORDER - 18);
+  altitude.addTo(root, { color: grey, widthPx: 2 }, casing, OVERLAY_ORDER - 20, "inner");
+  radials.addTo(root, { color: grey, widthPx: 1.75 }, casing, OVERLAY_ORDER - 18, "inner");
   axes.addTo(root, { color: ink, widthPx: 2, dash: [sideM * 0.012, sideM * 0.008] }, casing, OVERLAY_ORDER - 16);
-  minor.addTo(root, { color: grey, widthPx: 1.5 }, casing, OVERLAY_ORDER - 14);
-  medium.addTo(root, { color: ink, widthPx: 2 }, casing, OVERLAY_ORDER - 12);
+  minor.addTo(root, { color: grey, widthPx: 1.5 }, casing, OVERLAY_ORDER - 14, "minor");
+  medium.addTo(root, { color: ink, widthPx: 2 }, casing, OVERLAY_ORDER - 12, "medium");
   major.addTo(root, { color: ink, widthPx: 2.75 }, casing, OVERLAY_ORDER - 10);
   strong.addTo(root, { color: ink, widthPx: 4 }, casing, OVERLAY_ORDER - 8);
 
@@ -502,10 +540,37 @@ function overlaps(a: ScreenBox, b: ScreenBox, margin = 6): boolean {
 }
 
 /** Keeps line widths in screen pixels, fades far-side degree numbers, and moves labels off the cardinals and the sun. */
-function useHeliodonFrame(root: HeliodonRoot | null, sun: THREE.Object3D | null, centre: THREE.Vector3) {
+function useHeliodonFrame(
+  root: HeliodonRoot | null,
+  sun: THREE.Object3D | null,
+  centre: THREE.Vector3,
+  sideM: number,
+  ground: GroundHeight,
+) {
   useFrame(({ camera, size }) => {
     if (!root) return;
     for (const material of root.userData.lineMaterials) material.resolution.set(size.width, size.height);
+
+    const ringRadius = sideM * HELIODON_DOME_FRACTION;
+    const ringY = ground(0, 0) + HELIODON_LIFT_M;
+    const pxPerDegree = dialPixelsPerDegree(
+      (x, y, z) => {
+        scratch.centre.set(x, y, z).project(camera);
+        return scratch.centre;
+      },
+      size.width,
+      size.height,
+      ringRadius,
+      ringY,
+    );
+    const lod = dialTickLodOpacity(pxPerDegree);
+    for (const entry of root.userData.lodMaterials) {
+      const scale =
+        entry.tier === "minor" ? lod.minor : entry.tier === "medium" ? lod.medium : lod.inner;
+      const opacity = entry.baseOpacity * scale;
+      entry.material.opacity = opacity;
+      entry.material.transparent = opacity < 0.995;
+    }
 
     scratch.toCamera.copy(camera.position).sub(centre);
     const lookingDown = scratch.toCamera.y / Math.max(scratch.toCamera.length(), 1e-6);
@@ -567,7 +632,7 @@ export function SolarHeliodon({
   const root = useDisposable(() => {
     const group = new THREE.Group() as HeliodonRoot;
     group.name = "Heliodon";
-    group.userData = { cardinals: [], degreeLabels: [], movable: [], lineMaterials: [] };
+    group.userData = { cardinals: [], degreeLabels: [], movable: [], lineMaterials: [], lodMaterials: [] };
     if (!show) return group;
     const palette = heliodonPalette();
     buildDial(group, palette, sideM, ground);
@@ -590,7 +655,7 @@ export function SolarHeliodon({
   marker.position.copy(vec(heliodonPoint(sample.direction, sideM * HELIODON_DOME_FRACTION, ground)));
   marker.visible = show && sample.aboveHorizon;
 
-  useHeliodonFrame(show ? root : null, marker, centre);
+  useHeliodonFrame(show ? root : null, marker, centre, sideM, ground);
 
   if (!show) return null;
   return (

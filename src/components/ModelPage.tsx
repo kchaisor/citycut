@@ -235,11 +235,13 @@ export function ModelPage({ model }: { model: CityModel }) {
   const sourceCounts = countSources(model.buildings);
   const hint =
     tab === "3d"
-      ? view.projection === "perspective"
-        ? "Drag to orbit · scroll to zoom · right-drag to pan"
-        : view.freeRotate
-          ? "Drag to orbit · scroll to zoom · right-drag to pan · not true isometric"
-          : "Drag to pan · scroll to zoom"
+      ? view.projection === "plan"
+        ? "Drag to pan · scroll to zoom · north up · orthographic"
+        : view.projection === "perspective"
+          ? "Drag to orbit · scroll to zoom · right-drag to pan"
+          : view.freeRotate
+            ? "Drag to orbit · scroll to zoom · right-drag to pan · not true isometric"
+            : "Drag to pan · scroll to zoom"
       : tab === "drawing"
         ? "Scroll to zoom · drag to pan · double-click to fit"
         : "Satellite preview of this frame. It is not included in the downloads.";
@@ -344,6 +346,9 @@ export function ModelPage({ model }: { model: CityModel }) {
                     {showSource ? "Showing source" : "Show source"}
                   </button>
                 </div>
+                {solar.showPath && (
+                  <p className="legend-note">Use colours hidden while sun path is on.</p>
+                )}
                 <ul>
                   {BUILDING_USES.filter((use) => useCounts[use] > 0).map((use) => (
                     <li key={use}>
@@ -447,7 +452,17 @@ export function ModelPage({ model }: { model: CityModel }) {
                     >
                       Isometric
                     </button>
+                    <button
+                      type="button"
+                      aria-pressed={view.projection === "plan"}
+                      onClick={() => commitView({ projection: "plan", corner: view.corner, freeRotate: false }, true)}
+                    >
+                      Plan, north-up
+                    </button>
                   </div>
+                  {view.projection === "plan" && (
+                    <p className="field-note">Orthographic plan view. Choose Perspective to return to the 3D orbit camera.</p>
+                  )}
                   {view.projection === "iso" && (
                     <>
                       <p className="kicker">Corner</p>

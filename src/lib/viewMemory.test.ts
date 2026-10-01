@@ -84,6 +84,11 @@ describe("resolveView", () => {
       corner: "se",
       freeRotate: false,
     });
+    expect(resolveView(stored, "?view=plan")).toEqual({
+      projection: "plan",
+      corner: "se",
+      freeRotate: false,
+    });
     expect(resolveView(stored, "?view=nope")).toEqual({
       projection: "perspective",
       corner: "se",
@@ -113,6 +118,7 @@ describe("writeViewSearch", () => {
     expect(params.get("label")).toBe("North Melbourne");
     expect(frameFromSearch(withIso).label).toBe("North Melbourne");
     expect(viewToken(isoSw)).toBe("iso-sw");
+    expect(viewToken({ projection: "plan", corner: "sw", freeRotate: false })).toBe("plan");
 
     const cleared = writeViewSearch(withIso, DEFAULT_VIEW);
     expect(new URLSearchParams(cleared.slice(1)).get("view")).toBeNull();

@@ -58,6 +58,8 @@ export const COLOUR_KEYS = [
   "--sun-marker",
   "--sun-compass",
   "--sun-compass-label",
+  "--building-solar-neutral",
+  "--heliodon-dial-disc",
 ] as const;
 
 export type ColourKey = (typeof COLOUR_KEYS)[number];
@@ -139,6 +141,8 @@ export const COLOUR_GROUPS = [
       "--sun-marker",
       "--sun-compass",
       "--sun-compass-label",
+      "--building-solar-neutral",
+      "--heliodon-dial-disc",
     ],
   },
 ] as const satisfies readonly { id: string; title: string; keys: readonly ColourKey[] }[];
@@ -193,6 +197,8 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--sun-marker": "Sun marker",
   "--sun-compass": "Compass ring",
   "--sun-compass-label": "Compass labels",
+  "--building-solar-neutral": "Solar neutral buildings",
+  "--heliodon-dial-disc": "Heliodon dial disc",
 };
 
 const parsed = resolveSheet(parseCustomProperties(coloursCss));

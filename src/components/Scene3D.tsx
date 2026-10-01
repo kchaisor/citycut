@@ -13,6 +13,12 @@ import { useColourRevision } from "../lib/useColourRevision";
 import { captureViewPng } from "../lib/capturePng";
 import { flushControlInertia, holdControlPose } from "../lib/controlInertia";
 import {
+  applyBuildingSolarNeutral,
+  snapshotBuildingViewportColors,
+  withBuildingExportColours,
+  type BuildingColourMode,
+} from "../lib/buildingViewportColor";
+import {
   eyeDistance,
   fitOrthoZoom,
   frameCentre,
@@ -23,6 +29,13 @@ import {
   type IsoCorner,
   type Vec3,
 } from "../lib/isoCamera";
+import {
+  fitPlanOrthoZoom,
+  planEye,
+  planEyeDistance,
+  planNearFar,
+  sitePlanBounds,
+} from "../lib/planCamera";
 import type { ProjectionMode } from "../lib/viewMemory";
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
 import type { CityModel } from "../types";
@@ -84,16 +97,28 @@ function City({
   model,
   uniformBuildings,
   colourBySource,
+  solarDiagramOn,
+  solarNeutralFill,
   onBounds,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
   colourBySource: boolean;
+  solarDiagramOn: boolean;
+  solarNeutralFill: string;
   onBounds: (bounds: Aabb) => void;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
   const colourTick = useColourRevision();
+  const colourMode = useMemo<BuildingColourMode>(
+    () => ({
+      colourByUse: !uniformBuildings && !colourBySource,
+      uniformBuildings,
+      colourBySource,
+    }),
+    [uniformBuildings, colourBySource],
+  );
   const group = useMemo(() => {
     const city = buildCityGroup(model, { uniformBuildings, colourBySource });
     const ground = city.getObjectByName("Ground");
@@ -112,6 +137,12 @@ function City({
   useLayoutEffect(() => {
     onBoundsRef.current(measureCity(group));
   }, [group]);
+  useLayoutEffect(() => {
+    snapshotBuildingViewportColors(group, colourMode);
+  }, [group, colourMode]);
+  useLayoutEffect(() => {
+    applyBuildingSolarNeutral(group, solarDiagramOn, solarNeutralFill);
+  }, [group, solarDiagramOn, solarNeutralFill, colourTick]);
   useLayoutEffect(() => () => disposeObject(group), [group]);
   return <primitive object={group} />;
 }
@@ -251,6 +282,70 @@ function IsoSnap({
   return null;
 }
 
+function PlanSnap({
+  camera,
+  controlsRef,
+  boundsRef,
+  sideM,
+  groundY,
+  siteTopY,
+  snapId,
+  active,
+  touchedRef,
+}: {
+  camera: THREE.OrthographicCamera;
+  controlsRef: RefObject<OrbitControlsImpl | null>;
+  boundsRef: RefObject<Aabb | null>;
+  sideM: number;
+  groundY: number;
+  siteTopY: number;
+  snapId: number;
+  active: boolean;
+  touchedRef: RefObject<boolean>;
+}) {
+  const size = useThree((state) => state.size);
+  const fittedKey = useRef<string | null>(null);
+  const place = useCallback(() => {
+    const controls = controlsRef.current;
+    if (!controls || size.width < 2 || size.height < 2) return;
+    const key = `${snapId}:${size.width}x${size.height}`;
+    if (fittedKey.current === key) return;
+    const sameSnap = fittedKey.current?.startsWith(`${snapId}:`) ?? false;
+    if (sameSnap && touchedRef.current) return;
+    if (!active && fittedKey.current !== null && !sameSnap) return;
+    const measured = boundsRef.current;
+    const fitBounds = sitePlanBounds(sideM, groundY, siteTopY);
+    if (measured) {
+      fitBounds.min[1] = Math.min(fitBounds.min[1], measured.min[1]);
+      fitBounds.max[1] = Math.max(fitBounds.max[1], measured.max[1]);
+    }
+    const centre = frameCentre(fitBounds);
+    const distance = planEyeDistance(fitBounds);
+    const eye = planEye(centre, distance);
+    const planes = planNearFar(fitBounds, centre);
+    flushControlInertia(controls);
+    camera.up.set(0, 0, -1);
+    camera.position.set(eye[0], eye[1], eye[2]);
+    camera.near = planes.near;
+    camera.far = planes.far;
+    camera.zoom = fitPlanOrthoZoom(fitBounds, size.width, size.height);
+    camera.updateProjectionMatrix();
+    controls.target.set(centre[0], centre[1], centre[2]);
+    camera.lookAt(controls.target);
+    camera.up.set(0, 0, -1);
+    controls.update();
+    fittedKey.current = key;
+    touchedRef.current = false;
+  }, [active, camera, controlsRef, boundsRef, groundY, sideM, siteTopY, snapId, size.width, size.height, touchedRef]);
+  useLayoutEffect(() => {
+    place();
+  }, [place]);
+  useFrame(() => {
+    place();
+  });
+  return null;
+}
+
 function OrthoClip({
   camera,
   controlsRef,
@@ -294,9 +389,9 @@ function CameraReadout({
 }) {
   const gl = useThree((state) => state.gl);
   useFrame(() => {
-    const iso = projection === "iso";
-    const camera = iso ? ortho : persp;
-    const controls = iso ? orthoControls.current : perspControls.current;
+    const orthoView = projection === "iso" || projection === "plan";
+    const camera = orthoView ? ortho : persp;
+    const controls = orthoView ? orthoControls.current : perspControls.current;
     if (!controls) return;
     publishCamera(camera, controls.target, gl.domElement);
   });
@@ -321,38 +416,55 @@ function HoldPoseWhenInactive({
   return null;
 }
 
-function ExportBridge({ onExportReady }: { onExportReady: (exporter: SceneExporter | null) => void }) {
+function ExportBridge({
+  onExportReady,
+  solarDiagramOn,
+}: {
+  onExportReady: (exporter: SceneExporter | null) => void;
+  solarDiagramOn: boolean;
+}) {
   const gl = useThree((state) => state.gl);
   const scene = useThree((state) => state.scene);
   const get = useThree((state) => state.get);
   useLayoutEffect(() => {
     onExportReady({
-      png: () => captureViewPng(gl, scene, get().camera),
+      png: async () => {
+        const city = scene.getObjectByName("CityCut");
+        const render = () => captureViewPng(gl, scene, get().camera);
+        if (city && solarDiagramOn) return withBuildingExportColours(city, true, render);
+        return render();
+      },
       shot: () => shotFromCamera(get().camera, gl.domElement.clientWidth, gl.domElement.clientHeight),
     });
     return () => onExportReady(null);
-  }, [gl, scene, get, onExportReady]);
+  }, [gl, scene, get, onExportReady, solarDiagramOn]);
   return null;
 }
 
 function Cameras({
   side,
   lift,
+  groundY,
+  siteTopY,
   projection,
   corner,
   freeRotate,
   snapId,
   boundsRef,
   onExportReady,
+  solarDiagramOn,
 }: {
   side: number;
   lift: number;
+  groundY: number;
+  siteTopY: number;
   projection: ProjectionMode;
   corner: IsoCorner;
   freeRotate: boolean;
   snapId: number;
   boundsRef: RefObject<Aabb | null>;
   onExportReady: (exporter: SceneExporter | null) => void;
+  solarDiagramOn: boolean;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
@@ -369,6 +481,8 @@ function Cameras({
     setReady(true);
   }, []);
   const iso = projection === "iso";
+  const plan = projection === "plan";
+  const orthoView = iso || plan;
   const persp = perspRef.current;
   const ortho = orthoRef.current;
 
@@ -378,11 +492,11 @@ function Cameras({
       <orthographicCamera ref={orthoRef} />
       {ready && persp && ortho && (
         <>
-          <BindCamera camera={iso ? ortho : persp} />
+          <BindCamera camera={orthoView ? ortho : persp} />
           <FrameCameras persp={persp} ortho={ortho} />
           <PerspectiveSetup camera={persp} controlsRef={perspControls} side={side} lift={lift} />
-          <HoldPoseWhenInactive controlsRef={perspControls} active={!iso} />
-          <HoldPoseWhenInactive controlsRef={orthoControls} active={iso} />
+          <HoldPoseWhenInactive controlsRef={perspControls} active={!orthoView} />
+          <HoldPoseWhenInactive controlsRef={orthoControls} active={orthoView} />
           <IsoSnap
             camera={ortho}
             controlsRef={orthoControls}
@@ -392,12 +506,23 @@ function Cameras({
             active={iso && !freeRotate}
             touchedRef={touchedRef}
           />
-          <OrthoClip camera={ortho} controlsRef={orthoControls} boundsRef={boundsRef} active={iso} />
+          <PlanSnap
+            camera={ortho}
+            controlsRef={orthoControls}
+            boundsRef={boundsRef}
+            sideM={side}
+            groundY={groundY}
+            siteTopY={siteTopY}
+            snapId={snapId}
+            active={plan}
+            touchedRef={touchedRef}
+          />
+          <OrthoClip camera={ortho} controlsRef={orthoControls} boundsRef={boundsRef} active={orthoView} />
           <OrbitControls
             ref={perspControls}
             camera={persp}
-            makeDefault={!iso}
-            enabled={!iso}
+            makeDefault={!orthoView}
+            enabled={!orthoView}
             enableDamping
             dampingFactor={0.08}
             maxPolarAngle={Math.PI / 2.02}
@@ -407,22 +532,22 @@ function Cameras({
           <OrbitControls
             ref={orthoControls}
             camera={ortho}
-            makeDefault={iso}
-            enabled={iso}
+            makeDefault={orthoView}
+            enabled={orthoView}
             enableDamping
             dampingFactor={0.08}
-            enableRotate={freeRotate}
+            enableRotate={iso && freeRotate}
             zoomToCursor
             maxPolarAngle={Math.PI / 2.02}
             minDistance={1}
             maxDistance={side * 20}
             mouseButtons={{
-              LEFT: freeRotate ? MOUSE.ROTATE : MOUSE.PAN,
+              LEFT: plan || !freeRotate ? MOUSE.PAN : MOUSE.ROTATE,
               MIDDLE: MOUSE.DOLLY,
               RIGHT: MOUSE.PAN,
             }}
             touches={{
-              ONE: freeRotate ? TOUCH.ROTATE : TOUCH.PAN,
+              ONE: plan || !freeRotate ? TOUCH.PAN : TOUCH.ROTATE,
               TWO: TOUCH.DOLLY_PAN,
             }}
             onStart={() => {
@@ -436,7 +561,7 @@ function Cameras({
             perspControls={perspControls}
             orthoControls={orthoControls}
           />
-          <ExportBridge onExportReady={onExportReady} />
+          <ExportBridge onExportReady={onExportReady} solarDiagramOn={solarDiagramOn} />
         </>
       )}
     </>
@@ -474,6 +599,7 @@ export function Scene3D({
   const sky = getColour("--light-sky");
   const groundLight = getColour("--light-ground");
   const groundY = model.terrain ? model.terrain.min : 0;
+  const solarNeutralFill = useMemo(() => getColour("--building-solar-neutral"), [colourTick]);
   const sunSample = useMelbourneSunSample(model.center.lat, model.center.lon, solar);
   const [glEpoch, setGlEpoch] = useState(0);
   const fillKeyLight = solar.castShadows ? 0 : 1.35;
@@ -515,7 +641,14 @@ export function Scene3D({
         targetY={shadowTargetY}
         topY={siteTopY}
       />
-      <City model={model} uniformBuildings={uniformBuildings} colourBySource={colourBySource} onBounds={onBounds} />
+      <City
+        model={model}
+        uniformBuildings={uniformBuildings}
+        colourBySource={colourBySource}
+        solarDiagramOn={solar.showPath}
+        solarNeutralFill={solarNeutralFill}
+        onBounds={onBounds}
+      />
       <SolarHeliodon
         lat={model.center.lat}
         lon={model.center.lon}
@@ -527,12 +660,15 @@ export function Scene3D({
       <Cameras
         side={model.sideM}
         lift={lift}
+        groundY={groundY}
+        siteTopY={siteTopY}
         projection={projection}
         corner={corner}
         freeRotate={freeRotate}
         snapId={snapId}
         boundsRef={boundsRef}
         onExportReady={onExportReady}
+        solarDiagramOn={solar.showPath}
       />
     </Canvas>
   );
