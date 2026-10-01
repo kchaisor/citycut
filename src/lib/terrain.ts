@@ -459,18 +459,25 @@ function stitchContours(segments: { a: Pt; b: Pt }[]): Pt[][] {
   return lines;
 }
 
-/** Marching-squares contours in local east/north metres. */
-export function contourLines(field: TerrainField, sideM: number, interval = contourInterval(field.max - field.min)): Pt[][] {
+export type LeveledContour = { line: Pt[]; z: number };
+
+/** Marching-squares contours in local east/north metres, one polyline per level. */
+export function leveledContourLines(
+  field: TerrainField,
+  sideM: number,
+  interval = contourInterval(field.max - field.min),
+): LeveledContour[] {
   const levels = contourLevels(field.min, field.max, interval);
   if (levels.length === 0 || field.cols < 2 || field.rows < 2) return [];
   const half = sideM / 2;
-  const segments: { a: Pt; b: Pt }[] = [];
   const at = (col: number, row: number) => field.heights[row * field.cols + col];
   const locate = (col: number, row: number): Pt => [
     -half + col * field.spacingM,
     -half + row * field.spacingM,
   ];
+  const lines: LeveledContour[] = [];
   for (const level of levels) {
+    const segments: { a: Pt; b: Pt }[] = [];
     for (let row = 0; row < field.rows - 1; row++) {
       for (let col = 0; col < field.cols - 1; col++) {
         const hsw = at(col, row);
@@ -505,8 +512,14 @@ export function contourLines(field: TerrainField, sideM: number, interval = cont
         }
       }
     }
+    for (const line of stitchContours(segments)) lines.push({ line, z: level });
   }
-  return stitchContours(segments);
+  return lines;
+}
+
+/** Marching-squares contours in local east/north metres. */
+export function contourLines(field: TerrainField, sideM: number, interval = contourInterval(field.max - field.min)): Pt[][] {
+  return leveledContourLines(field, sideM, interval).map((item) => item.line);
 }
 
 export function terrainNote(field: TerrainField, contours: boolean): string {

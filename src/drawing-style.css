@@ -53,6 +53,15 @@
   --contour-stroke-mm: 0.1;
   --contour-stroke: #B0B0B0;
   --contour-dash: 1.5 0.75;
+  /* Every Nth drawn contour, slightly heavier. 5 is every 5th line. */
+  --contour-index-mm: 0.18;
+  --contour-index-every: 5;
+  /* Metro contours thinner than this step are drawn at this interval once the
+     plan scale reaches the denominator below. 2500 is 1:2500 and smaller
+     (1:5000, …). 1:500 and 1:1000 keep every metre. Index lines stay every
+     Nth drawn contour, so a 5 m step indexes every 25 m. */
+  --contour-coarse-interval-m: 5;
+  --contour-coarse-from-scale: 2500;
 
   /* The square frame around the plan. */
   --frame-stroke-mm: 0.35;

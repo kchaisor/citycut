@@ -3,7 +3,14 @@ import { clipPolygon, clipPolyline } from "./clip";
 import { openRing } from "./geo";
 import { PATH_WIDTH_M } from "./lineweights";
 import { carriagewaysOf, footpathLines, unionCarriageways, unionFootpaths } from "./roadFill";
-import { contourInterval, contourLines } from "./terrain";
+import {
+  DEFAULT_COARSE_FROM_SCALE,
+  DEFAULT_COARSE_INTERVAL_M,
+  altitudeOnInterval,
+  demContourLayer,
+  drawContours,
+  drawnContourInterval,
+} from "./vicmapContours";
 import type { CityModel, Pt } from "../types";
 
 const round = (value: number) => Math.round(value * 10) / 10;
@@ -38,7 +45,12 @@ export type PlanPaths = {
   buildings: { rings: Pt[][]; fill: string }[];
   trees: { east: number; north: number; r: number }[];
   contours: Pt[][];
+  /** Parallel to `contours`. True on every Nth interval. */
+  contourIndex: boolean[];
+  /** Elevation labels for index contours only. */
+  contourLabels: { east: number; north: number; text: string }[];
   contourInterval: number | null;
+  contourSource: "vicmap-metro" | "vicmap-state" | "dem" | null;
 };
 
 function dedupe(line: Pt[]): Pt[] {
@@ -112,7 +124,14 @@ function clipLines(line: Pt[], half: number): Pt[][] {
   return clipPolyline(dedupe(line), -half, half).map(dedupe).filter((part) => part.length >= 2);
 }
 
-export function planPaths(model: CityModel, pathWidthM = PATH_WIDTH_M): PlanPaths {
+export function planPaths(
+  model: CityModel,
+  pathWidthM = PATH_WIDTH_M,
+  contourIndexEvery = 5,
+  planScale = 1000,
+  coarseIntervalM = DEFAULT_COARSE_INTERVAL_M,
+  coarseFromScale = DEFAULT_COARSE_FROM_SCALE,
+): PlanPaths {
   const half = model.sideM / 2;
   const green: Pt[][][] = [];
   const water: Pt[][][] = [];
@@ -148,11 +167,25 @@ export function planPaths(model: CityModel, pathWidthM = PATH_WIDTH_M): PlanPath
       r: tree.crown_diameter_m / 2,
     }));
 
-  const interval = model.terrain && model.contours ? contourInterval(model.terrain.max - model.terrain.min) : null;
-  const contours =
-    model.terrain && interval
-      ? contourLines(model.terrain, model.sideM, interval).flatMap((line) => clipLines(line, half))
-      : [];
+  const layer =
+    model.contours === false
+      ? null
+      : model.contourLayer
+        ? model.contourLayer
+        : model.contours && model.terrain
+          ? demContourLayer(model.terrain, model.sideM)
+          : null;
+  const clipped = layer
+    ? layer.lines.flatMap((line) => clipLines(line.points, half).map((points) => ({ points, z: line.z })))
+    : [];
+  const drawnInterval = layer
+    ? drawnContourInterval(layer.source, layer.interval, planScale, coarseIntervalM, coarseFromScale)
+    : 0;
+  const visible =
+    layer && drawnInterval > layer.interval
+      ? clipped.filter((line) => altitudeOnInterval(line.z, drawnInterval))
+      : clipped;
+  const drawn = layer && visible.length > 0 ? drawContours(visible, drawnInterval, contourIndexEvery) : null;
 
   return {
     green,
@@ -164,7 +197,10 @@ export function planPaths(model: CityModel, pathWidthM = PATH_WIDTH_M): PlanPath
     rails,
     buildings,
     trees,
-    contours,
-    contourInterval: contours.length > 0 ? interval : null,
+    contours: drawn ? drawn.lines.map((line) => line.points) : [],
+    contourIndex: drawn ? drawn.lines.map((line) => line.index) : [],
+    contourLabels: drawn?.labels ?? [],
+    contourInterval: drawn && layer ? drawnInterval : null,
+    contourSource: drawn && layer ? layer.source : null,
   };
 }

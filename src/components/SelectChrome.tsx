@@ -226,8 +226,8 @@ export function SelectChrome({
           </ul>
           <p className="field-note">
             {layers.terrain
-              ? "Elevation from Mapterhorn. Contours, when on, are added to the site plan."
-              : "Terrain is off, so the ground stays a flat surface. Contours need Terrain."}
+              ? "Elevation from Mapterhorn. Contours inside Victoria come from Vicmap Elevation, and from this terrain if that service fails."
+              : "Terrain is off, so the ground stays a flat surface. Contours inside Victoria still use Vicmap Elevation."}
           </p>
           <p className="attrib">
             © OpenStreetMap contributors

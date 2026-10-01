@@ -20,6 +20,7 @@ import { TERRAIN_UNAVAILABLE, terrainNote } from "./lib/terrain";
 import { MAX_TREE_INSTANCES, assembleTreeTiers } from "./lib/treeTiers";
 import { replaceTreeNote, treeTierCounts } from "./lib/trees";
 import { fetchVicmapTrees, vicmapPointsToTrees, VICMAP_ATTRIBUTION } from "./lib/vicmapTrees";
+import { loadContoursForCut } from "./lib/vicmapContours";
 import { assignExternalUses, loadUseTiers } from "./lib/useCascade";
 import type { Basemap, CityModel, PlaceHit, UiLayers, UseTierFailure, ViewState } from "./types";
 
@@ -123,8 +124,8 @@ export default function App() {
     };
     const wantsOsm =
       modelLayers.buildings || modelLayers.roads || modelLayers.waterGreen || modelLayers.trees;
-    if (!wantsOsm && !layers.terrain) {
-      setError("Turn on Buildings, Roads and rail, Water and green, Trees, or Terrain.");
+    if (!wantsOsm && !layers.terrain && !layers.contours) {
+      setError("Turn on Buildings, Roads and rail, Water and green, Trees, Terrain, or Contours.");
       return;
     }
     if (sideM * sideM > MAX_AREA_M2 + 1) {
@@ -181,6 +182,18 @@ export default function App() {
               });
           })()
         : Promise.resolve({ rows: [], error: null as string | null });
+      const contourTask = layers.contours
+        ? loadContoursForCut({
+            center,
+            sideM,
+            bounds,
+            signal: controller.signal,
+            terrain: () => terrainTask.then((result) => result.field),
+          }).catch((err: unknown) => {
+            if (controller.signal.aborted) throw err;
+            return null;
+          })
+        : Promise.resolve(null);
       const vicmapTask = modelLayers.trees
         ? (() => {
             const vicmapAbort = new AbortController();
@@ -204,12 +217,13 @@ export default function App() {
               });
           })()
         : Promise.resolve({ points: [], error: null as string | null });
-      const [data, terrainResult, comResult, vicmapResult, useTiers] = await Promise.all([
+      const [data, terrainResult, comResult, vicmapResult, useTiers, contourLayer] = await Promise.all([
         osmTask,
         terrainTask,
         comTask,
         vicmapTask,
         useTierTask,
+        contourTask,
       ]);
       const parsed = parseCity(data, center, sideM, modelLayers);
       const buildings = modelLayers.buildings
@@ -225,10 +239,13 @@ export default function App() {
           })
         : null;
       const trees = assembled ? assembled.trees : parsed.trees;
-      const contours = Boolean(layers.contours && terrainResult.field);
+      const contours = Boolean(layers.contours && contourLayer && contourLayer.lines.length > 0);
       let sourceNote = terrainResult.field
-        ? parsed.sourceNote.replace(FLAT_GROUND_NOTE, terrainNote(terrainResult.field, contours))
+        ? parsed.sourceNote.replace(FLAT_GROUND_NOTE, terrainNote(terrainResult.field, contourLayer?.source === "dem"))
         : parsed.sourceNote;
+      if (contourLayer && contourLayer.source !== "dem") {
+        sourceNote = `${sourceNote} Contours are ${contourLayer.label}, every ${contourLayer.interval} m. ${contourLayer.attribution}`;
+      }
       if (modelLayers.trees) sourceNote = replaceTreeNote(sourceNote, trees);
       if (assembled?.capHit) {
         sourceNote = `${sourceNote} Tree count was capped at ${MAX_TREE_INSTANCES}. Canopy infill was trimmed first, then Vicmap.`;
@@ -252,6 +269,7 @@ export default function App() {
         terrainError: terrainResult.error,
         useTierFailures: useTiers.failures,
         contours,
+        contourLayer,
       });
       setPhase("model");
     } catch (err) {
