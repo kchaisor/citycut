@@ -1,3 +1,4 @@
+import { Line } from "@react-three/drei";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { getColour } from "../lib/colours";
@@ -27,6 +28,10 @@ function sampleToPoint(direction: Vec3, radius: number, groundY: number): THREE.
   return new THREE.Vector3(direction[0] * radius, groundY + direction[1] * radius, direction[2] * radius);
 }
 
+function decimate(samples: SolarSample[], every: number): SolarSample[] {
+  return samples.filter((_, index) => index % every === 0 || index === samples.length - 1);
+}
+
 function ArcLine({
   samples,
   color,
@@ -38,61 +43,36 @@ function ArcLine({
   radius: number;
   groundY: number;
 }) {
-  const geometry = useMemo(() => {
-    const visible = samples.filter((sample) => sample.aboveHorizon);
+  const points = useMemo(() => {
+    const visible = decimate(
+      samples.filter((sample) => sample.aboveHorizon),
+      2,
+    );
     if (visible.length < 2) return null;
-    const points = visible.map((sample) => sampleToPoint(sample.direction, radius, groundY));
-    return new THREE.BufferGeometry().setFromPoints(points);
+    return visible.map((sample) => sampleToPoint(sample.direction, radius, groundY));
   }, [samples, radius, groundY]);
-  useEffect(() => () => geometry?.dispose(), [geometry]);
-  const line = useMemo(() => {
-    if (!geometry) return null;
-    return new THREE.Line(geometry, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.85 }));
-  }, [geometry, color]);
-  useEffect(() => () => line?.geometry.dispose(), [line]);
-  useEffect(() => () => (line?.material as THREE.Material)?.dispose(), [line]);
-  if (!line) return null;
-  return <primitive object={line} />;
+  if (!points) return null;
+  return <Line points={points} color={color} lineWidth={1} transparent opacity={0.85} />;
 }
 
 function CompassRing({ radius, groundY }: { radius: number; groundY: number }) {
   const ringColor = getColour("--sun-compass");
-  const ring = useMemo(() => {
-    const geometry = new THREE.BufferGeometry();
-    const segments = 64;
-    const points: THREE.Vector3[] = [];
-    for (let i = 0; i <= segments; i++) {
-      const t = (i / segments) * Math.PI * 2;
-      points.push(new THREE.Vector3(Math.sin(t) * radius, groundY + 0.05, -Math.cos(t) * radius));
+  const points = useMemo(() => {
+    const pts: THREE.Vector3[] = [];
+    for (let i = 0; i <= 48; i++) {
+      const t = (i / 48) * Math.PI * 2;
+      pts.push(new THREE.Vector3(Math.sin(t) * radius, groundY + 0.05, -Math.cos(t) * radius));
     }
-    geometry.setFromPoints(points);
-    return geometry;
+    return pts;
   }, [radius, groundY]);
-  const pointer = useMemo(() => {
-    const geometry = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(0, groundY + 0.06, -radius * 1.08),
-      new THREE.Vector3(0, groundY + radius * 0.35, -radius * 0.98),
-    ]);
-    return geometry;
-  }, [radius, groundY]);
-  useEffect(() => {
-    return () => {
-      ring.dispose();
-      pointer.dispose();
-    };
-  }, [ring, pointer]);
-  const ringLine = useMemo(
-    () => new THREE.Line(ring, new THREE.LineBasicMaterial({ color: ringColor })),
-    [ring, ringColor],
-  );
-  const pointerLine = useMemo(
-    () => new THREE.Line(pointer, new THREE.LineBasicMaterial({ color: ringColor })),
-    [pointer, ringColor],
+  const north = useMemo(
+    () => [new THREE.Vector3(0, groundY + 0.06, -radius * 1.05), new THREE.Vector3(0, groundY + radius * 0.3, -radius * 0.95)],
+    [radius, groundY],
   );
   return (
     <group>
-      <primitive object={ringLine} />
-      <primitive object={pointerLine} />
+      <Line points={points} color={ringColor} lineWidth={1} />
+      <Line points={north} color={ringColor} lineWidth={2} />
     </group>
   );
 }
@@ -122,15 +102,15 @@ export function SolarHeliodon({
   const { year } = settings;
   const melbourneActive = useMelbourneSunSample(lat, lon, settings);
   const summer = useMemo(
-    () => daylightArcSamples(lat, lon, year, SOLAR_SUMMER.month, SOLAR_SUMMER.day, 15),
+    () => daylightArcSamples(lat, lon, year, SOLAR_SUMMER.month, SOLAR_SUMMER.day, 30),
     [lat, lon, year],
   );
   const equinox = useMemo(
-    () => daylightArcSamples(lat, lon, year, SOLAR_EQUINOX.month, SOLAR_EQUINOX.day, 15),
+    () => daylightArcSamples(lat, lon, year, SOLAR_EQUINOX.month, SOLAR_EQUINOX.day, 30),
     [lat, lon, year],
   );
   const winter = useMemo(
-    () => daylightArcSamples(lat, lon, year, SOLAR_WINTER.month, SOLAR_WINTER.day, 15),
+    () => daylightArcSamples(lat, lon, year, SOLAR_WINTER.month, SOLAR_WINTER.day, 30),
     [lat, lon, year],
   );
 
@@ -152,7 +132,7 @@ export function SolarHeliodon({
       <CompassRing radius={radius} groundY={groundY} />
       {melbourneActive.aboveHorizon && (
         <mesh position={marker}>
-          <sphereGeometry args={[sideM * 0.012, 12, 12]} />
+          <sphereGeometry args={[sideM * 0.012, 10, 10]} />
           <meshBasicMaterial color={markerColor} />
         </mesh>
       )}

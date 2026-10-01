@@ -463,7 +463,7 @@ export function Scene3D({
     <Canvas
       className="scene-canvas"
       dpr={[1, 1.75]}
-      gl={{ antialias: true, alpha: false }}
+      gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
       shadows={solar.castShadows}
     >
       <color attach="background" args={[modelBg]} />
