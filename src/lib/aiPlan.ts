@@ -1,4 +1,7 @@
 import type { PdfChunk, PdfPath, Rgb } from "./aiDocument";
+import { useNativeAi8Export } from "./aiExportFormat";
+import { buildLayeredNativeAi } from "./aiNative";
+import { buildLayeredNativeAiPdfOps } from "./aiNativePdfFallback";
 import { buildLayeredPdf } from "./aiDocument";
 import { getColour, type ColourKey } from "./colours";
 import {
@@ -24,14 +27,15 @@ import type { CityModel, Pt } from "../types";
 
 export const SITE_LAYER_ORDER = [
   "Frame",
-  "Buildings",
-  "Roads",
-  "Rail",
-  "Paths",
-  "Water",
   "Green",
-  "Contours",
+  "Water",
+  "Roads",
+  "Paths",
+  "Rail",
+  "Buildings",
   "Trees",
+  "Contours",
+  "Contour labels",
   "Annotation",
 ] as const;
 
@@ -394,18 +398,23 @@ export function figureGroundChunks(model: CityModel, scale: number, style: LineS
   return chunks;
 }
 
-export function sitePlanAi(model: CityModel, scale: number, style?: LineStyles): Promise<Uint8Array> {
-  const layout = layoutSheet(model.sideM, scale);
-  const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle());
+function sitePlanLayerOrder(chunks: PdfChunk[]): string[] {
   const order: string[] = [...SITE_LAYER_ORDER];
-  if (chunks.some((chunk) => chunk.name === "Contour labels")) {
+  if (!order.includes("Contour labels") && chunks.some((chunk) => chunk.name === "Contour labels")) {
     const at = order.indexOf("Contours");
     order.splice(at + 1, 0, "Contour labels");
   }
-  return buildLayeredPdf(layout.pageWidthMm, layout.pageHeightMm, chunks, order);
+  return order;
 }
 
-export function figureGroundAi(model: CityModel, scale: number, style?: LineStyles): Promise<Uint8Array> {
+/** PDF/OCG site plan, the default .ai export. */
+export async function sitePlanPdf(model: CityModel, scale: number, style?: LineStyles): Promise<Uint8Array> {
+  const layout = layoutSheet(model.sideM, scale);
+  const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle());
+  return buildLayeredPdf(layout.pageWidthMm, layout.pageHeightMm, chunks, sitePlanLayerOrder(chunks));
+}
+
+export async function figureGroundPdf(model: CityModel, scale: number, style?: LineStyles): Promise<Uint8Array> {
   const layout = layoutSheet(model.sideM, scale);
   return buildLayeredPdf(
     layout.pageWidthMm,
@@ -413,4 +422,59 @@ export function figureGroundAi(model: CityModel, scale: number, style?: LineStyl
     figureGroundChunks(model, scale, style ?? readDrawingStyle()),
     FIGURE_LAYER_ORDER,
   );
+}
+
+/** Illustrator 8 EPS site plan. Opt-in with VITE_CITYCUT_AI_NATIVE=true. */
+export function sitePlanAi8(model: CityModel, scale: number, style?: LineStyles): Uint8Array {
+  const layout = layoutSheet(model.sideM, scale);
+  const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle());
+  return buildLayeredNativeAi(
+    layout.pageWidthMm,
+    layout.pageHeightMm,
+    chunks,
+    sitePlanLayerOrder(chunks),
+    titleLine(model, layout),
+  );
+}
+
+export function figureGroundAi8(model: CityModel, scale: number, style?: LineStyles): Uint8Array {
+  const layout = layoutSheet(model.sideM, scale);
+  return buildLayeredNativeAi(
+    layout.pageWidthMm,
+    layout.pageHeightMm,
+    figureGroundChunks(model, scale, style ?? readDrawingStyle()),
+    FIGURE_LAYER_ORDER,
+    titleLine(model, layout),
+  );
+}
+
+export async function sitePlanAi(model: CityModel, scale: number, style?: LineStyles): Promise<Uint8Array> {
+  if (useNativeAi8Export()) return sitePlanAi8(model, scale, style);
+  if (import.meta.env.VITE_CITYCUT_AI_PDF_OPS === "true") {
+    const layout = layoutSheet(model.sideM, scale);
+    const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle());
+    return buildLayeredNativeAiPdfOps(
+      layout.pageWidthMm,
+      layout.pageHeightMm,
+      chunks,
+      sitePlanLayerOrder(chunks),
+      titleLine(model, layout),
+    );
+  }
+  return sitePlanPdf(model, scale, style);
+}
+
+export async function figureGroundAi(model: CityModel, scale: number, style?: LineStyles): Promise<Uint8Array> {
+  if (useNativeAi8Export()) return figureGroundAi8(model, scale, style);
+  if (import.meta.env.VITE_CITYCUT_AI_PDF_OPS === "true") {
+    const layout = layoutSheet(model.sideM, scale);
+    return buildLayeredNativeAiPdfOps(
+      layout.pageWidthMm,
+      layout.pageHeightMm,
+      figureGroundChunks(model, scale, style ?? readDrawingStyle()),
+      FIGURE_LAYER_ORDER,
+      titleLine(model, layout),
+    );
+  }
+  return figureGroundPdf(model, scale, style);
 }

@@ -3,7 +3,7 @@ import { DEFAULT_ISO_CORNER, isIsoCorner, type IsoCorner } from "./isoCamera";
 /** Projection, corner, and free-rotate. Separate from the map frame in the URL. */
 export const VIEW_STORAGE_KEY = "citycut.view";
 
-export type ProjectionMode = "perspective" | "iso";
+export type ProjectionMode = "perspective" | "iso" | "plan";
 
 export type ViewMemory = {
   projection: ProjectionMode;
@@ -26,7 +26,8 @@ export function parseStoredView(raw: string | null): ViewMemory {
   if (!raw) return { ...DEFAULT_VIEW };
   try {
     const data = JSON.parse(raw) as Partial<ViewMemory>;
-    const projection: ProjectionMode = data.projection === "iso" ? "iso" : "perspective";
+    const projection: ProjectionMode =
+      data.projection === "iso" ? "iso" : data.projection === "plan" ? "plan" : "perspective";
     const corner = isIsoCorner(data.corner) ? data.corner : DEFAULT_VIEW.corner;
     return {
       projection,
@@ -49,6 +50,9 @@ export function viewFromToken(token: string | null): Partial<ViewMemory> | null 
   if (value === "persp" || value === "perspective") {
     return { projection: "perspective", freeRotate: false };
   }
+  if (value === "plan" || value === "plan-north") {
+    return { projection: "plan", freeRotate: false };
+  }
   if (value === "axo" || value === "axonometric") {
     return { projection: "iso", freeRotate: true };
   }
@@ -60,6 +64,7 @@ export function viewFromToken(token: string | null): Partial<ViewMemory> | null 
 /** A locked isometric corner encodes as `iso-sw`. Perspective adds nothing. Free rotate is `axo`. */
 export function viewToken(view: ViewMemory): string | null {
   if (view.projection === "perspective") return null;
+  if (view.projection === "plan") return "plan";
   if (view.freeRotate) return "axo";
   return `iso-${view.corner}`;
 }

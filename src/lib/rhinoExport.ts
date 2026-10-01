@@ -1,8 +1,9 @@
 import * as THREE from "three";
 import rhino3dm from "rhino3dm/rhino3dm.module.js";
 import type { RhinoModuleOptions } from "rhino3dm";
+import { BUILDING_USE_META, BUILDING_USES } from "./buildingUse";
 import { buildCityGroup, disposeObject } from "./buildCity";
-import { colourRgb } from "./colours";
+import { colourRgb, type ColourKey } from "./colours";
 import { CRS_NOTE, mgaCrs, projectLocal, projectLonLat } from "./crs";
 import { readDrawingStyle } from "./drawingStyle";
 import { figureGround, figureGroundDatum } from "./figureGround";
@@ -20,19 +21,50 @@ function contourLayerColor(): Rgb {
 }
 
 /** Layer swatches, read when the file is written so a live colour edit is included. */
-function layerColors(): Record<string, Rgb> {
-  return {
-    Buildings: colourRgb("--building-uniform"),
-    Roads: colourRgb("--road-arterial"),
-    Rail: colourRgb("--rail-fill"),
-    Water: colourRgb("--water-3d"),
-    Green: colourRgb("--green-3d"),
-    Ground: colourRgb("--ground-fill"),
-    Terrain: colourRgb("--terrain-layer"),
-    Trees: colourRgb("--tree-layer"),
-    Contours: contourLayerColor(),
-    FigureGround: colourRgb("--figure-fill"),
+const BUILDING_LAYER_KEYS: Record<string, ColourKey> = {
+  Residential: "--use-residential",
+  Commercial: "--use-commercial",
+  Retail: "--use-retail",
+  MixedUse: "--use-mixed",
+  Industrial: "--use-industrial",
+  Civic: "--use-civic",
+  Recreation: "--use-recreation",
+  Outbuilding: "--use-outbuilding",
+  Unclassified: "--use-unclassified",
+};
+
+/** Full layer path → theme key (or contour pen) for every Rhino layer CityCut writes. */
+export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
+  const keys: Record<string, ColourKey | "contour"> = {
+    Buildings: "--building-uniform",
+    Roads: "--road-arterial",
+    Rail: "--rail-fill",
+    Water: "--water-3d",
+    Green: "--green-3d",
+    Ground: "--ground-fill",
+    Terrain: "--terrain-layer",
+    Trees: "--tree-layer",
+    Contours: "contour",
+    FigureGround: "--figure-fill",
   };
+  for (const use of BUILDING_USES) {
+    const layer = BUILDING_USE_META[use].layer;
+    keys[`Buildings::${layer}`] = BUILDING_LAYER_KEYS[layer];
+  }
+  return keys;
+}
+
+function layerColors(): Record<string, Rgb> {
+  const keys = rhinoLayerColourKeys();
+  const out: Record<string, Rgb> = {};
+  for (const [name, key] of Object.entries(keys)) {
+    out[name] = key === "contour" ? contourLayerColor() : colourRgb(key);
+  }
+  return out;
+}
+
+function displayColor(color: Rgb) {
+  return { r: color.r, g: color.g, b: color.b, a: 255 };
 }
 
 let rhinoPromise: Promise<Rhino> | null = null;
@@ -62,10 +94,32 @@ function layerName(mesh: THREE.Mesh): string {
   return mesh.name || mesh.parent?.name || "Mesh";
 }
 
+function ensureMaterial(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  materials: Map<string, number>,
+  name: string,
+  color: Rgb,
+): number {
+  const cached = materials.get(name);
+  if (cached !== undefined) return cached;
+  const material = new rhino.Material();
+  material.name = name;
+  const swatch = displayColor(color);
+  material.diffuseColor = swatch as unknown as number[];
+  material.ambientColor = swatch as unknown as number[];
+  const index = doc.materials().count;
+  doc.materials().add(material);
+  materials.set(name, index);
+  release(material);
+  return index;
+}
+
 function ensureLayer(
   rhino: Rhino,
   doc: InstanceType<Rhino["File3dm"]>,
   layers: Map<string, number>,
+  materials: Map<string, number>,
   name: string,
   color: Rgb,
 ): number {
@@ -74,12 +128,22 @@ function ensureLayer(
   const parts = name.split("::");
   const layer = new rhino.Layer();
   layer.name = parts.length === 2 ? parts[1] : name;
-  layer.color = color;
+  const swatch = displayColor(color);
+  layer.color = swatch;
+  layer.plotColor = swatch;
   if (parts.length === 2) {
     const palette = layerColors();
-    const parentIndex = ensureLayer(rhino, doc, layers, parts[0], palette[parts[0]] ?? colourRgb("--building-uniform"));
+    const parentIndex = ensureLayer(
+      rhino,
+      doc,
+      layers,
+      materials,
+      parts[0],
+      palette[parts[0]] ?? colourRgb("--building-uniform"),
+    );
     layer.parentLayerId = doc.layers().get(parentIndex).id;
   }
+  layer.renderMaterialIndex = ensureMaterial(rhino, doc, materials, name, color);
   const index = doc.layers().add(layer);
   layers.set(name, index);
   return index;
@@ -87,6 +151,12 @@ function ensureLayer(
 
 function release(object: object) {
   (object as { delete?: () => void }).delete?.();
+}
+
+function applyByLayerAttributes(rhino: Rhino, attributes: InstanceType<Rhino["ObjectAttributes"]>) {
+  attributes.colorSource = rhino.ObjectColorSource.ColorFromLayer;
+  attributes.materialSource = rhino.ObjectMaterialSource.MaterialFromLayer;
+  attributes.plotColorSource = rhino.ObjectPlotColorSource.PlotColorFromLayer;
 }
 
 function addWorldVertex(
@@ -104,6 +174,7 @@ function addMesh(
   rhino: Rhino,
   doc: InstanceType<Rhino["File3dm"]>,
   layers: Map<string, number>,
+  materials: Map<string, number>,
   mesh: THREE.Mesh,
   model: CityModel,
   zone: number,
@@ -158,15 +229,11 @@ function addMesh(
   const name = layerName(mesh);
   const palette = layerColors();
   const layerColor = (mesh.userData.layerColor as Rgb | undefined) ?? palette[name] ?? colourRgb("--rhino-fallback");
-  const layerIndex = ensureLayer(rhino, doc, layers, name, layerColor);
+  const layerIndex = ensureLayer(rhino, doc, layers, materials, name, layerColor);
   const attributes = new rhino.ObjectAttributes();
   attributes.name = name;
   attributes.layerIndex = layerIndex;
-  const objectColor = mesh.userData.objectColor as Rgb | undefined;
-  if (objectColor) {
-    attributes.colorSource = rhino.ObjectColorSource.ColorFromObject;
-    attributes.objectColor = objectColor;
-  }
+  applyByLayerAttributes(rhino, attributes);
   const use = mesh.userData.use;
   const typologySource = mesh.userData.typologySource;
   if (typeof use === "string") attributes.setUserString("use", use);
@@ -181,13 +248,14 @@ function addFigureGround(
   rhino: Rhino,
   doc: InstanceType<Rhino["File3dm"]>,
   layers: Map<string, number>,
+  materials: Map<string, number>,
   model: CityModel,
   zone: number,
 ) {
   const ground = figureGround(model.buildings, model.sideM);
   if (ground.polygons.length === 0) return;
   const z = figureGroundDatum(model);
-  const layerIndex = ensureLayer(rhino, doc, layers, "FigureGround", layerColors().FigureGround);
+  const layerIndex = ensureLayer(rhino, doc, layers, materials, "FigureGround", layerColors().FigureGround);
   for (const polygon of ground.polygons) {
     for (const ring of polygon) {
       const points: number[][] = [];
@@ -207,6 +275,7 @@ function addFigureGround(
       const attributes = new rhino.ObjectAttributes();
       attributes.name = "FigureGround";
       attributes.layerIndex = layerIndex;
+      applyByLayerAttributes(rhino, attributes);
       doc.objects().addPolyline(points, attributes);
       release(attributes);
     }
@@ -222,6 +291,7 @@ function addContours(
   rhino: Rhino,
   doc: InstanceType<Rhino["File3dm"]>,
   layers: Map<string, number>,
+  materials: Map<string, number>,
   model: CityModel,
   zone: number,
 ) {
@@ -229,7 +299,7 @@ function addContours(
   const layer = model.contourLayer ?? (model.contours && model.terrain ? demContourLayer(model.terrain, model.sideM) : null);
   if (!layer || layer.lines.length === 0) return;
   const every = readDrawingStyle().contourIndexEvery;
-  const layerIndex = ensureLayer(rhino, doc, layers, "Contours", layerColors().Contours);
+  const layerIndex = ensureLayer(rhino, doc, layers, materials, "Contours", layerColors().Contours);
   for (const line of layer.lines) {
     const points: number[][] = [];
     for (const point of line.points) {
@@ -242,6 +312,7 @@ function addContours(
     const attributes = new rhino.ObjectAttributes();
     attributes.name = "Contour";
     attributes.layerIndex = layerIndex;
+    applyByLayerAttributes(rhino, attributes);
     attributes.setUserString("altitude", String(line.z));
     if (contourIsIndex(line.z, layer.interval, every)) attributes.setUserString("index", "yes");
     doc.objects().addPolyline(points, attributes);
@@ -285,13 +356,14 @@ export async function cityModelTo3dm(model: CityModel): Promise<Uint8Array> {
     doc.settings().earthAnchorPoint = anchor;
 
     const layers = new Map<string, number>();
+    const materials = new Map<string, number>();
     group.traverse((object) => {
       const mesh = object as THREE.Mesh;
       if (!mesh.isMesh) return;
-      addMesh(rhino, doc, layers, mesh, model, crs.zone);
+      addMesh(rhino, doc, layers, materials, mesh, model, crs.zone);
     });
-    addFigureGround(rhino, doc, layers, model, crs.zone);
-    addContours(rhino, doc, layers, model, crs.zone);
+    addFigureGround(rhino, doc, layers, materials, model, crs.zone);
+    addContours(rhino, doc, layers, materials, model, crs.zone);
 
     return doc.toByteArray();
   } finally {

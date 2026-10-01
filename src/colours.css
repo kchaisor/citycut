@@ -153,4 +153,28 @@
 
   /* Frame drawn around the cut on the satellite preview. */
   --cut-line: #f7f4ee;
+
+  /* Summer-solstice sun path in the 3D heliodon (screen only). */
+  --sun-arc-summer: #1a1916;
+
+  /* Equinox sun path. */
+  --sun-arc-equinox: #1a1916;
+
+  /* Winter-solstice sun path. */
+  --sun-arc-winter: #1a1916;
+
+  /* Active sun marker sphere. */
+  --sun-marker: #ffcc1a;
+
+  /* Heliodon dial greys: altitude rings, radials, 1° ticks, degree numbers, hour lines. */
+  --sun-compass: #45423c;
+
+  /* Heliodon dial ink: horizon ring, 5° and 10° ticks, axes, N/E/S/W, hour and arc labels. */
+  --sun-compass-label: #1a1916;
+
+  /* Viewport-only building fill while the sun path and compass are on. */
+  --building-solar-neutral: #c2bdb4;
+
+  /* Faint ground disc under the heliodon dial (screen only). */
+  --heliodon-dial-disc: #e8e2d8;
 }

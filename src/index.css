@@ -602,6 +602,69 @@ input[type="range"]::-moz-range-thumb {
 .plan:active { cursor: grabbing; }
 
 .model .drawer { max-height: calc(100% - 108px); }
+
+.solar-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 6;
+  width: min(320px, calc(100% - 24px));
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+}
+.solar-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--font-size-drawer);
+  font-weight: 560;
+  cursor: pointer;
+}
+.solar-panel-head svg { transition: transform 0.15s ease; }
+.solar-panel-head svg.is-open { transform: rotate(180deg); }
+.solar-panel-body {
+  display: grid;
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+.solar-panel-body[hidden] { display: none; }
+.solar-panel .field input[type="range"] { width: 100%; }
+.solar-standards { display: grid; gap: 6px; }
+.solar-standards .panel-toolbar { margin: 0; }
+.solar-stepper { display: grid; gap: 4px; }
+.solar-stepper-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.solar-stepper .field-note { margin: 0; }
+.solar-hour,
+.solar-step {
+  min-width: 26px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.solar-step:disabled { opacity: 0.35; }
+.solar-hour[aria-pressed="true"] {
+  background: var(--panel-border);
+  font-weight: 600;
+}
+.solar-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12px; }
+.solar-legend li { display: flex; align-items: center; gap: 8px; }
+.solar-legend-swatch { flex: none; width: 24px; height: 12px; }
+.solar-legend-note { color: var(--muted-text); }
 .panel-toolbar {
   display: flex;
   flex-wrap: wrap;

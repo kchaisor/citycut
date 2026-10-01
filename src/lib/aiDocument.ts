@@ -1,3 +1,4 @@
+import { aiLayerLabel } from "./aiNative";
 import {
   LineCapStyle,
   LineJoinStyle,
@@ -199,15 +200,16 @@ export async function buildLayeredPdf(
   const propName = new Map<string, string>();
   names.forEach((name, index) => {
     const key = `L${index}`;
+    const label = aiLayerLabel(name);
     const ocg = context.obj({
       Type: "OCG",
-      Name: PDFString.of(name),
+      Name: PDFString.of(label),
       Intent: "View",
     });
     const ref = context.register(ocg);
     ocgRefs.push(ref);
     props.set(PDFName.of(key), ref);
-    propName.set(name, key);
+    propName.set(label, key);
   });
   const resources = page.node.Resources();
   if (!resources) throw new Error("The PDF page has no resource dictionary.");
@@ -231,7 +233,7 @@ export async function buildLayeredPdf(
   );
 
   for (const chunk of chunks) {
-    const key = propName.get(chunk.name);
+    const key = propName.get(aiLayerLabel(chunk.name));
     if (!key) continue;
     const ops = [beginOc(key)];
     for (const path of chunk.paths ?? []) ops.push(...pathOperators(path));

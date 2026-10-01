@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { projectLocal } from "./crs";
-import { cityModelTo3dm, loadRhino } from "./rhinoExport";
+import { colourRgb } from "./colours";
+import { cityModelTo3dm, loadRhino, rhinoLayerColourKeys } from "./rhinoExport";
 import { SURFACE } from "./surfaceLayers";
 import { footprintBase } from "./terrain";
 import type { CityModel, Pt, TerrainField } from "../types";
@@ -361,6 +362,63 @@ describe("rhino export", () => {
       const east = projectLocal([40, 0], origin, 55);
       expect(curves[0][0][0]).toBeCloseTo(west[0], 2);
       expect(curves[0][curves[0].length - 1][0]).toBeCloseTo(east[0], 2);
+    } finally {
+      doc.destroy();
+    }
+  });
+
+  it("writes distinct layer and material colours with by-layer object sources", async () => {
+    const bytes = await cityModelTo3dm({
+      ...model,
+      buildings: [
+        { id: 1, ring: square([0, 0], 40), holes: [], height: 12, use: "unclassified", source: "none" },
+        { id: 8, ring: square([60, 0], 16), holes: [], height: 10, use: "civic", source: "zone" },
+        { id: 10, ring: square([-50, 40], 14), holes: [], height: 8, use: "retail", source: "osm_tag" },
+      ],
+      areas: [...model.areas, { id: 9, ring: square([30, 30], 20), holes: [], kind: "water" }],
+      layers: { ...model.layers, trees: true },
+      trees: [{ id: 9, at: [20, 30], height_m: 14, crown_diameter_m: 8, trunk_diameter_m: 0.3, sizeSource: "osm" }],
+    });
+    const rhino = await loadRhino();
+    const doc = rhino.File3dm.fromByteArray(bytes);
+    try {
+      const keys = rhinoLayerColourKeys();
+      const seen = new Set<string>();
+      for (let i = 0; i < doc.layers().count; i++) {
+        const layer = doc.layers().get(i);
+        const path = layer.fullPath;
+        seen.add(path);
+        const key = keys[path];
+        expect(key, `missing colour key for layer ${path}`).toBeTruthy();
+        const expected = key === "contour" ? null : colourRgb(key!);
+        if (expected) {
+          const swatch = layer.color as { r: number; g: number; b: number; a: number };
+          expect(swatch.r).toBe(expected.r);
+          expect(swatch.g).toBe(expected.g);
+          expect(swatch.b).toBe(expected.b);
+          expect(swatch.a).toBe(255);
+          expect(layer.renderMaterialIndex).toBeGreaterThanOrEqual(0);
+        }
+      }
+      const optionalLayers = new Set(["Rail", "Terrain", "Contours", "FigureGround"]);
+      for (const path of Object.keys(keys)) {
+        if (path.startsWith("Buildings::") && !seen.has(path)) continue;
+        if (optionalLayers.has(path) && !seen.has(path)) continue;
+        expect(seen.has(path), `expected layer ${path}`).toBe(true);
+      }
+      expect(seen.has("Buildings::Unclassified")).toBe(true);
+      expect(seen.has("Buildings::Civic")).toBe(true);
+      expect(seen.has("Buildings::Retail")).toBe(true);
+      expect(seen.has("Roads")).toBe(true);
+      expect(seen.has("Green")).toBe(true);
+      expect(seen.has("Water")).toBe(true);
+      expect(seen.has("Ground")).toBe(true);
+      expect(seen.has("Trees")).toBe(true);
+      for (let i = 0; i < doc.objects().count; i++) {
+        const attributes = doc.objects().get(i).attributes();
+        expect(attributes.colorSource).toBe(rhino.ObjectColorSource.ColorFromLayer);
+        expect(attributes.materialSource).toBe(rhino.ObjectMaterialSource.MaterialFromLayer);
+      }
     } finally {
       doc.destroy();
     }
