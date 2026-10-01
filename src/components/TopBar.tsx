@@ -23,7 +23,7 @@ export function TopBar({
       {place ? (
         <p className="top-note" title={full}>
           <span className="top-note-place">{place}</span>
-          {size ? <span className="top-note-size"> · {size}</span> : null}
+          {size ? <span className="top-note-size">{size}</span> : null}
         </p>
       ) : (
         <span />

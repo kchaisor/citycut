@@ -53,6 +53,7 @@ button { cursor: pointer; }
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-width: max-content;
   border: 0;
   background: transparent;
   padding: 6px 8px;
@@ -83,7 +84,19 @@ button { cursor: pointer; }
   flex: none;
   white-space: nowrap;
 }
-.top-actions { justify-self: end; display: flex; align-items: center; gap: 4px; min-height: 36px; }
+/* A leading space in this span is collapsed by the flex item, so the gap is margin. */
+.top-note-size::before {
+  content: "·";
+  margin-inline: 0.35em;
+}
+.top-actions {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: max-content;
+  min-height: 36px;
+}
 .text-btn {
   border: 0;
   background: transparent;
@@ -589,7 +602,6 @@ input[type="range"]::-moz-range-thumb {
 .plan:active { cursor: grabbing; }
 
 .model .drawer { max-height: calc(100% - 108px); }
-.model .viewport.is-drawing .fill.is-plan { bottom: 96px; }
 .panel-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -805,7 +817,6 @@ input[type="range"]::-moz-range-thumb {
     max-width: 100%;
   }
   .select .maplibregl-ctrl-top-right { top: 56px; }
-  .model .viewport.is-drawing .fill.is-plan { bottom: 196px; }
   .model .viewport-hint {
     left: 12px;
     right: 12px;
