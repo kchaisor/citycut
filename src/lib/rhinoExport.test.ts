@@ -324,6 +324,48 @@ describe("rhino export", () => {
     }
   });
 
+  it("writes Vicmap contours as polylines on a Contours layer at their elevation", async () => {
+    const bytes = await cityModelTo3dm({
+      ...model,
+      contours: true,
+      contourLayer: {
+        source: "vicmap-metro",
+        label: "Vicmap Elevation 1 m",
+        interval: 1,
+        lines: [{ points: [[-40, 0], [40, 0]], z: 28 }],
+        attribution: null,
+        datasetUrl: null,
+        featureCount: 1,
+        fetchMs: 0,
+      },
+    });
+    const rhino = await loadRhino();
+    const doc = rhino.File3dm.fromByteArray(bytes);
+    try {
+      const layers: string[] = [];
+      for (let i = 0; i < doc.layers().count; i++) layers.push(doc.layers().get(i).name);
+      expect(layers).toContain("Contours");
+      const curves: number[][][] = [];
+      for (let i = 0; i < doc.objects().count; i++) {
+        const object = doc.objects().get(i);
+        if (object.attributes().name !== "Contour") continue;
+        expect(object.attributes().getUserString("altitude")).toBe("28");
+        const curve = object.geometry() as unknown as ReadCurve;
+        const points: number[][] = [];
+        for (let p = 0; p < curve.pointCount; p++) points.push(curve.point(p));
+        curves.push(points);
+      }
+      expect(curves).toHaveLength(1);
+      for (const point of curves[0]) expect(point[2]).toBeCloseTo(28, 5);
+      const west = projectLocal([-40, 0], origin, 55);
+      const east = projectLocal([40, 0], origin, 55);
+      expect(curves[0][0][0]).toBeCloseTo(west[0], 2);
+      expect(curves[0][curves[0].length - 1][0]).toBeCloseTo(east[0], 2);
+    } finally {
+      doc.destroy();
+    }
+  });
+
   it("labels a western block as MGA zone 54", async () => {
     const bytes = await cityModelTo3dm({
       ...model,

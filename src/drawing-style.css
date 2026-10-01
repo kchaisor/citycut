@@ -53,6 +53,9 @@
   --contour-stroke-mm: 0.1;
   --contour-stroke: #B0B0B0;
   --contour-dash: 1.5 0.75;
+  /* Every Nth contour, slightly heavier. 5 is 5 m on 1 m data and 50 m on 10 m data. */
+  --contour-index-mm: 0.18;
+  --contour-index-every: 5;
 
   /* The square frame around the plan. */
   --frame-stroke-mm: 0.35;

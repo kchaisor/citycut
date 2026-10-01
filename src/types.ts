@@ -105,6 +105,29 @@ export type TreeFeat = TreeDimensions & {
  * Geoscience Australia lidar; otherwise the Copernicus geoid height).
  * Row 0 is the south edge. Samples include both edges of the square.
  */
+export type ContourSourceId = "vicmap-metro" | "vicmap-state" | "dem";
+
+/** One contour polyline in the cut's local east/north frame, clipped to the square. */
+export type StoredContour = {
+  points: Pt[];
+  /** Elevation in metres. Vicmap values are Australian Height Datum. */
+  z: number;
+};
+
+export type ContourLayer = {
+  source: ContourSourceId;
+  /** Short label for the Drawing drawer, without the "Contours:" prefix. */
+  label: string;
+  interval: number;
+  lines: StoredContour[];
+  attribution: string | null;
+  datasetUrl: string | null;
+  /** Features returned by the service, before clipping. DEM uses the line count. */
+  featureCount: number;
+  /** Network time for the Vicmap queries. Zero for a cache hit or the DEM. */
+  fetchMs: number;
+};
+
 export type TerrainField = {
   cols: number;
   rows: number;
@@ -140,8 +163,13 @@ export type CityModel = {
   terrainError?: string | null;
   /** Vicmap zones skipped after a hard failure. */
   useTierFailures?: UseTierFailure[];
-  /** Draw contour lines on the SVG plan. Ignored unless `terrain` is set. */
+  /** Draw contour lines on the site plan. Vicmap when the cut is in Victoria, otherwise the DEM. */
   contours?: boolean;
+  /**
+   * Contours for this cut. Set when the Contours layer was on.
+   * Absent keeps the older path: marching squares on `terrain` when `contours` is set.
+   */
+  contourLayer?: ContourLayer | null;
 };
 
 export type ViewState = {

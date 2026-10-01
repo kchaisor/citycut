@@ -120,6 +120,8 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--contour-stroke-mm` | Weight of a contour | `0.1` | mm |
 | `--contour-stroke` | Colour of a contour | `#B0B0B0` | colour |
 | `--contour-dash` | Dash of a contour | `1.5 0.75` | mm, on then off |
+| `--contour-index-mm` | Weight of every Nth contour. Same colour and dash as the other contours | `0.18` | mm |
+| `--contour-index-every` | How many intervals between index contours. `5` is 5 m on 1 m data and 50 m on 10 m data | `5` | count |
 | `--frame-stroke-mm` | Weight of the square frame | `0.35` | mm |
 | `--frame-stroke` | Colour of the frame | `#1C1B17` | colour |
 | `--frame-dash` | Dash of the frame | `none` | mm, on then off |

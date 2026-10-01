@@ -71,7 +71,10 @@ export function DrawingPlan({
   const drag = useRef<{ px: number; py: number; view: View } | null>(null);
   const figure = kind === "figure-ground";
   const style = lineStyle ?? readDrawingStyle();
-  const plan = useMemo(() => planPaths(model, style.pathWidthM), [model, style.pathWidthM]);
+  const plan = useMemo(
+    () => planPaths(model, style.pathWidthM, style.contourIndexEvery),
+    [model, style.pathWidthM, style.contourIndexEvery],
+  );
   const figurePaths = useMemo(
     () => (figure ? figureGroundModelPaths(model.buildings, model.sideM) : []),
     [figure, model],
@@ -255,7 +258,29 @@ export function DrawingPlan({
               />
             )}
             {plan.contours.map((line, index) => (
-              <path key={`c${index}`} d={svgPolyline(line, false)} fill="none" {...screenPenAttrs(style.contour, "miter")} />
+              <path
+                key={`c${index}`}
+                d={svgPolyline(line, false)}
+                fill="none"
+                {...screenPenAttrs(
+                  plan.contourIndex[index] ? { ...style.contour, mm: style.contourIndexMm } : style.contour,
+                  "miter",
+                )}
+              />
+            ))}
+            {plan.contourLabels.map((label, index) => (
+              <text
+                key={`cl${index}`}
+                x={label.east}
+                y={-label.north}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={model.sideM * 0.014}
+                fill="#6A6A6A"
+                fontFamily="Helvetica, Arial, sans-serif"
+              >
+                {label.text}
+              </text>
             ))}
             {plan.rails.map((rail, index) => (
               <CasedLine key={`l${index}`} d={svgPolyline(rail, false)} stroke={style.rail} paper={canvas} />

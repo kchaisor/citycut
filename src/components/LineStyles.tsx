@@ -7,6 +7,7 @@ import {
   dashPresetId,
   normalizeDash,
   parseColor,
+  parseIndexEvery,
   parseMetres,
   parseMm,
   patchStroke,
@@ -147,6 +148,45 @@ export function LineStylesEditor({
           {STROKE_KEYS.map((key) => (
             <StyleRow key={key} name={key} style={style} onChange={onChange} />
           ))}
+          <label className="line-style-fill">
+            Contour index
+            <span className="line-style-metres">
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                max={5}
+                step={0.01}
+                aria-label="Contour index weight in millimetres"
+                value={style.contourIndexMm}
+                onChange={(event) => {
+                  const mm = parseMm(event.target.value);
+                  if (mm == null) return;
+                  onChange({ ...style, contourIndexMm: mm });
+                }}
+              />
+              mm
+            </span>
+          </label>
+          <label className="line-style-fill">
+            Index every
+            <span className="line-style-metres">
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={20}
+                step={1}
+                aria-label="Index every Nth contour"
+                value={style.contourIndexEvery}
+                onChange={(event) => {
+                  const every = parseIndexEvery(event.target.value);
+                  if (every == null) return;
+                  onChange({ ...style, contourIndexEvery: every });
+                }}
+              />
+            </span>
+          </label>
           <div className="line-styles-actions">
             <button
               type="button"

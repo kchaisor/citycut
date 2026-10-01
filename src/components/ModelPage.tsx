@@ -495,6 +495,18 @@ export function ModelPage({ model }: { model: CityModel }) {
                 </select>
               </label>
               {figureFit && <p className="fit-note">{figureFit}</p>}
+              {model.contourLayer && (
+                <p
+                  className="field-note"
+                  data-contour-source={model.contourLayer.source}
+                  data-contour-features={model.contourLayer.featureCount}
+                  data-contour-lines={model.contourLayer.lines.length}
+                  data-contour-ms={model.contourLayer.fetchMs}
+                  data-contour-interval={model.contourLayer.interval}
+                >
+                  Contours: {model.contourLayer.label}
+                </p>
+              )}
               <LineStylesEditor
                 style={lineStyles}
                 baseline={lineStyleBaseline()}
@@ -636,6 +648,16 @@ export function ModelPage({ model }: { model: CityModel }) {
               </a>{" "}
               © State of Victoria (Department of Transport and Planning),{" "}
               <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.
+            </>
+          )}
+          {model.contourLayer && model.contourLayer.source !== "dem" && model.contourLayer.attribution && (
+            <>
+              {" "}
+              <a href={model.contourLayer.datasetUrl ?? "https://discover.data.vic.gov.au/dataset/vicmap-elevation-contour-line-1-to-5-metres-covering-metropolitan-melbourne"}>
+                Vicmap Elevation
+              </a>{" "}
+              © State of Victoria (Department of Transport and Planning),{" "}
+              <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 (CC-BY)</a>.
             </>
           )}{" "}
           CityCut · Kelvin Chai.

@@ -3,7 +3,9 @@ import rhino3dm from "rhino3dm/rhino3dm.module.js";
 import type { RhinoModuleOptions } from "rhino3dm";
 import { buildCityGroup, disposeObject } from "./buildCity";
 import { CRS_NOTE, mgaCrs, projectLocal, projectLonLat } from "./crs";
+import { readDrawingStyle } from "./drawingStyle";
 import { figureGround, figureGroundDatum } from "./figureGround";
+import { contourIsIndex, demContourLayer } from "./vicmapContours";
 import type { CityModel } from "../types";
 
 type Rgb = { r: number; g: number; b: number };
@@ -19,6 +21,7 @@ const LAYER_COLORS: Record<string, { r: number; g: number; b: number }> = {
   Ground: { r: 230, g: 224, b: 212 },
   Terrain: { r: 214, g: 206, b: 190 },
   Trees: { r: 62, g: 138, b: 72 },
+  Contours: { r: 176, g: 176, b: 176 },
 };
 
 let rhinoPromise: Promise<Rhino> | null = null;
@@ -197,6 +200,42 @@ function addFigureGround(
   }
 }
 
+/**
+ * Contour polylines on a Contours layer, at their true elevation.
+ * The 3dm did not previously contain contour curves. These are new, and they
+ * sit at the contour's own Z because the rest of the file is Z-up metres.
+ */
+function addContours(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  model: CityModel,
+  zone: number,
+) {
+  if (model.contours === false) return;
+  const layer = model.contourLayer ?? (model.contours && model.terrain ? demContourLayer(model.terrain, model.sideM) : null);
+  if (!layer || layer.lines.length === 0) return;
+  const every = readDrawingStyle().contourIndexEvery;
+  const layerIndex = ensureLayer(rhino, doc, layers, "Contours", LAYER_COLORS.Contours);
+  for (const line of layer.lines) {
+    const points: number[][] = [];
+    for (const point of line.points) {
+      const [easting, northing] = projectLocal(point, model.center, zone);
+      const last = points[points.length - 1];
+      if (last && Math.hypot(last[0] - easting, last[1] - northing) < 0.001) continue;
+      points.push([easting, northing, line.z]);
+    }
+    if (points.length < 2) continue;
+    const attributes = new rhino.ObjectAttributes();
+    attributes.name = "Contour";
+    attributes.layerIndex = layerIndex;
+    attributes.setUserString("altitude", String(line.z));
+    if (contourIsIndex(line.z, layer.interval, every)) attributes.setUserString("index", "yes");
+    doc.objects().addPolyline(points, attributes);
+    release(attributes);
+  }
+}
+
 /** Current city meshes as a Rhino .3dm in MGA metres, Z-up. */
 export async function cityModelTo3dm(model: CityModel): Promise<Uint8Array> {
   const rhino = await loadRhino();
@@ -239,6 +278,7 @@ export async function cityModelTo3dm(model: CityModel): Promise<Uint8Array> {
       addMesh(rhino, doc, layers, mesh, model, crs.zone);
     });
     addFigureGround(rhino, doc, layers, model, crs.zone);
+    addContours(rhino, doc, layers, model, crs.zone);
 
     return doc.toByteArray();
   } finally {

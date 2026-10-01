@@ -58,6 +58,10 @@ export type LineStyles = {
   pathFill: string;
   /** Stroke on the unioned footpath outline only. */
   pathEdgeOn: boolean;
+  /** Printed millimetres for every Nth contour. Same colour and dash as `contour`. */
+  contourIndexMm: number;
+  /** Index every Nth interval. 5 is 5 m on 1 m data and 50 m on 10 m data. */
+  contourIndexEvery: number;
 };
 
 export const STROKE_KEYS = [
@@ -106,6 +110,8 @@ export const ROAD_KERB_VAR = "--road-kerb";
 export const PATH_WIDTH_VAR = "--path-width-m";
 export const PATH_FILL_VAR = "--path-fill";
 export const PATH_EDGE_VAR = "--path-edge";
+export const CONTOUR_INDEX_MM_VAR = "--contour-index-mm";
+export const CONTOUR_INDEX_EVERY_VAR = "--contour-index-every";
 export const LINE_STYLES_KEY = "citycut.lineStyles";
 
 /** Previous centreline names. Read as the footpath edge when the new names are absent. */
@@ -142,6 +148,8 @@ export const DEFAULT_LINE_STYLES: LineStyles = {
   pathWidthM: PATH_WIDTH_M,
   pathFill: PATH_FILL,
   pathEdgeOn: false,
+  contourIndexMm: 0.18,
+  contourIndexEvery: 5,
 };
 
 export function allStyleVariables(): string[] {
@@ -150,7 +158,15 @@ export function allStyleVariables(): string[] {
     const vars = STROKE_VARS[key];
     names.push(vars.mm, vars.color, vars.dash);
   }
-  names.push(ROAD_FILL_VAR, ROAD_KERB_VAR, PATH_WIDTH_VAR, PATH_FILL_VAR, PATH_EDGE_VAR);
+  names.push(
+    ROAD_FILL_VAR,
+    ROAD_KERB_VAR,
+    PATH_WIDTH_VAR,
+    PATH_FILL_VAR,
+    PATH_EDGE_VAR,
+    CONTOUR_INDEX_MM_VAR,
+    CONTOUR_INDEX_EVERY_VAR,
+  );
   return names;
 }
 
@@ -173,6 +189,8 @@ export function cloneLineStyles(style: LineStyles = DEFAULT_LINE_STYLES): LineSt
     pathWidthM: style.pathWidthM,
     pathFill: style.pathFill,
     pathEdgeOn: style.pathEdgeOn,
+    contourIndexMm: style.contourIndexMm,
+    contourIndexEvery: style.contourIndexEvery,
   };
 }
 
@@ -220,6 +238,16 @@ export function parseMm(raw: string | undefined | null): number | null {
 
 export function formatMm(mm: number): string {
   return String(Math.round(mm * 100) / 100);
+}
+
+/** Whole intervals, from 1 to 20. 1 draws every contour as an index line. */
+export function parseIndexEvery(raw: string | undefined | null): number | null {
+  if (raw == null) return null;
+  const text = raw.trim();
+  if (!text) return null;
+  const value = Number(text);
+  if (!Number.isFinite(value)) return null;
+  return Math.min(20, Math.max(1, Math.round(value)));
 }
 
 /** `none` is solid. Anything else is "on off" in millimetres. */
@@ -324,6 +352,10 @@ export function styleFromProperties(
   if (pathFill) next.pathFill = pathFill;
   const edge = parseKerb(read(PATH_EDGE_VAR));
   if (edge != null) next.pathEdgeOn = edge;
+  const indexMm = parseMm(read(CONTOUR_INDEX_MM_VAR));
+  if (indexMm != null) next.contourIndexMm = indexMm;
+  const indexEvery = parseIndexEvery(read(CONTOUR_INDEX_EVERY_VAR));
+  if (indexEvery != null) next.contourIndexEvery = indexEvery;
   const pathVars = STROKE_VARS.path;
   if (parseMm(read(pathVars.mm)) == null) {
     const legacyMm = parseMm(read("--path-stroke-mm"));
@@ -404,6 +436,12 @@ export function changedVariables(current: LineStyles, baseline: LineStyles): Rec
   if (formatMetres(current.pathWidthM) !== formatMetres(baseline.pathWidthM)) out[PATH_WIDTH_VAR] = formatMetres(current.pathWidthM);
   if (current.pathFill.toUpperCase() !== baseline.pathFill.toUpperCase()) out[PATH_FILL_VAR] = current.pathFill.toUpperCase();
   if (current.pathEdgeOn !== baseline.pathEdgeOn) out[PATH_EDGE_VAR] = current.pathEdgeOn ? "on" : "off";
+  if (formatMm(current.contourIndexMm) !== formatMm(baseline.contourIndexMm)) {
+    out[CONTOUR_INDEX_MM_VAR] = formatMm(current.contourIndexMm);
+  }
+  if (current.contourIndexEvery !== baseline.contourIndexEvery) {
+    out[CONTOUR_INDEX_EVERY_VAR] = String(current.contourIndexEvery);
+  }
   return out;
 }
 

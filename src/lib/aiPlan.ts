@@ -18,6 +18,7 @@ import { formatCoord, openRing } from "./geo";
 import { LINE_MM, hexRgb } from "./lineweights";
 import { footpathLines, unionFootpaths } from "./roadFill";
 import { planPaths } from "./svgPlan";
+import { VICMAP_CONTOUR_ATTRIBUTION } from "./vicmapContours";
 import type { CityModel, Pt } from "../types";
 
 export const SITE_LAYER_ORDER = [
@@ -74,14 +75,28 @@ function titleLine(model: CityModel, layout: SheetLayout): string {
   return `${model.placeLabel} · 1:${layout.scale} · ${formatCoord(model.center.lat)}, ${formatCoord(model.center.lon)}`;
 }
 
-function creditLine(layout: SheetLayout, interval: number | null): string {
+function creditLine(
+  layout: SheetLayout,
+  interval: number | null,
+  source: "vicmap-metro" | "vicmap-state" | "dem" | null,
+): string {
   const parts = ["© OpenStreetMap contributors. CityCut."];
-  if (interval) parts.push(`Contours every ${interval} m. Terrain © Mapterhorn.`);
+  if (interval && (source === "vicmap-metro" || source === "vicmap-state")) {
+    parts.push(`Contours every ${interval} m. ${VICMAP_CONTOUR_ATTRIBUTION}`);
+  } else if (interval) {
+    parts.push(`Contours every ${interval} m. Terrain © Mapterhorn.`);
+  }
   if (layout.note) parts.push(layout.note);
   return parts.join(" ");
 }
 
-function annotation(model: CityModel, layout: SheetLayout, interval: number | null, style: StrokeStyle): PdfChunk {
+function annotation(
+  model: CityModel,
+  layout: SheetLayout,
+  interval: number | null,
+  style: StrokeStyle,
+  source: "vicmap-metro" | "vicmap-state" | "dem" | null = null,
+): PdfChunk {
   const ink = hexRgb(style.color);
   const page = layout.pageHeightMm;
   const tip: [number, number] = [layout.northX, yUp(layout.northTipY, page)];
@@ -91,7 +106,7 @@ function annotation(model: CityModel, layout: SheetLayout, interval: number | nu
   const headR: [number, number] = [layout.northX + 0.9, yUp(layout.northTipY + 1.8, page)];
   const barBottom = yUp(layout.barY + layout.barHeightMm, page);
   const label = titleLine(model, layout);
-  const credit = creditLine(layout, interval);
+  const credit = creditLine(layout, interval, source);
   return {
     name: "Annotation",
     paths: [
@@ -202,7 +217,7 @@ function pathStrip(polygons: Pt[][][], model: CityModel, layout: SheetLayout, st
 
 export function sitePlanChunks(model: CityModel, scale: number, style: LineStyles = readDrawingStyle()): PdfChunk[] {
   const layout = layoutSheet(model.sideM, scale);
-  const plan = planPaths(model, style.pathWidthM);
+  const plan = planPaths(model, style.pathWidthM, style.contourIndexEvery);
   const page = layout.pageHeightMm;
   const bottom = yUp(layout.frameY + layout.frameMm, page);
   const chunks: PdfChunk[] = [
@@ -272,14 +287,24 @@ export function sitePlanChunks(model: CityModel, scale: number, style: LineStyle
     });
   }
   const contourPen = pen(style.contour);
+  const indexPen = pen({ ...style.contour, mm: style.contourIndexMm });
   if (plan.contours.length > 0 && contourPen) {
     chunks.push({
       name: "Contours",
-      paths: plan.contours.map((line) => ({
+      paths: plan.contours.map((line, index) => ({
         rings: [mapRing(line, model.sideM, layout)],
         close: false,
-        ...contourPen,
+        ...(plan.contourIndex[index] && indexPen ? indexPen : contourPen),
       })),
+    });
+  }
+  if (plan.contourLabels.length > 0) {
+    chunks.push({
+      name: "Contour labels",
+      texts: plan.contourLabels.map((label) => {
+        const [x, y] = sheetPoint(label.east, label.north, model.sideM, layout);
+        return { x, y, sizeMm: 1.6, text: label.text, color: hexRgb("#6A6A6A") };
+      }),
     });
   }
   const railPen = pen(style.rail);
@@ -322,7 +347,7 @@ export function sitePlanChunks(model: CityModel, scale: number, style: LineStyle
     });
   }
   chunks.push(frameStroke(layout, style.frame));
-  chunks.push(annotation(model, layout, plan.contourInterval, style.annotation));
+  chunks.push(annotation(model, layout, plan.contourInterval, style.annotation, plan.contourSource));
   return chunks;
 }
 
@@ -365,12 +390,13 @@ export function figureGroundChunks(model: CityModel, scale: number, style: LineS
 
 export function sitePlanAi(model: CityModel, scale: number, style?: LineStyles): Promise<Uint8Array> {
   const layout = layoutSheet(model.sideM, scale);
-  return buildLayeredPdf(
-    layout.pageWidthMm,
-    layout.pageHeightMm,
-    sitePlanChunks(model, scale, style ?? readDrawingStyle()),
-    SITE_LAYER_ORDER,
-  );
+  const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle());
+  const order: string[] = [...SITE_LAYER_ORDER];
+  if (chunks.some((chunk) => chunk.name === "Contour labels")) {
+    const at = order.indexOf("Contours");
+    order.splice(at + 1, 0, "Contour labels");
+  }
+  return buildLayeredPdf(layout.pageWidthMm, layout.pageHeightMm, chunks, order);
 }
 
 export function figureGroundAi(model: CityModel, scale: number, style?: LineStyles): Promise<Uint8Array> {
