@@ -12,15 +12,14 @@ import {
 describe("lineweights", () => {
   it("keeps each pen inside the drawing standard", () => {
     expect(LINE_MM).toEqual({
-      buildingCut: 0.4,
+      buildingCut: 0,
       propertyRoad: 0.22,
       secondary: 0.15,
       contour: 0.1,
       frame: 0.35,
       annotation: 0.13,
     });
-    expect(LINE_MM.buildingCut).toBeGreaterThanOrEqual(0.35);
-    expect(LINE_MM.buildingCut).toBeLessThanOrEqual(0.5);
+    expect(LINE_MM.buildingCut).toBe(0);
     expect(LINE_MM.propertyRoad).toBeGreaterThanOrEqual(0.18);
     expect(LINE_MM.propertyRoad).toBeLessThanOrEqual(0.25);
     expect(LINE_MM.secondary).toBeGreaterThanOrEqual(0.13);
@@ -41,8 +40,10 @@ describe("lineweights", () => {
   it("maps a millimetre to about 3.78 px and keeps the hierarchy visible", () => {
     expect(PX_PER_MM).toBeCloseTo(3.78, 2);
     expect(screenPx(LINE_MM.contour)).toBeGreaterThanOrEqual(0.55);
-    expect(screenPx(LINE_MM.buildingCut)).toBeLessThanOrEqual(2.4);
-    expect(screenPx(LINE_MM.buildingCut)).toBeGreaterThan(screenPx(LINE_MM.frame));
+    expect(screenPx(0)).toBe(0);
+    expect(screenPx(LINE_MM.buildingCut)).toBe(0);
+    expect(screenPx(0.4)).toBeLessThanOrEqual(2.4);
+    expect(screenPx(0.4)).toBeGreaterThan(screenPx(LINE_MM.frame));
     expect(screenPx(LINE_MM.frame)).toBeGreaterThan(screenPx(LINE_MM.propertyRoad));
     expect(screenPx(LINE_MM.propertyRoad)).toBeGreaterThan(screenPx(LINE_MM.secondary));
     expect(screenPx(LINE_MM.secondary)).toBeGreaterThan(screenPx(LINE_MM.annotation));

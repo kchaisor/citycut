@@ -172,7 +172,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     setExportError(null);
     setBusy("ai-figure");
     try {
-      await downloadFigureAi(model, figureScale);
+      await downloadFigureAi(model, figureScale, lineStyles);
     } catch {
       setExportError("The figure-ground file could not be written.");
     } finally {
@@ -593,7 +593,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                     <h3>
                       Figure-ground <span>.ai</span>
                     </h3>
-                    <p>Black footprints on white, true scale. A3 landscape or portrait, whichever fits the frame.</p>
+                    <p>Black footprints on white, with the footpath strips, true scale. A3 landscape or portrait, whichever fits the frame.</p>
                   </div>
                   <button className="ghost" type="button" disabled={busy !== null} onClick={saveFigureAi} aria-label="Download figure-ground Illustrator">
                     {busy === "ai-figure" ? "Preparing…" : "Download"}

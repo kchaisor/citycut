@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  dashScreen,
   haloMm,
   readDrawingStyle,
+  screenPenAttrs,
   type LineStyles,
   type StrokeStyle,
 } from "../lib/drawingStyle";
@@ -50,22 +50,9 @@ function CasedLine({ d, stroke, paper }: { d: string; stroke: StrokeStyle; paper
           vectorEffect="non-scaling-stroke"
         />
       )}
-      <path d={d} fill="none" {...penAttrs(stroke)} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={d} fill="none" {...screenPenAttrs(stroke)} strokeLinecap="round" strokeLinejoin="round" />
     </g>
   );
-}
-
-function penAttrs(stroke: StrokeStyle, join: "miter" | "round" = "round") {
-  if (!(stroke.mm > 0)) return { stroke: "none" as const };
-  const dash = dashScreen(stroke.dash);
-  return {
-    stroke: stroke.color,
-    strokeWidth: screenPx(stroke.mm),
-    strokeDasharray: dash.array,
-    strokeLinecap: dash.cap as "round" | "butt",
-    strokeLinejoin: join,
-    vectorEffect: "non-scaling-stroke" as const,
-  };
 }
 
 export function DrawingPlan({
@@ -84,7 +71,7 @@ export function DrawingPlan({
   const drag = useRef<{ px: number; py: number; view: View } | null>(null);
   const figure = kind === "figure-ground";
   const style = lineStyle ?? readDrawingStyle();
-  const paths = useMemo(() => (figure ? null : planPaths(model)), [figure, model]);
+  const plan = useMemo(() => planPaths(model, style.pathWidthM), [model, style.pathWidthM]);
   const figurePaths = useMemo(
     () => (figure ? figureGroundModelPaths(model.buildings, model.sideM) : []),
     [figure, model],
@@ -129,12 +116,12 @@ export function DrawingPlan({
 
   const half = model.sideM / 2;
   const empty = figure
-    ? figurePaths.length === 0
+    ? figurePaths.length === 0 && plan.pathFill.length === 0
     : model.buildings.length === 0 &&
       model.roads.length === 0 &&
       model.areas.length === 0 &&
       model.trees.length === 0 &&
-      (paths?.contours.length ?? 0) === 0;
+      plan.contours.length === 0;
   const framePx = screenPx(LINE_MM.frame);
   const notePx = screenPx(LINE_MM.annotation);
   const barMetres = scaleBarMetres(model.sideM);
@@ -175,6 +162,14 @@ export function DrawingPlan({
       <rect x={-half} y={-half} width={model.sideM} height={model.sideM} fill={canvas} />
       {figure ? (
         <>
+          {plan.pathFill.length > 0 && (
+            <path
+              d={plan.pathFill.map((polygon) => svgRings(polygon)).join(" ")}
+              fill={style.pathFill}
+              fillRule="evenodd"
+              {...(style.pathEdgeOn ? screenPenAttrs(style.path) : { stroke: "none" })}
+            />
+          )}
           {figurePaths.map((d, index) => (
             <path key={`f${index}`} d={d} fill="#000" fillRule="evenodd" />
           ))}
@@ -236,48 +231,52 @@ export function DrawingPlan({
           </g>
         </>
       ) : (
-        paths && (
-          <>
-            {paths.green.map((rings, index) => (
-              <path key={`g${index}`} d={svgRings(rings)} fill="#b7d39a" {...penAttrs(style.green)} />
+        <>
+            {plan.green.map((rings, index) => (
+              <path key={`g${index}`} d={svgRings(rings)} fill="#b7d39a" {...screenPenAttrs(style.green)} />
             ))}
-            {paths.water.map((rings, index) => (
-              <path key={`w${index}`} d={svgRings(rings)} fill="#9ec9d1" {...penAttrs(style.water)} />
+            {plan.water.map((rings, index) => (
+              <path key={`w${index}`} d={svgRings(rings)} fill="#9ec9d1" {...screenPenAttrs(style.water)} />
             ))}
-            {paths.roadFill.length > 0 && (
+            {plan.pathFill.length > 0 && (
               <path
-                d={paths.roadFill.map((polygon) => svgRings(polygon)).join(" ")}
-                fill={style.roadFill}
+                d={plan.pathFill.map((polygon) => svgRings(polygon)).join(" ")}
+                fill={style.pathFill}
                 fillRule="evenodd"
-                {...(style.kerbOn ? penAttrs(style.kerb) : { stroke: "none" })}
+                {...(style.pathEdgeOn ? screenPenAttrs(style.path) : { stroke: "none" })}
               />
             )}
-            {paths.contours.map((line, index) => (
-              <path key={`c${index}`} d={svgPolyline(line, false)} fill="none" {...penAttrs(style.contour, "miter")} />
+            {plan.roadFill.length > 0 && (
+              <path
+                d={plan.roadFill.map((polygon) => svgRings(polygon)).join(" ")}
+                fill={style.roadFill}
+                fillRule="evenodd"
+                {...(style.kerbOn ? screenPenAttrs(style.kerb) : { stroke: "none" })}
+              />
+            )}
+            {plan.contours.map((line, index) => (
+              <path key={`c${index}`} d={svgPolyline(line, false)} fill="none" {...screenPenAttrs(style.contour, "miter")} />
             ))}
-            {paths.rails.map((rail, index) => (
+            {plan.rails.map((rail, index) => (
               <CasedLine key={`l${index}`} d={svgPolyline(rail, false)} stroke={style.rail} paper={canvas} />
             ))}
-            {paths.paths.map((path, index) => (
-              <CasedLine key={`p${index}`} d={svgPolyline(path, false)} stroke={style.path} paper={canvas} />
-            ))}
-            {paths.buildings.map((building, index) => (
+            {plan.buildings.map((building, index) => (
               <path
                 key={`b${index}`}
                 d={svgRings(building.rings)}
                 fill={building.fill}
                 fillRule="evenodd"
-                {...penAttrs(style.building, "miter")}
+                {...screenPenAttrs(style.building, "miter")}
               />
             ))}
-            {paths.trees.map((tree, index) => (
+            {plan.trees.map((tree, index) => (
               <circle
                 key={`t${index}`}
                 cx={tree.east}
                 cy={-tree.north}
                 r={tree.r}
                 fill="#6ea35a"
-                {...penAttrs(style.tree)}
+                {...screenPenAttrs(style.tree)}
               />
             ))}
             <rect
@@ -286,7 +285,7 @@ export function DrawingPlan({
               width={model.sideM}
               height={model.sideM}
               fill="none"
-              {...penAttrs(style.frame, "miter")}
+              {...screenPenAttrs(style.frame, "miter")}
             />
             <text
               x={0}
@@ -297,8 +296,7 @@ export function DrawingPlan({
             >
               N
             </text>
-          </>
-        )
+        </>
       )}
       {empty && (
         <text x={0} y={0} textAnchor="middle" fontSize={model.sideM * 0.04} fill="#6d675e">

@@ -12,13 +12,14 @@ import {
 } from "pdf-lib";
 import * as THREE from "three";
 import { buildLayeredPdf } from "./aiDocument";
-import { FIGURE_LAYER_ORDER, figureGroundAi, sitePlanAi, SITE_LAYER_ORDER } from "./aiPlan";
+import { FIGURE_LAYER_ORDER, figureGroundAi, figureGroundChunks, sitePlanAi, sitePlanChunks, SITE_LAYER_ORDER } from "./aiPlan";
 import { clipEdge, viewAi, VIEW_LAYER_ORDER, VIEW_OUTLINE_MM, type ScreenTri } from "./aiView";
 import { shotFromCamera } from "./cameraShot";
 import * as download from "./download";
 import * as figureGround from "./figureGround";
 import { DEFAULT_LINE_STYLES, cloneLineStyles } from "./drawingStyle";
-import { CONTOUR_DASH_MM, CONTOUR_GAP_MM, LINE_MM, pdfPt } from "./lineweights";
+import { paperMillimetres } from "./figureGround";
+import { CONTOUR_DASH_MM, CONTOUR_GAP_MM, hexRgb, LINE_MM, PATH_FILL, PATH_WIDTH_M, pdfPt } from "./lineweights";
 import * as svgPlan from "./svgPlan";
 import type { CityModel, Pt, TerrainField } from "../types";
 
@@ -212,7 +213,7 @@ describe("Illustrator plans", () => {
     expect(info.text).toContain("N");
     for (const name of info.layers) expect(info.counts.get(name) ?? 0).toBeGreaterThan(0);
     const widths = info.widthsMm.map((mm) => Math.round(mm * 100) / 100);
-    expect(widths).toContain(LINE_MM.buildingCut);
+    expect(widths).not.toContain(0);
     expect(widths).toContain(LINE_MM.propertyRoad);
     expect(widths).toContain(LINE_MM.secondary);
     expect(widths).toContain(LINE_MM.contour);
@@ -240,6 +241,69 @@ describe("Illustrator plans", () => {
     expect(edited.content).toContain("1 0 0 RG");
   });
 
+  it("paints a zero weight as fill only, including buildings, green, and water", async () => {
+    const paintsOf = (body: string) => body.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g) ?? [];
+    const info = await inspect(await sitePlanAi(model(), 1000));
+    expect(paintsOf(info.bodies.get("Buildings") ?? "")).toEqual(["f*"]);
+    expect(paintsOf(info.bodies.get("Green") ?? "")).toEqual(["f*"]);
+    expect(paintsOf(info.bodies.get("Water") ?? "")).toEqual(["f*"]);
+    expect(info.content).not.toMatch(/(?:^|[\s[])0(?:\.0+)? w/);
+
+    const hidden = cloneLineStyles(DEFAULT_LINE_STYLES);
+    for (const key of ["building", "kerb", "path", "rail", "green", "water", "contour", "frame", "annotation", "tree"] as const) {
+      hidden[key] = { ...hidden[key], mm: 0 };
+    }
+    const bare = await inspect(await sitePlanAi(model(), 1000, hidden));
+    expect(bare.content).not.toMatch(/(?:^|[\s[])0(?:\.0+)? w/);
+    expect(paintsOf(bare.bodies.get("Buildings") ?? "")).toEqual(["f*"]);
+    expect(paintsOf(bare.bodies.get("Green") ?? "")).toEqual(["f*"]);
+    expect(paintsOf(bare.bodies.get("Water") ?? "")).toEqual(["f*"]);
+    expect(paintsOf(bare.bodies.get("Roads") ?? "")).toEqual(["f*"]);
+    expect(paintsOf(bare.bodies.get("Paths") ?? "")).toEqual(["f*"]);
+    expect(bare.bodies.has("Rail")).toBe(false);
+    expect(bare.bodies.has("Contours")).toBe(false);
+
+    const restored = cloneLineStyles(DEFAULT_LINE_STYLES);
+    restored.building = { ...restored.building, mm: 0.4 };
+    const outlined = await inspect(await sitePlanAi(model(), 1000, restored));
+    expect(paintsOf(outlined.bodies.get("Buildings") ?? "")).toEqual(["B*"]);
+    expect(outlined.widthsMm.map((mm) => Math.round(mm * 100) / 100)).toContain(0.4);
+  });
+
+  it("draws the footpath layer as one filled strip whose width is metres on the sheet", async () => {
+    const paintsOf = (body: string) => body.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g) ?? [];
+    const info = await inspect(await sitePlanAi(model(), 1000));
+    expect(paintsOf(info.bodies.get("Paths") ?? "")).toEqual(["f*"]);
+    const strip = sitePlanChunks(model(), 1000).find((chunk) => chunk.name === "Paths");
+    expect(strip?.paths).toHaveLength(1);
+    expect(strip?.paths?.[0]?.fill).toEqual(hexRgb(PATH_FILL));
+    const widthMm = (scale: number) => {
+      const rings = sitePlanChunks(model(), scale).find((chunk) => chunk.name === "Paths")?.paths?.[0]?.rings ?? [];
+      let min = Infinity;
+      let max = -Infinity;
+      for (const ring of rings) {
+        for (const point of ring) {
+          min = Math.min(min, point[1]);
+          max = Math.max(max, point[1]);
+        }
+      }
+      return max - min;
+    };
+    expect(widthMm(1000)).toBeCloseTo(paperMillimetres(PATH_WIDTH_M, 1000), 1);
+    expect(widthMm(500)).toBeCloseTo(paperMillimetres(PATH_WIDTH_M, 500), 1);
+    const hidden = cloneLineStyles(DEFAULT_LINE_STYLES);
+    hidden.pathWidthM = 0;
+    const gone = await inspect(await sitePlanAi(model(), 1000, hidden));
+    expect(gone.bodies.has("Paths")).toBe(false);
+    const edged = cloneLineStyles(DEFAULT_LINE_STYLES);
+    edged.pathEdgeOn = true;
+    const withEdge = await inspect(await sitePlanAi(model(), 1000, edged));
+    expect(paintsOf(withEdge.bodies.get("Paths") ?? "")).toEqual(["B*"]);
+    const figure = figureGroundChunks(model(), 1000).find((chunk) => chunk.name === "Paths");
+    expect(figure?.paths).toHaveLength(1);
+    expect(figure?.paths?.[0]?.fill).toEqual(hexRgb(PATH_FILL));
+  });
+
   it("writes figure-ground with frame, footprints, and annotation only", async () => {
     const fitted = await inspect(await figureGroundAi(model(), 1000));
     expect(fitted.layers).toEqual([...FIGURE_LAYER_ORDER]);
@@ -248,12 +312,17 @@ describe("Illustrator plans", () => {
     expect(fitted.text).toContain("OpenStreetMap");
     expect(fitted.image).toBe(false);
     expect(fitted.widthsMm.map((mm) => Math.round(mm * 100) / 100)).toContain(LINE_MM.frame);
+    const figureBuildings = fitted.bodies.get("Buildings") ?? "";
+    expect(figureBuildings.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g)).toEqual(["f*"]);
+    expect(figureBuildings).not.toMatch(/\bw\b/);
     const wide = await inspect(await figureGroundAi({ ...model(), sideM: 1000, buildings: [] }, 2500));
     expect(wide.text).toContain("Does not fit on A3");
     expect(wide.text).toContain("1:2500");
     expect(wide.widthMm).toBeCloseTo(420, 1);
     expect(wide.heightMm).toBeCloseTo(428, 1);
-    expect(wide.layers).toEqual(["Frame", "Annotation"]);
+    expect(wide.layers).toEqual(["Frame", "Paths", "Annotation"]);
+    const figurePaths = fitted.bodies.get("Paths") ?? "";
+    expect(figurePaths.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g)).toEqual(["f*"]);
   });
 });
 

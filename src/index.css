@@ -871,6 +871,23 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 8px;
   background: #fff;
 }
+.line-style-metres {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-text);
+  font-size: 13px;
+}
+.line-style-metres input[type="number"] {
+  width: 4.5rem;
+  height: 32px;
+  padding: 0 6px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font-size: 13px;
+}
 .line-style-row select,
 .line-style-custom { height: 32px; padding: 0 6px; }
 .line-styles-actions { display: flex; flex-wrap: wrap; gap: 8px; }

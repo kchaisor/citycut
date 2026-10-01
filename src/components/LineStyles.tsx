@@ -7,6 +7,7 @@ import {
   dashPresetId,
   normalizeDash,
   parseColor,
+  parseMetres,
   parseMm,
   patchStroke,
   type LineStyles,
@@ -80,8 +81,8 @@ export function LineStylesEditor({
       {open && (
         <div id={panelId} className="line-styles-panel">
           <p className="field-note">
-            Weights are millimetres on the sheet. The plan updates as you edit. A site-plan download uses these
-            values.
+            Weights are millimetres on the sheet. Footpath width is metres on the ground. The plan updates as you
+            edit. A site-plan or figure-ground download uses these values.
           </p>
           <label className="line-style-fill">
             Road fill
@@ -102,6 +103,46 @@ export function LineStylesEditor({
               onChange={(event) => onChange({ ...style, kerbOn: event.target.checked })}
             />
             Kerb outline
+          </label>
+          <label className="line-style-fill">
+            Footpath width
+            <span className="line-style-metres">
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                max={30}
+                step={0.1}
+                aria-label="Footpath width in metres"
+                value={style.pathWidthM}
+                onChange={(event) => {
+                  const width = parseMetres(event.target.value);
+                  if (width == null) return;
+                  onChange({ ...style, pathWidthM: width });
+                }}
+              />
+              m
+            </span>
+          </label>
+          <label className="line-style-fill">
+            Footpath fill
+            <input
+              type="color"
+              aria-label="Footpath fill colour"
+              value={style.pathFill.toLowerCase()}
+              onChange={(event) => {
+                const color = parseColor(event.target.value);
+                if (color) onChange({ ...style, pathFill: color });
+              }}
+            />
+          </label>
+          <label className="check-field">
+            <input
+              type="checkbox"
+              checked={style.pathEdgeOn}
+              onChange={(event) => onChange({ ...style, pathEdgeOn: event.target.checked })}
+            />
+            Footpath edge
           </label>
           {STROKE_KEYS.map((key) => (
             <StyleRow key={key} name={key} style={style} onChange={onChange} />
