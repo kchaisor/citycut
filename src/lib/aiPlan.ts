@@ -21,6 +21,8 @@ import {
 import { formatCoord, openRing } from "./geo";
 import { LINE_MM, hexRgb } from "./lineweights";
 import { footpathLines, unionFootpaths } from "./roadFill";
+import { heliodonPlanPdfChunk } from "./heliodonPlanExport";
+import type { HeliodonDiagramExportOptions } from "./heliodonDiagram";
 import { planPaths } from "./svgPlan";
 import { VICMAP_CONTOUR_ATTRIBUTION } from "./vicmapContours";
 import type { CityModel, Pt } from "../types";
@@ -36,10 +38,11 @@ export const SITE_LAYER_ORDER = [
   "Trees",
   "Contours",
   "Contour labels",
+  "Sun path",
   "Annotation",
 ] as const;
 
-export const FIGURE_LAYER_ORDER = ["Frame", "Buildings", "Paths", "Annotation"] as const;
+export const FIGURE_LAYER_ORDER = ["Frame", "Buildings", "Paths", "Sun path", "Annotation"] as const;
 
 /** Sheet colour. A path or rail casing uses this so it vanishes on the page and reads on the road fill. */
 function fillOf(name: ColourKey): Rgb {
@@ -218,7 +221,12 @@ function pathStrip(polygons: Pt[][][], model: CityModel, layout: SheetLayout, st
   };
 }
 
-export function sitePlanChunks(model: CityModel, scale: number, style: LineStyles = readDrawingStyle()): PdfChunk[] {
+export function sitePlanChunks(
+  model: CityModel,
+  scale: number,
+  style: LineStyles = readDrawingStyle(),
+  heliodon?: HeliodonDiagramExportOptions | null,
+): PdfChunk[] {
   const layout = layoutSheet(model.sideM, scale);
   const plan = planPaths(
     model,
@@ -357,6 +365,7 @@ export function sitePlanChunks(model: CityModel, scale: number, style: LineStyle
     });
   }
   chunks.push(frameStroke(layout, style.frame));
+  if (heliodon) chunks.push(heliodonPlanPdfChunk(model.sideM, layout, heliodon, scale));
   chunks.push(annotation(model, layout, plan.contourInterval, style.annotation, plan.contourSource));
   return chunks;
 }
@@ -376,7 +385,12 @@ function mapRings(rings: Pt[][], sideM: number, layout: SheetLayout): number[][]
   return rings.map((ring) => mapRing(ring, sideM, layout)).filter((ring) => ring.length >= 3);
 }
 
-export function figureGroundChunks(model: CityModel, scale: number, style: LineStyles = readDrawingStyle()): PdfChunk[] {
+export function figureGroundChunks(
+  model: CityModel,
+  scale: number,
+  style: LineStyles = readDrawingStyle(),
+  heliodon?: HeliodonDiagramExportOptions | null,
+): PdfChunk[] {
   const layout = layoutSheet(model.sideM, scale);
   const ground = figureGround(model.buildings, model.sideM);
   const chunks: PdfChunk[] = [];
@@ -394,6 +408,7 @@ export function figureGroundChunks(model: CityModel, scale: number, style: LineS
     }));
   if (paths.length > 0) chunks.push({ name: "Buildings", paths });
   chunks.push(frameStroke(layout, { mm: LINE_MM.frame, color: getColour("--figure-fill"), dash: "none" }));
+  if (heliodon) chunks.push(heliodonPlanPdfChunk(model.sideM, layout, heliodon, scale));
   chunks.push(annotation(model, layout, null, { mm: LINE_MM.annotation, color: style.annotation.color, dash: "none" }));
   return chunks;
 }
@@ -408,26 +423,41 @@ function sitePlanLayerOrder(chunks: PdfChunk[]): string[] {
 }
 
 /** PDF/OCG site plan, the default .ai export. */
-export async function sitePlanPdf(model: CityModel, scale: number, style?: LineStyles): Promise<Uint8Array> {
+export async function sitePlanPdf(
+  model: CityModel,
+  scale: number,
+  style?: LineStyles,
+  heliodon?: HeliodonDiagramExportOptions | null,
+): Promise<Uint8Array> {
   const layout = layoutSheet(model.sideM, scale);
-  const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle());
+  const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), heliodon);
   return buildLayeredPdf(layout.pageWidthMm, layout.pageHeightMm, chunks, sitePlanLayerOrder(chunks));
 }
 
-export async function figureGroundPdf(model: CityModel, scale: number, style?: LineStyles): Promise<Uint8Array> {
+export async function figureGroundPdf(
+  model: CityModel,
+  scale: number,
+  style?: LineStyles,
+  heliodon?: HeliodonDiagramExportOptions | null,
+): Promise<Uint8Array> {
   const layout = layoutSheet(model.sideM, scale);
   return buildLayeredPdf(
     layout.pageWidthMm,
     layout.pageHeightMm,
-    figureGroundChunks(model, scale, style ?? readDrawingStyle()),
+    figureGroundChunks(model, scale, style ?? readDrawingStyle(), heliodon),
     FIGURE_LAYER_ORDER,
   );
 }
 
 /** Illustrator 8 EPS site plan. Opt-in with VITE_CITYCUT_AI_NATIVE=true. */
-export function sitePlanAi8(model: CityModel, scale: number, style?: LineStyles): Uint8Array {
+export function sitePlanAi8(
+  model: CityModel,
+  scale: number,
+  style?: LineStyles,
+  heliodon?: HeliodonDiagramExportOptions | null,
+): Uint8Array {
   const layout = layoutSheet(model.sideM, scale);
-  const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle());
+  const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), heliodon);
   return buildLayeredNativeAi(
     layout.pageWidthMm,
     layout.pageHeightMm,
@@ -437,22 +467,32 @@ export function sitePlanAi8(model: CityModel, scale: number, style?: LineStyles)
   );
 }
 
-export function figureGroundAi8(model: CityModel, scale: number, style?: LineStyles): Uint8Array {
+export function figureGroundAi8(
+  model: CityModel,
+  scale: number,
+  style?: LineStyles,
+  heliodon?: HeliodonDiagramExportOptions | null,
+): Uint8Array {
   const layout = layoutSheet(model.sideM, scale);
   return buildLayeredNativeAi(
     layout.pageWidthMm,
     layout.pageHeightMm,
-    figureGroundChunks(model, scale, style ?? readDrawingStyle()),
+    figureGroundChunks(model, scale, style ?? readDrawingStyle(), heliodon),
     FIGURE_LAYER_ORDER,
     titleLine(model, layout),
   );
 }
 
-export async function sitePlanAi(model: CityModel, scale: number, style?: LineStyles): Promise<Uint8Array> {
-  if (useNativeAi8Export()) return sitePlanAi8(model, scale, style);
+export async function sitePlanAi(
+  model: CityModel,
+  scale: number,
+  style?: LineStyles,
+  heliodon?: HeliodonDiagramExportOptions | null,
+): Promise<Uint8Array> {
+  if (useNativeAi8Export()) return sitePlanAi8(model, scale, style, heliodon);
   if (import.meta.env.VITE_CITYCUT_AI_PDF_OPS === "true") {
     const layout = layoutSheet(model.sideM, scale);
-    const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle());
+    const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), heliodon);
     return buildLayeredNativeAiPdfOps(
       layout.pageWidthMm,
       layout.pageHeightMm,
@@ -461,20 +501,25 @@ export async function sitePlanAi(model: CityModel, scale: number, style?: LineSt
       titleLine(model, layout),
     );
   }
-  return sitePlanPdf(model, scale, style);
+  return sitePlanPdf(model, scale, style, heliodon);
 }
 
-export async function figureGroundAi(model: CityModel, scale: number, style?: LineStyles): Promise<Uint8Array> {
-  if (useNativeAi8Export()) return figureGroundAi8(model, scale, style);
+export async function figureGroundAi(
+  model: CityModel,
+  scale: number,
+  style?: LineStyles,
+  heliodon?: HeliodonDiagramExportOptions | null,
+): Promise<Uint8Array> {
+  if (useNativeAi8Export()) return figureGroundAi8(model, scale, style, heliodon);
   if (import.meta.env.VITE_CITYCUT_AI_PDF_OPS === "true") {
     const layout = layoutSheet(model.sideM, scale);
     return buildLayeredNativeAiPdfOps(
       layout.pageWidthMm,
       layout.pageHeightMm,
-      figureGroundChunks(model, scale, style ?? readDrawingStyle()),
+      figureGroundChunks(model, scale, style ?? readDrawingStyle(), heliodon),
       FIGURE_LAYER_ORDER,
       titleLine(model, layout),
     );
   }
-  return figureGroundPdf(model, scale, style);
+  return figureGroundPdf(model, scale, style, heliodon);
 }

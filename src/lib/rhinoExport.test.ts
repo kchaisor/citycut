@@ -400,7 +400,7 @@ describe("rhino export", () => {
           expect(layer.renderMaterialIndex).toBeGreaterThanOrEqual(0);
         }
       }
-      const optionalLayers = new Set(["Rail", "Terrain", "Contours", "FigureGround"]);
+      const optionalLayers = new Set(["Rail", "Terrain", "Contours", "FigureGround", "Sun path"]);
       for (const path of Object.keys(keys)) {
         if (path.startsWith("Buildings::") && !seen.has(path)) continue;
         if (optionalLayers.has(path) && !seen.has(path)) continue;

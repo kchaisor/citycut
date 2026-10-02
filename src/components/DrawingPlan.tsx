@@ -13,6 +13,8 @@ import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import type { CityModel } from "../types";
+import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
+import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
 
 type View = { x: number; y: number; w: number; h: number };
 
@@ -63,6 +65,7 @@ export function DrawingPlan({
   onScale,
   lineStyle,
   planScale = 1000,
+  heliodon = null,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -71,6 +74,8 @@ export function DrawingPlan({
   lineStyle?: LineStyles;
   /** Drawing drawer plan scale. 2500 and smaller thin metro 1 m contours to 5 m. */
   planScale?: number;
+  /** When set, draws the sun path over the plan (same ring radius as the 3D heliodon). */
+  heliodon?: HeliodonDiagramInput | null;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: View } | null>(null);
@@ -348,7 +353,13 @@ export function DrawingPlan({
             >
               N
             </text>
+            {heliodon && (
+              <HeliodonPlanOverlay input={heliodon} planScale={planScale} />
+            )}
         </>
+      )}
+      {figure && heliodon && (
+        <HeliodonPlanOverlay input={heliodon} planScale={planScale} />
       )}
       {empty && (
         <text x={0} y={0} textAnchor="middle" fontSize={model.sideM * 0.04} fill={planEmpty}>

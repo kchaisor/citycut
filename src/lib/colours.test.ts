@@ -36,6 +36,34 @@ async function sourceFiles(dir: string): Promise<string[]> {
   return found;
 }
 
+const SOLAR_NEUTRAL_BUILDINGS = "--building-solar-neutral";
+
+/** Files allowed to reference the viewport-only solar neutral building fill. */
+const SOLAR_NEUTRAL_BUILDING_ALLOWLIST = new Set(["components/Scene3D.tsx", "lib/colours.ts"]);
+
+describe("colour selection", () => {
+  it("keeps solar neutral building fill off the plan drawing", async () => {
+    const planDrawing = await readFile(
+      fileURLToPath(new URL("../components/DrawingPlan.tsx", import.meta.url)),
+      "utf8",
+    );
+    expect(planDrawing).not.toContain(SOLAR_NEUTRAL_BUILDINGS);
+  });
+
+  it("uses solar neutral building fill only in the 3D viewport", async () => {
+    const files = await sourceFiles(srcRoot);
+    const hits: string[] = [];
+    for (const file of files) {
+      const relative = path.relative(srcRoot, file).split(path.sep).join("/");
+      const text = await readFile(file, "utf8");
+      if (text.includes(SOLAR_NEUTRAL_BUILDINGS) && !SOLAR_NEUTRAL_BUILDING_ALLOWLIST.has(relative)) {
+        hits.push(relative);
+      }
+    }
+    expect(hits).toEqual([]);
+  });
+});
+
 describe("colour fallbacks", () => {
   it("matches colours.css value by value", async () => {
     const css = await readFile(fileURLToPath(new URL("../colours.css", import.meta.url)), "utf8");

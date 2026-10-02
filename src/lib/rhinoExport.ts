@@ -7,8 +7,9 @@ import { colourRgb, type ColourKey } from "./colours";
 import { CRS_NOTE, mgaCrs, projectLocal, projectLonLat } from "./crs";
 import { readDrawingStyle } from "./drawingStyle";
 import { figureGround, figureGroundDatum } from "./figureGround";
+import { buildHeliodonGroundOverlay, type HeliodonGroundExportOptions } from "./heliodonDiagram";
 import { contourIsIndex, demContourLayer } from "./vicmapContours";
-import type { CityModel } from "../types";
+import type { CityModel, Pt } from "../types";
 
 type Rgb = { r: number; g: number; b: number };
 
@@ -46,6 +47,7 @@ export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
     Trees: "--tree-layer",
     Contours: "contour",
     FigureGround: "--figure-fill",
+    "Sun path": "--sun-compass-label",
   };
   for (const use of BUILDING_USES) {
     const layer = BUILDING_USE_META[use].layer;
@@ -320,8 +322,47 @@ function addContours(
   }
 }
 
+function addHeliodonPlan(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  model: CityModel,
+  zone: number,
+  options: HeliodonGroundExportOptions,
+) {
+  const overlay = buildHeliodonGroundOverlay({ ...options, sideM: model.sideM });
+  const z = model.terrain ? model.terrain.min : 0;
+  const layerIndex = ensureLayer(rhino, doc, layers, materials, "Sun path", layerColors()["Sun path"]);
+
+  const toWorld = (east: number, north: number): number[] => {
+    const [easting, northing] = projectLocal([east, north], model.center, zone);
+    return [easting, northing, z];
+  };
+
+  const addPolyline = (line: Pt[], name: string) => {
+    const points = line.map(([east, north]) => toWorld(east, north));
+    if (points.length < 2) return;
+    const attributes = new rhino.ObjectAttributes();
+    attributes.name = name;
+    attributes.layerIndex = layerIndex;
+    applyByLayerAttributes(rhino, attributes);
+    doc.objects().addPolyline(points, attributes);
+    release(attributes);
+  };
+
+  addPolyline(overlay.horizonRing, "Horizon ring");
+  for (const ring of overlay.altitudeRings) addPolyline(ring, "Altitude ring");
+  for (const tick of overlay.ticks) addPolyline([tick.a, tick.b], "Tick");
+  for (const arc of overlay.arcs) addPolyline(arc.points, "Sun arc");
+  for (const line of overlay.hourLines) addPolyline(line, "Hour line");
+}
+
 /** Current city meshes as a Rhino .3dm in MGA metres, Z-up. */
-export async function cityModelTo3dm(model: CityModel): Promise<Uint8Array> {
+export async function cityModelTo3dm(
+  model: CityModel,
+  heliodon?: HeliodonGroundExportOptions | null,
+): Promise<Uint8Array> {
   const rhino = await loadRhino();
   const crs = mgaCrs(model.center.lon);
   const group = buildCityGroup(model, { splitBuildings: true });
@@ -364,6 +405,7 @@ export async function cityModelTo3dm(model: CityModel): Promise<Uint8Array> {
     });
     addFigureGround(rhino, doc, layers, materials, model, crs.zone);
     addContours(rhino, doc, layers, materials, model, crs.zone);
+    if (heliodon) addHeliodonPlan(rhino, doc, layers, materials, model, crs.zone, heliodon);
 
     return doc.toByteArray();
   } finally {

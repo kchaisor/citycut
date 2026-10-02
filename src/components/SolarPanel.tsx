@@ -11,6 +11,11 @@ import {
 } from "../lib/solar";
 import { getColour, type ColourKey } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
+import {
+  HELIODON_RADIUS_FACTOR_MAX,
+  HELIODON_RADIUS_FACTOR_MIN,
+  heliodonRadiusM,
+} from "../lib/heliodonRadius";
 import type { SolarViewSettings } from "./SolarHeliodon";
 
 const SOLAR_LEGEND: { key: ColourKey; label: string; dash?: string }[] = [
@@ -22,9 +27,11 @@ const SOLAR_LEGEND: { key: ColourKey; label: string; dash?: string }[] = [
 export function SolarPanel({
   settings,
   onChange,
+  sideM,
 }: {
   settings: SolarViewSettings;
   onChange: (next: SolarViewSettings) => void;
+  sideM: number;
 }) {
   const [open, setOpen] = useState(true);
   const [standard, setStandard] = useState<{ id: ShadowStandardId; index: number } | null>(null);
@@ -79,6 +86,23 @@ export function SolarPanel({
           />
           Cast real-time shadows
         </label>
+        {settings.showPath && (
+          <label className="field">
+            <span className="kicker">Sun path size (× site half-width)</span>
+            <input
+              type="range"
+              min={HELIODON_RADIUS_FACTOR_MIN}
+              max={HELIODON_RADIUS_FACTOR_MAX}
+              step={0.05}
+              value={settings.radiusFactor}
+              onChange={(event) => patch({ radiusFactor: Number(event.target.value) })}
+            />
+            <span className="field-note">
+              {settings.radiusFactor.toFixed(2)}× · {Math.round(heliodonRadiusM(sideM, settings.radiusFactor))} m radius. The 3D
+              view reframes when this changes.
+            </span>
+          </label>
+        )}
         <label className="field">
           <span className="kicker">Time (Melbourne)</span>
           <input
@@ -211,7 +235,7 @@ export function SolarPanel({
               Same clock hour across the three dates
             </li>
             <li className="solar-legend-note">
-              Dots mark each clock hour (AEST/AEDT). Dial rings are sun altitude every 10°. Lines behind buildings are ghosted.
+              Dots mark each clock hour (AEST/AEDT). Faint rings are 30° and 60° sun altitude. Lines behind buildings are ghosted.
             </li>
           </ul>
         )}
