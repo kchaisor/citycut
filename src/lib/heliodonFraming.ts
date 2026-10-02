@@ -19,7 +19,7 @@ import {
 } from "./isoCamera";
 
 /** Margin when fitting the perspective camera to the heliodon. */
-export const HELIODON_FIT_MARGIN = 1.24;
+export const HELIODON_FIT_MARGIN = 1.38;
 
 /** Default orbit direction (target → eye), matching the original CityCut perspective. */
 export const DEFAULT_PERSPECTIVE_OFFSET: Vec3 = normalize([0.78, 0.6, 0.86]);
