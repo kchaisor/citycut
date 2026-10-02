@@ -310,21 +310,23 @@ export function ModelPage({ model }: { model: CityModel }) {
     <div className="model">
       <h1 className="sr-only">Your model is ready.</h1>
       <div className={tab === "drawing" ? "viewport is-drawing" : "viewport"}>
-        <div className={tab === "3d" ? "fill" : "fill is-parked"}>
-          <SceneBoundary>
-            <Scene3D
-              model={model}
-              uniformBuildings={!colourByUse && !showSource}
-              colourBySource={showSource}
-              projection={view.projection}
-              corner={view.corner}
-              freeRotate={view.freeRotate}
-              snapId={snapId}
-              solar={solar}
-              onExportReady={onExportReady}
-            />
-          </SceneBoundary>
-        </div>
+        {tab === "3d" && (
+          <div className="fill">
+            <SceneBoundary>
+              <Scene3D
+                model={model}
+                uniformBuildings={!colourByUse && !showSource}
+                colourBySource={showSource}
+                projection={view.projection}
+                corner={view.corner}
+                freeRotate={view.freeRotate}
+                snapId={snapId}
+                solar={solar}
+                onExportReady={onExportReady}
+              />
+            </SceneBoundary>
+          </div>
+        )}
         {tab === "drawing" && (
           <div className="fill is-plan">
             <DrawingPlan
