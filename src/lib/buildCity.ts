@@ -384,11 +384,13 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
       (area.kind === "water" ? SURFACE.water.lift : SURFACE.green.lift) + overlapLift(index);
     if (sample && model.terrain) {
       try {
+        const drapeSpacing =
+          area.kind === "water" ? Math.min(model.terrain.spacingM, 3) : model.terrain.spacingM;
         const geometry = drapedAreaGeometry(
           area,
           sample,
           lift,
-          model.terrain.spacingM,
+          drapeSpacing,
         );
         if (!geometry) continue;
         if (area.kind === "water") waterGeos.push(geometry);
