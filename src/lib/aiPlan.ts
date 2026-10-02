@@ -229,19 +229,24 @@ export type SitePlanExportOptions = {
   castShadows?: boolean;
 };
 
+function resolveSitePlanExport(
+  exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
+): SitePlanExportOptions {
+  if (!exportOptions) return {};
+  if ("shadows" in exportOptions || "castShadows" in exportOptions) return exportOptions;
+  return { heliodon: exportOptions };
+}
+
 export function sitePlanChunks(
   model: CityModel,
   scale: number,
   style: LineStyles = readDrawingStyle(),
   exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): PdfChunk[] {
-  const heliodon =
-    exportOptions && "heliodon" in exportOptions
-      ? exportOptions.heliodon
-      : (exportOptions as HeliodonDiagramExportOptions | null | undefined);
-  const shadowInput =
-    exportOptions && "shadows" in exportOptions ? exportOptions.shadows : null;
-  const castShadows = Boolean(exportOptions && "castShadows" in exportOptions && exportOptions.castShadows);
+  const resolved = resolveSitePlanExport(exportOptions);
+  const heliodon = resolved.heliodon ?? null;
+  const shadowInput = resolved.shadows ?? null;
+  const castShadows = Boolean(resolved.castShadows);
   const layout = layoutSheet(model.sideM, scale);
   const plan = planPaths(
     model,

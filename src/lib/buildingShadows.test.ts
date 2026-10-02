@@ -1,4 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
+import { parseNativeAiLayers } from "./aiNative";
+import { sitePlanAi8 } from "./aiPlan";
+import { cityModelTo3dm } from "./rhinoExport";
 import {
   buildingShadowPolygon,
   clearPlanShadowCache,
@@ -120,6 +123,28 @@ describe("plan building shadows", () => {
         }
       }
     }
+  });
+
+  it("exports a Shadows layer in site-plan AI8 and Rhino when castShadows is on", async () => {
+    const shadowInput = { ...CBD, year: 2026, month: 6, day: 21, hour: 12, minute: 0 };
+    const ai = sitePlanAi8(model([boxBuilding(1, 0, 0, 20, 12)]), 1000, undefined, {
+      shadows: shadowInput,
+      castShadows: true,
+    });
+    expect(parseNativeAiLayers(ai).map((name) => name.replace(/^CityCut /, ""))).toContain("Shadows");
+    const bytes = await cityModelTo3dm(model([boxBuilding(1, 0, 0, 20, 12)]), {
+      shadows: shadowInput,
+      castShadows: true,
+    });
+    const rhinoModule = await import("rhino3dm/rhino3dm.module.js");
+    const rhino = await rhinoModule.default();
+    const doc = rhino.File3dm.fromByteArray(bytes);
+    let hasShadowLayer = false;
+    for (let i = 0; i < doc.layers().count; i++) {
+      if (doc.layers().get(i).fullPath === "Shadows") hasShadowLayer = true;
+    }
+    doc.destroy();
+    expect(hasShadowLayer).toBe(true);
   });
 
   it("uses a known sun vector for shadow direction", () => {
