@@ -30,6 +30,7 @@ import { FIGURE_SCALES, preferredFigureScale, sheetFitMessage } from "../lib/fig
 import { formatCoord, formatLengthKm } from "../lib/geo";
 import { ISO_CORNERS, type IsoCorner } from "../lib/isoCamera";
 import { drawerIsAvailable, loadModelDrawer, reduceRail, saveModelDrawer } from "../lib/railState";
+import { capturePresetFromSearch } from "../lib/captureQuery";
 import {
   resolveView,
   VIEW_STORAGE_KEY,
@@ -100,7 +101,9 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [figureScale, setFigureScale] = useState<number>(() => preferredFigureScale(model.sideM));
   const [exportError, setExportError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"3dm" | "png" | "ai-view" | "ai-site" | "ai-figure" | null>(null);
-  const [colourByUse, setColourByUse] = useState(true);
+  const [colourByUse, setColourByUse] = useState(
+    () => !capturePresetFromSearch(window.location.search).uniformBuildings,
+  );
   const [showSource, setShowSource] = useState(false);
   const [preferred, setPreferred] = useState<string | null>(() => loadModelDrawer());
   const [planWidth, setPlanWidth] = useState<number | null>(null);
@@ -108,7 +111,7 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [view, setView] = useState<ViewMemory>(loadView);
   const [snapId, setSnapId] = useState(0);
   const [solar, setSolar] = useState<SolarViewSettings>(() => ({
-    showPath: false,
+    showPath: capturePresetFromSearch(window.location.search).solarPath,
     castShadows: false,
     radiusFactor: resolveHeliodonRadiusFactor(
       readStoredHeliodonRadiusFactor(window.localStorage),

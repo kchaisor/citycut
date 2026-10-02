@@ -5,6 +5,7 @@ import { dedupeConsecutive, openRing, polylineLength, signedArea, toLocal } from
 import { buildingHeight } from "./height";
 import type { OverpassElement, OverpassResponse } from "./overpass";
 import { resolveArchetype } from "./treeMap";
+import { isOpenWaterArea } from "./waterAreas";
 import { describeTrees, treeSize, trunkTaggedAsCentimetres } from "./trees";
 import type {
   AreaFeat,
@@ -178,14 +179,7 @@ export function stitchRings(lines: Pt[][]): Pt[][] {
 }
 
 function areaKind(tags: Record<string, string>): "water" | "green" | null {
-  if (
-    tags.natural === "water" ||
-    tags.natural === "wetland" ||
-    tags.waterway === "riverbank" ||
-    tags.waterway === "dock" ||
-    tags.landuse === "reservoir" ||
-    tags.water
-  ) {
+  if (isOpenWaterArea(tags)) {
     return "water";
   }
   if (
@@ -200,7 +194,8 @@ function areaKind(tags: Record<string, string>): "water" | "green" | null {
     tags.landuse === "village_green" ||
     tags.landuse === "cemetery" ||
     tags.natural === "wood" ||
-    tags.natural === "scrub"
+    tags.natural === "scrub" ||
+    tags.natural === "wetland"
   ) {
     return "green";
   }
@@ -373,9 +368,11 @@ function pushArea(
   outer: Pt[],
   holes: Pt[][],
   half: number,
+  tags: Record<string, string>,
 ) {
   const ring = clipRing(outer, half);
   if (ring.length < 3) return;
+  if (kind === "water" && !isOpenWaterArea(tags, Math.abs(signedArea(ring)))) return;
   const clippedHoles = holes
     .map((hole) => clipRing(hole, half))
     .filter((hole) => hole.length >= 3);
@@ -400,6 +397,25 @@ function relationRings(
     else outers.push(line);
   }
   return { outers, inners, used };
+}
+
+/** Absolute plan area (local m²) for a closed way or multipolygon relation. */
+export function overpassPolygonAreaM2(element: OverpassElement, origin: LonLat): number | null {
+  if (element.type === "way") {
+    const line = pointsFromGeom(element.geometry, origin);
+    if (!isClosed(line)) return null;
+    return Math.round(Math.abs(signedArea(line)));
+  }
+  if (element.type === "relation") {
+    const stitched = relationRings(element, origin);
+    if (!stitched) return null;
+    const rings = stitchRings(stitched.outers);
+    if (rings.length === 0) return null;
+    let sum = 0;
+    for (const ring of rings) sum += Math.abs(signedArea(ring));
+    return Math.round(sum);
+  }
+  return null;
 }
 
 export type CanopyKind = "wood" | "forest" | "scrub";
@@ -451,7 +467,9 @@ export function collectTreeContext(elements: OverpassElement[], origin: LonLat, 
       const clippedHoles = holes.map((hole) => clipRing(hole, half)).filter((hole) => hole.length >= 3);
       if (kind) canopy.push({ ring: clipped, holes: clippedHoles, kind });
       else if (buildingRel) buildings.push({ ring: clipped, holes: clippedHoles });
-      else water.push({ ring: clipped, holes: clippedHoles });
+      else if (isOpenWaterArea(tags, Math.abs(signedArea(clipped)))) {
+        water.push({ ring: clipped, holes: clippedHoles });
+      }
     }
   }
 
@@ -480,7 +498,9 @@ export function collectTreeContext(elements: OverpassElement[], origin: LonLat, 
     }
     if (areaKind(tags) === "water" && isClosed(line)) {
       const clipped = clipRing(line, half);
-      if (clipped.length >= 3) water.push({ ring: clipped, holes: [] });
+      if (clipped.length >= 3 && isOpenWaterArea(tags, Math.abs(signedArea(clipped)))) {
+        water.push({ ring: clipped, holes: [] });
+      }
       continue;
     }
     const spec = roadWidth(tags);
@@ -535,7 +555,7 @@ export function parseCity(
           );
         }
       } else if (kind) {
-        for (const ring of rings) pushArea(areas, element.id, kind, ring, holes, half);
+        for (const ring of rings) pushArea(areas, element.id, kind, ring, holes, half, tags);
       }
     }
   }
@@ -558,7 +578,7 @@ export function parseCity(
     if (layers.waterGreen && !consumedWays.has(element.id)) {
       const kind = areaKind(tags);
       if (kind && isClosed(line)) {
-        pushArea(areas, element.id, kind, line, [], half);
+        pushArea(areas, element.id, kind, line, [], half, tags);
         continue;
       }
     }

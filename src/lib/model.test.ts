@@ -167,6 +167,129 @@ describe("parse", () => {
     expect(parsed.buildings[0].id).toBe(2);
   });
 
+  it("drops zoo enclosure, intermittent drains, and ponds", () => {
+    const ring = geom([
+      [-20, -20],
+      [20, -20],
+      [20, 20],
+      [-20, 20],
+      [-20, -20],
+    ]);
+    const parsed = parseCity(
+      {
+        elements: [
+          {
+            type: "way",
+            id: 1,
+            tags: { natural: "water", water: "pond", name: "Sediment Pond" },
+            geometry: ring,
+          },
+          {
+            type: "way",
+            id: 2,
+            tags: { natural: "water", zoo: "enclosure" },
+            geometry: ring,
+          },
+          {
+            type: "way",
+            id: 3,
+            tags: { natural: "water", water: "drain", intermittent: "yes" },
+            geometry: ring,
+          },
+        ],
+      },
+      origin,
+      200,
+      { buildings: false, roads: false, waterGreen: true, trees: false },
+    );
+    expect(parsed.areas.filter((area) => area.kind === "water")).toHaveLength(0);
+  });
+
+  it("classifies wetland as green, not water", () => {
+    const ring = geom([
+      [-20, -20],
+      [20, -20],
+      [20, 20],
+      [-20, 20],
+      [-20, -20],
+    ]);
+    const parsed = parseCity(
+      {
+        elements: [
+          {
+            type: "way",
+            id: 4,
+            tags: { natural: "wetland" },
+            geometry: ring,
+          },
+        ],
+      },
+      origin,
+      200,
+      { buildings: false, roads: false, waterGreen: true, trees: false },
+    );
+    expect(parsed.areas).toHaveLength(1);
+    expect(parsed.areas[0].kind).toBe("green");
+  });
+
+  it("hides ponds at any size and keeps lakes and riverbanks", () => {
+    const parsed = parseCity(
+      {
+        elements: [
+          {
+            type: "way",
+            id: 1,
+            tags: { natural: "water", water: "pond" },
+            geometry: geom(square([-60, -60], 200)),
+          },
+          {
+            type: "way",
+            id: 2,
+            tags: { natural: "water", water: "lake" },
+            geometry: geom(square([60, 60], Math.sqrt(200))),
+          },
+          {
+            type: "way",
+            id: 3,
+            tags: { waterway: "riverbank" },
+            geometry: geom(square([100, 100], 8)),
+          },
+        ],
+      },
+      origin,
+      200,
+      { buildings: false, roads: false, waterGreen: true, trees: false },
+    );
+    const water = parsed.areas.filter((a) => a.kind === "water");
+    expect(water.map((a) => a.id).sort()).toEqual([2, 3]);
+  });
+
+  it("keeps Yarra-style river areas tagged natural=water and water=river", () => {
+    const ring = geom([
+      [-80, -10],
+      [80, -10],
+      [80, 10],
+      [-80, 10],
+      [-80, -10],
+    ]);
+    const parsed = parseCity(
+      {
+        elements: [
+          {
+            type: "way",
+            id: 25930191,
+            tags: { natural: "water", water: "river", name: "Yarra River" },
+            geometry: ring,
+          },
+        ],
+      },
+      origin,
+      200,
+      { buildings: false, roads: false, waterGreen: true, trees: false },
+    );
+    expect(parsed.areas.filter((area) => area.kind === "water")).toHaveLength(1);
+  });
+
   it("reads a multipolygon water relation", () => {
     const west = geom([
       [-30, -20],
@@ -185,7 +308,7 @@ describe("parse", () => {
           {
             type: "relation",
             id: 9,
-            tags: { natural: "water", type: "multipolygon" },
+            tags: { natural: "water", water: "lake", name: "Test Lake", type: "multipolygon" },
             members: [
               { type: "way", ref: 11, role: "outer", geometry: west },
               { type: "way", ref: 12, role: "outer", geometry: east },
