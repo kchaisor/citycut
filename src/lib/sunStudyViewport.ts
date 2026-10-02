@@ -22,10 +22,10 @@ export function sunStudyViewportLighting(options: {
   }
   if (options.castShadows) {
     return {
-      fillKeyLight: 0.14,
-      fillAmbient: 0.18,
-      fillHemi: 0.55,
-      sunIntensity: 4.4,
+      fillKeyLight: 0.08,
+      fillAmbient: 0.11,
+      fillHemi: 0.4,
+      sunIntensity: 4.05,
       noToneMapping: true,
     };
   }

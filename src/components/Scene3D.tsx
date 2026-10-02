@@ -19,6 +19,10 @@ import {
   type BuildingColourMode,
 } from "../lib/buildingViewportColor";
 import {
+  applySunStudySurfaceTint,
+  snapshotSunStudySurfaceColors,
+} from "../lib/sunStudySurfaceViewport";
+import {
   eyeDistance,
   fitOrthoZoom,
   frameCentre,
@@ -150,8 +154,10 @@ function City({
   }, [group]);
   useLayoutEffect(() => {
     snapshotBuildingViewportColors(group, colourMode);
+    snapshotSunStudySurfaceColors(group);
   }, [group, colourMode]);
   useLayoutEffect(() => {
+    applySunStudySurfaceTint(group, solarDiagramOn);
     applyBuildingSolarNeutral(group, solarDiagramOn, solarNeutralFill);
   }, [group, solarDiagramOn, solarNeutralFill, colourTick]);
   useLayoutEffect(() => () => disposeObject(group), [group]);

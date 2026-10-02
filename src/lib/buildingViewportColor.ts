@@ -68,6 +68,14 @@ export function applyBuildingSolarNeutral(root: THREE.Object3D, solarDiagramOn: 
       const rest = material.userData.viewportFill as string | undefined;
       if (!rest) return;
       material.color.setStyle(solarDiagramOn ? neutralFill : rest);
+      if (solarDiagramOn) {
+        material.emissive.setStyle(neutralFill);
+        material.emissiveIntensity = 0.06;
+      } else {
+        material.emissive.setHex(0x000000);
+        material.emissiveIntensity = 0;
+      }
+      applyMatteFinish(material);
     });
   }
 }
@@ -75,18 +83,34 @@ export function applyBuildingSolarNeutral(root: THREE.Object3D, solarDiagramOn: 
 /** During PNG export, briefly show the ordinary building colours even when the sun diagram is on. */
 export function withBuildingExportColours<T>(root: THREE.Object3D, solarDiagramOn: boolean, work: () => T): T {
   if (!solarDiagramOn) return work();
-  const saved: { material: THREE.MeshStandardMaterial; color: THREE.Color }[] = [];
+  const saved: {
+    material: THREE.MeshStandardMaterial;
+    color: THREE.Color;
+    emissive: THREE.Color;
+    emissiveIntensity: number;
+  }[] = [];
   for (const mesh of buildingMeshes(root)) {
     forEachStandardMaterial(mesh, (material) => {
       const rest = material.userData.viewportFill as string | undefined;
       if (!rest) return;
-      saved.push({ material, color: material.color.clone() });
+      saved.push({
+        material,
+        color: material.color.clone(),
+        emissive: material.emissive.clone(),
+        emissiveIntensity: material.emissiveIntensity,
+      });
       material.color.setStyle(rest);
+      material.emissive.setHex(0x000000);
+      material.emissiveIntensity = 0;
     });
   }
   try {
     return work();
   } finally {
-    for (const entry of saved) entry.material.color.copy(entry.color);
+    for (const entry of saved) {
+      entry.material.color.copy(entry.color);
+      entry.material.emissive.copy(entry.emissive);
+      entry.material.emissiveIntensity = entry.emissiveIntensity;
+    }
   }
 }
