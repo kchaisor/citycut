@@ -636,6 +636,7 @@ input[type="range"]::-moz-range-thumb {
   padding: 0 12px 12px;
 }
 .solar-panel-body[hidden] { display: none; }
+.solar-drawer .solar-panel-body { padding: 0; }
 .solar-panel .field input[type="range"] { width: 100%; }
 .solar-standards { display: grid; gap: 6px; }
 .solar-standards .panel-toolbar { margin: 0; }

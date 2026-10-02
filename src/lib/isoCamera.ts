@@ -18,6 +18,9 @@ export type IsoCorner = (typeof ISO_CORNERS)[number];
 
 export const DEFAULT_ISO_CORNER: IsoCorner = "sw";
 
+/** Orthographic isometric views use world Y-up. Plan north-up temporarily sets Z-up on the shared camera. */
+export const ISO_CAMERA_UP: Vec3 = [0, 1, 0];
+
 /** arctan(1/√2), about 35.264°. */
 export const ISO_ELEVATION_RAD = Math.atan(1 / Math.SQRT2);
 

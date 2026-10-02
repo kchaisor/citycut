@@ -8,7 +8,7 @@ import {
 /** Which model drawer is open. `none` means the rail is collapsed. */
 export const MODEL_DRAWER_KEY = "citycut.rail.model";
 
-export const MODEL_DRAWER_IDS = ["summary", "buildings", "trees", "drawing", "exports"] as const;
+export const MODEL_DRAWER_IDS = ["summary", "buildings", "trees", "drawing", "solar", "exports"] as const;
 
 export type ModelDrawerId = (typeof MODEL_DRAWER_IDS)[number];
 

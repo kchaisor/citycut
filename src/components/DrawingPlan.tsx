@@ -14,6 +14,7 @@ import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import type { CityModel } from "../types";
 import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
+import { planShadowRings, type PlanShadowInput } from "../lib/buildingShadows";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
 
 type View = { x: number; y: number; w: number; h: number };
@@ -66,6 +67,8 @@ export function DrawingPlan({
   lineStyle,
   planScale = 1000,
   heliodon = null,
+  castShadows = false,
+  shadowInput = null,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -76,6 +79,8 @@ export function DrawingPlan({
   planScale?: number;
   /** When set, draws the sun path over the plan (same ring radius as the 3D heliodon). */
   heliodon?: HeliodonDiagramInput | null;
+  castShadows?: boolean;
+  shadowInput?: PlanShadowInput | null;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: View } | null>(null);
@@ -167,6 +172,11 @@ export function DrawingPlan({
   const treeFill = getColour("--tree-fill");
   const contourLabel = getColour("--contour-label");
   const planEmpty = getColour("--plan-empty");
+  const shadowFill = getColour("--shadow-fill");
+  const shadowRings = useMemo(() => {
+    if (!shadowInput || figure) return [];
+    return planShadowRings(model, shadowInput, castShadows);
+  }, [castShadows, figure, model, shadowInput]);
 
   return (
     <svg
@@ -316,6 +326,15 @@ export function DrawingPlan({
             ))}
             {plan.rails.map((rail, index) => (
               <CasedLine key={`l${index}`} d={svgPolyline(rail, false)} stroke={style.rail} paper={canvas} />
+            ))}
+            {shadowRings.map((rings, index) => (
+              <path
+                key={`sh${index}`}
+                d={svgRings(rings)}
+                fill={shadowFill}
+                fillRule="evenodd"
+                stroke="none"
+              />
             ))}
             {plan.buildings.map((building, index) => (
               <path

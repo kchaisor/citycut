@@ -7,9 +7,11 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { useFrame } from "@react-three/fiber";
 import { getColour } from "../lib/colours";
 import {
+  DIAL_PLANE_EPSILON_M,
   HELIODON_LIFT_M,
   altitudeRingRadius,
   dialPoint,
+  flatDialGround,
   heliodonPoint,
   horizonArcDirections,
   type GroundHeight,
@@ -18,7 +20,7 @@ import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { HELIODON_LABELLED_HOURS, SUN_PATH_STYLES } from "../lib/heliodonSunPaths";
 import { dialPixelsPerDegree, dialTickLodOpacity } from "../lib/dialLod";
 import { heliodonPalette, type HeliodonPalette } from "../lib/heliodonPalette";
-import { sampleTerrain } from "../lib/terrain";
+import { meanTerrainElevation } from "../lib/terrain";
 import type { TerrainField } from "../types";
 import { markScreenOnly } from "../lib/screenOnly";
 import { useColourRevision } from "../lib/useColourRevision";
@@ -604,10 +606,11 @@ export function SolarHeliodon({
   const colourTick = useColourRevision();
   const ringRadius = heliodonRadiusM(sideM, settings.radiusFactor);
   const show = settings.showPath && !hideDiagram;
-  const ground = useMemo<GroundHeight>(
-    () => (terrain ? (x, z) => sampleTerrain(terrain, x, -z, sideM) : () => groundY),
-    [terrain, sideM, groundY],
+  const dialPlaneY = useMemo(
+    () => (terrain ? meanTerrainElevation(terrain) : groundY) + DIAL_PLANE_EPSILON_M,
+    [terrain, groundY],
   );
+  const ground = useMemo<GroundHeight>(() => flatDialGround(dialPlaneY), [dialPlaneY]);
   const centre = useMemo(() => new THREE.Vector3(0, ground(0, 0) + HELIODON_LIFT_M, 0), [ground]);
 
   const root = useDisposable(() => {

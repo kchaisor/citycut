@@ -6,6 +6,14 @@ export type GroundHeight = (x: number, z: number) => number;
 /** Lift above the draped terrain so dial lines clear the road surfaces. */
 export const HELIODON_LIFT_M = 1.5;
 
+/** Small lift above the flat dial plane to avoid z-fighting with terrain. */
+export const DIAL_PLANE_EPSILON_M = 0.08;
+
+/** Ground dial on one horizontal elevation (metres, world Y). */
+export function flatDialGround(elevationM: number): GroundHeight {
+  return () => elevationM;
+}
+
 /**
  * The heliodon's shared projection. Plan position is the orthographic polar
  * chart (radius · cos altitude), so arcs, the horizon ring and the altitude

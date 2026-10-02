@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { applyMatteFinish } from "./matteMaterial";
 import type { BuildingUse } from "../types";
 import { BUILDING_USE_META, SOURCE_META, buildingLayerName, uniformBuildingColor } from "./buildingUse";
 
@@ -55,6 +56,7 @@ export function snapshotBuildingViewportColors(root: THREE.Object3D, mode: Build
     forEachStandardMaterial(mesh, (material) => {
       if (material.userData.viewportFill === undefined) material.userData.viewportFill = fill;
       material.color.setStyle(fill);
+      applyMatteFinish(material);
     });
   }
 }

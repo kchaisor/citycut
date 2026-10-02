@@ -23,6 +23,7 @@ import { LINE_MM, hexRgb } from "./lineweights";
 import { footpathLines, unionFootpaths } from "./roadFill";
 import { heliodonPlanPdfChunk } from "./heliodonPlanExport";
 import type { HeliodonDiagramExportOptions } from "./heliodonDiagram";
+import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { planPaths } from "./svgPlan";
 import { VICMAP_CONTOUR_ATTRIBUTION } from "./vicmapContours";
 import type { CityModel, Pt } from "../types";
@@ -38,6 +39,7 @@ export const SITE_LAYER_ORDER = [
   "Trees",
   "Contours",
   "Contour labels",
+  "Shadows",
   "Sun path",
   "Annotation",
 ] as const;
@@ -221,12 +223,25 @@ function pathStrip(polygons: Pt[][][], model: CityModel, layout: SheetLayout, st
   };
 }
 
+export type SitePlanExportOptions = {
+  heliodon?: HeliodonDiagramExportOptions | null;
+  shadows?: PlanShadowInput | null;
+  castShadows?: boolean;
+};
+
 export function sitePlanChunks(
   model: CityModel,
   scale: number,
   style: LineStyles = readDrawingStyle(),
-  heliodon?: HeliodonDiagramExportOptions | null,
+  exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): PdfChunk[] {
+  const heliodon =
+    exportOptions && "heliodon" in exportOptions
+      ? exportOptions.heliodon
+      : (exportOptions as HeliodonDiagramExportOptions | null | undefined);
+  const shadowInput =
+    exportOptions && "shadows" in exportOptions ? exportOptions.shadows : null;
+  const castShadows = Boolean(exportOptions && "castShadows" in exportOptions && exportOptions.castShadows);
   const layout = layoutSheet(model.sideM, scale);
   const plan = planPaths(
     model,
@@ -351,6 +366,18 @@ export function sitePlanChunks(
       }),
     });
   }
+  const shadowRings = shadowInput ? planShadowRings(model, shadowInput, castShadows) : [];
+  if (shadowRings.length > 0) {
+    chunks.push({
+      name: "Shadows",
+      paths: shadowRings.map((rings) => ({
+        rings: mapRings(rings, model.sideM, layout),
+        fill: fillOf("--shadow-fill"),
+        evenOdd: true,
+        close: true,
+      })),
+    });
+  }
   const buildingPen = pen(style.building, "miter");
   if (plan.buildings.length > 0) {
     chunks.push({
@@ -427,10 +454,10 @@ export async function sitePlanPdf(
   model: CityModel,
   scale: number,
   style?: LineStyles,
-  heliodon?: HeliodonDiagramExportOptions | null,
+  exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): Promise<Uint8Array> {
   const layout = layoutSheet(model.sideM, scale);
-  const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), heliodon);
+  const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions);
   return buildLayeredPdf(layout.pageWidthMm, layout.pageHeightMm, chunks, sitePlanLayerOrder(chunks));
 }
 
@@ -454,10 +481,10 @@ export function sitePlanAi8(
   model: CityModel,
   scale: number,
   style?: LineStyles,
-  heliodon?: HeliodonDiagramExportOptions | null,
+  exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): Uint8Array {
   const layout = layoutSheet(model.sideM, scale);
-  const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), heliodon);
+  const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions);
   return buildLayeredNativeAi(
     layout.pageWidthMm,
     layout.pageHeightMm,
@@ -487,12 +514,12 @@ export async function sitePlanAi(
   model: CityModel,
   scale: number,
   style?: LineStyles,
-  heliodon?: HeliodonDiagramExportOptions | null,
+  exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): Promise<Uint8Array> {
-  if (useNativeAi8Export()) return sitePlanAi8(model, scale, style, heliodon);
+  if (useNativeAi8Export()) return sitePlanAi8(model, scale, style, exportOptions);
   if (import.meta.env.VITE_CITYCUT_AI_PDF_OPS === "true") {
     const layout = layoutSheet(model.sideM, scale);
-    const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), heliodon);
+    const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions);
     return buildLayeredNativeAiPdfOps(
       layout.pageWidthMm,
       layout.pageHeightMm,
@@ -501,7 +528,7 @@ export async function sitePlanAi(
       titleLine(model, layout),
     );
   }
-  return sitePlanPdf(model, scale, style, heliodon);
+  return sitePlanPdf(model, scale, style, exportOptions);
 }
 
 export async function figureGroundAi(

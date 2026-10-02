@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import * as THREE from "three";
 import {
   ISO_AZIMUTH_RAD,
+  ISO_CAMERA_UP,
   ISO_CORNERS,
   ISO_ELEVATION_RAD,
   ISO_FIT_MARGIN,
@@ -72,6 +74,34 @@ describe("iso offsets", () => {
     expect(look[2]).toBeLessThan(0);
     expect(azimuthFromEastRad(isoOffset("sw"))).toBeCloseTo((3 * Math.PI) / 4, 12);
     expect(azimuthFromEastRad(isoOffset("ne"))).toBeCloseTo(-Math.PI / 4, 12);
+  });
+});
+
+function isoCamera(corner: (typeof ISO_CORNERS)[number], up: THREE.Vector3): THREE.OrthographicCamera {
+  const centre = new THREE.Vector3(0, 40, 0);
+  const eye = isoEye([centre.x, centre.y, centre.z], corner, eyeDistance(CUT));
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 5000);
+  camera.up.copy(up);
+  camera.position.set(eye[0], eye[1], eye[2]);
+  camera.lookAt(centre);
+  return camera;
+}
+
+describe("iso camera orientation", () => {
+  it("snaps isometric views to world Y-up", () => {
+    expect(ISO_CAMERA_UP).toEqual([0, 1, 0]);
+    for (const corner of ISO_CORNERS) {
+      const camera = isoCamera(corner, new THREE.Vector3(...ISO_CAMERA_UP));
+      expect(camera.up.x).toBeCloseTo(0, 10);
+      expect(camera.up.y).toBeCloseTo(1, 10);
+      expect(camera.up.z).toBeCloseTo(0, 10);
+    }
+  });
+
+  it("tilts the iso view when plan north-up leaves Z as camera up", () => {
+    const iso = isoCamera("sw", new THREE.Vector3(...ISO_CAMERA_UP));
+    const skewed = isoCamera("sw", new THREE.Vector3(0, 0, -1));
+    expect(iso.quaternion.angleTo(skewed.quaternion)).toBeGreaterThan(0.5);
   });
 });
 

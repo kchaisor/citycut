@@ -5,6 +5,7 @@ import { getColour } from "./colours";
 import { buildTreeGroup } from "./treeArchetypes";
 import { openRing, signedArea } from "./geo";
 import { hexRgb, overlapLift, ROAD_COLOR, ROAD_RGB, roadGradeLayer, SURFACE } from "./surfaceLayers";
+import { matteStandardMaterial } from "./matteMaterial";
 import { footprintBase, sampleTerrain, terrainBuffers } from "./terrain";
 import type { AreaFeat, BuildingFeat, BuildingUse, CityModel, Pt, Ring, RoadGrade, TerrainField } from "../types";
 
@@ -327,9 +328,8 @@ function terrainMesh(field: TerrainField, sideM: number): THREE.Mesh {
   geometry.setIndex(new THREE.BufferAttribute(buffers.indices, 1));
   geometry.computeVertexNormals();
   const material = paint(
-    new THREE.MeshStandardMaterial({
+    matteStandardMaterial({
       vertexColors: true,
-      roughness: 0.96,
       side: THREE.DoubleSide,
     }),
     SURFACE.terrain,
@@ -362,9 +362,8 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     const groundGeo = new THREE.PlaneGeometry(model.sideM, model.sideM);
     groundGeo.rotateX(-Math.PI / 2);
     const groundMat = paint(
-      new THREE.MeshStandardMaterial({
+      matteStandardMaterial({
         color: getColour("--ground-fill"),
-        roughness: 0.95,
         side: THREE.DoubleSide,
       }),
       SURFACE.ground,
@@ -375,15 +374,8 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     group.add(ground);
   }
 
-  const greenMat = paint(new THREE.MeshStandardMaterial({ color: getColour("--green-3d"), roughness: 1 }), SURFACE.green);
-  const waterMat = paint(
-    new THREE.MeshStandardMaterial({
-      color: getColour("--water-3d"),
-      roughness: 0.35,
-      metalness: 0.04,
-    }),
-    SURFACE.water,
-  );
+  const greenMat = paint(matteStandardMaterial({ color: getColour("--green-3d") }), SURFACE.green);
+  const waterMat = paint(matteStandardMaterial({ color: getColour("--water-3d") }), SURFACE.water);
   const greenGeos: THREE.BufferGeometry[] = [];
   const waterGeos: THREE.BufferGeometry[] = [];
   for (let index = 0; index < model.areas.length; index++) {
@@ -427,7 +419,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     group.add(water);
   }
 
-  const railMat = paint(new THREE.MeshStandardMaterial({ color: getColour("--rail-fill"), roughness: 0.8 }), SURFACE.rail);
+  const railMat = paint(matteStandardMaterial({ color: getColour("--rail-fill") }), SURFACE.rail);
   const segment = model.terrain ? Math.min(model.terrain.spacingM, 8) : undefined;
   const grades: RoadGrade[] = ["path", "local", "arterial"];
   for (const grade of grades) {
@@ -435,10 +427,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     const lines = model.roads.filter((road) => road.kind === "road" && (road.grade ?? "local") === grade);
     const geometry = ribbonGeometry(lines, layer.lift, sample ?? undefined, segment);
     if (!geometry) continue;
-    const material = paint(
-      new THREE.MeshStandardMaterial({ color: ROAD_COLOR[grade], roughness: 0.94 }),
-      layer,
-    );
+    const material = paint(matteStandardMaterial({ color: ROAD_COLOR[grade] }), layer);
     material.name = "Roads";
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = "Roads";
@@ -469,10 +458,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
       if (!geometry) continue;
       const name = buildingLayerName(building.use);
       const color = BUILDING_USE_META[building.use].color;
-      const material = paint(
-        new THREE.MeshStandardMaterial({ color, roughness: 0.78 }),
-        SURFACE.building,
-      );
+      const material = paint(matteStandardMaterial({ color }), SURFACE.building);
       material.name = name;
       const mesh = new THREE.Mesh(geometry, material);
       mesh.name = name;
@@ -505,10 +491,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
         (key) => buildingLayerName(key) === name,
       );
       const color = sourceMeta?.color ?? (uniform || !use ? uniformBuildingColor() : BUILDING_USE_META[use].color);
-      const material = paint(
-        new THREE.MeshStandardMaterial({ color, roughness: sourceMeta?.inferred ? 0.92 : 0.78 }),
-        SURFACE.building,
-      );
+      const material = paint(matteStandardMaterial({ color }), SURFACE.building);
       if (sourceMeta?.inferred) {
         const map = inferredStripeMap();
         if (map) material.map = map;

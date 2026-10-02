@@ -22,6 +22,7 @@ import {
   eyeDistance,
   fitOrthoZoom,
   frameCentre,
+  ISO_CAMERA_UP,
   isoEye,
   isoOffset,
   orthoNearFar,
@@ -344,6 +345,7 @@ function IsoSnap({
     const eye = isoEye(centre, corner, distance);
     const planes = orthoNearFar(bounds, eye, centre);
     flushControlInertia(controls);
+    camera.up.set(ISO_CAMERA_UP[0], ISO_CAMERA_UP[1], ISO_CAMERA_UP[2]);
     camera.position.set(eye[0], eye[1], eye[2]);
     camera.near = planes.near;
     camera.far = planes.far;
@@ -351,6 +353,7 @@ function IsoSnap({
     camera.updateProjectionMatrix();
     controls.target.set(centre[0], centre[1], centre[2]);
     camera.lookAt(controls.target);
+    camera.up.set(ISO_CAMERA_UP[0], ISO_CAMERA_UP[1], ISO_CAMERA_UP[2]);
     controls.update();
     fittedKey.current = key;
     touchedRef.current = false;
