@@ -167,7 +167,7 @@ describe("parse", () => {
     expect(parsed.buildings[0].id).toBe(2);
   });
 
-  it("drops zoo ponds and intermittent drains from the water layer", () => {
+  it("drops zoo enclosure and intermittent drains but keeps named ponds", () => {
     const ring = geom([
       [-20, -20],
       [20, -20],
@@ -193,7 +193,7 @@ describe("parse", () => {
           {
             type: "way",
             id: 3,
-            tags: { natural: "water", name: "Tam-Boore" },
+            tags: { natural: "water", water: "drain", intermittent: "yes" },
             geometry: ring,
           },
         ],
@@ -202,8 +202,36 @@ describe("parse", () => {
       200,
       { buildings: false, roads: false, waterGreen: true, trees: false },
     );
-    expect(parsed.areas.filter((area) => area.kind === "water")).toHaveLength(1);
-    expect(parsed.areas[0].id).toBe(3);
+    const water = parsed.areas.filter((area) => area.kind === "water");
+    expect(water).toHaveLength(1);
+    expect(water[0].id).toBe(1);
+  });
+
+  it("classifies wetland as green, not water", () => {
+    const ring = geom([
+      [-20, -20],
+      [20, -20],
+      [20, 20],
+      [-20, 20],
+      [-20, -20],
+    ]);
+    const parsed = parseCity(
+      {
+        elements: [
+          {
+            type: "way",
+            id: 4,
+            tags: { natural: "wetland" },
+            geometry: ring,
+          },
+        ],
+      },
+      origin,
+      200,
+      { buildings: false, roads: false, waterGreen: true, trees: false },
+    );
+    expect(parsed.areas).toHaveLength(1);
+    expect(parsed.areas[0].kind).toBe("green");
   });
 
   it("keeps Yarra-style river areas tagged natural=water and water=river", () => {

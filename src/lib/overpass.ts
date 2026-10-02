@@ -73,7 +73,7 @@ export function buildOverpassQuery(bbox: string, layers: ModelLayers): string {
     parts.push(`way["natural"="water"]${bbox};`);
     parts.push(`way["waterway"~"^(riverbank|dock)$"]${bbox};`);
     parts.push(`way["landuse"="reservoir"]${bbox};`);
-    parts.push(`way["natural"~"^(wood|scrub)$"]${bbox};`);
+    parts.push(`way["natural"~"^(wood|scrub|wetland)$"]${bbox};`);
     parts.push(`way["leisure"~"^(park|garden|nature_reserve|pitch)$"]${bbox};`);
     parts.push(
       `way["landuse"~"^(forest|grass|meadow|recreation_ground|village_green|cemetery)$"]${bbox};`,
@@ -83,7 +83,7 @@ export function buildOverpassQuery(bbox: string, layers: ModelLayers): string {
     parts.push(
       `relation["landuse"~"^(forest|grass|meadow|recreation_ground|village_green)$"]${bbox};`,
     );
-    parts.push(`relation["natural"="wood"]${bbox};`);
+    parts.push(`relation["natural"~"^(wood|wetland)$"]${bbox};`);
   }
   if (parts.length === 0) {
     throw new OverpassError("Turn on Buildings, Roads and rail, Water and green, or Trees.");
