@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isOpenWaterArea, OPEN_WATER_TAG_FIXTURES } from "./waterAreas";
+import {
+  isOpenWaterArea,
+  isRiverWaterArea,
+  MIN_WATER_AREA_M2,
+  OPEN_WATER_TAG_FIXTURES,
+} from "./waterAreas";
 
 describe("open water OSM tag filter", () => {
   it("includes lakes, ponds, reservoirs, and riverbank areas", () => {
@@ -14,9 +19,13 @@ describe("open water OSM tag filter", () => {
     }
   });
 
-  it("keeps real ponds and does not use area or name heuristics", () => {
-    expect(isOpenWaterArea({ natural: "water", water: "pond" })).toBe(true);
-    expect(isOpenWaterArea({ natural: "water", name: "Crocodile Paddling Pool" })).toBe(true);
-    expect(isOpenWaterArea({ natural: "water" })).toBe(true);
+  it("applies the minimum water area unless the feature is a river", () => {
+    const pond = { natural: "water", water: "pond" };
+    expect(MIN_WATER_AREA_M2).toBe(500);
+    expect(isOpenWaterArea(pond, 499)).toBe(false);
+    expect(isOpenWaterArea(pond, 501)).toBe(true);
+    expect(isRiverWaterArea({ waterway: "riverbank" })).toBe(true);
+    expect(isOpenWaterArea({ waterway: "riverbank" }, 12)).toBe(true);
+    expect(isOpenWaterArea({ natural: "water", water: "river" }, 40)).toBe(true);
   });
 });

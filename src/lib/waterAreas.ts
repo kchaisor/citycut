@@ -1,5 +1,8 @@
 /** Which OSM area tags count as open water for the model, site plan, and exports. */
 
+/** Ponds and lakes smaller than this (m² in the local frame) are hidden; rivers are exempt. */
+export const MIN_WATER_AREA_M2 = 500;
+
 const OPEN_WATERWAY = new Set(["riverbank", "dock", "river"]);
 
 /** Explicit `water=*` values that are open water when paired with a polygon. */
@@ -56,10 +59,24 @@ function includedWaterFeature(tags: Record<string, string>): boolean {
   return false;
 }
 
-/** True when an OSM area relation or closed way should fill the water layer. */
-export function isOpenWaterArea(tags: Record<string, string>): boolean {
+/** River polygons stay visible even below {@link MIN_WATER_AREA_M2}. */
+export function isRiverWaterArea(tags: Record<string, string>): boolean {
+  const waterway = tags.waterway?.split(";")[0];
+  if (waterway && OPEN_WATERWAY.has(waterway)) return true;
+  if (tags.water?.trim().toLowerCase() === "river") return true;
+  return false;
+}
+
+/**
+ * True when an OSM area should fill the water layer.
+ * Pass `areaM2` (absolute area in local metres) to apply {@link MIN_WATER_AREA_M2}.
+ */
+export function isOpenWaterArea(tags: Record<string, string>, areaM2?: number): boolean {
   if (excludedWaterFeature(tags)) return false;
-  return includedWaterFeature(tags);
+  if (!includedWaterFeature(tags)) return false;
+  if (isRiverWaterArea(tags)) return true;
+  if (areaM2 != null && areaM2 < MIN_WATER_AREA_M2) return false;
+  return true;
 }
 
 /** Tag pairs used in tests and docs for allowed water areas. */

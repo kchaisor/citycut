@@ -234,6 +234,38 @@ describe("parse", () => {
     expect(parsed.areas[0].kind).toBe("green");
   });
 
+  it("drops water polygons under 500 m² but keeps rivers and large ponds", () => {
+    const parsed = parseCity(
+      {
+        elements: [
+          {
+            type: "way",
+            id: 1,
+            tags: { natural: "water", water: "pond" },
+            geometry: geom(square([-60, -60], Math.sqrt(499))),
+          },
+          {
+            type: "way",
+            id: 2,
+            tags: { natural: "water", water: "pond" },
+            geometry: geom(square([60, 60], Math.sqrt(501))),
+          },
+          {
+            type: "way",
+            id: 3,
+            tags: { waterway: "riverbank" },
+            geometry: geom(square([100, 100], 8)),
+          },
+        ],
+      },
+      origin,
+      200,
+      { buildings: false, roads: false, waterGreen: true, trees: false },
+    );
+    const water = parsed.areas.filter((a) => a.kind === "water");
+    expect(water.map((a) => a.id).sort()).toEqual([2, 3]);
+  });
+
   it("keeps Yarra-style river areas tagged natural=water and water=river", () => {
     const ring = geom([
       [-80, -10],
