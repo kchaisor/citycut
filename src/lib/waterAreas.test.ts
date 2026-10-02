@@ -33,5 +33,6 @@ describe("open water OSM tag filter", () => {
     expect(isRiverWaterArea({ waterway: "riverbank" })).toBe(true);
     expect(isOpenWaterArea({ waterway: "riverbank" }, 5)).toBe(true);
     expect(isOpenWaterArea({ natural: "water", water: "river" }, 1)).toBe(true);
+    expect(isOpenWaterArea({ natural: "water", water: "harbour" }, 50)).toBe(true);
   });
 });

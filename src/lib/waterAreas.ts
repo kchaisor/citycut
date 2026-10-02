@@ -6,7 +6,16 @@ export const UNTAGGED_WATER_MIN_AREA_M2 = 10_000;
 const KEEP_WATERWAY = new Set(["riverbank", "river", "canal", "dock"]);
 
 /** `water=*` values kept at any polygon area. */
-const KEEP_WATER_TAG = new Set(["lake", "lagoon", "reservoir", "river", "canal", "oxbow", "stream"]);
+const KEEP_WATER_TAG = new Set([
+  "lake",
+  "lagoon",
+  "reservoir",
+  "river",
+  "canal",
+  "oxbow",
+  "stream",
+  "harbour",
+]);
 
 const EXCLUDED_WATER_TAG = new Set([
   "pond",
@@ -26,7 +35,6 @@ export const UNLISTED_WATER_SUBTAGS = [
   "lock",
   "moat",
   "fishpond",
-  "harbour",
   "rapids",
   "waterfall",
   "yes",
@@ -112,6 +120,7 @@ export const OPEN_WATER_TAG_FIXTURES = {
     { natural: "water", water: "reservoir" },
     { natural: "water", water: "river" },
     { natural: "water", water: "canal" },
+    { natural: "water", water: "harbour" },
   ],
   excluded: [
     { natural: "water", water: "pond" },
