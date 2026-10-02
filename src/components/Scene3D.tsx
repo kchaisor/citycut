@@ -47,6 +47,7 @@ import {
   unionAabb,
 } from "../lib/heliodonFraming";
 import { heliodonRadiusM } from "../lib/heliodonRadius";
+import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
 import type { CityModel } from "../types";
 
@@ -155,6 +156,17 @@ function City({
   }, [group, solarDiagramOn, solarNeutralFill, colourTick]);
   useLayoutEffect(() => () => disposeObject(group), [group]);
   return <primitive object={group} />;
+}
+
+/** Sun-study whites read grey under ACES; use linear output while the diagram is on. */
+function SunStudyToneMapping({ noToneMapping }: { noToneMapping: boolean }) {
+  const gl = useThree((state) => state.gl);
+  useLayoutEffect(() => {
+    gl.toneMapping = noToneMapping ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
+    gl.toneMappingExposure = 1;
+    gl.outputColorSpace = THREE.SRGBColorSpace;
+  }, [gl, noToneMapping]);
+  return null;
 }
 
 function RendererShadows({ enabled }: { enabled: boolean }) {
@@ -766,9 +778,11 @@ export function Scene3D({
   const solarNeutralFill = useMemo(() => getColour("--building-solar-neutral"), [colourTick]);
   const sunSample = useMelbourneSunSample(model.center.lat, model.center.lon, solar);
   const [glEpoch, setGlEpoch] = useState(0);
-  const fillKeyLight = solar.castShadows ? 0 : 1.35;
-  const fillAmbient = solar.castShadows ? 0.08 : 0.28;
-  const fillHemi = solar.castShadows ? 0.34 : 0.7;
+  const viewportLight = sunStudyViewportLighting({
+    showPath: solar.showPath,
+    castShadows: solar.castShadows,
+  });
+  const { fillKeyLight, fillAmbient, fillHemi, sunIntensity, noToneMapping } = viewportLight;
   const heliodonRadius = heliodonRadiusM(model.sideM, solar.radiusFactor);
   const shadowTargetY = groundY;
   const siteTopY = useMemo(() => {
@@ -795,6 +809,7 @@ export function Scene3D({
       }}
     >
       <RendererShadows enabled={solar.castShadows} />
+      <SunStudyToneMapping noToneMapping={noToneMapping} />
       <color attach="background" args={[modelBg]} />
       <hemisphereLight args={[sky, groundLight, fillHemi]} />
       <ambientLight intensity={fillAmbient} />
@@ -803,6 +818,7 @@ export function Scene3D({
         sample={sunSample}
         sideM={Math.max(model.sideM, heliodonRadius * 0.5)}
         enabled={solar.castShadows}
+        intensity={sunIntensity}
         targetY={shadowTargetY}
         topY={siteTopY}
       />

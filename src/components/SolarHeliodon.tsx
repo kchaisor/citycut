@@ -655,12 +655,14 @@ export function SolarLight({
   sample,
   sideM,
   enabled,
+  intensity = 2.35,
   targetY,
   topY,
 }: {
   sample: SolarSample;
   sideM: number;
   enabled: boolean;
+  intensity?: number;
   targetY: number;
   /** Highest point in the cut (tallest roof or terrain peak), world Y. */
   topY: number;
@@ -704,7 +706,7 @@ export function SolarLight({
       <object3D ref={targetRef} />
       <directionalLight
         ref={lightRef}
-        intensity={on ? 2.35 : 0}
+        intensity={on ? intensity : 0}
         castShadow={on}
         shadow-mapSize={[2048, 2048]}
       />
