@@ -11,7 +11,7 @@ import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import { captureViewPng } from "../lib/capturePng";
-import { flushControlInertia, holdControlPose } from "../lib/controlInertia";
+import { flushControlInertia, holdControlPose, type HeldControl } from "../lib/controlInertia";
 import {
   applyBuildingSolarNeutral,
   snapshotBuildingViewportColors,
@@ -19,9 +19,14 @@ import {
   type BuildingColourMode,
 } from "../lib/buildingViewportColor";
 import {
+  applySunStudySurfaceTint,
+  snapshotSunStudySurfaceColors,
+} from "../lib/sunStudySurfaceViewport";
+import {
   eyeDistance,
   fitOrthoZoom,
   frameCentre,
+  ISO_CAMERA_UP,
   isoEye,
   isoOffset,
   orthoNearFar,
@@ -43,8 +48,10 @@ import {
   defaultPerspectiveTarget,
   heliodonSceneBounds,
   perspectiveFitDistance,
+  unionAabb,
 } from "../lib/heliodonFraming";
 import { heliodonRadiusM } from "../lib/heliodonRadius";
+import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
 import type { CityModel } from "../types";
 
@@ -147,12 +154,25 @@ function City({
   }, [group]);
   useLayoutEffect(() => {
     snapshotBuildingViewportColors(group, colourMode);
+    snapshotSunStudySurfaceColors(group);
   }, [group, colourMode]);
   useLayoutEffect(() => {
+    applySunStudySurfaceTint(group, solarDiagramOn);
     applyBuildingSolarNeutral(group, solarDiagramOn, solarNeutralFill);
   }, [group, solarDiagramOn, solarNeutralFill, colourTick]);
   useLayoutEffect(() => () => disposeObject(group), [group]);
   return <primitive object={group} />;
+}
+
+/** Sun-study whites read grey under ACES; use linear output while the diagram is on. */
+function SunStudyToneMapping({ noToneMapping }: { noToneMapping: boolean }) {
+  const gl = useThree((state) => state.gl);
+  useLayoutEffect(() => {
+    gl.toneMapping = noToneMapping ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
+    gl.toneMappingExposure = 1;
+    gl.outputColorSpace = THREE.SRGBColorSpace;
+  }, [gl, noToneMapping]);
+  return null;
 }
 
 function RendererShadows({ enabled }: { enabled: boolean }) {
@@ -317,6 +337,13 @@ function IsoSnap({
   snapId,
   active,
   touchedRef,
+  sideM,
+  groundY,
+  siteTopY,
+  heliodonRadius,
+  solar,
+  lat,
+  lon,
 }: {
   camera: THREE.OrthographicCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
@@ -325,6 +352,13 @@ function IsoSnap({
   snapId: number;
   active: boolean;
   touchedRef: RefObject<boolean>;
+  sideM: number;
+  groundY: number;
+  siteTopY: number;
+  heliodonRadius: number;
+  solar: SolarViewSettings;
+  lat: number;
+  lon: number;
 }) {
   const size = useThree((state) => state.size);
   const fittedKey = useRef<string | null>(null);
@@ -333,28 +367,66 @@ function IsoSnap({
     if (!controls || size.width < 2 || size.height < 2) return;
     const bounds = boundsRef.current;
     if (!bounds) return;
-    const key = `${snapId}:${size.width}x${size.height}`;
+    const key = `${snapId}:${solar.showPath ? "sun" : "nosun"}:${size.width}x${size.height}`;
     if (fittedKey.current === key) return;
     const sameSnap = fittedKey.current?.startsWith(`${snapId}:`) ?? false;
     if (sameSnap && touchedRef.current) return;
     if (!active && fittedKey.current !== null && !sameSnap) return;
-    const centre = frameCentre(bounds);
+    let fitBounds = bounds;
+    if (solar.showPath) {
+      fitBounds = unionAabb(
+        bounds,
+        heliodonSceneBounds({
+          lat,
+          lon,
+          year: solar.year,
+          month: solar.month,
+          day: solar.day,
+          hour: solar.hour,
+          minute: solar.minute,
+          sideM,
+          ringRadiusM: heliodonRadius,
+          groundY,
+          siteTopY,
+        }),
+      );
+    }
+    const centre = frameCentre(fitBounds);
     const direction = isoOffset(corner);
-    const distance = eyeDistance(bounds);
+    const distance = eyeDistance(fitBounds);
     const eye = isoEye(centre, corner, distance);
-    const planes = orthoNearFar(bounds, eye, centre);
+    const planes = orthoNearFar(fitBounds, eye, centre);
     flushControlInertia(controls);
+    camera.up.set(ISO_CAMERA_UP[0], ISO_CAMERA_UP[1], ISO_CAMERA_UP[2]);
     camera.position.set(eye[0], eye[1], eye[2]);
     camera.near = planes.near;
     camera.far = planes.far;
-    camera.zoom = fitOrthoZoom(bounds, direction, size.width, size.height);
+    camera.zoom = fitOrthoZoom(fitBounds, direction, size.width, size.height);
     camera.updateProjectionMatrix();
     controls.target.set(centre[0], centre[1], centre[2]);
     camera.lookAt(controls.target);
-    controls.update();
+    camera.up.set(ISO_CAMERA_UP[0], ISO_CAMERA_UP[1], ISO_CAMERA_UP[2]);
+    holdControlPose(controls as HeldControl<THREE.Vector3>);
     fittedKey.current = key;
     touchedRef.current = false;
-  }, [active, camera, controlsRef, boundsRef, corner, snapId, size.width, size.height, touchedRef]);
+  }, [
+    active,
+    camera,
+    controlsRef,
+    boundsRef,
+    corner,
+    groundY,
+    heliodonRadius,
+    lat,
+    lon,
+    sideM,
+    siteTopY,
+    snapId,
+    solar,
+    size.width,
+    size.height,
+    touchedRef,
+  ]);
   useLayoutEffect(() => {
     place();
   }, [place]);
@@ -608,6 +680,13 @@ function Cameras({
             snapId={snapId}
             active={iso && !freeRotate}
             touchedRef={touchedRef}
+            sideM={side}
+            groundY={groundY}
+            siteTopY={siteTopY}
+            heliodonRadius={heliodonRadius}
+            solar={solar}
+            lat={lat}
+            lon={lon}
           />
           <PlanSnap
             camera={ortho}
@@ -705,9 +784,11 @@ export function Scene3D({
   const solarNeutralFill = useMemo(() => getColour("--building-solar-neutral"), [colourTick]);
   const sunSample = useMelbourneSunSample(model.center.lat, model.center.lon, solar);
   const [glEpoch, setGlEpoch] = useState(0);
-  const fillKeyLight = solar.castShadows ? 0 : 1.35;
-  const fillAmbient = solar.castShadows ? 0.08 : 0.28;
-  const fillHemi = solar.castShadows ? 0.34 : 0.7;
+  const viewportLight = sunStudyViewportLighting({
+    showPath: solar.showPath,
+    castShadows: solar.castShadows,
+  });
+  const { fillKeyLight, fillAmbient, fillHemi, sunIntensity, noToneMapping } = viewportLight;
   const heliodonRadius = heliodonRadiusM(model.sideM, solar.radiusFactor);
   const shadowTargetY = groundY;
   const siteTopY = useMemo(() => {
@@ -734,6 +815,7 @@ export function Scene3D({
       }}
     >
       <RendererShadows enabled={solar.castShadows} />
+      <SunStudyToneMapping noToneMapping={noToneMapping} />
       <color attach="background" args={[modelBg]} />
       <hemisphereLight args={[sky, groundLight, fillHemi]} />
       <ambientLight intensity={fillAmbient} />
@@ -742,6 +824,7 @@ export function Scene3D({
         sample={sunSample}
         sideM={Math.max(model.sideM, heliodonRadius * 0.5)}
         enabled={solar.castShadows}
+        intensity={sunIntensity}
         targetY={shadowTargetY}
         topY={siteTopY}
       />

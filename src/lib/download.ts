@@ -3,7 +3,9 @@ import type { LineStyles } from "./drawingStyle";
 import { viewAi, type ViewStyle } from "./aiView";
 import type { CameraShot } from "./cameraShot";
 import { slugifyPlace } from "./placeLabel";
+import type { SitePlanExportOptions } from "./aiPlan";
 import type { HeliodonDiagramExportOptions, HeliodonGroundExportOptions } from "./heliodonDiagram";
+import type { PlanShadowInput } from "./buildingShadows";
 import type { CityModel } from "../types";
 
 /** Downloads the drawer still offers. glTF, SVG, and figure-ground PDF are gone. */
@@ -47,9 +49,18 @@ function downloadBytes(filename: string, bytes: Uint8Array, type: string) {
   downloadBlob(filename, new Blob([copy], { type }));
 }
 
-export async function download3dm(model: CityModel, heliodon?: HeliodonGroundExportOptions | null): Promise<void> {
+export type RhinoDownloadOptions = {
+  heliodon?: HeliodonGroundExportOptions | null;
+  shadows?: PlanShadowInput | null;
+  castShadows?: boolean;
+};
+
+export async function download3dm(
+  model: CityModel,
+  options?: HeliodonGroundExportOptions | RhinoDownloadOptions | null,
+): Promise<void> {
   const { cityModelTo3dm } = await import("./rhinoExport");
-  const bytes = await cityModelTo3dm(model, heliodon);
+  const bytes = await cityModelTo3dm(model, options);
   downloadBytes(`${fileStem(model)}.3dm`, bytes, "application/octet-stream");
 }
 
@@ -57,9 +68,9 @@ export async function downloadSiteAi(
   model: CityModel,
   scale: number,
   style?: LineStyles,
-  heliodon?: HeliodonDiagramExportOptions | null,
+  exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): Promise<void> {
-  const bytes = await sitePlanAi(model, scale, style, heliodon);
+  const bytes = await sitePlanAi(model, scale, style, exportOptions);
   downloadBytes(aiFilename(model, "site", scale), bytes, "application/pdf");
 }
 

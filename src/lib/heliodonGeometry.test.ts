@@ -3,6 +3,7 @@ import {
   HELIODON_LIFT_M,
   altitudeRingRadius,
   dialPoint,
+  flatDialGround,
   heliodonPoint,
   horizonArcDirections,
   type GroundHeight,
@@ -49,5 +50,20 @@ describe("heliodon dial geometry", () => {
     const [x, , z] = dialPoint(0, RADIUS, flat);
     expect(x).toBeCloseTo(0, 9);
     expect(z).toBeCloseTo(-RADIUS, 9);
+  });
+
+  it("keeps every ground dial vertex on one elevation", () => {
+    const plane = 36.5;
+    const ground = flatDialGround(plane);
+    const y = plane + HELIODON_LIFT_M;
+    for (let deg = 0; deg < 360; deg += 3) {
+      expect(dialPoint(deg, RADIUS, ground)[1]).toBeCloseTo(y, 9);
+    }
+    for (const alt of [30, 60]) {
+      for (let deg = 0; deg < 360; deg += 15) {
+        const point = dialPoint(deg, altitudeRingRadius(alt, RADIUS), ground);
+        expect(point[1]).toBeCloseTo(y, 9);
+      }
+    }
   });
 });

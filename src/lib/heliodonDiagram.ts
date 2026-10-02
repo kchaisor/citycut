@@ -1,6 +1,6 @@
 import { getColour } from "./colours";
 import { altitudeRingRadius, horizonArcDirections } from "./heliodonGeometry";
-import { heliodonRadiusM } from "./heliodonRadius";
+import { HELIODON_RADIUS_FACTOR_DEFAULT, heliodonRadiusM } from "./heliodonRadius";
 import { HELIODON_LABELLED_HOURS, SUN_PATH_STYLES } from "./heliodonSunPaths";
 import {
   daylightHourMarks,
@@ -13,8 +13,18 @@ import type { Pt } from "../types";
 /** Sun-path diagram radius on drawings: fraction of the square frame side (not ground metres at 3D scale). */
 export const HELIODON_DIAGRAM_RADIUS_FRACTION = 0.45;
 
-export function heliodonDiagramRadiusM(sideM: number): number {
-  return sideM * HELIODON_DIAGRAM_RADIUS_FRACTION;
+/** Smallest 2D dial radius as a fraction of the frame side (legibility floor). */
+export const HELIODON_DIAGRAM_RADIUS_MIN_FRACTION = 0.12;
+
+/** 2D plan dial radius; default slider value matches the historical 0.45 × side look. */
+export function heliodonDiagramRadiusM(
+  sideM: number,
+  radiusFactor = HELIODON_RADIUS_FACTOR_DEFAULT,
+): number {
+  const scaled =
+    sideM * HELIODON_DIAGRAM_RADIUS_FRACTION * (radiusFactor / HELIODON_RADIUS_FACTOR_DEFAULT);
+  const min = sideM * HELIODON_DIAGRAM_RADIUS_MIN_FRACTION;
+  return Math.max(min, scaled);
 }
 
 /** ~6.5 pt on paper at `planScale`, in plan viewBox metres. */
@@ -32,6 +42,7 @@ export type HeliodonDiagramInput = {
   hour: number;
   minute: number;
   sideM: number;
+  radiusFactor?: number;
 };
 
 export type HeliodonDiagramTick = { a: Pt; b: Pt; tier: "minor" | "medium" | "major" };
@@ -199,7 +210,10 @@ function buildHeliodonOverlayAtRadius(input: HeliodonDiagramInput, R: number): H
 }
 
 export function buildHeliodonDiagramOverlay(input: HeliodonDiagramInput): HeliodonDiagramOverlay {
-  return buildHeliodonOverlayAtRadius(input, heliodonDiagramRadiusM(input.sideM));
+  return buildHeliodonOverlayAtRadius(
+    input,
+    heliodonDiagramRadiusM(input.sideM, input.radiusFactor ?? HELIODON_RADIUS_FACTOR_DEFAULT),
+  );
 }
 
 export type HeliodonDiagramExportOptions = HeliodonDiagramInput;

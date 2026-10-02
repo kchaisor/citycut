@@ -309,6 +309,14 @@ export function heightFieldFromTiles(
 }
 
 /** Bilinear DEM sample. Points outside the square clamp to the edge. */
+/** Mean elevation across the heightfield inside the site frame. */
+export function meanTerrainElevation(field: TerrainField): number {
+  if (field.heights.length === 0) return field.min;
+  let sum = 0;
+  for (let i = 0; i < field.heights.length; i++) sum += field.heights[i]!;
+  return sum / field.heights.length;
+}
+
 export function sampleTerrain(field: TerrainField, east: number, north: number, sideM: number): number {
   const half = sideM / 2;
   const u = Math.min(1, Math.max(0, (east + half) / sideM));

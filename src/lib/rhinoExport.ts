@@ -7,6 +7,7 @@ import { colourRgb, type ColourKey } from "./colours";
 import { CRS_NOTE, mgaCrs, projectLocal, projectLonLat } from "./crs";
 import { readDrawingStyle } from "./drawingStyle";
 import { figureGround, figureGroundDatum } from "./figureGround";
+import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { buildHeliodonGroundOverlay, type HeliodonGroundExportOptions } from "./heliodonDiagram";
 import { contourIsIndex, demContourLayer } from "./vicmapContours";
 import type { CityModel, Pt } from "../types";
@@ -48,6 +49,7 @@ export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
     Contours: "contour",
     FigureGround: "--figure-fill",
     "Sun path": "--sun-compass-label",
+    Shadows: "--shadow-fill",
   };
   for (const use of BUILDING_USES) {
     const layer = BUILDING_USE_META[use].layer;
@@ -358,11 +360,58 @@ function addHeliodonPlan(
   for (const line of overlay.hourLines) addPolyline(line, "Hour line");
 }
 
+function addPlanShadows(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  model: CityModel,
+  zone: number,
+  input: PlanShadowInput,
+  castShadows: boolean,
+) {
+  const rings = planShadowRings(model, input, castShadows);
+  if (rings.length === 0) return;
+  const z = model.terrain ? model.terrain.min : 0;
+  const layerIndex = ensureLayer(rhino, doc, layers, materials, "Shadows", layerColors()["Shadows"]);
+  for (const polygon of rings) {
+    for (const ring of polygon) {
+      if (ring.length < 3) continue;
+      const points = ring.map(([east, north]) => {
+        const [easting, northing] = projectLocal([east, north], model.center, zone);
+        return [easting, northing, z];
+      });
+      points.push(points[0]!);
+      const attributes = new rhino.ObjectAttributes();
+      attributes.name = "Shadow";
+      attributes.layerIndex = layerIndex;
+      applyByLayerAttributes(rhino, attributes);
+      doc.objects().addPolyline(points, attributes);
+      release(attributes);
+    }
+  }
+}
+
+export type CityModelTo3dmOptions = {
+  heliodon?: HeliodonGroundExportOptions | null;
+  shadows?: PlanShadowInput | null;
+  castShadows?: boolean;
+};
+
+function normalize3dmOptions(
+  options?: HeliodonGroundExportOptions | CityModelTo3dmOptions | null,
+): CityModelTo3dmOptions {
+  if (!options) return {};
+  if ("heliodon" in options || "castShadows" in options || "shadows" in options) return options;
+  return { heliodon: options as HeliodonGroundExportOptions };
+}
+
 /** Current city meshes as a Rhino .3dm in MGA metres, Z-up. */
 export async function cityModelTo3dm(
   model: CityModel,
-  heliodon?: HeliodonGroundExportOptions | null,
+  options?: HeliodonGroundExportOptions | CityModelTo3dmOptions | null,
 ): Promise<Uint8Array> {
+  const { heliodon, shadows, castShadows } = normalize3dmOptions(options);
   const rhino = await loadRhino();
   const crs = mgaCrs(model.center.lon);
   const group = buildCityGroup(model, { splitBuildings: true });
@@ -406,6 +455,7 @@ export async function cityModelTo3dm(
     addFigureGround(rhino, doc, layers, materials, model, crs.zone);
     addContours(rhino, doc, layers, materials, model, crs.zone);
     if (heliodon) addHeliodonPlan(rhino, doc, layers, materials, model, crs.zone, heliodon);
+    if (shadows) addPlanShadows(rhino, doc, layers, materials, model, crs.zone, shadows, Boolean(castShadows));
 
     return doc.toByteArray();
   } finally {

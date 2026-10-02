@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { matteStandardMaterial } from "./matteMaterial";
 import { ARCHETYPE_CATALOG, GENERIC_ARCHETYPE, isArchetypeId } from "./treeForms";
 import { resolveArchetype } from "./treeMap";
 import type { TreeFeat } from "../types";
@@ -127,9 +128,8 @@ export function buildTreeGroup(
   const up = new THREE.Vector3(0, 1, 0);
 
   for (const [id, bucket] of buckets) {
-    const material = new THREE.MeshStandardMaterial({
+    const material = matteStandardMaterial({
       vertexColors: true,
-      roughness: 0.86,
       side: THREE.DoubleSide,
     });
     const mesh = new THREE.InstancedMesh(archetypeGeometry(id).clone(), material, bucket.length);

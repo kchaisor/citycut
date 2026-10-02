@@ -28,10 +28,13 @@ export function SolarPanel({
   settings,
   onChange,
   sideM,
+  embedded = false,
 }: {
   settings: SolarViewSettings;
   onChange: (next: SolarViewSettings) => void;
   sideM: number;
+  /** When true, render inside the left drawer without the floating panel chrome. */
+  embedded?: boolean;
 }) {
   const [open, setOpen] = useState(true);
   const [standard, setStandard] = useState<{ id: ShadowStandardId; index: number } | null>(null);
@@ -58,18 +61,20 @@ export function SolarPanel({
   }
 
   return (
-    <div className="solar-panel">
-      <button
-        type="button"
-        className="solar-panel-head"
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <span>Solar</span>
-        <ChevronDown size={16} strokeWidth={1.75} aria-hidden className={open ? "is-open" : undefined} />
-      </button>
-      <div id={panelId} className="solar-panel-body" hidden={!open}>
+    <div className={embedded ? "solar-drawer" : "solar-panel"}>
+      {!embedded && (
+        <button
+          type="button"
+          className="solar-panel-head"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <span>Solar</span>
+          <ChevronDown size={16} strokeWidth={1.75} aria-hidden className={open ? "is-open" : undefined} />
+        </button>
+      )}
+      <div id={panelId} className="solar-panel-body" hidden={!embedded && !open}>
         <label className="check-field">
           <input
             type="checkbox"

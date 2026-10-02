@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Building2, Download, DraftingCompass, Info, Trees } from "lucide-react";
+import { Building2, Download, DraftingCompass, Info, Sun, Trees } from "lucide-react";
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -50,6 +50,8 @@ import { SatellitePane } from "./SatellitePane";
 import { Scene3D, type SceneExporter } from "./Scene3D";
 import { SceneBoundary } from "./SceneBoundary";
 import { SolarPanel } from "./SolarPanel";
+import type { SitePlanExportOptions } from "../lib/aiPlan";
+import type { PlanShadowInput } from "../lib/buildingShadows";
 import type { HeliodonDiagramExportOptions, HeliodonGroundExportOptions } from "../lib/heliodonDiagram";
 import {
   readStoredHeliodonRadiusFactor,
@@ -85,6 +87,7 @@ const TITLES: Record<string, string> = {
   buildings: "Buildings",
   trees: "Tree sizes",
   drawing: "Drawing",
+  solar: "Solar",
   exports: "Exports",
 };
 
@@ -126,8 +129,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     setSolar(next);
   }
 
-  function heliodonDiagramExport(): HeliodonDiagramExportOptions | null {
-    if (!solar.showPath) return null;
+  function planShadowInput(): PlanShadowInput {
     return {
       lat: model.center.lat,
       lon: model.center.lon,
@@ -136,7 +138,23 @@ export function ModelPage({ model }: { model: CityModel }) {
       day: solar.day,
       hour: solar.hour,
       minute: solar.minute,
+    };
+  }
+
+  function heliodonDiagramExport(): HeliodonDiagramExportOptions | null {
+    if (!solar.showPath) return null;
+    return {
+      ...planShadowInput(),
       sideM: model.sideM,
+      radiusFactor: solar.radiusFactor,
+    };
+  }
+
+  function sitePlanExportOptions(): SitePlanExportOptions {
+    return {
+      heliodon: heliodonDiagramExport(),
+      shadows: planShadowInput(),
+      castShadows: solar.castShadows,
     };
   }
 
@@ -172,6 +190,7 @@ export function ModelPage({ model }: { model: CityModel }) {
   if (showTrees) items.push({ id: "trees", label: "Tree sizes", icon: <Trees {...iconProps} /> });
   items.push(
     { id: "drawing", label: "Drawing", icon: <DraftingCompass {...iconProps} /> },
+    { id: "solar", label: "Solar", icon: <Sun {...iconProps} /> },
     { id: "exports", label: "Exports", icon: <Download {...iconProps} /> },
   );
   const open = drawerIsAvailable(preferred, items.map((item) => item.id));
@@ -202,7 +221,11 @@ export function ModelPage({ model }: { model: CityModel }) {
     setExportError(null);
     setBusy("3dm");
     try {
-      await download3dm(model, heliodonRhinoExport());
+      await download3dm(model, {
+        heliodon: heliodonRhinoExport(),
+        shadows: planShadowInput(),
+        castShadows: solar.castShadows,
+      });
     } catch {
       setExportError("The Rhino file could not be written.");
     } finally {
@@ -214,7 +237,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     setExportError(null);
     setBusy("ai-site");
     try {
-      await downloadSiteAi(model, figureScale, lineStyles, heliodonDiagramExport());
+      await downloadSiteAi(model, figureScale, lineStyles, sitePlanExportOptions());
     } catch {
       setExportError("The site plan could not be written.");
     } finally {
@@ -287,25 +310,25 @@ export function ModelPage({ model }: { model: CityModel }) {
     <div className="model">
       <h1 className="sr-only">Your model is ready.</h1>
       <div className={tab === "drawing" ? "viewport is-drawing" : "viewport"}>
-        <div className={tab === "3d" ? "fill" : "fill is-parked"}>
-          {tab === "3d" && <SolarPanel settings={solar} onChange={commitSolar} sideM={model.sideM} />}
-          <SceneBoundary>
-            <Scene3D
-              model={model}
-              uniformBuildings={!colourByUse && !showSource}
-              colourBySource={showSource}
-              projection={view.projection}
-              corner={view.corner}
-              freeRotate={view.freeRotate}
-              snapId={snapId}
-              solar={solar}
-              onExportReady={onExportReady}
-            />
-          </SceneBoundary>
-        </div>
+        {tab === "3d" && (
+          <div className="fill">
+            <SceneBoundary>
+              <Scene3D
+                model={model}
+                uniformBuildings={!colourByUse && !showSource}
+                colourBySource={showSource}
+                projection={view.projection}
+                corner={view.corner}
+                freeRotate={view.freeRotate}
+                snapId={snapId}
+                solar={solar}
+                onExportReady={onExportReady}
+              />
+            </SceneBoundary>
+          </div>
+        )}
         {tab === "drawing" && (
           <div className="fill is-plan">
-            <SolarPanel settings={solar} onChange={commitSolar} sideM={model.sideM} />
             <DrawingPlan
               key={fitToken}
               model={model}
@@ -314,6 +337,8 @@ export function ModelPage({ model }: { model: CityModel }) {
               lineStyle={lineStyles}
               planScale={figureScale}
               heliodon={heliodonDiagramExport()}
+              castShadows={solar.castShadows}
+              shadowInput={planShadowInput()}
             />
           </div>
         )}
@@ -623,6 +648,10 @@ export function ModelPage({ model }: { model: CityModel }) {
               {tab === "satellite" && (
                 <p className="field-note">Satellite is a preview of this frame. It is not included in the downloads.</p>
               )}
+            </div>
+
+            <div className="drawer-section" hidden={open !== "solar"}>
+              <SolarPanel embedded settings={solar} onChange={commitSolar} sideM={model.sideM} />
             </div>
 
             <div className="drawer-section" hidden={open !== "exports"}>
