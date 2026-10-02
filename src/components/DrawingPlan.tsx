@@ -66,7 +66,6 @@ export function DrawingPlan({
   lineStyle,
   planScale = 1000,
   heliodon = null,
-  solarStudyOn = false,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -77,8 +76,6 @@ export function DrawingPlan({
   planScale?: number;
   /** When set, draws the sun path over the plan (same ring radius as the 3D heliodon). */
   heliodon?: HeliodonDiagramInput | null;
-  /** Site-plan buildings render white while the sun study is on (screen only). */
-  solarStudyOn?: boolean;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: View } | null>(null);
@@ -170,7 +167,6 @@ export function DrawingPlan({
   const treeFill = getColour("--tree-fill");
   const contourLabel = getColour("--contour-label");
   const planEmpty = getColour("--plan-empty");
-  const solarBuildingFill = getColour("--building-solar-neutral");
 
   return (
     <svg
@@ -325,7 +321,7 @@ export function DrawingPlan({
               <path
                 key={`b${index}`}
                 d={svgRings(building.rings)}
-                fill={solarStudyOn ? solarBuildingFill : building.fill}
+                fill={building.fill}
                 fillRule="evenodd"
                 {...screenPenAttrs(style.building, "miter")}
               />

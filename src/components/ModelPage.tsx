@@ -314,7 +314,6 @@ export function ModelPage({ model }: { model: CityModel }) {
               lineStyle={lineStyles}
               planScale={figureScale}
               heliodon={heliodonDiagramExport()}
-              solarStudyOn={solar.showPath}
             />
           </div>
         )}
@@ -386,7 +385,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                     {showSource ? "Showing source" : "Show source"}
                   </button>
                 </div>
-                {solar.showPath && (
+                {solar.showPath && tab === "3d" && (
                   <p className="legend-note">Buildings render white on screen while sun path is on; exports keep normal colours.</p>
                 )}
                 <ul>
