@@ -206,6 +206,32 @@ describe("parse", () => {
     expect(parsed.areas[0].id).toBe(3);
   });
 
+  it("keeps Yarra-style river areas tagged natural=water and water=river", () => {
+    const ring = geom([
+      [-80, -10],
+      [80, -10],
+      [80, 10],
+      [-80, 10],
+      [-80, -10],
+    ]);
+    const parsed = parseCity(
+      {
+        elements: [
+          {
+            type: "way",
+            id: 25930191,
+            tags: { natural: "water", water: "river", name: "Yarra River" },
+            geometry: ring,
+          },
+        ],
+      },
+      origin,
+      200,
+      { buildings: false, roads: false, waterGreen: true, trees: false },
+    );
+    expect(parsed.areas.filter((area) => area.kind === "water")).toHaveLength(1);
+  });
+
   it("reads a multipolygon water relation", () => {
     const west = geom([
       [-30, -20],
