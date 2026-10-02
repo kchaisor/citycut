@@ -211,7 +211,7 @@ function subdivideToSpacing(tris: Tri[], maxEdge: number): Tri[] {
 }
 
 /** Parks and water keep their outline and pick up interior samples so they follow the heightfield. */
-function drapedAreaGeometry(
+export function drapedAreaGeometry(
   area: AreaFeat,
   sample: (east: number, north: number) => number,
   offset: number,

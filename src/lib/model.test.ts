@@ -167,6 +167,45 @@ describe("parse", () => {
     expect(parsed.buildings[0].id).toBe(2);
   });
 
+  it("drops zoo ponds and intermittent drains from the water layer", () => {
+    const ring = geom([
+      [-20, -20],
+      [20, -20],
+      [20, 20],
+      [-20, 20],
+      [-20, -20],
+    ]);
+    const parsed = parseCity(
+      {
+        elements: [
+          {
+            type: "way",
+            id: 1,
+            tags: { natural: "water", water: "pond", name: "Sediment Pond" },
+            geometry: ring,
+          },
+          {
+            type: "way",
+            id: 2,
+            tags: { natural: "water", zoo: "enclosure" },
+            geometry: ring,
+          },
+          {
+            type: "way",
+            id: 3,
+            tags: { natural: "water", name: "Tam-Boore" },
+            geometry: ring,
+          },
+        ],
+      },
+      origin,
+      200,
+      { buildings: false, roads: false, waterGreen: true, trees: false },
+    );
+    expect(parsed.areas.filter((area) => area.kind === "water")).toHaveLength(1);
+    expect(parsed.areas[0].id).toBe(3);
+  });
+
   it("reads a multipolygon water relation", () => {
     const west = geom([
       [-30, -20],

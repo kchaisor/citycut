@@ -5,6 +5,7 @@ import { dedupeConsecutive, openRing, polylineLength, signedArea, toLocal } from
 import { buildingHeight } from "./height";
 import type { OverpassElement, OverpassResponse } from "./overpass";
 import { resolveArchetype } from "./treeMap";
+import { isOpenWaterArea } from "./waterAreas";
 import { describeTrees, treeSize, trunkTaggedAsCentimetres } from "./trees";
 import type {
   AreaFeat,
@@ -178,14 +179,7 @@ export function stitchRings(lines: Pt[][]): Pt[][] {
 }
 
 function areaKind(tags: Record<string, string>): "water" | "green" | null {
-  if (
-    tags.natural === "water" ||
-    tags.natural === "wetland" ||
-    tags.waterway === "riverbank" ||
-    tags.waterway === "dock" ||
-    tags.landuse === "reservoir" ||
-    tags.water
-  ) {
+  if (isOpenWaterArea(tags)) {
     return "water";
   }
   if (
