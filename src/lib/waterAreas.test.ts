@@ -18,4 +18,10 @@ describe("open water OSM tag filter", () => {
     expect(isOpenWaterArea({ water: "pond" })).toBe(false);
     expect(isOpenWaterArea({ natural: "water", water: "river" })).toBe(true);
   });
+
+  it("drops tiny unnamed natural=water patches and named paddling pools", () => {
+    expect(isOpenWaterArea({ natural: "water" }, 1200)).toBe(false);
+    expect(isOpenWaterArea({ natural: "water", name: "Tam-Boore" }, 1200)).toBe(true);
+    expect(isOpenWaterArea({ natural: "water", name: "Crocodile Paddling Pool" }, 800)).toBe(false);
+  });
 });

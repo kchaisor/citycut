@@ -224,7 +224,7 @@ describe("parse", () => {
           {
             type: "relation",
             id: 9,
-            tags: { natural: "water", type: "multipolygon" },
+            tags: { natural: "water", name: "Test Lake", type: "multipolygon" },
             members: [
               { type: "way", ref: 11, role: "outer", geometry: west },
               { type: "way", ref: 12, role: "outer", geometry: east },

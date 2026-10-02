@@ -24,6 +24,9 @@ const EXCLUDED_WATER_VALUES = new Set([
   "moat",
 ]);
 
+/** Unnamed `natural=water` patches smaller than this are usually zoo or park plumbing, not lakes. */
+export const MIN_UNNAMED_NATURAL_WATER_M2 = 5000;
+
 const EXCLUDED_MAN_MADE = new Set([
   "water_well",
   "storage_tank",
@@ -47,6 +50,15 @@ function excludedWaterFeature(tags: Record<string, string>): boolean {
   if (tags.man_made && EXCLUDED_MAN_MADE.has(tags.man_made)) return true;
   const waterTag = tags.water?.trim().toLowerCase();
   if (waterTag && EXCLUDED_WATER_VALUES.has(waterTag)) return true;
+  const name = tags.name?.trim();
+  if (
+    name &&
+    /\bpool\b/i.test(name) &&
+    tags.water !== "lake" &&
+    tags.landuse !== "reservoir"
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -61,8 +73,17 @@ function includedWaterFeature(tags: Record<string, string>): boolean {
 }
 
 /** True when an OSM area relation or closed way should fill the water layer. */
-export function isOpenWaterArea(tags: Record<string, string>): boolean {
+export function isOpenWaterArea(tags: Record<string, string>, areaM2?: number): boolean {
   if (excludedWaterFeature(tags)) return false;
+  if (
+    tags.natural === "water" &&
+    !tags.name &&
+    !tags.water &&
+    areaM2 != null &&
+    areaM2 < MIN_UNNAMED_NATURAL_WATER_M2
+  ) {
+    return false;
+  }
   return includedWaterFeature(tags);
 }
 
@@ -88,5 +109,6 @@ export const OPEN_WATER_TAG_FIXTURES = {
     { natural: "water", water: "reflecting_pool" },
     { natural: "water", man_made: "wastewater_plant" },
     { landuse: "basin", natural: "water" },
+    { natural: "water", name: "Crocodile Paddling Pool" },
   ],
 } as const;

@@ -367,9 +367,11 @@ function pushArea(
   outer: Pt[],
   holes: Pt[][],
   half: number,
+  tags: Record<string, string>,
 ) {
   const ring = clipRing(outer, half);
   if (ring.length < 3) return;
+  if (kind === "water" && !isOpenWaterArea(tags, Math.abs(signedArea(ring)))) return;
   const clippedHoles = holes
     .map((hole) => clipRing(hole, half))
     .filter((hole) => hole.length >= 3);
@@ -445,7 +447,9 @@ export function collectTreeContext(elements: OverpassElement[], origin: LonLat, 
       const clippedHoles = holes.map((hole) => clipRing(hole, half)).filter((hole) => hole.length >= 3);
       if (kind) canopy.push({ ring: clipped, holes: clippedHoles, kind });
       else if (buildingRel) buildings.push({ ring: clipped, holes: clippedHoles });
-      else water.push({ ring: clipped, holes: clippedHoles });
+      else if (isOpenWaterArea(tags, Math.abs(signedArea(clipped)))) {
+        water.push({ ring: clipped, holes: clippedHoles });
+      }
     }
   }
 
@@ -474,7 +478,9 @@ export function collectTreeContext(elements: OverpassElement[], origin: LonLat, 
     }
     if (areaKind(tags) === "water" && isClosed(line)) {
       const clipped = clipRing(line, half);
-      if (clipped.length >= 3) water.push({ ring: clipped, holes: [] });
+      if (clipped.length >= 3 && isOpenWaterArea(tags, Math.abs(signedArea(clipped)))) {
+        water.push({ ring: clipped, holes: [] });
+      }
       continue;
     }
     const spec = roadWidth(tags);
@@ -529,7 +535,7 @@ export function parseCity(
           );
         }
       } else if (kind) {
-        for (const ring of rings) pushArea(areas, element.id, kind, ring, holes, half);
+        for (const ring of rings) pushArea(areas, element.id, kind, ring, holes, half, tags);
       }
     }
   }
@@ -552,7 +558,7 @@ export function parseCity(
     if (layers.waterGreen && !consumedWays.has(element.id)) {
       const kind = areaKind(tags);
       if (kind && isClosed(line)) {
-        pushArea(areas, element.id, kind, line, [], half);
+        pushArea(areas, element.id, kind, line, [], half, tags);
         continue;
       }
     }
