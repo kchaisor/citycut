@@ -167,7 +167,7 @@ describe("parse", () => {
     expect(parsed.buildings[0].id).toBe(2);
   });
 
-  it("drops zoo enclosure and intermittent drains but keeps named ponds", () => {
+  it("drops zoo enclosure, intermittent drains, and ponds", () => {
     const ring = geom([
       [-20, -20],
       [20, -20],
@@ -202,9 +202,7 @@ describe("parse", () => {
       200,
       { buildings: false, roads: false, waterGreen: true, trees: false },
     );
-    const water = parsed.areas.filter((area) => area.kind === "water");
-    expect(water).toHaveLength(1);
-    expect(water[0].id).toBe(1);
+    expect(parsed.areas.filter((area) => area.kind === "water")).toHaveLength(0);
   });
 
   it("classifies wetland as green, not water", () => {
@@ -234,7 +232,7 @@ describe("parse", () => {
     expect(parsed.areas[0].kind).toBe("green");
   });
 
-  it("drops water polygons under 500 m² but keeps rivers and large ponds", () => {
+  it("hides ponds at any size and keeps lakes and riverbanks", () => {
     const parsed = parseCity(
       {
         elements: [
@@ -242,13 +240,13 @@ describe("parse", () => {
             type: "way",
             id: 1,
             tags: { natural: "water", water: "pond" },
-            geometry: geom(square([-60, -60], Math.sqrt(499))),
+            geometry: geom(square([-60, -60], 200)),
           },
           {
             type: "way",
             id: 2,
-            tags: { natural: "water", water: "pond" },
-            geometry: geom(square([60, 60], Math.sqrt(501))),
+            tags: { natural: "water", water: "lake" },
+            geometry: geom(square([60, 60], Math.sqrt(200))),
           },
           {
             type: "way",
@@ -310,7 +308,7 @@ describe("parse", () => {
           {
             type: "relation",
             id: 9,
-            tags: { natural: "water", name: "Test Lake", type: "multipolygon" },
+            tags: { natural: "water", water: "lake", name: "Test Lake", type: "multipolygon" },
             members: [
               { type: "way", ref: 11, role: "outer", geometry: west },
               { type: "way", ref: 12, role: "outer", geometry: east },
