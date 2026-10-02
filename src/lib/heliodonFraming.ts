@@ -1,5 +1,6 @@
 import {
   HELIODON_LIFT_M,
+  dialPoint,
   heliodonPoint,
   horizonArcDirections,
   type GroundHeight,
@@ -89,10 +90,24 @@ export function heliodonSceneBounds(input: HeliodonFramingInput): Aabb {
     maxY = Math.max(maxY, sunY + sideM * 0.12);
   }
 
+  let minX = -horizontal;
+  let maxX = horizontal;
+  let minZ = -horizontal;
+  let maxZ = horizontal;
+  for (const deg of [0, 90, 180, 270]) {
+    const [x, y, z] = dialPoint(deg, ringRadiusM + labelPad, ground);
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minZ = Math.min(minZ, z);
+    maxZ = Math.max(maxZ, z);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y + sideM * 0.07);
+  }
+
   const site = siteBounds(sideM, groundY, siteTopY);
   const dome: Aabb = {
-    min: [-horizontal, minY, -horizontal],
-    max: [horizontal, maxY, horizontal],
+    min: [minX, minY, minZ],
+    max: [maxX, maxY, maxZ],
   };
   return unionAabb(site, dome);
 }
@@ -143,7 +158,7 @@ export function perspectiveFitDistance(
     if (fitsFrustum(bounds, target, eyeOffsetUnit, mid, fovVerticalDeg, aspect, margin)) hi = mid;
     else lo = mid;
   }
-  return hi;
+  return hi * 1.06;
 }
 
 function boundingSpan(bounds: Aabb): number {

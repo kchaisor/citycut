@@ -257,13 +257,14 @@ function PerspectiveFit({
         siteTopY,
       });
       target = frameCentre(bounds);
-      distance = perspectiveFitDistance(
-        bounds,
-        target,
-        DEFAULT_PERSPECTIVE_OFFSET,
-        camera.fov,
-        size.width / Math.max(size.height, 1),
-      );
+      distance =
+        perspectiveFitDistance(
+          bounds,
+          target,
+          DEFAULT_PERSPECTIVE_OFFSET,
+          camera.fov,
+          size.width / Math.max(size.height, 1),
+        ) * (1 + Math.max(0, solar.radiusFactor - 1) * 0.08);
     } else {
       target = defaultPerspectiveTarget(side, lift);
       distance = defaultPerspectiveDistance(side);
