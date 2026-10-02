@@ -14,6 +14,8 @@ import {
   horizonArcDirections,
   type GroundHeight,
 } from "../lib/heliodonGeometry";
+import { heliodonRadiusM } from "../lib/heliodonRadius";
+import { HELIODON_LABELLED_HOURS, SUN_PATH_STYLES } from "../lib/heliodonSunPaths";
 import { dialPixelsPerDegree, dialTickLodOpacity } from "../lib/dialLod";
 import { heliodonPalette, type HeliodonPalette } from "../lib/heliodonPalette";
 import { sampleTerrain } from "../lib/terrain";
@@ -21,9 +23,6 @@ import type { TerrainField } from "../types";
 import { markScreenOnly } from "../lib/screenOnly";
 import { useColourRevision } from "../lib/useColourRevision";
 import {
-  SOLAR_EQUINOX,
-  SOLAR_SUMMER,
-  SOLAR_WINTER,
   daylightHourMarks,
   melbourneLocalToUtc,
   sunSample,
@@ -34,6 +33,8 @@ import {
 export type SolarViewSettings = {
   showPath: boolean;
   castShadows: boolean;
+  /** Horizon-ring radius as a multiple of the site half-width. */
+  radiusFactor: number;
   year: number;
   month: number;
   day: number;
@@ -44,17 +45,7 @@ export type SolarViewSettings = {
 /** Paint after the city so the heliodon sits over it. */
 const OVERLAY_ORDER = 1000;
 
-/** Dome and horizon-ring radius as a fraction of the cut side. One radius, so arc ends meet the ring. */
-export const HELIODON_DOME_FRACTION = 0.36;
-
-/** Dash patterns as fractions of the cut side: on, off, on, off… `null` is a solid line. */
-export const SUN_PATH_STYLES = [
-  { date: SOLAR_SUMMER, label: "Dec 21", key: "--sun-arc-summer", pattern: null, labelSide: 1 },
-  { date: SOLAR_EQUINOX, label: "Sep/Mar", key: "--sun-arc-equinox", pattern: [0.018, 0.011], labelSide: -1 },
-  { date: SOLAR_WINTER, label: "Jun 21", key: "--sun-arc-winter", pattern: [0.024, 0.009, 0.004, 0.009], labelSide: -1 },
-] as const;
-
-const LABELLED_HOURS = new Set([6, 9, 12, 15, 18]);
+export { SUN_PATH_STYLES } from "../lib/heliodonSunPaths";
 /** Opacity of the second pass that draws heliodon lines where buildings hide them. */
 const GHOST_OPACITY = 0.38;
 /** Labels on the ground keep more of their ink when hidden, so they stay legible. */
@@ -340,20 +331,21 @@ type HeliodonRoot = THREE.Group & {
   };
 };
 
-function buildDialDisc(root: HeliodonRoot, radius: number, ground: GroundHeight) {
-  const geometry = new THREE.CircleGeometry(radius * 1.01, 96);
+/** Faint ring under the horizon ticks only; the site centre stays clear. */
+function buildDialAnnulus(root: HeliodonRoot, radius: number, ground: GroundHeight) {
+  const geometry = new THREE.RingGeometry(radius * 0.992, radius * 1.008, 96);
   geometry.rotateX(-Math.PI / 2);
   const mesh = new THREE.Mesh(
     geometry,
     new THREE.MeshBasicMaterial({
       color: getColour("--heliodon-dial-disc"),
       transparent: true,
-      opacity: 0.36,
+      opacity: 0.22,
       depthWrite: false,
       toneMapped: false,
     }),
   );
-  mesh.position.y = ground(0, 0) + 0.06;
+  mesh.position.y = ground(0, 0) + 0.05;
   mesh.renderOrder = OVERLAY_ORDER - 45;
   mesh.frustumCulled = false;
   root.add(mesh);
@@ -365,29 +357,16 @@ function circle(radius: number, ground: GroundHeight, stepDeg = 1): Vec3[] {
   return points;
 }
 
-function ray(deg: number, from: number, to: number, ground: GroundHeight, steps = 24): Vec3[] {
-  const points: Vec3[] = [];
-  for (let i = 0; i <= steps; i++) points.push(dialPoint(deg, from + ((to - from) * i) / steps, ground));
-  return points;
-}
-
-function buildDial(root: HeliodonRoot, palette: HeliodonPalette, sideM: number, ground: GroundHeight) {
-  const R = sideM * HELIODON_DOME_FRACTION;
-  buildDialDisc(root, R, ground);
+function buildDial(root: HeliodonRoot, palette: HeliodonPalette, ringRadius: number, sideM: number, ground: GroundHeight) {
+  const R = ringRadius;
+  buildDialAnnulus(root, R, ground);
   const minor = new LineBatch();
   const medium = new LineBatch();
   const major = new LineBatch();
   const strong = new LineBatch();
   const altitude = new LineBatch();
-  const radials = new LineBatch();
-  const axes = new LineBatch();
 
-  for (let alt = 10; alt < 90; alt += 10) altitude.polyline(circle(altitudeRingRadius(alt, R), ground, 2));
-  const inner = altitudeRingRadius(80, R);
-  for (let deg = 0; deg < 360; deg += 10) {
-    if (deg % 90 === 0) axes.polyline(ray(deg, 0, R, ground, 40));
-    else radials.polyline(ray(deg, inner, R, ground));
-  }
+  for (const alt of [30, 60]) altitude.polyline(circle(altitudeRingRadius(alt, R), ground, 2));
   strong.polyline(circle(R, ground));
   for (let deg = 0; deg < 360; deg += 1) {
     if (deg % 90 === 0) strong.segment(dialPoint(deg, R, ground), dialPoint(deg, R + sideM * 0.05, ground));
@@ -397,13 +376,12 @@ function buildDial(root: HeliodonRoot, palette: HeliodonPalette, sideM: number, 
   }
 
   const { ink, grey, casing } = palette;
-  altitude.addTo(root, { color: grey, widthPx: 2 }, casing, OVERLAY_ORDER - 20, "inner");
-  radials.addTo(root, { color: grey, widthPx: 1.75 }, casing, OVERLAY_ORDER - 18, "inner");
-  axes.addTo(root, { color: ink, widthPx: 2, dash: [sideM * 0.012, sideM * 0.008] }, casing, OVERLAY_ORDER - 16);
-  minor.addTo(root, { color: grey, widthPx: 1.5 }, casing, OVERLAY_ORDER - 14, "minor");
-  medium.addTo(root, { color: ink, widthPx: 2 }, casing, OVERLAY_ORDER - 12, "medium");
-  major.addTo(root, { color: ink, widthPx: 2.75 }, casing, OVERLAY_ORDER - 10);
-  strong.addTo(root, { color: ink, widthPx: 4 }, casing, OVERLAY_ORDER - 8);
+  const uncased = { cased: false as const };
+  altitude.addTo(root, { color: grey, widthPx: 1.75, ...uncased }, casing, OVERLAY_ORDER - 20, "inner");
+  minor.addTo(root, { color: grey, widthPx: 1.5, ...uncased }, casing, OVERLAY_ORDER - 14, "minor");
+  medium.addTo(root, { color: ink, widthPx: 2, ...uncased }, casing, OVERLAY_ORDER - 12, "medium");
+  major.addTo(root, { color: ink, widthPx: 2.75, ...uncased }, casing, OVERLAY_ORDER - 10);
+  strong.addTo(root, { color: ink, widthPx: 3.5, ...uncased }, casing, OVERLAY_ORDER - 8);
 
   const lift = (sprite: THREE.Sprite, point: Vec3) => sprite.position.set(point[0], point[1] + sprite.scale.y * 0.6, point[2]);
   for (let deg = 10; deg < 360; deg += 10) {
@@ -438,10 +416,11 @@ function buildSunPaths(
   lon: number,
   year: number,
   sideM: number,
+  ringRadius: number,
   ground: GroundHeight,
   centre: THREE.Vector3,
 ) {
-  const dome = sideM * HELIODON_DOME_FRACTION;
+  const dome = ringRadius;
   const dots = hourDotMaterial(palette.ink, palette.casing);
   const casing = visibleMaterial(palette.casing);
   const onDome = (direction: Vec3) => vec(heliodonPoint(direction, dome, ground));
@@ -471,7 +450,7 @@ function buildSunPaths(
         dot.scale.setScalar(sideM * 0.011);
         root.add(dot);
       }
-      if (!LABELLED_HOURS.has(mark.hour)) continue;
+      if (!HELIODON_LABELLED_HOURS.has(mark.hour)) continue;
       const label = textSprite(`${mark.hour}h`, { ink: palette.ink, halo: palette.halo, heightM: sideM * 0.022 });
       if (!label) continue;
       const near = outward(at, style.labelSide * sideM * 0.024);
@@ -544,14 +523,12 @@ function useHeliodonFrame(
   root: HeliodonRoot | null,
   sun: THREE.Object3D | null,
   centre: THREE.Vector3,
-  sideM: number,
+  ringRadius: number,
   ground: GroundHeight,
 ) {
   useFrame(({ camera, size }) => {
     if (!root) return;
     for (const material of root.userData.lineMaterials) material.resolution.set(size.width, size.height);
-
-    const ringRadius = sideM * HELIODON_DOME_FRACTION;
     const ringY = ground(0, 0) + HELIODON_LIFT_M;
     const pxPerDegree = dialPixelsPerDegree(
       (x, y, z) => {
@@ -612,6 +589,7 @@ export function SolarHeliodon({
   groundY,
   terrain,
   settings,
+  hideDiagram,
 }: {
   lat: number;
   lon: number;
@@ -619,10 +597,13 @@ export function SolarHeliodon({
   groundY: number;
   terrain?: TerrainField;
   settings: SolarViewSettings;
+  /** Plan orthographic view shows the 2D overlay instead. */
+  hideDiagram?: boolean;
 }) {
   const sample = useMelbourneSunSample(lat, lon, settings);
   const colourTick = useColourRevision();
-  const show = settings.showPath;
+  const ringRadius = heliodonRadiusM(sideM, settings.radiusFactor);
+  const show = settings.showPath && !hideDiagram;
   const ground = useMemo<GroundHeight>(
     () => (terrain ? (x, z) => sampleTerrain(terrain, x, -z, sideM) : () => groundY),
     [terrain, sideM, groundY],
@@ -635,11 +616,11 @@ export function SolarHeliodon({
     group.userData = { cardinals: [], degreeLabels: [], movable: [], lineMaterials: [], lodMaterials: [] };
     if (!show) return group;
     const palette = heliodonPalette();
-    buildDial(group, palette, sideM, ground);
-    buildSunPaths(group, palette, lat, lon, settings.year, sideM, ground, centre);
+    buildDial(group, palette, ringRadius, sideM, ground);
+    buildSunPaths(group, palette, lat, lon, settings.year, sideM, ringRadius, ground, centre);
     markScreenOnly(group);
     return group;
-  }, [show, lat, lon, settings.year, sideM, ground, centre, colourTick]);
+  }, [show, lat, lon, settings.year, sideM, ringRadius, ground, centre, colourTick]);
 
   const marker = useDisposable(() => {
     const group = new THREE.Group();
@@ -652,10 +633,10 @@ export function SolarHeliodon({
     markScreenOnly(group);
     return group;
   }, [sideM, colourTick]);
-  marker.position.copy(vec(heliodonPoint(sample.direction, sideM * HELIODON_DOME_FRACTION, ground)));
+  marker.position.copy(vec(heliodonPoint(sample.direction, ringRadius, ground)));
   marker.visible = show && sample.aboveHorizon;
 
-  useHeliodonFrame(show ? root : null, marker, centre, sideM, ground);
+  useHeliodonFrame(show ? root : null, marker, centre, ringRadius, ground);
 
   if (!show) return null;
   return (

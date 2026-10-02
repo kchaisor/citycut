@@ -37,6 +37,7 @@ import {
   sitePlanBounds,
 } from "../lib/planCamera";
 import type { ProjectionMode } from "../lib/viewMemory";
+import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
 import type { CityModel } from "../types";
 
@@ -199,11 +200,13 @@ function PerspectiveSetup({
   controlsRef,
   side,
   lift,
+  heliodonRadius,
 }: {
   camera: THREE.PerspectiveCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
   side: number;
   lift: number;
+  heliodonRadius: number;
 }) {
   const ready = useRef(false);
   const place = useCallback(() => {
@@ -211,13 +214,13 @@ function PerspectiveSetup({
     if (ready.current || !controls) return;
     camera.position.set(side * 0.78, lift + side * 0.62, side * 0.86);
     camera.near = Math.max(0.1, side / 400);
-    camera.far = side * 40;
+    camera.far = Math.max(side * 40, heliodonRadius * 28);
     controls.target.set(0, lift + side * 0.02, 0);
     camera.lookAt(controls.target);
     camera.updateProjectionMatrix();
     controls.update();
     ready.current = true;
-  }, [camera, controlsRef, side, lift]);
+  }, [camera, controlsRef, side, lift, heliodonRadius]);
   useLayoutEffect(() => {
     place();
   }, [place]);
@@ -453,6 +456,7 @@ function Cameras({
   boundsRef,
   onExportReady,
   solarDiagramOn,
+  heliodonRadius,
 }: {
   side: number;
   lift: number;
@@ -465,6 +469,7 @@ function Cameras({
   boundsRef: RefObject<Aabb | null>;
   onExportReady: (exporter: SceneExporter | null) => void;
   solarDiagramOn: boolean;
+  heliodonRadius: number;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
@@ -494,7 +499,7 @@ function Cameras({
         <>
           <BindCamera camera={orthoView ? ortho : persp} />
           <FrameCameras persp={persp} ortho={ortho} />
-          <PerspectiveSetup camera={persp} controlsRef={perspControls} side={side} lift={lift} />
+          <PerspectiveSetup camera={persp} controlsRef={perspControls} side={side} lift={lift} heliodonRadius={heliodonRadius} />
           <HoldPoseWhenInactive controlsRef={perspControls} active={!orthoView} />
           <HoldPoseWhenInactive controlsRef={orthoControls} active={orthoView} />
           <IsoSnap
@@ -527,7 +532,7 @@ function Cameras({
             dampingFactor={0.08}
             maxPolarAngle={Math.PI / 2.02}
             minDistance={side * 0.2}
-            maxDistance={side * 3.4}
+            maxDistance={Math.max(side * 3.4, heliodonRadius * 2.4)}
           />
           <OrbitControls
             ref={orthoControls}
@@ -540,7 +545,7 @@ function Cameras({
             zoomToCursor
             maxPolarAngle={Math.PI / 2.02}
             minDistance={1}
-            maxDistance={side * 20}
+            maxDistance={Math.max(side * 20, heliodonRadius * 2.4)}
             mouseButtons={{
               LEFT: plan || !freeRotate ? MOUSE.PAN : MOUSE.ROTATE,
               MIDDLE: MOUSE.DOLLY,
@@ -605,6 +610,7 @@ export function Scene3D({
   const fillKeyLight = solar.castShadows ? 0 : 1.35;
   const fillAmbient = solar.castShadows ? 0.08 : 0.28;
   const fillHemi = solar.castShadows ? 0.34 : 0.7;
+  const heliodonRadius = heliodonRadiusM(model.sideM, solar.radiusFactor);
   const shadowTargetY = groundY;
   const siteTopY = useMemo(() => {
     let top = model.terrain ? model.terrain.max : 0;
@@ -636,7 +642,7 @@ export function Scene3D({
       <directionalLight position={[model.sideM * 0.4, model.sideM, model.sideM * 0.2]} intensity={fillKeyLight} />
       <SolarLight
         sample={sunSample}
-        sideM={model.sideM}
+        sideM={Math.max(model.sideM, heliodonRadius * 0.5)}
         enabled={solar.castShadows}
         targetY={shadowTargetY}
         topY={siteTopY}
@@ -656,6 +662,7 @@ export function Scene3D({
         groundY={groundY}
         terrain={model.terrain ?? undefined}
         settings={solar}
+        hideDiagram={projection === "plan"}
       />
       <Cameras
         side={model.sideM}
@@ -669,6 +676,7 @@ export function Scene3D({
         boundsRef={boundsRef}
         onExportReady={onExportReady}
         solarDiagramOn={solar.showPath}
+        heliodonRadius={heliodonRadius}
       />
     </Canvas>
   );

@@ -50,6 +50,12 @@ import { SatellitePane } from "./SatellitePane";
 import { Scene3D, type SceneExporter } from "./Scene3D";
 import { SceneBoundary } from "./SceneBoundary";
 import { SolarPanel } from "./SolarPanel";
+import type { HeliodonPlanExportOptions } from "../lib/heliodonPlan";
+import {
+  readStoredHeliodonRadiusFactor,
+  resolveHeliodonRadiusFactor,
+  writeStoredHeliodonRadiusFactor,
+} from "../lib/heliodonRadius";
 import type { SolarViewSettings } from "./SolarHeliodon";
 
 type Tab = "3d" | "drawing" | "satellite";
@@ -101,12 +107,36 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [solar, setSolar] = useState<SolarViewSettings>(() => ({
     showPath: false,
     castShadows: false,
+    radiusFactor: resolveHeliodonRadiusFactor(
+      readStoredHeliodonRadiusFactor(window.localStorage),
+      window.location.search,
+    ),
     year: 2026,
     month: 9,
     day: 22,
     hour: 15,
     minute: 0,
   }));
+
+  function commitSolar(next: SolarViewSettings) {
+    writeStoredHeliodonRadiusFactor(window.localStorage, next.radiusFactor);
+    setSolar(next);
+  }
+
+  function heliodonExport(): HeliodonPlanExportOptions | null {
+    if (!solar.showPath) return null;
+    return {
+      lat: model.center.lat,
+      lon: model.center.lon,
+      year: solar.year,
+      month: solar.month,
+      day: solar.day,
+      hour: solar.hour,
+      minute: solar.minute,
+      sideM: model.sideM,
+      radiusFactor: solar.radiusFactor,
+    };
+  }
   const exportRef = useRef<SceneExporter | null>(null);
   const onExportReady = useCallback((exporter: SceneExporter | null) => {
     exportRef.current = exporter;
@@ -165,7 +195,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     setExportError(null);
     setBusy("3dm");
     try {
-      await download3dm(model);
+      await download3dm(model, heliodonExport());
     } catch {
       setExportError("The Rhino file could not be written.");
     } finally {
@@ -177,7 +207,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     setExportError(null);
     setBusy("ai-site");
     try {
-      await downloadSiteAi(model, figureScale, lineStyles);
+      await downloadSiteAi(model, figureScale, lineStyles, heliodonExport());
     } catch {
       setExportError("The site plan could not be written.");
     } finally {
@@ -189,7 +219,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     setExportError(null);
     setBusy("ai-figure");
     try {
-      await downloadFigureAi(model, figureScale, lineStyles);
+      await downloadFigureAi(model, figureScale, lineStyles, heliodonExport());
     } catch {
       setExportError("The figure-ground file could not be written.");
     } finally {
@@ -251,7 +281,7 @@ export function ModelPage({ model }: { model: CityModel }) {
       <h1 className="sr-only">Your model is ready.</h1>
       <div className={tab === "drawing" ? "viewport is-drawing" : "viewport"}>
         <div className={tab === "3d" ? "fill" : "fill is-parked"}>
-          {tab === "3d" && <SolarPanel settings={solar} onChange={setSolar} />}
+          {tab === "3d" && <SolarPanel settings={solar} onChange={commitSolar} sideM={model.sideM} />}
           <SceneBoundary>
             <Scene3D
               model={model}
@@ -268,6 +298,7 @@ export function ModelPage({ model }: { model: CityModel }) {
         </div>
         {tab === "drawing" && (
           <div className="fill is-plan">
+            <SolarPanel settings={solar} onChange={commitSolar} sideM={model.sideM} />
             <DrawingPlan
               key={fitToken}
               model={model}
@@ -275,6 +306,7 @@ export function ModelPage({ model }: { model: CityModel }) {
               onScale={onScale}
               lineStyle={lineStyles}
               planScale={figureScale}
+              heliodon={heliodonExport()}
             />
           </div>
         )}
