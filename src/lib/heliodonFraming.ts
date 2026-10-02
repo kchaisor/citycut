@@ -19,7 +19,7 @@ import {
 } from "./isoCamera";
 
 /** Margin when fitting the perspective camera to the heliodon. */
-export const HELIODON_FIT_MARGIN = 1.12;
+export const HELIODON_FIT_MARGIN = 1.24;
 
 /** Default orbit direction (target → eye), matching the original CityCut perspective. */
 export const DEFAULT_PERSPECTIVE_OFFSET: Vec3 = normalize([0.78, 0.6, 0.86]);
@@ -65,7 +65,7 @@ export type HeliodonFramingInput = {
 export function heliodonSceneBounds(input: HeliodonFramingInput): Aabb {
   const { sideM, ringRadiusM, groundY, siteTopY } = input;
   const ground: GroundHeight = () => groundY;
-  const labelPad = Math.max(ringRadiusM * 0.11, sideM * 0.09);
+  const labelPad = Math.max(ringRadiusM * 0.14, sideM * 0.1);
   const horizontal = ringRadiusM + labelPad;
   let minY = groundY;
   let maxY = Math.max(siteTopY, groundY + HELIODON_LIFT_M + 2);
@@ -75,7 +75,7 @@ export function heliodonSceneBounds(input: HeliodonFramingInput): Aabb {
     for (const direction of directions) {
       const [, y] = heliodonPoint(direction, ringRadiusM, ground);
       minY = Math.min(minY, y);
-      maxY = Math.max(maxY, y + sideM * 0.02);
+      maxY = Math.max(maxY, y + sideM * 0.04);
     }
   }
 
@@ -86,7 +86,7 @@ export function heliodonSceneBounds(input: HeliodonFramingInput): Aabb {
   );
   if (sample.aboveHorizon) {
     const [, sunY] = heliodonPoint(sample.direction, ringRadiusM, ground);
-    maxY = Math.max(maxY, sunY + sideM * 0.08);
+    maxY = Math.max(maxY, sunY + sideM * 0.12);
   }
 
   const site = siteBounds(sideM, groundY, siteTopY);
