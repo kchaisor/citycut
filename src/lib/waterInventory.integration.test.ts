@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { signedArea, toLocal } from "./geo";
-import type { LonLat, Pt } from "../types";
+import { signedArea } from "./geo";
+import type { LonLat } from "../types";
 import { buildOverpassQuery, fetchOverpass, overpassBBox, type OverpassElement } from "./overpass";
 import { isOpenWaterArea } from "./waterAreas";
-import { parseCity } from "./parseOsm";
+import { overpassPolygonAreaM2, parseCity } from "./parseOsm";
 import { writeFileSync } from "node:fs";
 
 function bbox(center: { lat: number; lon: number }, sideM: number) {
@@ -46,17 +46,6 @@ function tagsSummary(tags: Record<string, string>): string {
   return parts.join("; ") || "(no tags)";
 }
 
-function ringAreaM2(el: OverpassElement, origin: LonLat): number | null {
-  const geom = el.geometry;
-  if (!geom || geom.length < 3) return null;
-  const ring: Pt[] = geom.map((g) => toLocal(g.lat, g.lon, origin));
-  if (ring.length < 4) return null;
-  const a = ring[0];
-  const b = ring[ring.length - 1];
-  if (Math.hypot(a[0] - b[0], a[1] - b[1]) > 0.5) return null;
-  return Math.round(Math.abs(signedArea(ring)));
-}
-
 function waterRows(
   site: string,
   center: LonLat,
@@ -87,7 +76,7 @@ function waterRows(
     if (!isWaterCandidate(tags)) continue;
     if (seen.has(el.id)) continue;
     seen.add(el.id);
-    const areaM2 = modelWater.get(el.id) ?? ringAreaM2(el, center);
+    const areaM2 = modelWater.get(el.id) ?? overpassPolygonAreaM2(el, center);
     const kept = isOpenWaterArea(tags, areaM2 ?? undefined);
     rows.push({
       site,

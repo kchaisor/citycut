@@ -399,6 +399,25 @@ function relationRings(
   return { outers, inners, used };
 }
 
+/** Absolute plan area (local m²) for a closed way or multipolygon relation. */
+export function overpassPolygonAreaM2(element: OverpassElement, origin: LonLat): number | null {
+  if (element.type === "way") {
+    const line = pointsFromGeom(element.geometry, origin);
+    if (!isClosed(line)) return null;
+    return Math.round(Math.abs(signedArea(line)));
+  }
+  if (element.type === "relation") {
+    const stitched = relationRings(element, origin);
+    if (!stitched) return null;
+    const rings = stitchRings(stitched.outers);
+    if (rings.length === 0) return null;
+    let sum = 0;
+    for (const ring of rings) sum += Math.abs(signedArea(ring));
+    return Math.round(sum);
+  }
+  return null;
+}
+
 export type CanopyKind = "wood" | "forest" | "scrub";
 
 export type CanopyPatch = {
