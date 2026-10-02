@@ -50,7 +50,7 @@ import { SatellitePane } from "./SatellitePane";
 import { Scene3D, type SceneExporter } from "./Scene3D";
 import { SceneBoundary } from "./SceneBoundary";
 import { SolarPanel } from "./SolarPanel";
-import type { HeliodonPlanExportOptions } from "../lib/heliodonPlan";
+import type { HeliodonDiagramExportOptions, HeliodonGroundExportOptions } from "../lib/heliodonDiagram";
 import {
   readStoredHeliodonRadiusFactor,
   resolveHeliodonRadiusFactor,
@@ -120,10 +120,13 @@ export function ModelPage({ model }: { model: CityModel }) {
 
   function commitSolar(next: SolarViewSettings) {
     writeStoredHeliodonRadiusFactor(window.localStorage, next.radiusFactor);
+    if (next.showPath !== solar.showPath || next.radiusFactor !== solar.radiusFactor) {
+      setSnapId((id) => id + 1);
+    }
     setSolar(next);
   }
 
-  function heliodonExport(): HeliodonPlanExportOptions | null {
+  function heliodonDiagramExport(): HeliodonDiagramExportOptions | null {
     if (!solar.showPath) return null;
     return {
       lat: model.center.lat,
@@ -134,8 +137,12 @@ export function ModelPage({ model }: { model: CityModel }) {
       hour: solar.hour,
       minute: solar.minute,
       sideM: model.sideM,
-      radiusFactor: solar.radiusFactor,
     };
+  }
+
+  function heliodonRhinoExport(): HeliodonGroundExportOptions | null {
+    if (!solar.showPath) return null;
+    return { ...heliodonDiagramExport()!, radiusFactor: solar.radiusFactor };
   }
   const exportRef = useRef<SceneExporter | null>(null);
   const onExportReady = useCallback((exporter: SceneExporter | null) => {
@@ -195,7 +202,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     setExportError(null);
     setBusy("3dm");
     try {
-      await download3dm(model, heliodonExport());
+      await download3dm(model, heliodonRhinoExport());
     } catch {
       setExportError("The Rhino file could not be written.");
     } finally {
@@ -207,7 +214,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     setExportError(null);
     setBusy("ai-site");
     try {
-      await downloadSiteAi(model, figureScale, lineStyles, heliodonExport());
+      await downloadSiteAi(model, figureScale, lineStyles, heliodonDiagramExport());
     } catch {
       setExportError("The site plan could not be written.");
     } finally {
@@ -219,7 +226,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     setExportError(null);
     setBusy("ai-figure");
     try {
-      await downloadFigureAi(model, figureScale, lineStyles, heliodonExport());
+      await downloadFigureAi(model, figureScale, lineStyles, heliodonDiagramExport());
     } catch {
       setExportError("The figure-ground file could not be written.");
     } finally {
@@ -306,7 +313,8 @@ export function ModelPage({ model }: { model: CityModel }) {
               onScale={onScale}
               lineStyle={lineStyles}
               planScale={figureScale}
-              heliodon={heliodonExport()}
+              heliodon={heliodonDiagramExport()}
+              solarStudyOn={solar.showPath}
             />
           </div>
         )}
@@ -379,7 +387,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                   </button>
                 </div>
                 {solar.showPath && (
-                  <p className="legend-note">Use colours hidden while sun path is on.</p>
+                  <p className="legend-note">Buildings render white on screen while sun path is on; exports keep normal colours.</p>
                 )}
                 <ul>
                   {BUILDING_USES.filter((use) => useCounts[use] > 0).map((use) => (

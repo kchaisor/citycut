@@ -1,7 +1,7 @@
 import type { PdfChunk, PdfEllipse } from "./aiDocument";
 import { getColour } from "./colours";
 import { hexRgb } from "./lineweights";
-import { buildHeliodonPlanOverlay, type HeliodonPlanExportOptions } from "./heliodonPlan";
+import { buildHeliodonDiagramOverlay, type HeliodonDiagramExportOptions } from "./heliodonDiagram";
 import { paperMillimetres, type SheetLayout } from "./figureGround";
 import type { Pt } from "../types";
 
@@ -29,10 +29,10 @@ function parseDashMm(dash: string | undefined, planScale: number): [number, numb
 export function heliodonPlanPdfChunk(
   modelSideM: number,
   layout: SheetLayout,
-  options: HeliodonPlanExportOptions,
+  options: HeliodonDiagramExportOptions,
   planScale: number,
 ): PdfChunk {
-  const overlay = buildHeliodonPlanOverlay({ ...options, sideM: modelSideM });
+  const overlay = buildHeliodonDiagramOverlay({ ...options, sideM: modelSideM });
   const ink = hexRgb(getColour("--sun-compass-label"));
   const grey = hexRgb(getColour("--sun-compass"));
   const paths: NonNullable<PdfChunk["paths"]> = [];
@@ -98,11 +98,12 @@ export function heliodonPlanPdfChunk(
   const texts: NonNullable<PdfChunk["texts"]> = [
     ...overlay.degreeLabels.map((label) => {
       const [x, y] = sheetPoint(label.east, label.north, modelSideM, layout);
-      return { x, y, sizeMm: 1.5, text: label.text, color: grey };
+      return { x, y, sizeMm: (6.5 * 25.4) / 72, text: label.text, color: grey };
     }),
     ...overlay.cardinals.map((label) => {
       const [x, y] = sheetPoint(label.east, label.north, modelSideM, layout);
-      return { x, y, sizeMm: label.text === "N" ? 2.8 : 2.2, text: label.text, color: ink };
+      const sizeMm = (label.fontPt * 25.4) / 72;
+      return { x, y, sizeMm, text: label.text, color: ink };
     }),
     ...overlay.hourLabels.map((label) => {
       const [x, y] = sheetPoint(label.east, label.north, modelSideM, layout);

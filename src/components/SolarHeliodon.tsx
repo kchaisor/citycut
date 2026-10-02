@@ -701,7 +701,7 @@ export function SolarLight({
       <object3D ref={targetRef} />
       <directionalLight
         ref={lightRef}
-        intensity={on ? 2.6 : 0}
+        intensity={on ? 2.35 : 0}
         castShadow={on}
         shadow-mapSize={[2048, 2048]}
       />

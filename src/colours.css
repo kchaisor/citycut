@@ -173,7 +173,7 @@
   --sun-compass-label: #1a1916;
 
   /* Viewport-only building fill while the sun path and compass are on. */
-  --building-solar-neutral: #c2bdb4;
+  --building-solar-neutral: #fafafa;
 
   /* Faint ground disc under the heliodon dial (screen only). */
   --heliodon-dial-disc: #e8e2d8;

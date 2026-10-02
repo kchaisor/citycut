@@ -1,9 +1,12 @@
 import { useMemo } from "react";
-import { buildHeliodonPlanOverlay } from "../lib/heliodonPlan";
+import {
+  buildHeliodonDiagramOverlay,
+  heliodonLabelFontMetres,
+  type HeliodonDiagramInput,
+} from "../lib/heliodonDiagram";
 import { getColour } from "../lib/colours";
 import { svgPolyline } from "../lib/svgPlan";
 import { screenPx } from "../lib/lineweights";
-import type { HeliodonPlanInput } from "../lib/heliodonPlan";
 
 function planLine(points: [number, number][], close = false) {
   return svgPolyline(
@@ -42,12 +45,20 @@ function SunNowIcon({ cx, cy, size }: { cx: number; cy: number; size: number }) 
   );
 }
 
-export function HeliodonPlanOverlay({ input, sideM }: { input: HeliodonPlanInput; sideM: number }) {
-  const overlay = useMemo(() => buildHeliodonPlanOverlay(input), [input]);
+export function HeliodonPlanOverlay({
+  input,
+  planScale,
+}: {
+  input: HeliodonDiagramInput;
+  planScale: number;
+}) {
+  const overlay = useMemo(() => buildHeliodonDiagramOverlay(input), [input]);
   const ink = getColour("--sun-compass-label");
   const grey = getColour("--sun-compass");
+  const degreeSize = heliodonLabelFontMetres(planScale, 6.5);
   const tickWidth = (tier: "minor" | "medium" | "major") =>
     screenPx(tier === "major" ? 0.22 : tier === "medium" ? 0.18 : 0.14);
+  const R = overlay.radiusM;
 
   return (
     <g className="heliodon-plan" aria-label="Sun path and compass">
@@ -110,7 +121,7 @@ export function HeliodonPlanOverlay({ input, sideM }: { input: HeliodonPlanInput
           fill="none"
           stroke={grey}
           strokeWidth={screenPx(0.12)}
-          strokeDasharray={`${sideM * 0.004} ${sideM * 0.004}`}
+          strokeDasharray={`${R * 0.008} ${R * 0.008}`}
           vectorEffect="non-scaling-stroke"
         />
       ))}
@@ -119,7 +130,7 @@ export function HeliodonPlanOverlay({ input, sideM }: { input: HeliodonPlanInput
           key={`dot-${index}`}
           cx={east}
           cy={-north}
-          r={sideM * 0.0035}
+          r={R * 0.008}
           fill={ink}
           stroke={ink}
           strokeWidth={screenPx(0.08)}
@@ -133,7 +144,7 @@ export function HeliodonPlanOverlay({ input, sideM }: { input: HeliodonPlanInput
           y={-label.north}
           textAnchor="middle"
           dominantBaseline="central"
-          fontSize={sideM * 0.017}
+          fontSize={degreeSize}
           fill={grey}
           fontFamily="Helvetica, Arial, sans-serif"
           fontWeight={600}
@@ -148,7 +159,7 @@ export function HeliodonPlanOverlay({ input, sideM }: { input: HeliodonPlanInput
           y={-label.north}
           textAnchor="middle"
           dominantBaseline="central"
-          fontSize={sideM * label.size}
+          fontSize={heliodonLabelFontMetres(planScale, label.fontPt)}
           fill={ink}
           fontFamily="Helvetica, Arial, sans-serif"
           fontWeight={label.weight}
@@ -163,7 +174,7 @@ export function HeliodonPlanOverlay({ input, sideM }: { input: HeliodonPlanInput
           y={-label.north}
           textAnchor="middle"
           dominantBaseline="central"
-          fontSize={sideM * 0.022}
+          fontSize={heliodonLabelFontMetres(planScale, 7)}
           fill={ink}
           fontFamily="Helvetica, Arial, sans-serif"
         >
@@ -177,7 +188,7 @@ export function HeliodonPlanOverlay({ input, sideM }: { input: HeliodonPlanInput
           y={-label.north}
           textAnchor="middle"
           dominantBaseline="central"
-          fontSize={sideM * 0.026}
+          fontSize={heliodonLabelFontMetres(planScale, 7.5)}
           fill={ink}
           fontFamily="Helvetica, Arial, sans-serif"
           fontWeight={650}
@@ -185,7 +196,17 @@ export function HeliodonPlanOverlay({ input, sideM }: { input: HeliodonPlanInput
           {label.text}
         </text>
       ))}
-      {overlay.sun && <SunNowIcon cx={overlay.sun[0]} cy={-overlay.sun[1]} size={sideM * 0.028} />}
+      {overlay.sun && <SunNowIcon cx={overlay.sun[0]} cy={-overlay.sun[1]} size={R * 0.065} />}
+      <text
+        x={0}
+        y={R + heliodonLabelFontMetres(planScale, 6) * 1.8}
+        textAnchor="middle"
+        fontSize={heliodonLabelFontMetres(planScale, 6)}
+        fill={grey}
+        fontFamily="Helvetica, Arial, sans-serif"
+      >
+        Sun path diagram, not to ground scale
+      </text>
     </g>
   );
 }

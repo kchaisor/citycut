@@ -22,7 +22,7 @@ import { formatCoord, openRing } from "./geo";
 import { LINE_MM, hexRgb } from "./lineweights";
 import { footpathLines, unionFootpaths } from "./roadFill";
 import { heliodonPlanPdfChunk } from "./heliodonPlanExport";
-import type { HeliodonPlanExportOptions } from "./heliodonPlan";
+import type { HeliodonDiagramExportOptions } from "./heliodonDiagram";
 import { planPaths } from "./svgPlan";
 import { VICMAP_CONTOUR_ATTRIBUTION } from "./vicmapContours";
 import type { CityModel, Pt } from "../types";
@@ -225,7 +225,7 @@ export function sitePlanChunks(
   model: CityModel,
   scale: number,
   style: LineStyles = readDrawingStyle(),
-  heliodon?: HeliodonPlanExportOptions | null,
+  heliodon?: HeliodonDiagramExportOptions | null,
 ): PdfChunk[] {
   const layout = layoutSheet(model.sideM, scale);
   const plan = planPaths(
@@ -389,7 +389,7 @@ export function figureGroundChunks(
   model: CityModel,
   scale: number,
   style: LineStyles = readDrawingStyle(),
-  heliodon?: HeliodonPlanExportOptions | null,
+  heliodon?: HeliodonDiagramExportOptions | null,
 ): PdfChunk[] {
   const layout = layoutSheet(model.sideM, scale);
   const ground = figureGround(model.buildings, model.sideM);
@@ -427,7 +427,7 @@ export async function sitePlanPdf(
   model: CityModel,
   scale: number,
   style?: LineStyles,
-  heliodon?: HeliodonPlanExportOptions | null,
+  heliodon?: HeliodonDiagramExportOptions | null,
 ): Promise<Uint8Array> {
   const layout = layoutSheet(model.sideM, scale);
   const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), heliodon);
@@ -438,7 +438,7 @@ export async function figureGroundPdf(
   model: CityModel,
   scale: number,
   style?: LineStyles,
-  heliodon?: HeliodonPlanExportOptions | null,
+  heliodon?: HeliodonDiagramExportOptions | null,
 ): Promise<Uint8Array> {
   const layout = layoutSheet(model.sideM, scale);
   return buildLayeredPdf(
@@ -454,7 +454,7 @@ export function sitePlanAi8(
   model: CityModel,
   scale: number,
   style?: LineStyles,
-  heliodon?: HeliodonPlanExportOptions | null,
+  heliodon?: HeliodonDiagramExportOptions | null,
 ): Uint8Array {
   const layout = layoutSheet(model.sideM, scale);
   const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), heliodon);
@@ -471,7 +471,7 @@ export function figureGroundAi8(
   model: CityModel,
   scale: number,
   style?: LineStyles,
-  heliodon?: HeliodonPlanExportOptions | null,
+  heliodon?: HeliodonDiagramExportOptions | null,
 ): Uint8Array {
   const layout = layoutSheet(model.sideM, scale);
   return buildLayeredNativeAi(
@@ -487,7 +487,7 @@ export async function sitePlanAi(
   model: CityModel,
   scale: number,
   style?: LineStyles,
-  heliodon?: HeliodonPlanExportOptions | null,
+  heliodon?: HeliodonDiagramExportOptions | null,
 ): Promise<Uint8Array> {
   if (useNativeAi8Export()) return sitePlanAi8(model, scale, style, heliodon);
   if (import.meta.env.VITE_CITYCUT_AI_PDF_OPS === "true") {
@@ -508,7 +508,7 @@ export async function figureGroundAi(
   model: CityModel,
   scale: number,
   style?: LineStyles,
-  heliodon?: HeliodonPlanExportOptions | null,
+  heliodon?: HeliodonDiagramExportOptions | null,
 ): Promise<Uint8Array> {
   if (useNativeAi8Export()) return figureGroundAi8(model, scale, style, heliodon);
   if (import.meta.env.VITE_CITYCUT_AI_PDF_OPS === "true") {

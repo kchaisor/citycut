@@ -14,7 +14,7 @@ import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import type { CityModel } from "../types";
 import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
-import type { HeliodonPlanInput } from "../lib/heliodonPlan";
+import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
 
 type View = { x: number; y: number; w: number; h: number };
 
@@ -66,6 +66,7 @@ export function DrawingPlan({
   lineStyle,
   planScale = 1000,
   heliodon = null,
+  solarStudyOn = false,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -75,7 +76,9 @@ export function DrawingPlan({
   /** Drawing drawer plan scale. 2500 and smaller thin metro 1 m contours to 5 m. */
   planScale?: number;
   /** When set, draws the sun path over the plan (same ring radius as the 3D heliodon). */
-  heliodon?: HeliodonPlanInput | null;
+  heliodon?: HeliodonDiagramInput | null;
+  /** Site-plan buildings render white while the sun study is on (screen only). */
+  solarStudyOn?: boolean;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: View } | null>(null);
@@ -167,6 +170,7 @@ export function DrawingPlan({
   const treeFill = getColour("--tree-fill");
   const contourLabel = getColour("--contour-label");
   const planEmpty = getColour("--plan-empty");
+  const solarBuildingFill = getColour("--building-solar-neutral");
 
   return (
     <svg
@@ -321,7 +325,7 @@ export function DrawingPlan({
               <path
                 key={`b${index}`}
                 d={svgRings(building.rings)}
-                fill={building.fill}
+                fill={solarStudyOn ? solarBuildingFill : building.fill}
                 fillRule="evenodd"
                 {...screenPenAttrs(style.building, "miter")}
               />
@@ -353,10 +357,14 @@ export function DrawingPlan({
             >
               N
             </text>
-            {heliodon && <HeliodonPlanOverlay input={heliodon} sideM={model.sideM} />}
+            {heliodon && (
+              <HeliodonPlanOverlay input={heliodon} planScale={planScale} />
+            )}
         </>
       )}
-      {figure && heliodon && <HeliodonPlanOverlay input={heliodon} sideM={model.sideM} />}
+      {figure && heliodon && (
+        <HeliodonPlanOverlay input={heliodon} planScale={planScale} />
+      )}
       {empty && (
         <text x={0} y={0} textAnchor="middle" fontSize={model.sideM * 0.04} fill={planEmpty}>
           {figure ? "No building footprints in this frame" : "Nothing mapped in this frame"}

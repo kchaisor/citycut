@@ -7,7 +7,7 @@ import { colourRgb, type ColourKey } from "./colours";
 import { CRS_NOTE, mgaCrs, projectLocal, projectLonLat } from "./crs";
 import { readDrawingStyle } from "./drawingStyle";
 import { figureGround, figureGroundDatum } from "./figureGround";
-import { buildHeliodonPlanOverlay, type HeliodonPlanExportOptions } from "./heliodonPlan";
+import { buildHeliodonGroundOverlay, type HeliodonGroundExportOptions } from "./heliodonDiagram";
 import { contourIsIndex, demContourLayer } from "./vicmapContours";
 import type { CityModel, Pt } from "../types";
 
@@ -329,9 +329,9 @@ function addHeliodonPlan(
   materials: Map<string, number>,
   model: CityModel,
   zone: number,
-  options: HeliodonPlanExportOptions,
+  options: HeliodonGroundExportOptions,
 ) {
-  const overlay = buildHeliodonPlanOverlay({ ...options, sideM: model.sideM });
+  const overlay = buildHeliodonGroundOverlay({ ...options, sideM: model.sideM });
   const z = model.terrain ? model.terrain.min : 0;
   const layerIndex = ensureLayer(rhino, doc, layers, materials, "Sun path", layerColors()["Sun path"]);
 
@@ -361,7 +361,7 @@ function addHeliodonPlan(
 /** Current city meshes as a Rhino .3dm in MGA metres, Z-up. */
 export async function cityModelTo3dm(
   model: CityModel,
-  heliodon?: HeliodonPlanExportOptions | null,
+  heliodon?: HeliodonGroundExportOptions | null,
 ): Promise<Uint8Array> {
   const rhino = await loadRhino();
   const crs = mgaCrs(model.center.lon);
