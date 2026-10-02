@@ -48,9 +48,12 @@ function SunNowIcon({ cx, cy, size }: { cx: number; cy: number; size: number }) 
 export function HeliodonPlanOverlay({
   input,
   planScale,
+  sideM,
 }: {
   input: HeliodonDiagramInput;
   planScale: number;
+  /** Clips the diagram to the square site frame. */
+  sideM: number;
 }) {
   const overlay = useMemo(() => buildHeliodonDiagramOverlay(input), [input]);
   const ink = getColour("--sun-compass-label");
@@ -59,9 +62,17 @@ export function HeliodonPlanOverlay({
   const tickWidth = (tier: "minor" | "medium" | "major") =>
     screenPx(tier === "major" ? 0.22 : tier === "medium" ? 0.18 : 0.14);
   const R = overlay.radiusM;
+  const half = sideM / 2;
+  const clipId = `heliodon-frame-${sideM}`;
 
   return (
-    <g className="heliodon-plan" aria-label="Sun path and compass">
+    <>
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={-half} y={-half} width={sideM} height={sideM} />
+        </clipPath>
+      </defs>
+      <g className="heliodon-plan" aria-label="Sun path and compass" clipPath={`url(#${clipId})`}>
       {overlay.altitudeRings.map((ring, index) => (
         <path
           key={`alt-${index}`}
@@ -207,6 +218,7 @@ export function HeliodonPlanOverlay({
       >
         Sun path diagram, not to ground scale
       </text>
-    </g>
+      </g>
+    </>
   );
 }

@@ -3,7 +3,7 @@ type InertiaControl = {
   update: () => void;
 };
 
-type HeldControl<P> = InertiaControl & {
+export type HeldControl<P> = InertiaControl & {
   target: { clone(): P; copy(value: P): void };
   object: {
     position: { clone(): P; copy(value: P): void };

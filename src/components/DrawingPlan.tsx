@@ -373,12 +373,12 @@ export function DrawingPlan({
               N
             </text>
             {heliodon && (
-              <HeliodonPlanOverlay input={heliodon} planScale={planScale} />
+              <HeliodonPlanOverlay input={heliodon} planScale={planScale} sideM={model.sideM} />
             )}
         </>
       )}
       {figure && heliodon && (
-        <HeliodonPlanOverlay input={heliodon} planScale={planScale} />
+        <HeliodonPlanOverlay input={heliodon} planScale={planScale} sideM={model.sideM} />
       )}
       {empty && (
         <text x={0} y={0} textAnchor="middle" fontSize={model.sideM * 0.04} fill={planEmpty}>

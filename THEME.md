@@ -147,7 +147,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-compass-label` | `#1a1916` | Ink of the 3D heliodon dial: horizon ring, 5° and 10° ticks, cardinal ticks, dashed axes, N/E/S/W, hour labels, arc labels and hour-dot outlines (screen only). |
 | `--building-solar-neutral` | `#c2bdb4` | Single neutral building fill in the 3D viewport while the sun path and compass are on (screen only). |
 | `--heliodon-dial-disc` | `#e8e2d8` | Faint ground disc under the heliodon dial at about 35% opacity (screen only). |
-| `--shadow-fill` | `#737373` | Site-plan building shadows (mid-grey, ~28% black on paper). |
+| `--shadow-fill` | `#454545` | Site-plan building shadows on the site plan. |
 
 The contour lines in Rhino use the pen `--contour-stroke` from `src/drawing-style.css`, not a fill.
 

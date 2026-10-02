@@ -6,13 +6,14 @@ describe("heliodon diagram overlay", () => {
     expect(heliodonDiagramRadiusM(1000)).toBe(450);
   });
 
-  it("scales the 2D dial with the sun-path size slider", () => {
+  it("scales the 2D dial proportionally with the sun-path size slider", () => {
     expect(heliodonDiagramRadiusM(1000, 1.75)).toBeCloseTo(450, 6);
     expect(heliodonDiagramRadiusM(1000, 1)).toBeCloseTo(450 * (1 / 1.75), 6);
+    expect(heliodonDiagramRadiusM(1000, 3.5)).toBeCloseTo(450 * (3.5 / 1.75), 6);
   });
 
-  it("clamps an oversized 2D dial so it stays inside the frame", () => {
-    expect(heliodonDiagramRadiusM(1000, 3.5)).toBe(480);
+  it("keeps a lower floor so tiny slider values stay legible", () => {
+    expect(heliodonDiagramRadiusM(1000, 0.2)).toBe(120);
   });
 
   it("keeps degree labels inside the frame bounds", () => {

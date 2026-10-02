@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { parseNativeAiLayers } from "./aiNative";
-import { sitePlanAi8 } from "./aiPlan";
+import { sitePlanAi8, sitePlanPdf } from "./aiPlan";
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFString } from "pdf-lib";
 import { cityModelTo3dm } from "./rhinoExport";
 import {
   buildingShadowPolygon,
@@ -125,25 +126,49 @@ describe("plan building shadows", () => {
     }
   });
 
-  it("exports a Shadows layer in site-plan AI8 and Rhino when castShadows is on", async () => {
+  it("casts winter midday shadows south and equinox 9am shadows west of a north building", () => {
+    const north = boxBuilding(1, 0, 80, 20, 15);
+    const winter = sunAtMelbourneLocal(CBD.lat, CBD.lon, 2026, 6, 21, 12, 0);
+    const winterOffset = planShadowOffset(winter, north.height)!;
+    expect(winterOffset[1]).toBeLessThan(-5);
+    const equinox = sunAtMelbourneLocal(CBD.lat, CBD.lon, 2026, 9, 22, 9, 0);
+    const equinoxOffset = planShadowOffset(equinox, north.height)!;
+    expect(equinoxOffset[0]).toBeLessThan(-2);
+  });
+
+  it("exports a Shadows layer in site-plan PDF, AI8, and Rhino when castShadows is on", async () => {
     const shadowInput = { ...CBD, year: 2026, month: 6, day: 21, hour: 12, minute: 0 };
     const ai = sitePlanAi8(model([boxBuilding(1, 0, 0, 20, 12)]), 1000, undefined, {
       shadows: shadowInput,
       castShadows: true,
     });
     expect(parseNativeAiLayers(ai).map((name) => name.replace(/^CityCut /, ""))).toContain("Shadows");
+    const pdf = await sitePlanPdf(model([boxBuilding(1, 0, 0, 20, 12)]), 1000, undefined, {
+      shadows: shadowInput,
+      castShadows: true,
+    });
+    const pdfDoc = await PDFDocument.load(pdf);
+    const oc = pdfDoc.catalog.lookup(PDFName.of("OCProperties"), PDFDict);
+    const config = oc.lookup(PDFName.of("D"), PDFDict);
+    const order = config.lookup(PDFName.of("Order"), PDFArray);
+    const pdfLayers: string[] = [];
+    for (let i = 0; i < order.size(); i++) {
+      const dict = pdfDoc.context.lookup(order.get(i), PDFDict);
+      pdfLayers.push(dict.lookup(PDFName.of("Name"), PDFString).decodeText());
+    }
+    expect(pdfLayers.some((name) => name.startsWith("Shadows"))).toBe(true);
     const bytes = await cityModelTo3dm(model([boxBuilding(1, 0, 0, 20, 12)]), {
       shadows: shadowInput,
       castShadows: true,
     });
     const rhinoModule = await import("rhino3dm/rhino3dm.module.js");
     const rhino = await rhinoModule.default();
-    const doc = rhino.File3dm.fromByteArray(bytes);
+    const rhinoDoc = rhino.File3dm.fromByteArray(bytes);
     let hasShadowLayer = false;
-    for (let i = 0; i < doc.layers().count; i++) {
-      if (doc.layers().get(i).fullPath === "Shadows") hasShadowLayer = true;
+    for (let i = 0; i < rhinoDoc.layers().count; i++) {
+      if (rhinoDoc.layers().get(i).fullPath === "Shadows") hasShadowLayer = true;
     }
-    doc.destroy();
+    rhinoDoc.destroy();
     expect(hasShadowLayer).toBe(true);
   });
 

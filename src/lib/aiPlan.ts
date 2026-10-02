@@ -233,8 +233,10 @@ function resolveSitePlanExport(
   exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): SitePlanExportOptions {
   if (!exportOptions) return {};
-  if ("shadows" in exportOptions || "castShadows" in exportOptions) return exportOptions;
-  return { heliodon: exportOptions };
+  if ("shadows" in exportOptions || "castShadows" in exportOptions || "heliodon" in exportOptions) {
+    return exportOptions as SitePlanExportOptions;
+  }
+  return { heliodon: exportOptions as HeliodonDiagramExportOptions };
 }
 
 export function sitePlanChunks(

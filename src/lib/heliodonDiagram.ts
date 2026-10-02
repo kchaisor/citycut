@@ -13,15 +13,18 @@ import type { Pt } from "../types";
 /** Sun-path diagram radius on drawings: fraction of the square frame side (not ground metres at 3D scale). */
 export const HELIODON_DIAGRAM_RADIUS_FRACTION = 0.45;
 
-/** 2D plan dial radius; default factor matches the historical 0.45 × side look. */
+/** Smallest 2D dial radius as a fraction of the frame side (legibility floor). */
+export const HELIODON_DIAGRAM_RADIUS_MIN_FRACTION = 0.12;
+
+/** 2D plan dial radius; default slider value matches the historical 0.45 × side look. */
 export function heliodonDiagramRadiusM(
   sideM: number,
   radiusFactor = HELIODON_RADIUS_FACTOR_DEFAULT,
 ): number {
-  const scaled = sideM * HELIODON_DIAGRAM_RADIUS_FRACTION * (radiusFactor / HELIODON_RADIUS_FACTOR_DEFAULT);
-  const max = sideM * 0.48;
-  const min = sideM * 0.12;
-  return Math.min(max, Math.max(min, scaled));
+  const scaled =
+    sideM * HELIODON_DIAGRAM_RADIUS_FRACTION * (radiusFactor / HELIODON_RADIUS_FACTOR_DEFAULT);
+  const min = sideM * HELIODON_DIAGRAM_RADIUS_MIN_FRACTION;
+  return Math.max(min, scaled);
 }
 
 /** ~6.5 pt on paper at `planScale`, in plan viewBox metres. */
