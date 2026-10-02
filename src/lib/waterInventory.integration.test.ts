@@ -4,7 +4,6 @@ import type { LonLat } from "../types";
 import { buildOverpassQuery, fetchOverpass, overpassBBox, type OverpassElement } from "./overpass";
 import { isOpenWaterArea } from "./waterAreas";
 import { overpassPolygonAreaM2, parseCity } from "./parseOsm";
-import { writeFileSync } from "node:fs";
 
 function bbox(center: { lat: number; lon: number }, sideM: number) {
   const half = sideM / 2;
@@ -112,7 +111,8 @@ describe.runIf(process.env.WATER_INVENTORY === "1")("water OSM inventory (manual
         allRows.push(...waterRows(site.name, { lat: site.lat, lon: site.lon }, sideM, data.elements));
       }
       expect(allRows.length).toBeGreaterThan(0);
-      writeFileSync("/opt/cursor/artifacts/water-inventory.json", JSON.stringify(allRows, null, 2));
+      // eslint-disable-next-line no-console -- manual inventory (`WATER_INVENTORY=1`)
+      console.log(JSON.stringify(allRows, null, 2));
     },
     120_000,
   );
