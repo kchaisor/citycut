@@ -199,6 +199,10 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--annotation-dash` | Dash of the annotation strokes | `none` | mm, on then off |
 | `--tree-stroke-mm` | Weight of a tree-crown outline | `0.15` | mm |
 | `--tree-stroke` | Colour of a tree-crown outline | `#245232` | colour |
+| `--property-boundaries` | Vicmap Property parcel lines on the site plan. `on` or `off`. | `off` | on/off |
+| `--property-boundary-mm` | Weight of a parcel boundary line | `0.15` | mm |
+| `--property-boundary-stroke` | Colour of a parcel boundary line | `#1C1B17` | colour |
+| `--property-boundary-dash` | Dash pattern for parcel boundaries | `none` | dash |
 | `--tree-dash` | Dash of a tree-crown outline | `none` | mm, on then off |
 | `--building-edge` | Colour of the massing edge in the 3D view | `#000000` | colour |
 

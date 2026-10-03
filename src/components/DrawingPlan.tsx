@@ -16,6 +16,8 @@ import type { CityModel } from "../types";
 import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
 import { planShadowRings, type PlanShadowInput } from "../lib/buildingShadows";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
+import { fetchVicmapPropertyLayer, viewBoundsLonLat } from "../lib/vicmapProperty";
+import type { Pt } from "../types";
 
 type View = { x: number; y: number; w: number; h: number };
 
@@ -69,6 +71,7 @@ export function DrawingPlan({
   heliodon = null,
   castShadows = false,
   shadowInput = null,
+  onPropertyNote,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -81,6 +84,7 @@ export function DrawingPlan({
   heliodon?: HeliodonDiagramInput | null;
   castShadows?: boolean;
   shadowInput?: PlanShadowInput | null;
+  onPropertyNote?: (note: string | null) => void;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: View } | null>(null);
@@ -111,10 +115,47 @@ export function DrawingPlan({
   );
   const fitted = useMemo(() => fittedView(model, kind), [model, kind]);
   const [view, setView] = useState<View>(fitted);
+  const [propertyLines, setPropertyLines] = useState<Pt[][]>([]);
+  const [propertyNote, setPropertyNote] = useState<string | null>(null);
 
   useEffect(() => {
     setView(fitted);
   }, [fitted]);
+
+  useEffect(() => {
+    if (!style.propertyBoundariesOn) {
+      setPropertyLines([]);
+      setPropertyNote(null);
+      return;
+    }
+    const controller = new AbortController();
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const bounds = viewBoundsLonLat(view, model.center);
+        const layer = await fetchVicmapPropertyLayer(bounds, model.center, model.sideM / 2, {
+          signal: controller.signal,
+        });
+        if (cancelled) return;
+        if (!layer || layer.lines.length === 0) {
+          setPropertyLines([]);
+          setPropertyNote(layer ? null : "Property boundaries could not be loaded.");
+          return;
+        }
+        setPropertyLines(layer.lines);
+        setPropertyNote(layer.capped ? "Property boundaries capped for this view." : null);
+      })();
+    }, 200);
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [style.propertyBoundariesOn, view, model.center, model.sideM]);
+
+  useEffect(() => {
+    onPropertyNote?.(style.propertyBoundariesOn ? propertyNote : null);
+  }, [onPropertyNote, propertyNote, style.propertyBoundariesOn]);
 
   useEffect(() => {
     onScale?.(view.w);
@@ -218,6 +259,17 @@ export function DrawingPlan({
           {figurePaths.map((d, index) => (
             <path key={`f${index}`} d={d} fill={figureFill} fillRule="evenodd" />
           ))}
+          {style.propertyBoundariesOn &&
+            propertyLines.map((line, index) => (
+              <path
+                key={`fp${index}`}
+                d={svgPolyline(line, false)}
+                fill="none"
+                stroke={figureFill}
+                strokeWidth={screenPx(style.propertyBoundary.mm)}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
           <rect
             x={-half}
             y={-half}
@@ -327,6 +379,15 @@ export function DrawingPlan({
             {plan.rails.map((rail, index) => (
               <CasedLine key={`l${index}`} d={svgPolyline(rail, false)} stroke={style.rail} paper={canvas} />
             ))}
+            {style.propertyBoundariesOn &&
+              propertyLines.map((line, index) => (
+                <path
+                  key={`p${index}`}
+                  d={svgPolyline(line, false)}
+                  fill="none"
+                  {...screenPenAttrs(style.propertyBoundary)}
+                />
+              ))}
             {shadowRings.map((rings, index) => (
               <path
                 key={`sh${index}`}

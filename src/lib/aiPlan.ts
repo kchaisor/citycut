@@ -26,6 +26,7 @@ import type { HeliodonDiagramExportOptions } from "./heliodonDiagram";
 import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { planPaths } from "./svgPlan";
 import { VICMAP_CONTOUR_ATTRIBUTION } from "./vicmapContours";
+import { fetchPropertyBoundariesForModel } from "./vicmapProperty";
 import type { CityModel, Pt } from "../types";
 
 export const SITE_LAYER_ORDER = [
@@ -35,6 +36,7 @@ export const SITE_LAYER_ORDER = [
   "Roads",
   "Paths",
   "Rail",
+  "Property boundaries",
   "Buildings",
   "Trees",
   "Contours",
@@ -44,7 +46,14 @@ export const SITE_LAYER_ORDER = [
   "Annotation",
 ] as const;
 
-export const FIGURE_LAYER_ORDER = ["Frame", "Buildings", "Paths", "Sun path", "Annotation"] as const;
+export const FIGURE_LAYER_ORDER = [
+  "Frame",
+  "Buildings",
+  "Paths",
+  "Property boundaries",
+  "Sun path",
+  "Annotation",
+] as const;
 
 /** Sheet colour. A path or rail casing uses this so it vanishes on the page and reads on the road fill. */
 function fillOf(name: ColourKey): Rgb {
@@ -239,11 +248,36 @@ function resolveSitePlanExport(
   return { heliodon: exportOptions as HeliodonDiagramExportOptions };
 }
 
+export function propertyBoundaryChunk(
+  lines: Pt[][],
+  model: CityModel,
+  layout: SheetLayout,
+  style: LineStyles,
+): PdfChunk | null {
+  if (!style.propertyBoundariesOn || lines.length === 0) return null;
+  const boundaryPen = pen(style.propertyBoundary);
+  if (!boundaryPen) return null;
+  return {
+    name: "Property boundaries",
+    paths: lines
+      .map((line) => mapRing(line, model.sideM, layout))
+      .filter((ring) => ring.length >= 2)
+      .map((ring) => ({
+        rings: [ring],
+        close: false,
+        cap: "round" as const,
+        join: "round" as const,
+        ...boundaryPen,
+      })),
+  };
+}
+
 export function sitePlanChunks(
   model: CityModel,
   scale: number,
   style: LineStyles = readDrawingStyle(),
   exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
+  propertyBoundaries: Pt[][] = [],
 ): PdfChunk[] {
   const resolved = resolveSitePlanExport(exportOptions);
   const heliodon = resolved.heliodon ?? null;
@@ -354,6 +388,8 @@ export function sitePlanChunks(
       paths: plan.rails.flatMap((line) => casedLine(mapRing(line, model.sideM, layout), style.rail, railPen)),
     });
   }
+  const propertyChunk = propertyBoundaryChunk(propertyBoundaries, model, layout, style);
+  if (propertyChunk) chunks.push(propertyChunk);
   const treePen = pen(style.tree);
   if (plan.trees.length > 0) {
     chunks.push({
@@ -424,6 +460,7 @@ export function figureGroundChunks(
   scale: number,
   style: LineStyles = readDrawingStyle(),
   heliodon?: HeliodonDiagramExportOptions | null,
+  propertyBoundaries: Pt[][] = [],
 ): PdfChunk[] {
   const layout = layoutSheet(model.sideM, scale);
   const ground = figureGround(model.buildings, model.sideM);
@@ -441,6 +478,8 @@ export function figureGroundChunks(
       close: true,
     }));
   if (paths.length > 0) chunks.push({ name: "Buildings", paths });
+  const propertyChunk = propertyBoundaryChunk(propertyBoundaries, model, layout, style);
+  if (propertyChunk) chunks.push(propertyChunk);
   chunks.push(frameStroke(layout, { mm: LINE_MM.frame, color: getColour("--figure-fill"), dash: "none" }));
   if (heliodon) chunks.push(heliodonPlanPdfChunk(model.sideM, layout, heliodon, scale));
   chunks.push(annotation(model, layout, null, { mm: LINE_MM.annotation, color: style.annotation.color, dash: "none" }));
@@ -453,7 +492,20 @@ function sitePlanLayerOrder(chunks: PdfChunk[]): string[] {
     const at = order.indexOf("Contours");
     order.splice(at + 1, 0, "Contour labels");
   }
+  if (!order.includes("Property boundaries") && chunks.some((chunk) => chunk.name === "Property boundaries")) {
+    const at = order.indexOf("Buildings");
+    order.splice(at, 0, "Property boundaries");
+  }
   return order;
+}
+
+async function resolveExportPropertyLines(
+  model: CityModel,
+  style: LineStyles,
+): Promise<Pt[][]> {
+  if (!style.propertyBoundariesOn) return [];
+  const layer = await fetchPropertyBoundariesForModel(model.center, model.sideM, { useCache: true });
+  return layer?.lines ?? [];
 }
 
 /** PDF/OCG site plan, the default .ai export. */
@@ -464,7 +516,9 @@ export async function sitePlanPdf(
   exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): Promise<Uint8Array> {
   const layout = layoutSheet(model.sideM, scale);
-  const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions);
+  const resolved = style ?? readDrawingStyle();
+  const propertyBoundaries = await resolveExportPropertyLines(model, resolved);
+  const chunks = sitePlanChunks(model, scale, resolved, exportOptions, propertyBoundaries);
   return buildLayeredPdf(layout.pageWidthMm, layout.pageHeightMm, chunks, sitePlanLayerOrder(chunks));
 }
 
@@ -475,10 +529,12 @@ export async function figureGroundPdf(
   heliodon?: HeliodonDiagramExportOptions | null,
 ): Promise<Uint8Array> {
   const layout = layoutSheet(model.sideM, scale);
+  const resolved = style ?? readDrawingStyle();
+  const propertyBoundaries = await resolveExportPropertyLines(model, resolved);
   return buildLayeredPdf(
     layout.pageWidthMm,
     layout.pageHeightMm,
-    figureGroundChunks(model, scale, style ?? readDrawingStyle(), heliodon),
+    figureGroundChunks(model, scale, resolved, heliodon, propertyBoundaries),
     FIGURE_LAYER_ORDER,
   );
 }
@@ -489,9 +545,10 @@ export function sitePlanAi8(
   scale: number,
   style?: LineStyles,
   exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
+  propertyBoundaries: Pt[][] = [],
 ): Uint8Array {
   const layout = layoutSheet(model.sideM, scale);
-  const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions);
+  const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions, propertyBoundaries);
   return buildLayeredNativeAi(
     layout.pageWidthMm,
     layout.pageHeightMm,
@@ -506,12 +563,13 @@ export function figureGroundAi8(
   scale: number,
   style?: LineStyles,
   heliodon?: HeliodonDiagramExportOptions | null,
+  propertyBoundaries: Pt[][] = [],
 ): Uint8Array {
   const layout = layoutSheet(model.sideM, scale);
   return buildLayeredNativeAi(
     layout.pageWidthMm,
     layout.pageHeightMm,
-    figureGroundChunks(model, scale, style ?? readDrawingStyle(), heliodon),
+    figureGroundChunks(model, scale, style ?? readDrawingStyle(), heliodon, propertyBoundaries),
     FIGURE_LAYER_ORDER,
     titleLine(model, layout),
   );
@@ -523,10 +581,12 @@ export async function sitePlanAi(
   style?: LineStyles,
   exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): Promise<Uint8Array> {
-  if (useNativeAi8Export()) return sitePlanAi8(model, scale, style, exportOptions);
+  const resolved = style ?? readDrawingStyle();
+  const propertyBoundaries = await resolveExportPropertyLines(model, resolved);
+  if (useNativeAi8Export()) return sitePlanAi8(model, scale, resolved, exportOptions, propertyBoundaries);
   if (import.meta.env.VITE_CITYCUT_AI_PDF_OPS === "true") {
     const layout = layoutSheet(model.sideM, scale);
-    const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions);
+    const chunks = sitePlanChunks(model, scale, resolved, exportOptions, propertyBoundaries);
     return buildLayeredNativeAiPdfOps(
       layout.pageWidthMm,
       layout.pageHeightMm,
@@ -535,7 +595,7 @@ export async function sitePlanAi(
       titleLine(model, layout),
     );
   }
-  return sitePlanPdf(model, scale, style, exportOptions);
+  return sitePlanPdf(model, scale, resolved, exportOptions);
 }
 
 export async function figureGroundAi(
@@ -544,16 +604,18 @@ export async function figureGroundAi(
   style?: LineStyles,
   heliodon?: HeliodonDiagramExportOptions | null,
 ): Promise<Uint8Array> {
-  if (useNativeAi8Export()) return figureGroundAi8(model, scale, style, heliodon);
+  const resolved = style ?? readDrawingStyle();
+  const propertyBoundaries = await resolveExportPropertyLines(model, resolved);
+  if (useNativeAi8Export()) return figureGroundAi8(model, scale, resolved, heliodon, propertyBoundaries);
   if (import.meta.env.VITE_CITYCUT_AI_PDF_OPS === "true") {
     const layout = layoutSheet(model.sideM, scale);
     return buildLayeredNativeAiPdfOps(
       layout.pageWidthMm,
       layout.pageHeightMm,
-      figureGroundChunks(model, scale, style ?? readDrawingStyle(), heliodon),
+      figureGroundChunks(model, scale, resolved, heliodon, propertyBoundaries),
       FIGURE_LAYER_ORDER,
       titleLine(model, layout),
     );
   }
-  return figureGroundPdf(model, scale, style, heliodon);
+  return figureGroundPdf(model, scale, resolved, heliodon);
 }

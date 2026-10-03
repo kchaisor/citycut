@@ -10,6 +10,7 @@ import { figureGround, figureGroundDatum } from "./figureGround";
 import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { buildHeliodonGroundOverlay, type HeliodonGroundExportOptions } from "./heliodonDiagram";
 import { contourIsIndex, demContourLayer } from "./vicmapContours";
+import { fetchPropertyBoundariesForModel } from "./vicmapProperty";
 import type { CityModel, Pt } from "../types";
 
 type Rgb = { r: number; g: number; b: number };
@@ -36,8 +37,8 @@ const BUILDING_LAYER_KEYS: Record<string, ColourKey> = {
 };
 
 /** Full layer path → theme key (or contour pen) for every Rhino layer CityCut writes. */
-export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
-  const keys: Record<string, ColourKey | "contour"> = {
+export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour" | "propertyBoundary"> {
+  const keys: Record<string, ColourKey | "contour" | "propertyBoundary"> = {
     Buildings: "--building-uniform",
     Roads: "--road-arterial",
     Rail: "--rail-fill",
@@ -47,6 +48,7 @@ export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
     Terrain: "--terrain-layer",
     Trees: "--tree-layer",
     Contours: "contour",
+    "Property boundaries": "propertyBoundary",
     FigureGround: "--figure-fill",
     "Sun path": "--sun-compass-label",
     Shadows: "--shadow-fill",
@@ -61,8 +63,14 @@ export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
 function layerColors(): Record<string, Rgb> {
   const keys = rhinoLayerColourKeys();
   const out: Record<string, Rgb> = {};
+  const style = readDrawingStyle();
   for (const [name, key] of Object.entries(keys)) {
-    out[name] = key === "contour" ? contourLayerColor() : colourRgb(key);
+    if (key === "contour") out[name] = contourLayerColor();
+    else if (key === "propertyBoundary") {
+      const hex = style.propertyBoundary.color;
+      const value = Number.parseInt(hex.slice(1), 16);
+      out[name] = { r: (value >> 16) & 255, g: (value >> 8) & 255, b: value & 255 };
+    } else out[name] = colourRgb(key);
   }
   return out;
 }
@@ -291,6 +299,43 @@ function addFigureGround(
  * The 3dm did not previously contain contour curves. These are new, and they
  * sit at the contour's own Z because the rest of the file is Z-up metres.
  */
+function addPropertyBoundaries(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  model: CityModel,
+  zone: number,
+  lines: Pt[][],
+) {
+  if (lines.length === 0) return;
+  const z = model.terrain ? model.terrain.min : 0;
+  const layerIndex = ensureLayer(
+    rhino,
+    doc,
+    layers,
+    materials,
+    "Property boundaries",
+    layerColors()["Property boundaries"],
+  );
+  for (const line of lines) {
+    const points: number[][] = [];
+    for (const point of line) {
+      const [easting, northing] = projectLocal(point, model.center, zone);
+      const last = points[points.length - 1];
+      if (last && Math.hypot(last[0] - easting, last[1] - northing) < 0.001) continue;
+      points.push([easting, northing, z]);
+    }
+    if (points.length < 2) continue;
+    const attributes = new rhino.ObjectAttributes();
+    attributes.name = "Property boundary";
+    attributes.layerIndex = layerIndex;
+    applyByLayerAttributes(rhino, attributes);
+    doc.objects().addPolyline(points, attributes);
+    release(attributes);
+  }
+}
+
 function addContours(
   rhino: Rhino,
   doc: InstanceType<Rhino["File3dm"]>,
@@ -454,6 +499,11 @@ export async function cityModelTo3dm(
     });
     addFigureGround(rhino, doc, layers, materials, model, crs.zone);
     addContours(rhino, doc, layers, materials, model, crs.zone);
+    const planStyle = readDrawingStyle();
+    if (planStyle.propertyBoundariesOn) {
+      const propertyLayer = await fetchPropertyBoundariesForModel(model.center, model.sideM);
+      if (propertyLayer) addPropertyBoundaries(rhino, doc, layers, materials, model, crs.zone, propertyLayer.lines);
+    }
     if (heliodon) addHeliodonPlan(rhino, doc, layers, materials, model, crs.zone, heliodon);
     if (shadows) addPlanShadows(rhino, doc, layers, materials, model, crs.zone, shadows, Boolean(castShadows));
 

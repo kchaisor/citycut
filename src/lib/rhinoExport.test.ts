@@ -390,7 +390,10 @@ describe("rhino export", () => {
         seen.add(path);
         const key = keys[path];
         expect(key, `missing colour key for layer ${path}`).toBeTruthy();
-        const expected = key === "contour" ? null : colourRgb(key!);
+        const expected =
+          key === "contour" || key === "propertyBoundary"
+            ? null
+            : colourRgb(key!);
         if (expected) {
           const swatch = layer.color as { r: number; g: number; b: number; a: number };
           expect(swatch.r).toBe(expected.r);
@@ -400,7 +403,15 @@ describe("rhino export", () => {
           expect(layer.renderMaterialIndex).toBeGreaterThanOrEqual(0);
         }
       }
-      const optionalLayers = new Set(["Rail", "Terrain", "Contours", "FigureGround", "Sun path", "Shadows"]);
+      const optionalLayers = new Set([
+        "Rail",
+        "Terrain",
+        "Contours",
+        "Property boundaries",
+        "FigureGround",
+        "Sun path",
+        "Shadows",
+      ]);
       for (const path of Object.keys(keys)) {
         if (path.startsWith("Buildings::") && !seen.has(path)) continue;
         if (optionalLayers.has(path) && !seen.has(path)) continue;

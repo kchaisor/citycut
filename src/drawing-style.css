@@ -77,6 +77,12 @@
   --tree-stroke: #245232;
   --tree-dash: none;
 
+  /* Vicmap Property parcel boundaries. "on" draws title boundaries on the site plan. */
+  --property-boundaries: off;
+  --property-boundary-mm: 0.15;
+  --property-boundary-stroke: #1C1B17;
+  --property-boundary-dash: none;
+
   /* Massing edge in the 3D view. Black, so the volume reads against the roads and the sky. */
   --building-edge: #000000;
 }

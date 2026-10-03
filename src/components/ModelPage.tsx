@@ -40,6 +40,7 @@ import {
 } from "../lib/viewMemory";
 import { treeSizeSummary, treeTierCounts } from "../lib/trees";
 import { contourDrawerLabel } from "../lib/vicmapContours";
+import { VICMAP_PROPERTY_DATASET_URL } from "../lib/vicmapProperty";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import type { CityModel } from "../types";
 import { ColoursEditor } from "./Colours";
@@ -107,6 +108,7 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [showSource, setShowSource] = useState(false);
   const [preferred, setPreferred] = useState<string | null>(() => loadModelDrawer());
   const [planWidth, setPlanWidth] = useState<number | null>(null);
+  const [propertyNote, setPropertyNote] = useState<string | null>(null);
   const [fitToken, setFitToken] = useState(0);
   const [view, setView] = useState<ViewMemory>(loadView);
   const [snapId, setSnapId] = useState(0);
@@ -342,6 +344,7 @@ export function ModelPage({ model }: { model: CityModel }) {
               heliodon={heliodonDiagramExport()}
               castShadows={solar.castShadows}
               shadowInput={planShadowInput()}
+              onPropertyNote={setPropertyNote}
             />
           </div>
         )}
@@ -603,6 +606,22 @@ export function ModelPage({ model }: { model: CityModel }) {
                 </select>
               </label>
               {figureFit && <p className="fit-note">{figureFit}</p>}
+              <fieldset className="layer-controls">
+                <legend>Layer controls</legend>
+                <label className="check-field">
+                  <input
+                    type="checkbox"
+                    checked={lineStyles.propertyBoundariesOn}
+                    onChange={(event) =>
+                      setLineStyles(
+                        commitLineStyles({ ...lineStyles, propertyBoundariesOn: event.target.checked }),
+                      )
+                    }
+                  />
+                  Property boundaries
+                </label>
+                {propertyNote && <p className="field-note">{propertyNote}</p>}
+              </fieldset>
               {model.contourLayer && (
                 <p
                   className="field-note"
@@ -783,6 +802,13 @@ export function ModelPage({ model }: { model: CityModel }) {
               </a>{" "}
               © State of Victoria (Department of Transport and Planning),{" "}
               <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 (CC-BY)</a>.
+            </>
+          )}
+          {lineStyles.propertyBoundariesOn && (
+            <>
+              {" "}
+              <a href={VICMAP_PROPERTY_DATASET_URL}>Vicmap Property</a> © State of Victoria (Department of Transport
+              and Planning), <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.
             </>
           )}{" "}
           CityCut · Kelvin Chai.
