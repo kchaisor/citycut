@@ -170,6 +170,8 @@ export type CityModel = {
    * Absent keeps the older path: marching squares on `terrain` when `contours` is set.
    */
   contourLayer?: ContourLayer | null;
+  /** When true, building heights came from City of Melbourne 2023 Building Footprints. */
+  comBuildingHeights?: boolean;
 };
 
 export type ViewState = {

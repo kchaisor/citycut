@@ -29,10 +29,13 @@ import {
 import { FIGURE_SCALES, preferredFigureScale, sheetFitMessage } from "../lib/figureGround";
 import {
   applyComBuildingHeights,
-  COM_BUILDING_HEIGHT_ATTRIBUTION,
   fetchComBuildingFootprints,
   type ComBuildingFootprint,
 } from "../lib/comBuildingHeights";
+import {
+  COM_BUILDING_HEIGHTS_CREDIT,
+  COM_BUILDING_HEIGHTS_DATASET_URL,
+} from "../lib/comBuildingHeightCredit";
 import {
   readStoredComBuildingHeights,
   writeStoredComBuildingHeights,
@@ -216,8 +219,12 @@ export function ModelPage({ model }: { model: CityModel }) {
   }, [betterHeights, comFootprints, model.buildings]);
 
   const displayModel = useMemo(
-    () => ({ ...model, buildings: displayBuildings }),
-    [model, displayBuildings],
+    () => ({
+      ...model,
+      buildings: displayBuildings,
+      comBuildingHeights: betterHeights,
+    }),
+    [model, displayBuildings, betterHeights],
   );
   const crs = mgaCrs(model.center.lon);
   const sideKm = model.sideM / 1000;
@@ -286,7 +293,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     setExportError(null);
     setBusy("ai-site");
     try {
-      await downloadSiteAi(model, figureScale, lineStyles, sitePlanExportOptions());
+      await downloadSiteAi(displayModel, figureScale, lineStyles, sitePlanExportOptions());
     } catch {
       setExportError("The site plan could not be written.");
     } finally {
@@ -298,7 +305,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     setExportError(null);
     setBusy("ai-figure");
     try {
-      await downloadFigureAi(model, figureScale, lineStyles, heliodonDiagramExport());
+      await downloadFigureAi(displayModel, figureScale, lineStyles, heliodonDiagramExport());
     } catch {
       setExportError("The figure-ground file could not be written.");
     } finally {
@@ -312,7 +319,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     try {
       const exporter = exportRef.current;
       if (!exporter) throw new Error("The 3D view is not ready.");
-      await downloadViewAi(model, exporter.shot(), {
+      await downloadViewAi(displayModel, exporter.shot(), {
         uniformBuildings: !colourByUse && !showSource,
         colourBySource: showSource,
       });
@@ -478,7 +485,11 @@ export function ModelPage({ model }: { model: CityModel }) {
                     Melbourne extrusion heights in this frame.
                   </p>
                 )}
-                {betterHeights && <p className="legend-note">{COM_BUILDING_HEIGHT_ATTRIBUTION}</p>}
+                {betterHeights && (
+                  <p className="legend-note">
+                    <a href={COM_BUILDING_HEIGHTS_DATASET_URL}>{COM_BUILDING_HEIGHTS_CREDIT}</a>
+                  </p>
+                )}
                 {solar.showPath && tab === "3d" && (
                   <p className="legend-note">Buildings render white on screen while sun path is on; exports keep normal colours.</p>
                 )}
@@ -838,6 +849,14 @@ export function ModelPage({ model }: { model: CityModel }) {
                 Vicmap Vegetation Tree Urban
               </a>{" "}
               © State of Victoria (Department of Transport and Planning),{" "}
+              <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.
+            </>
+          )}
+          {betterHeights && (
+            <>
+              {" "}
+              Building heights:{" "}
+              <a href={COM_BUILDING_HEIGHTS_DATASET_URL}>2023 Building Footprints © City of Melbourne</a>,{" "}
               <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.
             </>
           )}
