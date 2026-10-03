@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Building2, Download, DraftingCompass, Info, Sun, Trees } from "lucide-react";
 import {
   BUILDING_USES,
@@ -27,7 +27,17 @@ import {
   pngFilename,
 } from "../lib/download";
 import { FIGURE_SCALES, preferredFigureScale, sheetFitMessage } from "../lib/figureGround";
-import { formatCoord, formatLengthKm } from "../lib/geo";
+import {
+  applyComBuildingHeights,
+  COM_BUILDING_HEIGHT_ATTRIBUTION,
+  fetchComBuildingFootprints,
+  type ComBuildingFootprint,
+} from "../lib/comBuildingHeights";
+import {
+  readStoredComBuildingHeights,
+  writeStoredComBuildingHeights,
+} from "../lib/comBuildingHeightsToggle";
+import { formatCoord, formatLengthKm, squareBBox } from "../lib/geo";
 import { ISO_CORNERS, type IsoCorner } from "../lib/isoCamera";
 import { drawerIsAvailable, loadModelDrawer, reduceRail, saveModelDrawer } from "../lib/railState";
 import { capturePresetFromSearch } from "../lib/captureQuery";
@@ -105,6 +115,10 @@ export function ModelPage({ model }: { model: CityModel }) {
     () => !capturePresetFromSearch(window.location.search).uniformBuildings,
   );
   const [showSource, setShowSource] = useState(false);
+  const [betterHeights, setBetterHeights] = useState(() =>
+    readStoredComBuildingHeights(window.localStorage),
+  );
+  const [comFootprints, setComFootprints] = useState<ComBuildingFootprint[]>([]);
   const [preferred, setPreferred] = useState<string | null>(() => loadModelDrawer());
   const [planWidth, setPlanWidth] = useState<number | null>(null);
   const [fitToken, setFitToken] = useState(0);
@@ -173,6 +187,38 @@ export function ModelPage({ model }: { model: CityModel }) {
   useEffect(() => {
     writeStoredView(window.localStorage, loadView());
   }, []);
+
+  useEffect(() => {
+    if (!betterHeights || !model.layers.buildings) {
+      setComFootprints([]);
+      return;
+    }
+    const bounds = squareBBox(model.center, model.sideM);
+    const controller = new AbortController();
+    fetchComBuildingFootprints(bounds, model.center, controller.signal)
+      .then((footprints) => {
+        setComFootprints(footprints);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setComFootprints([]);
+        }
+      });
+    return () => controller.abort();
+  }, [betterHeights, model.center.lat, model.center.lon, model.sideM, model.layers.buildings]);
+
+  const { displayBuildings, comHeightUpdates } = useMemo(() => {
+    if (!betterHeights || comFootprints.length === 0) {
+      return { displayBuildings: model.buildings, comHeightUpdates: 0 };
+    }
+    const applied = applyComBuildingHeights(model.buildings, comFootprints);
+    return { displayBuildings: applied.buildings, comHeightUpdates: applied.updated };
+  }, [betterHeights, comFootprints, model.buildings]);
+
+  const displayModel = useMemo(
+    () => ({ ...model, buildings: displayBuildings }),
+    [model, displayBuildings],
+  );
   const crs = mgaCrs(model.center.lon);
   const sideKm = model.sideM / 1000;
   const tierCounts = treeTierCounts(model.trees);
@@ -224,7 +270,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     setExportError(null);
     setBusy("3dm");
     try {
-      await download3dm(model, {
+      await download3dm(displayModel, {
         heliodon: heliodonRhinoExport(),
         shadows: planShadowInput(),
         castShadows: solar.castShadows,
@@ -317,7 +363,7 @@ export function ModelPage({ model }: { model: CityModel }) {
           <div className="fill">
             <SceneBoundary>
               <Scene3D
-                model={model}
+                model={displayModel}
                 uniformBuildings={!colourByUse && !showSource}
                 colourBySource={showSource}
                 projection={view.projection}
@@ -412,7 +458,27 @@ export function ModelPage({ model }: { model: CityModel }) {
                   <button type="button" aria-pressed={showSource} onClick={() => setShowSource((on) => !on)}>
                     {showSource ? "Showing source" : "Show source"}
                   </button>
+                  <button
+                    type="button"
+                    aria-pressed={betterHeights}
+                    onClick={() => {
+                      setBetterHeights((on) => {
+                        const next = !on;
+                        writeStoredComBuildingHeights(window.localStorage, next);
+                        return next;
+                      });
+                    }}
+                  >
+                    {betterHeights ? "Better heights (CoM 2023) on" : "Better heights (CoM 2023)"}
+                  </button>
                 </div>
+                {betterHeights && comHeightUpdates > 0 && (
+                  <p className="legend-note">
+                    {comHeightUpdates.toLocaleString()} building{comHeightUpdates === 1 ? "" : "s"} use City of
+                    Melbourne extrusion heights in this frame.
+                  </p>
+                )}
+                {betterHeights && <p className="legend-note">{COM_BUILDING_HEIGHT_ATTRIBUTION}</p>}
                 {solar.showPath && tab === "3d" && (
                   <p className="legend-note">Buildings render white on screen while sun path is on; exports keep normal colours.</p>
                 )}
