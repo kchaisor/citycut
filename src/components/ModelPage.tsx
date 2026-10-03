@@ -28,10 +28,11 @@ import {
 } from "../lib/download";
 import { FIGURE_SCALES, preferredFigureScale, sheetFitMessage } from "../lib/figureGround";
 import {
-  applyComBuildingHeights,
   fetchComBuildingFootprints,
+  paddedComFetchBounds,
   type ComBuildingFootprint,
 } from "../lib/comBuildingHeights";
+import { runComBuildingHeightsInWorker } from "../lib/comBuildingHeightsWorkerClient";
 import {
   COM_BUILDING_HEIGHTS_CREDIT,
   COM_BUILDING_HEIGHTS_DATASET_URL,
@@ -40,7 +41,7 @@ import {
   readStoredComBuildingHeights,
   writeStoredComBuildingHeights,
 } from "../lib/comBuildingHeightsToggle";
-import { formatCoord, formatLengthKm, squareBBox } from "../lib/geo";
+import { formatCoord, formatLengthKm } from "../lib/geo";
 import { ISO_CORNERS, type IsoCorner } from "../lib/isoCamera";
 import { drawerIsAvailable, loadModelDrawer, reduceRail, saveModelDrawer } from "../lib/railState";
 import { capturePresetFromSearch } from "../lib/captureQuery";
@@ -196,9 +197,9 @@ export function ModelPage({ model }: { model: CityModel }) {
       setComFootprints([]);
       return;
     }
-    const bounds = squareBBox(model.center, model.sideM);
+    const bounds = paddedComFetchBounds(model.center, model.sideM);
     const controller = new AbortController();
-    fetchComBuildingFootprints(bounds, model.center, controller.signal, model.sideM)
+    fetchComBuildingFootprints(bounds, model.center, controller.signal)
       .then((footprints) => {
         setComFootprints(footprints);
       })
@@ -210,13 +211,33 @@ export function ModelPage({ model }: { model: CityModel }) {
     return () => controller.abort();
   }, [betterHeights, model.center.lat, model.center.lon, model.sideM, model.layers.buildings]);
 
-  const { displayBuildings, comHeightUpdates } = useMemo(() => {
-    if (!betterHeights || comFootprints.length === 0) {
-      return { displayBuildings: model.buildings, comHeightUpdates: 0 };
+  const [comHeightBuildings, setComHeightBuildings] = useState<typeof model.buildings | null>(null);
+  const [comHeightUpdates, setComHeightUpdates] = useState(0);
+
+  useEffect(() => {
+    if (!betterHeights || comFootprints.length === 0 || model.buildings.length === 0) {
+      setComHeightBuildings(null);
+      setComHeightUpdates(0);
+      return;
     }
-    const applied = applyComBuildingHeights(model.buildings, comFootprints);
-    return { displayBuildings: applied.buildings, comHeightUpdates: applied.updated };
+    const controller = new AbortController();
+    runComBuildingHeightsInWorker(model.buildings, comFootprints, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        setComHeightBuildings(result.buildings);
+        setComHeightUpdates(result.updated);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setComHeightBuildings(null);
+          setComHeightUpdates(0);
+        }
+      });
+    return () => controller.abort();
   }, [betterHeights, comFootprints, model.buildings]);
+
+  const displayBuildings =
+    betterHeights && comHeightBuildings ? comHeightBuildings : model.buildings;
 
   const displayModel = useMemo(
     () => ({

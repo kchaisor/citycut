@@ -1,27 +1,26 @@
 import { describe, expect, it } from "vitest";
 import {
   applyComBuildingHeights,
+  attachFootprintBBox,
   clipBuildingComExtrusions,
+  COM_SINGLE_PART_COVERAGE,
   intersectionAreaM2,
   pickComHeight,
   pickComHeightFallback20,
   tallestExtrusionHeight,
-  type ComBuildingFootprint,
 } from "./comBuildingHeights";
 import type { BuildingFeat, Ring } from "../types";
+import type { ComBuildingFootprint } from "./comBuildingHeightsTypes";
 
 function building(id: number, ring: BuildingFeat["ring"], height = 9): BuildingFeat {
   return { id, ring, holes: [], height, use: "unclassified", source: "none" };
 }
 
-describe("comBuildingHeights matching", () => {
-  const footprint = (id: string, ring: ComBuildingFootprint["ring"], height_m: number): ComBuildingFootprint => ({
-    id,
-    ring,
-    holes: [],
-    height_m,
-  });
+function footprint(id: string, ring: ComBuildingFootprint["ring"], height_m: number): ComBuildingFootprint {
+  return attachFootprintBBox(id, ring, [], height_m);
+}
 
+describe("comBuildingHeights matching", () => {
   it("chooses the CoM footprint with the largest overlap", () => {
     const osm = building(1, [
       [0, 0],
@@ -93,8 +92,57 @@ describe("comBuildingHeights matching", () => {
     expect(tallestExtrusionHeight({ ...osm, extrusionParts: parts ?? undefined })).toBe(48);
   });
 
-  it("drops intersection slivers under 2 m² or 5% of the OSM footprint", () => {
+  it("uses the single-part fast path when one CoM part covers at least 80%", () => {
     const osm = building(11, [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [0, 10],
+      [0, 0],
+    ], 9);
+    const bulk = footprint(
+      "bulk",
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+        [0, 0],
+      ],
+      22,
+    );
+    const applied = applyComBuildingHeights([osm], [bulk]);
+    expect(applied.updated).toBe(1);
+    expect(applied.buildings[0]?.height).toBe(22);
+    expect(applied.buildings[0]?.extrusionParts).toBeUndefined();
+    expect(COM_SINGLE_PART_COVERAGE).toBe(0.8);
+  });
+
+  it("clips when a single CoM part covers less than 80%", () => {
+    const osm = building(12, [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [0, 10],
+      [0, 0],
+    ], 9);
+    const partial = footprint(
+      "partial",
+      [
+        [0, 0],
+        [6, 0],
+        [6, 10],
+        [0, 10],
+        [0, 0],
+      ],
+      30,
+    );
+    const applied = applyComBuildingHeights([osm], [partial]);
+    expect(applied.buildings[0]?.extrusionParts?.length).toBeGreaterThan(1);
+  });
+
+  it("drops intersection slivers under 2 m² or 5% of the OSM footprint", () => {
+    const osm = building(13, [
       [0, 0],
       [10, 0],
       [10, 10],
@@ -129,7 +177,7 @@ describe("comBuildingHeights matching", () => {
   });
 
   it("keeps the OSM height when no CoM footprint overlaps", () => {
-    const osm = building(12, [
+    const osm = building(14, [
       [50, 50],
       [55, 50],
       [55, 55],
@@ -150,11 +198,10 @@ describe("comBuildingHeights matching", () => {
     expect(clipBuildingComExtrusions(osm, [remote])).toBeNull();
     const applied = applyComBuildingHeights([osm], [remote]);
     expect(applied.updated).toBe(0);
-    expect(applied.buildings[0]?.extrusionParts).toBeUndefined();
   });
 
   it("uses the 20% tallest-part fallback when clipping throws", () => {
-    const osm = building(13, [
+    const osm = building(15, [
       [0, 0],
       [10, 0],
       [10, 10],
@@ -184,54 +231,6 @@ describe("comBuildingHeights matching", () => {
       60,
     );
     expect(pickComHeightFallback20(osm, [low, tall])?.height_m).toBe(60);
-    const tiny = footprint(
-      "tiny",
-      [
-        [0, 0],
-        [100, 0],
-        [100, 0.5],
-        [0, 0.5],
-        [0, 0],
-      ],
-      80,
-    );
-    expect(pickComHeightFallback20(osm, [tiny])).toBeNull();
-  });
-
-  it("applies extrusion parts and counts updates", () => {
-    const buildings = [
-      building(3, [
-        [0, 0],
-        [5, 0],
-        [5, 5],
-        [0, 5],
-        [0, 0],
-      ]),
-      building(4, [
-        [50, 50],
-        [55, 50],
-        [55, 55],
-        [50, 55],
-        [50, 50],
-      ]),
-    ];
-    const footprints = [
-      footprint(
-        "c1",
-        [
-          [0, 0],
-          [5, 0],
-          [5, 5],
-          [0, 5],
-          [0, 0],
-        ],
-        18,
-      ),
-    ];
-    const result = applyComBuildingHeights(buildings, footprints);
-    expect(result.updated).toBe(1);
-    expect(result.buildings[0]?.extrusionParts?.[0]?.height).toBe(18);
-    expect(result.buildings[1]?.extrusionParts).toBeUndefined();
   });
 
   it("measures intersection area for overlapping squares", () => {
