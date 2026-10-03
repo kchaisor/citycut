@@ -16,7 +16,7 @@ export const COM_BUILDINGS_DATASET =
 export const COM_BUILDING_HEIGHT_ATTRIBUTION =
   "2023 Building Footprints © City of Melbourne (CC BY 4.0).";
 
-const EXPORT_LIMIT = 8000;
+const EXPORT_LIMIT = 50_000;
 
 /** Padded City of Melbourne extent. Outside this the inventory has no rows. */
 export const COM_CITY_EXTENT = { south: -37.86, west: 144.89, north: -37.77, east: 145.0 };
@@ -52,7 +52,7 @@ export const COM_FALLBACK_MIN_FRACTION = 0.2;
 const footprintCache = new Map<string, ComBuildingFootprint[]>();
 
 function cacheKey(bounds: BBox, origin: LonLat): string {
-  return ["clip-v2", bounds.south, bounds.west, bounds.north, bounds.east, origin.lat, origin.lon]
+  return ["clip-v3", bounds.south, bounds.west, bounds.north, bounds.east, origin.lat, origin.lon]
     .map((v) => (typeof v === "number" ? v.toFixed(6) : v))
     .join(",");
 }
@@ -367,12 +367,32 @@ export function applyComBuildingHeightsWithStats(
   return { ...result, stats: { clipMs, extrusionMeshCount } };
 }
 
+function footprintInFrame(footprint: ComBuildingFootprint, halfSideM: number): boolean {
+  const limit = halfSideM * 1.02;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const [x, y] of footprint.ring) {
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  return minX <= limit && maxX >= -limit && minY <= limit && maxY >= -limit;
+}
+
 export async function fetchComBuildingFootprints(
   bounds: BBox,
   origin: LonLat,
   signal?: AbortSignal,
+  sideM?: number,
 ): Promise<ComBuildingFootprint[]> {
   if (!intersectsComCity(bounds)) return [];
+  const halfSideM =
+    sideM && sideM > 0
+      ? sideM / 2
+      : ((bounds.north - bounds.south) * 111_132) / 2;
   const key = cacheKey(bounds, origin);
   const cached = footprintCache.get(key);
   if (cached) return cached;
@@ -403,8 +423,9 @@ export async function fetchComBuildingFootprints(
   for (const feature of json.features ?? []) {
     footprints.push(...footprintsFromFeature(feature, origin));
   }
-  footprintCache.set(key, footprints);
-  return footprints;
+  const inFrame = footprints.filter((footprint) => footprintInFrame(footprint, halfSideM));
+  footprintCache.set(key, inFrame);
+  return inFrame;
 }
 
 /** @internal test helper */

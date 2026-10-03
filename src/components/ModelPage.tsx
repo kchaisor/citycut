@@ -198,7 +198,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     }
     const bounds = squareBBox(model.center, model.sideM);
     const controller = new AbortController();
-    fetchComBuildingFootprints(bounds, model.center, controller.signal)
+    fetchComBuildingFootprints(bounds, model.center, controller.signal, model.sideM)
       .then((footprints) => {
         setComFootprints(footprints);
       })
