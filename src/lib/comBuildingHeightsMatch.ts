@@ -219,10 +219,27 @@ function significantOverlaps(building: BuildingFeat, index: RBush<IndexedFootpri
   return hits;
 }
 
-/** Apply CoM heights with single-part fast path and spatial index. */
-export function applyComBuildingHeights(
+function comPartAreaM2(footprint: ComBuildingFootprint): number {
+  return Math.abs(signedArea(openRing(footprint.ring)));
+}
+
+function singlePartFastPathEligible(hit: OverlapHit, osmArea: number): boolean {
+  const osmShare = hit.area / osmArea;
+  if (osmShare < COM_SINGLE_PART_COVERAGE) return false;
+  const comArea = comPartAreaM2(hit.footprint);
+  if (comArea <= 0) return false;
+  const comShare = hit.area / comArea;
+  return comShare >= COM_SINGLE_PART_COVERAGE;
+}
+
+function singlePartLegacyOsmOnlyFastPathEligible(hit: OverlapHit, osmArea: number): boolean {
+  return hit.area / osmArea >= COM_SINGLE_PART_COVERAGE;
+}
+
+function applyComBuildingHeightsCore(
   buildings: BuildingFeat[],
   footprints: ComBuildingFootprint[],
+  options: { allowFastPath: boolean },
 ): { buildings: BuildingFeat[]; updated: number } {
   if (footprints.length === 0) return { buildings, updated: 0 };
   const index = buildFootprintIndex(footprints);
@@ -232,7 +249,11 @@ export function applyComBuildingHeights(
     const overlaps = significantOverlaps(building, index, osmArea);
     if (overlaps.length === 0) return building;
 
-    if (overlaps.length === 1 && overlaps[0].area / osmArea >= COM_SINGLE_PART_COVERAGE) {
+    if (
+      options.allowFastPath &&
+      overlaps.length === 1 &&
+      singlePartFastPathEligible(overlaps[0], osmArea)
+    ) {
       const height = overlaps[0].footprint.height_m;
       if (Math.abs(height - building.height) < 0.05) return building;
       return { ...building, height };
@@ -245,6 +266,115 @@ export function applyComBuildingHeights(
   });
   const updated = countBuildingsWithComDerivedExtrusion(buildings, out);
   return { buildings: out, updated };
+}
+
+/** @internal d835ce1 fast path (OSM coverage only) for regression diffs. */
+export function applyComBuildingHeightsLegacyOsmOnlyFastPath(
+  buildings: BuildingFeat[],
+  footprints: ComBuildingFootprint[],
+): { buildings: BuildingFeat[]; updated: number } {
+  if (footprints.length === 0) return { buildings, updated: 0 };
+  const index = buildFootprintIndex(footprints);
+  const out = buildings.map((building) => {
+    const osmArea = Math.abs(signedArea(openRing(building.ring)));
+    if (osmArea <= 0) return building;
+    const overlaps = significantOverlaps(building, index, osmArea);
+    if (overlaps.length === 0) return building;
+    if (
+      overlaps.length === 1 &&
+      singlePartLegacyOsmOnlyFastPathEligible(overlaps[0], osmArea)
+    ) {
+      const height = overlaps[0].footprint.height_m;
+      if (Math.abs(height - building.height) < 0.05) return building;
+      return { ...building, height };
+    }
+    const candidates = overlaps.map((hit) => hit.footprint);
+    const parts = clipBuildingComExtrusions(building, candidates);
+    if (!parts || parts.length === 0) return building;
+    return { ...building, extrusionParts: parts };
+  });
+  const updated = countBuildingsWithComDerivedExtrusion(buildings, out);
+  return { buildings: out, updated };
+}
+
+/** Clip-only matching (0a8b37a behaviour): always intersect, never whole-footprint fast path. */
+export function applyComBuildingHeightsClipOnly(
+  buildings: BuildingFeat[],
+  footprints: ComBuildingFootprint[],
+): { buildings: BuildingFeat[]; updated: number } {
+  return applyComBuildingHeightsCore(buildings, footprints, { allowFastPath: false });
+}
+
+export type ComHeightPathDetail = {
+  path: "none" | "fast" | "clip";
+  comPartIds: string[];
+  osmCoveragePct: number | null;
+  comCoveragePct: number | null;
+};
+
+function classifyWithEligible(
+  building: BuildingFeat,
+  footprints: ComBuildingFootprint[],
+  eligible: (hit: OverlapHit, osmArea: number) => boolean,
+): ComHeightPathDetail {
+  if (footprints.length === 0) {
+    return { path: "none", comPartIds: [], osmCoveragePct: null, comCoveragePct: null };
+  }
+  const index = buildFootprintIndex(footprints);
+  const osmArea = Math.abs(signedArea(openRing(building.ring)));
+  if (osmArea <= 0) {
+    return { path: "none", comPartIds: [], osmCoveragePct: null, comCoveragePct: null };
+  }
+  const overlaps = significantOverlaps(building, index, osmArea);
+  if (overlaps.length === 0) {
+    return { path: "none", comPartIds: [], osmCoveragePct: null, comCoveragePct: null };
+  }
+  if (overlaps.length === 1 && eligible(overlaps[0], osmArea)) {
+    const hit = overlaps[0];
+    const comArea = comPartAreaM2(hit.footprint);
+    return {
+      path: "fast",
+      comPartIds: [hit.footprint.id],
+      osmCoveragePct: Math.round((1000 * hit.area) / osmArea) / 10,
+      comCoveragePct: comArea > 0 ? Math.round((1000 * hit.area) / comArea) / 10 : null,
+    };
+  }
+  return {
+    path: "clip",
+    comPartIds: overlaps.map((hit) => hit.footprint.id),
+    osmCoveragePct:
+      overlaps.length === 1
+        ? Math.round((1000 * overlaps[0].area) / osmArea) / 10
+        : null,
+    comCoveragePct:
+      overlaps.length === 1
+        ? Math.round((1000 * overlaps[0].area) / comPartAreaM2(overlaps[0].footprint)) / 10
+        : null,
+  };
+}
+
+/** Classify which path would run for one building (for diagnostics). */
+export function classifyComHeightApplication(
+  building: BuildingFeat,
+  footprints: ComBuildingFootprint[],
+): ComHeightPathDetail {
+  return classifyWithEligible(building, footprints, singlePartFastPathEligible);
+}
+
+/** Classify legacy d835ce1 OSM-only 80% fast path. */
+export function classifyComHeightApplicationLegacy(
+  building: BuildingFeat,
+  footprints: ComBuildingFootprint[],
+): ComHeightPathDetail {
+  return classifyWithEligible(building, footprints, singlePartLegacyOsmOnlyFastPathEligible);
+}
+
+/** Apply CoM heights with single-part fast path and spatial index. */
+export function applyComBuildingHeights(
+  buildings: BuildingFeat[],
+  footprints: ComBuildingFootprint[],
+): { buildings: BuildingFeat[]; updated: number } {
+  return applyComBuildingHeightsCore(buildings, footprints, { allowFastPath: true });
 }
 
 export function tallestExtrusionHeight(building: BuildingFeat): number {

@@ -20,7 +20,11 @@ export {
 export type { BBox, ComBuildingFootprint } from "./comBuildingHeightsTypes";
 export {
   applyComBuildingHeights,
+  applyComBuildingHeightsClipOnly,
+  applyComBuildingHeightsLegacyOsmOnlyFastPath,
   applyComBuildingHeightsWithStats,
+  classifyComHeightApplication,
+  classifyComHeightApplicationLegacy,
   attachFootprintBBox,
   COM_SINGLE_PART_COVERAGE,
   COM_SLIVER_MIN_FRACTION,

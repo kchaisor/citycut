@@ -92,6 +92,30 @@ describe("comBuildingHeights matching", () => {
     expect(tallestExtrusionHeight({ ...osm, extrusionParts: parts ?? undefined })).toBe(48);
   });
 
+  it("requires CoM part coverage both ways before the single-part fast path", () => {
+    const osm = building(17, [
+      [0, 0],
+      [20, 0],
+      [20, 10],
+      [0, 10],
+      [0, 0],
+    ], 9);
+    const tallShell = footprint(
+      "shell",
+      [
+        [0, 0],
+        [20, 0],
+        [20, 100],
+        [0, 100],
+        [0, 0],
+      ],
+      87,
+    );
+    const applied = applyComBuildingHeights([osm], [tallShell]);
+    expect(applied.buildings[0]?.extrusionParts?.length).toBeGreaterThan(0);
+    expect(applied.buildings[0]?.height).toBe(9);
+  });
+
   it("uses the single-part fast path when one CoM part covers at least 80%", () => {
     const osm = building(11, [
       [0, 0],
@@ -111,11 +135,36 @@ describe("comBuildingHeights matching", () => {
       ],
       22,
     );
+    // Same ring as OSM so both coverage fractions are 100%.
     const applied = applyComBuildingHeights([osm], [bulk]);
     expect(applied.updated).toBe(1);
     expect(applied.buildings[0]?.height).toBe(22);
     expect(applied.buildings[0]?.extrusionParts).toBeUndefined();
     expect(COM_SINGLE_PART_COVERAGE).toBe(0.8);
+  });
+
+  it("clips when one CoM part covers most of OSM but OSM covers less than 80% of the part (podium vs tower shell)", () => {
+    const osm = building(16, [
+      [0, 0],
+      [20, 0],
+      [20, 10],
+      [0, 10],
+      [0, 0],
+    ], 9);
+    const towerAndPodium = footprint(
+      "shell",
+      [
+        [0, 0],
+        [20, 0],
+        [20, 20],
+        [0, 20],
+        [0, 0],
+      ],
+      80,
+    );
+    const applied = applyComBuildingHeights([osm], [towerAndPodium]);
+    expect(applied.buildings[0]?.extrusionParts?.length).toBeGreaterThan(0);
+    expect(applied.buildings[0]?.height).toBe(9);
   });
 
   it("clips when a single CoM part covers less than 80%", () => {
