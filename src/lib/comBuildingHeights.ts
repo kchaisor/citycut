@@ -9,14 +9,13 @@ import type { BuildingFeat, LonLat, Pt, Ring } from "../types";
  * https://data.melbourne.vic.gov.au/explore/dataset/2023-building-footprints/
  * CC BY 4.0. `structure_extrusion` is the building height in metres.
  */
-export const COM_BUILDINGS_ENDPOINT =
-  "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets/2023-building-footprints/records";
+export const COM_BUILDINGS_DATASET =
+  "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets/2023-building-footprints";
 
 export const COM_BUILDING_HEIGHT_ATTRIBUTION =
   "2023 Building Footprints © City of Melbourne (CC BY 4.0).";
 
-const PAGE = 100;
-const MAX_PAGES = 80;
+const EXPORT_LIMIT = 8000;
 
 /** Padded City of Melbourne extent. Outside this the inventory has no rows. */
 export const COM_CITY_EXTENT = { south: -37.86, west: 144.89, north: -37.77, east: 145.0 };
@@ -70,17 +69,27 @@ type ApiRow = {
   structure_id?: string;
   structure_extrusion?: number | null;
   geo_shape?: GeoShape;
+  geo_point_2d?: { lat: number; lon: number };
+};
+
+type GeoJsonFeature = {
+  type?: string;
+  geometry?: GeoShape["geometry"];
+  properties?: ApiRow;
 };
 
 function ringFromLonLat(coords: number[][], origin: LonLat): Ring {
   return openRing(coords.map(([lon, lat]) => toLocal(lat, lon, origin)));
 }
 
-function footprintFromRow(row: ApiRow, origin: LonLat): ComBuildingFootprint | null {
+function footprintFromGeometry(
+  row: ApiRow,
+  geom: NonNullable<GeoShape["geometry"]>,
+  origin: LonLat,
+): ComBuildingFootprint | null {
   const height = row.structure_extrusion;
   if (typeof height !== "number" || !(height > 0)) return null;
-  const geom = row.geo_shape?.geometry;
-  if (!geom?.coordinates) return null;
+  if (!geom.coordinates) return null;
   const id = row.structure_id?.trim() || "";
   if (geom.type === "Polygon") {
     const rings = geom.coordinates as number[][][];
@@ -113,6 +122,13 @@ function footprintFromRow(row: ApiRow, origin: LonLat): ComBuildingFootprint | n
     return best;
   }
   return null;
+}
+
+function footprintFromFeature(feature: GeoJsonFeature, origin: LonLat): ComBuildingFootprint | null {
+  const props = feature.properties ?? {};
+  const geom = feature.geometry;
+  if (!geom?.coordinates) return null;
+  return footprintFromGeometry(props, geom, origin);
 }
 
 function toClipPolygon(ring: Ring, holes: Ring[]): Polygon {
@@ -200,10 +216,29 @@ export function applyComBuildingHeights(
   return { buildings: out, updated };
 }
 
-async function readPage(bounds: BBox, offset: number, signal?: AbortSignal): Promise<ApiRow[]> {
+function rowInBounds(row: ApiRow, bounds: BBox): boolean {
+  const point = row.geo_point_2d;
+  if (!point || typeof point.lat !== "number" || typeof point.lon !== "number") return false;
+  return (
+    point.lat >= bounds.south &&
+    point.lat <= bounds.north &&
+    point.lon >= bounds.west &&
+    point.lon <= bounds.east
+  );
+}
+
+export async function fetchComBuildingFootprints(
+  bounds: BBox,
+  origin: LonLat,
+  signal?: AbortSignal,
+): Promise<ComBuildingFootprint[]> {
+  if (!intersectsComCity(bounds)) return [];
+  const key = cacheKey(bounds);
+  const cached = footprintCache.get(key);
+  if (cached) return cached;
+
   const params = new URLSearchParams({
-    limit: String(PAGE),
-    offset: String(offset),
+    limit: String(EXPORT_LIMIT),
     geofilter: JSON.stringify({
       type: "Polygon",
       coordinates: [
@@ -217,36 +252,18 @@ async function readPage(bounds: BBox, offset: number, signal?: AbortSignal): Pro
       ],
     }),
   });
-  const response = await fetch(`${COM_BUILDINGS_ENDPOINT}?${params.toString()}`, {
+  const exportUrl = `${COM_BUILDINGS_DATASET}/exports/geojson?${params.toString()}`;
+  const response = await fetch(exportUrl, {
     signal,
     headers: { Accept: "application/json" },
   });
-  if (!response.ok) throw new Error(`City of Melbourne building records answered ${response.status}.`);
-  const json = (await response.json()) as { results?: ApiRow[] };
-  return json.results ?? [];
-}
-
-export async function fetchComBuildingFootprints(
-  bounds: BBox,
-  origin: LonLat,
-  signal?: AbortSignal,
-): Promise<ComBuildingFootprint[]> {
-  if (!intersectsComCity(bounds)) return [];
-  const key = cacheKey(bounds);
-  const cached = footprintCache.get(key);
-  if (cached) return cached;
-
-  const rows: ApiRow[] = [];
-  for (let page = 0; page < MAX_PAGES; page += 1) {
-    const batch = await readPage(bounds, page * PAGE, signal);
-    if (batch.length === 0) break;
-    rows.push(...batch);
-    if (batch.length < PAGE) break;
-  }
-
+  if (!response.ok) throw new Error(`City of Melbourne building export answered ${response.status}.`);
+  const json = (await response.json()) as { features?: GeoJsonFeature[] };
   const footprints: ComBuildingFootprint[] = [];
-  for (const row of rows) {
-    const footprint = footprintFromRow(row, origin);
+  for (const feature of json.features ?? []) {
+    const props = feature.properties ?? {};
+    if (!rowInBounds(props, bounds)) continue;
+    const footprint = footprintFromFeature(feature, origin);
     if (footprint) footprints.push(footprint);
   }
   footprintCache.set(key, footprints);
