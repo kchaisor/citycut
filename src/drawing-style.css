@@ -79,7 +79,7 @@
 
   /* Vicmap Property parcel boundaries. "on" draws title boundaries on the site plan. */
   --property-boundaries: off;
-  --property-boundary-mm: 0.15;
+  --property-boundary-mm: 0.22;
   --property-boundary-stroke: #1C1B17;
   --property-boundary-dash: none;
 

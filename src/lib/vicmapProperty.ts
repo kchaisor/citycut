@@ -4,12 +4,16 @@ import { VICTORIA_BOUNDS, boundsIntersect, type LonLatBounds } from "./vicmapCon
 import type { LonLat, Pt } from "../types";
 
 /**
- * Vicmap Property parcel polygons (PROPERTY_MP), Department of Transport and Planning.
+ * Vicmap Property title parcel polygons (PARCEL_MP), Department of Transport and Planning.
  * Creative Commons Attribution 4.0 International.
  * https://discover.data.vic.gov.au/dataset/vicmap-property
+ *
+ * PROPERTY_MP (Vicmap_Property) is the property map; PARCEL_MP is the cadastral parcel / title lot.
  */
 export const VICMAP_PROPERTY_URL =
-  "https://services-ap1.arcgis.com/P744lA0wf4LlBZ84/ArcGIS/rest/services/Vicmap_Property/FeatureServer/0";
+  "https://services-ap1.arcgis.com/P744lA0wf4LlBZ84/ArcGIS/rest/services/Vicmap_Parcel/FeatureServer/0";
+
+export const VICMAP_PROPERTY_LAYER_NAME = "Parcel Map Polygons - Vicmap Property (PARCEL_MP)";
 
 export const VICMAP_PROPERTY_DATASET_URL =
   "https://discover.data.vic.gov.au/dataset/vicmap-property";
@@ -18,8 +22,8 @@ export const VICMAP_PROPERTY_ATTRIBUTION =
   "Vicmap Property © State of Victoria (Department of Transport and Planning), CC BY 4.0.";
 
 export const VICMAP_PROPERTY_PAGE = 2000;
-export const VICMAP_PROPERTY_TIMEOUT_MS = 8000;
-const MAX_PAGES = 12;
+export const VICMAP_PROPERTY_TIMEOUT_MS = 35_000;
+const MAX_PAGES = 15;
 
 export type PropertyFetch = (url: string, signal: AbortSignal) => Promise<unknown>;
 
@@ -61,7 +65,7 @@ export function propertyQueryUrl(bounds: LonLatBounds, offset: number): string {
     geometryType: "esriGeometryEnvelope",
     inSR: "4326",
     spatialRel: "esriSpatialRelIntersects",
-    outFields: "prop_pfi",
+    outFields: "parcel_pfi",
     returnGeometry: "true",
     outSR: "4326",
     geometryPrecision: "6",
@@ -75,8 +79,12 @@ export function propertyQueryUrl(bounds: LonLatBounds, offset: number): string {
 
 type GeoFeature = {
   geometry?: { type?: string; coordinates?: unknown } | null;
-  properties?: { prop_pfi?: unknown } | null;
+  properties?: { parcel_pfi?: unknown; prop_pfi?: unknown } | null;
 };
+
+function parcelId(properties: GeoFeature["properties"]): unknown {
+  return properties?.parcel_pfi ?? properties?.prop_pfi;
+}
 
 type GeoCollection = {
   type?: string;
@@ -130,10 +138,9 @@ export function parsePropertyPage(json: unknown, origin: LonLat): PropertyPage {
   const features = Array.isArray(collection.features) ? collection.features : [];
   const lines: Pt[][] = [];
   for (const feature of features) {
-    if (feature.properties?.prop_pfi == null || feature.properties.prop_pfi === "") continue;
-    for (const ring of ringsFromGeometry(feature.geometry, origin)) {
-      lines.push(ring);
-    }
+    const id = parcelId(feature.properties);
+    if (id == null || id === "") continue;
+    lines.push(...ringsToBoundaryLines(ringsFromGeometry(feature.geometry, origin)));
   }
   const exceeded = Boolean(
     collection.properties?.exceededTransferLimit || collection.exceededTransferLimit,
@@ -156,6 +163,44 @@ export function viewBoundsLonLat(view: { x: number; y: number; w: number; h: num
     south: Math.min(sw.lat, ne.lat),
     north: Math.max(sw.lat, ne.lat),
   };
+}
+
+export function boundsFromLocalSquare(origin: LonLat, half: number): LonLatBounds {
+  const sw = fromLocal([-half, -half], origin);
+  const ne = fromLocal([half, half], origin);
+  return {
+    west: Math.min(sw.lon, ne.lon),
+    east: Math.max(sw.lon, ne.lon),
+    south: Math.min(sw.lat, ne.lat),
+    north: Math.max(sw.lat, ne.lat),
+  };
+}
+
+/** Lon/lat envelope for a Vicmap query: visible plan view clipped to the cut square. */
+export function propertyQueryBounds(
+  view: { x: number; y: number; w: number; h: number },
+  origin: LonLat,
+  sideM: number,
+): LonLatBounds {
+  const viewBox = viewBoundsLonLat(view, origin);
+  const frame = boundsFromLocalSquare(origin, sideM / 2);
+  return {
+    west: Math.max(viewBox.west, frame.west),
+    east: Math.min(viewBox.east, frame.east),
+    south: Math.max(viewBox.south, frame.south),
+    north: Math.min(viewBox.north, frame.north),
+  };
+}
+
+export function ringsToBoundaryLines(rings: Pt[][]): Pt[][] {
+  const lines: Pt[][] = [];
+  for (const ring of rings) {
+    if (ring.length < 2) continue;
+    const open = openPropertyRing(ring);
+    if (open.length < 2) continue;
+    lines.push(open[0][0] === open[open.length - 1][0] && open[0][1] === open[open.length - 1][1] ? open : [...open, open[0]]);
+  }
+  return lines;
 }
 
 export function clipPropertyLines(lines: Pt[][], half: number): Pt[][] {

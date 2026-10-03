@@ -18,8 +18,8 @@ describe("propertyQueryUrl", () => {
       { west: 144.97, south: -37.81, north: -37.799, east: 144.98 },
       0,
     );
-    expect(url).toContain("Vicmap_Property/FeatureServer/0/query");
-    expect(url).toContain("outFields=prop_pfi");
+    expect(url).toContain("Vicmap_Parcel/FeatureServer/0/query");
+    expect(url).toContain("outFields=parcel_pfi");
     expect(url).toContain("inSR=4326");
     expect(url).toContain("outSR=4326");
     expect(url).toContain("resultRecordCount=2000");
@@ -33,7 +33,7 @@ describe("parsePropertyPage", () => {
     const json = {
       features: [
         {
-          properties: { prop_pfi: "1033626" },
+          properties: { parcel_pfi: "1033626" },
           geometry: {
             type: "Polygon",
             coordinates: [
@@ -127,7 +127,7 @@ describe("paging and cache", () => {
       return {
         features: [
           {
-            properties: { prop_pfi: "1" },
+            properties: { parcel_pfi: "1" },
             geometry: {
               type: "Polygon",
               coordinates: [[[144.978, -37.799], [144.9781, -37.799], [144.9781, -37.7991], [144.978, -37.7991], [144.978, -37.799]]],

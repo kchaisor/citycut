@@ -36,9 +36,9 @@ export const SITE_LAYER_ORDER = [
   "Roads",
   "Paths",
   "Rail",
-  "Property boundaries",
   "Buildings",
   "Trees",
+  "Property boundaries",
   "Contours",
   "Contour labels",
   "Shadows",
@@ -50,8 +50,8 @@ export const FIGURE_LAYER_ORDER = [
   "Frame",
   "Buildings",
   "Paths",
-  "Property boundaries",
   "Sun path",
+  "Property boundaries",
   "Annotation",
 ] as const;
 
@@ -388,8 +388,6 @@ export function sitePlanChunks(
       paths: plan.rails.flatMap((line) => casedLine(mapRing(line, model.sideM, layout), style.rail, railPen)),
     });
   }
-  const propertyChunk = propertyBoundaryChunk(propertyBoundaries, model, layout, style);
-  if (propertyChunk) chunks.push(propertyChunk);
   const treePen = pen(style.tree);
   if (plan.trees.length > 0) {
     chunks.push({
@@ -434,6 +432,8 @@ export function sitePlanChunks(
       })),
     });
   }
+  const propertyChunk = propertyBoundaryChunk(propertyBoundaries, model, layout, style);
+  if (propertyChunk) chunks.push(propertyChunk);
   chunks.push(frameStroke(layout, style.frame));
   if (heliodon) chunks.push(heliodonPlanPdfChunk(model.sideM, layout, heliodon, scale));
   chunks.push(annotation(model, layout, plan.contourInterval, style.annotation, plan.contourSource));
@@ -491,10 +491,6 @@ function sitePlanLayerOrder(chunks: PdfChunk[]): string[] {
   if (!order.includes("Contour labels") && chunks.some((chunk) => chunk.name === "Contour labels")) {
     const at = order.indexOf("Contours");
     order.splice(at + 1, 0, "Contour labels");
-  }
-  if (!order.includes("Property boundaries") && chunks.some((chunk) => chunk.name === "Property boundaries")) {
-    const at = order.indexOf("Buildings");
-    order.splice(at, 0, "Property boundaries");
   }
   return order;
 }

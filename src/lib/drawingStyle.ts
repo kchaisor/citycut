@@ -168,7 +168,7 @@ export const DEFAULT_LINE_STYLES: LineStyles = {
   contourCoarseIntervalM: 5,
   contourCoarseFromScale: 2500,
   propertyBoundary: {
-    mm: LINE_MM.secondary,
+    mm: LINE_MM.propertyRoad,
     color: INK,
     dash: "none",
   },

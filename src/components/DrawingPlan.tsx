@@ -16,7 +16,7 @@ import type { CityModel } from "../types";
 import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
 import { planShadowRings, type PlanShadowInput } from "../lib/buildingShadows";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
-import { fetchVicmapPropertyLayer, viewBoundsLonLat } from "../lib/vicmapProperty";
+import { fetchVicmapPropertyLayer, propertyQueryBounds } from "../lib/vicmapProperty";
 import type { Pt } from "../types";
 
 type View = { x: number; y: number; w: number; h: number };
@@ -132,7 +132,7 @@ export function DrawingPlan({
     let cancelled = false;
     const timer = window.setTimeout(() => {
       void (async () => {
-        const bounds = viewBoundsLonLat(view, model.center);
+        const bounds = propertyQueryBounds(view, model.center, model.sideM);
         const layer = await fetchVicmapPropertyLayer(bounds, model.center, model.sideM / 2, {
           signal: controller.signal,
         });
@@ -379,15 +379,6 @@ export function DrawingPlan({
             {plan.rails.map((rail, index) => (
               <CasedLine key={`l${index}`} d={svgPolyline(rail, false)} stroke={style.rail} paper={canvas} />
             ))}
-            {style.propertyBoundariesOn &&
-              propertyLines.map((line, index) => (
-                <path
-                  key={`p${index}`}
-                  d={svgPolyline(line, false)}
-                  fill="none"
-                  {...screenPenAttrs(style.propertyBoundary)}
-                />
-              ))}
             {shadowRings.map((rings, index) => (
               <path
                 key={`sh${index}`}
@@ -416,6 +407,15 @@ export function DrawingPlan({
                 {...screenPenAttrs(style.tree)}
               />
             ))}
+            {style.propertyBoundariesOn &&
+              propertyLines.map((line, index) => (
+                <path
+                  key={`p${index}`}
+                  d={svgPolyline(line, false)}
+                  fill="none"
+                  {...screenPenAttrs(style.propertyBoundary)}
+                />
+              ))}
             <rect
               x={-half}
               y={-half}
