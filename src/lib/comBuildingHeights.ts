@@ -3,6 +3,7 @@ import type { MultiPolygon, Polygon } from "polygon-clipping";
 import { clampBuildingHeight } from "./height";
 import { openRing, signedArea, toLocal } from "./geo";
 import type { BuildingFeat, LonLat, Pt, Ring } from "../types";
+import type { BuildingExtrusionPart as ExtrusionPart } from "../types";
 
 /**
  * City of Melbourne "2023 Building Footprints".
@@ -31,6 +32,8 @@ export type ComBuildingFootprint = {
 
 type ClipFns = {
   intersection: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
+  difference: (subject: Polygon | MultiPolygon, ...clips: Array<Polygon | MultiPolygon>) => MultiPolygon;
+  union: (...geoms: Array<Polygon | MultiPolygon>) => MultiPolygon;
 };
 
 function clippingFns(): ClipFns {
@@ -40,12 +43,18 @@ function clippingFns(): ClipFns {
   throw new Error("polygon-clipping did not load.");
 }
 
-const { intersection } = clippingFns();
+const { intersection, difference, union } = clippingFns();
+
+export const COM_SLIVER_MIN_M2 = 2;
+export const COM_SLIVER_MIN_FRACTION = 0.05;
+export const COM_FALLBACK_MIN_FRACTION = 0.2;
 
 const footprintCache = new Map<string, ComBuildingFootprint[]>();
 
-function cacheKey(bounds: BBox): string {
-  return [bounds.south, bounds.west, bounds.north, bounds.east].map((v) => v.toFixed(6)).join(",");
+function cacheKey(bounds: BBox, origin: LonLat): string {
+  return ["clip-v2", bounds.south, bounds.west, bounds.north, bounds.east, origin.lat, origin.lon]
+    .map((v) => (typeof v === "number" ? v.toFixed(6) : v))
+    .join(",");
 }
 
 export function intersectsComCity(bounds: BBox): boolean {
@@ -82,57 +91,64 @@ function ringFromLonLat(coords: number[][], origin: LonLat): Ring {
   return openRing(coords.map(([lon, lat]) => toLocal(lat, lon, origin)));
 }
 
-function footprintFromGeometry(
+function footprintsFromGeometry(
   row: ApiRow,
   geom: NonNullable<GeoShape["geometry"]>,
   origin: LonLat,
-): ComBuildingFootprint | null {
+): ComBuildingFootprint[] {
   const height = row.structure_extrusion;
-  if (typeof height !== "number" || !(height > 0)) return null;
-  if (!geom.coordinates) return null;
+  if (typeof height !== "number" || !(height > 0)) return [];
+  if (!geom.coordinates) return [];
   const id = row.structure_id?.trim() || "";
+  const height_m = clampBuildingHeight(height);
+  const out: ComBuildingFootprint[] = [];
   if (geom.type === "Polygon") {
     const rings = geom.coordinates as number[][][];
-    if (!rings[0]?.length) return null;
-    return {
+    if (!rings[0]?.length) return [];
+    out.push({
       id,
       ring: ringFromLonLat(rings[0], origin),
       holes: rings.slice(1).map((hole) => ringFromLonLat(hole, origin)),
-      height_m: clampBuildingHeight(height),
-    };
+      height_m,
+    });
+    return out;
   }
   if (geom.type === "MultiPolygon") {
     const parts = geom.coordinates as number[][][][];
-    let best: ComBuildingFootprint | null = null;
-    let bestArea = 0;
     for (const poly of parts) {
       if (!poly[0]?.length) continue;
-      const ring = ringFromLonLat(poly[0], origin);
-      const area = Math.abs(signedArea(ring));
-      if (area > bestArea) {
-        bestArea = area;
-        best = {
-          id,
-          ring,
-          holes: poly.slice(1).map((hole) => ringFromLonLat(hole, origin)),
-          height_m: clampBuildingHeight(height),
-        };
-      }
+      out.push({
+        id,
+        ring: ringFromLonLat(poly[0], origin),
+        holes: poly.slice(1).map((hole) => ringFromLonLat(hole, origin)),
+        height_m,
+      });
     }
-    return best;
   }
-  return null;
+  return out;
 }
 
-function footprintFromFeature(feature: GeoJsonFeature, origin: LonLat): ComBuildingFootprint | null {
+function footprintsFromFeature(feature: GeoJsonFeature, origin: LonLat): ComBuildingFootprint[] {
   const props = feature.properties ?? {};
   const geom = feature.geometry;
-  if (!geom?.coordinates) return null;
-  return footprintFromGeometry(props, geom, origin);
+  if (!geom?.coordinates) return [];
+  return footprintsFromGeometry(props, geom, origin);
+}
+
+function closeRingForClip(ring: Ring): [number, number][] {
+  const pts = ring.map(([x, y]) => [x, y] as [number, number]);
+  if (pts.length < 3) return pts;
+  const [ax, ay] = pts[0];
+  const [bx, by] = pts[pts.length - 1];
+  if (Math.hypot(ax - bx, ay - by) > 1e-9) pts.push([ax, ay]);
+  return pts;
 }
 
 function toClipPolygon(ring: Ring, holes: Ring[]): Polygon {
-  return [ring.map(([x, y]) => [x, y] as [number, number]), ...holes.map((hole) => hole.map(([x, y]) => [x, y] as [number, number]))];
+  return [
+    closeRingForClip(ring),
+    ...holes.map((hole) => closeRingForClip(hole)),
+  ];
 }
 
 function multiPolygonArea(multi: MultiPolygon): number {
@@ -201,6 +217,121 @@ export function pickComHeight(
   return best;
 }
 
+/** Tallest CoM part with ≥20% overlap on OSM or on the CoM part (fallback when clip fails). */
+export function pickComHeightFallback20(
+  building: BuildingFeat,
+  footprints: ComBuildingFootprint[],
+): ComBuildingFootprint | null {
+  const osmArea = Math.abs(signedArea(openRing(building.ring)));
+  if (osmArea <= 0) return null;
+  let best: ComBuildingFootprint | null = null;
+  let bestHeight = 0;
+  for (const footprint of footprints) {
+    const overlap = intersectionAreaM2(building, footprint);
+    if (overlap <= 0) continue;
+    const comArea = Math.abs(signedArea(openRing(footprint.ring)));
+    const osmShare = overlap / osmArea;
+    const comShare = comArea > 0 ? overlap / comArea : 0;
+    if (osmShare < COM_FALLBACK_MIN_FRACTION && comShare < COM_FALLBACK_MIN_FRACTION) continue;
+    if (footprint.height_m > bestHeight) {
+      bestHeight = footprint.height_m;
+      best = footprint;
+    }
+  }
+  return best;
+}
+
+function polygonAreaM2(poly: Polygon): number {
+  if (!poly[0]?.length) return 0;
+  let a = Math.abs(signedArea(poly[0] as Ring));
+  for (const hole of poly.slice(1)) {
+    a -= Math.abs(signedArea(hole as Ring));
+  }
+  return Math.max(0, a);
+}
+
+function isSliver(area: number, referenceArea: number): boolean {
+  return area < COM_SLIVER_MIN_M2 || area < COM_SLIVER_MIN_FRACTION * referenceArea;
+}
+
+function partsFromMultiPolygon(
+  multi: MultiPolygon,
+  height: number,
+  referenceArea: number,
+  filterSlivers: boolean,
+): ExtrusionPart[] {
+  const parts: ExtrusionPart[] = [];
+  for (const poly of multi) {
+    const area = polygonAreaM2(poly);
+    if (filterSlivers && isSliver(area, referenceArea)) continue;
+    if (!poly[0]?.length) continue;
+    parts.push({
+      ring: openRing(poly[0] as Ring),
+      holes: poly.slice(1).map((hole) => openRing(hole as Ring)),
+      height,
+    });
+  }
+  return parts;
+}
+
+function osmClipPolygon(building: BuildingFeat): Polygon {
+  return toClipPolygon(building.ring, building.holes);
+}
+
+/** Clip one OSM footprint against CoM parts; OSM-height remainder fills gaps. */
+export function clipBuildingComExtrusions(
+  building: BuildingFeat,
+  footprints: ComBuildingFootprint[],
+): ExtrusionPart[] | null {
+  const osmArea = Math.abs(signedArea(openRing(building.ring)));
+  if (osmArea <= 0 || footprints.length === 0) return null;
+
+  try {
+    const osmPoly = osmClipPolygon(building);
+    const comParts: ExtrusionPart[] = [];
+    const comUnionInputs: Polygon[] = [];
+
+    for (const footprint of footprints) {
+      const inter = intersection(osmPoly, toClipPolygon(footprint.ring, footprint.holes));
+      const area = multiPolygonArea(inter);
+      if (area <= 0) continue;
+      for (const poly of inter) {
+        if (!poly[0]?.length) continue;
+        comUnionInputs.push(poly as Polygon);
+      }
+      comParts.push(...partsFromMultiPolygon(inter, footprint.height_m, osmArea, true));
+    }
+
+    if (comParts.length === 0) return null;
+
+    let remainderParts: ExtrusionPart[] = [];
+    if (comUnionInputs.length > 0) {
+      const covered = comUnionInputs.length === 1 ? comUnionInputs[0] : union(...comUnionInputs);
+      const remainder = difference(osmPoly, covered);
+      remainderParts = partsFromMultiPolygon(remainder, building.height, osmArea, true);
+    }
+
+    return [...comParts, ...remainderParts];
+  } catch {
+    const fallback = pickComHeightFallback20(building, footprints);
+    if (!fallback) return null;
+    return [
+      {
+        ring: building.ring,
+        holes: building.holes,
+        height: fallback.height_m,
+      },
+    ];
+  }
+}
+
+export function tallestExtrusionHeight(building: BuildingFeat): number {
+  if (building.extrusionParts?.length) {
+    return Math.max(...building.extrusionParts.map((part) => part.height));
+  }
+  return building.height;
+}
+
 export function applyComBuildingHeights(
   buildings: BuildingFeat[],
   footprints: ComBuildingFootprint[],
@@ -208,12 +339,32 @@ export function applyComBuildingHeights(
   if (footprints.length === 0) return { buildings, updated: 0 };
   let updated = 0;
   const out = buildings.map((building) => {
-    const match = pickComHeight(building, footprints);
-    if (!match || Math.abs(match.height_m - building.height) < 0.05) return building;
+    const parts = clipBuildingComExtrusions(building, footprints);
+    if (!parts || parts.length === 0) return building;
+    const hadCom = parts.some((part) => Math.abs(part.height - building.height) > 0.05);
+    const prevMax = tallestExtrusionHeight(building);
+    const nextMax = Math.max(...parts.map((p) => p.height));
+    if (!hadCom && Math.abs(nextMax - prevMax) < 0.05 && parts.length === 1) return building;
     updated += 1;
-    return { ...building, height: match.height_m };
+    return { ...building, extrusionParts: parts };
   });
   return { buildings: out, updated };
+}
+
+export type ComClipStats = { clipMs: number; extrusionMeshCount: number };
+
+export function applyComBuildingHeightsWithStats(
+  buildings: BuildingFeat[],
+  footprints: ComBuildingFootprint[],
+): { buildings: BuildingFeat[]; updated: number; stats: ComClipStats } {
+  const t0 = performance.now();
+  const result = applyComBuildingHeights(buildings, footprints);
+  const clipMs = performance.now() - t0;
+  let extrusionMeshCount = 0;
+  for (const building of result.buildings) {
+    extrusionMeshCount += building.extrusionParts?.length ?? 1;
+  }
+  return { ...result, stats: { clipMs, extrusionMeshCount } };
 }
 
 function rowInBounds(row: ApiRow, bounds: BBox): boolean {
@@ -233,7 +384,7 @@ export async function fetchComBuildingFootprints(
   signal?: AbortSignal,
 ): Promise<ComBuildingFootprint[]> {
   if (!intersectsComCity(bounds)) return [];
-  const key = cacheKey(bounds);
+  const key = cacheKey(bounds, origin);
   const cached = footprintCache.get(key);
   if (cached) return cached;
 
@@ -261,10 +412,7 @@ export async function fetchComBuildingFootprints(
   const json = (await response.json()) as { features?: GeoJsonFeature[] };
   const footprints: ComBuildingFootprint[] = [];
   for (const feature of json.features ?? []) {
-    const props = feature.properties ?? {};
-    if (!rowInBounds(props, bounds)) continue;
-    const footprint = footprintFromFeature(feature, origin);
-    if (footprint) footprints.push(footprint);
+    footprints.push(...footprintsFromFeature(feature, origin));
   }
   footprintCache.set(key, footprints);
   return footprints;
