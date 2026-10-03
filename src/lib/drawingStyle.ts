@@ -68,6 +68,9 @@ export type LineStyles = {
   contourCoarseIntervalM: number;
   /** Scale denominator at which that coarser interval starts. 2500 is 1:2500 and smaller. */
   contourCoarseFromScale: number;
+  /** Vicmap Property parcel boundaries on the site plan and figure-ground. */
+  propertyBoundary: StrokeStyle;
+  propertyBoundariesOn: boolean;
 };
 
 export const STROKE_KEYS = [
@@ -120,6 +123,10 @@ export const CONTOUR_INDEX_MM_VAR = "--contour-index-mm";
 export const CONTOUR_INDEX_EVERY_VAR = "--contour-index-every";
 export const CONTOUR_COARSE_INTERVAL_VAR = "--contour-coarse-interval-m";
 export const CONTOUR_COARSE_FROM_SCALE_VAR = "--contour-coarse-from-scale";
+export const PROPERTY_BOUNDARIES_VAR = "--property-boundaries";
+export const PROPERTY_BOUNDARY_MM_VAR = "--property-boundary-mm";
+export const PROPERTY_BOUNDARY_STROKE_VAR = "--property-boundary-stroke";
+export const PROPERTY_BOUNDARY_DASH_VAR = "--property-boundary-dash";
 export const LINE_STYLES_KEY = "citycut.lineStyles";
 
 /** Previous centreline names. Read as the footpath edge when the new names are absent. */
@@ -160,6 +167,12 @@ export const DEFAULT_LINE_STYLES: LineStyles = {
   contourIndexEvery: 5,
   contourCoarseIntervalM: 5,
   contourCoarseFromScale: 2500,
+  propertyBoundary: {
+    mm: LINE_MM.propertyRoad,
+    color: INK,
+    dash: "none",
+  },
+  propertyBoundariesOn: false,
 };
 
 export function allStyleVariables(): string[] {
@@ -178,6 +191,10 @@ export function allStyleVariables(): string[] {
     CONTOUR_INDEX_EVERY_VAR,
     CONTOUR_COARSE_INTERVAL_VAR,
     CONTOUR_COARSE_FROM_SCALE_VAR,
+    PROPERTY_BOUNDARIES_VAR,
+    PROPERTY_BOUNDARY_MM_VAR,
+    PROPERTY_BOUNDARY_STROKE_VAR,
+    PROPERTY_BOUNDARY_DASH_VAR,
   );
   return names;
 }
@@ -205,6 +222,8 @@ export function cloneLineStyles(style: LineStyles = DEFAULT_LINE_STYLES): LineSt
     contourIndexEvery: style.contourIndexEvery,
     contourCoarseIntervalM: style.contourCoarseIntervalM,
     contourCoarseFromScale: style.contourCoarseFromScale,
+    propertyBoundary: { ...style.propertyBoundary },
+    propertyBoundariesOn: style.propertyBoundariesOn,
   };
 }
 
@@ -376,6 +395,14 @@ export function styleFromProperties(
   if (coarseInterval != null) next.contourCoarseIntervalM = coarseInterval;
   const coarseFrom = parseScaleDenominator(read(CONTOUR_COARSE_FROM_SCALE_VAR));
   if (coarseFrom != null) next.contourCoarseFromScale = coarseFrom;
+  const propertyMm = parseMm(read(PROPERTY_BOUNDARY_MM_VAR));
+  const propertyColor = parseColor(read(PROPERTY_BOUNDARY_STROKE_VAR));
+  const propertyDash = normalizeDash(read(PROPERTY_BOUNDARY_DASH_VAR));
+  if (propertyMm != null) next.propertyBoundary.mm = propertyMm;
+  if (propertyColor) next.propertyBoundary.color = propertyColor;
+  if (propertyDash) next.propertyBoundary.dash = propertyDash;
+  const propertyOn = parseKerb(read(PROPERTY_BOUNDARIES_VAR));
+  if (propertyOn != null) next.propertyBoundariesOn = propertyOn;
   const pathVars = STROKE_VARS.path;
   if (parseMm(read(pathVars.mm)) == null) {
     const legacyMm = parseMm(read("--path-stroke-mm"));
@@ -467,6 +494,20 @@ export function changedVariables(current: LineStyles, baseline: LineStyles): Rec
   }
   if (current.contourCoarseFromScale !== baseline.contourCoarseFromScale) {
     out[CONTOUR_COARSE_FROM_SCALE_VAR] = String(current.contourCoarseFromScale);
+  }
+  if (formatMm(current.propertyBoundary.mm) !== formatMm(baseline.propertyBoundary.mm)) {
+    out[PROPERTY_BOUNDARY_MM_VAR] = formatMm(current.propertyBoundary.mm);
+  }
+  if (current.propertyBoundary.color.toUpperCase() !== baseline.propertyBoundary.color.toUpperCase()) {
+    out[PROPERTY_BOUNDARY_STROKE_VAR] = current.propertyBoundary.color.toUpperCase();
+  }
+  const propertyDash = normalizeDash(current.propertyBoundary.dash);
+  const basePropertyDash = normalizeDash(baseline.propertyBoundary.dash);
+  if (propertyDash && basePropertyDash && propertyDash !== basePropertyDash) {
+    out[PROPERTY_BOUNDARY_DASH_VAR] = propertyDash;
+  }
+  if (current.propertyBoundariesOn !== baseline.propertyBoundariesOn) {
+    out[PROPERTY_BOUNDARIES_VAR] = current.propertyBoundariesOn ? "on" : "off";
   }
   return out;
 }

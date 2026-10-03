@@ -427,4 +427,24 @@ describe("Illustrator 3D view", () => {
     );
     expect(behind).toHaveLength(1);
   });
+
+  it("adds a Property boundaries layer to the site plan only when the toggle is on", async () => {
+    const ring: Pt[] = [
+      [-20, -20],
+      [20, -20],
+      [20, 20],
+      [-20, 20],
+    ];
+    const on = cloneLineStyles(DEFAULT_LINE_STYLES);
+    on.propertyBoundariesOn = true;
+    const withLayer = sitePlanChunks(model(), 1000, on, null, [ring]);
+    expect(withLayer.some((chunk) => chunk.name === "Property boundaries")).toBe(true);
+
+    const off = cloneLineStyles(DEFAULT_LINE_STYLES);
+    expect(sitePlanChunks(model(), 1000, off, null, [ring]).some((chunk) => chunk.name === "Property boundaries")).toBe(
+      false,
+    );
+    const bare = await inspect(await sitePlanPdf(model(), 1000, off));
+    expect(bare.layers).not.toContain("Property boundaries");
+  });
 });
