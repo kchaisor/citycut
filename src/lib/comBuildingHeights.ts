@@ -367,17 +367,6 @@ export function applyComBuildingHeightsWithStats(
   return { ...result, stats: { clipMs, extrusionMeshCount } };
 }
 
-function rowInBounds(row: ApiRow, bounds: BBox): boolean {
-  const point = row.geo_point_2d;
-  if (!point || typeof point.lat !== "number" || typeof point.lon !== "number") return false;
-  return (
-    point.lat >= bounds.south &&
-    point.lat <= bounds.north &&
-    point.lon >= bounds.west &&
-    point.lon <= bounds.east
-  );
-}
-
 export async function fetchComBuildingFootprints(
   bounds: BBox,
   origin: LonLat,
