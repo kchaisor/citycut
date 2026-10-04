@@ -11,8 +11,8 @@ import {
 import { runComBuildingHeightsInWorker } from "../src/lib/comBuildingHeightsWorkerClient.ts";
 import { squareBBox } from "../src/lib/geo.ts";
 import { fetchOvertureBuildingsForCut } from "../src/lib/overtureBuildings.ts";
-import { buildOverpassQuery, fetchOverpass, overpassBBox } from "../src/lib/overpass.ts";
-import { parseCity } from "../src/lib/parseOsm.ts";
+import { fetchOvertureBaseForCut } from "../src/lib/overtureBase.ts";
+import { fetchOvertureTransportationForCut } from "../src/lib/overtureTransportation.ts";
 
 const center = { lon: 144.9631, lat: -37.8136 };
 const sideM = 1000;
@@ -21,18 +21,17 @@ const cutBounds = squareBBox({ lon: center.lon, lat: center.lat, zoom: 15 }, sid
 const layers = { buildings: true, roads: true, waterGreen: true, trees: false };
 
 async function oneRun() {
-  const osmT0 = performance.now();
-  const overpass = await fetchOverpass(
-    buildOverpassQuery(overpassBBox(cutBounds), { ...layers, buildings: false }),
-  );
-  const osmMs = performance.now() - osmT0;
-
   const overtureT0 = performance.now();
-  const overture = await fetchOvertureBuildingsForCut(cutBounds, center, sideM);
+  const [overture, transport, base] = await Promise.all([
+    fetchOvertureBuildingsForCut(cutBounds, center, sideM),
+    fetchOvertureTransportationForCut(cutBounds, center, sideM),
+    fetchOvertureBaseForCut(cutBounds, center, sideM, { waterGreen: true, trees: false }),
+  ]);
   const overtureMs = performance.now() - overtureT0;
 
-  const parsed = parseCity(overpass, center, sideM, layers);
   const buildings = overture.buildings;
+  void transport;
+  void base;
 
   clearComBuildingFootprintCache();
   const { footprints, stats: fetchStats } = await fetchComBuildingFootprintsWithStats(bounds, center);
@@ -49,13 +48,12 @@ async function oneRun() {
   applyComBuildingHeightsWithStats(buildings, footprints);
 
   return {
-    fetchMs: Math.round(osmMs + overtureMs + fetchStats.fetchMs),
+    fetchMs: Math.round(overtureMs + fetchStats.fetchMs),
     overtureMs: Math.round(overtureMs),
-    osmMs: Math.round(osmMs),
     comFetchMs: Math.round(fetchStats.fetchMs),
     matchMs: Math.round(matchMs),
     buildMs: Math.round(buildMs),
-    totalMs: Math.round(osmMs + overtureMs + fetchStats.fetchMs + matchMs + buildMs),
+    totalMs: Math.round(overtureMs + fetchStats.fetchMs + matchMs + buildMs),
     buildings: buildings.length,
     release: overture.stats.release,
   };
@@ -70,6 +68,5 @@ console.log(JSON.stringify({ runs, average: {
   buildMs: avg("buildMs"),
   totalMs: avg("totalMs"),
   overtureMs: avg("overtureMs"),
-  osmMs: avg("osmMs"),
   comFetchMs: avg("comFetchMs"),
 }}, null, 2));

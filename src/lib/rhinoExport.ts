@@ -9,7 +9,7 @@ import { readDrawingStyle } from "./drawingStyle";
 import { figureGround, figureGroundDatum } from "./figureGround";
 import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { buildHeliodonGroundOverlay, type HeliodonGroundExportOptions } from "./heliodonDiagram";
-import { buildingDataCredit } from "./buildingAttribution";
+import { overtureThemeCredit } from "./overtureAttribution";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { contourIsIndex, demContourLayer } from "./vicmapContours";
 import type { CityModel, Pt } from "../types";
@@ -424,9 +424,13 @@ export async function cityModelTo3dm(
     doc.applicationUrl = "https://kchaisor.github.io/citycut-export/";
     doc.applicationDetails = `${model.placeLabel}; ${crs.name}`;
     const comCredit = comBuildingHeightCreditLine(model);
-    const buildingCredit = model.layers.buildings
-      ? buildingDataCredit(Boolean(model.hasMicrosoftFootprints))
-      : null;
+    const buildingCredit =
+      model.layers.buildings || model.layers.roads || model.layers.waterGreen || model.layers.trees
+        ? overtureThemeCredit({
+            hasMicrosoftFootprints: model.hasMicrosoftFootprints,
+            hasEsaLandCover: model.hasEsaLandCover,
+          })
+        : null;
     doc.startSectionComments = [`CityCut. ${crs.name}. Metres, Z-up. ${CRS_NOTE}`, buildingCredit, comCredit]
       .filter(Boolean)
       .join(" ");

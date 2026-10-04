@@ -25,7 +25,7 @@ import { heliodonPlanPdfChunk } from "./heliodonPlanExport";
 import type { HeliodonDiagramExportOptions } from "./heliodonDiagram";
 import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { planPaths } from "./svgPlan";
-import { buildingDataCredit } from "./buildingAttribution";
+import { overtureThemeCredit } from "./overtureAttribution";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { VICMAP_CONTOUR_ATTRIBUTION } from "./vicmapContours";
 import type { CityModel, Pt } from "../types";
@@ -91,9 +91,14 @@ function creditLine(
   interval: number | null,
   source: "vicmap-metro" | "vicmap-state" | "dem" | null,
 ): string {
-  const parts = ["© OpenStreetMap contributors. CityCut."];
-  if (model.layers.buildings) {
-    parts.push(buildingDataCredit(Boolean(model.hasMicrosoftFootprints)));
+  const parts = ["CityCut."];
+  if (model.layers.buildings || model.layers.roads || model.layers.waterGreen || model.layers.trees) {
+    parts.push(
+      overtureThemeCredit({
+        hasMicrosoftFootprints: model.hasMicrosoftFootprints,
+        hasEsaLandCover: model.hasEsaLandCover,
+      }),
+    );
   }
   const comCredit = comBuildingHeightCreditLine(model);
   if (comCredit) parts.push(comCredit);

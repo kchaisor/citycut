@@ -16,7 +16,6 @@ if (typeof globalThis.FileReader === "undefined") {
 import * as THREE from "three";
 import { buildCityGroup, disposeObject } from "./buildCity";
 import { fromLocal } from "./geo";
-import { buildOverpassQuery, overpassBBox } from "./overpass";
 import { parseCity } from "./parseOsm";
 import { planPaths } from "./svgPlan";
 import { applyComTreeSizes, comRecordsToTrees } from "./comTrees";
@@ -31,8 +30,6 @@ import type { CityModel, Pt } from "../types";
 
 const origin = { lon: 144.9631, lat: -37.8136 };
 const layersOn = { buildings: false, roads: false, waterGreen: false, trees: true };
-const bbox = overpassBBox({ south: -37.82, west: 144.95, north: -37.8, east: 144.98 });
-
 function square(center: Pt, size: number): Pt[] {
   const h = size / 2;
   return [
@@ -346,30 +343,6 @@ describe("tree parse", () => {
     expect(parsed.trees).toHaveLength(6001);
     expect(parsed.trees[0].tier).toBe("osm");
     expect(parsed.sourceNote).not.toContain("capped");
-  });
-});
-
-describe("tree query", () => {
-  it("asks Overpass for trees only when the layer is on", () => {
-    const on = buildOverpassQuery(bbox, layersOn);
-    expect(on).toContain('node["natural"="tree"]');
-    expect(on).toContain('way["natural"="tree_row"]');
-    expect(on).toContain('way["natural"="wood"]');
-    expect(on).toContain('way["landuse"="forest"]');
-    expect(on).toContain('way["natural"="scrub"]');
-    expect(on).toContain('relation["natural"="scrub"]');
-    expect(on).toContain("highway");
-    expect(on).not.toContain('way["building"]');
-    const off = buildOverpassQuery(bbox, {
-      buildings: false,
-      roads: true,
-      waterGreen: false,
-      trees: false,
-    });
-    expect(off).not.toContain('natural"="tree"');
-    expect(() =>
-      buildOverpassQuery(bbox, { buildings: false, roads: false, waterGreen: false, trees: false }),
-    ).toThrow(/Trees/);
   });
 });
 

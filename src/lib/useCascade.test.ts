@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { squareBBox } from "./geo";
-import { buildOverpassQuery } from "./overpass";
 import type { BuildingFeat, Pt } from "../types";
 import { TIER_TIMEOUT_MS, assignExternalUses, refineBuildingUses, zoneWfsUrl } from "./useCascade";
 
@@ -18,19 +17,6 @@ function square(center: Pt, size: number): Pt[] {
 function bare(ring: Pt[], height: number): BuildingFeat {
   return { id: 1, ring, holes: [], height, use: "unclassified", source: "none" };
 }
-
-describe("overpass layers", () => {
-  it("does not query Overpass for building footprints", () => {
-    const query = buildOverpassQuery("(1,2,3,4)", {
-      buildings: true,
-      roads: true,
-      waterGreen: false,
-      trees: false,
-    });
-    expect(query).not.toContain('["building"]');
-    expect(query).toContain('["highway"]');
-  });
-});
 
 describe("zone tier", () => {
   it("assigns a zone, including the C1Z height split", () => {

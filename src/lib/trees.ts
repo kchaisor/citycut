@@ -235,5 +235,5 @@ export function replaceTreeNote(note: string, trees: { sizeSource: TreeSizeSourc
 
 export function describeTrees(trees: { sizeSource: TreeSizeSource; tier?: TreeTier }[]): string {
   const tiers = treeTierCounts(trees);
-  return `Trees: ${treeSizeSummary(trees)} (${tiers.com} City of Melbourne, ${tiers.osm} OpenStreetMap, ${tiers.vicmap} Vicmap, ${tiers.canopy} canopy infill). City of Melbourne inventory trees use surveyed species, diameter at breast height, and age; that dataset has no crown or height field. OpenStreetMap height, est_height, crown diameter, circumference, and trunk diameter are used when present. Vicmap Vegetation Tree Urban fills gaps beyond 3 m using height_m and canopy diameter. Wood, forest, and scrub are filled at about 7 m. Otherwise 10 m tall and 6 m across.`;
+  return `Trees: ${treeSizeSummary(trees)} (${tiers.com} City of Melbourne, ${tiers.osm} Overture base points, ${tiers.vicmap} Vicmap, ${tiers.canopy} canopy infill). City of Melbourne inventory trees use surveyed species, diameter at breast height, and age; that dataset has no crown or height field. Overture base land points carry OSM tree tags when present. Vicmap Vegetation Tree Urban fills gaps beyond 3 m using height_m and canopy diameter. Wood, forest, and scrub are filled at about 7 m. Otherwise 10 m tall and 6 m across.`;
 }

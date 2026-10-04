@@ -3,7 +3,7 @@ import { Layers, Search } from "lucide-react";
 import { MAX_SIDE_KM, MIN_SIDE_KM } from "../content/constants";
 import { formatKmSide } from "../lib/geo";
 import { searchPlaces } from "../lib/nominatim";
-import { buildingDataCredit } from "../lib/buildingAttribution";
+import { overtureThemeCredit } from "../lib/overtureAttribution";
 import {
   readStoredComBuildingHeights,
   writeStoredComBuildingHeights,
@@ -252,7 +252,9 @@ export function SelectChrome({
               : "Terrain is off, so the ground stays a flat surface. Contours inside Victoria still use Vicmap Elevation."}
           </p>
           <p className="attrib">
-            {layers.buildings ? buildingDataCredit(false) : "© OpenStreetMap contributors"}
+            {layers.buildings || layers.roads || layers.waterGreen || layers.trees
+              ? overtureThemeCredit({ hasMicrosoftFootprints: false, hasEsaLandCover: layers.trees })
+              : "© OpenStreetMap contributors"}
             {layers.terrain && (
               <>
                 {" · "}

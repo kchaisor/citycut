@@ -9,6 +9,14 @@ export function overtureBuildingsUrl(release: string): string {
   return `https://tiles.overturemaps.org/${release}/buildings.pmtiles`;
 }
 
+export function overtureTransportationUrl(release: string): string {
+  return `https://tiles.overturemaps.org/${release}/transportation.pmtiles`;
+}
+
+export function overtureBaseUrl(release: string): string {
+  return `https://tiles.overturemaps.org/${release}/base.pmtiles`;
+}
+
 type StacCatalog = {
   stac_version?: string;
   links?: { rel: string; href: string; title?: string }[];

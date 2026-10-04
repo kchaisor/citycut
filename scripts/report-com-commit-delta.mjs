@@ -12,31 +12,16 @@ import {
   classifyComHeightApplicationLegacy,
   classifyComHeightApplication,
 } from "../src/lib/comBuildingHeights.ts";
-import { fetchOverpass, overpassBBox, buildOverpassQuery } from "../src/lib/overpass.ts";
-import { parseCity } from "../src/lib/parseOsm.ts";
+import { squareBBox } from "../src/lib/geo.ts";
+import { fetchOvertureBuildingsForCut } from "../src/lib/overtureBuildings.ts";
 
 const center = { lon: 144.9631, lat: -37.8136 };
 const sideM = 1000;
 const bounds = paddedComFetchBounds(center, sideM);
-const bbox = overpassBBox({
-  south: center.lat - sideM / 2 / 111_132,
-  north: center.lat + sideM / 2 / 111_132,
-  west: center.lon - sideM / 2 / (111_320 * Math.cos((center.lat * Math.PI) / 180)),
-  east: center.lon + sideM / 2 / (111_320 * Math.cos((center.lat * Math.PI) / 180)),
-});
-const overpass = await fetchOverpass(
-  buildOverpassQuery(bbox, { buildings: true, roads: true, waterGreen: true, trees: false }),
-);
-const parsed = parseCity(overpass, center, sideM, {
-  buildings: true,
-  roads: true,
-  waterGreen: true,
-  trees: false,
-});
+const cutBounds = squareBBox({ lon: center.lon, lat: center.lat, zoom: 15 }, sideM);
+const { buildings } = await fetchOvertureBuildingsForCut(cutBounds, center, sideM);
+const parsed = { buildings };
 const wayTags = new Map();
-for (const el of overpass.elements) {
-  if (el.type === "way" && el.tags) wayTags.set(el.id, el.tags);
-}
 clearComBuildingFootprintCache();
 const fp = await fetchComBuildingFootprints(bounds, center);
 const clip = applyComBuildingHeightsClipOnly(parsed.buildings, fp);

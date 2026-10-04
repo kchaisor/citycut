@@ -1,8 +1,8 @@
 import { clipPolygon, clipPolyline } from "./clip";
 import { dedupeAreas, dedupeRoads } from "./footprints";
 import { dedupeConsecutive, openRing, polylineLength, signedArea, toLocal } from "./geo";
-import type { OverpassElement, OverpassResponse } from "./overpass";
 import { isOpenWaterArea } from "./waterAreas";
+import { roadSpecFromHighway, roadSpecFromRailway } from "./roadCatalog";
 import { describeTrees, treeSize, trunkTaggedAsCentimetres } from "./trees";
 import type {
   AreaFeat,
@@ -21,61 +21,25 @@ const MIN_AREA = 4;
 /** Replaced when a terrain heightfield is attached to the model. */
 export const FLAT_GROUND_NOTE = "Ground is flat — no lidar or terrain in this version.";
 
-const SKIP_HIGHWAY = new Set([
-  "proposed",
-  "construction",
-  "abandoned",
-  "platform",
-  "bus_stop",
-  "elevator",
-  "corridor",
-  "raceway",
-  "rest_area",
-  "services",
-  "no",
-  "via_ferrata",
-  "escalator",
-  "escape",
-  "bus_guideway",
-]);
+/** Legacy Overpass-shaped fixtures for unit tests only. */
+export type OverpassElement = {
+  type: "node" | "way" | "relation";
+  id: number;
+  lat?: number;
+  lon?: number;
+  tags?: Record<string, string>;
+  geometry?: { lat: number; lon: number }[];
+  members?: {
+    type: string;
+    ref: number;
+    role: string;
+    geometry?: { lat: number; lon: number }[];
+  }[];
+};
 
-const ARTERIAL = new Set([
-  "motorway",
-  "trunk",
-  "primary",
-  "secondary",
-  "tertiary",
-  "motorway_link",
-  "trunk_link",
-  "primary_link",
-  "secondary_link",
-  "tertiary_link",
-]);
-
-const PATH = new Set(["footway", "path", "cycleway", "steps", "pedestrian", "bridleway", "track"]);
-
-const ROAD_WIDTH: Record<string, number> = {
-  motorway: 16,
-  trunk: 14,
-  primary: 12,
-  secondary: 9,
-  tertiary: 7.5,
-  residential: 5.5,
-  unclassified: 5,
-  living_street: 4.5,
-  service: 3.2,
-  pedestrian: 6,
-  footway: 1.8,
-  path: 1.6,
-  cycleway: 2.2,
-  track: 3,
-  steps: 1.4,
-  bridleway: 1.8,
-  motorway_link: 8,
-  trunk_link: 7,
-  primary_link: 6.5,
-  secondary_link: 5.5,
-  tertiary_link: 4.5,
+export type OverpassResponse = {
+  elements: OverpassElement[];
+  remark?: string;
 };
 
 type Geom = { lat: number; lon: number };
@@ -201,23 +165,11 @@ function hidden(tags: Record<string, string>): boolean {
   return tags.tunnel === "yes" || tags.tunnel === "culvert" || tags.location === "underground" || tags.indoor === "yes";
 }
 
-function roadGrade(highway: string): RoadGrade {
-  const base = highway.split(";")[0];
-  if (PATH.has(base)) return "path";
-  if (ARTERIAL.has(base)) return "arterial";
-  return "local";
-}
-
 function roadWidth(tags: Record<string, string>): { width: number; kind: "road" | "rail"; grade?: RoadGrade } | null {
-  if (tags.railway) {
-    const kind = tags.railway;
-    if (!["rail", "light_rail", "tram", "subway", "narrow_gauge"].includes(kind)) return null;
-    return { width: kind === "tram" ? 2.8 : 3.6, kind: "rail" };
-  }
+  if (tags.railway) return roadSpecFromRailway(tags.railway);
   const highway = tags.highway;
-  if (!highway || SKIP_HIGHWAY.has(highway)) return null;
-  const base = highway.split(";")[0];
-  return { width: ROAD_WIDTH[base] ?? 4.2, kind: "road", grade: roadGrade(base) };
+  if (!highway) return null;
+  return roadSpecFromHighway(highway.split(";")[0]);
 }
 
 function ringCentroid(points: Pt[]): Pt | null {
@@ -540,10 +492,7 @@ export function parseCity(
   const roadsKept = dedupeRoads(roads);
   const areasKept = dedupeAreas(areas);
 
-  const notes = [
-    "Roads, water, green, and trees from OpenStreetMap via Overpass.",
-    FLAT_GROUND_NOTE,
-  ];
+  const notes = [FLAT_GROUND_NOTE];
   if (layers.trees) notes.push(describeTrees(trees));
   return {
     center: origin,

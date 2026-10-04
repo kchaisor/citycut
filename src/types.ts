@@ -191,6 +191,8 @@ export type CityModel = {
   comBuildingHeights?: boolean;
   /** True when Overture Microsoft ML footprints appear in the cut. */
   hasMicrosoftFootprints?: boolean;
+  /** True when ESA WorldCover land_cover polygons were used for canopy infill. */
+  hasEsaLandCover?: boolean;
 };
 
 export type ViewState = {

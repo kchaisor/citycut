@@ -14,8 +14,8 @@ Pushes to `main` build `dist` and deploy it with GitHub Actions (`.github/workfl
 
 1. **Choose a block.** A MapLibre map fills the screen. A fixed frame stays centered while you pan and zoom. The frame is a true square on the ground, from 0.25 km to 1.4 km on a side (about 2 km² at the top of the slider).
 2. **Search.** Nominatim pans the map to a place. The frame still marks the area that will be exported.
-3. **Choose layers.** Buildings, roads and rail, water and green, and terrain are on by default. Buildings, roads, water, and green are sent to Overpass. Trees is off until you turn it on. It then places four vector tiers, deduplicated, as instanced archetype silhouettes: City of Melbourne urban-forest trees, OpenStreetMap `natural=tree` and `natural=tree_row`, Vicmap Vegetation Tree Urban points, and a canopy infill of `natural=wood`, `landuse=forest`, and `natural=scrub`. Contours is on by default. Inside Victoria the lines are Vicmap Elevation: the metro 1–5 m contours where that layer has features, otherwise the statewide 1:25,000 10 m contours. If that service fails or the frame is outside Victoria, the site plan keeps the lines marched from the terrain. Satellite image only switches the basemap.
-4. **Create model.** CityCut queries Overpass for that bounding box, clips every feature to the square, and opens the result. Tree tiers, Vicmap contours, and the terrain are fetched in parallel. Trees, when that layer is on, are drawn as instanced massing forms rather than one mesh per tree. Terrain, when that layer is on, fetches Mapterhorn tiles for the square and builds a heightfield in the same local metre frame. The 3D terrain mesh stays that heightfield.
+3. **Choose layers.** Buildings, roads and rail, water and green, and terrain are on by default. Buildings come from Overture Maps building PMTiles (z14); roads and rail from Overture transportation PMTiles (z14); water and green from Overture base PMTiles (z13). Trees is off until you turn it on. It then places four vector tiers, deduplicated, as instanced archetype silhouettes: City of Melbourne urban-forest trees, Overture base point trees (OSM-sourced tags), Vicmap Vegetation Tree Urban points, and a canopy infill from Overture land cover and land use. Contours is on by default. Inside Victoria the lines are Vicmap Elevation: the metro 1–5 m contours where that layer has features, otherwise the statewide 1:25,000 10 m contours. If that service fails or the frame is outside Victoria, the site plan keeps the lines marched from the terrain. Satellite image only switches the basemap.
+4. **Create model.** CityCut fetches Overture PMTiles for the frame, clips every feature to the square, and opens the result. Tree tiers, Vicmap contours, and the terrain are fetched in parallel. Trees, when that layer is on, are drawn as instanced massing forms rather than one mesh per tree. Terrain, when that layer is on, fetches Mapterhorn tiles for the square and builds a heightfield in the same local metre frame. The 3D terrain mesh stays that heightfield.
 
 5. **Review.** Three views of the same block:
    - **3D model** — extruded footprints in the browser (Three.js)
@@ -59,9 +59,9 @@ Mapterhorn’s Melbourne tiles already use the 5 m Geoscience Australia lidar, w
 Trees are placed in four tiers. A later tier is skipped when an earlier tree is already within 3 m. Every tier is clamped: height 2–40 m, crown diameter 1–25 m, and crown at most 1.4 times the height. A crown thinner than half the archetype’s own proportion is lifted so the instance does not become a needle. Trunk diameter stays between 0.05 m and 2 m. Missing, NaN, zero, and negative measurements are dropped and the count is logged. The combined set is capped at 8,000 instances. Canopy infill is trimmed first, then Vicmap.
 
 1. **City of Melbourne**, inside the council urban-forest inventory. The [Trees, with species and dimensions (Urban Forest)](https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/) dataset is CC BY 4.0. Its fields are species (`scientific_name`, `genus`, `common_name`), `diameter_breast_height` in centimetres, and `age_description`. There is no crown-spread field and no height field, so crown and height follow the species archetype from DBH and age. The request runs only when the frame meets the council extent; the dataset itself contains only that inventory.
-2. **OpenStreetMap** `natural=tree` and `natural=tree_row`, where tier 1 has no tree within 3 m. A bare trunk diameter of 2 or more, or a bare girth wider than a 2 m trunk, is read as centimetres. An explicit `cm` or `mm` suffix is converted. Size comes from `height` or `est_height`, then crown diameter (`diameter_crown`, `crown_diameter`, `diameter:crown`), then trunk girth or diameter, then the species archetype, then the generic tree (10 m tall, 6 m across, 0.35 m trunk).
+2. **Overture base** point trees (`land` layer, class tree), where tier 1 has no tree within 3 m. Tags come from Overture `source_tags` (OpenStreetMap contributors). Size uses the same rules as OSM trees: `height` or `est_height`, crown diameter, trunk girth or diameter, then species archetype, then the generic tree (10 m tall, 6 m across, 0.35 m trunk).
 3. **Vicmap Vegetation Tree Urban**, where tiers 1 and 2 have no tree within 3 m. The layer is the Victorian government’s Vicmap service (Department of Transport and Planning), [CC BY 4.0](https://discover.data.vic.gov.au/dataset/vicmap-vegetation-tree-urban-point). Height is `height_m`. Crown diameter is `canopy_radius_m` × 2 when that radius is a positive number, otherwise it is derived from height. `dense_canopy` picks the broader round-broadleaf archetype; anything else uses the generic broadleaf. The query is the frame envelope only, paged with `resultOffset` at 2,000 rows. A failed fetch is noted and the model still opens.
-4. **Canopy infill** of OSM `natural=wood`, `landuse=forest`, and `natural=scrub`. Scrub uses the smaller shrub archetype. Points are a Poisson disc at 7 m. Roads (plus a 2 m buffer), buildings, water, and any sample within 4 m of a tree already placed are left empty.
+4. **Canopy infill** from Overture `land_cover` (forest, wood, scrub) and matching land use. Scrub uses the smaller shrub archetype. Points are a Poisson disc at 7 m. Roads (plus a 2 m buffer), buildings, water, and any sample within 4 m of a tree already placed are left empty.
 
 The Tree sizes panel lists the four counts. Each instance is scaled vertically by height and horizontally by crown. The archetype is one mesh, so the trunk thickens with the crown; the trunk diameter is still stored on the tree. glTF and Rhino exports include every tier, still as instanced silhouettes.
 
@@ -92,7 +92,6 @@ Copy `.env.example` if you want to override the public endpoints. Both variables
 
 | Variable | Default | Role |
 | --- | --- | --- |
-| `VITE_OVERPASS_URL` | unset | Optional first Overpass interpreter. By default CityCut tries `overpass.kumi.systems`, then the Mail.ru public instance. |
 | `VITE_NOMINATIM_URL` | `https://nominatim.openstreetmap.org` | Place search. |
 
 Map tiles:
@@ -107,14 +106,14 @@ Nominatim’s usage policy asks for an identifying User-Agent. Browsers set that
 | Feature | Status |
 | --- | --- |
 | Map, search, square frame, area slider | Real |
-| Buildings, roads and rail, water and green | Real, from Overpass, clipped to the frame |
+| Buildings, roads and rail, water and green | Real, from Overture Maps PMTiles, clipped to the frame |
 | 3D orbit view | Real |
 | Drawing tab (SVG, pan/zoom) | Real |
 | glTF `.glb` download | Not offered |
 | Rhino `.3dm` download | Real. Meshes in GDA2020 / MGA metres, Z-up |
 | SVG download | Not offered |
 | Satellite basemap and satellite tab | Real preview. Not embedded in the glTF or SVG |
-| Trees | Real when the toggle is on. City of Melbourne urban forest, OpenStreetMap trees, Vicmap Tree Urban, and canopy infill. Instanced massing archetypes in the 3D view, glTF, and Rhino; circles on the SVG plan |
+| Trees | Real when the toggle is on. City of Melbourne urban forest, Overture base point trees, Vicmap Tree Urban, and canopy infill. Instanced massing archetypes in the 3D view, glTF, and Rhino; circles on the SVG plan |
 | Terrain | Real when the toggle is on (the default). Mapterhorn Terrarium tiles, heightfield mesh named Terrain in the glTF and on a Terrain layer in the 3DM. Off falls back to a flat ground surface |
 | Contours | Real on the site plan, the site-plan Illustrator file, and the Rhino `Contours` layer. Vicmap Elevation inside Victoria (metro 1–5 m, otherwise 10 m). Metro 1 m lines draw at 5 m from 1:2500. The terrain DEM is the fallback. The Rhino file keeps every contour |
 | Relief / terrain stats | The model page shows the DEM elevation range when terrain loaded |
@@ -124,7 +123,7 @@ Nominatim’s usage policy asks for an identifying User-Agent. Browsers set that
 ## Limits
 
 - Frame side is 0.25–1.4 km so the area stays under about 2 km².
-- Live Overpass queries can be slow or refused when the public instances are busy. The app tries the next endpoint and shows an error rather than a partial fake model.
+- Overture PMTiles and Vicmap services can be slow or unavailable; failed endpoints abort or fall back rather than inventing data.
 - Most Melbourne buildings have no `height` tag, so many blocks use levels × 3 m or the 9 m default.
 - Indoor corridors, tunnels, and `building:part` outlines are skipped so they do not paint through the block.
 - A very large multipolygon (more than 80 members) is skipped. Coastlines are not queried.
