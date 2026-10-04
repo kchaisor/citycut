@@ -10,7 +10,7 @@
   --background: #EBEBEB;
 
   /* Colour of the page itself, behind the header and the map. */
-  --page-bg: var(--background);
+  --page-bg: var(#FFFFFF);
 
   /* Landing page header, and the bar across the top of the model. */
   --landing-bg: var(--background);
