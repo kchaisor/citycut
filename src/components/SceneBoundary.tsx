@@ -1,18 +1,37 @@
 import { Component, type ReactNode } from "react";
+import {
+  classifySceneFailure,
+  readWebGlRendererLabel,
+  sceneFallbackMessage,
+  type SceneFallbackDetail,
+} from "../lib/scene3dFallback";
 
-export class SceneBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
-  state = { failed: false };
+type State = { failed: boolean; detail: SceneFallbackDetail | null };
 
-  static getDerivedStateFromError(): { failed: boolean } {
-    return { failed: true };
+export class SceneBoundary extends Component<{ children: ReactNode }, State> {
+  state: State = { failed: false, detail: null };
+
+  static getDerivedStateFromError(error: unknown): State {
+    return { failed: true, detail: classifySceneFailure(error) };
+  }
+
+  componentDidCatch(error: unknown, info: { componentStack?: string }) {
+    const detail = classifySceneFailure(error);
+    const renderer = readWebGlRendererLabel();
+    console.error("[CityCut 3D]", detail, error, {
+      componentStack: info.componentStack,
+      webglRenderer: renderer,
+    });
   }
 
   render() {
     if (this.state.failed) {
+      const detail = this.state.detail ?? classifySceneFailure(new Error("unknown"));
+      const { lead, hint } = sceneFallbackMessage(detail);
       return (
         <div className="scene-fallback">
-          The 3D view could not start in this browser. The drawing and the PNG, Rhino, and Illustrator
-          downloads still work.
+          <p>{lead}</p>
+          {hint ? <p className="scene-fallback-hint">{hint}</p> : null}
         </div>
       );
     }
