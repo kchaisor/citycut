@@ -1,3 +1,4 @@
+import { clipPolylineRect } from "./clip";
 import { dedupeConsecutive, signedArea, toLocal } from "./geo";
 import type { LonLat, Pt } from "../types";
 
@@ -71,49 +72,8 @@ export function clipBoundsForTile(half: number, tile: ReturnType<typeof tileLoca
 }
 
 export function clipPolylineToRect(line: Pt[], rect: { minE: number; maxE: number; minN: number; maxN: number }): Pt[][] {
-  let current = line.slice();
-  const slack = 1e-6;
-  // Chain four half-plane clips on polyline vertices.
-  const clipHalfLine = (
-    input: Pt[],
-    inside: (p: Pt) => boolean,
-    intersect: (a: Pt, b: Pt) => Pt,
-  ): Pt[] => {
-    if (input.length === 0) return [];
-    const output: Pt[] = [];
-    let previous = input[input.length - 1];
-    let previousInside = inside(previous);
-    for (const point of input) {
-      const currentInside = inside(point);
-      if (currentInside) {
-        if (!previousInside) output.push(intersect(previous, point));
-        output.push(point);
-      } else if (previousInside) {
-        output.push(intersect(previous, point));
-      }
-      previous = point;
-      previousInside = currentInside;
-    }
-    return output;
-  };
-  const hitX = (a: Pt, b: Pt, x: number): Pt => {
-    const dx = b[0] - a[0];
-    if (Math.abs(dx) < 1e-12) return [x, a[1]];
-    const t = (x - a[0]) / dx;
-    return [x, a[1] + (b[1] - a[1]) * t];
-  };
-  const hitY = (a: Pt, b: Pt, y: number): Pt => {
-    const dy = b[1] - a[1];
-    if (Math.abs(dy) < 1e-12) return [a[0], y];
-    const t = (y - a[1]) / dy;
-    return [a[0] + (b[0] - a[0]) * t, y];
-  };
-  current = clipHalfLine(current, (p) => p[0] >= rect.minE - slack, (a, b) => hitX(a, b, rect.minE));
-  current = clipHalfLine(current, (p) => p[0] <= rect.maxE + slack, (a, b) => hitX(a, b, rect.maxE));
-  current = clipHalfLine(current, (p) => p[1] >= rect.minN - slack, (a, b) => hitY(a, b, rect.minN));
-  current = clipHalfLine(current, (p) => p[1] <= rect.maxN + slack, (a, b) => hitY(a, b, rect.maxN));
-  if (current.length < 2) return [];
-  return [dedupeConsecutive(current, 0.1)];
+  const parts = clipPolylineRect(line, rect);
+  return parts.map((part) => dedupeConsecutive(part, 0.1)).filter((part) => part.length >= 2);
 }
 
 export function clipPolygonToRect(

@@ -3,6 +3,7 @@ import { PbfReader } from "pbf";
 import { PMTiles } from "pmtiles";
 import { dedupeRoads } from "./footprints";
 import { polylineLength } from "./geo";
+import { overtureMaxRoadJumpM, sanitizeRoadFeatures } from "./roadLineValidation";
 import { overtureTransportationUrl, resolveOvertureRelease } from "./overtureRelease";
 import { roadSpecFromOvertureSegment, skipTomTomSegmentWithoutClass } from "./overtureTransportMapping";
 import {
@@ -52,11 +53,18 @@ function partsFromTile(
     const id = typeof props.id === "string" ? props.id : String(props.id ?? "");
     if (!id) continue;
     const geo = feature.toGeoJSON(x, y, z);
-    if (geo.geometry.type !== "LineString") continue;
-    const clipped = lineFromGeoJson(geo.geometry.coordinates, origin, half, tileRect);
-    for (const line of clipped) {
-      if (polylineLength(line) < 1) continue;
-      parts.push({ id, line, spec });
+    const lineStrings =
+      geo.geometry.type === "LineString"
+        ? [geo.geometry.coordinates]
+        : geo.geometry.type === "MultiLineString"
+          ? geo.geometry.coordinates
+          : [];
+    for (const coordinates of lineStrings) {
+      const clipped = lineFromGeoJson(coordinates, origin, half, tileRect);
+      for (const line of clipped) {
+        if (polylineLength(line) < 1) continue;
+        parts.push({ id: `${id}:${x}:${y}:${parts.length}`, line, spec });
+      }
     }
   }
   return { parts, skippedTomTom };
@@ -92,7 +100,9 @@ export async function fetchOvertureTransportationForCut(
     kind: part.spec.kind,
     ...(part.spec.grade ? { grade: part.spec.grade } : {}),
   }));
-  const deduped = dedupeRoads(roads);
+  const jumpLimit = overtureMaxRoadJumpM(OVERTURE_TRANSPORT_ZOOM, origin);
+  const sanitized = sanitizeRoadFeatures(roads, jumpLimit);
+  const deduped = dedupeRoads(sanitized.roads);
   return {
     roads: deduped.roads,
     roadKm: deduped.metres / 1000,

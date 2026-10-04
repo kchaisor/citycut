@@ -56,6 +56,87 @@ export function clipSegment(a: Pt, b: Pt, min: number, max: number): [Pt, Pt] | 
   return null;
 }
 
+export type AxisRect = { minE: number; maxE: number; minN: number; maxN: number };
+
+function outCodeRect(x: number, y: number, rect: AxisRect): number {
+  let code = INSIDE;
+  if (x < rect.minE) code |= LEFT;
+  else if (x > rect.maxE) code |= RIGHT;
+  if (y < rect.minN) code |= BOTTOM;
+  else if (y > rect.maxN) code |= TOP;
+  return code;
+}
+
+/** Cohen–Sutherland clip of one segment against an axis-aligned rectangle. */
+export function clipSegmentRect(a: Pt, b: Pt, rect: AxisRect): [Pt, Pt] | null {
+  let x0 = a[0];
+  let y0 = a[1];
+  let x1 = b[0];
+  let y1 = b[1];
+  let c0 = outCodeRect(x0, y0, rect);
+  let c1 = outCodeRect(x1, y1, rect);
+
+  for (let i = 0; i < 16; i++) {
+    if ((c0 | c1) === 0) return [[x0, y0], [x1, y1]];
+    if (c0 & c1) return null;
+    const code = c0 || c1;
+    let x = 0;
+    let y = 0;
+    if (code & TOP) {
+      x = x0 + ((x1 - x0) * (rect.maxN - y0)) / (y1 - y0);
+      y = rect.maxN;
+    } else if (code & BOTTOM) {
+      x = x0 + ((x1 - x0) * (rect.minN - y0)) / (y1 - y0);
+      y = rect.minN;
+    } else if (code & RIGHT) {
+      y = y0 + ((y1 - y0) * (rect.maxE - x0)) / (x1 - x0);
+      x = rect.maxE;
+    } else {
+      y = y0 + ((y1 - y0) * (rect.minE - x0)) / (x1 - x0);
+      x = rect.minE;
+    }
+    if (code === c0) {
+      x0 = x;
+      y0 = y;
+      c0 = outCodeRect(x0, y0, rect);
+    } else {
+      x1 = x;
+      y1 = y;
+      c1 = outCodeRect(x1, y1, rect);
+    }
+  }
+  return null;
+}
+
+/** Clip a polyline to a rectangle, returning one part per visible run (no chords across gaps). */
+export function clipPolylineRect(points: Pt[], rect: AxisRect): Pt[][] {
+  const parts: Pt[][] = [];
+  let current: Pt[] = [];
+
+  const flush = () => {
+    if (current.length >= 2) parts.push(current);
+    current = [];
+  };
+
+  const same = (p: Pt, q: Pt) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 0.01;
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const segment = clipSegmentRect(points[i], points[i + 1], rect);
+    if (!segment) {
+      flush();
+      continue;
+    }
+    if (current.length === 0) current.push(segment[0]);
+    else if (!same(current[current.length - 1], segment[0])) {
+      flush();
+      current.push(segment[0]);
+    }
+    if (!same(current[current.length - 1], segment[1])) current.push(segment[1]);
+  }
+  flush();
+  return parts;
+}
+
 export function clipPolyline(points: Pt[], min: number, max: number): Pt[][] {
   const parts: Pt[][] = [];
   let current: Pt[] = [];
