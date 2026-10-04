@@ -16,13 +16,13 @@
   --landing-bg: var(--background);
 
   /* Colour behind the map while the streets are still loading. */
-  --map-bg: var(--background);
+  --map-bg: var(#FFFFFF);
 
   /* Sky colour of the 3D model. The model reads this when it opens. Downloads do not use it. */
-  --model-bg: var(--background);
+  --model-bg: var(#FFFFFF);
 
   /* On-screen site plan and figure-ground. The downloaded drawing files do not use it. */
-  --drawing-bg: var(--background);
+  --drawing-bg: var(#FFFFFF);
 
   /* Fill of drawers, panels, and cards. Near-white so they sit clearly on the grey page. */
   --panel-bg: #FFFCF8;
