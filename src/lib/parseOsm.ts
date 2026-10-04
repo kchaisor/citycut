@@ -1,15 +1,11 @@
-import { classify } from "./buildingUse";
 import { clipPolygon, clipPolyline } from "./clip";
-import { dedupeAreas, dedupeBuildings, dedupeRoads } from "./footprints";
+import { dedupeAreas, dedupeRoads } from "./footprints";
 import { dedupeConsecutive, openRing, polylineLength, signedArea, toLocal } from "./geo";
-import { buildingHeight } from "./height";
-import type { OverpassElement, OverpassResponse } from "./overpass";
-import { resolveArchetype } from "./treeMap";
 import { isOpenWaterArea } from "./waterAreas";
+import { roadSpecFromHighway, roadSpecFromRailway } from "./roadCatalog";
 import { describeTrees, treeSize, trunkTaggedAsCentimetres } from "./trees";
 import type {
   AreaFeat,
-  BuildingFeat,
   CityModel,
   LonLat,
   ModelLayers,
@@ -19,68 +15,31 @@ import type {
   TreeFeat,
 } from "../types";
 
-const MAX_BUILDINGS = 4000;
 const MAX_RELATION_MEMBERS = 80;
 const MIN_AREA = 4;
 
 /** Replaced when a terrain heightfield is attached to the model. */
 export const FLAT_GROUND_NOTE = "Ground is flat — no lidar or terrain in this version.";
 
-const SKIP_HIGHWAY = new Set([
-  "proposed",
-  "construction",
-  "abandoned",
-  "platform",
-  "bus_stop",
-  "elevator",
-  "corridor",
-  "raceway",
-  "rest_area",
-  "services",
-  "no",
-  "via_ferrata",
-  "escalator",
-  "escape",
-  "bus_guideway",
-]);
+/** Legacy Overpass-shaped fixtures for unit tests only. */
+export type OverpassElement = {
+  type: "node" | "way" | "relation";
+  id: number;
+  lat?: number;
+  lon?: number;
+  tags?: Record<string, string>;
+  geometry?: { lat: number; lon: number }[];
+  members?: {
+    type: string;
+    ref: number;
+    role: string;
+    geometry?: { lat: number; lon: number }[];
+  }[];
+};
 
-const ARTERIAL = new Set([
-  "motorway",
-  "trunk",
-  "primary",
-  "secondary",
-  "tertiary",
-  "motorway_link",
-  "trunk_link",
-  "primary_link",
-  "secondary_link",
-  "tertiary_link",
-]);
-
-const PATH = new Set(["footway", "path", "cycleway", "steps", "pedestrian", "bridleway", "track"]);
-
-const ROAD_WIDTH: Record<string, number> = {
-  motorway: 16,
-  trunk: 14,
-  primary: 12,
-  secondary: 9,
-  tertiary: 7.5,
-  residential: 5.5,
-  unclassified: 5,
-  living_street: 4.5,
-  service: 3.2,
-  pedestrian: 6,
-  footway: 1.8,
-  path: 1.6,
-  cycleway: 2.2,
-  track: 3,
-  steps: 1.4,
-  bridleway: 1.8,
-  motorway_link: 8,
-  trunk_link: 7,
-  primary_link: 6.5,
-  secondary_link: 5.5,
-  tertiary_link: 4.5,
+export type OverpassResponse = {
+  elements: OverpassElement[];
+  remark?: string;
 };
 
 type Geom = { lat: number; lon: number };
@@ -206,23 +165,11 @@ function hidden(tags: Record<string, string>): boolean {
   return tags.tunnel === "yes" || tags.tunnel === "culvert" || tags.location === "underground" || tags.indoor === "yes";
 }
 
-function roadGrade(highway: string): RoadGrade {
-  const base = highway.split(";")[0];
-  if (PATH.has(base)) return "path";
-  if (ARTERIAL.has(base)) return "arterial";
-  return "local";
-}
-
 function roadWidth(tags: Record<string, string>): { width: number; kind: "road" | "rail"; grade?: RoadGrade } | null {
-  if (tags.railway) {
-    const kind = tags.railway;
-    if (!["rail", "light_rail", "tram", "subway", "narrow_gauge"].includes(kind)) return null;
-    return { width: kind === "tram" ? 2.8 : 3.6, kind: "rail" };
-  }
+  if (tags.railway) return roadSpecFromRailway(tags.railway);
   const highway = tags.highway;
-  if (!highway || SKIP_HIGHWAY.has(highway)) return null;
-  const base = highway.split(";")[0];
-  return { width: ROAD_WIDTH[base] ?? 4.2, kind: "road", grade: roadGrade(base) };
+  if (!highway) return null;
+  return roadSpecFromHighway(highway.split(";")[0]);
 }
 
 function ringCentroid(points: Pt[]): Pt | null {
@@ -291,7 +238,6 @@ function pushTree(trees: TreeFeat[], id: number, at: Pt, tags: Record<string, st
     ...(taxon ? { taxon } : {}),
     ...(leafType ? { leafType } : {}),
     ...(leafCycle ? { leafCycle } : {}),
-    archetype: resolveArchetype({ genus, species, taxon, leafType, leafCycle }),
     tier: "osm",
   });
 }
@@ -335,23 +281,6 @@ function collectTrees(elements: OverpassElement[], origin: LonLat, half: number)
     );
   }
   return trees;
-}
-
-function buildingFeat(
-  id: number,
-  ring: Pt[],
-  holes: Pt[][],
-  tags: Record<string, string>,
-): BuildingFeat {
-  const tagged = classify(tags);
-  return {
-    id,
-    ring,
-    holes,
-    height: buildingHeight(tags),
-    use: tagged ?? "unclassified",
-    source: tagged ? "osm_tag" : "none",
-  };
 }
 
 function clipRing(points: Pt[], half: number): Pt[] {
@@ -443,7 +372,6 @@ function canopyKind(tags: Record<string, string>): CanopyKind | null {
 /** Canopy polygons and the masks that keep infill off roads, buildings, and water. */
 export function collectTreeContext(elements: OverpassElement[], origin: LonLat, half: number): TreeContext {
   const canopy: CanopyPatch[] = [];
-  const buildings: TreeContext["buildings"] = [];
   const water: TreeContext["water"] = [];
   const roads: TreeContext["roads"] = [];
   const consumed = new Set<number>();
@@ -452,9 +380,8 @@ export function collectTreeContext(elements: OverpassElement[], origin: LonLat, 
     if (element.type !== "relation") continue;
     const tags = element.tags ?? {};
     const kind = canopyKind(tags);
-    const buildingRel = Boolean(tags.building && tags.building !== "no" && tags.building !== "entrance");
     const waterRel = areaKind(tags) === "water";
-    if (!kind && !buildingRel && !waterRel) continue;
+    if (!kind && !waterRel) continue;
     const stitched = relationRings(element, origin);
     if (!stitched) continue;
     const rings = stitchRings(stitched.outers);
@@ -466,7 +393,6 @@ export function collectTreeContext(elements: OverpassElement[], origin: LonLat, 
       if (clipped.length < 3) continue;
       const clippedHoles = holes.map((hole) => clipRing(hole, half)).filter((hole) => hole.length >= 3);
       if (kind) canopy.push({ ring: clipped, holes: clippedHoles, kind });
-      else if (buildingRel) buildings.push({ ring: clipped, holes: clippedHoles });
       else if (isOpenWaterArea(tags, Math.abs(signedArea(clipped)))) {
         water.push({ ring: clipped, holes: clippedHoles });
       }
@@ -485,17 +411,6 @@ export function collectTreeContext(elements: OverpassElement[], origin: LonLat, 
       if (clipped.length >= 3) canopy.push({ ring: clipped, holes: [], kind });
       continue;
     }
-    if (
-      tags.building &&
-      tags.building !== "no" &&
-      tags.building !== "entrance" &&
-      !tags["building:part"] &&
-      isClosed(line)
-    ) {
-      const clipped = clipRing(line, half);
-      if (clipped.length >= 3) buildings.push({ ring: clipped, holes: [] });
-      continue;
-    }
     if (areaKind(tags) === "water" && isClosed(line)) {
       const clipped = clipRing(line, half);
       if (clipped.length >= 3 && isOpenWaterArea(tags, Math.abs(signedArea(clipped)))) {
@@ -511,7 +426,7 @@ export function collectTreeContext(elements: OverpassElement[], origin: LonLat, 
     }
   }
 
-  return { canopy, buildings, water, roads };
+  return { canopy, buildings: [], water, roads };
 }
 
 export function parseCity(
@@ -521,42 +436,25 @@ export function parseCity(
   layers: ModelLayers,
 ): Omit<CityModel, "placeLabel" | "sourceNote"> & { sourceNote: string } {
   const half = sideM / 2;
-  const buildings: BuildingFeat[] = [];
   const roads: RoadFeat[] = [];
   const areas: AreaFeat[] = [];
   const consumedWays = new Set<number>();
   const elements = data.elements ?? [];
   const trees = layers.trees ? collectTrees(elements, origin, half) : [];
 
-  if (layers.buildings || layers.waterGreen) {
+  if (layers.waterGreen) {
     for (const element of elements) {
       if (element.type !== "relation") continue;
       const tags = element.tags ?? {};
-      const buildingRel = layers.buildings && tags.building && tags.building !== "no" && tags.building !== "entrance";
-      const kind = layers.waterGreen ? areaKind(tags) : null;
-      if (!buildingRel && !kind) continue;
+      const kind = areaKind(tags);
+      if (!kind) continue;
       const stitched = relationRings(element, origin);
       if (!stitched) continue;
       const rings = stitchRings(stitched.outers);
       const holes = rings.length === 1 ? stitchRings(stitched.inners) : [];
       if (rings.length === 0) continue;
       for (const ref of stitched.used) consumedWays.add(ref);
-      if (buildingRel) {
-        for (const ring of rings) {
-          const clipped = clipRing(ring, half);
-          if (clipped.length < 3) continue;
-          buildings.push(
-            buildingFeat(
-              element.id,
-              clipped,
-              holes.map((hole) => clipRing(hole, half)).filter((hole) => hole.length >= 3),
-              tags,
-            ),
-          );
-        }
-      } else if (kind) {
-        for (const ring of rings) pushArea(areas, element.id, kind, ring, holes, half, tags);
-      }
+      for (const ring of rings) pushArea(areas, element.id, kind, ring, holes, half, tags);
     }
   }
 
@@ -565,15 +463,6 @@ export function parseCity(
     const tags = element.tags ?? {};
     const line = pointsFromGeom(element.geometry, origin);
     if (line.length < 2) continue;
-
-    if (layers.buildings && tags.building && tags.building !== "no" && tags.building !== "entrance" && !tags["building:part"]) {
-      if (consumedWays.has(element.id)) continue;
-      if (!isClosed(line)) continue;
-      const clipped = clipRing(line, half);
-      if (clipped.length < 3) continue;
-      buildings.push(buildingFeat(element.id, clipped, [], tags));
-      continue;
-    }
 
     if (layers.waterGreen && !consumedWays.has(element.id)) {
       const kind = areaKind(tags);
@@ -600,37 +489,21 @@ export function parseCity(
     }
   }
 
-  let buildingCapHit = false;
-  let kept = dedupeBuildings(buildings);
-  if (kept.length > MAX_BUILDINGS) {
-    buildingCapHit = true;
-    kept = kept
-      .slice()
-      .sort((a, b) => Math.abs(signedArea(b.ring)) - Math.abs(signedArea(a.ring)))
-      .slice(0, MAX_BUILDINGS);
-  }
   const roadsKept = dedupeRoads(roads);
   const areasKept = dedupeAreas(areas);
 
-  const notes = [
-    "OpenStreetMap via Overpass.",
-    "Building height uses the height tag, otherwise building:levels × 3 m, otherwise 9 m.",
-    "Building use follows OSM tags on the building, then Vicmap planning zones.",
-    FLAT_GROUND_NOTE,
-  ];
+  const notes = [FLAT_GROUND_NOTE];
   if (layers.trees) notes.push(describeTrees(trees));
-  if (buildingCapHit) notes.push(`Building count was capped at ${MAX_BUILDINGS}.`);
-
   return {
     center: origin,
     sideM,
     layers,
-    buildings: kept,
+    buildings: [],
     roads: roadsKept.roads,
     areas: areasKept,
     trees,
     roadKm: roadsKept.metres / 1000,
-    buildingCapHit,
+    buildingCapHit: false,
     sourceNote: notes.join(" "),
   };
 }

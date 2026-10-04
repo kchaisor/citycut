@@ -18,8 +18,6 @@ export const VICMAP_PAGE_SIZE = 2000;
 export const VICMAP_ATTRIBUTION =
   "Vicmap Vegetation Tree Urban © State of Victoria (Department of Transport and Planning), CC BY 4.0.";
 
-const DENSE_ARCHETYPE = "broadleaf-round";
-const OPEN_ARCHETYPE = "generic";
 const MAX_PAGES = 12;
 
 export type VicmapPoint = {
@@ -159,24 +157,19 @@ export function vicmapPointsToTrees(points: VicmapPoint[], origin: LonLat, half:
   points.forEach((point, index) => {
     const at = toLocal(point.lat, point.lon, origin);
     if (Math.abs(at[0]) > half + 0.2 || Math.abs(at[1]) > half + 0.2) return;
-    const archetype = point.dense ? DENSE_ARCHETYPE : OPEN_ARCHETYPE;
-    const sized = finishTreeSize(
-      {
-        height: point.height_m,
-        crown: point.crown_m,
-        trunk: null,
-        crownMeasured: point.crown_m !== null,
-        trunkMeasured: false,
-        sizeSource: "vicmap",
-      },
-      archetype,
-    );
+    const sized = finishTreeSize({
+      height: point.height_m,
+      crown: point.dense && point.crown_m === null ? (point.height_m ?? 10) * 0.75 : point.crown_m,
+      trunk: null,
+      crownMeasured: point.crown_m !== null,
+      trunkMeasured: false,
+      sizeSource: "vicmap",
+    });
     trees.push({
       id: index + 1,
       at,
       ...sized,
       tier: "vicmap",
-      archetype,
     });
   });
   return trees;

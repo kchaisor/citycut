@@ -39,6 +39,15 @@ export type UseTierFailure = {
   message: string;
 };
 
+/** One vertical extrusion inside an OSM footprint (CoM clip or OSM-height remainder). */
+export type BuildingExtrusionPart = {
+  ring: Ring;
+  holes: Ring[];
+  height: number;
+  /** Metres above ground for the extrusion start (Overture min_height). */
+  base?: number;
+};
+
 export type BuildingFeat = {
   id: number;
   ring: Ring;
@@ -46,6 +55,15 @@ export type BuildingFeat = {
   height: number;
   use: BuildingUse;
   source: TypologySource;
+  /** Overture GERS building id when the footprint comes from Overture Maps. */
+  overtureId?: string;
+  /** OSM way ids from Overture `sources` (`record_id` like w13307317). */
+  osmWayIds?: number[];
+  /**
+   * When Better heights (CoM) clips overlaps, 3D and Rhino extrude each part separately.
+   * Site plan and exports still use {@link ring} only.
+   */
+  extrusionParts?: BuildingExtrusionPart[];
 };
 
 /** Highway class used for width and asphalt colour. Rail leaves this unset. */
@@ -94,7 +112,6 @@ export type TreeFeat = TreeDimensions & {
   leafType?: string;
   leafCycle?: string;
   /** Massing form chosen from the tags above. */
-  archetype?: string;
   /** Dataset that placed this tree. Older fixtures leave this unset. */
   tier?: TreeTier;
 };
@@ -170,6 +187,12 @@ export type CityModel = {
    * Absent keeps the older path: marching squares on `terrain` when `contours` is set.
    */
   contourLayer?: ContourLayer | null;
+  /** When true, building heights came from City of Melbourne 2023 Building Footprints. */
+  comBuildingHeights?: boolean;
+  /** True when Overture Microsoft ML footprints appear in the cut. */
+  hasMicrosoftFootprints?: boolean;
+  /** True when ESA WorldCover land_cover polygons were used for canopy infill. */
+  hasEsaLandCover?: boolean;
 };
 
 export type ViewState = {

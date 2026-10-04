@@ -39,7 +39,7 @@ function model(): CityModel {
     trees: [],
     roadKm: 0.16,
     buildingCapHit: false,
-    sourceNote: "OpenStreetMap via Overpass.",
+    sourceNote: "© OpenStreetMap contributors, Overture Maps Foundation (ODbL)",
     contours: false,
   };
 }

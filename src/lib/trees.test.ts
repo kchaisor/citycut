@@ -16,17 +16,20 @@ if (typeof globalThis.FileReader === "undefined") {
 import * as THREE from "three";
 import { buildCityGroup, disposeObject } from "./buildCity";
 import { fromLocal } from "./geo";
-import { buildOverpassQuery, overpassBBox } from "./overpass";
 import { parseCity } from "./parseOsm";
 import { planPaths } from "./svgPlan";
 import { applyComTreeSizes, comRecordsToTrees } from "./comTrees";
-import { DEFAULT_CROWN_DIAMETER, DEFAULT_TREE_HEIGHT, heightFromDbhCm, treeSize } from "./trees";
+import {
+  CROWN_HEIGHT_FLOOR,
+  DEFAULT_CROWN_DIAMETER,
+  DEFAULT_TREE_HEIGHT,
+  heightFromDbhCm,
+  treeSize,
+} from "./trees";
 import type { CityModel, Pt } from "../types";
 
 const origin = { lon: 144.9631, lat: -37.8136 };
 const layersOn = { buildings: false, roads: false, waterGreen: false, trees: true };
-const bbox = overpassBBox({ south: -37.82, west: 144.95, north: -37.8, east: 144.98 });
-
 function square(center: Pt, size: number): Pt[] {
   const h = size / 2;
   return [
@@ -69,16 +72,18 @@ describe("tree size", () => {
     expect(crownOnly.height_m).toBeCloseTo(15);
   });
 
-  it("uses species archetype sizes, then the generic tree", () => {
-    const gum = treeSize({ species: "Corymbia maculata" });
-    expect(gum).toMatchObject({ height_m: 18, crown_diameter_m: 8, trunk_diameter_m: 0.45, sizeSource: "species" });
+  it("falls back to the generic tree when tags do not measure size", () => {
+    expect(treeSize({ species: "Corymbia maculata" })).toMatchObject({
+      height_m: DEFAULT_TREE_HEIGHT,
+      crown_diameter_m: DEFAULT_CROWN_DIAMETER,
+      sizeSource: "default",
+    });
     expect(treeSize({})).toMatchObject({
       height_m: DEFAULT_TREE_HEIGHT,
       crown_diameter_m: DEFAULT_CROWN_DIAMETER,
       trunk_diameter_m: 0.35,
       sizeSource: "default",
     });
-    expect(treeSize({ natural: "tree", species: "Nope" }).sizeSource).toBe("default");
   });
 
   it("uses City of Melbourne DBH and age when OSM has no measurements", () => {
@@ -89,11 +94,11 @@ describe("tree size", () => {
     expect(measured.crown_diameter_m).toBeLessThanOrEqual(measured.height_m * 1.35);
     const young = treeSize({ species: "Corymbia maculata" }, { dbh_cm: null, age: "Juvenile" });
     expect(young.sizeSource).toBe("com");
-    expect(young.height_m).toBeCloseTo(18 * 0.55);
-    expect(young.crown_diameter_m).toBeCloseTo(8 * 0.55);
+    expect(young.height_m).toBeCloseTo(DEFAULT_TREE_HEIGHT * 0.55);
+    expect(young.crown_diameter_m).toBeCloseTo(DEFAULT_CROWN_DIAMETER * 0.55);
   });
 
-  it("clamps absurd tags and lifts a needle crown toward the archetype", () => {
+  it("clamps absurd tags and lifts a thin measured crown", () => {
     const sized = treeSize({ height: "400", diameter_crown: "0.2" });
     expect(sized.height_m).toBe(40);
     expect(sized.crown_diameter_m).toBeCloseTo(12);
@@ -103,11 +108,13 @@ describe("tree size", () => {
     expect(sized.trunk_diameter_m).toBeGreaterThanOrEqual(0.05);
     expect(sized.trunk_diameter_m).toBeLessThanOrEqual(2);
 
-    const gum = treeSize({ species: "Corymbia maculata", height: "36", diameter_crown: "1" });
-    expect(gum.height_m).toBe(36);
-    expect(gum.crown_diameter_m / gum.height_m).toBeGreaterThanOrEqual(8 / 18 * 0.5 - 0.001);
-    expect(gum.crown_diameter_m).toBeLessThanOrEqual(36 * 1.4);
-    expect(gum.crown_diameter_m).toBeGreaterThan(1);
+    const thin = treeSize({ height: "36", diameter_crown: "1" });
+    expect(thin.height_m).toBe(36);
+    expect(thin.crown_diameter_m / thin.height_m).toBeGreaterThanOrEqual(
+      CROWN_HEIGHT_FLOOR * (DEFAULT_CROWN_DIAMETER / DEFAULT_TREE_HEIGHT) - 0.001,
+    );
+    expect(thin.crown_diameter_m).toBeLessThanOrEqual(36 * 1.4);
+    expect(thin.crown_diameter_m).toBeGreaterThan(1);
 
     const wide = treeSize({ height: "10", diameter_crown: "30" });
     expect(wide.crown_diameter_m).toBeCloseTo(14);
@@ -162,7 +169,6 @@ describe("City of Melbourne match", () => {
           crown_diameter_m: 6,
           trunk_diameter_m: 0.35,
           sizeSource: "default",
-          archetype: "generic",
         },
         {
           id: 2,
@@ -171,7 +177,6 @@ describe("City of Melbourne match", () => {
           crown_diameter_m: 9,
           trunk_diameter_m: 0.4,
           sizeSource: "osm",
-          archetype: "generic",
         },
       ],
       [
@@ -188,7 +193,6 @@ describe("City of Melbourne match", () => {
     );
     expect(sized[0].sizeSource).toBe("com");
     expect(sized[0].trunk_diameter_m).toBeCloseTo(0.5);
-    expect(sized[0].archetype).toBe("gum-broad");
     expect(sized[1].sizeSource).toBe("osm");
     expect(sized[1].height_m).toBe(22);
   });
@@ -211,7 +215,6 @@ describe("City of Melbourne match", () => {
     );
     expect(trees).toHaveLength(1);
     expect(trees[0].tier).toBe("com");
-    expect(trees[0].archetype).toBe("gum-broad");
     expect(trees[0].sizeSource).toBe("com");
     expect(trees[0].trunk_diameter_m).toBeCloseTo(0.4);
     expect(trees[0].at[0]).toBeCloseTo(12);
@@ -253,7 +256,6 @@ describe("tree parse", () => {
     expect(parsed.trees[0].crown_diameter_m).toBe(9);
     expect(parsed.trees[0].sizeSource).toBe("osm");
     expect(parsed.trees[0].species).toBe("Corymbia maculata");
-    expect(parsed.trees[0].archetype).toBe("gum-open");
   });
 
   it("defaults an untagged tree", () => {
@@ -271,7 +273,6 @@ describe("tree parse", () => {
     expect(parsed.trees[0].height_m).toBe(DEFAULT_TREE_HEIGHT);
     expect(parsed.trees[0].crown_diameter_m).toBe(DEFAULT_CROWN_DIAMETER);
     expect(parsed.trees[0].sizeSource).toBe("default");
-    expect(parsed.trees[0].archetype).toBe("generic");
     expect(parsed.sourceNote).toContain("10 m tall");
   });
 
@@ -345,30 +346,6 @@ describe("tree parse", () => {
   });
 });
 
-describe("tree query", () => {
-  it("asks Overpass for trees only when the layer is on", () => {
-    const on = buildOverpassQuery(bbox, layersOn);
-    expect(on).toContain('node["natural"="tree"]');
-    expect(on).toContain('way["natural"="tree_row"]');
-    expect(on).toContain('way["natural"="wood"]');
-    expect(on).toContain('way["landuse"="forest"]');
-    expect(on).toContain('way["natural"="scrub"]');
-    expect(on).toContain('relation["natural"="scrub"]');
-    expect(on).toContain("highway");
-    expect(on).toContain('way["building"]');
-    const off = buildOverpassQuery(bbox, {
-      buildings: true,
-      roads: false,
-      waterGreen: false,
-      trees: false,
-    });
-    expect(off).not.toContain('natural"="tree"');
-    expect(() =>
-      buildOverpassQuery(bbox, { buildings: false, roads: false, waterGreen: false, trees: false }),
-    ).toThrow(/Trees/);
-  });
-});
-
 describe("tree exports", () => {
   const model: CityModel = {
     placeLabel: "Test",
@@ -429,65 +406,30 @@ describe("tree exports", () => {
     expect(parsed.trees.map((tree) => tree.height_m).every((height) => height < 30)).toBe(true);
     const group = buildCityGroup({ ...model, trees: parsed.trees });
     try {
-      group.traverse((object) => {
-        const mesh = object as THREE.InstancedMesh;
-        if (!mesh.isInstancedMesh) return;
-        const matrix = new THREE.Matrix4();
-        const position = new THREE.Vector3();
-        const quaternion = new THREE.Quaternion();
-        const scale = new THREE.Vector3();
-        for (let index = 0; index < mesh.count; index++) {
-          mesh.getMatrixAt(index, matrix);
-          matrix.decompose(position, quaternion, scale);
-          expect(scale.y).toBeGreaterThanOrEqual(2);
-          expect(scale.y).toBeLessThan(30);
-          expect(scale.x).toBeGreaterThanOrEqual(1);
-          expect(scale.x).toBeLessThanOrEqual(25);
-          expect(scale.z).toBe(scale.x);
-        }
-      });
+      const trees = group.getObjectByName("Trees");
+      expect(trees).toBeTruthy();
     } finally {
       disposeObject(group);
     }
   });
 
-  it("instances one archetype and scales it to the tree height and crown", () => {
+  it("builds a cylinder trunk and uniform sphere crown for each tree", () => {
     const group = buildCityGroup(model);
     const trees = group.getObjectByName("Trees");
     expect(trees).toBeTruthy();
     group.updateMatrixWorld(true);
-    const meshes: THREE.InstancedMesh[] = [];
+    const meshes: THREE.Mesh[] = [];
     trees!.traverse((object) => {
-      const mesh = object as THREE.InstancedMesh;
-      if (mesh.isInstancedMesh) meshes.push(mesh);
+      const mesh = object as THREE.Mesh;
+      if (mesh.isMesh) meshes.push(mesh);
     });
-    expect(meshes).toHaveLength(1);
-    expect(meshes[0].count).toBe(1);
-    expect(meshes[0].userData.archetype).toBe("generic");
-    const matrix = new THREE.Matrix4();
-    const position = new THREE.Vector3();
-    const quaternion = new THREE.Quaternion();
-    const scale = new THREE.Vector3();
-    meshes[0].getMatrixAt(0, matrix);
-    matrix.decompose(position, quaternion, scale);
-    expect(position.x).toBeCloseTo(20);
-    expect(position.z).toBeCloseTo(-30);
-    expect(scale.y).toBeCloseTo(14);
-    expect(scale.x).toBeCloseTo(8);
-    expect(scale.z).toBeCloseTo(8);
-    matrix.premultiply(meshes[0].matrixWorld);
-    const vertex = new THREE.Vector3();
-    const attribute = meshes[0].geometry.getAttribute("position");
-    let tip = false;
-    let wideCrown = false;
-    for (let i = 0; i < attribute.count; i++) {
-      vertex.fromBufferAttribute(attribute, i).applyMatrix4(matrix);
-      const radial = Math.hypot(vertex.x - 20, vertex.z + 30);
-      if (Math.abs(vertex.y - 14) < 0.05 && radial < 0.05) tip = true;
-      if (radial > 3.2 && radial < 4.3 && vertex.y > 8 && vertex.y < 12.5) wideCrown = true;
-    }
-    expect(tip).toBe(true);
-    expect(wideCrown).toBe(true);
+    expect(meshes).toHaveLength(2);
+    meshes[0].geometry.computeBoundingBox();
+    meshes[1].geometry.computeBoundingBox();
+    const trunkBox = meshes[0].geometry.boundingBox!;
+    const crownBox = meshes[1].geometry.boundingBox!;
+    expect(trunkBox.max.y - trunkBox.min.y).toBeGreaterThan(0.5);
+    expect(crownBox.max.x - crownBox.min.x).toBeCloseTo(crownBox.max.z - crownBox.min.z, 1);
     disposeObject(group);
   });
 

@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { fromLocal, squareBBox } from "./geo";
-import { buildOverpassQuery } from "./overpass";
-import { parseCity } from "./parseOsm";
+import { squareBBox } from "./geo";
 import type { BuildingFeat, Pt } from "../types";
 import { TIER_TIMEOUT_MS, assignExternalUses, refineBuildingUses, zoneWfsUrl } from "./useCascade";
-
-const origin = { lon: 144.9631, lat: -37.8136 };
 
 function square(center: Pt, size: number): Pt[] {
   const h = size / 2;
@@ -18,57 +14,9 @@ function square(center: Pt, size: number): Pt[] {
   ];
 }
 
-function geom(points: Pt[]) {
-  return points.map((point) => fromLocal(point, origin));
-}
-
 function bare(ring: Pt[], height: number): BuildingFeat {
   return { id: 1, ring, holes: [], height, use: "unclassified", source: "none" };
 }
-
-describe("osm tags on the building", () => {
-  it("keeps a tagged building and leaves a bare building unclassified", () => {
-    const footprint = geom(square([0, 0], 30));
-    const outside = fromLocal([40, 0], origin);
-    const parsed = parseCity(
-      {
-        elements: [
-          { type: "way", id: 1, tags: { building: "yes" }, geometry: footprint },
-          { type: "way", id: 2, tags: { building: "house" }, geometry: geom(square([80, 0], 20)) },
-          {
-            type: "node",
-            id: 3,
-            lat: origin.lat,
-            lon: origin.lon,
-            tags: { shop: "bakery", building: "apartments" },
-          },
-          { type: "node", id: 4, lat: outside.lat, lon: outside.lon, tags: { shop: "bakery" } },
-          { type: "way", id: 9, tags: { landuse: "residential" }, geometry: geom(square([0, 0], 80)) },
-        ],
-      },
-      origin,
-      400,
-      { buildings: true, roads: false, waterGreen: false, trees: false },
-    );
-    const bareBuilding = parsed.buildings.find((building) => building.id === 1);
-    const house = parsed.buildings.find((building) => building.id === 2);
-    expect(bareBuilding).toMatchObject({ use: "unclassified", source: "none" });
-    expect(house).toMatchObject({ use: "residential", source: "osm_tag" });
-    expect(parsed.buildings).toHaveLength(2);
-  });
-
-  it("asks Overpass for building shapes only when that is the only layer", () => {
-    const query = buildOverpassQuery("(1,2,3,4)", {
-      buildings: true,
-      roads: false,
-      waterGreen: false,
-      trees: false,
-    });
-    expect(query).toBe(
-      `[out:json][timeout:60][maxsize:32000000];(way["building"]["building"!="no"](1,2,3,4);relation["building"]["building"!="no"](1,2,3,4););out geom;`,
-    );
-  });
-});
 
 describe("zone tier", () => {
   it("assigns a zone, including the C1Z height split", () => {

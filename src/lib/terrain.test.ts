@@ -337,7 +337,6 @@ function slopedModel(): CityModel {
         crown_diameter_m: 6,
         trunk_diameter_m: 0.3,
         sizeSource: "osm",
-        archetype: "generic",
       },
     ],
     roadKm: 0.08,
@@ -398,17 +397,19 @@ describe("terrain in the model", () => {
       expect(buildingMin).toBeCloseTo(base + SURFACE.building.lift, 4);
       expect(buildingMax).toBeCloseTo(base + 12 + SURFACE.building.lift, 4);
 
-      let trees: THREE.InstancedMesh | null = null;
-      group.traverse((object) => {
-        const candidate = object as THREE.InstancedMesh;
-        if (candidate.isInstancedMesh) trees = candidate;
+      const treeGroup = group.getObjectByName("Trees");
+      expect(treeGroup).toBeTruthy();
+      treeGroup!.updateWorldMatrix(true, true);
+      let treeBaseY = Infinity;
+      treeGroup!.traverse((object) => {
+        const mesh = object as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        mesh.geometry.computeBoundingBox();
+        const box = mesh.geometry.boundingBox;
+        if (!box) return;
+        treeBaseY = Math.min(treeBaseY, box.min.y);
       });
-      expect(trees).toBeTruthy();
-      const matrix = new THREE.Matrix4();
-      const treePosition = new THREE.Vector3();
-      trees!.getMatrixAt(0, matrix);
-      treePosition.setFromMatrixPosition(matrix);
-      expect(treePosition.y).toBeCloseTo(sampleTerrain(field, 10, 0, 100), 4);
+      expect(treeBaseY).toBeCloseTo(sampleTerrain(field, 10, 0, 100), 4);
 
       const roads = group.getObjectByName("Roads") as THREE.Mesh;
       const roadPosition = roads.geometry.getAttribute("position");

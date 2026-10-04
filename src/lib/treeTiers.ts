@@ -1,5 +1,4 @@
 import { pointInPolygon } from "./useCascade";
-import { archetypeSize } from "./treeMap";
 import { finishTreeSize } from "./trees";
 import type { Pt, TreeFeat, TreeTier } from "../types";
 
@@ -10,8 +9,6 @@ export const MAX_TREE_INSTANCES = 8000;
 /** Extra metres beyond half the mapped road width. */
 export const ROAD_MASK_BUFFER_M = 2;
 
-const SCRUB_ARCHETYPE = "shrub";
-const WOOD_ARCHETYPE = "generic";
 const TRIM_ORDER: TreeTier[] = ["canopy", "vicmap", "osm", "com"];
 
 export type MaskPolygon = { ring: Pt[]; holes: Pt[][] };
@@ -306,20 +303,15 @@ export function poissonDisc(
 }
 
 function canopyTree(id: number, at: Pt, kind: CanopyPatch["kind"]): TreeFeat {
-  const archetype = kind === "scrub" ? SCRUB_ARCHETYPE : WOOD_ARCHETYPE;
-  const spec = archetypeSize(archetype);
-  const sized = finishTreeSize(
-    {
-      height: spec.height_m,
-      crown: spec.crown_diameter_m,
-      trunk: spec.trunk_diameter_m,
-      crownMeasured: false,
-      trunkMeasured: false,
-      sizeSource: "default",
-    },
-    archetype,
-  );
-  return { id, at, ...sized, tier: "canopy", archetype };
+  const sized = finishTreeSize({
+    height: kind === "scrub" ? 2.5 : 10,
+    crown: kind === "scrub" ? 2 : 6,
+    trunk: kind === "scrub" ? 0.12 : 0.35,
+    crownMeasured: false,
+    trunkMeasured: false,
+    sizeSource: "default",
+  });
+  return { id, at, ...sized, tier: "canopy" };
 }
 
 export function fillCanopy(

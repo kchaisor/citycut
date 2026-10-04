@@ -88,10 +88,7 @@ describe("Vicmap pages", () => {
       expect(trees.every((point) => point.tier === "vicmap" && point.sizeSource === "vicmap")).toBe(true);
       expect(trees.every((point) => point.height_m >= 2 && point.height_m <= 40)).toBe(true);
       expect(trees.every((point) => point.crown_diameter_m <= point.height_m * 1.4)).toBe(true);
-      const dense = trees.find((point) => point.archetype === "broadleaf-round");
-      const open = trees.find((point) => point.archetype === "generic");
-      expect(dense).toBeTruthy();
-      expect(open).toBeTruthy();
+      expect(new Set(trees.map((point) => point.height_m)).size).toBeGreaterThan(1);
     } finally {
       info.mockRestore();
       vi.unstubAllGlobals();

@@ -76,7 +76,7 @@ export function model(): CityModel {
     trees: [{ id: 4, at: [20, 30], height_m: 10, crown_diameter_m: 8, trunk_diameter_m: 0.3, sizeSource: "osm" }],
     roadKm: 0.16,
     buildingCapHit: false,
-    sourceNote: "OpenStreetMap via Overpass.",
+    sourceNote: "© OpenStreetMap contributors, Overture Maps Foundation (ODbL)",
     terrain: terrain(),
     contours: true,
   };
