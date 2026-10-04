@@ -443,8 +443,26 @@ input[type="range"]::-moz-range-thumb {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   min-height: 36px;
+}
+.layer-sub-toggle {
+  flex: 1 1 100%;
+  margin: 0 0 4px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  background: var(--panel-bg);
+  color: var(--text);
+  cursor: pointer;
+}
+.layer-sub-toggle.on {
+  border-color: var(--text);
+  font-weight: 600;
 }
 .layer-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .soon, .layer-hint {

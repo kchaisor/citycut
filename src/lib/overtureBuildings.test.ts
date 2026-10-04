@@ -16,6 +16,7 @@ describe("reassembleBuildingFragments", () => {
         holes: [],
         props: { height: 12 },
         microsoft: false,
+        osmWayIds: [],
       },
       {
         id: "abc",
@@ -29,6 +30,7 @@ describe("reassembleBuildingFragments", () => {
         holes: [],
         props: { height: 12 },
         microsoft: false,
+        osmWayIds: [],
       },
     ]);
     expect(merged).toHaveLength(1);
@@ -49,8 +51,43 @@ describe("reassembleBuildingFragments", () => {
         holes: [],
         props: {},
         microsoft: false,
+        osmWayIds: [],
       },
     ]);
     expect(merged).toHaveLength(0);
+  });
+
+  it("keeps the tallest fragment height after union", () => {
+    const merged = reassembleBuildingFragments([
+      {
+        id: "tower",
+        ring: [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+        holes: [],
+        props: { height: 9 },
+        microsoft: false,
+        osmWayIds: [1],
+      },
+      {
+        id: "tower",
+        ring: [
+          [10, 0],
+          [20, 0],
+          [20, 10],
+          [10, 10],
+          [10, 0],
+        ],
+        holes: [],
+        props: { height: 280 },
+        microsoft: false,
+        osmWayIds: [1],
+      },
+    ]);
+    expect(merged[0]?.props.height).toBe(280);
   });
 });

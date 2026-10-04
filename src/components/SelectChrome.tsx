@@ -3,6 +3,11 @@ import { Layers, Search } from "lucide-react";
 import { MAX_SIDE_KM, MIN_SIDE_KM } from "../content/constants";
 import { formatKmSide } from "../lib/geo";
 import { searchPlaces } from "../lib/nominatim";
+import { buildingDataCredit } from "../lib/buildingAttribution";
+import {
+  readStoredComBuildingHeights,
+  writeStoredComBuildingHeights,
+} from "../lib/comBuildingHeightsToggle";
 import { reduceRail } from "../lib/railState";
 import type { PlaceHit, UiLayers } from "../types";
 import { Drawer } from "./Drawer";
@@ -61,6 +66,9 @@ export function SelectChrome({
   const [searchError, setSearchError] = useState<string | null>(null);
   const [resultsOpen, setResultsOpen] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
+  const [betterHeights, setBetterHeights] = useState(() =>
+    readStoredComBuildingHeights(window.localStorage),
+  );
   const boxRef = useRef<HTMLDivElement>(null);
   const area = sideKm * sideKm;
 
@@ -219,6 +227,22 @@ export function SelectChrome({
                 >
                   <i />
                 </button>
+                {row.key === "buildings" && layers.buildings && (
+                  <button
+                    type="button"
+                    className={`layer-sub-toggle${betterHeights ? " on" : ""}`}
+                    aria-pressed={betterHeights}
+                    onClick={() => {
+                      setBetterHeights((on) => {
+                        const next = !on;
+                        writeStoredComBuildingHeights(window.localStorage, next);
+                        return next;
+                      });
+                    }}
+                  >
+                    {betterHeights ? "Better heights (CoM 2023) on" : "Better heights (CoM 2023)"}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -228,7 +252,7 @@ export function SelectChrome({
               : "Terrain is off, so the ground stays a flat surface. Contours inside Victoria still use Vicmap Elevation."}
           </p>
           <p className="attrib">
-            © OpenStreetMap contributors
+            {layers.buildings ? buildingDataCredit(false) : "© OpenStreetMap contributors"}
             {layers.terrain && (
               <>
                 {" · "}

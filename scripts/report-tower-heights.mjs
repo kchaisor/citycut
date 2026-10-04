@@ -1,19 +1,22 @@
 /**
- * CBD tower heights (CoM 2023 on Overture). Run: npx vite-node scripts/report-tower-heights.mjs
+ * Five CBD towers: per-tower Overture frame + CoM (same spot check as PR #37).
+ * Run: npx vite-node scripts/report-tower-heights.mjs
  */
 import {
   fetchComBuildingFootprintsWithStats,
   paddedComFetchBounds,
   tallestExtrusionHeight,
 } from "../src/lib/comBuildingHeights.ts";
-import { intersectionAreaM2 } from "../src/lib/comBuildingHeightsMatch.ts";
 import { runComBuildingHeightsInWorker } from "../src/lib/comBuildingHeightsWorkerClient.ts";
-import { openRing, squareBBox, toLocal } from "../src/lib/geo.ts";
-import { fetchOvertureBuildingsForCut } from "../src/lib/overtureBuildings.ts";
+import { openRing, toLocal } from "../src/lib/geo.ts";
+import {
+  fetchOvertureBuildingsForCut,
+  findOvertureBuildingByOsmWayId,
+  findOvertureBuildingForOsmFootprint,
+} from "../src/lib/overtureBuildings.ts";
 
-const center = { lon: 144.9631, lat: -37.8136 };
-const sideM = 1000;
-const cutBounds = squareBBox({ lon: center.lon, lat: center.lat, zoom: 15 }, sideM);
+const TOWER_SIDE_M = 400;
+const TOWER_PAD_DEG = 0.0018;
 
 const towers = [
   { name: "Rialto", osmWayId: 14665796, expect: 245.5 },
@@ -40,57 +43,39 @@ async function loadWay(id) {
   return coords;
 }
 
-function centroid(ring) {
-  const points = openRing(ring);
-  let x = 0;
-  let y = 0;
-  for (const point of points) {
-    x += point[0];
-    y += point[1];
-  }
-  return [x / points.length, y / points.length];
-}
-
-function matchOverture(seedRing, list) {
-  const seed = { ring: seedRing, holes: [] };
-  let best = null;
-  let bestArea = 0;
-  for (const building of list) {
-    const area = intersectionAreaM2(seed, building);
-    if (area > bestArea) {
-      bestArea = area;
-      best = building;
-    }
-  }
-  if (best && bestArea > 4) return best;
-  const at = centroid(seedRing);
-  let nearest = null;
-  let nearestD = 80;
-  for (const building of list) {
-    const c = centroid(building.ring);
-    const d = Math.hypot(c[0] - at[0], c[1] - at[1]);
-    if (d < nearestD) {
-      nearestD = d;
-      nearest = building;
-    }
-  }
-  return nearest;
-}
-
-const { buildings } = await fetchOvertureBuildingsForCut(cutBounds, center, sideM);
-const { footprints } = await fetchComBuildingFootprintsWithStats(paddedComFetchBounds(center, sideM), center);
-const { buildings: withCom } = await runComBuildingHeightsInWorker(buildings, footprints);
-const byId = new Map(withCom.map((building) => [building.id, building]));
-
 const rows = [];
 for (const tower of towers) {
   const coords = await loadWay(tower.osmWayId);
-  const seedRing = openRing(coords.map((c) => toLocal(c.lat, c.lon, center)));
-  const match = matchOverture(seedRing, buildings);
-  const com = match ? byId.get(match.id) ?? matchOverture(seedRing, withCom) : null;
+  const meanLat = coords.reduce((sum, c) => sum + c.lat, 0) / coords.length;
+  const meanLon = coords.reduce((sum, c) => sum + c.lon, 0) / coords.length;
+  const origin = { lon: meanLon, lat: meanLat };
+  const at = toLocal(meanLat, meanLon, origin);
+  const towerBounds = {
+    south: meanLat - TOWER_PAD_DEG,
+    north: meanLat + TOWER_PAD_DEG,
+    west: meanLon - TOWER_PAD_DEG,
+    east: meanLon + TOWER_PAD_DEG,
+  };
+  const { buildings } = await fetchOvertureBuildingsForCut(towerBounds, origin, TOWER_SIDE_M);
+  const seedRing = openRing(coords.map((c) => toLocal(c.lat, c.lon, origin)));
+  const seed = { ring: seedRing, holes: [] };
+  const bySource = findOvertureBuildingByOsmWayId(buildings, tower.osmWayId);
+  const match = bySource ?? findOvertureBuildingForOsmFootprint(buildings, seed, at);
+  const { footprints } = await fetchComBuildingFootprintsWithStats(
+    paddedComFetchBounds(origin, TOWER_SIDE_M),
+    origin,
+  );
+  const { buildings: withCom } = await runComBuildingHeightsInWorker(
+    match ? [match] : [],
+    footprints,
+  );
+  const com = withCom[0] ?? null;
   rows.push({
-    name: tower.name.replace(" Tower", "").replace(" Street", ""),
+    name: tower.name,
+    frame_m: TOWER_SIDE_M,
+    osm_way: tower.osmWayId,
     expect_m: tower.expect,
+    match: bySource ? "sources" : match ? "geometry" : "none",
     overture_m: match ? Math.round(match.height * 10) / 10 : null,
     com_m: com ? Math.round(tallestExtrusionHeight(com) * 10) / 10 : null,
   });

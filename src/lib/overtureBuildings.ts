@@ -11,12 +11,17 @@ import { PbfReader } from "pbf";
 import { PMTiles } from "pmtiles";
 import polygonClipping from "polygon-clipping";
 import { classify } from "./buildingUse";
+import { intersectionAreaM2 } from "./comBuildingHeightsMatch";
 import { clipPolygon } from "./clip";
 import { dedupeBuildings } from "./footprints";
 import { dedupeConsecutive, openRing, signedArea, toLocal } from "./geo";
 import { overtureBuildingHeight, overtureMinHeightM } from "./overtureHeight";
 import { overtureBuildingsUrl, resolveOvertureRelease } from "./overtureRelease";
+import { parseOvertureSources, pickTallestOvertureProps } from "./overtureSources";
+import { pointInPolygon } from "./useCascade";
 import type { BuildingFeat, LonLat, Pt, Ring } from "../types";
+
+export { parseOvertureSources, pickTallestOvertureProps } from "./overtureSources";
 
 export const OVERTURE_BUILDING_ZOOM = 14;
 const MIN_AREA = 4;
@@ -38,6 +43,7 @@ type Fragment = {
   holes: Ring[];
   props: Record<string, unknown>;
   microsoft: boolean;
+  osmWayIds: number[];
 };
 
 function stableNumericId(id: string): number {
@@ -63,22 +69,6 @@ function tileRange(bounds: { south: number; west: number; north: number; east: n
     for (let y = yMin; y <= yMax; y++) tiles.push({ z, x, y });
   }
   return tiles;
-}
-
-function parseSources(raw: unknown): { microsoft: boolean } {
-  if (typeof raw !== "string") return { microsoft: false };
-  try {
-    const list = JSON.parse(raw) as { provider?: string; dataset?: string }[];
-    if (!Array.isArray(list)) return { microsoft: false };
-    const microsoft = list.some(
-      (entry) =>
-        entry.provider?.toLowerCase() === "microsoft" ||
-        entry.dataset?.toLowerCase().includes("microsoft"),
-    );
-    return { microsoft };
-  } catch {
-    return { microsoft: false };
-  }
 }
 
 function ringFromGeoJson(
@@ -127,7 +117,7 @@ function fragmentsFromTile(
     if (geo.geometry.type !== "Polygon" && geo.geometry.type !== "MultiPolygon") continue;
     const polys =
       geo.geometry.type === "Polygon" ? [geo.geometry.coordinates] : geo.geometry.coordinates;
-    const sourceMeta = parseSources(props.sources);
+    const sourceMeta = parseOvertureSources(props.sources);
     const microsoft =
       sourceMeta.microsoft ||
       String(props["@geometry_source"] ?? "")
@@ -136,7 +126,14 @@ function fragmentsFromTile(
     for (const coordinates of polys) {
       const converted = ringFromGeoJson(coordinates, origin, half);
       if (!converted) continue;
-      out.push({ id, ring: converted.ring, holes: converted.holes, props, microsoft });
+      out.push({
+        id,
+        ring: converted.ring,
+        holes: converted.holes,
+        props,
+        microsoft,
+        osmWayIds: sourceMeta.osmWayIds,
+      });
     }
   }
   return out;
@@ -193,8 +190,9 @@ export function reassembleBuildingFragments(fragments: Fragment[]): Fragment[] {
   const merged: Fragment[] = [];
   for (const [id, parts] of byId) {
     let union: MultiPoly = [];
-    let props = parts[0].props;
+    const props = pickTallestOvertureProps(parts);
     let microsoft = parts.some((part) => part.microsoft);
+    const osmWayIds = [...new Set(parts.flatMap((part) => part.osmWayIds))];
     for (const part of parts) {
       union = polygonClipping.union(union, asMultiPoly(part.ring, part.holes)) as MultiPoly;
       if (part.microsoft) microsoft = true;
@@ -210,6 +208,7 @@ export function reassembleBuildingFragments(fragments: Fragment[]): Fragment[] {
       holes: primary.holes,
       props,
       microsoft,
+      osmWayIds,
     });
   }
   return merged;
@@ -231,6 +230,8 @@ function fragmentToBuilding(fragment: Fragment): BuildingFeat {
   const extrusionHeight = Math.max(1, height - minBase);
   const building: BuildingFeat = {
     id: stableNumericId(fragment.id),
+    overtureId: fragment.id,
+    osmWayIds: fragment.osmWayIds.length > 0 ? fragment.osmWayIds : undefined,
     ring: fragment.ring,
     holes: fragment.holes,
     height,
@@ -241,6 +242,34 @@ function fragmentToBuilding(fragment: Fragment): BuildingFeat {
     building.extrusionParts = [{ ring: fragment.ring, holes: fragment.holes, height: extrusionHeight, base: minBase }];
   }
   return building;
+}
+
+export function findOvertureBuildingByOsmWayId(
+  buildings: BuildingFeat[],
+  osmWayId: number,
+): BuildingFeat | undefined {
+  return buildings.find((building) => building.osmWayIds?.includes(osmWayId));
+}
+
+/** Prefer a footprint containing the tower coordinate; falls back to max intersection area. */
+export function findOvertureBuildingForOsmFootprint(
+  buildings: BuildingFeat[],
+  seed: { ring: Ring; holes: Ring[] },
+  at: Pt,
+): BuildingFeat | null {
+  for (const building of buildings) {
+    if (pointInPolygon(at, building.ring, building.holes)) return building;
+  }
+  let best: BuildingFeat | null = null;
+  let bestArea = 4;
+  for (const building of buildings) {
+    const area = intersectionAreaM2(seed, building);
+    if (area > bestArea) {
+      bestArea = area;
+      best = building;
+    }
+  }
+  return best;
 }
 
 export async function fetchOvertureBuildingsForCut(

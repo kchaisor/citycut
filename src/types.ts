@@ -55,6 +55,10 @@ export type BuildingFeat = {
   height: number;
   use: BuildingUse;
   source: TypologySource;
+  /** Overture GERS building id when the footprint comes from Overture Maps. */
+  overtureId?: string;
+  /** OSM way ids from Overture `sources` (`record_id` like w13307317). */
+  osmWayIds?: number[];
   /**
    * When Better heights (CoM) clips overlaps, 3D and Rhino extrude each part separately.
    * Site plan and exports still use {@link ring} only.
