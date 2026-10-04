@@ -44,6 +44,8 @@ export type BuildingExtrusionPart = {
   ring: Ring;
   holes: Ring[];
   height: number;
+  /** Metres above ground for the extrusion start (Overture min_height). */
+  base?: number;
 };
 
 export type BuildingFeat = {
@@ -106,7 +108,6 @@ export type TreeFeat = TreeDimensions & {
   leafType?: string;
   leafCycle?: string;
   /** Massing form chosen from the tags above. */
-  archetype?: string;
   /** Dataset that placed this tree. Older fixtures leave this unset. */
   tier?: TreeTier;
 };
@@ -184,6 +185,8 @@ export type CityModel = {
   contourLayer?: ContourLayer | null;
   /** When true, building heights came from City of Melbourne 2023 Building Footprints. */
   comBuildingHeights?: boolean;
+  /** True when Overture Microsoft ML footprints appear in the cut. */
+  hasMicrosoftFootprints?: boolean;
 };
 
 export type ViewState = {

@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { BUILDING_USE_META, SOURCE_META, buildingLayerName, uniformBuildingColor } from "./buildingUse";
 import { getColour } from "./colours";
-import { buildTreeGroup } from "./treeArchetypes";
+import { buildTreeGroup } from "./treeMassing";
 import { openRing, signedArea } from "./geo";
 import { hexRgb, overlapLift, ROAD_COLOR, ROAD_RGB, roadGradeLayer, SURFACE } from "./surfaceLayers";
 import { matteStandardMaterial } from "./matteMaterial";
@@ -321,7 +321,7 @@ function extrudeFootprint(building: BuildingFeat, base: number): THREE.BufferGeo
       : [{ ring: building.ring, holes: building.holes, height: building.height }];
   const geometries: THREE.BufferGeometry[] = [];
   for (const part of parts) {
-    const geometry = extrudePart(part.ring, part.holes, part.height, base);
+    const geometry = extrudePart(part.ring, part.holes, part.height, base + (part.base ?? 0));
     if (geometry) geometries.push(geometry);
   }
   return geometries;

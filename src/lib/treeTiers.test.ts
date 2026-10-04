@@ -24,7 +24,6 @@ function tree(at: Pt, tier: TreeFeat["tier"], id = 1): TreeFeat {
     trunk_diameter_m: 0.35,
     sizeSource: tier === "vicmap" ? "vicmap" : tier === "com" ? "com" : "default",
     tier,
-    archetype: "generic",
   };
 }
 
@@ -122,7 +121,6 @@ describe("canopy infill", () => {
       expect(inWater).toBe(false);
       expect(Math.abs(sample.at[1] + 10)).toBeGreaterThanOrEqual(reach - 0.05);
       expect(Math.hypot(sample.at[0], sample.at[1] - 28)).toBeGreaterThanOrEqual(INFILL_CLEARANCE_M - 0.05);
-      expect(sample.archetype).toBe("generic");
       expect(sample.tier).toBe("canopy");
     }
     for (let i = 0; i < filled.length; i++) {
@@ -133,14 +131,13 @@ describe("canopy infill", () => {
     }
   });
 
-  it("uses the smaller shrub archetype for scrub", () => {
+  it("uses smaller scrub massing for scrub canopy", () => {
     const filled = fillCanopy(
       [{ ring: square([0, 0], 36), holes: [], kind: "scrub" }],
       { buildings: [], water: [], roads: [], trees: [] },
       mulberry32(3),
     );
     expect(filled.length).toBeGreaterThan(4);
-    expect(filled.every((sample) => sample.archetype === "shrub")).toBe(true);
     expect(filled.every((sample) => sample.height_m < 4 && sample.crown_diameter_m <= 3)).toBe(true);
   });
 });
@@ -148,10 +145,10 @@ describe("canopy infill", () => {
 describe("tier exports", () => {
   const origin = { lon: 144.9631, lat: -37.8136 };
   const trees: TreeFeat[] = [
-    { ...tree([0, 0], "com", 1), archetype: "generic" },
-    { ...tree([12, 0], "osm", 2), archetype: "gum-open", height_m: 18, crown_diameter_m: 8, sizeSource: "species" },
-    { ...tree([24, 0], "vicmap", 3), archetype: "broadleaf-round", sizeSource: "vicmap" },
-    { ...tree([36, 0], "canopy", 4), archetype: "shrub", height_m: 2.5, crown_diameter_m: 2 },
+    tree([0, 0], "com", 1),
+    { ...tree([12, 0], "osm", 2), height_m: 18, crown_diameter_m: 8, sizeSource: "osm" },
+    { ...tree([24, 0], "vicmap", 3), sizeSource: "vicmap" },
+    { ...tree([36, 0], "canopy", 4), height_m: 2.5, crown_diameter_m: 2 },
   ];
   const model: CityModel = {
     placeLabel: "Test",
@@ -170,12 +167,7 @@ describe("tier exports", () => {
   it("instances every tier", () => {
     const group = buildCityGroup(model);
     try {
-      let count = 0;
-      group.traverse((object) => {
-        const mesh = object as import("three").InstancedMesh;
-        if (mesh.isInstancedMesh) count += mesh.count;
-      });
-      expect(count).toBe(4);
+      expect(group.getObjectByName("Trees")?.children.length).toBe(2);
     } finally {
       disposeObject(group);
     }
@@ -196,7 +188,7 @@ describe("tier exports", () => {
         const geometry = object.geometry() as unknown as { vertices: () => { count: number } };
         vertices += geometry.vertices().count;
       }
-      expect(treeObjects).toBe(4);
+      expect(treeObjects).toBe(2);
       const one = await cityModelTo3dm({ ...model, trees: [trees[0]] });
       const oneDoc = rhino.File3dm.fromByteArray(one);
       try {

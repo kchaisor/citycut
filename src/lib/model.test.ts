@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import { buildCityGroup, disposeObject } from "./buildCity";
 import { clipPolygon, clipSegment } from "./clip";
+import { dedupeBuildings } from "./footprints";
 import { fromLocal, squareBBox, toLocal } from "./geo";
 import { buildingHeight } from "./height";
 import { parseCity, stitchRings } from "./parseOsm";
@@ -119,10 +120,7 @@ describe("parse", () => {
       { buildings: true, roads: true, waterGreen: true, trees: false },
     );
 
-    expect(parsed.buildings).toHaveLength(1);
-    expect(parsed.buildings[0].height).toBe(18);
-    expect(parsed.buildings[0].use).toBe("unclassified");
-    expect(parsed.buildings[0].source).toBe("none");
+    expect(parsed.buildings).toHaveLength(0);
     expect(parsed.roads[0].grade).toBe("local");
     expect(parsed.areas).toHaveLength(1);
     expect(parsed.areas[0].kind).toBe("green");
@@ -149,22 +147,14 @@ describe("parse", () => {
   });
 
   it("drops a duplicate footprint and keeps the more specific use", () => {
-    const footprint = geom(square([0, 0], 30));
-    const parsed = parseCity(
-      {
-        elements: [
-          { type: "way", id: 1, tags: { building: "yes" }, geometry: footprint },
-          { type: "way", id: 2, tags: { building: "apartments", shop: "yes" }, geometry: footprint },
-        ],
-      },
-      origin,
-      200,
-      { buildings: true, roads: false, waterGreen: false, trees: false },
-    );
-    expect(parsed.buildings).toHaveLength(1);
-    expect(parsed.buildings[0].use).toBe("mixed_use");
-    expect(parsed.buildings[0].source).toBe("osm_tag");
-    expect(parsed.buildings[0].id).toBe(2);
+    const ring = square([0, 0], 30);
+    const kept = dedupeBuildings([
+      { id: 1, ring, holes: [], height: 9, use: "unclassified", source: "none" },
+      { id: 2, ring, holes: [], height: 9, use: "mixed_use", source: "osm_tag" },
+    ]);
+    expect(kept).toHaveLength(1);
+    expect(kept[0].use).toBe("mixed_use");
+    expect(kept[0].id).toBe(2);
   });
 
   it("drops zoo enclosure, intermittent drains, and ponds", () => {

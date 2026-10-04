@@ -9,6 +9,7 @@ import { readDrawingStyle } from "./drawingStyle";
 import { figureGround, figureGroundDatum } from "./figureGround";
 import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { buildHeliodonGroundOverlay, type HeliodonGroundExportOptions } from "./heliodonDiagram";
+import { buildingDataCredit } from "./buildingAttribution";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { contourIsIndex, demContourLayer } from "./vicmapContours";
 import type { CityModel, Pt } from "../types";
@@ -423,7 +424,10 @@ export async function cityModelTo3dm(
     doc.applicationUrl = "https://kchaisor.github.io/citycut-export/";
     doc.applicationDetails = `${model.placeLabel}; ${crs.name}`;
     const comCredit = comBuildingHeightCreditLine(model);
-    doc.startSectionComments = [`CityCut. ${crs.name}. Metres, Z-up. ${CRS_NOTE}`, comCredit]
+    const buildingCredit = model.layers.buildings
+      ? buildingDataCredit(Boolean(model.hasMicrosoftFootprints))
+      : null;
+    doc.startSectionComments = [`CityCut. ${crs.name}. Metres, Z-up. ${CRS_NOTE}`, buildingCredit, comCredit]
       .filter(Boolean)
       .join(" ");
     doc.settings().modelUnitSystem = rhino.UnitSystem.Meters;

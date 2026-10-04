@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Box, Layers, Scaling, Search } from "lucide-react";
+import { Layers, Search } from "lucide-react";
 import { MAX_SIDE_KM, MIN_SIDE_KM } from "../content/constants";
 import { formatKmSide } from "../lib/geo";
 import { searchPlaces } from "../lib/nominatim";
@@ -22,18 +22,14 @@ const ROWS: { key: keyof UiLayers; label: string; soon?: boolean; hint?: string 
 
 const TITLES: Record<string, string> = {
   search: "Search",
-  area: "Area size",
-  layers: "Include in the model",
-  create: "Create model",
+  layers: "Layers",
 };
 
 const iconProps = { size: 18, strokeWidth: 1.75, "aria-hidden": true as const };
 
 const RAIL: RailItem[] = [
   { id: "search", label: "Search", icon: <Search {...iconProps} /> },
-  { id: "area", label: "Area size", icon: <Scaling {...iconProps} /> },
   { id: "layers", label: "Layers", icon: <Layers {...iconProps} /> },
-  { id: "create", label: "Create model", icon: <Box {...iconProps} /> },
 ];
 
 export function SelectChrome({
@@ -69,7 +65,7 @@ export function SelectChrome({
   const area = sideKm * sideKm;
 
   useEffect(() => {
-    if (error) setOpen("create");
+    if (error) setOpen("layers");
   }, [error]);
 
   useEffect(() => {
@@ -176,7 +172,7 @@ export function SelectChrome({
           </div>
         </div>
 
-        <div className="drawer-section" hidden={open !== "area"}>
+        <div className="drawer-section" hidden={open !== "layers"}>
           <div className="field">
             <div className="field-head">
               <label htmlFor={sliderId}>Area size</label>
@@ -200,9 +196,11 @@ export function SelectChrome({
             />
             <p className="field-note">{area.toFixed(2)} km² · square frame, max about 2 km²</p>
           </div>
-        </div>
-
-        <div className="drawer-section" hidden={open !== "layers"}>
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
           <ul className="layers">
             {ROWS.map((row, index) => (
               <li key={row.key}>
@@ -238,18 +236,6 @@ export function SelectChrome({
               </>
             )}
           </p>
-        </div>
-
-        <div className="drawer-section" hidden={open !== "create"}>
-          {error && (
-            <p className="error" role="alert">
-              {error}
-            </p>
-          )}
-          <button className="primary" type="button" data-autofocus="true" disabled={loading} onClick={onCreate}>
-            {loading ? "Reading the map…" : "Create model"}
-          </button>
-          <p className="hint">Pan and zoom until the block you want sits inside the frame.</p>
         </div>
       </Drawer>
       <button className="primary create-fab" type="button" disabled={loading} onClick={onCreate}>

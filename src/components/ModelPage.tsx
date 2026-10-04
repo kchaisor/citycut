@@ -54,6 +54,7 @@ import {
 } from "../lib/viewMemory";
 import { treeSizeSummary, treeTierCounts } from "../lib/trees";
 import { contourDrawerLabel } from "../lib/vicmapContours";
+import { buildingDataCredit } from "../lib/buildingAttribution";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import type { CityModel } from "../types";
 import { ColoursEditor } from "./Colours";
@@ -873,6 +874,7 @@ export function ModelPage({ model }: { model: CityModel }) {
               <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.
             </>
           )}
+          {model.layers.buildings && <> {buildingDataCredit(Boolean(model.hasMicrosoftFootprints))}.</>}
           {betterHeights && (
             <>
               {" "}

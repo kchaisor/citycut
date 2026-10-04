@@ -1,5 +1,4 @@
 import { toLocal } from "./geo";
-import { resolveArchetype } from "./treeMap";
 import { ageFactor, logDroppedTreeValues, treeSize, type ComMeasure } from "./trees";
 import type { LonLat, TreeFeat } from "../types";
 
@@ -109,7 +108,7 @@ export async function fetchComTrees(bounds: BBox, signal?: AbortSignal): Promise
 /**
  * Inventory rows become trees. The dataset is the City of Melbourne urban forest,
  * so a record is already inside that boundary. Crown and height are not published;
- * species, DBH, and age size the archetype.
+ * species, DBH, and age size the tree.
  */
 export function comRecordsToTrees(records: ComTree[], origin: LonLat, half: number): TreeFeat[] {
   const trees: TreeFeat[] = [];
@@ -119,7 +118,6 @@ export function comRecordsToTrees(records: ComTree[], origin: LonLat, half: numb
     if (Math.abs(at[0]) > half + 0.2 || Math.abs(at[1]) > half + 0.2) return;
     const genus = record.genus ?? undefined;
     const species = record.scientific ?? undefined;
-    const archetype = resolveArchetype({ genus, species });
     const sized = treeSize(
       {
         ...(genus ? { genus } : {}),
@@ -132,7 +130,6 @@ export function comRecordsToTrees(records: ComTree[], origin: LonLat, half: numb
       at,
       ...sized,
       tier: "com",
-      archetype,
       ...(genus ? { genus } : {}),
       ...(species ? { species } : {}),
     });
@@ -209,16 +206,11 @@ export function applyComTreeSizes(trees: TreeFeat[], records: ComTree[], origin:
     if (usedTrees.has(pair.treeIndex) || usedRecords.has(pair.recordIndex)) continue;
     const tree = next[pair.treeIndex];
     const record = located[pair.recordIndex];
-    let archetype = tree.archetype;
     let genus = tree.genus;
     let species = tree.species;
-    if ((!archetype || archetype === "generic") && (record.scientific || record.genus)) {
-      archetype = resolveArchetype({
-        genus: record.genus ?? undefined,
-        species: record.scientific ?? undefined,
-      });
-      genus = genus ?? record.genus ?? undefined;
-      species = species ?? record.scientific ?? undefined;
+    if ((record.scientific || record.genus) && !genus && !species) {
+      genus = record.genus ?? undefined;
+      species = record.scientific ?? undefined;
     }
     const sized = treeSize(
       {
@@ -236,7 +228,6 @@ export function applyComTreeSizes(trees: TreeFeat[], records: ComTree[], origin:
     next[pair.treeIndex] = {
       ...tree,
       ...sized,
-      ...(archetype ? { archetype } : {}),
       ...(genus ? { genus } : {}),
       ...(species ? { species } : {}),
     };

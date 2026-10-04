@@ -44,10 +44,6 @@ export function overpassBBox(bounds: {
 
 export function buildOverpassQuery(bbox: string, layers: ModelLayers): string {
   const parts: string[] = [];
-  if (layers.buildings || layers.trees) {
-    parts.push(`way["building"]["building"!="no"]${bbox};`);
-    parts.push(`relation["building"]["building"!="no"]${bbox};`);
-  }
   if (layers.roads || layers.trees) {
     parts.push(`way["highway"]${bbox};`);
     parts.push(`way["railway"~"^(rail|light_rail|tram|subway|narrow_gauge)$"]${bbox};`);
@@ -86,7 +82,7 @@ export function buildOverpassQuery(bbox: string, layers: ModelLayers): string {
     parts.push(`relation["natural"~"^(wood|wetland)$"]${bbox};`);
   }
   if (parts.length === 0) {
-    throw new OverpassError("Turn on Buildings, Roads and rail, Water and green, or Trees.");
+    throw new OverpassError("Turn on Roads and rail, Water and green, or Trees.");
   }
   return `[out:json][timeout:60][maxsize:32000000];(${parts.join("")});out geom;`;
 }

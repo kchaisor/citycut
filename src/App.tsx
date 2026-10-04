@@ -28,6 +28,8 @@ import { MAX_TREE_INSTANCES, assembleTreeTiers } from "./lib/treeTiers";
 import { replaceTreeNote, treeTierCounts } from "./lib/trees";
 import { fetchVicmapTrees, vicmapPointsToTrees, VICMAP_ATTRIBUTION } from "./lib/vicmapTrees";
 import { loadContoursForCut } from "./lib/vicmapContours";
+import { buildingDataCredit } from "./lib/buildingAttribution";
+import { fetchOvertureBuildingsForCut } from "./lib/overtureBuildings";
 import { assignExternalUses, loadUseTiers } from "./lib/useCascade";
 import type { Basemap, CityModel, LonLat, PlaceHit, UiLayers, UseTierFailure, ViewState } from "./types";
 
@@ -224,9 +226,9 @@ export default function App() {
       waterGreen: layers.waterGreen,
       trees: layers.trees,
     };
-    const wantsOsm =
-      modelLayers.buildings || modelLayers.roads || modelLayers.waterGreen || modelLayers.trees;
-    if (!wantsOsm && !layers.terrain && !layers.contours) {
+    const wantsOsm = modelLayers.roads || modelLayers.waterGreen || modelLayers.trees;
+    const wantsOverture = modelLayers.buildings || modelLayers.trees;
+    if (!wantsOsm && !wantsOverture && !layers.terrain && !layers.contours) {
       setError("Turn on Buildings, Roads and rail, Water and green, Trees, Terrain, or Contours.");
       return;
     }
@@ -263,8 +265,25 @@ export default function App() {
         : Promise.resolve({ field: null, error: null as string | null });
       const bounds = squareBBox(view, sideM);
       const osmTask = wantsOsm
-        ? fetchOverpass(buildOverpassQuery(overpassBBox(bounds), modelLayers), controller.signal)
+        ? fetchOverpass(
+            buildOverpassQuery(overpassBBox(bounds), { ...modelLayers, buildings: false }),
+            controller.signal,
+          )
         : Promise.resolve({ elements: [] });
+      const overtureTask = wantsOverture
+        ? fetchOvertureBuildingsForCut(bounds, center, sideM, controller.signal)
+        : Promise.resolve({
+            buildings: [],
+            buildingCapHit: false,
+            stats: {
+              release: "",
+              tileCount: 0,
+              fetchMs: 0,
+              fragmentCount: 0,
+              buildingCount: 0,
+              hasMicrosoftFootprints: false,
+            },
+          });
       const useTierTask = modelLayers.buildings
         ? loadUseTiers(bounds, center, { signal: controller.signal }).catch((err: unknown) => {
             if (controller.signal.aborted) throw err;
@@ -330,25 +349,33 @@ export default function App() {
               });
           })()
         : Promise.resolve({ points: [], error: null as string | null });
-      const [data, terrainResult, comResult, vicmapResult, useTiers, contourLayer] = await Promise.all([
-        osmTask,
-        terrainTask,
-        comTask,
-        vicmapTask,
-        useTierTask,
-        contourTask,
-      ]);
+      const [data, terrainResult, comResult, vicmapResult, useTiers, contourLayer, overtureResult] =
+        await Promise.all([
+          osmTask,
+          terrainTask,
+          comTask,
+          vicmapTask,
+          useTierTask,
+          contourTask,
+          overtureTask,
+        ]);
       const parsed = parseCity(data, center, sideM, modelLayers);
+      const overtureBuildings = overtureResult.buildings;
       const buildings = modelLayers.buildings
-        ? assignExternalUses(parsed.buildings, useTiers.zones)
-        : parsed.buildings;
+        ? assignExternalUses(overtureBuildings, useTiers.zones)
+        : [];
       const half = sideM / 2;
+      const treeContext = collectTreeContext(data.elements, center, half);
       const assembled = modelLayers.trees
         ? assembleTreeTiers({
             com: comRecordsToTrees(comResult.rows, center, half),
             osm: parsed.trees,
             vicmap: vicmapPointsToTrees(vicmapResult.points, center, half),
-            ...collectTreeContext(data.elements, center, half),
+            ...treeContext,
+            buildings: overtureBuildings.map((building) => ({
+              ring: building.ring,
+              holes: building.holes,
+            })),
           })
         : null;
       const trees = assembled ? assembled.trees : parsed.trees;
@@ -356,6 +383,11 @@ export default function App() {
       let sourceNote = terrainResult.field
         ? parsed.sourceNote.replace(FLAT_GROUND_NOTE, terrainNote(terrainResult.field, contourLayer?.source === "dem"))
         : parsed.sourceNote;
+      if (modelLayers.buildings) {
+        sourceNote = `${sourceNote} Buildings from Overture Maps (${overtureResult.stats.release}, z14). Height uses Overture height, then num_floors × 3 m, otherwise 9 m. Use follows Overture class, then Vicmap planning zones. ${buildingDataCredit(overtureResult.stats.hasMicrosoftFootprints)}.`;
+      }
+      const buildingCapHit = parsed.buildingCapHit || overtureResult.buildingCapHit;
+      if (buildingCapHit) sourceNote = `${sourceNote} Building count was capped at 4000.`;
       if (contourLayer && contourLayer.source !== "dem") {
         sourceNote = `${sourceNote} Contours are ${contourLayer.label}, every ${contourLayer.interval} m. ${contourLayer.attribution}`;
       }
@@ -375,6 +407,7 @@ export default function App() {
         ...parsed,
         buildings,
         trees,
+        buildingCapHit,
         treeCapHit: assembled?.capHit ?? false,
         placeLabel: label,
         sourceNote,
@@ -383,6 +416,7 @@ export default function App() {
         useTierFailures: useTiers.failures,
         contours,
         contourLayer,
+        hasMicrosoftFootprints: overtureResult.stats.hasMicrosoftFootprints,
       });
       setPhase("model");
     } catch (err) {
