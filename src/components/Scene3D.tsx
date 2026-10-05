@@ -6,6 +6,7 @@ import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
+import { arterialRoadTerrainMetrics } from "../lib/roadTerrainMetrics";
 import { shotFromCamera, type CameraShot } from "../lib/cameraShot";
 import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
@@ -160,6 +161,20 @@ function City({
     applySunStudySurfaceTint(group, solarDiagramOn);
     applyBuildingSolarNeutral(group, solarDiagramOn, solarNeutralFill);
   }, [group, solarDiagramOn, solarNeutralFill, colourTick]);
+  useLayoutEffect(() => {
+    if (!import.meta.env.DEV || !model.terrain) return;
+    const terrainMesh = group.getObjectByName("Terrain") as THREE.Mesh | null;
+    if (!terrainMesh) return;
+    const raycaster = new THREE.Raycaster();
+    const win = window as unknown as {
+      __citycutRoadMetrics?: () => ReturnType<typeof arterialRoadTerrainMetrics>;
+    };
+    win.__citycutRoadMetrics = () =>
+      arterialRoadTerrainMetrics(group, model.terrain!, model.sideM, raycaster, terrainMesh);
+    return () => {
+      delete win.__citycutRoadMetrics;
+    };
+  }, [group, model.terrain, model.sideM]);
   useLayoutEffect(() => () => disposeObject(group), [group]);
   return <primitive object={group} />;
 }

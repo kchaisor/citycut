@@ -8,6 +8,46 @@ export const BRIDGE_DECK_CLEARANCE_M = 4.5;
 /** Max triangle count while densifying a draped fill (roads/path/rail). */
 export const ROAD_DRAPE_TRIANGLE_BUDGET = 48_000;
 
+/** Max ground-height change along a draped road edge (m/m). Limits embankment/DEM step spikes. */
+export const ROAD_DRAPE_MAX_SLOPE = 0.42;
+
+/** Max vertical move from the sampled terrain height at a draped vertex. */
+export const ROAD_DRAPE_MAX_DEVIATION_M = 12;
+
+export type GroundPoint = { east: number; north: number; ground: number; initial: number };
+
+function clampGround(point: GroundPoint): void {
+  const lo = point.initial - ROAD_DRAPE_MAX_DEVIATION_M;
+  const hi = point.initial + ROAD_DRAPE_MAX_DEVIATION_M;
+  if (point.ground < lo) point.ground = lo;
+  else if (point.ground > hi) point.ground = hi;
+}
+
+/** Relax ground heights along draped edges so triangles stay shallow on steep DEM steps. */
+export function smoothRoadGroundHeights(points: Map<string, GroundPoint>, edges: Array<[string, string]>): void {
+  for (let pass = 0; pass < 10; pass++) {
+    let moved = false;
+    for (const [ka, kb] of edges) {
+      const a = points.get(ka);
+      const b = points.get(kb);
+      if (!a || !b) continue;
+      const span = distance([a.east, a.north], [b.east, b.north]);
+      if (span < 1e-3) continue;
+      const limit = ROAD_DRAPE_MAX_SLOPE * span;
+      const delta = b.ground - a.ground;
+      if (Math.abs(delta) <= limit) continue;
+      const adjust = ((Math.abs(delta) - limit) * 0.5 * Math.sign(delta));
+      a.ground -= adjust;
+      b.ground += adjust;
+      clampGround(a);
+      clampGround(b);
+      moved = true;
+    }
+    if (!moved) break;
+  }
+  for (const point of points.values()) clampGround(point);
+}
+
 export function distance(a: Pt, b: Pt): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1]);
 }

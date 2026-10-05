@@ -336,6 +336,32 @@ export function sampleTerrain(field: TerrainField, east: number, north: number, 
 }
 
 /**
+ * Height on the rendered terrain mesh (grid nodes, SW–NE diagonal split).
+ * Differs from {@link sampleTerrain} bilinear inside each cell; roads must use this to match the mesh.
+ */
+export function terrainMeshHeightAt(field: TerrainField, east: number, north: number, sideM: number): number {
+  const half = sideM / 2;
+  const col = Math.min(field.cols - 1.001, Math.max(0, (east + half) / field.spacingM));
+  const row = Math.min(field.rows - 1.001, Math.max(0, (north + half) / field.spacingM));
+  const c0 = Math.min(field.cols - 2, Math.floor(col));
+  const r0 = Math.min(field.rows - 2, Math.floor(row));
+  const tx = col - c0;
+  const ty = row - r0;
+  const at = (c: number, r: number) => field.heights[r * field.cols + c];
+  const hsw = at(c0, r0);
+  const hse = at(c0 + 1, r0);
+  const hnw = at(c0, r0 + 1);
+  const hne = at(c0 + 1, r0 + 1);
+  if (tx + ty <= 1) {
+    return hsw + tx * (hse - hsw) + ty * (hne - hsw);
+  }
+  const wNe = tx + ty - 1;
+  const wSw = 1 - ty;
+  const wNw = 1 - tx;
+  return wSw * hsw + wNw * hnw + wNe * hne;
+}
+
+/**
  * Base elevation for an extruded footprint: the lowest sample on the outer
  * ring. The whole solid starts there, so a corner cannot float. The uphill
  * side may meet the terrain part-way up the wall.
