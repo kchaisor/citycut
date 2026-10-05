@@ -528,6 +528,51 @@ function OrthoClip({
   return null;
 }
 
+/** Dev-only: Playwright can read/write the perspective camera for reproducible screenshots. */
+function DevCameraApi({
+  camera,
+  controlsRef,
+  active,
+}: {
+  camera: THREE.PerspectiveCamera;
+  controlsRef: RefObject<OrbitControlsImpl | null>;
+  active: boolean;
+}) {
+  useLayoutEffect(() => {
+    if (!import.meta.env.DEV || !active) return;
+    type Pose = { position: [number, number, number]; target: [number, number, number]; near?: number; far?: number };
+    const win = window as unknown as {
+      citycutCamera?: { get: () => Pose; set: (pose: Pose) => void };
+    };
+    win.citycutCamera = {
+      get: () => {
+        const controls = controlsRef.current;
+        return {
+          position: [camera.position.x, camera.position.y, camera.position.z],
+          target: controls ? [controls.target.x, controls.target.y, controls.target.z] : [0, 0, 0],
+          near: camera.near,
+          far: camera.far,
+        };
+      },
+      set: (pose) => {
+        const controls = controlsRef.current;
+        if (!controls) return;
+        controls.target.set(pose.target[0], pose.target[1], pose.target[2]);
+        camera.position.set(pose.position[0], pose.position[1], pose.position[2]);
+        if (pose.near != null) camera.near = pose.near;
+        if (pose.far != null) camera.far = pose.far;
+        camera.updateProjectionMatrix();
+        camera.lookAt(controls.target);
+        controls.update();
+      },
+    };
+    return () => {
+      delete win.citycutCamera;
+    };
+  }, [active, camera, controlsRef]);
+  return null;
+}
+
 function CameraReadout({
   projection,
   persp,
@@ -736,6 +781,7 @@ function Cameras({
               touchedRef.current = true;
             }}
           />
+          <DevCameraApi camera={persp} controlsRef={perspControls} active={!orthoView} />
           <CameraReadout
             projection={projection}
             persp={persp}
