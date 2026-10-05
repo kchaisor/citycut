@@ -8,8 +8,9 @@ import { openRing, signedArea } from "./geo";
 import { carriagewaysOf, unionCarriageways, unionPathRoads } from "./roadFill";
 import { hexRgb, overlapLift, ROAD_COLOR, ROAD_RGB, roadGradeLayer, SURFACE } from "./surfaceLayers";
 import { matteStandardMaterial } from "./matteMaterial";
-import { footprintBase, sampleTerrain, terrainBuffers } from "./terrain";
-import type { AreaFeat, BuildingFeat, BuildingUse, CityModel, Pt, Ring, RoadGrade, TerrainField } from "../types";
+import { constrainTrisToTerrainGrid, deckHeightAt, type Tri } from "./roadDrape";
+import { footprintBase, sampleTerrain, terrainBuffers, terrainMeshHeightAt } from "./terrain";
+import type { AreaFeat, BuildingFeat, BuildingUse, CityModel, Pt, Ring, RoadFeat, RoadGrade, TerrainField } from "../types";
 
 export type CityBuildOptions = {
   /** Viewport only. Exports keep one material, and one Rhino sublayer, per use. */
@@ -76,8 +77,6 @@ function mergeMeshes(
     return group;
   }
 }
-
-type Tri = [Pt, Pt, Pt];
 
 function distance(a: Pt, b: Pt): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -174,11 +173,126 @@ function roadFillGeometry(
   lift: number,
   sample: ((east: number, north: number) => number) | null,
   spacing: number | undefined,
+  field?: TerrainField | null,
+  sideM?: number,
 ): THREE.BufferGeometry | null {
   if (multi.length === 0) return null;
   const heightAt = sample ?? (() => 0);
+  if (field && sideM != null) {
+    return drapedRoadFillGeometry(multi, heightAt, lift, field, sideM);
+  }
   const step = spacing ?? 12;
   return drapedMultiPolygonGeometry(multi, heightAt, lift, step);
+}
+
+/** Unioned road fill split onto the same triangles the terrain mesh renders. */
+export function drapedRoadFillGeometry(
+  multi: MultiPolygon,
+  sample: (east: number, north: number) => number,
+  offset: number,
+  field: TerrainField,
+  sideM: number,
+): THREE.BufferGeometry | null {
+  const parts: THREE.BufferGeometry[] = [];
+  for (const polygon of multi) {
+    if (polygon.length === 0) continue;
+    const area: AreaFeat = {
+      id: -1,
+      kind: "green",
+      ring: polygon[0] as Ring,
+      holes: polygon.slice(1) as Ring[],
+    };
+    const geometry = drapedRoadAreaGeometry(area, sample, offset, field, sideM);
+    if (geometry) parts.push(geometry);
+  }
+  if (parts.length === 0) return null;
+  const merged = mergeGeometries(parts, false);
+  parts.forEach((geometry) => geometry.dispose());
+  merged?.computeVertexNormals();
+  return merged;
+}
+
+function drapedRoadAreaGeometry(
+  area: AreaFeat,
+  sample: (east: number, north: number) => number,
+  offset: number,
+  field: TerrainField,
+  sideM: number,
+): THREE.BufferGeometry | null {
+  const shape = shapeFromRing(area.ring, area.holes);
+  if (!shape) return null;
+  let flat: THREE.BufferGeometry;
+  try {
+    flat = new THREE.ShapeGeometry(shape);
+  } catch {
+    return null;
+  }
+  const constrained = constrainTrisToTerrainGrid(trianglesFromShape(flat), field, sideM);
+  flat.dispose();
+  const positions: number[] = [];
+  for (const [a, b, c] of constrained) {
+    const span = distance(a, b) + distance(b, c) + distance(c, a);
+    if (span < 0.05) continue;
+    for (const point of [a, b, c]) {
+      positions.push(point[0], sample(point[0], point[1]) + offset, -point[1]);
+    }
+  }
+  if (positions.length === 0) return null;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+/** One bridge span: planar ramp between abutments, clearance tapering to the ground. */
+export function deckSpanGeometry(
+  line: Pt[],
+  width: number,
+  sample: (east: number, north: number) => number,
+  lift: number,
+  sideM: number,
+): THREE.BufferGeometry | null {
+  const fill = unionCarriageways([{ line, width }], sideM);
+  if (fill.polygons.length === 0) return null;
+  const heightAt = (east: number, north: number) => deckHeightAt(line, sample, east, north) + lift;
+  return drapedMultiPolygonGeometry(fill.polygons, heightAt, 0, Math.min(8, Math.max(4, width)));
+}
+
+function addRoadMesh(
+  group: THREE.Group,
+  geometry: THREE.BufferGeometry,
+  material: THREE.Material,
+  layer: { renderOrder: number },
+  grade: RoadGrade,
+  deck: boolean,
+) {
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = "Roads";
+  mesh.userData.layerColor = ROAD_RGB.arterial;
+  mesh.userData.objectColor = ROAD_RGB[grade];
+  mesh.userData.deck = deck;
+  order(mesh, deck ? layer.renderOrder + 0.1 : layer.renderOrder);
+  group.add(mesh);
+}
+
+function addDeckSpans(
+  group: THREE.Group,
+  roads: RoadFeat[],
+  sample: (east: number, north: number) => number,
+  lift: number,
+  sideM: number,
+  material: THREE.Material,
+  layer: { renderOrder: number },
+  grade: RoadGrade,
+) {
+  for (const road of roads) {
+    try {
+      const geometry = deckSpanGeometry(road.line, road.width, sample, lift, sideM);
+      if (geometry) addRoadMesh(group, geometry, material, layer, grade, true);
+    } catch {
+      /* Skip a broken deck rather than failing the whole block. */
+    }
+  }
 }
 
 /** Parks and water keep their outline and pick up interior samples so they follow the heightfield. */
@@ -336,6 +450,12 @@ function elevationAt(model: CityModel): ((east: number, north: number) => number
   return (east, north) => sampleTerrain(field, east, north, model.sideM);
 }
 
+function roadGroundAt(model: CityModel): ((east: number, north: number) => number) | null {
+  const field = model.terrain;
+  if (!field) return null;
+  return (east, north) => terrainMeshHeightAt(field, east, north, model.sideM);
+}
+
 export function buildCityGroup(model: CityModel, options: CityBuildOptions = {}): THREE.Group {
   const group = new THREE.Group();
   group.name = "CityCut";
@@ -420,42 +540,85 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
 
   const railMat = paint(matteStandardMaterial({ color: getColour("--rail-fill") }), SURFACE.rail);
   const drapeSpacing = model.terrain ? Math.min(model.terrain.spacingM, 8) : undefined;
+  const roadGround = roadGroundAt(model) ?? sample;
   const grades: RoadGrade[] = ["path", "local", "arterial"];
   for (const grade of grades) {
     const layer = roadGradeLayer(grade);
+    const gradeRoads = model.roads.filter(
+      (road) => road.kind === "road" && (road.grade ?? "local") === grade,
+    );
+    const groundRoads = gradeRoads.filter((road) => !road.deck);
+    const deckRoads = gradeRoads.filter((road) => road.deck);
     const fill =
       grade === "path"
         ? unionPathRoads(
-            model.roads
-              .filter((road) => road.kind === "road" && road.grade === "path")
-              .map((road) => ({ line: road.line, width: road.width })),
+            groundRoads.map((road) => ({ line: road.line, width: road.width })),
             model.sideM,
           )
-        : unionCarriageways(
-            carriagewaysOf(model.roads.filter((road) => (road.grade ?? "local") === grade)),
-            model.sideM,
-          );
-    const geometry = roadFillGeometry(fill.polygons, layer.lift, sample, drapeSpacing);
-    if (!geometry) continue;
+        : unionCarriageways(carriagewaysOf(groundRoads), model.sideM);
     const material = paint(matteStandardMaterial({ color: ROAD_COLOR[grade] }), layer);
     material.name = "Roads";
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.name = "Roads";
-    mesh.userData.layerColor = ROAD_RGB.arterial;
-    mesh.userData.objectColor = ROAD_RGB[grade];
-    order(mesh, layer.renderOrder);
-    group.add(mesh);
+    const geometry = roadFillGeometry(
+      fill.polygons,
+      layer.lift,
+      roadGround,
+      drapeSpacing,
+      model.terrain,
+      model.sideM,
+    );
+    if (geometry) addRoadMesh(group, geometry, material, layer, grade, false);
+    addDeckSpans(
+      group,
+      deckRoads,
+      roadGround ?? (() => 0),
+      layer.lift,
+      model.sideM,
+      material,
+      layer,
+      grade,
+    );
   }
+  const groundRail = model.roads.filter((road) => road.kind === "rail" && !road.deck);
+  const deckRail = model.roads.filter((road) => road.kind === "rail" && road.deck);
   const railFill = unionCarriageways(
-    model.roads.filter((road) => road.kind === "rail").map((road) => ({ line: road.line, width: road.width })),
+    groundRail.map((road) => ({ line: road.line, width: road.width })),
     model.sideM,
   );
-  const railGeo = roadFillGeometry(railFill.polygons, SURFACE.rail.lift, sample, drapeSpacing);
+  const railGeo = roadFillGeometry(
+    railFill.polygons,
+    SURFACE.rail.lift,
+    roadGround,
+    drapeSpacing,
+    model.terrain,
+    model.sideM,
+  );
   if (railGeo) {
     const mesh = new THREE.Mesh(railGeo, railMat);
     mesh.name = "Rail";
     order(mesh, SURFACE.rail.renderOrder);
     group.add(mesh);
+  }
+  if (deckRail.length > 0) {
+    const railSample = roadGround ?? (() => 0);
+    for (const road of deckRail) {
+      try {
+        const geometry = deckSpanGeometry(
+          road.line,
+          road.width,
+          railSample,
+          SURFACE.rail.lift,
+          model.sideM,
+        );
+        if (!geometry) continue;
+        const mesh = new THREE.Mesh(geometry, railMat);
+        mesh.name = "Rail";
+        mesh.userData.deck = true;
+        order(mesh, SURFACE.rail.renderOrder + 0.1);
+        group.add(mesh);
+      } catch {
+        /* Skip a broken rail deck rather than failing the whole block. */
+      }
+    }
   }
 
   const bySource = Boolean(options.colourBySource) && !options.splitBuildings;
