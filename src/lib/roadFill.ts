@@ -479,6 +479,11 @@ export function unionCarriageways(roads: { line: Pt[]; width: number }[], sideM:
   return unionStrips(roads, sideM, 0.4);
 }
 
+/** Buffer each path by its stored width and union the strips (3D and exports match the site plan). */
+export function unionPathRoads(roads: { line: Pt[]; width: number }[], sideM: number): RoadFill {
+  return unionStrips(roads, sideM, 0);
+}
+
 export function carriagewaysOf(roads: RoadFeat[]): { line: Pt[]; width: number }[] {
   return roads
     .filter((road) => road.kind !== "rail" && road.grade !== "path")

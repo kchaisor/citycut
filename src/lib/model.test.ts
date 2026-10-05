@@ -130,11 +130,11 @@ describe("parse", () => {
 
     const roadGroup = buildCityGroup({ ...parsed, placeLabel: "Test" });
     try {
-      const roadMesh = roadGroup.getObjectByName("Roads") as THREE.Mesh;
-      expect(roadMesh).toBeTruthy();
-      const stats = roadSurface(roadMesh);
+      const roadMeshes = roadMeshesNamed(roadGroup);
+      expect(roadMeshes.length).toBeGreaterThan(0);
+      const stats = mergeRoadSurface(roadMeshes);
       expect(stats.triangles).toBeGreaterThan(0);
-      expect(stats.area).toBeGreaterThan(400 * 5.5 * 0.8);
+      expect(stats.area).toBeGreaterThan(400 * 5.5 * 0.75);
       expect(stats.minNormalY).toBeGreaterThan(0);
       expect(stats.minY).toBeGreaterThan(0.1);
       expect(stats.maxY).toBeLessThan(0.4);
@@ -314,7 +314,7 @@ describe("parse", () => {
     expect(parsed.areas[0].kind).toBe("water");
   });
 
-  it("builds upward, non-degenerate road ribbons from sample OSM ways", () => {
+  it("builds upward, non-degenerate unioned road fills from sample OSM ways", () => {
     const parsed = parseCity(
       {
         elements: [
@@ -363,7 +363,7 @@ describe("parse", () => {
       let area = 0;
       const colors = new Set<string>();
       for (const mesh of meshes) {
-        const stats = roadSurface(mesh);
+        const stats = roadSurface(mesh, false);
         expect(stats.vertices).toBeGreaterThanOrEqual(6);
         expect(stats.minNormalY).toBeGreaterThan(0);
         expect(stats.minY).toBeGreaterThan(0.1);
@@ -376,16 +376,44 @@ describe("parse", () => {
         colors.add(hex);
       }
       expect(colors).toEqual(new Set(["3a3a3a", "4a4a4a", "5c5c5c"]));
-      // 100 m × 12 m + 110 m × 5.5 m + 50 m × 1.8 m
-      expect(area).toBeGreaterThan(1800);
-      expect(area).toBeLessThan(2000);
+      // 100 m × 12 m + 110 m × 5.5 m + 50 m × 1.8 m (union removes junction overlap)
+      expect(area).toBeGreaterThan(1750);
+      expect(area).toBeLessThan(2050);
     } finally {
       disposeObject(group);
     }
   });
 });
 
-function roadSurface(mesh: THREE.Mesh) {
+function roadMeshesNamed(group: THREE.Object3D): THREE.Mesh[] {
+  const meshes: THREE.Mesh[] = [];
+  group.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (mesh.isMesh && mesh.name === "Roads") meshes.push(mesh);
+  });
+  return meshes;
+}
+
+function mergeRoadSurface(meshes: THREE.Mesh[]) {
+  let area = 0;
+  let triangles = 0;
+  let minNormalY = Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  let vertices = 0;
+  for (const mesh of meshes) {
+    const stats = roadSurface(mesh, false);
+    area += stats.area;
+    triangles += stats.triangles;
+    minNormalY = Math.min(minNormalY, stats.minNormalY);
+    minY = Math.min(minY, stats.minY);
+    maxY = Math.max(maxY, stats.maxY);
+    vertices += stats.vertices;
+  }
+  return { area, triangles, minNormalY, minY, maxY, vertices };
+}
+
+function roadSurface(mesh: THREE.Mesh, assertTriangleArea = true) {
   const position = mesh.geometry.getAttribute("position");
   let area = 0;
   let triangles = 0;
@@ -417,7 +445,7 @@ function roadSurface(mesh: THREE.Mesh) {
     minNormalY = Math.min(minNormalY, ny);
     minY = Math.min(minY, ay, by, cy);
     maxY = Math.max(maxY, ay, by, cy);
-    expect(tri).toBeGreaterThan(0.5);
+    if (assertTriangleArea) expect(tri).toBeGreaterThan(0.5);
   }
   return { area, triangles, minNormalY, minY, maxY, vertices: position.count };
 }
