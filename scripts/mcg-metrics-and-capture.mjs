@@ -28,9 +28,9 @@ page.setDefaultTimeout(240_000);
 await page.goto(url, { waitUntil: "domcontentloaded" });
 await page.locator("button.create-fab").click();
 await page.waitForSelector(".model-chrome", { timeout: 240_000 });
-const drawingOpen = page.locator("#model-drawer .drawer-section").filter({ hasText: "Drawing type" });
-if (await drawingOpen.isVisible()) {
-  await page.getByRole("button", { name: "Drawing", exact: true }).click();
+const buildingsDrawer = page.locator("#model-drawer .drawer-section").filter({ hasText: "Residential" });
+if (await buildingsDrawer.isVisible()) {
+  await page.getByRole("button", { name: "Buildings", exact: true }).click();
 }
 const perspective = page.getByRole("button", { name: "Perspective" });
 if (await perspective.isVisible()) await perspective.click();
@@ -55,8 +55,8 @@ const poses = await page.evaluate(
       far: 40000,
     };
     const close = {
-      position: [targetEast + 120, 45, -targetNorth + 40],
-      target: [targetEast, 8, -targetNorth],
+      position: [targetEast + 120, 70, -targetNorth + 10],
+      target: [targetEast, 12, -targetNorth],
       near: 1,
       far: 20000,
     };
