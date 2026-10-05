@@ -277,7 +277,7 @@ function applyFallbackHeightFromZone(building: BuildingFeat, zoneCode: string | 
   return next;
 }
 
-function zoneAtBuilding(index: GridIndex<ZonePolygon>, building: BuildingFeat): string | null {
+export function zoneAtBuilding(index: GridIndex<ZonePolygon>, building: BuildingFeat): string | null {
   const at = interiorPoint(building.ring, building.holes);
   const covers = index
     .queryPoint(at)
@@ -303,6 +303,17 @@ function applyZones(buildings: BuildingFeat[], zones: ZonePolygon[]): BuildingFe
 export function assignExternalUses(buildings: BuildingFeat[], zones: ZonePolygon[] | null): BuildingFeat[] {
   if (!zones || zones.length === 0) return buildings;
   return applyZones(buildings, zones);
+}
+
+/** Vicmap zone code at each building centroid (smallest covering polygon). */
+export function zoneCodesForBuildings(
+  buildings: BuildingFeat[],
+  zones: ZonePolygon[] | null,
+): (string | null)[] {
+  if (!zones || zones.length === 0) return buildings.map(() => null);
+  const index = new GridIndex<ZonePolygon>(80);
+  for (const zone of zones) index.insert(ringBBox(zone.outer), zone);
+  return buildings.map((building) => zoneAtBuilding(index, building));
 }
 
 export async function refineBuildingUses(

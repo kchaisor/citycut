@@ -24,6 +24,17 @@ function floorCount(props: OvertureHeightProps): number | null {
     : parseLooseNumber(typeof floorsRaw === "string" ? floorsRaw : undefined);
 }
 
+export type OvertureHeightMethod = "height" | "num_floors" | "fallback";
+
+/** Which Overture field supplied the height before zone refinement. */
+export function overtureHeightMethod(props: OvertureHeightProps): OvertureHeightMethod {
+  const tagged = taggedHeightM(props);
+  if (tagged !== null && tagged > 0) return "height";
+  const floors = floorCount(props);
+  if (floors !== null && floors > 0) return "num_floors";
+  return "fallback";
+}
+
 /** True when height would come from footprint area and/or planning zone, not Overture tags. */
 export function overtureHeightUsesFallback(props: OvertureHeightProps): boolean {
   const tagged = taggedHeightM(props);

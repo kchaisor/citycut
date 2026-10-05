@@ -16,9 +16,19 @@ import { clipPolygon } from "./clip";
 import { dedupeBuildings } from "./footprints";
 import { dedupeConsecutive, openRing, signedArea, toLocal } from "./geo";
 import { footprintArea } from "./useCascade";
-import { overtureBuildingHeight, overtureHeightUsesFallback, overtureMinHeightM } from "./overtureHeight";
+import {
+  overtureBuildingHeight,
+  overtureHeightMethod,
+  overtureHeightUsesFallback,
+  overtureMinHeightM,
+} from "./overtureHeight";
 import { overtureBuildingsUrl, resolveOvertureRelease } from "./overtureRelease";
-import { parseOvertureSources, pickTallestOvertureProps } from "./overtureSources";
+import {
+  overtureFootprintIsMlOnly,
+  overtureSourceDatasetLabels,
+  parseOvertureSources,
+  pickTallestOvertureProps,
+} from "./overtureSources";
 import { pointInPolygon } from "./useCascade";
 import type { BuildingFeat, LonLat, Pt, Ring } from "../types";
 
@@ -277,12 +287,61 @@ export function findOvertureBuildingForOsmFootprint(
   return best;
 }
 
-export async function fetchOvertureBuildingsForCut(
+export type OvertureBuildingRecord = {
+  building: BuildingFeat;
+  props: Record<string, unknown>;
+  sourceDatasets: string[];
+  geometrySource: string | null;
+  heightMethod: ReturnType<typeof overtureHeightMethod>;
+  mlFootprintOnly: boolean;
+};
+
+function recordFromFragment(fragment: Fragment): OvertureBuildingRecord {
+  const props = fragment.props;
+  return {
+    building: fragmentToBuilding(fragment),
+    props,
+    sourceDatasets: overtureSourceDatasetLabels(props.sources),
+    geometrySource:
+      typeof props["@geometry_source"] === "string" ? props["@geometry_source"] : null,
+    heightMethod: overtureHeightMethod(props),
+    mlFootprintOnly: overtureFootprintIsMlOnly(props.sources, fragment.osmWayIds),
+  };
+}
+
+function finalizeBuildingRecords(records: OvertureBuildingRecord[]): {
+  records: OvertureBuildingRecord[];
+  buildingCapHit: boolean;
+} {
+  let buildingCapHit = false;
+  const byOvertureId = new Map(
+    records.map((record) => [record.building.overtureId ?? String(record.building.id), record]),
+  );
+  let buildings = dedupeBuildings(records.map((record) => record.building));
+  let kept = buildings.map(
+    (building) => byOvertureId.get(building.overtureId ?? String(building.id))!,
+  );
+  if (buildings.length > MAX_BUILDINGS) {
+    buildingCapHit = true;
+    const order = buildings
+      .slice()
+      .sort((a, b) => Math.abs(signedArea(b.ring)) - Math.abs(signedArea(a.ring)))
+      .slice(0, MAX_BUILDINGS);
+    const capIds = new Set(order.map((building) => building.overtureId ?? String(building.id)));
+    kept = kept.filter((record) =>
+      capIds.has(record.building.overtureId ?? String(record.building.id)),
+    );
+    buildings = order;
+  }
+  return { records: kept, buildingCapHit };
+}
+
+async function fetchMergedFragmentsForCut(
   bounds: { south: number; west: number; north: number; east: number },
   origin: LonLat,
   sideM: number,
   signal?: AbortSignal,
-): Promise<{ buildings: BuildingFeat[]; stats: OvertureFetchStats; buildingCapHit: boolean }> {
+): Promise<{ merged: Fragment[]; stats: OvertureFetchStats }> {
   const half = sideM / 2;
   const t0 = performance.now();
   const release = await resolveOvertureRelease(signal);
@@ -298,27 +357,51 @@ export async function fetchOvertureBuildingsForCut(
   );
   const fragments = tileResults.flat();
   const merged = reassembleBuildingFragments(fragments);
-  let buildings = merged.map(fragmentToBuilding);
-  let buildingCapHit = false;
-  buildings = dedupeBuildings(buildings);
-  if (buildings.length > MAX_BUILDINGS) {
-    buildingCapHit = true;
-    buildings = buildings
-      .slice()
-      .sort((a, b) => Math.abs(signedArea(b.ring)) - Math.abs(signedArea(a.ring)))
-      .slice(0, MAX_BUILDINGS);
-  }
   const fetchMs = performance.now() - t0;
   return {
-    buildings,
-    buildingCapHit,
+    merged,
     stats: {
       release,
       tileCount: tiles.length,
       fetchMs,
       fragmentCount: fragments.length,
-      buildingCount: buildings.length,
+      buildingCount: merged.length,
       hasMicrosoftFootprints: merged.some((item) => item.microsoft),
     },
+  };
+}
+
+export async function fetchOvertureBuildingRecordsForCut(
+  bounds: { south: number; west: number; north: number; east: number },
+  origin: LonLat,
+  sideM: number,
+  signal?: AbortSignal,
+): Promise<{ records: OvertureBuildingRecord[]; stats: OvertureFetchStats; buildingCapHit: boolean }> {
+  const { merged, stats } = await fetchMergedFragmentsForCut(bounds, origin, sideM, signal);
+  const draft = merged.map(recordFromFragment);
+  const { records, buildingCapHit } = finalizeBuildingRecords(draft);
+  return {
+    records,
+    buildingCapHit,
+    stats: { ...stats, buildingCount: records.length },
+  };
+}
+
+export async function fetchOvertureBuildingsForCut(
+  bounds: { south: number; west: number; north: number; east: number },
+  origin: LonLat,
+  sideM: number,
+  signal?: AbortSignal,
+): Promise<{ buildings: BuildingFeat[]; stats: OvertureFetchStats; buildingCapHit: boolean }> {
+  const { records, stats, buildingCapHit } = await fetchOvertureBuildingRecordsForCut(
+    bounds,
+    origin,
+    sideM,
+    signal,
+  );
+  return {
+    buildings: records.map((record) => record.building),
+    buildingCapHit,
+    stats,
   };
 }

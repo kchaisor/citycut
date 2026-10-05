@@ -30,13 +30,30 @@ import { MAX_TREE_INSTANCES, assembleTreeTiers } from "./lib/treeTiers";
 import { replaceTreeNote, treeTierCounts } from "./lib/trees";
 import { fetchVicmapTrees, vicmapPointsToTrees, VICMAP_ATTRIBUTION } from "./lib/vicmapTrees";
 import { loadContoursForCut } from "./lib/vicmapContours";
-import { fetchOvertureBuildingsForCut } from "./lib/overtureBuildings";
-import { assignExternalUses, loadUseTiers } from "./lib/useCascade";
+import {
+  fetchOvertureBuildingRecordsForCut,
+  fetchOvertureBuildingsForCut,
+  type OvertureBuildingRecord,
+} from "./lib/overtureBuildings";
+import {
+  applyZoneHeightCaps,
+  type HeightCapMode,
+} from "./lib/buildingHeightCap";
+import { assignExternalUses, loadUseTiers, zoneCodesForBuildings } from "./lib/useCascade";
 import type { Basemap, CityModel, LonLat, PlaceHit, UiLayers, UseTierFailure, ViewState } from "./types";
 
 function frameFromQuery(): FrameQuery | null {
   if (typeof window === "undefined") return null;
   return frameFromSearch(window.location.search);
+}
+
+function heightCapModeFromSearch(): HeightCapMode | null {
+  if (typeof window === "undefined") return null;
+  const raw = new URLSearchParams(window.location.search).get("heightCap")?.trim();
+  if (raw === "ml" || raw === "ml_footprint_only") return "ml_footprint_only";
+  if (raw === "non_osm" || raw === "non_osm_height") return "non_osm_height";
+  if (raw === "all" || raw === "all_overture") return "all_overture";
+  return null;
 }
 
 const ModelPage = lazy(() => import("./components/ModelPage").then((mod) => ({ default: mod.ModelPage })));
@@ -265,10 +282,23 @@ export default function App() {
             })
         : Promise.resolve({ field: null, error: null as string | null });
       const bounds = squareBBox(view, sideM);
+      const heightCapMode = heightCapModeFromSearch();
       const buildingsTask = modelLayers.buildings
-        ? fetchOvertureBuildingsForCut(bounds, center, sideM, controller.signal)
+        ? (heightCapMode
+            ? fetchOvertureBuildingRecordsForCut(bounds, center, sideM, controller.signal).then(
+                (result) => ({
+                  buildings: result.records.map((record) => record.building),
+                  records: result.records,
+                  buildingCapHit: result.buildingCapHit,
+                  stats: result.stats,
+                }),
+              )
+            : fetchOvertureBuildingsForCut(bounds, center, sideM, controller.signal).then(
+                (result) => ({ ...result, records: null as OvertureBuildingRecord[] | null }),
+              ))
         : Promise.resolve({
             buildings: [],
+            records: null as OvertureBuildingRecord[] | null,
             buildingCapHit: false,
             stats: {
               release: "",
@@ -386,9 +416,18 @@ export default function App() {
           baseTask,
         ]);
       const overtureBuildings = overtureResult.buildings;
-      const buildings = modelLayers.buildings
+      let buildings = modelLayers.buildings
         ? assignExternalUses(overtureBuildings, useTiers.zones)
         : [];
+      if (modelLayers.buildings && heightCapMode && overtureResult.records?.length) {
+        const zoneCodes = zoneCodesForBuildings(buildings, useTiers.zones);
+        const targets = overtureResult.records.map((record) => ({
+          heightMethod: record.heightMethod,
+          mlFootprintOnly: record.mlFootprintOnly,
+          hasOsmWay: (record.building.osmWayIds?.length ?? 0) > 0,
+        }));
+        buildings = applyZoneHeightCaps(buildings, zoneCodes, heightCapMode, targets);
+      }
       const half = sideM / 2;
       const treeContext = {
         ...baseResult.treeContext,
