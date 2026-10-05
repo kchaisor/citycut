@@ -484,9 +484,16 @@ export function unionPathRoads(roads: { line: Pt[]; width: number }[], sideM: nu
   return unionStrips(roads, sideM, 0);
 }
 
-export function carriagewaysOf(roads: RoadFeat[]): { line: Pt[]; width: number }[] {
+export function carriagewaysOf(
+  roads: RoadFeat[],
+  surface: "ground" | "deck" | "all" = "ground",
+): { line: Pt[]; width: number }[] {
   return roads
     .filter((road) => road.kind !== "rail" && road.grade !== "path")
+    .filter((road) => {
+      if (surface === "all") return true;
+      return (road.deck === true) === (surface === "deck");
+    })
     .map((road) => ({ line: road.line, width: road.width }));
 }
 

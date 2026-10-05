@@ -149,7 +149,7 @@ export function planPaths(
     }
   }
   const footpaths = unionFootpaths(footpathLines(model.roads), pathWidthM, model.sideM);
-  const carriageway = unionCarriageways(carriagewaysOf(model.roads), model.sideM);
+  const carriageway = unionCarriageways(carriagewaysOf(model.roads, "all"), model.sideM);
 
   const buildings = model.buildings
     .map((building) => {

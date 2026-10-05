@@ -8,6 +8,7 @@ import { openRing, signedArea } from "./geo";
 import { carriagewaysOf, unionCarriageways, unionPathRoads } from "./roadFill";
 import { hexRgb, overlapLift, ROAD_COLOR, ROAD_RGB, roadGradeLayer, SURFACE } from "./surfaceLayers";
 import { matteStandardMaterial } from "./matteMaterial";
+import { BRIDGE_DECK_CLEARANCE_M, subdivideToSpacing, type Tri } from "./roadDrape";
 import { footprintBase, sampleTerrain, terrainBuffers } from "./terrain";
 import type { AreaFeat, BuildingFeat, BuildingUse, CityModel, Pt, Ring, RoadGrade, TerrainField } from "../types";
 
@@ -77,14 +78,8 @@ function mergeMeshes(
   }
 }
 
-type Tri = [Pt, Pt, Pt];
-
 function distance(a: Pt, b: Pt): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1]);
-}
-
-function midpoint(a: Pt, b: Pt): Pt {
-  return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 }
 
 function trianglesFromShape(geometry: THREE.BufferGeometry): Tri[] {
@@ -100,42 +95,6 @@ function trianglesFromShape(geometry: THREE.BufferGeometry): Tri[] {
     for (let i = 0; i + 2 < position.count; i += 3) tris.push([at(i), at(i + 1), at(i + 2)]);
   }
   return tris;
-}
-
-function splitTriangle(tri: Tri, maxEdge: number): Tri[] {
-  const [a, b, c] = tri;
-  const ab = distance(a, b) > maxEdge;
-  const bc = distance(b, c) > maxEdge;
-  const ca = distance(c, a) > maxEdge;
-  const count = Number(ab) + Number(bc) + Number(ca);
-  if (count === 0) return [tri];
-  const mab = midpoint(a, b);
-  const mbc = midpoint(b, c);
-  const mca = midpoint(c, a);
-  if (count === 3) return [[a, mab, mca], [mab, b, mbc], [mca, mbc, c], [mab, mbc, mca]];
-  if (count === 1) {
-    if (ab) return [[a, mab, c], [mab, b, c]];
-    if (bc) return [[a, b, mbc], [a, mbc, c]];
-    return [[a, b, mca], [mca, b, c]];
-  }
-  if (!ab) return [[a, b, mbc], [a, mbc, mca], [mca, mbc, c]];
-  if (!bc) return [[a, mab, mca], [mab, b, c], [mab, c, mca]];
-  return [[a, mab, c], [mab, mbc, c], [mab, b, mbc]];
-}
-
-function subdivideToSpacing(tris: Tri[], maxEdge: number): Tri[] {
-  let current = tris;
-  for (let level = 0; level < 8; level++) {
-    const needsSplit = current.some(
-      ([a, b, c]) => distance(a, b) > maxEdge || distance(b, c) > maxEdge || distance(c, a) > maxEdge,
-    );
-    if (!needsSplit) break;
-    const next: Tri[] = [];
-    for (const tri of current) next.push(...splitTriangle(tri, maxEdge));
-    if (next.length > 24000) break;
-    current = next;
-  }
-  return current;
 }
 
 function drapedRingGeometry(
@@ -159,7 +118,13 @@ export function drapedMultiPolygonGeometry(
   const parts: THREE.BufferGeometry[] = [];
   for (const polygon of multi) {
     if (polygon.length === 0) continue;
-    const geometry = drapedRingGeometry(polygon[0] as Ring, polygon.slice(1) as Ring[], sample, offset, spacing);
+    const geometry = drapedRingGeometry(
+      polygon[0] as Ring,
+      polygon.slice(1) as Ring[],
+      sample,
+      offset,
+      spacing,
+    );
     if (geometry) parts.push(geometry);
   }
   if (parts.length === 0) return null;
@@ -177,8 +142,42 @@ function roadFillGeometry(
 ): THREE.BufferGeometry | null {
   if (multi.length === 0) return null;
   const heightAt = sample ?? (() => 0);
-  const step = spacing ?? 12;
+  const step = spacing ?? 8;
   return drapedMultiPolygonGeometry(multi, heightAt, lift, step);
+}
+
+function deckHeightForRing(ring: Ring, sample: (east: number, north: number) => number): number {
+  let max = -Infinity;
+  for (const point of ring) max = Math.max(max, sample(point[0], point[1]));
+  return max;
+}
+
+/** Flat bridge/overpass decks sit above the terrain under the fill. */
+export function deckMultiPolygonGeometry(
+  multi: MultiPolygon,
+  sample: (east: number, north: number) => number,
+  lift: number,
+): THREE.BufferGeometry | null {
+  const parts: THREE.BufferGeometry[] = [];
+  for (const polygon of multi) {
+    if (polygon.length === 0) continue;
+    const outer = polygon[0] as Ring;
+    const holes = polygon.slice(1) as Ring[];
+    let deckBase = deckHeightForRing(outer, sample);
+    for (const hole of holes) deckBase = Math.max(deckBase, deckHeightForRing(hole, sample));
+    const shape = shapeFromRing(outer, holes);
+    if (!shape) continue;
+    try {
+      parts.push(layFlat(new THREE.ShapeGeometry(shape), deckBase + BRIDGE_DECK_CLEARANCE_M + lift));
+    } catch {
+      /* skip broken deck polygon */
+    }
+  }
+  if (parts.length === 0) return null;
+  const merged = mergeGeometries(parts, false);
+  parts.forEach((geometry) => geometry.dispose());
+  merged?.computeVertexNormals();
+  return merged;
 }
 
 /** Parks and water keep their outline and pick up interior samples so they follow the heightfield. */
@@ -419,32 +418,45 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   }
 
   const railMat = paint(matteStandardMaterial({ color: getColour("--rail-fill") }), SURFACE.rail);
-  const drapeSpacing = model.terrain ? Math.min(model.terrain.spacingM, 8) : undefined;
+  const drapeSpacing = model.terrain ? Math.min(model.terrain.spacingM, 5) : undefined;
   const grades: RoadGrade[] = ["path", "local", "arterial"];
   for (const grade of grades) {
     const layer = roadGradeLayer(grade);
+    const gradeRoads = model.roads.filter((road) => (road.grade ?? "local") === grade);
     const fill =
       grade === "path"
         ? unionPathRoads(
-            model.roads
-              .filter((road) => road.kind === "road" && road.grade === "path")
+            gradeRoads
+              .filter((road) => road.kind === "road" && !road.deck)
               .map((road) => ({ line: road.line, width: road.width })),
             model.sideM,
           )
-        : unionCarriageways(
-            carriagewaysOf(model.roads.filter((road) => (road.grade ?? "local") === grade)),
-            model.sideM,
-          );
+        : unionCarriageways(carriagewaysOf(gradeRoads, "ground"), model.sideM);
     const geometry = roadFillGeometry(fill.polygons, layer.lift, sample, drapeSpacing);
-    if (!geometry) continue;
+    const deckFill = unionCarriageways(carriagewaysOf(gradeRoads, "deck"), model.sideM);
+    const deckGeo =
+      sample && deckFill.polygons.length > 0
+        ? deckMultiPolygonGeometry(deckFill.polygons, sample, layer.lift)
+        : null;
+    if (!geometry && !deckGeo) continue;
     const material = paint(matteStandardMaterial({ color: ROAD_COLOR[grade] }), layer);
     material.name = "Roads";
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.name = "Roads";
-    mesh.userData.layerColor = ROAD_RGB.arterial;
-    mesh.userData.objectColor = ROAD_RGB[grade];
-    order(mesh, layer.renderOrder);
-    group.add(mesh);
+    if (geometry) {
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.name = "Roads";
+      mesh.userData.layerColor = ROAD_RGB.arterial;
+      mesh.userData.objectColor = ROAD_RGB[grade];
+      order(mesh, layer.renderOrder);
+      group.add(mesh);
+    }
+    if (deckGeo) {
+      const deckMesh = new THREE.Mesh(deckGeo, material);
+      deckMesh.name = "Roads";
+      deckMesh.userData.layerColor = ROAD_RGB.arterial;
+      deckMesh.userData.objectColor = ROAD_RGB[grade];
+      order(deckMesh, layer.renderOrder + 0.1);
+      group.add(deckMesh);
+    }
   }
   const railFill = unionCarriageways(
     model.roads.filter((road) => road.kind === "rail").map((road) => ({ line: road.line, width: road.width })),

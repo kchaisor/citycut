@@ -63,6 +63,17 @@ function hiddenAt(values: string[]): boolean {
   return false;
 }
 
+function elevatedAt(values: string[]): boolean {
+  if (values.includes("is_bridge")) return true;
+  for (const value of values) {
+    if (value.startsWith("level:")) {
+      const level = Number(value.slice("level:".length));
+      if (Number.isFinite(level) && level > 0) return true;
+    }
+  }
+  return false;
+}
+
 function mergeIntervals(ranges: Array<[number, number]>): Array<[number, number]> {
   if (ranges.length === 0) return [];
   const sorted = ranges.slice().sort((a, b) => a[0] - b[0]);
@@ -103,6 +114,68 @@ export function hiddenSpansFromOvertureProps(props: Record<string, unknown>): Ar
   );
 }
 
+/** Tunnels plus bridge/elevated spans removed from the ground-draped centreline. */
+export function groundHiddenSpansFromOvertureProps(props: Record<string, unknown>): Array<[number, number]> {
+  return mergeIntervals([
+    ...hiddenSpansFromOvertureProps(props),
+    ...elevatedSpansFromOvertureProps(props),
+  ]);
+}
+
+/** Bridge and above-grade spans that should render as a flat deck, not draped onto terrain. */
+export function elevatedSpansFromOvertureProps(props: Record<string, unknown>): Array<[number, number]> {
+  const spans = [...parseFlagSpans(props.road_flags), ...parseLevelSpans(props.level_rules)];
+  return mergeIntervals(
+    spans
+      .filter((span) => elevatedAt(span.values))
+      .map((span) => [Math.max(0, span.from), Math.min(1, span.to)] as [number, number]),
+  );
+}
+
+function clipLinePart(line: Pt[], from: number, to: number): Pt[] {
+  const start = pointAt(line, from);
+  const end = pointAt(line, to);
+  const piece: Pt[] = [start];
+  const total = polylineLength(line);
+  for (let i = 0; i < line.length - 1; i++) {
+    const a = line[i];
+    const b = line[i + 1];
+    const seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (seg < 1e-9) continue;
+    const segStart = from * total;
+    const segEnd = to * total;
+    let walked = 0;
+    for (let j = 0; j <= i; j++) {
+      if (j < i) walked += Math.hypot(line[j + 1][0] - line[j][0], line[j + 1][1] - line[j][1]);
+    }
+    const segStartDist = walked;
+    const segEndDist = walked + seg;
+    if (segEndDist <= segStart + 1e-6 || segStartDist >= segEnd - 1e-6) continue;
+    if (segStartDist > segStart + 1e-6 && segStartDist < segEnd - 1e-6) piece.push([a[0], a[1]]);
+    if (segEndDist > segStart + 1e-6 && segEndDist < segEnd - 1e-6) piece.push([b[0], b[1]]);
+  }
+  piece.push(end);
+  const deduped: Pt[] = [];
+  for (const point of piece) {
+    const last = deduped[deduped.length - 1];
+    if (!last || Math.hypot(point[0] - last[0], point[1] - last[1]) > 0.05) deduped.push(point);
+  }
+  if (deduped.length >= 2 && polylineLength(deduped) >= 0.5) return deduped;
+  return [];
+}
+
+/** Keep centreline pieces that fall inside the given normalised spans. */
+export function clipLineToVisibleSpans(line: Pt[], spans: Array<[number, number]>): Pt[][] {
+  if (line.length < 2 || polylineLength(line) < 0.2 || spans.length === 0) return [];
+  const parts: Pt[][] = [];
+  for (const [from, to] of mergeIntervals(spans)) {
+    if (to - from < 1e-4) continue;
+    const piece = clipLinePart(line, from, to);
+    if (piece.length >= 2) parts.push(piece);
+  }
+  return parts;
+}
+
 function pointAt(line: Pt[], t: number): Pt {
   const total = polylineLength(line);
   if (total < 1e-6) return [line[0][0], line[0][1]];
@@ -126,38 +199,5 @@ function pointAt(line: Pt[], t: number): Pt {
 export function clipLineToGroundVisible(line: Pt[], hidden: Array<[number, number]>): Pt[][] {
   if (line.length < 2 || polylineLength(line) < 0.2) return [];
   if (hidden.length === 0) return [line];
-  const visible = subtractHidden(0, 1, hidden);
-  const parts: Pt[][] = [];
-  for (const [from, to] of visible) {
-    if (to - from < 1e-4) continue;
-    const start = pointAt(line, from);
-    const end = pointAt(line, to);
-    const piece: Pt[] = [start];
-    const total = polylineLength(line);
-    for (let i = 0; i < line.length - 1; i++) {
-      const a = line[i];
-      const b = line[i + 1];
-      const seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
-      if (seg < 1e-9) continue;
-      const segStart = from * total;
-      const segEnd = to * total;
-      let walked = 0;
-      for (let j = 0; j <= i; j++) {
-        if (j < i) walked += Math.hypot(line[j + 1][0] - line[j][0], line[j + 1][1] - line[j][1]);
-      }
-      const segStartDist = walked;
-      const segEndDist = walked + seg;
-      if (segEndDist <= segStart + 1e-6 || segStartDist >= segEnd - 1e-6) continue;
-      if (segStartDist > segStart + 1e-6 && segStartDist < segEnd - 1e-6) piece.push([a[0], a[1]]);
-      if (segEndDist > segStart + 1e-6 && segEndDist < segEnd - 1e-6) piece.push([b[0], b[1]]);
-    }
-    piece.push(end);
-    const deduped: Pt[] = [];
-    for (const point of piece) {
-      const last = deduped[deduped.length - 1];
-      if (!last || Math.hypot(point[0] - last[0], point[1] - last[1]) > 0.05) deduped.push(point);
-    }
-    if (deduped.length >= 2 && polylineLength(deduped) >= 0.5) parts.push(deduped);
-  }
-  return parts;
+  return clipLineToVisibleSpans(line, subtractHidden(0, 1, hidden));
 }
