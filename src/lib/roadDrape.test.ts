@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { BRIDGE_DECK_CLEARANCE_M, closestParameter, deckHeightAt } from "./roadDrape";
+import {
+  BRIDGE_DECK_CLEARANCE_M,
+  closestParameter,
+  deckHeightAt,
+  mergeAdjacentDeckRoads,
+} from "./roadDrape";
+import type { RoadFeat } from "../types";
 
 describe("deckHeightAt", () => {
   const line: [number, number][] = [
@@ -32,5 +38,18 @@ describe("deckHeightAt", () => {
 
   it("finds the closest parameter along the centreline", () => {
     expect(closestParameter(line, [25, 4])).toBeCloseTo(0.25, 5);
+  });
+});
+
+describe("mergeAdjacentDeckRoads", () => {
+  it("chains deck spans that meet at an abutment", () => {
+    const roads: RoadFeat[] = [
+      { id: 1, line: [[0, 0], [50, 0]], width: 10, kind: "road", grade: "arterial", deck: true },
+      { id: 2, line: [[50, 0], [100, 0]], width: 10, kind: "road", grade: "arterial", deck: true },
+    ];
+    const merged = mergeAdjacentDeckRoads(roads);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].line[0]).toEqual([0, 0]);
+    expect(merged[0].line[merged[0].line.length - 1]).toEqual([100, 0]);
   });
 });

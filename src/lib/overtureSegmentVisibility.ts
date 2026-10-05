@@ -1,4 +1,5 @@
 import { polylineLength } from "./geo";
+import { closestParameter, MIN_DECK_SPAN_M } from "./roadDrape";
 import type { Pt } from "../types";
 
 type FlagSpan = { from: number; to: number; values: string[] };
@@ -63,8 +64,11 @@ function hiddenAt(values: string[]): boolean {
   return false;
 }
 
-function elevatedAt(values: string[]): boolean {
-  if (values.includes("is_bridge")) return true;
+function bridgeAt(values: string[]): boolean {
+  return values.includes("is_bridge");
+}
+
+function levelAboveGroundAt(values: string[]): boolean {
   for (const value of values) {
     if (value.startsWith("level:")) {
       const level = Number(value.slice("level:".length));
@@ -72,6 +76,10 @@ function elevatedAt(values: string[]): boolean {
     }
   }
   return false;
+}
+
+function elevatedAt(values: string[]): boolean {
+  return bridgeAt(values) || levelAboveGroundAt(values);
 }
 
 function mergeIntervals(ranges: Array<[number, number]>): Array<[number, number]> {
@@ -125,9 +133,87 @@ function rawElevatedSpans(props: Record<string, unknown>): Array<[number, number
   );
 }
 
+function rawBridgeSpans(props: Record<string, unknown>): Array<[number, number]> {
+  return mergeIntervals(
+    flagSpansOf(props)
+      .filter((span) => bridgeAt(span.values))
+      .map((span) => [Math.max(0, span.from), Math.min(1, span.to)] as [number, number]),
+  );
+}
+
+function rawLevelElevatedSpans(props: Record<string, unknown>): Array<[number, number]> {
+  return mergeIntervals(
+    flagSpansOf(props)
+      .filter((span) => levelAboveGroundAt(span.values))
+      .map((span) => [Math.max(0, span.from), Math.min(1, span.to)] as [number, number]),
+  );
+}
+
+export function bridgeSpansFromOvertureProps(props: Record<string, unknown>): Array<[number, number]> {
+  return rawBridgeSpans(props);
+}
+
+/** Deck spans for a segment: paths only use explicit bridges; rail and carriageways keep level>0. */
+export function deckElevatedSpansForSpec(
+  props: Record<string, unknown>,
+  kind: "road" | "rail",
+  grade?: "arterial" | "local" | "path",
+): Array<[number, number]> {
+  const hidden = hiddenSpansFromOvertureProps(props);
+  const raw =
+    kind === "road" && grade === "path"
+      ? rawBridgeSpans(props)
+      : mergeIntervals([...rawBridgeSpans(props), ...rawLevelElevatedSpans(props)]);
+  const parts: Array<[number, number]> = [];
+  for (const [from, to] of raw) {
+    parts.push(...subtractHidden(from, to, hidden));
+  }
+  return mergeIntervals(parts);
+}
+
 /** Tunnels plus bridge / elevated spans removed from the ground-draped centreline. */
 export function groundHiddenSpansFromOvertureProps(props: Record<string, unknown>): Array<[number, number]> {
   return mergeIntervals([...hiddenSpansFromOvertureProps(props), ...rawElevatedSpans(props)]);
+}
+
+/** Elevated centreline pieces long enough to render as a deck. */
+export function deckPiecesFromLine(
+  line: Pt[],
+  props: Record<string, unknown>,
+  kind: "road" | "rail",
+  grade?: "arterial" | "local" | "path",
+): Pt[][] {
+  return clipLineToVisibleSpans(line, deckElevatedSpansForSpec(props, kind, grade)).filter(
+    (piece) => polylineLength(piece) >= MIN_DECK_SPAN_M,
+  );
+}
+
+function deckHiddenSpansOnLine(
+  line: Pt[],
+  props: Record<string, unknown>,
+  kind: "road" | "rail",
+  grade?: "arterial" | "local" | "path",
+): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  for (const piece of deckPiecesFromLine(line, props, kind, grade)) {
+    const from = closestParameter(line, piece[0]);
+    const to = closestParameter(line, piece[piece.length - 1]);
+    spans.push([Math.min(from, to), Math.max(from, to)]);
+  }
+  return mergeIntervals(spans);
+}
+
+/** Per-line hidden spans: tunnels plus deck spans that will actually be meshed. */
+export function groundHiddenSpansForLine(
+  line: Pt[],
+  props: Record<string, unknown>,
+  kind: "road" | "rail",
+  grade?: "arterial" | "local" | "path",
+): Array<[number, number]> {
+  return mergeIntervals([
+    ...hiddenSpansFromOvertureProps(props),
+    ...deckHiddenSpansOnLine(line, props, kind, grade),
+  ]);
 }
 
 /** Bridge and level>0 spans that should render as a deck. Tunnels stay hidden. */
