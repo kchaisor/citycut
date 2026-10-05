@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from "react";
+import { LINE_MM } from "../lib/lineweights";
 import {
   DASH_PRESETS,
   STROKE_KEYS,
@@ -141,7 +142,18 @@ export function LineStylesEditor({
             <input
               type="checkbox"
               checked={style.pathEdgeOn}
-              onChange={(event) => onChange({ ...style, pathEdgeOn: event.target.checked })}
+              onChange={(event) => {
+                const on = event.target.checked;
+                if (!on) {
+                  onChange({ ...style, pathEdgeOn: false, path: { ...style.path, mm: 0 } });
+                  return;
+                }
+                onChange({
+                  ...style,
+                  pathEdgeOn: true,
+                  path: style.path.mm > 0 ? style.path : { ...style.path, mm: LINE_MM.secondary },
+                });
+              }}
             />
             Footpath edge
           </label>

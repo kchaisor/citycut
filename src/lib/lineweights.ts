@@ -12,7 +12,7 @@ import { drawingSheetColor } from "./drawingSheet";
  * | ---------------------------- | ---- |
  * | Building outlines / cut      | 0    |
  * | Property and road edges      | 0.22 |
- * | Path edge and rail          | 0.15 |
+ * | Path edge (when on) and rail | 0.15 |
  * | Contours                     | 0.10 |
  * | Frame                        | 0.35 |
  * | Text and annotation strokes  | 0.13 |

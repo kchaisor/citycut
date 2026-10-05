@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   haloMm,
+  footpathEdgeSvgAttrs,
   readDrawingStyle,
   screenPenAttrs,
   type LineStyles,
@@ -212,7 +213,7 @@ export function DrawingPlan({
               d={plan.pathFill.map((polygon) => svgRings(polygon)).join(" ")}
               fill={style.pathFill}
               fillRule="evenodd"
-              {...(style.pathEdgeOn ? screenPenAttrs(style.path) : { stroke: "none" })}
+              {...footpathEdgeSvgAttrs(style)}
             />
           )}
           {figurePaths.map((d, index) => (
@@ -288,7 +289,7 @@ export function DrawingPlan({
                 d={plan.pathFill.map((polygon) => svgRings(polygon)).join(" ")}
                 fill={style.pathFill}
                 fillRule="evenodd"
-                {...(style.pathEdgeOn ? screenPenAttrs(style.path) : { stroke: "none" })}
+                {...footpathEdgeSvgAttrs(style)}
               />
             )}
             {plan.roadFill.length > 0 && (

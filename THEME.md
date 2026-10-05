@@ -172,7 +172,7 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--path-width-m` | Width of a footpath strip, centred on the way. `1.2` is 0.6 m each side | `1.2` | m on the ground |
 | `--path-fill` | Fill of the unioned footpath. Defined in `src/colours.css`. Slightly darker than the page, lighter than the road | `#DADADA` | colour |
 | `--path-edge` | Whether the footpath outline is drawn. `on` or `off` | `off` | on or off |
-| `--path-edge-mm` | Weight of that outline, on the unioned edge only. `0` leaves the fill | `0.15` | mm |
+| `--path-edge-mm` | Weight of that outline, on the unioned edge only. `0` leaves the fill | `0` | mm |
 | `--path-edge-stroke` | Colour of the footpath outline | `#5C5C5C` | colour |
 | `--path-edge-dash` | Dash of the footpath outline | `none` | mm, on then off |
 | `--rail-stroke-mm` | Weight of a rail line | `0.15` | mm |

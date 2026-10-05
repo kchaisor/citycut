@@ -7,6 +7,7 @@ import { getColour, type ColourKey } from "./colours";
 import {
   dashIsDotted,
   dashPair,
+  footpathEdgeStroke,
   haloMm,
   readDrawingStyle,
   type LineStyles,
@@ -220,7 +221,8 @@ function frameStroke(layout: SheetLayout, style: StrokeStyle): PdfChunk {
 function pathStrip(polygons: Pt[][][], model: CityModel, layout: SheetLayout, style: LineStyles): PdfChunk | null {
   const rings = polygons.flatMap((polygon) => mapRings(polygon, model.sideM, layout));
   if (rings.length === 0) return null;
-  const edge = style.pathEdgeOn ? pen(style.path) : null;
+  const edgePen = footpathEdgeStroke(style);
+  const edge = edgePen ? pen(edgePen) : null;
   return {
     name: "Paths",
     paths: [
