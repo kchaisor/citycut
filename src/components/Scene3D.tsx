@@ -558,6 +558,8 @@ function DevCameraHook({
     const controls = controlsRef.current;
     if (!controls) return;
     flushControlInertia(controls);
+    controls.minDistance = 1;
+    controls.maxDistance = Math.max(side * 40, 40000);
     camera.position.set(pose.position[0], pose.position[1], pose.position[2]);
     controls.target.set(pose.target[0], pose.target[1], pose.target[2]);
     camera.near = Math.max(0.1, side / 400);
@@ -777,8 +779,8 @@ function Cameras({
             enableDamping
             dampingFactor={0.08}
             maxPolarAngle={Math.PI / 2.02}
-            minDistance={side * 0.2}
-            maxDistance={Math.max(side * 3.4, heliodonRadius * 2.4)}
+            minDistance={captureCam ? 1 : side * 0.2}
+            maxDistance={Math.max(side * 3.4, heliodonRadius * 2.4, 40000)}
           />
           <OrbitControls
             ref={orthoControls}
