@@ -143,7 +143,7 @@ const INK = drawingSheetColor("--frame-stroke");
 export const DEFAULT_LINE_STYLES: LineStyles = {
   building: { mm: LINE_MM.buildingCut, color: drawingSheetColor("--building-stroke"), dash: "none" },
   kerb: { mm: LINE_MM.propertyRoad, color: drawingSheetColor("--road-kerb-stroke"), dash: "none" },
-  path: { mm: LINE_MM.secondary, color: drawingSheetColor("--path-edge-stroke"), dash: "none" },
+  path: { mm: 0, color: drawingSheetColor("--path-edge-stroke"), dash: "none" },
   rail: { mm: LINE_MM.secondary, color: drawingSheetColor("--rail-stroke"), dash: "none" },
   green: { mm: 0, color: drawingSheetColor("--green-stroke"), dash: "none" },
   water: { mm: 0, color: drawingSheetColor("--water-stroke"), dash: "none" },
@@ -302,6 +302,18 @@ export function dashPair(dash: string): readonly [number, number] | null {
  * SVG stroke for a pen. A weight of 0 is `stroke="none"` and does not set a
  * width, so the 0.6 px screen floor never turns a hidden edge into a line.
  */
+/** Footpath outline on the unioned strip. Requires `--path-edge: on` and a weight above 0. */
+export function footpathEdgeStroke(style: LineStyles): StrokeStyle | null {
+  if (!style.pathEdgeOn || !(style.path.mm > 0)) return null;
+  return style.path;
+}
+
+export function footpathEdgeSvgAttrs(style: LineStyles, join: "miter" | "round" = "round") {
+  const stroke = footpathEdgeStroke(style);
+  if (!stroke) return { stroke: "none" as const };
+  return screenPenAttrs(stroke, join);
+}
+
 export function screenPenAttrs(stroke: StrokeStyle, join: "miter" | "round" = "round") {
   if (!(stroke.mm > 0)) return { stroke: "none" as const };
   const dash = dashScreen(stroke.dash);
@@ -368,6 +380,7 @@ export function styleFromProperties(
   if (pathFill) next.pathFill = pathFill;
   const edge = parseKerb(read(PATH_EDGE_VAR));
   if (edge != null) next.pathEdgeOn = edge;
+  if (!next.pathEdgeOn) next.path = { ...next.path, mm: 0 };
   const indexMm = parseMm(read(CONTOUR_INDEX_MM_VAR));
   if (indexMm != null) next.contourIndexMm = indexMm;
   const indexEvery = parseIndexEvery(read(CONTOUR_INDEX_EVERY_VAR));

@@ -335,6 +335,7 @@ describe("Illustrator plans", () => {
     expect(gone.bodies.has("Footpaths")).toBe(false);
     const edged = cloneLineStyles(DEFAULT_LINE_STYLES);
     edged.pathEdgeOn = true;
+    edged.path = { ...edged.path, mm: LINE_MM.secondary };
     const withEdge = await inspect(await sitePlanPdf(model(), 1000, edged));
     expect(paintsOf(withEdge.bodies.get("Footpaths") ?? "")).toContain("B*");
     const figure = figureGroundChunks(model(), 1000).find((chunk) => chunk.name === "Paths");

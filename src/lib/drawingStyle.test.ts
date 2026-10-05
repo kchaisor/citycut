@@ -156,7 +156,10 @@ describe("drawing style css", () => {
     const legacyStored = readStoredOverrides(legacyStore);
     expect(legacyStored["--path-edge-mm"]).toBe("0.3");
     expect(legacyStored["--path-stroke-mm"]).toBeUndefined();
-    expect(styleFromProperties((name) => legacyStored[name] ?? "").path.mm).toBe(0.3);
+    expect(styleFromProperties((name) => legacyStored[name] ?? "").path.mm).toBe(0);
+    expect(
+      styleFromProperties((name) => legacyStored[name] ?? (name === PATH_EDGE_VAR ? "on" : "")).path.mm,
+    ).toBe(0.3);
     expect(parseMetres("1.25m")).toBe(1.3);
     const legacy = styleFromProperties((name) => (name === "--path-stroke" ? "#112233" : ""));
     expect(legacy.path.color).toBe("#112233");
