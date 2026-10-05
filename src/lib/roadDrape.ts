@@ -8,11 +8,14 @@ export const BRIDGE_DECK_CLEARANCE_M = 4.5;
 /** Max triangle count while densifying a draped fill (roads/path/rail). */
 export const ROAD_DRAPE_TRIANGLE_BUDGET = 48_000;
 
-/** Max ground-height change along a draped road edge (m/m). Limits embankment/DEM step spikes. */
-export const ROAD_DRAPE_MAX_SLOPE = 0.42;
+/** Denser cap for arterial/freeway ribbons on steep LiDAR (still bounded). */
+export const ROAD_DRAPE_TRIANGLE_BUDGET_STEEP = 120_000;
 
-/** Max vertical move from the sampled terrain height at a draped vertex. */
-export const ROAD_DRAPE_MAX_DEVIATION_M = 12;
+/** Max ground-height change along a draped road edge (m/m). Limits embankment/DEM step spikes. */
+export const ROAD_DRAPE_MAX_SLOPE = 0.22;
+
+/** Max vertical move from the terrain-mesh sample at a draped vertex. */
+export const ROAD_DRAPE_MAX_DEVIATION_M = 0.85;
 
 export type GroundPoint = { east: number; north: number; ground: number; initial: number };
 
@@ -94,6 +97,50 @@ export function splitTriangle(tri: Tri, maxEdge: number): Tri[] {
 function needsSplit(tri: Tri, maxEdge: number): boolean {
   const [a, b, c] = tri;
   return distance(a, b) > maxEdge || distance(b, c) > maxEdge || distance(c, a) > maxEdge;
+}
+
+/** Split triangles until corner samples differ by at most `maxRelief` metres (road drape). */
+export function refineSteepRoadTriangles(
+  tris: Tri[],
+  sample: (east: number, north: number) => number,
+  maxRelief = 1.25,
+  maxCount = ROAD_DRAPE_TRIANGLE_BUDGET,
+  maxEdge = 5,
+): Tri[] {
+  let current = tris;
+  for (let pass = 0; pass < 16; pass++) {
+    const next: Tri[] = [];
+    let splitAny = false;
+    for (const tri of current) {
+      const [a, b, c] = tri;
+      const heights = [sample(a[0], a[1]), sample(b[0], b[1]), sample(c[0], c[1])];
+      const relief = Math.max(...heights) - Math.min(...heights);
+      const longEdge =
+        distance(a, b) > maxEdge || distance(b, c) > maxEdge || distance(c, a) > maxEdge;
+      if (relief <= maxRelief && !longEdge) {
+        next.push(tri);
+        continue;
+      }
+      splitAny = true;
+      const ab = distance(a, b);
+      const bc = distance(b, c);
+      const ca = distance(c, a);
+      if (ab >= bc && ab >= ca) {
+        const m = midpoint(a, b);
+        next.push([a, m, c], [m, b, c]);
+      } else if (bc >= ca) {
+        const m = midpoint(b, c);
+        next.push([a, b, m], [a, m, c]);
+      } else {
+        const m = midpoint(c, a);
+        next.push([c, m, b], [m, a, b]);
+      }
+    }
+    if (!splitAny) return current;
+    if (next.length > maxCount) return current;
+    current = next;
+  }
+  return current;
 }
 
 /** Longest edge in a triangle list (plan metres). */

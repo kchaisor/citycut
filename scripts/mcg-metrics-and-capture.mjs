@@ -25,31 +25,15 @@ const browser = await chromium.launch({
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 page.setDefaultTimeout(240_000);
 
-await page.goto(url, { waitUntil: "networkidle" });
-await page.getByRole("button", { name: "Layers", exact: true }).click();
-for (const [name, on] of [
-  ["Buildings", true],
-  ["Roads and rail", true],
-  ["Water and green", true],
-  ["Trees", false],
-  ["Terrain", true],
-  ["Contours", false],
-]) {
-  const row = page.locator(".layers li").filter({ hasText: name });
-  const toggle = row.locator("button.toggle");
-  const pressed = await toggle.getAttribute("aria-pressed");
-  if ((pressed === "true") !== on) await toggle.click();
-}
-
+await page.goto(url, { waitUntil: "domcontentloaded" });
 await page.locator("button.create-fab").click();
 await page.waitForSelector(".model-chrome", { timeout: 240_000 });
-await page.waitForSelector('[role=tablist][aria-label="Model views"]');
-await page.getByRole("tab", { name: "3D model" }).click();
-await page.getByRole("button", { name: "Perspective" }).click();
-const drawingDrawer = page.locator("#model-drawer .drawer-section").filter({ hasText: "Drawing type" });
-if (await drawingDrawer.isVisible()) {
+const drawingOpen = page.locator("#model-drawer .drawer-section").filter({ hasText: "Drawing type" });
+if (await drawingOpen.isVisible()) {
   await page.getByRole("button", { name: "Drawing", exact: true }).click();
 }
+const perspective = page.getByRole("button", { name: "Perspective" });
+if (await perspective.isVisible()) await perspective.click();
 await page.locator(".viewport canvas").waitFor({ state: "visible" });
 await page.waitForTimeout(8000);
 await page.waitForFunction(() => typeof window.__citycutRoadMetrics === "function", null, { timeout: 120_000 });

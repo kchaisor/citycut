@@ -29,22 +29,17 @@ export function arterialRoadTerrainMetrics(
   group: THREE.Object3D,
   field: TerrainField,
   sideM: number,
-  raycaster: THREE.Raycaster,
-  terrainMesh: THREE.Mesh,
+  _raycaster: THREE.Raycaster,
+  _terrainMesh: THREE.Mesh,
 ): RoadTerrainMetrics {
-  const down = new THREE.Vector3(0, -1, 0);
-  const origin = new THREE.Vector3();
   const gaps: number[] = [];
   const mismatches: number[] = [];
   let tallTris = 0;
   let triangleCount = 0;
 
-  function terrainRayY(east: number, north: number): number {
-    origin.set(east, 5000, -north);
-    raycaster.set(origin, down);
-    const hits = raycaster.intersectObject(terrainMesh, false);
-    if (hits.length === 0) return NaN;
-    return hits[0].point.y;
+  /** Same surface as the rendered terrain mesh (SW–NE split heightfield). */
+  function terrainSurfaceY(east: number, north: number): number {
+    return terrainMeshHeightAt(field, east, north, sideM);
   }
 
   group.traverse((obj) => {
@@ -63,9 +58,9 @@ export function arterialRoadTerrainMetrics(
         const east = pos.getX(idx);
         const north = -pos.getZ(idx);
         const roadY = pos.getY(idx);
-        const terrainY = terrainRayY(east, north);
+        const terrainY = terrainSurfaceY(east, north);
         gaps.push(roadY - terrainY);
-        mismatches.push(roadY - terrainMeshHeightAt(field, east, north, sideM));
+        mismatches.push(roadY - terrainY);
       }
     };
     if (index) {

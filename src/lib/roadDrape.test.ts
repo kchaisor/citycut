@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { maxTriangleEdge, splitTriangle, subdivideToSpacing, type Tri } from "./roadDrape";
+import {
+  maxTriangleEdge,
+  refineSteepRoadTriangles,
+  splitTriangle,
+  subdivideToSpacing,
+  type Tri,
+} from "./roadDrape";
 
 function oldSubdivideToSpacing(tris: Tri[], maxEdge: number): Tri[] {
   let current = tris;
@@ -48,6 +54,23 @@ describe("road drape subdivision", () => {
     const fine = subdivideToSpacing(tris, 4);
     expect(maxTriangleEdge(legacy)).toBeGreaterThan(4);
     expect(maxTriangleEdge(fine)).toBeLessThanOrEqual(4.01);
+  });
+});
+
+describe("refineSteepRoadTriangles", () => {
+  it("splits a triangle that spans a sharp height step", () => {
+    const tri: Tri = [
+      [0, 0],
+      [20, 0],
+      [10, 15],
+    ];
+    const sample = (east: number) => (east < 10 ? 0 : 8);
+    const refined = refineSteepRoadTriangles([tri], sample, 1.75, 10_000, 20);
+    expect(refined.length).toBeGreaterThan(1);
+    for (const [a, b, c] of refined) {
+      const hs = [sample(a[0], a[1]), sample(b[0], b[1]), sample(c[0], c[1])];
+      expect(Math.max(...hs) - Math.min(...hs)).toBeLessThanOrEqual(1.76);
+    }
   });
 });
 

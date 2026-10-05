@@ -10,6 +10,9 @@ import { hexRgb, overlapLift, ROAD_COLOR, ROAD_RGB, roadGradeLayer, SURFACE } fr
 import { matteStandardMaterial } from "./matteMaterial";
 import {
   BRIDGE_DECK_CLEARANCE_M,
+  ROAD_DRAPE_TRIANGLE_BUDGET,
+  ROAD_DRAPE_TRIANGLE_BUDGET_STEEP,
+  refineSteepRoadTriangles,
   smoothRoadGroundHeights,
   subdivideToSpacing,
   type GroundPoint,
@@ -109,7 +112,7 @@ function drapedRingGeometry(
   sample: (east: number, north: number) => number,
   offset: number,
   spacing: number,
-  options: { roadDrape?: boolean; sideM?: number } = {},
+  options: { roadDrape?: boolean; sideM?: number; skipSmooth?: boolean } = {},
 ): THREE.BufferGeometry | null {
   const area: AreaFeat = { id: -1, kind: "green", ring: outer, holes };
   return drapedAreaGeometry(area, sample, offset, spacing, options);
@@ -121,7 +124,7 @@ export function drapedMultiPolygonGeometry(
   sample: (east: number, north: number) => number,
   offset: number,
   spacing: number,
-  options: { roadDrape?: boolean; sideM?: number } = {},
+  options: { roadDrape?: boolean; sideM?: number; skipSmooth?: boolean } = {},
 ): THREE.BufferGeometry | null {
   const parts: THREE.BufferGeometry[] = [];
   for (const polygon of multi) {
@@ -153,7 +156,7 @@ function roadFillGeometry(
   if (multi.length === 0) return null;
   const heightAt = sample ?? (() => 0);
   const step = spacing ?? 8;
-  return drapedMultiPolygonGeometry(multi, heightAt, lift, step, { roadDrape: true, sideM });
+  return drapedMultiPolygonGeometry(multi, heightAt, lift, step, { roadDrape: true, sideM, skipSmooth: true });
 }
 
 function deckHeightForRing(ring: Ring, sample: (east: number, north: number) => number): number {
@@ -196,7 +199,7 @@ export function drapedAreaGeometry(
   sample: (east: number, north: number) => number,
   offset: number,
   spacing: number,
-  options: { roadDrape?: boolean; sideM?: number } = {},
+  options: { roadDrape?: boolean; sideM?: number; skipSmooth?: boolean } = {},
 ): THREE.BufferGeometry | null {
   const shape = shapeFromRing(area.ring, area.holes);
   if (!shape) return null;
@@ -206,7 +209,11 @@ export function drapedAreaGeometry(
   } catch {
     return null;
   }
-  const fine = subdivideToSpacing(trianglesFromShape(flat), Math.max(spacing, 4));
+  const triBudget = options.roadDrape ? ROAD_DRAPE_TRIANGLE_BUDGET_STEEP : ROAD_DRAPE_TRIANGLE_BUDGET;
+  const shapeTris = trianglesFromShape(flat);
+  let fine = options.roadDrape
+    ? refineSteepRoadTriangles(shapeTris, sample, 0.95, triBudget, Math.max(spacing, 5))
+    : subdivideToSpacing(shapeTris, Math.max(spacing, 4), triBudget);
   flat.dispose();
   const positions: number[] = [];
   if (options.roadDrape) {
@@ -224,7 +231,7 @@ export function drapedAreaGeometry(
       const span = distance(a, b) + distance(b, c) + distance(c, a);
       if (span < 0.05) continue;
       const triKeys = [a, b, c].map((p) => {
-        const key = pointKey(p[0], p[1]);
+        const key = pointKey(p[0], p[1], true);
         if (!points.has(key)) {
           const initial = sample(p[0], p[1]);
           points.set(key, { east: p[0], north: p[1], ground: initial, initial });
@@ -235,12 +242,12 @@ export function drapedAreaGeometry(
       addEdge(triKeys[1], triKeys[2]);
       addEdge(triKeys[2], triKeys[0]);
     }
-    smoothRoadGroundHeights(points, edges);
+    if (!options.skipSmooth) smoothRoadGroundHeights(points, edges);
     for (const [a, b, c] of fine) {
       const span = distance(a, b) + distance(b, c) + distance(c, a);
       if (span < 0.05) continue;
       for (const point of [a, b, c]) {
-        const key = pointKey(point[0], point[1]);
+        const key = pointKey(point[0], point[1], true);
         const row = points.get(key);
         const ground = row?.ground ?? sample(point[0], point[1]);
         positions.push(point[0], ground + offset, -point[1]);
@@ -262,8 +269,9 @@ export function drapedAreaGeometry(
   return geometry;
 }
 
-function pointKey(east: number, north: number): string {
-  return `${Math.round(east * 20) / 20},${Math.round(north * 20) / 20}`;
+function pointKey(east: number, north: number, fine = false): string {
+  const scale = fine ? 100 : 20;
+  return `${Math.round(east * scale) / scale},${Math.round(north * scale) / scale}`;
 }
 
 const stripeMaps = new Map<string, THREE.CanvasTexture | null>();
