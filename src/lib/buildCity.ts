@@ -1,9 +1,11 @@
 import * as THREE from "three";
+import type { MultiPolygon } from "polygon-clipping";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { BUILDING_USE_META, SOURCE_META, buildingLayerName, uniformBuildingColor } from "./buildingUse";
 import { getColour } from "./colours";
 import { buildTreeGroup } from "./treeMassing";
 import { openRing, signedArea } from "./geo";
+import { carriagewaysOf, unionCarriageways, unionPathRoads } from "./roadFill";
 import { hexRgb, overlapLift, ROAD_COLOR, ROAD_RGB, roadGradeLayer, SURFACE } from "./surfaceLayers";
 import { matteStandardMaterial } from "./matteMaterial";
 import { footprintBase, sampleTerrain, terrainBuffers } from "./terrain";
@@ -75,80 +77,6 @@ function mergeMeshes(
   }
 }
 
-function ribbonPositions(
-  line: Pt[],
-  width: number,
-  y: number,
-  heightAt?: (east: number, north: number) => number,
-): number[] {
-  const positions: number[] = [];
-  for (let i = 0; i < line.length - 1; i++) {
-    const a = line[i];
-    const b = line[i + 1];
-    const dx = b[0] - a[0];
-    const dy = b[1] - a[1];
-    const length = Math.hypot(dx, dy);
-    if (length < 0.2) continue;
-    const px = (-dy / length) * (width / 2);
-    const py = (dx / length) * (width / 2);
-    const lift = (east: number, north: number) => (heightAt ? heightAt(east, north) + y : y);
-    const corner = (east: number, north: number): [number, number, number] => [
-      east,
-      lift(east, north),
-      -north,
-    ];
-    const aL = corner(a[0] + px, a[1] + py);
-    const aR = corner(a[0] - px, a[1] - py);
-    const bL = corner(b[0] + px, b[1] + py);
-    const bR = corner(b[0] - px, b[1] - py);
-    // Y is up. OSM ways run either direction, and a draped quad can twist,
-    // so each triangle is flipped until its normal points at the sky.
-    // Otherwise FrontSide culls about half the carriageways.
-    const pushUp = (p: [number, number, number], q: [number, number, number], r: [number, number, number]) => {
-      const ny = (q[2] - p[2]) * (r[0] - p[0]) - (q[0] - p[0]) * (r[2] - p[2]);
-      if (ny >= 0) positions.push(...p, ...q, ...r);
-      else positions.push(...p, ...r, ...q);
-    };
-    pushUp(aL, bL, bR);
-    pushUp(aL, bR, aR);
-  }
-  return positions;
-}
-
-function densifyLine(line: Pt[], maxLen: number): Pt[] {
-  if (line.length < 2) return line;
-  const out: Pt[] = [line[0]];
-  for (let i = 0; i < line.length - 1; i++) {
-    const a = line[i];
-    const b = line[i + 1];
-    const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    const steps = Math.max(1, Math.ceil(length / maxLen));
-    for (let step = 1; step <= steps; step++) {
-      const t = step / steps;
-      out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
-    }
-  }
-  return out;
-}
-
-function ribbonGeometry(
-  lines: { line: Pt[]; width: number }[],
-  y: number,
-  heightAt?: (east: number, north: number) => number,
-  maxSegment?: number,
-): THREE.BufferGeometry | null {
-  const positions: number[] = [];
-  for (const item of lines) {
-    const line = heightAt && maxSegment ? densifyLine(item.line, maxSegment) : item.line;
-    positions.push(...ribbonPositions(line, item.width, y, heightAt));
-  }
-  if (positions.length === 0) return null;
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geometry.computeVertexNormals();
-  return geometry;
-}
-
 type Tri = [Pt, Pt, Pt];
 
 function distance(a: Pt, b: Pt): number {
@@ -208,6 +136,49 @@ function subdivideToSpacing(tris: Tri[], maxEdge: number): Tri[] {
     current = next;
   }
   return current;
+}
+
+function drapedRingGeometry(
+  outer: Ring,
+  holes: Ring[],
+  sample: (east: number, north: number) => number,
+  offset: number,
+  spacing: number,
+): THREE.BufferGeometry | null {
+  const area: AreaFeat = { id: -1, kind: "green", ring: outer, holes };
+  return drapedAreaGeometry(area, sample, offset, spacing);
+}
+
+/** Unioned road or path fill, draped on the terrain heightfield. */
+export function drapedMultiPolygonGeometry(
+  multi: MultiPolygon,
+  sample: (east: number, north: number) => number,
+  offset: number,
+  spacing: number,
+): THREE.BufferGeometry | null {
+  const parts: THREE.BufferGeometry[] = [];
+  for (const polygon of multi) {
+    if (polygon.length === 0) continue;
+    const geometry = drapedRingGeometry(polygon[0] as Ring, polygon.slice(1) as Ring[], sample, offset, spacing);
+    if (geometry) parts.push(geometry);
+  }
+  if (parts.length === 0) return null;
+  const merged = mergeGeometries(parts, false);
+  parts.forEach((geometry) => geometry.dispose());
+  merged?.computeVertexNormals();
+  return merged;
+}
+
+function roadFillGeometry(
+  multi: MultiPolygon,
+  lift: number,
+  sample: ((east: number, north: number) => number) | null,
+  spacing: number | undefined,
+): THREE.BufferGeometry | null {
+  if (multi.length === 0) return null;
+  const heightAt = sample ?? (() => 0);
+  const step = spacing ?? 12;
+  return drapedMultiPolygonGeometry(multi, heightAt, lift, step);
 }
 
 /** Parks and water keep their outline and pick up interior samples so they follow the heightfield. */
@@ -436,12 +407,23 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   }
 
   const railMat = paint(matteStandardMaterial({ color: getColour("--rail-fill") }), SURFACE.rail);
-  const segment = model.terrain ? Math.min(model.terrain.spacingM, 8) : undefined;
+  const drapeSpacing = model.terrain ? Math.min(model.terrain.spacingM, 8) : undefined;
   const grades: RoadGrade[] = ["path", "local", "arterial"];
   for (const grade of grades) {
     const layer = roadGradeLayer(grade);
-    const lines = model.roads.filter((road) => road.kind === "road" && (road.grade ?? "local") === grade);
-    const geometry = ribbonGeometry(lines, layer.lift, sample ?? undefined, segment);
+    const fill =
+      grade === "path"
+        ? unionPathRoads(
+            model.roads
+              .filter((road) => road.kind === "road" && road.grade === "path")
+              .map((road) => ({ line: road.line, width: road.width })),
+            model.sideM,
+          )
+        : unionCarriageways(
+            carriagewaysOf(model.roads.filter((road) => (road.grade ?? "local") === grade)),
+            model.sideM,
+          );
+    const geometry = roadFillGeometry(fill.polygons, layer.lift, sample, drapeSpacing);
     if (!geometry) continue;
     const material = paint(matteStandardMaterial({ color: ROAD_COLOR[grade] }), layer);
     material.name = "Roads";
@@ -452,12 +434,11 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     order(mesh, layer.renderOrder);
     group.add(mesh);
   }
-  const railGeo = ribbonGeometry(
-    model.roads.filter((road) => road.kind === "rail"),
-    SURFACE.rail.lift,
-    sample ?? undefined,
-    segment,
+  const railFill = unionCarriageways(
+    model.roads.filter((road) => road.kind === "rail").map((road) => ({ line: road.line, width: road.width })),
+    model.sideM,
   );
+  const railGeo = roadFillGeometry(railFill.polygons, SURFACE.rail.lift, sample, drapeSpacing);
   if (railGeo) {
     const mesh = new THREE.Mesh(railGeo, railMat);
     mesh.name = "Rail";
