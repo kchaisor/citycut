@@ -13,7 +13,7 @@
   --sheet-fill: #E7E6E6;
 
   /* Flat 3D ground when the frame has no terrain, the ground on the 3D-view Illustrator sheet, and the Rhino Ground layer. */
-  --ground-fill: #FFFFFF;
+  --ground-fill: #6b6c6f;
 
   /* Backdrop of the 3D PNG download, and the page behind the 3D-view Illustrator drawing. */
   --export-backdrop: #e7e4dc;
