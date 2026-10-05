@@ -5,7 +5,11 @@ import { dedupeRoads } from "./footprints";
 import { polylineLength } from "./geo";
 import { overtureMaxRoadJumpM, sanitizeRoadFeatures } from "./roadLineValidation";
 import { overtureTransportationUrl, resolveOvertureRelease } from "./overtureRelease";
-import { clipLineToGroundVisible, hiddenSpansFromOvertureProps } from "./overtureSegmentVisibility";
+import {
+  clipLineToGroundVisible,
+  deckPiecesFromLine,
+  groundHiddenSpansForLine,
+} from "./overtureSegmentVisibility";
 import { roadSpecFromOvertureSegment, skipTomTomSegmentWithoutClass } from "./overtureTransportMapping";
 import {
   clipBoundsForTile,
@@ -26,7 +30,12 @@ export type OvertureTransportStats = {
   skippedTomTom: number;
 };
 
-type LinePart = { id: string; line: Pt[]; spec: NonNullable<ReturnType<typeof roadSpecFromOvertureSegment>> };
+type LinePart = {
+  id: string;
+  line: Pt[];
+  spec: NonNullable<ReturnType<typeof roadSpecFromOvertureSegment>>;
+  deck?: boolean;
+};
 
 function partsFromTile(
   data: ArrayBuffer,
@@ -42,7 +51,6 @@ function partsFromTile(
   const tileRect = clipBoundsForTile(half, tileLocalRect(z, x, y, origin));
   const parts: LinePart[] = [];
   let skippedTomTom = 0;
-  const hidden = (props: Record<string, unknown>) => hiddenSpansFromOvertureProps(props);
   for (let i = 0; i < layer.length; i++) {
     const feature = layer.feature(i);
     const props = feature.properties as Record<string, unknown>;
@@ -61,14 +69,18 @@ function partsFromTile(
         : geo.geometry.type === "MultiLineString"
           ? geo.geometry.coordinates
           : [];
-    const underground = hidden(props);
     for (const coordinates of lineStrings) {
       const clipped = lineFromGeoJson(coordinates, origin, half, tileRect);
       for (const line of clipped) {
-        const visible = clipLineToGroundVisible(line, underground);
+        const offGround = groundHiddenSpansForLine(line, props, spec.kind, spec.grade);
+        const visible = clipLineToGroundVisible(line, offGround);
         for (const piece of visible) {
           if (polylineLength(piece) < 1) continue;
           parts.push({ id: `${id}:${x}:${y}:${parts.length}`, line: piece, spec });
+        }
+        for (const piece of deckPiecesFromLine(line, props, spec.kind, spec.grade)) {
+          if (polylineLength(piece) < 1) continue;
+          parts.push({ id: `${id}:${x}:${y}:deck:${parts.length}`, line: piece, spec, deck: true });
         }
       }
     }
@@ -105,6 +117,7 @@ export async function fetchOvertureTransportationForCut(
     width: part.spec.width,
     kind: part.spec.kind,
     ...(part.spec.grade ? { grade: part.spec.grade } : {}),
+    ...(part.deck ? { deck: true } : {}),
   }));
   const jumpLimit = overtureMaxRoadJumpM(OVERTURE_TRANSPORT_ZOOM, origin);
   const sanitized = sanitizeRoadFeatures(roads, jumpLimit);
