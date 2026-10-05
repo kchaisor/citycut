@@ -8,8 +8,9 @@ import { openRing, signedArea } from "./geo";
 import { carriagewaysOf, unionCarriageways, unionPathRoads } from "./roadFill";
 import { hexRgb, overlapLift, ROAD_COLOR, ROAD_RGB, roadGradeLayer, SURFACE } from "./surfaceLayers";
 import { matteStandardMaterial } from "./matteMaterial";
+import { deckHeightAt } from "./roadDrape";
 import { footprintBase, sampleTerrain, terrainBuffers } from "./terrain";
-import type { AreaFeat, BuildingFeat, BuildingUse, CityModel, Pt, Ring, RoadGrade, TerrainField } from "../types";
+import type { AreaFeat, BuildingFeat, BuildingUse, CityModel, Pt, Ring, RoadFeat, RoadGrade, TerrainField } from "../types";
 
 export type CityBuildOptions = {
   /** Viewport only. Exports keep one material, and one Rhino sublayer, per use. */
@@ -179,6 +180,57 @@ function roadFillGeometry(
   const heightAt = sample ?? (() => 0);
   const step = spacing ?? 12;
   return drapedMultiPolygonGeometry(multi, heightAt, lift, step);
+}
+
+/** One bridge span: planar ramp between abutments, clearance tapering to the ground. */
+export function deckSpanGeometry(
+  line: Pt[],
+  width: number,
+  sample: (east: number, north: number) => number,
+  lift: number,
+  sideM: number,
+): THREE.BufferGeometry | null {
+  const fill = unionCarriageways([{ line, width }], sideM);
+  if (fill.polygons.length === 0) return null;
+  const heightAt = (east: number, north: number) => deckHeightAt(line, sample, east, north) + lift;
+  return drapedMultiPolygonGeometry(fill.polygons, heightAt, 0, Math.min(8, Math.max(4, width)));
+}
+
+function addRoadMesh(
+  group: THREE.Group,
+  geometry: THREE.BufferGeometry,
+  material: THREE.Material,
+  layer: { renderOrder: number },
+  grade: RoadGrade,
+  deck: boolean,
+) {
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = "Roads";
+  mesh.userData.layerColor = ROAD_RGB.arterial;
+  mesh.userData.objectColor = ROAD_RGB[grade];
+  mesh.userData.deck = deck;
+  order(mesh, deck ? layer.renderOrder + 0.1 : layer.renderOrder);
+  group.add(mesh);
+}
+
+function addDeckSpans(
+  group: THREE.Group,
+  roads: RoadFeat[],
+  sample: (east: number, north: number) => number,
+  lift: number,
+  sideM: number,
+  material: THREE.Material,
+  layer: { renderOrder: number },
+  grade: RoadGrade,
+) {
+  for (const road of roads) {
+    try {
+      const geometry = deckSpanGeometry(road.line, road.width, sample, lift, sideM);
+      if (geometry) addRoadMesh(group, geometry, material, layer, grade, true);
+    } catch {
+      /* Skip a broken deck rather than failing the whole block. */
+    }
+  }
 }
 
 /** Parks and water keep their outline and pick up interior samples so they follow the heightfield. */
@@ -423,31 +475,37 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   const grades: RoadGrade[] = ["path", "local", "arterial"];
   for (const grade of grades) {
     const layer = roadGradeLayer(grade);
+    const gradeRoads = model.roads.filter(
+      (road) => road.kind === "road" && (road.grade ?? "local") === grade,
+    );
+    const groundRoads = gradeRoads.filter((road) => !road.deck);
+    const deckRoads = gradeRoads.filter((road) => road.deck);
     const fill =
       grade === "path"
         ? unionPathRoads(
-            model.roads
-              .filter((road) => road.kind === "road" && road.grade === "path")
-              .map((road) => ({ line: road.line, width: road.width })),
+            groundRoads.map((road) => ({ line: road.line, width: road.width })),
             model.sideM,
           )
-        : unionCarriageways(
-            carriagewaysOf(model.roads.filter((road) => (road.grade ?? "local") === grade)),
-            model.sideM,
-          );
-    const geometry = roadFillGeometry(fill.polygons, layer.lift, sample, drapeSpacing);
-    if (!geometry) continue;
+        : unionCarriageways(carriagewaysOf(groundRoads), model.sideM);
     const material = paint(matteStandardMaterial({ color: ROAD_COLOR[grade] }), layer);
     material.name = "Roads";
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.name = "Roads";
-    mesh.userData.layerColor = ROAD_RGB.arterial;
-    mesh.userData.objectColor = ROAD_RGB[grade];
-    order(mesh, layer.renderOrder);
-    group.add(mesh);
+    const geometry = roadFillGeometry(fill.polygons, layer.lift, sample, drapeSpacing);
+    if (geometry) addRoadMesh(group, geometry, material, layer, grade, false);
+    addDeckSpans(
+      group,
+      deckRoads,
+      sample ?? (() => 0),
+      layer.lift,
+      model.sideM,
+      material,
+      layer,
+      grade,
+    );
   }
+  const groundRail = model.roads.filter((road) => road.kind === "rail" && !road.deck);
+  const deckRail = model.roads.filter((road) => road.kind === "rail" && road.deck);
   const railFill = unionCarriageways(
-    model.roads.filter((road) => road.kind === "rail").map((road) => ({ line: road.line, width: road.width })),
+    groundRail.map((road) => ({ line: road.line, width: road.width })),
     model.sideM,
   );
   const railGeo = roadFillGeometry(railFill.polygons, SURFACE.rail.lift, sample, drapeSpacing);
@@ -456,6 +514,28 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     mesh.name = "Rail";
     order(mesh, SURFACE.rail.renderOrder);
     group.add(mesh);
+  }
+  if (deckRail.length > 0) {
+    const railSample = sample ?? (() => 0);
+    for (const road of deckRail) {
+      try {
+        const geometry = deckSpanGeometry(
+          road.line,
+          road.width,
+          railSample,
+          SURFACE.rail.lift,
+          model.sideM,
+        );
+        if (!geometry) continue;
+        const mesh = new THREE.Mesh(geometry, railMat);
+        mesh.name = "Rail";
+        mesh.userData.deck = true;
+        order(mesh, SURFACE.rail.renderOrder + 0.1);
+        group.add(mesh);
+      } catch {
+        /* Skip a broken rail deck rather than failing the whole block. */
+      }
+    }
   }
 
   const bySource = Boolean(options.colourBySource) && !options.splitBuildings;

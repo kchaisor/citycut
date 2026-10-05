@@ -75,6 +75,8 @@ export type RoadFeat = {
   width: number;
   kind: "road" | "rail";
   grade?: RoadGrade;
+  /** Bridge or level>0 span: flat deck above terrain, not draped. */
+  deck?: boolean;
 };
 
 export type AreaFeat = {
