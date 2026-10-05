@@ -336,6 +336,29 @@ export function sampleTerrain(field: TerrainField, east: number, north: number, 
 }
 
 /**
+ * Height on the rendered terrain mesh: grid nodes split SW–NE, matching
+ * {@link terrainBuffers} (`sw-se-ne` and `sw-ne-nw`). Differs from bilinear
+ * {@link sampleTerrain} inside a cell.
+ */
+export function terrainMeshHeightAt(field: TerrainField, east: number, north: number, sideM: number): number {
+  if (field.cols < 2 || field.rows < 2) return field.heights[0] ?? 0;
+  const half = sideM / 2;
+  const col = Math.min(field.cols - 1, Math.max(0, (east + half) / field.spacingM));
+  const row = Math.min(field.rows - 1, Math.max(0, (north + half) / field.spacingM));
+  const c0 = Math.min(field.cols - 2, Math.floor(col));
+  const r0 = Math.min(field.rows - 2, Math.floor(row));
+  const tx = Math.min(1, col - c0);
+  const ty = Math.min(1, row - r0);
+  const at = (c: number, r: number) => field.heights[r * field.cols + c];
+  const hsw = at(c0, r0);
+  const hse = at(c0 + 1, r0);
+  const hnw = at(c0, r0 + 1);
+  const hne = at(c0 + 1, r0 + 1);
+  if (tx >= ty) return (1 - tx) * hsw + (tx - ty) * hse + ty * hne;
+  return (1 - ty) * hsw + tx * hne + (ty - tx) * hnw;
+}
+
+/**
  * Base elevation for an extruded footprint: the lowest sample on the outer
  * ring. The whole solid starts there, so a corner cannot float. The uphill
  * side may meet the terrain part-way up the wall.

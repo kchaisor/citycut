@@ -137,7 +137,7 @@ export function dedupeAreas(areas: AreaFeat[]): AreaFeat[] {
 
 function roadKey(road: RoadFeat): string {
   const line = road.line.map((point) => `${Math.round(point[0] * 2) / 2},${Math.round(point[1] * 2) / 2}`).join(";");
-  return `${road.kind}|${line}`;
+  return `${road.kind}|${road.deck ? "deck" : "ground"}|${line}`;
 }
 
 /** Drop a second copy of the same centerline. The wider carriageway stays. */
