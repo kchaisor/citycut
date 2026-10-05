@@ -6,6 +6,7 @@ import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
+import { cameraFromSearch, formatCameraSearch } from "../lib/captureQuery";
 import { shotFromCamera, type CameraShot } from "../lib/cameraShot";
 import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
@@ -235,6 +236,7 @@ function PerspectiveFit({
   lon,
   fitId,
   active,
+  skipDefaultFit,
 }: {
   camera: THREE.PerspectiveCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
@@ -248,12 +250,14 @@ function PerspectiveFit({
   lon: number;
   fitId: number;
   active: boolean;
+  skipDefaultFit: boolean;
 }) {
   const size = useThree((state) => state.size);
   const fittedKey = useRef<string | null>(null);
   const place = useCallback(() => {
     const controls = controlsRef.current;
     if (!controls || !active || size.width < 2 || size.height < 2) return;
+    if (skipDefaultFit) return;
     const solarKey = solar.showPath
       ? `${solar.radiusFactor}:${solar.month}-${solar.day}:${solar.hour}:${solar.minute}`
       : "off";
@@ -318,6 +322,7 @@ function PerspectiveFit({
     siteTopY,
     size.height,
     size.width,
+    skipDefaultFit,
     solar,
   ]);
   useLayoutEffect(() => {
@@ -528,6 +533,67 @@ function OrthoClip({
   return null;
 }
 
+/**
+ * Dev-only: `?cam=px,py,pz,tx,ty,tz` parks the perspective camera after load,
+ * and `window.citycutCamera()` prints the current pose. Production builds omit both.
+ */
+function DevCameraHook({
+  camera,
+  controlsRef,
+  active,
+  side,
+}: {
+  camera: THREE.PerspectiveCamera;
+  controlsRef: RefObject<OrbitControlsImpl | null>;
+  active: boolean;
+  side: number;
+}) {
+  const pose = useMemo(
+    () => (import.meta.env.DEV ? cameraFromSearch(window.location.search) : null),
+    [],
+  );
+  const applied = useRef(false);
+  const apply = useCallback(() => {
+    if (!import.meta.env.DEV || !active || !pose || applied.current) return;
+    const controls = controlsRef.current;
+    if (!controls) return;
+    flushControlInertia(controls);
+    camera.position.set(pose.position[0], pose.position[1], pose.position[2]);
+    controls.target.set(pose.target[0], pose.target[1], pose.target[2]);
+    camera.near = Math.max(0.1, side / 400);
+    camera.far = Math.max(side * 40, 40000);
+    camera.lookAt(controls.target);
+    camera.updateProjectionMatrix();
+    controls.update();
+    applied.current = true;
+  }, [active, camera, controlsRef, pose, side]);
+
+  useLayoutEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const win = window as Window & { citycutCamera?: () => string };
+    win.citycutCamera = () => {
+      const controls = controlsRef.current;
+      const value = formatCameraSearch(
+        [camera.position.x, camera.position.y, camera.position.z],
+        controls ? [controls.target.x, controls.target.y, controls.target.z] : [0, 0, 0],
+      );
+      console.log(value);
+      return value;
+    };
+    return () => {
+      delete win.citycutCamera;
+    };
+  }, [camera, controlsRef]);
+
+  useLayoutEffect(() => {
+    apply();
+  }, [apply]);
+  useFrame(() => {
+    apply();
+  });
+  return null;
+}
+
 function CameraReadout({
   projection,
   persp,
@@ -647,6 +713,7 @@ function Cameras({
   const orthoView = iso || plan;
   const persp = perspRef.current;
   const ortho = orthoRef.current;
+  const captureCam = import.meta.env.DEV ? cameraFromSearch(typeof window !== "undefined" ? window.location.search : "") : null;
 
   return (
     <>
@@ -669,7 +736,9 @@ function Cameras({
             lon={lon}
             fitId={snapId}
             active={!orthoView}
+            skipDefaultFit={Boolean(captureCam)}
           />
+          <DevCameraHook camera={persp} controlsRef={perspControls} active={!orthoView} side={side} />
           <HoldPoseWhenInactive controlsRef={perspControls} active={!orthoView} />
           <HoldPoseWhenInactive controlsRef={orthoControls} active={orthoView} />
           <IsoSnap
