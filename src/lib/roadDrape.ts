@@ -52,7 +52,7 @@ function fan(poly: Pt[]): Tri[] {
   const tris: Tri[] = [];
   for (let i = 1; i + 1 < poly.length; i++) {
     const tri: Tri = [poly[0], poly[i], poly[i + 1]];
-    if (triangleArea(tri) > 1e-8) tris.push(tri);
+    if (triangleArea(tri) > 1e-4) tris.push(tri);
   }
   return tris;
 }
@@ -67,53 +67,60 @@ export function splitTriByLine(tri: Tri, side: (point: Pt) => number): Tri[] {
   return [...left, ...right];
 }
 
-function splitOnceOnGrid(tri: Tri, field: TerrainField, sideM: number): Tri[] {
+function clipAgainstEdge(poly: Pt[], a: Pt, b: Pt): Pt[] {
+  return clipPoly(poly, (point) => (b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0]), true);
+}
+
+function clipConvex(tri: Tri, clip: Pt[]): Pt[] {
+  let poly = [tri[0], tri[1], tri[2]];
+  for (let i = 0; i < clip.length; i++) {
+    poly = clipAgainstEdge(poly, clip[i], clip[(i + 1) % clip.length]);
+    if (poly.length < 3) return [];
+  }
+  return poly;
+}
+
+function overlappingCells(tri: Tri, field: TerrainField, sideM: number): Array<{ c0: number; r0: number }> {
+  const half = sideM / 2;
   const minE = Math.min(tri[0][0], tri[1][0], tri[2][0]);
   const maxE = Math.max(tri[0][0], tri[1][0], tri[2][0]);
   const minN = Math.min(tri[0][1], tri[1][1], tri[2][1]);
   const maxN = Math.max(tri[0][1], tri[1][1], tri[2][1]);
+  const col0 = Math.max(0, Math.min(field.cols - 2, Math.floor((minE + half) / field.spacingM)));
+  const col1 = Math.max(0, Math.min(field.cols - 2, Math.floor((maxE + half - 1e-9) / field.spacingM)));
+  const row0 = Math.max(0, Math.min(field.rows - 2, Math.floor((minN + half) / field.spacingM)));
+  const row1 = Math.max(0, Math.min(field.rows - 2, Math.floor((maxN + half - 1e-9) / field.spacingM)));
+  const cells: Array<{ c0: number; r0: number }> = [];
+  for (let r0 = row0; r0 <= row1; r0++) {
+    for (let c0 = col0; c0 <= col1; c0++) cells.push({ c0, r0 });
+  }
+  return cells;
+}
+
+function constrainOne(tri: Tri, field: TerrainField, sideM: number): Tri[] {
+  if (triangleArea(tri) < 1e-4) return [];
+  const cells = overlappingCells(tri, field, sideM);
+  if (cells.length === 0) return [tri];
   const half = sideM / 2;
-  const slop = 1e-4;
-  const col0 = Math.floor((minE + half) / field.spacingM);
-  const col1 = Math.floor((maxE + half - 1e-9) / field.spacingM);
-  const row0 = Math.floor((minN + half) / field.spacingM);
-  const row1 = Math.floor((maxN + half - 1e-9) / field.spacingM);
-
-  for (let col = Math.max(1, col0 + 1); col <= col1 && col <= field.cols - 1; col++) {
-    const east = -half + col * field.spacingM;
-    if (east > minE + slop && east < maxE - slop) {
-      const parts = splitTriByLine(tri, (point) => point[0] - east);
-      if (parts.length > 1) return parts;
-    }
+  const spacing = field.spacingM;
+  if (cells.length === 1) {
+    const { c0, r0 } = cells[0];
+    const sw: Pt = [-half + c0 * spacing, -half + r0 * spacing];
+    const sides = tri.map((point) => point[0] - sw[0] - (point[1] - sw[1]));
+    const pos = sides.some((value) => value > 1e-4);
+    const neg = sides.some((value) => value < -1e-4);
+    if (!pos || !neg) return [tri];
   }
-  for (let row = Math.max(1, row0 + 1); row <= row1 && row <= field.rows - 1; row++) {
-    const north = -half + row * field.spacingM;
-    if (north > minN + slop && north < maxN - slop) {
-      const parts = splitTriByLine(tri, (point) => point[1] - north);
-      if (parts.length > 1) return parts;
-    }
+  const out: Tri[] = [];
+  for (const { c0, r0 } of cells) {
+    const sw: Pt = [-half + c0 * spacing, -half + r0 * spacing];
+    const se: Pt = [sw[0] + spacing, sw[1]];
+    const ne: Pt = [sw[0] + spacing, sw[1] + spacing];
+    const nw: Pt = [sw[0], sw[1] + spacing];
+    out.push(...fan(clipConvex(tri, [sw, se, ne])));
+    out.push(...fan(clipConvex(tri, [sw, ne, nw])));
   }
-
-  if (
-    col0 === col1 &&
-    row0 === row1 &&
-    col0 >= 0 &&
-    row0 >= 0 &&
-    col0 < field.cols - 1 &&
-    row0 < field.rows - 1
-  ) {
-    const swE = -half + col0 * field.spacingM;
-    const swN = -half + row0 * field.spacingM;
-    const sides = tri.map((point) => point[0] - swE - (point[1] - swN));
-    const pos = sides.some((value) => value > slop);
-    const neg = sides.some((value) => value < -slop);
-    if (pos && neg) {
-      const parts = splitTriByLine(tri, (point) => point[0] - swE - (point[1] - swN));
-      if (parts.length > 1) return parts;
-    }
-  }
-
-  return [tri];
+  return out.length > 0 ? out : [tri];
 }
 
 /**
@@ -123,19 +130,9 @@ function splitOnceOnGrid(tri: Tri, field: TerrainField, sideM: number): Tri[] {
  */
 export function constrainTrisToTerrainGrid(tris: Tri[], field: TerrainField, sideM: number): Tri[] {
   if (field.cols < 2 || field.rows < 2) return tris;
-  let current = tris;
-  for (let pass = 0; pass < 24; pass++) {
-    const next: Tri[] = [];
-    let splitAny = false;
-    for (const tri of current) {
-      const parts = splitOnceOnGrid(tri, field, sideM);
-      if (parts.length > 1) splitAny = true;
-      next.push(...parts);
-    }
-    current = next;
-    if (!splitAny) break;
-  }
-  return current;
+  const out: Tri[] = [];
+  for (const tri of tris) out.push(...constrainOne(tri, field, sideM));
+  return out;
 }
 
 /** Normalised distance along `line` of the closest point to `point`. */

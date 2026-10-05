@@ -8,6 +8,11 @@ export type RoadTerrainMetrics = {
   gapP95: number;
   tallTrisOver2m: number;
   triangleCount: number;
+  arterialTallTrisOver2m: number;
+  arterialTriangleCount: number;
+  arterialGapMax: number;
+  arterialGapP95: number;
+  worstTall: { east: number; north: number; extent: number } | null;
 };
 
 function percentile(sorted: number[], p: number): number {
@@ -26,23 +31,42 @@ export function drapedRoadTerrainMetrics(
   sideM: number,
 ): RoadTerrainMetrics {
   const gaps: number[] = [];
+  const arterialGaps: number[] = [];
   let tallTris = 0;
   let triangleCount = 0;
+  let arterialTall = 0;
+  let arterialTris = 0;
+  let worstTall: { east: number; north: number; extent: number } | null = null;
 
   group.traverse((obj) => {
     const mesh = obj as Mesh;
     if (!mesh.isMesh || (mesh.name !== "Roads" && mesh.name !== "Rail")) return;
     if (mesh.userData.deck === true) return;
+    const oc = mesh.userData.objectColor as { r: number; g: number; b: number } | undefined;
+    const arterial = mesh.name === "Roads" && oc != null && oc.r === 58 && oc.g === 58 && oc.b === 58;
     const pos = mesh.geometry.getAttribute("position") as BufferAttribute;
     const index = mesh.geometry.getIndex();
     const visit = (i0: number, i1: number, i2: number) => {
       triangleCount += 1;
       const ys = [pos.getY(i0), pos.getY(i1), pos.getY(i2)];
-      if (Math.max(...ys) - Math.min(...ys) > 2) tallTris += 1;
+      const extent = Math.max(...ys) - Math.min(...ys);
+      const tall = extent > 2;
+      if (tall) {
+        tallTris += 1;
+        const east = (pos.getX(i0) + pos.getX(i1) + pos.getX(i2)) / 3;
+        const north = -(pos.getZ(i0) + pos.getZ(i1) + pos.getZ(i2)) / 3;
+        if (!worstTall || extent > worstTall.extent) worstTall = { east, north, extent };
+      }
+      if (arterial) {
+        arterialTris += 1;
+        if (tall) arterialTall += 1;
+      }
       for (const idx of [i0, i1, i2]) {
         const east = pos.getX(idx);
         const north = -pos.getZ(idx);
-        gaps.push(pos.getY(idx) - terrainMeshHeightAt(field, east, north, sideM));
+        const gap = pos.getY(idx) - terrainMeshHeightAt(field, east, north, sideM);
+        gaps.push(gap);
+        if (arterial) arterialGaps.push(gap);
       }
     };
     if (index) {
@@ -52,12 +76,23 @@ export function drapedRoadTerrainMetrics(
     }
   });
 
+  const maxOf = (values: number[]) => {
+    let max = 0;
+    for (let i = 0; i < values.length; i++) if (values[i] > max) max = values[i];
+    return max;
+  };
   gaps.sort((a, b) => a - b);
+  arterialGaps.sort((a, b) => a - b);
   return {
     vertexCount: gaps.length,
-    gapMax: gaps.length ? Math.max(...gaps) : 0,
+    gapMax: maxOf(gaps),
     gapP95: percentile(gaps, 0.95),
     tallTrisOver2m: tallTris,
     triangleCount,
+    arterialTallTrisOver2m: arterialTall,
+    arterialTriangleCount: arterialTris,
+    arterialGapMax: maxOf(arterialGaps),
+    arterialGapP95: percentile(arterialGaps, 0.95),
+    worstTall,
   };
 }

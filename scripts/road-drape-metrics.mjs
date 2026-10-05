@@ -3,7 +3,7 @@
  * Usage: node --experimental-strip-types scripts/road-drape-metrics.mjs [label]
  */
 import { buildCityGroup, disposeObject } from "../src/lib/buildCity.ts";
-import { fetchTerrainForCut } from "../src/lib/fetchTerrain.ts";
+import { fetchTerrainForCutNode as fetchTerrainForCut } from "./nodeTerrain.mjs";
 import { squareBBox } from "../src/lib/geo.ts";
 import { fetchOvertureTransportationForCut } from "../src/lib/overtureTransportation.ts";
 import { parseCity } from "../src/lib/parseOsm.ts";
@@ -27,6 +27,8 @@ async function measureFrame(name, center, sideM) {
     buildings: [],
     roadKm: transport.roadKm,
   };
+  const warm = buildCityGroup(model);
+  disposeObject(warm);
   const t0 = performance.now();
   const group = buildCityGroup(model);
   const buildMs = performance.now() - t0;
