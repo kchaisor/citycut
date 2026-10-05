@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import { buildCityGroup, disposeObject } from "./buildCity";
-import type { CityModel, Pt } from "../types";
+import type { AreaFeat, CityModel, Pt, TerrainField } from "../types";
 
 function modelWithCrossing(): CityModel {
   const roads = [
@@ -23,6 +23,20 @@ function modelWithCrossing(): CityModel {
   };
 }
 
+function flatTerrain(): TerrainField {
+  return {
+    cols: 3,
+    rows: 3,
+    heights: new Float32Array(9).fill(2),
+    min: 2,
+    max: 2,
+    spacingM: 20,
+    zoom: 14,
+    metresPerPixel: 4,
+    source: "Mapterhorn",
+  };
+}
+
 describe("buildCity road fills", () => {
   it("merges crossing carriageways into one local mesh", () => {
     const group = buildCityGroup(modelWithCrossing());
@@ -36,6 +50,38 @@ describe("buildCity road fills", () => {
       let maxY = -Infinity;
       for (let i = 0; i < position.count; i++) maxY = Math.max(maxY, position.getY(i));
       expect(maxY).toBeCloseTo(0.17, 2);
+    } finally {
+      disposeObject(group);
+    }
+  });
+
+  it("does not polygon-offset draped green over the terrain heightfield", () => {
+    const areas: AreaFeat[] = [
+      {
+        id: 1,
+        kind: "green",
+        ring: [
+          [-40, -40],
+          [40, -40],
+          [40, 40],
+          [-40, 40],
+          [-40, -40],
+        ],
+        holes: [],
+      },
+    ];
+    const model: CityModel = {
+      ...modelWithCrossing(),
+      areas,
+      terrain: flatTerrain(),
+      layers: { buildings: false, roads: false, waterGreen: true, trees: false },
+    };
+    const group = buildCityGroup(model);
+    try {
+      const green = group.getObjectByName("Green") as THREE.Mesh;
+      expect(green).toBeTruthy();
+      const material = green.material as THREE.MeshStandardMaterial;
+      expect(material.polygonOffset).toBe(false);
     } finally {
       disposeObject(group);
     }

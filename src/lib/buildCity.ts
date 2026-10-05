@@ -261,6 +261,11 @@ function paint(material: THREE.MeshStandardMaterial, layer: { polygonOffsetFacto
   return material;
 }
 
+/** Draped fills already sit above the heightfield; negative offset pulls them through the terrain. */
+function drapeLayer(layer: { lift: number; polygonOffsetFactor: number; polygonOffsetUnits: number; renderOrder: number }) {
+  return { ...layer, polygonOffsetFactor: 0, polygonOffsetUnits: 0 };
+}
+
 function extrudeShape(shape: THREE.Shape, height: number, base: number): THREE.BufferGeometry {
   const geometry = new THREE.ExtrudeGeometry(shape, {
     depth: height,
@@ -359,8 +364,15 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     group.add(ground);
   }
 
-  const greenMat = paint(matteStandardMaterial({ color: getColour("--green-3d") }), SURFACE.green);
-  const waterMat = paint(matteStandardMaterial({ color: getColour("--water-3d") }), SURFACE.water);
+  const onTerrain = Boolean(sample && model.terrain);
+  const greenMat = paint(
+    matteStandardMaterial({ color: getColour("--green-3d") }),
+    onTerrain ? drapeLayer(SURFACE.green) : SURFACE.green,
+  );
+  const waterMat = paint(
+    matteStandardMaterial({ color: getColour("--water-3d") }),
+    onTerrain ? drapeLayer(SURFACE.water) : SURFACE.water,
+  );
   const greenGeos: THREE.BufferGeometry[] = [];
   const waterGeos: THREE.BufferGeometry[] = [];
   for (let index = 0; index < model.areas.length; index++) {
