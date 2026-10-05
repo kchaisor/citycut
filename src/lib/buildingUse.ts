@@ -279,9 +279,9 @@ export function normaliseZoneCode(code: string): string {
 
 /**
  * Planning zone for a building.
- * `heightM` is the resolved height the extruder already uses: the OSM height
- * tag, otherwise building:levels × 3 m, otherwise 9 m, then clamped to 3–420 m
- * by `buildingHeight`. C1Z under 15 m is retail; 15 m and taller stays commercial.
+ * `heightM` is the resolved height the extruder already uses: Overture/OSM height,
+ * otherwise building:levels × 3 m, otherwise Vicmap zone defaults (see buildingFallbackHeight),
+ * then clamped to 3–420 m. C1Z under 15 m is retail; 15 m and taller stays commercial.
  * Overlays (DDO and the rest) and zones outside the table do not match.
  */
 export function useFromZone(code: string | null | undefined, heightM: number): BuildingUse | null {

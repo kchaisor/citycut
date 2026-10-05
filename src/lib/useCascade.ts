@@ -1,4 +1,6 @@
+import { fallbackBuildingHeightM } from "./buildingFallbackHeight";
 import { useFromZone } from "./buildingUse";
+import { clampBuildingHeight } from "./height";
 import { openRing, signedArea, toLocal } from "./geo";
 import type { BuildingFeat, LonLat, Pt, UseTierFailure } from "../types";
 
@@ -256,20 +258,45 @@ export async function loadUseTiers(
   return { zones: null, failures: [{ tier: "zone", message: "zones unavailable" }] };
 }
 
+function applyFallbackHeightFromZone(building: BuildingFeat, zoneCode: string | null): BuildingFeat {
+  if (!building.heightFromFallback) return building;
+  const height = clampBuildingHeight(
+    fallbackBuildingHeightM({
+      footprintAreaM2: footprintArea(building.ring, building.holes),
+      zoneCode,
+    }),
+  );
+  if (Math.abs(height - building.height) < 0.001) return building;
+  const next: BuildingFeat = { ...building, height };
+  if (building.extrusionParts?.length) {
+    next.extrusionParts = building.extrusionParts.map((part) => ({
+      ...part,
+      height: Math.max(1, height - (part.base ?? 0)),
+    }));
+  }
+  return next;
+}
+
+function zoneAtBuilding(index: GridIndex<ZonePolygon>, building: BuildingFeat): string | null {
+  const at = interiorPoint(building.ring, building.holes);
+  const covers = index
+    .queryPoint(at)
+    .filter((zone) => pointInPolygon(at, zone.outer, zone.holes))
+    .sort((a, b) => a.area - b.area);
+  return covers[0]?.code ?? null;
+}
+
 function applyZones(buildings: BuildingFeat[], zones: ZonePolygon[]): BuildingFeat[] {
   const index = new GridIndex<ZonePolygon>(80);
   for (const zone of zones) index.insert(ringBBox(zone.outer), zone);
   return buildings.map((building) => {
-    if (building.source !== "none") return building;
-    const at = interiorPoint(building.ring, building.holes);
-    const covers = index
-      .queryPoint(at)
-      .filter((zone) => pointInPolygon(at, zone.outer, zone.holes))
-      .sort((a, b) => a.area - b.area);
-    if (covers.length === 0) return building;
-    const use = useFromZone(covers[0].code, building.height);
-    if (!use) return building;
-    return { ...building, use, source: "zone" as const };
+    const zoneCode = zoneAtBuilding(index, building);
+    let next = applyFallbackHeightFromZone(building, zoneCode);
+    if (next.source !== "none") return next;
+    if (!zoneCode) return next;
+    const use = useFromZone(zoneCode, next.height);
+    if (!use) return next;
+    return { ...next, use, source: "zone" as const };
   });
 }
 

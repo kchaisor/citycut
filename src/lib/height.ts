@@ -1,7 +1,10 @@
+import { fallbackBuildingHeightM, type FallbackHeightInput } from "./buildingFallbackHeight";
+
 const MIN_HEIGHT = 3;
 const MAX_HEIGHT = 420;
-const DEFAULT_HEIGHT = 9;
 const LEVEL_HEIGHT = 3;
+
+export type BuildingHeightOptions = Partial<Pick<FallbackHeightInput, "footprintAreaM2" | "zoneCode">>;
 
 export function parseLooseNumber(raw: string | undefined): number | null {
   if (!raw) return null;
@@ -38,7 +41,21 @@ export function clampBuildingHeight(meters: number): number {
   return Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, meters));
 }
 
-export function buildingHeight(tags: Record<string, string>): number {
+/** True when height would come from footprint area and/or planning zone, not OSM tags. */
+export function buildingHeightUsesFallback(tags: Record<string, string>): boolean {
+  const tagged =
+    parseMeters(tags.height) ??
+    parseMeters(tags["building:height"]) ??
+    parseMeters(tags.est_height);
+  if (tagged !== null && tagged > 0) return false;
+  const levels = parseLooseNumber(tags["building:levels"]);
+  return levels === null || levels <= 0;
+}
+
+export function buildingHeight(
+  tags: Record<string, string>,
+  options: BuildingHeightOptions = {},
+): number {
   const tagged =
     parseMeters(tags.height) ??
     parseMeters(tags["building:height"]) ??
@@ -48,5 +65,10 @@ export function buildingHeight(tags: Record<string, string>): number {
   const levels = parseLooseNumber(tags["building:levels"]);
   if (levels !== null && levels > 0) return clampBuildingHeight(levels * LEVEL_HEIGHT);
 
-  return DEFAULT_HEIGHT;
+  return clampBuildingHeight(
+    fallbackBuildingHeightM({
+      footprintAreaM2: options.footprintAreaM2 ?? null,
+      zoneCode: options.zoneCode ?? null,
+    }),
+  );
 }

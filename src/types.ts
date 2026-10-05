@@ -53,6 +53,8 @@ export type BuildingFeat = {
   ring: Ring;
   holes: Ring[];
   height: number;
+  /** Set when height came from footprint/zone fallback, not Overture height or floors. */
+  heightFromFallback?: boolean;
   use: BuildingUse;
   source: TypologySource;
   /** Overture GERS building id when the footprint comes from Overture Maps. */
