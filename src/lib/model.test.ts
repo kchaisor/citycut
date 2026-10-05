@@ -35,6 +35,8 @@ describe("heights", () => {
     expect(buildingHeight({ height: "30 ft" })).toBeCloseTo(9.144, 2);
     expect(buildingHeight({ "building:levels": "4" })).toBe(12);
     expect(buildingHeight({ building: "yes" })).toBe(9);
+    expect(buildingHeight({ building: "yes" }, { footprintAreaM2: 25, zoneCode: "GRZ1" })).toBe(3);
+    expect(buildingHeight({ building: "yes" }, { footprintAreaM2: 100, zoneCode: "GRZ1" })).toBe(7);
   });
 });
 

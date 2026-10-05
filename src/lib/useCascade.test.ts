@@ -14,11 +14,26 @@ function square(center: Pt, size: number): Pt[] {
   ];
 }
 
-function bare(ring: Pt[], height: number): BuildingFeat {
-  return { id: 1, ring, holes: [], height, use: "unclassified", source: "none" };
+function bare(ring: Pt[], height: number, heightFromFallback = false): BuildingFeat {
+  return {
+    id: 1,
+    ring,
+    holes: [],
+    height,
+    heightFromFallback,
+    use: "unclassified",
+    source: "none",
+  };
 }
 
 describe("zone tier", () => {
+  it("applies zone default height for fallback buildings", () => {
+    const home = { ...bare(square([0, 0], 20), 9, true), id: 1 };
+    const zone = { code: "GRZ1", outer: square([0, 0], 200), holes: [], area: 40000 };
+    const result = assignExternalUses([home], [zone]);
+    expect(result[0]).toMatchObject({ height: 7, use: "residential", source: "zone" });
+  });
+
   it("assigns a zone, including the C1Z height split", () => {
     const low = bare(square([0, 0], 20), 9);
     const tall = { ...bare(square([40, 0], 20), 18), id: 2 };

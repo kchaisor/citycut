@@ -15,7 +15,8 @@ import { intersectionAreaM2 } from "./comBuildingHeightsMatch";
 import { clipPolygon } from "./clip";
 import { dedupeBuildings } from "./footprints";
 import { dedupeConsecutive, openRing, signedArea, toLocal } from "./geo";
-import { overtureBuildingHeight, overtureMinHeightM } from "./overtureHeight";
+import { footprintArea } from "./useCascade";
+import { overtureBuildingHeight, overtureHeightUsesFallback, overtureMinHeightM } from "./overtureHeight";
 import { overtureBuildingsUrl, resolveOvertureRelease } from "./overtureRelease";
 import { parseOvertureSources, pickTallestOvertureProps } from "./overtureSources";
 import { pointInPolygon } from "./useCascade";
@@ -225,8 +226,11 @@ function tagsFromOverture(props: Record<string, unknown>): Record<string, string
 function fragmentToBuilding(fragment: Fragment): BuildingFeat {
   const tags = tagsFromOverture(fragment.props);
   const tagged = classify(tags);
-  const height = overtureBuildingHeight(fragment.props as Record<string, unknown>);
-  const minBase = overtureMinHeightM(fragment.props as Record<string, unknown>);
+  const props = fragment.props as Record<string, unknown>;
+  const areaM2 = footprintArea(fragment.ring, fragment.holes);
+  const heightOpts = { footprintAreaM2: areaM2 };
+  const height = overtureBuildingHeight(props, heightOpts);
+  const minBase = overtureMinHeightM(props, heightOpts);
   const extrusionHeight = Math.max(1, height - minBase);
   const building: BuildingFeat = {
     id: stableNumericId(fragment.id),
@@ -235,6 +239,7 @@ function fragmentToBuilding(fragment: Fragment): BuildingFeat {
     ring: fragment.ring,
     holes: fragment.holes,
     height,
+    heightFromFallback: overtureHeightUsesFallback(props),
     use: tagged ?? "unclassified",
     source: tagged ? "osm_tag" : "none",
   };

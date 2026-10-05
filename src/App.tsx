@@ -423,7 +423,7 @@ export default function App() {
         })}.`;
       }
       if (modelLayers.buildings) {
-        sourceNote = `${sourceNote} Building height uses Overture height, then num_floors × 3 m, otherwise 9 m. Use follows Overture class, then Vicmap planning zones.`;
+        sourceNote = `${sourceNote} Building height uses Overture height, then num_floors × 3 m, otherwise Vicmap zone defaults (3 m under 40 m², else by zone, else 9 m). Use follows Overture class, then Vicmap planning zones.`;
       }
       const buildingCapHit = overtureResult.buildingCapHit;
       if (buildingCapHit) sourceNote = `${sourceNote} Building count was capped at 4000.`;
