@@ -64,13 +64,14 @@ describe("refineSteepRoadTriangles", () => {
       [20, 0],
       [10, 15],
     ];
-    const sample = (east: number) => (east < 10 ? 0 : 8);
+    const sample = (east: number, north: number) => east * 0.35 + north * 0.05;
+    const relief = (t: Tri) => {
+      const hs = t.map((p) => sample(p[0], p[1]));
+      return Math.max(...hs) - Math.min(...hs);
+    };
     const refined = refineSteepRoadTriangles([tri], sample, 1.75, 10_000, 20);
     expect(refined.length).toBeGreaterThan(1);
-    for (const [a, b, c] of refined) {
-      const hs = [sample(a[0], a[1]), sample(b[0], b[1]), sample(c[0], c[1])];
-      expect(Math.max(...hs) - Math.min(...hs)).toBeLessThanOrEqual(1.76);
-    }
+    for (const t of refined) expect(relief(t)).toBeLessThanOrEqual(1.76);
   });
 });
 
