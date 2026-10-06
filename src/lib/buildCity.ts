@@ -8,7 +8,6 @@ import { openRing, signedArea } from "./geo";
 import { carriagewaysOf, unionCarriageways, unionPathRoads } from "./roadFill";
 import { hexRgb, overlapLift, ROAD_COLOR, ROAD_RGB, roadGradeLayer, SURFACE } from "./surfaceLayers";
 import { matteStandardMaterial } from "./matteMaterial";
-import { readDrawingStyle } from "./drawingStyle";
 import { isSiteBuilding } from "./siteBuildings";
 import { footprintBase, sampleTerrain, terrainBuffers } from "./terrain";
 import type { AreaFeat, BuildingFeat, BuildingUse, CityModel, Pt, Ring, RoadGrade, TerrainField } from "../types";
@@ -578,7 +577,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
 
   const boundaryLines = model.siteBoundaryLines;
   if (boundaryLines && boundaryLines.length > 0) {
-    const stroke = readDrawingStyle().siteBoundary.color;
+    const stroke = getColour("--site-boundary");
     const lift = 0.05;
     const positions: number[] = [];
     for (const line of boundaryLines) {

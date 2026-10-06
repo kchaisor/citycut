@@ -44,6 +44,9 @@ export type StrokeStyle = {
 };
 
 export const SITE_BOUNDARY_MM_VAR = "--site-boundary-mm";
+/** Theme fill in colours.css; editable in the Colours panel. */
+export const SITE_BOUNDARY_COLOUR_VAR = "--site-boundary";
+/** Legacy pen name; aliases `--site-boundary` in drawing-style.css. */
 export const SITE_BOUNDARY_STROKE_VAR = "--site-boundary-stroke";
 export const SITE_BOUNDARY_DASH_VAR = "--site-boundary-dash";
 export const SITE_BUILDING_MM_VAR = "--site-building-stroke-mm";
@@ -128,7 +131,7 @@ export const STROKE_VARS: Record<StrokeKey, VarNames> = {
   tree: { mm: "--tree-stroke-mm", color: "--tree-stroke", dash: "--tree-dash" },
   siteBoundary: {
     mm: SITE_BOUNDARY_MM_VAR,
-    color: SITE_BOUNDARY_STROKE_VAR,
+    color: SITE_BOUNDARY_COLOUR_VAR,
     dash: SITE_BOUNDARY_DASH_VAR,
   },
   siteBuilding: {
@@ -171,7 +174,7 @@ export const DEFAULT_LINE_STYLES: LineStyles = {
   building: { mm: LINE_MM.buildingCut, color: drawingSheetColor("--building-stroke"), dash: "none" },
   siteBoundary: {
     mm: 0.35,
-    color: drawingSheetColor(SITE_BOUNDARY_STROKE_VAR),
+    color: COLOUR_FALLBACK[SITE_BOUNDARY_COLOUR_VAR],
     dash: "1.2 0.6",
   },
   siteBuilding: {
@@ -441,6 +444,10 @@ export function styleFromProperties(
     const legacyDash = normalizeDash(read("--path-dash"));
     if (legacyDash) next.path.dash = legacyDash;
   }
+  if (!parseColor(read(SITE_BOUNDARY_COLOUR_VAR))) {
+    const legacyBoundary = parseColor(read(SITE_BOUNDARY_STROKE_VAR));
+    if (legacyBoundary) next.siteBoundary.color = legacyBoundary;
+  }
   return next;
 }
 
@@ -528,8 +535,12 @@ export function copyCssText(current: LineStyles, baseline: LineStyles): string {
   const changed = changedVariables(current, baseline);
   const names = Object.keys(changed);
   if (names.length === 0) return "/* No line-style changes to paste. */\n";
-  const fills = names.filter((name) => name === ROAD_FILL_VAR || name === PATH_FILL_VAR);
-  const strokes = names.filter((name) => name !== ROAD_FILL_VAR && name !== PATH_FILL_VAR);
+  const fills = names.filter(
+    (name) => name === ROAD_FILL_VAR || name === PATH_FILL_VAR || name === SITE_BOUNDARY_COLOUR_VAR,
+  );
+  const strokes = names.filter(
+    (name) => name !== ROAD_FILL_VAR && name !== PATH_FILL_VAR && name !== SITE_BOUNDARY_COLOUR_VAR,
+  );
   const blocks: string[] = [];
   if (strokes.length > 0) {
     const body = strokes.map((name) => `${name}: ${changed[name]};`).join("\n");

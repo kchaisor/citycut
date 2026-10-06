@@ -84,7 +84,7 @@
 
   /* Searched-property parcel boundary on the site plan and in exports. */
   --site-boundary-mm: 0.35;
-  --site-boundary-stroke: #1C1B17;
+  --site-boundary-stroke: var(--site-boundary);
   --site-boundary-dash: 1.2 0.6;
 
   /* Massing edge in the 3D view. Black, so the volume reads against the roads and the sky. */

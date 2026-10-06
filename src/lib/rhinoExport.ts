@@ -38,12 +38,12 @@ const BUILDING_LAYER_KEYS: Record<string, ColourKey> = {
 };
 
 /** Full layer path → theme key (or contour pen) for every Rhino layer CityCut writes. */
-export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour" | "siteBoundary"> {
-  const keys: Record<string, ColourKey | "contour" | "siteBoundary"> = {
+export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
+  const keys: Record<string, ColourKey | "contour"> = {
     Buildings: "--building-uniform",
     "Buildings::Site": "--site-building",
     Site: "--site-building",
-    "Site::Boundary": "siteBoundary",
+    "Site::Boundary": "--site-boundary",
     Roads: "--road-arterial",
     Rail: "--rail-fill",
     Water: "--water-3d",
@@ -63,18 +63,11 @@ export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour" | "
   return keys;
 }
 
-function siteBoundaryLayerColor(): Rgb {
-  const hex = readDrawingStyle().siteBoundary.color;
-  const value = Number.parseInt(hex.slice(1), 16);
-  return { r: (value >> 16) & 255, g: (value >> 8) & 255, b: value & 255 };
-}
-
 function layerColors(): Record<string, Rgb> {
   const keys = rhinoLayerColourKeys();
   const out: Record<string, Rgb> = {};
   for (const [name, key] of Object.entries(keys)) {
     if (key === "contour") out[name] = contourLayerColor();
-    else if (key === "siteBoundary") out[name] = siteBoundaryLayerColor();
     else out[name] = colourRgb(key);
   }
   return out;

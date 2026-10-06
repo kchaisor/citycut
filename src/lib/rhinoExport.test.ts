@@ -390,7 +390,7 @@ describe("rhino export", () => {
         seen.add(path);
         const key = keys[path];
         expect(key, `missing colour key for layer ${path}`).toBeTruthy();
-        const expected = key === "contour" || key === "siteBoundary" ? null : colourRgb(key!);
+        const expected = key === "contour" ? null : colourRgb(key!);
         if (expected) {
           const swatch = layer.color as { r: number; g: number; b: number; a: number };
           expect(swatch.r).toBe(expected.r);
@@ -456,6 +456,16 @@ describe("rhino export", () => {
       for (let i = 0; i < doc.layers().count; i++) paths.push(doc.layers().get(i).fullPath);
       expect(paths).toContain("Buildings::Site");
       expect(paths).toContain("Site::Boundary");
+      const red = colourRgb("--site-boundary");
+      let boundarySwatch: { r: number; g: number; b: number } | null = null;
+      for (let i = 0; i < doc.layers().count; i++) {
+        const layer = doc.layers().get(i);
+        if (layer.fullPath === "Site::Boundary") boundarySwatch = layer.color as { r: number; g: number; b: number };
+      }
+      expect(boundarySwatch).toBeTruthy();
+      expect(boundarySwatch!.r).toBe(red.r);
+      expect(boundarySwatch!.g).toBe(red.g);
+      expect(boundarySwatch!.b).toBe(red.b);
       let siteMesh = false;
       let boundaryCurve = false;
       for (let i = 0; i < doc.objects().count; i++) {

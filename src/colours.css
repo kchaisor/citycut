@@ -41,6 +41,9 @@
   /* Outline on site buildings in the 3D view so they read against retail/civic fills. */
   --site-building-edge: #3D3010;
 
+  /* Searched-property parcel boundary: site plan, 3D ground line, Rhino Site::Boundary, Illustrator/PDF. */
+  --site-boundary: #D7263D;
+
   /* Residential footprints, legend swatch, and the Residential Rhino layer. */
   --use-residential: #A4A5A8;
 
