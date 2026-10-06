@@ -5,11 +5,17 @@ import type { TerrainField } from "../types";
 import { sampleTerrain } from "./terrain";
 import { downwindFromSector } from "./windRose";
 
-export const WIND_ARROW_COUNT = 6;
+export const WIND_ARROW_COUNT = 10;
 export const WIND_ARROW_LIFT_MIN_M = 20;
 export const WIND_ARROW_LIFT_MAX_M = 30;
-/** Opacity ramp over this fraction of the frame at upwind/downwind edges. */
-export const WIND_ARROW_FADE_FRAC = 0.12;
+/** Opacity ramp over this fraction of each arrow’s travel loop. */
+export const WIND_ARROW_FADE_FRAC = 0.1;
+/** Spawn with the tail this far outside the upwind frame edge (fraction of sideM). */
+export const WIND_ARROW_SPAWN_OUTSIDE_FRAC = 0.1;
+/** Despawn after the head passes this far beyond the downwind frame edge. */
+export const WIND_ARROW_DESPAWN_OUTSIDE_FRAC = 0.135;
+/** Animated arrows may extend this far past the frame edge (fraction of sideM). */
+export const WIND_ARROW_VISIBLE_EXTRA_FRAC = 0.15;
 
 /** Frame-relative drift speed (m/s): cross the site in ~25–40 s, scaled by median wind. */
 export function windStreakSpeedMs(sideM: number, medianKmh: number): number {
@@ -79,15 +85,15 @@ function fract(n: number): number {
   return n - Math.floor(n);
 }
 
-/** Even spread across the site (fractions of half-extent), with light jitter. */
-const ARROW_SLOTS: [number, number][] = [
-  [-0.38, -0.34],
-  [0.02, -0.4],
-  [0.4, -0.3],
-  [-0.36, 0.32],
-  [0.06, 0.38],
-  [0.42, 0.28],
-];
+/** Wind-relative slot (lateral, along) as fractions of half-extent; staggered 5×2 grid. */
+function arrowSlotWindRelative(index: number): [lateralFrac: number, alongFrac: number] {
+  const col = index % 5;
+  const row = Math.floor(index / 5);
+  const lateralStep = 1.4 / 4;
+  const lateral = -0.7 + col * lateralStep + (row === 1 ? lateralStep * 0.5 : 0);
+  const along = row === 0 ? -0.32 : 0.32;
+  return [lateral, along];
+}
 
 function minPolylineSeparation(a: Float32Array, b: Float32Array, step = 3): number {
   let min = Infinity;
@@ -110,36 +116,76 @@ function lateralForRespawn(index: number, cycle: number, sideM: number): number 
   return (seed.a - 0.5) * sideM * 0.88;
 }
 
-/** Distance the centre may travel per loop while keeping the arrow inside the frame at full opacity. */
+/** Distance the curve centre travels from upwind spawn to downwind despawn. */
 export function windArrowTravelRangeM(sideM: number, pathLenM: number): number {
-  return Math.max(sideM * 0.5, sideM - pathLenM);
+  const span =
+    sideM * (1 + WIND_ARROW_SPAWN_OUTSIDE_FRAC + WIND_ARROW_DESPAWN_OUTSIDE_FRAC) - pathLenM;
+  return Math.max(sideM * 0.35, span);
 }
 
-/** Opacity ramp near upwind/downwind frame edges; zero if head/tail would leave the square. */
+/** Furthest east/north extent allowed for animated arrow vertices. */
+export function windArrowVisibleExtentM(sideM: number, pathLenM: number): number {
+  return sideM / 2 + sideM * WIND_ARROW_VISIBLE_EXTRA_FRAC + pathLenM;
+}
+
+/** Opacity ramp over the first/last fraction of travel; zero at loop endpoints. */
 export function windArrowEdgeOpacity(
-  alongM: number,
-  sideM: number,
-  pathLenM: number,
+  travelledM: number,
+  travelRangeM: number,
   fadeFrac = WIND_ARROW_FADE_FRAC,
 ): number {
-  const half = sideM / 2;
-  const headAlong = alongM + pathLenM * 0.5;
-  const tailAlong = alongM - pathLenM * 0.5;
-  if (headAlong > half || tailAlong < -half) return 0;
-  const norm = (alongM + half - pathLenM * 0.5) / Math.max(1, sideM - pathLenM);
+  if (travelRangeM <= 0 || travelledM <= 0 || travelledM >= travelRangeM) return 0;
+  const norm = travelledM / travelRangeM;
   let op = 1;
   if (norm < fadeFrac) op = norm / fadeFrac;
   else if (norm > 1 - fadeFrac) op = (1 - norm) / fadeFrac;
   return Math.max(0, Math.min(1, op));
 }
 
-function curveInsideFrame(curve: WindArrowCurve, half: number): boolean {
+function curveExceedsFrame(curve: WindArrowCurve, half: number): boolean {
   for (let s = 0; s < curve.pointCount; s++) {
     const east = curve.positions[s * 3]!;
     const north = -curve.positions[s * 3 + 2]!;
-    if (Math.abs(east) > half + 0.001 || Math.abs(north) > half + 0.001) return false;
+    if (Math.abs(east) > half + 0.001 || Math.abs(north) > half + 0.001) return true;
   }
-  return true;
+  return false;
+}
+
+function fitCurveInsideFrame(
+  curve: WindArrowCurve,
+  wx: number,
+  wn: number,
+  px: number,
+  pz: number,
+  half: number,
+  wavePhase: number,
+): void {
+  const margin = 0.5;
+  const limit = half - margin;
+  for (let pass = 0; pass < 8; pass++) {
+    fillCurvePositions(curve, wx, wn, px, pz, wavePhase);
+    let minE = Infinity;
+    let maxE = -Infinity;
+    let minN = Infinity;
+    let maxN = -Infinity;
+    for (let s = 0; s < curve.pointCount; s++) {
+      const east = curve.positions[s * 3]!;
+      const north = -curve.positions[s * 3 + 2]!;
+      minE = Math.min(minE, east);
+      maxE = Math.max(maxE, east);
+      minN = Math.min(minN, north);
+      maxN = Math.max(maxN, north);
+    }
+    let dE = 0;
+    let dN = 0;
+    if (maxE > limit) dE -= maxE - limit;
+    if (minE < -limit) dE += -limit - minE;
+    if (maxN > limit) dN -= maxN - limit;
+    if (minN < -limit) dN += -limit - minN;
+    if (dE === 0 && dN === 0) return;
+    curve.alongM += dE * wx + dN * wn;
+    curve.lateralM += dE * px + dN * pz;
+  }
 }
 
 function fillCurvePositions(
@@ -244,10 +290,12 @@ export function buildWindArrowBuffer(
 
   for (let i = 0; i < WIND_ARROW_COUNT; i++) {
     const seed = hash(i + prevailingSector * 31);
-    const slot = ARROW_SLOTS[i] ?? [0, 0];
-    const jitter = sideM * 0.045;
-    let centreEast = slot[0] * half + (seed.a - 0.5) * jitter;
-    let centreNorth = slot[1] * half + (seed.b - 0.5) * jitter;
+    const slot = arrowSlotWindRelative(i);
+    const jitter = sideM * 0.038;
+    const latFrac = slot[0] + (seed.a - 0.5) * 0.07;
+    const alongFrac = slot[1] + (seed.b - 0.5) * 0.07;
+    let centreEast = alongFrac * half * wx + latFrac * half * px + (seed.c - 0.5) * jitter;
+    let centreNorth = alongFrac * half * wn + latFrac * half * pz + (seed.d - 0.5) * jitter;
     let pathLen = sideM * (0.32 + seed.c * 0.11);
     const waveCount = 1 + seed.d * 0.5;
     let waveAmp = pathLen * (0.08 + seed.a * 0.04);
@@ -307,6 +355,26 @@ export function buildWindArrowBuffer(
       attempts += 1;
     }
 
+    if (curveExceedsFrame(curve, half)) {
+      fitCurveInsideFrame(curve, wx, wn, px, pz, half, seed.d * Math.PI * 2);
+    }
+
+    let sepAttempts = 0;
+    while (overlapsOthers(curve) && sepAttempts < 14) {
+      const sign = sepAttempts % 2 === 0 ? 1 : -1;
+      const mag = 1 + Math.floor(sepAttempts / 2);
+      curve.lateralM += sideM * 0.045 * sign * mag;
+      curve.alongM += sideM * 0.06 * sign * (Math.floor(sepAttempts / 3) - 1);
+      fillCurvePositions(curve, wx, wn, px, pz, seed.d * Math.PI * 2);
+      if (curveExceedsFrame(curve, half)) {
+        fitCurveInsideFrame(curve, wx, wn, px, pz, half, seed.d * Math.PI * 2);
+      } else if (sepAttempts > 8) {
+        curve.waveAmp *= 0.9;
+        fillCurvePositions(curve, wx, wn, px, pz, seed.d * Math.PI * 2);
+      }
+      sepAttempts += 1;
+    }
+
     const travelRange = windArrowTravelRangeM(sideM, curve.pathLenM);
     curve.driftM = curve.phase * travelRange;
     curves.push(curve);
@@ -341,13 +409,14 @@ function writeWindArrowDriftFrame(
   hideFrame: boolean,
 ): void {
   const half = buffer.sideM / 2;
-  curve.alongM = -half + curve.pathLenM * 0.5 + travelled;
+  const travelRange = windArrowTravelRangeM(buffer.sideM, curve.pathLenM);
+  curve.alongM =
+    -half + curve.pathLenM * 0.5 + travelled - buffer.sideM * WIND_ARROW_SPAWN_OUTSIDE_FRAC;
   const wavePhase = curve.phase * Math.PI * 2 + waveTimeS * 0.35;
   fillCurvePositions(curve, wx, wn, px, pz, wavePhase);
   let op = 0;
   if (!hideFrame) {
-    op = windArrowEdgeOpacity(curve.alongM, buffer.sideM, curve.pathLenM);
-    if (op > 0 && !curveInsideFrame(curve, half)) op = 0;
+    op = windArrowEdgeOpacity(travelled, travelRange);
   }
   curve.opacity = op;
 }
@@ -550,8 +619,17 @@ export function windFlowArrowPolylines(
   prevailingSector: number,
 ): { path: [number, number][]; head: [number, number][] }[] {
   const buffer = buildWindArrowBuffer(sideM, prevailingSector, null);
+  const wind = downwindFromSector(prevailingSector);
+  const wLen = Math.hypot(wind.east, wind.north) || 1;
+  const wx = wind.east / wLen;
+  const wn = wind.north / wLen;
+  const px = -wn;
+  const pz = wx;
+  const half = sideM / 2;
   const out: { path: [number, number][]; head: [number, number][] }[] = [];
   for (const curve of buffer.curves) {
+    const wavePhase = curve.phase * Math.PI * 2;
+    fitCurveInsideFrame(curve, wx, wn, px, pz, half, wavePhase);
     const path: [number, number][] = [];
     for (let i = 0; i < curve.pointCount; i++) {
       path.push([curve.positions[i * 3]!, -curve.positions[i * 3 + 2]!]);
