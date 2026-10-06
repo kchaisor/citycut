@@ -716,6 +716,59 @@ input[type="range"]::-moz-range-thumb {
 .tree-credit { margin: 6px 0 0; color: var(--muted-text); }
 .legend-sub { margin: 8px 0 4px; font-weight: 560; }
 .legend-note { margin: 6px 0 0; color: var(--muted-text); }
+.height-override-panel { margin: 0 0 10px; }
+.building-height-popover {
+  position: fixed;
+  z-index: 40;
+  transform: translate(12px, 12px);
+  width: min(260px, calc(100vw - 24px));
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  background: #fff;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+  font-size: 13px;
+}
+.building-height-popover header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.building-height-popover .icon-close {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+}
+.building-height-popover .height-field {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0;
+}
+.building-height-popover .height-field input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  font: inherit;
+}
+.building-height-popover .popover-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.building-height-popover .popover-actions button {
+  border: 1px solid var(--panel-border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
 .legend ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .legend li { display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: center; }
 .legend i { width: 12px; height: 12px; border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }

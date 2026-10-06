@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
+import { attachBuildingPick } from "../lib/buildingPick";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { shotFromCamera, type CameraShot } from "../lib/cameraShot";
 import { getColour } from "../lib/colours";
@@ -108,20 +109,44 @@ function publishCamera(camera: THREE.Camera, target: THREE.Vector3, element: HTM
   }
 }
 
+function BuildingPickLayer({
+  root,
+  enabled,
+  onBuildingPick,
+}: {
+  root: THREE.Object3D;
+  enabled: boolean;
+  onBuildingPick: (buildingId: number, clientX: number, clientY: number) => void;
+}) {
+  const camera = useThree((state) => state.camera);
+  const gl = useThree((state) => state.gl);
+  useLayoutEffect(() => {
+    if (!enabled) return;
+    return attachBuildingPick(gl.domElement, camera, root, { onBuildingPick });
+  }, [camera, enabled, gl.domElement, onBuildingPick, root]);
+  return null;
+}
+
 function City({
   model,
   uniformBuildings,
   colourBySource,
+  highlightManual,
   solarDiagramOn,
   solarNeutralFill,
   onBounds,
+  onBuildingPick,
+  pickBuildings,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
   colourBySource: boolean;
+  highlightManual: boolean;
   solarDiagramOn: boolean;
   solarNeutralFill: string;
   onBounds: (bounds: Aabb) => void;
+  onBuildingPick: (buildingId: number, clientX: number, clientY: number) => void;
+  pickBuildings: boolean;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -135,7 +160,7 @@ function City({
     [uniformBuildings, colourBySource],
   );
   const group = useMemo(() => {
-    const city = buildCityGroup(model, { uniformBuildings, colourBySource });
+    const city = buildCityGroup(model, { uniformBuildings, colourBySource, highlightManual });
     const ground = city.getObjectByName("Ground");
     if (ground && ground instanceof THREE.Mesh && ground.name === "Ground") {
       const edges = new THREE.LineSegments(
@@ -148,7 +173,7 @@ function City({
     }
     addBuildingEdges(city);
     return city;
-  }, [model, uniformBuildings, colourBySource, colourTick]);
+  }, [model, uniformBuildings, colourBySource, highlightManual, colourTick]);
   useLayoutEffect(() => {
     onBoundsRef.current(measureCity(group));
   }, [group]);
@@ -161,7 +186,12 @@ function City({
     applyBuildingSolarNeutral(group, solarDiagramOn, solarNeutralFill);
   }, [group, solarDiagramOn, solarNeutralFill, colourTick]);
   useLayoutEffect(() => () => disposeObject(group), [group]);
-  return <primitive object={group} />;
+  return (
+    <>
+      <primitive object={group} />
+      <BuildingPickLayer root={group} enabled={pickBuildings} onBuildingPick={onBuildingPick} />
+    </>
+  );
 }
 
 /** Sun-study whites read grey under ACES; use linear output while the diagram is on. */
@@ -754,22 +784,26 @@ export function Scene3D({
   model,
   uniformBuildings,
   colourBySource,
+  showManualEdits,
   projection,
   corner,
   freeRotate,
   snapId,
   solar,
   onExportReady,
+  onBuildingPick,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
   colourBySource: boolean;
+  showManualEdits: boolean;
   projection: ProjectionMode;
   corner: IsoCorner;
   freeRotate: boolean;
   snapId: number;
   solar: SolarViewSettings;
   onExportReady: (exporter: SceneExporter | null) => void;
+  onBuildingPick: (buildingId: number, clientX: number, clientY: number) => void;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
@@ -832,9 +866,12 @@ export function Scene3D({
         model={model}
         uniformBuildings={uniformBuildings}
         colourBySource={colourBySource}
+        highlightManual={showManualEdits && model.manualHeightEditCount !== undefined && model.manualHeightEditCount > 0}
         solarDiagramOn={solar.showPath}
         solarNeutralFill={solarNeutralFill}
         onBounds={onBounds}
+        onBuildingPick={onBuildingPick}
+        pickBuildings={model.layers.buildings}
       />
       <SolarHeliodon
         lat={model.center.lat}

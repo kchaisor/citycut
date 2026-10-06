@@ -55,6 +55,8 @@ export type BuildingFeat = {
   height: number;
   /** Set when height came from footprint/zone fallback, not Overture height or floors. */
   heightFromFallback?: boolean;
+  /** Set when the user overrode height in the 3D view. */
+  heightManual?: true;
   use: BuildingUse;
   source: TypologySource;
   /** Overture GERS building id when the footprint comes from Overture Maps. */
@@ -191,6 +193,8 @@ export type CityModel = {
   contourLayer?: ContourLayer | null;
   /** When true, building heights came from City of Melbourne 2023 Building Footprints. */
   comBuildingHeights?: boolean;
+  /** Manual height overrides applied in the browser for this session's display and exports. */
+  manualHeightEditCount?: number;
   /** True when Overture Microsoft ML footprints appear in the cut. */
   hasMicrosoftFootprints?: boolean;
   /** True when ESA WorldCover land_cover polygons were used for canopy infill. */
