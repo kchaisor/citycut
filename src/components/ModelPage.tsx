@@ -93,6 +93,7 @@ import {
   writeStoredWindSettings,
   type WindViewSettings,
 } from "../lib/windState";
+import { useWindStreakMotion } from "../lib/windStreakMotion";
 import type { SitePlanExportOptions } from "../lib/aiPlan";
 import type { PlanShadowInput } from "../lib/buildingShadows";
 import type { HeliodonDiagramExportOptions, HeliodonGroundExportOptions } from "../lib/heliodonDiagram";
@@ -160,6 +161,7 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [windSettings, setWindSettings] = useState<WindViewSettings>(() => readStoredWindSettings(window.localStorage));
   const [windTable, setWindTable] = useState<WindRoseTable | null>(null);
   const [windNote, setWindNote] = useState<string | null>(null);
+  const windMotion = useWindStreakMotion();
   const [solar, setSolar] = useState<SolarViewSettings>(() => ({
     showPath: capturePresetFromSearch(window.location.search).solarPath,
     castShadows: false,
@@ -562,13 +564,20 @@ export function ModelPage({ model }: { model: CityModel }) {
                 windEnabled={windSettings.enabled}
                 windTable={windTable}
                 windPeriod={windSettings.period}
+                windAnimateStreaks={windMotion.animateStreaks}
                 onExportReady={onExportReady}
                 onBuildingPick={(buildingId, clientX, clientY) =>
                   setHeightPick({ buildingId, clientX, clientY })
                 }
               />
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
-                <WindRoseOverlay table={windTable} period={windSettings.period} />
+                <WindRoseOverlay
+                  table={windTable}
+                  period={windSettings.period}
+                  streaksPaused={windMotion.streaksPaused}
+                  animateAnyway={windMotion.animateAnyway}
+                  onAnimateAnyway={windMotion.setAnimateAnyway}
+                />
               )}
               {pickedBuilding && heightPick && (
                 <BuildingHeightPopover
@@ -958,6 +967,9 @@ export function ModelPage({ model }: { model: CityModel }) {
                 settings={windSettings}
                 onChange={commitWind}
                 note={windNote}
+                streaksPaused={windMotion.streaksPaused}
+                animateAnyway={windMotion.animateAnyway}
+                onAnimateAnyway={windMotion.setAnimateAnyway}
               />
             </div>
 

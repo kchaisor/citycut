@@ -1,6 +1,7 @@
 import { useId } from "react";
 import { WIND_PERIOD_LABELS, monthPeriodLabel, type WindPeriodId } from "../lib/windRose";
 import type { WindViewSettings } from "../lib/windState";
+import { WindReducedMotionNote } from "./WindReducedMotionNote";
 
 const PERIOD_OPTIONS: { id: WindPeriodId; label: string }[] = [
   { id: "annual", label: WIND_PERIOD_LABELS.annual },
@@ -19,11 +20,17 @@ export function WindPanel({
   onChange,
   note,
   embedded = true,
+  streaksPaused = false,
+  animateAnyway = false,
+  onAnimateAnyway,
 }: {
   settings: WindViewSettings;
   onChange: (next: WindViewSettings) => void;
   note?: string | null;
   embedded?: boolean;
+  streaksPaused?: boolean;
+  animateAnyway?: boolean;
+  onAnimateAnyway?: (value: boolean) => void;
 }) {
   const panelId = useId();
 
@@ -66,6 +73,13 @@ export function WindPanel({
           />
           Show rose
         </label>
+        {settings.enabled && streaksPaused && onAnimateAnyway && (
+          <WindReducedMotionNote
+            animateAnyway={animateAnyway}
+            onAnimateAnyway={onAnimateAnyway}
+            className="wind-reduced-motion-note wind-reduced-motion-note--drawer"
+          />
+        )}
       </div>
     </div>
   );

@@ -10,13 +10,11 @@ import type { TerrainField } from "../types";
 import {
   buildWindStreakBuffer,
   updateWindStreakPositions,
+  windStreakSpeedMs,
+  writeLineSegmentPositions,
   type WindStreakBuffer,
 } from "../lib/windStreakGeometry";
 import type { WindPeriodStats } from "../lib/windRose";
-
-function speedMs(medianKmh: number): number {
-  return Math.max(1.5, medianKmh * 0.04);
-}
 
 function streakLines(buffer: WindStreakBuffer, material: LineMaterial): LineSegments2 {
   const geometry = new LineSegmentsGeometry();
@@ -76,8 +74,9 @@ export function WindStreaks({
   useFrame((_, delta) => {
     if (!animate) return;
     timeRef.current += delta;
-    updateWindStreakPositions(buffer, stats.prevailingSector, timeRef.current, speedMs(stats.prevailingMedianKmh));
-    lines.geometry.setPositions(buffer.positions);
+    const speed = windStreakSpeedMs(sideM, stats.prevailingMedianKmh);
+    updateWindStreakPositions(buffer, stats.prevailingSector, timeRef.current, speed);
+    writeLineSegmentPositions(lines.geometry, buffer.positions);
   });
 
   return <primitive object={lines} />;

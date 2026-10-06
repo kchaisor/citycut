@@ -807,6 +807,9 @@ input[type="range"]::-moz-range-thumb {
   box-shadow: var(--shadow);
   pointer-events: none;
 }
+.wind-rose-overlay .wind-reduced-motion-note {
+  pointer-events: auto;
+}
 .wind-rose-overlay svg {
   display: block;
   width: 120px;
@@ -824,6 +827,29 @@ input[type="range"]::-moz-range-thumb {
   font-size: 10px;
   line-height: 1.35;
   color: var(--muted-text);
+}
+.wind-reduced-motion-note {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--hairline);
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--muted-text);
+}
+.wind-reduced-motion-note p {
+  margin: 0 0 4px;
+}
+.wind-reduced-motion-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 10px;
+  color: var(--ink);
+}
+.wind-reduced-motion-note--drawer {
+  margin-top: 12px;
+  padding-top: 10px;
 }
 .stage-attrib {
   left: auto;
