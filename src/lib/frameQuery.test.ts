@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SIDE_KM, DEFAULT_ZOOM, MAX_SIDE_KM, MIN_SIDE_KM } from "../content/constants";
-import { explicitLabel, frameFromSearch, writeFrameSearch } from "./frameQuery";
+import { explicitLabel, frameFromSearch, siteAnchorFromSearch, writeFrameSearch, writeSiteAnchorSearch } from "./frameQuery";
 
 const melbourne = {
   view: { lat: -37.8136, lon: 144.9631, zoom: DEFAULT_ZOOM },
@@ -81,5 +81,13 @@ describe("writeFrameSearch", () => {
     });
     expect(new URLSearchParams(search.slice(1)).get("view")).toBe("iso-sw");
     expect(explicitLabel("?lat=-37.8041&lon=144.94944&km=1")).toBeNull();
+  });
+
+  it("round-trips siteLat and siteLon", () => {
+    const search = writeSiteAnchorSearch("?lat=-37.81&lon=145.05&km=0.4", {
+      lat: -37.81012,
+      lon: 145.05123,
+    });
+    expect(siteAnchorFromSearch(search)).toEqual({ lat: -37.81012, lon: 145.05123 });
   });
 });

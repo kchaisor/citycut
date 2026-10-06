@@ -35,6 +35,9 @@
   /* 3D viewport tint for buildings with a manual height override when “Show manual edits” is on. */
   --building-manual: #D4A017;
 
+  /* Buildings on the searched property: site plan, 3D, Rhino Buildings::Site, and Illustrator Site buildings layer. */
+  --site-building: #F2C230;
+
   /* Residential footprints, legend swatch, and the Residential Rhino layer. */
   --use-residential: #A4A5A8;
 

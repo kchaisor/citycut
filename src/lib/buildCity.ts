@@ -8,6 +8,8 @@ import { openRing, signedArea } from "./geo";
 import { carriagewaysOf, unionCarriageways, unionPathRoads } from "./roadFill";
 import { hexRgb, overlapLift, ROAD_COLOR, ROAD_RGB, roadGradeLayer, SURFACE } from "./surfaceLayers";
 import { matteStandardMaterial } from "./matteMaterial";
+import { readDrawingStyle } from "./drawingStyle";
+import { isSiteBuilding } from "./siteBuildings";
 import { footprintBase, sampleTerrain, terrainBuffers } from "./terrain";
 import type { AreaFeat, BuildingFeat, BuildingUse, CityModel, Pt, Ring, RoadGrade, TerrainField } from "../types";
 
@@ -476,14 +478,17 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     group.add(mesh);
   }
 
+  const siteFill = getColour("--site-building");
+  const siteLayerName = "Buildings::Site";
   const bySource = Boolean(options.colourBySource) && !options.splitBuildings;
   const uniform = Boolean(options.uniformBuildings) && !bySource && !options.splitBuildings;
   if (options.splitBuildings) {
     for (const building of model.buildings) {
       const base = (model.terrain ? footprintBase(model.terrain, building.ring, model.sideM) : 0) + SURFACE.building.lift;
       const geometries = extrudeFootprint(building, base);
-      const name = buildingLayerName(building.use);
-      const color = BUILDING_USE_META[building.use].color;
+      const onSite = isSiteBuilding(model, building.id);
+      const name = onSite ? siteLayerName : buildingLayerName(building.use);
+      const color = onSite ? siteFill : BUILDING_USE_META[building.use].color;
       const material = paint(matteStandardMaterial({ color }), SURFACE.building);
       material.name = name;
       for (const geometry of geometries) {
@@ -507,6 +512,8 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     const manualColor = getColour("--building-manual");
     const manualMat = paint(matteStandardMaterial({ color: manualColor }), SURFACE.building);
     manualMat.name = "Buildings-manual";
+    const siteMat = paint(matteStandardMaterial({ color: siteFill }), SURFACE.building);
+    siteMat.name = "Buildings-site";
     for (const building of model.buildings) {
       const base = (model.terrain ? footprintBase(model.terrain, building.ring, model.sideM) : 0) + SURFACE.building.lift;
       const geometries = extrudeFootprint(building, base);
@@ -516,6 +523,17 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
           mesh.name = "Buildings-manual";
           mesh.userData.buildingId = building.id;
           mesh.userData.layerColor = hexRgb(manualColor);
+          order(mesh, SURFACE.building.renderOrder);
+          group.add(mesh);
+        }
+        continue;
+      }
+      if (isSiteBuilding(model, building.id)) {
+        for (const geometry of geometries) {
+          const mesh = new THREE.Mesh(geometry, siteMat);
+          mesh.name = "Buildings-site";
+          mesh.userData.buildingId = building.id;
+          mesh.userData.layerColor = hexRgb(siteFill);
           order(mesh, SURFACE.building.renderOrder);
           group.add(mesh);
         }
@@ -557,6 +575,32 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
 
   const trees = buildTreeGroup(model.trees, sample ?? undefined);
   if (trees) group.add(trees);
+
+  const boundaryLines = model.siteBoundaryLines;
+  if (boundaryLines && boundaryLines.length > 0) {
+    const stroke = readDrawingStyle().siteBoundary.color;
+    const lift = 0.05;
+    const positions: number[] = [];
+    for (const line of boundaryLines) {
+      for (let i = 0; i < line.length - 1; i++) {
+        const a = line[i];
+        const b = line[i + 1];
+        const ya = (sample ? sample(a[0], a[1]) : 0) + lift;
+        const yb = (sample ? sample(b[0], b[1]) : 0) + lift;
+        positions.push(a[0], ya, -a[1], b[0], yb, -b[1]);
+      }
+    }
+    if (positions.length >= 6) {
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      const material = new THREE.LineBasicMaterial({ color: stroke });
+      material.name = "Site::Boundary";
+      const linesMesh = new THREE.LineSegments(geometry, material);
+      linesMesh.name = "Site::Boundary";
+      order(linesMesh, SURFACE.building.renderOrder + 1);
+      group.add(linesMesh);
+    }
+  }
 
   group.traverse((object) => {
     const mesh = object as THREE.Mesh;

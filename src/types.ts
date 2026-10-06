@@ -199,6 +199,16 @@ export type CityModel = {
   hasMicrosoftFootprints?: boolean;
   /** True when ESA WorldCover land_cover polygons were used for canopy infill. */
   hasEsaLandCover?: boolean;
+  /** Geocoded address point when the frame came from address search (or reload via URL). */
+  siteAnchor?: LonLat | null;
+  /** Vicmap parcel identifier (PFI/SPI) when the boundary loaded. */
+  siteParcelPfi?: string | null;
+  /** Boundary polylines in local metres, clipped to the cut square. */
+  siteBoundaryLines?: Pt[][];
+  /** Building ids highlighted as on-site (yellow). */
+  siteBuildingIds?: number[];
+  /** Quiet note when the parcel could not be loaded. */
+  siteNote?: string | null;
 };
 
 export type ViewState = {

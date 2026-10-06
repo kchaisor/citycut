@@ -30,7 +30,8 @@ export type StrokeKey =
   | "contour"
   | "frame"
   | "annotation"
-  | "tree";
+  | "tree"
+  | "siteBoundary";
 
 export type StrokeStyle = {
   /** Printed millimetres. */
@@ -41,8 +42,14 @@ export type StrokeStyle = {
   dash: string;
 };
 
+export const SITE_BOUNDARY_MM_VAR = "--site-boundary-mm";
+export const SITE_BOUNDARY_STROKE_VAR = "--site-boundary-stroke";
+export const SITE_BOUNDARY_DASH_VAR = "--site-boundary-dash";
+
 export type LineStyles = {
   building: StrokeStyle;
+  /** Searched-property parcel boundary. */
+  siteBoundary: StrokeStyle;
   kerb: StrokeStyle;
   path: StrokeStyle;
   rail: StrokeStyle;
@@ -81,6 +88,7 @@ export const STROKE_KEYS = [
   "frame",
   "annotation",
   "tree",
+  "siteBoundary",
 ] as const satisfies readonly StrokeKey[];
 
 export const STROKE_LABELS: Record<StrokeKey, string> = {
@@ -94,6 +102,7 @@ export const STROKE_LABELS: Record<StrokeKey, string> = {
   frame: "Frame",
   annotation: "Annotation",
   tree: "Tree crowns",
+  siteBoundary: "Site boundary",
 };
 
 type VarNames = { mm: string; color: string; dash: string };
@@ -109,6 +118,11 @@ export const STROKE_VARS: Record<StrokeKey, VarNames> = {
   frame: { mm: "--frame-stroke-mm", color: "--frame-stroke", dash: "--frame-dash" },
   annotation: { mm: "--annotation-stroke-mm", color: "--annotation-stroke", dash: "--annotation-dash" },
   tree: { mm: "--tree-stroke-mm", color: "--tree-stroke", dash: "--tree-dash" },
+  siteBoundary: {
+    mm: SITE_BOUNDARY_MM_VAR,
+    color: SITE_BOUNDARY_STROKE_VAR,
+    dash: SITE_BOUNDARY_DASH_VAR,
+  },
 };
 
 export const ROAD_FILL_VAR = "--road-fill";
@@ -142,6 +156,11 @@ const INK = drawingSheetColor("--frame-stroke");
 
 export const DEFAULT_LINE_STYLES: LineStyles = {
   building: { mm: LINE_MM.buildingCut, color: drawingSheetColor("--building-stroke"), dash: "none" },
+  siteBoundary: {
+    mm: 0.35,
+    color: drawingSheetColor(SITE_BOUNDARY_STROKE_VAR),
+    dash: "1.2 0.6",
+  },
   kerb: { mm: LINE_MM.propertyRoad, color: drawingSheetColor("--road-kerb-stroke"), dash: "none" },
   path: { mm: 0, color: drawingSheetColor("--path-edge-stroke"), dash: "none" },
   rail: { mm: LINE_MM.secondary, color: drawingSheetColor("--rail-stroke"), dash: "none" },
@@ -187,6 +206,7 @@ const KNOWN = new Set(allStyleVariables());
 export function cloneLineStyles(style: LineStyles = DEFAULT_LINE_STYLES): LineStyles {
   return {
     building: { ...style.building },
+    siteBoundary: { ...style.siteBoundary },
     kerb: { ...style.kerb },
     path: { ...style.path },
     rail: { ...style.rail },

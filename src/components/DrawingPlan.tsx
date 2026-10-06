@@ -346,6 +346,14 @@ export function DrawingPlan({
                 {...screenPenAttrs(style.building, "miter")}
               />
             ))}
+            {(model.siteBoundaryLines ?? []).map((line, index) => (
+              <path
+                key={`sb${index}`}
+                d={svgPolyline(line, false)}
+                fill="none"
+                {...screenPenAttrs(style.siteBoundary)}
+              />
+            ))}
             {plan.trees.map((tree, index) => (
               <circle
                 key={`t${index}`}

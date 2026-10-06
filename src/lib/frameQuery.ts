@@ -6,7 +6,7 @@ import {
   MELBOURNE_LABEL,
   MIN_SIDE_KM,
 } from "../content/constants";
-import type { ViewState } from "../types";
+import type { LonLat, ViewState } from "../types";
 
 export type FrameQuery = {
   view: ViewState;
@@ -81,6 +81,28 @@ export function writeFrameSearch(
   params.set("lon", trimCoord(frame.lon));
   params.set("km", trimKm(frame.sideKm));
   params.set("label", frame.label);
+  const next = params.toString();
+  return next ? `?${next}` : "";
+}
+
+/** Persisted geocoded search point so a reload restores site detection. */
+export function siteAnchorFromSearch(search: string): LonLat | null {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  const lat = readCoordinate(params.get("siteLat"), -90, 90);
+  const lon = readCoordinate(params.get("siteLon"), -180, 180);
+  if (lat == null || lon == null) return null;
+  return { lat, lon };
+}
+
+export function writeSiteAnchorSearch(search: string, anchor: LonLat | null): string {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  if (anchor) {
+    params.set("siteLat", trimCoord(anchor.lat));
+    params.set("siteLon", trimCoord(anchor.lon));
+  } else {
+    params.delete("siteLat");
+    params.delete("siteLon");
+  }
   const next = params.toString();
   return next ? `?${next}` : "";
 }

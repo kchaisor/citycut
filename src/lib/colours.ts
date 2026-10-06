@@ -17,6 +17,7 @@ export const COLOUR_KEYS = [
   "--contour-label",
   "--building-uniform",
   "--building-manual",
+  "--site-building",
   "--use-residential",
   "--use-commercial",
   "--use-retail",
@@ -78,6 +79,7 @@ export const COLOUR_GROUPS = [
     keys: [
       "--building-uniform",
       "--building-manual",
+      "--site-building",
       "--use-residential",
       "--use-commercial",
       "--use-retail",
@@ -164,6 +166,7 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--contour-label": "Contour numbers",
   "--building-uniform": "Uniform buildings",
   "--building-manual": "Manual height (3D)",
+  "--site-building": "Site buildings",
   "--use-residential": "Residential",
   "--use-commercial": "Commercial",
   "--use-retail": "Retail",

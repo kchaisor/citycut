@@ -38,9 +38,12 @@ const BUILDING_LAYER_KEYS: Record<string, ColourKey> = {
 };
 
 /** Full layer path → theme key (or contour pen) for every Rhino layer CityCut writes. */
-export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
-  const keys: Record<string, ColourKey | "contour"> = {
+export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour" | "siteBoundary"> {
+  const keys: Record<string, ColourKey | "contour" | "siteBoundary"> = {
     Buildings: "--building-uniform",
+    "Buildings::Site": "--site-building",
+    Site: "--site-building",
+    "Site::Boundary": "siteBoundary",
     Roads: "--road-arterial",
     Rail: "--rail-fill",
     Water: "--water-3d",
@@ -60,11 +63,19 @@ export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
   return keys;
 }
 
+function siteBoundaryLayerColor(): Rgb {
+  const hex = readDrawingStyle().siteBoundary.color;
+  const value = Number.parseInt(hex.slice(1), 16);
+  return { r: (value >> 16) & 255, g: (value >> 8) & 255, b: value & 255 };
+}
+
 function layerColors(): Record<string, Rgb> {
   const keys = rhinoLayerColourKeys();
   const out: Record<string, Rgb> = {};
   for (const [name, key] of Object.entries(keys)) {
-    out[name] = key === "contour" ? contourLayerColor() : colourRgb(key);
+    if (key === "contour") out[name] = contourLayerColor();
+    else if (key === "siteBoundary") out[name] = siteBoundaryLayerColor();
+    else out[name] = colourRgb(key);
   }
   return out;
 }
@@ -293,6 +304,36 @@ function addFigureGround(
  * The 3dm did not previously contain contour curves. These are new, and they
  * sit at the contour's own Z because the rest of the file is Z-up metres.
  */
+function addSiteBoundary(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  model: CityModel,
+  zone: number,
+) {
+  const lines = model.siteBoundaryLines;
+  if (!lines || lines.length === 0) return;
+  const z = model.terrain ? model.terrain.min : 0;
+  const layerIndex = ensureLayer(rhino, doc, layers, materials, "Site::Boundary", layerColors()["Site::Boundary"]);
+  for (const line of lines) {
+    const points: number[][] = [];
+    for (const point of line) {
+      const [easting, northing] = projectLocal(point, model.center, zone);
+      const last = points[points.length - 1];
+      if (last && Math.hypot(last[0] - easting, last[1] - northing) < 0.001) continue;
+      points.push([easting, northing, z]);
+    }
+    if (points.length < 2) continue;
+    const attributes = new rhino.ObjectAttributes();
+    attributes.name = "Site boundary";
+    attributes.layerIndex = layerIndex;
+    applyByLayerAttributes(rhino, attributes);
+    doc.objects().addPolyline(points, attributes);
+    release(attributes);
+  }
+}
+
 function addContours(
   rhino: Rhino,
   doc: InstanceType<Rhino["File3dm"]>,
@@ -466,6 +507,7 @@ export async function cityModelTo3dm(
       addMesh(rhino, doc, layers, materials, mesh, model, crs.zone);
     });
     addFigureGround(rhino, doc, layers, materials, model, crs.zone);
+    addSiteBoundary(rhino, doc, layers, materials, model, crs.zone);
     addContours(rhino, doc, layers, materials, model, crs.zone);
     if (heliodon) addHeliodonPlan(rhino, doc, layers, materials, model, crs.zone, heliodon);
     if (shadows) addPlanShadows(rhino, doc, layers, materials, model, crs.zone, shadows, Boolean(castShadows));
