@@ -832,18 +832,16 @@ function WindLayer({
   table,
   period,
   enabled,
+  animateStreaks,
 }: {
   sideM: number;
   terrain?: import("../types").TerrainField | null;
   table: WindRoseTable | null;
   period: WindPeriodId;
   enabled: boolean;
+  animateStreaks: boolean;
 }) {
   const [visible, setVisible] = useState(() => typeof document !== "undefined" && !document.hidden);
-  const reducedMotion = useMemo(
-    () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-    [],
-  );
   useEffect(() => {
     const onVis = () => setVisible(!document.hidden);
     document.addEventListener("visibilitychange", onVis);
@@ -851,7 +849,7 @@ function WindLayer({
   }, []);
   if (!enabled || !table) return null;
   const stats = analyzeWindPeriod(table, period);
-  if (reducedMotion) return <WindStaticArrows sideM={sideM} stats={stats} terrain={terrain} />;
+  if (!animateStreaks) return <WindStaticArrows sideM={sideM} stats={stats} terrain={terrain} />;
   return <WindStreaks sideM={sideM} stats={stats} animate={visible} terrain={terrain} />;
 }
 
@@ -868,6 +866,7 @@ export function Scene3D({
   windEnabled,
   windTable,
   windPeriod,
+  windAnimateStreaks,
   onExportReady,
   onBuildingPick,
 }: {
@@ -883,6 +882,7 @@ export function Scene3D({
   windEnabled: boolean;
   windTable: WindRoseTable | null;
   windPeriod: WindPeriodId;
+  windAnimateStreaks: boolean;
   onExportReady: (exporter: SceneExporter | null) => void;
   onBuildingPick: (buildingId: number, clientX: number, clientY: number) => void;
 }) {
@@ -969,6 +969,7 @@ export function Scene3D({
         table={windTable}
         period={windPeriod}
         enabled={windEnabled}
+        animateStreaks={windAnimateStreaks}
       />
       <Cameras
         side={model.sideM}

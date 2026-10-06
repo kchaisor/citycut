@@ -9,15 +9,22 @@ import {
   WIND_SECTOR_COUNT,
 } from "../lib/windRose";
 import { windRoseCaption } from "../lib/windRoseSvg";
+import { WindReducedMotionNote } from "./WindReducedMotionNote";
 
 export function WindRoseOverlay({
   table,
   period,
   className = "wind-rose-overlay",
+  streaksPaused = false,
+  animateAnyway = false,
+  onAnimateAnyway,
 }: {
   table: WindRoseTable;
   period: WindPeriodId;
   className?: string;
+  streaksPaused?: boolean;
+  animateAnyway?: boolean;
+  onAnimateAnyway?: (value: boolean) => void;
 }) {
   useColourRevision();
   const fill = getColour("--wind-rose");
@@ -89,6 +96,9 @@ export function WindRoseOverlay({
         })}
       </svg>
       <p className="wind-rose-caption">{caption}</p>
+      {streaksPaused && onAnimateAnyway && (
+        <WindReducedMotionNote animateAnyway={animateAnyway} onAnimateAnyway={onAnimateAnyway} />
+      )}
     </div>
   );
 }

@@ -1,6 +1,20 @@
+import type { InterleavedBufferAttribute } from "three";
+import type { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
 import type { TerrainField } from "../types";
 import { sampleTerrain } from "./terrain";
 import { downwindFromSector } from "./windRose";
+
+/** Frame-relative drift speed (m/s): cross the site in ~25–40 s, scaled by median wind. */
+export function windStreakSpeedMs(sideM: number, medianKmh: number): number {
+  const calmKmh = 8;
+  const strongKmh = 32;
+  const t = Math.min(1, Math.max(0, (medianKmh - calmKmh) / (strongKmh - calmKmh)));
+  const crossS = 40 - t * 15;
+  const speed = sideM / crossS;
+  const minSpeed = sideM / 55;
+  const maxSpeed = sideM / 18;
+  return Math.min(maxSpeed, Math.max(minSpeed, speed));
+}
 
 export const WIND_STREAK_COUNT = 2000;
 export const WIND_STREAK_LENGTH_M = 18;
@@ -121,6 +135,28 @@ export function updateWindStreakPositions(
     positions[base + 4] = y;
     positions[base + 5] = z1;
   }
+}
+
+/** Copy streak positions into an existing wide-line geometry without reallocating GPU buffers. */
+export function writeLineSegmentPositions(
+  geometry: LineSegmentsGeometry,
+  positions: Float32Array,
+): void {
+  const start = geometry.attributes.instanceStart as InterleavedBufferAttribute | undefined;
+  const end = geometry.attributes.instanceEnd as InterleavedBufferAttribute | undefined;
+  if (!start || !end) {
+    geometry.setPositions(positions);
+    return;
+  }
+  const buffer = start.data;
+  const array = buffer.array as Float32Array;
+  if (array.length !== positions.length) {
+    geometry.setPositions(positions);
+    return;
+  }
+  array.set(positions);
+  buffer.needsUpdate = true;
+  geometry.computeBoundingSphere();
 }
 
 export type StreakBoundsReport = {
