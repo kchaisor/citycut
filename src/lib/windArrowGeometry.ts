@@ -8,17 +8,49 @@ import { downwindFromSector } from "./windRose";
 export const WIND_ARROW_COUNT = 6;
 export const WIND_ARROW_LIFT_MIN_M = 20;
 export const WIND_ARROW_LIFT_MAX_M = 30;
-/** One full travel along the curve per loop. */
-export const WIND_ARROW_LOOP_S = 3.5;
+/** Opacity ramp over this fraction of the frame at upwind/downwind edges. */
+export const WIND_ARROW_FADE_FRAC = 0.12;
+
+/** Frame-relative drift speed (m/s): cross the site in ~25–40 s, scaled by median wind. */
+export function windStreakSpeedMs(sideM: number, medianKmh: number): number {
+  const calmKmh = 8;
+  const strongKmh = 32;
+  const t = Math.min(1, Math.max(0, (medianKmh - calmKmh) / (strongKmh - calmKmh)));
+  const crossS = 40 - t * 15;
+  const speed = sideM / crossS;
+  const minSpeed = sideM / 55;
+  const maxSpeed = sideM / 18;
+  return Math.min(maxSpeed, Math.max(minSpeed, speed));
+}
 
 export type WindArrowCurve = {
   positions: Float32Array;
   pointCount: number;
   pathLenM: number;
+  /** 0–1 stagger for drift phase. */
   phase: number;
   headEast: number;
   headNorth: number;
   headY: number;
+  waveAmp: number;
+  waveCount: number;
+  liftY: number;
+  /** Perpendicular offset from wind axis (m). */
+  lateralM: number;
+  /** Downwind axis position of curve centre (m). */
+  alongM: number;
+  /** Multiplier on drift speed (~0.85–1.15). */
+  speedFactor: number;
+  /** Arrow index for respawn hashing. */
+  index: number;
+  /** Current edge fade opacity 0–1 (animation only). */
+  opacity: number;
+  /** Internal respawn cycle tracker for lateral respawn. */
+  _lastCycle: number;
+  /** Downwind progress within the current loop (m). */
+  driftM: number;
+  /** Accumulated time for S-curve wiggle (s). */
+  waveTimeS: number;
 };
 
 export type WindArrowBuffer = {
@@ -73,6 +105,73 @@ function minPolylineSeparation(a: Float32Array, b: Float32Array, step = 3): numb
   return min;
 }
 
+function lateralForRespawn(index: number, cycle: number, sideM: number): number {
+  const seed = hash(index + cycle * 997 + 41);
+  return (seed.a - 0.5) * sideM * 0.88;
+}
+
+/** Distance the centre may travel per loop while keeping the arrow inside the frame at full opacity. */
+export function windArrowTravelRangeM(sideM: number, pathLenM: number): number {
+  return Math.max(sideM * 0.5, sideM - pathLenM);
+}
+
+/** Opacity ramp near upwind/downwind frame edges; zero if head/tail would leave the square. */
+export function windArrowEdgeOpacity(
+  alongM: number,
+  sideM: number,
+  pathLenM: number,
+  fadeFrac = WIND_ARROW_FADE_FRAC,
+): number {
+  const half = sideM / 2;
+  const headAlong = alongM + pathLenM * 0.5;
+  const tailAlong = alongM - pathLenM * 0.5;
+  if (headAlong > half || tailAlong < -half) return 0;
+  const norm = (alongM + half - pathLenM * 0.5) / Math.max(1, sideM - pathLenM);
+  let op = 1;
+  if (norm < fadeFrac) op = norm / fadeFrac;
+  else if (norm > 1 - fadeFrac) op = (1 - norm) / fadeFrac;
+  return Math.max(0, Math.min(1, op));
+}
+
+function curveInsideFrame(curve: WindArrowCurve, half: number): boolean {
+  for (let s = 0; s < curve.pointCount; s++) {
+    const east = curve.positions[s * 3]!;
+    const north = -curve.positions[s * 3 + 2]!;
+    if (Math.abs(east) > half + 0.001 || Math.abs(north) > half + 0.001) return false;
+  }
+  return true;
+}
+
+function fillCurvePositions(
+  curve: WindArrowCurve,
+  wx: number,
+  wn: number,
+  px: number,
+  pz: number,
+  wavePhase: number,
+): void {
+  const { positions, pointCount, pathLenM, liftY, waveAmp, waveCount, alongM, lateralM } = curve;
+  const halfLen = pathLenM * 0.5;
+  const centreEast = wx * alongM + px * lateralM;
+  const centreNorth = wn * alongM + pz * lateralM;
+  const startEast = centreEast - wx * halfLen;
+  const startNorth = centreNorth - wn * halfLen;
+
+  for (let s = 0; s < pointCount; s++) {
+    const t = s / (pointCount - 1);
+    const along = t * pathLenM;
+    const wave = waveAmp * Math.sin(t * Math.PI * waveCount + wavePhase);
+    positions[s * 3] = startEast + wx * along + px * wave;
+    positions[s * 3 + 1] = liftY;
+    positions[s * 3 + 2] = -(startNorth + wn * along + pz * wave);
+  }
+
+  const headIdx = (pointCount - 1) * 3;
+  curve.headEast = positions[headIdx]!;
+  curve.headNorth = -positions[headIdx + 2]!;
+  curve.headY = positions[headIdx + 1]!;
+}
+
 function buildSingleCurve(
   wx: number,
   wn: number,
@@ -86,33 +185,34 @@ function buildSingleCurve(
   liftY: number,
   segments: number,
   phase: number,
+  index: number,
+  speedFactor: number,
 ): WindArrowCurve {
+  const alongM = centreEast * wx + centreNorth * wn;
+  const lateralM = centreEast * px + centreNorth * pz;
   const positions = new Float32Array(segments * 3);
-  const half = pathLen * 0.5;
-  const startEast = centreEast - wx * half;
-  const startNorth = centreNorth - wn * half;
-
-  for (let s = 0; s < segments; s++) {
-    const t = s / (segments - 1);
-    const along = t * pathLen;
-    const wave = waveAmp * Math.sin(t * Math.PI * waveCount);
-    const east = startEast + wx * along + px * wave;
-    const north = startNorth + wn * along + pz * wave;
-    positions[s * 3] = east;
-    positions[s * 3 + 1] = liftY;
-    positions[s * 3 + 2] = -north;
-  }
-
-  const headIdx = (segments - 1) * 3;
-  return {
+  const curve: WindArrowCurve = {
     positions,
     pointCount: segments,
     pathLenM: pathLen,
     phase,
-    headEast: positions[headIdx]!,
-    headNorth: -positions[headIdx + 2]!,
-    headY: positions[headIdx + 1]!,
+    headEast: 0,
+    headNorth: 0,
+    headY: liftY,
+    waveAmp,
+    waveCount,
+    liftY,
+    lateralM,
+    alongM,
+    speedFactor,
+    index,
+    opacity: 1,
+    _lastCycle: 0,
+    driftM: 0,
+    waveTimeS: 0,
   };
+  fillCurvePositions(curve, wx, wn, px, pz, phase * Math.PI * 2);
+  return curve;
 }
 
 function sampleHeight(
@@ -154,6 +254,7 @@ export function buildWindArrowBuffer(
     const groundMid = sampleHeight(terrain, sideM, centreEast, centreNorth);
     const liftY =
       groundMid + WIND_ARROW_LIFT_MIN_M + seed.b * (WIND_ARROW_LIFT_MAX_M - WIND_ARROW_LIFT_MIN_M);
+    const speedFactor = 0.85 + seed.c * 0.3;
 
     const overlapsOthers = (curve: WindArrowCurve) =>
       curves.some((other) => minPolylineSeparation(curve.positions, other.positions) < minSep);
@@ -171,6 +272,8 @@ export function buildWindArrowBuffer(
       liftY,
       segments,
       seed.d,
+      i,
+      speedFactor,
     );
 
     let attempts = 0;
@@ -198,10 +301,14 @@ export function buildWindArrowBuffer(
         liftY,
         segments,
         seed.d,
+        i,
+        speedFactor,
       );
       attempts += 1;
     }
 
+    const travelRange = windArrowTravelRangeM(sideM, curve.pathLenM);
+    curve.driftM = curve.phase * travelRange;
     curves.push(curve);
     for (let k = 0; k < curve.positions.length; k++) allChunks.push(curve.positions[k]!);
   }
@@ -212,6 +319,113 @@ export function buildWindArrowBuffer(
     terrainMin: terrain?.min ?? 0,
     allPositions: new Float32Array(allChunks),
   };
+}
+
+function syncAllPositions(buffer: WindArrowBuffer): void {
+  let offset = 0;
+  for (const curve of buffer.curves) {
+    buffer.allPositions.set(curve.positions, offset);
+    offset += curve.positions.length;
+  }
+}
+
+function writeWindArrowDriftFrame(
+  buffer: WindArrowBuffer,
+  wx: number,
+  wn: number,
+  px: number,
+  pz: number,
+  curve: WindArrowCurve,
+  travelled: number,
+  waveTimeS: number,
+  hideFrame: boolean,
+): void {
+  const half = buffer.sideM / 2;
+  curve.alongM = -half + curve.pathLenM * 0.5 + travelled;
+  const wavePhase = curve.phase * Math.PI * 2 + waveTimeS * 0.35;
+  fillCurvePositions(curve, wx, wn, px, pz, wavePhase);
+  let op = 0;
+  if (!hideFrame) {
+    op = windArrowEdgeOpacity(curve.alongM, buffer.sideM, curve.pathLenM);
+    if (op > 0 && !curveInsideFrame(curve, half)) op = 0;
+  }
+  curve.opacity = op;
+}
+
+/** Advance drift by a real-time step (used in the 3D view). */
+export function stepWindArrowDrift(
+  buffer: WindArrowBuffer,
+  prevailingSector: number,
+  deltaS: number,
+  speedMs: number,
+): void {
+  if (deltaS <= 0) return;
+  const wind = downwindFromSector(prevailingSector);
+  const wLen = Math.hypot(wind.east, wind.north) || 1;
+  const wx = wind.east / wLen;
+  const wn = wind.north / wLen;
+  const px = -wn;
+  const pz = wx;
+
+  for (const curve of buffer.curves) {
+    const travelRange = windArrowTravelRangeM(buffer.sideM, curve.pathLenM);
+    curve.waveTimeS += deltaS;
+    curve.driftM += deltaS * speedMs * curve.speedFactor;
+    let hideFrame = false;
+    if (curve.driftM >= travelRange) {
+      curve.driftM %= travelRange;
+      curve._lastCycle += 1;
+      curve.lateralM = lateralForRespawn(curve.index, curve._lastCycle, buffer.sideM);
+      hideFrame = true;
+    }
+    writeWindArrowDriftFrame(buffer, wx, wn, px, pz, curve, curve.driftM, curve.waveTimeS, hideFrame);
+  }
+
+  syncAllPositions(buffer);
+}
+
+/** Set drift from absolute time (tests and QA hooks). */
+export function applyWindArrowDriftAtTime(
+  buffer: WindArrowBuffer,
+  prevailingSector: number,
+  timeS: number,
+  speedMs: number,
+): void {
+  const wind = downwindFromSector(prevailingSector);
+  const wLen = Math.hypot(wind.east, wind.north) || 1;
+  const wx = wind.east / wLen;
+  const wn = wind.north / wLen;
+  const px = -wn;
+  const pz = wx;
+
+  for (const curve of buffer.curves) {
+    const travelRange = windArrowTravelRangeM(buffer.sideM, curve.pathLenM);
+    const speed = speedMs * curve.speedFactor;
+    const totalTravel = curve.phase * travelRange + timeS * speed;
+    const cycle = Math.floor(totalTravel / travelRange);
+    if (cycle !== curve._lastCycle) {
+      curve._lastCycle = cycle;
+      if (cycle > 0) {
+        curve.lateralM = lateralForRespawn(curve.index, cycle, buffer.sideM);
+      }
+    }
+    const travelled = totalTravel - cycle * travelRange;
+    curve.driftM = travelled;
+    curve.waveTimeS = timeS;
+    writeWindArrowDriftFrame(buffer, wx, wn, px, pz, curve, travelled, timeS, false);
+  }
+
+  syncAllPositions(buffer);
+}
+
+/** @deprecated Use {@link stepWindArrowDrift} or {@link applyWindArrowDriftAtTime}. */
+export function updateWindArrowDrift(
+  buffer: WindArrowBuffer,
+  prevailingSector: number,
+  timeS: number,
+  speedMs: number,
+): void {
+  applyWindArrowDriftAtTime(buffer, prevailingSector, timeS, speedMs);
 }
 
 /** Ground-plane filled arrowhead (tip + two base corners). */
@@ -271,20 +485,6 @@ export function arrowHeadSegmentPositions(curve: WindArrowCurve, _sideM: number)
   ]);
 }
 
-export function windArrowFlowDashOffset(timeS: number, phase: number, pathLenM: number): number {
-  const loop = ((timeS + phase * WIND_ARROW_LOOP_S) % WIND_ARROW_LOOP_S) / WIND_ARROW_LOOP_S;
-  return -loop * pathLenM;
-}
-
-export function updateWindArrowDashOffset(
-  material: { dashOffset: number },
-  timeS: number,
-  phase: number,
-  pathLenM: number,
-): void {
-  material.dashOffset = windArrowFlowDashOffset(timeS, phase, pathLenM);
-}
-
 export function writeLinePositions(geometry: LineGeometry | LineSegmentsGeometry, positions: Float32Array): void {
   const start = geometry.attributes.instanceStart as InterleavedBufferAttribute | undefined;
   if (!start) {
@@ -300,6 +500,16 @@ export function writeLinePositions(geometry: LineGeometry | LineSegmentsGeometry
   array.set(positions);
   buffer.needsUpdate = true;
   geometry.computeBoundingSphere();
+}
+
+export function writeHeadPositions(
+  geometry: { getAttribute(name: "position"): { array: ArrayLike<number>; needsUpdate: boolean } },
+  tri: ArrowHeadTriangle,
+): void {
+  const attr = geometry.getAttribute("position");
+  const array = attr.array as Float32Array;
+  array.set(tri.positions);
+  attr.needsUpdate = true;
 }
 
 export type ArrowBoundsReport = {
@@ -321,6 +531,17 @@ export function arrowBoundsReport(buffer: WindArrowBuffer): ArrowBoundsReport {
     if (Math.abs(east) > half + 0.01 || Math.abs(north) > half + 0.01) insideFrame = false;
   }
   return { insideFrame, aboveTerrain: minY >= floor, minY };
+}
+
+export type WindArrowHeadMetres = { east: number; north: number; y: number; opacity: number };
+
+export function windArrowHeadPositionsMetres(buffer: WindArrowBuffer): WindArrowHeadMetres[] {
+  return buffer.curves.map((c) => ({
+    east: c.headEast,
+    north: c.headNorth,
+    y: c.headY,
+    opacity: c.opacity,
+  }));
 }
 
 /** Plan/Rhino export: east/north path plus filled head triangle. */
