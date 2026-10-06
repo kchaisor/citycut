@@ -3,10 +3,12 @@ import {
   arrowBoundsReport,
   arrowHeadTriangle,
   buildWindArrowBuffer,
-  updateWindArrowDashOffset,
-  WIND_ARROW_COUNT,
-  WIND_ARROW_LOOP_S,
+  updateWindArrowDrift,
+  windArrowEdgeOpacity,
   windFlowArrowPolylines,
+  windStreakSpeedMs,
+  WIND_ARROW_COUNT,
+  WIND_ARROW_FADE_FRAC,
 } from "./windArrowGeometry";
 import { downwindFromSector } from "./windRose";
 
@@ -57,20 +59,62 @@ describe("windArrowGeometry", () => {
     expect(dot).toBeGreaterThan(0);
   });
 
-  it("animates dash offset over one loop period", () => {
-    const material = { dashOffset: 0 };
-    updateWindArrowDashOffset(material, 0, 0, 400);
-    const a = material.dashOffset;
-    updateWindArrowDashOffset(material, WIND_ARROW_LOOP_S * 0.5, 0, 400);
-    expect(material.dashOffset).not.toBe(a);
-    updateWindArrowDashOffset(material, WIND_ARROW_LOOP_S, 0, 400);
-    expect(material.dashOffset).toBeCloseTo(a, 4);
+  it("drifts arrow heads downwind between t and t+1 s", () => {
+    const buffer = buildWindArrowBuffer(1000, 4, null);
+    const speed = windStreakSpeedMs(1000, 20);
+    const wind = downwindFromSector(4);
+    updateWindArrowDrift(buffer, 4, 12, speed);
+    const before = buffer.curves.map((c) => ({ east: c.headEast, north: c.headNorth }));
+    updateWindArrowDrift(buffer, 4, 13, speed);
+    const after = buffer.curves.map((c) => ({ east: c.headEast, north: c.headNorth }));
+    for (let i = 0; i < before.length; i++) {
+      const de = after[i]!.east - before[i]!.east;
+      const dn = after[i]!.north - before[i]!.north;
+      const along = de * wind.east + dn * wind.north;
+      expect(along).toBeGreaterThan(0);
+    }
   });
 
-  it("exports static polylines with filled head triangles", () => {
-    const lines = windFlowArrowPolylines(800, 2);
-    expect(lines.length).toBe(WIND_ARROW_COUNT);
-    for (const line of lines) {
+  it("keeps visible drift geometry inside the frame", () => {
+    const buffer = buildWindArrowBuffer(1000, 6, null);
+    const speed = windStreakSpeedMs(1000, 15);
+    const half = buffer.sideM / 2;
+    for (const t of [8, 14, 22, 31]) {
+      updateWindArrowDrift(buffer, 6, t, speed);
+      for (const curve of buffer.curves) {
+        if (curve.opacity <= 0.05) continue;
+        for (let s = 0; s < curve.pointCount; s++) {
+          const east = curve.positions[s * 3]!;
+          const north = -curve.positions[s * 3 + 2]!;
+          expect(Math.abs(east)).toBeLessThanOrEqual(half + 0.01);
+          expect(Math.abs(north)).toBeLessThanOrEqual(half + 0.01);
+        }
+      }
+    }
+  });
+
+  it("ramps opacity at upwind and downwind edges", () => {
+    const sideM = 1000;
+    const pathLen = 350;
+    const half = sideM / 2;
+    const upwind = -half + sideM * WIND_ARROW_FADE_FRAC * 0.25;
+    const mid = 0;
+    const downwind = half - sideM * WIND_ARROW_FADE_FRAC * 0.25;
+    expect(windArrowEdgeOpacity(upwind, sideM, pathLen)).toBeLessThan(0.45);
+    expect(windArrowEdgeOpacity(mid, sideM, pathLen)).toBe(1);
+    expect(windArrowEdgeOpacity(downwind, sideM, pathLen)).toBeLessThan(0.45);
+  });
+
+  it("exports static polylines unchanged across calls", () => {
+    const a = windFlowArrowPolylines(800, 2);
+    const b = windFlowArrowPolylines(800, 2);
+    expect(a.length).toBe(WIND_ARROW_COUNT);
+    expect(b.length).toBe(WIND_ARROW_COUNT);
+    for (let i = 0; i < a.length; i++) {
+      expect(a[i]!.path).toEqual(b[i]!.path);
+      expect(a[i]!.head).toEqual(b[i]!.head);
+    }
+    for (const line of a) {
       expect(line.path.length).toBeGreaterThan(10);
       expect(line.head.length).toBe(3);
       const tri = arrowHeadTriangle(buildWindArrowBuffer(800, 2, null).curves[0]!);
