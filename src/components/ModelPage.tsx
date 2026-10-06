@@ -73,7 +73,7 @@ import {
 } from "../lib/heightOverrides";
 import { modelStageCreditHtml } from "../lib/dataCredits";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
-import type { CityModel } from "../types";
+import type { BuildingUse, CityModel } from "../types";
 import { BuildingHeightPopover, HeightOverridePanel } from "./BuildingHeightPopover";
 import { ColoursEditor } from "./Colours";
 import { Drawer } from "./Drawer";
@@ -289,6 +289,33 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [heightPick, setHeightPick] = useState<{ buildingId: number; clientX: number; clientY: number } | null>(
     null,
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !qaModeFromSearch(window.location.search)) return;
+    window.__citycutQaModel = {
+      openMidriseHeightEdit() {
+        const midriseUses: BuildingUse[] = ["commercial", "mixed_use", "retail"];
+        const midrise = model.buildings
+          .filter(
+            (building) =>
+              building.height >= 12 &&
+              building.use !== "outbuilding" &&
+              midriseUses.includes(building.use),
+          )
+          .sort((a, b) => b.height - a.height);
+        const fallback = model.buildings
+          .filter((building) => building.height >= 12 && building.use !== "outbuilding")
+          .sort((a, b) => b.height - a.height);
+        const pick = midrise[0] ?? fallback[0];
+        if (!pick) return null;
+        setHeightPick({ buildingId: pick.id, clientX: 72, clientY: 88 });
+        return pick.id;
+      },
+    };
+    return () => {
+      delete window.__citycutQaModel;
+    };
+  }, [model]);
 
   useEffect(() => {
     if (!betterHeights || comFootprints.length === 0 || model.buildings.length === 0) {

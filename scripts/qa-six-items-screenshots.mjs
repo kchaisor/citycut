@@ -24,92 +24,99 @@ function diffPixels(pathA, pathB) {
   return changed;
 }
 
+async function closeChrome(page) {
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(250);
+}
+
 await new Promise((resolve) => setTimeout(resolve, 1500));
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: view });
 page.on("pageerror", (err) => console.error("pageerror", err.message));
 
+const modelUrl = `${base}?qa=1&view=persp&solar=path&heliodon=2&lat=-37.8155&lon=145.1050&km=1&siteLat=-37.8155&siteLon=145.1050&label=20%20Hamilton%20St%2C%20Mont%20Albert`;
+
 try {
-  // 2 — search map highlight
   await page.goto(`${base}?qa=1`, { waitUntil: "networkidle", timeout: 120_000 });
   await page.getByRole("button", { name: "Search", exact: true }).click();
   const search = page.getByPlaceholder("Search a city, address, or place");
   await search.fill("20 Hamilton St, Mont Albert");
   await page.waitForTimeout(1500);
   const result = page.locator("#place-results button").first();
-  if (await result.isVisible().catch(() => false)) {
-    await result.click();
-  } else {
-    await search.press("Enter");
-  }
+  if (await result.isVisible().catch(() => false)) await result.click();
+  else await search.press("Enter");
   await page.waitForTimeout(3500);
   await page.screenshot({ path: `${outDir}/2-search-map-site.png`, fullPage: false });
 
-  // 1 — height edit (open model at Mont Albert)
-  await page.goto(
-    `${base}?qa=1&lat=-37.8155&lon=145.1050&km=1&siteLat=-37.8155&siteLon=145.1050&label=20%20Hamilton%20St%2C%20Mont%20Albert`,
-    { waitUntil: "networkidle", timeout: 120_000 },
-  );
+  await page.goto(modelUrl, { waitUntil: "networkidle", timeout: 120_000 });
   await page.getByRole("button", { name: "Create model" }).click({ timeout: 60_000 });
   await page.waitForTimeout(95_000);
   await page.locator(".viewport-hint").waitFor({ timeout: 60_000 });
   await page.waitForTimeout(2000);
-  await page.keyboard.press("Escape");
+  await closeChrome(page);
+
   await page.evaluate(() => {
     window.__citycutQa?.setCamera({
-      eye: { x: 280, y: 220, z: 320 },
-      target: { x: 0, y: 25, z: 0 },
+      eye: { x: 300, y: 240, z: 160 },
+      target: { x: 35, y: 40, z: -25 },
     });
   });
-  await page.waitForTimeout(500);
-  const canvas = page.locator(".viewport canvas").first();
-  const box = await canvas.boundingBox();
-  if (box) {
-    await page.mouse.click(box.x + box.width * 0.52, box.y + box.height * 0.48);
-  }
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(800);
+  await page.waitForFunction(() => window.__citycutQaModel != null, null, { timeout: 60_000 });
+  const pickedId = await page.evaluate(() => window.__citycutQaModel?.openMidriseHeightEdit() ?? null);
+  if (pickedId == null) console.warn("QA mid-rise height pick failed.");
+  await page.waitForTimeout(700);
   await page.screenshot({ path: `${outDir}/1-edit-selection.png`, fullPage: false });
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
 
-  // 3 — solar same camera
-  const readCam = async () =>
-    page.evaluate(() => {
-      const pose = window.__citycutQa?.getCamera?.();
-      if (pose) return pose;
-      return null;
-    });
-  await page.getByRole("button", { name: "Solar" }).click();
+  const readCam = async () => page.evaluate(() => window.__citycutQa?.getCamera?.() ?? null);
+  const sunPath = page.getByLabel("Show sun path & compass");
+
+  await closeChrome(page);
+  await page.getByRole("button", { name: "Solar", exact: true }).click();
+  if (await sunPath.isChecked()) await sunPath.uncheck();
+  await page.waitForTimeout(400);
+  await page.getByRole("button", { name: "Solar", exact: true }).click();
+
   await page.screenshot({ path: `${outDir}/3-solar-same-camera-before.png`, fullPage: false });
   const beforeCam = await readCam();
-  await page.getByLabel("Show sun path & compass").check();
+  await page.getByRole("button", { name: "Solar", exact: true }).click();
+  await sunPath.check();
   await page.waitForTimeout(800);
   const afterCam = await readCam();
   writeFileSync(
     `${outDir}/3-solar-camera-check.txt`,
-    `before: ${JSON.stringify(beforeCam)}\nafter: ${JSON.stringify(afterCam)}\nequal: ${JSON.stringify(beforeCam) === JSON.stringify(afterCam)}\n`,
+    `before: ${JSON.stringify(beforeCam)}\nafter: ${JSON.stringify(afterCam)}\npositionAndTargetEqual: ${
+      beforeCam &&
+      afterCam &&
+      JSON.stringify(beforeCam.eye) === JSON.stringify(afterCam.eye) &&
+      JSON.stringify(beforeCam.target) === JSON.stringify(afterCam.target)
+    }\n`,
   );
+  await page.getByRole("button", { name: "Solar", exact: true }).click();
   await page.screenshot({ path: `${outDir}/3-solar-same-camera-after.png`, fullPage: false });
 
-  // 4 — sun path labels
-  await page.getByLabel("Show sun path & compass").check();
-  await page.waitForTimeout(600);
-  await page.evaluate(() => {
-    window.__citycutQa?.setCamera({
-      eye: { x: 120, y: 180, z: 260 },
-      target: { x: 0, y: 8, z: -20 },
-    });
-  });
-  await page.waitForTimeout(500);
+  await closeChrome(page);
+  await page.getByRole("button", { name: "Solar", exact: true }).click();
+  if (!(await sunPath.isChecked())) await sunPath.check();
+  await page.getByRole("button", { name: "Solar", exact: true }).click();
+  await page.mouse.move(24, 24);
+  await page.evaluate(() => window.__citycutQa?.frameHeliodon?.());
+  await page.waitForTimeout(2000);
   await page.screenshot({ path: `${outDir}/4-sunpath-no-halo.png`, fullPage: false });
 
-  // 5 — credits
   await page.locator(".stage-attrib").screenshot({ path: `${outDir}/5-credits.png` });
 
-  // 6 — wind arrows
+  await closeChrome(page);
   await page.getByRole("button", { name: "Wind", exact: true }).click();
   const windEnable = page.locator(".wind-drawer input[type=checkbox]").first();
   if (!(await windEnable.isChecked())) await windEnable.check();
-  await page.waitForTimeout(500);
+  await page.getByRole("button", { name: "Wind", exact: true }).click();
+  await page.mouse.move(700, 420);
   await page.evaluate(() => {
     window.__citycutQa?.setCamera({
       eye: { x: 350, y: 280, z: 380 },

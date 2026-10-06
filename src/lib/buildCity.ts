@@ -609,8 +609,15 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
 
 const HEIGHT_EDIT_FILL_OPACITY = 0.65;
 
+export const HEIGHT_EDIT_EDGE_DASH_M = 2;
+export const HEIGHT_EDIT_EDGE_GAP_M = 1.5;
+
 /** Viewport-only clone for the building being height-edited; does not touch shared city materials. */
-export function buildHeightEditOverlay(model: CityModel, buildingId: number): THREE.Group | null {
+export function buildHeightEditOverlay(
+  model: CityModel,
+  buildingId: number,
+  fillColor: string,
+): THREE.Group | null {
   const building = model.buildings.find((item) => item.id === buildingId);
   if (!building) return null;
   const group = new THREE.Group();
@@ -619,30 +626,32 @@ export function buildHeightEditOverlay(model: CityModel, buildingId: number): TH
     (model.terrain ? footprintBase(model.terrain, building.ring, model.sideM) : 0) + SURFACE.building.lift;
   const geometries = extrudeFootprint(building, base);
   const fillMaterial = matteStandardMaterial({
-    color: getColour("--building-uniform"),
+    color: fillColor,
     transparent: true,
     opacity: HEIGHT_EDIT_FILL_OPACITY,
     depthWrite: false,
   });
   fillMaterial.toneMapped = false;
+  fillMaterial.depthTest = true;
   const edgeMaterial = new THREE.LineDashedMaterial({
     color: BUILDING_EDGE_COLOR,
-    dashSize: 2.5,
-    gapSize: 1.8,
-    linewidth: 1,
+    dashSize: HEIGHT_EDIT_EDGE_DASH_M,
+    gapSize: HEIGHT_EDIT_EDGE_GAP_M,
+    scale: 1,
     transparent: true,
-    opacity: 0.95,
+    opacity: 1,
+    depthTest: true,
     depthWrite: false,
     toneMapped: false,
   });
   for (const geometry of geometries) {
     const mesh = new THREE.Mesh(geometry, fillMaterial);
-    mesh.renderOrder = SURFACE.building.renderOrder + 2;
+    mesh.renderOrder = SURFACE.building.renderOrder + 4;
     group.add(mesh);
     const edges = new THREE.EdgesGeometry(geometry, BUILDING_EDGE_THRESHOLD_DEG);
     const lines = new THREE.LineSegments(edges, edgeMaterial);
     lines.computeLineDistances();
-    lines.renderOrder = SURFACE.building.renderOrder + 3;
+    lines.renderOrder = SURFACE.building.renderOrder + 5;
     group.add(lines);
   }
   return group;

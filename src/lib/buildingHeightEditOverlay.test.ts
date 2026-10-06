@@ -34,7 +34,7 @@ const model = {
 describe("buildHeightEditOverlay", () => {
   it("adds a semi-transparent overlay that is removed with the group", () => {
     const city = buildCityGroup(model, { uniformBuildings: true });
-    const overlay = buildHeightEditOverlay(model, 42);
+    const overlay = buildHeightEditOverlay(model, 42, "#888888");
     expect(overlay).not.toBeNull();
     city.add(overlay!);
     const fill = overlay!.children.find((child) => child instanceof THREE.Mesh) as THREE.Mesh;
