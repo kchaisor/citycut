@@ -36,7 +36,7 @@
   --building-manual: #D4A017;
 
   /* Buildings on the searched property: site plan, 3D, Rhino Buildings::Site, and Illustrator Site buildings layer. */
-  --site-building: #F2C230;
+  --site-building: #FFF500;
 
   /* Outline on site buildings in the 3D view so they read against retail/civic fills. */
   --site-building-edge: #3D3010;
