@@ -175,7 +175,7 @@ export const DEFAULT_LINE_STYLES: LineStyles = {
   siteBoundary: {
     mm: 0.35,
     color: COLOUR_FALLBACK[SITE_BOUNDARY_COLOUR_VAR],
-    dash: "1.2 0.6",
+    dash: "2.4 0.6 0.2 0.6",
   },
   siteBuilding: {
     mm: 0.35,
@@ -308,7 +308,7 @@ export function parseIndexEvery(raw: string | undefined | null): number | null {
   return Math.min(20, Math.max(1, Math.round(value)));
 }
 
-/** `none` is solid. Anything else is "on off" in millimetres. */
+/** `none` is solid. Two numbers are on/off mm; four numbers are dash-gap-dot-gap. */
 export function normalizeDash(raw: string | undefined | null): string | null {
   if (raw == null) return null;
   const text = raw.trim().toLowerCase().replace(/,/g, " ").replace(/\s+/g, " ");
@@ -316,8 +316,20 @@ export function normalizeDash(raw: string | undefined | null): string | null {
   if (text === "none" || text === "solid") return "none";
   const parts = text.split(" ").map(Number);
   if (parts.length === 0 || parts.some((part) => !Number.isFinite(part) || part < 0)) return null;
+  if (parts.length >= 4) {
+    return parts.slice(0, 4).map((part) => formatMm(part)).join(" ");
+  }
   const pair = parts.length === 1 ? [parts[0], parts[0]] : [parts[0], parts[1]];
   return `${formatMm(pair[0])} ${formatMm(pair[1])}`;
+}
+
+/** Dash lengths in mm for SVG/PDF. Null when solid. */
+export function dashSegments(dash: string): readonly number[] | null {
+  const norm = normalizeDash(dash);
+  if (!norm || norm === "none") return null;
+  const parts = norm.split(" ").map(Number);
+  if (parts.some((part) => !Number.isFinite(part))) return null;
+  return parts;
 }
 
 export function dashPresetId(dash: string): DashPresetId {
@@ -333,11 +345,9 @@ export function dashIsDotted(dash: string): boolean {
 }
 
 export function dashPair(dash: string): readonly [number, number] | null {
-  const norm = normalizeDash(dash);
-  if (!norm || norm === "none") return null;
-  const [on, off] = norm.split(" ").map(Number);
-  if (!Number.isFinite(on) || !Number.isFinite(off)) return null;
-  return [on, off];
+  const segments = dashSegments(dash);
+  if (!segments || segments.length < 2) return null;
+  return [segments[0], segments[1]];
 }
 
 /**
@@ -371,11 +381,12 @@ export function screenPenAttrs(stroke: StrokeStyle, join: "miter" | "round" = "r
 
 /** On-screen dash array. Dots use round caps so a zero-length dash is a dot. */
 export function dashScreen(dash: string): { array?: string; cap: "round" | "butt" } {
-  const pair = dashPair(dash);
-  if (!pair) return { cap: "butt" };
+  const segments = dashSegments(dash);
+  if (!segments) return { cap: "butt" };
+  const dotted = segments.some((segment, index) => segment === 0 && index % 2 === 0);
   return {
-    array: `${screenDashPx(pair[0])} ${screenDashPx(pair[1])}`,
-    cap: dashIsDotted(dash) ? "round" : "butt",
+    array: segments.map((segment) => screenDashPx(segment)).join(" "),
+    cap: dotted || dashIsDotted(dash) ? "round" : "butt",
   };
 }
 

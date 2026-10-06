@@ -410,6 +410,7 @@ describe("rhino export", () => {
         "Site",
         "Site::Boundary",
         "Buildings::Site",
+        "Wind",
       ]);
       for (const path of Object.keys(keys)) {
         if (path.startsWith("Buildings::") && !seen.has(path)) continue;

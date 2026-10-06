@@ -43,7 +43,7 @@ export type PdfPath = {
   stroke?: Rgb;
   strokeMm?: number;
   evenOdd?: boolean;
-  dashMm?: readonly [number, number];
+  dashMm?: readonly number[];
   cap?: "butt" | "round";
   join?: "miter" | "round";
 };
@@ -141,7 +141,9 @@ function pathOperators(path: PdfPath) {
     ops.push(setLineWidth(pdfPt(path.strokeMm ?? 0.1)));
     ops.push(setLineCap(path.cap === "round" ? LineCapStyle.Round : LineCapStyle.Butt));
     ops.push(setLineJoin(path.join === "round" ? LineJoinStyle.Round : LineJoinStyle.Miter));
-    if (path.dashMm) ops.push(setDashPattern([pdfPt(path.dashMm[0]), pdfPt(path.dashMm[1])], 0));
+    if (path.dashMm && path.dashMm.length >= 2) {
+      ops.push(setDashPattern(path.dashMm.map((segment) => pdfPt(segment)), 0));
+    }
   }
   for (const ring of rings) ops.push(...ringOps(ring, close && ring.length >= 3));
   ops.push(paintOp(hasFill, hasStroke, path.evenOdd !== false && hasFill));

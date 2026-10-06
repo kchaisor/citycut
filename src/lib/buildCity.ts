@@ -9,6 +9,7 @@ import { carriagewaysOf, unionCarriageways, unionPathRoads } from "./roadFill";
 import { hexRgb, overlapLift, ROAD_COLOR, ROAD_RGB, roadGradeLayer, SURFACE } from "./surfaceLayers";
 import { matteStandardMaterial } from "./matteMaterial";
 import { isSiteBuilding } from "./siteBuildings";
+import { siteBoundaryLineGeometry } from "./siteBoundaryDash3d";
 import { footprintBase, sampleTerrain, terrainBuffers } from "./terrain";
 import type { AreaFeat, BuildingFeat, BuildingUse, CityModel, Pt, Ring, RoadGrade, TerrainField } from "../types";
 
@@ -578,20 +579,9 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   const boundaryLines = model.siteBoundaryLines;
   if (boundaryLines && boundaryLines.length > 0) {
     const stroke = getColour("--site-boundary");
-    const lift = 0.05;
-    const positions: number[] = [];
-    for (const line of boundaryLines) {
-      for (let i = 0; i < line.length - 1; i++) {
-        const a = line[i];
-        const b = line[i + 1];
-        const ya = (sample ? sample(a[0], a[1]) : 0) + lift;
-        const yb = (sample ? sample(b[0], b[1]) : 0) + lift;
-        positions.push(a[0], ya, -a[1], b[0], yb, -b[1]);
-      }
-    }
-    if (positions.length >= 6) {
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    const sampleZ = (east: number, north: number) => (sample ? sample(east, north) : 0);
+    const geometry = siteBoundaryLineGeometry(boundaryLines, model.sideM, sampleZ);
+    if (geometry) {
       const material = new THREE.LineBasicMaterial({ color: stroke });
       material.name = "Site::Boundary";
       const linesMesh = new THREE.LineSegments(geometry, material);

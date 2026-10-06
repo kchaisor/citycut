@@ -9,6 +9,7 @@ import {
 } from "../lib/drawingStyle";
 import { figureGroundModelPaths, scaleBarMetres } from "../lib/figureGround";
 import { LINE_MM, screenPx } from "../lib/lineweights";
+import { planBuildingStrokeStyle } from "../lib/planBuildingFill";
 import { planPaths, svgPolyline, svgRings } from "../lib/svgPlan";
 import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
@@ -70,6 +71,9 @@ export function DrawingPlan({
   heliodon = null,
   castShadows = false,
   shadowInput = null,
+  uniformBuildings = false,
+  colourBySource = false,
+  highlightManual = false,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -82,6 +86,9 @@ export function DrawingPlan({
   heliodon?: HeliodonDiagramInput | null;
   castShadows?: boolean;
   shadowInput?: PlanShadowInput | null;
+  uniformBuildings?: boolean;
+  colourBySource?: boolean;
+  highlightManual?: boolean;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: View } | null>(null);
@@ -96,6 +103,14 @@ export function DrawingPlan({
         planScale,
         style.contourCoarseIntervalM,
         style.contourCoarseFromScale,
+        {
+          buildingColour: {
+            colourByUse: !uniformBuildings && !colourBySource,
+            uniformBuildings,
+            colourBySource,
+          },
+          highlightManual,
+        },
       ),
     [
       model,
@@ -104,6 +119,9 @@ export function DrawingPlan({
       style.contourCoarseIntervalM,
       style.contourCoarseFromScale,
       planScale,
+      uniformBuildings,
+      colourBySource,
+      highlightManual,
     ],
   );
   const figurePaths = useMemo(
@@ -343,7 +361,12 @@ export function DrawingPlan({
                 d={svgRings(building.rings)}
                 fill={building.fill}
                 fillRule="evenodd"
-                {...screenPenAttrs(building.site ? style.siteBuilding : style.building, "miter")}
+                {...screenPenAttrs(
+                  building.site
+                    ? style.siteBuilding
+                    : planBuildingStrokeStyle(style, uniformBuildings, false),
+                  "miter",
+                )}
               />
             ))}
             {(model.siteBoundaryLines ?? []).map((line, index) => (

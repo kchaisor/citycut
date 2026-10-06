@@ -12,6 +12,9 @@ import { buildHeliodonGroundOverlay, type HeliodonGroundExportOptions } from "./
 import { overtureThemeCredit } from "./overtureAttribution";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { contourIsIndex, demContourLayer } from "./vicmapContours";
+import { analyzeWindPeriod, sectorCenterDeg, type WindPeriodId, type WindRoseTable } from "./windRose";
+import { OPEN_METEO_WIND_ATTRIBUTION } from "./windFetch";
+import { dashSegments } from "./drawingStyle";
 import type { CityModel, Pt } from "../types";
 
 type Rgb = { r: number; g: number; b: number };
@@ -55,6 +58,7 @@ export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
     FigureGround: "--figure-fill",
     "Sun path": "--sun-compass-label",
     Shadows: "--shadow-fill",
+    Wind: "--wind-rose",
   };
   for (const use of BUILDING_USES) {
     const layer = BUILDING_USE_META[use].layer;
@@ -297,6 +301,24 @@ function addFigureGround(
  * The 3dm did not previously contain contour curves. These are new, and they
  * sit at the contour's own Z because the rest of the file is Z-up metres.
  */
+const PROPERTY_BOUNDARY_LINETYPE = "Property boundary";
+
+export function ensurePropertyBoundaryLinetype(rhino: Rhino, doc: InstanceType<Rhino["File3dm"]>): number | null {
+  const table = doc.linetypes();
+  const existing = table.findName(PROPERTY_BOUNDARY_LINETYPE);
+  if (existing) return existing.index;
+  const segments = dashSegments(readDrawingStyle().siteBoundary.dash);
+  if (!segments || segments.length < 4) return null;
+  const linetype = new rhino.Linetype();
+  linetype.name = PROPERTY_BOUNDARY_LINETYPE;
+  linetype.clearPattern();
+  for (let i = 0; i < segments.length; i++) {
+    linetype.appendSegment(segments[i]!, i % 2 === 0);
+  }
+  table.add(linetype);
+  return table.findName(PROPERTY_BOUNDARY_LINETYPE)?.index ?? null;
+}
+
 function addSiteBoundary(
   rhino: Rhino,
   doc: InstanceType<Rhino["File3dm"]>,
@@ -309,6 +331,11 @@ function addSiteBoundary(
   if (!lines || lines.length === 0) return;
   const z = model.terrain ? model.terrain.min : 0;
   const layerIndex = ensureLayer(rhino, doc, layers, materials, "Site::Boundary", layerColors()["Site::Boundary"]);
+  const linetypeIndex = ensurePropertyBoundaryLinetype(rhino, doc);
+  if (linetypeIndex !== null) {
+    const layer = doc.layers().get(layerIndex);
+    layer.linetypeIndex = linetypeIndex;
+  }
   for (const line of lines) {
     const points: number[][] = [];
     for (const point of line) {
@@ -323,6 +350,69 @@ function addSiteBoundary(
     attributes.layerIndex = layerIndex;
     applyByLayerAttributes(rhino, attributes);
     doc.objects().addPolyline(points, attributes);
+    release(attributes);
+  }
+}
+
+function addWindRose(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  model: CityModel,
+  zone: number,
+  table: WindRoseTable,
+  period: WindPeriodId,
+) {
+  const stats = analyzeWindPeriod(table, period);
+  const z = (model.terrain ? model.terrain.min : 0) + 0.2;
+  const layerIndex = ensureLayer(rhino, doc, layers, materials, "Wind", layerColors().Wind);
+  const half = model.sideM / 2;
+  const radius = model.sideM * 0.08;
+  const cx = half * 0.72;
+  const cy = -half * 0.72;
+  const maxFreq = Math.max(...stats.sectorFrequency, 0.001);
+
+  for (let sector = 0; sector < stats.sectorFrequency.length; sector++) {
+    const freq = stats.sectorFrequency[sector] ?? 0;
+    if (freq <= 0) continue;
+    const r = (freq / maxFreq) * radius;
+    const centre = sectorCenterDeg(sector);
+    const halfAngle = 22.5 / 2;
+    const points: number[][] = [[cx, cy, z]];
+    for (let step = 0; step <= 5; step++) {
+      const deg = centre - halfAngle + (step * (2 * halfAngle)) / 5;
+      const rad = ((deg - 90) * Math.PI) / 180;
+      const east = cx + Math.cos(rad) * r;
+      const north = cy + Math.sin(rad) * r;
+      const [easting, northing] = projectLocal([east, north], model.center, zone);
+      points.push([easting, northing, z]);
+    }
+    points.push(points[0]!);
+    const attributes = new rhino.ObjectAttributes();
+    attributes.name = "Wind wedge";
+    attributes.layerIndex = layerIndex;
+    applyByLayerAttributes(rhino, attributes);
+    doc.objects().addPolyline(points, attributes);
+    release(attributes);
+  }
+
+  const fromDeg = sectorCenterDeg(stats.prevailingSector);
+  const rad = ((fromDeg + 180 - 90) * Math.PI) / 180;
+  const dx = Math.cos(rad);
+  const dy = Math.sin(rad);
+  for (let i = 0; i < 3; i++) {
+    const offset = (i - 1) * radius * 0.2;
+    const px = cx + offset * -dy;
+    const py = cy + offset * dx;
+    const len = radius * (0.5 + i * 0.12);
+    const a = projectLocal([px - dx * len * 0.3, py - dy * len * 0.3], model.center, zone);
+    const b = projectLocal([px + dx * len, py + dy * len], model.center, zone);
+    const attributes = new rhino.ObjectAttributes();
+    attributes.name = "Wind arrow";
+    attributes.layerIndex = layerIndex;
+    applyByLayerAttributes(rhino, attributes);
+    doc.objects().addPolyline([[a[0], a[1], z], [b[0], b[1], z]], attributes);
     release(attributes);
   }
 }
@@ -432,13 +522,24 @@ export type CityModelTo3dmOptions = {
   heliodon?: HeliodonGroundExportOptions | null;
   shadows?: PlanShadowInput | null;
   castShadows?: boolean;
+  uniformBuildings?: boolean;
+  colourBySource?: boolean;
+  wind?: { table: WindRoseTable; period: WindPeriodId } | null;
 };
 
 function normalize3dmOptions(
   options?: HeliodonGroundExportOptions | CityModelTo3dmOptions | null,
 ): CityModelTo3dmOptions {
   if (!options) return {};
-  if ("heliodon" in options || "castShadows" in options || "shadows" in options) return options;
+  if (
+    "heliodon" in options ||
+    "castShadows" in options ||
+    "shadows" in options ||
+    "uniformBuildings" in options ||
+    "wind" in options
+  ) {
+    return options;
+  }
   return { heliodon: options as HeliodonGroundExportOptions };
 }
 
@@ -447,10 +548,14 @@ export async function cityModelTo3dm(
   model: CityModel,
   options?: HeliodonGroundExportOptions | CityModelTo3dmOptions | null,
 ): Promise<Uint8Array> {
-  const { heliodon, shadows, castShadows } = normalize3dmOptions(options);
+  const { heliodon, shadows, castShadows, uniformBuildings, colourBySource, wind } = normalize3dmOptions(options);
   const rhino = await loadRhino();
   const crs = mgaCrs(model.center.lon);
-  const group = buildCityGroup(model, { splitBuildings: true });
+  const group = buildCityGroup(model, {
+    splitBuildings: !uniformBuildings,
+    uniformBuildings: Boolean(uniformBuildings),
+    colourBySource: Boolean(colourBySource),
+  });
   const doc = new rhino.File3dm();
   try {
     group.updateMatrixWorld(true);
@@ -465,7 +570,8 @@ export async function cityModelTo3dm(
             hasEsaLandCover: model.hasEsaLandCover,
           })
         : null;
-    doc.startSectionComments = [`CityCut. ${crs.name}. Metres, Z-up. ${CRS_NOTE}`, buildingCredit, comCredit]
+    const windCredit = wind?.table ? OPEN_METEO_WIND_ATTRIBUTION : null;
+    doc.startSectionComments = [`CityCut. ${crs.name}. Metres, Z-up. ${CRS_NOTE}`, buildingCredit, comCredit, windCredit]
       .filter(Boolean)
       .join(" ");
     doc.settings().modelUnitSystem = rhino.UnitSystem.Meters;
@@ -504,6 +610,7 @@ export async function cityModelTo3dm(
     addContours(rhino, doc, layers, materials, model, crs.zone);
     if (heliodon) addHeliodonPlan(rhino, doc, layers, materials, model, crs.zone, heliodon);
     if (shadows) addPlanShadows(rhino, doc, layers, materials, model, crs.zone, shadows, Boolean(castShadows));
+    if (wind?.table) addWindRose(rhino, doc, layers, materials, model, crs.zone, wind.table, wind.period);
 
     return doc.toByteArray();
   } finally {

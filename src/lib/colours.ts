@@ -65,6 +65,8 @@ export const COLOUR_KEYS = [
   "--building-solar-neutral",
   "--heliodon-dial-disc",
   "--shadow-fill",
+  "--wind-streak",
+  "--wind-rose",
 ] as const;
 
 export type ColourKey = (typeof COLOUR_KEYS)[number];
@@ -217,6 +219,8 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--building-solar-neutral": "Solar neutral buildings",
   "--heliodon-dial-disc": "Heliodon dial disc",
   "--shadow-fill": "Building shadows",
+  "--wind-streak": "Wind streaks (3D)",
+  "--wind-rose": "Wind rose overlay",
 };
 
 const parsed = resolveSheet(parseCustomProperties(coloursCss));

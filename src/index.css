@@ -795,6 +795,36 @@ input[type="range"]::-moz-range-thumb {
   color: var(--muted-text);
   font-size: 12px;
 }
+.wind-rose-overlay {
+  position: absolute;
+  top: 72px;
+  right: 16px;
+  z-index: 5;
+  width: 140px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 252, 248, 0.92);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+.wind-rose-overlay svg {
+  display: block;
+  width: 120px;
+  height: 120px;
+  margin: 0 auto;
+}
+.wind-rose-overlay .wind-rose-n {
+  font-size: 11px;
+  font-weight: 600;
+  text-anchor: middle;
+  fill: var(--ink);
+}
+.wind-rose-caption {
+  margin: 4px 0 0;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--muted-text);
+}
 .stage-attrib {
   left: auto;
   right: 16px;

@@ -1,6 +1,6 @@
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import * as THREE from "three";
 import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
@@ -55,6 +55,8 @@ import {
 import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
+import { WindStaticArrows, WindStreaks } from "./WindStreaks";
+import { analyzeWindPeriod, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
 import type { CityModel } from "../types";
 
 export type SceneExporter = {
@@ -824,6 +826,35 @@ function Cameras({
   );
 }
 
+function WindLayer({
+  sideM,
+  terrain,
+  table,
+  period,
+  enabled,
+}: {
+  sideM: number;
+  terrain?: import("../types").TerrainField | null;
+  table: WindRoseTable | null;
+  period: WindPeriodId;
+  enabled: boolean;
+}) {
+  const [visible, setVisible] = useState(() => typeof document !== "undefined" && !document.hidden);
+  const reducedMotion = useMemo(
+    () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    [],
+  );
+  useEffect(() => {
+    const onVis = () => setVisible(!document.hidden);
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+  if (!enabled || !table) return null;
+  const stats = analyzeWindPeriod(table, period);
+  if (reducedMotion) return <WindStaticArrows sideM={sideM} stats={stats} terrain={terrain} />;
+  return <WindStreaks sideM={sideM} stats={stats} animate={visible} terrain={terrain} />;
+}
+
 export function Scene3D({
   model,
   uniformBuildings,
@@ -834,6 +865,9 @@ export function Scene3D({
   freeRotate,
   snapId,
   solar,
+  windEnabled,
+  windTable,
+  windPeriod,
   onExportReady,
   onBuildingPick,
 }: {
@@ -846,6 +880,9 @@ export function Scene3D({
   freeRotate: boolean;
   snapId: number;
   solar: SolarViewSettings;
+  windEnabled: boolean;
+  windTable: WindRoseTable | null;
+  windPeriod: WindPeriodId;
   onExportReady: (exporter: SceneExporter | null) => void;
   onBuildingPick: (buildingId: number, clientX: number, clientY: number) => void;
 }) {
@@ -925,6 +962,13 @@ export function Scene3D({
         terrain={model.terrain ?? undefined}
         settings={solar}
         hideDiagram={projection === "plan"}
+      />
+      <WindLayer
+        sideM={model.sideM}
+        terrain={model.terrain}
+        table={windTable}
+        period={windPeriod}
+        enabled={windEnabled}
       />
       <Cameras
         side={model.sideM}

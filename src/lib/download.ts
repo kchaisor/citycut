@@ -53,6 +53,9 @@ export type RhinoDownloadOptions = {
   heliodon?: HeliodonGroundExportOptions | null;
   shadows?: PlanShadowInput | null;
   castShadows?: boolean;
+  uniformBuildings?: boolean;
+  colourBySource?: boolean;
+  wind?: { table: import("./windRose").WindRoseTable; period: import("./windRose").WindPeriodId } | null;
 };
 
 export async function download3dm(
