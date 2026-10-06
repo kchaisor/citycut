@@ -7,6 +7,7 @@ import { buildCityGroup, disposeObject } from "../src/lib/buildCity.ts";
 import { sitePlanChunks } from "../src/lib/aiPlan.ts";
 import { dashSegments, DEFAULT_LINE_STYLES } from "../src/lib/drawingStyle.ts";
 import { getColour } from "../src/lib/colours.ts";
+import { buildWindStreakBuffer, streakBoundsReport } from "../src/lib/windStreakGeometry.ts";
 
 const m = {
   placeLabel: "Test",
@@ -56,6 +57,9 @@ const uniformWhite = getColour("--building-uniform").toUpperCase() === "#FFFFFF"
 const dash = dashSegments(DEFAULT_LINE_STYLES.siteBoundary.dash);
 const windLayer = chunkNames.includes("Wind");
 
+const streakBuffer = buildWindStreakBuffer(m.sideM, 0, null);
+const streakBounds = streakBoundsReport(streakBuffer);
+
 console.log(
   JSON.stringify(
     {
@@ -64,11 +68,14 @@ console.log(
       sitePlanHasWindLayer: windLayer,
       uniformWhite,
       siteBoundaryDash: dash,
+      streakBounds,
     },
     null,
     2,
   ),
 );
+
+if (!streakBounds.insideFrame || !streakBounds.aboveTerrain) process.exitCode = 1;
 
 if (windLayer) process.exitCode = 1;
 if (!uniformWhite) process.exitCode = 1;

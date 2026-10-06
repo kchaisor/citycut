@@ -828,11 +828,13 @@ function Cameras({
 
 function WindLayer({
   sideM,
+  terrain,
   table,
   period,
   enabled,
 }: {
   sideM: number;
+  terrain?: import("../types").TerrainField | null;
   table: WindRoseTable | null;
   period: WindPeriodId;
   enabled: boolean;
@@ -849,8 +851,8 @@ function WindLayer({
   }, []);
   if (!enabled || !table) return null;
   const stats = analyzeWindPeriod(table, period);
-  if (reducedMotion) return <WindStaticArrows sideM={sideM} stats={stats} />;
-  return <WindStreaks sideM={sideM} stats={stats} animate={visible} />;
+  if (reducedMotion) return <WindStaticArrows sideM={sideM} stats={stats} terrain={terrain} />;
+  return <WindStreaks sideM={sideM} stats={stats} animate={visible} terrain={terrain} />;
 }
 
 export function Scene3D({
@@ -961,7 +963,13 @@ export function Scene3D({
         settings={solar}
         hideDiagram={projection === "plan"}
       />
-      <WindLayer sideM={model.sideM} table={windTable} period={windPeriod} enabled={windEnabled} />
+      <WindLayer
+        sideM={model.sideM}
+        terrain={model.terrain}
+        table={windTable}
+        period={windPeriod}
+        enabled={windEnabled}
+      />
       <Cameras
         side={model.sideM}
         lift={lift}

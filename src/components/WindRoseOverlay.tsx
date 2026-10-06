@@ -61,15 +61,18 @@ export function WindRoseOverlay({
 
   return (
     <div className={className} aria-label={caption}>
-      <svg viewBox="0 0 100 100" width={120} height={120} role="img">
-        <circle cx={50} cy={50} r={46} fill="none" stroke={fill} strokeWidth={0.8} opacity={0.45} />
+      <svg viewBox="0 0 100 100" width={120} height={120} role="img" aria-hidden="true">
+        <text x={50} y={11} textAnchor="middle" fontSize={9} fontWeight={600} fill={fill}>
+          N
+        </text>
+        <circle cx={50} cy={52} r={42} fill="none" stroke={fill} strokeWidth={0.8} opacity={0.45} />
         {wedges.map((w, index) => (
           <path key={index} d={w.d} fill={fill} fillOpacity={w.opacity} />
         ))}
         {[0, 1, 2].map((i) => {
           const offset = (i - 1) * 6;
           const px = 50 + offset * -dy;
-          const py = 50 + offset * dx;
+          const py = 52 + offset * dx;
           const len = 14 + i * 3;
           return (
             <line

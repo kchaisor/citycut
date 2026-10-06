@@ -797,19 +797,27 @@ input[type="range"]::-moz-range-thumb {
 }
 .wind-rose-overlay {
   position: absolute;
+  top: 72px;
   right: 16px;
-  bottom: 56px;
-  z-index: 4;
-  max-width: 140px;
-  padding: 6px 8px;
+  z-index: 5;
+  width: 140px;
+  padding: 8px 10px;
   border-radius: 8px;
-  background: rgba(255, 252, 248, 0.88);
+  background: rgba(255, 252, 248, 0.92);
+  box-shadow: var(--shadow);
   pointer-events: none;
 }
 .wind-rose-overlay svg {
   display: block;
   width: 120px;
   height: 120px;
+  margin: 0 auto;
+}
+.wind-rose-overlay .wind-rose-n {
+  font-size: 11px;
+  font-weight: 600;
+  text-anchor: middle;
+  fill: var(--ink);
 }
 .wind-rose-caption {
   margin: 4px 0 0;

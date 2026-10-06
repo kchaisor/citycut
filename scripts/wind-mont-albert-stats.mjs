@@ -9,7 +9,7 @@ if (!result.ok) {
   process.exit(1);
 }
 const annual = analyzeWindPeriod(result.table, "annual");
-const winter = analyzeWindPeriod(result.table, "winter");
+const summer = analyzeWindPeriod(result.table, "summer");
 console.log(
   JSON.stringify(
     {
@@ -18,10 +18,10 @@ console.log(
         calmPercent: Math.round(annual.calmPercent * 10) / 10,
         medianKmh: annual.prevailingMedianKmh,
       },
-      winter: {
-        prevailing: winter.prevailingLabel,
-        calmPercent: Math.round(winter.calmPercent * 10) / 10,
-        medianKmh: winter.prevailingMedianKmh,
+      summer: {
+        prevailing: summer.prevailingLabel,
+        calmPercent: Math.round(summer.calmPercent * 10) / 10,
+        medianKmh: summer.prevailingMedianKmh,
       },
       fromCache: result.fromCache,
     },
