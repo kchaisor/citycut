@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { applyMatteFinish } from "./matteMaterial";
 import type { BuildingUse } from "../types";
+import { getColour } from "./colours";
 import { BUILDING_USE_META, SOURCE_META, buildingLayerName, uniformBuildingColor } from "./buildingUse";
 
 export type BuildingColourMode = {
@@ -51,6 +52,15 @@ function forEachStandardMaterial(mesh: THREE.Mesh, fn: (material: THREE.MeshStan
 export function snapshotBuildingViewportColors(root: THREE.Object3D, mode: BuildingColourMode): void {
   for (const mesh of buildingMeshes(root)) {
     const name = mesh.name || mesh.parent?.name || "";
+    if (name === "Buildings-manual") {
+      const fill = getColour("--building-manual");
+      forEachStandardMaterial(mesh, (material) => {
+        material.userData.viewportFill = fill;
+        material.color.setStyle(fill);
+        applyMatteFinish(material);
+      });
+      continue;
+    }
     const { use, sourceKey } = parseBuildingBucketName(name);
     const fill = buildingViewportFill(mode, use, sourceKey);
     forEachStandardMaterial(mesh, (material) => {

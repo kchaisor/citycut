@@ -54,9 +54,26 @@ import {
 } from "../lib/viewMemory";
 import { treeSizeSummary, treeTierCounts } from "../lib/trees";
 import { contourDrawerLabel } from "../lib/vicmapContours";
+import { clearPlanShadowCache } from "../lib/buildingShadows";
+import {
+  appendManualHeightCredit,
+  applyHeightOverrides,
+  clearAllHeightOverrides,
+  exportHeightOverridesJson,
+  importHeightOverridesJson,
+  mergeHeightOverrideStores,
+  readStoredHeightOverrides,
+  readStoredShowManualHeights,
+  removeOverrideForBuilding,
+  upsertOverrideForBuilding,
+  writeStoredHeightOverrides,
+  writeStoredShowManualHeights,
+  type HeightOverrideStore,
+} from "../lib/heightOverrides";
 import { overtureThemeCredit } from "../lib/overtureAttribution";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import type { CityModel } from "../types";
+import { BuildingHeightPopover, HeightOverridePanel } from "./BuildingHeightPopover";
 import { ColoursEditor } from "./Colours";
 import { Drawer } from "./Drawer";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
@@ -214,6 +231,16 @@ export function ModelPage({ model }: { model: CityModel }) {
 
   const [comHeightBuildings, setComHeightBuildings] = useState<typeof model.buildings | null>(null);
   const [comHeightUpdates, setComHeightUpdates] = useState(0);
+  const [heightOverrideStore, setHeightOverrideStore] = useState<HeightOverrideStore>(() =>
+    readStoredHeightOverrides(window.localStorage),
+  );
+  const [showManualEdits, setShowManualEdits] = useState(() =>
+    readStoredShowManualHeights(window.localStorage),
+  );
+  const [unmatchedEdits, setUnmatchedEdits] = useState(0);
+  const [heightPick, setHeightPick] = useState<{ buildingId: number; clientX: number; clientY: number } | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!betterHeights || comFootprints.length === 0 || model.buildings.length === 0) {
@@ -237,17 +264,73 @@ export function ModelPage({ model }: { model: CityModel }) {
     return () => controller.abort();
   }, [betterHeights, comFootprints, model.buildings]);
 
-  const displayBuildings =
-    betterHeights && comHeightBuildings ? comHeightBuildings : model.buildings;
+  const baseBuildings = betterHeights && comHeightBuildings ? comHeightBuildings : model.buildings;
+
+  const overrideResult = useMemo(
+    () => applyHeightOverrides(baseBuildings, heightOverrideStore, model.center),
+    [baseBuildings, heightOverrideStore, model.center],
+  );
+
+  useEffect(() => {
+    setUnmatchedEdits(overrideResult.unmatchedCount);
+    clearPlanShadowCache();
+  }, [overrideResult]);
 
   const displayModel = useMemo(
     () => ({
       ...model,
-      buildings: displayBuildings,
+      buildings: overrideResult.buildings,
       comBuildingHeights: betterHeights,
+      manualHeightEditCount: overrideResult.manualCount,
+      sourceNote: appendManualHeightCredit(model.sourceNote, overrideResult.manualCount),
     }),
-    [model, displayBuildings, betterHeights],
+    [model, overrideResult, betterHeights],
   );
+
+  const pickedBuilding =
+    heightPick === null
+      ? null
+      : (displayModel.buildings.find((building) => building.id === heightPick.buildingId) ?? null);
+
+  function persistOverrides(next: HeightOverrideStore) {
+    setHeightOverrideStore(next);
+    writeStoredHeightOverrides(window.localStorage, next);
+  }
+
+  function saveBuildingHeight(buildingId: number, heightM: number) {
+    const building = baseBuildings.find((item) => item.id === buildingId);
+    if (!building) return;
+    persistOverrides(upsertOverrideForBuilding(heightOverrideStore, building, model.center, heightM));
+    setHeightPick(null);
+  }
+
+  function resetBuildingHeight(buildingId: number) {
+    const building = baseBuildings.find((item) => item.id === buildingId);
+    if (!building) return;
+    persistOverrides(removeOverrideForBuilding(heightOverrideStore, building, model.center));
+    setHeightPick(null);
+  }
+
+  function resetAllHeights() {
+    if (!window.confirm("Reset every manual building height in storage?")) return;
+    persistOverrides(clearAllHeightOverrides());
+    setHeightPick(null);
+  }
+
+  function exportHeightEdits() {
+    const blob = new Blob([exportHeightOverridesJson(heightOverrideStore)], { type: "application/json" });
+    downloadBlob("citycut-building-heights.json", blob);
+  }
+
+  async function importHeightEdits(file: File) {
+    try {
+      const raw = await file.text();
+      const incoming = importHeightOverridesJson(raw);
+      persistOverrides(mergeHeightOverrideStores(heightOverrideStore, incoming));
+    } catch {
+      setExportError("The height edits file could not be read.");
+    }
+  }
   const crs = mgaCrs(model.center.lon);
   const sideKm = model.sideM / 1000;
   const tierCounts = treeTierCounts(model.trees);
@@ -395,13 +478,27 @@ export function ModelPage({ model }: { model: CityModel }) {
                 model={displayModel}
                 uniformBuildings={!colourByUse && !showSource}
                 colourBySource={showSource}
+                showManualEdits={showManualEdits}
                 projection={view.projection}
                 corner={view.corner}
                 freeRotate={view.freeRotate}
                 snapId={snapId}
                 solar={solar}
                 onExportReady={onExportReady}
+                onBuildingPick={(buildingId, clientX, clientY) =>
+                  setHeightPick({ buildingId, clientX, clientY })
+                }
               />
+              {pickedBuilding && heightPick && (
+                <BuildingHeightPopover
+                  building={pickedBuilding}
+                  clientX={heightPick.clientX}
+                  clientY={heightPick.clientY}
+                  onSave={(heightM) => saveBuildingHeight(pickedBuilding.id, heightM)}
+                  onReset={() => resetBuildingHeight(pickedBuilding.id)}
+                  onClose={() => setHeightPick(null)}
+                />
+              )}
             </SceneBoundary>
           </div>
         )}
@@ -409,7 +506,7 @@ export function ModelPage({ model }: { model: CityModel }) {
           <div className="fill is-plan">
             <DrawingPlan
               key={fitToken}
-              model={model}
+              model={displayModel}
               kind={drawing}
               onScale={onScale}
               lineStyle={lineStyles}
@@ -434,7 +531,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                 {model.placeLabel} · {formatCoord(model.center.lat)}, {formatCoord(model.center.lon)} ·{" "}
                 {Math.round(model.sideM)} × {Math.round(model.sideM)} m
               </p>
-              <p className="meta">{model.sourceNote}</p>
+              <p className="meta">{displayModel.sourceNote}</p>
               {model.terrainError && <p className="error">{model.terrainError}</p>}
               <dl className="stats">
                 {model.layers.buildings && (
@@ -472,6 +569,21 @@ export function ModelPage({ model }: { model: CityModel }) {
 
             {showBuildings && (
               <div className="drawer-section legend" hidden={open !== "buildings"}>
+                <HeightOverridePanel
+                  manualCount={overrideResult.manualCount}
+                  unmatchedCount={unmatchedEdits}
+                  showManualEdits={showManualEdits}
+                  onToggleShowManual={() => {
+                    setShowManualEdits((on) => {
+                      const next = !on;
+                      writeStoredShowManualHeights(window.localStorage, next);
+                      return next;
+                    });
+                  }}
+                  onResetAll={resetAllHeights}
+                  onExport={exportHeightEdits}
+                  onImport={importHeightEdits}
+                />
                 <div className="panel-toolbar">
                   <button
                     type="button"

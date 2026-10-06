@@ -1,3 +1,4 @@
+import { manualHeightCreditFragment } from "./heightOverrides";
 import type { CityModel } from "../types";
 
 /** Dataset page linked from the 3D footer and export credits. */
@@ -18,6 +19,11 @@ export function comBuildingHeightsActive(model: CityModel): boolean {
 }
 
 export function comBuildingHeightCreditLine(model: CityModel): string | null {
-  if (!comBuildingHeightsActive(model)) return null;
-  return COM_BUILDING_HEIGHTS_CREDIT;
+  const manual = manualHeightCreditFragment(model.manualHeightEditCount ?? 0);
+  if (!comBuildingHeightsActive(model)) {
+    if (!manual) return null;
+    return manual.charAt(0).toUpperCase() + manual.slice(1);
+  }
+  if (!manual) return COM_BUILDING_HEIGHTS_CREDIT;
+  return `${COM_BUILDING_HEIGHTS_CREDIT}; ${manual}.`;
 }

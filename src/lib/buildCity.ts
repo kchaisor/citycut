@@ -18,6 +18,8 @@ export type CityBuildOptions = {
   colourBySource?: boolean;
   /** One mesh per building so a Rhino object can carry use and typology_source. */
   splitBuildings?: boolean;
+  /** Viewport only. Manual-height buildings render in the manual tint when on. */
+  highlightManual?: boolean;
 };
 
 function orient(ring: Ring, ccw: boolean): Pt[] {
@@ -55,24 +57,40 @@ function layFlat(geometry: THREE.BufferGeometry, y: number): THREE.BufferGeometr
   return geometry;
 }
 
+type MergeEntry = { geometry: THREE.BufferGeometry; buildingId: number };
+
 function mergeMeshes(
-  geometries: THREE.BufferGeometry[],
+  entries: MergeEntry[] | THREE.BufferGeometry[],
   material: THREE.Material,
   name: string,
 ): THREE.Object3D | null {
-  const usable = geometries.filter((geometry) => geometry.getAttribute("position"));
+  const normalized: MergeEntry[] = entries.map((entry) =>
+    entry instanceof THREE.BufferGeometry ? { geometry: entry, buildingId: -1 } : entry,
+  );
+  const usable = normalized.filter((entry) => entry.geometry.getAttribute("position"));
   if (usable.length === 0) return null;
+  const trackBuildingIds = usable.some((entry) => entry.buildingId >= 0);
   try {
-    const merged = mergeGeometries(usable, false);
+    const merged = mergeGeometries(
+      usable.map((entry) => entry.geometry),
+      trackBuildingIds,
+    );
     if (!merged) throw new Error("empty merge");
-    usable.forEach((geometry) => geometry.dispose());
+    usable.forEach((entry) => entry.geometry.dispose());
     const mesh = new THREE.Mesh(merged, material);
     mesh.name = name;
+    if (usable.some((entry) => entry.buildingId >= 0)) {
+      mesh.userData.buildingIdByGroup = usable.map((entry) => entry.buildingId);
+    }
     return mesh;
   } catch {
     const group = new THREE.Group();
     group.name = name;
-    for (const geometry of usable) group.add(new THREE.Mesh(geometry, material));
+    for (const entry of usable) {
+      const child = new THREE.Mesh(entry.geometry, material);
+      child.userData.buildingId = entry.buildingId;
+      group.add(child);
+    }
     return group;
   }
 }
@@ -480,19 +498,35 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
       }
     }
   } else {
-    const buckets = new Map<string, THREE.BufferGeometry[]>();
+    const buckets = new Map<string, MergeEntry[]>();
     const bucketName = (building: BuildingFeat) => {
       if (bySource) return `source:${building.source}`;
       if (uniform) return "Buildings";
       return buildingLayerName(building.use);
     };
+    const manualColor = getColour("--building-manual");
+    const manualMat = paint(matteStandardMaterial({ color: manualColor }), SURFACE.building);
+    manualMat.name = "Buildings-manual";
     for (const building of model.buildings) {
       const base = (model.terrain ? footprintBase(model.terrain, building.ring, model.sideM) : 0) + SURFACE.building.lift;
-      for (const geometry of extrudeFootprint(building, base)) {
+      const geometries = extrudeFootprint(building, base);
+      if (options.highlightManual && building.heightManual) {
+        for (const geometry of geometries) {
+          const mesh = new THREE.Mesh(geometry, manualMat);
+          mesh.name = "Buildings-manual";
+          mesh.userData.buildingId = building.id;
+          mesh.userData.layerColor = hexRgb(manualColor);
+          order(mesh, SURFACE.building.renderOrder);
+          group.add(mesh);
+        }
+        continue;
+      }
+      for (const geometry of geometries) {
         const name = bucketName(building);
+        const entry = { geometry, buildingId: building.id };
         const list = buckets.get(name);
-        if (list) list.push(geometry);
-        else buckets.set(name, [geometry]);
+        if (list) list.push(entry);
+        else buckets.set(name, [entry]);
       }
     }
     for (const [name, geometries] of buckets) {

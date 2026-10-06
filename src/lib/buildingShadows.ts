@@ -2,6 +2,7 @@ import * as polygonClipping from "polygon-clipping";
 import type { MultiPolygon, Pair, Polygon } from "polygon-clipping";
 import { openRing } from "./geo";
 import { sunAtMelbourneLocal, type SolarSample } from "./solar";
+import { buildingHeightsFingerprint } from "./heightOverrides";
 import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
 
 type ClipFns = {
@@ -157,7 +158,7 @@ function unionCacheLookup(model: CityModel, input: PlanShadowInput, castShadows:
   return [
     castShadows ? 1 : 0,
     model.sideM,
-    model.buildings.length,
+    buildingHeightsFingerprint(model.buildings),
     input.lat,
     input.lon,
     input.year,

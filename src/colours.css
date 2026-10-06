@@ -32,6 +32,9 @@
   /* Buildings when colour-by-use is off, the legend swatch in that state, and the Rhino Buildings layer. */
   --building-uniform: #A4A5A8;
 
+  /* 3D viewport tint for buildings with a manual height override when “Show manual edits” is on. */
+  --building-manual: #D4A017;
+
   /* Residential footprints, legend swatch, and the Residential Rhino layer. */
   --use-residential: #A4A5A8;
 
