@@ -42,6 +42,7 @@ import {
   planNearFar,
   sitePlanBounds,
 } from "../lib/planCamera";
+import { qaModeFromSearch, registerQaCameraBridge, type QaCameraPose } from "../lib/qaCameraBridge";
 import type { ProjectionMode } from "../lib/viewMemory";
 import {
   DEFAULT_PERSPECTIVE_OFFSET,
@@ -600,6 +601,47 @@ function HoldPoseWhenInactive({
   return null;
 }
 
+function QaCameraBridgeRegister({
+  persp,
+  controlsRef,
+  active,
+}: {
+  persp: THREE.PerspectiveCamera;
+  controlsRef: RefObject<OrbitControlsImpl | null>;
+  active: boolean;
+}) {
+  const gl = useThree((state) => state.gl);
+  const invalidate = useThree((state) => state.invalidate);
+  useLayoutEffect(() => {
+    if (!qaModeFromSearch(window.location.search) || !active) {
+      registerQaCameraBridge(null);
+      return;
+    }
+    registerQaCameraBridge({
+      setCamera(pose: QaCameraPose) {
+        const controls = controlsRef.current;
+        if (!controls) return;
+        persp.position.set(pose.eye.x, pose.eye.y, pose.eye.z);
+        controls.target.set(pose.target.x, pose.target.y, pose.target.z);
+        controls.update();
+        persp.updateProjectionMatrix();
+        invalidate();
+      },
+      projectToScreen(world) {
+        const vec = new THREE.Vector3(world.x, world.y, world.z);
+        vec.project(persp);
+        const rect = gl.domElement.getBoundingClientRect();
+        return {
+          x: rect.left + (vec.x * 0.5 + 0.5) * rect.width,
+          y: rect.top + (-vec.y * 0.5 + 0.5) * rect.height,
+        };
+      },
+    });
+    return () => registerQaCameraBridge(null);
+  }, [active, controlsRef, gl, invalidate, persp]);
+  return null;
+}
+
 function ExportBridge({
   onExportReady,
   solarDiagramOn,
@@ -677,6 +719,7 @@ function Cameras({
   const orthoView = iso || plan;
   const persp = perspRef.current;
   const ortho = orthoRef.current;
+  const qaMode = typeof window !== "undefined" && qaModeFromSearch(window.location.search);
 
   return (
     <>
@@ -698,8 +741,9 @@ function Cameras({
             lat={lat}
             lon={lon}
             fitId={snapId}
-            active={!orthoView}
+            active={!orthoView && !qaMode}
           />
+          <QaCameraBridgeRegister persp={persp} controlsRef={perspControls} active={!orthoView} />
           <HoldPoseWhenInactive controlsRef={perspControls} active={!orthoView} />
           <HoldPoseWhenInactive controlsRef={orthoControls} active={orthoView} />
           <IsoSnap
