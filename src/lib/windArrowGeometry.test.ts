@@ -5,19 +5,21 @@ import {
   buildWindArrowBuffer,
   updateWindArrowDrift,
   windArrowEdgeOpacity,
+  windArrowTravelRangeM,
+  windArrowVisibleExtentM,
   windFlowArrowPolylines,
   windStreakSpeedMs,
   WIND_ARROW_COUNT,
   WIND_ARROW_FADE_FRAC,
+  WIND_ARROW_SPAWN_OUTSIDE_FRAC,
 } from "./windArrowGeometry";
 import { downwindFromSector } from "./windRose";
 
 describe("windArrowGeometry", () => {
-  it("builds 5–7 large curves inside the frame above terrain", () => {
+  it("builds 10 large curves inside the frame above terrain", () => {
     const buffer = buildWindArrowBuffer(1000, 4, null);
-    expect(buffer.curves.length).toBeGreaterThanOrEqual(5);
-    expect(buffer.curves.length).toBeLessThanOrEqual(7);
     expect(buffer.curves.length).toBe(WIND_ARROW_COUNT);
+    expect(buffer.curves.length).toBe(10);
     const report = arrowBoundsReport(buffer);
     expect(report.insideFrame).toBe(true);
     expect(report.aboveTerrain).toBe(true);
@@ -111,39 +113,45 @@ describe("windArrowGeometry", () => {
     expect(checked).toBeGreaterThan(0);
   });
 
-  it("keeps visible drift geometry inside the frame", () => {
+  it("keeps visible drift geometry within the extended outer limit", () => {
     const buffer = buildWindArrowBuffer(1000, 6, null);
     const speed = windStreakSpeedMs(1000, 15);
-    const half = buffer.sideM / 2;
     for (const t of [3, 8, 14, 22, 31, 40]) {
       updateWindArrowDrift(buffer, 6, t, speed);
       for (const curve of buffer.curves) {
         if (curve.opacity <= 0) continue;
+        const limit = windArrowVisibleExtentM(buffer.sideM, curve.pathLenM);
         for (let s = 0; s < curve.pointCount; s++) {
           const east = curve.positions[s * 3]!;
           const north = -curve.positions[s * 3 + 2]!;
-          expect(Math.abs(east)).toBeLessThanOrEqual(half + 0.001);
-          expect(Math.abs(north)).toBeLessThanOrEqual(half + 0.001);
+          expect(Math.abs(east)).toBeLessThanOrEqual(limit + 0.01);
+          expect(Math.abs(north)).toBeLessThanOrEqual(limit + 0.01);
         }
       }
     }
   });
 
-  it("ramps opacity at upwind and downwind edges", () => {
+  it("ramps opacity over travel and is full near frame crossing", () => {
     const sideM = 1000;
     const pathLen = 350;
-    const half = sideM / 2;
-    const upwind = -half + pathLen * 0.5 + sideM * WIND_ARROW_FADE_FRAC * 0.2;
-    const mid = 0;
-    const downwind = half - pathLen * 0.5 - sideM * WIND_ARROW_FADE_FRAC * 0.2;
-    expect(windArrowEdgeOpacity(upwind, sideM, pathLen)).toBeLessThan(0.45);
-    expect(windArrowEdgeOpacity(mid, sideM, pathLen)).toBe(1);
-    expect(windArrowEdgeOpacity(downwind, sideM, pathLen)).toBeLessThan(0.45);
+    const travelRange = windArrowTravelRangeM(sideM, pathLen);
+    expect(windArrowEdgeOpacity(0, travelRange)).toBe(0);
+    expect(windArrowEdgeOpacity(travelRange, travelRange)).toBe(0);
+    const spawnFade = travelRange * WIND_ARROW_FADE_FRAC * 0.5;
+    expect(windArrowEdgeOpacity(spawnFade, travelRange)).toBeLessThan(0.55);
+    const tailEntersFrame = sideM * WIND_ARROW_SPAWN_OUTSIDE_FRAC;
+    expect(windArrowEdgeOpacity(tailEntersFrame + travelRange * 0.02, travelRange)).toBeGreaterThan(
+      0.92,
+    );
+    const mid = travelRange * 0.5;
+    expect(windArrowEdgeOpacity(mid, travelRange)).toBe(1);
   });
 
-  it("exports static polylines unchanged across calls", () => {
-    const a = windFlowArrowPolylines(800, 2);
-    const b = windFlowArrowPolylines(800, 2);
+  it("exports static polylines inside the frame", () => {
+    const sideM = 800;
+    const half = sideM / 2;
+    const a = windFlowArrowPolylines(sideM, 2);
+    const b = windFlowArrowPolylines(sideM, 2);
     expect(a.length).toBe(WIND_ARROW_COUNT);
     expect(b.length).toBe(WIND_ARROW_COUNT);
     for (let i = 0; i < a.length; i++) {
@@ -153,6 +161,10 @@ describe("windArrowGeometry", () => {
     for (const line of a) {
       expect(line.path.length).toBeGreaterThan(10);
       expect(line.head.length).toBe(3);
+      for (const [east, north] of [...line.path, ...line.head]) {
+        expect(Math.abs(east)).toBeLessThanOrEqual(half + 0.01);
+        expect(Math.abs(north)).toBeLessThanOrEqual(half + 0.01);
+      }
       const tri = arrowHeadTriangle(buildWindArrowBuffer(800, 2, null).curves[0]!);
       expect(tri.positions.length).toBe(9);
     }
