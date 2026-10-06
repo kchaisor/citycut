@@ -29,10 +29,8 @@ import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { planPaths } from "./svgPlan";
 import { planBuildingStrokeStyle } from "./planBuildingFill";
 import { windPlanPdfChunk } from "./windExport";
-import { OPEN_METEO_WIND_ATTRIBUTION } from "./windFetch";
-import { overtureThemeCredit } from "./overtureAttribution";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
-import { VICMAP_CONTOUR_ATTRIBUTION } from "./vicmapContours";
+import { plainDataCredit } from "./dataCredits";
 import type { CityModel, Pt } from "../types";
 
 export const SITE_LAYER_ORDER = [
@@ -98,22 +96,15 @@ function creditLine(
   layout: SheetLayout,
   interval: number | null,
   source: "vicmap-metro" | "vicmap-state" | "dem" | null,
+  windOn: boolean,
 ): string {
-  const parts = ["CityCut."];
-  if (model.layers.buildings || model.layers.roads || model.layers.waterGreen || model.layers.trees) {
-    parts.push(
-      overtureThemeCredit({
-        hasMicrosoftFootprints: model.hasMicrosoftFootprints,
-        hasEsaLandCover: model.hasEsaLandCover,
-      }),
-    );
-  }
+  const parts = [plainDataCredit({ prefix: "CityCut.", windOn, satelliteOn: false })];
   const comCredit = comBuildingHeightCreditLine(model);
   if (comCredit) parts.push(comCredit);
   if (interval && (source === "vicmap-metro" || source === "vicmap-state")) {
-    parts.push(`Contours every ${interval} m. ${VICMAP_CONTOUR_ATTRIBUTION}`);
+    parts.push(`Contours every ${interval} m.`);
   } else if (interval) {
-    parts.push(`Contours every ${interval} m. Terrain © Mapterhorn.`);
+    parts.push(`Contours every ${interval} m.`);
   }
   if (layout.note) parts.push(layout.note);
   return parts.join(" ");
@@ -125,7 +116,7 @@ function annotation(
   interval: number | null,
   style: StrokeStyle,
   source: "vicmap-metro" | "vicmap-state" | "dem" | null = null,
-  windCredit: string | null = null,
+  windOn = false,
 ): PdfChunk {
   const ink = hexRgb(style.color);
   const page = layout.pageHeightMm;
@@ -136,7 +127,7 @@ function annotation(
   const headR: [number, number] = [layout.northX + 0.9, yUp(layout.northTipY + 1.8, page)];
   const barBottom = yUp(layout.barY + layout.barHeightMm, page);
   const label = titleLine(model, layout);
-  const credit = [creditLine(model, layout, interval, source), windCredit].filter(Boolean).join(" ");
+  const credit = creditLine(model, layout, interval, source, windOn);
   return {
     name: "Annotation",
     paths: [
@@ -483,7 +474,7 @@ export function sitePlanChunks(
   }
   const siteBoundary = siteBoundaryChunk(model.siteBoundaryLines ?? [], model, layout, style);
   if (siteBoundary) chunks.push(siteBoundary);
-  if (resolved.wind?.table) chunks.push(windPlanPdfChunk(resolved.wind.table, resolved.wind.period, layout));
+  if (resolved.wind?.table) chunks.push(windPlanPdfChunk(resolved.wind.table, resolved.wind.period, layout, model.sideM));
   chunks.push(frameStroke(layout, style.frame));
   if (heliodon) chunks.push(heliodonPlanPdfChunk(model.sideM, layout, heliodon, scale));
   chunks.push(
@@ -493,7 +484,7 @@ export function sitePlanChunks(
       plan.contourInterval,
       style.annotation,
       plan.contourSource,
-      resolved.wind?.table ? OPEN_METEO_WIND_ATTRIBUTION : null,
+      Boolean(resolved.wind?.table),
     ),
   );
   return chunks;

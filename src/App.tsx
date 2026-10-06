@@ -87,6 +87,13 @@ export default function App() {
   const [model, setModel] = useState<CityModel | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mapSiteSearch, setMapSiteSearch] = useState<{ lon: number; lat: number; label: string } | null>(() => {
+    const anchor = anchorRef.current;
+    const urlSite = urlSiteAnchor;
+    if (anchor && shouldResolveSite(anchor, urlSite)) return { lon: anchor.lon, lat: anchor.lat, label: anchor.label };
+    if (urlSite && sharedLabel) return { lon: urlSite.lon, lat: urlSite.lat, label: sharedLabel };
+    return null;
+  });
   sideRef.current = sideKm;
   phaseRef.current = phase;
   placeLabelRef.current = placeLabel;
@@ -195,6 +202,7 @@ export default function App() {
 
   function onPlace(place: PlaceHit) {
     anchorRef.current = { lon: place.lon, lat: place.lat, label: place.label };
+    setMapSiteSearch({ lon: place.lon, lat: place.lat, label: place.label });
     flyLandedRef.current = false;
     if (settleTimer.current != null) {
       window.clearTimeout(settleTimer.current);
@@ -212,6 +220,7 @@ export default function App() {
 
   function focusMelbourne() {
     anchorRef.current = null;
+    setMapSiteSearch(null);
     invalidateLookup();
     publishLabel(coordinateLabel(MELBOURNE.lat, MELBOURNE.lon));
     setFly({
@@ -571,6 +580,7 @@ export default function App() {
             initialView={viewRef.current}
             fly={fly}
             loading={loading}
+            siteSearch={mapSiteSearch}
             onCancel={cancel}
             onView={onView}
             onBasemap={onBasemap}

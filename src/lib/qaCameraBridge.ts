@@ -6,6 +6,9 @@ export type QaCameraPose = {
 
 export type QaCameraBridge = {
   setCamera: (pose: QaCameraPose) => void;
+  getCamera: () => QaCameraPose | null;
+  /** Fit the perspective camera to the sun path dome, labels, and sun icon. */
+  frameHeliodon: () => void;
   projectToScreen: (world: { x: number; y: number; z: number }) => { x: number; y: number } | null;
 };
 
@@ -20,6 +23,10 @@ declare global {
   interface Window {
     __citycutQa?: QaCameraBridge;
     __citycutQaSite?: QaSiteSnapshot;
+    /** QA only: programmatic height-edit pick for screenshots. */
+    __citycutQaModel?: {
+      openMidriseHeightEdit: () => number | null;
+    };
   }
 }
 

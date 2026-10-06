@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { clearSiteParcelCacheForTests } from "./sitePreviewCache";
 import { labelLooksLikeAddress, resolveSiteFrame, shouldResolveSite } from "./site";
 import type { BuildingFeat } from "../types";
 
@@ -40,6 +41,10 @@ describe("labelLooksLikeAddress", () => {
 });
 
 describe("resolveSiteFrame", () => {
+  beforeEach(() => {
+    clearSiteParcelCacheForTests();
+  });
+
   it("falls back to point-in-footprint when Vicmap returns no parcel", async () => {
     const frame = await resolveSiteFrame({
       anchor: { lat: -37.81, lon: 145.05 },

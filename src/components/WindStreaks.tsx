@@ -2,27 +2,169 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
-import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
-import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
+import { Line2 } from "three/examples/jsm/lines/Line2.js";
+import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
 import { getColour } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
 import type { TerrainField } from "../types";
 import {
-  buildWindStreakBuffer,
-  updateWindStreakPositions,
-  windStreakSpeedMs,
-  writeLineSegmentPositions,
-  type WindStreakBuffer,
-} from "../lib/windStreakGeometry";
+  arrowHeadTriangle,
+  buildWindArrowBuffer,
+  updateWindArrowDashOffset,
+  type WindArrowBuffer,
+  type WindArrowCurve,
+} from "../lib/windArrowGeometry";
 import type { WindPeriodStats } from "../lib/windRose";
 
-function streakLines(buffer: WindStreakBuffer, material: LineMaterial): LineSegments2 {
-  const geometry = new LineSegmentsGeometry();
-  geometry.setPositions(buffer.positions);
-  const lines = new LineSegments2(geometry, material);
-  lines.frustumCulled = false;
-  lines.renderOrder = 900;
-  return lines;
+type ArrowObjects = {
+  base: Line2;
+  flow: Line2;
+  head: THREE.Mesh;
+  curve: WindArrowCurve;
+};
+
+function buildArrowObjects(
+  curve: WindArrowCurve,
+  baseMaterial: LineMaterial,
+  flowMaterial: LineMaterial,
+  headMaterial: THREE.MeshBasicMaterial,
+): ArrowObjects {
+  const baseGeometry = new LineGeometry();
+  baseGeometry.setPositions(curve.positions);
+  const base = new Line2(baseGeometry, baseMaterial);
+  base.computeLineDistances();
+  base.frustumCulled = false;
+  base.renderOrder = 900;
+
+  const flowGeometry = new LineGeometry();
+  flowGeometry.setPositions(curve.positions);
+  const flow = new Line2(flowGeometry, flowMaterial);
+  flow.computeLineDistances();
+  flow.frustumCulled = false;
+  flow.renderOrder = 902;
+
+  const tri = arrowHeadTriangle(curve);
+  const headGeometry = new THREE.BufferGeometry();
+  headGeometry.setAttribute("position", new THREE.BufferAttribute(tri.positions, 3));
+  headGeometry.setIndex([0, 1, 2]);
+  headGeometry.computeVertexNormals();
+  const head = new THREE.Mesh(headGeometry, headMaterial);
+  head.frustumCulled = false;
+  head.renderOrder = 903;
+
+  return { base, flow, head, curve };
+}
+
+function WindArrowsInner({
+  buffer,
+  animate,
+}: {
+  buffer: WindArrowBuffer;
+  animate: boolean;
+}) {
+  const colourTick = useColourRevision();
+  const { size } = useThree();
+  const timeRef = useRef(0);
+
+  const baseMaterial = useMemo(() => {
+    const color = new THREE.Color(getColour("--wind-streak"));
+    return new LineMaterial({
+      color: color.getHex(),
+      linewidth: 4,
+      transparent: true,
+      opacity: 0.55,
+      depthTest: true,
+      depthWrite: false,
+      worldUnits: false,
+      dashed: false,
+    });
+  }, [colourTick]);
+
+  const flowMaterials = useMemo(() => {
+    const color = new THREE.Color(getColour("--wind-streak"));
+    return buffer.curves.map((curve) => {
+      const pulse = curve.pathLenM * 0.22;
+      const gap = Math.max(curve.pathLenM * 0.78, pulse * 2);
+      return new LineMaterial({
+        color: color.getHex(),
+        linewidth: 5.5,
+        transparent: true,
+        opacity: 1,
+        depthTest: true,
+        depthWrite: false,
+        worldUnits: true,
+        dashed: true,
+        dashSize: pulse,
+        gapSize: gap,
+        dashOffset: 0,
+      });
+    });
+  }, [buffer.curves, colourTick]);
+
+  const headMaterial = useMemo(
+    () =>
+      new THREE.MeshBasicMaterial({
+        color: new THREE.Color(getColour("--wind-streak")),
+        transparent: true,
+        opacity: 0.92,
+        depthTest: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+      }),
+    [colourTick],
+  );
+
+  const arrows = useMemo(
+    () =>
+      buffer.curves.map((curve, index) =>
+        buildArrowObjects(curve, baseMaterial, flowMaterials[index]!, headMaterial),
+      ),
+    [baseMaterial, buffer.curves, flowMaterials, headMaterial],
+  );
+
+  useEffect(() => {
+    baseMaterial.resolution.set(size.width, size.height);
+    for (const material of flowMaterials) {
+      material.resolution.set(size.width, size.height);
+    }
+  }, [baseMaterial, flowMaterials, size.width, size.height]);
+
+  useEffect(
+    () => () => {
+      baseMaterial.dispose();
+      for (const material of flowMaterials) material.dispose();
+      headMaterial.dispose();
+      for (const arrow of arrows) {
+        arrow.base.geometry.dispose();
+        arrow.flow.geometry.dispose();
+        arrow.head.geometry.dispose();
+      }
+    },
+    [arrows, baseMaterial, flowMaterials, headMaterial],
+  );
+
+  useFrame((_, delta) => {
+    if (!animate) {
+      for (const material of flowMaterials) material.dashOffset = 0;
+      return;
+    }
+    timeRef.current += delta;
+    for (let i = 0; i < arrows.length; i++) {
+      const { curve } = arrows[i]!;
+      updateWindArrowDashOffset(flowMaterials[i]!, timeRef.current, curve.phase, curve.pathLenM);
+    }
+  });
+
+  return (
+    <>
+      {arrows.flatMap((arrow, index) => [
+        <primitive key={`b-${index}`} object={arrow.base} />,
+        animate ? <primitive key={`f-${index}`} object={arrow.flow} /> : null,
+        <primitive key={`h-${index}`} object={arrow.head} />,
+      ])}
+    </>
+  );
 }
 
 export function WindStreaks({
@@ -36,50 +178,11 @@ export function WindStreaks({
   animate: boolean;
   terrain?: TerrainField | null;
 }) {
-  const colourTick = useColourRevision();
-  const { size } = useThree();
-  const timeRef = useRef(0);
   const buffer = useMemo(
-    () => buildWindStreakBuffer(sideM, stats.prevailingSector, terrain),
+    () => buildWindArrowBuffer(sideM, stats.prevailingSector, terrain),
     [sideM, stats.prevailingSector, terrain],
   );
-
-  const material = useMemo(() => {
-    const color = new THREE.Color(getColour("--wind-streak"));
-    return new LineMaterial({
-      color: color.getHex(),
-      linewidth: 2.8,
-      transparent: true,
-      opacity: 0.7,
-      depthTest: true,
-      depthWrite: false,
-      worldUnits: false,
-    });
-  }, [colourTick]);
-
-  const lines = useMemo(() => streakLines(buffer, material), [buffer, material]);
-
-  useEffect(() => {
-    material.resolution.set(size.width, size.height);
-  }, [material, size.width, size.height]);
-
-  useEffect(
-    () => () => {
-      lines.geometry.dispose();
-      material.dispose();
-    },
-    [lines, material],
-  );
-
-  useFrame((_, delta) => {
-    if (!animate) return;
-    timeRef.current += delta;
-    const speed = windStreakSpeedMs(sideM, stats.prevailingMedianKmh);
-    updateWindStreakPositions(buffer, stats.prevailingSector, timeRef.current, speed);
-    writeLineSegmentPositions(lines.geometry, buffer.positions);
-  });
-
-  return <primitive object={lines} />;
+  return <WindArrowsInner buffer={buffer} animate={animate} />;
 }
 
 export function WindStaticArrows({
@@ -91,39 +194,5 @@ export function WindStaticArrows({
   stats: WindPeriodStats;
   terrain?: TerrainField | null;
 }) {
-  const colourTick = useColourRevision();
-  const { size } = useThree();
-  const buffer = useMemo(
-    () => buildWindStreakBuffer(Math.min(sideM, 800), stats.prevailingSector, terrain),
-    [sideM, stats.prevailingSector, terrain, colourTick],
-  );
-
-  const material = useMemo(
-    () =>
-      new LineMaterial({
-        color: new THREE.Color(getColour("--wind-streak")).getHex(),
-        linewidth: 2.5,
-        transparent: true,
-        opacity: 0.7,
-        depthTest: true,
-        depthWrite: false,
-      }),
-    [colourTick],
-  );
-
-  const lines = useMemo(() => streakLines(buffer, material), [buffer, material]);
-
-  useEffect(() => {
-    material.resolution.set(size.width, size.height);
-  }, [material, size.width, size.height]);
-
-  useEffect(
-    () => () => {
-      lines.geometry.dispose();
-      material.dispose();
-    },
-    [lines, material],
-  );
-
-  return <primitive object={lines} />;
+  return <WindStreaks sideM={sideM} stats={stats} animate={false} terrain={terrain} />;
 }

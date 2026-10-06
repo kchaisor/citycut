@@ -11,12 +11,16 @@ type Props = {
   onClose: () => void;
 };
 
+function formatHeightM(height: number): string {
+  return height.toFixed(1);
+}
+
 export function BuildingHeightPopover({ building, clientX, clientY, onSave, onReset, onClose }: Props) {
-  const [value, setValue] = useState(String(building.height));
+  const [value, setValue] = useState(() => formatHeightM(building.height));
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setValue(String(building.height));
+    setValue(formatHeightM(building.height));
   }, [building.id, building.height]);
 
   useEffect(() => {
