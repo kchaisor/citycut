@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Building2, Download, DraftingCompass, Info, Sun, Trees } from "lucide-react";
+import { Building2, Download, DraftingCompass, Info, Sun, Trees, Wind } from "lucide-react";
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -84,6 +84,15 @@ import { SatellitePane } from "./SatellitePane";
 import { Scene3D, type SceneExporter } from "./Scene3D";
 import { SceneBoundary } from "./SceneBoundary";
 import { SolarPanel } from "./SolarPanel";
+import { WindPanel } from "./WindPanel";
+import { WindRoseOverlay } from "./WindRoseOverlay";
+import { fetchWindRoseTable, OPEN_METEO_WIND_ATTRIBUTION } from "../lib/windFetch";
+import type { WindRoseTable } from "../lib/windRose";
+import {
+  readStoredWindSettings,
+  writeStoredWindSettings,
+  type WindViewSettings,
+} from "../lib/windState";
 import type { SitePlanExportOptions } from "../lib/aiPlan";
 import type { PlanShadowInput } from "../lib/buildingShadows";
 import type { HeliodonDiagramExportOptions, HeliodonGroundExportOptions } from "../lib/heliodonDiagram";
@@ -122,6 +131,7 @@ const TITLES: Record<string, string> = {
   trees: "Tree sizes",
   drawing: "Drawing",
   solar: "Solar",
+  wind: "Wind",
   exports: "Exports",
 };
 
@@ -147,6 +157,9 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [fitToken, setFitToken] = useState(0);
   const [view, setView] = useState<ViewMemory>(loadView);
   const [snapId, setSnapId] = useState(0);
+  const [windSettings, setWindSettings] = useState<WindViewSettings>(() => readStoredWindSettings(window.localStorage));
+  const [windTable, setWindTable] = useState<WindRoseTable | null>(null);
+  const [windNote, setWindNote] = useState<string | null>(null);
   const [solar, setSolar] = useState<SolarViewSettings>(() => ({
     showPath: capturePresetFromSearch(window.location.search).solarPath,
     castShadows: false,
@@ -195,8 +208,40 @@ export function ModelPage({ model }: { model: CityModel }) {
       heliodon: heliodonDiagramExport(),
       shadows: planShadowInput(),
       castShadows: solar.castShadows,
+      uniformBuildings: !colourByUse && !showSource,
+      colourBySource: showSource,
+      highlightManual: showManualEdits && overrideResult.manualCount > 0,
+      wind:
+        windSettings.enabled && windTable
+          ? { table: windTable, period: windSettings.period }
+          : null,
     };
   }
+
+  function commitWind(next: WindViewSettings) {
+    writeStoredWindSettings(window.localStorage, next);
+    setWindSettings(next);
+  }
+
+  useEffect(() => {
+    if (!windSettings.enabled) return;
+    let cancelled = false;
+    const lat = model.siteAnchor?.lat ?? model.center.lat;
+    const lon = model.siteAnchor?.lon ?? model.center.lon;
+    fetchWindRoseTable(lat, lon).then((result) => {
+      if (cancelled) return;
+      if (result.ok) {
+        setWindTable(result.table);
+        setWindNote(null);
+      } else {
+        setWindTable(null);
+        setWindNote(result.quietNote);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [windSettings.enabled, model.center.lat, model.center.lon, model.siteAnchor?.lat, model.siteAnchor?.lon]);
 
   function heliodonRhinoExport(): HeliodonGroundExportOptions | null {
     if (!solar.showPath) return null;
@@ -375,6 +420,7 @@ export function ModelPage({ model }: { model: CityModel }) {
   items.push(
     { id: "drawing", label: "Drawing", icon: <DraftingCompass {...iconProps} /> },
     { id: "solar", label: "Solar", icon: <Sun {...iconProps} /> },
+    { id: "wind", label: "Wind", icon: <Wind {...iconProps} /> },
     { id: "exports", label: "Exports", icon: <Download {...iconProps} /> },
   );
   const open = drawerIsAvailable(preferred, items.map((item) => item.id));
@@ -409,6 +455,12 @@ export function ModelPage({ model }: { model: CityModel }) {
         heliodon: heliodonRhinoExport(),
         shadows: planShadowInput(),
         castShadows: solar.castShadows,
+        uniformBuildings: !colourByUse && !showSource,
+        colourBySource: showSource,
+        wind:
+          windSettings.enabled && windTable
+            ? { table: windTable, period: windSettings.period }
+            : null,
       });
     } catch {
       setExportError("The Rhino file could not be written.");
@@ -507,11 +559,17 @@ export function ModelPage({ model }: { model: CityModel }) {
                 freeRotate={view.freeRotate}
                 snapId={snapId}
                 solar={solar}
+                windEnabled={windSettings.enabled}
+                windTable={windTable}
+                windPeriod={windSettings.period}
                 onExportReady={onExportReady}
                 onBuildingPick={(buildingId, clientX, clientY) =>
                   setHeightPick({ buildingId, clientX, clientY })
                 }
               />
+              {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
+                <WindRoseOverlay table={windTable} period={windSettings.period} />
+              )}
               {pickedBuilding && heightPick && (
                 <BuildingHeightPopover
                   building={pickedBuilding}
@@ -537,6 +595,9 @@ export function ModelPage({ model }: { model: CityModel }) {
               heliodon={heliodonDiagramExport()}
               castShadows={solar.castShadows}
               shadowInput={planShadowInput()}
+              uniformBuildings={!colourByUse && !showSource}
+              colourBySource={showSource}
+              highlightManual={showManualEdits && overrideResult.manualCount > 0}
             />
           </div>
         )}
@@ -891,6 +952,15 @@ export function ModelPage({ model }: { model: CityModel }) {
               <SolarPanel embedded settings={solar} onChange={commitSolar} sideM={model.sideM} />
             </div>
 
+            <div className="drawer-section" hidden={open !== "wind"}>
+              <WindPanel
+                embedded
+                settings={windSettings}
+                onChange={commitWind}
+                note={windNote}
+              />
+            </div>
+
             <div className="drawer-section" hidden={open !== "exports"}>
               <div className="exports">
                 <article className="card">
@@ -1028,6 +1098,12 @@ export function ModelPage({ model }: { model: CityModel }) {
               Building heights:{" "}
               <a href={COM_BUILDING_HEIGHTS_DATASET_URL}>2023 Building Footprints © City of Melbourne</a>,{" "}
               <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.
+            </>
+          )}
+          {windSettings.enabled && (
+            <>
+              {" "}
+              {OPEN_METEO_WIND_ATTRIBUTION}
             </>
           )}
           {model.contourLayer && model.contourLayer.source !== "dem" && model.contourLayer.attribution && (

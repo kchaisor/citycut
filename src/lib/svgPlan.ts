@@ -1,5 +1,5 @@
-import { BUILDING_USE_META } from "./buildingUse";
-import { getColour } from "./colours";
+import type { BuildingColourMode } from "./buildingViewportColor";
+import { planBuildingFill } from "./planBuildingFill";
 import { isSiteBuilding } from "./siteBuildings";
 import { clipPolygon, clipPolyline } from "./clip";
 import { openRing } from "./geo";
@@ -126,6 +126,11 @@ function clipLines(line: Pt[], half: number): Pt[][] {
   return clipPolyline(dedupe(line), -half, half).map(dedupe).filter((part) => part.length >= 2);
 }
 
+export type PlanPathOptions = {
+  buildingColour?: BuildingColourMode;
+  highlightManual?: boolean;
+};
+
 export function planPaths(
   model: CityModel,
   pathWidthM = PATH_WIDTH_M,
@@ -133,6 +138,7 @@ export function planPaths(
   planScale = 1000,
   coarseIntervalM = DEFAULT_COARSE_INTERVAL_M,
   coarseFromScale = DEFAULT_COARSE_FROM_SCALE,
+  planOptions: PlanPathOptions = {},
 ): PlanPaths {
   const half = model.sideM / 2;
   const green: Pt[][][] = [];
@@ -153,13 +159,19 @@ export function planPaths(
   const footpaths = unionFootpaths(footpathLines(model.roads), pathWidthM, model.sideM);
   const carriageway = unionCarriageways(carriagewaysOf(model.roads), model.sideM);
 
-  const siteFill = getColour("--site-building");
+  const colourMode: BuildingColourMode = planOptions.buildingColour ?? {
+    colourByUse: true,
+    uniformBuildings: false,
+    colourBySource: false,
+  };
+  const highlightManual = Boolean(planOptions.highlightManual);
   const buildings = model.buildings
     .map((building) => {
       const rings = clipRings(building.ring, building.holes, half);
       if (!rings) return null;
-      const fill = isSiteBuilding(model, building.id) ? siteFill : BUILDING_USE_META[building.use].color;
-      return { rings, fill, site: isSiteBuilding(model, building.id) };
+      const site = isSiteBuilding(model, building.id);
+      const fill = planBuildingFill(model, building, colourMode, highlightManual);
+      return { rings, fill, site };
     })
     .filter((building): building is { rings: Pt[][]; fill: string; site: boolean } => building !== null);
 

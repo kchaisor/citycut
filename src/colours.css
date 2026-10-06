@@ -30,7 +30,7 @@
   /* Building use */
 
   /* Buildings when colour-by-use is off, the legend swatch in that state, and the Rhino Buildings layer. */
-  --building-uniform: #A4A5A8;
+  --building-uniform: #FFFFFF;
 
   /* 3D viewport tint for buildings with a manual height override when “Show manual edits” is on. */
   --building-manual: #D4A017;
@@ -43,6 +43,8 @@
 
   /* Searched-property parcel boundary: site plan, 3D ground line, Rhino Site::Boundary, Illustrator/PDF. */
   --site-boundary: #D7263D;
+  --wind-streak: #6b8fb8;
+  --wind-rose: #3d5a73;
 
   /* Residential footprints, legend swatch, and the Residential Rhino layer. */
   --use-residential: #A4A5A8;

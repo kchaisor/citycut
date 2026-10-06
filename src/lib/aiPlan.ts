@@ -7,6 +7,7 @@ import { getColour, type ColourKey } from "./colours";
 import {
   dashIsDotted,
   dashPair,
+  dashSegments,
   footpathEdgeStroke,
   haloMm,
   readDrawingStyle,
@@ -26,6 +27,9 @@ import { heliodonPlanPdfChunk } from "./heliodonPlanExport";
 import type { HeliodonDiagramExportOptions } from "./heliodonDiagram";
 import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { planPaths } from "./svgPlan";
+import { planBuildingStrokeStyle } from "./planBuildingFill";
+import { windPlanPdfChunk } from "./windExport";
+import { OPEN_METEO_WIND_ATTRIBUTION } from "./windFetch";
 import { overtureThemeCredit } from "./overtureAttribution";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { VICMAP_CONTOUR_ATTRIBUTION } from "./vicmapContours";
@@ -46,6 +50,7 @@ export const SITE_LAYER_ORDER = [
   "Contour labels",
   "Shadows",
   "Sun path",
+  "Wind",
   "Annotation",
 ] as const;
 
@@ -58,13 +63,13 @@ function fillOf(name: ColourKey): Rgb {
 
 function pen(style: StrokeStyle, join: "miter" | "round" = "round"): Partial<PdfPath> | null {
   if (!(style.mm > 0)) return null;
-  const dash = dashPair(style.dash);
+  const dash = dashSegments(style.dash);
   const dotted = dashIsDotted(style.dash);
   return {
     stroke: hexRgb(style.color),
     strokeMm: style.mm,
     ...(dash ? { dashMm: dash } : {}),
-    cap: dotted ? "round" : "butt",
+    cap: dotted || (dash?.some((segment, index) => segment === 0 && index % 2 === 0) ?? false) ? "round" : "butt",
     join,
   };
 }
@@ -120,6 +125,7 @@ function annotation(
   interval: number | null,
   style: StrokeStyle,
   source: "vicmap-metro" | "vicmap-state" | "dem" | null = null,
+  windCredit: string | null = null,
 ): PdfChunk {
   const ink = hexRgb(style.color);
   const page = layout.pageHeightMm;
@@ -130,7 +136,7 @@ function annotation(
   const headR: [number, number] = [layout.northX + 0.9, yUp(layout.northTipY + 1.8, page)];
   const barBottom = yUp(layout.barY + layout.barHeightMm, page);
   const label = titleLine(model, layout);
-  const credit = creditLine(model, layout, interval, source);
+  const credit = [creditLine(model, layout, interval, source), windCredit].filter(Boolean).join(" ");
   return {
     name: "Annotation",
     paths: [
@@ -244,6 +250,10 @@ export type SitePlanExportOptions = {
   heliodon?: HeliodonDiagramExportOptions | null;
   shadows?: PlanShadowInput | null;
   castShadows?: boolean;
+  uniformBuildings?: boolean;
+  highlightManual?: boolean;
+  colourBySource?: boolean;
+  wind?: { table: import("./windRose").WindRoseTable; period: import("./windRose").WindPeriodId } | null;
 };
 
 export function siteBoundaryChunk(
@@ -274,7 +284,13 @@ function resolveSitePlanExport(
   exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): SitePlanExportOptions {
   if (!exportOptions) return {};
-  if ("shadows" in exportOptions || "castShadows" in exportOptions || "heliodon" in exportOptions) {
+  if (
+    "shadows" in exportOptions ||
+    "castShadows" in exportOptions ||
+    "heliodon" in exportOptions ||
+    "wind" in exportOptions ||
+    "uniformBuildings" in exportOptions
+  ) {
     return exportOptions as SitePlanExportOptions;
   }
   return { heliodon: exportOptions as HeliodonDiagramExportOptions };
@@ -291,6 +307,9 @@ export function sitePlanChunks(
   const shadowInput = resolved.shadows ?? null;
   const castShadows = Boolean(resolved.castShadows);
   const layout = layoutSheet(model.sideM, scale);
+  const uniformBuildings = Boolean(resolved.uniformBuildings);
+  const colourBySource = Boolean(resolved.colourBySource);
+  const highlightManual = Boolean(resolved.highlightManual);
   const plan = planPaths(
     model,
     style.pathWidthM,
@@ -298,6 +317,14 @@ export function sitePlanChunks(
     scale,
     style.contourCoarseIntervalM,
     style.contourCoarseFromScale,
+    {
+      buildingColour: {
+        colourByUse: !uniformBuildings && !colourBySource,
+        uniformBuildings,
+        colourBySource,
+      },
+      highlightManual,
+    },
   );
   const page = layout.pageHeightMm;
   const bottom = yUp(layout.frameY + layout.frameMm, page);
@@ -426,7 +453,7 @@ export function sitePlanChunks(
       })),
     });
   }
-  const buildingPen = pen(style.building, "miter");
+  const buildingPen = pen(planBuildingStrokeStyle(style, uniformBuildings, false), "miter");
   const siteBuildingPen = pen(style.siteBuilding, "miter");
   const siteBuildings = plan.buildings.filter((building) => building.site);
   const otherBuildings = plan.buildings.filter((building) => !building.site);
@@ -456,9 +483,19 @@ export function sitePlanChunks(
   }
   const siteBoundary = siteBoundaryChunk(model.siteBoundaryLines ?? [], model, layout, style);
   if (siteBoundary) chunks.push(siteBoundary);
+  if (resolved.wind?.table) chunks.push(windPlanPdfChunk(resolved.wind.table, resolved.wind.period, layout));
   chunks.push(frameStroke(layout, style.frame));
   if (heliodon) chunks.push(heliodonPlanPdfChunk(model.sideM, layout, heliodon, scale));
-  chunks.push(annotation(model, layout, plan.contourInterval, style.annotation, plan.contourSource));
+  chunks.push(
+    annotation(
+      model,
+      layout,
+      plan.contourInterval,
+      style.annotation,
+      plan.contourSource,
+      resolved.wind?.table ? OPEN_METEO_WIND_ATTRIBUTION : null,
+    ),
+  );
   return chunks;
 }
 

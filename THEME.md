@@ -102,7 +102,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--figure-fill` | `#000000` | Figure-ground buildings, the black frame, north mark, and scale bar on that drawing, on screen and in the Illustrator file, and the Rhino FigureGround layer. |
 | `--plan-empty` | `#6d675e` | The sentence shown when a plan has nothing in the frame. |
 | `--contour-label` | `#6A6A6A` | Elevation numbers on the site plan, on screen and in the Illustrator file. |
-| `--building-uniform` | `#f6f3ec` | Buildings when colour-by-use is off, that legend swatch, and the Rhino Buildings layer. |
+| `--building-uniform` | `#FFFFFF` | Buildings when colour-by-use is off, that legend swatch, and the Rhino Buildings layer. |
 | `--building-manual` | `#D4A017` | 3D viewport tint for buildings with a manual height override when “Show manual edits” is on. |
 | `--site-building` | `#F2C230` | Buildings on the searched property: site plan, 3D, Rhino `Buildings::Site`, and Illustrator Site buildings layer. Manual-height amber and uniform colour apply to non-site buildings only; site buildings stay yellow unless manual-height tint is on for that building (manual wins in 3D). |
 | `--site-building-edge` | `#3D3010` | Darker outline on site-building massing in the 3D viewport so they read against retail (`--use-retail`) and civic (`--use-civic`) yellows. |
@@ -152,6 +152,8 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--building-solar-neutral` | `#ffffff` | Single neutral building fill in the 3D viewport while the sun path and compass are on (screen only). |
 | `--heliodon-dial-disc` | `#e8e2d8` | Faint ground disc under the heliodon dial at about 35% opacity (screen only). |
 | `--shadow-fill` | `#454545` | Site-plan building shadows on the site plan. |
+| `--wind-streak` | `#6b8fb8` | Animated wind streaks in the 3D viewport. |
+| `--wind-rose` | `#3d5a73` | On-screen wind rose overlay and Wind export layer. |
 
 The contour lines in Rhino use the pen `--contour-stroke` from `src/drawing-style.css`, not a fill.
 
@@ -203,7 +205,7 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--annotation-dash` | Dash of the annotation strokes | `none` | mm, on then off |
 | `--site-boundary-mm` | Weight of the searched-property parcel boundary | `0.35` | mm |
 | `--site-boundary-stroke` | Alias of `--site-boundary` for the pen cascade | `var(--site-boundary)` | colour |
-| `--site-boundary-dash` | Dash of the site boundary | `1.2 0.6` | mm, on then off |
+| `--site-boundary-dash` | Dash of the site boundary (long dash, gap, dot, gap) | `2.4 0.6 0.2 0.6` | mm per segment |
 | `--site-building-stroke-mm` | Outline on site-building fills on the site plan | `0.35` | mm |
 | `--site-building-stroke` | Colour of that site-building outline on the plan and in exports | `#3D3010` | colour |
 | `--site-building-dash` | Dash of the site-building outline | `none` | mm, on then off |
