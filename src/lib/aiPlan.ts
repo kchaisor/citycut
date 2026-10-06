@@ -427,6 +427,7 @@ export function sitePlanChunks(
     });
   }
   const buildingPen = pen(style.building, "miter");
+  const siteBuildingPen = pen(style.siteBuilding, "miter");
   const siteBuildings = plan.buildings.filter((building) => building.site);
   const otherBuildings = plan.buildings.filter((building) => !building.site);
   if (otherBuildings.length > 0) {
@@ -449,7 +450,7 @@ export function sitePlanChunks(
         fill: hexRgb(building.fill),
         evenOdd: true,
         close: true,
-        ...(buildingPen ?? {}),
+        ...(siteBuildingPen ?? buildingPen ?? {}),
       })),
     });
   }

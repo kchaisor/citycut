@@ -1,16 +1,14 @@
 /**
- * Site boundary QA: 3D oblique + site plan for an address frame.
+ * Site boundary QA: 3D oblique + site plan for an address frame (live Vicmap).
  * Run: npx vite-node scripts/capture-site-screenshots.mjs
  */
 import { chromium } from "playwright";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 
 const outDir = "/opt/cursor/artifacts";
 mkdirSync(outDir, { recursive: true });
 
 const ADDRESS = "1022 Whitehorse Road, Box Hill VIC 3128";
-const LAT = -37.8187756;
-const LON = 145.1266505;
 const KM = 0.4;
 const EYE_Y = 250;
 const HORIZONTAL_BACK_M = 400;
@@ -32,12 +30,7 @@ function cameraPose() {
   };
 }
 
-const label = encodeURIComponent(ADDRESS);
-const frameUrl = `http://127.0.0.1:5173/citycut-export/?qa=1&lat=${LAT}&lon=${LON}&km=${KM}&label=${label}`;
-
-const parcelFixture = JSON.parse(
-  readFileSync(new URL("./fixtures/box-hill-parcel-response.json", import.meta.url), "utf8"),
-);
+const baseUrl = "http://127.0.0.1:5173/citycut-export/?qa=1&buildings=uniform";
 
 const browser = await chromium.launch({
   headless: true,
@@ -46,18 +39,19 @@ const browser = await chromium.launch({
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 page.setDefaultTimeout(240_000);
 
-await page.route(/Vicmap_Parcel\/FeatureServer\/0\/query/i, async (route) => {
-  await route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify(parcelFixture),
-  });
-});
+await page.goto(baseUrl, { waitUntil: "networkidle" });
 
-await page.goto(frameUrl, { waitUntil: "networkidle" });
-await page.waitForTimeout(1500);
+await page.getByRole("button", { name: "Search", exact: true }).click();
+const searchInput = page.getByRole("combobox", { name: /Search a place/i });
+await searchInput.fill(ADDRESS);
+await page.waitForTimeout(1200);
+await page.getByRole("option").first().click();
+await page.waitForTimeout(800);
 
 await page.getByRole("button", { name: "Layers", exact: true }).click();
+const slider = page.locator('input[type="range"]');
+await slider.fill(String(KM));
+await page.waitForTimeout(300);
 async function setLayer(name, on) {
   const row = page.locator(".layers li").filter({ hasText: name });
   const toggle = row.locator("button.toggle");
@@ -81,16 +75,23 @@ await page.waitForTimeout(8000);
 
 await page.getByRole("button", { name: "Summary", exact: true }).click().catch(() => {});
 const meta = await page.evaluate(() => {
-  const note = document.querySelector(".meta")?.textContent ?? "";
+  const note = Array.from(document.querySelectorAll(".meta"))
+    .map((node) => node.textContent ?? "")
+    .join(" ");
   const params = new URLSearchParams(window.location.search);
-  const parcelMatch = note.match(/Site parcel ([^.]+)\./);
+  const pfiMatch = note.match(/Site parcel PFI (\S+)/);
+  const spiMatch = note.match(/SPI ([^.]+)\./);
+  const site = window.__citycutQaSite;
   return {
-    note: note.slice(0, 500),
+    note: note.slice(0, 1200),
     url: window.location.href,
     siteLat: params.get("siteLat"),
     siteLon: params.get("siteLon"),
     label: params.get("label"),
-    parcelPfi: parcelMatch?.[1] ?? null,
+    parcelPfi: site?.parcelPfi ?? pfiMatch?.[1] ?? null,
+    parcelSpi: site?.parcelSpi ?? spiMatch?.[1] ?? null,
+    siteBuildingIds: site?.siteBuildingIds ?? [],
+    siteOverlaps: site?.overlaps ?? [],
   };
 });
 
@@ -113,8 +114,8 @@ await page.locator(".fill.is-plan svg").screenshot({ path: shotPlan });
 
 writeFileSync(
   `${outDir}/site-capture-meta.json`,
-  JSON.stringify({ address: ADDRESS, lat: LAT, lon: LON, km: KM, ...meta, pose, shot3d, shotPlan }, null, 2),
+  JSON.stringify({ address: ADDRESS, km: KM, ...meta, pose, shot3d, shotPlan }, null, 2),
 );
 
 await browser.close();
-console.log(JSON.stringify({ address: ADDRESS, parcelPfi: meta.parcelPfi, shot3d, shotPlan }, null, 2));
+console.log(JSON.stringify({ address: ADDRESS, ...meta, shot3d, shotPlan }, null, 2));

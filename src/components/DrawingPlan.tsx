@@ -343,7 +343,7 @@ export function DrawingPlan({
                 d={svgRings(building.rings)}
                 fill={building.fill}
                 fillRule="evenodd"
-                {...screenPenAttrs(style.building, "miter")}
+                {...screenPenAttrs(building.site ? style.siteBuilding : style.building, "miter")}
               />
             ))}
             {(model.siteBoundaryLines ?? []).map((line, index) => (

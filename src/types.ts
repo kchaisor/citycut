@@ -201,14 +201,18 @@ export type CityModel = {
   hasEsaLandCover?: boolean;
   /** Geocoded address point when the frame came from address search (or reload via URL). */
   siteAnchor?: LonLat | null;
-  /** Vicmap parcel identifier (PFI/SPI) when the boundary loaded. */
+  /** Vicmap parcel PFI when the boundary loaded. */
   siteParcelPfi?: string | null;
+  /** Vicmap parcel SPI when the boundary loaded (may contain a backslash). */
+  siteParcelSpi?: string | null;
   /** Boundary polylines in local metres, clipped to the cut square. */
   siteBoundaryLines?: Pt[][];
   /** Building ids highlighted as on-site (yellow). */
   siteBuildingIds?: number[];
   /** Quiet note when the parcel could not be loaded. */
   siteNote?: string | null;
+  /** QA (`?qa=1`): overlap fractions for buildings that meet the parcel. */
+  siteBuildingQa?: import("./lib/siteBuildings").SiteBuildingOverlap[];
 };
 
 export type ViewState = {

@@ -2,7 +2,7 @@
 
 ## What it does (including the non-obvious part)
 
-Address-search frames fetch one Vicmap Property parcel at the geocoded point, pick site buildings by footprint overlap (>50%), and attach `siteBoundaryLines` / `siteBuildingIds` on `CityModel`. Bare lat/lon frames leave those fields unset, so plan paths, 3D buckets, Rhino layers, and Illustrator chunks stay on the pre-site code paths.
+Address-search frames fetch one Vicmap Property parcel with a point query at the geocoded address (no `resultRecordCount`; when several features return, prefer a non-road lot that contains the point), pick site buildings by footprint overlap (>50%), and attach `siteBoundaryLines` / `siteBuildingIds` on `CityModel`. Bare lat/lon frames leave those fields unset, so plan paths, 3D buckets, Rhino layers, and Illustrator chunks stay on the pre-site code paths.
 
 ## The one fact it is safe because of
 

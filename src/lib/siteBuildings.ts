@@ -60,3 +60,35 @@ export function siteBuildingIdsFromPoint(buildings: BuildingFeat[], point: Pt): 
 export function isSiteBuilding(model: { siteBuildingIds?: number[] }, buildingId: number): boolean {
   return Boolean(model.siteBuildingIds?.includes(buildingId));
 }
+
+export type SiteBuildingOverlap = {
+  id: number;
+  overlapM2: number;
+  footprintM2: number;
+  overlapFraction: number;
+  selected: boolean;
+};
+
+/** Overlap fractions for every building that meets the parcel at all (for QA). */
+export function siteBuildingOverlaps(
+  buildings: BuildingFeat[],
+  parcels: ParcelPolygon[],
+  threshold = SITE_OVERLAP_FRACTION,
+): SiteBuildingOverlap[] {
+  const rows: SiteBuildingOverlap[] = [];
+  for (const building of buildings) {
+    const footprintM2 = footprintAreaM2(building);
+    if (!(footprintM2 > 0)) continue;
+    const overlapM2 = totalOverlapM2(building, parcels);
+    if (overlapM2 <= 0) continue;
+    const overlapFraction = overlapM2 / footprintM2;
+    rows.push({
+      id: building.id,
+      overlapM2,
+      footprintM2,
+      overlapFraction,
+      selected: overlapFraction > threshold,
+    });
+  }
+  return rows.sort((a, b) => b.overlapFraction - a.overlapFraction);
+}

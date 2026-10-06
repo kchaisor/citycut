@@ -1,5 +1,6 @@
 import { clipPolyline } from "./clip";
-import { M_PER_DEG_LAT, mPerDegLon, openRing, toLocal } from "./geo";
+import { openRing, toLocal } from "./geo";
+import { pointInPolygon } from "./useCascade";
 import { VICTORIA_BOUNDS, boundsIntersect, type LonLatBounds } from "./vicmapContours";
 import type { LonLat, Pt, Ring } from "../types";
 
@@ -25,6 +26,8 @@ export type ParcelPolygon = {
 
 export type SiteParcel = {
   parcelPfi: string;
+  /** Title SPI (may contain a backslash). */
+  parcelSpi: string | null;
   /** Outer rings with holes, in local east/north metres at the cut centre. */
   polygons: ParcelPolygon[];
   /** Boundary polylines clipped to the cut square, for plan and exports. */
@@ -33,18 +36,36 @@ export type SiteParcel = {
 
 type GeoFeature = {
   geometry?: { type?: string; coordinates?: unknown } | null;
-  properties?: { parcel_pfi?: unknown; parcel_spi?: unknown; prop_pfi?: unknown; spi?: unknown } | null;
+  properties?: {
+    parcel_pfi?: unknown;
+    parcel_spi?: unknown;
+    parcel_road?: unknown;
+    prop_pfi?: unknown;
+    spi?: unknown;
+  } | null;
 };
 
 type GeoCollection = {
   features?: GeoFeature[];
-  error?: { message?: string };
+  error?: { message?: string; code?: number };
 };
 
-function parcelId(properties: GeoFeature["properties"]): string | null {
-  const raw = properties?.parcel_pfi ?? properties?.parcel_spi ?? properties?.prop_pfi ?? properties?.spi;
+function parcelPfiFromProperties(properties: GeoFeature["properties"]): string | null {
+  const raw = properties?.parcel_pfi ?? properties?.prop_pfi;
   if (raw == null || raw === "") return null;
   return String(raw);
+}
+
+function parcelSpiFromProperties(properties: GeoFeature["properties"]): string | null {
+  const raw = properties?.parcel_spi ?? properties?.spi;
+  if (raw == null || raw === "") return null;
+  return String(raw);
+}
+
+function isRoadParcel(properties: GeoFeature["properties"]): boolean {
+  return String(properties?.parcel_road ?? "")
+    .trim()
+    .toUpperCase() === "Y";
 }
 
 function asRing(raw: unknown, origin: LonLat): Ring | null {
@@ -62,7 +83,7 @@ function asRing(raw: unknown, origin: LonLat): Ring | null {
   return ring.length >= 3 ? ring : null;
 }
 
-function polygonsFromGeometry(geometry: GeoFeature["geometry"], origin: LonLat): ParcelPolygon[] {
+export function polygonsFromGeometry(geometry: GeoFeature["geometry"], origin: LonLat): ParcelPolygon[] {
   if (!geometry || typeof geometry !== "object") return [];
   const type = geometry.type;
   const coordinates = geometry.coordinates;
@@ -94,6 +115,34 @@ function polygonsFromGeometry(geometry: GeoFeature["geometry"], origin: LonLat):
   return out;
 }
 
+function featureContainsPoint(feature: GeoFeature, point: LonLat, origin: LonLat): boolean {
+  const local = toLocal(point.lat, point.lon, origin);
+  const polygons = polygonsFromGeometry(feature.geometry, origin);
+  return polygons.some((poly) => pointInPolygon(local, poly.outer, poly.holes));
+}
+
+/** When Vicmap returns more than one hit, pick the lot polygon that contains the geocoded point. */
+export function pickSiteParcelFeature(json: unknown, point: LonLat, origin: LonLat): GeoFeature | null {
+  const collection = (json ?? {}) as GeoCollection;
+  const features = Array.isArray(collection.features) ? collection.features : [];
+  if (features.length === 0) return null;
+  if (features.length === 1) return features[0];
+
+  const scored = features.map((feature) => ({
+    feature,
+    road: isRoadParcel(feature.properties),
+    contains: featureContainsPoint(feature, point, origin),
+  }));
+
+  const preferred = scored.filter((row) => !row.road && row.contains);
+  if (preferred.length > 0) return preferred[0].feature;
+
+  const containing = scored.filter((row) => row.contains);
+  if (containing.length > 0) return containing[0].feature;
+
+  return features[0];
+}
+
 function ringsToBoundaryLines(rings: Ring[]): Pt[][] {
   const lines: Pt[][] = [];
   for (const ring of rings) {
@@ -120,54 +169,41 @@ function clipBoundaryLines(lines: Pt[][], half: number): Pt[][] {
   return out;
 }
 
-/** One GeoJSON feature → parcel metadata and local geometry. */
-export function parseSiteParcelFeature(json: unknown, origin: LonLat, half: number): SiteParcel | null {
-  const collection = (json ?? {}) as GeoCollection;
-  const feature = collection.features?.[0];
+/** GeoJSON page → one site parcel at the cut centre. */
+export function parseSiteParcelFeature(
+  json: unknown,
+  point: LonLat,
+  origin: LonLat,
+  half: number,
+): SiteParcel | null {
+  const feature = pickSiteParcelFeature(json, point, origin);
   if (!feature) return null;
-  const id = parcelId(feature.properties);
-  if (!id) return null;
+  const parcelPfi = parcelPfiFromProperties(feature.properties);
+  if (!parcelPfi) return null;
   const polygons = polygonsFromGeometry(feature.geometry, origin);
   if (polygons.length === 0) return null;
   const rings = polygons.flatMap((poly) => [poly.outer, ...poly.holes]);
   return {
-    parcelPfi: id,
+    parcelPfi,
+    parcelSpi: parcelSpiFromProperties(feature.properties),
     polygons,
     boundaryLines: clipBoundaryLines(ringsToBoundaryLines(rings), half),
   };
 }
 
-/** Small WGS84 envelope around the geocoded point (one parcel, no paging). */
-export function siteParcelEnvelope(point: LonLat, bufferM = 8): {
-  xmin: number;
-  ymin: number;
-  xmax: number;
-  ymax: number;
-  spatialReference: { wkid: 4326 };
-} {
-  const dLat = bufferM / M_PER_DEG_LAT;
-  const dLon = bufferM / mPerDegLon(point.lat);
-  return {
-    xmin: point.lon - dLon,
-    ymin: point.lat - dLat,
-    xmax: point.lon + dLon,
-    ymax: point.lat + dLat,
-    spatialReference: { wkid: 4326 },
-  };
-}
-
+/**
+ * Point query against Vicmap Parcel. Do not set resultRecordCount — the service rejects it.
+ */
 export function siteParcelQueryUrl(point: LonLat): string {
-  const geometry = JSON.stringify(siteParcelEnvelope(point));
   const params = new URLSearchParams({
     where: "1=1",
-    geometry,
-    geometryType: "esriGeometryEnvelope",
+    geometry: `${point.lon},${point.lat}`,
+    geometryType: "esriGeometryPoint",
     inSR: "4326",
     spatialRel: "esriSpatialRelIntersects",
-    outFields: "parcel_pfi",
+    outFields: "parcel_pfi,parcel_spi,parcel_road",
     returnGeometry: "true",
     outSR: "4326",
-    resultRecordCount: "1",
     f: "geojson",
   });
   return `${VICMAP_PROPERTY_URL}/query?${params.toString()}`;
@@ -181,6 +217,11 @@ function pointInVictoria(point: LonLat): boolean {
     north: point.lat,
   };
   return boundsIntersect(bounds, VICTORIA_BOUNDS);
+}
+
+function collectionError(json: unknown): boolean {
+  const collection = (json ?? {}) as GeoCollection;
+  return Boolean(collection.error);
 }
 
 /**
@@ -203,13 +244,14 @@ export async function fetchSiteParcelAtPoint(
       const response = await fetch(url, { signal: abort, headers: { Accept: "application/json" } });
       if (response.status === 401 || response.status === 403 || response.status === 429) return null;
       if (!response.ok) return null;
-      return (await response.json()) as unknown;
+      const json = (await response.json()) as unknown;
+      if (collectionError(json)) return null;
+      return json;
     });
   try {
     const json = await fetchImpl(siteParcelQueryUrl(point), signal);
     if (json == null) return null;
-    const parsed = parseSiteParcelFeature(json, origin, half);
-    return parsed;
+    return parseSiteParcelFeature(json, point, origin, half);
   } catch {
     return null;
   } finally {

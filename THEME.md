@@ -105,6 +105,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--building-uniform` | `#f6f3ec` | Buildings when colour-by-use is off, that legend swatch, and the Rhino Buildings layer. |
 | `--building-manual` | `#D4A017` | 3D viewport tint for buildings with a manual height override when “Show manual edits” is on. |
 | `--site-building` | `#F2C230` | Buildings on the searched property: site plan, 3D, Rhino `Buildings::Site`, and Illustrator Site buildings layer. Manual-height amber and uniform colour apply to non-site buildings only; site buildings stay yellow unless manual-height tint is on for that building (manual wins in 3D). |
+| `--site-building-edge` | `#3D3010` | Darker outline on site-building massing in the 3D viewport so they read against retail (`--use-retail`) and civic (`--use-civic`) yellows. |
 | `--use-residential` | `#E06C75` | Residential footprints, legend swatch, 3D massing, and the Residential Rhino layer. |
 | `--use-commercial` | `#61AFEF` | Commercial footprints, legend swatch, 3D massing, and the Commercial Rhino layer. |
 | `--use-retail` | `#E5C07B` | Retail footprints, legend swatch, 3D massing, and the Retail Rhino layer. |
@@ -202,6 +203,9 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--site-boundary-mm` | Weight of the searched-property parcel boundary | `0.35` | mm |
 | `--site-boundary-stroke` | Colour of the site boundary on the plan and in exports | `#1C1B17` | colour |
 | `--site-boundary-dash` | Dash of the site boundary | `1.2 0.6` | mm, on then off |
+| `--site-building-stroke-mm` | Outline on site-building fills on the site plan | `0.35` | mm |
+| `--site-building-stroke` | Colour of that site-building outline on the plan and in exports | `#3D3010` | colour |
+| `--site-building-dash` | Dash of the site-building outline | `none` | mm, on then off |
 | `--tree-stroke-mm` | Weight of a tree-crown outline | `0.15` | mm |
 | `--tree-stroke` | Colour of a tree-crown outline | `#245232` | colour |
 | `--tree-dash` | Dash of a tree-crown outline | `none` | mm, on then off |

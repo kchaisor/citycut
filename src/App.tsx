@@ -39,6 +39,8 @@ import { replaceTreeNote, treeTierCounts } from "./lib/trees";
 import { fetchVicmapTrees, vicmapPointsToTrees, VICMAP_ATTRIBUTION } from "./lib/vicmapTrees";
 import { loadContoursForCut } from "./lib/vicmapContours";
 import { fetchOvertureBuildingsForCut } from "./lib/overtureBuildings";
+import { qaModeFromSearch } from "./lib/qaCameraBridge";
+import { siteBuildingOverlaps } from "./lib/siteBuildings";
 import { assignExternalUses, loadUseTiers } from "./lib/useCascade";
 import type { Basemap, CityModel, LonLat, PlaceHit, UiLayers, UseTierFailure, ViewState } from "./types";
 
@@ -461,9 +463,11 @@ export default function App() {
       }
       let siteAnchor: LonLat | null = null;
       let siteParcelPfi: string | null = null;
+      let siteParcelSpi: string | null = null;
       let siteBoundaryLines: CityModel["siteBoundaryLines"];
       let siteBuildingIds: number[] | undefined;
       let siteNote: string | null = null;
+      let siteBuildingQa: CityModel["siteBuildingQa"];
       const urlSite = typeof window !== "undefined" ? siteAnchorFromSearch(window.location.search) : null;
       const searchAnchor =
         anchorRef.current && shouldResolveSite(anchorRef.current, urlSite)
@@ -482,13 +486,24 @@ export default function App() {
         });
         if (controller.signal.aborted) return;
         siteParcelPfi = site.parcel?.parcelPfi ?? null;
+        siteParcelSpi = site.parcel?.parcelSpi ?? null;
         siteBoundaryLines = site.parcel?.boundaryLines;
         siteBuildingIds = site.siteBuildingIds;
         siteNote = site.note;
         const attribution = siteAttributionNote(site);
         if (attribution) sourceNote = `${sourceNote} ${attribution}`;
-        if (siteParcelPfi) sourceNote = `${sourceNote} Site parcel ${siteParcelPfi}.`;
+        if (siteParcelPfi) {
+          const spi = siteParcelSpi ? ` SPI ${siteParcelSpi}` : "";
+          sourceNote = `${sourceNote} Site parcel PFI ${siteParcelPfi}${spi}.`;
+        }
         if (siteNote) sourceNote = `${sourceNote} ${siteNote}`;
+        if (
+          typeof window !== "undefined" &&
+          qaModeFromSearch(window.location.search) &&
+          site.parcel
+        ) {
+          siteBuildingQa = siteBuildingOverlaps(buildings, site.parcel.polygons);
+        }
         writeUrl(siteAnchor);
       }
       setModel({
@@ -513,9 +528,11 @@ export default function App() {
         hasEsaLandCover: baseResult.stats.hasEsaLandCover,
         siteAnchor,
         siteParcelPfi,
+        siteParcelSpi,
         siteBoundaryLines,
         siteBuildingIds,
         siteNote,
+        siteBuildingQa,
       });
       setPhase("model");
     } catch (err) {

@@ -77,6 +77,11 @@
   --tree-stroke: #245232;
   --tree-dash: none;
 
+  /* Dark outline on site-building fills so they read against retail/civic yellows. */
+  --site-building-stroke-mm: 0.35;
+  --site-building-stroke: #3D3010;
+  --site-building-dash: none;
+
   /* Searched-property parcel boundary on the site plan and in exports. */
   --site-boundary-mm: 0.35;
   --site-boundary-stroke: #1C1B17;
