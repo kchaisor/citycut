@@ -1,8 +1,7 @@
 import { aggregateHourlyWind, type WindRoseTable } from "./windRose";
 import { WIND_CACHE_VERSION, readWindCache, writeWindCache } from "./windCache";
 
-export const OPEN_METEO_WIND_ATTRIBUTION =
-  "Weather data by Open-Meteo.com (CC BY 4.0)";
+export const OPEN_METEO_WIND_ATTRIBUTION = "Wind: Open-Meteo (CC BY 4.0).";
 
 const ARCHIVE_BASE = "https://archive-api.open-meteo.com/v1/archive";
 

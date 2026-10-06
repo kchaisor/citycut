@@ -6,7 +6,8 @@ import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
 import { attachBuildingPick } from "../lib/buildingPick";
-import { buildCityGroup, disposeObject } from "../lib/buildCity";
+import { buildCityGroup, buildHeightEditOverlay, disposeObject } from "../lib/buildCity";
+import { CAMERA_FIT_INCLUDES_HELIODON } from "../lib/sceneCameraFit";
 import { shotFromCamera, type CameraShot } from "../lib/cameraShot";
 import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
@@ -130,6 +131,33 @@ function BuildingPickLayer({
   return null;
 }
 
+function HeightEditOverlayLayer({ model, buildingId }: { model: CityModel; buildingId: number | null }) {
+  const overlayRef = useRef<THREE.Group | null>(null);
+  const hostRef = useRef<THREE.Object3D | null>(null);
+  useLayoutEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    if (overlayRef.current) {
+      host.remove(overlayRef.current);
+      disposeObject(overlayRef.current);
+      overlayRef.current = null;
+    }
+    if (buildingId == null) return;
+    const overlay = buildHeightEditOverlay(model, buildingId);
+    if (!overlay) return;
+    overlayRef.current = overlay;
+    host.add(overlay);
+    return () => {
+      if (overlayRef.current) {
+        host.remove(overlayRef.current);
+        disposeObject(overlayRef.current);
+        overlayRef.current = null;
+      }
+    };
+  }, [buildingId, model]);
+  return <group ref={hostRef} />;
+}
+
 function City({
   model,
   uniformBuildings,
@@ -137,6 +165,7 @@ function City({
   highlightManual,
   solarDiagramOn,
   solarNeutralFill,
+  heightEditBuildingId,
   onBounds,
   onBuildingPick,
   pickBuildings,
@@ -147,6 +176,7 @@ function City({
   highlightManual: boolean;
   solarDiagramOn: boolean;
   solarNeutralFill: string;
+  heightEditBuildingId: number | null;
   onBounds: (bounds: Aabb) => void;
   onBuildingPick: (buildingId: number, clientX: number, clientY: number) => void;
   pickBuildings: boolean;
@@ -192,6 +222,7 @@ function City({
   return (
     <>
       <primitive object={group} />
+      <HeightEditOverlayLayer model={model} buildingId={heightEditBuildingId} />
       <BuildingPickLayer root={group} enabled={pickBuildings} onBuildingPick={onBuildingPick} />
     </>
   );
@@ -287,15 +318,12 @@ function PerspectiveFit({
   const place = useCallback(() => {
     const controls = controlsRef.current;
     if (!controls || !active || size.width < 2 || size.height < 2) return;
-    const solarKey = solar.showPath
-      ? `${solar.radiusFactor}:${solar.month}-${solar.day}:${solar.hour}:${solar.minute}`
-      : "off";
-    const key = `${fitId}:${solar.showPath}:${solarKey}:${size.width}x${size.height}`;
+    const key = `${fitId}:${size.width}x${size.height}`;
     if (fittedKey.current === key) return;
 
     let target: [number, number, number];
     let distance: number;
-    if (solar.showPath) {
+    if (CAMERA_FIT_INCLUDES_HELIODON && solar.showPath) {
       const bounds = heliodonSceneBounds({
         lat,
         lon,
@@ -400,13 +428,13 @@ function IsoSnap({
     if (!controls || size.width < 2 || size.height < 2) return;
     const bounds = boundsRef.current;
     if (!bounds) return;
-    const key = `${snapId}:${solar.showPath ? "sun" : "nosun"}:${size.width}x${size.height}`;
+    const key = `${snapId}:${size.width}x${size.height}`;
     if (fittedKey.current === key) return;
     const sameSnap = fittedKey.current?.startsWith(`${snapId}:`) ?? false;
     if (sameSnap && touchedRef.current) return;
     if (!active && fittedKey.current !== null && !sameSnap) return;
     let fitBounds = bounds;
-    if (solar.showPath) {
+    if (CAMERA_FIT_INCLUDES_HELIODON && solar.showPath) {
       fitBounds = unionAabb(
         bounds,
         heliodonSceneBounds({
@@ -628,6 +656,15 @@ function QaCameraBridgeRegister({
         controls.update();
         persp.updateProjectionMatrix();
         invalidate();
+      },
+      getCamera() {
+        const controls = controlsRef.current;
+        if (!controls) return null;
+        const target = controls.target;
+        return {
+          eye: { x: persp.position.x, y: persp.position.y, z: persp.position.z },
+          target: { x: target.x, y: target.y, z: target.z },
+        };
       },
       projectToScreen(world) {
         const vec = new THREE.Vector3(world.x, world.y, world.z);
@@ -869,6 +906,7 @@ export function Scene3D({
   windAnimateStreaks,
   onExportReady,
   onBuildingPick,
+  heightEditBuildingId,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -885,6 +923,7 @@ export function Scene3D({
   windAnimateStreaks: boolean;
   onExportReady: (exporter: SceneExporter | null) => void;
   onBuildingPick: (buildingId: number, clientX: number, clientY: number) => void;
+  heightEditBuildingId: number | null;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
@@ -953,6 +992,7 @@ export function Scene3D({
         onBounds={onBounds}
         onBuildingPick={onBuildingPick}
         pickBuildings={model.layers.buildings}
+        heightEditBuildingId={heightEditBuildingId}
       />
       <SolarHeliodon
         lat={model.center.lat}

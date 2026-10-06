@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { MultiPolygon } from "polygon-clipping";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { BUILDING_EDGE_COLOR, BUILDING_EDGE_THRESHOLD_DEG } from "./buildingEdges";
 import { BUILDING_USE_META, SOURCE_META, buildingLayerName, uniformBuildingColor } from "./buildingUse";
 import { getColour } from "./colours";
 import { buildTreeGroup } from "./treeMassing";
@@ -603,6 +604,47 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     mesh.receiveShadow = !tree;
   });
 
+  return group;
+}
+
+const HEIGHT_EDIT_FILL_OPACITY = 0.65;
+
+/** Viewport-only clone for the building being height-edited; does not touch shared city materials. */
+export function buildHeightEditOverlay(model: CityModel, buildingId: number): THREE.Group | null {
+  const building = model.buildings.find((item) => item.id === buildingId);
+  if (!building) return null;
+  const group = new THREE.Group();
+  group.name = "HeightEditOverlay";
+  const base =
+    (model.terrain ? footprintBase(model.terrain, building.ring, model.sideM) : 0) + SURFACE.building.lift;
+  const geometries = extrudeFootprint(building, base);
+  const fillMaterial = matteStandardMaterial({
+    color: getColour("--building-uniform"),
+    transparent: true,
+    opacity: HEIGHT_EDIT_FILL_OPACITY,
+    depthWrite: false,
+  });
+  fillMaterial.toneMapped = false;
+  const edgeMaterial = new THREE.LineDashedMaterial({
+    color: BUILDING_EDGE_COLOR,
+    dashSize: 2.5,
+    gapSize: 1.8,
+    linewidth: 1,
+    transparent: true,
+    opacity: 0.95,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  for (const geometry of geometries) {
+    const mesh = new THREE.Mesh(geometry, fillMaterial);
+    mesh.renderOrder = SURFACE.building.renderOrder + 2;
+    group.add(mesh);
+    const edges = new THREE.EdgesGeometry(geometry, BUILDING_EDGE_THRESHOLD_DEG);
+    const lines = new THREE.LineSegments(edges, edgeMaterial);
+    lines.computeLineDistances();
+    lines.renderOrder = SURFACE.building.renderOrder + 3;
+    group.add(lines);
+  }
   return group;
 }
 

@@ -2,6 +2,7 @@ import type { PdfChunk } from "./aiDocument";
 import { hexRgb } from "./lineweights";
 import { getColour } from "./colours";
 import type { SheetLayout } from "./figureGround";
+import { windFlowArrowPolylines } from "./windArrowGeometry";
 import { analyzeWindPeriod, sectorCenterDeg, type WindPeriodId, type WindRoseTable } from "./windRose";
 
 /** Rose placement: lower-right of site frame on sheet (mm). */
@@ -12,11 +13,19 @@ export function windRoseSheetLayout(layout: SheetLayout): { cx: number; cy: numb
   return { cx, cy, radiusMm };
 }
 
-/** Wedge rose and prevailing-direction arrows on the site-plan sheet. */
+function sheetPoint(east: number, north: number, sideM: number, layout: SheetLayout): [number, number] {
+  const half = sideM / 2;
+  const x = layout.frameX + ((east + half) / sideM) * layout.frameMm;
+  const yDown = layout.frameY + ((half - north) / sideM) * layout.frameMm;
+  return [x, layout.pageHeightMm - yDown];
+}
+
+/** Wedge rose, prevailing-direction arrows, and frame-scale flow arrows on the site-plan sheet. */
 export function windPlanPdfChunk(
   table: WindRoseTable,
   period: WindPeriodId,
   layout: SheetLayout,
+  sideM: number,
 ): PdfChunk {
   const fill = hexRgb(getColour("--wind-rose"));
   const { cx, cy, radiusMm } = windRoseSheetLayout(layout);
@@ -66,6 +75,28 @@ export function windPlanPdfChunk(
       stroke: fill,
       strokeMm: 0.18,
       cap: "round",
+    });
+  }
+
+  const flowInk = hexRgb(getColour("--wind-streak"));
+  for (const arrow of windFlowArrowPolylines(sideM, stats.prevailingSector)) {
+    const path = arrow.path.map(([east, north]) => sheetPoint(east, north, sideM, layout));
+    paths.push({
+      rings: [path],
+      close: false,
+      stroke: flowInk,
+      strokeMm: 0.35,
+      cap: "round",
+      join: "round",
+    });
+    const head = arrow.head.map(([east, north]) => sheetPoint(east, north, sideM, layout));
+    paths.push({
+      rings: [[head[0]!, head[1]!, head[2]!]],
+      close: false,
+      stroke: flowInk,
+      strokeMm: 0.4,
+      cap: "round",
+      join: "round",
     });
   }
 

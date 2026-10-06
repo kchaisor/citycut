@@ -3,7 +3,7 @@ import { Layers, Search } from "lucide-react";
 import { MAX_SIDE_KM, MIN_SIDE_KM } from "../content/constants";
 import { formatKmSide } from "../lib/geo";
 import { searchPlaces } from "../lib/nominatim";
-import { overtureThemeCredit } from "../lib/overtureAttribution";
+import { DATA_CREDIT_BASE } from "../lib/dataCredits";
 import {
   readStoredComBuildingHeights,
   writeStoredComBuildingHeights,
@@ -251,17 +251,7 @@ export function SelectChrome({
               ? "Elevation from Mapterhorn. Contours inside Victoria come from Vicmap Elevation, and from this terrain if that service fails."
               : "Terrain is off, so the ground stays a flat surface. Contours inside Victoria still use Vicmap Elevation."}
           </p>
-          <p className="attrib">
-            {layers.buildings || layers.roads || layers.waterGreen || layers.trees
-              ? overtureThemeCredit({ hasMicrosoftFootprints: false, hasEsaLandCover: layers.trees })
-              : "© OpenStreetMap contributors"}
-            {layers.terrain && (
-              <>
-                {" · "}
-                <a href="https://mapterhorn.com/attribution">Terrain © Mapterhorn</a>
-              </>
-            )}
-          </p>
+          <p className="attrib">{DATA_CREDIT_BASE}</p>
         </div>
       </Drawer>
       <button className="primary create-fab" type="button" disabled={loading} onClick={onCreate}>

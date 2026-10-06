@@ -1,7 +1,12 @@
-import { toLocal } from "./geo";
 import type { PlaceAnchor } from "./placeLabel";
+import { toLocal } from "./geo";
 import { siteBuildingIdsFromParcel, siteBuildingIdsFromPoint } from "./siteBuildings";
-import { fetchSiteParcelAtPoint, VICMAP_PROPERTY_ATTRIBUTION, type SiteParcel } from "./vicmapSiteParcel";
+import { fetchSiteParcelCached } from "./sitePreviewCache";
+import {
+  fetchSiteParcelAtPoint,
+  VICMAP_PROPERTY_ATTRIBUTION,
+  type SiteParcel,
+} from "./vicmapSiteParcel";
 import type { BuildingFeat, LonLat } from "../types";
 
 export type SiteFrame = {
@@ -37,10 +42,14 @@ export function shouldResolveSite(anchor: PlaceAnchor | null, siteFromUrl: LonLa
 
 export async function resolveSiteFrame(input: SiteResolveInput): Promise<SiteFrame> {
   const half = input.sideM / 2;
-  const parcel = await fetchSiteParcelAtPoint(input.anchor, input.center, half, {
-    signal: input.signal,
-    fetchImpl: input.fetchImpl,
-  });
+  const parcel = input.fetchImpl
+    ? await fetchSiteParcelAtPoint(input.anchor, input.center, half, {
+        signal: input.signal,
+        fetchImpl: input.fetchImpl,
+      })
+    : await fetchSiteParcelCached(input.anchor, input.center, input.sideM, {
+        signal: input.signal,
+      });
   let siteBuildingIds: number[] = [];
   let note: string | null = null;
   const anchorLocal = toLocal(input.anchor.lat, input.anchor.lon, input.center);

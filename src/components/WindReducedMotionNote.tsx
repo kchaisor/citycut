@@ -9,7 +9,7 @@ export function WindReducedMotionNote({
 }) {
   return (
     <div className={className}>
-      <p>Streaks paused (system reduced-motion setting)</p>
+      <p>Arrows paused (system reduced-motion setting)</p>
       <label className="wind-reduced-motion-toggle">
         <input
           type="checkbox"

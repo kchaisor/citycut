@@ -71,7 +71,7 @@ import {
   writeStoredShowManualHeights,
   type HeightOverrideStore,
 } from "../lib/heightOverrides";
-import { overtureThemeCredit } from "../lib/overtureAttribution";
+import { modelStageCreditHtml } from "../lib/dataCredits";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import type { CityModel } from "../types";
 import { BuildingHeightPopover, HeightOverridePanel } from "./BuildingHeightPopover";
@@ -86,7 +86,7 @@ import { SceneBoundary } from "./SceneBoundary";
 import { SolarPanel } from "./SolarPanel";
 import { WindPanel } from "./WindPanel";
 import { WindRoseOverlay } from "./WindRoseOverlay";
-import { fetchWindRoseTable, OPEN_METEO_WIND_ATTRIBUTION } from "../lib/windFetch";
+import { fetchWindRoseTable } from "../lib/windFetch";
 import type { WindRoseTable } from "../lib/windRose";
 import {
   readStoredWindSettings,
@@ -569,6 +569,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                 onBuildingPick={(buildingId, clientX, clientY) =>
                   setHeightPick({ buildingId, clientX, clientY })
                 }
+                heightEditBuildingId={heightPick?.buildingId ?? null}
               />
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
@@ -1072,64 +1073,22 @@ export function ModelPage({ model }: { model: CityModel }) {
           </p>
         )}
         <p className="viewport-hint">{hint}</p>
-        <p className="stage-attrib">
-          Map data © OpenStreetMap contributors. Satellite imagery © Esri, Vantor, Earthstar Geographics, and the GIS
-          User Community.
-          {model.terrain && (
-            <>
-              {" "}
-              Terrain <a href="https://mapterhorn.com/attribution">© Mapterhorn</a>.
-            </>
-          )}
-          {tierCounts.vicmap > 0 && (
-            <>
-              {" "}
-              <a href="https://discover.data.vic.gov.au/dataset/vicmap-vegetation-tree-urban">
-                Vicmap Vegetation Tree Urban
-              </a>{" "}
-              © State of Victoria (Department of Transport and Planning),{" "}
-              <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.
-            </>
-          )}
-          {(model.layers.buildings ||
-            model.layers.roads ||
-            model.layers.waterGreen ||
-            model.layers.trees) && (
-            <>
-              {" "}
-              {overtureThemeCredit({
-                hasMicrosoftFootprints: model.hasMicrosoftFootprints,
-                hasEsaLandCover: model.hasEsaLandCover,
-              })}
-              .
-            </>
-          )}
-          {betterHeights && (
-            <>
-              {" "}
-              Building heights:{" "}
-              <a href={COM_BUILDING_HEIGHTS_DATASET_URL}>2023 Building Footprints © City of Melbourne</a>,{" "}
-              <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.
-            </>
-          )}
-          {windSettings.enabled && (
-            <>
-              {" "}
-              {OPEN_METEO_WIND_ATTRIBUTION}
-            </>
-          )}
-          {model.contourLayer && model.contourLayer.source !== "dem" && model.contourLayer.attribution && (
-            <>
-              {" "}
-              <a href={model.contourLayer.datasetUrl ?? "https://discover.data.vic.gov.au/dataset/vicmap-elevation-contour-line-1-to-5-metres-covering-metropolitan-melbourne"}>
-                Vicmap Elevation
-              </a>{" "}
-              © State of Victoria (Department of Transport and Planning),{" "}
-              <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 (CC-BY)</a>.
-            </>
-          )}{" "}
-          CityCut · Kelvin Chai.
-        </p>
+        <p
+          className="stage-attrib"
+          dangerouslySetInnerHTML={{
+            __html: modelStageCreditHtml({
+              windOn: windSettings.enabled,
+              satelliteOn: tab === "satellite",
+              comHeightsHtml: betterHeights
+                ? `Building heights: <a href="${COM_BUILDING_HEIGHTS_DATASET_URL}">2023 Building Footprints © City of Melbourne</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.`
+                : null,
+              contourHtml:
+                model.contourLayer && model.contourLayer.source !== "dem"
+                  ? `<a href="${model.contourLayer.datasetUrl ?? "https://discover.data.vic.gov.au/dataset/vicmap-elevation-contour-line-1-to-5-metres-covering-metropolitan-melbourne"}">Contours</a> every ${model.contourLayer.interval} m.`
+                  : null,
+            }),
+          }}
+        />
       </div>
     </div>
   );

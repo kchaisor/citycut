@@ -9,11 +9,11 @@ import { readDrawingStyle } from "./drawingStyle";
 import { figureGround, figureGroundDatum } from "./figureGround";
 import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { buildHeliodonGroundOverlay, type HeliodonGroundExportOptions } from "./heliodonDiagram";
-import { overtureThemeCredit } from "./overtureAttribution";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { contourIsIndex, demContourLayer } from "./vicmapContours";
 import { analyzeWindPeriod, sectorCenterDeg, type WindPeriodId, type WindRoseTable } from "./windRose";
-import { OPEN_METEO_WIND_ATTRIBUTION } from "./windFetch";
+import { plainDataCredit } from "./dataCredits";
+import { windFlowArrowPolylines } from "./windArrowGeometry";
 import { dashSegments } from "./drawingStyle";
 import type { CityModel, Pt } from "../types";
 
@@ -415,6 +415,35 @@ function addWindRose(
     doc.objects().addPolyline([[a[0], a[1], z], [b[0], b[1], z]], attributes);
     release(attributes);
   }
+
+  const flowZ = z + 0.05;
+  const flowLayer = layerIndex;
+  for (const arrow of windFlowArrowPolylines(model.sideM, stats.prevailingSector)) {
+    const pathPoints: number[][] = arrow.path.map(([east, north]) => {
+      const [easting, northing] = projectLocal([east, north], model.center, zone);
+      return [easting, northing, flowZ];
+    });
+    if (pathPoints.length >= 2) {
+      const attributes = new rhino.ObjectAttributes();
+      attributes.name = "Wind flow arrow";
+      attributes.layerIndex = flowLayer;
+      applyByLayerAttributes(rhino, attributes);
+      doc.objects().addPolyline(pathPoints, attributes);
+      release(attributes);
+    }
+    const headPoints: number[][] = arrow.head.map(([east, north]) => {
+      const [easting, northing] = projectLocal([east, north], model.center, zone);
+      return [easting, northing, flowZ];
+    });
+    if (headPoints.length >= 2) {
+      const attributes = new rhino.ObjectAttributes();
+      attributes.name = "Wind flow head";
+      attributes.layerIndex = flowLayer;
+      applyByLayerAttributes(rhino, attributes);
+      doc.objects().addPolyline([headPoints[0]!, headPoints[1]!, headPoints[2]!, headPoints[1]!], attributes);
+      release(attributes);
+    }
+  }
 }
 
 function addContours(
@@ -563,17 +592,11 @@ export async function cityModelTo3dm(
     doc.applicationUrl = "https://kchaisor.github.io/citycut-export/";
     doc.applicationDetails = `${model.placeLabel}; ${crs.name}`;
     const comCredit = comBuildingHeightCreditLine(model);
-    const buildingCredit =
-      model.layers.buildings || model.layers.roads || model.layers.waterGreen || model.layers.trees
-        ? overtureThemeCredit({
-            hasMicrosoftFootprints: model.hasMicrosoftFootprints,
-            hasEsaLandCover: model.hasEsaLandCover,
-          })
-        : null;
-    const windCredit = wind?.table ? OPEN_METEO_WIND_ATTRIBUTION : null;
-    doc.startSectionComments = [`CityCut. ${crs.name}. Metres, Z-up. ${CRS_NOTE}`, buildingCredit, comCredit, windCredit]
-      .filter(Boolean)
-      .join(" ");
+    const buildingCredit = plainDataCredit({
+      prefix: `CityCut. ${crs.name}. Metres, Z-up. ${CRS_NOTE}`,
+      windOn: Boolean(wind?.table),
+    });
+    doc.startSectionComments = [buildingCredit, comCredit].filter(Boolean).join(" ");
     doc.settings().modelUnitSystem = rhino.UnitSystem.Meters;
     doc.settings().pageUnitSystem = rhino.UnitSystem.Meters;
     doc.strings().set("CRS", crs.name);

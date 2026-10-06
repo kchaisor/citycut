@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import { MAP_STYLE, SATELLITE_STYLE } from "../content/constants";
-import { M_PER_DEG_LAT, formatKmSide, mPerDegLon } from "../lib/geo";
-import type { Basemap, ViewState } from "../types";
+import { M_PER_DEG_LAT, formatKmSide, mPerDegLon, squareBBox } from "../lib/geo";
+import { updateMapSiteLayers, removeMapSiteLayers } from "../lib/mapSiteLayers";
+import { fetchOvertureBuildingsForCut } from "../lib/overtureBuildings";
+import { fetchSiteParcelCached, siteBuildingIdsForPreview } from "../lib/sitePreviewCache";
+import type { Basemap, LonLat, ViewState } from "../types";
 
 export type FlyRequest = {
   token: number;
@@ -14,12 +17,15 @@ export type FlyRequest = {
 
 type Frame = { left: number; top: number; width: number; height: number };
 
+export type MapSiteSearch = LonLat & { label: string };
+
 export function MapStage({
   basemap,
   sideM,
   initialView,
   fly,
   loading,
+  siteSearch,
   onCancel,
   onView,
   onBasemap,
@@ -30,6 +36,8 @@ export function MapStage({
   initialView: ViewState;
   fly: FlyRequest | null;
   loading: boolean;
+  /** Geocoded address to highlight before the model is built. */
+  siteSearch: MapSiteSearch | null;
   onCancel: () => void;
   onView: (view: ViewState) => void;
   onBasemap: (basemap: Basemap) => void;
@@ -45,6 +53,7 @@ export function MapStage({
   const mountedFly = useRef(fly?.token ?? null);
   const [frame, setFrame] = useState<Frame | null>(null);
   const [ready, setReady] = useState(false);
+  const [mapEpoch, setMapEpoch] = useState(0);
   sideRef.current = sideM;
   onViewRef.current = onView;
   onFlyLandedRef.current = onFlyLanded;
@@ -85,6 +94,7 @@ export function MapStage({
       update();
     });
     map.on("move", update);
+    map.on("moveend", () => setMapEpoch((value) => value + 1));
     map.on("resize", update);
 
     return () => {
@@ -111,6 +121,52 @@ export function MapStage({
     map.setStyle(basemap === "satellite" ? SATELLITE_STYLE : MAP_STYLE);
     map.once("style.load", () => map.fire("move"));
   }, [basemap, ready]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !siteSearch) {
+      const mapOff = mapRef.current;
+      if (mapOff?.loaded()) removeMapSiteLayers(mapOff);
+      return;
+    }
+    let cancelled = false;
+    const center = map.getCenter();
+    const cutCenter: LonLat = { lat: center.lat, lon: center.lng };
+    const controller = new AbortController();
+
+    void (async () => {
+      try {
+        const bounds = squareBBox(cutCenter, sideM);
+        const [buildingResult, parcel] = await Promise.all([
+          fetchOvertureBuildingsForCut(bounds, cutCenter, sideM, controller.signal),
+          fetchSiteParcelCached(siteSearch, cutCenter, sideM, { signal: controller.signal }),
+        ]);
+        if (cancelled || controller.signal.aborted) return;
+        const siteBuildingIds = siteBuildingIdsForPreview(
+          buildingResult.buildings,
+          siteSearch,
+          cutCenter,
+          parcel,
+        );
+        if (!map.loaded()) await new Promise<void>((resolve) => map.once("idle", () => resolve()));
+        if (cancelled) return;
+        updateMapSiteLayers(map, {
+          center: cutCenter,
+          buildings: buildingResult.buildings,
+          siteBuildingIds,
+          parcel,
+        });
+      } catch {
+        /* Fail quietly when Vicmap or Overture errors. */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      if (map.loaded()) removeMapSiteLayers(map);
+    };
+  }, [ready, sideM, mapEpoch, siteSearch?.lat, siteSearch?.lon, siteSearch?.label]);
 
   useEffect(() => {
     const map = mapRef.current;

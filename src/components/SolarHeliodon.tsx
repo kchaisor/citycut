@@ -213,10 +213,6 @@ function textSprite(
   context.font = font;
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.lineJoin = "round";
-  context.lineWidth = 12;
-  context.strokeStyle = options.halo;
-  context.strokeText(text, canvas.width / 2, canvas.height / 2 + 3);
   context.fillStyle = options.ink;
   context.fillText(text, canvas.width / 2, canvas.height / 2 + 3);
   const sprite = canvasSprite(canvas, OVERLAY_ORDER + 40);
@@ -241,7 +237,7 @@ function setLabelOpacity(sprite: THREE.Sprite, opacity: number) {
   if (ghost) (ghost.material as THREE.SpriteMaterial).opacity = opacity * LABEL_GHOST_OPACITY;
 }
 
-function hourDotMaterial(ink: string, fill: string): THREE.SpriteMaterial | null {
+function hourDotMaterial(fill: string): THREE.SpriteMaterial | null {
   if (typeof document === "undefined") return null;
   const canvas = document.createElement("canvas");
   canvas.width = 64;
@@ -252,15 +248,12 @@ function hourDotMaterial(ink: string, fill: string): THREE.SpriteMaterial | null
   context.arc(32, 32, 22, 0, Math.PI * 2);
   context.fillStyle = fill;
   context.fill();
-  context.lineWidth = 9;
-  context.strokeStyle = ink;
-  context.stroke();
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return new THREE.SpriteMaterial({ map: texture, depthTest: false, depthWrite: false, toneMapped: false });
 }
 
-function sunIcon(core: string, casing: string): THREE.Sprite | null {
+function sunIcon(core: string): THREE.Sprite | null {
   if (typeof document === "undefined") return null;
   const canvas = document.createElement("canvas");
   canvas.width = 256;
@@ -274,19 +267,12 @@ function sunIcon(core: string, casing: string): THREE.Sprite | null {
     context.beginPath();
     context.moveTo(Math.cos(t) * 64, Math.sin(t) * 64);
     context.lineTo(Math.cos(t) * 110, Math.sin(t) * 110);
-    context.lineWidth = 24;
-    context.strokeStyle = casing;
-    context.stroke();
-    context.lineWidth = 12;
+    context.lineWidth = 14;
     context.strokeStyle = core;
     context.stroke();
   }
   context.beginPath();
-  context.arc(0, 0, 54, 0, Math.PI * 2);
-  context.fillStyle = casing;
-  context.fill();
-  context.beginPath();
-  context.arc(0, 0, 47, 0, Math.PI * 2);
+  context.arc(0, 0, 50, 0, Math.PI * 2);
   context.fillStyle = core;
   context.fill();
   return canvasSprite(canvas, OVERLAY_ORDER + 60);
@@ -423,8 +409,7 @@ function buildSunPaths(
   centre: THREE.Vector3,
 ) {
   const dome = ringRadius;
-  const dots = hourDotMaterial(palette.ink, palette.casing);
-  const casing = visibleMaterial(palette.casing);
+  const dots = hourDotMaterial(palette.casing);
   const onDome = (direction: Vec3) => vec(heliodonPoint(direction, dome, ground));
   const outward = (point: THREE.Vector3, by: number) => point.clone().sub(centre).normalize().multiplyScalar(by).add(point);
   const hourDirections = new Map<number, Vec3[]>();
@@ -435,8 +420,6 @@ function buildSunPaths(
     if (points.length < 2) continue;
     const pattern = style.pattern?.map((fraction) => fraction * sideM) ?? null;
     const stroke = strokeGeometry(points, sideM * 0.0013, pattern);
-    const outline = strokeGeometry(points, sideM * 0.0028, pattern);
-    if (outline) addTwoPass(root, new THREE.Mesh(outline, casing), OVERLAY_ORDER, false);
     if (stroke) addTwoPass(root, new THREE.Mesh(stroke, visibleMaterial(getColour(style.key))), OVERLAY_ORDER + 1);
 
     for (const mark of daylightHourMarks(lat, lon, year, month, day)) {
@@ -628,7 +611,7 @@ export function SolarHeliodon({
   const marker = useDisposable(() => {
     const group = new THREE.Group();
     const palette = heliodonPalette();
-    const icon = sunIcon(palette.sun, palette.casing);
+    const icon = sunIcon(palette.sun);
     if (icon) {
       icon.scale.setScalar(sideM * 0.075);
       group.add(icon);

@@ -1,13 +1,8 @@
-export const OVERTURE_BUILDING_ATTRIBUTION =
-  "© OpenStreetMap contributors, Overture Maps Foundation (ODbL)";
+import { DATA_CREDIT_BASE } from "./dataCredits";
 
-export const MICROSOFT_ML_ATTRIBUTION =
-  "includes Microsoft Global ML Building Footprints (ODbL)";
+export const OVERTURE_BUILDING_ATTRIBUTION = DATA_CREDIT_BASE;
 
-/** Footer, .ai, and Rhino building credit. Microsoft clause when ML footprints appear in the frame. */
-export function buildingDataCredit(hasMicrosoftFootprints: boolean): string {
-  if (hasMicrosoftFootprints) {
-    return `${OVERTURE_BUILDING_ATTRIBUTION}; ${MICROSOFT_ML_ATTRIBUTION}`;
-  }
-  return OVERTURE_BUILDING_ATTRIBUTION;
+/** @deprecated Use plainDataCredit from dataCredits.ts. Kept for callers that pass hasMicrosoftFootprints. */
+export function buildingDataCredit(_hasMicrosoftFootprints?: boolean): string {
+  return DATA_CREDIT_BASE;
 }
