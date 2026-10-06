@@ -6,14 +6,15 @@ import { sampleTerrain } from "./terrain";
 import { downwindFromSector } from "./windRose";
 
 export const WIND_ARROW_COUNT = 6;
-export const WIND_ARROW_LIFT_MIN_M = 18;
-export const WIND_ARROW_LIFT_MAX_M = 25;
-export const WIND_ARROW_LOOP_S = 4.5;
+export const WIND_ARROW_LIFT_MIN_M = 20;
+export const WIND_ARROW_LIFT_MAX_M = 30;
+/** One full travel along the curve per loop. */
+export const WIND_ARROW_LOOP_S = 3.5;
 
 export type WindArrowCurve = {
-  /** x,y,z triples along the wavy path (CityCut space). */
   positions: Float32Array;
   pointCount: number;
+  pathLenM: number;
   phase: number;
   headEast: number;
   headNorth: number;
@@ -24,8 +25,12 @@ export type WindArrowBuffer = {
   curves: WindArrowCurve[];
   sideM: number;
   terrainMin: number;
-  /** Flat array of all curve vertices for bounds checks. */
   allPositions: Float32Array;
+};
+
+export type ArrowHeadTriangle = {
+  /** x,y,z triples: tip, left base, right base (ground-plane triangle). */
+  positions: Float32Array;
 };
 
 function hash(i: number): { a: number; b: number; c: number; d: number } {
@@ -42,17 +47,84 @@ function fract(n: number): number {
   return n - Math.floor(n);
 }
 
+/** Even spread across the site (fractions of half-extent), with light jitter. */
+const ARROW_SLOTS: [number, number][] = [
+  [-0.38, -0.34],
+  [0.02, -0.4],
+  [0.4, -0.3],
+  [-0.36, 0.32],
+  [0.06, 0.38],
+  [0.42, 0.28],
+];
+
+function minPolylineSeparation(a: Float32Array, b: Float32Array, step = 3): number {
+  let min = Infinity;
+  for (let i = 0; i < a.length; i += step * 3) {
+    const ax = a[i]!;
+    const ay = a[i + 1]!;
+    const az = a[i + 2]!;
+    for (let j = 0; j < b.length; j += step * 3) {
+      const dx = ax - b[j]!;
+      const dy = ay - b[j + 1]!;
+      const dz = az - b[j + 2]!;
+      min = Math.min(min, Math.hypot(dx, dy, dz));
+    }
+  }
+  return min;
+}
+
+function buildSingleCurve(
+  wx: number,
+  wn: number,
+  px: number,
+  pz: number,
+  centreEast: number,
+  centreNorth: number,
+  pathLen: number,
+  waveAmp: number,
+  waveCount: number,
+  liftY: number,
+  segments: number,
+  phase: number,
+): WindArrowCurve {
+  const positions = new Float32Array(segments * 3);
+  const half = pathLen * 0.5;
+  const startEast = centreEast - wx * half;
+  const startNorth = centreNorth - wn * half;
+
+  for (let s = 0; s < segments; s++) {
+    const t = s / (segments - 1);
+    const along = t * pathLen;
+    const wave = waveAmp * Math.sin(t * Math.PI * waveCount);
+    const east = startEast + wx * along + px * wave;
+    const north = startNorth + wn * along + pz * wave;
+    positions[s * 3] = east;
+    positions[s * 3 + 1] = liftY;
+    positions[s * 3 + 2] = -north;
+  }
+
+  const headIdx = (segments - 1) * 3;
+  return {
+    positions,
+    pointCount: segments,
+    pathLenM: pathLen,
+    phase,
+    headEast: positions[headIdx]!,
+    headNorth: -positions[headIdx + 2]!,
+    headY: positions[headIdx + 1]!,
+  };
+}
+
 function sampleHeight(
   terrain: TerrainField | null | undefined,
   sideM: number,
   east: number,
   north: number,
 ): number {
-  const ground = terrain ? sampleTerrain(terrain, east, north, sideM) : 0;
-  return ground;
+  return terrain ? sampleTerrain(terrain, east, north, sideM) : 0;
 }
 
-/** Wavy downwind path spanning a few hundred metres, spread across the frame. */
+/** Smooth downwind S-curves on a jittered grid; constant height per arrow. */
 export function buildWindArrowBuffer(
   sideM: number,
   prevailingSector: number,
@@ -64,43 +136,74 @@ export function buildWindArrowBuffer(
   const wn = wind.north / wLen;
   const px = -wn;
   const pz = wx;
+  const half = sideM / 2;
   const curves: WindArrowCurve[] = [];
   const allChunks: number[] = [];
+  const segments = 56;
+  const minSep = sideM * 0.055;
 
   for (let i = 0; i < WIND_ARROW_COUNT; i++) {
-    const seed = hash(i + prevailingSector * 17);
-    const centreEast = (seed.a - 0.5) * sideM * 0.68;
-    const centreNorth = (seed.b - 0.5) * sideM * 0.68;
-    const pathLen = sideM * (0.28 + seed.c * 0.18);
-    const waveAmp = sideM * (0.022 + seed.d * 0.015);
-    const waveLen = sideM * (0.12 + seed.a * 0.08);
-    const segments = 48;
-    const positions = new Float32Array(segments * 3);
-    const lift =
-      WIND_ARROW_LIFT_MIN_M + seed.c * (WIND_ARROW_LIFT_MAX_M - WIND_ARROW_LIFT_MIN_M);
+    const seed = hash(i + prevailingSector * 31);
+    const slot = ARROW_SLOTS[i] ?? [0, 0];
+    const jitter = sideM * 0.045;
+    let centreEast = slot[0] * half + (seed.a - 0.5) * jitter;
+    let centreNorth = slot[1] * half + (seed.b - 0.5) * jitter;
+    let pathLen = sideM * (0.32 + seed.c * 0.11);
+    const waveCount = 1 + seed.d * 0.5;
+    let waveAmp = pathLen * (0.08 + seed.a * 0.04);
+    const groundMid = sampleHeight(terrain, sideM, centreEast, centreNorth);
+    const liftY =
+      groundMid + WIND_ARROW_LIFT_MIN_M + seed.b * (WIND_ARROW_LIFT_MAX_M - WIND_ARROW_LIFT_MIN_M);
 
-    for (let s = 0; s < segments; s++) {
-      const t = s / (segments - 1);
-      const along = (t - 0.5) * pathLen;
-      const wave = Math.sin((t * Math.PI * 2 * pathLen) / waveLen + seed.d * 6) * waveAmp;
-      const east = centreEast + wx * along + px * wave;
-      const north = centreNorth + wn * along + pz * wave;
-      const y = sampleHeight(terrain, sideM, east, north) + lift;
-      positions[s * 3] = east;
-      positions[s * 3 + 1] = y;
-      positions[s * 3 + 2] = -north;
-      allChunks.push(east, y, -north);
+    const overlapsOthers = (curve: WindArrowCurve) =>
+      curves.some((other) => minPolylineSeparation(curve.positions, other.positions) < minSep);
+
+    let curve = buildSingleCurve(
+      wx,
+      wn,
+      px,
+      pz,
+      centreEast,
+      centreNorth,
+      pathLen,
+      waveAmp,
+      waveCount,
+      liftY,
+      segments,
+      seed.d,
+    );
+
+    let attempts = 0;
+    while (overlapsOthers(curve) && attempts < 12) {
+      if (attempts < 6) {
+        const sign = attempts % 2 === 0 ? 1 : -1;
+        const step = sideM * 0.04 * (1 + Math.floor(attempts / 2));
+        centreEast += px * step * sign;
+        centreNorth += pz * step * sign;
+      } else if (attempts < 10) {
+        waveAmp *= 0.88;
+      } else {
+        pathLen = Math.max(sideM * 0.3, pathLen * 0.97);
+      }
+      curve = buildSingleCurve(
+        wx,
+        wn,
+        px,
+        pz,
+        centreEast,
+        centreNorth,
+        pathLen,
+        waveAmp,
+        waveCount,
+        liftY,
+        segments,
+        seed.d,
+      );
+      attempts += 1;
     }
 
-    const headIdx = (segments - 1) * 3;
-    curves.push({
-      positions,
-      pointCount: segments,
-      phase: seed.d,
-      headEast: positions[headIdx]!,
-      headNorth: -positions[headIdx + 2]!,
-      headY: positions[headIdx + 1]!,
-    });
+    curves.push(curve);
+    for (let k = 0; k < curve.positions.length; k++) allChunks.push(curve.positions[k]!);
   }
 
   return {
@@ -111,50 +214,75 @@ export function buildWindArrowBuffer(
   };
 }
 
-/** Append an arrowhead triangle at the path end (two extra segments). */
-export function arrowHeadSegmentPositions(curve: WindArrowCurve, sideM: number): Float32Array {
+/** Ground-plane filled arrowhead (tip + two base corners). */
+export function arrowHeadTriangle(curve: WindArrowCurve): ArrowHeadTriangle {
   const n = curve.pointCount;
   const positions = curve.positions;
   const tipX = positions[(n - 1) * 3]!;
   const tipY = positions[(n - 1) * 3 + 1]!;
   const tipZ = positions[(n - 1) * 3 + 2]!;
   const prevX = positions[(n - 2) * 3]!;
-  const prevY = positions[(n - 2) * 3 + 1]!;
   const prevZ = positions[(n - 2) * 3 + 2]!;
   let dx = tipX - prevX;
-  let dy = tipY - prevY;
   let dz = tipZ - prevZ;
-  const len = Math.hypot(dx, dy, dz) || 1;
+  const len = Math.hypot(dx, dz) || 1;
   dx /= len;
-  dy /= len;
   dz /= len;
-  const headLen = sideM * 0.045;
-  const wing = sideM * 0.022;
-  const leftX = tipX - dx * headLen - dz * wing;
-  const leftY = tipY - dy * headLen;
-  const leftZ = tipZ - dz * headLen + dx * wing;
-  const rightX = tipX - dx * headLen + dz * wing;
-  const rightY = tipY - dy * headLen;
-  const rightZ = tipZ - dz * headLen - dx * wing;
+  const headLen = curve.pathLenM * (0.06 + 0.02 * fract(curve.phase * 17));
+  const halfW = headLen * 0.55;
+  const baseX = tipX - dx * headLen;
+  const baseZ = tipZ - dz * headLen;
+  const leftX = baseX - dz * halfW;
+  const leftZ = baseZ + dx * halfW;
+  const rightX = baseX + dz * halfW;
+  const rightZ = baseZ - dx * halfW;
+  return {
+    positions: new Float32Array([
+      tipX,
+      tipY,
+      tipZ,
+      leftX,
+      tipY,
+      leftZ,
+      rightX,
+      tipY,
+      rightZ,
+    ]),
+  };
+}
+
+/** @deprecated Plan/Rhino use {@link arrowHeadTriangle}; kept for stroke export helpers. */
+export function arrowHeadSegmentPositions(curve: WindArrowCurve, _sideM: number): Float32Array {
+  const tri = arrowHeadTriangle(curve);
+  const p = tri.positions;
   return new Float32Array([
-    leftX,
-    leftY,
-    leftZ,
-    tipX,
-    tipY,
-    tipZ,
-    rightX,
-    rightY,
-    rightZ,
-    tipX,
-    tipY,
-    tipZ,
+    p[3]!,
+    p[4]!,
+    p[5]!,
+    p[0]!,
+    p[1]!,
+    p[2]!,
+    p[6]!,
+    p[7]!,
+    p[8]!,
+    p[0]!,
+    p[1]!,
+    p[2]!,
   ]);
 }
 
-export function updateWindArrowDashOffset(material: { dashOffset: number }, timeS: number, phase: number): void {
+export function windArrowFlowDashOffset(timeS: number, phase: number, pathLenM: number): number {
   const loop = ((timeS + phase * WIND_ARROW_LOOP_S) % WIND_ARROW_LOOP_S) / WIND_ARROW_LOOP_S;
-  material.dashOffset = -loop * 12;
+  return -loop * pathLenM;
+}
+
+export function updateWindArrowDashOffset(
+  material: { dashOffset: number },
+  timeS: number,
+  phase: number,
+  pathLenM: number,
+): void {
+  material.dashOffset = windArrowFlowDashOffset(timeS, phase, pathLenM);
 }
 
 export function writeLinePositions(geometry: LineGeometry | LineSegmentsGeometry, positions: Float32Array): void {
@@ -195,7 +323,7 @@ export function arrowBoundsReport(buffer: WindArrowBuffer): ArrowBoundsReport {
   return { insideFrame, aboveTerrain: minY >= floor, minY };
 }
 
-/** Plan/Rhino export: local east/north polylines with arrow heads. */
+/** Plan/Rhino export: east/north path plus filled head triangle. */
 export function windFlowArrowPolylines(
   sideM: number,
   prevailingSector: number,
@@ -207,11 +335,11 @@ export function windFlowArrowPolylines(
     for (let i = 0; i < curve.pointCount; i++) {
       path.push([curve.positions[i * 3]!, -curve.positions[i * 3 + 2]!]);
     }
-    const headSeg = arrowHeadSegmentPositions(curve, sideM);
+    const tri = arrowHeadTriangle(curve);
     const head: [number, number][] = [
-      [headSeg[0]!, -headSeg[2]!],
-      [headSeg[3]!, -headSeg[5]!],
-      [headSeg[6]!, -headSeg[8]!],
+      [tri.positions[0]!, -tri.positions[2]!],
+      [tri.positions[3]!, -tri.positions[5]!],
+      [tri.positions[6]!, -tri.positions[8]!],
     ];
     out.push({ path, head });
   }

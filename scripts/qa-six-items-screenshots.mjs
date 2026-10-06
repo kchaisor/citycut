@@ -33,8 +33,12 @@ async function closeChrome(page) {
 
 await new Promise((resolve) => setTimeout(resolve, 1500));
 
-const browser = await chromium.launch({ headless: true });
-const page = await browser.newPage({ viewport: view });
+const browser = await chromium.launch({
+  headless: true,
+  args: ["--use-gl=angle", "--use-angle=swiftshader"],
+});
+const context = await browser.newContext({ viewport: view, reducedMotion: "no-preference" });
+const page = await context.newPage();
 page.on("pageerror", (err) => console.error("pageerror", err.message));
 
 const modelUrl = `${base}?qa=1&view=persp&solar=path&heliodon=2&lat=-37.8155&lon=145.1050&km=1&siteLat=-37.8155&siteLon=145.1050&label=20%20Hamilton%20St%2C%20Mont%20Albert`;
@@ -116,16 +120,18 @@ try {
   const windEnable = page.locator(".wind-drawer input[type=checkbox]").first();
   if (!(await windEnable.isChecked())) await windEnable.check();
   await page.getByRole("button", { name: "Wind", exact: true }).click();
-  await page.mouse.move(700, 420);
+  await page.mouse.move(24, 24);
   await page.evaluate(() => {
     window.__citycutQa?.setCamera({
-      eye: { x: 350, y: 280, z: 380 },
-      target: { x: 0, y: 15, z: 0 },
+      eye: { x: 520, y: 620, z: 520 },
+      target: { x: 0, y: 0, z: 0 },
     });
   });
-  await page.screenshot({ path: `${outDir}/6-wind-arrows-t0.png`, fullPage: false });
+  await page.waitForTimeout(1500);
+  const windCanvas = page.locator(".viewport canvas");
+  await windCanvas.screenshot({ path: `${outDir}/6-wind-arrows-t0.png` });
   await page.waitForTimeout(700);
-  await page.screenshot({ path: `${outDir}/6-wind-arrows-t1.png`, fullPage: false });
+  await windCanvas.screenshot({ path: `${outDir}/6-wind-arrows-t1.png` });
   const windDiff = diffPixels(`${outDir}/6-wind-arrows-t0.png`, `${outDir}/6-wind-arrows-t1.png`);
   writeFileSync(`${outDir}/6-wind-arrows-diff.txt`, `changedPixels: ${windDiff}\n`);
 } finally {

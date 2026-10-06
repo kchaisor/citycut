@@ -92,11 +92,8 @@ export function windPlanPdfChunk(
     const head = arrow.head.map(([east, north]) => sheetPoint(east, north, sideM, layout));
     paths.push({
       rings: [[head[0]!, head[1]!, head[2]!]],
-      close: false,
-      stroke: flowInk,
-      strokeMm: 0.4,
-      cap: "round",
-      join: "round",
+      close: true,
+      fill: flowInk,
     });
   }
 
