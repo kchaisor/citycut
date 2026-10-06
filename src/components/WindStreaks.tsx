@@ -11,7 +11,7 @@ import type { TerrainField } from "../types";
 import {
   arrowHeadTriangle,
   buildWindArrowBuffer,
-  updateWindArrowDrift,
+  stepWindArrowDrift,
   windArrowHeadPositionsMetres,
   windStreakSpeedMs,
   writeHeadPositions,
@@ -24,7 +24,7 @@ import type { WindPeriodStats } from "../lib/windRose";
 declare global {
   interface Window {
     __citycutQaWind?: {
-      getHeadPositionsM: () => { east: number; north: number; y: number }[];
+      getHeadPositionsM: () => { east: number; north: number; y: number; opacity: number }[];
     };
   }
 }
@@ -91,7 +91,6 @@ function WindArrowsInner({
 }) {
   const colourTick = useColourRevision();
   const { size } = useThree();
-  const timeRef = useRef(0);
   const bufferRef = useRef(buffer);
   bufferRef.current = buffer;
 
@@ -130,9 +129,9 @@ function WindArrowsInner({
 
   useFrame((_, delta) => {
     if (!animate) return;
-    timeRef.current += delta;
+    const dt = Math.min(delta, 0.05);
     const speed = windStreakSpeedMs(buffer.sideM, stats.prevailingMedianKmh);
-    updateWindArrowDrift(buffer, stats.prevailingSector, timeRef.current, speed);
+    stepWindArrowDrift(buffer, stats.prevailingSector, dt, speed);
 
     for (const arrow of arrows) {
       const { curve } = arrow;

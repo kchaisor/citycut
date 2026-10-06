@@ -47,6 +47,10 @@ export type WindArrowCurve = {
   opacity: number;
   /** Internal respawn cycle tracker for lateral respawn. */
   _lastCycle: number;
+  /** Downwind progress within the current loop (m). */
+  driftM: number;
+  /** Accumulated time for S-curve wiggle (s). */
+  waveTimeS: number;
 };
 
 export type WindArrowBuffer = {
@@ -106,7 +110,12 @@ function lateralForRespawn(index: number, cycle: number, sideM: number): number 
   return (seed.a - 0.5) * sideM * 0.88;
 }
 
-/** Opacity ramp near upwind/downwind frame edges; fades before geometry leaves the square. */
+/** Distance the centre may travel per loop while keeping the arrow inside the frame at full opacity. */
+export function windArrowTravelRangeM(sideM: number, pathLenM: number): number {
+  return Math.max(sideM * 0.5, sideM - pathLenM);
+}
+
+/** Opacity ramp near upwind/downwind frame edges; zero if head/tail would leave the square. */
 export function windArrowEdgeOpacity(
   alongM: number,
   sideM: number,
@@ -114,15 +123,23 @@ export function windArrowEdgeOpacity(
   fadeFrac = WIND_ARROW_FADE_FRAC,
 ): number {
   const half = sideM / 2;
-  const norm = (alongM + half) / sideM;
+  const headAlong = alongM + pathLenM * 0.5;
+  const tailAlong = alongM - pathLenM * 0.5;
+  if (headAlong > half || tailAlong < -half) return 0;
+  const norm = (alongM + half - pathLenM * 0.5) / Math.max(1, sideM - pathLenM);
   let op = 1;
   if (norm < fadeFrac) op = norm / fadeFrac;
   else if (norm > 1 - fadeFrac) op = (1 - norm) / fadeFrac;
-  const headAlong = alongM + pathLenM * 0.5;
-  const tailAlong = alongM - pathLenM * 0.5;
-  if (headAlong > half + 0.5) op = 0;
-  if (tailAlong < -half - 0.5) op = 0;
   return Math.max(0, Math.min(1, op));
+}
+
+function curveInsideFrame(curve: WindArrowCurve, half: number): boolean {
+  for (let s = 0; s < curve.pointCount; s++) {
+    const east = curve.positions[s * 3]!;
+    const north = -curve.positions[s * 3 + 2]!;
+    if (Math.abs(east) > half + 0.001 || Math.abs(north) > half + 0.001) return false;
+  }
+  return true;
 }
 
 function fillCurvePositions(
@@ -190,7 +207,9 @@ function buildSingleCurve(
     speedFactor,
     index,
     opacity: 1,
-    _lastCycle: -1,
+    _lastCycle: 0,
+    driftM: 0,
+    waveTimeS: 0,
   };
   fillCurvePositions(curve, wx, wn, px, pz, phase * Math.PI * 2);
   return curve;
@@ -288,6 +307,8 @@ export function buildWindArrowBuffer(
       attempts += 1;
     }
 
+    const travelRange = windArrowTravelRangeM(sideM, curve.pathLenM);
+    curve.driftM = curve.phase * travelRange;
     curves.push(curve);
     for (let k = 0; k < curve.positions.length; k++) allChunks.push(curve.positions[k]!);
   }
@@ -308,8 +329,63 @@ function syncAllPositions(buffer: WindArrowBuffer): void {
   }
 }
 
-/** Drift whole arrows downwind with edge fade, respawn upwind, and slow S-curve wiggle. */
-export function updateWindArrowDrift(
+function writeWindArrowDriftFrame(
+  buffer: WindArrowBuffer,
+  wx: number,
+  wn: number,
+  px: number,
+  pz: number,
+  curve: WindArrowCurve,
+  travelled: number,
+  waveTimeS: number,
+  hideFrame: boolean,
+): void {
+  const half = buffer.sideM / 2;
+  curve.alongM = -half + curve.pathLenM * 0.5 + travelled;
+  const wavePhase = curve.phase * Math.PI * 2 + waveTimeS * 0.35;
+  fillCurvePositions(curve, wx, wn, px, pz, wavePhase);
+  let op = 0;
+  if (!hideFrame) {
+    op = windArrowEdgeOpacity(curve.alongM, buffer.sideM, curve.pathLenM);
+    if (op > 0 && !curveInsideFrame(curve, half)) op = 0;
+  }
+  curve.opacity = op;
+}
+
+/** Advance drift by a real-time step (used in the 3D view). */
+export function stepWindArrowDrift(
+  buffer: WindArrowBuffer,
+  prevailingSector: number,
+  deltaS: number,
+  speedMs: number,
+): void {
+  if (deltaS <= 0) return;
+  const wind = downwindFromSector(prevailingSector);
+  const wLen = Math.hypot(wind.east, wind.north) || 1;
+  const wx = wind.east / wLen;
+  const wn = wind.north / wLen;
+  const px = -wn;
+  const pz = wx;
+
+  for (const curve of buffer.curves) {
+    const travelRange = windArrowTravelRangeM(buffer.sideM, curve.pathLenM);
+    curve.waveTimeS += deltaS;
+    curve.driftM += deltaS * speedMs * curve.speedFactor;
+    let hideFrame = false;
+    if (curve.driftM >= travelRange) {
+      curve.driftM %= travelRange;
+      curve._lastCycle += 1;
+      curve.lateralM = lateralForRespawn(curve.index, curve._lastCycle, buffer.sideM);
+      hideFrame = true;
+    }
+    writeWindArrowDriftFrame(buffer, wx, wn, px, pz, curve, curve.driftM, curve.waveTimeS, hideFrame);
+  }
+
+  syncAllPositions(buffer);
+}
+
+/** Set drift from absolute time (tests and QA hooks). */
+export function applyWindArrowDriftAtTime(
   buffer: WindArrowBuffer,
   prevailingSector: number,
   timeS: number,
@@ -321,39 +397,35 @@ export function updateWindArrowDrift(
   const wn = wind.north / wLen;
   const px = -wn;
   const pz = wx;
-  const half = buffer.sideM / 2;
 
   for (const curve of buffer.curves) {
-    const travelSpan = buffer.sideM + curve.pathLenM;
+    const travelRange = windArrowTravelRangeM(buffer.sideM, curve.pathLenM);
     const speed = speedMs * curve.speedFactor;
-    const travelled = curve.phase * travelSpan + timeS * speed;
-    const cycle = Math.floor(travelled / travelSpan);
+    const totalTravel = curve.phase * travelRange + timeS * speed;
+    const cycle = Math.floor(totalTravel / travelRange);
     if (cycle !== curve._lastCycle) {
       curve._lastCycle = cycle;
       if (cycle > 0) {
         curve.lateralM = lateralForRespawn(curve.index, cycle, buffer.sideM);
       }
     }
-    const progress = travelled - cycle * travelSpan;
-    curve.alongM = -half - curve.pathLenM * 0.5 + progress;
-    const wavePhase = curve.phase * Math.PI * 2 + timeS * 0.35;
-    fillCurvePositions(curve, wx, wn, px, pz, wavePhase);
-    let op = windArrowEdgeOpacity(curve.alongM, buffer.sideM, curve.pathLenM);
-    if (op > 0) {
-      const half = buffer.sideM / 2;
-      for (let s = 0; s < curve.pointCount; s++) {
-        const east = curve.positions[s * 3]!;
-        const north = -curve.positions[s * 3 + 2]!;
-        if (Math.abs(east) > half + 0.01 || Math.abs(north) > half + 0.01) {
-          op = 0;
-          break;
-        }
-      }
-    }
-    curve.opacity = op;
+    const travelled = totalTravel - cycle * travelRange;
+    curve.driftM = travelled;
+    curve.waveTimeS = timeS;
+    writeWindArrowDriftFrame(buffer, wx, wn, px, pz, curve, travelled, timeS, false);
   }
 
   syncAllPositions(buffer);
+}
+
+/** @deprecated Use {@link stepWindArrowDrift} or {@link applyWindArrowDriftAtTime}. */
+export function updateWindArrowDrift(
+  buffer: WindArrowBuffer,
+  prevailingSector: number,
+  timeS: number,
+  speedMs: number,
+): void {
+  applyWindArrowDriftAtTime(buffer, prevailingSector, timeS, speedMs);
 }
 
 /** Ground-plane filled arrowhead (tip + two base corners). */
@@ -461,10 +533,15 @@ export function arrowBoundsReport(buffer: WindArrowBuffer): ArrowBoundsReport {
   return { insideFrame, aboveTerrain: minY >= floor, minY };
 }
 
-export type WindArrowHeadMetres = { east: number; north: number; y: number };
+export type WindArrowHeadMetres = { east: number; north: number; y: number; opacity: number };
 
 export function windArrowHeadPositionsMetres(buffer: WindArrowBuffer): WindArrowHeadMetres[] {
-  return buffer.curves.map((c) => ({ east: c.headEast, north: c.headNorth, y: c.headY }));
+  return buffer.curves.map((c) => ({
+    east: c.headEast,
+    north: c.headNorth,
+    y: c.headY,
+    opacity: c.opacity,
+  }));
 }
 
 /** Plan/Rhino export: east/north path plus filled head triangle. */

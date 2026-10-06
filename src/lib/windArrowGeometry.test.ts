@@ -64,30 +64,66 @@ describe("windArrowGeometry", () => {
     const speed = windStreakSpeedMs(1000, 20);
     const wind = downwindFromSector(4);
     updateWindArrowDrift(buffer, 4, 12, speed);
-    const before = buffer.curves.map((c) => ({ east: c.headEast, north: c.headNorth }));
+    const cyclesBefore = buffer.curves.map((c) => c._lastCycle);
+    const before = buffer.curves.map((c) => ({ east: c.headEast, north: c.headNorth, op: c.opacity }));
     updateWindArrowDrift(buffer, 4, 13, speed);
-    const after = buffer.curves.map((c) => ({ east: c.headEast, north: c.headNorth }));
+    const after = buffer.curves.map((c) => ({ east: c.headEast, north: c.headNorth, op: c.opacity }));
+    let checked = 0;
     for (let i = 0; i < before.length; i++) {
+      if (cyclesBefore[i] !== buffer.curves[i]!._lastCycle) continue;
+      if (before[i]!.op <= 0 || after[i]!.op <= 0) continue;
+      checked += 1;
       const de = after[i]!.east - before[i]!.east;
       const dn = after[i]!.north - before[i]!.north;
       const along = de * wind.east + dn * wind.north;
       expect(along).toBeGreaterThan(0);
     }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it("moves each visible head about sideM/40–sideM/25 metres per second", () => {
+    const sideM = 1000;
+    const buffer = buildWindArrowBuffer(sideM, 4, null);
+    const speed = windStreakSpeedMs(sideM, 20);
+    updateWindArrowDrift(buffer, 4, 8, speed);
+    const cycles0 = buffer.curves.map((c) => c._lastCycle);
+    const heads0 = buffer.curves.map((c) => ({
+      e: c.headEast,
+      n: c.headNorth,
+      op: c.opacity,
+    }));
+    updateWindArrowDrift(buffer, 4, 9, speed);
+    let checked = 0;
+    for (let i = 0; i < buffer.curves.length; i++) {
+      if (cycles0[i] !== buffer.curves[i]!._lastCycle) continue;
+      const h0 = heads0[i]!;
+      const h1 = {
+        e: buffer.curves[i]!.headEast,
+        n: buffer.curves[i]!.headNorth,
+        op: buffer.curves[i]!.opacity,
+      };
+      if (h0.op <= 0 || h1.op <= 0) continue;
+      checked += 1;
+      const disp = Math.hypot(h1.e - h0.e, h1.n - h0.n);
+      expect(disp).toBeGreaterThanOrEqual((sideM / 40) * 0.84);
+      expect(disp).toBeLessThanOrEqual((sideM / 25) * 1.16);
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 
   it("keeps visible drift geometry inside the frame", () => {
     const buffer = buildWindArrowBuffer(1000, 6, null);
     const speed = windStreakSpeedMs(1000, 15);
     const half = buffer.sideM / 2;
-    for (const t of [8, 14, 22, 31]) {
+    for (const t of [3, 8, 14, 22, 31, 40]) {
       updateWindArrowDrift(buffer, 6, t, speed);
       for (const curve of buffer.curves) {
-        if (curve.opacity <= 0.05) continue;
+        if (curve.opacity <= 0) continue;
         for (let s = 0; s < curve.pointCount; s++) {
           const east = curve.positions[s * 3]!;
           const north = -curve.positions[s * 3 + 2]!;
-          expect(Math.abs(east)).toBeLessThanOrEqual(half + 0.01);
-          expect(Math.abs(north)).toBeLessThanOrEqual(half + 0.01);
+          expect(Math.abs(east)).toBeLessThanOrEqual(half + 0.001);
+          expect(Math.abs(north)).toBeLessThanOrEqual(half + 0.001);
         }
       }
     }
@@ -97,9 +133,9 @@ describe("windArrowGeometry", () => {
     const sideM = 1000;
     const pathLen = 350;
     const half = sideM / 2;
-    const upwind = -half + sideM * WIND_ARROW_FADE_FRAC * 0.25;
+    const upwind = -half + pathLen * 0.5 + sideM * WIND_ARROW_FADE_FRAC * 0.2;
     const mid = 0;
-    const downwind = half - sideM * WIND_ARROW_FADE_FRAC * 0.25;
+    const downwind = half - pathLen * 0.5 - sideM * WIND_ARROW_FADE_FRAC * 0.2;
     expect(windArrowEdgeOpacity(upwind, sideM, pathLen)).toBeLessThan(0.45);
     expect(windArrowEdgeOpacity(mid, sideM, pathLen)).toBe(1);
     expect(windArrowEdgeOpacity(downwind, sideM, pathLen)).toBeLessThan(0.45);

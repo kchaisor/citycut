@@ -1,8 +1,8 @@
 /**
- * QA: drifting wind arrows — two canvas shots 2 s apart at Mont Albert.
+ * QA: drifting wind arrows — three canvas shots at Mont Albert (high oblique, full frame).
  */
 import { chromium } from "playwright";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { PNG } from "pngjs";
 
 const outDir = "/opt/cursor/artifacts";
@@ -11,9 +11,10 @@ mkdirSync(outDir, { recursive: true });
 const QUERY =
   "?lat=-37.8155&lon=145.1050&km=1&siteLat=-37.8155&siteLon=145.1050&qa=1";
 
+/** Match PR #50 six-wind-arrows high oblique (~50°) framing the full 1 km square. */
 const cameraPose = {
-  eye: { x: -320, y: 280, z: -320 },
-  look: { x: 0, y: 8, z: 0 },
+  eye: { x: 520, y: 620, z: 520 },
+  target: { x: 0, y: 0, z: 0 },
 };
 
 function diffPngBuffers(a, b) {
@@ -54,45 +55,45 @@ await page.getByLabel("Wind on").check();
 await page.locator(".wind-drawer select").selectOption("annual");
 await page.waitForTimeout(16000);
 
+await page.getByRole("button", { name: "Wind", exact: true }).click();
 await page.keyboard.press("Escape");
-await page.waitForTimeout(300);
+await page.mouse.move(24, 24);
+await page.waitForTimeout(400);
 
 await page.waitForFunction(() => window.__citycutQa?.setCamera, null, { timeout: 60_000 });
 await page.evaluate((p) => {
-  window.__citycutQa?.setCamera({ eye: p.eye, target: p.look });
+  window.__citycutQa?.setCamera({ eye: p.eye, target: p.target });
 }, cameraPose);
-await page.waitForTimeout(2500);
+await page.waitForTimeout(3000);
+await page.waitForTimeout(8000);
 
 const canvas = page.locator(".viewport canvas");
-const t0Path = `${outDir}/wind-drift-t0.png`;
-const t2Path = `${outDir}/wind-drift-t2.png`;
+const shots = [];
 
-const t0 = await canvas.screenshot();
-writeFileSync(t0Path, t0);
-const headsT0 = await page.evaluate(() => window.__citycutQaWind?.getHeadPositionsM?.() ?? null);
+async function capture(label, waitMs) {
+  if (waitMs > 0) await page.waitForTimeout(waitMs);
+  const path = `${outDir}/wind-drift-${label}.png`;
+  const png = await canvas.screenshot();
+  writeFileSync(path, png);
+  const heads = await page.evaluate(() => window.__citycutQaWind?.getHeadPositionsM?.() ?? null);
+  shots.push({ label, path, heads });
+}
 
-await page.waitForTimeout(2000);
+await capture("t0", 0);
+await capture("t2", 2000);
+await capture("t4", 2000);
 
-const t2 = await canvas.screenshot();
-writeFileSync(t2Path, t2);
-const headsT2 = await page.evaluate(() => window.__citycutQaWind?.getHeadPositionsM?.() ?? null);
-
-const { changedPixels, totalPixels } = diffPngBuffers(t0, t2);
+const { changedPixels, totalPixels } = diffPngBuffers(
+  readFileSync(shots[0].path),
+  readFileSync(shots[1].path),
+);
 
 await browser.close();
 
-console.log(
-  JSON.stringify(
-    {
-      changedPixels,
-      totalPixels,
-      fraction: changedPixels / totalPixels,
-      t0Path,
-      t2Path,
-      headsT0,
-      headsT2,
-    },
-    null,
-    2,
-  ),
-);
+const report = {
+  changedPixelsT0T2: changedPixels,
+  totalPixels,
+  shots,
+};
+writeFileSync(`${outDir}/wind-drift-qa.json`, JSON.stringify(report, null, 2));
+console.log(JSON.stringify(report, null, 2));
