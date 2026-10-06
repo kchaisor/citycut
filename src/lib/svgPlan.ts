@@ -1,4 +1,6 @@
 import { BUILDING_USE_META } from "./buildingUse";
+import { getColour } from "./colours";
+import { isSiteBuilding } from "./siteBuildings";
 import { clipPolygon, clipPolyline } from "./clip";
 import { openRing } from "./geo";
 import { PATH_WIDTH_M } from "./lineweights";
@@ -42,7 +44,7 @@ export type PlanPaths = {
   /** Buffer and union time for the footpath strip, in milliseconds. */
   pathUnionMs: number;
   rails: Pt[][];
-  buildings: { rings: Pt[][]; fill: string }[];
+  buildings: { rings: Pt[][]; fill: string; site: boolean }[];
   trees: { east: number; north: number; r: number }[];
   contours: Pt[][];
   /** Parallel to `contours`. True on every Nth interval. */
@@ -151,13 +153,15 @@ export function planPaths(
   const footpaths = unionFootpaths(footpathLines(model.roads), pathWidthM, model.sideM);
   const carriageway = unionCarriageways(carriagewaysOf(model.roads), model.sideM);
 
+  const siteFill = getColour("--site-building");
   const buildings = model.buildings
     .map((building) => {
       const rings = clipRings(building.ring, building.holes, half);
       if (!rings) return null;
-      return { rings, fill: BUILDING_USE_META[building.use].color };
+      const fill = isSiteBuilding(model, building.id) ? siteFill : BUILDING_USE_META[building.use].color;
+      return { rings, fill, site: isSiteBuilding(model, building.id) };
     })
-    .filter((building): building is { rings: Pt[][]; fill: string } => building !== null);
+    .filter((building): building is { rings: Pt[][]; fill: string; site: boolean } => building !== null);
 
   const trees = model.trees
     .filter((tree) => Math.abs(tree.at[0]) <= half && Math.abs(tree.at[1]) <= half)

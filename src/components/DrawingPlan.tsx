@@ -343,7 +343,15 @@ export function DrawingPlan({
                 d={svgRings(building.rings)}
                 fill={building.fill}
                 fillRule="evenodd"
-                {...screenPenAttrs(style.building, "miter")}
+                {...screenPenAttrs(building.site ? style.siteBuilding : style.building, "miter")}
+              />
+            ))}
+            {(model.siteBoundaryLines ?? []).map((line, index) => (
+              <path
+                key={`sb${index}`}
+                d={svgPolyline(line, false)}
+                fill="none"
+                {...screenPenAttrs(style.siteBoundary)}
               />
             ))}
             {plan.trees.map((tree, index) => (

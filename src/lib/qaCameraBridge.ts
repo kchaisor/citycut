@@ -9,9 +9,17 @@ export type QaCameraBridge = {
   projectToScreen: (world: { x: number; y: number; z: number }) => { x: number; y: number } | null;
 };
 
+export type QaSiteSnapshot = {
+  parcelPfi: string | null | undefined;
+  parcelSpi: string | null | undefined;
+  siteBuildingIds: number[];
+  overlaps: { id: number; overlapPercent: number; selected: boolean }[];
+};
+
 declare global {
   interface Window {
     __citycutQa?: QaCameraBridge;
+    __citycutQaSite?: QaSiteSnapshot;
   }
 }
 

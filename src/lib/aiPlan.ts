@@ -39,6 +39,8 @@ export const SITE_LAYER_ORDER = [
   "Paths",
   "Rail",
   "Buildings",
+  "Site buildings",
+  "Site boundary",
   "Trees",
   "Contours",
   "Contour labels",
@@ -244,6 +246,30 @@ export type SitePlanExportOptions = {
   castShadows?: boolean;
 };
 
+export function siteBoundaryChunk(
+  lines: Pt[][],
+  model: CityModel,
+  layout: SheetLayout,
+  style: LineStyles,
+): PdfChunk | null {
+  if (lines.length === 0) return null;
+  const boundaryPen = pen(style.siteBoundary);
+  if (!boundaryPen) return null;
+  return {
+    name: "Site boundary",
+    paths: lines
+      .map((line) => mapRing(line, model.sideM, layout))
+      .filter((ring) => ring.length >= 2)
+      .map((ring) => ({
+        rings: [ring],
+        close: false,
+        cap: "round" as const,
+        join: "round" as const,
+        ...boundaryPen,
+      })),
+  };
+}
+
 function resolveSitePlanExport(
   exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): SitePlanExportOptions {
@@ -401,10 +427,13 @@ export function sitePlanChunks(
     });
   }
   const buildingPen = pen(style.building, "miter");
-  if (plan.buildings.length > 0) {
+  const siteBuildingPen = pen(style.siteBuilding, "miter");
+  const siteBuildings = plan.buildings.filter((building) => building.site);
+  const otherBuildings = plan.buildings.filter((building) => !building.site);
+  if (otherBuildings.length > 0) {
     chunks.push({
       name: "Buildings",
-      paths: plan.buildings.map((building) => ({
+      paths: otherBuildings.map((building) => ({
         rings: mapRings(building.rings, model.sideM, layout),
         fill: hexRgb(building.fill),
         evenOdd: true,
@@ -413,6 +442,20 @@ export function sitePlanChunks(
       })),
     });
   }
+  if (siteBuildings.length > 0) {
+    chunks.push({
+      name: "Site buildings",
+      paths: siteBuildings.map((building) => ({
+        rings: mapRings(building.rings, model.sideM, layout),
+        fill: hexRgb(building.fill),
+        evenOdd: true,
+        close: true,
+        ...(siteBuildingPen ?? buildingPen ?? {}),
+      })),
+    });
+  }
+  const siteBoundary = siteBoundaryChunk(model.siteBoundaryLines ?? [], model, layout, style);
+  if (siteBoundary) chunks.push(siteBoundary);
   chunks.push(frameStroke(layout, style.frame));
   if (heliodon) chunks.push(heliodonPlanPdfChunk(model.sideM, layout, heliodon, scale));
   chunks.push(annotation(model, layout, plan.contourInterval, style.annotation, plan.contourSource));

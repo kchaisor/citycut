@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { getColour } from "./colours";
 import { drawingSheetColor } from "./drawingSheet";
 import { SURFACE } from "./surfaceLayers";
 
@@ -33,7 +34,19 @@ export type BuildingEdgeStats = {
 };
 
 function isBuildingBatch(name: string): boolean {
-  return name === "Buildings" || name.startsWith("Buildings::") || name.startsWith("source:");
+  return (
+    name === "Buildings" ||
+    name === "Buildings-site" ||
+    name.startsWith("Buildings::") ||
+    name.startsWith("source:")
+  );
+}
+
+function edgeColorForBatch(batchName: string): THREE.ColorRepresentation {
+  if (batchName === "Buildings-site" || batchName === "Buildings::Site") {
+    return getColour("--site-building-edge");
+  }
+  return BUILDING_EDGE_COLOR;
 }
 
 function edgesForMesh(mesh: THREE.Mesh): THREE.BufferGeometry | null {
@@ -134,7 +147,7 @@ export function addBuildingEdges(root: THREE.Object3D): BuildingEdgeStats {
     const position = geometry.getAttribute("position");
     segments += position.count / 2;
     const material = new THREE.LineBasicMaterial({
-      color: BUILDING_EDGE_COLOR,
+      color: edgeColorForBatch(batch.name),
       toneMapped: false,
       depthWrite: false,
     });

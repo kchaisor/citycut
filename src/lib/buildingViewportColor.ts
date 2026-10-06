@@ -61,6 +61,15 @@ export function snapshotBuildingViewportColors(root: THREE.Object3D, mode: Build
       });
       continue;
     }
+    if (name === "Buildings-site" || name === "Buildings::Site") {
+      const fill = getColour("--site-building");
+      forEachStandardMaterial(mesh, (material) => {
+        material.userData.viewportFill = fill;
+        material.color.setStyle(fill);
+        applyMatteFinish(material);
+      });
+      continue;
+    }
     const { use, sourceKey } = parseBuildingBucketName(name);
     const fill = buildingViewportFill(mode, use, sourceKey);
     forEachStandardMaterial(mesh, (material) => {

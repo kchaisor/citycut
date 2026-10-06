@@ -30,7 +30,9 @@ export type StrokeKey =
   | "contour"
   | "frame"
   | "annotation"
-  | "tree";
+  | "tree"
+  | "siteBoundary"
+  | "siteBuilding";
 
 export type StrokeStyle = {
   /** Printed millimetres. */
@@ -41,8 +43,22 @@ export type StrokeStyle = {
   dash: string;
 };
 
+export const SITE_BOUNDARY_MM_VAR = "--site-boundary-mm";
+/** Theme fill in colours.css; editable in the Colours panel. */
+export const SITE_BOUNDARY_COLOUR_VAR = "--site-boundary";
+/** Legacy pen name; aliases `--site-boundary` in drawing-style.css. */
+export const SITE_BOUNDARY_STROKE_VAR = "--site-boundary-stroke";
+export const SITE_BOUNDARY_DASH_VAR = "--site-boundary-dash";
+export const SITE_BUILDING_MM_VAR = "--site-building-stroke-mm";
+export const SITE_BUILDING_STROKE_VAR = "--site-building-stroke";
+export const SITE_BUILDING_DASH_VAR = "--site-building-dash";
+
 export type LineStyles = {
   building: StrokeStyle;
+  /** Outline on site-building fills on the site plan. */
+  siteBuilding: StrokeStyle;
+  /** Searched-property parcel boundary. */
+  siteBoundary: StrokeStyle;
   kerb: StrokeStyle;
   path: StrokeStyle;
   rail: StrokeStyle;
@@ -81,6 +97,8 @@ export const STROKE_KEYS = [
   "frame",
   "annotation",
   "tree",
+  "siteBoundary",
+  "siteBuilding",
 ] as const satisfies readonly StrokeKey[];
 
 export const STROKE_LABELS: Record<StrokeKey, string> = {
@@ -94,6 +112,8 @@ export const STROKE_LABELS: Record<StrokeKey, string> = {
   frame: "Frame",
   annotation: "Annotation",
   tree: "Tree crowns",
+  siteBoundary: "Site boundary",
+  siteBuilding: "Site buildings",
 };
 
 type VarNames = { mm: string; color: string; dash: string };
@@ -109,6 +129,16 @@ export const STROKE_VARS: Record<StrokeKey, VarNames> = {
   frame: { mm: "--frame-stroke-mm", color: "--frame-stroke", dash: "--frame-dash" },
   annotation: { mm: "--annotation-stroke-mm", color: "--annotation-stroke", dash: "--annotation-dash" },
   tree: { mm: "--tree-stroke-mm", color: "--tree-stroke", dash: "--tree-dash" },
+  siteBoundary: {
+    mm: SITE_BOUNDARY_MM_VAR,
+    color: SITE_BOUNDARY_COLOUR_VAR,
+    dash: SITE_BOUNDARY_DASH_VAR,
+  },
+  siteBuilding: {
+    mm: SITE_BUILDING_MM_VAR,
+    color: SITE_BUILDING_STROKE_VAR,
+    dash: SITE_BUILDING_DASH_VAR,
+  },
 };
 
 export const ROAD_FILL_VAR = "--road-fill";
@@ -142,6 +172,16 @@ const INK = drawingSheetColor("--frame-stroke");
 
 export const DEFAULT_LINE_STYLES: LineStyles = {
   building: { mm: LINE_MM.buildingCut, color: drawingSheetColor("--building-stroke"), dash: "none" },
+  siteBoundary: {
+    mm: 0.35,
+    color: COLOUR_FALLBACK[SITE_BOUNDARY_COLOUR_VAR],
+    dash: "1.2 0.6",
+  },
+  siteBuilding: {
+    mm: 0.35,
+    color: drawingSheetColor(SITE_BUILDING_STROKE_VAR),
+    dash: "none",
+  },
   kerb: { mm: LINE_MM.propertyRoad, color: drawingSheetColor("--road-kerb-stroke"), dash: "none" },
   path: { mm: 0, color: drawingSheetColor("--path-edge-stroke"), dash: "none" },
   rail: { mm: LINE_MM.secondary, color: drawingSheetColor("--rail-stroke"), dash: "none" },
@@ -187,6 +227,8 @@ const KNOWN = new Set(allStyleVariables());
 export function cloneLineStyles(style: LineStyles = DEFAULT_LINE_STYLES): LineStyles {
   return {
     building: { ...style.building },
+    siteBoundary: { ...style.siteBoundary },
+    siteBuilding: { ...style.siteBuilding },
     kerb: { ...style.kerb },
     path: { ...style.path },
     rail: { ...style.rail },
@@ -402,6 +444,10 @@ export function styleFromProperties(
     const legacyDash = normalizeDash(read("--path-dash"));
     if (legacyDash) next.path.dash = legacyDash;
   }
+  if (!parseColor(read(SITE_BOUNDARY_COLOUR_VAR))) {
+    const legacyBoundary = parseColor(read(SITE_BOUNDARY_STROKE_VAR));
+    if (legacyBoundary) next.siteBoundary.color = legacyBoundary;
+  }
   return next;
 }
 
@@ -489,8 +535,12 @@ export function copyCssText(current: LineStyles, baseline: LineStyles): string {
   const changed = changedVariables(current, baseline);
   const names = Object.keys(changed);
   if (names.length === 0) return "/* No line-style changes to paste. */\n";
-  const fills = names.filter((name) => name === ROAD_FILL_VAR || name === PATH_FILL_VAR);
-  const strokes = names.filter((name) => name !== ROAD_FILL_VAR && name !== PATH_FILL_VAR);
+  const fills = names.filter(
+    (name) => name === ROAD_FILL_VAR || name === PATH_FILL_VAR || name === SITE_BOUNDARY_COLOUR_VAR,
+  );
+  const strokes = names.filter(
+    (name) => name !== ROAD_FILL_VAR && name !== PATH_FILL_VAR && name !== SITE_BOUNDARY_COLOUR_VAR,
+  );
   const blocks: string[] = [];
   if (strokes.length > 0) {
     const body = strokes.map((name) => `${name}: ${changed[name]};`).join("\n");

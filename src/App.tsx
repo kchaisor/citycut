@@ -11,7 +11,15 @@ import {
 } from "./content/constants";
 import { comRecordsToTrees, fetchComTrees } from "./lib/comTrees";
 import { fetchTerrainForCut } from "./lib/fetchTerrain";
-import { explicitLabel, frameFromSearch, writeFrameSearch, type FrameQuery } from "./lib/frameQuery";
+import {
+  explicitLabel,
+  frameFromSearch,
+  siteAnchorFromSearch,
+  writeFrameSearch,
+  writeSiteAnchorSearch,
+  type FrameQuery,
+} from "./lib/frameQuery";
+import { resolveSiteFrame, shouldResolveSite, siteAttributionNote } from "./lib/site";
 import { squareBBox } from "./lib/geo";
 import { localityCacheKey, reverseLocality } from "./lib/nominatim";
 import { FLAT_GROUND_NOTE } from "./lib/parseOsm";
@@ -31,6 +39,8 @@ import { replaceTreeNote, treeTierCounts } from "./lib/trees";
 import { fetchVicmapTrees, vicmapPointsToTrees, VICMAP_ATTRIBUTION } from "./lib/vicmapTrees";
 import { loadContoursForCut } from "./lib/vicmapContours";
 import { fetchOvertureBuildingsForCut } from "./lib/overtureBuildings";
+import { qaModeFromSearch } from "./lib/qaCameraBridge";
+import { siteBuildingOverlaps } from "./lib/siteBuildings";
 import { assignExternalUses, loadUseTiers } from "./lib/useCascade";
 import type { Basemap, CityModel, LonLat, PlaceHit, UiLayers, UseTierFailure, ViewState } from "./types";
 
@@ -47,9 +57,17 @@ export default function App() {
   const queried = frameFromQuery();
   const initialView: ViewState = queried?.view ?? { ...MELBOURNE, zoom: DEFAULT_ZOOM };
   const sharedLabel = typeof window === "undefined" ? null : explicitLabel(window.location.search);
+  const urlSiteAnchor =
+    typeof window === "undefined" ? null : siteAnchorFromSearch(window.location.search);
   const viewRef = useRef<ViewState>(initialView);
   const anchorRef = useRef<PlaceAnchor | null>(
-    sharedLabel ? { lon: initialView.lon, lat: initialView.lat, label: sharedLabel } : null,
+    sharedLabel
+      ? {
+          lon: urlSiteAnchor?.lon ?? initialView.lon,
+          lat: urlSiteAnchor?.lat ?? initialView.lat,
+          label: sharedLabel,
+        }
+      : null,
   );
   const placeLabelRef = useRef(sharedLabel ?? coordinateLabel(initialView.lat, initialView.lon));
   const sideRef = useRef(queried?.sideKm ?? DEFAULT_SIDE_KM);
@@ -73,14 +91,15 @@ export default function App() {
   phaseRef.current = phase;
   placeLabelRef.current = placeLabel;
 
-  function writeUrl() {
+  function writeUrl(siteAnchor: LonLat | null = null) {
     const view = viewRef.current;
-    const search = writeFrameSearch(window.location.search, {
+    let search = writeFrameSearch(window.location.search, {
       lat: view.lat,
       lon: view.lon,
       sideKm: sideRef.current,
       label: placeLabelRef.current,
     });
+    if (siteAnchor !== null) search = writeSiteAnchorSearch(search, siteAnchor);
     const nextUrl = `${window.location.pathname}${search}${window.location.hash}`;
     const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     if (nextUrl !== current) window.history.replaceState(window.history.state, "", nextUrl);
@@ -442,6 +461,51 @@ export default function App() {
           .map((failure) => failure.message.charAt(0).toUpperCase() + failure.message.slice(1))
           .join(". ")}.`;
       }
+      let siteAnchor: LonLat | null = null;
+      let siteParcelPfi: string | null = null;
+      let siteParcelSpi: string | null = null;
+      let siteBoundaryLines: CityModel["siteBoundaryLines"];
+      let siteBuildingIds: number[] | undefined;
+      let siteNote: string | null = null;
+      let siteBuildingQa: CityModel["siteBuildingQa"];
+      const urlSite = typeof window !== "undefined" ? siteAnchorFromSearch(window.location.search) : null;
+      const searchAnchor =
+        anchorRef.current && shouldResolveSite(anchorRef.current, urlSite)
+          ? anchorRef.current
+          : urlSite
+            ? { lat: urlSite.lat, lon: urlSite.lon, label: label }
+            : null;
+      if (searchAnchor && modelLayers.buildings) {
+        siteAnchor = { lat: searchAnchor.lat, lon: searchAnchor.lon };
+        const site = await resolveSiteFrame({
+          anchor: siteAnchor,
+          center,
+          sideM,
+          buildings,
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        siteParcelPfi = site.parcel?.parcelPfi ?? null;
+        siteParcelSpi = site.parcel?.parcelSpi ?? null;
+        siteBoundaryLines = site.parcel?.boundaryLines;
+        siteBuildingIds = site.siteBuildingIds;
+        siteNote = site.note;
+        const attribution = siteAttributionNote(site);
+        if (attribution) sourceNote = `${sourceNote} ${attribution}`;
+        if (siteParcelPfi) {
+          const spi = siteParcelSpi ? ` SPI ${siteParcelSpi}` : "";
+          sourceNote = `${sourceNote} Site parcel PFI ${siteParcelPfi}${spi}.`;
+        }
+        if (siteNote) sourceNote = `${sourceNote} ${siteNote}`;
+        if (
+          typeof window !== "undefined" &&
+          qaModeFromSearch(window.location.search) &&
+          site.parcel
+        ) {
+          siteBuildingQa = siteBuildingOverlaps(buildings, site.parcel.polygons);
+        }
+        writeUrl(siteAnchor);
+      }
       setModel({
         center,
         sideM,
@@ -462,6 +526,13 @@ export default function App() {
         contourLayer,
         hasMicrosoftFootprints: overtureResult.stats.hasMicrosoftFootprints,
         hasEsaLandCover: baseResult.stats.hasEsaLandCover,
+        siteAnchor,
+        siteParcelPfi,
+        siteParcelSpi,
+        siteBoundaryLines,
+        siteBuildingIds,
+        siteNote,
+        siteBuildingQa,
       });
       setPhase("model");
     } catch (err) {

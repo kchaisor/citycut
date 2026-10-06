@@ -45,6 +45,7 @@ import { formatCoord, formatLengthKm } from "../lib/geo";
 import { ISO_CORNERS, type IsoCorner } from "../lib/isoCamera";
 import { drawerIsAvailable, loadModelDrawer, reduceRail, saveModelDrawer } from "../lib/railState";
 import { capturePresetFromSearch } from "../lib/captureQuery";
+import { qaModeFromSearch } from "../lib/qaCameraBridge";
 import {
   resolveView,
   VIEW_STORAGE_KEY,
@@ -286,6 +287,28 @@ export function ModelPage({ model }: { model: CityModel }) {
     }),
     [model, overrideResult, betterHeights],
   );
+
+  useEffect(() => {
+    if (!qaModeFromSearch(window.location.search)) return;
+    const qa = model.siteBuildingQa;
+    if (!qa) {
+      delete window.__citycutQaSite;
+      return;
+    }
+    window.__citycutQaSite = {
+      parcelPfi: model.siteParcelPfi,
+      parcelSpi: model.siteParcelSpi,
+      siteBuildingIds: model.siteBuildingIds ?? [],
+      overlaps: qa.map((row) => ({
+        id: row.id,
+        overlapPercent: Math.round(row.overlapFraction * 1000) / 10,
+        selected: row.selected,
+      })),
+    };
+    return () => {
+      delete window.__citycutQaSite;
+    };
+  }, [model]);
 
   const pickedBuilding =
     heightPick === null

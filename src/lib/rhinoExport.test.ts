@@ -400,7 +400,17 @@ describe("rhino export", () => {
           expect(layer.renderMaterialIndex).toBeGreaterThanOrEqual(0);
         }
       }
-      const optionalLayers = new Set(["Rail", "Terrain", "Contours", "FigureGround", "Sun path", "Shadows"]);
+      const optionalLayers = new Set([
+        "Rail",
+        "Terrain",
+        "Contours",
+        "FigureGround",
+        "Sun path",
+        "Shadows",
+        "Site",
+        "Site::Boundary",
+        "Buildings::Site",
+      ]);
       for (const path of Object.keys(keys)) {
         if (path.startsWith("Buildings::") && !seen.has(path)) continue;
         if (optionalLayers.has(path) && !seen.has(path)) continue;
@@ -419,6 +429,52 @@ describe("rhino export", () => {
         expect(attributes.colorSource).toBe(rhino.ObjectColorSource.ColorFromLayer);
         expect(attributes.materialSource).toBe(rhino.ObjectMaterialSource.MaterialFromLayer);
       }
+    } finally {
+      doc.destroy();
+    }
+  });
+
+  it("writes Site::Boundary and Buildings::Site layers when site data is present", async () => {
+    const bytes = await cityModelTo3dm({
+      ...model,
+      siteBuildingIds: [1],
+      siteBoundaryLines: [
+        [
+          [-50, -50],
+          [50, -50],
+          [50, 50],
+          [-50, 50],
+          [-50, -50],
+        ],
+      ],
+      siteParcelPfi: "PFI1",
+    });
+    const rhino = await loadRhino();
+    const doc = rhino.File3dm.fromByteArray(bytes);
+    try {
+      const paths: string[] = [];
+      for (let i = 0; i < doc.layers().count; i++) paths.push(doc.layers().get(i).fullPath);
+      expect(paths).toContain("Buildings::Site");
+      expect(paths).toContain("Site::Boundary");
+      const red = colourRgb("--site-boundary");
+      let boundarySwatch: { r: number; g: number; b: number } | null = null;
+      for (let i = 0; i < doc.layers().count; i++) {
+        const layer = doc.layers().get(i);
+        if (layer.fullPath === "Site::Boundary") boundarySwatch = layer.color as { r: number; g: number; b: number };
+      }
+      expect(boundarySwatch).toBeTruthy();
+      expect(boundarySwatch!.r).toBe(red.r);
+      expect(boundarySwatch!.g).toBe(red.g);
+      expect(boundarySwatch!.b).toBe(red.b);
+      let siteMesh = false;
+      let boundaryCurve = false;
+      for (let i = 0; i < doc.objects().count; i++) {
+        const attributes = doc.objects().get(i).attributes();
+        if (attributes.name === "Buildings::Site") siteMesh = true;
+        if (attributes.name === "Site boundary") boundaryCurve = true;
+      }
+      expect(siteMesh).toBe(true);
+      expect(boundaryCurve).toBe(true);
     } finally {
       doc.destroy();
     }
