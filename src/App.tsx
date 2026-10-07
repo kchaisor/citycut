@@ -26,6 +26,7 @@ import { localityCacheKey, reverseLocality } from "./lib/nominatim";
 import { FLAT_GROUND_NOTE } from "./lib/parseOsm";
 import { fetchOvertureBaseForCut } from "./lib/overtureBase";
 import { overtureThemeCredit } from "./lib/overtureAttribution";
+import { fetchTramLinesForCut } from "./lib/explodedAxoPt";
 import { fetchOvertureTransportationForCut } from "./lib/overtureTransportation";
 import {
   REVERSE_DEBOUNCE_MS,
@@ -319,15 +320,16 @@ export default function App() {
             roadKm: 0,
             stats: { release: "", tileCount: 0, fetchMs: 0, segmentCount: 0, skippedTomTom: 0 },
           });
+      const loadTreeTiers = wantsOverture;
       const baseTask =
-        modelLayers.waterGreen || modelLayers.trees
+        modelLayers.waterGreen || loadTreeTiers
           ? fetchOvertureBaseForCut(
               bounds,
               center,
               sideM,
               {
                 waterGreen: modelLayers.waterGreen,
-                trees: modelLayers.trees,
+                trees: loadTreeTiers,
                 frameShape: frameShapeRef.current,
               },
               controller.signal,
@@ -353,7 +355,7 @@ export default function App() {
             return { zones: null, failures };
           })
         : Promise.resolve({ zones: null, failures: [] as UseTierFailure[] });
-      const comTask = modelLayers.trees
+      const comTask = loadTreeTiers
         ? (() => {
             const comAbort = new AbortController();
             const comTimer = window.setTimeout(() => comAbort.abort(), 20000);
@@ -388,7 +390,7 @@ export default function App() {
             return null;
           })
         : Promise.resolve(null);
-      const vicmapTask = modelLayers.trees
+      const vicmapTask = loadTreeTiers
         ? (() => {
             const vicmapAbort = new AbortController();
             const vicmapTimer = window.setTimeout(() => vicmapAbort.abort(), 20000);
@@ -411,7 +413,14 @@ export default function App() {
               });
           })()
         : Promise.resolve({ points: [], error: null as string | null });
-      const [terrainResult, comResult, vicmapResult, useTiers, contourLayer, overtureResult, transportResult, baseResult] =
+      const tramTask = modelLayers.roads
+        ? fetchTramLinesForCut(
+            { center, sideM, frameShape: frameShapeRef.current, placeLabel: label, layers: modelLayers, buildings: [], roads: [], areas: [], trees: [], roadKm: 0, buildingCapHit: false, sourceNote: "" },
+            bounds,
+            controller.signal,
+          )
+        : Promise.resolve(null);
+      const [terrainResult, comResult, vicmapResult, useTiers, contourLayer, overtureResult, transportResult, baseResult, tramLines] =
         await Promise.all([
           terrainTask,
           comTask,
@@ -421,6 +430,7 @@ export default function App() {
           buildingsTask,
           transportTask,
           baseTask,
+          tramTask,
         ]);
       const overtureBuildings = overtureResult.buildings;
       const buildings = modelLayers.buildings
@@ -434,7 +444,7 @@ export default function App() {
           holes: building.holes,
         })),
       };
-      const assembled = modelLayers.trees
+      const assembled = loadTreeTiers
         ? assembleTreeTiers({
             com: comRecordsToTrees(comResult.rows, center, sideM, frameShapeRef.current),
             osm: baseResult.overtureTrees,
@@ -530,6 +540,7 @@ export default function App() {
         layers: modelLayers,
         buildings,
         roads: modelLayers.roads ? transportResult.roads : [],
+        tramLines: tramLines ?? undefined,
         areas: modelLayers.waterGreen ? baseResult.areas : [],
         trees,
         roadKm: modelLayers.roads ? transportResult.roadKm : 0,

@@ -328,6 +328,9 @@ export function DrawingPlan({
             {plan.rails.map((rail, index) => (
               <CasedLine key={`l${index}`} d={svgPolyline(rail, false)} stroke={style.rail} paper={canvas} />
             ))}
+            {plan.trams.map((tram, index) => (
+              <path key={`tr${index}`} d={svgPolyline(tram, false)} fill="none" {...screenPenAttrs(style.tram)} strokeLinecap="round" strokeLinejoin="round" />
+            ))}
             {shadowRings.map((rings, index) => (
               <path
                 key={`sh${index}`}
@@ -366,6 +369,7 @@ export function DrawingPlan({
                 cy={-tree.north}
                 r={tree.r}
                 fill={treeFill}
+                fillOpacity={style.treeFillOpacity}
                 {...screenPenAttrs(style.tree)}
               />
             ))}

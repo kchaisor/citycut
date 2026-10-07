@@ -7,9 +7,9 @@
 */
 
 :root {
-  /* Building outline. 0 hides the cut line and leaves the fill. */
-  --building-stroke-mm: 0;
-  --building-stroke: #1C1B17;
+  /* Building outline. Thin black edge on the site plan and exports. */
+  --building-stroke-mm: 0.08;
+  --building-stroke: var(--outline-building);
   --building-dash: none;
 
   /* Carriageway fill is --road-fill in colours.css. The name is unchanged, so a saved
@@ -34,18 +34,23 @@
   --path-edge-dash: none;
 
   /* Rail, drawn as a line on top of the road fill where they cross. */
-  --rail-stroke-mm: 0.15;
-  --rail-stroke: #8D6244;
+  --rail-stroke-mm: 0.08;
+  --rail-stroke: var(--outline-rail);
   --rail-dash: none;
 
-  /* Edge of a park or other green area. 0 hides the edge and leaves the fill. */
-  --green-stroke-mm: 0;
-  --green-stroke: #5E8A45;
+  /* PTV metro tram routes (dashed black). */
+  --tram-stroke-mm: 0.12;
+  --tram-stroke: var(--tram-line-stroke);
+  --tram-dash: 1.2 0.6;
+
+  /* Edge of a park or other green area. */
+  --green-stroke-mm: 0.08;
+  --green-stroke: var(--outline-green);
   --green-dash: none;
 
-  /* Edge of water. 0 hides the edge and leaves the fill. */
-  --water-stroke-mm: 0;
-  --water-stroke: #3E7C86;
+  /* Edge of water. */
+  --water-stroke-mm: 0.08;
+  --water-stroke: var(--outline-water);
   --water-dash: none;
 
   /* Contours. Dashed, and drawn on top of the road fill so they stay visible. */
@@ -72,10 +77,15 @@
   --annotation-stroke: #1C1B17;
   --annotation-dash: none;
 
-  /* Outline of a tree crown. The green fill of the crown is --tree-fill in colours.css. */
-  --tree-stroke-mm: 0.15;
-  --tree-stroke: #245232;
+  /* Outline of a tree crown. Fill is --tree-fill in colours.css. */
+  --tree-stroke-mm: 0.08;
+  --tree-stroke: var(--outline-tree);
   --tree-dash: none;
+  /* Tree crown fill opacity on the site plan and exports. */
+  --tree-fill-opacity: 0.7;
+
+  /* Exploded axo vertical guide lines. */
+  --axo-guide-dash: 0.8 0.5;
 
   /* Dark outline on site-building fills so they read against retail/civic yellows. */
   --site-building-stroke-mm: 0.35;

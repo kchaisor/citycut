@@ -57,6 +57,13 @@ async function cssFileValues(): Promise<Map<string, string>> {
   return values;
 }
 
+function resolveCssColor(raw: string | undefined, css: Map<string, string>): string | undefined {
+  if (!raw) return raw;
+  const reference = raw.match(/^var\(\s*(--[A-Za-z0-9-]+)\s*\)$/);
+  if (reference) return css.get(reference[1]) ?? raw;
+  return raw;
+}
+
 describe("drawing style css", () => {
   it("reads a stylesheet value over the typescript default", () => {
     const style = styleFromProperties((name) => {
@@ -90,7 +97,7 @@ describe("drawing style css", () => {
     expect(css.get(PATH_WIDTH_VAR)).toBe(formatMetres(DEFAULT_LINE_STYLES.pathWidthM));
     expect(css.get(PATH_FILL_VAR)?.toUpperCase()).toBe(DEFAULT_LINE_STYLES.pathFill);
     expect(css.get(PATH_EDGE_VAR)).toBe(DEFAULT_LINE_STYLES.pathEdgeOn ? "on" : "off");
-    expect(DEFAULT_LINE_STYLES.pathFill).toBe("#DADADA");
+    expect(DEFAULT_LINE_STYLES.pathFill).toBe("#D2B48C");
     expect(DEFAULT_LINE_STYLES.pathWidthM).toBe(1.2);
     expect(css.get(CONTOUR_INDEX_MM_VAR)).toBe(String(DEFAULT_LINE_STYLES.contourIndexMm));
     expect(css.get(CONTOUR_INDEX_EVERY_VAR)).toBe(String(DEFAULT_LINE_STYLES.contourIndexEvery));
@@ -99,7 +106,9 @@ describe("drawing style css", () => {
     for (const key of STROKE_KEYS) {
       const vars = STROKE_VARS[key];
       expect(css.get(vars.mm)).toBe(String(DEFAULT_LINE_STYLES[key].mm));
-      expect(css.get(vars.color)?.toUpperCase()).toBe(DEFAULT_LINE_STYLES[key].color);
+      expect(parseColor(resolveCssColor(css.get(vars.color), css))?.toUpperCase()).toBe(
+        DEFAULT_LINE_STYLES[key].color,
+      );
       expect(normalizeDash(css.get(vars.dash))).toBe(normalizeDash(DEFAULT_LINE_STYLES[key].dash));
     }
   });
@@ -167,10 +176,10 @@ describe("drawing style css", () => {
   });
 
   it("draws no on-screen stroke when a weight is 0, and brings a building outline back above 0", () => {
-    expect(DEFAULT_LINE_STYLES.building.mm).toBe(0);
-    expect(screenPenAttrs(DEFAULT_LINE_STYLES.building)).toEqual({ stroke: "none" });
-    expect(screenPenAttrs(DEFAULT_LINE_STYLES.green)).toEqual({ stroke: "none" });
-    expect(screenPenAttrs(DEFAULT_LINE_STYLES.water)).toEqual({ stroke: "none" });
+    expect(DEFAULT_LINE_STYLES.building.mm).toBe(0.08);
+    expect(screenPenAttrs(DEFAULT_LINE_STYLES.building).stroke).toBe(DEFAULT_LINE_STYLES.building.color);
+    expect(screenPenAttrs({ ...DEFAULT_LINE_STYLES.green, mm: 0 })).toEqual({ stroke: "none" });
+    expect(screenPenAttrs({ ...DEFAULT_LINE_STYLES.water, mm: 0 })).toEqual({ stroke: "none" });
     const restored = screenPenAttrs({ ...DEFAULT_LINE_STYLES.building, mm: 0.4 }, "miter");
     expect(restored.stroke).toBe(DEFAULT_LINE_STYLES.building.color);
     expect(restored.strokeWidth).toBeGreaterThan(0);

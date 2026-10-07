@@ -402,6 +402,19 @@ export function sitePlanChunks(
       paths: plan.rails.flatMap((line) => casedLine(mapRing(line, model.sideM, layout), style.rail, railPen)),
     });
   }
+  const tramPen = pen(style.tram);
+  if (plan.trams.length > 0 && tramPen) {
+    chunks.push({
+      name: "Trams",
+      paths: plan.trams.map((line) => ({
+        rings: [mapRing(line, model.sideM, layout)],
+        close: false,
+        cap: "round" as const,
+        join: "round" as const,
+        ...tramPen,
+      })),
+    });
+  }
   const treePen = pen(style.tree);
   if (plan.trees.length > 0) {
     chunks.push({

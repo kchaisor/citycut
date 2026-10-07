@@ -5,6 +5,8 @@ import {
   axoGuideAnchorPoints,
   axoGuideLines,
   axoPlateIsCircularRing,
+  axoLabelRotationDeg,
+  axoLayerLabelAnchor,
   axoLayerSvgTransform,
   axoPlateOutlineD,
   buildExplodedAxoLayers,
@@ -12,6 +14,7 @@ import {
   axoPlateProjectedHeight,
   defaultExplodedAxoGapM,
   defaultExplodedAxoSettings,
+  explodedAxoBounds,
   liftsForLayerOrder,
   planPointToIso,
   type ExplodedAxoSettings,
@@ -99,7 +102,7 @@ describe("exploded axo frame shape", () => {
       const m = modelWithShape(shape);
       const settings = defaultExplodedAxoSettings(m.sideM);
       const { layers } = buildExplodedAxoLayers(m, settings);
-      expect(layers.length).toBe(5);
+      expect(layers.length).toBe(6);
       for (const layer of layers) {
         expect(layer.clipD).toBe(layer.plateOutlineD);
         if (shape === "circle") {
@@ -139,11 +142,29 @@ describe("exploded axo stack order", () => {
     expect(paint[paint.length - 1]?.id).toBe("water");
   });
 
+  it("expands iso bounds when layer gap increases", () => {
+    const m = modelWithShape("square");
+    const tight = explodedAxoBounds(m, { ...defaultExplodedAxoSettings(m.sideM), gapM: 80 });
+    const loose = explodedAxoBounds(m, { ...defaultExplodedAxoSettings(m.sideM), gapM: 1000 });
+    expect(loose.maxY - loose.minY).toBeGreaterThan(tight.maxY - tight.minY);
+  });
+
   it("defaults gap to about 40% of plate height", () => {
     const sideM = 500;
     const gap = defaultExplodedAxoGapM(sideM);
     const plateH = axoPlateProjectedHeight(sideM);
     expect(gap / plateH).toBeCloseTo(0.4, 1);
+  });
+});
+
+describe("exploded axo labels", () => {
+  it("flips label rotation when the plate edge points left", () => {
+    const sideM = 400;
+    const anchor = axoLayerLabelAnchor(sideM, 120);
+    expect(anchor.rotateDeg).toBeGreaterThan(-91);
+    expect(anchor.rotateDeg).toBeLessThanOrEqual(91);
+    expect(axoLabelRotationDeg(-1, 0)).toBeCloseTo(0, 0);
+    expect(axoLabelRotationDeg(1, 0)).toBeCloseTo(0, 0);
   });
 });
 
@@ -160,6 +181,7 @@ describe("exploded axo layer settings", () => {
         topography: false,
         roads: false,
         green: true,
+        trees: false,
         buildings: true,
         aerial: true,
       },

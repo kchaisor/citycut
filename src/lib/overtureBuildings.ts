@@ -239,6 +239,18 @@ function fragmentToBuilding(fragment: Fragment): BuildingFeat {
   const height = overtureBuildingHeight(props, heightOpts);
   const minBase = overtureMinHeightM(props, heightOpts);
   const extrusionHeight = Math.max(1, height - minBase);
+  const names = props.names as { primary?: string; common?: { [key: string]: string } } | undefined;
+  const overtureName =
+    (typeof names?.primary === "string" && names.primary.trim()) ||
+    (names?.common && typeof names.common.en === "string" && names.common.en.trim()) ||
+    undefined;
+  const floorsRaw = props.num_floors;
+  const numFloors =
+    typeof floorsRaw === "number" && Number.isFinite(floorsRaw)
+      ? floorsRaw
+      : typeof floorsRaw === "string" && Number.isFinite(Number(floorsRaw))
+        ? Number(floorsRaw)
+        : undefined;
   const building: BuildingFeat = {
     id: stableNumericId(fragment.id),
     overtureId: fragment.id,
@@ -249,6 +261,8 @@ function fragmentToBuilding(fragment: Fragment): BuildingFeat {
     heightFromFallback: overtureHeightUsesFallback(props),
     use: tagged ?? "unclassified",
     source: tagged ? "osm_tag" : "none",
+    ...(overtureName ? { overtureName } : {}),
+    ...(numFloors != null ? { numFloors } : {}),
   };
   if (minBase > 0.5) {
     building.extrusionParts = [{ ring: fragment.ring, holes: fragment.holes, height: extrusionHeight, base: minBase }];

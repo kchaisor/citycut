@@ -44,6 +44,7 @@ export type PlanPaths = {
   /** Buffer and union time for the footpath strip, in milliseconds. */
   pathUnionMs: number;
   rails: Pt[][];
+  trams: Pt[][];
   buildings: { rings: Pt[][]; fill: string; site: boolean }[];
   trees: { east: number; north: number; r: number }[];
   contours: Pt[][];
@@ -151,6 +152,10 @@ export function planPaths(
       for (const line of clipLines(road.line, model.sideM, frameShape)) rails.push(line);
     }
   }
+  const trams: PlanPaths["trams"] = [];
+  for (const line of model.tramLines ?? []) {
+    for (const part of clipLines(line, model.sideM, frameShape)) trams.push(part);
+  }
   const footpaths = unionFootpaths(footpathLines(model.roads), pathWidthM, model.sideM, frameShape);
   const carriageway = unionCarriageways(carriagewaysOf(model.roads), model.sideM, frameShape);
 
@@ -208,6 +213,7 @@ export function planPaths(
     pathFill: footpaths.polygons,
     pathUnionMs: footpaths.ms,
     rails,
+    trams,
     buildings,
     trees,
     contours: drawn ? drawn.lines.map((line) => line.points) : [],

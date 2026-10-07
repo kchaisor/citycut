@@ -26,6 +26,7 @@ declare global {
     /** QA only: programmatic height-edit pick for screenshots. */
     __citycutQaModel?: {
       openMidriseHeightEdit: () => number | null;
+      pickBuildingNearGeoQa?: (lat: number, lon: number) => number | null;
       getSummary?: () => { buildingCount: number; roadCount: number; triangleCount: number };
       /** Pick a building for height edit (same path as 3D selection). */
       selectHeightEditBuilding?: (buildingId: number) => number;

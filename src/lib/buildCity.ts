@@ -590,8 +590,10 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     }
   }
 
-  const trees = buildTreeGroup(model.trees, sample ?? undefined);
-  if (trees) group.add(trees);
+  if (model.layers.trees) {
+    const trees = buildTreeGroup(model.trees, sample ?? undefined);
+    if (trees) group.add(trees);
+  }
 
   const boundaryLines = model.siteBoundaryLines;
   if (boundaryLines && boundaryLines.length > 0) {

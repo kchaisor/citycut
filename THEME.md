@@ -123,7 +123,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--source-zone` | `#A9C4DE` | Buildings whose use was inferred from a planning zone, and that legend swatch. |
 | `--source-none` | `#B8B8B8` | Buildings with no tag and no zone, and that legend swatch. |
 | `--road-fill` | `#4A4A4A` | Unioned carriageway on the site plan and the figure-ground, on screen and in the Illustrator file. |
-| `--path-fill` | `#DADADA` | Unioned footpath on the site plan and the figure-ground, on screen and in the Illustrator file. |
+| `--path-fill` | `#D2B48C` | Unioned footpath on the site plan and the figure-ground, on screen and in the Illustrator file. |
 | `--road-arterial` | `#3a3a3a` | Arterial ribbons in the 3D view and the 3D-view Illustrator file, and the Rhino Roads layer. |
 | `--road-local` | `#4a4a4a` | Local-street ribbons in the 3D view and the 3D-view Illustrator file. |
 | `--road-path` | `#5c5c5c` | Path ribbons in the 3D view and the 3D-view Illustrator file. |
@@ -161,7 +161,18 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--axo-road` | `#e8883a` | Exploded axo roads layer. |
 | `--axo-green` | `#8fbc8f` | Exploded axo green spaces layer. |
 | `--axo-building` | `#1a1916` | Exploded axo building footprints layer. |
-| `--axo-guide` | `#c8c8c8` | Exploded axo vertical guides and plate outlines. |
+| `--axo-guide` | `#c8c8c8` | Exploded axo vertical guides and plate outlines (solid edges). |
+| `--axo-guide-dash` | `#c8c8c8` | Exploded axo vertical guide dashes (same colour as `--axo-guide`). |
+| `--tram-line-stroke` | `#000000` | Tram routes on the site plan, exploded axo transport plate, and exports. |
+| `--outline-building` | `#000000` | Thin outline on building fills on the site plan and in exports. |
+| `--outline-tree` | `#000000` | Thin outline on tree crowns on the site plan and in exports. |
+| `--outline-road` | `#000000` | Thin outline on road fills on the site plan and in exports. |
+| `--outline-path` | `#000000` | Thin outline on footpath fills on the site plan and in exports. |
+| `--outline-green` | `#000000` | Thin outline on green fills on the site plan and in exports. |
+| `--outline-water` | `#000000` | Thin outline on water fills on the site plan and in exports. |
+| `--outline-rail` | `#000000` | Thin outline on rail lines on the site plan and in exports. |
+| `--outline-tram` | `#000000` | Thin outline on tram lines on the site plan and in exports. |
+| `--outline-contour` | `#000000` | Thin outline on contour lines on the site plan and in exports. |
 | `--axo-label` | `#6e685e` | Exploded axo layer labels. |
 | `--axo-plan-flood` | `#5a9fd4` | Exploded axo planning flood overlay (LSIO/SBO/FO hatch base). |
 | `--axo-plan-heritage` | `#c4a574` | Exploded axo heritage overlay (HO hatch base). |
@@ -199,7 +210,7 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--road-kerb-stroke` | Colour of the kerb. Mid grey, so it shows on the road fill and on the page | `#8D8983` | colour |
 | `--road-kerb-dash` | Dash of the kerb | `none` | mm, on then off |
 | `--path-width-m` | Width of a footpath strip, centred on the way. `1.2` is 0.6 m each side | `1.2` | m on the ground |
-| `--path-fill` | Fill of the unioned footpath. Defined in `src/colours.css`. Slightly darker than the page, lighter than the road | `#DADADA` | colour |
+| `--path-fill` | Fill of the unioned footpath. Defined in `src/colours.css`. Light tan on the page | `#D2B48C` | colour |
 | `--path-edge` | Whether the footpath outline is drawn. `on` or `off` | `off` | on or off |
 | `--path-edge-mm` | Weight of that outline, on the unioned edge only. `0` leaves the fill | `0` | mm |
 | `--path-edge-stroke` | Colour of the footpath outline | `#5C5C5C` | colour |
@@ -232,9 +243,14 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--site-building-stroke-mm` | Outline on site-building fills on the site plan | `0.35` | mm |
 | `--site-building-stroke` | Colour of that site-building outline on the plan and in exports | `#3D3010` | colour |
 | `--site-building-dash` | Dash of the site-building outline | `none` | mm, on then off |
-| `--tree-stroke-mm` | Weight of a tree-crown outline | `0.15` | mm |
-| `--tree-stroke` | Colour of a tree-crown outline | `#245232` | colour |
+| `--tree-stroke-mm` | Weight of a tree-crown outline | `0.08` | mm |
+| `--tree-stroke` | Colour of a tree-crown outline. Uses `--outline-tree` from `src/colours.css` | `var(--outline-tree)` | colour |
 | `--tree-dash` | Dash of a tree-crown outline | `none` | mm, on then off |
+| `--tree-fill-opacity` | Opacity of tree-crown fill on the site plan and in exports | `0.7` | 0–1 |
+| `--tram-stroke-mm` | Weight of a tram route line | `0.12` | mm |
+| `--tram-stroke` | Colour of a tram route. Uses `--tram-line-stroke` from `src/colours.css` | `var(--tram-line-stroke)` | colour |
+| `--tram-dash` | Dash of a tram route | `1.2 0.6` | mm, on then off |
+| `--axo-guide-dash` | Dash of exploded axo vertical guides | `0.8 0.5` | mm, on then off |
 | `--building-edge` | Colour of the massing edge in the 3D view | `#000000` | colour |
 
 Green fills, water fills, tree fills, and the other fills are in the Fills table above. This list is the pens. The footpath fill stays named here because the Line styles panel still edits it, and the value itself is in `src/colours.css`.

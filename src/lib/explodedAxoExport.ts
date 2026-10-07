@@ -3,6 +3,7 @@ import { getColour } from "./colours";
 import { hexRgb } from "./lineweights";
 import { formatCoord } from "./geo";
 import { plainDataCredit } from "./dataCredits";
+import { dashSegments, readDrawingStyle } from "./drawingStyle";
 import {
   AXO_LAYER_LABELS,
   axoLayerBasePaint,
@@ -109,6 +110,7 @@ export const EXPLODED_AXO_LAYER_ORDER = [
   "Topography",
   "Roads",
   "Green",
+  "Trees",
   "Buildings",
   "Aerial",
   "Labels",
@@ -123,6 +125,7 @@ function chunkNameForLayer(id: AxoLayerId): string {
   if (id === "topography") return "Topography";
   if (id === "roads") return "Roads";
   if (id === "green") return "Green";
+  if (id === "trees") return "Trees";
   if (id === "buildings") return "Buildings";
   return "Aerial";
 }
@@ -148,6 +151,7 @@ export function explodedAxoChunks(
   const pageHeightMm = page.heightMm;
   const chunks: PdfChunk[] = [];
 
+  const axoGuideDash = dashSegments(readDrawingStyle().axoGuideDash);
   const guidePaths: PdfPath[] = guides.map((guide) => ({
     rings: [
       [
@@ -155,9 +159,10 @@ export function explodedAxoChunks(
         isoToSheet([guide.x, guide.yBottom], origin, scale, pageHeightMm),
       ],
     ],
-    stroke: hexRgb(getColour("--axo-guide")),
+    stroke: hexRgb(getColour("--axo-guide-dash")),
     strokeMm: 0.08,
     close: false,
+    ...(axoGuideDash ? { dashMm: axoGuideDash, cap: "round" as const } : {}),
   }));
   if (guidePaths.length) chunks.push({ name: "Guides", paths: guidePaths });
 
@@ -188,13 +193,16 @@ export function explodedAxoChunks(
     layer.strokes.forEach((stroke, index) => {
       const rings = ringsFromIsoD(stroke, origin, scale, pageHeightMm, liftM);
       const widthScale = layer.strokeWidthScales?.[index] ?? 1;
+      const dashed = layer.strokeDashed?.[index];
+      const tramDash = dashed ? dashSegments(readDrawingStyle().tram.dash) : null;
       for (const ring of rings) {
         if (ring.length >= 2) {
           paths.push({
             rings: [ring],
-            stroke: hexRgb(axoPaintColour(strokePaint(layer, index))),
-            strokeMm: 0.25 * widthScale,
+            stroke: hexRgb(dashed ? getColour("--tram-line-stroke") : axoPaintColour(strokePaint(layer, index))),
+            strokeMm: (dashed ? readDrawingStyle().tram.mm : 0.25) * widthScale,
             close: false,
+            ...(tramDash ? { dashMm: tramDash, cap: "round" as const } : {}),
           });
         }
       }
@@ -238,6 +246,7 @@ export function explodedAxoChunks(
         sizeMm: model.sideM * 0.022 * mmPerMetre(scale),
         text: AXO_LAYER_LABELS[layer.id],
         color: hexRgb(getColour("--axo-label")),
+        rotateDeg: anchor.rotateDeg,
       });
     }
     if (texts.length) chunks.push({ name: "Labels", texts });
