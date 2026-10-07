@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { planViewportEqual, planViewportExtent } from "./planViewport";
+import { defaultExplodedAxoSettings, explodedAxoBounds } from "./explodedAxo";
+import { explodedAxoViewportExtent, planViewportEqual, planViewportExtent } from "./planViewport";
+import { model } from "./aiExport.test";
 
 describe("planViewportExtent", () => {
   const sideM = 500;
@@ -14,6 +16,15 @@ describe("planViewportExtent", () => {
     expect(planViewportEqual(afterSiteAgain, site)).toBe(true);
     expect(planViewportEqual(afterFigureAgain, figure)).toBe(true);
     expect(planViewportEqual(afterSiteAgain, afterFigureAgain)).toBe(true);
+  });
+
+  it("uses the same extent for exploded axo switching as site and figure-ground framing baseline", () => {
+    const m = model();
+    const plan = planViewportExtent(m.sideM);
+    const axo = explodedAxoViewportExtent(explodedAxoBounds(m, defaultExplodedAxoSettings(m.sideM)));
+    expect(axo.w).toBeGreaterThan(m.sideM);
+    expect(axo.h).toBeGreaterThan(m.sideM);
+    expect(planViewportEqual(plan, planViewportExtent(m.sideM))).toBe(true);
   });
 
   it("frames the cut square with asymmetric vertical margin for annotations", () => {

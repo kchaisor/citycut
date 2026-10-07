@@ -200,4 +200,12 @@
 
   /* Site-plan building shadows (mid-grey, readable under plan fills). */
   --shadow-fill: #454545;
+
+  /* Exploded axonometric drawing (on-screen and Illustrator). */
+  --axo-water: #7eb8da;
+  --axo-road: #e8883a;
+  --axo-green: #8fbc8f;
+  --axo-building: #1a1916;
+  --axo-guide: #c8c8c8;
+  --axo-label: #6e685e;
 }

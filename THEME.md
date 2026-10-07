@@ -157,6 +157,12 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--building-solar-neutral` | `#ffffff` | Single neutral building fill in the 3D viewport while the sun path and compass are on (screen only). |
 | `--heliodon-dial-disc` | `#e8e2d8` | Faint ground disc under the heliodon dial at about 35% opacity (screen only). |
 | `--shadow-fill` | `#454545` | Site-plan building shadows on the site plan. |
+| `--axo-water` | `#7eb8da` | Exploded axo floodplain / water layer. |
+| `--axo-road` | `#e8883a` | Exploded axo roads layer. |
+| `--axo-green` | `#8fbc8f` | Exploded axo green spaces layer. |
+| `--axo-building` | `#1a1916` | Exploded axo building footprints layer. |
+| `--axo-guide` | `#c8c8c8` | Exploded axo vertical guides and plate outlines. |
+| `--axo-label` | `#6e685e` | Exploded axo layer labels. |
 | `--wind-streak` | `#2B6CB0` | Animated wind streaks in the 3D viewport (~70% opacity). |
 | `--wind-rose` | `#3d5a73` | On-screen wind rose overlay and Wind export layer. |
 

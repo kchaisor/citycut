@@ -26,3 +26,18 @@ export function planViewportExtent(sideM: number): PlanViewport {
 export function planViewportEqual(a: PlanViewport, b: PlanViewport): boolean {
   return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 }
+
+/** Fit viewport for exploded axo in isometric screen metres. */
+export function explodedAxoViewportExtent(bounds: {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}): PlanViewport {
+  return {
+    x: bounds.minX,
+    y: bounds.minY,
+    w: bounds.maxX - bounds.minX,
+    h: bounds.maxY - bounds.minY,
+  };
+}

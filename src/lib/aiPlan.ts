@@ -30,6 +30,12 @@ import { planBuildingStrokeStyle } from "./planBuildingFill";
 import { windPlanPdfChunk } from "./windExport";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { plainDataCredit } from "./dataCredits";
+import {
+  explodedAxoChunks,
+  explodedAxoPageSize,
+  EXPLODED_AXO_LAYER_ORDER,
+} from "./explodedAxoExport";
+import { defaultExplodedAxoSettings, type ExplodedAxoSettings } from "./explodedAxo";
 import type { CityModel, Pt } from "../types";
 
 export const SITE_LAYER_ORDER = [
@@ -623,4 +629,24 @@ export async function figureGroundAi(
     );
   }
   return figureGroundPdf(model, scale, style, heliodon);
+}
+
+export async function explodedAxoPdf(
+  model: CityModel,
+  scale: number,
+  settings: ExplodedAxoSettings = defaultExplodedAxoSettings(model.sideM),
+  satelliteNote = "Satellite imagery omitted from this file.",
+): Promise<Uint8Array> {
+  const page = explodedAxoPageSize(model, settings, scale);
+  const chunks = explodedAxoChunks(model, scale, settings, satelliteNote);
+  return buildLayeredPdf(page.widthMm, page.heightMm, chunks, [...EXPLODED_AXO_LAYER_ORDER]);
+}
+
+export async function explodedAxoAi(
+  model: CityModel,
+  scale: number,
+  settings?: ExplodedAxoSettings,
+  satelliteNote?: string,
+): Promise<Uint8Array> {
+  return explodedAxoPdf(model, scale, settings, satelliteNote);
 }
