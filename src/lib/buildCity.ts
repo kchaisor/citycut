@@ -631,6 +631,9 @@ const HEIGHT_EDIT_FILL_OPACITY = SELECTED_BUILDING_FILL_OPACITY;
 export const HEIGHT_EDIT_EDGE_DASH_M = 2;
 export const HEIGHT_EDIT_EDGE_GAP_M = 1.5;
 
+/** Draw after the merged city so the selection overlay is never sorted behind it. */
+export const SELECTION_OVERLAY_RENDER_ORDER = SURFACE.building.renderOrder + 120;
+
 /** Viewport-only clone for the building being height-edited; does not touch shared city materials. */
 export function buildHeightEditOverlay(
   model: CityModel,
@@ -652,6 +655,7 @@ export function buildHeightEditOverlay(
   });
   fillMaterial.toneMapped = false;
   fillMaterial.depthTest = true;
+  fillMaterial.polygonOffset = false;
   const edgeMaterial = new THREE.LineDashedMaterial({
     color: BUILDING_EDGE_COLOR,
     dashSize: HEIGHT_EDIT_EDGE_DASH_M,
@@ -659,18 +663,18 @@ export function buildHeightEditOverlay(
     scale: 1,
     transparent: true,
     opacity: 1,
-    depthTest: true,
+    depthTest: false,
     depthWrite: false,
     toneMapped: false,
   });
   for (const geometry of geometries) {
     const mesh = new THREE.Mesh(geometry, fillMaterial);
-    mesh.renderOrder = SURFACE.building.renderOrder + 4;
+    mesh.renderOrder = SELECTION_OVERLAY_RENDER_ORDER;
     group.add(mesh);
     const edges = new THREE.EdgesGeometry(geometry, BUILDING_EDGE_THRESHOLD_DEG);
     const lines = new THREE.LineSegments(edges, edgeMaterial);
     lines.computeLineDistances();
-    lines.renderOrder = SURFACE.building.renderOrder + 5;
+    lines.renderOrder = SELECTION_OVERLAY_RENDER_ORDER + 1;
     group.add(lines);
   }
   return group;

@@ -43,7 +43,8 @@ export function hideBuildingForHeightEdit(root: THREE.Object3D, buildingId: numb
     const byGroup = mesh.userData.buildingIdByGroup as number[] | undefined;
     const groups = mesh.geometry?.groups;
     if (!byGroup?.length || !groups?.length) return;
-    for (let index = 0; index < groups.length; index++) {
+    const groupCount = Math.min(byGroup.length, groups.length);
+    for (let index = 0; index < groupCount; index++) {
       if (!sameBuildingId(byGroup[index], targetId)) continue;
       const group = groups[index]!;
       groupRestores.push({ mesh, groupIndex: index, count: group.count });

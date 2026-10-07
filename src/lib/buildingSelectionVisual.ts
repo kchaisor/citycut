@@ -38,7 +38,6 @@ export function mountSelectedBuildingVisual(
     restoreHide();
     return null;
   }
-  cityRoot.add(overlay);
   const fillMesh = overlay.children.find((child) => child instanceof THREE.Mesh) as THREE.Mesh | undefined;
   const mat = fillMesh?.material as THREE.MeshStandardMaterial | undefined;
   const overlayOpacity = mat?.opacity ?? SELECTED_BUILDING_FILL_OPACITY;
@@ -48,7 +47,6 @@ export function mountSelectedBuildingVisual(
     overlayOpacity,
     audit,
     restore: () => {
-      cityRoot.remove(overlay);
       disposeObject(overlay);
       restoreHide();
     },

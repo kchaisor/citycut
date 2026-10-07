@@ -7,7 +7,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
 import { attachBuildingPick } from "../lib/buildingPick";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
-import { mountSelectedBuildingVisual } from "../lib/buildingSelectionVisual";
+import { auditBuildingSelection, mountSelectedBuildingVisual } from "../lib/buildingSelectionVisual";
 import { CAMERA_FIT_INCLUDES_HELIODON } from "../lib/sceneCameraFit";
 import { shotFromCamera, type CameraShot } from "../lib/cameraShot";
 import { getColour } from "../lib/colours";
@@ -145,29 +145,40 @@ function HeightEditOverlayLayer({
   cityRoot: THREE.Object3D;
   colourMode: BuildingColourMode;
 }) {
-  const overlayRef = useRef<THREE.Group | null>(null);
+  const [overlay, setOverlay] = useState<THREE.Group | null>(null);
   useLayoutEffect(() => {
     if (buildingId == null) {
+      setOverlay(null);
       if (typeof window !== "undefined") delete window.__citycutQaSelectionAudit;
       return;
     }
     const mounted = mountSelectedBuildingVisual(cityRoot, model, buildingId, colourMode);
     if (!mounted) {
+      setOverlay(null);
       if (typeof window !== "undefined") delete window.__citycutQaSelectionAudit;
       return;
     }
-    overlayRef.current = mounted.overlay;
+    setOverlay(mounted.overlay);
     if (typeof window !== "undefined" && qaModeFromSearch(window.location.search)) {
-      window.__citycutQaSelectionAudit = mounted.audit;
-      console.info("[CityCut selection]", mounted.audit);
+      const publishAudit = () => {
+        window.__citycutQaSelectionAudit = auditBuildingSelection(cityRoot, buildingId, mounted.overlay);
+        console.info("[CityCut selection]", window.__citycutQaSelectionAudit);
+      };
+      publishAudit();
+      const frame = window.requestAnimationFrame(publishAudit);
+      return () => {
+        window.cancelAnimationFrame(frame);
+        mounted.restore();
+        setOverlay(null);
+        delete window.__citycutQaSelectionAudit;
+      };
     }
     return () => {
       mounted.restore();
-      overlayRef.current = null;
-      if (typeof window !== "undefined") delete window.__citycutQaSelectionAudit;
+      setOverlay(null);
     };
   }, [buildingId, cityRoot, colourMode, model]);
-  return null;
+  return overlay ? <primitive object={overlay} /> : null;
 }
 
 function City({

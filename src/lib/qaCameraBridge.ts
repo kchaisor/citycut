@@ -32,6 +32,13 @@ declare global {
       /** ~16 m foreground block for selection QA screenshots. */
       pickForegroundBuildingForSelectionQa?: () => number | null;
       frameSelectionBuilding?: (buildingId: number, variant?: "through" | "oblique") => boolean;
+      pickTallTowerForSelectionQa?: () => number | null;
+      frameAerialSelectionBuilding?: (buildingId: number) => boolean;
+      clearHeightSelection?: () => void;
+      selectionScreenClip?: (
+        buildingId: number,
+        padPx?: number,
+      ) => { x: number; y: number; width: number; height: number } | null;
       /** Footprints for QA framing (local metres). */
       listBuildings?: () => { id: number; height: number; east: number; north: number }[];
     };
@@ -42,6 +49,11 @@ declare global {
 export function qaModeFromSearch(search: string): boolean {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   return params.get("qa") === "1";
+}
+
+export function qaHideHeightPopoverFromSearch(search: string): boolean {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  return params.get("qaHidePopover") === "1";
 }
 
 export function registerQaCameraBridge(bridge: QaCameraBridge | null): void {

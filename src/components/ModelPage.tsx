@@ -47,7 +47,7 @@ import { cutSizeLabel } from "../lib/placeLabel";
 import { ISO_CORNERS, type IsoCorner } from "../lib/isoCamera";
 import { drawerIsAvailable, loadModelDrawer, reduceRail, saveModelDrawer } from "../lib/railState";
 import { capturePresetFromSearch } from "../lib/captureQuery";
-import { qaModeFromSearch } from "../lib/qaCameraBridge";
+import { qaHideHeightPopoverFromSearch, qaModeFromSearch } from "../lib/qaCameraBridge";
 import {
   resolveView,
   VIEW_STORAGE_KEY,
@@ -374,6 +374,35 @@ export function ModelPage({ model }: { model: CityModel }) {
         setHeightPick({ buildingId: pick.id, clientX: 640, clientY: 400 });
         return pick.id;
       },
+      clearHeightSelection() {
+        setHeightPick(null);
+      },
+      pickTallTowerForSelectionQa() {
+        const candidates = model.buildings
+          .filter((building) => building.height >= 40 && building.use !== "outbuilding")
+          .map((building) => {
+            const { east, north } = buildingCentroid(building);
+            return { building, east, north, dist: Math.hypot(east, north) };
+          })
+          .filter((entry) => entry.dist >= 15 && entry.dist <= 160)
+          .sort((a, b) => b.building.height - a.building.height || a.dist - b.dist);
+        const pick = candidates[0]?.building;
+        if (!pick) return null;
+        setHeightPick({ buildingId: pick.id, clientX: 24, clientY: 72 });
+        return pick.id;
+      },
+      frameAerialSelectionBuilding(buildingId: number) {
+        const row = window.__citycutQaModel?.listBuildings?.().find((item) => item.id === buildingId);
+        if (!row || !window.__citycutQa?.setCamera) return false;
+        const yMid = row.height * 0.45;
+        const z = -row.north;
+        const dist = 210;
+        window.__citycutQa.setCamera({
+          eye: { x: row.east - dist * 0.62, y: yMid + dist * 0.52, z: z - dist * 0.62 },
+          target: { x: row.east + 12, y: Math.max(8, yMid * 0.35), z: z + 10 },
+        });
+        return true;
+      },
       frameSelectionBuilding(buildingId: number, variant: "through" | "oblique" = "through") {
         const row = window.__citycutQaModel?.listBuildings?.().find((item) => item.id === buildingId);
         if (!row || !window.__citycutQa?.setCamera) return false;
@@ -391,6 +420,35 @@ export function ModelPage({ model }: { model: CityModel }) {
           });
         }
         return true;
+      },
+      selectionScreenClip(buildingId: number, padPx = 48) {
+        const row = window.__citycutQaModel?.listBuildings?.().find((item) => item.id === buildingId);
+        const project = window.__citycutQa?.projectToScreen;
+        if (!row || !project) return null;
+        const z = -row.north;
+        const corners = [
+          project({ x: row.east, y: 0, z }),
+          project({ x: row.east, y: row.height, z }),
+          project({ x: row.east - 25, y: row.height * 0.5, z }),
+          project({ x: row.east + 25, y: row.height * 0.5, z }),
+        ].filter(Boolean);
+        if (corners.length === 0) return null;
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        for (const point of corners) {
+          minX = Math.min(minX, point!.x);
+          minY = Math.min(minY, point!.y);
+          maxX = Math.max(maxX, point!.x);
+          maxY = Math.max(maxY, point!.y);
+        }
+        return {
+          x: Math.max(0, Math.floor(minX - padPx)),
+          y: Math.max(0, Math.floor(minY - padPx)),
+          width: Math.ceil(maxX - minX + padPx * 2),
+          height: Math.ceil(maxY - minY + padPx * 2),
+        };
       },
       openMidriseHeightEdit() {
         const midriseUses: BuildingUse[] = ["commercial", "mixed_use", "retail"];
@@ -706,7 +764,9 @@ export function ModelPage({ model }: { model: CityModel }) {
                   onAnimateAnyway={windMotion.setAnimateAnyway}
                 />
               )}
-              {pickedBuilding && heightPick && (
+              {pickedBuilding &&
+                heightPick &&
+                !qaHideHeightPopoverFromSearch(window.location.search) && (
                 <BuildingHeightPopover
                   building={pickedBuilding}
                   clientX={heightPick.clientX}
