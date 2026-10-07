@@ -3,6 +3,9 @@
 export const DATA_CREDIT_BASE =
   "© Overture Maps Foundation, OpenStreetMap contributors (ODbL), Microsoft. Terrain © Mapterhorn. Vicmap © State of Victoria (CC BY 4.0).";
 
+export const DATA_CREDIT_PT_VIC =
+  " Public transport lines and stops © Public Transport Victoria / Department of Transport (CC BY 4.0).";
+
 export const DATA_CREDIT_WIND_SUFFIX = " Wind: Open-Meteo (CC BY 4.0).";
 
 export const DATA_CREDIT_ESRI_SATELLITE =
@@ -39,6 +42,8 @@ export function modelStageCreditHtml(options: StageCreditOptions): string {
 export type PlainCreditOptions = {
   windOn?: boolean;
   satelliteOn?: boolean;
+  /** Include Vicmap planning/hydro/rail/contour and PT Vic attributions for exploded axo exports. */
+  explodedAxoOverlaysOn?: boolean;
   /** Prefix such as "CityCut." for export bars. */
   prefix?: string;
 };
@@ -50,5 +55,6 @@ export function plainDataCredit(options: PlainCreditOptions = {}): string {
   chunks.push(DATA_CREDIT_BASE);
   if (options.windOn) chunks.push(DATA_CREDIT_WIND_SUFFIX.trim());
   if (options.satelliteOn) chunks.push(DATA_CREDIT_ESRI_SATELLITE.trim());
+  if (options.explodedAxoOverlaysOn) chunks.push(DATA_CREDIT_PT_VIC.trim());
   return chunks.join(" ").replace(/\s+/g, " ").trim();
 }

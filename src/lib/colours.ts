@@ -75,6 +75,18 @@ export const COLOUR_KEYS = [
   "--axo-building",
   "--axo-guide",
   "--axo-label",
+  "--axo-plan-flood",
+  "--axo-plan-heritage",
+  "--axo-plan-ddo",
+  "--axo-plan-bmo",
+  "--axo-hydro-area",
+  "--axo-hydro-course",
+  "--axo-rail-line",
+  "--axo-rail-station",
+  "--axo-pt-train",
+  "--axo-pt-tram",
+  "--axo-pt-bus",
+  "--axo-contour",
 ] as const;
 
 export type ColourKey = (typeof COLOUR_KEYS)[number];
@@ -237,6 +249,18 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--axo-building": "Exploded axo buildings",
   "--axo-guide": "Exploded axo guides",
   "--axo-label": "Exploded axo labels",
+  "--axo-plan-flood": "Exploded axo planning flood overlay",
+  "--axo-plan-heritage": "Exploded axo heritage overlay",
+  "--axo-plan-ddo": "Exploded axo DDO overlay",
+  "--axo-plan-bmo": "Exploded axo BMO overlay",
+  "--axo-hydro-area": "Exploded axo hydro water area",
+  "--axo-hydro-course": "Exploded axo hydro watercourse",
+  "--axo-rail-line": "Exploded axo rail line",
+  "--axo-rail-station": "Exploded axo rail station",
+  "--axo-pt-train": "Exploded axo train route",
+  "--axo-pt-tram": "Exploded axo tram route",
+  "--axo-pt-bus": "Exploded axo bus route",
+  "--axo-contour": "Exploded axo contour",
 };
 
 const parsed = resolveSheet(parseCustomProperties(coloursCss));

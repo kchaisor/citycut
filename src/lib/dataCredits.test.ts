@@ -23,6 +23,10 @@ describe("dataCredits", () => {
     expect(plainDataCredit({ satelliteOn: true })).toContain("Esri");
   });
 
+  it("appends PT Vic attribution when exploded axo overlays export is requested", () => {
+    expect(plainDataCredit({ explodedAxoOverlaysOn: true })).toContain("Public transport lines and stops");
+  });
+
   it("keeps the CityCut byline on the model stage", () => {
     const html = modelStageCreditHtml({ windOn: false, satelliteOn: false });
     expect(html).toContain(CITYCUT_BYLINE);

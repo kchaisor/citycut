@@ -5,7 +5,7 @@ import { model } from "./aiExport.test";
 import { DEFAULT_LINE_STYLES } from "./drawingStyle";
 import { cityModelTo3dm, loadRhino } from "./rhinoExport";
 import { explodedAxoChunks } from "./explodedAxoExport";
-import { defaultExplodedAxoSettings } from "./explodedAxo";
+import { buildExplodedAxoLayers, defaultExplodedAxoSettings } from "./explodedAxo";
 
 function digest(value: unknown): string {
   return JSON.stringify(value);
@@ -26,10 +26,25 @@ function chunkDigest(chunks: PdfChunk[]): string {
   );
 }
 
+function axoLayerDigest(): string {
+  const fixture = model();
+  const settings = defaultExplodedAxoSettings(fixture.sideM);
+  const { layers } = buildExplodedAxoLayers(fixture, settings);
+  return digest(
+    layers.map((layer) => ({
+      id: layer.id,
+      fills: layer.fills.length,
+      strokes: layer.strokes.length,
+      liftM: layer.liftM,
+    })),
+  );
+}
+
 describe("exploded axo blast radius", () => {
   const fixture = model();
   const siteDigest = chunkDigest(sitePlanChunks(fixture, 1000, DEFAULT_LINE_STYLES));
   const figureDigest = chunkDigest(figureGroundChunks(fixture, 1000, DEFAULT_LINE_STYLES));
+  const defaultAxoDigest = axoLayerDigest();
 
   it("leaves site plan PDF chunks unchanged", () => {
     expect(chunkDigest(sitePlanChunks(fixture, 1000, DEFAULT_LINE_STYLES))).toBe(siteDigest);
@@ -59,5 +74,17 @@ describe("exploded axo blast radius", () => {
     const chunks = explodedAxoChunks(fixture, 1000, defaultExplodedAxoSettings(fixture.sideM));
     expect(chunks.some((chunk) => chunk.name === "Guides")).toBe(true);
     expect(chunks.some((chunk) => chunk.name === "Water")).toBe(true);
+  });
+
+  it("keeps default exploded axo layer geometry unchanged", () => {
+    expect(axoLayerDigest()).toBe(defaultAxoDigest);
+  });
+
+  it("does not change 3D water areas on the fixture model", () => {
+    const waterRings = fixture.areas.filter((area) => area.kind === "water").length;
+    expect(waterRings).toBeGreaterThan(0);
+    expect(JSON.stringify(fixture.areas.filter((area) => area.kind === "water"))).toBe(
+      JSON.stringify(model().areas.filter((area) => area.kind === "water")),
+    );
   });
 });

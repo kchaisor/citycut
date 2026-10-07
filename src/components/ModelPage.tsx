@@ -537,13 +537,16 @@ export function ModelPage({ model }: { model: CityModel }) {
 
   useEffect(() => {
     setPlanViewport(planViewportExtent(displayModel.sideM));
-    setAxoSettings((prev) => ({
-      ...defaultExplodedAxoSettings(displayModel.sideM),
-      layerOrder: prev.layerOrder,
-      layerVisible: prev.layerVisible,
-      gapM: defaultExplodedAxoGapM(displayModel.sideM),
-      showLabels: prev.showLabels,
-    }));
+    setAxoSettings((prev) => {
+      const defaults = defaultExplodedAxoSettings(displayModel.sideM);
+      return {
+        ...defaults,
+        layerOrder: prev.layerOrder,
+        layerVisible: { ...defaults.layerVisible, ...prev.layerVisible },
+        gapM: defaultExplodedAxoGapM(displayModel.sideM),
+        showLabels: prev.showLabels,
+      };
+    });
     setExplodedViewport(
       explodedAxoViewportExtent(explodedAxoBounds(displayModel, defaultExplodedAxoSettings(displayModel.sideM))),
     );

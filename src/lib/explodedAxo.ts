@@ -1,8 +1,30 @@
 import { figureGround } from "./figureGround";
-import { getColour } from "./colours";
-import { openRing } from "./geo";
+import { getColour, type ColourKey } from "./colours";
+import { bufferOpenLine } from "./bufferLine";
+import { openRing, signedArea } from "./geo";
 import { clipAreaToSiteFrame, clipPolylineSiteFrame, circleRing, DEFAULT_SITE_FRAME_SHAPE, type SiteFrameShape } from "./siteFrame";
-import type { CityModel, Pt } from "../types";
+import type {
+  HydroOverlay,
+  PlanningOverlayPolygon,
+  PublicTransportLine,
+  PublicTransportStop,
+  TopographyOverlay,
+  TransportRailLine,
+  TransportRailStation,
+} from "./explodedAxoOverlayFetch";
+import type { AreaFeat, CityModel, Pt } from "../types";
+
+export type ExplodedAxoOverlayBundle = {
+  planning?: PlanningOverlayPolygon[] | "unavailable";
+  transport?: {
+    rail: { lines: TransportRailLine; stations: TransportRailStation[] };
+    pt: { lines: PublicTransportLine[]; stops: PublicTransportStop[] } | null;
+  } | "unavailable";
+  hydro?: HydroOverlay | "unavailable";
+  topography?: TopographyOverlay | "unavailable";
+  /** Overture water polygons fetched for the frame when the model has none. */
+  overtureWater?: AreaFeat[];
+};
 
 const roundIso = (value: number) => Math.round(value * 100) / 100;
 
@@ -16,16 +38,55 @@ export function isoSvgPolyline(points: Pt[], close: boolean): string {
 }
 
 /** Layer ids, default stack top → bottom. */
-export const AXO_LAYER_IDS = ["water", "roads", "green", "buildings", "aerial"] as const;
+export const AXO_LAYER_IDS = [
+  "planning",
+  "water",
+  "hydro",
+  "transport",
+  "topography",
+  "roads",
+  "green",
+  "buildings",
+  "aerial",
+] as const;
 export type AxoLayerId = (typeof AXO_LAYER_IDS)[number];
 
+/** Layers that were in the original exploded axo release (default on). */
+export const AXO_LEGACY_LAYER_IDS = ["water", "roads", "green", "buildings", "aerial"] as const satisfies readonly AxoLayerId[];
+
 export const AXO_LAYER_LABELS: Record<AxoLayerId, string> = {
+  planning: "PLANNING",
   water: "FLOODPLAIN",
+  hydro: "HYDRO",
+  transport: "TRANSPORT",
+  topography: "TOPOGRAPHY",
   roads: "ROADS",
   green: "GREEN SPACES",
   buildings: "BUILDINGS",
   aerial: "SATELLITE",
 };
+
+export type AxoPaintKey =
+  | "water"
+  | "roads"
+  | "green"
+  | "buildings"
+  | "plan-flood"
+  | "plan-heritage"
+  | "plan-ddo"
+  | "plan-bmo"
+  | "hydro-area"
+  | "hydro-course"
+  | "rail-line"
+  | "rail-station"
+  | "pt-train"
+  | "pt-tram"
+  | "pt-bus"
+  | "contour";
+
+export type AxoLegendSwatch = { label: string; paint: AxoPaintKey };
+
+export type AxoPointMarker = { x: number; y: number; paint: AxoPaintKey; radiusM: number };
 
 export const DEFAULT_AXO_LAYER_ORDER: AxoLayerId[] = [...AXO_LAYER_IDS];
 
@@ -55,15 +116,20 @@ export function defaultExplodedAxoGapM(sideM: number): number {
 }
 
 export function defaultExplodedAxoSettings(sideM: number): ExplodedAxoSettings {
+  const layerVisible: Record<AxoLayerId, boolean> = {
+    planning: false,
+    water: true,
+    hydro: false,
+    transport: false,
+    topography: false,
+    roads: true,
+    green: true,
+    buildings: true,
+    aerial: true,
+  };
   return {
     layerOrder: [...DEFAULT_AXO_LAYER_ORDER],
-    layerVisible: {
-      water: true,
-      roads: true,
-      green: true,
-      buildings: true,
-      aerial: true,
-    },
+    layerVisible,
     gapM: defaultExplodedAxoGapM(sideM),
     showLabels: true,
   };
@@ -193,10 +259,17 @@ export type AxoLayerGeometry = {
   fills: string[];
   /** Stroked centre lines (roads). */
   strokes: string[];
+  /** Optional paint key per fill/stroke (defaults to the layer base colour). */
+  fillPaints?: AxoPaintKey[];
+  strokePaints?: AxoPaintKey[];
+  strokeWidthScales?: number[];
+  markers?: AxoPointMarker[];
   /** Frame plate outline at this lift. */
   plateOutlineD: string;
   /** Clip path d (same as plate interior). */
   clipD: string;
+  unavailableNote?: string;
+  legend?: AxoLegendSwatch[];
 };
 
 function dedupe(line: Pt[]): Pt[] {
@@ -232,6 +305,39 @@ function clipRoadLines(model: CityModel): Pt[][] {
   return lines;
 }
 
+/** True when at least one model water polygon survives site-frame clipping. */
+export function modelHasClippedWaterInFrame(model: CityModel): boolean {
+  return areaRings(model, "water").length > 0;
+}
+
+const HYDRO_COURSE_BUFFER_HALF_M = 38;
+
+function hydroCourseFillRings(courses: Pt[][], sideM: number, shape: SiteFrameShape): Pt[][][] {
+  const out: Pt[][][] = [];
+  for (const line of courses) {
+    const ring = bufferOpenLine(line, HYDRO_COURSE_BUFFER_HALF_M);
+    if (!ring) continue;
+    const clipped = clipAreaToSiteFrame(ring, [], sideM, shape);
+    if (!clipped || Math.abs(signedArea(clipped[0]!)) < 80) continue;
+    out.push(clipped);
+  }
+  return out;
+}
+
+function waterAreaRings(model: CityModel, overlays: ExplodedAxoOverlayBundle): Pt[][][] {
+  const fromModel = areaRings(model, "water");
+  if (fromModel.length > 0) return fromModel;
+  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
+  const extra = overlays.overtureWater ?? [];
+  const out: Pt[][][] = [];
+  for (const area of extra) {
+    if (area.kind !== "water") continue;
+    const rings = clipAreaToSiteFrame(area.ring, area.holes, model.sideM, shape);
+    if (rings) out.push(rings);
+  }
+  return out;
+}
+
 function areaRings(model: CityModel, kind: "water" | "green"): Pt[][][] {
   const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const out: Pt[][][] = [];
@@ -257,9 +363,56 @@ export function axoPlateIsCircularRing(_sideM: number, shape: SiteFrameShape): b
   return shape === "circle";
 }
 
+function pushAreaPaths(
+  ringsList: Pt[][][],
+  fills: string[],
+  fillPaints: AxoPaintKey[],
+  paint: AxoPaintKey,
+  areaToPath: (rings: Pt[][]) => string,
+) {
+  for (const rings of ringsList) {
+    const d = areaToPath(rings);
+    if (d) {
+      fills.push(d);
+      fillPaints.push(paint);
+    }
+  }
+}
+
+function pushLinePaths(
+  lines: Pt[][],
+  strokes: string[],
+  strokePaints: AxoPaintKey[],
+  strokeWidthScales: number[],
+  paint: AxoPaintKey,
+  widthScale = 1,
+) {
+  for (const line of lines) {
+    const pts = line.map(([e, n]) => planToIsoBase(e, n));
+    strokes.push(isoSvgPolyline(pts, false));
+    strokePaints.push(paint);
+    strokeWidthScales.push(widthScale);
+  }
+}
+
+function planningPaint(kind: PlanningOverlayPolygon["kind"]): AxoPaintKey {
+  if (kind === "flood") return "plan-flood";
+  if (kind === "heritage") return "plan-heritage";
+  if (kind === "ddo") return "plan-ddo";
+  return "plan-bmo";
+}
+
+function ptPaint(mode: PublicTransportLine["mode"], kind: "line" | "stop"): AxoPaintKey {
+  if (mode === "train") return "pt-train";
+  if (mode === "tram") return "pt-tram";
+  if (mode === "bus") return "pt-bus";
+  return kind === "line" ? "rail-line" : "rail-station";
+}
+
 export function buildExplodedAxoLayers(
   model: CityModel,
   settings: ExplodedAxoSettings,
+  overlays: ExplodedAxoOverlayBundle = {},
 ): { layers: AxoLayerGeometry[]; guides: AxoGuideLine[] } {
   const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const lifts = liftsForLayerOrder(settings.layerOrder, settings.gapM);
@@ -267,7 +420,7 @@ export function buildExplodedAxoLayers(
     .filter((id) => settings.layerVisible[id])
     .map((id) => lifts.get(id)!);
 
-  const waterAreas = areaRings(model, "water");
+  const overtureWaterAreas = waterAreaRings(model, overlays);
   const greenAreas = areaRings(model, "green");
   const roadLines = clipRoadLines(model);
 
@@ -280,6 +433,12 @@ export function buildExplodedAxoLayers(
     const clipD = plateOutlineD;
     const fills: string[] = [];
     const strokes: string[] = [];
+    const fillPaints: AxoPaintKey[] = [];
+    const strokePaints: AxoPaintKey[] = [];
+    const strokeWidthScales: number[] = [];
+    const markers: AxoPointMarker[] = [];
+    let unavailableNote: string | undefined;
+    let legend: AxoLegendSwatch[] | undefined;
 
     const areaToPath = (rings: Pt[][]) =>
       rings
@@ -287,10 +446,93 @@ export function buildExplodedAxoLayers(
         .filter(Boolean)
         .join(" ");
 
-    if (id === "water") {
-      for (const rings of waterAreas) {
-        const d = areaToPath(rings);
-        if (d) fills.push(d);
+    if (id === "planning") {
+      if (overlays.planning === "unavailable") {
+        unavailableNote = "unavailable";
+      } else if (overlays.planning?.length) {
+        for (const poly of overlays.planning) {
+          const rings = clipAreaToSiteFrame(poly.outer, poly.holes, model.sideM, shape);
+          if (!rings) continue;
+          const d = areaToPath(rings);
+          if (d) {
+            fills.push(d);
+            fillPaints.push(planningPaint(poly.kind));
+          }
+        }
+        legend = [
+          { label: "Flood (LSIO/SBO/FO)", paint: "plan-flood" },
+          { label: "Heritage (HO)", paint: "plan-heritage" },
+          { label: "DDO", paint: "plan-ddo" },
+          { label: "BMO", paint: "plan-bmo" },
+        ];
+      }
+    } else if (id === "water" || id === "hydro") {
+      const hydro = overlays.hydro !== "unavailable" ? overlays.hydro : undefined;
+      const hydroAreas = hydro?.areas.map((poly) => [poly.outer, ...poly.holes]) ?? [];
+      if (hydroAreas.length > 0) {
+        pushAreaPaths(hydroAreas, fills, fillPaints, "hydro-area", areaToPath);
+      } else {
+        pushAreaPaths(overtureWaterAreas, fills, fillPaints, "water", areaToPath);
+      }
+      if (hydro?.courses.length) {
+        if (fills.length === 0) {
+          pushAreaPaths(
+            hydroCourseFillRings(hydro.courses, model.sideM, shape),
+            fills,
+            fillPaints,
+            id === "water" ? "water" : "hydro-area",
+            areaToPath,
+          );
+        }
+        pushLinePaths(hydro.courses, strokes, strokePaints, strokeWidthScales, "hydro-course", fills.length ? 0.95 : 2.4);
+      }
+      if (fills.length === 0 && strokes.length === 0) {
+        if (overlays.hydro === "unavailable" && overtureWaterAreas.length === 0) unavailableNote = "unavailable";
+      }
+    } else if (id === "transport") {
+      if (overlays.transport === "unavailable") {
+        unavailableNote = "unavailable";
+      } else if (overlays.transport) {
+        pushLinePaths(
+          overlays.transport.rail.lines,
+          strokes,
+          strokePaints,
+          strokeWidthScales,
+          "rail-line",
+          0.55,
+        );
+        for (const station of overlays.transport.rail.stations) {
+          const [x, y] = planToIsoBase(station[0], station[1]);
+          markers.push({ x, y, paint: "rail-station", radiusM: model.sideM * 0.0045 });
+        }
+        for (const line of overlays.transport.pt?.lines ?? []) {
+          if (line.mode === "other") continue;
+          pushLinePaths([line.line], strokes, strokePaints, strokeWidthScales, ptPaint(line.mode, "line"), 0.7);
+        }
+        for (const stop of overlays.transport.pt?.stops ?? []) {
+          if (stop.mode === "other") continue;
+          const [x, y] = planToIsoBase(stop.point[0], stop.point[1]);
+          markers.push({ x, y, paint: ptPaint(stop.mode, "stop"), radiusM: model.sideM * 0.0038 });
+        }
+        legend = [
+          { label: "Rail", paint: "rail-line" },
+          { label: "Train", paint: "pt-train" },
+          { label: "Tram", paint: "pt-tram" },
+          { label: "Bus", paint: "pt-bus" },
+        ];
+      }
+    } else if (id === "topography") {
+      if (overlays.topography === "unavailable") {
+        unavailableNote = "unavailable";
+      } else if (overlays.topography?.contours.length) {
+        pushLinePaths(
+          overlays.topography.contours.map((item) => item.line),
+          strokes,
+          strokePaints,
+          strokeWidthScales,
+          "contour",
+          0.55,
+        );
       }
     } else if (id === "green") {
       for (const rings of greenAreas) {
@@ -312,15 +554,64 @@ export function buildExplodedAxoLayers(
       }
     }
 
-    layers.push({ id, liftM, fills, strokes, plateOutlineD, clipD });
+    layers.push({
+      id,
+      liftM,
+      fills,
+      strokes,
+      ...(fillPaints.length ? { fillPaints } : {}),
+      ...(strokePaints.length ? { strokePaints, strokeWidthScales } : {}),
+      ...(markers.length ? { markers } : {}),
+      plateOutlineD,
+      clipD,
+      ...(unavailableNote ? { unavailableNote } : {}),
+      ...(legend ? { legend } : {}),
+    });
   }
 
   return { layers, guides: axoGuideLines(model.sideM, shape, visibleLifts) };
 }
 
+const AXO_PAINT_CSS: Record<AxoPaintKey, ColourKey> = {
+  water: "--axo-water",
+  roads: "--axo-road",
+  green: "--axo-green",
+  buildings: "--axo-building",
+  "plan-flood": "--axo-plan-flood",
+  "plan-heritage": "--axo-plan-heritage",
+  "plan-ddo": "--axo-plan-ddo",
+  "plan-bmo": "--axo-plan-bmo",
+  "hydro-area": "--axo-hydro-area",
+  "hydro-course": "--axo-hydro-course",
+  "rail-line": "--axo-rail-line",
+  "rail-station": "--axo-rail-station",
+  "pt-train": "--axo-pt-train",
+  "pt-tram": "--axo-pt-tram",
+  "pt-bus": "--axo-pt-bus",
+  contour: "--axo-contour",
+};
+
+export function axoPaintColour(paint: AxoPaintKey): string {
+  return getColour(AXO_PAINT_CSS[paint]);
+}
+
+export function axoLayerBasePaint(id: AxoLayerId): AxoPaintKey {
+  if (id === "water" || id === "hydro") return "water";
+  if (id === "roads") return "roads";
+  if (id === "green") return "green";
+  if (id === "buildings" || id === "aerial") return "buildings";
+  if (id === "topography") return "contour";
+  if (id === "transport") return "rail-line";
+  return "plan-flood";
+}
+
 export function axoLayerColours(): Record<AxoLayerId | "guide" | "label", string> {
   return {
+    planning: getColour("--axo-plan-heritage"),
     water: getColour("--axo-water"),
+    hydro: getColour("--axo-hydro-area"),
+    transport: getColour("--axo-rail-line"),
+    topography: getColour("--axo-contour"),
     roads: getColour("--axo-road"),
     green: getColour("--axo-green"),
     buildings: getColour("--axo-building"),
@@ -329,6 +620,9 @@ export function axoLayerColours(): Record<AxoLayerId | "guide" | "label", string
     label: getColour("--axo-label"),
   };
 }
+
+/** Hatch pattern ids for planning fills (referenced from SVG defs). */
+export const AXO_HATCH_PAINTS: AxoPaintKey[] = ["plan-flood", "plan-heritage", "plan-ddo", "plan-bmo"];
 
 /** Iso bounds of the stacked drawing for fitting the viewport. */
 /** SVG transform mapping a plan-aligned satellite image onto the iso plate at `liftM`. */
@@ -350,7 +644,11 @@ export function explodedAxoBounds(
   model: CityModel,
   settings: ExplodedAxoSettings,
 ): { minX: number; minY: number; maxX: number; maxY: number } {
-  const { layers, guides } = buildExplodedAxoLayers(model, settings);
+  const stackSettings: ExplodedAxoSettings = {
+    ...settings,
+    layerVisible: Object.fromEntries(settings.layerOrder.map((id) => [id, true])) as Record<AxoLayerId, boolean>,
+  };
+  const { layers, guides } = buildExplodedAxoLayers(model, stackSettings);
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;

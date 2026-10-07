@@ -28,6 +28,19 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Install tippecanoe
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential libsqlite3-dev zlib1g-dev
+          git clone --depth 1 --branch 2.79.0 https://github.com/felt/tippecanoe.git /tmp/tippecanoe-src
+          make -C /tmp/tippecanoe-src -j"$(nproc)"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          mkdir -p "$HOME/.local/bin"
+          cp /tmp/tippecanoe-src/tippecanoe "$HOME/.local/bin/tippecanoe"
+      - name: Build PT PMTiles (metro subset)
+        run: node scripts/build-pt-pmtiles.mjs
+        env:
+          TIPPECANOE: tippecanoe
       - name: Build
         run: npm run build
       - name: Setup Pages

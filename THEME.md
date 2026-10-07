@@ -163,6 +163,18 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--axo-building` | `#1a1916` | Exploded axo building footprints layer. |
 | `--axo-guide` | `#c8c8c8` | Exploded axo vertical guides and plate outlines. |
 | `--axo-label` | `#6e685e` | Exploded axo layer labels. |
+| `--axo-plan-flood` | `#5a9fd4` | Exploded axo planning flood overlay (LSIO/SBO/FO hatch base). |
+| `--axo-plan-heritage` | `#c4a574` | Exploded axo heritage overlay (HO hatch base). |
+| `--axo-plan-ddo` | `#9b7ede` | Exploded axo DDO overlay hatch base. |
+| `--axo-plan-bmo` | `#d47a9b` | Exploded axo BMO overlay hatch base. |
+| `--axo-hydro-area` | `#6eb5d9` | Exploded axo Vicmap hydro water area fill. |
+| `--axo-hydro-course` | `#3d8fbf` | Exploded axo Vicmap hydro watercourse stroke. |
+| `--axo-rail-line` | `#2d2d2d` | Exploded axo Vicmap rail centre line. |
+| `--axo-rail-station` | `#1a1a1a` | Exploded axo Vicmap rail station marker. |
+| `--axo-pt-train` | `#003366` | Exploded axo PTV train route. |
+| `--axo-pt-tram` | `#00854a` | Exploded axo PTV tram route. |
+| `--axo-pt-bus` | `#c45c00` | Exploded axo PTV bus route. |
+| `--axo-contour` | `#8a8578` | Exploded axo Vicmap contour stroke. |
 | `--wind-streak` | `#2B6CB0` | Animated wind streaks in the 3D viewport (~70% opacity). |
 | `--wind-rose` | `#3d5a73` | On-screen wind rose overlay and Wind export layer. |
 

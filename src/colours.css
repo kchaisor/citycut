@@ -208,4 +208,16 @@
   --axo-building: #1a1916;
   --axo-guide: #c8c8c8;
   --axo-label: #6e685e;
+  --axo-plan-flood: #5a9fd4;
+  --axo-plan-heritage: #c4a574;
+  --axo-plan-ddo: #9b7ede;
+  --axo-plan-bmo: #d47a9b;
+  --axo-hydro-area: #6eb5d9;
+  --axo-hydro-course: #3d8fbf;
+  --axo-rail-line: #2d2d2d;
+  --axo-rail-station: #1a1a1a;
+  --axo-pt-train: #003366;
+  --axo-pt-tram: #00854a;
+  --axo-pt-bus: #c45c00;
+  --axo-contour: #8a8578;
 }

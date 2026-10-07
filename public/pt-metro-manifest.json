@@ -1,0 +1,14 @@
+{
+  "metroBounds": {
+    "west": 144.35,
+    "south": -38.25,
+    "east": 145.55,
+    "north": -37.45
+  },
+  "lineFeatures": 8327,
+  "stopFeatures": 24515,
+  "ptMetroLinesBytes": 1789287,
+  "ptMetroStopsBytes": 403192,
+  "licence": "Creative Commons Attribution 4.0",
+  "source": "https://opendata.transport.vic.gov.au/dataset/public-transport-lines-and-stops"
+}
