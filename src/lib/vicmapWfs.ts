@@ -32,15 +32,45 @@ function asLonLat(coord: unknown): [number, number] | null {
   return [lon, lat];
 }
 
-function ringFromCoords(coords: unknown, origin: LonLat): Pt[] {
+function lineFromCoords(coords: unknown, origin: LonLat): Pt[] {
   if (!Array.isArray(coords)) return [];
-  const ring: Pt[] = [];
+  const line: Pt[] = [];
   for (const coord of coords) {
     const lonLat = asLonLat(coord);
     if (!lonLat) continue;
-    ring.push(toLocal(lonLat[1], lonLat[0], origin));
+    line.push(toLocal(lonLat[1], lonLat[0], origin));
   }
-  return openRing(ring);
+  return line;
+}
+
+function ringFromCoords(coords: unknown, origin: LonLat): Pt[] {
+  return openRing(lineFromCoords(coords, origin));
+}
+
+function visitLonLatCoords(value: unknown, visit: (lon: number, lat: number) => void) {
+  if (!Array.isArray(value)) return;
+  if (value.length >= 2 && typeof value[0] === "number" && typeof value[1] === "number") {
+    visit(value[0], value[1]);
+    return;
+  }
+  for (const child of value) visitLonLatCoords(child, visit);
+}
+
+/** GeoServer sometimes returns features outside a WFS bbox; drop them before clipping. */
+export function geometryIntersectsBounds(geometry: unknown, bounds: FrameBBox): boolean {
+  if (!geometry || typeof geometry !== "object") return false;
+  let hit = false;
+  visitLonLatCoords((geometry as { coordinates?: unknown }).coordinates, (lon, lat) => {
+    if (
+      lon >= bounds.west - 1e-9 &&
+      lon <= bounds.east + 1e-9 &&
+      lat >= bounds.south - 1e-9 &&
+      lat <= bounds.north + 1e-9
+    ) {
+      hit = true;
+    }
+  });
+  return hit;
 }
 
 export type VicmapPolygon = { outer: Pt[]; holes: Pt[][] };
@@ -72,13 +102,13 @@ export function linesFromGeometry(geometry: unknown, origin: LonLat): Pt[][] {
   if (!geometry || typeof geometry !== "object") return [];
   const typed = geometry as { type?: string; coordinates?: unknown };
   if (typed.type === "LineString" && Array.isArray(typed.coordinates)) {
-    const line = ringFromCoords(typed.coordinates, origin);
+    const line = lineFromCoords(typed.coordinates, origin);
     return line.length >= 2 ? [line] : [];
   }
   if (typed.type === "MultiLineString" && Array.isArray(typed.coordinates)) {
     const out: Pt[][] = [];
     for (const part of typed.coordinates) {
-      const line = ringFromCoords(part, origin);
+      const line = lineFromCoords(part, origin);
       if (line.length >= 2) out.push(line);
     }
     return out;

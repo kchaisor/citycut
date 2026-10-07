@@ -1,10 +1,11 @@
-import { squareBBox } from "./geo";
+import { signedArea, squareBBox } from "./geo";
 import { clipAreaToSiteFrame, clipPolylineSiteFrame, DEFAULT_SITE_FRAME_SHAPE } from "./siteFrame";
 import { fetchTierJson, type FrameBBox } from "./useCascade";
 import {
   linesFromGeometry,
   parseFeatureCollection,
   pointFromGeometry,
+  geometryIntersectsBounds,
   polygonsFromGeometry,
   vicmapWfsGetFeatureUrl,
   type VicmapPolygon,
@@ -161,10 +162,10 @@ export async function fetchTransportRail(
 
 export function ptModeFromValue(value: unknown): PtMode {
   if (typeof value !== "string") return "other";
-  const mode = value.trim().toLowerCase();
-  if (mode.includes("train") || mode === "rail") return "train";
-  if (mode.includes("tram")) return "tram";
-  if (mode.includes("bus") || mode === "coach") return "bus";
+  const mode = value.trim().toUpperCase();
+  if (mode.includes("TRAM")) return "tram";
+  if (mode.includes("BUS") || mode.includes("COACH")) return "bus";
+  if (mode.includes("TRAIN") || mode.includes("RAIL")) return "train";
   return "other";
 }
 
@@ -182,19 +183,28 @@ export async function fetchHydroOverlays(
   const courses: Pt[][] = [];
   if (areaBody) {
     for (const feature of parseFeatureCollection(areaBody)) {
+      if (!geometryIntersectsBounds(feature.geometry, bounds)) continue;
       areas.push(...polygonsFromGeometry(feature.geometry, model.center));
     }
   }
   if (courseBody) {
     for (const feature of parseFeatureCollection(courseBody)) {
+      if (!geometryIntersectsBounds(feature.geometry, bounds)) continue;
       courses.push(...linesFromGeometry(feature.geometry, model.center));
     }
+  }
+  const clippedAreas = clipPolygons(areas, model).filter(
+    (poly) => Math.abs(signedArea(poly.outer)) >= 200,
+  );
+  const clippedCourses = clipLines(courses, model);
+  if (clippedAreas.length === 0 && clippedCourses.length === 0) {
+    return { ok: false, unavailable: true };
   }
   return {
     ok: true,
     data: {
-      areas: clipPolygons(areas, model),
-      courses: clipLines(courses, model),
+      areas: clippedAreas,
+      courses: clippedCourses,
     },
   };
 }

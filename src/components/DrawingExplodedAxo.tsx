@@ -275,8 +275,8 @@ export function DrawingExplodedAxo({
             {layer.legend && layer.legend.length > 0 && (
               <g className="axo-legend" transform={`translate(${legendOrigin.x} ${legendOrigin.y})`}>
                 {layer.legend.map((item, li) => {
-                  const swatchY = li * model.sideM * 0.022;
-                  const swatchSize = model.sideM * 0.014;
+                  const swatchY = li * model.sideM * 0.042;
+                  const swatchSize = model.sideM * 0.032;
                   const fill = AXO_HATCH_PAINTS.includes(item.paint)
                     ? `url(#${hatchPatternId(item.paint)})`
                     : axoPaintColour(item.paint);
@@ -286,7 +286,7 @@ export function DrawingExplodedAxo({
                       <text
                         x={swatchSize * 1.4}
                         y={swatchSize * 0.85}
-                        fontSize={model.sideM * 0.018}
+                        fontSize={model.sideM * 0.036}
                         fill={colours.label}
                         fontFamily="Helvetica, Arial, sans-serif"
                       >

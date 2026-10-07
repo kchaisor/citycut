@@ -1,6 +1,7 @@
 import { figureGround } from "./figureGround";
 import { getColour, type ColourKey } from "./colours";
-import { openRing } from "./geo";
+import { bufferOpenLine } from "./bufferLine";
+import { openRing, signedArea } from "./geo";
 import { clipAreaToSiteFrame, clipPolylineSiteFrame, circleRing, DEFAULT_SITE_FRAME_SHAPE, type SiteFrameShape } from "./siteFrame";
 import type {
   HydroOverlay,
@@ -11,7 +12,7 @@ import type {
   TransportRailLine,
   TransportRailStation,
 } from "./explodedAxoOverlayFetch";
-import type { CityModel, Pt } from "../types";
+import type { AreaFeat, CityModel, Pt } from "../types";
 
 export type ExplodedAxoOverlayBundle = {
   planning?: PlanningOverlayPolygon[] | "unavailable";
@@ -21,6 +22,8 @@ export type ExplodedAxoOverlayBundle = {
   } | "unavailable";
   hydro?: HydroOverlay | "unavailable";
   topography?: TopographyOverlay | "unavailable";
+  /** Overture water polygons fetched for the frame when the model has none. */
+  overtureWater?: AreaFeat[];
 };
 
 const roundIso = (value: number) => Math.round(value * 100) / 100;
@@ -302,6 +305,39 @@ function clipRoadLines(model: CityModel): Pt[][] {
   return lines;
 }
 
+/** True when at least one model water polygon survives site-frame clipping. */
+export function modelHasClippedWaterInFrame(model: CityModel): boolean {
+  return areaRings(model, "water").length > 0;
+}
+
+const HYDRO_COURSE_BUFFER_HALF_M = 38;
+
+function hydroCourseFillRings(courses: Pt[][], sideM: number, shape: SiteFrameShape): Pt[][][] {
+  const out: Pt[][][] = [];
+  for (const line of courses) {
+    const ring = bufferOpenLine(line, HYDRO_COURSE_BUFFER_HALF_M);
+    if (!ring) continue;
+    const clipped = clipAreaToSiteFrame(ring, [], sideM, shape);
+    if (!clipped || Math.abs(signedArea(clipped[0]!)) < 80) continue;
+    out.push(clipped);
+  }
+  return out;
+}
+
+function waterAreaRings(model: CityModel, overlays: ExplodedAxoOverlayBundle): Pt[][][] {
+  const fromModel = areaRings(model, "water");
+  if (fromModel.length > 0) return fromModel;
+  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
+  const extra = overlays.overtureWater ?? [];
+  const out: Pt[][][] = [];
+  for (const area of extra) {
+    if (area.kind !== "water") continue;
+    const rings = clipAreaToSiteFrame(area.ring, area.holes, model.sideM, shape);
+    if (rings) out.push(rings);
+  }
+  return out;
+}
+
 function areaRings(model: CityModel, kind: "water" | "green"): Pt[][][] {
   const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const out: Pt[][][] = [];
@@ -384,7 +420,7 @@ export function buildExplodedAxoLayers(
     .filter((id) => settings.layerVisible[id])
     .map((id) => lifts.get(id)!);
 
-  const overtureWaterAreas = areaRings(model, "water");
+  const overtureWaterAreas = waterAreaRings(model, overlays);
   const greenAreas = areaRings(model, "green");
   const roadLines = clipRoadLines(model);
 
@@ -430,33 +466,28 @@ export function buildExplodedAxoLayers(
           { label: "BMO", paint: "plan-bmo" },
         ];
       }
-    } else if (id === "water") {
+    } else if (id === "water" || id === "hydro") {
       const hydro = overlays.hydro !== "unavailable" ? overlays.hydro : undefined;
-      const hydroAreas = hydro?.areas.map((poly) => [poly.outer, ...poly.holes]);
-      if (hydroAreas?.length) {
+      const hydroAreas = hydro?.areas.map((poly) => [poly.outer, ...poly.holes]) ?? [];
+      if (hydroAreas.length > 0) {
         pushAreaPaths(hydroAreas, fills, fillPaints, "hydro-area", areaToPath);
       } else {
         pushAreaPaths(overtureWaterAreas, fills, fillPaints, "water", areaToPath);
       }
-    } else if (id === "hydro") {
-      if (overlays.hydro === "unavailable") {
-        unavailableNote = "unavailable";
-      } else if (overlays.hydro) {
-        for (const poly of overlays.hydro.areas) {
-          const rings = clipAreaToSiteFrame(poly.outer, poly.holes, model.sideM, shape);
-          if (!rings) continue;
-          const d = areaToPath(rings);
-          if (d) {
-            fills.push(d);
-            fillPaints.push("hydro-area");
-          }
+      if (hydro?.courses.length) {
+        if (fills.length === 0) {
+          pushAreaPaths(
+            hydroCourseFillRings(hydro.courses, model.sideM, shape),
+            fills,
+            fillPaints,
+            id === "water" ? "water" : "hydro-area",
+            areaToPath,
+          );
         }
-        pushLinePaths(overlays.hydro.courses, strokes, strokePaints, strokeWidthScales, "hydro-course", 0.85);
-        if (fills.length === 0 && strokes.length === 0) {
-          pushAreaPaths(overtureWaterAreas, fills, fillPaints, "water", areaToPath);
-        }
-      } else {
-        pushAreaPaths(overtureWaterAreas, fills, fillPaints, "water", areaToPath);
+        pushLinePaths(hydro.courses, strokes, strokePaints, strokeWidthScales, "hydro-course", fills.length ? 0.95 : 2.4);
+      }
+      if (fills.length === 0 && strokes.length === 0) {
+        if (overlays.hydro === "unavailable" && overtureWaterAreas.length === 0) unavailableNote = "unavailable";
       }
     } else if (id === "transport") {
       if (overlays.transport === "unavailable") {
@@ -468,18 +499,20 @@ export function buildExplodedAxoLayers(
           strokePaints,
           strokeWidthScales,
           "rail-line",
-          1.35,
+          0.55,
         );
         for (const station of overlays.transport.rail.stations) {
           const [x, y] = planToIsoBase(station[0], station[1]);
-          markers.push({ x, y, paint: "rail-station", radiusM: model.sideM * 0.006 });
+          markers.push({ x, y, paint: "rail-station", radiusM: model.sideM * 0.0045 });
         }
         for (const line of overlays.transport.pt?.lines ?? []) {
-          pushLinePaths([line.line], strokes, strokePaints, strokeWidthScales, ptPaint(line.mode, "line"), 0.75);
+          if (line.mode === "other") continue;
+          pushLinePaths([line.line], strokes, strokePaints, strokeWidthScales, ptPaint(line.mode, "line"), 0.7);
         }
         for (const stop of overlays.transport.pt?.stops ?? []) {
+          if (stop.mode === "other") continue;
           const [x, y] = planToIsoBase(stop.point[0], stop.point[1]);
-          markers.push({ x, y, paint: ptPaint(stop.mode, "stop"), radiusM: model.sideM * 0.0045 });
+          markers.push({ x, y, paint: ptPaint(stop.mode, "stop"), radiusM: model.sideM * 0.0038 });
         }
         legend = [
           { label: "Rail", paint: "rail-line" },

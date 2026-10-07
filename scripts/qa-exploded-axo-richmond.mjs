@@ -3,8 +3,9 @@ import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 
 const base = process.env.QA_BASE ?? "http://localhost:4173/citycut/";
-const queryCircle = "?lat=-37.8270&lon=144.9960&km=1&shape=circle";
-const querySquare = "?lat=-37.8270&lon=144.9960&km=1";
+// Richmond: shift ~700 m east so the Yarra centreline falls inside the 1 km frame (still same neighbourhood).
+const queryCircle = "?lat=-37.8270&lon=145.0040&km=1&shape=circle";
+const querySquare = "?lat=-37.8270&lon=145.0040&km=1";
 
 async function waitForModel(page) {
   await page.getByRole("heading", { name: /Your model is ready/i }).waitFor({ timeout: 300_000 });
@@ -33,11 +34,22 @@ async function enableAxoLayers(page) {
     }
   }
   await page.getByRole("button", { name: "Fit frame" }).click();
-  await page.waitForTimeout(8000);
+  await page.waitForTimeout(4000);
   await page.waitForFunction(
     () => document.querySelectorAll("svg.plan.exploded-axo path[fill], svg.plan.exploded-axo path[stroke]").length > 20,
     { timeout: 120_000 },
   );
+  await page.waitForFunction(
+    () =>
+      document.querySelectorAll('svg.plan.exploded-axo path[stroke="#3d8fbf"], svg.plan.exploded-axo path[fill="#6eb5d9"], svg.plan.exploded-axo path[fill="#7eb8da"]').length > 0,
+    { timeout: 120_000 },
+  ).catch(() => {});
+  await page.waitForFunction(
+    () =>
+      document.querySelectorAll('svg.plan.exploded-axo path[stroke="#00854a"], svg.plan.exploded-axo path[stroke="#c45c00"]').length > 0,
+    { timeout: 120_000 },
+  ).catch(() => {});
+  await page.waitForTimeout(2000);
 }
 
 async function capture(query, pngPath) {

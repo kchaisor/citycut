@@ -7,8 +7,8 @@
   },
   "lineFeatures": 8327,
   "stopFeatures": 24515,
-  "ptMetroLinesBytes": 3231219,
-  "ptMetroStopsBytes": 4138992,
+  "ptMetroLinesBytes": 1789287,
+  "ptMetroStopsBytes": 403192,
   "licence": "Creative Commons Attribution 4.0",
   "source": "https://opendata.transport.vic.gov.au/dataset/public-transport-lines-and-stops"
 }

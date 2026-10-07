@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { squareBBox } from "./geo";
-import type { AxoLayerId, ExplodedAxoOverlayBundle } from "./explodedAxo";
+import { modelHasClippedWaterInFrame, type AxoLayerId, type ExplodedAxoOverlayBundle } from "./explodedAxo";
 import {
   fetchHydroOverlays,
   fetchPlanningOverlays,
@@ -8,6 +8,7 @@ import {
   fetchTransportRail,
 } from "./explodedAxoOverlayFetch";
 import { fetchPublicTransportOverlays } from "./explodedAxoPt";
+import { fetchOvertureBaseForCut } from "./overtureBase";
 import type { CityModel } from "../types";
 
 export type OverlayLoadState = ExplodedAxoOverlayBundle;
@@ -50,6 +51,17 @@ export function useExplodedAxoOverlays(model: CityModel, layerVisible: Record<Ax
             next.hydro = result.ok ? result.data : "unavailable";
           }),
         );
+        if (!modelHasClippedWaterInFrame(model)) {
+          tasks.push(
+            fetchOvertureBaseForCut(bounds, model.center, model.sideM, {
+              waterGreen: true,
+              trees: false,
+              frameShape: model.frameShape,
+            }, controller.signal).then((base) => {
+              next.overtureWater = base.areas.filter((area) => area.kind === "water");
+            }),
+          );
+        }
       }
 
       if (layerVisible.transport) {
@@ -114,6 +126,17 @@ export async function loadExplodedAxoOverlayBundle(
         next.hydro = result.ok ? result.data : "unavailable";
       }),
     );
+    if (!modelHasClippedWaterInFrame(model)) {
+      tasks.push(
+        fetchOvertureBaseForCut(bounds, model.center, model.sideM, {
+          waterGreen: true,
+          trees: false,
+          frameShape: model.frameShape,
+        }, signal).then((base) => {
+          next.overtureWater = base.areas.filter((area) => area.kind === "water");
+        }),
+      );
+    }
   }
   if (layerVisible.transport) {
     tasks.push(

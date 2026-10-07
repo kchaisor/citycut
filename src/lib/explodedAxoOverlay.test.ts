@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { vicmapWfsGetFeatureUrl } from "./vicmapWfs";
+import { ptModeFromValue } from "./explodedAxoOverlayFetch";
 import { classifyPlanningSchemeForTest, planningWfsUrlForTest } from "./explodedAxoOverlayFetch.test-utils";
 import { buildExplodedAxoLayers, defaultExplodedAxoSettings, explodedAxoBounds } from "./explodedAxo";
 import { explodedAxoViewportExtent } from "./planViewport";
@@ -18,6 +19,12 @@ describe("vicmap WFS urls", () => {
 });
 
 describe("planning overlay classes", () => {
+  it("maps PTV MODE strings to train, tram, and bus", () => {
+    expect(ptModeFromValue("METRO TRAM")).toBe("tram");
+    expect(ptModeFromValue("METRO BUS")).toBe("bus");
+    expect(ptModeFromValue("METRO TRAIN")).toBe("train");
+  });
+
   it("maps scheme codes to flood, heritage, ddo, and bmo", () => {
     expect(classifyPlanningSchemeForTest("LSIO")).toBe("flood");
     expect(classifyPlanningSchemeForTest("HO")).toBe("heritage");

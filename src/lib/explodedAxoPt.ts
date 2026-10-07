@@ -18,16 +18,23 @@ export const PT_METRO_BOUNDS = {
 export const PT_LINES_PMTILES_URL = `${import.meta.env.BASE_URL}pt-metro-lines.pmtiles`;
 export const PT_STOPS_PMTILES_URL = `${import.meta.env.BASE_URL}pt-metro-stops.pmtiles`;
 
-const PT_TILE_ZOOM = 12;
-
 function resolveUrl(relative: string): string {
-  if (typeof document !== "undefined") {
-    return new URL(relative, document.baseURI).href;
-  }
-  return relative;
+  const base =
+    typeof document !== "undefined" && document.baseURI
+      ? document.baseURI
+      : typeof location !== "undefined"
+        ? `${location.origin}${import.meta.env.BASE_URL}`
+        : import.meta.env.BASE_URL;
+  return new URL(relative, base).href;
 }
 
-function linesFromVectorFeature(feature: { toGeoJSON: (x: number, y: number, z: number) => GeoJSON.Feature }, x: number, y: number, z: number, origin: LonLat): Pt[][] {
+function linesFromVectorFeature(
+  feature: { toGeoJSON: (x: number, y: number, z: number) => GeoJSON.Feature },
+  x: number,
+  y: number,
+  z: number,
+  origin: LonLat,
+): Pt[][] {
   const geo = feature.toGeoJSON(x, y, z);
   const geometry = geo.geometry;
   if (!geometry || geometry.type === "GeometryCollection") return [];
@@ -73,10 +80,16 @@ function pointFromVectorFeature(
   return toLocal(lat, lon, origin);
 }
 
+function zoomLevelsForArchive(header: { minZoom: number; maxZoom: number }): number[] {
+  const levels = new Set<number>();
+  for (let z = header.maxZoom; z >= header.minZoom && levels.size < 3; z--) levels.add(z);
+  return [...levels];
+}
+
 async function readPmtilesLayer<T>(
   url: string,
   bounds: { south: number; west: number; north: number; east: number },
-  layerName: string,
+  preferredLayerNames: string[],
   sideM: number,
   frameShape: SiteFrameShape,
   origin: LonLat,
@@ -85,33 +98,45 @@ async function readPmtilesLayer<T>(
   mapPoint?: (props: Record<string, unknown>, point: Pt) => T[],
 ): Promise<T[]> {
   const pmtiles = new PMTiles(resolveUrl(url));
-  const tiles = tileRange(bounds, PT_TILE_ZOOM);
+  const header = await pmtiles.getHeader();
+  const zooms = zoomLevelsForArchive(header);
   const out: T[] = [];
-  for (const { z, x, y } of tiles) {
-    if (signal?.aborted) throw signal.reason ?? new DOMException("Aborted", "AbortError");
-    const tile = await pmtiles.getZxy(z, x, y, signal);
-    if (!tile?.data) continue;
-    const vt = new VectorTile(new PbfReader(tile.data));
-    const layer = vt.layers[layerName];
-    if (!layer) continue;
-    for (let i = 0; i < layer.length; i++) {
-      const feature = layer.feature(i);
-      const props = feature.properties as Record<string, unknown>;
-      if (mapPoint) {
-        const point = pointFromVectorFeature(feature, x, y, z, origin);
-        if (!point || !pointInSiteFrame(point, sideM, frameShape)) continue;
-        out.push(...mapPoint(props, point));
-        continue;
-      }
-      const rawLines = linesFromVectorFeature(feature, x, y, z, origin);
-      const clipped: Pt[][] = [];
-      for (const line of rawLines) {
-        for (const part of clipPolylineSiteFrame(line, sideM, frameShape)) {
-          if (part.length >= 2) clipped.push(part);
+  const seen = new Set<string>();
+
+  for (const z of zooms) {
+    for (const { x, y } of tileRange(bounds, z)) {
+      if (signal?.aborted) throw signal.reason ?? new DOMException("Aborted", "AbortError");
+      const tile = await pmtiles.getZxy(z, x, y, signal);
+      if (!tile?.data) continue;
+      const vt = new VectorTile(new PbfReader(tile.data));
+      const layerName =
+        preferredLayerNames.find((name) => vt.layers[name]) ?? Object.keys(vt.layers)[0];
+      if (!layerName) continue;
+      const layer = vt.layers[layerName];
+      if (!layer) continue;
+      for (let i = 0; i < layer.length; i++) {
+        const feature = layer.feature(i);
+        const props = feature.properties as Record<string, unknown>;
+        const dedupeKey = `${z}:${x}:${y}:${i}:${JSON.stringify(props)}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+
+        if (mapPoint) {
+          const point = pointFromVectorFeature(feature, x, y, z, origin);
+          if (!point || !pointInSiteFrame(point, sideM, frameShape)) continue;
+          out.push(...mapPoint(props, point));
+          continue;
         }
+        const rawLines = linesFromVectorFeature(feature, x, y, z, origin);
+        const clipped: Pt[][] = [];
+        for (const line of rawLines) {
+          for (const part of clipPolylineSiteFrame(line, sideM, frameShape)) {
+            if (part.length >= 2) clipped.push(part);
+          }
+        }
+        if (clipped.length === 0) continue;
+        out.push(...mapFeature(props, clipped));
       }
-      if (clipped.length === 0) continue;
-      out.push(...mapFeature(props, clipped));
     }
   }
   return out;
@@ -136,7 +161,7 @@ export async function fetchPublicTransportOverlays(
       readPmtilesLayer(
         PT_LINES_PMTILES_URL,
         bounds,
-        "lines",
+        ["lines", "geojsonLayer"],
         model.sideM,
         shape,
         model.center,
@@ -149,7 +174,7 @@ export async function fetchPublicTransportOverlays(
       readPmtilesLayer(
         PT_STOPS_PMTILES_URL,
         bounds,
-        "stops",
+        ["stops", "geojsonLayer"],
         model.sideM,
         shape,
         model.center,
