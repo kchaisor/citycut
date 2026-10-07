@@ -16,7 +16,7 @@ type NominatimRow = GeocoderRow & {
 };
 
 /** Identifies the app. Browsers strip User-Agent and send Referer instead. */
-export const NOMINATIM_USER_AGENT = "CityCut/0.1 (https://kchaisor.github.io/citycut-export/)";
+export const NOMINATIM_USER_AGENT = "CityCut/0.1 (https://kchaisor.github.io/citycut/)";
 
 /** Nominatim's usage policy: at most one request per second. */
 export const NOMINATIM_MIN_INTERVAL_MS = 1000;

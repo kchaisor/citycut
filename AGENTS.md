@@ -4,7 +4,7 @@ CityCut cuts a square out of a city and exports a 3D model and a 2D site plan. B
 
 ## Stack and commands
 
-Vite, React, MapLibre, and three.js. Vite `base` is `/citycut-export/`. Use `npm run dev`, `npm test`, `npm run typecheck`, `npm run build`, and `npm run preview`. GitHub Pages deploys on push to `main` via `.github/workflows/pages.yml` (https://kchaisor.github.io/citycut-export/).
+Vite, React, MapLibre, and three.js. Vite `base` is `/citycut/`. Use `npm run dev`, `npm test`, `npm run typecheck`, `npm run build`, and `npm run preview`. GitHub Pages deploys on push to `main` via `.github/workflows/pages.yml` (https://kchaisor.github.io/citycut/).
 
 ## File map
 

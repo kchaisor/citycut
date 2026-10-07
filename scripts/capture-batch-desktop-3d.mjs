@@ -4,7 +4,7 @@ import fs from "node:fs";
 const out = "/opt/cursor/artifacts/batch-desktop-3d.png";
 fs.mkdirSync("/opt/cursor/artifacts", { recursive: true });
 
-const url = "http://127.0.0.1:5173/citycut-export/?lat=-37.8136&lon=144.9631&km=0.45";
+const url = "http://127.0.0.1:5173/citycut/?lat=-37.8136&lon=144.9631&km=0.45";
 const browser = await chromium.launch({
   headless: true,
   args: ["--use-gl=angle", "--use-angle=swiftshader"],

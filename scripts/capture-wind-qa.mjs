@@ -34,7 +34,7 @@ const browser = await chromium.launch({
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 page.setDefaultTimeout(300_000);
 
-await page.goto("http://127.0.0.1:5173/citycut-export/?qa=1&buildings=uniform", {
+await page.goto("http://127.0.0.1:5173/citycut/?qa=1&buildings=uniform", {
   waitUntil: "domcontentloaded",
 });
 await page.waitForTimeout(2000);

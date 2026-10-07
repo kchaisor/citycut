@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 import fs from "node:fs";
 
 const logPath = "/opt/cursor/artifacts/create-network-log.json";
-const url = "http://127.0.0.1:5173/citycut-export/?lat=-37.8136&lon=144.9631&km=1";
+const url = "http://127.0.0.1:5173/citycut/?lat=-37.8136&lon=144.9631&km=1";
 const requests = [];
 
 const browser = await chromium.launch({ headless: true });

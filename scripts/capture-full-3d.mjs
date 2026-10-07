@@ -7,7 +7,7 @@ if (!out || lat == null || lon == null || !km) {
 }
 
 fs.mkdirSync("/opt/cursor/artifacts", { recursive: true });
-const url = `http://127.0.0.1:5173/citycut-export/?lat=${lat}&lon=${lon}&km=${km}`;
+const url = `http://127.0.0.1:5173/citycut/?lat=${lat}&lon=${lon}&km=${km}`;
 const browser = await chromium.launch({
   headless: true,
   args: ["--use-gl=angle", "--use-angle=swiftshader"],

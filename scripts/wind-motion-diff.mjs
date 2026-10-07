@@ -1,6 +1,6 @@
 /**
  * Headless wind streak motion check: two canvas screenshots ~1s apart, pixel diff count.
- * Usage: node scripts/wind-motion-diff.mjs [--base=/citycut-export/] [--out=label]
+ * Usage: node scripts/wind-motion-diff.mjs [--base=/citycut/] [--out=label]
  */
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -15,7 +15,7 @@ const baseArg = process.argv.find((a) => a.startsWith("--base="));
 const labelArg = process.argv.find((a) => a.startsWith("--out="));
 const reducedMotion = process.argv.includes("--reduced-motion");
 const animateAnyway = process.argv.includes("--animate-anyway");
-const basePath = baseArg ? baseArg.slice("--base=".length) : "/citycut-export/";
+const basePath = baseArg ? baseArg.slice("--base=".length) : "/citycut/";
 const label = labelArg ? labelArg.slice("--out=".length) : "main";
 
 const cameraPose = {

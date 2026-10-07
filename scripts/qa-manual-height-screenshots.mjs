@@ -154,7 +154,7 @@ execSync(`npm test -- scripts/qa-rhino-building-height.test.ts`, {
 });
 
 const url =
-  "http://localhost:5173/citycut-export/?lat=-37.8136&lon=144.9631&km=0.6&label=CBD&view=persp&qa=1";
+  "http://localhost:5173/citycut/?lat=-37.8136&lon=144.9631&km=0.6&label=CBD&view=persp&qa=1";
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });

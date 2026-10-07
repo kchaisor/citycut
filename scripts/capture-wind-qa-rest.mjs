@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 
 const outDir = "/opt/cursor/artifacts";
 const baseUrl =
-  "http://127.0.0.1:5173/citycut-export/?qa=1&buildings=uniform&lat=-37.8207&lon=145.1053&km=0.4&label=Mont%20Albert";
+  "http://127.0.0.1:5173/citycut/?qa=1&buildings=uniform&lat=-37.8207&lon=145.1053&km=0.4&label=Mont%20Albert";
 
 const browser = await chromium.launch({
   headless: true,
