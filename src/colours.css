@@ -163,7 +163,7 @@
   /* Rail */
 
   /* Rail ribbon in the 3D view and the Rhino Rail layer. The site-plan rail line stays in drawing-style.css. */
-  --rail-fill: #8d6244;
+  --rail-fill: #000000;
 
   /* 3D-only materials */
 
@@ -223,8 +223,8 @@
 
   /* Exploded axonometric drawing (on-screen and Illustrator). */
   --axo-water: #7eb8da;
-  --axo-road: #e8883a;
-  --axo-green: #8fbc8f;
+  --axo-road: #2160A7;
+  --axo-green: #7CB942;
   --axo-building: #1a1916;
   --axo-guide: #c8c8c8;
   --axo-guide-dash: #c8c8c8;
@@ -240,5 +240,5 @@
   --axo-pt-train: #003366;
   --axo-pt-tram: #000000;
   --axo-pt-bus: #c45c00;
-  --axo-contour: #8a8578;
+  --axo-contour: #000000;
 }
