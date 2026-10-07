@@ -22,7 +22,6 @@ import {
 } from "./figureGround";
 import { formatCoord, openRing } from "./geo";
 import { LINE_MM, hexRgb } from "./lineweights";
-import { footpathLines, unionFootpaths } from "./roadFill";
 import { heliodonPlanPdfChunk } from "./heliodonPlanExport";
 import type { HeliodonDiagramExportOptions } from "./heliodonDiagram";
 import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
@@ -166,13 +165,6 @@ function annotation(
         y: yUp(layout.barY + layout.barHeightMm * 0.82, page),
         sizeMm: 2.3,
         text: `${layout.barMetres} m`,
-        color: ink,
-      },
-      {
-        x: layout.northX + 1.8,
-        y: yUp(layout.northTipY + 3.2, page),
-        sizeMm: 2.6,
-        text: "N",
         color: ink,
       },
       {
@@ -397,15 +389,6 @@ export function sitePlanChunks(
       })),
     });
   }
-  if (plan.contourLabels.length > 0) {
-    chunks.push({
-      name: "Contour labels",
-      texts: plan.contourLabels.map((label) => {
-        const [x, y] = sheetPoint(label.east, label.north, model.sideM, layout);
-        return { x, y, sizeMm: 1.6, text: label.text, color: fillOf("--contour-label") };
-      }),
-    });
-  }
   const railPen = pen(style.rail);
   if (plan.rails.length > 0 && railPen) {
     chunks.push({
@@ -512,11 +495,9 @@ export function figureGroundChunks(
   heliodon?: HeliodonDiagramExportOptions | null,
 ): PdfChunk[] {
   const layout = layoutSheet(model.sideM, scale);
-  const ground = figureGround(model.buildings, model.sideM);
+  const frameShape = model.frameShape ?? "square";
+  const ground = figureGround(model.buildings, model.sideM, frameShape);
   const chunks: PdfChunk[] = [];
-  const foot = unionFootpaths(footpathLines(model.roads), style.pathWidthM, model.sideM);
-  const strip = pathStrip(foot.polygons, model, layout, style);
-  if (strip) chunks.push(strip);
   const paths = ground.polygons
     .map((polygon) => mapRings(polygon, model.sideM, layout))
     .filter((rings) => rings.length > 0)

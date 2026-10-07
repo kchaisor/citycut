@@ -14,6 +14,7 @@ import {
   tileLocalRect,
   tileRange,
 } from "./overtureTiles";
+import { clipPolylineSiteFrame, DEFAULT_SITE_FRAME_SHAPE, type SiteFrameShape } from "./siteFrame";
 import type { LonLat, Pt, RoadFeat } from "../types";
 
 export const OVERTURE_TRANSPORT_ZOOM = 14;
@@ -81,6 +82,7 @@ export async function fetchOvertureTransportationForCut(
   origin: LonLat,
   sideM: number,
   signal?: AbortSignal,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
 ): Promise<{ roads: RoadFeat[]; roadKm: number; stats: OvertureTransportStats }> {
   const half = sideM / 2;
   const t0 = performance.now();
@@ -99,13 +101,19 @@ export async function fetchOvertureTransportationForCut(
     segmentCount += fromTile.parts.length;
     parts.push(...fromTile.parts);
   }
-  const roads: RoadFeat[] = parts.map((part) => ({
-    id: stableNumericId(part.id),
-    line: part.line,
-    width: part.spec.width,
-    kind: part.spec.kind,
-    ...(part.spec.grade ? { grade: part.spec.grade } : {}),
-  }));
+  const roads: RoadFeat[] = [];
+  for (const part of parts) {
+    for (const line of clipPolylineSiteFrame(part.line, sideM, frameShape)) {
+      if (polylineLength(line) < 1) continue;
+      roads.push({
+        id: stableNumericId(`${part.id}:${roads.length}`),
+        line,
+        width: part.spec.width,
+        kind: part.spec.kind,
+        ...(part.spec.grade ? { grade: part.spec.grade } : {}),
+      });
+    }
+  }
   const jumpLimit = overtureMaxRoadJumpM(OVERTURE_TRANSPORT_ZOOM, origin);
   const sanitized = sanitizeRoadFeatures(roads, jumpLimit);
   const deduped = dedupeRoads(sanitized.roads);

@@ -1,6 +1,7 @@
 import * as polygonClipping from "polygon-clipping";
 import type { MultiPolygon, Pair, Polygon } from "polygon-clipping";
 import { openRing } from "./geo";
+import { siteFramePolygon } from "./siteFrame";
 import { sunAtMelbourneLocal, type SolarSample } from "./solar";
 import { buildingHeightsFingerprint } from "./heightOverrides";
 import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
@@ -98,17 +99,8 @@ export function buildingShadowPolygon(building: BuildingFeat, offset: Pt): Multi
   return merged;
 }
 
-function framePolygon(sideM: number): Polygon {
-  const half = sideM / 2;
-  return [
-    [
-      [-half, -half] as Pair,
-      [half, -half] as Pair,
-      [half, half] as Pair,
-      [-half, half] as Pair,
-      [-half, -half] as Pair,
-    ],
-  ];
+function framePolygon(sideM: number, frameShape: import("./siteFrame").SiteFrameShape = "square"): Polygon {
+  return siteFramePolygon(sideM, frameShape) as Polygon;
 }
 
 function clipRingFromClipRing(ring: ClipRing): import("../types").Ring {
@@ -201,7 +193,7 @@ export function planShadowRings(
     merged = merged.length === 0 ? shadow : union(merged, shadow);
   }
   if (merged.length === 0) return unionCache;
-  merged = intersection(merged, framePolygon(model.sideM));
+  merged = intersection(merged, framePolygon(model.sideM, model.frameShape ?? "square"));
   unionCache = shadowRingsFromMulti(merged);
   return unionCache;
 }

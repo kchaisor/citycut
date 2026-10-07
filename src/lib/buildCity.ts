@@ -4,6 +4,7 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { BUILDING_EDGE_COLOR, BUILDING_EDGE_THRESHOLD_DEG } from "./buildingEdges";
 import { BUILDING_USE_META, SOURCE_META, buildingLayerName, uniformBuildingColor } from "./buildingUse";
 import { getColour } from "./colours";
+import { DEFAULT_SITE_FRAME_SHAPE } from "./siteFrame";
 import { buildTreeGroup } from "./treeMassing";
 import { openRing, signedArea } from "./geo";
 import { carriagewaysOf, unionCarriageways, unionPathRoads } from "./roadFill";
@@ -331,8 +332,8 @@ function order(object: THREE.Object3D, renderOrder: number) {
   });
 }
 
-function terrainMesh(field: TerrainField, sideM: number): THREE.Mesh {
-  const buffers = terrainBuffers(field, sideM);
+function terrainMesh(field: TerrainField, sideM: number, frameShape = DEFAULT_SITE_FRAME_SHAPE): THREE.Mesh {
+  const buffers = terrainBuffers(field, sideM, frameShape);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(buffers.positions, 3));
   geometry.setAttribute("color", new THREE.BufferAttribute(buffers.colors, 3));
@@ -366,11 +367,15 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     sideM: model.sideM,
   };
 
+  const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const sample = elevationAt(model);
   if (model.terrain) {
-    group.add(terrainMesh(model.terrain, model.sideM));
+    group.add(terrainMesh(model.terrain, model.sideM, frameShape));
   } else {
-    const groundGeo = new THREE.PlaneGeometry(model.sideM, model.sideM);
+    const groundGeo =
+      frameShape === "circle"
+        ? new THREE.CircleGeometry(model.sideM / 2, 72)
+        : new THREE.PlaneGeometry(model.sideM, model.sideM);
     groundGeo.rotateX(-Math.PI / 2);
     const groundMat = paint(
       matteStandardMaterial({
@@ -451,10 +456,12 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
               .filter((road) => road.kind === "road" && road.grade === "path")
               .map((road) => ({ line: road.line, width: road.width })),
             model.sideM,
+            frameShape,
           )
         : unionCarriageways(
             carriagewaysOf(model.roads.filter((road) => (road.grade ?? "local") === grade)),
             model.sideM,
+            frameShape,
           );
     const geometry = roadFillGeometry(fill.polygons, layer.lift, sample, drapeSpacing);
     if (!geometry) continue;
@@ -470,6 +477,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   const railFill = unionCarriageways(
     model.roads.filter((road) => road.kind === "rail").map((road) => ({ line: road.line, width: road.width })),
     model.sideM,
+    frameShape,
   );
   const railGeo = roadFillGeometry(railFill.polygons, SURFACE.rail.lift, sample, drapeSpacing);
   if (railGeo) {

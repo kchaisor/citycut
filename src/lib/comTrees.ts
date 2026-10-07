@@ -110,12 +110,21 @@ export async function fetchComTrees(bounds: BBox, signal?: AbortSignal): Promise
  * so a record is already inside that boundary. Crown and height are not published;
  * species, DBH, and age size the tree.
  */
-export function comRecordsToTrees(records: ComTree[], origin: LonLat, half: number): TreeFeat[] {
+export function comRecordsToTrees(
+  records: ComTree[],
+  origin: LonLat,
+  sideM: number,
+  frameShape: import("./siteFrame").SiteFrameShape = "square",
+): TreeFeat[] {
+  const half = sideM / 2;
   const trees: TreeFeat[] = [];
   records.forEach((record, index) => {
     if (!Number.isFinite(record.lat) || !Number.isFinite(record.lon)) return;
     const at = toLocal(record.lat, record.lon, origin);
-    if (Math.abs(at[0]) > half + 0.2 || Math.abs(at[1]) > half + 0.2) return;
+    const margin = 0.2;
+    if (frameShape === "square") {
+      if (Math.abs(at[0]) > half + margin || Math.abs(at[1]) > half + margin) return;
+    } else if (at[0] * at[0] + at[1] * at[1] > (half + margin) ** 2) return;
     const genus = record.genus ?? undefined;
     const species = record.scientific ?? undefined;
     const sized = treeSize(

@@ -16,6 +16,7 @@ function clippingFns(): ClipFns {
 
 const { union, intersection } = clippingFns();
 import { signedArea } from "./geo";
+import { DEFAULT_SITE_FRAME_SHAPE, siteFramePolygon, type SiteFrameShape } from "./siteFrame";
 import type { BuildingFeat, CityModel, Pt } from "../types";
 
 /** Finest scale first. 1:5000 is what lets a 1 km frame sit on A3. */
@@ -254,17 +255,8 @@ function buildingPolygon(building: BuildingFeat): Polygon | null {
   return [orient(outer, true), ...holes];
 }
 
-function framePolygon(sideM: number): Polygon {
-  const half = sideM / 2;
-  return [
-    [
-      [-half, -half],
-      [half, -half],
-      [half, half],
-      [-half, half],
-      [-half, -half],
-    ],
-  ];
+function framePolygon(sideM: number, frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE): Polygon {
+  return siteFramePolygon(sideM, frameShape);
 }
 
 function clipPolygonToFrame(polygon: Polygon, frame: Polygon): Polygon[] {
@@ -409,10 +401,14 @@ function tidy(polygons: MultiPolygon): MultiPolygon {
  * Building footprints from the model, clipped to the cut square, then unioned
  * where they overlap or touch. Courtyard holes stay holes.
  */
-export function figureGround(buildings: BuildingFeat[], sideM: number): FigureGround {
+export function figureGround(
+  buildings: BuildingFeat[],
+  sideM: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+): FigureGround {
   const before = buildings.length;
   if (before === 0 || !(sideM > 0)) return { polygons: [], before, after: 0 };
-  const frame = framePolygon(sideM);
+  const frame = framePolygon(sideM, frameShape);
   const clipped: Polygon[] = [];
   for (const building of buildings) {
     const polygon = buildingPolygon(building);
@@ -453,8 +449,12 @@ function modelPath(polygon: Polygon): string {
 }
 
 /** Screen-plan paths in local metres, north up (SVG y is minus north). */
-export function figureGroundModelPaths(buildings: BuildingFeat[], sideM: number): string[] {
-  return figureGround(buildings, sideM)
+export function figureGroundModelPaths(
+  buildings: BuildingFeat[],
+  sideM: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+): string[] {
+  return figureGround(buildings, sideM, frameShape)
     .polygons.map(modelPath)
     .filter(Boolean);
 }

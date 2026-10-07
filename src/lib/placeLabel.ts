@@ -187,8 +187,9 @@ export function coordinateLabel(lat: number, lon: number): string {
   return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
 }
 
-export function cutSizeLabel(sideM: number): string {
+export function cutSizeLabel(sideM: number, frameShape: "square" | "circle" = "square"): string {
   const metres = Math.round(sideM);
+  if (frameShape === "circle") return `${metres} m diameter`;
   return `${metres} × ${metres} m`;
 }
 

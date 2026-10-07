@@ -1,8 +1,14 @@
 import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 import { PMTiles } from "pmtiles";
-import { bufferOpenLine } from "./bufferLine";
-import { clipPolygon, clipPolyline } from "./clip";
+import {
+  clipAreaToSiteFrame,
+  clipPolylineSiteFrame,
+  DEFAULT_SITE_FRAME_SHAPE,
+  pointInSiteFrame,
+  type SiteFrameShape,
+} from "./siteFrame";
+import { waterFallbackFromCenterlines, type WaterCenterline } from "./waterRibbonFallback";
 import { dedupeAreas } from "./footprints";
 import { dedupeConsecutive, polylineLength, signedArea, toLocal } from "./geo";
 import { reassembleBuildingFragments } from "./overtureBuildings";
@@ -12,8 +18,6 @@ import {
   isOvertureWaterLine,
   isOvertureWaterPolygon,
   treeTagsFromLand,
-  waterLineHalfWidthM,
-  waterTagsFromOverture,
 } from "./overtureBaseMapping";
 import { overtureBaseUrl, resolveOvertureRelease } from "./overtureRelease";
 import { treeSize } from "./trees";
@@ -60,17 +64,24 @@ function mergePolyFragments(fragments: PolyFragment[]): PolyFragment[] {
   }));
 }
 
-function ringFromGeoJson(coordinates: number[][][], origin: LonLat, half: number) {
+function ringFromGeoJson(
+  coordinates: number[][][],
+  origin: LonLat,
+  sideM: number,
+  frameShape: SiteFrameShape,
+) {
   const toRing = (loop: number[][]): Ring =>
     dedupeConsecutive(
       loop.map(([lon, lat]) => toLocal(lat, lon, origin)),
       0.12,
     );
-  const outer = clipPolygon(toRing(coordinates[0]), -half, half);
-  if (outer.length < 3 || Math.abs(signedArea(outer)) < MIN_AREA) return null;
-  const holes = coordinates
+  const outerRaw = toRing(coordinates[0]);
+  const holeRaws = coordinates.slice(1).map((loop) => toRing(loop));
+  const clipped = clipAreaToSiteFrame(outerRaw, holeRaws, sideM, frameShape);
+  if (!clipped || clipped[0]!.length < 3 || Math.abs(signedArea(clipped[0]!)) < MIN_AREA) return null;
+  const outer = clipped[0]!;
+  const holes = clipped
     .slice(1)
-    .map((loop) => clipPolygon(toRing(loop), -half, half))
     .filter((hole) => hole.length >= 3 && Math.abs(signedArea(hole)) >= MIN_AREA);
   return { ring: outer, holes };
 }
@@ -82,7 +93,8 @@ function polysFromLayer(
   x: number,
   y: number,
   origin: LonLat,
-  half: number,
+  sideM: number,
+  frameShape: SiteFrameShape,
 ): PolyFragment[] {
   const vt = new VectorTile(new PbfReader(data));
   const layer = vt.layers[layerName];
@@ -101,7 +113,7 @@ function polysFromLayer(
           ? geo.geometry.coordinates
           : [];
     for (const coordinates of polys) {
-      const converted = ringFromGeoJson(coordinates, origin, half);
+      const converted = ringFromGeoJson(coordinates, origin, sideM, frameShape);
       if (!converted) continue;
       out.push({
         id,
@@ -116,8 +128,15 @@ function polysFromLayer(
   return out;
 }
 
-function pushTree(trees: TreeFeat[], id: number, at: Pt, tags: Record<string, string>, half: number) {
-  if (Math.abs(at[0]) > half + 0.2 || Math.abs(at[1]) > half + 0.2) return;
+function pushTree(
+  trees: TreeFeat[],
+  id: number,
+  at: Pt,
+  tags: Record<string, string>,
+  sideM: number,
+  frameShape: SiteFrameShape,
+) {
+  if (!pointInSiteFrame(at, sideM, frameShape)) return;
   const size = treeSize(tags);
   trees.push({
     id,
@@ -130,18 +149,19 @@ function pushTree(trees: TreeFeat[], id: number, at: Pt, tags: Record<string, st
   });
 }
 
-function waterLinesFromLayer(
+function waterCenterlinesFromLayer(
   data: ArrayBuffer,
   z: number,
   x: number,
   y: number,
   origin: LonLat,
-  half: number,
-): AreaFeat[] {
+  sideM: number,
+  frameShape: SiteFrameShape,
+): WaterCenterline[] {
   const vt = new VectorTile(new PbfReader(data));
   const layer = vt.layers.water;
   if (!layer) return [];
-  const out: AreaFeat[] = [];
+  const out: WaterCenterline[] = [];
   for (let i = 0; i < layer.length; i++) {
     const feature = layer.feature(i);
     const props = feature.properties as Record<string, unknown>;
@@ -153,20 +173,12 @@ function waterLinesFromLayer(
       geo.geometry.coordinates.map(([lon, lat]) => toLocal(lat, lon, origin)),
       0.08,
     );
-    for (const part of clipPolyline(raw, -half, half)) {
+    for (const part of clipPolylineSiteFrame(raw, sideM, frameShape)) {
       if (polylineLength(part) < 2) continue;
-      const ring = bufferOpenLine(part, waterLineHalfWidthM(props));
-      if (!ring || ring.length < 4) continue;
-      const tags = waterTagsFromOverture(props);
-      if (!isOvertureWaterPolygon(props, ring) && !isOpenWaterAreaFromTags(tags, ring)) continue;
-      out.push({ id: stableNumericId(`${id}:${out.length}`), kind: "water", ring, holes: [] });
+      out.push({ id: `${id}:${out.length}`, line: part, props });
     }
   }
   return out;
-}
-
-function isOpenWaterAreaFromTags(tags: Record<string, string>, ring: Ring): boolean {
-  return isOvertureWaterPolygon({ source_tags: JSON.stringify(tags) }, ring);
 }
 
 function treesFromLandTile(
@@ -175,7 +187,8 @@ function treesFromLandTile(
   x: number,
   y: number,
   origin: LonLat,
-  half: number,
+  sideM: number,
+  frameShape: SiteFrameShape,
 ): TreeFeat[] {
   const vt = new VectorTile(new PbfReader(data));
   const layer = vt.layers.land;
@@ -190,7 +203,7 @@ function treesFromLandTile(
     const [lon, lat] = geo.geometry.coordinates;
     const at = toLocal(lat, lon, origin);
     const id = typeof props.id === "string" ? props.id : String(props.id ?? "");
-    pushTree(trees, stableNumericId(id), at, treeTagsFromLand(props), half);
+    pushTree(trees, stableNumericId(id), at, treeTagsFromLand(props), sideM, frameShape);
   }
   return trees;
 }
@@ -199,7 +212,7 @@ export async function fetchOvertureBaseForCut(
   bounds: { south: number; west: number; north: number; east: number },
   origin: LonLat,
   sideM: number,
-  options: { waterGreen: boolean; trees: boolean },
+  options: { waterGreen: boolean; trees: boolean; frameShape?: SiteFrameShape },
   signal?: AbortSignal,
 ): Promise<{
   areas: AreaFeat[];
@@ -207,13 +220,13 @@ export async function fetchOvertureBaseForCut(
   overtureTrees: TreeFeat[];
   stats: OvertureBaseStats;
 }> {
-  const half = sideM / 2;
+  const frameShape = options.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const t0 = performance.now();
   const release = await resolveOvertureRelease(signal);
   const pmtiles = new PMTiles(overtureBaseUrl(release));
   const tiles = tileRange(bounds, OVERTURE_BASE_ZOOM);
   const waterFrags: PolyFragment[] = [];
-  const waterLines: AreaFeat[] = [];
+  const waterCenterlines: WaterCenterline[] = [];
   const greenFrags: PolyFragment[] = [];
   const canopyFrags: PolyFragment[] = [];
   const overtureTrees: TreeFeat[] = [];
@@ -223,12 +236,12 @@ export async function fetchOvertureBaseForCut(
     if (signal?.aborted) throw signal.reason ?? new DOMException("Aborted", "AbortError");
     const tile = await pmtiles.getZxy(z, x, y, signal);
     if (!tile?.data) continue;
-    if (options.trees) overtureTrees.push(...treesFromLandTile(tile.data, z, x, y, origin, half));
+    if (options.trees) overtureTrees.push(...treesFromLandTile(tile.data, z, x, y, origin, sideM, frameShape));
     if (!options.waterGreen) continue;
-    waterFrags.push(...polysFromLayer("water", tile.data, z, x, y, origin, half));
-    waterLines.push(...waterLinesFromLayer(tile.data, z, x, y, origin, half));
-    greenFrags.push(...polysFromLayer("land_use", tile.data, z, x, y, origin, half));
-    const cover = polysFromLayer("land_cover", tile.data, z, x, y, origin, half);
+    waterFrags.push(...polysFromLayer("water", tile.data, z, x, y, origin, sideM, frameShape));
+    waterCenterlines.push(...waterCenterlinesFromLayer(tile.data, z, x, y, origin, sideM, frameShape));
+    greenFrags.push(...polysFromLayer("land_use", tile.data, z, x, y, origin, sideM, frameShape));
+    const cover = polysFromLayer("land_cover", tile.data, z, x, y, origin, sideM, frameShape);
     for (const frag of cover) {
       const kind = canopyKindFromLandCover(String(frag.props.subtype ?? ""));
       if (kind) {
@@ -240,16 +253,18 @@ export async function fetchOvertureBaseForCut(
 
   const areas: AreaFeat[] = [];
   if (options.waterGreen) {
-    areas.push(...waterLines);
+    const polygonWater: AreaFeat[] = [];
     for (const merged of mergePolyFragments(waterFrags)) {
       if (!isOvertureWaterPolygon(merged.props, merged.ring)) continue;
-      areas.push({
+      polygonWater.push({
         id: stableNumericId(merged.id),
         kind: "water",
         ring: merged.ring,
         holes: merged.holes,
       });
     }
+    areas.push(...polygonWater);
+    areas.push(...waterFallbackFromCenterlines(waterCenterlines, polygonWater));
     for (const merged of mergePolyFragments(greenFrags)) {
       if (!isGreenLandUse(merged.props)) continue;
       areas.push({

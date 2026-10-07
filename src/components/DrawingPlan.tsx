@@ -8,6 +8,8 @@ import {
   type StrokeStyle,
 } from "../lib/drawingStyle";
 import { figureGroundModelPaths, scaleBarMetres } from "../lib/figureGround";
+import { circleRing, DEFAULT_SITE_FRAME_SHAPE } from "../lib/siteFrame";
+import { openRing } from "../lib/geo";
 import { LINE_MM, screenPx } from "../lib/lineweights";
 import { planBuildingStrokeStyle } from "../lib/planBuildingFill";
 import { planPaths, svgPolyline, svgRings } from "../lib/svgPlan";
@@ -124,9 +126,10 @@ export function DrawingPlan({
       highlightManual,
     ],
   );
+  const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const figurePaths = useMemo(
-    () => (figure ? figureGroundModelPaths(model.buildings, model.sideM) : []),
-    [figure, model],
+    () => (figure ? figureGroundModelPaths(model.buildings, model.sideM, frameShape) : []),
+    [figure, model, frameShape],
   );
   const fitted = useMemo(() => fittedView(model, kind), [model, kind]);
   const [view, setView] = useState<View>(fitted);
@@ -167,8 +170,14 @@ export function DrawingPlan({
   }, [model.sideM]);
 
   const half = model.sideM / 2;
+  const framePathD = useMemo(() => {
+    const half = model.sideM / 2;
+    if (frameShape === "circle") return svgPolyline(openRing(circleRing(half)), true);
+    return `M ${-half} ${-half} L ${half} ${-half} L ${half} ${half} L ${-half} ${half} Z`;
+  }, [frameShape, model.sideM]);
+
   const empty = figure
-    ? figurePaths.length === 0 && plan.pathFill.length === 0
+    ? figurePaths.length === 0
     : model.buildings.length === 0 &&
       model.roads.length === 0 &&
       model.areas.length === 0 &&
@@ -189,7 +198,6 @@ export function DrawingPlan({
   const greenFill = getColour("--green-fill");
   const waterFill = getColour("--water-fill");
   const treeFill = getColour("--tree-fill");
-  const contourLabel = getColour("--contour-label");
   const planEmpty = getColour("--plan-empty");
   const shadowFill = getColour("--shadow-fill");
   const shadowRings = useMemo(() => {
@@ -226,22 +234,11 @@ export function DrawingPlan({
       <rect x={-half} y={-half} width={model.sideM} height={model.sideM} fill={canvas} />
       {figure ? (
         <>
-          {plan.pathFill.length > 0 && (
-            <path
-              d={plan.pathFill.map((polygon) => svgRings(polygon)).join(" ")}
-              fill={style.pathFill}
-              fillRule="evenodd"
-              {...footpathEdgeSvgAttrs(style)}
-            />
-          )}
           {figurePaths.map((d, index) => (
             <path key={`f${index}`} d={d} fill={figureFill} fillRule="evenodd" />
           ))}
-          <rect
-            x={-half}
-            y={-half}
-            width={model.sideM}
-            height={model.sideM}
+          <path
+            d={framePathD}
             fill="none"
             stroke={figureFill}
             strokeWidth={framePx}
@@ -329,20 +326,6 @@ export function DrawingPlan({
                 )}
               />
             ))}
-            {plan.contourLabels.map((label, index) => (
-              <text
-                key={`cl${index}`}
-                x={label.east}
-                y={-label.north}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fontSize={model.sideM * 0.014}
-                fill={contourLabel}
-                fontFamily="Helvetica, Arial, sans-serif"
-              >
-                {label.text}
-              </text>
-            ))}
             {plan.rails.map((rail, index) => (
               <CasedLine key={`l${index}`} d={svgPolyline(rail, false)} stroke={style.rail} paper={canvas} />
             ))}
@@ -387,23 +370,7 @@ export function DrawingPlan({
                 {...screenPenAttrs(style.tree)}
               />
             ))}
-            <rect
-              x={-half}
-              y={-half}
-              width={model.sideM}
-              height={model.sideM}
-              fill="none"
-              {...screenPenAttrs(style.frame, "miter")}
-            />
-            <text
-              x={0}
-              y={-half + model.sideM * 0.04}
-              textAnchor="middle"
-              fontSize={model.sideM * 0.03}
-              fill={style.annotation.color}
-            >
-              N
-            </text>
+            <path d={framePathD} fill="none" {...screenPenAttrs(style.frame, "miter")} />
             {heliodon && (
               <HeliodonPlanOverlay input={heliodon} planScale={planScale} sideM={model.sideM} />
             )}

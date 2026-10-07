@@ -394,6 +394,9 @@ button { cursor: pointer; }
   color: var(--muted-text);
 }
 .field-head strong { font-size: 13px; font-variant-numeric: tabular-nums; font-weight: 560; }
+
+.shape-toggle { display: flex; gap: 8px; margin-top: 8px; }
+.shape-toggle .toggle { flex: 1; justify-content: center; min-height: 36px; }
 .field-note, .hint, .attrib, .v2, .meta {
   color: var(--muted-text);
   font-size: 12.5px;

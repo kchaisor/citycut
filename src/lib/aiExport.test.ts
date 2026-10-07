@@ -247,7 +247,7 @@ describe("Illustrator plans", () => {
     expect(info.text).toContain("1:1000");
     expect(info.text).toContain("-37.81360, 144.96310");
     expect(info.text).toContain("OpenStreetMap");
-    expect(info.text).toContain("N");
+    expect(info.text).not.toMatch(/\nN\n/);
     for (const name of info.layers) expect(info.counts.get(name) ?? 0).toBeGreaterThan(0);
     const widths = info.widthsMm.map((mm) => Math.round(mm * 100) / 100);
     expect(widths).not.toContain(0);
@@ -339,8 +339,7 @@ describe("Illustrator plans", () => {
     const withEdge = await inspect(await sitePlanPdf(model(), 1000, edged));
     expect(paintsOf(withEdge.bodies.get("Footpaths") ?? "")).toContain("B*");
     const figure = figureGroundChunks(model(), 1000).find((chunk) => chunk.name === "Paths");
-    expect(figure?.paths).toHaveLength(1);
-    expect(figure?.paths?.[0]?.fill).toEqual(hexRgb(PATH_FILL));
+    expect(figure).toBeUndefined();
   });
 
   it("writes figure-ground with frame, footprints, and annotation only", async () => {
@@ -361,9 +360,7 @@ describe("Illustrator plans", () => {
     expect(wide.widthMm).toBeCloseTo(420, 0);
     expect(wide.heightMm).toBeCloseTo(428, 0);
     expect(wide.layers).toContain("Frame/Sheet");
-    expect(wide.layers).toContain("Footpaths");
-    const figurePaths = fitted.bodies.get("Footpaths") ?? "";
-    expect(figurePaths.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g)).toEqual(expect.arrayContaining(["f*"]));
+    expect(wide.layers).not.toContain("Footpaths");
   });
 });
 

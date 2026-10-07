@@ -17,15 +17,15 @@ export const WIND_ARROW_DESPAWN_OUTSIDE_FRAC = 0.135;
 /** Animated arrows may extend this far past the frame edge (fraction of sideM). */
 export const WIND_ARROW_VISIBLE_EXTRA_FRAC = 0.15;
 
-/** Frame-relative drift speed (m/s): cross the site in ~25–40 s, scaled by median wind. */
+/** Frame-relative drift speed (m/s): cross the site in ~12–20 s, scaled by median wind. */
 export function windStreakSpeedMs(sideM: number, medianKmh: number): number {
   const calmKmh = 8;
   const strongKmh = 32;
   const t = Math.min(1, Math.max(0, (medianKmh - calmKmh) / (strongKmh - calmKmh)));
-  const crossS = 40 - t * 15;
+  const crossS = 20 - t * 7.5;
   const speed = sideM / crossS;
-  const minSpeed = sideM / 55;
-  const maxSpeed = sideM / 18;
+  const minSpeed = sideM / 27.5;
+  const maxSpeed = sideM / 9;
   return Math.min(maxSpeed, Math.max(minSpeed, speed));
 }
 

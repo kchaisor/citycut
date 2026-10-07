@@ -266,7 +266,7 @@ function addFigureGround(
   model: CityModel,
   zone: number,
 ) {
-  const ground = figureGround(model.buildings, model.sideM);
+  const ground = figureGround(model.buildings, model.sideM, model.frameShape ?? "square");
   if (ground.polygons.length === 0) return;
   const z = figureGroundDatum(model);
   const layerIndex = ensureLayer(rhino, doc, layers, materials, "FigureGround", layerColors().FigureGround);
