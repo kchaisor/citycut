@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AXO_LAYER_LABELS,
-  axoLayerLabelAnchor,
+  axoLayerLabelAnchorBase,
   axoLayerColours,
+  axoLayerSvgTransform,
   axoLayersForPaint,
   buildExplodedAxoLayers,
   explodedAxoBounds,
@@ -50,7 +51,7 @@ export function DrawingExplodedAxo({
 
   useEffect(() => {
     applyView(fitted);
-  }, [model.sideM, model.frameShape]);
+  }, [model.sideM, model.frameShape, settings.gapM, settings.layerOrder, settings.layerVisible, settings.showLabels]);
 
   useEffect(() => {
     onScale?.(view.w);
@@ -168,35 +169,38 @@ export function DrawingExplodedAxo({
                 ? colours.green
                 : colours.buildings;
         const clip = `url(#${clipIds[index]})`;
-        const label = axoLayerLabelAnchor(model.sideM, layer.liftM);
+        const label = axoLayerLabelAnchorBase(model.sideM);
+        const layerTransform = axoLayerSvgTransform(layer.liftM);
         return (
-          <g key={`${layer.id}-${layer.liftM}`} clipPath={clip}>
-            {layer.id === "aerial" && satelliteHref && (
-              <image
-                href={satelliteHref}
-                x={0}
-                y={0}
-                width={model.sideM}
-                height={model.sideM}
-                preserveAspectRatio="xMidYMid slice"
-                transform={isoSatelliteImageTransform(model.sideM, layer.liftM)}
-              />
-            )}
-            {layer.fills.map((d, fi) => (
-              <path key={`f${fi}`} d={d} fill={fillColour} fillRule="evenodd" stroke="none" />
-            ))}
-            {layer.strokes.map((d, si) => (
-              <path
-                key={`s${si}`}
-                d={d}
-                fill="none"
-                stroke={fillColour}
-                strokeWidth={roadPx}
-                vectorEffect="non-scaling-stroke"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            ))}
+          <g key={`${layer.id}-${layer.liftM}`} transform={layerTransform}>
+            <g clipPath={clip}>
+              {layer.id === "aerial" && satelliteHref && (
+                <image
+                  href={satelliteHref}
+                  x={0}
+                  y={0}
+                  width={model.sideM}
+                  height={model.sideM}
+                  preserveAspectRatio="xMidYMid slice"
+                  transform={isoSatelliteImageTransform(model.sideM)}
+                />
+              )}
+              {layer.fills.map((d, fi) => (
+                <path key={`f${fi}`} d={d} fill={fillColour} fillRule="evenodd" stroke="none" />
+              ))}
+              {layer.strokes.map((d, si) => (
+                <path
+                  key={`s${si}`}
+                  d={d}
+                  fill="none"
+                  stroke={fillColour}
+                  strokeWidth={roadPx}
+                  vectorEffect="non-scaling-stroke"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              ))}
+            </g>
             <path
               d={layer.plateOutlineD}
               fill="none"

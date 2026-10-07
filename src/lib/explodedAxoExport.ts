@@ -26,30 +26,54 @@ function isoToSheet(point: Pt, origin: Pt, scale: number, pageHeightMm: number):
   return [x, pageHeightMm - yDown];
 }
 
-function pathFromIsoD(d: string, origin: Pt, scale: number, pageHeightMm: number): number[][] {
+/** Base iso geometry → sheet coords at `liftM` (matches `axoLayerSvgTransform`). */
+function isoBaseToSheet(
+  east: number,
+  north: number,
+  liftM: number,
+  origin: Pt,
+  scale: number,
+  pageHeightMm: number,
+): [number, number] {
+  return isoToSheet([east, north - liftM], origin, scale, pageHeightMm);
+}
+
+function pathFromIsoD(
+  d: string,
+  origin: Pt,
+  scale: number,
+  pageHeightMm: number,
+  liftM = 0,
+): number[][] {
   const ring: number[][] = [];
   const tokens = d.match(/[ML][\d.-]+ [\d.-]+/g) ?? [];
   for (const token of tokens) {
     const m = /^[ML]([\d.-]+) ([\d.-]+)/.exec(token);
     if (m) {
-      ring.push(isoToSheet([Number(m[1]), Number(m[2])], origin, scale, pageHeightMm));
+      ring.push(isoBaseToSheet(Number(m[1]), Number(m[2]), liftM, origin, scale, pageHeightMm));
     }
   }
   return ring;
 }
 
-function ringsFromIsoD(d: string, origin: Pt, scale: number, pageHeightMm: number): number[][][] {
+function ringsFromIsoD(
+  d: string,
+  origin: Pt,
+  scale: number,
+  pageHeightMm: number,
+  liftM = 0,
+): number[][][] {
   const parts = d
     .split(/(?<=\sZ)\s*/i)
     .map((part) => part.trim())
     .filter(Boolean);
   const rings: number[][][] = [];
   for (const part of parts) {
-    const ring = pathFromIsoD(part, origin, scale, pageHeightMm);
+    const ring = pathFromIsoD(part, origin, scale, pageHeightMm, liftM);
     if (ring.length >= 3) rings.push(ring);
   }
   if (rings.length === 0) {
-    const ring = pathFromIsoD(d, origin, scale, pageHeightMm);
+    const ring = pathFromIsoD(d, origin, scale, pageHeightMm, liftM);
     if (ring.length >= 2) rings.push(ring);
   }
   return rings;
@@ -128,7 +152,8 @@ export function explodedAxoChunks(
               ? "Buildings"
               : "Aerial";
     const paths: PdfPath[] = [];
-    const plateRing = pathFromIsoD(layer.plateOutlineD, origin, scale, pageHeightMm);
+    const liftM = layer.liftM;
+    const plateRing = pathFromIsoD(layer.plateOutlineD, origin, scale, pageHeightMm, liftM);
     if (plateRing.length >= 3) {
       paths.push({
         rings: [plateRing],
@@ -138,13 +163,13 @@ export function explodedAxoChunks(
       });
     }
     for (const fill of layer.fills) {
-      const rings = ringsFromIsoD(fill, origin, scale, pageHeightMm);
+      const rings = ringsFromIsoD(fill, origin, scale, pageHeightMm, liftM);
       if (rings.length > 0) {
         paths.push({ rings, fill: hexRgb(layerColour[layer.id]), close: true, evenOdd: true });
       }
     }
     for (const stroke of layer.strokes) {
-      const rings = ringsFromIsoD(stroke, origin, scale, pageHeightMm);
+      const rings = ringsFromIsoD(stroke, origin, scale, pageHeightMm, liftM);
       for (const ring of rings) {
         if (ring.length >= 2) {
           paths.push({

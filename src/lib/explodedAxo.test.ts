@@ -5,6 +5,7 @@ import {
   axoGuideAnchorPoints,
   axoGuideLines,
   axoPlateIsCircularRing,
+  axoLayerSvgTransform,
   axoPlateOutlineD,
   buildExplodedAxoLayers,
   axoLayersForPaint,
@@ -117,6 +118,17 @@ describe("exploded axo stack order", () => {
     const lifts = liftsForLayerOrder(settings.layerOrder, settings.gapM);
     expect(lifts.get("aerial")).toBe(0);
     expect(lifts.get("water")!).toBeGreaterThan(lifts.get("buildings")!);
+  });
+
+  it("stores layer geometry at lift 0 for group transforms", () => {
+    const m = modelWithShape("square");
+    const settings = defaultExplodedAxoSettings(m.sideM);
+    const { layers } = buildExplodedAxoLayers(m, settings);
+    const aerial = layers.find((layer) => layer.id === "aerial")!;
+    const water = layers.find((layer) => layer.id === "water")!;
+    expect(aerial.plateOutlineD).toBe(water.plateOutlineD);
+    expect(axoLayerSvgTransform(aerial.liftM)).not.toBe(axoLayerSvgTransform(water.liftM));
+    expect(water.liftM).toBeGreaterThan(0);
   });
 
   it("paints bottom layers first so water draws on top", () => {

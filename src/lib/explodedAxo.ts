@@ -2,8 +2,18 @@ import { figureGround } from "./figureGround";
 import { getColour } from "./colours";
 import { openRing } from "./geo";
 import { clipAreaToSiteFrame, clipPolylineSiteFrame, circleRing, DEFAULT_SITE_FRAME_SHAPE, type SiteFrameShape } from "./siteFrame";
-import { svgPolyline } from "./svgPlan";
 import type { CityModel, Pt } from "../types";
+
+const roundIso = (value: number) => Math.round(value * 100) / 100;
+
+/** Iso screen path (y down). Do not use site-plan svgPolyline — it negates y. */
+export function isoSvgPolyline(points: Pt[], close: boolean): string {
+  if (points.length < 2) return "";
+  const body = points
+    .map((point, index) => `${index === 0 ? "M" : "L"}${roundIso(point[0])} ${roundIso(point[1])}`)
+    .join(" ");
+  return close ? `${body} Z` : body;
+}
 
 /** Layer ids, default stack top → bottom. */
 export const AXO_LAYER_IDS = ["water", "roads", "green", "buildings", "aerial"] as const;
@@ -68,7 +78,22 @@ export function planPointToIso(east: number, north: number, liftM: number): Pt {
 
 export function isoPathFromPlanRing(ring: Pt[], liftM: number, close = true): string {
   const pts = ring.map(([e, n]) => planPointToIso(e, n, liftM));
-  return svgPolyline(pts, close);
+  return isoSvgPolyline(pts, close);
+}
+
+/** SVG transform stacking one layer vertically (base geometry at lift 0). */
+export function axoLayerSvgTransform(liftM: number): string {
+  return `translate(0 ${roundIso(-liftM)})`;
+}
+
+/** Plan → iso at lift 0 (for geometry drawn inside a lifted group). */
+export function planToIsoBase(east: number, north: number): Pt {
+  return [(east - north) * COS30, (east + north) * SIN30];
+}
+
+export function isoPathFromPlanRingBase(ring: Pt[], close = true): string {
+  const pts = ring.map(([e, n]) => planToIsoBase(e, n));
+  return isoSvgPolyline(pts, close);
 }
 
 /** Closed frame boundary in plan east/north (square or circle). */
@@ -140,6 +165,11 @@ export function axoLayersForPaint(layers: AxoLayerGeometry[]): AxoLayerGeometry[
   return [...layers].sort((a, b) => a.liftM - b.liftM);
 }
 
+/** Label beside the plate when geometry lives in a group with `axoLayerSvgTransform`. */
+export function axoLayerLabelAnchorBase(sideM: number): { x: number; y: number; rotateDeg: number } {
+  return axoLayerLabelAnchor(sideM, 0);
+}
+
 export function axoLayerLabelAnchor(
   sideM: number,
   liftM: number,
@@ -148,10 +178,10 @@ export function axoLayerLabelAnchor(
   const [x0, y0] = planPointToIso(half, -half, liftM);
   const [x1, y1] = planPointToIso(half, half, liftM);
   const rotateDeg = (Math.atan2(y1 - y0, x1 - x0) * 180) / Math.PI;
-  const along = sideM * 0.04;
+  const along = sideM * 0.05;
   return {
-    x: x0 + along * 1.2,
-    y: y0 + along * 0.35,
+    x: x0 + along * 1.4,
+    y: y0 + along * 0.4,
     rotateDeg,
   };
 }
@@ -213,12 +243,13 @@ function areaRings(model: CityModel, kind: "water" | "green"): Pt[][][] {
   return out;
 }
 
-export function axoPlateOutlineD(sideM: number, shape: SiteFrameShape, liftM: number): string {
-  return isoPathFromPlanRing(axoFrameBoundaryRing(sideM, shape), liftM, true);
+export function axoPlateOutlineBaseD(sideM: number, shape: SiteFrameShape): string {
+  return isoPathFromPlanRingBase(axoFrameBoundaryRing(sideM, shape), true);
 }
 
-export function axoClipPathD(sideM: number, shape: SiteFrameShape, liftM: number): string {
-  return axoPlateOutlineD(sideM, shape, liftM);
+/** @deprecated use base outline + axoLayerSvgTransform */
+export function axoPlateOutlineD(sideM: number, shape: SiteFrameShape, liftM: number): string {
+  return isoPathFromPlanRing(axoFrameBoundaryRing(sideM, shape), liftM, true);
 }
 
 /** True when the closed iso path is a circle rim (enough segments, not 4 corners). */
@@ -245,14 +276,14 @@ export function buildExplodedAxoLayers(
   for (const id of settings.layerOrder) {
     if (!settings.layerVisible[id]) continue;
     const liftM = lifts.get(id)!;
-    const plateOutlineD = axoPlateOutlineD(model.sideM, shape, liftM);
-    const clipD = axoClipPathD(model.sideM, shape, liftM);
+    const plateOutlineD = axoPlateOutlineBaseD(model.sideM, shape);
+    const clipD = plateOutlineD;
     const fills: string[] = [];
     const strokes: string[] = [];
 
     const areaToPath = (rings: Pt[][]) =>
       rings
-        .map((ring) => isoPathFromPlanRing(openRing(ring), liftM, true))
+        .map((ring) => isoPathFromPlanRingBase(openRing(ring), true))
         .filter(Boolean)
         .join(" ");
 
@@ -270,14 +301,14 @@ export function buildExplodedAxoLayers(
       const ground = figureGround(model.buildings, model.sideM, shape);
       for (const polygon of ground.polygons) {
         const parts = polygon
-          .map((ring) => isoPathFromPlanRing(openRing(ring), liftM, true))
+          .map((ring) => isoPathFromPlanRingBase(openRing(ring), true))
           .filter(Boolean);
         if (parts.length) fills.push(parts.join(" "));
       }
     } else if (id === "roads") {
       for (const line of roadLines) {
-        const pts = line.map(([e, n]) => planPointToIso(e, n, liftM));
-        strokes.push(svgPolyline(pts, false));
+        const pts = line.map(([e, n]) => planToIsoBase(e, n));
+        strokes.push(isoSvgPolyline(pts, false));
       }
     }
 
@@ -301,11 +332,11 @@ export function axoLayerColours(): Record<AxoLayerId | "guide" | "label", string
 
 /** Iso bounds of the stacked drawing for fitting the viewport. */
 /** SVG transform mapping a plan-aligned satellite image onto the iso plate at `liftM`. */
-export function isoSatelliteImageTransform(sideM: number, liftM: number): string {
+export function isoSatelliteImageTransform(sideM: number, _liftM = 0): string {
   const half = sideM / 2;
-  const [x0, y0] = planPointToIso(-half, -half, liftM);
-  const [x1, y1] = planPointToIso(half, -half, liftM);
-  const [x2, y2] = planPointToIso(-half, half, liftM);
+  const [x0, y0] = planToIsoBase(-half, -half);
+  const [x1, y1] = planToIsoBase(half, -half);
+  const [x2, y2] = planToIsoBase(-half, half);
   const ax = (x1 - x0) / sideM;
   const bx = (x2 - x0) / sideM;
   const cx = x0;
@@ -336,12 +367,16 @@ export function explodedAxoBounds(
       const [x, y] = planPointToIso(pt[0], pt[1], layer.liftM);
       bump(x, y);
     }
+    const label = axoLayerLabelAnchor(model.sideM, layer.liftM);
+    bump(label.x, label.y);
+    bump(label.x + model.sideM * 0.12, label.y);
   }
   for (const guide of guides) {
     bump(guide.x, guide.yTop);
     bump(guide.x, guide.yBottom);
   }
-  const pad = model.sideM * 0.2;
+  const maxLift = layers.reduce((max, layer) => Math.max(max, layer.liftM), 0);
+  const pad = Math.max(model.sideM * 0.26, maxLift * 0.15 + model.sideM * 0.04);
   if (!Number.isFinite(minX)) {
     const half = model.sideM / 2;
     return { minX: -half, minY: -half, maxX: half, maxY: half };
