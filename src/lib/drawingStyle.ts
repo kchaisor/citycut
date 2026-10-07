@@ -31,6 +31,7 @@ export type StrokeKey =
   | "frame"
   | "annotation"
   | "tree"
+  | "tram"
   | "siteBoundary"
   | "siteBuilding";
 
@@ -68,6 +69,11 @@ export type LineStyles = {
   frame: StrokeStyle;
   annotation: StrokeStyle;
   tree: StrokeStyle;
+  tram: StrokeStyle;
+  /** Tree crown fill opacity on the site plan (0–1). */
+  treeFillOpacity: number;
+  /** Dash pattern for exploded axo vertical guides (`none` or mm pair). */
+  axoGuideDash: string;
   roadFill: string;
   /** Drawn on the boundary of the unioned carriageway. */
   kerbOn: boolean;
@@ -97,6 +103,7 @@ export const STROKE_KEYS = [
   "frame",
   "annotation",
   "tree",
+  "tram",
   "siteBoundary",
   "siteBuilding",
 ] as const satisfies readonly StrokeKey[];
@@ -112,6 +119,7 @@ export const STROKE_LABELS: Record<StrokeKey, string> = {
   frame: "Frame",
   annotation: "Annotation",
   tree: "Tree crowns",
+  tram: "Tram routes",
   siteBoundary: "Site boundary",
   siteBuilding: "Site buildings",
 };
@@ -129,6 +137,7 @@ export const STROKE_VARS: Record<StrokeKey, VarNames> = {
   frame: { mm: "--frame-stroke-mm", color: "--frame-stroke", dash: "--frame-dash" },
   annotation: { mm: "--annotation-stroke-mm", color: "--annotation-stroke", dash: "--annotation-dash" },
   tree: { mm: "--tree-stroke-mm", color: "--tree-stroke", dash: "--tree-dash" },
+  tram: { mm: "--tram-stroke-mm", color: "--tram-stroke", dash: "--tram-dash" },
   siteBoundary: {
     mm: SITE_BOUNDARY_MM_VAR,
     color: SITE_BOUNDARY_COLOUR_VAR,
@@ -171,7 +180,7 @@ export type DashPresetId = (typeof DASH_PRESETS)[number]["id"] | "custom";
 const INK = drawingSheetColor("--frame-stroke");
 
 export const DEFAULT_LINE_STYLES: LineStyles = {
-  building: { mm: LINE_MM.buildingCut, color: drawingSheetColor("--building-stroke"), dash: "none" },
+  building: { mm: 0.08, color: drawingSheetColor("--building-stroke"), dash: "none" },
   siteBoundary: {
     mm: 0.35,
     color: COLOUR_FALLBACK[SITE_BOUNDARY_COLOUR_VAR],
@@ -184,13 +193,16 @@ export const DEFAULT_LINE_STYLES: LineStyles = {
   },
   kerb: { mm: LINE_MM.propertyRoad, color: drawingSheetColor("--road-kerb-stroke"), dash: "none" },
   path: { mm: 0, color: drawingSheetColor("--path-edge-stroke"), dash: "none" },
-  rail: { mm: LINE_MM.secondary, color: drawingSheetColor("--rail-stroke"), dash: "none" },
-  green: { mm: 0, color: drawingSheetColor("--green-stroke"), dash: "none" },
-  water: { mm: 0, color: drawingSheetColor("--water-stroke"), dash: "none" },
+  rail: { mm: 0.08, color: drawingSheetColor("--rail-stroke"), dash: "none" },
+  green: { mm: 0.08, color: drawingSheetColor("--green-stroke"), dash: "none" },
+  water: { mm: 0.08, color: drawingSheetColor("--water-stroke"), dash: "none" },
   contour: { mm: LINE_MM.contour, color: CONTOUR_COLOR.toUpperCase(), dash: `${CONTOUR_DASH_MM} ${CONTOUR_GAP_MM}` },
   frame: { mm: LINE_MM.frame, color: INK, dash: "none" },
   annotation: { mm: LINE_MM.annotation, color: drawingSheetColor("--annotation-stroke"), dash: "none" },
-  tree: { mm: LINE_MM.secondary, color: drawingSheetColor("--tree-stroke"), dash: "none" },
+  tree: { mm: 0.08, color: drawingSheetColor("--tree-stroke"), dash: "none" },
+  tram: { mm: 0.12, color: COLOUR_FALLBACK["--tram-line-stroke"], dash: "1.2 0.6" },
+  treeFillOpacity: 0.7,
+  axoGuideDash: "0.8 0.5",
   roadFill: COLOUR_FALLBACK["--road-fill"],
   kerbOn: true,
   pathWidthM: PATH_WIDTH_M,
@@ -238,6 +250,9 @@ export function cloneLineStyles(style: LineStyles = DEFAULT_LINE_STYLES): LineSt
     frame: { ...style.frame },
     annotation: { ...style.annotation },
     tree: { ...style.tree },
+    tram: { ...style.tram },
+    treeFillOpacity: style.treeFillOpacity,
+    axoGuideDash: style.axoGuideDash,
     roadFill: style.roadFill,
     kerbOn: style.kerbOn,
     pathWidthM: style.pathWidthM,
@@ -442,6 +457,10 @@ export function styleFromProperties(
   if (coarseInterval != null) next.contourCoarseIntervalM = coarseInterval;
   const coarseFrom = parseScaleDenominator(read(CONTOUR_COARSE_FROM_SCALE_VAR));
   if (coarseFrom != null) next.contourCoarseFromScale = coarseFrom;
+  const treeOpacity = Number(read("--tree-fill-opacity"));
+  if (Number.isFinite(treeOpacity) && treeOpacity >= 0 && treeOpacity <= 1) next.treeFillOpacity = treeOpacity;
+  const axoGuide = normalizeDash(read("--axo-guide-dash"));
+  if (axoGuide) next.axoGuideDash = axoGuide;
   const pathVars = STROKE_VARS.path;
   if (parseMm(read(pathVars.mm)) == null) {
     const legacyMm = parseMm(read("--path-stroke-mm"));

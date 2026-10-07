@@ -3,7 +3,7 @@ import {
   AXO_HATCH_PAINTS,
   AXO_LAYER_LABELS,
   axoLayerBasePaint,
-  axoLayerLabelAnchorBase,
+  axoLayerLabelAnchor,
   axoLayerColours,
   axoLayerSvgTransform,
   axoLayersForPaint,
@@ -18,6 +18,8 @@ import {
 import { useExplodedAxoOverlays } from "../lib/explodedAxoOverlays";
 import { fetchSatelliteFramePng, satelliteFrameDataUrl } from "../lib/explodedAxoSatellite";
 import { explodedAxoViewportExtent, type PlanViewport } from "../lib/planViewport";
+import { getColour } from "../lib/colours";
+import { dashScreen, readDrawingStyle } from "../lib/drawingStyle";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import type { CityModel } from "../types";
@@ -78,7 +80,7 @@ export function DrawingExplodedAxo({
 
   useEffect(() => {
     applyView(fitted);
-  }, [model.sideM, model.frameShape, settings.gapM, settings.layerOrder.length]);
+  }, [model.sideM, model.frameShape]);
 
   useEffect(() => {
     onScale?.(view.w);
@@ -140,6 +142,9 @@ export function DrawingExplodedAxo({
   const outlinePx = model.sideM * 0.0018;
   const roadPx = model.sideM * 0.0045;
   const hatchStep = model.sideM * 0.012;
+  const lineStyle = useMemo(() => readDrawingStyle(), [colourTick]);
+  const guideDash = dashScreen(lineStyle.axoGuideDash ?? "none");
+  const tramColour = getColour("--tram-line-stroke");
 
   return (
     <svg
@@ -208,15 +213,16 @@ export function DrawingExplodedAxo({
           y1={guide.yTop}
           x2={guide.x}
           y2={guide.yBottom}
-          stroke={colours.guide}
+          stroke={getColour("--axo-guide-dash")}
           strokeWidth={model.sideM * 0.0012}
+          strokeDasharray={guideDash.array}
+          strokeLinecap={guideDash.cap}
           vectorEffect="non-scaling-stroke"
         />
       ))}
 
       {paintLayers.map((layer, index) => {
         const clip = `url(#${clipIds[index]})`;
-        const label = axoLayerLabelAnchorBase(model.sideM);
         const layerTransform = axoLayerSvgTransform(layer.liftM);
         const legendOrigin = planToIsoLegendOrigin(model.sideM);
         return (
@@ -241,16 +247,19 @@ export function DrawingExplodedAxo({
               {layer.strokes.map((d, si) => {
                 const paint = resolveStrokePaint(layer.id, si, layer);
                 const scale = layer.strokeWidthScales?.[si] ?? 1;
+                const dashed = layer.strokeDashed?.[si];
+                const tramDash = dashed ? dashScreen(lineStyle.tram.dash) : null;
                 return (
                   <path
                     key={`s${si}`}
                     d={d}
                     fill="none"
-                    stroke={axoPaintColour(paint)}
+                    stroke={dashed ? tramColour : axoPaintColour(paint)}
                     strokeWidth={roadPx * scale}
                     vectorEffect="non-scaling-stroke"
-                    strokeLinecap="round"
+                    strokeLinecap={tramDash?.cap ?? "round"}
                     strokeLinejoin="round"
+                    strokeDasharray={tramDash?.array}
                   />
                 );
               })}
@@ -261,6 +270,7 @@ export function DrawingExplodedAxo({
                   cy={marker.y}
                   r={marker.radiusM}
                   fill={axoPaintColour(marker.paint)}
+                  fillOpacity={marker.paint === "trees" ? lineStyle.treeFillOpacity : 1}
                   stroke="none"
                 />
               ))}
@@ -308,21 +318,26 @@ export function DrawingExplodedAxo({
                 {layer.unavailableNote}
               </text>
             )}
-            {settings.showLabels && (
-              <text
-                x={label.x}
-                y={label.y}
-                fontSize={model.sideM * 0.032}
-                fill={colours.label}
-                fontFamily="Helvetica, Arial, sans-serif"
-                transform={`rotate(${label.rotateDeg} ${label.x} ${label.y})`}
-              >
-                {AXO_LAYER_LABELS[layer.id]}
-              </text>
-            )}
           </g>
         );
       })}
+      {settings.showLabels &&
+        paintLayers.map((layer) => {
+          const label = axoLayerLabelAnchor(model.sideM, layer.liftM);
+          return (
+            <text
+              key={`label-${layer.id}-${layer.liftM}`}
+              x={label.x}
+              y={label.y}
+              fontSize={model.sideM * 0.032}
+              fill={colours.label}
+              fontFamily="Helvetica, Arial, sans-serif"
+              transform={`rotate(${label.rotateDeg + 180} ${label.x} ${label.y})`}
+            >
+              {AXO_LAYER_LABELS[layer.id]}
+            </text>
+          );
+        })}
     </svg>
   );
 }

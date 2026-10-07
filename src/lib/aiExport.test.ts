@@ -252,7 +252,7 @@ describe("Illustrator plans", () => {
     const widths = info.widthsMm.map((mm) => Math.round(mm * 100) / 100);
     expect(widths).not.toContain(0);
     expect(widths).toContain(LINE_MM.propertyRoad);
-    expect(widths).toContain(LINE_MM.secondary);
+    expect(widths).toContain(0.08);
     expect(widths).toContain(LINE_MM.contour);
     expect(widths).toContain(LINE_MM.frame);
     expect(widths).toContain(LINE_MM.annotation);
@@ -279,12 +279,12 @@ describe("Illustrator plans", () => {
     expect(edited.content).toMatch(/1\s+0\s+0\s+RG/);
   });
 
-  it("paints a zero weight as fill only, including buildings, green, and water", async () => {
+  it("draws thin outlines on buildings, green, and water by default", async () => {
     const paintsOf = (body: string) => body.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g) ?? [];
     const info = await inspect(await sitePlanPdf(model(), 1000));
-    expect(paintsOf(info.bodies.get("Buildings") ?? "")).toEqual(expect.arrayContaining(["f*"]));
-    expect(paintsOf(info.bodies.get("Green") ?? "")).toEqual(expect.arrayContaining(["f*"]));
-    expect(paintsOf(info.bodies.get("Water") ?? "")).toEqual(expect.arrayContaining(["f*"]));
+    expect(paintsOf(info.bodies.get("Buildings") ?? "")).toContain("B*");
+    expect(paintsOf(info.bodies.get("Green") ?? "")).toContain("B*");
+    expect(paintsOf(info.bodies.get("Water") ?? "")).toContain("B*");
     expect(info.content).not.toMatch(/(?:^|[\s[])0(?:\.0+)? w/);
 
     const hidden = cloneLineStyles(DEFAULT_LINE_STYLES);

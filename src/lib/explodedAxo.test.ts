@@ -5,6 +5,8 @@ import {
   axoGuideAnchorPoints,
   axoGuideLines,
   axoPlateIsCircularRing,
+  axoLabelRotationDeg,
+  axoLayerLabelAnchor,
   axoLayerSvgTransform,
   axoPlateOutlineD,
   buildExplodedAxoLayers,
@@ -147,6 +149,17 @@ describe("exploded axo stack order", () => {
   });
 });
 
+describe("exploded axo labels", () => {
+  it("flips label rotation when the plate edge points left", () => {
+    const sideM = 400;
+    const anchor = axoLayerLabelAnchor(sideM, 120);
+    expect(anchor.rotateDeg).toBeGreaterThan(-91);
+    expect(anchor.rotateDeg).toBeLessThanOrEqual(91);
+    expect(axoLabelRotationDeg(-1, 0)).toBeCloseTo(0, 0);
+    expect(axoLabelRotationDeg(1, 0)).toBeCloseTo(0, 0);
+  });
+});
+
 describe("exploded axo layer settings", () => {
   it("does not change guide count when toggling visibility", () => {
     const m = modelWithShape("circle");
@@ -160,6 +173,7 @@ describe("exploded axo layer settings", () => {
         topography: false,
         roads: false,
         green: true,
+        trees: false,
         buildings: true,
         aerial: true,
       },

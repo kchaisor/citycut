@@ -3,8 +3,8 @@ import { finishTreeSize } from "./trees";
 import type { Pt, TreeFeat, TreeTier } from "../types";
 
 export const TREE_DEDUPE_M = 3;
-export const INFILL_CLEARANCE_M = 4;
-export const INFILL_SPACING_M = 7;
+export const VICMAP_COM_DEDUPE_M = 8;
+export const INFILL_SPACING_M = 11;
 export const MAX_TREE_INSTANCES = 8000;
 /** Extra metres beyond half the mapped road width. */
 export const ROAD_MASK_BUFFER_M = 2;
@@ -78,6 +78,23 @@ export function omitWithin(existing: Pt[], incoming: TreeFeat[], metres: number)
   if (incoming.length === 0 || existing.length === 0) return incoming.slice();
   const index = new PointIndex(metres, existing);
   return incoming.filter((tree) => !index.within(tree.at, metres));
+}
+
+/** Vicmap dedupe distance against higher tiers: max(8 m, max(5 m, 0.6 × crown radius)). */
+export function vicmapDedupeMetres(tree: TreeFeat): number {
+  const crownRadius = tree.crown_diameter_m / 2;
+  return Math.max(VICMAP_COM_DEDUPE_M, Math.max(5, crownRadius * 0.6));
+}
+
+export function omitWithinVariable(existing: TreeFeat[], incoming: TreeFeat[]): TreeFeat[] {
+  if (incoming.length === 0 || existing.length === 0) return incoming.slice();
+  return incoming.filter((tree) => {
+    const metres = vicmapDedupeMetres(tree);
+    for (const other of existing) {
+      if (Math.hypot(other.at[0] - tree.at[0], other.at[1] - tree.at[1]) < metres) return false;
+    }
+    return true;
+  });
 }
 
 function evenSample<T>(items: T[], keep: number): T[] {
@@ -219,8 +236,12 @@ function ringBounds(ring: Pt[]): { minX: number; minY: number; maxX: number; max
   return { minX, minY, maxX, maxY };
 }
 
+function patchHasRealTrees(patch: CanopyPatch, trees: TreeFeat[]): boolean {
+  return trees.some((tree) => pointInPolygon(tree.at, patch.ring, patch.holes));
+}
+
 /**
- * Poisson-disc points at about 7 m. Candidates land between one and two
+ * Poisson-disc points at about 11 m. Candidates land between one and two
  * spacings from an existing sample, and nothing closer than the spacing is kept.
  */
 export function poissonDisc(
@@ -316,7 +337,7 @@ function canopyTree(id: number, at: Pt, kind: CanopyPatch["kind"]): TreeFeat {
 
 export function fillCanopy(
   patches: CanopyPatch[],
-  mask: { buildings: MaskPolygon[]; water: MaskPolygon[]; roads: MaskRoad[]; trees: Pt[] },
+  mask: { buildings: MaskPolygon[]; water: MaskPolygon[]; roads: MaskRoad[]; trees: TreeFeat[] },
   rng: () => number = Math.random,
   idStart = 1,
 ): TreeFeat[] {
@@ -331,18 +352,22 @@ export function fillCanopy(
       roads.add({ a: road.line[i], b: road.line[i + 1], reach });
     }
   }
-  const existing = new PointIndex(INFILL_CLEARANCE_M, mask.trees);
+  const realTrees = mask.trees;
   const placedIndex = new PointIndex(INFILL_SPACING_M);
-  const blocked = (point: Pt) =>
-    buildings.contains(point) ||
-    water.contains(point) ||
-    roads.hits(point) ||
-    existing.within(point, INFILL_CLEARANCE_M) ||
-    placedIndex.within(point, INFILL_SPACING_M);
+
+  const blocked = (point: Pt) => {
+    if (buildings.contains(point) || water.contains(point) || roads.hits(point)) return true;
+    for (const tree of realTrees) {
+      const keepOut = Math.max(INFILL_SPACING_M * 0.45, tree.crown_diameter_m / 2);
+      if (Math.hypot(tree.at[0] - point[0], tree.at[1] - point[1]) < keepOut) return true;
+    }
+    return placedIndex.within(point, INFILL_SPACING_M);
+  };
 
   const placed: TreeFeat[] = [];
   let id = idStart;
   for (const patch of patches) {
+    if (patchHasRealTrees(patch, realTrees)) continue;
     const points = poissonDisc(patch, INFILL_SPACING_M, blocked, rng);
     for (const at of points) {
       const tree = canopyTree(id, at, patch.kind);
@@ -363,17 +388,14 @@ export function assembleTreeTiers(input: AssembleInput): AssembleResult {
   const com = tag(input.com, "com");
   const osm = tag(omitWithin(com.map((tree) => tree.at), input.osm, TREE_DEDUPE_M), "osm");
   const higher = [...com, ...osm];
-  const vicmap = tag(
-    omitWithin(higher.map((tree) => tree.at), input.vicmap, TREE_DEDUPE_M),
-    "vicmap",
-  );
+  const vicmap = tag(omitWithinVariable(higher, input.vicmap), "vicmap");
   const canopy = fillCanopy(
     input.canopy,
     {
       buildings: input.buildings,
       water: input.water,
       roads: input.roads,
-      trees: [...higher, ...vicmap].map((tree) => tree.at),
+      trees: [...higher, ...vicmap],
     },
     input.rng,
   );

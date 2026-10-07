@@ -1,9 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { buildingHeightSource, buildingHeightSourceLabel } from "../lib/heightOverrides";
-import type { BuildingFeat } from "../types";
+import {
+  emptyBuildingPopupDetails,
+  isCityOfMelbourne,
+  loadBuildingPopupDetails,
+  type BuildingPopupDetails,
+} from "../lib/buildingPopupLookup";
+import { interiorPoint } from "../lib/useCascade";
+import { fromLocal } from "../lib/geo";
+import type { BuildingFeat, LonLat } from "../types";
 
 type Props = {
   building: BuildingFeat;
+  center: LonLat;
   clientX: number;
   clientY: number;
   onSave: (heightM: number) => void;
@@ -15,13 +24,30 @@ function formatHeightM(height: number): string {
   return height.toFixed(1);
 }
 
-export function BuildingHeightPopover({ building, clientX, clientY, onSave, onReset, onClose }: Props) {
+function Field({ label, value }: { label: string; value: string }) {
+  if (value === "") return null;
+  return (
+    <p className="building-popup-field">
+      <span className="field-label">{label}</span>
+      <span className="field-value">{value || "…"}</span>
+    </p>
+  );
+}
+
+export function BuildingHeightPopover({ building, center, clientX, clientY, onSave, onReset, onClose }: Props) {
   const [value, setValue] = useState(() => formatHeightM(building.height));
+  const [details, setDetails] = useState<BuildingPopupDetails>(() => emptyBuildingPopupDetails(building));
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setValue(formatHeightM(building.height));
-  }, [building.id, building.height]);
+    setDetails(emptyBuildingPopupDetails(building));
+    const controller = new AbortController();
+    void loadBuildingPopupDetails(building, center, controller.signal).then((loaded) => {
+      if (!controller.signal.aborted) setDetails(loaded);
+    });
+    return () => controller.abort();
+  }, [building.id, building.height, building.use, building.source, center.lat, center.lon]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -37,6 +63,9 @@ export function BuildingHeightPopover({ building, clientX, clientY, onSave, onRe
   }, [onClose]);
 
   const source = buildingHeightSourceLabel(buildingHeightSource(building));
+  const at = interiorPoint(building.ring, building.holes);
+  const { lat, lon } = fromLocal(at, center);
+  const showCom = isCityOfMelbourne(lat, lon);
 
   function commit() {
     const parsed = Number(value.replace(/,/g, "").trim());
@@ -46,45 +75,57 @@ export function BuildingHeightPopover({ building, clientX, clientY, onSave, onRe
 
   return (
     <div
-      className="building-height-popover"
+      className="building-height-popover building-detail-popover"
       role="dialog"
-      aria-label="Building height"
+      aria-label="Building details"
       style={{ left: clientX, top: clientY }}
     >
       <header>
-        <strong>Building height</strong>
+        <strong>Building</strong>
         <button type="button" className="icon-close" aria-label="Close" onClick={onClose}>
           ×
         </button>
       </header>
-      <p className="meta">
-        Current: {building.height.toFixed(1)} m · {source}
-      </p>
-      <label className="height-field">
-        <span>Height (m)</span>
-        <input
-          ref={inputRef}
-          type="number"
-          min={1}
-          step={0.5}
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              commit();
-            }
-          }}
-        />
-      </label>
-      <div className="popover-actions">
-        <button type="button" onClick={commit}>
-          Save
-        </button>
-        <button type="button" onClick={onReset}>
-          Reset this building
-        </button>
+      <Field label="Use" value={details.useLine} />
+      <Field label="Name / address" value={details.nameLine} />
+      <Field label="Height & storeys" value={details.heightStoreysLine} />
+      <Field label="Zone & overlays" value={details.zoneLine} />
+      <Field label="Lot / site" value={details.lotLine} />
+      {showCom && <Field label="Year built" value={details.yearLine} />}
+      {showCom && <Field label="Development" value={details.developmentLine} />}
+      <div className="height-editor-block">
+        <p className="meta">
+          Height editor · Current: {building.height.toFixed(1)} m · {source}
+        </p>
+        <label className="height-field">
+          <span>Height (m)</span>
+          <input
+            ref={inputRef}
+            type="number"
+            min={1}
+            step={0.5}
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                commit();
+              }
+            }}
+          />
+        </label>
+        <div className="popover-actions">
+          <button type="button" onClick={commit}>
+            Save
+          </button>
+          <button type="button" onClick={onReset}>
+            Reset this building
+          </button>
+        </div>
       </div>
+      {details.credits.length > 0 && (
+        <p className="legend-note popup-credits">{details.credits.join(" ")}</p>
+      )}
     </div>
   );
 }

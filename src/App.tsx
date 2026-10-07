@@ -26,6 +26,7 @@ import { localityCacheKey, reverseLocality } from "./lib/nominatim";
 import { FLAT_GROUND_NOTE } from "./lib/parseOsm";
 import { fetchOvertureBaseForCut } from "./lib/overtureBase";
 import { overtureThemeCredit } from "./lib/overtureAttribution";
+import { fetchTramLinesForCut } from "./lib/explodedAxoPt";
 import { fetchOvertureTransportationForCut } from "./lib/overtureTransportation";
 import {
   REVERSE_DEBOUNCE_MS,
@@ -411,7 +412,14 @@ export default function App() {
               });
           })()
         : Promise.resolve({ points: [], error: null as string | null });
-      const [terrainResult, comResult, vicmapResult, useTiers, contourLayer, overtureResult, transportResult, baseResult] =
+      const tramTask = modelLayers.roads
+        ? fetchTramLinesForCut(
+            { center, sideM, frameShape: frameShapeRef.current, placeLabel: label, layers: modelLayers, buildings: [], roads: [], areas: [], trees: [], roadKm: 0, buildingCapHit: false, sourceNote: "" },
+            bounds,
+            controller.signal,
+          )
+        : Promise.resolve(null);
+      const [terrainResult, comResult, vicmapResult, useTiers, contourLayer, overtureResult, transportResult, baseResult, tramLines] =
         await Promise.all([
           terrainTask,
           comTask,
@@ -421,6 +429,7 @@ export default function App() {
           buildingsTask,
           transportTask,
           baseTask,
+          tramTask,
         ]);
       const overtureBuildings = overtureResult.buildings;
       const buildings = modelLayers.buildings
@@ -530,6 +539,7 @@ export default function App() {
         layers: modelLayers,
         buildings,
         roads: modelLayers.roads ? transportResult.roads : [],
+        tramLines: tramLines ?? undefined,
         areas: modelLayers.waterGreen ? baseResult.areas : [],
         trees,
         roadKm: modelLayers.roads ? transportResult.roadKm : 0,

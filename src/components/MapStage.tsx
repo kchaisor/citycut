@@ -4,7 +4,8 @@ import { MAP_STYLE, SATELLITE_STYLE } from "../content/constants";
 import { M_PER_DEG_LAT, mPerDegLon, squareBBox } from "../lib/geo";
 import { cutFrameLabelKm } from "../lib/placeLabel";
 import type { SiteFrameShape } from "../types";
-import { updateMapSiteLayers, removeMapSiteLayers } from "../lib/mapSiteLayers";
+import { updateMapCutColourLayers, removeMapCutColourLayers, updateMapSiteLayers, removeMapSiteLayers } from "../lib/mapSiteLayers";
+import { fetchOvertureBaseForCut } from "../lib/overtureBase";
 import { fetchOvertureBuildingsForCut } from "../lib/overtureBuildings";
 import { fetchSiteParcelCached, siteBuildingIdsForPreview } from "../lib/sitePreviewCache";
 import { FLAT_NORTH_UP_MAP_OPTIONS, applyFlatNorthUpMapHandlers } from "../lib/mapStageMapOptions";
@@ -131,6 +132,43 @@ export function MapStage({
     map.setStyle(basemap === "satellite" ? SATELLITE_STYLE : MAP_STYLE);
     map.once("style.load", () => map.fire("move"));
   }, [basemap, ready]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    let cancelled = false;
+    const center = map.getCenter();
+    const cutCenter: LonLat = { lat: center.lat, lon: center.lng };
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const bounds = squareBBox(cutCenter, sideM);
+          const [base, buildingResult] = await Promise.all([
+            fetchOvertureBaseForCut(bounds, cutCenter, sideM, { waterGreen: true, trees: false, frameShape: frameShapeRef.current }, controller.signal),
+            fetchOvertureBuildingsForCut(bounds, cutCenter, sideM, controller.signal, frameShapeRef.current),
+          ]);
+          if (cancelled || controller.signal.aborted) return;
+          if (!map.loaded()) await new Promise<void>((resolve) => map.once("idle", () => resolve()));
+          if (cancelled) return;
+          updateMapCutColourLayers(map, {
+            center: cutCenter,
+            sideM,
+            frameShape: frameShapeRef.current,
+            areas: base.areas,
+            buildings: buildingResult.buildings,
+          });
+        } catch {
+          if (!cancelled && map.loaded()) removeMapCutColourLayers(map);
+        }
+      })();
+    }, 280);
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [ready, sideM, mapEpoch, frameShape]);
 
   useEffect(() => {
     const map = mapRef.current;

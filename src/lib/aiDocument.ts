@@ -7,6 +7,7 @@ import {
   PDFDocument,
   PDFHeader,
   PDFName,
+  PDFNumber,
   PDFOperator,
   PDFOperatorNames,
   PDFRef,
@@ -65,6 +66,8 @@ export type PdfText = {
   sizeMm: number;
   text: string;
   color: Rgb;
+  /** Degrees counter-clockwise in PDF y-up space. */
+  rotateDeg?: number;
 };
 
 /** One marked-content block. The same layer name may appear more than once so paint order can interleave. */
@@ -242,11 +245,28 @@ export async function buildLayeredPdf(
     for (const ellipse of chunk.ellipses ?? []) ops.push(...ellipseOperators(ellipse));
     for (const text of chunk.texts ?? []) {
       if (!text.text) continue;
+      const rad = ((text.rotateDeg ?? 0) * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const x = pdfPt(text.x);
+      const y = pdfPt(text.y);
       ops.push(
         beginText(),
         setFontAndSize(fontKey, pdfPt(text.sizeMm)),
         setFillingRgbColor(text.color[0], text.color[1], text.color[2]),
-        moveText(pdfPt(text.x), pdfPt(text.y)),
+        ...(text.rotateDeg
+          ? [
+              PDFOperator.of(PDFOperatorNames.ConcatTransformationMatrix, [
+                PDFNumber.of(cos),
+                PDFNumber.of(sin),
+                PDFNumber.of(-sin),
+                PDFNumber.of(cos),
+                PDFNumber.of(x),
+                PDFNumber.of(y),
+              ]),
+              moveText(0, 0),
+            ]
+          : [moveText(x, y)]),
         showText(font.encodeText(text.text)),
         endText(),
       );

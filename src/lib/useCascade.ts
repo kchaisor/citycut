@@ -9,7 +9,7 @@ export type FrameBBox = { south: number; west: number; north: number; east: numb
 export const TIER_TIMEOUT_MS = 15_000;
 const ZONE_LIMIT = 2000;
 
-export type ZonePolygon = { code: string; outer: Pt[]; holes: Pt[][]; area: number };
+export type ZonePolygon = { code: string; description?: string; outer: Pt[]; holes: Pt[][]; area: number };
 
 type BBox2 = { minX: number; minY: number; maxX: number; maxY: number };
 
@@ -138,7 +138,7 @@ export function zoneWfsUrl(bounds: FrameBBox): string {
   url.searchParams.set("typeNames", "open-data-platform:plan_zone");
   url.searchParams.set("outputFormat", "application/json");
   url.searchParams.set("srsName", "EPSG:4326");
-  url.searchParams.set("propertyName", "zone_code,geom");
+  url.searchParams.set("propertyName", "zone_code,zone_description,geom");
   url.searchParams.set("count", String(ZONE_LIMIT));
   url.searchParams.set("bbox", bbox);
   return url.toString();
@@ -207,7 +207,7 @@ function ringFromCoords(coords: unknown, origin: LonLat): Pt[] {
   return ring;
 }
 
-function polygonsFromGeometry(geometry: unknown, origin: LonLat, code: string): ZonePolygon[] {
+function polygonsFromGeometry(geometry: unknown, origin: LonLat, code: string, description?: string): ZonePolygon[] {
   if (!geometry || typeof geometry !== "object") return [];
   const typed = geometry as { type?: string; coordinates?: unknown };
   const polygons: unknown[] =
@@ -222,7 +222,7 @@ function polygonsFromGeometry(geometry: unknown, origin: LonLat, code: string): 
     const outer = ringFromCoords(polygon[0], origin);
     const holes = polygon.slice(1).map((hole) => ringFromCoords(hole, origin)).filter((hole) => hole.length >= 4);
     if (outer.length < 4) continue;
-    parsed.push({ code, outer, holes, area: footprintArea(outer, holes) });
+    parsed.push({ code, description, outer, holes, area: footprintArea(outer, holes) });
   }
   return parsed;
 }
@@ -234,10 +234,15 @@ function parseZones(body: unknown, origin: LonLat): ZonePolygon[] {
   const polygons: ZonePolygon[] = [];
   for (const feature of features.slice(0, ZONE_LIMIT)) {
     if (!feature || typeof feature !== "object") continue;
-    const record = feature as { properties?: { zone_code?: unknown }; geometry?: unknown };
+    const record = feature as {
+      properties?: { zone_code?: unknown; zone_description?: unknown };
+      geometry?: unknown;
+    };
     const code = record.properties?.zone_code;
     if (typeof code !== "string" || !code.trim()) continue;
-    polygons.push(...polygonsFromGeometry(record.geometry, origin, code.trim()));
+    const descRaw = record.properties?.zone_description;
+    const description = typeof descRaw === "string" && descRaw.trim() ? descRaw.trim() : undefined;
+    polygons.push(...polygonsFromGeometry(record.geometry, origin, code.trim(), description));
   }
   return polygons;
 }
@@ -277,21 +282,29 @@ function applyFallbackHeightFromZone(building: BuildingFeat, zoneCode: string | 
   return next;
 }
 
-function zoneAtBuilding(index: GridIndex<ZonePolygon>, building: BuildingFeat): string | null {
+function zoneAtBuilding(index: GridIndex<ZonePolygon>, building: BuildingFeat): ZonePolygon | null {
   const at = interiorPoint(building.ring, building.holes);
   const covers = index
     .queryPoint(at)
     .filter((zone) => pointInPolygon(at, zone.outer, zone.holes))
     .sort((a, b) => a.area - b.area);
-  return covers[0]?.code ?? null;
+  return covers[0] ?? null;
 }
 
 function applyZones(buildings: BuildingFeat[], zones: ZonePolygon[]): BuildingFeat[] {
   const index = new GridIndex<ZonePolygon>(80);
   for (const zone of zones) index.insert(ringBBox(zone.outer), zone);
   return buildings.map((building) => {
-    const zoneCode = zoneAtBuilding(index, building);
+    const zone = zoneAtBuilding(index, building);
+    const zoneCode = zone?.code ?? null;
     let next = applyFallbackHeightFromZone(building, zoneCode);
+    if (zone) {
+      next = {
+        ...next,
+        zoneCode: zone.code,
+        ...(zone.description ? { zoneDescription: zone.description } : {}),
+      };
+    }
     if (next.source !== "none") return next;
     if (!zoneCode) return next;
     const use = useFromZone(zoneCode, next.height);

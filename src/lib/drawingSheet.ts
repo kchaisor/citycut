@@ -1,8 +1,12 @@
+import coloursCss from "../colours.css?raw";
 import drawingCss from "../drawing-style.css?raw";
 import themeCss from "../theme.css?raw";
 import { cssColorToHex, parseCustomProperties, resolveSheet } from "./cssVars";
 
-const drawing = resolveSheet(parseCustomProperties(drawingCss));
+const drawing = resolveSheet({
+  ...parseCustomProperties(coloursCss),
+  ...parseCustomProperties(drawingCss),
+});
 const theme = resolveSheet(parseCustomProperties(themeCss));
 
 function hexFrom(sheet: Record<string, string>, name: string, file: string): string {

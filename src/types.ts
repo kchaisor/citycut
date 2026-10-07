@@ -59,6 +59,13 @@ export type BuildingFeat = {
   heightManual?: true;
   use: BuildingUse;
   source: TypologySource;
+  /** Overture `names.primary` or `names.common` when present. */
+  overtureName?: string;
+  /** Overture `num_floors` when present. */
+  numFloors?: number;
+  /** Vicmap planning zone code applied in the cut (when zones loaded). */
+  zoneCode?: string;
+  zoneDescription?: string;
   /** Overture GERS building id when the footprint comes from Overture Maps. */
   overtureId?: string;
   /** OSM way ids from Overture `sources` (`record_id` like w13307317). */
@@ -175,6 +182,8 @@ export type CityModel = {
   layers: ModelLayers;
   buildings: BuildingFeat[];
   roads: RoadFeat[];
+  /** PTV metro tram centre lines in local metres (when the cut is in metro bounds). */
+  tramLines?: Pt[][];
   areas: AreaFeat[];
   trees: TreeFeat[];
   roadKm: number;

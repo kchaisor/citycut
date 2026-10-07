@@ -142,6 +142,18 @@ async function readPmtilesLayer<T>(
   return out;
 }
 
+/** Metro tram centre lines clipped to the cut (PTV PMTiles, MODE METRO TRAM). */
+export async function fetchTramLinesForCut(
+  model: CityModel,
+  bounds: { south: number; west: number; north: number; east: number },
+  signal?: AbortSignal,
+): Promise<Pt[][] | null> {
+  const overlays = await fetchPublicTransportOverlays(model, bounds, signal);
+  if (!overlays) return null;
+  const lines = overlays.lines.filter((line) => line.mode === "tram").map((line) => line.line);
+  return lines.length > 0 ? lines : null;
+}
+
 export async function fetchPublicTransportOverlays(
   model: CityModel,
   bounds: { south: number; west: number; north: number; east: number },

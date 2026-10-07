@@ -827,6 +827,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                 !qaHideHeightPopoverFromSearch(window.location.search) && (
                 <BuildingHeightPopover
                   building={pickedBuilding}
+                  center={displayModel.center}
                   clientX={heightPick.clientX}
                   clientY={heightPick.clientY}
                   onSave={(heightM) => saveBuildingHeight(pickedBuilding.id, heightM)}
@@ -1201,7 +1202,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                     <input
                       type="range"
                       min={Math.round(defaultExplodedAxoGapM(displayModel.sideM) * 0.5)}
-                      max={Math.round(defaultExplodedAxoGapM(displayModel.sideM) * 1.5)}
+                      max={1000}
                       step={1}
                       value={Math.round(axoSettings.gapM)}
                       onChange={(event) =>

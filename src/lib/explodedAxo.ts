@@ -2,7 +2,14 @@ import { figureGround } from "./figureGround";
 import { getColour, type ColourKey } from "./colours";
 import { bufferOpenLine } from "./bufferLine";
 import { openRing, signedArea } from "./geo";
-import { clipAreaToSiteFrame, clipPolylineSiteFrame, circleRing, DEFAULT_SITE_FRAME_SHAPE, type SiteFrameShape } from "./siteFrame";
+import {
+  clipAreaToSiteFrame,
+  clipPolylineSiteFrame,
+  circleRing,
+  DEFAULT_SITE_FRAME_SHAPE,
+  pointInSiteFrame,
+  type SiteFrameShape,
+} from "./siteFrame";
 import type {
   HydroOverlay,
   PlanningOverlayPolygon,
@@ -46,6 +53,7 @@ export const AXO_LAYER_IDS = [
   "topography",
   "roads",
   "green",
+  "trees",
   "buildings",
   "aerial",
 ] as const;
@@ -62,6 +70,7 @@ export const AXO_LAYER_LABELS: Record<AxoLayerId, string> = {
   topography: "TOPOGRAPHY",
   roads: "ROADS",
   green: "GREEN SPACES",
+  trees: "TREES",
   buildings: "BUILDINGS",
   aerial: "SATELLITE",
 };
@@ -82,7 +91,8 @@ export type AxoPaintKey =
   | "pt-train"
   | "pt-tram"
   | "pt-bus"
-  | "contour";
+  | "contour"
+  | "trees";
 
 export type AxoLegendSwatch = { label: string; paint: AxoPaintKey };
 
@@ -124,6 +134,7 @@ export function defaultExplodedAxoSettings(sideM: number): ExplodedAxoSettings {
     topography: false,
     roads: true,
     green: true,
+    trees: false,
     buildings: true,
     aerial: true,
   };
@@ -236,6 +247,15 @@ export function axoLayerLabelAnchorBase(sideM: number): { x: number; y: number; 
   return axoLayerLabelAnchor(sideM, 0);
 }
 
+/** Keep axo plate labels upright; flip 180° when the edge direction points left. */
+export function axoLabelRotationDeg(edgeDx: number, edgeDy: number): number {
+  let deg = (Math.atan2(edgeDy, edgeDx) * 180) / Math.PI;
+  if (edgeDx < 0) deg += 180;
+  while (deg > 90) deg -= 180;
+  while (deg <= -90) deg += 180;
+  return deg;
+}
+
 export function axoLayerLabelAnchor(
   sideM: number,
   liftM: number,
@@ -243,7 +263,9 @@ export function axoLayerLabelAnchor(
   const half = sideM / 2;
   const [x0, y0] = planPointToIso(half, -half, liftM);
   const [x1, y1] = planPointToIso(half, half, liftM);
-  const rotateDeg = (Math.atan2(y1 - y0, x1 - x0) * 180) / Math.PI;
+  const edgeDx = x1 - x0;
+  const edgeDy = y1 - y0;
+  const rotateDeg = axoLabelRotationDeg(edgeDx, edgeDy);
   const along = sideM * 0.05;
   return {
     x: x0 + along * 1.4,
@@ -263,6 +285,8 @@ export type AxoLayerGeometry = {
   fillPaints?: AxoPaintKey[];
   strokePaints?: AxoPaintKey[];
   strokeWidthScales?: number[];
+  /** When true, the stroke at the same index is dashed (e.g. tram routes). */
+  strokeDashed?: boolean[];
   markers?: AxoPointMarker[];
   /** Frame plate outline at this lift. */
   plateOutlineD: string;
@@ -384,14 +408,17 @@ function pushLinePaths(
   strokes: string[],
   strokePaints: AxoPaintKey[],
   strokeWidthScales: number[],
+  strokeDashed: boolean[],
   paint: AxoPaintKey,
   widthScale = 1,
+  dashed = false,
 ) {
   for (const line of lines) {
     const pts = line.map(([e, n]) => planToIsoBase(e, n));
     strokes.push(isoSvgPolyline(pts, false));
     strokePaints.push(paint);
     strokeWidthScales.push(widthScale);
+    strokeDashed.push(dashed);
   }
 }
 
@@ -436,6 +463,7 @@ export function buildExplodedAxoLayers(
     const fillPaints: AxoPaintKey[] = [];
     const strokePaints: AxoPaintKey[] = [];
     const strokeWidthScales: number[] = [];
+    const strokeDashed: boolean[] = [];
     const markers: AxoPointMarker[] = [];
     let unavailableNote: string | undefined;
     let legend: AxoLegendSwatch[] | undefined;
@@ -484,7 +512,15 @@ export function buildExplodedAxoLayers(
             areaToPath,
           );
         }
-        pushLinePaths(hydro.courses, strokes, strokePaints, strokeWidthScales, "hydro-course", fills.length ? 0.95 : 2.4);
+        pushLinePaths(
+          hydro.courses,
+          strokes,
+          strokePaints,
+          strokeWidthScales,
+          strokeDashed,
+          "hydro-course",
+          fills.length ? 0.95 : 2.4,
+        );
       }
       if (fills.length === 0 && strokes.length === 0) {
         if (overlays.hydro === "unavailable" && overtureWaterAreas.length === 0) unavailableNote = "unavailable";
@@ -498,6 +534,7 @@ export function buildExplodedAxoLayers(
           strokes,
           strokePaints,
           strokeWidthScales,
+          strokeDashed,
           "rail-line",
           0.55,
         );
@@ -507,7 +544,17 @@ export function buildExplodedAxoLayers(
         }
         for (const line of overlays.transport.pt?.lines ?? []) {
           if (line.mode === "other") continue;
-          pushLinePaths([line.line], strokes, strokePaints, strokeWidthScales, ptPaint(line.mode, "line"), 0.7);
+          const paint = line.mode === "tram" ? "pt-tram" : ptPaint(line.mode, "line");
+          pushLinePaths(
+            [line.line],
+            strokes,
+            strokePaints,
+            strokeWidthScales,
+            strokeDashed,
+            paint,
+            line.mode === "tram" ? 0.55 : 0.7,
+            line.mode === "tram",
+          );
         }
         for (const stop of overlays.transport.pt?.stops ?? []) {
           if (stop.mode === "other") continue;
@@ -530,6 +577,7 @@ export function buildExplodedAxoLayers(
           strokes,
           strokePaints,
           strokeWidthScales,
+          strokeDashed,
           "contour",
           0.55,
         );
@@ -538,6 +586,17 @@ export function buildExplodedAxoLayers(
       for (const rings of greenAreas) {
         const d = areaToPath(rings);
         if (d) fills.push(d);
+      }
+    } else if (id === "trees") {
+      for (const tree of model.trees) {
+        if (!pointInSiteFrame(tree.at, model.sideM, shape)) continue;
+        const [x, y] = planToIsoBase(tree.at[0], tree.at[1]);
+        markers.push({
+          x,
+          y,
+          paint: "trees",
+          radiusM: Math.max(0.4, tree.crown_diameter_m / 2),
+        });
       }
     } else if (id === "buildings") {
       const ground = figureGround(model.buildings, model.sideM, shape);
@@ -560,7 +619,7 @@ export function buildExplodedAxoLayers(
       fills,
       strokes,
       ...(fillPaints.length ? { fillPaints } : {}),
-      ...(strokePaints.length ? { strokePaints, strokeWidthScales } : {}),
+      ...(strokePaints.length ? { strokePaints, strokeWidthScales, strokeDashed } : {}),
       ...(markers.length ? { markers } : {}),
       plateOutlineD,
       clipD,
@@ -589,6 +648,7 @@ const AXO_PAINT_CSS: Record<AxoPaintKey, ColourKey> = {
   "pt-tram": "--axo-pt-tram",
   "pt-bus": "--axo-pt-bus",
   contour: "--axo-contour",
+  trees: "--tree-fill",
 };
 
 export function axoPaintColour(paint: AxoPaintKey): string {
@@ -599,6 +659,7 @@ export function axoLayerBasePaint(id: AxoLayerId): AxoPaintKey {
   if (id === "water" || id === "hydro") return "water";
   if (id === "roads") return "roads";
   if (id === "green") return "green";
+  if (id === "trees") return "trees";
   if (id === "buildings" || id === "aerial") return "buildings";
   if (id === "topography") return "contour";
   if (id === "transport") return "rail-line";
@@ -614,6 +675,7 @@ export function axoLayerColours(): Record<AxoLayerId | "guide" | "label", string
     topography: getColour("--axo-contour"),
     roads: getColour("--axo-road"),
     green: getColour("--axo-green"),
+    trees: getColour("--tree-fill"),
     buildings: getColour("--axo-building"),
     aerial: getColour("--axo-building"),
     guide: getColour("--axo-guide"),

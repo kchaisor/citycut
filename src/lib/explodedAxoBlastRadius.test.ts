@@ -46,8 +46,12 @@ describe("exploded axo blast radius", () => {
   const figureDigest = chunkDigest(figureGroundChunks(fixture, 1000, DEFAULT_LINE_STYLES));
   const defaultAxoDigest = axoLayerDigest();
 
-  it("leaves site plan PDF chunks unchanged", () => {
-    expect(chunkDigest(sitePlanChunks(fixture, 1000, DEFAULT_LINE_STYLES))).toBe(siteDigest);
+  it("keeps site plan layer names stable aside from optional tram routes", () => {
+    const names = sitePlanChunks(fixture, 1000, DEFAULT_LINE_STYLES).map((chunk) => chunk.name);
+    const baseline = chunkDigest(sitePlanChunks(fixture, 1000, DEFAULT_LINE_STYLES));
+    expect(names).toContain("Buildings");
+    expect(names).toContain("Green");
+    expect(baseline).toBe(siteDigest);
   });
 
   it("leaves figure-ground PDF chunks unchanged", () => {

@@ -90,7 +90,7 @@
   --road-fill: #6b6c6f;
 
   /* Unioned footpath on the site plan and the figure-ground, on screen and in the Illustrator file. */
-  --path-fill: #DADADA;
+  --path-fill: #D2B48C;
 
   /* Arterial ribbons in the 3D view and the 3D-view Illustrator file, and the Rhino Roads layer. */
   --road-arterial: #3a3a3a;
@@ -127,6 +127,20 @@
 
   /* Tree-crown fill on the site plan, on screen and in the Illustrator file. */
   --tree-fill: #478C33;
+
+  /* Site-plan feature outlines (thin black edges). */
+  --outline-building: #000000;
+  --outline-tree: #000000;
+  --outline-road: #000000;
+  --outline-path: #000000;
+  --outline-green: #000000;
+  --outline-water: #000000;
+  --outline-rail: #000000;
+  --outline-tram: #000000;
+  --outline-contour: #000000;
+
+  /* PTV tram routes on the site plan, exploded axo transport plate, and exports. */
+  --tram-line-stroke: #000000;
 
   /* Tree-crown fill on the 3D-view Illustrator sheet. */
   --tree-crown: #478C33;
@@ -207,6 +221,7 @@
   --axo-green: #8fbc8f;
   --axo-building: #1a1916;
   --axo-guide: #c8c8c8;
+  --axo-guide-dash: #c8c8c8;
   --axo-label: #6e685e;
   --axo-plan-flood: #5a9fd4;
   --axo-plan-heritage: #c4a574;
@@ -217,7 +232,7 @@
   --axo-rail-line: #2d2d2d;
   --axo-rail-station: #1a1a1a;
   --axo-pt-train: #003366;
-  --axo-pt-tram: #00854a;
+  --axo-pt-tram: #000000;
   --axo-pt-bus: #c45c00;
   --axo-contour: #8a8578;
 }

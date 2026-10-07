@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { buildCityGroup, disposeObject } from "./buildCity";
 import { cityModelTo3dm } from "./rhinoExport";
 import {
-  INFILL_CLEARANCE_M,
   INFILL_SPACING_M,
   MAX_TREE_INSTANCES,
   ROAD_MASK_BUFFER_M,
@@ -72,7 +71,7 @@ describe("tree tier dedupe", () => {
     expect(ids).toContain(1);
     expect(ids).not.toContain(2);
     expect(ids).toContain(3);
-    expect(ids).not.toContain(4);
+    expect(ids).not.toContain(4); // Vicmap at 22 m is within 8 m of osm at 20 m
     expect(ids).toContain(5);
     expect(ids).toContain(6);
     expect(assembled.capHit).toBe(false);
@@ -108,7 +107,7 @@ describe("canopy infill", () => {
         buildings: [{ ring: square([18, 22], 14), holes: [] }],
         water: [{ ring: square([-18, 22], 12), holes: [] }],
         roads: [{ line: [[-40, -10], [40, -10]], width: 6 }],
-        trees: [[0, 28]],
+        trees: [],
       },
       mulberry32(7),
     );
@@ -120,7 +119,6 @@ describe("canopy infill", () => {
       expect(inBuilding).toBe(false);
       expect(inWater).toBe(false);
       expect(Math.abs(sample.at[1] + 10)).toBeGreaterThanOrEqual(reach - 0.05);
-      expect(Math.hypot(sample.at[0], sample.at[1] - 28)).toBeGreaterThanOrEqual(INFILL_CLEARANCE_M - 0.05);
       expect(sample.tier).toBe("canopy");
     }
     for (let i = 0; i < filled.length; i++) {
@@ -129,6 +127,16 @@ describe("canopy infill", () => {
         expect(distance).toBeGreaterThanOrEqual(INFILL_SPACING_M - 0.05);
       }
     }
+  });
+
+  it("skips canopy infill when a real tree already sits in the patch", () => {
+    const wood: CanopyPatch = { ring: square([0, 0], 40), holes: [], kind: "wood" };
+    const filled = fillCanopy(
+      [wood],
+      { buildings: [], water: [], roads: [], trees: [tree([0, 0], "com", 1)] },
+      mulberry32(2),
+    );
+    expect(filled).toHaveLength(0);
   });
 
   it("uses smaller scrub massing for scrub canopy", () => {
