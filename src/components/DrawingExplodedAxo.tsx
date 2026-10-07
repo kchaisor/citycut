@@ -80,7 +80,7 @@ export function DrawingExplodedAxo({
 
   useEffect(() => {
     applyView(fitted);
-  }, [model.sideM, model.frameShape]);
+  }, [model.sideM, model.frameShape, settings.gapM]);
 
   useEffect(() => {
     onScale?.(view.w);

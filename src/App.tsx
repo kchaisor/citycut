@@ -320,15 +320,16 @@ export default function App() {
             roadKm: 0,
             stats: { release: "", tileCount: 0, fetchMs: 0, segmentCount: 0, skippedTomTom: 0 },
           });
+      const loadTreeTiers = wantsOverture;
       const baseTask =
-        modelLayers.waterGreen || modelLayers.trees
+        modelLayers.waterGreen || loadTreeTiers
           ? fetchOvertureBaseForCut(
               bounds,
               center,
               sideM,
               {
                 waterGreen: modelLayers.waterGreen,
-                trees: modelLayers.trees,
+                trees: loadTreeTiers,
                 frameShape: frameShapeRef.current,
               },
               controller.signal,
@@ -354,7 +355,7 @@ export default function App() {
             return { zones: null, failures };
           })
         : Promise.resolve({ zones: null, failures: [] as UseTierFailure[] });
-      const comTask = modelLayers.trees
+      const comTask = loadTreeTiers
         ? (() => {
             const comAbort = new AbortController();
             const comTimer = window.setTimeout(() => comAbort.abort(), 20000);
@@ -389,7 +390,7 @@ export default function App() {
             return null;
           })
         : Promise.resolve(null);
-      const vicmapTask = modelLayers.trees
+      const vicmapTask = loadTreeTiers
         ? (() => {
             const vicmapAbort = new AbortController();
             const vicmapTimer = window.setTimeout(() => vicmapAbort.abort(), 20000);
@@ -443,7 +444,7 @@ export default function App() {
           holes: building.holes,
         })),
       };
-      const assembled = modelLayers.trees
+      const assembled = loadTreeTiers
         ? assembleTreeTiers({
             com: comRecordsToTrees(comResult.rows, center, sideM, frameShapeRef.current),
             osm: baseResult.overtureTrees,

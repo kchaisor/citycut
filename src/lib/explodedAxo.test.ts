@@ -14,6 +14,7 @@ import {
   axoPlateProjectedHeight,
   defaultExplodedAxoGapM,
   defaultExplodedAxoSettings,
+  explodedAxoBounds,
   liftsForLayerOrder,
   planPointToIso,
   type ExplodedAxoSettings,
@@ -139,6 +140,13 @@ describe("exploded axo stack order", () => {
     const paint = axoLayersForPaint(layers);
     expect(paint[0]?.id).toBe("aerial");
     expect(paint[paint.length - 1]?.id).toBe("water");
+  });
+
+  it("expands iso bounds when layer gap increases", () => {
+    const m = modelWithShape("square");
+    const tight = explodedAxoBounds(m, { ...defaultExplodedAxoSettings(m.sideM), gapM: 80 });
+    const loose = explodedAxoBounds(m, { ...defaultExplodedAxoSettings(m.sideM), gapM: 1000 });
+    expect(loose.maxY - loose.minY).toBeGreaterThan(tight.maxY - tight.minY);
   });
 
   it("defaults gap to about 40% of plate height", () => {
