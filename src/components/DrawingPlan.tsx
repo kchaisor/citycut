@@ -20,28 +20,9 @@ import type { CityModel } from "../types";
 import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
 import { planShadowRings, type PlanShadowInput } from "../lib/buildingShadows";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
-
-type View = { x: number; y: number; w: number; h: number };
+import { planViewportExtent, type PlanViewport } from "../lib/planViewport";
 
 export type DrawingKind = "site" | "figure-ground";
-
-function fittedView(model: CityModel, kind: DrawingKind): View {
-  const half = model.sideM / 2;
-  if (kind === "site") {
-    const pad = model.sideM * 0.045;
-    const size = model.sideM + pad * 2;
-    return { x: -half - pad, y: -half - pad, w: size, h: size };
-  }
-  const padX = model.sideM * 0.06;
-  const padTop = model.sideM * 0.09;
-  const padBottom = model.sideM * 0.11;
-  return {
-    x: -half - padX,
-    y: -half - padTop,
-    w: model.sideM + padX * 2,
-    h: model.sideM + padTop + padBottom,
-  };
-}
 
 function CasedLine({ d, stroke, paper }: { d: string; stroke: StrokeStyle; paper: string }) {
   if (!(stroke.mm > 0) || !d) return null;
@@ -93,7 +74,7 @@ export function DrawingPlan({
   highlightManual?: boolean;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const drag = useRef<{ px: number; py: number; view: View } | null>(null);
+  const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
   const figure = kind === "figure-ground";
   const style = lineStyle ?? readDrawingStyle();
   const plan = useMemo(
@@ -131,8 +112,8 @@ export function DrawingPlan({
     () => (figure ? figureGroundModelPaths(model.buildings, model.sideM, frameShape) : []),
     [figure, model, frameShape],
   );
-  const fitted = useMemo(() => fittedView(model, kind), [model, kind]);
-  const [view, setView] = useState<View>(fitted);
+  const fitted = useMemo(() => planViewportExtent(model.sideM), [model.sideM]);
+  const [view, setView] = useState<PlanViewport>(fitted);
 
   useEffect(() => {
     setView(fitted);

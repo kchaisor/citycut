@@ -6,7 +6,8 @@ import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
 import { attachBuildingPick } from "../lib/buildingPick";
-import { buildCityGroup, buildHeightEditOverlay, disposeObject } from "../lib/buildCity";
+import { buildCityGroup, disposeObject } from "../lib/buildCity";
+import { auditBuildingSelection, mountSelectedBuildingVisual } from "../lib/buildingSelectionVisual";
 import { CAMERA_FIT_INCLUDES_HELIODON } from "../lib/sceneCameraFit";
 import { shotFromCamera, type CameraShot } from "../lib/cameraShot";
 import { getColour } from "../lib/colours";
@@ -16,12 +17,10 @@ import { captureViewPng } from "../lib/capturePng";
 import { flushControlInertia, holdControlPose, type HeldControl } from "../lib/controlInertia";
 import {
   applyBuildingSolarNeutral,
-  buildingViewportFill,
   snapshotBuildingViewportColors,
   withBuildingExportColours,
   type BuildingColourMode,
 } from "../lib/buildingViewportColor";
-import { hideBuildingForHeightEdit } from "../lib/buildingHeightEditVisibility";
 import {
   applySunStudySurfaceTint,
   snapshotSunStudySurfaceColors,
@@ -146,39 +145,40 @@ function HeightEditOverlayLayer({
   cityRoot: THREE.Object3D;
   colourMode: BuildingColourMode;
 }) {
-  const overlayRef = useRef<THREE.Group | null>(null);
-  const hostRef = useRef<THREE.Object3D | null>(null);
+  const [overlay, setOverlay] = useState<THREE.Group | null>(null);
   useLayoutEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    if (overlayRef.current) {
-      host.remove(overlayRef.current);
-      disposeObject(overlayRef.current);
-      overlayRef.current = null;
-    }
-    if (buildingId == null) return;
-    const restoreHide = hideBuildingForHeightEdit(cityRoot, buildingId);
-    const building = model.buildings.find((item) => item.id === buildingId);
-    const fill = building
-      ? buildingViewportFill(colourMode, building.use, building.source)
-      : getColour("--building-uniform");
-    const overlay = buildHeightEditOverlay(model, buildingId, fill);
-    if (!overlay) {
-      restoreHide();
+    if (buildingId == null) {
+      setOverlay(null);
+      if (typeof window !== "undefined") delete window.__citycutQaSelectionAudit;
       return;
     }
-    overlayRef.current = overlay;
-    host.add(overlay);
+    const mounted = mountSelectedBuildingVisual(cityRoot, model, buildingId, colourMode);
+    if (!mounted) {
+      setOverlay(null);
+      if (typeof window !== "undefined") delete window.__citycutQaSelectionAudit;
+      return;
+    }
+    setOverlay(mounted.overlay);
+    if (typeof window !== "undefined" && qaModeFromSearch(window.location.search)) {
+      const publishAudit = () => {
+        window.__citycutQaSelectionAudit = auditBuildingSelection(cityRoot, buildingId, mounted.overlay);
+        console.info("[CityCut selection]", window.__citycutQaSelectionAudit);
+      };
+      publishAudit();
+      const frame = window.requestAnimationFrame(publishAudit);
+      return () => {
+        window.cancelAnimationFrame(frame);
+        mounted.restore();
+        setOverlay(null);
+        delete window.__citycutQaSelectionAudit;
+      };
+    }
     return () => {
-      restoreHide();
-      if (overlayRef.current) {
-        host.remove(overlayRef.current);
-        disposeObject(overlayRef.current);
-        overlayRef.current = null;
-      }
+      mounted.restore();
+      setOverlay(null);
     };
   }, [buildingId, cityRoot, colourMode, model]);
-  return <group ref={hostRef} />;
+  return overlay ? <primitive object={overlay} /> : null;
 }
 
 function City({
