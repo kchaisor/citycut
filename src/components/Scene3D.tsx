@@ -146,30 +146,28 @@ function HeightEditOverlayLayer({
   colourMode: BuildingColourMode;
 }) {
   const overlayRef = useRef<THREE.Group | null>(null);
-  const hostRef = useRef<THREE.Object3D | null>(null);
   useLayoutEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    if (overlayRef.current) {
-      host.remove(overlayRef.current);
-      disposeObject(overlayRef.current);
-      overlayRef.current = null;
+    if (buildingId == null) {
+      if (typeof window !== "undefined") delete window.__citycutQaSelectionAudit;
+      return;
     }
-    if (buildingId == null) return;
     const mounted = mountSelectedBuildingVisual(cityRoot, model, buildingId, colourMode);
-    if (!mounted) return;
+    if (!mounted) {
+      if (typeof window !== "undefined") delete window.__citycutQaSelectionAudit;
+      return;
+    }
     overlayRef.current = mounted.overlay;
-    host.add(mounted.overlay);
+    if (typeof window !== "undefined" && qaModeFromSearch(window.location.search)) {
+      window.__citycutQaSelectionAudit = mounted.audit;
+      console.info("[CityCut selection]", mounted.audit);
+    }
     return () => {
       mounted.restore();
-      if (overlayRef.current) {
-        host.remove(overlayRef.current);
-        disposeObject(overlayRef.current);
-        overlayRef.current = null;
-      }
+      overlayRef.current = null;
+      if (typeof window !== "undefined") delete window.__citycutQaSelectionAudit;
     };
   }, [buildingId, cityRoot, colourMode, model]);
-  return <group ref={hostRef} />;
+  return null;
 }
 
 function City({

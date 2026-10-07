@@ -1,13 +1,17 @@
 import * as THREE from "three";
 import type { CityModel } from "../types";
-import { SELECTED_BUILDING_FILL_OPACITY, buildHeightEditOverlay } from "./buildCity";
+import { SELECTED_BUILDING_FILL_OPACITY, buildHeightEditOverlay, disposeObject } from "./buildCity";
 import { hideBuildingForHeightEdit } from "./buildingHeightEditVisibility";
+import { auditBuildingSelection, type BuildingSelectionAudit } from "./buildingSelectionAudit";
 import { buildingViewportFill, type BuildingColourMode } from "./buildingViewportColor";
 export { SELECTED_BUILDING_FILL_OPACITY };
+export type { BuildingSelectionAudit };
+export { auditBuildingSelection };
 
 export type SelectedBuildingVisual = {
   overlay: THREE.Group;
   overlayOpacity: number;
+  audit: BuildingSelectionAudit;
   restore: () => void;
 };
 
@@ -34,13 +38,20 @@ export function mountSelectedBuildingVisual(
     restoreHide();
     return null;
   }
+  cityRoot.add(overlay);
   const fillMesh = overlay.children.find((child) => child instanceof THREE.Mesh) as THREE.Mesh | undefined;
   const mat = fillMesh?.material as THREE.MeshStandardMaterial | undefined;
   const overlayOpacity = mat?.opacity ?? SELECTED_BUILDING_FILL_OPACITY;
+  const audit = auditBuildingSelection(cityRoot, buildingId, overlay);
   return {
     overlay,
     overlayOpacity,
-    restore: restoreHide,
+    audit,
+    restore: () => {
+      cityRoot.remove(overlay);
+      disposeObject(overlay);
+      restoreHide();
+    },
   };
 }
 
@@ -55,6 +66,5 @@ export function selectedBuildingOpacityAfterPick(
   if (!mounted) return null;
   const opacity = mounted.overlayOpacity;
   mounted.restore();
-  cityRoot.remove(mounted.overlay);
   return opacity;
 }

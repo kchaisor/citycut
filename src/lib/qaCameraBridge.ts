@@ -27,7 +27,15 @@ declare global {
     __citycutQaModel?: {
       openMidriseHeightEdit: () => number | null;
       getSummary?: () => { buildingCount: number; roadCount: number; triangleCount: number };
+      /** Pick a building for height edit (same path as 3D selection). */
+      selectHeightEditBuilding?: (buildingId: number) => number;
+      /** ~16 m foreground block for selection QA screenshots. */
+      pickForegroundBuildingForSelectionQa?: () => number | null;
+      frameSelectionBuilding?: (buildingId: number, variant?: "through" | "oblique") => boolean;
+      /** Footprints for QA framing (local metres). */
+      listBuildings?: () => { id: number; height: number; east: number; north: number }[];
     };
+    __citycutQaSelectionAudit?: import("./buildingSelectionAudit").BuildingSelectionAudit;
   }
 }
 

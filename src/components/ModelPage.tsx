@@ -76,6 +76,7 @@ import {
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { modelStageCreditHtml } from "../lib/dataCredits";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
+import { openRing } from "../lib/geo";
 import type { BuildingUse, CityModel } from "../types";
 import { BuildingHeightPopover, HeightOverridePanel } from "./BuildingHeightPopover";
 import { ColoursEditor } from "./Colours";
@@ -320,8 +321,77 @@ export function ModelPage({ model }: { model: CityModel }) {
 
   useEffect(() => {
     if (typeof window === "undefined" || !qaModeFromSearch(window.location.search)) return;
+
+    function buildingCentroid(building: (typeof model.buildings)[number]) {
+      const ring = openRing(building.ring);
+      let east = 0;
+      let north = 0;
+      for (const [e, n] of ring) {
+        east += e;
+        north += n;
+      }
+      const count = ring.length || 1;
+      return { east: east / count, north: north / count };
+    }
+
     window.__citycutQaModel = {
       getSummary: () => qaSummaryRef.current,
+      listBuildings() {
+        return model.buildings.map((building) => {
+          const { east, north } = buildingCentroid(building);
+          return { id: building.id, height: building.height, east, north };
+        });
+      },
+      selectHeightEditBuilding(buildingId: number) {
+        setHeightPick({ buildingId, clientX: 640, clientY: 400 });
+        return buildingId;
+      },
+      pickForegroundBuildingForSelectionQa() {
+        const candidates = model.buildings
+          .filter(
+            (building) =>
+              building.height >= 10 &&
+              building.height <= 28 &&
+              building.use !== "outbuilding",
+          )
+          .map((building) => {
+            const { east, north } = buildingCentroid(building);
+            return {
+              building,
+              east,
+              north,
+              dist: Math.hypot(east, north),
+            };
+          })
+          .filter((entry) => entry.dist >= 35 && entry.dist <= 130)
+          .sort(
+            (a, b) =>
+              Math.abs(a.building.height - 16) - Math.abs(b.building.height - 16) ||
+              a.dist - b.dist,
+          );
+        const pick = candidates[0]?.building;
+        if (!pick) return null;
+        setHeightPick({ buildingId: pick.id, clientX: 640, clientY: 400 });
+        return pick.id;
+      },
+      frameSelectionBuilding(buildingId: number, variant: "through" | "oblique" = "through") {
+        const row = window.__citycutQaModel?.listBuildings?.().find((item) => item.id === buildingId);
+        if (!row || !window.__citycutQa?.setCamera) return false;
+        const y = row.height * 0.45;
+        const z = -row.north;
+        if (variant === "oblique") {
+          window.__citycutQa.setCamera({
+            eye: { x: row.east - 95, y: y + 58, z: z + 105 },
+            target: { x: row.east + 8, y: y, z: z },
+          });
+        } else {
+          window.__citycutQa.setCamera({
+            eye: { x: row.east - 135, y: y + 32, z: z - 75 },
+            target: { x: row.east + 45, y: y, z: z },
+          });
+        }
+        return true;
+      },
       openMidriseHeightEdit() {
         const midriseUses: BuildingUse[] = ["commercial", "mixed_use", "retail"];
         const midrise = model.buildings
