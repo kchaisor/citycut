@@ -623,7 +623,10 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   return group;
 }
 
-const HEIGHT_EDIT_FILL_OPACITY = 0.5;
+/** Viewport opacity when a building is selected (3D pick, height edit, or QA). */
+export const SELECTED_BUILDING_FILL_OPACITY = 0.5;
+
+const HEIGHT_EDIT_FILL_OPACITY = SELECTED_BUILDING_FILL_OPACITY;
 
 export const HEIGHT_EDIT_EDGE_DASH_M = 2;
 export const HEIGHT_EDIT_EDGE_GAP_M = 1.5;

@@ -4,11 +4,18 @@ type GroupRestore = { mesh: THREE.Mesh; groupIndex: number; count: number };
 type VisibleRestore = { mesh: THREE.Mesh; visible: boolean };
 type EdgeRestore = { object: THREE.Object3D; visible: boolean };
 
+function sameBuildingId(stored: unknown, buildingId: number): boolean {
+  if (stored == null) return false;
+  return Number(stored) === buildingId;
+}
+
 /** Hide the picked footprint in the city group while the height popover is open. Restores on cleanup. */
 export function hideBuildingForHeightEdit(root: THREE.Object3D, buildingId: number): () => void {
+  const targetId = Number(buildingId);
   const groupRestores: GroupRestore[] = [];
   const visibleRestores: VisibleRestore[] = [];
   const edgeRestores: EdgeRestore[] = [];
+  const shadowRestores: { mesh: THREE.Mesh; castShadow: boolean }[] = [];
 
   root.traverse((object) => {
     if (object.name === "BuildingEdges") {
@@ -23,9 +30,13 @@ export function hideBuildingForHeightEdit(root: THREE.Object3D, buildingId: numb
     const batch = mesh.name || mesh.parent?.name || "";
     if (!batch.startsWith("Buildings") && !batch.startsWith("source:")) return;
 
-    if (mesh.userData.buildingId === buildingId) {
+    if (sameBuildingId(mesh.userData.buildingId, targetId)) {
       visibleRestores.push({ mesh, visible: mesh.visible });
       mesh.visible = false;
+      if (mesh.castShadow) {
+        shadowRestores.push({ mesh, castShadow: true });
+        mesh.castShadow = false;
+      }
       return;
     }
 
@@ -33,7 +44,7 @@ export function hideBuildingForHeightEdit(root: THREE.Object3D, buildingId: numb
     const groups = mesh.geometry?.groups;
     if (!byGroup?.length || !groups?.length) return;
     for (let index = 0; index < groups.length; index++) {
-      if (byGroup[index] !== buildingId) continue;
+      if (!sameBuildingId(byGroup[index], targetId)) continue;
       const group = groups[index]!;
       groupRestores.push({ mesh, groupIndex: index, count: group.count });
       group.count = 0;
@@ -46,6 +57,7 @@ export function hideBuildingForHeightEdit(root: THREE.Object3D, buildingId: numb
       const group = entry.mesh.geometry.groups[entry.groupIndex];
       if (group) group.count = entry.count;
     }
+    for (const entry of shadowRestores) entry.mesh.castShadow = entry.castShadow;
     for (const entry of edgeRestores) entry.object.visible = entry.visible;
   };
 }

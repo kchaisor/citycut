@@ -7,6 +7,7 @@ import type { SiteFrameShape } from "../types";
 import { updateMapSiteLayers, removeMapSiteLayers } from "../lib/mapSiteLayers";
 import { fetchOvertureBuildingsForCut } from "../lib/overtureBuildings";
 import { fetchSiteParcelCached, siteBuildingIdsForPreview } from "../lib/sitePreviewCache";
+import { FLAT_NORTH_UP_MAP_OPTIONS, applyFlatNorthUpMapHandlers } from "../lib/mapStageMapOptions";
 import type { Basemap, LonLat, ViewState } from "../types";
 
 export type FlyRequest = {
@@ -73,7 +74,9 @@ export function MapStage({
       center: [initialView.lon, initialView.lat],
       zoom: initialView.zoom,
       attributionControl: { compact: true },
+      ...FLAT_NORTH_UP_MAP_OPTIONS,
     });
+    applyFlatNorthUpMapHandlers(map);
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     mapRef.current = map;
 
@@ -194,13 +197,15 @@ export function MapStage({
           [fly.bounds[0], fly.bounds[1]],
           [fly.bounds[2], fly.bounds[3]],
         ],
-        { padding: 56, maxZoom: 16, duration: 1100 },
+        { padding: 56, maxZoom: 16, duration: 1100, pitch: 0, bearing: 0 },
       );
     } else {
       map.flyTo({
         center: [fly.lon, fly.lat],
         zoom: fly.zoom ?? Math.max(map.getZoom(), 15),
         duration: 1100,
+        pitch: 0,
+        bearing: 0,
       });
     }
     // fitBounds starts on the next frame. If it never moves, land anyway so a later
@@ -260,8 +265,11 @@ export function MapStage({
       {loading && <div className="loading-shield" />}
       {loading && (
         <div className="loading-card" role="status">
-          <strong>Cutting this block from OpenStreetMap</strong>
-          <p>Fetching buildings, roads, and open space. This often takes a few seconds, sometimes longer.</p>
+          <strong>Cutting this block</strong>
+          <p>
+            Fetching buildings, roads, terrain and open space from Overture Maps, Vicmap and Mapterhorn. This often
+            takes a few seconds, sometimes longer.
+          </p>
           <div className="bar" aria-hidden="true">
             <span />
           </div>

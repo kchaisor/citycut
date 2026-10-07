@@ -6,7 +6,8 @@ import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
 import { attachBuildingPick } from "../lib/buildingPick";
-import { buildCityGroup, buildHeightEditOverlay, disposeObject } from "../lib/buildCity";
+import { buildCityGroup, disposeObject } from "../lib/buildCity";
+import { mountSelectedBuildingVisual } from "../lib/buildingSelectionVisual";
 import { CAMERA_FIT_INCLUDES_HELIODON } from "../lib/sceneCameraFit";
 import { shotFromCamera, type CameraShot } from "../lib/cameraShot";
 import { getColour } from "../lib/colours";
@@ -16,12 +17,10 @@ import { captureViewPng } from "../lib/capturePng";
 import { flushControlInertia, holdControlPose, type HeldControl } from "../lib/controlInertia";
 import {
   applyBuildingSolarNeutral,
-  buildingViewportFill,
   snapshotBuildingViewportColors,
   withBuildingExportColours,
   type BuildingColourMode,
 } from "../lib/buildingViewportColor";
-import { hideBuildingForHeightEdit } from "../lib/buildingHeightEditVisibility";
 import {
   applySunStudySurfaceTint,
   snapshotSunStudySurfaceColors,
@@ -157,20 +156,12 @@ function HeightEditOverlayLayer({
       overlayRef.current = null;
     }
     if (buildingId == null) return;
-    const restoreHide = hideBuildingForHeightEdit(cityRoot, buildingId);
-    const building = model.buildings.find((item) => item.id === buildingId);
-    const fill = building
-      ? buildingViewportFill(colourMode, building.use, building.source)
-      : getColour("--building-uniform");
-    const overlay = buildHeightEditOverlay(model, buildingId, fill);
-    if (!overlay) {
-      restoreHide();
-      return;
-    }
-    overlayRef.current = overlay;
-    host.add(overlay);
+    const mounted = mountSelectedBuildingVisual(cityRoot, model, buildingId, colourMode);
+    if (!mounted) return;
+    overlayRef.current = mounted.overlay;
+    host.add(mounted.overlay);
     return () => {
-      restoreHide();
+      mounted.restore();
       if (overlayRef.current) {
         host.remove(overlayRef.current);
         disposeObject(overlayRef.current);
