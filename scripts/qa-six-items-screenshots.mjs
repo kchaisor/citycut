@@ -9,7 +9,7 @@ import { PNG } from "pngjs";
 const outDir = "/opt/cursor/artifacts";
 mkdirSync(outDir, { recursive: true });
 
-const base = "http://127.0.0.1:4173/citycut-export/";
+const base = "http://127.0.0.1:4173/citycut/";
 const view = { width: 1280, height: 800 };
 
 function diffPixels(pathA, pathB) {

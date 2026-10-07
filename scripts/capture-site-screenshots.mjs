@@ -30,7 +30,7 @@ function cameraPose() {
   };
 }
 
-const baseUrl = "http://127.0.0.1:5173/citycut-export/?qa=1&buildings=uniform";
+const baseUrl = "http://127.0.0.1:5173/citycut/?qa=1&buildings=uniform";
 
 const browser = await chromium.launch({
   headless: true,

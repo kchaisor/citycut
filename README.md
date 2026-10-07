@@ -6,9 +6,9 @@ It is a study tool for early architectural work: OpenStreetMap footprints, estim
 
 ## Live site
 
-The production build is set up to publish to [https://kchaisor.github.io/citycut-export/](https://kchaisor.github.io/citycut-export/).
+The production build is set up to publish to [https://kchaisor.github.io/citycut/](https://kchaisor.github.io/citycut/).
 
-Pushes to `main` build `dist` and deploy it with GitHub Actions (`.github/workflows/pages.yml`). Vite’s `base` is `/citycut-export/`, so the built HTML, scripts, styles, and favicon resolve under that project path. The app has no client-side router, so there is no extra basename to set.
+Pushes to `main` build `dist` and deploy it with GitHub Actions (`.github/workflows/pages.yml`). Vite’s `base` is `/citycut/`, so the built HTML, scripts, styles, and favicon resolve under that project path. The app has no client-side router, so there is no extra basename to set.
 
 ## Pipeline
 
@@ -76,7 +76,7 @@ npm install
 npm run dev
 ```
 
-Vite serves the app at `http://localhost:5173/citycut-export/` (port 5173, same `/citycut-export/` base as Pages). Open that URL, leave the frame on Melbourne or search for a place, then press **Create model**. `npm run preview` serves the production build at `http://localhost:4173/citycut-export/`.
+Vite serves the app at `http://localhost:5173/citycut/` (port 5173, same `/citycut/` base as Pages). Open that URL, leave the frame on Melbourne or search for a place, then press **Create model**. `npm run preview` serves the production build at `http://localhost:4173/citycut/`.
 
 ```bash
 npm test

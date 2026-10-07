@@ -589,7 +589,7 @@ export async function cityModelTo3dm(
   try {
     group.updateMatrixWorld(true);
     doc.applicationName = "CityCut";
-    doc.applicationUrl = "https://kchaisor.github.io/citycut-export/";
+    doc.applicationUrl = "https://kchaisor.github.io/citycut/";
     doc.applicationDetails = `${model.placeLabel}; ${crs.name}`;
     const comCredit = comBuildingHeightCreditLine(model);
     const buildingCredit = plainDataCredit({
