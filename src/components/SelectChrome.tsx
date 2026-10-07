@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Layers, Search } from "lucide-react";
 import { MAX_SIDE_KM, MIN_SIDE_KM } from "../content/constants";
 import { formatKmSide } from "../lib/geo";
+import { cutFrameLabelKm } from "../lib/placeLabel";
 import { searchPlaces } from "../lib/nominatim";
 import { DATA_CREDIT_BASE } from "../lib/dataCredits";
 import {
@@ -76,10 +77,7 @@ export function SelectChrome({
   const boxRef = useRef<HTMLDivElement>(null);
   const area =
     frameShape === "circle" ? Math.PI * (sideKm / 2) ** 2 : sideKm * sideKm;
-  const sizeLabel =
-    frameShape === "circle"
-      ? `${formatKmSide(sideKm)} km diameter`
-      : `${formatKmSide(sideKm)} × ${formatKmSide(sideKm)} km`;
+  const sizeLabel = cutFrameLabelKm(sideKm, frameShape);
 
   useEffect(() => {
     if (error) setOpen("layers");

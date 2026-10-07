@@ -4,6 +4,8 @@ import { writeFrameSearch } from "./frameQuery";
 import {
   addressStillApplies,
   coordinateLabel,
+  cutFrameLabelKm,
+  cutSizeLabel,
   formatAustralianAddress,
   formatDisplayName,
   formatLocality,
@@ -25,6 +27,15 @@ const gertrude: GeocoderAddress = {
   "ISO3166-2-lvl4": "AU-VIC",
   postcode: "3065",
 };
+
+describe("cut frame labels", () => {
+  it("labels square and circle cuts in km and metres", () => {
+    expect(cutFrameLabelKm(1, "square")).toBe("1.0 × 1.0 km");
+    expect(cutFrameLabelKm(1, "circle")).toBe("1.0 km ø");
+    expect(cutSizeLabel(1000, "square")).toBe("1000 × 1000 m");
+    expect(cutSizeLabel(1000, "circle")).toBe("1000 m diameter");
+  });
+});
 
 describe("formatAustralianAddress", () => {
   it("formats a ranged house number, street, suburb, state, and postcode", () => {

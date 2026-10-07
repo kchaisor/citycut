@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import { MAP_STYLE, SATELLITE_STYLE } from "../content/constants";
-import { M_PER_DEG_LAT, formatKmSide, mPerDegLon, squareBBox } from "../lib/geo";
+import { M_PER_DEG_LAT, mPerDegLon, squareBBox } from "../lib/geo";
+import { cutFrameLabelKm } from "../lib/placeLabel";
+import type { SiteFrameShape } from "../types";
 import { updateMapSiteLayers, removeMapSiteLayers } from "../lib/mapSiteLayers";
 import { fetchOvertureBuildingsForCut } from "../lib/overtureBuildings";
 import { fetchSiteParcelCached, siteBuildingIdsForPreview } from "../lib/sitePreviewCache";
@@ -22,6 +24,7 @@ export type MapSiteSearch = LonLat & { label: string };
 export function MapStage({
   basemap,
   sideM,
+  frameShape,
   initialView,
   fly,
   loading,
@@ -33,6 +36,7 @@ export function MapStage({
 }: {
   basemap: Basemap;
   sideM: number;
+  frameShape: SiteFrameShape;
   initialView: ViewState;
   fly: FlyRequest | null;
   loading: boolean;
@@ -47,6 +51,7 @@ export function MapStage({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const sideRef = useRef(sideM);
+  const frameShapeRef = useRef(frameShape);
   const onViewRef = useRef(onView);
   const onFlyLandedRef = useRef(onFlyLanded);
   const appliedBasemap = useRef<Basemap>(basemap);
@@ -55,6 +60,7 @@ export function MapStage({
   const [ready, setReady] = useState(false);
   const [mapEpoch, setMapEpoch] = useState(0);
   sideRef.current = sideM;
+  frameShapeRef.current = frameShape;
   onViewRef.current = onView;
   onFlyLandedRef.current = onFlyLanded;
 
@@ -108,10 +114,11 @@ export function MapStage({
 
   useEffect(() => {
     sideRef.current = sideM;
+    frameShapeRef.current = frameShape;
     const map = mapRef.current;
     if (!map || !ready) return;
     map.fire("move");
-  }, [sideM, ready]);
+  }, [sideM, frameShape, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -208,7 +215,8 @@ export function MapStage({
   }, [fly, ready]);
 
   const sideKm = sideM / 1000;
-  const label = `${formatKmSide(sideKm)} × ${formatKmSide(sideKm)} km`;
+  const label = cutFrameLabelKm(sideKm, frameShape);
+  const circleFrame = frameShape === "circle";
 
   return (
     <div className={loading ? "map-wrap is-loading" : "map-wrap"}>
@@ -232,7 +240,7 @@ export function MapStage({
       {frame && frame.width > 8 && (
         <>
           <div
-            className="frame"
+            className={circleFrame ? "frame frame-circle" : "frame"}
             style={{ left: frame.left, top: frame.top, width: frame.width, height: frame.height }}
           />
           <div

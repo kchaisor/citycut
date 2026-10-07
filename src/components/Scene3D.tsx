@@ -49,12 +49,14 @@ import { qaModeFromSearch, registerQaCameraBridge, type QaCameraPose } from "../
 import type { ProjectionMode } from "../lib/viewMemory";
 import {
   DEFAULT_PERSPECTIVE_OFFSET,
-  defaultPerspectiveDistance,
-  defaultPerspectiveTarget,
   heliodonSceneBounds,
   perspectiveFitDistance,
   unionAabb,
 } from "../lib/heliodonFraming";
+import {
+  computePerspectiveViewportPose,
+  perspectiveClipFar,
+} from "../lib/perspectiveViewportFit";
 import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
@@ -347,71 +349,62 @@ function PerspectiveFit({
     const key = `${fitId}:${size.width}x${size.height}`;
     if (fittedKey.current === key) return;
 
-    let target: [number, number, number];
-    let distance: number;
-    if (CAMERA_FIT_INCLUDES_HELIODON && solar.showPath) {
-      const bounds = heliodonSceneBounds({
-        lat,
-        lon,
-        year: solar.year,
-        month: solar.month,
-        day: solar.day,
-        hour: solar.hour,
-        minute: solar.minute,
-        sideM: side,
-        ringRadiusM: heliodonRadius,
-        groundY,
-        siteTopY,
-      });
-      target = frameCentre(bounds);
-      distance =
-        perspectiveFitDistance(
-          bounds,
-          target,
-          DEFAULT_PERSPECTIVE_OFFSET,
-          camera.fov,
-          size.width / Math.max(size.height, 1),
-        ) * (1 + Math.max(0, solar.radiusFactor - 1) * 0.08);
-    } else {
-      target = defaultPerspectiveTarget(side, lift);
-      distance = defaultPerspectiveDistance(side);
-    }
-
-    const eye = [
-      target[0] + DEFAULT_PERSPECTIVE_OFFSET[0] * distance,
-      target[1] + DEFAULT_PERSPECTIVE_OFFSET[1] * distance,
-      target[2] + DEFAULT_PERSPECTIVE_OFFSET[2] * distance,
-    ] as const;
+    const pose = computePerspectiveViewportPose({
+      side,
+      lift,
+      groundY,
+      siteTopY,
+      heliodonRadius,
+      solar,
+      lat,
+      lon,
+      fov: camera.fov,
+      aspect: size.width / Math.max(size.height, 1),
+    });
     flushControlInertia(controls);
-    camera.position.set(eye[0], eye[1], eye[2]);
-    camera.near = Math.max(0.1, side / 400);
-    camera.far = Math.max(side * 40, heliodonRadius * 28, distance * 2.5);
-    controls.target.set(target[0], target[1], target[2]);
+    camera.position.set(pose.eye[0], pose.eye[1], pose.eye[2]);
+    camera.near = pose.near;
+    camera.far = pose.far;
+    controls.target.set(pose.target[0], pose.target[1], pose.target[2]);
     camera.lookAt(controls.target);
     camera.updateProjectionMatrix();
     controls.update();
     fittedKey.current = key;
-  }, [
-    active,
-    camera,
-    controlsRef,
-    fitId,
-    groundY,
-    heliodonRadius,
-    lat,
-    lift,
-    lon,
-    side,
-    siteTopY,
-    size.height,
-    size.width,
-    solar,
-  ]);
+  }, [active, camera, controlsRef, fitId, groundY, lift, side, siteTopY, size.height, size.width]);
   useLayoutEffect(() => {
     place();
   }, [place]);
   useFrame(() => {
     place();
+  });
+  return null;
+}
+
+function PerspectiveClipPlanes({
+  camera,
+  controlsRef,
+  side,
+  heliodonRadius,
+  active,
+}: {
+  camera: THREE.PerspectiveCamera;
+  controlsRef: RefObject<OrbitControlsImpl | null>;
+  side: number;
+  heliodonRadius: number;
+  active: boolean;
+}) {
+  useFrame(() => {
+    if (!active) return;
+    const controls = controlsRef.current;
+    if (!controls) return;
+    const distance = camera.position.distanceTo(controls.target);
+    const near = Math.max(0.1, side / 400);
+    const far = perspectiveClipFar(side, heliodonRadius, distance);
+    if (Math.abs(camera.near - near) > 1e-4 || Math.abs(camera.far - far) > 1) {
+      camera.near = near;
+      camera.far = far;
+      camera.updateProjectionMatrix();
+    }
   });
   return null;
 }
@@ -881,6 +874,13 @@ function Cameras({
             lon={lon}
             fitId={snapId}
             active={!orthoView && !qaMode}
+          />
+          <PerspectiveClipPlanes
+            camera={persp}
+            controlsRef={perspControls}
+            side={side}
+            heliodonRadius={heliodonRadius}
+            active={!orthoView}
           />
           <QaCameraBridgeRegister
             persp={persp}
