@@ -128,6 +128,8 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--green-3d` | `#7f9a62` | Green mesh in the 3D view, the 3D-view Illustrator green, and the Rhino Green layer. |
 | `--water-fill` | `#9ec9d1` | Water on the site plan, on screen and in the Illustrator file. |
 | `--water-3d` | `#8ebfc8` | Water mesh in the 3D view, the 3D-view Illustrator water, and the Rhino Water layer. |
+| `--water-sunpath` | `#4A9FE8` | Water in the 3D viewport while the sun path diagram is on. |
+| `--sun-study-surface` | `#FFFFFF` | Ground, roads, and parks in the 3D viewport while the sun path is on. |
 | `--tree-fill` | `#6ea35a` | Tree-crown fill on the site plan, on screen and in the Illustrator file. |
 | `--tree-crown` | `#5d8a45` | Tree-crown fill on the 3D-view Illustrator sheet. |
 | `--tree-crown-edge` | `#2c4a28` | Outline around that 3D-view crown. |

@@ -117,6 +117,12 @@
   /* Water mesh in the 3D view, the 3D-view Illustrator water, and the Rhino Water layer. */
   --water-3d: #7FBFFF;
 
+  /* Water in the 3D viewport while the sun path diagram is on. */
+  --water-sunpath: #4A9FE8;
+
+  /* Ground, roads, and parks in the 3D viewport while the sun path diagram is on. */
+  --sun-study-surface: #FFFFFF;
+
   /* Trees */
 
   /* Tree-crown fill on the site plan, on screen and in the Illustrator file. */

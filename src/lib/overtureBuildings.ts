@@ -12,7 +12,7 @@ import { PMTiles } from "pmtiles";
 import polygonClipping from "polygon-clipping";
 import { classify } from "./buildingUse";
 import { intersectionAreaM2 } from "./comBuildingHeightsMatch";
-import { clipPolygon } from "./clip";
+import { clipAreaToSiteFrame, DEFAULT_SITE_FRAME_SHAPE, type SiteFrameShape } from "./siteFrame";
 import { dedupeBuildings } from "./footprints";
 import { dedupeConsecutive, openRing, signedArea, toLocal } from "./geo";
 import { footprintArea } from "./useCascade";
@@ -75,7 +75,8 @@ function tileRange(bounds: { south: number; west: number; north: number; east: n
 function ringFromGeoJson(
   coordinates: number[][][],
   origin: LonLat,
-  half: number,
+  sideM: number,
+  frameShape: SiteFrameShape,
 ): { ring: Ring; holes: Ring[] } | null {
   const toRing = (loop: number[][]): Ring => {
     const raw: Pt[] = loop.map(([lon, lat]) => toLocal(lat, lon, origin));
@@ -87,11 +88,16 @@ function ringFromGeoJson(
     }
     return points;
   };
-  const outer = clipPolygon(toRing(coordinates[0]), -half, half);
-  if (outer.length < 3 || Math.abs(signedArea(outer)) < MIN_AREA) return null;
-  const holes = coordinates
+  const clipped = clipAreaToSiteFrame(
+    toRing(coordinates[0]),
+    coordinates.slice(1).map((loop) => toRing(loop)),
+    sideM,
+    frameShape,
+  );
+  if (!clipped || clipped[0]!.length < 3 || Math.abs(signedArea(clipped[0]!)) < MIN_AREA) return null;
+  const outer = clipped[0]!;
+  const holes = clipped
     .slice(1)
-    .map((loop) => clipPolygon(toRing(loop), -half, half))
     .filter((hole) => hole.length >= 3 && Math.abs(signedArea(hole)) >= MIN_AREA);
   return { ring: outer, holes };
 }
@@ -102,7 +108,8 @@ function fragmentsFromTile(
   x: number,
   y: number,
   origin: LonLat,
-  half: number,
+  sideM: number,
+  frameShape: SiteFrameShape,
 ): Fragment[] {
   const vt = new VectorTile(new PbfReader(data));
   const layer = vt.layers.building;
@@ -125,7 +132,7 @@ function fragmentsFromTile(
         .toLowerCase()
         .includes("microsoft");
     for (const coordinates of polys) {
-      const converted = ringFromGeoJson(coordinates, origin, half);
+      const converted = ringFromGeoJson(coordinates, origin, sideM, frameShape);
       if (!converted) continue;
       out.push({
         id,
@@ -282,8 +289,8 @@ export async function fetchOvertureBuildingsForCut(
   origin: LonLat,
   sideM: number,
   signal?: AbortSignal,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
 ): Promise<{ buildings: BuildingFeat[]; stats: OvertureFetchStats; buildingCapHit: boolean }> {
-  const half = sideM / 2;
   const t0 = performance.now();
   const release = await resolveOvertureRelease(signal);
   const pmtiles = new PMTiles(overtureBuildingsUrl(release));
@@ -293,7 +300,7 @@ export async function fetchOvertureBuildingsForCut(
       if (signal?.aborted) throw signal.reason ?? new DOMException("Aborted", "AbortError");
       const tile = await pmtiles.getZxy(z, x, y, signal);
       if (!tile?.data) return [] as Fragment[];
-      return fragmentsFromTile(tile.data, z, x, y, origin, half);
+      return fragmentsFromTile(tile.data, z, x, y, origin, sideM, frameShape);
     }),
   );
   const fragments = tileResults.flat();

@@ -1,7 +1,7 @@
 import type { BuildingColourMode } from "./buildingViewportColor";
 import { planBuildingFill } from "./planBuildingFill";
 import { isSiteBuilding } from "./siteBuildings";
-import { clipPolygon, clipPolyline } from "./clip";
+import { clipAreaToSiteFrame, clipPolylineSiteFrame, pointInSiteFrame, DEFAULT_SITE_FRAME_SHAPE } from "./siteFrame";
 import { openRing } from "./geo";
 import { PATH_WIDTH_M } from "./lineweights";
 import { carriagewaysOf, footpathLines, unionCarriageways, unionFootpaths } from "./roadFill";
@@ -113,17 +113,12 @@ export function offsetPolyline(line: Pt[], distance: number): Pt[] {
   return out;
 }
 
-function clipRings(outer: Pt[], holes: Pt[][], half: number): Pt[][] | null {
-  const ring = clipPolygon(outer, -half, half);
-  if (ring.length < 3) return null;
-  const inners = holes
-    .map((hole) => clipPolygon(hole, -half, half))
-    .filter((hole) => hole.length >= 3);
-  return [ring, ...inners];
+function clipRings(outer: Pt[], holes: Pt[][], sideM: number, frameShape: import("../types").SiteFrameShape): Pt[][] | null {
+  return clipAreaToSiteFrame(outer, holes, sideM, frameShape);
 }
 
-function clipLines(line: Pt[], half: number): Pt[][] {
-  return clipPolyline(dedupe(line), -half, half).map(dedupe).filter((part) => part.length >= 2);
+function clipLines(line: Pt[], sideM: number, frameShape: import("../types").SiteFrameShape): Pt[][] {
+  return clipPolylineSiteFrame(dedupe(line), sideM, frameShape).map(dedupe).filter((part) => part.length >= 2);
 }
 
 export type PlanPathOptions = {
@@ -140,11 +135,11 @@ export function planPaths(
   coarseFromScale = DEFAULT_COARSE_FROM_SCALE,
   planOptions: PlanPathOptions = {},
 ): PlanPaths {
-  const half = model.sideM / 2;
+  const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const green: Pt[][][] = [];
   const water: Pt[][][] = [];
   for (const area of model.areas) {
-    const rings = clipRings(area.ring, area.holes, half);
+    const rings = clipRings(area.ring, area.holes, model.sideM, frameShape);
     if (!rings) continue;
     if (area.kind === "water") water.push(rings);
     else green.push(rings);
@@ -153,11 +148,11 @@ export function planPaths(
   const rails: PlanPaths["rails"] = [];
   for (const road of model.roads) {
     if (road.kind === "rail") {
-      for (const line of clipLines(road.line, half)) rails.push(line);
+      for (const line of clipLines(road.line, model.sideM, frameShape)) rails.push(line);
     }
   }
-  const footpaths = unionFootpaths(footpathLines(model.roads), pathWidthM, model.sideM);
-  const carriageway = unionCarriageways(carriagewaysOf(model.roads), model.sideM);
+  const footpaths = unionFootpaths(footpathLines(model.roads), pathWidthM, model.sideM, frameShape);
+  const carriageway = unionCarriageways(carriagewaysOf(model.roads), model.sideM, frameShape);
 
   const colourMode: BuildingColourMode = planOptions.buildingColour ?? {
     colourByUse: true,
@@ -167,7 +162,7 @@ export function planPaths(
   const highlightManual = Boolean(planOptions.highlightManual);
   const buildings = model.buildings
     .map((building) => {
-      const rings = clipRings(building.ring, building.holes, half);
+      const rings = clipRings(building.ring, building.holes, model.sideM, frameShape);
       if (!rings) return null;
       const site = isSiteBuilding(model, building.id);
       const fill = planBuildingFill(model, building, colourMode, highlightManual);
@@ -176,7 +171,7 @@ export function planPaths(
     .filter((building): building is { rings: Pt[][]; fill: string; site: boolean } => building !== null);
 
   const trees = model.trees
-    .filter((tree) => Math.abs(tree.at[0]) <= half && Math.abs(tree.at[1]) <= half)
+    .filter((tree) => pointInSiteFrame(tree.at, model.sideM, frameShape))
     .map((tree) => ({
       east: tree.at[0],
       north: tree.at[1],
@@ -192,7 +187,9 @@ export function planPaths(
           ? demContourLayer(model.terrain, model.sideM)
           : null;
   const clipped = layer
-    ? layer.lines.flatMap((line) => clipLines(line.points, half).map((points) => ({ points, z: line.z })))
+    ? layer.lines.flatMap((line) =>
+        clipLines(line.points, model.sideM, frameShape).map((points) => ({ points, z: line.z })),
+      )
     : [];
   const drawnInterval = layer
     ? drawnContourInterval(layer.source, layer.interval, planScale, coarseIntervalM, coarseFromScale)
@@ -215,7 +212,7 @@ export function planPaths(
     trees,
     contours: drawn ? drawn.lines.map((line) => line.points) : [],
     contourIndex: drawn ? drawn.lines.map((line) => line.index) : [],
-    contourLabels: drawn?.labels ?? [],
+    contourLabels: [],
     contourInterval: drawn && layer ? drawnInterval : null,
     contourSource: drawn && layer ? layer.source : null,
   };

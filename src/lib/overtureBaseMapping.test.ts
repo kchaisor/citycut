@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isOvertureWaterPolygon, waterTagsFromOverture } from "./overtureBaseMapping";
+import { isOvertureWaterPolygon, waterLineHalfWidthM, waterTagsFromOverture } from "./overtureBaseMapping";
 import { UNTAGGED_WATER_MIN_AREA_M2 } from "./waterAreas";
 
 describe("overtureBaseMapping water", () => {
@@ -7,6 +7,13 @@ describe("overtureBaseMapping water", () => {
     const tags = waterTagsFromOverture({ class: "river", subtype: "river" });
     expect(tags.waterway).toBe("river");
     expect(isOvertureWaterPolygon({ class: "river" }, square(200))).toBe(true);
+  });
+
+  it("uses narrow fallback half-widths for river centreline ribbons", () => {
+    expect(waterLineHalfWidthM({ class: "river" })).toBe(6);
+    expect(waterLineHalfWidthM({ class: "canal" })).toBe(4);
+    expect(waterLineHalfWidthM({ class: "stream" })).toBe(4);
+    expect(waterLineHalfWidthM({ class: "dock" })).toBe(3);
   });
 
   it("hides ponds and small untagged water", () => {

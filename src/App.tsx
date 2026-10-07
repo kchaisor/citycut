@@ -21,6 +21,7 @@ import {
 } from "./lib/frameQuery";
 import { resolveSiteFrame, shouldResolveSite, siteAttributionNote } from "./lib/site";
 import { squareBBox } from "./lib/geo";
+import { siteFrameAreaM2, type SiteFrameShape } from "./lib/siteFrame";
 import { localityCacheKey, reverseLocality } from "./lib/nominatim";
 import { FLAT_GROUND_NOTE } from "./lib/parseOsm";
 import { fetchOvertureBaseForCut } from "./lib/overtureBase";
@@ -79,6 +80,9 @@ export default function App() {
   const abortRef = useRef<AbortController | null>(null);
 
   const [sideKm, setSideKm] = useState(queried?.sideKm ?? DEFAULT_SIDE_KM);
+  const [frameShape, setFrameShape] = useState<SiteFrameShape>(queried?.frameShape ?? "square");
+  const frameShapeRef = useRef(frameShape);
+  frameShapeRef.current = frameShape;
   const [layers, setLayers] = useState<UiLayers>(DEFAULT_LAYERS);
   const [basemap, setBasemap] = useState<Basemap>("map");
   const [placeLabel, setPlaceLabel] = useState(placeLabelRef.current);
@@ -105,6 +109,7 @@ export default function App() {
       lon: view.lon,
       sideKm: sideRef.current,
       label: placeLabelRef.current,
+      frameShape: frameShapeRef.current,
     });
     if (siteAnchor !== null) search = writeSiteAnchorSearch(search, siteAnchor);
     const nextUrl = `${window.location.pathname}${search}${window.location.hash}`;
@@ -261,7 +266,7 @@ export default function App() {
       setError("Turn on Buildings, Roads and rail, Water and green, Trees, Terrain, or Contours.");
       return;
     }
-    if (sideM * sideM > MAX_AREA_M2 + 1) {
+    if (siteFrameAreaM2(sideM, frameShapeRef.current) > MAX_AREA_M2 + 1) {
       setError("That frame is over the 2 km² limit for this version.");
       return;
     }
@@ -294,7 +299,7 @@ export default function App() {
         : Promise.resolve({ field: null, error: null as string | null });
       const bounds = squareBBox(view, sideM);
       const buildingsTask = modelLayers.buildings
-        ? fetchOvertureBuildingsForCut(bounds, center, sideM, controller.signal)
+        ? fetchOvertureBuildingsForCut(bounds, center, sideM, controller.signal, frameShapeRef.current)
         : Promise.resolve({
             buildings: [],
             buildingCapHit: false,
@@ -308,7 +313,7 @@ export default function App() {
             },
           });
       const transportTask = modelLayers.roads
-        ? fetchOvertureTransportationForCut(bounds, center, sideM, controller.signal)
+        ? fetchOvertureTransportationForCut(bounds, center, sideM, controller.signal, frameShapeRef.current)
         : Promise.resolve({
             roads: [],
             roadKm: 0,
@@ -320,7 +325,11 @@ export default function App() {
               bounds,
               center,
               sideM,
-              { waterGreen: modelLayers.waterGreen, trees: modelLayers.trees },
+              {
+                waterGreen: modelLayers.waterGreen,
+                trees: modelLayers.trees,
+                frameShape: frameShapeRef.current,
+              },
               controller.signal,
             )
           : Promise.resolve({
@@ -417,7 +426,6 @@ export default function App() {
       const buildings = modelLayers.buildings
         ? assignExternalUses(overtureBuildings, useTiers.zones)
         : [];
-      const half = sideM / 2;
       const treeContext = {
         ...baseResult.treeContext,
         roads: transportResult.roads.map((road) => ({ line: road.line, width: road.width })),
@@ -428,9 +436,9 @@ export default function App() {
       };
       const assembled = modelLayers.trees
         ? assembleTreeTiers({
-            com: comRecordsToTrees(comResult.rows, center, half),
+            com: comRecordsToTrees(comResult.rows, center, sideM, frameShapeRef.current),
             osm: baseResult.overtureTrees,
-            vicmap: vicmapPointsToTrees(vicmapResult.points, center, half),
+            vicmap: vicmapPointsToTrees(vicmapResult.points, center, sideM, frameShapeRef.current),
             ...treeContext,
           })
         : null;
@@ -518,6 +526,7 @@ export default function App() {
       setModel({
         center,
         sideM,
+        frameShape: frameShapeRef.current,
         layers: modelLayers,
         buildings,
         roads: modelLayers.roads ? transportResult.roads : [],
@@ -557,7 +566,8 @@ export default function App() {
 
   const headerPlace = phase === "model" && model ? model.placeLabel : placeLabel;
   const headerSide = phase === "model" && model ? model.sideM : sideKm * 1000;
-  const headerSize = cutSizeLabel(headerSide);
+  const headerShape = phase === "model" && model ? (model.frameShape ?? "square") : frameShape;
+  const headerSize = cutSizeLabel(headerSide, headerShape);
 
   useEffect(() => {
     document.title = `CityCut — ${headerPlace} · ${headerSize}`;
@@ -593,6 +603,8 @@ export default function App() {
             loading={loading}
             error={error}
             onSideKm={setSideKm}
+            frameShape={frameShape}
+            onFrameShape={setFrameShape}
             onLayer={onLayer}
             onPlace={onPlace}
             onCreate={createModel}

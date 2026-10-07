@@ -1,6 +1,7 @@
 import * as polygonClipping from "polygon-clipping";
 import type { MultiPolygon, Pair, Polygon, Ring } from "polygon-clipping";
 import { polylineLength, signedArea } from "./geo";
+import { DEFAULT_SITE_FRAME_SHAPE, siteFramePolygon, type SiteFrameShape } from "./siteFrame";
 import type { Pt, RoadFeat } from "../types";
 
 type ClipFns = {
@@ -408,22 +409,13 @@ export function bufferCentreline(line: Pt[], width: number, minWidth = 0.4): Pol
   return unionList(pieces);
 }
 
-function framePolygon(sideM: number): Polygon {
-  const half = sideM / 2;
-  return [
-    [
-      [-half, -half],
-      [half, -half],
-      [half, half],
-      [-half, half],
-      [-half, -half],
-    ],
-  ];
-}
-
-function clipToFrame(polygons: MultiPolygon, sideM: number): MultiPolygon {
+function clipToFrame(
+  polygons: MultiPolygon,
+  sideM: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+): MultiPolygon {
   if (polygons.length === 0 || !(sideM > 0)) return [];
-  const frame = framePolygon(sideM);
+  const frame = siteFramePolygon(sideM, frameShape);
   try {
     return intersection(polygons, frame);
   } catch {
@@ -459,6 +451,7 @@ function unionStrips(
   roads: { line: Pt[]; width: number }[],
   sideM: number,
   minWidth: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
 ): RoadFill {
   const started = performance.now();
   const inputs: Polygon[] = [];
@@ -466,7 +459,7 @@ function unionStrips(
     if (road.line.length < 2 || !(road.width > 0)) continue;
     inputs.push(...bufferCentreline(road.line, road.width, minWidth));
   }
-  const merged = tidy(clipToFrame(unionFast(inputs), sideM));
+  const merged = tidy(clipToFrame(unionFast(inputs), sideM, frameShape));
   return { polygons: merged, ms: performance.now() - started, inputs: inputs.length };
 }
 
@@ -475,13 +468,21 @@ function unionStrips(
  * Paths and rail are not included; callers pass carriageways only.
  * The union removes the internal edges that used to cross at junctions.
  */
-export function unionCarriageways(roads: { line: Pt[]; width: number }[], sideM: number): RoadFill {
-  return unionStrips(roads, sideM, 0.4);
+export function unionCarriageways(
+  roads: { line: Pt[]; width: number }[],
+  sideM: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+): RoadFill {
+  return unionStrips(roads, sideM, 0.4, frameShape);
 }
 
 /** Buffer each path by its stored width and union the strips (3D and exports match the site plan). */
-export function unionPathRoads(roads: { line: Pt[]; width: number }[], sideM: number): RoadFill {
-  return unionStrips(roads, sideM, 0);
+export function unionPathRoads(
+  roads: { line: Pt[]; width: number }[],
+  sideM: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+): RoadFill {
+  return unionStrips(roads, sideM, 0, frameShape);
 }
 
 export function carriagewaysOf(roads: RoadFeat[]): { line: Pt[]; width: number }[] {
@@ -504,11 +505,17 @@ export function footpathLines(roads: RoadFeat[]): Pt[][] {
  * and union the strips. A width of 0 leaves no geometry. The union is one shape,
  * so joins have no seams and a crossing is covered by the road drawn above it.
  */
-export function unionFootpaths(lines: Pt[][], widthM: number, sideM: number): RoadFill {
+export function unionFootpaths(
+  lines: Pt[][],
+  widthM: number,
+  sideM: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+): RoadFill {
   if (!(widthM > 0)) return { polygons: [], ms: 0, inputs: 0 };
   return unionStrips(
     lines.map((line) => ({ line, width: widthM })),
     sideM,
     0,
+    frameShape,
   );
 }

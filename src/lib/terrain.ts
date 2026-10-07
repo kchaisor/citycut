@@ -545,7 +545,11 @@ function shadeHeight(t: number, darken: number): [number, number, number] {
 }
 
 /** One heightfield surface, in Three.js coordinates (x east, y up, z = −north). No skirt or base. */
-export function terrainBuffers(field: TerrainField, sideM: number): {
+export function terrainBuffers(
+  field: TerrainField,
+  sideM: number,
+  frameShape: import("./siteFrame").SiteFrameShape = "square",
+): {
   positions: Float32Array;
   indices: Uint32Array;
   colors: Float32Array;
@@ -555,8 +559,7 @@ export function terrainBuffers(field: TerrainField, sideM: number): {
   const relief = Math.max(field.max - field.min, 0.001);
   const positions = new Float32Array(cols * rows * 3);
   const colors = new Float32Array(cols * rows * 3);
-  const indices = new Uint32Array((cols - 1) * (rows - 1) * 6);
-  let index = 0;
+  const indexList: number[] = [];
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const east = -half + col * field.spacingM;
@@ -572,19 +575,35 @@ export function terrainBuffers(field: TerrainField, sideM: number): {
       colors[offset + 2] = tint[2];
     }
   }
+  const inside = (east: number, north: number) => {
+    if (frameShape === "square") return true;
+    return east * east + north * north <= half * half + 0.001;
+  };
   for (let row = 0; row < rows - 1; row++) {
     for (let col = 0; col < cols - 1; col++) {
       const sw = row * cols + col;
       const se = sw + 1;
       const nw = sw + cols;
       const ne = nw + 1;
-      indices[index++] = sw;
-      indices[index++] = se;
-      indices[index++] = ne;
-      indices[index++] = sw;
-      indices[index++] = ne;
-      indices[index++] = nw;
+      const eSw = positions[sw * 3]!;
+      const nSw = -positions[sw * 3 + 2]!;
+      const eSe = positions[se * 3]!;
+      const nSe = -positions[se * 3 + 2]!;
+      const eNw = positions[nw * 3]!;
+      const nNw = -positions[nw * 3 + 2]!;
+      const eNe = positions[ne * 3]!;
+      const nNe = -positions[ne * 3 + 2]!;
+      if (
+        !inside(eSw, nSw) &&
+        !inside(eSe, nSe) &&
+        !inside(eNw, nNw) &&
+        !inside(eNe, nNe)
+      ) {
+        continue;
+      }
+      indexList.push(sw, se, ne, sw, ne, nw);
     }
   }
+  const indices = Uint32Array.from(indexList);
   return { positions, indices, colors };
 }

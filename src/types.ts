@@ -164,10 +164,14 @@ export type TerrainField = {
   source: string;
 };
 
+export type SiteFrameShape = "square" | "circle";
+
 export type CityModel = {
   placeLabel: string;
   center: LonLat;
   sideM: number;
+  /** Cut boundary: square side or circle diameter in metres. */
+  frameShape?: SiteFrameShape;
   layers: ModelLayers;
   buildings: BuildingFeat[];
   roads: RoadFeat[];

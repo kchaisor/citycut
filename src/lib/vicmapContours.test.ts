@@ -343,7 +343,7 @@ describe("contour fallback", () => {
     expect(plan.contourInterval).toBe(1);
     expect(plan.contours).toHaveLength(1);
     expect(plan.contourIndex).toEqual([true]);
-    expect(plan.contourLabels.map((label) => label.text)).toEqual(["30"]);
+    expect(plan.contourLabels).toEqual([]);
     expect(plan.contours.length).not.toBe(dem.lines.length);
     expect(planPaths({ ...model, contours: false }).contours).toHaveLength(0);
   });
@@ -404,7 +404,7 @@ describe("contour fallback", () => {
       expect(plan.contourInterval).toBe(5);
       expect(plan.contours).toHaveLength(3);
       expect(plan.contourIndex).toEqual([false, false, true]);
-      expect(plan.contourLabels.map((label) => label.text)).toEqual(["25"]);
+      expect(plan.contourLabels).toEqual([]);
       expect(contourDrawerLabel(layer, scale)).toBe("Vicmap Elevation 5 m (1 m at 1:1000)");
     }
   });
@@ -430,7 +430,7 @@ describe("contour fallback", () => {
     expect(coarseLines?.paths).toHaveLength(2);
     expect(coarseLines?.paths?.[0].strokeMm).toBe(0.1);
     expect(coarseLines?.paths?.[1].strokeMm).toBe(0.18);
-    expect(coarse.find((chunk) => chunk.name === "Contour labels")?.texts?.map((text) => text.text)).toEqual(["25"]);
+    expect(coarse.find((chunk) => chunk.name === "Contour labels")).toBeUndefined();
     expect(coarse.find((chunk) => chunk.name === "Annotation")?.texts?.some((text) => text.text.includes("Contours every 5 m"))).toBe(true);
 
     const fine = sitePlanChunks(model, 1000);
@@ -438,9 +438,9 @@ describe("contour fallback", () => {
     expect(fine.find((chunk) => chunk.name === "Annotation")?.texts?.some((text) => text.text.includes("Contours every 1 m"))).toBe(true);
   });
 
-  it("writes each site-plan layer once when contour labels are present", () => {
+  it("writes each site-plan layer once without contour label text", () => {
     const layers = parseNativeAiLayers(sitePlanAi8(metroModel([1, 5, 6, 25]), 5000));
-    expect(layers.filter((name) => name === "Contour labels")).toHaveLength(1);
+    expect(layers.filter((name) => name === "Contour labels")).toHaveLength(0);
     expect(new Set(layers).size).toBe(layers.length);
   });
 });

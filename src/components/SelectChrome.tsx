@@ -9,7 +9,7 @@ import {
   writeStoredComBuildingHeights,
 } from "../lib/comBuildingHeightsToggle";
 import { reduceRail } from "../lib/railState";
-import type { PlaceHit, UiLayers } from "../types";
+import type { PlaceHit, SiteFrameShape, UiLayers } from "../types";
 import { Drawer } from "./Drawer";
 import { IconRail, type RailItem } from "./IconRail";
 
@@ -44,6 +44,8 @@ export function SelectChrome({
   loading,
   error,
   onSideKm,
+  frameShape,
+  onFrameShape,
   onLayer,
   onPlace,
   onCreate,
@@ -54,6 +56,8 @@ export function SelectChrome({
   loading: boolean;
   error: string | null;
   onSideKm: (km: number) => void;
+  frameShape: SiteFrameShape;
+  onFrameShape: (shape: SiteFrameShape) => void;
   onLayer: (key: keyof UiLayers, on: boolean) => void;
   onPlace: (place: PlaceHit) => void;
   onCreate: () => void;
@@ -70,7 +74,12 @@ export function SelectChrome({
     readStoredComBuildingHeights(window.localStorage),
   );
   const boxRef = useRef<HTMLDivElement>(null);
-  const area = sideKm * sideKm;
+  const area =
+    frameShape === "circle" ? Math.PI * (sideKm / 2) ** 2 : sideKm * sideKm;
+  const sizeLabel =
+    frameShape === "circle"
+      ? `${formatKmSide(sideKm)} km diameter`
+      : `${formatKmSide(sideKm)} × ${formatKmSide(sideKm)} km`;
 
   useEffect(() => {
     if (error) setOpen("layers");
@@ -184,9 +193,7 @@ export function SelectChrome({
           <div className="field">
             <div className="field-head">
               <label htmlFor={sliderId}>Area size</label>
-              <strong>
-                {formatKmSide(sideKm)} × {formatKmSide(sideKm)} km
-              </strong>
+              <strong>{sizeLabel}</strong>
             </div>
             <input
               id={sliderId}
@@ -202,7 +209,32 @@ export function SelectChrome({
               aria-valuetext={`${formatKmSide(sideKm)} kilometres per side`}
               onChange={(event) => onSideKm(Number(event.target.value))}
             />
-            <p className="field-note">{area.toFixed(2)} km² · square frame, max about 2 km²</p>
+            <p className="field-note">
+              {area.toFixed(2)} km² · {frameShape} frame, max about 2 km²
+            </p>
+          </div>
+          <div className="field">
+            <div className="field-head">
+              <span>Area shape</span>
+            </div>
+            <div className="shape-toggle" role="group" aria-label="Site area shape">
+              <button
+                type="button"
+                className={frameShape === "square" ? "toggle on" : "toggle"}
+                aria-pressed={frameShape === "square"}
+                onClick={() => onFrameShape("square")}
+              >
+                Square
+              </button>
+              <button
+                type="button"
+                className={frameShape === "circle" ? "toggle on" : "toggle"}
+                aria-pressed={frameShape === "circle"}
+                onClick={() => onFrameShape("circle")}
+              >
+                Circle
+              </button>
+            </div>
           </div>
           {error && (
             <p className="error" role="alert">

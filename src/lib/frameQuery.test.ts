@@ -6,6 +6,7 @@ const melbourne = {
   view: { lat: -37.8136, lon: 144.9631, zoom: DEFAULT_ZOOM },
   sideKm: DEFAULT_SIDE_KM,
   label: "Melbourne CBD",
+  frameShape: "square" as const,
 };
 
 describe("frameFromSearch", () => {
@@ -33,6 +34,7 @@ describe("frameFromSearch", () => {
       view: { lat: -37.8041, lon: 144.94944, zoom: DEFAULT_ZOOM },
       sideKm: 1,
       label: "North Melbourne",
+      frameShape: "square",
     });
     expect(frameFromSearch("?view=iso-ne")).toEqual(melbourne);
   });
@@ -42,6 +44,7 @@ describe("frameFromSearch", () => {
       view: { lat: -37.8041, lon: 144.94944, zoom: DEFAULT_ZOOM },
       sideKm: 1,
       label: "Selected frame",
+      frameShape: "square",
     });
     expect(frameFromSearch("?lat=-37.8041&lon=144.94944&km=1&label=North%20Melbourne").label).toBe(
       "North Melbourne",
@@ -50,6 +53,7 @@ describe("frameFromSearch", () => {
       view: { lat: 0, lon: 0, zoom: DEFAULT_ZOOM },
       sideKm: 0.5,
       label: "Selected frame",
+      frameShape: "square",
     });
     expect(frameFromSearch("?lat=90&lon=180&km=1").view).toMatchObject({ lat: 90, lon: 180 });
     expect(frameFromSearch("?lat=-90&lon=-180&km=1").view).toMatchObject({ lat: -90, lon: -180 });
@@ -81,6 +85,26 @@ describe("writeFrameSearch", () => {
     });
     expect(new URLSearchParams(search.slice(1)).get("view")).toBe("iso-sw");
     expect(explicitLabel("?lat=-37.8041&lon=144.94944&km=1")).toBeNull();
+  });
+
+  it("round-trips shape=circle and omits shape for square", () => {
+    const circle = writeFrameSearch("", {
+      lat: -37.8,
+      lon: 145,
+      sideKm: 1,
+      label: "Test",
+      frameShape: "circle",
+    });
+    expect(new URLSearchParams(circle.slice(1)).get("shape")).toBe("circle");
+    expect(frameFromSearch(circle).frameShape).toBe("circle");
+    const square = writeFrameSearch(circle, {
+      lat: -37.8,
+      lon: 145,
+      sideKm: 1,
+      label: "Test",
+      frameShape: "square",
+    });
+    expect(new URLSearchParams(square.slice(1)).get("shape")).toBeNull();
   });
 
   it("round-trips siteLat and siteLon", () => {

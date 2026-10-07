@@ -83,7 +83,7 @@ describe("windArrowGeometry", () => {
     expect(checked).toBeGreaterThan(0);
   });
 
-  it("moves each visible head about sideM/40–sideM/25 metres per second", () => {
+  it("moves each visible head about sideM/20–sideM/12.5 metres per second", () => {
     const sideM = 1000;
     const buffer = buildWindArrowBuffer(sideM, 4, null);
     const speed = windStreakSpeedMs(sideM, 20);
@@ -107,8 +107,8 @@ describe("windArrowGeometry", () => {
       if (h0.op <= 0 || h1.op <= 0) continue;
       checked += 1;
       const disp = Math.hypot(h1.e - h0.e, h1.n - h0.n);
-      expect(disp).toBeGreaterThanOrEqual((sideM / 40) * 0.84);
-      expect(disp).toBeLessThanOrEqual((sideM / 25) * 1.16);
+      expect(disp).toBeGreaterThanOrEqual((sideM / 20) * 0.84);
+      expect(disp).toBeLessThanOrEqual((sideM / 12.5) * 1.16);
     }
     expect(checked).toBeGreaterThan(0);
   });

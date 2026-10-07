@@ -70,10 +70,11 @@ export function isOvertureWaterLine(props: Record<string, unknown>): boolean {
 export function waterLineHalfWidthM(props: Record<string, unknown>): number {
   const className = String(props.class ?? "").toLowerCase();
   const subtype = String(props.subtype ?? "").toLowerCase();
-  if (className === "river" || subtype === "river") return 35;
-  if (className === "canal" || subtype === "canal") return 12;
-  if (className === "dock" || subtype === "dock") return 18;
-  return 8;
+  if (className === "river" || subtype === "river") return 6;
+  if (className === "canal" || subtype === "canal") return 4;
+  if (className === "stream" || subtype === "stream") return 4;
+  if (className === "dock" || subtype === "dock") return 3;
+  return 4;
 }
 
 export function greenTagsFromLandUse(props: Record<string, unknown>): Record<string, string> | null {

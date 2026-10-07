@@ -1,13 +1,7 @@
 import * as THREE from "three";
+import { getColour } from "./colours";
 import { applyMatteFinish } from "./matteMaterial";
 
-/** Screen-only tints while the sun path is on (lit ground target ~RGB 200–215). */
-export const SUN_STUDY_TERRAIN_VERTEX_SCALE = 0.54;
-export const SUN_STUDY_GROUND_COLOR_SCALE = 0.58;
-export const SUN_STUDY_GREEN_COLOR_SCALE = 0.62;
-export const SUN_STUDY_ROAD_COLOR_SCALE = 0.64;
-export const SUN_STUDY_RAIL_COLOR_SCALE = 0.64;
-export const SUN_STUDY_WATER_COLOR_SCALE = 0.82;
 
 const SURFACE_MESH_NAMES = new Set(["Terrain", "Ground", "Green", "Water", "Roads", "Rail"]);
 
@@ -24,37 +18,22 @@ function forEachStandardMaterial(mesh: THREE.Mesh, fn: (material: THREE.MeshStan
   }
 }
 
-function scaleForMesh(mesh: THREE.Mesh): number {
-  switch (mesh.name) {
-    case "Terrain":
-      return SUN_STUDY_TERRAIN_VERTEX_SCALE;
-    case "Ground":
-      return SUN_STUDY_GROUND_COLOR_SCALE;
-    case "Green":
-      return SUN_STUDY_GREEN_COLOR_SCALE;
-    case "Water":
-      return SUN_STUDY_WATER_COLOR_SCALE;
-    case "Roads":
-      return SUN_STUDY_ROAD_COLOR_SCALE;
-    case "Rail":
-      return SUN_STUDY_RAIL_COLOR_SCALE;
-    default:
-      return SUN_STUDY_GROUND_COLOR_SCALE;
-  }
-}
-
 function snapshotTerrainVertexColors(mesh: THREE.Mesh): void {
   const attr = mesh.geometry.getAttribute("color");
   if (!attr || mesh.userData.sunStudyVertexColors) return;
   mesh.userData.sunStudyVertexColors = new Float32Array(attr.array);
 }
 
-function applyTerrainVertexTint(mesh: THREE.Mesh, sunStudyOn: boolean, scale: number): void {
+function applyTerrainVertexWhite(mesh: THREE.Mesh, sunStudyOn: boolean): void {
   const attr = mesh.geometry.getAttribute("color") as THREE.BufferAttribute | undefined;
   const base = mesh.userData.sunStudyVertexColors as Float32Array | undefined;
   if (!attr || !base) return;
   if (sunStudyOn) {
-    for (let i = 0; i < base.length; i++) attr.array[i] = base[i]! * scale;
+    for (let i = 0; i < base.length; i += 3) {
+      attr.array[i] = 1;
+      attr.array[i + 1] = 1;
+      attr.array[i + 2] = 1;
+    }
   } else {
     attr.array.set(base);
   }
@@ -66,16 +45,16 @@ function snapshotMaterialViewportColor(material: THREE.MeshStandardMaterial): vo
   material.userData.sunStudyRestHex = `#${material.color.getHexString()}`;
 }
 
-function applyMaterialViewportTint(
-  material: THREE.MeshStandardMaterial,
-  sunStudyOn: boolean,
-  scale: number,
-): void {
+function sunStudyColorForMesh(mesh: THREE.Mesh): string {
+  if (mesh.name === "Water") return getColour("--water-sunpath");
+  return getColour("--sun-study-surface");
+}
+
+function applyMaterialViewportTint(mesh: THREE.Mesh, material: THREE.MeshStandardMaterial, sunStudyOn: boolean): void {
   const rest = material.userData.sunStudyRestHex as string | undefined;
   if (!rest) return;
   if (sunStudyOn) {
-    material.color.setStyle(rest);
-    material.color.multiplyScalar(scale);
+    material.color.setStyle(sunStudyColorForMesh(mesh));
   } else {
     material.color.setStyle(rest);
   }
@@ -92,23 +71,23 @@ export function snapshotSunStudySurfaceColors(root: THREE.Object3D): void {
   });
 }
 
-/** Darken ground, roads, and water in the viewport during sun study; buildings stay separate. */
+/** White ground, roads, and parks during sun study; water uses --water-sunpath. Buildings stay separate. */
 export function applySunStudySurfaceTint(root: THREE.Object3D, sunStudyOn: boolean): void {
   root.traverse((object) => {
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh || !isSunStudySurfaceMesh(mesh)) return;
-    const scale = scaleForMesh(mesh);
     if (mesh.name === "Terrain") {
-      applyTerrainVertexTint(mesh, sunStudyOn, scale);
+      applyTerrainVertexWhite(mesh, sunStudyOn);
       return;
     }
-    forEachStandardMaterial(mesh, (material) => applyMaterialViewportTint(material, sunStudyOn, scale));
+    forEachStandardMaterial(mesh, (material) => applyMaterialViewportTint(mesh, material, sunStudyOn));
   });
 }
 
-/** Scale a CSS hex fill for tests (same math as material multiplyScalar). */
-export function tintSunStudyHex(hex: string, scale: number): string {
-  const color = new THREE.Color(hex);
-  color.multiplyScalar(scale);
-  return `#${color.getHexString()}`;
+/** Resolve the viewport tint for tests. */
+export function sunStudyViewportFill(meshName: string, sunStudyOn: boolean): string | null {
+  if (!sunStudyOn) return null;
+  if (meshName === "Water") return getColour("--water-sunpath");
+  if (SURFACE_MESH_NAMES.has(meshName)) return getColour("--sun-study-surface");
+  return null;
 }
