@@ -208,7 +208,7 @@ export function SelectChrome({
               onChange={(event) => onSideKm(Number(event.target.value))}
             />
             <p className="field-note">
-              {area.toFixed(2)} km² · {frameShape} frame, max about 2 km²
+              {area.toFixed(2)} km² · {frameShape} frame, up to 2 km {frameShape === "circle" ? "ø" : "side"} (4 km² square max)
             </p>
           </div>
           <div className="field">
@@ -218,7 +218,7 @@ export function SelectChrome({
             <div className="shape-toggle" role="group" aria-label="Site area shape">
               <button
                 type="button"
-                className={frameShape === "square" ? "toggle on" : "toggle"}
+                className={frameShape === "square" ? "shape-btn on" : "shape-btn"}
                 aria-pressed={frameShape === "square"}
                 onClick={() => onFrameShape("square")}
               >
@@ -226,7 +226,7 @@ export function SelectChrome({
               </button>
               <button
                 type="button"
-                className={frameShape === "circle" ? "toggle on" : "toggle"}
+                className={frameShape === "circle" ? "shape-btn on" : "shape-btn"}
                 aria-pressed={frameShape === "circle"}
                 onClick={() => onFrameShape("circle")}
               >

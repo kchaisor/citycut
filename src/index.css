@@ -134,7 +134,7 @@ button { cursor: pointer; }
 .frame {
   position: absolute;
   z-index: 2;
-  border: 2px solid #16140f;
+  border: 2px dashed #16140f;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45);
   pointer-events: none;
 }
@@ -399,7 +399,26 @@ button { cursor: pointer; }
 .field-head strong { font-size: 13px; font-variant-numeric: tabular-nums; font-weight: 560; }
 
 .shape-toggle { display: flex; gap: 8px; margin-top: 8px; }
-.shape-toggle .toggle { flex: 1; justify-content: center; min-height: 36px; }
+.shape-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  border-radius: 99px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.shape-btn.on {
+  background: var(--shape-toggle-on-bg);
+  border-color: var(--shape-toggle-on-bg);
+  color: var(--shape-toggle-on-text);
+  font-weight: 560;
+}
 .field-note, .hint, .attrib, .v2, .meta {
   color: var(--muted-text);
   font-size: 12.5px;

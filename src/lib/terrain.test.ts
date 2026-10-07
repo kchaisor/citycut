@@ -487,4 +487,33 @@ describe("terrain in the model", () => {
       expect(buffers.positions[i + 1]).toBeLessThanOrEqual(field.max + 1e-4);
     }
   });
+
+  it("clips circle terrain triangles to the frame circle instead of whole grid cells", () => {
+    const field: TerrainField = {
+      cols: 5,
+      rows: 5,
+      heights: Float32Array.from({ length: 25 }, (_, i) => i),
+      min: 0,
+      max: 24,
+      spacingM: 10,
+      zoom: 12,
+      metresPerPixel: 15,
+      source: "Mapterhorn",
+    };
+    const sideM = 40;
+    const half = sideM / 2;
+    const circle = terrainBuffers(field, sideM, "circle");
+    expect(circle.indices.length).toBeGreaterThan(0);
+    let rim = 0;
+    let outside = 0;
+    for (let i = 0; i < circle.positions.length; i += 3) {
+      const east = circle.positions[i]!;
+      const north = -circle.positions[i + 2]!;
+      const r = Math.hypot(east, north);
+      if (r > half + 0.2) outside += 1;
+      if (r > half - 2 && r <= half + 0.15) rim += 1;
+    }
+    expect(outside).toBe(0);
+    expect(rim).toBeGreaterThan(6);
+  });
 });

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as THREE from "three";
 import { Building2, Download, DraftingCompass, Info, Sun, Trees, Wind } from "lucide-react";
 import {
   BUILDING_USES,
@@ -72,6 +73,7 @@ import {
   writeStoredShowManualHeights,
   type HeightOverrideStore,
 } from "../lib/heightOverrides";
+import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { modelStageCreditHtml } from "../lib/dataCredits";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import type { BuildingUse, CityModel } from "../types";
@@ -90,7 +92,7 @@ import { WindRoseOverlay } from "./WindRoseOverlay";
 import { fetchWindRoseTable } from "../lib/windFetch";
 import type { WindRoseTable } from "../lib/windRose";
 import {
-  readStoredWindSettings,
+  windSettingsForModelOpen,
   writeStoredWindSettings,
   type WindViewSettings,
 } from "../lib/windState";
@@ -159,7 +161,11 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [fitToken, setFitToken] = useState(0);
   const [view, setView] = useState<ViewMemory>(loadView);
   const [snapId, setSnapId] = useState(0);
-  const [windSettings, setWindSettings] = useState<WindViewSettings>(() => readStoredWindSettings(window.localStorage));
+  const [windSettings, setWindSettings] = useState<WindViewSettings>(() => {
+    const next = windSettingsForModelOpen(window.localStorage);
+    writeStoredWindSettings(window.localStorage, next);
+    return next;
+  });
   const [windTable, setWindTable] = useState<WindRoseTable | null>(null);
   const [windNote, setWindNote] = useState<string | null>(null);
   const windMotion = useWindStreakMotion();
@@ -288,9 +294,34 @@ export function ModelPage({ model }: { model: CityModel }) {
     null,
   );
 
+  const qaSummaryRef = useRef({ buildingCount: 0, roadCount: 0, triangleCount: 0 });
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !qaModeFromSearch(window.location.search)) return;
+    const group = buildCityGroup(model);
+    let triangleCount = 0;
+    group.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.geometry) return;
+      const index = mesh.geometry.index;
+      if (index) triangleCount += index.count / 3;
+      else {
+        const position = mesh.geometry.getAttribute("position");
+        if (position) triangleCount += position.count / 3;
+      }
+    });
+    disposeObject(group);
+    qaSummaryRef.current = {
+      buildingCount: model.buildings.length,
+      roadCount: model.roads.length,
+      triangleCount: Math.round(triangleCount),
+    };
+  }, [model]);
+
   useEffect(() => {
     if (typeof window === "undefined" || !qaModeFromSearch(window.location.search)) return;
     window.__citycutQaModel = {
+      getSummary: () => qaSummaryRef.current,
       openMidriseHeightEdit() {
         const midriseUses: BuildingUse[] = ["commercial", "mixed_use", "retail"];
         const midrise = model.buildings

@@ -43,6 +43,8 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--font-size-stat` | The size of the big numbers in the model summary. | `22px` |
 | `--font-size-title` | The size of the large title in the model summary. | `28px` |
 | `--wind-rose-size` | Diameter of the on-screen wind rose diagram in the 3D view; caption text scales from this. | `168px` |
+| `--shape-toggle-on-bg` | Fill of the selected Square / Circle pill on the landing map. | `#1A1916` |
+| `--shape-toggle-on-text` | Label on the selected Square / Circle pill. | `#FFFCF8` |
 
 `var(--background)` means “use whatever `--background` is set to”. That is why one edit recolours the page, the header, the model, and the drawing together.
 

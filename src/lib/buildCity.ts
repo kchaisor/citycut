@@ -4,7 +4,7 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { BUILDING_EDGE_COLOR, BUILDING_EDGE_THRESHOLD_DEG } from "./buildingEdges";
 import { BUILDING_USE_META, SOURCE_META, buildingLayerName, uniformBuildingColor } from "./buildingUse";
 import { getColour } from "./colours";
-import { DEFAULT_SITE_FRAME_SHAPE } from "./siteFrame";
+import { DEFAULT_SITE_FRAME_SHAPE, SITE_FRAME_CIRCLE_SEGMENTS } from "./siteFrame";
 import { buildTreeGroup } from "./treeMassing";
 import { openRing, signedArea } from "./geo";
 import { carriagewaysOf, unionCarriageways, unionPathRoads } from "./roadFill";
@@ -288,6 +288,16 @@ function drapeLayer(layer: { lift: number; polygonOffsetFactor: number; polygonO
   return { ...layer, polygonOffsetFactor: 0, polygonOffsetUnits: 0 };
 }
 
+/** Draped water keeps a small lift and polygon offset so lakes do not z-fight the terrain mesh. */
+function drapedWaterLayer() {
+  return {
+    ...SURFACE.water,
+    lift: SURFACE.water.lift + 0.035,
+    polygonOffsetFactor: SURFACE.water.polygonOffsetFactor,
+    polygonOffsetUnits: SURFACE.water.polygonOffsetUnits,
+  };
+}
+
 function extrudeShape(shape: THREE.Shape, height: number, base: number): THREE.BufferGeometry {
   const geometry = new THREE.ExtrudeGeometry(shape, {
     depth: height,
@@ -374,7 +384,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   } else {
     const groundGeo =
       frameShape === "circle"
-        ? new THREE.CircleGeometry(model.sideM / 2, 72)
+        ? new THREE.CircleGeometry(model.sideM / 2, SITE_FRAME_CIRCLE_SEGMENTS)
         : new THREE.PlaneGeometry(model.sideM, model.sideM);
     groundGeo.rotateX(-Math.PI / 2);
     const groundMat = paint(
@@ -395,16 +405,14 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     matteStandardMaterial({ color: getColour("--green-3d") }),
     onTerrain ? drapeLayer(SURFACE.green) : SURFACE.green,
   );
-  const waterMat = paint(
-    matteStandardMaterial({ color: getColour("--water-3d") }),
-    onTerrain ? drapeLayer(SURFACE.water) : SURFACE.water,
-  );
+  const waterLayer = onTerrain ? drapedWaterLayer() : SURFACE.water;
+  const waterMat = paint(matteStandardMaterial({ color: getColour("--water-3d") }), waterLayer);
   const greenGeos: THREE.BufferGeometry[] = [];
   const waterGeos: THREE.BufferGeometry[] = [];
   for (let index = 0; index < model.areas.length; index++) {
     const area = model.areas[index];
     const lift =
-      (area.kind === "water" ? SURFACE.water.lift : SURFACE.green.lift) + overlapLift(index);
+      (area.kind === "water" ? waterLayer.lift : SURFACE.green.lift) + overlapLift(index);
     if (sample && model.terrain) {
       try {
         const drapeSpacing =
@@ -615,7 +623,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   return group;
 }
 
-const HEIGHT_EDIT_FILL_OPACITY = 0.65;
+const HEIGHT_EDIT_FILL_OPACITY = 0.5;
 
 export const HEIGHT_EDIT_EDGE_DASH_M = 2;
 export const HEIGHT_EDIT_EDGE_GAP_M = 1.5;

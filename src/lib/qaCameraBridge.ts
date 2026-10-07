@@ -26,6 +26,7 @@ declare global {
     /** QA only: programmatic height-edit pick for screenshots. */
     __citycutQaModel?: {
       openMidriseHeightEdit: () => number | null;
+      getSummary?: () => { buildingCount: number; roadCount: number; triangleCount: number };
     };
   }
 }
