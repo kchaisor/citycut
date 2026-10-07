@@ -220,7 +220,7 @@ async function inspect(bytes: Uint8Array) {
 
 describe("removed exports", () => {
   it("drops glTF, SVG, and figure-ground PDF from the download API", () => {
-    expect(download.EXPORT_IDS).toEqual(["png", "3dm", "ai-view", "ai-site", "ai-figure"]);
+    expect(download.EXPORT_IDS).toEqual(["png", "3dm", "ai-view", "ai-site", "ai-figure", "ai-exploded"]);
     expect("downloadGlb" in download).toBe(false);
     expect("downloadSvg" in download).toBe(false);
     expect("downloadFigureGround" in download).toBe(false);

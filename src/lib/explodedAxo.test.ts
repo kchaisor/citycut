@@ -1,0 +1,124 @@
+import { describe, expect, it } from "vitest";
+import { model as baseModel } from "./aiExport.test";
+import {
+  axoFrameBoundaryRing,
+  axoGuideAnchorPoints,
+  axoGuideLines,
+  axoPlateIsCircularRing,
+  axoPlateOutlineD,
+  buildExplodedAxoLayers,
+  defaultExplodedAxoSettings,
+  liftsForLayerOrder,
+  planPointToIso,
+  type ExplodedAxoSettings,
+} from "./explodedAxo";
+import type { CityModel } from "../types";
+
+function pathVertices(d: string): [number, number][] {
+  const pts: [number, number][] = [];
+  const tokens = d.match(/[ML][\d.-]+ [\d.-]+/g) ?? [];
+  for (const token of tokens) {
+    const m = /^[ML]([\d.-]+) ([\d.-]+)/.exec(token);
+    if (m) pts.push([Number(m[1]), Number(m[2])]);
+  }
+  return pts;
+}
+
+function modelWithShape(shape: "square" | "circle"): CityModel {
+  return { ...baseModel(), frameShape: shape };
+}
+
+describe("exploded axo frame shape", () => {
+  const sideM = 100;
+
+  it("uses four corner anchors and square plate outline for a square crop", () => {
+    const anchors = axoGuideAnchorPoints(sideM, "square");
+    expect(anchors).toHaveLength(4);
+    expect(anchors).toEqual([
+      [-50, -50],
+      [50, -50],
+      [50, 50],
+      [-50, 50],
+    ]);
+
+    const ring = axoFrameBoundaryRing(sideM, "square");
+    expect(ring).toHaveLength(5);
+    expect(axoPlateIsCircularRing(sideM, "square")).toBe(false);
+
+    const outline = axoPlateOutlineD(sideM, "square", 0);
+    const verts = pathVertices(outline);
+    expect(verts.length).toBeGreaterThanOrEqual(4);
+    const xs = new Set(verts.map((p) => p[0].toFixed(2)));
+    expect(xs.size).toBeGreaterThan(2);
+  });
+
+  it("uses four rim anchors and a circular plate for a circle crop", () => {
+    const half = sideM / 2;
+    const anchors = axoGuideAnchorPoints(sideM, "circle");
+    expect(anchors).toHaveLength(4);
+    expect(anchors).toEqual([
+      [half, 0],
+      [-half, 0],
+      [0, half],
+      [0, -half],
+    ]);
+
+    const ring = axoFrameBoundaryRing(sideM, "circle");
+    expect(ring.length).toBeGreaterThan(8);
+    expect(axoPlateIsCircularRing(sideM, "circle")).toBe(true);
+
+    const outline = axoPlateOutlineD(sideM, "circle", 0);
+    const verts = pathVertices(outline);
+    expect(verts.length).toBeGreaterThan(8);
+  });
+
+  it("draws four vertical guides at anchor iso-x for square and circle", () => {
+    const settings = defaultExplodedAxoSettings(sideM);
+    const lifts = [...liftsForLayerOrder(settings.layerOrder, settings.gapM).values()];
+    const squareGuides = axoGuideLines(sideM, "square", lifts);
+    const circleGuides = axoGuideLines(sideM, "circle", lifts);
+    expect(squareGuides).toHaveLength(4);
+    expect(circleGuides).toHaveLength(4);
+
+    for (const guide of squareGuides) {
+      expect(guide.yTop).toBeLessThan(guide.yBottom);
+    }
+
+    const half = sideM / 2;
+    const eastX = planPointToIso(half, 0, 0)[0];
+    const circleEast = circleGuides.find((g) => Math.abs(g.x - eastX) < 0.01);
+    expect(circleEast).toBeDefined();
+  });
+
+  it("clips each layer plate to the frame shape, not an axis square", () => {
+    for (const shape of ["square", "circle"] as const) {
+      const m = modelWithShape(shape);
+      const settings = defaultExplodedAxoSettings(m.sideM);
+      const { layers } = buildExplodedAxoLayers(m, settings);
+      expect(layers.length).toBe(5);
+      for (const layer of layers) {
+        expect(layer.clipD).toBe(layer.plateOutlineD);
+        if (shape === "circle") {
+          expect(pathVertices(layer.clipD).length).toBeGreaterThan(8);
+        } else {
+          expect(pathVertices(layer.clipD).length).toBeGreaterThanOrEqual(4);
+        }
+      }
+    }
+  });
+});
+
+describe("exploded axo layer settings", () => {
+  it("does not change guide count when toggling visibility", () => {
+    const m = modelWithShape("circle");
+    const settings: ExplodedAxoSettings = {
+      ...defaultExplodedAxoSettings(m.sideM),
+      layerVisible: { water: true, roads: false, green: true, buildings: true, aerial: true },
+    };
+    const lifts = settings.layerOrder
+      .filter((id) => settings.layerVisible[id])
+      .map((id) => liftsForLayerOrder(settings.layerOrder, settings.gapM).get(id)!);
+    const guides = axoGuideLines(m.sideM, "circle", lifts);
+    expect(guides).toHaveLength(4);
+  });
+});

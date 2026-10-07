@@ -22,11 +22,20 @@ import {
 import {
   download3dm,
   downloadBlob,
+  downloadExplodedAxoAi,
   downloadFigureAi,
   downloadSiteAi,
   downloadViewAi,
   pngFilename,
 } from "../lib/download";
+import {
+  AXO_LAYER_LABELS,
+  defaultExplodedAxoSettings,
+  explodedAxoBounds,
+  type AxoLayerId,
+  type ExplodedAxoSettings,
+} from "../lib/explodedAxo";
+import { explodedAxoViewportExtent, planViewportExtent, type PlanViewport } from "../lib/planViewport";
 import { FIGURE_SCALES, preferredFigureScale, sheetFitMessage } from "../lib/figureGround";
 import {
   fetchComBuildingFootprints,
@@ -82,6 +91,7 @@ import { BuildingHeightPopover, HeightOverridePanel } from "./BuildingHeightPopo
 import { ColoursEditor } from "./Colours";
 import { Drawer } from "./Drawer";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
+import { DrawingExplodedAxo } from "./DrawingExplodedAxo";
 import { LineStylesEditor } from "./LineStyles";
 import { IconRail, type RailItem } from "./IconRail";
 import { SatellitePane } from "./SatellitePane";
@@ -148,7 +158,7 @@ export function ModelPage({ model }: { model: CityModel }) {
   const uniform = uniformBuildingColor();
   const [figureScale, setFigureScale] = useState<number>(() => preferredFigureScale(model.sideM));
   const [exportError, setExportError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"3dm" | "png" | "ai-view" | "ai-site" | "ai-figure" | null>(null);
+  const [busy, setBusy] = useState<"3dm" | "png" | "ai-view" | "ai-site" | "ai-figure" | "ai-exploded" | null>(null);
   const [colourByUse, setColourByUse] = useState(
     () => !capturePresetFromSearch(window.location.search).uniformBuildings,
   );
@@ -159,7 +169,12 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [comFootprints, setComFootprints] = useState<ComBuildingFootprint[]>([]);
   const [preferred, setPreferred] = useState<string | null>(() => loadModelDrawer());
   const [planWidth, setPlanWidth] = useState<number | null>(null);
-  const [fitToken, setFitToken] = useState(0);
+  const [fitCounter, setFitCounter] = useState(0);
+  const [planViewport, setPlanViewport] = useState<PlanViewport>(() => planViewportExtent(model.sideM));
+  const [axoSettings, setAxoSettings] = useState<ExplodedAxoSettings>(() => defaultExplodedAxoSettings(model.sideM));
+  const [explodedViewport, setExplodedViewport] = useState<PlanViewport>(() =>
+    explodedAxoViewportExtent(explodedAxoBounds(model, defaultExplodedAxoSettings(model.sideM))),
+  );
   const [view, setView] = useState<ViewMemory>(loadView);
   const [snapId, setSnapId] = useState(0);
   const [windSettings, setWindSettings] = useState<WindViewSettings>(() => {
@@ -520,6 +535,20 @@ export function ModelPage({ model }: { model: CityModel }) {
   );
 
   useEffect(() => {
+    setPlanViewport(planViewportExtent(displayModel.sideM));
+    setAxoSettings((prev) => ({
+      ...defaultExplodedAxoSettings(displayModel.sideM),
+      layerOrder: prev.layerOrder,
+      layerVisible: prev.layerVisible,
+      gapM: Math.min(Math.max(prev.gapM, 4), displayModel.sideM * 0.2),
+      showLabels: prev.showLabels,
+    }));
+    setExplodedViewport(
+      explodedAxoViewportExtent(explodedAxoBounds(displayModel, defaultExplodedAxoSettings(displayModel.sideM))),
+    );
+  }, [displayModel.sideM, displayModel.frameShape]);
+
+  useEffect(() => {
     if (!qaModeFromSearch(window.location.search)) return;
     const qa = model.siteBuildingQa;
     if (!qa) {
@@ -679,6 +708,31 @@ export function ModelPage({ model }: { model: CityModel }) {
     }
   }
 
+  async function saveExplodedAxoAi() {
+    setExportError(null);
+    setBusy("ai-exploded");
+    try {
+      await downloadExplodedAxoAi(displayModel, figureScale, axoSettings);
+    } catch {
+      setExportError("The exploded axo file could not be written.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function moveAxoLayer(id: AxoLayerId, direction: -1 | 1) {
+    setAxoSettings((prev) => {
+      const order = [...prev.layerOrder];
+      const index = order.indexOf(id);
+      if (index < 0) return prev;
+      const next = index + direction;
+      if (next < 0 || next >= order.length) return prev;
+      order.splice(index, 1);
+      order.splice(next, 0, id);
+      return { ...prev, layerOrder: order };
+    });
+  }
+
   async function saveViewAi() {
     setExportError(null);
     setBusy("ai-view");
@@ -781,20 +835,33 @@ export function ModelPage({ model }: { model: CityModel }) {
         )}
         {tab === "drawing" && (
           <div className="fill is-plan">
-            <DrawingPlan
-              key={fitToken}
-              model={displayModel}
-              kind={drawing}
-              onScale={onScale}
-              lineStyle={lineStyles}
-              planScale={figureScale}
-              heliodon={heliodonDiagramExport()}
-              castShadows={solar.castShadows}
-              shadowInput={planShadowInput()}
-              uniformBuildings={!colourByUse && !showSource}
-              colourBySource={showSource}
-              highlightManual={showManualEdits && overrideResult.manualCount > 0}
-            />
+            {drawing === "exploded-axo" ? (
+              <DrawingExplodedAxo
+                model={displayModel}
+                settings={axoSettings}
+                onScale={onScale}
+                viewport={explodedViewport}
+                onViewportChange={setExplodedViewport}
+                fitCounter={fitCounter}
+              />
+            ) : (
+              <DrawingPlan
+                model={displayModel}
+                kind={drawing}
+                onScale={onScale}
+                lineStyle={lineStyles}
+                planScale={figureScale}
+                heliodon={heliodonDiagramExport()}
+                castShadows={solar.castShadows}
+                shadowInput={planShadowInput()}
+                uniformBuildings={!colourByUse && !showSource}
+                colourBySource={showSource}
+                highlightManual={showManualEdits && overrideResult.manualCount > 0}
+                viewport={planViewport}
+                onViewportChange={setPlanViewport}
+                fitCounter={fitCounter}
+              />
+            )}
           </div>
         )}
         {tab === "satellite" && (
@@ -1078,7 +1145,77 @@ export function ModelPage({ model }: { model: CityModel }) {
                 >
                   Figure-ground
                 </button>
+                <button
+                  type="button"
+                  aria-pressed={drawing === "exploded-axo"}
+                  onClick={() => {
+                    setDrawing("exploded-axo");
+                    setTab("drawing");
+                  }}
+                >
+                  Exploded axo
+                </button>
               </div>
+              {drawing === "exploded-axo" && (
+                <div className="axo-controls">
+                  <p className="kicker">Layers</p>
+                  <ul className="axo-layer-list">
+                    {axoSettings.layerOrder.map((id, index) => (
+                      <li key={id}>
+                        <label className="check-field">
+                          <input
+                            type="checkbox"
+                            checked={axoSettings.layerVisible[id]}
+                            onChange={(event) =>
+                              setAxoSettings((prev) => ({
+                                ...prev,
+                                layerVisible: { ...prev.layerVisible, [id]: event.target.checked },
+                              }))
+                            }
+                          />
+                          {AXO_LAYER_LABELS[id]}
+                        </label>
+                        <span className="axo-layer-move">
+                          <button type="button" className="ghost" disabled={index === 0} aria-label={`Move ${AXO_LAYER_LABELS[id]} up`} onClick={() => moveAxoLayer(id, -1)}>
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost"
+                            disabled={index === axoSettings.layerOrder.length - 1}
+                            aria-label={`Move ${AXO_LAYER_LABELS[id]} down`}
+                            onClick={() => moveAxoLayer(id, 1)}
+                          >
+                            ↓
+                          </button>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <label className="scale-field">
+                    Layer gap, m
+                    <input
+                      type="range"
+                      min={4}
+                      max={Math.round(displayModel.sideM * 0.2)}
+                      step={1}
+                      value={Math.round(axoSettings.gapM)}
+                      onChange={(event) =>
+                        setAxoSettings((prev) => ({ ...prev, gapM: Number(event.target.value) }))
+                      }
+                    />
+                    <span>{Math.round(axoSettings.gapM)} m</span>
+                  </label>
+                  <label className="check-field">
+                    <input
+                      type="checkbox"
+                      checked={axoSettings.showLabels}
+                      onChange={(event) => setAxoSettings((prev) => ({ ...prev, showLabels: event.target.checked }))}
+                    />
+                    Layer labels
+                  </label>
+                </div>
+              )}
               <label className="scale-field">
                 Plan scale
                 <select
@@ -1134,7 +1271,20 @@ export function ModelPage({ model }: { model: CityModel }) {
                   <p className="field-note">
                     Width of the drawing in view. The frame is {Math.round(model.sideM)} m on a side.
                   </p>
-                  <button className="ghost" type="button" onClick={() => setFitToken((token) => token + 1)}>
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() => {
+                      if (drawing === "exploded-axo") {
+                        setExplodedViewport(
+                          explodedAxoViewportExtent(explodedAxoBounds(displayModel, axoSettings)),
+                        );
+                      } else {
+                        setPlanViewport(planViewportExtent(displayModel.sideM));
+                      }
+                      setFitCounter((token) => token + 1);
+                    }}
+                  >
                     Fit frame
                   </button>
                 </div>
@@ -1237,6 +1387,19 @@ export function ModelPage({ model }: { model: CityModel }) {
                   </div>
                   <button className="ghost" type="button" disabled={busy !== null} onClick={saveFigureAi} aria-label="Download figure-ground Illustrator">
                     {busy === "ai-figure" ? "Preparing…" : "Download"}
+                  </button>
+                </article>
+                <article className="card">
+                  <div>
+                    <h3>
+                      Exploded axo <span>.ai</span>
+                    </h3>
+                    <p>
+                      Stacked isometric layers at 1:{figureScale}, with guides and labels. Satellite is noted in the file when imagery is not embedded.
+                    </p>
+                  </div>
+                  <button className="ghost" type="button" disabled={busy !== null} onClick={saveExplodedAxoAi} aria-label="Download exploded axo Illustrator">
+                    {busy === "ai-exploded" ? "Preparing…" : "Download"}
                   </button>
                 </article>
               </div>

@@ -1,4 +1,5 @@
-import { figureGroundAi, sitePlanAi } from "./aiPlan";
+import { explodedAxoAi, figureGroundAi, sitePlanAi } from "./aiPlan";
+import { defaultExplodedAxoSettings, type ExplodedAxoSettings } from "./explodedAxo";
 import type { LineStyles } from "./drawingStyle";
 import { viewAi, type ViewStyle } from "./aiView";
 import type { CameraShot } from "./cameraShot";
@@ -9,7 +10,7 @@ import type { PlanShadowInput } from "./buildingShadows";
 import type { CityModel } from "../types";
 
 /** Downloads the drawer still offers. glTF, SVG, and figure-ground PDF are gone. */
-export const EXPORT_IDS = ["png", "3dm", "ai-view", "ai-site", "ai-figure"] as const;
+export const EXPORT_IDS = ["png", "3dm", "ai-view", "ai-site", "ai-figure", "ai-exploded"] as const;
 
 export type ExportId = (typeof EXPORT_IDS)[number];
 
@@ -25,11 +26,16 @@ export function pngFilename(model: CityModel): string {
   return `${fileStem(model)}.png`;
 }
 
-export function aiFilename(model: CityModel, kind: "view" | "site" | "figure", scale?: number): string {
+export function aiFilename(
+  model: CityModel,
+  kind: "view" | "site" | "figure" | "exploded",
+  scale?: number,
+): string {
   const stem = fileStem(model);
   if (kind === "view") return `${stem}-view.ai`;
   if (kind === "site") return `${stem}-site-1-${scale}.ai`;
-  return `${stem}-figure-ground-1-${scale}.ai`;
+  if (kind === "figure") return `${stem}-figure-ground-1-${scale}.ai`;
+  return `${stem}-exploded-axo-1-${scale}.ai`;
 }
 
 export function downloadBlob(filename: string, blob: Blob) {
@@ -85,6 +91,16 @@ export async function downloadFigureAi(
 ): Promise<void> {
   const bytes = await figureGroundAi(model, scale, style, heliodon);
   downloadBytes(aiFilename(model, "figure", scale), bytes, "application/pdf");
+}
+
+export async function downloadExplodedAxoAi(
+  model: CityModel,
+  scale: number,
+  settings: ExplodedAxoSettings = defaultExplodedAxoSettings(model.sideM),
+  satelliteNote?: string,
+): Promise<void> {
+  const bytes = await explodedAxoAi(model, scale, settings, satelliteNote);
+  downloadBytes(aiFilename(model, "exploded", scale), bytes, "application/pdf");
 }
 
 export async function downloadViewAi(model: CityModel, shot: CameraShot, style: ViewStyle): Promise<void> {

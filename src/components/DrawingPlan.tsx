@@ -22,7 +22,7 @@ import { planShadowRings, type PlanShadowInput } from "../lib/buildingShadows";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
 import { planViewportExtent, type PlanViewport } from "../lib/planViewport";
 
-export type DrawingKind = "site" | "figure-ground";
+export type DrawingKind = "site" | "figure-ground" | "exploded-axo";
 
 function CasedLine({ d, stroke, paper }: { d: string; stroke: StrokeStyle; paper: string }) {
   if (!(stroke.mm > 0) || !d) return null;
@@ -57,6 +57,9 @@ export function DrawingPlan({
   uniformBuildings = false,
   colourBySource = false,
   highlightManual = false,
+  viewport,
+  onViewportChange,
+  fitCounter = 0,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -72,6 +75,9 @@ export function DrawingPlan({
   uniformBuildings?: boolean;
   colourBySource?: boolean;
   highlightManual?: boolean;
+  viewport?: PlanViewport;
+  onViewportChange?: (view: PlanViewport) => void;
+  fitCounter?: number;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
@@ -113,11 +119,21 @@ export function DrawingPlan({
     [figure, model, frameShape],
   );
   const fitted = useMemo(() => planViewportExtent(model.sideM), [model.sideM]);
-  const [view, setView] = useState<PlanViewport>(fitted);
+  const [internalView, setInternalView] = useState<PlanViewport>(fitted);
+  const view = viewport ?? internalView;
+  const applyView = (next: PlanViewport | ((current: PlanViewport) => PlanViewport)) => {
+    const resolved = typeof next === "function" ? next(viewport ?? internalView) : next;
+    if (onViewportChange) onViewportChange(resolved);
+    else setInternalView(resolved);
+  };
 
   useEffect(() => {
-    setView(fitted);
-  }, [fitted]);
+    if (fitCounter > 0) applyView(fitted);
+  }, [fitCounter, fitted]);
+
+  useEffect(() => {
+    if (viewport === undefined) setInternalView(fitted);
+  }, [model.sideM, model.frameShape, fitted, viewport]);
 
   useEffect(() => {
     onScale?.(view.w);
@@ -134,7 +150,7 @@ export function DrawingPlan({
       const py = (event.clientY - rect.top) / rect.height;
       const pixels = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
       const factor = Math.exp(pixels * 0.0012);
-      setView((current) => {
+      applyView((current) => {
         const w = current.w * factor;
         const h = current.h * factor;
         if (w < model.sideM * 0.04 || w > model.sideM * 6) return current;
@@ -148,7 +164,7 @@ export function DrawingPlan({
     };
     svg.addEventListener("wheel", onWheel, { passive: false });
     return () => svg.removeEventListener("wheel", onWheel);
-  }, [model.sideM]);
+  }, [model.sideM, view, internalView, onViewportChange]);
 
   const half = model.sideM / 2;
   const framePathD = useMemo(() => {
@@ -193,7 +209,7 @@ export function DrawingPlan({
       viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
       role="img"
       aria-label={figure ? "Figure-ground plan" : "Vector site plan"}
-      onDoubleClick={() => setView(fitted)}
+      onDoubleClick={() => applyView(fitted)}
       onPointerDown={(event) => {
         event.currentTarget.setPointerCapture(event.pointerId);
         drag.current = { px: event.clientX, py: event.clientY, view };
@@ -205,7 +221,9 @@ export function DrawingPlan({
         const rect = svg.getBoundingClientRect();
         const dx = ((event.clientX - start.px) / rect.width) * start.view.w;
         const dy = ((event.clientY - start.py) / rect.height) * start.view.h;
-        setView({ ...start.view, x: start.view.x - dx, y: start.view.y - dy });
+        const next = { ...start.view, x: start.view.x - dx, y: start.view.y - dy };
+        if (onViewportChange) onViewportChange(next);
+        else setInternalView(next);
       }}
       onPointerUp={() => {
         drag.current = null;
