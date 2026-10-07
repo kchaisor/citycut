@@ -1,20 +1,46 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  AXO_HATCH_PAINTS,
   AXO_LAYER_LABELS,
+  axoLayerBasePaint,
   axoLayerLabelAnchorBase,
   axoLayerColours,
   axoLayerSvgTransform,
   axoLayersForPaint,
+  axoPaintColour,
   buildExplodedAxoLayers,
   explodedAxoBounds,
   isoSatelliteImageTransform,
+  planToIsoBase,
   type ExplodedAxoSettings,
+  type AxoPaintKey,
 } from "../lib/explodedAxo";
+import { useExplodedAxoOverlays } from "../lib/explodedAxoOverlays";
 import { fetchSatelliteFramePng, satelliteFrameDataUrl } from "../lib/explodedAxoSatellite";
 import { explodedAxoViewportExtent, type PlanViewport } from "../lib/planViewport";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import type { CityModel } from "../types";
+
+function hatchPatternId(paint: AxoPaintKey): string {
+  return `axo-hatch-${paint}`;
+}
+
+function resolveFillPaint(
+  layerId: Parameters<typeof axoLayerBasePaint>[0],
+  index: number,
+  layer: ReturnType<typeof buildExplodedAxoLayers>["layers"][number],
+): AxoPaintKey {
+  return layer.fillPaints?.[index] ?? axoLayerBasePaint(layerId);
+}
+
+function resolveStrokePaint(
+  layerId: Parameters<typeof axoLayerBasePaint>[0],
+  index: number,
+  layer: ReturnType<typeof buildExplodedAxoLayers>["layers"][number],
+): AxoPaintKey {
+  return layer.strokePaints?.[index] ?? axoLayerBasePaint(layerId);
+}
 
 export function DrawingExplodedAxo({
   model,
@@ -33,6 +59,7 @@ export function DrawingExplodedAxo({
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
+  const overlays = useExplodedAxoOverlays(model, settings.layerVisible);
   const fitted = useMemo(() => {
     const bounds = explodedAxoBounds(model, settings);
     return explodedAxoViewportExtent(bounds);
@@ -51,7 +78,7 @@ export function DrawingExplodedAxo({
 
   useEffect(() => {
     applyView(fitted);
-  }, [model.sideM, model.frameShape, settings.gapM, settings.layerOrder, settings.layerVisible, settings.showLabels]);
+  }, [model.sideM, model.frameShape, settings.gapM, settings.layerOrder.length]);
 
   useEffect(() => {
     onScale?.(view.w);
@@ -84,7 +111,10 @@ export function DrawingExplodedAxo({
     return () => svg.removeEventListener("wheel", onWheel);
   }, [model.sideM, view, internalView, onViewportChange]);
 
-  const { layers, guides } = useMemo(() => buildExplodedAxoLayers(model, settings), [model, settings]);
+  const { layers, guides } = useMemo(
+    () => buildExplodedAxoLayers(model, settings, overlays),
+    [model, settings, overlays],
+  );
   const paintLayers = useMemo(() => axoLayersForPaint(layers), [layers]);
   const colourTick = useColourRevision();
   const colours = useMemo(() => axoLayerColours(), [colourTick]);
@@ -109,6 +139,7 @@ export function DrawingExplodedAxo({
   const clipIds = paintLayers.map((layer) => `axo-clip-${layer.id}-${layer.liftM}`);
   const outlinePx = model.sideM * 0.0018;
   const roadPx = model.sideM * 0.0045;
+  const hatchStep = model.sideM * 0.012;
 
   return (
     <svg
@@ -138,6 +169,30 @@ export function DrawingExplodedAxo({
       }}
     >
       <defs>
+        {AXO_HATCH_PAINTS.map((paint) => {
+          const colour = axoPaintColour(paint);
+          const id = hatchPatternId(paint);
+          const cross =
+            paint === "plan-flood"
+              ? `<path d="M0 ${hatchStep} L${hatchStep} 0" stroke="${colour}" stroke-width="${model.sideM * 0.001}" />`
+              : paint === "plan-heritage"
+                ? `<path d="M0 0 L0 ${hatchStep} M0 0 L${hatchStep} 0" stroke="${colour}" stroke-width="${model.sideM * 0.0012}" />`
+                : paint === "plan-ddo"
+                  ? `<path d="M0 ${hatchStep / 2} L${hatchStep / 2} 0 L${hatchStep} ${hatchStep / 2} L${hatchStep / 2} ${hatchStep} Z" fill="none" stroke="${colour}" stroke-width="${model.sideM * 0.0008}" />`
+                  : `<path d="M0 0 L${hatchStep} ${hatchStep} M${hatchStep} 0 L0 ${hatchStep}" stroke="${colour}" stroke-width="${model.sideM * 0.001}" />`;
+          return (
+            <pattern
+              key={id}
+              id={id}
+              patternUnits="userSpaceOnUse"
+              width={hatchStep}
+              height={hatchStep}
+            >
+              <rect width={hatchStep} height={hatchStep} fill={axoPaintColour(paint)} fillOpacity={0.22} />
+              {cross}
+            </pattern>
+          );
+        })}
         {paintLayers.map((layer, index) => (
           <clipPath key={clipIds[index]} id={clipIds[index]}>
             <path d={layer.clipD} />
@@ -160,17 +215,10 @@ export function DrawingExplodedAxo({
       ))}
 
       {paintLayers.map((layer, index) => {
-        const fillColour =
-          layer.id === "water"
-            ? colours.water
-            : layer.id === "roads"
-              ? colours.roads
-              : layer.id === "green"
-                ? colours.green
-                : colours.buildings;
         const clip = `url(#${clipIds[index]})`;
         const label = axoLayerLabelAnchorBase(model.sideM);
         const layerTransform = axoLayerSvgTransform(layer.liftM);
+        const legendOrigin = planToIsoLegendOrigin(model.sideM);
         return (
           <g key={`${layer.id}-${layer.liftM}`} transform={layerTransform}>
             <g clipPath={clip}>
@@ -185,19 +233,35 @@ export function DrawingExplodedAxo({
                   transform={isoSatelliteImageTransform(model.sideM)}
                 />
               )}
-              {layer.fills.map((d, fi) => (
-                <path key={`f${fi}`} d={d} fill={fillColour} fillRule="evenodd" stroke="none" />
-              ))}
-              {layer.strokes.map((d, si) => (
-                <path
-                  key={`s${si}`}
-                  d={d}
-                  fill="none"
-                  stroke={fillColour}
-                  strokeWidth={roadPx}
-                  vectorEffect="non-scaling-stroke"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+              {layer.fills.map((d, fi) => {
+                const paint = resolveFillPaint(layer.id, fi, layer);
+                const fill = AXO_HATCH_PAINTS.includes(paint) ? `url(#${hatchPatternId(paint)})` : axoPaintColour(paint);
+                return <path key={`f${fi}`} d={d} fill={fill} fillRule="evenodd" stroke="none" />;
+              })}
+              {layer.strokes.map((d, si) => {
+                const paint = resolveStrokePaint(layer.id, si, layer);
+                const scale = layer.strokeWidthScales?.[si] ?? 1;
+                return (
+                  <path
+                    key={`s${si}`}
+                    d={d}
+                    fill="none"
+                    stroke={axoPaintColour(paint)}
+                    strokeWidth={roadPx * scale}
+                    vectorEffect="non-scaling-stroke"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                );
+              })}
+              {layer.markers?.map((marker, mi) => (
+                <circle
+                  key={`m${mi}`}
+                  cx={marker.x}
+                  cy={marker.y}
+                  r={marker.radiusM}
+                  fill={axoPaintColour(marker.paint)}
+                  stroke="none"
                 />
               ))}
             </g>
@@ -208,6 +272,42 @@ export function DrawingExplodedAxo({
               strokeWidth={outlinePx}
               vectorEffect="non-scaling-stroke"
             />
+            {layer.legend && layer.legend.length > 0 && (
+              <g className="axo-legend" transform={`translate(${legendOrigin.x} ${legendOrigin.y})`}>
+                {layer.legend.map((item, li) => {
+                  const swatchY = li * model.sideM * 0.022;
+                  const swatchSize = model.sideM * 0.014;
+                  const fill = AXO_HATCH_PAINTS.includes(item.paint)
+                    ? `url(#${hatchPatternId(item.paint)})`
+                    : axoPaintColour(item.paint);
+                  return (
+                    <g key={item.label} transform={`translate(0 ${swatchY})`}>
+                      <rect width={swatchSize} height={swatchSize} fill={fill} stroke={colours.guide} strokeWidth={model.sideM * 0.0004} />
+                      <text
+                        x={swatchSize * 1.4}
+                        y={swatchSize * 0.85}
+                        fontSize={model.sideM * 0.018}
+                        fill={colours.label}
+                        fontFamily="Helvetica, Arial, sans-serif"
+                      >
+                        {item.label}
+                      </text>
+                    </g>
+                  );
+                })}
+              </g>
+            )}
+            {layer.unavailableNote && (
+              <text
+                x={legendOrigin.x}
+                y={legendOrigin.y - model.sideM * 0.02}
+                fontSize={model.sideM * 0.02}
+                fill={colours.label}
+                fontFamily="Helvetica, Arial, sans-serif"
+              >
+                {layer.unavailableNote}
+              </text>
+            )}
             {settings.showLabels && (
               <text
                 x={label.x}
@@ -225,4 +325,11 @@ export function DrawingExplodedAxo({
       })}
     </svg>
   );
+}
+
+/** Lower-left on the plate in iso base coords for legends and notes. */
+function planToIsoLegendOrigin(sideM: number): { x: number; y: number } {
+  const half = sideM / 2;
+  const [x, y] = planToIsoBase(-half + sideM * 0.06, half - sideM * 0.08);
+  return { x, y };
 }

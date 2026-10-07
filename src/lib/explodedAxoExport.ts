@@ -5,11 +5,15 @@ import { formatCoord } from "./geo";
 import { plainDataCredit } from "./dataCredits";
 import {
   AXO_LAYER_LABELS,
+  axoLayerBasePaint,
   axoLayerLabelAnchor,
   axoLayersForPaint,
+  axoPaintColour,
   buildExplodedAxoLayers,
   explodedAxoBounds,
   type AxoLayerId,
+  type AxoPaintKey,
+  type ExplodedAxoOverlayBundle,
   type ExplodedAxoSettings,
 } from "./explodedAxo";
 import type { CityModel, Pt } from "../types";
@@ -98,22 +102,47 @@ export function explodedAxoPageSize(
 
 export const EXPLODED_AXO_LAYER_ORDER = [
   "Guides",
-  "Aerial",
-  "Buildings",
-  "Green",
-  "Roads",
+  "Planning",
   "Water",
+  "Hydro",
+  "Transport",
+  "Topography",
+  "Roads",
+  "Green",
+  "Buildings",
+  "Aerial",
   "Labels",
   "Annotation",
 ] as const;
+
+function chunkNameForLayer(id: AxoLayerId): string {
+  if (id === "planning") return "Planning";
+  if (id === "water") return "Water";
+  if (id === "hydro") return "Hydro";
+  if (id === "transport") return "Transport";
+  if (id === "topography") return "Topography";
+  if (id === "roads") return "Roads";
+  if (id === "green") return "Green";
+  if (id === "buildings") return "Buildings";
+  return "Aerial";
+}
+
+function fillPaint(layer: ReturnType<typeof buildExplodedAxoLayers>["layers"][number], index: number): AxoPaintKey {
+  return layer.fillPaints?.[index] ?? axoLayerBasePaint(layer.id);
+}
+
+function strokePaint(layer: ReturnType<typeof buildExplodedAxoLayers>["layers"][number], index: number): AxoPaintKey {
+  return layer.strokePaints?.[index] ?? axoLayerBasePaint(layer.id);
+}
 
 export function explodedAxoChunks(
   model: CityModel,
   scale: number,
   settings: ExplodedAxoSettings,
   satelliteNote?: string | null,
+  overlays: ExplodedAxoOverlayBundle = {},
 ): PdfChunk[] {
-  const { layers, guides } = buildExplodedAxoLayers(model, settings);
+  const { layers, guides } = buildExplodedAxoLayers(model, settings, overlays);
   const page = explodedAxoPageSize(model, settings, scale);
   const origin: Pt = page.origin;
   const pageHeightMm = page.heightMm;
@@ -132,25 +161,8 @@ export function explodedAxoChunks(
   }));
   if (guidePaths.length) chunks.push({ name: "Guides", paths: guidePaths });
 
-  const layerColour: Record<AxoLayerId, string> = {
-    water: getColour("--axo-water"),
-    roads: getColour("--axo-road"),
-    green: getColour("--axo-green"),
-    buildings: getColour("--axo-building"),
-    aerial: getColour("--axo-building"),
-  };
-
   for (const layer of axoLayersForPaint(layers)) {
-    const chunkName =
-      layer.id === "water"
-        ? "Water"
-        : layer.id === "roads"
-          ? "Roads"
-          : layer.id === "green"
-            ? "Green"
-            : layer.id === "buildings"
-              ? "Buildings"
-              : "Aerial";
+    const chunkName = chunkNameForLayer(layer.id);
     const paths: PdfPath[] = [];
     const liftM = layer.liftM;
     const plateRing = pathFromIsoD(layer.plateOutlineD, origin, scale, pageHeightMm, liftM);
@@ -162,24 +174,47 @@ export function explodedAxoChunks(
         close: true,
       });
     }
-    for (const fill of layer.fills) {
+    layer.fills.forEach((fill, index) => {
       const rings = ringsFromIsoD(fill, origin, scale, pageHeightMm, liftM);
       if (rings.length > 0) {
-        paths.push({ rings, fill: hexRgb(layerColour[layer.id]), close: true, evenOdd: true });
+        paths.push({
+          rings,
+          fill: hexRgb(axoPaintColour(fillPaint(layer, index))),
+          close: true,
+          evenOdd: true,
+        });
       }
-    }
-    for (const stroke of layer.strokes) {
+    });
+    layer.strokes.forEach((stroke, index) => {
       const rings = ringsFromIsoD(stroke, origin, scale, pageHeightMm, liftM);
+      const widthScale = layer.strokeWidthScales?.[index] ?? 1;
       for (const ring of rings) {
         if (ring.length >= 2) {
           paths.push({
             rings: [ring],
-            stroke: hexRgb(layerColour[layer.id]),
-            strokeMm: 0.25,
+            stroke: hexRgb(axoPaintColour(strokePaint(layer, index))),
+            strokeMm: 0.25 * widthScale,
             close: false,
           });
         }
       }
+    });
+    for (const marker of layer.markers ?? []) {
+      const [sx, sy] = isoBaseToSheet(marker.x, marker.y, liftM, origin, scale, pageHeightMm);
+      const r = marker.radiusM * mmPerMetre(scale);
+      paths.push({
+        rings: [
+          [
+            [sx + r, sy],
+            [sx, sy + r],
+            [sx - r, sy],
+            [sx, sy - r],
+            [sx + r, sy],
+          ],
+        ],
+        fill: hexRgb(axoPaintColour(marker.paint)),
+        close: true,
+      });
     }
     if (layer.id === "aerial" && satelliteNote) {
       paths.push({
@@ -209,7 +244,17 @@ export function explodedAxoChunks(
   }
 
   const title = `${model.placeLabel} · Exploded axo · 1:${scale} · ${formatCoord(model.center.lat)}, ${formatCoord(model.center.lon)}`;
-  const credit = plainDataCredit({ prefix: "CityCut.", windOn: false, satelliteOn: true });
+  const overlayOn =
+    settings.layerVisible.planning ||
+    settings.layerVisible.hydro ||
+    settings.layerVisible.transport ||
+    settings.layerVisible.topography;
+  const credit = plainDataCredit({
+    prefix: "CityCut.",
+    windOn: false,
+    satelliteOn: true,
+    explodedAxoOverlaysOn: overlayOn,
+  });
   const note = satelliteNote ? `${credit} ${satelliteNote}` : credit;
   chunks.push({
     name: "Annotation",

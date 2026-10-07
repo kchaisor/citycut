@@ -7,3 +7,5 @@ dist
 !.env.example
 .vite
 coverage
+tippecanoe
+tmp/

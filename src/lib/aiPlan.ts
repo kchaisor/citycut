@@ -637,8 +637,10 @@ export async function explodedAxoPdf(
   settings: ExplodedAxoSettings = defaultExplodedAxoSettings(model.sideM),
   satelliteNote = "Satellite imagery omitted from this file.",
 ): Promise<Uint8Array> {
+  const { loadExplodedAxoOverlayBundle } = await import("./explodedAxoOverlays");
+  const overlays = await loadExplodedAxoOverlayBundle(model, settings.layerVisible);
   const page = explodedAxoPageSize(model, settings, scale);
-  const chunks = explodedAxoChunks(model, scale, settings, satelliteNote);
+  const chunks = explodedAxoChunks(model, scale, settings, satelliteNote, overlays);
   return buildLayeredPdf(page.widthMm, page.heightMm, chunks, [...EXPLODED_AXO_LAYER_ORDER]);
 }
 

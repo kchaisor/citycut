@@ -152,7 +152,17 @@ describe("exploded axo layer settings", () => {
     const m = modelWithShape("circle");
     const settings: ExplodedAxoSettings = {
       ...defaultExplodedAxoSettings(m.sideM),
-      layerVisible: { water: true, roads: false, green: true, buildings: true, aerial: true },
+      layerVisible: {
+        planning: false,
+        water: true,
+        hydro: false,
+        transport: false,
+        topography: false,
+        roads: false,
+        green: true,
+        buildings: true,
+        aerial: true,
+      },
     };
     const lifts = settings.layerOrder
       .filter((id) => settings.layerVisible[id])
