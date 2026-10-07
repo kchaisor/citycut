@@ -103,8 +103,7 @@ export function SolarPanel({
               onChange={(event) => patch({ radiusFactor: Number(event.target.value) })}
             />
             <span className="field-note">
-              {settings.radiusFactor.toFixed(2)}× · {Math.round(heliodonRadiusM(sideM, settings.radiusFactor))} m radius. The 3D
-              view reframes when this changes.
+              {settings.radiusFactor.toFixed(2)}× · {Math.round(heliodonRadiusM(sideM, settings.radiusFactor))} m radius.
             </span>
           </label>
         )}

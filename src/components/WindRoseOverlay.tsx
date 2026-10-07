@@ -68,7 +68,7 @@ export function WindRoseOverlay({
 
   return (
     <div className={className} aria-label={caption}>
-      <svg viewBox="0 0 100 100" width={120} height={120} role="img" aria-hidden="true">
+      <svg viewBox="0 0 100 100" role="img" aria-hidden="true">
         <text x={50} y={11} textAnchor="middle" fontSize={9} fontWeight={600} fill={fill}>
           N
         </text>

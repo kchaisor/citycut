@@ -1,4 +1,4 @@
-import { M_PER_DEG_LAT, mPerDegLon } from "./geo";
+import { M_PER_DEG_LAT, formatKmSide, mPerDegLon } from "./geo";
 import type { LonLat } from "../types";
 
 /**
@@ -191,6 +191,13 @@ export function cutSizeLabel(sideM: number, frameShape: "square" | "circle" = "s
   const metres = Math.round(sideM);
   if (frameShape === "circle") return `${metres} m diameter`;
   return `${metres} × ${metres} m`;
+}
+
+/** Landing map frame label in kilometres (square side or circle diameter). */
+export function cutFrameLabelKm(sideKm: number, frameShape: "square" | "circle" = "square"): string {
+  const km = formatKmSide(sideKm);
+  if (frameShape === "circle") return `${km} km ø`;
+  return `${km} × ${km} km`;
 }
 
 export type PlaceAnchor = LonLat & { label: string };

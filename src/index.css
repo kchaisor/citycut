@@ -138,6 +138,9 @@ button { cursor: pointer; }
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45);
   pointer-events: none;
 }
+.frame.frame-circle {
+  border-radius: 50%;
+}
 .frame-label {
   position: absolute;
   z-index: 2;
@@ -803,9 +806,10 @@ input[type="range"]::-moz-range-thumb {
   top: 72px;
   right: 16px;
   z-index: 5;
-  width: 140px;
-  padding: 8px 10px;
-  border-radius: 8px;
+  width: calc(var(--wind-rose-size) + var(--wind-rose-size) * 0.167);
+  max-width: min(calc(var(--wind-rose-size) + var(--wind-rose-size) * 0.167), calc(100vw - 168px));
+  padding: calc(var(--wind-rose-size) * 0.067) calc(var(--wind-rose-size) * 0.083);
+  border-radius: calc(var(--wind-rose-size) * 0.067);
   background: rgba(255, 252, 248, 0.92);
   box-shadow: var(--shadow);
   pointer-events: none;
@@ -815,8 +819,8 @@ input[type="range"]::-moz-range-thumb {
 }
 .wind-rose-overlay svg {
   display: block;
-  width: 120px;
-  height: 120px;
+  width: min(var(--wind-rose-size), calc(100vw - 200px));
+  height: min(var(--wind-rose-size), calc(100vw - 200px));
   margin: 0 auto;
 }
 .wind-rose-overlay .wind-rose-n {
@@ -826,8 +830,8 @@ input[type="range"]::-moz-range-thumb {
   fill: var(--ink);
 }
 .wind-rose-caption {
-  margin: 4px 0 0;
-  font-size: 10px;
+  margin: calc(var(--wind-rose-size) * 0.033) 0 0;
+  font-size: max(12px, calc(var(--wind-rose-size) * 0.077));
   line-height: 1.35;
   color: var(--muted-text);
 }

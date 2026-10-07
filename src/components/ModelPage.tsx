@@ -42,6 +42,7 @@ import {
   writeStoredComBuildingHeights,
 } from "../lib/comBuildingHeightsToggle";
 import { formatCoord, formatLengthKm } from "../lib/geo";
+import { cutSizeLabel } from "../lib/placeLabel";
 import { ISO_CORNERS, type IsoCorner } from "../lib/isoCamera";
 import { drawerIsAvailable, loadModelDrawer, reduceRail, saveModelDrawer } from "../lib/railState";
 import { capturePresetFromSearch } from "../lib/captureQuery";
@@ -178,9 +179,6 @@ export function ModelPage({ model }: { model: CityModel }) {
 
   function commitSolar(next: SolarViewSettings) {
     writeStoredHeliodonRadiusFactor(window.localStorage, next.radiusFactor);
-    if (next.showPath !== solar.showPath || next.radiusFactor !== solar.radiusFactor) {
-      setSnapId((id) => id + 1);
-    }
     setSolar(next);
   }
 
@@ -650,7 +648,7 @@ export function ModelPage({ model }: { model: CityModel }) {
               <p className="ready-title">Your model is ready.</p>
               <p className="meta">
                 {model.placeLabel} · {formatCoord(model.center.lat)}, {formatCoord(model.center.lon)} ·{" "}
-                {Math.round(model.sideM)} × {Math.round(model.sideM)} m
+                {cutSizeLabel(model.sideM, model.frameShape ?? "square")}
               </p>
               <p className="meta">{displayModel.sourceNote}</p>
               {model.terrainError && <p className="error">{model.terrainError}</p>}

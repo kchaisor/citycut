@@ -587,6 +587,7 @@ export default function App() {
           <MapStage
             basemap={basemap}
             sideM={sideKm * 1000}
+            frameShape={frameShape}
             initialView={viewRef.current}
             fly={fly}
             loading={loading}
