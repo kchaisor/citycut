@@ -134,7 +134,7 @@ export function defaultExplodedAxoSettings(sideM: number): ExplodedAxoSettings {
     topography: false,
     roads: true,
     green: true,
-    trees: false,
+    trees: true,
     buildings: true,
     aerial: true,
   };

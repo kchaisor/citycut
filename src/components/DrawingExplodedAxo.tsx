@@ -329,10 +329,10 @@ export function DrawingExplodedAxo({
               key={`label-${layer.id}-${layer.liftM}`}
               x={label.x}
               y={label.y}
-              fontSize={model.sideM * 0.032}
+              fontSize={model.sideM * 0.042}
               fill={colours.label}
               fontFamily="Helvetica, Arial, sans-serif"
-              transform={`rotate(${label.rotateDeg + 180} ${label.x} ${label.y})`}
+              transform={`rotate(${label.rotateDeg} ${label.x} ${label.y})`}
             >
               {AXO_LAYER_LABELS[layer.id]}
             </text>

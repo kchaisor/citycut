@@ -1,5 +1,5 @@
 import { fromLocal, openRing } from "./geo";
-import { planBuildingFill } from "./planBuildingFill";
+import { landingBuildingFill } from "./landingBuildingFill";
 import { interiorPoint } from "./useCascade";
 import { pointInSiteFrame } from "./siteFrame";
 import type { AreaFeat, BuildingFeat, LonLat, SiteFrameShape } from "../types";
@@ -38,26 +38,13 @@ export function cutBuildingsGeoJson(
   sideM: number,
   frameShape: SiteFrameShape,
 ): GeoJSON.FeatureCollection {
-  const model = {
-    placeLabel: "",
-    center,
-    sideM,
-    layers: { buildings: true, roads: false, waterGreen: false, trees: false },
-    buildings,
-    roads: [],
-    areas: [],
-    trees: [],
-    roadKm: 0,
-    buildingCapHit: false,
-    sourceNote: "",
-  };
   const features: GeoJSON.Feature[] = [];
   for (const building of buildings) {
     const anchor = interiorPoint(building.ring, building.holes);
     if (!pointInSiteFrame(anchor, sideM, frameShape)) continue;
     const outer = ringToLonLat(building.ring, center);
     if (outer.length < 3) continue;
-    const fill = planBuildingFill(model, building, { colourByUse: true, uniformBuildings: false, colourBySource: false }, false);
+    const fill = landingBuildingFill(building);
     features.push({
       type: "Feature",
       properties: { fill },

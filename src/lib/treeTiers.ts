@@ -1,10 +1,11 @@
-import { pointInPolygon } from "./useCascade";
+import { interiorPoint, pointInPolygon } from "./useCascade";
 import { finishTreeSize } from "./trees";
 import type { Pt, TreeFeat, TreeTier } from "../types";
 
 export const TREE_DEDUPE_M = 3;
-export const VICMAP_COM_DEDUPE_M = 8;
-export const INFILL_SPACING_M = 11;
+export const VICMAP_COM_DEDUPE_M = 11;
+export const INFILL_SPACING_M = 13;
+export const PATCH_TREE_COVERAGE_M = 22;
 export const MAX_TREE_INSTANCES = 8000;
 /** Extra metres beyond half the mapped road width. */
 export const ROAD_MASK_BUFFER_M = 2;
@@ -237,7 +238,11 @@ function ringBounds(ring: Pt[]): { minX: number; minY: number; maxX: number; max
 }
 
 function patchHasRealTrees(patch: CanopyPatch, trees: TreeFeat[]): boolean {
-  return trees.some((tree) => pointInPolygon(tree.at, patch.ring, patch.holes));
+  if (trees.some((tree) => pointInPolygon(tree.at, patch.ring, patch.holes))) return true;
+  const anchor = interiorPoint(patch.ring, patch.holes);
+  return trees.some(
+    (tree) => Math.hypot(tree.at[0] - anchor[0], tree.at[1] - anchor[1]) < PATCH_TREE_COVERAGE_M,
+  );
 }
 
 /**

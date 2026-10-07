@@ -37,8 +37,8 @@ describe("Fitzroy Gardens tree merge", () => {
         const { lat, lon } = fromLocal(tree.at, ORIGIN);
         return lat >= PARK.south && lat <= PARK.north && lon >= PARK.west && lon <= PARK.east;
       });
-      expect(inBox.length).toBeGreaterThanOrEqual(1700);
-      expect(inBox.length).toBeLessThanOrEqual(2350);
+      expect(inBox.length).toBeGreaterThanOrEqual(1800);
+      expect(inBox.length).toBeLessThanOrEqual(2000);
     },
     120_000,
   );

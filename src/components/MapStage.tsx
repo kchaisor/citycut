@@ -7,6 +7,7 @@ import type { SiteFrameShape } from "../types";
 import { updateMapCutColourLayers, removeMapCutColourLayers, updateMapSiteLayers, removeMapSiteLayers } from "../lib/mapSiteLayers";
 import { fetchOvertureBaseForCut } from "../lib/overtureBase";
 import { fetchOvertureBuildingsForCut } from "../lib/overtureBuildings";
+import { refineBuildingUses } from "../lib/useCascade";
 import { fetchSiteParcelCached, siteBuildingIdsForPreview } from "../lib/sitePreviewCache";
 import { FLAT_NORTH_UP_MAP_OPTIONS, applyFlatNorthUpMapHandlers } from "../lib/mapStageMapOptions";
 import type { Basemap, LonLat, ViewState } from "../types";
@@ -148,6 +149,9 @@ export function MapStage({
             fetchOvertureBaseForCut(bounds, cutCenter, sideM, { waterGreen: true, trees: false, frameShape: frameShapeRef.current }, controller.signal),
             fetchOvertureBuildingsForCut(bounds, cutCenter, sideM, controller.signal, frameShapeRef.current),
           ]);
+          const refined = await refineBuildingUses(buildingResult.buildings, cutCenter, bounds, {
+            signal: controller.signal,
+          });
           if (cancelled || controller.signal.aborted) return;
           if (!map.loaded()) await new Promise<void>((resolve) => map.once("idle", () => resolve()));
           if (cancelled) return;
@@ -156,7 +160,7 @@ export function MapStage({
             sideM,
             frameShape: frameShapeRef.current,
             areas: base.areas,
-            buildings: buildingResult.buildings,
+            buildings: refined.buildings,
           });
         } catch {
           if (!cancelled && map.loaded()) removeMapCutColourLayers(map);

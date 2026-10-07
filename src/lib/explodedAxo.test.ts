@@ -101,7 +101,7 @@ describe("exploded axo frame shape", () => {
       const m = modelWithShape(shape);
       const settings = defaultExplodedAxoSettings(m.sideM);
       const { layers } = buildExplodedAxoLayers(m, settings);
-      expect(layers.length).toBe(5);
+      expect(layers.length).toBe(6);
       for (const layer of layers) {
         expect(layer.clipD).toBe(layer.plateOutlineD);
         if (shape === "circle") {

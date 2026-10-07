@@ -86,7 +86,8 @@ import {
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { modelStageCreditHtml } from "../lib/dataCredits";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
-import { openRing } from "../lib/geo";
+import { openRing, toLocal } from "../lib/geo";
+import { pointInPolygon } from "../lib/useCascade";
 import type { BuildingUse, CityModel } from "../types";
 import { BuildingHeightPopover, HeightOverridePanel } from "./BuildingHeightPopover";
 import { ColoursEditor } from "./Colours";
@@ -482,6 +483,24 @@ export function ModelPage({ model }: { model: CityModel }) {
         const pick = midrise[0] ?? fallback[0];
         if (!pick) return null;
         setHeightPick({ buildingId: pick.id, clientX: 72, clientY: 88 });
+        return pick.id;
+      },
+      pickBuildingNearGeoQa(lat: number, lon: number) {
+        const at = toLocal(lat, lon, model.center);
+        let pick = model.buildings.find((building) => pointInPolygon(at, building.ring, building.holes));
+        if (!pick) {
+          let best = Infinity;
+          for (const building of model.buildings) {
+            const { east, north } = buildingCentroid(building);
+            const dist = Math.hypot(east - at[0], north - at[1]);
+            if (dist < best) {
+              best = dist;
+              pick = building;
+            }
+          }
+        }
+        if (!pick) return null;
+        setHeightPick({ buildingId: pick.id, clientX: 640, clientY: 420 });
         return pick.id;
       },
     };

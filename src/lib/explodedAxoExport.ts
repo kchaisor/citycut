@@ -246,7 +246,7 @@ export function explodedAxoChunks(
         sizeMm: model.sideM * 0.022 * mmPerMetre(scale),
         text: AXO_LAYER_LABELS[layer.id],
         color: hexRgb(getColour("--axo-label")),
-        rotateDeg: anchor.rotateDeg + 180,
+        rotateDeg: anchor.rotateDeg,
       });
     }
     if (texts.length) chunks.push({ name: "Labels", texts });

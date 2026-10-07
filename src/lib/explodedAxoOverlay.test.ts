@@ -53,9 +53,9 @@ describe("exploded axo viewport stability", () => {
     expect(toggledFit).toEqual(baseFit);
   });
 
-  it("keeps five default visible plates in geometry output", () => {
+  it("keeps six default visible plates in geometry output", () => {
     const m = model();
     const { layers } = buildExplodedAxoLayers(m, defaultExplodedAxoSettings(m.sideM));
-    expect(layers).toHaveLength(5);
+    expect(layers).toHaveLength(6);
   });
 });
