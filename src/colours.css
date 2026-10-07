@@ -10,7 +10,7 @@
   /* Paper and ground */
 
   /* Landing map: masks coloured Overture fills outside the cut frame (matches the grey map surround). */
-  --landing-map-mask: #EBEBEB;
+  --landing-map-mask: #F2F3F0;
 
   /* Illustrator site-plan page, and the casing under a rail so the line still reads on the road. */
   --sheet-fill: #E7E6E6;

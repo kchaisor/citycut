@@ -31,7 +31,7 @@ function mockMap() {
     getLayer,
     removeLayer,
     removeSource,
-    getStyle: () => ({ layers: [{ id: "symbols", type: "symbol" }] }),
+    getStyle: () => ({ layers: [{ id: "waterway", type: "line" }, { id: "symbols", type: "symbol" }] }),
   };
   return { map, sources };
 }
@@ -56,8 +56,10 @@ describe("updateMapCutColourMask", () => {
   it("updates only the mask source when the frame moves, not the colour fills", () => {
     const { map, sources } = mockMap();
     updateMapCutColourLayers(map as never, {
-      center: { lon: 144.96, lat: -37.81 },
-      sideM: 500,
+      dataOrigin: { lon: 144.96, lat: -37.81 },
+      dataSideM: 2000,
+      maskCenter: { lon: 144.96, lat: -37.81 },
+      cutSideM: 500,
       frameShape: "square",
       areas: [{ id: 1, kind: "water", ring: building.ring, holes: [] }],
       buildings: [building],

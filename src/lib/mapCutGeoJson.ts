@@ -83,9 +83,9 @@ export function cutFrameGeoJson(center: LonLat, sideM: number, shape: SiteFrameS
   };
 }
 
-/** Grey sheet with a frame-shaped hole; sits above landing colour fills. */
+/** Landuse-toned sheet with a frame-shaped hole; roads and labels sit above this layer. */
 export function cutColourMaskGeoJson(center: LonLat, sideM: number, frameShape: SiteFrameShape): GeoJSON.Feature {
-  const span = 5;
+  const span = 1.2;
   const outer: [number, number][] = [
     [center.lon - span, center.lat - span],
     [center.lon + span, center.lat - span],
