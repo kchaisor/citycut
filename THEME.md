@@ -99,7 +99,8 @@ A name the app does not load, such as a font from your computer only, will show 
 
 | Variable | Default | What it controls |
 | --- | --- | --- |
-| `--landing-map-mask` | `#F2F3F0` | Positron land background on the landing map; hides coloured Overture fills outside the cut frame (roads draw above). |
+| `--landing-map-mask` | `#F2F3F0` | Positron land background on the landing map; hides coloured water and green outside the cut frame (roads draw above). |
+| `--landing-building-mask` | `#EAEAE5` | Positron building fill; hides use-coloured footprints outside the cut frame. |
 | `--sheet-fill` | `#f4f1ea` | Illustrator site-plan page, and the casing under a rail so the line still reads on the road. |
 | `--ground-fill` | `#e6e0d4` | Flat 3D ground, the ground on the 3D-view Illustrator sheet, and the Rhino Ground layer. |
 | `--export-backdrop` | `#e7e4dc` | Backdrop of the 3D PNG, and the page behind the 3D-view Illustrator drawing. |

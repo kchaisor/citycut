@@ -1,7 +1,7 @@
 import type maplibregl from "maplibre-gl";
 import { getColour } from "./colours";
 import { dashSegments, readDrawingStyle } from "./drawingStyle";
-import { landingCutColourBeforeLayer } from "./mapBasemapLayers";
+import { landingCutBuildingsBeforeLayer, landingCutLanduseBeforeLayer } from "./mapBasemapLayers";
 import { cutAreasGeoJson, cutBuildingsGeoJson, cutColourMaskGeoJson } from "./mapCutGeoJson";
 import { mapSiteLayerPaint, siteBoundaryGeoJson, siteBuildingsGeoJson } from "./mapSiteGeoJson";
 import type { AreaFeat, BuildingFeat, LonLat, SiteFrameShape } from "../types";
@@ -17,6 +17,7 @@ const CUT_WATER_SOURCE = "citycut-cut-water";
 const CUT_GREEN_SOURCE = "citycut-cut-green";
 const CUT_BUILDINGS_SOURCE = "citycut-cut-buildings";
 const CUT_MASK_LAYER = "citycut-cut-mask-fill";
+const CUT_MASK_BUILDINGS_LAYER = "citycut-cut-mask-buildings-fill";
 const CUT_WATER_LAYER = "citycut-cut-water-fill";
 const CUT_GREEN_LAYER = "citycut-cut-green-fill";
 const CUT_BUILDINGS_LAYER = "citycut-cut-buildings-fill";
@@ -48,8 +49,15 @@ function bumpColourSetData(): void {
   if (stats) stats.colourSetData += 1;
 }
 
+
 export function removeMapCutColourLayers(map: maplibregl.Map): void {
-  for (const layer of [CUT_MASK_LAYER, CUT_BUILDINGS_LAYER, CUT_GREEN_LAYER, CUT_WATER_LAYER]) {
+  for (const layer of [
+    CUT_MASK_BUILDINGS_LAYER,
+    CUT_MASK_LAYER,
+    CUT_BUILDINGS_LAYER,
+    CUT_GREEN_LAYER,
+    CUT_WATER_LAYER,
+  ]) {
     if (map.getLayer(layer)) map.removeLayer(layer);
   }
   for (const source of [CUT_MASK_SOURCE, CUT_BUILDINGS_SOURCE, CUT_GREEN_SOURCE, CUT_WATER_SOURCE]) {
@@ -73,7 +81,7 @@ function colourGeoJson(
   };
 }
 
-/** Moves only the landuse mask with the cut frame (rAF-throttled from MapStage). */
+/** Moves the shared mask GeoJSON (both mask layers read this source; rAF-throttled in MapStage). */
 export function updateMapCutColourMask(
   map: maplibregl.Map,
   options: { center: LonLat; sideM: number; frameShape: SiteFrameShape },
@@ -117,7 +125,7 @@ export function setMapCutColourData(
   return true;
 }
 
-/** Thematic fills for the landing map; clipped by the mask below road layers (does not move the camera). */
+/** Thematic fills for the landing map; clipped by shared mask sources (does not move the camera). */
 export function updateMapCutColourLayers(
   map: maplibregl.Map,
   options: {
@@ -133,7 +141,8 @@ export function updateMapCutColourLayers(
   removeMapCutColourLayers(map);
   const stats = qaStats();
   if (stats) stats.layerRebuilds += 1;
-  const beforeId = landingCutColourBeforeLayer(map);
+  const landuseBefore = landingCutLanduseBeforeLayer(map);
+  const buildingsBefore = landingCutBuildingsBeforeLayer(map);
   const { water, green, buildings } = colourGeoJson(
     options.dataOrigin,
     options.dataSideM,
@@ -150,7 +159,7 @@ export function updateMapCutColourLayers(
         source: CUT_WATER_SOURCE,
         paint: { "fill-color": getColour("--water-fill"), "fill-opacity": 0.95 },
       },
-      beforeId,
+      landuseBefore,
     );
   }
   if (green.features.length > 0) {
@@ -162,19 +171,7 @@ export function updateMapCutColourLayers(
         source: CUT_GREEN_SOURCE,
         paint: { "fill-color": getColour("--green-fill"), "fill-opacity": 0.92 },
       },
-      beforeId,
-    );
-  }
-  if (buildings.features.length > 0) {
-    map.addSource(CUT_BUILDINGS_SOURCE, { type: "geojson", data: buildings });
-    map.addLayer(
-      {
-        id: CUT_BUILDINGS_LAYER,
-        type: "fill",
-        source: CUT_BUILDINGS_SOURCE,
-        paint: { "fill-color": ["get", "fill"], "fill-opacity": 0.94 },
-      },
-      beforeId,
+      landuseBefore,
     );
   }
 
@@ -187,8 +184,30 @@ export function updateMapCutColourLayers(
       source: CUT_MASK_SOURCE,
       paint: { "fill-color": getColour("--landing-map-mask"), "fill-opacity": 1 },
     },
-    beforeId,
+    landuseBefore,
   );
+
+  if (buildings.features.length > 0) {
+    map.addSource(CUT_BUILDINGS_SOURCE, { type: "geojson", data: buildings });
+    map.addLayer(
+      {
+        id: CUT_BUILDINGS_LAYER,
+        type: "fill",
+        source: CUT_BUILDINGS_SOURCE,
+        paint: { "fill-color": ["get", "fill"], "fill-opacity": 0.94 },
+      },
+      buildingsBefore,
+    );
+    map.addLayer(
+      {
+        id: CUT_MASK_BUILDINGS_LAYER,
+        type: "fill",
+        source: CUT_MASK_SOURCE,
+        paint: { "fill-color": getColour("--landing-building-mask"), "fill-opacity": 1 },
+      },
+      buildingsBefore,
+    );
+  }
 }
 
 export function removeMapSiteLayers(map: maplibregl.Map): void {

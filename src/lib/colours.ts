@@ -10,6 +10,7 @@ import { cssColorToHex, normalizeHex, parseCustomProperties, resolveSheet } from
 
 export const COLOUR_KEYS = [
   "--landing-map-mask",
+  "--landing-building-mask",
   "--sheet-fill",
   "--ground-fill",
   "--export-backdrop",
@@ -109,6 +110,7 @@ export const COLOUR_GROUPS = [
     title: "Paper and ground",
     keys: [
       "--landing-map-mask",
+      "--landing-building-mask",
       "--sheet-fill",
       "--ground-fill",
       "--export-backdrop",
@@ -204,6 +206,7 @@ export const COLOUR_GROUPS = [
 
 export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--landing-map-mask": "Landing map mask",
+  "--landing-building-mask": "Landing building mask",
   "--sheet-fill": "Sheet",
   "--ground-fill": "Ground",
   "--export-backdrop": "Export backdrop",

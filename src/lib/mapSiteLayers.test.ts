@@ -31,7 +31,14 @@ function mockMap() {
     getLayer,
     removeLayer,
     removeSource,
-    getStyle: () => ({ layers: [{ id: "waterway", type: "line" }, { id: "symbols", type: "symbol" }] }),
+    getStyle: () => ({
+      layers: [
+        { id: "waterway", type: "line" },
+        { id: "building", type: "fill" },
+        { id: "tunnel_motorway_casing", type: "line" },
+        { id: "symbols", type: "symbol" },
+      ],
+    }),
   };
   return { map, sources };
 }

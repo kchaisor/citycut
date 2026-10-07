@@ -27,7 +27,7 @@ await page.goto(`${base}?qa=1&lat=-37.8202&lon=144.9678&km=0.5`, {
   timeout: 120_000,
 });
 await waitForColour();
-await page.screenshot({ path: `${outDir}/landing-colour-yarra-pos1-v2.png` });
+await page.screenshot({ path: `${outDir}/landing-colour-yarra-pos1-v3.png` });
 
 /** Far pan within the same viewport tile cache — colour while still dragging (no moveend refetch). */
 const canvas = page.locator(".map-canvas");
@@ -41,14 +41,13 @@ if (box) {
   await page.mouse.move(sx, sy);
   await page.mouse.down();
   await page.mouse.move(sx - 280, sy - 120, { steps: 18 });
-  await page.screenshot({ path: `${outDir}/landing-colour-mid-drag-no-refetch-v2.png` });
+  await page.screenshot({ path: `${outDir}/landing-colour-mid-drag-no-refetch-v3.png` });
   const midStats = await page.evaluate(() => ({ ...window.__citycutCutColourStats }));
   await page.mouse.up();
   await page.waitForTimeout(400);
   console.log("mid-drag stats (expect 0 layer rebuilds, 0 colour setData):", midStats);
 }
 
-await page.screenshot({ path: `${outDir}/landing-colour-yarra-pos2-v2.png` });
 
 /** Circle frame — streets must remain visible outside the hole. */
 await page.goto(`${base}?qa=1&lat=-37.8202&lon=144.9678&km=0.5&shape=circle`, {
@@ -56,7 +55,7 @@ await page.goto(`${base}?qa=1&lat=-37.8202&lon=144.9678&km=0.5&shape=circle`, {
   timeout: 120_000,
 });
 await waitForColour();
-await page.screenshot({ path: `${outDir}/landing-colour-circle-frame-v2.png` });
+await page.screenshot({ path: `${outDir}/landing-colour-circle-frame-v3.png` });
 
 await browser.close();
 console.log("Wrote landing colour QA shots to", outDir);
