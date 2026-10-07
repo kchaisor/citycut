@@ -4,7 +4,13 @@ import { MAP_STYLE, SATELLITE_STYLE } from "../content/constants";
 import { M_PER_DEG_LAT, mPerDegLon, squareBBox } from "../lib/geo";
 import { cutFrameLabelKm } from "../lib/placeLabel";
 import type { SiteFrameShape } from "../types";
-import { updateMapCutColourLayers, removeMapCutColourLayers, updateMapSiteLayers, removeMapSiteLayers } from "../lib/mapSiteLayers";
+import {
+  updateMapCutColourLayers,
+  updateMapCutColourMask,
+  removeMapCutColourLayers,
+  updateMapSiteLayers,
+  removeMapSiteLayers,
+} from "../lib/mapSiteLayers";
 import { fetchOvertureBaseForCut } from "../lib/overtureBase";
 import { fetchOvertureBuildingsForCut } from "../lib/overtureBuildings";
 import { refineBuildingUses } from "../lib/useCascade";
@@ -84,6 +90,7 @@ export function MapStage({
 
     const update = () => {
       const center = map.getCenter();
+      const cutCenter: LonLat = { lon: center.lng, lat: center.lat };
       const half = sideRef.current / 2;
       const dLat = half / M_PER_DEG_LAT;
       const dLon = half / mPerDegLon(center.lat);
@@ -96,6 +103,11 @@ export function MapStage({
         top,
         width: Math.abs(southEast.x - northWest.x),
         height: Math.abs(southEast.y - northWest.y),
+      });
+      updateMapCutColourMask(map, {
+        center: cutCenter,
+        sideM: sideRef.current,
+        frameShape: frameShapeRef.current,
       });
       onViewRef.current({ lon: center.lng, lat: center.lat, zoom: map.getZoom() });
     };
@@ -146,8 +158,8 @@ export function MapStage({
         try {
           const bounds = squareBBox(cutCenter, sideM);
           const [base, buildingResult] = await Promise.all([
-            fetchOvertureBaseForCut(bounds, cutCenter, sideM, { waterGreen: true, trees: false, frameShape: frameShapeRef.current }, controller.signal),
-            fetchOvertureBuildingsForCut(bounds, cutCenter, sideM, controller.signal, frameShapeRef.current),
+            fetchOvertureBaseForCut(bounds, cutCenter, sideM, { waterGreen: true, trees: false, frameShape: "square" }, controller.signal),
+            fetchOvertureBuildingsForCut(bounds, cutCenter, sideM, controller.signal, "square"),
           ]);
           const refined = await refineBuildingUses(buildingResult.buildings, cutCenter, bounds, {
             signal: controller.signal,
