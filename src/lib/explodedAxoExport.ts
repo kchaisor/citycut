@@ -5,9 +5,10 @@ import { formatCoord } from "./geo";
 import { plainDataCredit } from "./dataCredits";
 import {
   AXO_LAYER_LABELS,
+  axoLayerLabelAnchor,
+  axoLayersForPaint,
   buildExplodedAxoLayers,
   explodedAxoBounds,
-  planPointToIso,
   type AxoLayerId,
   type ExplodedAxoSettings,
 } from "./explodedAxo";
@@ -37,6 +38,23 @@ function pathFromIsoD(d: string, origin: Pt, scale: number, pageHeightMm: number
   return ring;
 }
 
+function ringsFromIsoD(d: string, origin: Pt, scale: number, pageHeightMm: number): number[][][] {
+  const parts = d
+    .split(/(?<=\sZ)\s*/i)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const rings: number[][][] = [];
+  for (const part of parts) {
+    const ring = pathFromIsoD(part, origin, scale, pageHeightMm);
+    if (ring.length >= 3) rings.push(ring);
+  }
+  if (rings.length === 0) {
+    const ring = pathFromIsoD(d, origin, scale, pageHeightMm);
+    if (ring.length >= 2) rings.push(ring);
+  }
+  return rings;
+}
+
 export function explodedAxoPageSize(
   model: CityModel,
   settings: ExplodedAxoSettings,
@@ -44,7 +62,7 @@ export function explodedAxoPageSize(
 ): { widthMm: number; heightMm: number; origin: Pt } {
   const bounds = explodedAxoBounds(model, settings);
   const k = mmPerMetre(scale);
-  const margin = model.sideM * 0.08 * k;
+  const margin = model.sideM * 0.14 * k;
   const widthMm = (bounds.maxX - bounds.minX) * k + margin * 2;
   const heightMm = (bounds.maxY - bounds.minY) * k + margin * 2;
   return {
@@ -98,7 +116,7 @@ export function explodedAxoChunks(
     aerial: getColour("--axo-building"),
   };
 
-  for (const layer of layers) {
+  for (const layer of axoLayersForPaint(layers)) {
     const chunkName =
       layer.id === "water"
         ? "Water"
@@ -114,31 +132,28 @@ export function explodedAxoChunks(
     if (plateRing.length >= 3) {
       paths.push({
         rings: [plateRing],
-        fill: hexRgb(getColour("--sheet-fill")),
-        close: true,
-      });
-      paths.push({
-        rings: [plateRing],
         stroke: hexRgb(getColour("--axo-guide")),
         strokeMm: 0.12,
         close: true,
       });
     }
     for (const fill of layer.fills) {
-      const ring = pathFromIsoD(fill, origin, scale, pageHeightMm);
-      if (ring.length >= 3) {
-        paths.push({ rings: [ring], fill: hexRgb(layerColour[layer.id]), close: true, evenOdd: true });
+      const rings = ringsFromIsoD(fill, origin, scale, pageHeightMm);
+      if (rings.length > 0) {
+        paths.push({ rings, fill: hexRgb(layerColour[layer.id]), close: true, evenOdd: true });
       }
     }
     for (const stroke of layer.strokes) {
-      const ring = pathFromIsoD(stroke, origin, scale, pageHeightMm);
-      if (ring.length >= 2) {
-        paths.push({
-          rings: [ring],
-          stroke: hexRgb(layerColour[layer.id]),
-          strokeMm: 0.25,
-          close: false,
-        });
+      const rings = ringsFromIsoD(stroke, origin, scale, pageHeightMm);
+      for (const ring of rings) {
+        if (ring.length >= 2) {
+          paths.push({
+            rings: [ring],
+            stroke: hexRgb(layerColour[layer.id]),
+            strokeMm: 0.25,
+            close: false,
+          });
+        }
       }
     }
     if (layer.id === "aerial" && satelliteNote) {
@@ -155,14 +170,13 @@ export function explodedAxoChunks(
   if (settings.showLabels) {
     const texts: PdfText[] = [];
     for (const layer of layers) {
-      const label = AXO_LAYER_LABELS[layer.id];
-      const [lx, ly] = planPointToIso(model.sideM * 0.35, -model.sideM * 0.35, layer.liftM);
-      const [sx, sy] = isoToSheet([lx, ly], origin, scale, pageHeightMm);
+      const anchor = axoLayerLabelAnchor(model.sideM, layer.liftM);
+      const [sx, sy] = isoToSheet([anchor.x, anchor.y], origin, scale, pageHeightMm);
       texts.push({
         x: sx,
         y: sy,
-        sizeMm: model.sideM * 0.018 * mmPerMetre(scale),
-        text: label,
+        sizeMm: model.sideM * 0.022 * mmPerMetre(scale),
+        text: AXO_LAYER_LABELS[layer.id],
         color: hexRgb(getColour("--axo-label")),
       });
     }

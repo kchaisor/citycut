@@ -30,6 +30,7 @@ import {
 } from "../lib/download";
 import {
   AXO_LAYER_LABELS,
+  defaultExplodedAxoGapM,
   defaultExplodedAxoSettings,
   explodedAxoBounds,
   type AxoLayerId,
@@ -540,7 +541,7 @@ export function ModelPage({ model }: { model: CityModel }) {
       ...defaultExplodedAxoSettings(displayModel.sideM),
       layerOrder: prev.layerOrder,
       layerVisible: prev.layerVisible,
-      gapM: Math.min(Math.max(prev.gapM, 4), displayModel.sideM * 0.2),
+      gapM: defaultExplodedAxoGapM(displayModel.sideM),
       showLabels: prev.showLabels,
     }));
     setExplodedViewport(
@@ -1196,8 +1197,8 @@ export function ModelPage({ model }: { model: CityModel }) {
                     Layer gap, m
                     <input
                       type="range"
-                      min={4}
-                      max={Math.round(displayModel.sideM * 0.2)}
+                      min={Math.round(defaultExplodedAxoGapM(displayModel.sideM) * 0.5)}
+                      max={Math.round(defaultExplodedAxoGapM(displayModel.sideM) * 1.5)}
                       step={1}
                       value={Math.round(axoSettings.gapM)}
                       onChange={(event) =>

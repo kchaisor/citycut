@@ -27,6 +27,23 @@ export type ExplodedAxoSettings = {
   showLabels: boolean;
 };
 
+/** Vertical span of one frame plate in iso screen metres (same lift). */
+export function axoPlateProjectedHeight(sideM: number): number {
+  const half = sideM / 2;
+  const ys = [
+    planPointToIso(half, half, 0)[1],
+    planPointToIso(half, -half, 0)[1],
+    planPointToIso(-half, half, 0)[1],
+    planPointToIso(-half, -half, 0)[1],
+  ];
+  return Math.max(...ys) - Math.min(...ys);
+}
+
+/** Default vertical gap between layers (~40% of one plate height, per reference). */
+export function defaultExplodedAxoGapM(sideM: number): number {
+  return axoPlateProjectedHeight(sideM) * 0.4;
+}
+
 export function defaultExplodedAxoSettings(sideM: number): ExplodedAxoSettings {
   return {
     layerOrder: [...DEFAULT_AXO_LAYER_ORDER],
@@ -37,7 +54,7 @@ export function defaultExplodedAxoSettings(sideM: number): ExplodedAxoSettings {
       buildings: true,
       aerial: true,
     },
-    gapM: Math.max(sideM * 0.06, 8),
+    gapM: defaultExplodedAxoGapM(sideM),
     showLabels: true,
   };
 }
@@ -110,11 +127,33 @@ export function axoGuideLines(
   });
 }
 
+/** Lift in iso metres: aerial = 0 (bottom), water = highest (top of stack). */
 export function liftsForLayerOrder(order: AxoLayerId[], gapM: number): Map<AxoLayerId, number> {
   const bottomToTop = [...order].reverse();
   const lifts = new Map<AxoLayerId, number>();
   bottomToTop.forEach((id, index) => lifts.set(id, index * gapM));
   return lifts;
+}
+
+/** Painter's order: bottom layer first, top layer last (so water draws on top). */
+export function axoLayersForPaint(layers: AxoLayerGeometry[]): AxoLayerGeometry[] {
+  return [...layers].sort((a, b) => a.liftM - b.liftM);
+}
+
+export function axoLayerLabelAnchor(
+  sideM: number,
+  liftM: number,
+): { x: number; y: number; rotateDeg: number } {
+  const half = sideM / 2;
+  const [x0, y0] = planPointToIso(half, -half, liftM);
+  const [x1, y1] = planPointToIso(half, half, liftM);
+  const rotateDeg = (Math.atan2(y1 - y0, x1 - x0) * 180) / Math.PI;
+  const along = sideM * 0.04;
+  return {
+    x: x0 + along * 1.2,
+    y: y0 + along * 0.35,
+    rotateDeg,
+  };
 }
 
 export type AxoLayerGeometry = {
@@ -211,21 +250,21 @@ export function buildExplodedAxoLayers(
     const fills: string[] = [];
     const strokes: string[] = [];
 
+    const areaToPath = (rings: Pt[][]) =>
+      rings
+        .map((ring) => isoPathFromPlanRing(openRing(ring), liftM, true))
+        .filter(Boolean)
+        .join(" ");
+
     if (id === "water") {
       for (const rings of waterAreas) {
-        fills.push(
-          rings
-            .map((ring) => isoPathFromPlanRing(openRing(ring), liftM, true))
-            .join(" "),
-        );
+        const d = areaToPath(rings);
+        if (d) fills.push(d);
       }
     } else if (id === "green") {
       for (const rings of greenAreas) {
-        fills.push(
-          rings
-            .map((ring) => isoPathFromPlanRing(openRing(ring), liftM, true))
-            .join(" "),
-        );
+        const d = areaToPath(rings);
+        if (d) fills.push(d);
       }
     } else if (id === "buildings") {
       const ground = figureGround(model.buildings, model.sideM, shape);
@@ -248,7 +287,7 @@ export function buildExplodedAxoLayers(
   return { layers, guides: axoGuideLines(model.sideM, shape, visibleLifts) };
 }
 
-export function axoLayerColours(): Record<AxoLayerId | "guide" | "label" | "plate", string> {
+export function axoLayerColours(): Record<AxoLayerId | "guide" | "label", string> {
   return {
     water: getColour("--axo-water"),
     roads: getColour("--axo-road"),
@@ -257,7 +296,6 @@ export function axoLayerColours(): Record<AxoLayerId | "guide" | "label" | "plat
     aerial: getColour("--axo-building"),
     guide: getColour("--axo-guide"),
     label: getColour("--axo-label"),
-    plate: getColour("--sheet-fill"),
   };
 }
 
@@ -303,7 +341,7 @@ export function explodedAxoBounds(
     bump(guide.x, guide.yTop);
     bump(guide.x, guide.yBottom);
   }
-  const pad = model.sideM * 0.12;
+  const pad = model.sideM * 0.2;
   if (!Number.isFinite(minX)) {
     const half = model.sideM / 2;
     return { minX: -half, minY: -half, maxX: half, maxY: half };

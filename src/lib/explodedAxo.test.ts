@@ -7,6 +7,9 @@ import {
   axoPlateIsCircularRing,
   axoPlateOutlineD,
   buildExplodedAxoLayers,
+  axoLayersForPaint,
+  axoPlateProjectedHeight,
+  defaultExplodedAxoGapM,
   defaultExplodedAxoSettings,
   liftsForLayerOrder,
   planPointToIso,
@@ -105,6 +108,30 @@ describe("exploded axo frame shape", () => {
         }
       }
     }
+  });
+});
+
+describe("exploded axo stack order", () => {
+  it("puts water at the top lift and satellite at the bottom", () => {
+    const settings = defaultExplodedAxoSettings(500);
+    const lifts = liftsForLayerOrder(settings.layerOrder, settings.gapM);
+    expect(lifts.get("aerial")).toBe(0);
+    expect(lifts.get("water")!).toBeGreaterThan(lifts.get("buildings")!);
+  });
+
+  it("paints bottom layers first so water draws on top", () => {
+    const m = modelWithShape("square");
+    const { layers } = buildExplodedAxoLayers(m, defaultExplodedAxoSettings(m.sideM));
+    const paint = axoLayersForPaint(layers);
+    expect(paint[0]?.id).toBe("aerial");
+    expect(paint[paint.length - 1]?.id).toBe("water");
+  });
+
+  it("defaults gap to about 40% of plate height", () => {
+    const sideM = 500;
+    const gap = defaultExplodedAxoGapM(sideM);
+    const plateH = axoPlateProjectedHeight(sideM);
+    expect(gap / plateH).toBeCloseTo(0.4, 1);
   });
 });
 

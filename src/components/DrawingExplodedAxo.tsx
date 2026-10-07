@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AXO_LAYER_LABELS,
+  axoLayerLabelAnchor,
   axoLayerColours,
+  axoLayersForPaint,
   buildExplodedAxoLayers,
   explodedAxoBounds,
   isoSatelliteImageTransform,
-  planPointToIso,
   type ExplodedAxoSettings,
 } from "../lib/explodedAxo";
 import { fetchSatelliteFramePng, satelliteFrameDataUrl } from "../lib/explodedAxoSatellite";
@@ -69,7 +70,7 @@ export function DrawingExplodedAxo({
       applyView((current) => {
         const w = current.w * factor;
         const h = current.h * factor;
-        if (w < model.sideM * 0.04 || w > model.sideM * 8) return current;
+        if (w < model.sideM * 0.04 || w > model.sideM * 12) return current;
         return {
           x: current.x + (current.w - w) * px,
           y: current.y + (current.h - h) * py,
@@ -83,6 +84,7 @@ export function DrawingExplodedAxo({
   }, [model.sideM, view, internalView, onViewportChange]);
 
   const { layers, guides } = useMemo(() => buildExplodedAxoLayers(model, settings), [model, settings]);
+  const paintLayers = useMemo(() => axoLayersForPaint(layers), [layers]);
   const colourTick = useColourRevision();
   const colours = useMemo(() => axoLayerColours(), [colourTick]);
   const [satelliteHref, setSatelliteHref] = useState<string | null>(null);
@@ -103,7 +105,9 @@ export function DrawingExplodedAxo({
     };
   }, [model, showAerial]);
 
-  const clipIds = layers.map((layer) => `axo-clip-${layer.id}-${layer.liftM}`);
+  const clipIds = paintLayers.map((layer) => `axo-clip-${layer.id}-${layer.liftM}`);
+  const outlinePx = model.sideM * 0.0018;
+  const roadPx = model.sideM * 0.0045;
 
   return (
     <svg
@@ -133,7 +137,7 @@ export function DrawingExplodedAxo({
       }}
     >
       <defs>
-        {layers.map((layer, index) => (
+        {paintLayers.map((layer, index) => (
           <clipPath key={clipIds[index]} id={clipIds[index]}>
             <path d={layer.clipD} />
           </clipPath>
@@ -154,7 +158,7 @@ export function DrawingExplodedAxo({
         />
       ))}
 
-      {layers.map((layer, index) => {
+      {paintLayers.map((layer, index) => {
         const fillColour =
           layer.id === "water"
             ? colours.water
@@ -164,9 +168,9 @@ export function DrawingExplodedAxo({
                 ? colours.green
                 : colours.buildings;
         const clip = `url(#${clipIds[index]})`;
+        const label = axoLayerLabelAnchor(model.sideM, layer.liftM);
         return (
           <g key={`${layer.id}-${layer.liftM}`} clipPath={clip}>
-            <path d={layer.plateOutlineD} fill={colours.plate} stroke="none" />
             {layer.id === "aerial" && satelliteHref && (
               <image
                 href={satelliteHref}
@@ -178,15 +182,6 @@ export function DrawingExplodedAxo({
                 transform={isoSatelliteImageTransform(model.sideM, layer.liftM)}
               />
             )}
-            {layer.id === "aerial" && !satelliteHref && (
-              <path
-                d={layer.plateOutlineD}
-                fill="none"
-                stroke={colours.guide}
-                strokeWidth={model.sideM * 0.002}
-                vectorEffect="non-scaling-stroke"
-              />
-            )}
             {layer.fills.map((d, fi) => (
               <path key={`f${fi}`} d={d} fill={fillColour} fillRule="evenodd" stroke="none" />
             ))}
@@ -196,25 +191,27 @@ export function DrawingExplodedAxo({
                 d={d}
                 fill="none"
                 stroke={fillColour}
-                strokeWidth={model.sideM * 0.003}
+                strokeWidth={roadPx}
                 vectorEffect="non-scaling-stroke"
                 strokeLinecap="round"
+                strokeLinejoin="round"
               />
             ))}
             <path
               d={layer.plateOutlineD}
               fill="none"
               stroke={colours.guide}
-              strokeWidth={model.sideM * 0.0015}
+              strokeWidth={outlinePx}
               vectorEffect="non-scaling-stroke"
             />
             {settings.showLabels && (
               <text
-                x={planPointToIso(model.sideM * 0.42, -model.sideM * 0.38, layer.liftM)[0]}
-                y={planPointToIso(model.sideM * 0.42, -model.sideM * 0.38, layer.liftM)[1]}
-                fontSize={model.sideM * 0.028}
+                x={label.x}
+                y={label.y}
+                fontSize={model.sideM * 0.032}
                 fill={colours.label}
                 fontFamily="Helvetica, Arial, sans-serif"
+                transform={`rotate(${label.rotateDeg} ${label.x} ${label.y})`}
               >
                 {AXO_LAYER_LABELS[layer.id]}
               </text>
