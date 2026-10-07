@@ -1,4 +1,7 @@
+import * as polygonClipping from "polygon-clipping";
+import type { MultiPolygon, Polygon } from "polygon-clipping";
 import { fromLocal, squareBBox } from "./geo";
+import { siteFramePolygon, type SiteFrameShape } from "./siteFrame";
 import type { LonLat, Pt, Ring, TerrainField } from "../types";
 
 /**
@@ -544,16 +547,109 @@ function shadeHeight(t: number, darken: number): [number, number, number] {
   return [red, green, blue];
 }
 
-/** One heightfield surface, in Three.js coordinates (x east, y up, z = −north). No skirt or base. */
-export function terrainBuffers(
+type TerrainTri = [Pt, Pt, Pt];
+
+type ClipFns = {
+  intersection: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
+};
+
+function terrainClipFns(): ClipFns {
+  const loaded = polygonClipping as unknown as ClipFns & { default?: ClipFns };
+  if (typeof loaded.intersection === "function") return loaded;
+  if (loaded.default && typeof loaded.default.intersection === "function") return loaded.default;
+  throw new Error("polygon-clipping did not load.");
+}
+
+const { intersection: clipIntersection } = terrainClipFns();
+
+function barycentric(p: Pt, a: Pt, b: Pt, c: Pt): [number, number, number] | null {
+  const denom = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
+  if (Math.abs(denom) < 1e-14) return null;
+  const w0 = ((b[1] - c[1]) * (p[0] - c[0]) + (c[0] - b[0]) * (p[1] - c[1])) / denom;
+  const w1 = ((c[1] - a[1]) * (p[0] - c[0]) + (a[0] - c[0]) * (p[1] - c[1])) / denom;
+  const w2 = 1 - w0 - w1;
+  return [w0, w1, w2];
+}
+
+function heightOnTriangle(tri: TerrainTri, heights: [number, number, number], p: Pt): number {
+  const w = barycentric(p, tri[0], tri[1], tri[2]);
+  if (!w) return heights[0];
+  return w[0] * heights[0] + w[1] * heights[1] + w[2] * heights[2];
+}
+
+function closeTriangleRing(tri: TerrainTri): [number, number][] {
+  return tri.map(([x, y]) => [x, y] as [number, number]).concat([[tri[0][0], tri[0][1]]]);
+}
+
+function clipTriangleToCircle(tri: TerrainTri, sideM: number): Pt[][] {
+  const frame = siteFramePolygon(sideM, "circle");
+  let result: MultiPolygon;
+  try {
+    result = clipIntersection([closeTriangleRing(tri)], frame);
+  } catch {
+    return [];
+  }
+  const rings: Pt[][] = [];
+  for (const polygon of result) {
+    if (polygon.length === 0 || polygon[0]!.length < 3) continue;
+    const ring = polygon[0]!.map(([x, y]) => [x, y] as Pt);
+    rings.push(ring);
+  }
+  return rings;
+}
+
+function fanTriangulate(ring: Pt[]): TerrainTri[] {
+  const open =
+    ring.length >= 2 &&
+    Math.hypot(ring[0]![0] - ring[ring.length - 1]![0], ring[0]![1] - ring[ring.length - 1]![1]) < 0.02
+      ? ring.slice(0, -1)
+      : ring.slice();
+  if (open.length < 3) return [];
+  const tris: TerrainTri[] = [];
+  for (let i = 1; i + 1 < open.length; i++) {
+    tris.push([open[0]!, open[i]!, open[i + 1]!]);
+  }
+  return tris;
+}
+
+function pushClippedTriangle(
+  positions: number[],
+  colors: number[],
+  indexList: number[],
+  source: TerrainTri,
+  sourceHeights: [number, number, number],
+  clipped: TerrainTri,
   field: TerrainField,
+  relief: number,
+): void {
+  const base = positions.length / 3;
+  for (const point of clipped) {
+    const y = heightOnTriangle(source, sourceHeights, point);
+    positions.push(point[0], y, -point[1]);
+    const tint = shadeHeight((y - field.min) / relief, 1);
+    colors.push(tint[0], tint[1], tint[2]);
+  }
+  indexList.push(base, base + 1, base + 2);
+}
+
+function appendGridTriangleClippedToCircle(
+  positions: number[],
+  colors: number[],
+  indexList: number[],
+  tri: TerrainTri,
+  heights: [number, number, number],
   sideM: number,
-  frameShape: import("./siteFrame").SiteFrameShape = "square",
-): {
-  positions: Float32Array;
-  indices: Uint32Array;
-  colors: Float32Array;
-} {
+  field: TerrainField,
+  relief: number,
+): void {
+  for (const ring of clipTriangleToCircle(tri, sideM)) {
+    for (const part of fanTriangulate(ring)) {
+      pushClippedTriangle(positions, colors, indexList, tri, heights, part, field, relief);
+    }
+  }
+}
+
+function terrainBuffersSquare(field: TerrainField, sideM: number) {
   const { cols, rows } = field;
   const half = sideM / 2;
   const relief = Math.max(field.max - field.min, 0.001);
@@ -564,7 +660,7 @@ export function terrainBuffers(
     for (let col = 0; col < cols; col++) {
       const east = -half + col * field.spacingM;
       const north = -half + row * field.spacingM;
-      const y = field.heights[row * cols + col];
+      const y = field.heights[row * cols + col]!;
       const offset = (row * cols + col) * 3;
       positions[offset] = east;
       positions[offset + 1] = y;
@@ -575,35 +671,80 @@ export function terrainBuffers(
       colors[offset + 2] = tint[2];
     }
   }
-  const inside = (east: number, north: number) => {
-    if (frameShape === "square") return true;
-    return east * east + north * north <= half * half + 0.001;
-  };
   for (let row = 0; row < rows - 1; row++) {
     for (let col = 0; col < cols - 1; col++) {
       const sw = row * cols + col;
       const se = sw + 1;
       const nw = sw + cols;
       const ne = nw + 1;
-      const eSw = positions[sw * 3]!;
-      const nSw = -positions[sw * 3 + 2]!;
-      const eSe = positions[se * 3]!;
-      const nSe = -positions[se * 3 + 2]!;
-      const eNw = positions[nw * 3]!;
-      const nNw = -positions[nw * 3 + 2]!;
-      const eNe = positions[ne * 3]!;
-      const nNe = -positions[ne * 3 + 2]!;
-      if (
-        !inside(eSw, nSw) &&
-        !inside(eSe, nSe) &&
-        !inside(eNw, nNw) &&
-        !inside(eNe, nNe)
-      ) {
-        continue;
-      }
       indexList.push(sw, se, ne, sw, ne, nw);
     }
   }
-  const indices = Uint32Array.from(indexList);
-  return { positions, indices, colors };
+  return { positions, indices: Uint32Array.from(indexList), colors };
+}
+
+function terrainBuffersCircle(field: TerrainField, sideM: number) {
+  const { cols, rows } = field;
+  const half = sideM / 2;
+  const relief = Math.max(field.max - field.min, 0.001);
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const indexList: number[] = [];
+  const radius = half;
+  const inside = (east: number, north: number) => east * east + north * north <= radius * radius + 0.001;
+
+  for (let row = 0; row < rows - 1; row++) {
+    for (let col = 0; col < cols - 1; col++) {
+      const swH = field.heights[row * cols + col]!;
+      const seH = field.heights[row * cols + col + 1]!;
+      const nwH = field.heights[(row + 1) * cols + col]!;
+      const neH = field.heights[(row + 1) * cols + col + 1]!;
+      const sw: Pt = [-half + col * field.spacingM, -half + row * field.spacingM];
+      const se: Pt = [-half + (col + 1) * field.spacingM, -half + row * field.spacingM];
+      const nw: Pt = [-half + col * field.spacingM, -half + (row + 1) * field.spacingM];
+      const ne: Pt = [-half + (col + 1) * field.spacingM, -half + (row + 1) * field.spacingM];
+      if (!inside(sw[0], sw[1]) && !inside(se[0], se[1]) && !inside(nw[0], nw[1]) && !inside(ne[0], ne[1])) {
+        continue;
+      }
+      appendGridTriangleClippedToCircle(
+        positions,
+        colors,
+        indexList,
+        [sw, se, ne],
+        [swH, seH, neH],
+        sideM,
+        field,
+        relief,
+      );
+      appendGridTriangleClippedToCircle(
+        positions,
+        colors,
+        indexList,
+        [sw, ne, nw],
+        [swH, neH, nwH],
+        sideM,
+        field,
+        relief,
+      );
+    }
+  }
+  return {
+    positions: Float32Array.from(positions),
+    colors: Float32Array.from(colors),
+    indices: Uint32Array.from(indexList),
+  };
+}
+
+/** One heightfield surface, in Three.js coordinates (x east, y up, z = −north). No skirt or base. */
+export function terrainBuffers(
+  field: TerrainField,
+  sideM: number,
+  frameShape: SiteFrameShape = "square",
+): {
+  positions: Float32Array;
+  indices: Uint32Array;
+  colors: Float32Array;
+} {
+  if (frameShape === "circle") return terrainBuffersCircle(field, sideM);
+  return terrainBuffersSquare(field, sideM);
 }

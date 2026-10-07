@@ -62,4 +62,8 @@
 
   /* Diameter of the on-screen wind rose diagram (caption scales from this). Default ~1.4× the original 120px rose. */
   --wind-rose-size: 168px;
+
+  /* Selected pill on the landing map area-shape control (Square / Circle). */
+  --shape-toggle-on-bg: #1A1916;
+  --shape-toggle-on-text: #FFFCF8;
 }

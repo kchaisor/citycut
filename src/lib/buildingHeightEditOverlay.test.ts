@@ -40,7 +40,7 @@ describe("buildHeightEditOverlay", () => {
     const fill = overlay!.children.find((child) => child instanceof THREE.Mesh) as THREE.Mesh;
     const mat = fill.material as THREE.MeshStandardMaterial;
     expect(mat.transparent).toBe(true);
-    expect(mat.opacity).toBeCloseTo(0.65, 2);
+    expect(mat.opacity).toBeCloseTo(0.5, 2);
     expect(overlay!.name).toBe("HeightEditOverlay");
     disposeObject(city);
   });

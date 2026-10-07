@@ -4,9 +4,10 @@ export const MELBOURNE: LonLat = { lon: 144.9631, lat: -37.8136 };
 export const MELBOURNE_LABEL = "Melbourne CBD";
 export const DEFAULT_ZOOM = 15;
 export const MIN_SIDE_KM = 0.25;
-export const MAX_SIDE_KM = 1.4;
+export const MAX_SIDE_KM = 2;
 export const DEFAULT_SIDE_KM = 1;
-export const MAX_AREA_M2 = 2_000_000;
+/** Square side² or circle π (side/2)² cap in m² (2 km square → 4 km²). */
+export const MAX_AREA_M2 = 4_000_000;
 
 export const DEFAULT_LAYERS: UiLayers = {
   buildings: true,

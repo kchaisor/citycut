@@ -7,6 +7,9 @@ export type SiteFrameShape = "square" | "circle";
 
 export const DEFAULT_SITE_FRAME_SHAPE: SiteFrameShape = "square";
 
+/** Circle boundary segments for clip polygons, flat ground, and plan frame (smooth rim in 3D and exports). */
+export const SITE_FRAME_CIRCLE_SEGMENTS = 128;
+
 type ClipFns = {
   intersection: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
 };
@@ -38,7 +41,7 @@ export function pointInSiteFrame(point: Pt, sideM: number, shape: SiteFrameShape
   return point[0] * point[0] + point[1] * point[1] <= half * half + 0.001;
 }
 
-export function circleRing(radius: number, segments = 72): Ring {
+export function circleRing(radius: number, segments = SITE_FRAME_CIRCLE_SEGMENTS): Ring {
   const ring: Ring = [];
   for (let i = 0; i < segments; i++) {
     const angle = (i / segments) * Math.PI * 2;

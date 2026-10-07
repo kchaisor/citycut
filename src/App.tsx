@@ -267,7 +267,7 @@ export default function App() {
       return;
     }
     if (siteFrameAreaM2(sideM, frameShapeRef.current) > MAX_AREA_M2 + 1) {
-      setError("That frame is over the 2 km² limit for this version.");
+      setError("That frame is over the 4 km² limit for this version.");
       return;
     }
     if (settleTimer.current != null) {
