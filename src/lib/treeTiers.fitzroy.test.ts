@@ -8,7 +8,14 @@ const ORIGIN = { lat: -37.81313, lon: 144.98122 };
 const SIDE_M = 1000;
 const PARK = { south: -37.8165, north: -37.8105, west: 144.9775, east: 144.983 };
 
-describe("Fitzroy Gardens tree merge", () => {
+function networkTestsEnabled(): boolean {
+  const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
+  return proc?.env?.CITYCUT_NETWORK_TESTS === "1";
+}
+
+const runNetworkTests = networkTestsEnabled();
+
+describe.skipIf(!runNetworkTests)("Fitzroy Gardens tree merge", () => {
   it(
     "returns about 1,800–2,000 trees in the park box after tier merge",
     async () => {

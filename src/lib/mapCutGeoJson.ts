@@ -16,11 +16,13 @@ export function cutAreasGeoJson(
   center: LonLat,
   sideM: number,
   frameShape: SiteFrameShape,
+  options?: { clipToFrame?: boolean },
 ): GeoJSON.FeatureCollection {
+  const clipToFrame = options?.clipToFrame !== false;
   const features: GeoJSON.Feature[] = [];
   for (const area of areas) {
     const anchor = interiorPoint(area.ring, area.holes);
-    if (!pointInSiteFrame(anchor, sideM, frameShape)) continue;
+    if (clipToFrame && !pointInSiteFrame(anchor, sideM, frameShape)) continue;
     const outer = ringToLonLat(area.ring, center);
     if (outer.length < 3) continue;
     features.push({
@@ -37,11 +39,13 @@ export function cutBuildingsGeoJson(
   center: LonLat,
   sideM: number,
   frameShape: SiteFrameShape,
+  options?: { clipToFrame?: boolean },
 ): GeoJSON.FeatureCollection {
+  const clipToFrame = options?.clipToFrame !== false;
   const features: GeoJSON.Feature[] = [];
   for (const building of buildings) {
     const anchor = interiorPoint(building.ring, building.holes);
-    if (!pointInSiteFrame(anchor, sideM, frameShape)) continue;
+    if (clipToFrame && !pointInSiteFrame(anchor, sideM, frameShape)) continue;
     const outer = ringToLonLat(building.ring, center);
     if (outer.length < 3) continue;
     const fill = landingBuildingFill(building);
@@ -76,5 +80,24 @@ export function cutFrameGeoJson(center: LonLat, sideM: number, shape: SiteFrameS
     type: "Feature",
     properties: {},
     geometry: { type: "Polygon", coordinates: [ring] },
+  };
+}
+
+/** Landuse-toned sheet with a frame-shaped hole; roads and labels sit above this layer. */
+export function cutColourMaskGeoJson(center: LonLat, sideM: number, frameShape: SiteFrameShape): GeoJSON.Feature {
+  const span = 1.2;
+  const outer: [number, number][] = [
+    [center.lon - span, center.lat - span],
+    [center.lon + span, center.lat - span],
+    [center.lon + span, center.lat + span],
+    [center.lon - span, center.lat + span],
+    [center.lon - span, center.lat - span],
+  ];
+  const frame = cutFrameGeoJson(center, sideM, frameShape);
+  const hole = (frame.geometry as GeoJSON.Polygon).coordinates[0]!;
+  return {
+    type: "Feature",
+    properties: {},
+    geometry: { type: "Polygon", coordinates: [outer, hole] },
   };
 }

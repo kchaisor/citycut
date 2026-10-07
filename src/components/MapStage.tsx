@@ -4,13 +4,22 @@ import { MAP_STYLE, SATELLITE_STYLE } from "../content/constants";
 import { M_PER_DEG_LAT, mPerDegLon, squareBBox } from "../lib/geo";
 import { cutFrameLabelKm } from "../lib/placeLabel";
 import type { SiteFrameShape } from "../types";
-import { updateMapCutColourLayers, removeMapCutColourLayers, updateMapSiteLayers, removeMapSiteLayers } from "../lib/mapSiteLayers";
+import {
+  updateMapCutColourLayers,
+  updateMapCutColourMask,
+  setMapCutColourData,
+  removeMapCutColourLayers,
+  updateMapSiteLayers,
+  removeMapSiteLayers,
+} from "../lib/mapSiteLayers";
+import { landingViewportFootprint } from "../lib/landingMapViewport";
+import { readLandingColourCache, writeLandingColourCache } from "../lib/landingMapColourCache";
 import { fetchOvertureBaseForCut } from "../lib/overtureBase";
 import { fetchOvertureBuildingsForCut } from "../lib/overtureBuildings";
 import { refineBuildingUses } from "../lib/useCascade";
 import { fetchSiteParcelCached, siteBuildingIdsForPreview } from "../lib/sitePreviewCache";
 import { FLAT_NORTH_UP_MAP_OPTIONS, applyFlatNorthUpMapHandlers } from "../lib/mapStageMapOptions";
-import type { Basemap, LonLat, ViewState } from "../types";
+import type { AreaFeat, Basemap, BuildingFeat, LonLat, ViewState } from "../types";
 
 export type FlyRequest = {
   token: number;
@@ -59,6 +68,8 @@ export function MapStage({
   const onFlyLandedRef = useRef(onFlyLanded);
   const appliedBasemap = useRef<Basemap>(basemap);
   const mountedFly = useRef(fly?.token ?? null);
+  const colourCacheKeyRef = useRef<string | null>(null);
+  const maskRafRef = useRef(0);
   const [frame, setFrame] = useState<Frame | null>(null);
   const [ready, setReady] = useState(false);
   const [mapEpoch, setMapEpoch] = useState(0);
@@ -82,6 +93,19 @@ export function MapStage({
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     mapRef.current = map;
 
+    const scheduleMask = () => {
+      if (maskRafRef.current) return;
+      maskRafRef.current = window.requestAnimationFrame(() => {
+        maskRafRef.current = 0;
+        const center = map.getCenter();
+        updateMapCutColourMask(map, {
+          center: { lon: center.lng, lat: center.lat },
+          sideM: sideRef.current,
+          frameShape: frameShapeRef.current,
+        });
+      });
+    };
+
     const update = () => {
       const center = map.getCenter();
       const half = sideRef.current / 2;
@@ -97,6 +121,7 @@ export function MapStage({
         width: Math.abs(southEast.x - northWest.x),
         height: Math.abs(southEast.y - northWest.y),
       });
+      scheduleMask();
       onViewRef.current({ lon: center.lng, lat: center.lat, zoom: map.getZoom() });
     };
 
@@ -109,6 +134,7 @@ export function MapStage({
     map.on("resize", update);
 
     return () => {
+      if (maskRafRef.current) window.cancelAnimationFrame(maskRafRef.current);
       map.remove();
       mapRef.current = null;
       setReady(false);
@@ -131,37 +157,93 @@ export function MapStage({
     if (appliedBasemap.current === basemap) return;
     appliedBasemap.current = basemap;
     map.setStyle(basemap === "satellite" ? SATELLITE_STYLE : MAP_STYLE);
-    map.once("style.load", () => map.fire("move"));
+    map.once("style.load", () => {
+      colourCacheKeyRef.current = null;
+      setMapEpoch((value) => value + 1);
+    });
   }, [basemap, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready) return;
+    if (!map || !ready || basemap !== "map") {
+      colourCacheKeyRef.current = null;
+      const mapOff = mapRef.current;
+      if (mapOff?.loaded()) removeMapCutColourLayers(mapOff);
+      return;
+    }
+    const bounds = map.getBounds();
+    const footprint = landingViewportFootprint(
+      { south: bounds.getSouth(), west: bounds.getWest(), north: bounds.getNorth(), east: bounds.getEast() },
+      map.getZoom(),
+    );
+    if (footprint.cacheKey === colourCacheKeyRef.current) return;
+
     let cancelled = false;
-    const center = map.getCenter();
-    const cutCenter: LonLat = { lat: center.lat, lon: center.lng };
     const controller = new AbortController();
+    const maskCenter: LonLat = { lat: map.getCenter().lat, lon: map.getCenter().lng };
+
+    const applyPayload = (areas: AreaFeat[], buildings: BuildingFeat[], dataOrigin: LonLat) => {
+      if (cancelled) return;
+      const cutSideM = sideRef.current;
+      const swapped = setMapCutColourData(map, {
+        dataOrigin,
+        sideM: footprint.sideM,
+        areas,
+        buildings,
+      });
+      if (!swapped) {
+        updateMapCutColourLayers(map, {
+          dataOrigin,
+          dataSideM: footprint.sideM,
+          maskCenter,
+          cutSideM,
+          frameShape: frameShapeRef.current,
+          areas,
+          buildings,
+        });
+      } else {
+        updateMapCutColourMask(map, { center: maskCenter, sideM: cutSideM, frameShape: frameShapeRef.current });
+      }
+      colourCacheKeyRef.current = footprint.cacheKey;
+    };
+
+    const cached = readLandingColourCache(footprint.cacheKey);
+    if (cached) {
+      applyPayload(cached.areas, cached.buildings, cached.dataOrigin);
+      return;
+    }
+
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
-          const bounds = squareBBox(cutCenter, sideM);
           const [base, buildingResult] = await Promise.all([
-            fetchOvertureBaseForCut(bounds, cutCenter, sideM, { waterGreen: true, trees: false, frameShape: frameShapeRef.current }, controller.signal),
-            fetchOvertureBuildingsForCut(bounds, cutCenter, sideM, controller.signal, frameShapeRef.current),
+            fetchOvertureBaseForCut(
+              footprint.bounds,
+              footprint.origin,
+              footprint.sideM,
+              { waterGreen: true, trees: false, frameShape: "square" },
+              controller.signal,
+            ),
+            fetchOvertureBuildingsForCut(
+              footprint.bounds,
+              footprint.origin,
+              footprint.sideM,
+              controller.signal,
+              "square",
+            ),
           ]);
-          const refined = await refineBuildingUses(buildingResult.buildings, cutCenter, bounds, {
+          const refined = await refineBuildingUses(buildingResult.buildings, footprint.origin, footprint.bounds, {
             signal: controller.signal,
           });
           if (cancelled || controller.signal.aborted) return;
           if (!map.loaded()) await new Promise<void>((resolve) => map.once("idle", () => resolve()));
           if (cancelled) return;
-          updateMapCutColourLayers(map, {
-            center: cutCenter,
-            sideM,
-            frameShape: frameShapeRef.current,
+          writeLandingColourCache(footprint.cacheKey, {
             areas: base.areas,
             buildings: refined.buildings,
+            dataOrigin: footprint.origin,
           });
+          applyPayload(base.areas, refined.buildings, footprint.origin);
         } catch {
           if (!cancelled && map.loaded()) removeMapCutColourLayers(map);
         }
@@ -172,7 +254,7 @@ export function MapStage({
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [ready, sideM, mapEpoch, frameShape]);
+  }, [ready, basemap, mapEpoch]);
 
   useEffect(() => {
     const map = mapRef.current;
