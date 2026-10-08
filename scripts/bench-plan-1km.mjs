@@ -4,7 +4,9 @@
  */
 import { readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { planPaths } from "../src/lib/svgPlan.ts";
-import { clearFootpathUnionCacheForTests } from "../src/lib/roadFill.ts";
+import * as roadFill from "../src/lib/roadFill.ts";
+const clearFootpathUnionCacheForTests =
+  roadFill.clearFootpathUnionCacheForTests ?? (() => {});
 import { PATH_WIDTH_M } from "../src/lib/lineweights.ts";
 
 const modelPath = process.argv[2] ?? "/opt/cursor/artifacts/east-model.json";

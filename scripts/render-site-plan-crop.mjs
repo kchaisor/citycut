@@ -4,7 +4,9 @@
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { chromium } from "playwright";
-import { clearFootpathUnionCacheForTests } from "../src/lib/roadFill.ts";
+import * as roadFill from "../src/lib/roadFill.ts";
+const clearFootpathUnionCacheForTests =
+  roadFill.clearFootpathUnionCacheForTests ?? (() => {});
 import { planPaths, svgRings, svgPolyline } from "../src/lib/svgPlan.ts";
 import { DEFAULT_LINE_STYLES, footpathEdgeSvgAttrs } from "../src/lib/drawingStyle.ts";
 import { getColour } from "../src/lib/colours.ts";
