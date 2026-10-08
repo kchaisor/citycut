@@ -304,6 +304,17 @@ export function DrawingPlan({
             {plan.water.map((rings, index) => (
               <path key={`w${index}`} d={svgRings(rings)} fill={waterFill} {...screenPenAttrs(style.water)} />
             ))}
+            {plan.roadFill.length > 0 && (
+              <path
+                d={plan.roadFill.map((polygon) => svgRings(polygon)).join(" ")}
+                fill={style.roadFill}
+                fillRule="evenodd"
+                {...(style.kerbOn ? screenPenAttrs(style.kerb) : { stroke: "none" })}
+              />
+            )}
+            {plan.greenOnRoad.map((rings, index) => (
+              <path key={`gr${index}`} d={svgRings(rings)} fill={greenFill} {...screenPenAttrs(style.green)} />
+            ))}
             {plan.pathFill.length > 0 && (
               <path
                 d={plan.pathFill.map((polygon) => svgRings(polygon)).join(" ")}
@@ -322,17 +333,6 @@ export function DrawingPlan({
                   "miter",
                 )}
               />
-            ))}
-            {plan.roadFill.length > 0 && (
-              <path
-                d={plan.roadFill.map((polygon) => svgRings(polygon)).join(" ")}
-                fill={style.roadFill}
-                fillRule="evenodd"
-                {...(style.kerbOn ? screenPenAttrs(style.kerb) : { stroke: "none" })}
-              />
-            )}
-            {plan.greenOnRoad.map((rings, index) => (
-              <path key={`gr${index}`} d={svgRings(rings)} fill={greenFill} {...screenPenAttrs(style.green)} />
             ))}
             {plan.rails.map((rail, index) => (
               <CasedLine key={`l${index}`} d={svgPolyline(rail, false)} stroke={style.rail} paper={canvas} />

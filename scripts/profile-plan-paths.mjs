@@ -93,7 +93,7 @@ if (pathFilletM > 0 && carriageway.polygons.length > 0) {
 stages.pathBlockMergeMs = Math.round(performance.now() - t);
 
 t = performance.now();
-const roadFillPolys = fillRoadMedianHoles(carageway.polygons);
+const roadFillPolys = fillRoadMedianHoles(carriageway.polygons);
 stages.medianHolesMs = Math.round(performance.now() - t);
 
 t = performance.now();

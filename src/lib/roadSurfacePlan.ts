@@ -93,40 +93,54 @@ export function bridgeRoadFootpathGaps(
   }
 }
 
+/** Ignore sliver median fragments from boolean noise (m²). */
+export const GREEN_ON_ROAD_MIN_M2 = 2;
+
+function greenToPolygon(rings: Pt[][]): Polygon | null {
+  const outerOpen = openRing(rings[0] ?? []);
+  if (outerOpen.length < 3) return null;
+  const holes: Ring[] = [];
+  for (const hole of rings.slice(1)) {
+    const holeOpen = openRing(hole);
+    if (holeOpen.length >= 3) holes.push(closeRing(holeOpen.map((p): Pair => [p[0], p[1]])));
+  }
+  return [closeRing(outerOpen.map((p): Pair => [p[0], p[1]])), ...holes];
+}
+
+function multiToPtRings(multi: MultiPolygon): Pt[][][] {
+  const out: Pt[][][] = [];
+  for (const polygon of multi) {
+    const rings: Pt[][] = [];
+    for (const ring of polygon) {
+      if (!ring || ring.length < 4) continue;
+      rings.push(ring.map((p): Pt => [p[0], p[1]]));
+    }
+    if (rings.length > 0) out.push(rings);
+  }
+  return out;
+}
+
 export function splitGreenForRoadLayer(
   green: Pt[][][],
   road: MultiPolygon,
 ): { green: Pt[][][]; greenOnRoad: Pt[][][] } {
   if (road.length === 0) return { green, greenOnRoad: [] };
   const greenOnRoad: Pt[][][] = [];
-  const below: Pt[][][] = [];
   for (const rings of green) {
-    const cx = rings[0]?.[0]?.[0] ?? 0;
-    const cy = rings[0]?.[0]?.[1] ?? 0;
-    let onRoad = false;
-    for (const polygon of road) {
+    const source = greenToPolygon(rings);
+    if (!source) continue;
+    let hit: MultiPolygon;
+    try {
+      hit = intersection([source], road);
+    } catch {
+      continue;
+    }
+    for (const polygon of hit) {
       const outer = polygon[0];
       if (!outer) continue;
-      if (pointInRing(cx, cy, outer)) {
-        onRoad = true;
-        break;
-      }
+      if (ringArea(outer.slice(0, -1)) < GREEN_ON_ROAD_MIN_M2) continue;
+      greenOnRoad.push(...multiToPtRings([polygon]));
     }
-    if (onRoad) greenOnRoad.push(rings);
-    else below.push(rings);
   }
-  return { green: below, greenOnRoad };
-}
-
-function pointInRing(x: number, y: number, ring: Ring): boolean {
-  const open = ring.slice(0, -1);
-  let hits = 0;
-  for (let i = 0, j = open.length - 1; i < open.length; j = i++) {
-    const yi = open[i]![1];
-    const yj = open[j]![1];
-    if (yi > y === yj > y) continue;
-    const xc = ((open[j]![0] - open[i]![0]) * (y - yi)) / (yj - yi) + open[i]![0];
-    if (x < xc) hits++;
-  }
-  return hits % 2 === 1;
+  return { green, greenOnRoad };
 }

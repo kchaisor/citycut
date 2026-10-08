@@ -62,10 +62,10 @@ function buildSvg(viewBox, filletM = 2) {
   <rect x="-500" y="-500" width="1000" height="1000" fill="${sheet}"/>
   ${greenD ? `<path d="${greenD}" fill="${greenFill}" fill-rule="evenodd"/>` : ""}
   ${waterD ? `<path d="${waterD}" fill="${getColour("--water-fill")}" fill-rule="evenodd"/>` : ""}
-  ${pathD ? `<path d="${pathD}" fill="${style.pathFill}" fill-rule="evenodd" ${pathStroke}/>` : ""}
-  ${contours}
   ${roadD ? `<path d="${roadD}" fill="${style.roadFill}" fill-rule="evenodd"/>` : ""}
   ${greenOnRoadD ? `<path d="${greenOnRoadD}" fill="${greenFill}" fill-rule="evenodd"/>` : ""}
+  ${pathD ? `<path d="${pathD}" fill="${style.pathFill}" fill-rule="evenodd" ${pathStroke}/>` : ""}
+  ${contours}
   ${rails}
   ${buildings}
   ${trees}

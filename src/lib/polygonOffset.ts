@@ -6,8 +6,10 @@ import { signedArea } from "./geo";
 /** Clipper integer scale: 1 mm per unit (0.001 m). */
 export const CLIPPER_SCALE = 1000;
 
-/** Round-join arc tolerance for large road-surface offsets (m). */
-export const CLIPPER_ARC_TOLERANCE_M = 0.05;
+/** Round-join step scale for centreline buffers in roadFill (m). */
+export const CLIPPER_ARC_TOLERANCE_M = 0.02;
+/** Arc tolerance passed to Clipper polygon offset (m). */
+export const CLIPPER_POLYGON_OFFSET_ARC_TOLERANCE_M = 0.05;
 /** Tighter arcs for footpath junction fillet morphological close (m). */
 export const CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M = 0.01;
 
@@ -177,7 +179,7 @@ function offsetSingleRing(
   open: Ring,
   deltaM: number,
   allowEmpty: boolean,
-  arcToleranceM = CLIPPER_ARC_TOLERANCE_M,
+  arcToleranceM = CLIPPER_POLYGON_OFFSET_ARC_TOLERANCE_M,
 ): Ring[] {
   if (open.length < 3 || !(Math.abs(deltaM) > 1e-9)) {
     const closed = openRing(open);
@@ -208,7 +210,7 @@ function closeRing(open: Ring): Ring {
 function offsetNormalizedByParity(
   normalized: MultiPolygon,
   deltaM: number,
-  arcToleranceM = CLIPPER_ARC_TOLERANCE_M,
+  arcToleranceM = CLIPPER_POLYGON_OFFSET_ARC_TOLERANCE_M,
 ): MultiPolygon {
   const rings = flattenRings(normalized);
   if (rings.length === 0) return [];

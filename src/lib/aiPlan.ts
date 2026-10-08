@@ -368,20 +368,6 @@ export function sitePlanChunks(
       })),
     });
   }
-  const footpaths = pathStrip(plan.pathFill, model, layout, style);
-  if (footpaths) chunks.push(footpaths);
-  const contourPen = pen(style.contour);
-  const indexPen = pen({ ...style.contour, mm: style.contourIndexMm });
-  if (plan.contours.length > 0 && contourPen) {
-    chunks.push({
-      name: "Contours",
-      paths: plan.contours.map((line, index) => ({
-        rings: [mapRing(line, model.sideM, layout)],
-        close: false,
-        ...(plan.contourIndex[index] && indexPen ? indexPen : contourPen),
-      })),
-    });
-  }
   const roadRings = plan.roadFill.flatMap((polygon) => mapRings(polygon, model.sideM, layout));
   const blockFill = plan.blocks
     .map((rings) => mapRings(rings, model.sideM, layout))
@@ -425,6 +411,20 @@ export function sitePlanChunks(
         evenOdd: true,
         close: true,
         ...(greenPen ?? {}),
+      })),
+    });
+  }
+  const footpaths = pathStrip(plan.pathFill, model, layout, style);
+  if (footpaths) chunks.push(footpaths);
+  const contourPen = pen(style.contour);
+  const indexPen = pen({ ...style.contour, mm: style.contourIndexMm });
+  if (plan.contours.length > 0 && contourPen) {
+    chunks.push({
+      name: "Contours",
+      paths: plan.contours.map((line, index) => ({
+        rings: [mapRing(line, model.sideM, layout)],
+        close: false,
+        ...(plan.contourIndex[index] && indexPen ? indexPen : contourPen),
       })),
     });
   }

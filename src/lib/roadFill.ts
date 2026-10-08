@@ -31,7 +31,8 @@ const SIMPLIFY_M = 0.35;
 const OUTPUT_SIMPLIFY_M = 0.025;
 const SNAP_M = 0.01;
 const MIN_AREA_M2 = 0.8;
-const ARC = Math.PI / 16;
+/** Round-join arc tolerance (m); step count scales with radius like Clipper ArcTolerance. */
+const CENTRELINE_ARC_TOLERANCE_M = 0.02;
 /** Closes dual-carriageway and tram-corridor gaps after the centreline union. */
 export const ROAD_MORPH_CLOSE_M = 3;
 /** Default fillet radius for unioned footpath junctions (m on the ground). */
@@ -78,8 +79,15 @@ function at(center: Pt, angle: number, radius: number): Pt {
   return [center[0] + Math.cos(angle) * radius, center[1] + Math.sin(angle) * radius];
 }
 
+function arcStepCount(radius: number, sweep: number, toleranceM: number): number {
+  const absSweep = Math.abs(sweep);
+  if (!(radius > toleranceM)) return Math.max(1, Math.ceil(absSweep / (Math.PI / 16)));
+  const stepAngle = 2 * Math.acos(1 - toleranceM / radius);
+  return Math.max(1, Math.ceil(absSweep / stepAngle));
+}
+
 function arc(center: Pt, radius: number, from: number, sweep: number): Pt[] {
-  const steps = Math.max(1, Math.ceil(Math.abs(sweep) / ARC));
+  const steps = arcStepCount(radius, sweep, CENTRELINE_ARC_TOLERANCE_M);
   const out: Pt[] = [];
   for (let i = 1; i <= steps; i++) {
     out.push(at(center, from + (sweep * i) / steps, radius));
