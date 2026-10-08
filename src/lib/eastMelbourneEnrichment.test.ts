@@ -64,7 +64,7 @@ describe("East Melbourne building use census (CLUE enrichment)", () => {
             useSourceAfterEnrichment: after,
             heightSourceBeforeEnrichment: heightSourceCensus(legacyBuildings),
             heightSourceAfterEnrichment: heightSourceCensus(final),
-            lidarTierNote: "LiDAR: no data, ELVIS not ordered",
+            lidarTierNote: "LiDAR: licensed Vicmap data, not available",
             zoneDelta: legacy.zone - after.zone,
             clueAssigned: after.clue,
           },

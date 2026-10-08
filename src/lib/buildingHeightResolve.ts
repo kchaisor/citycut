@@ -15,7 +15,7 @@ export const STOREY_HEIGHT_M = 3;
  *
  * 1. Manual edit ({@link BuildingFeat.heightManual})
  * 2. City of Melbourne 2023 footprints — clipped extrusions or aggregate match
- * 3. ELVIS LiDAR 2017–18 (offline bake, Greater Melbourne)
+ * 3. Licensed Vicmap LiDAR (offline bake when available)
  * 4. Overture / OSM explicit height tag
  * 5. Overture `num_floors` × {@link STOREY_HEIGHT_M}
  * 6. CoM Development Activity Monitor `floors_above` × {@link STOREY_HEIGHT_M}
@@ -60,7 +60,7 @@ export function heightTierLabel(tier: BuildingHeightTier, meta?: BuildingHeightT
     case "com":
       return "City of Melbourne";
     case "lidar":
-      return "ELVIS LiDAR 2017–18";
+      return "LiDAR (Vicmap, licensed)";
     case "overture_height":
       return "Overture height";
     case "overture_floors":

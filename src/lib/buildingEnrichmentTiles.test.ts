@@ -1,4 +1,26 @@
 import { describe, expect, it } from "vitest";
+import { isEnrichmentFetchAbort } from "./buildingEnrichmentTiles";
+import { getPmtilesProtocol, sharedPmtilesForAbsoluteUrl } from "./registerPmtilesProtocol";
+
+describe("isEnrichmentFetchAbort", () => {
+  it("recognises AbortSignal and AbortError", () => {
+    const controller = new AbortController();
+    controller.abort();
+    expect(isEnrichmentFetchAbort(new DOMException("Aborted", "AbortError"), controller.signal)).toBe(
+      true,
+    );
+  });
+});
+
+describe("shared enrichment PMTiles", () => {
+  it("reuses one PMTiles instance per URL for MapLibre and app reads", () => {
+    const url = "https://example.test/building-enrichment.pmtiles";
+    const a = sharedPmtilesForAbsoluteUrl(url);
+    const b = sharedPmtilesForAbsoluteUrl(url);
+    expect(a).toBe(b);
+    expect(getPmtilesProtocol().tiles.get(url)).toBe(a);
+  });
+});
 
 /** Minimal decode check for compact tile attributes (u/s) vs legacy strings. */
 function decodeUseSource(props: Record<string, unknown>): { use: string; useSource: string } | null {

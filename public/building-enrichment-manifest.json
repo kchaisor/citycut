@@ -13,7 +13,7 @@
   "generatedAt": "2026-10-08T17:23:37.116779+00:00",
   "lidar": {
     "status": "no_data",
-    "detail": "LiDAR: no data, ELVIS not ordered"
+    "detail": "LiDAR: licensed Vicmap data, not available"
   },
   "zonesLoaded": true,
   "zonesFetch": {
