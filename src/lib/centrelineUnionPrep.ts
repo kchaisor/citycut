@@ -42,9 +42,28 @@ function endpointGroups(strips: CentrelineStrip[], snapM: number): Map<string, E
     const rb = find(b);
     if (ra !== rb) parent[rb] = ra;
   };
+  const cell = snapM > 0 ? snapM : 1;
+  const buckets = new Map<string, number[]>();
   for (let i = 0; i < endpoints.length; i++) {
-    for (let j = i + 1; j < endpoints.length; j++) {
-      if (pointsNear(endpoints[i]!.pt, endpoints[j]!.pt, snapM)) unite(i, j);
+    const pt = endpoints[i]!.pt;
+    const key = `${Math.floor(pt[0] / cell)},${Math.floor(pt[1] / cell)}`;
+    const list = buckets.get(key);
+    if (list) list.push(i);
+    else buckets.set(key, [i]);
+  }
+  for (let i = 0; i < endpoints.length; i++) {
+    const pt = endpoints[i]!.pt;
+    const gx = Math.floor(pt[0] / cell);
+    const gy = Math.floor(pt[1] / cell);
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const bucket = buckets.get(`${gx + dx},${gy + dy}`);
+        if (!bucket) continue;
+        for (const j of bucket) {
+          if (j <= i) continue;
+          if (pointsNear(endpoints[i]!.pt, endpoints[j]!.pt, snapM)) unite(i, j);
+        }
+      }
     }
   }
   const groups = new Map<string, EndpointRef[]>();

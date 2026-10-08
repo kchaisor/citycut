@@ -528,8 +528,7 @@ export function unionCarriageways(
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
 ): RoadFill {
-  const prepared = prepareStripsForUnion(roads, PATH_ENDPOINT_STITCH_M);
-  return unionStrips(prepared, sideM, 0.4, frameShape);
+  return unionStrips(roads, sideM, 0.4, frameShape);
 }
 
 /** Buffer each path by its stored width and union the strips (3D and exports match the site plan). */

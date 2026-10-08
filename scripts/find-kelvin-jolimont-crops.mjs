@@ -45,15 +45,24 @@ for (const c of crossings) {
   if (!bestT || score < bestT.score) bestT = { c, score };
 }
 
+/** viewBox Y matches svg path coordinates (y = −north). */
+function vbAround(east, north, w, h, padX, padY) {
+  const svgY = -north;
+  return `${Math.round(east - padX)} ${Math.round(svgY - padY)} ${w} ${h}`;
+}
+
 const out = {
-  facetSpot: bestT ? `${Math.round(bestT.c[0] - 28)} ${Math.round(bestT.c[1] - 28)} 55 55` : "120 180 55 55",
-  kerbReturn: bestT ? `${Math.round(bestT.c[0] - 6)} ${Math.round(bestT.c[1] - 6)} 12 12` : "145 195 12 12",
-  roadGaps: bestT ? `${Math.round(bestT.c[0] - 22)} ${Math.round(bestT.c[1] - 20)} 45 40` : "130 175 45 40",
+  facetSpot: bestT ? vbAround(bestT.c[0], bestT.c[1], 55, 55, 28, 28) : "-55 120 55 55",
+  kerbReturn: bestT ? vbAround(bestT.c[0], bestT.c[1], 12, 12, 6, 6) : "-33 142 12 12",
+  roadGaps: bestT ? vbAround(bestT.c[0], bestT.c[1], 45, 40, 22, 20) : "-49 128 45 40",
+  pathKink: "-25 138 22 22",
   railY,
   crossings: crossings.length,
 };
+
 writeFileSync("/opt/cursor/artifacts/kelvin-jolimont-crops.json", JSON.stringify(out, null, 2));
 console.log(JSON.stringify(out));
+
 const modelArg = process.argv[2] ?? "/opt/cursor/artifacts/jolimont-model.json";
-execSync(`npx vite-node scripts/find-path-kink-crop.mjs ${modelArg}`, { cwd: "/workspace", stdio: "inherit" });
+execSync(`npx vite-node scripts/find-road-gaps-crop.mjs ${modelArg}`, { cwd: "/workspace", stdio: "inherit" });
 console.log(readFileSync("/opt/cursor/artifacts/kelvin-jolimont-crops.json", "utf8"));
