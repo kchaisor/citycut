@@ -38,35 +38,36 @@ await saveModel(page, -37.8131, 144.98, 0.35, `${outDir}/fitzroy-model.json`);
 await saveModel(page, -37.8136, 144.9831, 1, `${outDir}/east-model.json`);
 await browser.close();
 
-// Fitzroy diagonal path crossing (~40 m), centre of gardens in local plan space
-const fitzroyViewBox = "380 20 80 80";
+// Fitzroy Gardens path crossings (local plan metres)
+const fitzroyViewBox = "-65 75 80 80";
 execSync(
-  `npx vite-node scripts/render-site-plan-crop.mjs ${outDir}/fitzroy-model.json fitzroy-main "${fitzroyViewBox}" 2`,
+  `npx vite-node scripts/render-site-plan-crop.mjs ${outDir}/fitzroy-model.json fitzroy-main "${fitzroyViewBox}" 0`,
   { stdio: "inherit" },
 );
+execSync(`cp ${outDir}/footpath-fillet-plan-fitzroy-main.png ${outDir}/clipper-fix-fitzroy-main.png`, {
+  stdio: "inherit",
+});
 execSync(
-  `cp ${outDir}/footpath-fillet-plan-fitzroy-main.png ${outDir}/clipper-fix-fitzroy-after.png`,
+  `npx vite-node scripts/render-site-plan-crop.mjs ${outDir}/fitzroy-model.json fitzroy-pr "${fitzroyViewBox}" 2`,
   { stdio: "inherit" },
 );
-execSync(
-  `cp ${outDir}/footpath-fillet-plan-fitzroy-main.svg ${outDir}/clipper-fix-fitzroy-after.svg`,
-  { stdio: "inherit" },
-);
+execSync(`cp ${outDir}/footpath-fillet-plan-fitzroy-pr.png ${outDir}/clipper-fix-fitzroy-after.png`, {
+  stdio: "inherit",
+});
 
-// Wellington Pde / tram corridor area (0.45 km CBD east)
-async function saveWellington() {
-  const b = await chromium.launch({ headless: true, args: ["--use-gl=angle", "--use-angle=swiftshader"] });
-  const p = await b.newPage();
-  await saveModel(p, -37.8148, 144.9845, 0.45, `${outDir}/wellington-model.json`);
-  await b.close();
-}
-await saveWellington();
-const tramViewBox = "420 -30 90 90";
+const tramViewBox = "10 85 90 90";
 execSync(
-  `npx vite-node scripts/render-site-plan-crop.mjs ${outDir}/wellington-model.json tram-gap "${tramViewBox}" 2`,
+  `npx vite-node scripts/render-site-plan-crop.mjs ${outDir}/east-model.json tram-gap-main "${tramViewBox}" 0`,
   { stdio: "inherit" },
 );
-execSync(`cp ${outDir}/footpath-fillet-plan-tram-gap.png ${outDir}/clipper-fix-tram-gap.png`, {
+execSync(`cp ${outDir}/footpath-fillet-plan-tram-gap-main.png ${outDir}/clipper-fix-tram-gap-main.png`, {
+  stdio: "inherit",
+});
+execSync(
+  `npx vite-node scripts/render-site-plan-crop.mjs ${outDir}/east-model.json tram-gap "${tramViewBox}" 2`,
+  { stdio: "inherit" },
+);
+execSync(`cp ${outDir}/footpath-fillet-plan-tram-gap.png ${outDir}/clipper-fix-tram-gap-after.png`, {
   stdio: "inherit",
 });
 

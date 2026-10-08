@@ -67,92 +67,94 @@ function ringCentroid(ring: Ring): Ring[0] {
   return [x / n, y / n];
 }
 
-function clipperPathsToMultiPolygon(paths: ClipperLib.Paths): MultiPolygon {
-  type Tagged = { ring: Ring; area: number; holeOf: number | null };
-  const tagged: Tagged[] = [];
-  for (const path of paths) {
-    if (!path || path.length < 3) continue;
-    const ring = fromClipperPath(path);
-    const open = openRing(ring);
-    if (open.length < 3) continue;
-    tagged.push({ ring, area: signedArea(open), holeOf: null });
-  }
-  for (let i = 0; i < tagged.length; i++) {
-    const ci = ringCentroid(tagged[i]!.ring);
-    let parent = -1;
-    let parentAbs = Infinity;
-    for (let j = 0; j < tagged.length; j++) {
-      if (i === j) continue;
-      const absJ = Math.abs(tagged[j]!.area);
-      if (absJ <= Math.abs(tagged[i]!.area)) continue;
-      if (!pointInRing(ci, tagged[j]!.ring)) continue;
-      if (absJ < parentAbs) {
-        parentAbs = absJ;
-        parent = j;
-      }
-    }
-    if (parent >= 0) tagged[i]!.holeOf = parent;
-  }
-  const out: MultiPolygon = [];
-  for (let i = 0; i < tagged.length; i++) {
-    if (tagged[i]!.holeOf !== null) continue;
-    const holes: Ring[] = [];
-    for (let j = 0; j < tagged.length; j++) {
-      if (tagged[j]!.holeOf === i) holes.push(tagged[j]!.ring);
-    }
-    out.push(holes.length > 0 ? [tagged[i]!.ring, ...holes] : [tagged[i]!.ring]);
-  }
-  return out;
+function ringAbsArea(ring: Ring): number {
+  return Math.abs(signedArea(openRing(ring)));
 }
 
-/** One polygon (outer + holes) as Clipper paths. */
-function polygonToClipperPaths(polygon: Polygon): ClipperLib.Paths {
-  const paths: ClipperLib.Paths = [];
-  const outer = polygon[0];
-  if (!outer || outer.length < 4) return paths;
-  paths.push(toClipperPath(outer.slice(0, -1)));
-  for (let i = 1; i < polygon.length; i++) {
-    const hole = polygon[i];
-    if (!hole || hole.length < 4) continue;
-    paths.push(toClipperPath(hole.slice(0, -1).slice().reverse()));
-  }
-  return paths;
-}
-
-function multiPolygonToClipperPaths(polygons: MultiPolygon): ClipperLib.Paths {
-  const paths: ClipperLib.Paths = [];
-  for (const polygon of polygons) {
-    const part = polygonToClipperPaths(polygon);
-    for (const p of part) paths.push(p);
-  }
-  return paths;
-}
-
-function offsetClipperPaths(paths: ClipperLib.Paths, deltaM: number): MultiPolygon {
-  if (paths.length === 0 || !(Math.abs(deltaM) > 1e-9)) return [];
+/** Offset one closed ring; may split into multiple rings. */
+function offsetSingleRing(open: Ring, deltaM: number, allowEmpty: boolean): Ring[] {
+  if (open.length < 3 || !(Math.abs(deltaM) > 1e-9)) return [openRing(open).length >= 3 ? closeRing(open) : open];
   const delta = Math.round(deltaM * CLIPPER_SCALE);
   const arcTol = Math.max(1, CLIPPER_ARC_TOLERANCE_M * CLIPPER_SCALE);
   const co = new ClipperLib.ClipperOffset(2, arcTol);
-  co.AddPaths(paths, ClipperLib.JoinType.jtRound, ClipperLib.EndType.etClosedPolygon);
+  co.AddPath(toClipperPath(open), ClipperLib.JoinType.jtRound, ClipperLib.EndType.etClosedPolygon);
   const solution: ClipperLib.Paths = [];
   co.Execute(solution, delta);
   if (solution.length === 0) {
-    throw new Error(`Clipper offset returned no paths (delta=${deltaM} m, inputs=${paths.length})`);
+    if (allowEmpty) return [];
+    throw new Error(`Clipper offset returned no paths (delta=${deltaM} m)`);
   }
-  return clipperPathsToMultiPolygon(solution);
+  return solution.map(fromClipperPath);
 }
 
-function offsetPolygonTree(polygon: Polygon, deltaM: number): MultiPolygon {
-  const paths = polygonToClipperPaths(polygon);
-  const result = offsetClipperPaths(paths, deltaM);
-  return result.length > 0 ? result : [polygon];
+function closeRing(open: Ring): Ring {
+  const ring = openRing(open);
+  if (ring.length === 0) return ring;
+  const first = ring[0]!;
+  const last = ring[ring.length - 1]!;
+  if (first[0] === last[0] && first[1] === last[1]) return ring as Ring;
+  return [...ring, first];
+}
+
+/** Attach hole rings to the smallest containing shell. */
+function assemblePolygons(shells: Ring[], holes: Ring[]): Polygon[] {
+  const keptShells = shells.filter((ring) => ringAbsArea(ring) > 1e-6);
+  const keptHoles = holes.filter((ring) => ringAbsArea(ring) > 1e-6);
+  if (keptShells.length === 0) return [];
+
+  const holeOwners = new Array<number | null>(keptHoles.length).fill(null);
+  for (let hi = 0; hi < keptHoles.length; hi++) {
+    const centroid = ringCentroid(keptHoles[hi]!);
+    let best = -1;
+    let bestArea = Infinity;
+    for (let si = 0; si < keptShells.length; si++) {
+      const area = ringAbsArea(keptShells[si]!);
+      if (!pointInRing(centroid, keptShells[si]!)) continue;
+      if (area < bestArea) {
+        bestArea = area;
+        best = si;
+      }
+    }
+    holeOwners[hi] = best >= 0 ? best : null;
+  }
+
+  const grouped = keptShells.map((shell): Ring[] => [shell]);
+  for (let hi = 0; hi < keptHoles.length; hi++) {
+    const owner = holeOwners[hi];
+    if (owner === null) continue;
+    grouped[owner]!.push(keptHoles[hi]!);
+  }
+
+  return grouped.filter((polygon) => polygon[0] != null) as Polygon[];
+}
+
+/**
+ * Offset a polygon with holes: expand the shell by delta and shrink holes by delta
+ * so city-block holes are not lost to a flat-path union.
+ */
+function offsetPolygonWithHoles(polygon: Polygon, deltaM: number): Polygon[] {
+  const outer = polygon[0];
+  if (!outer || outer.length < 4) return [];
+  const shells = offsetSingleRing(openRing(outer), deltaM, false);
+  const holes: Ring[] = [];
+  for (const hole of polygon.slice(1)) {
+    if (!hole || hole.length < 4) continue;
+    holes.push(...offsetSingleRing(openRing(hole), -deltaM, true));
+  }
+  return assemblePolygons(shells, holes);
 }
 
 /** Offset every polygon in a multipolygon; round joins, arc tolerance 0.05 m. */
 export function offsetMultiPolygon(polygons: MultiPolygon, deltaM: number): MultiPolygon {
   if (polygons.length === 0 || !(Math.abs(deltaM) > 1e-9)) return polygons;
-  if (polygons.length === 1) return offsetPolygonTree(polygons[0]!, deltaM);
-  return offsetClipperPaths(multiPolygonToClipperPaths(polygons), deltaM);
+  const out: MultiPolygon = [];
+  for (const polygon of polygons) {
+    out.push(...offsetPolygonWithHoles(polygon, deltaM));
+  }
+  if (out.length === 0) {
+    throw new Error(`Clipper offset produced no polygons (delta=${deltaM} m, inputs=${polygons.length})`);
+  }
+  return out;
 }
 
 /** Closing: offset +r then −r (fills concave pockets, restores the outer footprint). */
