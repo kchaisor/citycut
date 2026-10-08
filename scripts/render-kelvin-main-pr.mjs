@@ -28,7 +28,7 @@ if (!existsSync(model)) {
 }
 
 if (!existsSync("/opt/cursor/artifacts/kelvin-jolimont-crops.json")) {
-  execSync(`npx vite-node scripts/find-kelvin-jolimont-crops.mjs ${model}`, { stdio: "inherit", cwd: "/workspace" });
+  execSync(`npx vite-node scripts/find-kelvin-jolimont-crops-plan.mjs ${model}`, { stdio: "inherit", cwd: "/workspace" });
 }
 
 checkoutMain();
