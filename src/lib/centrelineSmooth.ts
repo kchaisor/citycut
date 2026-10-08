@@ -134,6 +134,13 @@ export function junctionPointsFromStrips(strips: { line: Pt[] }[], snapM = CENTR
  * Light Chaikin smoothing between pinned junction, endpoint, and sharp-corner vertices.
  * Falls back to the original line if lateral shift would exceed the bound.
  */
+function hasGentleBend(line: Pt[], minTurnDeg = 5): boolean {
+  for (let i = 1; i < line.length - 1; i++) {
+    if (turnDeflectionDeg(line[i - 1]!, line[i]!, line[i + 1]!) >= minTurnDeg) return true;
+  }
+  return false;
+}
+
 export function smoothCentreline(
   line: Pt[],
   options: {
@@ -143,7 +150,7 @@ export function smoothCentreline(
     sharpTurnDeg?: number;
   } = {},
 ): Pt[] {
-  if (line.length < 3) return line.slice();
+  if (line.length < 3 || !hasGentleBend(line)) return line.slice();
   const iterations = options.iterations ?? CENTRELINE_CHAIKIN_ITERATIONS;
   const maxShift = options.maxLateralShiftM ?? CENTRELINE_MAX_LATERAL_SHIFT_M;
   const junctionPoints = options.junctionPoints ?? [];

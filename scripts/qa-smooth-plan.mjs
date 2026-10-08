@@ -56,8 +56,9 @@ if (!existsSync(modelPath)) {
   await captureModel();
 }
 
+const kelvinViewBoxFile = `${outDir}/kelvin-fitzroy-viewbox.txt`;
 execSync(`npx vite-node scripts/find-kelvin-fitzroy-crop.mjs ${modelPath}`, { stdio: "inherit" });
-const kelvinViewBox = readFileSync(`${outDir}/kelvin-fitzroy-viewbox.txt`, "utf8").trim();
+const kelvinViewBox = readFileSync(kelvinViewBoxFile, "utf8").trim();
 console.log("Kelvin viewBox", kelvinViewBox);
 
 const bendViewBox = "55 75 70 70";
