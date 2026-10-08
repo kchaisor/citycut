@@ -118,7 +118,7 @@ function densifyCurvedSegment(segment: Pt[], chordErrorM: number): Pt[] {
     const p1 = segment[i]!;
     const p2 = segment[i + 1]!;
     const edgeLen = dist(p1, p2);
-    if (edgeLen < 5) continue;
+    if (edgeLen < 4) continue;
     const step = edgeDensifyStepM(edgeLen, chordErrorM);
     const steps = Math.min(4, Math.max(1, Math.ceil(edgeLen / step)));
     for (let s = 1; s <= steps; s++) {
@@ -207,7 +207,7 @@ export function junctionPointsFromStrips(strips: { line: Pt[] }[], snapM = CENTR
   return junctions;
 }
 
-function hasLongEdge(line: Pt[], minLenM = 5): boolean {
+function hasLongEdge(line: Pt[], minLenM = 4): boolean {
   for (let i = 0; i < line.length - 1; i++) {
     if (dist(line[i]!, line[i + 1]!) >= minLenM) return true;
   }
