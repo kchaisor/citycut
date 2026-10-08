@@ -81,6 +81,24 @@ describe("isVehicularRoad", () => {
 });
 
 describe("footpath fillet", () => {
+  it("keeps straight footpath edges smooth while filling concave junction corners", () => {
+    clearFootpathUnionCacheForTests();
+    const line: Pt[] = [
+      [-40, 0],
+      [40, 0],
+    ];
+    const straight = unionFootpaths([line], 1.2, 200, "square", 2);
+    const ring = straight.polygons[0]?.[0]?.slice(0, -1) ?? [];
+    expect(ring.length).toBeLessThan(24);
+    let maxEdge = 0;
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i]!;
+      const b = ring[(i + 1) % ring.length]!;
+      maxEdge = Math.max(maxEdge, Math.hypot(b[0] - a[0], b[1] - a[1]));
+    }
+    expect(maxEdge).toBeGreaterThan(10);
+  });
+
   it("filletes inner corners where two bands cross into one merged polygon", () => {
     clearFootpathUnionCacheForTests();
     const cross: Pt[][] = [

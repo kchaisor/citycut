@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseNativeAiLayers } from "./aiNative";
-import { sitePlanAi8, sitePlanChunks } from "./aiPlan";
+import { SITE_LAYER_ORDER, sitePlanAi8, sitePlanChunks, sitePlanLayerOrder } from "./aiPlan";
 import { DEFAULT_LINE_STYLES, screenPenAttrs } from "./drawingStyle";
 import { getColour } from "./colours";
 import { colourRgb } from "./colours";
@@ -54,6 +54,18 @@ describe("site exports", () => {
       .map((chunk) => chunk.name)
       .sort();
     expect(names).toEqual(emptySite);
+  });
+
+  it("orders road fill above contour lines in site plan exports", () => {
+    expect(SITE_LAYER_ORDER.indexOf("Roads")).toBeGreaterThan(SITE_LAYER_ORDER.indexOf("Contours"));
+    expect(SITE_LAYER_ORDER.indexOf("Trams")).toBeGreaterThan(SITE_LAYER_ORDER.indexOf("Roads"));
+    const chunks = sitePlanChunks(model(), 1000, DEFAULT_LINE_STYLES);
+    const order = sitePlanLayerOrder(chunks);
+    const contourIndex = order.indexOf("Contours");
+    const roadIndex = order.indexOf("Roads");
+    if (contourIndex >= 0 && roadIndex >= 0) {
+      expect(roadIndex).toBeGreaterThan(contourIndex);
+    }
   });
 
   it("writes Site buildings and Site boundary Illustrator layers", () => {

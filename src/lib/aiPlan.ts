@@ -535,7 +535,7 @@ export function figureGroundChunks(
   return chunks;
 }
 
-function sitePlanLayerOrder(chunks: PdfChunk[]): string[] {
+export function sitePlanLayerOrder(chunks: PdfChunk[]): string[] {
   const order: string[] = [...SITE_LAYER_ORDER];
   if (!order.includes("Contour labels") && chunks.some((chunk) => chunk.name === "Contour labels")) {
     const at = order.indexOf("Contours");

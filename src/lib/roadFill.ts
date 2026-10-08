@@ -30,6 +30,10 @@ const ARC = Math.PI / 4;
 export const ROAD_MORPH_CLOSE_M = 3;
 /** Default fillet radius for unioned footpath junctions (m on the ground). */
 export const DEFAULT_PATH_FILLET_M = 2;
+/** Arc segments on each fillet disk at path junctions. */
+export const PATH_FILLET_ARC_SEGMENTS = 12;
+/** Final simplification on unioned footpaths after junction fillets (m). */
+export const PATH_OUTPUT_SIMPLIFY_M = 0.2;
 /** Buffer half-width for in-road tram corridors merged into the road fill. */
 export const TRAM_CORRIDOR_WIDTH_M = 9;
 
@@ -500,6 +504,48 @@ export function carriagewaysOf(roads: RoadFeat[]): { line: Pt[]; width: number }
   return roads.filter(isVehicularRoad).map((road) => ({ line: road.line, width: road.width }));
 }
 
+function turnCross(prev: Pt, curr: Pt, next: Pt): number {
+  return (curr[0] - prev[0]) * (next[1] - curr[1]) - (curr[1] - prev[1]) * (next[0] - curr[0]);
+}
+
+function simplifyPathMulti(polygons: MultiPolygon): MultiPolygon {
+  const kept: MultiPolygon = [];
+  for (const polygon of polygons) {
+    const outer = cleanOpen(polygon[0], PATH_OUTPUT_SIMPLIFY_M);
+    if (!outer) continue;
+    const holes = polygon
+      .slice(1)
+      .map((hole) => cleanOpen(hole, PATH_OUTPUT_SIMPLIFY_M))
+      .filter((hole): hole is Pair[] => hole !== null && Math.abs(signedArea(hole)) >= MIN_AREA_M2);
+    kept.push([orient(outer, true), ...holes.map((hole) => orient(hole, false))]);
+  }
+  return kept;
+}
+
+/**
+ * Round concave junction corners only (reflex vertices on the union outline).
+ * Straight runs stay straight; no boundary scalloping from morphological disks.
+ */
+export function filletPathJunctions(polygons: MultiPolygon, radius: number): MultiPolygon {
+  if (!(radius > 0) || polygons.length === 0) return polygons;
+  const seeds: Polygon[] = [...polygons];
+  for (const polygon of polygons) {
+    const outer = polygon[0];
+    if (!outer || outer.length < 4) continue;
+    const open = outer.slice(0, -1);
+    const count = open.length;
+    for (let i = 0; i < count; i++) {
+      const prev = open[(i - 1 + count) % count]!;
+      const curr = open[i]!;
+      const next = open[(i + 1) % count]!;
+      if (turnCross(prev, curr, next) >= -1e-6) continue;
+      const disk = circlePolygon(curr, radius, PATH_FILLET_ARC_SEGMENTS);
+      if (disk) seeds.push(disk);
+    }
+  }
+  return simplifyPathMulti(tidy(unionFast(seeds)));
+}
+
 function circlePolygon(center: Pt, radius: number, segments = 10): Polygon | null {
   if (!(radius > 0)) return null;
   const ring: Pt[] = [];
@@ -659,7 +705,9 @@ export function unionFootpaths(
     frameShape,
   );
   const polygons =
-    filletM > 0 ? morphologicalClose(merged.polygons, filletM, sideM, frameShape) : merged.polygons;
+    filletM > 0
+      ? filletPathJunctions(merged.polygons, filletM)
+      : simplifyPathMulti(merged.polygons);
   const result: RoadFill = {
     polygons,
     ms: performance.now() - started,
