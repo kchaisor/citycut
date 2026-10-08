@@ -62,6 +62,13 @@ export function isVehicularRoad(road: RoadFeat): boolean {
   return road.kind === "road" && road.grade !== "path";
 }
 
+/** Fast matches main coarse Clipper; smooth uses fine arcs for plan/export. */
+export type PlanFillQuality = "fast" | "smooth";
+
+function clipperArcForQuality(quality: PlanFillQuality): number {
+  return quality === "smooth" ? CLIPPER_ARC_CHORD_M : CLIPPER_MORPH_CLOSE_ARC_TOLERANCE_M;
+}
+
 export type RoadFill = {
   /** Coarse union/fillet rings for booleans (0.12 m DP after Clipper). */
   polygons: MultiPolygon;
@@ -933,6 +940,7 @@ function footpathUnionCacheKey(
   filletM: number,
   sideM: number,
   frameShape: SiteFrameShape,
+  quality: PlanFillQuality,
 ): string {
   let minX = Infinity;
   let minY = Infinity;
@@ -948,7 +956,7 @@ function footpathUnionCacheKey(
       maxY = Math.max(maxY, y);
     }
   }
-  return `${lines.length}:${points}:${minX.toFixed(1)},${minY.toFixed(1)},${maxX.toFixed(1)},${maxY.toFixed(1)}:${widthM}:${filletM}:${sideM}:${frameShape}:tile1`;
+  return `${lines.length}:${points}:${minX.toFixed(1)},${minY.toFixed(1)},${maxX.toFixed(1)},${maxY.toFixed(1)}:${widthM}:${filletM}:${sideM}:${frameShape}:${quality}:tile1`;
 }
 
 function unionMulti(a: MultiPolygon, b: MultiPolygon, sideM: number): MultiPolygon {
@@ -962,10 +970,11 @@ function roadSurfaceCacheKey(
   tramLines: Pt[][] | undefined,
   sideM: number,
   frameShape: SiteFrameShape,
+  quality: PlanFillQuality,
 ): string {
   let tramPts = 0;
   for (const line of tramLines ?? []) tramPts += line.length;
-  return `${roads.length}:${tramLines?.length ?? 0}:${tramPts}:${sideM}:${frameShape}:tile1`;
+  return `${roads.length}:${tramLines?.length ?? 0}:${tramPts}:${sideM}:${frameShape}:${quality}:tile1`;
 }
 
 /** Unioned carriageway plus in-road tram corridors, with median gaps closed. */
@@ -974,8 +983,9 @@ export function unionRoadSurface(
   tramLines: Pt[][] | undefined,
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  quality: PlanFillQuality = "smooth",
 ): RoadFill {
-  const key = roadSurfaceCacheKey(roads, tramLines, sideM, frameShape);
+  const key = roadSurfaceCacheKey(roads, tramLines, sideM, frameShape, quality);
   const cached = roadSurfaceCache.get(key);
   if (cached) return cached;
 
@@ -991,7 +1001,7 @@ export function unionRoadSurface(
   const merged = unionMulti(carriageway.polygons, withTram.polygons, sideM);
   const morphRaw = normalizeMultiPolygonByParity(
     clipToFrame(
-      offsetCloseMultiComponents(merged, ROAD_MORPH_CLOSE_M, CLIPPER_ARC_CHORD_M),
+      offsetCloseMultiComponents(merged, ROAD_MORPH_CLOSE_M, clipperArcForQuality(quality)),
       sideM,
       frameShape,
     ),
@@ -999,7 +1009,7 @@ export function unionRoadSurface(
   const dual = dualSimplifyFromClipper(morphRaw);
   const result: RoadFill = {
     polygons: dual.coarse,
-    displayPolygons: dual.display,
+    displayPolygons: quality === "smooth" ? dual.display : dual.coarse,
     ms: performance.now() - started,
     inputs: carriageway.inputs + withTram.inputs,
   };
@@ -1137,11 +1147,12 @@ export function unionFootpathStrips(
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
   filletM: number = DEFAULT_PATH_FILLET_M,
   typicalBandWidthM = 1.2,
+  quality: PlanFillQuality = "smooth",
 ): RoadFill {
   const widthM = strips.reduce((max, strip) => Math.max(max, strip.width), 0);
   if (!(widthM > 0)) return { polygons: [], displayPolygons: [], ms: 0, inputs: 0 };
   const lines = strips.map((strip) => strip.line);
-  const key = footpathUnionCacheKey(lines, widthM, filletM, sideM, frameShape);
+  const key = footpathUnionCacheKey(lines, widthM, filletM, sideM, frameShape, quality);
   const cached = footpathUnionCache.get(key);
   if (cached) return cached;
 
@@ -1152,13 +1163,14 @@ export function unionFootpathStrips(
   const filletRadius =
     filletM > 0 ? Math.max(filletM, bandTypical * PATH_FILLET_BAND_SCALE) : 0;
   const merged = unionStrips(stitched, sideM, 0, frameShape);
+  const arcTol = clipperArcForQuality(quality);
   const dual =
     filletRadius > 0
-      ? closeFootpathJunctionsDual(merged.polygons, filletRadius, sideM, frameShape, CLIPPER_ARC_CHORD_M)
+      ? closeFootpathJunctionsDual(merged.polygons, filletRadius, sideM, frameShape, arcTol)
       : dualSimplifyFromClipper(merged.polygons);
   const result: RoadFill = {
     polygons: dual.coarse,
-    displayPolygons: dual.display,
+    displayPolygons: quality === "smooth" ? dual.display : dual.coarse,
     ms: performance.now() - started,
     inputs: merged.inputs,
   };

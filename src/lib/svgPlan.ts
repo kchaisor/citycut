@@ -10,10 +10,13 @@ import {
   footpathStrips,
   footpathDisplayAfterRoadBlockers,
   footpathFillDisplayPolygons,
+  mergeFootpathFragments,
   roadFillDisplayPolygons,
   setCentrelineSmoothForUnion,
+  subtractFootpathBlockers,
   unionFootpathStrips,
   unionRoadSurface,
+  type PlanFillQuality,
 } from "./roadFill";
 import {
   DEFAULT_COARSE_FROM_SCALE,
@@ -140,13 +143,32 @@ function clipLines(line: Pt[], sideM: number, frameShape: import("../types").Sit
   return clipPolylineSiteFrame(dedupe(line), sideM, frameShape).map(dedupe).filter((part) => part.length >= 2);
 }
 
+export type PlanPathQuality = PlanFillQuality;
+
 export type PlanPathOptions = {
   buildingColour?: BuildingColourMode;
   highlightManual?: boolean;
   pathFilletM?: number;
+  /** When set, overrides legacy `smoothOutput` for road/path fill quality. */
+  quality?: PlanPathQuality;
   smoothOutput?: boolean;
   /** Densify road/path centrelines before buffering (default true). */
   centrelineSmooth?: boolean;
+};
+
+export function resolvePlanPathQuality(planOptions: PlanPathOptions = {}): PlanPathQuality {
+  if (planOptions.quality) return planOptions.quality;
+  if (planOptions.smoothOutput === false) return "fast";
+  return "smooth";
+}
+
+export type PlanPathsBuildArgs = {
+  pathWidthM?: number;
+  contourIndexEvery?: number;
+  planScale?: number;
+  coarseIntervalM?: number;
+  coarseFromScale?: number;
+  planOptions?: PlanPathOptions;
 };
 
 export function planPaths(
@@ -186,6 +208,7 @@ export function planPaths(
   }
   const pathFilletM =
     planOptions.pathFilletM !== undefined ? planOptions.pathFilletM : DEFAULT_PATH_FILLET_M;
+  const quality = resolvePlanPathQuality(planOptions);
   const centrelineSmooth = planOptions.centrelineSmooth !== false;
   setCentrelineSmoothForUnion(centrelineSmooth);
   const footpaths = unionFootpathStrips(
@@ -194,8 +217,9 @@ export function planPaths(
     frameShape,
     pathFilletM,
     pathWidthM,
+    quality,
   );
-  let carriageway = unionRoadSurface(model.roads, model.tramLines, model.sideM, frameShape);
+  let carriageway = unionRoadSurface(model.roads, model.tramLines, model.sideM, frameShape, quality);
 
   const colourMode: BuildingColourMode = planOptions.buildingColour ?? {
     colourByUse: true,
@@ -213,20 +237,31 @@ export function planPaths(
     })
     .filter((building): building is { rings: Pt[][]; fill: string; site: boolean } => building !== null);
 
-  const roadFillPolys = fillRoadMedianHoles(roadFillDisplayPolygons(carriageway));
-  const roadCoarse = fillRoadMedianHoles(carriageway.polygons);
-
-  let pathFill: MultiPolygon = footpathFillDisplayPolygons(footpaths);
-  if (pathFilletM > 0 && roadFillPolys.length > 0) {
-    pathFill = footpathDisplayAfterRoadBlockers(footpathFillDisplayPolygons(footpaths), roadFillPolys);
+  let roadFillPolys: MultiPolygon;
+  let roadCoarse: MultiPolygon;
+  let pathFill: MultiPolygon;
+  if (quality === "fast") {
+    roadCoarse = fillRoadMedianHoles(carriageway.polygons);
+    roadFillPolys = roadCoarse;
+    pathFill = footpaths.polygons;
+    if (pathFilletM > 0 && carriageway.polygons.length > 0) {
+      pathFill = subtractFootpathBlockers(pathFill, carriageway.polygons);
+      pathFill = mergeFootpathFragments(pathFill);
+    }
+  } else {
+    roadFillPolys = fillRoadMedianHoles(roadFillDisplayPolygons(carriageway));
+    roadCoarse = fillRoadMedianHoles(carriageway.polygons);
+    pathFill = footpathFillDisplayPolygons(footpaths);
+    if (pathFilletM > 0 && roadFillPolys.length > 0) {
+      pathFill = footpathDisplayAfterRoadBlockers(footpathFillDisplayPolygons(footpaths), roadFillPolys);
+    }
   }
   const greenSplit = splitGreenForRoadLayer(green, roadCoarse);
   const greenBelow = greenSplit.green;
   const greenOnRoad = greenSplit.greenOnRoad;
 
-  const smoothOutput = planOptions.smoothOutput === true;
   let ringSmoothMs = 0;
-  if (smoothOutput) {
+  if (quality === "smooth") {
     const tSmooth = performance.now();
     // Centreline densify handles road curves; footpath fillets stay from Clipper union.
     ringSmoothMs = Math.round(performance.now() - tSmooth);

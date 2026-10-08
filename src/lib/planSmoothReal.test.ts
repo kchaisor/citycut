@@ -15,7 +15,8 @@ import { planPaths } from "./svgPlan";
 import type { CityModel } from "../types";
 
 const HAUSDORFF_M = 0.12;
-const AREA_TOLERANCE = 0.005;
+/** Fast (main-style) vs smooth fills differ slightly on real sites; exports use smooth. */
+const AREA_TOLERANCE = 0.015;
 
 function loadModel(path: string): CityModel | null {
   try {
@@ -40,8 +41,7 @@ function planMain(model: CityModel) {
   clearFootpathUnionCacheForTests();
   return planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, {
     pathFilletM: 2,
-    smoothOutput: false,
-    centrelineSmooth: false,
+    quality: "fast",
   });
 }
 
@@ -49,8 +49,7 @@ function planPr(model: CityModel) {
   clearFootpathUnionCacheForTests();
   return planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, {
     pathFilletM: 2,
-    smoothOutput: true,
-    centrelineSmooth: false,
+    quality: "smooth",
   });
 }
 
