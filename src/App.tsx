@@ -47,7 +47,8 @@ import {
   applyLidarHeightsFromEnrichment,
   mergeBuildingEnrichment,
 } from "./lib/buildingEnrichmentMerge";
-import { fetchBuildingEnrichmentForCut } from "./lib/buildingEnrichmentTiles";
+import { fetchBuildingEnrichmentForCut, fetchEnrichmentManifest } from "./lib/buildingEnrichmentTiles";
+import { cutCenterOutsideBuiltBbox, enrichmentCoverageMessage } from "./lib/enrichmentCoverage";
 import { computeCityBlocks } from "./lib/cityBlocks";
 import { assignExternalUses, loadUseTiers } from "./lib/useCascade";
 import {
@@ -371,6 +372,9 @@ export default function App() {
       const enrichmentTask = modelLayers.buildings
         ? fetchBuildingEnrichmentForCut(bounds, controller.signal)
         : Promise.resolve({ byId: new Map(), error: null as string | null });
+      const enrichmentManifestTask = modelLayers.buildings
+        ? fetchEnrichmentManifest(controller.signal)
+        : Promise.resolve(null);
       const useTierTask = modelLayers.buildings
         ? loadUseTiers(bounds, center, { signal: controller.signal }).catch((err: unknown) => {
             if (controller.signal.aborted) throw err;
@@ -479,6 +483,7 @@ export default function App() {
         vicmapResult,
         useTiers,
         enrichmentResult,
+        enrichmentManifest,
         contourLayer,
         overtureResult,
         transportResult,
@@ -492,6 +497,7 @@ export default function App() {
         vicmapTask,
         useTierTask,
         enrichmentTask,
+        enrichmentManifestTask,
         contourTask,
         buildingsTask,
         transportTask,
@@ -514,6 +520,12 @@ export default function App() {
           message: "building enrichment tiles unavailable; live Vicmap zones used for use",
         });
         console.warn(`[CityCut enrichment] ${enrichmentResult.error}`);
+      }
+      if (cutCenterOutsideBuiltBbox(center, enrichmentManifest)) {
+        const msg = enrichmentCoverageMessage(enrichmentManifest);
+        if (msg) {
+          useTierFailures.push({ tier: "enrichment_coverage", message: msg });
+        }
       }
       if (modelLayers.buildings) {
         const enriched = mergeBuildingEnrichment(overtureBuildings, enrichmentResult.byId);

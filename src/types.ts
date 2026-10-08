@@ -52,7 +52,7 @@ export type BuildingUseSourceTier =
   | "unclassified";
 
 export type UseTierFailure = {
-  tier: "zone" | "enrichment_tiles";
+  tier: "zone" | "enrichment_tiles" | "enrichment_coverage";
   /** Short UI line, for example "zones unavailable". */
   message: string;
 };

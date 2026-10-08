@@ -16,7 +16,8 @@ import { landingViewportFootprint } from "../lib/landingMapViewport";
 import { readLandingColourCache, writeLandingColourCache } from "../lib/landingMapColourCache";
 import { fetchOvertureBuildingsForCut } from "../lib/overtureBuildings";
 import { mergeBuildingEnrichment } from "../lib/buildingEnrichmentMerge";
-import { fetchBuildingEnrichmentForCut } from "../lib/buildingEnrichmentTiles";
+import { fetchBuildingEnrichmentForCut, fetchEnrichmentManifest } from "../lib/buildingEnrichmentTiles";
+import { cutCenterOutsideBuiltBbox, enrichmentCoverageMessage } from "../lib/enrichmentCoverage";
 import { refineBuildingUses } from "../lib/useCascade";
 import { fetchSiteParcelCached, siteBuildingIdsForPreview } from "../lib/sitePreviewCache";
 import { FLAT_NORTH_UP_MAP_OPTIONS, applyFlatNorthUpMapHandlers } from "../lib/mapStageMapOptions";
@@ -346,10 +347,55 @@ export function MapStage({
   const sideKm = sideM / 1000;
   const label = cutFrameLabelKm(sideKm, frameShape);
   const circleFrame = frameShape === "circle";
+  const [enrichmentNote, setEnrichmentNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const manifest = await fetchEnrichmentManifest();
+      if (cancelled) return;
+      const map = mapRef.current;
+      const center = map?.getCenter();
+      if (!center || !cutCenterOutsideBuiltBbox({ lat: center.lat, lon: center.lng }, manifest)) {
+        setEnrichmentNote(null);
+        return;
+      }
+      setEnrichmentNote(enrichmentCoverageMessage(manifest));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, mapEpoch]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    const refresh = () => {
+      void (async () => {
+        const manifest = await fetchEnrichmentManifest();
+        const center = map.getCenter();
+        if (!cutCenterOutsideBuiltBbox({ lat: center.lat, lon: center.lng }, manifest)) {
+          setEnrichmentNote(null);
+          return;
+        }
+        setEnrichmentNote(enrichmentCoverageMessage(manifest));
+      })();
+    };
+    map.on("moveend", refresh);
+    refresh();
+    return () => {
+      map.off("moveend", refresh);
+    };
+  }, [ready]);
 
   return (
     <div className={loading ? "map-wrap is-loading" : "map-wrap"}>
       <div ref={containerRef} className="map-canvas" />
+      {enrichmentNote && (
+        <p className="enrichment-coverage-banner" role="status">
+          {enrichmentNote}
+        </p>
+      )}
       <div className="basemap" role="group" aria-label="Basemap">
         <button
           type="button"

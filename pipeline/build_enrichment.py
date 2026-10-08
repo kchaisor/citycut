@@ -14,10 +14,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import geopandas as gpd
+import pandas as pd
 import requests
-from shapely.geometry import shape
+
+from bca_join import bca_use_for_buildings, fetch_vicmap_addresses, load_bca_index
+from clue_join import clue_use_for_buildings, load_clue_block_uses
 
 METRO = {"west": 144.35, "south": -38.25, "east": 145.55, "north": -37.45}
+COM_BOUNDS = {"west": 144.89, "south": -37.86, "east": 145.0, "north": -37.77}
 
 ZONE_WFS = (
     "https://opendata.maps.vic.gov.au/geoserver/wfs?"
@@ -27,16 +31,6 @@ ZONE_WFS = (
     f"bbox={METRO['west']},{METRO['south']},{METRO['east']},{METRO['north']},CRS:84"
 )
 
-CLUE_URL = (
-    "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets/"
-    "census-of-land-use-and-employment-clue/buildings/exports/geojson"
-)
-
-BCA_URL = (
-    "https://discover.data.vic.gov.au/api/3/action/datastore_search?"
-    "resource_id=8a7325e9-8c4c-4b5e-9f6e-8c8e8c8e8c8e&limit=0"
-)
-
 USE_MAP = {
     "residential": "residential",
     "commercial": "commercial",
@@ -44,6 +38,7 @@ USE_MAP = {
     "industrial": "industrial",
     "civic": "civic",
     "recreation": "recreation",
+    "mixed_use": "mixed_use",
 }
 
 
@@ -67,11 +62,7 @@ def classify_overture(props: dict) -> tuple[str, str] | None:
 
 def zone_use(code: str) -> str | None:
     code = code.strip().upper()
-    if code.startswith("GRZ"):
-        return "residential"
-    if code.startswith("NRZ"):
-        return "residential"
-    if code.startswith("RGZ"):
+    if code.startswith("GRZ") or code.startswith("NRZ") or code.startswith("RGZ"):
         return "residential"
     if code.startswith("MUZ"):
         return "mixed_use"
@@ -91,32 +82,21 @@ def fetch_zones() -> gpd.GeoDataFrame | None:
             print(f"[enrichment] zones HTTP {response.status_code}", file=sys.stderr)
             return None
         response.raise_for_status()
-        data = response.json()
-        gdf = gpd.GeoDataFrame.from_features(data.get("features", []), crs="EPSG:4326")
-        if gdf.empty:
-            return None
-        return gdf
+        gdf = gpd.GeoDataFrame.from_features(response.json().get("features", []), crs="EPSG:4326")
+        return gdf if not gdf.empty else None
     except Exception as exc:
         print(f"[enrichment] zones failed: {exc}", file=sys.stderr)
         return None
 
 
-def fetch_clue() -> gpd.GeoDataFrame | None:
-    try:
-        response = requests.get(CLUE_URL, timeout=180, allow_redirects=True)
-        if response.status_code in (401, 403, 429):
-            print(f"[enrichment] CLUE HTTP {response.status_code}", file=sys.stderr)
-            return None
-        if response.status_code >= 400:
-            print(f"[enrichment] CLUE HTTP {response.status_code}", file=sys.stderr)
-            return None
-        gdf = gpd.read_file(response.text)
-        if gdf.crs is None:
-            gdf.set_crs("EPSG:4326", inplace=True)
-        return gdf.to_crs("EPSG:4326")
-    except Exception as exc:
-        print(f"[enrichment] CLUE skipped: {exc}", file=sys.stderr)
+def zone_at(geom, zones: gpd.GeoDataFrame) -> str | None:
+    pt = geom if geom.geom_type == "Point" else geom.representative_point()
+    hits = zones[zones.contains(pt)]
+    if hits.empty:
         return None
+    row = hits.iloc[0]
+    zc = row.get("zone_code") or row.get("ZONE_CODE")
+    return zc.strip() if isinstance(zc, str) else None
 
 
 def probe_elvis() -> dict:
@@ -135,50 +115,53 @@ def probe_elvis() -> dict:
         return {"status": "unreachable", "detail": str(exc)}
 
 
-def assign_row(props: dict, zones: gpd.GeoDataFrame | None, clue: gpd.GeoDataFrame | None, geom) -> dict:
-    overture = classify_overture(props)
+def assign_cascade(
+    props: dict,
+    geom,
+    zones: gpd.GeoDataFrame | None,
+    clue_pick: tuple[str, str] | None,
+    bca_pick: tuple[str, str] | None,
+) -> dict:
     use = "unclassified"
     use_source = "unclassified"
     zone_code = None
+
+    overture = classify_overture(props)
     if overture:
         use, use_source = overture
+
+    if clue_pick and _tier_beats(clue_pick[1], use_source):
+        use, use_source = clue_pick
+
+    if bca_pick and _tier_beats(bca_pick[1], use_source):
+        use, use_source = bca_pick
+
     if zones is not None and not zones.empty:
-        try:
-            pt = geom if geom.geom_type == "Point" else geom.representative_point()
-            hits = zones[zones.contains(pt)]
-            if not hits.empty:
-                row = hits.iloc[0]
-                zc = row.get("zone_code") or row.get("ZONE_CODE")
-                if isinstance(zc, str):
-                    zone_code = zc.strip()
-                    if use_source == "unclassified":
-                        zu = zone_use(zone_code)
-                        if zu:
-                            use, use_source = zu, "zone"
-        except Exception:
-            pass
-    if clue is not None and not clue.empty and use_source in ("unclassified", "zone"):
-        try:
-            pt = geom if geom.geom_type == "Point" else geom.representative_point()
-            hits = clue[clue.contains(pt)]
-            if not hits.empty:
-                space = hits.iloc[0].get("clue_space_use") or hits.iloc[0].get("SPACE_USE")
-                if isinstance(space, str):
-                    key = space.strip().lower().replace(" ", "_")
-                    if key in USE_MAP.values() or key == "mixed_use":
-                        use, use_source = key, "clue"
-        except Exception:
-            pass
-    height_m = None
-    height_source = None
+        zone_code = zone_at(geom, zones)
+        if zone_code and use_source == "unclassified":
+            zu = zone_use(zone_code)
+            if zu:
+                use, use_source = zu, "zone"
+
+    rank = {"overture": 5, "clue": 4, "bca": 3, "zone": 2, "unclassified": 1}
+    if zone_code and use_source == "zone" and rank.get(use_source, 0) < rank["zone"]:
+        zu = zone_use(zone_code)
+        if zu:
+            use, use_source = zu, "zone"
+
     return {
         "use": use,
         "use_source": use_source,
         "zone_code": zone_code,
-        "height_m": height_m,
-        "height_source": height_source,
+        "height_m": None,
+        "height_source": None,
         "overture_id": props.get("overture_id") or props.get("id"),
     }
+
+
+def _tier_beats(candidate: str, current: str) -> bool:
+    rank = {"overture": 5, "clue": 4, "bca": 3, "zone": 2, "unclassified": 1}
+    return rank.get(candidate, 0) >= rank.get(current, 0)
 
 
 def main() -> int:
@@ -186,6 +169,7 @@ def main() -> int:
     parser.add_argument("--input", type=Path, required=True, help="Overture footprints GeoJSON")
     parser.add_argument("--output-geojson", type=Path, default=Path("pipeline/out/enrichment.geojson"))
     parser.add_argument("--manifest", type=Path, default=Path("public/building-enrichment-manifest.json"))
+    parser.add_argument("--cache", type=Path, default=Path("pipeline/cache"))
     args = parser.parse_args()
 
     buildings = gpd.read_file(args.input)
@@ -195,20 +179,37 @@ def main() -> int:
         buildings = buildings.to_crs("EPSG:4326")
 
     zones = fetch_zones()
-    clue = fetch_clue()
+    clue_blocks, _floor_map, clue_err = load_clue_block_uses()
+    clue_series = (
+        clue_use_for_buildings(buildings, clue_blocks) if clue_blocks is not None and not clue_blocks.empty else pd.Series([None] * len(buildings), index=buildings.index)
+    )
+
+    bca_index, bca_meta = load_bca_index(args.cache, METRO)
+    addresses = fetch_vicmap_addresses(METRO)
+    bca_series = bca_use_for_buildings(buildings, addresses, bca_index)
+
     lidar = probe_elvis()
 
+    source_counts = {"overture": 0, "clue": 0, "bca": 0, "zone": 0, "unclassified": 0}
     features = []
-    for _, row in buildings.iterrows():
-        props = dict(row)
+    for idx, row in buildings.iterrows():
         geom = row.geometry
         if geom is None or geom.is_empty:
             continue
-        base = {k: v for k, v in props.items() if k != "geometry"}
-        enriched = assign_row(base, zones, clue, geom)
+        props = {k: v for k, v in dict(row).items() if k != "geometry"}
+        enriched = assign_cascade(
+            props,
+            geom,
+            zones,
+            clue_series.loc[idx] if idx in clue_series.index else None,
+            bca_series.loc[idx] if idx in bca_series.index else None,
+        )
         oid = enriched.get("overture_id")
         if not oid:
             continue
+        tier = enriched.get("use_source", "unclassified")
+        if tier in source_counts:
+            source_counts[tier] += 1
         features.append(
             {
                 "type": "Feature",
@@ -218,8 +219,10 @@ def main() -> int:
         )
 
     args.output_geojson.parent.mkdir(parents=True, exist_ok=True)
-    out = {"type": "FeatureCollection", "features": features}
-    args.output_geojson.write_text(json.dumps(out), encoding="utf-8")
+    args.output_geojson.write_text(
+        json.dumps({"type": "FeatureCollection", "features": features}),
+        encoding="utf-8",
+    )
 
     manifest = {
         "extent": METRO,
@@ -228,11 +231,16 @@ def main() -> int:
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "lidar": lidar,
         "zonesLoaded": zones is not None and not zones.empty,
-        "clueLoaded": clue is not None and not clue.empty,
+        "clueLoaded": clue_blocks is not None and not clue_blocks.empty,
+        "clueError": clue_err,
+        "clueBlocks": int(len(clue_blocks)) if clue_blocks is not None else 0,
+        "bca": bca_meta,
+        "useSourceCountsSample": source_counts,
     }
     args.manifest.parent.mkdir(parents=True, exist_ok=True)
     args.manifest.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     print(f"Wrote {len(features)} enrichment features → {args.output_geojson}")
+    print(f"use_source sample counts: {source_counts}", file=sys.stderr)
     return 0
 
 

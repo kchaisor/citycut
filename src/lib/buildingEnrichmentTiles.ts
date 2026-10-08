@@ -9,8 +9,21 @@ import { PMTiles } from "pmtiles";
 import type { BuildingUse, BuildingUseSourceTier } from "../types";
 
 export const ENRICHMENT_TILE_ZOOM = 14;
-const ENRICHMENT_URL = `${import.meta.env.BASE_URL}building-enrichment.pmtiles`;
+const DEFAULT_PMTILES_URL = `${import.meta.env.BASE_URL}building-enrichment.pmtiles`;
 const MANIFEST_URL = `${import.meta.env.BASE_URL}building-enrichment-manifest.json`;
+
+let cachedPmtilesUrl: string | null = null;
+
+async function resolveEnrichmentPmtilesUrl(signal?: AbortSignal): Promise<string> {
+  if (cachedPmtilesUrl) return cachedPmtilesUrl;
+  const manifest = await fetchEnrichmentManifest(signal);
+  const url =
+    manifest?.pmtilesUrl && manifest.pmtilesUrl.startsWith("http")
+      ? manifest.pmtilesUrl
+      : DEFAULT_PMTILES_URL;
+  cachedPmtilesUrl = url;
+  return url;
+}
 
 export type BuildingEnrichmentRecord = {
   overtureId: string;
@@ -23,10 +36,16 @@ export type BuildingEnrichmentRecord = {
 
 export type EnrichmentManifest = {
   extent: { west: number; south: number; east: number; north: number };
+  builtBbox?: { west: number; south: number; east: number; north: number };
+  targetExtent?: { west: number; south: number; east: number; north: number };
   featureCount: number;
   pmtilesBytes: number;
   generatedAt: string;
+  /** When set, fetch PMTiles from this URL instead of the bundled GitHub Pages path. */
+  pmtilesUrl?: string;
   lidar?: { status: string; detail?: string };
+  clueLoaded?: boolean;
+  bca?: { status: string; detail?: string; url?: string };
 };
 
 function tileRange(bounds: { south: number; west: number; north: number; east: number }, z: number) {
@@ -109,7 +128,7 @@ export async function fetchBuildingEnrichmentForCut(
 ): Promise<{ byId: Map<string, BuildingEnrichmentRecord>; error: string | null }> {
   const byId = new Map<string, BuildingEnrichmentRecord>();
   try {
-    const pmtiles = new PMTiles(ENRICHMENT_URL);
+    const pmtiles = new PMTiles(await resolveEnrichmentPmtilesUrl(signal));
     const header = await pmtiles.getHeader();
     if (!header || header.minZoom == null) {
       return { byId, error: "Building enrichment tiles are missing or invalid." };

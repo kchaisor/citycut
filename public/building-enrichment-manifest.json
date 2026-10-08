@@ -5,14 +5,40 @@
     "east": 145.55,
     "north": -37.45
   },
-  "featureCount": 45418,
-  "pmtilesBytes": 1980813,
-  "generatedAt": "2026-10-08T09:40:00.037742+00:00",
+  "featureCount": 153959,
+  "pmtilesBytes": 6428760,
+  "generatedAt": "2026-10-08T09:59:36.049856+00:00",
   "lidar": {
     "status": "blocked",
     "detail": "ELVIS API returned HTTP 403. Order Greater Melbourne LiDAR 2017–18 via elevation.fsdf.org.au (email delivery) and place DSM/DTM GeoTIFFs under pipeline/cache/elvis/ for the lidar step."
   },
   "zonesLoaded": true,
-  "clueLoaded": false,
-  "overtureRelease": "2026-09-23.1"
+  "clueLoaded": true,
+  "clueError": null,
+  "clueBlocks": 500,
+  "bca": {
+    "status": "blocked",
+    "detail": "BCA xlsb HTTP 403 (https://www.bpc.vic.gov.au/__data/assets/file/0016/26521/VBA-DataVic-Building-Permits-2024-December.xlsb)",
+    "url": "https://www.bpc.vic.gov.au/__data/assets/file/0016/26521/VBA-DataVic-Building-Permits-2024-December.xlsb"
+  },
+  "useSourceCountsSample": {
+    "overture": 32434,
+    "clue": 15950,
+    "bca": 0,
+    "zone": 20411,
+    "unclassified": 85164
+  },
+  "overtureRelease": "2026-09-23.1",
+  "builtBbox": {
+    "west": 144.89,
+    "south": -37.86,
+    "east": 145,
+    "north": -37.77
+  },
+  "targetExtent": {
+    "west": 144.35,
+    "south": -38.25,
+    "east": 145.55,
+    "north": -37.45
+  }
 }

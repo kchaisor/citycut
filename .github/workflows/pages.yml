@@ -49,6 +49,8 @@ jobs:
         run: pip install -r pipeline/requirements.txt
       - name: Python pipeline tests
         run: pytest pipeline/test_build_enrichment.py -q
+      - name: Ensure enrichment PMTiles (committed or release download)
+        run: node scripts/fetch-building-enrichment-pmtiles.mjs
       - name: Build
         run: npm run build
       - name: Setup Pages
