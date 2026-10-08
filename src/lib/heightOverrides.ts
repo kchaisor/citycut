@@ -325,7 +325,7 @@ export function buildingHeightSourceLabel(source: BuildingHeightSource): string 
     case "development":
       return "CoM development floors";
     case "lidar":
-      return "LiDAR (ELVIS)";
+      return "LiDAR (Vicmap, licensed)";
     default:
       return "Overture (height or floors)";
   }

@@ -5,7 +5,7 @@
 
 import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
-import { PMTiles } from "pmtiles";
+import { sharedPmtilesForAbsoluteUrl } from "./registerPmtilesProtocol";
 import type { BuildingUse, BuildingUseSourceTier } from "../types";
 
 export const ENRICHMENT_TILE_ZOOM = 14;
@@ -23,6 +23,16 @@ async function resolveEnrichmentPmtilesUrl(signal?: AbortSignal): Promise<string
       : DEFAULT_PMTILES_URL;
   cachedPmtilesUrl = url;
   return url;
+}
+
+/** Absolute HTTP(S) URL for MapLibre `pmtiles://` sources (manifest override or bundled path). */
+export async function getEnrichmentPmtilesAbsoluteUrl(signal?: AbortSignal): Promise<string> {
+  const path = await resolveEnrichmentPmtilesUrl(signal);
+  if (path.startsWith("http")) return path;
+  if (typeof window !== "undefined") {
+    return new URL(path, window.location.href).href;
+  }
+  return path;
 }
 
 export type BuildingEnrichmentRecord = {
@@ -162,19 +172,27 @@ export async function fetchEnrichmentManifest(signal?: AbortSignal): Promise<Enr
   }
 }
 
+export function isEnrichmentFetchAbort(err: unknown, signal?: AbortSignal): boolean {
+  if (signal?.aborted) return true;
+  if (err instanceof DOMException && err.name === "AbortError") return true;
+  if (err instanceof Error && err.name === "AbortError") return true;
+  return false;
+}
+
 export async function fetchBuildingEnrichmentForCut(
   bounds: { south: number; west: number; north: number; east: number },
   signal?: AbortSignal,
 ): Promise<{ byId: Map<string, BuildingEnrichmentRecord>; error: string | null }> {
   const byId = new Map<string, BuildingEnrichmentRecord>();
   try {
-    const pmtiles = new PMTiles(await resolveEnrichmentPmtilesUrl(signal));
+    const absoluteUrl = await getEnrichmentPmtilesAbsoluteUrl(signal);
+    const pmtiles = sharedPmtilesForAbsoluteUrl(absoluteUrl);
     const header = await pmtiles.getHeader();
     if (!header || header.minZoom == null) {
       return { byId, error: "Building enrichment tiles are missing or invalid." };
     }
     const tiles = tileRange(bounds, ENRICHMENT_TILE_ZOOM);
-    const tileResults = await Promise.all(
+    await Promise.all(
       tiles.map(async ({ z, x, y }) => {
         if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
         const response = await pmtiles.getZxy(z, x, y);
@@ -190,10 +208,9 @@ export async function fetchBuildingEnrichmentForCut(
         }
       }),
     );
-    void tileResults;
     return { byId, error: null };
   } catch (err) {
-    if (signal?.aborted) throw err;
+    if (isEnrichmentFetchAbort(err, signal)) throw err;
     const message =
       err instanceof Error ? err.message : "Building enrichment tiles could not be loaded.";
     console.warn(`[CityCut enrichment] ${message}`);

@@ -51,7 +51,10 @@ export function cutBuildingsGeoJson(
     const fill = landingBuildingFill(building);
     features.push({
       type: "Feature",
-      properties: { fill },
+      properties: {
+        fill,
+        ...(building.overtureId ? { overture_id: building.overtureId } : {}),
+      },
       geometry: { type: "Polygon", coordinates: [outer] },
     });
   }

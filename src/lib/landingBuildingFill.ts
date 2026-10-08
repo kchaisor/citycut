@@ -9,3 +9,11 @@ export function landingBuildingFill(building: BuildingFeat): string {
   if (use && use !== "unclassified") return BUILDING_USE_META[use].color;
   return getColour("--building-uniform");
 }
+
+/** Fill colour for a baked enrichment tile `use` property (matches `buildingUseFillColorExpression`). */
+export function fillForTileUse(use: string | undefined): string {
+  if (use && use in BUILDING_USE_META) {
+    return BUILDING_USE_META[use as BuildingUse].color;
+  }
+  return getColour("--building-uniform");
+}

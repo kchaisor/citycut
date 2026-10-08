@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { landingBuildingFill } from "./landingBuildingFill";
+import { fillForTileUse, landingBuildingFill } from "./landingBuildingFill";
+import { BUILDING_USE_META } from "./buildingUse";
+import { getColour } from "./colours";
 import type { BuildingFeat } from "../types";
 
 const building = (use: BuildingFeat["use"]): BuildingFeat => ({
@@ -21,6 +23,12 @@ const building = (use: BuildingFeat["use"]): BuildingFeat => ({
 describe("landingBuildingFill", () => {
   it("uses the uniform token for unclassified buildings", () => {
     expect(landingBuildingFill(building("unclassified"))).toMatch(/^#/);
+  });
+
+  it("matches tile expression for unclassified (grey, not uniform white)", () => {
+    expect(fillForTileUse("unclassified")).toBe(BUILDING_USE_META.unclassified.color);
+    expect(fillForTileUse("unclassified")).not.toBe(getColour("--building-uniform"));
+    expect(landingBuildingFill(building("unclassified"))).toBe(getColour("--building-uniform"));
   });
 
   it("uses a use swatch for classified buildings", () => {

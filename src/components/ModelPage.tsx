@@ -985,11 +985,10 @@ export function ModelPage({ model }: { model: CityModel }) {
     () => countBuildingsWithComHeightTier(displayModel.buildings),
     [displayModel.buildings],
   );
-  const lidarHeightsOn = displayModel.buildings.some((b) => b.heightTier === "lidar");
   const lidarTierNote = model.lidarHeightTierNote ?? LIDAR_NO_DATA_LINE;
   const heightTierLegend: { tier: keyof typeof heightTierCounts; label: string }[] = [
     { tier: "com", label: heightTierLabel("com") },
-    { tier: "lidar", label: "LiDAR (ELVIS)" },
+    { tier: "lidar", label: "LiDAR (Vicmap, licensed)" },
     { tier: "overture_height", label: heightTierLabel("overture_height") },
     { tier: "overture_floors", label: heightTierLabel("overture_floors") },
     { tier: "development_floors", label: heightTierLabel("development_floors") },
@@ -1698,7 +1697,6 @@ export function ModelPage({ model }: { model: CityModel }) {
             __html: modelStageCreditHtml({
               windOn: windSettings.enabled,
               satelliteOn: tab === "satellite",
-              lidarHeightsOn,
               comHeightsHtml: comHeightsMeasuredOn
                 ? `Building heights: <a href="${COM_BUILDING_HEIGHTS_DATASET_URL}">2023 Building Footprints © City of Melbourne</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.`
                 : null,

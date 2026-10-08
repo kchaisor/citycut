@@ -6,7 +6,7 @@ import { inferHeightTier } from "./buildingHeightResolve";
 export const LIDAR_STATUS_NO_DATA = "no_data";
 
 /** Single public line for manifest detail, legend, census, and CI logs. */
-export const LIDAR_NO_DATA_LINE = "LiDAR: no data, ELVIS not ordered";
+export const LIDAR_NO_DATA_LINE = "LiDAR: licensed Vicmap data, not available";
 
 export function defaultLidarManifestEntry(): { status: typeof LIDAR_STATUS_NO_DATA; detail: string } {
   return { status: LIDAR_STATUS_NO_DATA, detail: LIDAR_NO_DATA_LINE };

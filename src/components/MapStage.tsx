@@ -9,15 +9,30 @@ import {
   updateMapCutColourMask,
   setMapCutColourData,
   removeMapCutColourLayers,
+  ensureLandingColourLayerOrder,
+  ensureMapLandingColourShell,
+  runWhenMapStyleReady,
   updateMapSiteLayers,
   removeMapSiteLayers,
 } from "../lib/mapSiteLayers";
 import { landingViewportFootprint } from "../lib/landingMapViewport";
 import { readLandingColourCache, writeLandingColourCache } from "../lib/landingMapColourCache";
+import { landingLiveColourBuildings } from "../lib/landingColourDelta";
+import {
+  countBuildingsInCutFrame,
+  installLandingColourQaBridge,
+  recordColourCoverageProgress,
+  sampleLandingDragColourCoverage,
+} from "../lib/landingMapColourQa";
 import { fetchOvertureBuildingsForCut } from "../lib/overtureBuildings";
 import { resolveOvertureReleaseForApp } from "../lib/overtureRelease";
+import { isEnrichmentFetchAbort } from "../lib/buildingEnrichmentTiles";
 import { mergeBuildingEnrichment } from "../lib/buildingEnrichmentMerge";
-import { fetchBuildingEnrichmentForCut, fetchEnrichmentManifest } from "../lib/buildingEnrichmentTiles";
+import {
+  fetchBuildingEnrichmentForCut,
+  fetchEnrichmentManifest,
+  getEnrichmentPmtilesAbsoluteUrl,
+} from "../lib/buildingEnrichmentTiles";
 import { cutCenterOutsideBuiltBbox, enrichmentCoverageMessage } from "../lib/enrichmentCoverage";
 import { refineBuildingUses } from "../lib/useCascade";
 import { fetchSiteParcelCached, siteBuildingIdsForPreview } from "../lib/sitePreviewCache";
@@ -26,6 +41,7 @@ import { countLandingUseProvenance } from "../lib/landingUseProvenance";
 import { manifestMatchesAppTables } from "../lib/enrichmentTableHashes";
 import { shouldRunLiveZoneRefine } from "../lib/landingRefinePolicy";
 import { withResolvedUseSourceTiers } from "../lib/useSourceTier";
+import type { BuildingEnrichmentRecord } from "../lib/buildingEnrichmentTiles";
 import type { Basemap, BuildingFeat, LonLat, ViewState } from "../types";
 
 export type FlyRequest = {
@@ -76,10 +92,18 @@ export function MapStage({
   const appliedBasemap = useRef<Basemap>(basemap);
   const mountedFly = useRef(fly?.token ?? null);
   const colourCacheKeyRef = useRef<string | null>(null);
+  const enrichmentTilesBrokenRef = useRef(false);
+  const frameScreenRef = useRef<Frame | null>(null);
+  const landingQaBuildingsRef = useRef<BuildingFeat[] | null>(null);
+  const landingQaEnrichmentRef = useRef<Map<string, BuildingEnrichmentRecord> | null>(null);
   const maskRafRef = useRef(0);
   const [frame, setFrame] = useState<Frame | null>(null);
   const [ready, setReady] = useState(false);
   const [mapEpoch, setMapEpoch] = useState(0);
+  const [enrichmentNote, setEnrichmentNote] = useState<string | null>(null);
+  const [landingEnrichmentError, setLandingEnrichmentError] = useState<string | null>(null);
+  const [landingBuildingCapNote, setLandingBuildingCapNote] = useState<string | null>(null);
+  const [landingStacWarning, setLandingStacWarning] = useState<string | null>(null);
   sideRef.current = sideM;
   frameShapeRef.current = frameShape;
   onViewRef.current = onView;
@@ -99,6 +123,9 @@ export function MapStage({
     applyFlatNorthUpMapHandlers(map);
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     mapRef.current = map;
+    if (typeof window !== "undefined" && window.location.search.includes("qa=1")) {
+      (window as Window & { __citycutMap?: maplibregl.Map }).__citycutMap = map;
+    }
 
     const scheduleMask = () => {
       if (maskRafRef.current) return;
@@ -122,16 +149,28 @@ export function MapStage({
       const southEast = map.project([center.lng + dLon, center.lat - dLat]);
       const left = Math.min(northWest.x, southEast.x);
       const top = Math.min(northWest.y, southEast.y);
-      setFrame({
+      const nextFrame = {
         left,
         top,
         width: Math.abs(southEast.x - northWest.x),
         height: Math.abs(southEast.y - northWest.y),
-      });
+      };
+      setFrame(nextFrame);
+      frameScreenRef.current = nextFrame;
       if (typeof window !== "undefined" && window.location.search.includes("qa=1")) {
         const stats = window.__citycutCutColourStats;
         if (stats && stats.frameFirstDrawnMs == null) {
           stats.frameFirstDrawnMs = performance.now();
+        }
+        if (stats && nextFrame.width > 8) {
+          sampleLandingDragColourCoverage(
+            map,
+            nextFrame,
+            stats,
+            sideRef.current,
+            frameShapeRef.current,
+            landingQaBuildingsRef.current,
+          );
         }
       }
       scheduleMask();
@@ -150,15 +189,67 @@ export function MapStage({
             colourFetchMs: null,
             colourEnrichmentMs: null,
             colourRefineMs: null,
+            dragFirstColourMs: null,
+            drag95PctColourMs: null,
+            dragExpectedInFrame: null,
+            navStartMs: performance.now(),
+            staticFirstColourMs: null,
+            staticFirstAnyColourMs: null,
+            static95PctAnyMs: null,
+            staticFirstFinalColourMs: null,
+            static95PctFinalMs: null,
+            panFirstColourMs: null,
+            panFirstAnyColourMs: null,
+            pan95AnyDuringMs: null,
+            panFirstFinalColourMs: null,
+            pan95DuringMs: null,
+            pan95FinalDuringMs: null,
+            pan95AfterReleaseMs: null,
+            pan95FinalAfterReleaseMs: null,
+            panStartMs: null,
           };
         }
       }
       setReady(true);
       update();
     };
-    const onMoveEnd = () => setMapEpoch((value) => value + 1);
+    const flushMask = () => {
+      if (maskRafRef.current) {
+        window.cancelAnimationFrame(maskRafRef.current);
+        maskRafRef.current = 0;
+      }
+      const center = map.getCenter();
+      updateMapCutColourMask(map, {
+        center: { lon: center.lng, lat: center.lat },
+        sideM: sideRef.current,
+        frameShape: frameShapeRef.current,
+      });
+      ensureLandingColourLayerOrder(map);
+    };
+
+    const onMoveEnd = () => {
+      flushMask();
+      setMapEpoch((value) => value + 1);
+    };
+    const onMoveStart = () => {
+      if (typeof window !== "undefined" && window.location.search.includes("qa=1")) {
+        const stats = window.__citycutCutColourStats;
+        if (stats) {
+          stats.panStartMs = performance.now();
+          stats.panFirstColourMs = null;
+          stats.pan95DuringMs = null;
+          stats.pan95AfterReleaseMs = null;
+          stats.panFirstAnyColourMs = null;
+          stats.pan95AnyDuringMs = null;
+          stats.panFirstFinalColourMs = null;
+          stats.pan95FinalDuringMs = null;
+          stats.pan95FinalAfterReleaseMs = null;
+        }
+      }
+    };
 
     map.on("load", onLoad);
+    map.on("movestart", onMoveStart);
     map.on("move", update);
     map.on("moveend", onMoveEnd);
     map.on("resize", update);
@@ -166,6 +257,7 @@ export function MapStage({
     return () => {
       if (maskRafRef.current) window.cancelAnimationFrame(maskRafRef.current);
       map.off("load", onLoad);
+      map.off("movestart", onMoveStart);
       map.off("move", update);
       map.off("moveend", onMoveEnd);
       map.off("resize", update);
@@ -203,8 +295,73 @@ export function MapStage({
     const map = mapRef.current;
     if (!map || !ready || basemap !== "map") {
       colourCacheKeyRef.current = null;
+      enrichmentTilesBrokenRef.current = false;
       const mapOff = mapRef.current;
       if (mapOff?.loaded()) removeMapCutColourLayers(mapOff);
+      return;
+    }
+
+    let cancelled = false;
+    const cleanups: (() => void)[] = [];
+    const shellOptions = () => {
+      const center = map.getCenter();
+      return {
+        maskCenter: { lat: center.lat, lon: center.lng },
+        cutSideM: sideRef.current,
+        frameShape: frameShapeRef.current,
+      };
+    };
+    const applyShell = (enrichmentAbsoluteUrl: string | null) => {
+      cleanups.push(
+        runWhenMapStyleReady(
+          map,
+          () => {
+            ensureMapLandingColourShell(map, {
+              ...shellOptions(),
+              enrichmentAbsoluteUrl,
+            });
+          },
+          () => cancelled,
+        ),
+      );
+    };
+
+    const startInstall = () => {
+      applyShell(null);
+      if (!enrichmentTilesBrokenRef.current) {
+        void getEnrichmentPmtilesAbsoluteUrl()
+          .then((url) => {
+            if (!cancelled) applyShell(url);
+          })
+          .catch(() => {
+            enrichmentTilesBrokenRef.current = true;
+          });
+      }
+    };
+
+    if (map.isStyleLoaded()) startInstall();
+    else map.once("load", startInstall);
+
+    return () => {
+      cancelled = true;
+      for (const off of cleanups) off();
+    };
+  }, [ready, basemap, mapEpoch, sideM, frameShape]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || basemap !== "map") return;
+    installLandingColourQaBridge(map, {
+      sideM: sideRef.current,
+      frameShape: frameShapeRef.current,
+      getBuildings: () => landingQaBuildingsRef.current,
+      getEnrichmentById: () => landingQaEnrichmentRef.current,
+    });
+  }, [ready, basemap, sideM, frameShape, mapEpoch]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || basemap !== "map") {
       return;
     }
     const bounds = map.getBounds();
@@ -223,16 +380,27 @@ export function MapStage({
     let cancelled = false;
     const controller = new AbortController();
     const maskCenter: LonLat = { lat: map.getCenter().lat, lon: map.getCenter().lng };
+    const tilesMode = () => !enrichmentTilesBrokenRef.current;
 
-    const applyPayload = (buildings: BuildingFeat[], dataOrigin: LonLat) => {
+    const applyPayload = (
+      buildings: BuildingFeat[],
+      dataOrigin: LonLat,
+      enrichmentById: Map<string, BuildingEnrichmentRecord> | null,
+    ) => {
       if (cancelled) return;
       const cutSideM = sideRef.current;
-      const swapped = setMapCutColourData(map, {
-        dataOrigin,
-        sideM: footprint.sideM,
-        buildings,
-      });
-      if (!swapped) {
+      if (typeof window !== "undefined" && window.location.search.includes("qa=1")) {
+        const stats = window.__citycutCutColourStats;
+        if (stats) {
+          stats.dragExpectedInFrame = countBuildingsInCutFrame(
+            buildings,
+            cutSideM,
+            frameShapeRef.current,
+          );
+        }
+      }
+
+      if (!tilesMode()) {
         updateMapCutColourLayers(map, {
           dataOrigin,
           dataSideM: footprint.sideM,
@@ -242,109 +410,189 @@ export function MapStage({
           buildings,
         });
       } else {
+        const overlay =
+          enrichmentById != null ? landingLiveColourBuildings(buildings, enrichmentById) : buildings;
+        if (!setMapCutColourData(map, { dataOrigin, sideM: footprint.sideM, buildings: overlay })) {
+          void getEnrichmentPmtilesAbsoluteUrl().then((url) => {
+            if (cancelled) return;
+            ensureMapLandingColourShell(map, {
+              enrichmentAbsoluteUrl: url,
+              maskCenter,
+              cutSideM,
+              frameShape: frameShapeRef.current,
+            });
+            setMapCutColourData(map, { dataOrigin, sideM: footprint.sideM, buildings: overlay });
+          });
+        }
         updateMapCutColourMask(map, { center: maskCenter, sideM: cutSideM, frameShape: frameShapeRef.current });
       }
       colourCacheKeyRef.current = colourCacheKey;
+      landingQaBuildingsRef.current = buildings;
+      if (enrichmentById) landingQaEnrichmentRef.current = enrichmentById;
+      map.once("idle", () => {
+        const stats = window.__citycutCutColourStats;
+        if (!stats) return;
+        recordColourCoverageProgress(map, stats, cutSideM, frameShapeRef.current, {
+          panning: map.isMoving(),
+          buildings: landingQaBuildingsRef.current,
+        });
+        if (!map.isMoving()) {
+          recordColourCoverageProgress(map, stats, cutSideM, frameShapeRef.current, {
+            panning: false,
+            buildings: landingQaBuildingsRef.current,
+          });
+        }
+      });
+    };
+
+    const refreshEnrichmentOverlay = async (
+      buildings: BuildingFeat[],
+      dataOrigin: LonLat,
+    ): Promise<void> => {
+      try {
+        const enrichment = await fetchBuildingEnrichmentForCut(footprint.bounds, controller.signal);
+        if (cancelled || controller.signal.aborted) return;
+        if (enrichment.error) {
+          enrichmentTilesBrokenRef.current = true;
+          setLandingEnrichmentError(enrichment.error);
+          applyPayload(buildings, dataOrigin, null);
+          return;
+        }
+        setLandingEnrichmentError(null);
+        applyPayload(buildings, dataOrigin, enrichment.byId);
+      } catch (err) {
+        if (cancelled || controller.signal.aborted || isEnrichmentFetchAbort(err, controller.signal)) {
+          return;
+        }
+        enrichmentTilesBrokenRef.current = true;
+        setLandingEnrichmentError(
+          err instanceof Error ? err.message : "Building enrichment tiles could not be loaded.",
+        );
+      }
+    };
+
+    const runFetch = async () => {
+      setLandingBuildingCapNote(null);
+      setLandingStacWarning(null);
+      const fetchT0 = qaFetch ? performance.now() : 0;
+      try {
+        const manifest = await fetchEnrichmentManifest(controller.signal);
+        const { release: appOvertureRelease, stacWarning: overtureStacWarning } =
+          await resolveOvertureReleaseForApp(manifest, controller.signal);
+        const buildingResult = await fetchOvertureBuildingsForCut(
+          footprint.bounds,
+          footprint.origin,
+          footprint.sideM,
+          controller.signal,
+          "square",
+          { overtureRelease: appOvertureRelease, stacWarning: overtureStacWarning },
+        );
+        const enrichT0 = qaFetch ? performance.now() : 0;
+        let enrichment: Awaited<ReturnType<typeof fetchBuildingEnrichmentForCut>>;
+        try {
+          enrichment = await fetchBuildingEnrichmentForCut(footprint.bounds, controller.signal);
+        } catch (err) {
+          if (isEnrichmentFetchAbort(err, controller.signal) || cancelled) return;
+          throw err;
+        }
+        if (enrichment.error) {
+          enrichmentTilesBrokenRef.current = true;
+          setLandingEnrichmentError(enrichment.error);
+        } else {
+          setLandingEnrichmentError(null);
+        }
+        const enrichT1 = qaFetch ? performance.now() : 0;
+        const mergedRaw = mergeBuildingEnrichment(buildingResult.buildings, enrichment.byId);
+        const merged = withResolvedUseSourceTiers(mergedRaw);
+        const tablesMatch = await manifestMatchesAppTables(manifest);
+        let buildingsForCut = merged;
+        let refineRan = false;
+        if (
+          shouldRunLiveZoneRefine({
+            tilesOnly,
+            forceLiveRefine,
+            enrichmentError: enrichment.error,
+            manifestMatchesAppTables: tablesMatch,
+            manifest,
+            appOvertureRelease,
+            cutBounds: footprint.bounds,
+            merged: mergedRaw,
+            byId: enrichment.byId,
+          })
+        ) {
+          refineRan = true;
+          const refined = await refineBuildingUses(merged, footprint.origin, footprint.bounds, {
+            signal: controller.signal,
+          });
+          buildingsForCut = withResolvedUseSourceTiers(refined.buildings);
+        }
+        const prov = countLandingUseProvenance(mergedRaw, buildingsForCut);
+        const fetchT1 = qaFetch ? performance.now() : 0;
+        if (qaFetch && window.__citycutCutColourStats) {
+          window.__citycutCutColourStats.colourFetchMs = Math.round(fetchT1 - fetchT0);
+          window.__citycutCutColourStats.colourEnrichmentMs = Math.round(enrichT1 - enrichT0);
+          window.__citycutCutColourStats.colourRefineMs = refineRan ? Math.round(fetchT1 - enrichT1) : 0;
+          window.__citycutCutColourStats.landingUseFromTiles = prov.tileTierAfterMerge;
+          window.__citycutCutColourStats.landingUseFromLiveRefine = prov.liveRefineNewlyClassified;
+          window.__citycutCutColourStats.landingUseUnclassified = prov.unclassifiedFinal;
+          window.__citycutCutColourStats.landingUseTotal = prov.total;
+          window.__citycutCutColourStats.landingBuildingCapHit = buildingResult.buildingCapHit;
+          window.__citycutCutColourStats.landingOvertureFragmentCount = buildingResult.stats.fragmentCount;
+          window.__citycutCutColourStats.tilesOnlyMode = tilesOnly;
+          window.__citycutCutColourStats.landingUseTierCounts = prov.finalTierCounts;
+        }
+        if (cancelled || controller.signal.aborted) return;
+        if (!map.loaded()) await new Promise<void>((resolve) => map.once("idle", () => resolve()));
+        if (cancelled) return;
+        if (!cancelled) {
+          setLandingStacWarning(buildingResult.stacWarning);
+          setLandingBuildingCapNote(
+            buildingResult.buildingCapHit
+              ? `Showing the largest 4,000 of ${buildingResult.stats.fragmentCount.toLocaleString()} building parts in this view.`
+              : null,
+          );
+        }
+        if (!qaFetch) {
+          writeLandingColourCache(colourCacheKey, {
+            buildings: buildingsForCut,
+            dataOrigin: footprint.origin,
+          });
+        }
+        applyPayload(
+          buildingsForCut,
+          footprint.origin,
+          enrichment.error ? null : enrichment.byId,
+        );
+      } catch (err) {
+        if (cancelled || controller.signal.aborted || isEnrichmentFetchAbort(err, controller.signal)) {
+          return;
+        }
+        enrichmentTilesBrokenRef.current = true;
+        const message =
+          err instanceof Error ? err.message : "Building enrichment tiles could not be loaded.";
+        setLandingEnrichmentError(message);
+        if (map.loaded()) removeMapCutColourLayers(map);
+      }
     };
 
     const cached = qaFetch ? undefined : readLandingColourCache(colourCacheKey);
     if (cached) {
-      applyPayload(cached.buildings, cached.dataOrigin);
-      return;
+      if (tilesMode()) {
+        applyPayload(cached.buildings, cached.dataOrigin, landingQaEnrichmentRef.current);
+        void refreshEnrichmentOverlay(cached.buildings, cached.dataOrigin);
+      } else {
+        applyPayload(cached.buildings, cached.dataOrigin, null);
+      }
+      return () => {
+        cancelled = true;
+        controller.abort();
+      };
     }
 
     const timer = window.setTimeout(() => {
-      void (async () => {
-        setLandingBuildingCapNote(null);
-        setLandingStacWarning(null);
-        const fetchT0 = qaFetch ? performance.now() : 0;
-        try {
-          const manifest = await fetchEnrichmentManifest(controller.signal);
-          const { release: appOvertureRelease, stacWarning: overtureStacWarning } =
-            await resolveOvertureReleaseForApp(manifest, controller.signal);
-          const buildingResult = await fetchOvertureBuildingsForCut(
-            footprint.bounds,
-            footprint.origin,
-            footprint.sideM,
-            controller.signal,
-            "square",
-            { overtureRelease: appOvertureRelease, stacWarning: overtureStacWarning },
-          );
-          const enrichT0 = qaFetch ? performance.now() : 0;
-          const enrichment = await fetchBuildingEnrichmentForCut(footprint.bounds, controller.signal);
-          if (enrichment.error) {
-            setLandingEnrichmentError(enrichment.error);
-          } else {
-            setLandingEnrichmentError(null);
-          }
-          const enrichT1 = qaFetch ? performance.now() : 0;
-          const mergedRaw = mergeBuildingEnrichment(buildingResult.buildings, enrichment.byId);
-          const merged = withResolvedUseSourceTiers(mergedRaw);
-          const tablesMatch = await manifestMatchesAppTables(manifest);
-          let buildingsForCut = merged;
-          let refineRan = false;
-          if (
-            shouldRunLiveZoneRefine({
-              tilesOnly,
-              forceLiveRefine,
-              enrichmentError: enrichment.error,
-              manifestMatchesAppTables: tablesMatch,
-              manifest,
-              appOvertureRelease,
-              cutBounds: footprint.bounds,
-              merged: mergedRaw,
-              byId: enrichment.byId,
-            })
-          ) {
-            refineRan = true;
-            const refined = await refineBuildingUses(merged, footprint.origin, footprint.bounds, {
-              signal: controller.signal,
-            });
-            buildingsForCut = withResolvedUseSourceTiers(refined.buildings);
-          }
-          const prov = countLandingUseProvenance(mergedRaw, buildingsForCut);
-          const fetchT1 = qaFetch ? performance.now() : 0;
-          if (qaFetch && window.__citycutCutColourStats) {
-            window.__citycutCutColourStats.colourFetchMs = Math.round(fetchT1 - fetchT0);
-            window.__citycutCutColourStats.colourEnrichmentMs = Math.round(enrichT1 - enrichT0);
-            window.__citycutCutColourStats.colourRefineMs = refineRan ? Math.round(fetchT1 - enrichT1) : 0;
-            window.__citycutCutColourStats.landingUseFromTiles = prov.tileTierAfterMerge;
-            window.__citycutCutColourStats.landingUseFromLiveRefine = prov.liveRefineNewlyClassified;
-            window.__citycutCutColourStats.landingUseUnclassified = prov.unclassifiedFinal;
-            window.__citycutCutColourStats.landingUseTotal = prov.total;
-            window.__citycutCutColourStats.landingBuildingCapHit = buildingResult.buildingCapHit;
-            window.__citycutCutColourStats.landingOvertureFragmentCount = buildingResult.stats.fragmentCount;
-            window.__citycutCutColourStats.tilesOnlyMode = tilesOnly;
-            window.__citycutCutColourStats.landingUseTierCounts = prov.finalTierCounts;
-          }
-          if (cancelled || controller.signal.aborted) return;
-          if (!map.loaded()) await new Promise<void>((resolve) => map.once("idle", () => resolve()));
-          if (cancelled) return;
-          if (!cancelled) {
-            setLandingStacWarning(buildingResult.stacWarning);
-            setLandingBuildingCapNote(
-              buildingResult.buildingCapHit
-                ? `Showing the largest 4,000 of ${buildingResult.stats.fragmentCount.toLocaleString()} building parts in this view.`
-                : null,
-            );
-          }
-          if (!qaFetch) {
-            writeLandingColourCache(colourCacheKey, {
-              buildings: buildingsForCut,
-              dataOrigin: footprint.origin,
-            });
-          }
-          applyPayload(buildingsForCut, footprint.origin);
-        } catch (err) {
-          if (!cancelled) {
-            const message =
-              err instanceof Error ? err.message : "Building enrichment tiles could not be loaded.";
-            setLandingEnrichmentError(message);
-            if (map.loaded()) removeMapCutColourLayers(map);
-          }
-        }
-      })();
+      void runFetch();
     }, 280);
+
     return () => {
       cancelled = true;
       controller.abort();
@@ -442,10 +690,6 @@ export function MapStage({
   const sideKm = sideM / 1000;
   const label = cutFrameLabelKm(sideKm, frameShape);
   const circleFrame = frameShape === "circle";
-  const [enrichmentNote, setEnrichmentNote] = useState<string | null>(null);
-  const [landingEnrichmentError, setLandingEnrichmentError] = useState<string | null>(null);
-  const [landingBuildingCapNote, setLandingBuildingCapNote] = useState<string | null>(null);
-  const [landingStacWarning, setLandingStacWarning] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
