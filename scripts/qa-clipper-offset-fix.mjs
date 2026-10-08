@@ -83,6 +83,15 @@ execSync(`cp ${outDir}/footpath-fillet-plan-full-1km.png ${outDir}/clipper-fix-f
   stdio: "inherit",
 });
 
+const blockViewBox = "250 -20 150 140";
+execSync(
+  `npx vite-node scripts/render-site-plan-crop.mjs ${outDir}/east-model.json centre-block-pr "${blockViewBox}" 2`,
+  { stdio: "inherit" },
+);
+execSync(`cp ${outDir}/footpath-fillet-plan-centre-block-pr.png ${outDir}/clipper-fix-centre-block-after.png`, {
+  stdio: "inherit",
+});
+
 // Bench 1 km plan build (PR code)
 execSync(`npx vite-node scripts/bench-plan-1km.mjs ${outDir}/east-model.json pr-clipper-fix`, {
   stdio: "inherit",
