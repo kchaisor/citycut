@@ -5,11 +5,14 @@ export type KeyValueStore = {
   setItem(key: string, value: string): void;
 };
 
+/** CoM 2023 heights are on by default; localStorage `"false"` opts out for this browser. */
 export function readStoredComBuildingHeights(storage: KeyValueStore): boolean {
   try {
-    return storage.getItem(COM_BUILDING_HEIGHTS_STORAGE_KEY) === "true";
+    const raw = storage.getItem(COM_BUILDING_HEIGHTS_STORAGE_KEY);
+    if (raw === "false") return false;
+    return true;
   } catch {
-    return false;
+    return true;
   }
 }
 

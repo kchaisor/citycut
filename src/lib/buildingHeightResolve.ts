@@ -101,10 +101,14 @@ export function applyComScalarHeight(building: BuildingFeat, heightM: number): B
 }
 
 /** Apply DAM / development floor count before zone fallback. */
+export function buildingEligibleForDamFloors(building: BuildingFeat): boolean {
+  if (building.heightManual) return false;
+  if (building.heightTier === "com" || building.extrusionParts?.length) return false;
+  return Boolean(building.heightFromFallback);
+}
+
 export function applyDevelopmentFloorsHeight(building: BuildingFeat, floorsAbove: number): BuildingFeat {
-  if (building.heightManual) return building;
-  if (building.heightTier === "com" || building.extrusionParts?.length) return building;
-  if (!building.heightFromFallback) return building;
+  if (!buildingEligibleForDamFloors(building)) return building;
   if (!(floorsAbove > 0)) return building;
   const height = clampBuildingHeight(floorsAbove * STOREY_HEIGHT_M);
   return {

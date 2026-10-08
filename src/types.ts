@@ -244,6 +244,10 @@ export type CityModel = {
   siteBuildingQa?: import("./lib/siteBuildings").SiteBuildingOverlap[];
   /** CoM development floor records loaded at model create (Melbourne cuts). */
   developmentDamRecords?: import("./lib/comDevelopmentFloors").DamFloorRecord[];
+  /** Building list before CoM 2023 heights (for opt-out toggle). */
+  buildingsWithoutCom?: BuildingFeat[];
+  /** CoM footprints were applied during model create. */
+  comBuildingHeightsApplied?: boolean;
 };
 
 export type ViewState = {

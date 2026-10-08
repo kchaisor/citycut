@@ -27,16 +27,16 @@ describe("Freemasons Hospital height regression (East Melbourne)", () => {
     expect(building.heightFromFallback).toBe(true);
     expect(building.height).toBe(6);
 
-    const withDam = applyDevelopmentFloorsToBuildings([building], center, damRecords)[0]!;
-    expect(withDam.height).toBeGreaterThanOrEqual(15);
-    expect(withDam.height).toBeLessThanOrEqual(30);
-    expect(inferHeightTier(withDam)).toBe("development_floors");
-
     const { buildings: withCom } = applyComBuildingHeights([building], comFootprints);
     const com = withCom[0]!;
     expect(com.height).toBeGreaterThanOrEqual(15);
     expect(com.height).toBeLessThanOrEqual(30);
     expect(inferHeightTier(com)).toBe("com");
+    expect(com.extrusionParts?.length ?? 0).toBeGreaterThan(1);
     expect(buildingHeightSourceLabelForBuilding(com)).not.toMatch(/^Zone default/);
+
+    const withDamAfterCom = applyDevelopmentFloorsToBuildings(withCom, center, damRecords)[0]!;
+    expect(inferHeightTier(withDamAfterCom)).toBe("com");
+    expect(withDamAfterCom.height).toBe(com.height);
   });
 });

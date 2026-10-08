@@ -39,6 +39,7 @@ import {
 import { explodedAxoViewportExtent, planViewportExtent, type PlanViewport } from "../lib/planViewport";
 import { FIGURE_SCALES, preferredFigureScale, sheetFitMessage } from "../lib/figureGround";
 import {
+  countBuildingsWithComDerivedExtrusion,
   fetchComBuildingFootprints,
   paddedComFetchBounds,
   type ComBuildingFootprint,
@@ -512,24 +513,44 @@ export function ModelPage({ model }: { model: CityModel }) {
   }, [model]);
 
   useEffect(() => {
-    if (!betterHeights || comFootprints.length === 0 || model.buildings.length === 0) {
+    if (!betterHeights) {
+      setComHeightBuildings(null);
+      setComHeightUpdates(0);
+      return;
+    }
+    if (model.comBuildingHeightsApplied) {
+      const before = model.buildingsWithoutCom ?? model.buildings;
+      setComHeightBuildings(
+        annotateUnresolvedZoneDefaults(
+          model.buildings,
+          model.center,
+          comFootprints,
+          model.developmentDamRecords ?? [],
+        ),
+      );
+      setComHeightUpdates(countBuildingsWithComDerivedExtrusion(before, model.buildings));
+      return;
+    }
+    if (comFootprints.length === 0 || model.buildings.length === 0) {
       setComHeightBuildings(null);
       setComHeightUpdates(0);
       return;
     }
     const controller = new AbortController();
-    runComBuildingHeightsInWorker(model.buildings, comFootprints, controller.signal)
+    const source = model.buildingsWithoutCom ?? model.buildings;
+    runComBuildingHeightsInWorker(source, comFootprints, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return;
+        const damApplied = result.buildings;
         setComHeightBuildings(
           annotateUnresolvedZoneDefaults(
-            result.buildings,
+            damApplied,
             model.center,
             comFootprints,
             model.developmentDamRecords ?? [],
           ),
         );
-        setComHeightUpdates(result.updated);
+        setComHeightUpdates(countBuildingsWithComDerivedExtrusion(source, damApplied));
       })
       .catch(() => {
         if (!controller.signal.aborted) {
@@ -538,9 +559,22 @@ export function ModelPage({ model }: { model: CityModel }) {
         }
       });
     return () => controller.abort();
-  }, [betterHeights, comFootprints, model.buildings]);
+  }, [
+    betterHeights,
+    comFootprints,
+    model.buildings,
+    model.buildingsWithoutCom,
+    model.center,
+    model.comBuildingHeightsApplied,
+    model.developmentDamRecords,
+  ]);
 
-  const baseBuildings = betterHeights && comHeightBuildings ? comHeightBuildings : model.buildings;
+  const baseBuildings = useMemo(() => {
+    if (!betterHeights) return model.buildingsWithoutCom ?? model.buildings;
+    if (comHeightBuildings) return comHeightBuildings;
+    if (model.comBuildingHeightsApplied) return model.buildings;
+    return model.buildings;
+  }, [betterHeights, comHeightBuildings, model.buildings, model.buildingsWithoutCom, model.comBuildingHeightsApplied]);
 
   const overrideResult = useMemo(
     () => applyHeightOverrides(baseBuildings, heightOverrideStore, model.center),
@@ -989,7 +1023,9 @@ export function ModelPage({ model }: { model: CityModel }) {
                       });
                     }}
                   >
-                    {betterHeights ? "Better heights (CoM 2023) on" : "Better heights (CoM 2023)"}
+                    {betterHeights
+                      ? "CoM 2023 measured heights on · turn off"
+                      : "CoM 2023 heights off · turn on"}
                   </button>
                 </div>
                 {betterHeights && comHeightUpdates > 0 && (
