@@ -50,6 +50,7 @@ import {
   paddedComFetchBounds,
 } from "./lib/comBuildingHeights";
 import { applyDevelopmentFloorsToBuildings, fetchDevelopmentFloorRecords } from "./lib/comDevelopmentFloors";
+import { buildHeightSourceLoadWarnings } from "./lib/buildHeightSourceLoadWarnings";
 import type { Basemap, CityModel, LonLat, PlaceHit, UiLayers, UseTierFailure, ViewState } from "./types";
 
 function frameFromQuery(): FrameQuery | null {
@@ -535,6 +536,13 @@ export default function App() {
       }
       if (damResult.error) sourceNote = `${sourceNote} ${damResult.error}`;
       if (comHeightsResult.error) sourceNote = `${sourceNote} ${comHeightsResult.error}`;
+      const heightSourceLoadWarnings = buildHeightSourceLoadWarnings({
+        buildingsLayer: modelLayers.buildings,
+        comBounds: comFetchBounds,
+        comError: comHeightsResult.error,
+        comFootprintCount: comHeightsResult.footprints.length,
+        damError: damResult.error,
+      });
       const buildingCapHit = overtureResult.buildingCapHit;
       if (buildingCapHit) sourceNote = `${sourceNote} Building count was capped at 4000.`;
       if (contourLayer && contourLayer.source !== "dem") {
@@ -630,6 +638,8 @@ export default function App() {
         buildingsWithoutCom,
         comBuildingHeightsApplied: false,
         comFootprintPrefetch,
+        heightSourceLoadWarnings:
+          heightSourceLoadWarnings.length > 0 ? heightSourceLoadWarnings : undefined,
       });
       setPhase("model");
     } catch (err) {

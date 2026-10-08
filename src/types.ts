@@ -47,7 +47,9 @@ export type BuildingHeightTier =
   | "overture_floors"
   | "development_floors"
   | "osm_levels"
-  | "zone_default";
+  | "zone_default"
+  /** Zone-style height but a measured/tag source overlapped and did not apply (see panel note). */
+  | "real_source_unmatched";
 
 /** One vertical extrusion inside an OSM footprint (CoM clip or OSM-height remainder). */
 export type BuildingExtrusionPart = {
@@ -256,6 +258,8 @@ export type CityModel = {
   comBuildingHeightsApplied?: boolean;
   /** CoM footprint rows prefetched during model create (Melbourne); ModelPage skips refetch when set. */
   comFootprintPrefetch?: import("./lib/comBuildingHeightsTypes").ComBuildingFootprint[];
+  /** Non-blocking banners when height datasets failed to load (CoM, DAM, Overture). */
+  heightSourceLoadWarnings?: string[];
 };
 
 export type ViewState = {

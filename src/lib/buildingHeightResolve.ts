@@ -3,7 +3,7 @@ import { clampBuildingHeight } from "./height";
 import { intersectionAreaM2, tallestExtrusionHeight, COM_SLIVER_MIN_FRACTION } from "./comBuildingHeightsMatch";
 import type { ComBuildingFootprint } from "./comBuildingHeightsTypes";
 import type { DamFloorRecord } from "./comDevelopmentFloors";
-import { matchDevelopmentFloorsToBuilding } from "./comDevelopmentFloors";
+import { applyHeightSourceTruthPass } from "./buildingHeightSourceTruth";
 import type { LonLat } from "../types";
 import type { BuildingFeat, BuildingExtrusionPart, BuildingHeightTier } from "../types";
 
@@ -43,6 +43,7 @@ export function effectiveBuildingHeightM(building: BuildingFeat): number {
 
 export function inferHeightTier(building: BuildingFeat): BuildingHeightTier {
   if (building.heightManual) return "manual";
+  if (building.heightTier === "real_source_unmatched") return "real_source_unmatched";
   if (building.heightTier) return building.heightTier;
   if (building.extrusionParts?.length) return "com";
   if (building.heightFromFallback) return "zone_default";
@@ -65,6 +66,10 @@ export function heightTierLabel(tier: BuildingHeightTier, meta?: BuildingHeightT
       return "CoM development floors";
     case "osm_levels":
       return "OSM building:levels";
+    case "real_source_unmatched": {
+      const note = meta?.zoneDefaultNote;
+      return note ? `Estimate · ${note}` : "Estimate · real source overlapped but did not apply";
+    }
     default: {
       const note = meta?.zoneDefaultNote;
       return note ? `Zone default · ${note}` : "Zone default · estimate, no measured height";
@@ -159,20 +164,12 @@ export function annotateUnresolvedZoneDefaults(
   footprints: ComBuildingFootprint[],
   damRecords: DamFloorRecord[],
 ): BuildingFeat[] {
-  return buildings.map((building) => {
+  const truth = applyHeightSourceTruthPass(buildings, center, footprints, damRecords);
+  return truth.map((building) => {
     if (!building.heightFromFallback) return building;
-    const notes: string[] = [];
-    if (footprints.length > 0 && buildingHasComOverlap(building, footprints)) {
-      notes.push("CoM data nearby not matched");
-    }
-    const damFloors = matchDevelopmentFloorsToBuilding(building, center, damRecords);
-    if (damFloors != null) {
-      notes.push(`recorded ${damFloors} floors not applied`);
-    }
-    if (notes.length === 0) {
-      return flagUnresolvedZoneDefault(building, "estimate, no measured height");
-    }
-    return flagUnresolvedZoneDefault(building, notes.join("; "));
+    if (building.heightTier === "real_source_unmatched") return building;
+    if (building.zoneDefaultNote) return building;
+    return flagUnresolvedZoneDefault(building, "estimate, no measured height");
   });
 }
 

@@ -8,11 +8,14 @@ import {
 } from "../lib/buildingPopupLookup";
 import { interiorPoint } from "../lib/useCascade";
 import { fromLocal } from "../lib/geo";
+import type { DamFloorRecord } from "../lib/comDevelopmentFloors";
 import type { BuildingFeat, LonLat } from "../types";
 
 type Props = {
   building: BuildingFeat;
   center: LonLat;
+  allBuildings?: BuildingFeat[];
+  damRecords?: DamFloorRecord[];
   onSave: (heightM: number) => void;
   onReset: () => void;
   onClose: () => void;
@@ -32,7 +35,15 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function BuildingHeightPopover({ building, center, onSave, onReset, onClose }: Props) {
+export function BuildingHeightPopover({
+  building,
+  center,
+  allBuildings,
+  damRecords,
+  onSave,
+  onReset,
+  onClose,
+}: Props) {
   const [value, setValue] = useState(() => formatHeightM(building.height));
   const [details, setDetails] = useState<BuildingPopupDetails>(() => emptyBuildingPopupDetails(building));
   const [minimised, setMinimised] = useState(false);
@@ -43,11 +54,23 @@ export function BuildingHeightPopover({ building, center, onSave, onReset, onClo
     setDetails(emptyBuildingPopupDetails(building));
     setMinimised(false);
     const controller = new AbortController();
-    void loadBuildingPopupDetails(building, center, controller.signal).then((loaded) => {
+    void loadBuildingPopupDetails(building, center, controller.signal, {
+      allBuildings,
+      damRecords,
+    }).then((loaded) => {
       if (!controller.signal.aborted) setDetails(loaded);
     });
     return () => controller.abort();
-  }, [building.id, building.height, building.use, building.source, center.lat, center.lon]);
+  }, [
+    building.id,
+    building.height,
+    building.use,
+    building.source,
+    center.lat,
+    center.lon,
+    allBuildings,
+    damRecords,
+  ]);
 
   useEffect(() => {
     if (minimised) return;

@@ -17,6 +17,11 @@ import {
   fetchDevelopmentFloorRecords,
 } from "../src/lib/comDevelopmentFloors.ts";
 import { inferHeightTier } from "../src/lib/buildingHeightResolve.ts";
+import {
+  applyHeightSourceTruthPass,
+  comAnyOverlapRatio,
+  findSilentDefaultViolations,
+} from "../src/lib/buildingHeightSourceTruth.ts";
 
 function parseArg(name, fallback) {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -46,17 +51,31 @@ function tierCounts(buildings) {
     development_floors: 0,
     osm_levels: 0,
     zone_default: 0,
+    real_source_unmatched: 0,
   };
   for (const b of buildings) {
-    counts[inferHeightTier(b)] += 1;
+    const tier = inferHeightTier(b);
+    if (tier in counts) counts[tier] += 1;
+    else counts[tier] = 1;
   }
   return counts;
+}
+
+function zoneDefaultWithOverlap(buildings, footprints) {
+  let n = 0;
+  for (const b of buildings) {
+    if (inferHeightTier(b) !== "zone_default") continue;
+    if (comAnyOverlapRatio(b, footprints) > 0) n += 1;
+  }
+  return n;
 }
 
 const before = tierCounts(zoned);
 const damLegacy = applyDevelopmentFloorsToBuildingsLegacy(zoned, center, dam);
 const damWinnerOnly = applyDevelopmentFloorsToBuildings(zoned, center, dam);
-const { buildings: afterComDam } = applyComBuildingHeights(damWinnerOnly, footprints);
+const { buildings: afterComDamRaw } = applyComBuildingHeights(damWinnerOnly, footprints);
+const afterComDam = applyHeightSourceTruthPass(afterComDamRaw, center, footprints, dam);
+const silentViolations = findSilentDefaultViolations(afterComDam, center, footprints, dam);
 
 const damMultiBefore = countDamMultiBuildingAssignments(zoned, center, dam, "legacy");
 const damMultiAfter = countDamMultiBuildingAssignments(zoned, center, dam, "winner");
@@ -74,7 +93,9 @@ console.log(
         winnerAssign: damMultiAfter.recordsWithMultipleBuildings,
       },
       damOnlyWinnerTiers: tierCounts(damWinnerOnly),
-      note: "afterComAndDamWinner mirrors App create order: zones → CoM → DAM winner",
+      zoneDefaultWithComOverlap: zoneDefaultWithOverlap(afterComDam, footprints),
+      silentDefaultViolations: silentViolations.length,
+      note: "afterComAndDamWinner: zones → DAM winner → CoM → source-truth pass",
     },
     null,
     2,

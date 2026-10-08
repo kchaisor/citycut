@@ -120,6 +120,16 @@ export function buildingsEligibleNearDamRecord(
 }
 
 /** Pick one building per DAM record: largest footprint among eligible neighbours. */
+/** DAM records for which this building is the largest eligible neighbour (height-tier winner). */
+export function damRecordsWonByBuilding(
+  building: BuildingFeat,
+  center: LonLat,
+  records: DamFloorRecord[],
+  allBuildings: BuildingFeat[],
+): DamFloorRecord[] {
+  return records.filter((record) => pickDamFloorRecipient(allBuildings, center, record)?.id === building.id);
+}
+
 export function pickDamFloorRecipient(
   buildings: BuildingFeat[],
   center: LonLat,

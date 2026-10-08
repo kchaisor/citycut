@@ -380,7 +380,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     window.__citycutQaModel = {
       getSummary: () => qaSummaryRef.current,
       listBuildings() {
-        return model.buildings.map((building) => {
+        return qaDisplayBuildingsRef.current.map((building) => {
           const { east, north } = buildingCentroid(building);
           return { id: building.id, height: building.height, east, north };
         });
@@ -465,15 +465,17 @@ export function ModelPage({ model }: { model: CityModel }) {
         return true;
       },
       selectionScreenClip(buildingId: number, padPx = 48) {
-        const row = window.__citycutQaModel?.listBuildings?.().find((item) => item.id === buildingId);
+        const building = qaDisplayBuildingsRef.current.find((item) => item.id === buildingId);
         const project = window.__citycutQa?.projectToScreen;
-        if (!row || !project) return null;
-        const z = -row.north;
+        if (!building || !project) return null;
+        const { east, north } = buildingCentroid(building);
+        const z = -north;
+        const h = building.height;
         const corners = [
-          project({ x: row.east, y: 0, z }),
-          project({ x: row.east, y: row.height, z }),
-          project({ x: row.east - 25, y: row.height * 0.5, z }),
-          project({ x: row.east + 25, y: row.height * 0.5, z }),
+          project({ x: east, y: 0, z }),
+          project({ x: east, y: h, z }),
+          project({ x: east - 25, y: h * 0.5, z }),
+          project({ x: east + 25, y: h * 0.5, z }),
         ].filter(Boolean);
         if (corners.length === 0) return null;
         let minX = Infinity;
@@ -932,6 +934,11 @@ export function ModelPage({ model }: { model: CityModel }) {
       <div className={tab === "drawing" ? "viewport is-drawing" : "viewport"}>
         {tab === "3d" && (
           <div className="fill">
+            {model.heightSourceLoadWarnings?.map((line) => (
+              <p key={line} className="height-source-notice" role="status">
+                {line}
+              </p>
+            ))}
             <SceneBoundary>
               <Scene3D
                 model={displayModel}
@@ -969,6 +976,8 @@ export function ModelPage({ model }: { model: CityModel }) {
                 <BuildingHeightPopover
                   building={pickedBuilding}
                   center={displayModel.center}
+                  allBuildings={displayModel.buildings}
+                  damRecords={displayModel.developmentDamRecords ?? []}
                   onSave={(heightM) => saveBuildingHeight(pickedBuilding.id, heightM)}
                   onReset={() => resetBuildingHeight(pickedBuilding.id)}
                   onClose={() => setHeightPick(null)}
