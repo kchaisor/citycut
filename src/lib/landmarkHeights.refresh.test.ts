@@ -6,7 +6,7 @@ import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import landmarks from "./fixtures/landmark-heights.json";
-import { snapshotCutName } from "./landmarkSnapshotAliases";
+import type { LandmarkRow } from "./landmarkHeights.test";
 import { squareBBox } from "./geo";
 import { fetchOvertureBuildingsForCut } from "./overtureBuildings";
 import { loadEnrichmentForCutFromDisk } from "./test/loadEnrichmentForCut";
@@ -24,18 +24,17 @@ const refresh = process.env.REFRESH_LANDMARK_SNAPSHOT === "1";
 
 describe.skipIf(!refresh)("landmark snapshot refresh", () => {
   it(
-    "writes landmark-heights-snapshot.json",
+    "writes landmark-heights-snapshot.json (one cut per fixture cut key)",
     async () => {
+      const byCut = new Map<string, LandmarkRow>();
+      for (const lm of landmarks as LandmarkRow[]) {
+        if (!byCut.has(lm.cut)) byCut.set(lm.cut, lm);
+      }
       const cuts: LandmarkCutSnapshot[] = [];
       const report: string[] = [];
-      for (const lm of landmarks as {
-        name: string;
-        lat: number;
-        lon: number;
-        sideM?: number;
-      }[]) {
+      for (const [cutName, lm] of byCut) {
         const center = { lon: lm.lon, lat: lm.lat };
-        const sideM = lm.sideM ?? 450;
+        const sideM = 450;
         const bounds = squareBBox(center, sideM);
         const comBounds = paddedComFetchBounds(center, sideM);
         const [{ buildings }, enrichment, { zones }, dam, { footprints }] = await Promise.all([
@@ -47,10 +46,10 @@ describe.skipIf(!refresh)("landmark snapshot refresh", () => {
         ]);
         const pick = pickBuildingAtPoint(buildings, lm.lat, lm.lon, center);
         report.push(
-          `${lm.name}: buildings=${buildings.length} contains=${pick ? pick.building.id : "NONE"} height=${pick?.heightM ?? "—"}`,
+          `${cutName}: buildings=${buildings.length} sample=${lm.name} contains=${pick ? pick.building.id : "NONE"} height=${pick?.heightM ?? "—"}`,
         );
         cuts.push({
-          name: snapshotCutName(lm.name),
+          name: cutName,
           center,
           sideM,
           overtureBuildings: buildings,
@@ -62,7 +61,8 @@ describe.skipIf(!refresh)("landmark snapshot refresh", () => {
       }
       writeFileSync(OUT, JSON.stringify({ generatedAt: new Date().toISOString(), cuts }, null, 0));
       console.info(report.join("\n"));
-      expect(cuts.length).toBe(landmarks.length);
+      console.info("Run: npx vite-node scripts/patch-landmark-snapshot-osm-ways.mjs");
+      expect(cuts.length).toBe(byCut.size);
     },
     900_000,
   );
