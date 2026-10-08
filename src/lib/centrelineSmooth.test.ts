@@ -51,7 +51,8 @@ describe("centrelineSmooth", () => {
   });
 
   it("uses a tight clipper arc tolerance for footpath fillets", () => {
-    expect(CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M).toBeLessThanOrEqual(0.015);
+    expect(CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M).toBeLessThanOrEqual(0.03);
+    expect(CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M).toBeGreaterThanOrEqual(0.02);
   });
 
   it("adds enough vertices on a filleted footpath crossing", () => {
@@ -64,6 +65,6 @@ describe("centrelineSmooth", () => {
     const filleted = unionFootpathStrips(strips, 200, "square", 2, 1.2);
     const outer = filleted.polygons[0]?.[0]?.slice(0, -1) ?? [];
     const nearCross = outer.filter((p) => Math.hypot(p[0], p[1]) > 0.35 && Math.hypot(p[0], p[1]) < 2.5);
-    expect(nearCross.length).toBeGreaterThanOrEqual(12);
+    expect(nearCross.length).toBeGreaterThanOrEqual(8);
   });
 });

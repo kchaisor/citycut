@@ -23,7 +23,6 @@ import {
   drawnContourInterval,
 } from "./vicmapContours";
 import type { CityModel, Pt } from "../types";
-import { smoothPlanMultiPolygon } from "./planRingSmooth";
 import { fillRoadMedianHoles, splitGreenForRoadLayer } from "./roadSurfacePlan";
 
 const round = (value: number) => Math.round(value * 10) / 10;

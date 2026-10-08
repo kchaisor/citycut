@@ -44,6 +44,7 @@ function meanRuns(modelPath, label, envExtra, runs = 3) {
   for (const key of keys) {
     mean[key] = Math.round(slice.reduce((s, r) => s + (r[key] ?? 0), 0) / slice.length);
   }
+  mean.totalMsExGreen = mean.totalMs - (mean.greenSplitMs ?? 0);
   return mean;
 }
 

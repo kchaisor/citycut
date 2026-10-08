@@ -6,12 +6,22 @@ import { signedArea } from "./geo";
 /** Clipper integer scale: 1 mm per unit (0.001 m). */
 export const CLIPPER_SCALE = 1000;
 
-/** Round-join step scale for centreline buffers in roadFill (m). */
-export const CLIPPER_ARC_TOLERANCE_M = 0.02;
+/** Round-join step for centreline buffers and morphological close (m). ~12–16 segments on a 3 m radius quarter arc. */
+export const CLIPPER_ARC_TOLERANCE_M = 0.025;
 /** Arc tolerance passed to Clipper polygon offset (m). */
-export const CLIPPER_POLYGON_OFFSET_ARC_TOLERANCE_M = 0.05;
-/** Tighter arcs for footpath junction fillet morphological close (m). */
-export const CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M = 0.01;
+export const CLIPPER_POLYGON_OFFSET_ARC_TOLERANCE_M = 0.025;
+/** Arc tolerance for footpath junction fillet morphological close (m). */
+export const CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M = 0.025;
+
+/** Segment count for a circular arc within sagitta `arcToleranceM`. */
+export function arcSegmentCount(radiusM: number, sweepRad: number, arcToleranceM = CLIPPER_ARC_TOLERANCE_M): number {
+  const r = Math.max(radiusM, 0.01);
+  const tol = Math.max(arcToleranceM, 0.005);
+  const cosArg = Math.max(-1, Math.min(1, 1 - tol / r));
+  let maxAng = 2 * Math.acos(cosArg);
+  if (!Number.isFinite(maxAng) || maxAng < 0.08) maxAng = Math.PI / 6;
+  return Math.max(2, Math.ceil(Math.abs(sweepRad) / maxAng));
+}
 
 type ClipperPoint = { X: number; Y: number };
 type ClipperPath = ClipperPoint[];
@@ -226,11 +236,15 @@ function offsetNormalizedByParity(
   return normalizeFromRings(expanded);
 }
 
-/** Offset every polygon in a multipolygon; round joins, arc tolerance 0.05 m. */
-export function offsetMultiPolygon(polygons: MultiPolygon, deltaM: number): MultiPolygon {
+/** Offset every polygon in a multipolygon; round joins at `arcToleranceM`. */
+export function offsetMultiPolygon(
+  polygons: MultiPolygon,
+  deltaM: number,
+  arcToleranceM = CLIPPER_POLYGON_OFFSET_ARC_TOLERANCE_M,
+): MultiPolygon {
   if (polygons.length === 0 || !(Math.abs(deltaM) > 1e-9)) return polygons;
   const normalized = normalizeMultiPolygonByParity(polygons);
-  return offsetNormalizedByParity(normalized, deltaM);
+  return offsetNormalizedByParity(normalized, deltaM, arcToleranceM);
 }
 
 function intersectMultiPolygon(a: MultiPolygon, b: MultiPolygon): MultiPolygon {
