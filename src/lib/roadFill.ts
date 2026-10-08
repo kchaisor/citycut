@@ -3,6 +3,7 @@ import type { MultiPolygon, Pair, Polygon, Ring } from "polygon-clipping";
 import { polylineLength, signedArea } from "./geo";
 import { DEFAULT_SITE_FRAME_SHAPE, pointInSiteFrame, siteFramePolygon, type SiteFrameShape } from "./siteFrame";
 import type { Pt, RoadFeat } from "../types";
+import { smoothCentrelineStrips } from "./centrelineSmooth";
 import { normalizeMultiPolygonByParity, offsetCloseMultiPolygon } from "./polygonOffset";
 
 type ClipFns = {
@@ -504,8 +505,9 @@ function unionStrips(
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
 ): RoadFill {
   const started = performance.now();
+  const smoothed = smoothCentrelineStrips(roads, PATH_ENDPOINT_STITCH_M);
   const inputs: Polygon[] = [];
-  for (const road of roads) {
+  for (const road of smoothed) {
     if (road.line.length < 2 || !(road.width > 0)) continue;
     inputs.push(...bufferCentreline(road.line, road.width, minWidth));
   }

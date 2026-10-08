@@ -6,8 +6,8 @@ import { signedArea } from "./geo";
 /** Clipper integer scale: 1 mm per unit (0.001 m). */
 export const CLIPPER_SCALE = 1000;
 
-/** Round-join arc tolerance on the ground, in metres. */
-export const CLIPPER_ARC_TOLERANCE_M = 0.05;
+/** Round-join arc tolerance on the ground, in metres (~0.01 m chord sagitta at r=2). */
+export const CLIPPER_ARC_TOLERANCE_M = 0.01;
 
 type ClipperPoint = { X: number; Y: number };
 type ClipperPath = ClipperPoint[];
