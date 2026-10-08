@@ -4,7 +4,8 @@
  * npx vite-node scripts/qa-clipper-offset-fix.mjs
  */
 import { chromium } from "playwright";
-import { mkdirSync, writeFileSync, readFileSync, execSync } from "node:fs";
+import { execSync } from "node:child_process";
+import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 
 const outDir = "/opt/cursor/artifacts";
 mkdirSync(outDir, { recursive: true });
