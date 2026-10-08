@@ -23,7 +23,8 @@ labels=(caac962 main pr)
 for i in "${!refs[@]}"; do
   ref=${refs[$i]}
   label=${labels[$i]}
-  git checkout "$ref" --quiet
+  rm -f scripts/bench-plan-1km.mjs scripts/render-site-plan-crop.mjs
+  git checkout -f "$ref" --quiet
   inject_bench_scripts
   npm run build --silent 2>/dev/null || npm run build
   npx vite-node scripts/bench-plan-1km.mjs "$MODEL" "$label"
