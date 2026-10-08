@@ -2,7 +2,7 @@
 set -euo pipefail
 cd /workspace
 BR=$(git rev-parse --abbrev-ref HEAD)
-BENCH_REF="${BENCH_SCRIPTS_REF:-HEAD}"
+BENCH_REF="${BENCH_SCRIPTS_REF:-$(git rev-parse HEAD)}"
 MODEL=/opt/cursor/artifacts/east-model.json
 : > /opt/cursor/artifacts/bench-plan-1km.jsonl
 
