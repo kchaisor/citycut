@@ -39,7 +39,11 @@ await sampleHeap();
 const t0 = Date.now();
 await page.locator("button.create-fab").click();
 await page.waitForSelector(".model-chrome", { timeout: 600_000 });
-await page.waitForFunction(() => window.__citycutQaModel?.getSummary != null, null, { timeout: 120_000 });
+await page.waitForFunction(
+  () => (window.__citycutQaModel?.getSummary()?.roadCount ?? 0) > 500,
+  null,
+  { timeout: 600_000 },
+);
 const readyMs = Date.now() - t0;
 await sampleHeap();
 const summary = await page.evaluate(() => window.__citycutQaModel?.getSummary?.() ?? null);

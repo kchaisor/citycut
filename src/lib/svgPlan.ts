@@ -6,8 +6,8 @@ import { openRing } from "./geo";
 import { PATH_WIDTH_M } from "./lineweights";
 import {
   DEFAULT_PATH_FILLET_M,
-  footpathLines,
-  unionFootpaths,
+  footpathStrips,
+  unionFootpathStrips,
   unionRoadSurface,
 } from "./roadFill";
 import {
@@ -163,12 +163,12 @@ export function planPaths(
   for (const line of model.tramLines ?? []) {
     for (const part of clipLines(line, model.sideM, frameShape)) trams.push(part);
   }
-  const footpaths = unionFootpaths(
-    footpathLines(model.roads),
-    pathWidthM,
+  const footpaths = unionFootpathStrips(
+    footpathStrips(model.roads, pathWidthM),
     model.sideM,
     frameShape,
     planOptions.pathFilletM ?? DEFAULT_PATH_FILLET_M,
+    pathWidthM,
   );
   const carriageway = unionRoadSurface(model.roads, model.tramLines, model.sideM, frameShape);
 

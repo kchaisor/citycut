@@ -1,5 +1,5 @@
 /**
- * Footpath junction before/after fillet PNGs for B5 item 6.
+ * Footpath junction before/after fillet PNGs (synthetic T junction, not a crossing blob).
  * npx vite-node scripts/qa-b5-footpath-fillet.mjs
  */
 import { chromium } from "playwright";
@@ -13,15 +13,14 @@ mkdirSync(outDir, { recursive: true });
 
 function junctionModel() {
   return {
-    placeLabel: "Footpath junction QA",
+    placeLabel: "Footpath T junction QA",
     center: { lat: -37.8136, lon: 144.9631 },
     sideM: 120,
     layers: { buildings: false, roads: true, waterGreen: false, trees: false },
     buildings: [],
     roads: [
-      { id: 1, line: [[-50, 0], [50, 0]], width: 1.2, kind: "road", grade: "path" },
-      { id: 2, line: [[0, -50], [0, 50]], width: 1.2, kind: "road", grade: "path" },
-      { id: 3, line: [[-35, -35], [35, 35]], width: 1.2, kind: "road", grade: "path" },
+      { id: 1, line: [[-45, 8], [45, 8]], width: 3.2, kind: "road", grade: "path" },
+      { id: 2, line: [[0, 8], [0, -45]], width: 3.2, kind: "road", grade: "path" },
     ],
     areas: [],
     trees: [],
@@ -54,16 +53,14 @@ function renderSvg(model, filletM, label) {
 }
 
 const model = junctionModel();
-const beforeSvg = renderSvg(model, 0, "Before");
-const afterSvg = renderSvg(model, 2, "After");
-writeFileSync(`${outDir}/b5-footpath-junction-fixture-before.svg`, beforeSvg);
-writeFileSync(`${outDir}/b5-footpath-junction-fixture-after.svg`, afterSvg);
+writeFileSync(`${outDir}/b5-footpath-junction-fixture-before.svg`, renderSvg(model, 0, "Before"));
+writeFileSync(`${outDir}/b5-footpath-junction-fixture-after.svg`, renderSvg(model, 2, "After"));
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 920, height: 920 } });
-await page.setContent(beforeSvg);
+await page.setContent(renderSvg(model, 0, "Before"));
 await page.screenshot({ path: `${outDir}/b5-footpath-junction-fixture-before.png` });
-await page.setContent(afterSvg);
+await page.setContent(renderSvg(model, 2, "After"));
 await page.screenshot({ path: `${outDir}/b5-footpath-junction-fixture-after.png` });
 await browser.close();
 console.log("Wrote footpath junction QA to", outDir);

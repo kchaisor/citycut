@@ -20,7 +20,7 @@ import * as download from "./download";
 import * as figureGround from "./figureGround";
 import { DEFAULT_LINE_STYLES, cloneLineStyles } from "./drawingStyle";
 import { paperMillimetres } from "./figureGround";
-import { hexRgb, LINE_MM, PATH_FILL, PATH_WIDTH_M, pdfPt } from "./lineweights";
+import { hexRgb, LINE_MM, PATH_FILL, pdfPt } from "./lineweights";
 import * as svgPlan from "./svgPlan";
 import type { CityModel, Pt, TerrainField } from "../types";
 
@@ -327,8 +327,8 @@ describe("Illustrator plans", () => {
       }
       return max - min;
     };
-    expect(widthMm(1000)).toBeCloseTo(paperMillimetres(PATH_WIDTH_M, 1000), 1);
-    expect(widthMm(500)).toBeCloseTo(paperMillimetres(PATH_WIDTH_M, 500), 1);
+    expect(widthMm(1000)).toBeCloseTo(paperMillimetres(2, 1000), 1);
+    expect(widthMm(500)).toBeCloseTo(paperMillimetres(2, 500), 1);
     const hidden = cloneLineStyles(DEFAULT_LINE_STYLES);
     hidden.pathWidthM = 0;
     const gone = await inspect(await sitePlanPdf(model(), 1000, hidden));

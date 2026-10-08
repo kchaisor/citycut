@@ -1,7 +1,7 @@
 import * as polygonClipping from "polygon-clipping";
 import type { MultiPolygon, Pair, Polygon, Ring } from "polygon-clipping";
 import { polylineLength, signedArea } from "./geo";
-import { DEFAULT_SITE_FRAME_SHAPE, siteFramePolygon, type SiteFrameShape } from "./siteFrame";
+import { DEFAULT_SITE_FRAME_SHAPE, pointInSiteFrame, siteFramePolygon, type SiteFrameShape } from "./siteFrame";
 import type { Pt, RoadFeat } from "../types";
 
 type ClipFns = {
@@ -424,6 +424,38 @@ export function bufferCentreline(line: Pt[], width: number, minWidth = 0.4): Pol
   return unionList(pieces);
 }
 
+/** Clip unioned road/path surfaces to the site frame after dilation or fillets. */
+export function clipSurfaceToSiteFrame(
+  polygons: MultiPolygon,
+  sideM: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+): MultiPolygon {
+  return clipToFrame(polygons, sideM, frameShape);
+}
+
+export function surfaceVerticesOutsideFrame(
+  polygons: MultiPolygon,
+  sideM: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  toleranceM = 0.02,
+): Pt[] {
+  const half = sideM / 2;
+  const outside: Pt[] = [];
+  for (const polygon of polygons) {
+    for (const ring of polygon) {
+      for (const [x, y] of ring) {
+        if (!pointInSiteFrame([x, y], sideM, frameShape)) {
+          outside.push([x, y]);
+        } else if (frameShape === "square") {
+          const slack = toleranceM;
+          if (Math.abs(x) > half + slack || Math.abs(y) > half + slack) outside.push([x, y]);
+        }
+      }
+    }
+  }
+  return outside;
+}
+
 function clipToFrame(
   polygons: MultiPolygon,
   sideM: number,
@@ -522,24 +554,86 @@ function simplifyPathMulti(polygons: MultiPolygon): MultiPolygon {
   return kept;
 }
 
+function reflexVerticesOnRing(open: Pt[]): Array<{ index: number; point: Pt; lenPrev: number; lenNext: number; turn: number }> {
+  const count = open.length;
+  const out: Array<{ index: number; point: Pt; lenPrev: number; lenNext: number; turn: number }> = [];
+  for (let i = 0; i < count; i++) {
+    const prev = open[(i - 1 + count) % count]!;
+    const curr = open[i]!;
+    const next = open[(i + 1) % count]!;
+    if (turnCross(prev, curr, next) >= -1e-6) continue;
+    const inDir = direction(prev, curr);
+    const outDir = direction(curr, next);
+    if (!inDir || !outDir) continue;
+    const turn = wrap(outDir.ang - inDir.ang);
+    out.push({
+      index: i,
+      point: curr,
+      lenPrev: Math.hypot(curr[0] - prev[0], curr[1] - prev[1]),
+      lenNext: Math.hypot(next[0] - curr[0], next[1] - curr[1]),
+      turn,
+    });
+  }
+  return out;
+}
+
+function clusterSkipReflex(
+  reflex: Array<{ index: number; point: Pt }>,
+  clusterM: number,
+): Set<number> {
+  const skip = new Set<number>();
+  for (let i = 0; i < reflex.length; i++) {
+    if (skip.has(reflex[i]!.index)) continue;
+    const near = reflex.filter(
+      (other, j) =>
+        j !== i &&
+        Math.hypot(other.point[0] - reflex[i]!.point[0], other.point[1] - reflex[i]!.point[1]) <= clusterM,
+    );
+    if (near.length >= 2) {
+      skip.add(reflex[i]!.index);
+      for (const other of near) skip.add(other.index);
+    }
+  }
+  return skip;
+}
+
+function filletRadiusAtReflex(
+  radius: number,
+  lenPrev: number,
+  lenNext: number,
+  turn: number,
+): number {
+  const halfTurn = Math.max(0.08, Math.abs(turn) / 2);
+  const tanHalf = Math.tan(halfTurn);
+  if (!(tanHalf > 1e-6)) return 0;
+  const cap = Math.min(lenPrev, lenNext) * tanHalf;
+  return Math.min(radius, cap);
+}
+
 /**
  * Round concave junction corners only (reflex vertices on the union outline).
- * Straight runs stay straight; no boundary scalloping from morphological disks.
+ * Skips crossing clusters (≥3 reflex corners within one band width) so + junctions
+ * do not become a filled blob; T/L inside corners still fillet.
  */
-export function filletPathJunctions(polygons: MultiPolygon, radius: number): MultiPolygon {
+export function filletPathJunctions(
+  polygons: MultiPolygon,
+  radius: number,
+  typicalBandWidthM = 1.2,
+): MultiPolygon {
   if (!(radius > 0) || polygons.length === 0) return polygons;
+  const clusterM = Math.max(typicalBandWidthM * 2.5, radius * 1.25);
   const seeds: Polygon[] = [...polygons];
   for (const polygon of polygons) {
     const outer = polygon[0];
     if (!outer || outer.length < 4) continue;
     const open = outer.slice(0, -1);
-    const count = open.length;
-    for (let i = 0; i < count; i++) {
-      const prev = open[(i - 1 + count) % count]!;
-      const curr = open[i]!;
-      const next = open[(i + 1) % count]!;
-      if (turnCross(prev, curr, next) >= -1e-6) continue;
-      const disk = circlePolygon(curr, radius, PATH_FILLET_ARC_SEGMENTS);
+    const reflex = reflexVerticesOnRing(open);
+    const skip = clusterSkipReflex(reflex, clusterM);
+    for (const vertex of reflex) {
+      if (skip.has(vertex.index)) continue;
+      const rEff = filletRadiusAtReflex(radius, vertex.lenPrev, vertex.lenNext, vertex.turn);
+      if (!(rEff > 0.05)) continue;
+      const disk = circlePolygon(vertex.point, rEff, PATH_FILLET_ARC_SEGMENTS);
       if (disk) seeds.push(disk);
     }
   }
@@ -663,7 +757,7 @@ export function unionRoadSurface(
   const withTram =
     tramInputs.length > 0 ? unionCarriageways(tramInputs, sideM, frameShape) : { polygons: [] as MultiPolygon, ms: 0, inputs: 0 };
   const merged = unionMulti(carriageway.polygons, withTram.polygons);
-  const closed = morphologicalDilate(merged, ROAD_MORPH_CLOSE_M);
+  const closed = tidy(clipToFrame(morphologicalDilate(merged, ROAD_MORPH_CLOSE_M), sideM, frameShape));
   return {
     polygons: closed,
     ms: carriageway.ms + withTram.ms,
@@ -680,6 +774,20 @@ export function footpathLines(roads: RoadFeat[]): Pt[][] {
   return roads.filter((road) => road.kind !== "rail" && road.grade === "path").map((road) => road.line);
 }
 
+/** Footpath centreline strips using each way's stored width when present. */
+export function footpathStrips(
+  roads: RoadFeat[],
+  defaultWidthM: number,
+): { line: Pt[]; width: number }[] {
+  if (!(defaultWidthM > 0)) return [];
+  return roads
+    .filter((road) => road.kind !== "rail" && road.grade === "path")
+    .map((road) => ({
+      line: road.line,
+      width: road.width > 0 ? road.width : defaultWidthM,
+    }));
+}
+
 /**
  * Buffer each footpath by `widthM` metres (half on each side of the centreline)
  * and union the strips. A width of 0 leaves no geometry. The union is one shape,
@@ -692,22 +800,38 @@ export function unionFootpaths(
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
   filletM: number = DEFAULT_PATH_FILLET_M,
 ): RoadFill {
+  return unionFootpathStrips(
+    lines.map((line) => ({ line, width: widthM })),
+    sideM,
+    frameShape,
+    filletM,
+    widthM,
+  );
+}
+
+export function unionFootpathStrips(
+  strips: { line: Pt[]; width: number }[],
+  sideM: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  filletM: number = DEFAULT_PATH_FILLET_M,
+  typicalBandWidthM = 1.2,
+): RoadFill {
+  const widthM = strips.reduce((max, strip) => Math.max(max, strip.width), 0);
   if (!(widthM > 0)) return { polygons: [], ms: 0, inputs: 0 };
+  const lines = strips.map((strip) => strip.line);
   const key = footpathUnionCacheKey(lines, widthM, filletM, sideM, frameShape);
   const cached = footpathUnionCache.get(key);
   if (cached) return cached;
 
   const started = performance.now();
-  const merged = unionStrips(
-    lines.map((line) => ({ line, width: widthM })),
-    sideM,
-    0,
-    frameShape,
-  );
-  const polygons =
+  const merged = unionStrips(strips, sideM, 0, frameShape);
+  const typical = strips.reduce((sum, s) => sum + s.width, 0) / Math.max(1, strips.length);
+  const bandTypical = typicalBandWidthM > 0 ? typicalBandWidthM : typical;
+  const filleted =
     filletM > 0
-      ? filletPathJunctions(merged.polygons, filletM)
+      ? filletPathJunctions(merged.polygons, filletM, bandTypical)
       : simplifyPathMulti(merged.polygons);
+  const polygons = tidy(clipToFrame(filleted, sideM, frameShape));
   const result: RoadFill = {
     polygons,
     ms: performance.now() - started,
