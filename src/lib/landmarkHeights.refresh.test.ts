@@ -6,6 +6,7 @@ import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import landmarks from "./fixtures/landmark-heights.json";
+import { snapshotCutName } from "./landmarkSnapshotAliases";
 import { squareBBox } from "./geo";
 import { fetchOvertureBuildingsForCut } from "./overtureBuildings";
 import { loadEnrichmentForCutFromDisk } from "./test/loadEnrichmentForCut";
@@ -49,7 +50,7 @@ describe.skipIf(!refresh)("landmark snapshot refresh", () => {
           `${lm.name}: buildings=${buildings.length} contains=${pick ? pick.building.id : "NONE"} height=${pick?.heightM ?? "—"}`,
         );
         cuts.push({
-          name: lm.name,
+          name: snapshotCutName(lm.name),
           center,
           sideM,
           overtureBuildings: buildings,

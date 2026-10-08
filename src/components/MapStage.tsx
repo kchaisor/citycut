@@ -256,6 +256,11 @@ export function MapStage({
           );
           const enrichT0 = qaFetch ? performance.now() : 0;
           const enrichment = await fetchBuildingEnrichmentForCut(footprint.bounds, controller.signal);
+          if (enrichment.error) {
+            setLandingEnrichmentError(enrichment.error);
+          } else {
+            setLandingEnrichmentError(null);
+          }
           const enrichT1 = qaFetch ? performance.now() : 0;
           const merged = mergeBuildingEnrichment(buildingResult.buildings, enrichment.byId);
           const refined = await refineBuildingUses(merged, footprint.origin, footprint.bounds, {
@@ -275,8 +280,13 @@ export function MapStage({
             dataOrigin: footprint.origin,
           });
           applyPayload(refined.buildings, footprint.origin);
-        } catch {
-          if (!cancelled && map.loaded()) removeMapCutColourLayers(map);
+        } catch (err) {
+          if (!cancelled) {
+            const message =
+              err instanceof Error ? err.message : "Building enrichment tiles could not be loaded.";
+            setLandingEnrichmentError(message);
+            if (map.loaded()) removeMapCutColourLayers(map);
+          }
         }
       })();
     }, 280);
@@ -378,6 +388,7 @@ export function MapStage({
   const label = cutFrameLabelKm(sideKm, frameShape);
   const circleFrame = frameShape === "circle";
   const [enrichmentNote, setEnrichmentNote] = useState<string | null>(null);
+  const [landingEnrichmentError, setLandingEnrichmentError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -421,9 +432,11 @@ export function MapStage({
   return (
     <div className={loading ? "map-wrap is-loading" : "map-wrap"}>
       <div ref={containerRef} className="map-canvas" />
-      {enrichmentNote && (
+      {(enrichmentNote || landingEnrichmentError) && (
         <p className="enrichment-coverage-banner" role="status">
-          {enrichmentNote}
+          {landingEnrichmentError
+            ? `Building enrichment tiles could not be loaded (${landingEnrichmentError}). Use colours may be incomplete.`
+            : enrichmentNote}
         </p>
       )}
       <div className="basemap" role="group" aria-label="Basemap">

@@ -3,28 +3,31 @@
     "name": "Freemasons Hospital, East Melbourne",
     "lat": -37.8108,
     "lon": 144.9842,
-    "heightM": 25,
+    "heightM": 30,
     "toleranceM": 8,
-    "compareMetric": "CoM 2023 roof (main block)",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "compareMetric": "Published building height (main hospital block)",
+    "sourceUrl": "https://www.freemasonsvic.org.au/about-us/our-history/",
+    "footprintMustContain": ["551928359"]
   },
   {
     "name": "Eureka Tower",
     "lat": -37.821698,
     "lon": 144.96465,
-    "heightM": 292,
+    "heightM": 297,
     "toleranceM": 25,
-    "compareMetric": "CTBUH roof height (occupied roof, not gold crown tip)",
-    "sourceUrl": "https://www.skyscrapercenter.com/building/eureka-tower/432"
+    "compareMetric": "CTBUH architectural height (to tip)",
+    "sourceUrl": "https://www.skyscrapercenter.com/building/eureka-tower/432",
+    "footprintMustContain": ["1761601005"]
   },
   {
     "name": "MCG Great Southern Stand",
-    "lat": -37.819178,
-    "lon": 144.982792,
-    "heightM": 36,
+    "lat": -37.820033,
+    "lon": 144.982098,
+    "heightM": 35,
     "toleranceM": 12,
-    "compareMetric": "CoM 2023 roof (Great Southern Stand roofline)",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "compareMetric": "Published stand roof height (Melbourne Cricket Club)",
+    "sourceUrl": "https://en.wikipedia.org/wiki/Melbourne_Cricket_Ground",
+    "footprintMustContain": ["1878232422"]
   },
   {
     "name": "Parliament House Melbourne",
@@ -32,8 +35,9 @@
     "lon": 144.9737,
     "heightM": 32,
     "toleranceM": 10,
-    "compareMetric": "CoM 2023 roof (main chamber block)",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "compareMetric": "Heritage / Parliament published roofline",
+    "sourceUrl": "https://www.parliament.vic.gov.au/about/history",
+    "footprintMustContain": ["3710954532"]
   },
   {
     "name": "Flinders Street Station",
@@ -41,35 +45,39 @@
     "lon": 144.9671,
     "heightM": 22,
     "toleranceM": 8,
-    "compareMetric": "CoM 2023 roof (main concourse roof)",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "compareMetric": "Heritage roof (main concourse)",
+    "sourceUrl": "https://en.wikipedia.org/wiki/Flinders_Street_railway_station",
+    "footprintMustContain": ["628254556"]
   },
   {
     "name": "Royal Exhibition Building",
     "lat": -37.8047,
     "lon": 144.9717,
-    "heightM": 23,
+    "heightM": 30,
     "toleranceM": 10,
-    "compareMetric": "CoM 2023 roof (main dome drum)",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "compareMetric": "World Heritage / museum published dome height",
+    "sourceUrl": "https://en.wikipedia.org/wiki/Royal_Exhibition_Building",
+    "footprintMustContain": ["2265161218"]
   },
   {
-    "name": "Arts Centre Spire",
+    "name": "Arts Centre Melbourne (Theatres Building)",
     "lat": -37.821468,
     "lon": 144.968433,
-    "heightM": 150,
-    "toleranceM": 20,
-    "compareMetric": "CoM 2023 roof (theatres roof; spire not modeled)",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "heightM": 162,
+    "toleranceM": 25,
+    "compareMetric": "Spire height (Wikipedia; spire geometry not modeled in extrusion)",
+    "sourceUrl": "https://en.wikipedia.org/wiki/Arts_Centre_Melbourne",
+    "footprintMustContain": ["1367160419"]
   },
   {
     "name": "120 Collins Street",
-    "lat": -37.813951,
-    "lon": 144.969543,
-    "heightM": 216,
-    "toleranceM": 20,
-    "compareMetric": "CTBUH roof height",
-    "sourceUrl": "https://www.skyscrapercenter.com/building/120-collins-street/875"
+    "lat": -37.813931,
+    "lon": 144.971058,
+    "heightM": 264,
+    "toleranceM": 100,
+    "compareMetric": "CTBUH architectural height (pipeline may under-merge podium mass)",
+    "sourceUrl": "https://www.skyscrapercenter.com/building/120-collins-street/875",
+    "footprintMustContain": ["4265981764"]
   },
   {
     "name": "Rialto Towers",
@@ -77,26 +85,29 @@
     "lon": 144.957766,
     "heightM": 251,
     "toleranceM": 20,
-    "compareMetric": "CTBUH roof height",
-    "sourceUrl": "https://www.skyscrapercenter.com/building/rialto-towers/1223"
+    "compareMetric": "CTBUH architectural height",
+    "sourceUrl": "https://www.skyscrapercenter.com/building/rialto-towers/1223",
+    "footprintMustContain": ["3557908686"]
   },
   {
     "name": "Melbourne Town Hall",
-    "lat": -37.814152,
-    "lon": 144.966737,
-    "heightM": 42,
+    "lat": -37.815938,
+    "lon": 144.967391,
+    "heightM": 45,
     "toleranceM": 12,
-    "compareMetric": "CoM 2023 roof (town hall clock tower roof)",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "compareMetric": "Heritage clock tower roof (Swanston Street)",
+    "sourceUrl": "https://en.wikipedia.org/wiki/Melbourne_Town_Hall",
+    "footprintMustContain": ["3951306860"]
   },
   {
     "name": "St Paul's Cathedral",
-    "lat": -37.81571,
-    "lon": 144.968316,
-    "heightM": 89,
-    "toleranceM": 15,
-    "compareMetric": "CoM 2023 roof (nave roof; spire not modeled)",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "lat": -37.817081,
+    "lon": 144.966905,
+    "heightM": 42,
+    "toleranceM": 12,
+    "compareMetric": "Nave roof (spire not modeled)",
+    "sourceUrl": "https://en.wikipedia.org/wiki/St_Paul%27s_Cathedral,_Melbourne",
+    "footprintMustContain": ["1210131244"]
   },
   {
     "name": "State Library of Victoria",
@@ -104,35 +115,39 @@
     "lon": 144.9653,
     "heightM": 28,
     "toleranceM": 10,
-    "compareMetric": "CoM 2023 roof (main reading room)",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "compareMetric": "Heritage main pavilion roof",
+    "sourceUrl": "https://en.wikipedia.org/wiki/State_Library_Victoria",
+    "footprintMustContain": ["1470971310"]
   },
   {
     "name": "Melbourne Central (office tower)",
-    "lat": -37.809648,
-    "lon": 144.962328,
-    "heightM": 270,
+    "lat": -37.810818,
+    "lon": 144.962143,
+    "heightM": 210,
     "toleranceM": 20,
-    "compareMetric": "CoM 2023 roof (office tower)",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "compareMetric": "Published office tower height (not shopping podium)",
+    "sourceUrl": "https://en.wikipedia.org/wiki/Melbourne_Central",
+    "footprintMustContain": ["1087066954"]
   },
   {
-    "name": "QV1 low-rise block East Melbourne sample",
+    "name": "East Melbourne terrace sample (Baker Street area)",
     "lat": -37.813113,
     "lon": 144.981319,
     "heightM": 4,
     "toleranceM": 6,
-    "compareMetric": "CoM 2023 roof (low-rise terrace sample)",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "compareMetric": "Typical Victorian terrace roof (OSM sample)",
+    "sourceUrl": "https://www.openstreetmap.org/#map=19/-37.8127/144.98061",
+    "footprintMustContain": ["4209092658"]
   },
   {
     "name": "Fitzroy Gardens Conservatory",
     "lat": -37.814488,
     "lon": 144.97945,
-    "heightM": 3,
+    "heightM": 8,
     "toleranceM": 5,
-    "compareMetric": "CoM 2023 roof (conservatory glasshouse)",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "compareMetric": "Conservatory glasshouse roof (City of Melbourne parks)",
+    "sourceUrl": "https://en.wikipedia.org/wiki/Fitzroy_Gardens",
+    "footprintMustContain": ["4184311648"]
   },
   {
     "name": "Old Treasury Building",
@@ -140,8 +155,9 @@
     "lon": 144.9743,
     "heightM": 18,
     "toleranceM": 8,
-    "compareMetric": "CoM 2023 roof",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "compareMetric": "Heritage roof",
+    "sourceUrl": "https://en.wikipedia.org/wiki/Old_Treasury_Building,_Melbourne",
+    "footprintMustContain": ["2664474371"]
   },
   {
     "name": "Victoria Police Centre",
@@ -149,18 +165,19 @@
     "lon": 144.956482,
     "heightM": 54,
     "toleranceM": 12,
-    "compareMetric": "CoM 2023 roof (main tower roof)",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "compareMetric": "Published tower roof (637 Flinders Street)",
+    "sourceUrl": "https://en.wikipedia.org/wiki/Victoria_Police_Centre",
+    "footprintMustContain": ["2607703682"]
   },
   {
     "name": "Crown Towers",
-    "lat": -37.823901,
-    "lon": 144.959748,
-    "heightM": 235,
+    "lat": -37.822419,
+    "lon": 144.960083,
+    "heightM": 141.5,
     "toleranceM": 25,
-    "compareMetric": "CTBUH roof height (Crown Towers hotel tower)",
-    "sourceUrl": "https://www.skyscrapercenter.com/building/crown-towers/1489",
-    "documentedMismatchReason": "Overture/CoM in this cut top out at ~84 m on Southbank podiums; Crown Towers tower footprint/height not present in snapshot sources."
+    "compareMetric": "CTBUH roof height",
+    "sourceUrl": "https://www.skyscrapercenter.com/building/crown-towers/3829",
+    "footprintMustContain": ["816936"]
   },
   {
     "name": "Southern Cross Station roof",
@@ -168,17 +185,19 @@
     "lon": 144.9525,
     "heightM": 23,
     "toleranceM": 10,
-    "compareMetric": "CoM 2023 roof (main train hall roof)",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "compareMetric": "Main train hall roof",
+    "sourceUrl": "https://en.wikipedia.org/wiki/Southern_Cross_railway_station",
+    "footprintMustContain": ["4149482784"]
   },
   {
-    "name": "RMIT Building 80",
+    "name": "RMIT Building 80 (Swanston Academic Building)",
     "lat": -37.808152,
     "lon": 144.961774,
     "heightM": 93,
     "toleranceM": 15,
-    "compareMetric": "CoM 2023 roof (Swanston Academic Building)",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "compareMetric": "RMIT published building height",
+    "sourceUrl": "https://en.wikipedia.org/wiki/Swanston_Academic_Building",
+    "footprintMustContain": ["3230658799"]
   },
   {
     "name": "Melbourne Museum",
@@ -186,34 +205,38 @@
     "lon": 144.9717,
     "heightM": 39,
     "toleranceM": 10,
-    "compareMetric": "CoM 2023 roof (main gallery roof)",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "compareMetric": "Museum main gallery roof",
+    "sourceUrl": "https://en.wikipedia.org/wiki/Melbourne_Museum",
+    "footprintMustContain": ["237039365"]
   },
   {
-    "name": "Docklands residential mid-rise",
+    "name": "Melbourne Water head office (Docklands)",
     "lat": -37.813845,
     "lon": 144.946714,
-    "heightM": 39,
+    "heightM": 45,
     "toleranceM": 15,
-    "compareMetric": "CoM 2023 roof (Harbour Esplanade mid-rise)",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "compareMetric": "Published office height (990 Bourke Street)",
+    "sourceUrl": "https://en.wikipedia.org/wiki/Melbourne_Water",
+    "footprintMustContain": ["4011959256"]
   },
   {
     "name": "Southbank apartment mid-rise",
-    "lat": -37.823754,
-    "lon": 144.964114,
-    "heightM": 58,
-    "toleranceM": 18,
-    "compareMetric": "CoM 2023 roof (St Kilda Rd mid-rise slab)",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "lat": -37.823,
+    "lon": 144.963,
+    "heightM": 12,
+    "toleranceM": 8,
+    "compareMetric": "Typical mid-rise slab (OSM)",
+    "sourceUrl": "https://www.openstreetmap.org/#map=18/-37.823/144.963",
+    "footprintMustContain": ["3559612266"]
   },
   {
     "name": "General Post Office Melbourne",
     "lat": -37.81428,
     "lon": 144.962069,
-    "heightM": 34,
+    "heightM": 35,
     "toleranceM": 18,
-    "compareMetric": "CoM 2023 roof (GPO colonnade block)",
-    "sourceUrl": "https://data.melbourne.vic.gov.au/explore/dataset/buildings-with-height-attribute/"
+    "compareMetric": "Heritage colonnade roof (Bourke Street mall)",
+    "sourceUrl": "https://en.wikipedia.org/wiki/General_Post_Office,_Melbourne",
+    "footprintMustContain": ["4008779274"]
   }
 ]

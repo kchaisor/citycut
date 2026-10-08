@@ -44,7 +44,7 @@ export function enrichmentBeatsBuilding(
         : building.source === "zone"
           ? USE_SOURCE_RANK.zone
           : USE_SOURCE_RANK.unclassified;
-  return USE_SOURCE_RANK[record.useSource] >= currentRank;
+  return USE_SOURCE_RANK[record.useSource] > currentRank;
 }
 
 /** Apply offline use + zone metadata from enrichment tiles (geometry stays Overture). */

@@ -52,7 +52,12 @@ jobs:
           gh release create "$tag" public/building-enrichment.pmtiles \
             --title "Building enrichment PMTiles" \
             --notes "Auto-built CoM bbox. See manifest for BCA/LiDAR status." \
-            || gh release upload building-enrichment-latest public/building-enrichment.pmtiles --clobber
+            || gh release upload "$tag" public/building-enrichment.pmtiles --clobber
+          gh release view building-enrichment-latest >/dev/null 2>&1 \
+            && gh release upload building-enrichment-latest public/building-enrichment.pmtiles --clobber \
+            || gh release create building-enrichment-latest public/building-enrichment.pmtiles \
+              --title "Building enrichment PMTiles (latest)" \
+              --notes "Rolling latest asset; dated tags are immutable snapshots."
       - name: Refresh manifest on main (no binary commit)
         if: github.ref == 'refs/heads/main'
         run: |

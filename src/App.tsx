@@ -518,9 +518,15 @@ export default function App() {
         enrichmentTilesFailed = true;
         useTierFailures.push({
           tier: "enrichment_tiles",
-          message: "building enrichment tiles unavailable; live Vicmap zones used for use",
+          message: `Building enrichment tiles unavailable (${enrichmentResult.error}); live Vicmap zones used for use`,
         });
         console.warn(`[CityCut enrichment] ${enrichmentResult.error}`);
+      }
+      if (enrichmentManifest?.bca?.status === "blocked") {
+        useTierFailures.push({
+          tier: "enrichment_tiles",
+          message: "Building permit (BCA): blocked by source (403)",
+        });
       }
       if (cutCenterOutsideBuiltBbox(center, enrichmentManifest)) {
         const msg = enrichmentCoverageMessage(enrichmentManifest);
