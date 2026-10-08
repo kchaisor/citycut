@@ -43,26 +43,18 @@ jobs:
         run: |
           cat public/building-enrichment-manifest.json
           echo "[enrichment] LiDAR: no data, ELVIS not ordered"
-      - name: Publish PMTiles to GitHub Release (main)
+      - name: Publish PMTiles + manifest to GitHub Release (main)
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="building-enrichment-$(date -u +%Y%m%d)"
-          gh release create "$tag" public/building-enrichment.pmtiles \
+          gh release create "$tag" public/building-enrichment.pmtiles public/building-enrichment-manifest.json \
             --title "Building enrichment PMTiles" \
-            --notes "Auto-built CoM bbox. See manifest for BCA/LiDAR status." \
-            || gh release upload "$tag" public/building-enrichment.pmtiles --clobber
+            --notes "Auto-built CoM bbox. Manifest includes pmtilesSha256 for Pages deploy verification." \
+            || gh release upload "$tag" public/building-enrichment.pmtiles public/building-enrichment-manifest.json --clobber
           gh release view building-enrichment-latest >/dev/null 2>&1 \
-            && gh release upload building-enrichment-latest public/building-enrichment.pmtiles --clobber \
-            || gh release create building-enrichment-latest public/building-enrichment.pmtiles \
+            && gh release upload building-enrichment-latest public/building-enrichment.pmtiles public/building-enrichment-manifest.json --clobber \
+            || gh release create building-enrichment-latest public/building-enrichment.pmtiles public/building-enrichment-manifest.json \
               --title "Building enrichment PMTiles (latest)" \
-              --notes "Rolling latest asset; dated tags are immutable snapshots."
-      - name: Refresh manifest on main (no binary commit)
-        if: github.ref == 'refs/heads/main'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/building-enrichment-manifest.json
-          git diff --staged --quiet || git commit -m "chore: refresh building enrichment manifest"
-          git push
+              --notes "Rolling latest assets (tiles + manifest); dated tags are immutable snapshots."

@@ -1,6 +1,7 @@
 /**
  * Dump Overture building props for metro, run Python enrichment, tippecanoe → public/.
  */
+import { createHash } from "node:crypto";
 import { createWriteStream, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { pipeline } from "node:stream/promises";
@@ -125,8 +126,10 @@ async function main() {
     ENRICHED,
   ]);
   const bytes = statSync(PMTILES_OUT).size;
+  const pmtilesSha256 = createHash("sha256").update(readFileSync(PMTILES_OUT)).digest("hex");
   const manifest = JSON.parse(readFileSync(MANIFEST, "utf8"));
   manifest.pmtilesBytes = bytes;
+  manifest.pmtilesSha256 = pmtilesSha256;
   manifest.overtureRelease = release;
   manifest.builtBbox = METRO;
   manifest.targetExtent = DEFAULT_METRO;

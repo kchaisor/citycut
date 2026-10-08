@@ -126,6 +126,10 @@ button { cursor: pointer; }
   line-height: 1.35;
   pointer-events: none;
 }
+.select .enrichment-coverage-banner {
+  right: 176px;
+  max-width: calc(100% - 188px);
+}
 
 .basemap {
   position: absolute;

@@ -288,10 +288,13 @@ function clipBuildingComExtrusions(
 
   try {
     const osmPoly = osmClipPolygon(building);
+    const matchIds = matchingStructureIds(building, footprints);
+    if (matchIds.size === 0) return null;
     const comParts: ExtrusionPart[] = [];
     const comUnionInputs: Polygon[] = [];
 
     for (const footprint of footprints) {
+      if (!matchIds.has(footprint.id)) continue;
       const overlap = intersectionAreaM2(building, footprint);
       if (overlap <= 0) continue;
       const inter = intersection(osmPoly, toClipPolygon(footprint.ring, footprint.holes));
@@ -372,8 +375,7 @@ function significantOverlaps(building: BuildingFeat, index: RBush<IndexedFootpri
     const area = intersectionAreaM2(building, candidate);
     if (area <= 0) continue;
     const onMatchedStructure = matchIds.has(candidate.id);
-    const tallComSlice = candidate.height_m >= 60;
-    if (!onMatchedStructure && isSliver(area, osmArea) && !tallComSlice) continue;
+    if (!onMatchedStructure && isSliver(area, osmArea)) continue;
     hits.push({ footprint: candidate, area });
   }
   hits.sort(

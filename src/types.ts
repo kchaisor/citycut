@@ -53,6 +53,8 @@ export type BuildingUseSourceTier =
 
 export type UseTierFailure = {
   tier: "zone" | "enrichment_tiles" | "enrichment_coverage";
+  /** Stable React key when several failures share the same tier. */
+  id: string;
   /** Short UI line, for example "zones unavailable". */
   message: string;
 };

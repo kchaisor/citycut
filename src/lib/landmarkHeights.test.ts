@@ -21,6 +21,8 @@ type Landmark = {
   compareMetric: string;
   sideM?: number;
   footprintMustContain: string[];
+  /** Cited height was verified from text at sourceUrl, not from matching computed height. */
+  independentEvidence?: boolean;
 };
 
 type SnapshotFile = {
@@ -36,11 +38,20 @@ function loadSnapshot(): SnapshotFile {
   return JSON.parse(readFileSync(path, "utf8")) as SnapshotFile;
 }
 
-function assertIndependentSource(lm: Landmark): string | null {
+function assertIndependentSource(lm: Landmark, computedM: number | null): string | null {
   if (/data\.melbourne\.vic\.gov\.au/i.test(lm.sourceUrl)) {
     return `${lm.name}: sourceUrl must not be CoM dataset (independent citation required)`;
   }
-  if (Math.abs(lm.heightM - 0) < 1e-6) return null;
+  if (/openstreetmap\.org/i.test(lm.sourceUrl)) {
+    return `${lm.name}: sourceUrl must not be an OSM map link (independent citation required)`;
+  }
+  if (
+    computedM != null &&
+    Math.abs(computedM - lm.heightM) < 0.5 &&
+    !lm.independentEvidence
+  ) {
+    return `${lm.name}: cited height matches computed (${computedM.toFixed(1)} m); independent source required`;
+  }
   return null;
 }
 
@@ -55,9 +66,6 @@ describe("Melbourne landmark height reference (CI)", () => {
     const failures: string[] = [];
 
     for (const lm of landmarks as Landmark[]) {
-      const sourceIssue = assertIndependentSource(lm);
-      if (sourceIssue) failures.push(sourceIssue);
-
       const cut = byName.get(snapshotCutName(lm.name));
       if (!cut) {
         failures.push(`${lm.name}: missing snapshot cut (run REFRESH_LANDMARK_SNAPSHOT=1)`);
@@ -84,6 +92,8 @@ describe("Melbourne landmark height reference (CI)", () => {
       }
       const tier = inferHeightTier(pick.building);
       const computed = pick.heightM;
+      const sourceIssue = assertIndependentSource(lm, computed);
+      if (sourceIssue) failures.push(sourceIssue);
       const delta = Math.abs(computed - lm.heightM);
       const tol = toleranceM(lm);
       const pass = tier !== "zone_default" && delta <= tol;

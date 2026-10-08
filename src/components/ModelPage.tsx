@@ -39,12 +39,12 @@ import {
 import { explodedAxoViewportExtent, planViewportExtent, type PlanViewport } from "../lib/planViewport";
 import { FIGURE_SCALES, preferredFigureScale, sheetFitMessage } from "../lib/figureGround";
 import {
-  countBuildingsWithComDerivedExtrusion,
   fetchComBuildingFootprints,
   intersectsComCity,
   paddedComFetchBounds,
   type ComBuildingFootprint,
 } from "../lib/comBuildingHeights";
+import { countBuildingsWithComHeightTier } from "../lib/comBuildingHeightsCount";
 import { runComBuildingHeightsInWorker } from "../lib/comBuildingHeightsWorkerClient";
 import {
   COM_BUILDING_HEIGHTS_CREDIT,
@@ -381,7 +381,6 @@ export function ModelPage({ model }: { model: CityModel }) {
   const comHeightsMeasuredOn = comHeightsToggleKind === "on";
 
   const [comHeightBuildings, setComHeightBuildings] = useState<typeof model.buildings | null>(null);
-  const [comHeightUpdates, setComHeightUpdates] = useState(0);
   const [heightOverrideStore, setHeightOverrideStore] = useState<HeightOverrideStore>(() =>
     readStoredHeightOverrides(window.localStorage),
   );
@@ -640,11 +639,9 @@ export function ModelPage({ model }: { model: CityModel }) {
   useEffect(() => {
     if (!betterHeights) {
       setComHeightBuildings(null);
-      setComHeightUpdates(0);
       return;
     }
     if (model.comBuildingHeightsApplied) {
-      const before = model.buildingsWithoutCom ?? model.buildings;
       setComHeightBuildings(
         annotateUnresolvedZoneDefaults(
           model.buildings,
@@ -653,12 +650,10 @@ export function ModelPage({ model }: { model: CityModel }) {
           model.developmentDamRecords ?? [],
         ),
       );
-      setComHeightUpdates(countBuildingsWithComDerivedExtrusion(before, model.buildings));
       return;
     }
     if (comFootprints.length === 0 || model.buildings.length === 0) {
       setComHeightBuildings(null);
-      setComHeightUpdates(0);
       return;
     }
     const controller = new AbortController();
@@ -675,12 +670,10 @@ export function ModelPage({ model }: { model: CityModel }) {
             model.developmentDamRecords ?? [],
           ),
         );
-        setComHeightUpdates(countBuildingsWithComDerivedExtrusion(source, damApplied));
       })
       .catch(() => {
         if (!controller.signal.aborted) {
           setComHeightBuildings(null);
-          setComHeightUpdates(0);
         }
       });
     return () => controller.abort();
@@ -988,6 +981,10 @@ export function ModelPage({ model }: { model: CityModel }) {
   const useCounts = countUses(model.buildings);
   const sourceCounts = countSourcesGrouped(displayModel.buildings);
   const heightTierCounts = countBuildingHeightTiers(displayModel.buildings);
+  const comMeasuredHeightCount = useMemo(
+    () => countBuildingsWithComHeightTier(displayModel.buildings),
+    [displayModel.buildings],
+  );
   const lidarHeightsOn = displayModel.buildings.some((b) => b.heightTier === "lidar");
   const lidarTierNote = model.lidarHeightTierNote ?? LIDAR_NO_DATA_LINE;
   const heightTierLegend: { tier: keyof typeof heightTierCounts; label: string }[] = [
@@ -1210,10 +1207,11 @@ export function ModelPage({ model }: { model: CityModel }) {
                     </button>
                   )}
                 </div>
-                {comHeightsMeasuredOn && comHeightUpdates > 0 && (
+                {comHeightsMeasuredOn && comMeasuredHeightCount > 0 && (
                   <p className="legend-note">
-                    {comHeightUpdates.toLocaleString()} building{comHeightUpdates === 1 ? "" : "s"} use City of
-                    Melbourne extrusion heights in this frame.
+                    {comMeasuredHeightCount.toLocaleString()} building
+                    {comMeasuredHeightCount === 1 ? "" : "s"} use City of Melbourne extrusion heights in this
+                    frame.
                   </p>
                 )}
                 {comHeightsLoadFailed && (
@@ -1265,7 +1263,9 @@ export function ModelPage({ model }: { model: CityModel }) {
                       <li key={tier}>
                         <i className={tier === "lidar" ? "hatch" : undefined} />
                         <span>{label}</span>
-                        <b>{heightTierCounts[tier].toLocaleString()}</b>
+                        <b>
+                          {(tier === "com" ? comMeasuredHeightCount : heightTierCounts[tier]).toLocaleString()}
+                        </b>
                       </li>
                     ))}
                 </ul>
@@ -1273,7 +1273,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                   {lidarTierNote}
                 </p>
                 {model.useTierFailures?.map((failure) => (
-                  <p key={failure.tier} className="legend-note">
+                  <p key={failure.id} className="legend-note">
                     {failure.message}
                   </p>
                 ))}

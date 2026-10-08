@@ -59,6 +59,7 @@ import {
 } from "./lib/comBuildingHeights";
 import { applyDevelopmentFloorsToBuildings, fetchDevelopmentFloorRecords } from "./lib/comDevelopmentFloors";
 import { buildHeightSourceLoadWarnings } from "./lib/buildHeightSourceLoadWarnings";
+import { buildEnrichmentUseTierFailures } from "./lib/enrichmentUseTierFailures";
 import type { Basemap, CityModel, LonLat, PlaceHit, UiLayers, UseTierFailure, ViewState } from "./types";
 
 function frameFromQuery(): FrameQuery | null {
@@ -379,7 +380,9 @@ export default function App() {
       const useTierTask = modelLayers.buildings
         ? loadUseTiers(bounds, center, { signal: controller.signal }).catch((err: unknown) => {
             if (controller.signal.aborted) throw err;
-            const failures: UseTierFailure[] = [{ tier: "zone", message: "zones unavailable" }];
+            const failures: UseTierFailure[] = [
+              { id: "zone", tier: "zone", message: "zones unavailable" },
+            ];
             return { zones: null, failures };
           })
         : Promise.resolve({ zones: null, failures: [] as UseTierFailure[] });
@@ -522,27 +525,19 @@ export default function App() {
         comFootprintFetchError = "City of Melbourne 2023 building footprints returned no data.";
       }
       let enrichmentTilesFailed = false;
-      const useTierFailures = [...useTiers.failures];
       if (enrichmentResult.error) {
         enrichmentTilesFailed = true;
-        useTierFailures.push({
-          tier: "enrichment_tiles",
-          message: `Building enrichment tiles unavailable (${enrichmentResult.error}); live Vicmap zones used for use`,
-        });
         console.warn(`[CityCut enrichment] ${enrichmentResult.error}`);
       }
-      if (enrichmentManifest?.bca?.status === "blocked") {
-        useTierFailures.push({
-          tier: "enrichment_tiles",
-          message: "Building permit (BCA): blocked by source (403)",
-        });
-      }
-      if (cutCenterOutsideBuiltBbox(center, enrichmentManifest)) {
-        const msg = enrichmentCoverageMessage(enrichmentManifest);
-        if (msg) {
-          useTierFailures.push({ tier: "enrichment_coverage", message: msg });
-        }
-      }
+      const coverageMsg = cutCenterOutsideBuiltBbox(center, enrichmentManifest)
+        ? enrichmentCoverageMessage(enrichmentManifest)
+        : null;
+      const useTierFailures = buildEnrichmentUseTierFailures({
+        baseFailures: useTiers.failures,
+        enrichmentError: enrichmentResult.error,
+        bcaBlocked: enrichmentManifest?.bca?.status === "blocked",
+        coverageMessage: coverageMsg,
+      });
       if (modelLayers.buildings) {
         const enriched = mergeBuildingEnrichment(overtureBuildings, enrichmentResult.byId);
         const zoned = assignExternalUses(enriched, useTiers.zones);
