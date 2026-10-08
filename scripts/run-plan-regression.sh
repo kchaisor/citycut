@@ -2,10 +2,14 @@
 set -euo pipefail
 cd /workspace
 BR=$(git rev-parse --abbrev-ref HEAD)
+BENCH_REF="${BENCH_SCRIPTS_REF:-HEAD}"
 MODEL=/opt/cursor/artifacts/east-model.json
 : > /opt/cursor/artifacts/bench-plan-1km.jsonl
-cp scripts/bench-plan-1km.mjs /tmp/bench-plan-1km.mjs
-cp scripts/render-site-plan-crop.mjs /tmp/render-site-plan-crop.mjs
+
+inject_bench_scripts() {
+  git show "${BENCH_REF}:scripts/bench-plan-1km.mjs" > scripts/bench-plan-1km.mjs
+  git show "${BENCH_REF}:scripts/render-site-plan-crop.mjs" > scripts/render-site-plan-crop.mjs
+}
 
 if [[ ! -f "$MODEL" ]]; then
   echo "Need $MODEL — run qa-footpath-fillet-east-melbourne.mjs or save model first" >&2
@@ -19,11 +23,12 @@ for i in "${!refs[@]}"; do
   ref=${refs[$i]}
   label=${labels[$i]}
   git checkout "$ref" --quiet
+  inject_bench_scripts
   npm run build --silent 2>/dev/null || npm run build
-  npx vite-node /tmp/bench-plan-1km.mjs "$MODEL" "$label" || true
+  npx vite-node scripts/bench-plan-1km.mjs "$MODEL" "$label"
   fillet=2
   [[ "$label" == "caac962" ]] && fillet=0
-  npx vite-node /tmp/render-site-plan-crop.mjs "$MODEL" "$label" "430 -120 70 70" "$fillet" || true
+  npx vite-node scripts/render-site-plan-crop.mjs "$MODEL" "$label" "430 -120 70 70" "$fillet"
 done
 
 git checkout "$BR" --quiet
