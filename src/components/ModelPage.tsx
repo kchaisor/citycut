@@ -41,6 +41,7 @@ import { FIGURE_SCALES, preferredFigureScale, sheetFitMessage } from "../lib/fig
 import {
   countBuildingsWithComDerivedExtrusion,
   fetchComBuildingFootprints,
+  intersectsComCity,
   paddedComFetchBounds,
   type ComBuildingFootprint,
 } from "../lib/comBuildingHeights";
@@ -50,6 +51,9 @@ import {
   COM_BUILDING_HEIGHTS_DATASET_URL,
 } from "../lib/comBuildingHeightCredit";
 import {
+  comBuildingHeightsToggleKind,
+  comBuildingHeightsToggleLabel,
+  comBuildingHeightsTogglePressed,
   readStoredComBuildingHeights,
   writeStoredComBuildingHeights,
 } from "../lib/comBuildingHeightsToggle";
@@ -178,6 +182,11 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [comFootprints, setComFootprints] = useState<ComBuildingFootprint[]>(
     () => model.comFootprintPrefetch ?? [],
   );
+  const [comFootprintFetchError, setComFootprintFetchError] = useState<string | null>(
+    () => model.comFootprintFetchError ?? null,
+  );
+  const [comFootprintLoading, setComFootprintLoading] = useState(false);
+  const [comFootprintRetryToken, setComFootprintRetryToken] = useState(0);
   const [preferred, setPreferred] = useState<string | null>(() => loadModelDrawer());
   const [planWidth, setPlanWidth] = useState<number | null>(null);
   const [fitCounter, setFitCounter] = useState(0);
@@ -290,24 +299,57 @@ export function ModelPage({ model }: { model: CityModel }) {
   }, []);
 
   useEffect(() => {
+    setComFootprintFetchError(model.comFootprintFetchError ?? null);
+  }, [
+    model.placeLabel,
+    model.center.lat,
+    model.center.lon,
+    model.sideM,
+    model.comFootprintFetchError,
+  ]);
+
+  useEffect(() => {
     if (!betterHeights || !model.layers.buildings) {
       setComFootprints([]);
+      setComFootprintLoading(false);
       return;
     }
     if (model.comFootprintPrefetch?.length) {
       setComFootprints(model.comFootprintPrefetch);
+      setComFootprintFetchError(null);
+      setComFootprintLoading(false);
       return;
     }
     const bounds = paddedComFetchBounds(model.center, model.sideM);
+    if (!intersectsComCity(bounds)) {
+      setComFootprints([]);
+      setComFootprintLoading(false);
+      return;
+    }
     const controller = new AbortController();
+    setComFootprintLoading(true);
     fetchComBuildingFootprints(bounds, model.center, controller.signal)
       .then((footprints) => {
+        if (controller.signal.aborted) return;
         setComFootprints(footprints);
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setComFootprints([]);
+        setComFootprintLoading(false);
+        if (footprints.length === 0) {
+          setComFootprintFetchError(
+            "City of Melbourne 2023 building footprints returned no data.",
+          );
+        } else {
+          setComFootprintFetchError(null);
         }
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        setComFootprints([]);
+        setComFootprintLoading(false);
+        setComFootprintFetchError(
+          err instanceof Error
+            ? err.message
+            : "City of Melbourne 2023 building footprints could not be loaded.",
+        );
       });
     return () => controller.abort();
   }, [
@@ -317,7 +359,26 @@ export function ModelPage({ model }: { model: CityModel }) {
     model.sideM,
     model.layers.buildings,
     model.comFootprintPrefetch,
+    comFootprintRetryToken,
   ]);
+
+  const comFetchBounds = useMemo(
+    () => paddedComFetchBounds(model.center, model.sideM),
+    [model.center.lat, model.center.lon, model.sideM],
+  );
+  const inComCity = intersectsComCity(comFetchBounds);
+  const comHeightsLoadFailed =
+    betterHeights &&
+    inComCity &&
+    !comFootprintLoading &&
+    comFootprintFetchError != null;
+  const comHeightsToggleKind = comBuildingHeightsToggleKind({
+    userEnabled: betterHeights,
+    inComCity,
+    loadFailed: comHeightsLoadFailed,
+    loading: comFootprintLoading && betterHeights && inComCity,
+  });
+  const comHeightsMeasuredOn = comHeightsToggleKind === "on";
 
   const [comHeightBuildings, setComHeightBuildings] = useState<typeof model.buildings | null>(null);
   const [comHeightUpdates, setComHeightUpdates] = useState(0);
@@ -1126,7 +1187,8 @@ export function ModelPage({ model }: { model: CityModel }) {
                   </button>
                   <button
                     type="button"
-                    aria-pressed={betterHeights}
+                    className={comHeightsToggleKind === "failed" ? "layer-sub-toggle warn" : undefined}
+                    aria-pressed={comBuildingHeightsTogglePressed(comHeightsToggleKind)}
                     onClick={() => {
                       setBetterHeights((on) => {
                         const next = !on;
@@ -1135,18 +1197,32 @@ export function ModelPage({ model }: { model: CityModel }) {
                       });
                     }}
                   >
-                    {betterHeights
-                      ? "CoM 2023 measured heights on · turn off"
-                      : "CoM 2023 heights off · turn on"}
+                    {comBuildingHeightsToggleLabel(comHeightsToggleKind)}
                   </button>
+                  {comHeightsToggleKind === "failed" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setComFootprintFetchError(null);
+                        setComFootprintRetryToken((token) => token + 1);
+                      }}
+                    >
+                      Retry CoM heights
+                    </button>
+                  )}
                 </div>
-                {betterHeights && comHeightUpdates > 0 && (
+                {comHeightsMeasuredOn && comHeightUpdates > 0 && (
                   <p className="legend-note">
                     {comHeightUpdates.toLocaleString()} building{comHeightUpdates === 1 ? "" : "s"} use City of
                     Melbourne extrusion heights in this frame.
                   </p>
                 )}
-                {betterHeights && (
+                {comHeightsLoadFailed && (
+                  <p className="legend-note" role="status">
+                    CoM 2023 measured heights are unavailable; showing estimates.
+                  </p>
+                )}
+                {comHeightsMeasuredOn && (
                   <p className="legend-note">
                     <a href={COM_BUILDING_HEIGHTS_DATASET_URL}>{COM_BUILDING_HEIGHTS_CREDIT}</a>
                   </p>
@@ -1624,7 +1700,7 @@ export function ModelPage({ model }: { model: CityModel }) {
               windOn: windSettings.enabled,
               satelliteOn: tab === "satellite",
               lidarHeightsOn,
-              comHeightsHtml: betterHeights
+              comHeightsHtml: comHeightsMeasuredOn
                 ? `Building heights: <a href="${COM_BUILDING_HEIGHTS_DATASET_URL}">2023 Building Footprints © City of Melbourne</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.`
                 : null,
               contourHtml:

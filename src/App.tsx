@@ -512,6 +512,15 @@ export default function App() {
       let buildings: typeof overtureBuildings = [];
       const comFootprintPrefetch =
         comHeightsResult.footprints.length > 0 ? comHeightsResult.footprints : undefined;
+      let comFootprintFetchError: string | null = comHeightsResult.error;
+      if (
+        !comFootprintFetchError &&
+        modelLayers.buildings &&
+        intersectsComCity(comFetchBounds) &&
+        comHeightsResult.footprints.length === 0
+      ) {
+        comFootprintFetchError = "City of Melbourne 2023 building footprints returned no data.";
+      }
       let enrichmentTilesFailed = false;
       const useTierFailures = [...useTiers.failures];
       if (enrichmentResult.error) {
@@ -683,6 +692,7 @@ export default function App() {
         buildingsWithoutCom,
         comBuildingHeightsApplied: false,
         comFootprintPrefetch,
+        comFootprintFetchError: comFootprintFetchError ?? undefined,
         heightSourceLoadWarnings:
           heightSourceLoadWarnings.length > 0 ? heightSourceLoadWarnings : undefined,
       };

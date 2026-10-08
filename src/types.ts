@@ -281,6 +281,8 @@ export type CityModel = {
   comBuildingHeightsApplied?: boolean;
   /** CoM footprint rows prefetched during model create (Melbourne); ModelPage skips refetch when set. */
   comFootprintPrefetch?: import("./lib/comBuildingHeightsTypes").ComBuildingFootprint[];
+  /** CoM 2023 footprint fetch failed at model create (Melbourne cuts). */
+  comFootprintFetchError?: string | null;
   /** Non-blocking banners when height datasets failed to load (CoM, DAM, Overture). */
   heightSourceLoadWarnings?: string[];
   /** Road-enclosed block fills (under buildings; not water/green/paper). */
