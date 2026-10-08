@@ -6,10 +6,10 @@ import { signedArea } from "./geo";
 /** Clipper integer scale: 1 mm per unit (0.001 m). */
 export const CLIPPER_SCALE = 1000;
 
-/** Max sagitta/chord error on Clipper round joins (m). */
-export const CLIPPER_ARC_CHORD_M = 0.02;
-/** Max angle step on Clipper round joins (degrees); 90° → ≥15 segments. */
-export const CLIPPER_ARC_MAX_STEP_DEG = 6;
+/** Max sagitta/chord error on Clipper round joins (m). ~8 segments per 90° at R=2 m. */
+export const CLIPPER_ARC_CHORD_M = 0.01;
+/** Max angle step on Clipper round joins (degrees). */
+export const CLIPPER_ARC_MAX_STEP_DEG = 12;
 
 /** Round-join sagitta for centreline buffers and morphological close (m). */
 export const CLIPPER_ARC_TOLERANCE_M = CLIPPER_ARC_CHORD_M;
@@ -36,11 +36,8 @@ export function arcSegmentCount(
 }
 
 /** Clipper offset arc tolerance (m) from chord cap and angle step at a typical radius. */
-export function clipperArcToleranceM(typicalRadiusM = 2): number {
-  const r = Math.max(typicalRadiusM, 0.5);
-  const halfStep = (CLIPPER_ARC_MAX_STEP_DEG * Math.PI) / 180 / 2;
-  const fromAngle = r * (1 - Math.cos(halfStep));
-  return Math.max(0.008, Math.min(CLIPPER_ARC_CHORD_M, fromAngle));
+export function clipperArcToleranceM(_typicalRadiusM = 2): number {
+  return CLIPPER_ARC_TOLERANCE_M;
 }
 
 type ClipperPoint = { X: number; Y: number };

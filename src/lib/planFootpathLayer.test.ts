@@ -84,6 +84,6 @@ describe("plan footpath layer", () => {
     });
     const baseArea = multiArea(baseline.pathFill);
     const area = multiArea(plan.pathFill);
-    expect(Math.abs(area - baseArea) / baseArea).toBeLessThanOrEqual(0.075);
+    expect(Math.abs(area - baseArea) / baseArea).toBeLessThanOrEqual(0.02);
   });
 });

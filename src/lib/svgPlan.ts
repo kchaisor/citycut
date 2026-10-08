@@ -25,7 +25,10 @@ import {
 import type { CityModel, Pt } from "../types";
 import { fillRoadMedianHoles, splitGreenForRoadLayer } from "./roadSurfacePlan";
 
-const round = (value: number) => Math.round(value * 10) / 10;
+/** Ground-metre precision for plan path coordinates (0.01 m). */
+export const PLAN_COORD_ROUND_M = 0.01;
+export const roundPlanCoord = (value: number) => Math.round(value / PLAN_COORD_ROUND_M) * PLAN_COORD_ROUND_M;
+const round = roundPlanCoord;
 
 export function svgPolyline(points: Pt[], close: boolean): string {
   if (points.length < 2) return "";
