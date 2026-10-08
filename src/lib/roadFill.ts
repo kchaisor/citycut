@@ -9,6 +9,7 @@ import {
   normalizeMultiPolygonByParity,
   offsetCloseMultiPolygon,
 } from "./polygonOffset";
+import { prepareStripsForUnion } from "./centrelineUnionPrep";
 
 type ClipFns = {
   union: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
@@ -28,10 +29,10 @@ const { union, intersection, difference } = clippingFns();
 /** Centreline points farther than this from the chord are kept. Invisible at 1:500. */
 const SIMPLIFY_M = 0.35;
 /** Final boundary simplification, in metres. */
-const OUTPUT_SIMPLIFY_M = 0.12;
+const OUTPUT_SIMPLIFY_M = 0.025;
 const SNAP_M = 0.01;
 const MIN_AREA_M2 = 0.8;
-const ARC = Math.PI / 4;
+const ARC = Math.PI / 16;
 /** Closes dual-carriageway and tram-corridor gaps after the centreline union. */
 export const ROAD_MORPH_CLOSE_M = 3;
 /** Default fillet radius for unioned footpath junctions (m on the ground). */
@@ -41,7 +42,7 @@ export const PATH_FILLET_BAND_SCALE = 1;
 /** Snap footpath centreline ends within this distance before union (m). */
 export const PATH_ENDPOINT_STITCH_M = 1.75;
 /** Final simplification on unioned footpaths after junction fillets (m). */
-export const PATH_OUTPUT_SIMPLIFY_M = 0.12;
+export const PATH_OUTPUT_SIMPLIFY_M = 0.025;
 /** Buffer half-width for in-road tram corridors merged into the road fill. */
 export const TRAM_CORRIDOR_WIDTH_M = 9;
 
@@ -532,7 +533,8 @@ export function unionCarriageways(
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
 ): RoadFill {
-  return unionStrips(roads, sideM, 0.4, frameShape);
+  const prepared = prepareStripsForUnion(roads, PATH_ENDPOINT_STITCH_M);
+  return unionStrips(prepared, sideM, 0.4, frameShape, true);
 }
 
 /** Buffer each path by its stored width and union the strips (3D and exports match the site plan). */
@@ -817,7 +819,8 @@ export function unionFootpathStrips(
 
   const started = performance.now();
   const stitched = stitchFootpathStrips(strips);
-  const merged = unionStrips(stitched, sideM, 0, frameShape);
+  const prepared = prepareStripsForUnion(stitched, PATH_ENDPOINT_STITCH_M);
+  const merged = unionStrips(prepared, sideM, 0, frameShape, true);
   const typical = strips.reduce((sum, s) => sum + s.width, 0) / Math.max(1, strips.length);
   const bandTypical = typicalBandWidthM > 0 ? typicalBandWidthM : typical;
   const filletRadius =

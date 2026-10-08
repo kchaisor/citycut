@@ -9,7 +9,7 @@ export const CENTRELINE_MAX_LATERAL_SHIFT_M = 0.5;
 /** Junction endpoints closer than this share a pinned coordinate (m). */
 export const CENTRELINE_JUNCTION_SNAP_M = 1.75;
 /** Douglas–Peucker tolerance after Chaikin (m); 0 skips simplify. */
-export const CENTRELINE_OUTPUT_SIMPLIFY_M = 0.12;
+export const CENTRELINE_OUTPUT_SIMPLIFY_M = 0;
 
 export type CentrelineSmoothStats = {
   polylines: number;

@@ -22,6 +22,7 @@ import {
   drawnContourInterval,
 } from "./vicmapContours";
 import type { CityModel, Pt } from "../types";
+import { fillRoadMedianHoles, splitGreenForRoadLayer } from "./roadSurfacePlan";
 
 const round = (value: number) => Math.round(value * 10) / 10;
 
@@ -46,6 +47,8 @@ export type PlanPaths = {
   water: Pt[][][];
   /** Unioned carriageway, outer rings plus block holes, in local east/north metres. */
   roadFill: Pt[][][];
+  /** Park/green drawn above the road layer (medians, traffic islands). */
+  greenOnRoad: Pt[][][];
   /** Buffer and union time for the carriageway, in milliseconds. */
   roadUnionMs: number;
   /** Unioned footpath strip. Outer rings plus holes, in local east/north metres. */
@@ -182,7 +185,7 @@ export function planPaths(
     pathFilletM,
     pathWidthM,
   );
-  const carriageway = unionRoadSurface(model.roads, model.tramLines, model.sideM, frameShape);
+  let carriageway = unionRoadSurface(model.roads, model.tramLines, model.sideM, frameShape);
 
   const colourMode: BuildingColourMode = planOptions.buildingColour ?? {
     colourByUse: true,
@@ -205,6 +208,11 @@ export function planPaths(
     pathFill = subtractFootpathBlockers(pathFill, carriageway.polygons);
     pathFill = mergeFootpathFragments(pathFill);
   }
+
+  let roadFillPolys = fillRoadMedianHoles(carriageway.polygons);
+  const greenSplit = splitGreenForRoadLayer(green, roadFillPolys);
+  const greenBelow = greenSplit.green;
+  const greenOnRoad = greenSplit.greenOnRoad;
 
   const trees = model.trees
     .filter((tree) => pointInSiteFrame(tree.at, model.sideM, frameShape))
@@ -238,9 +246,10 @@ export function planPaths(
 
   return {
     blocks,
-    green,
+    green: greenBelow,
+    greenOnRoad,
     water,
-    roadFill: carriageway.polygons,
+    roadFill: roadFillPolys,
     roadUnionMs: carriageway.ms,
     pathFill,
     pathUnionMs: footpaths.ms,

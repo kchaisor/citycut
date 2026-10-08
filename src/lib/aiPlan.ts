@@ -46,6 +46,7 @@ export const SITE_LAYER_ORDER = [
   "Contour labels",
   "Paths",
   "Roads",
+  "Green on road",
   "Blocks",
   "Rail",
   "Trams",
@@ -410,6 +411,21 @@ export function sitePlanChunks(
           ...(kerb ?? {}),
         },
       ],
+    });
+  }
+  const greenOnRoad = plan.greenOnRoad
+    .map((rings) => mapRings(rings, model.sideM, layout))
+    .filter((rings) => rings.length > 0);
+  if (greenOnRoad.length > 0) {
+    chunks.push({
+      name: "Green on road",
+      paths: greenOnRoad.map((rings) => ({
+        rings,
+        fill: fillOf("--green-fill"),
+        evenOdd: true,
+        close: true,
+        ...(greenPen ?? {}),
+      })),
     });
   }
   const railPen = pen(style.rail);

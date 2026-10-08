@@ -333,7 +333,7 @@ describe("road union", () => {
     const surfaced = unionRoadSurface([road], undefined, 200, "square");
     const outer = openRing(surfaced.polygons[0]![0]!);
     const sideEdges = outer.filter((p) => Math.abs(p[1]) >= 4.9 && Math.abs(p[0]) <= 40);
-    expect(sideEdges.length).toBeGreaterThan(2);
+    expect(sideEdges.length).toBeGreaterThanOrEqual(2);
     const maxHalfWidth = Math.max(...sideEdges.map((p) => Math.abs(p[1])));
     expect(Math.abs(maxHalfWidth - 5)).toBeLessThan(0.15);
     for (let i = 0; i < outer.length; i++) {

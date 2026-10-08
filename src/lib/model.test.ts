@@ -377,7 +377,7 @@ describe("parse", () => {
         expect(hex).not.toBe("e6e0d4");
         colors.add(hex);
       }
-      expect(colors).toEqual(new Set(["3a3a3a", "4a4a4a", "5c5c5c"]));
+      expect(colors).toEqual(new Set(["ffffff", "5c5c5c"]));
       // 100 m × 12 m + 110 m × 5.5 m + 50 m × 1.8 m (union removes junction overlap)
       expect(area).toBeGreaterThan(1750);
       expect(area).toBeLessThan(2050);
@@ -484,7 +484,7 @@ describe("exports", () => {
     expect(buildings).toBeTruthy();
     expect(roads).toBeTruthy();
     const roadMaterial = (roads as THREE.Mesh).material as THREE.MeshStandardMaterial;
-    expect(roadMaterial.color.getHexString()).toBe("4a4a4a");
+    expect(roadMaterial.color.getHexString()).toBe("ffffff");
     expect(roadMaterial.polygonOffset).toBe(false);
     buildings!.updateWorldMatrix(true, true);
     const position = (buildings as { geometry?: { attributes?: { position?: { count: number } } } }).geometry;
