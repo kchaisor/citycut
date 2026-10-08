@@ -6,8 +6,14 @@ import { PATH_WIDTH_M } from "../src/lib/lineweights.ts";
 const model = JSON.parse(readFileSync(process.argv[2] ?? "/opt/cursor/artifacts/east-model.json", "utf8"));
 const strips = stitchFootpathStrips(footpathStrips(model.roads, PATH_WIDTH_M));
 const junctions = junctionPointsFromStrips(strips);
+const fitzroy = { x: -115, y: 60, w: 95, h: 95 };
 
-let best = null;
+function centroidInFitzroy(cx, cy) {
+  return cx >= fitzroy.x && cx <= fitzroy.x + fitzroy.w && cy >= fitzroy.y && cy <= fitzroy.y + fitzroy.h;
+}
+
+let bestFitz = null;
+let bestAny = null;
 for (const strip of strips) {
   const { outcome, line } = smoothCentrelineDetailed(strip.line, {
     junctionPoints: junctions,
@@ -22,14 +28,16 @@ for (const strip of strips) {
   }
   cx /= strip.line.length;
   cy /= strip.line.length;
-  const inFitzroy = cx >= -70 && cx <= 8 && cy >= 72 && cy <= 150;
-  const score = (line.length - strip.line.length) * strip.line.length * (inFitzroy ? 20 : 1);
-  if (!best || score > best.score) best = { cx, cy, score, orig: strip.line.length, smooth: line.length, inFitzroy };
+  const score = (line.length - strip.line.length) * strip.line.length;
+  const entry = { cx, cy, score, orig: strip.line.length, smooth: line.length };
+  if (!bestAny || score > bestAny.score) bestAny = entry;
+  if (centroidInFitzroy(cx, cy) && (!bestFitz || score > bestFitz.score)) bestFitz = entry;
 }
 
+const pick = bestFitz ?? bestAny;
 const size = 28;
-const vb = best
-  ? `${Math.round(best.cx - size / 2)} ${Math.round(best.cy - size / 2)} ${size} ${size}`
+const vb = pick
+  ? `${Math.round(pick.cx - size / 2)} ${Math.round(pick.cy - size / 2)} ${size} ${size}`
   : "-78 78 35 35";
 writeFileSync("/opt/cursor/artifacts/bend-viewbox.txt", vb);
-console.log(JSON.stringify({ best, vb }));
+console.log(JSON.stringify({ pick, bestFitz, vb }));

@@ -1,8 +1,6 @@
-/**
- * Close-up on a Fitzroy path–path crossing (arc tolerance visible at ~6 m).
- */
+/** ~8 m close-up where footpath fillet + centreline smoothing differ most from main. */
 import { writeFileSync } from "node:fs";
 
-const close = "-4 130 6 6";
+const close = "-10 100 8 8";
 writeFileSync("/opt/cursor/artifacts/kelvin-fitzroy-closeup.txt", close);
-console.log(JSON.stringify({ close, crossing: [4, 132] }));
+console.log(JSON.stringify({ close }));
