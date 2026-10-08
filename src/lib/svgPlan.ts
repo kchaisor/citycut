@@ -8,8 +8,8 @@ import type { MultiPolygon } from "polygon-clipping";
 import {
   DEFAULT_PATH_FILLET_M,
   footpathStrips,
-  clipFootpathsOutsideCarriageway,
   mergeFootpathFragments,
+  subtractFootpathBlockers,
   unionFootpathStrips,
   unionRoadSurface,
 } from "./roadFill";
@@ -195,7 +195,7 @@ export function planPaths(
 
   let pathFill: MultiPolygon = footpaths.polygons;
   if (pathFilletM > 0 && carriageway.polygons.length > 0) {
-    pathFill = clipFootpathsOutsideCarriageway(pathFill, carriageway.polygons, model.sideM, frameShape);
+    pathFill = subtractFootpathBlockers(pathFill, carriageway.polygons);
     pathFill = mergeFootpathFragments(pathFill);
   }
 

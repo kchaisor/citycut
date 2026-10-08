@@ -3,6 +3,7 @@ import type { MultiPolygon, Pair, Polygon, Ring } from "polygon-clipping";
 import { polylineLength, signedArea } from "./geo";
 import { DEFAULT_SITE_FRAME_SHAPE, pointInSiteFrame, siteFramePolygon, type SiteFrameShape } from "./siteFrame";
 import type { Pt, RoadFeat } from "../types";
+import { offsetCloseMultiPolygon } from "./polygonOffset";
 
 type ClipFns = {
   union: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
@@ -553,7 +554,7 @@ function simplifyPathMulti(polygons: MultiPolygon): MultiPolygon {
 }
 
 /**
- * Round concave footpath junctions by morphological closing: dilate r, erode r, clip to frame.
+ * Round concave footpath junctions: Clipper offset close (+r then −r), then clip to frame.
  */
 export function closeFootpathJunctions(
   polygons: MultiPolygon,
@@ -563,14 +564,11 @@ export function closeFootpathJunctions(
 ): MultiPolygon {
   if (!(radius > 0) || polygons.length === 0) return polygons;
   const simplified = simplifyPathMulti(polygons);
-  const closed = morphologicalClose(simplified, radius, sideM, frameShape, {
-    outerRingsOnly: true,
-    edgeSpacingM: Math.max(radius * 1.1, 1.5),
-  });
+  const closed = offsetCloseMultiPolygon(simplified, radius);
   return simplifyPathMulti(tidy(clipToFrame(closed, sideM, frameShape)));
 }
 
-/** Remove footpath fill that morphological closing pushed into carriageway. */
+/** Remove footpath fill that closing pushed into the carriageway. */
 export function subtractFootpathBlockers(
   footpaths: MultiPolygon,
   blockers: MultiPolygon,
@@ -591,101 +589,10 @@ export function subtractFootpathBlockers(
   }
 }
 
-/** Keep footpaths inside the site frame but outside the carriageway (fewer slivers than raw difference). */
-/** Re-merge footpath fragments after carriageway clip so the plan stays one fill. */
+/** Re-merge footpath fragments after carriageway subtract so the plan stays one fill. */
 export function mergeFootpathFragments(polygons: MultiPolygon): MultiPolygon {
   if (polygons.length <= 1) return polygons;
   return tidy(unionFast(polygons));
-}
-
-export function clipFootpathsOutsideCarriageway(
-  footpaths: MultiPolygon,
-  carriageway: MultiPolygon,
-  sideM: number,
-  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
-): MultiPolygon {
-  if (footpaths.length === 0 || carriageway.length === 0) return footpaths;
-  const frame = siteFramePolygon(sideM, frameShape);
-  try {
-    const allowed = tidy(difference(frame, unionFast(carriageway)));
-    return tidy(intersection(footpaths, allowed));
-  } catch {
-    return subtractFootpathBlockers(footpaths, carriageway);
-  }
-}
-
-function circlePolygon(center: Pt, radius: number, segments = 10): Polygon | null {
-  if (!(radius > 0)) return null;
-  const ring: Pt[] = [];
-  for (let i = 0; i <= segments; i++) {
-    const angle = (i / segments) * Math.PI * 2;
-    ring.push([center[0] + Math.cos(angle) * radius, center[1] + Math.sin(angle) * radius]);
-  }
-  return toPolygon(ring);
-}
-
-/** Morphological dilation (buffer out with round caps on the boundary). */
-export function morphologicalDilate(
-  polygons: MultiPolygon,
-  radius: number,
-  options: { outerRingsOnly?: boolean; edgeSpacingM?: number } = {},
-): MultiPolygon {
-  if (polygons.length === 0 || !(radius > 0)) return polygons;
-  const spacing = options.edgeSpacingM ?? radius * 0.85;
-  const seeds: Polygon[] = [...polygons];
-  for (const polygon of polygons) {
-    const rings = options.outerRingsOnly ? [polygon[0]] : polygon;
-    for (const ring of rings) {
-      if (!ring) continue;
-      const open = ring.slice(0, -1);
-      for (let i = 0; i < open.length; i++) {
-        const a = open[i]!;
-        const b = open[(i + 1) % open.length]!;
-        const disk = circlePolygon(a, radius, 8);
-        if (disk) seeds.push(disk);
-        const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
-        const steps = Math.max(1, Math.ceil(length / spacing));
-        for (let step = 1; step < steps; step++) {
-          const t = step / steps;
-          const mid: Pt = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-          const midDisk = circlePolygon(mid, radius, 8);
-          if (midDisk) seeds.push(midDisk);
-        }
-      }
-    }
-  }
-  return tidy(unionFast(seeds));
-}
-
-/** Morphological erosion within the site frame (buffer in with round joins). */
-export function morphologicalErode(
-  polygons: MultiPolygon,
-  radius: number,
-  sideM: number,
-  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
-): MultiPolygon {
-  if (polygons.length === 0 || !(radius > 0)) return polygons;
-  const frame = siteFramePolygon(sideM, frameShape);
-  try {
-    const outside = difference(frame, polygons);
-    const expandedOutside = morphologicalDilate(outside, radius);
-    return tidy(difference(frame, expandedOutside));
-  } catch {
-    return polygons;
-  }
-}
-
-/** Closing fills concave junction corners then restores the outer footprint. */
-export function morphologicalClose(
-  polygons: MultiPolygon,
-  radius: number,
-  sideM: number,
-  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
-  dilateOptions?: { outerRingsOnly?: boolean; edgeSpacingM?: number },
-): MultiPolygon {
-  if (polygons.length === 0 || !(radius > 0)) return polygons;
-  const dilated = morphologicalDilate(polygons, radius, dilateOptions);
-  return morphologicalErode(dilated, radius, sideM, frameShape);
 }
 
 const footpathUnionCache = new Map<string, RoadFill>();
@@ -739,7 +646,7 @@ export function unionRoadSurface(
   const withTram =
     tramInputs.length > 0 ? unionCarriageways(tramInputs, sideM, frameShape) : { polygons: [] as MultiPolygon, ms: 0, inputs: 0 };
   const merged = unionMulti(carriageway.polygons, withTram.polygons);
-  const closed = tidy(clipToFrame(morphologicalDilate(merged, ROAD_MORPH_CLOSE_M), sideM, frameShape));
+  const closed = tidy(clipToFrame(offsetCloseMultiPolygon(merged, ROAD_MORPH_CLOSE_M), sideM, frameShape));
   return {
     polygons: closed,
     ms: carriageway.ms + withTram.ms,

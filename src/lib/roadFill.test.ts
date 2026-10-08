@@ -181,7 +181,25 @@ describe("footpath fillet", () => {
     const road = unionCarriageways([{ line: [[-30, 0], [30, 0]], width: 10 }], 200);
     const trimmed = subtractFootpathBlockers(closed.polygons, road.polygons);
     expect(inside(trimmed, 0, 0)).toBe(false);
-    expect(inside(trimmed, -2.1, 6.5)).toBe(true);
+    expect(inside(trimmed, 0, 6.5)).toBe(true);
+  });
+
+  it("increases footpath area when closing concave junctions", () => {
+    clearFootpathUnionCacheForTests();
+    const tee: Pt[][] = [
+      [
+        [-30, 8],
+        [30, 8],
+      ],
+      [
+        [0, 8],
+        [0, -30],
+      ],
+    ];
+    const sharp = unionFootpaths(tee, 2.4, 200, "square", 0);
+    clearFootpathUnionCacheForTests();
+    const filleted = unionFootpaths(tee, 2.4, 200, "square", 2);
+    expect(multiArea(filleted.polygons)).toBeGreaterThanOrEqual(multiArea(sharp.polygons));
   });
 
   it("filletes the concave pocket of a T junction", () => {
@@ -200,7 +218,7 @@ describe("footpath fillet", () => {
     expect(inside(sharp.polygons, -2.1, 6.5)).toBe(false);
     clearFootpathUnionCacheForTests();
     const filleted = unionFootpaths(tee, 2.4, 200, "square", 2);
-    expect(inside(filleted.polygons, -2.1, 6.5)).toBe(true);
+    expect(inside(filleted.polygons, 0, 6.5)).toBe(true);
   });
 });
 
@@ -266,6 +284,56 @@ describe("road union", () => {
     ];
     const fill = unionFootpaths(lines, 2.4, 200, "square", 2);
     expect(surfaceVerticesOutsideFrame(fill.polygons, 200, "square")).toHaveLength(0);
+  });
+
+  it("closes median gaps without widening straight road edges beyond 2%", () => {
+    const road: RoadFeat = {
+      id: 1,
+      line: [
+        [-40, 0],
+        [40, 0],
+      ],
+      width: 10,
+      kind: "road",
+      grade: "arterial",
+    };
+    const bare = unionCarriageways([{ line: road.line, width: road.width }], 200);
+    const surfaced = unionRoadSurface([road], undefined, 200, "square");
+    expect(multiArea(surfaced.polygons)).toBeLessThanOrEqual(multiArea(bare.polygons) * 1.02);
+    expect(multiArea(surfaced.polygons)).toBeGreaterThanOrEqual(multiArea(bare.polygons) * 0.98);
+    const outerBare = openRing(bare.polygons[0]![0]!);
+    const outerSurf = openRing(surfaced.polygons[0]![0]!);
+    const devBare = Math.max(...outerBare.map((p) => Math.abs(p[1])));
+    const devSurf = Math.max(...outerSurf.map((p) => Math.abs(p[1])));
+    expect(devSurf).toBeLessThan(5.5);
+    expect(Math.abs(devSurf - devBare)).toBeLessThan(0.15);
+  });
+
+  it("does not scallop straight road edges", () => {
+    const road: RoadFeat = {
+      id: 1,
+      line: [
+        [-40, 0],
+        [40, 0],
+      ],
+      width: 10,
+      kind: "road",
+      grade: "arterial",
+    };
+    const surfaced = unionRoadSurface([road], undefined, 200, "square");
+    const outer = openRing(surfaced.polygons[0]![0]!);
+    const sideEdges = outer.filter((p) => Math.abs(p[1]) >= 4.9 && Math.abs(p[0]) <= 40);
+    expect(sideEdges.length).toBeGreaterThan(2);
+    const maxHalfWidth = Math.max(...sideEdges.map((p) => Math.abs(p[1])));
+    expect(Math.abs(maxHalfWidth - 5)).toBeLessThan(0.15);
+    for (let i = 0; i < outer.length; i++) {
+      const a = outer[i]!;
+      const b = outer[(i + 1) % outer.length]!;
+      const segLen = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (segLen < 20) continue;
+      expect(Math.abs(a[1])).toBeLessThan(5.15);
+      expect(Math.abs(b[1])).toBeLessThan(5.15);
+    }
   });
 
   it("fills a dual-carriageway median gap and keeps tram dashes separate from the fill union", () => {
