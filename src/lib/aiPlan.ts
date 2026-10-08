@@ -317,6 +317,7 @@ export function sitePlanChunks(
       },
       highlightManual,
       pathFilletM: style.pathFilletM,
+      smoothOutput: true,
     },
   );
   const page = layout.pageHeightMm;

@@ -1,6 +1,6 @@
 /**
- * Pick Kelvin QA viewBoxes from plan geometry (Jolimont 1 km).
- * Facet/kerb: Clarendon pocket south of the rail (SVG x 80–220, y −490…−380).
+ * Pick Kelvin QA viewBoxes (Jolimont 1 km).
+ * Clarendon pocket: south of rail, north ≈ −455…−385 → viewBox y ≈ +385…+455.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { signedArea, openRing } from "../src/lib/geo.ts";
@@ -12,13 +12,12 @@ import { findPathJunctionNibs, viewBoxAround } from "../src/lib/pathJunctionNib.
 const model = JSON.parse(readFileSync(process.argv[2] ?? "/opt/cursor/artifacts/jolimont-model.json", "utf8"));
 const half = model.sideM / 2;
 
-/** ViewBox east / SVG y band for Kelvin's Clarendon curve pocket. */
 const KELVIN_EAST = [80, 220];
-const KELVIN_SVG_Y = [-490, -380];
+/** Ground north (m), negative south of origin. */
+const KELVIN_NORTH = [-455, -385];
 
 function inKelvinBox(east, north) {
-  const svgY = -north;
-  return east >= KELVIN_EAST[0] && east <= KELVIN_EAST[1] && svgY >= KELVIN_SVG_Y[0] && svgY <= KELVIN_SVG_Y[1];
+  return east >= KELVIN_EAST[0] && east <= KELVIN_EAST[1] && north >= KELVIN_NORTH[0] && north <= KELVIN_NORTH[1];
 }
 
 function vbAround(east, north, w, h) {
@@ -72,43 +71,28 @@ function pathNearGreen(greenOuter, pathMulti, maxD = 3.5) {
 clearFootpathUnionCacheForTests();
 const plan = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, { pathFilletM: 2, smoothOutput: false });
 
-const rails = model.roads.filter((r) => r.kind === "rail");
-let railY = 0;
-let railN = 0;
-for (const r of rails) {
-  for (const p of r.line) railY += p[1];
-  railN += r.line.length;
-}
-railY /= Math.max(1, railN);
-
-/** Park block inside the Clarendon curve with tan footpath on its edge. */
 let facet = null;
 for (const rings of plan.green) {
   const outer = rings[0];
   if (!outer || ringArea(outer) < 600 || ringArea(outer) > 25000) continue;
   const [cx, cy] = ringCentroid(outer);
   if (!inKelvinBox(cx, cy)) continue;
-  if (cy < railY - 15) continue;
   const pathHits = pathNearGreen(outer, plan.pathFill);
   if (pathHits < 4) continue;
   let roadNear = 0;
-  let roadMinEast = Infinity;
   for (const poly of plan.roadFill) {
     for (const p of poly[0]?.slice(0, -1) ?? []) {
       if (!inKelvinBox(p[0], p[1])) continue;
-      if (p[0] > cx - 5) {
-        roadNear++;
-        roadMinEast = Math.min(roadMinEast, p[0]);
-      }
+      if (p[0] > cx - 5) roadNear++;
     }
   }
   if (roadNear < 6) continue;
-  const score = pathHits * 50 + ringArea(outer) * 0.02 + (cy - railY) * 2;
-  if (!facet || score > facet.score) facet = { cx, cy, score, pathHits, roadMinEast };
+  const score = pathHits * 50 + ringArea(outer) * 0.02;
+  if (!facet || score > facet.score) facet = { cx, cy, score, pathHits };
 }
 
-let facetEast = 150;
-let facetNorth = 430;
+let facetEast = 160;
+let facetNorth = -420;
 if (facet) {
   let pathCorner = [facet.cx - 18, facet.cy + 8];
   let bestD = Infinity;
@@ -122,13 +106,13 @@ if (facet) {
       }
     }
   }
-  let roadPt = [facet.roadMinEast, facet.cy];
+  let roadPt = [facet.cx + 15, facet.cy];
   bestD = Infinity;
   for (const poly of plan.roadFill) {
     for (const p of poly[0]?.slice(0, -1) ?? []) {
       if (!inKelvinBox(p[0], p[1])) continue;
       const d = Math.hypot(p[0] - pathCorner[0], p[1] - pathCorner[1]);
-      if (d < bestD && p[0] >= pathCorner[0] - 5) {
+      if (d < bestD) {
         bestD = d;
         roadPt = [p[0], p[1]];
       }
@@ -139,7 +123,6 @@ if (facet) {
 }
 const facetSpot = vbAround(facetEast, facetNorth, 70, 70);
 
-/** Rounded kerb return on a side street in the same pocket. */
 let kerb = null;
 for (const poly of plan.roadFill) {
   const open = poly[0]?.slice(0, -1) ?? [];
@@ -161,10 +144,19 @@ for (const poly of plan.roadFill) {
     if (turn > 0.2 && turn < 1.4 && (!kerb || turn > kerb.turn)) kerb = { p, turn };
   }
 }
-const kerbReturn = kerb ? vbAround(kerb.p[0], kerb.p[1], 20, 20) : vbAround(127, 496, 20, 20);
+const kerbReturn = kerb ? vbAround(kerb.p[0], kerb.p[1], 20, 20) : vbAround(137, -430, 20, 20);
 
-/** Elongated green median on Wellington Pde (near rail). */
 let roadGapsBest = null;
+let railY = 0;
+let railN = 0;
+for (const r of model.roads.filter((rd) => rd.kind === "rail")) {
+  for (const p of r.line) {
+    railY += p[1];
+    railN++;
+  }
+}
+railY /= Math.max(1, railN);
+
 for (const rings of plan.greenOnRoad) {
   const ring = rings[0];
   if (!ring) continue;
@@ -187,26 +179,16 @@ for (const rings of plan.greenOnRoad) {
   const score = Math.abs(cy - railY) * 0.5 + Math.abs(spanX / Math.max(spanY, 1) - 5) * 3;
   if (!roadGapsBest || score < roadGapsBest.score) roadGapsBest = { cx, cy, score };
 }
-const roadGaps = roadGapsBest ? vbAround(roadGapsBest.cx, roadGapsBest.cy, 55, 35) : "284 126 55 35";
-
-/** Path kink from nib finder (merged by find-path-kink-nibs.mjs). */
-const nibs = findPathJunctionNibs(plan.pathFill, 200);
-const kelvinNibs = nibs.filter((n) => inKelvinBox(n.east, n.north));
-const pathKinkNib = kelvinNibs[0] ?? nibs[0];
-const pathKink = pathKinkNib ? viewBoxAround(pathKinkNib.east, pathKinkNib.north, 24, 24) : "154 -462 24 24";
-const pathKinkCentre = pathKinkNib ? { east: pathKinkNib.east, north: pathKinkNib.north } : null;
+const roadGaps = roadGapsBest ? vbAround(roadGapsBest.cx, roadGapsBest.cy, 55, 35) : "284 124 55 35";
 
 const out = {
   facetSpot,
   kerbReturn,
   roadGaps,
-  pathKink,
-  pathKinkCentre,
-  kelvinBox: { east: KELVIN_EAST, svgY: KELVIN_SVG_Y },
+  kelvinBox: { east: KELVIN_EAST, north: KELVIN_NORTH },
   facet,
   kerb,
   roadGapsBest,
-  pathKinkNib,
   railY,
 };
 writeFileSync("/opt/cursor/artifacts/kelvin-jolimont-crops.json", JSON.stringify(out, null, 2));

@@ -217,7 +217,7 @@ export function planPaths(
   const greenBelow = greenSplit.green;
   const greenOnRoad = greenSplit.greenOnRoad;
 
-  const smoothOutput = planOptions.smoothOutput !== false;
+  const smoothOutput = planOptions.smoothOutput === true;
   let ringSmoothMs = 0;
   if (smoothOutput) {
     const tSmooth = performance.now();

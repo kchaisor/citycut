@@ -1,14 +1,14 @@
 /**
  * Full site-plan SVG (planPaths, same layer order as DrawingPlan) at Kelvin crop viewBoxes.
- * Usage: npx vite-node scripts/render-kelvin-plan-shots.mjs <model.json> <main|pr>
+ * Usage: CITYCUT_ROOT=/path/to/repo npx vite-node scripts/render-kelvin-plan-shots.mjs <model.json> <main|pr>
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium } from "playwright";
-import { planPaths, svgRings, svgPolyline } from "../src/lib/svgPlan.ts";
-import { DEFAULT_LINE_STYLES, footpathEdgeSvgAttrs } from "../src/lib/drawingStyle.ts";
-import { getColour } from "../src/lib/colours.ts";
-import { PATH_WIDTH_M } from "../src/lib/lineweights.ts";
-import { clearFootpathUnionCacheForTests } from "../src/lib/roadFill.ts";
+
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = process.env.CITYCUT_ROOT ?? join(scriptDir, "..");
 
 const modelPath = process.argv[2];
 const label = process.argv[3] ?? "pr";
@@ -19,11 +19,19 @@ const cropFile = "/opt/cursor/artifacts/kelvin-jolimont-crops.json";
 const crops = existsSync(cropFile)
   ? JSON.parse(readFileSync(cropFile, "utf8"))
   : {
-      facetSpot: "120 180 55 55",
-      kerbReturn: "145 195 12 12",
-      roadGaps: "130 175 45 40",
-      pathKink: "95 210 18 18",
+      facetSpot: "125 385 70 70",
+      kerbReturn: "127 415 20 20",
+      roadGaps: "284 124 55 35",
+      pathKink: "125 420 24 24",
     };
+
+const { planPaths, svgRings, svgPolyline } = await import(pathToFileURL(join(repoRoot, "src/lib/svgPlan.ts")).href);
+const { DEFAULT_LINE_STYLES, footpathEdgeSvgAttrs } = await import(
+  pathToFileURL(join(repoRoot, "src/lib/drawingStyle.ts")).href,
+);
+const { getColour } = await import(pathToFileURL(join(repoRoot, "src/lib/colours.ts")).href);
+const { PATH_WIDTH_M } = await import(pathToFileURL(join(repoRoot, "src/lib/lineweights.ts")).href);
+const { clearFootpathUnionCacheForTests } = await import(pathToFileURL(join(repoRoot, "src/lib/roadFill.ts")).href);
 
 const shots = {
   "facet-spot": crops.facetSpot,
@@ -36,7 +44,10 @@ function buildSvg(viewBox, filletM = 2) {
   clearFootpathUnionCacheForTests();
   const style = { ...DEFAULT_LINE_STYLES, pathEdgeOn: true, pathFilletM: filletM };
   const smoothOutput = label === "pr";
-  const plan = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, { pathFilletM: filletM, smoothOutput });
+  const planOptions = { pathFilletM: filletM };
+  if (smoothOutput) planOptions.smoothOutput = true;
+  else planOptions.smoothOutput = false;
+  const plan = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, planOptions);
   const sheet = getColour("--sheet-fill");
   const greenFill = getColour("--green-fill");
   const pathD = plan.pathFill.map((p) => svgRings(p)).join(" ");
@@ -83,7 +94,7 @@ for (const [name, viewBox] of Object.entries(shots)) {
   writeFileSync(dest.replace(".png", ".svg"), svg);
   await page.setContent(svg);
   await page.screenshot({ path: dest });
-  console.log(name, viewBox, "->", dest);
+  console.log(name, viewBox, "->", dest, "root", repoRoot);
 }
 
 await browser.close();

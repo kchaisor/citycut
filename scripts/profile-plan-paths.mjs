@@ -1,26 +1,38 @@
 /**
  * Per-stage planPaths wall time (single run, ms).
- * Usage: npx vite-node scripts/profile-plan-paths.mjs <model.json> [label]
+ * Usage: CITYCUT_ROOT=/path npx vite-node scripts/profile-plan-paths.mjs <model.json> [label]
  */
-import { readFileSync, appendFileSync, mkdirSync } from "node:fs";
+import { readFileSync, appendFileSync, mkdirSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { performance } from "node:perf_hooks";
-import {
-  footpathStrips,
-  mergeFootpathFragments,
-  subtractFootpathBlockers,
-  unionFootpathStrips,
-  unionRoadSurface,
-  clearFootpathUnionCacheForTests,
-} from "../src/lib/roadFill.ts";
-import { fillRoadMedianHoles, splitGreenForRoadLayer } from "../src/lib/roadSurfacePlan.ts";
-import { collapsePathNibs } from "../src/lib/pathJunctionNib.ts";
-import { smoothPlanMultiPolygon } from "../src/lib/planRingSmooth.ts";
-import { clipAreaToSiteFrame, clipPolylineSiteFrame, pointInSiteFrame, DEFAULT_SITE_FRAME_SHAPE } from "../src/lib/siteFrame.ts";
-import { planBuildingFill } from "../src/lib/planBuildingFill.ts";
-import { isSiteBuilding } from "../src/lib/siteBuildings.ts";
-import { PATH_WIDTH_M } from "../src/lib/lineweights.ts";
-import { DEFAULT_PATH_FILLET_M } from "../src/lib/roadFill.ts";
-import { demContourLayer, drawContours, drawnContourInterval, altitudeOnInterval } from "../src/lib/vicmapContours.ts";
+
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = process.env.CITYCUT_ROOT ?? join(scriptDir, "..");
+
+const { footpathStrips, mergeFootpathFragments, subtractFootpathBlockers, unionFootpathStrips, unionRoadSurface, clearFootpathUnionCacheForTests, DEFAULT_PATH_FILLET_M } =
+  await import(pathToFileURL(join(repoRoot, "src/lib/roadFill.ts")).href);
+let fillRoadMedianHoles = (road) => road;
+let splitGreenForRoadLayer = (green) => ({ green, greenOnRoad: [] });
+if (existsSync(join(repoRoot, "src/lib/roadSurfacePlan.ts"))) {
+  ({ fillRoadMedianHoles, splitGreenForRoadLayer } = await import(
+    pathToFileURL(join(repoRoot, "src/lib/roadSurfacePlan.ts")).href,
+  ));
+}
+let collapsePathNibs = (pathFill) => pathFill;
+let smoothPlanMultiPolygon = (polygons) => polygons;
+if (existsSync(join(repoRoot, "src/lib/planRingSmooth.ts"))) {
+  ({ collapsePathNibs } = await import(pathToFileURL(join(repoRoot, "src/lib/pathJunctionNib.ts")).href));
+  ({ smoothPlanMultiPolygon } = await import(pathToFileURL(join(repoRoot, "src/lib/planRingSmooth.ts")).href));
+}
+const { clipAreaToSiteFrame, clipPolylineSiteFrame, pointInSiteFrame, DEFAULT_SITE_FRAME_SHAPE } = await import(
+  pathToFileURL(join(repoRoot, "src/lib/siteFrame.ts")).href,
+);
+const { planBuildingFill } = await import(pathToFileURL(join(repoRoot, "src/lib/planBuildingFill.ts")).href);
+const { PATH_WIDTH_M } = await import(pathToFileURL(join(repoRoot, "src/lib/lineweights.ts")).href);
+const { demContourLayer, drawContours, drawnContourInterval, altitudeOnInterval } = await import(
+  pathToFileURL(join(repoRoot, "src/lib/vicmapContours.ts")).href,
+);
 
 const modelPath = process.argv[2] ?? "/opt/cursor/artifacts/east-model.json";
 const label = process.argv[3] ?? "run";
@@ -43,7 +55,7 @@ function clipLines(line, sideM, frameShape) {
 }
 
 clearFootpathUnionCacheForTests();
-const stages = {};
+const stages = { citycutRoot: repoRoot };
 const t0 = performance.now();
 
 const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;

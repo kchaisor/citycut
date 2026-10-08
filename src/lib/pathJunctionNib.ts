@@ -1,8 +1,11 @@
 import type { MultiPolygon, Polygon, Ring } from "polygon-clipping";
 import type { Pt } from "../types";
+import { signedArea } from "./geo";
 
 /** Both edges of a T-junction nib are shorter than this (m). */
 export const NIB_MAX_EDGE_M = 1.5;
+/** Removing a nib must change ring area by less than this (m²). */
+export const NIB_MAX_AREA_DELTA_M2 = 0.5;
 
 export type PathJunctionNib = {
   east: number;
@@ -43,7 +46,41 @@ function nibScore(e1: number, e2: number, angleDeg: number): number {
   return shortness * 2 + sharpness;
 }
 
-/** Scan footpath fill outers for convex T-junction nibs (short edge pairs). */
+/** Outward spike: tip sticks out past the chord prev→next on a CCW outer ring. */
+function isOutwardSpike(prev: Pt, tip: Pt, next: Pt): boolean {
+  const ax = next[0] - prev[0];
+  const ay = next[1] - prev[1];
+  const cross = ax * (tip[1] - prev[1]) - ay * (tip[0] - prev[0]);
+  return cross > 1e-6;
+}
+
+function ringAreaAbs(open: Pt[]): number {
+  return Math.abs(signedArea(open));
+}
+
+function areaDeltaIfTipRemoved(open: Pt[], i: number): number {
+  const n = open.length;
+  if (n < 4) return Infinity;
+  const before = ringAreaAbs(open);
+  const reduced = open.filter((_, idx) => idx !== i);
+  return Math.abs(before - ringAreaAbs(reduced));
+}
+
+function isRemovableNib(open: Pt[], i: number): boolean {
+  const n = open.length;
+  const prev = open[(i + n - 1) % n]!;
+  const tip = open[i]!;
+  const next = open[(i + 1) % n]!;
+  const e1 = edgeLen(prev, tip);
+  const e2 = edgeLen(tip, next);
+  if (e1 > NIB_MAX_EDGE_M || e2 > NIB_MAX_EDGE_M) return false;
+  const angle = tipAngleDeg(prev, tip, next);
+  if (angle > 55) return false;
+  if (!isOutwardSpike(prev, tip, next)) return false;
+  return areaDeltaIfTipRemoved(open, i) <= NIB_MAX_AREA_DELTA_M2;
+}
+
+/** Scan footpath fill outers for convex outward T-junction nibs (short edge pairs). */
 export function findPathJunctionNibs(pathFill: MultiPolygon, limit = 10): PathJunctionNib[] {
   const found: PathJunctionNib[] = [];
   for (const polygon of pathFill) {
@@ -53,19 +90,17 @@ export function findPathJunctionNibs(pathFill: MultiPolygon, limit = 10): PathJu
     const n = open.length;
     if (n < 4) continue;
     for (let i = 0; i < n; i++) {
+      if (!isRemovableNib(open, i)) continue;
       const prev = open[(i + n - 1) % n]!;
       const tip = open[i]!;
       const next = open[(i + 1) % n]!;
       const e1 = edgeLen(prev, tip);
       const e2 = edgeLen(tip, next);
-      if (e1 > NIB_MAX_EDGE_M || e2 > NIB_MAX_EDGE_M) continue;
       const angle = tipAngleDeg(prev, tip, next);
-      if (angle > 55) continue;
-      const score = nibScore(e1, e2, angle);
       found.push({
         east: tip[0],
         north: tip[1],
-        score,
+        score: nibScore(e1, e2, angle),
         edge1M: e1,
         edge2M: e2,
         tipAngleDeg: angle,
@@ -91,11 +126,7 @@ export function viewBoxAround(east: number, north: number, w: number, h: number)
   return `${Math.round(east - w / 2)} ${Math.round(svgY - h / 2)} ${Math.round(w)} ${Math.round(h)}`;
 }
 
-function isNibVertex(prev: Pt, tip: Pt, next: Pt): boolean {
-  return edgeLen(prev, tip) <= NIB_MAX_EDGE_M && edgeLen(tip, next) <= NIB_MAX_EDGE_M && tipAngleDeg(prev, tip, next) <= 55;
-}
-
-/** Remove T-junction nib tips from footpath outers after ring smoothing. */
+/** Remove only outward T-junction nib tips; never concave fillet vertices. */
 export function collapsePathNibs(pathFill: MultiPolygon): MultiPolygon {
   const out: MultiPolygon = [];
   for (const polygon of pathFill) {
@@ -109,11 +140,8 @@ export function collapsePathNibs(pathFill: MultiPolygon): MultiPolygon {
       const kept: Pt[] = [];
       const n = open.length;
       for (let i = 0; i < n; i++) {
-        const prev = open[(i + n - 1) % n]!;
-        const tip = open[i]!;
-        const next = open[(i + 1) % n]!;
-        if (isNibVertex(prev, tip, next)) continue;
-        kept.push(tip);
+        if (isRemovableNib(open, i)) continue;
+        kept.push(open[i]!);
       }
       if (kept.length >= 3) {
         kept.push(kept[0]!);
