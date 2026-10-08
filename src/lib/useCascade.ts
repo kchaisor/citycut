@@ -309,7 +309,7 @@ function applyZones(buildings: BuildingFeat[], zones: ZonePolygon[]): BuildingFe
     if (!zoneCode) return next;
     const use = useFromZone(zoneCode, next.height);
     if (!use) return next;
-    return { ...next, use, source: "zone" as const };
+    return { ...next, use, source: "zone" as const, useSourceTier: "zone" };
   });
 }
 

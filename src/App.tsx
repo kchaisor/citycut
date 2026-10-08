@@ -537,6 +537,7 @@ export default function App() {
         enrichmentError: enrichmentResult.error,
         bcaBlocked: enrichmentManifest?.bca?.status === "blocked",
         coverageMessage: coverageMsg,
+        zonesFetchIncomplete: enrichmentManifest?.zonesFetch?.complete === false,
       });
       if (modelLayers.buildings) {
         const enriched = mergeBuildingEnrichment(overtureBuildings, enrichmentResult.byId);

@@ -6,8 +6,17 @@ export function buildEnrichmentUseTierFailures(input: {
   enrichmentError: string | null;
   bcaBlocked: boolean;
   coverageMessage: string | null;
+  zonesFetchIncomplete?: boolean;
 }): UseTierFailure[] {
   const failures = [...input.baseFailures];
+  if (input.zonesFetchIncomplete) {
+    failures.push({
+      id: "enrichment_zones_wfs_incomplete",
+      tier: "enrichment_tiles",
+      message:
+        "Offline zone bake missed Vicmap WFS pages; buildings without a zone match may show as unclassified until tiles are rebuilt",
+    });
+  }
   if (input.enrichmentError) {
     failures.push({
       id: "enrichment_tiles_fetch",

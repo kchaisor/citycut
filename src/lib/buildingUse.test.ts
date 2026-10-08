@@ -76,6 +76,8 @@ describe("tier tables", () => {
     expect(normaliseZoneCode("B4Z")).toBe("B4Z");
     expect(normaliseZoneCode("DDO1")).toBe("DDO");
     expect(useFromZone("GRZ7", 9)).toBe("residential");
+    expect(useFromZone("HCTZ1", 9)).toBe("residential");
+    expect(useFromZone("R1Z", 9)).toBe("residential");
     expect(useFromZone("MUZ", 40)).toBe("mixed_use");
     expect(useFromZone("IN3Z", 8)).toBe("industrial");
     expect(useFromZone("PUZ6", 12)).toBe("civic");

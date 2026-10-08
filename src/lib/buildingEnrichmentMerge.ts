@@ -8,6 +8,7 @@ import type {
 } from "../types";
 import type { BuildingEnrichmentRecord } from "./buildingEnrichmentTiles";
 import { inferHeightTier } from "./buildingHeightResolve";
+import { resolveUseSourceTier } from "./useSourceTier";
 
 const USE_SOURCE_RANK: Record<BuildingUseSourceTier, number> = {
   overture: 5,
@@ -115,14 +116,7 @@ export function countUseSourceTiers(
     unclassified: 0,
   };
   for (const building of buildings) {
-    const tier =
-      building.useSourceTier ??
-      (building.source === "osm_tag" || building.source === "overture_class"
-        ? "overture"
-        : building.source === "zone"
-          ? "zone"
-          : "unclassified");
-    counts[tier] += 1;
+    counts[resolveUseSourceTier(building)] += 1;
   }
   return counts;
 }

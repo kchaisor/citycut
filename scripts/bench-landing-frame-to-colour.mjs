@@ -1,6 +1,8 @@
 /**
- * East Melbourne 1 km: time from cut frame drawn → use-colour fill idle, with fetch breakdown.
- * Run with `npm run preview` on 4173. Optional argv: `main` (CoM heights off) or `pr` (default, on).
+ * Landing frame → use-colour fill timing (mean of 5).
+ * Usage: node scripts/bench-landing-frame-to-colour.mjs [pr|main] [east|hawthorn]
+ *   pr   — skip live refine when tiles cover the cut (default PR behaviour)
+ *   main — force live refine (`forceLiveRefine=1`) for before/after comparison
  */
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -8,9 +10,23 @@ import { mkdirSync, writeFileSync } from "node:fs";
 const outDir = "/opt/cursor/artifacts";
 mkdirSync(outDir, { recursive: true });
 const label = process.argv[2] ?? "pr";
-const comOff = label === "main";
+const site = process.argv[3] ?? "east";
+const forceLiveRefine = label === "main";
 const base = process.env.PREVIEW_URL ?? "http://127.0.0.1:4173/citycut/";
-const url = `${base}?lat=-37.8127&lon=144.98061&km=1&qa=1`;
+
+const sites = {
+  east: { lat: -37.8127, lon: 144.98061, km: 1 },
+  hawthorn: { lat: -37.8226, lon: 145.0354, km: 1 },
+};
+const { lat, lon, km } = sites[site] ?? sites.east;
+const qs = new URLSearchParams({
+  lat: String(lat),
+  lon: String(lon),
+  km: String(km),
+  qa: "1",
+});
+if (forceLiveRefine) qs.set("forceLiveRefine", "1");
+const url = `${base}?${qs.toString()}`;
 
 const SWIFT = [
   "--use-gl=angle",
@@ -22,13 +38,12 @@ const SWIFT = [
 
 const browser = await chromium.launch({ headless: true, args: SWIFT });
 const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-await context.addInitScript((off) => {
+await context.addInitScript(() => {
   window.localStorage.clear();
-  if (off) window.localStorage.setItem("citycut.comBuildingHeights", "false");
-}, comOff);
+});
 
 const runs = [];
-for (let i = 0; i < 3; i++) {
+for (let i = 0; i < 5; i++) {
   const page = await context.newPage();
   const navT0 = Date.now();
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 120_000 });
@@ -62,7 +77,9 @@ function mean(key) {
 
 const summary = {
   label,
-  comBuildingHeights: !comOff,
+  site,
+  forceLiveRefine,
+  url,
   runs,
   meanFrameToColourMs: mean("frameToColourMs"),
   meanColourFetchMs: mean("colourFetchMs"),
@@ -71,5 +88,6 @@ const summary = {
   meanNavigationMs: mean("navigationMs"),
 };
 
-writeFileSync(`${outDir}/bench-landing-frame-to-colour-${label}.json`, JSON.stringify(summary, null, 2));
+const file = `${outDir}/bench-landing-frame-to-colour-${label}-${site}.json`;
+writeFileSync(file, JSON.stringify(summary, null, 2));
 console.log(JSON.stringify(summary, null, 2));

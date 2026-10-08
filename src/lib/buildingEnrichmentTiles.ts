@@ -34,18 +34,56 @@ export type BuildingEnrichmentRecord = {
   zoneCode: string | null;
 };
 
+const USE_FROM_CODE: Record<number, BuildingUse> = {
+  0: "unclassified",
+  1: "residential",
+  2: "commercial",
+  3: "retail",
+  4: "mixed_use",
+  5: "industrial",
+  6: "civic",
+  7: "recreation",
+  8: "outbuilding",
+};
+
+const SOURCE_FROM_CODE: Record<number, BuildingUseSourceTier> = {
+  0: "unclassified",
+  1: "overture",
+  2: "clue",
+  3: "bca",
+  4: "zone",
+};
+
 export type EnrichmentManifest = {
   extent: { west: number; south: number; east: number; north: number };
   builtBbox?: { west: number; south: number; east: number; north: number };
   targetExtent?: { west: number; south: number; east: number; north: number };
+  regionName?: string;
   featureCount: number;
   pmtilesBytes: number;
   generatedAt: string;
   /** When set, fetch PMTiles from this URL instead of the bundled GitHub Pages path. */
   pmtilesUrl?: string;
   lidar?: { status: string; detail?: string };
+  zonesFetch?: {
+    complete?: boolean;
+    pagesOk?: number;
+    pagesFailed?: number;
+    features?: number;
+    failures?: string[];
+  };
+  zoneDiagnostics?: {
+    unclassifiedNoZoneJoin?: number;
+    unclassifiedUnmappedZoneCounts?: Record<string, number>;
+  };
   clueLoaded?: boolean;
   bca?: { status: string; detail?: string; url?: string };
+  /** SHA-256 of canonical `shared/vicmap-zone-use.json` at bake time. */
+  zoneUseTableSha256?: string;
+  /** SHA-256 of canonical `shared/overture-building-use.json` at bake time. */
+  overtureBuildingUseSha256?: string;
+  /** Overture Maps release used for the input building fetch at bake time. */
+  overtureRelease?: string;
 };
 
 function tileRange(bounds: { south: number; west: number; north: number; east: number }, z: number) {
@@ -89,8 +127,10 @@ function parseUseSource(raw: unknown): BuildingUseSourceTier | null {
 function recordFromProps(props: Record<string, unknown>): BuildingEnrichmentRecord | null {
   const id = typeof props.overture_id === "string" ? props.overture_id : typeof props.id === "string" ? props.id : "";
   if (!id) return null;
-  const use = parseUse(props.use);
-  const useSource = parseUseSource(props.use_source);
+  let use = parseUse(props.use);
+  let useSource = parseUseSource(props.use_source);
+  if (!use && typeof props.u === "number") use = USE_FROM_CODE[props.u] ?? null;
+  if (!useSource && typeof props.s === "number") useSource = SOURCE_FROM_CODE[props.s] ?? null;
   if (!use || !useSource) return null;
   const heightRaw = props.height_m;
   const heightM =

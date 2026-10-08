@@ -48,7 +48,9 @@ jobs:
       - name: Install enrichment pipeline deps
         run: pip install -r pipeline/requirements.txt
       - name: Python pipeline tests
-        run: pytest pipeline/test_build_enrichment.py -q
+        run: pytest pipeline/test_build_enrichment.py pipeline/test_extent.py pipeline/test_zone_use.py pipeline/test_zone_use_sync.py pipeline/test_table_hash_sync.py pipeline/test_overture_building_use_sync.py pipeline/test_cascade_parity.py -q
+      - name: Vitest (enrichment, refine policy, heights identity)
+        run: npx vitest run src/lib/overtureRelease.test.ts src/lib/landingRefinePolicy.test.ts src/lib/eastMelbourneHeightsIdentity.test.ts src/lib/enrichmentTableHashes.test.ts src/lib/cascadeParity.test.ts
       - name: Ensure enrichment PMTiles (release first, committed fallback)
         run: node scripts/fetch-building-enrichment-pmtiles.mjs
         env:

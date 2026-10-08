@@ -17,7 +17,7 @@ import { dedupeBuildings } from "./footprints";
 import { dedupeConsecutive, openRing, signedArea, toLocal } from "./geo";
 import { footprintArea } from "./useCascade";
 import { overtureBuildingHeight, overtureHeightUsesFallback, overtureMinHeightM } from "./overtureHeight";
-import { overtureBuildingsUrl, resolveOvertureRelease } from "./overtureRelease";
+import { overtureBuildingsUrl, resolveOvertureReleaseWithMeta } from "./overtureRelease";
 import { parseOvertureSources, pickTallestOvertureProps } from "./overtureSources";
 import { pointInPolygon } from "./useCascade";
 import type { BuildingFeat, LonLat, Pt, Ring } from "../types";
@@ -36,6 +36,7 @@ export type OvertureFetchStats = {
   fragmentCount: number;
   buildingCount: number;
   hasMicrosoftFootprints: boolean;
+  stacWarning: string | null;
 };
 
 type Fragment = {
@@ -268,6 +269,7 @@ function fragmentToBuilding(fragment: Fragment): BuildingFeat {
     heightTier,
     use: tagged ?? "unclassified",
     source: tagged ? "osm_tag" : "none",
+    useSourceTier: tagged ? "overture" : "unclassified",
     ...(overtureName ? { overtureName } : {}),
     ...(numFloors != null ? { numFloors } : {}),
   };
@@ -305,15 +307,37 @@ export function findOvertureBuildingForOsmFootprint(
   return best;
 }
 
+export type OvertureBuildingsForCutOptions = {
+  /** When set (e.g. from enrichment manifest), skip STAC and use this release. */
+  overtureRelease?: string;
+  stacWarning?: string | null;
+};
+
 export async function fetchOvertureBuildingsForCut(
   bounds: { south: number; west: number; north: number; east: number },
   origin: LonLat,
   sideM: number,
   signal?: AbortSignal,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
-): Promise<{ buildings: BuildingFeat[]; stats: OvertureFetchStats; buildingCapHit: boolean }> {
+  fetchOptions?: OvertureBuildingsForCutOptions,
+): Promise<{
+  buildings: BuildingFeat[];
+  stats: OvertureFetchStats;
+  buildingCapHit: boolean;
+  stacWarning: string | null;
+}> {
   const t0 = performance.now();
-  const release = await resolveOvertureRelease(signal);
+  let release: string;
+  let stacWarning: string | null;
+  const pinnedRelease = fetchOptions?.overtureRelease?.trim();
+  if (pinnedRelease) {
+    release = pinnedRelease;
+    stacWarning = fetchOptions?.stacWarning ?? null;
+  } else {
+    const resolved = await resolveOvertureReleaseWithMeta(signal);
+    release = resolved.release;
+    stacWarning = resolved.stacWarning;
+  }
   const pmtiles = new PMTiles(overtureBuildingsUrl(release));
   const tiles = tileRange(bounds, OVERTURE_BUILDING_ZOOM);
   const tileResults = await Promise.all(
@@ -340,6 +364,7 @@ export async function fetchOvertureBuildingsForCut(
   return {
     buildings,
     buildingCapHit,
+    stacWarning,
     stats: {
       release,
       tileCount: tiles.length,
@@ -347,6 +372,7 @@ export async function fetchOvertureBuildingsForCut(
       fragmentCount: fragments.length,
       buildingCount: buildings.length,
       hasMicrosoftFootprints: merged.some((item) => item.microsoft),
+      stacWarning,
     },
   };
 }

@@ -80,6 +80,7 @@ function main() {
     }
 
     if (decision.outcome === "committed_fallback") {
+      console.warn(`::warning::${decision.message}`);
       if (!existsSync(join(publicDir, PMTILES_NAME))) {
         console.warn("[enrichment] No committed building-enrichment.pmtiles fallback.");
       }
