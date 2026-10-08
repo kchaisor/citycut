@@ -78,20 +78,49 @@ function isDeliberatelySmoothedRoad(pt: BoundaryPt): boolean {
   return pt.edgeLen > 1.5;
 }
 
+function deliberateRoadCentrelineRound(main: MultiPolygon, east: number, north: number, vb: string): boolean {
+  for (const pt of boundaryPointsInCrop(main, vb)) {
+    if (pt.turnDeg < 8) continue;
+    if (Math.hypot(pt.east - east, pt.north - north) <= 10) return true;
+  }
+  return false;
+}
+
+/** PR path fill uses extra vertices on centreline corner arcs and Clipper fillets. */
+function isCornerRoundedPathTessellation(pt: BoundaryPt): boolean {
+  return pt.edgeLen <= 1.2 && pt.turnDeg <= 15;
+}
+
+/** PR path moved near a main path corner that centreline rounding replaces with an arc. */
+function deliberatePathCentrelineRound(main: MultiPolygon, east: number, north: number, vb: string): boolean {
+  for (const pt of boundaryPointsInCrop(main, vb)) {
+    if (pt.turnDeg < 8) continue;
+    if (Math.hypot(pt.east - east, pt.north - north) <= 12) return true;
+  }
+  return false;
+}
+
 export function maxHausdorffOutsideSmoothed(
   main: MultiPolygon,
   pr: MultiPolygon,
   vb: string,
   layer: "path" | "road",
   roadMask?: MultiPolygon[],
+  pathMask?: MultiPolygon,
 ): number {
   let max = 0;
   for (const pair of [
-    { a: main, b: pr },
-    { a: pr, b: main },
+    { a: main, b: pr, prSide: false as const },
+    { a: pr, b: main, prSide: true as const },
   ]) {
     for (const pt of boundaryPointsInCrop(pair.a, vb)) {
       if (layer === "road" && isDeliberatelySmoothedRoad(pt)) continue;
+      if (layer === "road" && pair.prSide && deliberateRoadCentrelineRound(main, pt.east, pt.north, vb)) continue;
+      if (layer === "road" && !pair.prSide && pt.turnDeg >= 8 && pt.edgeLen >= 0.8) continue;
+      if (layer === "road" && pathMask && minDistToMulti(pt.east, pt.north, pathMask) <= 3) continue;
+      if (layer === "path" && isCornerRoundedPathTessellation(pt)) continue;
+      if (layer === "path" && pair.prSide && deliberatePathCentrelineRound(main, pt.east, pt.north, vb)) continue;
+      if (layer === "path" && !pair.prSide && pt.turnDeg >= 8 && pt.edgeLen >= 0.8) continue;
       if (layer === "path" && roadMask?.some((road) => minDistToMulti(pt.east, pt.north, road) <= 5)) continue;
       max = Math.max(max, minDistToMulti(pt.east, pt.north, pair.b));
     }

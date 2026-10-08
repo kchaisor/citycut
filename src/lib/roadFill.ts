@@ -11,9 +11,9 @@ import {
 } from "./centrelineSmooth";
 import { prepareStripsForUnion } from "./centrelineUnionPrep";
 import {
-  CLIPPER_ARC_TOLERANCE_M,
-  CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M,
+  CLIPPER_ARC_CHORD_M,
   arcSegmentCount,
+  clipperArcToleranceM,
   normalizeMultiPolygonByParity,
   offsetCloseMultiPolygon,
 } from "./polygonOffset";
@@ -86,7 +86,7 @@ function at(center: Pt, angle: number, radius: number): Pt {
 }
 
 function arc(center: Pt, radius: number, from: number, sweep: number): Pt[] {
-  const steps = arcSegmentCount(radius, sweep, CLIPPER_ARC_TOLERANCE_M);
+  const steps = arcSegmentCount(radius, sweep, CLIPPER_ARC_CHORD_M, 10);
   const out: Pt[] = [];
   for (let i = 1; i <= steps; i++) {
     out.push(at(center, from + (sweep * i) / steps, radius));
@@ -582,7 +582,7 @@ export function closeFootpathJunctions(
 ): MultiPolygon {
   if (!(radius > 0) || polygons.length === 0) return polygons;
   const simplified = simplifyPathMulti(polygons);
-  const closed = offsetCloseMultiPolygon(simplified, radius, CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M);
+  const closed = offsetCloseMultiPolygon(simplified, radius, clipperArcToleranceM(radius));
   const clipped = normalizeMultiPolygonByParity(clipToFrame(closed, sideM, frameShape));
   return simplifyPathMulti(tidy(clipped));
 }
@@ -689,7 +689,11 @@ export function unionRoadSurface(
   const unioned = unionStrips(smoothedAll, sideM, 0.4, frameShape, true);
   const closed = tidy(
     normalizeMultiPolygonByParity(
-      clipToFrame(offsetCloseMultiPolygon(unioned.polygons, ROAD_MORPH_CLOSE_M, CLIPPER_ARC_TOLERANCE_M), sideM, frameShape),
+      clipToFrame(
+        offsetCloseMultiPolygon(unioned.polygons, ROAD_MORPH_CLOSE_M, clipperArcToleranceM(ROAD_MORPH_CLOSE_M)),
+        sideM,
+        frameShape,
+      ),
     ),
   );
   const result: RoadFill = {

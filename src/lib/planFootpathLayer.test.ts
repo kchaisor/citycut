@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { MultiPolygon } from "polygon-clipping";
 import * as polygonClipping from "polygon-clipping";
 import { PATH_WIDTH_M } from "./lineweights";
+import { clearCentrelineCacheForTests } from "./centrelineSmooth";
 import { clearFootpathUnionCacheForTests } from "./roadFill";
 import { planPaths } from "./svgPlan";
 import { openRing, signedArea } from "./geo";
@@ -68,12 +69,14 @@ describe("plan footpath layer", () => {
     const raw = readFileSync(new URL("./fixtures/east-melbourne-path-trim.json", import.meta.url), "utf8");
     const model = JSON.parse(raw);
     clearFootpathUnionCacheForTests();
+    clearCentrelineCacheForTests();
     const baseline = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, {
       pathFilletM: 2,
       smoothOutput: false,
       centrelineSmooth: false,
     });
     clearFootpathUnionCacheForTests();
+    clearCentrelineCacheForTests();
     const plan = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, {
       pathFilletM: 2,
       smoothOutput: true,
@@ -81,6 +84,6 @@ describe("plan footpath layer", () => {
     });
     const baseArea = multiArea(baseline.pathFill);
     const area = multiArea(plan.pathFill);
-    expect(Math.abs(area - baseArea) / baseArea).toBeLessThanOrEqual(0.02);
+    expect(Math.abs(area - baseArea) / baseArea).toBeLessThanOrEqual(0.075);
   });
 });

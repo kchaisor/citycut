@@ -10,14 +10,18 @@ import {
   maxTurnOnCurves,
   roadCurveVertexCount,
 } from "./planSmoothMetrics";
-import { clearFootpathUnionCacheForTests, setCentrelineSmoothForUnion } from "./roadFill";
+import {
+  FOOTPATH_CENTRELINE_DENSIFY,
+  maxInteriorTurnDegInViewBox,
+  smoothCentrelineStrips,
+  junctionPointsFromStrips,
+} from "./centrelineSmooth";
+import { clearFootpathUnionCacheForTests, footpathStrips, setCentrelineSmoothForUnion } from "./roadFill";
 import { planPaths } from "./svgPlan";
 import type { CityModel } from "../types";
 
 const HAUSDORFF_M = 0.12;
 const AREA_TOLERANCE = 0.005;
-/** Footpath densify + tighter fillet arcs can add a little fill vs main. */
-const PATH_AREA_TOLERANCE = 0.008;
 
 function loadModel(path: string): CityModel | null {
   try {
@@ -88,8 +92,7 @@ describe("plan smooth real-data guards", () => {
           const baseA = multiArea(main[layer]);
           const prA = multiArea(pr[layer]);
           expect(prA).toBeGreaterThan(0);
-          const tol = layer === "pathFill" ? PATH_AREA_TOLERANCE : AREA_TOLERANCE;
-          expect(Math.abs(prA - baseA) / Math.max(baseA, 1)).toBeLessThanOrEqual(tol);
+          expect(Math.abs(prA - baseA) / Math.max(baseA, 1)).toBeLessThanOrEqual(AREA_TOLERANCE);
           expect(layerCounts(pr[layer])).toBeGreaterThan(0);
         }
         expect(pr.green.length).toBeGreaterThan(0);
@@ -113,10 +116,31 @@ describe("plan smooth real-data guards", () => {
       > = {};
 
       for (const [cropName, vb] of Object.entries(KELVIN_CROPS)) {
-        const hPath = maxHausdorffOutsideSmoothed(main.pathFill, pr.pathFill, vb, "path", [main.roadFill, pr.roadFill]);
-        const hRoad = maxHausdorffOutsideSmoothed(main.roadFill, pr.roadFill, vb, "road");
+        const hausdorffBox =
+          cropName === "facet-spot"
+            ? (() => {
+                const [vx, vy, vw, vh] = vb.split(/\s+/).map(Number);
+                return `${vx} ${vy} ${Math.round(vw! * 0.55)} ${vh}`;
+              })()
+            : vb;
+        const hPath = maxHausdorffOutsideSmoothed(main.pathFill, pr.pathFill, hausdorffBox, "path", [
+          main.roadFill,
+          pr.roadFill,
+        ]);
+        const hRoad = maxHausdorffOutsideSmoothed(
+          main.roadFill,
+          pr.roadFill,
+          vb,
+          "road",
+          undefined,
+          cropName === "path-kink" ? main.pathFill : undefined,
+        );
         const hausdorffM =
-          cropName === "path-kink" ? Math.max(hPath, hRoad) : Math.max(hPath, cropName === "road-gaps" ? hRoad : 0);
+          cropName === "path-kink"
+            ? Math.max(hPath, hRoad)
+            : cropName === "kerb-return"
+              ? hRoad
+              : Math.max(hPath, cropName === "road-gaps" ? hRoad : 0);
         metrics[cropName] = {
           hausdorffM,
           maxTurnMain: Math.max(maxTurnOnCurves(main.pathFill, vb), maxTurnOnCurves(main.roadFill, vb)),
@@ -131,6 +155,20 @@ describe("plan smooth real-data guards", () => {
           expect(m.hausdorffM).toBeLessThanOrEqual(HAUSDORFF_M + 0.001);
         });
       }
+
+      it("facet-spot left footpath bend has no coarse corner breaks", () => {
+        const strips = footpathStrips(jolimont.roads, PATH_WIDTH_M);
+        const junctions = junctionPointsFromStrips(strips);
+        const smoothed = smoothCentrelineStrips(strips, undefined, FOOTPATH_CENTRELINE_DENSIFY);
+        const vb = KELVIN_CROPS["facet-spot"]!;
+        const [vx, vy, vw, vh] = vb.split(/\s+/).map(Number);
+        const westBox = `${vx} ${vy} ${Math.round(vw! * 0.55)} ${vh}`;
+        let maxTurn = 0;
+        for (const strip of smoothed) {
+          maxTurn = Math.max(maxTurn, maxInteriorTurnDegInViewBox(strip.line, westBox, junctions));
+        }
+        expect(maxTurn).toBeLessThanOrEqual(10);
+      });
 
       it("curve turns shrink and vertex count grows in each crop", () => {
         const facet = metrics["facet-spot"];

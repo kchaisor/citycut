@@ -6,21 +6,41 @@ import { signedArea } from "./geo";
 /** Clipper integer scale: 1 mm per unit (0.001 m). */
 export const CLIPPER_SCALE = 1000;
 
-/** Round-join step for centreline buffers and morphological close (m). ~12–16 segments on a 3 m radius quarter arc. */
-export const CLIPPER_ARC_TOLERANCE_M = 0.025;
-/** Arc tolerance passed to Clipper polygon offset (m). */
-export const CLIPPER_POLYGON_OFFSET_ARC_TOLERANCE_M = 0.025;
-/** Arc tolerance for footpath junction fillet morphological close (m). */
-export const CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M = 0.025;
+/** Max sagitta/chord error on Clipper round joins (m). */
+export const CLIPPER_ARC_CHORD_M = 0.02;
+/** Max angle step on Clipper round joins (degrees); 90° → ≥15 segments. */
+export const CLIPPER_ARC_MAX_STEP_DEG = 6;
 
-/** Segment count for a circular arc within sagitta `arcToleranceM`. */
-export function arcSegmentCount(radiusM: number, sweepRad: number, arcToleranceM = CLIPPER_ARC_TOLERANCE_M): number {
+/** Round-join sagitta for centreline buffers and morphological close (m). */
+export const CLIPPER_ARC_TOLERANCE_M = CLIPPER_ARC_CHORD_M;
+export const CLIPPER_POLYGON_OFFSET_ARC_TOLERANCE_M = CLIPPER_ARC_CHORD_M;
+export const CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M = CLIPPER_ARC_CHORD_M;
+
+/** Segment count for a circular arc: min step ≤ `maxStepDeg` and sagitta ≤ `chordM`. */
+export function arcSegmentCount(
+  radiusM: number,
+  sweepRad: number,
+  chordM = CLIPPER_ARC_CHORD_M,
+  maxStepDeg = CLIPPER_ARC_MAX_STEP_DEG,
+): number {
   const r = Math.max(radiusM, 0.01);
-  const tol = Math.max(arcToleranceM, 0.005);
+  const sweep = Math.abs(sweepRad);
+  const stepRad = (Math.max(maxStepDeg, 1) * Math.PI) / 180;
+  const byAngle = Math.ceil(sweep / stepRad);
+  const tol = Math.max(chordM, 1e-4);
   const cosArg = Math.max(-1, Math.min(1, 1 - tol / r));
   let maxAng = 2 * Math.acos(cosArg);
-  if (!Number.isFinite(maxAng) || maxAng < 0.08) maxAng = Math.PI / 6;
-  return Math.max(2, Math.ceil(Math.abs(sweepRad) / maxAng));
+  if (!Number.isFinite(maxAng) || maxAng < stepRad) maxAng = stepRad;
+  const byChord = Math.ceil(sweep / maxAng);
+  return Math.max(2, byAngle, byChord);
+}
+
+/** Clipper offset arc tolerance (m) from chord cap and angle step at a typical radius. */
+export function clipperArcToleranceM(typicalRadiusM = 2): number {
+  const r = Math.max(typicalRadiusM, 0.5);
+  const halfStep = (CLIPPER_ARC_MAX_STEP_DEG * Math.PI) / 180 / 2;
+  const fromAngle = r * (1 - Math.cos(halfStep));
+  return Math.max(0.008, Math.min(CLIPPER_ARC_CHORD_M, fromAngle));
 }
 
 type ClipperPoint = { X: number; Y: number };
@@ -189,14 +209,14 @@ function offsetSingleRing(
   open: Ring,
   deltaM: number,
   allowEmpty: boolean,
-  arcToleranceM = CLIPPER_POLYGON_OFFSET_ARC_TOLERANCE_M,
+  arcToleranceM = clipperArcToleranceM(2),
 ): Ring[] {
   if (open.length < 3 || !(Math.abs(deltaM) > 1e-9)) {
     const closed = openRing(open);
     return closed.length >= 3 ? [closeRing(closed)] : [];
   }
   const delta = Math.round(deltaM * CLIPPER_SCALE);
-  const arcTol = Math.max(1, arcToleranceM * CLIPPER_SCALE);
+  const arcTol = Math.max(1, Math.round(arcToleranceM * CLIPPER_SCALE));
   const co = new ClipperLib.ClipperOffset(2, arcTol);
   co.AddPath(toClipperPath(open), ClipperLib.JoinType.jtRound, ClipperLib.EndType.etClosedPolygon);
   const solution: ClipperLib.Paths = [];
@@ -240,7 +260,7 @@ function offsetNormalizedByParity(
 export function offsetMultiPolygon(
   polygons: MultiPolygon,
   deltaM: number,
-  arcToleranceM = CLIPPER_POLYGON_OFFSET_ARC_TOLERANCE_M,
+  arcToleranceM = clipperArcToleranceM(2),
 ): MultiPolygon {
   if (polygons.length === 0 || !(Math.abs(deltaM) > 1e-9)) return polygons;
   const normalized = normalizeMultiPolygonByParity(polygons);
@@ -260,7 +280,7 @@ function intersectMultiPolygon(a: MultiPolygon, b: MultiPolygon): MultiPolygon {
 export function offsetCloseMultiPolygon(
   polygons: MultiPolygon,
   radiusM: number,
-  arcToleranceM = CLIPPER_ARC_TOLERANCE_M,
+  arcToleranceM = CLIPPER_ARC_CHORD_M,
 ): MultiPolygon {
   if (polygons.length === 0 || !(radiusM > 0)) return polygons;
   const normalized = normalizeMultiPolygonByParity(polygons);

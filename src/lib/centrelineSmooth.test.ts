@@ -1,16 +1,24 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { Pt } from "../types";
 import {
-  CENTRELINE_MAX_LATERAL_SHIFT_M,
+  CENTRELINE_SHARP_TURN_DEG,
+  clearCentrelineCacheForTests,
+  FOOTPATH_CENTRELINE_DENSIFY,
+  maxInteriorTurnDeg,
+  maxInteriorTurnDegInViewBox,
   maxLateralShift,
   pinnedVertexIndices,
   smoothCentreline,
   smoothCentrelineStrips,
 } from "./centrelineSmooth";
-import { CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M } from "./polygonOffset";
+import { CLIPPER_ARC_CHORD_M, CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M, arcSegmentCount } from "./polygonOffset";
 import { clearFootpathUnionCacheForTests, unionFootpathStrips } from "./roadFill";
 
 describe("centrelineSmooth", () => {
+  beforeEach(() => {
+    clearCentrelineCacheForTests();
+  });
+
   it("pins endpoints and junctions but not ordinary corners", () => {
     const line: Pt[] = [
       [0, 0],
@@ -40,19 +48,30 @@ describe("centrelineSmooth", () => {
   });
 
   it("limits lateral shift on a gentle bend", () => {
-    const line: Pt[] = [];
-    for (let i = 0; i <= 8; i++) {
-      const t = i / 8;
-      line.push([t * 80, Math.sin(t * Math.PI) * 12]);
-    }
-    const smoothed = smoothCentreline(line);
-    expect(maxLateralShift(line, smoothed)).toBeLessThanOrEqual(CENTRELINE_MAX_LATERAL_SHIFT_M);
-    expect(smoothed.length).toBeGreaterThan(line.length);
+    const line: Pt[] = [
+      [0, 0],
+      [40, 0],
+      [40, 40],
+    ];
+    const smoothed = smoothCentreline(line, { profile: FOOTPATH_CENTRELINE_DENSIFY });
+    expect(maxLateralShift(line, smoothed)).toBeLessThanOrEqual(FOOTPATH_CENTRELINE_DENSIFY.maxLateralShiftM);
+    expect(maxInteriorTurnDeg(smoothed, [], CENTRELINE_SHARP_TURN_DEG)).toBeLessThanOrEqual(10);
   });
 
   it("uses a tight clipper arc tolerance for footpath fillets", () => {
-    expect(CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M).toBeLessThanOrEqual(0.03);
-    expect(CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M).toBeGreaterThanOrEqual(0.02);
+    expect(CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M).toBe(CLIPPER_ARC_CHORD_M);
+    expect(arcSegmentCount(2, Math.PI / 2)).toBeGreaterThanOrEqual(15);
+  });
+
+  it("rounds an interior corner with a tangent arc", () => {
+    const line: Pt[] = [
+      [0, 0],
+      [30, 0],
+      [45, 15],
+    ];
+    const smoothed = smoothCentreline(line, { profile: FOOTPATH_CENTRELINE_DENSIFY });
+    expect(smoothed.length).toBeGreaterThan(3);
+    expect(maxInteriorTurnDegInViewBox(smoothed, "20 -5 30 20", [], CENTRELINE_SHARP_TURN_DEG, 3)).toBeLessThanOrEqual(10);
   });
 
   it("adds enough vertices on a filleted footpath crossing", () => {
