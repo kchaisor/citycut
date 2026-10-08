@@ -50,7 +50,7 @@
   --wind-rose: #3d5a73;
 
   /* Residential footprints, legend swatch, and the Residential Rhino layer. */
-  --use-residential: #A4A5A8;
+  --use-residential: #CECBC6;
 
   /* Commercial footprints, legend swatch, and the Commercial Rhino layer. */
   --use-commercial: #89533D;
@@ -220,7 +220,7 @@
 
   /* Exploded axonometric drawing (on-screen and Illustrator). */
   --axo-water: #7eb8da;
-  --axo-road: #2160A7;
+  --axo-road: #6B6C6F;
   --axo-green: #7CB942;
   --axo-building: #1a1916;
   --axo-guide: #c8c8c8;
