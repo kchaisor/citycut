@@ -13,6 +13,8 @@ import {
   clearFootpathUnionCacheForTests,
 } from "../src/lib/roadFill.ts";
 import { fillRoadMedianHoles, splitGreenForRoadLayer } from "../src/lib/roadSurfacePlan.ts";
+import { collapsePathNibs } from "../src/lib/pathJunctionNib.ts";
+import { smoothPlanMultiPolygon } from "../src/lib/planRingSmooth.ts";
 import { clipAreaToSiteFrame, clipPolylineSiteFrame, pointInSiteFrame, DEFAULT_SITE_FRAME_SHAPE } from "../src/lib/siteFrame.ts";
 import { planBuildingFill } from "../src/lib/planBuildingFill.ts";
 import { isSiteBuilding } from "../src/lib/siteBuildings.ts";
@@ -99,6 +101,13 @@ stages.medianHolesMs = Math.round(performance.now() - t);
 t = performance.now();
 splitGreenForRoadLayer(green, roadFillPolys);
 stages.greenSplitMs = Math.round(performance.now() - t);
+
+t = performance.now();
+if (!label.endsWith("-main")) {
+  smoothPlanMultiPolygon(roadFillPolys);
+  collapsePathNibs(smoothPlanMultiPolygon(pathFill));
+}
+stages.ringSmoothMs = Math.round(performance.now() - t);
 
 t = performance.now();
 for (const building of model.buildings) {

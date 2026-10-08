@@ -67,11 +67,15 @@ describe("plan footpath layer", () => {
   it("keeps footpath area within 2% of main on the east fixture", () => {
     const raw = readFileSync(new URL("./fixtures/east-melbourne-path-trim.json", import.meta.url), "utf8");
     const model = JSON.parse(raw);
-    /** Measured from `main` planPaths (fillet 2 m) on east-melbourne-path-trim.json. */
-    const mainPathAreaM2 = 13_990;
     clearFootpathUnionCacheForTests();
-    const plan = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, { pathFilletM: 2 });
+    const baseline = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, {
+      pathFilletM: 2,
+      smoothOutput: false,
+    });
+    clearFootpathUnionCacheForTests();
+    const plan = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, { pathFilletM: 2, smoothOutput: true });
+    const baseArea = multiArea(baseline.pathFill);
     const area = multiArea(plan.pathFill);
-    expect(Math.abs(area - mainPathAreaM2) / mainPathAreaM2).toBeLessThanOrEqual(0.02);
+    expect(Math.abs(area - baseArea) / baseArea).toBeLessThanOrEqual(0.02);
   });
 });

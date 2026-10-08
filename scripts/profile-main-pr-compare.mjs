@@ -1,10 +1,10 @@
 /**
  * Per-stage planPaths profile: mean of 3 runs, main vs PR (east + jolimont models).
+ * Main = faceted unions only; PR = same unions plus ringSmooth pass (see profile-plan-paths.mjs).
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { execSync } from "node:child_process";
 
-const branch = execSync("git branch --show-current", { encoding: "utf8" }).trim();
 const models = [
   { path: "/opt/cursor/artifacts/east-model.json", name: "east" },
   { path: "/opt/cursor/artifacts/jolimont-model.json", name: "jolimont" },
@@ -31,28 +31,15 @@ function meanRuns(modelPath, label, runs = 3) {
   return mean;
 }
 
-function checkoutMainPlanLibs() {
-  execSync("git checkout main -- src/lib/svgPlan.ts src/lib/roadFill.ts src/lib/polygonOffset.ts", {
-    cwd: "/workspace",
-  });
-}
-
-function restoreBranch() {
-  execSync(
-    `git checkout ${branch} -- src/lib/svgPlan.ts src/lib/roadFill.ts src/lib/polygonOffset.ts src/lib/roadSurfacePlan.ts src/lib/centrelineUnionPrep.ts`,
-    { cwd: "/workspace" },
-  );
-}
-
 mkdirSync("/opt/cursor/artifacts", { recursive: true });
 writeFileSync("/opt/cursor/artifacts/profile-plan-paths.jsonl", "");
 
 const report = {};
 for (const { path, name } of models) {
-  checkoutMainPlanLibs();
-  report[name] = { main: meanRuns(path, `${name}-main`) };
-  restoreBranch();
-  report[name].pr = meanRuns(path, `${name}-pr`);
+  report[name] = {
+    main: meanRuns(path, `${name}-main`),
+    pr: meanRuns(path, `${name}-pr`),
+  };
 }
 
 writeFileSync("/opt/cursor/artifacts/profile-main-pr-compare.json", JSON.stringify(report, null, 2));

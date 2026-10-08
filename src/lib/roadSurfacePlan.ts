@@ -96,17 +96,6 @@ export function bridgeRoadFootpathGaps(
 /** Ignore sliver median fragments from boolean noise (m²). */
 export const GREEN_ON_ROAD_MIN_M2 = 2;
 
-function greenToPolygon(rings: Pt[][]): Polygon | null {
-  const outerOpen = openRing(rings[0] ?? []);
-  if (outerOpen.length < 3) return null;
-  const holes: Ring[] = [];
-  for (const hole of rings.slice(1)) {
-    const holeOpen = openRing(hole);
-    if (holeOpen.length >= 3) holes.push(closeRing(holeOpen.map((p): Pair => [p[0], p[1]])));
-  }
-  return [closeRing(outerOpen.map((p): Pair => [p[0], p[1]])), ...holes];
-}
-
 function multiToPtRings(multi: MultiPolygon): Pt[][][] {
   const out: Pt[][][] = [];
   for (const polygon of multi) {
@@ -125,22 +114,20 @@ export function splitGreenForRoadLayer(
   road: MultiPolygon,
 ): { green: Pt[][][]; greenOnRoad: Pt[][][] } {
   if (road.length === 0) return { green, greenOnRoad: [] };
+  const allGreen = unionBlockers(green);
+  if (allGreen.length === 0) return { green, greenOnRoad: [] };
+  let hit: MultiPolygon;
+  try {
+    hit = intersection(allGreen, road);
+  } catch {
+    return { green, greenOnRoad: [] };
+  }
   const greenOnRoad: Pt[][][] = [];
-  for (const rings of green) {
-    const source = greenToPolygon(rings);
-    if (!source) continue;
-    let hit: MultiPolygon;
-    try {
-      hit = intersection([source], road);
-    } catch {
-      continue;
-    }
-    for (const polygon of hit) {
-      const outer = polygon[0];
-      if (!outer) continue;
-      if (ringArea(outer.slice(0, -1)) < GREEN_ON_ROAD_MIN_M2) continue;
-      greenOnRoad.push(...multiToPtRings([polygon]));
-    }
+  for (const polygon of hit) {
+    const outer = polygon[0];
+    if (!outer) continue;
+    if (ringArea(outer.slice(0, -1)) < GREEN_ON_ROAD_MIN_M2) continue;
+    greenOnRoad.push(...multiToPtRings([polygon]));
   }
   return { green, greenOnRoad };
 }

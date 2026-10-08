@@ -35,7 +35,8 @@ const shots = {
 function buildSvg(viewBox, filletM = 2) {
   clearFootpathUnionCacheForTests();
   const style = { ...DEFAULT_LINE_STYLES, pathEdgeOn: true, pathFilletM: filletM };
-  const plan = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, { pathFilletM: filletM });
+  const smoothOutput = label === "pr";
+  const plan = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, { pathFilletM: filletM, smoothOutput });
   const sheet = getColour("--sheet-fill");
   const greenFill = getColour("--green-fill");
   const pathD = plan.pathFill.map((p) => svgRings(p)).join(" ");

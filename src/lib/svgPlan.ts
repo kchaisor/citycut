@@ -22,6 +22,8 @@ import {
   drawnContourInterval,
 } from "./vicmapContours";
 import type { CityModel, Pt } from "../types";
+import { collapsePathNibs } from "./pathJunctionNib";
+import { smoothPlanMultiPolygon } from "./planRingSmooth";
 import { fillRoadMedianHoles, splitGreenForRoadLayer } from "./roadSurfacePlan";
 
 const round = (value: number) => Math.round(value * 10) / 10;
@@ -66,6 +68,7 @@ export type PlanPaths = {
   contourLabels: { east: number; north: number; text: string }[];
   contourInterval: number | null;
   contourSource: "vicmap-metro" | "vicmap-state" | "dem" | null;
+  ringSmoothMs?: number;
 };
 
 function dedupe(line: Pt[]): Pt[] {
@@ -137,8 +140,8 @@ function clipLines(line: Pt[], sideM: number, frameShape: import("../types").Sit
 export type PlanPathOptions = {
   buildingColour?: BuildingColourMode;
   highlightManual?: boolean;
-  /** Junction fillet radius for unioned footpaths, in metres on the ground. */
   pathFilletM?: number;
+  smoothOutput?: boolean;
 };
 
 export function planPaths(
@@ -214,6 +217,15 @@ export function planPaths(
   const greenBelow = greenSplit.green;
   const greenOnRoad = greenSplit.greenOnRoad;
 
+  const smoothOutput = planOptions.smoothOutput !== false;
+  let ringSmoothMs = 0;
+  if (smoothOutput) {
+    const tSmooth = performance.now();
+    roadFillPolys = smoothPlanMultiPolygon(roadFillPolys);
+    pathFill = collapsePathNibs(smoothPlanMultiPolygon(pathFill));
+    ringSmoothMs = Math.round(performance.now() - tSmooth);
+  }
+
   const trees = model.trees
     .filter((tree) => pointInSiteFrame(tree.at, model.sideM, frameShape))
     .map((tree) => ({
@@ -262,5 +274,6 @@ export function planPaths(
     contourLabels: [],
     contourInterval: drawn && layer ? drawnInterval : null,
     contourSource: drawn && layer ? layer.source : null,
+    ringSmoothMs,
   };
 }

@@ -3,12 +3,7 @@ import type { MultiPolygon, Pair, Polygon, Ring } from "polygon-clipping";
 import { polylineLength, signedArea } from "./geo";
 import { DEFAULT_SITE_FRAME_SHAPE, pointInSiteFrame, siteFramePolygon, type SiteFrameShape } from "./siteFrame";
 import type { Pt, RoadFeat } from "../types";
-import {
-  CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M,
-  normalizeMultiPolygonByParity,
-  offsetCloseMultiPolygon,
-} from "./polygonOffset";
-import { prepareStripsForUnion } from "./centrelineUnionPrep";
+import { normalizeMultiPolygonByParity, offsetCloseMultiPolygon } from "./polygonOffset";
 
 type ClipFns = {
   union: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
@@ -28,11 +23,10 @@ const { union, intersection, difference } = clippingFns();
 /** Centreline points farther than this from the chord are kept. Invisible at 1:500. */
 const SIMPLIFY_M = 0.35;
 /** Final boundary simplification, in metres. */
-const OUTPUT_SIMPLIFY_M = 0.025;
+const OUTPUT_SIMPLIFY_M = 0.12;
 const SNAP_M = 0.01;
 const MIN_AREA_M2 = 0.8;
-/** Round-join arc tolerance (m); step count scales with radius like Clipper ArcTolerance. */
-const CENTRELINE_ARC_TOLERANCE_M = 0.02;
+const ARC = Math.PI / 4;
 /** Closes dual-carriageway and tram-corridor gaps after the centreline union. */
 export const ROAD_MORPH_CLOSE_M = 3;
 /** Default fillet radius for unioned footpath junctions (m on the ground). */
@@ -42,7 +36,7 @@ export const PATH_FILLET_BAND_SCALE = 1;
 /** Snap footpath centreline ends within this distance before union (m). */
 export const PATH_ENDPOINT_STITCH_M = 1.75;
 /** Final simplification on unioned footpaths after junction fillets (m). */
-export const PATH_OUTPUT_SIMPLIFY_M = 0.025;
+export const PATH_OUTPUT_SIMPLIFY_M = 0.12;
 /** Buffer half-width for in-road tram corridors merged into the road fill. */
 export const TRAM_CORRIDOR_WIDTH_M = 9;
 
@@ -79,15 +73,8 @@ function at(center: Pt, angle: number, radius: number): Pt {
   return [center[0] + Math.cos(angle) * radius, center[1] + Math.sin(angle) * radius];
 }
 
-function arcStepCount(radius: number, sweep: number, toleranceM: number): number {
-  const absSweep = Math.abs(sweep);
-  if (!(radius > toleranceM)) return Math.max(1, Math.ceil(absSweep / (Math.PI / 16)));
-  const stepAngle = 2 * Math.acos(1 - toleranceM / radius);
-  return Math.max(1, Math.ceil(absSweep / stepAngle));
-}
-
 function arc(center: Pt, radius: number, from: number, sweep: number): Pt[] {
-  const steps = arcStepCount(radius, sweep, CENTRELINE_ARC_TOLERANCE_M);
+  const steps = Math.max(1, Math.ceil(Math.abs(sweep) / ARC));
   const out: Pt[] = [];
   for (let i = 1; i <= steps; i++) {
     out.push(at(center, from + (sweep * i) / steps, radius));
@@ -577,7 +564,7 @@ export function closeFootpathJunctions(
 ): MultiPolygon {
   if (!(radius > 0) || polygons.length === 0) return polygons;
   const simplified = simplifyPathMulti(polygons);
-  const closed = offsetCloseMultiPolygon(simplified, radius, CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M);
+  const closed = offsetCloseMultiPolygon(simplified, radius);
   const clipped = normalizeMultiPolygonByParity(clipToFrame(closed, sideM, frameShape));
   return simplifyPathMulti(tidy(clipped));
 }
@@ -821,8 +808,7 @@ export function unionFootpathStrips(
 
   const started = performance.now();
   const stitched = stitchFootpathStrips(strips);
-  const prepared = prepareStripsForUnion(stitched, PATH_ENDPOINT_STITCH_M);
-  const merged = unionStrips(prepared, sideM, 0, frameShape);
+  const merged = unionStrips(stitched, sideM, 0, frameShape);
   const typical = strips.reduce((sum, s) => sum + s.width, 0) / Math.max(1, strips.length);
   const bandTypical = typicalBandWidthM > 0 ? typicalBandWidthM : typical;
   const filletRadius =
