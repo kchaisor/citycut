@@ -107,29 +107,10 @@ def join_zones(buildings: gpd.GeoDataFrame, zones: gpd.GeoDataFrame | None) -> p
 
 
 def _vector_overture_use(buildings: gpd.GeoDataFrame) -> tuple[pd.Series, pd.Series]:
-    use = pd.Series("unclassified", index=buildings.index, dtype="string")
-    source = pd.Series("unclassified", index=buildings.index, dtype="string")
-    for col in ("class", "subtype", "use"):
-        if col not in buildings.columns:
-            continue
-        raw = buildings[col].astype("string").str.strip().str.lower()
-        mixed = raw.isin(["mixed", "mixed_use"])
-        mapped = raw.map(OSM_BUILDING_USE)
-        hit = (mapped.notna() | mixed) & (source == "unclassified")
-        if not hit.any():
-            continue
-        use.loc[hit & mixed] = "mixed_use"
-        source.loc[hit & mixed] = "overture"
-        class_hit = hit & mapped.notna()
-        use.loc[class_hit] = mapped[class_hit]
-        source.loc[class_hit] = "overture"
-    # Rows with conflicting tags or amenity-style fields (rare) fall back to row classifier.
-    remaining = source == "unclassified"
-    if remaining.any():
-        for idx in buildings.index[remaining]:
-            picked = classify_overture_row(buildings.loc[idx])
-            if picked:
-                use.loc[idx], source.loc[idx] = picked
+    """One `classify_overture_row` per footprint (combined class/subtype/use tags)."""
+    picks = buildings.apply(classify_overture_row, axis=1)
+    use = picks.map(lambda p: p[0] if p else "unclassified").astype("string")
+    source = picks.map(lambda p: p[1] if p else "unclassified").astype("string")
     return use, source
 
 
