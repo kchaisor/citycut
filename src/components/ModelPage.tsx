@@ -503,6 +503,7 @@ export function ModelPage({ model }: { model: CityModel }) {
         setHeightPick({ buildingId: pick.id, clientX: 640, clientY: 420 });
         return pick.id;
       },
+      exportPlanSnapshot: () => model,
     };
     return () => {
       delete window.__citycutQaModel;

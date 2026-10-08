@@ -4,9 +4,12 @@ import { isSiteBuilding } from "./siteBuildings";
 import { clipAreaToSiteFrame, clipPolylineSiteFrame, pointInSiteFrame, DEFAULT_SITE_FRAME_SHAPE } from "./siteFrame";
 import { openRing } from "./geo";
 import { PATH_WIDTH_M } from "./lineweights";
+import type { MultiPolygon } from "polygon-clipping";
 import {
   DEFAULT_PATH_FILLET_M,
   footpathStrips,
+  mergeFootpathFragments,
+  subtractFootpathBlockers,
   unionFootpathStrips,
   unionRoadSurface,
 } from "./roadFill";
@@ -163,11 +166,13 @@ export function planPaths(
   for (const line of model.tramLines ?? []) {
     for (const part of clipLines(line, model.sideM, frameShape)) trams.push(part);
   }
+  const pathFilletM =
+    planOptions.pathFilletM !== undefined ? planOptions.pathFilletM : DEFAULT_PATH_FILLET_M;
   const footpaths = unionFootpathStrips(
     footpathStrips(model.roads, pathWidthM),
     model.sideM,
     frameShape,
-    planOptions.pathFilletM ?? DEFAULT_PATH_FILLET_M,
+    pathFilletM,
     pathWidthM,
   );
   const carriageway = unionRoadSurface(model.roads, model.tramLines, model.sideM, frameShape);
@@ -187,6 +192,12 @@ export function planPaths(
       return { rings, fill, site };
     })
     .filter((building): building is { rings: Pt[][]; fill: string; site: boolean } => building !== null);
+
+  let pathFill: MultiPolygon = footpaths.polygons;
+  if (pathFilletM > 0 && carriageway.polygons.length > 0) {
+    pathFill = subtractFootpathBlockers(pathFill, carriageway.polygons);
+    pathFill = mergeFootpathFragments(pathFill);
+  }
 
   const trees = model.trees
     .filter((tree) => pointInSiteFrame(tree.at, model.sideM, frameShape))
@@ -223,7 +234,7 @@ export function planPaths(
     water,
     roadFill: carriageway.polygons,
     roadUnionMs: carriageway.ms,
-    pathFill: footpaths.polygons,
+    pathFill,
     pathUnionMs: footpaths.ms,
     rails,
     trams,
