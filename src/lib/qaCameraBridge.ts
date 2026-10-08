@@ -42,6 +42,8 @@ declare global {
       ) => { x: number; y: number; width: number; height: number } | null;
       /** Footprints for QA framing (local metres). */
       listBuildings?: () => { id: number; height: number; east: number; north: number }[];
+      /** Minimal city model for plan-path QA exports (`?qa=1` only). */
+      exportPlanSnapshot?: () => import("../types").CityModel;
     };
     __citycutQaSelectionAudit?: import("./buildingSelectionAudit").BuildingSelectionAudit;
   }

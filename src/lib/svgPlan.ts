@@ -163,11 +163,13 @@ export function planPaths(
   for (const line of model.tramLines ?? []) {
     for (const part of clipLines(line, model.sideM, frameShape)) trams.push(part);
   }
+  const pathFilletM =
+    planOptions.pathFilletM !== undefined ? planOptions.pathFilletM : DEFAULT_PATH_FILLET_M;
   const footpaths = unionFootpathStrips(
     footpathStrips(model.roads, pathWidthM),
     model.sideM,
     frameShape,
-    planOptions.pathFilletM ?? DEFAULT_PATH_FILLET_M,
+    pathFilletM,
     pathWidthM,
   );
   const carriageway = unionRoadSurface(model.roads, model.tramLines, model.sideM, frameShape);

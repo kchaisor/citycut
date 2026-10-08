@@ -3,6 +3,7 @@ import type { MultiPolygon, Pair } from "polygon-clipping";
 import {
   clearFootpathUnionCacheForTests,
   isVehicularRoad,
+  stitchFootpathStrips,
   surfaceVerticesOutsideFrame,
   unionCarriageways,
   unionFootpaths,
@@ -140,6 +141,37 @@ describe("footpath fillet", () => {
     expect(multiArea(filleted.polygons)).toBeLessThanOrEqual(multiArea(sharp.polygons) * 1.002);
     expect(inside(filleted.polygons, 0.95, 0.95)).toBe(false);
     expect(hasInternalSeam(filleted.polygons)).toBe(false);
+  });
+
+  it("uses at least one band width as fillet radius on wide strips", () => {
+    clearFootpathUnionCacheForTests();
+    const tee: Pt[][] = [
+      [
+        [-30, 8],
+        [30, 8],
+      ],
+      [
+        [0, 8],
+        [0, -30],
+      ],
+    ];
+    const narrow = unionFootpaths(tee, 1.2, 200, "square", 0.5);
+    clearFootpathUnionCacheForTests();
+    const wide = unionFootpaths(tee, 3, 200, "square", 0.5);
+    expect(multiArea(wide.polygons)).toBeGreaterThan(multiArea(narrow.polygons));
+  });
+
+  it("stitches footpath ends that almost meet at a corner", () => {
+    const stitched = stitchFootpathStrips(
+      [
+        { line: [[0, 0], [40, 0]], width: 2.4 },
+        { line: [[40, 1.2], [40, -40]], width: 2.4 },
+      ],
+      1.75,
+    );
+    const joint = stitched[0]!.line[stitched[0]!.line.length - 1]!;
+    expect(joint[0]).toBeCloseTo(stitched[1]!.line[0]![0], 5);
+    expect(joint[1]).toBeCloseTo(stitched[1]!.line[0]![1], 5);
   });
 
   it("filletes the concave pocket of a T junction", () => {

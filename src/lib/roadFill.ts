@@ -30,10 +30,14 @@ const ARC = Math.PI / 4;
 export const ROAD_MORPH_CLOSE_M = 3;
 /** Default fillet radius for unioned footpath junctions (m on the ground). */
 export const DEFAULT_PATH_FILLET_M = 2;
-/** Arc segments on each fillet disk at path junctions. */
-export const PATH_FILLET_ARC_SEGMENTS = 12;
+/** Arc segments on each concave footpath fillet. */
+export const PATH_FILLET_ARC_SEGMENTS = 16;
+/** Fillet radius scales with band width: max(theme, width × this factor). */
+export const PATH_FILLET_BAND_SCALE = 1;
+/** Snap footpath centreline ends within this distance before union (m). */
+export const PATH_ENDPOINT_STITCH_M = 1.75;
 /** Final simplification on unioned footpaths after junction fillets (m). */
-export const PATH_OUTPUT_SIMPLIFY_M = 0.2;
+export const PATH_OUTPUT_SIMPLIFY_M = 0.12;
 /** Buffer half-width for in-road tram corridors merged into the road fill. */
 export const TRAM_CORRIDOR_WIDTH_M = 9;
 
@@ -589,7 +593,7 @@ function clusterSkipReflex(
         j !== i &&
         Math.hypot(other.point[0] - reflex[i]!.point[0], other.point[1] - reflex[i]!.point[1]) <= clusterM,
     );
-    if (near.length >= 2) {
+    if (near.length >= 3) {
       skip.add(reflex[i]!.index);
       for (const other of near) skip.add(other.index);
     }
@@ -602,17 +606,21 @@ function filletRadiusAtReflex(
   lenPrev: number,
   lenNext: number,
   turn: number,
+  typicalBandWidthM: number,
 ): number {
   const halfTurn = Math.max(0.08, Math.abs(turn) / 2);
   const tanHalf = Math.tan(halfTurn);
   if (!(tanHalf > 1e-6)) return 0;
   const cap = Math.min(lenPrev, lenNext) * tanHalf;
-  return Math.min(radius, cap);
+  const target = Math.min(radius, cap);
+  const floor = Math.min(typicalBandWidthM * PATH_FILLET_BAND_SCALE, cap);
+  if (!(target > 0.05) && !(floor > 0.05)) return 0;
+  return Math.max(target, floor);
 }
 
 /**
  * Round concave junction corners only (reflex vertices on the union outline).
- * Skips crossing clusters (≥3 reflex corners within one band width) so + junctions
+ * Skips crossing clusters (≥4 reflex corners within one band width) so + junctions
  * do not become a filled blob; T/L inside corners still fillet.
  */
 export function filletPathJunctions(
@@ -631,7 +639,13 @@ export function filletPathJunctions(
     const skip = clusterSkipReflex(reflex, clusterM);
     for (const vertex of reflex) {
       if (skip.has(vertex.index)) continue;
-      const rEff = filletRadiusAtReflex(radius, vertex.lenPrev, vertex.lenNext, vertex.turn);
+      const rEff = filletRadiusAtReflex(
+        radius,
+        vertex.lenPrev,
+        vertex.lenNext,
+        vertex.turn,
+        typicalBandWidthM,
+      );
       if (!(rEff > 0.05)) continue;
       const disk = circlePolygon(vertex.point, rEff, PATH_FILLET_ARC_SEGMENTS);
       if (disk) seeds.push(disk);
@@ -774,6 +788,72 @@ export function footpathLines(roads: RoadFeat[]): Pt[][] {
   return roads.filter((road) => road.kind !== "rail" && road.grade === "path").map((road) => road.line);
 }
 
+/** Move strip endpoints that almost meet onto a shared junction point so corners union. */
+export function stitchFootpathStrips(
+  strips: { line: Pt[]; width: number }[],
+  stitchM: number = PATH_ENDPOINT_STITCH_M,
+): { line: Pt[]; width: number }[] {
+  if (!(stitchM > 0) || strips.length === 0) return strips;
+  const out = strips.map((strip) => ({ line: strip.line.map((p): Pt => [p[0], p[1]]), width: strip.width }));
+  type Endpoint = { si: number; end: "start" | "end"; pt: Pt };
+  const endpoints: Endpoint[] = [];
+  for (let si = 0; si < out.length; si++) {
+    const line = out[si]!.line;
+    if (line.length < 2) continue;
+    endpoints.push({ si, end: "start", pt: line[0]! });
+    endpoints.push({ si, end: "end", pt: line[line.length - 1]! });
+  }
+  const count = endpoints.length;
+  const parent = endpoints.map((_, index) => index);
+  const find = (index: number): number => {
+    let root = index;
+    while (parent[root] !== root) root = parent[root]!;
+    let cursor = index;
+    while (parent[cursor] !== cursor) {
+      const next = parent[cursor]!;
+      parent[cursor] = root;
+      cursor = next;
+    }
+    return root;
+  };
+  const unite = (a: number, b: number) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent[rb] = ra;
+  };
+  for (let i = 0; i < count; i++) {
+    for (let j = i + 1; j < count; j++) {
+      const dx = endpoints[i]!.pt[0] - endpoints[j]!.pt[0];
+      const dy = endpoints[i]!.pt[1] - endpoints[j]!.pt[1];
+      if (Math.hypot(dx, dy) <= stitchM) unite(i, j);
+    }
+  }
+  const groups = new Map<number, number[]>();
+  for (let i = 0; i < count; i++) {
+    const root = find(i);
+    const list = groups.get(root);
+    if (list) list.push(i);
+    else groups.set(root, [i]);
+  }
+  for (const indices of groups.values()) {
+    if (indices.length < 2) continue;
+    let east = 0;
+    let north = 0;
+    for (const index of indices) {
+      east += endpoints[index]!.pt[0];
+      north += endpoints[index]!.pt[1];
+    }
+    const centroid: Pt = [east / indices.length, north / indices.length];
+    for (const index of indices) {
+      const ep = endpoints[index]!;
+      const line = out[ep.si]!.line;
+      if (ep.end === "start") line[0] = centroid;
+      else line[line.length - 1] = centroid;
+    }
+  }
+  return out;
+}
+
 /** Footpath centreline strips using each way's stored width when present. */
 export function footpathStrips(
   roads: RoadFeat[],
@@ -784,7 +864,7 @@ export function footpathStrips(
     .filter((road) => road.kind !== "rail" && road.grade === "path")
     .map((road) => ({
       line: road.line,
-      width: road.width > 0 ? road.width : defaultWidthM,
+      width: Math.max(road.width > 0 ? road.width : 0, defaultWidthM),
     }));
 }
 
@@ -824,12 +904,15 @@ export function unionFootpathStrips(
   if (cached) return cached;
 
   const started = performance.now();
-  const merged = unionStrips(strips, sideM, 0, frameShape);
+  const stitched = stitchFootpathStrips(strips);
+  const merged = unionStrips(stitched, sideM, 0, frameShape);
   const typical = strips.reduce((sum, s) => sum + s.width, 0) / Math.max(1, strips.length);
   const bandTypical = typicalBandWidthM > 0 ? typicalBandWidthM : typical;
+  const filletRadius =
+    filletM > 0 ? Math.max(filletM, bandTypical * PATH_FILLET_BAND_SCALE) : 0;
   const filleted =
-    filletM > 0
-      ? filletPathJunctions(merged.polygons, filletM, bandTypical)
+    filletRadius > 0
+      ? filletPathJunctions(merged.polygons, filletRadius, bandTypical)
       : simplifyPathMulti(merged.polygons);
   const polygons = tidy(clipToFrame(filleted, sideM, frameShape));
   const result: RoadFill = {
