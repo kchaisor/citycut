@@ -2,7 +2,8 @@
 set -euo pipefail
 cd /workspace
 BR=$(git rev-parse --abbrev-ref HEAD)
-BENCH_REF="${BENCH_SCRIPTS_REF:-$(git rev-parse HEAD)}"
+PR_REF=$(git rev-parse HEAD)
+BENCH_REF="${BENCH_SCRIPTS_REF:-$PR_REF}"
 MODEL=/opt/cursor/artifacts/east-model.json
 : > /opt/cursor/artifacts/bench-plan-1km.jsonl
 
@@ -16,7 +17,7 @@ if [[ ! -f "$MODEL" ]]; then
   exit 1
 fi
 
-refs=(caac962 origin/main HEAD)
+refs=(caac962 origin/main "$PR_REF")
 labels=(caac962 main pr)
 
 for i in "${!refs[@]}"; do
@@ -31,6 +32,7 @@ for i in "${!refs[@]}"; do
   npx vite-node scripts/render-site-plan-crop.mjs "$MODEL" "$label" "430 -120 70 70" "$fillet"
 done
 
-git checkout "$BR" --quiet
+git checkout -f "$BR" --quiet
+rm -f scripts/bench-plan-1km.mjs scripts/render-site-plan-crop.mjs
 npm run build --silent 2>/dev/null || npm run build
 echo "Plan regression complete. See /opt/cursor/artifacts/bench-plan-1km.jsonl and footpath-fillet-plan-*.png"

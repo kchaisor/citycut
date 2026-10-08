@@ -596,10 +596,13 @@ export function mergeFootpathFragments(polygons: MultiPolygon): MultiPolygon {
 }
 
 const footpathUnionCache = new Map<string, RoadFill>();
+const roadSurfaceCache = new Map<string, RoadFill>();
 const FOOTPATH_CACHE_LIMIT = 16;
+const ROAD_SURFACE_CACHE_LIMIT = 8;
 
 export function clearFootpathUnionCacheForTests(): void {
   footpathUnionCache.clear();
+  roadSurfaceCache.clear();
 }
 
 function footpathUnionCacheKey(
@@ -632,6 +635,17 @@ function unionMulti(a: MultiPolygon, b: MultiPolygon): MultiPolygon {
   return tidy(unionFast([...a, ...b]));
 }
 
+function roadSurfaceCacheKey(
+  roads: RoadFeat[],
+  tramLines: Pt[][] | undefined,
+  sideM: number,
+  frameShape: SiteFrameShape,
+): string {
+  let tramPts = 0;
+  for (const line of tramLines ?? []) tramPts += line.length;
+  return `${roads.length}:${tramLines?.length ?? 0}:${tramPts}:${sideM}:${frameShape}`;
+}
+
 /** Unioned carriageway plus in-road tram corridors, with median gaps closed. */
 export function unionRoadSurface(
   roads: RoadFeat[],
@@ -639,6 +653,11 @@ export function unionRoadSurface(
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
 ): RoadFill {
+  const key = roadSurfaceCacheKey(roads, tramLines, sideM, frameShape);
+  const cached = roadSurfaceCache.get(key);
+  if (cached) return cached;
+
+  const started = performance.now();
   const carriageway = unionCarriageways(carriagewaysOf(roads), sideM, frameShape);
   const tramInputs = (tramLines ?? [])
     .filter((line) => line.length >= 2)
@@ -647,11 +666,17 @@ export function unionRoadSurface(
     tramInputs.length > 0 ? unionCarriageways(tramInputs, sideM, frameShape) : { polygons: [] as MultiPolygon, ms: 0, inputs: 0 };
   const merged = unionMulti(carriageway.polygons, withTram.polygons);
   const closed = tidy(clipToFrame(offsetCloseMultiPolygon(merged, ROAD_MORPH_CLOSE_M), sideM, frameShape));
-  return {
+  const result: RoadFill = {
     polygons: closed,
-    ms: carriageway.ms + withTram.ms,
+    ms: performance.now() - started,
     inputs: carriageway.inputs + withTram.inputs,
   };
+  if (roadSurfaceCache.size >= ROAD_SURFACE_CACHE_LIMIT) {
+    const first = roadSurfaceCache.keys().next().value;
+    if (first) roadSurfaceCache.delete(first);
+  }
+  roadSurfaceCache.set(key, result);
+  return result;
 }
 
 /**

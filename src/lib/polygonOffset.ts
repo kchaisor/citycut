@@ -68,9 +68,17 @@ function polyTreeToMultiPolygon(tree: PolyTree64): MultiPolygon {
   return out;
 }
 
-function offsetPolygonTree(polygon: Polygon, deltaM: number): MultiPolygon {
-  const paths = polygonToPaths64(polygon);
-  if (paths.length === 0 || !(Math.abs(deltaM) > 1e-9)) return [polygon];
+function multiPolygonToPaths64(polygons: MultiPolygon): Paths64 {
+  const paths = new Paths64();
+  for (const polygon of polygons) {
+    const part = polygonToPaths64(polygon);
+    for (let i = 0; i < part.length; i++) paths.push(part[i]!);
+  }
+  return paths;
+}
+
+function offsetPaths64(paths: Paths64, deltaM: number, fallback: MultiPolygon): MultiPolygon {
+  if (paths.length === 0 || !(Math.abs(deltaM) > 1e-9)) return fallback;
   const delta = Math.round(deltaM * CLIPPER_SCALE);
   const arcTol = Math.max(1, Math.round(CLIPPER_ARC_TOLERANCE_M * CLIPPER_SCALE));
   const co = new ClipperOffset(2, arcTol);
@@ -78,17 +86,19 @@ function offsetPolygonTree(polygon: Polygon, deltaM: number): MultiPolygon {
   const tree = new PolyTree64();
   co.executePolytree(delta, tree);
   const result = polyTreeToMultiPolygon(tree);
-  return result.length > 0 ? result : [polygon];
+  return result.length > 0 ? result : fallback;
+}
+
+function offsetPolygonTree(polygon: Polygon, deltaM: number): MultiPolygon {
+  const paths = polygonToPaths64(polygon);
+  return offsetPaths64(paths, deltaM, [polygon]);
 }
 
 /** Offset every polygon in a multipolygon; round joins, arc tolerance 0.05 m. */
 export function offsetMultiPolygon(polygons: MultiPolygon, deltaM: number): MultiPolygon {
   if (polygons.length === 0 || !(Math.abs(deltaM) > 1e-9)) return polygons;
-  const out: MultiPolygon = [];
-  for (const polygon of polygons) {
-    out.push(...offsetPolygonTree(polygon, deltaM));
-  }
-  return out;
+  if (polygons.length === 1) return offsetPolygonTree(polygons[0]!, deltaM);
+  return offsetPaths64(multiPolygonToPaths64(polygons), deltaM, polygons);
 }
 
 /** Closing: offset +r then −r (fills concave pockets, restores the outer footprint). */
