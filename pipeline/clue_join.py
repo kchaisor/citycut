@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from typing import Any
 
 import geopandas as gpd
@@ -138,6 +139,35 @@ def fetch_clue_blocks_gdf() -> gpd.GeoDataFrame | None:
     except Exception as exc:
         print(f"[enrichment] CLUE blocks failed: {exc}", file=sys.stderr)
         return None
+
+
+CLUE_TEST_FIXTURE = Path(__file__).resolve().parent / "data" / "clue-block-uses-test-fixture.geojson"
+
+
+def load_clue_block_uses_fixture(
+    path: Path | None = None,
+) -> tuple[gpd.GeoDataFrame | None, dict[int, tuple[str, str]], str | None]:
+    """Committed CLUE blocks for unit tests (no data.melbourne.vic.gov.au)."""
+    fixture_path = path or CLUE_TEST_FIXTURE
+    try:
+        gdf = gpd.read_file(fixture_path)
+    except Exception as exc:
+        return None, {}, f"CLUE test fixture unreadable: {exc}"
+    if gdf.empty:
+        return None, {}, "CLUE test fixture empty"
+    if gdf.crs is None:
+        gdf = gdf.set_crs("EPSG:4326")
+    else:
+        gdf = gdf.to_crs("EPSG:4326")
+    floor: dict[int, tuple[str, str]] = {}
+    for _, row in gdf.iterrows():
+        block_id = row.get("block_id")
+        use = row.get("use")
+        if block_id is None or use is None or (isinstance(use, float) and pd.isna(use)):
+            continue
+        col = row.get("dominant_column")
+        floor[int(block_id)] = (str(use), str(col) if col is not None and not pd.isna(col) else "office")
+    return gdf, floor, None
 
 
 def load_clue_block_uses() -> tuple[gpd.GeoDataFrame | None, dict[int, tuple[str, str]], str | None]:
