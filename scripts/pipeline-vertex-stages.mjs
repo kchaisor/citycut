@@ -10,9 +10,15 @@ import {
   footpathStrips,
   OUTPUT_SIMPLIFY_M,
   PATH_OUTPUT_SIMPLIFY_M,
+  CENTRELINE_SIMPLIFY_CURVE_M,
+  CENTRELINE_SIMPLIFY_STRAIGHT_M,
   footpathMergedBeforeFillet,
   footpathStrips,
+  OUTPUT_SIMPLIFY_M,
+  PATH_OUTPUT_SIMPLIFY_M,
 } from "../src/lib/roadFill.ts";
+import { CLIPPER_ARC_CHORD_M } from "../src/lib/polygonOffset.ts";
+import { PLAN_COORD_ROUND_M } from "../src/lib/svgPlan.ts";
 import { roundPlanCoord } from "../src/lib/svgPlan.ts";
 import { planPaths } from "../src/lib/svgPlan.ts";
 import { PATH_WIDTH_M } from "../src/lib/lineweights.ts";
@@ -42,12 +48,12 @@ const roadVertsFinal = roadCurveVertexCount(prPlan.roadFill, facetVb);
 
 const report = {
   tolerances: {
-    centrelineStraightM: 0.35,
-    centrelineCurveM: 0.04,
+    centrelineStraightM: CENTRELINE_SIMPLIFY_STRAIGHT_M,
+    centrelineCurveM: CENTRELINE_SIMPLIFY_CURVE_M,
     outputSimplifyM: OUTPUT_SIMPLIFY_M,
     pathOutputSimplifyM: PATH_OUTPUT_SIMPLIFY_M,
-    clipperArcChordM: 0.01,
-    svgRoundM: 0.01,
+    clipperArcChordM: CLIPPER_ARC_CHORD_M,
+    svgRoundM: PLAN_COORD_ROUND_M,
   },
   kerbReturnRingMaxVerts: kerbStages,
   facetSpotRoadCurveVertsInCrop: {

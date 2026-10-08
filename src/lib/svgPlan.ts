@@ -8,9 +8,10 @@ import type { MultiPolygon } from "polygon-clipping";
 import {
   DEFAULT_PATH_FILLET_M,
   footpathStrips,
-  mergeFootpathFragments,
+  footpathDisplayAfterRoadBlockers,
+  footpathFillDisplayPolygons,
+  roadFillDisplayPolygons,
   setCentrelineSmoothForUnion,
-  subtractFootpathBlockers,
   unionFootpathStrips,
   unionRoadSurface,
 } from "./roadFill";
@@ -212,14 +213,16 @@ export function planPaths(
     })
     .filter((building): building is { rings: Pt[][]; fill: string; site: boolean } => building !== null);
 
-  let pathFill: MultiPolygon = footpaths.polygons;
-  if (pathFilletM > 0 && carriageway.polygons.length > 0) {
-    pathFill = subtractFootpathBlockers(pathFill, carriageway.polygons);
-    pathFill = mergeFootpathFragments(pathFill);
-  }
+  const roadDisplayRaw = roadFillDisplayPolygons(carriageway, model.sideM, frameShape);
+  const roadCoarse = fillRoadMedianHoles(carriageway.polygons);
+  const roadFillPolys = fillRoadMedianHoles(roadDisplayRaw);
 
-  let roadFillPolys = fillRoadMedianHoles(carriageway.polygons);
-  const greenSplit = splitGreenForRoadLayer(green, roadFillPolys);
+  const footDisplay = footpathFillDisplayPolygons(footpaths, model.sideM, frameShape);
+  let pathFill: MultiPolygon = footDisplay;
+  if (pathFilletM > 0 && roadFillPolys.length > 0) {
+    pathFill = footpathDisplayAfterRoadBlockers(footDisplay, roadFillPolys);
+  }
+  const greenSplit = splitGreenForRoadLayer(green, roadCoarse);
   const greenBelow = greenSplit.green;
   const greenOnRoad = greenSplit.greenOnRoad;
 

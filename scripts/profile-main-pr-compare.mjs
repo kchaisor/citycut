@@ -45,6 +45,11 @@ function meanRuns(modelPath, label, envExtra, runs = 3) {
     mean[key] = Math.round(slice.reduce((s, r) => s + (r[key] ?? 0), 0) / slice.length);
   }
   mean.totalMsExGreen = mean.totalMs - (mean.greenSplitMs ?? 0);
+  mean.totalMsCoreExGreen =
+    mean.totalMsExGreen -
+    (mean.displayFootpathFilletMs ?? 0) -
+    (mean.displayFootpathClipMs ?? 0) -
+    (mean.displayRoadMorphMs ?? 0);
   return mean;
 }
 
