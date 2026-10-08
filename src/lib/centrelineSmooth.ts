@@ -105,93 +105,26 @@ function dist(a: Pt, b: Pt): number {
   return Math.hypot(b[0] - a[0], b[1] - a[1]);
 }
 
-/** Centripetal Catmull–Rom point for segment p1→p2 (t in [0,1]). */
-function catmullRomCentripetal(p0: Pt, p1: Pt, p2: Pt, p3: Pt, t: number): Pt {
-  const alpha = 0.5;
-  const tj = (ti: number, a: Pt, b: Pt) => ti + dist(a, b) ** alpha;
-  const t0 = 0;
-  const t1 = tj(t0, p0, p1);
-  const t2 = tj(t1, p1, p2);
-  const t3 = tj(t2, p2, p3);
-  const u = t1 + t * (t2 - t1);
-  const a1: Pt = [
-    (t1 - u) / (t1 - t0) * p0[0] + (u - t0) / (t1 - t0) * p1[0],
-    (t1 - u) / (t1 - t0) * p0[1] + (u - t0) / (t1 - t0) * p1[1],
-  ];
-  const a2: Pt = [
-    (t2 - u) / (t2 - t1) * p1[0] + (u - t1) / (t2 - t1) * p2[0],
-    (t2 - u) / (t2 - t1) * p1[1] + (u - t1) / (t2 - t1) * p2[1],
-  ];
-  const a3: Pt = [
-    (t3 - u) / (t3 - t2) * p2[0] + (u - t2) / (t3 - t2) * p3[0],
-    (t3 - u) / (t3 - t2) * p2[1] + (u - t2) / (t3 - t2) * p3[1],
-  ];
-  const b1: Pt = [
-    (t2 - u) / (t2 - t0) * a1[0] + (u - t0) / (t2 - t0) * a2[0],
-    (t2 - u) / (t2 - t0) * a1[1] + (u - t0) / (t2 - t0) * a2[1],
-  ];
-  const b2: Pt = [
-    (t3 - u) / (t3 - t1) * a2[0] + (u - t1) / (t3 - t1) * a3[0],
-    (t3 - u) / (t3 - t1) * a2[1] + (u - t1) / (t3 - t1) * a3[1],
-  ];
-  return [
-    (t2 - u) / (t2 - t1) * b1[0] + (u - t1) / (t2 - t1) * b2[0],
-    (t2 - u) / (t2 - t1) * b1[1] + (u - t1) / (t2 - t1) * b2[1],
-  ];
+/** Step length for linear edge densify (m); keeps points on the original polyline. */
+function edgeDensifyStepM(edgeLen: number, chordErrorM: number): number {
+  return Math.max(0.35, Math.min(0.55, Math.sqrt(Math.max(edgeLen, chordErrorM) * chordErrorM * 8)));
 }
 
-function maxSplineDeviationFromPolyline(samples: Pt[], polyline: Pt[]): number {
-  let max = 0;
-  for (const p of samples) {
-    max = Math.max(max, pointToSegmentDistance(p, polyline[0]!, polyline[polyline.length - 1]!));
-    for (let i = 0; i < polyline.length - 1; i++) {
-      max = Math.max(max, pointToSegmentDistance(p, polyline[i]!, polyline[i + 1]!));
-    }
-  }
-  return max;
-}
-
-/** Add vertices along curved runs; endpoints stay exact. */
+/** Add vertices along curved runs without leaving the source polyline (endpoints exact). */
 function densifyCurvedSegment(segment: Pt[], chordErrorM: number): Pt[] {
   if (segment.length < 2) return segment.slice();
-  if (segment.length === 2) {
-    const edgeLen = dist(segment[0]!, segment[1]!);
-    if (edgeLen <= 1.2) return segment.slice();
-    const steps = Math.max(1, Math.ceil(edgeLen / 0.45));
-    const out: Pt[] = [segment[0]!];
-    for (let s = 1; s < steps; s++) {
-      const t = s / steps;
-      out.push([
-        segment[0]![0] + t * (segment[1]![0] - segment[0]![0]),
-        segment[0]![1] + t * (segment[1]![1] - segment[0]![1]),
-      ]);
-    }
-    out.push(segment[1]!);
-    return dedupeAdjacent(out);
-  }
-
   const out: Pt[] = [segment[0]!];
   for (let i = 0; i < segment.length - 1; i++) {
-    const p0 = segment[Math.max(0, i - 1)]!;
     const p1 = segment[i]!;
     const p2 = segment[i + 1]!;
-    const p3 = segment[Math.min(segment.length - 1, i + 2)]!;
     const edgeLen = dist(p1, p2);
-    let steps = Math.max(1, Math.ceil(edgeLen / 0.45));
-    for (let attempt = 0; attempt < 4; attempt++) {
-      const samples: Pt[] = [];
-      for (let s = 1; s <= steps; s++) {
-        const t = s / steps;
-        samples.push(catmullRomCentripetal(p0, p1, p2, p3, t));
-      }
-      const dev = maxSplineDeviationFromPolyline(samples, segment);
-      if (dev <= chordErrorM * 1.25 || steps >= Math.ceil(edgeLen / 0.12)) break;
-      steps = Math.ceil(steps * 1.6);
-    }
+    if (edgeLen < 5) continue;
+    const step = edgeDensifyStepM(edgeLen, chordErrorM);
+    const steps = Math.min(4, Math.max(1, Math.ceil(edgeLen / step)));
     for (let s = 1; s <= steps; s++) {
       if (s === steps && i < segment.length - 2) continue;
       const t = s / steps;
-      out.push(catmullRomCentripetal(p0, p1, p2, p3, t));
+      out.push([p1[0] + t * (p2[0] - p1[0]), p1[1] + t * (p2[1] - p1[1])]);
     }
   }
   out[out.length - 1] = segment[segment.length - 1]!;
@@ -274,14 +207,19 @@ export function junctionPointsFromStrips(strips: { line: Pt[] }[], snapM = CENTR
   return junctions;
 }
 
+function hasLongEdge(line: Pt[], minLenM = 5): boolean {
+  for (let i = 0; i < line.length - 1; i++) {
+    if (dist(line[i]!, line[i + 1]!) >= minLenM) return true;
+  }
+  return false;
+}
+
 function hasGentleBend(line: Pt[], minTurnDeg = 3): boolean {
+  if (!hasLongEdge(line)) return false;
   for (let i = 1; i < line.length - 1; i++) {
     if (turnDeflectionDeg(line[i - 1]!, line[i]!, line[i + 1]!) >= minTurnDeg) return true;
   }
-  for (let i = 0; i < line.length - 1; i++) {
-    if (dist(line[i]!, line[i + 1]!) > 2.5) return true;
-  }
-  return false;
+  return hasLongEdge(line);
 }
 
 function pinExactJunctionCoords(line: Pt[], junctionPoints: Pt[]): Pt[] {

@@ -672,7 +672,7 @@ export function unionRoadSurface(
   if (cached) return cached;
 
   const started = performance.now();
-  const carRaw = prepareStripsForUnion(carriagewaysOf(roads), PATH_ENDPOINT_STITCH_M);
+  const carRaw = carriagewaysOf(roads);
   const tramRaw = (tramLines ?? [])
     .filter((line) => line.length >= 2)
     .map((line) => ({ line, width: TRAM_CORRIDOR_WIDTH_M }));
@@ -828,8 +828,8 @@ export function unionFootpathStrips(
   if (cached) return cached;
 
   const started = performance.now();
-  const prepared = prepareStripsForUnion(stitchFootpathStrips(strips), PATH_ENDPOINT_STITCH_M);
-  const merged = unionStrips(prepared, sideM, 0, frameShape);
+  const stitched = stitchFootpathStrips(strips);
+  const merged = unionStrips(stitched, sideM, 0, frameShape, true);
   const typical = strips.reduce((sum, s) => sum + s.width, 0) / Math.max(1, strips.length);
   const bandTypical = typicalBandWidthM > 0 ? typicalBandWidthM : typical;
   const filletRadius =

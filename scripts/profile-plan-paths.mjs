@@ -19,10 +19,6 @@ if (existsSync(join(repoRoot, "src/lib/roadSurfacePlan.ts"))) {
     pathToFileURL(join(repoRoot, "src/lib/roadSurfacePlan.ts")).href,
   ));
 }
-let smoothPlanMultiPolygon = (polygons) => polygons;
-if (existsSync(join(repoRoot, "src/lib/planRingSmooth.ts"))) {
-  ({ smoothPlanMultiPolygon } = await import(pathToFileURL(join(repoRoot, "src/lib/planRingSmooth.ts")).href));
-}
 const { clipAreaToSiteFrame, clipPolylineSiteFrame, pointInSiteFrame, DEFAULT_SITE_FRAME_SHAPE } = await import(
   pathToFileURL(join(repoRoot, "src/lib/siteFrame.ts")).href,
 );
@@ -113,10 +109,6 @@ splitGreenForRoadLayer(green, roadFillPolys);
 stages.greenSplitMs = Math.round(performance.now() - t);
 
 t = performance.now();
-if (!label.endsWith("-main")) {
-  smoothPlanMultiPolygon(roadFillPolys);
-  smoothPlanMultiPolygon(pathFill);
-}
 stages.ringSmoothMs = Math.round(performance.now() - t);
 
 t = performance.now();

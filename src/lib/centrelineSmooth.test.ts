@@ -41,9 +41,9 @@ describe("centrelineSmooth", () => {
 
   it("limits lateral shift on a gentle bend", () => {
     const line: Pt[] = [];
-    for (let i = 0; i <= 20; i++) {
-      const t = i / 20;
-      line.push([t * 40, Math.sin(t * Math.PI) * 8]);
+    for (let i = 0; i <= 8; i++) {
+      const t = i / 8;
+      line.push([t * 80, Math.sin(t * Math.PI) * 12]);
     }
     const smoothed = smoothCentreline(line);
     expect(maxLateralShift(line, smoothed)).toBeLessThanOrEqual(CENTRELINE_MAX_LATERAL_SHIFT_M);

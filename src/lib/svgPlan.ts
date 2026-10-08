@@ -225,8 +225,7 @@ export function planPaths(
   let ringSmoothMs = 0;
   if (smoothOutput) {
     const tSmooth = performance.now();
-    roadFillPolys = smoothPlanMultiPolygon(roadFillPolys);
-    pathFill = smoothPlanMultiPolygon(pathFill);
+    // Centreline densify handles road curves; footpath fillets stay from Clipper union.
     ringSmoothMs = Math.round(performance.now() - tSmooth);
   }
 

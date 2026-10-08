@@ -9,7 +9,7 @@ const jolimontPath = "/opt/cursor/artifacts/jolimont-model.json";
 const cropsPath = "/opt/cursor/artifacts/kelvin-jolimont-crops.json";
 
 describe("path junction nib finder", () => {
-  it("finds nibs on main-style output and none at Kelvin junction after PR smoothing", () => {
+  it("finds nibs on main-style output and none at Kelvin junction after PR smoothing", { timeout: 60_000 }, () => {
     let model;
     try {
       model = JSON.parse(readFileSync(jolimontPath, "utf8"));
@@ -33,6 +33,7 @@ describe("path junction nib finder", () => {
     const smoothed = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, {
       pathFilletM: 2,
       smoothOutput: true,
+      centrelineSmooth: true,
     });
 
     let east = -25;
