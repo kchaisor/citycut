@@ -34,10 +34,31 @@ export type BuildingEnrichmentRecord = {
   zoneCode: string | null;
 };
 
+const USE_FROM_CODE: Record<number, BuildingUse> = {
+  0: "unclassified",
+  1: "residential",
+  2: "commercial",
+  3: "retail",
+  4: "mixed_use",
+  5: "industrial",
+  6: "civic",
+  7: "recreation",
+  8: "outbuilding",
+};
+
+const SOURCE_FROM_CODE: Record<number, BuildingUseSourceTier> = {
+  0: "unclassified",
+  1: "overture",
+  2: "clue",
+  3: "bca",
+  4: "zone",
+};
+
 export type EnrichmentManifest = {
   extent: { west: number; south: number; east: number; north: number };
   builtBbox?: { west: number; south: number; east: number; north: number };
   targetExtent?: { west: number; south: number; east: number; north: number };
+  regionName?: string;
   featureCount: number;
   pmtilesBytes: number;
   generatedAt: string;
@@ -89,8 +110,10 @@ function parseUseSource(raw: unknown): BuildingUseSourceTier | null {
 function recordFromProps(props: Record<string, unknown>): BuildingEnrichmentRecord | null {
   const id = typeof props.overture_id === "string" ? props.overture_id : typeof props.id === "string" ? props.id : "";
   if (!id) return null;
-  const use = parseUse(props.use);
-  const useSource = parseUseSource(props.use_source);
+  let use = parseUse(props.use);
+  let useSource = parseUseSource(props.use_source);
+  if (!use && typeof props.u === "number") use = USE_FROM_CODE[props.u] ?? null;
+  if (!useSource && typeof props.s === "number") useSource = SOURCE_FROM_CODE[props.s] ?? null;
   if (!use || !useSource) return null;
   const heightRaw = props.height_m;
   const heightM =
