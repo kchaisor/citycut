@@ -83,7 +83,7 @@ export function cutFrameGeoJson(center: LonLat, sideM: number, shape: SiteFrameS
   };
 }
 
-/** Landuse-toned sheet with a frame-shaped hole; roads and labels sit above this layer. */
+/** Donut mask: hides use-coloured buildings outside the cut frame (roads and labels sit above). */
 export function cutColourMaskGeoJson(center: LonLat, sideM: number, frameShape: SiteFrameShape): GeoJSON.Feature {
   const span = 1.2;
   const outer: [number, number][] = [

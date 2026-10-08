@@ -9,10 +9,7 @@
 :root {
   /* Paper and ground */
 
-  /* Landing map: masks coloured Overture fills outside the cut frame (matches the grey map surround). */
-  --landing-map-mask: #F2F3F0;
-
-  /* Positron building fill — second landing mask above use-coloured footprints. */
+  /* Positron building fill — landing mask above use-coloured footprints outside the cut frame. */
   --landing-building-mask: #EAEAE5;
 
   /* Illustrator site-plan page, and the casing under a rail so the line still reads on the road. */

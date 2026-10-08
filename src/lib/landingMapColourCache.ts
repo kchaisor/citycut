@@ -1,7 +1,6 @@
-import type { AreaFeat, BuildingFeat } from "../types";
+import type { BuildingFeat } from "../types";
 
 export type LandingColourPayload = {
-  areas: AreaFeat[];
   buildings: BuildingFeat[];
   dataOrigin: { lat: number; lon: number };
 };

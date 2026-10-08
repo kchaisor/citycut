@@ -9,7 +9,6 @@ import { cssColorToHex, normalizeHex, parseCustomProperties, resolveSheet } from
  */
 
 export const COLOUR_KEYS = [
-  "--landing-map-mask",
   "--landing-building-mask",
   "--sheet-fill",
   "--ground-fill",
@@ -109,7 +108,6 @@ export const COLOUR_GROUPS = [
     id: "paper",
     title: "Paper and ground",
     keys: [
-      "--landing-map-mask",
       "--landing-building-mask",
       "--sheet-fill",
       "--ground-fill",
@@ -205,7 +203,6 @@ export const COLOUR_GROUPS = [
 ] as const satisfies readonly { id: string; title: string; keys: readonly ColourKey[] }[];
 
 export const COLOUR_LABELS: Record<ColourKey, string> = {
-  "--landing-map-mask": "Landing map mask",
   "--landing-building-mask": "Landing building mask",
   "--sheet-fill": "Sheet",
   "--ground-fill": "Ground",

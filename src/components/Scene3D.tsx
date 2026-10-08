@@ -45,6 +45,7 @@ import {
   sitePlanBounds,
 } from "../lib/planCamera";
 import { qaModeFromSearch, registerQaCameraBridge, type QaCameraPose } from "../lib/qaCameraBridge";
+import { WebGlContextWatch } from "./WebGlContextWatch";
 import type { ProjectionMode } from "../lib/viewMemory";
 import {
   DEFAULT_PERSPECTIVE_OFFSET,
@@ -1050,6 +1051,16 @@ export function Scene3D({
   const solarNeutralFill = useMemo(() => getColour("--building-solar-neutral"), [colourTick]);
   const sunSample = useMelbourneSunSample(model.center.lat, model.center.lon, solar);
   const [glEpoch, setGlEpoch] = useState(0);
+  const [glContextLost, setGlContextLost] = useState(false);
+  const onGlContextLost = useCallback(() => setGlContextLost(true), []);
+  const onGlContextRestored = useCallback(() => {
+    setGlContextLost(false);
+    setGlEpoch((value) => value + 1);
+  }, []);
+  const restoreGlContext = useCallback(() => {
+    setGlContextLost(false);
+    setGlEpoch((value) => value + 1);
+  }, []);
   const viewportLight = sunStudyViewportLighting({
     showPath: solar.showPath,
     castShadows: solar.castShadows,
@@ -1064,23 +1075,24 @@ export function Scene3D({
     return top;
   }, [model]);
   return (
-    <Canvas
-      key={glEpoch}
-      className="scene-canvas"
-      dpr={[1, 1.75]}
-      gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
-      shadows={solar.castShadows}
-      onCreated={({ gl }) => {
-        const canvas = gl.domElement;
-        const onLost = (event: Event) => {
-          event.preventDefault();
-        };
-        const onRestored = () => setGlEpoch((value) => value + 1);
-        canvas.addEventListener("webglcontextlost", onLost);
-        canvas.addEventListener("webglcontextrestored", onRestored);
-      }}
-    >
-      <RendererShadows enabled={solar.castShadows} />
+    <div className="scene-viewport">
+      {glContextLost ? (
+        <div className="webgl-lost-overlay" role="alert">
+          <p>3D view lost (GPU memory)</p>
+          <button type="button" className="primary" onClick={restoreGlContext}>
+            Restore
+          </button>
+        </div>
+      ) : null}
+      <Canvas
+        key={glEpoch}
+        className="scene-canvas"
+        dpr={[1, 1.75]}
+        gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
+        shadows={solar.castShadows}
+      >
+        <WebGlContextWatch onContextLost={onGlContextLost} onContextRestored={onGlContextRestored} />
+        <RendererShadows enabled={solar.castShadows} />
       <SunStudyToneMapping noToneMapping={noToneMapping} />
       <color attach="background" args={[modelBg]} />
       <hemisphereLight args={[sky, groundLight, fillHemi]} />
@@ -1140,6 +1152,7 @@ export function Scene3D({
         lat={model.center.lat}
         lon={model.center.lon}
       />
-    </Canvas>
+      </Canvas>
+    </div>
   );
 }

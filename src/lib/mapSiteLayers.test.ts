@@ -40,7 +40,7 @@ function mockMap() {
       ],
     }),
   };
-  return { map, sources };
+  return { map, sources, layers };
 }
 
 const building: BuildingFeat = {
@@ -59,6 +59,25 @@ const building: BuildingFeat = {
   source: "osm_tag",
 };
 
+describe("updateMapCutColourLayers", () => {
+  it("adds only building use fills and the frame mask, not water or green", () => {
+    const { map, layers } = mockMap();
+    updateMapCutColourLayers(map as never, {
+      dataOrigin: { lon: 144.96, lat: -37.81 },
+      dataSideM: 2000,
+      maskCenter: { lon: 144.96, lat: -37.81 },
+      cutSideM: 500,
+      frameShape: "square",
+      buildings: [building],
+    });
+    expect(layers.has("citycut-cut-buildings-fill")).toBe(true);
+    expect(layers.has("citycut-cut-mask-buildings-fill")).toBe(true);
+    expect(layers.has("citycut-cut-water-fill")).toBe(false);
+    expect(layers.has("citycut-cut-green-fill")).toBe(false);
+    expect(layers.has("citycut-cut-mask-fill")).toBe(false);
+  });
+});
+
 describe("updateMapCutColourMask", () => {
   it("updates only the mask source when the frame moves, not the colour fills", () => {
     const { map, sources } = mockMap();
@@ -68,7 +87,6 @@ describe("updateMapCutColourMask", () => {
       maskCenter: { lon: 144.96, lat: -37.81 },
       cutSideM: 500,
       frameShape: "square",
-      areas: [{ id: 1, kind: "water", ring: building.ring, holes: [] }],
       buildings: [building],
     });
 

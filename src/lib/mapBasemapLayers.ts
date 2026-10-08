@@ -1,6 +1,6 @@
 import type maplibregl from "maplibre-gl";
 
-/** Water, green, and the landuse mask sit below `waterway` (and the basemap building fill). */
+/** Anchor for legacy landuse overlays; unused by the building-only landing preview. */
 export function landingCutLanduseBeforeLayer(map: maplibregl.Map): string | undefined {
   const layers = map.getStyle().layers;
   if (!layers) return undefined;
