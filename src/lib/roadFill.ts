@@ -3,7 +3,7 @@ import type { MultiPolygon, Pair, Polygon, Ring } from "polygon-clipping";
 import { polylineLength, signedArea } from "./geo";
 import { DEFAULT_SITE_FRAME_SHAPE, pointInSiteFrame, siteFramePolygon, type SiteFrameShape } from "./siteFrame";
 import type { Pt, RoadFeat } from "../types";
-import { offsetCloseMultiPolygon } from "./polygonOffset";
+import { normalizeMultiPolygonByParity, offsetCloseMultiPolygon } from "./polygonOffset";
 
 type ClipFns = {
   union: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
@@ -565,7 +565,8 @@ export function closeFootpathJunctions(
   if (!(radius > 0) || polygons.length === 0) return polygons;
   const simplified = simplifyPathMulti(polygons);
   const closed = offsetCloseMultiPolygon(simplified, radius);
-  return simplifyPathMulti(tidy(clipToFrame(closed, sideM, frameShape)));
+  const clipped = normalizeMultiPolygonByParity(clipToFrame(closed, sideM, frameShape));
+  return simplifyPathMulti(tidy(clipped));
 }
 
 /** Remove footpath fill that closing pushed into the carriageway. */
@@ -665,7 +666,9 @@ export function unionRoadSurface(
   const withTram =
     tramInputs.length > 0 ? unionCarriageways(tramInputs, sideM, frameShape) : { polygons: [] as MultiPolygon, ms: 0, inputs: 0 };
   const merged = unionMulti(carriageway.polygons, withTram.polygons);
-  const closed = tidy(clipToFrame(offsetCloseMultiPolygon(merged, ROAD_MORPH_CLOSE_M), sideM, frameShape));
+  const closed = tidy(
+    normalizeMultiPolygonByParity(clipToFrame(offsetCloseMultiPolygon(merged, ROAD_MORPH_CLOSE_M), sideM, frameShape)),
+  );
   const result: RoadFill = {
     polygons: closed,
     ms: performance.now() - started,

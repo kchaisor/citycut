@@ -1,30 +1,39 @@
-import {
-  ClipperOffset,
-  EndType,
-  JoinType,
-  Path64,
-  Paths64,
-  PolyPath64,
-  PolyTree64,
-} from "clipper2-js";
+import ClipperLib from "clipper-lib";
+import * as polygonClipping from "polygon-clipping";
 import type { MultiPolygon, Polygon, Ring } from "polygon-clipping";
+import { signedArea } from "./geo";
 
-/** Clipper2 integer scale: 1 mm per unit (0.001 m). */
+/** Clipper integer scale: 1 mm per unit (0.001 m). */
 export const CLIPPER_SCALE = 1000;
 
 /** Round-join arc tolerance on the ground, in metres. */
 export const CLIPPER_ARC_TOLERANCE_M = 0.05;
 
-function toPath64(open: Ring): Path64 {
-  const path = new Path64();
-  for (const [x, y] of open) {
-    path.push({ x: Math.round(x * CLIPPER_SCALE), y: Math.round(y * CLIPPER_SCALE) });
-  }
-  return path;
+type ClipperPoint = { X: number; Y: number };
+type ClipperPath = ClipperPoint[];
+
+type ClipFns = {
+  intersection: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
+};
+
+function clippingFns(): ClipFns {
+  const loaded = polygonClipping as unknown as ClipFns & { default?: ClipFns };
+  if (typeof loaded.intersection === "function") return loaded;
+  if (loaded.default && typeof loaded.default.intersection === "function") return loaded.default;
+  throw new Error("polygon-clipping did not load.");
 }
 
-function fromPath64(path: Path64): Ring {
-  const out: Ring = path.map((p) => [p.x / CLIPPER_SCALE, p.y / CLIPPER_SCALE]);
+const { intersection } = clippingFns();
+
+function toClipperPath(open: Ring): ClipperPath {
+  return open.map(([x, y]) => ({
+    X: Math.round(x * CLIPPER_SCALE),
+    Y: Math.round(y * CLIPPER_SCALE),
+  }));
+}
+
+function fromClipperPath(path: ClipperPath): Ring {
+  const out: Ring = path.map((p) => [p.X / CLIPPER_SCALE, p.Y / CLIPPER_SCALE]);
   if (out.length > 0) {
     const first = out[0]!;
     const last = out[out.length - 1]!;
@@ -33,77 +42,199 @@ function fromPath64(path: Path64): Ring {
   return out;
 }
 
-/** One polygon (outer CCW + holes CW) as Clipper paths. */
-function polygonToPaths64(polygon: Polygon): Paths64 {
-  const paths = new Paths64();
-  const outer = polygon[0];
-  if (!outer || outer.length < 4) return paths;
-  paths.push(toPath64(outer.slice(0, -1)));
-  for (let i = 1; i < polygon.length; i++) {
-    const hole = polygon[i];
-    if (!hole || hole.length < 4) continue;
-    paths.push(toPath64(hole.slice(0, -1).slice().reverse()));
+function openRing(ring: Ring): Ring {
+  if (
+    ring.length > 1 &&
+    ring[0]![0] === ring[ring.length - 1]![0] &&
+    ring[0]![1] === ring[ring.length - 1]![1]
+  ) {
+    return ring.slice(0, -1);
   }
-  return paths;
+  return ring;
 }
 
-function polyPathToPolygon(node: PolyPath64): Polygon | null {
-  if (!node.polygon || node.polygon.length < 3) return null;
-  const shell = fromPath64(node.polygon);
+function pointInRing(point: Ring[0], ring: Ring): boolean {
+  const open = openRing(ring);
+  let inside = false;
+  for (let i = 0, j = open.length - 1; i < open.length; j = i++) {
+    const xi = open[i]![0];
+    const yi = open[i]![1];
+    const xj = open[j]![0];
+    const yj = open[j]![1];
+    if (yi > point[1] !== yj > point[1]) {
+      const xCross = ((xj - xi) * (point[1] - yi)) / (yj - yi) + xi;
+      if (point[0] < xCross) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function ringCentroid(ring: Ring): Ring[0] {
+  const open = openRing(ring);
+  let x = 0;
+  let y = 0;
+  for (const p of open) {
+    x += p[0];
+    y += p[1];
+  }
+  const n = open.length || 1;
+  return [x / n, y / n];
+}
+
+function ringAbsArea(ring: Ring): number {
+  return Math.abs(signedArea(openRing(ring)));
+}
+
+function flattenRings(polygons: MultiPolygon): Ring[] {
+  const rings: Ring[] = [];
+  for (const polygon of polygons) {
+    for (const ring of polygon) {
+      if (ring && ring.length >= 4) rings.push(ring);
+    }
+  }
+  return rings;
+}
+
+function ringContainsRing(outer: Ring, inner: Ring): boolean {
+  const probe = openRing(inner)[0];
+  if (!probe) return false;
+  return pointInRing(probe, outer);
+}
+
+function immediateParent(ring: Ring, all: Ring[]): Ring | null {
+  const areaR = ringAbsArea(ring);
+  let parent: Ring | null = null;
+  let parentArea = Infinity;
+  for (const other of all) {
+    if (other === ring || ringAbsArea(other) <= areaR) continue;
+    if (!ringContainsRing(other, ring)) continue;
+    const area = ringAbsArea(other);
+    if (area < parentArea) {
+      parentArea = area;
+      parent = other;
+    }
+  }
+  return parent;
+}
+
+/** Nesting depth from immediate containment (0 = outermost shell). */
+export function containmentDepth(ring: Ring, all: Ring[]): number {
+  let depth = 0;
+  let current: Ring | null = ring;
+  const seen = new Set<Ring>();
+  for (let guard = 0; guard < all.length + 2; guard++) {
+    const parent: Ring | null = current ? immediateParent(current, all) : null;
+    if (!parent || seen.has(parent)) break;
+    seen.add(parent);
+    depth++;
+    current = parent;
+  }
+  return depth;
+}
+
+type TaggedRing = { ring: Ring; depth: number };
+
+function directHoles(parent: TaggedRing, tagged: TaggedRing[]): Ring[] {
   const holes: Ring[] = [];
-  for (let i = 0; i < node.count; i++) {
-    const child = node.child(i);
-    if (!child.isHole || !child.polygon || child.polygon.length < 3) continue;
-    holes.push(fromPath64(child.polygon));
+  for (const candidate of tagged) {
+    if (candidate.depth !== parent.depth + 1 || candidate.depth % 2 === 0) continue;
+    if (!pointInRing(ringCentroid(candidate.ring), parent.ring)) continue;
+    let blocked = false;
+    for (const island of tagged) {
+      if (island.depth !== parent.depth + 2 || island.depth % 2 !== 0) continue;
+      if (!pointInRing(ringCentroid(island.ring), parent.ring)) continue;
+      if (pointInRing(ringCentroid(candidate.ring), island.ring)) {
+        blocked = true;
+        break;
+      }
+    }
+    if (!blocked) holes.push(candidate.ring);
   }
-  return holes.length > 0 ? [shell, ...holes] : [shell];
+  return holes;
 }
 
-function polyTreeToMultiPolygon(tree: PolyTree64): MultiPolygon {
+function normalizeFromRings(rings: Ring[]): MultiPolygon {
+  if (rings.length === 0) return [];
+  const tagged: TaggedRing[] = rings.map((ring) => ({ ring, depth: containmentDepth(ring, rings) }));
   const out: MultiPolygon = [];
-  for (let i = 0; i < tree.count; i++) {
-    const poly = polyPathToPolygon(tree.child(i));
-    if (poly) out.push(poly);
+  for (const parent of tagged) {
+    if (parent.depth % 2 !== 0) continue;
+    const holes = directHoles(parent, tagged);
+    out.push(holes.length > 0 ? [parent.ring, ...holes] : [parent.ring]);
   }
   return out;
 }
 
-function multiPolygonToPaths64(polygons: MultiPolygon): Paths64 {
-  const paths = new Paths64();
-  for (const polygon of polygons) {
-    const part = polygonToPaths64(polygon);
-    for (let i = 0; i < part.length; i++) paths.push(part[i]!);
+/** Rebuild multipolygons from rings using even/odd nesting depth. */
+export function normalizeMultiPolygonByParity(polygons: MultiPolygon): MultiPolygon {
+  return normalizeFromRings(flattenRings(polygons));
+}
+
+/** Offset one closed ring; may split into multiple rings. */
+function offsetSingleRing(open: Ring, deltaM: number, allowEmpty: boolean): Ring[] {
+  if (open.length < 3 || !(Math.abs(deltaM) > 1e-9)) {
+    const closed = openRing(open);
+    return closed.length >= 3 ? [closeRing(closed)] : [];
   }
-  return paths;
-}
-
-function offsetPaths64(paths: Paths64, deltaM: number, fallback: MultiPolygon): MultiPolygon {
-  if (paths.length === 0 || !(Math.abs(deltaM) > 1e-9)) return fallback;
   const delta = Math.round(deltaM * CLIPPER_SCALE);
-  const arcTol = Math.max(1, Math.round(CLIPPER_ARC_TOLERANCE_M * CLIPPER_SCALE));
-  const co = new ClipperOffset(2, arcTol);
-  co.addPaths(paths, JoinType.Round, EndType.Polygon);
-  const tree = new PolyTree64();
-  co.executePolytree(delta, tree);
-  const result = polyTreeToMultiPolygon(tree);
-  return result.length > 0 ? result : fallback;
+  const arcTol = Math.max(1, CLIPPER_ARC_TOLERANCE_M * CLIPPER_SCALE);
+  const co = new ClipperLib.ClipperOffset(2, arcTol);
+  co.AddPath(toClipperPath(open), ClipperLib.JoinType.jtRound, ClipperLib.EndType.etClosedPolygon);
+  const solution: ClipperLib.Paths = [];
+  co.Execute(solution, delta);
+  if (solution.length === 0) {
+    if (allowEmpty) return [];
+    throw new Error(`Clipper offset returned no paths (delta=${deltaM} m)`);
+  }
+  return solution.map(fromClipperPath);
 }
 
-function offsetPolygonTree(polygon: Polygon, deltaM: number): MultiPolygon {
-  const paths = polygonToPaths64(polygon);
-  return offsetPaths64(paths, deltaM, [polygon]);
+function closeRing(open: Ring): Ring {
+  const ring = openRing(open);
+  if (ring.length === 0) return ring;
+  const first = ring[0]!;
+  const last = ring[ring.length - 1]!;
+  if (first[0] === last[0] && first[1] === last[1]) return ring as Ring;
+  return [...ring, first];
+}
+
+function offsetNormalizedByParity(normalized: MultiPolygon, deltaM: number): MultiPolygon {
+  const rings = flattenRings(normalized);
+  if (rings.length === 0) return [];
+  const tagged = rings.map((ring) => ({ ring, depth: containmentDepth(ring, rings) }));
+  const expanded: Ring[] = [];
+  for (const { ring, depth } of tagged) {
+    const sign = depth % 2 === 0 ? deltaM : -deltaM;
+    expanded.push(...offsetSingleRing(openRing(ring), sign, depth % 2 === 1));
+  }
+  if (expanded.length === 0) {
+    throw new Error(`Clipper offset produced no rings (delta=${deltaM} m)`);
+  }
+  return normalizeFromRings(expanded);
 }
 
 /** Offset every polygon in a multipolygon; round joins, arc tolerance 0.05 m. */
 export function offsetMultiPolygon(polygons: MultiPolygon, deltaM: number): MultiPolygon {
   if (polygons.length === 0 || !(Math.abs(deltaM) > 1e-9)) return polygons;
-  if (polygons.length === 1) return offsetPolygonTree(polygons[0]!, deltaM);
-  return offsetPaths64(multiPolygonToPaths64(polygons), deltaM, polygons);
+  const normalized = normalizeMultiPolygonByParity(polygons);
+  return offsetNormalizedByParity(normalized, deltaM);
 }
 
-/** Closing: offset +r then −r (fills concave pockets, restores the outer footprint). */
+function intersectMultiPolygon(a: MultiPolygon, b: MultiPolygon): MultiPolygon {
+  if (a.length === 0 || b.length === 0) return [];
+  try {
+    return normalizeMultiPolygonByParity(intersection(a, b));
+  } catch {
+    throw new Error("polygon intersection failed during morphological close clamp");
+  }
+}
+
+/** Closing: offset +r then −r, clamped to the +r dilation (fills concave pockets only). */
 export function offsetCloseMultiPolygon(polygons: MultiPolygon, radiusM: number): MultiPolygon {
   if (polygons.length === 0 || !(radiusM > 0)) return polygons;
-  const expanded = offsetMultiPolygon(polygons, radiusM);
-  return offsetMultiPolygon(expanded, -radiusM);
+  const normalized = normalizeMultiPolygonByParity(polygons);
+  const expanded = offsetNormalizedByParity(normalized, radiusM);
+  const contracted = offsetNormalizedByParity(expanded, -radiusM);
+  const cap = offsetNormalizedByParity(normalized, radiusM + 0.01);
+  return intersectMultiPolygon(contracted, cap);
 }
