@@ -13,9 +13,44 @@ const gmManifest: EnrichmentManifest = {
   featureCount: 1,
   pmtilesBytes: 1,
   generatedAt: "2026-01-01T00:00:00Z",
+  overtureRelease: "2026-09-23.1",
 };
 
 const hawthornBounds = { west: 145.02, south: -37.83, east: 145.05, north: -37.81 };
+
+function tiledBuilding(): { merged: BuildingFeat[]; byId: Map<string, import("./buildingEnrichmentTiles").BuildingEnrichmentRecord> } {
+  const merged: BuildingFeat[] = [
+    {
+      id: 1,
+      overtureId: "a",
+      ring: [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 0],
+      ],
+      holes: [],
+      height: 9,
+      use: "residential",
+      source: "zone",
+      useSourceTier: "zone",
+    },
+  ];
+  const byId = new Map([
+    [
+      "a",
+      {
+        overtureId: "a",
+        use: "residential" as const,
+        useSource: "zone" as const,
+        heightM: null,
+        heightSource: null,
+        zoneCode: "GRZ",
+      },
+    ],
+  ]);
+  return { merged, byId };
+}
 
 describe("landingRefinePolicy", () => {
   it("detects a cut fully inside built bbox", () => {
@@ -23,36 +58,7 @@ describe("landingRefinePolicy", () => {
   });
 
   it("skips live refine inside coverage when every footprint has a tile row", () => {
-    const merged: BuildingFeat[] = [
-      {
-        id: 1,
-        overtureId: "a",
-        ring: [
-          [0, 0],
-          [1, 0],
-          [1, 1],
-          [0, 0],
-        ],
-        holes: [],
-        height: 9,
-        use: "residential",
-        source: "zone",
-        useSourceTier: "zone",
-      },
-    ];
-    const byId = new Map([
-      [
-        "a",
-        {
-          overtureId: "a",
-          use: "residential" as const,
-          useSource: "zone" as const,
-          heightM: null,
-          heightSource: null,
-          zoneCode: "GRZ",
-        },
-      ],
-    ]);
+    const { merged, byId } = tiledBuilding();
     expect(mergedNeedsLiveZoneRefine(merged, byId)).toBe(false);
     expect(
       shouldRunLiveZoneRefine({
@@ -61,11 +67,29 @@ describe("landingRefinePolicy", () => {
         enrichmentError: null,
         manifestMatchesAppTables: true,
         manifest: gmManifest,
+        appOvertureRelease: "2026-09-23.1",
         cutBounds: hawthornBounds,
         merged,
         byId,
       }),
     ).toBe(false);
+  });
+
+  it("runs live refine when Overture release differs but all ids are tiled", () => {
+    const { merged, byId } = tiledBuilding();
+    expect(
+      shouldRunLiveZoneRefine({
+        tilesOnly: false,
+        forceLiveRefine: false,
+        enrichmentError: null,
+        manifestMatchesAppTables: true,
+        manifest: gmManifest,
+        appOvertureRelease: "2026-10-21.0",
+        cutBounds: hawthornBounds,
+        merged,
+        byId,
+      }),
+    ).toBe(true);
   });
 
   it("runs live refine when a footprint is missing from tiles", () => {

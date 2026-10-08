@@ -82,6 +82,8 @@ export type EnrichmentManifest = {
   zoneUseTableSha256?: string;
   /** SHA-256 of canonical `shared/overture-building-use.json` at bake time. */
   overtureBuildingUseSha256?: string;
+  /** Overture Maps release used for the input building fetch at bake time. */
+  overtureRelease?: string;
 };
 
 function tileRange(bounds: { south: number; west: number; north: number; east: number }, z: number) {

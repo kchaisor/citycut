@@ -9,6 +9,7 @@ import {
   refreshEastMelbourneHeightFixtures,
 } from "./eastMelbourneHeightsPipeline";
 
+/** Heights are pinned to committed fixtures, not live Overture STAC (refresh only via REFRESH_EAST_MELBOURNE_HEIGHTS=1). */
 const FIXTURE = fileURLToPath(new URL("./fixtures/east-melbourne-heights-main.json", import.meta.url));
 
 type Snapshot = {

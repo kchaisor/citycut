@@ -1,5 +1,10 @@
-/** Pinned when the STAC catalog cannot be read. Only a few releases stay hosted. */
-export const OVERTURE_RELEASE_FALLBACK = "2026-09-23.1";
+import {
+  OVERTURE_RELEASE_FALLBACK,
+  releaseFromStacCatalog as releaseFromStacCatalogShared,
+  releaseIdFromStacHref,
+} from "../../shared/overtureStacRelease.js";
+
+export { OVERTURE_RELEASE_FALLBACK, releaseIdFromStacHref };
 
 const STAC_CATALOG_URL = "https://stac.overturemaps.org/catalog.json";
 
@@ -9,10 +14,11 @@ export type OvertureReleaseResolution = {
   stacWarning: string | null;
 };
 
-type StacLink = { rel: string; href: string; title?: string };
+type StacLink = { rel: string; href: string; title?: string; latest?: boolean };
 
 type StacCatalog = {
   stac_version?: string;
+  latest?: string;
   links?: StacLink[];
 };
 
@@ -30,33 +36,12 @@ export function overtureBaseUrl(release: string): string {
   return `https://tiles.overturemaps.org/${release}/base.pmtiles`;
 }
 
-const RELEASE_ID = /^\d{4}-\d{2}-\d{2}\.\d+$/;
-
-function releaseIdFromHref(href: string): string | null {
-  const segment = href.split("/").filter(Boolean).pop();
-  return segment && RELEASE_ID.test(segment) ? segment : null;
-}
-
-/** Same effective release as main: `latest` when present, else newest STAC `child`, else pin. */
+/** Same rules as the enrichment pipeline (`shared/overtureStacRelease.js`). */
 export function releaseFromStacCatalog(catalog: StacCatalog): string {
-  const latest = catalog.links?.find((link) => link.rel === "latest");
-  const fromLatest = latest?.href ? releaseIdFromHref(latest.href) : null;
-  if (fromLatest) return fromLatest;
-
-  const childReleases =
-    catalog.links
-      ?.filter((link) => link.rel === "child")
-      .map((link) => releaseIdFromHref(link.href))
-      .filter((id): id is string => id != null) ?? [];
-  if (childReleases.length > 0) {
-    childReleases.sort();
-    return childReleases[childReleases.length - 1]!;
-  }
-
-  return OVERTURE_RELEASE_FALLBACK;
+  return releaseFromStacCatalogShared(catalog);
 }
 
-/** Resolve the current Overture release from STAC. Cached for the session. */
+/** Resolve from STAC only (transport/base tiles, or landing when no manifest release). Cached for the session. */
 export async function resolveOvertureReleaseWithMeta(
   signal?: AbortSignal,
 ): Promise<OvertureReleaseResolution> {
@@ -81,6 +66,21 @@ export async function resolveOvertureReleaseWithMeta(
     };
     return cachedResolution;
   }
+}
+
+/**
+ * Landing / enrichment: prefer the baked manifest release so tile tags match Overture fetches.
+ * Falls back to STAC (or pin on error) when the manifest is missing or has no release field.
+ */
+export async function resolveOvertureReleaseForApp(
+  manifest: { overtureRelease?: string } | null | undefined,
+  signal?: AbortSignal,
+): Promise<OvertureReleaseResolution> {
+  const baked = manifest?.overtureRelease?.trim();
+  if (baked && /^\d{4}-\d{2}-\d{2}\.\d+$/.test(baked)) {
+    return { release: baked, stacWarning: null };
+  }
+  return resolveOvertureReleaseWithMeta(signal);
 }
 
 export async function resolveOvertureRelease(signal?: AbortSignal): Promise<string> {

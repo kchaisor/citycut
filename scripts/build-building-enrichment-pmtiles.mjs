@@ -4,6 +4,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { OVERTURE_RELEASE_FALLBACK, releaseFromStacCatalog } from "../shared/overtureStacRelease.js";
 
 const DEFAULT_EXTENT = {
   west: 144.333634,
@@ -32,19 +33,12 @@ const MANIFEST = "public/building-enrichment-manifest.json";
 const MIN_ZOOM = Number(process.env.BUILD_ENRICHMENT_MIN_ZOOM ?? "11");
 const MAX_ZOOM = Number(process.env.BUILD_ENRICHMENT_MAX_ZOOM ?? "14");
 
-const OVERTURE_RELEASE_FALLBACK = "2026-09-23.1";
-
 async function resolveOvertureRelease() {
   try {
     const response = await fetch("https://stac.overturemaps.org/catalog.json");
     if (!response.ok) throw new Error(String(response.status));
     const catalog = await response.json();
-    const latest = catalog.links?.find((link) => link.rel === "latest");
-    const href = latest?.href;
-    if (!href) throw new Error("missing latest");
-    const release = href.split("/").filter(Boolean).pop();
-    if (!release) throw new Error("bad latest href");
-    return release;
+    return releaseFromStacCatalog(catalog);
   } catch {
     return OVERTURE_RELEASE_FALLBACK;
   }

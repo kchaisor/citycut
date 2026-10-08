@@ -33,7 +33,7 @@ jobs:
           mkdir -p "$HOME/.local/bin"
           cp /tmp/tippecanoe-src/tippecanoe "$HOME/.local/bin/tippecanoe"
       - name: Python tests
-        run: pytest pipeline/test_build_enrichment.py pipeline/test_extent.py pipeline/test_zone_use.py pipeline/test_zone_use_sync.py -q
+        run: pytest pipeline/test_build_enrichment.py pipeline/test_extent.py pipeline/test_zone_use.py pipeline/test_zone_use_sync.py pipeline/test_table_hash_sync.py pipeline/test_overture_building_use_sync.py pipeline/test_cascade_parity.py -q
       - name: Build enrichment PMTiles (Greater Melbourne GCCSA)
         run: node scripts/build-building-enrichment-pmtiles.mjs
         env:
@@ -54,9 +54,9 @@ jobs:
           gh release create "$tag" public/building-enrichment.pmtiles public/building-enrichment-manifest.json \
             --title "Building enrichment PMTiles" \
             --notes "Auto-built Greater Melbourne GCCSA. Manifest includes pmtilesSha256 for Pages deploy verification." \
-            || gh release upload "$tag" public/building-enrichment.pmtiles public/building-enrichment-manifest.json --clobber
+            || (gh release upload "$tag" public/building-enrichment.pmtiles --clobber && gh release upload "$tag" public/building-enrichment-manifest.json --clobber)
           gh release view building-enrichment-latest >/dev/null 2>&1 \
-            && gh release upload building-enrichment-latest public/building-enrichment.pmtiles public/building-enrichment-manifest.json --clobber \
+            && (gh release upload building-enrichment-latest public/building-enrichment.pmtiles --clobber && gh release upload building-enrichment-latest public/building-enrichment-manifest.json --clobber) \
             || gh release create building-enrichment-latest public/building-enrichment.pmtiles public/building-enrichment-manifest.json \
               --title "Building enrichment PMTiles (latest)" \
               --notes "Rolling latest assets (tiles + manifest); dated tags are immutable snapshots."
@@ -67,7 +67,7 @@ jobs:
         run: |
           tag="building-enrichment-test-gm"
           gh release view "$tag" >/dev/null 2>&1 \
-            && gh release upload "$tag" public/building-enrichment.pmtiles public/building-enrichment-manifest.json --clobber \
+            && (gh release upload "$tag" public/building-enrichment.pmtiles --clobber && gh release upload "$tag" public/building-enrichment-manifest.json --clobber) \
             || gh release create "$tag" public/building-enrichment.pmtiles public/building-enrichment-manifest.json \
               --title "Building enrichment PMTiles (GM test)" \
               --notes "Branch test build for Greater Melbourne GCCSA — not used by production Pages."

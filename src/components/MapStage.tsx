@@ -15,6 +15,7 @@ import {
 import { landingViewportFootprint } from "../lib/landingMapViewport";
 import { readLandingColourCache, writeLandingColourCache } from "../lib/landingMapColourCache";
 import { fetchOvertureBuildingsForCut } from "../lib/overtureBuildings";
+import { resolveOvertureReleaseForApp } from "../lib/overtureRelease";
 import { mergeBuildingEnrichment } from "../lib/buildingEnrichmentMerge";
 import { fetchBuildingEnrichmentForCut, fetchEnrichmentManifest } from "../lib/buildingEnrichmentTiles";
 import { cutCenterOutsideBuiltBbox, enrichmentCoverageMessage } from "../lib/enrichmentCoverage";
@@ -258,12 +259,16 @@ export function MapStage({
         setLandingStacWarning(null);
         const fetchT0 = qaFetch ? performance.now() : 0;
         try {
+          const manifest = await fetchEnrichmentManifest(controller.signal);
+          const { release: appOvertureRelease, stacWarning: overtureStacWarning } =
+            await resolveOvertureReleaseForApp(manifest, controller.signal);
           const buildingResult = await fetchOvertureBuildingsForCut(
             footprint.bounds,
             footprint.origin,
             footprint.sideM,
             controller.signal,
             "square",
+            { overtureRelease: appOvertureRelease, stacWarning: overtureStacWarning },
           );
           const enrichT0 = qaFetch ? performance.now() : 0;
           const enrichment = await fetchBuildingEnrichmentForCut(footprint.bounds, controller.signal);
@@ -275,7 +280,6 @@ export function MapStage({
           const enrichT1 = qaFetch ? performance.now() : 0;
           const mergedRaw = mergeBuildingEnrichment(buildingResult.buildings, enrichment.byId);
           const merged = withResolvedUseSourceTiers(mergedRaw);
-          const manifest = await fetchEnrichmentManifest(controller.signal);
           const tablesMatch = await manifestMatchesAppTables(manifest);
           let buildingsForCut = merged;
           let refineRan = false;
@@ -286,6 +290,7 @@ export function MapStage({
               enrichmentError: enrichment.error,
               manifestMatchesAppTables: tablesMatch,
               manifest,
+              appOvertureRelease,
               cutBounds: footprint.bounds,
               merged: mergedRaw,
               byId: enrichment.byId,

@@ -307,12 +307,19 @@ export function findOvertureBuildingForOsmFootprint(
   return best;
 }
 
+export type OvertureBuildingsForCutOptions = {
+  /** When set (e.g. from enrichment manifest), skip STAC and use this release. */
+  overtureRelease?: string;
+  stacWarning?: string | null;
+};
+
 export async function fetchOvertureBuildingsForCut(
   bounds: { south: number; west: number; north: number; east: number },
   origin: LonLat,
   sideM: number,
   signal?: AbortSignal,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  fetchOptions?: OvertureBuildingsForCutOptions,
 ): Promise<{
   buildings: BuildingFeat[];
   stats: OvertureFetchStats;
@@ -320,7 +327,17 @@ export async function fetchOvertureBuildingsForCut(
   stacWarning: string | null;
 }> {
   const t0 = performance.now();
-  const { release, stacWarning } = await resolveOvertureReleaseWithMeta(signal);
+  let release: string;
+  let stacWarning: string | null;
+  const pinnedRelease = fetchOptions?.overtureRelease?.trim();
+  if (pinnedRelease) {
+    release = pinnedRelease;
+    stacWarning = fetchOptions?.stacWarning ?? null;
+  } else {
+    const resolved = await resolveOvertureReleaseWithMeta(signal);
+    release = resolved.release;
+    stacWarning = resolved.stacWarning;
+  }
   const pmtiles = new PMTiles(overtureBuildingsUrl(release));
   const tiles = tileRange(bounds, OVERTURE_BUILDING_ZOOM);
   const tileResults = await Promise.all(

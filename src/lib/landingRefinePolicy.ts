@@ -24,12 +24,22 @@ export function mergedNeedsLiveZoneRefine(
   });
 }
 
+export function manifestOvertureReleaseMatchesApp(
+  manifest: EnrichmentManifest | null,
+  appOvertureRelease: string,
+): boolean {
+  const baked = manifest?.overtureRelease?.trim();
+  if (!baked) return false;
+  return baked === appOvertureRelease;
+}
+
 export function shouldRunLiveZoneRefine(options: {
   tilesOnly: boolean;
   forceLiveRefine: boolean;
   enrichmentError: string | null;
   manifestMatchesAppTables: boolean;
   manifest: EnrichmentManifest | null;
+  appOvertureRelease: string;
   cutBounds: GeoBounds;
   merged: BuildingFeat[];
   byId: Map<string, BuildingEnrichmentRecord>;
@@ -38,6 +48,7 @@ export function shouldRunLiveZoneRefine(options: {
   if (options.forceLiveRefine) return true;
   if (options.enrichmentError) return true;
   if (!options.manifestMatchesAppTables) return true;
+  if (!manifestOvertureReleaseMatchesApp(options.manifest, options.appOvertureRelease)) return true;
   if (!cutBoundsInsideBuiltBbox(options.cutBounds, options.manifest)) return true;
   if (mergedNeedsLiveZoneRefine(options.merged, options.byId)) return true;
   return false;
