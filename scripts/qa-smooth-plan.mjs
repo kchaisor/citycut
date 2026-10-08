@@ -8,17 +8,26 @@ import { chromium } from "playwright";
 const outDir = "/opt/cursor/artifacts";
 const modelPath = "/opt/cursor/artifacts/east-model.json";
 const branch = execSync("git branch --show-current", { encoding: "utf8" }).trim();
-const mainWorktree = "/tmp/citycut-main-qa";
+const mainLibFiles = ["src/lib/polygonOffset.ts", "src/lib/roadFill.ts"];
 
-function renderCrop(cwd, label, viewBox, fillet = 2) {
+function renderCrop(label, viewBox, fillet = 2) {
   execSync(
     `npx vite-node scripts/render-site-plan-crop.mjs ${modelPath} ${label} "${viewBox}" ${fillet}`,
-    { stdio: "inherit", cwd },
+    { stdio: "inherit", cwd: "/workspace" },
   );
 }
 
 function copyPlan(label, dest) {
   cpSync(`${outDir}/footpath-fillet-plan-${label}.png`, `${outDir}/${dest}`);
+}
+
+function checkoutMainLib() {
+  execSync(`git checkout main -- ${mainLibFiles.join(" ")}`, { cwd: "/workspace" });
+  rmSync("/workspace/src/lib/centrelineSmooth.ts", { force: true });
+}
+
+function restoreBranchLib() {
+  execSync(`git checkout ${branch} -- ${mainLibFiles.join(" ")} src/lib/centrelineSmooth.ts`, { cwd: "/workspace" });
 }
 
 async function captureModel() {
@@ -61,23 +70,23 @@ if (!existsSync(modelPath)) {
 }
 
 execSync(`npx vite-node scripts/find-kelvin-fitzroy-crop.mjs ${modelPath}`, { stdio: "inherit", cwd: "/workspace" });
-execSync(`npx vite-node scripts/find-bend-crop.mjs ${modelPath}`, { stdio: "inherit", cwd: "/workspace" });
+execSync(`npx vite-node scripts/find-smoothed-bend-crop.mjs ${modelPath}`, { stdio: "inherit", cwd: "/workspace" });
+execSync(`npx vite-node scripts/find-fillet-closeup-crop.mjs ${modelPath}`, { stdio: "inherit", cwd: "/workspace" });
 
 const junctionWide = readFileSync(`${outDir}/kelvin-fitzroy-wide.txt`, "utf8").trim();
 const junctionClose = readFileSync(`${outDir}/kelvin-fitzroy-closeup.txt`, "utf8").trim();
 const bendViewBox = readFileSync(`${outDir}/bend-viewbox.txt`, "utf8").trim();
 console.log({ junctionWide, junctionClose, bendViewBox });
 
-rmSync(mainWorktree, { recursive: true, force: true });
-execSync(`git worktree add ${mainWorktree} main`, { stdio: "inherit", cwd: "/workspace" });
-renderCrop(mainWorktree, "junction-wide-main", junctionWide, 2);
-renderCrop(mainWorktree, "junction-closeup-main", junctionClose, 2);
-renderCrop(mainWorktree, "bend-main", bendViewBox, 2);
-execSync(`git worktree remove ${mainWorktree} --force`, { cwd: "/workspace", stdio: "inherit" });
+checkoutMainLib();
+renderCrop("junction-wide-main", junctionWide, 2);
+renderCrop("junction-closeup-main", junctionClose, 2);
+renderCrop("bend-main", bendViewBox, 2);
+restoreBranchLib();
 
-renderCrop("/workspace", "junction-wide-pr", junctionWide, 2);
-renderCrop("/workspace", "junction-closeup-pr", junctionClose, 2);
-renderCrop("/workspace", "bend-pr", bendViewBox, 2);
+renderCrop("junction-wide-pr", junctionWide, 2);
+renderCrop("junction-closeup-pr", junctionClose, 2);
+renderCrop("bend-pr", bendViewBox, 2);
 
 copyPlan("junction-wide-main", "smooth-junction-wide-main.png");
 copyPlan("junction-wide-pr", "smooth-junction-wide-pr.png");
@@ -88,12 +97,8 @@ copyPlan("bend-pr", "smooth-bend-pr.png");
 
 execSync(`npx vite-node scripts/centreline-smooth-stats.mjs ${modelPath} pr`, { stdio: "inherit", cwd: "/workspace" });
 execSync(`npx vite-node scripts/bench-plan-1km.mjs ${modelPath} smooth-pr`, { stdio: "inherit", cwd: "/workspace" });
-rmSync(mainWorktree, { recursive: true, force: true });
-execSync(`git worktree add ${mainWorktree} main`, { stdio: "inherit", cwd: "/workspace" });
-execSync(`npx vite-node scripts/bench-plan-1km.mjs ${modelPath} smooth-main`, {
-  stdio: "inherit",
-  cwd: mainWorktree,
-});
-execSync(`git worktree remove ${mainWorktree} --force`, { cwd: "/workspace", stdio: "inherit" });
+checkoutMainLib();
+execSync(`npx vite-node scripts/bench-plan-1km.mjs ${modelPath} smooth-main`, { stdio: "inherit", cwd: "/workspace" });
+restoreBranchLib();
 
 console.log("QA complete", outDir);

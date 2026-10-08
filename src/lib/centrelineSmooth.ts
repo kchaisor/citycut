@@ -1,7 +1,7 @@
 import type { Pt } from "../types";
 
-/** Chaikin passes before buffering centreline geometry. */
-export const CENTRELINE_CHAIKIN_ITERATIONS = 2;
+/** Chaikin passes before buffering centreline geometry (one pass stays within the shift cap on OSM curves). */
+export const CENTRELINE_CHAIKIN_ITERATIONS = 1;
 /** When set below 180, vertices with more turn than this stay pinned (degrees). */
 export const CENTRELINE_SHARP_TURN_DEG = 180;
 /** Max distance a smoothed point may move from the original polyline (m). */
@@ -14,6 +14,7 @@ export const CENTRELINE_OUTPUT_SIMPLIFY_M = 0.12;
 export type CentrelineSmoothStats = {
   polylines: number;
   skippedNoBend: number;
+  skippedSharpKink: number;
   skippedTooFewPins: number;
   smoothed: number;
   revertedShift: number;
@@ -176,7 +177,15 @@ function hasGentleBend(line: Pt[], minTurnDeg = 5): boolean {
   return false;
 }
 
-type SmoothOutcome = "no_bend" | "too_few_pins" | "reverted_shift" | "smoothed";
+/** Skip polylines with a sharp kink — Chaikin would exceed the lateral shift cap. */
+function hasSharpKink(line: Pt[], maxTurnDeg = 35): boolean {
+  for (let i = 1; i < line.length - 1; i++) {
+    if (turnDeflectionDeg(line[i - 1]!, line[i]!, line[i + 1]!) >= maxTurnDeg) return true;
+  }
+  return false;
+}
+
+type SmoothOutcome = "no_bend" | "sharp_kink" | "too_few_pins" | "reverted_shift" | "smoothed";
 
 /**
  * Light Chaikin smoothing between pinned junction and endpoint vertices.
@@ -207,6 +216,7 @@ export function smoothCentrelineDetailed(
   } = {},
 ): { line: Pt[]; outcome: SmoothOutcome } {
   if (line.length < 3 || !hasGentleBend(line)) return { line: line.slice(), outcome: "no_bend" };
+  if (hasSharpKink(line)) return { line: line.slice(), outcome: "sharp_kink" };
   const iterations = options.iterations ?? CENTRELINE_CHAIKIN_ITERATIONS;
   const maxShift = options.maxLateralShiftM ?? CENTRELINE_MAX_LATERAL_SHIFT_M;
   const junctionPoints = options.junctionPoints ?? [];
@@ -253,6 +263,7 @@ export function centrelineSmoothStats(
   const stats: CentrelineSmoothStats = {
     polylines: strips.length,
     skippedNoBend: 0,
+    skippedSharpKink: 0,
     skippedTooFewPins: 0,
     smoothed: 0,
     revertedShift: 0,
@@ -263,6 +274,7 @@ export function centrelineSmoothStats(
   for (const strip of strips) {
     const { outcome } = smoothCentrelineDetailed(strip.line, { junctionPoints: junctions, simplifyM });
     if (outcome === "no_bend") stats.skippedNoBend++;
+    else if (outcome === "sharp_kink") stats.skippedSharpKink++;
     else if (outcome === "too_few_pins") stats.skippedTooFewPins++;
     else if (outcome === "reverted_shift") stats.revertedShift++;
     else stats.smoothed++;
