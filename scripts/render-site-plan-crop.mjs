@@ -35,6 +35,7 @@ function buildSvg(model, fillet) {
   const pathD = plan.pathFill.map((p) => svgRings(p)).join(" ");
   const roadD = plan.roadFill.map((p) => svgRings(p)).join(" ");
   const greenD = plan.green.map((rings) => svgRings(rings)).join(" ");
+  const greenOnRoadD = plan.greenOnRoad.map((rings) => svgRings(rings)).join(" ");
   const waterD = plan.water.map((rings) => svgRings(rings)).join(" ");
   const buildings = plan.buildings
     .map((b) => `<path d="${svgRings(b.rings)}" fill="${b.fill}" fill-rule="evenodd"/>`)
@@ -42,12 +43,16 @@ function buildSvg(model, fillet) {
   const edge = footpathEdgeSvgAttrs(style, "round");
   const pathStroke =
     edge.stroke === "none" ? "" : `stroke="${edge.stroke}" stroke-width="0.12" vector-effect="non-scaling-stroke"`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" width="900" height="900" style="background:${getColour("--sheet-fill")}">
-  <path d="${greenD}" fill="${getColour("--green-fill")}" fill-rule="evenodd"/>
+  const sheet = getColour("--sheet-fill");
+  const greenFill = getColour("--green-fill");
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" width="900" height="900" style="background:${sheet}">
+  <rect x="-500" y="-500" width="1000" height="1000" fill="${sheet}"/>
+  <path d="${greenD}" fill="${greenFill}" fill-rule="evenodd"/>
   <path d="${waterD}" fill="${getColour("--water-fill")}" fill-rule="evenodd"/>
   <path d="${pathD}" fill="${style.pathFill}" fill-rule="evenodd" ${pathStroke}/>
   ${plan.contours.map((line) => `<path d="${svgPolyline(line, false)}" fill="none" stroke="${style.contour.color}" stroke-width="0.03"/>`).join("")}
   <path d="${roadD}" fill="${style.roadFill}" fill-rule="evenodd"/>
+  <path d="${greenOnRoadD}" fill="${greenFill}" fill-rule="evenodd"/>
   ${buildings}
 </svg>`;
 }

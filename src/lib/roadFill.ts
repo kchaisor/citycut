@@ -3,7 +3,6 @@ import type { MultiPolygon, Pair, Polygon, Ring } from "polygon-clipping";
 import { polylineLength, signedArea } from "./geo";
 import { DEFAULT_SITE_FRAME_SHAPE, pointInSiteFrame, siteFramePolygon, type SiteFrameShape } from "./siteFrame";
 import type { Pt, RoadFeat } from "../types";
-import { smoothCentrelineStrips } from "./centrelineSmooth";
 import {
   CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M,
   normalizeMultiPolygonByParity,
@@ -508,14 +507,10 @@ function unionStrips(
   sideM: number,
   minWidth: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
-  smoothCentrelines = false,
 ): RoadFill {
   const started = performance.now();
-  const source = smoothCentrelines
-    ? smoothCentrelineStrips(roads, PATH_ENDPOINT_STITCH_M, { simplifyM: PATH_OUTPUT_SIMPLIFY_M })
-    : roads;
   const inputs: Polygon[] = [];
-  for (const road of source) {
+  for (const road of roads) {
     if (road.line.length < 2 || !(road.width > 0)) continue;
     inputs.push(...bufferCentreline(road.line, road.width, minWidth));
   }
@@ -534,7 +529,7 @@ export function unionCarriageways(
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
 ): RoadFill {
   const prepared = prepareStripsForUnion(roads, PATH_ENDPOINT_STITCH_M);
-  return unionStrips(prepared, sideM, 0.4, frameShape, true);
+  return unionStrips(prepared, sideM, 0.4, frameShape);
 }
 
 /** Buffer each path by its stored width and union the strips (3D and exports match the site plan). */
@@ -543,7 +538,7 @@ export function unionPathRoads(
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
 ): RoadFill {
-  return unionStrips(roads, sideM, 0, frameShape, true);
+  return unionStrips(roads, sideM, 0, frameShape);
 }
 
 export function carriagewaysOf(roads: RoadFeat[]): { line: Pt[]; width: number }[] {
@@ -820,7 +815,7 @@ export function unionFootpathStrips(
   const started = performance.now();
   const stitched = stitchFootpathStrips(strips);
   const prepared = prepareStripsForUnion(stitched, PATH_ENDPOINT_STITCH_M);
-  const merged = unionStrips(prepared, sideM, 0, frameShape, true);
+  const merged = unionStrips(prepared, sideM, 0, frameShape);
   const typical = strips.reduce((sum, s) => sum + s.width, 0) / Math.max(1, strips.length);
   const bandTypical = typicalBandWidthM > 0 ? typicalBandWidthM : typical;
   const filletRadius =
