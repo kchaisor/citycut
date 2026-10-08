@@ -44,11 +44,16 @@ vi.mock("./components/ModelPage", () => ({
 vi.mock("maplibre-gl", () => {
   class NavigationControl {}
   class MockGlMap {
+    private sources = new Map<string, { setData: ReturnType<typeof vi.fn> }>();
+    private layers = new Set<string>();
+
     on = vi.fn((event: string, fn: () => void) => {
       if (event === "load") queueMicrotask(() => fn());
     });
     off = vi.fn();
-    once = vi.fn();
+    once = vi.fn((_event: string, fn: () => void) => {
+      queueMicrotask(() => fn());
+    });
     remove = vi.fn();
     addControl = vi.fn();
     dragRotate = { disable: vi.fn() };
@@ -59,10 +64,30 @@ vi.mock("maplibre-gl", () => {
     getBearing = () => 0;
     setPitch = vi.fn();
     setBearing = vi.fn();
-    getLayer = vi.fn(() => undefined);
-    getSource = vi.fn(() => undefined);
-    removeLayer = vi.fn();
-    removeSource = vi.fn();
+    getLayer = vi.fn((id: string) => (this.layers.has(id) ? {} : undefined));
+    getSource = vi.fn((id: string) => this.sources.get(id) ?? undefined);
+    addSource = vi.fn((id: string) => {
+      this.sources.set(id, { setData: vi.fn() });
+    });
+    addLayer = vi.fn((layer: { id: string }) => {
+      this.layers.add(layer.id);
+    });
+    moveLayer = vi.fn();
+    removeLayer = vi.fn((id: string) => {
+      this.layers.delete(id);
+    });
+    removeSource = vi.fn((id: string) => {
+      this.sources.delete(id);
+    });
+    getStyle = () => ({
+      layers: [
+        { id: "waterway", type: "line" },
+        { id: "building", type: "fill" },
+        { id: "tunnel_motorway_casing", type: "line" },
+        { id: "symbols", type: "symbol" },
+      ],
+    });
+    isStyleLoaded = () => true;
     getCenter = () => ({ lng: 144.9831, lat: -37.8136 });
     getZoom = () => 15;
     getBounds = () => ({
@@ -143,6 +168,29 @@ vi.mock("./lib/treeTiers", () => ({
   MAX_TREE_INSTANCES: 1000,
   assembleTreeTiers: vi.fn(() => ({ trees: [], capHit: false })),
 }));
+
+/** Landing + create-model must not read real enrichment PMTiles (slow range fetches in jsdom). */
+vi.mock("./lib/buildingEnrichmentTiles", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("./lib/buildingEnrichmentTiles")>();
+  return {
+    ...mod,
+    fetchEnrichmentManifest: vi.fn().mockResolvedValue({
+      extent: { west: 144.88, south: -37.85, east: 145.05, north: -37.78 },
+      builtBbox: { west: 144.88, south: -37.85, east: 145.05, north: -37.78 },
+      featureCount: 1,
+      pmtilesBytes: 1,
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      overtureRelease: "2026-09-23.1",
+    }),
+    getEnrichmentPmtilesAbsoluteUrl: vi
+      .fn()
+      .mockResolvedValue("https://test.invalid/citycut/building-enrichment.pmtiles"),
+    fetchBuildingEnrichmentForCut: vi.fn().mockResolvedValue({
+      byId: new Map(),
+      error: null as string | null,
+    }),
+  };
+});
 
 describe("App model stage", () => {
   afterEach(() => cleanup());
