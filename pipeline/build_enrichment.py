@@ -110,17 +110,46 @@ def join_zones(buildings: gpd.GeoDataFrame, zones: gpd.GeoDataFrame | None) -> p
     out = pd.Series([None] * len(buildings), index=buildings.index, dtype=object)
     if zones is None or zones.empty:
         return out
-    pts = buildings.copy()
+    pts = buildings[["geometry"]].copy()
     pts["geometry"] = pts.geometry.representative_point()
-    joined = gpd.sjoin(pts, zones, how="left", predicate="within")
-    zcol = "zone_code" if "zone_code" in joined.columns else "ZONE_CODE"
-    for idx in joined.index.unique():
-        part = joined.loc[[idx]] if idx in joined.index else joined[joined.index == idx]
-        row = part.iloc[0]
-        zc = row.get(zcol)
-        if isinstance(zc, str) and zc.strip():
-            out.loc[idx] = zc.strip()
+    zcol = "zone_code" if "zone_code" in zones.columns else "ZONE_CODE"
+    zsubset = zones[[zcol, "geometry"]].rename(columns={zcol: "zone_code"})
+    joined = gpd.sjoin(pts, zsubset, how="left", predicate="within")
+    joined = joined[~joined.index.duplicated(keep="first")]
+    codes = joined["zone_code"].astype("string").str.strip()
+    out.loc[joined.index] = codes.where(codes.notna() & (codes != ""))
     return out
+
+
+def _vector_overture_use(buildings: gpd.GeoDataFrame) -> tuple[pd.Series, pd.Series]:
+    use = pd.Series("unclassified", index=buildings.index, dtype="string")
+    source = pd.Series("unclassified", index=buildings.index, dtype="string")
+    for col in ("subtype", "class"):
+        if col not in buildings.columns:
+            continue
+        mapped = buildings[col].astype("string").str.strip().str.lower().map(USE_MAP)
+        hit = mapped.notna()
+        use = use.where(~hit, mapped)
+        source = source.where(~hit, "overture")
+    return use, source
+
+
+def _apply_tier_series(
+    use: pd.Series,
+    use_source: pd.Series,
+    picks: pd.Series,
+    tier_name: str,
+) -> tuple[pd.Series, pd.Series]:
+    """Apply (use, tier) tuples from picks where tier rank beats current."""
+    rank = use_source.map(lambda t: TIER_RANK.get(str(t), 0))
+    cand_rank = TIER_RANK[tier_name]
+    mask = picks.notna() & (cand_rank >= rank)
+    if not mask.any():
+        return use, use_source
+    uses = picks[mask].map(lambda t: t[0])
+    use = use.where(~mask, uses)
+    use_source = use_source.where(~mask, tier_name)
+    return use, use_source
 
 
 def apply_cascade_vectorized(
@@ -129,27 +158,17 @@ def apply_cascade_vectorized(
     clue_series: pd.Series,
     bca_series: pd.Series,
 ) -> pd.DataFrame:
-    n = len(buildings)
-    use = pd.Series(["unclassified"] * n, index=buildings.index)
-    use_source = pd.Series(["unclassified"] * n, index=buildings.index)
+    use, use_source = _vector_overture_use(buildings)
+    use, use_source = _apply_tier_series(use, use_source, clue_series, "clue")
+    use, use_source = _apply_tier_series(use, use_source, bca_series, "bca")
 
-    overture_hits = buildings.apply(classify_overture_row, axis=1)
-    for idx, hit in overture_hits.items():
-        if hit:
-            use.loc[idx], use_source.loc[idx] = hit
-
-    for idx in buildings.index:
-        clue_pick = clue_series.loc[idx] if idx in clue_series.index else None
-        if clue_pick and _tier_beats(clue_pick[1], use_source.loc[idx]):
-            use.loc[idx], use_source.loc[idx] = clue_pick
-        bca_pick = bca_series.loc[idx] if idx in bca_series.index else None
-        if bca_pick and _tier_beats(bca_pick[1], use_source.loc[idx]):
-            use.loc[idx], use_source.loc[idx] = bca_pick
-        zc = zone_codes.loc[idx] if idx in zone_codes.index else None
-        if zc and use_source.loc[idx] == "unclassified":
-            zu = zone_use(str(zc))
-            if zu:
-                use.loc[idx], use_source.loc[idx] = zu, "zone"
+    zone_mask = (use_source == "unclassified") & zone_codes.notna()
+    if zone_mask.any():
+        zuses = zone_codes[zone_mask].map(lambda z: zone_use(str(z)))
+        zhit = zuses.notna()
+        idx = zuses[zhit].index
+        use.loc[idx] = zuses[zhit].values
+        use_source.loc[idx] = "zone"
 
     return pd.DataFrame({"use": use, "use_source": use_source, "zone_code": zone_codes})
 
@@ -157,16 +176,17 @@ def apply_cascade_vectorized(
 def count_sources_by_com(
     buildings: gpd.GeoDataFrame,
     use_source: pd.Series,
+    com_mask: pd.Series,
 ) -> dict[str, dict[str, int]]:
     inside = {"overture": 0, "clue": 0, "bca": 0, "zone": 0, "unclassified": 0}
     outside = dict(inside)
-    for idx, tier in use_source.items():
-        geom = buildings.geometry.loc[idx]
-        if geom is None or geom.is_empty:
-            continue
-        bucket = inside if building_in_bounds(geom, CITY_OF_MELBOURNE) else outside
-        key = tier if tier in bucket else "unclassified"
-        bucket[key] += 1
+    tiers = use_source.fillna("unclassified")
+    for tier, in_com in zip(tiers, com_mask, strict=False):
+        key = tier if tier in inside else "unclassified"
+        if in_com:
+            inside[key] += 1
+        else:
+            outside[key] += 1
     return {"insideCityOfMelbourne": inside, "outsideCityOfMelbourne": outside}
 
 
@@ -199,7 +219,13 @@ def main() -> int:
     clue_blocks, _floor_map, clue_err = load_clue_block_uses()
     timings["loadClueSec"] = round(time.perf_counter() - t0, 2)
 
-    com_mask = buildings.geometry.apply(lambda g: building_in_bounds(g, CITY_OF_MELBOURNE) if g is not None else False)
+    centroids = buildings.geometry.representative_point()
+    com_mask = (
+        (centroids.x >= CITY_OF_MELBOURNE["west"])
+        & (centroids.x <= CITY_OF_MELBOURNE["east"])
+        & (centroids.y >= CITY_OF_MELBOURNE["south"])
+        & (centroids.y <= CITY_OF_MELBOURNE["north"])
+    )
     com_buildings = buildings.loc[com_mask]
     t0 = time.perf_counter()
     clue_full = pd.Series([None] * len(buildings), index=buildings.index, dtype=object)
@@ -226,52 +252,44 @@ def main() -> int:
     for key in ("overture", "clue", "bca", "zone", "unclassified"):
         source_counts.setdefault(key, 0)
 
-    by_com = count_sources_by_com(buildings, assigned["use_source"])
+    by_com = count_sources_by_com(buildings, assigned["use_source"], com_mask)
 
     t0 = time.perf_counter()
-    features = []
-    for idx, row in buildings.iterrows():
-        geom = row.geometry
-        if geom is None or geom.is_empty:
-            continue
-        props_row = assigned.loc[idx]
-        oid = row.get("overture_id") or row.get("id")
-        if oid is None or (isinstance(oid, float) and pd.isna(oid)):
-            continue
-        oid = str(oid)
-        use = str(props_row["use"])
-        src = str(props_row["use_source"])
-        zc = props_row.get("zone_code")
-        enriched = {
-            "overture_id": oid,
-            "use": use,
-            "use_source": src,
-            "u": USE_CODE.get(use, 0),
-            "s": SOURCE_CODE.get(src, 0),
-            "zone_code": zc if isinstance(zc, str) and zc else None,
-            "height_m": None,
-            "height_source": None,
-        }
-        features.append(
-            {
-                "type": "Feature",
-                "properties": enriched,
-                "geometry": geom.__geo_interface__,
-            }
-        )
+    out = buildings.copy()
+    out["use"] = assigned["use"].values
+    out["use_source"] = assigned["use_source"].values
+    out["zone_code"] = assigned["zone_code"].values
+    out["u"] = out["use"].map(lambda u: USE_CODE.get(str(u), 0))
+    out["s"] = out["use_source"].map(lambda s: SOURCE_CODE.get(str(s), 0))
+    out["height_m"] = None
+    out["height_source"] = None
+    oid = out.get("overture_id")
+    if oid is None:
+        out["overture_id"] = out.get("id")
+    out = out[out["overture_id"].notna()]
+    out = out[~out.geometry.is_empty]
+    keep_cols = [
+        "overture_id",
+        "use",
+        "use_source",
+        "u",
+        "s",
+        "zone_code",
+        "height_m",
+        "height_source",
+        "geometry",
+    ]
+    out = out[[c for c in keep_cols if c in out.columns]]
+    args.output_geojson.parent.mkdir(parents=True, exist_ok=True)
+    out.to_file(args.output_geojson, driver="GeoJSON")
+    features_count = len(out)
     timings["writeFeaturesSec"] = round(time.perf_counter() - t0, 2)
     timings["totalSec"] = round(time.perf_counter() - t_all, 2)
-
-    args.output_geojson.parent.mkdir(parents=True, exist_ok=True)
-    args.output_geojson.write_text(
-        json.dumps({"type": "FeatureCollection", "features": features}),
-        encoding="utf-8",
-    )
 
     manifest = {
         "extent": extent,
         "regionName": REGION_NAME,
-        "featureCount": len(features),
+        "featureCount": features_count,
         "pmtilesBytes": 0,
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "lidar": lidar,
@@ -287,7 +305,7 @@ def main() -> int:
     }
     args.manifest.parent.mkdir(parents=True, exist_ok=True)
     args.manifest.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    print(f"Wrote {len(features)} enrichment features → {args.output_geojson}")
+    print(f"Wrote {features_count} enrichment features → {args.output_geojson}")
     print(f"use_source counts: {source_counts}", file=sys.stderr)
     print(f"timings: {timings}", file=sys.stderr)
     return 0
