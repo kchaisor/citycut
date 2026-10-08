@@ -15,6 +15,9 @@ import {
 import { landingViewportFootprint } from "../lib/landingMapViewport";
 import { readLandingColourCache, writeLandingColourCache } from "../lib/landingMapColourCache";
 import { fetchOvertureBuildingsForCut } from "../lib/overtureBuildings";
+import { mergeBuildingEnrichment } from "../lib/buildingEnrichmentMerge";
+import { fetchBuildingEnrichmentForCut, fetchEnrichmentManifest } from "../lib/buildingEnrichmentTiles";
+import { cutCenterOutsideBuiltBbox, enrichmentCoverageMessage } from "../lib/enrichmentCoverage";
 import { refineBuildingUses } from "../lib/useCascade";
 import { fetchSiteParcelCached, siteBuildingIdsForPreview } from "../lib/sitePreviewCache";
 import { FLAT_NORTH_UP_MAP_OPTIONS, applyFlatNorthUpMapHandlers } from "../lib/mapStageMapOptions";
@@ -120,11 +123,31 @@ export function MapStage({
         width: Math.abs(southEast.x - northWest.x),
         height: Math.abs(southEast.y - northWest.y),
       });
+      if (typeof window !== "undefined" && window.location.search.includes("qa=1")) {
+        const stats = window.__citycutCutColourStats;
+        if (stats && stats.frameFirstDrawnMs == null) {
+          stats.frameFirstDrawnMs = performance.now();
+        }
+      }
       scheduleMask();
       onViewRef.current({ lon: center.lng, lat: center.lat, zoom: map.getZoom() });
     };
 
     const onLoad = () => {
+      if (typeof window !== "undefined" && window.location.search.includes("qa=1")) {
+        if (!window.__citycutCutColourStats) {
+          window.__citycutCutColourStats = {
+            maskSetData: 0,
+            colourSetData: 0,
+            layerRebuilds: 0,
+            frameFirstDrawnMs: null,
+            colourFillMs: null,
+            colourFetchMs: null,
+            colourEnrichmentMs: null,
+            colourRefineMs: null,
+          };
+        }
+      }
       setReady(true);
       update();
     };
@@ -221,6 +244,8 @@ export function MapStage({
 
     const timer = window.setTimeout(() => {
       void (async () => {
+        const qaFetch = typeof window !== "undefined" && window.location.search.includes("qa=1");
+        const fetchT0 = qaFetch ? performance.now() : 0;
         try {
           const buildingResult = await fetchOvertureBuildingsForCut(
             footprint.bounds,
@@ -229,9 +254,24 @@ export function MapStage({
             controller.signal,
             "square",
           );
-          const refined = await refineBuildingUses(buildingResult.buildings, footprint.origin, footprint.bounds, {
+          const enrichT0 = qaFetch ? performance.now() : 0;
+          const enrichment = await fetchBuildingEnrichmentForCut(footprint.bounds, controller.signal);
+          if (enrichment.error) {
+            setLandingEnrichmentError(enrichment.error);
+          } else {
+            setLandingEnrichmentError(null);
+          }
+          const enrichT1 = qaFetch ? performance.now() : 0;
+          const merged = mergeBuildingEnrichment(buildingResult.buildings, enrichment.byId);
+          const refined = await refineBuildingUses(merged, footprint.origin, footprint.bounds, {
             signal: controller.signal,
           });
+          const fetchT1 = qaFetch ? performance.now() : 0;
+          if (qaFetch && window.__citycutCutColourStats) {
+            window.__citycutCutColourStats.colourFetchMs = Math.round(fetchT1 - fetchT0);
+            window.__citycutCutColourStats.colourEnrichmentMs = Math.round(enrichT1 - enrichT0);
+            window.__citycutCutColourStats.colourRefineMs = Math.round(fetchT1 - enrichT1);
+          }
           if (cancelled || controller.signal.aborted) return;
           if (!map.loaded()) await new Promise<void>((resolve) => map.once("idle", () => resolve()));
           if (cancelled) return;
@@ -240,8 +280,13 @@ export function MapStage({
             dataOrigin: footprint.origin,
           });
           applyPayload(refined.buildings, footprint.origin);
-        } catch {
-          if (!cancelled && map.loaded()) removeMapCutColourLayers(map);
+        } catch (err) {
+          if (!cancelled) {
+            const message =
+              err instanceof Error ? err.message : "Building enrichment tiles could not be loaded.";
+            setLandingEnrichmentError(message);
+            if (map.loaded()) removeMapCutColourLayers(map);
+          }
         }
       })();
     }, 280);
@@ -342,10 +387,58 @@ export function MapStage({
   const sideKm = sideM / 1000;
   const label = cutFrameLabelKm(sideKm, frameShape);
   const circleFrame = frameShape === "circle";
+  const [enrichmentNote, setEnrichmentNote] = useState<string | null>(null);
+  const [landingEnrichmentError, setLandingEnrichmentError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const manifest = await fetchEnrichmentManifest();
+      if (cancelled) return;
+      const map = mapRef.current;
+      const center = map?.getCenter();
+      if (!center || !cutCenterOutsideBuiltBbox({ lat: center.lat, lon: center.lng }, manifest)) {
+        setEnrichmentNote(null);
+        return;
+      }
+      setEnrichmentNote(enrichmentCoverageMessage(manifest));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, mapEpoch]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    const refresh = () => {
+      void (async () => {
+        const manifest = await fetchEnrichmentManifest();
+        const center = map.getCenter();
+        if (!cutCenterOutsideBuiltBbox({ lat: center.lat, lon: center.lng }, manifest)) {
+          setEnrichmentNote(null);
+          return;
+        }
+        setEnrichmentNote(enrichmentCoverageMessage(manifest));
+      })();
+    };
+    map.on("moveend", refresh);
+    refresh();
+    return () => {
+      map.off("moveend", refresh);
+    };
+  }, [ready]);
 
   return (
     <div className={loading ? "map-wrap is-loading" : "map-wrap"}>
       <div ref={containerRef} className="map-canvas" />
+      {(enrichmentNote || landingEnrichmentError) && (
+        <p className="enrichment-coverage-banner" role="status">
+          {landingEnrichmentError
+            ? `Building enrichment tiles could not be loaded (${landingEnrichmentError}). Use colours may be incomplete.`
+            : enrichmentNote}
+        </p>
+      )}
       <div className="basemap" role="group" aria-label="Basemap">
         <button
           type="button"

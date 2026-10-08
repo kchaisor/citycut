@@ -260,7 +260,7 @@ export async function loadUseTiers(
 ): Promise<LoadedTiers> {
   const zoneBody = await fetchTierJson(zoneWfsUrl(bounds), options);
   if (zoneBody.ok) return { zones: parseZones(zoneBody.body, origin), failures: [] };
-  return { zones: null, failures: [{ tier: "zone", message: "zones unavailable" }] };
+  return { zones: null, failures: [{ id: "zone", tier: "zone", message: "zones unavailable" }] };
 }
 
 function applyFallbackHeightFromZone(building: BuildingFeat, zoneCode: string | null): BuildingFeat {

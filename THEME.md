@@ -121,6 +121,10 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--use-outbuilding` | `#5C6370` | Outbuilding footprints, legend swatch, 3D massing, and the Outbuilding Rhino layer. |
 | `--use-unclassified` | `#B8B8B8` | Unclassified footprints, legend swatch, 3D massing, and the Unclassified Rhino layer. |
 | `--source-osm` | `#1F4E79` | Buildings whose use came from an OpenStreetMap tag, and that legend swatch. |
+| `--source-clue` | `#2E6B4F` | Buildings whose use came from CoM CLUE (offline tiles). |
+| `--source-bca` | `#6B4F2E` | Buildings whose use came from building permit BCA class (offline tiles). |
+| `--block-fill` | `#D8D8D8` | Road-enclosed city blocks in the 3D view (under buildings). |
+| `--block-plan` | `#D4D4D4` | City blocks on the site plan (not the `#EBEBEB` paper). |
 | `--source-zone` | `#A9C4DE` | Buildings whose use was inferred from a planning zone, and that legend swatch. |
 | `--source-none` | `#B8B8B8` | Buildings with no tag and no zone, and that legend swatch. |
 | `--road-fill` | `#4A4A4A` | Unioned carriageway on the site plan and the figure-ground, on screen and in the Illustrator file. |

@@ -302,12 +302,13 @@ export function clearAllHeightOverrides(): HeightOverrideStore {
   return { v: HEIGHT_OVERRIDES_VERSION, overrides: [] };
 }
 
-export type BuildingHeightSource = "manual" | "melbourne" | "zone_default" | "overture" | "development";
+export type BuildingHeightSource = "manual" | "melbourne" | "zone_default" | "overture" | "development" | "lidar";
 
 export function buildingHeightSource(building: BuildingFeat): BuildingHeightSource {
   const tier = inferHeightTier(building);
   if (tier === "manual") return "manual";
   if (tier === "com") return "melbourne";
+  if (tier === "lidar") return "lidar";
   if (tier === "development_floors") return "development";
   if (tier === "zone_default") return "zone_default";
   return "overture";
@@ -323,6 +324,8 @@ export function buildingHeightSourceLabel(source: BuildingHeightSource): string 
       return "City of Melbourne";
     case "development":
       return "CoM development floors";
+    case "lidar":
+      return "LiDAR (ELVIS)";
     default:
       return "Overture (height or floors)";
   }

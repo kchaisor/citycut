@@ -21,6 +21,7 @@ export type SurfaceLayer = {
 export const SURFACE = {
   terrain: { lift: 0, polygonOffsetFactor: 1, polygonOffsetUnits: 1, renderOrder: 0 },
   ground: { lift: 0, polygonOffsetFactor: 1, polygonOffsetUnits: 1, renderOrder: 0 },
+  block: { lift: 0.02, polygonOffsetFactor: -0.5, polygonOffsetUnits: -1, renderOrder: 0.5 },
   green: { lift: 0.045, polygonOffsetFactor: -1, polygonOffsetUnits: -2, renderOrder: 1 },
   water: { lift: 0.09, polygonOffsetFactor: -2, polygonOffsetUnits: -4, renderOrder: 2 },
   path: { lift: 0.14, polygonOffsetFactor: 0, polygonOffsetUnits: 0, renderOrder: 3 },

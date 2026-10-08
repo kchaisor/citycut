@@ -9,3 +9,8 @@ dist
 coverage
 tippecanoe
 tmp/
+pipeline/cache/
+pipeline/out/
+pipeline/__pycache__/
+pipeline/cache/
+pipeline/out/

@@ -73,8 +73,24 @@ function nearby<T>(buckets: Map<string, T[]>, point: Pt, size: number): T[] {
   return found;
 }
 
+function sourceRank(source: BuildingFeat["source"]): number {
+  switch (source) {
+    case "overture_class":
+    case "osm_tag":
+      return 5;
+    case "clue":
+      return 4;
+    case "bca":
+      return 3;
+    case "zone":
+      return 2;
+    default:
+      return 0;
+  }
+}
+
 function buildingScore(building: BuildingFeat): number {
-  const known = building.source === "none" ? 0 : 1_000_000;
+  const known = sourceRank(building.source) * 1_000_000;
   return known + building.height * 100 + Math.abs(signedArea(building.ring));
 }
 

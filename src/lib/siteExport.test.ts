@@ -4,6 +4,7 @@ import { SITE_LAYER_ORDER, sitePlanAi8, sitePlanChunks, sitePlanLayerOrder } fro
 import { DEFAULT_LINE_STYLES, screenPenAttrs } from "./drawingStyle";
 import { getColour } from "./colours";
 import { colourRgb } from "./colours";
+import { computeCityBlocks } from "./cityBlocks";
 import { model } from "./aiExport.test";
 import type { Pt } from "../types";
 
@@ -54,6 +55,17 @@ describe("site exports", () => {
       .map((chunk) => chunk.name)
       .sort();
     expect(names).toEqual(emptySite);
+  });
+
+  it("includes city blocks in site plan exports when blocks are present", () => {
+    const withBlocks = { ...model(), blocks: computeCityBlocks(model()) };
+    const blocks = sitePlanChunks(withBlocks, 1000, DEFAULT_LINE_STYLES).find(
+      (chunk) => chunk.name === "Blocks",
+    );
+    expect(blocks?.paths?.length).toBeGreaterThan(0);
+    expect(sitePlanLayerOrder(sitePlanChunks(withBlocks, 1000, DEFAULT_LINE_STYLES))).toContain(
+      "Blocks",
+    );
   });
 
   it("orders road fill above contour lines in site plan exports", () => {

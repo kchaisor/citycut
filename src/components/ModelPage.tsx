@@ -6,7 +6,7 @@ import {
   BUILDING_USE_META,
   SOURCE_COUNT_KEYS,
   SOURCE_META,
-  countSources,
+  countSourcesGrouped,
   countUses,
   uniformBuildingColor,
 } from "../lib/buildingUse";
@@ -39,17 +39,21 @@ import {
 import { explodedAxoViewportExtent, planViewportExtent, type PlanViewport } from "../lib/planViewport";
 import { FIGURE_SCALES, preferredFigureScale, sheetFitMessage } from "../lib/figureGround";
 import {
-  countBuildingsWithComDerivedExtrusion,
   fetchComBuildingFootprints,
+  intersectsComCity,
   paddedComFetchBounds,
   type ComBuildingFootprint,
 } from "../lib/comBuildingHeights";
+import { countBuildingsWithComHeightTier } from "../lib/comBuildingHeightsCount";
 import { runComBuildingHeightsInWorker } from "../lib/comBuildingHeightsWorkerClient";
 import {
   COM_BUILDING_HEIGHTS_CREDIT,
   COM_BUILDING_HEIGHTS_DATASET_URL,
 } from "../lib/comBuildingHeightCredit";
 import {
+  comBuildingHeightsToggleKind,
+  comBuildingHeightsToggleLabel,
+  comBuildingHeightsTogglePressed,
   readStoredComBuildingHeights,
   writeStoredComBuildingHeights,
 } from "../lib/comBuildingHeightsToggle";
@@ -86,8 +90,10 @@ import {
 } from "../lib/heightOverrides";
 import {
   annotateUnresolvedZoneDefaults,
+  heightTierLabel,
   stampPlainZoneDefaultLabels,
 } from "../lib/buildingHeightResolve";
+import { countBuildingHeightTiers, LIDAR_NO_DATA_LINE } from "../lib/lidarTierStatus";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { modelStageCreditHtml } from "../lib/dataCredits";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
@@ -176,6 +182,11 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [comFootprints, setComFootprints] = useState<ComBuildingFootprint[]>(
     () => model.comFootprintPrefetch ?? [],
   );
+  const [comFootprintFetchError, setComFootprintFetchError] = useState<string | null>(
+    () => model.comFootprintFetchError ?? null,
+  );
+  const [comFootprintLoading, setComFootprintLoading] = useState(false);
+  const [comFootprintRetryToken, setComFootprintRetryToken] = useState(0);
   const [preferred, setPreferred] = useState<string | null>(() => loadModelDrawer());
   const [planWidth, setPlanWidth] = useState<number | null>(null);
   const [fitCounter, setFitCounter] = useState(0);
@@ -288,24 +299,57 @@ export function ModelPage({ model }: { model: CityModel }) {
   }, []);
 
   useEffect(() => {
+    setComFootprintFetchError(model.comFootprintFetchError ?? null);
+  }, [
+    model.placeLabel,
+    model.center.lat,
+    model.center.lon,
+    model.sideM,
+    model.comFootprintFetchError,
+  ]);
+
+  useEffect(() => {
     if (!betterHeights || !model.layers.buildings) {
       setComFootprints([]);
+      setComFootprintLoading(false);
       return;
     }
     if (model.comFootprintPrefetch?.length) {
       setComFootprints(model.comFootprintPrefetch);
+      setComFootprintFetchError(null);
+      setComFootprintLoading(false);
       return;
     }
     const bounds = paddedComFetchBounds(model.center, model.sideM);
+    if (!intersectsComCity(bounds)) {
+      setComFootprints([]);
+      setComFootprintLoading(false);
+      return;
+    }
     const controller = new AbortController();
+    setComFootprintLoading(true);
     fetchComBuildingFootprints(bounds, model.center, controller.signal)
       .then((footprints) => {
+        if (controller.signal.aborted) return;
         setComFootprints(footprints);
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setComFootprints([]);
+        setComFootprintLoading(false);
+        if (footprints.length === 0) {
+          setComFootprintFetchError(
+            "City of Melbourne 2023 building footprints returned no data.",
+          );
+        } else {
+          setComFootprintFetchError(null);
         }
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        setComFootprints([]);
+        setComFootprintLoading(false);
+        setComFootprintFetchError(
+          err instanceof Error
+            ? err.message
+            : "City of Melbourne 2023 building footprints could not be loaded.",
+        );
       });
     return () => controller.abort();
   }, [
@@ -315,10 +359,28 @@ export function ModelPage({ model }: { model: CityModel }) {
     model.sideM,
     model.layers.buildings,
     model.comFootprintPrefetch,
+    comFootprintRetryToken,
   ]);
 
+  const comFetchBounds = useMemo(
+    () => paddedComFetchBounds(model.center, model.sideM),
+    [model.center.lat, model.center.lon, model.sideM],
+  );
+  const inComCity = intersectsComCity(comFetchBounds);
+  const comHeightsLoadFailed =
+    betterHeights &&
+    inComCity &&
+    !comFootprintLoading &&
+    comFootprintFetchError != null;
+  const comHeightsToggleKind = comBuildingHeightsToggleKind({
+    userEnabled: betterHeights,
+    inComCity,
+    loadFailed: comHeightsLoadFailed,
+    loading: comFootprintLoading && betterHeights && inComCity,
+  });
+  const comHeightsMeasuredOn = comHeightsToggleKind === "on";
+
   const [comHeightBuildings, setComHeightBuildings] = useState<typeof model.buildings | null>(null);
-  const [comHeightUpdates, setComHeightUpdates] = useState(0);
   const [heightOverrideStore, setHeightOverrideStore] = useState<HeightOverrideStore>(() =>
     readStoredHeightOverrides(window.localStorage),
   );
@@ -559,6 +621,15 @@ export function ModelPage({ model }: { model: CityModel }) {
           tick();
         });
       },
+      async captureViewportPng(): Promise<string | null> {
+        const exporter = exportRef.current;
+        if (!exporter) return null;
+        const blob = await exporter.png();
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        let binary = "";
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
+        return btoa(binary);
+      },
     };
     return () => {
       delete window.__citycutQaModel;
@@ -568,11 +639,9 @@ export function ModelPage({ model }: { model: CityModel }) {
   useEffect(() => {
     if (!betterHeights) {
       setComHeightBuildings(null);
-      setComHeightUpdates(0);
       return;
     }
     if (model.comBuildingHeightsApplied) {
-      const before = model.buildingsWithoutCom ?? model.buildings;
       setComHeightBuildings(
         annotateUnresolvedZoneDefaults(
           model.buildings,
@@ -581,12 +650,10 @@ export function ModelPage({ model }: { model: CityModel }) {
           model.developmentDamRecords ?? [],
         ),
       );
-      setComHeightUpdates(countBuildingsWithComDerivedExtrusion(before, model.buildings));
       return;
     }
     if (comFootprints.length === 0 || model.buildings.length === 0) {
       setComHeightBuildings(null);
-      setComHeightUpdates(0);
       return;
     }
     const controller = new AbortController();
@@ -603,12 +670,10 @@ export function ModelPage({ model }: { model: CityModel }) {
             model.developmentDamRecords ?? [],
           ),
         );
-        setComHeightUpdates(countBuildingsWithComDerivedExtrusion(source, damApplied));
       })
       .catch(() => {
         if (!controller.signal.aborted) {
           setComHeightBuildings(null);
-          setComHeightUpdates(0);
         }
       });
     return () => controller.abort();
@@ -914,7 +979,25 @@ export function ModelPage({ model }: { model: CityModel }) {
 
   const figureFit = sheetFitMessage(model.sideM, figureScale);
   const useCounts = countUses(model.buildings);
-  const sourceCounts = countSources(model.buildings);
+  const sourceCounts = countSourcesGrouped(displayModel.buildings);
+  const heightTierCounts = countBuildingHeightTiers(displayModel.buildings);
+  const comMeasuredHeightCount = useMemo(
+    () => countBuildingsWithComHeightTier(displayModel.buildings),
+    [displayModel.buildings],
+  );
+  const lidarHeightsOn = displayModel.buildings.some((b) => b.heightTier === "lidar");
+  const lidarTierNote = model.lidarHeightTierNote ?? LIDAR_NO_DATA_LINE;
+  const heightTierLegend: { tier: keyof typeof heightTierCounts; label: string }[] = [
+    { tier: "com", label: heightTierLabel("com") },
+    { tier: "lidar", label: "LiDAR (ELVIS)" },
+    { tier: "overture_height", label: heightTierLabel("overture_height") },
+    { tier: "overture_floors", label: heightTierLabel("overture_floors") },
+    { tier: "development_floors", label: heightTierLabel("development_floors") },
+    { tier: "osm_levels", label: heightTierLabel("osm_levels") },
+    { tier: "zone_default", label: heightTierLabel("zone_default") },
+    { tier: "real_source_unmatched", label: heightTierLabel("real_source_unmatched") },
+    { tier: "manual", label: heightTierLabel("manual") },
+  ];
   const hint =
     tab === "3d"
       ? view.projection === "plan"
@@ -1101,7 +1184,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                   </button>
                   <button
                     type="button"
-                    aria-pressed={betterHeights}
+                    aria-pressed={comBuildingHeightsTogglePressed(comHeightsToggleKind)}
                     onClick={() => {
                       setBetterHeights((on) => {
                         const next = !on;
@@ -1110,18 +1193,33 @@ export function ModelPage({ model }: { model: CityModel }) {
                       });
                     }}
                   >
-                    {betterHeights
-                      ? "CoM 2023 measured heights on · turn off"
-                      : "CoM 2023 heights off · turn on"}
+                    {comBuildingHeightsToggleLabel(comHeightsToggleKind)}
                   </button>
+                  {comHeightsToggleKind === "failed" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setComFootprintFetchError(null);
+                        setComFootprintRetryToken((token) => token + 1);
+                      }}
+                    >
+                      Retry CoM heights
+                    </button>
+                  )}
                 </div>
-                {betterHeights && comHeightUpdates > 0 && (
+                {comHeightsMeasuredOn && comMeasuredHeightCount > 0 && (
                   <p className="legend-note">
-                    {comHeightUpdates.toLocaleString()} building{comHeightUpdates === 1 ? "" : "s"} use City of
-                    Melbourne extrusion heights in this frame.
+                    {comMeasuredHeightCount.toLocaleString()} building
+                    {comMeasuredHeightCount === 1 ? "" : "s"} use City of Melbourne extrusion heights in this
+                    frame.
                   </p>
                 )}
-                {betterHeights && (
+                {comHeightsLoadFailed && (
+                  <p className="legend-note" role="status">
+                    CoM 2023 measured heights are unavailable; showing estimates.
+                  </p>
+                )}
+                {comHeightsMeasuredOn && (
                   <p className="legend-note">
                     <a href={COM_BUILDING_HEIGHTS_DATASET_URL}>{COM_BUILDING_HEIGHTS_CREDIT}</a>
                   </p>
@@ -1157,8 +1255,25 @@ export function ModelPage({ model }: { model: CityModel }) {
                     </li>
                   ))}
                 </ul>
+                <p className="legend-sub">Height source</p>
+                <ul>
+                  {heightTierLegend
+                    .filter(({ tier }) => tier === "lidar" || heightTierCounts[tier] > 0)
+                    .map(({ tier, label }) => (
+                      <li key={tier}>
+                        <i className={tier === "lidar" ? "hatch" : undefined} />
+                        <span>{label}</span>
+                        <b>
+                          {(tier === "com" ? comMeasuredHeightCount : heightTierCounts[tier]).toLocaleString()}
+                        </b>
+                      </li>
+                    ))}
+                </ul>
+                <p className="legend-note" role="status">
+                  {lidarTierNote}
+                </p>
                 {model.useTierFailures?.map((failure) => (
-                  <p key={failure.tier} className="legend-note">
+                  <p key={failure.id} className="legend-note">
                     {failure.message}
                   </p>
                 ))}
@@ -1583,7 +1698,8 @@ export function ModelPage({ model }: { model: CityModel }) {
             __html: modelStageCreditHtml({
               windOn: windSettings.enabled,
               satelliteOn: tab === "satellite",
-              comHeightsHtml: betterHeights
+              lidarHeightsOn,
+              comHeightsHtml: comHeightsMeasuredOn
                 ? `Building heights: <a href="${COM_BUILDING_HEIGHTS_DATASET_URL}">2023 Building Footprints © City of Melbourne</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.`
                 : null,
               contourHtml:

@@ -24,6 +24,9 @@ function mockMap() {
   const removeSource = vi.fn((id: string) => {
     sources.delete(id);
   });
+  const once = vi.fn((_event: string, cb: () => void) => {
+    cb();
+  });
   const map = {
     addSource,
     getSource,
@@ -31,6 +34,7 @@ function mockMap() {
     getLayer,
     removeLayer,
     removeSource,
+    once,
     getStyle: () => ({
       layers: [
         { id: "waterway", type: "line" },

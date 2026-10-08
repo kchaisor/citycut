@@ -1,0 +1,416 @@
+[
+  {
+    "name": "Eureka Tower",
+    "cut": "Eureka Tower",
+    "osm": {
+      "type": "way",
+      "id": 13307317,
+      "tag": "name",
+      "value": "Eureka Tower",
+      "tower_part_way": 272730141
+    },
+    "lat": -37.8215766,
+    "lon": 144.9645305,
+    "cited_m": 297.3,
+    "metric": "architectural (no spire; flat crown)",
+    "source_url": "https://en.wikipedia.org/wiki/Eureka_Tower",
+    "source_quote": "Eureka Tower is a 297.3 m (975 ft) skyscraper located in the Southbank precinct",
+    "computed_m_main": 297.5
+  },
+  {
+    "name": "Australia 108",
+    "cut": "Southbank apartment mid-rise",
+    "osm": {
+      "type": "way",
+      "id": 540885940,
+      "tag": "name",
+      "value": "Australia 108",
+      "tower_part_way": 907257129
+    },
+    "lat": -37.8231241,
+    "lon": 144.9639173,
+    "cited_m": 316.675,
+    "metric": "roof",
+    "source_url": "https://en.wikipedia.org/wiki/Australia_108",
+    "source_quote": "Roof | 316.675 m (1,038.96 ft)",
+    "computed_m_main": 316.5
+  },
+  {
+    "name": "Aurora Melbourne Central",
+    "cut": "Melbourne Central (office tower)",
+    "osm": {
+      "type": "way",
+      "id": 114114375,
+      "tag": "name",
+      "value": "Aurora Melbourne Central",
+      "tower_part_way": 584174639
+    },
+    "lat": -37.809649,
+    "lon": 144.9624125,
+    "cited_m": 270.5,
+    "metric": "roof",
+    "source_url": "https://en.wikipedia.org/wiki/Aurora_Melbourne_Central",
+    "source_quote": "Roof | 270.5 m (887 ft)",
+    "computed_m_main": 270.2
+  },
+  {
+    "name": "120 Collins Street",
+    "cut": "120 Collins Street",
+    "osm": {
+      "type": "way",
+      "id": 140835386,
+      "tag": "name",
+      "value": "120 Collins Street",
+      "tower_part_way": null
+    },
+    "lat": -37.8138347,
+    "lon": 144.9695097,
+    "cited_m": 220,
+    "metric": "main roof (excludes 45 m spire)",
+    "source_url": "https://en.wikipedia.org/wiki/120_Collins_Street",
+    "source_quote": "the building had a roof height of 220 metres (720 ft) with a 45-metre (148 ft) spire",
+    "computed_m_main": 217
+  },
+  {
+    "name": "101 Collins Street",
+    "cut": "120 Collins Street",
+    "osm": {
+      "type": "way",
+      "id": 140834631,
+      "tag": "name",
+      "value": "101 Collins Street",
+      "tower_part_way": null
+    },
+    "lat": -37.814892,
+    "lon": 144.9706521,
+    "cited_m": 195,
+    "metric": "roof (excludes antenna spire, 260 m)",
+    "source_url": "https://en.wikipedia.org/wiki/101_Collins_Street",
+    "source_quote": "Roof | 195 m (640 ft)",
+    "computed_m_main": 194
+  },
+  {
+    "name": "Rialto Towers (South Tower)",
+    "cut": "Rialto Towers",
+    "osm": {
+      "type": "way",
+      "id": 140812591,
+      "tag": "name",
+      "value": "Rialto South Tower",
+      "tower_part_way": null
+    },
+    "lat": -37.8188751,
+    "lon": 144.9577669,
+    "cited_m": 247,
+    "metric": "roof",
+    "source_url": "https://en.wikipedia.org/wiki/Rialto_Towers",
+    "source_quote": "Roof | 247 m (810 ft)",
+    "computed_m_main": 249
+  },
+  {
+    "name": "Rialto Towers (North Tower)",
+    "cut": "Rialto Towers",
+    "osm": {
+      "type": "way",
+      "id": 140812396,
+      "tag": "name",
+      "value": "Rialto North Tower",
+      "tower_part_way": null
+    },
+    "lat": -37.8186007,
+    "lon": 144.9575384,
+    "cited_m": 185,
+    "metric": "height as stated ('high'); no roof/architectural split given",
+    "source_url": "https://en.wikipedia.org/wiki/Rialto_Towers",
+    "source_quote": "the shorter North Tower being 185 m (607 ft) high with 43 floors",
+    "computed_m_main": 178
+  },
+  {
+    "name": "Prima Pearl",
+    "cut": "Southbank apartment mid-rise",
+    "osm": {
+      "type": "way",
+      "id": 154296962,
+      "tag": "name",
+      "value": "Prima Pearl Tower",
+      "tower_part_way": 331322477
+    },
+    "lat": -37.8229159,
+    "lon": 144.9613493,
+    "cited_m": 254,
+    "metric": "roof",
+    "source_url": "https://en.wikipedia.org/wiki/Prima_Pearl",
+    "source_quote": "Roof | 254 m (833 ft)",
+    "computed_m_main": 253.5
+  },
+  {
+    "name": "Premier Tower",
+    "cut": "Southern Cross Station roof",
+    "osm": {
+      "type": "way",
+      "id": 168069183,
+      "tag": "name",
+      "value": "Premier Tower",
+      "tower_part_way": null
+    },
+    "lat": -37.8174366,
+    "lon": 144.9537838,
+    "cited_m": 245.7,
+    "metric": "architectural (= to tip; no spire)",
+    "source_url": "https://www.skyscrapercenter.com/building/premier-tower/17613",
+    "source_quote": "Architectural ... 245.7 m / 806 ft ... To Tip ... 245.7 m / 806 ft",
+    "computed_m_main": 243.1
+  },
+  {
+    "name": "Swanston Central",
+    "cut": "RMIT Building 80",
+    "osm": {
+      "type": "way",
+      "id": 31152559,
+      "tag": "name",
+      "value": "Swanston Central",
+      "tower_part_way": null
+    },
+    "lat": -37.8060899,
+    "lon": 144.9619518,
+    "cited_m": 236.7,
+    "metric": "architectural (= to tip)",
+    "source_url": "https://www.skyscrapercenter.com/building/swanston-central/625",
+    "source_quote": "Architectural ... 236.7 m / 777 ft ... To Tip ... 236.7 m / 777 ft",
+    "computed_m_main": 238.6
+  },
+  {
+    "name": "568 Collins Street",
+    "cut": "Rialto Towers",
+    "osm": {
+      "type": "way",
+      "id": 50523289,
+      "tag": "name",
+      "value": "568 Collins Street",
+      "tower_part_way": null
+    },
+    "lat": -37.8184032,
+    "lon": 144.955451,
+    "cited_m": 224,
+    "metric": "architectural (= to tip)",
+    "source_url": "https://www.skyscrapercenter.com/building/568-collins-street/13442",
+    "source_quote": "Height 224 m / 735 ft ... Architectural ... 224 m / 735 ft",
+    "computed_m_main": 222.5
+  },
+  {
+    "name": "Melbourne Central Tower",
+    "cut": "Melbourne Central (office tower)",
+    "osm": {
+      "type": "way",
+      "id": 46422801,
+      "tag": "name",
+      "value": "Melbourne Central office tower",
+      "tower_part_way": null
+    },
+    "lat": -37.8108085,
+    "lon": 144.96213,
+    "cited_m": 210,
+    "metric": "roof (excludes two communications masts, 246 m)",
+    "source_url": "https://en.wikipedia.org/wiki/Melbourne_Central_Tower",
+    "source_quote": "Roof | 210 m (690 ft)",
+    "computed_m_main": 211
+  },
+  {
+    "name": "Freshwater Place Residential Tower",
+    "cut": "Southbank apartment mid-rise",
+    "osm": {
+      "type": "way",
+      "id": 51714429,
+      "tag": "name",
+      "value": "Freshwater Place",
+      "tower_part_way": 141009715
+    },
+    "lat": -37.821924,
+    "lon": 144.9620509,
+    "cited_m": 205,
+    "metric": "architectural (= to tip)",
+    "source_url": "https://awards-api.skyscrapercenter.com/building/freshwater-place-residential-tower/1570",
+    "source_quote": "Architectural ... 205 m / 673 ft",
+    "computed_m_main": 204.5
+  },
+  {
+    "name": "ANZ Tower, Collins Place (55 Collins St)",
+    "cut": "120 Collins Street",
+    "osm": {
+      "type": "way",
+      "id": 24530656,
+      "tag": "name",
+      "value": "ANZ Tower",
+      "tower_part_way": null
+    },
+    "lat": -37.8142433,
+    "lon": 144.9720591,
+    "cited_m": 188,
+    "metric": "architectural (= to tip)",
+    "source_url": "https://www.skyscrapercenter.com/building/anz-tower-collins-place/2136",
+    "source_quote": "Architectural ... 188 m / 617 ft ... 188 m / 617 ft",
+    "computed_m_main": 160.5
+  },
+  {
+    "name": "Nauru House (80 Collins St)",
+    "cut": "120 Collins Street",
+    "osm": {
+      "type": "way",
+      "id": 46652486,
+      "tag": "name",
+      "value": "Nauru House",
+      "tower_part_way": null
+    },
+    "lat": -37.8134528,
+    "lon": 144.9707334,
+    "cited_m": 183,
+    "metric": "roof (excludes antenna spire, 190 m)",
+    "source_url": "https://en.wikipedia.org/wiki/80_Collins_Street",
+    "source_quote": "Roof | 183 m (600 ft)",
+    "computed_m_main": 180.1
+  },
+  {
+    "name": "405 Bourke Street",
+    "cut": "General Post Office Melbourne",
+    "osm": {
+      "type": "way",
+      "id": 48207810,
+      "tag": "name",
+      "value": "405 Bourke Street",
+      "tower_part_way": null
+    },
+    "lat": -37.8150512,
+    "lon": 144.9621743,
+    "cited_m": 173,
+    "metric": "architectural (= to tip)",
+    "source_url": "https://awards-api.skyscrapercenter.com/building/405-bourke-street/13436",
+    "source_quote": "Architectural ... 173 m / 568 ft ... To Tip ... 173 m / 568 ft",
+    "computed_m_main": 169.8
+  },
+  {
+    "name": "35 Spring Street",
+    "cut": "Old Treasury Building",
+    "osm": {
+      "type": "way",
+      "id": 219393605,
+      "tag": "addr:housenumber+addr:street",
+      "value": "35-47 Spring Street",
+      "tower_part_way": null
+    },
+    "lat": -37.8141929,
+    "lon": 144.973959,
+    "cited_m": 164.4,
+    "metric": "architectural (tip 167.1)",
+    "source_url": "https://www.skyscrapercenter.com/building/35-spring-street/15510",
+    "source_quote": "Architectural ... 164.4 m / 539 ft ... To Tip ... 167.1 m / 548 ft",
+    "computed_m_main": 164.5
+  },
+  {
+    "name": "Ernst & Young Plaza (8 Exhibition St)",
+    "cut": "120 Collins Street",
+    "osm": {
+      "type": "way",
+      "id": 452037697,
+      "tag": "addr:housenumber+addr:street",
+      "value": "8 Exhibition Street",
+      "tower_part_way": null
+    },
+    "lat": -37.8155045,
+    "lon": 144.9727498,
+    "cited_m": 164.7,
+    "metric": "architectural (= to tip)",
+    "source_url": "https://awards-api.skyscrapercenter.com/building/ernst-young-plaza/3095",
+    "source_quote": "Architectural ... 164.7 m / 540 ft",
+    "computed_m_main": 164.5
+  },
+  {
+    "name": "Crown Towers",
+    "cut": "Crown Towers",
+    "osm": {
+      "type": "way",
+      "id": 207170758,
+      "tag": "name",
+      "value": "Crown Towers",
+      "tower_part_way": null
+    },
+    "lat": -37.8224158,
+    "lon": 144.9601021,
+    "cited_m": 152.5,
+    "metric": "architectural (= to tip)",
+    "source_url": "https://www.skyscrapercenter.com/building/crown-towers/3829",
+    "source_quote": "Height 152.5 m / 500 ft ... Architectural ... 152.5 m / 500 ft",
+    "computed_m_main": 19.5
+  },
+  {
+    "name": "HWT Tower (40 City Rd)",
+    "cut": "Eureka Tower",
+    "osm": {
+      "type": "way",
+      "id": 27165313,
+      "tag": "name",
+      "value": "HWT Tower",
+      "tower_part_way": null
+    },
+    "lat": -37.8210455,
+    "lon": 144.9667161,
+    "cited_m": 111,
+    "metric": "architectural",
+    "source_url": "https://www.skyscrapercenter.com/building/herald-weekly-times-tower/19766",
+    "source_quote": "Architectural ... 111 m / 364 ft",
+    "computed_m_main": 105.5
+  },
+  {
+    "name": "1 Spring Street (Shell House)",
+    "cut": "120 Collins Street",
+    "osm": {
+      "type": "way",
+      "id": 52054832,
+      "tag": "name",
+      "value": "1 Spring Street",
+      "tower_part_way": null
+    },
+    "lat": -37.8151837,
+    "lon": 144.9741077,
+    "cited_m": 132,
+    "metric": "architectural (= to tip)",
+    "source_url": "https://www.skyscrapercenter.com/building/1-spring-street/13492",
+    "source_quote": "Height 132 m / 433 ft ... Architectural ... 132 m / 433 ft",
+    "computed_m_main": 108.5
+  },
+  {
+    "name": "Manchester Unity Building",
+    "cut": "Melbourne Town Hall",
+    "osm": {
+      "type": "way",
+      "id": 46493095,
+      "tag": "name",
+      "value": "Manchester Unity Building",
+      "tower_part_way": null
+    },
+    "lat": -37.8152009,
+    "lon": 144.966115,
+    "cited_m": 40.2,
+    "metric": "roof (excludes ornamental tower/spire to 64 m)",
+    "source_url": "https://en.wikipedia.org/wiki/Manchester_Unity_Building",
+    "source_quote": "Roof | 40.2 metres (132 ft)",
+    "computed_m_main": 40
+  },
+  {
+    "name": "RMIT Swanston Academic Building (Building 80)",
+    "cut": "RMIT Building 80",
+    "osm": {
+      "type": "way",
+      "id": 83569106,
+      "tag": "name",
+      "value": "RMIT Swanston Academic Building",
+      "tower_part_way": null
+    },
+    "lat": -37.8082142,
+    "lon": 144.9626739,
+    "cited_m": 52,
+    "metric": "architectural (= to tip)",
+    "source_url": "https://www.skyscrapercenter.com/building/rmit-swanston-academic-building/17061",
+    "source_quote": "Architectural ... 52 m / 171 ft ... To Tip ... 52 m / 171 ft",
+    "computed_m_main": 50
+  }
+]

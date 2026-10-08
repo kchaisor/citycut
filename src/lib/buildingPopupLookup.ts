@@ -44,7 +44,9 @@ const EMPTY: BuildingPopupDetails = {
 };
 
 function useSourceLabel(source: BuildingFeat["source"]): string {
-  if (source === "osm_tag") return "Overture class";
+  if (source === "osm_tag" || source === "overture_class") return "Overture class";
+  if (source === "clue") return "CoM CLUE";
+  if (source === "bca") return "Building permit (BCA)";
   if (source === "zone") return "Vicmap zone";
   return "—";
 }

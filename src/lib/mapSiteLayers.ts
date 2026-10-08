@@ -23,6 +23,16 @@ export type CutColourMoveStats = {
   maskSetData: number;
   colourSetData: number;
   layerRebuilds: number;
+  /** QA: first cut frame overlay drawn (performance.now). */
+  frameFirstDrawnMs?: number | null;
+  /** QA: map idle after use-colour fill applied. */
+  colourFillMs?: number | null;
+  /** QA: ms spent in landing building fetch + merge (excludes 280 ms debounce). */
+  colourFetchMs?: number | null;
+  /** QA: enrichment PMTiles read in that fetch. */
+  colourEnrichmentMs?: number | null;
+  /** QA: refineBuildingUses (zones/WFS) in that fetch. */
+  colourRefineMs?: number | null;
 };
 
 declare global {
@@ -34,7 +44,16 @@ declare global {
 function qaStats(): CutColourMoveStats | null {
   if (typeof window === "undefined" || !window.location.search.includes("qa=1")) return null;
   if (!window.__citycutCutColourStats) {
-    window.__citycutCutColourStats = { maskSetData: 0, colourSetData: 0, layerRebuilds: 0 };
+    window.__citycutCutColourStats = {
+      maskSetData: 0,
+      colourSetData: 0,
+      layerRebuilds: 0,
+      frameFirstDrawnMs: null,
+      colourFillMs: null,
+      colourFetchMs: null,
+      colourEnrichmentMs: null,
+      colourRefineMs: null,
+    };
   }
   return window.__citycutCutColourStats;
 }
@@ -86,6 +105,10 @@ export function setMapCutColourData(
   if (buildingSource) {
     buildingSource.setData(buildings);
     bumpColourSetData();
+    map.once("idle", () => {
+      const idleStats = qaStats();
+      if (idleStats) idleStats.colourFillMs = performance.now();
+    });
   }
   return true;
 }
@@ -111,6 +134,15 @@ export function updateMapCutColourLayers(
   const mask = cutColourMaskGeoJson(options.maskCenter, options.cutSideM, options.frameShape);
   map.addSource(CUT_MASK_SOURCE, { type: "geojson", data: mask });
 
+  const markColourFillWhenIdle = () => {
+    map.once("idle", () => {
+      const idleStats = qaStats();
+      if (idleStats && idleStats.colourFillMs == null) {
+        idleStats.colourFillMs = performance.now();
+      }
+    });
+  };
+
   if (buildings.features.length > 0) {
     map.addSource(CUT_BUILDINGS_SOURCE, { type: "geojson", data: buildings });
     map.addLayer(
@@ -131,6 +163,7 @@ export function updateMapCutColourLayers(
       },
       buildingsBefore,
     );
+    markColourFillWhenIdle();
   }
 }
 

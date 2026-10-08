@@ -46,6 +46,7 @@ export const SITE_LAYER_ORDER = [
   "Contour labels",
   "Paths",
   "Roads",
+  "Blocks",
   "Rail",
   "Trams",
   "Buildings",
@@ -381,6 +382,20 @@ export function sitePlanChunks(
     });
   }
   const roadRings = plan.roadFill.flatMap((polygon) => mapRings(polygon, model.sideM, layout));
+  const blockFill = plan.blocks
+    .map((rings) => mapRings(rings, model.sideM, layout))
+    .filter((rings) => rings.length > 0);
+  if (blockFill.length > 0) {
+    chunks.push({
+      name: "Blocks",
+      paths: blockFill.map((rings) => ({
+        rings,
+        fill: fillOf("--block-plan"),
+        evenOdd: true,
+        close: true,
+      })),
+    });
+  }
   if (roadRings.length > 0) {
     const kerb = style.kerbOn ? pen(style.kerb) : null;
     chunks.push({

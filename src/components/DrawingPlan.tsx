@@ -194,6 +194,7 @@ export function DrawingPlan({
   const colourTick = useColourRevision();
   const canvas = useMemo(() => themeColor("--drawing-bg"), [colourTick]);
   const figureFill = getColour("--figure-fill");
+  const blockFill = getColour("--block-plan");
   const greenFill = getColour("--green-fill");
   const waterFill = getColour("--water-fill");
   const treeFill = getColour("--tree-fill");
@@ -294,6 +295,9 @@ export function DrawingPlan({
         </>
       ) : (
         <>
+            {plan.blocks.map((rings, index) => (
+              <path key={`b${index}`} d={svgRings(rings)} fill={blockFill} />
+            ))}
             {plan.green.map((rings, index) => (
               <path key={`g${index}`} d={svgRings(rings)} fill={greenFill} {...screenPenAttrs(style.green)} />
             ))}

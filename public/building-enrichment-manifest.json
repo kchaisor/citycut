@@ -1,0 +1,45 @@
+{
+  "extent": {
+    "west": 144.35,
+    "south": -38.25,
+    "east": 145.55,
+    "north": -37.45
+  },
+  "featureCount": 153959,
+  "pmtilesBytes": 6428760,
+  "generatedAt": "2026-10-08T09:59:36.049856+00:00",
+  "lidar": {
+    "status": "no_data",
+    "detail": "LiDAR: no data, ELVIS not ordered"
+  },
+  "zonesLoaded": true,
+  "clueLoaded": true,
+  "clueError": null,
+  "clueBlocks": 500,
+  "bca": {
+    "status": "blocked",
+    "detail": "BCA xlsb HTTP 403 (https://www.bpc.vic.gov.au/__data/assets/file/0016/26521/VBA-DataVic-Building-Permits-2024-December.xlsb)",
+    "url": "https://www.bpc.vic.gov.au/__data/assets/file/0016/26521/VBA-DataVic-Building-Permits-2024-December.xlsb"
+  },
+  "useSourceCountsSample": {
+    "overture": 32434,
+    "clue": 15950,
+    "bca": 0,
+    "zone": 20411,
+    "unclassified": 85164
+  },
+  "overtureRelease": "2026-09-23.1",
+  "builtBbox": {
+    "west": 144.89,
+    "south": -37.86,
+    "east": 145,
+    "north": -37.77
+  },
+  "targetExtent": {
+    "west": 144.35,
+    "south": -38.25,
+    "east": 145.55,
+    "north": -37.45
+  },
+  "pmtilesSha256": "369dc6aab2f4620308e20a3bdb88bc3ccc6fb3ddd51e891f842e7530631fc246"
+}

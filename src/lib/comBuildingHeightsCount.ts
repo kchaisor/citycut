@@ -1,3 +1,4 @@
+import { inferHeightTier } from "./buildingHeightResolve";
 import type { BuildingFeat } from "../types";
 
 /** True when CoM changed height or added at least one non-OSM extrusion part. */
@@ -17,6 +18,15 @@ export function countBuildingsWithComDerivedExtrusion(
   let count = 0;
   for (let i = 0; i < n; i++) {
     if (buildingHasComDerivedExtrusion(before[i], after[i])) count += 1;
+  }
+  return count;
+}
+
+/** Buildings whose resolved height tier is CoM 2023 (legend + summary). */
+export function countBuildingsWithComHeightTier(buildings: BuildingFeat[]): number {
+  let count = 0;
+  for (const building of buildings) {
+    if (inferHeightTier(building) === "com") count += 1;
   }
   return count;
 }

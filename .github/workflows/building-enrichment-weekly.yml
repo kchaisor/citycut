@@ -1,0 +1,60 @@
+name: Building enrichment tiles (weekly)
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-tiles:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Python deps
+        run: pip install -r pipeline/requirements.txt
+      - name: Install tippecanoe
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential libsqlite3-dev zlib1g-dev
+          git clone --depth 1 --branch 2.79.0 https://github.com/felt/tippecanoe.git /tmp/tippecanoe-src
+          make -C /tmp/tippecanoe-src -j"$(nproc)"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          mkdir -p "$HOME/.local/bin"
+          cp /tmp/tippecanoe-src/tippecanoe "$HOME/.local/bin/tippecanoe"
+      - name: Python tests
+        run: pytest pipeline/test_build_enrichment.py -q
+      - name: Build enrichment PMTiles (City of Melbourne bbox)
+        run: node scripts/build-building-enrichment-pmtiles.mjs
+        env:
+          TIPPECANOE: tippecanoe
+          BUILD_ENRICHMENT_BBOX: 144.89,-37.86,145.0,-37.77
+      - name: Log manifest (BCA / LiDAR / CLUE — never silent)
+        run: |
+          cat public/building-enrichment-manifest.json
+          echo "[enrichment] LiDAR: no data, ELVIS not ordered"
+      - name: Publish PMTiles + manifest to GitHub Release (main)
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="building-enrichment-$(date -u +%Y%m%d)"
+          gh release create "$tag" public/building-enrichment.pmtiles public/building-enrichment-manifest.json \
+            --title "Building enrichment PMTiles" \
+            --notes "Auto-built CoM bbox. Manifest includes pmtilesSha256 for Pages deploy verification." \
+            || gh release upload "$tag" public/building-enrichment.pmtiles public/building-enrichment-manifest.json --clobber
+          gh release view building-enrichment-latest >/dev/null 2>&1 \
+            && gh release upload building-enrichment-latest public/building-enrichment.pmtiles public/building-enrichment-manifest.json --clobber \
+            || gh release create building-enrichment-latest public/building-enrichment.pmtiles public/building-enrichment-manifest.json \
+              --title "Building enrichment PMTiles (latest)" \
+              --notes "Rolling latest assets (tiles + manifest); dated tags are immutable snapshots."

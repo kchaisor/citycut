@@ -41,6 +41,7 @@ export function svgRings(rings: Pt[][]): string {
 }
 
 export type PlanPaths = {
+  blocks: Pt[][][];
   green: Pt[][][];
   water: Pt[][][];
   /** Unioned carriageway, outer rings plus block holes, in local east/north metres. */
@@ -147,9 +148,15 @@ export function planPaths(
   planOptions: PlanPathOptions = {},
 ): PlanPaths {
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
+  const blocks: Pt[][][] = [];
   const green: Pt[][][] = [];
   const water: Pt[][][] = [];
+  for (const area of model.blocks ?? []) {
+    const rings = clipRings(area.ring, area.holes, model.sideM, frameShape);
+    if (rings) blocks.push(rings);
+  }
   for (const area of model.areas) {
+    if (area.kind === "block") continue;
     const rings = clipRings(area.ring, area.holes, model.sideM, frameShape);
     if (!rings) continue;
     if (area.kind === "water") water.push(rings);
@@ -230,6 +237,7 @@ export function planPaths(
   const drawn = layer && visible.length > 0 ? drawContours(visible, drawnInterval, contourIndexEvery) : null;
 
   return {
+    blocks,
     green,
     water,
     roadFill: carriageway.polygons,
