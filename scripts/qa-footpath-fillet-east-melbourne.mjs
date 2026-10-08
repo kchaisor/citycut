@@ -42,7 +42,7 @@ async function trySitePlanCrop(page, filletM, viewBox, dest) {
     );
   }, { fillet: filletM });
   await page.reload({ waitUntil: "networkidle" });
-  await page.locator(".model-chrome").getByRole("button", { name: "Drawing", exact: true }).click();
+  await page.locator(".icon-rail").getByRole("button", { name: "Drawing", exact: true }).click();
   await page.waitForTimeout(300);
   const sitePlanBtn = page.getByRole("button", { name: "Site plan", exact: true });
   if ((await sitePlanBtn.getAttribute("aria-pressed")) !== "true") await sitePlanBtn.click();
@@ -64,7 +64,12 @@ const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 page.setDefaultTimeout(120_000);
 
 await createModel(page);
-writeFileSync(`${outDir}/east-model.json`, JSON.stringify(await page.evaluate(() => window.__citycutQaModel?.exportPlanSnapshot?.() ?? null)));
+const snapshot = await page.evaluate(() => window.__citycutQaModel?.exportPlanSnapshot?.() ?? null);
+if (snapshot && typeof snapshot.sideM === "number") {
+  writeFileSync(`${outDir}/east-model.json`, JSON.stringify(snapshot));
+} else {
+  console.warn("exportPlanSnapshot missing; keeping existing east-model.json");
+}
 
 try {
   await trySitePlanCrop(page, 0, cornerViewBox, `${outDir}/footpath-fillet-east-before.png`);
