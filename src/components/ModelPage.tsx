@@ -86,8 +86,10 @@ import {
 } from "../lib/heightOverrides";
 import {
   annotateUnresolvedZoneDefaults,
+  heightTierLabel,
   stampPlainZoneDefaultLabels,
 } from "../lib/buildingHeightResolve";
+import { countBuildingHeightTiers, LIDAR_NO_DATA_LINE } from "../lib/lidarTierStatus";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { modelStageCreditHtml } from "../lib/dataCredits";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
@@ -915,7 +917,20 @@ export function ModelPage({ model }: { model: CityModel }) {
   const figureFit = sheetFitMessage(model.sideM, figureScale);
   const useCounts = countUses(model.buildings);
   const sourceCounts = countSourcesGrouped(displayModel.buildings);
+  const heightTierCounts = countBuildingHeightTiers(displayModel.buildings);
   const lidarHeightsOn = displayModel.buildings.some((b) => b.heightTier === "lidar");
+  const lidarTierNote = model.lidarHeightTierNote ?? LIDAR_NO_DATA_LINE;
+  const heightTierLegend: { tier: keyof typeof heightTierCounts; label: string }[] = [
+    { tier: "com", label: heightTierLabel("com") },
+    { tier: "lidar", label: "LiDAR (ELVIS)" },
+    { tier: "overture_height", label: heightTierLabel("overture_height") },
+    { tier: "overture_floors", label: heightTierLabel("overture_floors") },
+    { tier: "development_floors", label: heightTierLabel("development_floors") },
+    { tier: "osm_levels", label: heightTierLabel("osm_levels") },
+    { tier: "zone_default", label: heightTierLabel("zone_default") },
+    { tier: "real_source_unmatched", label: heightTierLabel("real_source_unmatched") },
+    { tier: "manual", label: heightTierLabel("manual") },
+  ];
   const hint =
     tab === "3d"
       ? view.projection === "plan"
@@ -1158,6 +1173,21 @@ export function ModelPage({ model }: { model: CityModel }) {
                     </li>
                   ))}
                 </ul>
+                <p className="legend-sub">Height source</p>
+                <ul>
+                  {heightTierLegend
+                    .filter(({ tier }) => tier === "lidar" || heightTierCounts[tier] > 0)
+                    .map(({ tier, label }) => (
+                      <li key={tier}>
+                        <i className={tier === "lidar" ? "hatch" : undefined} />
+                        <span>{label}</span>
+                        <b>{heightTierCounts[tier].toLocaleString()}</b>
+                      </li>
+                    ))}
+                </ul>
+                <p className="legend-note" role="status">
+                  {lidarTierNote}
+                </p>
                 {model.useTierFailures?.map((failure) => (
                   <p key={failure.tier} className="legend-note">
                     {failure.message}

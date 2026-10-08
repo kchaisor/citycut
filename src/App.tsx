@@ -49,6 +49,7 @@ import {
 } from "./lib/buildingEnrichmentMerge";
 import { fetchBuildingEnrichmentForCut, fetchEnrichmentManifest } from "./lib/buildingEnrichmentTiles";
 import { cutCenterOutsideBuiltBbox, enrichmentCoverageMessage } from "./lib/enrichmentCoverage";
+import { lidarLegendLine, logLidarEnrichmentStatus } from "./lib/lidarTierStatus";
 import { computeCityBlocks } from "./lib/cityBlocks";
 import { assignExternalUses, loadUseTiers } from "./lib/useCascade";
 import {
@@ -567,7 +568,8 @@ export default function App() {
         })}.`;
       }
       if (modelLayers.buildings) {
-        sourceNote = `${sourceNote} Building height uses CoM 2023 footprints (on by default in Melbourne), then ELVIS LiDAR where baked, then Overture height, num_floors × 3 m, then CoM development floors × 3 m for one building per site, otherwise Vicmap zone defaults (3 m under 40 m², else by zone, else 9 m). Manual height edits override every other source. Use follows offline enrichment tiles (Overture class, CoM CLUE, building permit BCA, Vicmap zone), with live zones when tiles fail.`;
+        logLidarEnrichmentStatus(enrichmentManifest);
+        sourceNote = `${sourceNote} Building height uses CoM 2023 footprints (on by default in Melbourne), then the ELVIS LiDAR tier (${lidarLegendLine(enrichmentManifest).toLowerCase()}), then Overture height, num_floors × 3 m, then CoM development floors × 3 m for one building per site, otherwise Vicmap zone defaults (3 m under 40 m², else by zone, else 9 m). Manual height edits override every other source. Use follows offline enrichment tiles (Overture class, CoM CLUE, building permit BCA, Vicmap zone), with live zones when tiles fail.`;
       }
       if (damResult.error) sourceNote = `${sourceNote} ${damResult.error}`;
       if (comHeightsResult.error) sourceNote = `${sourceNote} ${comHeightsResult.error}`;
@@ -659,6 +661,7 @@ export default function App() {
         terrainError: terrainResult.error,
         useTierFailures,
         enrichmentTilesFailed,
+        lidarHeightTierNote: modelLayers.buildings ? lidarLegendLine(enrichmentManifest) : undefined,
         contours,
         contourLayer,
         hasMicrosoftFootprints: overtureResult.stats.hasMicrosoftFootprints,

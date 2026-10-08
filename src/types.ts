@@ -287,6 +287,8 @@ export type CityModel = {
   blocks?: AreaFeat[];
   /** Building enrichment PMTiles could not be read; live zone fallback was used. */
   enrichmentTilesFailed?: boolean;
+  /** Offline ELVIS LiDAR bake status for the height-tier legend (e.g. no data, not ordered). */
+  lidarHeightTierNote?: string;
 };
 
 export type ViewState = {

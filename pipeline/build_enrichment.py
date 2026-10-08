@@ -99,20 +99,12 @@ def zone_at(geom, zones: gpd.GeoDataFrame) -> str | None:
     return zc.strip() if isinstance(zc, str) else None
 
 
-def probe_elvis() -> dict:
-    url = "https://api.elevation.fsdf.org.au/api/v1/collections"
-    try:
-        response = requests.head(url, timeout=30)
-        if response.status_code in (401, 403, 429):
-            return {
-                "status": "blocked",
-                "detail": f"ELVIS API returned HTTP {response.status_code}. "
-                "Order Greater Melbourne LiDAR 2017–18 via elevation.fsdf.org.au (email delivery) "
-                "and place DSM/DTM GeoTIFFs under pipeline/cache/elvis/ for the lidar step.",
-            }
-        return {"status": "not_implemented", "detail": "LiDAR height bake requires local DSM/DTM tiles."}
-    except Exception as exc:
-        return {"status": "unreachable", "detail": str(exc)}
+LIDAR_NO_DATA_LINE = "LiDAR: no data, ELVIS not ordered"
+
+
+def lidar_manifest() -> dict:
+    """LiDAR height tier is wired in the app; no DSM/DTM bake (ELVIS order on hold)."""
+    return {"status": "no_data", "detail": LIDAR_NO_DATA_LINE}
 
 
 def assign_cascade(
@@ -188,7 +180,8 @@ def main() -> int:
     addresses = fetch_vicmap_addresses(METRO)
     bca_series = bca_use_for_buildings(buildings, addresses, bca_index)
 
-    lidar = probe_elvis()
+    lidar = lidar_manifest()
+    print(f"[enrichment] {LIDAR_NO_DATA_LINE}", file=sys.stderr)
 
     source_counts = {"overture": 0, "clue": 0, "bca": 0, "zone": 0, "unclassified": 0}
     features = []

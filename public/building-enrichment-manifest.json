@@ -9,8 +9,8 @@
   "pmtilesBytes": 6428760,
   "generatedAt": "2026-10-08T09:59:36.049856+00:00",
   "lidar": {
-    "status": "blocked",
-    "detail": "ELVIS API returned HTTP 403. Order Greater Melbourne LiDAR 2017–18 via elevation.fsdf.org.au (email delivery) and place DSM/DTM GeoTIFFs under pipeline/cache/elvis/ for the lidar step."
+    "status": "no_data",
+    "detail": "LiDAR: no data, ELVIS not ordered"
   },
   "zonesLoaded": true,
   "clueLoaded": true,

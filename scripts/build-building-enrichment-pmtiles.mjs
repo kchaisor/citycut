@@ -108,6 +108,7 @@ async function main() {
   const count = await dumpOvertureInput(release);
   console.log(`Dumped ${count} building fragments to ${OUT_GEO}`);
   run("python3", ["pipeline/build_enrichment.py", "--input", OUT_GEO, "--output-geojson", ENRICHED, "--manifest", MANIFEST]);
+  console.log("[enrichment] LiDAR: no data, ELVIS not ordered");
   const tippecanoe = process.env.TIPPECANOE ?? "tippecanoe";
   run(tippecanoe, [
     "-o",

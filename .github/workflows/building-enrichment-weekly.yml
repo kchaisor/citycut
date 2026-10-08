@@ -40,7 +40,9 @@ jobs:
           TIPPECANOE: tippecanoe
           BUILD_ENRICHMENT_BBOX: 144.89,-37.86,145.0,-37.77
       - name: Log manifest (BCA / LiDAR / CLUE — never silent)
-        run: cat public/building-enrichment-manifest.json
+        run: |
+          cat public/building-enrichment-manifest.json
+          echo "[enrichment] LiDAR: no data, ELVIS not ordered"
       - name: Publish PMTiles to GitHub Release (main)
         if: github.ref == 'refs/heads/main'
         env:
