@@ -13,7 +13,9 @@ export const CLIPPER_ARC_MAX_STEP_DEG = 12;
 
 /** Round-join sagitta for centreline buffers and morphological close (m). */
 export const CLIPPER_ARC_TOLERANCE_M = CLIPPER_ARC_CHORD_M;
-export const CLIPPER_POLYGON_OFFSET_ARC_TOLERANCE_M = CLIPPER_ARC_CHORD_M;
+/** Coarser joins for morphological road close (3 m radius). */
+export const CLIPPER_MORPH_CLOSE_ARC_TOLERANCE_M = 0.05;
+export const CLIPPER_POLYGON_OFFSET_ARC_TOLERANCE_M = CLIPPER_MORPH_CLOSE_ARC_TOLERANCE_M;
 export const CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M = CLIPPER_ARC_CHORD_M;
 
 /** Segment count for a circular arc: min step ≤ `maxStepDeg` and sagitta ≤ `chordM`. */
@@ -36,8 +38,8 @@ export function arcSegmentCount(
 }
 
 /** Clipper offset arc tolerance (m) from chord cap and angle step at a typical radius. */
-export function clipperArcToleranceM(_typicalRadiusM = 2): number {
-  return CLIPPER_ARC_TOLERANCE_M;
+export function clipperArcToleranceM(typicalRadiusM = 2): number {
+  return typicalRadiusM <= 2.5 ? CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M : CLIPPER_MORPH_CLOSE_ARC_TOLERANCE_M;
 }
 
 type ClipperPoint = { X: number; Y: number };

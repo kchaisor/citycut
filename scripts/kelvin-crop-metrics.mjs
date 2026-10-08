@@ -30,7 +30,7 @@ function plan(opts) {
 }
 
 const main = plan({ smoothOutput: false, centrelineSmooth: false });
-const pr = plan({ smoothOutput: true, centrelineSmooth: true });
+const pr = plan({ smoothOutput: true, centrelineSmooth: false });
 
 console.log("areas", {
   pathPct: ((multiArea(pr.pathFill) - multiArea(main.pathFill)) / multiArea(main.pathFill)) * 100,

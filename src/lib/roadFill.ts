@@ -4,8 +4,12 @@ import { polylineLength, signedArea } from "./geo";
 import { DEFAULT_SITE_FRAME_SHAPE, pointInSiteFrame, siteFramePolygon, type SiteFrameShape } from "./siteFrame";
 import type { Pt, RoadFeat } from "../types";
 import { clearCentrelineCacheForTests } from "./centrelineSmooth";
-import { prepareStripsForUnion } from "./centrelineUnionPrep";
-import { clipperArcToleranceM, normalizeMultiPolygonByParity, offsetCloseMultiPolygon } from "./polygonOffset";
+import {
+  CLIPPER_MORPH_CLOSE_ARC_TOLERANCE_M,
+  clipperArcToleranceM,
+  normalizeMultiPolygonByParity,
+  offsetCloseMultiPolygon,
+} from "./polygonOffset";
 
 type ClipFns = {
   union: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
@@ -25,8 +29,8 @@ const { union, intersection, difference } = clippingFns();
 /** Douglas–Peucker on near-straight centreline runs (m). */
 export const CENTRELINE_SIMPLIFY_STRAIGHT_M = 0.35;
 /** Douglas–Peucker on curved centreline runs (m). */
-export const CENTRELINE_SIMPLIFY_CURVE_M = 0.04;
-const CENTRELINE_CURVE_TURN_DEG = 8;
+export const CENTRELINE_SIMPLIFY_CURVE_M = 0.05;
+const CENTRELINE_CURVE_TURN_DEG = 10;
 /** Final boundary simplification, in metres. */
 export const OUTPUT_SIMPLIFY_M = 0.02;
 const SNAP_M = 0.01;
@@ -564,8 +568,7 @@ export function unionCarriageways(
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
 ): RoadFill {
-  const prepared = prepareStripsForUnion(roads, PATH_ENDPOINT_STITCH_M);
-  return unionStrips(prepared, sideM, 0.4, frameShape);
+  return unionStrips(roads, sideM, 0.4, frameShape);
 }
 
 /** Buffer each path by its stored width and union the strips (3D and exports match the site plan). */
@@ -581,18 +584,22 @@ export function carriagewaysOf(roads: RoadFeat[]): { line: Pt[]; width: number }
   return roads.filter(isVehicularRoad).map((road) => ({ line: road.line, width: road.width }));
 }
 
-function simplifyPathMulti(polygons: MultiPolygon): MultiPolygon {
+function simplifyPathMultiAt(polygons: MultiPolygon, toleranceM: number): MultiPolygon {
   const kept: MultiPolygon = [];
   for (const polygon of polygons) {
-    const outer = cleanOpen(polygon[0], PATH_OUTPUT_SIMPLIFY_M);
+    const outer = cleanOpen(polygon[0], toleranceM);
     if (!outer) continue;
     const holes = polygon
       .slice(1)
-      .map((hole) => cleanOpen(hole, PATH_OUTPUT_SIMPLIFY_M))
+      .map((hole) => cleanOpen(hole, toleranceM))
       .filter((hole): hole is Pair[] => hole !== null && Math.abs(signedArea(hole)) >= MIN_AREA_M2);
     kept.push([orient(outer, true), ...holes.map((hole) => orient(hole, false))]);
   }
   return kept;
+}
+
+function simplifyPathMulti(polygons: MultiPolygon): MultiPolygon {
+  return simplifyPathMultiAt(polygons, PATH_OUTPUT_SIMPLIFY_M);
 }
 
 /**
@@ -630,6 +637,7 @@ export type FootpathFilletStageCounts = {
   afterCollinearOnly: number;
   afterClipperClose: number;
   afterFinalSimplify: number;
+  afterLegacy012Simplify: number;
   afterSvgRound: number;
 };
 
@@ -670,8 +678,11 @@ export function footpathFilletStageCounts(
   const closed = offsetCloseMultiPolygon(prepped, radius, clipperArcToleranceM(radius));
   const afterClipperClose = maxRingVertsInViewBox(closed, cropViewBox);
   const clipped = normalizeMultiPolygonByParity(clipToFrame(closed, sideM, frameShape));
-  const finalPolys = simplifyPathMulti(tidy(clipped));
+  const tidied = tidy(clipped);
+  const finalPolys = simplifyPathMulti(tidied);
   const afterFinalSimplify = maxRingVertsInViewBox(finalPolys, cropViewBox);
+  const legacyPolys = simplifyPathMultiAt(tidied, 0.12);
+  const afterLegacy012Simplify = maxRingVertsInViewBox(legacyPolys, cropViewBox);
   const rounded: MultiPolygon = finalPolys.map((polygon) =>
     polygon.map((ring) =>
       ring.map(([east, north]) => [roundCoord(east), roundCoord(north)] as Pair),
@@ -683,6 +694,7 @@ export function footpathFilletStageCounts(
     afterCollinearOnly,
     afterClipperClose,
     afterFinalSimplify,
+    afterLegacy012Simplify,
     afterSvgRound,
   };
 }
@@ -795,7 +807,7 @@ export function unionRoadSurface(
   const closed = tidy(
     normalizeMultiPolygonByParity(
       clipToFrame(
-        offsetCloseMultiPolygon(merged, ROAD_MORPH_CLOSE_M, clipperArcToleranceM(ROAD_MORPH_CLOSE_M)),
+        offsetCloseMultiPolygon(merged, ROAD_MORPH_CLOSE_M, CLIPPER_MORPH_CLOSE_ARC_TOLERANCE_M),
         sideM,
         frameShape,
       ),
@@ -922,6 +934,16 @@ export function unionFootpaths(
     filletM,
     widthM,
   );
+}
+
+/** Union footpath strips before junction filleting (for pipeline diagnostics). */
+export function footpathMergedBeforeFillet(
+  strips: { line: Pt[]; width: number }[],
+  sideM: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+): MultiPolygon {
+  const stitched = stitchFootpathStrips(strips);
+  return unionStrips(stitched, sideM, 0, frameShape).polygons;
 }
 
 export function unionFootpathStrips(

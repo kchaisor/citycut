@@ -10,8 +10,8 @@ import {
   footpathStrips,
   OUTPUT_SIMPLIFY_M,
   PATH_OUTPUT_SIMPLIFY_M,
-  stitchFootpathStrips,
-  unionStrips,
+  footpathMergedBeforeFillet,
+  footpathStrips,
 } from "../src/lib/roadFill.ts";
 import { roundPlanCoord } from "../src/lib/svgPlan.ts";
 import { planPaths } from "../src/lib/svgPlan.ts";
@@ -22,13 +22,12 @@ import { clearFootpathUnionCacheForTests } from "../src/lib/roadFill.ts";
 const model = JSON.parse(readFileSync("/opt/cursor/artifacts/jolimont-model.json", "utf8"));
 
 clearFootpathUnionCacheForTests();
-const strips = stitchFootpathStrips(footpathStrips(model.roads, PATH_WIDTH_M));
-const merged = unionStrips(strips, model.sideM, 0, "square");
+const mergedPolys = footpathMergedBeforeFillet(footpathStrips(model.roads, PATH_WIDTH_M), model.sideM, "square");
 const filletRadius = Math.max(DEFAULT_PATH_FILLET_M, PATH_WIDTH_M * 1);
 const kerbVb = KELVIN_CROPS["kerb-return"];
 
 const kerbStages = footpathFilletStageCounts(
-  merged.polygons,
+  mergedPolys,
   filletRadius,
   model.sideM,
   kerbVb,
