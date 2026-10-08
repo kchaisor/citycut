@@ -11,7 +11,9 @@ const DEFAULT_EXTENT = {
   east: 145.878412,
   north: -37.175099,
 };
-const REGION_NAME = "Greater Melbourne (ABS ASGS 2021 GCCSA 2GMEL)";
+const REGION_NAME =
+  process.env.BUILD_ENRICHMENT_REGION_NAME ??
+  "Greater Melbourne (ABS ASGS 2021 GCCSA 2GMEL)";
 
 function parseBbox() {
   const raw = process.env.BUILD_ENRICHMENT_BBOX;

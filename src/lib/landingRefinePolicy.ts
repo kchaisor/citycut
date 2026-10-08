@@ -28,6 +28,7 @@ export function shouldRunLiveZoneRefine(options: {
   tilesOnly: boolean;
   forceLiveRefine: boolean;
   enrichmentError: string | null;
+  manifestMatchesAppTables: boolean;
   manifest: EnrichmentManifest | null;
   cutBounds: GeoBounds;
   merged: BuildingFeat[];
@@ -36,6 +37,7 @@ export function shouldRunLiveZoneRefine(options: {
   if (options.tilesOnly) return false;
   if (options.forceLiveRefine) return true;
   if (options.enrichmentError) return true;
+  if (!options.manifestMatchesAppTables) return true;
   if (!cutBoundsInsideBuiltBbox(options.cutBounds, options.manifest)) return true;
   if (mergedNeedsLiveZoneRefine(options.merged, options.byId)) return true;
   return false;

@@ -1,4 +1,5 @@
 import type { BuildingUse, TypologySource } from "../types";
+import overtureBuildingUseTable from "../../shared/overture-building-use.json";
 import { getColour, type ColourKey } from "./colours";
 import { ZONE_USE } from "./zoneUseTable";
 
@@ -102,62 +103,11 @@ export const SOURCE_COUNT_KEYS = [
  * Hut, shed, garage, and the other outbuildings used to be left unknown or
  * called residential; they are outbuildings here.
  */
-export const OSM_BUILDING_USE: Record<string, BuildingUse> = {
-  house: "residential",
-  detached: "residential",
-  terrace: "residential",
-  apartments: "residential",
-  residential: "residential",
-  semidetached_house: "residential",
-  bungalow: "residential",
-  dormitory: "residential",
-  cabin: "residential",
-  farm: "residential",
-  commercial: "commercial",
-  office: "commercial",
-  hotel: "commercial",
-  motel: "commercial",
-  retail: "retail",
-  supermarket: "retail",
-  kiosk: "retail",
-  industrial: "industrial",
-  warehouse: "industrial",
-  factory: "industrial",
-  manufacture: "industrial",
-  school: "civic",
-  university: "civic",
-  college: "civic",
-  kindergarten: "civic",
-  hospital: "civic",
-  civic: "civic",
-  public: "civic",
-  government: "civic",
-  church: "civic",
-  chapel: "civic",
-  mosque: "civic",
-  temple: "civic",
-  synagogue: "civic",
-  cathedral: "civic",
-  fire_station: "civic",
-  train_station: "civic",
-  transportation: "civic",
-  community_centre: "civic",
-  library: "civic",
-  townhall: "civic",
-  sports_hall: "recreation",
-  stadium: "recreation",
-  sports_centre: "recreation",
-  pavilion: "recreation",
-  grandstand: "recreation",
-  shed: "outbuilding",
-  garage: "outbuilding",
-  garages: "outbuilding",
-  carport: "outbuilding",
-  hut: "outbuilding",
-  roof: "outbuilding",
-  greenhouse: "outbuilding",
-  outbuilding: "outbuilding",
-};
+/** Shared with pipeline via `shared/overture-building-use.json` (kept in sync by tests). */
+export const OSM_BUILDING_USE: Record<string, BuildingUse> = overtureBuildingUseTable as Record<
+  string,
+  BuildingUse
+>;
 
 /** Amenity values already read off the building element itself. */
 const ELEMENT_AMENITY_USE: Record<string, BuildingUse> = {

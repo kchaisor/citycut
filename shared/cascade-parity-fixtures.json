@@ -1,0 +1,41 @@
+{
+  "cases": [
+    {
+      "id": "61f8022e-df18-4a41-b125-2628c527c0b2",
+      "note": "Fitzroy Gardens pavilion",
+      "props": { "class": "pavilion" },
+      "zoneCode": "PUZ7",
+      "heightM": 9
+    },
+    {
+      "id": "a486afec-c08f-4741-80f0-4db569a2628c",
+      "props": { "class": "pavilion" },
+      "zoneCode": "PUZ7",
+      "heightM": 9
+    },
+    {
+      "id": "7aa825dd-331f-41b4-9b54-e577fe0e7d3c",
+      "props": {},
+      "zoneCode": "HCTZ",
+      "heightM": 9
+    },
+    {
+      "id": "83b55da8-9659-4300-84a8-37ac64f6ec02",
+      "props": {},
+      "zoneCode": "R1Z",
+      "heightM": 9
+    },
+    {
+      "id": "8f0dafb8-ae64-4889-a3b4-49248af88181",
+      "props": { "class": "civic" },
+      "zoneCode": "CCZ1",
+      "heightM": 12
+    },
+    {
+      "id": "acb164a1-07d7-4a6c-845a-5e9c2e5ea20e",
+      "props": { "class": "retail" },
+      "zoneCode": "C1Z",
+      "heightM": 10
+    }
+  ]
+}

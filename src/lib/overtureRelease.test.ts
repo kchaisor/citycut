@@ -3,6 +3,7 @@ import {
   OVERTURE_RELEASE_FALLBACK,
   clearOvertureReleaseCache,
   resolveOvertureRelease,
+  resolveOvertureReleaseWithMeta,
 } from "./overtureRelease";
 
 describe("resolveOvertureRelease", () => {
@@ -29,8 +30,27 @@ describe("resolveOvertureRelease", () => {
       "fetch",
       vi.fn(async () => ({
         ok: false,
+        status: 503,
       })),
     );
     await expect(resolveOvertureRelease()).resolves.toBe(OVERTURE_RELEASE_FALLBACK);
+    await expect(resolveOvertureReleaseWithMeta()).resolves.toMatchObject({
+      release: OVERTURE_RELEASE_FALLBACK,
+      stacWarning: expect.stringContaining("503"),
+    });
+  });
+
+  it("surfaces HTTP 429 on the pinned fallback", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 429,
+      })),
+    );
+    await expect(resolveOvertureReleaseWithMeta()).resolves.toMatchObject({
+      release: OVERTURE_RELEASE_FALLBACK,
+      stacWarning: expect.stringContaining("429"),
+    });
   });
 });

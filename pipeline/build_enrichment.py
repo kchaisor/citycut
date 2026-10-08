@@ -34,17 +34,9 @@ from zone_use import (
     strip_schedule_suffix,
     use_from_zone_row,
 )
+from overture_tag_classify import OSM_BUILDING_USE, classify_overture_row
+from table_hash import enrichment_table_hashes
 from zones_fetch import fetch_zones_for_bounds
-
-USE_MAP = {
-    "residential": "residential",
-    "commercial": "commercial",
-    "retail": "retail",
-    "industrial": "industrial",
-    "civic": "civic",
-    "recreation": "recreation",
-    "mixed_use": "mixed_use",
-}
 
 USE_CODE = {
     "unclassified": 0,
@@ -69,16 +61,6 @@ SOURCE_CODE = {
 TIER_RANK = {"overture": 5, "clue": 4, "bca": 3, "zone": 2, "unclassified": 1}
 
 
-def classify_overture_row(row: pd.Series) -> tuple[str, str] | None:
-    for key in ("subtype", "class", "use"):
-        raw = row.get(key)
-        if isinstance(raw, str) and raw.strip():
-            use = USE_MAP.get(raw.strip().lower())
-            if use:
-                return use, "overture"
-    return None
-
-
 LIDAR_NO_DATA_LINE = "LiDAR: no data, ELVIS not ordered"
 
 
@@ -87,7 +69,7 @@ def lidar_manifest() -> dict:
 
 
 def _tier_beats(candidate: str, current: str) -> bool:
-    return TIER_RANK.get(candidate, 0) >= TIER_RANK.get(current, 0)
+    return TIER_RANK.get(candidate, 0) > TIER_RANK.get(current, 0)
 
 
 def load_buildings(path: Path) -> gpd.GeoDataFrame:
@@ -127,13 +109,27 @@ def join_zones(buildings: gpd.GeoDataFrame, zones: gpd.GeoDataFrame | None) -> p
 def _vector_overture_use(buildings: gpd.GeoDataFrame) -> tuple[pd.Series, pd.Series]:
     use = pd.Series("unclassified", index=buildings.index, dtype="string")
     source = pd.Series("unclassified", index=buildings.index, dtype="string")
-    for col in ("subtype", "class"):
+    for col in ("class", "subtype", "use"):
         if col not in buildings.columns:
             continue
-        mapped = buildings[col].astype("string").str.strip().str.lower().map(USE_MAP)
-        hit = mapped.notna()
-        use = use.where(~hit, mapped)
-        source = source.where(~hit, "overture")
+        raw = buildings[col].astype("string").str.strip().str.lower()
+        mixed = raw.isin(["mixed", "mixed_use"])
+        mapped = raw.map(OSM_BUILDING_USE)
+        hit = (mapped.notna() | mixed) & (source == "unclassified")
+        if not hit.any():
+            continue
+        use.loc[hit & mixed] = "mixed_use"
+        source.loc[hit & mixed] = "overture"
+        class_hit = hit & mapped.notna()
+        use.loc[class_hit] = mapped[class_hit]
+        source.loc[class_hit] = "overture"
+    # Rows with conflicting tags or amenity-style fields (rare) fall back to row classifier.
+    remaining = source == "unclassified"
+    if remaining.any():
+        for idx in buildings.index[remaining]:
+            picked = classify_overture_row(buildings.loc[idx])
+            if picked:
+                use.loc[idx], source.loc[idx] = picked
     return use, source
 
 
@@ -146,7 +142,7 @@ def _apply_tier_series(
     """Apply (use, tier) tuples from picks where tier rank beats current."""
     rank = use_source.map(lambda t: TIER_RANK.get(str(t), 0))
     cand_rank = TIER_RANK[tier_name]
-    mask = picks.notna() & (cand_rank >= rank)
+    mask = picks.notna() & (cand_rank > rank)
     if not mask.any():
         return use, use_source
     uses = picks[mask].map(lambda t: t[0])
@@ -320,9 +316,11 @@ def main() -> int:
     timings["writeFeaturesSec"] = round(time.perf_counter() - t0, 2)
     timings["totalSec"] = round(time.perf_counter() - t_all, 2)
 
+    table_hashes = enrichment_table_hashes()
     manifest = {
         "extent": extent,
         "regionName": REGION_NAME,
+        **table_hashes,
         "featureCount": features_count,
         "pmtilesBytes": 0,
         "generatedAt": datetime.now(timezone.utc).isoformat(),

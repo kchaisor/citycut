@@ -22,6 +22,7 @@ import { refineBuildingUses } from "../lib/useCascade";
 import { fetchSiteParcelCached, siteBuildingIdsForPreview } from "../lib/sitePreviewCache";
 import { FLAT_NORTH_UP_MAP_OPTIONS, applyFlatNorthUpMapHandlers } from "../lib/mapStageMapOptions";
 import { countLandingUseProvenance } from "../lib/landingUseProvenance";
+import { manifestMatchesAppTables } from "../lib/enrichmentTableHashes";
 import { shouldRunLiveZoneRefine } from "../lib/landingRefinePolicy";
 import { withResolvedUseSourceTiers } from "../lib/useSourceTier";
 import type { Basemap, BuildingFeat, LonLat, ViewState } from "../types";
@@ -254,6 +255,7 @@ export function MapStage({
     const timer = window.setTimeout(() => {
       void (async () => {
         setLandingBuildingCapNote(null);
+        setLandingStacWarning(null);
         const fetchT0 = qaFetch ? performance.now() : 0;
         try {
           const buildingResult = await fetchOvertureBuildingsForCut(
@@ -274,6 +276,7 @@ export function MapStage({
           const mergedRaw = mergeBuildingEnrichment(buildingResult.buildings, enrichment.byId);
           const merged = withResolvedUseSourceTiers(mergedRaw);
           const manifest = await fetchEnrichmentManifest(controller.signal);
+          const tablesMatch = await manifestMatchesAppTables(manifest);
           let buildingsForCut = merged;
           let refineRan = false;
           if (
@@ -281,9 +284,10 @@ export function MapStage({
               tilesOnly,
               forceLiveRefine,
               enrichmentError: enrichment.error,
+              manifestMatchesAppTables: tablesMatch,
               manifest,
               cutBounds: footprint.bounds,
-              merged,
+              merged: mergedRaw,
               byId: enrichment.byId,
             })
           ) {
@@ -312,6 +316,7 @@ export function MapStage({
           if (!map.loaded()) await new Promise<void>((resolve) => map.once("idle", () => resolve()));
           if (cancelled) return;
           if (!cancelled) {
+            setLandingStacWarning(buildingResult.stacWarning);
             setLandingBuildingCapNote(
               buildingResult.buildingCapHit
                 ? `Showing the largest 4,000 of ${buildingResult.stats.fragmentCount.toLocaleString()} building parts in this view.`
@@ -435,6 +440,7 @@ export function MapStage({
   const [enrichmentNote, setEnrichmentNote] = useState<string | null>(null);
   const [landingEnrichmentError, setLandingEnrichmentError] = useState<string | null>(null);
   const [landingBuildingCapNote, setLandingBuildingCapNote] = useState<string | null>(null);
+  const [landingStacWarning, setLandingStacWarning] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -478,11 +484,14 @@ export function MapStage({
   return (
     <div className={loading ? "map-wrap is-loading" : "map-wrap"}>
       <div ref={containerRef} className="map-canvas" />
-      {(enrichmentNote || landingEnrichmentError || landingBuildingCapNote) && (
+      {(enrichmentNote ||
+        landingEnrichmentError ||
+        landingBuildingCapNote ||
+        landingStacWarning) && (
         <p className="enrichment-coverage-banner" role="status">
           {landingEnrichmentError
             ? `Building enrichment tiles could not be loaded (${landingEnrichmentError}). Use colours may be incomplete.`
-            : [enrichmentNote, landingBuildingCapNote].filter(Boolean).join(" ")}
+            : [landingStacWarning, enrichmentNote, landingBuildingCapNote].filter(Boolean).join(" ")}
         </p>
       )}
       <div className="basemap" role="group" aria-label="Basemap">

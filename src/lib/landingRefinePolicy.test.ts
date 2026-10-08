@@ -59,6 +59,7 @@ describe("landingRefinePolicy", () => {
         tilesOnly: false,
         forceLiveRefine: false,
         enrichmentError: null,
+        manifestMatchesAppTables: true,
         manifest: gmManifest,
         cutBounds: hawthornBounds,
         merged,

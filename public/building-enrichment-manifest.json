@@ -1,33 +1,85 @@
 {
   "extent": {
-    "west": 144.35,
-    "south": -38.25,
-    "east": 145.55,
-    "north": -37.45
+    "west": 144.89,
+    "south": -37.86,
+    "east": 145,
+    "north": -37.77
   },
-  "featureCount": 153959,
-  "pmtilesBytes": 6428760,
-  "generatedAt": "2026-10-08T09:59:36.049856+00:00",
+  "regionName": "City of Melbourne (committed fallback tiles)",
+  "zoneUseTableSha256": "dd4aedda39bc15404941412098fbb41aa40a6762cd405d7e49c4193f37718fe3",
+  "overtureBuildingUseSha256": "38136c68fa4c19a03b59a0cd6657d243df563abb464cdcbc77214940e85f83f1",
+  "featureCount": 86453,
+  "pmtilesBytes": 13352861,
+  "generatedAt": "2026-10-08T17:23:37.116779+00:00",
   "lidar": {
     "status": "no_data",
     "detail": "LiDAR: no data, ELVIS not ordered"
   },
   "zonesLoaded": true,
+  "zonesFetch": {
+    "cells": 1,
+    "pagesOk": 1,
+    "pagesFailed": 0,
+    "features": 1722,
+    "retries": 0,
+    "complete": true,
+    "failures": []
+  },
+  "zoneDiagnostics": {
+    "unclassifiedNoZoneJoin": 0,
+    "unclassifiedUnmappedZoneCounts": {
+      "SUZ": 982,
+      "PRZ": 499,
+      "PZ": 450,
+      "TRZ": 365,
+      "DZ": 294,
+      "CA": 23
+    }
+  },
   "clueLoaded": true,
   "clueError": null,
   "clueBlocks": 500,
+  "clueAppliesWithinLga": "City of Melbourne (ABS ASGS 2021 LGA 24600)",
+  "clueAppliesLgaCode": "24600",
   "bca": {
     "status": "blocked",
     "detail": "BCA xlsb HTTP 403 (https://www.bpc.vic.gov.au/__data/assets/file/0016/26521/VBA-DataVic-Building-Permits-2024-December.xlsb)",
     "url": "https://www.bpc.vic.gov.au/__data/assets/file/0016/26521/VBA-DataVic-Building-Permits-2024-December.xlsb"
   },
   "useSourceCountsSample": {
-    "overture": 32434,
-    "clue": 15950,
+    "overture": 27068,
+    "clue": 14402,
     "bca": 0,
-    "zone": 20411,
-    "unclassified": 85164
+    "zone": 44687,
+    "unclassified": 296
   },
+  "useSourceCountsByCom": {
+    "insideCityOfMelbourne": {
+      "overture": 5100,
+      "clue": 14402,
+      "bca": 0,
+      "zone": 601,
+      "unclassified": 148
+    },
+    "outsideCityOfMelbourne": {
+      "overture": 21968,
+      "clue": 0,
+      "bca": 0,
+      "zone": 44086,
+      "unclassified": 148
+    }
+  },
+  "pipelineTimingsSec": {
+    "loadBuildingsSec": 0.35,
+    "fetchZonesSec": 1.88,
+    "loadClueSec": 5.64,
+    "clueJoinSec": 12.69,
+    "bcaJoinSec": 2.97,
+    "cascadeSec": 17.26,
+    "writeFeaturesSec": 1.72,
+    "totalSec": 46.69
+  },
+  "pmtilesSha256": "12f3539b22f8a67eb1ab65f7d3ac56506808d7cf5bc23dd70eafe822190a45f5",
   "overtureRelease": "2026-09-23.1",
   "builtBbox": {
     "west": 144.89,
@@ -36,10 +88,18 @@
     "north": -37.77
   },
   "targetExtent": {
-    "west": 144.35,
-    "south": -38.25,
-    "east": 145.55,
-    "north": -37.45
+    "west": 144.333634,
+    "south": -38.502988,
+    "east": 145.878412,
+    "north": -37.175099
   },
-  "pmtilesSha256": "369dc6aab2f4620308e20a3bdb88bc3ccc6fb3ddd51e891f842e7530631fc246"
+  "tileZoomRange": {
+    "min": 11,
+    "max": 14
+  },
+  "buildStageSec": {
+    "overtureFetch": 22.025,
+    "pythonEnrichment": 47.248,
+    "tippecanoe": 3.88
+  }
 }

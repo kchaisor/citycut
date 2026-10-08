@@ -3,7 +3,13 @@ export const OVERTURE_RELEASE_FALLBACK = "2026-09-23.1";
 
 const STAC_CATALOG_URL = "https://stac.overturemaps.org/catalog.json";
 
-let cachedRelease: string | null = null;
+export type OvertureReleaseResolution = {
+  release: string;
+  /** Set when STAC failed or returned an error status; still uses {@link release}. */
+  stacWarning: string | null;
+};
+
+let cachedResolution: OvertureReleaseResolution | null = null;
 
 export function overtureBuildingsUrl(release: string): string {
   return `https://tiles.overturemaps.org/${release}/buildings.pmtiles`;
@@ -17,32 +23,45 @@ export function overtureBaseUrl(release: string): string {
   return `https://tiles.overturemaps.org/${release}/base.pmtiles`;
 }
 
-type StacCatalog = {
-  stac_version?: string;
-  links?: { rel: string; href: string; title?: string }[];
-};
-
 /** Resolve the current Overture release from STAC (`latest` link). Cached for the session. */
-export async function resolveOvertureRelease(signal?: AbortSignal): Promise<string> {
-  if (cachedRelease) return cachedRelease;
+export async function resolveOvertureReleaseWithMeta(
+  signal?: AbortSignal,
+): Promise<OvertureReleaseResolution> {
+  if (cachedResolution) return cachedResolution;
   try {
     const response = await fetch(STAC_CATALOG_URL, { signal });
-    if (!response.ok) throw new Error(String(response.status));
-    const catalog = (await response.json()) as StacCatalog;
+    if (!response.ok) {
+      cachedResolution = {
+        release: OVERTURE_RELEASE_FALLBACK,
+        stacWarning: `Overture STAC catalog HTTP ${response.status}; using pinned release ${OVERTURE_RELEASE_FALLBACK}.`,
+      };
+      return cachedResolution;
+    }
+    const catalog = (await response.json()) as {
+      links?: { rel: string; href: string; title?: string }[];
+    };
     const latest = catalog.links?.find((link) => link.rel === "latest");
     const href = latest?.href;
     if (!href) throw new Error("missing latest");
     const release = href.split("/").filter(Boolean).pop();
     if (!release) throw new Error("bad latest href");
-    cachedRelease = release;
-    return release;
-  } catch {
-    cachedRelease = OVERTURE_RELEASE_FALLBACK;
-    return OVERTURE_RELEASE_FALLBACK;
+    cachedResolution = { release, stacWarning: null };
+    return cachedResolution;
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "unknown error";
+    cachedResolution = {
+      release: OVERTURE_RELEASE_FALLBACK,
+      stacWarning: `Overture STAC catalog unavailable (${detail}); using pinned release ${OVERTURE_RELEASE_FALLBACK}.`,
+    };
+    return cachedResolution;
   }
+}
+
+export async function resolveOvertureRelease(signal?: AbortSignal): Promise<string> {
+  return (await resolveOvertureReleaseWithMeta(signal)).release;
 }
 
 /** Test helper. */
 export function clearOvertureReleaseCache(): void {
-  cachedRelease = null;
+  cachedResolution = null;
 }

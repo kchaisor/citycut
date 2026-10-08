@@ -17,7 +17,7 @@ import { dedupeBuildings } from "./footprints";
 import { dedupeConsecutive, openRing, signedArea, toLocal } from "./geo";
 import { footprintArea } from "./useCascade";
 import { overtureBuildingHeight, overtureHeightUsesFallback, overtureMinHeightM } from "./overtureHeight";
-import { overtureBuildingsUrl, resolveOvertureRelease } from "./overtureRelease";
+import { overtureBuildingsUrl, resolveOvertureReleaseWithMeta } from "./overtureRelease";
 import { parseOvertureSources, pickTallestOvertureProps } from "./overtureSources";
 import { pointInPolygon } from "./useCascade";
 import type { BuildingFeat, LonLat, Pt, Ring } from "../types";
@@ -36,6 +36,7 @@ export type OvertureFetchStats = {
   fragmentCount: number;
   buildingCount: number;
   hasMicrosoftFootprints: boolean;
+  stacWarning: string | null;
 };
 
 type Fragment = {
@@ -312,9 +313,14 @@ export async function fetchOvertureBuildingsForCut(
   sideM: number,
   signal?: AbortSignal,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
-): Promise<{ buildings: BuildingFeat[]; stats: OvertureFetchStats; buildingCapHit: boolean }> {
+): Promise<{
+  buildings: BuildingFeat[];
+  stats: OvertureFetchStats;
+  buildingCapHit: boolean;
+  stacWarning: string | null;
+}> {
   const t0 = performance.now();
-  const release = await resolveOvertureRelease(signal);
+  const { release, stacWarning } = await resolveOvertureReleaseWithMeta(signal);
   const pmtiles = new PMTiles(overtureBuildingsUrl(release));
   const tiles = tileRange(bounds, OVERTURE_BUILDING_ZOOM);
   const tileResults = await Promise.all(
@@ -341,6 +347,7 @@ export async function fetchOvertureBuildingsForCut(
   return {
     buildings,
     buildingCapHit,
+    stacWarning,
     stats: {
       release,
       tileCount: tiles.length,
@@ -348,6 +355,7 @@ export async function fetchOvertureBuildingsForCut(
       fragmentCount: fragments.length,
       buildingCount: buildings.length,
       hasMicrosoftFootprints: merged.some((item) => item.microsoft),
+      stacWarning,
     },
   };
 }

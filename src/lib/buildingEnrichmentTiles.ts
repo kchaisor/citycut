@@ -78,6 +78,10 @@ export type EnrichmentManifest = {
   };
   clueLoaded?: boolean;
   bca?: { status: string; detail?: string; url?: string };
+  /** SHA-256 of canonical `shared/vicmap-zone-use.json` at bake time. */
+  zoneUseTableSha256?: string;
+  /** SHA-256 of canonical `shared/overture-building-use.json` at bake time. */
+  overtureBuildingUseSha256?: string;
 };
 
 function tileRange(bounds: { south: number; west: number; north: number; east: number }, z: number) {

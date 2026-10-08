@@ -16,6 +16,10 @@ def test_classify_overture_subtype():
     assert classify_overture({"subtype": "residential"}) == ("residential", "overture")
 
 
+def test_classify_overture_pavilion():
+    assert classify_overture({"class": "pavilion"}) == ("recreation", "overture")
+
+
 def test_zone_use_grz():
     assert zone_use("GRZ1") == "residential"
 
