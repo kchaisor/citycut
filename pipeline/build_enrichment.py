@@ -94,8 +94,12 @@ def _tier_beats(candidate: str, current: str) -> bool:
 def load_buildings(path: Path) -> gpd.GeoDataFrame:
     if path.suffix.lower() == ".parquet":
         gdf = gpd.read_parquet(path)
-        if "geom" in gdf.columns and "geometry" not in gdf.columns:
-            gdf = gdf.set_geometry("geom")
+        geom_col = "geometry" if "geometry" in gdf.columns else "geom" if "geom" in gdf.columns else None
+        if geom_col is None:
+            raise ValueError(f"No geometry column in {path}")
+        gdf = gdf.set_geometry(geom_col)
+        if geom_col != "geometry":
+            gdf = gdf.rename_geometry("geometry")
     else:
         gdf = gpd.read_file(path)
     if gdf.crs is None:
