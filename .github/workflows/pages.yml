@@ -48,7 +48,7 @@ jobs:
       - name: Install enrichment pipeline deps
         run: pip install -r pipeline/requirements.txt
       - name: Python pipeline tests
-        run: pytest pipeline/test_build_enrichment.py -q
+        run: pytest pipeline/test_build_enrichment.py pipeline/test_extent.py pipeline/test_zone_use.py -q
       - name: Ensure enrichment PMTiles (release first, committed fallback)
         run: node scripts/fetch-building-enrichment-pmtiles.mjs
         env:

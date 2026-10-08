@@ -65,6 +65,17 @@ export type EnrichmentManifest = {
   /** When set, fetch PMTiles from this URL instead of the bundled GitHub Pages path. */
   pmtilesUrl?: string;
   lidar?: { status: string; detail?: string };
+  zonesFetch?: {
+    complete?: boolean;
+    pagesOk?: number;
+    pagesFailed?: number;
+    features?: number;
+    failures?: string[];
+  };
+  zoneDiagnostics?: {
+    unclassifiedNoZoneJoin?: number;
+    unclassifiedUnmappedZoneCounts?: Record<string, number>;
+  };
   clueLoaded?: boolean;
   bca?: { status: string; detail?: string; url?: string };
 };

@@ -1,6 +1,12 @@
-from build_enrichment import LIDAR_NO_DATA_LINE, assign_cascade, classify_overture, lidar_manifest, zone_use
+from build_enrichment import LIDAR_NO_DATA_LINE, assign_cascade, classify_overture, lidar_manifest
 from clue_join import _dominant_use_from_row, clue_use_for_buildings, load_clue_block_uses
-from extent import CITY_OF_MELBOURNE, building_in_bounds
+from extent import (
+    CITY_OF_MELBOURNE_RECT,
+    building_in_city_of_melbourne,
+    point_in_bounds,
+    point_in_city_of_melbourne,
+)
+from zone_use import use_from_zone as zone_use
 from shapely.geometry import Point
 import geopandas as gpd
 import pandas as pd
@@ -38,23 +44,21 @@ def test_clue_beats_zone():
     assert row["use_source"] == "clue"
 
 
-def test_clue_join_skipped_outside_city_of_melbourne():
-    """CLUE must not apply to Hawthorn (outside CoM bbox)."""
-    blocks, _, err = load_clue_block_uses()
+def test_clue_gate_lga_not_legacy_rectangle():
+    """Richmond: inside old CLUE rect, outside City of Melbourne LGA."""
+    lon, lat = 144.995, -37.825
+    assert point_in_bounds(lon, lat, CITY_OF_MELBOURNE_RECT)
+    assert not point_in_city_of_melbourne(lon, lat)
+    blocks, _, _ = load_clue_block_uses()
     if blocks is None or blocks.empty:
         return
-    hawthorn = gpd.GeoDataFrame(
-        {"overture_id": ["h1"]},
-        geometry=[Point(145.0354, -37.8226)],
-        crs="EPSG:4326",
-    )
-    series = clue_use_for_buildings(hawthorn, blocks)
-    assert series.iloc[0] is None
-    assert not building_in_bounds(hawthorn.geometry.iloc[0], CITY_OF_MELBOURNE)
+    row = gpd.GeoDataFrame({"overture_id": ["r1"]}, geometry=[Point(lon, lat)], crs="EPSG:4326")
+    assert clue_use_for_buildings(row, blocks).iloc[0] is None
+    assert not building_in_city_of_melbourne(row.geometry.iloc[0])
 
 
-def test_clue_join_allowed_inside_city_of_melbourne():
-    blocks, _, err = load_clue_block_uses()
+def test_clue_join_allowed_inside_city_of_melbourne_lga():
+    blocks, _, _ = load_clue_block_uses()
     if blocks is None or blocks.empty:
         return
     cbd = gpd.GeoDataFrame(
@@ -62,6 +66,4 @@ def test_clue_join_allowed_inside_city_of_melbourne():
         geometry=[Point(144.965, -37.813)],
         crs="EPSG:4326",
     )
-    series = clue_use_for_buildings(cbd, blocks)
-    # May or may not hit a block; only assert pipeline would consider this point in CoM.
-    assert building_in_bounds(cbd.geometry.iloc[0], CITY_OF_MELBOURNE)
+    assert building_in_city_of_melbourne(cbd.geometry.iloc[0])

@@ -5,7 +5,8 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const RELEASE = "building-enrichment-latest";
+export const RELEASE =
+  process.env.BUILDING_ENRICHMENT_RELEASE?.trim() || "building-enrichment-latest";
 export const PMTILES_NAME = "building-enrichment.pmtiles";
 export const MANIFEST_NAME = "building-enrichment-manifest.json";
 

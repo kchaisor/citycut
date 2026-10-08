@@ -33,7 +33,7 @@ jobs:
           mkdir -p "$HOME/.local/bin"
           cp /tmp/tippecanoe-src/tippecanoe "$HOME/.local/bin/tippecanoe"
       - name: Python tests
-        run: pytest pipeline/test_build_enrichment.py pipeline/test_extent.py -q
+        run: pytest pipeline/test_build_enrichment.py pipeline/test_extent.py pipeline/test_zone_use.py -q
       - name: Build enrichment PMTiles (Greater Melbourne GCCSA)
         run: node scripts/build-building-enrichment-pmtiles.mjs
         env:

@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -19,7 +21,19 @@ import pandas as pd
 
 from bca_join import bca_use_for_buildings, fetch_vicmap_addresses, load_bca_index
 from clue_join import clue_use_for_buildings, load_clue_block_uses
-from extent import CITY_OF_MELBOURNE, GREATER_MELBOURNE_GCCSA, REGION_NAME, building_in_bounds
+from extent import (
+    GREATER_MELBOURNE_GCCSA,
+    LGA_NAME,
+    REGION_NAME,
+    building_in_city_of_melbourne,
+)
+from zone_use import (
+    C1Z_RETAIL_BELOW_M,
+    ZONE_USE,
+    resolved_height_m,
+    strip_schedule_suffix,
+    use_from_zone_row,
+)
 from zones_fetch import fetch_zones_for_bounds
 
 USE_MAP = {
@@ -65,21 +79,6 @@ def classify_overture_row(row: pd.Series) -> tuple[str, str] | None:
     return None
 
 
-def zone_use(code: str) -> str | None:
-    code = code.strip().upper()
-    if code.startswith("GRZ") or code.startswith("NRZ") or code.startswith("RGZ"):
-        return "residential"
-    if code.startswith("MUZ"):
-        return "mixed_use"
-    if code.startswith("C"):
-        return "commercial"
-    if code.startswith("IN"):
-        return "industrial"
-    if code.startswith("PUZ"):
-        return "civic"
-    return None
-
-
 LIDAR_NO_DATA_LINE = "LiDAR: no data, ELVIS not ordered"
 
 
@@ -118,7 +117,7 @@ def join_zones(buildings: gpd.GeoDataFrame, zones: gpd.GeoDataFrame | None) -> p
     pts["geometry"] = pts.geometry.representative_point()
     zcol = "zone_code" if "zone_code" in zones.columns else "ZONE_CODE"
     zsubset = zones[[zcol, "geometry"]].rename(columns={zcol: "zone_code"})
-    joined = gpd.sjoin(pts, zsubset, how="left", predicate="within")
+    joined = gpd.sjoin(pts, zsubset, how="left", predicate="intersects")
     joined = joined[~joined.index.duplicated(keep="first")]
     codes = joined["zone_code"].astype("string").str.strip()
     out.loc[joined.index] = codes.where(codes.notna() & (codes != ""))
@@ -168,13 +167,41 @@ def apply_cascade_vectorized(
 
     zone_mask = (use_source == "unclassified") & zone_codes.notna()
     if zone_mask.any():
-        zuses = zone_codes[zone_mask].map(lambda z: zone_use(str(z)))
-        zhit = zuses.notna()
-        idx = zuses[zhit].index
-        use.loc[idx] = zuses[zhit].values
-        use_source.loc[idx] = "zone"
+        sub_idx = buildings.index[zone_mask]
+        stripped = zone_codes.loc[sub_idx].astype(str).map(strip_schedule_suffix)
+        heights = buildings.loc[sub_idx].apply(
+            lambda r: resolved_height_m(r.get("height"), r.get("num_floors")),
+            axis=1,
+        )
+        zuses = stripped.map(lambda s: ZONE_USE.get(s))
+        c1z = stripped == "C1Z"
+        if c1z.any():
+            zuses.loc[c1z] = heights.loc[c1z].map(
+                lambda h: "retail" if h < C1Z_RETAIL_BELOW_M else "commercial"
+            )
+        hit = zuses.notna()
+        use.loc[sub_idx[hit]] = zuses[hit].values
+        use_source.loc[sub_idx[hit]] = "zone"
 
     return pd.DataFrame({"use": use, "use_source": use_source, "zone_code": zone_codes})
+
+
+def zone_diagnostics(
+    buildings: gpd.GeoDataFrame,
+    zone_codes: pd.Series,
+    assigned: pd.DataFrame,
+) -> dict[str, object]:
+    unclassified = assigned["use_source"] == "unclassified"
+    zc = zone_codes.astype("string")
+    missing = unclassified & (zc.isna() | (zc.str.strip() == ""))
+    with_zone = unclassified & ~missing
+    stripped = zc.loc[with_zone.index].dropna().astype(str).map(strip_schedule_suffix)
+    unmapped_mask = ~stripped.map(lambda s: s == "C1Z" or s in ZONE_USE)
+    counts = Counter(stripped[unmapped_mask].value_counts().to_dict())
+    return {
+        "unclassifiedNoZoneJoin": int(missing.sum()),
+        "unclassifiedUnmappedZoneCounts": dict(counts.most_common(40)),
+    }
 
 
 def count_sources_by_com(
@@ -215,20 +242,22 @@ def main() -> int:
         raw = json.loads(args.extent_json)
         extent = {k: float(raw[k]) for k in ("west", "south", "east", "north")}
 
+    strict_zones = os.environ.get("STRICT_ZONES_FETCH", "1") == "1"
     t0 = time.perf_counter()
-    zones = fetch_zones_for_bounds(extent)
+    zones, zone_fetch_stats = fetch_zones_for_bounds(extent, strict=strict_zones)
     timings["fetchZonesSec"] = round(time.perf_counter() - t0, 2)
+    print(f"[enrichment] zones WFS: {zone_fetch_stats.to_manifest()}", file=sys.stderr)
+    if not zone_fetch_stats.to_manifest()["complete"]:
+        print("[enrichment] zones WFS incomplete — manifest will flag; unclassified may be inflated", file=sys.stderr)
+        if strict_zones and zone_fetch_stats.pages_failed > 0:
+            return 1
 
     t0 = time.perf_counter()
     clue_blocks, _floor_map, clue_err = load_clue_block_uses()
     timings["loadClueSec"] = round(time.perf_counter() - t0, 2)
 
-    centroids = buildings.geometry.representative_point()
-    com_mask = (
-        (centroids.x >= CITY_OF_MELBOURNE["west"])
-        & (centroids.x <= CITY_OF_MELBOURNE["east"])
-        & (centroids.y >= CITY_OF_MELBOURNE["south"])
-        & (centroids.y <= CITY_OF_MELBOURNE["north"])
+    com_mask = buildings.geometry.apply(
+        lambda g: building_in_city_of_melbourne(g) if g is not None and not g.is_empty else False
     )
     com_buildings = buildings.loc[com_mask]
     t0 = time.perf_counter()
@@ -257,6 +286,7 @@ def main() -> int:
         source_counts.setdefault(key, 0)
 
     by_com = count_sources_by_com(buildings, assigned["use_source"], com_mask)
+    zone_diag = zone_diagnostics(buildings, zone_codes, assigned)
 
     t0 = time.perf_counter()
     out = buildings.copy()
@@ -298,10 +328,13 @@ def main() -> int:
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "lidar": lidar,
         "zonesLoaded": zones is not None and not zones.empty,
+        "zonesFetch": zone_fetch_stats.to_manifest(),
+        "zoneDiagnostics": zone_diag,
         "clueLoaded": clue_blocks is not None and not clue_blocks.empty,
         "clueError": clue_err,
         "clueBlocks": int(len(clue_blocks)) if clue_blocks is not None else 0,
-        "clueAppliesWithin": CITY_OF_MELBOURNE,
+        "clueAppliesWithinLga": LGA_NAME,
+        "clueAppliesLgaCode": "24600",
         "bca": bca_meta,
         "useSourceCountsSample": {k: source_counts.get(k, 0) for k in ("overture", "clue", "bca", "zone", "unclassified")},
         "useSourceCountsByCom": by_com,
@@ -342,7 +375,7 @@ def assign_cascade(props, geom, zones, clue_pick, bca_pick):
             if isinstance(zc, str):
                 zone_code = zc.strip()
                 if use_source == "unclassified":
-                    zu = zone_use(zone_code)
+                    zu = use_from_zone_row(zone_code, row)
                     if zu:
                         use, use_source = zu, "zone"
 
