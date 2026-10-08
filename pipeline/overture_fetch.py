@@ -35,7 +35,6 @@ def fetch_buildings_parquet(
             id,
             class,
             subtype,
-            "use",
             height,
             num_floors,
             geometry AS geom
