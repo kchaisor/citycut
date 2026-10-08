@@ -246,6 +246,43 @@ export function formatDamDevelopmentRow(row: {
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
+const DAM_STATUS_RANK: Record<string, number> = {
+  COMPLETED: 0,
+  APPROVED: 1,
+};
+
+function damStatusRank(status: string | undefined): number {
+  if (!status) return 50;
+  const key = status.trim().toUpperCase();
+  return DAM_STATUS_RANK[key] ?? 25;
+}
+
+/** Prefer completed over approved; note a secondary approved record when both exist. */
+export function pickDamDevelopmentDisplayRows(
+  rows: { status?: string; floors_above?: number; resi_dwellings?: number }[],
+): string | null {
+  if (rows.length === 0) return null;
+  const sorted = [...rows].sort(
+    (a, b) =>
+      damStatusRank(a.status) - damStatusRank(b.status) ||
+      (b.floors_above ?? 0) - (a.floors_above ?? 0),
+  );
+  const primary = formatDamDevelopmentRow(sorted[0]!);
+  if (!primary) return null;
+  const approvedNote = sorted.find(
+    (row, i) =>
+      i > 0 &&
+      typeof row.status === "string" &&
+      row.status.trim().toUpperCase() === "APPROVED" &&
+      damStatusRank(sorted[0]?.status) < damStatusRank(row.status),
+  );
+  const approvedText = approvedNote ? formatDamDevelopmentRow(approvedNote) : null;
+  if (approvedText && sorted[0]?.status?.trim().toUpperCase() === "COMPLETED") {
+    return `${primary} (${approvedText} also on site)`;
+  }
+  return primary;
+}
+
 /** Same winner rule as {@link applyDevelopmentFloorsToBuildings}; skips nearest-point mismatches. */
 export async function lookupDevelopmentForBuilding(
   building: BuildingFeat,
@@ -256,18 +293,25 @@ export async function lookupDevelopmentForBuilding(
 ): Promise<string | null> {
   const won = damRecordsWonByBuilding(building, center, damRecords, allBuildings);
   if (won.length === 0) return null;
-  won.sort((a, b) => b.floorsAbove - a.floorsAbove);
-  const record = won[0]!;
-  const where = `within_distance(geopoint, geom'POINT(${record.lon} ${record.lat})', 70m)`;
-  const url = comRecordsUrl(DAM_SLUG, where, undefined, 20);
-  logPopupUrl("CoM development", url);
-  const body = (await fetchJson(url, signal)) as {
-    results?: { status?: string; floors_above?: number; resi_dwellings?: number }[];
-  } | null;
-  const row =
-    body?.results?.find((r) => r.floors_above === record.floorsAbove) ?? body?.results?.[0] ?? null;
-  if (!row) return `${record.floorsAbove} floors`;
-  return formatDamDevelopmentRow(row);
+  const lines: string[] = [];
+  const seen = new Set<string>();
+  for (const record of won) {
+    const key = `${record.lon.toFixed(5)},${record.lat.toFixed(5)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const where = `within_distance(geopoint, geom'POINT(${record.lon} ${record.lat})', 70m)`;
+    const url = comRecordsUrl(DAM_SLUG, where, undefined, 20);
+    logPopupUrl("CoM development", url);
+    const body = (await fetchJson(url, signal)) as {
+      results?: { status?: string; floors_above?: number; resi_dwellings?: number }[];
+    } | null;
+    const matching =
+      body?.results?.filter((r) => r.floors_above === record.floorsAbove) ?? body?.results ?? [];
+    const display = pickDamDevelopmentDisplayRows(matching.length > 0 ? matching : body?.results ?? []);
+    if (display) lines.push(display);
+    else lines.push(`${record.floorsAbove} floors`);
+  }
+  return lines.length > 0 ? lines.join(" · ") : null;
 }
 
 export type BuildingPopupContext = {

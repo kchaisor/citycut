@@ -150,10 +150,39 @@ cam.position.set(center.x, center.y + size.y * 0.05, center.z - Math.max(size.z,
 cam.up.set(0, 1, 0);
 cam.lookAt(center.x, center.y * 0.45, center.z);
 cam.updateProjectionMatrix();
-const barMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
-const bar = new THREE.Mesh(new THREE.BoxGeometry(10, 0.8, 0.8), barMat);
-bar.position.set(box.min.x + 15, 5, center.z);
+const barY = box.min.y + 2;
+const barX0 = box.min.x + 12;
+const barMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+const capMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+const bar = new THREE.Mesh(new THREE.BoxGeometry(10, 1.2, 1.2), barMat);
+bar.position.set(barX0 + 5, barY, center.z);
 scene.add(bar);
+for (const dx of [0, 10]) {
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.6, 2.4, 1.2), capMat);
+  cap.position.set(barX0 + dx, barY + 0.6, center.z);
+  scene.add(cap);
+}
+renderer.render(scene, cam);
+const overlay = document.createElement("div");
+overlay.style.cssText =
+  "position:fixed;left:0;top:0;width:1200px;height:800px;pointer-events:none;font:600 14px sans-serif;color:#111";
+const capEl = document.querySelector(".cap");
+const capRect = capEl.getBoundingClientRect();
+const worldToPx = (wx, wy) => {
+  const v = new THREE.Vector3(wx, wy, center.z).project(cam);
+  return { x: (v.x * 0.5 + 0.5) * 1200, y: (-v.y * 0.5 + 0.5) * 760 + capRect.height };
+};
+const left = worldToPx(barX0, barY);
+const label = document.createElement("div");
+label.textContent = "10 m";
+label.style.cssText =
+  "position:absolute;left:" +
+  Math.round(left.x) +
+  "px;top:" +
+  Math.round(left.y + 8) +
+  "px;background:rgba(245,243,238,0.92);padding:2px 6px;border:1px solid #333";
+overlay.appendChild(label);
+document.body.appendChild(overlay);
 renderer.render(scene, cam);
 window.__done = true;
 </script>`,

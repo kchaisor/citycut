@@ -1,5 +1,5 @@
-import { fromLocal, openRing, signedArea } from "./geo";
-import { interiorPoint } from "./useCascade";
+import { fromLocal, openRing, signedArea, toLocal } from "./geo";
+import { interiorPoint, pointInPolygon } from "./useCascade";
 import { intersectsComCity } from "./comBuildingHeights";
 import type { BBox } from "./comBuildingHeightsTypes";
 import type { BuildingFeat, LonLat } from "../types";
@@ -102,6 +102,20 @@ function buildingLonLat(building: BuildingFeat, center: LonLat): { lon: number; 
   return fromLocal(at, center);
 }
 
+function damRecordLocalPoint(record: DamFloorRecord, center: LonLat): [number, number] {
+  return toLocal(record.lat, record.lon, center);
+}
+
+/** True when the DAM geopoint falls inside the building footprint. */
+export function buildingContainsDamGeopoint(
+  building: BuildingFeat,
+  center: LonLat,
+  record: DamFloorRecord,
+): boolean {
+  const at = damRecordLocalPoint(record, center);
+  return pointInPolygon(at, building.ring, building.holes);
+}
+
 /** Buildings within {@link MATCH_RADIUS_M} of a DAM point that still qualify for DAM height. */
 export function buildingsEligibleNearDamRecord(
   buildings: BuildingFeat[],
@@ -117,6 +131,19 @@ export function buildingsEligibleNearDamRecord(
     }
   }
   return eligible;
+}
+
+function buildingsContainingDamGeopoint(
+  buildings: BuildingFeat[],
+  center: LonLat,
+  record: DamFloorRecord,
+): BuildingFeat[] {
+  const out: BuildingFeat[] = [];
+  for (const building of buildings) {
+    if (!buildingEligibleForDamFloors(building)) continue;
+    if (buildingContainsDamGeopoint(building, center, record)) out.push(building);
+  }
+  return out;
 }
 
 /** Pick one building per DAM record: largest footprint among eligible neighbours. */
@@ -135,7 +162,11 @@ export function pickDamFloorRecipient(
   center: LonLat,
   record: DamFloorRecord,
 ): BuildingFeat | null {
-  const eligible = buildingsEligibleNearDamRecord(buildings, center, record);
+  const containing = buildingsContainingDamGeopoint(buildings, center, record);
+  const eligible =
+    containing.length > 0
+      ? containing
+      : buildingsEligibleNearDamRecord(buildings, center, record);
   if (eligible.length === 0) return null;
   return eligible.reduce((best, b) =>
     footprintAreaM2(b) > footprintAreaM2(best) ? b : best,

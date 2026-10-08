@@ -3,6 +3,7 @@ import type { BuildingFeat } from "../types";
 import { fromLocal } from "./geo";
 import { interiorPoint } from "./useCascade";
 import { damRecordsWonByBuilding, type DamFloorRecord } from "./comDevelopmentFloors";
+import { pickDamDevelopmentDisplayRows } from "./buildingPopupLookup";
 const center = { lon: 144.98, lat: -37.812 };
 
 function building(id: number, ring: BuildingFeat["ring"], extra: Partial<BuildingFeat> = {}): BuildingFeat {
@@ -40,5 +41,14 @@ describe("building popup DAM display", () => {
     const damAtTower: DamFloorRecord = { lon, lat, floorsAbove: 33 };
     expect(damRecordsWonByBuilding(park, center, [damAtTower], all).length).toBe(0);
     expect(damRecordsWonByBuilding(tower, center, [damAtTower], all).length).toBe(1);
+  });
+
+  it("prefers COMPLETED over APPROVED and notes the other record", () => {
+    const line = pickDamDevelopmentDisplayRows([
+      { status: "APPROVED", floors_above: 11 },
+      { status: "COMPLETED", floors_above: 9 },
+    ]);
+    expect(line).toMatch(/COMPLETED · 9 floors/);
+    expect(line).toMatch(/APPROVED · 11 floors also on site/);
   });
 });

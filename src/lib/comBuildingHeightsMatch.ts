@@ -78,9 +78,51 @@ function isSliver(area: number, referenceArea: number): boolean {
   return area < COM_SLIVER_MIN_M2 || area < COM_SLIVER_MIN_FRACTION * referenceArea;
 }
 
-/** CoM clip parts below this share of the OSM footprint must not drive scalar height or 3D extrusions. */
-function isInsignificantComPart(area: number, osmArea: number): boolean {
-  return isSliver(area, osmArea) || area / osmArea < COM_FALLBACK_MIN_FRACTION;
+type StructureOverlap = {
+  id: string;
+  overlapArea: number;
+  comArea: number;
+  maxHeight: number;
+};
+
+/** Sum footprint overlap per CoM structure id (structure-level gate, not per slice). */
+function structureOverlapsForBuilding(
+  building: BuildingFeat,
+  footprints: ComBuildingFootprint[],
+): Map<string, StructureOverlap> {
+  const osmArea = Math.abs(signedArea(openRing(building.ring)));
+  const byId = new Map<string, StructureOverlap>();
+  if (osmArea <= 0) return byId;
+  for (const footprint of footprints) {
+    const overlap = intersectionAreaM2(building, footprint);
+    if (overlap <= 0 || overlap < COM_SLIVER_MIN_M2) continue;
+    const id = footprint.id || `part-${footprint.minX}-${footprint.minY}`;
+    const comArea = comPartAreaM2(footprint);
+    const prev = byId.get(id) ?? { id, overlapArea: 0, comArea: 0, maxHeight: 0 };
+    prev.overlapArea += overlap;
+    prev.comArea = Math.max(prev.comArea, comArea);
+    prev.maxHeight = Math.max(prev.maxHeight, footprint.height_m);
+    byId.set(id, prev);
+  }
+  return byId;
+}
+
+function structureQualifiesForBuilding(row: StructureOverlap, osmArea: number): boolean {
+  if (row.overlapArea <= 0) return false;
+  return row.overlapArea / osmArea >= COM_FALLBACK_MIN_FRACTION;
+}
+
+function matchingStructureIds(
+  building: BuildingFeat,
+  footprints: ComBuildingFootprint[],
+): Set<string> {
+  const osmArea = Math.abs(signedArea(openRing(building.ring)));
+  const byId = structureOverlapsForBuilding(building, footprints);
+  const ids = new Set<string>();
+  for (const row of byId.values()) {
+    if (structureQualifiesForBuilding(row, osmArea)) ids.add(row.id);
+  }
+  return ids;
 }
 
 function partsFromMultiPolygon(
@@ -88,13 +130,16 @@ function partsFromMultiPolygon(
   height: number,
   referenceArea: number,
   filterSlivers: boolean,
-  strictComShare = false,
+  sliverMode: "osm_fraction" | "absolute_only" | "strict_com_share" = "osm_fraction",
 ): ExtrusionPart[] {
   const parts: ExtrusionPart[] = [];
   for (const poly of multi) {
     const area = polygonAreaM2(poly);
-    if (filterSlivers && strictComShare && isInsignificantComPart(area, referenceArea)) continue;
-    if (filterSlivers && !strictComShare && isSliver(area, referenceArea)) continue;
+    if (filterSlivers && sliverMode === "strict_com_share" && area / referenceArea < COM_FALLBACK_MIN_FRACTION) {
+      continue;
+    }
+    if (filterSlivers && sliverMode === "absolute_only" && area < COM_SLIVER_MIN_M2) continue;
+    if (filterSlivers && sliverMode === "osm_fraction" && isSliver(area, referenceArea)) continue;
     if (!poly[0]?.length) continue;
     parts.push({
       ring: openRing(poly[0] as Ring),
@@ -135,55 +180,36 @@ export function pickPrimaryComMatchMeta(
 ): ComMatchMeta {
   const osmArea = Math.abs(signedArea(openRing(building.ring)));
   if (osmArea <= 0) return {};
-  let best: { id: string; height_m: number; overlap: number } | null = null;
-  for (const footprint of footprints) {
-    const overlap = intersectionAreaM2(building, footprint);
-    if (overlap <= 0 || isSliver(overlap, osmArea)) continue;
-    if (overlap / osmArea < COM_FALLBACK_MIN_FRACTION) continue;
+  const byId = structureOverlapsForBuilding(building, footprints);
+  let best: StructureOverlap | null = null;
+  for (const row of byId.values()) {
+    if (!structureQualifiesForBuilding(row, osmArea)) continue;
     if (
       !best ||
-      overlap > best.overlap ||
-      (overlap === best.overlap && footprint.height_m > best.height_m)
+      row.overlapArea > best.overlapArea ||
+      (row.overlapArea === best.overlapArea && row.maxHeight > best.maxHeight)
     ) {
-      best = { id: footprint.id, height_m: footprint.height_m, overlap };
+      best = row;
     }
   }
   if (!best) return {};
   return {
     comMatchStructureId: best.id,
-    comMatchHeightM: best.height_m,
-    comMatchOverlapRatio: best.overlap / osmArea,
+    comMatchHeightM: best.maxHeight,
+    comMatchOverlapRatio: best.overlapArea / osmArea,
   };
 }
 
-function maxQualifyingComPartHeightM(building: BuildingFeat): number {
-  const osmArea = Math.abs(signedArea(openRing(building.ring)));
-  if (osmArea <= 0 || !building.extrusionParts?.length) return building.height;
-  let max = 0;
-  for (const part of building.extrusionParts) {
-    const area = Math.abs(signedArea(openRing(part.ring)));
-    if (isInsignificantComPart(area, osmArea)) continue;
-    max = Math.max(max, part.height);
-  }
-  return max > 0 ? max : building.height;
-}
-
-function dropInsignificantExtrusionParts(building: BuildingFeat): ExtrusionPart[] | undefined {
-  const parts = building.extrusionParts;
-  if (!parts?.length) return parts;
-  const osmArea = Math.abs(signedArea(openRing(building.ring)));
-  if (osmArea <= 0) return parts;
-  const kept = parts.filter((part) => !isInsignificantComPart(Math.abs(signedArea(openRing(part.ring))), osmArea));
-  return kept.length > 0 ? kept : parts;
+function maxExtrusionPartHeightM(building: BuildingFeat): number {
+  if (!building.extrusionParts?.length) return building.height;
+  return Math.max(...building.extrusionParts.map((part) => part.height));
 }
 
 function finalizeComMatchedBuilding(building: BuildingFeat): BuildingFeat {
   if (building.heightManual || !building.extrusionParts?.length) return building;
-  const extrusionParts = dropInsignificantExtrusionParts(building);
-  const withParts = extrusionParts ? { ...building, extrusionParts } : building;
-  const height = clampBuildingHeight(maxQualifyingComPartHeightM(withParts));
+  const height = clampBuildingHeight(maxExtrusionPartHeightM(building));
   return {
-    ...withParts,
+    ...building,
     height,
     heightFromFallback: undefined,
     heightTier: "com",
@@ -201,15 +227,12 @@ export function pickComHeightFallback20(
 ): ComBuildingFootprint | null {
   const osmArea = Math.abs(signedArea(openRing(building.ring)));
   if (osmArea <= 0) return null;
+  const matchIds = matchingStructureIds(building, footprints);
+  if (matchIds.size === 0) return null;
   let best: ComBuildingFootprint | null = null;
   let bestHeight = 0;
   for (const footprint of footprints) {
-    const overlap = intersectionAreaM2(building, footprint);
-    if (overlap <= 0) continue;
-    const comArea = Math.abs(signedArea(openRing(footprint.ring)));
-    const osmShare = overlap / osmArea;
-    const comShare = comArea > 0 ? overlap / comArea : 0;
-    if (osmShare < COM_FALLBACK_MIN_FRACTION && comShare < COM_FALLBACK_MIN_FRACTION) continue;
+    if (!matchIds.has(footprint.id)) continue;
     if (footprint.height_m > bestHeight) {
       bestHeight = footprint.height_m;
       best = footprint;
@@ -237,7 +260,7 @@ export function aggregateComHeightForMergedFootprint(
   const byId = new Map<string, StructureAggregate>();
   for (const footprint of footprints) {
     const overlap = intersectionAreaM2(building, footprint);
-    if (overlap <= 0 || isSliver(overlap, osmArea)) continue;
+    if (overlap <= 0 || overlap < COM_SLIVER_MIN_M2) continue;
     const id = footprint.id || `part-${footprint.minX}-${footprint.minY}`;
     const prev = byId.get(id) ?? { id, overlapArea: 0, maxHeight: 0 };
     prev.overlapArea += overlap;
@@ -265,16 +288,15 @@ function clipBuildingComExtrusions(
 
   try {
     const osmPoly = osmClipPolygon(building);
+    const matchIds = matchingStructureIds(building, footprints);
+    if (matchIds.size === 0) return null;
     const comParts: ExtrusionPart[] = [];
     const comUnionInputs: Polygon[] = [];
 
     for (const footprint of footprints) {
+      if (!matchIds.has(footprint.id)) continue;
       const overlap = intersectionAreaM2(building, footprint);
-      if (overlap <= 0 || isSliver(overlap, osmArea)) continue;
-      const comArea = Math.abs(signedArea(openRing(footprint.ring)));
-      const osmShare = overlap / osmArea;
-      const comShare = comArea > 0 ? overlap / comArea : 0;
-      if (osmShare < COM_FALLBACK_MIN_FRACTION && comShare < COM_FALLBACK_MIN_FRACTION) continue;
+      if (overlap <= 0) continue;
       const inter = intersection(osmPoly, toClipPolygon(footprint.ring, footprint.holes));
       const area = multiPolygonArea(inter);
       if (area <= 0) continue;
@@ -282,7 +304,9 @@ function clipBuildingComExtrusions(
         if (!poly[0]?.length) continue;
         comUnionInputs.push(poly as Polygon);
       }
-      comParts.push(...partsFromMultiPolygon(inter, footprint.height_m, osmArea, true, true));
+      comParts.push(
+        ...partsFromMultiPolygon(inter, footprint.height_m, osmArea, true, "absolute_only"),
+      );
     }
 
     if (comParts.length === 0) return null;
@@ -342,10 +366,16 @@ type OverlapHit = { footprint: ComBuildingFootprint; area: number };
 function significantOverlaps(building: BuildingFeat, index: RBush<IndexedFootprint>, osmArea: number): OverlapHit[] {
   const { minX, minY, maxX, maxY } = ringBBox(building.ring);
   const candidates = index.search({ minX, minY, maxX, maxY });
+  const matchIds = matchingStructureIds(
+    building,
+    candidates.map((candidate) => candidate as ComBuildingFootprint),
+  );
   const hits: OverlapHit[] = [];
   for (const candidate of candidates) {
     const area = intersectionAreaM2(building, candidate);
-    if (area <= 0 || isSliver(area, osmArea)) continue;
+    if (area <= 0) continue;
+    const onMatchedStructure = matchIds.has(candidate.id);
+    if (!onMatchedStructure && isSliver(area, osmArea)) continue;
     hits.push({ footprint: candidate, area });
   }
   hits.sort(
