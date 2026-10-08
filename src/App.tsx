@@ -41,7 +41,7 @@ import { replaceTreeNote, treeTierCounts } from "./lib/trees";
 import { fetchVicmapTrees, vicmapPointsToTrees, VICMAP_ATTRIBUTION } from "./lib/vicmapTrees";
 import { loadContoursForCut } from "./lib/vicmapContours";
 import { fetchOvertureBuildingsForCut } from "./lib/overtureBuildings";
-import { qaModeFromSearch } from "./lib/qaCameraBridge";
+import { qaForcedCrashFromSearch, qaModeFromSearch } from "./lib/qaCameraBridge";
 import { siteBuildingOverlaps } from "./lib/siteBuildings";
 import { assignExternalUses, loadUseTiers } from "./lib/useCascade";
 import type { Basemap, CityModel, LonLat, PlaceHit, UiLayers, UseTierFailure, ViewState } from "./types";
@@ -55,7 +55,14 @@ const ModelPage = lazy(() => import("./components/ModelPage").then((mod) => ({ d
 
 type PlaceAnchor = LonLat & { label: string };
 
+function QaCrashThrower(): null {
+  throw new Error("QA forced fatal error");
+}
+
 export default function App() {
+  if (typeof window !== "undefined" && qaForcedCrashFromSearch(window.location.search)) {
+    return <QaCrashThrower />;
+  }
   const queried = frameFromQuery();
   const initialView: ViewState = queried?.view ?? { ...MELBOURNE, zoom: DEFAULT_ZOOM };
   const sharedLabel = typeof window === "undefined" ? null : explicitLabel(window.location.search);

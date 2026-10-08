@@ -52,6 +52,13 @@ export function qaModeFromSearch(search: string): boolean {
   return params.get("qa") === "1";
 }
 
+/** Dev-only: `?qa=crash` throws on the next render so QA can capture the app error boundary. */
+export function qaForcedCrashFromSearch(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  return params.get("qa") === "crash";
+}
+
 export function qaHideHeightPopoverFromSearch(search: string): boolean {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   return params.get("qaHidePopover") === "1";

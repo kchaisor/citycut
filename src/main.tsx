@@ -8,16 +8,18 @@ import "@fontsource/outfit/500.css";
 import "@fontsource/outfit/600.css";
 import "@fontsource/fraunces/500.css";
 import "maplibre-gl/dist/maplibre-gl.css";
-import App from "./App";
+import { AppRoot } from "./AppRoot";
 import "./index.css";
 import { hydrateStoredColours } from "./lib/colours";
 import { hydrateStoredLineStyles } from "./lib/drawingStyle";
+import { installPreloadErrorGuard } from "./lib/preloadErrorGuard";
 
 hydrateStoredLineStyles();
 hydrateStoredColours();
+installPreloadErrorGuard();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <AppRoot />
   </StrictMode>,
 );

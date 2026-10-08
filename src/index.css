@@ -647,6 +647,61 @@ input[type="range"]::-moz-range-thumb {
   max-width: 36em;
   font-size: 0.92em;
 }
+.app-fatal {
+  min-height: 100dvh;
+  display: grid;
+  place-content: center;
+  gap: 12px;
+  padding: 32px 24px;
+  text-align: center;
+  background: var(--app-bg);
+  color: var(--text);
+}
+.app-fatal h1 {
+  margin: 0;
+  font-family: var(--display-font);
+  font-size: 1.5rem;
+}
+.app-fatal-lead {
+  margin: 0;
+  color: var(--muted-text);
+  max-width: 28em;
+}
+.app-fatal-detail {
+  margin: 0;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+  color: var(--muted-text);
+  word-break: break-word;
+  max-width: 40em;
+}
+.app-fatal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 8px;
+}
+.scene-viewport {
+  position: absolute;
+  inset: 0;
+}
+.webgl-lost-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: grid;
+  place-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  background: color-mix(in srgb, var(--model-bg) 88%, transparent);
+  color: var(--text);
+}
+.webgl-lost-overlay p {
+  margin: 0;
+  max-width: 20em;
+}
 .plan { touch-action: none; cursor: grab; background: var(--drawing-bg); }
 .plan.figure-ground { background: var(--drawing-bg); }
 .plan.exploded-axo { background: var(--drawing-bg); }
