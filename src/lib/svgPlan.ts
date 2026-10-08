@@ -4,9 +4,12 @@ import { isSiteBuilding } from "./siteBuildings";
 import { clipAreaToSiteFrame, clipPolylineSiteFrame, pointInSiteFrame, DEFAULT_SITE_FRAME_SHAPE } from "./siteFrame";
 import { openRing } from "./geo";
 import { PATH_WIDTH_M } from "./lineweights";
+import type { MultiPolygon } from "polygon-clipping";
 import {
   DEFAULT_PATH_FILLET_M,
   footpathStrips,
+  clipFootpathsOutsideCarriageway,
+  mergeFootpathFragments,
   unionFootpathStrips,
   unionRoadSurface,
 } from "./roadFill";
@@ -190,6 +193,12 @@ export function planPaths(
     })
     .filter((building): building is { rings: Pt[][]; fill: string; site: boolean } => building !== null);
 
+  let pathFill: MultiPolygon = footpaths.polygons;
+  if (pathFilletM > 0 && carriageway.polygons.length > 0) {
+    pathFill = clipFootpathsOutsideCarriageway(pathFill, carriageway.polygons, model.sideM, frameShape);
+    pathFill = mergeFootpathFragments(pathFill);
+  }
+
   const trees = model.trees
     .filter((tree) => pointInSiteFrame(tree.at, model.sideM, frameShape))
     .map((tree) => ({
@@ -225,7 +234,7 @@ export function planPaths(
     water,
     roadFill: carriageway.polygons,
     roadUnionMs: carriageway.ms,
-    pathFill: footpaths.polygons,
+    pathFill,
     pathUnionMs: footpaths.ms,
     rails,
     trams,

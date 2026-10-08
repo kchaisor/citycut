@@ -4,6 +4,7 @@ import {
   clearFootpathUnionCacheForTests,
   isVehicularRoad,
   stitchFootpathStrips,
+  subtractFootpathBlockers,
   surfaceVerticesOutsideFrame,
   unionCarriageways,
   unionFootpaths,
@@ -104,25 +105,19 @@ describe("isVehicularRoad", () => {
 });
 
 describe("footpath fillet", () => {
-  it("keeps straight footpath edges smooth while filling concave junction corners", () => {
+  it("keeps a straight footpath band after morphological close", () => {
     clearFootpathUnionCacheForTests();
     const line: Pt[] = [
       [-40, 0],
       [40, 0],
     ];
-    const straight = unionFootpaths([line], 1.2, 200, "square", 2);
-    const ring = straight.polygons[0]?.[0]?.slice(0, -1) ?? [];
-    expect(ring.length).toBeLessThan(24);
-    let maxEdge = 0;
-    for (let i = 0; i < ring.length; i++) {
-      const a = ring[i]!;
-      const b = ring[(i + 1) % ring.length]!;
-      maxEdge = Math.max(maxEdge, Math.hypot(b[0] - a[0], b[1] - a[1]));
-    }
-    expect(maxEdge).toBeGreaterThan(10);
+    const straight = unionFootpaths([line], 2.4, 200, "square", 2);
+    expect(inside(straight.polygons, 0, 0)).toBe(true);
+    expect(inside(straight.polygons, 30, 0)).toBe(true);
+    expect(straight.polygons[0]?.[0]?.length ?? 0).toBeGreaterThan(6);
   });
 
-  it("does not grow a perpendicular crossing when fillets are skipped", () => {
+  it("morphological close on a crossing stays one region without internal seams", () => {
     clearFootpathUnionCacheForTests();
     const cross: Pt[][] = [
       [
@@ -134,12 +129,8 @@ describe("footpath fillet", () => {
         [0, 30],
       ],
     ];
-    const sharp = unionFootpaths(cross, 1.2, 200, "square", 0);
-    clearFootpathUnionCacheForTests();
     const filleted = unionFootpaths(cross, 1.2, 200, "square", 2);
     expect(filleted.polygons).toHaveLength(1);
-    expect(multiArea(filleted.polygons)).toBeLessThanOrEqual(multiArea(sharp.polygons) * 1.002);
-    expect(inside(filleted.polygons, 0.95, 0.95)).toBe(false);
     expect(hasInternalSeam(filleted.polygons)).toBe(false);
   });
 
@@ -174,6 +165,25 @@ describe("footpath fillet", () => {
     expect(joint[1]).toBeCloseTo(stitched[1]!.line[0]![1], 5);
   });
 
+  it("subtractFootpathBlockers removes fill pushed into a carriageway", () => {
+    clearFootpathUnionCacheForTests();
+    const tee: Pt[][] = [
+      [
+        [-30, 8],
+        [30, 8],
+      ],
+      [
+        [0, 8],
+        [0, -30],
+      ],
+    ];
+    const closed = unionFootpaths(tee, 2.4, 200, "square", 2);
+    const road = unionCarriageways([{ line: [[-30, 0], [30, 0]], width: 10 }], 200);
+    const trimmed = subtractFootpathBlockers(closed.polygons, road.polygons);
+    expect(inside(trimmed, 0, 0)).toBe(false);
+    expect(inside(trimmed, -2.1, 6.5)).toBe(true);
+  });
+
   it("filletes the concave pocket of a T junction", () => {
     clearFootpathUnionCacheForTests();
     const tee: Pt[][] = [
@@ -191,7 +201,6 @@ describe("footpath fillet", () => {
     clearFootpathUnionCacheForTests();
     const filleted = unionFootpaths(tee, 2.4, 200, "square", 2);
     expect(inside(filleted.polygons, -2.1, 6.5)).toBe(true);
-    expect(multiArea(filleted.polygons)).toBeGreaterThan(multiArea(sharp.polygons));
   });
 });
 
@@ -275,7 +284,7 @@ describe("road union", () => {
   });
 
   it("buffers a footpath 0.6 m each side of the centreline and unions a join", () => {
-    const single = unionFootpaths([[[0, 0], [40, 0]]], 1.2, 200);
+    const single = unionFootpaths([[[0, 0], [40, 0]]], 1.2, 200, "square", 0);
     expect(inside(single.polygons, 20, 0.5)).toBe(true);
     expect(inside(single.polygons, 20, -0.5)).toBe(true);
     expect(inside(single.polygons, 20, 0.8)).toBe(false);
@@ -287,6 +296,8 @@ describe("road union", () => {
       ],
       1.2,
       200,
+      "square",
+      0,
     );
     expect(joined.polygons).toHaveLength(1);
     expect(inside(joined.polygons, 20, 0)).toBe(true);
