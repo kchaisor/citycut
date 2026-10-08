@@ -169,7 +169,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--outline-tree` | `#000000` | Thin outline on tree crowns on the site plan and in exports. |
 | `--outline-road` | `#000000` | Thin outline on road fills on the site plan and in exports. |
 | `--outline-path` | `#000000` | Thin outline on footpath fills on the site plan and in exports. |
-| `--outline-green` | `#000000` | Thin outline on green fills on the site plan and in exports. |
+| `--outline-green` | `#00000000` | Green fills have no outline on the site plan or in exports (`--green-stroke-mm` is `0`). |
 | `--outline-water` | `#000000` | Thin outline on water fills on the site plan and in exports. |
 | `--outline-rail` | `#000000` | Thin outline on rail lines on the site plan and in exports. |
 | `--outline-tram` | `#000000` | Thin outline on tram lines on the site plan and in exports. |
@@ -211,6 +211,7 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--road-kerb-stroke` | Colour of the kerb. Mid grey, so it shows on the road fill and on the page | `#8D8983` | colour |
 | `--road-kerb-dash` | Dash of the kerb | `none` | mm, on then off |
 | `--path-width-m` | Width of a footpath strip, centred on the way. `1.2` is 0.6 m each side | `1.2` | m on the ground |
+| `--path-fillet-m` | Fillet radius at footpath T and X junctions after the union (m on the ground) | `2` | m on the ground |
 | `--path-fill` | Fill of the unioned footpath. Defined in `src/colours.css`. Light tan on the page | `#D2B48C` | colour |
 | `--path-edge` | Whether the footpath outline is drawn. `on` or `off` | `off` | on or off |
 | `--path-edge-mm` | Weight of that outline, on the unioned edge only. `0` leaves the fill | `0` | mm |

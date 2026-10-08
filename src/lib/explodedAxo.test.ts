@@ -157,6 +157,22 @@ describe("exploded axo stack order", () => {
   });
 });
 
+describe("exploded axo roads plate", () => {
+  it("draws vehicular centre lines only on the roads layer", () => {
+    const m: CityModel = {
+      ...modelWithShape("square"),
+      roads: [
+        { id: 1, line: [[-20, 0], [20, 0]], width: 8, kind: "road", grade: "local" },
+        { id: 2, line: [[-10, -15], [10, 15]], width: 2, kind: "road", grade: "path" },
+        { id: 3, line: [[0, -20], [0, 20]], width: 3, kind: "rail" },
+      ],
+    };
+    const { layers } = buildExplodedAxoLayers(m, defaultExplodedAxoSettings(m.sideM));
+    const roads = layers.find((layer) => layer.id === "roads");
+    expect(roads?.strokes.length).toBe(1);
+  });
+});
+
 describe("exploded axo labels", () => {
   it("flips label rotation when the plate edge points left", () => {
     const sideM = 400;

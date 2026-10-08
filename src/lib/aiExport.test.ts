@@ -253,7 +253,7 @@ describe("Illustrator plans", () => {
     expect(widths).not.toContain(0);
     expect(widths).toContain(LINE_MM.propertyRoad);
     expect(widths).toContain(0.08);
-    expect(widths).toContain(LINE_MM.contour);
+    expect(widths).toContain(0.02);
     expect(widths).toContain(LINE_MM.frame);
     expect(widths).toContain(LINE_MM.annotation);
     expect(info.layers).toContain("Contours");
@@ -283,7 +283,7 @@ describe("Illustrator plans", () => {
     const paintsOf = (body: string) => body.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g) ?? [];
     const info = await inspect(await sitePlanPdf(model(), 1000));
     expect(paintsOf(info.bodies.get("Buildings") ?? "")).toContain("B*");
-    expect(paintsOf(info.bodies.get("Green") ?? "")).toContain("B*");
+    expect(paintsOf(info.bodies.get("Green") ?? "")).toEqual(expect.arrayContaining(["f*"]));
     expect(paintsOf(info.bodies.get("Water") ?? "")).toContain("B*");
     expect(info.content).not.toMatch(/(?:^|[\s[])0(?:\.0+)? w/);
 

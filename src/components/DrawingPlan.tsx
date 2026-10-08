@@ -99,6 +99,7 @@ export function DrawingPlan({
             colourBySource,
           },
           highlightManual,
+          pathFilletM: style.pathFilletM,
         },
       ),
     [
@@ -111,6 +112,7 @@ export function DrawingPlan({
       uniformBuildings,
       colourBySource,
       highlightManual,
+      style.pathFilletM,
     ],
   );
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
@@ -306,14 +308,6 @@ export function DrawingPlan({
                 {...footpathEdgeSvgAttrs(style)}
               />
             )}
-            {plan.roadFill.length > 0 && (
-              <path
-                d={plan.roadFill.map((polygon) => svgRings(polygon)).join(" ")}
-                fill={style.roadFill}
-                fillRule="evenodd"
-                {...(style.kerbOn ? screenPenAttrs(style.kerb) : { stroke: "none" })}
-              />
-            )}
             {plan.contours.map((line, index) => (
               <path
                 key={`c${index}`}
@@ -325,6 +319,14 @@ export function DrawingPlan({
                 )}
               />
             ))}
+            {plan.roadFill.length > 0 && (
+              <path
+                d={plan.roadFill.map((polygon) => svgRings(polygon)).join(" ")}
+                fill={style.roadFill}
+                fillRule="evenodd"
+                {...(style.kerbOn ? screenPenAttrs(style.kerb) : { stroke: "none" })}
+              />
+            )}
             {plan.rails.map((rail, index) => (
               <CasedLine key={`l${index}`} d={svgPolyline(rail, false)} stroke={style.rail} paper={canvas} />
             ))}

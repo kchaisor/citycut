@@ -31,7 +31,17 @@ const ARTERIAL = new Set([
   "tertiary_link",
 ]);
 
-const PATH = new Set(["footway", "path", "cycleway", "steps", "pedestrian", "bridleway", "track"]);
+export const NON_VEHICULAR_HIGHWAY = new Set([
+  "footway",
+  "path",
+  "cycleway",
+  "steps",
+  "pedestrian",
+  "bridleway",
+  "track",
+]);
+
+const PATH = NON_VEHICULAR_HIGHWAY;
 
 export const ROAD_WIDTH: Record<string, number> = {
   motorway: 16,

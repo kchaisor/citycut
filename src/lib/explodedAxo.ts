@@ -2,6 +2,7 @@ import { figureGround } from "./figureGround";
 import { getColour, type ColourKey } from "./colours";
 import { bufferOpenLine } from "./bufferLine";
 import { openRing, signedArea } from "./geo";
+import { isVehicularRoad } from "./roadFill";
 import {
   clipAreaToSiteFrame,
   clipPolylineSiteFrame,
@@ -320,7 +321,7 @@ function clipRoadLines(model: CityModel): Pt[][] {
   const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const lines: Pt[][] = [];
   for (const road of model.roads) {
-    if (road.kind === "rail") continue;
+    if (!isVehicularRoad(road)) continue;
     for (const part of clipPolylineSiteFrame(dedupe(road.line), model.sideM, shape)) {
       const simplified = simplifyLine(part, 120);
       if (simplified.length >= 2) lines.push(simplified);

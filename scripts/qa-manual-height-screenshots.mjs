@@ -216,8 +216,8 @@ const clickPt = await screenPointForBuilding(pose, {
 });
 
 await page.mouse.click(clickPt.x, clickPt.y);
-await page.locator(".building-height-popover").waitFor({ timeout: 8000 });
-const input = page.locator(".building-height-popover input[type='number']");
+await page.locator(".building-detail-panel").waitFor({ timeout: 8000 });
+const input = page.locator(".building-detail-panel input[type='number']");
 await input.fill(String(NEW_HEIGHT));
 await page.getByRole("button", { name: "Save" }).click();
 await page.waitForFunction(() => document.body.innerText.match(/1 manual height/i));
@@ -227,7 +227,7 @@ await reapplyCameraLock();
 await openBuildingsDrawer();
 
 await page.mouse.click(clickPt.x, clickPt.y);
-await page.locator(".building-height-popover").waitFor({ timeout: 8000 });
+await page.locator(".building-detail-panel").waitFor({ timeout: 8000 });
 await reapplyCameraLock();
 await page.waitForTimeout(300);
 

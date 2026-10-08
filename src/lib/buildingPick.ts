@@ -4,6 +4,8 @@ const CLICK_MAX_PX = 5;
 
 export type BuildingPickHandlers = {
   onBuildingPick: (buildingId: number, clientX: number, clientY: number) => void;
+  /** Fired on a click that did not hit a building (empty space). */
+  onClearPick?: () => void;
 };
 
 export function buildingIdFromIntersection(intersection: THREE.Intersection): number | null {
@@ -65,6 +67,7 @@ export function attachBuildingPick(
         return;
       }
     }
+    handlers.onClearPick?.();
   }
 
   canvas.addEventListener("pointerdown", onPointerDown);

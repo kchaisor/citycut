@@ -7,6 +7,7 @@ import type { Pt, RoadFeat } from "../types";
 type ClipFns = {
   union: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
   intersection: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
+  difference: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
 };
 
 function clippingFns(): ClipFns {
@@ -16,7 +17,7 @@ function clippingFns(): ClipFns {
   throw new Error("polygon-clipping did not load.");
 }
 
-const { union, intersection } = clippingFns();
+const { union, intersection, difference } = clippingFns();
 
 /** Centreline points farther than this from the chord are kept. Invisible at 1:500. */
 const SIMPLIFY_M = 0.35;
@@ -25,6 +26,16 @@ const OUTPUT_SIMPLIFY_M = 0.12;
 const SNAP_M = 0.01;
 const MIN_AREA_M2 = 0.8;
 const ARC = Math.PI / 4;
+/** Closes dual-carriageway and tram-corridor gaps after the centreline union. */
+export const ROAD_MORPH_CLOSE_M = 3;
+/** Default fillet radius for unioned footpath junctions (m on the ground). */
+export const DEFAULT_PATH_FILLET_M = 2;
+/** Buffer half-width for in-road tram corridors merged into the road fill. */
+export const TRAM_CORRIDOR_WIDTH_M = 9;
+
+export function isVehicularRoad(road: RoadFeat): boolean {
+  return road.kind === "road" && road.grade !== "path";
+}
 
 export type RoadFill = {
   /** Unioned carriageway. Each polygon is an outer ring plus holes (city blocks). */
@@ -486,9 +497,132 @@ export function unionPathRoads(
 }
 
 export function carriagewaysOf(roads: RoadFeat[]): { line: Pt[]; width: number }[] {
-  return roads
-    .filter((road) => road.kind !== "rail" && road.grade !== "path")
-    .map((road) => ({ line: road.line, width: road.width }));
+  return roads.filter(isVehicularRoad).map((road) => ({ line: road.line, width: road.width }));
+}
+
+function circlePolygon(center: Pt, radius: number, segments = 10): Polygon | null {
+  if (!(radius > 0)) return null;
+  const ring: Pt[] = [];
+  for (let i = 0; i <= segments; i++) {
+    const angle = (i / segments) * Math.PI * 2;
+    ring.push([center[0] + Math.cos(angle) * radius, center[1] + Math.sin(angle) * radius]);
+  }
+  return toPolygon(ring);
+}
+
+/** Morphological dilation (buffer out with round caps on the boundary). */
+export function morphologicalDilate(polygons: MultiPolygon, radius: number): MultiPolygon {
+  if (polygons.length === 0 || !(radius > 0)) return polygons;
+  const seeds: Polygon[] = [...polygons];
+  for (const polygon of polygons) {
+    for (const ring of polygon) {
+      const open = ring.slice(0, -1);
+      for (let i = 0; i < open.length; i++) {
+        const a = open[i]!;
+        const b = open[(i + 1) % open.length]!;
+        const disk = circlePolygon(a, radius);
+        if (disk) seeds.push(disk);
+        const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        const steps = Math.max(1, Math.ceil(length / (radius * 0.85)));
+        for (let step = 1; step < steps; step++) {
+          const t = step / steps;
+          const mid: Pt = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+          const midDisk = circlePolygon(mid, radius);
+          if (midDisk) seeds.push(midDisk);
+        }
+      }
+    }
+  }
+  return tidy(unionFast(seeds));
+}
+
+/** Morphological erosion within the site frame (buffer in with round joins). */
+export function morphologicalErode(
+  polygons: MultiPolygon,
+  radius: number,
+  sideM: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+): MultiPolygon {
+  if (polygons.length === 0 || !(radius > 0)) return polygons;
+  const frame = siteFramePolygon(sideM, frameShape);
+  try {
+    const outside = difference(frame, polygons);
+    const expandedOutside = morphologicalDilate(outside, radius);
+    return tidy(difference(frame, expandedOutside));
+  } catch {
+    return polygons;
+  }
+}
+
+/** Closing fills concave junction corners then restores the outer footprint. */
+export function morphologicalClose(
+  polygons: MultiPolygon,
+  radius: number,
+  sideM: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+): MultiPolygon {
+  if (polygons.length === 0 || !(radius > 0)) return polygons;
+  const dilated = morphologicalDilate(polygons, radius);
+  return morphologicalErode(dilated, radius, sideM, frameShape);
+}
+
+const footpathUnionCache = new Map<string, RoadFill>();
+const FOOTPATH_CACHE_LIMIT = 16;
+
+export function clearFootpathUnionCacheForTests(): void {
+  footpathUnionCache.clear();
+}
+
+function footpathUnionCacheKey(
+  lines: Pt[][],
+  widthM: number,
+  filletM: number,
+  sideM: number,
+  frameShape: SiteFrameShape,
+): string {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let points = 0;
+  for (const line of lines) {
+    points += line.length;
+    for (const [x, y] of line) {
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  return `${lines.length}:${points}:${minX.toFixed(1)},${minY.toFixed(1)},${maxX.toFixed(1)},${maxY.toFixed(1)}:${widthM}:${filletM}:${sideM}:${frameShape}`;
+}
+
+function unionMulti(a: MultiPolygon, b: MultiPolygon): MultiPolygon {
+  if (a.length === 0) return b;
+  if (b.length === 0) return a;
+  return tidy(unionFast([...a, ...b]));
+}
+
+/** Unioned carriageway plus in-road tram corridors, with median gaps closed. */
+export function unionRoadSurface(
+  roads: RoadFeat[],
+  tramLines: Pt[][] | undefined,
+  sideM: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+): RoadFill {
+  const carriageway = unionCarriageways(carriagewaysOf(roads), sideM, frameShape);
+  const tramInputs = (tramLines ?? [])
+    .filter((line) => line.length >= 2)
+    .map((line) => ({ line, width: TRAM_CORRIDOR_WIDTH_M }));
+  const withTram =
+    tramInputs.length > 0 ? unionCarriageways(tramInputs, sideM, frameShape) : { polygons: [] as MultiPolygon, ms: 0, inputs: 0 };
+  const merged = unionMulti(carriageway.polygons, withTram.polygons);
+  const closed = morphologicalDilate(merged, ROAD_MORPH_CLOSE_M);
+  return {
+    polygons: closed,
+    ms: carriageway.ms + withTram.ms,
+    inputs: carriageway.inputs + withTram.inputs,
+  };
 }
 
 /**
@@ -510,12 +644,31 @@ export function unionFootpaths(
   widthM: number,
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  filletM: number = DEFAULT_PATH_FILLET_M,
 ): RoadFill {
   if (!(widthM > 0)) return { polygons: [], ms: 0, inputs: 0 };
-  return unionStrips(
+  const key = footpathUnionCacheKey(lines, widthM, filletM, sideM, frameShape);
+  const cached = footpathUnionCache.get(key);
+  if (cached) return cached;
+
+  const started = performance.now();
+  const merged = unionStrips(
     lines.map((line) => ({ line, width: widthM })),
     sideM,
     0,
     frameShape,
   );
+  const polygons =
+    filletM > 0 ? morphologicalClose(merged.polygons, filletM, sideM, frameShape) : merged.polygons;
+  const result: RoadFill = {
+    polygons,
+    ms: performance.now() - started,
+    inputs: merged.inputs,
+  };
+  if (footpathUnionCache.size >= FOOTPATH_CACHE_LIMIT) {
+    const first = footpathUnionCache.keys().next().value;
+    if (first) footpathUnionCache.delete(first);
+  }
+  footpathUnionCache.set(key, result);
+  return result;
 }

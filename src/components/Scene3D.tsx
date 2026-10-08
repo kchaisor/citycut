@@ -121,17 +121,19 @@ function BuildingPickLayer({
   root,
   enabled,
   onBuildingPick,
+  onClearPick,
 }: {
   root: THREE.Object3D;
   enabled: boolean;
   onBuildingPick: (buildingId: number, clientX: number, clientY: number) => void;
+  onClearPick?: () => void;
 }) {
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
   useLayoutEffect(() => {
     if (!enabled) return;
-    return attachBuildingPick(gl.domElement, camera, root, { onBuildingPick });
-  }, [camera, enabled, gl.domElement, onBuildingPick, root]);
+    return attachBuildingPick(gl.domElement, camera, root, { onBuildingPick, onClearPick });
+  }, [camera, enabled, gl.domElement, onBuildingPick, onClearPick, root]);
   return null;
 }
 
@@ -192,6 +194,7 @@ function City({
   heightEditBuildingId,
   onBounds,
   onBuildingPick,
+  onClearBuildingPick,
   pickBuildings,
 }: {
   model: CityModel;
@@ -203,6 +206,7 @@ function City({
   heightEditBuildingId: number | null;
   onBounds: (bounds: Aabb) => void;
   onBuildingPick: (buildingId: number, clientX: number, clientY: number) => void;
+  onClearBuildingPick?: () => void;
   pickBuildings: boolean;
 }) {
   const onBoundsRef = useRef(onBounds);
@@ -252,7 +256,12 @@ function City({
         cityRoot={group}
         colourMode={colourMode}
       />
-      <BuildingPickLayer root={group} enabled={pickBuildings} onBuildingPick={onBuildingPick} />
+      <BuildingPickLayer
+        root={group}
+        enabled={pickBuildings}
+        onBuildingPick={onBuildingPick}
+        onClearPick={onClearBuildingPick}
+      />
     </>
   );
 }
@@ -1019,6 +1028,7 @@ export function Scene3D({
   windAnimateStreaks,
   onExportReady,
   onBuildingPick,
+  onClearBuildingPick,
   heightEditBuildingId,
 }: {
   model: CityModel;
@@ -1036,6 +1046,7 @@ export function Scene3D({
   windAnimateStreaks: boolean;
   onExportReady: (exporter: SceneExporter | null) => void;
   onBuildingPick: (buildingId: number, clientX: number, clientY: number) => void;
+  onClearBuildingPick?: () => void;
   heightEditBuildingId: number | null;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
@@ -1115,6 +1126,7 @@ export function Scene3D({
         solarNeutralFill={solarNeutralFill}
         onBounds={onBounds}
         onBuildingPick={onBuildingPick}
+        onClearBuildingPick={onClearBuildingPick}
         pickBuildings={model.layers.buildings}
         heightEditBuildingId={heightEditBuildingId}
       />
