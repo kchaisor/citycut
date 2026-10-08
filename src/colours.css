@@ -80,6 +80,12 @@
 
   /* Buildings whose use came from an OpenStreetMap tag, and that legend swatch. */
   --source-osm: #1F4E79;
+  --source-clue: #2E6B4F;
+  --source-bca: #6B4F2E;
+
+  /* Urban block fabric between roads (under buildings; not site-plan paper #EBEBEB). */
+  --block-fill: #D8D8D8;
+  --block-plan: #D4D4D4;
 
   /* Buildings whose use was inferred from a planning zone, and that legend swatch. */
   --source-zone: #A9C4DE;

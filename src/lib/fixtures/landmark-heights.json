@@ -1,0 +1,194 @@
+[
+  {
+    "name": "Freemasons Hospital, East Melbourne",
+    "lat": -37.8108,
+    "lon": 144.9842,
+    "heightM": 30,
+    "toleranceM": 8,
+    "sourceUrl": "https://www.freemasonsvic.org.au/about-us/our-history/"
+  },
+  {
+    "name": "Eureka Tower",
+    "lat": -37.8214,
+    "lon": 144.9647,
+    "heightM": 297,
+    "toleranceM": 25,
+    "sourceUrl": "https://en.wikipedia.org/wiki/Eureka_Tower"
+  },
+  {
+    "name": "MCG Great Southern Stand",
+    "lat": -37.82,
+    "lon": 144.9834,
+    "heightM": 35,
+    "toleranceM": 12,
+    "sourceUrl": "https://en.wikipedia.org/wiki/Melbourne_Cricket_Ground"
+  },
+  {
+    "name": "Parliament House Melbourne",
+    "lat": -37.8112,
+    "lon": 144.9737,
+    "heightM": 32,
+    "toleranceM": 10,
+    "sourceUrl": "https://www.parliament.vic.gov.au/about/history"
+  },
+  {
+    "name": "Flinders Street Station",
+    "lat": -37.8183,
+    "lon": 144.9671,
+    "heightM": 22,
+    "toleranceM": 8,
+    "sourceUrl": "https://en.wikipedia.org/wiki/Flinders_Street_railway_station"
+  },
+  {
+    "name": "Royal Exhibition Building",
+    "lat": -37.8047,
+    "lon": 144.9717,
+    "heightM": 30,
+    "toleranceM": 10,
+    "sourceUrl": "https://en.wikipedia.org/wiki/Royal_Exhibition_Building"
+  },
+  {
+    "name": "Arts Centre Spire",
+    "lat": -37.8206,
+    "lon": 144.9688,
+    "heightM": 162,
+    "toleranceM": 20,
+    "sourceUrl": "https://en.wikipedia.org/wiki/Arts_Centre_Melbourne"
+  },
+  {
+    "name": "120 Collins Street",
+    "lat": -37.8136,
+    "lon": 144.9717,
+    "heightM": 264,
+    "toleranceM": 20,
+    "sourceUrl": "https://en.wikipedia.org/wiki/120_Collins_Street"
+  },
+  {
+    "name": "Rialto Towers",
+    "lat": -37.8182,
+    "lon": 144.9569,
+    "heightM": 251,
+    "toleranceM": 20,
+    "sourceUrl": "https://en.wikipedia.org/wiki/Rialto_Towers"
+  },
+  {
+    "name": "Melbourne Town Hall",
+    "lat": -37.8147,
+    "lon": 144.9669,
+    "heightM": 45,
+    "toleranceM": 12,
+    "sourceUrl": "https://en.wikipedia.org/wiki/Melbourne_Town_Hall"
+  },
+  {
+    "name": "St Paul's Cathedral",
+    "lat": -37.817,
+    "lon": 144.9674,
+    "heightM": 96,
+    "toleranceM": 15,
+    "sourceUrl": "https://en.wikipedia.org/wiki/St_Paul%27s_Cathedral,_Melbourne"
+  },
+  {
+    "name": "State Library of Victoria",
+    "lat": -37.8098,
+    "lon": 144.9653,
+    "heightM": 28,
+    "toleranceM": 10,
+    "sourceUrl": "https://en.wikipedia.org/wiki/State_Library_Victoria"
+  },
+  {
+    "name": "Melbourne Central (office tower)",
+    "lat": -37.8106,
+    "lon": 144.9631,
+    "heightM": 210,
+    "toleranceM": 20,
+    "sourceUrl": "https://en.wikipedia.org/wiki/Melbourne_Central"
+  },
+  {
+    "name": "QV1 low-rise block East Melbourne sample",
+    "lat": -37.8127,
+    "lon": 144.98061,
+    "heightM": 12,
+    "toleranceM": 6,
+    "sourceUrl": "https://www.openstreetmap.org/"
+  },
+  {
+    "name": "Fitzroy Gardens Conservatory",
+    "lat": -37.8139,
+    "lon": 144.9802,
+    "heightM": 8,
+    "toleranceM": 5,
+    "sourceUrl": "https://en.wikipedia.org/wiki/Fitzroy_Gardens"
+  },
+  {
+    "name": "Old Treasury Building",
+    "lat": -37.8132,
+    "lon": 144.9743,
+    "heightM": 18,
+    "toleranceM": 8,
+    "sourceUrl": "https://en.wikipedia.org/wiki/Old_Treasury_Building,_Melbourne"
+  },
+  {
+    "name": "Victoria Police Centre",
+    "lat": -37.8225,
+    "lon": 144.9578,
+    "heightM": 40,
+    "toleranceM": 12,
+    "sourceUrl": "https://en.wikipedia.org/wiki/Victoria_Police_Centre"
+  },
+  {
+    "name": "Crown Towers",
+    "lat": -37.8228,
+    "lon": 144.9579,
+    "heightM": 235,
+    "toleranceM": 25,
+    "sourceUrl": "https://en.wikipedia.org/wiki/Crown_Towers_(Melbourne)"
+  },
+  {
+    "name": "Southern Cross Station roof",
+    "lat": -37.8182,
+    "lon": 144.9525,
+    "heightM": 23,
+    "toleranceM": 10,
+    "sourceUrl": "https://en.wikipedia.org/wiki/Southern_Cross_railway_station"
+  },
+  {
+    "name": "RMIT Building 80",
+    "lat": -37.8076,
+    "lon": 144.9637,
+    "heightM": 85,
+    "toleranceM": 15,
+    "sourceUrl": "https://en.wikipedia.org/wiki/RMIT_University"
+  },
+  {
+    "name": "Melbourne Museum",
+    "lat": -37.8032,
+    "lon": 144.9717,
+    "heightM": 25,
+    "toleranceM": 10,
+    "sourceUrl": "https://en.wikipedia.org/wiki/Melbourne_Museum"
+  },
+  {
+    "name": "Docklands residential mid-rise",
+    "lat": -37.814,
+    "lon": 144.946,
+    "heightM": 45,
+    "toleranceM": 15,
+    "sourceUrl": "https://www.openstreetmap.org/"
+  },
+  {
+    "name": "Southbank apartment mid-rise",
+    "lat": -37.823,
+    "lon": 144.963,
+    "heightM": 55,
+    "toleranceM": 18,
+    "sourceUrl": "https://www.openstreetmap.org/"
+  },
+  {
+    "name": "General Post Office Melbourne",
+    "lat": -37.8147,
+    "lon": 144.9627,
+    "heightM": 35,
+    "toleranceM": 18,
+    "sourceUrl": "https://en.wikipedia.org/wiki/General_Post_Office,_Melbourne"
+  }
+]

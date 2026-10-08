@@ -15,11 +15,12 @@ export const STOREY_HEIGHT_M = 3;
  *
  * 1. Manual edit ({@link BuildingFeat.heightManual})
  * 2. City of Melbourne 2023 footprints — clipped extrusions or aggregate match
- * 3. Overture / OSM explicit height tag
- * 4. Overture `num_floors` × {@link STOREY_HEIGHT_M}
- * 5. CoM Development Activity Monitor `floors_above` × {@link STOREY_HEIGHT_M}
- * 6. OSM `building:levels` × {@link STOREY_HEIGHT_M} (Overture source tags when present)
- * 7. Vicmap zone / shed fallback ({@link BuildingFeat.heightFromFallback})
+ * 3. ELVIS LiDAR 2017–18 (offline bake, Greater Melbourne)
+ * 4. Overture / OSM explicit height tag
+ * 5. Overture `num_floors` × {@link STOREY_HEIGHT_M}
+ * 6. CoM Development Activity Monitor `floors_above` × {@link STOREY_HEIGHT_M}
+ * 7. OSM `building:levels` × {@link STOREY_HEIGHT_M} (Overture source tags when present)
+ * 8. Vicmap zone / shed fallback ({@link BuildingFeat.heightFromFallback})
  *
  * Manual edits clear extrusion parts. CoM may set {@link BuildingFeat.extrusionParts}; scalar height
  * is synced to the tallest part (or aggregate) for panels, shadows, and plan metadata.
@@ -58,6 +59,8 @@ export function heightTierLabel(tier: BuildingHeightTier, meta?: BuildingHeightT
       return "Manual edit";
     case "com":
       return "City of Melbourne";
+    case "lidar":
+      return "ELVIS LiDAR 2017–18";
     case "overture_height":
       return "Overture height";
     case "overture_floors":

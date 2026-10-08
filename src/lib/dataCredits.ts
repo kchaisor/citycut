@@ -3,6 +3,9 @@
 export const DATA_CREDIT_BASE =
   "© Overture Maps Foundation, OpenStreetMap contributors (ODbL), Microsoft. Terrain © Mapterhorn. Vicmap © State of Victoria (CC BY 4.0).";
 
+export const DATA_CREDIT_ELVIS_LIDAR =
+  " Building heights from ELVIS Greater Melbourne LiDAR 2017–18 © Geoscience Australia / participating agencies (CC BY-NC 4.0; non-commercial use).";
+
 export const DATA_CREDIT_PT_VIC =
   " Public transport lines and stops © Public Transport Victoria / Department of Transport (CC BY 4.0).";
 
@@ -19,6 +22,8 @@ export type StageCreditOptions = {
   /** Linked CoM building heights line when the toggle is on. */
   comHeightsHtml?: string | null;
   contourHtml?: string | null;
+  /** When any building in the cut used offline LiDAR height. */
+  lidarHeightsOn?: boolean;
 };
 
 const VICMAP_LINK =
@@ -35,6 +40,11 @@ export function modelStageCreditHtml(options: StageCreditOptions): string {
   if (options.satelliteOn) parts.push(DATA_CREDIT_ESRI_SATELLITE.trim());
   if (options.comHeightsHtml) parts.push(options.comHeightsHtml);
   if (options.contourHtml) parts.push(options.contourHtml);
+  if (options.lidarHeightsOn) {
+    parts.push(
+      '<a href="https://elevation.fsdf.org.au/">ELVIS LiDAR 2017–18</a> (CC BY-NC 4.0; non-commercial).',
+    );
+  }
   parts.push(CITYCUT_BYLINE);
   return parts.join(" ");
 }

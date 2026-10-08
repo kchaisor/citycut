@@ -6,7 +6,7 @@ import {
   BUILDING_USE_META,
   SOURCE_COUNT_KEYS,
   SOURCE_META,
-  countSources,
+  countSourcesGrouped,
   countUses,
   uniformBuildingColor,
 } from "../lib/buildingUse";
@@ -914,7 +914,8 @@ export function ModelPage({ model }: { model: CityModel }) {
 
   const figureFit = sheetFitMessage(model.sideM, figureScale);
   const useCounts = countUses(model.buildings);
-  const sourceCounts = countSources(model.buildings);
+  const sourceCounts = countSourcesGrouped(displayModel.buildings);
+  const lidarHeightsOn = displayModel.buildings.some((b) => b.heightTier === "lidar");
   const hint =
     tab === "3d"
       ? view.projection === "plan"
@@ -1583,6 +1584,7 @@ export function ModelPage({ model }: { model: CityModel }) {
             __html: modelStageCreditHtml({
               windOn: windSettings.enabled,
               satelliteOn: tab === "satellite",
+              lidarHeightsOn,
               comHeightsHtml: betterHeights
                 ? `Building heights: <a href="${COM_BUILDING_HEIGHTS_DATASET_URL}">2023 Building Footprints © City of Melbourne</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.`
                 : null,

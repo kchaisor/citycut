@@ -41,6 +41,14 @@ jobs:
         run: node scripts/build-pt-pmtiles.mjs
         env:
           TIPPECANOE: tippecanoe
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install enrichment pipeline deps
+        run: pip install -r pipeline/requirements.txt
+      - name: Python pipeline tests
+        run: pytest pipeline/test_build_enrichment.py -q
       - name: Build
         run: npm run build
       - name: Setup Pages

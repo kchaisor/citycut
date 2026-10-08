@@ -308,6 +308,7 @@ export function buildingHeightSource(building: BuildingFeat): BuildingHeightSour
   const tier = inferHeightTier(building);
   if (tier === "manual") return "manual";
   if (tier === "com") return "melbourne";
+  if (tier === "lidar") return "overture";
   if (tier === "development_floors") return "development";
   if (tier === "zone_default") return "zone_default";
   return "overture";

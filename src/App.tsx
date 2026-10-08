@@ -43,6 +43,12 @@ import { loadContoursForCut } from "./lib/vicmapContours";
 import { fetchOvertureBuildingsForCut } from "./lib/overtureBuildings";
 import { qaForcedCrashFromSearch, qaModeFromSearch } from "./lib/qaCameraBridge";
 import { siteBuildingOverlaps } from "./lib/siteBuildings";
+import {
+  applyLidarHeightsFromEnrichment,
+  mergeBuildingEnrichment,
+} from "./lib/buildingEnrichmentMerge";
+import { fetchBuildingEnrichmentForCut } from "./lib/buildingEnrichmentTiles";
+import { computeCityBlocks } from "./lib/cityBlocks";
 import { assignExternalUses, loadUseTiers } from "./lib/useCascade";
 import {
   fetchComBuildingFootprintsWithStats,
@@ -362,6 +368,9 @@ export default function App() {
                 hasEsaLandCover: false,
               },
             });
+      const enrichmentTask = modelLayers.buildings
+        ? fetchBuildingEnrichmentForCut(bounds, controller.signal)
+        : Promise.resolve({ byId: new Map(), error: null as string | null });
       const useTierTask = modelLayers.buildings
         ? loadUseTiers(bounds, center, { signal: controller.signal }).catch((err: unknown) => {
             if (controller.signal.aborted) throw err;
@@ -469,6 +478,7 @@ export default function App() {
         comResult,
         vicmapResult,
         useTiers,
+        enrichmentResult,
         contourLayer,
         overtureResult,
         transportResult,
@@ -481,6 +491,7 @@ export default function App() {
         comTask,
         vicmapTask,
         useTierTask,
+        enrichmentTask,
         contourTask,
         buildingsTask,
         transportTask,
@@ -494,10 +505,22 @@ export default function App() {
       let buildings: typeof overtureBuildings = [];
       const comFootprintPrefetch =
         comHeightsResult.footprints.length > 0 ? comHeightsResult.footprints : undefined;
+      let enrichmentTilesFailed = false;
+      const useTierFailures = [...useTiers.failures];
+      if (enrichmentResult.error) {
+        enrichmentTilesFailed = true;
+        useTierFailures.push({
+          tier: "enrichment_tiles",
+          message: "building enrichment tiles unavailable; live Vicmap zones used for use",
+        });
+        console.warn(`[CityCut enrichment] ${enrichmentResult.error}`);
+      }
       if (modelLayers.buildings) {
-        const zoned = assignExternalUses(overtureBuildings, useTiers.zones);
-        buildingsWithoutCom = structuredClone(zoned);
-        buildings = applyDevelopmentFloorsToBuildings(zoned, center, damResult.records);
+        const enriched = mergeBuildingEnrichment(overtureBuildings, enrichmentResult.byId);
+        const zoned = assignExternalUses(enriched, useTiers.zones);
+        const withLidar = applyLidarHeightsFromEnrichment(zoned);
+        buildingsWithoutCom = structuredClone(withLidar);
+        buildings = applyDevelopmentFloorsToBuildings(withLidar, center, damResult.records);
       }
       const treeContext = {
         ...baseResult.treeContext,
@@ -532,7 +555,7 @@ export default function App() {
         })}.`;
       }
       if (modelLayers.buildings) {
-        sourceNote = `${sourceNote} Building height uses CoM 2023 footprints (on by default in Melbourne), then Overture height, num_floors × 3 m, then CoM development floors × 3 m for one building per site, otherwise Vicmap zone defaults (3 m under 40 m², else by zone, else 9 m). Manual height edits in the 3D view override every other source. Use follows Overture class, then Vicmap planning zones.`;
+        sourceNote = `${sourceNote} Building height uses CoM 2023 footprints (on by default in Melbourne), then ELVIS LiDAR where baked, then Overture height, num_floors × 3 m, then CoM development floors × 3 m for one building per site, otherwise Vicmap zone defaults (3 m under 40 m², else by zone, else 9 m). Manual height edits override every other source. Use follows offline enrichment tiles (Overture class, CoM CLUE, building permit BCA, Vicmap zone), with live zones when tiles fail.`;
       }
       if (damResult.error) sourceNote = `${sourceNote} ${damResult.error}`;
       if (comHeightsResult.error) sourceNote = `${sourceNote} ${comHeightsResult.error}`;
@@ -605,7 +628,7 @@ export default function App() {
         }
         writeUrl(siteAnchor);
       }
-      setModel({
+      const draftModel: CityModel = {
         center,
         sideM,
         frameShape: frameShapeRef.current,
@@ -622,7 +645,8 @@ export default function App() {
         sourceNote,
         terrain: terrainResult.field,
         terrainError: terrainResult.error,
-        useTierFailures: useTiers.failures,
+        useTierFailures,
+        enrichmentTilesFailed,
         contours,
         contourLayer,
         hasMicrosoftFootprints: overtureResult.stats.hasMicrosoftFootprints,
@@ -640,7 +664,11 @@ export default function App() {
         comFootprintPrefetch,
         heightSourceLoadWarnings:
           heightSourceLoadWarnings.length > 0 ? heightSourceLoadWarnings : undefined,
-      });
+      };
+      if (modelLayers.roads) {
+        draftModel.blocks = computeCityBlocks(draftModel);
+      }
+      setModel(draftModel);
       setPhase("model");
     } catch (err) {
       if (controller.signal.aborted) return;

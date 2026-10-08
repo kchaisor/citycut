@@ -13,7 +13,14 @@ export const BUILDING_USES = [
   "unclassified",
 ] as const satisfies readonly BuildingUse[];
 
-export const TYPOLOGY_SOURCES = ["osm_tag", "zone", "none"] as const satisfies readonly TypologySource[];
+export const TYPOLOGY_SOURCES = [
+  "osm_tag",
+  "overture_class",
+  "clue",
+  "bca",
+  "zone",
+  "none",
+] as const satisfies readonly TypologySource[];
 
 /** Previous single colour, used when the use colours are turned off. */
 export function uniformBuildingColor(): string {
@@ -71,13 +78,22 @@ export const SOURCE_META: Record<
   TypologySource,
   { label: string; color: string; inferred: boolean }
 > = {
-  osm_tag: sourceSwatch("OSM tag", "--source-osm", false),
+  osm_tag: sourceSwatch("Overture class", "--source-osm", false),
+  overture_class: sourceSwatch("Overture class", "--source-osm", false),
+  clue: sourceSwatch("CoM CLUE", "--source-clue", false),
+  bca: sourceSwatch("Building permit (BCA)", "--source-bca", false),
   zone: sourceSwatch("Zone", "--source-zone", true),
   none: sourceSwatch("Unclassified", "--source-none", false),
 };
 
 /** Legend order for source counts. `none` is shown as unclassified. */
-export const SOURCE_COUNT_KEYS = ["osm_tag", "zone", "none"] as const satisfies readonly TypologySource[];
+export const SOURCE_COUNT_KEYS = [
+  "overture_class",
+  "clue",
+  "bca",
+  "zone",
+  "none",
+] as const satisfies readonly TypologySource[];
 
 /**
  * `building` and `building:use` values. `yes` is omitted on purpose: a bare
@@ -314,12 +330,35 @@ export function countUses(buildings: { use: BuildingUse }[]): Record<BuildingUse
   return counts;
 }
 
+function normaliseSourceForCount(source: TypologySource): (typeof SOURCE_COUNT_KEYS)[number] {
+  if (source === "osm_tag") return "overture_class";
+  if (source === "overture_class" || source === "clue" || source === "bca" || source === "zone" || source === "none") {
+    return source;
+  }
+  return "none";
+}
+
 export function countSources(buildings: { source: TypologySource }[]): Record<TypologySource, number> {
   const counts = Object.fromEntries(TYPOLOGY_SOURCES.map((source) => [source, 0])) as Record<
     TypologySource,
     number
   >;
   for (const building of buildings) counts[building.source] += 1;
+  return counts;
+}
+
+/** Legend counts grouped for the model UI. */
+export function countSourcesGrouped(buildings: { source: TypologySource }[]): Record<
+  (typeof SOURCE_COUNT_KEYS)[number],
+  number
+> {
+  const counts = Object.fromEntries(SOURCE_COUNT_KEYS.map((key) => [key, 0])) as Record<
+    (typeof SOURCE_COUNT_KEYS)[number],
+    number
+  >;
+  for (const building of buildings) {
+    counts[normaliseSourceForCount(building.source)] += 1;
+  }
   return counts;
 }
 

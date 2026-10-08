@@ -51,6 +51,7 @@ export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
     Rail: "--rail-fill",
     Water: "--water-3d",
     Green: "--green-3d",
+    Blocks: "--block-fill",
     Ground: "--ground-fill",
     Terrain: "--terrain-layer",
     Trees: "--tree-layer",

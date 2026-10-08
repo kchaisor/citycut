@@ -401,16 +401,48 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   }
 
   const onTerrain = Boolean(sample && model.terrain);
+  const blockMat = paint(
+    matteStandardMaterial({ color: getColour("--block-fill") }),
+    onTerrain ? drapeLayer(SURFACE.block) : SURFACE.block,
+  );
   const greenMat = paint(
     matteStandardMaterial({ color: getColour("--green-3d") }),
     onTerrain ? drapeLayer(SURFACE.green) : SURFACE.green,
   );
   const waterLayer = onTerrain ? drapedWaterLayer() : SURFACE.water;
   const waterMat = paint(matteStandardMaterial({ color: getColour("--water-3d") }), waterLayer);
+  const blockGeos: THREE.BufferGeometry[] = [];
   const greenGeos: THREE.BufferGeometry[] = [];
   const waterGeos: THREE.BufferGeometry[] = [];
+  const blocks = model.blocks ?? [];
+  for (let index = 0; index < blocks.length; index++) {
+    const area = blocks[index];
+    const lift = SURFACE.block.lift + overlapLift(index);
+    if (sample && model.terrain) {
+      try {
+        const geometry = drapedAreaGeometry(area, sample, lift, model.terrain.spacingM);
+        if (geometry) blockGeos.push(geometry);
+      } catch {
+        /* skip */
+      }
+      continue;
+    }
+    const shape = shapeFromRing(area.ring, area.holes);
+    if (!shape) continue;
+    try {
+      blockGeos.push(layFlat(new THREE.ShapeGeometry(shape), lift));
+    } catch {
+      /* skip */
+    }
+  }
+  const blockMesh = mergeMeshes(blockGeos, blockMat, "Blocks");
+  if (blockMesh) {
+    order(blockMesh, SURFACE.block.renderOrder);
+    group.add(blockMesh);
+  }
   for (let index = 0; index < model.areas.length; index++) {
     const area = model.areas[index];
+    if (area.kind === "block") continue;
     const lift =
       (area.kind === "water" ? waterLayer.lift : SURFACE.green.lift) + overlapLift(index);
     if (sample && model.terrain) {

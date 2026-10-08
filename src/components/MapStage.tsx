@@ -15,6 +15,8 @@ import {
 import { landingViewportFootprint } from "../lib/landingMapViewport";
 import { readLandingColourCache, writeLandingColourCache } from "../lib/landingMapColourCache";
 import { fetchOvertureBuildingsForCut } from "../lib/overtureBuildings";
+import { mergeBuildingEnrichment } from "../lib/buildingEnrichmentMerge";
+import { fetchBuildingEnrichmentForCut } from "../lib/buildingEnrichmentTiles";
 import { refineBuildingUses } from "../lib/useCascade";
 import { fetchSiteParcelCached, siteBuildingIdsForPreview } from "../lib/sitePreviewCache";
 import { FLAT_NORTH_UP_MAP_OPTIONS, applyFlatNorthUpMapHandlers } from "../lib/mapStageMapOptions";
@@ -229,7 +231,9 @@ export function MapStage({
             controller.signal,
             "square",
           );
-          const refined = await refineBuildingUses(buildingResult.buildings, footprint.origin, footprint.bounds, {
+          const enrichment = await fetchBuildingEnrichmentForCut(footprint.bounds, controller.signal);
+          const merged = mergeBuildingEnrichment(buildingResult.buildings, enrichment.byId);
+          const refined = await refineBuildingUses(merged, footprint.origin, footprint.bounds, {
             signal: controller.signal,
           });
           if (cancelled || controller.signal.aborted) return;

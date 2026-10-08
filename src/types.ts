@@ -30,11 +30,29 @@ export type BuildingUse =
   | "outbuilding"
   | "unclassified";
 
-/** Which cascade tier named the use. `none` is unclassified. */
-export type TypologySource = "osm_tag" | "zone" | "none";
+/**
+ * Which cascade tier named the use.
+ * `osm_tag` is legacy for Overture class / OSM tags on the footprint.
+ * `none` is unclassified after every real tier was tried.
+ */
+export type TypologySource =
+  | "osm_tag"
+  | "overture_class"
+  | "clue"
+  | "bca"
+  | "zone"
+  | "none";
+
+/** Offline tile / pipeline tier id stored as `use_source` on enrichment features. */
+export type BuildingUseSourceTier =
+  | "overture"
+  | "clue"
+  | "bca"
+  | "zone"
+  | "unclassified";
 
 export type UseTierFailure = {
-  tier: "zone";
+  tier: "zone" | "enrichment_tiles";
   /** Short UI line, for example "zones unavailable". */
   message: string;
 };
@@ -43,6 +61,7 @@ export type UseTierFailure = {
 export type BuildingHeightTier =
   | "manual"
   | "com"
+  | "lidar"
   | "overture_height"
   | "overture_floors"
   | "development_floors"
@@ -83,6 +102,10 @@ export type BuildingFeat = {
   heightManual?: true;
   use: BuildingUse;
   source: TypologySource;
+  /** Offline enrichment tier (matches pipeline `use_source`). */
+  useSourceTier?: BuildingUseSourceTier;
+  /** Metres from ELVIS LiDAR bake when tier is lidar. */
+  lidarHeightM?: number;
   /** Overture `names.primary` or `names.common` when present. */
   overtureName?: string;
   /** Overture `num_floors` when present. */
@@ -116,7 +139,7 @@ export type AreaFeat = {
   id: number;
   ring: Ring;
   holes: Ring[];
-  kind: "water" | "green";
+  kind: "water" | "green" | "block";
 };
 
 /** Where a tree's height, crown, and trunk came from. */
@@ -260,6 +283,10 @@ export type CityModel = {
   comFootprintPrefetch?: import("./lib/comBuildingHeightsTypes").ComBuildingFootprint[];
   /** Non-blocking banners when height datasets failed to load (CoM, DAM, Overture). */
   heightSourceLoadWarnings?: string[];
+  /** Road-enclosed block fills (under buildings; not water/green/paper). */
+  blocks?: AreaFeat[];
+  /** Building enrichment PMTiles could not be read; live zone fallback was used. */
+  enrichmentTilesFailed?: boolean;
 };
 
 export type ViewState = {
