@@ -2,91 +2,96 @@
  * Ensure public/building-enrichment.pmtiles + manifest match the latest release before build.
  * Falls back to committed copies when the release download or hash check fails.
  */
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import {
+  MANIFEST_NAME,
+  PMTILES_NAME,
+  RELEASE,
+  installVerifiedRelease,
+  resolveEnrichmentDeploy,
+} from "./fetch-building-enrichment-lib.mjs";
 
-const OUT = "public/building-enrichment.pmtiles";
-const MANIFEST = "public/building-enrichment-manifest.json";
-const RELEASE = "building-enrichment-latest";
+const publicDir = "public";
 
-function sha256File(path) {
-  const data = readFileSync(path);
-  return createHash("sha256").update(data).digest("hex");
-}
-
-function downloadReleaseAssets() {
-  mkdirSync("public", { recursive: true });
-  const gh = spawnSync(
+function downloadReleaseToTemp(tempDir, ghToken) {
+  const view = spawnSync("gh", ["release", "view", RELEASE], {
+    encoding: "utf8",
+    env: { ...process.env, GH_TOKEN: ghToken },
+  });
+  if (view.status !== 0) {
+    return { ok: false, missing: true, stderr: view.stderr || view.stdout };
+  }
+  const download = spawnSync(
     "gh",
     [
       "release",
       "download",
       RELEASE,
       "-p",
-      "building-enrichment.pmtiles",
+      PMTILES_NAME,
       "-p",
-      "building-enrichment-manifest.json",
+      MANIFEST_NAME,
       "-D",
-      "public",
+      tempDir,
+      "--clobber",
     ],
-    { encoding: "utf8" },
+    { encoding: "utf8", env: { ...process.env, GH_TOKEN: ghToken } },
   );
-  if (gh.status !== 0) {
-    console.warn(`[enrichment] release download failed: ${gh.stderr || gh.stdout}`);
-    return false;
+  if (download.status !== 0) {
+    return { ok: false, missing: false, stderr: download.stderr || download.stdout };
   }
-  if (!existsSync(OUT) || !existsSync(MANIFEST)) {
-    console.warn("[enrichment] release download missing expected assets");
-    return false;
-  }
-  return true;
+  return { ok: true };
 }
 
-function verifyManifestHash() {
-  const manifest = JSON.parse(readFileSync(MANIFEST, "utf8"));
-  const expected = manifest.pmtilesSha256;
-  if (!expected || typeof expected !== "string") {
-    console.warn("[enrichment] manifest missing pmtilesSha256");
-    return false;
-  }
-  const actual = sha256File(OUT);
-  if (actual !== expected) {
-    console.warn(`[enrichment] PMTiles SHA-256 mismatch (manifest ${expected}, file ${actual})`);
-    return false;
-  }
-  console.log(`Verified ${OUT} against manifest (${(manifest.pmtilesBytes / 1024 / 1024).toFixed(2)} MiB)`);
-  return true;
-}
-
-function useCommittedFallback() {
-  if (!existsSync(OUT)) {
-    console.warn("No committed building-enrichment.pmtiles fallback; build continues without offline enrichment file.");
-    return false;
-  }
-  console.warn(`Using committed fallback ${OUT}`);
-  if (existsSync(MANIFEST)) {
-    const manifest = JSON.parse(readFileSync(MANIFEST, "utf8"));
-    const expected = manifest.pmtilesSha256;
-    if (expected) {
-      const actual = sha256File(OUT);
-      if (actual !== expected) {
-        console.warn(
-          `[enrichment] committed PMTiles hash mismatch (manifest ${expected}, file ${actual}); serving file anyway`,
-        );
-      } else {
-        console.log(`Committed fallback matches manifest hash`);
+function main() {
+  const ghToken = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? "";
+  const tempDir = mkdtempSync(join(tmpdir(), "citycut-enrichment-"));
+  try {
+    let releaseDownloadOk = false;
+    let releaseMissing = false;
+    if (ghToken) {
+      const dl = downloadReleaseToTemp(tempDir, ghToken);
+      releaseDownloadOk = dl.ok;
+      releaseMissing = dl.missing === true;
+      if (!dl.ok) {
+        console.warn(`[enrichment] ${releaseMissing ? "release not found" : "release download failed"}: ${dl.stderr ?? ""}`.trim());
       }
+    } else {
+      console.warn("[enrichment] no GH_TOKEN; skipping release download");
     }
+
+    const decision = resolveEnrichmentDeploy({
+      publicDir,
+      tempDir,
+      ghToken,
+      releaseDownloadOk,
+      releaseMissing,
+    });
+
+    console.info(`[enrichment] ${decision.message}`);
+
+    if (decision.outcome === "release_ok") {
+      installVerifiedRelease(publicDir, tempDir, decision);
+      console.info(`[enrichment] Installed verified release assets into ${publicDir}/`);
+      return;
+    }
+
+    if (decision.outcome === "committed_fallback") {
+      if (!existsSync(join(publicDir, PMTILES_NAME))) {
+        console.warn("[enrichment] No committed building-enrichment.pmtiles fallback.");
+      }
+      return;
+    }
+
+    if (decision.outcome === "no_token" || decision.outcome === "release_not_found") {
+      return;
+    }
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
   }
-  return true;
 }
 
-if (downloadReleaseAssets() && verifyManifestHash()) {
-  process.exit(0);
-}
-
-console.warn("[enrichment] Release assets unavailable or failed verification; trying committed fallback.");
-if (!useCommittedFallback()) {
-  process.exit(0);
-}
+main();

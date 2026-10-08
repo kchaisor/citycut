@@ -2,28 +2,21 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { squareBBox } from "./geo";
 import { fetchOvertureBuildingsForCut } from "./overtureBuildings";
-import { assignExternalUses, loadUseTiers } from "./useCascade";
+import { loadUseTiers } from "./useCascade";
 import {
-  applyComBuildingHeights,
   fetchComBuildingFootprintsWithStats,
   paddedComFetchBounds,
 } from "./comBuildingHeights";
-import {
-  applyDevelopmentFloorsToBuildings,
-  fetchDevelopmentFloorRecords,
-  type DamFloorRecord,
-} from "./comDevelopmentFloors";
-import { applyHeightSourceTruthPass } from "./buildingHeightSourceTruth";
-import {
-  applyLidarHeightsFromEnrichment,
-  mergeBuildingEnrichment,
-} from "./buildingEnrichmentMerge";
-import { effectiveBuildingHeightM } from "./buildingHeightResolve";
+import { fetchDevelopmentFloorRecords, type DamFloorRecord } from "./comDevelopmentFloors";
 import { loadEnrichmentForCutFromDisk } from "./test/loadEnrichmentForCut";
 import type { BuildingEnrichmentRecord } from "./buildingEnrichmentTiles";
 import type { ComBuildingFootprint } from "./comBuildingHeightsTypes";
 import type { BuildingFeat, LonLat } from "../types";
 import type { ZonePolygon } from "./useCascade";
+import {
+  modelPageDisplayBuildings,
+  modelPageHeightSignature,
+} from "./modelPageDisplayBuildings";
 
 export const EAST_MELBOURNE_HEIGHT_CUT = {
   lat: -37.8127,
@@ -45,21 +38,14 @@ export type EastMelbourneHeightInputs = {
   comFootprints: ComBuildingFootprint[];
 };
 
-export function applyEastMelbourneHeightPipeline(input: EastMelbourneHeightInputs): BuildingFeat[] {
-  const byId = new Map(Object.entries(input.enrichmentById));
-  const enriched = mergeBuildingEnrichment(input.overtureBuildings, byId);
-  const zoned = assignExternalUses(enriched, input.zones);
-  const withLidar = applyLidarHeightsFromEnrichment(zoned);
-  const withDam = applyDevelopmentFloorsToBuildings(withLidar, input.center, input.damRecords);
-  const { buildings: withCom } = applyComBuildingHeights(withDam, input.comFootprints);
-  return applyHeightSourceTruthPass(withCom, input.center, input.comFootprints, input.damRecords);
+export function applyEastMelbourneDisplayHeights(input: EastMelbourneHeightInputs): BuildingFeat[] {
+  return modelPageDisplayBuildings(input);
 }
 
 export function loadEastMelbourneHeightInputsFromFixture(): EastMelbourneHeightInputs {
   return JSON.parse(readFileSync(INPUT_FIXTURE, "utf8")) as EastMelbourneHeightInputs;
 }
 
-/** Same height resolution order as model create (App) for a Melbourne building cut. */
 export async function fetchEastMelbourneHeightInputs(
   center: LonLat = { lat: EAST_MELBOURNE_HEIGHT_CUT.lat, lon: EAST_MELBOURNE_HEIGHT_CUT.lon },
   km = EAST_MELBOURNE_HEIGHT_CUT.km,
@@ -85,18 +71,10 @@ export async function fetchEastMelbourneHeightInputs(
   };
 }
 
-export async function buildEastMelbourneDisplayHeights(
-  center: LonLat = { lat: EAST_MELBOURNE_HEIGHT_CUT.lat, lon: EAST_MELBOURNE_HEIGHT_CUT.lon },
-  km = EAST_MELBOURNE_HEIGHT_CUT.km,
-): Promise<BuildingFeat[]> {
-  const input = await fetchEastMelbourneHeightInputs(center, km);
-  return applyEastMelbourneHeightPipeline(input);
-}
-
 export async function refreshEastMelbourneHeightFixtures(): Promise<void> {
   const input = await fetchEastMelbourneHeightInputs();
-  const display = applyEastMelbourneHeightPipeline(input);
-  const signature = buildingHeightSignature(display);
+  const display = applyEastMelbourneDisplayHeights(input);
+  const signature = modelPageHeightSignature(display);
   writeFileSync(INPUT_FIXTURE, `${JSON.stringify(input)}\n`);
   writeFileSync(
     fileURLToPath(new URL("./fixtures/east-melbourne-heights-main.json", import.meta.url)),
@@ -112,11 +90,7 @@ export async function refreshEastMelbourneHeightFixtures(): Promise<void> {
   );
 }
 
+/** @deprecated use modelPageHeightSignature */
 export function buildingHeightSignature(buildings: BuildingFeat[]): { id: number; heightM: number }[] {
-  return buildings
-    .map((building) => ({
-      id: building.id,
-      heightM: Math.round(effectiveBuildingHeightM(building) * 1000) / 1000,
-    }))
-    .sort((a, b) => a.id - b.id);
+  return modelPageHeightSignature(buildings);
 }

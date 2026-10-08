@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import landmarks from "./fixtures/landmark-heights.json";
 import type { LandmarkRow } from "./landmarkHeights.test";
+import { landmarkCutBounds } from "./landmarkCutBounds";
 import { squareBBox } from "./geo";
 import { fetchOvertureBuildingsForCut } from "./overtureBuildings";
 import { loadEnrichmentForCutFromDisk } from "./test/loadEnrichmentForCut";
@@ -26,15 +27,16 @@ describe.skipIf(!refresh)("landmark snapshot refresh", () => {
   it(
     "writes landmark-heights-snapshot.json (one cut per fixture cut key)",
     async () => {
-      const byCut = new Map<string, LandmarkRow>();
+      const byCut = new Map<string, LandmarkRow[]>();
       for (const lm of landmarks as LandmarkRow[]) {
-        if (!byCut.has(lm.cut)) byCut.set(lm.cut, lm);
+        const list = byCut.get(lm.cut) ?? [];
+        list.push(lm);
+        byCut.set(lm.cut, list);
       }
       const cuts: LandmarkCutSnapshot[] = [];
       const report: string[] = [];
-      for (const [cutName, lm] of byCut) {
-        const center = { lon: lm.lon, lat: lm.lat };
-        const sideM = 450;
+      for (const [cutName, cutRows] of byCut) {
+        const { center, sideM } = landmarkCutBounds(cutRows);
         const bounds = squareBBox(center, sideM);
         const comBounds = paddedComFetchBounds(center, sideM);
         const [{ buildings }, enrichment, { zones }, dam, { footprints }] = await Promise.all([
@@ -44,9 +46,10 @@ describe.skipIf(!refresh)("landmark snapshot refresh", () => {
           fetchDevelopmentFloorRecords(comBounds),
           fetchComBuildingFootprintsWithStats(comBounds, center),
         ]);
-        const pick = pickBuildingAtPoint(buildings, lm.lat, lm.lon, center);
+        const sample = cutRows[0]!;
+        const pick = pickBuildingAtPoint(buildings, sample.lat, sample.lon, center);
         report.push(
-          `${cutName}: buildings=${buildings.length} sample=${lm.name} contains=${pick ? pick.building.id : "NONE"} height=${pick?.heightM ?? "—"}`,
+          `${cutName}: side=${sideM}m center=${center.lat.toFixed(5)},${center.lon.toFixed(5)} buildings=${buildings.length} sample=${sample.name} pick=${pick ? pick.building.id : "NONE"}`,
         );
         cuts.push({
           name: cutName,
@@ -61,7 +64,8 @@ describe.skipIf(!refresh)("landmark snapshot refresh", () => {
       }
       writeFileSync(OUT, JSON.stringify({ generatedAt: new Date().toISOString(), cuts }, null, 0));
       console.info(report.join("\n"));
-      console.info("Run: npx vite-node scripts/patch-landmark-snapshot-osm-ways.mjs");
+      console.info("Run: npx vite-node scripts/fetch-landmark-osm-ways.mjs");
+      console.info("Run: npx vite-node scripts/write-landmark-computed-sidecar.mjs");
       expect(cuts.length).toBe(byCut.size);
     },
     900_000,

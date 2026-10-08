@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   EAST_MELBOURNE_HEIGHT_CUT,
-  applyEastMelbourneHeightPipeline,
+  applyEastMelbourneDisplayHeights,
   buildingHeightSignature,
   loadEastMelbourneHeightInputsFromFixture,
   refreshEastMelbourneHeightFixtures,
@@ -24,7 +24,7 @@ describe("East Melbourne height identity (main baseline)", () => {
       if (process.env.REFRESH_EAST_MELBOURNE_HEIGHTS === "1") {
         await refreshEastMelbourneHeightFixtures();
       }
-      const display = applyEastMelbourneHeightPipeline(loadEastMelbourneHeightInputsFromFixture());
+      const display = applyEastMelbourneDisplayHeights(loadEastMelbourneHeightInputsFromFixture());
       const signature = buildingHeightSignature(display);
       const expected = JSON.parse(readFileSync(FIXTURE, "utf8")) as Snapshot;
       expect(signature.length).toBe(expected.buildingCount);

@@ -2,11 +2,14 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import landmarks from "./fixtures/landmark-heights.json";
-import { pickBuildingForLandmark } from "./landmarkBuildingPick";
+import {
+  assertLandmarkOsmGeometry,
+  loadLandmarkOsmWays,
+  pickLandmarkBuildingAtPoint,
+} from "./landmarkOsmVerify";
 import { inferHeightTier, heightTierLabel } from "./buildingHeightResolve";
 import { landmarkFootprintDescriptor } from "./landmarkFootprintDescriptor";
 import { resolveLandmarkCut, type LandmarkCutSnapshot } from "./landmarkHeightPipeline";
-import type { BuildingFeat } from "../types";
 
 type LandmarkOsm = {
   type: "way";
@@ -33,6 +36,15 @@ export type LandmarkRow = {
 type SnapshotFile = {
   cuts: LandmarkCutSnapshot[];
 };
+
+type ComputedSidecar = {
+  computed: Record<string, number>;
+};
+
+function loadComputedSidecar(): ComputedSidecar {
+  const path = fileURLToPath(new URL("./fixtures/landmark-computed.json", import.meta.url));
+  return JSON.parse(readFileSync(path, "utf8")) as ComputedSidecar;
+}
 
 /** Genuine pipeline vs independent citation gaps at main's CoM matcher (do not “fix” in CI). */
 export const REAL_DISAGREEMENTS: {
@@ -94,19 +106,6 @@ function assertSourceGuard(lm: LandmarkRow): string | null {
   return null;
 }
 
-function assertOsmPick(lm: LandmarkRow, building: BuildingFeat): string | null {
-  if (!building.osmWayIds?.includes(lm.osm.id)) {
-    return `${lm.name}: picked building osmWayIds ${building.osmWayIds?.join(",") ?? "—"} must include osm way ${lm.osm.id}`;
-  }
-  if (lm.osm.tag === "name") {
-    const label = building.overtureName?.trim();
-    if (label && label.localeCompare(lm.osm.value, undefined, { sensitivity: "accent" }) !== 0) {
-      return `${lm.name}: OSM name "${lm.osm.value}" != Overture name "${label}"`;
-    }
-  }
-  return null;
-}
-
 function failsTolerance(lm: LandmarkRow, computed: number, tier: ReturnType<typeof inferHeightTier>): boolean {
   const delta = Math.abs(computed - lm.cited_m);
   const tol = toleranceM(lm.cited_m);
@@ -123,6 +122,8 @@ describe("Melbourne landmark height reference (CI)", () => {
     );
     const wiringFailures: string[] = [];
     const toleranceFailureNames: string[] = [];
+    const osmWays = loadLandmarkOsmWays();
+    const computedSidecar = loadComputedSidecar();
 
     for (const lm of landmarks as LandmarkRow[]) {
       const sourceIssue = assertSourceGuard(lm);
@@ -135,21 +136,24 @@ describe("Melbourne landmark height reference (CI)", () => {
         continue;
       }
       const final = resolveLandmarkCut(cut);
-      const pick = pickBuildingForLandmark(final, lm.lat, lm.lon, cut.center, lm.osm.id);
+      const pick = pickLandmarkBuildingAtPoint(final, lm, cut.center, osmWays);
       if (!pick) {
         wiringFailures.push(`${lm.name}: no footprint contains fixture lat/lon`);
         rows.push(`${lm.name} | ${lm.cited_m} | ${lm.metric} | — | — | — | ${lm.osm.id} | — | FAIL | ${lm.source_url}`);
         continue;
       }
 
-      const osmIssue = assertOsmPick(lm, pick.building);
+      const osmIssue = assertLandmarkOsmGeometry(lm, pick.building, cut.center, osmWays);
       if (osmIssue) wiringFailures.push(osmIssue);
 
       const tier = inferHeightTier(pick.building);
       const computed = pick.heightM;
-      if (Math.abs(computed - lm.computed_m_main) > 0.15) {
+      const expectedComputed = computedSidecar.computed[lm.name];
+      if (expectedComputed == null) {
+        wiringFailures.push(`${lm.name}: missing entry in landmark-computed.json`);
+      } else if (Math.abs(computed - expectedComputed) > 0.15) {
         wiringFailures.push(
-          `${lm.name}: computed ${computed.toFixed(1)} m != fixture computed_m_main ${lm.computed_m_main} m (snapshot pipeline drift)`,
+          `${lm.name}: computed ${computed.toFixed(1)} m != snapshot sidecar ${expectedComputed} m`,
         );
       }
 
