@@ -830,6 +830,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                 onBuildingPick={(buildingId, clientX, clientY) =>
                   setHeightPick({ buildingId, clientX, clientY })
                 }
+                onClearBuildingPick={() => setHeightPick(null)}
                 heightEditBuildingId={heightPick?.buildingId ?? null}
               />
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
@@ -847,8 +848,6 @@ export function ModelPage({ model }: { model: CityModel }) {
                 <BuildingHeightPopover
                   building={pickedBuilding}
                   center={displayModel.center}
-                  clientX={heightPick.clientX}
-                  clientY={heightPick.clientY}
                   onSave={(heightM) => saveBuildingHeight(pickedBuilding.id, heightM)}
                   onReset={() => resetBuildingHeight(pickedBuilding.id)}
                   onClose={() => setHeightPick(null)}

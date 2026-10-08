@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { MultiPolygon, Pair } from "polygon-clipping";
-import { unionCarriageways, unionFootpaths } from "./roadFill";
+import {
+  clearFootpathUnionCacheForTests,
+  isVehicularRoad,
+  surfaceVerticesOutsideFrame,
+  unionCarriageways,
+  unionFootpaths,
+  unionRoadSurface,
+} from "./roadFill";
+import type { Pt, RoadFeat } from "../types";
 
 function openRing(ring: Pair[]): Pair[] {
   if (
@@ -11,6 +19,27 @@ function openRing(ring: Pair[]): Pair[] {
     return ring.slice(0, -1);
   }
   return ring;
+}
+
+function ringArea(ring: Pair[]): number {
+  let sum = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const [x1, y1] = ring[i]!;
+    const [x2, y2] = ring[(i + 1) % ring.length]!;
+    sum += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(sum) / 2;
+}
+
+function multiArea(multi: MultiPolygon): number {
+  let area = 0;
+  for (const polygon of multi) {
+    const outer = polygon[0];
+    if (!outer) continue;
+    area += ringArea(outer);
+    for (const hole of polygon.slice(1)) area -= ringArea(hole);
+  }
+  return area;
 }
 
 function inside(multi: MultiPolygon, x: number, y: number): boolean {
@@ -62,6 +91,78 @@ function circle(radius: number, segments = 16): Pair[] {
   return points;
 }
 
+describe("isVehicularRoad", () => {
+  it("keeps carriageways and drops paths and rail", () => {
+    const path: RoadFeat = { id: 1, line: [[0, 0], [10, 0]], width: 2, kind: "road", grade: "path" };
+    const local: RoadFeat = { id: 2, line: [[0, 0], [10, 0]], width: 6, kind: "road", grade: "local" };
+    const rail: RoadFeat = { id: 3, line: [[0, 0], [10, 0]], width: 3, kind: "rail" };
+    expect(isVehicularRoad(path)).toBe(false);
+    expect(isVehicularRoad(local)).toBe(true);
+    expect(isVehicularRoad(rail)).toBe(false);
+  });
+});
+
+describe("footpath fillet", () => {
+  it("keeps straight footpath edges smooth while filling concave junction corners", () => {
+    clearFootpathUnionCacheForTests();
+    const line: Pt[] = [
+      [-40, 0],
+      [40, 0],
+    ];
+    const straight = unionFootpaths([line], 1.2, 200, "square", 2);
+    const ring = straight.polygons[0]?.[0]?.slice(0, -1) ?? [];
+    expect(ring.length).toBeLessThan(24);
+    let maxEdge = 0;
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i]!;
+      const b = ring[(i + 1) % ring.length]!;
+      maxEdge = Math.max(maxEdge, Math.hypot(b[0] - a[0], b[1] - a[1]));
+    }
+    expect(maxEdge).toBeGreaterThan(10);
+  });
+
+  it("does not grow a perpendicular crossing when fillets are skipped", () => {
+    clearFootpathUnionCacheForTests();
+    const cross: Pt[][] = [
+      [
+        [-30, 0],
+        [30, 0],
+      ],
+      [
+        [0, -30],
+        [0, 30],
+      ],
+    ];
+    const sharp = unionFootpaths(cross, 1.2, 200, "square", 0);
+    clearFootpathUnionCacheForTests();
+    const filleted = unionFootpaths(cross, 1.2, 200, "square", 2);
+    expect(filleted.polygons).toHaveLength(1);
+    expect(multiArea(filleted.polygons)).toBeLessThanOrEqual(multiArea(sharp.polygons) * 1.002);
+    expect(inside(filleted.polygons, 0.95, 0.95)).toBe(false);
+    expect(hasInternalSeam(filleted.polygons)).toBe(false);
+  });
+
+  it("filletes the concave pocket of a T junction", () => {
+    clearFootpathUnionCacheForTests();
+    const tee: Pt[][] = [
+      [
+        [-30, 8],
+        [30, 8],
+      ],
+      [
+        [0, 8],
+        [0, -30],
+      ],
+    ];
+    const sharp = unionFootpaths(tee, 2.4, 200, "square", 0);
+    expect(inside(sharp.polygons, -2.1, 6.5)).toBe(false);
+    clearFootpathUnionCacheForTests();
+    const filleted = unionFootpaths(tee, 2.4, 200, "square", 2);
+    expect(inside(filleted.polygons, -2.1, 6.5)).toBe(true);
+    expect(multiArea(filleted.polygons)).toBeGreaterThan(multiArea(sharp.polygons));
+  });
+});
+
 describe("road union", () => {
   it("joins a crossing, a bend, and a cul-de-sac into one shape with no internal seams", () => {
     const fill = unionCarriageways(
@@ -98,6 +199,47 @@ describe("road union", () => {
     expect(inside(fill.polygons, 18, 0)).toBe(true);
     expect(inside(fill.polygons, 30, 0)).toBe(true);
     expect(hasInternalSeam(fill.polygons)).toBe(false);
+  });
+
+  it("keeps dilated road fill inside the site frame", () => {
+    const roads: RoadFeat[] = [
+      { id: 1, line: [[-95, 92], [95, 92]], width: 12, kind: "road", grade: "arterial" },
+      { id: 2, line: [[-92, -95], [-92, 95]], width: 12, kind: "road", grade: "arterial" },
+      { id: 3, line: [[95, -95], [95, 95]], width: 12, kind: "road", grade: "arterial" },
+    ];
+    const fill = unionRoadSurface(roads, undefined, 200, "square");
+    expect(surfaceVerticesOutsideFrame(fill.polygons, 200, "square")).toHaveLength(0);
+  });
+
+  it("keeps filleted footpaths inside the site frame", () => {
+    clearFootpathUnionCacheForTests();
+    const lines: Pt[][] = [
+      [
+        [-95, 0],
+        [95, 0],
+      ],
+      [
+        [0, -95],
+        [0, 95],
+      ],
+    ];
+    const fill = unionFootpaths(lines, 2.4, 200, "square", 2);
+    expect(surfaceVerticesOutsideFrame(fill.polygons, 200, "square")).toHaveLength(0);
+  });
+
+  it("fills a dual-carriageway median gap and keeps tram dashes separate from the fill union", () => {
+    const roads: RoadFeat[] = [
+      { id: 1, line: [[-40, 0], [40, 0]], width: 10, kind: "road", grade: "arterial" },
+      { id: 2, line: [[-40, 12], [40, 12]], width: 10, kind: "road", grade: "arterial" },
+    ];
+    const bare = unionCarriageways(
+      roads.map((road) => ({ line: road.line, width: road.width })),
+      200,
+    );
+    expect(inside(bare.polygons, 0, 6)).toBe(false);
+    const filled = unionRoadSurface(roads, [[[-40, 6], [40, 6]]], 200);
+    expect(inside(filled.polygons, 0, 6)).toBe(true);
+    expect(hasInternalSeam(filled.polygons)).toBe(false);
   });
 
   it("buffers a footpath 0.6 m each side of the centreline and unions a join", () => {

@@ -31,7 +31,7 @@ describe("lineweights", () => {
   });
 
   it("dashes contours in hidden-line style", () => {
-    expect(CONTOUR_COLOR).toBe("#B0B0B0");
+    expect(CONTOUR_COLOR).toBe("#000000");
     expect(CONTOUR_DASH_MM).toBe(1.5);
     expect(CONTOUR_GAP_MM).toBe(0.75);
     expect(screenDashPx(CONTOUR_DASH_MM)).toBeCloseTo(screenDashPx(CONTOUR_GAP_MM) * 2, 5);

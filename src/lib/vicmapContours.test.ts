@@ -428,7 +428,7 @@ describe("contour fallback", () => {
     const coarse = sitePlanChunks(model, 5000);
     const coarseLines = coarse.find((chunk) => chunk.name === "Contours");
     expect(coarseLines?.paths).toHaveLength(2);
-    expect(coarseLines?.paths?.[0].strokeMm).toBe(0.1);
+    expect(coarseLines?.paths?.[0].strokeMm).toBe(0.02);
     expect(coarseLines?.paths?.[1].strokeMm).toBe(0.18);
     expect(coarse.find((chunk) => chunk.name === "Contour labels")).toBeUndefined();
     expect(coarse.find((chunk) => chunk.name === "Annotation")?.texts?.some((text) => text.text.includes("Contours every 5 m"))).toBe(true);

@@ -4,7 +4,12 @@ import { isSiteBuilding } from "./siteBuildings";
 import { clipAreaToSiteFrame, clipPolylineSiteFrame, pointInSiteFrame, DEFAULT_SITE_FRAME_SHAPE } from "./siteFrame";
 import { openRing } from "./geo";
 import { PATH_WIDTH_M } from "./lineweights";
-import { carriagewaysOf, footpathLines, unionCarriageways, unionFootpaths } from "./roadFill";
+import {
+  DEFAULT_PATH_FILLET_M,
+  footpathStrips,
+  unionFootpathStrips,
+  unionRoadSurface,
+} from "./roadFill";
 import {
   DEFAULT_COARSE_FROM_SCALE,
   DEFAULT_COARSE_INTERVAL_M,
@@ -125,6 +130,8 @@ function clipLines(line: Pt[], sideM: number, frameShape: import("../types").Sit
 export type PlanPathOptions = {
   buildingColour?: BuildingColourMode;
   highlightManual?: boolean;
+  /** Junction fillet radius for unioned footpaths, in metres on the ground. */
+  pathFilletM?: number;
 };
 
 export function planPaths(
@@ -156,8 +163,14 @@ export function planPaths(
   for (const line of model.tramLines ?? []) {
     for (const part of clipLines(line, model.sideM, frameShape)) trams.push(part);
   }
-  const footpaths = unionFootpaths(footpathLines(model.roads), pathWidthM, model.sideM, frameShape);
-  const carriageway = unionCarriageways(carriagewaysOf(model.roads), model.sideM, frameShape);
+  const footpaths = unionFootpathStrips(
+    footpathStrips(model.roads, pathWidthM),
+    model.sideM,
+    frameShape,
+    planOptions.pathFilletM ?? DEFAULT_PATH_FILLET_M,
+    pathWidthM,
+  );
+  const carriageway = unionRoadSurface(model.roads, model.tramLines, model.sideM, frameShape);
 
   const colourMode: BuildingColourMode = planOptions.buildingColour ?? {
     colourByUse: true,

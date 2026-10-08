@@ -13,8 +13,6 @@ import type { BuildingFeat, LonLat } from "../types";
 type Props = {
   building: BuildingFeat;
   center: LonLat;
-  clientX: number;
-  clientY: number;
   onSave: (heightM: number) => void;
   onReset: () => void;
   onClose: () => void;
@@ -34,14 +32,16 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function BuildingHeightPopover({ building, center, clientX, clientY, onSave, onReset, onClose }: Props) {
+export function BuildingHeightPopover({ building, center, onSave, onReset, onClose }: Props) {
   const [value, setValue] = useState(() => formatHeightM(building.height));
   const [details, setDetails] = useState<BuildingPopupDetails>(() => emptyBuildingPopupDetails(building));
+  const [minimised, setMinimised] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setValue(formatHeightM(building.height));
     setDetails(emptyBuildingPopupDetails(building));
+    setMinimised(false);
     const controller = new AbortController();
     void loadBuildingPopupDetails(building, center, controller.signal).then((loaded) => {
       if (!controller.signal.aborted) setDetails(loaded);
@@ -50,9 +50,10 @@ export function BuildingHeightPopover({ building, center, clientX, clientY, onSa
   }, [building.id, building.height, building.use, building.source, center.lat, center.lon]);
 
   useEffect(() => {
+    if (minimised) return;
     inputRef.current?.focus();
     inputRef.current?.select();
-  }, [building.id]);
+  }, [building.id, minimised]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -74,59 +75,73 @@ export function BuildingHeightPopover({ building, center, clientX, clientY, onSa
   }
 
   return (
-    <div
-      className="building-height-popover building-detail-popover"
+    <aside
+      className={minimised ? "building-detail-panel is-minimised" : "building-detail-panel"}
       role="dialog"
       aria-label="Building details"
-      style={{ left: clientX, top: clientY }}
     >
       <header>
         <strong>Building</strong>
-        <button type="button" className="icon-close" aria-label="Close" onClick={onClose}>
-          ×
-        </button>
-      </header>
-      <Field label="Use" value={details.useLine} />
-      <Field label="Name / address" value={details.nameLine} />
-      <Field label="Height & storeys" value={details.heightStoreysLine} />
-      <Field label="Zone & overlays" value={details.zoneLine} />
-      <Field label="Lot / site" value={details.lotLine} />
-      {showCom && <Field label="Year built" value={details.yearLine} />}
-      {showCom && <Field label="Development" value={details.developmentLine} />}
-      <div className="height-editor-block">
-        <p className="meta">
-          Height editor · Current: {building.height.toFixed(1)} m · {source}
-        </p>
-        <label className="height-field">
-          <span>Height (m)</span>
-          <input
-            ref={inputRef}
-            type="number"
-            min={1}
-            step={0.5}
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                commit();
-              }
-            }}
-          />
-        </label>
-        <div className="popover-actions">
-          <button type="button" onClick={commit}>
-            Save
+        <div className="building-detail-panel-actions">
+          <button
+            type="button"
+            className="icon-minimise"
+            aria-label={minimised ? "Expand panel" : "Minimise panel"}
+            aria-expanded={!minimised}
+            onClick={() => setMinimised((open) => !open)}
+          >
+            {minimised ? "▴" : "▾"}
           </button>
-          <button type="button" onClick={onReset}>
-            Reset this building
+          <button type="button" className="icon-close" aria-label="Close" onClick={onClose}>
+            ×
           </button>
         </div>
-      </div>
-      {details.credits.length > 0 && (
-        <p className="legend-note popup-credits">{details.credits.join(" ")}</p>
+      </header>
+      {!minimised && (
+        <div className="building-detail-panel-body">
+          <Field label="Use" value={details.useLine} />
+          <Field label="Name / address" value={details.nameLine} />
+          <Field label="Height & storeys" value={details.heightStoreysLine} />
+          <Field label="Zone & overlays" value={details.zoneLine} />
+          <Field label="Lot / site" value={details.lotLine} />
+          {showCom && <Field label="Year built" value={details.yearLine} />}
+          {showCom && <Field label="Development" value={details.developmentLine} />}
+          <div className="height-editor-block">
+            <p className="meta">
+              Height editor · Current: {building.height.toFixed(1)} m · {source}
+            </p>
+            <label className="height-field">
+              <span>Height (m)</span>
+              <input
+                ref={inputRef}
+                type="number"
+                min={1}
+                step={0.5}
+                value={value}
+                onChange={(event) => setValue(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    commit();
+                  }
+                }}
+              />
+            </label>
+            <div className="popover-actions">
+              <button type="button" onClick={commit}>
+                Save
+              </button>
+              <button type="button" onClick={onReset}>
+                Reset this building
+              </button>
+            </div>
+          </div>
+          {details.credits.length > 0 && (
+            <p className="legend-note popup-credits">{details.credits.join(" ")}</p>
+          )}
+        </div>
       )}
-    </div>
+    </aside>
   );
 }
 

@@ -58,3 +58,12 @@ export function roadSpecFromOvertureSegment(props: SegmentProps): RoadSpec | nul
   }
   return null;
 }
+
+/** Vehicle carriageways only — excludes rail, water, and path-class highways. */
+export function isVehicularOvertureSegment(props: SegmentProps): boolean {
+  const subtype = String(props.subtype ?? "").toLowerCase();
+  if (subtype === "water" || subtype === "rail") return false;
+  if (subtype !== "road" && subtype !== "") return false;
+  const spec = roadSpecFromOvertureSegment(props);
+  return spec != null && spec.kind === "road" && spec.grade !== "path";
+}

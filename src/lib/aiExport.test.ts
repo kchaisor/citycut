@@ -20,7 +20,7 @@ import * as download from "./download";
 import * as figureGround from "./figureGround";
 import { DEFAULT_LINE_STYLES, cloneLineStyles } from "./drawingStyle";
 import { paperMillimetres } from "./figureGround";
-import { hexRgb, LINE_MM, PATH_FILL, PATH_WIDTH_M, pdfPt } from "./lineweights";
+import { hexRgb, LINE_MM, PATH_FILL, pdfPt } from "./lineweights";
 import * as svgPlan from "./svgPlan";
 import type { CityModel, Pt, TerrainField } from "../types";
 
@@ -253,7 +253,7 @@ describe("Illustrator plans", () => {
     expect(widths).not.toContain(0);
     expect(widths).toContain(LINE_MM.propertyRoad);
     expect(widths).toContain(0.08);
-    expect(widths).toContain(LINE_MM.contour);
+    expect(widths).toContain(0.02);
     expect(widths).toContain(LINE_MM.frame);
     expect(widths).toContain(LINE_MM.annotation);
     expect(info.layers).toContain("Contours");
@@ -283,7 +283,7 @@ describe("Illustrator plans", () => {
     const paintsOf = (body: string) => body.match(/(?:B\*|b\*|f\*|B|b|f|S|s)(?![A-Za-z*])/g) ?? [];
     const info = await inspect(await sitePlanPdf(model(), 1000));
     expect(paintsOf(info.bodies.get("Buildings") ?? "")).toContain("B*");
-    expect(paintsOf(info.bodies.get("Green") ?? "")).toContain("B*");
+    expect(paintsOf(info.bodies.get("Green") ?? "")).toEqual(expect.arrayContaining(["f*"]));
     expect(paintsOf(info.bodies.get("Water") ?? "")).toContain("B*");
     expect(info.content).not.toMatch(/(?:^|[\s[])0(?:\.0+)? w/);
 
@@ -327,8 +327,8 @@ describe("Illustrator plans", () => {
       }
       return max - min;
     };
-    expect(widthMm(1000)).toBeCloseTo(paperMillimetres(PATH_WIDTH_M, 1000), 1);
-    expect(widthMm(500)).toBeCloseTo(paperMillimetres(PATH_WIDTH_M, 500), 1);
+    expect(widthMm(1000)).toBeCloseTo(paperMillimetres(2, 1000), 1);
+    expect(widthMm(500)).toBeCloseTo(paperMillimetres(2, 500), 1);
     const hidden = cloneLineStyles(DEFAULT_LINE_STYLES);
     hidden.pathWidthM = 0;
     const gone = await inspect(await sitePlanPdf(model(), 1000, hidden));

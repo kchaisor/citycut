@@ -79,6 +79,8 @@ export type LineStyles = {
   kerbOn: boolean;
   /** Full footpath width in metres on the ground. Half lies each side of the centreline. */
   pathWidthM: number;
+  /** Fillet radius at footpath junctions after the union (m on the ground). */
+  pathFilletM: number;
   pathFill: string;
   /** Stroke on the unioned footpath outline only. */
   pathEdgeOn: boolean;
@@ -154,6 +156,7 @@ export const ROAD_FILL_VAR = "--road-fill";
 export const ROAD_KERB_VAR = "--road-kerb";
 export const PATH_WIDTH_VAR = "--path-width-m";
 export const PATH_FILL_VAR = "--path-fill";
+export const PATH_FILLET_VAR = "--path-fillet-m";
 export const PATH_EDGE_VAR = "--path-edge";
 export const CONTOUR_INDEX_MM_VAR = "--contour-index-mm";
 export const CONTOUR_INDEX_EVERY_VAR = "--contour-index-every";
@@ -194,9 +197,9 @@ export const DEFAULT_LINE_STYLES: LineStyles = {
   kerb: { mm: LINE_MM.propertyRoad, color: drawingSheetColor("--road-kerb-stroke"), dash: "none" },
   path: { mm: 0, color: drawingSheetColor("--path-edge-stroke"), dash: "none" },
   rail: { mm: 0.08, color: drawingSheetColor("--rail-stroke"), dash: "none" },
-  green: { mm: 0.08, color: drawingSheetColor("--green-stroke"), dash: "none" },
+  green: { mm: 0, color: drawingSheetColor("--green-stroke"), dash: "none" },
   water: { mm: 0.08, color: drawingSheetColor("--water-stroke"), dash: "none" },
-  contour: { mm: LINE_MM.contour, color: CONTOUR_COLOR.toUpperCase(), dash: `${CONTOUR_DASH_MM} ${CONTOUR_GAP_MM}` },
+  contour: { mm: 0.02, color: CONTOUR_COLOR.toUpperCase(), dash: `${CONTOUR_DASH_MM} ${CONTOUR_GAP_MM}` },
   frame: { mm: LINE_MM.frame, color: INK, dash: "none" },
   annotation: { mm: LINE_MM.annotation, color: drawingSheetColor("--annotation-stroke"), dash: "none" },
   tree: { mm: 0.08, color: drawingSheetColor("--tree-stroke"), dash: "none" },
@@ -206,6 +209,7 @@ export const DEFAULT_LINE_STYLES: LineStyles = {
   roadFill: COLOUR_FALLBACK["--road-fill"],
   kerbOn: true,
   pathWidthM: PATH_WIDTH_M,
+  pathFilletM: 2,
   pathFill: COLOUR_FALLBACK["--path-fill"],
   pathEdgeOn: false,
   contourIndexMm: 0.18,
@@ -224,6 +228,7 @@ export function allStyleVariables(): string[] {
     ROAD_FILL_VAR,
     ROAD_KERB_VAR,
     PATH_WIDTH_VAR,
+    PATH_FILLET_VAR,
     PATH_FILL_VAR,
     PATH_EDGE_VAR,
     CONTOUR_INDEX_MM_VAR,
@@ -256,6 +261,7 @@ export function cloneLineStyles(style: LineStyles = DEFAULT_LINE_STYLES): LineSt
     roadFill: style.roadFill,
     kerbOn: style.kerbOn,
     pathWidthM: style.pathWidthM,
+    pathFilletM: style.pathFilletM,
     pathFill: style.pathFill,
     pathEdgeOn: style.pathEdgeOn,
     contourIndexMm: style.contourIndexMm,
@@ -444,6 +450,8 @@ export function styleFromProperties(
   if (kerb != null) next.kerbOn = kerb;
   const width = parseMetres(read(PATH_WIDTH_VAR));
   if (width != null) next.pathWidthM = width;
+  const fillet = parseMetres(read(PATH_FILLET_VAR));
+  if (fillet != null) next.pathFilletM = fillet;
   const pathFill = parseColor(read(PATH_FILL_VAR));
   if (pathFill) next.pathFill = pathFill;
   const edge = parseKerb(read(PATH_EDGE_VAR));
@@ -543,6 +551,7 @@ export function changedVariables(current: LineStyles, baseline: LineStyles): Rec
   if (current.roadFill.toUpperCase() !== baseline.roadFill.toUpperCase()) out[ROAD_FILL_VAR] = current.roadFill.toUpperCase();
   if (current.kerbOn !== baseline.kerbOn) out[ROAD_KERB_VAR] = current.kerbOn ? "on" : "off";
   if (formatMetres(current.pathWidthM) !== formatMetres(baseline.pathWidthM)) out[PATH_WIDTH_VAR] = formatMetres(current.pathWidthM);
+  if (formatMetres(current.pathFilletM) !== formatMetres(baseline.pathFilletM)) out[PATH_FILLET_VAR] = formatMetres(current.pathFilletM);
   if (current.pathFill.toUpperCase() !== baseline.pathFill.toUpperCase()) out[PATH_FILL_VAR] = current.pathFill.toUpperCase();
   if (current.pathEdgeOn !== baseline.pathEdgeOn) out[PATH_EDGE_VAR] = current.pathEdgeOn ? "on" : "off";
   if (formatMm(current.contourIndexMm) !== formatMm(baseline.contourIndexMm)) {

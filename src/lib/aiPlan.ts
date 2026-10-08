@@ -42,15 +42,16 @@ export const SITE_LAYER_ORDER = [
   "Frame",
   "Green",
   "Water",
-  "Roads",
+  "Contours",
+  "Contour labels",
   "Paths",
+  "Roads",
   "Rail",
+  "Trams",
   "Buildings",
   "Site buildings",
   "Site boundary",
   "Trees",
-  "Contours",
-  "Contour labels",
   "Shadows",
   "Sun path",
   "Wind",
@@ -313,6 +314,7 @@ export function sitePlanChunks(
         colourBySource,
       },
       highlightManual,
+      pathFilletM: style.pathFilletM,
     },
   );
   const page = layout.pageHeightMm;
@@ -366,6 +368,18 @@ export function sitePlanChunks(
   }
   const footpaths = pathStrip(plan.pathFill, model, layout, style);
   if (footpaths) chunks.push(footpaths);
+  const contourPen = pen(style.contour);
+  const indexPen = pen({ ...style.contour, mm: style.contourIndexMm });
+  if (plan.contours.length > 0 && contourPen) {
+    chunks.push({
+      name: "Contours",
+      paths: plan.contours.map((line, index) => ({
+        rings: [mapRing(line, model.sideM, layout)],
+        close: false,
+        ...(plan.contourIndex[index] && indexPen ? indexPen : contourPen),
+      })),
+    });
+  }
   const roadRings = plan.roadFill.flatMap((polygon) => mapRings(polygon, model.sideM, layout));
   if (roadRings.length > 0) {
     const kerb = style.kerbOn ? pen(style.kerb) : null;
@@ -381,18 +395,6 @@ export function sitePlanChunks(
           ...(kerb ?? {}),
         },
       ],
-    });
-  }
-  const contourPen = pen(style.contour);
-  const indexPen = pen({ ...style.contour, mm: style.contourIndexMm });
-  if (plan.contours.length > 0 && contourPen) {
-    chunks.push({
-      name: "Contours",
-      paths: plan.contours.map((line, index) => ({
-        rings: [mapRing(line, model.sideM, layout)],
-        close: false,
-        ...(plan.contourIndex[index] && indexPen ? indexPen : contourPen),
-      })),
     });
   }
   const railPen = pen(style.rail);
@@ -533,7 +535,7 @@ export function figureGroundChunks(
   return chunks;
 }
 
-function sitePlanLayerOrder(chunks: PdfChunk[]): string[] {
+export function sitePlanLayerOrder(chunks: PdfChunk[]): string[] {
   const order: string[] = [...SITE_LAYER_ORDER];
   if (!order.includes("Contour labels") && chunks.some((chunk) => chunk.name === "Contour labels")) {
     const at = order.indexOf("Contours");

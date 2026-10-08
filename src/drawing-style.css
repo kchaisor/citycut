@@ -25,6 +25,8 @@
   /* Footpath strips. Metres on the ground, 0.6 m each side of the centreline, then unioned.
      The fill is --path-fill in colours.css: just under the page and well above the road. */
   --path-width-m: 1.2;
+  /* Fillet radius at T and X junctions after the footpath union (m on the ground). */
+  --path-fillet-m: 2;
 
   /* Optional edge on the unioned outline only. "off" leaves the fill with no edge.
      The old --path-stroke* names are the same edge, if a saved edit still uses them. */
@@ -44,7 +46,7 @@
   --tram-dash: 1.2 0.6;
 
   /* Edge of a park or other green area. */
-  --green-stroke-mm: 0.08;
+  --green-stroke-mm: 0;
   --green-stroke: var(--outline-green);
   --green-dash: none;
 
