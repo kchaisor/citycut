@@ -33,14 +33,16 @@ export type CutColourMoveStats = {
   colourEnrichmentMs?: number | null;
   /** QA: refineBuildingUses (zones/WFS) in that fetch. */
   colourRefineMs?: number | null;
-  /** QA: buildings in cut with use from enrichment tiles (after merge). */
+  /** QA: buildings with tile `useSourceTier` after merge. */
   landingUseFromTiles?: number | null;
-  /** QA: buildings classified by live zone refine (after merge). */
+  /** QA: buildings newly classified by live refine (`source` was `none`). */
   landingUseFromLiveRefine?: number | null;
-  /** QA: still unclassified in cut after chosen path. */
   landingUseUnclassified?: number | null;
   landingUseTotal?: number | null;
+  landingBuildingCapHit?: boolean;
+  landingOvertureFragmentCount?: number | null;
   tilesOnlyMode?: boolean;
+  landingUseTierCounts?: Record<string, number> | null;
 };
 
 declare global {

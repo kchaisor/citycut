@@ -1,5 +1,6 @@
 import type { BuildingUse, TypologySource } from "../types";
 import { getColour, type ColourKey } from "./colours";
+import { ZONE_USE } from "./zoneUseTable";
 
 export const BUILDING_USES = [
   "residential",
@@ -208,34 +209,8 @@ const TAG_PRIORITY: BuildingUse[] = [
   "outbuilding",
 ];
 
-/**
- * Vicmap zone codes after schedule digits are stripped.
- * C1Z is absent: height decides retail or commercial.
- */
-export const ZONE_USE: Record<string, BuildingUse> = {
-  GRZ: "residential",
-  NRZ: "residential",
-  RGZ: "residential",
-  LDRZ: "residential",
-  RLZ: "residential",
-  TZ: "residential",
-  C2Z: "commercial",
-  B1Z: "commercial",
-  B2Z: "commercial",
-  B3Z: "commercial",
-  B4Z: "commercial",
-  B5Z: "commercial",
-  MUZ: "mixed_use",
-  ACZ: "mixed_use",
-  CCZ: "mixed_use",
-  CDZ: "mixed_use",
-  IN1Z: "industrial",
-  IN2Z: "industrial",
-  IN3Z: "industrial",
-  PUZ: "civic",
-  PPRZ: "recreation",
-  PCRZ: "recreation",
-};
+/** Vicmap zone codes after schedule digits are stripped. C1Z is absent: height decides retail or commercial. */
+export { ZONE_USE } from "./zoneUseTable";
 
 /** C1Z below this resolved height is retail. At 15 m and above it stays commercial. */
 export const C1Z_RETAIL_BELOW_M = 15;

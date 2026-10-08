@@ -8,6 +8,8 @@ def test_strip_schedule_suffix_keeps_c1z():
 
 def test_use_from_zone_matches_app():
     assert use_from_zone("GRZ7", 9) == "residential"
+    assert use_from_zone("HCTZ1", 9) == "residential"
+    assert use_from_zone("R1Z", 9) == "residential"
     assert use_from_zone("MUZ", 40) == "mixed_use"
     assert use_from_zone("IN3Z", 8) == "industrial"
     assert use_from_zone("PUZ6", 12) == "civic"

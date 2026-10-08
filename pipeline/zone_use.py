@@ -1,37 +1,16 @@
-"""Vicmap zone → use class (mirrors src/lib/buildingUse.ts)."""
+"""Vicmap zone → use class (mirrors src/lib/buildingUse.ts via shared/vicmap-zone-use.json)."""
 
 from __future__ import annotations
 
+import json
 import re
+from pathlib import Path
 
 DEFAULT_ZONE_HEIGHT_M = 9.0
 C1Z_RETAIL_BELOW_M = 15.0
 
-# After normaliseZoneCode (strip trailing schedule digits only).
-ZONE_USE: dict[str, str] = {
-    "GRZ": "residential",
-    "NRZ": "residential",
-    "RGZ": "residential",
-    "LDRZ": "residential",
-    "RLZ": "residential",
-    "TZ": "residential",
-    "C2Z": "commercial",
-    "B1Z": "commercial",
-    "B2Z": "commercial",
-    "B3Z": "commercial",
-    "B4Z": "commercial",
-    "B5Z": "commercial",
-    "MUZ": "mixed_use",
-    "ACZ": "mixed_use",
-    "CCZ": "mixed_use",
-    "CDZ": "mixed_use",
-    "IN1Z": "industrial",
-    "IN2Z": "industrial",
-    "IN3Z": "industrial",
-    "PUZ": "civic",
-    "PPRZ": "recreation",
-    "PCRZ": "recreation",
-}
+_TABLE_PATH = Path(__file__).resolve().parents[1] / "shared" / "vicmap-zone-use.json"
+ZONE_USE: dict[str, str] = json.loads(_TABLE_PATH.read_text(encoding="utf-8"))
 
 
 def normalise_zone_code(code: str | None) -> str:
