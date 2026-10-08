@@ -32,9 +32,9 @@ export const ROAD_CENTRELINE_DENSIFY: CentrelineDensifyProfile = {
 };
 
 export const FOOTPATH_CENTRELINE_DENSIFY: CentrelineDensifyProfile = {
-  minEdgeDensifyM: 2.5,
-  maxStepsPerEdge: 8,
-  minLongEdgeM: 2.5,
+  minEdgeDensifyM: 4,
+  maxStepsPerEdge: 6,
+  minLongEdgeM: 4,
   catmullOnGentleRuns: true,
   maxLateralShiftM: 0.12,
 };
