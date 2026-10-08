@@ -7,6 +7,7 @@ import {
   subtractFootpathBlockers,
   surfaceVerticesOutsideFrame,
   unionCarriageways,
+  unionFootpathStrips,
   unionFootpaths,
   unionRoadSurface,
 } from "./roadFill";
@@ -31,6 +32,15 @@ function ringArea(ring: Pair[]): number {
     sum += x1 * y2 - x2 * y1;
   }
   return Math.abs(sum) / 2;
+}
+
+function outerVertexCount(multi: MultiPolygon): number {
+  let n = 0;
+  for (const polygon of multi) {
+    const outer = polygon[0];
+    if (outer) n += outer.length;
+  }
+  return n;
 }
 
 function multiArea(multi: MultiPolygon): number {
@@ -349,6 +359,47 @@ describe("road union", () => {
     const filled = unionRoadSurface(roads, [[[-40, 6], [40, 6]]], 200);
     expect(inside(filled.polygons, 0, 6)).toBe(true);
     expect(hasInternalSeam(filled.polygons)).toBe(false);
+    function outerYExtents(multi: MultiPolygon) {
+      let minY = Infinity;
+      let maxY = -Infinity;
+      for (const polygon of multi) {
+        for (const p of openRing(polygon[0]!)) {
+          minY = Math.min(minY, p[1]);
+          maxY = Math.max(maxY, p[1]);
+        }
+      }
+      return { minY, maxY };
+    }
+    const bareY = outerYExtents(bare.polygons);
+    const filledY = outerYExtents(filled.polygons);
+    expect(Math.abs(filledY.minY - bareY.minY)).toBeLessThan(0.11);
+    expect(Math.abs(filledY.maxY - bareY.maxY)).toBeLessThan(0.11);
+  });
+
+  it("filleted footpath crossing has more area, more vertices, and rounded inside corners", () => {
+    clearFootpathUnionCacheForTests();
+    const len = 40;
+    const angle = (75 * Math.PI) / 180;
+    const strips = [
+      { line: [[-len / 2, 0], [len / 2, 0]] as Pt[], width: 1.2 },
+      {
+        line: [
+          [-Math.cos(angle) * (len / 2), -Math.sin(angle) * (len / 2)],
+          [Math.cos(angle) * (len / 2), Math.sin(angle) * (len / 2)],
+        ] as Pt[],
+        width: 1.2,
+      },
+    ];
+    const sharp = unionFootpathStrips(strips, 200, "square", 0, 1.2);
+    clearFootpathUnionCacheForTests();
+    const filleted = unionFootpathStrips(strips, 200, "square", 2, 1.2);
+    expect(multiArea(filleted.polygons)).toBeGreaterThan(multiArea(sharp.polygons));
+    expect(outerVertexCount(filleted.polygons)).toBeGreaterThan(outerVertexCount(sharp.polygons));
+    const outer = openRing(filleted.polygons[0]![0]!);
+    const nearCross = outer.filter((p) => Math.hypot(p[0], p[1]) < 2.5 && Math.hypot(p[0], p[1]) > 0.35);
+    expect(nearCross.length).toBeGreaterThanOrEqual(4);
+    const radii = nearCross.map((p) => Math.hypot(p[0], p[1])).sort((a, b) => a - b);
+    expect(radii[radii.length - 1]! - radii[0]!).toBeGreaterThan(0.15);
   });
 
   it("buffers a footpath 0.6 m each side of the centreline and unions a join", () => {
