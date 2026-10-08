@@ -1099,7 +1099,12 @@ export function Scene3D({
         key={glEpoch}
         className="scene-canvas"
         dpr={[1, 1.75]}
-        gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
+        gl={{
+          antialias: true,
+          alpha: false,
+          powerPreference: "high-performance",
+          preserveDrawingBuffer: qaModeFromSearch(window.location.search),
+        }}
         shadows={solar.castShadows}
       >
         <WebGlContextWatch onContextLost={onGlContextLost} onContextRestored={onGlContextRestored} />

@@ -123,11 +123,31 @@ export function MapStage({
         width: Math.abs(southEast.x - northWest.x),
         height: Math.abs(southEast.y - northWest.y),
       });
+      if (typeof window !== "undefined" && window.location.search.includes("qa=1")) {
+        const stats = window.__citycutCutColourStats;
+        if (stats && stats.frameFirstDrawnMs == null) {
+          stats.frameFirstDrawnMs = performance.now();
+        }
+      }
       scheduleMask();
       onViewRef.current({ lon: center.lng, lat: center.lat, zoom: map.getZoom() });
     };
 
     const onLoad = () => {
+      if (typeof window !== "undefined" && window.location.search.includes("qa=1")) {
+        if (!window.__citycutCutColourStats) {
+          window.__citycutCutColourStats = {
+            maskSetData: 0,
+            colourSetData: 0,
+            layerRebuilds: 0,
+            frameFirstDrawnMs: null,
+            colourFillMs: null,
+            colourFetchMs: null,
+            colourEnrichmentMs: null,
+            colourRefineMs: null,
+          };
+        }
+      }
       setReady(true);
       update();
     };
@@ -224,6 +244,8 @@ export function MapStage({
 
     const timer = window.setTimeout(() => {
       void (async () => {
+        const qaFetch = typeof window !== "undefined" && window.location.search.includes("qa=1");
+        const fetchT0 = qaFetch ? performance.now() : 0;
         try {
           const buildingResult = await fetchOvertureBuildingsForCut(
             footprint.bounds,
@@ -232,11 +254,19 @@ export function MapStage({
             controller.signal,
             "square",
           );
+          const enrichT0 = qaFetch ? performance.now() : 0;
           const enrichment = await fetchBuildingEnrichmentForCut(footprint.bounds, controller.signal);
+          const enrichT1 = qaFetch ? performance.now() : 0;
           const merged = mergeBuildingEnrichment(buildingResult.buildings, enrichment.byId);
           const refined = await refineBuildingUses(merged, footprint.origin, footprint.bounds, {
             signal: controller.signal,
           });
+          const fetchT1 = qaFetch ? performance.now() : 0;
+          if (qaFetch && window.__citycutCutColourStats) {
+            window.__citycutCutColourStats.colourFetchMs = Math.round(fetchT1 - fetchT0);
+            window.__citycutCutColourStats.colourEnrichmentMs = Math.round(enrichT1 - enrichT0);
+            window.__citycutCutColourStats.colourRefineMs = Math.round(fetchT1 - enrichT1);
+          }
           if (cancelled || controller.signal.aborted) return;
           if (!map.loaded()) await new Promise<void>((resolve) => map.once("idle", () => resolve()));
           if (cancelled) return;

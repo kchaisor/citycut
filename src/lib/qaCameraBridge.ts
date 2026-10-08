@@ -54,6 +54,8 @@ declare global {
         comAppliedMs: number | null;
         firstRenderMs: number | null;
       }>;
+      /** Offscreen WebGL render for headless 3D QA screenshots. */
+      captureViewportPng?: () => Promise<string | null>;
     };
     __citycutQaSelectionAudit?: import("./buildingSelectionAudit").BuildingSelectionAudit;
   }

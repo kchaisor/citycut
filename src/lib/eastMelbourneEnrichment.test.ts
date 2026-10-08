@@ -14,11 +14,21 @@ import {
   countUseSourceTiers,
   mergeBuildingEnrichment,
 } from "./buildingEnrichmentMerge";
+import { inferHeightTier } from "./buildingHeightResolve";
 import { loadEnrichmentForCutFromDisk } from "./test/loadEnrichmentForCut";
 
 const lat = -37.8127;
 const lon = 144.98061;
 const km = 1;
+
+function heightSourceCensus(buildings: Awaited<ReturnType<typeof fetchOvertureBuildingsForCut>>["buildings"]) {
+  const counts: Record<string, number> = {};
+  for (const building of buildings) {
+    const tier = inferHeightTier(building);
+    counts[tier] = (counts[tier] ?? 0) + 1;
+  }
+  return counts;
+}
 
 describe("East Melbourne building use census (CLUE enrichment)", () => {
   it(
@@ -35,7 +45,8 @@ describe("East Melbourne building use census (CLUE enrichment)", () => {
         fetchDevelopmentFloorRecords(comBounds),
         fetchComBuildingFootprintsWithStats(comBounds, center),
       ]);
-      const legacy = countUseSourceTiers(assignExternalUses(raw, zones));
+      const legacyBuildings = assignExternalUses(raw, zones);
+      const legacy = countUseSourceTiers(legacyBuildings);
       const enriched = mergeBuildingEnrichment(raw, enrichment.byId);
       const zoned = assignExternalUses(enriched, zones);
       const withLidar = applyLidarHeightsFromEnrichment(zoned);
@@ -51,6 +62,9 @@ describe("East Melbourne building use census (CLUE enrichment)", () => {
             overtureBuildingCount: stats.buildingCount,
             useSourceBeforeEnrichment: legacy,
             useSourceAfterEnrichment: after,
+            heightSourceBeforeEnrichment: heightSourceCensus(legacyBuildings),
+            heightSourceAfterEnrichment: heightSourceCensus(final),
+            lidarTierNote: "LiDAR: no data, ELVIS not ordered",
             zoneDelta: legacy.zone - after.zone,
             clueAssigned: after.clue,
           },

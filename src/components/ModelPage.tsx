@@ -561,6 +561,15 @@ export function ModelPage({ model }: { model: CityModel }) {
           tick();
         });
       },
+      async captureViewportPng(): Promise<string | null> {
+        const exporter = exportRef.current;
+        if (!exporter) return null;
+        const blob = await exporter.png();
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        let binary = "";
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
+        return btoa(binary);
+      },
     };
     return () => {
       delete window.__citycutQaModel;
