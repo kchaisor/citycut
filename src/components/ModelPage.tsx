@@ -84,7 +84,10 @@ import {
   writeStoredShowManualHeights,
   type HeightOverrideStore,
 } from "../lib/heightOverrides";
-import { annotateUnresolvedZoneDefaults } from "../lib/buildingHeightResolve";
+import {
+  annotateUnresolvedZoneDefaults,
+  stampPlainZoneDefaultLabels,
+} from "../lib/buildingHeightResolve";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { modelStageCreditHtml } from "../lib/dataCredits";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
@@ -170,7 +173,9 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [betterHeights, setBetterHeights] = useState(() =>
     readStoredComBuildingHeights(window.localStorage),
   );
-  const [comFootprints, setComFootprints] = useState<ComBuildingFootprint[]>([]);
+  const [comFootprints, setComFootprints] = useState<ComBuildingFootprint[]>(
+    () => model.comFootprintPrefetch ?? [],
+  );
   const [preferred, setPreferred] = useState<string | null>(() => loadModelDrawer());
   const [planWidth, setPlanWidth] = useState<number | null>(null);
   const [fitCounter, setFitCounter] = useState(0);
@@ -287,6 +292,10 @@ export function ModelPage({ model }: { model: CityModel }) {
       setComFootprints([]);
       return;
     }
+    if (model.comFootprintPrefetch?.length) {
+      setComFootprints(model.comFootprintPrefetch);
+      return;
+    }
     const bounds = paddedComFetchBounds(model.center, model.sideM);
     const controller = new AbortController();
     fetchComBuildingFootprints(bounds, model.center, controller.signal)
@@ -299,7 +308,14 @@ export function ModelPage({ model }: { model: CityModel }) {
         }
       });
     return () => controller.abort();
-  }, [betterHeights, model.center.lat, model.center.lon, model.sideM, model.layers.buildings]);
+  }, [
+    betterHeights,
+    model.center.lat,
+    model.center.lon,
+    model.sideM,
+    model.layers.buildings,
+    model.comFootprintPrefetch,
+  ]);
 
   const [comHeightBuildings, setComHeightBuildings] = useState<typeof model.buildings | null>(null);
   const [comHeightUpdates, setComHeightUpdates] = useState(0);
@@ -315,6 +331,14 @@ export function ModelPage({ model }: { model: CityModel }) {
   );
 
   const qaSummaryRef = useRef({ buildingCount: 0, roadCount: 0, triangleCount: 0 });
+  const qaDisplayBuildingsRef = useRef(model.buildings);
+  const heightPerfRef = useRef<{ modelOpenMs: number; firstRenderMs: number | null; comAppliedMs: number | null }>(
+    { modelOpenMs: performance.now(), firstRenderMs: null, comAppliedMs: null },
+  );
+
+  useEffect(() => {
+    heightPerfRef.current = { modelOpenMs: performance.now(), firstRenderMs: null, comAppliedMs: null };
+  }, [model.placeLabel, model.center.lat, model.center.lon, model.sideM]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !qaModeFromSearch(window.location.search)) return;
@@ -506,6 +530,33 @@ export function ModelPage({ model }: { model: CityModel }) {
         return pick.id;
       },
       exportPlanSnapshot: () => model,
+      pickZoneDefaultPanelQa() {
+        const rows = qaDisplayBuildingsRef.current.filter((b) => b.heightFromFallback);
+        const pick =
+          rows.find((b) => b.zoneDefaultNote?.includes("estimate, no measured height")) ?? rows[0];
+        if (!pick) return null;
+        setHeightPick({ buildingId: pick.id, clientX: 480, clientY: 420 });
+        return { id: pick.id, height: pick.height, note: pick.zoneDefaultNote ?? "" };
+      },
+      getHeightPerfTimings: () => ({ ...heightPerfRef.current }),
+      waitForComHeightsApplied(timeoutMs = 120_000) {
+        const start = performance.now();
+        return new Promise<{ comAppliedMs: number | null; firstRenderMs: number | null }>((resolve, reject) => {
+          const tick = () => {
+            const timings = heightPerfRef.current;
+            if (timings.comAppliedMs != null) {
+              resolve({ comAppliedMs: timings.comAppliedMs, firstRenderMs: timings.firstRenderMs });
+              return;
+            }
+            if (performance.now() - start > timeoutMs) {
+              reject(new Error("Timed out waiting for CoM heights"));
+              return;
+            }
+            requestAnimationFrame(tick);
+          };
+          tick();
+        });
+      },
     };
     return () => {
       delete window.__citycutQaModel;
@@ -570,10 +621,12 @@ export function ModelPage({ model }: { model: CityModel }) {
   ]);
 
   const baseBuildings = useMemo(() => {
-    if (!betterHeights) return model.buildingsWithoutCom ?? model.buildings;
+    if (!betterHeights) {
+      return stampPlainZoneDefaultLabels(model.buildingsWithoutCom ?? model.buildings);
+    }
     if (comHeightBuildings) return comHeightBuildings;
     if (model.comBuildingHeightsApplied) return model.buildings;
-    return model.buildings;
+    return stampPlainZoneDefaultLabels(model.buildings);
   }, [betterHeights, comHeightBuildings, model.buildings, model.buildingsWithoutCom, model.comBuildingHeightsApplied]);
 
   const overrideResult = useMemo(
@@ -596,6 +649,31 @@ export function ModelPage({ model }: { model: CityModel }) {
     }),
     [model, overrideResult, betterHeights],
   );
+
+  useEffect(() => {
+    qaDisplayBuildingsRef.current = displayModel.buildings;
+  }, [displayModel.buildings]);
+
+  useEffect(() => {
+    let cancelled = false;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (cancelled || heightPerfRef.current.firstRenderMs != null) return;
+        heightPerfRef.current.firstRenderMs = performance.now() - heightPerfRef.current.modelOpenMs;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [displayModel.buildings, displayModel.comBuildingHeights]);
+
+  useEffect(() => {
+    const comDone =
+      !betterHeights || comHeightBuildings != null || (betterHeights && comFootprints.length === 0);
+    if (comDone && heightPerfRef.current.comAppliedMs == null) {
+      heightPerfRef.current.comAppliedMs = performance.now() - heightPerfRef.current.modelOpenMs;
+    }
+  }, [betterHeights, comHeightBuildings, comFootprints.length]);
 
   useEffect(() => {
     setPlanViewport(planViewportExtent(displayModel.sideM));

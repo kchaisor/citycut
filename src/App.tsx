@@ -49,7 +49,6 @@ import {
   intersectsComCity,
   paddedComFetchBounds,
 } from "./lib/comBuildingHeights";
-import { runComBuildingHeightsInWorker } from "./lib/comBuildingHeightsWorkerClient";
 import { applyDevelopmentFloorsToBuildings, fetchDevelopmentFloorRecords } from "./lib/comDevelopmentFloors";
 import type { Basemap, CityModel, LonLat, PlaceHit, UiLayers, UseTierFailure, ViewState } from "./types";
 
@@ -491,22 +490,13 @@ export default function App() {
       ]);
       const overtureBuildings = overtureResult.buildings;
       let buildingsWithoutCom: typeof overtureBuildings | undefined;
-      let comBuildingHeightsApplied = false;
       let buildings: typeof overtureBuildings = [];
+      const comFootprintPrefetch =
+        comHeightsResult.footprints.length > 0 ? comHeightsResult.footprints : undefined;
       if (modelLayers.buildings) {
         const zoned = assignExternalUses(overtureBuildings, useTiers.zones);
         buildingsWithoutCom = structuredClone(zoned);
-        let withCom = zoned;
-        if (comHeightsResult.footprints.length > 0) {
-          const matched = await runComBuildingHeightsInWorker(
-            zoned,
-            comHeightsResult.footprints,
-            controller.signal,
-          );
-          withCom = matched.buildings;
-          comBuildingHeightsApplied = true;
-        }
-        buildings = applyDevelopmentFloorsToBuildings(withCom, center, damResult.records);
+        buildings = applyDevelopmentFloorsToBuildings(zoned, center, damResult.records);
       }
       const treeContext = {
         ...baseResult.treeContext,
@@ -638,7 +628,8 @@ export default function App() {
         siteBuildingQa,
         developmentDamRecords: damResult.records.length > 0 ? damResult.records : undefined,
         buildingsWithoutCom,
-        comBuildingHeightsApplied,
+        comBuildingHeightsApplied: false,
+        comFootprintPrefetch,
       });
       setPhase("model");
     } catch (err) {

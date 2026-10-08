@@ -44,6 +44,16 @@ declare global {
       listBuildings?: () => { id: number; height: number; east: number; north: number }[];
       /** Minimal city model for plan-path QA exports (`?qa=1` only). */
       exportPlanSnapshot?: () => import("../types").CityModel;
+      pickZoneDefaultPanelQa?: () => { id: number; height: number; note: string } | null;
+      getHeightPerfTimings?: () => {
+        modelOpenMs: number;
+        firstRenderMs: number | null;
+        comAppliedMs: number | null;
+      };
+      waitForComHeightsApplied?: (timeoutMs?: number) => Promise<{
+        comAppliedMs: number | null;
+        firstRenderMs: number | null;
+      }>;
     };
     __citycutQaSelectionAudit?: import("./buildingSelectionAudit").BuildingSelectionAudit;
   }

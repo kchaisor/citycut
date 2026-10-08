@@ -67,7 +67,7 @@ export function heightTierLabel(tier: BuildingHeightTier, meta?: BuildingHeightT
       return "OSM building:levels";
     default: {
       const note = meta?.zoneDefaultNote;
-      return note ? `Zone default — ${note}` : "Zone default";
+      return note ? `Zone default · ${note}` : "Zone default · estimate, no measured height";
     }
   }
 }
@@ -145,6 +145,14 @@ export function buildingHasComOverlap(
   return covered / osmArea >= COM_SLIVER_MIN_FRACTION;
 }
 
+/** Plain Vicmap zone fallbacks show an explicit estimate label in the building panel. */
+export function stampPlainZoneDefaultLabels(buildings: BuildingFeat[]): BuildingFeat[] {
+  return buildings.map((building) => {
+    if (!building.heightFromFallback || building.zoneDefaultNote) return building;
+    return flagUnresolvedZoneDefault(building, "estimate, no measured height");
+  });
+}
+
 export function annotateUnresolvedZoneDefaults(
   buildings: BuildingFeat[],
   center: LonLat,
@@ -161,7 +169,9 @@ export function annotateUnresolvedZoneDefaults(
     if (damFloors != null) {
       notes.push(`recorded ${damFloors} floors not applied`);
     }
-    if (notes.length === 0) return building;
+    if (notes.length === 0) {
+      return flagUnresolvedZoneDefault(building, "estimate, no measured height");
+    }
     return flagUnresolvedZoneDefault(building, notes.join("; "));
   });
 }

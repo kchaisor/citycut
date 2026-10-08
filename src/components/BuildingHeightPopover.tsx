@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { buildingHeightSource, buildingHeightSourceLabel } from "../lib/heightOverrides";
+import { buildingHeightSourceLabelForBuilding } from "../lib/heightOverrides";
 import {
   emptyBuildingPopupDetails,
   isCityOfMelbourne,
@@ -63,7 +63,7 @@ export function BuildingHeightPopover({ building, center, onSave, onReset, onClo
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const source = buildingHeightSourceLabel(buildingHeightSource(building));
+  const source = buildingHeightSourceLabelForBuilding(building);
   const at = interiorPoint(building.ring, building.holes);
   const { lat, lon } = fromLocal(at, center);
   const showCom = isCityOfMelbourne(lat, lon);

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import * as THREE from "three";
 import { buildCityGroup, disposeObject } from "./buildCity";
 import {
   applyHeightOverrides,

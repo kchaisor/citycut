@@ -71,6 +71,12 @@ export type BuildingFeat = {
   developmentFloors?: number;
   /** Panel flag when zone default wins despite nearby unmatched sources. */
   zoneDefaultNote?: string;
+  /** Primary CoM structure id when height tier is com (diagnostics / census). */
+  comMatchStructureId?: string;
+  /** Height (m) of {@link comMatchStructureId}. */
+  comMatchHeightM?: number;
+  /** Overlap area / OSM footprint area for {@link comMatchStructureId}. */
+  comMatchOverlapRatio?: number;
   /** Set when the user overrode height in the 3D view. */
   heightManual?: true;
   use: BuildingUse;
@@ -248,6 +254,8 @@ export type CityModel = {
   buildingsWithoutCom?: BuildingFeat[];
   /** CoM footprints were applied during model create. */
   comBuildingHeightsApplied?: boolean;
+  /** CoM footprint rows prefetched during model create (Melbourne); ModelPage skips refetch when set. */
+  comFootprintPrefetch?: import("./lib/comBuildingHeightsTypes").ComBuildingFootprint[];
 };
 
 export type ViewState = {

@@ -32,6 +32,7 @@ export {
   COM_FALLBACK_MIN_FRACTION,
   intersectionAreaM2,
   pickComHeightFallback20,
+  pickPrimaryComMatchMeta,
   ringBBox,
   tallestExtrusionHeight,
   clipBuildingComExtrusionsForTest as clipBuildingComExtrusions,

@@ -1,17 +1,16 @@
 /**
- * Mean building-stack time for 1 km East Melbourne (3 runs).
- * --skip-com simulates main (no CoM fetch/match at create).
+ * Mean model-create stack for 1 km East Melbourne (3 warm runs + optional cold).
+ * Matches App.tsx: CoM footprints prefetch in parallel but no worker before first model.
+ * --skip-com skips CoM prefetch (main-line behaviour outside Melbourne / off).
  */
 import { squareBBox } from "../src/lib/geo.ts";
 import { fetchOvertureBuildingsForCut } from "../src/lib/overtureBuildings.ts";
 import { assignExternalUses, loadUseTiers } from "../src/lib/useCascade.ts";
 import {
-  applyComBuildingHeights,
   fetchComBuildingFootprintsWithStats,
   intersectsComCity,
   paddedComFetchBounds,
 } from "../src/lib/comBuildingHeights.ts";
-import { runComBuildingHeightsInWorker } from "../src/lib/comBuildingHeightsWorkerClient.ts";
 import {
   applyDevelopmentFloorsToBuildings,
   fetchDevelopmentFloorRecords,
@@ -25,17 +24,22 @@ const comBounds = paddedComFetchBounds(center, sideM);
 
 async function oneRun() {
   const t0 = performance.now();
-  const { buildings: raw } = await fetchOvertureBuildingsForCut(bounds, center, sideM);
-  const { zones } = await loadUseTiers(bounds, center);
+  const overtureTask = fetchOvertureBuildingsForCut(bounds, center, sideM);
+  const zonesTask = loadUseTiers(bounds, center);
+  const damTask = fetchDevelopmentFloorRecords(comBounds);
+  const comTask =
+    !skipCom && intersectsComCity(comBounds)
+      ? fetchComBuildingFootprintsWithStats(comBounds, center)
+      : Promise.resolve({ footprints: [] });
+  const [{ buildings: raw }, { zones }, dam, com] = await Promise.all([
+    overtureTask,
+    zonesTask,
+    damTask,
+    comTask,
+  ]);
+  void com;
   const zoned = assignExternalUses(raw, zones);
-  let withCom = zoned;
-  if (!skipCom && intersectsComCity(comBounds)) {
-    const { footprints } = await fetchComBuildingFootprintsWithStats(comBounds, center);
-    const matched = await runComBuildingHeightsInWorker(zoned, footprints);
-    withCom = matched.buildings;
-  }
-  const dam = await fetchDevelopmentFloorRecords(comBounds);
-  applyDevelopmentFloorsToBuildings(withCom, center, dam);
+  applyDevelopmentFloorsToBuildings(zoned, center, dam);
   return performance.now() - t0;
 }
 
