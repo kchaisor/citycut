@@ -2,17 +2,18 @@
  * QA: smooth fillets and centreline bends — main vs PR crops.
  */
 import { execSync } from "node:child_process";
-import { readFileSync, existsSync, cpSync } from "node:fs";
+import { readFileSync, existsSync, cpSync, rmSync } from "node:fs";
 import { chromium } from "playwright";
 
 const outDir = "/opt/cursor/artifacts";
 const modelPath = "/opt/cursor/artifacts/east-model.json";
 const branch = execSync("git branch --show-current", { encoding: "utf8" }).trim();
+const mainWorktree = "/tmp/citycut-main-qa";
 
-function renderCrop(label, viewBox, fillet = 2) {
+function renderCrop(cwd, label, viewBox, fillet = 2) {
   execSync(
     `npx vite-node scripts/render-site-plan-crop.mjs ${modelPath} ${label} "${viewBox}" ${fillet}`,
-    { stdio: "inherit" },
+    { stdio: "inherit", cwd },
   );
 }
 
@@ -59,25 +60,24 @@ if (!existsSync(modelPath)) {
   await captureModel();
 }
 
-execSync(`npx vite-node scripts/find-kelvin-fitzroy-crop.mjs ${modelPath}`, { stdio: "inherit" });
-execSync(`npx vite-node scripts/find-bend-crop.mjs ${modelPath}`, { stdio: "inherit" });
+execSync(`npx vite-node scripts/find-kelvin-fitzroy-crop.mjs ${modelPath}`, { stdio: "inherit", cwd: "/workspace" });
+execSync(`npx vite-node scripts/find-bend-crop.mjs ${modelPath}`, { stdio: "inherit", cwd: "/workspace" });
 
 const junctionWide = readFileSync(`${outDir}/kelvin-fitzroy-wide.txt`, "utf8").trim();
 const junctionClose = readFileSync(`${outDir}/kelvin-fitzroy-closeup.txt`, "utf8").trim();
 const bendViewBox = readFileSync(`${outDir}/bend-viewbox.txt`, "utf8").trim();
 console.log({ junctionWide, junctionClose, bendViewBox });
 
-execSync("git stash push -u -m qa-smooth-main --quiet || true");
-execSync("git checkout main --quiet");
-renderCrop("junction-wide-main", junctionWide, 2);
-renderCrop("junction-closeup-main", junctionClose, 2);
-renderCrop("bend-main", bendViewBox, 2);
-execSync(`git checkout ${branch} --quiet`);
-execSync("git stash pop --quiet || true");
+rmSync(mainWorktree, { recursive: true, force: true });
+execSync(`git worktree add ${mainWorktree} main`, { stdio: "inherit", cwd: "/workspace" });
+renderCrop(mainWorktree, "junction-wide-main", junctionWide, 2);
+renderCrop(mainWorktree, "junction-closeup-main", junctionClose, 2);
+renderCrop(mainWorktree, "bend-main", bendViewBox, 2);
+execSync(`git worktree remove ${mainWorktree} --force`, { cwd: "/workspace", stdio: "inherit" });
 
-renderCrop("junction-wide-pr", junctionWide, 2);
-renderCrop("junction-closeup-pr", junctionClose, 2);
-renderCrop("bend-pr", bendViewBox, 2);
+renderCrop("/workspace", "junction-wide-pr", junctionWide, 2);
+renderCrop("/workspace", "junction-closeup-pr", junctionClose, 2);
+renderCrop("/workspace", "bend-pr", bendViewBox, 2);
 
 copyPlan("junction-wide-main", "smooth-junction-wide-main.png");
 copyPlan("junction-wide-pr", "smooth-junction-wide-pr.png");
@@ -86,10 +86,14 @@ copyPlan("junction-closeup-pr", "smooth-junction-closeup-pr.png");
 copyPlan("bend-main", "smooth-bend-main.png");
 copyPlan("bend-pr", "smooth-bend-pr.png");
 
-execSync(`npx vite-node scripts/centreline-smooth-stats.mjs ${modelPath} pr`, { stdio: "inherit" });
-execSync(`npx vite-node scripts/bench-plan-1km.mjs ${modelPath} smooth-pr`, { stdio: "inherit" });
-execSync("git checkout main --quiet");
-execSync(`npx vite-node scripts/bench-plan-1km.mjs ${modelPath} smooth-main`, { stdio: "inherit" });
-execSync(`git checkout ${branch} --quiet`);
+execSync(`npx vite-node scripts/centreline-smooth-stats.mjs ${modelPath} pr`, { stdio: "inherit", cwd: "/workspace" });
+execSync(`npx vite-node scripts/bench-plan-1km.mjs ${modelPath} smooth-pr`, { stdio: "inherit", cwd: "/workspace" });
+rmSync(mainWorktree, { recursive: true, force: true });
+execSync(`git worktree add ${mainWorktree} main`, { stdio: "inherit", cwd: "/workspace" });
+execSync(`npx vite-node scripts/bench-plan-1km.mjs ${modelPath} smooth-main`, {
+  stdio: "inherit",
+  cwd: mainWorktree,
+});
+execSync(`git worktree remove ${mainWorktree} --force`, { cwd: "/workspace", stdio: "inherit" });
 
 console.log("QA complete", outDir);
