@@ -59,18 +59,12 @@ export function isVehicularRoad(road: RoadFeat): boolean {
 export type RoadFill = {
   /** Coarse union/fillet rings for booleans (0.12 m DP after Clipper). */
   polygons: MultiPolygon;
-  /** Fine rings for plan/export (0.02 m DP after fine Clipper); filled lazily for roads. */
+  /** Fine rings for plan/export (0.02 m DP after the same fine Clipper pass). */
   displayPolygons: MultiPolygon;
   /** Wall time of buffer, union, and frame clip. */
   ms: number;
   /** Buffered centreline polygons before the union. */
   inputs: number;
-  /** Pre-morph union (road surface only); used to build display rings without re-buffering. */
-  mergedBeforeMorph?: MultiPolygon;
-  /** Pre-fillet union (footpaths only). */
-  mergedBeforeFillet?: MultiPolygon;
-  /** Fillet radius used for this footpath fill (m). */
-  filletRadiusM?: number;
 };
 
 function direction(a: Pt, b: Pt): { ang: number } | null {
@@ -834,8 +828,6 @@ export function setCentrelineSmoothForUnion(_enabled: boolean): void {}
 
 const footpathUnionCache = new Map<string, RoadFill>();
 const roadSurfaceCache = new Map<string, RoadFill>();
-const roadDisplayCache = new Map<string, MultiPolygon>();
-const footpathDisplayCache = new Map<string, MultiPolygon>();
 const FOOTPATH_CACHE_LIMIT = 16;
 const ROAD_SURFACE_CACHE_LIMIT = 8;
 
@@ -843,74 +835,17 @@ export function clearFootpathUnionCacheForTests(): void {
   footpathUnionCache.clear();
   roadSurfaceCache.clear();
   displayFootpathClipCache.clear();
-  roadDisplayCache.clear();
-  footpathDisplayCache.clear();
   clearCentrelineCacheForTests();
 }
 
-/** Fine footpath fillet (0.01 m arcs) for plan/export. */
-export function footpathFillDisplayPolygons(
-  fill: RoadFill,
-  sideM: number,
-  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
-): MultiPolygon {
-  if (fill.displayPolygons.length > 0) return fill.displayPolygons;
-  const merged = fill.mergedBeforeFillet;
-  const radius = fill.filletRadiusM ?? 0;
-  if (!merged || merged.length === 0 || !(radius > 0)) {
-    fill.displayPolygons = fill.polygons;
-    return fill.displayPolygons;
-  }
-  const key = `${multiFingerprint(merged)}:${radius}:${sideM}:${frameShape}:fdisp`;
-  const cached = footpathDisplayCache.get(key);
-  if (cached) {
-    fill.displayPolygons = cached;
-    return cached;
-  }
-  const raw = footpathClipperFilletRaw(merged, radius, sideM, frameShape, CLIPPER_ARC_CHORD_M);
-  const display = simplifyPathMultiAt(raw, PATH_OUTPUT_SIMPLIFY_M);
-  if (footpathDisplayCache.size >= FOOTPATH_CACHE_LIMIT) {
-    const first = footpathDisplayCache.keys().next().value;
-    if (first) footpathDisplayCache.delete(first);
-  }
-  footpathDisplayCache.set(key, display);
-  fill.displayPolygons = display;
-  return display;
+/** Fine footpath rings from the single fillet close (built in unionFootpathStrips). */
+export function footpathFillDisplayPolygons(fill: RoadFill): MultiPolygon {
+  return fill.displayPolygons.length > 0 ? fill.displayPolygons : fill.polygons;
 }
 
-/** Fine road morph close (0.01 m arcs) for plan/export; booleans use coarse rings only. */
-export function roadFillDisplayPolygons(
-  fill: RoadFill,
-  sideM: number,
-  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
-): MultiPolygon {
-  if (fill.displayPolygons.length > 0) return fill.displayPolygons;
-  const merged = fill.mergedBeforeMorph;
-  if (!merged || merged.length === 0) {
-    fill.displayPolygons = fill.polygons;
-    return fill.displayPolygons;
-  }
-  const key = `${multiFingerprint(merged)}:${sideM}:${frameShape}:rdisp`;
-  const cached = roadDisplayCache.get(key);
-  if (cached) {
-    fill.displayPolygons = cached;
-    return cached;
-  }
-  const morphRaw = normalizeMultiPolygonByParity(
-    clipToFrame(
-      offsetCloseMultiPolygon(merged, ROAD_MORPH_CLOSE_M, CLIPPER_ARC_CHORD_M),
-      sideM,
-      frameShape,
-    ),
-  );
-  const display = simplifyPathMultiAt(morphRaw, OUTPUT_SIMPLIFY_M);
-  if (roadDisplayCache.size >= ROAD_SURFACE_CACHE_LIMIT) {
-    const first = roadDisplayCache.keys().next().value;
-    if (first) roadDisplayCache.delete(first);
-  }
-  roadDisplayCache.set(key, display);
-  fill.displayPolygons = display;
-  return display;
+/** Fine road rings from the single morph close (built in unionRoadSurface). */
+export function roadFillDisplayPolygons(fill: RoadFill): MultiPolygon {
+  return fill.displayPolygons.length > 0 ? fill.displayPolygons : fill.polygons;
 }
 
 function footpathUnionCacheKey(
@@ -934,7 +869,7 @@ function footpathUnionCacheKey(
       maxY = Math.max(maxY, y);
     }
   }
-  return `${lines.length}:${points}:${minX.toFixed(1)},${minY.toFixed(1)},${maxX.toFixed(1)},${maxY.toFixed(1)}:${widthM}:${filletM}:${sideM}:${frameShape}:dual3`;
+  return `${lines.length}:${points}:${minX.toFixed(1)},${minY.toFixed(1)},${maxX.toFixed(1)},${maxY.toFixed(1)}:${widthM}:${filletM}:${sideM}:${frameShape}:single1`;
 }
 
 function unionMulti(a: MultiPolygon, b: MultiPolygon): MultiPolygon {
@@ -951,7 +886,7 @@ function roadSurfaceCacheKey(
 ): string {
   let tramPts = 0;
   for (const line of tramLines ?? []) tramPts += line.length;
-  return `${roads.length}:${tramLines?.length ?? 0}:${tramPts}:${sideM}:${frameShape}:dual3`;
+  return `${roads.length}:${tramLines?.length ?? 0}:${tramPts}:${sideM}:${frameShape}:single1`;
 }
 
 /** Unioned carriageway plus in-road tram corridors, with median gaps closed. */
@@ -975,17 +910,17 @@ export function unionRoadSurface(
       ? unionCarriageways(tramInputs, sideM, frameShape)
       : { polygons: [] as MultiPolygon, ms: 0, inputs: 0 };
   const merged = unionMulti(carriageway.polygons, withTram.polygons);
-  const morphCoarseRaw = normalizeMultiPolygonByParity(
+  const morphRaw = normalizeMultiPolygonByParity(
     clipToFrame(
-      offsetCloseMultiPolygon(merged, ROAD_MORPH_CLOSE_M, CLIPPER_MORPH_CLOSE_ARC_TOLERANCE_M),
+      offsetCloseMultiPolygon(merged, ROAD_MORPH_CLOSE_M, CLIPPER_ARC_CHORD_M),
       sideM,
       frameShape,
     ),
   );
+  const dual = dualSimplifyFromClipper(morphRaw);
   const result: RoadFill = {
-    polygons: simplifyPathMultiAt(morphCoarseRaw, COARSE_OUTPUT_SIMPLIFY_M),
-    displayPolygons: [],
-    mergedBeforeMorph: merged,
+    polygons: dual.coarse,
+    displayPolygons: dual.display,
     ms: performance.now() - started,
     inputs: carriageway.inputs + withTram.inputs,
   };
@@ -1140,14 +1075,11 @@ export function unionFootpathStrips(
     filletM > 0 ? Math.max(filletM, bandTypical * PATH_FILLET_BAND_SCALE) : 0;
   const dual =
     filletRadius > 0
-      ? closeFootpathJunctionsDual(merged.polygons, filletRadius, sideM, frameShape, CLIPPER_MORPH_CLOSE_ARC_TOLERANCE_M)
+      ? closeFootpathJunctionsDual(merged.polygons, filletRadius, sideM, frameShape, CLIPPER_ARC_CHORD_M)
       : dualSimplifyFromClipper(merged.polygons);
-  const polygons = clipToFrame(dual.coarse, sideM, frameShape);
   const result: RoadFill = {
-    polygons,
-    displayPolygons: [],
-    mergedBeforeFillet: merged.polygons,
-    filletRadiusM: filletRadius,
+    polygons: dual.coarse,
+    displayPolygons: dual.display,
     ms: performance.now() - started,
     inputs: merged.inputs,
   };

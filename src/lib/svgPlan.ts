@@ -213,14 +213,12 @@ export function planPaths(
     })
     .filter((building): building is { rings: Pt[][]; fill: string; site: boolean } => building !== null);
 
-  const roadDisplayRaw = roadFillDisplayPolygons(carriageway, model.sideM, frameShape);
+  const roadFillPolys = fillRoadMedianHoles(roadFillDisplayPolygons(carriageway));
   const roadCoarse = fillRoadMedianHoles(carriageway.polygons);
-  const roadFillPolys = fillRoadMedianHoles(roadDisplayRaw);
 
-  const footDisplay = footpathFillDisplayPolygons(footpaths, model.sideM, frameShape);
-  let pathFill: MultiPolygon = footDisplay;
+  let pathFill: MultiPolygon = footpathFillDisplayPolygons(footpaths);
   if (pathFilletM > 0 && roadFillPolys.length > 0) {
-    pathFill = footpathDisplayAfterRoadBlockers(footDisplay, roadFillPolys);
+    pathFill = footpathDisplayAfterRoadBlockers(footpathFillDisplayPolygons(footpaths), roadFillPolys);
   }
   const greenSplit = splitGreenForRoadLayer(green, roadCoarse);
   const greenBelow = greenSplit.green;

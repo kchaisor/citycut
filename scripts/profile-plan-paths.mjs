@@ -13,16 +13,17 @@ const repoRoot = process.env.CITYCUT_ROOT ?? join(scriptDir, "..");
 const roadFill = await import(pathToFileURL(join(repoRoot, "src/lib/roadFill.ts")).href);
 const {
   footpathStrips,
-  mergeFootpathFragments,
+  footpathDisplayAfterRoadBlockers,
+  footpathFillDisplayPolygons,
+  roadFillDisplayPolygons,
   subtractFootpathBlockers,
+  mergeFootpathFragments,
   unionFootpathStrips,
   unionRoadSurface,
   clearFootpathUnionCacheForTests,
   DEFAULT_PATH_FILLET_M,
 } = roadFill;
-const footpathDisplayAfterRoadBlockers = roadFill.footpathDisplayAfterRoadBlockers;
-const roadFillDisplayPolygons = roadFill.roadFillDisplayPolygons;
-const footpathFillDisplayPolygons = roadFill.footpathFillDisplayPolygons;
+const useDisplayPipeline = typeof roadFillDisplayPolygons === "function";
 let fillRoadMedianHoles = (road) => road;
 let splitGreenForRoadLayer = (green) => ({ green, greenOnRoad: [] });
 if (existsSync(join(repoRoot, "src/lib/roadSurfacePlan.ts"))) {
@@ -104,35 +105,17 @@ const carriageway = unionRoadSurface(model.roads, model.tramLines, model.sideM, 
 stages.roadSurfaceMs = Math.round(performance.now() - t);
 
 t = performance.now();
-if (pathFilletM > 0 && carriageway.polygons.length > 0) {
-  mergeFootpathFragments(subtractFootpathBlockers(footpaths.polygons, carriageway.polygons));
+if (useDisplayPipeline) {
+  const roadFillPolys = fillRoadMedianHoles(roadFillDisplayPolygons(carriageway));
+  if (pathFilletM > 0 && roadFillPolys.length > 0) {
+    footpathDisplayAfterRoadBlockers(footpathFillDisplayPolygons(footpaths), roadFillPolys);
+  }
+} else if (pathFilletM > 0 && carriageway.polygons.length > 0) {
+  let pathFill = footpaths.polygons;
+  pathFill = subtractFootpathBlockers(pathFill, carriageway.polygons);
+  mergeFootpathFragments(pathFill);
 }
 stages.pathBlockMergeMs = Math.round(performance.now() - t);
-
-t = performance.now();
-if (typeof footpathFillDisplayPolygons === "function") {
-  footpathFillDisplayPolygons(footpaths, model.sideM, frameShape);
-}
-stages.displayFootpathFilletMs = Math.round(performance.now() - t);
-
-t = performance.now();
-if (typeof footpathDisplayAfterRoadBlockers === "function") {
-  const footDisp = footpathFillDisplayPolygons(footpaths, model.sideM, frameShape);
-  const roadDisp =
-    typeof roadFillDisplayPolygons === "function"
-      ? fillRoadMedianHoles(roadFillDisplayPolygons(carriageway, model.sideM, frameShape))
-      : [];
-  if (pathFilletM > 0 && roadDisp.length > 0) {
-    footpathDisplayAfterRoadBlockers(footDisp, roadDisp);
-  }
-}
-stages.displayFootpathClipMs = Math.round(performance.now() - t);
-
-t = performance.now();
-if (typeof roadFillDisplayPolygons === "function") {
-  fillRoadMedianHoles(roadFillDisplayPolygons(carriageway, model.sideM, frameShape));
-}
-stages.displayRoadMorphMs = Math.round(performance.now() - t);
 
 t = performance.now();
 const roadFillCoarse = fillRoadMedianHoles(carriageway.polygons);
