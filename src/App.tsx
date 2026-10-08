@@ -44,6 +44,13 @@ import { fetchOvertureBuildingsForCut } from "./lib/overtureBuildings";
 import { qaForcedCrashFromSearch, qaModeFromSearch } from "./lib/qaCameraBridge";
 import { siteBuildingOverlaps } from "./lib/siteBuildings";
 import { assignExternalUses, loadUseTiers } from "./lib/useCascade";
+import {
+  fetchComBuildingFootprintsWithStats,
+  intersectsComCity,
+  paddedComFetchBounds,
+} from "./lib/comBuildingHeights";
+import { applyDevelopmentFloorsToBuildings, fetchDevelopmentFloorRecords } from "./lib/comDevelopmentFloors";
+import { buildHeightSourceLoadWarnings } from "./lib/buildHeightSourceLoadWarnings";
 import type { Basemap, CityModel, LonLat, PlaceHit, UiLayers, UseTierFailure, ViewState } from "./types";
 
 function frameFromQuery(): FrameQuery | null {
@@ -427,22 +434,71 @@ export default function App() {
             controller.signal,
           )
         : Promise.resolve(null);
-      const [terrainResult, comResult, vicmapResult, useTiers, contourLayer, overtureResult, transportResult, baseResult, tramLines] =
-        await Promise.all([
-          terrainTask,
-          comTask,
-          vicmapTask,
-          useTierTask,
-          contourTask,
-          buildingsTask,
-          transportTask,
-          baseTask,
-          tramTask,
-        ]);
+      const comFetchBounds = paddedComFetchBounds(center, sideM);
+      const damTask = modelLayers.buildings
+        ? fetchDevelopmentFloorRecords(comFetchBounds, controller.signal)
+            .then((records) => ({ records, error: null as string | null }))
+            .catch((err: unknown) => {
+              if (controller.signal.aborted) throw err;
+              const message =
+                err instanceof Error
+                  ? err.message
+                  : "City of Melbourne development records could not be loaded.";
+              return { records: [], error: message };
+            })
+        : Promise.resolve({ records: [], error: null as string | null });
+      const comHeightsTask =
+        modelLayers.buildings && intersectsComCity(comFetchBounds)
+          ? fetchComBuildingFootprintsWithStats(comFetchBounds, center, controller.signal)
+              .then((result) => ({
+                footprints: result.footprints,
+                fetchMs: result.stats.fetchMs,
+                error: null as string | null,
+              }))
+              .catch((err: unknown) => {
+                if (controller.signal.aborted) throw err;
+                const message =
+                  err instanceof Error
+                    ? err.message
+                    : "City of Melbourne 2023 building footprints could not be loaded.";
+                return { footprints: [], fetchMs: 0, error: message };
+              })
+          : Promise.resolve({ footprints: [], fetchMs: 0, error: null as string | null });
+      const [
+        terrainResult,
+        comResult,
+        vicmapResult,
+        useTiers,
+        contourLayer,
+        overtureResult,
+        transportResult,
+        baseResult,
+        tramLines,
+        damResult,
+        comHeightsResult,
+      ] = await Promise.all([
+        terrainTask,
+        comTask,
+        vicmapTask,
+        useTierTask,
+        contourTask,
+        buildingsTask,
+        transportTask,
+        baseTask,
+        tramTask,
+        damTask,
+        comHeightsTask,
+      ]);
       const overtureBuildings = overtureResult.buildings;
-      const buildings = modelLayers.buildings
-        ? assignExternalUses(overtureBuildings, useTiers.zones)
-        : [];
+      let buildingsWithoutCom: typeof overtureBuildings | undefined;
+      let buildings: typeof overtureBuildings = [];
+      const comFootprintPrefetch =
+        comHeightsResult.footprints.length > 0 ? comHeightsResult.footprints : undefined;
+      if (modelLayers.buildings) {
+        const zoned = assignExternalUses(overtureBuildings, useTiers.zones);
+        buildingsWithoutCom = structuredClone(zoned);
+        buildings = applyDevelopmentFloorsToBuildings(zoned, center, damResult.records);
+      }
       const treeContext = {
         ...baseResult.treeContext,
         roads: transportResult.roads.map((road) => ({ line: road.line, width: road.width })),
@@ -476,8 +532,17 @@ export default function App() {
         })}.`;
       }
       if (modelLayers.buildings) {
-        sourceNote = `${sourceNote} Building height uses Overture height, then num_floors × 3 m, otherwise Vicmap zone defaults (3 m under 40 m², else by zone, else 9 m). Manual height edits in the 3D view override every other source. Use follows Overture class, then Vicmap planning zones.`;
+        sourceNote = `${sourceNote} Building height uses CoM 2023 footprints (on by default in Melbourne), then Overture height, num_floors × 3 m, then CoM development floors × 3 m for one building per site, otherwise Vicmap zone defaults (3 m under 40 m², else by zone, else 9 m). Manual height edits in the 3D view override every other source. Use follows Overture class, then Vicmap planning zones.`;
       }
+      if (damResult.error) sourceNote = `${sourceNote} ${damResult.error}`;
+      if (comHeightsResult.error) sourceNote = `${sourceNote} ${comHeightsResult.error}`;
+      const heightSourceLoadWarnings = buildHeightSourceLoadWarnings({
+        buildingsLayer: modelLayers.buildings,
+        comBounds: comFetchBounds,
+        comError: comHeightsResult.error,
+        comFootprintCount: comHeightsResult.footprints.length,
+        damError: damResult.error,
+      });
       const buildingCapHit = overtureResult.buildingCapHit;
       if (buildingCapHit) sourceNote = `${sourceNote} Building count was capped at 4000.`;
       if (contourLayer && contourLayer.source !== "dem") {
@@ -569,6 +634,12 @@ export default function App() {
         siteBuildingIds,
         siteNote,
         siteBuildingQa,
+        developmentDamRecords: damResult.records.length > 0 ? damResult.records : undefined,
+        buildingsWithoutCom,
+        comBuildingHeightsApplied: false,
+        comFootprintPrefetch,
+        heightSourceLoadWarnings:
+          heightSourceLoadWarnings.length > 0 ? heightSourceLoadWarnings : undefined,
       });
       setPhase("model");
     } catch (err) {

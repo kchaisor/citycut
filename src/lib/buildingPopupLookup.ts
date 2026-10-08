@@ -3,6 +3,12 @@ import { interiorPoint, pointInPolygon } from "./useCascade";
 import { vicmapWfsGetFeatureUrl } from "./vicmapWfs";
 import { VICMAP_PROPERTY_URL } from "./vicmapSiteParcel";
 import type { BuildingFeat, LonLat, Pt } from "../types";
+import { buildingDisplayHeightM, buildingHeightSourceLabelForBuilding } from "./heightOverrides";
+import { inferHeightTier } from "./buildingHeightResolve";
+import {
+  damRecordsWonByBuilding,
+  type DamFloorRecord,
+} from "./comDevelopmentFloors";
 import type { FrameBBox } from "./useCascade";
 
 const COM_BOUNDS = { south: -37.86, west: 144.89, north: -37.77, east: 145 };
@@ -228,15 +234,11 @@ function formatClueName(row: ClueRow | null): string | null {
   return address || null;
 }
 
-async function lookupDevelopment(lon: number, lat: number, signal?: AbortSignal): Promise<string | null> {
-  const where = `within_distance(geopoint, geom'POINT(${lon} ${lat})', 70m)`;
-  const url = comRecordsUrl(DAM_SLUG, where, undefined, 5);
-  logPopupUrl("CoM development", url);
-  const body = (await fetchJson(url, signal)) as {
-    results?: { status?: string; floors_above?: number; resi_dwellings?: number }[];
-  } | null;
-  const row = body?.results?.[0];
-  if (!row) return null;
+export function formatDamDevelopmentRow(row: {
+  status?: string;
+  floors_above?: number;
+  resi_dwellings?: number;
+}): string | null {
   const parts: string[] = [];
   if (typeof row.status === "string" && row.status.trim()) parts.push(row.status.trim());
   if (typeof row.floors_above === "number") parts.push(`${row.floors_above} floors`);
@@ -244,10 +246,84 @@ async function lookupDevelopment(lon: number, lat: number, signal?: AbortSignal)
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
+const DAM_STATUS_RANK: Record<string, number> = {
+  COMPLETED: 0,
+  APPROVED: 1,
+};
+
+function damStatusRank(status: string | undefined): number {
+  if (!status) return 50;
+  const key = status.trim().toUpperCase();
+  return DAM_STATUS_RANK[key] ?? 25;
+}
+
+/** Prefer completed over approved; note a secondary approved record when both exist. */
+export function pickDamDevelopmentDisplayRows(
+  rows: { status?: string; floors_above?: number; resi_dwellings?: number }[],
+): string | null {
+  if (rows.length === 0) return null;
+  const sorted = [...rows].sort(
+    (a, b) =>
+      damStatusRank(a.status) - damStatusRank(b.status) ||
+      (b.floors_above ?? 0) - (a.floors_above ?? 0),
+  );
+  const primary = formatDamDevelopmentRow(sorted[0]!);
+  if (!primary) return null;
+  const approvedNote = sorted.find(
+    (row, i) =>
+      i > 0 &&
+      typeof row.status === "string" &&
+      row.status.trim().toUpperCase() === "APPROVED" &&
+      damStatusRank(sorted[0]?.status) < damStatusRank(row.status),
+  );
+  const approvedText = approvedNote ? formatDamDevelopmentRow(approvedNote) : null;
+  if (approvedText && sorted[0]?.status?.trim().toUpperCase() === "COMPLETED") {
+    return `${primary} (${approvedText} also on site)`;
+  }
+  return primary;
+}
+
+/** Same winner rule as {@link applyDevelopmentFloorsToBuildings}; skips nearest-point mismatches. */
+export async function lookupDevelopmentForBuilding(
+  building: BuildingFeat,
+  center: LonLat,
+  allBuildings: BuildingFeat[],
+  damRecords: DamFloorRecord[],
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const won = damRecordsWonByBuilding(building, center, damRecords, allBuildings);
+  if (won.length === 0) return null;
+  const lines: string[] = [];
+  const seen = new Set<string>();
+  for (const record of won) {
+    const key = `${record.lon.toFixed(5)},${record.lat.toFixed(5)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const where = `within_distance(geopoint, geom'POINT(${record.lon} ${record.lat})', 70m)`;
+    const url = comRecordsUrl(DAM_SLUG, where, undefined, 20);
+    logPopupUrl("CoM development", url);
+    const body = (await fetchJson(url, signal)) as {
+      results?: { status?: string; floors_above?: number; resi_dwellings?: number }[];
+    } | null;
+    const matching =
+      body?.results?.filter((r) => r.floors_above === record.floorsAbove) ?? body?.results ?? [];
+    const display = pickDamDevelopmentDisplayRows(matching.length > 0 ? matching : body?.results ?? []);
+    if (display) lines.push(display);
+    else lines.push(`${record.floorsAbove} floors`);
+  }
+  return lines.length > 0 ? lines.join(" · ") : null;
+}
+
+export type BuildingPopupContext = {
+  allBuildings?: BuildingFeat[];
+  damRecords?: DamFloorRecord[];
+};
+
 export async function loadBuildingPopupDetails(
   building: BuildingFeat,
   center: LonLat,
   signal?: AbortSignal,
+  context: BuildingPopupContext = {},
 ): Promise<BuildingPopupDetails> {
   const at = pointFromBuilding(building);
   const { lon, lat } = fromLocal(at, center);
@@ -255,20 +331,17 @@ export async function loadBuildingPopupDetails(
 
   const useLine = `${buildingLabel(building)} · ${useSourceLabel(building.source)}`;
 
-  const heightSource = building.heightManual
-    ? "Manual edit"
-    : building.heightFromFallback
-      ? "Zone default"
-      : building.numFloors != null
-        ? "Overture num_floors"
-        : "Overture height";
+  const displayHeight = buildingDisplayHeightM(building);
+  const heightSource = buildingHeightSourceLabelForBuilding(building);
+  const tier = inferHeightTier(building);
+  const floorCount = building.developmentFloors ?? building.numFloors;
   const storeys =
-    building.numFloors != null
-      ? `${building.numFloors} storeys`
-      : building.height > 0
-        ? `~${Math.max(1, Math.round(building.height / 3))} storeys (est.)`
+    floorCount != null && tier !== "zone_default"
+      ? `${floorCount} storeys`
+      : displayHeight > 0
+        ? `~${Math.max(1, Math.round(displayHeight / 3))} storeys (est.)`
         : null;
-  const heightStoreysLine = `${building.height.toFixed(1)} m${storeys ? ` · ${storeys}` : ""} · ${heightSource}`;
+  const heightStoreysLine = `${displayHeight.toFixed(1)} m${storeys ? ` · ${storeys}` : ""} · ${heightSource}`;
 
   const clueRowsPromise = inCom ? lookupClueRows(lon, lat, signal) : Promise.resolve([]);
 
@@ -309,7 +382,9 @@ export async function loadBuildingPopupDetails(
     zonePromise,
     lookupParcel(lon, lat, signal),
     yearPromise,
-    inCom ? lookupDevelopment(lon, lat, signal) : Promise.resolve(null),
+    inCom && context.allBuildings && context.damRecords
+      ? lookupDevelopmentForBuilding(building, center, context.allBuildings, context.damRecords, signal)
+      : Promise.resolve(null),
   ]);
 
   const credits = [

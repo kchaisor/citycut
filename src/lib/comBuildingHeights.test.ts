@@ -113,7 +113,8 @@ describe("comBuildingHeights matching", () => {
     );
     const applied = applyComBuildingHeights([osm], [tallShell]);
     expect(applied.buildings[0]?.extrusionParts?.length).toBeGreaterThan(0);
-    expect(applied.buildings[0]?.height).toBe(9);
+    expect(applied.buildings[0]?.height).toBe(87);
+    expect(applied.buildings[0]?.heightTier).toBe("com");
   });
 
   it("uses the single-part fast path when one CoM part covers at least 80%", () => {
@@ -164,7 +165,8 @@ describe("comBuildingHeights matching", () => {
     );
     const applied = applyComBuildingHeights([osm], [towerAndPodium]);
     expect(applied.buildings[0]?.extrusionParts?.length).toBeGreaterThan(0);
-    expect(applied.buildings[0]?.height).toBe(9);
+    expect(applied.buildings[0]?.height).toBe(80);
+    expect(applied.buildings[0]?.heightTier).toBe("com");
   });
 
   it("clips when a single CoM part covers less than 80%", () => {
@@ -223,6 +225,81 @@ describe("comBuildingHeights matching", () => {
     const parts = clipBuildingComExtrusions(osm, [thin, bulk]);
     expect(parts?.some((p) => p.height === 99)).toBe(false);
     expect(parts?.some((p) => p.height === 20)).toBe(true);
+  });
+
+  it("keeps all slices from a matched structure even when one clip is under 20% OSM share", () => {
+    const osm = building(551928359, [
+      [0, 0],
+      [100, 0],
+      [100, 100],
+      [0, 100],
+      [0, 0],
+    ], 6);
+    const crown = footprint(
+      "811239",
+      [
+        [60, 60],
+        [68, 60],
+        [68, 68],
+        [60, 68],
+        [60, 60],
+      ],
+      27.7,
+    );
+    const bulk = footprint(
+      "811239",
+      [
+        [0, 0],
+        [90, 0],
+        [90, 90],
+        [0, 90],
+        [0, 0],
+      ],
+      24.4,
+    );
+    const { buildings } = applyComBuildingHeights([osm], [crown, bulk]);
+    expect(buildings[0].height).toBeCloseTo(27.7, 1);
+    expect(tallestExtrusionHeight(buildings[0])).toBeCloseTo(27.7, 1);
+    expect(buildings[0].extrusionParts?.some((p) => p.height === 27.7)).toBe(true);
+  });
+
+  it("ignores a tall CoM sliver below 20% OSM coverage when syncing scalar height", () => {
+    const osm = building(195697645, [
+      [0, 0],
+      [30, 0],
+      [30, 20],
+      [0, 20],
+      [0, 0],
+    ], 7);
+    const measured = footprint(
+      "810143",
+      [
+        [0, 0],
+        [18, 0],
+        [18, 20],
+        [0, 20],
+        [0, 0],
+      ],
+      10.2,
+    );
+    const distantTower = footprint(
+      "811999",
+      [
+        [28.5, 8],
+        [29.5, 8],
+        [29.5, 12],
+        [28.5, 12],
+        [28.5, 8],
+      ],
+      54,
+    );
+    const { buildings, updated } = applyComBuildingHeights([osm], [measured, distantTower]);
+    expect(updated).toBe(1);
+    expect(buildings[0].height).toBeCloseTo(10.2, 1);
+    expect(tallestExtrusionHeight(buildings[0])).toBeCloseTo(10.2, 1);
+    expect(buildings[0].comMatchStructureId).toBe("810143");
+    expect(buildings[0].comMatchHeightM).toBeCloseTo(10.2, 1);
+    expect(buildings[0].comMatchOverlapRatio ?? 0).toBeGreaterThan(0.35);
   });
 
   it("keeps the OSM height when no CoM footprint overlaps", () => {

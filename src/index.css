@@ -561,6 +561,26 @@ input[type="range"]::-moz-range-thumb {
   line-height: 1.1;
 }
 .meta { margin: 6px 0 0; }
+.height-source-notice {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  margin: 0;
+  padding: 8px 14px;
+  max-width: min(92%, 520px);
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--sheet-fill);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 8%);
+  pointer-events: none;
+}
+.viewport .fill { position: relative; }
 .stats {
   display: grid;
   grid-template-columns: 1fr 1fr;

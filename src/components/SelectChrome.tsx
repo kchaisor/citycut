@@ -270,7 +270,9 @@ export function SelectChrome({
                       });
                     }}
                   >
-                    {betterHeights ? "Better heights (CoM 2023) on" : "Better heights (CoM 2023)"}
+                    {betterHeights
+                      ? "CoM 2023 measured heights on"
+                      : "CoM 2023 heights off · turn on"}
                   </button>
                 )}
               </li>

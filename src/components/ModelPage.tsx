@@ -39,6 +39,7 @@ import {
 import { explodedAxoViewportExtent, planViewportExtent, type PlanViewport } from "../lib/planViewport";
 import { FIGURE_SCALES, preferredFigureScale, sheetFitMessage } from "../lib/figureGround";
 import {
+  countBuildingsWithComDerivedExtrusion,
   fetchComBuildingFootprints,
   paddedComFetchBounds,
   type ComBuildingFootprint,
@@ -83,6 +84,10 @@ import {
   writeStoredShowManualHeights,
   type HeightOverrideStore,
 } from "../lib/heightOverrides";
+import {
+  annotateUnresolvedZoneDefaults,
+  stampPlainZoneDefaultLabels,
+} from "../lib/buildingHeightResolve";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { modelStageCreditHtml } from "../lib/dataCredits";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
@@ -168,7 +173,9 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [betterHeights, setBetterHeights] = useState(() =>
     readStoredComBuildingHeights(window.localStorage),
   );
-  const [comFootprints, setComFootprints] = useState<ComBuildingFootprint[]>([]);
+  const [comFootprints, setComFootprints] = useState<ComBuildingFootprint[]>(
+    () => model.comFootprintPrefetch ?? [],
+  );
   const [preferred, setPreferred] = useState<string | null>(() => loadModelDrawer());
   const [planWidth, setPlanWidth] = useState<number | null>(null);
   const [fitCounter, setFitCounter] = useState(0);
@@ -285,6 +292,10 @@ export function ModelPage({ model }: { model: CityModel }) {
       setComFootprints([]);
       return;
     }
+    if (model.comFootprintPrefetch?.length) {
+      setComFootprints(model.comFootprintPrefetch);
+      return;
+    }
     const bounds = paddedComFetchBounds(model.center, model.sideM);
     const controller = new AbortController();
     fetchComBuildingFootprints(bounds, model.center, controller.signal)
@@ -297,7 +308,14 @@ export function ModelPage({ model }: { model: CityModel }) {
         }
       });
     return () => controller.abort();
-  }, [betterHeights, model.center.lat, model.center.lon, model.sideM, model.layers.buildings]);
+  }, [
+    betterHeights,
+    model.center.lat,
+    model.center.lon,
+    model.sideM,
+    model.layers.buildings,
+    model.comFootprintPrefetch,
+  ]);
 
   const [comHeightBuildings, setComHeightBuildings] = useState<typeof model.buildings | null>(null);
   const [comHeightUpdates, setComHeightUpdates] = useState(0);
@@ -313,6 +331,14 @@ export function ModelPage({ model }: { model: CityModel }) {
   );
 
   const qaSummaryRef = useRef({ buildingCount: 0, roadCount: 0, triangleCount: 0 });
+  const qaDisplayBuildingsRef = useRef(model.buildings);
+  const heightPerfRef = useRef<{ modelOpenMs: number; firstRenderMs: number | null; comAppliedMs: number | null }>(
+    { modelOpenMs: performance.now(), firstRenderMs: null, comAppliedMs: null },
+  );
+
+  useEffect(() => {
+    heightPerfRef.current = { modelOpenMs: performance.now(), firstRenderMs: null, comAppliedMs: null };
+  }, [model.placeLabel, model.center.lat, model.center.lon, model.sideM]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !qaModeFromSearch(window.location.search)) return;
@@ -354,7 +380,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     window.__citycutQaModel = {
       getSummary: () => qaSummaryRef.current,
       listBuildings() {
-        return model.buildings.map((building) => {
+        return qaDisplayBuildingsRef.current.map((building) => {
           const { east, north } = buildingCentroid(building);
           return { id: building.id, height: building.height, east, north };
         });
@@ -439,15 +465,17 @@ export function ModelPage({ model }: { model: CityModel }) {
         return true;
       },
       selectionScreenClip(buildingId: number, padPx = 48) {
-        const row = window.__citycutQaModel?.listBuildings?.().find((item) => item.id === buildingId);
+        const building = qaDisplayBuildingsRef.current.find((item) => item.id === buildingId);
         const project = window.__citycutQa?.projectToScreen;
-        if (!row || !project) return null;
-        const z = -row.north;
+        if (!building || !project) return null;
+        const { east, north } = buildingCentroid(building);
+        const z = -north;
+        const h = building.height;
         const corners = [
-          project({ x: row.east, y: 0, z }),
-          project({ x: row.east, y: row.height, z }),
-          project({ x: row.east - 25, y: row.height * 0.5, z }),
-          project({ x: row.east + 25, y: row.height * 0.5, z }),
+          project({ x: east, y: 0, z }),
+          project({ x: east, y: h, z }),
+          project({ x: east - 25, y: h * 0.5, z }),
+          project({ x: east + 25, y: h * 0.5, z }),
         ].filter(Boolean);
         if (corners.length === 0) return null;
         let minX = Infinity;
@@ -504,6 +532,33 @@ export function ModelPage({ model }: { model: CityModel }) {
         return pick.id;
       },
       exportPlanSnapshot: () => model,
+      pickZoneDefaultPanelQa() {
+        const rows = qaDisplayBuildingsRef.current.filter((b) => b.heightFromFallback);
+        const pick =
+          rows.find((b) => b.zoneDefaultNote?.includes("estimate, no measured height")) ?? rows[0];
+        if (!pick) return null;
+        setHeightPick({ buildingId: pick.id, clientX: 480, clientY: 420 });
+        return { id: pick.id, height: pick.height, note: pick.zoneDefaultNote ?? "" };
+      },
+      getHeightPerfTimings: () => ({ ...heightPerfRef.current }),
+      waitForComHeightsApplied(timeoutMs = 120_000) {
+        const start = performance.now();
+        return new Promise<{ comAppliedMs: number | null; firstRenderMs: number | null }>((resolve, reject) => {
+          const tick = () => {
+            const timings = heightPerfRef.current;
+            if (timings.comAppliedMs != null) {
+              resolve({ comAppliedMs: timings.comAppliedMs, firstRenderMs: timings.firstRenderMs });
+              return;
+            }
+            if (performance.now() - start > timeoutMs) {
+              reject(new Error("Timed out waiting for CoM heights"));
+              return;
+            }
+            requestAnimationFrame(tick);
+          };
+          tick();
+        });
+      },
     };
     return () => {
       delete window.__citycutQaModel;
@@ -511,17 +566,44 @@ export function ModelPage({ model }: { model: CityModel }) {
   }, [model]);
 
   useEffect(() => {
-    if (!betterHeights || comFootprints.length === 0 || model.buildings.length === 0) {
+    if (!betterHeights) {
+      setComHeightBuildings(null);
+      setComHeightUpdates(0);
+      return;
+    }
+    if (model.comBuildingHeightsApplied) {
+      const before = model.buildingsWithoutCom ?? model.buildings;
+      setComHeightBuildings(
+        annotateUnresolvedZoneDefaults(
+          model.buildings,
+          model.center,
+          comFootprints,
+          model.developmentDamRecords ?? [],
+        ),
+      );
+      setComHeightUpdates(countBuildingsWithComDerivedExtrusion(before, model.buildings));
+      return;
+    }
+    if (comFootprints.length === 0 || model.buildings.length === 0) {
       setComHeightBuildings(null);
       setComHeightUpdates(0);
       return;
     }
     const controller = new AbortController();
-    runComBuildingHeightsInWorker(model.buildings, comFootprints, controller.signal)
+    const source = model.buildingsWithoutCom ?? model.buildings;
+    runComBuildingHeightsInWorker(source, comFootprints, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return;
-        setComHeightBuildings(result.buildings);
-        setComHeightUpdates(result.updated);
+        const damApplied = result.buildings;
+        setComHeightBuildings(
+          annotateUnresolvedZoneDefaults(
+            damApplied,
+            model.center,
+            comFootprints,
+            model.developmentDamRecords ?? [],
+          ),
+        );
+        setComHeightUpdates(countBuildingsWithComDerivedExtrusion(source, damApplied));
       })
       .catch(() => {
         if (!controller.signal.aborted) {
@@ -530,9 +612,24 @@ export function ModelPage({ model }: { model: CityModel }) {
         }
       });
     return () => controller.abort();
-  }, [betterHeights, comFootprints, model.buildings]);
+  }, [
+    betterHeights,
+    comFootprints,
+    model.buildings,
+    model.buildingsWithoutCom,
+    model.center,
+    model.comBuildingHeightsApplied,
+    model.developmentDamRecords,
+  ]);
 
-  const baseBuildings = betterHeights && comHeightBuildings ? comHeightBuildings : model.buildings;
+  const baseBuildings = useMemo(() => {
+    if (!betterHeights) {
+      return stampPlainZoneDefaultLabels(model.buildingsWithoutCom ?? model.buildings);
+    }
+    if (comHeightBuildings) return comHeightBuildings;
+    if (model.comBuildingHeightsApplied) return model.buildings;
+    return stampPlainZoneDefaultLabels(model.buildings);
+  }, [betterHeights, comHeightBuildings, model.buildings, model.buildingsWithoutCom, model.comBuildingHeightsApplied]);
 
   const overrideResult = useMemo(
     () => applyHeightOverrides(baseBuildings, heightOverrideStore, model.center),
@@ -554,6 +651,31 @@ export function ModelPage({ model }: { model: CityModel }) {
     }),
     [model, overrideResult, betterHeights],
   );
+
+  useEffect(() => {
+    qaDisplayBuildingsRef.current = displayModel.buildings;
+  }, [displayModel.buildings]);
+
+  useEffect(() => {
+    let cancelled = false;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (cancelled || heightPerfRef.current.firstRenderMs != null) return;
+        heightPerfRef.current.firstRenderMs = performance.now() - heightPerfRef.current.modelOpenMs;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [displayModel.buildings, displayModel.comBuildingHeights]);
+
+  useEffect(() => {
+    const comDone =
+      !betterHeights || comHeightBuildings != null || (betterHeights && comFootprints.length === 0);
+    if (comDone && heightPerfRef.current.comAppliedMs == null) {
+      heightPerfRef.current.comAppliedMs = performance.now() - heightPerfRef.current.modelOpenMs;
+    }
+  }, [betterHeights, comHeightBuildings, comFootprints.length]);
 
   useEffect(() => {
     setPlanViewport(planViewportExtent(displayModel.sideM));
@@ -812,6 +934,11 @@ export function ModelPage({ model }: { model: CityModel }) {
       <div className={tab === "drawing" ? "viewport is-drawing" : "viewport"}>
         {tab === "3d" && (
           <div className="fill">
+            {model.heightSourceLoadWarnings?.map((line) => (
+              <p key={line} className="height-source-notice" role="status">
+                {line}
+              </p>
+            ))}
             <SceneBoundary>
               <Scene3D
                 model={displayModel}
@@ -849,6 +976,8 @@ export function ModelPage({ model }: { model: CityModel }) {
                 <BuildingHeightPopover
                   building={pickedBuilding}
                   center={displayModel.center}
+                  allBuildings={displayModel.buildings}
+                  damRecords={displayModel.developmentDamRecords ?? []}
                   onSave={(heightM) => saveBuildingHeight(pickedBuilding.id, heightM)}
                   onReset={() => resetBuildingHeight(pickedBuilding.id)}
                   onClose={() => setHeightPick(null)}
@@ -981,7 +1110,9 @@ export function ModelPage({ model }: { model: CityModel }) {
                       });
                     }}
                   >
-                    {betterHeights ? "Better heights (CoM 2023) on" : "Better heights (CoM 2023)"}
+                    {betterHeights
+                      ? "CoM 2023 measured heights on · turn off"
+                      : "CoM 2023 heights off · turn on"}
                   </button>
                 </div>
                 {betterHeights && comHeightUpdates > 0 && (
