@@ -83,6 +83,7 @@ import {
   writeStoredShowManualHeights,
   type HeightOverrideStore,
 } from "../lib/heightOverrides";
+import { annotateUnresolvedZoneDefaults } from "../lib/buildingHeightResolve";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { modelStageCreditHtml } from "../lib/dataCredits";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
@@ -520,7 +521,14 @@ export function ModelPage({ model }: { model: CityModel }) {
     runComBuildingHeightsInWorker(model.buildings, comFootprints, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return;
-        setComHeightBuildings(result.buildings);
+        setComHeightBuildings(
+          annotateUnresolvedZoneDefaults(
+            result.buildings,
+            model.center,
+            comFootprints,
+            model.developmentDamRecords ?? [],
+          ),
+        );
         setComHeightUpdates(result.updated);
       })
       .catch(() => {

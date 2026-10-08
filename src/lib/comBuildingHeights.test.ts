@@ -113,7 +113,8 @@ describe("comBuildingHeights matching", () => {
     );
     const applied = applyComBuildingHeights([osm], [tallShell]);
     expect(applied.buildings[0]?.extrusionParts?.length).toBeGreaterThan(0);
-    expect(applied.buildings[0]?.height).toBe(9);
+    expect(applied.buildings[0]?.height).toBe(87);
+    expect(applied.buildings[0]?.heightTier).toBe("com");
   });
 
   it("uses the single-part fast path when one CoM part covers at least 80%", () => {
@@ -164,7 +165,8 @@ describe("comBuildingHeights matching", () => {
     );
     const applied = applyComBuildingHeights([osm], [towerAndPodium]);
     expect(applied.buildings[0]?.extrusionParts?.length).toBeGreaterThan(0);
-    expect(applied.buildings[0]?.height).toBe(9);
+    expect(applied.buildings[0]?.height).toBe(80);
+    expect(applied.buildings[0]?.heightTier).toBe("com");
   });
 
   it("clips when a single CoM part covers less than 80%", () => {

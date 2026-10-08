@@ -3,6 +3,8 @@ import { interiorPoint, pointInPolygon } from "./useCascade";
 import { vicmapWfsGetFeatureUrl } from "./vicmapWfs";
 import { VICMAP_PROPERTY_URL } from "./vicmapSiteParcel";
 import type { BuildingFeat, LonLat, Pt } from "../types";
+import { buildingDisplayHeightM, buildingHeightSourceLabelForBuilding } from "./heightOverrides";
+import { inferHeightTier } from "./buildingHeightResolve";
 import type { FrameBBox } from "./useCascade";
 
 const COM_BOUNDS = { south: -37.86, west: 144.89, north: -37.77, east: 145 };
@@ -255,20 +257,17 @@ export async function loadBuildingPopupDetails(
 
   const useLine = `${buildingLabel(building)} · ${useSourceLabel(building.source)}`;
 
-  const heightSource = building.heightManual
-    ? "Manual edit"
-    : building.heightFromFallback
-      ? "Zone default"
-      : building.numFloors != null
-        ? "Overture num_floors"
-        : "Overture height";
+  const displayHeight = buildingDisplayHeightM(building);
+  const heightSource = buildingHeightSourceLabelForBuilding(building);
+  const tier = inferHeightTier(building);
+  const floorCount = building.developmentFloors ?? building.numFloors;
   const storeys =
-    building.numFloors != null
-      ? `${building.numFloors} storeys`
-      : building.height > 0
-        ? `~${Math.max(1, Math.round(building.height / 3))} storeys (est.)`
+    floorCount != null && tier !== "zone_default"
+      ? `${floorCount} storeys`
+      : displayHeight > 0
+        ? `~${Math.max(1, Math.round(displayHeight / 3))} storeys (est.)`
         : null;
-  const heightStoreysLine = `${building.height.toFixed(1)} m${storeys ? ` · ${storeys}` : ""} · ${heightSource}`;
+  const heightStoreysLine = `${displayHeight.toFixed(1)} m${storeys ? ` · ${storeys}` : ""} · ${heightSource}`;
 
   const clueRowsPromise = inCom ? lookupClueRows(lon, lat, signal) : Promise.resolve([]);
 

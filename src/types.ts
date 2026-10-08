@@ -39,6 +39,16 @@ export type UseTierFailure = {
   message: string;
 };
 
+/** Resolved building height source tier (see `buildingHeightResolve.ts` for order). */
+export type BuildingHeightTier =
+  | "manual"
+  | "com"
+  | "overture_height"
+  | "overture_floors"
+  | "development_floors"
+  | "osm_levels"
+  | "zone_default";
+
 /** One vertical extrusion inside an OSM footprint (CoM clip or OSM-height remainder). */
 export type BuildingExtrusionPart = {
   ring: Ring;
@@ -55,6 +65,12 @@ export type BuildingFeat = {
   height: number;
   /** Set when height came from footprint/zone fallback, not Overture height or floors. */
   heightFromFallback?: boolean;
+  /** Resolved height tier for UI labels. */
+  heightTier?: BuildingHeightTier;
+  /** CoM DAM floors_above when used for height. */
+  developmentFloors?: number;
+  /** Panel flag when zone default wins despite nearby unmatched sources. */
+  zoneDefaultNote?: string;
   /** Set when the user overrode height in the 3D view. */
   heightManual?: true;
   use: BuildingUse;
@@ -226,6 +242,8 @@ export type CityModel = {
   siteNote?: string | null;
   /** QA (`?qa=1`): overlap fractions for buildings that meet the parcel. */
   siteBuildingQa?: import("./lib/siteBuildings").SiteBuildingOverlap[];
+  /** CoM development floor records loaded at model create (Melbourne cuts). */
+  developmentDamRecords?: import("./lib/comDevelopmentFloors").DamFloorRecord[];
 };
 
 export type ViewState = {

@@ -251,6 +251,12 @@ function fragmentToBuilding(fragment: Fragment): BuildingFeat {
       : typeof floorsRaw === "string" && Number.isFinite(Number(floorsRaw))
         ? Number(floorsRaw)
         : undefined;
+  const heightFromFallback = overtureHeightUsesFallback(props);
+  const heightTier = heightFromFallback
+    ? ("zone_default" as const)
+    : numFloors != null && numFloors > 0
+      ? ("overture_floors" as const)
+      : ("overture_height" as const);
   const building: BuildingFeat = {
     id: stableNumericId(fragment.id),
     overtureId: fragment.id,
@@ -258,7 +264,8 @@ function fragmentToBuilding(fragment: Fragment): BuildingFeat {
     ring: fragment.ring,
     holes: fragment.holes,
     height,
-    heightFromFallback: overtureHeightUsesFallback(props),
+    heightFromFallback: heightFromFallback ? true : undefined,
+    heightTier,
     use: tagged ?? "unclassified",
     source: tagged ? "osm_tag" : "none",
     ...(overtureName ? { overtureName } : {}),

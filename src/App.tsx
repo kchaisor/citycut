@@ -44,6 +44,8 @@ import { fetchOvertureBuildingsForCut } from "./lib/overtureBuildings";
 import { qaForcedCrashFromSearch, qaModeFromSearch } from "./lib/qaCameraBridge";
 import { siteBuildingOverlaps } from "./lib/siteBuildings";
 import { assignExternalUses, loadUseTiers } from "./lib/useCascade";
+import { paddedComFetchBounds } from "./lib/comBuildingHeights";
+import { applyDevelopmentFloorsToBuildings, fetchDevelopmentFloorRecords } from "./lib/comDevelopmentFloors";
 import type { Basemap, CityModel, LonLat, PlaceHit, UiLayers, UseTierFailure, ViewState } from "./types";
 
 function frameFromQuery(): FrameQuery | null {
@@ -427,7 +429,19 @@ export default function App() {
             controller.signal,
           )
         : Promise.resolve(null);
-      const [terrainResult, comResult, vicmapResult, useTiers, contourLayer, overtureResult, transportResult, baseResult, tramLines] =
+      const damTask = modelLayers.buildings
+        ? fetchDevelopmentFloorRecords(paddedComFetchBounds(center, sideM), controller.signal)
+            .then((records) => ({ records, error: null as string | null }))
+            .catch((err: unknown) => {
+              if (controller.signal.aborted) throw err;
+              const message =
+                err instanceof Error
+                  ? err.message
+                  : "City of Melbourne development records could not be loaded.";
+              return { records: [], error: message };
+            })
+        : Promise.resolve({ records: [], error: null as string | null });
+      const [terrainResult, comResult, vicmapResult, useTiers, contourLayer, overtureResult, transportResult, baseResult, tramLines, damResult] =
         await Promise.all([
           terrainTask,
           comTask,
@@ -438,10 +452,15 @@ export default function App() {
           transportTask,
           baseTask,
           tramTask,
+          damTask,
         ]);
       const overtureBuildings = overtureResult.buildings;
       const buildings = modelLayers.buildings
-        ? assignExternalUses(overtureBuildings, useTiers.zones)
+        ? applyDevelopmentFloorsToBuildings(
+            assignExternalUses(overtureBuildings, useTiers.zones),
+            center,
+            damResult.records,
+          )
         : [];
       const treeContext = {
         ...baseResult.treeContext,
@@ -476,8 +495,9 @@ export default function App() {
         })}.`;
       }
       if (modelLayers.buildings) {
-        sourceNote = `${sourceNote} Building height uses Overture height, then num_floors × 3 m, otherwise Vicmap zone defaults (3 m under 40 m², else by zone, else 9 m). Manual height edits in the 3D view override every other source. Use follows Overture class, then Vicmap planning zones.`;
+        sourceNote = `${sourceNote} Building height uses CoM 2023 footprints when Better heights is on, then Overture height, num_floors × 3 m, CoM development floors × 3 m, otherwise Vicmap zone defaults (3 m under 40 m², else by zone, else 9 m). Manual height edits in the 3D view override every other source. Use follows Overture class, then Vicmap planning zones.`;
       }
+      if (damResult.error) sourceNote = `${sourceNote} ${damResult.error}`;
       const buildingCapHit = overtureResult.buildingCapHit;
       if (buildingCapHit) sourceNote = `${sourceNote} Building count was capped at 4000.`;
       if (contourLayer && contourLayer.source !== "dem") {
@@ -569,6 +589,7 @@ export default function App() {
         siteBuildingIds,
         siteNote,
         siteBuildingQa,
+        developmentDamRecords: damResult.records.length > 0 ? damResult.records : undefined,
       });
       setPhase("model");
     } catch (err) {

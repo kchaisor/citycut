@@ -6,6 +6,7 @@ import type { BuildingFeat, Ring } from "../types";
 import type { BuildingExtrusionPart as ExtrusionPart } from "../types";
 import type { ComBuildingFootprint } from "./comBuildingHeightsTypes";
 import { countBuildingsWithComDerivedExtrusion } from "./comBuildingHeightsCount";
+import { clampBuildingHeight } from "./height";
 
 export const COM_SLIVER_MIN_M2 = 2;
 export const COM_SLIVER_MIN_FRACTION = 0.05;
@@ -97,6 +98,31 @@ function partsFromMultiPolygon(
   return parts;
 }
 
+function applyComScalarHeight(building: BuildingFeat, heightM: number): BuildingFeat {
+  if (building.heightManual) return building;
+  const height = clampBuildingHeight(heightM);
+  return {
+    ...building,
+    height,
+    heightFromFallback: undefined,
+    heightTier: "com",
+    zoneDefaultNote: undefined,
+    extrusionParts: undefined,
+  };
+}
+
+function finalizeComMatchedBuilding(building: BuildingFeat): BuildingFeat {
+  if (building.heightManual || !building.extrusionParts?.length) return building;
+  const height = clampBuildingHeight(tallestExtrusionHeight(building));
+  return {
+    ...building,
+    height,
+    heightFromFallback: undefined,
+    heightTier: "com",
+    zoneDefaultNote: undefined,
+  };
+}
+
 function osmClipPolygon(building: BuildingFeat): Polygon {
   return toClipPolygon(building.ring, building.holes);
 }
@@ -122,6 +148,44 @@ export function pickComHeightFallback20(
     }
   }
   return best;
+}
+
+type StructureAggregate = {
+  id: string;
+  overlapArea: number;
+  maxHeight: number;
+};
+
+/**
+ * For one large Overture footprint overlapping several CoM structures, sum overlap area per
+ * structure_id and use area-weighted height when combined coverage clears the threshold.
+ */
+export function aggregateComHeightForMergedFootprint(
+  building: BuildingFeat,
+  footprints: ComBuildingFootprint[],
+): number | null {
+  const osmArea = Math.abs(signedArea(openRing(building.ring)));
+  if (osmArea <= 0) return null;
+  const byId = new Map<string, StructureAggregate>();
+  for (const footprint of footprints) {
+    const overlap = intersectionAreaM2(building, footprint);
+    if (overlap <= 0 || isSliver(overlap, osmArea)) continue;
+    const id = footprint.id || `part-${footprint.minX}-${footprint.minY}`;
+    const prev = byId.get(id) ?? { id, overlapArea: 0, maxHeight: 0 };
+    prev.overlapArea += overlap;
+    prev.maxHeight = Math.max(prev.maxHeight, footprint.height_m);
+    byId.set(id, prev);
+  }
+  if (byId.size === 0) return null;
+  let covered = 0;
+  let weighted = 0;
+  for (const row of byId.values()) {
+    covered += row.overlapArea;
+    weighted += row.overlapArea * row.maxHeight;
+  }
+  const osmShare = covered / osmArea;
+  if (osmShare < COM_FALLBACK_MIN_FRACTION) return null;
+  return weighted / covered;
 }
 
 function clipBuildingComExtrusions(
@@ -256,13 +320,23 @@ function applyComBuildingHeightsCore(
     ) {
       const height = overlaps[0].footprint.height_m;
       if (Math.abs(height - building.height) < 0.05) return building;
-      return { ...building, height };
+      return applyComScalarHeight(building, height);
     }
 
     const candidates = overlaps.map((hit) => hit.footprint);
     const parts = clipBuildingComExtrusions(building, candidates);
-    if (!parts || parts.length === 0) return building;
-    return { ...building, extrusionParts: parts };
+    if (!parts || parts.length === 0) {
+      const aggregate = aggregateComHeightForMergedFootprint(building, candidates);
+      if (aggregate != null && aggregate > building.height + 0.05) {
+        return applyComScalarHeight(building, aggregate);
+      }
+      const fallback = pickComHeightFallback20(building, candidates);
+      if (fallback && fallback.height_m > building.height + 0.05) {
+        return applyComScalarHeight(building, fallback.height_m);
+      }
+      return building;
+    }
+    return finalizeComMatchedBuilding({ ...building, extrusionParts: parts });
   });
   const updated = countBuildingsWithComDerivedExtrusion(buildings, out);
   return { buildings: out, updated };

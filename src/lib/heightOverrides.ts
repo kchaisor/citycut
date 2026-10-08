@@ -1,6 +1,7 @@
 import { fromLocal, openRing, signedArea } from "./geo";
 import { clampBuildingHeight } from "./height";
 import type { BuildingFeat, LonLat } from "../types";
+import { effectiveBuildingHeightM, heightTierLabel, inferHeightTier } from "./buildingHeightResolve";
 
 export const HEIGHT_OVERRIDES_STORAGE_KEY = "citycut.heightOverrides";
 export const SHOW_MANUAL_HEIGHTS_STORAGE_KEY = "citycut.showManualHeights";
@@ -250,6 +251,8 @@ export function applyOverrideToBuilding(building: BuildingFeat, heightM: number)
     height,
     heightManual: true,
     heightFromFallback: undefined,
+    heightTier: "manual",
+    zoneDefaultNote: undefined,
     extrusionParts: undefined,
   };
 }
@@ -299,12 +302,14 @@ export function clearAllHeightOverrides(): HeightOverrideStore {
   return { v: HEIGHT_OVERRIDES_VERSION, overrides: [] };
 }
 
-export type BuildingHeightSource = "manual" | "melbourne" | "zone_default" | "overture";
+export type BuildingHeightSource = "manual" | "melbourne" | "zone_default" | "overture" | "development";
 
 export function buildingHeightSource(building: BuildingFeat): BuildingHeightSource {
-  if (building.heightManual) return "manual";
-  if (building.heightFromFallback) return "zone_default";
-  if (building.extrusionParts?.length) return "melbourne";
+  const tier = inferHeightTier(building);
+  if (tier === "manual") return "manual";
+  if (tier === "com") return "melbourne";
+  if (tier === "development_floors") return "development";
+  if (tier === "zone_default") return "zone_default";
   return "overture";
 }
 
@@ -316,9 +321,24 @@ export function buildingHeightSourceLabel(source: BuildingHeightSource): string 
       return "Zone default";
     case "melbourne":
       return "City of Melbourne";
+    case "development":
+      return "CoM development floors";
     default:
       return "Overture (height or floors)";
   }
+}
+
+export function buildingHeightSourceLabelForBuilding(building: BuildingFeat): string {
+  const tier = inferHeightTier(building);
+  return heightTierLabel(tier, {
+    tier,
+    zoneDefaultNote: building.zoneDefaultNote,
+    recordedFloors: building.developmentFloors ?? building.numFloors,
+  });
+}
+
+export function buildingDisplayHeightM(building: BuildingFeat): number {
+  return effectiveBuildingHeightM(building);
 }
 
 export function manualHeightCreditFragment(count: number): string | null {
