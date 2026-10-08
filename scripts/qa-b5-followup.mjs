@@ -76,6 +76,16 @@ const benchText = [
 writeFileSync(`${outDir}/b5-footpath-2km-union-ms.txt`, `${benchText}\n`);
 console.log(benchText);
 
+try {
+  const createBench = JSON.parse(readFileSync("/opt/cursor/artifacts/bench-2km-create.json", "utf8"));
+  writeFileSync(
+    `${outDir}/b5-footpath-2km-union-ms.txt`,
+    `${benchText}\ncreate_model_2km_wall_ms=${createBench.wallMsCreateToReady}\n`,
+  );
+} catch {
+  /* optional bench-2km-create.json */
+}
+
 const browser = await chromium.launch({
   headless: true,
   args: ["--use-gl=angle", "--use-angle=swiftshader"],
@@ -94,23 +104,28 @@ async function openSitePlan(page, lat, lon, km, { filletM = 2, pathEdgeOn = true
   });
   await page.locator("button.create-fab").click();
   await page.waitForSelector(".model-chrome", { timeout: 600_000 });
-  await page.waitForFunction(() => window.__citycutQaModel?.getSummary != null, null, { timeout: 180_000 });
+  await page.waitForFunction(
+    () => (window.__citycutQaModel?.getSummary()?.roadCount ?? 0) > 50,
+    null,
+    { timeout: 600_000 },
+  );
 
-  await page.getByRole("button", { name: "Drawing", exact: true }).click();
-  await page.getByRole("tab", { name: "Drawing" }).click();
-  await page.getByRole("button", { name: "Site plan", exact: true }).click();
+  await page.locator(".model-chrome").getByRole("button", { name: "Drawing", exact: true }).click();
+  const sitePlan = page.locator(".drawer-section:not([hidden])").getByRole("button", { name: "Site plan", exact: true });
+  await sitePlan.waitFor({ state: "visible", timeout: 30_000 });
+  await sitePlan.click();
   await page.waitForSelector(".fill.is-plan svg.plan:not(.figure-ground)", { timeout: 120_000 });
   await page.waitForTimeout(1500);
 }
 
 async function setPlanScale(page, scale) {
-  await page.getByLabel("Plan scale").selectOption(String(scale));
+  await page.getByLabel("Plan scale", { exact: true }).selectOption(String(scale));
   await page.waitForTimeout(800);
 }
 
 async function zoomPlan(page, steps = 6) {
   const svg = page.locator(".fill.is-plan svg.plan");
-  await svg.click({ position: { x: 400, y: 350 } });
+  await svg.click({ position: { x: 980, y: 420 }, force: true });
   for (let i = 0; i < steps; i++) {
     await page.keyboard.press("Equal");
     await page.waitForTimeout(120);
