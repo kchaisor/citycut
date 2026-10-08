@@ -1187,7 +1187,6 @@ export function ModelPage({ model }: { model: CityModel }) {
                   </button>
                   <button
                     type="button"
-                    className={comHeightsToggleKind === "failed" ? "layer-sub-toggle warn" : undefined}
                     aria-pressed={comBuildingHeightsTogglePressed(comHeightsToggleKind)}
                     onClick={() => {
                       setBetterHeights((on) => {
