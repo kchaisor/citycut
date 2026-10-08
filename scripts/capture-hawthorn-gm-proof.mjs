@@ -51,7 +51,14 @@ async function captureMode(browser, mode) {
     undefined,
     { timeout: 300_000 },
   );
-  await page.waitForTimeout(1500);
+  if (mode === "normal") {
+    await page.waitForFunction(
+      () => document.body.innerText.includes("Showing the largest 4,000"),
+      undefined,
+      { timeout: 60_000 },
+    );
+  }
+  await page.waitForTimeout(800);
   const stats = await page.evaluate(() => ({ ...window.__citycutCutColourStats }));
   const pngPath = `${outDir}/landing-hawthorn-gm-${mode}.png`;
   await page.screenshot({ path: pngPath, fullPage: false });

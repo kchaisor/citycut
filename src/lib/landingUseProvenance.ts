@@ -1,4 +1,5 @@
 import type { BuildingFeat } from "../types";
+import { resolveUseSourceTier } from "./useSourceTier";
 
 export type UseSourceTierKey =
   | "overture"
@@ -58,9 +59,8 @@ export function countLandingUseProvenance(
       liveRefineNewlyClassified += 1;
     }
     if (!isClassified(finalBuilding)) unclassifiedFinal += 1;
-    const tier = finalBuilding.useSourceTier ?? "unclassified";
-    if (tier in finalTierCounts) finalTierCounts[tier as UseSourceTierKey] += 1;
-    else finalTierCounts.unclassified += 1;
+    const tier = resolveUseSourceTier(finalBuilding);
+    finalTierCounts[tier] += 1;
   }
 
   return {

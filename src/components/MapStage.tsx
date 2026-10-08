@@ -22,6 +22,8 @@ import { refineBuildingUses } from "../lib/useCascade";
 import { fetchSiteParcelCached, siteBuildingIdsForPreview } from "../lib/sitePreviewCache";
 import { FLAT_NORTH_UP_MAP_OPTIONS, applyFlatNorthUpMapHandlers } from "../lib/mapStageMapOptions";
 import { countLandingUseProvenance } from "../lib/landingUseProvenance";
+import { shouldRunLiveZoneRefine } from "../lib/landingRefinePolicy";
+import { withResolvedUseSourceTiers } from "../lib/useSourceTier";
 import type { Basemap, BuildingFeat, LonLat, ViewState } from "../types";
 
 export type FlyRequest = {
@@ -211,6 +213,7 @@ export function MapStage({
     const searchParams =
       typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
     const tilesOnly = searchParams.has("tilesOnly");
+    const forceLiveRefine = searchParams.has("forceLiveRefine");
     const qaFetch = searchParams.get("qa") === "1";
     const colourCacheKey = `${footprint.cacheKey}|${tilesOnly ? "tilesOnly" : "liveRefine"}`;
     if (colourCacheKey === colourCacheKeyRef.current) return;
@@ -250,6 +253,7 @@ export function MapStage({
 
     const timer = window.setTimeout(() => {
       void (async () => {
+        setLandingBuildingCapNote(null);
         const fetchT0 = qaFetch ? performance.now() : 0;
         try {
           const buildingResult = await fetchOvertureBuildingsForCut(
@@ -267,20 +271,34 @@ export function MapStage({
             setLandingEnrichmentError(null);
           }
           const enrichT1 = qaFetch ? performance.now() : 0;
-          const merged = mergeBuildingEnrichment(buildingResult.buildings, enrichment.byId);
+          const mergedRaw = mergeBuildingEnrichment(buildingResult.buildings, enrichment.byId);
+          const merged = withResolvedUseSourceTiers(mergedRaw);
+          const manifest = await fetchEnrichmentManifest(controller.signal);
           let buildingsForCut = merged;
-          if (!tilesOnly) {
+          let refineRan = false;
+          if (
+            shouldRunLiveZoneRefine({
+              tilesOnly,
+              forceLiveRefine,
+              enrichmentError: enrichment.error,
+              manifest,
+              cutBounds: footprint.bounds,
+              merged,
+              byId: enrichment.byId,
+            })
+          ) {
+            refineRan = true;
             const refined = await refineBuildingUses(merged, footprint.origin, footprint.bounds, {
               signal: controller.signal,
             });
-            buildingsForCut = refined.buildings;
+            buildingsForCut = withResolvedUseSourceTiers(refined.buildings);
           }
-          const prov = countLandingUseProvenance(merged, buildingsForCut);
+          const prov = countLandingUseProvenance(mergedRaw, buildingsForCut);
           const fetchT1 = qaFetch ? performance.now() : 0;
           if (qaFetch && window.__citycutCutColourStats) {
             window.__citycutCutColourStats.colourFetchMs = Math.round(fetchT1 - fetchT0);
             window.__citycutCutColourStats.colourEnrichmentMs = Math.round(enrichT1 - enrichT0);
-            window.__citycutCutColourStats.colourRefineMs = tilesOnly ? 0 : Math.round(fetchT1 - enrichT1);
+            window.__citycutCutColourStats.colourRefineMs = refineRan ? Math.round(fetchT1 - enrichT1) : 0;
             window.__citycutCutColourStats.landingUseFromTiles = prov.tileTierAfterMerge;
             window.__citycutCutColourStats.landingUseFromLiveRefine = prov.liveRefineNewlyClassified;
             window.__citycutCutColourStats.landingUseUnclassified = prov.unclassifiedFinal;
@@ -293,6 +311,13 @@ export function MapStage({
           if (cancelled || controller.signal.aborted) return;
           if (!map.loaded()) await new Promise<void>((resolve) => map.once("idle", () => resolve()));
           if (cancelled) return;
+          if (!cancelled) {
+            setLandingBuildingCapNote(
+              buildingResult.buildingCapHit
+                ? `Showing the largest 4,000 of ${buildingResult.stats.fragmentCount.toLocaleString()} building parts in this view.`
+                : null,
+            );
+          }
           if (!qaFetch) {
             writeLandingColourCache(colourCacheKey, {
               buildings: buildingsForCut,
@@ -409,6 +434,7 @@ export function MapStage({
   const circleFrame = frameShape === "circle";
   const [enrichmentNote, setEnrichmentNote] = useState<string | null>(null);
   const [landingEnrichmentError, setLandingEnrichmentError] = useState<string | null>(null);
+  const [landingBuildingCapNote, setLandingBuildingCapNote] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -452,11 +478,11 @@ export function MapStage({
   return (
     <div className={loading ? "map-wrap is-loading" : "map-wrap"}>
       <div ref={containerRef} className="map-canvas" />
-      {(enrichmentNote || landingEnrichmentError) && (
+      {(enrichmentNote || landingEnrichmentError || landingBuildingCapNote) && (
         <p className="enrichment-coverage-banner" role="status">
           {landingEnrichmentError
             ? `Building enrichment tiles could not be loaded (${landingEnrichmentError}). Use colours may be incomplete.`
-            : enrichmentNote}
+            : [enrichmentNote, landingBuildingCapNote].filter(Boolean).join(" ")}
         </p>
       )}
       <div className="basemap" role="group" aria-label="Basemap">

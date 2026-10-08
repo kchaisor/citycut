@@ -268,6 +268,7 @@ function fragmentToBuilding(fragment: Fragment): BuildingFeat {
     heightTier,
     use: tagged ?? "unclassified",
     source: tagged ? "osm_tag" : "none",
+    useSourceTier: tagged ? "overture" : "unclassified",
     ...(overtureName ? { overtureName } : {}),
     ...(numFloors != null ? { numFloors } : {}),
   };
