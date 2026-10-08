@@ -20,9 +20,9 @@ const crops = existsSync(cropFile)
   ? JSON.parse(readFileSync(cropFile, "utf8"))
   : {
       facetSpot: "125 385 70 70",
-      kerbReturn: "127 415 20 20",
-      roadGaps: "284 124 55 35",
-      pathKink: "125 420 24 24",
+      kerbReturn: "142 442 20 20",
+      roadGaps: "284 127 55 35",
+      pathKink: "171 381 24 24",
     };
 
 const { planPaths, svgRings, svgPolyline } = await import(pathToFileURL(join(repoRoot, "src/lib/svgPlan.ts")).href);
@@ -44,7 +44,7 @@ function buildSvg(viewBox, filletM = 2) {
   clearFootpathUnionCacheForTests();
   const style = { ...DEFAULT_LINE_STYLES, pathEdgeOn: true, pathFilletM: filletM };
   const smoothOutput = label === "pr";
-  const planOptions = { pathFilletM: filletM };
+  const planOptions = { pathFilletM: filletM, centrelineSmooth: smoothOutput };
   if (smoothOutput) planOptions.smoothOutput = true;
   else planOptions.smoothOutput = false;
   const plan = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, planOptions);

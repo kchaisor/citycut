@@ -71,9 +71,14 @@ describe("plan footpath layer", () => {
     const baseline = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, {
       pathFilletM: 2,
       smoothOutput: false,
+      centrelineSmooth: false,
     });
     clearFootpathUnionCacheForTests();
-    const plan = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, { pathFilletM: 2, smoothOutput: true });
+    const plan = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, {
+      pathFilletM: 2,
+      smoothOutput: true,
+      centrelineSmooth: true,
+    });
     const baseArea = multiArea(baseline.pathFill);
     const area = multiArea(plan.pathFill);
     expect(Math.abs(area - baseArea) / baseArea).toBeLessThanOrEqual(0.02);

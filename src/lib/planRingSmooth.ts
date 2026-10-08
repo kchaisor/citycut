@@ -3,7 +3,7 @@ import type { Pt } from "../types";
 import { signedArea } from "./geo";
 
 /** Max deviation from the original faceted boundary (m). */
-export const PLAN_RING_SMOOTH_MAX_DEVIATION_M = 0.03;
+export const PLAN_RING_SMOOTH_MAX_DEVIATION_M = 0.05;
 /** Segments shorter than this may belong to a faceted arc run (m). */
 const FACET_EDGE_MAX_M = 2.5;
 /** Preserve vertices whose turn exceeds this (degrees). */
@@ -53,7 +53,12 @@ function inEdgeM(open: Pair[], i: number, n: number): number {
   return len(open[(i + n - 1) % n]!, open[i]!);
 }
 
-function inFilletChain(open: Pair[], i: number, n: number): boolean {
+function ringOrientationSign(open: Pair[]): number {
+  const area = signedArea(open);
+  return area >= 0 ? 1 : -1;
+}
+
+function inFilletChain(open: Pair[], i: number, n: number, orientSign: number): boolean {
   const prev = open[(i + n - 1) % n]!;
   const curr = open[i]!;
   const next = open[(i + 1) % n]!;
@@ -61,26 +66,28 @@ function inFilletChain(open: Pair[], i: number, n: number): boolean {
   if (t > CORNER_TURN_DEG * 1.25) return false;
   const shortIn = inEdgeM(open, i, n) <= FACET_EDGE_MAX_M;
   const shortOut = outEdgeM(open, i, n) <= FACET_EDGE_MAX_M;
-  if (shortIn && shortOut) return true;
+  const signed = signedTurnRad(prev, curr, next) * orientSign;
+  if (shortIn && shortOut) return signed < 0.02 || t < CORNER_TURN_DEG;
   if (shortIn && !shortOut) return t < CORNER_TURN_DEG;
   if (!shortIn && shortOut) return t < CORNER_TURN_DEG;
   return false;
 }
 
 /** True when this vertex begins a faceted arc chain. */
-function startsFacetRun(open: Pair[], i: number, n: number): boolean {
-  if (!inFilletChain(open, i, n)) return false;
-  return !inFilletChain(open, (i + n - 1) % n, n);
+function startsFacetRun(open: Pair[], i: number, n: number, orientSign: number): boolean {
+  if (!inFilletChain(open, i, n, orientSign)) return false;
+  return !inFilletChain(open, (i + n - 1) % n, n, orientSign);
 }
 
-function continuesFacetRun(open: Pair[], i: number, n: number, sign: number): boolean {
-  if (!inFilletChain(open, i, n)) return false;
+function continuesFacetRun(open: Pair[], i: number, n: number, sign: number, orientSign: number): boolean {
+  if (!inFilletChain(open, i, n, orientSign)) return false;
   const prev = open[(i + n - 1) % n]!;
   const curr = open[i]!;
   const next = open[(i + 1) % n]!;
   const t = turnDeg(prev, curr, next);
   if (t > CORNER_TURN_DEG * 1.25) return false;
-  return sameSign(signedTurnRad(prev, curr, next), sign) || t < 3;
+  const signed = signedTurnRad(prev, curr, next) * orientSign;
+  return sameSign(signed, sign) || t < 3;
 }
 
 function sameSign(a: number, b: number): boolean {
@@ -178,10 +185,7 @@ function resampleArcRun(
   const fit = fitArcFromRun(start, mids, end);
   if (!fit) return null;
   const arcLen = Math.abs(fit.sweep) * fit.r;
-  const steps = Math.min(
-    Math.max(minVertices, Math.ceil(arcLen / Math.max(chordStepM, 0.008))),
-    Math.max(minVertices, 24),
-  );
+  const steps = Math.max(minVertices, Math.ceil(arcLen / Math.max(chordStepM, 0.008)));
   const out: Pair[] = [];
   for (let s = 1; s <= steps; s++) {
     const t = s / (steps + 1);
@@ -199,16 +203,17 @@ export function countConcaveArcRuns(ring: Ring): number {
   const open = openRing(ring);
   const n = open.length;
   if (n < 4) return 0;
+  const orientSign = ringOrientationSign(open);
   let count = 0;
   let i = 0;
   while (i < n) {
-    if (!startsFacetRun(open, i, n)) {
+    if (!startsFacetRun(open, i, n, orientSign)) {
       i++;
       continue;
     }
-    const sign = signedTurnRad(open[(i + n - 1) % n]!, open[i]!, open[(i + 1) % n]!);
+    const sign = signedTurnRad(open[(i + n - 1) % n]!, open[i]!, open[(i + 1) % n]!) * orientSign;
     let j = i + 1;
-    while (j < n && continuesFacetRun(open, j, n, sign)) j++;
+    while (j < n && continuesFacetRun(open, j, n, sign, orientSign)) j++;
     if (j - i >= 2) count++;
     i = j;
   }
@@ -229,17 +234,18 @@ export function smoothPlanRing(ring: Ring, maxDeviationM = PLAN_RING_SMOOTH_MAX_
   const open = openRing(ring);
   const n = open.length;
   if (n < 4) return ring;
+  const orientSign = ringOrientationSign(open);
   const out: Pair[] = [];
   let i = 0;
   while (i < n) {
-    if (!startsFacetRun(open, i, n)) {
+    if (!startsFacetRun(open, i, n, orientSign)) {
       out.push(open[i]!);
       i++;
       continue;
     }
-    const sign = signedTurnRad(open[(i + n - 1) % n]!, open[i]!, open[(i + 1) % n]!);
+    const sign = signedTurnRad(open[(i + n - 1) % n]!, open[i]!, open[(i + 1) % n]!) * orientSign;
     let j = i + 1;
-    while (j < n && continuesFacetRun(open, j, n, sign)) j++;
+    while (j < n && continuesFacetRun(open, j, n, sign, orientSign)) j++;
     const runLen = j - i;
     if (runLen < 2) {
       out.push(open[i]!);
@@ -274,7 +280,9 @@ export function smoothPlanMultiPolygon(polygons: MultiPolygon): MultiPolygon {
     for (let ri = 0; ri < polygon.length; ri++) {
       const ring = polygon[ri];
       if (!ring || ring.length < 4) continue;
-      rings.push(smoothPlanRing(ring));
+      const smoothed = smoothPlanRing(ring);
+      if (openRing(smoothed).length >= 3) rings.push(smoothed);
+      else rings.push(ring);
     }
     if (rings.length > 0) out.push(rings as Polygon);
   }

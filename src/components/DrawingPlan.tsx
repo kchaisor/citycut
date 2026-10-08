@@ -101,6 +101,7 @@ export function DrawingPlan({
           highlightManual,
           pathFilletM: style.pathFilletM,
           smoothOutput: true,
+          centrelineSmooth: true,
         },
       ),
     [

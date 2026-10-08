@@ -318,6 +318,7 @@ export function sitePlanChunks(
       highlightManual,
       pathFilletM: style.pathFilletM,
       smoothOutput: true,
+      centrelineSmooth: true,
     },
   );
   const page = layout.pageHeightMm;

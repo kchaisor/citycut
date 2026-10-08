@@ -9,6 +9,7 @@ import {
   DEFAULT_PATH_FILLET_M,
   footpathStrips,
   mergeFootpathFragments,
+  setCentrelineSmoothForUnion,
   subtractFootpathBlockers,
   unionFootpathStrips,
   unionRoadSurface,
@@ -22,7 +23,6 @@ import {
   drawnContourInterval,
 } from "./vicmapContours";
 import type { CityModel, Pt } from "../types";
-import { collapsePathNibs } from "./pathJunctionNib";
 import { smoothPlanMultiPolygon } from "./planRingSmooth";
 import { fillRoadMedianHoles, splitGreenForRoadLayer } from "./roadSurfacePlan";
 
@@ -142,6 +142,8 @@ export type PlanPathOptions = {
   highlightManual?: boolean;
   pathFilletM?: number;
   smoothOutput?: boolean;
+  /** Densify road/path centrelines before buffering (default true). */
+  centrelineSmooth?: boolean;
 };
 
 export function planPaths(
@@ -181,6 +183,8 @@ export function planPaths(
   }
   const pathFilletM =
     planOptions.pathFilletM !== undefined ? planOptions.pathFilletM : DEFAULT_PATH_FILLET_M;
+  const centrelineSmooth = planOptions.centrelineSmooth !== false;
+  setCentrelineSmoothForUnion(centrelineSmooth);
   const footpaths = unionFootpathStrips(
     footpathStrips(model.roads, pathWidthM),
     model.sideM,
@@ -222,7 +226,7 @@ export function planPaths(
   if (smoothOutput) {
     const tSmooth = performance.now();
     roadFillPolys = smoothPlanMultiPolygon(roadFillPolys);
-    pathFill = collapsePathNibs(smoothPlanMultiPolygon(pathFill));
+    pathFill = smoothPlanMultiPolygon(pathFill);
     ringSmoothMs = Math.round(performance.now() - tSmooth);
   }
 

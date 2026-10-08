@@ -3,6 +3,8 @@ import type { MultiPolygon, Pair, Polygon, Ring } from "polygon-clipping";
 import { polylineLength, signedArea } from "./geo";
 import { DEFAULT_SITE_FRAME_SHAPE, pointInSiteFrame, siteFramePolygon, type SiteFrameShape } from "./siteFrame";
 import type { Pt, RoadFeat } from "../types";
+import { smoothCentrelineStrips } from "./centrelineSmooth";
+import { prepareStripsForUnion } from "./centrelineUnionPrep";
 import { normalizeMultiPolygonByParity, offsetCloseMultiPolygon } from "./polygonOffset";
 
 type ClipFns = {
@@ -502,10 +504,13 @@ function unionStrips(
   sideM: number,
   minWidth: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  skipCentrelineSmooth = false,
 ): RoadFill {
   const started = performance.now();
   const inputs: Polygon[] = [];
-  for (const road of roads) {
+  const smoothed =
+    skipCentrelineSmooth || !centrelineSmoothForUnion ? roads : smoothCentrelineStrips(roads, PATH_ENDPOINT_STITCH_M);
+  for (const road of smoothed) {
     if (road.line.length < 2 || !(road.width > 0)) continue;
     inputs.push(...bufferCentreline(road.line, road.width, minWidth));
   }
@@ -523,7 +528,8 @@ export function unionCarriageways(
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
 ): RoadFill {
-  return unionStrips(roads, sideM, 0.4, frameShape);
+  const prepared = prepareStripsForUnion(roads, PATH_ENDPOINT_STITCH_M);
+  return unionStrips(prepared, sideM, 0.4, frameShape);
 }
 
 /** Buffer each path by its stored width and union the strips (3D and exports match the site plan). */
@@ -596,6 +602,13 @@ export function mergeFootpathFragments(polygons: MultiPolygon): MultiPolygon {
   return tidy(unionFast(polygons));
 }
 
+/** When false, union skips centreline densify (main-branch behaviour in QA tests). */
+export let centrelineSmoothForUnion = true;
+
+export function setCentrelineSmoothForUnion(enabled: boolean): void {
+  centrelineSmoothForUnion = enabled;
+}
+
 const footpathUnionCache = new Map<string, RoadFill>();
 const roadSurfaceCache = new Map<string, RoadFill>();
 const FOOTPATH_CACHE_LIMIT = 16;
@@ -659,12 +672,20 @@ export function unionRoadSurface(
   if (cached) return cached;
 
   const started = performance.now();
-  const carriageway = unionCarriageways(carriagewaysOf(roads), sideM, frameShape);
-  const tramInputs = (tramLines ?? [])
+  const carRaw = prepareStripsForUnion(carriagewaysOf(roads), PATH_ENDPOINT_STITCH_M);
+  const tramRaw = (tramLines ?? [])
     .filter((line) => line.length >= 2)
     .map((line) => ({ line, width: TRAM_CORRIDOR_WIDTH_M }));
+  const smoothedAll = centrelineSmoothForUnion
+    ? smoothCentrelineStrips([...carRaw, ...tramRaw], PATH_ENDPOINT_STITCH_M)
+    : [...carRaw, ...tramRaw];
+  const carSmoothed = smoothedAll.slice(0, carRaw.length);
+  const tramSmoothed = smoothedAll.slice(carRaw.length);
+  const carriageway = unionStrips(carSmoothed, sideM, 0.4, frameShape, true);
   const withTram =
-    tramInputs.length > 0 ? unionCarriageways(tramInputs, sideM, frameShape) : { polygons: [] as MultiPolygon, ms: 0, inputs: 0 };
+    tramSmoothed.length > 0
+      ? unionStrips(tramSmoothed, sideM, 0.4, frameShape, true)
+      : { polygons: [] as MultiPolygon, ms: 0, inputs: 0 };
   const merged = unionMulti(carriageway.polygons, withTram.polygons);
   const closed = tidy(
     normalizeMultiPolygonByParity(clipToFrame(offsetCloseMultiPolygon(merged, ROAD_MORPH_CLOSE_M), sideM, frameShape)),
@@ -807,8 +828,8 @@ export function unionFootpathStrips(
   if (cached) return cached;
 
   const started = performance.now();
-  const stitched = stitchFootpathStrips(strips);
-  const merged = unionStrips(stitched, sideM, 0, frameShape);
+  const prepared = prepareStripsForUnion(stitchFootpathStrips(strips), PATH_ENDPOINT_STITCH_M);
+  const merged = unionStrips(prepared, sideM, 0, frameShape);
   const typical = strips.reduce((sum, s) => sum + s.width, 0) / Math.max(1, strips.length);
   const bandTypical = typicalBandWidthM > 0 ? typicalBandWidthM : typical;
   const filletRadius =

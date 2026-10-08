@@ -1,15 +1,18 @@
 import type { Pt } from "../types";
 
-/** Chaikin passes before buffering centreline geometry (one pass stays within the shift cap on OSM curves). */
-export const CENTRELINE_CHAIKIN_ITERATIONS = 1;
-/** When set below 180, vertices with more turn than this stay pinned (degrees). */
-export const CENTRELINE_SHARP_TURN_DEG = 180;
-/** Max distance a smoothed point may move from the original polyline (m). */
+/** Vertices with more turn than this stay pinned (degrees). */
+export const CENTRELINE_SHARP_TURN_DEG = 35;
+/** Max deviation from a circular arc when densifying curved runs (m). */
+export const CENTRELINE_CHORD_ERROR_M = 0.05;
+/** Max distance a densified point may move from the original polyline (m). */
 export const CENTRELINE_MAX_LATERAL_SHIFT_M = 0.5;
-/** Junction endpoints closer than this share a pinned coordinate (m). */
+/** Endpoints within this distance of another way's vertex count as a shared junction (m). */
 export const CENTRELINE_JUNCTION_SNAP_M = 1.75;
-/** Douglas–Peucker tolerance after Chaikin (m); 0 skips simplify. */
+/** Douglas–Peucker tolerance after densify (m); 0 skips simplify. */
 export const CENTRELINE_OUTPUT_SIMPLIFY_M = 0;
+
+/** @deprecated Chaikin is no longer used; kept for scripts that import the name. */
+export const CENTRELINE_CHAIKIN_ITERATIONS = 0;
 
 export type CentrelineSmoothStats = {
   polylines: number;
@@ -62,41 +65,6 @@ export function maxLateralShift(original: Pt[], smoothed: Pt[]): number {
   return max;
 }
 
-export function pinnedVertexIndices(
-  line: Pt[],
-  junctionPoints: Pt[] = [],
-  sharpTurnDeg = CENTRELINE_SHARP_TURN_DEG,
-): number[] {
-  if (line.length === 0) return [];
-  const pinned = new Set<number>([0, line.length - 1]);
-  if (sharpTurnDeg < 180) {
-    for (let i = 1; i < line.length - 1; i++) {
-      const turn = turnDeflectionDeg(line[i - 1]!, line[i]!, line[i + 1]!);
-      if (turn >= sharpTurnDeg) pinned.add(i);
-    }
-  }
-  for (const junction of junctionPoints) {
-    for (let i = 0; i < line.length; i++) {
-      if (pointsNear(line[i]!, junction, 0.05)) pinned.add(i);
-    }
-  }
-  return [...pinned].sort((a, b) => a - b);
-}
-
-/** One open Chaikin pass with fixed endpoints. */
-function chaikinOpenFixedEnds(points: Pt[]): Pt[] {
-  if (points.length < 3) return points.slice();
-  const out: Pt[] = [points[0]!];
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[i]!;
-    const p1 = points[i + 1]!;
-    if (i > 0) out.push([0.25 * p0[0] + 0.75 * p1[0], 0.25 * p0[1] + 0.75 * p1[1]]);
-    if (i < points.length - 2) out.push([0.75 * p0[0] + 0.25 * p1[0], 0.75 * p0[1] + 0.25 * p1[1]]);
-  }
-  out.push(points[points.length - 1]!);
-  return out;
-}
-
 function dedupeAdjacent(points: Pt[], epsilon = 0.02): Pt[] {
   const out: Pt[] = [];
   for (const point of points) {
@@ -133,62 +101,214 @@ function simplifyOpenPolyline(points: Pt[], tolerance: number): Pt[] {
   return points.filter((_, index) => keep[index]);
 }
 
-function smoothSegment(segment: Pt[], iterations: number): Pt[] {
-  if (segment.length < 3 || iterations <= 0) return segment.slice();
-  let current = segment.slice();
-  for (let pass = 0; pass < iterations; pass++) {
-    current = chaikinOpenFixedEnds(current);
-    current[0] = segment[0]!;
-    current[current.length - 1] = segment[segment.length - 1]!;
-  }
-  return dedupeAdjacent(current);
+function dist(a: Pt, b: Pt): number {
+  return Math.hypot(b[0] - a[0], b[1] - a[1]);
 }
 
-/** Collect junctions where an endpoint meets any vertex on another strip. */
+/** Centripetal Catmull–Rom point for segment p1→p2 (t in [0,1]). */
+function catmullRomCentripetal(p0: Pt, p1: Pt, p2: Pt, p3: Pt, t: number): Pt {
+  const alpha = 0.5;
+  const tj = (ti: number, a: Pt, b: Pt) => ti + dist(a, b) ** alpha;
+  const t0 = 0;
+  const t1 = tj(t0, p0, p1);
+  const t2 = tj(t1, p1, p2);
+  const t3 = tj(t2, p2, p3);
+  const u = t1 + t * (t2 - t1);
+  const a1: Pt = [
+    (t1 - u) / (t1 - t0) * p0[0] + (u - t0) / (t1 - t0) * p1[0],
+    (t1 - u) / (t1 - t0) * p0[1] + (u - t0) / (t1 - t0) * p1[1],
+  ];
+  const a2: Pt = [
+    (t2 - u) / (t2 - t1) * p1[0] + (u - t1) / (t2 - t1) * p2[0],
+    (t2 - u) / (t2 - t1) * p1[1] + (u - t1) / (t2 - t1) * p2[1],
+  ];
+  const a3: Pt = [
+    (t3 - u) / (t3 - t2) * p2[0] + (u - t2) / (t3 - t2) * p3[0],
+    (t3 - u) / (t3 - t2) * p2[1] + (u - t2) / (t3 - t2) * p3[1],
+  ];
+  const b1: Pt = [
+    (t2 - u) / (t2 - t0) * a1[0] + (u - t0) / (t2 - t0) * a2[0],
+    (t2 - u) / (t2 - t0) * a1[1] + (u - t0) / (t2 - t0) * a2[1],
+  ];
+  const b2: Pt = [
+    (t3 - u) / (t3 - t1) * a2[0] + (u - t1) / (t3 - t1) * a3[0],
+    (t3 - u) / (t3 - t1) * a2[1] + (u - t1) / (t3 - t1) * a3[1],
+  ];
+  return [
+    (t2 - u) / (t2 - t1) * b1[0] + (u - t1) / (t2 - t1) * b2[0],
+    (t2 - u) / (t2 - t1) * b1[1] + (u - t1) / (t2 - t1) * b2[1],
+  ];
+}
+
+function maxSplineDeviationFromPolyline(samples: Pt[], polyline: Pt[]): number {
+  let max = 0;
+  for (const p of samples) {
+    max = Math.max(max, pointToSegmentDistance(p, polyline[0]!, polyline[polyline.length - 1]!));
+    for (let i = 0; i < polyline.length - 1; i++) {
+      max = Math.max(max, pointToSegmentDistance(p, polyline[i]!, polyline[i + 1]!));
+    }
+  }
+  return max;
+}
+
+/** Add vertices along curved runs; endpoints stay exact. */
+function densifyCurvedSegment(segment: Pt[], chordErrorM: number): Pt[] {
+  if (segment.length < 2) return segment.slice();
+  if (segment.length === 2) {
+    const edgeLen = dist(segment[0]!, segment[1]!);
+    if (edgeLen <= 1.2) return segment.slice();
+    const steps = Math.max(1, Math.ceil(edgeLen / 0.45));
+    const out: Pt[] = [segment[0]!];
+    for (let s = 1; s < steps; s++) {
+      const t = s / steps;
+      out.push([
+        segment[0]![0] + t * (segment[1]![0] - segment[0]![0]),
+        segment[0]![1] + t * (segment[1]![1] - segment[0]![1]),
+      ]);
+    }
+    out.push(segment[1]!);
+    return dedupeAdjacent(out);
+  }
+
+  const out: Pt[] = [segment[0]!];
+  for (let i = 0; i < segment.length - 1; i++) {
+    const p0 = segment[Math.max(0, i - 1)]!;
+    const p1 = segment[i]!;
+    const p2 = segment[i + 1]!;
+    const p3 = segment[Math.min(segment.length - 1, i + 2)]!;
+    const edgeLen = dist(p1, p2);
+    let steps = Math.max(1, Math.ceil(edgeLen / 0.45));
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const samples: Pt[] = [];
+      for (let s = 1; s <= steps; s++) {
+        const t = s / steps;
+        samples.push(catmullRomCentripetal(p0, p1, p2, p3, t));
+      }
+      const dev = maxSplineDeviationFromPolyline(samples, segment);
+      if (dev <= chordErrorM * 1.25 || steps >= Math.ceil(edgeLen / 0.12)) break;
+      steps = Math.ceil(steps * 1.6);
+    }
+    for (let s = 1; s <= steps; s++) {
+      if (s === steps && i < segment.length - 2) continue;
+      const t = s / steps;
+      out.push(catmullRomCentripetal(p0, p1, p2, p3, t));
+    }
+  }
+  out[out.length - 1] = segment[segment.length - 1]!;
+  return dedupeAdjacent(out);
+}
+
+export function pinnedVertexIndices(
+  line: Pt[],
+  junctionPoints: Pt[] = [],
+  sharpTurnDeg = CENTRELINE_SHARP_TURN_DEG,
+): number[] {
+  if (line.length === 0) return [];
+  const pinned = new Set<number>([0, line.length - 1]);
+  if (sharpTurnDeg < 180) {
+    for (let i = 1; i < line.length - 1; i++) {
+      const turn = turnDeflectionDeg(line[i - 1]!, line[i]!, line[i + 1]!);
+      if (turn >= sharpTurnDeg) pinned.add(i);
+    }
+  }
+  for (const junction of junctionPoints) {
+    let best = -1;
+    let bestD = Infinity;
+    for (let i = 0; i < line.length; i++) {
+      const d = Math.hypot(line[i]![0] - junction[0], line[i]![1] - junction[1]);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    if (best >= 0 && bestD <= 0.05) pinned.add(best);
+  }
+  return [...pinned].sort((a, b) => a - b);
+}
+
+type WayVertex = { si: number; vi: number; pt: Pt };
+
+/** Junction vertices shared by two or more centreline ways (endpoints or interior). */
 export function junctionPointsFromStrips(strips: { line: Pt[] }[], snapM = CENTRELINE_JUNCTION_SNAP_M): Pt[] {
-  const junctions: Pt[] = [];
+  const verts: WayVertex[] = [];
   for (let si = 0; si < strips.length; si++) {
     const line = strips[si]!.line;
-    if (line.length < 2) continue;
-    for (const endpoint of [line[0]!, line[line.length - 1]!]) {
-      let hitOther = false;
-      for (let sj = 0; sj < strips.length; sj++) {
-        if (si === sj) continue;
-        for (const p of strips[sj]!.line) {
-          if (pointsNear(p, endpoint, snapM)) {
-            hitOther = true;
-            break;
-          }
+    for (let vi = 0; vi < line.length; vi++) verts.push({ si, vi, pt: line[vi]! });
+  }
+  const cell = snapM > 0 ? snapM : 1;
+  const buckets = new Map<string, WayVertex[]>();
+  for (const v of verts) {
+    const key = `${Math.floor(v.pt[0] / cell)},${Math.floor(v.pt[1] / cell)}`;
+    const list = buckets.get(key);
+    if (list) list.push(v);
+    else buckets.set(key, [v]);
+  }
+  const junctions: Pt[] = [];
+  const seen = new Set<string>();
+  for (const v of verts) {
+    const gx = Math.floor(v.pt[0] / cell);
+    const gy = Math.floor(v.pt[1] / cell);
+    const group: WayVertex[] = [];
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const bucket = buckets.get(`${gx + dx},${gy + dy}`);
+        if (!bucket) continue;
+        for (const other of bucket) {
+          if (pointsNear(v.pt, other.pt, snapM)) group.push(other);
         }
-        if (hitOther) break;
       }
-      if (!hitOther) continue;
-      const dup = junctions.some((j) => pointsNear(j, endpoint, snapM));
-      if (!dup) junctions.push(endpoint);
     }
+    const ways = new Set(group.map((g) => g.si));
+    if (ways.size < 2) continue;
+    const key = `${Math.round(v.pt[0] * 20) / 20},${Math.round(v.pt[1] * 20) / 20}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    let x = 0;
+    let y = 0;
+    for (const g of group) {
+      x += g.pt[0];
+      y += g.pt[1];
+    }
+    junctions.push([x / group.length, y / group.length]);
   }
   return junctions;
 }
 
-function hasGentleBend(line: Pt[], minTurnDeg = 5): boolean {
+function hasGentleBend(line: Pt[], minTurnDeg = 3): boolean {
   for (let i = 1; i < line.length - 1; i++) {
     if (turnDeflectionDeg(line[i - 1]!, line[i]!, line[i + 1]!) >= minTurnDeg) return true;
+  }
+  for (let i = 0; i < line.length - 1; i++) {
+    if (dist(line[i]!, line[i + 1]!) > 2.5) return true;
   }
   return false;
 }
 
-/** Skip polylines with a sharp kink — Chaikin would exceed the lateral shift cap. */
-function hasSharpKink(line: Pt[], maxTurnDeg = 35): boolean {
-  for (let i = 1; i < line.length - 1; i++) {
-    if (turnDeflectionDeg(line[i - 1]!, line[i]!, line[i + 1]!) >= maxTurnDeg) return true;
+function pinExactJunctionCoords(line: Pt[], junctionPoints: Pt[]): Pt[] {
+  const out = line.map((p): Pt => [p[0], p[1]]);
+  for (const junction of junctionPoints) {
+    let best = -1;
+    let bestD = Infinity;
+    for (let i = 0; i < out.length; i++) {
+      const d = Math.hypot(out[i]![0] - junction[0], out[i]![1] - junction[1]);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    if (best >= 0 && bestD <= 0.05) out[best] = [junction[0], junction[1]];
   }
-  return false;
+  if (out.length >= 1) {
+    out[0] = [line[0]![0], line[0]![1]];
+    out[out.length - 1] = [line[line.length - 1]![0], line[line.length - 1]![1]];
+  }
+  return out;
 }
 
 type SmoothOutcome = "no_bend" | "sharp_kink" | "too_few_pins" | "reverted_shift" | "smoothed";
 
 /**
- * Light Chaikin smoothing between pinned junction and endpoint vertices.
+ * Densify curved centreline runs between pinned junction and corner vertices.
  * Falls back to the original line if lateral shift would exceed the bound.
  */
 export function smoothCentreline(
@@ -199,6 +319,7 @@ export function smoothCentreline(
     maxLateralShiftM?: number;
     sharpTurnDeg?: number;
     simplifyM?: number;
+    chordErrorM?: number;
   } = {},
 ): Pt[] {
   const { line: result } = smoothCentrelineDetailed(line, options);
@@ -213,45 +334,55 @@ export function smoothCentrelineDetailed(
     maxLateralShiftM?: number;
     sharpTurnDeg?: number;
     simplifyM?: number;
+    chordErrorM?: number;
   } = {},
 ): { line: Pt[]; outcome: SmoothOutcome } {
   if (line.length < 3 || !hasGentleBend(line)) return { line: line.slice(), outcome: "no_bend" };
-  if (hasSharpKink(line)) return { line: line.slice(), outcome: "sharp_kink" };
-  const iterations = options.iterations ?? CENTRELINE_CHAIKIN_ITERATIONS;
   const maxShift = options.maxLateralShiftM ?? CENTRELINE_MAX_LATERAL_SHIFT_M;
   const junctionPoints = options.junctionPoints ?? [];
   const sharpTurnDeg = options.sharpTurnDeg ?? CENTRELINE_SHARP_TURN_DEG;
-  const simplifyM = options.simplifyM ?? 0;
+  const simplifyM = options.simplifyM ?? CENTRELINE_OUTPUT_SIMPLIFY_M;
+  const chordErrorM = options.chordErrorM ?? CENTRELINE_CHORD_ERROR_M;
   const pins = pinnedVertexIndices(line, junctionPoints, sharpTurnDeg);
   if (pins.length < 2) return { line: line.slice(), outcome: "too_few_pins" };
 
-  const smoothed: Pt[] = [];
+  const densified: Pt[] = [];
   for (let pi = 0; pi < pins.length - 1; pi++) {
     const start = pins[pi]!;
     const end = pins[pi + 1]!;
     if (end <= start) continue;
     const segment = line.slice(start, end + 1);
-    const part = smoothSegment(segment, iterations);
-    if (pi === 0) smoothed.push(...part);
-    else smoothed.push(...part.slice(1));
+    const part = densifyCurvedSegment(segment, chordErrorM);
+    if (pi === 0) densified.push(...part);
+    else densified.push(...part.slice(1));
   }
 
-  if (maxLateralShift(line, smoothed) > maxShift) return { line: line.slice(), outcome: "reverted_shift" };
-  const simplified = simplifyM > 0 ? simplifyOpenPolyline(smoothed, simplifyM) : smoothed;
-  return { line: simplified, outcome: "smoothed" };
+  let withJunctions = pinExactJunctionCoords(densified.length >= 2 ? densified : line.slice(), junctionPoints);
+  if (withJunctions.length >= 2) {
+    withJunctions[0] = [line[0]![0], line[0]![1]];
+    withJunctions[withJunctions.length - 1] = [line[line.length - 1]![0], line[line.length - 1]![1]];
+  }
+
+  if (maxLateralShift(line, withJunctions) > maxShift) return { line: line.slice(), outcome: "reverted_shift" };
+  const simplified = simplifyM > 0 ? simplifyOpenPolyline(withJunctions, simplifyM) : withJunctions;
+  if (simplified.length < line.length && maxLateralShift(line, simplified) > chordErrorM) {
+    return { line: withJunctions, outcome: "smoothed" };
+  }
+  return { line: simplified.length >= 2 ? simplified : withJunctions, outcome: "smoothed" };
 }
 
 export function smoothCentrelineStrips<T extends { line: Pt[]; width: number }>(
   strips: T[],
   snapM = CENTRELINE_JUNCTION_SNAP_M,
-  options: { simplifyM?: number } = {},
+  options: { simplifyM?: number; chordErrorM?: number } = {},
 ): T[] {
   if (strips.length === 0) return strips;
   const junctions = junctionPointsFromStrips(strips, snapM);
-  const simplifyM = options.simplifyM ?? 0;
+  const simplifyM = options.simplifyM ?? CENTRELINE_OUTPUT_SIMPLIFY_M;
+  const chordErrorM = options.chordErrorM ?? CENTRELINE_CHORD_ERROR_M;
   return strips.map((strip) => ({
     ...strip,
-    line: smoothCentreline(strip.line, { junctionPoints: junctions, simplifyM }),
+    line: smoothCentreline(strip.line, { junctionPoints: junctions, simplifyM, chordErrorM }),
   }));
 }
 

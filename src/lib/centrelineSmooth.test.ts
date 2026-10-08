@@ -21,7 +21,7 @@ describe("centrelineSmooth", () => {
     const pins = pinnedVertexIndices(line);
     expect(pins).toContain(0);
     expect(pins).toContain(3);
-    expect(pins).not.toContain(2);
+    expect(pins).toContain(2);
   });
 
   it("keeps junction and endpoint coordinates fixed after smoothing", () => {
