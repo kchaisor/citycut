@@ -6,8 +6,10 @@ import { signedArea } from "./geo";
 /** Clipper integer scale: 1 mm per unit (0.001 m). */
 export const CLIPPER_SCALE = 1000;
 
-/** Round-join arc tolerance on the ground, in metres (~0.01 m chord sagitta at r=2). */
-export const CLIPPER_ARC_TOLERANCE_M = 0.01;
+/** Round-join arc tolerance for large road-surface offsets (m). */
+export const CLIPPER_ARC_TOLERANCE_M = 0.05;
+/** Tighter arcs for footpath junction fillet morphological close (m). */
+export const CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M = 0.01;
 
 type ClipperPoint = { X: number; Y: number };
 type ClipperPath = ClipperPoint[];
@@ -171,13 +173,18 @@ export function normalizeMultiPolygonByParity(polygons: MultiPolygon): MultiPoly
 }
 
 /** Offset one closed ring; may split into multiple rings. */
-function offsetSingleRing(open: Ring, deltaM: number, allowEmpty: boolean): Ring[] {
+function offsetSingleRing(
+  open: Ring,
+  deltaM: number,
+  allowEmpty: boolean,
+  arcToleranceM = CLIPPER_ARC_TOLERANCE_M,
+): Ring[] {
   if (open.length < 3 || !(Math.abs(deltaM) > 1e-9)) {
     const closed = openRing(open);
     return closed.length >= 3 ? [closeRing(closed)] : [];
   }
   const delta = Math.round(deltaM * CLIPPER_SCALE);
-  const arcTol = Math.max(1, CLIPPER_ARC_TOLERANCE_M * CLIPPER_SCALE);
+  const arcTol = Math.max(1, arcToleranceM * CLIPPER_SCALE);
   const co = new ClipperLib.ClipperOffset(2, arcTol);
   co.AddPath(toClipperPath(open), ClipperLib.JoinType.jtRound, ClipperLib.EndType.etClosedPolygon);
   const solution: ClipperLib.Paths = [];
@@ -198,14 +205,18 @@ function closeRing(open: Ring): Ring {
   return [...ring, first];
 }
 
-function offsetNormalizedByParity(normalized: MultiPolygon, deltaM: number): MultiPolygon {
+function offsetNormalizedByParity(
+  normalized: MultiPolygon,
+  deltaM: number,
+  arcToleranceM = CLIPPER_ARC_TOLERANCE_M,
+): MultiPolygon {
   const rings = flattenRings(normalized);
   if (rings.length === 0) return [];
   const tagged = rings.map((ring) => ({ ring, depth: containmentDepth(ring, rings) }));
   const expanded: Ring[] = [];
   for (const { ring, depth } of tagged) {
     const sign = depth % 2 === 0 ? deltaM : -deltaM;
-    expanded.push(...offsetSingleRing(openRing(ring), sign, depth % 2 === 1));
+    expanded.push(...offsetSingleRing(openRing(ring), sign, depth % 2 === 1, arcToleranceM));
   }
   if (expanded.length === 0) {
     throw new Error(`Clipper offset produced no rings (delta=${deltaM} m)`);
@@ -230,11 +241,15 @@ function intersectMultiPolygon(a: MultiPolygon, b: MultiPolygon): MultiPolygon {
 }
 
 /** Closing: offset +r then −r, clamped to the +r dilation (fills concave pockets only). */
-export function offsetCloseMultiPolygon(polygons: MultiPolygon, radiusM: number): MultiPolygon {
+export function offsetCloseMultiPolygon(
+  polygons: MultiPolygon,
+  radiusM: number,
+  arcToleranceM = CLIPPER_ARC_TOLERANCE_M,
+): MultiPolygon {
   if (polygons.length === 0 || !(radiusM > 0)) return polygons;
   const normalized = normalizeMultiPolygonByParity(polygons);
-  const expanded = offsetNormalizedByParity(normalized, radiusM);
-  const contracted = offsetNormalizedByParity(expanded, -radiusM);
-  const cap = offsetNormalizedByParity(normalized, radiusM + 0.01);
+  const expanded = offsetNormalizedByParity(normalized, radiusM, arcToleranceM);
+  const contracted = offsetNormalizedByParity(expanded, -radiusM, arcToleranceM);
+  const cap = offsetNormalizedByParity(normalized, radiusM + 0.01, arcToleranceM);
   return intersectMultiPolygon(contracted, cap);
 }

@@ -7,11 +7,11 @@ import {
   smoothCentreline,
   smoothCentrelineStrips,
 } from "./centrelineSmooth";
-import { CLIPPER_ARC_TOLERANCE_M } from "./polygonOffset";
+import { CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M } from "./polygonOffset";
 import { clearFootpathUnionCacheForTests, unionFootpathStrips } from "./roadFill";
 
 describe("centrelineSmooth", () => {
-  it("pins endpoints and sharp corners", () => {
+  it("pins endpoints and junctions but not ordinary corners", () => {
     const line: Pt[] = [
       [0, 0],
       [20, 0],
@@ -21,7 +21,7 @@ describe("centrelineSmooth", () => {
     const pins = pinnedVertexIndices(line);
     expect(pins).toContain(0);
     expect(pins).toContain(3);
-    expect(pins).toContain(2);
+    expect(pins).not.toContain(2);
   });
 
   it("keeps junction and endpoint coordinates fixed after smoothing", () => {
@@ -50,8 +50,8 @@ describe("centrelineSmooth", () => {
     expect(smoothed.length).toBeGreaterThan(line.length);
   });
 
-  it("uses a tight clipper arc tolerance for fillets", () => {
-    expect(CLIPPER_ARC_TOLERANCE_M).toBeLessThanOrEqual(0.015);
+  it("uses a tight clipper arc tolerance for footpath fillets", () => {
+    expect(CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M).toBeLessThanOrEqual(0.015);
   });
 
   it("adds enough vertices on a filleted footpath crossing", () => {

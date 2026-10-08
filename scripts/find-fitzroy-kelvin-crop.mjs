@@ -1,11 +1,7 @@
-/**
- * Fitzroy Gardens east edge: wide junction crop + close-up fillet (~8–10 m).
- */
 import { readFileSync, writeFileSync } from "node:fs";
 import { footpathLines, isVehicularRoad } from "../src/lib/roadFill.ts";
 
-const modelPath = process.argv[2] ?? "/opt/cursor/artifacts/east-model.json";
-const model = JSON.parse(readFileSync(modelPath, "utf8"));
+const model = JSON.parse(readFileSync(process.argv[2] ?? "/opt/cursor/artifacts/east-model.json", "utf8"));
 
 function segIntersect(a, b, c, d) {
   const cross = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
@@ -32,10 +28,10 @@ for (let i = 0; i < paths.length; i++) {
   }
 }
 
-const wideBox = { x: -70, y: 72, w: 78, h: 78 };
-const inWide = ([x, y]) =>
-  x >= wideBox.x && x <= wideBox.x + wideBox.w && y >= wideBox.y && y <= wideBox.y + wideBox.h;
-const local = crossings.filter(inWide);
+const box = { x: -70, y: 70, w: 90, h: 90 };
+const inBox = ([x, y]) => x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h;
+const local = crossings.filter(inBox);
+console.log("crossings in fitzroy box", local);
 
 const roads = model.roads.filter(isVehicularRoad);
 let roadEast = 0;
@@ -43,20 +39,17 @@ for (const road of roads) {
   for (let i = 0; i < road.line.length - 1; i++) {
     const mx = (road.line[i][0] + road.line[i + 1][0]) / 2;
     const my = (road.line[i][1] + road.line[i + 1][1]) / 2;
-    if (mx > 8 && mx < 30 && my > wideBox.y && my < wideBox.y + wideBox.h) roadEast++;
+    if (mx > 5 && mx < 25 && my > 70 && my < 160) roadEast++;
   }
 }
+console.log("road segments east edge", roadEast);
 
-const wide = `${wideBox.x} ${wideBox.y} ${wideBox.w} ${wideBox.h}`;
-const pick =
-  local.find(([x, y]) => x > -15 && x < 15 && y > 120 && y < 145) ??
-  local.sort((a, b) => b[1] - a[1])[0] ??
-  [-1, 127];
-const closeSize = 9;
-const close = `${Math.round(pick[0] - closeSize / 2)} ${Math.round(pick[1] - closeSize / 2)} ${closeSize} ${closeSize}`;
+const wide = "-68 72 78 78";
+const close =
+  local.length > 0
+    ? `${Math.round(local[0][0] - 5)} ${Math.round(local[0][1] - 5)} 10 10`
+    : "-32 102 10 10";
 
-const outDir = "/opt/cursor/artifacts";
-writeFileSync(`${outDir}/kelvin-fitzroy-viewbox.txt`, wide);
-writeFileSync(`${outDir}/kelvin-fitzroy-wide.txt`, wide);
-writeFileSync(`${outDir}/kelvin-fitzroy-closeup.txt`, close);
-console.log(JSON.stringify({ wide, close, crossingsInWide: local.length, roadEast }));
+writeFileSync("/opt/cursor/artifacts/kelvin-fitzroy-wide.txt", wide);
+writeFileSync("/opt/cursor/artifacts/kelvin-fitzroy-closeup.txt", close);
+console.log(JSON.stringify({ wide, close, crossings: local.length }));

@@ -1,9 +1,8 @@
 /**
  * QA: smooth fillets and centreline bends — main vs PR crops.
- * npm run build && npm run preview (or use vite-node renders only)
  */
 import { execSync } from "node:child_process";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, cpSync } from "node:fs";
 import { chromium } from "playwright";
 
 const outDir = "/opt/cursor/artifacts";
@@ -15,6 +14,10 @@ function renderCrop(label, viewBox, fillet = 2) {
     `npx vite-node scripts/render-site-plan-crop.mjs ${modelPath} ${label} "${viewBox}" ${fillet}`,
     { stdio: "inherit" },
   );
+}
+
+function copyPlan(label, dest) {
+  cpSync(`${outDir}/footpath-fillet-plan-${label}.png`, `${outDir}/${dest}`);
 }
 
 async function captureModel() {
@@ -56,45 +59,34 @@ if (!existsSync(modelPath)) {
   await captureModel();
 }
 
-const kelvinViewBoxFile = `${outDir}/kelvin-fitzroy-viewbox.txt`;
 execSync(`npx vite-node scripts/find-kelvin-fitzroy-crop.mjs ${modelPath}`, { stdio: "inherit" });
-const kelvinViewBox = readFileSync(kelvinViewBoxFile, "utf8").trim();
-console.log("Kelvin viewBox", kelvinViewBox);
+execSync(`npx vite-node scripts/find-bend-crop.mjs ${modelPath}`, { stdio: "inherit" });
 
-const bendViewBox = "55 75 70 70";
+const junctionWide = readFileSync(`${outDir}/kelvin-fitzroy-wide.txt`, "utf8").trim();
+const junctionClose = readFileSync(`${outDir}/kelvin-fitzroy-closeup.txt`, "utf8").trim();
+const bendViewBox = readFileSync(`${outDir}/bend-viewbox.txt`, "utf8").trim();
+console.log({ junctionWide, junctionClose, bendViewBox });
 
-// Main baseline (parent commit on main before this branch)
 execSync("git stash push -u -m qa-smooth-main --quiet || true");
 execSync("git checkout main --quiet");
-renderCrop("kelvin-junction-main", kelvinViewBox, 2);
-renderCrop("road-bend-main", bendViewBox, 2);
-renderCrop("fitzroy-fillet-main", "-65 75 80 80", 2);
+renderCrop("junction-wide-main", junctionWide, 2);
+renderCrop("junction-closeup-main", junctionClose, 2);
+renderCrop("bend-main", bendViewBox, 2);
 execSync(`git checkout ${branch} --quiet`);
 execSync("git stash pop --quiet || true");
 
-renderCrop("kelvin-junction-pr", kelvinViewBox, 2);
-renderCrop("road-bend-pr", bendViewBox, 2);
-renderCrop("fitzroy-fillet-pr", "-65 75 80 80", 2);
+renderCrop("junction-wide-pr", junctionWide, 2);
+renderCrop("junction-closeup-pr", junctionClose, 2);
+renderCrop("bend-pr", bendViewBox, 2);
 
-execSync(`cp ${outDir}/footpath-fillet-plan-kelvin-junction-main.png ${outDir}/smooth-kelvin-junction-main.png`, {
-  stdio: "inherit",
-});
-execSync(`cp ${outDir}/footpath-fillet-plan-kelvin-junction-pr.png ${outDir}/smooth-kelvin-junction-pr.png`, {
-  stdio: "inherit",
-});
-execSync(`cp ${outDir}/footpath-fillet-plan-road-bend-main.png ${outDir}/smooth-road-bend-main.png`, {
-  stdio: "inherit",
-});
-execSync(`cp ${outDir}/footpath-fillet-plan-road-bend-pr.png ${outDir}/smooth-road-bend-pr.png`, {
-  stdio: "inherit",
-});
-execSync(`cp ${outDir}/footpath-fillet-plan-fitzroy-fillet-main.png ${outDir}/smooth-fitzroy-fillet-main.png`, {
-  stdio: "inherit",
-});
-execSync(`cp ${outDir}/footpath-fillet-plan-fitzroy-fillet-pr.png ${outDir}/smooth-fitzroy-fillet-pr.png`, {
-  stdio: "inherit",
-});
+copyPlan("junction-wide-main", "smooth-junction-wide-main.png");
+copyPlan("junction-wide-pr", "smooth-junction-wide-pr.png");
+copyPlan("junction-closeup-main", "smooth-junction-closeup-main.png");
+copyPlan("junction-closeup-pr", "smooth-junction-closeup-pr.png");
+copyPlan("bend-main", "smooth-bend-main.png");
+copyPlan("bend-pr", "smooth-bend-pr.png");
 
+execSync(`npx vite-node scripts/centreline-smooth-stats.mjs ${modelPath} pr`, { stdio: "inherit" });
 execSync(`npx vite-node scripts/bench-plan-1km.mjs ${modelPath} smooth-pr`, { stdio: "inherit" });
 execSync("git checkout main --quiet");
 execSync(`npx vite-node scripts/bench-plan-1km.mjs ${modelPath} smooth-main`, { stdio: "inherit" });

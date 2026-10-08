@@ -4,7 +4,11 @@ import { polylineLength, signedArea } from "./geo";
 import { DEFAULT_SITE_FRAME_SHAPE, pointInSiteFrame, siteFramePolygon, type SiteFrameShape } from "./siteFrame";
 import type { Pt, RoadFeat } from "../types";
 import { smoothCentrelineStrips } from "./centrelineSmooth";
-import { normalizeMultiPolygonByParity, offsetCloseMultiPolygon } from "./polygonOffset";
+import {
+  CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M,
+  normalizeMultiPolygonByParity,
+  offsetCloseMultiPolygon,
+} from "./polygonOffset";
 
 type ClipFns = {
   union: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
@@ -503,11 +507,14 @@ function unionStrips(
   sideM: number,
   minWidth: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  smoothCentrelines = false,
 ): RoadFill {
   const started = performance.now();
-  const smoothed = smoothCentrelineStrips(roads, PATH_ENDPOINT_STITCH_M);
+  const source = smoothCentrelines
+    ? smoothCentrelineStrips(roads, PATH_ENDPOINT_STITCH_M, { simplifyM: PATH_OUTPUT_SIMPLIFY_M })
+    : roads;
   const inputs: Polygon[] = [];
-  for (const road of smoothed) {
+  for (const road of source) {
     if (road.line.length < 2 || !(road.width > 0)) continue;
     inputs.push(...bufferCentreline(road.line, road.width, minWidth));
   }
@@ -534,7 +541,7 @@ export function unionPathRoads(
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
 ): RoadFill {
-  return unionStrips(roads, sideM, 0, frameShape);
+  return unionStrips(roads, sideM, 0, frameShape, true);
 }
 
 export function carriagewaysOf(roads: RoadFeat[]): { line: Pt[]; width: number }[] {
@@ -566,7 +573,7 @@ export function closeFootpathJunctions(
 ): MultiPolygon {
   if (!(radius > 0) || polygons.length === 0) return polygons;
   const simplified = simplifyPathMulti(polygons);
-  const closed = offsetCloseMultiPolygon(simplified, radius);
+  const closed = offsetCloseMultiPolygon(simplified, radius, CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M);
   const clipped = normalizeMultiPolygonByParity(clipToFrame(closed, sideM, frameShape));
   return simplifyPathMulti(tidy(clipped));
 }
