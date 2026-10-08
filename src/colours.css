@@ -90,16 +90,16 @@
   /* Roads and paths */
 
   /* Unioned carriageway on the site plan and the figure-ground, on screen and in the Illustrator file. */
-  --road-fill: #6b6c6f;
+  --road-fill: #FFFFFF;
 
   /* Unioned footpath on the site plan and the figure-ground, on screen and in the Illustrator file. */
   --path-fill: #D2B48C;
 
   /* Arterial ribbons in the 3D view and the 3D-view Illustrator file, and the Rhino Roads layer. */
-  --road-arterial: #3a3a3a;
+  --road-arterial: #FFFFFF;
 
   /* Local-street ribbons in the 3D view and the 3D-view Illustrator file. */
-  --road-local: #4a4a4a;
+  --road-local: #FFFFFF;
 
   /* Path ribbons in the 3D view and the 3D-view Illustrator file. */
   --road-path: #5c5c5c;
