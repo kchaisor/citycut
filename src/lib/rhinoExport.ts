@@ -4,7 +4,6 @@ import type { RhinoModuleOptions } from "rhino3dm";
 import { BUILDING_USE_META, BUILDING_USES } from "./buildingUse";
 import { buildCityGroup, disposeObject } from "./buildCity";
 import { readDrawingStyle } from "./drawingStyle";
-import { ensureSmoothPlanPaths, planPathsFromSiteStyle } from "./planPathsSession";
 import { colourRgb, type ColourKey } from "./colours";
 import { CRS_NOTE, mgaCrs, projectLocal, projectLonLat } from "./crs";
 import { figureGround, figureGroundDatum } from "./figureGround";
@@ -580,12 +579,6 @@ export async function cityModelTo3dm(
   options?: HeliodonGroundExportOptions | CityModelTo3dmOptions | null,
 ): Promise<Uint8Array> {
   const { heliodon, shadows, castShadows, uniformBuildings, colourBySource, wind } = normalize3dmOptions(options);
-  await ensureSmoothPlanPaths(
-    planPathsFromSiteStyle(model, 1000, readDrawingStyle(), {
-      uniformBuildings: Boolean(uniformBuildings),
-      colourBySource: Boolean(colourBySource),
-    }),
-  );
   const rhino = await loadRhino();
   const crs = mgaCrs(model.center.lon);
   const group = buildCityGroup(model, {

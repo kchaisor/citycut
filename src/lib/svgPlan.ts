@@ -241,8 +241,8 @@ export function planPaths(
   let roadCoarse: MultiPolygon;
   let pathFill: MultiPolygon;
   if (quality === "fast") {
-    roadCoarse = fillRoadMedianHoles(carriageway.polygons);
-    roadFillPolys = roadCoarse;
+    roadCoarse = carriageway.polygons;
+    roadFillPolys = carriageway.polygons;
     pathFill = footpaths.polygons;
     if (pathFilletM > 0 && carriageway.polygons.length > 0) {
       pathFill = subtractFootpathBlockers(pathFill, carriageway.polygons);

@@ -972,9 +972,37 @@ function roadSurfaceCacheKey(
   frameShape: SiteFrameShape,
   quality: PlanFillQuality,
 ): string {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let points = 0;
+  let widthSum = 0;
+  for (const road of roads) {
+    widthSum += Math.round(road.width * 100);
+    points += road.line.length;
+    for (const [x, y] of road.line) {
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
   let tramPts = 0;
-  for (const line of tramLines ?? []) tramPts += line.length;
-  return `${roads.length}:${tramLines?.length ?? 0}:${tramPts}:${sideM}:${frameShape}:${quality}:tile1`;
+  for (const line of tramLines ?? []) {
+    tramPts += line.length;
+    for (const [x, y] of line) {
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  const bounds =
+    points + tramPts === 0
+      ? "empty"
+      : `${minX.toFixed(1)},${minY.toFixed(1)},${maxX.toFixed(1)},${maxY.toFixed(1)}`;
+  return `${roads.length}:${points}:${widthSum}:${tramLines?.length ?? 0}:${tramPts}:${bounds}:${sideM}:${frameShape}:${quality}:tile2`;
 }
 
 /** Unioned carriageway plus in-road tram corridors, with median gaps closed. */

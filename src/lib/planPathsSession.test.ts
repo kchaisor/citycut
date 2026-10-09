@@ -1,7 +1,7 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import type { CityModel } from "../types";
 import { clearFootpathUnionCacheForTests } from "./roadFill";
-import { sitePlanChunksForExport } from "./aiPlan";
+import { sitePlanChunks, sitePlanChunksForExport } from "./aiPlan";
 import { DEFAULT_LINE_STYLES } from "./drawingStyle";
 import {
   beginBackgroundSmoothPlan,
@@ -13,7 +13,6 @@ import {
   planPathsFromSiteStyle,
   resetPlanPathsSessionForTests,
 } from "./planPathsSession";
-import { cityModelTo3dm } from "./rhinoExport";
 
 function square(minX: number, minY: number, maxX: number, maxY: number) {
   return [
@@ -25,7 +24,7 @@ function square(minX: number, minY: number, maxX: number, maxY: number) {
   ] as [number, number][];
 }
 
-function testModel(sideM = 100): CityModel {
+function testModel(sideM = 100, roadYOffset = -20): CityModel {
   return {
     placeLabel: "Progressive plan test",
     center: { lon: 144.9631, lat: -37.8136 },
@@ -35,7 +34,7 @@ function testModel(sideM = 100): CityModel {
     blocks: [],
     roads: [
       { id: 1, line: [[-40, 0], [40, 0]], width: 8, kind: "road", grade: "arterial" },
-      { id: 2, line: [[-30, -20], [30, -20]], width: 2, kind: "road", grade: "path" },
+      { id: 2, line: [[-30, roadYOffset], [30, roadYOffset]], width: 2, kind: "road", grade: "path" },
       { id: 3, line: [[10, -40], [10, 40]], width: 2, kind: "road", grade: "path" },
     ],
     areas: [{ id: 4, ring: square(-45, -45, 45, 45), holes: [], kind: "green" }],
@@ -60,6 +59,15 @@ describe("planPathsSession", () => {
     clearFootpathUnionCacheForTests();
     const smooth = buildSmoothPlanPaths(request);
     expect(planFillVertexCount(smooth)).toBeGreaterThan(planFillVertexCount(fast));
+    expect(smooth.roadFill).not.toEqual(fast.roadFill);
+  });
+
+  it("cut token distinguishes geometry with the same feature counts", () => {
+    const a = testModel(100, -20);
+    const b = testModel(100, 25);
+    expect(a.roads.length).toBe(b.roads.length);
+    expect(a.sideM).toBe(b.sideM);
+    expect(planModelCutToken(a)).not.toBe(planModelCutToken(b));
   });
 
   it("export awaits smooth geometry when background job is in flight", async () => {
@@ -70,50 +78,38 @@ describe("planPathsSession", () => {
     clearFootpathUnionCacheForTests();
     const exported = await ensureSmoothPlanPaths(request);
     const fromBackground = await background;
-    expect(planFillVertexCount(exported)).toBe(planFillVertexCount(fromBackground));
-    expect(planFillVertexCount(exported)).toBeGreaterThan(planFillVertexCount(buildFastPlanPaths(request)));
+    expect(exported.roadFill).toEqual(fromBackground.roadFill);
+    expect(exported.pathFill).toEqual(fromBackground.pathFill);
+    expect(exported.roadFill).not.toEqual(buildFastPlanPaths(request).roadFill);
   });
 
   it("site plan export chunks use smooth fills", async () => {
     const model = testModel();
+    const request = planPathsFromSiteStyle(model, 1000, DEFAULT_LINE_STYLES);
     clearFootpathUnionCacheForTests();
-    const fastVerts = planFillVertexCount(buildFastPlanPaths(planPathsFromSiteStyle(model, 1000, DEFAULT_LINE_STYLES)));
+    const fast = buildFastPlanPaths(request);
     clearFootpathUnionCacheForTests();
-    beginBackgroundSmoothPlan(planPathsFromSiteStyle(model, 1000, DEFAULT_LINE_STYLES));
+    const smooth = buildSmoothPlanPaths(request);
+    beginBackgroundSmoothPlan(request);
     const chunks = await sitePlanChunksForExport(model, 1000, DEFAULT_LINE_STYLES);
-    clearFootpathUnionCacheForTests();
-    const smoothVerts = planFillVertexCount(
-      buildSmoothPlanPaths(planPathsFromSiteStyle(model, 1000, DEFAULT_LINE_STYLES)),
+    const expectedRoads = sitePlanChunks(model, 1000, DEFAULT_LINE_STYLES, null, smooth).find(
+      (chunk) => chunk.name === "Roads",
     );
-    const roads = chunks.find((c) => c.name === "Roads");
-    expect(roads?.paths?.length).toBeGreaterThan(0);
-    const roadPath = roads!.paths![0];
-    const roadRingPts = roadPath?.rings?.[0]?.length ?? 0;
-    expect(roadRingPts).toBeGreaterThan(0);
-    expect(smoothVerts).toBeGreaterThan(fastVerts);
+    const exportedRoads = chunks.find((chunk) => chunk.name === "Roads");
+    expect(exportedRoads).toEqual(expectedRoads);
+    const fastRoads = sitePlanChunks(model, 1000, DEFAULT_LINE_STYLES, null, fast).find(
+      (chunk) => chunk.name === "Roads",
+    );
+    expect(exportedRoads).not.toEqual(fastRoads);
   });
 
   it("replaces in-flight smooth job when cut token changes", async () => {
-    const reqA = planPathsFromSiteStyle(testModel(100), 1000, DEFAULT_LINE_STYLES);
-    const reqB = planPathsFromSiteStyle(testModel(120), 1000, DEFAULT_LINE_STYLES);
+    const reqA = planPathsFromSiteStyle(testModel(100, -20), 1000, DEFAULT_LINE_STYLES);
+    const reqB = planPathsFromSiteStyle(testModel(100, 30), 1000, DEFAULT_LINE_STYLES);
     expect(planModelCutToken(reqA.model)).not.toBe(planModelCutToken(reqB.model));
     beginBackgroundSmoothPlan(reqA);
     const jobB = beginBackgroundSmoothPlan(reqB);
     const fromExport = await ensureSmoothPlanPaths(reqB);
     expect(fromExport.roadFill).toEqual((await jobB).roadFill);
-  });
-
-  it("rhino export awaits smooth plan pipeline before building", async () => {
-    const model = testModel();
-    const smoothSpy = vi.spyOn(
-      await import("./planPathsSession"),
-      "ensureSmoothPlanPaths",
-    );
-    try {
-      await cityModelTo3dm(model);
-      expect(smoothSpy).toHaveBeenCalledTimes(1);
-    } finally {
-      smoothSpy.mockRestore();
-    }
   });
 });

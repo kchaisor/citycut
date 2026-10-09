@@ -27,15 +27,16 @@ const requestDeps = (request: PlanPathsRequest) => {
 
 /**
  * Site plan: main-speed coarse fills first, then swap to smooth fills in one React update.
+ * Smooth geometry is never built synchronously while progressive mode is on.
  */
 export function useProgressivePlanPaths(request: PlanPathsRequest, enabled: boolean): PlanPaths {
-  const syncPlan = useMemo(() => buildSmoothPlanPaths(request), requestDeps(request));
+  const fastPlan = useMemo(() => buildFastPlanPaths(request), requestDeps(request));
 
-  const fastPlan = useMemo(
-    () => (enabled ? buildFastPlanPaths(request) : syncPlan),
+  const syncSmoothPlan = useMemo(() => {
+    if (enabled) return null;
+    return buildSmoothPlanPaths(request);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- requestDeps
-    [enabled, ...requestDeps(request)],
-  );
+  }, [enabled, ...requestDeps(request)]);
 
   const [smoothPlan, setSmoothPlan] = useState<PlanPaths | null>(null);
   const generationRef = useRef(0);
@@ -67,6 +68,6 @@ export function useProgressivePlanPaths(request: PlanPathsRequest, enabled: bool
     };
   }, [enabled, ...requestDeps(request)]);
 
-  if (!enabled) return fastPlan;
+  if (!enabled) return syncSmoothPlan ?? fastPlan;
   return smoothPlan ?? fastPlan;
 }
