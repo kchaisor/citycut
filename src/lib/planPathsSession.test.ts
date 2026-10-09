@@ -8,11 +8,23 @@ import {
   buildFastPlanPaths,
   buildSmoothPlanPaths,
   ensureSmoothPlanPaths,
-  planFillVertexCount,
   planModelCutToken,
   planPathsFromSiteStyle,
+  planSmoothJobKey,
   resetPlanPathsSessionForTests,
+  withColourSnapshot,
 } from "./planPathsSession";
+
+function planFillVertexCount(plan: ReturnType<typeof buildFastPlanPaths>): number {
+  let count = 0;
+  for (const polygon of plan.pathFill) {
+    for (const ring of polygon) count += ring.length;
+  }
+  for (const polygon of plan.roadFill) {
+    for (const ring of polygon) count += ring.length;
+  }
+  return count;
+}
 
 function square(minX: number, minY: number, maxX: number, maxY: number) {
   return [
@@ -101,6 +113,21 @@ describe("planPathsSession", () => {
       (chunk) => chunk.name === "Roads",
     );
     expect(exportedRoads).not.toEqual(fastRoads);
+  });
+
+  it("does not reuse in-flight job when path fillet changes on the same cut", async () => {
+    const model = testModel();
+    const styleLow = { ...DEFAULT_LINE_STYLES, pathFilletM: 0.5 };
+    const styleHigh = { ...DEFAULT_LINE_STYLES, pathFilletM: 6 };
+    const reqLow = withColourSnapshot(planPathsFromSiteStyle(model, 1000, styleLow));
+    const reqHigh = withColourSnapshot(planPathsFromSiteStyle(model, 1000, styleHigh));
+    expect(planSmoothJobKey(reqLow)).not.toBe(planSmoothJobKey(reqHigh));
+    beginBackgroundSmoothPlan(reqLow);
+    const jobHigh = beginBackgroundSmoothPlan(reqHigh);
+    clearFootpathUnionCacheForTests();
+    const expected = buildSmoothPlanPaths(reqHigh);
+    const resolved = await jobHigh;
+    expect(resolved.pathFill).toEqual(expected.pathFill);
   });
 
   it("replaces in-flight smooth job when cut token changes", async () => {

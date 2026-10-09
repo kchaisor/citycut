@@ -34,7 +34,26 @@ export const PLAN_COORD_ROUND_M = 0.1;
 export const PLAN_COORD_ROUND_SMOOTH_M = 0.01;
 
 export function roundPlanCoordAt(value: number, roundM: number): number {
-  return Math.round(value / roundM) * roundM;
+  if (roundM === 0.1) return Math.round(value * 10) / 10;
+  if (roundM === 0.01) return Math.round(value * 100) / 100;
+  const scale = 1 / roundM;
+  return Math.round(value * scale) / scale;
+}
+
+/** Format a plan SVG coordinate without float noise (matches main at 0.1 m). */
+export function formatPlanSvgCoord(value: number, coordRoundM: number): string {
+  const rounded = roundPlanCoordAt(value, coordRoundM);
+  if (coordRoundM === 0.1) {
+    const tenths = Math.round(rounded * 10);
+    return tenths % 10 === 0 ? String(tenths / 10) : (tenths / 10).toFixed(1);
+  }
+  if (coordRoundM === 0.01) {
+    const hundredths = Math.round(rounded * 100);
+    if (hundredths % 100 === 0) return String(hundredths / 100);
+    if (hundredths % 10 === 0) return (hundredths / 100).toFixed(1);
+    return (hundredths / 100).toFixed(2);
+  }
+  return String(rounded);
 }
 
 export function roundPlanCoord(value: number): number {
@@ -49,9 +68,9 @@ export function svgPolyline(points: Pt[], close: boolean, coordRoundM = PLAN_COO
   if (points.length < 2) return "";
   const body = points
     .map((point, index) => {
-      const x = roundPlanCoordAt(point[0], coordRoundM);
-      const y = roundPlanCoordAt(point[1], coordRoundM);
-      return `${index === 0 ? "M" : "L"}${x} ${-y}`;
+      const x = formatPlanSvgCoord(point[0], coordRoundM);
+      const y = formatPlanSvgCoord(-point[1], coordRoundM);
+      return `${index === 0 ? "M" : "L"}${x} ${y}`;
     })
     .join(" ");
   return close ? `${body} Z` : body;
@@ -62,6 +81,14 @@ export function svgRings(rings: Pt[][], coordRoundM = PLAN_COORD_ROUND_M): strin
     .map((ring) => svgPolyline(openRing(ring), true, coordRoundM))
     .filter(Boolean)
     .join(" ");
+}
+
+/** Road and path fill `d` strings as drawn on the site plan (first-paint layers). */
+export function planRoadPathFillDs(plan: PlanPaths): string {
+  const roundM = plan.coordRoundM;
+  const road = plan.roadFill.map((polygon) => svgRings(polygon, roundM)).join(" ");
+  const path = plan.pathFill.map((polygon) => svgRings(polygon, roundM)).join(" ");
+  return `${road}\n${path}`;
 }
 
 export type PlanPaths = {

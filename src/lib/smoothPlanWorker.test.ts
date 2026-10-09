@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { CityModel } from "../types";
+import { COLOUR_FALLBACK } from "./colours";
 import { clearFootpathUnionCacheForTests } from "./roadFill";
 import { DEFAULT_LINE_STYLES } from "./drawingStyle";
 import { runSmoothPlanWorkerJob } from "./smoothPlanCompute";
@@ -33,15 +34,20 @@ function testModel(): CityModel {
   };
 }
 
-describe("smooth plan worker", () => {
+function requestWithColours(model = testModel()) {
+  const request = planPathsFromSiteStyle(model, 1000, DEFAULT_LINE_STYLES);
+  return { ...request, colourSnapshot: { ...COLOUR_FALLBACK, "--use-residential": "#FF00FF" } };
+}
+
+describe("smooth plan worker compute parity", () => {
   beforeEach(() => {
     clearFootpathUnionCacheForTests();
     resetPlanPathsSessionForTests();
     terminateSmoothPlanWorkerForTests();
   });
 
-  it("worker job matches synchronous smooth build byte-for-byte on geometry", () => {
-    const request = planPathsFromSiteStyle(testModel(), 1000, DEFAULT_LINE_STYLES);
+  it("in-process worker job matches sync smooth build on geometry", () => {
+    const request = requestWithColours();
     clearFootpathUnionCacheForTests();
     const sync = computeSmoothPlanPaths(request);
     clearFootpathUnionCacheForTests();
@@ -49,12 +55,13 @@ describe("smooth plan worker", () => {
     expect(stripTiming(fromWorkerJob)).toEqual(stripTiming(sync));
   });
 
-  it("buildSmoothPlanPathsInWorker matches sync (fallback path in Vitest)", async () => {
-    const request = planPathsFromSiteStyle(testModel(), 1000, DEFAULT_LINE_STYLES);
+  it("client fallback path matches sync when Worker is unavailable in Vitest", async () => {
+    const request = requestWithColours();
     clearFootpathUnionCacheForTests();
     const sync = computeSmoothPlanPaths(request);
     clearFootpathUnionCacheForTests();
     const fromClient = await buildSmoothPlanPathsInWorker(request);
     expect(stripTiming(fromClient)).toEqual(stripTiming(sync));
   });
+
 });

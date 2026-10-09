@@ -783,6 +783,20 @@ export function closeFootpathJunctionsDual(
   return dualSimplifyFromClipper(raw, quality);
 }
 
+/** Main / first-paint footpath fillet (matches origin/main). */
+function closeFootpathJunctionsLegacy(
+  polygons: MultiPolygon,
+  radius: number,
+  sideM: number,
+  frameShape: SiteFrameShape,
+): MultiPolygon {
+  if (!(radius > 0) || polygons.length === 0) return polygons;
+  const simplified = simplifyPathMulti(polygons);
+  const closed = offsetCloseMultiPolygon(simplified, radius);
+  const clipped = normalizeMultiPolygonByParity(clipToFrame(closed, sideM, frameShape));
+  return simplifyPathMulti(tidy(clipped));
+}
+
 /** Coarse footpath fillet result (boolean pipeline). */
 export function closeFootpathJunctions(
   polygons: MultiPolygon,
@@ -1021,6 +1035,19 @@ function finishUnionRoadSurface(
     quality === "smooth"
       ? unionMultiPlan(carriageway.polygons, withTram.polygons, sideM)
       : unionMulti(carriageway.polygons, withTram.polygons);
+  if (quality === "fast") {
+    const closed = tidy(
+      normalizeMultiPolygonByParity(
+        clipToFrame(offsetCloseMultiPolygon(merged, ROAD_MORPH_CLOSE_M), sideM, frameShape),
+      ),
+    );
+    return {
+      polygons: closed,
+      displayPolygons: closed,
+      ms: performance.now() - started,
+      inputs: carriageway.inputs + withTram.inputs,
+    };
+  }
   const morphRaw = normalizeMultiPolygonByParity(
     clipToFrame(
       offsetCloseMultiComponents(merged, ROAD_MORPH_CLOSE_M, clipperArcForQuality(quality)),
@@ -1031,7 +1058,7 @@ function finishUnionRoadSurface(
   const dual = dualSimplifyFromClipper(morphRaw, quality);
   return {
     polygons: dual.coarse,
-    displayPolygons: quality === "smooth" ? dual.display : dual.coarse,
+    displayPolygons: dual.display,
     ms: performance.now() - started,
     inputs: carriageway.inputs + withTram.inputs,
   };
@@ -1209,18 +1236,34 @@ export function unionFootpathStrips(
   const bandTypical = typicalBandWidthM > 0 ? typicalBandWidthM : typical;
   const filletRadius =
     filletM > 0 ? Math.max(filletM, bandTypical * PATH_FILLET_BAND_SCALE) : 0;
-  const merged = unionStripsPlan(stitched, sideM, 0, frameShape);
-  const arcTol = clipperArcForQuality(quality);
-  const dual =
-    filletRadius > 0
-      ? closeFootpathJunctionsDual(merged.polygons, filletRadius, sideM, frameShape, arcTol, quality)
-      : dualSimplifyFromClipper(merged.polygons, quality);
-  const result: RoadFill = {
-    polygons: dual.coarse,
-    displayPolygons: quality === "smooth" ? dual.display : dual.coarse,
-    ms: performance.now() - started,
-    inputs: merged.inputs,
-  };
+  let result: RoadFill;
+  if (quality === "fast") {
+    const merged = unionStripsLegacy(stitched, sideM, 0, frameShape);
+    const filleted =
+      filletRadius > 0
+        ? closeFootpathJunctionsLegacy(merged.polygons, filletRadius, sideM, frameShape)
+        : simplifyPathMulti(merged.polygons);
+    const polygons = tidy(clipToFrame(filleted, sideM, frameShape));
+    result = {
+      polygons,
+      displayPolygons: polygons,
+      ms: performance.now() - started,
+      inputs: merged.inputs,
+    };
+  } else {
+    const merged = unionStripsPlan(stitched, sideM, 0, frameShape);
+    const arcTol = clipperArcForQuality(quality);
+    const dual =
+      filletRadius > 0
+        ? closeFootpathJunctionsDual(merged.polygons, filletRadius, sideM, frameShape, arcTol, quality)
+        : dualSimplifyFromClipper(merged.polygons, quality);
+    result = {
+      polygons: dual.coarse,
+      displayPolygons: dual.display,
+      ms: performance.now() - started,
+      inputs: merged.inputs,
+    };
+  }
   if (footpathUnionCache.size >= FOOTPATH_CACHE_LIMIT) {
     const first = footpathUnionCache.keys().next().value;
     if (first) footpathUnionCache.delete(first);

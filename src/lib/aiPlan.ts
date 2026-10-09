@@ -47,7 +47,6 @@ export const SITE_LAYER_ORDER = [
   "Contour labels",
   "Paths",
   "Roads",
-  "Green on road",
   "Blocks",
   "Rail",
   "Trams",

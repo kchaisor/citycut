@@ -3,7 +3,8 @@ import {
   beginBackgroundSmoothPlan,
   buildFastPlanPaths,
   buildSmoothPlanPaths,
-  planModelCutToken,
+  planSmoothJobKey,
+  withColourSnapshot,
   type PlanPathsRequest,
 } from "./planPathsSession";
 import type { PlanPaths } from "./svgPlan";
@@ -48,7 +49,7 @@ export function useProgressivePlanPaths(request: PlanPathsRequest, enabled: bool
     }
     generationRef.current += 1;
     const generation = generationRef.current;
-    const token = planModelCutToken(request.model);
+    const jobKey = planSmoothJobKey(withColourSnapshot(request));
     setSmoothPlan(null);
 
     let cancelled = false;
@@ -56,7 +57,7 @@ export function useProgressivePlanPaths(request: PlanPathsRequest, enabled: bool
       .then((plan) => {
         if (cancelled) return;
         if (generationRef.current !== generation) return;
-        if (planModelCutToken(request.model) !== token) return;
+        if (planSmoothJobKey(withColourSnapshot(request)) !== jobKey) return;
         setSmoothPlan(plan);
       })
       .catch(() => {

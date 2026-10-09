@@ -1,23 +1,25 @@
 import type { CityModel } from "../types";
 import { PATH_WIDTH_M } from "./lineweights";
-import { planModelCutToken } from "./planCutToken";
+import { snapshotPlanColours } from "./colours";
 
 export { planModelCutToken } from "./planCutToken";
+export { planSmoothJobKey } from "./planSmoothJobKey";
 import type { LineStyles } from "./drawingStyle";
 import type { BuildingColourMode } from "./buildingViewportColor";
-import {
-  planPaths,
-  type PlanPaths,
-  type PlanPathOptions,
-  resolvePlanPathQuality,
-} from "./svgPlan";
+import { planPaths, type PlanPaths, type PlanPathOptions } from "./svgPlan";
 import { computeSmoothPlanPaths, type PlanPathsRequest } from "./smoothPlanCompute";
+import { planSmoothJobKey } from "./planSmoothJobKey";
 import {
   buildSmoothPlanPathsInWorker,
   terminateSmoothPlanWorkerForTests,
 } from "./smoothPlanWorkerClient";
 
 export type { PlanPathsRequest };
+
+export function withColourSnapshot(request: PlanPathsRequest): PlanPathsRequest {
+  if (request.colourSnapshot && Object.keys(request.colourSnapshot).length > 0) return request;
+  return { ...request, colourSnapshot: snapshotPlanColours() };
+}
 
 function fastPlanOptions(planOptions: PlanPathOptions = {}): PlanPathOptions {
   return {
@@ -49,11 +51,11 @@ export function buildFastPlanPaths(request: PlanPathsRequest): PlanPaths {
 }
 
 export function buildSmoothPlanPaths(request: PlanPathsRequest): PlanPaths {
-  return computeSmoothPlanPaths(request);
+  return computeSmoothPlanPaths(withColourSnapshot(request));
 }
 
 type SmoothJob = {
-  token: string;
+  jobKey: string;
   promise: Promise<PlanPaths>;
 };
 
@@ -65,27 +67,29 @@ export function resetPlanPathsSessionForTests(): void {
 }
 
 function scheduleSmoothCompute(request: PlanPathsRequest): Promise<PlanPaths> {
-  return buildSmoothPlanPathsInWorker(request);
+  return buildSmoothPlanPathsInWorker(withColourSnapshot(request));
 }
 
 /** Start or reuse background smooth plan build for the current cut (Web Worker when available). */
 export function beginBackgroundSmoothPlan(request: PlanPathsRequest): Promise<PlanPaths> {
-  const token = planModelCutToken(request.model);
-  if (activeSmoothJob?.token === token) return activeSmoothJob.promise;
-  const promise = scheduleSmoothCompute(request).finally(() => {
-    if (activeSmoothJob?.token === token && activeSmoothJob.promise === promise) {
+  const req = withColourSnapshot(request);
+  const jobKey = planSmoothJobKey(req);
+  if (activeSmoothJob?.jobKey === jobKey) return activeSmoothJob.promise;
+  const promise = scheduleSmoothCompute(req).finally(() => {
+    if (activeSmoothJob?.jobKey === jobKey && activeSmoothJob.promise === promise) {
       activeSmoothJob = null;
     }
   });
-  activeSmoothJob = { token, promise };
+  activeSmoothJob = { jobKey, promise };
   return promise;
 }
 
 /** Export and download paths: await in-flight smooth work or compute (worker or sync fallback). */
 export async function ensureSmoothPlanPaths(request: PlanPathsRequest): Promise<PlanPaths> {
-  const token = planModelCutToken(request.model);
-  if (activeSmoothJob?.token === token) return activeSmoothJob.promise;
-  return buildSmoothPlanPathsInWorker(request);
+  const req = withColourSnapshot(request);
+  const jobKey = planSmoothJobKey(req);
+  if (activeSmoothJob?.jobKey === jobKey) return activeSmoothJob.promise;
+  return buildSmoothPlanPathsInWorker(req);
 }
 
 export function planPathsFromSiteStyle(
@@ -117,20 +121,4 @@ export function planPathsFromSiteStyle(
       quality: "smooth",
     },
   };
-}
-
-/** Rough ring-vertex count for tests comparing fast vs smooth fills. */
-export function planFillVertexCount(plan: PlanPaths): number {
-  let count = 0;
-  for (const polygon of plan.pathFill) {
-    for (const ring of polygon) count += ring.length;
-  }
-  for (const polygon of plan.roadFill) {
-    for (const ring of polygon) count += ring.length;
-  }
-  return count;
-}
-
-export function isSmoothQuality(options: PlanPathOptions): boolean {
-  return resolvePlanPathQuality(options) === "smooth";
 }

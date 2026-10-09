@@ -320,8 +320,28 @@ export const COLOUR_FALLBACK: Record<ColourKey, string> = fallbackTable();
 
 const KNOWN = new Set<string>(COLOUR_KEYS);
 
+/** When set, plan/worker builds use these fills instead of document or fallbacks. */
+let planColourOverride: Partial<Record<ColourKey, string>> | null = null;
+
 export function isColourKey(name: string): name is ColourKey {
   return KNOWN.has(name);
+}
+
+export function runWithPlanColours<T>(snapshot: Partial<Record<ColourKey, string>>, fn: () => T): T {
+  const prev = planColourOverride;
+  planColourOverride = snapshot;
+  try {
+    return fn();
+  } finally {
+    planColourOverride = prev;
+  }
+}
+
+/** Resolve every theme fill from the live page (or fallbacks in Node). */
+export function snapshotPlanColours(): Record<ColourKey, string> {
+  const out = {} as Record<ColourKey, string>;
+  for (const key of COLOUR_KEYS) out[key] = getColour(key);
+  return out;
 }
 
 /**
@@ -330,6 +350,8 @@ export function isColourKey(name: string): name is ColourKey {
  * override wins over the file. Without a document, the fallback table is used.
  */
 export function getColour(name: ColourKey): string {
+  const override = planColourOverride?.[name];
+  if (override) return override;
   if (typeof document !== "undefined") {
     const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     const parsedColor = cssColorToHex(raw);
