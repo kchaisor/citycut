@@ -13,6 +13,7 @@ import {
   unionFootpathStrips,
   unionRoadSurface,
 } from "./roadFill";
+import { fillRoadMedianGaps } from "./roadMedianFill";
 import {
   DEFAULT_COARSE_FROM_SCALE,
   DEFAULT_COARSE_INTERVAL_M,
@@ -206,6 +207,13 @@ export function planPaths(
     pathFill = mergeFootpathFragments(pathFill);
   }
 
+  const roadFill = fillRoadMedianGaps(carriageway.polygons, {
+    green,
+    water,
+    paths: pathFill,
+    buildings: buildings.map((building) => building.rings),
+  });
+
   const trees = model.trees
     .filter((tree) => pointInSiteFrame(tree.at, model.sideM, frameShape))
     .map((tree) => ({
@@ -240,7 +248,7 @@ export function planPaths(
     blocks,
     green,
     water,
-    roadFill: carriageway.polygons,
+    roadFill,
     roadUnionMs: carriageway.ms,
     pathFill,
     pathUnionMs: footpaths.ms,

@@ -3,6 +3,7 @@ import type { MultiPolygon, Pair, Polygon, Ring } from "polygon-clipping";
 import { polylineLength, signedArea } from "./geo";
 import { DEFAULT_SITE_FRAME_SHAPE, pointInSiteFrame, siteFramePolygon, type SiteFrameShape } from "./siteFrame";
 import type { Pt, RoadFeat } from "../types";
+import { hashLineCoords, hashRoadFeatures, mixGeometryHash } from "./geometryHash";
 import { normalizeMultiPolygonByParity, offsetCloseMultiPolygon } from "./polygonOffset";
 
 type ClipFns = {
@@ -607,27 +608,15 @@ export function clearFootpathUnionCacheForTests(): void {
 }
 
 function footpathUnionCacheKey(
-  lines: Pt[][],
-  widthM: number,
+  strips: { line: Pt[]; width: number }[],
   filletM: number,
+  typicalBandWidthM: number,
   sideM: number,
   frameShape: SiteFrameShape,
 ): string {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  let points = 0;
-  for (const line of lines) {
-    points += line.length;
-    for (const [x, y] of line) {
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x);
-      maxY = Math.max(maxY, y);
-    }
-  }
-  return `${lines.length}:${points}:${minX.toFixed(1)},${minY.toFixed(1)},${maxX.toFixed(1)},${maxY.toFixed(1)}:${widthM}:${filletM}:${sideM}:${frameShape}`;
+  let h = 2166136261;
+  for (const strip of strips) h = hashLineCoords(mixGeometryHash(h, Math.round(strip.width * 100)), strip.line);
+  return `${strips.length}:${h.toString(16)}:${filletM}:${typicalBandWidthM}:${sideM}:${frameShape}`;
 }
 
 function unionMulti(a: MultiPolygon, b: MultiPolygon): MultiPolygon {
@@ -642,9 +631,9 @@ function roadSurfaceCacheKey(
   sideM: number,
   frameShape: SiteFrameShape,
 ): string {
-  let tramPts = 0;
-  for (const line of tramLines ?? []) tramPts += line.length;
-  return `${roads.length}:${tramLines?.length ?? 0}:${tramPts}:${sideM}:${frameShape}`;
+  let tram = 2166136261;
+  for (const line of tramLines ?? []) tram = hashLineCoords(tram, line);
+  return `${roads.length}:${hashRoadFeatures(roads)}:${tram.toString(16)}:${sideM}:${frameShape}`;
 }
 
 /** Unioned carriageway plus in-road tram corridors, with median gaps closed. */
@@ -801,8 +790,7 @@ export function unionFootpathStrips(
 ): RoadFill {
   const widthM = strips.reduce((max, strip) => Math.max(max, strip.width), 0);
   if (!(widthM > 0)) return { polygons: [], ms: 0, inputs: 0 };
-  const lines = strips.map((strip) => strip.line);
-  const key = footpathUnionCacheKey(lines, widthM, filletM, sideM, frameShape);
+  const key = footpathUnionCacheKey(strips, filletM, typicalBandWidthM, sideM, frameShape);
   const cached = footpathUnionCache.get(key);
   if (cached) return cached;
 

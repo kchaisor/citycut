@@ -12,6 +12,7 @@ import {
   unionRoadSurface,
 } from "./roadFill";
 import type { Pt, RoadFeat } from "../types";
+import { hashMultiPolygon } from "./geometryHash";
 
 function openRing(ring: Pair[]): Pair[] {
   if (
@@ -422,5 +423,41 @@ describe("road union", () => {
     expect(inside(joined.polygons, 20, 0)).toBe(true);
     expect(hasInternalSeam(joined.polygons)).toBe(false);
     expect(unionFootpaths([[[0, 0], [40, 0]]], 0, 200).polygons).toHaveLength(0);
+  });
+
+  describe("cut caches are keyed on geometry", () => {
+    const arterial = (id: number, line: Pt[]): RoadFeat => ({ id, line, width: 8, kind: "road", grade: "arterial" });
+    const crossing: Pt[][] = [[[-50, 0], [50, 0]], [[0, -50], [0, 50]]];
+    const parallel: Pt[][] = [[[-50, -50], [50, -50]], [[-50, 50], [50, 50]]];
+    const fresh = <T>(build: () => T): T => {
+      clearFootpathUnionCacheForTests();
+      return build();
+    };
+
+    it("road surface: same counts and bounds, different geometry (X then P)", () => {
+      const x = crossing.map((line, i) => arterial(i + 1, line));
+      const p = parallel.map((line, i) => arterial(i + 1, line));
+      const expected = hashMultiPolygon(fresh(() => unionRoadSurface(p, undefined, 100, "square")).polygons);
+      fresh(() => unionRoadSurface(x, undefined, 100, "square"));
+      expect(hashMultiPolygon(unionRoadSurface(p, undefined, 100, "square").polygons)).toBe(expected);
+    });
+
+    it("road surface: roads shifted 0.37 m and a kind change both rebuild", () => {
+      const base = parallel.map((line, i) => arterial(i + 1, line));
+      const shifted = base.map((road) => ({ ...road, line: road.line.map(([e, n]): Pt => [e + 0.37, n]) }));
+      const rail = base.map((road, i) => (i === 0 ? { ...road, kind: "rail" as const } : road));
+      for (const next of [shifted, rail]) {
+        const expected = hashMultiPolygon(fresh(() => unionRoadSurface(next, undefined, 100, "square")).polygons);
+        fresh(() => unionRoadSurface(base, undefined, 100, "square"));
+        expect(hashMultiPolygon(unionRoadSurface(next, undefined, 100, "square").polygons)).toBe(expected);
+      }
+    });
+
+    it("footpath union: same counts and bounds, different geometry (X then P)", () => {
+      const strips = (lines: Pt[][]) => lines.map((line) => ({ line, width: 2 }));
+      const expected = hashMultiPolygon(fresh(() => unionFootpathStrips(strips(parallel), 100, "square", 2, 1.2)).polygons);
+      fresh(() => unionFootpathStrips(strips(crossing), 100, "square", 2, 1.2));
+      expect(hashMultiPolygon(unionFootpathStrips(strips(parallel), 100, "square", 2, 1.2).polygons)).toBe(expected);
+    });
   });
 });
