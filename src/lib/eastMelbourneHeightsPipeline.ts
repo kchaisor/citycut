@@ -13,6 +13,7 @@ import type { BuildingEnrichmentRecord } from "./buildingEnrichmentTiles";
 import type { ComBuildingFootprint } from "./comBuildingHeightsTypes";
 import type { BuildingFeat, LonLat } from "../types";
 import type { ZonePolygon } from "./useCascade";
+import { enrichmentRecordsForBuildings } from "./landmarkHeightPipeline";
 import {
   modelPageDisplayBuildings,
   modelPageHeightSignature,
@@ -64,7 +65,9 @@ export async function fetchEastMelbourneHeightInputs(
     center,
     sideM,
     overtureBuildings: raw,
-    enrichmentById: Object.fromEntries(enrichment.byId.entries()),
+    enrichmentById: Object.fromEntries(
+      enrichmentRecordsForBuildings(raw, enrichment.byId.values()).map((record) => [record.overtureId, record]),
+    ),
     zones,
     damRecords: dam,
     comFootprints: footprints,

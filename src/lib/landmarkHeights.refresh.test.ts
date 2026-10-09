@@ -18,7 +18,7 @@ import {
 } from "./comBuildingHeights";
 import { fetchDevelopmentFloorRecords } from "./comDevelopmentFloors";
 import { pickBuildingAtPoint } from "./landmarkBuildingPick";
-import type { LandmarkCutSnapshot } from "./landmarkHeightPipeline";
+import { enrichmentRecordsForBuildings, type LandmarkCutSnapshot } from "./landmarkHeightPipeline";
 
 const OUT = fileURLToPath(new URL("./fixtures/landmark-heights-snapshot.json", import.meta.url));
 const refresh = process.env.REFRESH_LANDMARK_SNAPSHOT === "1";
@@ -56,7 +56,7 @@ describe.skipIf(!refresh)("landmark snapshot refresh", () => {
           center,
           sideM,
           overtureBuildings: buildings,
-          enrichmentRecords: [...enrichment.byId.values()],
+          enrichmentRecords: enrichmentRecordsForBuildings(buildings, enrichment.byId.values()),
           zones: zones ?? null,
           damRecords: dam,
           comFootprints: footprints,
