@@ -12,7 +12,8 @@ import { circleRing, DEFAULT_SITE_FRAME_SHAPE } from "../lib/siteFrame";
 import { openRing } from "../lib/geo";
 import { LINE_MM, screenPx } from "../lib/lineweights";
 import { planBuildingStrokeStyle } from "../lib/planBuildingFill";
-import { planPaths, svgPolyline, svgRings } from "../lib/svgPlan";
+import { svgPolyline, svgRings } from "../lib/svgPlan";
+import { useProgressivePlanPaths } from "../lib/useProgressivePlanPaths";
 import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
@@ -83,25 +84,24 @@ export function DrawingPlan({
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
   const figure = kind === "figure-ground";
   const style = lineStyle ?? readDrawingStyle();
-  const plan = useMemo(
-    () =>
-      planPaths(
-        model,
-        style.pathWidthM,
-        style.contourIndexEvery,
-        planScale,
-        style.contourCoarseIntervalM,
-        style.contourCoarseFromScale,
-        {
-          buildingColour: {
-            colourByUse: !uniformBuildings && !colourBySource,
-            uniformBuildings,
-            colourBySource,
-          },
-          highlightManual,
-          pathFilletM: style.pathFilletM,
+  const planRequest = useMemo(
+    () => ({
+      model,
+      pathWidthM: style.pathWidthM,
+      contourIndexEvery: style.contourIndexEvery,
+      planScale,
+      coarseIntervalM: style.contourCoarseIntervalM,
+      coarseFromScale: style.contourCoarseFromScale,
+      planOptions: {
+        buildingColour: {
+          colourByUse: !uniformBuildings && !colourBySource,
+          uniformBuildings,
+          colourBySource,
         },
-      ),
+        highlightManual,
+        pathFilletM: style.pathFilletM,
+      },
+    }),
     [
       model,
       style.pathWidthM,
@@ -115,6 +115,8 @@ export function DrawingPlan({
       style.pathFilletM,
     ],
   );
+  const plan = useProgressivePlanPaths(planRequest, !figure);
+  const pathFillRoundM = plan.coordRoundM;
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const figurePaths = useMemo(
     () => (figure ? figureGroundModelPaths(model.buildings, model.sideM, frameShape) : []),
@@ -306,7 +308,7 @@ export function DrawingPlan({
             ))}
             {plan.pathFill.length > 0 && (
               <path
-                d={plan.pathFill.map((polygon) => svgRings(polygon)).join(" ")}
+                d={plan.pathFill.map((polygon) => svgRings(polygon, pathFillRoundM)).join(" ")}
                 fill={style.pathFill}
                 fillRule="evenodd"
                 {...footpathEdgeSvgAttrs(style)}
@@ -325,7 +327,7 @@ export function DrawingPlan({
             ))}
             {plan.roadFill.length > 0 && (
               <path
-                d={plan.roadFill.map((polygon) => svgRings(polygon)).join(" ")}
+                d={plan.roadFill.map((polygon) => svgRings(polygon, pathFillRoundM)).join(" ")}
                 fill={style.roadFill}
                 fillRule="evenodd"
                 {...(style.kerbOn ? screenPenAttrs(style.kerb) : { stroke: "none" })}

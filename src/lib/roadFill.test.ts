@@ -12,6 +12,7 @@ import {
   unionRoadSurface,
 } from "./roadFill";
 import type { Pt, RoadFeat } from "../types";
+import { hashMultiPolygon } from "./geometryHash";
 
 function openRing(ring: Pair[]): Pair[] {
   if (
@@ -422,5 +423,27 @@ describe("road union", () => {
     expect(inside(joined.polygons, 20, 0)).toBe(true);
     expect(hasInternalSeam(joined.polygons)).toBe(false);
     expect(unionFootpaths([[[0, 0], [40, 0]]], 0, 200).polygons).toHaveLength(0);
+  });
+
+  it("does not reuse road surface cache when bounds and counts match but geometry differs (X vs P)", () => {
+    const sideM = 100;
+    const width = 8;
+    const roadsX: RoadFeat[] = [
+      { id: 1, line: [[-50, 0], [50, 0]], width, kind: "road", grade: "arterial" },
+      { id: 2, line: [[0, -50], [0, 50]], width, kind: "road", grade: "arterial" },
+    ];
+    const roadsP: RoadFeat[] = [
+      { id: 1, line: [[-50, -50], [50, -50]], width, kind: "road", grade: "arterial" },
+      { id: 2, line: [[-50, 50], [50, 50]], width, kind: "road", grade: "arterial" },
+    ];
+    clearFootpathUnionCacheForTests();
+    const fillX = unionRoadSurface(roadsX, undefined, sideM, "square");
+    clearFootpathUnionCacheForTests();
+    const fillP = unionRoadSurface(roadsP, undefined, sideM, "square");
+    expect(hashMultiPolygon(fillP.polygons)).not.toBe(hashMultiPolygon(fillX.polygons));
+    clearFootpathUnionCacheForTests();
+    unionRoadSurface(roadsX, undefined, sideM, "square");
+    const fillPAfterX = unionRoadSurface(roadsP, undefined, sideM, "square");
+    expect(hashMultiPolygon(fillPAfterX.polygons)).toBe(hashMultiPolygon(fillP.polygons));
   });
 });

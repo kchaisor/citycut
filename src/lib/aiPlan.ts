@@ -25,7 +25,8 @@ import { LINE_MM, hexRgb } from "./lineweights";
 import { heliodonPlanPdfChunk } from "./heliodonPlanExport";
 import type { HeliodonDiagramExportOptions } from "./heliodonDiagram";
 import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
-import { planPaths } from "./svgPlan";
+import { buildSmoothPlanPaths, ensureSmoothPlanPaths, planPathsFromSiteStyle } from "./planPathsSession";
+import type { PlanPaths } from "./svgPlan";
 import { planBuildingStrokeStyle } from "./planBuildingFill";
 import { windPlanPdfChunk } from "./windExport";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
@@ -292,6 +293,7 @@ export function sitePlanChunks(
   scale: number,
   style: LineStyles = readDrawingStyle(),
   exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
+  planOverride?: PlanPaths,
 ): PdfChunk[] {
   const resolved = resolveSitePlanExport(exportOptions);
   const heliodon = resolved.heliodon ?? null;
@@ -301,23 +303,11 @@ export function sitePlanChunks(
   const uniformBuildings = Boolean(resolved.uniformBuildings);
   const colourBySource = Boolean(resolved.colourBySource);
   const highlightManual = Boolean(resolved.highlightManual);
-  const plan = planPaths(
-    model,
-    style.pathWidthM,
-    style.contourIndexEvery,
-    scale,
-    style.contourCoarseIntervalM,
-    style.contourCoarseFromScale,
-    {
-      buildingColour: {
-        colourByUse: !uniformBuildings && !colourBySource,
-        uniformBuildings,
-        colourBySource,
-      },
-      highlightManual,
-      pathFilletM: style.pathFilletM,
-    },
-  );
+  const plan =
+    planOverride ??
+    buildSmoothPlanPaths(
+      planPathsFromSiteStyle(model, scale, style, { uniformBuildings, colourBySource, highlightManual }),
+    );
   const page = layout.pageHeightMm;
   const bottom = yUp(layout.frameY + layout.frameMm, page);
   const chunks: PdfChunk[] = [
@@ -367,20 +357,6 @@ export function sitePlanChunks(
       })),
     });
   }
-  const footpaths = pathStrip(plan.pathFill, model, layout, style);
-  if (footpaths) chunks.push(footpaths);
-  const contourPen = pen(style.contour);
-  const indexPen = pen({ ...style.contour, mm: style.contourIndexMm });
-  if (plan.contours.length > 0 && contourPen) {
-    chunks.push({
-      name: "Contours",
-      paths: plan.contours.map((line, index) => ({
-        rings: [mapRing(line, model.sideM, layout)],
-        close: false,
-        ...(plan.contourIndex[index] && indexPen ? indexPen : contourPen),
-      })),
-    });
-  }
   const roadRings = plan.roadFill.flatMap((polygon) => mapRings(polygon, model.sideM, layout));
   const blockFill = plan.blocks
     .map((rings) => mapRings(rings, model.sideM, layout))
@@ -410,6 +386,20 @@ export function sitePlanChunks(
           ...(kerb ?? {}),
         },
       ],
+    });
+  }
+  const footpaths = pathStrip(plan.pathFill, model, layout, style);
+  if (footpaths) chunks.push(footpaths);
+  const contourPen = pen(style.contour);
+  const indexPen = pen({ ...style.contour, mm: style.contourIndexMm });
+  if (plan.contours.length > 0 && contourPen) {
+    chunks.push({
+      name: "Contours",
+      paths: plan.contours.map((line, index) => ({
+        rings: [mapRing(line, model.sideM, layout)],
+        close: false,
+        ...(plan.contourIndex[index] && indexPen ? indexPen : contourPen),
+      })),
     });
   }
   const railPen = pen(style.rail);
@@ -559,6 +549,23 @@ export function sitePlanLayerOrder(chunks: PdfChunk[]): string[] {
   return order;
 }
 
+export async function sitePlanChunksForExport(
+  model: CityModel,
+  scale: number,
+  style: LineStyles = readDrawingStyle(),
+  exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
+): Promise<PdfChunk[]> {
+  const resolved = resolveSitePlanExport(exportOptions);
+  const plan = await ensureSmoothPlanPaths(
+    planPathsFromSiteStyle(model, scale, style, {
+      uniformBuildings: Boolean(resolved.uniformBuildings),
+      colourBySource: Boolean(resolved.colourBySource),
+      highlightManual: Boolean(resolved.highlightManual),
+    }),
+  );
+  return sitePlanChunks(model, scale, style, exportOptions, plan);
+}
+
 /** PDF/OCG site plan, the default .ai export. */
 export async function sitePlanPdf(
   model: CityModel,
@@ -567,7 +574,7 @@ export async function sitePlanPdf(
   exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): Promise<Uint8Array> {
   const layout = layoutSheet(model.sideM, scale);
-  const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions);
+  const chunks = await sitePlanChunksForExport(model, scale, style ?? readDrawingStyle(), exportOptions);
   return buildLayeredPdf(layout.pageWidthMm, layout.pageHeightMm, chunks, sitePlanLayerOrder(chunks));
 }
 
@@ -629,7 +636,7 @@ export async function sitePlanAi(
   if (useNativeAi8Export()) return sitePlanAi8(model, scale, style, exportOptions);
   if (import.meta.env.VITE_CITYCUT_AI_PDF_OPS === "true") {
     const layout = layoutSheet(model.sideM, scale);
-    const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions);
+    const chunks = await sitePlanChunksForExport(model, scale, style ?? readDrawingStyle(), exportOptions);
     return buildLayeredNativeAiPdfOps(
       layout.pageWidthMm,
       layout.pageHeightMm,
