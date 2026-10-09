@@ -16,6 +16,7 @@ import {
 } from "./buildingEnrichmentMerge";
 import { inferHeightTier } from "./buildingHeightResolve";
 import { loadEnrichmentForCutFromDisk } from "./test/loadEnrichmentForCut";
+import { networkTestsEnabled } from "./test/networkTests";
 
 const lat = -37.8127;
 const lon = 144.98061;
@@ -30,7 +31,7 @@ function heightSourceCensus(buildings: Awaited<ReturnType<typeof fetchOvertureBu
   return counts;
 }
 
-describe("East Melbourne building use census (CLUE enrichment)", () => {
+describe.skipIf(!networkTestsEnabled())("East Melbourne building use census (CLUE enrichment)", () => {
   it(
     "assigns most zone-tier buildings to CLUE after enrichment tiles merge",
     async () => {

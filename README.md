@@ -86,6 +86,8 @@ npm run preview
 
 No API key is required for the defaults.
 
+`npm test` runs offline. Tests that read live Overture, City of Melbourne, or Vicmap data are skipped unless you set `CITYCUT_NETWORK_TESTS=1` (for example `CITYCUT_NETWORK_TESTS=1 npx vitest run src/lib/buildingHeightSourceGuard.test.ts`).
+
 ## Environment
 
 Copy `.env.example` if you want to override the public endpoints. Both variables are optional.

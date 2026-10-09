@@ -26,12 +26,13 @@ import {
   roadDedupeCounts,
 } from "./layerDuplicateAudit";
 import type { CityModel } from "../types";
+import { networkTestsEnabled } from "./test/networkTests";
 
 const lat = -37.8127;
 const lon = 144.98061;
 const km = 1;
 
-describe("East Melbourne duplicate audit", () => {
+describe.skipIf(!networkTestsEnabled())("East Melbourne duplicate audit", () => {
   it(
     "reports before/after dedupe counts and export emits without heavy IoU duplicates",
     async () => {
