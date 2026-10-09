@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { EtagMismatch } from "pmtiles";
 import { EnrichmentPmtilesSource } from "./enrichmentPmtilesSource";
 
 describe("EnrichmentPmtilesSource", () => {
@@ -59,5 +60,31 @@ describe("EnrichmentPmtilesSource", () => {
     );
     const source = new EnrichmentPmtilesSource("https://example.test/enrichment.pmtiles");
     await source.getBytes(0, 1);
+  });
+
+  it("never sends conditional headers (GitHub Pages answers If-None-Match with 304)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url, init) => {
+        const h = new Headers(init?.headers);
+        if (h.has("if-none-match") || h.has("if-modified-since")) {
+          return new Response(null, { status: 304, headers: { etag: '"abc"' } });
+        }
+        return new Response(new Uint8Array([7, 8]).buffer, { status: 206, headers: { etag: '"abc"' } });
+      }),
+    );
+    const source = new EnrichmentPmtilesSource("https://example.test/enrichment.pmtiles");
+    const result = await source.getBytes(500, 2, undefined, '"abc"');
+    expect(result.data.byteLength).toBe(2);
+    expect(result.etag).toBe('"abc"');
+  });
+
+  it("throws EtagMismatch when the file changed under a known etag", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(new Uint8Array([1]).buffer, { status: 206, headers: { etag: '"new"' } })),
+    );
+    const source = new EnrichmentPmtilesSource("https://example.test/enrichment.pmtiles");
+    await expect(source.getBytes(900, 1, undefined, '"old"')).rejects.toBeInstanceOf(EtagMismatch);
   });
 });

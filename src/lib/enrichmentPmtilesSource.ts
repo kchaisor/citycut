@@ -1,4 +1,4 @@
-import type { RangeResponse } from "pmtiles";
+import { EtagMismatch, type RangeResponse } from "pmtiles";
 
 type RangeResult = RangeResponse & { data: ArrayBuffer };
 
@@ -14,8 +14,14 @@ async function fetchRangeOnce(
 ): Promise<RangeResult> {
   const headers = new Headers();
   headers.set("range", `bytes=${offset}-${offset + length - 1}`);
-  if (etag) headers.set("If-None-Match", etag);
+  // No conditional header: "If-None-Match" makes GitHub Pages answer 304 with no body.
+  // Like pmtiles' FetchSource, compare the returned ETag instead.
   const response = await fetch(url, { signal, headers, cache: "no-store" });
+  const rawEtag = response.headers.get("Etag");
+  const responseEtag = rawEtag?.startsWith("W/") ? undefined : rawEtag ?? undefined;
+  if (etag && responseEtag && responseEtag !== etag) {
+    throw new EtagMismatch(`Server returned non-matching ETag ${etag}`);
+  }
   if (response.status >= 300) {
     throw new Error(`Bad response code: ${response.status}`);
   }
@@ -23,10 +29,9 @@ async function fetchRangeOnce(
   if (data.byteLength === 0 && length > 0 && allowEmptyRetry) {
     return fetchRangeOnce(url, offset, length, signal, etag, false);
   }
-  const responseEtag = response.headers.get("Etag");
   return {
     data,
-    etag: responseEtag?.startsWith("W/") ? undefined : responseEtag ?? undefined,
+    etag: responseEtag,
     cacheControl: response.headers.get("Cache-Control") ?? undefined,
     expires: response.headers.get("Expires") ?? undefined,
   };
@@ -44,9 +49,12 @@ function dedupedRangeFetch(
   if (!pending) {
     pending = fetchRangeOnce(url, offset, length, signal, etag);
     inflightRanges.set(key, pending);
-    void pending.finally(() => {
-      if (inflightRanges.get(key) === pending) inflightRanges.delete(key);
-    });
+    // Callers handle the rejection; this cleanup branch must not re-throw it as unhandled.
+    pending
+      .finally(() => {
+        if (inflightRanges.get(key) === pending) inflightRanges.delete(key);
+      })
+      .catch(() => {});
   }
   return pending;
 }
