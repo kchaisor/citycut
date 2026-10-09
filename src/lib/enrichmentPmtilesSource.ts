@@ -49,9 +49,12 @@ function dedupedRangeFetch(
   if (!pending) {
     pending = fetchRangeOnce(url, offset, length, signal, etag);
     inflightRanges.set(key, pending);
-    void pending.finally(() => {
-      if (inflightRanges.get(key) === pending) inflightRanges.delete(key);
-    });
+    // Callers handle the rejection; this cleanup branch must not re-throw it as unhandled.
+    pending
+      .finally(() => {
+        if (inflightRanges.get(key) === pending) inflightRanges.delete(key);
+      })
+      .catch(() => {});
   }
   return pending;
 }
