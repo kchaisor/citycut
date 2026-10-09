@@ -28,22 +28,38 @@ import {
 import type { CityModel, Pt } from "../types";
 import type { RoadFill } from "./roadFill";
 
-/** Ground-metre precision for plan path `d` coordinates (matches main). */
+/** Fast / main first-paint precision for plan path `d` coordinates. */
 export const PLAN_COORD_ROUND_M = 0.1;
-export const roundPlanCoord = (value: number) => Math.round(value / PLAN_COORD_ROUND_M) * PLAN_COORD_ROUND_M;
-const round = roundPlanCoord;
+/** Smooth plan and export precision (finer arcs; not on first-paint path). */
+export const PLAN_COORD_ROUND_SMOOTH_M = 0.01;
 
-export function svgPolyline(points: Pt[], close: boolean): string {
+export function roundPlanCoordAt(value: number, roundM: number): number {
+  return Math.round(value / roundM) * roundM;
+}
+
+export function roundPlanCoord(value: number): number {
+  return roundPlanCoordAt(value, PLAN_COORD_ROUND_M);
+}
+
+export function planPathCoordRoundM(quality: PlanFillQuality): number {
+  return quality === "smooth" ? PLAN_COORD_ROUND_SMOOTH_M : PLAN_COORD_ROUND_M;
+}
+
+export function svgPolyline(points: Pt[], close: boolean, coordRoundM = PLAN_COORD_ROUND_M): string {
   if (points.length < 2) return "";
   const body = points
-    .map((point, index) => `${index === 0 ? "M" : "L"}${round(point[0])} ${round(-point[1])}`)
+    .map((point, index) => {
+      const x = roundPlanCoordAt(point[0], coordRoundM);
+      const y = roundPlanCoordAt(point[1], coordRoundM);
+      return `${index === 0 ? "M" : "L"}${x} ${-y}`;
+    })
     .join(" ");
   return close ? `${body} Z` : body;
 }
 
-export function svgRings(rings: Pt[][]): string {
+export function svgRings(rings: Pt[][], coordRoundM = PLAN_COORD_ROUND_M): string {
   return rings
-    .map((ring) => svgPolyline(openRing(ring), true))
+    .map((ring) => svgPolyline(openRing(ring), true, coordRoundM))
     .filter(Boolean)
     .join(" ");
 }
@@ -74,6 +90,8 @@ export type PlanPaths = {
   contourInterval: number | null;
   contourSource: "vicmap-metro" | "vicmap-state" | "dem" | null;
   ringSmoothMs?: number;
+  /** SVG `d` coordinate quantisation for this plan (0.1 m fast, 0.01 m smooth). */
+  coordRoundM: number;
 };
 
 function dedupe(line: Pt[]): Pt[] {
@@ -281,6 +299,7 @@ export function assemblePlanPaths(
     contourInterval: drawn && layer ? drawnInterval : null,
     contourSource: drawn && layer ? layer.source : null,
     ringSmoothMs: quality === "smooth" ? 0 : undefined,
+    coordRoundM: planPathCoordRoundM(quality),
   };
 }
 

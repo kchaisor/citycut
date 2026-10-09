@@ -9,7 +9,7 @@ import {
   maxHausdorffOutsideSmoothed,
   maxTurnOnCurves,
   roadCurveVertexCount,
-} from "./planSmoothMetrics";
+} from "./test/planSmoothMetrics";
 import { clearFootpathUnionCacheForTests } from "./roadFill";
 import { planPaths } from "./svgPlan";
 import type { CityModel } from "../types";

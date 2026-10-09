@@ -116,6 +116,7 @@ export function DrawingPlan({
     ],
   );
   const plan = useProgressivePlanPaths(planRequest, !figure);
+  const pathFillRoundM = plan.coordRoundM;
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const figurePaths = useMemo(
     () => (figure ? figureGroundModelPaths(model.buildings, model.sideM, frameShape) : []),
@@ -307,7 +308,7 @@ export function DrawingPlan({
             ))}
             {plan.roadFill.length > 0 && (
               <path
-                d={plan.roadFill.map((polygon) => svgRings(polygon)).join(" ")}
+                d={plan.roadFill.map((polygon) => svgRings(polygon, pathFillRoundM)).join(" ")}
                 fill={style.roadFill}
                 fillRule="evenodd"
                 {...(style.kerbOn ? screenPenAttrs(style.kerb) : { stroke: "none" })}
@@ -315,7 +316,7 @@ export function DrawingPlan({
             )}
             {plan.pathFill.length > 0 && (
               <path
-                d={plan.pathFill.map((polygon) => svgRings(polygon)).join(" ")}
+                d={plan.pathFill.map((polygon) => svgRings(polygon, pathFillRoundM)).join(" ")}
                 fill={style.pathFill}
                 fillRule="evenodd"
                 {...footpathEdgeSvgAttrs(style)}

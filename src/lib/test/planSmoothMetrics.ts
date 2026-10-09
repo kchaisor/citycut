@@ -148,3 +148,16 @@ export function curveVertexCount(multi: MultiPolygon, vb: string): number {
 export function roadCurveVertexCount(multi: MultiPolygon, vb: string, minEdgeM = 2): number {
   return boundaryPointsInCrop(multi, vb).filter((pt) => pt.edgeLen >= minEdgeM).length;
 }
+
+function isSquareCorner(pt: BoundaryPt): boolean {
+  return pt.turnDeg >= 70 && pt.turnDeg <= 110 && pt.edgeLen >= 1.2;
+}
+
+/** Boundary vertices turning more than `minTurnDeg`, excluding right-angle building-style corners. */
+export function steepTurnVertexCount(
+  multi: MultiPolygon,
+  vb: string,
+  minTurnDeg = 20,
+): number {
+  return boundaryPointsInCrop(multi, vb).filter((pt) => pt.turnDeg > minTurnDeg && !isSquareCorner(pt)).length;
+}
