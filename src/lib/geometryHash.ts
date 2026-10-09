@@ -14,11 +14,20 @@ export function hashLineCoords(hash: number, line: Pt[]): number {
   return h;
 }
 
+function hashRoadKindGrade(kind: RoadFeat["kind"], grade: RoadFeat["grade"]): number {
+  let h = 2166136261;
+  for (let i = 0; i < kind.length; i++) h = mixGeometryHash(h, kind.charCodeAt(i));
+  const gradeKey = grade ?? "";
+  for (let i = 0; i < gradeKey.length; i++) h = mixGeometryHash(h, gradeKey.charCodeAt(i));
+  return h;
+}
+
 export function hashRoadFeatures(roads: RoadFeat[]): string {
   let h = 2166136261;
   for (const road of roads) {
     h = mixGeometryHash(h, road.id);
     h = mixGeometryHash(h, Math.round(road.width * 100));
+    h = mixGeometryHash(h, hashRoadKindGrade(road.kind, road.grade));
     h = hashLineCoords(h, road.line);
   }
   return h.toString(16);

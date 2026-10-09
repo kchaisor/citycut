@@ -10,7 +10,7 @@ import {
   maxTurnOnCurves,
   roadCurveVertexCount,
 } from "./planSmoothMetrics";
-import { clearFootpathUnionCacheForTests, setCentrelineSmoothForUnion } from "./roadFill";
+import { clearFootpathUnionCacheForTests } from "./roadFill";
 import { planPaths } from "./svgPlan";
 import type { CityModel } from "../types";
 
@@ -62,7 +62,6 @@ describe("plan smooth real-data guards", () => {
 
   afterEach(() => {
     clearFootpathUnionCacheForTests();
-    setCentrelineSmoothForUnion(false);
   });
 
   const east = loadModel("/opt/cursor/artifacts/east-model.json");
@@ -152,15 +151,24 @@ describe("plan smooth real-data guards", () => {
       it("curve turns shrink and vertex count grows in each crop", () => {
         const facet = metrics["facet-spot"];
         if (facet) {
-          expect(facet.maxTurnPr).toBeLessThanOrEqual(facet.maxTurnMain + 0.5);
+          expect(facet.maxTurnPr).toBeLessThan(facet.maxTurnMain - 2);
           expect(roadCurveVertexCount(pr.roadFill, KELVIN_CROPS["facet-spot"]!)).toBeGreaterThanOrEqual(8);
+          expect(facet.curveVertsPr).toBeGreaterThan(facet.curveVertsMain);
+        }
+        const kerb = metrics["kerb-return"];
+        if (kerb) {
+          expect(kerb.curveVertsPr).toBeGreaterThanOrEqual(12);
+          expect(kerb.curveVertsPr).toBeGreaterThan(kerb.curveVertsMain + 4);
+          expect(kerb.maxTurnPr).toBeLessThanOrEqual(kerb.maxTurnMain);
         }
         const kink = metrics["path-kink"];
         if (kink) {
-          expect(kink.curveVertsPr).toBeGreaterThanOrEqual(kink.curveVertsMain);
+          expect(kink.maxTurnPr).toBeLessThanOrEqual(kink.maxTurnMain);
+          expect(kink.curveVertsPr).toBeGreaterThan(kink.curveVertsMain + 2);
         }
-        if (facet) {
-          expect(facet.curveVertsPr).toBeGreaterThanOrEqual(facet.curveVertsMain);
+        const gaps = metrics["road-gaps"];
+        if (gaps) {
+          expect(gaps.maxTurnPr).toBeLessThanOrEqual(gaps.maxTurnMain + 1);
         }
       });
     });

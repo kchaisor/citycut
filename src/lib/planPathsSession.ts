@@ -11,8 +11,14 @@ import {
   type PlanPathOptions,
   resolvePlanPathQuality,
 } from "./svgPlan";
-import { DEFAULT_PATH_FILLET_M, footpathStrips, unionFootpathStrips, unionRoadSurface } from "./roadFill";
+import {
+  DEFAULT_PATH_FILLET_M,
+  footpathStrips,
+  unionFootpathStripsAsync,
+  unionRoadSurfaceAsync,
+} from "./roadFill";
 import { DEFAULT_COARSE_FROM_SCALE, DEFAULT_COARSE_INTERVAL_M } from "./vicmapContours";
+import { PlanUnionCancelled, createPlanSliceController } from "./planUnionSlice";
 
 export type PlanPathsRequest = PlanPathsBuildArgs & {
   model: CityModel;
@@ -107,30 +113,11 @@ export function buildSmoothPlanPaths(request: PlanPathsRequest): PlanPaths {
   });
 }
 
-const SLICE_BUDGET_MS = 90;
-
-async function yieldToIdle(): Promise<void> {
-  await new Promise<void>((resolve) => {
-    const idle = globalThis.requestIdleCallback;
-    if (typeof idle !== "function") {
-      setTimeout(resolve, 0);
-      return;
-    }
-    const started = performance.now();
-    const step = (deadline: IdleDeadline) => {
-      if (performance.now() - started >= SLICE_BUDGET_MS || deadline.timeRemaining() > 2) {
-        resolve();
-        return;
-      }
-      idle(step, { timeout: 100 });
-    };
-    idle(step, { timeout: 100 });
-  });
-}
-
-async function buildSmoothPlanPathsChunked(
+/** Same as {@link buildSmoothPlanPaths} but yields during long plan unions (idle smooth). */
+export async function buildSmoothPlanPathsChunked(
   request: PlanPathsRequest,
   isValid: () => boolean,
+  sliceBudgetMs = 90,
 ): Promise<PlanPaths | null> {
   const {
     model,
@@ -146,42 +133,46 @@ async function buildSmoothPlanPathsChunked(
     planOptions.pathFilletM !== undefined ? planOptions.pathFilletM : DEFAULT_PATH_FILLET_M;
   const preamble = planPathsPreamble(model);
   if (!isValid()) return null;
-  await yieldToIdle();
-  if (!isValid()) return null;
 
-  const footpaths = unionFootpathStrips(
-    footpathStrips(model.roads, pathWidthM),
-    model.sideM,
-    preamble.frameShape,
-    pathFilletM,
-    pathWidthM,
-    "smooth",
-  );
-  await yieldToIdle();
-  if (!isValid()) return null;
+  const slice = createPlanSliceController(isValid, sliceBudgetMs);
+  try {
+    const footpaths = await unionFootpathStripsAsync(
+      footpathStrips(model.roads, pathWidthM),
+      model.sideM,
+      preamble.frameShape,
+      pathFilletM,
+      pathWidthM,
+      "smooth",
+      slice,
+    );
+    if (!isValid()) return null;
 
-  const carriageway = unionRoadSurface(
-    model.roads,
-    model.tramLines,
-    model.sideM,
-    preamble.frameShape,
-    "smooth",
-  );
-  await yieldToIdle();
-  if (!isValid()) return null;
+    const carriageway = await unionRoadSurfaceAsync(
+      model.roads,
+      model.tramLines,
+      model.sideM,
+      preamble.frameShape,
+      "smooth",
+      slice,
+    );
+    if (!isValid()) return null;
 
-  return assemblePlanPaths(
-    model,
-    footpaths,
-    carriageway,
-    pathWidthM,
-    contourIndexEvery,
-    planScale,
-    coarseIntervalM ?? DEFAULT_COARSE_INTERVAL_M,
-    coarseFromScale ?? DEFAULT_COARSE_FROM_SCALE,
-    planOptions,
-    preamble,
-  );
+    return assemblePlanPaths(
+      model,
+      footpaths,
+      carriageway,
+      pathWidthM,
+      contourIndexEvery,
+      planScale,
+      coarseIntervalM ?? DEFAULT_COARSE_INTERVAL_M,
+      coarseFromScale ?? DEFAULT_COARSE_FROM_SCALE,
+      planOptions,
+      preamble,
+    );
+  } catch (err) {
+    if (err instanceof PlanUnionCancelled) return null;
+    throw err;
+  }
 }
 
 type SmoothJob = {

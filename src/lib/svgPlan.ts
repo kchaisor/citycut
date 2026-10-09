@@ -12,7 +12,6 @@ import {
   footpathFillDisplayPolygons,
   mergeFootpathFragments,
   roadFillDisplayPolygons,
-  setCentrelineSmoothForUnion,
   subtractFootpathBlockers,
   unionFootpathStrips,
   unionRoadSurface,
@@ -188,7 +187,7 @@ function planRoadAndPathFills(
   const roadFillPolys = roadFillDisplayPolygons(carriageway);
   let pathFill = footpathFillDisplayPolygons(footpaths);
   if (pathFilletM > 0 && roadFillPolys.length > 0) {
-    pathFill = footpathDisplayAfterRoadBlockers(footpathFillDisplayPolygons(footpaths), carriageway.polygons);
+    pathFill = footpathDisplayAfterRoadBlockers(footpathFillDisplayPolygons(footpaths), roadFillPolys);
   }
   return { roadFillPolys, pathFill };
 }
@@ -334,8 +333,6 @@ export function planPaths(
   const pathFilletM =
     planOptions.pathFilletM !== undefined ? planOptions.pathFilletM : DEFAULT_PATH_FILLET_M;
   const quality = resolvePlanPathQuality(planOptions);
-  const centrelineSmooth = planOptions.centrelineSmooth !== false;
-  setCentrelineSmoothForUnion(centrelineSmooth);
   const footpaths = unionFootpathStrips(
     footpathStrips(model.roads, pathWidthM),
     model.sideM,

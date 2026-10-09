@@ -7,6 +7,7 @@ import {
   beginBackgroundSmoothPlan,
   buildFastPlanPaths,
   buildSmoothPlanPaths,
+  buildSmoothPlanPathsChunked,
   ensureSmoothPlanPaths,
   planFillVertexCount,
   planModelCutToken,
@@ -101,6 +102,20 @@ describe("planPathsSession", () => {
       (chunk) => chunk.name === "Roads",
     );
     expect(exportedRoads).not.toEqual(fastRoads);
+  });
+
+  it("chunked smooth build matches synchronous smooth plan", async () => {
+    const model = testModel();
+    const request = planPathsFromSiteStyle(model, 1000, DEFAULT_LINE_STYLES);
+    clearFootpathUnionCacheForTests();
+    const sync = buildSmoothPlanPaths(request);
+    clearFootpathUnionCacheForTests();
+    const chunked = await buildSmoothPlanPathsChunked(request, () => true, 1_000_000);
+    const stripTiming = (plan: typeof sync) => {
+      const { roadUnionMs: _r, pathUnionMs: _p, ringSmoothMs: _s, ...geometry } = plan;
+      return geometry;
+    };
+    expect(stripTiming(chunked!)).toEqual(stripTiming(sync));
   });
 
   it("replaces in-flight smooth job when cut token changes", async () => {
