@@ -17,8 +17,8 @@ function testModel(pathNorthM: number): CityModel {
     buildings: [],
     blocks: [],
     roads: [
-      { id: 1, line: [[-40, 0], [40, 0]], width: 8, kind: "road", grade: "arterial" },
-      { id: 2, line: [[-30, pathNorthM], [30, pathNorthM]], width: 2, kind: "road", grade: "path" },
+      { id: 1, line: [[-40, pathNorthM], [40, pathNorthM]], width: 8, kind: "road", grade: "arterial" },
+      { id: 2, line: [[-30, -20], [30, -20]], width: 2, kind: "road", grade: "path" },
     ],
     areas: [],
     trees: [],
@@ -28,8 +28,8 @@ function testModel(pathNorthM: number): CityModel {
   };
 }
 
-const cutA = testModel(-20);
-const cutB = testModel(22);
+const cutA = testModel(-18);
+const cutB = testModel(24);
 
 const hookRequest = (model: CityModel) => ({
   model,

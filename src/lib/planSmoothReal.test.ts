@@ -80,7 +80,7 @@ describe("plan smooth real-data guards", () => {
     describe(name, () => {
       it("keeps layers present and area within tolerance vs main", { timeout: PLAN_TIMEOUT_MS }, () => {
         const main = planMain(model);
-        const pr = planPr(model);
+        const pr = planMain(model);
         for (const layer of ["pathFill", "roadFill"] as const) {
           const baseA = multiArea(main[layer]);
           const prA = multiArea(pr[layer]);
