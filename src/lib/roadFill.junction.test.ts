@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MultiPolygon, Pair } from "polygon-clipping";
-import { clearFootpathUnionCacheForTests, unionFootpathStrips } from "./roadFill";
+import { clearAllRoadFillCachesForTests, unionFootpathStrips } from "./roadFill";
 import type { Pt } from "../types";
 
 function openRing(ring: Pair[]): Pair[] {
@@ -71,7 +71,7 @@ function nearestSegment(line: Pt[], px: number, py: number) {
 
 describe("T junction outer edge", () => {
   it("keeps the main path outer edge within r + 0.05 m at a slight bend", () => {
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     const width = 2.4;
     const half = width / 2;
     const junction: Pt = [20, 0];

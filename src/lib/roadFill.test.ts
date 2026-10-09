@@ -437,13 +437,13 @@ describe("road union", () => {
       { id: 2, line: [[-50, 50], [50, 50]], width, kind: "road", grade: "arterial" },
     ];
     clearFootpathUnionCacheForTests();
-    const fillX = unionRoadSurface(roadsX, undefined, sideM, "square", "fast");
+    const fillX = unionRoadSurface(roadsX, undefined, sideM, "square");
     clearFootpathUnionCacheForTests();
-    const fillP = unionRoadSurface(roadsP, undefined, sideM, "square", "fast");
+    const fillP = unionRoadSurface(roadsP, undefined, sideM, "square");
     expect(hashMultiPolygon(fillP.polygons)).not.toBe(hashMultiPolygon(fillX.polygons));
     clearFootpathUnionCacheForTests();
-    unionRoadSurface(roadsX, undefined, sideM, "square", "fast");
-    const fillPAfterX = unionRoadSurface(roadsP, undefined, sideM, "square", "fast");
+    unionRoadSurface(roadsX, undefined, sideM, "square");
+    const fillPAfterX = unionRoadSurface(roadsP, undefined, sideM, "square");
     expect(hashMultiPolygon(fillPAfterX.polygons)).toBe(hashMultiPolygon(fillP.polygons));
   });
 });

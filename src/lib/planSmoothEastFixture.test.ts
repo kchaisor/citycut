@@ -5,7 +5,11 @@ import type { MultiPolygon } from "polygon-clipping";
 import { openRing, signedArea } from "./geo";
 import { PATH_WIDTH_M } from "./lineweights";
 import { KELVIN_CROPS, steepTurnVertexCount } from "./test/planSmoothMetrics";
-import { clearFootpathUnionCacheForTests, unionRoadSurface, type PlanFillQuality } from "./roadFill";
+import {
+  clearAllRoadFillCachesForTests,
+  unionRoadSurfaceForPlanSmooth,
+  type PlanFillQuality,
+} from "./roadFill";
 import { planPaths } from "./svgPlan";
 import type { CityModel } from "../types";
 
@@ -26,12 +30,18 @@ function multiArea(multi: MultiPolygon): number {
 }
 
 function planSeamGapM2(model: CityModel, quality: PlanFillQuality): number {
-  clearFootpathUnionCacheForTests();
+  clearAllRoadFillCachesForTests();
   const plan = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, {
     pathFilletM: 2,
     quality,
   });
-  const roadUnion = unionRoadSurface(model.roads, model.tramLines, model.sideM, model.frameShape ?? "square", quality);
+  const roadUnion = unionRoadSurfaceForPlanSmooth(
+    model.roads,
+    model.tramLines,
+    model.sideM,
+    model.frameShape ?? "square",
+    quality,
+  );
   const envelope = union(roadUnion.displayPolygons, plan.pathFill);
   const painted = union(plan.roadFill, plan.pathFill);
   try {
@@ -47,11 +57,11 @@ describe("east melbourne path-trim smooth guards", () => {
   const model = JSON.parse(raw) as CityModel;
 
   afterEach(() => {
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
   });
 
   it("facet-spot and path-kink have at most two steep turns on smooth fills", { timeout: PLAN_TIMEOUT_MS }, () => {
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     const smooth = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, {
       pathFilletM: 2,
       quality: "smooth",

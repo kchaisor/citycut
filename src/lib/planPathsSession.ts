@@ -3,12 +3,12 @@ import { PATH_WIDTH_M } from "./lineweights";
 import { snapshotPlanColours } from "./colours";
 
 export { planModelCutToken } from "./planCutToken";
-export { planSmoothJobKey } from "./planSmoothJobKey";
+export { planSmoothGeometryKey, planSmoothJobKey } from "./planSmoothJobKey";
 import type { LineStyles } from "./drawingStyle";
 import type { BuildingColourMode } from "./buildingViewportColor";
 import { planPaths, type PlanPaths, type PlanPathOptions } from "./svgPlan";
 import { computeSmoothPlanPaths, type PlanPathsRequest } from "./smoothPlanCompute";
-import { planSmoothJobKey } from "./planSmoothJobKey";
+import { planSmoothGeometryKey } from "./planSmoothJobKey";
 import {
   buildSmoothPlanPathsInWorker,
   terminateSmoothPlanWorkerForTests,
@@ -55,41 +55,44 @@ export function buildSmoothPlanPaths(request: PlanPathsRequest): PlanPaths {
 }
 
 type SmoothJob = {
-  jobKey: string;
+  geometryKey: string;
   promise: Promise<PlanPaths>;
 };
 
-let activeSmoothJob: SmoothJob | null = null;
+let activeDisplaySmoothJob: SmoothJob | null = null;
 
 export function resetPlanPathsSessionForTests(): void {
-  activeSmoothJob = null;
+  activeDisplaySmoothJob = null;
   terminateSmoothPlanWorkerForTests();
 }
 
-function scheduleSmoothCompute(request: PlanPathsRequest): Promise<PlanPaths> {
-  return buildSmoothPlanPathsInWorker(withColourSnapshot(request));
+function scheduleDisplaySmoothCompute(request: PlanPathsRequest): Promise<PlanPaths> {
+  return buildSmoothPlanPathsInWorker(withColourSnapshot(request), "display");
 }
 
 /** Start or reuse background smooth plan build for the current cut (Web Worker when available). */
 export function beginBackgroundSmoothPlan(request: PlanPathsRequest): Promise<PlanPaths> {
   const req = withColourSnapshot(request);
-  const jobKey = planSmoothJobKey(req);
-  if (activeSmoothJob?.jobKey === jobKey) return activeSmoothJob.promise;
-  const promise = scheduleSmoothCompute(req).finally(() => {
-    if (activeSmoothJob?.jobKey === jobKey && activeSmoothJob.promise === promise) {
-      activeSmoothJob = null;
+  const geometryKey = planSmoothGeometryKey(req);
+  if (activeDisplaySmoothJob?.geometryKey === geometryKey) return activeDisplaySmoothJob.promise;
+  const promise = scheduleDisplaySmoothCompute(req).finally(() => {
+    if (
+      activeDisplaySmoothJob?.geometryKey === geometryKey &&
+      activeDisplaySmoothJob.promise === promise
+    ) {
+      activeDisplaySmoothJob = null;
     }
   });
-  activeSmoothJob = { jobKey, promise };
+  activeDisplaySmoothJob = { geometryKey, promise };
   return promise;
 }
 
-/** Export and download paths: await in-flight smooth work or compute (worker or sync fallback). */
+/** Export and download paths: await display job when geometry matches, else export worker pool. */
 export async function ensureSmoothPlanPaths(request: PlanPathsRequest): Promise<PlanPaths> {
   const req = withColourSnapshot(request);
-  const jobKey = planSmoothJobKey(req);
-  if (activeSmoothJob?.jobKey === jobKey) return activeSmoothJob.promise;
-  return buildSmoothPlanPathsInWorker(req);
+  const geometryKey = planSmoothGeometryKey(req);
+  if (activeDisplaySmoothJob?.geometryKey === geometryKey) return activeDisplaySmoothJob.promise;
+  return buildSmoothPlanPathsInWorker(req, "export");
 }
 
 export function planPathsFromSiteStyle(

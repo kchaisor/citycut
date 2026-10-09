@@ -3,10 +3,11 @@ import {
   beginBackgroundSmoothPlan,
   buildFastPlanPaths,
   buildSmoothPlanPaths,
-  planSmoothJobKey,
+  planSmoothGeometryKey,
   withColourSnapshot,
   type PlanPathsRequest,
 } from "./planPathsSession";
+import { SupersededSmoothPlanJob } from "./smoothPlanWorkerClient";
 import type { PlanPaths } from "./svgPlan";
 
 const requestDeps = (request: PlanPathsRequest) => {
@@ -49,20 +50,27 @@ export function useProgressivePlanPaths(request: PlanPathsRequest, enabled: bool
     }
     generationRef.current += 1;
     const generation = generationRef.current;
-    const jobKey = planSmoothJobKey(withColourSnapshot(request));
+    const geometryKey = planSmoothGeometryKey(withColourSnapshot(request));
     setSmoothPlan(null);
 
     let cancelled = false;
-    beginBackgroundSmoothPlan(request)
-      .then((plan) => {
-        if (cancelled) return;
-        if (generationRef.current !== generation) return;
-        if (planSmoothJobKey(withColourSnapshot(request)) !== jobKey) return;
-        setSmoothPlan(plan);
-      })
-      .catch(() => {
-        /* keep fast plan visible */
-      });
+    const applySmooth = (plan: PlanPaths) => {
+      if (cancelled) return;
+      if (generationRef.current !== generation) return;
+      if (planSmoothGeometryKey(withColourSnapshot(request)) !== geometryKey) return;
+      setSmoothPlan(plan);
+    };
+    const runDisplaySmooth = () => {
+      beginBackgroundSmoothPlan(request)
+        .then(applySmooth)
+        .catch((err) => {
+          if (cancelled) return;
+          if (err instanceof SupersededSmoothPlanJob && generationRef.current === generation) {
+            runDisplaySmooth();
+          }
+        });
+    };
+    runDisplaySmooth();
 
     return () => {
       cancelled = true;

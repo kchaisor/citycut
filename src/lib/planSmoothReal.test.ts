@@ -10,7 +10,7 @@ import {
   maxTurnOnCurves,
   roadCurveVertexCount,
 } from "./test/planSmoothMetrics";
-import { clearFootpathUnionCacheForTests } from "./roadFill";
+import { clearAllRoadFillCachesForTests } from "./roadFill";
 import { planPaths } from "./svgPlan";
 import type { CityModel } from "../types";
 
@@ -38,7 +38,7 @@ function multiArea(multi: MultiPolygon): number {
 }
 
 function planMain(model: CityModel) {
-  clearFootpathUnionCacheForTests();
+  clearAllRoadFillCachesForTests();
   return planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, {
     pathFilletM: 2,
     quality: "fast",
@@ -46,7 +46,7 @@ function planMain(model: CityModel) {
 }
 
 function planPr(model: CityModel) {
-  clearFootpathUnionCacheForTests();
+  clearAllRoadFillCachesForTests();
   return planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, {
     pathFilletM: 2,
     quality: "smooth",
@@ -61,7 +61,7 @@ describe("plan smooth real-data guards", () => {
   const PLAN_TIMEOUT_MS = 120_000;
 
   afterEach(() => {
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
   });
 
   const east = loadModel("/opt/cursor/artifacts/east-model.json");

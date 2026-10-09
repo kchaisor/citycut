@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { MultiPolygon } from "polygon-clipping";
 import { PATH_WIDTH_M } from "./lineweights";
 import { clearCentrelineCacheForTests } from "./centrelineSmooth";
-import { clearFootpathUnionCacheForTests } from "./roadFill";
+import { clearAllRoadFillCachesForTests } from "./roadFill";
 import { planPaths } from "./svgPlan";
 import { openRing, signedArea } from "./geo";
 
@@ -30,7 +30,7 @@ describe("plan footpath layer", () => {
     } catch {
       return;
     }
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     const plan = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, { pathFilletM: 2 });
     expect(plan.greenOnRoad.length).toBe(0);
     expect(plan.green.length).toBeGreaterThan(0);
@@ -40,14 +40,14 @@ describe("plan footpath layer", () => {
   it("keeps smooth footpath area near fast (main-style) on the east fixture", () => {
     const raw = readFileSync(new URL("./fixtures/east-melbourne-path-trim.json", import.meta.url), "utf8");
     const model = JSON.parse(raw);
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     clearCentrelineCacheForTests();
     const baseline = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, {
       pathFilletM: 2,
       smoothOutput: false,
       centrelineSmooth: false,
     });
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     clearCentrelineCacheForTests();
     const plan = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, {
       pathFilletM: 2,

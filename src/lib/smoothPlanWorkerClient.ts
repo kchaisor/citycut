@@ -1,6 +1,9 @@
 import { computeSmoothPlanPaths, type PlanPathsRequest } from "./smoothPlanCompute";
 import { planModelCutToken } from "./planCutToken";
-import { planSmoothJobKey } from "./planSmoothJobKey";
+import {
+  planSmoothJobKey,
+  type SmoothPlanConsumer,
+} from "./planSmoothJobKey";
 import type { PlanPaths } from "./svgPlan";
 import type { SmoothPlanWorkerIn, SmoothPlanWorkerOut } from "./smoothPlan.worker";
 
@@ -8,74 +11,92 @@ export class SupersededSmoothPlanJob extends Error {
   override name = "SupersededSmoothPlanJob";
 }
 
-let worker: Worker | null = null;
-let workerFailed = false;
-let nextJobId = 0;
-/** Latest requested job; worker responses for other keys are dropped. */
-let latestJobKey = "";
+type PendingJob = {
+  jobKey: string;
+  resolve: (plan: PlanPaths) => void;
+  reject: (err: Error) => void;
+};
 
-const pending = new Map<
-  number,
-  {
-    jobKey: string;
-    resolve: (plan: PlanPaths) => void;
-    reject: (err: Error) => void;
-  }
->();
+type WorkerPool = {
+  worker: Worker | null;
+  workerFailed: boolean;
+  latestJobKey: string;
+  pending: Map<number, PendingJob>;
+  nextJobId: number;
+};
 
-function canUseWorker(): boolean {
-  return typeof Worker !== "undefined" && !workerFailed;
+function createPool(): WorkerPool {
+  return {
+    worker: null,
+    workerFailed: false,
+    latestJobKey: "",
+    pending: new Map(),
+    nextJobId: 0,
+  };
 }
 
-function attachWorkerHandlers(w: Worker): void {
+const pools: Record<SmoothPlanConsumer, WorkerPool> = {
+  display: createPool(),
+  export: createPool(),
+};
+
+function canUseWorker(pool: WorkerPool): boolean {
+  return typeof Worker !== "undefined" && !pool.workerFailed;
+}
+
+function attachWorkerHandlers(pool: WorkerPool, w: Worker): void {
   w.onmessage = (event: MessageEvent<SmoothPlanWorkerOut>) => {
     const { id, jobKey, plan } = event.data;
-    if (jobKey !== latestJobKey) return;
-    const job = pending.get(id);
+    if (jobKey !== pool.latestJobKey) return;
+    const job = pool.pending.get(id);
     if (!job || job.jobKey !== jobKey) return;
-    pending.delete(id);
+    pool.pending.delete(id);
     job.resolve(plan);
   };
   w.onerror = () => {
-    workerFailed = true;
-    worker?.terminate();
-    worker = null;
-    for (const [, job] of pending) job.reject(new Error("Smooth plan worker failed"));
-    pending.clear();
+    pool.workerFailed = true;
+    pool.worker?.terminate();
+    pool.worker = null;
+    for (const [, job] of pool.pending) job.reject(new Error("Smooth plan worker failed"));
+    pool.pending.clear();
   };
 }
 
-function getWorker(): Worker {
-  if (worker) return worker;
-  worker = new Worker(new URL("./smoothPlan.worker.ts", import.meta.url), { type: "module" });
-  attachWorkerHandlers(worker);
-  return worker;
+function getWorker(pool: WorkerPool): Worker {
+  if (pool.worker) return pool.worker;
+  pool.worker = new Worker(new URL("./smoothPlan.worker.ts", import.meta.url), { type: "module" });
+  attachWorkerHandlers(pool, pool.worker);
+  return pool.worker;
 }
 
-function bumpToJobKey(jobKey: string): void {
-  if (jobKey === latestJobKey) return;
-  latestJobKey = jobKey;
-  for (const [id, job] of pending) {
-    pending.delete(id);
+function bumpToJobKey(pool: WorkerPool, jobKey: string): void {
+  if (jobKey === pool.latestJobKey) return;
+  pool.latestJobKey = jobKey;
+  for (const [id, job] of pool.pending) {
+    pool.pending.delete(id);
     job.reject(new SupersededSmoothPlanJob());
   }
-  if (worker) {
-    worker.terminate();
-    worker = null;
+  if (pool.worker) {
+    pool.worker.terminate();
+    pool.worker = null;
   }
 }
 
 /** Build smooth plan off the main thread when Workers are available. */
-export function buildSmoothPlanPathsInWorker(request: PlanPathsRequest): Promise<PlanPaths> {
-  const jobKey = planSmoothJobKey(request);
-  if (!canUseWorker()) return Promise.resolve(computeSmoothPlanPaths(request));
+export function buildSmoothPlanPathsInWorker(
+  request: PlanPathsRequest,
+  consumer: SmoothPlanConsumer,
+): Promise<PlanPaths> {
+  const pool = pools[consumer];
+  const jobKey = planSmoothJobKey(request, consumer);
+  if (!canUseWorker(pool)) return Promise.resolve(computeSmoothPlanPaths(request));
 
-  bumpToJobKey(jobKey);
+  bumpToJobKey(pool, jobKey);
 
-  const id = ++nextJobId;
+  const id = ++pool.nextJobId;
   return new Promise((resolve, reject) => {
-    pending.set(id, { jobKey, resolve, reject });
-    const w = getWorker();
+    pool.pending.set(id, { jobKey, resolve, reject });
+    const w = getWorker(pool);
     const msg: SmoothPlanWorkerIn = {
       id,
       jobKey,
@@ -87,10 +108,12 @@ export function buildSmoothPlanPathsInWorker(request: PlanPathsRequest): Promise
 }
 
 export function terminateSmoothPlanWorkerForTests(): void {
-  worker?.terminate();
-  worker = null;
-  workerFailed = false;
-  pending.clear();
-  nextJobId = 0;
-  latestJobKey = "";
+  for (const pool of Object.values(pools)) {
+    pool.worker?.terminate();
+    pool.worker = null;
+    pool.workerFailed = false;
+    pool.pending.clear();
+    pool.nextJobId = 0;
+    pool.latestJobKey = "";
+  }
 }

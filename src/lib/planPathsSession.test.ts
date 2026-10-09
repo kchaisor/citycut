@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import type { CityModel } from "../types";
-import { clearFootpathUnionCacheForTests } from "./roadFill";
+import { clearAllRoadFillCachesForTests } from "./roadFill";
 import { sitePlanChunks, sitePlanChunksForExport } from "./aiPlan";
 import { DEFAULT_LINE_STYLES } from "./drawingStyle";
 import {
@@ -10,7 +10,7 @@ import {
   ensureSmoothPlanPaths,
   planModelCutToken,
   planPathsFromSiteStyle,
-  planSmoothJobKey,
+  planSmoothGeometryKey,
   resetPlanPathsSessionForTests,
   withColourSnapshot,
 } from "./planPathsSession";
@@ -59,16 +59,16 @@ function testModel(sideM = 100, roadYOffset = -20): CityModel {
 
 describe("planPathsSession", () => {
   beforeEach(() => {
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     resetPlanPathsSessionForTests();
   });
 
   it("fast and smooth fills differ on path/road junctions", () => {
     const model = testModel();
     const request = planPathsFromSiteStyle(model, 1000, DEFAULT_LINE_STYLES);
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     const fast = buildFastPlanPaths(request);
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     const smooth = buildSmoothPlanPaths(request);
     expect(planFillVertexCount(smooth)).toBeGreaterThan(planFillVertexCount(fast));
     expect(smooth.roadFill).not.toEqual(fast.roadFill);
@@ -85,9 +85,9 @@ describe("planPathsSession", () => {
   it("export awaits smooth geometry when background job is in flight", async () => {
     const model = testModel();
     const request = planPathsFromSiteStyle(model, 1000, DEFAULT_LINE_STYLES);
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     const background = beginBackgroundSmoothPlan(request);
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     const exported = await ensureSmoothPlanPaths(request);
     const fromBackground = await background;
     expect(exported.roadFill).toEqual(fromBackground.roadFill);
@@ -98,9 +98,9 @@ describe("planPathsSession", () => {
   it("site plan export chunks use smooth fills", async () => {
     const model = testModel();
     const request = planPathsFromSiteStyle(model, 1000, DEFAULT_LINE_STYLES);
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     const fast = buildFastPlanPaths(request);
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     const smooth = buildSmoothPlanPaths(request);
     beginBackgroundSmoothPlan(request);
     const chunks = await sitePlanChunksForExport(model, 1000, DEFAULT_LINE_STYLES);
@@ -121,13 +121,23 @@ describe("planPathsSession", () => {
     const styleHigh = { ...DEFAULT_LINE_STYLES, pathFilletM: 6 };
     const reqLow = withColourSnapshot(planPathsFromSiteStyle(model, 1000, styleLow));
     const reqHigh = withColourSnapshot(planPathsFromSiteStyle(model, 1000, styleHigh));
-    expect(planSmoothJobKey(reqLow)).not.toBe(planSmoothJobKey(reqHigh));
+    expect(planSmoothGeometryKey(reqLow)).not.toBe(planSmoothGeometryKey(reqHigh));
     beginBackgroundSmoothPlan(reqLow);
     const jobHigh = beginBackgroundSmoothPlan(reqHigh);
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     const expected = buildSmoothPlanPaths(reqHigh);
     const resolved = await jobHigh;
     expect(resolved.pathFill).toEqual(expected.pathFill);
+  });
+
+  it("export reuses in-flight display smooth job when geometry matches", async () => {
+    const model = testModel();
+    const displayReq = planPathsFromSiteStyle(model, 1000, DEFAULT_LINE_STYLES);
+    const exportReq = planPathsFromSiteStyle(model, 500, DEFAULT_LINE_STYLES);
+    expect(planSmoothGeometryKey(displayReq)).toBe(planSmoothGeometryKey(exportReq));
+    const displayJob = beginBackgroundSmoothPlan(displayReq);
+    const exported = await ensureSmoothPlanPaths(exportReq);
+    expect(exported.pathFill).toEqual((await displayJob).pathFill);
   });
 
   it("replaces in-flight smooth job when cut token changes", async () => {

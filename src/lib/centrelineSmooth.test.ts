@@ -8,7 +8,7 @@ import {
   smoothCentrelineStrips,
 } from "./centrelineSmooth";
 import { CLIPPER_ARC_CHORD_M, CLIPPER_FOOTPATH_FILLET_ARC_TOLERANCE_M, arcSegmentCount } from "./polygonOffset";
-import { clearFootpathUnionCacheForTests, unionFootpathStrips } from "./roadFill";
+import { clearAllRoadFillCachesForTests, unionFootpathStripsForPlanSmooth } from "./roadFill";
 
 describe("centrelineSmooth stubs", () => {
   beforeEach(() => {
@@ -46,13 +46,13 @@ describe("centrelineSmooth stubs", () => {
   });
 
   it("adds enough vertices on a filleted footpath crossing", () => {
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     const len = 40;
     const strips = [
       { line: [[-len / 2, 0], [len / 2, 0]] as Pt[], width: 1.2 },
       { line: [[0, -len / 2], [0, len / 2]] as Pt[], width: 1.2 },
     ];
-    const filleted = unionFootpathStrips(strips, 200, "square", 2, 1.2);
+    const filleted = unionFootpathStripsForPlanSmooth(strips, 200, "square", 2, 1.2, "smooth");
     const outer = filleted.displayPolygons[0]?.[0]?.slice(0, -1) ?? [];
     const nearCross = outer.filter((p) => Math.hypot(p[0], p[1]) > 0.35 && Math.hypot(p[0], p[1]) < 2.5);
     expect(nearCross.length).toBeGreaterThanOrEqual(8);

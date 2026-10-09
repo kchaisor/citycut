@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CityModel } from "../types";
 import { COLOUR_FALLBACK } from "./colours";
 import { DEFAULT_LINE_STYLES } from "./drawingStyle";
-import { clearFootpathUnionCacheForTests } from "./roadFill";
+import { clearAllRoadFillCachesForTests } from "./roadFill";
 import { computeSmoothPlanPaths } from "./smoothPlanCompute";
 import { planPathsFromSiteStyle, resetPlanPathsSessionForTests } from "./planPathsSession";
 import { planSmoothJobKey } from "./planSmoothJobKey";
@@ -62,7 +62,7 @@ describe("smoothPlanWorkerClient queue", () => {
         return instance;
       }),
     );
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     resetPlanPathsSessionForTests();
     terminateSmoothPlanWorkerForTests();
   });
@@ -79,17 +79,17 @@ describe("smoothPlanWorkerClient queue", () => {
       ...reqA,
       planOptions: { ...reqA.planOptions, pathFilletM: (reqA.planOptions?.pathFilletM ?? 2) + 4 },
     };
-    clearFootpathUnionCacheForTests();
-    const promiseA = buildSmoothPlanPathsInWorker(reqA);
-    const promiseB = buildSmoothPlanPathsInWorker(reqB);
+    clearAllRoadFillCachesForTests();
+    const promiseA = buildSmoothPlanPathsInWorker(reqA, "display");
+    const promiseB = buildSmoothPlanPathsInWorker(reqB, "display");
     await expect(promiseA).rejects.toBeInstanceOf(SupersededSmoothPlanJob);
     expect(mockWorkers.length).toBe(2);
     expect(mockWorkers[0]!.terminate).toHaveBeenCalled();
 
     const workerB = mockWorkers[1]!;
     const msg = workerB.pending[0]!;
-    expect(msg.jobKey).toBe(planSmoothJobKey(reqB));
-    clearFootpathUnionCacheForTests();
+    expect(msg.jobKey).toBe(planSmoothJobKey(reqB, "display"));
+    clearAllRoadFillCachesForTests();
     const plan = computeSmoothPlanPaths(reqB);
     workerB.onmessage?.(
       new MessageEvent("message", {
@@ -107,18 +107,18 @@ describe("smoothPlanWorkerClient queue", () => {
       ...reqA,
       planOptions: { ...reqA.planOptions, pathFilletM: (reqA.planOptions?.pathFilletM ?? 2) + 2 },
     };
-    clearFootpathUnionCacheForTests();
-    const promiseB = buildSmoothPlanPathsInWorker(reqB);
+    clearAllRoadFillCachesForTests();
+    const promiseB = buildSmoothPlanPathsInWorker(reqB, "display");
     const workerB = mockWorkers[mockWorkers.length - 1]!;
     const msg = workerB.pending[0]!;
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     const stale = computeSmoothPlanPaths(reqA);
     workerB.onmessage?.(
       new MessageEvent("message", {
-        data: { id: msg.id, jobKey: planSmoothJobKey(reqA), token: msg.token, plan: stale },
+        data: { id: msg.id, jobKey: planSmoothJobKey(reqA, "display"), token: msg.token, plan: stale },
       }),
     );
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     const fresh = computeSmoothPlanPaths(reqB);
     workerB.onmessage?.(
       new MessageEvent("message", {

@@ -14,7 +14,9 @@ import {
   roadFillDisplayPolygons,
   subtractFootpathBlockers,
   unionFootpathStrips,
+  unionFootpathStripsForPlanSmooth,
   unionRoadSurface,
+  unionRoadSurfaceForPlanSmooth,
   type PlanFillQuality,
 } from "./roadFill";
 import {
@@ -26,7 +28,9 @@ import {
   drawnContourInterval,
 } from "./vicmapContours";
 import type { CityModel, Pt } from "../types";
-import type { RoadFill } from "./roadFill";
+import type { PlanSmoothRoadFill, RoadFill } from "./roadFill";
+
+type PlanUnionFill = RoadFill | PlanSmoothRoadFill;
 
 /** Fast / main first-paint precision for plan path `d` coordinates. */
 export const PLAN_COORD_ROUND_M = 0.1;
@@ -217,8 +221,8 @@ export type PlanPathsBuildArgs = {
 
 function planRoadAndPathFills(
   quality: PlanFillQuality,
-  carriageway: RoadFill,
-  footpaths: RoadFill,
+  carriageway: PlanUnionFill,
+  footpaths: PlanUnionFill,
   pathFilletM: number,
 ): { roadFillPolys: MultiPolygon; pathFill: MultiPolygon } {
   if (quality === "fast") {
@@ -239,8 +243,8 @@ function planRoadAndPathFills(
 
 export function assemblePlanPaths(
   model: CityModel,
-  footpaths: RoadFill,
-  carriageway: RoadFill,
+  footpaths: PlanUnionFill,
+  carriageway: PlanUnionFill,
   _pathWidthM: number,
   contourIndexEvery: number,
   planScale: number,
@@ -379,21 +383,22 @@ export function planPaths(
   const pathFilletM =
     planOptions.pathFilletM !== undefined ? planOptions.pathFilletM : DEFAULT_PATH_FILLET_M;
   const quality = resolvePlanPathQuality(planOptions);
-  const footpaths = unionFootpathStrips(
-    footpathStrips(model.roads, pathWidthM),
-    model.sideM,
-    preamble.frameShape,
-    pathFilletM,
-    pathWidthM,
-    quality,
-  );
-  const carriageway = unionRoadSurface(
-    model.roads,
-    model.tramLines,
-    model.sideM,
-    preamble.frameShape,
-    quality,
-  );
+  const footpathStripsInput = footpathStrips(model.roads, pathWidthM);
+  const footpaths =
+    quality === "smooth"
+      ? unionFootpathStripsForPlanSmooth(
+          footpathStripsInput,
+          model.sideM,
+          preamble.frameShape,
+          pathFilletM,
+          pathWidthM,
+          "smooth",
+        )
+      : unionFootpathStrips(footpathStripsInput, model.sideM, preamble.frameShape, pathFilletM, pathWidthM);
+  const carriageway =
+    quality === "smooth"
+      ? unionRoadSurfaceForPlanSmooth(model.roads, model.tramLines, model.sideM, preamble.frameShape, "smooth")
+      : unionRoadSurface(model.roads, model.tramLines, model.sideM, preamble.frameShape);
   return assemblePlanPaths(
     model,
     footpaths,

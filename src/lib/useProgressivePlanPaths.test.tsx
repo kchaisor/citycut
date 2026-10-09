@@ -2,11 +2,17 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import type { CityModel, RoadFeat } from "../types";
-import { clearFootpathUnionCacheForTests, unionRoadSurface } from "./roadFill";
+import { clearAllRoadFillCachesForTests, unionRoadSurface } from "./roadFill";
 import { hashMultiPolygon } from "./geometryHash";
 import { DEFAULT_LINE_STYLES } from "./drawingStyle";
 import * as planPathsSession from "./planPathsSession";
-import { buildSmoothPlanPaths, planPathsFromSiteStyle, resetPlanPathsSessionForTests } from "./planPathsSession";
+import {
+  buildSmoothPlanPaths,
+  beginBackgroundSmoothPlan,
+  ensureSmoothPlanPaths,
+  planPathsFromSiteStyle,
+  resetPlanPathsSessionForTests,
+} from "./planPathsSession";
 import { useProgressivePlanPaths } from "./useProgressivePlanPaths";
 
 function crossingRoads(): RoadFeat[] {
@@ -55,7 +61,7 @@ const hookRequest = (model: CityModel) => ({
 
 describe("useProgressivePlanPaths", () => {
   beforeEach(() => {
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     resetPlanPathsSessionForTests();
   });
 
@@ -70,10 +76,10 @@ describe("useProgressivePlanPaths", () => {
   });
 
   it("never shows crossing-road geometry after a parallel cut with matching counts and bounds", async () => {
-    clearFootpathUnionCacheForTests();
-    unionRoadSurface(cutX.roads, undefined, cutX.sideM, "square", "fast");
-    const parallelFast = unionRoadSurface(cutP.roads, undefined, cutP.sideM, "square", "fast");
-    const crossingFast = unionRoadSurface(cutX.roads, undefined, cutX.sideM, "square", "fast");
+    clearAllRoadFillCachesForTests();
+    const parallelFast = unionRoadSurface(cutP.roads, undefined, cutP.sideM, "square");
+    clearAllRoadFillCachesForTests();
+    const crossingFast = unionRoadSurface(cutX.roads, undefined, cutX.sideM, "square");
     expect(hashMultiPolygon(parallelFast.polygons)).not.toBe(hashMultiPolygon(crossingFast.polygons));
 
     const { result, rerender } = renderHook(
@@ -93,5 +99,30 @@ describe("useProgressivePlanPaths", () => {
       { timeout: 15_000 },
     );
     expect(result.current.roadFill).not.toEqual(roadFillCutX);
+  });
+
+  it("export before the smooth swap still leaves display on smooth fills", async () => {
+    const displayReq = planPathsFromSiteStyle(cutX, 1000, DEFAULT_LINE_STYLES);
+    const exportReq = planPathsFromSiteStyle(cutX, 500, DEFAULT_LINE_STYLES);
+    const expected = buildSmoothPlanPaths(displayReq);
+    const { result } = renderHook(() => useProgressivePlanPaths(displayReq, true));
+    await ensureSmoothPlanPaths(exportReq);
+    await waitFor(
+      () => {
+        expect(result.current.roadFill).toEqual(expected.roadFill);
+      },
+      { timeout: 15_000 },
+    );
+  });
+
+  it("display cut change during export still writes the export cut", async () => {
+    const exportReq = planPathsFromSiteStyle(cutX, 500, DEFAULT_LINE_STYLES);
+    const displayReqP = planPathsFromSiteStyle(cutP, 1000, DEFAULT_LINE_STYLES);
+    const expectedExport = buildSmoothPlanPaths(exportReq);
+    const exportPromise = ensureSmoothPlanPaths(exportReq);
+    beginBackgroundSmoothPlan(displayReqP);
+    const exported = await exportPromise;
+    expect(exported.roadFill).toEqual(expectedExport.roadFill);
+    expect(exported.pathFill).toEqual(expectedExport.pathFill);
   });
 });

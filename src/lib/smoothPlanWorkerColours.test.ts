@@ -5,7 +5,7 @@ import * as colours from "./colours";
 import { COLOUR_FALLBACK, runWithPlanColours } from "./colours";
 import { sitePlanChunksForExport } from "./aiPlan";
 import { DEFAULT_LINE_STYLES } from "./drawingStyle";
-import { clearFootpathUnionCacheForTests } from "./roadFill";
+import { clearAllRoadFillCachesForTests } from "./roadFill";
 import { computeSmoothPlanPaths, runSmoothPlanWorkerJob } from "./smoothPlanCompute";
 import { ensureSmoothPlanPaths, planPathsFromSiteStyle, resetPlanPathsSessionForTests } from "./planPathsSession";
 import { hexRgb } from "./lineweights";
@@ -39,7 +39,7 @@ function snapshotWithCustomResidential(): typeof COLOUR_FALLBACK {
 
 describe("smooth plan worker colours", () => {
   beforeEach(() => {
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     resetPlanPathsSessionForTests();
   });
 
@@ -54,7 +54,7 @@ describe("smooth plan worker colours", () => {
       ...planPathsFromSiteStyle(residentialModel(), 500, DEFAULT_LINE_STYLES),
       colourSnapshot: snapshotWithCustomResidential(),
     };
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     const plan = runSmoothPlanWorkerJob(request);
     const fills = plan.buildings.map((b) => b.fill.toUpperCase());
     expect(fills.some((fill) => fill === CUSTOM)).toBe(true);
@@ -68,7 +68,7 @@ describe("smooth plan worker colours", () => {
       colourSnapshot: snapshotWithCustomResidential(),
     };
     vi.spyOn(colours, "snapshotPlanColours").mockReturnValue(snapshotWithCustomResidential());
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     const plan = await ensureSmoothPlanPaths(request);
     expect(plan.buildings.some((b) => b.fill.toUpperCase() === CUSTOM)).toBe(true);
     const chunks = await sitePlanChunksForExport(model, 500, DEFAULT_LINE_STYLES);

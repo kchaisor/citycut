@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MultiPolygon, Pair } from "polygon-clipping";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { clearFootpathUnionCacheForTests } from "./roadFill";
+import { clearAllRoadFillCachesForTests } from "./roadFill";
 import { planPaths } from "./svgPlan";
 import { PATH_WIDTH_M } from "./lineweights";
 import type { CityModel } from "../types";
@@ -86,9 +86,9 @@ function minDistToUnclosedFootpath(multi: MultiPolygon, x: number, y: number): n
 describe("east melbourne path fixture", () => {
   it("keeps path and road area near un-filleted plan and does not flood beyond the close radius", () => {
     const model = fixtureModel();
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     const sharp = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, { pathFilletM: 0 });
-    clearFootpathUnionCacheForTests();
+    clearAllRoadFillCachesForTests();
     const filleted = planPaths(model, PATH_WIDTH_M, 5, 500, 5, 2500, { pathFilletM: 2 });
 
     const pathSharp = multiArea(sharp.pathFill);
