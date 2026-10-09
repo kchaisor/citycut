@@ -1,13 +1,15 @@
-import { explodedAxoAi, figureGroundAi, sitePlanAi } from "./aiPlan";
 import { defaultExplodedAxoSettings, type ExplodedAxoSettings } from "./explodedAxo";
 import type { LineStyles } from "./drawingStyle";
-import { viewAi, type ViewStyle } from "./aiView";
+import type { ViewStyle } from "./aiView";
 import type { CameraShot } from "./cameraShot";
 import { slugifyPlace } from "./placeLabel";
 import type { SitePlanExportOptions } from "./aiPlan";
 import type { HeliodonDiagramExportOptions, HeliodonGroundExportOptions } from "./heliodonDiagram";
 import type { PlanShadowInput } from "./buildingShadows";
 import type { CityModel } from "../types";
+
+// The Illustrator writers (aiPlan, aiView, and pdf-lib under them) load on the first .ai export,
+// like rhinoExport for .3dm, so they stay out of the model-page chunk.
 
 /** Downloads the drawer still offers. glTF, SVG, and figure-ground PDF are gone. */
 export const EXPORT_IDS = ["png", "3dm", "ai-view", "ai-site", "ai-figure", "ai-exploded"] as const;
@@ -79,6 +81,7 @@ export async function downloadSiteAi(
   style?: LineStyles,
   exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): Promise<void> {
+  const { sitePlanAi } = await import("./aiPlan");
   const bytes = await sitePlanAi(model, scale, style, exportOptions);
   downloadBytes(aiFilename(model, "site", scale), bytes, "application/pdf");
 }
@@ -89,6 +92,7 @@ export async function downloadFigureAi(
   style?: LineStyles,
   heliodon?: HeliodonDiagramExportOptions | null,
 ): Promise<void> {
+  const { figureGroundAi } = await import("./aiPlan");
   const bytes = await figureGroundAi(model, scale, style, heliodon);
   downloadBytes(aiFilename(model, "figure", scale), bytes, "application/pdf");
 }
@@ -99,11 +103,13 @@ export async function downloadExplodedAxoAi(
   settings: ExplodedAxoSettings = defaultExplodedAxoSettings(model.sideM),
   satelliteNote?: string,
 ): Promise<void> {
+  const { explodedAxoAi } = await import("./aiPlan");
   const bytes = await explodedAxoAi(model, scale, settings, satelliteNote);
   downloadBytes(aiFilename(model, "exploded", scale), bytes, "application/pdf");
 }
 
 export async function downloadViewAi(model: CityModel, shot: CameraShot, style: ViewStyle): Promise<void> {
+  const { viewAi } = await import("./aiView");
   const bytes = await viewAi(model, shot, style);
   downloadBytes(aiFilename(model, "view"), bytes, "application/pdf");
 }

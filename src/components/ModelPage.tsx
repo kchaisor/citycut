@@ -11,7 +11,7 @@ import {
   uniformBuildingColor,
 } from "../lib/buildingUse";
 import { useColourRevision } from "../lib/useColourRevision";
-import { CRS_NOTE, mgaCrs } from "../lib/crs";
+import { CRS_NOTE, mgaCrs } from "../lib/crsZone";
 import {
   commitLineStyles,
   lineStyleBaseline,
