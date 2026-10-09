@@ -313,9 +313,6 @@ export function DrawingPlan({
                 {...(style.kerbOn ? screenPenAttrs(style.kerb) : { stroke: "none" })}
               />
             )}
-            {plan.greenOnRoad.map((rings, index) => (
-              <path key={`gr${index}`} d={svgRings(rings)} fill={greenFill} {...screenPenAttrs(style.green)} />
-            ))}
             {plan.pathFill.length > 0 && (
               <path
                 d={plan.pathFill.map((polygon) => svgRings(polygon)).join(" ")}

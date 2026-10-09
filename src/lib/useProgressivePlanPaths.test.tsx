@@ -1,14 +1,29 @@
 // @vitest-environment happy-dom
 import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, beforeEach, vi } from "vitest";
-import type { CityModel } from "../types";
-import { clearFootpathUnionCacheForTests } from "./roadFill";
+import type { CityModel, RoadFeat } from "../types";
+import { clearFootpathUnionCacheForTests, unionRoadSurface } from "./roadFill";
+import { hashMultiPolygon } from "./geometryHash";
 import { DEFAULT_LINE_STYLES } from "./drawingStyle";
 import * as planPathsSession from "./planPathsSession";
 import { buildSmoothPlanPaths, planPathsFromSiteStyle, resetPlanPathsSessionForTests } from "./planPathsSession";
 import { useProgressivePlanPaths } from "./useProgressivePlanPaths";
 
-function testModel(pathNorthM: number): CityModel {
+function crossingRoads(): RoadFeat[] {
+  return [
+    { id: 1, line: [[-50, 0], [50, 0]], width: 8, kind: "road", grade: "arterial" },
+    { id: 2, line: [[0, -50], [0, 50]], width: 8, kind: "road", grade: "arterial" },
+  ];
+}
+
+function parallelRoadsSameBounds(): RoadFeat[] {
+  return [
+    { id: 1, line: [[-50, -50], [50, -50]], width: 8, kind: "road", grade: "arterial" },
+    { id: 2, line: [[-50, 50], [50, 50]], width: 8, kind: "road", grade: "arterial" },
+  ];
+}
+
+function testModel(roads: RoadFeat[]): CityModel {
   return {
     placeLabel: "Hook test",
     center: { lon: 144.9631, lat: -37.8136 },
@@ -16,10 +31,7 @@ function testModel(pathNorthM: number): CityModel {
     layers: { buildings: true, roads: true, waterGreen: true, trees: false },
     buildings: [],
     blocks: [],
-    roads: [
-      { id: 1, line: [[-40, pathNorthM], [40, pathNorthM]], width: 8, kind: "road", grade: "arterial" },
-      { id: 2, line: [[-30, -20], [30, -20]], width: 2, kind: "road", grade: "path" },
-    ],
+    roads,
     areas: [],
     trees: [],
     roadKm: 0.1,
@@ -28,8 +40,8 @@ function testModel(pathNorthM: number): CityModel {
   };
 }
 
-const cutA = testModel(-18);
-const cutB = testModel(24);
+const cutX = testModel(crossingRoads());
+const cutP = testModel(parallelRoadsSameBounds());
 
 const hookRequest = (model: CityModel) => ({
   model,
@@ -50,31 +62,36 @@ describe("useProgressivePlanPaths", () => {
   it("does not run a synchronous smooth build on first paint when progressive mode is on", () => {
     const smoothSpy = vi.spyOn(planPathsSession, "buildSmoothPlanPaths");
     try {
-      renderHook(() => useProgressivePlanPaths(hookRequest(cutA), true));
+      renderHook(() => useProgressivePlanPaths(hookRequest(cutX), true));
       expect(smoothSpy).not.toHaveBeenCalled();
     } finally {
       smoothSpy.mockRestore();
     }
   });
 
-  it("never shows the previous cut's road fill when counts and centre match but geometry differs", async () => {
+  it("never shows crossing-road geometry after a parallel cut with matching counts and bounds", async () => {
+    clearFootpathUnionCacheForTests();
+    unionRoadSurface(cutX.roads, undefined, cutX.sideM, "square", "fast");
+    const parallelFast = unionRoadSurface(cutP.roads, undefined, cutP.sideM, "square", "fast");
+    const crossingFast = unionRoadSurface(cutX.roads, undefined, cutX.sideM, "square", "fast");
+    expect(hashMultiPolygon(parallelFast.polygons)).not.toBe(hashMultiPolygon(crossingFast.polygons));
+
     const { result, rerender } = renderHook(
       ({ model }: { model: CityModel }) => useProgressivePlanPaths(hookRequest(model), true),
-      { initialProps: { model: cutA } },
+      { initialProps: { model: cutX } },
     );
+    const roadFillCutX = structuredClone(result.current.roadFill);
+    rerender({ model: cutP });
 
-    const roadFillCutA = structuredClone(result.current.roadFill);
-    rerender({ model: cutB });
+    expect(result.current.roadFill).not.toEqual(roadFillCutX);
 
-    expect(result.current.roadFill).not.toEqual(roadFillCutA);
-
-    const smoothB = buildSmoothPlanPaths(planPathsFromSiteStyle(cutB, 1000, DEFAULT_LINE_STYLES));
+    const smoothP = buildSmoothPlanPaths(planPathsFromSiteStyle(cutP, 1000, DEFAULT_LINE_STYLES));
     await waitFor(
       () => {
-        expect(result.current.roadFill).toEqual(smoothB.roadFill);
+        expect(result.current.roadFill).toEqual(smoothP.roadFill);
       },
       { timeout: 15_000 },
     );
-    expect(result.current.roadFill).not.toEqual(roadFillCutA);
+    expect(result.current.roadFill).not.toEqual(roadFillCutX);
   });
 });

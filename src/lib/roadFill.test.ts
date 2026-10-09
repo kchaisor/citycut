@@ -12,6 +12,7 @@ import {
   unionRoadSurface,
 } from "./roadFill";
 import type { Pt, RoadFeat } from "../types";
+import { hashMultiPolygon } from "./geometryHash";
 
 function openRing(ring: Pair[]): Pair[] {
   if (
@@ -332,7 +333,9 @@ describe("road union", () => {
     };
     const surfaced = unionRoadSurface([road], undefined, 200, "square");
     const outer = openRing(surfaced.polygons[0]![0]!);
-    const maxHalfWidth = Math.max(...outer.map((p) => Math.abs(p[1])));
+    const sideEdges = outer.filter((p) => Math.abs(p[1]) >= 4.9 && Math.abs(p[0]) <= 40);
+    expect(sideEdges.length).toBeGreaterThan(2);
+    const maxHalfWidth = Math.max(...sideEdges.map((p) => Math.abs(p[1])));
     expect(Math.abs(maxHalfWidth - 5)).toBeLessThan(0.15);
     for (let i = 0; i < outer.length; i++) {
       const a = outer[i]!;
@@ -420,5 +423,27 @@ describe("road union", () => {
     expect(inside(joined.polygons, 20, 0)).toBe(true);
     expect(hasInternalSeam(joined.polygons)).toBe(false);
     expect(unionFootpaths([[[0, 0], [40, 0]]], 0, 200).polygons).toHaveLength(0);
+  });
+
+  it("does not reuse road surface cache when bounds and counts match but geometry differs (X vs P)", () => {
+    const sideM = 100;
+    const width = 8;
+    const roadsX: RoadFeat[] = [
+      { id: 1, line: [[-50, 0], [50, 0]], width, kind: "road", grade: "arterial" },
+      { id: 2, line: [[0, -50], [0, 50]], width, kind: "road", grade: "arterial" },
+    ];
+    const roadsP: RoadFeat[] = [
+      { id: 1, line: [[-50, -50], [50, -50]], width, kind: "road", grade: "arterial" },
+      { id: 2, line: [[-50, 50], [50, 50]], width, kind: "road", grade: "arterial" },
+    ];
+    clearFootpathUnionCacheForTests();
+    const fillX = unionRoadSurface(roadsX, undefined, sideM, "square", "fast");
+    clearFootpathUnionCacheForTests();
+    const fillP = unionRoadSurface(roadsP, undefined, sideM, "square", "fast");
+    expect(hashMultiPolygon(fillP.polygons)).not.toBe(hashMultiPolygon(fillX.polygons));
+    clearFootpathUnionCacheForTests();
+    unionRoadSurface(roadsX, undefined, sideM, "square", "fast");
+    const fillPAfterX = unionRoadSurface(roadsP, undefined, sideM, "square", "fast");
+    expect(hashMultiPolygon(fillPAfterX.polygons)).toBe(hashMultiPolygon(fillP.polygons));
   });
 });

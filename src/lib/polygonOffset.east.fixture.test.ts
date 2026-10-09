@@ -98,8 +98,8 @@ describe("east melbourne path fixture", () => {
 
     expect(pathFil).toBeGreaterThan(pathSharp * 0.85);
     expect(pathFil).toBeLessThan(pathSharp * 1.15);
-    expect(roadFil).toBeGreaterThan(roadSharp * 0.92);
-    expect(roadFil).toBeLessThan(roadSharp * 1.08);
+    expect(roadFil).toBeGreaterThan(roadSharp * 0.95);
+    expect(roadFil).toBeLessThan(roadSharp * 1.05);
 
     const r = 2;
     const slack = 0.1;

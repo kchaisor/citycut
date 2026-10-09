@@ -3,12 +3,16 @@ import { PATH_WIDTH_M } from "./lineweights";
 import type { LineStyles } from "./drawingStyle";
 import type { BuildingColourMode } from "./buildingViewportColor";
 import {
+  assemblePlanPaths,
   planPaths,
+  planPathsPreamble,
   type PlanPaths,
   type PlanPathsBuildArgs,
   type PlanPathOptions,
   resolvePlanPathQuality,
 } from "./svgPlan";
+import { DEFAULT_PATH_FILLET_M, footpathStrips, unionFootpathStrips, unionRoadSurface } from "./roadFill";
+import { DEFAULT_COARSE_FROM_SCALE, DEFAULT_COARSE_INTERVAL_M } from "./vicmapContours";
 
 export type PlanPathsRequest = PlanPathsBuildArgs & {
   model: CityModel;
@@ -103,6 +107,83 @@ export function buildSmoothPlanPaths(request: PlanPathsRequest): PlanPaths {
   });
 }
 
+const SLICE_BUDGET_MS = 90;
+
+async function yieldToIdle(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    const idle = globalThis.requestIdleCallback;
+    if (typeof idle !== "function") {
+      setTimeout(resolve, 0);
+      return;
+    }
+    const started = performance.now();
+    const step = (deadline: IdleDeadline) => {
+      if (performance.now() - started >= SLICE_BUDGET_MS || deadline.timeRemaining() > 2) {
+        resolve();
+        return;
+      }
+      idle(step, { timeout: 100 });
+    };
+    idle(step, { timeout: 100 });
+  });
+}
+
+async function buildSmoothPlanPathsChunked(
+  request: PlanPathsRequest,
+  isValid: () => boolean,
+): Promise<PlanPaths | null> {
+  const {
+    model,
+    pathWidthM = PATH_WIDTH_M,
+    contourIndexEvery = 5,
+    planScale = 1000,
+    coarseIntervalM,
+    coarseFromScale,
+    planOptions: rawOptions = {},
+  } = request;
+  const planOptions = smoothPlanOptions(rawOptions);
+  const pathFilletM =
+    planOptions.pathFilletM !== undefined ? planOptions.pathFilletM : DEFAULT_PATH_FILLET_M;
+  const preamble = planPathsPreamble(model);
+  if (!isValid()) return null;
+  await yieldToIdle();
+  if (!isValid()) return null;
+
+  const footpaths = unionFootpathStrips(
+    footpathStrips(model.roads, pathWidthM),
+    model.sideM,
+    preamble.frameShape,
+    pathFilletM,
+    pathWidthM,
+    "smooth",
+  );
+  await yieldToIdle();
+  if (!isValid()) return null;
+
+  const carriageway = unionRoadSurface(
+    model.roads,
+    model.tramLines,
+    model.sideM,
+    preamble.frameShape,
+    "smooth",
+  );
+  await yieldToIdle();
+  if (!isValid()) return null;
+
+  return assemblePlanPaths(
+    model,
+    footpaths,
+    carriageway,
+    pathWidthM,
+    contourIndexEvery,
+    planScale,
+    coarseIntervalM ?? DEFAULT_COARSE_INTERVAL_M,
+    coarseFromScale ?? DEFAULT_COARSE_FROM_SCALE,
+    planOptions,
+    preamble,
+  );
+}
+
 type SmoothJob = {
   token: string;
   promise: Promise<PlanPaths>;
@@ -115,19 +196,12 @@ export function resetPlanPathsSessionForTests(): void {
 }
 
 function scheduleSmoothCompute(request: PlanPathsRequest): Promise<PlanPaths> {
-  const run = () => buildSmoothPlanPaths(request);
-  const idle = globalThis.requestIdleCallback;
-  if (typeof idle === "function") {
-    return new Promise((resolve) => {
-      idle(
-        () => {
-          resolve(run());
-        },
-        { timeout: 5000 },
-      );
-    });
-  }
-  return Promise.resolve().then(run);
+  const token = planModelCutToken(request.model);
+  const isValid = () => planModelCutToken(request.model) === token;
+  return buildSmoothPlanPathsChunked(request, isValid).then((plan) => {
+    if (!plan) throw new Error("Smooth plan build cancelled");
+    return plan;
+  });
 }
 
 /** Start or reuse background smooth plan build for the current cut. */

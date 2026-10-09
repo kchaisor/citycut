@@ -9,6 +9,7 @@ import {
   type SiteFrameShape,
 } from "./siteFrame";
 import type { Pt, RoadFeat } from "../types";
+import { hashLineCoords, hashMultiPolygon, hashRoadFeatures, hashStripLines } from "./geometryHash";
 import { clearCentrelineCacheForTests } from "./centrelineSmooth";
 import {
   CLIPPER_ARC_CHORD_M,
@@ -33,6 +34,8 @@ function clippingFns(): ClipFns {
 
 const { union, intersection, difference } = clippingFns();
 
+/** Main / 3D / .3dm centreline simplify (m). */
+export const LEGACY_CENTRELINE_SIMPLIFY_M = 0.35;
 /** Douglas–Peucker on near-straight centreline runs (m). */
 export const CENTRELINE_SIMPLIFY_STRAIGHT_M = 0.35;
 /** Douglas–Peucker on curved centreline runs (m). */
@@ -440,8 +443,24 @@ function boxOf(polygon: Polygon): { minX: number; minY: number; maxX: number; ma
   return { minX, minY, maxX, maxY };
 }
 
-/** Union nearby buffers first so a 1 km network does not start from one giant pair. */
-function unionFast(polygons: Polygon[], sideM = 1000): MultiPolygon {
+/** Main-style union bucketing (fixed cell size). */
+function unionFastLegacy(polygons: Polygon[]): MultiPolygon {
+  if (polygons.length < 24) return unionList(polygons);
+  const cell = 90;
+  const buckets = new Map<string, Polygon[]>();
+  for (const polygon of polygons) {
+    const box = boxOf(polygon);
+    const key = `${Math.floor((box.minX + box.maxX) / 2 / cell)}:${Math.floor((box.minY + box.maxY) / 2 / cell)}`;
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(polygon);
+    else buckets.set(key, [polygon]);
+  }
+  const parts = [...buckets.values()].map((group) => unionList(group));
+  return unionList(parts.flatMap((multi) => multi));
+}
+
+/** Plan-only union bucketing scaled to cut size. */
+function unionFastPlan(polygons: Polygon[], sideM = 1000): MultiPolygon {
   if (polygons.length < 24) return unionList(polygons);
   const cell = sideM > 0 ? sideM / 4 : 90;
   const buckets = new Map<string, Polygon[]>();
@@ -467,14 +486,12 @@ function capsules(pts: Pt[], half: number): Polygon[] {
   return polygons;
 }
 
-/**
- * One buffered centreline. `width` is the full strip, so half of it lies on each side.
- * Roads keep a 0.4 m minimum. Footpaths pass `minWidth` 0 so 1.2 m stays 0.6 m each side.
- * A closed centreline keeps the island as a hole.
- */
-export function bufferCentreline(line: Pt[], width: number, minWidth = 0.4): Polygon[] {
+function bufferCentrelineInternal(line: Pt[], width: number, minWidth: number, plan: boolean): Polygon[] {
   const half = Math.max(width, minWidth) / 2;
-  const simplified = simplifyCentreline(line);
+  const deduped = dedupe(line);
+  const simplified = plan
+    ? simplifyCentreline(deduped)
+    : simplify(deduped, LEGACY_CENTRELINE_SIMPLIFY_M);
   if (simplified.length < 2) return [];
   if (isLoop(simplified)) {
     const loop = bufferLoop(simplified, half);
@@ -488,6 +505,17 @@ export function bufferCentreline(line: Pt[], width: number, minWidth = 0.4): Pol
   const pieces = capsules(isLoop(simplified) ? simplified.slice(0, -1) : simplified, half);
   if (pieces.length === 0) return [];
   return unionList(pieces);
+}
+
+/**
+ * One buffered centreline (main / 3D / .3dm). Plan smoothing uses {@link bufferCentrelinePlan}.
+ */
+export function bufferCentreline(line: Pt[], width: number, minWidth = 0.4): Polygon[] {
+  return bufferCentrelineInternal(line, width, minWidth, false);
+}
+
+function bufferCentrelinePlan(line: Pt[], width: number, minWidth = 0.4): Polygon[] {
+  return bufferCentrelineInternal(line, width, minWidth, true);
 }
 
 /** Clip unioned road/path surfaces to the site frame after dilation or fillets. */
@@ -583,7 +611,25 @@ function clipCentrelineForBuffer(
     .filter((part) => part.length >= 2);
 }
 
-function unionStrips(
+/** Main / 3D / city blocks — unchanged from pre-smooth-plan behaviour. */
+function unionStripsLegacy(
+  roads: { line: Pt[]; width: number }[],
+  sideM: number,
+  minWidth: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+): StripUnion {
+  const started = performance.now();
+  const inputs: Polygon[] = [];
+  for (const road of roads) {
+    if (road.line.length < 2 || !(road.width > 0)) continue;
+    inputs.push(...bufferCentreline(road.line, road.width, minWidth));
+  }
+  const merged = tidy(clipToFrame(unionFastLegacy(inputs), sideM, frameShape));
+  return { polygons: merged, ms: performance.now() - started, inputs: inputs.length };
+}
+
+/** Plan-only footpath union (pre-clipped centreline + plan simplify). */
+function unionStripsPlan(
   roads: { line: Pt[]; width: number }[],
   sideM: number,
   minWidth: number,
@@ -596,10 +642,10 @@ function unionStrips(
     const padM = centrelineBufferPadM(road.width, minWidth);
     const parts = clipCentrelineForBuffer(road.line, sideM, frameShape, padM);
     for (const line of parts) {
-      inputs.push(...bufferCentreline(line, road.width, minWidth));
+      inputs.push(...bufferCentrelinePlan(line, road.width, minWidth));
     }
   }
-  const merged = tidy(clipToFrame(unionFast(inputs, sideM), sideM, frameShape));
+  const merged = tidy(clipToFrame(unionFastPlan(inputs, sideM), sideM, frameShape));
   return { polygons: merged, ms: performance.now() - started, inputs: inputs.length };
 }
 
@@ -613,7 +659,7 @@ export function unionCarriageways(
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
 ): StripUnion {
-  return unionStrips(roads, sideM, 0.4, frameShape);
+  return unionStripsLegacy(roads, sideM, 0.4, frameShape);
 }
 
 /** Buffer each path by its stored width and union the strips (3D and exports match the site plan). */
@@ -622,7 +668,7 @@ export function unionPathRoads(
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
 ): StripUnion {
-  return unionStrips(roads, sideM, 0, frameShape);
+  return unionStripsLegacy(roads, sideM, 0, frameShape);
 }
 
 export function carriagewaysOf(roads: RoadFeat[]): { line: Pt[]; width: number }[] {
@@ -651,21 +697,7 @@ const COMPONENT_CLOSE_CACHE_LIMIT = 160;
 const componentCloseCache = new Map<string, MultiPolygon>();
 
 function polygonFingerprint(polygon: Polygon): string {
-  let points = 0;
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const ring of polygon) {
-    points += ring.length;
-    for (const [x, y] of ring) {
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x);
-      maxY = Math.max(maxY, y);
-    }
-  }
-  return `${polygon.length}:${points}:${minX.toFixed(2)},${minY.toFixed(2)},${maxX.toFixed(2)},${maxY.toFixed(2)}`;
+  return hashMultiPolygon([polygon]);
 }
 
 function offsetClosePolygonCached(
@@ -833,7 +865,7 @@ export function subtractFootpathBlockersAt(
 ): MultiPolygon {
   if (footpaths.length === 0 || blockers.length === 0) return footpaths;
   try {
-    return tidyAt(difference(footpaths, unionFast(blockers)), simplifyM);
+    return tidyAt(difference(footpaths, unionFastPlan(blockers)), simplifyM);
   } catch {
     let result = footpaths;
     for (const blocker of blockers) {
@@ -854,7 +886,7 @@ export function subtractFootpathBlockers(footpaths: MultiPolygon, blockers: Mult
 /** Re-merge footpath fragments after carriageway subtract so the plan stays one fill. */
 export function mergeFootpathFragmentsAt(polygons: MultiPolygon, simplifyM: number): MultiPolygon {
   if (polygons.length <= 1) return polygons;
-  return tidyAt(unionFast(polygons), simplifyM);
+  return tidyAt(unionFastPlan(polygons), simplifyM);
 }
 
 export function mergeFootpathFragments(polygons: MultiPolygon): MultiPolygon {
@@ -865,23 +897,7 @@ const displayFootpathClipCache = new Map<string, MultiPolygon>();
 const DISPLAY_FOOTPATH_CACHE_LIMIT = 32;
 
 function multiFingerprint(multi: MultiPolygon): string {
-  let points = 0;
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const polygon of multi) {
-    for (const ring of polygon) {
-      points += ring.length;
-      for (const [x, y] of ring) {
-        minX = Math.min(minX, x);
-        minY = Math.min(minY, y);
-        maxX = Math.max(maxX, x);
-        maxY = Math.max(maxY, y);
-      }
-    }
-  }
-  return `${multi.length}:${points}:${minX.toFixed(2)},${minY.toFixed(2)},${maxX.toFixed(2)},${maxY.toFixed(2)}`;
+  return hashMultiPolygon(multi);
 }
 
 /**
@@ -942,27 +958,14 @@ function footpathUnionCacheKey(
   frameShape: SiteFrameShape,
   quality: PlanFillQuality,
 ): string {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  let points = 0;
-  for (const line of lines) {
-    points += line.length;
-    for (const [x, y] of line) {
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x);
-      maxY = Math.max(maxY, y);
-    }
-  }
-  return `${lines.length}:${points}:${minX.toFixed(1)},${minY.toFixed(1)},${maxX.toFixed(1)},${maxY.toFixed(1)}:${widthM}:${filletM}:${sideM}:${frameShape}:${quality}:tile1`;
+  const geom = hashStripLines(lines, widthM, filletM);
+  return `${geom}:${sideM}:${frameShape}:${quality}:v3`;
 }
 
-function unionMulti(a: MultiPolygon, b: MultiPolygon, sideM: number): MultiPolygon {
+function unionMulti(a: MultiPolygon, b: MultiPolygon): MultiPolygon {
   if (a.length === 0) return b;
   if (b.length === 0) return a;
-  return tidy(unionFast([...a, ...b], sideM));
+  return tidy(unionFastLegacy([...a, ...b]));
 }
 
 function roadSurfaceCacheKey(
@@ -972,37 +975,9 @@ function roadSurfaceCacheKey(
   frameShape: SiteFrameShape,
   quality: PlanFillQuality,
 ): string {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  let points = 0;
-  let widthSum = 0;
-  for (const road of roads) {
-    widthSum += Math.round(road.width * 100);
-    points += road.line.length;
-    for (const [x, y] of road.line) {
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x);
-      maxY = Math.max(maxY, y);
-    }
-  }
-  let tramPts = 0;
-  for (const line of tramLines ?? []) {
-    tramPts += line.length;
-    for (const [x, y] of line) {
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x);
-      maxY = Math.max(maxY, y);
-    }
-  }
-  const bounds =
-    points + tramPts === 0
-      ? "empty"
-      : `${minX.toFixed(1)},${minY.toFixed(1)},${maxX.toFixed(1)},${maxY.toFixed(1)}`;
-  return `${roads.length}:${points}:${widthSum}:${tramLines?.length ?? 0}:${tramPts}:${bounds}:${sideM}:${frameShape}:${quality}:tile2`;
+  let h = 2166136261;
+  for (const line of tramLines ?? []) h = hashLineCoords(h, line);
+  return `${hashRoadFeatures(roads)}:${h.toString(16)}:${sideM}:${frameShape}:${quality}:v3`;
 }
 
 /** Unioned carriageway plus in-road tram corridors, with median gaps closed. */
@@ -1026,7 +1001,7 @@ export function unionRoadSurface(
     tramInputs.length > 0
       ? unionCarriageways(tramInputs, sideM, frameShape)
       : { polygons: [] as MultiPolygon, ms: 0, inputs: 0 };
-  const merged = unionMulti(carriageway.polygons, withTram.polygons, sideM);
+  const merged = unionMulti(carriageway.polygons, withTram.polygons);
   const morphRaw = normalizeMultiPolygonByParity(
     clipToFrame(
       offsetCloseMultiComponents(merged, ROAD_MORPH_CLOSE_M, clipperArcForQuality(quality)),
@@ -1166,7 +1141,7 @@ export function footpathMergedBeforeFillet(
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
 ): MultiPolygon {
   const stitched = stitchFootpathStrips(strips);
-  return unionStrips(stitched, sideM, 0, frameShape).polygons;
+  return unionStripsLegacy(stitched, sideM, 0, frameShape).polygons;
 }
 
 export function unionFootpathStrips(
@@ -1190,7 +1165,7 @@ export function unionFootpathStrips(
   const bandTypical = typicalBandWidthM > 0 ? typicalBandWidthM : typical;
   const filletRadius =
     filletM > 0 ? Math.max(filletM, bandTypical * PATH_FILLET_BAND_SCALE) : 0;
-  const merged = unionStrips(stitched, sideM, 0, frameShape);
+  const merged = unionStripsPlan(stitched, sideM, 0, frameShape);
   const arcTol = clipperArcForQuality(quality);
   const dual =
     filletRadius > 0

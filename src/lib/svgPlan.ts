@@ -27,10 +27,10 @@ import {
   drawnContourInterval,
 } from "./vicmapContours";
 import type { CityModel, Pt } from "../types";
-import { fillRoadMedianHoles, splitGreenForRoadLayer } from "./roadSurfacePlan";
+import type { RoadFill } from "./roadFill";
 
-/** Ground-metre precision for plan path coordinates (0.01 m). */
-export const PLAN_COORD_ROUND_M = 0.01;
+/** Ground-metre precision for plan path `d` coordinates (matches main). */
+export const PLAN_COORD_ROUND_M = 0.1;
 export const roundPlanCoord = (value: number) => Math.round(value / PLAN_COORD_ROUND_M) * PLAN_COORD_ROUND_M;
 const round = roundPlanCoord;
 
@@ -55,7 +55,7 @@ export type PlanPaths = {
   water: Pt[][][];
   /** Unioned carriageway, outer rings plus block holes, in local east/north metres. */
   roadFill: Pt[][][];
-  /** Park/green drawn above the road layer (medians, traffic islands). */
+  /** Reserved; always empty (green stays below roads, matching main). */
   greenOnRoad: Pt[][][];
   /** Buffer and union time for the carriageway, in milliseconds. */
   roadUnionMs: number;
@@ -171,55 +171,51 @@ export type PlanPathsBuildArgs = {
   planOptions?: PlanPathOptions;
 };
 
-export function planPaths(
+function planRoadAndPathFills(
+  quality: PlanFillQuality,
+  carriageway: RoadFill,
+  footpaths: RoadFill,
+  pathFilletM: number,
+): { roadFillPolys: MultiPolygon; pathFill: MultiPolygon } {
+  if (quality === "fast") {
+    let pathFill = footpaths.polygons;
+    if (pathFilletM > 0 && carriageway.polygons.length > 0) {
+      pathFill = subtractFootpathBlockers(pathFill, carriageway.polygons);
+      pathFill = mergeFootpathFragments(pathFill);
+    }
+    return { roadFillPolys: carriageway.polygons, pathFill };
+  }
+  const roadFillPolys = roadFillDisplayPolygons(carriageway);
+  let pathFill = footpathFillDisplayPolygons(footpaths);
+  if (pathFilletM > 0 && roadFillPolys.length > 0) {
+    pathFill = footpathDisplayAfterRoadBlockers(footpathFillDisplayPolygons(footpaths), carriageway.polygons);
+  }
+  return { roadFillPolys, pathFill };
+}
+
+export function assemblePlanPaths(
   model: CityModel,
-  pathWidthM = PATH_WIDTH_M,
-  contourIndexEvery = 5,
-  planScale = 1000,
-  coarseIntervalM = DEFAULT_COARSE_INTERVAL_M,
-  coarseFromScale = DEFAULT_COARSE_FROM_SCALE,
-  planOptions: PlanPathOptions = {},
+  footpaths: RoadFill,
+  carriageway: RoadFill,
+  _pathWidthM: number,
+  contourIndexEvery: number,
+  planScale: number,
+  coarseIntervalM: number,
+  coarseFromScale: number,
+  planOptions: PlanPathOptions,
+  preamble: {
+    blocks: Pt[][][];
+    green: Pt[][][];
+    water: Pt[][][];
+    rails: PlanPaths["rails"];
+    trams: PlanPaths["trams"];
+  },
 ): PlanPaths {
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
-  const blocks: Pt[][][] = [];
-  const green: Pt[][][] = [];
-  const water: Pt[][][] = [];
-  for (const area of model.blocks ?? []) {
-    const rings = clipRings(area.ring, area.holes, model.sideM, frameShape);
-    if (rings) blocks.push(rings);
-  }
-  for (const area of model.areas) {
-    if (area.kind === "block") continue;
-    const rings = clipRings(area.ring, area.holes, model.sideM, frameShape);
-    if (!rings) continue;
-    if (area.kind === "water") water.push(rings);
-    else green.push(rings);
-  }
-
-  const rails: PlanPaths["rails"] = [];
-  for (const road of model.roads) {
-    if (road.kind === "rail") {
-      for (const line of clipLines(road.line, model.sideM, frameShape)) rails.push(line);
-    }
-  }
-  const trams: PlanPaths["trams"] = [];
-  for (const line of model.tramLines ?? []) {
-    for (const part of clipLines(line, model.sideM, frameShape)) trams.push(part);
-  }
   const pathFilletM =
     planOptions.pathFilletM !== undefined ? planOptions.pathFilletM : DEFAULT_PATH_FILLET_M;
   const quality = resolvePlanPathQuality(planOptions);
-  const centrelineSmooth = planOptions.centrelineSmooth !== false;
-  setCentrelineSmoothForUnion(centrelineSmooth);
-  const footpaths = unionFootpathStrips(
-    footpathStrips(model.roads, pathWidthM),
-    model.sideM,
-    frameShape,
-    pathFilletM,
-    pathWidthM,
-    quality,
-  );
-  let carriageway = unionRoadSurface(model.roads, model.tramLines, model.sideM, frameShape, quality);
+  const { roadFillPolys, pathFill } = planRoadAndPathFills(quality, carriageway, footpaths, pathFilletM);
 
   const colourMode: BuildingColourMode = planOptions.buildingColour ?? {
     colourByUse: true,
@@ -236,36 +232,6 @@ export function planPaths(
       return { rings, fill, site };
     })
     .filter((building): building is { rings: Pt[][]; fill: string; site: boolean } => building !== null);
-
-  let roadFillPolys: MultiPolygon;
-  let roadCoarse: MultiPolygon;
-  let pathFill: MultiPolygon;
-  if (quality === "fast") {
-    roadCoarse = carriageway.polygons;
-    roadFillPolys = carriageway.polygons;
-    pathFill = footpaths.polygons;
-    if (pathFilletM > 0 && carriageway.polygons.length > 0) {
-      pathFill = subtractFootpathBlockers(pathFill, carriageway.polygons);
-      pathFill = mergeFootpathFragments(pathFill);
-    }
-  } else {
-    roadFillPolys = fillRoadMedianHoles(roadFillDisplayPolygons(carriageway));
-    roadCoarse = fillRoadMedianHoles(carriageway.polygons);
-    pathFill = footpathFillDisplayPolygons(footpaths);
-    if (pathFilletM > 0 && roadFillPolys.length > 0) {
-      pathFill = footpathDisplayAfterRoadBlockers(footpathFillDisplayPolygons(footpaths), roadFillPolys);
-    }
-  }
-  const greenSplit = splitGreenForRoadLayer(green, roadCoarse);
-  const greenBelow = greenSplit.green;
-  const greenOnRoad = greenSplit.greenOnRoad;
-
-  let ringSmoothMs = 0;
-  if (quality === "smooth") {
-    const tSmooth = performance.now();
-    // Centreline densify handles road curves; footpath fillets stay from Clipper union.
-    ringSmoothMs = Math.round(performance.now() - tSmooth);
-  }
 
   const trees = model.trees
     .filter((tree) => pointInSiteFrame(tree.at, model.sideM, frameShape))
@@ -298,16 +264,16 @@ export function planPaths(
   const drawn = layer && visible.length > 0 ? drawContours(visible, drawnInterval, contourIndexEvery) : null;
 
   return {
-    blocks,
-    green: greenBelow,
-    greenOnRoad,
-    water,
+    blocks: preamble.blocks,
+    green: preamble.green,
+    greenOnRoad: [],
+    water: preamble.water,
     roadFill: roadFillPolys,
     roadUnionMs: carriageway.ms,
     pathFill,
     pathUnionMs: footpaths.ms,
-    rails,
-    trams,
+    rails: preamble.rails,
+    trams: preamble.trams,
     buildings,
     trees,
     contours: drawn ? drawn.lines.map((line) => line.points) : [],
@@ -315,6 +281,86 @@ export function planPaths(
     contourLabels: [],
     contourInterval: drawn && layer ? drawnInterval : null,
     contourSource: drawn && layer ? layer.source : null,
-    ringSmoothMs,
+    ringSmoothMs: quality === "smooth" ? 0 : undefined,
   };
+}
+
+export function planPathsPreamble(model: CityModel): {
+  blocks: Pt[][][];
+  green: Pt[][][];
+  water: Pt[][][];
+  rails: PlanPaths["rails"];
+  trams: PlanPaths["trams"];
+  frameShape: import("../types").SiteFrameShape;
+} {
+  const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
+  const blocks: Pt[][][] = [];
+  const green: Pt[][][] = [];
+  const water: Pt[][][] = [];
+  for (const area of model.blocks ?? []) {
+    const rings = clipRings(area.ring, area.holes, model.sideM, frameShape);
+    if (rings) blocks.push(rings);
+  }
+  for (const area of model.areas) {
+    if (area.kind === "block") continue;
+    const rings = clipRings(area.ring, area.holes, model.sideM, frameShape);
+    if (!rings) continue;
+    if (area.kind === "water") water.push(rings);
+    else green.push(rings);
+  }
+  const rails: PlanPaths["rails"] = [];
+  for (const road of model.roads) {
+    if (road.kind === "rail") {
+      for (const line of clipLines(road.line, model.sideM, frameShape)) rails.push(line);
+    }
+  }
+  const trams: PlanPaths["trams"] = [];
+  for (const line of model.tramLines ?? []) {
+    for (const part of clipLines(line, model.sideM, frameShape)) trams.push(part);
+  }
+  return { blocks, green, water, rails, trams, frameShape };
+}
+
+export function planPaths(
+  model: CityModel,
+  pathWidthM = PATH_WIDTH_M,
+  contourIndexEvery = 5,
+  planScale = 1000,
+  coarseIntervalM = DEFAULT_COARSE_INTERVAL_M,
+  coarseFromScale = DEFAULT_COARSE_FROM_SCALE,
+  planOptions: PlanPathOptions = {},
+): PlanPaths {
+  const preamble = planPathsPreamble(model);
+  const pathFilletM =
+    planOptions.pathFilletM !== undefined ? planOptions.pathFilletM : DEFAULT_PATH_FILLET_M;
+  const quality = resolvePlanPathQuality(planOptions);
+  const centrelineSmooth = planOptions.centrelineSmooth !== false;
+  setCentrelineSmoothForUnion(centrelineSmooth);
+  const footpaths = unionFootpathStrips(
+    footpathStrips(model.roads, pathWidthM),
+    model.sideM,
+    preamble.frameShape,
+    pathFilletM,
+    pathWidthM,
+    quality,
+  );
+  const carriageway = unionRoadSurface(
+    model.roads,
+    model.tramLines,
+    model.sideM,
+    preamble.frameShape,
+    quality,
+  );
+  return assemblePlanPaths(
+    model,
+    footpaths,
+    carriageway,
+    pathWidthM,
+    contourIndexEvery,
+    planScale,
+    coarseIntervalM,
+    coarseFromScale,
+    planOptions,
+    preamble,
+  );
 }

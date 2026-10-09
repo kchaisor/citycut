@@ -389,21 +389,6 @@ export function sitePlanChunks(
       ],
     });
   }
-  const greenOnRoad = plan.greenOnRoad
-    .map((rings) => mapRings(rings, model.sideM, layout))
-    .filter((rings) => rings.length > 0);
-  if (greenOnRoad.length > 0) {
-    chunks.push({
-      name: "Green on road",
-      paths: greenOnRoad.map((rings) => ({
-        rings,
-        fill: fillOf("--green-fill"),
-        evenOdd: true,
-        close: true,
-        ...(greenPen ?? {}),
-      })),
-    });
-  }
   const footpaths = pathStrip(plan.pathFill, model, layout, style);
   if (footpaths) chunks.push(footpaths);
   const contourPen = pen(style.contour);
