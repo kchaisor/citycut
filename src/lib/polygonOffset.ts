@@ -11,8 +11,8 @@ export const CLIPPER_ARC_CHORD_M = 0.01;
 /** Max angle step on Clipper round joins (degrees). */
 export const CLIPPER_ARC_MAX_STEP_DEG = 12;
 
-/** Round-join sagitta for centreline buffers and morphological close (m). */
-export const CLIPPER_ARC_TOLERANCE_M = CLIPPER_ARC_CHORD_M;
+/** Round-join arc tolerance on the ground, in metres (matches origin/main for shared callers). */
+export const CLIPPER_ARC_TOLERANCE_M = 0.05;
 /** Coarser joins for morphological road close (3 m radius). */
 export const CLIPPER_MORPH_CLOSE_ARC_TOLERANCE_M = 0.05;
 export const CLIPPER_POLYGON_OFFSET_ARC_TOLERANCE_M = CLIPPER_MORPH_CLOSE_ARC_TOLERANCE_M;
@@ -208,7 +208,7 @@ function offsetSingleRing(
   open: Ring,
   deltaM: number,
   allowEmpty: boolean,
-  arcToleranceM = clipperArcToleranceM(2),
+  arcToleranceM = CLIPPER_ARC_TOLERANCE_M,
 ): Ring[] {
   if (open.length < 3 || !(Math.abs(deltaM) > 1e-9)) {
     const closed = openRing(open);
@@ -239,7 +239,7 @@ function closeRing(open: Ring): Ring {
 function offsetNormalizedByParity(
   normalized: MultiPolygon,
   deltaM: number,
-  arcToleranceM = CLIPPER_POLYGON_OFFSET_ARC_TOLERANCE_M,
+  arcToleranceM = CLIPPER_ARC_TOLERANCE_M,
 ): MultiPolygon {
   const rings = flattenRings(normalized);
   if (rings.length === 0) return [];
@@ -259,7 +259,7 @@ function offsetNormalizedByParity(
 export function offsetMultiPolygon(
   polygons: MultiPolygon,
   deltaM: number,
-  arcToleranceM = clipperArcToleranceM(2),
+  arcToleranceM = CLIPPER_ARC_TOLERANCE_M,
 ): MultiPolygon {
   if (polygons.length === 0 || !(Math.abs(deltaM) > 1e-9)) return polygons;
   const normalized = normalizeMultiPolygonByParity(polygons);
@@ -279,7 +279,7 @@ function intersectMultiPolygon(a: MultiPolygon, b: MultiPolygon): MultiPolygon {
 export function offsetCloseMultiPolygon(
   polygons: MultiPolygon,
   radiusM: number,
-  arcToleranceM = CLIPPER_ARC_CHORD_M,
+  arcToleranceM = CLIPPER_ARC_TOLERANCE_M,
 ): MultiPolygon {
   if (polygons.length === 0 || !(radiusM > 0)) return polygons;
   const normalized = normalizeMultiPolygonByParity(polygons);

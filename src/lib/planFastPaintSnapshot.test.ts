@@ -6,7 +6,7 @@ import { buildFastPlanPaths, planPathsFromSiteStyle } from "./planPathsSession";
 import { clearAllRoadFillCachesForTests } from "./roadFill";
 import { planRoadPathFillDs } from "./svgPlan";
 
-/** Captured from origin/main @ 8fb47f6 (main union code) via scripts/generate-east-melbourne-fast-plan-d-snapshot.mjs */
+/** Captured from origin/main @ 8fb47f6 via node scripts/capture-main-fast-snapshot.mjs (main planPaths + svgRings only). */
 const SNAPSHOT_PATH = new URL("./fixtures/east-melbourne-fast-plan-d.snapshot.txt", import.meta.url);
 
 describe("fast plan paint matches main DOM strings", () => {

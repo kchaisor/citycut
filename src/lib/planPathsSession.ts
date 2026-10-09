@@ -11,6 +11,7 @@ import { computeSmoothPlanPaths, type PlanPathsRequest } from "./smoothPlanCompu
 import { planSmoothGeometryKey } from "./planSmoothJobKey";
 import {
   buildSmoothPlanPathsInWorker,
+  SupersededSmoothPlanJob,
   terminateSmoothPlanWorkerForTests,
 } from "./smoothPlanWorkerClient";
 
@@ -91,7 +92,16 @@ export function beginBackgroundSmoothPlan(request: PlanPathsRequest): Promise<Pl
 export async function ensureSmoothPlanPaths(request: PlanPathsRequest): Promise<PlanPaths> {
   const req = withColourSnapshot(request);
   const geometryKey = planSmoothGeometryKey(req);
-  if (activeDisplaySmoothJob?.geometryKey === geometryKey) return activeDisplaySmoothJob.promise;
+  if (activeDisplaySmoothJob?.geometryKey === geometryKey) {
+    try {
+      return await activeDisplaySmoothJob.promise;
+    } catch (err) {
+      if (err instanceof SupersededSmoothPlanJob) {
+        return buildSmoothPlanPathsInWorker(req, "export");
+      }
+      throw err;
+    }
+  }
   return buildSmoothPlanPathsInWorker(req, "export");
 }
 

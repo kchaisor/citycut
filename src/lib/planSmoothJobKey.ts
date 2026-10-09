@@ -25,12 +25,13 @@ function hashColourSnapshot(snapshot: Partial<Record<ColourKey, string>> | undef
   return h.toString(16);
 }
 
-/** Shared road/path/building smooth inputs (excludes plan scale and consumer). */
+/** Smooth plan identity for reuse and stale checks (includes plan scale and contour inputs). */
 export function planSmoothGeometryKey(request: PlanPathsRequest): string {
   const cut = planModelCutToken(request.model);
   const opts = request.planOptions ?? {};
   const colour = request.colourSnapshot;
   const stylePart = [
+    request.planScale ?? "",
     request.pathWidthM ?? "",
     request.contourIndexEvery ?? "",
     request.coarseIntervalM ?? "",

@@ -306,14 +306,6 @@ export function DrawingPlan({
             {plan.water.map((rings, index) => (
               <path key={`w${index}`} d={svgRings(rings)} fill={waterFill} {...screenPenAttrs(style.water)} />
             ))}
-            {plan.roadFill.length > 0 && (
-              <path
-                d={plan.roadFill.map((polygon) => svgRings(polygon, pathFillRoundM)).join(" ")}
-                fill={style.roadFill}
-                fillRule="evenodd"
-                {...(style.kerbOn ? screenPenAttrs(style.kerb) : { stroke: "none" })}
-              />
-            )}
             {plan.pathFill.length > 0 && (
               <path
                 d={plan.pathFill.map((polygon) => svgRings(polygon, pathFillRoundM)).join(" ")}
@@ -333,6 +325,14 @@ export function DrawingPlan({
                 )}
               />
             ))}
+            {plan.roadFill.length > 0 && (
+              <path
+                d={plan.roadFill.map((polygon) => svgRings(polygon, pathFillRoundM)).join(" ")}
+                fill={style.roadFill}
+                fillRule="evenodd"
+                {...(style.kerbOn ? screenPenAttrs(style.kerb) : { stroke: "none" })}
+              />
+            )}
             {plan.rails.map((rail, index) => (
               <CasedLine key={`l${index}`} d={svgPolyline(rail, false)} stroke={style.rail} paper={canvas} />
             ))}

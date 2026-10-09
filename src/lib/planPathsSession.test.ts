@@ -130,14 +130,41 @@ describe("planPathsSession", () => {
     expect(resolved.pathFill).toEqual(expected.pathFill);
   });
 
-  it("export reuses in-flight display smooth job when geometry matches", async () => {
+  it("export reuses in-flight display smooth job when geometry and plan scale match", async () => {
     const model = testModel();
     const displayReq = planPathsFromSiteStyle(model, 1000, DEFAULT_LINE_STYLES);
-    const exportReq = planPathsFromSiteStyle(model, 500, DEFAULT_LINE_STYLES);
+    const exportReq = planPathsFromSiteStyle(model, 1000, DEFAULT_LINE_STYLES);
     expect(planSmoothGeometryKey(displayReq)).toBe(planSmoothGeometryKey(exportReq));
     const displayJob = beginBackgroundSmoothPlan(displayReq);
     const exported = await ensureSmoothPlanPaths(exportReq);
     expect(exported.pathFill).toEqual((await displayJob).pathFill);
+  });
+
+  it("does not reuse display job when plan scale differs", async () => {
+    const model = testModel();
+    const displayReq = planPathsFromSiteStyle(model, 1000, DEFAULT_LINE_STYLES);
+    const exportReq = planPathsFromSiteStyle(model, 2500, DEFAULT_LINE_STYLES);
+    expect(planSmoothGeometryKey(displayReq)).not.toBe(planSmoothGeometryKey(exportReq));
+    beginBackgroundSmoothPlan(displayReq);
+    clearAllRoadFillCachesForTests();
+    const expected = buildSmoothPlanPaths(exportReq);
+    const exported = await ensureSmoothPlanPaths(exportReq);
+    expect(exported.contourInterval).toBe(expected.contourInterval);
+    expect(exported.contours.length).toBe(expected.contours.length);
+  });
+
+  it("export falls back to export pool when borrowed display job is superseded", async () => {
+    const model = testModel();
+    const exportReq = planPathsFromSiteStyle(model, 1000, DEFAULT_LINE_STYLES);
+    const otherCut = planPathsFromSiteStyle(testModel(100, 30), 1000, DEFAULT_LINE_STYLES);
+    beginBackgroundSmoothPlan(exportReq);
+    const exportPromise = ensureSmoothPlanPaths(exportReq);
+    beginBackgroundSmoothPlan(otherCut);
+    clearAllRoadFillCachesForTests();
+    const expected = buildSmoothPlanPaths(exportReq);
+    const exported = await exportPromise;
+    expect(exported.roadFill).toEqual(expected.roadFill);
+    expect(exported.pathFill).toEqual(expected.pathFill);
   });
 
   it("replaces in-flight smooth job when cut token changes", async () => {
