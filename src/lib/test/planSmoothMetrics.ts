@@ -1,5 +1,5 @@
 import type { MultiPolygon } from "polygon-clipping";
-import { openRing } from "./geo";
+import { openRing } from "../geo";
 
 export const KELVIN_CROPS: Record<string, string> = {
   "facet-spot": "125 385 70 70",

@@ -8,7 +8,6 @@ import type { BuildingColourMode } from "./buildingViewportColor";
 import {
   planPaths,
   type PlanPaths,
-  type PlanPathsBuildArgs,
   type PlanPathOptions,
   resolvePlanPathQuality,
 } from "./svgPlan";

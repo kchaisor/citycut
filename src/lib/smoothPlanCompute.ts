@@ -1,5 +1,5 @@
 import { PATH_WIDTH_M } from "./lineweights";
-import { buildPlanPaths, type PlanPaths, type PlanPathsBuildArgs, type PlanPathOptions } from "./svgPlan";
+import { planPaths, type PlanPaths, type PlanPathsBuildArgs, type PlanPathOptions } from "./svgPlan";
 import type { CityModel } from "../types";
 
 export type PlanPathsRequest = PlanPathsBuildArgs & {
@@ -26,7 +26,12 @@ export function computeSmoothPlanPaths(request: PlanPathsRequest): PlanPaths {
     coarseFromScale,
     planOptions = {},
   } = request;
-  return buildPlanPaths(model, pathWidthM, contourIndexEvery, planScale, coarseIntervalM, coarseFromScale, {
+  return planPaths(model, pathWidthM, contourIndexEvery, planScale, coarseIntervalM, coarseFromScale, {
     ...smoothPlanOptions(planOptions),
   });
+}
+
+/** Same entry point the Web Worker runs (for tests without Worker). */
+export function runSmoothPlanWorkerJob(request: PlanPathsRequest): PlanPaths {
+  return computeSmoothPlanPaths(request);
 }

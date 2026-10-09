@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { CityModel } from "../types";
 import { clearFootpathUnionCacheForTests } from "./roadFill";
 import { DEFAULT_LINE_STYLES } from "./drawingStyle";
-import { runSmoothPlanWorkerJob } from "./smoothPlan.worker";
+import { runSmoothPlanWorkerJob } from "./smoothPlanCompute";
 import { computeSmoothPlanPaths } from "./smoothPlanCompute";
 import { buildSmoothPlanPathsInWorker, terminateSmoothPlanWorkerForTests } from "./smoothPlanWorkerClient";
 import { planPathsFromSiteStyle, resetPlanPathsSessionForTests } from "./planPathsSession";
