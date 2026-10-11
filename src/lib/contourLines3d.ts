@@ -21,6 +21,46 @@ export function contourPolylinesForModel(model: CityModel, planScale = 1000): Pt
   return plan.contours;
 }
 
+/**
+ * Splits each contour segment so no piece is longer than half the terrain grid spacing, then
+ * samples the terrain at every point. A straight chord between two far-apart contour vertices
+ * cuts under convex ground and the line breaks up; short pieces follow the surface.
+ */
+export function drapeContourSegments(
+  lines: Pt[][],
+  sample: (east: number, north: number) => number,
+  maxStepM: number,
+  lift: number,
+): number[] {
+  const positions: number[] = [];
+  const step = maxStepM > 0 ? maxStepM : Infinity;
+  for (const line of lines) {
+    for (let i = 0; i < line.length - 1; i++) {
+      const a = line[i]!;
+      const b = line[i + 1]!;
+      const pieces = Math.max(1, Math.min(64, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / step)));
+      let pe = a[0];
+      let pn = a[1];
+      let py = sample(pe, pn) + lift;
+      for (let k = 1; k <= pieces; k++) {
+        const t = k / pieces;
+        const qe = a[0] + (b[0] - a[0]) * t;
+        const qn = a[1] + (b[1] - a[1]) * t;
+        const qy = sample(qe, qn) + lift;
+        positions.push(pe, py, -pn, qe, qy, -qn);
+        pe = qe;
+        pn = qn;
+        py = qy;
+      }
+    }
+  }
+  return positions;
+}
+
+export function contourDrapeStepM(model: CityModel): number {
+  return model.terrain ? model.terrain.spacingM / 2 : Infinity;
+}
+
 export function buildContourLineGeometry(
   model: CityModel,
   planScale = 1000,
@@ -31,16 +71,7 @@ export function buildContourLineGeometry(
     model.terrain != null
       ? (east: number, north: number) => sampleTerrain(model.terrain!, east, north, model.sideM)
       : () => 0;
-  const positions: number[] = [];
-  for (const line of lines) {
-    for (let i = 0; i < line.length - 1; i++) {
-      const a = line[i]!;
-      const b = line[i + 1]!;
-      const ya = sample(a[0], a[1]) + CONTOUR_LIFT + SURFACE.building.lift;
-      const yb = sample(b[0], b[1]) + CONTOUR_LIFT + SURFACE.building.lift;
-      positions.push(a[0], ya, -a[1], b[0], yb, -b[1]);
-    }
-  }
+  const positions = drapeContourSegments(lines, sample, contourDrapeStepM(model), CONTOUR_LIFT + SURFACE.building.lift);
   if (positions.length < 6) return null;
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));

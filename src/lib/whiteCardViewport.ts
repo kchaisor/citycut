@@ -24,10 +24,12 @@ function applyTerrainVertexCard(mesh: THREE.Mesh, whiteCardOn: boolean): void {
   const base = mesh.userData.whiteCardVertexColors as Float32Array | undefined;
   if (!attr || !base) return;
   if (whiteCardOn) {
+    // Same token as the flat ground, in the linear working space vertex colours use.
+    const card = new THREE.Color(getColour("--card-ground"));
     for (let i = 0; i < base.length; i += 3) {
-      attr.array[i] = 1;
-      attr.array[i + 1] = 1;
-      attr.array[i + 2] = 1;
+      attr.array[i] = card.r;
+      attr.array[i + 1] = card.g;
+      attr.array[i + 2] = card.b;
     }
   } else {
     attr.array.set(base);

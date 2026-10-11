@@ -13,7 +13,7 @@ import { ROAD_COLOR, SURFACE } from "./surfaceLayers";
 import { footprintBase, sampleTerrain } from "./terrain";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { stableExportModel } from "./exportStableOrder";
-import { contourPolylinesForModel } from "./contourLines3d";
+import { contourDrapeStepM, contourPolylinesForModel, drapeContourSegments } from "./contourLines3d";
 import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
 
 export const VIEW_LAYER_ORDER = [
@@ -21,6 +21,7 @@ export const VIEW_LAYER_ORDER = [
   "Roads",
   "Water",
   "Green",
+  "Contours",
   "Buildings",
   "Trees",
   "Outlines",
@@ -29,6 +30,9 @@ export const VIEW_LAYER_ORDER = [
 
 /** Visible building edges on the 3D sheet. Not a true-scale pen from the plan table. */
 export const VIEW_OUTLINE_MM = 0.18;
+
+/** Contour lines draped on the terrain in the 3D sheet (own layer, independent of the outlines toggle). */
+export const VIEW_CONTOUR_MM = 0.1;
 
 const PAGE_LONG_MM = 340;
 const LIGHT: Vec3 = normalize([0.4, 1, 0.2]);
@@ -434,7 +438,7 @@ function collect(
   style: ViewStyle,
   pageW: number,
   pageH: number,
-): { fills: Fill[]; edges: Edge[]; trees: Fill[] } {
+): { fills: Fill[]; edges: Edge[]; trees: Fill[]; contours: Edge[] } {
   const forward = shot.forward;
   const half = model.sideM / 2;
   const groundFill = style.whiteCard ? cardGround() : fillOf("--ground-fill");
@@ -463,7 +467,7 @@ function collect(
       return [east, y, -north];
     };
     const tint = (col: number, row: number): Rgb =>
-      style.whiteCard ? cardWhite() : shadeHeight((field.heights[row * field.cols + col] - field.min) / relief);
+      style.whiteCard ? cardGround() : shadeHeight((field.heights[row * field.cols + col] - field.min) / relief);
     for (let r = 0; r < rows.length - 1; r++) {
       for (let c = 0; c < cols.length - 1; c++) {
         const sw = at(cols[c], rows[r]);
@@ -695,22 +699,23 @@ function collect(
     });
   }
 
+  const contours: Edge[] = [];
   if (style.showContours) {
     const lift = field ? 0.35 : 0;
-    for (const line of contourPolylinesForModel(model)) {
-      for (let i = 0; i < line.length - 1; i++) {
-        const a = line[i]!;
-        const b = line[i + 1]!;
-        const ya = (sample ? sample(a[0], a[1]) : 0) + lift;
-        const yb = (sample ? sample(b[0], b[1]) : 0) + lift;
-        const pa = project(shot, worldOf(a[0], a[1], ya), pageW, pageH);
-        const pb = project(shot, worldOf(b[0], b[1], yb), pageW, pageH);
-        if (pa && pb) edges.push({ a: pa, b: pb, id: nextId++ });
-      }
+    const positions = drapeContourSegments(
+      contourPolylinesForModel(model),
+      (east, north) => (sample ? sample(east, north) : 0),
+      contourDrapeStepM(model),
+      lift,
+    );
+    for (let i = 0; i + 5 < positions.length; i += 6) {
+      const pa = project(shot, [positions[i]!, positions[i + 1]!, positions[i + 2]!], pageW, pageH);
+      const pb = project(shot, [positions[i + 3]!, positions[i + 4]!, positions[i + 5]!], pageW, pageH);
+      if (pa && pb) contours.push({ a: pa, b: pb, id: -1 });
     }
   }
 
-  return { fills, edges, trees };
+  return { fills, edges, trees, contours };
 }
 
 export function viewChunks(model: CityModel, shot: CameraShot, style: ViewStyle): PdfChunk[] {
@@ -718,7 +723,7 @@ export function viewChunks(model: CityModel, shot: CameraShot, style: ViewStyle)
   const page = viewPageMm(shot.width, shot.height);
   const ink = fillOf("--view-ink");
   const backdrop = fillOf("--export-backdrop");
-  const { fills, edges, trees } = collect(model, shot, style, page.widthMm, page.heightMm);
+  const { fills, edges, trees, contours } = collect(model, shot, style, page.widthMm, page.heightMm);
   const ordered = [...fills, ...trees].sort((a, b) => b.depth - a.depth || a.rank - b.rank);
   const occ = fills.flatMap((fill) => fill.occ);
   const cells = gridIndex(occ, page.widthMm, page.heightMm);
@@ -760,6 +765,16 @@ export function viewChunks(model: CityModel, shot: CameraShot, style: ViewStyle)
   ];
   for (const fill of ordered) chunks.push(fill.chunk);
   if (drawOutlines && outlinePaths.length > 0) chunks.push({ name: "Outlines", paths: outlinePaths });
+  if (contours.length > 0) {
+    const contourInk = fillOf("--outline-contour");
+    const contourPaths: NonNullable<PdfChunk["paths"]> = [];
+    for (const edge of contours) {
+      for (const [a, b] of clipEdge(edge.a, edge.b, candidates(cells, edge.a, edge.b, page.widthMm, page.heightMm), edge.id)) {
+        contourPaths.push({ rings: [[[a.x, a.y], [b.x, b.y]]], close: false, stroke: contourInk, strokeMm: VIEW_CONTOUR_MM, cap: "round", join: "round" });
+      }
+    }
+    if (contourPaths.length > 0) chunks.push({ name: "Contours", paths: contourPaths });
+  }
   const label = `${model.placeLabel} · ${formatPair(model)}`;
   const comCredit = comBuildingHeightCreditLine(model);
   const plate = Math.min(page.widthMm - 8, Math.max(42, label.length * 1.35 + 8));
