@@ -8,6 +8,11 @@ import { buildingHeight } from "./height";
 import { parseCity, stitchRings } from "./parseOsm";
 import { planPaths } from "./svgPlan";
 import type { CityModel, Pt } from "../types";
+import { getColour } from "./colours";
+
+function roadHex(name: "--road-arterial" | "--road-local" | "--road-path"): string {
+  return new THREE.Color(getColour(name)).getHexString();
+}
 
 const origin = { lon: 144.9631, lat: -37.8136 };
 
@@ -377,7 +382,10 @@ describe("parse", () => {
         expect(hex).not.toBe("e6e0d4");
         colors.add(hex);
       }
-      expect(colors).toEqual(new Set(["3a3a3a", "4a4a4a", "5c5c5c"]));
+      // One material per grade, each read from src/colours.css (the palette lives there, not here).
+      expect(colors).toEqual(
+        new Set((["arterial", "local", "path"] as const).map((grade) => roadHex(`--road-${grade}`))),
+      );
       // 100 m × 12 m + 110 m × 5.5 m + 50 m × 1.8 m (union removes junction overlap)
       expect(area).toBeGreaterThan(1750);
       expect(area).toBeLessThan(2050);
@@ -484,7 +492,8 @@ describe("exports", () => {
     expect(buildings).toBeTruthy();
     expect(roads).toBeTruthy();
     const roadMaterial = (roads as THREE.Mesh).material as THREE.MeshStandardMaterial;
-    expect(roadMaterial.color.getHexString()).toBe("4a4a4a");
+    // The fixture road has no grade, so buildCity draws it as a local street.
+    expect(roadMaterial.color.getHexString()).toBe(roadHex("--road-local"));
     expect(roadMaterial.polygonOffset).toBe(false);
     buildings!.updateWorldMatrix(true, true);
     const position = (buildings as { geometry?: { attributes?: { position?: { count: number } } } }).geometry;
