@@ -3,6 +3,7 @@ import { getColour, type ColourKey } from "./colours";
 import { bufferOpenLine } from "./bufferLine";
 import { openRing, signedArea } from "./geo";
 import { isVehicularRoad } from "./roadFill";
+import { clipTransportLines } from "./dashedTransportLines";
 import {
   clipAreaToSiteFrame,
   clipPolylineSiteFrame,
@@ -538,6 +539,7 @@ export function buildExplodedAxoLayers(
           strokeDashed,
           "rail-line",
           0.55,
+          true,
         );
         for (const station of overlays.transport.rail.stations) {
           const [x, y] = planToIsoBase(station[0], station[1]);
@@ -554,7 +556,7 @@ export function buildExplodedAxoLayers(
             strokeDashed,
             paint,
             line.mode === "tram" ? 0.55 : 0.7,
-            line.mode === "tram",
+            line.mode === "tram" || line.mode === "train",
           );
         }
         for (const stop of overlays.transport.pt?.stops ?? []) {
@@ -612,6 +614,17 @@ export function buildExplodedAxoLayers(
         const pts = line.map(([e, n]) => planToIsoBase(e, n));
         strokes.push(isoSvgPolyline(pts, false));
       }
+      // Rail and tram replace their surface geometry with black dashed lines, as on the site plan and in 3D.
+      const transport = clipTransportLines(model);
+      if (transport.rails.length > 0 || transport.trams.length > 0) {
+        for (let i = 0; i < strokes.length; i++) {
+          strokePaints.push("roads");
+          strokeWidthScales.push(1);
+          strokeDashed.push(false);
+        }
+        pushLinePaths(transport.rails, strokes, strokePaints, strokeWidthScales, strokeDashed, "rail-line", 0.55, true);
+        pushLinePaths(transport.trams, strokes, strokePaints, strokeWidthScales, strokeDashed, "pt-tram", 0.55, true);
+      }
     }
 
     layers.push({
@@ -651,6 +664,11 @@ const AXO_PAINT_CSS: Record<AxoPaintKey, ColourKey> = {
   contour: "--axo-contour",
   trees: "--tree-fill",
 };
+
+/** Dashed strokes: trams use the tram pen, rail and train use the rail pen (both black dashed). */
+export function axoDashedStroke<T>(paint: AxoPaintKey, style: { rail: T; tram: T }): T {
+  return paint === "pt-tram" ? style.tram : style.rail;
+}
 
 export function axoPaintColour(paint: AxoPaintKey): string {
   return getColour(AXO_PAINT_CSS[paint]);

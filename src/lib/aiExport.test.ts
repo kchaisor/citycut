@@ -386,6 +386,9 @@ describe("Illustrator 3D view", () => {
     for (const name of info.layers) expect(info.counts.get(name) ?? 0).toBeGreaterThan(0);
     const widths = info.widthsMm.map((mm) => Math.round(mm * 1000) / 1000);
     expect(widths).toContain(VIEW_OUTLINE_MM);
+    // The rail in the test model is drawn as dashed black segments on its own layer.
+    expect(info.counts.get("Rail") ?? 0).toBeGreaterThan(0);
+    expect(widths).toContain(Math.round(DEFAULT_LINE_STYLES.rail.mm * 1000) / 1000);
   });
 
   it("writes a layer whose operator list is too long to spread in one call", async () => {

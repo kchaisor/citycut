@@ -13,6 +13,8 @@ import { ROAD_COLOR, SURFACE } from "./surfaceLayers";
 import { footprintBase, sampleTerrain } from "./terrain";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { stableExportModel } from "./exportStableOrder";
+import { clipTransportLines, drapedDashedLineGeometry } from "./dashedTransportLines";
+import { readDrawingStyle } from "./drawingStyle";
 import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
 
 export const VIEW_LAYER_ORDER = [
@@ -22,6 +24,7 @@ export const VIEW_LAYER_ORDER = [
   "Green",
   "Buildings",
   "Trees",
+  "Rail",
   "Outlines",
   "Annotation",
 ] as const;
@@ -66,6 +69,7 @@ type Fill = {
 };
 
 type Edge = { a: V2; b: V2; id: number };
+type TransportEdge = Edge & { stroke: Rgb; strokeMm: number };
 
 export function viewPageMm(widthPx: number, heightPx: number): { widthMm: number; heightMm: number } {
   const aspect = widthPx / Math.max(heightPx, 1);
@@ -420,7 +424,7 @@ function collect(
   style: ViewStyle,
   pageW: number,
   pageH: number,
-): { fills: Fill[]; edges: Edge[]; trees: Fill[] } {
+): { fills: Fill[]; edges: Edge[]; trees: Fill[]; transport: TransportEdge[] } {
   const forward = shot.forward;
   const half = model.sideM / 2;
   const groundFill = fillOf("--ground-fill");
@@ -680,7 +684,28 @@ function collect(
     });
   }
 
-  return { fills, edges, trees };
+  // Rail and tram as black dashed lines draped on the terrain, the same dashes the 3D view draws.
+  const transport: TransportEdge[] = [];
+  const lineStyle = readDrawingStyle();
+  const transportLines = clipTransportLines(model);
+  const sampleZ = (east: number, north: number) => (sample ? sample(east, north) : 0);
+  for (const [lines, stroke] of [
+    [transportLines.rails, lineStyle.rail],
+    [transportLines.trams, lineStyle.tram],
+  ] as const) {
+    if (!(stroke.mm > 0)) continue;
+    const geometry = drapedDashedLineGeometry(lines, stroke, model.sideM, sampleZ, SURFACE.rail.lift);
+    if (!geometry) continue;
+    const positions = geometry.getAttribute("position").array;
+    geometry.dispose();
+    for (let i = 0; i + 5 < positions.length; i += 6) {
+      const a = project(shot, [positions[i]!, positions[i + 1]!, positions[i + 2]!], pageW, pageH);
+      const b = project(shot, [positions[i + 3]!, positions[i + 4]!, positions[i + 5]!], pageW, pageH);
+      if (a && b) transport.push({ a, b, id: -1, stroke: hexRgb(stroke.color), strokeMm: stroke.mm });
+    }
+  }
+
+  return { fills, edges, trees, transport };
 }
 
 export function viewChunks(model: CityModel, shot: CameraShot, style: ViewStyle): PdfChunk[] {
@@ -688,7 +713,7 @@ export function viewChunks(model: CityModel, shot: CameraShot, style: ViewStyle)
   const page = viewPageMm(shot.width, shot.height);
   const ink = fillOf("--view-ink");
   const backdrop = fillOf("--export-backdrop");
-  const { fills, edges, trees } = collect(model, shot, style, page.widthMm, page.heightMm);
+  const { fills, edges, trees, transport } = collect(model, shot, style, page.widthMm, page.heightMm);
   const ordered = [...fills, ...trees].sort((a, b) => b.depth - a.depth || a.rank - b.rank);
   const occ = fills.flatMap((fill) => fill.occ);
   const cells = gridIndex(occ, page.widthMm, page.heightMm);
@@ -726,6 +751,21 @@ export function viewChunks(model: CityModel, shot: CameraShot, style: ViewStyle)
   ];
   for (const fill of ordered) chunks.push(fill.chunk);
   if (outlinePaths.length > 0) chunks.push({ name: "Outlines", paths: outlinePaths });
+  const transportPaths: PdfChunk["paths"] = [];
+  for (const edge of transport) {
+    const parts = clipEdge(edge.a, edge.b, candidates(cells, edge.a, edge.b, page.widthMm, page.heightMm), edge.id);
+    for (const [a, b] of parts) {
+      transportPaths.push({
+        rings: [[[a.x, a.y], [b.x, b.y]]],
+        close: false,
+        stroke: edge.stroke,
+        strokeMm: edge.strokeMm,
+        cap: "butt",
+        join: "round",
+      });
+    }
+  }
+  if (transportPaths.length > 0) chunks.push({ name: "Rail", paths: transportPaths });
   const label = `${model.placeLabel} · ${formatPair(model)}`;
   const comCredit = comBuildingHeightCreditLine(model);
   const plate = Math.min(page.widthMm - 8, Math.max(42, label.length * 1.35 + 8));
