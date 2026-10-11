@@ -450,7 +450,7 @@ export default function App() {
             bounds,
             controller.signal,
           )
-        : Promise.resolve(null);
+        : Promise.resolve({ lines: null, loadFailed: false });
       const comFetchBounds = paddedComFetchBounds(center, sideM);
       const damTask = modelLayers.buildings
         ? fetchDevelopmentFloorRecords(comFetchBounds, controller.signal)
@@ -492,7 +492,7 @@ export default function App() {
         overtureResult,
         transportResult,
         baseResult,
-        tramLines,
+        tramResult,
         damResult,
         comHeightsResult,
       ] = await Promise.all([
@@ -591,6 +591,9 @@ export default function App() {
         comFootprintCount: comHeightsResult.footprints.length,
         damError: damResult.error,
       });
+      if (tramResult.loadFailed) {
+        heightSourceLoadWarnings.push("PTV tram routes failed to load.");
+      }
       const buildingCapHit = overtureResult.buildingCapHit;
       if (buildingCapHit) sourceNote = `${sourceNote} Building count was capped at 4000.`;
       if (contourLayer && contourLayer.source !== "dem") {
@@ -660,7 +663,8 @@ export default function App() {
         layers: modelLayers,
         buildings,
         roads: modelLayers.roads ? transportResult.roads : [],
-        tramLines: tramLines ?? undefined,
+        tramLines: tramResult.lines ?? undefined,
+        tramLinesLoadFailed: tramResult.loadFailed || undefined,
         areas: modelLayers.waterGreen ? baseResult.areas : [],
         trees,
         roadKm: modelLayers.roads ? transportResult.roadKm : 0,

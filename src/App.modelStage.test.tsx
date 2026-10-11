@@ -31,6 +31,13 @@ const { sampleBuilding, emptyBuildingStats } = vi.hoisted(() => ({
   },
 }));
 
+vi.mock("./lib/loadMapStyle", () => ({
+  loadBasemapStyle: vi.fn(async () => ({
+    style: { version: 8, sources: {}, layers: [] },
+    styleLoadFailed: false,
+  })),
+}));
+
 vi.mock("./components/ModelPage", () => ({
   ModelPage: () => (
     <div className="model">
@@ -158,7 +165,7 @@ vi.mock("./lib/vicmapContours", () => ({
   loadContoursForCut: vi.fn().mockResolvedValue(null),
 }));
 vi.mock("./lib/explodedAxoPt", () => ({
-  fetchTramLinesForCut: vi.fn().mockResolvedValue(null),
+  fetchTramLinesForCut: vi.fn().mockResolvedValue({ lines: null, loadFailed: false }),
 }));
 vi.mock("./lib/nominatim", () => ({
   reverseLocality: vi.fn().mockResolvedValue("East Melbourne"),

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MapStage } from "./MapStage";
 import {
@@ -19,6 +19,25 @@ type MockMapInstance = {
 };
 
 const mapInstances: MockMapInstance[] = [];
+
+const { loadBasemapStyle } = vi.hoisted(() => ({
+  loadBasemapStyle: vi.fn<
+    () => Promise<{
+      style: { version: 8; sources: Record<string, never>; layers: never[] } | string;
+      styleLoadFailed: boolean;
+    }>
+  >(async () => ({
+    style: { version: 8, sources: {}, layers: [] },
+    styleLoadFailed: false,
+  })),
+}));
+
+vi.mock("../lib/loadMapStyle", () => ({
+  loadBasemapStyle,
+  applyBasemapStyleToMap: vi.fn((map: { setStyle: ReturnType<typeof vi.fn> }, style: unknown) => {
+    map.setStyle(style);
+  }),
+}));
 
 vi.mock("../lib/buildingEnrichmentTiles", async (importOriginal) => {
   const mod = await importOriginal<typeof import("../lib/buildingEnrichmentTiles")>();
@@ -87,7 +106,7 @@ vi.mock("maplibre-gl", () => {
 });
 
 vi.mock("../lib/overtureBuildings", () => ({
-  fetchOvertureBuildingsForCut: vi.fn().mockResolvedValue({ buildings: [] }),
+  fetchOvertureBuildingsForCut: vi.fn().mockRejectedValue(new Error("preview failed")),
 }));
 vi.mock("../lib/sitePreviewCache", () => ({
   fetchSiteParcelCached: vi.fn(),
@@ -114,9 +133,9 @@ describe("MapStage", () => {
     vi.clearAllMocks();
   });
 
-  it("removes move and moveend listeners before map.remove on unmount", () => {
+  it("removes move and moveend listeners before map.remove on unmount", async () => {
     const view = render(<MapStage {...baseProps} />);
-    expect(mapInstances).toHaveLength(1);
+    await waitFor(() => expect(mapInstances).toHaveLength(1));
     const map = mapInstances[0]!;
     expect(map.handlers.get("move")?.size).toBeGreaterThan(0);
     expect(map.handlers.get("moveend")?.size).toBeGreaterThan(0);
@@ -127,6 +146,18 @@ describe("MapStage", () => {
     expect(map.off).toHaveBeenCalledWith("resize", expect.any(Function));
     expect(map.remove).toHaveBeenCalledTimes(1);
     expect(map.handlers.get("move")?.size ?? 0).toBe(0);
+  });
+
+  it("shows a notice when the landing site preview fails", async () => {
+    const view = render(
+      <MapStage
+        {...baseProps}
+        siteSearch={{ lon: 144.96, lat: -37.81, label: "Test address" }}
+      />,
+    );
+    await waitFor(() => {
+      expect(view.getByRole("status").textContent).toMatch(/site preview.*could not be loaded/i);
+    });
   });
 
   it("does not fetch enrichment or add use-colour map layers on landing", async () => {
@@ -145,5 +176,15 @@ describe("MapStage", () => {
         id.includes("citycut-cut-mask"),
     );
     expect(colourLayerIds).toEqual([]);
+  });
+
+  it("still creates the map and shows a notice when basemap style load fails", async () => {
+    loadBasemapStyle.mockResolvedValueOnce({
+      style: "https://tiles.openfreemap.org/styles/positron",
+      styleLoadFailed: true,
+    });
+    render(<MapStage {...baseProps} />);
+    await waitFor(() => expect(mapInstances).toHaveLength(1));
+    expect(screen.getByText("Basemap style failed to load.")).toBeTruthy();
   });
 });

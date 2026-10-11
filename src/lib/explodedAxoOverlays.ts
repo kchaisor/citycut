@@ -11,6 +11,18 @@ import { fetchPublicTransportOverlays } from "./explodedAxoPt";
 import { fetchOvertureBaseForCut } from "./overtureBase";
 import type { CityModel } from "../types";
 
+async function publicTransportOverlaysSafe(
+  model: CityModel,
+  bounds: ReturnType<typeof squareBBox>,
+  signal?: AbortSignal,
+) {
+  try {
+    return await fetchPublicTransportOverlays(model, bounds, signal);
+  } catch {
+    return null;
+  }
+}
+
 export type OverlayLoadState = ExplodedAxoOverlayBundle;
 
 const OVERLAY_LAYER_IDS: AxoLayerId[] = ["planning", "hydro", "transport", "topography"];
@@ -68,7 +80,7 @@ export function useExplodedAxoOverlays(model: CityModel, layerVisible: Record<Ax
         tasks.push(
           (async () => {
             const rail = await fetchTransportRail(model, controller.signal);
-            const pt = await fetchPublicTransportOverlays(model, bounds, controller.signal);
+            const pt = await publicTransportOverlaysSafe(model, bounds, controller.signal);
             if (!rail.ok && !pt) {
               next.transport = "unavailable";
             } else {
@@ -142,7 +154,7 @@ export async function loadExplodedAxoOverlayBundle(
     tasks.push(
       (async () => {
         const rail = await fetchTransportRail(model, signal);
-        const pt = await fetchPublicTransportOverlays(model, bounds, signal);
+        const pt = await publicTransportOverlaysSafe(model, bounds, signal);
         if (!rail.ok && !pt) next.transport = "unavailable";
         else {
           next.transport = {

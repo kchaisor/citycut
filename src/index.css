@@ -110,6 +110,70 @@ button { cursor: pointer; }
 .map-wrap { position: absolute; inset: 0; background: var(--map-bg); }
 .map-wrap.is-loading { z-index: 7; }
 .map-canvas { position: absolute; inset: 0; }
+.map-wrap-satellite { position: relative; width: 100%; height: 100%; }
+.map-attribution {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  max-width: min(100%, 420px);
+  margin: 0;
+  padding: 2px 6px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--text);
+  background: rgb(255 255 255 / 78%);
+  pointer-events: auto;
+}
+.map-attribution a { color: inherit; }
+.map-attribution span { color: var(--muted-text); }
+.map-stage-notice {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  margin: 0;
+  padding: 8px 14px;
+  max-width: min(92%, 520px);
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--sheet-fill);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 8%);
+  pointer-events: none;
+}
+.map-stage-notices {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(92%, 520px);
+  pointer-events: none;
+}
+.map-stage-notices .map-stage-notice {
+  position: static;
+  top: auto;
+  left: auto;
+  transform: none;
+  z-index: auto;
+}
+.model .viewport.is-satellite .map-attribution {
+  bottom: 8px;
+  z-index: 6;
+}
+.model .viewport.is-satellite .stage-attrib {
+  right: 16px;
+  bottom: 52px;
+  max-width: min(480px, calc(100% - 32px));
+}
 
 .basemap {
   position: absolute;
@@ -561,7 +625,8 @@ input[type="range"]::-moz-range-thumb {
   line-height: 1.1;
 }
 .meta { margin: 6px 0 0; }
-.height-source-notice {
+.height-source-notice,
+.map-stage-notice {
   position: absolute;
   top: 10px;
   left: 50%;
@@ -580,6 +645,7 @@ input[type="range"]::-moz-range-thumb {
   box-shadow: 0 2px 8px rgb(0 0 0 / 8%);
   pointer-events: none;
 }
+.map-stage-notice { z-index: 3; }
 .stats {
   display: grid;
   grid-template-columns: 1fr 1fr;

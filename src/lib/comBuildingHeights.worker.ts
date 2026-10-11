@@ -10,6 +10,8 @@ export type ComHeightsWorkerRequest = {
 export type ComHeightsWorkerResponse = {
   buildings: BuildingFeat[];
   updated: number;
+  /** Set when matching threw; buildings are unchanged. */
+  failed?: boolean;
 };
 
 self.onmessage = (event: MessageEvent<ComHeightsWorkerRequest>) => {
@@ -25,6 +27,7 @@ self.onmessage = (event: MessageEvent<ComHeightsWorkerRequest>) => {
     const payload: ComHeightsWorkerResponse = {
       buildings: event.data.buildings,
       updated: 0,
+      failed: true,
     };
     self.postMessage(payload);
   }
