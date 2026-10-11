@@ -9,6 +9,7 @@ import {
 } from "./comBuildingHeights";
 import { applyDevelopmentFloorsToBuildings, fetchDevelopmentFloorRecords } from "./comDevelopmentFloors";
 import { applyHeightSourceTruthPass, findSilentDefaultViolations } from "./buildingHeightSourceTruth";
+import { networkTestsEnabled } from "./test/networkTests";
 
 const CROPS = [
   { lat: -37.8127, lon: 144.98061, km: 1, label: "East Melbourne" },
@@ -35,7 +36,7 @@ async function resolveCrop(lat: number, lon: number, km: number) {
   };
 }
 
-describe("height source guard (Melbourne census crops)", () => {
+describe.skipIf(!networkTestsEnabled())("height source guard (Melbourne census crops)", () => {
   it(
     "has no zone_default buildings while a real source overlaps",
     async () => {

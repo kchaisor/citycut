@@ -164,6 +164,21 @@ vi.mock("./lib/nominatim", () => ({
   reverseLocality: vi.fn().mockResolvedValue("East Melbourne"),
   localityCacheKey: vi.fn(() => "k"),
 }));
+/** City of Melbourne footprints and DAM records are live APIs; the test must not wait on them. */
+vi.mock("./lib/comBuildingHeights", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("./lib/comBuildingHeights")>();
+  return {
+    ...mod,
+    fetchComBuildingFootprintsWithStats: vi.fn().mockResolvedValue({
+      footprints: [],
+      stats: { requestCount: 0, recordCount: 0, payloadBytes: 0, fetchMs: 0 },
+    }),
+  };
+});
+vi.mock("./lib/comDevelopmentFloors", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("./lib/comDevelopmentFloors")>();
+  return { ...mod, fetchDevelopmentFloorRecords: vi.fn().mockResolvedValue([]) };
+});
 vi.mock("./lib/treeTiers", () => ({
   MAX_TREE_INSTANCES: 1000,
   assembleTreeTiers: vi.fn(() => ({ trees: [], capHit: false })),
@@ -210,5 +225,5 @@ describe("App model stage", () => {
       { timeout: 15000 },
     );
     expect(document.querySelector(".scene-canvas")).toBeTruthy();
-  });
+  }, 20_000);
 });
