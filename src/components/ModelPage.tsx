@@ -103,6 +103,7 @@ import type { BuildingUse, CityModel } from "../types";
 import { BuildingHeightPopover, HeightOverridePanel } from "./BuildingHeightPopover";
 import { ColoursEditor } from "./Colours";
 import { Drawer } from "./Drawer";
+import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
 import { DrawingExplodedAxo } from "./DrawingExplodedAxo";
 import { LineStylesEditor } from "./LineStyles";
@@ -187,6 +188,7 @@ export function ModelPage({ model }: { model: CityModel }) {
   );
   const [comFootprintLoading, setComFootprintLoading] = useState(false);
   const [comFootprintRetryToken, setComFootprintRetryToken] = useState(0);
+  const [comHeightsApplyFailed, setComHeightsApplyFailed] = useState(false);
   const [preferred, setPreferred] = useState<string | null>(() => loadModelDrawer());
   const [planWidth, setPlanWidth] = useState<number | null>(null);
   const [fitCounter, setFitCounter] = useState(0);
@@ -371,7 +373,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     betterHeights &&
     inComCity &&
     !comFootprintLoading &&
-    comFootprintFetchError != null;
+    (comFootprintFetchError != null || comHeightsApplyFailed);
   const comHeightsToggleKind = comBuildingHeightsToggleKind({
     userEnabled: betterHeights,
     inComCity,
@@ -639,6 +641,7 @@ export function ModelPage({ model }: { model: CityModel }) {
   useEffect(() => {
     if (!betterHeights) {
       setComHeightBuildings(null);
+      setComHeightsApplyFailed(false);
       return;
     }
     if (model.comBuildingHeightsApplied) {
@@ -658,6 +661,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     }
     const controller = new AbortController();
     const source = model.buildingsWithoutCom ?? model.buildings;
+    setComHeightsApplyFailed(false);
     runComBuildingHeightsInWorker(source, comFootprints, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return;
@@ -674,6 +678,7 @@ export function ModelPage({ model }: { model: CityModel }) {
       .catch(() => {
         if (!controller.signal.aborted) {
           setComHeightBuildings(null);
+          setComHeightsApplyFailed(true);
         }
       });
     return () => controller.abort();
@@ -1203,6 +1208,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                       type="button"
                       onClick={() => {
                         setComFootprintFetchError(null);
+                        setComHeightsApplyFailed(false);
                         setComFootprintRetryToken((token) => token + 1);
                       }}
                     >
@@ -1219,7 +1225,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                 )}
                 {comHeightsLoadFailed && (
                   <p className="legend-note" role="status">
-                    CoM 2023 measured heights are unavailable; showing estimates.
+                    City of Melbourne heights failed to load, so heights are estimates.
                   </p>
                 )}
                 {comHeightsMeasuredOn && (
@@ -1382,15 +1388,18 @@ export function ModelPage({ model }: { model: CityModel }) {
                           checked={view.freeRotate}
                           onChange={(event) => {
                             const freeRotate = event.target.checked;
-                            commitView({ ...view, projection: "iso", freeRotate }, !freeRotate);
+                            commitView(
+                              { ...view, projection: "iso", freeRotate },
+                              snapWhenTogglingIsoFreeRotate(),
+                            );
                           }}
                         />
                         Free rotate (axonometric)
                       </label>
                       {view.freeRotate && (
                         <p className="iso-warning">
-                          Free rotate is on, so this is no longer a true isometric view. Turn it off, or pick a
-                          corner, to lock the true angles again.
+                          Free rotate is on, so this is no longer a true isometric view. Turn it off to lock pan-only
+                          at the current angle, or pick a corner for a true isometric view.
                         </p>
                       )}
                     </>

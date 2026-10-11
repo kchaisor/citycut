@@ -12,8 +12,12 @@ export function runComBuildingHeightsInWorker(
     if (signal?.aborted) {
       return Promise.reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
     }
-    const result = applyComBuildingHeights(buildings, footprints);
-    return Promise.resolve({ buildings: result.buildings, updated: result.updated });
+    try {
+      const result = applyComBuildingHeights(buildings, footprints);
+      return Promise.resolve({ buildings: result.buildings, updated: result.updated });
+    } catch {
+      return Promise.reject(new Error("City of Melbourne heights could not be applied."));
+    }
   }
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
@@ -31,12 +35,16 @@ export function runComBuildingHeightsInWorker(
     worker.onmessage = (event: MessageEvent<ComHeightsWorkerResponse>) => {
       signal?.removeEventListener("abort", onAbort);
       worker.terminate();
+      if (event.data.failed) {
+        reject(new Error("City of Melbourne heights could not be applied."));
+        return;
+      }
       resolve(event.data);
     };
     worker.onerror = () => {
       signal?.removeEventListener("abort", onAbort);
       worker.terminate();
-      resolve({ buildings, updated: 0 });
+      reject(new Error("City of Melbourne heights worker failed."));
     };
     const request: ComHeightsWorkerRequest = { buildings, footprints };
     worker.postMessage(request);

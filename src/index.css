@@ -146,6 +146,25 @@ button { cursor: pointer; }
   box-shadow: 0 2px 8px rgb(0 0 0 / 8%);
   pointer-events: none;
 }
+.map-stage-notices {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(92%, 520px);
+  pointer-events: none;
+}
+.map-stage-notices .map-stage-notice {
+  position: static;
+  top: auto;
+  left: auto;
+  transform: none;
+  z-index: auto;
+}
 .model .viewport.is-satellite .map-attribution {
   bottom: 8px;
   z-index: 6;
@@ -606,7 +625,8 @@ input[type="range"]::-moz-range-thumb {
   line-height: 1.1;
 }
 .meta { margin: 6px 0 0; }
-.height-source-notice {
+.height-source-notice,
+.map-stage-notice {
   position: absolute;
   top: 10px;
   left: 50%;
@@ -625,6 +645,7 @@ input[type="range"]::-moz-range-thumb {
   box-shadow: 0 2px 8px rgb(0 0 0 / 8%);
   pointer-events: none;
 }
+.map-stage-notice { z-index: 3; }
 .stats {
   display: grid;
   grid-template-columns: 1fr 1fr;

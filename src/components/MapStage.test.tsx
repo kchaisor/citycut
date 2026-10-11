@@ -106,7 +106,7 @@ vi.mock("maplibre-gl", () => {
 });
 
 vi.mock("../lib/overtureBuildings", () => ({
-  fetchOvertureBuildingsForCut: vi.fn().mockResolvedValue({ buildings: [] }),
+  fetchOvertureBuildingsForCut: vi.fn().mockRejectedValue(new Error("preview failed")),
 }));
 vi.mock("../lib/sitePreviewCache", () => ({
   fetchSiteParcelCached: vi.fn(),
@@ -146,6 +146,18 @@ describe("MapStage", () => {
     expect(map.off).toHaveBeenCalledWith("resize", expect.any(Function));
     expect(map.remove).toHaveBeenCalledTimes(1);
     expect(map.handlers.get("move")?.size ?? 0).toBe(0);
+  });
+
+  it("shows a notice when the landing site preview fails", async () => {
+    const view = render(
+      <MapStage
+        {...baseProps}
+        siteSearch={{ lon: 144.96, lat: -37.81, label: "Test address" }}
+      />,
+    );
+    await waitFor(() => {
+      expect(view.getByRole("status").textContent).toMatch(/site preview.*could not be loaded/i);
+    });
   });
 
   it("does not fetch enrichment or add use-colour map layers on landing", async () => {

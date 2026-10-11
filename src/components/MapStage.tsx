@@ -62,6 +62,7 @@ export function MapStage({
   const [ready, setReady] = useState(false);
   const [mapEpoch, setMapEpoch] = useState(0);
   const [basemapStyleFailed, setBasemapStyleFailed] = useState(false);
+  const [sitePreviewFailed, setSitePreviewFailed] = useState(false);
   sideRef.current = sideM;
   frameShapeRef.current = frameShape;
   onViewRef.current = onView;
@@ -173,6 +174,7 @@ export function MapStage({
       return;
     }
     let cancelled = false;
+    setSitePreviewFailed(false);
     const center = map.getCenter();
     const cutCenter: LonLat = { lat: center.lat, lon: center.lng };
     const controller = new AbortController();
@@ -200,7 +202,7 @@ export function MapStage({
           parcel,
         });
       } catch {
-        /* Fail quietly when Vicmap or Overture errors. */
+        if (!cancelled && !controller.signal.aborted) setSitePreviewFailed(true);
       }
     })();
 
@@ -294,10 +296,19 @@ export function MapStage({
           </div>
         </>
       )}
-      {basemapStyleFailed && !loading && (
-        <p className="map-stage-notice" role="status">
-          Basemap style failed to load.
-        </p>
+      {!loading && (basemapStyleFailed || sitePreviewFailed) && (
+        <div className="map-stage-notices">
+          {basemapStyleFailed && (
+            <p className="map-stage-notice" role="status">
+              Basemap style failed to load.
+            </p>
+          )}
+          {sitePreviewFailed && (
+            <p className="map-stage-notice" role="status">
+              Site preview on the map could not be loaded.
+            </p>
+          )}
+        </div>
       )}
       {loading && <div className="loading-shield" />}
       {loading && (
