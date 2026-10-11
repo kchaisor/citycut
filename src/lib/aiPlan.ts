@@ -37,6 +37,7 @@ import {
 } from "./explodedAxoExport";
 import { defaultExplodedAxoSettings, type ExplodedAxoSettings } from "./explodedAxo";
 import { stableExportModel } from "./exportStableOrder";
+import { clipTransportLines } from "./dashedTransportLines";
 import type { CityModel, Pt } from "../types";
 
 export const SITE_LAYER_ORDER = [
@@ -60,7 +61,7 @@ export const SITE_LAYER_ORDER = [
   "Annotation",
 ] as const;
 
-export const FIGURE_LAYER_ORDER = ["Frame", "Buildings", "Paths", "Sun path", "Annotation"] as const;
+export const FIGURE_LAYER_ORDER = ["Frame", "Buildings", "Paths", "Rail", "Trams", "Sun path", "Annotation"] as const;
 
 /** Sheet colour. A path or rail casing uses this so it vanishes on the page and reads on the road fill. */
 function fillOf(name: ColourKey): Rgb {
@@ -547,6 +548,35 @@ export function figureGroundChunks(
       close: true,
     }));
   if (paths.length > 0) chunks.push({ name: "Buildings", paths });
+  // Rail and tram read as black dashed lines over the figure-ground, as on the site plan.
+  const transport = clipTransportLines(model);
+  const railPen = pen(style.rail);
+  if (transport.rails.length > 0 && railPen) {
+    chunks.push({
+      name: "Rail",
+      // No paper casing here: it would cut a white gap through the black figure.
+      paths: transport.rails.map((line) => ({
+        rings: [mapRing(line, model.sideM, layout)],
+        close: false,
+        cap: "round" as const,
+        join: "round" as const,
+        ...railPen,
+      })),
+    });
+  }
+  const tramPen = pen(style.tram);
+  if (transport.trams.length > 0 && tramPen) {
+    chunks.push({
+      name: "Trams",
+      paths: transport.trams.map((line) => ({
+        rings: [mapRing(line, model.sideM, layout)],
+        close: false,
+        cap: "round" as const,
+        join: "round" as const,
+        ...tramPen,
+      })),
+    });
+  }
   chunks.push(frameStroke(layout, { mm: LINE_MM.frame, color: getColour("--figure-fill"), dash: "none" }));
   if (heliodon) chunks.push(heliodonPlanPdfChunk(model.sideM, layout, heliodon, scale));
   chunks.push(annotation(model, layout, null, { mm: LINE_MM.annotation, color: style.annotation.color, dash: "none" }));

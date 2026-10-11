@@ -368,6 +368,7 @@ function addFigureGround(
  */
 const PROPERTY_BOUNDARY_LINETYPE = "Property boundary";
 const RAIL_LINETYPE = "Rail dashed";
+const TRAM_LINETYPE = "Tram dashed";
 
 function ensureDashedLinetype(
   rhino: Rhino,
@@ -415,7 +416,7 @@ function addRailTramPolylines(
   const addLayerLines = (lines: Pt[][], layerName: "Rail" | "Trams", stroke: typeof style.rail) => {
     if (lines.length === 0) return;
     const layerIndex = ensureLayer(rhino, doc, layers, materials, layerName, layerColors()[layerName]);
-    const linetypeIndex = ensureDashedLinetype(rhino, doc, RAIL_LINETYPE, stroke.dash);
+    const linetypeIndex = ensureDashedLinetype(rhino, doc, layerName === "Rail" ? RAIL_LINETYPE : TRAM_LINETYPE, stroke.dash);
     if (linetypeIndex !== null) {
       const layer = doc.layers().get(layerIndex);
       layer.linetypeIndex = linetypeIndex;

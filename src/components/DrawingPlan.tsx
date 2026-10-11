@@ -239,6 +239,12 @@ export function DrawingPlan({
           {figurePaths.map((d, index) => (
             <path key={`f${index}`} d={d} fill={figureFill} fillRule="evenodd" />
           ))}
+          {plan.rails.map((rail, index) => (
+            <path key={`fl${index}`} d={svgPolyline(rail, false)} fill="none" {...screenPenAttrs(style.rail)} strokeLinecap="round" strokeLinejoin="round" />
+          ))}
+          {plan.trams.map((tram, index) => (
+            <path key={`ftr${index}`} d={svgPolyline(tram, false)} fill="none" {...screenPenAttrs(style.tram)} strokeLinecap="round" strokeLinejoin="round" />
+          ))}
           <path
             d={framePathD}
             fill="none"

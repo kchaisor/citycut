@@ -342,6 +342,15 @@ describe("Illustrator plans", () => {
     expect(figure).toBeUndefined();
   });
 
+  it("draws rail as a black dashed line on the figure-ground, without a paper casing", () => {
+    const chunks = figureGroundChunks(model(), 1000);
+    const rail = chunks.find((chunk) => chunk.name === "Rail");
+    expect(rail?.paths?.length).toBe(1);
+    const path = rail!.paths![0]!;
+    expect(path.stroke).toEqual(hexRgb(DEFAULT_LINE_STYLES.rail.color));
+    expect(path.dashMm?.length).toBeGreaterThanOrEqual(2);
+  });
+
   it("writes figure-ground with frame, footprints, and annotation only", async () => {
     const fitted = await inspect(await figureGroundPdf(model(), 1000));
     expect(fitted.layers[0]).toBe("Frame/Sheet");
