@@ -1,4 +1,4 @@
-import type { CityModel, Pt, Ring, TreeFeat } from "../types";
+import type { CityModel, Pt, TreeFeat } from "../types";
 
 function compareNum(a: number, b: number): number {
   return a === b ? 0 : a < b ? -1 : 1;
@@ -8,15 +8,6 @@ function comparePt(a: Pt, b: Pt): number {
   const east = compareNum(a[0], b[0]);
   if (east !== 0) return east;
   return compareNum(a[1], b[1]);
-}
-
-function compareRing(a: Ring, b: Ring): number {
-  const len = Math.min(a.length, b.length);
-  for (let i = 0; i < len; i++) {
-    const c = comparePt(a[i], b[i]);
-    if (c !== 0) return c;
-  }
-  return compareNum(a.length, b.length);
 }
 
 function treeSpeciesLabel(tree: TreeFeat): string {
@@ -53,9 +44,6 @@ function comparePolyline(a: Pt[], b: Pt[]): number {
 export function stableExportModel(model: CityModel): CityModel {
   return {
     ...model,
-    buildings: [...model.buildings].sort(
-      (a, b) => compareNum(a.id, b.id) || compareRing(a.ring, b.ring),
-    ),
     roads: [...model.roads].sort((a, b) => compareNum(a.id, b.id)),
     areas: model.areas,
     trees: [...model.trees].sort(compareTreesForExport),

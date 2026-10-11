@@ -11,6 +11,9 @@ function normalizeAiBytes(bytes: Uint8Array): string {
     .decode(bytes)
     .replace(/%%CreationDate:.*\n/g, "")
     .replace(/%%Creator:.*\n/g, "")
+    .replace(/\(D:\d{14}[^)]*\)/g, "(D:X)")
+    .replace(/\/CreationDate\s*\(D:[^)]*\)/g, "/CreationDate (D:X)")
+    .replace(/\/ModDate\s*\(D:[^)]*\)/g, "/ModDate (D:X)")
     .replace(/\(\d+\)\s*$/gm, "");
 }
 
