@@ -33,9 +33,8 @@ const { sampleBuilding, emptyBuildingStats } = vi.hoisted(() => ({
 
 vi.mock("./lib/loadMapStyle", () => ({
   loadBasemapStyle: vi.fn(async () => ({
-    version: 8,
-    sources: {},
-    layers: [],
+    style: { version: 8, sources: {}, layers: [] },
+    styleLoadFailed: false,
   })),
 }));
 

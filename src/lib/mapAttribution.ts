@@ -1,7 +1,7 @@
 export const MAP_VECTOR_ATTRIBUTION = {
   openFreeMap: { label: "OpenFreeMap", href: "https://openfreemap.org/" },
-  openMapTiles: { label: "OpenMapTiles", href: "https://www.openmaptiles.org/" },
-  openStreetMap: { label: "OpenStreetMap contributors", href: "https://www.openstreetmap.org/copyright" },
+  openMapTiles: { label: "© OpenMapTiles", href: "https://www.openmaptiles.org/" },
+  openStreetMap: { label: "© OpenStreetMap contributors", href: "https://www.openstreetmap.org/copyright" },
 } as const;
 
 export const MAP_SATELLITE_ATTRIBUTION = {

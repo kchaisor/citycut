@@ -1013,7 +1013,11 @@ export function ModelPage({ model }: { model: CityModel }) {
   return (
     <div className="model">
       <h1 className="sr-only">Your model is ready.</h1>
-      <div className={tab === "drawing" ? "viewport is-drawing" : "viewport"}>
+      <div
+        className={
+          tab === "drawing" ? "viewport is-drawing" : tab === "satellite" ? "viewport is-satellite" : "viewport"
+        }
+      >
         {tab === "3d" && (
           <div className="fill">
             {model.heightSourceLoadWarnings?.map((line) => (

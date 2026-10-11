@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MapStage } from "./MapStage";
 import {
@@ -20,12 +20,23 @@ type MockMapInstance = {
 
 const mapInstances: MockMapInstance[] = [];
 
-vi.mock("../lib/loadMapStyle", () => ({
-  loadBasemapStyle: vi.fn(async () => ({
-    version: 8,
-    sources: {},
-    layers: [],
+const { loadBasemapStyle } = vi.hoisted(() => ({
+  loadBasemapStyle: vi.fn<
+    () => Promise<{
+      style: { version: 8; sources: Record<string, never>; layers: never[] } | string;
+      styleLoadFailed: boolean;
+    }>
+  >(async () => ({
+    style: { version: 8, sources: {}, layers: [] },
+    styleLoadFailed: false,
   })),
+}));
+
+vi.mock("../lib/loadMapStyle", () => ({
+  loadBasemapStyle,
+  applyBasemapStyleToMap: vi.fn((map: { setStyle: ReturnType<typeof vi.fn> }, style: unknown) => {
+    map.setStyle(style);
+  }),
 }));
 
 vi.mock("../lib/buildingEnrichmentTiles", async (importOriginal) => {
@@ -153,5 +164,15 @@ describe("MapStage", () => {
         id.includes("citycut-cut-mask"),
     );
     expect(colourLayerIds).toEqual([]);
+  });
+
+  it("still creates the map and shows a notice when basemap style load fails", async () => {
+    loadBasemapStyle.mockResolvedValueOnce({
+      style: "https://tiles.openfreemap.org/styles/positron",
+      styleLoadFailed: true,
+    });
+    render(<MapStage {...baseProps} />);
+    await waitFor(() => expect(mapInstances).toHaveLength(1));
+    expect(screen.getByText("Basemap style failed to load.")).toBeTruthy();
   });
 });

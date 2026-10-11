@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import { MapAttribution } from "./MapAttribution";
-import { loadBasemapStyle } from "../lib/loadMapStyle";
+import { applyBasemapStyleToMap, loadBasemapStyle } from "../lib/loadMapStyle";
 import { M_PER_DEG_LAT, mPerDegLon, squareBBox } from "../lib/geo";
 import { cutFrameLabelKm } from "../lib/placeLabel";
 import type { SiteFrameShape } from "../types";
@@ -61,6 +61,7 @@ export function MapStage({
   const [frame, setFrame] = useState<Frame | null>(null);
   const [ready, setReady] = useState(false);
   const [mapEpoch, setMapEpoch] = useState(0);
+  const [basemapStyleFailed, setBasemapStyleFailed] = useState(false);
   sideRef.current = sideM;
   frameShapeRef.current = frameShape;
   onViewRef.current = onView;
@@ -75,16 +76,18 @@ export function MapStage({
     let update: (() => void) | null = null;
     let onMoveEnd: (() => void) | null = null;
 
-    void loadBasemapStyle(appliedBasemap.current).then((style) => {
+    void loadBasemapStyle(appliedBasemap.current).then(({ style, styleLoadFailed }) => {
       if (cancelled) return;
+      if (styleLoadFailed) setBasemapStyleFailed(true);
       map = new maplibregl.Map({
         container,
-        style,
+        style: typeof style === "string" ? undefined : style,
         center: [initialView.lon, initialView.lat],
         zoom: initialView.zoom,
         attributionControl: false,
         ...FLAT_NORTH_UP_MAP_OPTIONS,
       });
+      if (typeof style === "string") applyBasemapStyleToMap(map, style);
       applyFlatNorthUpMapHandlers(map);
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
       mapRef.current = map;
@@ -151,9 +154,11 @@ export function MapStage({
     if (!map || !ready) return;
     if (appliedBasemap.current === basemap) return;
     appliedBasemap.current = basemap;
-    void loadBasemapStyle(basemap).then((style) => {
+    void loadBasemapStyle(basemap).then(({ style, styleLoadFailed }) => {
       if (mapRef.current !== map) return;
-      map.setStyle(style);
+      if (styleLoadFailed) setBasemapStyleFailed(true);
+      else setBasemapStyleFailed(false);
+      applyBasemapStyleToMap(map, style);
       map.once("style.load", () => {
         setMapEpoch((value) => value + 1);
       });
@@ -288,6 +293,11 @@ export function MapStage({
             {label}
           </div>
         </>
+      )}
+      {basemapStyleFailed && !loading && (
+        <p className="map-stage-notice" role="status">
+          Basemap style failed to load.
+        </p>
       )}
       {loading && <div className="loading-shield" />}
       {loading && (

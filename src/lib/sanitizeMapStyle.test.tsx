@@ -37,4 +37,25 @@ describe("sanitizeMapStyle", () => {
     expect(view.container.innerHTML).not.toContain("<img");
     expect((window as { __citycutXss?: number }).__citycutXss).toBeUndefined();
   });
+
+  it("renders attribution links in a new tab", () => {
+    const view = render(<MapAttribution basemap="map" />);
+    const links = view.container.querySelectorAll("a");
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      expect(link.getAttribute("target")).toBe("_blank");
+      expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+    }
+  });
+
+  it("uses OpenMapTiles and OpenStreetMap contributor wording", () => {
+    const view = render(<MapAttribution basemap="map" />);
+    expect(view.container.textContent).toContain("© OpenMapTiles");
+    expect(view.container.textContent).toContain("© OpenStreetMap contributors");
+  });
+
+  it("separates Esri satellite attribution with a middle dot", () => {
+    const view = render(<MapAttribution basemap="satellite" />);
+    expect(view.container.textContent).toMatch(/Esri World Imagery · Imagery/);
+  });
 });

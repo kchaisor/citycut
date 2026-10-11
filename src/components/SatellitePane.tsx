@@ -1,7 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import { MapAttribution } from "./MapAttribution";
-import { loadBasemapStyle } from "../lib/loadMapStyle";
+import { applyBasemapStyleToMap, loadBasemapStyle } from "../lib/loadMapStyle";
 import { getColour } from "../lib/colours";
 import { squareBBox } from "../lib/geo";
 import { useColourRevision } from "../lib/useColourRevision";
@@ -10,6 +10,7 @@ import type { CityModel } from "../types";
 export function SatellitePane({ model }: { model: CityModel }) {
   const ref = useRef<HTMLDivElement>(null);
   const colourTick = useColourRevision();
+  const [basemapStyleFailed, setBasemapStyleFailed] = useState(false);
 
   useEffect(() => {
     const container = ref.current;
@@ -17,16 +18,18 @@ export function SatellitePane({ model }: { model: CityModel }) {
     let map: maplibregl.Map | null = null;
     let cancelled = false;
     const bounds = squareBBox(model.center, model.sideM);
-    void loadBasemapStyle("satellite").then((style) => {
+    void loadBasemapStyle("satellite").then(({ style, styleLoadFailed }) => {
       if (cancelled) return;
+      if (styleLoadFailed) setBasemapStyleFailed(true);
       map = new maplibregl.Map({
         container,
-        style,
+        style: typeof style === "string" ? undefined : style,
         center: [model.center.lon, model.center.lat],
         zoom: 15,
         attributionControl: false,
         dragRotate: false,
       });
+      if (typeof style === "string") applyBasemapStyleToMap(map, style);
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
       const ring: [number, number][] = [
         [bounds.west, bounds.south],
@@ -65,6 +68,11 @@ export function SatellitePane({ model }: { model: CityModel }) {
   return (
     <div className="map-wrap map-wrap-satellite">
       <div ref={ref} className="map-canvas" />
+      {basemapStyleFailed && (
+        <p className="map-stage-notice" role="status">
+          Basemap style failed to load.
+        </p>
+      )}
       <MapAttribution basemap="satellite" />
     </div>
   );
