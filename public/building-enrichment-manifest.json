@@ -9,7 +9,7 @@
   "zoneUseTableSha256": "dd4aedda39bc15404941412098fbb41aa40a6762cd405d7e49c4193f37718fe3",
   "overtureBuildingUseSha256": "38136c68fa4c19a03b59a0cd6657d243df563abb464cdcbc77214940e85f83f1",
   "featureCount": 86453,
-  "pmtilesBytes": 13352861,
+  "pmtilesBytes": 3885131,
   "generatedAt": "2026-10-08T17:23:37.116779+00:00",
   "lidar": {
     "status": "no_data",
@@ -79,7 +79,7 @@
     "writeFeaturesSec": 1.72,
     "totalSec": 46.69
   },
-  "pmtilesSha256": "12f3539b22f8a67eb1ab65f7d3ac56506808d7cf5bc23dd70eafe822190a45f5",
+  "pmtilesSha256": "0363f5a1b7d9a998cde14953923a27f7800d8d5f7c08315740bf79877be2ede7",
   "overtureRelease": "2026-09-23.1",
   "builtBbox": {
     "west": 144.89,
@@ -94,7 +94,7 @@
     "north": -37.175099
   },
   "tileZoomRange": {
-    "min": 11,
+    "min": 14,
     "max": 14
   },
   "buildStageSec": {
