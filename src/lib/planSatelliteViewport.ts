@@ -2,16 +2,19 @@ import { fromLocal, toLocal } from "./geo";
 import type { LonLat } from "../types";
 import { planViewportEqual, type PlanViewport } from "./planViewport";
 
-/** WGS84 bounds [[west, south], [east, north]] for the plan/SVG viewBox. */
+/**
+ * WGS84 bounds [[west, south], [east, north]] for the plan/SVG viewBox.
+ * The viewBox is in local metres with Y growing south, so north = -y.
+ */
 export function planViewportLngLatBounds(
   view: PlanViewport,
   center: LonLat,
 ): [[number, number], [number, number]] {
-  const west = fromLocal([view.x, view.y + view.h], center);
-  const east = fromLocal([view.x + view.w, view.y], center);
+  const southWest = fromLocal([view.x, -(view.y + view.h)], center);
+  const northEast = fromLocal([view.x + view.w, -view.y], center);
   return [
-    [west.lon, west.lat],
-    [east.lon, east.lat],
+    [southWest.lon, southWest.lat],
+    [northEast.lon, northEast.lat],
   ];
 }
 
@@ -21,13 +24,9 @@ export function planViewportFromLngLatBounds(
   center: LonLat,
 ): PlanViewport {
   const [sw, ne] = bounds;
-  const nw = toLocal(ne[1], sw[0], center);
-  const se = toLocal(sw[1], ne[0], center);
-  const x = nw[0];
-  const y = nw[1];
-  const w = se[0] - x;
-  const h = se[1] - y;
-  return { x, y, w, h };
+  const [west, south] = toLocal(sw[1], sw[0], center);
+  const [east, north] = toLocal(ne[1], ne[0], center);
+  return { x: west, y: -north, w: east - west, h: north - south };
 }
 
 export function planSatelliteViewportEqual(a: PlanViewport, b: PlanViewport): boolean {
