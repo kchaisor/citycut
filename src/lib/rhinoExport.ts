@@ -15,6 +15,7 @@ import { analyzeWindPeriod, sectorCenterDeg, type WindPeriodId, type WindRoseTab
 import { plainDataCredit } from "./dataCredits";
 import { windFlowArrowPolylines } from "./windArrowGeometry";
 import { dashSegments } from "./drawingStyle";
+import { stableExportModel } from "./exportStableOrder";
 import type { CityModel, Pt } from "../types";
 
 type Rgb = { r: number; g: number; b: number };
@@ -107,6 +108,13 @@ export function loadRhino(): Promise<Rhino> {
 
 function layerName(mesh: THREE.Mesh): string {
   return mesh.name || mesh.parent?.name || "Mesh";
+}
+
+function meshExportSortKey(mesh: THREE.Mesh): string {
+  const name = layerName(mesh);
+  const position = mesh.geometry.getAttribute("position");
+  if (!position || position.count === 0) return name;
+  return `${name}:${position.getX(0).toFixed(4)}:${position.getY(0).toFixed(4)}:${position.getZ(0).toFixed(4)}`;
 }
 
 function ensureMaterial(
@@ -578,6 +586,7 @@ export async function cityModelTo3dm(
   model: CityModel,
   options?: HeliodonGroundExportOptions | CityModelTo3dmOptions | null,
 ): Promise<Uint8Array> {
+  model = stableExportModel(model);
   const { heliodon, shadows, castShadows, uniformBuildings, colourBySource, wind } = normalize3dmOptions(options);
   const rhino = await loadRhino();
   const crs = mgaCrs(model.center.lon);
@@ -624,11 +633,13 @@ export async function cityModelTo3dm(
 
     const layers = new Map<string, number>();
     const materials = new Map<string, number>();
+    const meshes: THREE.Mesh[] = [];
     group.traverse((object) => {
       const mesh = object as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      addMesh(rhino, doc, layers, materials, mesh, model, crs.zone);
+      if (mesh.isMesh) meshes.push(mesh);
     });
+    meshes.sort((a, b) => meshExportSortKey(a).localeCompare(meshExportSortKey(b)));
+    for (const mesh of meshes) addMesh(rhino, doc, layers, materials, mesh, model, crs.zone);
     addFigureGround(rhino, doc, layers, materials, model, crs.zone);
     addSiteBoundary(rhino, doc, layers, materials, model, crs.zone);
     addContours(rhino, doc, layers, materials, model, crs.zone);

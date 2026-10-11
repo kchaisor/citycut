@@ -36,6 +36,7 @@ import {
   EXPLODED_AXO_LAYER_ORDER,
 } from "./explodedAxoExport";
 import { defaultExplodedAxoSettings, type ExplodedAxoSettings } from "./explodedAxo";
+import { stableExportModel } from "./exportStableOrder";
 import type { CityModel, Pt } from "../types";
 
 export const SITE_LAYER_ORDER = [
@@ -293,6 +294,7 @@ export function sitePlanChunks(
   style: LineStyles = readDrawingStyle(),
   exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): PdfChunk[] {
+  model = stableExportModel(model);
   const resolved = resolveSitePlanExport(exportOptions);
   const heliodon = resolved.heliodon ?? null;
   const shadowInput = resolved.shadows ?? null;
@@ -530,6 +532,7 @@ export function figureGroundChunks(
   style: LineStyles = readDrawingStyle(),
   heliodon?: HeliodonDiagramExportOptions | null,
 ): PdfChunk[] {
+  model = stableExportModel(model);
   const layout = layoutSheet(model.sideM, scale);
   const frameShape = model.frameShape ?? "square";
   const ground = figureGround(model.buildings, model.sideM, frameShape);

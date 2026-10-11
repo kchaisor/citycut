@@ -12,6 +12,7 @@ import { hexRgb } from "./lineweights";
 import { ROAD_COLOR, SURFACE } from "./surfaceLayers";
 import { footprintBase, sampleTerrain } from "./terrain";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
+import { stableExportModel } from "./exportStableOrder";
 import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
 
 export const VIEW_LAYER_ORDER = [
@@ -673,6 +674,7 @@ function collect(
 }
 
 export function viewChunks(model: CityModel, shot: CameraShot, style: ViewStyle): PdfChunk[] {
+  model = stableExportModel(model);
   const page = viewPageMm(shot.width, shot.height);
   const ink = fillOf("--view-ink");
   const backdrop = fillOf("--export-backdrop");
