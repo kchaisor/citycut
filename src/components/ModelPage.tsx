@@ -1123,7 +1123,7 @@ export function ModelPage({ model }: { model: CityModel }) {
         )}
         {tab === "satellite" && (
           <div className="fill">
-            <SatellitePane model={model} />
+            <SatellitePane model={displayModel} viewport={planViewport} onViewportChange={setPlanViewport} />
           </div>
         )}
         <div className="chrome model-chrome">
