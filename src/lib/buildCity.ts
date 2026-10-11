@@ -12,6 +12,8 @@ import { hexRgb, overlapLift, ROAD_COLOR, ROAD_RGB, roadGradeLayer, SURFACE } fr
 import { matteStandardMaterial } from "./matteMaterial";
 import { isSiteBuilding } from "./siteBuildings";
 import { siteBoundaryLineGeometry } from "./siteBoundaryDash3d";
+import { clipTransportLines, drapedDashedLineGeometry } from "./dashedTransportLines";
+import { readDrawingStyle } from "./drawingStyle";
 import { footprintBase, sampleTerrain, terrainBuffers } from "./terrain";
 import type { AreaFeat, BuildingFeat, BuildingUse, CityModel, Pt, Ring, RoadGrade, TerrainField } from "../types";
 
@@ -485,7 +487,6 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     group.add(water);
   }
 
-  const railMat = paint(matteStandardMaterial({ color: getColour("--rail-fill") }), SURFACE.rail);
   const drapeSpacing = model.terrain ? Math.min(model.terrain.spacingM, 8) : undefined;
   const grades: RoadGrade[] = ["path", "local", "arterial"];
   for (const grade of grades) {
@@ -515,19 +516,6 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     order(mesh, layer.renderOrder);
     group.add(mesh);
   }
-  const railFill = unionCarriageways(
-    model.roads.filter((road) => road.kind === "rail").map((road) => ({ line: road.line, width: road.width })),
-    model.sideM,
-    frameShape,
-  );
-  const railGeo = roadFillGeometry(railFill.polygons, SURFACE.rail.lift, sample, drapeSpacing);
-  if (railGeo) {
-    const mesh = new THREE.Mesh(railGeo, railMat);
-    mesh.name = "Rail";
-    order(mesh, SURFACE.rail.renderOrder);
-    group.add(mesh);
-  }
-
   const siteFill = getColour("--site-building");
   const siteLayerName = "Buildings::Site";
   const bySource = Boolean(options.colourBySource) && !options.splitBuildings;
@@ -627,6 +615,22 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     const trees = buildTreeGroup(model.trees, sample ?? undefined);
     if (trees) group.add(trees);
   }
+
+  const { rails, trams } = clipTransportLines(model);
+  const style = readDrawingStyle();
+  const sampleZ = (east: number, north: number) => (sample ? sample(east, north) : 0);
+  const addTransportLines = (lines: import("../types").Pt[][], name: string, stroke: typeof style.rail) => {
+    const geometry = drapedDashedLineGeometry(lines, stroke, model.sideM, sampleZ, SURFACE.rail.lift);
+    if (!geometry) return;
+    const material = new THREE.LineBasicMaterial({ color: stroke.color, toneMapped: false });
+    material.name = name;
+    const segments = new THREE.LineSegments(geometry, material);
+    segments.name = name;
+    order(segments, SURFACE.rail.renderOrder + 1);
+    group.add(segments);
+  };
+  addTransportLines(rails, "RailLines", style.rail);
+  addTransportLines(trams, "TramLines", style.tram);
 
   const boundaryLines = model.siteBoundaryLines;
   if (boundaryLines && boundaryLines.length > 0) {

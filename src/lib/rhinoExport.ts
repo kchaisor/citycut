@@ -16,6 +16,9 @@ import { plainDataCredit } from "./dataCredits";
 import { windFlowArrowPolylines } from "./windArrowGeometry";
 import { dashSegments } from "./drawingStyle";
 import { stableExportModel } from "./exportStableOrder";
+import { clipTransportLines } from "./dashedTransportLines";
+import { SURFACE } from "./surfaceLayers";
+import { sampleTerrain } from "./terrain";
 import type { CityModel, Pt } from "../types";
 
 type Rgb = { r: number; g: number; b: number };
@@ -49,7 +52,8 @@ export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
     Site: "--site-building",
     "Site::Boundary": "--site-boundary",
     Roads: "--road-arterial",
-    Rail: "--rail-fill",
+    Rail: "--outline-rail",
+    Trams: "--tram-line-stroke",
     Water: "--water-3d",
     Green: "--green-3d",
     Blocks: "--block-fill",
@@ -363,21 +367,79 @@ function addFigureGround(
  * sit at the contour's own Z because the rest of the file is Z-up metres.
  */
 const PROPERTY_BOUNDARY_LINETYPE = "Property boundary";
+const RAIL_LINETYPE = "Rail dashed";
 
-export function ensurePropertyBoundaryLinetype(rhino: Rhino, doc: InstanceType<Rhino["File3dm"]>): number | null {
+function ensureDashedLinetype(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  name: string,
+  dash: string,
+): number | null {
   const table = doc.linetypes();
-  const existing = table.findName(PROPERTY_BOUNDARY_LINETYPE);
+  const existing = table.findName(name);
   if (existing) return existing.index;
-  const segments = dashSegments(readDrawingStyle().siteBoundary.dash);
-  if (!segments || segments.length < 4) return null;
+  const segments = dashSegments(dash);
+  if (!segments || segments.length < 2) return null;
   const linetype = new rhino.Linetype();
-  linetype.name = PROPERTY_BOUNDARY_LINETYPE;
+  linetype.name = name;
   linetype.clearPattern();
   for (let i = 0; i < segments.length; i++) {
     linetype.appendSegment(segments[i]!, i % 2 === 0);
   }
   table.add(linetype);
-  return table.findName(PROPERTY_BOUNDARY_LINETYPE)?.index ?? null;
+  return table.findName(name)?.index ?? null;
+}
+
+export function ensurePropertyBoundaryLinetype(rhino: Rhino, doc: InstanceType<Rhino["File3dm"]>): number | null {
+  const table = doc.linetypes();
+  const existing = table.findName(PROPERTY_BOUNDARY_LINETYPE);
+  if (existing) return existing.index;
+  return ensureDashedLinetype(rhino, doc, PROPERTY_BOUNDARY_LINETYPE, readDrawingStyle().siteBoundary.dash);
+}
+
+function addRailTramPolylines(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  model: CityModel,
+  zone: number,
+) {
+  const style = readDrawingStyle();
+  const { rails, trams } = clipTransportLines(model);
+  const sample =
+    model.terrain != null
+      ? (east: number, north: number) => sampleTerrain(model.terrain!, east, north, model.sideM)
+      : () => 0;
+  const lift = SURFACE.rail.lift;
+  const addLayerLines = (lines: Pt[][], layerName: "Rail" | "Trams", stroke: typeof style.rail) => {
+    if (lines.length === 0) return;
+    const layerIndex = ensureLayer(rhino, doc, layers, materials, layerName, layerColors()[layerName]);
+    const linetypeIndex = ensureDashedLinetype(rhino, doc, RAIL_LINETYPE, stroke.dash);
+    if (linetypeIndex !== null) {
+      const layer = doc.layers().get(layerIndex);
+      layer.linetypeIndex = linetypeIndex;
+    }
+    for (const line of lines) {
+      const points: number[][] = [];
+      for (const point of line) {
+        const z = sample(point[0], point[1]) + lift;
+        const [easting, northing] = projectLocal(point, model.center, zone);
+        const last = points[points.length - 1];
+        if (last && Math.hypot(last[0] - easting, last[1] - northing) < 0.001) continue;
+        points.push([easting, northing, z]);
+      }
+      if (points.length < 2) continue;
+      const attributes = new rhino.ObjectAttributes();
+      attributes.name = layerName === "Rail" ? "Rail" : "Tram";
+      attributes.layerIndex = layerIndex;
+      applyByLayerAttributes(rhino, attributes);
+      doc.objects().addPolyline(points, attributes);
+      release(attributes);
+    }
+  };
+  addLayerLines(rails, "Rail", style.rail);
+  addLayerLines(trams, "Trams", style.tram);
 }
 
 function addSiteBoundary(
@@ -693,6 +755,7 @@ export async function cityModelTo3dm(
     addMeshesInTraverseLayerOrder(rhino, doc, layers, materials, meshes, model, crs.zone);
     addFigureGround(rhino, doc, layers, materials, model, crs.zone);
     addSiteBoundary(rhino, doc, layers, materials, model, crs.zone);
+    addRailTramPolylines(rhino, doc, layers, materials, model, crs.zone);
     addContours(rhino, doc, layers, materials, model, crs.zone);
     if (heliodon) addHeliodonPlan(rhino, doc, layers, materials, model, crs.zone, heliodon);
     if (shadows) addPlanShadows(rhino, doc, layers, materials, model, crs.zone, shadows, Boolean(castShadows));

@@ -36,9 +36,9 @@
   --path-edge-dash: none;
 
   /* Rail, drawn as a line on top of the road fill where they cross. */
-  --rail-stroke-mm: 0.08;
+  --rail-stroke-mm: 0.12;
   --rail-stroke: var(--outline-rail);
-  --rail-dash: none;
+  --rail-dash: 1.2 0.6;
 
   /* PTV metro tram routes (dashed black). */
   --tram-stroke-mm: 0.12;
