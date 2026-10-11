@@ -359,6 +359,7 @@ export default function App() {
             )
           : Promise.resolve({
               areas: [],
+              carParks: [],
               treeContext: { canopy: [], buildings: [], water: [], roads: [] },
               overtureTrees: [],
               stats: {
@@ -666,6 +667,7 @@ export default function App() {
         tramLines: tramResult.lines ?? undefined,
         tramLinesLoadFailed: tramResult.loadFailed || undefined,
         areas: modelLayers.waterGreen ? baseResult.areas : [],
+        carParks: modelLayers.waterGreen ? baseResult.carParks : undefined,
         trees,
         roadKm: modelLayers.roads ? transportResult.roadKm : 0,
         buildingCapHit,

@@ -9,7 +9,6 @@ import {
   DEFAULT_PATH_FILLET_M,
   footpathStrips,
   mergeFootpathFragments,
-  PARKING_AISLE,
   subtractFootpathBlockers,
   unionCarriageways,
   unionFootpathStrips,
@@ -17,6 +16,7 @@ import {
 } from "./roadFill";
 import * as polygonClipping from "polygon-clipping";
 import { fillRoadMedianGaps } from "./roadMedianFill";
+import { carParkWays } from "./planCarParks";
 import {
   DEFAULT_COARSE_FROM_SCALE,
   DEFAULT_COARSE_INTERVAL_M,
@@ -192,7 +192,10 @@ export function planPaths(
     pathFilletM,
     pathWidthM,
   );
-  const carriageway = unionRoadSurface(model.roads, model.tramLines, model.sideM, frameShape);
+  // Car-park aisles (and service ways inside a mapped car park) are car park, not road white.
+  const carPark = carParkWays(model.roads, model.carParks);
+  const planRoads = carPark.size > 0 ? model.roads.filter((road) => !carPark.has(road)) : model.roads;
+  const carriageway = unionRoadSurface(planRoads, model.tramLines, model.sideM, frameShape);
 
   const colourMode: BuildingColourMode = planOptions.buildingColour ?? {
     colourByUse: true,
@@ -216,9 +219,9 @@ export function planPaths(
     pathFill = mergeFootpathFragments(pathFill);
   }
 
-  // Car-park aisles are not road white: draw them as block ground so the car park reads as one
-  // surface with a clear edge against the carriageway. Blocks already exclude the aisle strips.
-  const aisles = model.roads.filter((road) => road.kind === "road" && road.service === PARKING_AISLE);
+  // Draw car-park ways as block ground so the car park reads as one surface with a clear edge
+  // against the carriageway. City blocks already exclude these strips.
+  const aisles = [...carPark];
   if (aisles.length > 0) {
     const strips = unionCarriageways(
       aisles.map((road) => ({ line: road.line, width: road.width })),

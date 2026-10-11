@@ -150,6 +150,9 @@ export type RoadFeat = {
   service?: string;
 };
 
+/** Car-park outline in local metres. The site plan uses it only to draw service ways inside it as ground. */
+export type CarParkArea = { ring: Ring; holes: Ring[] };
+
 export type AreaFeat = {
   id: number;
   ring: Ring;
@@ -249,6 +252,8 @@ export type CityModel = {
   /** True when tram routes were requested but PTV data failed to load. */
   tramLinesLoadFailed?: boolean;
   areas: AreaFeat[];
+  /** Car-park outlines from the base tiles. Plan-only; 3D, .3dm and city blocks ignore them. */
+  carParks?: CarParkArea[];
   trees: TreeFeat[];
   roadKm: number;
   buildingCapHit: boolean;

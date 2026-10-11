@@ -8,6 +8,7 @@ import { normalizeMultiPolygonByParity, offsetMultiPolygon } from "./polygonOffs
 import { clearFootpathUnionCacheForTests, PARKING_AISLE, unionCarriageways, unionRoadSurface } from "./roadFill";
 import { fillRoadMedianGaps, ROAD_MEDIAN_HOLE_MAX_M2 } from "./roadMedianFill";
 import { serviceKindOfSegment } from "./overtureTransportMapping";
+import { carParkWays } from "./planCarParks";
 import { planPaths } from "./svgPlan";
 import { PATH_WIDTH_M } from "./lineweights";
 import type { CityModel, Pt } from "../types";
@@ -54,6 +55,20 @@ describe("serviceKindOfSegment", () => {
   });
 });
 
+describe("carParkWays", () => {
+  const park = { ring: [[0, 0], [100, 0], [100, 60], [0, 60], [0, 0]] as Pt[], holes: [] };
+  const way = (line: Pt[], service?: string) => ({ id: 1, line, width: 3.2, kind: "road" as const, grade: "local" as const, ...(service ? { service } : {}) });
+  it("takes every parking aisle, and plain service ways that run inside a car park", () => {
+    const aisle = way([[500, 500], [600, 500]], "parking_aisle");
+    const inside = way([[10, 30], [90, 30]], "service");
+    const through = way([[-200, 30], [50, 30]], "service");
+    const street = way([[10, 20], [90, 20]]);
+    const out = carParkWays([aisle, inside, through, street], [park]);
+    expect([...out]).toEqual([aisle, inside]);
+    expect([...carParkWays([aisle, inside], undefined)]).toEqual([aisle]);
+  });
+});
+
 describe("fillRoadMedianGaps street rim", () => {
   const none = { green: [], water: [], paths: [], buildings: [] };
   // 100 x 30 m road with an 80 x 6 m hole between y 12 and 18.
@@ -77,9 +92,12 @@ describe("Dandenong site plan ground (40 Cleeland St, Overture 2026-09-23.1)", (
   const roadFill = plan.roadFill as MultiPolygon;
   const ground = asMulti(plan.blocks);
   const aisles = model.roads.filter((road) => road.service === PARKING_AISLE);
+  const carPark = [...carParkWays(model.roads, model.carParks)];
 
   it("has the shopping-centre block and the park car park in the fixture", () => {
     expect(aisles.length).toBeGreaterThan(40);
+    expect(model.carParks?.length).toBeGreaterThan(5);
+    expect(carPark.length).toBeGreaterThan(aisles.length);
     expect(model.buildings.length).toBeGreaterThan(100);
   });
 
@@ -90,16 +108,17 @@ describe("Dandenong site plan ground (40 Cleeland St, Overture 2026-09-23.1)", (
       expect(covers(ground, p), `ground at ${p}`).toBe(true);
     }
     // Car-park bays east of the site, by the park (gap-filled white by #74 on main).
-    for (const p of [[77, 12], [93, 62], [89, 46], [75, -2], [86, 31]] as Pair[]) {
+    // [119, 37] and [110, 3] sit on car-park rows mapped as plain service ways inside the car park.
+    for (const p of [[77, 12], [93, 62], [89, 46], [75, -2], [86, 31], [119, 37], [110, 3]] as Pair[]) {
       expect(covers(roadFill, p), `road at ${p}`).toBe(false);
       expect(covers(ground, p), `ground at ${p}`).toBe(true);
     }
   });
 
-  it("draws car-park aisles as ground, not road", () => {
-    const strips = unionCarriageways(aisles, model.sideM, "square").polygons;
+  it("draws car-park aisles (and service ways inside car parks) as ground, not road", () => {
+    const strips = unionCarriageways(carPark, model.sideM, "square").polygons;
     const streetSurface = unionCarriageways(
-      model.roads.filter((r) => r.kind === "road" && r.grade !== "path" && r.service !== PARKING_AISLE),
+      model.roads.filter((r) => r.kind === "road" && r.grade !== "path" && !carPark.includes(r)),
       model.sideM,
       "square",
     ).polygons;
@@ -117,8 +136,8 @@ describe("Dandenong site plan ground (40 Cleeland St, Overture 2026-09-23.1)", (
     expect(area(pc.intersection(inner, roadFill))).toBeLessThan(1);
   });
 
-  it("keeps the plan road surface equal to the street carriageway (no aisles), with only street-rimmed gaps filled", () => {
-    const surface = unionRoadSurface(model.roads, model.tramLines, model.sideM, "square").polygons;
+  it("fills only street-rimmed gaps on top of the plan carriageway (no car-park ways)", () => {
+    const surface = unionRoadSurface(model.roads.filter((r) => !carPark.includes(r)), model.tramLines, model.sideM, "square").polygons;
     const filled = pc.difference(roadFill, surface);
     expect(area(filled)).toBeLessThan(1500);
   });

@@ -5,6 +5,8 @@ import { DEFAULT_SITE_FRAME_SHAPE, pointInSiteFrame, siteFramePolygon, type Site
 import type { Pt, RoadFeat } from "../types";
 import { hashLineCoords, hashRoadFeatures, mixGeometryHash } from "./geometryHash";
 import { normalizeMultiPolygonByParity, offsetCloseMultiPolygon } from "./polygonOffset";
+import { PARKING_AISLE } from "./planCarParks";
+export { PARKING_AISLE };
 
 type ClipFns = {
   union: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
@@ -635,9 +637,6 @@ function roadSurfaceCacheKey(
   for (const line of tramLines ?? []) tram = hashLineCoords(tram, line);
   return `${roads.length}:${hashRoadFeatures(roads)}:${tram.toString(16)}:${sideM}:${frameShape}`;
 }
-
-/** `RoadFeat.service` value for car-park aisles. */
-export const PARKING_AISLE = "parking_aisle";
 
 /**
  * Plan road surface: every carriageway except car-park aisles. Aisles are car park, which the
