@@ -52,12 +52,11 @@ import {
   COM_BUILDING_HEIGHTS_DATASET_URL,
 } from "../lib/comBuildingHeightCredit";
 import {
-  comBuildingHeightsToggleKind,
-  comBuildingHeightsToggleLabel,
-  comBuildingHeightsTogglePressed,
-  readStoredComBuildingHeights,
-  writeStoredComBuildingHeights,
-} from "../lib/comBuildingHeightsToggle";
+  clearLegacyComBuildingHeightsPreference,
+  comBuildingHeightsStatus,
+  comBuildingHeightsStatusNote,
+} from "../lib/comBuildingHeightsStatus";
+import { resolveBuildingHeightsAfterCom } from "../lib/buildingHeightPipeline";
 import { formatCoord, formatLengthKm } from "../lib/geo";
 import { cutSizeLabel } from "../lib/placeLabel";
 import { ISO_CORNERS, type IsoCorner } from "../lib/isoCamera";
@@ -178,9 +177,6 @@ export function ModelPage({ model }: { model: CityModel }) {
     () => !capturePresetFromSearch(window.location.search).uniformBuildings,
   );
   const [showSource, setShowSource] = useState(false);
-  const [betterHeights, setBetterHeights] = useState(() =>
-    readStoredComBuildingHeights(window.localStorage),
-  );
   const [comFootprints, setComFootprints] = useState<ComBuildingFootprint[]>(
     () => model.comFootprintPrefetch ?? [],
   );
@@ -312,7 +308,11 @@ export function ModelPage({ model }: { model: CityModel }) {
   ]);
 
   useEffect(() => {
-    if (!betterHeights || !model.layers.buildings) {
+    clearLegacyComBuildingHeightsPreference(window.localStorage);
+  }, []);
+
+  useEffect(() => {
+    if (!model.layers.buildings) {
       setComFootprints([]);
       setComFootprintLoading(false);
       return;
@@ -356,7 +356,6 @@ export function ModelPage({ model }: { model: CityModel }) {
       });
     return () => controller.abort();
   }, [
-    betterHeights,
     model.center.lat,
     model.center.lon,
     model.sideM,
@@ -370,20 +369,26 @@ export function ModelPage({ model }: { model: CityModel }) {
     [model.center.lat, model.center.lon, model.sideM],
   );
   const inComCity = intersectsComCity(comFetchBounds);
+  const [comHeightBuildings, setComHeightBuildings] = useState<typeof model.buildings | null>(null);
   const comHeightsLoadFailed =
-    betterHeights &&
+    model.layers.buildings &&
     inComCity &&
     !comFootprintLoading &&
     (comFootprintFetchError != null || comHeightsApplyFailed);
-  const comHeightsToggleKind = comBuildingHeightsToggleKind({
-    userEnabled: betterHeights,
+  const comHeightsStatus = comBuildingHeightsStatus({
+    buildingsLayer: model.layers.buildings,
     inComCity,
     loadFailed: comHeightsLoadFailed,
-    loading: comFootprintLoading && betterHeights && inComCity,
+    loading:
+      comFootprintLoading ||
+      (!comHeightsLoadFailed &&
+        comFootprints.length > 0 &&
+        model.buildings.length > 0 &&
+        comHeightBuildings == null &&
+        !model.comBuildingHeightsApplied),
   });
-  const comHeightsMeasuredOn = comHeightsToggleKind === "on";
-
-  const [comHeightBuildings, setComHeightBuildings] = useState<typeof model.buildings | null>(null);
+  const comHeightsMeasuredOn = comHeightsStatus === "on";
+  const comHeightsStatusNote = comBuildingHeightsStatusNote(comHeightsStatus);
   const [heightOverrideStore, setHeightOverrideStore] = useState<HeightOverrideStore>(() =>
     readStoredHeightOverrides(window.localStorage),
   );
@@ -640,11 +645,6 @@ export function ModelPage({ model }: { model: CityModel }) {
   }, [model]);
 
   useEffect(() => {
-    if (!betterHeights) {
-      setComHeightBuildings(null);
-      setComHeightsApplyFailed(false);
-      return;
-    }
     if (model.comBuildingHeightsApplied) {
       setComHeightBuildings(
         annotateUnresolvedZoneDefaults(
@@ -666,10 +666,10 @@ export function ModelPage({ model }: { model: CityModel }) {
     runComBuildingHeightsInWorker(source, comFootprints, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return;
-        const damApplied = result.buildings;
+        // CoM first, then DAM floors on what CoM did not measure, then estimate labels.
         setComHeightBuildings(
-          annotateUnresolvedZoneDefaults(
-            damApplied,
+          resolveBuildingHeightsAfterCom(
+            result.buildings,
             model.center,
             comFootprints,
             model.developmentDamRecords ?? [],
@@ -684,8 +684,8 @@ export function ModelPage({ model }: { model: CityModel }) {
       });
     return () => controller.abort();
   }, [
-    betterHeights,
     comFootprints,
+    comFootprintRetryToken,
     model.buildings,
     model.buildingsWithoutCom,
     model.center,
@@ -693,14 +693,25 @@ export function ModelPage({ model }: { model: CityModel }) {
     model.developmentDamRecords,
   ]);
 
+  // No CoM heights yet (loading, failed, or outside the City of Melbourne): the next source in
+  // tier order applies (DAM floors, Overture/OSM, zone default) and every default is labelled.
+  const fallbackBuildings = useMemo(
+    () =>
+      model.buildingsWithoutCom
+        ? resolveBuildingHeightsAfterCom(
+            model.buildingsWithoutCom,
+            model.center,
+            [],
+            model.developmentDamRecords ?? [],
+          )
+        : stampPlainZoneDefaultLabels(model.buildings),
+    [model.buildings, model.buildingsWithoutCom, model.center, model.developmentDamRecords],
+  );
   const baseBuildings = useMemo(() => {
-    if (!betterHeights) {
-      return stampPlainZoneDefaultLabels(model.buildingsWithoutCom ?? model.buildings);
-    }
     if (comHeightBuildings) return comHeightBuildings;
     if (model.comBuildingHeightsApplied) return model.buildings;
-    return stampPlainZoneDefaultLabels(model.buildings);
-  }, [betterHeights, comHeightBuildings, model.buildings, model.buildingsWithoutCom, model.comBuildingHeightsApplied]);
+    return fallbackBuildings;
+  }, [comHeightBuildings, fallbackBuildings, model.buildings, model.comBuildingHeightsApplied]);
 
   const overrideResult = useMemo(
     () => applyHeightOverrides(baseBuildings, heightOverrideStore, model.center),
@@ -716,11 +727,11 @@ export function ModelPage({ model }: { model: CityModel }) {
     () => ({
       ...model,
       buildings: overrideResult.buildings,
-      comBuildingHeights: betterHeights,
+      comBuildingHeights: comHeightsMeasuredOn,
       manualHeightEditCount: overrideResult.manualCount,
       sourceNote: appendManualHeightCredit(model.sourceNote, overrideResult.manualCount),
     }),
-    [model, overrideResult, betterHeights],
+    [model, overrideResult, comHeightsMeasuredOn],
   );
 
   useEffect(() => {
@@ -741,12 +752,11 @@ export function ModelPage({ model }: { model: CityModel }) {
   }, [displayModel.buildings, displayModel.comBuildingHeights]);
 
   useEffect(() => {
-    const comDone =
-      !betterHeights || comHeightBuildings != null || (betterHeights && comFootprints.length === 0);
+    const comDone = comHeightBuildings != null || comFootprints.length === 0;
     if (comDone && heightPerfRef.current.comAppliedMs == null) {
       heightPerfRef.current.comAppliedMs = performance.now() - heightPerfRef.current.modelOpenMs;
     }
-  }, [betterHeights, comHeightBuildings, comFootprints.length]);
+  }, [comHeightBuildings, comFootprints.length]);
 
   useEffect(() => {
     setPlanViewport(planViewportExtent(displayModel.sideM));
@@ -1193,20 +1203,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                   <button type="button" aria-pressed={showSource} onClick={() => setShowSource((on) => !on)}>
                     {showSource ? "Showing source" : "Show source"}
                   </button>
-                  <button
-                    type="button"
-                    aria-pressed={comBuildingHeightsTogglePressed(comHeightsToggleKind)}
-                    onClick={() => {
-                      setBetterHeights((on) => {
-                        const next = !on;
-                        writeStoredComBuildingHeights(window.localStorage, next);
-                        return next;
-                      });
-                    }}
-                  >
-                    {comBuildingHeightsToggleLabel(comHeightsToggleKind)}
-                  </button>
-                  {comHeightsToggleKind === "failed" && (
+                  {comHeightsStatus === "failed" && (
                     <button
                       type="button"
                       onClick={() => {
@@ -1222,13 +1219,13 @@ export function ModelPage({ model }: { model: CityModel }) {
                 {comHeightsMeasuredOn && comMeasuredHeightCount > 0 && (
                   <p className="legend-note">
                     {comMeasuredHeightCount.toLocaleString()} building
-                    {comMeasuredHeightCount === 1 ? "" : "s"} use City of Melbourne extrusion heights in this
+                    {comMeasuredHeightCount === 1 ? "" : "s"} use City of Melbourne measured heights in this
                     frame.
                   </p>
                 )}
-                {comHeightsLoadFailed && (
+                {comHeightsStatusNote && (
                   <p className="legend-note" role="status">
-                    City of Melbourne heights failed to load, so heights are estimates.
+                    {comHeightsStatusNote}
                   </p>
                 )}
                 {comHeightsMeasuredOn && (

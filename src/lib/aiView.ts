@@ -576,47 +576,57 @@ function collect(
   }
 
   for (const building of model.buildings) {
-    const base = (field ? footprintBase(field, building.ring, model.sideM) : 0) + SURFACE.building.lift;
-    const top = base + Math.max(building.height, 0.5);
+    // Same masses as the 3D viewport and .3dm (buildCity extrudeFootprint): one prism per
+    // extrusion part (CoM bands, Overture raised parts), none for a nested footprint.
+    if (building.meshDrawnBy != null) continue;
+    const footBase = (field ? footprintBase(field, building.ring, model.sideM) : 0) + SURFACE.building.lift;
     const color = buildingColor(building, style);
-    const shell = [building.ring, ...building.holes];
-    for (const ring of shell) {
-      const ccw = ring === building.ring;
-      const points = orient(ring, ccw);
-      for (let i = 0; i < points.length; i++) {
-        const a = points[i];
-        const b = points[(i + 1) % points.length];
-        if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 0.25) continue;
-        const id = nextId++;
-        pushTri(
-          fills,
-          edges,
-          occ,
-          id,
-          [worldOf(a[0], a[1], base), worldOf(b[0], b[1], base), worldOf(b[0], b[1], top), worldOf(a[0], a[1], top)],
-          color,
-          "Buildings",
-          4,
-          true,
-          shot,
-          pageW,
-          pageH,
-          forward,
-        );
+    const parts =
+      building.extrusionParts && building.extrusionParts.length > 0
+        ? building.extrusionParts
+        : [{ ring: building.ring, holes: building.holes, height: building.height }];
+    for (const part of parts) {
+      const base = footBase + (part.base ?? 0);
+      const top = base + Math.max(part.height, 0.5);
+      const shell = [part.ring, ...part.holes];
+      for (const ring of shell) {
+        const ccw = ring === part.ring;
+        const points = orient(ring, ccw);
+        for (let i = 0; i < points.length; i++) {
+          const a = points[i];
+          const b = points[(i + 1) % points.length];
+          if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 0.25) continue;
+          const id = nextId++;
+          pushTri(
+            fills,
+            edges,
+            occ,
+            id,
+            [worldOf(a[0], a[1], base), worldOf(b[0], b[1], base), worldOf(b[0], b[1], top), worldOf(a[0], a[1], top)],
+            color,
+            "Buildings",
+            4,
+            true,
+            shot,
+            pageW,
+            pageH,
+            forward,
+          );
+        }
       }
-    }
-    const roofId = nextId++;
-    const roofLoops = [orient(building.ring, true), ...building.holes.map((hole) => orient(hole, false))];
-    for (const loop of roofLoops) {
-      if (loop.length < 3) continue;
-      const projected = loop.map((point) => project(shot, worldOf(point[0], point[1], top), pageW, pageH));
-      if (projected.some((point) => point === null)) continue;
-      const poly = projected as V2[];
-      if (!facesCamera([0, 1, 0], forward)) continue;
-      for (let i = 0; i < poly.length; i++) edges.push({ a: poly[i], b: poly[(i + 1) % poly.length], id: roofId });
-    }
-    for (const tri of shapeTriangles(building.ring, building.holes, () => top)) {
-      pushTri(fills, edges, occ, roofId, faceUp(tri), color, "Buildings", 4, false, shot, pageW, pageH, forward);
+      const roofId = nextId++;
+      const roofLoops = [orient(part.ring, true), ...part.holes.map((hole) => orient(hole, false))];
+      for (const loop of roofLoops) {
+        if (loop.length < 3) continue;
+        const projected = loop.map((point) => project(shot, worldOf(point[0], point[1], top), pageW, pageH));
+        if (projected.some((point) => point === null)) continue;
+        const poly = projected as V2[];
+        if (!facesCamera([0, 1, 0], forward)) continue;
+        for (let i = 0; i < poly.length; i++) edges.push({ a: poly[i], b: poly[(i + 1) % poly.length], id: roofId });
+      }
+      for (const tri of shapeTriangles(part.ring, part.holes, () => top)) {
+        pushTri(fills, edges, occ, roofId, faceUp(tri), color, "Buildings", 4, false, shot, pageW, pageH, forward);
+      }
     }
   }
 

@@ -124,6 +124,12 @@ export type BuildingFeat = {
    * Site plan and exports still use {@link ring} only.
    */
   extrusionParts?: BuildingExtrusionPart[];
+  /**
+   * Set when this footprint sits inside a larger building that already draws the same mass
+   * (Overture nested outline). 3D, .3dm and the 3D-view .ai draw no mesh for it; the panel,
+   * site plan and lists still carry it. Value is the id of the building that draws it.
+   */
+  meshDrawnBy?: number;
 };
 
 /** Highway class used for width and asphalt colour. Rail leaves this unset. */
@@ -279,7 +285,7 @@ export type CityModel = {
   siteBuildingQa?: import("./lib/siteBuildings").SiteBuildingOverlap[];
   /** CoM development floor records loaded at model create (Melbourne cuts). */
   developmentDamRecords?: import("./lib/comDevelopmentFloors").DamFloorRecord[];
-  /** Building list before CoM 2023 heights (for opt-out toggle). */
+  /** Building list before CoM 2023 heights and DAM floors (input to the ModelPage CoM worker). */
   buildingsWithoutCom?: BuildingFeat[];
   /** CoM footprints were applied during model create. */
   comBuildingHeightsApplied?: boolean;

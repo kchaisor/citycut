@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { applyComBuildingHeights } from "./comBuildingHeights";
 import {
   applyDevelopmentFloorsToBuildings,
+  damRecordGivesHeight,
   damRecordsWonByBuilding,
   buildingContainsDamGeopoint,
 } from "./comDevelopmentFloors";
@@ -44,6 +45,7 @@ describe("Freemasons Hospital height regression (East Melbourne)", () => {
 
     const hospitalDam = damRecords.filter((r) => buildingContainsDamGeopoint(building, center, r));
     expect(hospitalDam.length).toBeGreaterThan(0);
+    expect(hospitalDam.map((r) => r.status).sort()).toEqual(["APPROVED", "COMPLETED"]);
     const parkStub: BuildingFeat = {
       id: 2809555828,
       ring: [
@@ -61,7 +63,10 @@ describe("Freemasons Hospital height regression (East Melbourne)", () => {
     };
     for (const record of hospitalDam) {
       expect(damRecordsWonByBuilding(parkStub, center, [record], [building, parkStub]).length).toBe(0);
-      expect(damRecordsWonByBuilding(building, center, [record], [building, parkStub]).length).toBe(1);
+      // Only a COMPLETED record can be won; the APPROVED redevelopment record sets no height.
+      expect(damRecordsWonByBuilding(building, center, [record], [building, parkStub]).length).toBe(
+        damRecordGivesHeight(record) ? 1 : 0,
+      );
     }
 
     const withDamAfterCom = applyDevelopmentFloorsToBuildings(withCom, center, damRecords)[0]!;

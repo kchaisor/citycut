@@ -12,18 +12,24 @@ export const STOREY_HEIGHT_M = 3;
 
 /**
  * Building scalar height tier order (first match wins for {@link BuildingFeat.height}).
+ * Most accurate source first; there is no switch to skip CoM.
  *
  * 1. Manual edit ({@link BuildingFeat.heightManual})
- * 2. City of Melbourne 2023 footprints — clipped extrusions or aggregate match
- * 3. Licensed Vicmap LiDAR (offline bake when available)
- * 4. Overture / OSM explicit height tag
- * 5. Overture `num_floors` × {@link STOREY_HEIGHT_M}
- * 6. CoM Development Activity Monitor `floors_above` × {@link STOREY_HEIGHT_M}
+ * 2. City of Melbourne 2023 footprints, measured: clipped extrusions or aggregate match
+ * 3. Licensed Vicmap LiDAR, measured (offline bake when available)
+ * 4. CoM Development Activity Monitor `floors_above` × {@link STOREY_HEIGHT_M}, official record, only
+ *    when the record's status is COMPLETED. Approved, applied and under-construction records do not
+ *    apply at all (see damRecordGivesHeight in comDevelopmentFloors.ts).
+ * 5. Overture / OSM explicit height tag
+ * 6. Overture `num_floors` × {@link STOREY_HEIGHT_M}
  * 7. OSM `building:levels` × {@link STOREY_HEIGHT_M} (Overture source tags when present)
- * 8. Vicmap zone / shed fallback ({@link BuildingFeat.heightFromFallback})
+ * 8. Vicmap zone / shed fallback ({@link BuildingFeat.heightFromFallback}), always labelled as an
+ *    estimate, and flagged `real_source_unmatched` when a real source overlapped but did not apply.
  *
- * Manual edits clear extrusion parts. CoM may set {@link BuildingFeat.extrusionParts}; scalar height
- * is synced to the tallest part (or aggregate) for panels, shadows, and plan metadata.
+ * Run order is `resolveBuildingHeightsAfterCom` (buildingHeightPipeline.ts): CoM first, then DAM on what CoM left, then
+ * the truth pass. Manual edits clear extrusion parts. CoM may set
+ * {@link BuildingFeat.extrusionParts}; scalar height is synced to the tallest part (or aggregate)
+ * for panels, shadows, and plan metadata.
  */
 export type BuildingHeightTierMeta = {
   tier: BuildingHeightTier;
@@ -112,7 +118,10 @@ export function applyComScalarHeight(building: BuildingFeat, heightM: number): B
 export function buildingEligibleForDamFloors(building: BuildingFeat): boolean {
   if (building.heightManual) return false;
   if (building.heightTier === "com" || building.extrusionParts?.length) return false;
-  return Boolean(building.heightFromFallback);
+  if (building.heightTier === "lidar") return false;
+  // A completed DAM record (official council record) outranks Overture/OSM height and floor tags and
+  // zone defaults. Callers pass only completed records (heightBearingDamRecords).
+  return true;
 }
 
 export function applyDevelopmentFloorsHeight(building: BuildingFeat, floorsAbove: number): BuildingFeat {

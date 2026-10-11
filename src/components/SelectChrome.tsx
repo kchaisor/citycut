@@ -5,10 +5,6 @@ import { formatKmSide } from "../lib/geo";
 import { cutFrameLabelKm } from "../lib/placeLabel";
 import { searchPlaces } from "../lib/nominatim";
 import { DATA_CREDIT_BASE } from "../lib/dataCredits";
-import {
-  readStoredComBuildingHeights,
-  writeStoredComBuildingHeights,
-} from "../lib/comBuildingHeightsToggle";
 import { reduceRail } from "../lib/railState";
 import type { PlaceHit, SiteFrameShape, UiLayers } from "../types";
 import { Drawer } from "./Drawer";
@@ -71,9 +67,6 @@ export function SelectChrome({
   const [searchError, setSearchError] = useState<string | null>(null);
   const [resultsOpen, setResultsOpen] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
-  const [betterHeights, setBetterHeights] = useState(() =>
-    readStoredComBuildingHeights(window.localStorage),
-  );
   const boxRef = useRef<HTMLDivElement>(null);
   const area =
     frameShape === "circle" ? Math.PI * (sideKm / 2) ** 2 : sideKm * sideKm;
@@ -257,24 +250,6 @@ export function SelectChrome({
                 >
                   <i />
                 </button>
-                {row.key === "buildings" && layers.buildings && (
-                  <button
-                    type="button"
-                    className={`layer-sub-toggle${betterHeights ? " on" : ""}`}
-                    aria-pressed={betterHeights}
-                    onClick={() => {
-                      setBetterHeights((on) => {
-                        const next = !on;
-                        writeStoredComBuildingHeights(window.localStorage, next);
-                        return next;
-                      });
-                    }}
-                  >
-                    {betterHeights
-                      ? "CoM 2023 measured heights on"
-                      : "CoM 2023 heights off · turn on"}
-                  </button>
-                )}
               </li>
             ))}
           </ul>

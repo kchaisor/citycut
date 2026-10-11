@@ -5,19 +5,21 @@ import { fetchOvertureBuildingsForCut } from "./overtureBuildings";
 import { fetchOvertureTransportationForCut } from "./overtureTransportation";
 import { fetchOvertureBaseForCut } from "./overtureBase";
 import { assignExternalUses, loadUseTiers } from "./useCascade";
+import { fetchComBuildingFootprintsWithStats, paddedComFetchBounds } from "./comBuildingHeights";
+import { fetchDevelopmentFloorRecords } from "./comDevelopmentFloors";
+import { resolveBuildingHeights } from "./buildingHeightPipeline";
 import {
-  applyComBuildingHeights,
-  fetchComBuildingFootprintsWithStats,
-  paddedComFetchBounds,
-} from "./comBuildingHeights";
-import { applyDevelopmentFloorsToBuildings, fetchDevelopmentFloorRecords } from "./comDevelopmentFloors";
-import { applyHeightSourceTruthPass } from "./buildingHeightSourceTruth";
+  applyEastMelbourneDisplayHeights,
+  loadEastMelbourneHeightInputsFromFixture,
+} from "./eastMelbourneHeightsPipeline";
 import { mergeBuildingEnrichment, applyLidarHeightsFromEnrichment } from "./buildingEnrichmentMerge";
 import { loadEnrichmentForCutFromDisk } from "./test/loadEnrichmentForCut";
 import {
   areaDedupeCounts,
   blockBuildingStackingPairs,
+  buildingMeshOverlaps,
   comOvertureOverlapCount,
+  countBuildingMeshesById,
   countThreeDMeshesByName,
   findDuplicateBuildingPairs,
   findDuplicateSurfaceEmits,
@@ -31,6 +33,53 @@ import { networkTestsEnabled } from "./test/networkTests";
 const lat = -37.8127;
 const lon = 144.98061;
 const km = 1;
+
+/**
+ * CoM is always on, so this is the only render path. Offline: the committed East Melbourne
+ * inputs (496 Overture footprints, 1,240 CoM 2023 footprint components) through the same
+ * pipeline as ModelPage, then the same three.js group the viewport and .3dm export build.
+ */
+describe("East Melbourne duplicate audit, CoM on (committed fixture)", () => {
+  it(
+    "draws every building once: no overlapping CoM parts, no IoU > 0.5 pairs, one mesh set per building",
+    () => {
+      const input = loadEastMelbourneHeightInputsFromFixture();
+      const buildings = applyEastMelbourneDisplayHeights(input);
+      const comBuildings = buildings.filter((b) => b.heightTier === "com");
+      expect(buildings.length).toBe(496);
+      expect(comBuildings.length).toBeGreaterThan(300);
+
+      // Two Overture/CoM footprints for the same building.
+      expect(findDuplicateBuildingPairs(buildings)).toEqual([]);
+      // Stacked CoM components drawn as nested prisms (main had 1,127 pairs in 183 buildings).
+      const overlaps = buildingMeshOverlaps(buildings);
+      expect(overlaps.withinBuildingPairs, JSON.stringify(overlaps.examples)).toBe(0);
+      expect(overlaps.acrossBuildingPairs, JSON.stringify(overlaps.examples)).toBe(0);
+
+      // No separate CoM layer: the 3D group holds exactly the parts of the matched buildings.
+      const model: CityModel = {
+        center: input.center,
+        sideM: input.sideM,
+        buildings,
+        roads: [],
+        areas: [],
+        trees: [],
+        roadKm: 0,
+        buildingCapHit: false,
+        sourceNote: "",
+        placeLabel: "East Melbourne",
+        layers: { buildings: true, roads: false, waterGreen: false, trees: false },
+      };
+      const meshesById = countBuildingMeshesById(model);
+      expect(buildings.filter((b) => b.meshDrawnBy != null)).toEqual([]);
+      expect(meshesById.size).toBe(buildings.length);
+      for (const building of buildings) {
+        expect(meshesById.get(building.id)).toBe(building.extrusionParts?.length || 1);
+      }
+    },
+    120_000,
+  );
+});
 
 describe.skipIf(!networkTestsEnabled())("East Melbourne duplicate audit", () => {
   it(
@@ -62,9 +111,8 @@ describe.skipIf(!networkTestsEnabled())("East Melbourne duplicate audit", () => 
 
       let buildings = mergeBuildingEnrichment(buildingResult.buildings, enrichment.byId);
       buildings = applyLidarHeightsFromEnrichment(assignExternalUses(buildings, zones));
-      buildings = applyDevelopmentFloorsToBuildings(buildings, center, dam);
-      buildings = applyComBuildingHeights(buildings, com.footprints).buildings;
-      buildings = applyHeightSourceTruthPass(buildings, center, com.footprints, dam);
+      // Same order as ModelPage: CoM always, then DAM, then the truth pass.
+      buildings = resolveBuildingHeights(buildings, center, com.footprints, dam);
 
       const model: CityModel = {
         center,
@@ -88,6 +136,7 @@ describe.skipIf(!networkTestsEnabled())("East Melbourne duplicate audit", () => 
           comMatchedBuildings: comOvertureOverlapCount(buildings, com.footprints),
           osmTagged: buildings.filter((b) => (b.osmWayIds?.length ?? 0) > 0).length,
           duplicatePairsAfterDedupe: findDuplicateBuildingPairs(buildings).length,
+          meshOverlaps: buildingMeshOverlaps(buildings),
         },
         roads,
         footpaths: footpathEmitCounts(model),
@@ -107,7 +156,9 @@ describe.skipIf(!networkTestsEnabled())("East Melbourne duplicate audit", () => 
       console.info(JSON.stringify(report, null, 2));
 
       expect(buildingDedupe.afterOvertureDedupe).toBeGreaterThan(100);
-      expect(report.buildings.duplicatePairsAfterDedupe).toBeLessThan(8);
+      expect(report.buildings.duplicatePairsAfterDedupe).toBe(0);
+      expect(report.buildings.meshOverlaps.withinBuildingPairs).toBe(0);
+      expect(report.buildings.meshOverlaps.acrossBuildingPairs).toBe(0);
       expect(report.surfaceDuplicateIssues.length).toBeLessThan(20);
       expect(report.exports.threeD.Blocks ?? 0).toBeGreaterThan(0);
       expect(report.exports.plan.blocks).toBeGreaterThan(0);
