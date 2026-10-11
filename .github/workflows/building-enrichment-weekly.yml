@@ -18,20 +18,28 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install Python deps
         run: pip install -r pipeline/requirements.txt
+      - name: Cache tippecanoe 2.79.0
+        id: tippecanoe-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.local/bin/tippecanoe
+          key: tippecanoe-2.79.0-${{ runner.os }}-${{ runner.arch }}
       - name: Install tippecanoe
+        if: steps.tippecanoe-cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq build-essential libsqlite3-dev zlib1g-dev
           git clone --depth 1 --branch 2.79.0 https://github.com/felt/tippecanoe.git /tmp/tippecanoe-src
           make -C /tmp/tippecanoe-src -j"$(nproc)"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           mkdir -p "$HOME/.local/bin"
           cp /tmp/tippecanoe-src/tippecanoe "$HOME/.local/bin/tippecanoe"
+      - name: Put tippecanoe on PATH
+        run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Python tests
         run: pytest pipeline/test_build_enrichment.py pipeline/test_extent.py pipeline/test_zone_use.py pipeline/test_zone_use_sync.py pipeline/test_table_hash_sync.py pipeline/test_overture_building_use_sync.py pipeline/test_cascade_parity.py -q
       - name: Build enrichment PMTiles (Greater Melbourne GCCSA)
@@ -39,7 +47,7 @@ jobs:
         env:
           TIPPECANOE: tippecanoe
           BUILD_ENRICHMENT_BBOX: 144.333634,-38.502988,145.878412,-37.175099
-          BUILD_ENRICHMENT_MIN_ZOOM: "11"
+          BUILD_ENRICHMENT_MIN_ZOOM: "14"
           BUILD_ENRICHMENT_MAX_ZOOM: "14"
       - name: Log manifest (BCA / LiDAR / CLUE — never silent)
         run: |
