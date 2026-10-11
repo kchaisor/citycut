@@ -2,14 +2,34 @@ name: Building enrichment tiles (monthly)
 
 on:
   schedule:
-    - cron: "0 6 1 * *"
+    # 3:00 AM Melbourne on the 1st of each month. Cron is UTC and can't follow
+    # daylight saving, so fire at 16:00 and 17:00 UTC daily and let the gate job
+    # run only when it's 03:xx on the 1st in Australia/Melbourne.
+    - cron: "0 16,17 * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - id: check
+        run: |
+          now=$(TZ=Australia/Melbourne date +%d%H)
+          if [ "${{ github.event_name }}" != "schedule" ] || [ "$now" = "0103" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Melbourne day+hour: $now"
+
   build-tiles:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
