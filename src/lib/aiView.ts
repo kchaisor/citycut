@@ -13,6 +13,7 @@ import { ROAD_COLOR, SURFACE } from "./surfaceLayers";
 import { footprintBase, sampleTerrain } from "./terrain";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { stableExportModel } from "./exportStableOrder";
+import { contourPolylinesForModel } from "./contourLines3d";
 import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
 
 export const VIEW_LAYER_ORDER = [
@@ -56,6 +57,10 @@ type Occ = ScreenTri;
 export type ViewStyle = {
   uniformBuildings: boolean;
   colourBySource: boolean;
+  whiteCard?: boolean;
+  showOutlines?: boolean;
+  showContours?: boolean;
+  hideTrees?: boolean;
 };
 
 type Fill = {
@@ -141,7 +146,16 @@ function orient(ring: Ring, ccw: boolean): Pt[] {
   return points;
 }
 
+function cardWhite(): Rgb {
+  return hexRgb(getColour("--card-white"));
+}
+
+function cardGround(): Rgb {
+  return hexRgb(getColour("--card-ground"));
+}
+
 function buildingColor(building: BuildingFeat, style: ViewStyle): Rgb {
+  if (style.whiteCard) return cardWhite();
   if (style.colourBySource) return hexRgb(SOURCE_META[building.source].color);
   if (style.uniformBuildings) return hexRgb(uniformBuildingColor());
   return hexRgb(BUILDING_USE_META[building.use].color);
@@ -423,9 +437,9 @@ function collect(
 ): { fills: Fill[]; edges: Edge[]; trees: Fill[] } {
   const forward = shot.forward;
   const half = model.sideM / 2;
-  const groundFill = fillOf("--ground-fill");
-  const greenFill = fillOf("--green-3d");
-  const waterFill = fillOf("--water-3d");
+  const groundFill = style.whiteCard ? cardGround() : fillOf("--ground-fill");
+  const greenFill = style.whiteCard ? cardWhite() : fillOf("--green-3d");
+  const waterFill = style.whiteCard ? cardWhite() : fillOf("--water-3d");
   const crownFill = fillOf("--tree-crown");
   const crownEdge = fillOf("--tree-crown-edge");
   const trunkFill = fillOf("--tree-trunk");
@@ -448,7 +462,8 @@ function collect(
       const y = field.heights[row * field.cols + col];
       return [east, y, -north];
     };
-    const tint = (col: number, row: number): Rgb => shadeHeight((field.heights[row * field.cols + col] - field.min) / relief);
+    const tint = (col: number, row: number): Rgb =>
+      style.whiteCard ? cardWhite() : shadeHeight((field.heights[row * field.cols + col] - field.min) / relief);
     for (let r = 0; r < rows.length - 1; r++) {
       for (let c = 0; c < cols.length - 1; c++) {
         const sw = at(cols[c], rows[r]);
@@ -544,7 +559,7 @@ function collect(
   for (const road of model.roads) {
     if (road.kind === "rail") continue;
     const grade = road.grade ?? "local";
-    const color = hexRgb(ROAD_COLOR[grade]);
+    const color = style.whiteCard ? cardWhite() : hexRgb(ROAD_COLOR[grade]);
     const lift = grade === "arterial" ? SURFACE.arterial.lift : grade === "path" ? SURFACE.path.lift : SURFACE.local.lift;
     const line = openRing(road.line);
     for (let i = 0; i < line.length - 1; i++) {
@@ -631,7 +646,7 @@ function collect(
   }
 
   const trees: Fill[] = [];
-  for (const tree of model.trees) {
+  if (!style.hideTrees) for (const tree of model.trees) {
     const east = tree.at[0];
     const north = tree.at[1];
     const groundY = sample ? sample(east, north) : 0;
@@ -680,6 +695,21 @@ function collect(
     });
   }
 
+  if (style.showContours) {
+    const lift = field ? 0.35 : 0;
+    for (const line of contourPolylinesForModel(model)) {
+      for (let i = 0; i < line.length - 1; i++) {
+        const a = line[i]!;
+        const b = line[i + 1]!;
+        const ya = (sample ? sample(a[0], a[1]) : 0) + lift;
+        const yb = (sample ? sample(b[0], b[1]) : 0) + lift;
+        const pa = project(shot, worldOf(a[0], a[1], ya), pageW, pageH);
+        const pb = project(shot, worldOf(b[0], b[1], yb), pageW, pageH);
+        if (pa && pb) edges.push({ a: pa, b: pb, id: nextId++ });
+      }
+    }
+  }
+
   return { fills, edges, trees };
 }
 
@@ -694,6 +724,10 @@ export function viewChunks(model: CityModel, shot: CameraShot, style: ViewStyle)
   const cells = gridIndex(occ, page.widthMm, page.heightMm);
   const seen = new Set<string>();
   const outlinePaths: PdfChunk["paths"] = [];
+  const drawOutlines = style.showOutlines !== false;
+  if (!drawOutlines) {
+    edges.length = 0;
+  }
   for (const edge of edges) {
     const key = edgeKey(edge.a, edge.b);
     if (seen.has(key)) continue;
@@ -725,7 +759,7 @@ export function viewChunks(model: CityModel, shot: CameraShot, style: ViewStyle)
     },
   ];
   for (const fill of ordered) chunks.push(fill.chunk);
-  if (outlinePaths.length > 0) chunks.push({ name: "Outlines", paths: outlinePaths });
+  if (drawOutlines && outlinePaths.length > 0) chunks.push({ name: "Outlines", paths: outlinePaths });
   const label = `${model.placeLabel} · ${formatPair(model)}`;
   const comCredit = comBuildingHeightCreditLine(model);
   const plate = Math.min(page.widthMm - 8, Math.max(42, label.length * 1.35 + 8));

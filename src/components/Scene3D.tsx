@@ -48,6 +48,13 @@ import {
 import { qaModeFromSearch, registerQaCameraBridge, type QaCameraPose } from "../lib/qaCameraBridge";
 import { WebGlContextWatch } from "./WebGlContextWatch";
 import type { ProjectionMode } from "../lib/viewMemory";
+import type { View3dDisplaySettings } from "../lib/view3dDisplay";
+import { buildContourLineObject } from "../lib/contourLines3d";
+import {
+  applyWhiteCardTint,
+  snapshotWhiteCardColors,
+  whiteCardViewportLighting,
+} from "../lib/whiteCardViewport";
 import {
   DEFAULT_PERSPECTIVE_OFFSET,
   heliodonSceneBounds,
@@ -193,6 +200,7 @@ function City({
   solarDiagramOn,
   solarNeutralFill,
   heightEditBuildingId,
+  display,
   onBounds,
   onBuildingPick,
   onClearBuildingPick,
@@ -205,6 +213,7 @@ function City({
   solarDiagramOn: boolean;
   solarNeutralFill: string;
   heightEditBuildingId: number | null;
+  display: View3dDisplaySettings;
   onBounds: (bounds: Aabb) => void;
   onBuildingPick: (buildingId: number, clientX: number, clientY: number) => void;
   onClearBuildingPick?: () => void;
@@ -242,15 +251,38 @@ function City({
   useLayoutEffect(() => {
     snapshotBuildingViewportColors(group, colourMode);
     snapshotSunStudySurfaceColors(group);
+    snapshotWhiteCardColors(group, colourMode);
   }, [group, colourMode]);
   useLayoutEffect(() => {
-    applySunStudySurfaceTint(group, solarDiagramOn);
-    applyBuildingSolarNeutral(group, solarDiagramOn, solarNeutralFill);
-  }, [group, solarDiagramOn, solarNeutralFill, colourTick]);
+    if (!display.whiteCard) {
+      applySunStudySurfaceTint(group, solarDiagramOn);
+      applyBuildingSolarNeutral(group, solarDiagramOn, solarNeutralFill);
+    } else {
+      applySunStudySurfaceTint(group, false);
+      applyBuildingSolarNeutral(group, false, solarNeutralFill);
+    }
+    applyWhiteCardTint(group, display.whiteCard);
+  }, [group, solarDiagramOn, solarNeutralFill, colourTick, display.whiteCard]);
+  useLayoutEffect(() => {
+    group.traverse((object) => {
+      if (object.name === "BuildingEdges") object.visible = display.showOutlines;
+    });
+    const groundEdge = group.getObjectByName("GroundEdge");
+    if (groundEdge) groundEdge.visible = display.showOutlines;
+  }, [group, display.showOutlines]);
+  useLayoutEffect(() => {
+    const trees = group.getObjectByName("Trees");
+    if (trees) trees.visible = model.layers.trees && !display.hideTrees;
+  }, [group, display.hideTrees, model.layers.trees]);
+  const contours = useMemo(
+    () => (display.showContours3d ? buildContourLineObject(model) : null),
+    [model, display.showContours3d, colourTick],
+  );
   useLayoutEffect(() => () => disposeObject(group), [group]);
   return (
     <>
       <primitive object={group} />
+      {contours ? <primitive object={contours} /> : null}
       <HeightEditOverlayLayer
         model={model}
         buildingId={heightEditBuildingId}
@@ -1059,6 +1091,7 @@ export function Scene3D({
   onBuildingPick,
   onClearBuildingPick,
   heightEditBuildingId,
+  display,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -1077,6 +1110,7 @@ export function Scene3D({
   onBuildingPick: (buildingId: number, clientX: number, clientY: number) => void;
   onClearBuildingPick?: () => void;
   heightEditBuildingId: number | null;
+  display: View3dDisplaySettings;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
@@ -1102,10 +1136,14 @@ export function Scene3D({
     setGlEpoch((value) => value + 1);
   }, []);
   const viewportLight = sunStudyViewportLighting({
-    showPath: solar.showPath,
+    showPath: solar.showPath && !display.whiteCard,
     castShadows: solar.castShadows,
   });
-  const { fillKeyLight, fillAmbient, fillHemi, sunIntensity, noToneMapping } = viewportLight;
+  const cardLight = whiteCardViewportLighting(display.whiteCard);
+  const fillKeyLight = display.whiteCard ? cardLight.fillKeyLight : viewportLight.fillKeyLight;
+  const fillAmbient = display.whiteCard ? cardLight.fillAmbient : viewportLight.fillAmbient;
+  const fillHemi = display.whiteCard ? cardLight.fillHemi : viewportLight.fillHemi;
+  const { sunIntensity, noToneMapping } = viewportLight;
   const heliodonRadius = heliodonRadiusM(model.sideM, solar.radiusFactor);
   const shadowTargetY = groundY;
   const siteTopY = useMemo(() => {
@@ -1163,6 +1201,7 @@ export function Scene3D({
         onClearBuildingPick={onClearBuildingPick}
         pickBuildings={model.layers.buildings}
         heightEditBuildingId={heightEditBuildingId}
+        display={display}
       />
       <SolarHeliodon
         lat={model.center.lat}

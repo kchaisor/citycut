@@ -131,6 +131,11 @@ import {
   writeStoredHeliodonRadiusFactor,
 } from "../lib/heliodonRadius";
 import type { SolarViewSettings } from "./SolarHeliodon";
+import {
+  readStoredView3dDisplay,
+  writeStoredView3dDisplay,
+  type View3dDisplaySettings,
+} from "../lib/view3dDisplay";
 
 type Tab = "3d" | "drawing" | "satellite";
 
@@ -196,6 +201,9 @@ export function ModelPage({ model }: { model: CityModel }) {
   );
   const [view, setView] = useState<ViewMemory>(loadView);
   const [snapId, setSnapId] = useState(0);
+  const [view3dDisplay, setView3dDisplay] = useState<View3dDisplaySettings>(() =>
+    readStoredView3dDisplay(window.localStorage),
+  );
   const [windSettings, setWindSettings] = useState<WindViewSettings>(() => {
     const next = windSettingsForModelOpen(window.localStorage);
     writeStoredWindSettings(window.localStorage, next);
@@ -879,6 +887,11 @@ export function ModelPage({ model }: { model: CityModel }) {
     setPreferred(next);
   }
 
+  function commitView3dDisplay(next: View3dDisplaySettings) {
+    setView3dDisplay(next);
+    writeStoredView3dDisplay(window.localStorage, next);
+  }
+
   function commitView(next: ViewMemory, snap: boolean) {
     setView(next);
     writeStoredView(window.localStorage, next);
@@ -969,6 +982,10 @@ export function ModelPage({ model }: { model: CityModel }) {
       await downloadViewAi(displayModel, exporter.shot(), {
         uniformBuildings: !colourByUse && !showSource,
         colourBySource: showSource,
+        whiteCard: view3dDisplay.whiteCard,
+        showOutlines: view3dDisplay.showOutlines,
+        showContours: view3dDisplay.showContours3d,
+        hideTrees: view3dDisplay.hideTrees,
       });
     } catch (error) {
       console.error(error);
@@ -1064,6 +1081,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                 }
                 onClearBuildingPick={() => setHeightPick(null)}
                 heightEditBuildingId={heightPick?.buildingId ?? null}
+                display={view3dDisplay}
               />
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
@@ -1367,6 +1385,48 @@ export function ModelPage({ model }: { model: CityModel }) {
                   {view.projection === "plan" && (
                     <p className="field-note">Orthographic plan view. Choose Perspective to return to the 3D orbit camera.</p>
                   )}
+                  <p className="kicker">Display</p>
+                  <div className="plan-switch" role="group" aria-label="3D display">
+                    <button
+                      type="button"
+                      aria-pressed={view3dDisplay.whiteCard}
+                      onClick={() =>
+                        commitView3dDisplay({ ...view3dDisplay, whiteCard: !view3dDisplay.whiteCard })
+                      }
+                    >
+                      {view3dDisplay.whiteCard ? "Use colour" : "White card"}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={view3dDisplay.showOutlines}
+                      onClick={() =>
+                        commitView3dDisplay({ ...view3dDisplay, showOutlines: !view3dDisplay.showOutlines })
+                      }
+                    >
+                      {view3dDisplay.showOutlines ? "Hide outlines" : "Show outlines"}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={view3dDisplay.showContours3d}
+                      onClick={() =>
+                        commitView3dDisplay({
+                          ...view3dDisplay,
+                          showContours3d: !view3dDisplay.showContours3d,
+                        })
+                      }
+                    >
+                      {view3dDisplay.showContours3d ? "Hide contours" : "Contours in 3D"}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={view3dDisplay.hideTrees}
+                      onClick={() =>
+                        commitView3dDisplay({ ...view3dDisplay, hideTrees: !view3dDisplay.hideTrees })
+                      }
+                    >
+                      {view3dDisplay.hideTrees ? "Show trees" : "Hide trees"}
+                    </button>
+                  </div>
                   {view.projection === "iso" && (
                     <>
                       <p className="kicker">Corner</p>
