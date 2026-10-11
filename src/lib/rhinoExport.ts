@@ -113,8 +113,60 @@ function layerName(mesh: THREE.Mesh): string {
 function meshExportSortKey(mesh: THREE.Mesh): string {
   const name = layerName(mesh);
   const position = mesh.geometry.getAttribute("position");
-  if (!position || position.count === 0) return name;
-  return `${name}:${position.getX(0).toFixed(4)}:${position.getY(0).toFixed(4)}:${position.getZ(0).toFixed(4)}`;
+  if (!position || position.count === 0) return `${name}:empty`;
+  const vertex = new THREE.Vector3();
+  let minX = Infinity;
+  let minY = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let maxZ = -Infinity;
+  let hash = 2166136261;
+  for (let i = 0; i < position.count; i++) {
+    vertex.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
+    minX = Math.min(minX, vertex.x);
+    minY = Math.min(minY, vertex.y);
+    minZ = Math.min(minZ, vertex.z);
+    maxX = Math.max(maxX, vertex.x);
+    maxY = Math.max(maxY, vertex.y);
+    maxZ = Math.max(maxZ, vertex.z);
+    for (const component of [
+      Math.round(vertex.x * 1000),
+      Math.round(vertex.y * 1000),
+      Math.round(vertex.z * 1000),
+    ]) {
+      hash ^= component & 0xff;
+      hash = Math.imul(hash, 16777619);
+      hash ^= (component >> 8) & 0xff;
+      hash = Math.imul(hash, 16777619);
+      hash ^= (component >> 16) & 0xff;
+      hash = Math.imul(hash, 16777619);
+    }
+  }
+  const q = (n: number) => (Math.round(n * 1000) / 1000).toFixed(3);
+  return `${name}:${position.count}:${q(minX)},${q(minY)},${q(minZ)}:${q(maxX)},${q(maxY)},${q(maxZ)}:${hash.toString(16)}`;
+}
+
+function addMeshesInTraverseLayerOrder(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  meshes: THREE.Mesh[],
+  model: CityModel,
+  zone: number,
+) {
+  const emittedLayers = new Set<string>();
+  for (const mesh of meshes) {
+    const name = layerName(mesh);
+    if (emittedLayers.has(name)) continue;
+    emittedLayers.add(name);
+    const layerMeshes = meshes.filter((candidate) => layerName(candidate) === name);
+    layerMeshes.sort((a, b) => meshExportSortKey(a).localeCompare(meshExportSortKey(b)));
+    for (const layerMesh of layerMeshes) {
+      addMesh(rhino, doc, layers, materials, layerMesh, model, zone);
+    }
+  }
 }
 
 function ensureMaterial(
@@ -638,8 +690,7 @@ export async function cityModelTo3dm(
       const mesh = object as THREE.Mesh;
       if (mesh.isMesh) meshes.push(mesh);
     });
-    meshes.sort((a, b) => meshExportSortKey(a).localeCompare(meshExportSortKey(b)));
-    for (const mesh of meshes) addMesh(rhino, doc, layers, materials, mesh, model, crs.zone);
+    addMeshesInTraverseLayerOrder(rhino, doc, layers, materials, meshes, model, crs.zone);
     addFigureGround(rhino, doc, layers, materials, model, crs.zone);
     addSiteBoundary(rhino, doc, layers, materials, model, crs.zone);
     addContours(rhino, doc, layers, materials, model, crs.zone);
