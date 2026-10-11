@@ -1,8 +1,8 @@
-name: Building enrichment tiles (weekly)
+name: Building enrichment tiles (monthly)
 
 on:
   schedule:
-    - cron: "0 6 * * 1"
+    - cron: "0 6 1 * *"
   workflow_dispatch:
 
 permissions:
