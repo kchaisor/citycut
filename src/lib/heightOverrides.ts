@@ -254,6 +254,7 @@ export function applyOverrideToBuilding(building: BuildingFeat, heightM: number)
     heightTier: "manual",
     zoneDefaultNote: undefined,
     extrusionParts: undefined,
+    meshDrawnBy: undefined,
   };
 }
 

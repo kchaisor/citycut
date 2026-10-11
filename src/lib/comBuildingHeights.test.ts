@@ -383,3 +383,49 @@ describe("comBuildingHeights matching", () => {
     expect(intersectionAreaM2(a, b)).toBeCloseTo(25, 1);
   });
 });
+
+describe("CoM stacked footprint components (one structure, several bands)", () => {
+  const sq = (x0: number, y0: number, x1: number, y1: number): Ring => [
+    [x0, y0],
+    [x1, y0],
+    [x1, y1],
+    [x0, y1],
+    [x0, y0],
+  ];
+  const area = (ring: Ring) => {
+    let a = 0;
+    for (let i = 0; i < ring.length - 1; i++) a += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
+    return Math.abs(a) / 2;
+  };
+
+  it("partitions podium, tower band and a repeated outline so no two parts overlap", () => {
+    const osm = building(7, sq(0, 0, 40, 40), 9);
+    // CoM 2023 rows for one structure_id: podium, the same podium outline traced again,
+    // a setback band and the tower top; each structure_extrusion is measured to its own top.
+    const rows = [
+      footprint("801082", sq(0, 0, 40, 40), 25.7),
+      footprint("801082", sq(0.05, 0, 40, 40), 25.7),
+      footprint("801082", sq(5, 5, 35, 35), 31),
+      footprint("801082", sq(10, 10, 30, 30), 46.7),
+    ];
+    const [out] = applyComBuildingHeights([osm], rows).buildings;
+    const parts = out.extrusionParts ?? [];
+    expect(out.heightTier).toBe("com");
+    expect(out.height).toBe(46.7);
+    for (let i = 0; i < parts.length; i++) {
+      for (let j = i + 1; j < parts.length; j++) {
+        expect(intersectionAreaM2(parts[i], parts[j])).toBeLessThan(1e-6);
+      }
+    }
+    // Parts tile the footprint exactly once and keep the max height at every point.
+    const total = parts.reduce((sum, part) => sum + area(part.ring) - part.holes.reduce((h, hole) => h + area(hole), 0), 0);
+    expect(total).toBeCloseTo(1600, 3);
+    const heightAt = (x: number, y: number) =>
+      parts
+        .filter((part) => intersectionAreaM2(part, { ring: sq(x - 0.1, y - 0.1, x + 0.1, y + 0.1), holes: [] }) > 0.039)
+        .map((part) => part.height);
+    expect(heightAt(20, 20)).toEqual([46.7]);
+    expect(heightAt(7, 20)).toEqual([31]);
+    expect(heightAt(2, 20)).toEqual([25.7]);
+  });
+});

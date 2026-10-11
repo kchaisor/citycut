@@ -1,6 +1,5 @@
 import { applyHeightOverrides, clearAllHeightOverrides } from "./heightOverrides";
-import { annotateUnresolvedZoneDefaults } from "./buildingHeightResolve";
-import { applyComBuildingHeights } from "./comBuildingHeights";
+import { resolveBuildingHeights } from "./buildingHeightPipeline";
 import type { DamFloorRecord } from "./comDevelopmentFloors";
 import {
   applyLidarHeightsFromEnrichment,
@@ -12,7 +11,7 @@ import type { ComBuildingFootprint } from "./comBuildingHeightsTypes";
 import type { BuildingFeat, LonLat } from "../types";
 import type { ZonePolygon } from "./useCascade";
 
-/** Same building list and scalar heights as ModelPage (CoM on, no manual edits). */
+/** Same building list and scalar heights as ModelPage (CoM always applied, no manual edits). */
 export function modelPageDisplayBuildings(input: {
   center: LonLat;
   overtureBuildings: BuildingFeat[];
@@ -25,15 +24,12 @@ export function modelPageDisplayBuildings(input: {
   const enriched = mergeBuildingEnrichment(input.overtureBuildings, byId);
   const zoned = assignExternalUses(enriched, input.zones);
   const withLidar = applyLidarHeightsFromEnrichment(zoned);
-  const buildingsWithoutCom = structuredClone(withLidar);
-  const { buildings: withCom } = applyComBuildingHeights(buildingsWithoutCom, input.comFootprints);
-  const annotated = annotateUnresolvedZoneDefaults(
-    withCom,
+  const base = resolveBuildingHeights(
+    structuredClone(withLidar),
     input.center,
     input.comFootprints,
     input.damRecords,
   );
-  const base = annotated;
   const { buildings } = applyHeightOverrides(base, clearAllHeightOverrides(), input.center);
   return buildings;
 }

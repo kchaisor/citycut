@@ -1,7 +1,6 @@
-import { applyComBuildingHeights } from "./comBuildingHeights";
+import { resolveBuildingHeights } from "./buildingHeightPipeline";
 import type { ComBuildingFootprint } from "./comBuildingHeightsTypes";
-import { applyDevelopmentFloorsToBuildings, type DamFloorRecord } from "./comDevelopmentFloors";
-import { applyHeightSourceTruthPass } from "./buildingHeightSourceTruth";
+import type { DamFloorRecord } from "./comDevelopmentFloors";
 import {
   applyLidarHeightsFromEnrichment,
   mergeBuildingEnrichment,
@@ -46,7 +45,5 @@ export function resolveLandmarkCut(snapshot: LandmarkCutSnapshot): BuildingFeat[
   const enriched = mergeBuildingEnrichment(snapshot.overtureBuildings, byId);
   const zoned = assignExternalUses(enriched, snapshot.zones);
   const withLidar = applyLidarHeightsFromEnrichment(zoned);
-  const withDam = applyDevelopmentFloorsToBuildings(withLidar, snapshot.center, snapshot.damRecords);
-  const { buildings: withCom } = applyComBuildingHeights(withDam, snapshot.comFootprints);
-  return applyHeightSourceTruthPass(withCom, snapshot.center, snapshot.comFootprints, snapshot.damRecords);
+  return resolveBuildingHeights(withLidar, snapshot.center, snapshot.comFootprints, snapshot.damRecords);
 }

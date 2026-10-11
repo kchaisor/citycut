@@ -109,6 +109,102 @@ export type LayerDuplicateReport = {
   };
 };
 
+type MeshPart = { buildingId: number; ring: BuildingFeat["ring"]; holes: BuildingFeat["holes"]; height: number };
+
+function meshPartsFor(building: BuildingFeat): MeshPart[] {
+  if (building.meshDrawnBy != null) return [];
+  const parts = building.extrusionParts?.length
+    ? building.extrusionParts
+    : [{ ring: building.ring, holes: building.holes, height: building.height }];
+  return parts.map((part) => ({ buildingId: building.id, ring: part.ring, holes: part.holes, height: part.height }));
+}
+
+function partBBox(part: MeshPart): [number, number, number, number] {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const [x, y] of part.ring) {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  }
+  return [minX, minY, maxX, maxY];
+}
+
+/**
+ * Every extruded building mesh starts at the ground, so two meshes whose footprints overlap
+ * draw the same volume twice (doubled walls, z-fighting, duplicate .3dm solids). Counts
+ * overlapping mesh pairs inside one building (stacked CoM components, any overlap over
+ * `minOverlapM2`) and across buildings (a mesh of one building covering at least half of a mesh
+ * of another, i.e. the same mass drawn by two buildings). Edge slivers where neighbouring
+ * Overture outlines touch are reported separately as `acrossBuildingSlivers`.
+ */
+export function buildingMeshOverlaps(
+  buildings: BuildingFeat[],
+  minOverlapM2 = 0.5,
+): {
+  meshes: number;
+  withinBuildingPairs: number;
+  buildingsWithOverlaps: number;
+  acrossBuildingPairs: number;
+  acrossBuildingSlivers: number;
+  overlapAreaM2: number;
+  examples: { a: number; b: number; m2: number }[];
+} {
+  const parts = buildings.flatMap(meshPartsFor);
+  const boxes = parts.map(partBBox);
+  let within = 0;
+  let across = 0;
+  let slivers = 0;
+  let overlapAreaM2 = 0;
+  const areas = parts.map((part) => footprintArea(part));
+  const withOverlap = new Set<number>();
+  const examples: { a: number; b: number; m2: number }[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const [ax0, ay0, ax1, ay1] = boxes[i];
+    for (let j = i + 1; j < parts.length; j++) {
+      const [bx0, by0, bx1, by1] = boxes[j];
+      if (bx0 > ax1 || bx1 < ax0 || by0 > ay1 || by1 < ay0) continue;
+      const m2 = intersectionAreaM2(parts[i], parts[j]);
+      if (m2 <= minOverlapM2) continue;
+      if (parts[i].buildingId === parts[j].buildingId) {
+        within += 1;
+        withOverlap.add(parts[i].buildingId);
+      } else if (m2 >= 0.5 * Math.min(areas[i], areas[j])) {
+        across += 1;
+      } else {
+        slivers += 1;
+        continue;
+      }
+      overlapAreaM2 += m2;
+      if (examples.length < 5) examples.push({ a: parts[i].buildingId, b: parts[j].buildingId, m2: Math.round(m2) });
+    }
+  }
+  return {
+    meshes: parts.length,
+    withinBuildingPairs: within,
+    buildingsWithOverlaps: withOverlap.size,
+    acrossBuildingPairs: across,
+    acrossBuildingSlivers: slivers,
+    overlapAreaM2: Math.round(overlapAreaM2),
+    examples,
+  };
+}
+
+/** Building meshes per building id in the split (viewport / .3dm) group. */
+export function countBuildingMeshesById(model: CityModel): Map<number, number> {
+  const group = buildCityGroup(model, { splitBuildings: true });
+  const counts = new Map<number, number>();
+  group.traverse((obj) => {
+    const id = obj.userData?.buildingId;
+    if (obj instanceof THREE.Mesh && typeof id === "number") counts.set(id, (counts.get(id) ?? 0) + 1);
+  });
+  disposeObject(group);
+  return counts;
+}
+
 export function comOvertureOverlapCount(
   buildings: BuildingFeat[],
   footprints: ComBuildingFootprint[],

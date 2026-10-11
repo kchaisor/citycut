@@ -204,6 +204,8 @@ export function applyDevelopmentFloorsToBuildings(
     if (!recipient) continue;
     const current = byId.get(recipient.id);
     if (!current) continue;
+    // First record wins; a building already lifted by DAM keeps it.
+    if (current.heightTier === "development_floors") continue;
     byId.set(recipient.id, applyDevelopmentFloorsHeight(current, record.floorsAbove));
   }
   return buildings.map((b) => byId.get(b.id) ?? b);

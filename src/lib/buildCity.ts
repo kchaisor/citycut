@@ -323,6 +323,7 @@ function extrudePart(ring: Ring, holes: Ring[], height: number, base: number): T
 }
 
 function extrudeFootprint(building: BuildingFeat, base: number): THREE.BufferGeometry[] {
+  if (building.meshDrawnBy != null) return [];
   const parts =
     building.extrusionParts && building.extrusionParts.length > 0
       ? building.extrusionParts

@@ -279,6 +279,36 @@ export function aggregateComHeightForMergedFootprint(
   return weighted / covered;
 }
 
+/**
+ * CoM 2023 stores one structure as stacked footprint components (`footprint_min/max_elevation`):
+ * a podium row, then each setback band above it, each with its own outline and a
+ * `structure_extrusion` measured to the top of that band. The outlines overlap in plan (the
+ * tower band sits inside the podium band, and the dataset also repeats near-identical outlines).
+ *
+ * Every part here is extruded from the ground, so emitting one part per component drew the
+ * same plan area several times as nested, coincident prisms (doubled walls, z-fighting, and
+ * duplicate solids in .3dm). Instead, partition the footprint: walk components tallest first and
+ * give each only the area no taller component already claimed. The visible envelope (the max
+ * height at every point) and the tallest height are unchanged; each square metre is drawn once.
+ */
+function partitionComClips(
+  clips: { height: number; id: string; minX: number; multi: MultiPolygon }[],
+): { parts: ExtrusionPart[]; covered: MultiPolygon | null } {
+  const ordered = [...clips].sort(
+    (a, b) => b.height - a.height || a.id.localeCompare(b.id) || a.minX - b.minX,
+  );
+  const parts: ExtrusionPart[] = [];
+  let covered: MultiPolygon | null = null;
+  for (const clip of ordered) {
+    const own: MultiPolygon = covered ? difference(clip.multi, covered) : clip.multi;
+    if (multiPolygonArea(own) > 0) {
+      parts.push(...partsFromMultiPolygon(own, clip.height, 0, true, "absolute_only"));
+    }
+    covered = covered ? union(covered, clip.multi) : clip.multi;
+  }
+  return { parts, covered };
+}
+
 function clipBuildingComExtrusions(
   building: BuildingFeat,
   footprints: ComBuildingFootprint[],
@@ -290,8 +320,7 @@ function clipBuildingComExtrusions(
     const osmPoly = osmClipPolygon(building);
     const matchIds = matchingStructureIds(building, footprints);
     if (matchIds.size === 0) return null;
-    const comParts: ExtrusionPart[] = [];
-    const comUnionInputs: Polygon[] = [];
+    const clips: { height: number; id: string; minX: number; multi: MultiPolygon }[] = [];
 
     for (const footprint of footprints) {
       if (!matchIds.has(footprint.id)) continue;
@@ -300,20 +329,15 @@ function clipBuildingComExtrusions(
       const inter = intersection(osmPoly, toClipPolygon(footprint.ring, footprint.holes));
       const area = multiPolygonArea(inter);
       if (area <= 0) continue;
-      for (const poly of inter) {
-        if (!poly[0]?.length) continue;
-        comUnionInputs.push(poly as Polygon);
-      }
-      comParts.push(
-        ...partsFromMultiPolygon(inter, footprint.height_m, osmArea, true, "absolute_only"),
-      );
+      clips.push({ height: footprint.height_m, id: footprint.id, minX: footprint.minX, multi: inter });
     }
 
+    if (clips.length === 0) return null;
+    const { parts: comParts, covered } = partitionComClips(clips);
     if (comParts.length === 0) return null;
 
     let remainderParts: ExtrusionPart[] = [];
-    if (comUnionInputs.length > 0) {
-      const covered = comUnionInputs.length === 1 ? comUnionInputs[0] : union(...comUnionInputs);
+    if (covered) {
       const remainder = difference(osmPoly, covered);
       remainderParts = partsFromMultiPolygon(remainder, building.height, osmArea, true);
     }
@@ -423,8 +447,16 @@ function applyComBuildingHeightsCore(
       singlePartFastPathEligible(overlaps[0], osmArea)
     ) {
       const height = overlaps[0].footprint.height_m;
-      if (Math.abs(height - building.height) < 0.05) return building;
       const meta = pickPrimaryComMatchMeta(building, [overlaps[0].footprint]);
+      if (Math.abs(height - building.height) < 0.05) {
+        // Height already agrees with CoM: keep it, but record CoM as the source so a lower
+        // tier (DAM floors) cannot claim the building later and the legend counts it as measured.
+        if (building.heightManual || building.extrusionParts?.length) return building;
+        return attachComMatchMeta(
+          { ...building, heightFromFallback: undefined, heightTier: "com", zoneDefaultNote: undefined },
+          meta,
+        );
+      }
       return attachComMatchMeta(applyComScalarHeight(building, height), meta);
     }
 
