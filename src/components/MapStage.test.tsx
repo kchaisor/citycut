@@ -20,6 +20,14 @@ type MockMapInstance = {
 
 const mapInstances: MockMapInstance[] = [];
 
+vi.mock("../lib/loadMapStyle", () => ({
+  loadBasemapStyle: vi.fn(async () => ({
+    version: 8,
+    sources: {},
+    layers: [],
+  })),
+}));
+
 vi.mock("../lib/buildingEnrichmentTiles", async (importOriginal) => {
   const mod = await importOriginal<typeof import("../lib/buildingEnrichmentTiles")>();
   return {
@@ -114,9 +122,9 @@ describe("MapStage", () => {
     vi.clearAllMocks();
   });
 
-  it("removes move and moveend listeners before map.remove on unmount", () => {
+  it("removes move and moveend listeners before map.remove on unmount", async () => {
     const view = render(<MapStage {...baseProps} />);
-    expect(mapInstances).toHaveLength(1);
+    await waitFor(() => expect(mapInstances).toHaveLength(1));
     const map = mapInstances[0]!;
     expect(map.handlers.get("move")?.size).toBeGreaterThan(0);
     expect(map.handlers.get("moveend")?.size).toBeGreaterThan(0);

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
-import { MAP_STYLE, SATELLITE_STYLE } from "../content/constants";
+import { MapAttribution } from "./MapAttribution";
+import { loadBasemapStyle } from "../lib/loadMapStyle";
 import { M_PER_DEG_LAT, mPerDegLon, squareBBox } from "../lib/geo";
 import { cutFrameLabelKm } from "../lib/placeLabel";
 import type { SiteFrameShape } from "../types";
@@ -68,54 +69,68 @@ export function MapStage({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const map = new maplibregl.Map({
-      container,
-      style: basemap === "satellite" ? SATELLITE_STYLE : MAP_STYLE,
-      center: [initialView.lon, initialView.lat],
-      zoom: initialView.zoom,
-      attributionControl: { compact: true },
-      ...FLAT_NORTH_UP_MAP_OPTIONS,
-    });
-    applyFlatNorthUpMapHandlers(map);
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-    mapRef.current = map;
+    let map: maplibregl.Map | null = null;
+    let cancelled = false;
+    let onLoad: (() => void) | null = null;
+    let update: (() => void) | null = null;
+    let onMoveEnd: (() => void) | null = null;
 
-    const update = () => {
-      const center = map.getCenter();
-      const half = sideRef.current / 2;
-      const dLat = half / M_PER_DEG_LAT;
-      const dLon = half / mPerDegLon(center.lat);
-      const northWest = map.project([center.lng - dLon, center.lat + dLat]);
-      const southEast = map.project([center.lng + dLon, center.lat - dLat]);
-      const left = Math.min(northWest.x, southEast.x);
-      const top = Math.min(northWest.y, southEast.y);
-      setFrame({
-        left,
-        top,
-        width: Math.abs(southEast.x - northWest.x),
-        height: Math.abs(southEast.y - northWest.y),
+    void loadBasemapStyle(appliedBasemap.current).then((style) => {
+      if (cancelled) return;
+      map = new maplibregl.Map({
+        container,
+        style,
+        center: [initialView.lon, initialView.lat],
+        zoom: initialView.zoom,
+        attributionControl: false,
+        ...FLAT_NORTH_UP_MAP_OPTIONS,
       });
-      onViewRef.current({ lon: center.lng, lat: center.lat, zoom: map.getZoom() });
-    };
+      applyFlatNorthUpMapHandlers(map);
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+      mapRef.current = map;
 
-    const onLoad = () => {
-      setReady(true);
-      update();
-    };
-    const onMoveEnd = () => setMapEpoch((value) => value + 1);
+      update = () => {
+        if (!map) return;
+        const center = map.getCenter();
+        const half = sideRef.current / 2;
+        const dLat = half / M_PER_DEG_LAT;
+        const dLon = half / mPerDegLon(center.lat);
+        const northWest = map.project([center.lng - dLon, center.lat + dLat]);
+        const southEast = map.project([center.lng + dLon, center.lat - dLat]);
+        const left = Math.min(northWest.x, southEast.x);
+        const top = Math.min(northWest.y, southEast.y);
+        setFrame({
+          left,
+          top,
+          width: Math.abs(southEast.x - northWest.x),
+          height: Math.abs(southEast.y - northWest.y),
+        });
+        onViewRef.current({ lon: center.lng, lat: center.lat, zoom: map.getZoom() });
+      };
 
-    map.on("load", onLoad);
-    map.on("move", update);
-    map.on("moveend", onMoveEnd);
-    map.on("resize", update);
+      onLoad = () => {
+        setReady(true);
+        update?.();
+      };
+      onMoveEnd = () => setMapEpoch((value) => value + 1);
+
+      map.on("load", onLoad);
+      map.on("move", update);
+      map.on("moveend", onMoveEnd);
+      map.on("resize", update);
+    });
 
     return () => {
-      map.off("load", onLoad);
-      map.off("move", update);
-      map.off("moveend", onMoveEnd);
-      map.off("resize", update);
-      removeMapSiteLayers(map);
-      map.remove();
+      cancelled = true;
+      const active = map ?? mapRef.current;
+      if (active && onLoad && update && onMoveEnd) {
+        active.off("load", onLoad);
+        active.off("move", update);
+        active.off("moveend", onMoveEnd);
+        active.off("resize", update);
+        removeMapSiteLayers(active);
+        active.remove();
+      }
       mapRef.current = null;
       setReady(false);
     };
@@ -136,9 +151,12 @@ export function MapStage({
     if (!map || !ready) return;
     if (appliedBasemap.current === basemap) return;
     appliedBasemap.current = basemap;
-    map.setStyle(basemap === "satellite" ? SATELLITE_STYLE : MAP_STYLE);
-    map.once("style.load", () => {
-      setMapEpoch((value) => value + 1);
+    void loadBasemapStyle(basemap).then((style) => {
+      if (mapRef.current !== map) return;
+      map.setStyle(style);
+      map.once("style.load", () => {
+        setMapEpoch((value) => value + 1);
+      });
     });
   }, [basemap, ready]);
 
@@ -234,6 +252,7 @@ export function MapStage({
   return (
     <div className={loading ? "map-wrap is-loading" : "map-wrap"}>
       <div ref={containerRef} className="map-canvas" />
+      <MapAttribution basemap={basemap} />
       <div className="basemap" role="group" aria-label="Basemap">
         <button
           type="button"
