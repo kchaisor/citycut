@@ -11,6 +11,7 @@ const DAM_PAGE_SIZE = 100;
 const MATCH_RADIUS_M = 70;
 
 type DamRow = {
+  status?: string | null;
   floors_above?: number | null;
   geopoint?: { lon?: number; lat?: number } | null;
 };
@@ -32,7 +33,7 @@ function damRecordsUrl(bounds: BBox, offset: number): string {
   url.searchParams.set("limit", String(DAM_PAGE_SIZE));
   url.searchParams.set("offset", String(offset));
   url.searchParams.set("where", damWhereIntersects(bounds));
-  url.searchParams.set("select", "floors_above,geopoint");
+  url.searchParams.set("select", "status,floors_above,geopoint");
   return url.toString();
 }
 
@@ -40,7 +41,29 @@ export type DamFloorRecord = {
   lon: number;
   lat: number;
   floorsAbove: number;
+  /**
+   * DAM `status` as published: "COMPLETED", "UNDER CONSTRUCTION", "APPROVED" or "APPLIED" (Oct 2026).
+   * Only completed records describe a building that stands; see {@link damRecordGivesHeight}.
+   */
+  status?: string;
 };
+
+/** The DAM status whose floor count describes a built building. */
+export const DAM_COMPLETED_STATUS = "COMPLETED";
+
+/**
+ * Only a completed DAM record sets a height. Approved, applied and under-construction records
+ * describe a building that does not stand yet, so they do not apply at all: Overture/OSM height or
+ * floors come first, then the labelled zone estimate. A record with no status is treated the same.
+ */
+export function damRecordGivesHeight(record: DamFloorRecord): boolean {
+  return (record.status ?? "").trim().toUpperCase() === DAM_COMPLETED_STATUS;
+}
+
+/** The DAM records that set heights (completed only). */
+export function heightBearingDamRecords(records: DamFloorRecord[]): DamFloorRecord[] {
+  return records.filter(damRecordGivesHeight);
+}
 
 export async function fetchDevelopmentFloorRecords(
   bounds: BBox,
@@ -84,7 +107,8 @@ function pushRow(row: DamRow, out: DamFloorRecord[]): void {
   const lon = point?.lon;
   const lat = point?.lat;
   if (typeof lon !== "number" || typeof lat !== "number") return;
-  out.push({ lon, lat, floorsAbove: floors });
+  const status = typeof row.status === "string" ? row.status.trim().toUpperCase() : undefined;
+  out.push(status ? { lon, lat, floorsAbove: floors, status } : { lon, lat, floorsAbove: floors });
 }
 
 function distanceM(aLon: number, aLat: number, bLon: number, bLat: number): number {
@@ -154,7 +178,9 @@ export function damRecordsWonByBuilding(
   records: DamFloorRecord[],
   allBuildings: BuildingFeat[],
 ): DamFloorRecord[] {
-  return records.filter((record) => pickDamFloorRecipient(allBuildings, center, record)?.id === building.id);
+  return heightBearingDamRecords(records).filter(
+    (record) => pickDamFloorRecipient(allBuildings, center, record)?.id === building.id,
+  );
 }
 
 export function pickDamFloorRecipient(
@@ -197,9 +223,10 @@ export function applyDevelopmentFloorsToBuildings(
   center: LonLat,
   records: DamFloorRecord[],
 ): BuildingFeat[] {
-  if (records.length === 0) return buildings;
+  const completed = heightBearingDamRecords(records);
+  if (completed.length === 0) return buildings;
   const byId = new Map(buildings.map((b) => [b.id, b]));
-  for (const record of records) {
+  for (const record of completed) {
     const recipient = pickDamFloorRecipient(buildings, center, record);
     if (!recipient) continue;
     const current = byId.get(recipient.id);

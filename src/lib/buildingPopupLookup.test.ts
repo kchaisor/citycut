@@ -38,7 +38,7 @@ describe("building popup DAM display", () => {
     const all = [park, tower];
     const towerAt = interiorPoint(tower.ring, tower.holes);
     const { lon, lat } = fromLocal(towerAt, center);
-    const damAtTower: DamFloorRecord = { lon, lat, floorsAbove: 33 };
+    const damAtTower: DamFloorRecord = { lon, lat, floorsAbove: 33, status: "COMPLETED" };
     expect(damRecordsWonByBuilding(park, center, [damAtTower], all).length).toBe(0);
     expect(damRecordsWonByBuilding(tower, center, [damAtTower], all).length).toBe(1);
   });

@@ -3,6 +3,7 @@ import { intersectionAreaM2, COM_FALLBACK_MIN_FRACTION } from "./comBuildingHeig
 import type { ComBuildingFootprint } from "./comBuildingHeightsTypes";
 import {
   damRecordsWonByBuilding,
+  heightBearingDamRecords,
   matchDevelopmentFloorsToBuilding,
   pickDamFloorRecipient,
   type DamFloorRecord,
@@ -38,6 +39,8 @@ function damNearButLost(
   records: DamFloorRecord[],
   allBuildings: BuildingFeat[],
 ): RealSourceOverlap | null {
+  // Non-completed DAM records are not a real source for a standing building; ignore them here too.
+  records = heightBearingDamRecords(records);
   const nearFloors = matchDevelopmentFloorsToBuilding(building, center, records);
   if (nearFloors == null) return null;
   if (damRecordsWonByBuilding(building, center, records, allBuildings).length > 0) return null;

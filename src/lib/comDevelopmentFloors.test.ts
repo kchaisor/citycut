@@ -7,7 +7,7 @@ import {
   type DamFloorRecord,
 } from "./comDevelopmentFloors";
 
-const record: DamFloorRecord = { lon: 144.98061, lat: -37.8127, floorsAbove: 9 };
+const record: DamFloorRecord = { lon: 144.98061, lat: -37.8127, floorsAbove: 9, status: "COMPLETED" };
 const center = { lon: record.lon, lat: record.lat };
 
 function box(id: number, x: number, y: number, w: number, areaScale = 1): BuildingFeat {

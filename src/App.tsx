@@ -580,7 +580,7 @@ export default function App() {
       }
       if (modelLayers.buildings) {
         logLidarEnrichmentStatus(enrichmentManifest);
-        sourceNote = `${sourceNote} Building height uses CoM 2023 measured footprints (always applied in Melbourne), then the LiDAR (Vicmap, licensed) tier (${lidarLegendLine(enrichmentManifest).toLowerCase()}), then CoM development floors × 3 m for one building per site, then Overture height, num_floors × 3 m, otherwise Vicmap zone defaults labelled as estimates (3 m under 40 m², else by zone, else 9 m). Manual height edits override every other source. Use follows offline enrichment tiles (Overture class, CoM CLUE, building permit BCA, Vicmap zone), with live zones when tiles fail.`;
+        sourceNote = `${sourceNote} Building height uses CoM 2023 measured footprints (always applied in Melbourne), then the LiDAR (Vicmap, licensed) tier (${lidarLegendLine(enrichmentManifest).toLowerCase()}), then CoM development floors × 3 m for one building per completed development (approved or under-construction records are ignored), then Overture height, num_floors × 3 m, otherwise Vicmap zone defaults labelled as estimates (3 m under 40 m², else by zone, else 9 m). Manual height edits override every other source. Use follows offline enrichment tiles (Overture class, CoM CLUE, building permit BCA, Vicmap zone), with live zones when tiles fail.`;
       }
       if (damResult.error) sourceNote = `${sourceNote} ${damResult.error}`;
       if (comHeightsResult.error) sourceNote = `${sourceNote} ${comHeightsResult.error}`;

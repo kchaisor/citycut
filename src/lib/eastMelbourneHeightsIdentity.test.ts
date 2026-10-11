@@ -21,15 +21,14 @@ type Snapshot = {
 /**
  * Main dropped CoM Development Activity Monitor floors from the displayed model (the CoM worker
  * ran on the pre-DAM list). DAM now applies after CoM, above Overture/OSM tags and zone defaults,
- * so exactly these non-CoM buildings change. Every other building, including every CoM-matched
- * one, must keep main's height.
+ * so exactly these non-CoM buildings change. Only COMPLETED DAM records count (#84): 772906255
+ * (APPROVED / APPLIED records) and 2700911224 (APPROVED) keep main's height. Every other building,
+ * including every CoM-matched one, must keep main's height.
  */
 const DAM_RESTORED: { id: number; mainM: number; damM: number; mainTier: string }[] = [
   { id: 29225853, mainM: 12, damM: 9, mainTier: "zone_default" },
-  { id: 772906255, mainM: 8, damM: 21, mainTier: "real_source_unmatched" },
   { id: 2141905945, mainM: 7, damM: 12, mainTier: "real_source_unmatched" },
   { id: 2577531592, mainM: 7, damM: 21, mainTier: "real_source_unmatched" },
-  { id: 2700911224, mainM: 6, damM: 9, mainTier: "real_source_unmatched" },
   { id: 2741926066, mainM: 8, damM: 30, mainTier: "zone_default" },
   { id: 2805387076, mainM: 7.747, damM: 54, mainTier: "overture_height" },
   { id: 3426932838, mainM: 8, damM: 30, mainTier: "real_source_unmatched" },

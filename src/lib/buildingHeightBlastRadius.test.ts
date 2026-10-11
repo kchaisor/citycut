@@ -115,7 +115,7 @@ describe("building height blast radius", () => {
     const afterDam = applyDevelopmentFloorsToBuildings(
       [withCom],
       origin,
-      [{ lon: origin.lon, lat: origin.lat, floorsAbove: 9 }],
+      [{ lon: origin.lon, lat: origin.lat, floorsAbove: 9, status: "COMPLETED" }],
     )[0]!;
     expect(inferHeightTier(afterDam)).toBe("com");
     expect(afterDam.height).toBe(22);
