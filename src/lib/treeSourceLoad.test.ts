@@ -73,7 +73,7 @@ describe("Vicmap tree points", () => {
         return calls <= 2 ? Promise.resolve(vicmapPage(VICMAP_PAGE_SIZE, true)) : stalled(url, init);
       }),
     );
-    const result = await fetchVicmapTreesDetailed(toorak, undefined, 20);
+    const result = await fetchVicmapTreesDetailed(toorak, undefined, 20, 1);
     expect(result.rows).toHaveLength(2 * VICMAP_PAGE_SIZE);
     expect(result.partial).toBe(true);
     expect(result.error).toMatch(/Vicmap tree points are incomplete: 2 pages \(4000 points\) loaded/);
@@ -82,7 +82,7 @@ describe("Vicmap tree points", () => {
     vi.useFakeTimers();
     try {
       const pending = fetchVicmapTrees(toorak);
-      await vi.advanceTimersByTimeAsync(21_000);
+      await vi.advanceTimersByTimeAsync(45_000);
       expect(await pending).toHaveLength(2 * VICMAP_PAGE_SIZE);
     } finally {
       vi.useRealTimers();
@@ -91,7 +91,7 @@ describe("Vicmap tree points", () => {
 
   it("reports a failure that loads nothing (HTTP 503) instead of a silent zero", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) })));
-    const result = await fetchVicmapTreesDetailed(toorak);
+    const result = await fetchVicmapTreesDetailed(toorak, undefined, 20_000, 1);
     expect(result.rows).toHaveLength(0);
     expect(result.partial).toBe(false);
     expect(result.error).toMatch(/^Vicmap tree points could not be loaded, so that tier is missing\. .*503/);
@@ -122,6 +122,57 @@ describe("Vicmap tree points", () => {
   });
 });
 
+describe("one retry on a transient page failure", () => {
+  it("retries the ArcGIS HTTP 400 seen live at East Melbourne, and the tier loads", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls += 1;
+        return calls === 1 ? { ok: false, status: 400, json: async () => ({}) } : vicmapPage(561, false);
+      }),
+    );
+    const result = await fetchVicmapTreesDetailed(eastMelbourne, undefined, 20_000, 1);
+    expect(calls).toBe(2);
+    expect(result).toMatchObject({ error: null, partial: false });
+    expect(result.rows).toHaveLength(561);
+  });
+
+  it("retries an 'Unable to perform query' error body once", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls += 1;
+        return calls === 1
+          ? { ok: true, status: 200, json: async () => ({ error: { code: 400, message: "", details: ["Unable to perform query. Please check your parameters."] } }) }
+          : vicmapPage(10, false);
+      }),
+    );
+    const result = await fetchVicmapTreesDetailed(toorak, undefined, 20_000, 1);
+    expect(calls).toBe(2);
+    expect(result.rows).toHaveLength(10);
+  });
+
+  it("does not retry auth or rate-limit answers (403, 429), and says so", async () => {
+    for (const status of [403, 429]) {
+      let calls = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => {
+          calls += 1;
+          return { ok: false, status, json: async () => ({}) };
+        }),
+      );
+      const result = await fetchVicmapTreesDetailed(toorak, undefined, 20_000, 1);
+      expect(calls).toBe(1);
+      expect(result.error).toContain(String(status));
+    }
+  });
+});
+
 describe("City of Melbourne tree records", () => {
   const rows = (n: number, offset: number) =>
     Array.from({ length: n }, (_, i) => ({ latitude: -37.812, longitude: 144.98 + (offset + i) * 1e-6, diameter_breast_height: 30 }));
@@ -136,7 +187,7 @@ describe("City of Melbourne tree records", () => {
   it("reports a first-page failure, and keeps a clean prefix when a later page fails", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) })));
-    const failed = await fetchComTreesDetailed(eastMelbourne);
+    const failed = await fetchComTreesDetailed(eastMelbourne, undefined, 20_000, 1);
     expect(failed.rows).toHaveLength(0);
     expect(failed.error).toMatch(/^City of Melbourne tree records could not be loaded, so that tier is missing\. .*503/);
 
@@ -148,7 +199,7 @@ describe("City of Melbourne tree records", () => {
         return { ok: true, status: 200, json: async () => ({ total_count: 600, results: rows(100, offset) }) };
       }),
     );
-    const partial = await fetchComTreesDetailed(eastMelbourne);
+    const partial = await fetchComTreesDetailed(eastMelbourne, undefined, 20_000, 1);
     expect(partial.partial).toBe(true);
     expect(partial.rows).toHaveLength(300);
     expect(partial.error).toMatch(/City of Melbourne tree records are incomplete: 300 of 600 loaded/);
