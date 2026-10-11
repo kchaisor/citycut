@@ -6,7 +6,11 @@ import { polylineLength } from "./geo";
 import { overtureMaxRoadJumpM, sanitizeRoadFeatures } from "./roadLineValidation";
 import { overtureTransportationUrl, resolveOvertureRelease } from "./overtureRelease";
 import { clipLineToGroundVisible, hiddenSpansFromOvertureProps } from "./overtureSegmentVisibility";
-import { roadSpecFromOvertureSegment, skipTomTomSegmentWithoutClass } from "./overtureTransportMapping";
+import {
+  roadSpecFromOvertureSegment,
+  serviceKindOfSegment,
+  skipTomTomSegmentWithoutClass,
+} from "./overtureTransportMapping";
 import {
   clipBoundsForTile,
   lineFromGeoJson,
@@ -27,7 +31,12 @@ export type OvertureTransportStats = {
   skippedTomTom: number;
 };
 
-type LinePart = { id: string; line: Pt[]; spec: NonNullable<ReturnType<typeof roadSpecFromOvertureSegment>> };
+type LinePart = {
+  id: string;
+  line: Pt[];
+  spec: NonNullable<ReturnType<typeof roadSpecFromOvertureSegment>>;
+  service: string | null;
+};
 
 function partsFromTile(
   data: ArrayBuffer,
@@ -63,13 +72,14 @@ function partsFromTile(
           ? geo.geometry.coordinates
           : [];
     const underground = hidden(props);
+    const service = serviceKindOfSegment(props);
     for (const coordinates of lineStrings) {
       const clipped = lineFromGeoJson(coordinates, origin, half, tileRect);
       for (const line of clipped) {
         const visible = clipLineToGroundVisible(line, underground);
         for (const piece of visible) {
           if (polylineLength(piece) < 1) continue;
-          parts.push({ id: `${id}:${x}:${y}:${parts.length}`, line: piece, spec });
+          parts.push({ id: `${id}:${x}:${y}:${parts.length}`, line: piece, spec, service });
         }
       }
     }
@@ -111,6 +121,7 @@ export async function fetchOvertureTransportationForCut(
         width: part.spec.width,
         kind: part.spec.kind,
         ...(part.spec.grade ? { grade: part.spec.grade } : {}),
+        ...(part.service && part.spec.kind === "road" ? { service: part.service } : {}),
       });
     }
   }

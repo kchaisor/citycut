@@ -636,13 +636,25 @@ function roadSurfaceCacheKey(
   return `${roads.length}:${hashRoadFeatures(roads)}:${tram.toString(16)}:${sideM}:${frameShape}`;
 }
 
-/** Unioned carriageway plus in-road tram corridors, with median gaps closed. */
+/** `RoadFeat.service` value for car-park aisles. */
+export const PARKING_AISLE = "parking_aisle";
+
+/**
+ * Plan road surface: every carriageway except car-park aisles. Aisles are car park, which the
+ * site plan draws as ground; 3D, .3dm and city blocks still use `carriagewaysOf` on all roads.
+ */
+export function planRoadCarriageways(roads: RoadFeat[]): RoadFeat[] {
+  return roads.filter((road) => road.service !== PARKING_AISLE);
+}
+
+/** Unioned carriageway (car-park aisles excluded) plus in-road tram corridors, with median gaps closed. */
 export function unionRoadSurface(
-  roads: RoadFeat[],
+  allRoads: RoadFeat[],
   tramLines: Pt[][] | undefined,
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
 ): RoadFill {
+  const roads = planRoadCarriageways(allRoads);
   const key = roadSurfaceCacheKey(roads, tramLines, sideM, frameShape);
   const cached = roadSurfaceCache.get(key);
   if (cached) return cached;
