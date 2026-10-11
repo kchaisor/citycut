@@ -561,7 +561,8 @@ input[type="range"]::-moz-range-thumb {
   line-height: 1.1;
 }
 .meta { margin: 6px 0 0; }
-.height-source-notice {
+.height-source-notice,
+.map-stage-notice {
   position: absolute;
   top: 10px;
   left: 50%;
@@ -580,6 +581,7 @@ input[type="range"]::-moz-range-thumb {
   box-shadow: 0 2px 8px rgb(0 0 0 / 8%);
   pointer-events: none;
 }
+.map-stage-notice { z-index: 3; }
 .stats {
   display: grid;
   grid-template-columns: 1fr 1fr;

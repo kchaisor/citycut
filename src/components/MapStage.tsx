@@ -60,6 +60,7 @@ export function MapStage({
   const [frame, setFrame] = useState<Frame | null>(null);
   const [ready, setReady] = useState(false);
   const [mapEpoch, setMapEpoch] = useState(0);
+  const [sitePreviewFailed, setSitePreviewFailed] = useState(false);
   sideRef.current = sideM;
   frameShapeRef.current = frameShape;
   onViewRef.current = onView;
@@ -150,6 +151,7 @@ export function MapStage({
       return;
     }
     let cancelled = false;
+    setSitePreviewFailed(false);
     const center = map.getCenter();
     const cutCenter: LonLat = { lat: center.lat, lon: center.lng };
     const controller = new AbortController();
@@ -177,7 +179,7 @@ export function MapStage({
           parcel,
         });
       } catch {
-        /* Fail quietly when Vicmap or Overture errors. */
+        if (!cancelled && !controller.signal.aborted) setSitePreviewFailed(true);
       }
     })();
 
@@ -271,6 +273,11 @@ export function MapStage({
         </>
       )}
       {loading && <div className="loading-shield" />}
+      {sitePreviewFailed && !loading && (
+        <p className="map-stage-notice" role="status">
+          Site preview on the map could not be loaded.
+        </p>
+      )}
       {loading && (
         <div className="loading-card" role="status">
           <strong>Cutting this block</strong>

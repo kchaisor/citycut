@@ -143,15 +143,25 @@ async function readPmtilesLayer<T>(
 }
 
 /** Metro tram centre lines clipped to the cut (PTV PMTiles, MODE METRO TRAM). */
+export type TramLinesFetchResult = {
+  lines: Pt[][] | null;
+  loadFailed: boolean;
+};
+
 export async function fetchTramLinesForCut(
   model: CityModel,
   bounds: { south: number; west: number; north: number; east: number },
   signal?: AbortSignal,
-): Promise<Pt[][] | null> {
-  const overlays = await fetchPublicTransportOverlays(model, bounds, signal);
-  if (!overlays) return null;
-  const lines = overlays.lines.filter((line) => line.mode === "tram").map((line) => line.line);
-  return lines.length > 0 ? lines : null;
+): Promise<TramLinesFetchResult> {
+  try {
+    const overlays = await fetchPublicTransportOverlays(model, bounds, signal);
+    if (!overlays) return { lines: null, loadFailed: false };
+    const lines = overlays.lines.filter((line) => line.mode === "tram").map((line) => line.line);
+    return { lines: lines.length > 0 ? lines : null, loadFailed: false };
+  } catch (err) {
+    if (signal?.aborted) throw err;
+    return { lines: null, loadFailed: true };
+  }
 }
 
 export async function fetchPublicTransportOverlays(
@@ -167,37 +177,33 @@ export async function fetchPublicTransportOverlays(
   ) {
     return null;
   }
-  try {
-    const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
-    const [lines, stops] = await Promise.all([
-      readPmtilesLayer(
-        PT_LINES_PMTILES_URL,
-        bounds,
-        ["lines", "geojsonLayer"],
-        model.sideM,
-        shape,
-        model.center,
-        signal,
-        (props, clipped) => {
-          const mode = ptModeFromValue(props.MODE ?? props.mode);
-          return clipped.map((line) => ({ mode, line }));
-        },
-      ),
-      readPmtilesLayer(
-        PT_STOPS_PMTILES_URL,
-        bounds,
-        ["stops", "geojsonLayer"],
-        model.sideM,
-        shape,
-        model.center,
-        signal,
-        () => [],
-        (props, point) => [{ mode: ptModeFromValue(props.MODE ?? props.mode), point }],
-      ),
-    ]);
-    if (lines.length === 0 && stops.length === 0) return null;
-    return { lines, stops };
-  } catch {
-    return null;
-  }
+  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
+  const [lines, stops] = await Promise.all([
+    readPmtilesLayer(
+      PT_LINES_PMTILES_URL,
+      bounds,
+      ["lines", "geojsonLayer"],
+      model.sideM,
+      shape,
+      model.center,
+      signal,
+      (props, clipped) => {
+        const mode = ptModeFromValue(props.MODE ?? props.mode);
+        return clipped.map((line) => ({ mode, line }));
+      },
+    ),
+    readPmtilesLayer(
+      PT_STOPS_PMTILES_URL,
+      bounds,
+      ["stops", "geojsonLayer"],
+      model.sideM,
+      shape,
+      model.center,
+      signal,
+      () => [],
+      (props, point) => [{ mode: ptModeFromValue(props.MODE ?? props.mode), point }],
+    ),
+  ]);
+  if (lines.length === 0 && stops.length === 0) return null;
+  return { lines, stops };
 }

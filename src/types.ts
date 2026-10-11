@@ -233,6 +233,8 @@ export type CityModel = {
   roads: RoadFeat[];
   /** PTV metro tram centre lines in local metres (when the cut is in metro bounds). */
   tramLines?: Pt[][];
+  /** True when tram routes were requested but PTV data failed to load. */
+  tramLinesLoadFailed?: boolean;
   areas: AreaFeat[];
   trees: TreeFeat[];
   roadKm: number;

@@ -15,6 +15,7 @@ import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import { captureViewPng } from "../lib/capturePng";
 import { flushControlInertia, holdControlPose, type HeldControl } from "../lib/controlInertia";
+import { shouldSkipViewportSizeRefit } from "../lib/viewportAutoFit";
 import {
   applyBuildingSolarNeutral,
   snapshotBuildingViewportColors,
@@ -337,6 +338,7 @@ function PerspectiveFit({
   lon,
   fitId,
   active,
+  touchedRef,
 }: {
   camera: THREE.PerspectiveCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
@@ -350,6 +352,7 @@ function PerspectiveFit({
   lon: number;
   fitId: number;
   active: boolean;
+  touchedRef: RefObject<boolean>;
 }) {
   const size = useThree((state) => state.size);
   const fittedKey = useRef<string | null>(null);
@@ -357,7 +360,12 @@ function PerspectiveFit({
     const controls = controlsRef.current;
     if (!controls || !active || size.width < 2 || size.height < 2) return;
     const key = `${fitId}:${size.width}x${size.height}`;
-    if (fittedKey.current === key) return;
+    if (
+      shouldSkipViewportSizeRefit(fittedKey.current, key, fitId, touchedRef.current) &&
+      fittedKey.current !== null
+    ) {
+      return;
+    }
 
     const pose = computePerspectiveViewportPose({
       side,
@@ -380,7 +388,24 @@ function PerspectiveFit({
     camera.updateProjectionMatrix();
     controls.update();
     fittedKey.current = key;
-  }, [active, camera, controlsRef, fitId, groundY, lift, side, siteTopY, size.height, size.width]);
+    touchedRef.current = false;
+  }, [
+    active,
+    camera,
+    controlsRef,
+    fitId,
+    groundY,
+    lift,
+    side,
+    siteTopY,
+    heliodonRadius,
+    solar,
+    lat,
+    lon,
+    size.height,
+    size.width,
+    touchedRef,
+  ]);
   useLayoutEffect(() => {
     place();
   }, [place]);
@@ -884,6 +909,7 @@ function Cameras({
             lon={lon}
             fitId={snapId}
             active={!orthoView && !qaMode}
+            touchedRef={touchedRef}
           />
           <PerspectiveClipPlanes
             camera={persp}
@@ -945,6 +971,9 @@ function Cameras({
             maxPolarAngle={Math.PI / 2.02}
             minDistance={side * 0.2}
             maxDistance={Math.max(side * 3.4, heliodonRadius * 2.4)}
+            onStart={() => {
+              touchedRef.current = true;
+            }}
           />
           <OrbitControls
             ref={orthoControls}
