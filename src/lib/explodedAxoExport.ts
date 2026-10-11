@@ -17,6 +17,7 @@ import {
   type ExplodedAxoOverlayBundle,
   type ExplodedAxoSettings,
 } from "./explodedAxo";
+import { stableExportModel } from "./exportStableOrder";
 import type { CityModel, Pt } from "../types";
 
 /** Millimetres on the sheet per metre in iso space at plan scale 1:scale. */
@@ -145,6 +146,7 @@ export function explodedAxoChunks(
   satelliteNote?: string | null,
   overlays: ExplodedAxoOverlayBundle = {},
 ): PdfChunk[] {
+  model = stableExportModel(model);
   const { layers, guides } = buildExplodedAxoLayers(model, settings, overlays);
   const page = explodedAxoPageSize(model, settings, scale);
   const origin: Pt = page.origin;

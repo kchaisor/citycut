@@ -28,6 +28,7 @@ import {
   downloadViewAi,
   pngFilename,
 } from "../lib/download";
+import { VIEW3D_EXPORT_TOOLTIP, view3dExportBlocked } from "../lib/view3dExportTab";
 import {
   AXO_LAYER_LABELS,
   defaultExplodedAxoGapM,
@@ -1002,6 +1003,8 @@ export function ModelPage({ model }: { model: CityModel }) {
     { tier: "real_source_unmatched", label: heightTierLabel("real_source_unmatched") },
     { tier: "manual", label: heightTierLabel("manual") },
   ];
+  const view3dExportDisabled = view3dExportBlocked(tab);
+
   const hint =
     tab === "3d"
       ? view.projection === "plan"
@@ -1601,7 +1604,15 @@ export function ModelPage({ model }: { model: CityModel }) {
                     </h3>
                     <p>The current 3D view, in perspective or isometric, at twice the canvas resolution.</p>
                   </div>
-                  <button className="ghost" type="button" data-autofocus="true" disabled={busy !== null} onClick={savePng} aria-label="Download PNG">
+                  <button
+                    className="ghost"
+                    type="button"
+                    data-autofocus="true"
+                    disabled={busy !== null || view3dExportDisabled}
+                    title={view3dExportDisabled ? VIEW3D_EXPORT_TOOLTIP : undefined}
+                    onClick={savePng}
+                    aria-label="Download PNG"
+                  >
                     {busy === "png" ? "Preparing…" : "Download"}
                   </button>
                 </article>
@@ -1623,7 +1634,14 @@ export function ModelPage({ model }: { model: CityModel }) {
                     </h3>
                     <p>The current camera as vectors: filled faces, visible edges, and simplified trees. Not to scale.</p>
                   </div>
-                  <button className="ghost" type="button" disabled={busy !== null} onClick={saveViewAi} aria-label="Download 3D view Illustrator">
+                  <button
+                    className="ghost"
+                    type="button"
+                    disabled={busy !== null || view3dExportDisabled}
+                    title={view3dExportDisabled ? VIEW3D_EXPORT_TOOLTIP : undefined}
+                    onClick={saveViewAi}
+                    aria-label="Download 3D view Illustrator"
+                  >
                     {busy === "ai-view" ? "Preparing…" : "Download"}
                   </button>
                 </article>
