@@ -29,6 +29,18 @@ export function enrichmentMapFromRecords(records: BuildingEnrichmentRecord[]): M
   return byId;
 }
 
+/**
+ * Only the enrichment records a cut can use: resolveLandmarkCut looks records up by
+ * the overtureId of the cut's own buildings, so every other record is dead weight in a fixture.
+ */
+export function enrichmentRecordsForBuildings(
+  buildings: BuildingFeat[],
+  records: Iterable<BuildingEnrichmentRecord>,
+): BuildingEnrichmentRecord[] {
+  const ids = new Set(buildings.map((building) => building.overtureId).filter(Boolean));
+  return [...records].filter((record) => ids.has(record.overtureId));
+}
+
 export function resolveLandmarkCut(snapshot: LandmarkCutSnapshot): BuildingFeat[] {
   const byId = enrichmentMapFromRecords(snapshot.enrichmentRecords);
   const enriched = mergeBuildingEnrichment(snapshot.overtureBuildings, byId);
