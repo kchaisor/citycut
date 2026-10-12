@@ -22,6 +22,8 @@ export function SatellitePane({
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const applyingRef = useRef(false);
+  const viewportRef = useRef(viewport);
+  viewportRef.current = viewport;
   const colourTick = useColourRevision();
   const [basemapStyleFailed, setBasemapStyleFailed] = useState(false);
 
@@ -84,8 +86,22 @@ export function SatellitePane({
         });
         applyingRef.current = false;
       });
-      map.on("moveend", () => {
-        if (applyingRef.current || !map) return;
+      // A container resize keeps MapLibre's zoom and fires moveend with no originalEvent. Re-fit the
+      // shared viewport instead of writing the container's bounds back, so a window resize never
+      // changes the site plan or figure-ground extent.
+      map.on("resize", () => {
+        if (!map) return;
+        applyingRef.current = true;
+        map.fitBounds(planViewportLngLatBounds(viewportRef.current, model.center), {
+          padding: 0,
+          duration: 0,
+          animate: false,
+        });
+        applyingRef.current = false;
+      });
+      map.on("moveend", (event) => {
+        // Only a user pan or zoom (drag, wheel, keys, the +/- buttons) carries an originalEvent.
+        if (applyingRef.current || !map || !event.originalEvent) return;
         const bounds = map.getBounds();
         const sw = bounds.getSouthWest();
         const ne = bounds.getNorthEast();
