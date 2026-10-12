@@ -10,7 +10,7 @@ import {
 describe("sidebar sections", () => {
   it("opens on Model details", () => {
     expect(INITIAL_SIDEBAR_SECTION).toBe("summary");
-    expect(initialSidebarState()).toEqual({ section: "summary", collapsed: false });
+    expect(initialSidebarState()).toEqual({ section: "summary" });
   });
 
   it("lists Buildings and Trees only when the model has them", () => {
@@ -31,20 +31,18 @@ describe("sidebar sections", () => {
     expect(resolveSidebarSection(null, ["summary"])).toBe("summary");
   });
 
-  it("switches sections without closing, collapses only from the collapse button", () => {
+  it("switches sections; selecting the open section keeps it", () => {
     let state = initialSidebarState();
     state = reduceSidebar(state, { type: "select", id: "buildings" });
-    expect(state).toEqual({ section: "buildings", collapsed: false });
+    expect(state).toEqual({ section: "buildings" });
     state = reduceSidebar(state, { type: "select", id: "buildings" });
-    expect(state).toEqual({ section: "buildings", collapsed: false });
-    state = reduceSidebar(state, { type: "toggle-collapse" });
-    expect(state).toEqual({ section: "buildings", collapsed: true });
+    expect(state).toEqual({ section: "buildings" });
     state = reduceSidebar(state, { type: "select", id: "wind" });
-    expect(state).toEqual({ section: "wind", collapsed: false });
+    expect(state).toEqual({ section: "wind" });
   });
 
-  it("returns to Model details, open, for a new model", () => {
-    const state = reduceSidebar({ section: "exports", collapsed: true }, { type: "new-model" });
-    expect(state).toEqual({ section: "summary", collapsed: false });
+  it("returns to Model details for a new model", () => {
+    const state = reduceSidebar({ section: "exports" }, { type: "new-model" });
+    expect(state).toEqual({ section: "summary" });
   });
 });

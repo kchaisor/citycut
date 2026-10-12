@@ -58,6 +58,7 @@ import {
 } from "../lib/comBuildingHeightsStatus";
 import { resolveBuildingHeightsAfterCom } from "../lib/buildingHeightPipeline";
 import { formatCoord, formatLengthKm } from "../lib/geo";
+import { useSidebarCollapsed } from "../lib/sidebarCollapse";
 import { cutSizeLabel } from "../lib/placeLabel";
 import { ISO_CORNERS, type IsoCorner } from "../lib/isoCamera";
 import {
@@ -214,6 +215,7 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [comFootprintRetryToken, setComFootprintRetryToken] = useState(0);
   const [comHeightsApplyFailed, setComHeightsApplyFailed] = useState(false);
   const [sidebar, dispatchSidebar] = useReducer(reduceSidebar, undefined, initialSidebarState);
+  const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed();
   const sidebarModelRef = useRef(model);
   useEffect(() => {
     // A new model always opens the sidebar on Model details.
@@ -909,6 +911,7 @@ export function ModelPage({ model }: { model: CityModel }) {
 
   function selectSection(id: string) {
     dispatchSidebar({ type: "select", id: resolveSidebarSection(id, sectionIds) });
+    setSidebarCollapsed(false);
   }
 
   function retryComHeights() {
@@ -1129,7 +1132,7 @@ export function ModelPage({ model }: { model: CityModel }) {
       <div
         className={`${
           tab === "drawing" ? "viewport is-drawing" : tab === "satellite" ? "viewport is-satellite" : "viewport"
-        }${sidebar.collapsed ? " sidebar-collapsed" : ""}`}
+        }${sidebarCollapsed ? " sidebar-collapsed" : ""}`}
       >
         {tab === "3d" && (
           <div className="fill">
@@ -1228,10 +1231,10 @@ export function ModelPage({ model }: { model: CityModel }) {
             id={SIDEBAR_PANEL_ID}
             items={items}
             active={open}
-            collapsed={sidebar.collapsed}
+            collapsed={sidebarCollapsed}
             title={SIDEBAR_SECTION_LABELS[open]}
             onSelect={selectSection}
-            onToggleCollapse={() => dispatchSidebar({ type: "toggle-collapse" })}
+            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
             status={
               open === "summary" ? (
                 <span className="sidebar-status">
