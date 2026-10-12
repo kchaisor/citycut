@@ -170,7 +170,12 @@ export type TreeSizeSource = "osm" | "com" | "species" | "default" | "vicmap";
 export type TreeTier = "com" | "osm" | "vicmap" | "canopy";
 
 /** A tree source that failed or is incomplete: "base" is the Overture base tile (OSM trees + canopy). */
-export type TreeLoadNote = { source: "com" | "vicmap" | "base"; message: string };
+export type TreeLoadNote = { source: "com" | "vicmap" | "base" | "prebake"; message: string };
+
+/** Where the cut's Vicmap and City of Melbourne trees came from (treesPrebake.ts). */
+export type TreeSourceInfo =
+  | { kind: "prebake"; builtAt: string | null; vicmapDate: string | null; comDate: string | null; osmFromFile: boolean }
+  | { kind: "live"; reason: string };
 
 /** Metres. `sizeSource` records which dataset supplied the numbers. */
 export type TreeDimensions = {
@@ -264,6 +269,7 @@ export type CityModel = {
   treeCapHit?: boolean;
   /** Tree sources that failed or loaded only part of the frame. Shown in the Tree sizes panel. */
   treeLoadNotes?: TreeLoadNote[];
+  treeSource?: TreeSourceInfo;
   sourceNote: string;
   /** Set when the Terrain layer was built. Absent or null keeps the flat ground surface. */
   terrain?: TerrainField | null;

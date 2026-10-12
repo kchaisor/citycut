@@ -32,6 +32,14 @@ function unitTrunkGeometry(): THREE.BufferGeometry {
   return geometry;
 }
 
+/** Trees drawn in a built scene: the merged crown mesh holds one unit sphere per tree (QA readout). */
+export function countTreeCrowns(root: THREE.Object3D): number {
+  const group = root.getObjectByName("Trees");
+  const crowns = group?.children[group.children.length - 1] as THREE.Mesh | undefined;
+  const vertices = crowns?.geometry?.getAttribute("position")?.count ?? 0;
+  return vertices / unitSphereGeometry().getAttribute("position").count;
+}
+
 /** Cylinder trunk plus one uniform sphere crown per tree. */
 export function buildTreeGroup(
   trees: TreeFeat[],

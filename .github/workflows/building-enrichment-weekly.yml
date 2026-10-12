@@ -7,6 +7,16 @@ on:
     # run only when it's 03:xx on the 1st in Australia/Melbourne.
     - cron: "0 16,17 * * *"
   workflow_dispatch:
+    inputs:
+      jobs:
+        description: "Which builds to run"
+        type: choice
+        options: [all, buildings, trees]
+        default: all
+      force_trees:
+        description: "Rebuild trees even when the sources are unchanged"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -29,7 +39,7 @@ jobs:
 
   build-tiles:
     needs: gate
-    if: needs.gate.outputs.run == 'true'
+    if: needs.gate.outputs.run == 'true' && (github.event_name != 'workflow_dispatch' || inputs.jobs != 'trees')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -99,3 +109,80 @@ jobs:
             || gh release create "$tag" public/building-enrichment.pmtiles public/building-enrichment-manifest.json \
               --title "Building enrichment PMTiles (GM test)" \
               --notes "Branch test build for Greater Melbourne GCCSA — not used by production Pages."
+
+  # Greater Melbourne trees (Vicmap Tree Urban, CoM Urban Forest, OSM via Overture base) for the app.
+  # Skips when every source stamp matches the last published manifest. Branch runs publish only to
+  # the trees-prebake-test pre-release; the site reads trees-latest, which only main updates.
+  build-trees:
+    needs: gate
+    if: needs.gate.outputs.run == 'true' && (github.event_name != 'workflow_dispatch' || inputs.jobs != 'buildings')
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write
+      actions: write
+    env:
+      TREES_TAG: ${{ github.ref == 'refs/heads/main' && 'trees-latest' || 'trees-prebake-test' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Cache tippecanoe 2.79.0
+        id: tippecanoe-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.local/bin/tippecanoe
+          key: tippecanoe-2.79.0-${{ runner.os }}-${{ runner.arch }}
+      - name: Install tippecanoe
+        if: steps.tippecanoe-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential libsqlite3-dev zlib1g-dev
+          git clone --depth 1 --branch 2.79.0 https://github.com/felt/tippecanoe.git /tmp/tippecanoe-src
+          make -C /tmp/tippecanoe-src -j"$(nproc)"
+          mkdir -p "$HOME/.local/bin"
+          cp /tmp/tippecanoe-src/tippecanoe "$HOME/.local/bin/tippecanoe"
+      - name: Put tippecanoe on PATH
+        run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Last build's manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .trees-prev
+          gh release download "$TREES_TAG" -p trees-manifest.json -D .trees-prev --clobber \
+            || echo "No previous trees manifest on $TREES_TAG; building."
+      - name: Build trees PMTiles
+        id: build
+        run: node scripts/build-trees-pmtiles.mjs
+        env:
+          TIPPECANOE: tippecanoe
+          TREES_ZOOM: "15"
+          TREES_PREV_MANIFEST: .trees-prev/trees-manifest.json
+          TREES_FORCE: ${{ inputs.force_trees && '1' || '' }}
+      - name: Publish trees release (main)
+        if: github.ref == 'refs/heads/main' && steps.build.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="trees-$(date -u +%Y%m%d)"
+          gh release create "$tag" public/trees.pmtiles public/trees-manifest.json \
+            --title "Trees PMTiles" --notes "Greater Melbourne trees. Manifest has source dates and pmtilesSha256." \
+            || gh release upload "$tag" public/trees.pmtiles public/trees-manifest.json --clobber
+          gh release view trees-latest >/dev/null 2>&1 \
+            && gh release upload trees-latest public/trees.pmtiles public/trees-manifest.json --clobber \
+            || gh release create trees-latest public/trees.pmtiles public/trees-manifest.json \
+              --title "Trees PMTiles (latest)" --notes "Rolling latest trees file read by the Pages build."
+          # Pages only copies release assets at build time, so redeploy to serve the new file.
+          gh workflow run pages.yml --ref main
+      - name: Publish test pre-release (non-main branches)
+        if: github.ref != 'refs/heads/main' && steps.build.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view trees-prebake-test >/dev/null 2>&1 \
+            && gh release upload trees-prebake-test public/trees.pmtiles public/trees-manifest.json --clobber \
+            || gh release create trees-prebake-test public/trees.pmtiles public/trees-manifest.json --prerelease \
+              --title "Trees PMTiles (branch test)" --notes "Branch test build. Not read by the live site."

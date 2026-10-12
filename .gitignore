@@ -14,3 +14,6 @@ pipeline/out/
 pipeline/__pycache__/
 pipeline/cache/
 pipeline/out/
+.trees-work/
+public/trees.pmtiles
+public/trees-manifest.json
