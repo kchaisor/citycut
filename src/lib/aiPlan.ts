@@ -29,6 +29,7 @@ import { planPaths } from "./svgPlan";
 import { planBuildingStrokeStyle } from "./planBuildingFill";
 import { windPlanPdfChunk } from "./windExport";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
+import { comTreesCreditLine } from "./comTreesCredit";
 import { plainDataCredit } from "./dataCredits";
 import {
   explodedAxoChunks,
@@ -109,6 +110,8 @@ function creditLine(
   const parts = [plainDataCredit({ prefix: "CityCut.", windOn, satelliteOn: false })];
   const comCredit = comBuildingHeightCreditLine(model);
   if (comCredit) parts.push(comCredit);
+  const treesCredit = comTreesCreditLine(model);
+  if (treesCredit) parts.push(`${treesCredit}.`);
   if (interval && (source === "vicmap-metro" || source === "vicmap-state")) {
     parts.push(`Contours every ${interval} m.`);
   } else if (interval) {

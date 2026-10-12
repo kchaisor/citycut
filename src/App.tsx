@@ -39,6 +39,7 @@ import { TERRAIN_UNAVAILABLE, terrainNote } from "./lib/terrain";
 import { MAX_TREE_INSTANCES, assembleTreeTiers } from "./lib/treeTiers";
 import { replaceTreeNote, treeSourceLoadNotes, treeTierCounts } from "./lib/trees";
 import { fetchVicmapTreesDetailed, vicmapPointsToTrees, VICMAP_ATTRIBUTION } from "./lib/vicmapTrees";
+import { COM_TREES_CREDIT } from "./lib/comTreesCredit";
 import { loadContoursForCut } from "./lib/vicmapContours";
 import { fetchOvertureBuildingsForCut } from "./lib/overtureBuildings";
 import { qaForcedCrashFromSearch, qaModeFromSearch } from "./lib/qaCameraBridge";
@@ -598,6 +599,7 @@ export default function App() {
         base: baseResult.error,
       });
       for (const note of treeLoadNotes) sourceNote = `${sourceNote} ${note.message}`;
+      if (treeTierCounts(trees).com > 0) sourceNote = `${sourceNote} ${COM_TREES_CREDIT}.`;
       if (treeTierCounts(trees).vicmap > 0) sourceNote = `${sourceNote} ${VICMAP_ATTRIBUTION}`;
       if (useTiers.failures.length > 0) {
         sourceNote = `${sourceNote} ${useTiers.failures
