@@ -9,7 +9,7 @@ import {
   MAX_AREA_M2,
   MELBOURNE,
 } from "./content/constants";
-import { comRecordsToTrees, fetchComTrees } from "./lib/comTrees";
+import { comRecordsToTrees, fetchComTreesDetailed } from "./lib/comTrees";
 import { fetchTerrainForCut } from "./lib/fetchTerrain";
 import {
   explicitLabel,
@@ -37,8 +37,8 @@ import {
 } from "./lib/placeLabel";
 import { TERRAIN_UNAVAILABLE, terrainNote } from "./lib/terrain";
 import { MAX_TREE_INSTANCES, assembleTreeTiers } from "./lib/treeTiers";
-import { replaceTreeNote, treeTierCounts } from "./lib/trees";
-import { fetchVicmapTrees, vicmapPointsToTrees, VICMAP_ATTRIBUTION } from "./lib/vicmapTrees";
+import { replaceTreeNote, treeSourceLoadNotes, treeTierCounts } from "./lib/trees";
+import { fetchVicmapTreesDetailed, vicmapPointsToTrees, VICMAP_ATTRIBUTION } from "./lib/vicmapTrees";
 import { loadContoursForCut } from "./lib/vicmapContours";
 import { fetchOvertureBuildingsForCut } from "./lib/overtureBuildings";
 import { qaForcedCrashFromSearch, qaModeFromSearch } from "./lib/qaCameraBridge";
@@ -344,7 +344,24 @@ export default function App() {
             stats: { release: "", tileCount: 0, fetchMs: 0, segmentCount: 0, skippedTomTom: 0 },
           });
       const loadTreeTiers = wantsOverture;
-      const baseTask =
+      const emptyBase = {
+        areas: [],
+        carParks: [],
+        treeContext: { canopy: [], buildings: [], water: [], roads: [] },
+        overtureTrees: [],
+        stats: {
+          release: "",
+          tileCount: 0,
+          fetchMs: 0,
+          waterCount: 0,
+          greenCount: 0,
+          overtureTreeCount: 0,
+          hasEsaLandCover: false,
+        },
+      };
+      // A failed base tile read used to reject the whole model. Now water, green, OSM tree points and
+      // canopy infill are dropped with a visible note, and the rest of the model still builds.
+      const baseTask: Promise<Awaited<ReturnType<typeof fetchOvertureBaseForCut>> & { error: string | null }> =
         modelLayers.waterGreen || loadTreeTiers
           ? fetchOvertureBaseForCut(
               bounds,
@@ -357,21 +374,16 @@ export default function App() {
               },
               controller.signal,
             )
-          : Promise.resolve({
-              areas: [],
-              carParks: [],
-              treeContext: { canopy: [], buildings: [], water: [], roads: [] },
-              overtureTrees: [],
-              stats: {
-                release: "",
-                tileCount: 0,
-                fetchMs: 0,
-                waterCount: 0,
-                greenCount: 0,
-                overtureTreeCount: 0,
-                hasEsaLandCover: false,
-              },
-            });
+              .then((result) => ({ ...result, error: null as string | null }))
+              .catch((err: unknown) => {
+                if (controller.signal.aborted) throw err;
+                const detail = err instanceof Error && err.message ? ` ${err.message}` : "";
+                return {
+                  ...emptyBase,
+                  error: `Overture base map could not be loaded, so water, green space, OpenStreetMap tree points and canopy infill are missing.${detail}`,
+                };
+              })
+          : Promise.resolve({ ...emptyBase, error: null as string | null });
       const enrichmentTask = modelLayers.buildings
         ? fetchBuildingEnrichmentForCut(bounds, controller.signal)
         : Promise.resolve({ byId: new Map(), error: null as string | null });
@@ -387,29 +399,18 @@ export default function App() {
             return { zones: null, failures };
           })
         : Promise.resolve({ zones: null, failures: [] as UseTierFailure[] });
+      // Each tree page has its own time limit (treeSourceFetch.ts); a slow page no longer drops
+      // the pages already read, and a failure becomes a note in the Tree sizes panel.
       const comTask = loadTreeTiers
-        ? (() => {
-            const comAbort = new AbortController();
-            const comTimer = window.setTimeout(() => comAbort.abort(), 20000);
-            const stopCom = () => comAbort.abort();
-            controller.signal.addEventListener("abort", stopCom);
-            return fetchComTrees(bounds, comAbort.signal)
-              .then((rows) => ({ rows, error: null as string | null }))
-              .catch((err: unknown) => {
-                if (controller.signal.aborted) throw err;
-                const message = comAbort.signal.aborted
-                  ? "City of Melbourne tree records took too long, so that tier is missing."
-                  : err instanceof Error
-                    ? err.message
-                    : "City of Melbourne tree records could not be loaded.";
-                return { rows: [], error: message };
-              })
-              .finally(() => {
-                window.clearTimeout(comTimer);
-                controller.signal.removeEventListener("abort", stopCom);
-              });
-          })()
-        : Promise.resolve({ rows: [], error: null as string | null });
+        ? fetchComTreesDetailed(bounds, controller.signal).catch((err: unknown) => {
+            if (controller.signal.aborted) throw err;
+            return {
+              rows: [],
+              partial: false,
+              error: err instanceof Error ? err.message : "City of Melbourne tree records could not be loaded.",
+            };
+          })
+        : Promise.resolve({ rows: [], partial: false, error: null as string | null });
       const contourTask = layers.contours
         ? loadContoursForCut({
             center,
@@ -423,28 +424,15 @@ export default function App() {
           })
         : Promise.resolve(null);
       const vicmapTask = loadTreeTiers
-        ? (() => {
-            const vicmapAbort = new AbortController();
-            const vicmapTimer = window.setTimeout(() => vicmapAbort.abort(), 20000);
-            const stopVicmap = () => vicmapAbort.abort();
-            controller.signal.addEventListener("abort", stopVicmap);
-            return fetchVicmapTrees(bounds, vicmapAbort.signal)
-              .then((points) => ({ points, error: null as string | null }))
-              .catch((err: unknown) => {
-                if (controller.signal.aborted) throw err;
-                const message = vicmapAbort.signal.aborted
-                  ? "Vicmap tree points took too long, so that tier is missing."
-                  : err instanceof Error
-                    ? err.message
-                    : "Vicmap tree points could not be loaded, so that tier is missing.";
-                return { points: [], error: message };
-              })
-              .finally(() => {
-                window.clearTimeout(vicmapTimer);
-                controller.signal.removeEventListener("abort", stopVicmap);
-              });
-          })()
-        : Promise.resolve({ points: [], error: null as string | null });
+        ? fetchVicmapTreesDetailed(bounds, controller.signal).catch((err: unknown) => {
+            if (controller.signal.aborted) throw err;
+            return {
+              rows: [],
+              partial: false,
+              error: err instanceof Error ? err.message : "Vicmap tree points could not be loaded, so that tier is missing.",
+            };
+          })
+        : Promise.resolve({ rows: [], partial: false, error: null as string | null });
       const tramTask = modelLayers.roads
         ? fetchTramLinesForCut(
             { center, sideM, frameShape: frameShapeRef.current, placeLabel: label, layers: modelLayers, buildings: [], roads: [], areas: [], trees: [], roadKm: 0, buildingCapHit: false, sourceNote: "" },
@@ -559,7 +547,7 @@ export default function App() {
         ? assembleTreeTiers({
             com: comRecordsToTrees(comResult.rows, center, sideM, frameShapeRef.current),
             osm: baseResult.overtureTrees,
-            vicmap: vicmapPointsToTrees(vicmapResult.points, center, sideM, frameShapeRef.current),
+            vicmap: vicmapPointsToTrees(vicmapResult.rows, center, sideM, frameShapeRef.current),
             ...treeContext,
           })
         : null;
@@ -604,8 +592,12 @@ export default function App() {
       if (assembled?.capHit) {
         sourceNote = `${sourceNote} Tree count was capped at ${MAX_TREE_INSTANCES}. Canopy infill was trimmed first, then Vicmap.`;
       }
-      if (comResult.error) sourceNote = `${sourceNote} ${comResult.error}`;
-      if (vicmapResult.error) sourceNote = `${sourceNote} ${vicmapResult.error}`;
+      const treeLoadNotes = treeSourceLoadNotes({
+        com: comResult.error,
+        vicmap: vicmapResult.error,
+        base: baseResult.error,
+      });
+      for (const note of treeLoadNotes) sourceNote = `${sourceNote} ${note.message}`;
       if (treeTierCounts(trees).vicmap > 0) sourceNote = `${sourceNote} ${VICMAP_ATTRIBUTION}`;
       if (useTiers.failures.length > 0) {
         sourceNote = `${sourceNote} ${useTiers.failures
@@ -672,6 +664,7 @@ export default function App() {
         roadKm: modelLayers.roads ? transportResult.roadKm : 0,
         buildingCapHit,
         treeCapHit: assembled?.capHit ?? false,
+        treeLoadNotes: treeLoadNotes.length > 0 ? treeLoadNotes : undefined,
         placeLabel: label,
         sourceNote,
         terrain: terrainResult.field,

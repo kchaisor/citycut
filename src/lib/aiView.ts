@@ -631,7 +631,8 @@ function collect(
   }
 
   const trees: Fill[] = [];
-  for (const tree of model.trees) {
+  // Same rule as the 3D scene and .3dm (buildCity.ts): the 3D view only draws trees when the layer is on.
+  for (const tree of model.layers.trees ? model.trees : []) {
     const east = tree.at[0];
     const north = tree.at[1];
     const groundY = sample ? sample(east, north) : 0;
