@@ -1050,7 +1050,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     { id: "lidar", label: "LiDAR", value: heightTierCounts.lidar },
     {
       id: "overture",
-      label: "Overture / OSM",
+      label: "Overture",
       value: heightTierCounts.overture_height + heightTierCounts.overture_floors + heightTierCounts.osm_levels,
     },
     { id: "floors", label: "Dev. floors", value: heightTierCounts.development_floors },
@@ -1290,7 +1290,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                   </div>
                   <ul className="height-bar-legend">
                     {heightBar.parts.map((part) =>
-                      part.value > 0 || part.id === "measured" ? (
+                      part.value > 0 ? (
                         <li key={part.id}>
                           <i className={`height-bar-${part.id}`} />
                           <span>{part.label}</span>

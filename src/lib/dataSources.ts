@@ -72,8 +72,6 @@ export function buildDataSources({ model, comHeights, comMeasuredCount, comError
   const release = overtureReleaseFromNote(model.sourceNote);
   const overtureBits = [
     model.layers.buildings ? count(model.buildings.length, "building") : null,
-    model.layers.roads ? "roads" : null,
-    model.layers.waterGreen ? "water and green" : null,
   ].filter(Boolean);
   const baseNotes = treeNotesFor("base");
   rows.push({
@@ -112,6 +110,7 @@ export function buildDataSources({ model, comHeights, comMeasuredCount, comError
 
   if (model.layers.buildings) {
     const tileFailure = failures.find((failure) => failure.id === "enrichment_tiles_fetch");
+    const bca = failures.find((failure) => failure.id === "enrichment_bca_blocked");
     rows.push({
       id: "enrichment",
       label: "Building use tiles",
@@ -119,17 +118,18 @@ export function buildDataSources({ model, comHeights, comMeasuredCount, comError
       detail:
         model.enrichmentTilesFailed || tileFailure
           ? "Live Vicmap zones used instead"
-          : "Overture class, CoM CLUE, BCA, Vicmap zones",
+          : bca
+            ? "Overture class, CoM CLUE, Vicmap zones"
+            : "Overture class, CoM CLUE, BCA, Vicmap zones",
       notes: tileFailure ? [tileFailure.message] : [],
     });
 
-    const bca = failures.find((failure) => failure.id === "enrichment_bca_blocked");
     if (bca) {
       rows.push({
         id: "bca",
         label: "Building permits (BCA)",
         status: "failed",
-        detail: "Blocked by source (403)",
+        detail: "Permit use classes are missing",
         notes: [bca.message],
       });
     }
