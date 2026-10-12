@@ -66,4 +66,54 @@
   /* Selected pill on the landing map area-shape control (Square / Circle). */
   --shape-toggle-on-bg: #1A1916;
   --shape-toggle-on-text: #FFFCF8;
+
+  /* ---- Model sidebar (fixed left sidebar with the icon rail) ---- */
+
+  /* The one accent colour. Only ever a fill, with --accent-ink on top and a 1 px --accent-edge outline:
+     the active rail icon, a switch that is on, the selected segment, and the Ready dot.
+     Never text and never a thin line. Separate from --site-building, even though both are yellow. */
+  --accent: #FFF500;
+
+  /* Text and icons on an --accent fill, and the knob of a switch that is on. */
+  --accent-ink: #1A1916;
+
+  /* The 1 px outline around every --accent fill. */
+  --accent-edge: #1A1916;
+
+  /* An --accent control under the pointer. */
+  --accent-hover: #FFF9A6;
+
+  /* Sidebar and rail paper. */
+  --sidebar-bg: #FFFCF8;
+
+  /* Hairlines between sidebar groups, and the edge between rail, panel and viewport. */
+  --sidebar-hairline: #EEEAE3;
+
+  /* Rail icons that are not selected. */
+  --sidebar-icon: #8F897E;
+
+  /* Rail icon and quiet button under the pointer. */
+  --sidebar-hover: #F4F1EB;
+
+  /* Track behind a segmented control. */
+  --control-track: #F1EEE8;
+
+  /* Track of a switch that is off, and the outline of a secondary button. */
+  --control-off: #DCD7CE;
+
+  /* Status dots in Data sources: loaded, failed, and not used. */
+  --status-ok: #478C33;
+  --status-failed: #8D3418;
+  --status-idle: #B8B2A7;
+
+  /* Model details height bar and the Height source key in Buildings. */
+  --height-measured: #2E6B4F;
+  --height-overture: #3D5A73;
+  --height-floors: #6B4F2E;
+  --height-estimate: #7D7D7D;
+  --height-manual: #D4A017;
+
+  /* Rail and panel widths. The viewport sits to the right of both. */
+  --sidebar-rail-w: 56px;
+  --sidebar-panel-w: 320px;
 }

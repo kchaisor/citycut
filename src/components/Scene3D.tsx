@@ -107,6 +107,10 @@ function publishCamera(camera: THREE.Camera, target: THREE.Vector3, element: HTM
   element.dataset.camElevation = elevation.toFixed(3);
   element.dataset.camAxisAngle = axisAngle.toFixed(3);
   element.dataset.camBearing = bearing.toFixed(3);
+  // Full pose for QA: proves a resize or sidebar change leaves the camera where it was.
+  element.dataset.camPosition = camera.position.toArray().map((v) => v.toFixed(3)).join(",");
+  element.dataset.camTarget = target.toArray().map((v) => v.toFixed(3)).join(",");
+  element.dataset.camZoom = (camera as THREE.OrthographicCamera | THREE.PerspectiveCamera).zoom.toFixed(4);
   const ortho = camera as THREE.OrthographicCamera;
   element.dataset.camKind = ortho.isOrthographicCamera ? "orthographic" : "perspective";
   if (ortho.isOrthographicCamera) {
@@ -485,7 +489,8 @@ function IsoSnap({
     const key = `${snapId}:${size.width}x${size.height}`;
     if (fittedKey.current === key) return;
     const sameSnap = fittedKey.current?.startsWith(`${snapId}:`) ?? false;
-    if (sameSnap && touchedRef.current) return;
+    // Resizes keep the pose and zoom; only a new snap id refits (see viewportAutoFit.ts).
+    if (sameSnap) return;
     if (!active && fittedKey.current !== null && !sameSnap) return;
     let fitBounds = bounds;
     if (CAMERA_FIT_INCLUDES_HELIODON && solar.showPath) {
@@ -580,7 +585,8 @@ function PlanSnap({
     const key = `${snapId}:${size.width}x${size.height}`;
     if (fittedKey.current === key) return;
     const sameSnap = fittedKey.current?.startsWith(`${snapId}:`) ?? false;
-    if (sameSnap && touchedRef.current) return;
+    // Resizes keep the pose and zoom; only a new snap id refits (see viewportAutoFit.ts).
+    if (sameSnap) return;
     if (!active && fittedKey.current !== null && !sameSnap) return;
     const measured = boundsRef.current;
     const fitBounds = sitePlanBounds(sideM, groundY, siteTopY);
