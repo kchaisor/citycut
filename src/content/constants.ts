@@ -15,7 +15,9 @@ export const DEFAULT_LAYERS: UiLayers = {
   terrain: true,
   contours: true,
   waterGreen: true,
-  trees: false,
+  // On since #85: the site plan always carries trees (#60), so the 3D model, .3dm and 3D-view .ai
+  // show them by default too. The Trees switch still turns them off in all three.
+  trees: true,
   satellite: false,
 };
 
