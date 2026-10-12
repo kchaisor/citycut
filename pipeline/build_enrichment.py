@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Assign building use (Overture → CLUE (CoM only) → BCA → zone → unclassified) and optional ELVIS LiDAR height.
+Assign building use (Overture → CLUE (CoM only) → zone → unclassified) and optional ELVIS LiDAR height.
 Input: GeoJSON or GeoParquet of Overture footprints.
 Output: GeoJSON for tippecanoe + manifest JSON.
 """
@@ -19,7 +19,6 @@ from pathlib import Path
 import geopandas as gpd
 import pandas as pd
 
-from bca_join import bca_use_for_buildings, fetch_vicmap_addresses, load_bca_index
 from clue_join import clue_use_for_buildings, load_clue_block_uses
 from extent import (
     GREATER_MELBOURNE_GCCSA,
@@ -54,11 +53,11 @@ SOURCE_CODE = {
     "unclassified": 0,
     "overture": 1,
     "clue": 2,
-    "bca": 3,
+    # 3 was the retired building-permit (BCA) tier; never reuse it.
     "zone": 4,
 }
 
-TIER_RANK = {"overture": 5, "clue": 4, "bca": 3, "zone": 2, "unclassified": 1}
+TIER_RANK = {"overture": 5, "clue": 4, "zone": 2, "unclassified": 1}
 
 
 LIDAR_NO_DATA_LINE = "LiDAR: no data, ELVIS not ordered"
@@ -136,11 +135,9 @@ def apply_cascade_vectorized(
     buildings: gpd.GeoDataFrame,
     zone_codes: pd.Series,
     clue_series: pd.Series,
-    bca_series: pd.Series,
 ) -> pd.DataFrame:
     use, use_source = _vector_overture_use(buildings)
     use, use_source = _apply_tier_series(use, use_source, clue_series, "clue")
-    use, use_source = _apply_tier_series(use, use_source, bca_series, "bca")
 
     zone_mask = (use_source == "unclassified") & zone_codes.notna()
     if zone_mask.any():
@@ -186,7 +183,7 @@ def count_sources_by_com(
     use_source: pd.Series,
     com_mask: pd.Series,
 ) -> dict[str, dict[str, int]]:
-    inside = {"overture": 0, "clue": 0, "bca": 0, "zone": 0, "unclassified": 0}
+    inside = {"overture": 0, "clue": 0, "zone": 0, "unclassified": 0}
     outside = dict(inside)
     tiers = use_source.fillna("unclassified")
     for tier, in_com in zip(tiers, com_mask, strict=False):
@@ -245,21 +242,15 @@ def main() -> int:
     timings["clueJoinSec"] = round(time.perf_counter() - t0, 2)
 
     t0 = time.perf_counter()
-    bca_index, bca_meta = load_bca_index(args.cache, extent)
-    addresses = fetch_vicmap_addresses(extent)
-    bca_series = bca_use_for_buildings(buildings, addresses, bca_index)
-    timings["bcaJoinSec"] = round(time.perf_counter() - t0, 2)
-
-    t0 = time.perf_counter()
     zone_codes = join_zones(buildings, zones)
-    assigned = apply_cascade_vectorized(buildings, zone_codes, clue_full, bca_series)
+    assigned = apply_cascade_vectorized(buildings, zone_codes, clue_full)
     timings["cascadeSec"] = round(time.perf_counter() - t0, 2)
 
     lidar = lidar_manifest()
     print(f"[enrichment] {LIDAR_NO_DATA_LINE}", file=sys.stderr)
 
     source_counts = assigned["use_source"].value_counts().to_dict()
-    for key in ("overture", "clue", "bca", "zone", "unclassified"):
+    for key in ("overture", "clue", "zone", "unclassified"):
         source_counts.setdefault(key, 0)
 
     by_com = count_sources_by_com(buildings, assigned["use_source"], com_mask)
@@ -314,8 +305,7 @@ def main() -> int:
         "clueBlocks": int(len(clue_blocks)) if clue_blocks is not None else 0,
         "clueAppliesWithinLga": LGA_NAME,
         "clueAppliesLgaCode": "24600",
-        "bca": bca_meta,
-        "useSourceCountsSample": {k: source_counts.get(k, 0) for k in ("overture", "clue", "bca", "zone", "unclassified")},
+        "useSourceCountsSample": {k: source_counts.get(k, 0) for k in ("overture", "clue", "zone", "unclassified")},
         "useSourceCountsByCom": by_com,
         "pipelineTimingsSec": timings,
     }
@@ -328,7 +318,7 @@ def main() -> int:
 
 
 # Re-export for tests
-def assign_cascade(props, geom, zones, clue_pick, bca_pick):
+def assign_cascade(props, geom, zones, clue_pick):
     """Single-building cascade (used by unit tests)."""
     use = "unclassified"
     use_source = "unclassified"
@@ -341,9 +331,6 @@ def assign_cascade(props, geom, zones, clue_pick, bca_pick):
 
     if clue_pick and _tier_beats(clue_pick[1], use_source):
         use, use_source = clue_pick
-
-    if bca_pick and _tier_beats(bca_pick[1], use_source):
-        use, use_source = bca_pick
 
     if zones is not None and not zones.empty:
         pt = geom if geom.geom_type == "Point" else geom.representative_point()

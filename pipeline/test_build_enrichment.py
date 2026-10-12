@@ -30,7 +30,7 @@ def test_zone_use_grz():
 
 def test_assign_defaults_unclassified():
     geom = Point(144.98, -37.81)
-    row = assign_cascade({}, geom, None, None, None)
+    row = assign_cascade({}, geom, None, None)
     assert row["use"] == "unclassified"
     assert row["use_source"] == "unclassified"
 
@@ -48,7 +48,7 @@ def test_lidar_manifest_no_data():
 
 def test_clue_beats_zone():
     geom = Point(144.98, -37.81)
-    row = assign_cascade({}, geom, None, ("retail", "clue"), None)
+    row = assign_cascade({}, geom, None, ("retail", "clue"))
     assert row["use_source"] == "clue"
 
 

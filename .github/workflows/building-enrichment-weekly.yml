@@ -79,7 +79,7 @@ jobs:
           BUILD_ENRICHMENT_BBOX: 144.333634,-38.502988,145.878412,-37.175099
           BUILD_ENRICHMENT_MIN_ZOOM: "14"
           BUILD_ENRICHMENT_MAX_ZOOM: "14"
-      - name: Log manifest (BCA / LiDAR / CLUE — never silent)
+      - name: Log manifest (LiDAR / CLUE — never silent)
         run: |
           cat public/building-enrichment-manifest.json
           echo "[enrichment] LiDAR: no data, ELVIS not ordered"

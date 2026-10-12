@@ -39,7 +39,6 @@ export type TypologySource =
   | "osm_tag"
   | "overture_class"
   | "clue"
-  | "bca"
   | "zone"
   | "none";
 
@@ -47,7 +46,6 @@ export type TypologySource =
 export type BuildingUseSourceTier =
   | "overture"
   | "clue"
-  | "bca"
   | "zone"
   | "unclassified";
 
