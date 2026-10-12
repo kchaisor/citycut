@@ -188,6 +188,30 @@ export function buildDataSources({ model, comHeights, comMeasuredCount, comError
   }
 
   if (model.layers.trees) {
+    const source = model.treeSource;
+    if (source?.kind === "prebake") {
+      rows.push({
+        id: "trees-file",
+        label: "Pre-baked tree file",
+        status: "ok",
+        detail: [
+          source.builtAt ? `Built ${source.builtAt}` : null,
+          source.vicmapDate ? `Vicmap data ${source.vicmapDate}` : null,
+          source.comDate ? `CoM data ${source.comDate}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        notes: [],
+      });
+    } else if (source?.kind === "live") {
+      rows.push({
+        id: "trees-file",
+        label: "Pre-baked tree file",
+        status: "failed",
+        detail: "Live servers used (backup)",
+        notes: treeNotesFor("prebake"),
+      });
+    }
     const tiers = treeTierCounts(model.trees);
     const treeRow = (id: "com" | "osm" | "vicmap", label: string, noteSource: "com" | "vicmap" | "base") => {
       const notes = treeNotesFor(noteSource);

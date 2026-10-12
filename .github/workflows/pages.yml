@@ -63,6 +63,10 @@ jobs:
         run: node scripts/fetch-building-enrichment-pmtiles.mjs
         env:
           GH_TOKEN: ${{ github.token }}
+      - name: Ensure trees PMTiles (release; live tree servers otherwise)
+        run: node scripts/fetch-trees-pmtiles.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Build
         run: npm run build
       - name: Setup Pages

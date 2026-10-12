@@ -18,6 +18,7 @@ import {
   isOvertureCarPark,
   isOvertureWaterLine,
   isOvertureWaterPolygon,
+  parseSourceTags,
   treeTagsFromLand,
 } from "./overtureBaseMapping";
 import { overtureBaseUrl, resolveOvertureRelease } from "./overtureRelease";
@@ -148,6 +149,20 @@ function pushTree(
     sizeSource: size.sizeSource,
     tier: "osm",
   });
+}
+
+/** OSM tree points from the pre-baked tree file, sized and framed exactly like base-tile points. */
+export function overtureTreesFromPoints(
+  points: { lon: number; lat: number; sid: number; tags: string | null }[],
+  origin: LonLat,
+  sideM: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+): TreeFeat[] {
+  const trees: TreeFeat[] = [];
+  for (const point of points) {
+    pushTree(trees, point.sid, toLocal(point.lat, point.lon, origin), parseSourceTags(point.tags), sideM, frameShape);
+  }
+  return trees;
 }
 
 function waterCenterlinesFromLayer(

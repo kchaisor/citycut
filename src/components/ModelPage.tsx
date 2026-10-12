@@ -69,6 +69,8 @@ import {
   type SidebarSectionId,
 } from "../lib/sidebarSections";
 import { buildDataSources, countLoaded, dataSourceStatusWord } from "../lib/dataSources";
+import { OSM_TREES_ODBL_CREDIT } from "../lib/treesPrebake";
+import { countTreeCrowns } from "../lib/treeMassing";
 import { capturePresetFromSearch } from "../lib/captureQuery";
 import { qaHideHeightPopoverFromSearch, qaModeFromSearch } from "../lib/qaCameraBridge";
 import {
@@ -439,7 +441,7 @@ export function ModelPage({ model }: { model: CityModel }) {
     null,
   );
 
-  const qaSummaryRef = useRef({ buildingCount: 0, roadCount: 0, triangleCount: 0 });
+  const qaSummaryRef = useRef({ treeCrowns: 0, buildingCount: 0, roadCount: 0, triangleCount: 0 });
   const qaDisplayBuildingsRef = useRef(model.buildings);
   const heightPerfRef = useRef<{ modelOpenMs: number; firstRenderMs: number | null; comAppliedMs: number | null }>(
     { modelOpenMs: performance.now(), firstRenderMs: null, comAppliedMs: null },
@@ -463,8 +465,10 @@ export function ModelPage({ model }: { model: CityModel }) {
         if (position) triangleCount += position.count / 3;
       }
     });
+    const treeCrowns = countTreeCrowns(group);
     disposeObject(group);
     qaSummaryRef.current = {
+      treeCrowns,
       buildingCount: model.buildings.length,
       roadCount: model.roads.length,
       triangleCount: Math.round(triangleCount),
@@ -1546,6 +1550,9 @@ export function ModelPage({ model }: { model: CityModel }) {
                   ))}
                 </ul>
                 <p className="tree-readout">{treeSizeSummary(model.trees)}</p>
+                {model.treeSource?.kind === "prebake" && model.treeSource.osmFromFile && tierCounts.osm > 0 && (
+                  <p className="tree-credit">{OSM_TREES_ODBL_CREDIT}</p>
+                )}
                 {(model.treeLoadNotes ?? []).map((note) => (
                   <p key={note.source} className="legend-note tree-load-note" role="status">
                     {note.message}

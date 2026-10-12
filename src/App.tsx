@@ -9,7 +9,15 @@ import {
   MAX_AREA_M2,
   MELBOURNE,
 } from "./content/constants";
-import { comRecordsToTrees, fetchComTreesDetailed } from "./lib/comTrees";
+import { comRecordsToTrees, fetchComTreesDetailed, type ComTree } from "./lib/comTrees";
+import {
+  isoDay,
+  loadPrebakedTrees,
+  OSM_TREES_ODBL_CREDIT,
+  prebakeBackupNote,
+  prebakeSourceNote,
+  type PrebakeResult,
+} from "./lib/treesPrebake";
 import { fetchTerrainForCut } from "./lib/fetchTerrain";
 import {
   explicitLabel,
@@ -24,7 +32,7 @@ import { squareBBox } from "./lib/geo";
 import { siteFrameAreaM2, type SiteFrameShape } from "./lib/siteFrame";
 import { localityCacheKey, reverseLocality } from "./lib/nominatim";
 import { FLAT_GROUND_NOTE } from "./lib/parseOsm";
-import { fetchOvertureBaseForCut } from "./lib/overtureBase";
+import { fetchOvertureBaseForCut, overtureTreesFromPoints } from "./lib/overtureBase";
 import { overtureThemeCredit } from "./lib/overtureAttribution";
 import { fetchTramLinesForCut } from "./lib/explodedAxoPt";
 import { fetchOvertureTransportationForCut } from "./lib/overtureTransportation";
@@ -38,7 +46,7 @@ import {
 import { TERRAIN_UNAVAILABLE, terrainNote } from "./lib/terrain";
 import { MAX_TREE_INSTANCES, assembleTreeTiers } from "./lib/treeTiers";
 import { replaceTreeNote, treeSourceLoadNotes, treeTierCounts } from "./lib/trees";
-import { fetchVicmapTreesDetailed, vicmapPointsToTrees, VICMAP_ATTRIBUTION } from "./lib/vicmapTrees";
+import { fetchVicmapTreesDetailed, vicmapPointsToTrees, VICMAP_ATTRIBUTION, type VicmapPoint } from "./lib/vicmapTrees";
 import { loadContoursForCut } from "./lib/vicmapContours";
 import { fetchOvertureBuildingsForCut } from "./lib/overtureBuildings";
 import { qaForcedCrashFromSearch, qaModeFromSearch } from "./lib/qaCameraBridge";
@@ -399,18 +407,24 @@ export default function App() {
             return { zones: null, failures };
           })
         : Promise.resolve({ zones: null, failures: [] as UseTierFailure[] });
-      // Each tree page has its own time limit (treeSourceFetch.ts); a slow page no longer drops
-      // the pages already read, and a failure becomes a note in the Tree sizes panel.
-      const comTask = loadTreeTiers
-        ? fetchComTreesDetailed(bounds, controller.signal).catch((err: unknown) => {
-            if (controller.signal.aborted) throw err;
-            return {
-              rows: [],
-              partial: false,
-              error: err instanceof Error ? err.message : "City of Melbourne tree records could not be loaded.",
-            };
-          })
-        : Promise.resolve({ rows: [], partial: false, error: null as string | null });
+      // Trees come from the pre-baked Greater Melbourne file first (treesPrebake.ts). When it is
+      // missing, fails, or does not cover the cut, the live servers are the backup: each tree page
+      // has its own time limit (treeSourceFetch.ts) and a failure becomes a note in the Tree sizes panel.
+      const prebakeTask: Promise<PrebakeResult | null> = loadTreeTiers
+        ? loadPrebakedTrees(bounds, controller.signal)
+        : Promise.resolve(null);
+      const comTask = prebakeTask.then((prebake) => {
+        if (!loadTreeTiers) return { rows: [] as ComTree[], partial: false, error: null as string | null };
+        if (prebake?.ok) return { rows: prebake.trees.com, partial: false, error: null as string | null };
+        return fetchComTreesDetailed(bounds, controller.signal).catch((err: unknown) => {
+          if (controller.signal.aborted) throw err;
+          return {
+            rows: [] as ComTree[],
+            partial: false,
+            error: err instanceof Error ? err.message : "City of Melbourne tree records could not be loaded.",
+          };
+        });
+      });
       const contourTask = layers.contours
         ? loadContoursForCut({
             center,
@@ -423,16 +437,18 @@ export default function App() {
             return null;
           })
         : Promise.resolve(null);
-      const vicmapTask = loadTreeTiers
-        ? fetchVicmapTreesDetailed(bounds, controller.signal).catch((err: unknown) => {
-            if (controller.signal.aborted) throw err;
-            return {
-              rows: [],
-              partial: false,
-              error: err instanceof Error ? err.message : "Vicmap tree points could not be loaded, so that tier is missing.",
-            };
-          })
-        : Promise.resolve({ rows: [], partial: false, error: null as string | null });
+      const vicmapTask = prebakeTask.then((prebake) => {
+        if (!loadTreeTiers) return { rows: [] as VicmapPoint[], partial: false, error: null as string | null };
+        if (prebake?.ok) return { rows: prebake.trees.vicmap, partial: false, error: null as string | null };
+        return fetchVicmapTreesDetailed(bounds, controller.signal).catch((err: unknown) => {
+          if (controller.signal.aborted) throw err;
+          return {
+            rows: [] as VicmapPoint[],
+            partial: false,
+            error: err instanceof Error ? err.message : "Vicmap tree points could not be loaded, so that tier is missing.",
+          };
+        });
+      });
       const tramTask = modelLayers.roads
         ? fetchTramLinesForCut(
             { center, sideM, frameShape: frameShapeRef.current, placeLabel: label, layers: modelLayers, buildings: [], roads: [], areas: [], trees: [], roadKm: 0, buildingCapHit: false, sourceNote: "" },
@@ -499,6 +515,13 @@ export default function App() {
         damTask,
         comHeightsTask,
       ]);
+      const prebake = await prebakeTask;
+      // OSM points from the file only when it was baked from the same Overture release as the
+      // base tiles this cut read; otherwise the base tile's own points are used, as before.
+      const prebakeOsm =
+        prebake?.ok && baseResult.stats.release && prebake.trees.manifest.sourceStamps?.overtureRelease === baseResult.stats.release
+          ? overtureTreesFromPoints(prebake.trees.osm, center, sideM, frameShapeRef.current)
+          : null;
       const overtureBuildings = overtureResult.buildings;
       let buildingsWithoutCom: typeof overtureBuildings | undefined;
       let buildings: typeof overtureBuildings = [];
@@ -546,7 +569,7 @@ export default function App() {
       const assembled = loadTreeTiers
         ? assembleTreeTiers({
             com: comRecordsToTrees(comResult.rows, center, sideM, frameShapeRef.current),
-            osm: baseResult.overtureTrees,
+            osm: prebakeOsm ?? baseResult.overtureTrees,
             vicmap: vicmapPointsToTrees(vicmapResult.rows, center, sideM, frameShapeRef.current),
             ...treeContext,
           })
@@ -597,8 +620,16 @@ export default function App() {
         vicmap: vicmapResult.error,
         base: baseResult.error,
       });
+      const treeBackupNote = loadTreeTiers && prebake && !prebake.ok ? prebakeBackupNote(prebake.reason) : null;
+      if (treeBackupNote) {
+        treeLoadNotes.unshift({ source: "prebake", message: treeBackupNote });
+        console.warn(`[CityCut trees] ${treeBackupNote}`);
+      } else if (prebake?.ok) {
+        sourceNote = `${sourceNote} ${prebakeSourceNote(prebake.trees.manifest, prebakeOsm !== null)}`;
+      }
       for (const note of treeLoadNotes) sourceNote = `${sourceNote} ${note.message}`;
       if (treeTierCounts(trees).vicmap > 0) sourceNote = `${sourceNote} ${VICMAP_ATTRIBUTION}`;
+      if (prebakeOsm && treeTierCounts(trees).osm > 0) sourceNote = `${sourceNote} ${OSM_TREES_ODBL_CREDIT}`;
       if (useTiers.failures.length > 0) {
         sourceNote = `${sourceNote} ${useTiers.failures
           .map((failure) => failure.message.charAt(0).toUpperCase() + failure.message.slice(1))
@@ -665,6 +696,17 @@ export default function App() {
         buildingCapHit,
         treeCapHit: assembled?.capHit ?? false,
         treeLoadNotes: treeLoadNotes.length > 0 ? treeLoadNotes : undefined,
+        treeSource: !loadTreeTiers || !prebake
+          ? undefined
+          : prebake.ok
+            ? {
+                kind: "prebake",
+                builtAt: isoDay(prebake.trees.manifest.generatedAt),
+                vicmapDate: isoDay(prebake.trees.manifest.sourceStamps?.vicmapDataLastEdit),
+                comDate: isoDay(prebake.trees.manifest.sourceStamps?.comDataProcessed),
+                osmFromFile: prebakeOsm !== null,
+              }
+            : { kind: "live", reason: prebake.reason },
         placeLabel: label,
         sourceNote,
         terrain: terrainResult.field,
