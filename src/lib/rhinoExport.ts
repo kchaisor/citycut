@@ -16,6 +16,7 @@ import { plainDataCredit } from "./dataCredits";
 import { windFlowArrowPolylines } from "./windArrowGeometry";
 import { dashSegments } from "./drawingStyle";
 import { stableExportModel } from "./exportStableOrder";
+import { treesVisibleIn3d } from "./view3dDisplay";
 import { clipTransportLines } from "./dashedTransportLines";
 import { SURFACE } from "./surfaceLayers";
 import { sampleTerrain } from "./terrain";
@@ -678,6 +679,8 @@ export type CityModelTo3dmOptions = {
   uniformBuildings?: boolean;
   colourBySource?: boolean;
   wind?: { table: WindRoseTable; period: WindPeriodId } | null;
+  /** "Hide trees" from the 3D display modes (#87). Trees are left out, as in the 3D view. */
+  hideTrees?: boolean;
 };
 
 function normalize3dmOptions(
@@ -689,7 +692,8 @@ function normalize3dmOptions(
     "castShadows" in options ||
     "shadows" in options ||
     "uniformBuildings" in options ||
-    "wind" in options
+    "wind" in options ||
+    "hideTrees" in options
   ) {
     return options;
   }
@@ -702,7 +706,12 @@ export async function cityModelTo3dm(
   options?: HeliodonGroundExportOptions | CityModelTo3dmOptions | null,
 ): Promise<Uint8Array> {
   model = stableExportModel(model);
-  const { heliodon, shadows, castShadows, uniformBuildings, colourBySource, wind } = normalize3dmOptions(options);
+  const { heliodon, shadows, castShadows, uniformBuildings, colourBySource, wind, hideTrees } =
+    normalize3dmOptions(options);
+  // One rule for the 3D view, PNG, 3D-view .ai and .3dm: trees only when the layer is on and Hide trees is off.
+  if (!treesVisibleIn3d(model.layers, { hideTrees: Boolean(hideTrees) })) {
+    model = { ...model, layers: { ...model.layers, trees: false }, trees: [] };
+  }
   const rhino = await loadRhino();
   const crs = mgaCrs(model.center.lon);
   const group = buildCityGroup(model, {

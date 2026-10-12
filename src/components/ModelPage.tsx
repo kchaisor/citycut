@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import * as THREE from "three";
-import { Building2, Download, DraftingCompass, Info, Sun, Trees, Wind } from "lucide-react";
+import { Building2, Copy, Download, DraftingCompass, Info, Sun, Trees, Wind } from "lucide-react";
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -60,7 +60,15 @@ import { resolveBuildingHeightsAfterCom } from "../lib/buildingHeightPipeline";
 import { formatCoord, formatLengthKm } from "../lib/geo";
 import { cutSizeLabel } from "../lib/placeLabel";
 import { ISO_CORNERS, type IsoCorner } from "../lib/isoCamera";
-import { drawerIsAvailable, loadModelDrawer, reduceRail, saveModelDrawer } from "../lib/railState";
+import {
+  SIDEBAR_SECTION_LABELS,
+  availableSidebarSections,
+  initialSidebarState,
+  reduceSidebar,
+  resolveSidebarSection,
+  type SidebarSectionId,
+} from "../lib/sidebarSections";
+import { buildDataSources, countLoaded, dataSourceStatusWord } from "../lib/dataSources";
 import { capturePresetFromSearch } from "../lib/captureQuery";
 import { qaHideHeightPopoverFromSearch, qaModeFromSearch } from "../lib/qaCameraBridge";
 import {
@@ -102,12 +110,11 @@ import { pointInPolygon } from "../lib/useCascade";
 import type { BuildingUse, CityModel } from "../types";
 import { BuildingHeightPopover, HeightOverridePanel } from "./BuildingHeightPopover";
 import { ColoursEditor } from "./Colours";
-import { Drawer } from "./Drawer";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
 import { DrawingExplodedAxo } from "./DrawingExplodedAxo";
 import { LineStylesEditor } from "./LineStyles";
-import { IconRail, type RailItem } from "./IconRail";
+import { Sidebar, type SidebarItem } from "./Sidebar";
 import { SatellitePane } from "./SatellitePane";
 import { Scene3D, type SceneExporter } from "./Scene3D";
 import type { CameraMemoryRef } from "../lib/cameraMemory";
@@ -140,7 +147,7 @@ import {
 
 type Tab = "3d" | "drawing" | "satellite";
 
-const DRAWER_ID = "model-drawer";
+const SIDEBAR_PANEL_ID = "model-sidebar-panel";
 const iconProps = { size: 18, strokeWidth: 1.75, "aria-hidden": true as const };
 
 const CORNER_LABEL: Record<IsoCorner, string> = {
@@ -160,14 +167,27 @@ function loadView(): ViewMemory {
   return resolveView(stored, window.location.search);
 }
 
-const TITLES: Record<string, string> = {
-  summary: "Model details",
-  buildings: "Buildings",
-  trees: "Tree sizes",
-  drawing: "Drawing",
-  solar: "Solar",
-  wind: "Wind",
-  exports: "Exports",
+/** Height-source tier to its swatch in the Model details height bar. */
+const HEIGHT_TIER_BAR: Record<string, string> = {
+  com: "measured",
+  lidar: "lidar",
+  overture_height: "overture",
+  overture_floors: "overture",
+  osm_levels: "overture",
+  development_floors: "floors",
+  zone_default: "estimate",
+  real_source_unmatched: "estimate",
+  manual: "manual",
+};
+
+const SECTION_ICONS: Record<SidebarSectionId, typeof Info> = {
+  summary: Info,
+  buildings: Building2,
+  trees: Trees,
+  drawing: DraftingCompass,
+  solar: Sun,
+  wind: Wind,
+  exports: Download,
 };
 
 export function ModelPage({ model }: { model: CityModel }) {
@@ -192,7 +212,14 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [comFootprintLoading, setComFootprintLoading] = useState(false);
   const [comFootprintRetryToken, setComFootprintRetryToken] = useState(0);
   const [comHeightsApplyFailed, setComHeightsApplyFailed] = useState(false);
-  const [preferred, setPreferred] = useState<string | null>(() => loadModelDrawer());
+  const [sidebar, dispatchSidebar] = useReducer(reduceSidebar, undefined, initialSidebarState);
+  const sidebarModelRef = useRef(model);
+  useEffect(() => {
+    // A new model always opens the sidebar on Model details.
+    if (sidebarModelRef.current === model) return;
+    sidebarModelRef.current = model;
+    dispatchSidebar({ type: "new-model" });
+  }, [model]);
   const [planWidth, setPlanWidth] = useState<number | null>(null);
   const [fitCounter, setFitCounter] = useState(0);
   const [planViewport, setPlanViewport] = useState<PlanViewport>(() => planViewportExtent(model.sideM));
@@ -867,29 +894,26 @@ export function ModelPage({ model }: { model: CityModel }) {
     model.terrain ? "terrain" : null,
   ].filter(Boolean);
 
-  const items: RailItem[] = [
-    { id: "summary", label: "Model details", icon: <Info {...iconProps} /> },
-  ];
-  if (showBuildings) items.push({ id: "buildings", label: "Buildings", icon: <Building2 {...iconProps} /> });
-  if (showTrees) items.push({ id: "trees", label: "Tree sizes", icon: <Trees {...iconProps} /> });
-  items.push(
-    { id: "drawing", label: "Drawing", icon: <DraftingCompass {...iconProps} /> },
-    { id: "solar", label: "Solar", icon: <Sun {...iconProps} /> },
-    { id: "wind", label: "Wind", icon: <Wind {...iconProps} /> },
-    { id: "exports", label: "Exports", icon: <Download {...iconProps} /> },
-  );
-  const open = drawerIsAvailable(preferred, items.map((item) => item.id));
+  const sectionIds = availableSidebarSections({ buildings: showBuildings, trees: showTrees });
+  const items: SidebarItem[] = sectionIds.map((id, index) => {
+    const Icon = SECTION_ICONS[id];
+    return {
+      id,
+      label: SIDEBAR_SECTION_LABELS[id],
+      icon: <Icon {...iconProps} />,
+      groupStart: index === 1 || id === "exports",
+    };
+  });
+  const open: SidebarSectionId = resolveSidebarSection(sidebar.section, sectionIds);
 
-  function toggle(id: string) {
-    const next = reduceRail(preferred, { type: "toggle", id });
-    saveModelDrawer(next);
-    setPreferred(next);
+  function selectSection(id: string) {
+    dispatchSidebar({ type: "select", id: resolveSidebarSection(id, sectionIds) });
   }
 
-  function close() {
-    const next = reduceRail(preferred, { type: "close" });
-    saveModelDrawer(next);
-    setPreferred(next);
+  function retryComHeights() {
+    setComFootprintFetchError(null);
+    setComHeightsApplyFailed(false);
+    setComFootprintRetryToken((token) => token + 1);
   }
 
   function commitView3dDisplay(next: View3dDisplaySettings) {
@@ -921,6 +945,7 @@ export function ModelPage({ model }: { model: CityModel }) {
           windSettings.enabled && windTable
             ? { table: windTable, period: windSettings.period }
             : null,
+        hideTrees: view3dDisplay.hideTrees,
       });
     } catch {
       setExportError("The Rhino file could not be written.");
@@ -1036,6 +1061,53 @@ export function ModelPage({ model }: { model: CityModel }) {
     { tier: "manual", label: heightTierLabel("manual") },
   ];
   const view3dExportDisabled = view3dExportBlocked(tab);
+  const dataSources = buildDataSources({
+    model,
+    comHeights: comHeightsStatus,
+    comMeasuredCount: comMeasuredHeightCount,
+    comError: comFootprintFetchError ?? (comHeightsApplyFailed ? "The height matcher failed." : null),
+  });
+  const sourcesLoaded = countLoaded(dataSources);
+  const heightBarParts = [
+    { id: "measured", label: "Measured", value: comMeasuredHeightCount },
+    { id: "lidar", label: "LiDAR", value: heightTierCounts.lidar },
+    {
+      id: "overture",
+      label: "Overture",
+      value: heightTierCounts.overture_height + heightTierCounts.overture_floors + heightTierCounts.osm_levels,
+    },
+    { id: "floors", label: "Dev. floors", value: heightTierCounts.development_floors },
+    { id: "estimate", label: "Estimated", value: heightTierCounts.zone_default + heightTierCounts.real_source_unmatched },
+    { id: "manual", label: "Manual", value: heightTierCounts.manual },
+  ];
+  const heightBar = {
+    parts: heightBarParts,
+    measured: comMeasuredHeightCount,
+    total: heightBarParts.reduce((sum, part) => sum + part.value, 0),
+  };
+
+  // #87's 3D display modes, housed as switches: Buildings › Display, or Drawing when the model has no buildings.
+  const displaySwitches = (
+    <div className="display-switches" role="group" aria-label="3D display">
+      {(
+        [
+          ["whiteCard", "White card"],
+          ["showOutlines", "Outlines"],
+          ["showContours3d", "Contours in 3D"],
+          ["hideTrees", "Hide trees"],
+        ] as const
+      ).map(([key, label]) => (
+        <label key={key} className="check-field">
+          <input
+            type="checkbox"
+            checked={view3dDisplay[key]}
+            onChange={(event) => commitView3dDisplay({ ...view3dDisplay, [key]: event.target.checked })}
+          />
+          {label}
+        </label>
+      ))}
+    </div>
+  );
 
   const hint =
     tab === "3d"
@@ -1054,9 +1126,9 @@ export function ModelPage({ model }: { model: CityModel }) {
     <div className="model">
       <h1 className="sr-only">Your model is ready.</h1>
       <div
-        className={
+        className={`${
           tab === "drawing" ? "viewport is-drawing" : tab === "satellite" ? "viewport is-satellite" : "viewport"
-        }
+        }${sidebar.collapsed ? " sidebar-collapsed" : ""}`}
       >
         {tab === "3d" && (
           <div className="fill">
@@ -1150,166 +1222,309 @@ export function ModelPage({ model }: { model: CityModel }) {
             <SatellitePane model={displayModel} viewport={planViewport} onViewportChange={setPlanViewport} />
           </div>
         )}
-        <div className="chrome model-chrome">
-          <IconRail items={items} openId={open} onToggle={toggle} label="Model tools" drawerId={DRAWER_ID} />
-          <Drawer id={DRAWER_ID} open={open !== null} title={TITLES[open ?? "summary"] ?? "Model details"} onClose={close}>
+        <div className="sidebar-host">
+          <Sidebar
+            id={SIDEBAR_PANEL_ID}
+            items={items}
+            active={open}
+            collapsed={sidebar.collapsed}
+            title={SIDEBAR_SECTION_LABELS[open]}
+            onSelect={selectSection}
+            onToggleCollapse={() => dispatchSidebar({ type: "toggle-collapse" })}
+            status={
+              open === "summary" ? (
+                <span className="sidebar-status">
+                  <i className="status-dot is-ready" aria-hidden="true" />
+                  Ready
+                </span>
+              ) : open === "buildings" ? (
+                <span className="sidebar-status">
+                  {comMeasuredHeightCount.toLocaleString()} of {displayModel.buildings.length.toLocaleString()} measured
+                </span>
+              ) : null
+            }
+            footer={
+              open === "summary" ? (
+                <button type="button" className="sidebar-primary" onClick={() => selectSection("exports")}>
+                  <Download size={16} strokeWidth={1.75} aria-hidden="true" />
+                  Export model
+                </button>
+              ) : open === "buildings" ? (
+                <p className="sidebar-foot-note">
+                  {overrideResult.manualCount.toLocaleString()} manual height
+                  {overrideResult.manualCount === 1 ? "" : "s"}
+                </p>
+              ) : null
+            }
+          >
             <div className="drawer-section" hidden={open !== "summary"}>
-              <p className="ready-title">Your model is ready.</p>
-              <p className="meta">
-                {model.placeLabel} · {formatCoord(model.center.lat)}, {formatCoord(model.center.lon)} ·{" "}
-                {cutSizeLabel(model.sideM, model.frameShape ?? "square")}
-              </p>
-              <p className="meta">{displayModel.sourceNote}</p>
-              {model.terrainError && <p className="error">{model.terrainError}</p>}
-              <dl className="stats">
-                {model.layers.buildings && (
-                  <div>
-                    <dt>Buildings</dt>
-                    <dd>{model.buildings.length.toLocaleString()}</dd>
+              <div className="sidebar-hero">
+                <p className="sidebar-place">{model.placeLabel}</p>
+                <p className="sidebar-sub">
+                  {cutSizeLabel(model.sideM, model.frameShape ?? "square")} {model.frameShape === "circle" ? "circle" : "square"} ·{" "}
+                  {(sideKm * sideKm).toFixed(2)} km²
+                </p>
+                <p className="sidebar-coord">
+                  <span>
+                    {formatCoord(model.center.lat)}, {formatCoord(model.center.lon)}
+                  </span>
+                  <button
+                    type="button"
+                    className="sidebar-icon-btn"
+                    aria-label="Copy coordinates"
+                    title="Copy coordinates"
+                    onClick={() => {
+                      void navigator.clipboard
+                        ?.writeText(`${formatCoord(model.center.lat)}, ${formatCoord(model.center.lon)}`)
+                        .catch(() => undefined);
+                    }}
+                  >
+                    <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
+                  </button>
+                </p>
+              </div>
+              <section className="sidebar-group">
+                <h3 className="sidebar-gh">In this model</h3>
+                <dl className="stats">
+                  {model.layers.buildings && (
+                    <div>
+                      <dt>Buildings</dt>
+                      <dd>{model.buildings.length.toLocaleString()}</dd>
+                    </div>
+                  )}
+                  {model.layers.trees && (
+                    <div>
+                      <dt>Trees</dt>
+                      <dd>{model.trees.length.toLocaleString()}</dd>
+                    </div>
+                  )}
+                  {model.layers.roads && (
+                    <div>
+                      <dt title="Clipped centerline length of roads, paths, and rail">Roads</dt>
+                      <dd>
+                        {formatLengthKm(model.roadKm)}
+                        <small>km</small>
+                      </dd>
+                    </div>
+                  )}
+                  {model.terrain && (
+                    <div>
+                      <dt>Elevation</dt>
+                      <dd>
+                        {model.terrain.min.toFixed(0)}–{model.terrain.max.toFixed(0)}
+                        <small>m</small>
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+                {model.terrainError && <p className="error">{model.terrainError}</p>}
+              </section>
+              {showBuildings && heightBar.total > 0 && (
+                <section className="sidebar-group">
+                  <div className="sidebar-gh">
+                    <h3>Building heights</h3>
+                    <span>{Math.round((heightBar.measured / heightBar.total) * 100)}% measured</span>
                   </div>
-                )}
-                {model.layers.roads && (
-                  <div>
-                    <dt title="Clipped centerline length of roads, paths, and rail">Roads, km</dt>
-                    <dd>{formatLengthKm(model.roadKm)}</dd>
+                  <div className="height-bar" aria-hidden="true">
+                    {heightBar.parts.map((part) =>
+                      part.value > 0 ? (
+                        <i
+                          key={part.id}
+                          className={`height-bar-${part.id}`}
+                          style={{ flexGrow: part.value }}
+                        />
+                      ) : null,
+                    )}
                   </div>
-                )}
-                {model.layers.trees && (
-                  <div>
-                    <dt>Trees</dt>
-                    <dd>{model.trees.length.toLocaleString()}</dd>
-                  </div>
-                )}
-                {model.terrain && (
-                  <div>
-                    <dt>Elevation, m</dt>
-                    <dd>
-                      {model.terrain.min.toFixed(0)}–{model.terrain.max.toFixed(0)}
-                    </dd>
-                  </div>
-                )}
-                <div>
-                  <dt>Area</dt>
-                  <dd>{(sideKm * sideKm).toFixed(2)} km²</dd>
+                  <ul className="height-bar-legend">
+                    {heightBar.parts.map((part) =>
+                      part.value > 0 ? (
+                        <li key={part.id}>
+                          <i className={`height-bar-${part.id}`} />
+                          <span>{part.label}</span>
+                          <b>{part.value.toLocaleString()}</b>
+                        </li>
+                      ) : null,
+                    )}
+                  </ul>
+                </section>
+              )}
+              <section className="sidebar-group">
+                <div className="sidebar-gh">
+                  <h3>Data sources</h3>
+                  <span>
+                    {sourcesLoaded.loaded} of {sourcesLoaded.total} loaded
+                  </span>
                 </div>
-              </dl>
+                <ul className="source-list">
+                  {dataSources.map((row) => (
+                    <li key={row.id} className={`source-row is-${row.status}`} data-source={row.id}>
+                      <i className={`status-dot is-${row.status}`} aria-hidden="true" />
+                      <div className="source-text">
+                        <span className="source-name">{row.label}</span>
+                        {row.detail && <span className="source-meta">{row.detail}</span>}
+                        {row.notes.map((note) => (
+                          <span key={note} className="source-note" role={row.status === "failed" ? "alert" : undefined}>
+                            {note}
+                          </span>
+                        ))}
+                        {row.retry === "com-heights" && (
+                          <button type="button" className="sidebar-link" onClick={retryComHeights}>
+                            Retry CoM heights
+                          </button>
+                        )}
+                      </div>
+                      <span className="source-state">{dataSourceStatusWord(row.status)}</span>
+                    </li>
+                  ))}
+                </ul>
+                <details className="source-notes">
+                  <summary>Full source notes and credits</summary>
+                  <p className="meta">{displayModel.sourceNote}</p>
+                </details>
+              </section>
             </div>
 
             {showBuildings && (
               <div className="drawer-section legend" hidden={open !== "buildings"}>
-                <HeightOverridePanel
-                  manualCount={overrideResult.manualCount}
-                  unmatchedCount={unmatchedEdits}
-                  showManualEdits={showManualEdits}
-                  onToggleShowManual={() => {
-                    setShowManualEdits((on) => {
-                      const next = !on;
-                      writeStoredShowManualHeights(window.localStorage, next);
-                      return next;
-                    });
-                  }}
-                  onResetAll={resetAllHeights}
-                  onExport={exportHeightEdits}
-                  onImport={importHeightEdits}
-                />
-                <div className="panel-toolbar">
-                  <button
-                    type="button"
-                    data-autofocus="true"
-                    aria-pressed={colourByUse && !showSource}
-                    onClick={() => {
-                      setShowSource(false);
-                      setColourByUse((on) => !on);
-                    }}
-                  >
-                    {colourByUse ? "Uniform colour" : "Colour by use"}
-                  </button>
-                  <button type="button" aria-pressed={showSource} onClick={() => setShowSource((on) => !on)}>
-                    {showSource ? "Showing source" : "Show source"}
-                  </button>
-                  {comHeightsStatus === "failed" && (
+                <section className="sidebar-group">
+                  <h3 className="sidebar-gh">Colour by</h3>
+                  <div className="segmented" role="group" aria-label="Colour buildings by">
                     <button
                       type="button"
+                      data-autofocus="true"
+                      aria-pressed={colourByUse && !showSource}
                       onClick={() => {
-                        setComFootprintFetchError(null);
-                        setComHeightsApplyFailed(false);
-                        setComFootprintRetryToken((token) => token + 1);
+                        setShowSource(false);
+                        setColourByUse(true);
                       }}
                     >
-                      Retry CoM heights
+                      Use
                     </button>
+                    <button type="button" aria-pressed={showSource} onClick={() => setShowSource(true)}>
+                      Source
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={!colourByUse && !showSource}
+                      onClick={() => {
+                        setShowSource(false);
+                        setColourByUse(false);
+                      }}
+                    >
+                      None
+                    </button>
+                  </div>
+                  {solar.showPath && tab === "3d" && (
+                    <p className="legend-note">Buildings render white on screen while sun path is on; exports keep normal colours.</p>
                   )}
-                </div>
-                {comHeightsMeasuredOn && comMeasuredHeightCount > 0 && (
-                  <p className="legend-note">
-                    {comMeasuredHeightCount.toLocaleString()} building
-                    {comMeasuredHeightCount === 1 ? "" : "s"} use City of Melbourne measured heights in this
-                    frame.
-                  </p>
-                )}
-                {comHeightsStatusNote && (
-                  <p className="legend-note" role="status">
-                    {comHeightsStatusNote}
-                  </p>
-                )}
-                {comHeightsMeasuredOn && (
-                  <p className="legend-note">
-                    <a href={COM_BUILDING_HEIGHTS_DATASET_URL}>{COM_BUILDING_HEIGHTS_CREDIT}</a>
-                  </p>
-                )}
-                {solar.showPath && tab === "3d" && (
-                  <p className="legend-note">Buildings render white on screen while sun path is on; exports keep normal colours.</p>
-                )}
-                <ul>
-                  {BUILDING_USES.filter((use) => useCounts[use] > 0).map((use) => (
-                    <li key={use}>
-                      <i
-                        style={{
-                          background: colourByUse && !showSource ? BUILDING_USE_META[use].color : uniform,
-                        }}
-                      />
-                      <span>{BUILDING_USE_META[use].label}</span>
-                      <b>{useCounts[use].toLocaleString()}</b>
-                    </li>
-                  ))}
-                </ul>
-                <p className="legend-sub">Source</p>
-                <ul>
-                  {SOURCE_COUNT_KEYS.map((source) => (
-                    <li key={source}>
-                      <i
-                        className={SOURCE_META[source].inferred ? "hatch" : undefined}
-                        style={{
-                          backgroundColor: showSource ? SOURCE_META[source].color : uniform,
-                        }}
-                      />
-                      <span>{SOURCE_META[source].label}</span>
-                      <b>{sourceCounts[source].toLocaleString()}</b>
-                    </li>
-                  ))}
-                </ul>
-                <p className="legend-sub">Height source</p>
-                <ul>
-                  {heightTierLegend
-                    .filter(({ tier }) => tier === "lidar" || heightTierCounts[tier] > 0)
-                    .map(({ tier, label }) => (
-                      <li key={tier}>
-                        <i className={tier === "lidar" ? "hatch" : undefined} />
-                        <span>{label}</span>
-                        <b>
-                          {(tier === "com" ? comMeasuredHeightCount : heightTierCounts[tier]).toLocaleString()}
-                        </b>
+                </section>
+                <section className="sidebar-group">
+                  <div className="sidebar-gh">
+                    <h3>Use</h3>
+                    <span>{model.buildings.length.toLocaleString()}</span>
+                  </div>
+                  <ul className="legend-two">
+                    {BUILDING_USES.filter((use) => useCounts[use] > 0).map((use) => (
+                      <li key={use}>
+                        <i
+                          style={{
+                            background: colourByUse && !showSource ? BUILDING_USE_META[use].color : uniform,
+                          }}
+                        />
+                        <span>{BUILDING_USE_META[use].label}</span>
+                        <b>{useCounts[use].toLocaleString()}</b>
                       </li>
                     ))}
-                </ul>
-                <p className="legend-note" role="status">
-                  {lidarTierNote}
-                </p>
-                {model.useTierFailures?.map((failure) => (
-                  <p key={failure.id} className="legend-note">
-                    {failure.message}
+                  </ul>
+                </section>
+                <section className="sidebar-group">
+                  <h3 className="sidebar-gh">Source</h3>
+                  <ul>
+                    {SOURCE_COUNT_KEYS.map((source) => (
+                      <li key={source}>
+                        <i
+                          className={SOURCE_META[source].inferred ? "hatch" : undefined}
+                          style={{
+                            backgroundColor: showSource ? SOURCE_META[source].color : uniform,
+                          }}
+                        />
+                        <span>{SOURCE_META[source].label}</span>
+                        <b>{sourceCounts[source].toLocaleString()}</b>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+                <section className="sidebar-group">
+                  <h3 className="sidebar-gh">Height source</h3>
+                  <ul>
+                    {heightTierLegend
+                      .filter(({ tier }) => tier === "lidar" || heightTierCounts[tier] > 0)
+                      .map(({ tier, label }) => (
+                        <li key={tier} className={tier === "lidar" && heightTierCounts.lidar === 0 ? "is-empty" : undefined}>
+                          <i className={`height-bar-${HEIGHT_TIER_BAR[tier]}`} />
+                          <span>{label}</span>
+                          <b>
+                            {(tier === "com" ? comMeasuredHeightCount : heightTierCounts[tier]).toLocaleString()}
+                          </b>
+                        </li>
+                      ))}
+                  </ul>
+                  {comHeightsMeasuredOn && comMeasuredHeightCount > 0 && (
+                    <p className="legend-note">
+                      {comMeasuredHeightCount.toLocaleString()} building
+                      {comMeasuredHeightCount === 1 ? "" : "s"} use City of Melbourne measured heights in this
+                      frame.
+                    </p>
+                  )}
+                  {comHeightsStatusNote && (
+                    <p className="legend-note" role="status">
+                      {comHeightsStatusNote}
+                    </p>
+                  )}
+                  {comHeightsStatus === "failed" && (
+                    <div className="panel-toolbar">
+                      <button type="button" onClick={retryComHeights}>
+                        Retry CoM heights
+                      </button>
+                    </div>
+                  )}
+                  {comHeightsMeasuredOn && (
+                    <p className="legend-note">
+                      <a href={COM_BUILDING_HEIGHTS_DATASET_URL}>{COM_BUILDING_HEIGHTS_CREDIT}</a>
+                    </p>
+                  )}
+                  <p className="legend-note" role="status">
+                    {lidarTierNote}
                   </p>
-                ))}
+                  {model.useTierFailures?.map((failure) => (
+                    <p key={failure.id} className="legend-note">
+                      {failure.message}
+                    </p>
+                  ))}
+                </section>
+                <section className="sidebar-group">
+                  <h3 className="sidebar-gh">Display</h3>
+                  {displaySwitches}
+                </section>
+                <section className="sidebar-group">
+                  <h3 className="sidebar-gh">Manual heights</h3>
+                  <HeightOverridePanel
+                    manualCount={overrideResult.manualCount}
+                    unmatchedCount={unmatchedEdits}
+                    showManualEdits={showManualEdits}
+                    onToggleShowManual={() => {
+                      setShowManualEdits((on) => {
+                        const next = !on;
+                        writeStoredShowManualHeights(window.localStorage, next);
+                        return next;
+                      });
+                    }}
+                    onResetAll={resetAllHeights}
+                    onExport={exportHeightEdits}
+                    onImport={importHeightEdits}
+                  />
+                </section>
               </div>
             )}
 
@@ -1396,48 +1611,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                   {view.projection === "plan" && (
                     <p className="field-note">Orthographic plan view. Choose Perspective to return to the 3D orbit camera.</p>
                   )}
-                  <p className="kicker">Display</p>
-                  <div className="plan-switch" role="group" aria-label="3D display">
-                    <button
-                      type="button"
-                      aria-pressed={view3dDisplay.whiteCard}
-                      onClick={() =>
-                        commitView3dDisplay({ ...view3dDisplay, whiteCard: !view3dDisplay.whiteCard })
-                      }
-                    >
-                      {view3dDisplay.whiteCard ? "Use colour" : "White card"}
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={view3dDisplay.showOutlines}
-                      onClick={() =>
-                        commitView3dDisplay({ ...view3dDisplay, showOutlines: !view3dDisplay.showOutlines })
-                      }
-                    >
-                      {view3dDisplay.showOutlines ? "Hide outlines" : "Show outlines"}
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={view3dDisplay.showContours3d}
-                      onClick={() =>
-                        commitView3dDisplay({
-                          ...view3dDisplay,
-                          showContours3d: !view3dDisplay.showContours3d,
-                        })
-                      }
-                    >
-                      {view3dDisplay.showContours3d ? "Hide contours" : "Contours in 3D"}
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={view3dDisplay.hideTrees}
-                      onClick={() =>
-                        commitView3dDisplay({ ...view3dDisplay, hideTrees: !view3dDisplay.hideTrees })
-                      }
-                    >
-                      {view3dDisplay.hideTrees ? "Show trees" : "Hide trees"}
-                    </button>
-                  </div>
+                  {!showBuildings && displaySwitches}
                   {view.projection === "iso" && (
                     <>
                       <p className="kicker">Corner</p>
@@ -1782,7 +1956,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                 </p>
               )}
             </div>
-          </Drawer>
+          </Sidebar>
         </div>
         {model.terrainError && (
           <p className="stage-error" role="alert">

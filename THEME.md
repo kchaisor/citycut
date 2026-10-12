@@ -45,6 +45,26 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--wind-rose-size` | Diameter of the on-screen wind rose diagram in the 3D view; caption text scales from this. | `168px` |
 | `--shape-toggle-on-bg` | Fill of the selected Square / Circle pill on the landing map. | `#1A1916` |
 | `--shape-toggle-on-text` | Label on the selected Square / Circle pill. | `#FFFCF8` |
+| `--accent` | The one accent colour in the model sidebar. Only ever a fill, with `--accent-ink` on top and a 1 px `--accent-edge` outline: the selected rail icon, a switch that is on, the selected segment (such as Colour by), and the Ready dot. Never used for text or thin lines. It is its own setting, separate from `--site-building`, so changing one does not change the other. | `#FFF500` |
+| `--accent-ink` | Text and icons on an `--accent` fill, and the knob of a switch that is on. | `#1A1916` |
+| `--accent-edge` | The 1 px outline around every `--accent` fill, so the yellow still reads on the near-white sidebar. | `#1A1916` |
+| `--accent-hover` | An `--accent` control under the pointer. | `#FFF9A6` |
+| `--sidebar-bg` | The model sidebar and its icon rail. | `#FFFCF8` |
+| `--sidebar-hairline` | Thin lines between sidebar groups, and the edges between rail, panel and model. | `#EEEAE3` |
+| `--sidebar-icon` | Rail icons that are not selected. | `#8F897E` |
+| `--sidebar-hover` | A rail icon or quiet sidebar button under the pointer. | `#F4F1EB` |
+| `--control-track` | The track behind a segmented control in the sidebar. | `#F1EEE8` |
+| `--control-off` | A switch that is off, and the outline of a secondary sidebar button. | `#DCD7CE` |
+| `--status-ok` | Status dot for a data source that loaded. | `#478C33` |
+| `--status-failed` | Status dot, word and note for a data source that failed. | `#8D3418` |
+| `--status-idle` | Status dot for a data source that is not used for this cut, or still loading. | `#B8B2A7` |
+| `--height-measured` | Measured (City of Melbourne) part of the Building heights bar in Model details, and its swatch in Buildings › Height source. | `#2E6B4F` |
+| `--height-overture` | Overture and OpenStreetMap heights in that bar and key. | `#3D5A73` |
+| `--height-floors` | CoM development floors in that bar and key. | `#6B4F2E` |
+| `--height-estimate` | Hatching for estimated heights (zone default) and LiDAR in that bar and key. | `#7D7D7D` |
+| `--height-manual` | Manual height edits in that bar and key. | `#D4A017` |
+| `--sidebar-rail-w` | Width of the icon rail. The model view starts to its right when the sidebar is collapsed. | `56px` |
+| `--sidebar-panel-w` | Width of the sidebar panel next to the rail. | `320px` |
 
 `var(--background)` means “use whatever `--background` is set to”. That is why one edit recolours the page, the header, the model, and the drawing together.
 
