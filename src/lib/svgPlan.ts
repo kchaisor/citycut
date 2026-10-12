@@ -238,7 +238,7 @@ export function planPaths(
     .map((road) => ({ line: road.line, width: road.width }));
   const roadFill = fillRoadMedianGaps(
     carriageway.polygons,
-    { green, water, paths: pathFill, buildings: buildings.map((building) => building.rings) },
+    { green, water, buildings: buildings.map((building) => building.rings) },
     undefined,
     streets,
   );

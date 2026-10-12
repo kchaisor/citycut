@@ -16,7 +16,7 @@ const area = (multi: MultiPolygon) =>
 // 100 x 30 m carriageway with a 80 x 6 m median hole; the green strip is 80 x 3 m inside it.
 const road: MultiPolygon = [[rect(0, 0, 100, 30), rect(10, 12, 90, 18)]];
 const median = [rect(10, 13.5, 90, 16.5)];
-const none = { green: [], water: [], paths: [], buildings: [] };
+const none = { green: [], water: [], buildings: [] };
 
 describe("fillRoadMedianGaps", () => {
   it("fills the paper halo around a median and keeps the green visible", () => {
@@ -27,9 +27,9 @@ describe("fillRoadMedianGaps", () => {
   it("fills a bare island hole completely", () => {
     expect(area(fillRoadMedianGaps(road, none))).toBeCloseTo(3000, 3);
   });
-  it("keeps footpaths inside the hole uncovered", () => {
+  it("paints road over footpaths inside the hole (road above the kerb layer)", () => {
     const path = [rect(40, 12, 42, 18)];
-    expect(area(pc.intersection(fillRoadMedianGaps(road, { ...none, paths: [path] }), [path]))).toBeCloseTo(0, 3);
+    expect(area(pc.intersection(fillRoadMedianGaps(road, none), [path]))).toBeCloseTo(area([path]), 3);
   });
   it("leaves holes with buildings and large holes (city blocks) alone", () => {
     expect(fillRoadMedianGaps(road, { ...none, buildings: [[rect(50, 14, 52, 16)]] })).toEqual(road);
