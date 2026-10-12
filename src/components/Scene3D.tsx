@@ -23,6 +23,7 @@ import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import { captureViewPng } from "../lib/capturePng";
+import { cameraForExportFrame, exportFrameSize } from "../lib/exportFrame";
 import { flushControlInertia, holdControlPose, type HeldControl } from "../lib/controlInertia";
 import { shouldSkipViewportSizeRefit } from "../lib/viewportAutoFit";
 import {
@@ -880,11 +881,14 @@ function ExportBridge({
     onExportReady({
       png: async () => {
         const city = scene.getObjectByName("CityCut");
-        const render = () => captureViewPng(gl, scene, get().camera);
+        const render = () => captureViewPng(gl, scene, get().camera, exportFrameSize(gl.domElement));
         if (city && solarDiagramOn) return withBuildingExportColours(city, true, render);
         return render();
       },
-      shot: () => shotFromCamera(get().camera, gl.domElement.clientWidth, gl.domElement.clientHeight),
+      shot: () => {
+        const frame = exportFrameSize(gl.domElement);
+        return shotFromCamera(cameraForExportFrame(get().camera, frame.width, frame.height), frame.width, frame.height);
+      },
     });
     return () => onExportReady(null);
   }, [gl, scene, get, onExportReady, solarDiagramOn]);

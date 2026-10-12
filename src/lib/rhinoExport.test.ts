@@ -4,6 +4,7 @@ import { colourRgb } from "./colours";
 import { cityModelTo3dm, loadRhino, rhinoLayerColourKeys } from "./rhinoExport";
 import { SURFACE } from "./surfaceLayers";
 import { footprintBase } from "./terrain";
+import { treesVisibleIn3d } from "./view3dDisplay";
 import type { CityModel, Pt, TerrainField } from "../types";
 
 const origin = { lon: 144.9631, lat: -37.8136 };
@@ -488,5 +489,44 @@ describe("rhino export", () => {
       center: { lon: 143.5, lat: -37.8136 },
     });
     expect(latin1(bytes)).toContain("EPSG:7854");
+  });
+});
+
+describe("rhino export: Trees layer × Hide trees", () => {
+  const forest: CityModel = {
+    ...model,
+    trees: [
+      { id: 9, at: [20, 30], height_m: 14, crown_diameter_m: 8, trunk_diameter_m: 0.3, sizeSource: "osm" },
+      { id: 10, at: [-30, 40], height_m: 9, crown_diameter_m: 6, trunk_diameter_m: 0.25, sizeSource: "osm" },
+    ],
+  };
+
+  async function treeObjects(layerOn: boolean, hideTrees: boolean): Promise<number> {
+    const bytes = await cityModelTo3dm({ ...forest, layers: { ...forest.layers, trees: layerOn } }, { hideTrees });
+    const rhino = await loadRhino();
+    const doc = rhino.File3dm.fromByteArray(bytes);
+    try {
+      let count = 0;
+      for (let i = 0; i < doc.objects().count; i++) {
+        const object = doc.objects().get(i);
+        const layer = doc.layers().get(object.attributes().layerIndex);
+        if (object.attributes().name === "Trees" || layer.fullPath === "Trees") count++;
+      }
+      return count;
+    } finally {
+      doc.destroy();
+    }
+  }
+
+  it.each([
+    [true, false, true],
+    [true, true, false],
+    [false, false, false],
+    [false, true, false],
+  ])("Trees layer %s, Hide trees %s: trees in the .3dm = %s", async (layerOn, hideTrees, expected) => {
+    expect(treesVisibleIn3d({ trees: layerOn }, { hideTrees })).toBe(expected);
+    const count = await treeObjects(layerOn, hideTrees);
+    if (expected) expect(count).toBeGreaterThan(0);
+    else expect(count).toBe(0);
   });
 });

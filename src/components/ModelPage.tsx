@@ -945,6 +945,7 @@ export function ModelPage({ model }: { model: CityModel }) {
           windSettings.enabled && windTable
             ? { table: windTable, period: windSettings.period }
             : null,
+        hideTrees: view3dDisplay.hideTrees,
       });
     } catch {
       setExportError("The Rhino file could not be written.");

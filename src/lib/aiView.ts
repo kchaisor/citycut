@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { treesVisibleIn3d } from "./view3dDisplay";
 import type { PdfChunk, Rgb } from "./aiDocument";
 import { useNativeAi8Export } from "./aiExportFormat";
 import { buildLayeredNativeAi } from "./aiNative";
@@ -650,8 +651,8 @@ function collect(
   }
 
   const trees: Fill[] = [];
-  // Same rule as the 3D scene and .3dm (buildCity.ts): the 3D view only draws trees when the layer is on.
-  if (!style.hideTrees) for (const tree of model.layers.trees ? model.trees : []) {
+  // Same rule as the 3D scene, PNG and .3dm: treesVisibleIn3d (layer on, Hide trees off).
+  for (const tree of treesVisibleIn3d(model.layers, { hideTrees: Boolean(style.hideTrees) }) ? model.trees : []) {
     const east = tree.at[0];
     const north = tree.at[1];
     const groundY = sample ? sample(east, north) : 0;
