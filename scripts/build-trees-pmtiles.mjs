@@ -8,7 +8,7 @@
  * Urban Forest export, and OSM tree points from the Overture base PMTiles the app already reads.
  * Writes public/trees.pmtiles and public/trees-manifest.json only after every check passes.
  *
- * Env: TIPPECANOE (binary), TREES_OUT_DIR (default public), TREES_ZOOM (14 or 15, default 14),
+ * Env: TIPPECANOE (binary), TREES_OUT_DIR (default public), TREES_ZOOM (14 or 15, default 15),
  * TREES_ALSO_ZOOM (build a second zoom into the work dir to compare sizes), TREES_PREV_MANIFEST
  * (last build's manifest; skip when every source stamp matches), TREES_FORCE=1, TREES_WORK_DIR,
  * TREES_CONCURRENCY (Vicmap pages in flight, default 3), TREES_VICMAP_FORMAT (pbf|geojson).
@@ -53,7 +53,7 @@ import {
 const ROOT = resolve(import.meta.dirname, "..");
 const OUT_DIR = resolve(ROOT, process.env.TREES_OUT_DIR ?? "public");
 const WORK = resolve(process.env.TREES_WORK_DIR ?? join(ROOT, ".trees-work"));
-const ZOOM = Number(process.env.TREES_ZOOM ?? 14);
+const ZOOM = Number(process.env.TREES_ZOOM ?? 15);
 const ALSO_ZOOM = process.env.TREES_ALSO_ZOOM ? Number(process.env.TREES_ALSO_ZOOM) : null;
 const TIPPECANOE = process.env.TIPPECANOE ?? "tippecanoe";
 const CONCURRENCY = Number(process.env.TREES_CONCURRENCY ?? 3);
@@ -237,7 +237,7 @@ async function fetchOsm(release) {
 }
 
 function tippecanoe(outPath, zoom) {
-  const detail = zoom >= 15 ? 13 : 14; // about 0.12 m either way
+  const detail = zoom >= 15 ? 13 : 14; // about 0.12 m either way (tile edge / 2^detail)
   const args = [
     "-q", "-f", "-o", outPath,
     "-Z", String(zoom), "-z", String(zoom), "-d", String(detail),
@@ -292,6 +292,11 @@ async function countTileFeatures(path) {
   return { counts, tilesWithData: sizes.length, header };
 }
 
+function strip(source) {
+  const { url: _u, dataLastEdit: _d, layerCount: _l, format: _f, dataProcessed: _p, modified: _m, overtureRelease: _o, ...rest } = source;
+  return rest;
+}
+
 async function main() {
   mkdirSync(WORK, { recursive: true });
   mkdirSync(OUT_DIR, { recursive: true });
@@ -309,9 +314,19 @@ async function main() {
   output("skip", "false");
   if (!vicmapMaxOid || !stamps.vicmapCount) throw new Error("Vicmap layer count or max OBJECTID unknown.");
 
-  const vicmap = await stage("vicmap", () => fetchVicmap(vicmapMaxOid, stamps.vicmapCount));
-  const com = await stage("com", () => fetchCom(stamps.comCount));
-  const osm = await stage("osm", () => fetchOsm(stamps.overtureRelease));
+  // Local only: TREES_REUSE_INPUTS=<manifest> re-tiles the GeoJSON already in TREES_WORK_DIR (for
+  // trying another zoom) instead of paging the sources again. Its source stamps must still match.
+  const reuse = process.env.TREES_REUSE_INPUTS ? JSON.parse(readFileSync(process.env.TREES_REUSE_INPUTS, "utf8")) : null;
+  if (reuse) {
+    const { zoom: _z, ...a } = reuse.sourceStamps ?? {};
+    const { zoom: _y, ...b } = stamps;
+    if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error("TREES_REUSE_INPUTS: sources changed since those inputs were fetched.");
+    log("reusing fetched inputs from the work dir");
+  }
+  const vicmap = reuse ? strip(reuse.sources.vicmap) : await stage("vicmap", () => fetchVicmap(vicmapMaxOid, stamps.vicmapCount));
+  const com = reuse ? strip(reuse.sources.com) : await stage("com", () => fetchCom(stamps.comCount));
+  const osm = reuse ? strip(reuse.sources.osm) : await stage("osm", () => fetchOsm(stamps.overtureRelease));
+  if (reuse) timings.reusedFetchSec = reuse.timingsSec;
   if (!SMOKE && osm.kept < 1000) throw new Error(`OSM trees: only ${osm.kept} in Greater Melbourne; expected about 195,000.`);
   if (previous?.counts?.osm && Math.abs(osm.kept - previous.counts.osm) > previous.counts.osm * 0.2) {
     throw new Error(`OSM trees: ${osm.kept} vs ${previous.counts.osm} last build (more than 20% change).`);

@@ -159,7 +159,7 @@ jobs:
         run: node scripts/build-trees-pmtiles.mjs
         env:
           TIPPECANOE: tippecanoe
-          TREES_ZOOM: "14"
+          TREES_ZOOM: "15"
           TREES_PREV_MANIFEST: .trees-prev/trees-manifest.json
           TREES_FORCE: ${{ inputs.force_trees && '1' || '' }}
       - name: Publish trees release (main)
