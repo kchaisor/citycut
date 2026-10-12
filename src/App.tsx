@@ -18,6 +18,7 @@ import {
   prebakeSourceNote,
   type PrebakeResult,
 } from "./lib/treesPrebake";
+import type { VicmapPoint } from "./lib/vicmapTrees";
 import { fetchTerrainForCut } from "./lib/fetchTerrain";
 import {
   explicitLabel,
@@ -46,7 +47,7 @@ import {
 import { TERRAIN_UNAVAILABLE, terrainNote } from "./lib/terrain";
 import { MAX_TREE_INSTANCES, assembleTreeTiers } from "./lib/treeTiers";
 import { replaceTreeNote, treeSourceLoadNotes, treeTierCounts } from "./lib/trees";
-import { fetchVicmapTreesDetailed, vicmapPointsToTrees, VICMAP_ATTRIBUTION, type VicmapPoint } from "./lib/vicmapTrees";
+import { fetchVicmapTreesDetailed, vicmapPointsToTrees, VICMAP_ATTRIBUTION } from "./lib/vicmapTrees";
 import { loadContoursForCut } from "./lib/vicmapContours";
 import { fetchOvertureBuildingsForCut } from "./lib/overtureBuildings";
 import { qaForcedCrashFromSearch, qaModeFromSearch } from "./lib/qaCameraBridge";
