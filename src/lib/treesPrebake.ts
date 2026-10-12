@@ -200,6 +200,7 @@ export async function loadPrebakedTrees(bounds: BBox, signal?: AbortSignal, deps
   } catch (err) {
     if (signal?.aborted) throw err;
     const detail = err instanceof Error && err.message ? err.message : String(err);
-    return { ok: false, reason: detail.replace(/\.$/, "") };
+    const status = /Bad response code: (\d+)/.exec(detail);
+    return { ok: false, reason: status ? `trees.pmtiles answered HTTP ${status[1]}` : detail.replace(/\.$/, "") };
   }
 }

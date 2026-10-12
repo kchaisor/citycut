@@ -83,7 +83,7 @@ describe("pre-baked tree reader", () => {
       fetchManifest: async () => manifest,
       archive: { getHeader: async () => { throw new Error("Bad response code: 503"); }, getZxy: async () => undefined },
     });
-    expect(broken).toEqual({ ok: false, reason: "Bad response code: 503" });
+    expect(broken).toEqual({ ok: false, reason: "trees.pmtiles answered HTTP 503" });
   });
 
   it("rethrows an abort instead of falling back", async () => {
