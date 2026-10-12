@@ -15,6 +15,15 @@ BCA_2024_URL = (
     "https://www.bpc.vic.gov.au/__data/assets/file/0016/26521/"
     "VBA-DataVic-Building-Permits-2024-December.xlsb"
 )
+# Source of truth for the file URL: the DataVic catalogue entry published by the
+# Building and Plumbing Commission (formerly the VBA), CC BY 4.0.
+BCA_PACKAGE_API = "https://discover.data.vic.gov.au/api/3/action/package_show?id=building-permit-activity-data"
+# Identify the pipeline honestly; the default python-requests agent is refused (HTTP 403)
+# by the publisher's Cloudflare front end.
+HTTP_HEADERS = {"User-Agent": "CityCut-enrichment/1.0 (+https://github.com/kchaisor/citycut)"}
+# Columns that would let a permit be matched to one building. The published extract has
+# street name, suburb and postcode only, so a per-building join is not possible.
+HOUSE_NUMBER_HINTS = ("street_number", "house_number", "site_number", "site_address", "full_address")
 VICMAP_ADDRESS_WFS = "https://opendata.maps.vic.gov.au/geoserver/wfs"
 
 BCA_CLASS_TO_USE: dict[str, str] = {
@@ -79,13 +88,40 @@ def fetch_vicmap_addresses(bounds: dict[str, float]) -> gpd.GeoDataFrame | None:
         return None
 
 
-def download_bca_xlsb(dest: Path) -> tuple[bool, str | None]:
+def latest_bca_resource_url(package: dict[str, Any]) -> str | None:
+    """Newest full-year xlsb in the DataVic package (`Building Permit Activity Data YYYY`)."""
+    best: tuple[int, str] | None = None
+    for resource in package.get("resources", []):
+        name = str(resource.get("name") or "")
+        url = str(resource.get("url") or "")
+        match = re.fullmatch(r"\s*Building Permit Activity Data (\d{4})\s*", name)
+        if not match or not url.lower().endswith(".xlsb"):
+            continue
+        year = int(match.group(1))
+        if best is None or year > best[0]:
+            best = (year, url)
+    return best[1] if best else None
+
+
+def resolve_bca_url() -> str:
+    try:
+        response = requests.get(BCA_PACKAGE_API, timeout=60, headers=HTTP_HEADERS)
+        response.raise_for_status()
+        url = latest_bca_resource_url(response.json().get("result", {}))
+        if url:
+            return url
+    except Exception as exc:
+        print(f"[enrichment] DataVic BCA catalogue lookup failed: {exc}", file=sys.stderr)
+    return BCA_2024_URL
+
+
+def download_bca_xlsb(dest: Path, url: str = BCA_2024_URL) -> tuple[bool, str | None]:
     if dest.is_file() and dest.stat().st_size > 10_000:
         return True, None
     try:
-        response = requests.get(BCA_2024_URL, timeout=180, allow_redirects=True)
+        response = requests.get(url, timeout=180, allow_redirects=True, headers=HTTP_HEADERS)
         if response.status_code in (401, 403, 429):
-            return False, f"BCA xlsb HTTP {response.status_code} ({BCA_2024_URL})"
+            return False, f"BCA xlsb HTTP {response.status_code} ({url})"
         if not response.ok:
             return False, f"BCA xlsb HTTP {response.status_code}"
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -105,7 +141,8 @@ def load_bca_permits(xlsb_path: Path) -> pd.DataFrame | None:
         return None
     rows: list[dict[str, Any]] = []
     with open_workbook(str(xlsb_path)) as wb:
-        sheet = wb.sheets[0]
+        # The workbook opens on a disclaimer sheet; the permits are on "Data".
+        sheet = "Data" if "Data" in wb.sheets else wb.sheets[0]
         headers: list[str] | None = None
         with wb.get_sheet(sheet) as sh:
             for i, row in enumerate(sh.rows()):
@@ -142,6 +179,10 @@ def bca_address_column(df: pd.DataFrame) -> str | None:
         if "street" in name and "address" in name:
             return name
     return None
+
+
+def bca_has_house_numbers(df: pd.DataFrame) -> bool:
+    return any(any(hint in str(name).lower() for hint in HOUSE_NUMBER_HINTS) for name in df.columns)
 
 
 def build_bca_address_index(df: pd.DataFrame) -> dict[str, str]:
@@ -184,19 +225,28 @@ def bca_use_for_buildings(
 
 def load_bca_index(cache_dir: Path, bounds: dict[str, float]) -> tuple[dict[str, str], dict[str, Any]]:
     meta: dict[str, Any] = {"status": "not_attempted"}
-    dest = cache_dir / "bca-2024.xlsb"
-    ok, err = download_bca_xlsb(dest)
+    url = resolve_bca_url()
+    dest = cache_dir / f"bca-{Path(url).stem}.xlsb"
+    ok, err = download_bca_xlsb(dest, url)
     if not ok:
-        meta = {"status": "blocked" if err and "403" in err else "failed", "detail": err, "url": BCA_2024_URL}
+        meta = {"status": "blocked" if err and "403" in err else "failed", "detail": err, "url": url}
         return {}, meta
     df = load_bca_permits(dest)
     if df is None or df.empty:
-        meta = {"status": "failed", "detail": "Could not parse BCA xlsb", "url": BCA_2024_URL}
+        meta = {"status": "failed", "detail": "Could not parse BCA xlsb", "url": url}
+        return {}, meta
+    if not bca_has_house_numbers(df):
+        meta = {
+            "status": "unjoinable",
+            "detail": "Permit records list street, suburb and postcode only (no house number)",
+            "url": url,
+            "permitRows": len(df),
+        }
         return {}, meta
     index = build_bca_address_index(df)
     meta = {
         "status": "loaded" if index else "empty",
-        "url": BCA_2024_URL,
+        "url": url,
         "permitRows": len(df),
         "addressKeys": len(index),
     }

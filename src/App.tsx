@@ -531,7 +531,7 @@ export default function App() {
       const useTierFailures = buildEnrichmentUseTierFailures({
         baseFailures: useTiers.failures,
         enrichmentError: enrichmentResult.error,
-        bcaBlocked: enrichmentManifest?.bca?.status === "blocked",
+        bcaStatus: enrichmentManifest?.bca?.status,
         coverageMessage: coverageMsg,
         zonesFetchIncomplete: enrichmentManifest?.zonesFetch?.complete === false,
       });

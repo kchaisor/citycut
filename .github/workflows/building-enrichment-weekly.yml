@@ -61,7 +61,7 @@ jobs:
       - name: Put tippecanoe on PATH
         run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Python tests
-        run: pytest pipeline/test_build_enrichment.py pipeline/test_extent.py pipeline/test_zone_use.py pipeline/test_zone_use_sync.py pipeline/test_table_hash_sync.py pipeline/test_overture_building_use_sync.py pipeline/test_cascade_parity.py -q
+        run: pytest pipeline/test_build_enrichment.py pipeline/test_bca_join.py pipeline/test_extent.py pipeline/test_zone_use.py pipeline/test_zone_use_sync.py pipeline/test_table_hash_sync.py pipeline/test_overture_building_use_sync.py pipeline/test_cascade_parity.py -q
       - name: Build enrichment PMTiles (Greater Melbourne GCCSA)
         run: node scripts/build-building-enrichment-pmtiles.mjs
         env:
