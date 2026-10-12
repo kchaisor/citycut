@@ -342,6 +342,13 @@ describe("Illustrator plans", () => {
     expect(figure).toBeUndefined();
   });
 
+  it("keeps rail and tram off the figure-ground (they show only in 3D and on the site plan)", () => {
+    const chunks = figureGroundChunks(model(), 1000);
+    expect(chunks.map((chunk) => chunk.name)).not.toContain("Rail");
+    expect(chunks.map((chunk) => chunk.name)).not.toContain("Trams");
+    expect(chunks.find((chunk) => chunk.name === "Buildings")?.paths?.some((p) => p.dashMm)).toBeFalsy();
+  });
+
   it("writes figure-ground with frame, footprints, and annotation only", async () => {
     const fitted = await inspect(await figureGroundPdf(model(), 1000));
     expect(fitted.layers[0]).toBe("Frame/Sheet");
@@ -387,6 +394,9 @@ describe("Illustrator 3D view", () => {
     for (const name of info.layers) expect(info.counts.get(name) ?? 0).toBeGreaterThan(0);
     const widths = info.widthsMm.map((mm) => Math.round(mm * 1000) / 1000);
     expect(widths).toContain(VIEW_OUTLINE_MM);
+    // The rail in the test model is drawn as dashed black segments on its own layer.
+    expect(info.counts.get("Rail") ?? 0).toBeGreaterThan(0);
+    expect(widths).toContain(Math.round(DEFAULT_LINE_STYLES.rail.mm * 1000) / 1000);
   });
 
   it("keeps draped contours on their own layer when outlines are off", async () => {
