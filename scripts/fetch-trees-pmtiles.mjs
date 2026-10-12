@@ -36,6 +36,11 @@ try {
     rmSync(join(publicDir, TREES_MANIFEST_NAME), { force: true });
     console.warn(`[trees] ${result.message}; the site will use the live tree servers.`);
   }
+} catch (err) {
+  // Never fail the Pages build over trees: without the file the app uses the live servers.
+  rmSync(join(publicDir, TREES_PMTILES_NAME), { force: true });
+  rmSync(join(publicDir, TREES_MANIFEST_NAME), { force: true });
+  console.warn(`[trees] install failed (${err instanceof Error ? err.message : err}); the site will use the live tree servers.`);
 } finally {
   rmSync(tempDir, { recursive: true, force: true });
 }
