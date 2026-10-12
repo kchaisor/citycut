@@ -152,6 +152,19 @@ function pushTree(
 }
 
 /** OSM tree points from the pre-baked tree file, sized and framed exactly like base-tile points. */
+/**
+ * Neighbouring base tiles both carry a point that sits in their shared buffer. Keep the first
+ * copy of each Overture id so a tree on a tile edge is drawn once.
+ */
+export function dedupeTreesById(trees: TreeFeat[]): TreeFeat[] {
+  const seen = new Set<number>();
+  return trees.filter((tree) => {
+    if (seen.has(tree.id)) return false;
+    seen.add(tree.id);
+    return true;
+  });
+}
+
 export function overtureTreesFromPoints(
   points: { lon: number; lat: number; sid: number; tags: string | null }[],
   origin: LonLat,
@@ -321,14 +334,14 @@ export async function fetchOvertureBaseForCut(
     areas: areasKept,
     carParks,
     treeContext,
-    overtureTrees,
+    overtureTrees: dedupeTreesById(overtureTrees),
     stats: {
       release,
       tileCount: tiles.length,
       fetchMs: performance.now() - t0,
       waterCount: areasKept.filter((a) => a.kind === "water").length,
       greenCount: areasKept.filter((a) => a.kind === "green").length,
-      overtureTreeCount: overtureTrees.length,
+      overtureTreeCount: dedupeTreesById(overtureTrees).length,
       hasEsaLandCover,
     },
   };

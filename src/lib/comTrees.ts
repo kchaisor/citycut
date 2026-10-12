@@ -74,6 +74,8 @@ async function readPage(
   url.searchParams.set("limit", String(PAGE));
   url.searchParams.set("offset", String(offset));
   url.searchParams.set("where", where);
+  // Offset paging needs a stable, unique order; without it pages repeat and skip records.
+  url.searchParams.set("order_by", "com_id");
   url.searchParams.set(
     "select",
     "latitude,longitude,diameter_breast_height,age_description,genus,scientific_name",
