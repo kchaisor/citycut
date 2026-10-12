@@ -141,7 +141,17 @@ export type RoadFeat = {
   width: number;
   kind: "road" | "rail";
   grade?: RoadGrade;
+  /**
+   * Set on service ways only (OSM highway=service, Overture road/service): the service subclass
+   * ("parking_aisle", "driveway", "alley", "drive_through") or "service" when it has none.
+   * 3D, .3dm and city blocks ignore it. The site plan draws parking aisles as car-park ground,
+   * and only bridges road gaps that are rimmed by streets, not by service ways.
+   */
+  service?: string;
 };
+
+/** Car-park outline in local metres. The site plan uses it only to draw service ways inside it as ground. */
+export type CarParkArea = { ring: Ring; holes: Ring[] };
 
 export type AreaFeat = {
   id: number;
@@ -158,6 +168,9 @@ export type TreeSizeSource = "osm" | "com" | "species" | "default" | "vicmap";
  * then Vicmap, then canopy infill.
  */
 export type TreeTier = "com" | "osm" | "vicmap" | "canopy";
+
+/** A tree source that failed or is incomplete: "base" is the Overture base tile (OSM trees + canopy). */
+export type TreeLoadNote = { source: "com" | "vicmap" | "base"; message: string };
 
 /** Metres. `sizeSource` records which dataset supplied the numbers. */
 export type TreeDimensions = {
@@ -242,11 +255,15 @@ export type CityModel = {
   /** True when tram routes were requested but PTV data failed to load. */
   tramLinesLoadFailed?: boolean;
   areas: AreaFeat[];
+  /** Car-park outlines from the base tiles. Plan-only; 3D, .3dm and city blocks ignore them. */
+  carParks?: CarParkArea[];
   trees: TreeFeat[];
   roadKm: number;
   buildingCapHit: boolean;
   /** Set when the combined tree tiers were trimmed to the instance cap. */
   treeCapHit?: boolean;
+  /** Tree sources that failed or loaded only part of the frame. Shown in the Tree sizes panel. */
+  treeLoadNotes?: TreeLoadNote[];
   sourceNote: string;
   /** Set when the Terrain layer was built. Absent or null keeps the flat ground surface. */
   terrain?: TerrainField | null;

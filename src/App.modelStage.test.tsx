@@ -154,10 +154,12 @@ vi.mock("./lib/useCascade", () => ({
 }));
 vi.mock("./lib/comTrees", () => ({
   fetchComTrees: vi.fn().mockResolvedValue([]),
+  fetchComTreesDetailed: vi.fn().mockResolvedValue({ rows: [], error: null, partial: false }),
   comRecordsToTrees: vi.fn(() => []),
 }));
 vi.mock("./lib/vicmapTrees", () => ({
   fetchVicmapTrees: vi.fn().mockResolvedValue([]),
+  fetchVicmapTreesDetailed: vi.fn().mockResolvedValue({ rows: [], error: null, partial: false }),
   vicmapPointsToTrees: vi.fn(() => []),
   VICMAP_ATTRIBUTION: "",
 }));

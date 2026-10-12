@@ -125,3 +125,8 @@ export function canopyKindFromLandCover(subtype: string): CanopyKind | null {
 export function treeTagsFromLand(props: Record<string, unknown>): Record<string, string> {
   return parseSourceTags(props.source_tags);
 }
+
+/** Overture base `infrastructure` car parks (OSM amenity=parking): subtype transit, class parking. */
+export function isOvertureCarPark(props: Record<string, unknown>): boolean {
+  return String(props.class ?? "").toLowerCase() === "parking";
+}
