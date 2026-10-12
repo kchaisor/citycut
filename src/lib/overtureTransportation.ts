@@ -20,6 +20,7 @@ import {
 } from "./overtureTiles";
 import { clipPolylineSiteFrame, DEFAULT_SITE_FRAME_SHAPE, type SiteFrameShape } from "./siteFrame";
 import type { LonLat, Pt, RoadFeat } from "../types";
+import { circleRing, detectRoundabouts, osmWayKey, type Roundabout } from "./roundabouts";
 
 export const OVERTURE_TRANSPORT_ZOOM = 14;
 
@@ -36,6 +37,8 @@ type LinePart = {
   line: Pt[];
   spec: NonNullable<ReturnType<typeof roadSpecFromOvertureSegment>>;
   service: string | null;
+  /** OSM way key, used to reassemble roundabout rings cut into segments. */
+  key: string | null;
 };
 
 function partsFromTile(
@@ -73,13 +76,14 @@ function partsFromTile(
           : [];
     const underground = hidden(props);
     const service = serviceKindOfSegment(props);
+    const key = osmWayKey(props);
     for (const coordinates of lineStrings) {
       const clipped = lineFromGeoJson(coordinates, origin, half, tileRect);
       for (const line of clipped) {
         const visible = clipLineToGroundVisible(line, underground);
         for (const piece of visible) {
           if (polylineLength(piece) < 1) continue;
-          parts.push({ id: `${id}:${x}:${y}:${parts.length}`, line: piece, spec, service });
+          parts.push({ id: `${id}:${x}:${y}:${parts.length}`, line: piece, spec, service, key });
         }
       }
     }
@@ -93,7 +97,7 @@ export async function fetchOvertureTransportationForCut(
   sideM: number,
   signal?: AbortSignal,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
-): Promise<{ roads: RoadFeat[]; roadKm: number; stats: OvertureTransportStats }> {
+): Promise<{ roads: RoadFeat[]; roadKm: number; roundabouts: Roundabout[]; stats: OvertureTransportStats }> {
   const half = sideM / 2;
   const t0 = performance.now();
   const release = await resolveOvertureRelease(signal);
@@ -110,6 +114,24 @@ export async function fetchOvertureTransportationForCut(
     skippedTomTom += fromTile.skippedTomTom;
     segmentCount += fromTile.parts.length;
     parts.push(...fromTile.parts);
+  }
+  // Redraw each roundabout ring as one smooth closed centreline (fixed segment count).
+  const roundabouts = detectRoundabouts(
+    parts
+      .filter((part) => part.spec.kind === "road" && part.spec.grade !== "path" && !part.service)
+      .map((part) => ({ key: part.key, line: part.line, width: part.spec.width })),
+  );
+  if (roundabouts.length > 0) {
+    const byKey = new Map(roundabouts.map((rb) => [rb.key, rb]));
+    const firstOf = new Map<string, LinePart>();
+    for (const part of parts) if (part.key && byKey.has(part.key) && !firstOf.has(part.key)) firstOf.set(part.key, part);
+    const kept = parts.filter((part) => !(part.key && byKey.has(part.key)));
+    for (const [key, part] of firstOf) {
+      const rb = byKey.get(key)!;
+      kept.push({ ...part, id: `${key}:roundabout`, line: circleRing(rb.center, rb.radius) });
+    }
+    parts.length = 0;
+    parts.push(...kept);
   }
   const roads: RoadFeat[] = [];
   for (const part of parts) {
@@ -130,6 +152,7 @@ export async function fetchOvertureTransportationForCut(
   const deduped = dedupeRoads(sanitized.roads);
   return {
     roads: deduped.roads,
+    roundabouts,
     roadKm: deduped.metres / 1000,
     stats: {
       release,
