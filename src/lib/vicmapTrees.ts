@@ -1,5 +1,14 @@
 import { toLocal } from "./geo";
 import { finishTreeSize, invalidPositive, logDroppedTreeValues } from "./trees";
+import {
+  errorText,
+  fetchTreePage,
+  readTreePageWithRetry,
+  TREE_PAGE_RETRY_MS,
+  TREE_PAGE_TIMEOUT_MS,
+  TreeSourceHttpError,
+  type TreeSourceResult,
+} from "./treeSourceFetch";
 import type { LonLat, TreeFeat } from "../types";
 
 /**
@@ -127,29 +136,70 @@ export function nextVicmapOffset(offset: number, page: Pick<VicmapPage, "count" 
   return offset + VICMAP_PAGE_SIZE;
 }
 
-export async function fetchVicmapTrees(bounds: BBox, signal?: AbortSignal): Promise<VicmapPoint[]> {
+/**
+ * Every Vicmap page for the frame, in OBJECTID order. Each page has its own time limit
+ * ({@link TREE_PAGE_TIMEOUT_MS}) and one retry on a transient failure; when a later page fails, the pages already read are kept and
+ * the result says the tier is incomplete. Nothing loaded is an error, never a silent zero.
+ */
+export async function fetchVicmapTreesDetailed(
+  bounds: BBox,
+  signal?: AbortSignal,
+  pageTimeoutMs = TREE_PAGE_TIMEOUT_MS,
+  retryMs = TREE_PAGE_RETRY_MS,
+): Promise<TreeSourceResult<VicmapPoint>> {
   const points: VicmapPoint[] = [];
   let dropped = 0;
   let offset = 0;
+  let pages = 0;
+  let error: string | null = null;
   for (let page = 0; page < MAX_PAGES; page++) {
-    const response = await fetch(vicmapPageUrl(bounds, offset), {
-      signal,
-      headers: { Accept: "application/json" },
-    });
-    if (!response.ok) throw new Error(`Vicmap tree points answered ${response.status}.`);
-    const json = (await response.json()) as { error?: { message?: string } };
-    if (json.error) {
-      throw new Error(json.error.message || "Vicmap tree points could not be queried.");
+    try {
+      const json = await readTreePageWithRetry(async () => {
+        const response = await fetchTreePage(
+          vicmapPageUrl(bounds, offset),
+          { headers: { Accept: "application/json" } },
+          "Vicmap tree points",
+          signal,
+          pageTimeoutMs,
+        );
+        if (!response.ok) {
+          throw new TreeSourceHttpError(`Vicmap tree points answered ${response.status}.`, response.status);
+        }
+        const body = (await response.json()) as { error?: { message?: string; details?: string[] } };
+        if (body.error) {
+          const detail = body.error.message || body.error.details?.join(" ") || "";
+          throw new Error(`Vicmap tree points could not be queried.${detail ? ` ${detail}` : ""}`);
+        }
+        return body;
+      }, signal, retryMs);
+      const parsed = parseVicmapPage(json);
+      points.push(...parsed.points);
+      dropped += parsed.dropped;
+      pages += 1;
+      const next = nextVicmapOffset(offset, parsed);
+      if (next === null) break;
+      offset = next;
+    } catch (err) {
+      if (signal?.aborted) throw err;
+      error = errorText(err, "Vicmap tree points could not be loaded.");
+      break;
     }
-    const parsed = parseVicmapPage(json);
-    points.push(...parsed.points);
-    dropped += parsed.dropped;
-    const next = nextVicmapOffset(offset, parsed);
-    if (next === null) break;
-    offset = next;
   }
   logDroppedTreeValues(dropped, "Vicmap");
-  return points;
+  const partial = error !== null && pages > 0;
+  if (error !== null) {
+    error = partial
+      ? `Vicmap tree points are incomplete: ${pages} page${pages === 1 ? "" : "s"} (${points.length} points) loaded, then ${error}`
+      : `Vicmap tree points could not be loaded, so that tier is missing. ${error}`;
+  }
+  return { rows: points, error, partial };
+}
+
+/** Every Vicmap point for the frame. Throws when nothing loaded; a partial load returns what arrived. */
+export async function fetchVicmapTrees(bounds: BBox, signal?: AbortSignal): Promise<VicmapPoint[]> {
+  const result = await fetchVicmapTreesDetailed(bounds, signal);
+  if (result.error && !result.partial) throw new Error(result.error);
+  return result.rows;
 }
 
 export function vicmapPointsToTrees(

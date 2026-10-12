@@ -15,6 +15,7 @@ import { reassembleBuildingFragments } from "./overtureBuildings";
 import {
   canopyKindFromLandCover,
   isGreenLandUse,
+  isOvertureCarPark,
   isOvertureWaterLine,
   isOvertureWaterPolygon,
   treeTagsFromLand,
@@ -23,7 +24,7 @@ import { overtureBaseUrl, resolveOvertureRelease } from "./overtureRelease";
 import { treeSize } from "./trees";
 import type { CanopyPatch, TreeContext } from "./parseOsm";
 import { stableNumericId, tileRange } from "./overtureTiles";
-import type { AreaFeat, LonLat, Pt, Ring, TreeFeat } from "../types";
+import type { AreaFeat, CarParkArea, LonLat, Pt, Ring, TreeFeat } from "../types";
 
 export const OVERTURE_BASE_ZOOM = 13;
 const MIN_AREA = 4;
@@ -216,6 +217,8 @@ export async function fetchOvertureBaseForCut(
   signal?: AbortSignal,
 ): Promise<{
   areas: AreaFeat[];
+  /** Car-park outlines (Overture infrastructure/transit/parking, OSM amenity=parking), plan-only. */
+  carParks?: CarParkArea[];
   treeContext: TreeContext;
   overtureTrees: TreeFeat[];
   stats: OvertureBaseStats;
@@ -229,6 +232,7 @@ export async function fetchOvertureBaseForCut(
   const waterCenterlines: WaterCenterline[] = [];
   const greenFrags: PolyFragment[] = [];
   const canopyFrags: PolyFragment[] = [];
+  const carParkFrags: PolyFragment[] = [];
   const overtureTrees: TreeFeat[] = [];
   let hasEsaLandCover = false;
 
@@ -241,6 +245,9 @@ export async function fetchOvertureBaseForCut(
     waterFrags.push(...polysFromLayer("water", tile.data, z, x, y, origin, sideM, frameShape));
     waterCenterlines.push(...waterCenterlinesFromLayer(tile.data, z, x, y, origin, sideM, frameShape));
     greenFrags.push(...polysFromLayer("land_use", tile.data, z, x, y, origin, sideM, frameShape));
+    for (const frag of polysFromLayer("infrastructure", tile.data, z, x, y, origin, sideM, frameShape)) {
+      if (isOvertureCarPark(frag.props)) carParkFrags.push(frag);
+    }
     const cover = polysFromLayer("land_cover", tile.data, z, x, y, origin, sideM, frameShape);
     for (const frag of cover) {
       const kind = canopyKindFromLandCover(String(frag.props.subtype ?? ""));
@@ -292,8 +299,12 @@ export async function fetchOvertureBaseForCut(
   };
 
   const areasKept = dedupeAreas(areas);
+  const carParks = options.waterGreen
+    ? mergePolyFragments(carParkFrags).map((merged) => ({ ring: merged.ring, holes: merged.holes }))
+    : [];
   return {
     areas: areasKept,
+    carParks,
     treeContext,
     overtureTrees,
     stats: {
