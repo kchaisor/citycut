@@ -2,6 +2,8 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { MapStage, type FlyRequest } from "./components/MapStage";
 import { SelectChrome } from "./components/SelectChrome";
 import { TopBar } from "./components/TopBar";
+import { useSidebarCollapsed } from "./lib/sidebarCollapse";
+import { viewportIsNarrow } from "./lib/panelCollapse";
 import {
   DEFAULT_LAYERS,
   DEFAULT_SIDE_KM,
@@ -48,6 +50,7 @@ import { TERRAIN_UNAVAILABLE, terrainNote } from "./lib/terrain";
 import { MAX_TREE_INSTANCES, assembleTreeTiers } from "./lib/treeTiers";
 import { replaceTreeNote, treeSourceLoadNotes, treeTierCounts } from "./lib/trees";
 import { fetchVicmapTreesDetailed, vicmapPointsToTrees, VICMAP_ATTRIBUTION } from "./lib/vicmapTrees";
+import { COM_TREES_CREDIT } from "./lib/comTreesCredit";
 import { loadContoursForCut } from "./lib/vicmapContours";
 import { fetchOvertureBuildingsForCut } from "./lib/overtureBuildings";
 import { qaForcedCrashFromSearch, qaModeFromSearch } from "./lib/qaCameraBridge";
@@ -94,6 +97,9 @@ export default function App() {
   const urlSiteAnchor =
     typeof window === "undefined" ? null : siteAnchorFromSearch(window.location.search);
   const viewRef = useRef<ViewState>(initialView);
+  // Read once at load: on a phone each new landing map zooms out to fit the frame.
+  const [fitFrameOnLoad] = useState(viewportIsNarrow);
+  const [cutCenter, setCutCenter] = useState({ lat: initialView.lat, lon: initialView.lon });
   const anchorRef = useRef<PlaceAnchor | null>(
     sharedLabel
       ? {
@@ -198,6 +204,7 @@ export default function App() {
     if (settleTimer.current != null) window.clearTimeout(settleTimer.current);
     settleTimer.current = window.setTimeout(() => {
       settleTimer.current = null;
+      setCutCenter({ lat: viewRef.current.lat, lon: viewRef.current.lon });
       void applyLocality(viewRef.current);
     }, REVERSE_DEBOUNCE_MS);
   }
@@ -629,6 +636,7 @@ export default function App() {
         sourceNote = `${sourceNote} ${prebakeSourceNote(prebake.trees.manifest, prebakeOsm !== null)}`;
       }
       for (const note of treeLoadNotes) sourceNote = `${sourceNote} ${note.message}`;
+      if (treeTierCounts(trees).com > 0) sourceNote = `${sourceNote} ${COM_TREES_CREDIT}.`;
       if (treeTierCounts(trees).vicmap > 0) sourceNote = `${sourceNote} ${VICMAP_ATTRIBUTION}`;
       if (prebakeOsm && treeTierCounts(trees).osm > 0) sourceNote = `${sourceNote} ${OSM_TREES_ODBL_CREDIT}`;
       if (useTiers.failures.length > 0) {
@@ -750,6 +758,7 @@ export default function App() {
     }
   }
 
+  const [selectCollapsed] = useSidebarCollapsed();
   const headerPlace = phase === "model" && model ? model.placeLabel : placeLabel;
   const headerSide = phase === "model" && model ? model.sideM : sideKm * 1000;
   const headerShape = phase === "model" && model ? (model.frameShape ?? "square") : frameShape;
@@ -769,9 +778,10 @@ export default function App() {
         onNewCut={() => setPhase("select")}
       />
       {phase === "select" ? (
-        <div className="select">
+        <div className={selectCollapsed ? "select sidebar-collapsed" : "select"}>
           <MapStage
             basemap={basemap}
+            fitFrameOnLoad={fitFrameOnLoad}
             sideM={sideKm * 1000}
             frameShape={frameShape}
             initialView={viewRef.current}
@@ -780,7 +790,6 @@ export default function App() {
             siteSearch={mapSiteSearch}
             onCancel={cancel}
             onView={onView}
-            onBasemap={onBasemap}
             onFlyLanded={onFlyLanded}
           />
           <SelectChrome
@@ -795,6 +804,9 @@ export default function App() {
             onLayer={onLayer}
             onPlace={onPlace}
             onCreate={createModel}
+            basemap={basemap}
+            onBasemap={onBasemap}
+            center={cutCenter}
           />
         </div>
       ) : model ? (
