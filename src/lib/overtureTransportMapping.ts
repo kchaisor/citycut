@@ -59,6 +59,15 @@ export function roadSpecFromOvertureSegment(props: SegmentProps): RoadSpec | nul
   return null;
 }
 
+/** Service subclass for Overture `road/service[/subclass]` segments ("service" when none); otherwise null. */
+export function serviceKindOfSegment(props: SegmentProps): string | null {
+  const subtype = String(props.subtype ?? "").toLowerCase();
+  if (subtype !== "road" && subtype !== "") return null;
+  if (String(props.class ?? "").toLowerCase() !== "service") return null;
+  const subclass = String(props.subclass ?? "").toLowerCase();
+  return subclass || "service";
+}
+
 /** Vehicle carriageways only — excludes rail, water, and path-class highways. */
 export function isVehicularOvertureSegment(props: SegmentProps): boolean {
   const subtype = String(props.subtype ?? "").toLowerCase();

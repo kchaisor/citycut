@@ -69,18 +69,6 @@ function pointInRing(point: Ring[0], ring: Ring): boolean {
   return inside;
 }
 
-function ringCentroid(ring: Ring): Ring[0] {
-  const open = openRing(ring);
-  let x = 0;
-  let y = 0;
-  for (const p of open) {
-    x += p[0];
-    y += p[1];
-  }
-  const n = open.length || 1;
-  return [x / n, y / n];
-}
-
 function ringAbsArea(ring: Ring): number {
   return Math.abs(signedArea(openRing(ring)));
 }
@@ -132,36 +120,46 @@ export function containmentDepth(ring: Ring, all: Ring[]): number {
   return depth;
 }
 
-type TaggedRing = { ring: Ring; depth: number };
-
-function directHoles(parent: TaggedRing, tagged: TaggedRing[]): Ring[] {
-  const holes: Ring[] = [];
-  for (const candidate of tagged) {
-    if (candidate.depth !== parent.depth + 1 || candidate.depth % 2 === 0) continue;
-    if (!pointInRing(ringCentroid(candidate.ring), parent.ring)) continue;
-    let blocked = false;
-    for (const island of tagged) {
-      if (island.depth !== parent.depth + 2 || island.depth % 2 !== 0) continue;
-      if (!pointInRing(ringCentroid(island.ring), parent.ring)) continue;
-      if (pointInRing(ringCentroid(candidate.ring), island.ring)) {
-        blocked = true;
-        break;
-      }
-    }
-    if (!blocked) holes.push(candidate.ring);
-  }
-  return holes;
-}
-
+/**
+ * Rebuild polygons from unordered rings: even depth is a shell, odd depth a hole, and each hole
+ * belongs to the ring that immediately contains it. A ring's vertex average is not used: a concave
+ * hole's vertex average can land inside one of its own islands, which used to drop the hole and
+ * fill a whole city block as road (Dandenong shopping centre).
+ */
 function normalizeFromRings(rings: Ring[]): MultiPolygon {
   if (rings.length === 0) return [];
-  const tagged: TaggedRing[] = rings.map((ring) => ({ ring, depth: containmentDepth(ring, rings) }));
+  const parents = rings.map((ring) => immediateParent(ring, rings));
+  const depthOf = new Map<Ring, number>();
+  const depth = (index: number): number => {
+    const ring = rings[index]!;
+    const known = depthOf.get(ring);
+    if (known !== undefined) return known;
+    let d = 0;
+    let current: Ring | null = parents[index] ?? null;
+    const seen = new Set<Ring>();
+    while (current && !seen.has(current) && d <= rings.length) {
+      seen.add(current);
+      d++;
+      current = parents[rings.indexOf(current)] ?? null;
+    }
+    depthOf.set(ring, d);
+    return d;
+  };
+  const holesOf = new Map<Ring, Ring[]>();
+  rings.forEach((ring, index) => {
+    const parent = parents[index];
+    if (depth(index) % 2 === 1 && parent) {
+      const list = holesOf.get(parent) ?? [];
+      list.push(ring);
+      holesOf.set(parent, list);
+    }
+  });
   const out: MultiPolygon = [];
-  for (const parent of tagged) {
-    if (parent.depth % 2 !== 0) continue;
-    const holes = directHoles(parent, tagged);
-    out.push(holes.length > 0 ? [parent.ring, ...holes] : [parent.ring]);
-  }
+  rings.forEach((ring, index) => {
+    if (depth(index) % 2 !== 0) return;
+    const holes = holesOf.get(ring) ?? [];
+    out.push(holes.length > 0 ? [ring, ...holes] : [ring]);
+  });
   return out;
 }
 
