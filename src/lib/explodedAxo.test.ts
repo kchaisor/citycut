@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { model as baseModel } from "./aiExport.test";
 import {
-  axoDashedStroke,
   axoFrameBoundaryRing,
   axoGuideAnchorPoints,
   axoGuideLines,
@@ -159,7 +158,7 @@ describe("exploded axo stack order", () => {
 });
 
 describe("exploded axo roads plate", () => {
-  it("draws vehicular centre lines solid and rail as a dashed line on the roads layer", () => {
+  it("draws vehicular centre lines only on the roads layer", () => {
     const m: CityModel = {
       ...modelWithShape("square"),
       roads: [
@@ -170,27 +169,7 @@ describe("exploded axo roads plate", () => {
     };
     const { layers } = buildExplodedAxoLayers(m, defaultExplodedAxoSettings(m.sideM));
     const roads = layers.find((layer) => layer.id === "roads");
-    expect(roads?.strokes.length).toBe(2);
-    expect(roads?.strokeDashed).toEqual([false, true]);
-    expect(roads?.strokePaints).toEqual(["roads", "rail-line"]);
-  });
-
-  it("keeps the roads layer solid-only when the cut has no rail or tram", () => {
-    const m: CityModel = {
-      ...modelWithShape("square"),
-      roads: [{ id: 1, line: [[-20, 0], [20, 0]], width: 8, kind: "road", grade: "local" }],
-    };
-    const { layers } = buildExplodedAxoLayers(m, defaultExplodedAxoSettings(m.sideM));
-    const roads = layers.find((layer) => layer.id === "roads");
     expect(roads?.strokes.length).toBe(1);
-    expect(roads?.strokeDashed).toBeUndefined();
-  });
-
-  it("dashes rail and train with the rail pen and trams with the tram pen", () => {
-    const style = { rail: "rail-pen", tram: "tram-pen" };
-    expect(axoDashedStroke("rail-line", style)).toBe("rail-pen");
-    expect(axoDashedStroke("pt-train", style)).toBe("rail-pen");
-    expect(axoDashedStroke("pt-tram", style)).toBe("tram-pen");
   });
 });
 
@@ -228,5 +207,45 @@ describe("exploded axo layer settings", () => {
       .map((id) => liftsForLayerOrder(settings.layerOrder, settings.gapM).get(id)!);
     const guides = axoGuideLines(m.sideM, "circle", lifts);
     expect(guides).toHaveLength(4);
+  });
+});
+
+describe("rail and tram stay off the exploded axo", () => {
+  const settingsWith = (m: CityModel): ExplodedAxoSettings => {
+    const s = defaultExplodedAxoSettings(m.sideM);
+    return { ...s, layerVisible: { ...s.layerVisible, roads: true, transport: true } };
+  };
+
+  it("draws no rail, train or tram lines in the transport overlay; stations, stops and bus routes stay", () => {
+    const m = baseModel();
+    const { layers } = buildExplodedAxoLayers(m, settingsWith(m), {
+      transport: {
+        rail: { lines: [[[-40, 0], [40, 0]]], stations: [[0, 0]] },
+        pt: {
+          lines: [
+            { mode: "train", line: [[-40, 5], [40, 5]] },
+            { mode: "tram", line: [[-40, 10], [40, 10]] },
+            { mode: "bus", line: [[-40, 15], [40, 15]] },
+          ],
+          stops: [
+            { mode: "train", point: [5, 5] },
+            { mode: "tram", point: [5, 10] },
+          ],
+        },
+      },
+    });
+    const transport = layers.find((layer) => layer.id === "transport")!;
+    expect(transport.strokePaints ?? []).toEqual(["pt-bus"]);
+    expect(transport.strokeDashed ?? []).not.toContain(true);
+    expect((transport.markers ?? []).map((marker) => marker.paint)).toEqual(["rail-station", "pt-train", "pt-tram"]);
+    expect((transport.legend ?? []).map((entry) => entry.label)).not.toContain("Rail");
+  });
+
+  it("keeps the roads plate to vehicular roads, with no dashed rail or tram strokes", () => {
+    const m = baseModel();
+    const roads = buildExplodedAxoLayers(m, settingsWith(m)).layers.find((layer) => layer.id === "roads")!;
+    expect(roads.strokeDashed ?? []).not.toContain(true);
+    expect(roads.strokePaints ?? []).not.toContain("rail-line");
+    expect(roads.strokePaints ?? []).not.toContain("pt-tram");
   });
 });

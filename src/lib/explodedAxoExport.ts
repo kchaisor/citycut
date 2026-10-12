@@ -9,7 +9,6 @@ import {
   axoLayerBasePaint,
   axoLayerLabelAnchor,
   axoLayersForPaint,
-  axoDashedStroke,
   axoPaintColour,
   buildExplodedAxoLayers,
   explodedAxoBounds,
@@ -197,15 +196,13 @@ export function explodedAxoChunks(
       const rings = ringsFromIsoD(stroke, origin, scale, pageHeightMm, liftM);
       const widthScale = layer.strokeWidthScales?.[index] ?? 1;
       const dashed = layer.strokeDashed?.[index];
-      const paint = strokePaint(layer, index);
-      const dashPen = dashed ? axoDashedStroke(paint, readDrawingStyle()) : null;
-      const tramDash = dashPen ? dashSegments(dashPen.dash) : null;
+      const tramDash = dashed ? dashSegments(readDrawingStyle().tram.dash) : null;
       for (const ring of rings) {
         if (ring.length >= 2) {
           paths.push({
             rings: [ring],
-            stroke: hexRgb(dashPen ? (paint === "pt-tram" ? getColour("--tram-line-stroke") : dashPen.color) : axoPaintColour(paint)),
-            strokeMm: (dashPen ? dashPen.mm : 0.25) * widthScale,
+            stroke: hexRgb(dashed ? getColour("--tram-line-stroke") : axoPaintColour(strokePaint(layer, index))),
+            strokeMm: (dashed ? readDrawingStyle().tram.mm : 0.25) * widthScale,
             close: false,
             ...(tramDash ? { dashMm: tramDash, cap: "round" as const } : {}),
           });

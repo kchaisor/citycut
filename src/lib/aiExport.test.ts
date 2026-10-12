@@ -342,13 +342,11 @@ describe("Illustrator plans", () => {
     expect(figure).toBeUndefined();
   });
 
-  it("draws rail as a black dashed line on the figure-ground, without a paper casing", () => {
+  it("keeps rail and tram off the figure-ground (they show only in 3D and on the site plan)", () => {
     const chunks = figureGroundChunks(model(), 1000);
-    const rail = chunks.find((chunk) => chunk.name === "Rail");
-    expect(rail?.paths?.length).toBe(1);
-    const path = rail!.paths![0]!;
-    expect(path.stroke).toEqual(hexRgb(DEFAULT_LINE_STYLES.rail.color));
-    expect(path.dashMm?.length).toBeGreaterThanOrEqual(2);
+    expect(chunks.map((chunk) => chunk.name)).not.toContain("Rail");
+    expect(chunks.map((chunk) => chunk.name)).not.toContain("Trams");
+    expect(chunks.find((chunk) => chunk.name === "Buildings")?.paths?.some((p) => p.dashMm)).toBeFalsy();
   });
 
   it("writes figure-ground with frame, footprints, and annotation only", async () => {

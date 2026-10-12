@@ -7,7 +7,6 @@ import {
   axoLayerColours,
   axoLayerSvgTransform,
   axoLayersForPaint,
-  axoDashedStroke,
   axoPaintColour,
   buildExplodedAxoLayers,
   explodedAxoBounds,
@@ -249,14 +248,13 @@ export function DrawingExplodedAxo({
                 const paint = resolveStrokePaint(layer.id, si, layer);
                 const scale = layer.strokeWidthScales?.[si] ?? 1;
                 const dashed = layer.strokeDashed?.[si];
-                const dashPen = dashed ? axoDashedStroke(paint, lineStyle) : null;
-                const tramDash = dashPen ? dashScreen(dashPen.dash) : null;
+                const tramDash = dashed ? dashScreen(lineStyle.tram.dash) : null;
                 return (
                   <path
                     key={`s${si}`}
                     d={d}
                     fill="none"
-                    stroke={dashPen ? (paint === "pt-tram" ? tramColour : dashPen.color) : axoPaintColour(paint)}
+                    stroke={dashed ? tramColour : axoPaintColour(paint)}
                     strokeWidth={roadPx * scale}
                     vectorEffect="non-scaling-stroke"
                     strokeLinecap={tramDash?.cap ?? "round"}
