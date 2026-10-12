@@ -10,6 +10,7 @@ import { figureGround, figureGroundDatum } from "./figureGround";
 import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { buildHeliodonGroundOverlay, type HeliodonGroundExportOptions } from "./heliodonDiagram";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
+import { comTreesCreditLine } from "./comTreesCredit";
 import { contourIsIndex, demContourLayer } from "./vicmapContours";
 import { analyzeWindPeriod, sectorCenterDeg, type WindPeriodId, type WindRoseTable } from "./windRose";
 import { plainDataCredit } from "./dataCredits";
@@ -730,12 +731,14 @@ export async function cityModelTo3dm(
       prefix: `CityCut. ${crs.name}. Metres, Z-up. ${CRS_NOTE}`,
       windOn: Boolean(wind?.table),
     });
-    doc.startSectionComments = [buildingCredit, comCredit].filter(Boolean).join(" ");
+    const treesCredit = comTreesCreditLine(model);
+    doc.startSectionComments = [buildingCredit, comCredit, treesCredit].filter(Boolean).join(" ");
     doc.settings().modelUnitSystem = rhino.UnitSystem.Meters;
     doc.settings().pageUnitSystem = rhino.UnitSystem.Meters;
     doc.strings().set("CRS", crs.name);
     doc.strings().set("CRS note", CRS_NOTE);
     if (comCredit) doc.strings().set("Building heights", comCredit);
+    if (treesCredit) doc.strings().set("Trees", treesCredit);
     if (model.terrain) {
       doc.strings().set(
         "Vertical",

@@ -15,6 +15,7 @@ import { hexRgb } from "./lineweights";
 import { ROAD_COLOR, SURFACE } from "./surfaceLayers";
 import { footprintBase, sampleTerrain } from "./terrain";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
+import { comTreesCreditLine } from "./comTreesCredit";
 import { stableExportModel } from "./exportStableOrder";
 import { contourDrapeStepM, contourPolylinesForModel, drapeContourSegments } from "./contourLines3d";
 import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
@@ -785,14 +786,16 @@ export function viewChunks(model: CityModel, shot: CameraShot, style: ViewStyle)
   const railPaths = transportPaths(model, shot, page.widthMm, page.heightMm, cells);
   if (railPaths.length > 0) chunks.push({ name: "Rail", paths: railPaths });
   const plate = Math.min(page.widthMm - 8, Math.max(42, label.length * 1.35 + 8));
-  const boxHeight = comCredit ? 18.4 : 12.4;
+  const credits = [comCredit, comTreesCreditLine(model)].filter((line): line is string => Boolean(line));
+  // One credit keeps the original 18.4 mm plate; each extra credit adds a 4 mm line above it.
+  const boxHeight = credits.length === 0 ? 12.4 : 18.4 + (credits.length - 1) * 4;
   const texts: PdfChunk["texts"] = [
     { x: 4.2, y: boxHeight - 4, sizeMm: 2.6, text: label, color: ink },
     { x: 4.2, y: 4.2, sizeMm: 2.8, text: "not to scale", color: ink },
   ];
-  if (comCredit) {
-    texts.splice(1, 0, { x: 4.2, y: 8.8, sizeMm: 1.85, text: comCredit, color: ink });
-  }
+  credits.forEach((text, index) => {
+    texts.splice(1 + index, 0, { x: 4.2, y: 8.8 + index * 4, sizeMm: 1.85, text, color: ink });
+  });
   chunks.push({
     name: "Annotation",
     paths: [

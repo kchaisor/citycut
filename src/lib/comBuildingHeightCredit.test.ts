@@ -12,6 +12,20 @@ import { viewAi } from "./aiView";
 import * as THREE from "three";
 import { shotFromCamera } from "./cameraShot";
 import type { CityModel } from "../types";
+import { explodedAxoAi } from "./aiPlan";
+import { COM_TREES_CREDIT } from "./comTreesCredit";
+
+// PostScript strings escape parentheses, so allow a backslash before each.
+const TREES_RE = /Trees: Trees, with species and dimensions \\?\(Urban Forest\\?\) .*City of Melbourne, CC BY 4\.0/;
+
+/** Same block plus one City of Melbourne inventory tree (or an OSM one). */
+function treeModel(tier: "com" | "osm"): CityModel {
+  return {
+    ...baseModel(false),
+    layers: { buildings: true, roads: true, waterGreen: true, trees: true },
+    trees: [{ id: 9, at: [30, 30], height_m: 10, crown_diameter_m: 6, trunk_diameter_m: 0.4, sizeSource: "default", tier } as unknown as CityModel["trees"][number]],
+  };
+}
 
 const CREDIT_RE = /Building heights: 2023 Building Footprints .*City of Melbourne, CC BY 4\.0/;
 
@@ -140,3 +154,49 @@ describe("comBuildingHeightCredit", () => {
     }
   });
 });
+
+describe("City of Melbourne urban forest credit in exports", () => {
+  it("site plan and figure-ground AI8 carry it only when CoM trees are in the cut", () => {
+    expect(latin1(sitePlanAi8(treeModel("com"), 1000))).toMatch(TREES_RE);
+    expect(latin1(figureGroundAi8(treeModel("com"), 1000))).toMatch(TREES_RE);
+    expect(latin1(sitePlanAi8(treeModel("osm"), 1000))).not.toMatch(/Urban Forest/);
+  });
+
+  it("site plan PDF and 3D view PDF annotations carry it", async () => {
+    expect(await pdfVisibleText(await sitePlanPdf(treeModel("com"), 1000))).toMatch(TREES_RE);
+    const camera = new THREE.PerspectiveCamera(32, 16 / 10, 0.5, 4000);
+    camera.position.set(-90, 80, 110);
+    camera.lookAt(0, 6, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+    const shot = shotFromCamera(camera, 640, 400);
+    const both = { ...treeModel("com"), comBuildingHeights: true };
+    const text = await pdfVisibleText(await viewAi(both, shot, { uniformBuildings: false, colourBySource: false }));
+    expect(text).toMatch(TREES_RE);
+    expect(text).toMatch(CREDIT_RE);
+  });
+
+  it("exploded axo AI carries it", async () => {
+    const bytes = await explodedAxoAi(treeModel("com"), 1000);
+    const text = latin1(bytes).startsWith("%PDF") ? await pdfVisibleText(bytes) : latin1(bytes);
+    expect(text).toMatch(TREES_RE);
+  });
+
+  it("Rhino start comments and a Trees document string carry it", async () => {
+    const rhino = await loadRhino();
+    const doc = rhino.File3dm.fromByteArray(await cityModelTo3dm(treeModel("com")));
+    try {
+      expect(doc.startSectionComments).toMatch(TREES_RE);
+      const table = doc.strings();
+      let trees: string | null = null;
+      for (let i = 0; i < table.count; i++) {
+        const entry = table.get(i) as string[];
+        if (entry[0] === "Trees") trees = entry[1];
+      }
+      expect(trees).toBe(COM_TREES_CREDIT);
+    } finally {
+      doc.destroy();
+    }
+  });
+});
+

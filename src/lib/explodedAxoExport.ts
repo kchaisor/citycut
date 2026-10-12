@@ -3,6 +3,7 @@ import { getColour } from "./colours";
 import { hexRgb } from "./lineweights";
 import { formatCoord } from "./geo";
 import { plainDataCredit } from "./dataCredits";
+import { comTreesCreditLine } from "./comTreesCredit";
 import { dashSegments, readDrawingStyle } from "./drawingStyle";
 import {
   AXO_LAYER_LABELS,
@@ -266,7 +267,9 @@ export function explodedAxoChunks(
     satelliteOn: true,
     explodedAxoOverlaysOn: overlayOn,
   });
-  const note = satelliteNote ? `${credit} ${satelliteNote}` : credit;
+  const treesCredit = comTreesCreditLine(model);
+  const credited = treesCredit ? `${credit} ${treesCredit}.` : credit;
+  const note = satelliteNote ? `${credited} ${satelliteNote}` : credited;
   chunks.push({
     name: "Annotation",
     texts: [

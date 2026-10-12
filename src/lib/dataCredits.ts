@@ -18,6 +18,8 @@ export type StageCreditOptions = {
   satelliteOn: boolean;
   /** Linked CoM building heights line when the toggle is on. */
   comHeightsHtml?: string | null;
+  /** Linked CoM urban forest credit when the cut has CoM trees. */
+  comTreesHtml?: string | null;
   contourHtml?: string | null;
 };
 
@@ -34,6 +36,7 @@ export function modelStageCreditHtml(options: StageCreditOptions): string {
   if (options.windOn) parts.push(DATA_CREDIT_WIND_SUFFIX.trim());
   if (options.satelliteOn) parts.push(DATA_CREDIT_ESRI_SATELLITE.trim());
   if (options.comHeightsHtml) parts.push(options.comHeightsHtml);
+  if (options.comTreesHtml) parts.push(options.comTreesHtml);
   if (options.contourHtml) parts.push(options.contourHtml);
   parts.push(CITYCUT_BYLINE);
   return parts.join(" ");
