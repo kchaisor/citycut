@@ -6,6 +6,7 @@ import { fetchComTreesDetailed } from "./comTrees";
 import { DEFAULT_LAYERS } from "../content/constants";
 import { viewChunks } from "./aiView";
 import { treeSourceLoadNotes } from "./trees";
+import { treesVisibleIn3d } from "./view3dDisplay";
 import { fetchTreePage, TreePageTimeoutError } from "./treeSourceFetch";
 import { VICMAP_PAGE_SIZE, fetchVicmapTrees, fetchVicmapTreesDetailed } from "./vicmapTrees";
 import type { CityModel, Pt } from "../types";
@@ -271,5 +272,42 @@ describe("3D, .3dm and the 3D-view .ai agree on trees", () => {
     expect(treeChunks(treeModel(true)).flatMap((c) => c.ellipses ?? [])).toHaveLength(2);
     expect(sceneTrees(treeModel(false))).toBe(0);
     expect(treeChunks(treeModel(false))).toHaveLength(0);
+  });
+
+  it("trees are hidden in the 3D scene, PNG and 3D-view .ai when the layer is off OR Hide trees is on", () => {
+    const camera = new THREE.PerspectiveCamera(32, 16 / 10, 0.5, 4000);
+    camera.position.set(-90, 80, 110);
+    camera.lookAt(0, 6, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+    const shot = shotFromCamera(camera, 640, 400);
+    const aiTrees = (m: CityModel, hideTrees: boolean) =>
+      viewChunks(m, shot, { uniformBuildings: false, colourBySource: false, hideTrees })
+        .filter((chunk) => chunk.name === "Trees")
+        .flatMap((chunk) => chunk.ellipses ?? []).length;
+    // Scene3D sets the built Trees group visible with treesVisibleIn3d; the PNG captures that scene.
+    const sceneShowsTrees = (m: CityModel, hideTrees: boolean) => {
+      const group = buildCityGroup(m);
+      const trees = group.getObjectByName("Trees");
+      if (trees) trees.visible = treesVisibleIn3d(m.layers, { hideTrees });
+      let visible = false;
+      trees?.traverseVisible((o) => {
+        if ((o as THREE.InstancedMesh).isInstancedMesh || (o as THREE.Mesh).isMesh) visible = true;
+      });
+      return visible;
+    };
+    const cases: Array<[boolean, boolean, boolean]> = [
+      // [layer on, hide trees, trees drawn]
+      [true, false, true],
+      [true, true, false],
+      [false, false, false],
+      [false, true, false],
+    ];
+    for (const [layerOn, hideTrees, drawn] of cases) {
+      const m = treeModel(layerOn);
+      expect(treesVisibleIn3d(m.layers, { hideTrees }), `rule ${layerOn}/${hideTrees}`).toBe(drawn);
+      expect(sceneShowsTrees(m, hideTrees), `scene ${layerOn}/${hideTrees}`).toBe(drawn);
+      expect(aiTrees(m, hideTrees), `.ai ${layerOn}/${hideTrees}`).toBe(drawn ? 2 : 0);
+    }
   });
 });
