@@ -85,9 +85,6 @@ export function buildContourLineObject(model: CityModel, planScale = 1000): THRE
     color: getColour("--outline-contour"),
     toneMapped: false,
     depthTest: true,
-    polygonOffset: true,
-    polygonOffsetFactor: -2,
-    polygonOffsetUnits: -2,
   });
   material.name = "Contours3d";
   const lines = new THREE.LineSegments(geometry, material);
