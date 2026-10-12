@@ -17,6 +17,14 @@ export const DEFAULT_VIEW3D_DISPLAY: View3dDisplaySettings = {
   hideTrees: false,
 };
 
+/**
+ * Trees show in the 3D viewport (and so the PNG, which captures it) only when the Trees layer is on
+ * AND "Hide trees" is off. The 3D-view .ai applies the same two conditions in aiView.ts.
+ */
+export function treesVisibleIn3d(layers: { trees: boolean }, display: Pick<View3dDisplaySettings, "hideTrees">): boolean {
+  return layers.trees && !display.hideTrees;
+}
+
 export type KeyValueStore = {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;

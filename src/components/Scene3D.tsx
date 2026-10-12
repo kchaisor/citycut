@@ -48,7 +48,7 @@ import {
 import { qaModeFromSearch, registerQaCameraBridge, type QaCameraPose } from "../lib/qaCameraBridge";
 import { WebGlContextWatch } from "./WebGlContextWatch";
 import type { ProjectionMode } from "../lib/viewMemory";
-import type { View3dDisplaySettings } from "../lib/view3dDisplay";
+import { treesVisibleIn3d, type View3dDisplaySettings } from "../lib/view3dDisplay";
 import { buildContourLineObject } from "../lib/contourLines3d";
 import {
   applyWhiteCardTint,
@@ -272,7 +272,7 @@ function City({
   }, [group, display.showOutlines]);
   useLayoutEffect(() => {
     const trees = group.getObjectByName("Trees");
-    if (trees) trees.visible = model.layers.trees && !display.hideTrees;
+    if (trees) trees.visible = treesVisibleIn3d(model.layers, display);
   }, [group, display.hideTrees, model.layers.trees]);
   const contours = useMemo(
     () => (display.showContours3d ? buildContourLineObject(model) : null),
