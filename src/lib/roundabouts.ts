@@ -1,5 +1,5 @@
 import { signedArea } from "./geo";
-import { pointInSiteFrame, type SiteFrameShape } from "./siteFrame";
+import { clipAreaToSiteFrame, type SiteFrameShape } from "./siteFrame";
 import type { AreaFeat, Pt } from "../types";
 
 /**
@@ -129,10 +129,14 @@ function centroid(ring: Pt[]): Pt {
   return [x, y];
 }
 
+/** Model details wording for an inferred island. */
+export const ROUNDABOUT_ISLAND_ESTIMATE_NOTE = "Roundabout island (estimate): no island in the loaded map data (OpenStreetMap via Overture), inferred from the road ring";
+
 /**
- * Replace each roundabout's mapped island (a near-circular green area inside the ring) with a
- * smooth circle of the same area, and add a circle where no island is mapped (radius = ring radius
- * less half the carriageway). Other areas pass through untouched.
+ * Only greens inside a roundabout ring are touched. A mapped island (a green area whose centroid
+ * is near the ring centre and that lies wholly inside the ring) becomes a circle of the same area.
+ * Where none is mapped, an estimated island is added (radius = ring radius less half the
+ * carriageway) and flagged `estimate`. Circles the site frame cuts are clipped to it.
  */
 export function withRoundaboutIslands(
   areas: AreaFeat[],
@@ -140,50 +144,39 @@ export function withRoundaboutIslands(
   frame?: { sideM: number; shape: SiteFrameShape },
 ): AreaFeat[] {
   if (roundabouts.length === 0) return areas;
-  const drop = new Set<AreaFeat>();
+  const replaced = new Map<AreaFeat, AreaFeat | null>();
   const added: AreaFeat[] = [];
+  const fitFrame = (ring: Pt[]): Pt[] | null => {
+    if (!frame) return ring;
+    const rings = clipAreaToSiteFrame(ring.slice(0, -1), [], frame.sideM, frame.shape);
+    const outer = rings?.[0];
+    if (!outer || outer.length < 3) return null;
+    const first = outer[0]!, last = outer.at(-1)!;
+    return first[0] === last[0] && first[1] === last[1] ? outer : [...outer, [first[0], first[1]]];
+  };
   for (const rb of roundabouts) {
-    const inner = rb.radius - rb.width / 2;
-    let radius = inner;
+    let mapped = false;
     for (const area of areas) {
-      if (area.kind !== "green" || drop.has(area) || area.holes.length > 0) continue;
+      if (area.kind !== "green" || replaced.has(area) || area.holes.length > 0) continue;
       const c = centroid(area.ring);
       if (Math.hypot(c[0] - rb.center[0], c[1] - rb.center[1]) > rb.radius * 0.4) continue;
-      const pts = area.ring;
-      if (pts.some((p) => Math.hypot(p[0] - rb.center[0], p[1] - rb.center[1]) > rb.radius)) continue;
-      // Mapped island: keep its size, drop its facets.
-      radius = Math.sqrt(Math.abs(signedArea(pts)) / Math.PI);
-      drop.add(area);
+      if (area.ring.some((p) => Math.hypot(p[0] - rb.center[0], p[1] - rb.center[1]) > rb.radius)) continue;
+      mapped = true;
+      const radius = Math.sqrt(Math.abs(signedArea(area.ring)) / Math.PI);
+      const ring = radius >= ISLAND_MIN_R_M ? fitFrame(circleRing(rb.center, radius)) : null;
+      replaced.set(area, ring ? { ...area, ring } : area);
     }
+    if (mapped) continue;
+    const radius = rb.radius - rb.width / 2;
     if (radius < ISLAND_MIN_R_M) continue;
-    const ring = circleRing(rb.center, radius);
-    // Areas are clipped to the frame upstream; an island the frame cuts is left out, not overhung.
-    if (frame && ring.some((p) => !pointInSiteFrame(p, frame.sideM, frame.shape))) {
-      for (const area of areas) if (drop.has(area) && Math.hypot(centroid(area.ring)[0] - rb.center[0], centroid(area.ring)[1] - rb.center[1]) <= rb.radius * 0.4) drop.delete(area);
-      continue;
-    }
-    added.push({
-      id: -1_000_000 - added.length,
-      kind: "green",
-      ring,
-      holes: [],
-    });
+    const ring = fitFrame(circleRing(rb.center, radius));
+    if (!ring) continue;
+    added.push({ id: -1_000_000 - added.length, kind: "green", ring, holes: [], estimate: "roundabout-island" });
   }
-  // A mapped island whose ring is cut by the site frame, or whose roundabout is, is still smoothed
-  // when the island ring itself is near-circular.
-  const rest = areas.filter((area) => !drop.has(area)).map((area) => smoothIslandRing(area));
-  return [...rest, ...added];
+  return [...areas.map((area) => replaced.get(area) ?? area), ...added];
 }
 
-/** Small green areas at or below this size are island candidates for smoothing (m²). */
-export const ISLAND_MAX_M2 = 1200;
-
-/** Replace a small, near-circular green ring with a circle of the same area; otherwise unchanged. */
-export function smoothIslandRing(area: AreaFeat): AreaFeat {
-  if (area.kind !== "green" || area.holes.length > 0 || area.ring.length < 6) return area;
-  const size = Math.abs(signedArea(area.ring));
-  if (size > ISLAND_MAX_M2 || size < Math.PI * ISLAND_MIN_R_M ** 2) return area;
-  const fit = fitCircle(area.ring);
-  if (!fit || !nearCircle(area.ring, fit, 0.15)) return area;
-  return { ...area, ring: circleRing(fit.center, Math.sqrt(size / Math.PI)) };
+/** Count of inferred (estimated) roundabout islands in a model. */
+export function estimatedIslandCount(areas: AreaFeat[]): number {
+  return areas.filter((area) => area.estimate === "roundabout-island").length;
 }

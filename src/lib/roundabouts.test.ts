@@ -5,7 +5,8 @@ import {
   fitCircle,
   osmWayKey,
   ROUNDABOUT_SEGMENTS,
-  smoothIslandRing,
+  estimatedIslandCount,
+  ROUNDABOUT_ISLAND_ESTIMATE_NOTE,
   withRoundaboutIslands,
 } from "./roundabouts";
 import { signedArea } from "./geo";
@@ -69,15 +70,22 @@ describe("roundabouts", () => {
     expect(Math.abs(signedArea(out[0]!.ring))).toBeCloseTo(Math.abs(signedArea(octagon)), -0.5);
   });
 
-  it("smooths near-circular small green rings only", () => {
-    const round = smoothIslandRing({ id: 1, kind: "green", ring: poly([0, 0], 9, 9), holes: [] });
-    expect(round.ring).toHaveLength(ROUNDABOUT_SEGMENTS + 1);
-    const rect: AreaFeat = { id: 2, kind: "green", ring: [[0, 0], [30, 0], [30, 8], [0, 8], [0, 0], [0, 0]], holes: [] };
-    expect(smoothIslandRing(rect)).toBe(rect);
-    const big: AreaFeat = { id: 3, kind: "green", ring: poly([0, 0], 60, 12), holes: [] };
-    expect(smoothIslandRing(big)).toBe(big);
-    const water: AreaFeat = { id: 4, kind: "water", ring: poly([0, 0], 9, 9), holes: [] };
-    expect(smoothIslandRing(water)).toBe(water);
+  it("leaves a near-circular green outside any ring unchanged", () => {
+    const round: AreaFeat = { id: 1, kind: "green", ring: poly([100, 100], 9, 9), holes: [] };
+    const out = withRoundaboutIslands([round], [{ key: "w1", center: [0, 0], radius: 10, width: 5.5 }]);
+    expect(out[0]).toBe(round);
+    expect(withRoundaboutIslands([round], [])[0]).toBe(round);
+  });
+
+  it("flags only inferred islands as estimates", () => {
+    const octagon: AreaFeat = { id: 7, kind: "green", ring: poly([0, 0], 8, 8), holes: [] };
+    const out = withRoundaboutIslands([octagon], [
+      { key: "w1", center: [0, 0], radius: 13, width: 5.5 },
+      { key: "w2", center: [200, 0], radius: 10, width: 5.5 },
+    ]);
+    expect(out.map((a) => a.estimate ?? null)).toEqual([null, "roundabout-island"]);
+    expect(estimatedIslandCount(out)).toBe(1);
+    expect(ROUNDABOUT_ISLAND_ESTIMATE_NOTE).toMatch(/^Roundabout island \(estimate\): .*inferred from the road ring$/);
   });
 
   it("circleRing is closed with a fixed segment count", () => {
@@ -104,9 +112,12 @@ describe("roundabout island in the plan road fill", async () => {
 });
 
 describe("roundabout islands at the site frame", () => {
-  it("leaves out an island the frame would cut, and keeps the mapped one", () => {
+  it("rounds a mapped island the frame cuts, clipped to the frame", () => {
     const mapped: AreaFeat = { id: 9, kind: "green", ring: [[490, -5], [499, -5], [499, 5], [490, 5]], holes: [] };
     const out = withRoundaboutIslands([mapped], [{ key: "w1", center: [496, 0], radius: 10, width: 5.5 }], { sideM: 1000, shape: "square" });
-    expect(out).toEqual([mapped]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.id).toBe(9);
+    expect(out[0]!.ring.length).toBeGreaterThan(20);
+    for (const p of out[0]!.ring) expect(p[0]).toBeLessThanOrEqual(500 + 1e-9);
   });
 });

@@ -20,6 +20,28 @@ function model(over: Partial<CityModel> = {}): CityModel {
 }
 
 describe("buildDataSources", () => {
+  it("labels inferred roundabout islands as estimates, with the count", () => {
+    const ring: [number, number][] = [[0, 0], [1, 0], [1, 1], [0, 0]];
+    const rows = buildDataSources({
+      model: model({
+        areas: [
+          { id: 1, kind: "green", ring, holes: [] },
+          { id: -1, kind: "green", ring, holes: [], estimate: "roundabout-island" },
+          { id: -2, kind: "green", ring, holes: [], estimate: "roundabout-island" },
+        ],
+      }),
+      comHeights: "on",
+      comMeasuredCount: 0,
+      comError: null,
+    });
+    const row = rows.find((r) => r.id === "roundabout-islands")!;
+    expect(row.label).toBe("Roundabout islands (estimate)");
+    expect(row.detail).toBe("2 estimated");
+    expect(row.notes[0]).toMatch(/^Roundabout island \(estimate\): .*inferred from the road ring$/);
+    const none = buildDataSources({ model: model(), comHeights: "on", comMeasuredCount: 0, comError: null });
+    expect(none.find((r) => r.id === "roundabout-islands")).toBeUndefined();
+  });
+
   it("has no building-permit row, even for a stale BCA failure id", () => {
     const rows = buildDataSources({
       model: model({
