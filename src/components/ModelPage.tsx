@@ -1081,6 +1081,29 @@ export function ModelPage({ model }: { model: CityModel }) {
     total: heightBarParts.reduce((sum, part) => sum + part.value, 0),
   };
 
+  // #87's 3D display modes, housed as switches: Buildings › Display, or Drawing when the model has no buildings.
+  const displaySwitches = (
+    <div className="display-switches" role="group" aria-label="3D display">
+      {(
+        [
+          ["whiteCard", "White card"],
+          ["showOutlines", "Outlines"],
+          ["showContours3d", "Contours in 3D"],
+          ["hideTrees", "Hide trees"],
+        ] as const
+      ).map(([key, label]) => (
+        <label key={key} className="check-field">
+          <input
+            type="checkbox"
+            checked={view3dDisplay[key]}
+            onChange={(event) => commitView3dDisplay({ ...view3dDisplay, [key]: event.target.checked })}
+          />
+          {label}
+        </label>
+      ))}
+    </div>
+  );
+
   const hint =
     tab === "3d"
       ? view.projection === "plan"
@@ -1475,6 +1498,10 @@ export function ModelPage({ model }: { model: CityModel }) {
                   ))}
                 </section>
                 <section className="sidebar-group">
+                  <h3 className="sidebar-gh">Display</h3>
+                  {displaySwitches}
+                </section>
+                <section className="sidebar-group">
                   <h3 className="sidebar-gh">Manual heights</h3>
                   <HeightOverridePanel
                     manualCount={overrideResult.manualCount}
@@ -1578,48 +1605,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                   {view.projection === "plan" && (
                     <p className="field-note">Orthographic plan view. Choose Perspective to return to the 3D orbit camera.</p>
                   )}
-                  <p className="kicker">Display</p>
-                  <div className="plan-switch" role="group" aria-label="3D display">
-                    <button
-                      type="button"
-                      aria-pressed={view3dDisplay.whiteCard}
-                      onClick={() =>
-                        commitView3dDisplay({ ...view3dDisplay, whiteCard: !view3dDisplay.whiteCard })
-                      }
-                    >
-                      {view3dDisplay.whiteCard ? "Use colour" : "White card"}
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={view3dDisplay.showOutlines}
-                      onClick={() =>
-                        commitView3dDisplay({ ...view3dDisplay, showOutlines: !view3dDisplay.showOutlines })
-                      }
-                    >
-                      {view3dDisplay.showOutlines ? "Hide outlines" : "Show outlines"}
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={view3dDisplay.showContours3d}
-                      onClick={() =>
-                        commitView3dDisplay({
-                          ...view3dDisplay,
-                          showContours3d: !view3dDisplay.showContours3d,
-                        })
-                      }
-                    >
-                      {view3dDisplay.showContours3d ? "Hide contours" : "Contours in 3D"}
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={view3dDisplay.hideTrees}
-                      onClick={() =>
-                        commitView3dDisplay({ ...view3dDisplay, hideTrees: !view3dDisplay.hideTrees })
-                      }
-                    >
-                      {view3dDisplay.hideTrees ? "Show trees" : "Hide trees"}
-                    </button>
-                  </div>
+                  {!showBuildings && displaySwitches}
                   {view.projection === "iso" && (
                     <>
                       <p className="kicker">Corner</p>
