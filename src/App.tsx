@@ -3,6 +3,7 @@ import { MapStage, type FlyRequest } from "./components/MapStage";
 import { SelectChrome } from "./components/SelectChrome";
 import { TopBar } from "./components/TopBar";
 import { useSidebarCollapsed } from "./lib/sidebarCollapse";
+import { viewportIsNarrow } from "./lib/panelCollapse";
 import {
   DEFAULT_LAYERS,
   DEFAULT_SIDE_KM,
@@ -87,6 +88,8 @@ export default function App() {
   const urlSiteAnchor =
     typeof window === "undefined" ? null : siteAnchorFromSearch(window.location.search);
   const viewRef = useRef<ViewState>(initialView);
+  // Read once at load: on a phone each new landing map zooms out to fit the frame.
+  const [fitFrameOnLoad] = useState(viewportIsNarrow);
   const [cutCenter, setCutCenter] = useState({ lat: initialView.lat, lon: initialView.lon });
   const anchorRef = useRef<PlaceAnchor | null>(
     sharedLabel
@@ -735,6 +738,7 @@ export default function App() {
         <div className={selectCollapsed ? "select sidebar-collapsed" : "select"}>
           <MapStage
             basemap={basemap}
+            fitFrameOnLoad={fitFrameOnLoad}
             sideM={sideKm * 1000}
             frameShape={frameShape}
             initialView={viewRef.current}

@@ -2,6 +2,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MapStage } from "./MapStage";
+import { FRAME_FIT_MARGIN_PX, frameSidePx } from "../lib/frameFit";
 import {
   fetchBuildingEnrichmentForCut,
   fetchEnrichmentManifest,
@@ -16,6 +17,7 @@ type MockMapInstance = {
   handlers: Map<string, Set<Handler>>;
   addLayer: ReturnType<typeof vi.fn>;
   addLayerCalls: string[];
+  options: { zoom?: number };
 };
 
 const mapInstances: MockMapInstance[] = [];
@@ -57,7 +59,9 @@ vi.mock("maplibre-gl", () => {
       this.addLayerCalls.push(layer.id);
     });
     addLayerCalls: string[] = [];
-    constructor() {
+    options: { zoom?: number } = {};
+    constructor(options: { zoom?: number }) {
+      this.options = options;
       mapInstances.push(this);
     }
     off = vi.fn(function (this: MockGlMap, event: string, fn: Handler) {
@@ -185,5 +189,26 @@ describe("MapStage", () => {
     render(<MapStage {...baseProps} />);
     await waitFor(() => expect(mapInstances).toHaveLength(1));
     expect(screen.getByText("Basemap style failed to load.")).toBeTruthy();
+  });
+
+  it("keeps the desktop initial zoom exactly, with or without a frame fit", async () => {
+    render(<MapStage {...baseProps} initialView={{ ...baseProps.initialView, zoom: 15 }} />);
+    await waitFor(() => expect(mapInstances).toHaveLength(1));
+    expect(mapInstances[0]!.options.zoom).toBe(15);
+  });
+
+  it("zooms out on a phone so the whole frame fits the map at load", async () => {
+    const width = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(390);
+    const height = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(737);
+    try {
+      render(<MapStage {...baseProps} sideM={1200} fitFrameOnLoad initialView={{ ...baseProps.initialView, zoom: 15 }} />);
+      await waitFor(() => expect(mapInstances).toHaveLength(1));
+      const zoom = mapInstances[0]!.options.zoom!;
+      expect(zoom).toBeLessThan(15);
+      expect(frameSidePx(1200, baseProps.initialView.lat, zoom)).toBeCloseTo(390 - 2 * FRAME_FIT_MARGIN_PX, 3);
+    } finally {
+      width.mockRestore();
+      height.mockRestore();
+    }
   });
 });

@@ -9,6 +9,7 @@ import { updateMapSiteLayers, removeMapSiteLayers } from "../lib/mapSiteLayers";
 import { fetchOvertureBuildingsForCut } from "../lib/overtureBuildings";
 import { fetchSiteParcelCached, siteBuildingIdsForPreview } from "../lib/sitePreviewCache";
 import { FLAT_NORTH_UP_MAP_OPTIONS, applyFlatNorthUpMapHandlers } from "../lib/mapStageMapOptions";
+import { initialLandingZoom } from "../lib/frameFit";
 import type { Basemap, LonLat, ViewState } from "../types";
 
 export type FlyRequest = {
@@ -25,6 +26,7 @@ export type MapSiteSearch = LonLat & { label: string };
 
 export function MapStage({
   basemap,
+  fitFrameOnLoad = false,
   sideM,
   frameShape,
   initialView,
@@ -36,6 +38,8 @@ export function MapStage({
   onFlyLanded,
 }: {
   basemap: Basemap;
+  /** Fit the whole cut frame into the map when it is first created (phones). */
+  fitFrameOnLoad?: boolean;
   sideM: number;
   frameShape: SiteFrameShape;
   initialView: ViewState;
@@ -82,7 +86,15 @@ export function MapStage({
         container,
         style: typeof style === "string" ? undefined : style,
         center: [initialView.lon, initialView.lat],
-        zoom: initialView.zoom,
+        // On a phone, at load only, zoom out so the whole cut frame fits the map.
+        zoom: initialLandingZoom({
+          zoom: initialView.zoom,
+          sideM: sideRef.current,
+          lat: initialView.lat,
+          widthPx: container.clientWidth,
+          heightPx: container.clientHeight,
+          fit: fitFrameOnLoad,
+        }),
         attributionControl: false,
         ...FLAT_NORTH_UP_MAP_OPTIONS,
       });
