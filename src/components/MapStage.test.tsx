@@ -123,7 +123,6 @@ const baseProps = {
   siteSearch: null,
   onCancel: () => undefined,
   onView: () => undefined,
-  onBasemap: () => undefined,
   onFlyLanded: () => undefined,
 };
 

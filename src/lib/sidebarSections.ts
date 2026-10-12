@@ -2,8 +2,8 @@
  * Fixed model sidebar: one section open at a time, chosen from the icon rail.
  *
  * A new model always opens on Model details. The section is not restored from
- * storage (the old floating drawer remembered it in `citycut.rail.model`); the
- * landing page still uses `railState.ts` for its own rail.
+ * storage (the old floating drawer remembered it in `citycut.rail.model`). Whether
+ * the panel is collapsed is shared with the landing page; see `sidebarCollapse.ts`.
  */
 export const SIDEBAR_SECTION_IDS = ["summary", "buildings", "trees", "drawing", "solar", "wind", "exports"] as const;
 
@@ -40,27 +40,22 @@ export function resolveSidebarSection(
 }
 
 /**
- * Sidebar state for one model. Choosing a section never closes the panel (the
+ * Section state for one model. Choosing a section never closes the panel (the
  * rail does not toggle); only the collapse button does. A new model resets to
- * Model details with the panel open.
+ * Model details.
  */
-export type SidebarState = { section: SidebarSectionId; collapsed: boolean };
+export type SidebarState = { section: SidebarSectionId };
 
-export type SidebarAction =
-  | { type: "select"; id: SidebarSectionId }
-  | { type: "toggle-collapse" }
-  | { type: "new-model" };
+export type SidebarAction = { type: "select"; id: SidebarSectionId } | { type: "new-model" };
 
 export function initialSidebarState(): SidebarState {
-  return { section: INITIAL_SIDEBAR_SECTION, collapsed: false };
+  return { section: INITIAL_SIDEBAR_SECTION };
 }
 
-export function reduceSidebar(state: SidebarState, action: SidebarAction): SidebarState {
+export function reduceSidebar(_state: SidebarState, action: SidebarAction): SidebarState {
   switch (action.type) {
     case "select":
-      return { section: action.id, collapsed: false };
-    case "toggle-collapse":
-      return { ...state, collapsed: !state.collapsed };
+      return { section: action.id };
     case "new-model":
       return initialSidebarState();
   }

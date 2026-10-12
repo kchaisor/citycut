@@ -33,7 +33,6 @@ export function MapStage({
   siteSearch,
   onCancel,
   onView,
-  onBasemap,
   onFlyLanded,
 }: {
   basemap: Basemap;
@@ -46,7 +45,6 @@ export function MapStage({
   siteSearch: MapSiteSearch | null;
   onCancel: () => void;
   onView: (view: ViewState) => void;
-  onBasemap: (basemap: Basemap) => void;
   /** The search or home camera animation has stopped. */
   onFlyLanded: () => void;
 }) {
@@ -260,22 +258,6 @@ export function MapStage({
     <div className={loading ? "map-wrap is-loading" : "map-wrap"}>
       <div ref={containerRef} className="map-canvas" />
       <MapAttribution basemap={basemap} />
-      <div className="basemap" role="group" aria-label="Basemap">
-        <button
-          type="button"
-          className={basemap === "map" ? "active" : ""}
-          onClick={() => onBasemap("map")}
-        >
-          Map
-        </button>
-        <button
-          type="button"
-          className={basemap === "satellite" ? "active" : ""}
-          onClick={() => onBasemap("satellite")}
-        >
-          Satellite
-        </button>
-      </div>
       {frame && frame.width > 8 && (
         <>
           <div
