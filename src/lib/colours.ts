@@ -32,7 +32,6 @@ export const COLOUR_KEYS = [
   "--use-unclassified",
   "--source-osm",
   "--source-clue",
-  "--source-bca",
   "--block-fill",
   "--block-plan",
   "--source-zone",
@@ -145,7 +144,7 @@ export const COLOUR_GROUPS = [
   {
     id: "source",
     title: "Source badges",
-    keys: ["--source-osm", "--source-clue", "--source-bca", "--source-zone", "--source-none", "--block-fill", "--block-plan"],
+    keys: ["--source-osm", "--source-clue", "--source-zone", "--source-none", "--block-fill", "--block-plan"],
   },
   {
     id: "roads",
@@ -232,7 +231,6 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--use-unclassified": "Unclassified",
   "--source-osm": "OSM tag",
   "--source-clue": "CoM CLUE",
-  "--source-bca": "Building permit (BCA)",
   "--block-fill": "City blocks (3D)",
   "--block-plan": "City blocks (plan)",
   "--source-zone": "Zone",

@@ -41,15 +41,9 @@
   "clueBlocks": 500,
   "clueAppliesWithinLga": "City of Melbourne (ABS ASGS 2021 LGA 24600)",
   "clueAppliesLgaCode": "24600",
-  "bca": {
-    "status": "blocked",
-    "detail": "BCA xlsb HTTP 403 (https://www.bpc.vic.gov.au/__data/assets/file/0016/26521/VBA-DataVic-Building-Permits-2024-December.xlsb)",
-    "url": "https://www.bpc.vic.gov.au/__data/assets/file/0016/26521/VBA-DataVic-Building-Permits-2024-December.xlsb"
-  },
   "useSourceCountsSample": {
     "overture": 27068,
     "clue": 14402,
-    "bca": 0,
     "zone": 44687,
     "unclassified": 296
   },
@@ -57,14 +51,12 @@
     "insideCityOfMelbourne": {
       "overture": 5100,
       "clue": 14402,
-      "bca": 0,
       "zone": 601,
       "unclassified": 148
     },
     "outsideCityOfMelbourne": {
       "overture": 21968,
       "clue": 0,
-      "bca": 0,
       "zone": 44086,
       "unclassified": 148
     }
@@ -74,7 +66,6 @@
     "fetchZonesSec": 1.88,
     "loadClueSec": 5.64,
     "clueJoinSec": 12.69,
-    "bcaJoinSec": 2.97,
     "cascadeSec": 17.26,
     "writeFeaturesSec": 1.72,
     "totalSec": 46.69

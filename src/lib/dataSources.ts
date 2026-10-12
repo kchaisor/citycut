@@ -98,7 +98,6 @@ export function buildDataSources({ model, comHeights, comMeasuredCount, comError
 
   if (model.layers.buildings) {
     const tileFailure = failures.find((failure) => failure.id === "enrichment_tiles_fetch");
-    const bca = failures.find((failure) => failure.id === "enrichment_bca_blocked");
     rows.push({
       id: "enrichment",
       label: "Building use tiles",
@@ -106,21 +105,9 @@ export function buildDataSources({ model, comHeights, comMeasuredCount, comError
       detail:
         model.enrichmentTilesFailed || tileFailure
           ? "Live Vicmap zones used instead"
-          : bca
-            ? "Overture class, CoM CLUE, Vicmap zones"
-            : "Overture class, CoM CLUE, BCA, Vicmap zones",
+          : "Overture class, CoM CLUE, Vicmap zones",
       notes: tileFailure ? [tileFailure.message] : [],
     });
-
-    if (bca) {
-      rows.push({
-        id: "bca",
-        label: "Building permits (BCA)",
-        status: "failed",
-        detail: "Permit use classes are missing",
-        notes: [bca.message],
-      });
-    }
 
     const zoneFailures = failures.filter(
       (failure) => failure.tier === "zone" || failure.id === "enrichment_zones_wfs_incomplete",

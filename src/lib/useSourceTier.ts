@@ -12,8 +12,6 @@ export function resolveUseSourceTier(building: BuildingFeat): BuildingUseSourceT
       return "overture";
     case "clue":
       return "clue";
-    case "bca":
-      return "bca";
     case "zone":
       return "zone";
     default:

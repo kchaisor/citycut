@@ -12,7 +12,7 @@ def _live_like_assign(props: dict, zone_code: str | None, height_m: float = 9.0)
     zones = None
     if zone_code:
         zones = gpd.GeoDataFrame({"zone_code": [zone_code]}, geometry=[Point(0, 0)], crs="EPSG:4326")
-    return assign_cascade(row_props, Point(0, 0), zones, None, None)
+    return assign_cascade(row_props, Point(0, 0), zones, None)
 
 
 def test_cascade_parity_fixtures_match_assign_cascade():
