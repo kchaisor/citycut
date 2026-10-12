@@ -237,3 +237,19 @@ export function describeTrees(trees: { sizeSource: TreeSizeSource; tier?: TreeTi
   const tiers = treeTierCounts(trees);
   return `Trees: ${treeSizeSummary(trees)} (${tiers.com} City of Melbourne, ${tiers.osm} Overture base points, ${tiers.vicmap} Vicmap, ${tiers.canopy} canopy infill). City of Melbourne inventory trees use surveyed species, diameter at breast height, and age; that dataset has no crown or height field. Overture base land points carry OSM tree tags when present. Vicmap Vegetation Tree Urban fills gaps beyond 3 m using height_m and canopy diameter. Wood, forest, and scrub are filled at about 7 m. Otherwise 10 m tall and 6 m across.`;
 }
+
+/**
+ * One note per tree source that failed or loaded only part of the frame, in tier order
+ * (City of Melbourne, Overture base for OSM points and canopy, Vicmap). Empty when all loaded.
+ */
+export function treeSourceLoadNotes(errors: {
+  com: string | null;
+  vicmap: string | null;
+  base: string | null;
+}): import("../types").TreeLoadNote[] {
+  const notes: import("../types").TreeLoadNote[] = [];
+  if (errors.com) notes.push({ source: "com", message: errors.com });
+  if (errors.base) notes.push({ source: "base", message: errors.base });
+  if (errors.vicmap) notes.push({ source: "vicmap", message: errors.vicmap });
+  return notes;
+}

@@ -849,7 +849,8 @@ export function ModelPage({ model }: { model: CityModel }) {
   const sideKm = model.sideM / 1000;
   const tierCounts = treeTierCounts(model.trees);
   const showBuildings = model.layers.buildings && model.buildings.length > 0;
-  const showTrees = model.layers.trees && model.trees.length > 0;
+  // A failed tree source must stay visible even when it leaves the frame with no trees.
+  const showTrees = model.layers.trees && (model.trees.length > 0 || (model.treeLoadNotes?.length ?? 0) > 0);
   const layerBits = [
     model.layers.buildings ? "buildings" : null,
     model.layers.roads ? "roads and rail" : null,
@@ -1312,6 +1313,11 @@ export function ModelPage({ model }: { model: CityModel }) {
                   ))}
                 </ul>
                 <p className="tree-readout">{treeSizeSummary(model.trees)}</p>
+                {(model.treeLoadNotes ?? []).map((note) => (
+                  <p key={note.source} className="legend-note tree-load-note" role="status">
+                    {note.message}
+                  </p>
+                ))}
                 {model.treeCapHit && (
                   <p className="legend-note">
                     Tree count was capped at 8,000. Canopy infill was trimmed first, then Vicmap.

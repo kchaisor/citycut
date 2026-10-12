@@ -8,13 +8,9 @@ import { createWriteStream, mkdirSync, readFileSync, writeFileSync } from "node:
 import { spawnSync } from "node:child_process";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
+import { lookupPtResources, probeUrl, ptCandidates, useFirstWorking } from "./pt-data-lib.mjs";
 
 const METRO = { west: 144.35, south: -38.25, east: 145.55, north: -37.45 };
-const LINES_URL =
-  "https://opendata.transport.vic.gov.au/dataset/6d36dfd9-8693-4552-8a03-05eb29a391fd/resource/aa99290b-0954-42ac-adb2-814c0e0de3f3/download/public_transport_lines.geojson";
-const STOPS_URL =
-  "https://opendata.transport.vic.gov.au/dataset/6d36dfd9-8693-4552-8a03-05eb29a391fd/resource/f14397c0-fb27-417c-95df-c606d4fe3095/download/public_transport_stops.geojson";
-
 const CACHE = "tmp/pt-cache";
 const OUT = "public";
 
@@ -57,6 +53,13 @@ async function download(url, dest) {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Download failed ${url}: ${response.status}`);
   await pipeline(Readable.fromWeb(response.body), createWriteStream(dest));
+}
+
+/** Resolve current lines/stops URLs (dataset API, else known-good fallback). */
+async function resolveCandidates() {
+  const { found, error } = await lookupPtResources();
+  if (error) console.warn(`PT dataset lookup: ${error}. Falling back to known-good resource ids where needed.`);
+  return ptCandidates(found);
 }
 
 function filterGeojson(path, outPath, keepProps) {
@@ -103,11 +106,21 @@ async function main() {
   mkdirSync(OUT, { recursive: true });
   const linesCache = `${CACHE}/lines.geojson`;
   const stopsCache = `${CACHE}/stops.geojson`;
+  if (process.argv.includes("--resolve-only")) {
+    // Resolve and range-check both URLs without downloading (~380 MB) or running tippecanoe.
+    const candidates = await resolveCandidates();
+    for (const kind of ["lines", "stops"]) {
+      const used = await useFirstWorking(kind, candidates[kind], (url) => probeUrl(url));
+      console.log(`PT ${kind}: range check HTTP ${used.result}`);
+    }
+    return;
+  }
   if (!process.env.SKIP_PT_DOWNLOAD) {
+    const candidates = await resolveCandidates();
     console.log("Downloading PT lines…");
-    await download(LINES_URL, linesCache);
+    await useFirstWorking("lines", candidates.lines, (url) => download(url, linesCache));
     console.log("Downloading PT stops…");
-    await download(STOPS_URL, stopsCache);
+    await useFirstWorking("stops", candidates.stops, (url) => download(url, stopsCache));
   }
   const metroLines = `${CACHE}/metro-lines.geojson`;
   const metroStops = `${CACHE}/metro-stops.geojson`;

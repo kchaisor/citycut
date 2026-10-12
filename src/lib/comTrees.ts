@@ -1,6 +1,15 @@
 import { toLocal } from "./geo";
 import { ageFactor, logDroppedTreeValues, treeSize, type ComMeasure } from "./trees";
 import type { LonLat, TreeFeat } from "../types";
+import {
+  errorText,
+  fetchTreePage,
+  readTreePageWithRetry,
+  TREE_PAGE_RETRY_MS,
+  TREE_PAGE_TIMEOUT_MS,
+  TreeSourceHttpError,
+  type TreeSourceResult,
+} from "./treeSourceFetch";
 
 /**
  * City of Melbourne "Trees, with species and dimensions (Urban Forest)".
@@ -59,6 +68,7 @@ async function readPage(
   where: string,
   offset: number,
   signal?: AbortSignal,
+  timeoutMs = TREE_PAGE_TIMEOUT_MS,
 ): Promise<{ total: number; rows: ComTree[]; dropped: number }> {
   const url = new URL(ENDPOINT);
   url.searchParams.set("limit", String(PAGE));
@@ -68,8 +78,16 @@ async function readPage(
     "select",
     "latitude,longitude,diameter_breast_height,age_description,genus,scientific_name",
   );
-  const response = await fetch(url, { signal, headers: { Accept: "application/json" } });
-  if (!response.ok) throw new Error(`City of Melbourne tree records answered ${response.status}.`);
+  const response = await fetchTreePage(
+    url,
+    { headers: { Accept: "application/json" } },
+    "City of Melbourne tree records",
+    signal,
+    timeoutMs,
+  );
+  if (!response.ok) {
+    throw new TreeSourceHttpError(`City of Melbourne tree records answered ${response.status}.`, response.status);
+  }
   const json = (await response.json()) as { total_count?: number; results?: ApiRow[] };
   let dropped = 0;
   const rows: ComTree[] = [];
@@ -83,26 +101,71 @@ async function readPage(
   return { total: json.total_count ?? rows.length, rows, dropped };
 }
 
-/** Trees inside the frame. An empty list outside the City of Melbourne, or when the request fails upstream. */
-export async function fetchComTrees(bounds: BBox, signal?: AbortSignal): Promise<ComTree[]> {
-  if (!intersectsCity(bounds)) return [];
+/**
+ * Trees inside the frame, in API offset order. Nothing outside the City of Melbourne. Each page has
+ * its own time limit; when a later page fails, the pages already read are kept and the result says
+ * the tier is incomplete. A failure that loads nothing is an error, never a silent zero.
+ */
+export async function fetchComTreesDetailed(
+  bounds: BBox,
+  signal?: AbortSignal,
+  pageTimeoutMs = TREE_PAGE_TIMEOUT_MS,
+  retryMs = TREE_PAGE_RETRY_MS,
+): Promise<TreeSourceResult<ComTree>> {
+  if (!intersectsCity(bounds)) return { rows: [], error: null, partial: false };
   const where = `latitude>=${bounds.south.toFixed(6)} AND latitude<=${bounds.north.toFixed(6)} AND longitude>=${bounds.west.toFixed(6)} AND longitude<=${bounds.east.toFixed(6)}`;
-  const first = await readPage(where, 0, signal);
+  const page = (offset: number) =>
+    readTreePageWithRetry(() => readPage(where, offset, signal, pageTimeoutMs), signal, retryMs);
+  let first: Awaited<ReturnType<typeof readPage>>;
+  try {
+    first = await page(0);
+  } catch (err) {
+    if (signal?.aborted) throw err;
+    return {
+      rows: [],
+      error: `City of Melbourne tree records could not be loaded, so that tier is missing. ${errorText(err, "")}`.trim(),
+      partial: false,
+    };
+  }
   const rows = first.rows.slice();
   let dropped = first.dropped;
   const total = Math.min(first.total, MAX_RECORDS);
   const offsets: number[] = [];
   for (let offset = PAGE; offset < total; offset += PAGE) offsets.push(offset);
   const concurrency = 4;
-  for (let i = 0; i < offsets.length; i += concurrency) {
-    const pages = await Promise.all(offsets.slice(i, i + concurrency).map((offset) => readPage(where, offset, signal)));
-    for (const page of pages) {
-      rows.push(...page.rows);
-      dropped += page.dropped;
+  let error: string | null = null;
+  for (let i = 0; i < offsets.length && error === null; i += concurrency) {
+    const batch = await Promise.allSettled(
+      offsets.slice(i, i + concurrency).map((offset) => page(offset)),
+    );
+    if (signal?.aborted) throw signal.reason ?? new DOMException("Aborted", "AbortError");
+    for (const settled of batch) {
+      if (settled.status === "rejected") {
+        error ??= errorText(settled.reason, "a page failed");
+        continue;
+      }
+      // Keep offset order up to the first failed page so a partial load is a clean prefix.
+      if (error !== null) continue;
+      rows.push(...settled.value.rows);
+      dropped += settled.value.dropped;
     }
   }
   logDroppedTreeValues(dropped, "City of Melbourne");
-  return rows;
+  return {
+    rows,
+    error:
+      error === null
+        ? null
+        : `City of Melbourne tree records are incomplete: ${rows.length} of ${total} loaded, then ${error}`,
+    partial: error !== null,
+  };
+}
+
+/** Trees inside the frame. Throws when nothing loaded; a partial load returns what arrived. */
+export async function fetchComTrees(bounds: BBox, signal?: AbortSignal): Promise<ComTree[]> {
+  const result = await fetchComTreesDetailed(bounds, signal);
+  if (result.error && !result.partial) throw new Error(result.error);
+  return result.rows;
 }
 
 /**
