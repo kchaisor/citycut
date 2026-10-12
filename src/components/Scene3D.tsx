@@ -1,6 +1,15 @@
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+  type RefObject,
+} from "react";
 import * as THREE from "three";
 import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
@@ -16,6 +25,13 @@ import { useColourRevision } from "../lib/useColourRevision";
 import { captureViewPng } from "../lib/capturePng";
 import { flushControlInertia, holdControlPose, type HeldControl } from "../lib/controlInertia";
 import { shouldSkipViewportSizeRefit } from "../lib/viewportAutoFit";
+import {
+  applyPose,
+  capturePose,
+  usableCameraMemory,
+  type CameraMemory,
+  type CameraMemoryRef,
+} from "../lib/cameraMemory";
 import {
   applyBuildingSolarNeutral,
   snapshotBuildingViewportColors,
@@ -48,6 +64,13 @@ import {
 import { qaModeFromSearch, registerQaCameraBridge, type QaCameraPose } from "../lib/qaCameraBridge";
 import { WebGlContextWatch } from "./WebGlContextWatch";
 import type { ProjectionMode } from "../lib/viewMemory";
+import { treesVisibleIn3d, type View3dDisplaySettings } from "../lib/view3dDisplay";
+import { buildContourLineObject } from "../lib/contourLines3d";
+import {
+  applyWhiteCardTint,
+  snapshotWhiteCardColors,
+  whiteCardViewportLighting,
+} from "../lib/whiteCardViewport";
 import {
   DEFAULT_PERSPECTIVE_OFFSET,
   heliodonSceneBounds,
@@ -193,6 +216,7 @@ function City({
   solarDiagramOn,
   solarNeutralFill,
   heightEditBuildingId,
+  display,
   onBounds,
   onBuildingPick,
   onClearBuildingPick,
@@ -205,6 +229,7 @@ function City({
   solarDiagramOn: boolean;
   solarNeutralFill: string;
   heightEditBuildingId: number | null;
+  display: View3dDisplaySettings;
   onBounds: (bounds: Aabb) => void;
   onBuildingPick: (buildingId: number, clientX: number, clientY: number) => void;
   onClearBuildingPick?: () => void;
@@ -242,15 +267,38 @@ function City({
   useLayoutEffect(() => {
     snapshotBuildingViewportColors(group, colourMode);
     snapshotSunStudySurfaceColors(group);
+    snapshotWhiteCardColors(group, colourMode);
   }, [group, colourMode]);
   useLayoutEffect(() => {
-    applySunStudySurfaceTint(group, solarDiagramOn);
-    applyBuildingSolarNeutral(group, solarDiagramOn, solarNeutralFill);
-  }, [group, solarDiagramOn, solarNeutralFill, colourTick]);
+    if (!display.whiteCard) {
+      applySunStudySurfaceTint(group, solarDiagramOn);
+      applyBuildingSolarNeutral(group, solarDiagramOn, solarNeutralFill);
+    } else {
+      applySunStudySurfaceTint(group, false);
+      applyBuildingSolarNeutral(group, false, solarNeutralFill);
+    }
+    applyWhiteCardTint(group, display.whiteCard);
+  }, [group, solarDiagramOn, solarNeutralFill, colourTick, display.whiteCard]);
+  useLayoutEffect(() => {
+    group.traverse((object) => {
+      if (object.name === "BuildingEdges") object.visible = display.showOutlines;
+    });
+    const groundEdge = group.getObjectByName("GroundEdge");
+    if (groundEdge) groundEdge.visible = display.showOutlines;
+  }, [group, display.showOutlines]);
+  useLayoutEffect(() => {
+    const trees = group.getObjectByName("Trees");
+    if (trees) trees.visible = treesVisibleIn3d(model.layers, display);
+  }, [group, display.hideTrees, model.layers.trees]);
+  const contours = useMemo(
+    () => (display.showContours3d ? buildContourLineObject(model) : null),
+    [model, display.showContours3d, colourTick],
+  );
   useLayoutEffect(() => () => disposeObject(group), [group]);
   return (
     <>
       <primitive object={group} />
+      {contours ? <primitive object={contours} /> : null}
       <HeightEditOverlayLayer
         model={model}
         buildingId={heightEditBuildingId}
@@ -339,6 +387,7 @@ function PerspectiveFit({
   fitId,
   active,
   touchedRef,
+  fittedKey,
 }: {
   camera: THREE.PerspectiveCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
@@ -353,9 +402,9 @@ function PerspectiveFit({
   fitId: number;
   active: boolean;
   touchedRef: RefObject<boolean>;
+  fittedKey: MutableRefObject<string | null>;
 }) {
   const size = useThree((state) => state.size);
-  const fittedKey = useRef<string | null>(null);
   const place = useCallback(() => {
     const controls = controlsRef.current;
     if (!controls || !active || size.width < 2 || size.height < 2) return;
@@ -452,6 +501,7 @@ function IsoSnap({
   snapId,
   active,
   touchedRef,
+  fittedKey,
   sideM,
   groundY,
   siteTopY,
@@ -467,6 +517,7 @@ function IsoSnap({
   snapId: number;
   active: boolean;
   touchedRef: RefObject<boolean>;
+  fittedKey: MutableRefObject<string | null>;
   sideM: number;
   groundY: number;
   siteTopY: number;
@@ -476,7 +527,6 @@ function IsoSnap({
   lon: number;
 }) {
   const size = useThree((state) => state.size);
-  const fittedKey = useRef<string | null>(null);
   const place = useCallback(() => {
     const controls = controlsRef.current;
     if (!controls || size.width < 2 || size.height < 2) return;
@@ -561,6 +611,7 @@ function PlanSnap({
   snapId,
   active,
   touchedRef,
+  fittedKey,
 }: {
   camera: THREE.OrthographicCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
@@ -571,9 +622,9 @@ function PlanSnap({
   snapId: number;
   active: boolean;
   touchedRef: RefObject<boolean>;
+  fittedKey: MutableRefObject<string | null>;
 }) {
   const size = useThree((state) => state.size);
-  const fittedKey = useRef<string | null>(null);
   const place = useCallback(() => {
     const controls = controlsRef.current;
     if (!controls || size.width < 2 || size.height < 2) return;
@@ -834,7 +885,71 @@ function ExportBridge({
   return null;
 }
 
-function Cameras({
+/**
+ * Puts back the camera the user left when the 3D tab was unmounted (Drawing/Satellite round trip),
+ * and keeps a copy of the live camera every frame. Runs after both OrbitControls are mounted, and
+ * restores the fit keys and the touched flag before the first frame, so no auto-fit fires.
+ */
+function CameraMemoryBridge({
+  memoryRef,
+  snapId,
+  persp,
+  ortho,
+  perspControls,
+  orthoControls,
+  fittedKeys,
+  touchedRef,
+}: {
+  memoryRef: CameraMemoryRef | undefined;
+  snapId: number;
+  persp: THREE.PerspectiveCamera;
+  ortho: THREE.OrthographicCamera;
+  perspControls: RefObject<OrbitControlsImpl | null>;
+  orthoControls: RefObject<OrbitControlsImpl | null>;
+  fittedKeys: {
+    persp: MutableRefObject<string | null>;
+    iso: MutableRefObject<string | null>;
+    plan: MutableRefObject<string | null>;
+  };
+  touchedRef: MutableRefObject<boolean>;
+}) {
+  useLayoutEffect(() => {
+    const memory = usableCameraMemory(memoryRef?.current ?? null, snapId);
+    const pc = perspControls.current;
+    const oc = orthoControls.current;
+    if (!memory || !pc || !oc) return;
+    for (const [camera, controls, pose] of [
+      [persp, pc, memory.persp],
+      [ortho, oc, memory.ortho],
+    ] as const) {
+      flushControlInertia(controls);
+      applyPose(camera, controls, pose);
+    }
+    fittedKeys.persp.current = memory.fittedKeys.persp;
+    fittedKeys.iso.current = memory.fittedKeys.iso;
+    fittedKeys.plan.current = memory.fittedKeys.plan;
+    touchedRef.current = memory.touched;
+    // Mount-only: later prop changes must not re-apply an old pose.
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useFrame(() => {
+    if (!memoryRef) return;
+    const pc = perspControls.current;
+    const oc = orthoControls.current;
+    if (!pc || !oc) return;
+    const next: CameraMemory = {
+      snapId,
+      persp: capturePose(persp, pc),
+      ortho: capturePose(ortho, oc),
+      fittedKeys: { persp: fittedKeys.persp.current, iso: fittedKeys.iso.current, plan: fittedKeys.plan.current },
+      touched: touchedRef.current,
+    };
+    memoryRef.current = next;
+    // Default priority: a positive priority would take over rendering in react-three-fiber.
+  });
+  return null;
+}
+
+export function Cameras({
   side,
   lift,
   groundY,
@@ -850,6 +965,7 @@ function Cameras({
   solar,
   lat,
   lon,
+  cameraMemory,
 }: {
   side: number;
   lift: number;
@@ -866,12 +982,17 @@ function Cameras({
   solar: SolarViewSettings;
   lat: number;
   lon: number;
+  cameraMemory?: CameraMemoryRef;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
   const perspControls = useRef<OrbitControlsImpl | null>(null);
   const orthoControls = useRef<OrbitControlsImpl | null>(null);
   const touchedRef = useRef(false);
+  const perspFitKey = useRef<string | null>(null);
+  const isoFitKey = useRef<string | null>(null);
+  const planFitKey = useRef<string | null>(null);
+  const fittedKeys = useMemo(() => ({ persp: perspFitKey, iso: isoFitKey, plan: planFitKey }), []);
   const [ready, setReady] = useState(false);
   useLayoutEffect(() => {
     const persp = perspRef.current;
@@ -910,6 +1031,7 @@ function Cameras({
             fitId={snapId}
             active={!orthoView && !qaMode}
             touchedRef={touchedRef}
+            fittedKey={perspFitKey}
           />
           <PerspectiveClipPlanes
             camera={persp}
@@ -941,6 +1063,7 @@ function Cameras({
             snapId={snapId}
             active={iso && !freeRotate}
             touchedRef={touchedRef}
+            fittedKey={isoFitKey}
             sideM={side}
             groundY={groundY}
             siteTopY={siteTopY}
@@ -959,6 +1082,7 @@ function Cameras({
             snapId={snapId}
             active={plan}
             touchedRef={touchedRef}
+            fittedKey={planFitKey}
           />
           <OrthoClip camera={ortho} controlsRef={orthoControls} boundsRef={boundsRef} active={orthoView} />
           <OrbitControls
@@ -999,6 +1123,16 @@ function Cameras({
             onStart={() => {
               touchedRef.current = true;
             }}
+          />
+          <CameraMemoryBridge
+            memoryRef={cameraMemory}
+            snapId={snapId}
+            persp={persp}
+            ortho={ortho}
+            perspControls={perspControls}
+            orthoControls={orthoControls}
+            fittedKeys={fittedKeys}
+            touchedRef={touchedRef}
           />
           <CameraReadout
             projection={projection}
@@ -1059,6 +1193,8 @@ export function Scene3D({
   onBuildingPick,
   onClearBuildingPick,
   heightEditBuildingId,
+  cameraMemory,
+  display,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -1077,6 +1213,9 @@ export function Scene3D({
   onBuildingPick: (buildingId: number, clientX: number, clientY: number) => void;
   onClearBuildingPick?: () => void;
   heightEditBuildingId: number | null;
+  /** Survives the 3D tab unmounting; see CameraMemory. Omit to always frame afresh. */
+  cameraMemory?: CameraMemoryRef;
+  display: View3dDisplaySettings;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
@@ -1102,10 +1241,14 @@ export function Scene3D({
     setGlEpoch((value) => value + 1);
   }, []);
   const viewportLight = sunStudyViewportLighting({
-    showPath: solar.showPath,
+    showPath: solar.showPath && !display.whiteCard,
     castShadows: solar.castShadows,
   });
-  const { fillKeyLight, fillAmbient, fillHemi, sunIntensity, noToneMapping } = viewportLight;
+  const cardLight = whiteCardViewportLighting(display.whiteCard);
+  const fillKeyLight = display.whiteCard ? cardLight.fillKeyLight : viewportLight.fillKeyLight;
+  const fillAmbient = display.whiteCard ? cardLight.fillAmbient : viewportLight.fillAmbient;
+  const fillHemi = display.whiteCard ? cardLight.fillHemi : viewportLight.fillHemi;
+  const { sunIntensity, noToneMapping } = viewportLight;
   const heliodonRadius = heliodonRadiusM(model.sideM, solar.radiusFactor);
   const shadowTargetY = groundY;
   const siteTopY = useMemo(() => {
@@ -1163,6 +1306,7 @@ export function Scene3D({
         onClearBuildingPick={onClearBuildingPick}
         pickBuildings={model.layers.buildings}
         heightEditBuildingId={heightEditBuildingId}
+        display={display}
       />
       <SolarHeliodon
         lat={model.center.lat}
@@ -1197,6 +1341,7 @@ export function Scene3D({
         solar={solar}
         lat={model.center.lat}
         lon={model.center.lon}
+        cameraMemory={cameraMemory}
       />
       </Canvas>
     </div>

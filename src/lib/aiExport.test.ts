@@ -342,6 +342,13 @@ describe("Illustrator plans", () => {
     expect(figure).toBeUndefined();
   });
 
+  it("keeps rail and tram off the figure-ground (they show only in 3D and on the site plan)", () => {
+    const chunks = figureGroundChunks(model(), 1000);
+    expect(chunks.map((chunk) => chunk.name)).not.toContain("Rail");
+    expect(chunks.map((chunk) => chunk.name)).not.toContain("Trams");
+    expect(chunks.find((chunk) => chunk.name === "Buildings")?.paths?.some((p) => p.dashMm)).toBeFalsy();
+  });
+
   it("writes figure-ground with frame, footprints, and annotation only", async () => {
     const fitted = await inspect(await figureGroundPdf(model(), 1000));
     expect(fitted.layers[0]).toBe("Frame/Sheet");
@@ -375,7 +382,8 @@ describe("Illustrator 3D view", () => {
     const bytes = await viewAi(model(), shot, { uniformBuildings: false, colourBySource: false });
     const info = await inspect(bytes);
     expect(info.header.startsWith("%PDF-1.6")).toBe(true);
-    expect(info.layers.length).toBe(VIEW_LAYER_ORDER.length);
+    // Contours is an opt-in layer (3D display toggle), so the default sheet has every other layer.
+    expect(info.layers).toEqual(VIEW_LAYER_ORDER.filter((name) => name !== "Contours"));
     expect(info.widthMm / info.heightMm).toBeCloseTo(640 / 400, 2);
     expect(info.text).toContain("not to scale");
     expect(info.text).toContain("Test Block");
@@ -386,6 +394,33 @@ describe("Illustrator 3D view", () => {
     for (const name of info.layers) expect(info.counts.get(name) ?? 0).toBeGreaterThan(0);
     const widths = info.widthsMm.map((mm) => Math.round(mm * 1000) / 1000);
     expect(widths).toContain(VIEW_OUTLINE_MM);
+    // The rail in the test model is drawn as dashed black segments on its own layer.
+    expect(info.counts.get("Rail") ?? 0).toBeGreaterThan(0);
+    expect(widths).toContain(Math.round(DEFAULT_LINE_STYLES.rail.mm * 1000) / 1000);
+  });
+
+  it("keeps draped contours on their own layer when outlines are off", async () => {
+    const camera = new THREE.PerspectiveCamera(32, 16 / 10, 0.5, 4000);
+    camera.position.set(-90, 80, 110);
+    camera.lookAt(0, 6, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+    const shot = shotFromCamera(camera, 640, 400);
+    const withTerrain = model();
+    const info = await inspect(
+      await viewAi(withTerrain, shot, {
+        uniformBuildings: false,
+        colourBySource: false,
+        whiteCard: true,
+        showOutlines: false,
+        showContours: true,
+        hideTrees: true,
+      }),
+    );
+    expect(info.layers).toContain("Contours");
+    expect(info.counts.get("Contours") ?? 0).toBeGreaterThan(0);
+    expect(info.layers).not.toContain("Outlines");
+    expect(info.layers).not.toContain("Trees");
   });
 
   it("writes a layer whose operator list is too long to spread in one call", async () => {

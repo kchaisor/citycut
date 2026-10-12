@@ -74,6 +74,9 @@ jobs:
 
   deploy:
     needs: build
+    # Only main deploys. A workflow_dispatch on another branch runs the build (PT step, tests,
+    # vite build) as a check and stops here.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

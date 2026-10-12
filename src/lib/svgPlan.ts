@@ -10,10 +10,13 @@ import {
   footpathStrips,
   mergeFootpathFragments,
   subtractFootpathBlockers,
+  unionCarriageways,
   unionFootpathStrips,
   unionRoadSurface,
 } from "./roadFill";
+import * as polygonClipping from "polygon-clipping";
 import { fillRoadMedianGaps } from "./roadMedianFill";
+import { carParkWays } from "./planCarParks";
 import {
   DEFAULT_COARSE_FROM_SCALE,
   DEFAULT_COARSE_INTERVAL_M,
@@ -23,6 +26,11 @@ import {
   drawnContourInterval,
 } from "./vicmapContours";
 import type { CityModel, Pt } from "../types";
+
+type ClipDifference = (geom: MultiPolygon, ...more: MultiPolygon[]) => MultiPolygon;
+const clipModule = polygonClipping as unknown as { difference?: ClipDifference; default?: { difference: ClipDifference } };
+const clipDifference: ClipDifference =
+  typeof clipModule.difference === "function" ? clipModule.difference : clipModule.default!.difference;
 
 const round = (value: number) => Math.round(value * 10) / 10;
 
@@ -42,6 +50,7 @@ export function svgRings(rings: Pt[][]): string {
 }
 
 export type PlanPaths = {
+  /** City blocks, then car-park aisle ground (aisles are left out of the road surface). */
   blocks: Pt[][][];
   green: Pt[][][];
   water: Pt[][][];
@@ -183,7 +192,10 @@ export function planPaths(
     pathFilletM,
     pathWidthM,
   );
-  const carriageway = unionRoadSurface(model.roads, model.tramLines, model.sideM, frameShape);
+  // Car-park aisles (and service ways inside a mapped car park) are car park, not road white.
+  const carPark = carParkWays(model.roads, model.carParks);
+  const planRoads = carPark.size > 0 ? model.roads.filter((road) => !carPark.has(road)) : model.roads;
+  const carriageway = unionRoadSurface(planRoads, model.tramLines, model.sideM, frameShape);
 
   const colourMode: BuildingColourMode = planOptions.buildingColour ?? {
     colourByUse: true,
@@ -207,12 +219,29 @@ export function planPaths(
     pathFill = mergeFootpathFragments(pathFill);
   }
 
-  const roadFill = fillRoadMedianGaps(carriageway.polygons, {
-    green,
-    water,
-    paths: pathFill,
-    buildings: buildings.map((building) => building.rings),
-  });
+  // Draw car-park ways as block ground so the car park reads as one surface with a clear edge
+  // against the carriageway. City blocks already exclude these strips.
+  const aisles = [...carPark];
+  if (aisles.length > 0) {
+    const strips = unionCarriageways(
+      aisles.map((road) => ({ line: road.line, width: road.width })),
+      model.sideM,
+      frameShape,
+    ).polygons;
+    const ground = carriageway.polygons.length > 0 ? clipDifference(strips, carriageway.polygons) : strips;
+    for (const polygon of ground) blocks.push(polygon.map((ring) => ring.map((p): Pt => [p[0], p[1]])));
+  }
+
+  // Only gaps rimmed by streets are medians or islands; service ways and aisles do not count.
+  const streets = model.roads
+    .filter((road) => road.kind === "road" && road.grade !== "path" && !road.service)
+    .map((road) => ({ line: road.line, width: road.width }));
+  const roadFill = fillRoadMedianGaps(
+    carriageway.polygons,
+    { green, water, paths: pathFill, buildings: buildings.map((building) => building.rings) },
+    undefined,
+    streets,
+  );
 
   const trees = model.trees
     .filter((tree) => pointInSiteFrame(tree.at, model.sideM, frameShape))

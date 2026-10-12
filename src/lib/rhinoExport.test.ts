@@ -402,6 +402,7 @@ describe("rhino export", () => {
       }
       const optionalLayers = new Set([
         "Rail",
+        "Trams",
         "Terrain",
         "Contours",
         "FigureGround",
