@@ -60,7 +60,7 @@ const SOURCE_FROM_CODE: Record<number, BuildingUseSourceTier> = {
   0: "unclassified",
   1: "overture",
   2: "clue",
-  3: "bca",
+  // 3 was the retired building-permit (BCA) tier; old tiles never used it.
   4: "zone",
 };
 
@@ -87,7 +87,6 @@ export type EnrichmentManifest = {
     unclassifiedUnmappedZoneCounts?: Record<string, number>;
   };
   clueLoaded?: boolean;
-  bca?: { status: string; detail?: string; url?: string };
   /** SHA-256 of canonical `shared/vicmap-zone-use.json` at bake time. */
   zoneUseTableSha256?: string;
   /** SHA-256 of canonical `shared/overture-building-use.json` at bake time. */
@@ -130,7 +129,7 @@ function parseUse(raw: unknown): BuildingUse | null {
 
 function parseUseSource(raw: unknown): BuildingUseSourceTier | null {
   if (typeof raw !== "string") return null;
-  const allowed = new Set(["overture", "clue", "bca", "zone", "unclassified"]);
+  const allowed = new Set(["overture", "clue", "zone", "unclassified"]);
   return allowed.has(raw) ? (raw as BuildingUseSourceTier) : null;
 }
 

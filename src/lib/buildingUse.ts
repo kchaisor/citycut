@@ -19,7 +19,6 @@ export const TYPOLOGY_SOURCES = [
   "osm_tag",
   "overture_class",
   "clue",
-  "bca",
   "zone",
   "none",
 ] as const satisfies readonly TypologySource[];
@@ -83,7 +82,6 @@ export const SOURCE_META: Record<
   osm_tag: sourceSwatch("Overture class", "--source-osm", false),
   overture_class: sourceSwatch("Overture class", "--source-osm", false),
   clue: sourceSwatch("CoM CLUE", "--source-clue", false),
-  bca: sourceSwatch("Building permit (BCA)", "--source-bca", false),
   zone: sourceSwatch("Zone", "--source-zone", true),
   none: sourceSwatch("Unclassified", "--source-none", false),
 };
@@ -92,7 +90,6 @@ export const SOURCE_META: Record<
 export const SOURCE_COUNT_KEYS = [
   "overture_class",
   "clue",
-  "bca",
   "zone",
   "none",
 ] as const satisfies readonly TypologySource[];
@@ -257,7 +254,7 @@ export function countUses(buildings: { use: BuildingUse }[]): Record<BuildingUse
 
 function normaliseSourceForCount(source: TypologySource): (typeof SOURCE_COUNT_KEYS)[number] {
   if (source === "osm_tag") return "overture_class";
-  if (source === "overture_class" || source === "clue" || source === "bca" || source === "zone" || source === "none") {
+  if (source === "overture_class" || source === "clue" || source === "zone" || source === "none") {
     return source;
   }
   return "none";

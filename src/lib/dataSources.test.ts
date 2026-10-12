@@ -20,7 +20,7 @@ function model(over: Partial<CityModel> = {}): CityModel {
 }
 
 describe("buildDataSources", () => {
-  it("keeps the BCA 403 failure and its note", () => {
+  it("has no building-permit row, even for a stale BCA failure id", () => {
     const rows = buildDataSources({
       model: model({
         useTierFailures: [
@@ -31,9 +31,8 @@ describe("buildDataSources", () => {
       comMeasuredCount: 1210,
       comError: null,
     });
-    const bca = rows.find((row) => row.id === "bca");
-    expect(bca?.status).toBe("failed");
-    expect(bca?.notes).toEqual(["Building permit (BCA): blocked by source (403)"]);
+    expect(rows.find((row) => row.id === "bca")).toBeUndefined();
+    expect(JSON.stringify(rows)).not.toMatch(/BCA|permit/i);
     expect(rows.find((row) => row.id === "com-heights")?.detail).toContain("1,210 buildings measured");
   });
 

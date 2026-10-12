@@ -80,8 +80,6 @@ function sourceRank(source: BuildingFeat["source"]): number {
       return 5;
     case "clue":
       return 4;
-    case "bca":
-      return 3;
     case "zone":
       return 2;
     default:

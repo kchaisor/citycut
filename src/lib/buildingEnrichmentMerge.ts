@@ -13,7 +13,6 @@ import { resolveUseSourceTier } from "./useSourceTier";
 const USE_SOURCE_RANK: Record<BuildingUseSourceTier, number> = {
   overture: 5,
   clue: 4,
-  bca: 3,
   zone: 2,
   unclassified: 1,
 };
@@ -24,8 +23,6 @@ function typologyFromTile(tier: BuildingUseSourceTier): TypologySource {
       return "overture_class";
     case "clue":
       return "clue";
-    case "bca":
-      return "bca";
     case "zone":
       return "zone";
     default:
@@ -111,7 +108,6 @@ export function countUseSourceTiers(
   const counts: Record<BuildingUseSourceTier, number> = {
     overture: 0,
     clue: 0,
-    bca: 0,
     zone: 0,
     unclassified: 0,
   };
