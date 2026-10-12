@@ -3,12 +3,27 @@ import maplibregl from "maplibre-gl";
 import { MapAttribution } from "./MapAttribution";
 import { applyBasemapStyleToMap, loadBasemapStyle } from "../lib/loadMapStyle";
 import { getColour } from "../lib/colours";
-import { squareBBox } from "../lib/geo";
+import { fromLocal, openRing } from "../lib/geo";
+import { planViewportFromLngLatBounds, planViewportLngLatBounds } from "../lib/planSatelliteViewport";
+import { circleRing, DEFAULT_SITE_FRAME_SHAPE, siteFrameHalf } from "../lib/siteFrame";
 import { useColourRevision } from "../lib/useColourRevision";
+import type { PlanViewport } from "../lib/planViewport";
 import type { CityModel } from "../types";
 
-export function SatellitePane({ model }: { model: CityModel }) {
+export function SatellitePane({
+  model,
+  viewport,
+  onViewportChange,
+}: {
+  model: CityModel;
+  viewport: PlanViewport;
+  onViewportChange: (view: PlanViewport) => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const applyingRef = useRef(false);
+  const viewportRef = useRef(viewport);
+  viewportRef.current = viewport;
   const colourTick = useColourRevision();
   const [basemapStyleFailed, setBasemapStyleFailed] = useState(false);
 
@@ -17,7 +32,6 @@ export function SatellitePane({ model }: { model: CityModel }) {
     if (!container) return;
     let map: maplibregl.Map | null = null;
     let cancelled = false;
-    const bounds = squareBBox(model.center, model.sideM);
     void loadBasemapStyle("satellite").then(({ style, styleLoadFailed }) => {
       if (cancelled) return;
       if (styleLoadFailed) setBasemapStyleFailed(true);
@@ -28,21 +42,35 @@ export function SatellitePane({ model }: { model: CityModel }) {
         zoom: 15,
         attributionControl: false,
         dragRotate: false,
+        pitch: 0,
+        bearing: 0,
       });
+      mapRef.current = map;
       if (typeof style === "string") applyBasemapStyleToMap(map, style);
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-      const ring: [number, number][] = [
-        [bounds.west, bounds.south],
-        [bounds.east, bounds.south],
-        [bounds.east, bounds.north],
-        [bounds.west, bounds.north],
-        [bounds.west, bounds.south],
-      ];
+      const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
+      const half = siteFrameHalf(model.sideM);
+      const localRing =
+        frameShape === "circle"
+          ? circleRing(half)
+          : ([
+              [-half, -half],
+              [half, -half],
+              [half, half],
+              [-half, half],
+              [-half, -half],
+            ] as const);
+      const coordinates = openRing(localRing.map(([east, north]) => [east, north] as [number, number])).map(
+        ([east, north]) => {
+        const { lon, lat } = fromLocal([east, north], model.center);
+          return [lon, lat] as [number, number];
+        },
+      );
       map.on("load", () => {
         if (!map) return;
         map.addSource("cut", {
           type: "geojson",
-          data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: ring } },
+          data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates } },
         });
         map.addLayer({
           id: "cut-line",
@@ -50,20 +78,62 @@ export function SatellitePane({ model }: { model: CityModel }) {
           source: "cut",
           paint: { "line-color": getColour("--cut-line"), "line-width": 2 },
         });
-        map.fitBounds(
-          [
-            [bounds.west, bounds.south],
-            [bounds.east, bounds.north],
-          ],
-          { padding: 28, duration: 0, animate: false },
+        applyingRef.current = true;
+        map.fitBounds(planViewportLngLatBounds(viewport, model.center), {
+          padding: 0,
+          duration: 0,
+          animate: false,
+        });
+        applyingRef.current = false;
+      });
+      // A container resize keeps MapLibre's zoom and fires moveend with no originalEvent. Re-fit the
+      // shared viewport instead of writing the container's bounds back, so a window resize never
+      // changes the site plan or figure-ground extent.
+      map.on("resize", () => {
+        if (!map) return;
+        applyingRef.current = true;
+        map.fitBounds(planViewportLngLatBounds(viewportRef.current, model.center), {
+          padding: 0,
+          duration: 0,
+          animate: false,
+        });
+        applyingRef.current = false;
+      });
+      map.on("moveend", (event) => {
+        // Only a user pan or zoom (drag, wheel, keys, the +/- buttons) carries an originalEvent.
+        if (applyingRef.current || !map || !event.originalEvent) return;
+        const bounds = map.getBounds();
+        const sw = bounds.getSouthWest();
+        const ne = bounds.getNorthEast();
+        onViewportChange(
+          planViewportFromLngLatBounds(
+            [
+              [sw.lng, sw.lat],
+              [ne.lng, ne.lat],
+            ],
+            model.center,
+          ),
         );
       });
     });
     return () => {
       cancelled = true;
       map?.remove();
+      mapRef.current = null;
     };
-  }, [model, colourTick]);
+  }, [model.center.lat, model.center.lon, model.sideM, model.frameShape, colourTick]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    applyingRef.current = true;
+    map.fitBounds(planViewportLngLatBounds(viewport, model.center), {
+      padding: 0,
+      duration: 0,
+      animate: false,
+    });
+    applyingRef.current = false;
+  }, [viewport, model.center]);
 
   return (
     <div className="map-wrap map-wrap-satellite">
