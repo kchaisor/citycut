@@ -39,6 +39,7 @@ import { fetchOvertureBaseForCut, overtureTreesFromPoints } from "./lib/overture
 import { overtureThemeCredit } from "./lib/overtureAttribution";
 import { fetchTramLinesForCut } from "./lib/explodedAxoPt";
 import { fetchOvertureTransportationForCut } from "./lib/overtureTransportation";
+import { withRoundaboutIslands } from "./lib/roundabouts";
 import {
   REVERSE_DEBOUNCE_MS,
   addressStillApplies,
@@ -357,6 +358,7 @@ export default function App() {
         : Promise.resolve({
             roads: [],
             roadKm: 0,
+            roundabouts: [],
             stats: { release: "", tileCount: 0, fetchMs: 0, segmentCount: 0, skippedTomTom: 0 },
           });
       const loadTreeTiers = wantsOverture;
@@ -697,7 +699,7 @@ export default function App() {
         roads: modelLayers.roads ? transportResult.roads : [],
         tramLines: tramResult.lines ?? undefined,
         tramLinesLoadFailed: tramResult.loadFailed || undefined,
-        areas: modelLayers.waterGreen ? baseResult.areas : [],
+        areas: modelLayers.waterGreen ? withRoundaboutIslands(baseResult.areas, modelLayers.roads ? (transportResult.roundabouts ?? []) : [], { sideM, shape: frameShapeRef.current }) : [],
         carParks: modelLayers.waterGreen ? baseResult.carParks : undefined,
         trees,
         roadKm: modelLayers.roads ? transportResult.roadKm : 0,

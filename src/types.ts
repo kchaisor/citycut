@@ -156,6 +156,8 @@ export type AreaFeat = {
   ring: Ring;
   holes: Ring[];
   kind: "water" | "green" | "block";
+  /** Not from a source: a roundabout island inferred from the road ring (no island mapped in OSM). */
+  estimate?: "roundabout-island";
 };
 
 /** Where a tree's height, crown, and trunk came from. */

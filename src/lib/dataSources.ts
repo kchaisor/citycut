@@ -1,6 +1,7 @@
 import type { CityModel } from "../types";
 import type { ComBuildingHeightsStatus } from "./comBuildingHeightsStatus";
 import { treeTierCounts } from "./trees";
+import { estimatedIslandCount, ROUNDABOUT_ISLAND_ESTIMATE_NOTE } from "./roundabouts";
 
 /**
  * The data-source list in Model details. Every row is read from the model and the
@@ -171,6 +172,17 @@ export function buildDataSources({ model, comHeights, comMeasuredCount, comError
       status: "ok",
       detail: `${model.contourLayer.label} · every ${model.contourLayer.interval} m`,
       notes: [],
+    });
+  }
+
+  const estimatedIslands = estimatedIslandCount(model.areas);
+  if (estimatedIslands > 0) {
+    rows.push({
+      id: "roundabout-islands",
+      label: "Roundabout islands (estimate)",
+      status: "ok",
+      detail: `${estimatedIslands} estimated`,
+      notes: [ROUNDABOUT_ISLAND_ESTIMATE_NOTE],
     });
   }
 
