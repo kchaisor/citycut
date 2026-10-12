@@ -1492,7 +1492,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                   )}
                   {comHeightsMeasuredOn && (
                     <p className="legend-note">
-                      <a href={COM_BUILDING_HEIGHTS_DATASET_URL}>{COM_BUILDING_HEIGHTS_CREDIT}</a>
+                      <a href={COM_BUILDING_HEIGHTS_DATASET_URL} target="_blank" rel="noopener noreferrer">{COM_BUILDING_HEIGHTS_CREDIT}</a>
                     </p>
                   )}
                   <p className="legend-note" role="status">
@@ -1979,12 +1979,12 @@ export function ModelPage({ model }: { model: CityModel }) {
               windOn: windSettings.enabled,
               satelliteOn: tab === "satellite",
               comHeightsHtml: comHeightsMeasuredOn
-                ? `Building heights: <a href="${COM_BUILDING_HEIGHTS_DATASET_URL}">2023 Building Footprints © City of Melbourne</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.`
+                ? `Building heights: <a href="${COM_BUILDING_HEIGHTS_DATASET_URL}" target="_blank" rel="noopener noreferrer">2023 Building Footprints © City of Melbourne</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>.`
                 : null,
               comTreesHtml: comTreesInCut(model) ? COM_TREES_CREDIT_HTML : null,
               contourHtml:
                 model.contourLayer && model.contourLayer.source !== "dem"
-                  ? `<a href="${model.contourLayer.datasetUrl ?? "https://discover.data.vic.gov.au/dataset/vicmap-elevation-contour-line-1-to-5-metres-covering-metropolitan-melbourne"}">Contours</a> every ${model.contourLayer.interval} m.`
+                  ? `<a href="${model.contourLayer.datasetUrl ?? "https://discover.data.vic.gov.au/dataset/vicmap-elevation-contour-line-1-to-5-metres-covering-metropolitan-melbourne"}" target="_blank" rel="noopener noreferrer">Contours</a> every ${model.contourLayer.interval} m.`
                   : null,
             }),
           }}
