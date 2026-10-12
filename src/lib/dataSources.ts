@@ -20,9 +20,6 @@ export type DataSourceRow = {
   retry?: "com-heights";
 };
 
-/** Tree-source notes from fix/trees-3d (#88). Read defensively so this file builds before and after it lands. */
-type TreeLoadNoteLike = { source: string; message: string };
-
 export type DataSourceInput = {
   model: CityModel;
   comHeights: ComBuildingHeightsStatus;
@@ -52,21 +49,12 @@ export function overtureReleaseFromNote(note: string): string | null {
   return match ? match[1]!.trim() : null;
 }
 
-/** The sentence of the source note that starts with `lead`, when App.tsx recorded that failure there. */
-export function sentenceFromNote(note: string, lead: string): string | null {
-  const start = note.indexOf(lead);
-  if (start < 0) return null;
-  const end = note.indexOf(".", start);
-  return note.slice(start, end < 0 ? undefined : end + 1).trim();
-}
-
 export function buildDataSources({ model, comHeights, comMeasuredCount, comError }: DataSourceInput): DataSourceRow[] {
   const rows: DataSourceRow[] = [];
   const failures = model.useTierFailures ?? [];
   const warnings = model.heightSourceLoadWarnings ?? [];
-  const treeNotes = ((model as CityModel & { treeLoadNotes?: TreeLoadNoteLike[] }).treeLoadNotes ?? []).filter(
-    (note) => note && typeof note.message === "string",
-  );
+  // Tree-source notes from #88: "base" is the Overture base tile, "com" and "vicmap" the tree tiers.
+  const treeNotes = model.treeLoadNotes ?? [];
   const treeNotesFor = (source: string) => treeNotes.filter((note) => note.source === source).map((n) => n.message);
 
   const release = overtureReleaseFromNote(model.sourceNote);
@@ -201,10 +189,8 @@ export function buildDataSources({ model, comHeights, comMeasuredCount, comError
 
   if (model.layers.trees) {
     const tiers = treeTierCounts(model.trees);
-    const treeRow = (id: "com" | "osm" | "vicmap", label: string, lead: string | null) => {
-      const notes = treeNotesFor(id);
-      const legacy = notes.length === 0 && lead ? sentenceFromNote(model.sourceNote, lead) : null;
-      if (legacy) notes.push(legacy);
+    const treeRow = (id: "com" | "osm" | "vicmap", label: string, noteSource: "com" | "vicmap" | "base") => {
+      const notes = treeNotesFor(noteSource);
       const n = tiers[id];
       rows.push({
         id: `trees-${id}`,
@@ -214,9 +200,10 @@ export function buildDataSources({ model, comHeights, comMeasuredCount, comError
         notes,
       });
     };
-    treeRow("com", "City of Melbourne trees", "City of Melbourne tree records");
-    treeRow("osm", "OpenStreetMap trees", null);
-    treeRow("vicmap", "Vicmap trees", "Vicmap tree points");
+    treeRow("com", "City of Melbourne trees", "com");
+    // OpenStreetMap tree points come from the Overture base tile, so a base failure shows here too.
+    treeRow("osm", "OpenStreetMap trees", "base");
+    treeRow("vicmap", "Vicmap trees", "vicmap");
   }
 
   if (model.layers.roads && (model.tramLinesLoadFailed || (model.tramLines?.length ?? 0) > 0)) {

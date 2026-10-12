@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CityModel } from "../types";
-import { buildDataSources, countLoaded, overtureReleaseFromNote, sentenceFromNote } from "./dataSources";
+import { buildDataSources, countLoaded, overtureReleaseFromNote } from "./dataSources";
 
 function model(over: Partial<CityModel> = {}): CityModel {
   return {
@@ -73,11 +73,11 @@ describe("buildDataSources", () => {
     expect(rows.find((row) => row.id === "parcel")?.notes).toEqual(["Property boundary could not be loaded."]);
   });
 
-  it("marks a missing tree tier failed with the sentence from the source note", () => {
+  it("marks a missing tree tier failed and keeps the #88 tree-source note", () => {
     const rows = buildDataSources({
       model: model({
         layers: { buildings: false, roads: false, waterGreen: false, trees: true },
-        sourceNote: "Flat ground. City of Melbourne tree records took too long, so that tier is missing. Other text.",
+        treeLoadNotes: [{ source: "com", message: "City of Melbourne tree records took too long, so that tier is missing." }],
       }),
       comHeights: "outside",
       comMeasuredCount: 0,
@@ -97,11 +97,8 @@ describe("buildDataSources", () => {
 });
 
 describe("note helpers", () => {
-  it("reads the Overture release and one sentence", () => {
+  it("reads the Overture release", () => {
     expect(overtureReleaseFromNote("x Overture Maps (2025-09-24.0): y")).toBe("2025-09-24.0");
     expect(overtureReleaseFromNote("none")).toBe(null);
-    expect(sentenceFromNote("A. Vicmap tree points took too long. B.", "Vicmap tree points")).toBe(
-      "Vicmap tree points took too long.",
-    );
   });
 });

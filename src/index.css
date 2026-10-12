@@ -1778,6 +1778,7 @@ input[type="range"]::-moz-range-thumb {
 .sidebar .exports { gap: 0; }
 .sidebar .tree-tiers li { min-height: 24px; align-items: center; }
 .sidebar .tree-tiers b { font-weight: 400; }
+.sidebar .tree-load-note { color: var(--status-failed); }
 
 /* Narrow screens: the viewport on top, the panel under it, the rail along the bottom. */
 @media (max-width: 640px) {
