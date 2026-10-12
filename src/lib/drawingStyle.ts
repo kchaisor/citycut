@@ -196,7 +196,7 @@ export const DEFAULT_LINE_STYLES: LineStyles = {
   },
   kerb: { mm: LINE_MM.propertyRoad, color: drawingSheetColor("--road-kerb-stroke"), dash: "none" },
   path: { mm: 0, color: drawingSheetColor("--path-edge-stroke"), dash: "none" },
-  rail: { mm: 0.08, color: drawingSheetColor("--rail-stroke"), dash: "none" },
+  rail: { mm: 0.12, color: drawingSheetColor("--rail-stroke"), dash: "1.2 0.6" },
   green: { mm: 0, color: drawingSheetColor("--green-stroke"), dash: "none" },
   water: { mm: 0.08, color: drawingSheetColor("--water-stroke"), dash: "none" },
   contour: { mm: 0.02, color: CONTOUR_COLOR.toUpperCase(), dash: `${CONTOUR_DASH_MM} ${CONTOUR_GAP_MM}` },

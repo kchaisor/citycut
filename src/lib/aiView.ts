@@ -6,6 +6,8 @@ import { buildLayeredNativeAi } from "./aiNative";
 import { buildLayeredNativeAiPdfOps } from "./aiNativePdfFallback";
 import { buildLayeredPdf } from "./aiDocument";
 import type { CameraShot } from "./cameraShot";
+import { clipTransportLines, drapedDashedLineGeometry } from "./dashedTransportLines";
+import { readDrawingStyle } from "./drawingStyle";
 import { BUILDING_USE_META, SOURCE_META, uniformBuildingColor } from "./buildingUse";
 import { getColour, type ColourKey } from "./colours";
 import { formatCoord, openRing, signedArea } from "./geo";
@@ -25,6 +27,7 @@ export const VIEW_LAYER_ORDER = [
   "Contours",
   "Buildings",
   "Trees",
+  "Rail",
   "Outlines",
   "Annotation",
 ] as const;
@@ -779,6 +782,8 @@ export function viewChunks(model: CityModel, shot: CameraShot, style: ViewStyle)
   }
   const label = `${model.placeLabel} · ${formatPair(model)}`;
   const comCredit = comBuildingHeightCreditLine(model);
+  const railPaths = transportPaths(model, shot, page.widthMm, page.heightMm, cells);
+  if (railPaths.length > 0) chunks.push({ name: "Rail", paths: railPaths });
   const plate = Math.min(page.widthMm - 8, Math.max(42, label.length * 1.35 + 8));
   const boxHeight = comCredit ? 18.4 : 12.4;
   const texts: PdfChunk["texts"] = [
@@ -827,4 +832,42 @@ export async function viewAi(model: CityModel, shot: CameraShot, style: ViewStyl
     return buildLayeredNativeAiPdfOps(page.widthMm, page.heightMm, chunks, VIEW_LAYER_ORDER, title);
   }
   return buildLayeredPdf(page.widthMm, page.heightMm, chunks, VIEW_LAYER_ORDER);
+}
+
+/**
+ * Rail and tram as black dashed lines draped on the terrain: the same dashes the 3D view draws,
+ * projected through the camera and clipped where nearer faces cover them, like the outlines.
+ */
+function transportPaths(
+  model: CityModel,
+  shot: CameraShot,
+  pageW: number,
+  pageH: number,
+  cells: ReturnType<typeof gridIndex>,
+): NonNullable<PdfChunk["paths"]> {
+  const field = model.terrain;
+  const sampleZ = (east: number, north: number) => (field ? sampleTerrain(field, east, north, model.sideM) : 0);
+  const style = readDrawingStyle();
+  const { rails, trams } = clipTransportLines(model);
+  const paths: NonNullable<PdfChunk["paths"]> = [];
+  for (const [lines, stroke] of [
+    [rails, style.rail],
+    [trams, style.tram],
+  ] as const) {
+    if (!(stroke.mm > 0)) continue;
+    const geometry = drapedDashedLineGeometry(lines, stroke, model.sideM, sampleZ, SURFACE.rail.lift);
+    if (!geometry) continue;
+    const positions = geometry.getAttribute("position").array;
+    geometry.dispose();
+    const color = hexRgb(stroke.color);
+    for (let i = 0; i + 5 < positions.length; i += 6) {
+      const a = project(shot, [positions[i]!, positions[i + 1]!, positions[i + 2]!], pageW, pageH);
+      const b = project(shot, [positions[i + 3]!, positions[i + 4]!, positions[i + 5]!], pageW, pageH);
+      if (!a || !b) continue;
+      for (const [p, q] of clipEdge(a, b, candidates(cells, a, b, pageW, pageH), -1)) {
+        paths.push({ rings: [[[p.x, p.y], [q.x, q.y]]], close: false, stroke: color, strokeMm: stroke.mm, cap: "butt", join: "round" });
+      }
+    }
+  }
+  return paths;
 }

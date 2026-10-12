@@ -530,40 +530,23 @@ export function buildExplodedAxoLayers(
       if (overlays.transport === "unavailable") {
         unavailableNote = "unavailable";
       } else if (overlays.transport) {
-        pushLinePaths(
-          overlays.transport.rail.lines,
-          strokes,
-          strokePaints,
-          strokeWidthScales,
-          strokeDashed,
-          "rail-line",
-          0.55,
-        );
+        // Rail, train and tram lines are not drawn on the exploded axo: they show only in the 3D view and on
+        // the site plan. Stations, stops and bus routes stay.
         for (const station of overlays.transport.rail.stations) {
           const [x, y] = planToIsoBase(station[0], station[1]);
           markers.push({ x, y, paint: "rail-station", radiusM: model.sideM * 0.0045 });
         }
         for (const line of overlays.transport.pt?.lines ?? []) {
-          if (line.mode === "other") continue;
-          const paint = line.mode === "tram" ? "pt-tram" : ptPaint(line.mode, "line");
-          pushLinePaths(
-            [line.line],
-            strokes,
-            strokePaints,
-            strokeWidthScales,
-            strokeDashed,
-            paint,
-            line.mode === "tram" ? 0.55 : 0.7,
-            line.mode === "tram",
-          );
+          if (line.mode === "other" || line.mode === "train" || line.mode === "tram") continue;
+          pushLinePaths([line.line], strokes, strokePaints, strokeWidthScales, strokeDashed, ptPaint(line.mode, "line"), 0.7);
         }
         for (const stop of overlays.transport.pt?.stops ?? []) {
           if (stop.mode === "other") continue;
           const [x, y] = planToIsoBase(stop.point[0], stop.point[1]);
           markers.push({ x, y, paint: ptPaint(stop.mode, "stop"), radiusM: model.sideM * 0.0038 });
         }
+        // No "Rail" swatch: no rail lines are drawn. Train and Tram now key the stop markers.
         legend = [
-          { label: "Rail", paint: "rail-line" },
           { label: "Train", paint: "pt-train" },
           { label: "Tram", paint: "pt-tram" },
           { label: "Bus", paint: "pt-bus" },
