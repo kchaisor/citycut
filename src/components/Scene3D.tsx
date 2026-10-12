@@ -917,7 +917,7 @@ function CameraMemoryBridge({
   return null;
 }
 
-function Cameras({
+export function Cameras({
   side,
   lift,
   groundY,
