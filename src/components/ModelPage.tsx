@@ -110,6 +110,7 @@ import { LineStylesEditor } from "./LineStyles";
 import { IconRail, type RailItem } from "./IconRail";
 import { SatellitePane } from "./SatellitePane";
 import { Scene3D, type SceneExporter } from "./Scene3D";
+import type { CameraMemoryRef } from "../lib/cameraMemory";
 import { SceneBoundary } from "./SceneBoundary";
 import { SolarPanel } from "./SolarPanel";
 import { WindPanel } from "./WindPanel";
@@ -196,6 +197,9 @@ export function ModelPage({ model }: { model: CityModel }) {
   );
   const [view, setView] = useState<ViewMemory>(loadView);
   const [snapId, setSnapId] = useState(0);
+  // The 3D view unmounts on Drawing/Satellite; this keeps the user's camera for the way back.
+  // A new model gets a fresh memory, so a new cut is framed afresh.
+  const cameraMemory = useMemo<CameraMemoryRef>(() => ({ current: null }), [model]);
   const [windSettings, setWindSettings] = useState<WindViewSettings>(() => {
     const next = windSettingsForModelOpen(window.localStorage);
     writeStoredWindSettings(window.localStorage, next);
@@ -1064,6 +1068,7 @@ export function ModelPage({ model }: { model: CityModel }) {
                 }
                 onClearBuildingPick={() => setHeightPick(null)}
                 heightEditBuildingId={heightPick?.buildingId ?? null}
+                cameraMemory={cameraMemory}
               />
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
