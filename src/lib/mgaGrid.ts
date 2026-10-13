@@ -11,50 +11,6 @@ export function mgaGridStep(metresPerPixel: number, minGapPx = MGA_GRID_MIN_GAP_
   return MGA_GRID_STEPS_M[MGA_GRID_STEPS_M.length - 1]!;
 }
 
-export type GridLine = { coords: [number, number][]; axis: "e" | "n"; value: number };
-
-/**
- * Lines of constant MGA easting and northing (GDA2020 / MGA, the zone of the view centre;
- * zone 55 = EPSG:7855 for Melbourne) covering a lon/lat box, as lon/lat polylines.
- * Each line is sampled so it stays straight in MGA, which is a slight curve in Web Mercator.
- */
-export function mgaGridLines(
-  bounds: { west: number; south: number; east: number; north: number },
-  step: number,
-  zone = mgaZone((bounds.west + bounds.east) / 2),
-  samples = 12,
-): GridLine[] {
-  const corners = [
-    projectLonLat(bounds.west, bounds.south, zone),
-    projectLonLat(bounds.west, bounds.north, zone),
-    projectLonLat(bounds.east, bounds.south, zone),
-    projectLonLat(bounds.east, bounds.north, zone),
-  ];
-  const e0 = Math.floor(Math.min(...corners.map((c) => c[0])) / step) * step;
-  const e1 = Math.ceil(Math.max(...corners.map((c) => c[0])) / step) * step;
-  const n0 = Math.floor(Math.min(...corners.map((c) => c[1])) / step) * step;
-  const n1 = Math.ceil(Math.max(...corners.map((c) => c[1])) / step) * step;
-  if ((e1 - e0) / step > 400 || (n1 - n0) / step > 400) return [];
-  const lines: GridLine[] = [];
-  for (let e = e0; e <= e1; e += step) {
-    const coords: [number, number][] = [];
-    for (let i = 0; i <= samples; i++) {
-      const p = unprojectMga(e, n0 + ((n1 - n0) * i) / samples, zone);
-      coords.push([p.lon, p.lat]);
-    }
-    lines.push({ coords, axis: "e", value: e });
-  }
-  for (let n = n0; n <= n1; n += step) {
-    const coords: [number, number][] = [];
-    for (let i = 0; i <= samples; i++) {
-      const p = unprojectMga(e0 + ((e1 - e0) * i) / samples, n, zone);
-      coords.push([p.lon, p.lat]);
-    }
-    lines.push({ coords, axis: "n", value: n });
-  }
-  return lines;
-}
-
 export type GridCross = { lon: number; lat: number; easting: number; northing: number };
 
 /** Grid intersections (MGA easting × northing on whole steps) inside a lon/lat box. */

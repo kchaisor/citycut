@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import { MapAttribution } from "./MapAttribution";
-import { MgaGridOverlay } from "./MgaGridOverlay";
+import { MgaGridLayer } from "./MgaGridLayer";
 import { applyBasemapStyleToMap, loadBasemapStyle } from "../lib/loadMapStyle";
 import { M_PER_DEG_LAT, mPerDegLon, squareBBox } from "../lib/geo";
 import { cutFrameLabelKm } from "../lib/placeLabel";
@@ -289,7 +289,7 @@ export function MapStage({
     <div className={loading ? "map-wrap is-loading" : "map-wrap"}>
       <div ref={containerRef} className={basemap === "satellite" ? "map-canvas" : "map-canvas map-canvas-muted"} />
       {basemap !== "satellite" && <div className="map-tint" aria-hidden="true" />}
-      {ready && <MgaGridOverlay map={mapRef.current} />}
+      {ready && <MgaGridLayer map={mapRef.current} epoch={mapEpoch} />}
       <MapAttribution basemap={basemap} />
       {frame && frame.width > 8 && (
         <>
