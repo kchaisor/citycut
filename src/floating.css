@@ -230,20 +230,22 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
    landing stay floating. The 3D canvas still runs under the panel (view offset unchanged), so
    the framing stays centred in the visible area and nothing moves when switching views. */
 :root {
-  --panel-3d-bg: #F4F5F7;
-  --panel-3d-line: #D5D8DD;
+  /* Same vertical gradient as the 3D sky, pinned to the window so the panel matches the sky
+     at every screen height. */
+  --panel-3d-bg: linear-gradient(180deg, var(--model-grad-top) 0%, var(--model-grad-bottom) 100%) fixed;
+  --panel-3d-line: #00000014;
 }
 @media (min-width: 641px) {
   .model .viewport:not(.is-drawing):not(.is-satellite) > .sidebar-host {
     background: var(--panel-3d-bg);
-    border-right: 1px solid var(--panel-3d-line);
+    border-right: 0;
   }
   .model .viewport:not(.is-drawing):not(.is-satellite) > .sidebar-host .sidebar,
   .model .viewport:not(.is-drawing):not(.is-satellite) > .sidebar-host .sidebar * { text-shadow: none; }
 }
 .building-detail-panel {
   background: var(--panel-3d-bg);
-  border-left: 1px solid var(--panel-3d-line);
+  border-left: 0;
   box-shadow: none;
   color: #000000;
   --text: #000000;
