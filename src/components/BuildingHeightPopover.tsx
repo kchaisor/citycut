@@ -1,3 +1,4 @@
+import type { HiddenBuilding } from "../lib/hiddenBuildings";
 import { useEffect, useRef, useState } from "react";
 import { buildingHeightSourceLabelForBuilding } from "../lib/heightOverrides";
 import {
@@ -19,6 +20,12 @@ type Props = {
   onSave: (heightM: number) => void;
   onReset: () => void;
   onClose: () => void;
+  /** Buildings in the shift-click selection (at least 1: this one). */
+  selectedCount?: number;
+  /** Buildings hidden in this cut. */
+  hiddenCount?: number;
+  onHideSelected?: () => void;
+  onShowAll?: () => void;
 };
 
 function formatHeightM(height: number): string {
@@ -43,6 +50,10 @@ export function BuildingHeightPopover({
   onSave,
   onReset,
   onClose,
+  selectedCount = 1,
+  hiddenCount = 0,
+  onHideSelected,
+  onShowAll,
 }: Props) {
   const [value, setValue] = useState(() => formatHeightM(building.height));
   const [details, setDetails] = useState<BuildingPopupDetails>(() => emptyBuildingPopupDetails(building));
@@ -104,7 +115,11 @@ export function BuildingHeightPopover({
       aria-label="Building details"
     >
       <header>
-        <strong>Building</strong>
+        <strong>
+          Building
+          {selectedCount > 1 ? ` · ${selectedCount} selected` : ""}
+          {hiddenCount > 0 && <span className="hidden-count-chip">{hiddenCount} hidden</span>}
+        </strong>
         <div className="building-detail-panel-actions">
           <button
             type="button"
@@ -159,12 +174,63 @@ export function BuildingHeightPopover({
               </button>
             </div>
           </div>
+          {onHideSelected && (
+            <div className="hide-buildings-block">
+              <p className="meta">Visibility · shift-click to add buildings</p>
+              <div className="popover-actions">
+                <button type="button" className="is-accent" onClick={onHideSelected}>
+                  Hide selected ({selectedCount})
+                </button>
+                <button type="button" onClick={onShowAll} disabled={hiddenCount === 0}>
+                  Show all
+                </button>
+              </div>
+            </div>
+          )}
           {details.credits.length > 0 && (
             <p className="legend-note popup-credits">{details.credits.join(" ")}</p>
           )}
         </div>
       )}
     </aside>
+  );
+}
+
+export function HiddenBuildingsPanel({
+  hidden,
+  onShow,
+  onShowAll,
+}: {
+  hidden: HiddenBuilding[];
+  onShow: (entry: HiddenBuilding) => void;
+  onShowAll: () => void;
+}) {
+  return (
+    <div className="hidden-buildings-panel">
+      <p className="legend-note">
+        {hidden.length.toLocaleString()} hidden building{hidden.length === 1 ? "" : "s"}
+        {hidden.length === 0 ? " · select a building, then Hide selected" : ""}
+      </p>
+      {hidden.length > 0 && (
+        <>
+          <ul className="hidden-buildings-list">
+            {hidden.map((entry, index) => (
+              <li key={`${entry.overtureId ?? entry.centroid.join(",")}-${index}`}>
+                <span>{entry.label ?? "Building"}</span>
+                <button type="button" onClick={() => onShow(entry)}>
+                  Show
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="panel-toolbar">
+            <button type="button" onClick={onShowAll}>
+              Show all
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

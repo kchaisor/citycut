@@ -36,7 +36,6 @@ export function MgaGridOverlay({ map }: { map: maplibregl.Map | null }) {
       const crosses = mgaGridCrosses({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() }, step);
       const style = getComputedStyle(canvas);
       const ink = style.getPropertyValue("--grid-cross").trim() || style.color;
-      const halo = style.getPropertyValue("--grid-cross-halo").trim() || "transparent";
       const arm = Number.parseFloat(style.getPropertyValue("--grid-cross-arm")) || 6;
       // Keep the controls' strip clear: no crosses under the floating sidebar (camera padding).
       const clearLeft = typeof map.getPadding === "function" ? (map.getPadding().left ?? 0) : 0;
@@ -51,11 +50,8 @@ export function MgaGridOverlay({ map }: { map: maplibregl.Map | null }) {
         path.moveTo(x, y - arm);
         path.lineTo(x, y + arm);
       }
-      // A 1 px light halo under the 1 px dark cross keeps it legible on satellite imagery.
+      // Only the thin dark cross: no outline or halo.
       ctx.lineCap = "butt";
-      ctx.strokeStyle = halo;
-      ctx.lineWidth = 3;
-      ctx.stroke(path);
       ctx.strokeStyle = ink;
       ctx.lineWidth = 1;
       ctx.stroke(path);

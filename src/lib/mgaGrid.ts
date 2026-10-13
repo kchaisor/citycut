@@ -1,7 +1,7 @@
 import { mgaZone, projectLonLat, unprojectMga } from "./crs";
 
 /** Grid steps (m), finest first. The overlay picks the finest one that stays readable. */
-export const MGA_GRID_STEPS_M = [50, 100, 500, 1000, 5000, 10000, 50000] as const;
+export const MGA_GRID_STEPS_M = [10, 50, 100, 500, 1000, 5000, 10000, 50000] as const;
 /** Smallest on-screen gap between grid lines (CSS px). */
 export const MGA_GRID_MIN_GAP_PX = 72;
 
@@ -38,12 +38,18 @@ export function mgaGridLines(
   const lines: GridLine[] = [];
   for (let e = e0; e <= e1; e += step) {
     const coords: [number, number][] = [];
-    for (let i = 0; i <= samples; i++) coords.push(unprojectMga(e, n0 + ((n1 - n0) * i) / samples, zone));
+    for (let i = 0; i <= samples; i++) {
+      const p = unprojectMga(e, n0 + ((n1 - n0) * i) / samples, zone);
+      coords.push([p.lon, p.lat]);
+    }
     lines.push({ coords, axis: "e", value: e });
   }
   for (let n = n0; n <= n1; n += step) {
     const coords: [number, number][] = [];
-    for (let i = 0; i <= samples; i++) coords.push(unprojectMga(e0 + ((e1 - e0) * i) / samples, n, zone));
+    for (let i = 0; i <= samples; i++) {
+      const p = unprojectMga(e0 + ((e1 - e0) * i) / samples, n, zone);
+      coords.push([p.lon, p.lat]);
+    }
     lines.push({ coords, axis: "n", value: n });
   }
   return lines;
@@ -71,7 +77,7 @@ export function mgaGridCrosses(
   const out: GridCross[] = [];
   for (let e = e0; e <= e1; e += step)
     for (let n = n0; n <= n1; n += step) {
-      const [lon, lat] = unprojectMga(e, n, zone);
+      const { lon, lat } = unprojectMga(e, n, zone);
       out.push({ lon, lat, easting: e, northing: n });
     }
   return out;

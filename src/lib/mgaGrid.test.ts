@@ -4,6 +4,7 @@ import { projectLonLat } from "./crs";
 
 describe("MGA cross-hatch grid", () => {
   it("picks the finest readable step as the map zooms", () => {
+    expect(mgaGridStep(0.1)).toBe(10);
     expect(mgaGridStep(0.25)).toBe(50);
     expect(mgaGridStep(1)).toBe(100);
     expect(mgaGridStep(3)).toBe(500);

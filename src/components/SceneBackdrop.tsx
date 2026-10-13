@@ -89,6 +89,14 @@ export function GroundGrid({ sideM, groundY, colourTick }: { sideM: number; grou
     markScreenOnly(lines);
     return lines;
   }, [sideM, colourTick]);
+  // Floor grid only in the 3D perspective / isometric views: hidden whenever the camera looks
+  // (near) straight down, as in Plan north and the top-down site-plan framing, so plan-type
+  // views never show it.
+  const forward = useMemo(() => new THREE.Vector3(), []);
+  useFrame(({ camera }) => {
+    camera.getWorldDirection(forward);
+    object.visible = forward.y > -0.94;
+  });
   useEffect(() => () => {
     object.geometry.dispose();
     (object.material as THREE.Material).dispose();

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import * as THREE from "three";
-import { Building2, Copy, Download, DraftingCompass, Info, Sun, Trees, Wind } from "lucide-react";
+import { Building2, Copy, Download, DraftingCompass, Info, Sun, Trees, Upload, Wind } from "lucide-react";
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -112,8 +112,20 @@ import { COM_TREES_CREDIT, COM_TREES_CREDIT_HTML, COM_TREES_DATASET_URL, comTree
 import { openRing, toLocal } from "../lib/geo";
 import { pointInPolygon } from "../lib/useCascade";
 import type { BuildingUse, CityModel } from "../types";
-import { BuildingHeightPopover, HeightOverridePanel } from "./BuildingHeightPopover";
+import { BuildingHeightPopover, HeightOverridePanel, HiddenBuildingsPanel } from "./BuildingHeightPopover";
+import {
+  filterHiddenBuildings,
+  hideBuildings,
+  matchHiddenBuildings,
+  readStoredHiddenBuildings,
+  showAllInCut,
+  showHiddenEntry,
+  writeStoredHiddenBuildings,
+  type HiddenBuildingStore,
+} from "../lib/hiddenBuildings";
 import { ColoursEditor } from "./Colours";
+import { ImportMassingPanel } from "./ImportMassingPanel";
+import { useImportedMassing } from "./useImportedMassing";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
 import { DrawingExplodedAxo } from "./DrawingExplodedAxo";
@@ -191,6 +203,7 @@ const SECTION_ICONS: Record<SidebarSectionId, typeof Info> = {
   drawing: DraftingCompass,
   solar: Sun,
   wind: Wind,
+  import: Upload,
   exports: Download,
 };
 
@@ -440,9 +453,16 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     readStoredShowManualHeights(window.localStorage),
   );
   const [unmatchedEdits, setUnmatchedEdits] = useState(0);
+  const [hiddenStore, setHiddenStore] = useState<HiddenBuildingStore>(() =>
+    readStoredHiddenBuildings(window.localStorage),
+  );
+  /** Shift-click multi-selection for Hide selected. Holds the single pick too. */
+  const [hideSelection, setHideSelection] = useState<number[]>([]);
   const [heightPick, setHeightPick] = useState<{ buildingId: number; clientX: number; clientY: number } | null>(
     null,
   );
+
+  const massing = useImportedMassing(model);
 
   const qaSummaryRef = useRef({ treeCrowns: 0, buildingCount: 0, roadCount: 0, triangleCount: 0 });
   const qaDisplayBuildingsRef = useRef(model.buildings);
@@ -769,15 +789,24 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     clearPlanShadowCache();
   }, [overrideResult]);
 
+  const hiddenMatch = useMemo(
+    () => matchHiddenBuildings(overrideResult.buildings, hiddenStore, model.center),
+    [overrideResult.buildings, hiddenStore, model.center],
+  );
+  const visibleBuildings = useMemo(
+    () => filterHiddenBuildings(overrideResult.buildings, new Set(hiddenMatch.keys())),
+    [overrideResult.buildings, hiddenMatch],
+  );
+
   const displayModel = useMemo(
     () => ({
       ...model,
-      buildings: overrideResult.buildings,
+      buildings: visibleBuildings,
       comBuildingHeights: comHeightsMeasuredOn,
       manualHeightEditCount: overrideResult.manualCount,
       sourceNote: appendManualHeightCredit(model.sourceNote, overrideResult.manualCount),
     }),
-    [model, overrideResult, comHeightsMeasuredOn],
+    [model, overrideResult, visibleBuildings, comHeightsMeasuredOn],
   );
 
   useEffect(() => {
@@ -848,6 +877,27 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       ? null
       : (displayModel.buildings.find((building) => building.id === heightPick.buildingId) ?? null);
 
+  function persistHidden(next: HiddenBuildingStore) {
+    setHiddenStore(next);
+    writeStoredHiddenBuildings(window.localStorage, next);
+  }
+
+  function hideSelectedBuildings() {
+    const ids = new Set(hideSelection.length ? hideSelection : heightPick ? [heightPick.buildingId] : []);
+    const picked = overrideResult.buildings.filter((building) => ids.has(building.id));
+    if (picked.length === 0) return;
+    persistHidden(hideBuildings(hiddenStore, picked, model.center));
+    setHideSelection([]);
+    setHeightPick(null);
+  }
+
+  function selectForHide(buildingId: number, additive?: boolean) {
+    setHideSelection((prev) => {
+      if (!additive) return [buildingId];
+      return prev.includes(buildingId) ? prev.filter((id) => id !== buildingId) : [...prev, buildingId];
+    });
+  }
+
   function persistOverrides(next: HeightOverrideStore) {
     setHeightOverrideStore(next);
     writeStoredHeightOverrides(window.localStorage, next);
@@ -908,7 +958,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       id,
       label: SIDEBAR_SECTION_LABELS[id],
       icon: <Icon {...iconProps} />,
-      groupStart: index === 1 || id === "exports",
+      groupStart: index === 1 || id === "import",
     };
   });
   const open: SidebarSectionId = resolveSidebarSection(sidebar.section, sectionIds);
@@ -954,6 +1004,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             ? { table: windTable, period: windSettings.period }
             : null,
         hideTrees: view3dDisplay.hideTrees,
+        importedMassing: massing.forExport.length ? massing.forExport : null,
       });
     } catch {
       setExportError("The Rhino file could not be written.");
@@ -1161,13 +1212,19 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 windPeriod={windSettings.period}
                 windAnimateStreaks={windMotion.animateStreaks}
                 onExportReady={onExportReady}
-                onBuildingPick={(buildingId, clientX, clientY) =>
-                  setHeightPick({ buildingId, clientX, clientY })
-                }
-                onClearBuildingPick={() => setHeightPick(null)}
+                onBuildingPick={(buildingId, clientX, clientY, additive) => {
+                  setHeightPick({ buildingId, clientX, clientY });
+                  selectForHide(buildingId, additive);
+                }}
+                onClearBuildingPick={() => {
+                  setHeightPick(null);
+                  setHideSelection([]);
+                }}
                 heightEditBuildingId={heightPick?.buildingId ?? null}
                 cameraMemory={cameraMemory}
                 display={view3dDisplay}
+                importedMassing={massing.group}
+                onScenePoint={massing.onScenePoint}
               />
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
@@ -1188,7 +1245,14 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                   damRecords={displayModel.developmentDamRecords ?? []}
                   onSave={(heightM) => saveBuildingHeight(pickedBuilding.id, heightM)}
                   onReset={() => resetBuildingHeight(pickedBuilding.id)}
-                  onClose={() => setHeightPick(null)}
+                  onClose={() => {
+                    setHeightPick(null);
+                    setHideSelection([]);
+                  }}
+                  selectedCount={Math.max(1, hideSelection.length)}
+                  hiddenCount={hiddenMatch.size}
+                  onHideSelected={hideSelectedBuildings}
+                  onShowAll={() => persistHidden(showAllInCut(hiddenStore, hiddenMatch.values()))}
                 />
               )}
             </SceneBoundary>
@@ -1247,6 +1311,10 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 <span className="sidebar-status">
                   <i className="status-dot is-ready" aria-hidden="true" />
                   Ready
+                </span>
+              ) : open === "import" ? (
+                <span className="sidebar-status">
+                  {massing.imported.length} model{massing.imported.length === 1 ? "" : "s"}
                 </span>
               ) : open === "buildings" ? (
                 <span className="sidebar-status">
@@ -1520,6 +1588,11 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 </section>
                 <section className="sidebar-group">
                   <h3 className="sidebar-gh">Manual heights</h3>
+                  <HiddenBuildingsPanel
+                    hidden={[...hiddenMatch.values()]}
+                    onShow={(entry) => persistHidden(showHiddenEntry(hiddenStore, entry))}
+                    onShowAll={() => persistHidden(showAllInCut(hiddenStore, hiddenMatch.values()))}
+                  />
                   <HeightOverridePanel
                     manualCount={overrideResult.manualCount}
                     unmatchedCount={unmatchedEdits}
@@ -1855,6 +1928,24 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 streaksPaused={windMotion.streaksPaused}
                 animateAnyway={windMotion.animateAnyway}
                 onAnimateAnyway={windMotion.setAnimateAnyway}
+              />
+            </div>
+
+            <div className="drawer-section" hidden={open !== "import"}>
+              <ImportMassingPanel
+                imported={massing.imported}
+                warnings={massing.warnings}
+                crsName={crs.name}
+                placingId={massing.placingId}
+                busy={massing.busy}
+                error={massing.error}
+                onImport={(file) => void massing.importFile(file)}
+                onMode={massing.setMode}
+                onPlacement={massing.setPlacement}
+                onSnap={massing.snapToGround}
+                onResetMga={massing.resetToMga}
+                onToggleVisible={massing.toggleVisible}
+                onRemove={massing.remove}
               />
             </div>
 

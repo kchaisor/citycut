@@ -14,7 +14,6 @@
   --float-halo: 0 0 1px #FFFFFF, 0 0 1px #FFFFFF, 0 0 3px #FFFFFF, 0 0 5px #FFFFFF, 0 0 7px #FFFFFFCC;
   --float-label-on-map: #4A4C52;
   --grid-cross: #1A1916;
-  --grid-cross-halo: #FFFFFFB3;
   /* Half the cross width: 6 px arms make a 12 px cross. */
   --grid-cross-arm: 6px;
 
@@ -176,3 +175,22 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
   /* The view-wide paper rect of a drawing; the frame-sized paper inside it stays. */
   .model .viewport .plan > rect:first-of-type { fill: transparent; }
 }
+
+/* PR tweaks (Kelvin): all UI text pure black; no track behind segmented groups; bigger brand. */
+.sidebar-host, .select-chrome {
+  --text: #000000;
+  --muted-text: #000000;
+  --float-ink: #000000;
+  --float-label: #000000;
+  --float-label-on-map: #000000;
+  --sidebar-icon: #000000;
+  color: #000000;
+}
+.sidebar .segmented, .sidebar .plan-switch, .sidebar .tabs {
+  background: transparent;
+  padding: 0;
+  gap: 6px;
+  box-shadow: none;
+}
+.sidebar-brand { font-size: calc(var(--font-size-brand) * 1.22); }
+.sidebar-brand-mark svg { transform: scale(1.22); }
