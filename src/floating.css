@@ -80,7 +80,7 @@
   .select .sidebar-place { font-weight: 650; }
   .select .search input { color: var(--float-ink); }
   .select .search input::placeholder { color: var(--float-label-on-map); }
-  .select .rail-btn svg { stroke-width: 1.5; filter: drop-shadow(0 0 1.5px #FFFFFF) drop-shadow(0 0 1.5px #FFFFFF); }
+  .select .rail-btn svg { stroke-width: 1.5; }
   /* Filled pills keep their own fill; no halo on them. */
   .select .rail-btn.is-active svg, .select .shape-btn.on, .select .sidebar-primary { filter: none; text-shadow: none; }
 }
