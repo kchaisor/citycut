@@ -42,6 +42,8 @@ export type SolarViewSettings = {
   day: number;
   hour: number;
   minute: number;
+  /** MOCK: hours-of-sun heatmap on the ground for the chosen day. */
+  sunHours?: boolean;
 };
 
 /** Paint after the city so the heliodon sits over it. */

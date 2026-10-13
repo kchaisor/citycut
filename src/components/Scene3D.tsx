@@ -85,6 +85,7 @@ import {
 } from "../lib/perspectiveViewportFit";
 import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
+import { SunHoursLayer } from "./SunHoursLayer";
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
 import { WindStaticArrows, WindStreaks } from "./WindStreaks";
 import { analyzeWindPeriod, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
@@ -1327,6 +1328,9 @@ export function Scene3D({
         targetY={shadowTargetY}
         topY={siteTopY}
       />
+      {solar.sunHours && (
+        <SunHoursLayer model={model} year={solar.year} month={solar.month} day={solar.day} groundY={groundY} />
+      )}
       <City
         model={model}
         uniformBuildings={uniformBuildings}

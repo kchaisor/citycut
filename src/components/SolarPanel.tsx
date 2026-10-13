@@ -17,6 +17,7 @@ import {
   heliodonRadiusM,
 } from "../lib/heliodonRadius";
 import type { SolarViewSettings } from "./SolarHeliodon";
+import { SunStudyPlayer } from "./SunStudyPlayer";
 
 const SOLAR_LEGEND: { key: ColourKey; label: string; dash?: string }[] = [
   { key: "--sun-arc-summer", label: "Dec 21 (summer solstice)" },
@@ -29,12 +30,15 @@ export function SolarPanel({
   onChange,
   sideM,
   embedded = false,
+  site,
 }: {
   settings: SolarViewSettings;
   onChange: (next: SolarViewSettings) => void;
   sideM: number;
   /** When true, render inside the left drawer without the floating panel chrome. */
   embedded?: boolean;
+  /** MOCK: site lat/lon for the sun sweep. */
+  site?: { lat: number; lon: number };
 }) {
   const [open, setOpen] = useState(true);
   const [standard, setStandard] = useState<{ id: ShadowStandardId; index: number } | null>(null);
@@ -75,6 +79,7 @@ export function SolarPanel({
         </button>
       )}
       <div id={panelId} className="solar-panel-body" hidden={!embedded && !open}>
+        {site && <SunStudyPlayer settings={settings} onChange={onChange} lat={site.lat} lon={site.lon} />}
         <label className="check-field">
           <input
             type="checkbox"

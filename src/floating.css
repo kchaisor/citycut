@@ -257,3 +257,19 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
   .select > .map-wrap { bottom: 0; }
   .select > .map-wrap .map-attribution { bottom: var(--sidebar-h); }
 }
+
+/* MOCK: sun study player (Sun section). Accent pills, black ink, no extra chrome. */
+.sun-study { display: grid; gap: 10px; padding: 4px 0 14px; color: #000000; }
+.sun-study-dates, .sun-study-speed { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.sun-study-date { margin-left: auto; font: inherit; font-size: 12px; color: #000000; background: transparent; border: 0; border-bottom: 1px solid #00000033; padding: 2px 0; }
+.sun-study-row { display: flex; align-items: center; gap: 10px; }
+.sun-study-play { flex: none; width: 34px; height: 34px; border-radius: 999px; border: 0; display: grid; place-items: center; background: var(--accent, #FFF500); color: #000000; cursor: pointer; }
+.sun-study-scrub { flex: 1; min-width: 0; accent-color: #000000; }
+.sun-study-time { font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.sun-study-zone, .sun-study-window { font-size: 11px; font-weight: 500; color: #000000; opacity: 0.6; }
+.sun-study-foot { justify-content: space-between; }
+.sun-study .shape-btn { padding: 3px 8px; font-size: 12px; white-space: nowrap; }
+.sun-study-dates { flex-wrap: nowrap; }
+.sun-study-date { width: 118px; min-width: 0; }
+.sun-study-foot { flex-wrap: nowrap; gap: 6px; }
+.sun-study-speed { flex-wrap: nowrap; }
