@@ -102,12 +102,13 @@ Small `+` marks on the landing map at round MGA (GDA2020) coordinates.
 | What | File · line | Value | SHA link |
 | --- | --- | --- | --- |
 | Cross colour | `src/floating.css` · L16 | `--grid-cross: #1A1916` | [L16](https://github.com/kchaisor/citycut/blob/c97d02f8468c5bf8ee5dd82fca83c8c950c95340/src/floating.css#L16) |
-| Cross size (half-width; 6 → 12 px cross) | `src/floating.css` · L18 | `--grid-cross-arm: 6px` | [L18](https://github.com/kchaisor/citycut/blob/c97d02f8468c5bf8ee5dd82fca83c8c950c95340/src/floating.css#L18) |
+| Cross opacity (fully faded in) | `src/floating.css` · L17 | `--grid-cross-opacity: 0.7` | [L17](https://github.com/kchaisor/citycut/blob/main/src/floating.css#L17) |
+| Cross size (half-width; 4.2 → 8.4 px cross) | `src/floating.css` · L18 | `--grid-cross-arm: 4.2px` | [L18](https://github.com/kchaisor/citycut/blob/c97d02f8468c5bf8ee5dd82fca83c8c950c95340/src/floating.css#L18) |
 | Spacing levels (m) | `src/lib/mgaGrid.ts` · L4 | `MGA_GRID_STEPS_M = [10, 50, 100, 500, 1000, 5000, 10000, 50000]` | [L4](https://github.com/kchaisor/citycut/blob/c97d02f8468c5bf8ee5dd82fca83c8c950c95340/src/lib/mgaGrid.ts#L4) |
 | Screen gap at which a level is fully dark | `src/lib/mgaGrid.ts` · L6 | `MGA_GRID_MIN_GAP_PX = 72` | [L6](https://github.com/kchaisor/citycut/blob/c97d02f8468c5bf8ee5dd82fca83c8c950c95340/src/lib/mgaGrid.ts#L6) |
 | Screen gap at which a finer level starts fading in | `src/lib/mgaGridLayer.ts` · L13 | `MGA_GRID_FADE_START_PX = 28` | [L13](https://github.com/kchaisor/citycut/blob/c97d02f8468c5bf8ee5dd82fca83c8c950c95340/src/lib/mgaGridLayer.ts#L13) |
 
-Levels cross-fade as you zoom: a finer level fades in between the two gaps above while coarser levels stay dark, so there is always a set of crosses on screen. The two CSS tokens (`--grid-cross`, `--grid-cross-arm`) are the safe knobs. Changing the spacing numbers or gaps is borderline-code — keep the steps ascending and the fade start below 72.
+Levels cross-fade as you zoom: a finer level fades in between the two gaps above while coarser levels stay dark, so there is always a set of crosses on screen. The three CSS tokens (`--grid-cross`, `--grid-cross-opacity`, `--grid-cross-arm`) are the safe knobs. Changing the spacing numbers or gaps is borderline-code — keep the steps ascending and the fade start below 72.
 
 ---
 

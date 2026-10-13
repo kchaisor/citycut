@@ -1,3 +1,4 @@
+import { landingMapPadding } from "../lib/landingPadding";
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import { MapAttribution } from "./MapAttribution";
@@ -263,21 +264,25 @@ export function MapStage({
     };
   }, [fly, ready]);
 
-  // Floating mock: the landing map runs under the controls on desktop. Pad the camera by the
-  // controls' width so the same centre sits in the same place on screen as before.
+  // The landing map runs under the floating controls (left column on desktop, bottom sheet on a
+  // phone). Pad the camera by the part of the map they cover, so the camera centre, and with it
+  // the cut frame, sits in the middle of the visible map. Padding keeps the geographic centre,
+  // so this never moves the place; only load and a search pick the centre.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready || typeof map.setPadding !== "function") return;
+    if (!map || !ready || typeof map.setPadding !== "function" || typeof map.getContainer !== "function") return;
     const chrome = document.querySelector<HTMLElement>(".select-chrome");
     if (!chrome) return;
     const apply = () => {
-      const desktop = window.matchMedia("(min-width: 641px)").matches;
-      const inset = parseFloat(getComputedStyle(chrome).paddingLeft) || 0;
-      map.setPadding({ left: desktop ? chrome.getBoundingClientRect().width - inset : 0, top: 0, right: 0, bottom: 0 });
+      const next = landingMapPadding(map.getContainer().getBoundingClientRect(), chrome.getBoundingClientRect());
+      const current = typeof map.getPadding === "function" ? map.getPadding() : null;
+      if (current && current.left === next.left && current.top === next.top && current.right === next.right && current.bottom === next.bottom) return;
+      map.setPadding(next);
     };
     apply();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(apply);
     observer?.observe(chrome);
+    observer?.observe(map.getContainer());
     return () => observer?.disconnect();
   }, [ready]);
 

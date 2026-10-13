@@ -18,6 +18,9 @@ type MockMapInstance = {
   addLayer: ReturnType<typeof vi.fn>;
   addLayerCalls: string[];
   options: { zoom?: number };
+  setPadding: ReturnType<typeof vi.fn>;
+  flyTo: ReturnType<typeof vi.fn>;
+  fitBounds: ReturnType<typeof vi.fn>;
 };
 
 const mapInstances: MockMapInstance[] = [];
@@ -99,8 +102,13 @@ vi.mock("maplibre-gl", () => {
       getEast: () => 144.97,
     });
     project = () => ({ x: 100, y: 100 });
-    getContainer = () => document.createElement("div");
-    getPadding = () => ({ left: 0, top: 0, right: 0, bottom: 0 });
+    container = rectElement({ left: 0, top: 0, right: 1440, bottom: 900 });
+    getContainer = () => this.container;
+    padding = { left: 0, top: 0, right: 0, bottom: 0 };
+    getPadding = () => this.padding;
+    setPadding = vi.fn(function (this: MockGlMap, next: { left: number; top: number; right: number; bottom: number }) {
+      this.padding = next;
+    });
     loaded = () => true;
     fire = vi.fn();
     setStyle = vi.fn();
@@ -131,6 +139,13 @@ const baseProps = {
   onView: () => undefined,
   onFlyLanded: () => undefined,
 };
+
+function rectElement(r: { left: number; top: number; right: number; bottom: number }): HTMLDivElement {
+  const element = document.createElement("div");
+  element.getBoundingClientRect = () =>
+    ({ ...r, x: r.left, y: r.top, width: r.right - r.left, height: r.bottom - r.top, toJSON: () => r }) as DOMRect;
+  return element;
+}
 
 describe("MapStage", () => {
   afterEach(() => {
@@ -197,6 +212,27 @@ describe("MapStage", () => {
     render(<MapStage {...baseProps} initialView={{ ...baseProps.initialView, zoom: 15 }} />);
     await waitFor(() => expect(mapInstances).toHaveLength(1));
     expect(mapInstances[0]!.options.zoom).toBe(15);
+  });
+
+  it("pads the camera by the floating controls so the frame centres in the visible map", async () => {
+    const chrome = rectElement({ left: 0, top: 0, right: 388, bottom: 900 });
+    chrome.className = "select-chrome";
+    document.body.appendChild(chrome);
+    try {
+      const view = render(<MapStage {...baseProps} />);
+      await waitFor(() => expect(mapInstances[0]?.setPadding).toHaveBeenCalled());
+      const map = mapInstances[0]!;
+      expect(map.setPadding).toHaveBeenLastCalledWith({ left: 388, top: 0, right: 0, bottom: 0 });
+      // Overlay toggles (basemap, frame shape) never move the viewport or re-pad.
+      const paddingCalls = map.setPadding.mock.calls.length;
+      view.rerender(<MapStage {...baseProps} basemap="satellite" frameShape="circle" />);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(map.flyTo).not.toHaveBeenCalled();
+      expect(map.fitBounds).not.toHaveBeenCalled();
+      expect(map.setPadding.mock.calls.length).toBe(paddingCalls);
+    } finally {
+      chrome.remove();
+    }
   });
 
   it("zooms out on a phone so the whole frame fits the map at load", async () => {
