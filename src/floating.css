@@ -224,3 +224,29 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
   color: #000000;
 }
 .sidebar .massing-warning { background: transparent; }
+
+/* 3D view only: the floating sidebar sits over busy buildings and trees, so it gets a light
+   panel. The right-hand Building panel uses the same style. Drawing, satellite and the
+   landing stay floating. The 3D canvas still runs under the panel (view offset unchanged), so
+   the framing stays centred in the visible area and nothing moves when switching views. */
+:root {
+  --panel-3d-bg: #F4F5F7;
+  --panel-3d-line: #D5D8DD;
+}
+@media (min-width: 641px) {
+  .model .viewport:not(.is-drawing):not(.is-satellite) > .sidebar-host {
+    background: var(--panel-3d-bg);
+    border-right: 1px solid var(--panel-3d-line);
+  }
+  .model .viewport:not(.is-drawing):not(.is-satellite) > .sidebar-host .sidebar,
+  .model .viewport:not(.is-drawing):not(.is-satellite) > .sidebar-host .sidebar * { text-shadow: none; }
+}
+.building-detail-panel {
+  background: var(--panel-3d-bg);
+  border-left: 1px solid var(--panel-3d-line);
+  box-shadow: none;
+  color: #000000;
+  --text: #000000;
+  --muted-text: #000000;
+}
+.building-detail-panel header { border-bottom-color: var(--panel-3d-line); }
