@@ -1,4 +1,3 @@
-import { landingMapPadding } from "../lib/landingPadding";
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import { MapAttribution } from "./MapAttribution";
@@ -264,27 +263,9 @@ export function MapStage({
     };
   }, [fly, ready]);
 
-  // The landing map runs under the floating controls (left column on desktop, bottom sheet on a
-  // phone). Pad the camera by the part of the map they cover, so the camera centre, and with it
-  // the cut frame, sits in the middle of the visible map. Padding keeps the geographic centre,
-  // so this never moves the place; only load and a search pick the centre.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !ready || typeof map.setPadding !== "function" || typeof map.getContainer !== "function") return;
-    const chrome = document.querySelector<HTMLElement>(".select-chrome");
-    if (!chrome) return;
-    const apply = () => {
-      const next = landingMapPadding(map.getContainer().getBoundingClientRect(), chrome.getBoundingClientRect());
-      const current = typeof map.getPadding === "function" ? map.getPadding() : null;
-      if (current && current.left === next.left && current.top === next.top && current.right === next.right && current.bottom === next.bottom) return;
-      map.setPadding(next);
-    };
-    apply();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(apply);
-    observer?.observe(chrome);
-    observer?.observe(map.getContainer());
-    return () => observer?.disconnect();
-  }, [ready]);
+  // The landing map fills the whole window under the floating controls (left column on desktop,
+  // bottom sheet on a phone) and is NOT padded for them: the cut frame sits on the middle of
+  // the window (Kelvin, PR 112). Only load and a search pick the centre; toggles never move it.
 
   const sideKm = sideM / 1000;
   const label = cutFrameLabelKm(sideKm, frameShape);

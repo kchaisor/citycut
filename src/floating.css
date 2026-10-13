@@ -250,3 +250,10 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
   --muted-text: #000000;
 }
 .building-detail-panel header { border-bottom-color: var(--panel-3d-line); }
+
+/* Phone landing: the map runs under the bottom sheet too, so the cut frame centres on the
+   whole window (Kelvin, PR 112); attribution stays visible above the sheet. */
+@media (max-width: 640px) {
+  .select > .map-wrap { bottom: 0; }
+  .select > .map-wrap .map-attribution { bottom: var(--sidebar-h); }
+}

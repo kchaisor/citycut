@@ -214,22 +214,21 @@ describe("MapStage", () => {
     expect(mapInstances[0]!.options.zoom).toBe(15);
   });
 
-  it("pads the camera by the floating controls so the frame centres in the visible map", async () => {
+  it("centres on the whole window: never pads the camera for the floating controls, and toggles never move it", async () => {
     const chrome = rectElement({ left: 0, top: 0, right: 388, bottom: 900 });
     chrome.className = "select-chrome";
     document.body.appendChild(chrome);
     try {
       const view = render(<MapStage {...baseProps} />);
-      await waitFor(() => expect(mapInstances[0]?.setPadding).toHaveBeenCalled());
+      await waitFor(() => expect(mapInstances).toHaveLength(1));
+      await new Promise((resolve) => setTimeout(resolve, 20));
       const map = mapInstances[0]!;
-      expect(map.setPadding).toHaveBeenLastCalledWith({ left: 388, top: 0, right: 0, bottom: 0 });
-      // Overlay toggles (basemap, frame shape) never move the viewport or re-pad.
-      const paddingCalls = map.setPadding.mock.calls.length;
+      expect(map.setPadding).not.toHaveBeenCalled();
       view.rerender(<MapStage {...baseProps} basemap="satellite" frameShape="circle" />);
       await new Promise((resolve) => setTimeout(resolve, 20));
       expect(map.flyTo).not.toHaveBeenCalled();
       expect(map.fitBounds).not.toHaveBeenCalled();
-      expect(map.setPadding.mock.calls.length).toBe(paddingCalls);
+      expect(map.setPadding).not.toHaveBeenCalled();
     } finally {
       chrome.remove();
     }
