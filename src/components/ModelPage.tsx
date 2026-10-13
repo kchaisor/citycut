@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import * as THREE from "three";
-import { Building2, Copy, Download, DraftingCompass, Info, Sun, Trees, Wind } from "lucide-react";
+import { Building2, Copy, Download, DraftingCompass, Info, Sun, Trees, Upload, Wind } from "lucide-react";
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -203,6 +203,7 @@ const SECTION_ICONS: Record<SidebarSectionId, typeof Info> = {
   drawing: DraftingCompass,
   solar: Sun,
   wind: Wind,
+  import: Upload,
   exports: Download,
 };
 
@@ -957,7 +958,7 @@ export function ModelPage({ model }: { model: CityModel }) {
       id,
       label: SIDEBAR_SECTION_LABELS[id],
       icon: <Icon {...iconProps} />,
-      groupStart: index === 1 || id === "exports",
+      groupStart: index === 1 || id === "import",
     };
   });
   const open: SidebarSectionId = resolveSidebarSection(sidebar.section, sectionIds);
@@ -1308,6 +1309,10 @@ export function ModelPage({ model }: { model: CityModel }) {
                   <i className="status-dot is-ready" aria-hidden="true" />
                   Ready
                 </span>
+              ) : open === "import" ? (
+                <span className="sidebar-status">
+                  {massing.imported.length} model{massing.imported.length === 1 ? "" : "s"}
+                </span>
               ) : open === "buildings" ? (
                 <span className="sidebar-status">
                   {comMeasuredHeightCount.toLocaleString()} of {displayModel.buildings.length.toLocaleString()} measured
@@ -1580,21 +1585,6 @@ export function ModelPage({ model }: { model: CityModel }) {
                 </section>
                 <section className="sidebar-group">
                   <h3 className="sidebar-gh">Manual heights</h3>
-                  <ImportMassingPanel
-                    imported={massing.imported}
-                    warnings={massing.warnings}
-                    crsName={crs.name}
-                    placingId={massing.placingId}
-                    busy={massing.busy}
-                    error={massing.error}
-                    onImport={(file) => void massing.importFile(file)}
-                    onMode={massing.setMode}
-                    onPlacement={massing.setPlacement}
-                    onSnap={massing.snapToGround}
-                    onResetMga={massing.resetToMga}
-                    onToggleVisible={massing.toggleVisible}
-                    onRemove={massing.remove}
-                  />
                   <HiddenBuildingsPanel
                     hidden={[...hiddenMatch.values()]}
                     onShow={(entry) => persistHidden(showHiddenEntry(hiddenStore, entry))}
@@ -1935,6 +1925,24 @@ export function ModelPage({ model }: { model: CityModel }) {
                 streaksPaused={windMotion.streaksPaused}
                 animateAnyway={windMotion.animateAnyway}
                 onAnimateAnyway={windMotion.setAnimateAnyway}
+              />
+            </div>
+
+            <div className="drawer-section" hidden={open !== "import"}>
+              <ImportMassingPanel
+                imported={massing.imported}
+                warnings={massing.warnings}
+                crsName={crs.name}
+                placingId={massing.placingId}
+                busy={massing.busy}
+                error={massing.error}
+                onImport={(file) => void massing.importFile(file)}
+                onMode={massing.setMode}
+                onPlacement={massing.setPlacement}
+                onSnap={massing.snapToGround}
+                onResetMga={massing.resetToMga}
+                onToggleVisible={massing.toggleVisible}
+                onRemove={massing.remove}
               />
             </div>
 
