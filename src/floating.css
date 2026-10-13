@@ -10,8 +10,8 @@
   --float-line: #1A1916;
   --float-tile-line: #9A9CA1;
   --float-hover: #FFFFFF;
-  /* Readability over the map comes from type only: a soft white halo. */
-  --float-halo: 0 0 1px #FFFFFF, 0 0 1px #FFFFFF, 0 0 3px #FFFFFF, 0 0 5px #FFFFFF, 0 0 7px #FFFFFFCC;
+  /* Text over the map and gradients is plain ink. */
+  /* No text halos or outlines anywhere in the UI (Kelvin): text is plain ink. */
   --float-label-on-map: #4A4C52;
   --grid-cross: #1A1916;
   --grid-cross-opacity: 0.7; /* fully faded-in crosses; levels fade from 0 up to this */
@@ -32,10 +32,10 @@
 
 .app { background: linear-gradient(180deg, var(--float-grad-top) 0%, var(--float-grad-bottom) 100%); }
 .model .viewport { background: linear-gradient(180deg, var(--model-grad-top) 0%, var(--model-grad-bottom) 100%); }
-/* Model sidebar: same type-only treatment as the landing, over the gradient and 3D. */
+/* Model sidebar: plain black text, no halo, over the gradient, 3D, drawing and satellite. */
 @media (min-width: 641px) {
-  .model .sidebar { text-shadow: 0 0 2px #FFFFFF, 0 0 4px #FFFFFFB3; }
-  .model .rail-btn.is-active, .model .sidebar-primary, .model .segmented button[aria-pressed="true"] { text-shadow: none; }
+  .model .sidebar { text-shadow: none; }
+  .model .sidebar * { text-shadow: none; }
 }
 
 /* v3 landing map: muted greyscale streets under a screen-space vertical grey gradient.
@@ -58,15 +58,15 @@
 .sidebar-brand:hover, .sidebar-new-cut:hover { background: var(--sidebar-hover); border-radius: 999px; }
 
 /* Landing (desktop): the map runs under the controls, which float directly on it with no
-   backdrop. The map camera keeps the cut frame where it was via map padding. Readability comes
-   from type only: a soft white halo and slightly heavier ink. */
+   backdrop and centres the cut frame on the window. Readability comes from slightly heavier
+   ink only: no text halo or outline (Kelvin). */
 @media (min-width: 641px) {
   .select > .map-wrap { left: 0; }
   .select .select-chrome { padding: 12px 0 12px 12px; box-sizing: border-box; }
   .select .sidebar {
     color: var(--float-ink);
     font-weight: 560;
-    text-shadow: var(--float-halo);
+    text-shadow: none;
   }
   .select .sidebar-head h2,
   .select .sidebar-group > h3.sidebar-gh,
@@ -78,7 +78,7 @@
   .select .hint,
   .select .sidebar-status { color: var(--float-label-on-map); font-weight: 500; }
   .select .sidebar-place { font-weight: 650; }
-  .select .search input { text-shadow: var(--float-halo); color: var(--float-ink); }
+  .select .search input { color: var(--float-ink); }
   .select .search input::placeholder { color: var(--float-label-on-map); }
   .select .rail-btn svg { stroke-width: 1.5; filter: drop-shadow(0 0 1.5px #FFFFFF) drop-shadow(0 0 1.5px #FFFFFF); }
   /* Filled pills keep their own fill; no halo on them. */
