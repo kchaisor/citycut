@@ -112,7 +112,17 @@ import { COM_TREES_CREDIT, COM_TREES_CREDIT_HTML, COM_TREES_DATASET_URL, comTree
 import { openRing, toLocal } from "../lib/geo";
 import { pointInPolygon } from "../lib/useCascade";
 import type { BuildingUse, CityModel } from "../types";
-import { BuildingHeightPopover, HeightOverridePanel } from "./BuildingHeightPopover";
+import { BuildingHeightPopover, HeightOverridePanel, HiddenBuildingsPanel } from "./BuildingHeightPopover";
+import {
+  filterHiddenBuildings,
+  hideBuildings,
+  matchHiddenBuildings,
+  readStoredHiddenBuildings,
+  showAllInCut,
+  showHiddenEntry,
+  writeStoredHiddenBuildings,
+  type HiddenBuildingStore,
+} from "../lib/hiddenBuildings";
 import { ColoursEditor } from "./Colours";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
@@ -440,6 +450,11 @@ export function ModelPage({ model }: { model: CityModel }) {
     readStoredShowManualHeights(window.localStorage),
   );
   const [unmatchedEdits, setUnmatchedEdits] = useState(0);
+  const [hiddenStore, setHiddenStore] = useState<HiddenBuildingStore>(() =>
+    readStoredHiddenBuildings(window.localStorage),
+  );
+  /** Shift-click multi-selection for Hide selected. Holds the single pick too. */
+  const [hideSelection, setHideSelection] = useState<number[]>([]);
   const [heightPick, setHeightPick] = useState<{ buildingId: number; clientX: number; clientY: number } | null>(
     null,
   );
@@ -769,15 +784,24 @@ export function ModelPage({ model }: { model: CityModel }) {
     clearPlanShadowCache();
   }, [overrideResult]);
 
+  const hiddenMatch = useMemo(
+    () => matchHiddenBuildings(overrideResult.buildings, hiddenStore, model.center),
+    [overrideResult.buildings, hiddenStore, model.center],
+  );
+  const visibleBuildings = useMemo(
+    () => filterHiddenBuildings(overrideResult.buildings, new Set(hiddenMatch.keys())),
+    [overrideResult.buildings, hiddenMatch],
+  );
+
   const displayModel = useMemo(
     () => ({
       ...model,
-      buildings: overrideResult.buildings,
+      buildings: visibleBuildings,
       comBuildingHeights: comHeightsMeasuredOn,
       manualHeightEditCount: overrideResult.manualCount,
       sourceNote: appendManualHeightCredit(model.sourceNote, overrideResult.manualCount),
     }),
-    [model, overrideResult, comHeightsMeasuredOn],
+    [model, overrideResult, visibleBuildings, comHeightsMeasuredOn],
   );
 
   useEffect(() => {
@@ -847,6 +871,27 @@ export function ModelPage({ model }: { model: CityModel }) {
     heightPick === null
       ? null
       : (displayModel.buildings.find((building) => building.id === heightPick.buildingId) ?? null);
+
+  function persistHidden(next: HiddenBuildingStore) {
+    setHiddenStore(next);
+    writeStoredHiddenBuildings(window.localStorage, next);
+  }
+
+  function hideSelectedBuildings() {
+    const ids = new Set(hideSelection.length ? hideSelection : heightPick ? [heightPick.buildingId] : []);
+    const picked = overrideResult.buildings.filter((building) => ids.has(building.id));
+    if (picked.length === 0) return;
+    persistHidden(hideBuildings(hiddenStore, picked, model.center));
+    setHideSelection([]);
+    setHeightPick(null);
+  }
+
+  function selectForHide(buildingId: number, additive?: boolean) {
+    setHideSelection((prev) => {
+      if (!additive) return [buildingId];
+      return prev.includes(buildingId) ? prev.filter((id) => id !== buildingId) : [...prev, buildingId];
+    });
+  }
 
   function persistOverrides(next: HeightOverrideStore) {
     setHeightOverrideStore(next);
@@ -1161,10 +1206,14 @@ export function ModelPage({ model }: { model: CityModel }) {
                 windPeriod={windSettings.period}
                 windAnimateStreaks={windMotion.animateStreaks}
                 onExportReady={onExportReady}
-                onBuildingPick={(buildingId, clientX, clientY) =>
-                  setHeightPick({ buildingId, clientX, clientY })
-                }
-                onClearBuildingPick={() => setHeightPick(null)}
+                onBuildingPick={(buildingId, clientX, clientY, additive) => {
+                  setHeightPick({ buildingId, clientX, clientY });
+                  selectForHide(buildingId, additive);
+                }}
+                onClearBuildingPick={() => {
+                  setHeightPick(null);
+                  setHideSelection([]);
+                }}
                 heightEditBuildingId={heightPick?.buildingId ?? null}
                 cameraMemory={cameraMemory}
                 display={view3dDisplay}
@@ -1188,7 +1237,14 @@ export function ModelPage({ model }: { model: CityModel }) {
                   damRecords={displayModel.developmentDamRecords ?? []}
                   onSave={(heightM) => saveBuildingHeight(pickedBuilding.id, heightM)}
                   onReset={() => resetBuildingHeight(pickedBuilding.id)}
-                  onClose={() => setHeightPick(null)}
+                  onClose={() => {
+                    setHeightPick(null);
+                    setHideSelection([]);
+                  }}
+                  selectedCount={Math.max(1, hideSelection.length)}
+                  hiddenCount={hiddenMatch.size}
+                  onHideSelected={hideSelectedBuildings}
+                  onShowAll={() => persistHidden(showAllInCut(hiddenStore, hiddenMatch.values()))}
                 />
               )}
             </SceneBoundary>
@@ -1517,6 +1573,11 @@ export function ModelPage({ model }: { model: CityModel }) {
                 </section>
                 <section className="sidebar-group">
                   <h3 className="sidebar-gh">Manual heights</h3>
+                  <HiddenBuildingsPanel
+                    hidden={[...hiddenMatch.values()]}
+                    onShow={(entry) => persistHidden(showHiddenEntry(hiddenStore, entry))}
+                    onShowAll={() => persistHidden(showAllInCut(hiddenStore, hiddenMatch.values()))}
+                  />
                   <HeightOverridePanel
                     manualCount={overrideResult.manualCount}
                     unmatchedCount={unmatchedEdits}
