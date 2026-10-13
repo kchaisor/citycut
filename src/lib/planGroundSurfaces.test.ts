@@ -70,7 +70,7 @@ describe("carParkWays", () => {
 });
 
 describe("fillRoadMedianGaps street rim", () => {
-  const none = { green: [], water: [], paths: [], buildings: [] };
+  const none = { green: [], water: [], buildings: [] };
   // 100 x 30 m road with an 80 x 6 m hole between y 12 and 18.
   const road: MultiPolygon = [[rect(0, 0, 100, 30), rect(10, 12, 90, 18)]];
   it("fills a hole rimmed by streets (a median)", () => {

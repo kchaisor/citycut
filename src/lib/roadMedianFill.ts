@@ -77,14 +77,16 @@ function toPolygon(rings: Pt[][]): Polygon {
 
 /**
  * Fill the small holes in the plan road surface (paper showing between a median or island and the
- * carriageway) with road, leaving green, water and footpaths in the hole visible. Holes that touch a
+ * carriageway) with road, leaving green and water in the hole visible. Footpaths in the hole are
+ * painted over: the road sits above the kerb/footpath layer, so stray footpath slivers and stubs
+ * inside the carriageway (junctions, beside roundabouts, beside rail) do not show. Holes that touch a
  * building stay as they are. When `streets` is given, a hole is only filled if at least
  * MEDIAN_STREET_RIM_MIN of its rim runs along a street, so car-park bays between service ways or
  * aisles stay ground. Plan-only: 3D, .3dm and city blocks use their own unions.
  */
 export function fillRoadMedianGaps(
   road: MultiPolygon,
-  keep: { green: Pt[][][]; water: Pt[][][]; paths: MultiPolygon; buildings: Pt[][][] },
+  keep: { green: Pt[][][]; water: Pt[][][]; buildings: Pt[][][] },
   maxHoleM2 = ROAD_MEDIAN_HOLE_MAX_M2,
   streets?: MedianStreet[],
 ): MultiPolygon {
@@ -96,7 +98,7 @@ export function fillRoadMedianGaps(
       return { ...s, box: [b[0] - r, b[1] - r, b[2] + r, b[3] + r] as Box };
     });
   const index = (polys: Polygon[]) => polys.map((poly) => ({ poly, box: boxOf(poly[0] ?? []) }));
-  const kept = index([...keep.green.map(toPolygon), ...keep.water.map(toPolygon), ...keep.paths]);
+  const kept = index([...keep.green.map(toPolygon), ...keep.water.map(toPolygon)]);
   const blockers = index(keep.buildings.map(toPolygon));
   const out: MultiPolygon = [];
   for (const polygon of road) {

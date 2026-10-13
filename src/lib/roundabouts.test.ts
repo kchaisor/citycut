@@ -102,7 +102,7 @@ describe("roundabout island in the plan road fill", async () => {
     const road = bufferCentreline(circleRing([0, 0], 10), 5.5);
     expect(road[0]!.length).toBe(2); // the ring keeps its island hole
     const streets = [{ line: circleRing([0, 0], 10), width: 5.5 }];
-    const keep = { water: [], paths: [], buildings: [] };
+    const keep = { water: [], buildings: [] };
     const without = fillRoadMedianGaps(road, { ...keep, green: [] }, undefined, streets);
     expect(without.every((polygon) => polygon.length === 1)).toBe(true);
     const island = withRoundaboutIslands([], [{ key: "w1", center: [0, 0], radius: 10, width: 5.5 }])[0]!;
