@@ -194,3 +194,33 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 }
 .sidebar-brand { font-size: calc(var(--font-size-brand) * 1.22); }
 .sidebar-brand-mark svg { transform: scale(1.22); }
+
+/* #103 Hide buildings and #104 Import tab in the floating style: thin tiles, accent pills,
+   hairline inputs, no boxes. */
+.sidebar .massing-mode { gap: 6px; }
+.sidebar .massing-mode button,
+.sidebar .hide-buildings-block button,
+.sidebar .hidden-buildings-list button {
+  border: 1px solid var(--float-tile-line);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--float-ink);
+  box-shadow: none;
+}
+.sidebar .massing-mode button[aria-pressed="true"],
+.sidebar .hide-buildings-block .is-accent {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+  border-radius: 999px;
+}
+.sidebar .massing-item,
+.sidebar .hide-buildings-block { border-top: 1px solid var(--float-tile-line); }
+.sidebar .massing-field input {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--float-tile-line);
+  border-radius: 0;
+  color: #000000;
+}
+.sidebar .massing-warning { background: transparent; }
