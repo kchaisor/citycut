@@ -201,3 +201,39 @@ export function dateFromDayOfYear(year: number, doy: number): { month: number; d
   const date = new Date(Date.UTC(year, 0, doy));
   return { month: date.getUTCMonth() + 1, day: date.getUTCDate() };
 }
+
+/** Sun-study date presets: winter solstice, equinox, summer solstice. */
+export const SUN_STUDY_DATES = [
+  { id: "jun21", label: "21 Jun", month: 6, day: 21 },
+  { id: "sep22", label: "22 Sep", month: 9, day: 22 },
+  { id: "dec21", label: "21 Dec", month: 12, day: 21 },
+] as const;
+
+/** Melbourne clock minutes (AEST/AEDT as the date falls) of sunrise and sunset, from SunCalc. */
+export function daylightWindowMinutes(
+  lat: number,
+  lon: number,
+  year: number,
+  month: number,
+  day: number,
+): { sunrise: number; sunset: number } | null {
+  const times = SunCalc.getTimes(melbourneLocalToUtc(year, month, day, 12, 0), lat, lon);
+  if (!times.sunrise || !times.sunset || Number.isNaN(times.sunrise.getTime())) return null;
+  const local = (when: Date) => {
+    const parts = readMelbourneParts(when);
+    return parts.hour * 60 + parts.minute + parts.second / 60;
+  };
+  return { sunrise: Math.ceil(local(times.sunrise)), sunset: Math.floor(local(times.sunset)) };
+}
+
+/** Next sweep minute: advance by `hoursPerSecond` of sun time over `dtSeconds`, wrapping at sunset. */
+export function sweepMinute(
+  current: number,
+  dtSeconds: number,
+  hoursPerSecond: number,
+  window: { sunrise: number; sunset: number },
+): number {
+  const start = Math.max(current, window.sunrise);
+  const next = start + dtSeconds * hoursPerSecond * 60;
+  return next > window.sunset ? window.sunrise : next;
+}

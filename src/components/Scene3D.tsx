@@ -85,6 +85,10 @@ import {
 } from "../lib/perspectiveViewportFit";
 import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
+import { SunHoursLayer } from "./SunHoursLayer";
+
+/** Hours-of-sun heatmap: later phase. Code kept, no UI; flip to preview. */
+const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
 import { WindStaticArrows, WindStreaks } from "./WindStreaks";
 import { analyzeWindPeriod, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
@@ -1327,6 +1331,9 @@ export function Scene3D({
         targetY={shadowTargetY}
         topY={siteTopY}
       />
+      {SUN_HOURS_HEATMAP_ENABLED && solar.sunHours && (
+        <SunHoursLayer model={model} year={solar.year} month={solar.month} day={solar.day} groundY={groundY} />
+      )}
       <City
         model={model}
         uniformBuildings={uniformBuildings}

@@ -1928,7 +1928,13 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             </div>
 
             <div className="drawer-section" hidden={open !== "solar"}>
-              <SolarPanel embedded settings={solar} onChange={commitSolar} sideM={model.sideM} />
+              <SolarPanel
+                embedded
+                settings={solar}
+                onChange={commitSolar}
+                sideM={model.sideM}
+                site={{ lat: model.center.lat, lon: model.center.lon }}
+              />
             </div>
 
             <div className="drawer-section" hidden={open !== "wind"}>
