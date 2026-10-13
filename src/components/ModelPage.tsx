@@ -809,6 +809,18 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     [model, overrideResult, visibleBuildings, comHeightsMeasuredOn],
   );
 
+  /**
+   * Drawing tab and its .ai exports: the display model (hidden buildings already gone) plus plan
+   * footprints of visible imported massing. The 3D view and .3dm keep displayModel, so nothing is drawn twice.
+   */
+  const drawingModel = useMemo(
+    () =>
+      massing.drawingBuildings.length
+        ? { ...displayModel, buildings: [...displayModel.buildings, ...massing.drawingBuildings] }
+        : displayModel,
+    [displayModel, massing.drawingBuildings],
+  );
+
   useEffect(() => {
     qaDisplayBuildingsRef.current = displayModel.buildings;
   }, [displayModel.buildings]);
@@ -1017,7 +1029,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     setExportError(null);
     setBusy("ai-site");
     try {
-      await downloadSiteAi(displayModel, figureScale, lineStyles, sitePlanExportOptions());
+      await downloadSiteAi(drawingModel, figureScale, lineStyles, sitePlanExportOptions());
     } catch {
       setExportError("The site plan could not be written.");
     } finally {
@@ -1029,7 +1041,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     setExportError(null);
     setBusy("ai-figure");
     try {
-      await downloadFigureAi(displayModel, figureScale, lineStyles, heliodonDiagramExport());
+      await downloadFigureAi(drawingModel, figureScale, lineStyles, heliodonDiagramExport());
     } catch {
       setExportError("The figure-ground file could not be written.");
     } finally {
@@ -1041,7 +1053,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     setExportError(null);
     setBusy("ai-exploded");
     try {
-      await downloadExplodedAxoAi(displayModel, figureScale, axoSettings);
+      await downloadExplodedAxoAi(drawingModel, figureScale, axoSettings);
     } catch {
       setExportError("The exploded axo file could not be written.");
     } finally {
@@ -1262,7 +1274,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
           <div className="fill is-plan">
             {drawing === "exploded-axo" ? (
               <DrawingExplodedAxo
-                model={displayModel}
+                model={drawingModel}
                 settings={axoSettings}
                 onScale={onScale}
                 viewport={explodedViewport}
@@ -1271,7 +1283,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
               />
             ) : (
               <DrawingPlan
-                model={displayModel}
+                model={drawingModel}
                 kind={drawing}
                 onScale={onScale}
                 lineStyle={lineStyles}

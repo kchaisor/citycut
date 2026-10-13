@@ -64,7 +64,7 @@ export type PlanPaths = {
   pathUnionMs: number;
   rails: Pt[][];
   trams: Pt[][];
-  buildings: { rings: Pt[][]; fill: string; site: boolean }[];
+  buildings: { rings: Pt[][]; fill: string; site: boolean; imported?: boolean }[];
   trees: { east: number; north: number; r: number }[];
   contours: Pt[][];
   /** Parallel to `contours`. True on every Nth interval. */
@@ -209,9 +209,11 @@ export function planPaths(
       if (!rings) return null;
       const site = isSiteBuilding(model, building.id);
       const fill = planBuildingFill(model, building, colourMode, highlightManual);
-      return { rings, fill, site };
+      return building.importedMassing ? { rings, fill, site: false, imported: true } : { rings, fill, site };
     })
-    .filter((building): building is { rings: Pt[][]; fill: string; site: boolean } => building !== null);
+    .filter(
+      (building): building is { rings: Pt[][]; fill: string; site: boolean; imported?: boolean } => building !== null,
+    );
 
   let pathFill: MultiPolygon = footpaths.polygons;
   if (pathFilletM > 0 && carriageway.polygons.length > 0) {
