@@ -99,6 +99,8 @@ vi.mock("maplibre-gl", () => {
       getEast: () => 144.97,
     });
     project = () => ({ x: 100, y: 100 });
+    getContainer = () => document.createElement("div");
+    getPadding = () => ({ left: 0, top: 0, right: 0, bottom: 0 });
     loaded = () => true;
     fire = vi.fn();
     setStyle = vi.fn();
