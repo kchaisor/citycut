@@ -24,20 +24,20 @@ The name is `--background`. The value is `#EBEBEB`.
 
 | Name | What you see on screen | Current value |
 | --- | --- | --- |
-| `--background` | The grey used by the page, the top bar, the area around the map, the 3D view, and the drawing. Change this one and all of those follow, unless you have given one of them its own colour. | `#EBEBEB` |
-| `--page-bg` | The page behind the header and the map. | `var(--background)` |
-| `--landing-bg` | The top bar on the landing page and on the model. | `var(--background)` |
+| `--background` | The grey used by the page, the area around the map, the 3D view, and the drawing. Change this one and all of those follow, unless you have given one of them its own colour. | `#EBEBEB` |
+| `--page-bg` | The page behind the map. | `var(--background)` |
+| `--landing-bg` | Page chrome behind the map on the landing page (same as `--background` unless you set it apart). | `var(--background)` |
 | `--map-bg` | The colour behind the map while the streets are still loading. | `var(--background)` |
 | `--model-bg` | The sky colour of the 3D model. | `var(--background)` |
 | `--drawing-bg` | The on-screen site plan and figure-ground. | `var(--background)` |
 | `--panel-bg` | Drawers, panels, and cards. | `#FFFCF8` |
-| `--panel-border` | The line around panels, cards, inputs, and under the top bar. | `#C8C8C8` |
+| `--panel-border` | The line around panels, cards, and inputs. | `#C8C8C8` |
 | `--text` | Main text, icons, and the Create model button. | `#1A1916` |
 | `--muted-text` | Notes, credits, and other secondary text. | `#6E685E` |
 | `--font-sans` | The font for buttons, labels, and ordinary text. | `"Outfit", "Avenir Next", "Segoe UI", sans-serif` |
 | `--font-serif` | The font for the large “Your model is ready” title. | `"Fraunces", "Iowan Old Style", Georgia, serif` |
 | `--font-size` | The size of ordinary text. | `15px` |
-| `--font-size-brand` | The size of the CityCut name in the top bar. | `18px` |
+| `--font-size-brand` | The size of the CityCut name in the sidebar brand bar. | `18px` |
 | `--font-size-drawer` | The size of a drawer title, such as Exports. | `15px` |
 | `--font-size-card` | The size of an export card title, such as Site plan. | `16px` |
 | `--font-size-stat` | The size of the big numbers in the model summary. | `22px` |
@@ -66,7 +66,7 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--sidebar-rail-w` | Width of the icon rail. The model view starts to its right when the sidebar is collapsed. | `56px` |
 | `--sidebar-panel-w` | Width of the sidebar panel next to the rail. | `320px` |
 
-`var(--background)` means “use whatever `--background` is set to”. That is why one edit recolours the page, the header, the model, and the drawing together.
+`var(--background)` means “use whatever `--background` is set to”. That is why one edit recolours the page, the model, and the drawing together.
 
 Downloaded Illustrator and PNG files do not use the colours in this file. Pens for the site plan, both on screen and in the site-plan Illustrator download, use `src/drawing-style.css`. Fills for the plan, the 3D view, and every download use `src/colours.css`. Both files are described below.
 

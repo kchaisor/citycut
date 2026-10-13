@@ -194,7 +194,7 @@ const SECTION_ICONS: Record<SidebarSectionId, typeof Info> = {
   exports: Download,
 };
 
-export function ModelPage({ model }: { model: CityModel }) {
+export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHome: () => void; onNewCut: () => void }) {
   const [tab, setTab] = useState<Tab>("3d");
   const [drawing, setDrawing] = useState<DrawingKind>("site");
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
@@ -1237,6 +1237,9 @@ export function ModelPage({ model }: { model: CityModel }) {
             active={open}
             collapsed={sidebarCollapsed}
             title={SIDEBAR_SECTION_LABELS[open]}
+            onHome={onHome}
+            showNewCut
+            onNewCut={onNewCut}
             onSelect={selectSection}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
             status={

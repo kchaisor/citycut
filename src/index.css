@@ -34,69 +34,7 @@ button { cursor: pointer; }
   overflow: hidden;
 }
 
-.topbar {
-  height: 56px;
-  flex: none;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: 8px;
-  width: 100%;
-  min-width: 0;
-  padding: 0 16px 0 14px;
-  background: var(--landing-bg);
-  border-bottom: 1px solid var(--panel-border);
-  z-index: 5;
-}
-.brand {
-  justify-self: start;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: max-content;
-  border: 0;
-  background: transparent;
-  padding: 6px 8px;
-  border-radius: 8px;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  font-size: var(--font-size-brand);
-}
 .mark { width: 18px; height: 18px; display: block; }
-.top-note {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  min-width: 0;
-  margin: 0;
-  color: var(--muted-text);
-  font-size: 13px;
-  overflow: hidden;
-  white-space: nowrap;
-}
-.top-note-place {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.top-note-size {
-  flex: none;
-  white-space: nowrap;
-}
-/* A leading space in this span is collapsed by the flex item, so the gap is margin. */
-.top-note-size::before {
-  content: "·";
-  margin-inline: 0.35em;
-}
-.top-actions {
-  justify-self: end;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: max-content;
-  min-height: 36px;
-}
 .text-btn {
   border: 0;
   background: transparent;
@@ -770,7 +708,7 @@ input[type="range"]::-moz-range-thumb {
 .building-detail-panel {
   position: fixed;
   z-index: 40;
-  top: 56px;
+  top: 0;
   right: 0;
   bottom: 0;
   width: 340px;
@@ -1060,15 +998,12 @@ input[type="range"]::-moz-range-thumb {
   color: var(--text);
 }
 .maplibregl-ctrl-attrib a { color: var(--text); }
-.select .maplibregl-ctrl-top-right { top: 52px; right: 8px; }
+.select .maplibregl-ctrl-top-right { top: 12px; right: 8px; }
 .select .maplibregl-ctrl-bottom-right { bottom: 68px; right: 8px; }
 .model .maplibregl-ctrl-top-right { top: 12px; right: 12px; }
 .model .maplibregl-ctrl-bottom-right { bottom: 88px; right: 12px; }
 
 @media (max-width: 640px) {
-  .topbar { padding: 0 8px 0 6px; column-gap: 6px; }
-  .brand { padding: 6px 4px; }
-  .top-note { font-size: 12px; }
   .rail-tip { display: none; }
   .select .maplibregl-ctrl-bottom-right {
     top: auto;
@@ -1081,7 +1016,7 @@ input[type="range"]::-moz-range-thumb {
     margin: 0 0 0 0;
     max-width: 100%;
   }
-  .select .maplibregl-ctrl-top-right { top: 56px; }
+  .select .maplibregl-ctrl-top-right { top: 12px; }
   .model .viewport-hint {
     left: 12px;
     right: 12px;
@@ -1234,10 +1169,72 @@ input[type="range"]::-moz-range-thumb {
 }
 .sidebar {
   display: flex;
+  flex-direction: column;
   height: 100%;
   font-size: 13px;
   line-height: 20px;
   color: var(--text);
+}
+.sidebar-brand-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  height: 56px;
+  box-sizing: border-box;
+  background: var(--sidebar-bg);
+  border-bottom: 1px solid var(--sidebar-hairline);
+  border-right: 1px solid var(--sidebar-hairline);
+}
+.sidebar-brand {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-size: var(--font-size-brand);
+  color: var(--text);
+}
+.sidebar-brand:hover { background: var(--sidebar-hover); }
+.sidebar-brand-mark {
+  flex: none;
+  width: var(--sidebar-rail-w);
+  height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.sidebar-brand-name {
+  padding: 0 16px;
+  white-space: nowrap;
+}
+.sidebar-new-cut {
+  flex: none;
+  border: 0;
+  background: transparent;
+  margin-right: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  white-space: nowrap;
+}
+.sidebar-new-cut:hover { background: var(--sidebar-hover); }
+.sidebar.is-collapsed .sidebar-brand-name { display: none; }
+.sidebar.is-collapsed .sidebar-brand-bar {
+  width: var(--sidebar-rail-w);
+  justify-content: center;
+}
+.sidebar-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
 }
 .sidebar-rail.icon-rail {
   position: static;
@@ -1615,18 +1612,22 @@ input[type="range"]::-moz-range-thumb {
 .sidebar .tree-tiers b { font-weight: 400; }
 .sidebar .tree-load-note { color: var(--status-failed); }
 
-/* Narrow screens: the viewport on top, the panel under it, the rail along the bottom. */
+/* Narrow screens: brand + panel above the map strip, rail along the bottom. */
 @media (max-width: 640px) {
   .model .viewport {
-    --sidebar-h: calc(52px + min(42vh, 360px));
+    --sidebar-h: calc(56px + 52px + min(42vh, 360px));
   }
-  .model .viewport.sidebar-collapsed { --sidebar-h: 52px; }
+  .model .viewport.sidebar-collapsed { --sidebar-h: calc(56px + 52px); }
   .model .viewport > .fill { left: 0; bottom: var(--sidebar-h); }
   .model .viewport > .viewport-hint { left: 12px; right: 12px; bottom: calc(var(--sidebar-h) + 8px); }
   .model .viewport > .stage-attrib { left: 12px; right: 12px; bottom: calc(var(--sidebar-h) + 40px); max-width: none; }
   .model .viewport > .stage-error { left: 12px; right: 12px; bottom: calc(var(--sidebar-h) + 96px); }
   .sidebar-host { top: auto; right: 0; height: var(--sidebar-h); }
-  .sidebar { flex-direction: column-reverse; width: 100%; }
+  .sidebar { flex-direction: column; width: 100%; }
+  .sidebar-brand-bar { border-right: 0; width: 100%; }
+  .sidebar.is-collapsed .sidebar-brand-bar { width: 100%; }
+  .sidebar.is-collapsed .sidebar-brand-name { display: inline; padding-left: 12px; }
+  .sidebar-main { flex-direction: column-reverse; width: 100%; }
   .sidebar-rail.icon-rail {
     flex-direction: row;
     width: 100%;
@@ -1652,8 +1653,8 @@ input[type="range"]::-moz-range-thumb {
 .select > .map-wrap { left: var(--sidebar-w); }
 .select .select-chrome { position: absolute; z-index: 6; inset: 0 auto 0 0; }
 @media (max-width: 640px) {
-  .select { --sidebar-h: calc(52px + min(42vh, 360px)); }
-  .select.sidebar-collapsed { --sidebar-h: 52px; }
+  .select { --sidebar-h: calc(56px + 52px + min(42vh, 360px)); }
+  .select.sidebar-collapsed { --sidebar-h: calc(56px + 52px); }
   .select > .map-wrap { left: 0; bottom: var(--sidebar-h); }
   .select .select-chrome { inset: auto 0 0 0; height: var(--sidebar-h); }
 }

@@ -55,6 +55,7 @@ export function SelectChrome({
   basemap,
   onBasemap,
   center,
+  onHome,
 }: {
   center: { lat: number; lon: number };
   basemap: "map" | "satellite";
@@ -70,6 +71,7 @@ export function SelectChrome({
   onLayer: (key: keyof UiLayers, on: boolean) => void;
   onPlace: (place: PlaceHit) => void;
   onCreate: () => void;
+  onHome: () => void;
 }) {
   const sliderId = useId();
   const [collapsed, setCollapsed] = useSidebarCollapsed();
@@ -143,6 +145,7 @@ export function SelectChrome({
         active={open}
         collapsed={collapsed}
         title={TITLES[open]}
+        onHome={onHome}
         onSelect={(id) => {
           setOpen(id);
           setCollapsed(false);
