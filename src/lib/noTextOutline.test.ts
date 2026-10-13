@@ -13,7 +13,7 @@ function cssFiles(dir: string): string[] {
 }
 
 describe("UI text has no outline or halo (Kelvin)", () => {
-  it("no CSS rule gives UI text a text-shadow, text-stroke or stroke paint-order", () => {
+  it("no CSS rule gives UI text or icons a text-shadow, text-stroke, drop-shadow glow or stroke paint-order", () => {
     const offenders: string[] = [];
     for (const file of cssFiles(SRC)) {
       const css = readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
@@ -22,6 +22,9 @@ describe("UI text has no outline or halo (Kelvin)", () => {
       }
       for (const match of css.matchAll(/-webkit-text-stroke(?:-width)?\s*:\s*([^;}]+)/g)) {
         if (!/^0(px)?$/.test(match[1]!.trim())) offenders.push(`${file}: -webkit-text-stroke: ${match[1]!.trim()}`);
+      }
+      for (const match of css.matchAll(/drop-shadow\(([^)]*)\)/g)) {
+        offenders.push(`${file}: drop-shadow(${match[1]!.trim()}) (icon/text glow)`);
       }
       for (const match of css.matchAll(/paint-order\s*:\s*([^;}]+)/g)) {
         if (/stroke/.test(match[1]!)) offenders.push(`${file}: paint-order: ${match[1]!.trim()}`);
