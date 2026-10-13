@@ -1,0 +1,78 @@
+import { mgaZone, projectLonLat, unprojectMga } from "./crs";
+
+/** Grid steps (m), finest first. The overlay picks the finest one that stays readable. */
+export const MGA_GRID_STEPS_M = [50, 100, 500, 1000, 5000, 10000, 50000] as const;
+/** Smallest on-screen gap between grid lines (CSS px). */
+export const MGA_GRID_MIN_GAP_PX = 72;
+
+/** Finest step whose lines sit at least MGA_GRID_MIN_GAP_PX apart at this scale. */
+export function mgaGridStep(metresPerPixel: number, minGapPx = MGA_GRID_MIN_GAP_PX): number {
+  for (const step of MGA_GRID_STEPS_M) if (step / metresPerPixel >= minGapPx) return step;
+  return MGA_GRID_STEPS_M[MGA_GRID_STEPS_M.length - 1]!;
+}
+
+export type GridLine = { coords: [number, number][]; axis: "e" | "n"; value: number };
+
+/**
+ * Lines of constant MGA easting and northing (GDA2020 / MGA, the zone of the view centre;
+ * zone 55 = EPSG:7855 for Melbourne) covering a lon/lat box, as lon/lat polylines.
+ * Each line is sampled so it stays straight in MGA, which is a slight curve in Web Mercator.
+ */
+export function mgaGridLines(
+  bounds: { west: number; south: number; east: number; north: number },
+  step: number,
+  zone = mgaZone((bounds.west + bounds.east) / 2),
+  samples = 12,
+): GridLine[] {
+  const corners = [
+    projectLonLat(bounds.west, bounds.south, zone),
+    projectLonLat(bounds.west, bounds.north, zone),
+    projectLonLat(bounds.east, bounds.south, zone),
+    projectLonLat(bounds.east, bounds.north, zone),
+  ];
+  const e0 = Math.floor(Math.min(...corners.map((c) => c[0])) / step) * step;
+  const e1 = Math.ceil(Math.max(...corners.map((c) => c[0])) / step) * step;
+  const n0 = Math.floor(Math.min(...corners.map((c) => c[1])) / step) * step;
+  const n1 = Math.ceil(Math.max(...corners.map((c) => c[1])) / step) * step;
+  if ((e1 - e0) / step > 400 || (n1 - n0) / step > 400) return [];
+  const lines: GridLine[] = [];
+  for (let e = e0; e <= e1; e += step) {
+    const coords: [number, number][] = [];
+    for (let i = 0; i <= samples; i++) coords.push(unprojectMga(e, n0 + ((n1 - n0) * i) / samples, zone));
+    lines.push({ coords, axis: "e", value: e });
+  }
+  for (let n = n0; n <= n1; n += step) {
+    const coords: [number, number][] = [];
+    for (let i = 0; i <= samples; i++) coords.push(unprojectMga(e0 + ((e1 - e0) * i) / samples, n, zone));
+    lines.push({ coords, axis: "n", value: n });
+  }
+  return lines;
+}
+
+export type GridCross = { lon: number; lat: number; easting: number; northing: number };
+
+/** Grid intersections (MGA easting × northing on whole steps) inside a lon/lat box. */
+export function mgaGridCrosses(
+  bounds: { west: number; south: number; east: number; north: number },
+  step: number,
+  zone = mgaZone((bounds.west + bounds.east) / 2),
+): GridCross[] {
+  const corners = [
+    projectLonLat(bounds.west, bounds.south, zone),
+    projectLonLat(bounds.west, bounds.north, zone),
+    projectLonLat(bounds.east, bounds.south, zone),
+    projectLonLat(bounds.east, bounds.north, zone),
+  ];
+  const e0 = Math.floor(Math.min(...corners.map((c) => c[0])) / step) * step;
+  const e1 = Math.ceil(Math.max(...corners.map((c) => c[0])) / step) * step;
+  const n0 = Math.floor(Math.min(...corners.map((c) => c[1])) / step) * step;
+  const n1 = Math.ceil(Math.max(...corners.map((c) => c[1])) / step) * step;
+  if (((e1 - e0) / step + 1) * ((n1 - n0) / step + 1) > 4000) return [];
+  const out: GridCross[] = [];
+  for (let e = e0; e <= e1; e += step)
+    for (let n = n0; n <= n1; n += step) {
+      const [lon, lat] = unprojectMga(e, n, zone);
+      out.push({ lon, lat, easting: e, northing: n });
+    }
+  return out;
+}

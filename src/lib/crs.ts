@@ -41,3 +41,9 @@ export function projectLocal(point: Pt, origin: LonLat, zone: number): [number, 
   const geographic = fromLocal(point, origin);
   return projectLonLat(geographic.lon, geographic.lat, zone);
 }
+
+/** MGA easting/northing in the given zone back to WGS84 [lon, lat]. */
+export function unprojectMga(easting: number, northing: number, zone: number): [number, number] {
+  const lonLat = converterFor(zone).inverse([easting, northing]);
+  return [lonLat[0], lonLat[1]];
+}
