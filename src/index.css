@@ -1659,3 +1659,37 @@ input[type="range"]::-moz-range-thumb {
 }
 .select .search { margin-top: 16px; }
 .sidebar-foot-error { margin: 0 0 8px; }
+
+/* Hide buildings (massing replacement). */
+.hidden-count-chip {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--accent-edge);
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+.hide-buildings-block {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--panel-border);
+}
+.hide-buildings-block .is-accent {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent-edge);
+}
+.hidden-buildings-list {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+}
+.hidden-buildings-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}

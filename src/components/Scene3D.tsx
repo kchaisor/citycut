@@ -154,7 +154,7 @@ function BuildingPickLayer({
 }: {
   root: THREE.Object3D;
   enabled: boolean;
-  onBuildingPick: (buildingId: number, clientX: number, clientY: number) => void;
+  onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
   onClearPick?: () => void;
 }) {
   const camera = useThree((state) => state.camera);
@@ -236,7 +236,7 @@ function City({
   heightEditBuildingId: number | null;
   display: View3dDisplaySettings;
   onBounds: (bounds: Aabb) => void;
-  onBuildingPick: (buildingId: number, clientX: number, clientY: number) => void;
+  onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
   onClearBuildingPick?: () => void;
   pickBuildings: boolean;
 }) {
@@ -1220,7 +1220,7 @@ export function Scene3D({
   windPeriod: WindPeriodId;
   windAnimateStreaks: boolean;
   onExportReady: (exporter: SceneExporter | null) => void;
-  onBuildingPick: (buildingId: number, clientX: number, clientY: number) => void;
+  onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
   onClearBuildingPick?: () => void;
   heightEditBuildingId: number | null;
   /** Survives the 3D tab unmounting; see CameraMemory. Omit to always frame afresh. */

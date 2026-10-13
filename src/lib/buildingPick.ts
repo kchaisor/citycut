@@ -3,7 +3,8 @@ import * as THREE from "three";
 const CLICK_MAX_PX = 5;
 
 export type BuildingPickHandlers = {
-  onBuildingPick: (buildingId: number, clientX: number, clientY: number) => void;
+  /** additive is true on shift-click (multi-select). */
+  onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
   /** Fired on a click that did not hit a building (empty space). */
   onClearPick?: () => void;
 };
@@ -63,7 +64,7 @@ export function attachBuildingPick(
     for (const hit of hits) {
       const buildingId = buildingIdFromIntersection(hit);
       if (buildingId != null) {
-        handlers.onBuildingPick(buildingId, event.clientX, event.clientY);
+        handlers.onBuildingPick(buildingId, event.clientX, event.clientY, event.shiftKey);
         return;
       }
     }
