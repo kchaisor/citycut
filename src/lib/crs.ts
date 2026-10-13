@@ -1,5 +1,5 @@
 import proj4 from "proj4";
-import { fromLocal } from "./geo";
+import { fromLocal, toLocal } from "./geo";
 import type { LonLat, Pt } from "../types";
 
 export { CRS_NOTE, mgaCrs, mgaZone, type MgaCrs } from "./crsZone";
@@ -40,4 +40,20 @@ export function projectLonLat(lon: number, lat: number, zone: number): [number, 
 export function projectLocal(point: Pt, origin: LonLat, zone: number): [number, number] {
   const geographic = fromLocal(point, origin);
   return projectLonLat(geographic.lon, geographic.lat, zone);
+}
+
+/** Inverse of {@link projectLonLat}: MGA easting/northing in `zone` back to WGS84. */
+export function unprojectMga(easting: number, northing: number, zone: number): { lon: number; lat: number } {
+  const [lon, lat] = converterFor(zone).inverse([easting, northing]);
+  return { lon, lat };
+}
+
+/**
+ * Exact inverse of {@link projectLocal}: MGA metres to the CityModel's local east/north frame.
+ * proj4 inverse, then the same equirectangular step `fromLocal` undoes, so a point exported to
+ * the .3dm and read back lands where it started.
+ */
+export function mgaToLocal(easting: number, northing: number, origin: LonLat, zone: number): Pt {
+  const { lon, lat } = unprojectMga(easting, northing, zone);
+  return toLocal(lat, lon, origin);
 }

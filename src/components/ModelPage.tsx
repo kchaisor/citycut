@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import * as THREE from "three";
-import { Building2, Copy, Download, DraftingCompass, Info, Sun, Trees, Wind } from "lucide-react";
+import { Building2, Copy, Download, DraftingCompass, Info, Sun, Trees, Upload, Wind } from "lucide-react";
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -124,6 +124,8 @@ import {
   type HiddenBuildingStore,
 } from "../lib/hiddenBuildings";
 import { ColoursEditor } from "./Colours";
+import { ImportMassingPanel } from "./ImportMassingPanel";
+import { useImportedMassing } from "./useImportedMassing";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
 import { DrawingExplodedAxo } from "./DrawingExplodedAxo";
@@ -201,6 +203,7 @@ const SECTION_ICONS: Record<SidebarSectionId, typeof Info> = {
   drawing: DraftingCompass,
   solar: Sun,
   wind: Wind,
+  import: Upload,
   exports: Download,
 };
 
@@ -458,6 +461,8 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [heightPick, setHeightPick] = useState<{ buildingId: number; clientX: number; clientY: number } | null>(
     null,
   );
+
+  const massing = useImportedMassing(model);
 
   const qaSummaryRef = useRef({ treeCrowns: 0, buildingCount: 0, roadCount: 0, triangleCount: 0 });
   const qaDisplayBuildingsRef = useRef(model.buildings);
@@ -953,7 +958,7 @@ export function ModelPage({ model }: { model: CityModel }) {
       id,
       label: SIDEBAR_SECTION_LABELS[id],
       icon: <Icon {...iconProps} />,
-      groupStart: index === 1 || id === "exports",
+      groupStart: index === 1 || id === "import",
     };
   });
   const open: SidebarSectionId = resolveSidebarSection(sidebar.section, sectionIds);
@@ -999,6 +1004,7 @@ export function ModelPage({ model }: { model: CityModel }) {
             ? { table: windTable, period: windSettings.period }
             : null,
         hideTrees: view3dDisplay.hideTrees,
+        importedMassing: massing.forExport.length ? massing.forExport : null,
       });
     } catch {
       setExportError("The Rhino file could not be written.");
@@ -1217,6 +1223,8 @@ export function ModelPage({ model }: { model: CityModel }) {
                 heightEditBuildingId={heightPick?.buildingId ?? null}
                 cameraMemory={cameraMemory}
                 display={view3dDisplay}
+                importedMassing={massing.group}
+                onScenePoint={massing.onScenePoint}
               />
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
@@ -1300,6 +1308,10 @@ export function ModelPage({ model }: { model: CityModel }) {
                 <span className="sidebar-status">
                   <i className="status-dot is-ready" aria-hidden="true" />
                   Ready
+                </span>
+              ) : open === "import" ? (
+                <span className="sidebar-status">
+                  {massing.imported.length} model{massing.imported.length === 1 ? "" : "s"}
                 </span>
               ) : open === "buildings" ? (
                 <span className="sidebar-status">
@@ -1913,6 +1925,24 @@ export function ModelPage({ model }: { model: CityModel }) {
                 streaksPaused={windMotion.streaksPaused}
                 animateAnyway={windMotion.animateAnyway}
                 onAnimateAnyway={windMotion.setAnimateAnyway}
+              />
+            </div>
+
+            <div className="drawer-section" hidden={open !== "import"}>
+              <ImportMassingPanel
+                imported={massing.imported}
+                warnings={massing.warnings}
+                crsName={crs.name}
+                placingId={massing.placingId}
+                busy={massing.busy}
+                error={massing.error}
+                onImport={(file) => void massing.importFile(file)}
+                onMode={massing.setMode}
+                onPlacement={massing.setPlacement}
+                onSnap={massing.snapToGround}
+                onResetMga={massing.resetToMga}
+                onToggleVisible={massing.toggleVisible}
+                onRemove={massing.remove}
               />
             </div>
 

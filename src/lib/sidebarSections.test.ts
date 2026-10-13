@@ -20,6 +20,7 @@ describe("sidebar sections", () => {
       "drawing",
       "solar",
       "wind",
+      "import",
       "exports",
     ]);
     expect(availableSidebarSections({ buildings: false, trees: true })).toContain("trees");

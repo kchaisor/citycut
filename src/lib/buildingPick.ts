@@ -78,3 +78,45 @@ export function attachBuildingPick(
     canvas.removeEventListener("pointerup", onPointerUp);
   };
 }
+
+/** Click-to-place: first mesh hit under a click (drags ignored), skipping the imported massing itself. */
+export function attachScenePointPick(
+  canvas: HTMLCanvasElement,
+  camera: THREE.Camera,
+  root: THREE.Object3D,
+  onPoint: (point: THREE.Vector3) => void,
+): () => void {
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+  let downX = 0;
+  let downY = 0;
+  function onPointerDown(event: PointerEvent) {
+    downX = event.clientX;
+    downY = event.clientY;
+  }
+  function onPointerUp(event: PointerEvent) {
+    if (event.button !== 0) return;
+    if (Math.hypot(event.clientX - downX, event.clientY - downY) > CLICK_MAX_PX) return;
+    const rect = canvas.getBoundingClientRect();
+    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+    for (const hit of raycaster.intersectObject(root, true)) {
+      let object: THREE.Object3D | null = hit.object;
+      let skip = !(hit.object as THREE.Mesh).isMesh;
+      while (object && !skip) {
+        if (object.name === "ImportedMassing" || object.userData.noScenePick) skip = true;
+        object = object.parent;
+      }
+      if (skip) continue;
+      onPoint(hit.point.clone());
+      return;
+    }
+  }
+  canvas.addEventListener("pointerdown", onPointerDown);
+  canvas.addEventListener("pointerup", onPointerUp);
+  return () => {
+    canvas.removeEventListener("pointerdown", onPointerDown);
+    canvas.removeEventListener("pointerup", onPointerUp);
+  };
+}
