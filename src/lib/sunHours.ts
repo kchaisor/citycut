@@ -82,7 +82,7 @@ export function sunHoursGrid(
   return { res, hours, maxHours: steps * stepH, steps, skipped, ms: performance.now() - started };
 }
 
-/** Few hours → dark grey, full day → #FFF500. */
+/** Few hours → dark grey, full day → accent yellow. */
 export function sunHoursColour(hours: number, maxHours: number): [number, number, number, number] {
   if (hours < 0) return [0, 0, 0, 0];
   const t = maxHours > 0 ? Math.min(1, Math.max(0, hours / maxHours)) : 0;
