@@ -200,11 +200,27 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     return out;
   }, [rt, imported, model, zone]);
 
+  /** Plan footprints for Drawing (site plan, figure-ground, exploded axo) and their .ai exports. */
+  const drawingBuildings = useMemo(
+    () => {
+      if (!rt || !imported.some((item) => item.visible)) return [];
+      try {
+        return rt.massingDrawingBuildings(imported, model.center, zone);
+      } catch (err) {
+        // A footprint that fails to union must not take the model page down; the 3D view still shows it.
+        console.warn("[CityCut] imported massing footprint failed", err);
+        return [];
+      }
+    },
+    [rt, imported, model.center, zone],
+  );
+
   const forExport = useMemo(() => imported.filter((item) => item.visible), [imported]);
 
   return {
     imported,
     forExport,
+    drawingBuildings,
     group,
     warnings,
     placingId,

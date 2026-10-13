@@ -98,6 +98,8 @@ export type BuildingFeat = {
   comMatchHeightM?: number;
   /** Overlap area / OSM footprint area for {@link comMatchStructureId}. */
   comMatchOverlapRatio?: number;
+  /** Footprint of an imported .3dm massing model (drawings only; never in the 3D city or .3dm). */
+  importedMassing?: true;
   /** Set when the user overrode height in the 3D view. */
   heightManual?: true;
   use: BuildingUse;

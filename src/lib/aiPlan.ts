@@ -26,7 +26,7 @@ import { heliodonPlanPdfChunk } from "./heliodonPlanExport";
 import type { HeliodonDiagramExportOptions } from "./heliodonDiagram";
 import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { planPaths } from "./svgPlan";
-import { planBuildingStrokeStyle } from "./planBuildingFill";
+import { importedMassingStrokeStyle, planBuildingStrokeStyle } from "./planBuildingFill";
 import { windPlanPdfChunk } from "./windExport";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { comTreesCreditLine } from "./comTreesCredit";
@@ -53,6 +53,7 @@ export const SITE_LAYER_ORDER = [
   "Trams",
   "Buildings",
   "Site buildings",
+  "Imported massing",
   "Site boundary",
   "Trees",
   "Shadows",
@@ -471,7 +472,8 @@ export function sitePlanChunks(
   const buildingPen = pen(planBuildingStrokeStyle(style, uniformBuildings, false), "miter");
   const siteBuildingPen = pen(style.siteBuilding, "miter");
   const siteBuildings = plan.buildings.filter((building) => building.site);
-  const otherBuildings = plan.buildings.filter((building) => !building.site);
+  const importedBuildings = plan.buildings.filter((building) => building.imported);
+  const otherBuildings = plan.buildings.filter((building) => !building.site && !building.imported);
   if (otherBuildings.length > 0) {
     chunks.push({
       name: "Buildings",
@@ -493,6 +495,19 @@ export function sitePlanChunks(
         evenOdd: true,
         close: true,
         ...(siteBuildingPen ?? buildingPen ?? {}),
+      })),
+    });
+  }
+  if (importedBuildings.length > 0) {
+    const importedPen = pen(importedMassingStrokeStyle(style), "miter");
+    chunks.push({
+      name: "Imported massing",
+      paths: importedBuildings.map((building) => ({
+        rings: mapRings(building.rings, model.sideM, layout),
+        fill: hexRgb(building.fill),
+        evenOdd: true,
+        close: true,
+        ...(importedPen ?? buildingPen ?? {}),
       })),
     });
   }

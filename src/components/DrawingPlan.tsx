@@ -11,7 +11,7 @@ import { figureGroundModelPaths, scaleBarMetres } from "../lib/figureGround";
 import { circleRing, DEFAULT_SITE_FRAME_SHAPE } from "../lib/siteFrame";
 import { openRing } from "../lib/geo";
 import { LINE_MM, screenPx } from "../lib/lineweights";
-import { planBuildingStrokeStyle } from "../lib/planBuildingFill";
+import { importedMassingStrokeStyle, planBuildingStrokeStyle } from "../lib/planBuildingFill";
 import { planPaths, svgPolyline, svgRings } from "../lib/svgPlan";
 import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
@@ -353,9 +353,11 @@ export function DrawingPlan({
                 fill={building.fill}
                 fillRule="evenodd"
                 {...screenPenAttrs(
-                  building.site
-                    ? style.siteBuilding
-                    : planBuildingStrokeStyle(style, uniformBuildings, false),
+                  building.imported
+                    ? importedMassingStrokeStyle(style)
+                    : building.site
+                      ? style.siteBuilding
+                      : planBuildingStrokeStyle(style, uniformBuildings, false),
                   "miter",
                 )}
               />
