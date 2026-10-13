@@ -18,6 +18,7 @@ export function mgaGridCrosses(
   bounds: { west: number; south: number; east: number; north: number },
   step: number,
   zone = mgaZone((bounds.west + bounds.east) / 2),
+  maxCount = 4000,
 ): GridCross[] {
   const corners = [
     projectLonLat(bounds.west, bounds.south, zone),
@@ -29,7 +30,7 @@ export function mgaGridCrosses(
   const e1 = Math.ceil(Math.max(...corners.map((c) => c[0])) / step) * step;
   const n0 = Math.floor(Math.min(...corners.map((c) => c[1])) / step) * step;
   const n1 = Math.ceil(Math.max(...corners.map((c) => c[1])) / step) * step;
-  if (((e1 - e0) / step + 1) * ((n1 - n0) / step + 1) > 4000) return [];
+  if (((e1 - e0) / step + 1) * ((n1 - n0) / step + 1) > maxCount) return [];
   const out: GridCross[] = [];
   for (let e = e0; e <= e1; e += step)
     for (let n = n0; n <= n1; n += step) {
