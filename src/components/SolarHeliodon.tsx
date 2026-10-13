@@ -42,7 +42,7 @@ export type SolarViewSettings = {
   day: number;
   hour: number;
   minute: number;
-  /** MOCK: hours-of-sun heatmap on the ground for the chosen day. */
+  /** Later phase (flagged off, no UI): hours-of-sun heatmap on the ground for the chosen day. */
   sunHours?: boolean;
 };
 

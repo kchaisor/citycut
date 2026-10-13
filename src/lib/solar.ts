@@ -202,7 +202,7 @@ export function dateFromDayOfYear(year: number, doy: number): { month: number; d
   return { month: date.getUTCMonth() + 1, day: date.getUTCDate() };
 }
 
-/** Sun-study date presets (mock): winter solstice, equinox, summer solstice. */
+/** Sun-study date presets: winter solstice, equinox, summer solstice. */
 export const SUN_STUDY_DATES = [
   { id: "jun21", label: "21 Jun", month: 6, day: 21 },
   { id: "sep22", label: "22 Sep", month: 9, day: 22 },

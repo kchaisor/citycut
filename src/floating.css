@@ -258,7 +258,7 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
   .select > .map-wrap .map-attribution { bottom: var(--sidebar-h); }
 }
 
-/* MOCK: sun study player (Sun section). Accent pills, black ink, no extra chrome. */
+/* Sun study player (Sun section). Accent pills, black ink, no extra chrome. */
 .sun-study { display: grid; gap: 10px; padding: 4px 0 14px; color: #000000; }
 .sun-study-dates, .sun-study-speed { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
 .sun-study-date { margin-left: auto; font: inherit; font-size: 12px; color: #000000; background: transparent; border: 0; border-bottom: 1px solid #00000033; padding: 2px 0; }
@@ -273,3 +273,8 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 .sun-study-date { width: 118px; min-width: 0; }
 .sun-study-foot { flex-wrap: nowrap; gap: 6px; }
 .sun-study-speed { flex-wrap: nowrap; }
+.sun-study-standards { flex-wrap: wrap; }
+.sun-study .shape-btn { flex: none; width: auto; }
+.sun-study-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; }
+.sun-study-foot { display: flex; }
+.sun-study-time { font-size: 12px; }

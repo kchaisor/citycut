@@ -5,7 +5,7 @@ import type { CityModel, Pt } from "../types";
 export type SunHoursGrid = { res: number; hours: Float32Array; maxHours: number; steps: number; ms: number; skipped: number };
 
 /**
- * MOCK: hours of direct sun on the ground through one day. Samples the plan building shadows
+ * Later phase (flagged off): hours of direct sun on the ground through one day. Samples the plan building shadows
  * every `stepMinutes` from sunrise to sunset and counts, per grid cell, the samples in sun.
  * Buildings only (trees and imported models are not rasterised yet).
  */

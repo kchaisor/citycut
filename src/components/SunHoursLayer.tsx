@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { sunHoursColour, sunHoursGrid } from "../lib/sunHours";
 import type { CityModel } from "../types";
 
-/** MOCK: hours-of-sun heatmap laid flat on the ground of the cut. */
+/** Later phase (flagged off): hours-of-sun heatmap laid flat on the ground of the cut. */
 export function SunHoursLayer({
   model,
   year,

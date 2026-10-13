@@ -1,6 +1,15 @@
-import { Pause, Play } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { SUN_STUDY_DATES, daylightWindowMinutes, melbourneZoneName, melbourneLocalToUtc, sweepMinute } from "../lib/solar";
+import {
+  SHADOW_STANDARDS,
+  SUN_STUDY_DATES,
+  daylightWindowMinutes,
+  melbourneLocalToUtc,
+  melbourneZoneName,
+  shadowStandardStepLabel,
+  sweepMinute,
+  type ShadowStandardId,
+} from "../lib/solar";
 import type { SolarViewSettings } from "./SolarHeliodon";
 
 /** Sun-time hours per real second. */
@@ -13,7 +22,7 @@ function clock(minutes: number): string {
 }
 
 /**
- * MOCK: animated sun and shadow study. Sweeps the existing sun (same site lat/lon, Melbourne
+ * Animated sun and shadow study. Sweeps the existing sun (same site lat/lon, Melbourne
  * clock, SunCalc) from sunrise to sunset on a chosen day. Only the sun moves; the camera is
  * never touched. Playing switches cast shadows on.
  */
@@ -33,7 +42,15 @@ export function SunStudyPlayer({
   const latest = useRef({ settings, onChange, speed });
   latest.current = { settings, onChange, speed };
   const fraction = useRef(settings.hour * 60 + settings.minute);
-  const window_ = daylightWindowMinutes(lat, lon, settings.year, settings.month, settings.day);
+  const [standardId, setStandardId] = useState<ShadowStandardId | null>(null);
+  const standardRef = useRef(standardId);
+  standardRef.current = standardId;
+  const daylight = daylightWindowMinutes(lat, lon, settings.year, settings.month, settings.day);
+  const standard = standardId ? SHADOW_STANDARDS[standardId] : null;
+  /** A shadow standard narrows the sweep and scrubber to its test hours (e.g. 9am–3pm). */
+  const window_ = standard
+    ? { sunrise: standard.hours[0]! * 60, sunset: standard.hours[standard.hours.length - 1]! * 60 }
+    : daylight;
   const minutes = settings.hour * 60 + settings.minute;
 
   useEffect(() => {
@@ -43,7 +60,10 @@ export function SunStudyPlayer({
     fraction.current = latest.current.settings.hour * 60 + latest.current.settings.minute;
     const tick = (now: number) => {
       const { settings: s, onChange: commit, speed: hps } = latest.current;
-      const w = daylightWindowMinutes(lat, lon, s.year, s.month, s.day);
+      const sid = standardRef.current;
+      const w = sid
+        ? { sunrise: SHADOW_STANDARDS[sid].hours[0]! * 60, sunset: SHADOW_STANDARDS[sid].hours[SHADOW_STANDARDS[sid].hours.length - 1]! * 60 }
+        : daylightWindowMinutes(lat, lon, s.year, s.month, s.day);
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       if (w) {
@@ -60,13 +80,25 @@ export function SunStudyPlayer({
   }, [playing, lat, lon]);
 
   const patch = (partial: Partial<SolarViewSettings>) => onChange({ ...settings, ...partial });
+  const stepHour = (delta: number) => {
+    if (!standard) return;
+    const hours = standard.hours;
+    // Exact test hour → step from it; between hours → step to the neighbour in that direction.
+    const below = hours.filter((h) => h * 60 <= minutes).length - 1;
+    const exact = below >= 0 && hours[below]! * 60 === minutes;
+    const from = exact ? below : delta > 0 ? below : below + 1;
+    const index = Math.min(hours.length - 1, Math.max(0, from + delta));
+    const hour = hours[index]!;
+    fraction.current = hour * 60;
+    patch({ hour, minute: 0 });
+  };
   const zone = melbourneZoneName(melbourneLocalToUtc(settings.year, settings.month, settings.day, 12, 0));
 
   return (
     <div className="sun-study" role="group" aria-label="Sun study">
       <div className="sun-study-dates" role="radiogroup" aria-label="Day">
         {SUN_STUDY_DATES.map((d) => {
-          const on = settings.month === d.month && settings.day === d.day;
+          const on = !standardId && settings.month === d.month && settings.day === d.day;
           return (
             <button
               key={d.id}
@@ -78,6 +110,7 @@ export function SunStudyPlayer({
                 const w = daylightWindowMinutes(lat, lon, settings.year, d.month, d.day);
                 const clamped = w ? Math.min(w.sunset, Math.max(w.sunrise, minutes)) : minutes;
                 fraction.current = clamped;
+                setStandardId(null);
                 patch({ month: d.month, day: d.day, hour: Math.floor(clamped / 60), minute: clamped % 60 });
               }}
             >
@@ -92,9 +125,34 @@ export function SunStudyPlayer({
           value={`${settings.year}-${String(settings.month).padStart(2, "0")}-${String(settings.day).padStart(2, "0")}`}
           onChange={(event) => {
             const [y, m, d] = event.target.value.split("-").map(Number);
-            if (y && m && d) patch({ year: y, month: m, day: d });
+            if (y && m && d) {
+              setStandardId(null);
+              patch({ year: y, month: m, day: d });
+            }
           }}
         />
+      </div>
+      <div className="sun-study-dates sun-study-standards" role="radiogroup" aria-label="Victorian shadow standards">
+        {(Object.keys(SHADOW_STANDARDS) as ShadowStandardId[]).map((id) => {
+          const set = SHADOW_STANDARDS[id];
+          return (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={standardId === id}
+              className={standardId === id ? "shape-btn on" : "shape-btn"}
+              title={set.source}
+              onClick={() => {
+                setStandardId(id);
+                fraction.current = set.hours[0]! * 60;
+                patch({ month: set.month, day: set.day, hour: set.hours[0]!, minute: 0, castShadows: true });
+              }}
+            >
+              {set.label}
+            </button>
+          );
+        })}
       </div>
       <div className="sun-study-row">
         <button
@@ -129,7 +187,11 @@ export function SunStudyPlayer({
       </div>
       <div className="sun-study-row sun-study-foot">
         <span className="sun-study-window">
-          {window_ ? `Sunrise ${clock(window_.sunrise)} · Sunset ${clock(window_.sunset)}` : "No sunrise"}
+          {standard && window_
+            ? `Test window ${clock(window_.sunrise)}–${clock(window_.sunset)}`
+            : daylight
+              ? `Sunrise ${clock(daylight.sunrise)} · Sunset ${clock(daylight.sunset)}`
+              : "No sunrise"}
         </span>
         <div className="sun-study-speed" role="radiogroup" aria-label="Speed">
           {SPEEDS.map((s) => (
@@ -147,14 +209,50 @@ export function SunStudyPlayer({
           ))}
         </div>
       </div>
-      <label className="check-field">
-        <input
-          type="checkbox"
-          checked={settings.sunHours ?? false}
-          onChange={(event) => patch({ sunHours: event.target.checked })}
-        />
-        <span>Hours of sun (preview)</span>
-      </label>
+      {standard && standardId && (
+        <div className="solar-stepper">
+          <div className="solar-stepper-row" role="group" aria-label="Hour in the shadow standard">
+            <button
+              type="button"
+              className="solar-step"
+              aria-label="Previous hour"
+              disabled={settings.hour <= standard.hours[0]!}
+              onClick={() => stepHour(-1)}
+            >
+              <ChevronLeft size={14} strokeWidth={1.75} aria-hidden />
+            </button>
+            {standard.hours.map((hour) => (
+              <button
+                key={hour}
+                type="button"
+                className="solar-hour"
+                aria-pressed={settings.hour === hour && settings.minute === 0}
+                onClick={() => {
+                  fraction.current = hour * 60;
+                  patch({ hour, minute: 0 });
+                }}
+              >
+                {hour > 12 ? hour - 12 : hour}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="solar-step"
+              aria-label="Next hour"
+              disabled={settings.hour >= standard.hours[standard.hours.length - 1]!}
+              onClick={() => stepHour(1)}
+            >
+              <ChevronRight size={14} strokeWidth={1.75} aria-hidden />
+            </button>
+          </div>
+          <p className="field-note" aria-live="polite">
+            {standard.hours.includes(settings.hour) && settings.minute === 0
+              ? shadowStandardStepLabel(standardId, settings.year, standard.hours.indexOf(settings.hour))
+              : `${clock(minutes)} ${zone}`}
+          </p>
+          <p className="field-note">{standard.source}</p>
+        </div>
+      )}
     </div>
   );
 }

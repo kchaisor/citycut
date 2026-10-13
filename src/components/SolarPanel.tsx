@@ -1,14 +1,5 @@
-import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useId, useState } from "react";
-import {
-  SHADOW_STANDARDS,
-  SOLAR_PRESETS,
-  dayOfYear,
-  dateFromDayOfYear,
-  shadowStandardStepLabel,
-  type ShadowStandardId,
-  type SolarPresetId,
-} from "../lib/solar";
 import { getColour, type ColourKey } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
 import {
@@ -37,31 +28,15 @@ export function SolarPanel({
   sideM: number;
   /** When true, render inside the left drawer without the floating panel chrome. */
   embedded?: boolean;
-  /** MOCK: site lat/lon for the sun sweep. */
+  /** Site lat/lon for the sun sweep. */
   site?: { lat: number; lon: number };
 }) {
   const [open, setOpen] = useState(true);
-  const [standard, setStandard] = useState<{ id: ShadowStandardId; index: number } | null>(null);
   useColourRevision();
   const panelId = useId();
-  const doy = dayOfYear(settings.year, settings.month, settings.day);
-  const minutes = settings.hour * 60 + settings.minute;
 
   function patch(partial: Partial<SolarViewSettings>) {
     onChange({ ...settings, ...partial });
-  }
-
-  function applyPreset(id: SolarPresetId) {
-    const preset = SOLAR_PRESETS[id];
-    setStandard(null);
-    patch({ month: preset.month, day: preset.day, hour: preset.hour, minute: preset.minute });
-  }
-
-  function stepStandard(id: ShadowStandardId, index: number) {
-    const set = SHADOW_STANDARDS[id];
-    const clamped = Math.min(set.hours.length - 1, Math.max(0, index));
-    setStandard({ id, index: clamped });
-    patch({ month: set.month, day: set.day, hour: set.hours[clamped], minute: 0 });
   }
 
   return (
@@ -112,104 +87,6 @@ export function SolarPanel({
             </span>
           </label>
         )}
-        <label className="field">
-          <span className="kicker">Time (Melbourne)</span>
-          <input
-            type="range"
-            min={360}
-            max={1080}
-            step={15}
-            value={minutes}
-            onChange={(event) => {
-              const total = Number(event.target.value);
-              setStandard(null);
-              patch({ hour: Math.floor(total / 60), minute: total % 60 });
-            }}
-          />
-          <span className="field-note">
-            {String(settings.hour).padStart(2, "0")}:{String(settings.minute).padStart(2, "0")}
-          </span>
-        </label>
-        <label className="field">
-          <span className="kicker">Day of year ({settings.year})</span>
-          <input
-            type="range"
-            min={1}
-            max={365}
-            step={1}
-            value={doy}
-            onChange={(event) => {
-              const next = dateFromDayOfYear(settings.year, Number(event.target.value));
-              setStandard(null);
-              patch({ month: next.month, day: next.day });
-            }}
-          />
-          <span className="field-note">
-            {settings.year}-{String(settings.month).padStart(2, "0")}-{String(settings.day).padStart(2, "0")}
-          </span>
-        </label>
-        <div className="panel-toolbar">
-          {(Object.keys(SOLAR_PRESETS) as SolarPresetId[]).map((id) => (
-            <button key={id} type="button" onClick={() => applyPreset(id)}>
-              {SOLAR_PRESETS[id].label}
-            </button>
-          ))}
-        </div>
-        <div className="solar-standards">
-          <span className="kicker">Victorian shadow standards</span>
-          <div className="panel-toolbar">
-            {(Object.keys(SHADOW_STANDARDS) as ShadowStandardId[]).map((id) => (
-              <button
-                key={id}
-                type="button"
-                aria-pressed={standard?.id === id}
-                title={SHADOW_STANDARDS[id].source}
-                onClick={() => stepStandard(id, 0)}
-              >
-                {SHADOW_STANDARDS[id].label}
-              </button>
-            ))}
-          </div>
-          {standard && (
-            <div className="solar-stepper">
-              <div className="solar-stepper-row" role="group" aria-label="Hour in the shadow standard">
-                <button
-                  type="button"
-                  className="solar-step"
-                  aria-label="Previous hour"
-                  disabled={standard.index === 0}
-                  onClick={() => stepStandard(standard.id, standard.index - 1)}
-                >
-                  <ChevronLeft size={14} strokeWidth={1.75} aria-hidden />
-                </button>
-                {SHADOW_STANDARDS[standard.id].hours.map((hour, index) => (
-                  <button
-                    key={hour}
-                    type="button"
-                    className="solar-hour"
-                    aria-pressed={index === standard.index}
-                    onClick={() => stepStandard(standard.id, index)}
-                  >
-                    {hour > 12 ? hour - 12 : hour}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className="solar-step"
-                  aria-label="Next hour"
-                  disabled={standard.index === SHADOW_STANDARDS[standard.id].hours.length - 1}
-                  onClick={() => stepStandard(standard.id, standard.index + 1)}
-                >
-                  <ChevronRight size={14} strokeWidth={1.75} aria-hidden />
-                </button>
-              </div>
-              <p className="field-note" aria-live="polite">
-                {shadowStandardStepLabel(standard.id, settings.year, standard.index)}
-              </p>
-              <p className="field-note">{SHADOW_STANDARDS[standard.id].source}</p>
-            </div>
-          )}
-        </div>
         {settings.showPath && (
           <ul className="solar-legend" aria-label="Sun path legend">
             {SOLAR_LEGEND.map((entry) => (
