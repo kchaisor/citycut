@@ -1,93 +1,85 @@
 import { describe, expect, it } from "vitest";
-import { MGA_GRID_STEPS_M, mgaGridStep } from "./mgaGrid";
 import {
-  crossFeatures,
-  crossImage,
-  crossOpacityExpression,
-  crossRank,
-  crossRegion,
+  buildCache,
+  cacheCovers,
+  crossVertices,
+  finestVisibleStep,
+  levelOpacity,
+  lonLatToMercator,
   metresPerPixel,
-  MGA_GRID_FADE_ZOOM,
-  regionCovers,
-  zoomForStep,
+  MGA_GRID_FADE_FULL_PX,
+  MGA_GRID_FADE_START_PX,
+  translateMatrix,
 } from "./mgaGridLayer";
-import { projectLonLat } from "./crs";
+import { MGA_GRID_STEPS_M } from "./mgaGrid";
 
-// Evaluate the icon-opacity expression for one rank at one zoom (linear interpolate over match).
-function opacityAt(expression: unknown[], rank: number, zoom: number): number {
-  const stops: [number, number][] = [];
-  for (let i = 3; i < expression.length; i += 2) {
-    const match = expression[i + 1] as unknown[];
-    let value = match[match.length - 1] as number;
-    for (let k = 2; k < match.length - 1; k += 2) if (match[k] === rank) value = match[k + 1] as number;
-    stops.push([expression[i] as number, value]);
-  }
-  if (zoom <= stops[0]![0]) return stops[0]![1];
-  for (let i = 1; i < stops.length; i++) {
-    const [z1, v1] = stops[i]!;
-    const [z0, v0] = stops[i - 1]!;
-    if (zoom <= z1) return v0 + ((v1 - v0) * (zoom - z0)) / (z1 - z0);
-  }
-  return stops[stops.length - 1]![1];
-}
+const LAT = -37.81;
+const view = { west: 144.955, south: -37.818, east: 144.975, north: -37.806 };
 
-describe("native MGA cross layer", () => {
-  const lat = -37.985; // Dandenong
+describe("MGA cross levels", () => {
+  it("never leaves a zoom with zero fully visible crosses, from z10 to z22 in 0.01 steps", () => {
+    for (let z = 10; z <= 22; z += 0.01) {
+      const mpp = metresPerPixel(z, LAT);
+      const opaque = MGA_GRID_STEPS_M.filter((s) => levelOpacity(s, mpp) === 1);
+      if (MGA_GRID_STEPS_M[0]! / mpp >= MGA_GRID_FADE_FULL_PX) expect(opaque.length).toBeGreaterThan(0);
+      expect(MGA_GRID_STEPS_M.some((s) => levelOpacity(s, mpp) > 0)).toBe(true);
+    }
+  });
 
-  it("fades each level in from 0 where its step becomes readable, never popping", () => {
-    const expression = crossOpacityExpression(lat);
-    for (const step of MGA_GRID_STEPS_M.slice(0, -1)) {
-      const z0 = zoomForStep(step, lat);
-      expect(opacityAt(expression, step, z0 - 0.01)).toBe(0);
-      expect(opacityAt(expression, step, z0 + MGA_GRID_FADE_ZOOM / 2)).toBeCloseTo(0.5, 2);
-      expect(opacityAt(expression, step, z0 + MGA_GRID_FADE_ZOOM)).toBe(1);
-      // Small zoom changes only change opacity a little: no jump anywhere along the ramp.
-      for (let z = z0 - 0.2; z < z0 + 0.6; z += 0.01) {
-        expect(Math.abs(opacityAt(expression, step, z + 0.01) - opacityAt(expression, step, z))).toBeLessThan(0.03);
+  it("fades continuously: opacity changes by less than 0.05 per 0.01 zoom", () => {
+    for (const step of MGA_GRID_STEPS_M) {
+      let prev = levelOpacity(step, metresPerPixel(10, LAT));
+      for (let z = 10.01; z <= 22; z += 0.01) {
+        const next = levelOpacity(step, metresPerPixel(z, LAT));
+        expect(Math.abs(next - prev)).toBeLessThan(0.05);
+        prev = next;
       }
     }
   });
 
-  it("matches the readable step: the step chosen at a zoom is the finest level that has started", () => {
-    for (const zoom of [12, 13.5, 15, 16.2, 17.8, 19, 20.5]) {
-      const step = mgaGridStep(metresPerPixel(zoom, lat));
-      expect(zoomForStep(step, lat)).toBeLessThanOrEqual(zoom + 1e-9);
-    }
+  it("fades between the start and full gaps", () => {
+    expect(levelOpacity(100, 100 / (MGA_GRID_FADE_START_PX - 1))).toBe(0);
+    expect(levelOpacity(100, 100 / (MGA_GRID_FADE_FULL_PX + 1))).toBe(1);
+    const mid = levelOpacity(100, 100 / ((MGA_GRID_FADE_START_PX + MGA_GRID_FADE_FULL_PX) / 2));
+    expect(mid).toBeGreaterThan(0.2);
+    expect(mid).toBeLessThan(0.8);
   });
 
-  it("ranks a cross by the coarsest step it sits on", () => {
-    expect(crossRank(345000, 5795000, 10)).toBe(5000);
-    expect(crossRank(342000, 5795000, 10)).toBe(1000);
-    expect(crossRank(342500, 5795000, 10)).toBe(500);
-    expect(crossRank(342510, 5795000, 10)).toBe(10);
-    expect(crossRank(350000, 5800000, 100)).toBe(50000);
+  it("keeps 10 m as the finest step", () => {
+    expect(finestVisibleStep(metresPerPixel(24, LAT))).toBe(10);
+  });
+});
+
+describe("cross cache", () => {
+  it("covers the view and is reused while the view stays inside it", () => {
+    const cache = buildCache(view, 100);
+    expect(cacheCovers(cache, view, 100)).toBe(true);
+    expect(cacheCovers(cache, view, 50)).toBe(false);
+    expect(cacheCovers(null, view, 100)).toBe(false);
+    const total = [...cache.ranks.values()].reduce((n, a) => n + a.length / 2, 0);
+    expect(total).toBeGreaterThan(0);
+  });
+});
+
+describe("cross geometry", () => {
+  it("builds 3 non-overlapping quads per cross", () => {
+    const v = crossVertices([0.1, 0.2, 0.3, 0.4], 6);
+    expect(v.count).toBe(36);
+    expect(v.centres[0]).toBeCloseTo(0.1);
+    expect(Math.max(...v.offsets)).toBe(6);
   });
 
-  it("puts features exactly on whole-step MGA intersections, with no screen rounding", () => {
-    const bounds = { west: 145.214, south: -37.988, east: 145.224, north: -37.982 };
-    const region = crossRegion(bounds, 100);
-    const data = crossFeatures(region);
-    expect(data.features.length).toBeGreaterThan(20);
-    for (const f of data.features) {
-      const [e, n] = projectLonLat(f.geometry.coordinates[0]!, f.geometry.coordinates[1]!, 55);
-      expect(Math.abs(e - Math.round(e / 100) * 100)).toBeLessThan(0.01);
-      expect(Math.abs(n - Math.round(n / 100) * 100)).toBeLessThan(0.01);
-      expect(f.properties.rank % 100).toBe(0);
-    }
-    expect(regionCovers(region, bounds, 100)).toBe(true);
-    expect(regionCovers(region, bounds, 50)).toBe(false);
-    expect(regionCovers(region, { ...bounds, east: region.east + 0.001 }, 100)).toBe(false);
+  it("maps lon/lat to MapLibre mercator units", () => {
+    expect(lonLatToMercator(0, 0)).toEqual([0.5, 0.5]);
+    const [x, y] = lonLatToMercator(144.96, LAT);
+    expect(x).toBeCloseTo(0.9027, 3);
+    expect(y).toBeGreaterThan(0.5);
   });
 
-  it("draws a thin cross image with no halo", () => {
-    const img = crossImage(6, [26, 25, 22, 255], 1);
-    expect(img.width).toBe(13);
-    const alpha = (x: number, y: number) => img.data[(y * 13 + x) * 4 + 3];
-    expect(alpha(6, 0)).toBe(255);
-    expect(alpha(0, 6)).toBe(255);
-    expect(alpha(5, 0)).toBe(0);
-    expect(alpha(7, 3)).toBe(0);
-    const opaque = Array.from({ length: 169 }, (_, i) => img.data[i * 4 + 3]).filter((a) => a > 0).length;
-    expect(opaque).toBe(25);
+  it("translates the matrix in float64", () => {
+    const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    const m = translateMatrix(identity, 0.25, 0.75);
+    expect(m[12]).toBe(0.25);
+    expect(m[13]).toBe(0.75);
   });
 });
