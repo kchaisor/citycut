@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import { MapAttribution } from "./MapAttribution";
+import { MgaGridOverlay } from "./MgaGridOverlay";
 import { applyBasemapStyleToMap, loadBasemapStyle } from "../lib/loadMapStyle";
 import { M_PER_DEG_LAT, mPerDegLon, squareBBox } from "../lib/geo";
 import { cutFrameLabelKm } from "../lib/placeLabel";
@@ -262,13 +263,33 @@ export function MapStage({
     };
   }, [fly, ready]);
 
+  // Floating mock: the landing map runs under the controls on desktop. Pad the camera by the
+  // controls' width so the same centre sits in the same place on screen as before.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || typeof map.setPadding !== "function") return;
+    const chrome = document.querySelector<HTMLElement>(".select-chrome");
+    if (!chrome) return;
+    const apply = () => {
+      const desktop = window.matchMedia("(min-width: 641px)").matches;
+      const inset = parseFloat(getComputedStyle(chrome).paddingLeft) || 0;
+      map.setPadding({ left: desktop ? chrome.getBoundingClientRect().width - inset : 0, top: 0, right: 0, bottom: 0 });
+    };
+    apply();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(apply);
+    observer?.observe(chrome);
+    return () => observer?.disconnect();
+  }, [ready]);
+
   const sideKm = sideM / 1000;
   const label = cutFrameLabelKm(sideKm, frameShape);
   const circleFrame = frameShape === "circle";
 
   return (
     <div className={loading ? "map-wrap is-loading" : "map-wrap"}>
-      <div ref={containerRef} className="map-canvas" />
+      <div ref={containerRef} className={basemap === "satellite" ? "map-canvas" : "map-canvas map-canvas-muted"} />
+      {basemap !== "satellite" && <div className="map-tint" aria-hidden="true" />}
+      {ready && <MgaGridOverlay map={mapRef.current} />}
       <MapAttribution basemap={basemap} />
       {frame && frame.width > 8 && (
         <>

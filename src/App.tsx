@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { MapStage, type FlyRequest } from "./components/MapStage";
 import { SelectChrome } from "./components/SelectChrome";
-import { TopBar } from "./components/TopBar";
 import { useSidebarCollapsed } from "./lib/sidebarCollapse";
 import { viewportIsNarrow } from "./lib/panelCollapse";
 import {
@@ -771,13 +770,6 @@ export default function App() {
 
   return (
     <div className="app">
-      <TopBar
-        showNewCut={phase === "model"}
-        place={headerPlace}
-        size={headerSize}
-        onHome={onHome}
-        onNewCut={() => setPhase("select")}
-      />
       {phase === "select" ? (
         <div className={selectCollapsed ? "select sidebar-collapsed" : "select"}>
           <MapStage
@@ -808,11 +800,12 @@ export default function App() {
             basemap={basemap}
             onBasemap={onBasemap}
             center={cutCenter}
+            onHome={onHome}
           />
         </div>
       ) : model ? (
         <Suspense fallback={<p className="opening">Opening the model…</p>}>
-          <ModelPage model={model} />
+          <ModelPage model={model} onHome={onHome} onNewCut={() => setPhase("select")} />
         </Suspense>
       ) : null}
     </div>

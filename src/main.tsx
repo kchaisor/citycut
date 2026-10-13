@@ -10,6 +10,7 @@ import "@fontsource/fraunces/500.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { AppRoot } from "./AppRoot";
 import "./index.css";
+import "./floating.css";
 import { hydrateStoredColours } from "./lib/colours";
 import { hydrateStoredLineStyles } from "./lib/drawingStyle";
 import { installPreloadErrorGuard } from "./lib/preloadErrorGuard";

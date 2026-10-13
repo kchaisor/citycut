@@ -1,0 +1,226 @@
+/*
+  Floating UI mock (style only): controls float over the canvas with no solid sidebar.
+  Tokens are hex. Accent stays #FFF500 with dark ink.
+*/
+:root {
+  --float-grad-top: #F3F3F4;
+  --float-grad-bottom: #CFD1D5;
+  --float-ink: #1A1916;
+  --float-label: #8E9096;
+  --float-line: #1A1916;
+  --float-tile-line: #9A9CA1;
+  --float-hover: #FFFFFF;
+  /* Readability over the map comes from type only: a soft white halo. */
+  --float-halo: 0 0 1px #FFFFFF, 0 0 1px #FFFFFF, 0 0 3px #FFFFFF, 0 0 5px #FFFFFF, 0 0 7px #FFFFFFCC;
+  --float-label-on-map: #4A4C52;
+  --grid-cross: #1A1916;
+  /* Half the cross width: 6 px arms make a 12 px cross. */
+  --grid-cross-arm: 6px;
+
+  --sidebar-bg: transparent;
+  --sidebar-hairline: transparent;
+  --sidebar-hover: #FFFFFF99;
+  --model-bg: #DCDDE0;
+  /* v3: one vertical grey gradient for the landing map tint and the 3D sky. */
+  --model-grad-top: #F2F2F3;
+  --model-grad-bottom: #B9BDC4;
+  --map-tint-top: #FFFFFF;
+  --map-tint-bottom: #C3C8D0;
+  --model-grid-line: #FFFFFF;
+  --drawing-bg: #E6E7E9;
+}
+
+.app { background: linear-gradient(180deg, var(--float-grad-top) 0%, var(--float-grad-bottom) 100%); }
+.model .viewport { background: linear-gradient(180deg, var(--model-grad-top) 0%, var(--model-grad-bottom) 100%); }
+/* Model sidebar: same type-only treatment as the landing, over the gradient and 3D. */
+@media (min-width: 641px) {
+  .model .sidebar { text-shadow: 0 0 2px #FFFFFF, 0 0 4px #FFFFFFB3; }
+  .model .rail-btn.is-active, .model .sidebar-primary, .model .segmented button[aria-pressed="true"] { text-shadow: none; }
+}
+
+/* v3 landing map: muted greyscale streets under a screen-space vertical grey gradient.
+   The tint multiplies, so white streets take the gradient and labels stay dark; it never
+   takes pointer events. Satellite is untouched. */
+.map-canvas-muted { filter: grayscale(1) contrast(1.04); }
+.map-tint {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(180deg, var(--map-tint-top) 0%, var(--map-tint-bottom) 100%);
+  mix-blend-mode: multiply;
+}
+
+/* No solid panel: brand bar, rail and panel are transparent and borderless. */
+.sidebar-brand-bar,
+.sidebar-rail.icon-rail,
+.sidebar-panel { background: transparent; border: 0; }
+.sidebar-brand:hover, .sidebar-new-cut:hover { background: var(--sidebar-hover); border-radius: 999px; }
+
+/* Landing (desktop): the map runs under the controls, which float directly on it with no
+   backdrop. The map camera keeps the cut frame where it was via map padding. Readability comes
+   from type only: a soft white halo and slightly heavier ink. */
+@media (min-width: 641px) {
+  .select > .map-wrap { left: 0; }
+  .select .select-chrome { padding: 12px 0 12px 12px; box-sizing: border-box; }
+  .select .sidebar {
+    color: var(--float-ink);
+    font-weight: 560;
+    text-shadow: var(--float-halo);
+  }
+  .select .sidebar-head h2,
+  .select .sidebar-group > h3.sidebar-gh,
+  .select .field-head label,
+  .select .kicker,
+  .select .sidebar-sub,
+  .select .sidebar-coord,
+  .select .field-note,
+  .select .hint,
+  .select .sidebar-status { color: var(--float-label-on-map); font-weight: 500; }
+  .select .sidebar-place { font-weight: 650; }
+  .select .search input { text-shadow: var(--float-halo); color: var(--float-ink); }
+  .select .search input::placeholder { color: var(--float-label-on-map); }
+  .select .rail-btn svg { stroke-width: 1.5; filter: drop-shadow(0 0 1.5px #FFFFFF) drop-shadow(0 0 1.5px #FFFFFF); }
+  /* Filled pills keep their own fill; no halo on them. */
+  .select .rail-btn.is-active svg, .select .shape-btn.on, .select .sidebar-primary { filter: none; text-shadow: none; }
+}
+@media (max-width: 640px) {
+  .select .select-chrome, .model .sidebar-host {
+    background: linear-gradient(180deg, var(--float-grad-top) 0%, var(--float-grad-bottom) 100%);
+  }
+}
+
+/* Thin line icons, plain items. */
+.sidebar .rail-btn { color: var(--float-ink); border-radius: 999px; }
+.sidebar .rail-btn svg { stroke-width: 1.25; }
+.sidebar .rail-btn:hover { background: var(--sidebar-hover); }
+/* Selected item: solid accent pill with dark ink, no outline. */
+.sidebar .rail-btn.is-active { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
+
+/* Small light-grey section labels. */
+.sidebar-head h2,
+.sidebar-group > h3.sidebar-gh,
+.sidebar-gh h3,
+.field-head label, .kicker {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--float-label);
+}
+.sidebar-hero, .sidebar-group, .sidebar-foot { border-color: transparent; }
+.sidebar-body { padding-top: 4px; }
+
+/* Thin 1px outline square tiles; selected = accent pill. */
+.shape-btn,
+.sidebar .segmented button,
+.sidebar .plan-switch button,
+.sidebar .tabs button,
+.sidebar .panel-toolbar button {
+  border: 1px solid var(--float-tile-line);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--float-ink);
+  box-shadow: none;
+}
+.sidebar .tabs { background: transparent; padding: 0; gap: 6px; }
+.shape-btn.on,
+.sidebar .segmented button[aria-pressed="true"],
+.sidebar .plan-switch button[aria-pressed="true"],
+.sidebar .tabs button.active,
+.sidebar .tabs button[aria-selected="true"],
+.sidebar .solar-hour[aria-pressed="true"],
+.sidebar .panel-toolbar button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+  border-radius: 999px;
+  box-shadow: none;
+}
+
+/* Inputs: a hairline under the text instead of a box. */
+.search input,
+.sidebar select {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--float-tile-line);
+  border-radius: 0;
+}
+
+/* Thin slider lines. */
+input[type="range"]::-webkit-slider-runnable-track { height: 1px; background: var(--float-line); }
+input[type="range"]::-moz-range-track { height: 1px; background: var(--float-line); }
+input[type="range"]::-webkit-slider-thumb { width: 18px; height: 3px; margin-top: -1px; border-radius: 0; border: 0; box-shadow: none; background: var(--float-ink); }
+input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius: 0; border: 0; background: var(--float-ink); }
+
+/* Primary action (Create model / Export model): ink pill. */
+.sidebar-primary { border-radius: 999px; background: var(--float-ink); color: #FFFFFF; }
+
+/* Landing map grid canvas: above the map tiles, under the frame and controls, never interactive. */
+.map-grid { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+
+/* v4: one continuous background. The 3D canvas runs under the controls (ViewInset); the
+   drawing and satellite panes stay in the visible area and let the viewport gradient show. */
+@media (min-width: 641px) {
+  .model .viewport > .fill { overflow: visible; }
+  .model .viewport .scene-viewport { overflow: visible; }
+}
+@media (min-width: 641px) {
+  /* Drawing panes keep their framing in the visible area; the viewport gradient shows through. */
+  .model .viewport .plan,
+  .model .viewport .plan.figure-ground,
+  .model .viewport .plan.exploded-axo { background: transparent; }
+}
+@media (min-width: 641px) {
+  /* The view-wide paper rect of a drawing; the frame-sized paper inside it stays. */
+  .model .viewport .plan > rect:first-of-type { fill: transparent; }
+}
+
+/* PR tweaks (Kelvin): all UI text pure black; no track behind segmented groups; bigger brand. */
+.sidebar-host, .select-chrome {
+  --text: #000000;
+  --muted-text: #000000;
+  --float-ink: #000000;
+  --float-label: #000000;
+  --float-label-on-map: #000000;
+  --sidebar-icon: #000000;
+  color: #000000;
+}
+.sidebar .segmented, .sidebar .plan-switch, .sidebar .tabs {
+  background: transparent;
+  padding: 0;
+  gap: 6px;
+  box-shadow: none;
+}
+.sidebar-brand { font-size: calc(var(--font-size-brand) * 1.22); }
+.sidebar-brand-mark svg { transform: scale(1.22); }
+
+/* #103 Hide buildings and #104 Import tab in the floating style: thin tiles, accent pills,
+   hairline inputs, no boxes. */
+.sidebar .massing-mode { gap: 6px; }
+.sidebar .massing-mode button,
+.sidebar .hide-buildings-block button,
+.sidebar .hidden-buildings-list button {
+  border: 1px solid var(--float-tile-line);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--float-ink);
+  box-shadow: none;
+}
+.sidebar .massing-mode button[aria-pressed="true"],
+.sidebar .hide-buildings-block .is-accent {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+  border-radius: 999px;
+}
+.sidebar .massing-item,
+.sidebar .hide-buildings-block { border-top: 1px solid var(--float-tile-line); }
+.sidebar .massing-field input {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--float-tile-line);
+  border-radius: 0;
+  color: #000000;
+}
+.sidebar .massing-warning { background: transparent; }

@@ -25,7 +25,7 @@ describe("building detail panel camera unchanged", () => {
   it("renders the building detail panel as a fixed right dock", () => {
     const css = readFileSync(`${srcRoot}/index.css`, "utf8");
     expect(css).toContain(".building-detail-panel");
-    expect(css).toMatch(/\.building-detail-panel[\s\S]*top:\s*56px/);
+    expect(css).toMatch(/\.building-detail-panel[\s\S]*top:\s*0;/);
     expect(css).toMatch(/width:\s*340px/);
   });
 });

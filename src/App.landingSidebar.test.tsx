@@ -128,6 +128,7 @@ describe("landing sidebar", () => {
         basemap="map"
         onBasemap={() => undefined}
         center={{ lat: -37.8127, lon: 144.98061 }}
+        onHome={() => undefined}
       />,
     );
     const foot = container.querySelector(".sidebar-foot")!;

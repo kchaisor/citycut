@@ -45,7 +45,7 @@
   /* Size of ordinary text. */
   --font-size: 15px;
 
-  /* Size of the CityCut name in the top bar. */
+  /* Size of the CityCut name in the sidebar brand bar. */
   --font-size-brand: 18px;
 
   /* Size of a drawer title, such as “Exports” or “Drawing”. */
