@@ -11,7 +11,7 @@ export function MgaGridOverlay({ map }: { map: maplibregl.Map | null }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!map || !canvas || typeof map.getBounds !== "function" || typeof map.project !== "function") return;
+    if (!map || !canvas || typeof map.getBounds !== "function" || typeof map.project !== "function" || typeof map.getContainer !== "function") return;
     let frame = 0;
     const draw = () => {
       frame = 0;
