@@ -124,6 +124,8 @@ import {
   type HiddenBuildingStore,
 } from "../lib/hiddenBuildings";
 import { ColoursEditor } from "./Colours";
+import { ImportMassingPanel } from "./ImportMassingPanel";
+import { useImportedMassing } from "./useImportedMassing";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
 import { DrawingExplodedAxo } from "./DrawingExplodedAxo";
@@ -458,6 +460,8 @@ export function ModelPage({ model }: { model: CityModel }) {
   const [heightPick, setHeightPick] = useState<{ buildingId: number; clientX: number; clientY: number } | null>(
     null,
   );
+
+  const massing = useImportedMassing(model);
 
   const qaSummaryRef = useRef({ treeCrowns: 0, buildingCount: 0, roadCount: 0, triangleCount: 0 });
   const qaDisplayBuildingsRef = useRef(model.buildings);
@@ -999,6 +1003,7 @@ export function ModelPage({ model }: { model: CityModel }) {
             ? { table: windTable, period: windSettings.period }
             : null,
         hideTrees: view3dDisplay.hideTrees,
+        importedMassing: massing.forExport.length ? massing.forExport : null,
       });
     } catch {
       setExportError("The Rhino file could not be written.");
@@ -1217,6 +1222,8 @@ export function ModelPage({ model }: { model: CityModel }) {
                 heightEditBuildingId={heightPick?.buildingId ?? null}
                 cameraMemory={cameraMemory}
                 display={view3dDisplay}
+                importedMassing={massing.group}
+                onScenePoint={massing.onScenePoint}
               />
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
@@ -1573,6 +1580,21 @@ export function ModelPage({ model }: { model: CityModel }) {
                 </section>
                 <section className="sidebar-group">
                   <h3 className="sidebar-gh">Manual heights</h3>
+                  <ImportMassingPanel
+                    imported={massing.imported}
+                    warnings={massing.warnings}
+                    crsName={crs.name}
+                    placingId={massing.placingId}
+                    busy={massing.busy}
+                    error={massing.error}
+                    onImport={(file) => void massing.importFile(file)}
+                    onMode={massing.setMode}
+                    onPlacement={massing.setPlacement}
+                    onSnap={massing.snapToGround}
+                    onResetMga={massing.resetToMga}
+                    onToggleVisible={massing.toggleVisible}
+                    onRemove={massing.remove}
+                  />
                   <HiddenBuildingsPanel
                     hidden={[...hiddenMatch.values()]}
                     onShow={(entry) => persistHidden(showHiddenEntry(hiddenStore, entry))}

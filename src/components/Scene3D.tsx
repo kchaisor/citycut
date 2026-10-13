@@ -14,7 +14,7 @@ import * as THREE from "three";
 import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
-import { attachBuildingPick } from "../lib/buildingPick";
+import { attachScenePointPick, attachBuildingPick } from "../lib/buildingPick";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { auditBuildingSelection, mountSelectedBuildingVisual } from "../lib/buildingSelectionVisual";
 import { CAMERA_FIT_INCLUDES_HELIODON } from "../lib/sceneCameraFit";
@@ -163,6 +163,18 @@ function BuildingPickLayer({
     if (!enabled) return;
     return attachBuildingPick(gl.domElement, camera, root, { onBuildingPick, onClearPick });
   }, [camera, enabled, gl.domElement, onBuildingPick, onClearPick, root]);
+  return null;
+}
+
+function ScenePointLayer({ onScenePoint }: { onScenePoint: (east: number, north: number, up: number) => void }) {
+  const camera = useThree((state) => state.camera);
+  const gl = useThree((state) => state.gl);
+  const scene = useThree((state) => state.scene);
+  useLayoutEffect(
+    () =>
+      attachScenePointPick(gl.domElement, camera, scene, (point) => onScenePoint(point.x, -point.z, point.y)),
+    [camera, gl.domElement, scene, onScenePoint],
+  );
   return null;
 }
 
@@ -1205,6 +1217,8 @@ export function Scene3D({
   heightEditBuildingId,
   cameraMemory,
   display,
+  importedMassing = null,
+  onScenePoint = null,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -1226,6 +1240,10 @@ export function Scene3D({
   /** Survives the 3D tab unmounting; see CameraMemory. Omit to always frame afresh. */
   cameraMemory?: CameraMemoryRef;
   display: View3dDisplaySettings;
+  /** Imported massing, already in the local frame. Never measured for camera framing. */
+  importedMassing?: THREE.Object3D | null;
+  /** Click-to-place: while set, a click reports the scene point (east, north, up) instead of picking a building. */
+  onScenePoint?: ((east: number, north: number, up: number) => void) | null;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
@@ -1314,10 +1332,12 @@ export function Scene3D({
         onBounds={onBounds}
         onBuildingPick={onBuildingPick}
         onClearBuildingPick={onClearBuildingPick}
-        pickBuildings={model.layers.buildings}
+        pickBuildings={model.layers.buildings && !onScenePoint}
         heightEditBuildingId={heightEditBuildingId}
         display={display}
       />
+      {importedMassing ? <primitive object={importedMassing} /> : null}
+      {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
       <SolarHeliodon
         lat={model.center.lat}
         lon={model.center.lon}

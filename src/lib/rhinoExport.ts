@@ -21,6 +21,7 @@ import { treesVisibleIn3d } from "./view3dDisplay";
 import { clipTransportLines } from "./dashedTransportLines";
 import { SURFACE } from "./surfaceLayers";
 import { sampleTerrain } from "./terrain";
+import { placedMga, type ImportedMassing } from "./massingImport";
 import type { CityModel, Pt } from "../types";
 
 type Rgb = { r: number; g: number; b: number };
@@ -682,7 +683,47 @@ export type CityModelTo3dmOptions = {
   wind?: { table: WindRoseTable; period: WindPeriodId } | null;
   /** "Hide trees" from the 3D display modes (#87). Trees are left out, as in the 3D view. */
   hideTrees?: boolean;
+  /** Imported massing models (#massing), written in MGA on their own layer. */
+  importedMassing?: ImportedMassingExport[] | null;
 };
+
+export type ImportedMassingExport = Pick<ImportedMassing, "name" | "positions" | "indices" | "placement">;
+
+export const IMPORTED_MASSING_LAYER = "Imported massing";
+
+/** Imported models straight from their placement to MGA, so an MGA-placed model round-trips exactly. */
+function addImportedMassing(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  imported: ImportedMassingExport[],
+) {
+  for (const massing of imported) {
+    const count = massing.positions.length / 3;
+    if (count < 3 || massing.indices.length < 3) continue;
+    const mesh = new rhino.Mesh();
+    const vertices = mesh.vertices();
+    vertices.useDoublePrecisionVertices = true;
+    for (let i = 0; i < count; i++) {
+      const [e, n, z] = placedMga(massing, massing.placement, i);
+      (vertices as unknown as { addPoint3d(x: number, y: number, z: number): number }).addPoint3d(e, n, z);
+    }
+    const faces = mesh.faces();
+    for (let i = 0; i + 2 < massing.indices.length; i += 3) {
+      faces.addTriFace(massing.indices[i]!, massing.indices[i + 1]!, massing.indices[i + 2]!);
+    }
+    mesh.normals().computeNormals();
+    const layerIndex = ensureLayer(rhino, doc, layers, materials, IMPORTED_MASSING_LAYER, { r: 255, g: 245, b: 0 });
+    const attributes = new rhino.ObjectAttributes();
+    attributes.name = massing.name;
+    attributes.layerIndex = layerIndex;
+    applyByLayerAttributes(rhino, attributes);
+    doc.objects().addMesh(mesh, attributes);
+    release(mesh);
+    release(attributes);
+  }
+}
 
 function normalize3dmOptions(
   options?: HeliodonGroundExportOptions | CityModelTo3dmOptions | null,
@@ -694,7 +735,8 @@ function normalize3dmOptions(
     "shadows" in options ||
     "uniformBuildings" in options ||
     "wind" in options ||
-    "hideTrees" in options
+    "hideTrees" in options ||
+    "importedMassing" in options
   ) {
     return options;
   }
@@ -707,7 +749,7 @@ export async function cityModelTo3dm(
   options?: HeliodonGroundExportOptions | CityModelTo3dmOptions | null,
 ): Promise<Uint8Array> {
   model = stableExportModel(model);
-  const { heliodon, shadows, castShadows, uniformBuildings, colourBySource, wind, hideTrees } =
+  const { heliodon, shadows, castShadows, uniformBuildings, colourBySource, wind, hideTrees, importedMassing } =
     normalize3dmOptions(options);
   // One rule for the 3D view, PNG, 3D-view .ai and .3dm: trees only when the layer is on and Hide trees is off.
   if (!treesVisibleIn3d(model.layers, { hideTrees: Boolean(hideTrees) })) {
@@ -773,6 +815,7 @@ export async function cityModelTo3dm(
     if (heliodon) addHeliodonPlan(rhino, doc, layers, materials, model, crs.zone, heliodon);
     if (shadows) addPlanShadows(rhino, doc, layers, materials, model, crs.zone, shadows, Boolean(castShadows));
     if (wind?.table) addWindRose(rhino, doc, layers, materials, model, crs.zone, wind.table, wind.period);
+    if (importedMassing?.length) addImportedMassing(rhino, doc, layers, materials, importedMassing);
 
     return doc.toByteArray();
   } finally {

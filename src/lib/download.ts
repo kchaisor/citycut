@@ -65,6 +65,7 @@ export type RhinoDownloadOptions = {
   colourBySource?: boolean;
   wind?: { table: import("./windRose").WindRoseTable; period: import("./windRose").WindPeriodId } | null;
   hideTrees?: boolean;
+  importedMassing?: import("./rhinoExport").ImportedMassingExport[] | null;
 };
 
 export async function download3dm(
