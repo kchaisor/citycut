@@ -159,3 +159,20 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 
 /* Landing map grid canvas: above the map tiles, under the frame and controls, never interactive. */
 .map-grid { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+
+/* v4: one continuous background. The 3D canvas runs under the controls (ViewInset); the
+   drawing and satellite panes stay in the visible area and let the viewport gradient show. */
+@media (min-width: 641px) {
+  .model .viewport > .fill { overflow: visible; }
+  .model .viewport .scene-viewport { overflow: visible; }
+}
+@media (min-width: 641px) {
+  /* Drawing panes keep their framing in the visible area; the viewport gradient shows through. */
+  .model .viewport .plan,
+  .model .viewport .plan.figure-ground,
+  .model .viewport .plan.exploded-axo { background: transparent; }
+}
+@media (min-width: 641px) {
+  /* The view-wide paper rect of a drawing; the frame-sized paper inside it stays. */
+  .model .viewport .plan > rect:first-of-type { fill: transparent; }
+}

@@ -23,7 +23,7 @@ import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import { captureViewPng } from "../lib/capturePng";
-import { GradientSky, GroundGrid } from "./SceneBackdrop";
+import { GradientSky, GroundGrid, ViewInset, insetPointerEvents } from "./SceneBackdrop";
 import { cameraForExportFrame, exportFrameSize } from "../lib/exportFrame";
 import { flushControlInertia, holdControlPose, type HeldControl } from "../lib/controlInertia";
 import { shouldSkipViewportSizeRefit } from "../lib/viewportAutoFit";
@@ -1289,12 +1289,15 @@ export function Scene3D({
           preserveDrawingBuffer: qaModeFromSearch(window.location.search),
         }}
         shadows={solar.castShadows}
+        style={{ overflow: "visible" }}
+        events={insetPointerEvents}
       >
+        <ViewInset />
         <WebGlContextWatch onContextLost={onGlContextLost} onContextRestored={onGlContextRestored} />
         <RendererShadows enabled={solar.castShadows} />
       <SunStudyToneMapping noToneMapping={noToneMapping} />
       <GradientSky colourTick={colourTick} fallback={modelBg} />
-      <GroundGrid sideM={model.sideM} groundY={groundY} colourTick={colourTick} />
+      {projection !== "plan" && <GroundGrid sideM={model.sideM} groundY={groundY} colourTick={colourTick} />}
       <hemisphereLight args={[sky, groundLight, fillHemi]} />
       <ambientLight intensity={fillAmbient} />
       <directionalLight position={[model.sideM * 0.4, model.sideM, model.sideM * 0.2]} intensity={fillKeyLight} />

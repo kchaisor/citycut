@@ -24,6 +24,9 @@ export function exportFrameSize(canvas: HTMLElement): ExportFrame {
 export function cameraForExportFrame<T extends THREE.Camera>(camera: T, width: number, height: number): T {
   if (!(width >= 2) || !(height >= 2)) throw new Error("The 3D view is not on screen.");
   const copy = camera.clone() as T;
+  // The on-screen view offset (floating sidebar inset) never goes into an export.
+  const withView = copy as unknown as { view?: { enabled: boolean } | null; clearViewOffset?: () => void };
+  if (withView.view?.enabled) withView.clearViewOffset?.();
   const persp = copy as unknown as THREE.PerspectiveCamera;
   const ortho = copy as unknown as THREE.OrthographicCamera;
   if (persp.isPerspectiveCamera) {

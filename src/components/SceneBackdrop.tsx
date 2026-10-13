@@ -1,5 +1,6 @@
-import { useEffect, useMemo } from "react";
-import { useThree } from "@react-three/fiber";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { events as createPointerEvents, useFrame, useThree } from "@react-three/fiber";
+import type { EventManager, RootState } from "@react-three/fiber";
 import * as THREE from "three";
 import { themeColor } from "../lib/themeColor";
 import { markScreenOnly } from "../lib/screenOnly";
@@ -94,4 +95,56 @@ export function GroundGrid({ sideM, groundY, colourTick }: { sideM: number; grou
   }, [object]);
   // Half a metre below the lowest ground of the cut: under the terrain drape and site base.
   return <primitive object={object} position={[0, groundY - 0.5, 0]} />;
+}
+
+/**
+ * Floating mock: the canvas runs full width under the floating sidebar. R3F still sizes and
+ * frames against the visible area right of the controls (the .fill box), so every fit, zoom
+ * and camera position/target is exactly what it was. The drawing buffer is widened to the
+ * left by the sidebar width and the camera gets a projection view offset of the same amount,
+ * which adds the extra strip without moving or rescaling anything.
+ */
+export function ViewInset() {
+  const gl = useThree((state) => state.gl);
+  const size = useThree((state) => state.size);
+  const invalidate = useThree((state) => state.invalidate);
+  const inset = useRef(0);
+  useLayoutEffect(() => {
+    const canvas = gl.domElement;
+    const fill = canvas.closest(".fill");
+    const viewport = canvas.closest(".viewport");
+    const left = fill && viewport ? fill.getBoundingClientRect().left - viewport.getBoundingClientRect().left : 0;
+    const p = Math.max(0, Math.round(left));
+    inset.current = p;
+    gl.setSize(size.width + p, size.height, true);
+    canvas.style.marginLeft = p ? `${-p}px` : "";
+    invalidate();
+  }, [gl, size.width, size.height, invalidate]);
+  useFrame(({ camera, size: s }) => {
+    const p = inset.current;
+    const cam = camera as THREE.PerspectiveCamera | THREE.OrthographicCamera;
+    const v = cam.view;
+    if (!p) {
+      if (v?.enabled) cam.clearViewOffset();
+      return;
+    }
+    if (v?.enabled && v.fullWidth === s.width && v.fullHeight === s.height && v.offsetX === -p && v.width === s.width + p) return;
+    cam.setViewOffset(s.width, s.height, -p, 0, s.width + p, s.height);
+  });
+  return null;
+}
+
+/** Pointer events against the full-width canvas, so raycasts match the offset projection. */
+export function insetPointerEvents(store: Parameters<typeof createPointerEvents>[0]): EventManager<HTMLElement> {
+  const base = createPointerEvents(store);
+  return {
+    ...base,
+    compute(event: { offsetX: number; offsetY: number }, state: RootState) {
+      const canvas = state.gl.domElement;
+      const w = canvas.clientWidth || state.size.width;
+      const h = canvas.clientHeight || state.size.height;
+      state.pointer.set((event.offsetX / w) * 2 - 1, -(event.offsetY / h) * 2 + 1);
+      state.raycaster.setFromCamera(state.pointer, state.camera);
+    },
+  };
 }
