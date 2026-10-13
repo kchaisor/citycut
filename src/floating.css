@@ -14,8 +14,8 @@
   --float-halo: 0 0 1px #FFFFFF, 0 0 1px #FFFFFF, 0 0 3px #FFFFFF, 0 0 5px #FFFFFF, 0 0 7px #FFFFFFCC;
   --float-label-on-map: #4A4C52;
   --grid-cross: #1A1916;
-  /* Half the cross width: 6 px arms make a 12 px cross. */
-  --grid-cross-arm: 6px;
+  --grid-cross-opacity: 0.7; /* fully faded-in crosses; levels fade from 0 up to this */
+  --grid-cross-arm: 4.2px; /* half the cross width: 4.2 px arms make an 8.4 px cross */
 
   --sidebar-bg: transparent;
   --sidebar-hairline: transparent;
@@ -250,3 +250,10 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
   --muted-text: #000000;
 }
 .building-detail-panel header { border-bottom-color: var(--panel-3d-line); }
+
+/* Phone landing: the map runs under the bottom sheet too, so the cut frame centres on the
+   whole window (Kelvin, PR 112); attribution stays visible above the sheet. */
+@media (max-width: 640px) {
+  .select > .map-wrap { bottom: 0; }
+  .select > .map-wrap .map-attribution { bottom: var(--sidebar-h); }
+}

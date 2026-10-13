@@ -263,23 +263,9 @@ export function MapStage({
     };
   }, [fly, ready]);
 
-  // Floating mock: the landing map runs under the controls on desktop. Pad the camera by the
-  // controls' width so the same centre sits in the same place on screen as before.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !ready || typeof map.setPadding !== "function") return;
-    const chrome = document.querySelector<HTMLElement>(".select-chrome");
-    if (!chrome) return;
-    const apply = () => {
-      const desktop = window.matchMedia("(min-width: 641px)").matches;
-      const inset = parseFloat(getComputedStyle(chrome).paddingLeft) || 0;
-      map.setPadding({ left: desktop ? chrome.getBoundingClientRect().width - inset : 0, top: 0, right: 0, bottom: 0 });
-    };
-    apply();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(apply);
-    observer?.observe(chrome);
-    return () => observer?.disconnect();
-  }, [ready]);
+  // The landing map fills the whole window under the floating controls (left column on desktop,
+  // bottom sheet on a phone) and is NOT padded for them: the cut frame sits on the middle of
+  // the window (Kelvin, PR 112). Only load and a search pick the centre; toggles never move it.
 
   const sideKm = sideM / 1000;
   const label = cutFrameLabelKm(sideKm, frameShape);

@@ -49,7 +49,8 @@ function crossLayer(map: maplibregl.Map, container: HTMLElement): maplibregl.Cus
   let cache: GridCache | null = null;
   let origin: [number, number] = [0, 0];
   let ink: [number, number, number] = [0, 0, 0];
-  let arm = 6;
+  let arm = 4.2;
+  let inkAlpha = 0.7;
   const loc = { centre: -1, offset: -1, matrix: null as WebGLUniformLocation | null, viewport: null as WebGLUniformLocation | null, ink: null as WebGLUniformLocation | null, opacity: null as WebGLUniformLocation | null };
 
   const freeBuffers = (gl: WebGLRenderingContext) => {
@@ -92,7 +93,9 @@ function crossLayer(map: maplibregl.Map, container: HTMLElement): maplibregl.Cus
     renderingMode: "2d",
     onAdd(_map, gl) {
       const style = getComputedStyle(container);
-      arm = Number.parseFloat(style.getPropertyValue("--grid-cross-arm")) || 6;
+      arm = Number.parseFloat(style.getPropertyValue("--grid-cross-arm")) || 4.2;
+      const alpha = Number.parseFloat(style.getPropertyValue("--grid-cross-opacity"));
+      inkAlpha = Number.isFinite(alpha) ? Math.min(1, Math.max(0, alpha)) : 0.7;
       ink = inkRgb(container);
       const compile = (type: number, source: string) => {
         const shader = gl.createShader(type)!;
@@ -137,7 +140,7 @@ function crossLayer(map: maplibregl.Map, container: HTMLElement): maplibregl.Cus
       gl.disable(gl.DEPTH_TEST);
       gl.disable(gl.STENCIL_TEST);
       for (const buffer of buffers) {
-        const opacity = levelOpacity(buffer.rank, mpp);
+        const opacity = levelOpacity(buffer.rank, mpp) * inkAlpha;
         if (opacity < 0.004) continue;
         gl.uniform1f(loc.opacity, opacity);
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer.centres);
