@@ -65,7 +65,7 @@ Each gradient runs top → bottom. Edit the two hexes of a pair.
 | Landing map tint (multiplied over greyscale streets) | `src/floating.css` · L27–L28 | `--map-tint-top: #FFFFFF` / `--map-tint-bottom: #C3C8D0` | [L27](https://github.com/kchaisor/citycut/blob/c97d02f8468c5bf8ee5dd82fca83c8c950c95340/src/floating.css#L27) |
 | Phone sidebar background | `src/floating.css` · L89 | reuses `--float-grad-top` / `--float-grad-bottom` | [L89](https://github.com/kchaisor/citycut/blob/c97d02f8468c5bf8ee5dd82fca83c8c950c95340/src/floating.css#L89) |
 
-The sidebar itself has **no fill** on desktop: `--sidebar-bg: transparent` ([L20](https://github.com/kchaisor/citycut/blob/c97d02f8468c5bf8ee5dd82fca83c8c950c95340/src/floating.css#L20)) overrides `--sidebar-bg: #EBEBEB` in `theme.css` L87.
+The sidebar panel tokens are transparent on desktop: `--sidebar-bg: transparent` ([L20](https://github.com/kchaisor/citycut/blob/c97d02f8468c5bf8ee5dd82fca83c8c950c95340/src/floating.css#L20)) overrides `--sidebar-bg: #EBEBEB` in `theme.css` L87.
 
 ---
 
