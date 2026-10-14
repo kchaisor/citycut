@@ -66,6 +66,8 @@ export type RhinoDownloadOptions = {
   wind?: { table: import("./windRose").WindRoseTable; period: import("./windRose").WindPeriodId } | null;
   hideTrees?: boolean;
   importedMassing?: import("./rhinoExport").ImportedMassingExport[] | null;
+  /** Write buildings as meshes instead of closed Extrusions. */
+  buildingsAsMesh?: boolean;
 };
 
 export async function download3dm(

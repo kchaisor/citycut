@@ -59,7 +59,8 @@ describe("rhino export", () => {
         ...model.buildings,
         { id: 8, ring: square([60, 0], 16), holes: [], height: 10, use: "civic", source: "zone" },
       ],
-    });
+      // Vertex-level check of the mesh writer; the default Extrusion path is covered in rhinoExtrusion.test.ts.
+    }, { buildingsAsMesh: true });
     const header = latin1(bytes);
     expect(header.startsWith("3D Geometry File Format")).toBe(true);
     expect(header).toContain("EPSG:7855");
@@ -201,6 +202,10 @@ describe("rhino export", () => {
         const name = object.attributes().name;
         names.push(name);
         const geometry = object.geometry() as unknown as ReadMesh;
+        if (name.startsWith("Buildings")) {
+          const box = (geometry as unknown as { getBoundingBox(): { min: number[] } }).getBoundingBox();
+          buildingMin = Math.min(buildingMin, box.min[2]);
+        }
         if (geometry.objectType !== rhino.ObjectType.Mesh) continue;
         for (let v = 0; v < geometry.vertices().count; v++) {
           const point = geometry.vertices().point3dAt(v);
@@ -209,7 +214,6 @@ describe("rhino export", () => {
             terrainMin = Math.min(terrainMin, point[2]);
             terrainMax = Math.max(terrainMax, point[2]);
           }
-          if (name.startsWith("Buildings")) buildingMin = Math.min(buildingMin, point[2]);
         }
       }
       expect(names).toContain("Terrain");
