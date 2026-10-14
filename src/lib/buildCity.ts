@@ -76,6 +76,7 @@ function mergeMeshes(
   const usable = normalized.filter((entry) => entry.geometry.getAttribute("position"));
   if (usable.length === 0) return null;
   const trackBuildingIds = usable.some((entry) => entry.buildingId >= 0);
+  const extrusionParts = usable.map((entry) => entry.geometry.userData.extrusionPart as ExtrusionPartRecord | undefined);
   try {
     const merged = mergeGeometries(
       usable.map((entry) => entry.geometry),
@@ -88,6 +89,7 @@ function mergeMeshes(
     if (usable.some((entry) => entry.buildingId >= 0)) {
       mesh.userData.buildingIdByGroup = usable.map((entry) => entry.buildingId);
     }
+    if (extrusionParts.every(Boolean)) mesh.userData.extrusionParts = extrusionParts;
     return mesh;
   } catch {
     const group = new THREE.Group();
@@ -308,16 +310,29 @@ function extrudeShape(shape: THREE.Shape, height: number, base: number): THREE.B
   return layFlat(geometry, base);
 }
 
-function extrudePart(ring: Ring, holes: Ring[], height: number, base: number): THREE.BufferGeometry | null {
+/**
+ * One extruded building part as the .3dm export rebuilds it: outline and courtyards in the
+ * cut's local east/north metres, and the absolute base (terrain + lift + part base) in metres.
+ * Stored on the part's geometry (and on merged meshes) so Rhino gets the same outlines,
+ * heights and base as the mesh.
+ */
+export type ExtrusionPartRecord = { ring: Ring; holes: Ring[]; height: number; base: number };
+
+export function extrudePart(ring: Ring, holes: Ring[], height: number, base: number): THREE.BufferGeometry | null {
+  const tag = (geometry: THREE.BufferGeometry, usedHoles: Ring[]) => {
+    const record: ExtrusionPartRecord = { ring, holes: usedHoles, height, base };
+    geometry.userData.extrusionPart = record;
+    return geometry;
+  };
   const shape = shapeFromRing(ring, holes);
   if (!shape) return null;
   try {
-    return extrudeShape(shape, height, base);
+    return tag(extrudeShape(shape, height, base), holes);
   } catch {
     const fallback = shapeFromRing(ring, []);
     if (!fallback) return null;
     try {
-      return extrudeShape(fallback, height, base);
+      return tag(extrudeShape(fallback, height, base), []);
     } catch {
       return null;
     }

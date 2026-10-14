@@ -220,6 +220,8 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     () => !capturePresetFromSearch(window.location.search).uniformBuildings,
   );
   const [showSource, setShowSource] = useState(false);
+  /** Rhino export: buildings as triangle meshes instead of closed Extrusions. */
+  const [buildingsAsMesh, setBuildingsAsMesh] = useState(false);
   const [comFootprints, setComFootprints] = useState<ComBuildingFootprint[]>(
     () => model.comFootprintPrefetch ?? [],
   );
@@ -1017,6 +1019,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             : null,
         hideTrees: view3dDisplay.hideTrees,
         importedMassing: massing.forExport.length ? massing.forExport : null,
+        buildingsAsMesh,
       });
     } catch {
       setExportError("The Rhino file could not be written.");
@@ -1993,12 +1996,25 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     <h3>
                       Rhino <span>.3dm</span>
                     </h3>
-                    <p>The same meshes in {crs.name}, metres, Z-up, plus a FigureGround layer.</p>
+                    <p>
+                      {buildingsAsMesh
+                        ? "Buildings as meshes"
+                        : "Buildings as closed extrusions, one per part"}
+                      ; terrain, roads and trees as meshes. {crs.name}, metres, Z-up, plus a FigureGround layer.
+                    </p>
                   </div>
                   <button className="ghost" type="button" disabled={busy !== null} onClick={save3dm} aria-label="Download Rhino">
                     {busy === "3dm" ? "Preparing…" : "Download"}
                   </button>
                 </article>
+                <label className="check-field rhino-mesh-option">
+                  <input
+                    type="checkbox"
+                    checked={buildingsAsMesh}
+                    onChange={(event) => setBuildingsAsMesh(event.target.checked)}
+                  />
+                  Buildings as mesh
+                </label>
                 <article className="card">
                   <div>
                     <h3>

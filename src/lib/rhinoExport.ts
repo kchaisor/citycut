@@ -2,7 +2,8 @@ import * as THREE from "three";
 import rhino3dm from "rhino3dm/rhino3dm.module.js";
 import type { RhinoModuleOptions } from "rhino3dm";
 import { BUILDING_USE_META, BUILDING_USES } from "./buildingUse";
-import { buildCityGroup, disposeObject } from "./buildCity";
+import { buildCityGroup, disposeObject, extrudePart, type ExtrusionPartRecord } from "./buildCity";
+import { buildingExtrusionPoints, type ExtrusionPoints } from "./rhinoExtrusion";
 import { colourRgb, type ColourKey } from "./colours";
 import { CRS_NOTE, mgaCrs, projectLocal, projectLonLat } from "./crs";
 import { readDrawingStyle } from "./drawingStyle";
@@ -27,6 +28,8 @@ import type { CityModel, Pt } from "../types";
 type Rgb = { r: number; g: number; b: number };
 
 type Rhino = Awaited<ReturnType<typeof rhino3dm>>;
+
+const IDENTITY = new THREE.Matrix4();
 
 function contourLayerColor(): Rgb {
   const hex = readDrawingStyle().contour.color;
@@ -162,6 +165,7 @@ function addMeshesInTraverseLayerOrder(
   meshes: THREE.Mesh[],
   model: CityModel,
   zone: number,
+  extrusions: ExtrusionTally | null = null,
 ) {
   const emittedLayers = new Set<string>();
   for (const mesh of meshes) {
@@ -171,7 +175,7 @@ function addMeshesInTraverseLayerOrder(
     const layerMeshes = meshes.filter((candidate) => layerName(candidate) === name);
     layerMeshes.sort((a, b) => meshExportSortKey(a).localeCompare(meshExportSortKey(b)));
     for (const layerMesh of layerMeshes) {
-      addMesh(rhino, doc, layers, materials, layerMesh, model, zone);
+      addMesh(rhino, doc, layers, materials, layerMesh, model, zone, extrusions);
     }
   }
 }
@@ -252,6 +256,197 @@ function addWorldVertex(
   vertices.addPoint3d(easting, northing, vertex.y);
 }
 
+/** Per-export count of building parts written as Rhino Extrusions vs the mesh fallback. */
+export type ExtrusionTally = { extrusions: number; meshFallback: number };
+
+function extrusionPartsOf(mesh: THREE.Mesh): ExtrusionPartRecord[] | null {
+  const merged = mesh.userData.extrusionParts as ExtrusionPartRecord[] | undefined;
+  if (merged && merged.length > 0) return merged;
+  const single = mesh.geometry.userData.extrusionPart as ExtrusionPartRecord | undefined;
+  return single ? [single] : null;
+}
+
+function objectAttributes(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  mesh: THREE.Mesh,
+) {
+  const name = layerName(mesh);
+  const palette = layerColors();
+  const layerColor = (mesh.userData.layerColor as Rgb | undefined) ?? palette[name] ?? colourRgb("--rhino-fallback");
+  const layerIndex = ensureLayer(rhino, doc, layers, materials, name, layerColor);
+  const attributes = new rhino.ObjectAttributes();
+  attributes.name = name;
+  attributes.layerIndex = layerIndex;
+  applyByLayerAttributes(rhino, attributes);
+  const use = mesh.userData.use;
+  const typologySource = mesh.userData.typologySource;
+  if (typeof use === "string") attributes.setUserString("use", use);
+  if (typeof typologySource === "string") attributes.setUserString("typology_source", typologySource);
+  return attributes;
+}
+
+type RhinoBrep = { vertices(): { count: number; get(index: number): { location: number[] } }; delete(): void };
+
+type RhinoExtrusion = {
+  isValid: boolean;
+  isSolid: boolean;
+  pathStart: number[];
+  pathEnd: number[];
+  profileCount: number;
+  addInnerProfile(curve: unknown): boolean;
+  translate(motion: number[]): boolean;
+  delete(): void;
+};
+
+/**
+ * Every corner of the solid must be an outline or courtyard corner at the base or the top.
+ * Rhino may drop collinear points, but a profile it moved (even in a "valid" solid) is caught.
+ */
+function solidMatchesRings(locations: number[][], points: ExtrusionPoints): boolean {
+  const corners: number[][] = [];
+  for (const ring of [points.outer, ...points.holes]) {
+    for (const [e, n] of ring.slice(0, -1)) {
+      corners.push([e, n, points.base], [e, n, points.base + points.height]);
+    }
+  }
+  if (locations.length < 6 || locations.length > corners.length) return false;
+  const tol = 0.01;
+  return locations.every((location) =>
+    corners.some((corner) => corner.every((value, k) => Math.abs(value - location[k]) <= tol)),
+  );
+}
+
+/**
+ * One capped Rhino Extrusion for a building part, or null when it fails a check (the caller then
+ * writes that part as a mesh). Profiles are built relative to the first MGA vertex, then moved to
+ * full MGA, so courtyards (inner profiles) stay exact at MGA magnitudes.
+ */
+export function partExtrusion(rhino: Rhino, points: ExtrusionPoints): RhinoExtrusion | null {
+  const api = rhino as unknown as {
+    PolylineCurve: new (points: number[][]) => { delete(): void };
+    Extrusion: {
+      createWithPlane(curve: unknown, plane: unknown, height: number, cap: boolean): RhinoExtrusion | null;
+    };
+    Plane: { worldXY(): unknown };
+  };
+  // World XY profile plane: with Extrusion.create the profile frame follows the first edge, and
+  // inner profiles are then read in that rotated frame (courtyards land in the wrong place).
+  const plane = api.Plane.worldXY();
+  const [oe, on] = points.origin;
+  const local = (ring: number[][]) => ring.map(([e, n]) => [e - oe, n - on, 0]);
+  const curves: { delete(): void }[] = [];
+  const curve = (ring: number[][]) => {
+    const c = new api.PolylineCurve(local(ring));
+    curves.push(c);
+    return c;
+  };
+  let extrusion: RhinoExtrusion | null = null;
+  try {
+    const outer = curve(points.outer);
+    extrusion = api.Extrusion.createWithPlane(outer, plane, points.height, true);
+    if (extrusion && extrusion.pathEnd[2] < extrusion.pathStart[2]) {
+      extrusion.delete();
+      extrusion = api.Extrusion.createWithPlane(outer, plane, -points.height, true);
+    }
+    if (!extrusion) return null;
+    for (const hole of points.holes) {
+      if (!extrusion.addInnerProfile(curve(hole))) throw new Error("inner profile");
+    }
+    extrusion.translate([oe, on, points.base]);
+    if (!extrusion.isValid || !extrusion.isSolid || extrusion.profileCount !== 1 + points.holes.length) {
+      throw new Error("not a valid closed solid");
+    }
+    // Extrusion and Brep bounding boxes are loose (profile-frame / NURBS hulls), so check the
+    // corner points of the solid instead: they must span exactly the outline, base and top.
+    const brep = (extrusion as unknown as { toBrep(split: boolean): RhinoBrep | null }).toBrep(false);
+    if (!brep) throw new Error("no brep");
+    const box = { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] };
+    try {
+      const vertices = brep.vertices();
+      const locations: number[][] = [];
+      for (let i = 0; i < vertices.count; i++) locations.push(vertices.get(i).location);
+      if (!solidMatchesRings(locations, points)) throw new Error("vertices");
+      for (const location of locations) {
+        for (let k = 0; k < 3; k++) {
+          box.min[k] = Math.min(box.min[k], location[k]);
+          box.max[k] = Math.max(box.max[k], location[k]);
+        }
+      }
+    } finally {
+      brep.delete();
+    }
+    const tol = 0.01;
+    const [minE, minN, maxE, maxN] = points.bounds;
+    if (
+      Math.abs(box.min[0] - minE) > tol ||
+      Math.abs(box.min[1] - minN) > tol ||
+      Math.abs(box.max[0] - maxE) > tol ||
+      Math.abs(box.max[1] - maxN) > tol ||
+      Math.abs(box.min[2] - points.base) > tol ||
+      Math.abs(box.max[2] - (points.base + points.height)) > tol
+    ) {
+      throw new Error("bounding box");
+    }
+    const result = extrusion;
+    extrusion = null;
+    return result;
+  } catch {
+    return null;
+  } finally {
+    extrusion?.delete();
+    curves.forEach(release);
+    release(plane as object);
+  }
+}
+
+/** Building parts as Extrusions; any part that fails is written as its own mesh, as before. */
+function addBuildingExtrusions(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  mesh: THREE.Mesh,
+  parts: ExtrusionPartRecord[],
+  model: CityModel,
+  zone: number,
+  tally: ExtrusionTally,
+) {
+  const failed: ExtrusionPartRecord[] = [];
+  for (const part of parts) {
+    const points = buildingExtrusionPoints(part, (pt) => projectLocal(pt, model.center, zone));
+    const extrusion = points ? partExtrusion(rhino, points) : null;
+    if (!extrusion) {
+      failed.push(part);
+      continue;
+    }
+    const attributes = objectAttributes(rhino, doc, layers, materials, mesh);
+    (doc.objects() as unknown as { add(geometry: unknown, attributes: unknown): unknown }).add(extrusion, attributes);
+    release(extrusion);
+    release(attributes);
+    tally.extrusions++;
+  }
+  if (failed.length === 0) return;
+  tally.meshFallback += failed.length;
+  if (failed.length === parts.length) {
+    addMesh(rhino, doc, layers, materials, mesh, model, zone, null);
+    return;
+  }
+  const geometries = failed
+    .map((part) => extrudePart(part.ring, part.holes, part.height, part.base))
+    .filter((geometry): geometry is THREE.BufferGeometry => Boolean(geometry));
+  for (const geometry of geometries) {
+    const fallback = new THREE.Mesh(geometry, mesh.material);
+    fallback.name = mesh.name;
+    fallback.userData = { ...mesh.userData, extrusionParts: undefined };
+    fallback.updateMatrixWorld(true);
+    addMesh(rhino, doc, layers, materials, fallback, model, zone, null);
+    geometry.dispose();
+  }
+}
+
 function addMesh(
   rhino: Rhino,
   doc: InstanceType<Rhino["File3dm"]>,
@@ -260,7 +455,13 @@ function addMesh(
   mesh: THREE.Mesh,
   model: CityModel,
   zone: number,
+  extrusions: ExtrusionTally | null = null,
 ) {
+  const parts = extrusions ? extrusionPartsOf(mesh) : null;
+  if (extrusions && parts && !(mesh as THREE.InstancedMesh).isInstancedMesh && mesh.matrixWorld.equals(IDENTITY)) {
+    addBuildingExtrusions(rhino, doc, layers, materials, mesh, parts, model, zone, extrusions);
+    return;
+  }
   const position = mesh.geometry.getAttribute("position");
   if (!position || position.count < 3) return;
 
@@ -308,18 +509,7 @@ function addMesh(
   }
   rhinoMesh.normals().computeNormals();
 
-  const name = layerName(mesh);
-  const palette = layerColors();
-  const layerColor = (mesh.userData.layerColor as Rgb | undefined) ?? palette[name] ?? colourRgb("--rhino-fallback");
-  const layerIndex = ensureLayer(rhino, doc, layers, materials, name, layerColor);
-  const attributes = new rhino.ObjectAttributes();
-  attributes.name = name;
-  attributes.layerIndex = layerIndex;
-  applyByLayerAttributes(rhino, attributes);
-  const use = mesh.userData.use;
-  const typologySource = mesh.userData.typologySource;
-  if (typeof use === "string") attributes.setUserString("use", use);
-  if (typeof typologySource === "string") attributes.setUserString("typology_source", typologySource);
+  const attributes = objectAttributes(rhino, doc, layers, materials, mesh);
   doc.objects().addMesh(rhinoMesh, attributes);
   release(rhinoMesh);
   release(attributes);
@@ -685,6 +875,13 @@ export type CityModelTo3dmOptions = {
   hideTrees?: boolean;
   /** Imported massing models (#massing), written in MGA on their own layer. */
   importedMassing?: ImportedMassingExport[] | null;
+  /**
+   * Write buildings as triangle meshes (the pre-extrusion export). Off by default: each building
+   * part is a capped Rhino Extrusion, with a per-part mesh fallback.
+   */
+  buildingsAsMesh?: boolean;
+  /** Filled in with how many parts became Extrusions and how many fell back to meshes. */
+  extrusionTally?: ExtrusionTally;
 };
 
 export type ImportedMassingExport = Pick<ImportedMassing, "name" | "positions" | "indices" | "placement">;
@@ -736,7 +933,9 @@ function normalize3dmOptions(
     "uniformBuildings" in options ||
     "wind" in options ||
     "hideTrees" in options ||
-    "importedMassing" in options
+    "importedMassing" in options ||
+    "buildingsAsMesh" in options ||
+    "extrusionTally" in options
   ) {
     return options;
   }
@@ -749,8 +948,18 @@ export async function cityModelTo3dm(
   options?: HeliodonGroundExportOptions | CityModelTo3dmOptions | null,
 ): Promise<Uint8Array> {
   model = stableExportModel(model);
-  const { heliodon, shadows, castShadows, uniformBuildings, colourBySource, wind, hideTrees, importedMassing } =
-    normalize3dmOptions(options);
+  const {
+    heliodon,
+    shadows,
+    castShadows,
+    uniformBuildings,
+    colourBySource,
+    wind,
+    hideTrees,
+    importedMassing,
+    buildingsAsMesh,
+    extrusionTally,
+  } = normalize3dmOptions(options);
   // One rule for the 3D view, PNG, 3D-view .ai and .3dm: trees only when the layer is on and Hide trees is off.
   if (!treesVisibleIn3d(model.layers, { hideTrees: Boolean(hideTrees) })) {
     model = { ...model, layers: { ...model.layers, trees: false }, trees: [] };
@@ -807,7 +1016,8 @@ export async function cityModelTo3dm(
       const mesh = object as THREE.Mesh;
       if (mesh.isMesh) meshes.push(mesh);
     });
-    addMeshesInTraverseLayerOrder(rhino, doc, layers, materials, meshes, model, crs.zone);
+    const tally: ExtrusionTally = extrusionTally ?? { extrusions: 0, meshFallback: 0 };
+    addMeshesInTraverseLayerOrder(rhino, doc, layers, materials, meshes, model, crs.zone, buildingsAsMesh ? null : tally);
     addFigureGround(rhino, doc, layers, materials, model, crs.zone);
     addSiteBoundary(rhino, doc, layers, materials, model, crs.zone);
     addRailTramPolylines(rhino, doc, layers, materials, model, crs.zone);
