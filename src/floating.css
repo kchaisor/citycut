@@ -62,7 +62,7 @@
    ink only: no text halo or outline (Kelvin). */
 @media (min-width: 641px) {
   .select > .map-wrap { left: 0; }
-  .select .select-chrome { padding: 12px 0 12px 12px; box-sizing: border-box; }
+  /* Same panel fill as the 3D view sidebar (--panel-3d-bg, below). */ .select .select-chrome { padding: 12px 0 12px 12px; box-sizing: border-box; background: var(--panel-3d-bg); }
   .select .sidebar {
     color: var(--float-ink);
     font-weight: 560;
