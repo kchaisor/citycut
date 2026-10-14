@@ -15,6 +15,7 @@ import { siteBoundaryLineGeometry } from "./siteBoundaryDash3d";
 import { clipTransportLines, drapedDashedLineGeometry } from "./dashedTransportLines";
 import { readDrawingStyle } from "./drawingStyle";
 import { footprintBase, sampleTerrain, terrainBuffers } from "./terrain";
+import { clipTrianglesToTerrainGrid, terrainMeshHeight } from "./terrainDrape";
 import type { AreaFeat, BuildingFeat, BuildingUse, CityModel, Pt, Ring, RoadGrade, TerrainField } from "../types";
 
 export type CityBuildOptions = {
@@ -168,9 +169,10 @@ function drapedRingGeometry(
   sample: (east: number, north: number) => number,
   offset: number,
   spacing: number,
+  grid?: TerrainGrid | null,
 ): THREE.BufferGeometry | null {
   const area: AreaFeat = { id: -1, kind: "green", ring: outer, holes };
-  return drapedAreaGeometry(area, sample, offset, spacing);
+  return drapedAreaGeometry(area, sample, offset, spacing, grid);
 }
 
 /** Unioned road or path fill, draped on the terrain heightfield. */
@@ -179,11 +181,12 @@ export function drapedMultiPolygonGeometry(
   sample: (east: number, north: number) => number,
   offset: number,
   spacing: number,
+  grid?: TerrainGrid | null,
 ): THREE.BufferGeometry | null {
   const parts: THREE.BufferGeometry[] = [];
   for (const polygon of multi) {
     if (polygon.length === 0) continue;
-    const geometry = drapedRingGeometry(polygon[0] as Ring, polygon.slice(1) as Ring[], sample, offset, spacing);
+    const geometry = drapedRingGeometry(polygon[0] as Ring, polygon.slice(1) as Ring[], sample, offset, spacing, grid);
     if (geometry) parts.push(geometry);
   }
   if (parts.length === 0) return null;
@@ -198,19 +201,28 @@ function roadFillGeometry(
   lift: number,
   sample: ((east: number, north: number) => number) | null,
   spacing: number | undefined,
+  grid?: TerrainGrid | null,
 ): THREE.BufferGeometry | null {
   if (multi.length === 0) return null;
   const heightAt = sample ?? (() => 0);
   const step = spacing ?? 12;
-  return drapedMultiPolygonGeometry(multi, heightAt, lift, step);
+  return drapedMultiPolygonGeometry(multi, heightAt, lift, step, grid);
 }
 
-/** Parks and water keep their outline and pick up interior samples so they follow the heightfield. */
+/** The rendered terrain mesh a ground layer drapes onto. */
+export type TerrainGrid = { field: TerrainField; sideM: number };
+
+/**
+ * Parks, water, blocks and roads keep their outline and follow the heightfield. With the terrain
+ * grid, triangles are cut along the mesh's grid lines and diagonals and lifted off the exact mesh
+ * height, so no piece can dip below the terrain. Without it, the old spacing subdivision applies.
+ */
 export function drapedAreaGeometry(
   area: AreaFeat,
   sample: (east: number, north: number) => number,
   offset: number,
   spacing: number,
+  grid?: TerrainGrid | null,
 ): THREE.BufferGeometry | null {
   const shape = shapeFromRing(area.ring, area.holes);
   if (!shape) return null;
@@ -220,14 +232,19 @@ export function drapedAreaGeometry(
   } catch {
     return null;
   }
-  const fine = subdivideToSpacing(trianglesFromShape(flat), Math.max(spacing, 4));
+  const fine = grid
+    ? clipTrianglesToTerrainGrid(trianglesFromShape(flat), grid.field, grid.sideM)
+    : subdivideToSpacing(trianglesFromShape(flat), Math.max(spacing, 4));
   flat.dispose();
+  const heightAt = grid
+    ? (east: number, north: number) => terrainMeshHeight(grid.field, grid.sideM, east, north)
+    : sample;
   const positions: number[] = [];
   for (const [a, b, c] of fine) {
     const span = distance(a, b) + distance(b, c) + distance(c, a);
-    if (span < 0.05) continue;
+    if (span < (grid ? 0.005 : 0.05)) continue;
     for (const point of [a, b, c]) {
-      positions.push(point[0], sample(point[0], point[1]) + offset, -point[1]);
+      positions.push(point[0], heightAt(point[0], point[1]) + offset, -point[1]);
     }
   }
   if (positions.length === 0) return null;
@@ -382,6 +399,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
 
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const sample = elevationAt(model);
+  const terrainGrid: TerrainGrid | null = model.terrain ? { field: model.terrain, sideM: model.sideM } : null;
   if (model.terrain) {
     group.add(terrainMesh(model.terrain, model.sideM, frameShape));
   } else {
@@ -423,7 +441,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     const lift = SURFACE.block.lift + overlapLift(index);
     if (sample && model.terrain) {
       try {
-        const geometry = drapedAreaGeometry(area, sample, lift, model.terrain.spacingM);
+        const geometry = drapedAreaGeometry(area, sample, lift, model.terrain.spacingM, terrainGrid);
         if (geometry) blockGeos.push(geometry);
       } catch {
         /* skip */
@@ -457,6 +475,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
           sample,
           lift,
           drapeSpacing,
+          terrainGrid,
         );
         if (!geometry) continue;
         if (area.kind === "water") waterGeos.push(geometry);
@@ -487,7 +506,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     group.add(water);
   }
 
-  const drapeSpacing = model.terrain ? Math.min(model.terrain.spacingM, 8) : undefined;
+  const drapeSpacing = model.terrain ? model.terrain.spacingM : undefined;
   const grades: RoadGrade[] = ["path", "local", "arterial"];
   for (const grade of grades) {
     const layer = roadGradeLayer(grade);
@@ -505,7 +524,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
             model.sideM,
             frameShape,
           );
-    const geometry = roadFillGeometry(fill.polygons, layer.lift, sample, drapeSpacing);
+    const geometry = roadFillGeometry(fill.polygons, layer.lift, sample, drapeSpacing, terrainGrid);
     if (!geometry) continue;
     const material = paint(matteStandardMaterial({ color: ROAD_COLOR[grade] }), layer);
     material.name = "Roads";
