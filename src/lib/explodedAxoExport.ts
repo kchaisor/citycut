@@ -110,6 +110,7 @@ export const EXPLODED_AXO_LAYER_ORDER = [
   "Hydro",
   "Transport",
   "Topography",
+  "Terrain",
   "Roads",
   "Green",
   "Trees",
@@ -125,6 +126,7 @@ function chunkNameForLayer(id: AxoLayerId): string {
   if (id === "hydro") return "Hydro";
   if (id === "transport") return "Transport";
   if (id === "topography") return "Topography";
+  if (id === "terrain") return "Terrain";
   if (id === "roads") return "Roads";
   if (id === "green") return "Green";
   if (id === "trees") return "Trees";
@@ -211,6 +213,15 @@ export function explodedAxoChunks(
         }
       }
     });
+    for (const stroke of layer.unclippedStrokes ?? []) {
+      for (const ring of ringsFromIsoD(stroke, origin, scale, pageHeightMm, liftM)) {
+        if (ring.length >= 2) {
+          paths.push({ rings: [ring], stroke: hexRgb(axoPaintColour(axoLayerBasePaint(layer.id))), strokeMm: 0.08, close: false });
+        }
+      }
+    }
+    if (layer.sourceNote) sourceNotes.push(layer.sourceNote);
+    else if (layer.unavailableNote && layer.unavailableNote !== "unavailable") sourceNotes.push(layer.unavailableNote);
     for (const marker of layer.markers ?? []) {
       const [sx, sy] = isoBaseToSheet(marker.x, marker.y, liftM, origin, scale, pageHeightMm);
       const r = marker.radiusM * mmPerMetre(scale);
@@ -241,9 +252,6 @@ export function explodedAxoChunks(
           evenOdd: true,
         });
       }
-    }
-    if (layer.sourceNote) {
-      sourceNotes.push(layer.sourceNote);
     }
     if (layer.id === "aerial" && satelliteNote) {
       paths.push({

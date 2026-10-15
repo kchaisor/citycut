@@ -283,6 +283,17 @@ export function DrawingExplodedAxo({
               strokeWidth={outlinePx}
               vectorEffect="non-scaling-stroke"
             />
+            {layer.unclippedStrokes?.map((d, ui) => (
+              <path
+                key={`u${ui}`}
+                d={d}
+                fill="none"
+                stroke={axoPaintColour(axoLayerBasePaint(layer.id))}
+                strokeWidth={outlinePx * 0.6}
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
+              />
+            ))}
             {layer.solids && layer.solids.length > 0 && (
               <g className="axo-solids" stroke={massingEdge} strokeWidth={outlinePx * 0.5} strokeLinejoin="round">
                 {layer.solids.map((face, fi) => (
