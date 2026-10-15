@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import * as THREE from "three";
+import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
 import { Building2, Copy, Download, DraftingCompass, Info, Sun, Trees, Upload, Wind } from "lucide-react";
 import {
   BUILDING_USES,
@@ -857,6 +858,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
         layerVisible: { ...defaults.layerVisible, ...prev.layerVisible },
         gapM: defaultExplodedAxoGapM(displayModel.sideM),
         showLabels: prev.showLabels,
+        ...(prev.terrainExaggeration != null ? { terrainExaggeration: prev.terrainExaggeration } : {}),
       };
     });
     setExplodedViewport(
@@ -1842,6 +1844,22 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     />
                     <span>{Math.round(axoSettings.gapM)} m</span>
                   </label>
+                  {axoSettings.layerVisible.terrain && (
+                    <label className="scale-field">
+                      Terrain exaggeration
+                      <input
+                        type="range"
+                        min={AXO_TERRAIN_EXAGGERATION_RANGE.min}
+                        max={AXO_TERRAIN_EXAGGERATION_RANGE.max}
+                        step={AXO_TERRAIN_EXAGGERATION_RANGE.step}
+                        value={axoSettings.terrainExaggeration ?? DEFAULT_AXO_TERRAIN_EXAGGERATION}
+                        onChange={(event) =>
+                          setAxoSettings((prev) => ({ ...prev, terrainExaggeration: Number(event.target.value) }))
+                        }
+                      />
+                      <span>×{axoSettings.terrainExaggeration ?? DEFAULT_AXO_TERRAIN_EXAGGERATION}</span>
+                    </label>
+                  )}
                   <label className="check-field">
                     <input
                       type="checkbox"

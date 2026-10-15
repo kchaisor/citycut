@@ -147,6 +147,7 @@ export function DrawingExplodedAxo({
   const lineStyle = useMemo(() => readDrawingStyle(), [colourTick]);
   const guideDash = dashScreen(lineStyle.axoGuideDash ?? "none");
   const tramColour = getColour("--tram-line-stroke");
+  const massingEdge = getColour("--axo-building-edge");
 
   return (
     <svg
@@ -287,6 +288,42 @@ export function DrawingExplodedAxo({
               strokeWidth={outlinePx}
               vectorEffect="non-scaling-stroke"
             />
+            {layer.unclippedStrokes?.map((d, ui) => (
+              <path
+                key={`u${ui}`}
+                d={d}
+                fill="none"
+                stroke={axoPaintColour(axoLayerBasePaint(layer.id))}
+                strokeWidth={outlinePx * 0.6}
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
+              />
+            ))}
+            {layer.solids && layer.solids.length > 0 && (
+              <g className="axo-solids" stroke={massingEdge} strokeWidth={outlinePx * 0.5} strokeLinejoin="round">
+                {layer.solids.map((face, fi) => (
+                  <path
+                    key={`v${fi}`}
+                    d={face.d}
+                    fill={axoPaintColour(face.paint)}
+                    fillRule="evenodd"
+                    stroke={face.paint.startsWith("building") ? undefined : "none"}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ))}
+              </g>
+            )}
+            {layer.sourceNote && (
+              <text
+                x={axoLayerLabelAnchor(model.sideM, 0).x}
+                y={axoLayerLabelAnchor(model.sideM, 0).y + model.sideM * 0.035}
+                fontSize={model.sideM * 0.018}
+                fill={colours.label}
+                fontFamily="Helvetica, Arial, sans-serif"
+              >
+                {layer.sourceNote}
+              </text>
+            )}
             {layer.legend && layer.legend.length > 0 && (
               <g className="axo-legend" transform={`translate(${legendOrigin.x} ${legendOrigin.y})`}>
                 {layer.legend.map((item, li) => {

@@ -269,4 +269,14 @@
   --axo-edge-buildings: #8c8980;
   --axo-plate-aerial: #ffffff;
   --axo-edge-aerial: #c8c8c8;
+  --axo-plate-terrain: #f0f0f0;
+  --axo-edge-terrain: #333333;
+  --axo-terrain-mesh: #4a4a4a;
+  --axo-building-roof: #e8e6e1;
+  --axo-building-wall-light: #b9b6ae;
+  --axo-building-wall-dark: #8c8980;
+  --axo-building-edge: #5e5b54;
+  --axo-tree-canopy: #8fbf6a;
+  --axo-tree-canopy-shade: #5e8f45;
+  --axo-tree-trunk: #7a6a55;
 }

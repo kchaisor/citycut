@@ -111,6 +111,7 @@ export const EXPLODED_AXO_LAYER_ORDER = [
   "Hydro",
   "Transport",
   "Topography",
+  "Terrain",
   "Roads",
   "Green",
   "Trees",
@@ -126,6 +127,7 @@ function chunkNameForLayer(id: AxoLayerId): string {
   if (id === "hydro") return "Hydro";
   if (id === "transport") return "Transport";
   if (id === "topography") return "Topography";
+  if (id === "terrain") return "Terrain";
   if (id === "roads") return "Roads";
   if (id === "green") return "Green";
   if (id === "trees") return "Trees";
@@ -154,6 +156,7 @@ export function explodedAxoChunks(
   const origin: Pt = page.origin;
   const pageHeightMm = page.heightMm;
   const chunks: PdfChunk[] = [];
+  const sourceNotes: string[] = [];
 
   const axoGuideDash = dashSegments(readDrawingStyle().axoGuideDash);
   const guidePaths: PdfPath[] = guides.map((guide) => ({
@@ -211,6 +214,15 @@ export function explodedAxoChunks(
         }
       }
     });
+    for (const stroke of layer.unclippedStrokes ?? []) {
+      for (const ring of ringsFromIsoD(stroke, origin, scale, pageHeightMm, liftM)) {
+        if (ring.length >= 2) {
+          paths.push({ rings: [ring], stroke: hexRgb(axoPaintColour(axoLayerBasePaint(layer.id))), strokeMm: 0.08, close: false });
+        }
+      }
+    }
+    if (layer.sourceNote) sourceNotes.push(layer.sourceNote);
+    else if (layer.unavailableNote && layer.unavailableNote !== "unavailable") sourceNotes.push(layer.unavailableNote);
     for (const marker of layer.markers ?? []) {
       const [sx, sy] = isoBaseToSheet(marker.x, marker.y, liftM, origin, scale, pageHeightMm);
       const r = marker.radiusM * mmPerMetre(scale);
@@ -227,6 +239,20 @@ export function explodedAxoChunks(
         fill: hexRgb(axoPaintColour(marker.paint)),
         close: true,
       });
+    }
+    for (const face of layer.solids ?? []) {
+      const rings = ringsFromIsoD(face.d, origin, scale, pageHeightMm, liftM);
+      if (rings.length > 0) {
+        paths.push({
+          rings,
+          fill: hexRgb(axoPaintColour(face.paint)),
+          ...(face.paint.startsWith("building")
+            ? { stroke: hexRgb(getColour("--axo-building-edge")), strokeMm: 0.05 }
+            : {}),
+          close: true,
+          evenOdd: true,
+        });
+      }
     }
     if (layer.id === "aerial" && satelliteNote) {
       paths.push({
@@ -281,7 +307,8 @@ export function explodedAxoChunks(
   });
   const treesCredit = comTreesCreditLine(model);
   const credited = treesCredit ? `${credit} ${treesCredit}.` : credit;
-  const note = satelliteNote ? `${credited} ${satelliteNote}` : credited;
+  const withSatellite = satelliteNote ? `${credited} ${satelliteNote}` : credited;
+  const note = sourceNotes.length ? `${withSatellite} ${sourceNotes.join(". ")}.` : withSatellite;
   chunks.push({
     name: "Annotation",
     texts: [

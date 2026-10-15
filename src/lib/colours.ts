@@ -125,6 +125,16 @@ export const COLOUR_KEYS = [
   "--axo-edge-buildings",
   "--axo-plate-aerial",
   "--axo-edge-aerial",
+  "--axo-plate-terrain",
+  "--axo-edge-terrain",
+  "--axo-terrain-mesh",
+  "--axo-building-roof",
+  "--axo-building-wall-light",
+  "--axo-building-wall-dark",
+  "--axo-building-edge",
+  "--axo-tree-canopy",
+  "--axo-tree-canopy-shade",
+  "--axo-tree-trunk",
 ] as const;
 
 export type ColourKey = (typeof COLOUR_KEYS)[number];
@@ -346,6 +356,16 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--axo-edge-buildings": "Exploded axo buildings plate edge",
   "--axo-plate-aerial": "Exploded axo satellite plate tint",
   "--axo-edge-aerial": "Exploded axo satellite plate edge",
+  "--axo-plate-terrain": "Exploded axo terrain (DTM) plate tint",
+  "--axo-edge-terrain": "Exploded axo terrain (DTM) plate edge",
+  "--axo-terrain-mesh": "Exploded axo terrain (DTM) mesh grid",
+  "--axo-building-roof": "Exploded axo building roof (massing)",
+  "--axo-building-wall-light": "Exploded axo building wall, sunlit side",
+  "--axo-building-wall-dark": "Exploded axo building wall, shaded side",
+  "--axo-building-edge": "Exploded axo building edge stroke",
+  "--axo-tree-canopy": "Exploded axo tree canopy (lit)",
+  "--axo-tree-canopy-shade": "Exploded axo tree canopy (shaded side)",
+  "--axo-tree-trunk": "Exploded axo tree trunk",
 };
 
 const parsed = resolveSheet(parseCustomProperties(coloursCss));
