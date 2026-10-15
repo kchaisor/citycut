@@ -1,4 +1,5 @@
 import { figureGround } from "./figureGround";
+import { axoMassingHeightNote, buildAxoMassingFaces, type AxoSolidFace } from "./explodedAxoMassing";
 import { getColour, type ColourKey } from "./colours";
 import { bufferOpenLine } from "./bufferLine";
 import { openRing, signedArea } from "./geo";
@@ -93,7 +94,10 @@ export type AxoPaintKey =
   | "pt-tram"
   | "pt-bus"
   | "contour"
-  | "trees";
+  | "trees"
+  | "building-roof"
+  | "building-wall-light"
+  | "building-wall-dark";
 
 export type AxoLegendSwatch = { label: string; paint: AxoPaintKey };
 
@@ -107,6 +111,8 @@ export type ExplodedAxoSettings = {
   /** Vertical separation between layers, in local metres (iso lift). */
   gapM: number;
   showLabels: boolean;
+  /** Draw buildings as extruded massing (walls + roofs). False keeps the flat footprint plate. */
+  buildingMassing?: boolean;
 };
 
 /** Vertical span of one frame plate in iso screen metres (same lift). */
@@ -295,6 +301,13 @@ export type AxoLayerGeometry = {
   clipD: string;
   unavailableNote?: string;
   legend?: AxoLegendSwatch[];
+  /**
+   * Extruded solids (building massing) in painter's order, far to near. Drawn after the
+   * plate fills and not clipped to the plate, so tall masses can rise above it.
+   */
+  solids?: AxoSolidFace[];
+  /** Visible source note for this plate (e.g. where heights came from). */
+  sourceNote?: string;
 };
 
 function dedupe(line: Pt[]): Pt[] {
@@ -468,6 +481,8 @@ export function buildExplodedAxoLayers(
     const markers: AxoPointMarker[] = [];
     let unavailableNote: string | undefined;
     let legend: AxoLegendSwatch[] | undefined;
+    let solids: AxoSolidFace[] | undefined;
+    let sourceNote: string | undefined;
 
     const areaToPath = (rings: Pt[][]) =>
       rings
@@ -583,12 +598,18 @@ export function buildExplodedAxoLayers(
         });
       }
     } else if (id === "buildings") {
-      const ground = figureGround(model.buildings, model.sideM, shape);
-      for (const polygon of ground.polygons) {
-        const parts = polygon
-          .map((ring) => isoPathFromPlanRingBase(openRing(ring), true))
-          .filter(Boolean);
-        if (parts.length) fills.push(parts.join(" "));
+      if (settings.buildingMassing === false) {
+        const ground = figureGround(model.buildings, model.sideM, shape);
+        for (const polygon of ground.polygons) {
+          const parts = polygon
+            .map((ring) => isoPathFromPlanRingBase(openRing(ring), true))
+            .filter(Boolean);
+          if (parts.length) fills.push(parts.join(" "));
+        }
+      } else {
+        const massing = buildAxoMassingFaces(model);
+        solids = massing.faces;
+        sourceNote = axoMassingHeightNote(massing.counts) || undefined;
       }
     } else if (id === "roads") {
       for (const line of roadLines) {
@@ -609,6 +630,8 @@ export function buildExplodedAxoLayers(
       clipD,
       ...(unavailableNote ? { unavailableNote } : {}),
       ...(legend ? { legend } : {}),
+      ...(solids?.length ? { solids } : {}),
+      ...(sourceNote ? { sourceNote } : {}),
     });
   }
 
@@ -633,6 +656,9 @@ const AXO_PAINT_CSS: Record<AxoPaintKey, ColourKey> = {
   "pt-bus": "--axo-pt-bus",
   contour: "--axo-contour",
   trees: "--tree-fill",
+  "building-roof": "--axo-building-roof",
+  "building-wall-light": "--axo-building-wall-light",
+  "building-wall-dark": "--axo-building-wall-dark",
 };
 
 export function axoPaintColour(paint: AxoPaintKey): string {

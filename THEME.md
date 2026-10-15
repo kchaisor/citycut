@@ -212,6 +212,10 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--axo-pt-tram` | `#00854a` | Exploded axo PTV tram route. |
 | `--axo-pt-bus` | `#c45c00` | Exploded axo PTV bus route. |
 | `--axo-contour` | `#8a8578` | Exploded axo Vicmap contour stroke. |
+| `--axo-building-roof` | `#e8e6e1` | Exploded axo building roof (massing). |
+| `--axo-building-wall-light` | `#b9b6ae` | Exploded axo building wall, sunlit side. |
+| `--axo-building-wall-dark` | `#8c8980` | Exploded axo building wall, shaded side. |
+| `--axo-building-edge` | `#5e5b54` | Exploded axo building edge stroke. |
 | `--wind-streak` | `#2B6CB0` | Animated wind streaks in the 3D viewport (~70% opacity). |
 | `--wind-rose` | `#3d5a73` | On-screen wind rose overlay and Wind export layer. |
 
