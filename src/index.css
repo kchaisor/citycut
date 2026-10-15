@@ -1545,8 +1545,8 @@ input[type="range"]::-moz-range-thumb {
 .sidebar .height-override-panel { margin: 0; }
 .sidebar .height-override-panel .legend-note { margin: 0; }
 
-/* Checkboxes in the sidebar read as switches: off is a grey track, on is an --accent fill
-   with an ink outline and an ink knob. */
+/* Checkboxes in the sidebar read as switches: a black --switch-knob always; off is a grey track with
+   the knob left, on is an --accent fill with an ink outline and the knob right. */
 .sidebar .check-field {
   flex-direction: row-reverse;
   justify-content: space-between;
@@ -1576,8 +1576,7 @@ input[type="range"]::-moz-range-thumb {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: var(--sidebar-bg);
-  box-shadow: 0 1px 1px rgb(26 25 22 / 16%);
+  background: var(--switch-knob);
   transition: transform 120ms ease;
 }
 .sidebar input[type="checkbox"]:checked {
@@ -1586,8 +1585,7 @@ input[type="range"]::-moz-range-thumb {
 }
 .sidebar input[type="checkbox"]:checked::after {
   transform: translateX(12px);
-  background: var(--accent-ink);
-  box-shadow: none;
+  background: var(--switch-knob);
 }
 .sidebar input[type="checkbox"]:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 .sidebar .axo-layer-list li { gap: 12px; }

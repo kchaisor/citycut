@@ -884,7 +884,7 @@ export type CityModelTo3dmOptions = {
   extrusionTally?: ExtrusionTally;
 };
 
-export type ImportedMassingExport = Pick<ImportedMassing, "name" | "positions" | "indices" | "placement">;
+export type ImportedMassingExport = Pick<ImportedMassing, "name" | "positions" | "indices" | "placement" | "colour">;
 
 export const IMPORTED_MASSING_LAYER = "Imported massing";
 
@@ -911,11 +911,20 @@ function addImportedMassing(
       faces.addTriFace(massing.indices[i]!, massing.indices[i + 1]!, massing.indices[i + 2]!);
     }
     mesh.normals().computeNormals();
-    const layerIndex = ensureLayer(rhino, doc, layers, materials, IMPORTED_MASSING_LAYER, { r: 255, g: 245, b: 0 });
+    const layerIndex = ensureLayer(rhino, doc, layers, materials, IMPORTED_MASSING_LAYER, colourRgb("--imported-massing"));
     const attributes = new rhino.ObjectAttributes();
     attributes.name = massing.name;
     attributes.layerIndex = layerIndex;
     applyByLayerAttributes(rhino, attributes);
+    if (massing.colour) {
+      // Per-model colour rides on the object (display + plot); the layer keeps the --imported-massing default.
+      const value = Number.parseInt(massing.colour.slice(1), 16);
+      const rgba = { r: (value >> 16) & 255, g: (value >> 8) & 255, b: value & 255, a: 255 };
+      attributes.colorSource = rhino.ObjectColorSource.ColorFromObject;
+      attributes.objectColor = rgba;
+      attributes.plotColorSource = rhino.ObjectPlotColorSource.PlotColorFromObject;
+      attributes.plotColor = rgba;
+    }
     doc.objects().addMesh(mesh, attributes);
     release(mesh);
     release(attributes);

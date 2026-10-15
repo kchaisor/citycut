@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import type { ImportedMassing, MassingPlacement } from "../lib/massingImport";
+import { getColour } from "../lib/colours";
 
 type Props = {
   imported: ImportedMassing[];
@@ -14,6 +15,7 @@ type Props = {
   onSnap: (id: string) => void;
   onResetMga: (id: string) => void;
   onToggleVisible: (id: string) => void;
+  onColour: (id: string, colour: string) => void;
   onRemove: (id: string) => void;
 };
 
@@ -135,6 +137,16 @@ export function ImportMassingPanel(props: Props) {
               ⚠ {warning}
             </p>
           ))}
+          <label className="massing-field massing-colour">
+            <span>Colour</span>
+            <input
+              type="color"
+              aria-label={`Colour of ${item.name}`}
+              value={(item.colour ?? getColour("--imported-massing")).toLowerCase()}
+              onChange={(event) => props.onColour(item.id, event.target.value)}
+            />
+            <code>{(item.colour ?? getColour("--imported-massing")).toUpperCase()}</code>
+          </label>
           <div className="panel-toolbar">
             <button type="button" aria-pressed={item.visible} onClick={() => props.onToggleVisible(item.id)}>
               {item.visible ? "Shown (in view and .3dm)" : "Hidden"}

@@ -10,11 +10,16 @@ export function planBuildingFill(
   mode: BuildingColourMode,
   highlightManual: boolean,
 ): string {
-  // Imported massing reads as the massing yellow in every colour mode.
-  if (building.importedMassing) return getColour("--imported-massing");
+  // Imported massing keeps its own colour (default token) in every colour mode.
+  if (building.importedMassing) return importedMassingFill(building);
   if (highlightManual && building.heightManual) return getColour("--building-manual");
   if (isSiteBuilding(model, building.id)) return getColour("--site-building");
   return buildingViewportFill(mode, building.use as BuildingUse, building.source);
+}
+
+/** Fill of an imported massing footprint: its per-model colour, else the `--imported-massing` token. */
+export function importedMassingFill(building: Pick<BuildingFeat, "importedColour">): string {
+  return building.importedColour ?? getColour("--imported-massing");
 }
 
 export function planBuildingStrokeStyle(

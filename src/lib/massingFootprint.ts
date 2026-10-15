@@ -108,6 +108,7 @@ export function massingDrawingBuildings(
         use: "unclassified",
         source: "none",
         importedMassing: true,
+        ...(item.colour ? { importedColour: item.colour } : {}),
         overtureName: item.name,
       });
     }

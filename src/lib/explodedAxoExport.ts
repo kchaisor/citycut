@@ -249,7 +249,7 @@ export function explodedAxoChunks(
       if (rings.length > 0) {
         paths.push({
           rings,
-          fill: hexRgb(axoPaintColour(face.paint)),
+          fill: hexRgb(face.fill ?? axoPaintColour(face.paint)),
           ...(face.paint.startsWith("building")
             ? { stroke: hexRgb(getColour("--axo-building-edge")), strokeMm: 0.05 }
             : {}),

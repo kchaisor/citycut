@@ -1,5 +1,6 @@
 import { clipAreaToSiteFrame, DEFAULT_SITE_FRAME_SHAPE, type SiteFrameShape } from "./siteFrame";
 import { openRing, signedArea } from "./geo";
+import { getColour } from "./colours";
 import type { BuildingFeat, BuildingHeightTier, CityModel, Pt } from "../types";
 
 /** One filled face of an extruded solid, in iso base coords (lift 0 = plate). */
@@ -13,7 +14,16 @@ export type AxoSolidFace = {
     | "tree-canopy"
     | "tree-canopy-shade"
     | "tree-trunk";
+  /** Explicit fill overriding `paint` (imported massing in its per-model colour). */
+  fill?: string;
 };
+
+/** Scale a #RRGGBB colour toward black (wall shading for imported massing). */
+export function shadeHex(hex: string, factor: number): string {
+  const value = Number.parseInt(hex.slice(1), 16);
+  const ch = (shift: number) => Math.round(((value >> shift) & 255) * factor).toString(16).padStart(2, "0");
+  return `#${ch(16)}${ch(8)}${ch(0)}`.toUpperCase();
+}
 
 const COS30 = Math.sqrt(3) / 2;
 const round = (v: number) => Math.round(v * 100) / 100;
@@ -42,7 +52,7 @@ export function axoHeightSource(tier: BuildingHeightTier | undefined, fallback?:
   return fallback ? "estimate" : "overture_osm";
 }
 
-type Prism = { outer: Pt[]; holes: Pt[][]; base: number; top: number; depth: number };
+type Prism = { outer: Pt[]; holes: Pt[][]; base: number; top: number; depth: number; fill?: string };
 
 function prismsFor(building: BuildingFeat, sideM: number, shape: SiteFrameShape): Prism[] {
   const parts = building.extrusionParts?.length
@@ -79,7 +89,8 @@ export function buildAxoMassingFaces(
     const list = prismsFor(building, model.sideM, shape);
     if (list.length === 0) continue;
     counts[axoHeightSource(building.heightTier, building.heightFromFallback)] += 1;
-    prisms.push(...list);
+    const fill = building.importedMassing ? (building.importedColour ?? getColour("--imported-massing")) : undefined;
+    prisms.push(...(fill ? list.map((p) => ({ ...p, fill })) : list));
   }
   prisms.sort((a, b) => a.depth - b.depth || a.top - b.top);
   const faces: AxoSolidFace[] = [];
@@ -109,9 +120,15 @@ export function buildAxoMassingFaces(
       }
     });
     walls.sort((p, q) => p.depth - q.depth);
-    for (const wall of walls) faces.push({ d: wall.d, paint: wall.paint });
+    for (const wall of walls) {
+      faces.push(
+        prism.fill
+          ? { d: wall.d, paint: wall.paint, fill: shadeHex(prism.fill, wall.paint === "building-wall-light" ? 0.86 : 0.72) }
+          : { d: wall.d, paint: wall.paint },
+      );
+    }
     const roof = rings.map((ring) => pathOf(ring.map(([e, n]) => iso(e, n, top)))).join(" ");
-    faces.push({ d: roof, paint: "building-roof" });
+    faces.push(prism.fill ? { d: roof, paint: "building-roof", fill: prism.fill } : { d: roof, paint: "building-roof" });
   }
   return { faces, counts };
 }

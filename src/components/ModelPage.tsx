@@ -2011,6 +2011,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 onSnap={massing.snapToGround}
                 onResetMga={massing.resetToMga}
                 onToggleVisible={massing.toggleVisible}
+                onColour={massing.setColour}
                 onRemove={massing.remove}
               />
             </div>
