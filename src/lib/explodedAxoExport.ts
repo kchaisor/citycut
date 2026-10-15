@@ -6,10 +6,10 @@ import { plainDataCredit } from "./dataCredits";
 import { comTreesCreditLine } from "./comTreesCredit";
 import { dashSegments, readDrawingStyle } from "./drawingStyle";
 import {
-  AXO_LAYER_LABELS,
+  axoPlateColours,
+  axoPlateLabelText,
   axoLayerBasePaint,
   axoLayerLabelAnchor,
-  axoPlateShowsAerial,
   axoLayersForPaint,
   axoPaintColour,
   buildExplodedAxoLayers,
@@ -185,7 +185,7 @@ export function explodedAxoChunks(
     if (plateRing.length >= 3) {
       paths.push({
         rings: [plateRing],
-        stroke: hexRgb(layer.id === "base" ? getColour("--axo-base-outline") : getColour("--axo-guide")),
+        stroke: hexRgb(layer.id === "base" ? getColour("--axo-base-outline") : axoPlateColours(layer.id).edge),
         strokeMm: layer.id === "base" ? 0.3 : 0.12,
         close: true,
       });
@@ -244,7 +244,21 @@ export function explodedAxoChunks(
         close: true,
       });
     }
-    if (axoPlateShowsAerial(layer.id) && satelliteNote) {
+    for (const face of layer.solids ?? []) {
+      const rings = ringsFromIsoD(face.d, origin, scale, pageHeightMm, liftM);
+      if (rings.length > 0) {
+        paths.push({
+          rings,
+          fill: hexRgb(axoPaintColour(face.paint)),
+          ...(face.paint.startsWith("building")
+            ? { stroke: hexRgb(getColour("--axo-building-edge")), strokeMm: 0.05 }
+            : {}),
+          close: true,
+          evenOdd: true,
+        });
+      }
+    }
+    if (layer.id === "aerial" && satelliteNote) {
       paths.push({
         rings: [plateRing],
         stroke: hexRgb(getColour("--axo-guide")),
@@ -257,19 +271,30 @@ export function explodedAxoChunks(
 
   if (settings.showLabels) {
     const texts: PdfText[] = [];
+    const leaders: PdfPath[] = [];
     for (const layer of layers) {
-      const anchor = axoLayerLabelAnchor(model.sideM, layer.liftM);
+      const anchor = axoLayerLabelAnchor(model.sideM, layer.liftM, model.frameShape ?? "square");
       const [sx, sy] = isoToSheet([anchor.x, anchor.y], origin, scale, pageHeightMm);
       texts.push({
         x: sx,
         y: sy,
-        sizeMm: model.sideM * 0.022 * mmPerMetre(scale),
-        text: AXO_LAYER_LABELS[layer.id],
+        sizeMm: model.sideM * 0.03 * mmPerMetre(scale),
+        text: axoPlateLabelText(layer.id),
         color: hexRgb(getColour("--axo-label")),
-        rotateDeg: anchor.rotateDeg,
+      });
+      leaders.push({
+        rings: [
+          [
+            isoToSheet([anchor.leader.x1, anchor.leader.y1], origin, scale, pageHeightMm),
+            isoToSheet([anchor.leader.x2, anchor.leader.y2], origin, scale, pageHeightMm),
+          ],
+        ],
+        stroke: hexRgb(axoPlateColours(layer.id).edge),
+        strokeMm: 0.12,
+        close: false,
       });
     }
-    if (texts.length) chunks.push({ name: "Labels", texts });
+    if (texts.length) chunks.push({ name: "Labels", texts, paths: leaders });
   }
 
   const title = `${model.placeLabel} · Exploded axo · 1:${scale} · ${formatCoord(model.center.lat)}, ${formatCoord(model.center.lon)}`;
