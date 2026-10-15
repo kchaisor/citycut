@@ -105,6 +105,10 @@ export const COLOUR_KEYS = [
   "--axo-pt-tram",
   "--axo-pt-bus",
   "--axo-contour",
+  "--axo-building-roof",
+  "--axo-building-wall-light",
+  "--axo-building-wall-dark",
+  "--axo-building-edge",
 ] as const;
 
 export type ColourKey = (typeof COLOUR_KEYS)[number];
@@ -306,6 +310,10 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--axo-pt-tram": "Exploded axo tram route",
   "--axo-pt-bus": "Exploded axo bus route",
   "--axo-contour": "Exploded axo contour",
+  "--axo-building-roof": "Exploded axo building roof (massing)",
+  "--axo-building-wall-light": "Exploded axo building wall, sunlit side",
+  "--axo-building-wall-dark": "Exploded axo building wall, shaded side",
+  "--axo-building-edge": "Exploded axo building edge stroke",
 };
 
 const parsed = resolveSheet(parseCustomProperties(coloursCss));

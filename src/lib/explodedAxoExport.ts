@@ -153,6 +153,7 @@ export function explodedAxoChunks(
   const origin: Pt = page.origin;
   const pageHeightMm = page.heightMm;
   const chunks: PdfChunk[] = [];
+  const sourceNotes: string[] = [];
 
   const axoGuideDash = dashSegments(readDrawingStyle().axoGuideDash);
   const guidePaths: PdfPath[] = guides.map((guide) => ({
@@ -227,6 +228,22 @@ export function explodedAxoChunks(
         close: true,
       });
     }
+    for (const face of layer.solids ?? []) {
+      const rings = ringsFromIsoD(face.d, origin, scale, pageHeightMm, liftM);
+      if (rings.length > 0) {
+        paths.push({
+          rings,
+          fill: hexRgb(axoPaintColour(face.paint)),
+          stroke: hexRgb(getColour("--axo-building-edge")),
+          strokeMm: 0.05,
+          close: true,
+          evenOdd: true,
+        });
+      }
+    }
+    if (layer.sourceNote) {
+      sourceNotes.push(layer.sourceNote);
+    }
     if (layer.id === "aerial" && satelliteNote) {
       paths.push({
         rings: [plateRing],
@@ -269,7 +286,8 @@ export function explodedAxoChunks(
   });
   const treesCredit = comTreesCreditLine(model);
   const credited = treesCredit ? `${credit} ${treesCredit}.` : credit;
-  const note = satelliteNote ? `${credited} ${satelliteNote}` : credited;
+  const withSatellite = satelliteNote ? `${credited} ${satelliteNote}` : credited;
+  const note = sourceNotes.length ? `${withSatellite} ${sourceNotes.join(". ")}.` : withSatellite;
   chunks.push({
     name: "Annotation",
     texts: [

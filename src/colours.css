@@ -249,4 +249,8 @@
   --axo-pt-tram: #000000;
   --axo-pt-bus: #c45c00;
   --axo-contour: #000000;
+  --axo-building-roof: #e8e6e1;
+  --axo-building-wall-light: #b9b6ae;
+  --axo-building-wall-dark: #8c8980;
+  --axo-building-edge: #5e5b54;
 }
