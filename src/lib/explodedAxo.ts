@@ -1,4 +1,5 @@
 import { figureGround } from "./figureGround";
+import { AXO_CADASTRE_UNAVAILABLE_NOTE, axoCadastreNote, type CadastreOverlay } from "./explodedAxoCadastre";
 import {
   AXO_TERRAIN_UNAVAILABLE_NOTE,
   axoTerrainNote,
@@ -40,6 +41,8 @@ export type ExplodedAxoOverlayBundle = {
   topography?: TopographyOverlay | "unavailable";
   /** Overture water polygons fetched for the frame when the model has none. */
   overtureWater?: AreaFeat[];
+  /** Vicmap Parcel outlines for the cadastre plate. */
+  cadastre?: CadastreOverlay | "unavailable";
   /** Mapterhorn terrain field for the terrain mesh plate when the model has none. */
   terrain?: TerrainField | "unavailable";
 };
@@ -64,6 +67,7 @@ export const AXO_LAYER_IDS = [
   "topography",
   "terrain",
   "roads",
+  "cadastre",
   "green",
   "trees",
   "buildings",
@@ -82,6 +86,7 @@ export const AXO_LAYER_LABELS: Record<AxoLayerId, string> = {
   topography: "TOPOGRAPHY",
   terrain: "TERRAIN (DTM)",
   roads: "ROADS",
+  cadastre: "CADASTRE",
   green: "GREEN SPACES",
   trees: "TREES",
   buildings: "BUILDINGS",
@@ -106,6 +111,7 @@ export type AxoPaintKey =
   | "pt-bus"
   | "contour"
   | "trees"
+  | "cadastre"
   | "terrain-mesh"
   | "building-roof"
   | "building-wall-light"
@@ -160,6 +166,7 @@ export function defaultExplodedAxoSettings(sideM: number): ExplodedAxoSettings {
     topography: false,
     terrain: false,
     roads: true,
+    cadastre: false,
     green: true,
     trees: true,
     buildings: true,
@@ -630,6 +637,22 @@ export function buildExplodedAxoLayers(
           0.55,
         );
       }
+    } else if (id === "cadastre") {
+      if (overlays.cadastre === "unavailable") {
+        unavailableNote = AXO_CADASTRE_UNAVAILABLE_NOTE;
+      } else if (overlays.cadastre) {
+        for (const rings of overlays.cadastre.parcels) {
+          for (const ring of rings) {
+            const d = isoPathFromPlanRingBase(openRing(ring), true);
+            if (!d) continue;
+            strokes.push(d);
+            strokePaints.push("cadastre");
+            strokeWidthScales.push(0.35);
+            strokeDashed.push(false);
+          }
+        }
+        sourceNote = axoCadastreNote(overlays.cadastre);
+      }
     } else if (id === "terrain") {
       const field = model.terrain ?? (overlays.terrain !== "unavailable" ? overlays.terrain : undefined);
       if (field) {
@@ -719,6 +742,7 @@ const AXO_PAINT_CSS: Record<AxoPaintKey, ColourKey> = {
   "pt-bus": "--axo-pt-bus",
   contour: "--axo-contour",
   trees: "--tree-fill",
+  cadastre: "--axo-cadastre",
   "terrain-mesh": "--axo-terrain-mesh",
   "building-roof": "--axo-building-roof",
   "building-wall-light": "--axo-building-wall-light",
@@ -735,6 +759,7 @@ export function axoPaintColour(paint: AxoPaintKey): string {
 export function axoLayerBasePaint(id: AxoLayerId): AxoPaintKey {
   if (id === "water" || id === "hydro") return "water";
   if (id === "roads") return "roads";
+  if (id === "cadastre") return "cadastre";
   if (id === "green") return "green";
   if (id === "trees") return "trees";
   if (id === "buildings" || id === "aerial") return "buildings";
@@ -753,6 +778,7 @@ export function axoLayerColours(): Record<AxoLayerId | "guide" | "label", string
     topography: getColour("--axo-contour"),
     terrain: getColour("--axo-terrain-mesh"),
     roads: getColour("--axo-road"),
+    cadastre: getColour("--axo-cadastre"),
     green: getColour("--axo-green"),
     trees: getColour("--tree-fill"),
     buildings: getColour("--axo-building"),

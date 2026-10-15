@@ -11,6 +11,9 @@ export const DATA_CREDIT_WIND_SUFFIX = " Wind: Open-Meteo (CC BY 4.0).";
 export const DATA_CREDIT_ESRI_SATELLITE =
   " Satellite imagery © Esri, Vantor, Earthstar Geographics, and the GIS User Community.";
 
+export const DATA_CREDIT_VICMAP_PROPERTY =
+  " Cadastre: Vicmap Property © State of Victoria (Department of Transport and Planning), CC BY 4.0.";
+
 export const CITYCUT_BYLINE = "CityCut · Kelvin Chai";
 
 export type StageCreditOptions = {
@@ -21,6 +24,8 @@ export type StageCreditOptions = {
   /** Linked CoM urban forest credit when the cut has CoM trees. */
   comTreesHtml?: string | null;
   contourHtml?: string | null;
+  /** Vicmap Property parcels on the exploded axo cadastre plate. */
+  cadastreOn?: boolean;
 };
 
 const VICMAP_LINK =
@@ -38,6 +43,7 @@ export function modelStageCreditHtml(options: StageCreditOptions): string {
   if (options.comHeightsHtml) parts.push(options.comHeightsHtml);
   if (options.comTreesHtml) parts.push(options.comTreesHtml);
   if (options.contourHtml) parts.push(options.contourHtml);
+  if (options.cadastreOn) parts.push(DATA_CREDIT_VICMAP_PROPERTY.trim());
   parts.push(CITYCUT_BYLINE);
   return parts.join(" ");
 }
@@ -47,6 +53,8 @@ export type PlainCreditOptions = {
   satelliteOn?: boolean;
   /** Include Vicmap planning/hydro/rail/contour and PT Vic attributions for exploded axo exports. */
   explodedAxoOverlaysOn?: boolean;
+  /** Vicmap Property parcels on the exploded axo cadastre plate. */
+  cadastreOn?: boolean;
   /** Prefix such as "CityCut." for export bars. */
   prefix?: string;
 };
@@ -59,5 +67,6 @@ export function plainDataCredit(options: PlainCreditOptions = {}): string {
   if (options.windOn) chunks.push(DATA_CREDIT_WIND_SUFFIX.trim());
   if (options.satelliteOn) chunks.push(DATA_CREDIT_ESRI_SATELLITE.trim());
   if (options.explodedAxoOverlaysOn) chunks.push(DATA_CREDIT_PT_VIC.trim());
+  if (options.cadastreOn) chunks.push(DATA_CREDIT_VICMAP_PROPERTY.trim());
   return chunks.join(" ").replace(/\s+/g, " ").trim();
 }

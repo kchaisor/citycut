@@ -113,6 +113,7 @@ export const EXPLODED_AXO_LAYER_ORDER = [
   "Topography",
   "Terrain",
   "Roads",
+  "Cadastre",
   "Green",
   "Trees",
   "Buildings",
@@ -129,6 +130,7 @@ function chunkNameForLayer(id: AxoLayerId): string {
   if (id === "topography") return "Topography";
   if (id === "terrain") return "Terrain";
   if (id === "roads") return "Roads";
+  if (id === "cadastre") return "Cadastre";
   if (id === "green") return "Green";
   if (id === "trees") return "Trees";
   if (id === "buildings") return "Buildings";
@@ -304,6 +306,7 @@ export function explodedAxoChunks(
     windOn: false,
     satelliteOn: true,
     explodedAxoOverlaysOn: overlayOn,
+    cadastreOn: settings.layerVisible.cadastre,
   });
   const treesCredit = comTreesCreditLine(model);
   const credited = treesCredit ? `${credit} ${treesCredit}.` : credit;
