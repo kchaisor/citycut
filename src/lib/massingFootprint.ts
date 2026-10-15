@@ -62,6 +62,26 @@ export function massingFootprint(
 }
 
 /**
+ * Ground (AHD m) under a footprint: mean terrain at its vertices. Drawings extrude from the ground, so
+ * height must be the top above *terrain*, not above the model's lowest vertex: a model whose base Z
+ * sits below or above the terrain (or carries geometry sunk into it) otherwise casts plan shadows
+ * from the wrong height. Without terrain, falls back to the placement base.
+ */
+function footprintGround(outer: Pt[], base: number, groundAt?: (east: number, north: number) => number): number {
+  if (!groundAt || outer.length === 0) return base;
+  let sum = 0;
+  let count = 0;
+  for (const [east, north] of outer) {
+    const z = groundAt(east, north);
+    if (Number.isFinite(z)) {
+      sum += z;
+      count += 1;
+    }
+  }
+  return count > 0 ? sum / count : base;
+}
+
+/**
  * Drawing-only buildings for the visible imported models: one per footprint polygon, flagged
  * `importedMassing` so the site plan fills it yellow. Figure-ground and exploded axo count them as figure.
  */
@@ -69,6 +89,8 @@ export function massingDrawingBuildings(
   imported: ImportedMassing[],
   origin: LonLat,
   zone: number,
+  /** Terrain (AHD m) at a local point; the same field the 3D view and click placement use. */
+  groundAt?: (east: number, north: number) => number,
 ): BuildingFeat[] {
   const out: BuildingFeat[] = [];
   let next = IMPORTED_ID_BASE;
@@ -82,7 +104,7 @@ export function massingDrawingBuildings(
         id: next--,
         ring: closeRing(outer as Pt[]),
         holes: holes.map((hole) => closeRing(hole as Pt[])),
-        height: Math.max(1, topZ - item.placement.base),
+        height: Math.max(1, topZ - footprintGround(outer as Pt[], item.placement.base, groundAt)),
         use: "unclassified",
         source: "none",
         importedMassing: true,

@@ -205,14 +205,14 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     () => {
       if (!rt || !imported.some((item) => item.visible)) return [];
       try {
-        return rt.massingDrawingBuildings(imported, model.center, zone);
+        return rt.massingDrawingBuildings(imported, model.center, zone, model.terrain ? groundAt : undefined);
       } catch (err) {
         // A footprint that fails to union must not take the model page down; the 3D view still shows it.
         console.warn("[CityCut] imported massing footprint failed", err);
         return [];
       }
     },
-    [rt, imported, model.center, zone],
+    [rt, imported, model.center, zone, model.terrain, groundAt],
   );
 
   const forExport = useMemo(() => imported.filter((item) => item.visible), [imported]);
