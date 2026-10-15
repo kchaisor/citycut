@@ -1,5 +1,13 @@
 import { figureGround } from "./figureGround";
 import { AXO_CADASTRE_UNAVAILABLE_NOTE, axoCadastreNote, type CadastreOverlay } from "./explodedAxoCadastre";
+import {
+  AXO_TERRAIN_UNAVAILABLE_NOTE,
+  axoTerrainNote,
+  buildAxoTerrainMesh,
+  DEFAULT_AXO_TERRAIN_EXAGGERATION,
+} from "./explodedAxoTerrain";
+import { axoCanopyNote, buildAxoCanopyFaces } from "./explodedAxoCanopies";
+import { axoMassingHeightNote, buildAxoMassingFaces, type AxoSolidFace } from "./explodedAxoMassing";
 import { getColour, type ColourKey } from "./colours";
 import { bufferOpenLine } from "./bufferLine";
 import { openRing, signedArea } from "./geo";
@@ -21,7 +29,7 @@ import type {
   TransportRailLine,
   TransportRailStation,
 } from "./explodedAxoOverlayFetch";
-import type { AreaFeat, CityModel, Pt } from "../types";
+import type { AreaFeat, CityModel, Pt, TerrainField } from "../types";
 
 export type ExplodedAxoOverlayBundle = {
   planning?: PlanningOverlayPolygon[] | "unavailable";
@@ -35,6 +43,8 @@ export type ExplodedAxoOverlayBundle = {
   overtureWater?: AreaFeat[];
   /** Vicmap Parcel outlines for the cadastre plate. */
   cadastre?: CadastreOverlay | "unavailable";
+  /** Mapterhorn terrain field for the terrain mesh plate when the model has none. */
+  terrain?: TerrainField | "unavailable";
 };
 
 const roundIso = (value: number) => Math.round(value * 100) / 100;
@@ -55,6 +65,7 @@ export const AXO_LAYER_IDS = [
   "hydro",
   "transport",
   "topography",
+  "terrain",
   "roads",
   "cadastre",
   "green",
@@ -73,6 +84,7 @@ export const AXO_LAYER_LABELS: Record<AxoLayerId, string> = {
   hydro: "HYDRO",
   transport: "TRANSPORT",
   topography: "TOPOGRAPHY",
+  terrain: "TERRAIN (DTM)",
   roads: "ROADS",
   cadastre: "CADASTRE",
   green: "GREEN SPACES",
@@ -99,7 +111,14 @@ export type AxoPaintKey =
   | "pt-bus"
   | "contour"
   | "trees"
-  | "cadastre";
+  | "cadastre"
+  | "terrain-mesh"
+  | "building-roof"
+  | "building-wall-light"
+  | "building-wall-dark"
+  | "tree-canopy"
+  | "tree-canopy-shade"
+  | "tree-trunk";
 
 export type AxoLegendSwatch = { label: string; paint: AxoPaintKey };
 
@@ -113,6 +132,12 @@ export type ExplodedAxoSettings = {
   /** Vertical separation between layers, in local metres (iso lift). */
   gapM: number;
   showLabels: boolean;
+  /** Vertical exaggeration of the terrain mesh plate (1 = true scale). */
+  terrainExaggeration?: number;
+  /** Draw buildings as extruded massing (walls + roofs). False keeps the flat footprint plate. */
+  buildingMassing?: boolean;
+  /** Draw trees as 3D canopies sized from crown data. False keeps flat crown discs. */
+  treeCanopies?: boolean;
 };
 
 /** Vertical span of one frame plate in iso screen metres (same lift). */
@@ -139,6 +164,7 @@ export function defaultExplodedAxoSettings(sideM: number): ExplodedAxoSettings {
     hydro: false,
     transport: false,
     topography: false,
+    terrain: false,
     roads: true,
     cadastre: false,
     green: true,
@@ -264,22 +290,48 @@ export function axoLabelRotationDeg(edgeDx: number, edgeDy: number): number {
   return deg;
 }
 
+export type AxoLayerLabelAnchor = {
+  /** Text baseline start (horizontal text, left-aligned). */
+  x: number;
+  y: number;
+  /** Always 0: labels are horizontal. Kept for callers that still pass a rotate(). */
+  rotateDeg: number;
+  /** Short leader from the plate's right corner to the label. */
+  leader: { x1: number; y1: number; x2: number; y2: number };
+};
+
+/** Right-most point of the plate in iso (square corner or circle rim). */
+export function axoPlateRightCorner(sideM: number, shape: SiteFrameShape, liftM: number): Pt {
+  const half = sideM / 2;
+  if (shape === "circle") {
+    const k = half / Math.SQRT2;
+    return planPointToIso(k, -k, liftM);
+  }
+  return planPointToIso(half, -half, liftM);
+}
+
+/** Horizontal label at the plate's right corner with a short leader line (per Kelvin's reference). */
 export function axoLayerLabelAnchor(
   sideM: number,
   liftM: number,
-): { x: number; y: number; rotateDeg: number } {
-  const half = sideM / 2;
-  const [x0, y0] = planPointToIso(half, -half, liftM);
-  const [x1, y1] = planPointToIso(half, half, liftM);
-  const edgeDx = x1 - x0;
-  const edgeDy = y1 - y0;
-  const rotateDeg = axoLabelRotationDeg(edgeDx, edgeDy);
-  const along = sideM * 0.05;
+  shape: SiteFrameShape = "square",
+): AxoLayerLabelAnchor {
+  const [x0, y0] = axoPlateRightCorner(sideM, shape, liftM);
+  const leaderLen = sideM * 0.07;
+  const fontM = sideM * 0.03;
   return {
-    x: x0 + along * 1.4,
-    y: y0 + along * 0.4,
-    rotateDeg,
+    x: x0 + leaderLen + sideM * 0.012,
+    y: y0 + fontM * 0.35,
+    rotateDeg: 0,
+    leader: { x1: x0 + sideM * 0.01, y1: y0, x2: x0 + leaderLen, y2: y0 },
   };
+}
+
+/** Plate label text as in the reference ("Trees.", "Buildings."). */
+export function axoPlateLabelText(id: AxoLayerId): string {
+  const raw = AXO_LAYER_LABELS[id];
+  const title = raw.charAt(0) + raw.slice(1).toLowerCase();
+  return `${title}.`;
 }
 
 export type AxoLayerGeometry = {
@@ -302,7 +354,14 @@ export type AxoLayerGeometry = {
   clipD: string;
   unavailableNote?: string;
   legend?: AxoLegendSwatch[];
-  /** Visible source note for this plate. */
+  /** Strokes drawn without the plate clip (terrain mesh rises above the plate). */
+  unclippedStrokes?: string[];
+  /**
+   * Extruded solids (building massing) in painter's order, far to near. Drawn after the
+   * plate fills and not clipped to the plate, so tall masses can rise above it.
+   */
+  solids?: AxoSolidFace[];
+  /** Visible source note for this plate (e.g. where heights came from). */
   sourceNote?: string;
 };
 
@@ -477,6 +536,8 @@ export function buildExplodedAxoLayers(
     const markers: AxoPointMarker[] = [];
     let unavailableNote: string | undefined;
     let legend: AxoLegendSwatch[] | undefined;
+    let unclippedStrokes: string[] | undefined;
+    let solids: AxoSolidFace[] | undefined;
     let sourceNote: string | undefined;
 
     const areaToPath = (rings: Pt[][]) =>
@@ -592,11 +653,24 @@ export function buildExplodedAxoLayers(
         }
         sourceNote = axoCadastreNote(overlays.cadastre);
       }
+    } else if (id === "terrain") {
+      const field = model.terrain ?? (overlays.terrain !== "unavailable" ? overlays.terrain : undefined);
+      if (field) {
+        const ex = settings.terrainExaggeration ?? DEFAULT_AXO_TERRAIN_EXAGGERATION;
+        unclippedStrokes = buildAxoTerrainMesh(model, field, ex);
+        sourceNote = axoTerrainNote(field, ex);
+      } else if (overlays.terrain === "unavailable") {
+        unavailableNote = AXO_TERRAIN_UNAVAILABLE_NOTE;
+      }
     } else if (id === "green") {
       for (const rings of greenAreas) {
         const d = areaToPath(rings);
         if (d) fills.push(d);
       }
+    } else if (id === "trees" && settings.treeCanopies !== false) {
+      const canopies = buildAxoCanopyFaces(model);
+      solids = canopies.faces;
+      sourceNote = axoCanopyNote(canopies.counts) || undefined;
     } else if (id === "trees") {
       for (const tree of model.trees) {
         if (!pointInSiteFrame(tree.at, model.sideM, shape)) continue;
@@ -609,12 +683,18 @@ export function buildExplodedAxoLayers(
         });
       }
     } else if (id === "buildings") {
-      const ground = figureGround(model.buildings, model.sideM, shape);
-      for (const polygon of ground.polygons) {
-        const parts = polygon
-          .map((ring) => isoPathFromPlanRingBase(openRing(ring), true))
-          .filter(Boolean);
-        if (parts.length) fills.push(parts.join(" "));
+      if (settings.buildingMassing === false) {
+        const ground = figureGround(model.buildings, model.sideM, shape);
+        for (const polygon of ground.polygons) {
+          const parts = polygon
+            .map((ring) => isoPathFromPlanRingBase(openRing(ring), true))
+            .filter(Boolean);
+          if (parts.length) fills.push(parts.join(" "));
+        }
+      } else {
+        const massing = buildAxoMassingFaces(model);
+        solids = massing.faces;
+        sourceNote = axoMassingHeightNote(massing.counts) || undefined;
       }
     } else if (id === "roads") {
       for (const line of roadLines) {
@@ -635,6 +715,8 @@ export function buildExplodedAxoLayers(
       clipD,
       ...(unavailableNote ? { unavailableNote } : {}),
       ...(legend ? { legend } : {}),
+      ...(unclippedStrokes?.length ? { unclippedStrokes } : {}),
+      ...(solids?.length ? { solids } : {}),
       ...(sourceNote ? { sourceNote } : {}),
     });
   }
@@ -661,6 +743,13 @@ const AXO_PAINT_CSS: Record<AxoPaintKey, ColourKey> = {
   contour: "--axo-contour",
   trees: "--tree-fill",
   cadastre: "--axo-cadastre",
+  "terrain-mesh": "--axo-terrain-mesh",
+  "building-roof": "--axo-building-roof",
+  "building-wall-light": "--axo-building-wall-light",
+  "building-wall-dark": "--axo-building-wall-dark",
+  "tree-canopy": "--axo-tree-canopy",
+  "tree-canopy-shade": "--axo-tree-canopy-shade",
+  "tree-trunk": "--axo-tree-trunk",
 };
 
 export function axoPaintColour(paint: AxoPaintKey): string {
@@ -675,6 +764,7 @@ export function axoLayerBasePaint(id: AxoLayerId): AxoPaintKey {
   if (id === "trees") return "trees";
   if (id === "buildings" || id === "aerial") return "buildings";
   if (id === "topography") return "contour";
+  if (id === "terrain") return "terrain-mesh";
   if (id === "transport") return "rail-line";
   return "plan-flood";
 }
@@ -686,6 +776,7 @@ export function axoLayerColours(): Record<AxoLayerId | "guide" | "label", string
     hydro: getColour("--axo-hydro-area"),
     transport: getColour("--axo-rail-line"),
     topography: getColour("--axo-contour"),
+    terrain: getColour("--axo-terrain-mesh"),
     roads: getColour("--axo-road"),
     cadastre: getColour("--axo-cadastre"),
     green: getColour("--axo-green"),
@@ -696,6 +787,17 @@ export function axoLayerColours(): Record<AxoLayerId | "guide" | "label", string
     label: getColour("--axo-label"),
   };
 }
+
+/** Per-layer plate tint (fill) and edge colours, from colours.css tokens. */
+export function axoPlateColours(id: AxoLayerId): { tint: string; edge: string } {
+  return {
+    tint: getColour(`--axo-plate-${id}` as ColourKey),
+    edge: getColour(`--axo-edge-${id}` as ColourKey),
+  };
+}
+
+/** Opacity of the plate tint on screen, so lower plates still read through (reference look). */
+export const AXO_PLATE_TINT_OPACITY = 0.55;
 
 /** Hatch pattern ids for planning fills (referenced from SVG defs). */
 export const AXO_HATCH_PAINTS: AxoPaintKey[] = ["plan-flood", "plan-heritage", "plan-ddo", "plan-bmo"];
@@ -741,9 +843,9 @@ export function explodedAxoBounds(
       const [x, y] = planPointToIso(pt[0], pt[1], layer.liftM);
       bump(x, y);
     }
-    const label = axoLayerLabelAnchor(model.sideM, layer.liftM);
+    const label = axoLayerLabelAnchor(model.sideM, layer.liftM, model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE);
     bump(label.x, label.y);
-    bump(label.x + model.sideM * 0.12, label.y);
+    bump(label.x + model.sideM * 0.22, label.y);
   }
   for (const guide of guides) {
     bump(guide.x, guide.yTop);
