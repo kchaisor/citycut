@@ -107,6 +107,7 @@ export const COLOUR_KEYS = [
   "--axo-contour",
   "--axo-cadastre",
   "--axo-terrain-mesh",
+  "--axo-base-outline",
 ] as const;
 
 export type ColourKey = (typeof COLOUR_KEYS)[number];
@@ -310,6 +311,7 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--axo-contour": "Exploded axo contour",
   "--axo-cadastre": "Exploded axo cadastre (Vicmap parcel) boundary, orange",
   "--axo-terrain-mesh": "Exploded axo terrain (DTM) mesh grid",
+  "--axo-base-outline": "Exploded axo base outline plate (frame edge and corner dots)",
 };
 
 const parsed = resolveSheet(parseCustomProperties(coloursCss));

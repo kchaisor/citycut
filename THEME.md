@@ -214,6 +214,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--axo-contour` | `#8a8578` | Exploded axo Vicmap contour stroke. |
 | `--axo-cadastre` | `#e8a33c` | Exploded axo cadastre (Vicmap parcel) boundary, orange. |
 | `--axo-terrain-mesh` | `#4a4a4a` | Exploded axo terrain (DTM) mesh grid. |
+| `--axo-base-outline` | `#1a1916` | Exploded axo base outline plate (frame edge and corner dots). |
 | `--wind-streak` | `#2B6CB0` | Animated wind streaks in the 3D viewport (~70% opacity). |
 | `--wind-rose` | `#3d5a73` | On-screen wind rose overlay and Wind export layer. |
 

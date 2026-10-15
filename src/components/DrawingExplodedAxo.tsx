@@ -278,8 +278,8 @@ export function DrawingExplodedAxo({
             <path
               d={layer.plateOutlineD}
               fill="none"
-              stroke={colours.guide}
-              strokeWidth={outlinePx}
+              stroke={layer.id === "base" ? colours.base : colours.guide}
+              strokeWidth={layer.id === "base" ? outlinePx * 2.5 : outlinePx}
               vectorEffect="non-scaling-stroke"
             />
             {layer.unclippedStrokes?.map((d, ui) => (

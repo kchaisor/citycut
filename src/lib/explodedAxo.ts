@@ -70,6 +70,7 @@ export const AXO_LAYER_IDS = [
   "trees",
   "buildings",
   "aerial",
+  "base",
 ] as const;
 export type AxoLayerId = (typeof AXO_LAYER_IDS)[number];
 
@@ -89,6 +90,7 @@ export const AXO_LAYER_LABELS: Record<AxoLayerId, string> = {
   trees: "TREES",
   buildings: "BUILDINGS",
   aerial: "SATELLITE",
+  base: "BASE OUTLINE",
 };
 
 export type AxoPaintKey =
@@ -110,13 +112,18 @@ export type AxoPaintKey =
   | "contour"
   | "trees"
   | "cadastre"
-  | "terrain-mesh";
+  | "terrain-mesh"
+  | "base-outline";
 
 export type AxoLegendSwatch = { label: string; paint: AxoPaintKey };
 
 export type AxoPointMarker = { x: number; y: number; paint: AxoPaintKey; radiusM: number };
 
-export const DEFAULT_AXO_LAYER_ORDER: AxoLayerId[] = [...AXO_LAYER_IDS];
+/**
+ * Default stack. Every listed layer keeps its lift slot even when hidden (so toggles never move
+ * the view), so the reference-only base outline plate is left out and the default stack is unchanged.
+ */
+export const DEFAULT_AXO_LAYER_ORDER: AxoLayerId[] = AXO_LAYER_IDS.filter((id) => id !== "base");
 
 export type ExplodedAxoSettings = {
   layerOrder: AxoLayerId[];
@@ -126,6 +133,8 @@ export type ExplodedAxoSettings = {
   showLabels: boolean;
   /** Vertical exaggeration of the terrain mesh plate (1 = true scale). */
   terrainExaggeration?: number;
+  /** Extra vertical gap (iso metres) added directly above the named layer. */
+  extraGapAboveM?: Partial<Record<AxoLayerId, number>>;
 };
 
 /** Vertical span of one frame plate in iso screen metres (same lift). */
@@ -159,6 +168,7 @@ export function defaultExplodedAxoSettings(sideM: number): ExplodedAxoSettings {
     trees: true,
     buildings: true,
     aerial: true,
+    base: false,
   };
   return {
     layerOrder: [...DEFAULT_AXO_LAYER_ORDER],
@@ -252,11 +262,56 @@ export function axoGuideLines(
 }
 
 /** Lift in iso metres: aerial = 0 (bottom), water = highest (top of stack). */
-export function liftsForLayerOrder(order: AxoLayerId[], gapM: number): Map<AxoLayerId, number> {
+export function liftsForLayerOrder(
+  order: AxoLayerId[],
+  gapM: number,
+  extraGapAboveM: Partial<Record<AxoLayerId, number>> = {},
+): Map<AxoLayerId, number> {
   const bottomToTop = [...order].reverse();
   const lifts = new Map<AxoLayerId, number>();
-  bottomToTop.forEach((id, index) => lifts.set(id, index * gapM));
+  let lift = 0;
+  bottomToTop.forEach((id, index) => {
+    if (index > 0) lift += gapM + (extraGapAboveM[bottomToTop[index - 1]!] ?? 0);
+    lifts.set(id, lift);
+  });
   return lifts;
+}
+
+/** Kelvin's reference stack, top → bottom (Bern kakemono). */
+export const AXO_REFERENCE_ORDER: AxoLayerId[] = [
+  "trees",
+  "buildings",
+  "roads",
+  "cadastre",
+  "hydro",
+  "topography",
+  "terrain",
+  "base",
+];
+
+/** Extra gap above the buildings plate in the reference preset, as a share of the normal gap. */
+export const AXO_REFERENCE_BUILDING_GAP_FACTOR = 1.5;
+
+/**
+ * Reference preset: exactly the reference plates in the reference order (all visible), a bigger
+ * gap above buildings, and the base outline plate. Other layers leave the stack (hidden layers
+ * would still take lift slots); "Default stack" brings them back.
+ */
+export function referenceExplodedAxoSettings(sideM: number, current?: ExplodedAxoSettings): ExplodedAxoSettings {
+  const defaults = defaultExplodedAxoSettings(sideM);
+  const gapM = current?.gapM ?? defaults.gapM;
+  const layerVisible = Object.fromEntries(
+    AXO_LAYER_IDS.map((id) => [id, AXO_REFERENCE_ORDER.includes(id)]),
+  ) as Record<AxoLayerId, boolean>;
+  return {
+    ...defaults,
+    ...current,
+    layerOrder: [...AXO_REFERENCE_ORDER],
+    layerVisible,
+    gapM,
+    showLabels: true,
+    extraGapAboveM: { buildings: gapM * AXO_REFERENCE_BUILDING_GAP_FACTOR },
+  };
 }
 
 /** Painter's order: bottom layer first, top layer last (so water draws on top). */
@@ -468,7 +523,7 @@ export function buildExplodedAxoLayers(
   overlays: ExplodedAxoOverlayBundle = {},
 ): { layers: AxoLayerGeometry[]; guides: AxoGuideLine[] } {
   const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
-  const lifts = liftsForLayerOrder(settings.layerOrder, settings.gapM);
+  const lifts = liftsForLayerOrder(settings.layerOrder, settings.gapM, settings.extraGapAboveM);
   const visibleLifts = settings.layerOrder
     .filter((id) => settings.layerVisible[id])
     .map((id) => lifts.get(id)!);
@@ -618,6 +673,11 @@ export function buildExplodedAxoLayers(
       } else if (overlays.terrain === "unavailable") {
         unavailableNote = AXO_TERRAIN_UNAVAILABLE_NOTE;
       }
+    } else if (id === "base") {
+      for (const [east, north] of axoGuideAnchorPoints(model.sideM, shape)) {
+        const [x, y] = planToIsoBase(east, north);
+        markers.push({ x, y, paint: "base-outline", radiusM: model.sideM * 0.006 });
+      }
     } else if (id === "green") {
       for (const rings of greenAreas) {
         const d = areaToPath(rings);
@@ -689,6 +749,7 @@ const AXO_PAINT_CSS: Record<AxoPaintKey, ColourKey> = {
   trees: "--tree-fill",
   cadastre: "--axo-cadastre",
   "terrain-mesh": "--axo-terrain-mesh",
+  "base-outline": "--axo-base-outline",
 };
 
 export function axoPaintColour(paint: AxoPaintKey): string {
@@ -704,6 +765,7 @@ export function axoLayerBasePaint(id: AxoLayerId): AxoPaintKey {
   if (id === "buildings" || id === "aerial") return "buildings";
   if (id === "topography") return "contour";
   if (id === "terrain") return "terrain-mesh";
+  if (id === "base") return "base-outline";
   if (id === "transport") return "rail-line";
   return "plan-flood";
 }
@@ -722,6 +784,7 @@ export function axoLayerColours(): Record<AxoLayerId | "guide" | "label", string
     trees: getColour("--tree-fill"),
     buildings: getColour("--axo-building"),
     aerial: getColour("--axo-building"),
+    base: getColour("--axo-base-outline"),
     guide: getColour("--axo-guide"),
     label: getColour("--axo-label"),
   };

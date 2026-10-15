@@ -202,6 +202,7 @@ describe("exploded axo layer settings", () => {
         trees: false,
         buildings: true,
         aerial: true,
+        base: false,
       },
     };
     const lifts = settings.layerOrder
