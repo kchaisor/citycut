@@ -9,6 +9,7 @@ import {
 } from "./explodedAxoOverlayFetch";
 import { fetchPublicTransportOverlays } from "./explodedAxoPt";
 import { fetchOvertureBaseForCut } from "./overtureBase";
+import { fetchCadastreOverlay } from "./explodedAxoCadastre";
 import type { CityModel } from "../types";
 
 async function publicTransportOverlaysSafe(
@@ -25,7 +26,13 @@ async function publicTransportOverlaysSafe(
 
 export type OverlayLoadState = ExplodedAxoOverlayBundle;
 
-const OVERLAY_LAYER_IDS: AxoLayerId[] = ["planning", "hydro", "transport", "topography"];
+const OVERLAY_LAYER_IDS: AxoLayerId[] = ["planning", "hydro", "transport", "topography", "cadastre"];
+
+function cadastreTask(model: CityModel, next: ExplodedAxoOverlayBundle, signal?: AbortSignal): Promise<void> {
+  return fetchCadastreOverlay(model, signal).then((result) => {
+    next.cadastre = result.ok ? result.data : "unavailable";
+  });
+}
 
 export function overlaysNeeded(layerVisible: Record<AxoLayerId, boolean>): boolean {
   return OVERLAY_LAYER_IDS.some((id) => layerVisible[id]) || layerVisible.water;
@@ -100,8 +107,14 @@ export function useExplodedAxoOverlays(model: CityModel, layerVisible: Record<Ax
           }),
         );
       }
+      if (layerVisible.cadastre) tasks.push(cadastreTask(model, next, controller.signal));
 
-      await Promise.all(tasks);
+      try {
+        await Promise.all(tasks);
+      } catch {
+        // Aborted by a toggle or unmount; the next run reloads.
+        return;
+      }
       if (!cancelled) setState(next);
     }
 
@@ -110,7 +123,7 @@ export function useExplodedAxoOverlays(model: CityModel, layerVisible: Record<Ax
       cancelled = true;
       controller.abort();
     };
-  }, [model, need, layerVisible.planning, layerVisible.hydro, layerVisible.water, layerVisible.transport, layerVisible.topography]);
+  }, [model, need, layerVisible.planning, layerVisible.hydro, layerVisible.water, layerVisible.transport, layerVisible.topography, layerVisible.cadastre]);
 
   return need ? state : {};
 }
@@ -172,6 +185,7 @@ export async function loadExplodedAxoOverlayBundle(
       }),
     );
   }
+  if (layerVisible.cadastre) tasks.push(cadastreTask(model, next, signal));
   await Promise.all(tasks);
   return next;
 }

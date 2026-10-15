@@ -2120,6 +2120,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 ? `Building heights: <a href="${COM_BUILDING_HEIGHTS_DATASET_URL}" target="_blank" rel="noopener noreferrer">2023 Building Footprints © City of Melbourne</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>.`
                 : null,
               comTreesHtml: comTreesInCut(model) ? COM_TREES_CREDIT_HTML : null,
+              cadastreOn: drawing === "exploded-axo" && tab === "drawing" && axoSettings.layerVisible.cadastre,
               contourHtml:
                 model.contourLayer && model.contourLayer.source !== "dem"
                   ? `<a href="${model.contourLayer.datasetUrl ?? "https://discover.data.vic.gov.au/dataset/vicmap-elevation-contour-line-1-to-5-metres-covering-metropolitan-melbourne"}" target="_blank" rel="noopener noreferrer">Contours</a> every ${model.contourLayer.interval} m.`

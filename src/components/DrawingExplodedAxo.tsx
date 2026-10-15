@@ -282,6 +282,17 @@ export function DrawingExplodedAxo({
               strokeWidth={outlinePx}
               vectorEffect="non-scaling-stroke"
             />
+            {layer.sourceNote && (
+              <text
+                x={axoLayerLabelAnchor(model.sideM, 0).x}
+                y={axoLayerLabelAnchor(model.sideM, 0).y + model.sideM * 0.035}
+                fontSize={model.sideM * 0.018}
+                fill={colours.label}
+                fontFamily="Helvetica, Arial, sans-serif"
+              >
+                {layer.sourceNote}
+              </text>
+            )}
             {layer.legend && layer.legend.length > 0 && (
               <g className="axo-legend" transform={`translate(${legendOrigin.x} ${legendOrigin.y})`}>
                 {layer.legend.map((item, li) => {

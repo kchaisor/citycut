@@ -1,4 +1,5 @@
 import { figureGround } from "./figureGround";
+import { AXO_CADASTRE_UNAVAILABLE_NOTE, axoCadastreNote, type CadastreOverlay } from "./explodedAxoCadastre";
 import { getColour, type ColourKey } from "./colours";
 import { bufferOpenLine } from "./bufferLine";
 import { openRing, signedArea } from "./geo";
@@ -32,6 +33,8 @@ export type ExplodedAxoOverlayBundle = {
   topography?: TopographyOverlay | "unavailable";
   /** Overture water polygons fetched for the frame when the model has none. */
   overtureWater?: AreaFeat[];
+  /** Vicmap Parcel outlines for the cadastre plate. */
+  cadastre?: CadastreOverlay | "unavailable";
 };
 
 const roundIso = (value: number) => Math.round(value * 100) / 100;
@@ -53,6 +56,7 @@ export const AXO_LAYER_IDS = [
   "transport",
   "topography",
   "roads",
+  "cadastre",
   "green",
   "trees",
   "buildings",
@@ -70,6 +74,7 @@ export const AXO_LAYER_LABELS: Record<AxoLayerId, string> = {
   transport: "TRANSPORT",
   topography: "TOPOGRAPHY",
   roads: "ROADS",
+  cadastre: "CADASTRE",
   green: "GREEN SPACES",
   trees: "TREES",
   buildings: "BUILDINGS",
@@ -93,7 +98,8 @@ export type AxoPaintKey =
   | "pt-tram"
   | "pt-bus"
   | "contour"
-  | "trees";
+  | "trees"
+  | "cadastre";
 
 export type AxoLegendSwatch = { label: string; paint: AxoPaintKey };
 
@@ -134,6 +140,7 @@ export function defaultExplodedAxoSettings(sideM: number): ExplodedAxoSettings {
     transport: false,
     topography: false,
     roads: true,
+    cadastre: false,
     green: true,
     trees: true,
     buildings: true,
@@ -295,6 +302,8 @@ export type AxoLayerGeometry = {
   clipD: string;
   unavailableNote?: string;
   legend?: AxoLegendSwatch[];
+  /** Visible source note for this plate. */
+  sourceNote?: string;
 };
 
 function dedupe(line: Pt[]): Pt[] {
@@ -468,6 +477,7 @@ export function buildExplodedAxoLayers(
     const markers: AxoPointMarker[] = [];
     let unavailableNote: string | undefined;
     let legend: AxoLegendSwatch[] | undefined;
+    let sourceNote: string | undefined;
 
     const areaToPath = (rings: Pt[][]) =>
       rings
@@ -566,6 +576,22 @@ export function buildExplodedAxoLayers(
           0.55,
         );
       }
+    } else if (id === "cadastre") {
+      if (overlays.cadastre === "unavailable") {
+        unavailableNote = AXO_CADASTRE_UNAVAILABLE_NOTE;
+      } else if (overlays.cadastre) {
+        for (const rings of overlays.cadastre.parcels) {
+          for (const ring of rings) {
+            const d = isoPathFromPlanRingBase(openRing(ring), true);
+            if (!d) continue;
+            strokes.push(d);
+            strokePaints.push("cadastre");
+            strokeWidthScales.push(0.35);
+            strokeDashed.push(false);
+          }
+        }
+        sourceNote = axoCadastreNote(overlays.cadastre);
+      }
     } else if (id === "green") {
       for (const rings of greenAreas) {
         const d = areaToPath(rings);
@@ -609,6 +635,7 @@ export function buildExplodedAxoLayers(
       clipD,
       ...(unavailableNote ? { unavailableNote } : {}),
       ...(legend ? { legend } : {}),
+      ...(sourceNote ? { sourceNote } : {}),
     });
   }
 
@@ -633,6 +660,7 @@ const AXO_PAINT_CSS: Record<AxoPaintKey, ColourKey> = {
   "pt-bus": "--axo-pt-bus",
   contour: "--axo-contour",
   trees: "--tree-fill",
+  cadastre: "--axo-cadastre",
 };
 
 export function axoPaintColour(paint: AxoPaintKey): string {
@@ -642,6 +670,7 @@ export function axoPaintColour(paint: AxoPaintKey): string {
 export function axoLayerBasePaint(id: AxoLayerId): AxoPaintKey {
   if (id === "water" || id === "hydro") return "water";
   if (id === "roads") return "roads";
+  if (id === "cadastre") return "cadastre";
   if (id === "green") return "green";
   if (id === "trees") return "trees";
   if (id === "buildings" || id === "aerial") return "buildings";
@@ -658,6 +687,7 @@ export function axoLayerColours(): Record<AxoLayerId | "guide" | "label", string
     transport: getColour("--axo-rail-line"),
     topography: getColour("--axo-contour"),
     roads: getColour("--axo-road"),
+    cadastre: getColour("--axo-cadastre"),
     green: getColour("--axo-green"),
     trees: getColour("--tree-fill"),
     buildings: getColour("--axo-building"),

@@ -196,6 +196,7 @@ describe("exploded axo layer settings", () => {
         transport: false,
         topography: false,
         roads: false,
+        cadastre: false,
         green: true,
         trees: false,
         buildings: true,

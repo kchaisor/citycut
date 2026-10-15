@@ -111,6 +111,7 @@ export const EXPLODED_AXO_LAYER_ORDER = [
   "Transport",
   "Topography",
   "Roads",
+  "Cadastre",
   "Green",
   "Trees",
   "Buildings",
@@ -126,6 +127,7 @@ function chunkNameForLayer(id: AxoLayerId): string {
   if (id === "transport") return "Transport";
   if (id === "topography") return "Topography";
   if (id === "roads") return "Roads";
+  if (id === "cadastre") return "Cadastre";
   if (id === "green") return "Green";
   if (id === "trees") return "Trees";
   if (id === "buildings") return "Buildings";
@@ -153,6 +155,7 @@ export function explodedAxoChunks(
   const origin: Pt = page.origin;
   const pageHeightMm = page.heightMm;
   const chunks: PdfChunk[] = [];
+  const sourceNotes: string[] = [];
 
   const axoGuideDash = dashSegments(readDrawingStyle().axoGuideDash);
   const guidePaths: PdfPath[] = guides.map((guide) => ({
@@ -210,6 +213,8 @@ export function explodedAxoChunks(
         }
       }
     });
+    if (layer.sourceNote) sourceNotes.push(layer.sourceNote);
+    else if (layer.unavailableNote && layer.unavailableNote !== "unavailable") sourceNotes.push(layer.unavailableNote);
     for (const marker of layer.markers ?? []) {
       const [sx, sy] = isoBaseToSheet(marker.x, marker.y, liftM, origin, scale, pageHeightMm);
       const r = marker.radiusM * mmPerMetre(scale);
@@ -266,10 +271,12 @@ export function explodedAxoChunks(
     windOn: false,
     satelliteOn: true,
     explodedAxoOverlaysOn: overlayOn,
+    cadastreOn: settings.layerVisible.cadastre,
   });
   const treesCredit = comTreesCreditLine(model);
   const credited = treesCredit ? `${credit} ${treesCredit}.` : credit;
-  const note = satelliteNote ? `${credited} ${satelliteNote}` : credited;
+  const withSatellite = satelliteNote ? `${credited} ${satelliteNote}` : credited;
+  const note = sourceNotes.length ? `${withSatellite} ${sourceNotes.join(". ")}.` : withSatellite;
   chunks.push({
     name: "Annotation",
     texts: [
