@@ -6,7 +6,13 @@ import type { BuildingFeat, BuildingHeightTier, CityModel, Pt } from "../types";
 export type AxoSolidFace = {
   /** Closed iso SVG path (M/L/Z, y down). */
   d: string;
-  paint: "building-roof" | "building-wall-light" | "building-wall-dark";
+  paint:
+    | "building-roof"
+    | "building-wall-light"
+    | "building-wall-dark"
+    | "tree-canopy"
+    | "tree-canopy-shade"
+    | "tree-trunk";
 };
 
 const COS30 = Math.sqrt(3) / 2;

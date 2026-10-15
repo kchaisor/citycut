@@ -1,4 +1,5 @@
 import { figureGround } from "./figureGround";
+import { axoCanopyNote, buildAxoCanopyFaces } from "./explodedAxoCanopies";
 import { axoMassingHeightNote, buildAxoMassingFaces, type AxoSolidFace } from "./explodedAxoMassing";
 import { getColour, type ColourKey } from "./colours";
 import { bufferOpenLine } from "./bufferLine";
@@ -97,7 +98,10 @@ export type AxoPaintKey =
   | "trees"
   | "building-roof"
   | "building-wall-light"
-  | "building-wall-dark";
+  | "building-wall-dark"
+  | "tree-canopy"
+  | "tree-canopy-shade"
+  | "tree-trunk";
 
 export type AxoLegendSwatch = { label: string; paint: AxoPaintKey };
 
@@ -113,6 +117,8 @@ export type ExplodedAxoSettings = {
   showLabels: boolean;
   /** Draw buildings as extruded massing (walls + roofs). False keeps the flat footprint plate. */
   buildingMassing?: boolean;
+  /** Draw trees as 3D canopies sized from crown data. False keeps flat crown discs. */
+  treeCanopies?: boolean;
 };
 
 /** Vertical span of one frame plate in iso screen metres (same lift). */
@@ -586,6 +592,10 @@ export function buildExplodedAxoLayers(
         const d = areaToPath(rings);
         if (d) fills.push(d);
       }
+    } else if (id === "trees" && settings.treeCanopies !== false) {
+      const canopies = buildAxoCanopyFaces(model);
+      solids = canopies.faces;
+      sourceNote = axoCanopyNote(canopies.counts) || undefined;
     } else if (id === "trees") {
       for (const tree of model.trees) {
         if (!pointInSiteFrame(tree.at, model.sideM, shape)) continue;
@@ -659,6 +669,9 @@ const AXO_PAINT_CSS: Record<AxoPaintKey, ColourKey> = {
   "building-roof": "--axo-building-roof",
   "building-wall-light": "--axo-building-wall-light",
   "building-wall-dark": "--axo-building-wall-dark",
+  "tree-canopy": "--axo-tree-canopy",
+  "tree-canopy-shade": "--axo-tree-canopy-shade",
+  "tree-trunk": "--axo-tree-trunk",
 };
 
 export function axoPaintColour(paint: AxoPaintKey): string {

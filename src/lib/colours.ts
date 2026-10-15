@@ -109,6 +109,9 @@ export const COLOUR_KEYS = [
   "--axo-building-wall-light",
   "--axo-building-wall-dark",
   "--axo-building-edge",
+  "--axo-tree-canopy",
+  "--axo-tree-canopy-shade",
+  "--axo-tree-trunk",
 ] as const;
 
 export type ColourKey = (typeof COLOUR_KEYS)[number];
@@ -314,6 +317,9 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--axo-building-wall-light": "Exploded axo building wall, sunlit side",
   "--axo-building-wall-dark": "Exploded axo building wall, shaded side",
   "--axo-building-edge": "Exploded axo building edge stroke",
+  "--axo-tree-canopy": "Exploded axo tree canopy (lit)",
+  "--axo-tree-canopy-shade": "Exploded axo tree canopy (shaded side)",
+  "--axo-tree-trunk": "Exploded axo tree trunk",
 };
 
 const parsed = resolveSheet(parseCustomProperties(coloursCss));

@@ -216,6 +216,9 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--axo-building-wall-light` | `#b9b6ae` | Exploded axo building wall, sunlit side. |
 | `--axo-building-wall-dark` | `#8c8980` | Exploded axo building wall, shaded side. |
 | `--axo-building-edge` | `#5e5b54` | Exploded axo building edge stroke. |
+| `--axo-tree-canopy` | `#8fbf6a` | Exploded axo tree canopy (lit). |
+| `--axo-tree-canopy-shade` | `#5e8f45` | Exploded axo tree canopy (shaded side). |
+| `--axo-tree-trunk` | `#7a6a55` | Exploded axo tree trunk. |
 | `--wind-streak` | `#2B6CB0` | Animated wind streaks in the 3D viewport (~70% opacity). |
 | `--wind-rose` | `#3d5a73` | On-screen wind rose overlay and Wind export layer. |
 
