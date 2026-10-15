@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AXO_HATCH_PAINTS,
-  AXO_LAYER_LABELS,
   axoLayerBasePaint,
   axoLayerLabelAnchor,
+  axoPlateColours,
+  axoPlateLabelText,
+  AXO_PLATE_TINT_OPACITY,
   axoLayerColours,
   axoLayerSvgTransform,
   axoLayersForPaint,
@@ -228,6 +230,9 @@ export function DrawingExplodedAxo({
         const legendOrigin = planToIsoLegendOrigin(model.sideM);
         return (
           <g key={`${layer.id}-${layer.liftM}`} transform={layerTransform}>
+            {layer.id !== "aerial" && (
+              <path d={layer.plateOutlineD} fill={axoPlateColours(layer.id).tint} fillOpacity={AXO_PLATE_TINT_OPACITY} stroke="none" />
+            )}
             <g clipPath={clip}>
               {layer.id === "aerial" && satelliteHref && (
                 <image
@@ -279,7 +284,7 @@ export function DrawingExplodedAxo({
             <path
               d={layer.plateOutlineD}
               fill="none"
-              stroke={colours.guide}
+              stroke={axoPlateColours(layer.id).edge}
               strokeWidth={outlinePx}
               vectorEffect="non-scaling-stroke"
             />
@@ -360,19 +365,29 @@ export function DrawingExplodedAxo({
       })}
       {settings.showLabels &&
         paintLayers.map((layer) => {
-          const label = axoLayerLabelAnchor(model.sideM, layer.liftM);
+          const label = axoLayerLabelAnchor(model.sideM, layer.liftM, model.frameShape ?? "square");
+          const edge = axoPlateColours(layer.id).edge;
           return (
-            <text
-              key={`label-${layer.id}-${layer.liftM}`}
-              x={label.x}
-              y={label.y}
-              fontSize={model.sideM * 0.042}
-              fill={colours.label}
-              fontFamily="Helvetica, Arial, sans-serif"
-              transform={`rotate(${label.rotateDeg} ${label.x} ${label.y})`}
-            >
-              {AXO_LAYER_LABELS[layer.id]}
-            </text>
+            <g key={`label-${layer.id}-${layer.liftM}`} className="axo-plate-label">
+              <line
+                x1={label.leader.x1}
+                y1={label.leader.y1}
+                x2={label.leader.x2}
+                y2={label.leader.y2}
+                stroke={edge}
+                strokeWidth={outlinePx}
+                vectorEffect="non-scaling-stroke"
+              />
+              <text
+                x={label.x}
+                y={label.y}
+                fontSize={model.sideM * 0.03}
+                fill={colours.label}
+                fontFamily="Helvetica, Arial, sans-serif"
+              >
+                {axoPlateLabelText(layer.id)}
+              </text>
+            </g>
           );
         })}
     </svg>

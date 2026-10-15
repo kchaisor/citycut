@@ -212,6 +212,28 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--axo-pt-tram` | `#00854a` | Exploded axo PTV tram route. |
 | `--axo-pt-bus` | `#c45c00` | Exploded axo PTV bus route. |
 | `--axo-contour` | `#8a8578` | Exploded axo Vicmap contour stroke. |
+| `--axo-plate-planning` | `#f3ecf7` | Exploded axo planning plate tint. |
+| `--axo-edge-planning` | `#a98cc4` | Exploded axo planning plate edge. |
+| `--axo-plate-water` | `#e8f2f9` | Exploded axo floodplain plate tint. |
+| `--axo-edge-water` | `#7eb8da` | Exploded axo floodplain plate edge. |
+| `--axo-plate-hydro` | `#eceefb` | Exploded axo hydro/waterways plate tint. |
+| `--axo-edge-hydro` | `#8a8ce0` | Exploded axo hydro/waterways plate edge. |
+| `--axo-plate-transport` | `#f1f1f1` | Exploded axo transport plate tint. |
+| `--axo-edge-transport` | `#6b6c6f` | Exploded axo transport plate edge. |
+| `--axo-plate-topography` | `#fbebe5` | Exploded axo topography/contour plate tint. |
+| `--axo-edge-topography` | `#e07a5f` | Exploded axo topography/contour plate edge. |
+| `--axo-plate-roads` | `#f2f2f2` | Exploded axo roads plate tint. |
+| `--axo-edge-roads` | `#8a8a8a` | Exploded axo roads plate edge. |
+| `--axo-plate-green` | `#edf5e6` | Exploded axo green-space plate tint. |
+| `--axo-edge-green` | `#7cb942` | Exploded axo green-space plate edge. |
+| `--axo-plate-trees` | `#eef6e8` | Exploded axo trees plate tint. |
+| `--axo-edge-trees` | `#6aa84f` | Exploded axo trees plate edge. |
+| `--axo-plate-buildings` | `#f0efec` | Exploded axo buildings plate tint. |
+| `--axo-edge-buildings` | `#8c8980` | Exploded axo buildings plate edge. |
+| `--axo-plate-aerial` | `#ffffff` | Exploded axo satellite plate tint. |
+| `--axo-edge-aerial` | `#c8c8c8` | Exploded axo satellite plate edge. |
+| `--axo-plate-terrain` | `#f0f0f0` | Exploded axo terrain (DTM) plate tint. |
+| `--axo-edge-terrain` | `#333333` | Exploded axo terrain (DTM) plate edge. |
 | `--axo-terrain-mesh` | `#4a4a4a` | Exploded axo terrain (DTM) mesh grid. |
 | `--axo-building-roof` | `#e8e6e1` | Exploded axo building roof (massing). |
 | `--axo-building-wall-light` | `#b9b6ae` | Exploded axo building wall, sunlit side. |
