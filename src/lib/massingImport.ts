@@ -47,7 +47,14 @@ export type ImportedMassing = {
   mode: MassingPlacementMode;
   placement: MassingPlacement;
   visible: boolean;
+  /** Per-model colour as #RRGGBB. Unset uses the `--imported-massing` token (white). */
+  colour?: string;
 } & ParsedMassing;
+
+/** Valid #RRGGBB, else null (a bad stored value falls back to the token). */
+export function normaliseMassingColour(value: unknown): string | null {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toUpperCase() : null;
+}
 
 export class MassingImportError extends Error {}
 

@@ -14,6 +14,8 @@ export type StoredMassing = {
   mode: MassingPlacementMode;
   placement: MassingPlacement;
   visible: boolean;
+  /** Per-model colour (#RRGGBB); absent = default token. */
+  colour?: string;
   addedAt: string;
 };
 
@@ -65,7 +67,7 @@ export async function saveStoredMassing(row: StoredMassing): Promise<void> {
 /** Placement/visibility only; the file bytes stay as stored. */
 export async function updateStoredMassing(
   id: string,
-  patch: Partial<Pick<StoredMassing, "mode" | "placement" | "visible">>,
+  patch: Partial<Pick<StoredMassing, "mode" | "placement" | "visible" | "colour">>,
 ): Promise<void> {
   const db = await openDb();
   if (!db) return;
