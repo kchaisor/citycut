@@ -9,6 +9,7 @@ import {
 } from "./explodedAxoOverlayFetch";
 import { fetchPublicTransportOverlays } from "./explodedAxoPt";
 import { fetchOvertureBaseForCut } from "./overtureBase";
+import { fetchTerrainForCut } from "./fetchTerrain";
 import type { CityModel } from "../types";
 
 async function publicTransportOverlaysSafe(
@@ -25,7 +26,21 @@ async function publicTransportOverlaysSafe(
 
 export type OverlayLoadState = ExplodedAxoOverlayBundle;
 
-const OVERLAY_LAYER_IDS: AxoLayerId[] = ["planning", "hydro", "transport", "topography"];
+const OVERLAY_LAYER_IDS: AxoLayerId[] = ["planning", "hydro", "transport", "topography", "terrain"];
+
+/** Mapterhorn field for the terrain plate; reuses the model field when Terrain was built. */
+function terrainTask(model: CityModel, next: ExplodedAxoOverlayBundle, signal?: AbortSignal): Promise<void> {
+  if (model.terrain) return Promise.resolve();
+  return fetchTerrainForCut(model.center, model.sideM, signal).then(
+    (field) => {
+      next.terrain = field;
+    },
+    (err) => {
+      if (signal?.aborted) throw err;
+      next.terrain = "unavailable";
+    },
+  );
+}
 
 export function overlaysNeeded(layerVisible: Record<AxoLayerId, boolean>): boolean {
   return OVERLAY_LAYER_IDS.some((id) => layerVisible[id]) || layerVisible.water;
@@ -100,8 +115,13 @@ export function useExplodedAxoOverlays(model: CityModel, layerVisible: Record<Ax
           }),
         );
       }
+      if (layerVisible.terrain) tasks.push(terrainTask(model, next, controller.signal));
 
-      await Promise.all(tasks);
+      try {
+        await Promise.all(tasks);
+      } catch {
+        return;
+      }
       if (!cancelled) setState(next);
     }
 
@@ -110,7 +130,7 @@ export function useExplodedAxoOverlays(model: CityModel, layerVisible: Record<Ax
       cancelled = true;
       controller.abort();
     };
-  }, [model, need, layerVisible.planning, layerVisible.hydro, layerVisible.water, layerVisible.transport, layerVisible.topography]);
+  }, [model, need, layerVisible.planning, layerVisible.hydro, layerVisible.water, layerVisible.transport, layerVisible.topography, layerVisible.terrain]);
 
   return need ? state : {};
 }
@@ -172,6 +192,7 @@ export async function loadExplodedAxoOverlayBundle(
       }),
     );
   }
+  if (layerVisible.terrain) tasks.push(terrainTask(model, next, signal));
   await Promise.all(tasks);
   return next;
 }
