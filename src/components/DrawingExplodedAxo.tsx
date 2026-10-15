@@ -282,6 +282,17 @@ export function DrawingExplodedAxo({
               strokeWidth={outlinePx}
               vectorEffect="non-scaling-stroke"
             />
+            {layer.unclippedStrokes?.map((d, ui) => (
+              <path
+                key={`u${ui}`}
+                d={d}
+                fill="none"
+                stroke={axoPaintColour(axoLayerBasePaint(layer.id))}
+                strokeWidth={outlinePx * 0.6}
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
+              />
+            ))}
             {layer.sourceNote && (
               <text
                 x={axoLayerLabelAnchor(model.sideM, 0).x}

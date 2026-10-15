@@ -1,5 +1,11 @@
 import { figureGround } from "./figureGround";
 import { AXO_CADASTRE_UNAVAILABLE_NOTE, axoCadastreNote, type CadastreOverlay } from "./explodedAxoCadastre";
+import {
+  AXO_TERRAIN_UNAVAILABLE_NOTE,
+  axoTerrainNote,
+  buildAxoTerrainMesh,
+  DEFAULT_AXO_TERRAIN_EXAGGERATION,
+} from "./explodedAxoTerrain";
 import { getColour, type ColourKey } from "./colours";
 import { bufferOpenLine } from "./bufferLine";
 import { openRing, signedArea } from "./geo";
@@ -21,7 +27,7 @@ import type {
   TransportRailLine,
   TransportRailStation,
 } from "./explodedAxoOverlayFetch";
-import type { AreaFeat, CityModel, Pt } from "../types";
+import type { AreaFeat, CityModel, Pt, TerrainField } from "../types";
 
 export type ExplodedAxoOverlayBundle = {
   planning?: PlanningOverlayPolygon[] | "unavailable";
@@ -35,6 +41,8 @@ export type ExplodedAxoOverlayBundle = {
   overtureWater?: AreaFeat[];
   /** Vicmap Parcel outlines for the cadastre plate. */
   cadastre?: CadastreOverlay | "unavailable";
+  /** Mapterhorn terrain field for the terrain mesh plate when the model has none. */
+  terrain?: TerrainField | "unavailable";
 };
 
 const roundIso = (value: number) => Math.round(value * 100) / 100;
@@ -55,6 +63,7 @@ export const AXO_LAYER_IDS = [
   "hydro",
   "transport",
   "topography",
+  "terrain",
   "roads",
   "cadastre",
   "green",
@@ -73,6 +82,7 @@ export const AXO_LAYER_LABELS: Record<AxoLayerId, string> = {
   hydro: "HYDRO",
   transport: "TRANSPORT",
   topography: "TOPOGRAPHY",
+  terrain: "TERRAIN (DTM)",
   roads: "ROADS",
   cadastre: "CADASTRE",
   green: "GREEN SPACES",
@@ -99,7 +109,8 @@ export type AxoPaintKey =
   | "pt-bus"
   | "contour"
   | "trees"
-  | "cadastre";
+  | "cadastre"
+  | "terrain-mesh";
 
 export type AxoLegendSwatch = { label: string; paint: AxoPaintKey };
 
@@ -113,6 +124,8 @@ export type ExplodedAxoSettings = {
   /** Vertical separation between layers, in local metres (iso lift). */
   gapM: number;
   showLabels: boolean;
+  /** Vertical exaggeration of the terrain mesh plate (1 = true scale). */
+  terrainExaggeration?: number;
 };
 
 /** Vertical span of one frame plate in iso screen metres (same lift). */
@@ -139,6 +152,7 @@ export function defaultExplodedAxoSettings(sideM: number): ExplodedAxoSettings {
     hydro: false,
     transport: false,
     topography: false,
+    terrain: false,
     roads: true,
     cadastre: false,
     green: true,
@@ -302,6 +316,8 @@ export type AxoLayerGeometry = {
   clipD: string;
   unavailableNote?: string;
   legend?: AxoLegendSwatch[];
+  /** Strokes drawn without the plate clip (terrain mesh rises above the plate). */
+  unclippedStrokes?: string[];
   /** Visible source note for this plate. */
   sourceNote?: string;
 };
@@ -477,6 +493,7 @@ export function buildExplodedAxoLayers(
     const markers: AxoPointMarker[] = [];
     let unavailableNote: string | undefined;
     let legend: AxoLegendSwatch[] | undefined;
+    let unclippedStrokes: string[] | undefined;
     let sourceNote: string | undefined;
 
     const areaToPath = (rings: Pt[][]) =>
@@ -592,6 +609,15 @@ export function buildExplodedAxoLayers(
         }
         sourceNote = axoCadastreNote(overlays.cadastre);
       }
+    } else if (id === "terrain") {
+      const field = model.terrain ?? (overlays.terrain !== "unavailable" ? overlays.terrain : undefined);
+      if (field) {
+        const ex = settings.terrainExaggeration ?? DEFAULT_AXO_TERRAIN_EXAGGERATION;
+        unclippedStrokes = buildAxoTerrainMesh(model, field, ex);
+        sourceNote = axoTerrainNote(field, ex);
+      } else if (overlays.terrain === "unavailable") {
+        unavailableNote = AXO_TERRAIN_UNAVAILABLE_NOTE;
+      }
     } else if (id === "green") {
       for (const rings of greenAreas) {
         const d = areaToPath(rings);
@@ -635,6 +661,7 @@ export function buildExplodedAxoLayers(
       clipD,
       ...(unavailableNote ? { unavailableNote } : {}),
       ...(legend ? { legend } : {}),
+      ...(unclippedStrokes?.length ? { unclippedStrokes } : {}),
       ...(sourceNote ? { sourceNote } : {}),
     });
   }
@@ -661,6 +688,7 @@ const AXO_PAINT_CSS: Record<AxoPaintKey, ColourKey> = {
   contour: "--axo-contour",
   trees: "--tree-fill",
   cadastre: "--axo-cadastre",
+  "terrain-mesh": "--axo-terrain-mesh",
 };
 
 export function axoPaintColour(paint: AxoPaintKey): string {
@@ -675,6 +703,7 @@ export function axoLayerBasePaint(id: AxoLayerId): AxoPaintKey {
   if (id === "trees") return "trees";
   if (id === "buildings" || id === "aerial") return "buildings";
   if (id === "topography") return "contour";
+  if (id === "terrain") return "terrain-mesh";
   if (id === "transport") return "rail-line";
   return "plan-flood";
 }
@@ -686,6 +715,7 @@ export function axoLayerColours(): Record<AxoLayerId | "guide" | "label", string
     hydro: getColour("--axo-hydro-area"),
     transport: getColour("--axo-rail-line"),
     topography: getColour("--axo-contour"),
+    terrain: getColour("--axo-terrain-mesh"),
     roads: getColour("--axo-road"),
     cadastre: getColour("--axo-cadastre"),
     green: getColour("--axo-green"),
