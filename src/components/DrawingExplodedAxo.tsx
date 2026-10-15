@@ -4,6 +4,7 @@ import {
   AXO_LAYER_LABELS,
   axoLayerBasePaint,
   axoLayerLabelAnchor,
+  axoPlateShowsAerial,
   axoLayerColours,
   axoLayerSvgTransform,
   axoLayersForPaint,
@@ -121,7 +122,7 @@ export function DrawingExplodedAxo({
   const colourTick = useColourRevision();
   const colours = useMemo(() => axoLayerColours(), [colourTick]);
   const [satelliteHref, setSatelliteHref] = useState<string | null>(null);
-  const showAerial = settings.layerVisible.aerial;
+  const showAerial = settings.layerVisible.aerial || settings.layerVisible.base;
 
   useEffect(() => {
     if (!showAerial) return;
@@ -228,7 +229,7 @@ export function DrawingExplodedAxo({
         return (
           <g key={`${layer.id}-${layer.liftM}`} transform={layerTransform}>
             <g clipPath={clip}>
-              {layer.id === "aerial" && satelliteHref && (
+              {axoPlateShowsAerial(layer.id) && satelliteHref && (
                 <image
                   href={satelliteHref}
                   x={0}

@@ -277,6 +277,11 @@ export function liftsForLayerOrder(
   return lifts;
 }
 
+/** Plates that carry the aerial image (#85 Esri World Imagery): the satellite plate and the reference base. */
+export function axoPlateShowsAerial(id: AxoLayerId): boolean {
+  return id === "aerial" || id === "base";
+}
+
 /** Kelvin's reference stack, top → bottom (Bern kakemono). */
 export const AXO_REFERENCE_ORDER: AxoLayerId[] = [
   "trees",

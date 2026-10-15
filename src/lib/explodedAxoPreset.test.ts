@@ -5,6 +5,7 @@ import {
   defaultExplodedAxoSettings,
   explodedAxoBounds,
   liftsForLayerOrder,
+  axoPlateShowsAerial,
   referenceExplodedAxoSettings,
 } from "./explodedAxo";
 import { explodedAxoChunks } from "./explodedAxoExport";
@@ -44,5 +45,13 @@ describe("exploded axo reference preset", () => {
     const d = defaultExplodedAxoSettings(500);
     const plain = liftsForLayerOrder(d.layerOrder, d.gapM);
     d.layerOrder.forEach((id, i) => expect(plain.get(id)).toBeCloseTo((d.layerOrder.length - 1 - i) * d.gapM));
+  });
+
+  it("base plate carries the aerial image; .ai keeps the omitted-imagery note", async () => {
+    expect(axoPlateShowsAerial("base")).toBe(true);
+    expect(axoPlateShowsAerial("roads")).toBe(false);
+    const s = referenceExplodedAxoSettings(500);
+    const chunks = explodedAxoChunks(model, 1000, s, "Satellite imagery omitted from this file.");
+    expect(JSON.stringify(chunks.find((c) => c.name === "Annotation"))).toContain("Satellite imagery omitted");
   });
 });

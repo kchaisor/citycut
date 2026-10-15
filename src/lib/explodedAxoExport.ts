@@ -9,6 +9,7 @@ import {
   AXO_LAYER_LABELS,
   axoLayerBasePaint,
   axoLayerLabelAnchor,
+  axoPlateShowsAerial,
   axoLayersForPaint,
   axoPaintColour,
   buildExplodedAxoLayers,
@@ -243,7 +244,7 @@ export function explodedAxoChunks(
         close: true,
       });
     }
-    if (layer.id === "aerial" && satelliteNote) {
+    if (axoPlateShowsAerial(layer.id) && satelliteNote) {
       paths.push({
         rings: [plateRing],
         stroke: hexRgb(getColour("--axo-guide")),
