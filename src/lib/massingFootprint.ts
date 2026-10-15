@@ -35,9 +35,10 @@ export function massingFootprint(
   massing: Pick<ImportedMassing, "positions" | "indices" | "placement">,
   origin: LonLat,
   zone: number,
-): { polygons: MultiPolygon; topZ: number } {
+): { polygons: MultiPolygon; topZ: number; polygonTops: number[] } {
   const local = placedLocal(massing, massing.placement, origin, zone);
   const tris: Polygon[] = [];
+  const triTops: { x: number; y: number; z: number }[] = [];
   let topZ = -Infinity;
   for (let i = 2; i < local.length; i += 3) topZ = Math.max(topZ, local[i]!);
   for (let t = 0; t + 2 < massing.indices.length; t += 3) {
@@ -49,16 +50,34 @@ export function massingFootprint(
     const cx = local[c]!, cy = local[c + 1]!;
     const area = ((bx - ax) * (cy - ay) - (cx - ax) * (by - ay)) / 2;
     if (Math.abs(area) < MIN_PLAN_AREA_M2) continue;
+    triTops.push({ x: (ax + bx + cx) / 3, y: (ay + by + cy) / 3, z: Math.max(local[a + 2]!, local[b + 2]!, local[c + 2]!) });
     tris.push(area > 0 ? [[[ax, ay], [bx, by], [cx, cy], [ax, ay]]] : [[[ax, ay], [cx, cy], [bx, by], [ax, ay]]]);
   }
-  if (tris.length === 0) return { polygons: [], topZ };
+  if (tris.length === 0) return { polygons: [], topZ, polygonTops: [] };
   const union = unionFn();
   let merged: MultiPolygon = [];
   for (let i = 0; i < tris.length; i += UNION_BATCH) {
     const batch = tris.slice(i, i + UNION_BATCH);
     merged = union(merged, ...batch);
   }
-  return { polygons: merged, topZ };
+  // Each footprint keeps the roof of the geometry above it, not the tallest part of the whole file.
+  const polygonTops = merged.map((polygon) => {
+    let top = -Infinity;
+    const outer = polygon[0] ?? [];
+    for (const t of triTops) if (t.z > top && pointInRing(t.x, t.y, outer)) top = t.z;
+    return Number.isFinite(top) ? top : topZ;
+  });
+  return { polygons: merged, topZ, polygonTops };
+}
+
+function pointInRing(x: number, y: number, ring: ReadonlyArray<readonly [number, number] | number[]>): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i] as [number, number];
+    const [xj, yj] = ring[j] as [number, number];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
 }
 
 /**
@@ -96,8 +115,9 @@ export function massingDrawingBuildings(
   let next = IMPORTED_ID_BASE;
   for (const item of imported) {
     if (!item.visible) continue;
-    const { polygons, topZ } = massingFootprint(item, origin, zone);
-    for (const polygon of polygons) {
+    const { polygons, polygonTops } = massingFootprint(item, origin, zone);
+    for (const [index, polygon] of polygons.entries()) {
+      const topZ = polygonTops[index]!;
       const [outer, ...holes] = polygon;
       if (!outer || outer.length < 4) continue;
       out.push({
@@ -108,6 +128,7 @@ export function massingDrawingBuildings(
         use: "unclassified",
         source: "none",
         importedMassing: true,
+        importedTopZ: topZ,
         ...(item.colour ? { importedColour: item.colour } : {}),
         overtureName: item.name,
       });

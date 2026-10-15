@@ -100,6 +100,8 @@ export type BuildingFeat = {
   comMatchOverlapRatio?: number;
   /** Footprint of an imported .3dm massing model (drawings only; never in the 3D city or .3dm). */
   importedMassing?: true;
+  /** Imported massing only: absolute roof Z (AHD m) of this footprint, so plan shadows can land on terrain. */
+  importedTopZ?: number;
   /** Per-model colour of an imported massing footprint (#RRGGBB); unset = `--imported-massing`. */
   importedColour?: string;
   /** Set when the user overrode height in the 3D view. */

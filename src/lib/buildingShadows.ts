@@ -4,6 +4,7 @@ import { openRing } from "./geo";
 import { siteFramePolygon } from "./siteFrame";
 import { sunAtMelbourneLocal, type SolarSample } from "./solar";
 import { buildingHeightsFingerprint } from "./heightOverrides";
+import { footprintBase, sampleTerrain } from "./terrain";
 import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
 
 type ClipFns = {
@@ -84,6 +85,64 @@ export function planShadowOffset(sample: SolarSample, height: number): Pt | null
   return [dx * scale, -dz * scale];
 }
 
+type Ground = (east: number, north: number) => number;
+
+/**
+ * Plan offset of a roof point at absolute height `topZ` to where its shadow meets the terrain:
+ * marches along the sun's plan direction until the ray drops below the ground. On a slope the
+ * shadow is shorter uphill and longer downhill, exactly as in the 3D view.
+ */
+export function terrainShadowOffset(sample: SolarSample, point: Pt, topZ: number, ground: Ground): Pt | null {
+  const unit = planShadowOffset(sample, 1);
+  if (!unit) return null;
+  const perMetre = Math.hypot(unit[0], unit[1]); // plan metres per metre of drop
+  const u: Pt = [unit[0] / perMetre, unit[1] / perMetre];
+  const above = (t: number) => topZ - t / perMetre - ground(point[0] + u[0] * t, point[1] + u[1] * t);
+  if (above(0) <= 0) return [0, 0];
+  let lo = 0;
+  let hi = Math.max(1, (topZ - ground(point[0], point[1])) * perMetre);
+  for (let i = 0; i < 40 && above(hi) > 0; i++) {
+    lo = hi;
+    hi *= 2;
+  }
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (above(mid) > 0) lo = mid;
+    else hi = mid;
+  }
+  return [u[0] * hi, u[1] * hi];
+}
+
+/** Shadow footprint when each vertex has its own offset (roof shadow draped on terrain). */
+export function buildingShadowPolygonOnTerrain(
+  building: BuildingFeat,
+  offsetAt: (point: Pt) => Pt,
+): MultiPolygon | null {
+  const footprint = footprintPolygon(building.ring, building.holes);
+  if (!footprint) return null;
+  let merged: MultiPolygon = [footprint];
+  for (const ringPts of [building.ring, ...building.holes]) {
+    const ring = openRing(ringPts);
+    const moved = ring.map((p) => translatePoint(p, offsetAt(p)));
+    for (let index = 0; index < ring.length; index++) {
+      const next = (index + 1) % ring.length;
+      const quad: Polygon = [[
+        [ring[index]![0], ring[index]![1]],
+        [ring[next]![0], ring[next]![1]],
+        [moved[next]![0], moved[next]![1]],
+        [moved[index]![0], moved[index]![1]],
+        [ring[index]![0], ring[index]![1]],
+      ]];
+      merged = union(merged, quad);
+    }
+    if (ringPts === building.ring) {
+      const roof = closeRing(moved);
+      if (roof.length >= 4) merged = union(merged, [roof]);
+    }
+  }
+  return merged;
+}
+
 /** Exact shadow footprint for one building (footprint ∪ translation ∪ edge sweeps). */
 export function buildingShadowPolygon(building: BuildingFeat, offset: Pt): MultiPolygon | null {
   const footprint = footprintPolygon(building.ring, building.holes);
@@ -131,6 +190,7 @@ function buildingCacheKey(building: BuildingFeat, sample: SolarSample): string {
   return [
     building.id,
     building.height.toFixed(3),
+    (building.importedTopZ ?? NaN).toFixed(3),
     building.ring.length,
     building.holes.length,
     sample.altitudeDeg.toFixed(4),
@@ -138,10 +198,17 @@ function buildingCacheKey(building: BuildingFeat, sample: SolarSample): string {
   ].join(":");
 }
 
-function cachedBuildingShadow(building: BuildingFeat, sample: SolarSample, offset: Pt): MultiPolygon | null {
-  const key = buildingCacheKey(building, sample);
+function cachedBuildingShadow(
+  building: BuildingFeat,
+  sample: SolarSample,
+  offset: Pt,
+  terrain?: { ground: Ground; topZ: number; key: string },
+): MultiPolygon | null {
+  const key = buildingCacheKey(building, sample) + (terrain ? `:t${terrain.key}:${terrain.topZ.toFixed(3)}` : "");
   if (buildingShadowCache.has(key)) return buildingShadowCache.get(key)!;
-  const shadow = buildingShadowPolygon(building, offset);
+  const shadow = terrain
+    ? buildingShadowPolygonOnTerrain(building, (p) => terrainShadowOffset(sample, p, terrain.topZ, terrain.ground) ?? [0, 0])
+    : buildingShadowPolygon(building, offset);
   buildingShadowCache.set(key, shadow);
   return shadow;
 }
@@ -150,6 +217,7 @@ function unionCacheLookup(model: CityModel, input: PlanShadowInput, castShadows:
   return [
     castShadows ? 1 : 0,
     model.sideM,
+    model.terrain ? `${model.terrain.cols}x${model.terrain.rows}:${model.terrain.min}:${model.terrain.max}` : "flat",
     buildingHeightsFingerprint(model.buildings),
     input.lat,
     input.lon,
@@ -184,11 +252,19 @@ export function planShadowRings(
   );
   if (!sample.aboveHorizon) return unionCache;
 
+  // With terrain, shadows land on the ground the 3D view shows: regular buildings stand on their
+  // lowest footprint sample (as buildCity extrudes them), imported massing keeps its own roof Z.
+  const field = model.terrain;
+  const ground: Ground | null = field ? (east, north) => sampleTerrain(field, east, north, model.sideM) : null;
+  const terrainKey = field ? `${field.cols}x${field.rows}:${field.min}:${field.max}:${model.sideM}` : "";
   let merged: MultiPolygon = [];
   for (const building of model.buildings) {
     const offset = planShadowOffset(sample, building.height);
     if (!offset) continue;
-    const shadow = cachedBuildingShadow(building, sample, offset);
+    const topZ = ground
+      ? (building.importedTopZ ?? footprintBase(field!, building.ring, model.sideM) + building.height)
+      : 0;
+    const shadow = cachedBuildingShadow(building, sample, offset, ground ? { ground, topZ, key: terrainKey } : undefined);
     if (!shadow || shadow.length === 0) continue;
     merged = merged.length === 0 ? shadow : union(merged, shadow);
   }
