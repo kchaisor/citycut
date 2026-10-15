@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { placedLocal, type ImportedMassing } from "./massingImport";
+import { getColour } from "./colours";
 import type { LonLat } from "../types";
 
 /** Imported massing as three meshes in the CityModel frame (x east, y up, z = −north). */
@@ -8,7 +9,6 @@ export function buildMassingGroup(imported: ImportedMassing[], origin: LonLat, z
   if (visible.length === 0) return null;
   const group = new THREE.Group();
   group.name = "ImportedMassing";
-  const material = new THREE.MeshStandardMaterial({ color: 0xfff500, roughness: 0.85, metalness: 0 });
   const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x1a1916 });
   for (const item of visible) {
     const local = placedLocal(item, item.placement, origin, zone);
@@ -22,6 +22,11 @@ export function buildMassingGroup(imported: ImportedMassing[], origin: LonLat, z
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     geometry.setIndex(new THREE.BufferAttribute(item.indices, 1));
     geometry.computeVertexNormals();
+    const material = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(item.colour ?? getColour("--imported-massing")),
+      roughness: 0.85,
+      metalness: 0,
+    });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = item.name;
     mesh.castShadow = true;

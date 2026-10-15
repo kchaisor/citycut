@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { mgaCrs } from "../lib/crsZone";
 import { disposeObject } from "../lib/buildCity";
-import type { ImportedMassing, MassingPlacement } from "../lib/massingImport";
+import { normaliseMassingColour, type ImportedMassing, type MassingPlacement } from "../lib/massingImport";
 import {
   deleteStoredMassing,
   loadStoredMassing,
@@ -57,7 +57,7 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
       for (const row of rows) {
         try {
           const parsed = await parseBytes(new Uint8Array(row.bytes));
-          out.push({ ...parsed, id: row.id, name: row.name, fileBytes: row.bytes.byteLength, mode: row.mode, placement: row.placement, visible: row.visible });
+          out.push({ ...parsed, id: row.id, name: row.name, fileBytes: row.bytes.byteLength, mode: row.mode, placement: row.placement, visible: row.visible, ...(normaliseMassingColour(row.colour) ? { colour: normaliseMassingColour(row.colour)! } : {}) });
         } catch {
           // A stored file that no longer parses is skipped, not deleted.
         }
@@ -120,7 +120,7 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     [imported, model, zone, groundAt, cutKey],
   );
 
-  const patch = useCallback((id: string, next: Partial<Pick<ImportedMassing, "mode" | "placement" | "visible">>) => {
+  const patch = useCallback((id: string, next: Partial<Pick<ImportedMassing, "mode" | "placement" | "visible" | "colour">>) => {
     setImported((prev) => prev.map((item) => (item.id === id ? { ...item, ...next } : item)));
     void updateStoredMassing(id, next);
   }, []);
@@ -163,6 +163,15 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
       if (item) patch(id, { visible: !item.visible });
     },
     [imported, patch],
+  );
+
+  /** Colour only: rebuilds the massing meshes and footprints, never the camera. */
+  const setColour = useCallback(
+    (id: string, colour: string) => {
+      const next = normaliseMassingColour(colour);
+      if (next) patch(id, { colour: next });
+    },
+    [patch],
   );
 
   const remove = useCallback((id: string) => {
@@ -232,6 +241,7 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     snapToGround,
     resetToMga,
     toggleVisible,
+    setColour,
     remove,
     onScenePoint,
   };

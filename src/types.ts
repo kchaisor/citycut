@@ -100,6 +100,8 @@ export type BuildingFeat = {
   comMatchOverlapRatio?: number;
   /** Footprint of an imported .3dm massing model (drawings only; never in the 3D city or .3dm). */
   importedMassing?: true;
+  /** Per-model colour of an imported massing footprint (#RRGGBB); unset = `--imported-massing`. */
+  importedColour?: string;
   /** Set when the user overrode height in the 3D view. */
   heightManual?: true;
   use: BuildingUse;
