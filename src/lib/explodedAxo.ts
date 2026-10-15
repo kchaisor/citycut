@@ -257,22 +257,48 @@ export function axoLabelRotationDeg(edgeDx: number, edgeDy: number): number {
   return deg;
 }
 
+export type AxoLayerLabelAnchor = {
+  /** Text baseline start (horizontal text, left-aligned). */
+  x: number;
+  y: number;
+  /** Always 0: labels are horizontal. Kept for callers that still pass a rotate(). */
+  rotateDeg: number;
+  /** Short leader from the plate's right corner to the label. */
+  leader: { x1: number; y1: number; x2: number; y2: number };
+};
+
+/** Right-most point of the plate in iso (square corner or circle rim). */
+export function axoPlateRightCorner(sideM: number, shape: SiteFrameShape, liftM: number): Pt {
+  const half = sideM / 2;
+  if (shape === "circle") {
+    const k = half / Math.SQRT2;
+    return planPointToIso(k, -k, liftM);
+  }
+  return planPointToIso(half, -half, liftM);
+}
+
+/** Horizontal label at the plate's right corner with a short leader line (per Kelvin's reference). */
 export function axoLayerLabelAnchor(
   sideM: number,
   liftM: number,
-): { x: number; y: number; rotateDeg: number } {
-  const half = sideM / 2;
-  const [x0, y0] = planPointToIso(half, -half, liftM);
-  const [x1, y1] = planPointToIso(half, half, liftM);
-  const edgeDx = x1 - x0;
-  const edgeDy = y1 - y0;
-  const rotateDeg = axoLabelRotationDeg(edgeDx, edgeDy);
-  const along = sideM * 0.05;
+  shape: SiteFrameShape = "square",
+): AxoLayerLabelAnchor {
+  const [x0, y0] = axoPlateRightCorner(sideM, shape, liftM);
+  const leaderLen = sideM * 0.07;
+  const fontM = sideM * 0.03;
   return {
-    x: x0 + along * 1.4,
-    y: y0 + along * 0.4,
-    rotateDeg,
+    x: x0 + leaderLen + sideM * 0.012,
+    y: y0 + fontM * 0.35,
+    rotateDeg: 0,
+    leader: { x1: x0 + sideM * 0.01, y1: y0, x2: x0 + leaderLen, y2: y0 },
   };
+}
+
+/** Plate label text as in the reference ("Trees.", "Buildings."). */
+export function axoPlateLabelText(id: AxoLayerId): string {
+  const raw = AXO_LAYER_LABELS[id];
+  const title = raw.charAt(0) + raw.slice(1).toLowerCase();
+  return `${title}.`;
 }
 
 export type AxoLayerGeometry = {
@@ -667,6 +693,17 @@ export function axoLayerColours(): Record<AxoLayerId | "guide" | "label", string
   };
 }
 
+/** Per-layer plate tint (fill) and edge colours, from colours.css tokens. */
+export function axoPlateColours(id: AxoLayerId): { tint: string; edge: string } {
+  return {
+    tint: getColour(`--axo-plate-${id}` as ColourKey),
+    edge: getColour(`--axo-edge-${id}` as ColourKey),
+  };
+}
+
+/** Opacity of the plate tint on screen, so lower plates still read through (reference look). */
+export const AXO_PLATE_TINT_OPACITY = 0.55;
+
 /** Hatch pattern ids for planning fills (referenced from SVG defs). */
 export const AXO_HATCH_PAINTS: AxoPaintKey[] = ["plan-flood", "plan-heritage", "plan-ddo", "plan-bmo"];
 
@@ -711,9 +748,9 @@ export function explodedAxoBounds(
       const [x, y] = planPointToIso(pt[0], pt[1], layer.liftM);
       bump(x, y);
     }
-    const label = axoLayerLabelAnchor(model.sideM, layer.liftM);
+    const label = axoLayerLabelAnchor(model.sideM, layer.liftM, model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE);
     bump(label.x, label.y);
-    bump(label.x + model.sideM * 0.12, label.y);
+    bump(label.x + model.sideM * 0.22, label.y);
   }
   for (const guide of guides) {
     bump(guide.x, guide.yTop);
