@@ -3,6 +3,7 @@ import {
   AXO_HATCH_PAINTS,
   axoLayerBasePaint,
   axoLayerLabelAnchor,
+  axoPlateShowsAerial,
   axoPlateColours,
   axoPlateLabelText,
   AXO_PLATE_TINT_OPACITY,
@@ -123,7 +124,7 @@ export function DrawingExplodedAxo({
   const colourTick = useColourRevision();
   const colours = useMemo(() => axoLayerColours(), [colourTick]);
   const [satelliteHref, setSatelliteHref] = useState<string | null>(null);
-  const showAerial = settings.layerVisible.aerial;
+  const showAerial = settings.layerVisible.aerial || settings.layerVisible.base;
 
   useEffect(() => {
     if (!showAerial) return;
@@ -230,11 +231,11 @@ export function DrawingExplodedAxo({
         const legendOrigin = planToIsoLegendOrigin(model.sideM);
         return (
           <g key={`${layer.id}-${layer.liftM}`} transform={layerTransform}>
-            {layer.id !== "aerial" && (
+            {!axoPlateShowsAerial(layer.id) && (
               <path d={layer.plateOutlineD} fill={axoPlateColours(layer.id).tint} fillOpacity={AXO_PLATE_TINT_OPACITY} stroke="none" />
             )}
             <g clipPath={clip}>
-              {layer.id === "aerial" && satelliteHref && (
+              {axoPlateShowsAerial(layer.id) && satelliteHref && (
                 <image
                   href={satelliteHref}
                   x={0}
@@ -284,8 +285,8 @@ export function DrawingExplodedAxo({
             <path
               d={layer.plateOutlineD}
               fill="none"
-              stroke={axoPlateColours(layer.id).edge}
-              strokeWidth={outlinePx}
+              stroke={layer.id === "base" ? colours.base : axoPlateColours(layer.id).edge}
+              strokeWidth={layer.id === "base" ? outlinePx * 2.5 : outlinePx}
               vectorEffect="non-scaling-stroke"
             />
             {layer.unclippedStrokes?.map((d, ui) => (

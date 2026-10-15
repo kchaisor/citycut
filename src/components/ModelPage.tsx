@@ -34,6 +34,8 @@ import {
   AXO_LAYER_LABELS,
   defaultExplodedAxoGapM,
   defaultExplodedAxoSettings,
+  referenceExplodedAxoSettings,
+  AXO_REFERENCE_BUILDING_GAP_FACTOR,
   explodedAxoBounds,
   type AxoLayerId,
   type ExplodedAxoSettings,
@@ -859,6 +861,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
         gapM: defaultExplodedAxoGapM(displayModel.sideM),
         showLabels: prev.showLabels,
         ...(prev.terrainExaggeration != null ? { terrainExaggeration: prev.terrainExaggeration } : {}),
+        ...(prev.extraGapAboveM?.buildings != null
+          ? { extraGapAboveM: { buildings: defaultExplodedAxoGapM(displayModel.sideM) * AXO_REFERENCE_BUILDING_GAP_FACTOR } }
+          : {}),
       };
     });
     setExplodedViewport(
@@ -1796,6 +1801,28 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
               </div>
               {drawing === "exploded-axo" && (
                 <div className="axo-controls">
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => {
+                      const next = referenceExplodedAxoSettings(displayModel.sideM, axoSettings);
+                      setAxoSettings(next);
+                      setExplodedViewport(explodedAxoViewportExtent(explodedAxoBounds(displayModel, next)));
+                    }}
+                  >
+                    Reference preset
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => {
+                      const next = defaultExplodedAxoSettings(displayModel.sideM);
+                      setAxoSettings((prev) => ({ ...next, gapM: prev.gapM, showLabels: prev.showLabels, ...(prev.terrainExaggeration != null ? { terrainExaggeration: prev.terrainExaggeration } : {}) }));
+                      setExplodedViewport(explodedAxoViewportExtent(explodedAxoBounds(displayModel, { ...next, gapM: axoSettings.gapM })));
+                    }}
+                  >
+                    Default stack
+                  </button>
                   <p className="kicker">Layers</p>
                   <ul className="axo-layer-list">
                     {axoSettings.layerOrder.map((id, index) => (

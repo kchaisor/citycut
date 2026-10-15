@@ -213,6 +213,8 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--axo-pt-bus` | `#c45c00` | Exploded axo PTV bus route. |
 | `--axo-contour` | `#8a8578` | Exploded axo Vicmap contour stroke. |
 | `--axo-cadastre` | `#e8a33c` | Exploded axo cadastre (Vicmap parcel) boundary, orange. |
+| `--axo-terrain-mesh` | `#4a4a4a` | Exploded axo terrain (DTM) mesh grid. |
+| `--axo-base-outline` | `#1a1916` | Exploded axo base outline plate (frame edge and corner dots). |
 | `--axo-plate-planning` | `#f3ecf7` | Exploded axo planning plate tint. |
 | `--axo-edge-planning` | `#a98cc4` | Exploded axo planning plate edge. |
 | `--axo-plate-water` | `#e8f2f9` | Exploded axo floodplain plate tint. |
@@ -237,7 +239,8 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--axo-edge-terrain` | `#333333` | Exploded axo terrain (DTM) plate edge. |
 | `--axo-plate-cadastre` | `#fdf3e4` | Exploded axo cadastre plate tint. |
 | `--axo-edge-cadastre` | `#e8a33c` | Exploded axo cadastre plate edge. |
-| `--axo-terrain-mesh` | `#4a4a4a` | Exploded axo terrain (DTM) mesh grid. |
+| `--axo-plate-base` | `#ffffff` | Exploded axo base outline plate tint (unused under the aerial image). |
+| `--axo-edge-base` | `#1a1916` | Exploded axo base outline plate edge. |
 | `--axo-building-roof` | `#e8e6e1` | Exploded axo building roof (massing). |
 | `--axo-building-wall-light` | `#b9b6ae` | Exploded axo building wall, sunlit side. |
 | `--axo-building-wall-dark` | `#8c8980` | Exploded axo building wall, shaded side. |

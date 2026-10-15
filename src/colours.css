@@ -250,6 +250,8 @@
   --axo-pt-bus: #c45c00;
   --axo-contour: #000000;
   --axo-cadastre: #e8a33c;
+  --axo-terrain-mesh: #4a4a4a;
+  --axo-base-outline: #1a1916;
   --axo-plate-planning: #f3ecf7;
   --axo-edge-planning: #a98cc4;
   --axo-plate-water: #e8f2f9;
@@ -274,7 +276,8 @@
   --axo-edge-terrain: #333333;
   --axo-plate-cadastre: #fdf3e4;
   --axo-edge-cadastre: #e8a33c;
-  --axo-terrain-mesh: #4a4a4a;
+  --axo-plate-base: #ffffff;
+  --axo-edge-base: #1a1916;
   --axo-building-roof: #e8e6e1;
   --axo-building-wall-light: #b9b6ae;
   --axo-building-wall-dark: #8c8980;

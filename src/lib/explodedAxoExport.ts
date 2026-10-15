@@ -118,6 +118,7 @@ export const EXPLODED_AXO_LAYER_ORDER = [
   "Trees",
   "Buildings",
   "Aerial",
+  "Base",
   "Labels",
   "Annotation",
 ] as const;
@@ -134,6 +135,7 @@ function chunkNameForLayer(id: AxoLayerId): string {
   if (id === "green") return "Green";
   if (id === "trees") return "Trees";
   if (id === "buildings") return "Buildings";
+  if (id === "base") return "Base";
   return "Aerial";
 }
 
@@ -183,8 +185,8 @@ export function explodedAxoChunks(
     if (plateRing.length >= 3) {
       paths.push({
         rings: [plateRing],
-        stroke: hexRgb(axoPlateColours(layer.id).edge),
-        strokeMm: 0.12,
+        stroke: hexRgb(layer.id === "base" ? getColour("--axo-base-outline") : axoPlateColours(layer.id).edge),
+        strokeMm: layer.id === "base" ? 0.3 : 0.12,
         close: true,
       });
     }
