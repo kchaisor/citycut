@@ -291,6 +291,7 @@ export function DrawingExplodedAxo({
                     d={face.d}
                     fill={axoPaintColour(face.paint)}
                     fillRule="evenodd"
+                    stroke={face.paint.startsWith("building") ? undefined : "none"}
                     vectorEffect="non-scaling-stroke"
                   />
                 ))}
