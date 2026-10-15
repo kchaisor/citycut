@@ -5,6 +5,8 @@ import {
   buildAxoTerrainMesh,
   DEFAULT_AXO_TERRAIN_EXAGGERATION,
 } from "./explodedAxoTerrain";
+import { axoCanopyNote, buildAxoCanopyFaces } from "./explodedAxoCanopies";
+import { axoMassingHeightNote, buildAxoMassingFaces, type AxoSolidFace } from "./explodedAxoMassing";
 import { getColour, type ColourKey } from "./colours";
 import { bufferOpenLine } from "./bufferLine";
 import { openRing, signedArea } from "./geo";
@@ -104,7 +106,13 @@ export type AxoPaintKey =
   | "pt-bus"
   | "contour"
   | "trees"
-  | "terrain-mesh";
+  | "terrain-mesh"
+  | "building-roof"
+  | "building-wall-light"
+  | "building-wall-dark"
+  | "tree-canopy"
+  | "tree-canopy-shade"
+  | "tree-trunk";
 
 export type AxoLegendSwatch = { label: string; paint: AxoPaintKey };
 
@@ -120,6 +128,10 @@ export type ExplodedAxoSettings = {
   showLabels: boolean;
   /** Vertical exaggeration of the terrain mesh plate (1 = true scale). */
   terrainExaggeration?: number;
+  /** Draw buildings as extruded massing (walls + roofs). False keeps the flat footprint plate. */
+  buildingMassing?: boolean;
+  /** Draw trees as 3D canopies sized from crown data. False keeps flat crown discs. */
+  treeCanopies?: boolean;
 };
 
 /** Vertical span of one frame plate in iso screen metres (same lift). */
@@ -311,7 +323,12 @@ export type AxoLayerGeometry = {
   legend?: AxoLegendSwatch[];
   /** Strokes drawn without the plate clip (terrain mesh rises above the plate). */
   unclippedStrokes?: string[];
-  /** Visible source note for this plate. */
+  /**
+   * Extruded solids (building massing) in painter's order, far to near. Drawn after the
+   * plate fills and not clipped to the plate, so tall masses can rise above it.
+   */
+  solids?: AxoSolidFace[];
+  /** Visible source note for this plate (e.g. where heights came from). */
   sourceNote?: string;
 };
 
@@ -487,6 +504,7 @@ export function buildExplodedAxoLayers(
     let unavailableNote: string | undefined;
     let legend: AxoLegendSwatch[] | undefined;
     let unclippedStrokes: string[] | undefined;
+    let solids: AxoSolidFace[] | undefined;
     let sourceNote: string | undefined;
 
     const areaToPath = (rings: Pt[][]) =>
@@ -600,6 +618,10 @@ export function buildExplodedAxoLayers(
         const d = areaToPath(rings);
         if (d) fills.push(d);
       }
+    } else if (id === "trees" && settings.treeCanopies !== false) {
+      const canopies = buildAxoCanopyFaces(model);
+      solids = canopies.faces;
+      sourceNote = axoCanopyNote(canopies.counts) || undefined;
     } else if (id === "trees") {
       for (const tree of model.trees) {
         if (!pointInSiteFrame(tree.at, model.sideM, shape)) continue;
@@ -612,12 +634,18 @@ export function buildExplodedAxoLayers(
         });
       }
     } else if (id === "buildings") {
-      const ground = figureGround(model.buildings, model.sideM, shape);
-      for (const polygon of ground.polygons) {
-        const parts = polygon
-          .map((ring) => isoPathFromPlanRingBase(openRing(ring), true))
-          .filter(Boolean);
-        if (parts.length) fills.push(parts.join(" "));
+      if (settings.buildingMassing === false) {
+        const ground = figureGround(model.buildings, model.sideM, shape);
+        for (const polygon of ground.polygons) {
+          const parts = polygon
+            .map((ring) => isoPathFromPlanRingBase(openRing(ring), true))
+            .filter(Boolean);
+          if (parts.length) fills.push(parts.join(" "));
+        }
+      } else {
+        const massing = buildAxoMassingFaces(model);
+        solids = massing.faces;
+        sourceNote = axoMassingHeightNote(massing.counts) || undefined;
       }
     } else if (id === "roads") {
       for (const line of roadLines) {
@@ -639,6 +667,7 @@ export function buildExplodedAxoLayers(
       ...(unavailableNote ? { unavailableNote } : {}),
       ...(legend ? { legend } : {}),
       ...(unclippedStrokes?.length ? { unclippedStrokes } : {}),
+      ...(solids?.length ? { solids } : {}),
       ...(sourceNote ? { sourceNote } : {}),
     });
   }
@@ -665,6 +694,12 @@ const AXO_PAINT_CSS: Record<AxoPaintKey, ColourKey> = {
   contour: "--axo-contour",
   trees: "--tree-fill",
   "terrain-mesh": "--axo-terrain-mesh",
+  "building-roof": "--axo-building-roof",
+  "building-wall-light": "--axo-building-wall-light",
+  "building-wall-dark": "--axo-building-wall-dark",
+  "tree-canopy": "--axo-tree-canopy",
+  "tree-canopy-shade": "--axo-tree-canopy-shade",
+  "tree-trunk": "--axo-tree-trunk",
 };
 
 export function axoPaintColour(paint: AxoPaintKey): string {

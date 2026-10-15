@@ -239,6 +239,20 @@ export function explodedAxoChunks(
         close: true,
       });
     }
+    for (const face of layer.solids ?? []) {
+      const rings = ringsFromIsoD(face.d, origin, scale, pageHeightMm, liftM);
+      if (rings.length > 0) {
+        paths.push({
+          rings,
+          fill: hexRgb(axoPaintColour(face.paint)),
+          ...(face.paint.startsWith("building")
+            ? { stroke: hexRgb(getColour("--axo-building-edge")), strokeMm: 0.05 }
+            : {}),
+          close: true,
+          evenOdd: true,
+        });
+      }
+    }
     if (layer.id === "aerial" && satelliteNote) {
       paths.push({
         rings: [plateRing],
