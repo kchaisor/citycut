@@ -15,6 +15,16 @@ import type { SolarViewSettings } from "./SolarHeliodon";
 /** Sun-time hours per real second. */
 const SPEEDS = [0.5, 1, 2, 4] as const;
 
+/** "9:30", "09:30" or "0930" to minutes past midnight; null when not a real clock time. */
+export function parseClock(text: string): number | null {
+  const m = /^\s*(\d{1,2}):?(\d{2})\s*$/.exec(text);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+
 function clock(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = Math.floor(minutes % 60);
@@ -52,6 +62,18 @@ export function SunStudyPlayer({
     ? { sunrise: standard.hours[0]! * 60, sunset: standard.hours[standard.hours.length - 1]! * 60 }
     : daylight;
   const minutes = settings.hour * 60 + settings.minute;
+  const [editing, setEditing] = useState<string | null>(null);
+  /** Typed HH:MM, snapped into the slider range; invalid text leaves the time unchanged. */
+  const commitTyped = () => {
+    const typed = editing === null ? null : parseClock(editing);
+    setEditing(null);
+    if (typed === null) return;
+    const lo = window_?.sunrise ?? 0;
+    const hi = window_?.sunset ?? 1439;
+    const v = Math.min(hi, Math.max(lo, typed));
+    fraction.current = v;
+    patch({ hour: Math.floor(v / 60), minute: v % 60 });
+  };
 
   useEffect(() => {
     if (!playing) return;
@@ -96,7 +118,8 @@ export function SunStudyPlayer({
 
   return (
     <div className="sun-study" role="group" aria-label="Sun study">
-      <div className="sun-study-dates" role="radiogroup" aria-label="Day">
+      <h4 className="sun-study-kicker">Key dates</h4>
+      <div className="sun-study-cards" role="radiogroup" aria-label="Day">
         {SUN_STUDY_DATES.map((d) => {
           const on = !standardId && settings.month === d.month && settings.day === d.day;
           return (
@@ -105,7 +128,8 @@ export function SunStudyPlayer({
               type="button"
               role="radio"
               aria-checked={on}
-              className={on ? "shape-btn on" : "shape-btn"}
+              aria-label={d.label}
+              className={on ? "sun-study-card on" : "sun-study-card"}
               onClick={() => {
                 const w = daylightWindowMinutes(lat, lon, settings.year, d.month, d.day);
                 const clamped = w ? Math.min(w.sunset, Math.max(w.sunrise, minutes)) : minutes;
@@ -114,10 +138,15 @@ export function SunStudyPlayer({
                 patch({ month: d.month, day: d.day, hour: Math.floor(clamped / 60), minute: clamped % 60 });
               }}
             >
-              {d.label}
+              <span className="sun-study-card-name">{d.name}</span>
+              <span className="sun-study-card-date">{d.label}</span>
+              <span className="sun-study-card-why">{d.why}</span>
             </button>
           );
         })}
+      </div>
+      <label className="sun-study-other">
+        <span>Other day</span>
         <input
           className="sun-study-date"
           type="date"
@@ -131,8 +160,9 @@ export function SunStudyPlayer({
             }
           }}
         />
-      </div>
-      <div className="sun-study-dates sun-study-standards" role="radiogroup" aria-label="Victorian shadow standards">
+      </label>
+      <h4 className="sun-study-kicker">Assessment presets</h4>
+      <div className="sun-study-cards sun-study-presets" role="radiogroup" aria-label="Victorian shadow standards">
         {(Object.keys(SHADOW_STANDARDS) as ShadowStandardId[]).map((id) => {
           const set = SHADOW_STANDARDS[id];
           return (
@@ -141,7 +171,8 @@ export function SunStudyPlayer({
               type="button"
               role="radio"
               aria-checked={standardId === id}
-              className={standardId === id ? "shape-btn on" : "shape-btn"}
+              aria-label={set.label}
+              className={standardId === id ? "sun-study-card on" : "sun-study-card"}
               title={set.source}
               onClick={() => {
                 setStandardId(id);
@@ -149,11 +180,13 @@ export function SunStudyPlayer({
                 patch({ month: set.month, day: set.day, hour: set.hours[0]!, minute: 0, castShadows: true });
               }}
             >
-              {set.label}
+              <span className="sun-study-card-name">{set.label}</span>
+              <span className="sun-study-card-why">{set.detail}</span>
             </button>
           );
         })}
       </div>
+      <h4 className="sun-study-kicker">Time</h4>
       <div className="sun-study-row">
         <button
           type="button"
@@ -182,7 +215,28 @@ export function SunStudyPlayer({
           }}
         />
         <span className="sun-study-time">
-          {clock(minutes)} <span className="sun-study-zone">{zone}</span>
+          {editing !== null ? (
+            <input
+              className="sun-study-time-input"
+              aria-label="Type time (HH:MM)"
+              autoFocus
+              inputMode="numeric"
+              maxLength={5}
+              value={editing}
+              aria-invalid={parseClock(editing) === null}
+              onChange={(event) => setEditing(event.target.value)}
+              onBlur={() => commitTyped()}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") commitTyped();
+                if (event.key === "Escape") setEditing(null);
+              }}
+            />
+          ) : (
+            <button type="button" className="sun-study-time-btn" aria-label={`Time ${clock(minutes)}, click to type`} onClick={() => setEditing(clock(minutes))}>
+              {clock(minutes)}
+            </button>
+          )}{" "}
+          <span className="sun-study-zone">{zone}</span>
         </span>
       </div>
       <div className="sun-study-row sun-study-foot">

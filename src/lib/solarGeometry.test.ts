@@ -70,7 +70,7 @@ describe("Melbourne sun-path geometry", () => {
     expect(summer[summer.length - 1].azimuthDeg).toBeLessThan(270);
   });
 
-  it("orders the arcs Jun 21 lowest and Dec 21 highest, all through the north", () => {
+  it("orders the arcs Jun 21 lowest and Dec 22 highest, all through the north", () => {
     const peak = (month: number, day: number) => solarNoon(month, day).sample;
     const winter = peak(SOLAR_WINTER.month, SOLAR_WINTER.day);
     const equinox = peak(SOLAR_EQUINOX.month, SOLAR_EQUINOX.day);

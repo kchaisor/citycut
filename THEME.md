@@ -345,3 +345,14 @@ The same drawer has **Colours**, under Line styles. It lists every fill, with a 
 3. The browser remembers the edits (`citycut.colours`).
 4. Click **Copy CSS**. It copies only the fills you changed, ready to paste into `src/colours.css`.
 5. Paste those lines over the matching ones, commit, and hard-refresh. Then click **Reset to defaults** so the browser is not still covering the file.
+
+## Sidebar and Sun tab colours (`src/colours.css`)
+
+| Name | What you see on screen | Current value |
+| --- | --- | --- |
+| `--sidebar-grey` | Plain grey behind the sidebar on the landing page and the model page. | `#EBEBEB` |
+| `--viewport-bg` | Flat 3D sky and the flat tint over the landing map. No gradients. | `#EBEBEB` |
+| `--sidebar-text` | All sidebar text, including section labels and card descriptions. | `#000000` |
+| `--sun-card-bg` | Sun tab date and preset cards, and the speed buttons. | `#FFFFFF` |
+| `--sun-card-border` | Border of an unselected Sun tab card. | `#CECBC6` |
+| `--sun-card-on-border` | Border of a selected card (fill is the `#FFF500` accent) and of the New cut button. | `#000000` |
