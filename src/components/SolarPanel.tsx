@@ -11,7 +11,7 @@ import type { SolarViewSettings } from "./SolarHeliodon";
 import { SunStudyPlayer } from "./SunStudyPlayer";
 
 const SOLAR_LEGEND: { key: ColourKey; label: string; dash?: string }[] = [
-  { key: "--sun-arc-summer", label: "Dec 21 (summer solstice)" },
+  { key: "--sun-arc-summer", label: "Dec 22 (summer solstice)" },
   { key: "--sun-arc-equinox", label: "Sep/Mar (equinox)", dash: "4 3" },
   { key: "--sun-arc-winter", label: "Jun 21 (winter solstice)", dash: "6 2.5 1.2 2.5" },
 ];

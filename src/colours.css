@@ -7,6 +7,23 @@
 */
 
 :root {
+  /* Sidebar and page chrome */
+
+  /* Plain grey behind the sidebar on the landing page and the model page, and the landing page chrome. */
+  --sidebar-grey: #EBEBEB;
+
+  /* Flat 3D viewport sky and the flat landing-map tint (no gradients). */
+  --viewport-bg: #EBEBEB;
+
+  /* All sidebar text, section labels and card descriptions included. */
+  --sidebar-text: #000000;
+
+  /* Sun tab date and preset cards, and the speed buttons. */
+  --sun-card-bg: #FFFFFF;
+  --sun-card-border: #CECBC6;
+  /* Border of a selected card and of the New cut button; the fill is the #FFF500 accent. */
+  --sun-card-on-border: #000000;
+
   /* Paper and ground */
 
   /* Positron building fill — landing mask above use-coloured footprints outside the cut frame. */

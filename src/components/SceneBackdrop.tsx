@@ -6,37 +6,18 @@ import { themeColor } from "../lib/themeColor";
 import { markScreenOnly } from "../lib/screenOnly";
 
 /**
- * Screen-space vertical gradient sky for the 3D view (light grey top to cool grey bottom).
- * A small canvas texture as scene.background, so the camera and picking are untouched.
- * PNG export swaps scene.background for its flat backdrop (capturePng), so downloads keep it.
+ * Flat sky for the 3D view: one --viewport-bg colour, no gradient (Kelvin, Oct 2026).
+ * Set as scene.background, so the camera and picking are untouched. PNG export swaps
+ * scene.background for its flat backdrop (capturePng), so downloads keep it.
  */
 export function GradientSky({ colourTick, fallback }: { colourTick: number; fallback: string }) {
   const scene = useThree((state) => state.scene);
   useEffect(() => {
-    const top = themeColor("--model-grad-top", fallback);
-    const bottom = themeColor("--model-grad-bottom", fallback);
-    const canvas = document.createElement("canvas");
-    canvas.width = 2;
-    canvas.height = 256;
-    const ctx = canvas.getContext("2d");
     const previous = scene.background;
-    if (!ctx) {
-      scene.background = new THREE.Color(fallback);
-      return () => {
-        scene.background = previous;
-      };
-    }
-    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, top);
-    gradient.addColorStop(1, bottom);
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    scene.background = texture;
+    const colour = new THREE.Color(themeColor("--viewport-bg", fallback));
+    scene.background = colour;
     return () => {
-      if (scene.background === texture) scene.background = previous;
-      texture.dispose();
+      if (scene.background === colour) scene.background = previous;
     };
   }, [scene, colourTick, fallback]);
   return null;

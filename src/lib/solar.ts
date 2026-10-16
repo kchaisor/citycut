@@ -3,7 +3,7 @@ import * as SunCalc from "suncalc";
 export const MELBOURNE_TZ = "Australia/Melbourne";
 
 /** Southern-hemisphere solstice and equinox dates used for the heliodon presets. */
-export const SOLAR_SUMMER = { month: 12, day: 21, label: "Summer solstice" };
+export const SOLAR_SUMMER = { month: 12, day: 22, label: "Summer solstice" };
 export const SOLAR_WINTER = { month: 6, day: 21, label: "Winter solstice" };
 export const SOLAR_EQUINOX = { month: 9, day: 22, label: "Equinox" };
 
@@ -24,18 +24,20 @@ export type ShadowStandardId = "rescode-sep" | "winter-jun-public";
 
 export const SHADOW_STANDARDS: Record<
   ShadowStandardId,
-  { label: string; source: string; month: number; day: number; hours: readonly number[] }
+  { label: string; detail: string; source: string; month: number; day: number; hours: readonly number[] }
 > = {
   "rescode-sep": {
-    label: "ResCode 22 Sep",
-    source: "Clause 54.04-5 / 55.04-5, 9am to 3pm",
+    label: "ResCode open space",
+    detail: "22 Sep · 9am–3pm · Cl. 55.04-3 (B4-3)",
+    source: "Clause 54.04-3 (A4-3) / 55.04-3 (B4-3), 22 Sep 9am to 3pm",
     month: 9,
     day: 22,
     hours: [9, 10, 11, 12, 13, 14, 15],
   },
   "winter-jun-public": {
-    label: "Winter 22 Jun (public spaces)",
-    source: "Public open space, 11am to 2pm",
+    label: "Public spaces",
+    detail: "22 Jun 11am–2pm · common practice",
+    source: "Common practice, not a clause: 22 Jun 11am to 2pm",
     month: 6,
     day: 22,
     hours: [11, 12, 13, 14],
@@ -202,11 +204,14 @@ export function dateFromDayOfYear(year: number, doy: number): { month: number; d
   return { month: date.getUTCMonth() + 1, day: date.getUTCDate() };
 }
 
-/** Sun-study date presets: winter solstice, equinox, summer solstice. */
+/**
+ * Sun-study key dates. Solstices are the 2026 AEST dates (USNO: 21 Jun 18:24, 22 Dec 06:50).
+ * The equinox card uses 22 Sep, the ResCode test date, not the astronomical 23 Sep.
+ */
 export const SUN_STUDY_DATES = [
-  { id: "jun21", label: "21 Jun", month: 6, day: 21 },
-  { id: "sep22", label: "22 Sep", month: 9, day: 22 },
-  { id: "dec21", label: "21 Dec", month: 12, day: 21 },
+  { id: "jun21", name: "Winter solstice", label: "21 Jun", why: "Worst-case shadow, lowest sun", month: 6, day: 21 },
+  { id: "sep22", name: "Equinox", label: "22 Sep", why: "Average day, parks, commercial", month: 9, day: 22 },
+  { id: "dec22", name: "Summer solstice", label: "22 Dec", why: "Highest sun, shading, passive design", month: 12, day: 22 },
 ] as const;
 
 /** Melbourne clock minutes (AEST/AEDT as the date falls) of sunrise and sunset, from SunCalc. */

@@ -3,7 +3,7 @@ import type { ColourKey } from "./colours";
 
 /** Three seasonal arcs; dash patterns are fractions of the cut side in 3D, metres on the 2D plan. */
 export const SUN_PATH_STYLES = [
-  { date: SOLAR_SUMMER, label: "Dec 21", key: "--sun-arc-summer" as ColourKey, pattern: null as readonly number[] | null, labelSide: 1 },
+  { date: SOLAR_SUMMER, label: "Dec 22", key: "--sun-arc-summer" as ColourKey, pattern: null as readonly number[] | null, labelSide: 1 },
   { date: SOLAR_EQUINOX, label: "Sep/Mar", key: "--sun-arc-equinox" as ColourKey, pattern: [0.018, 0.011], labelSide: -1 },
   { date: SOLAR_WINTER, label: "Jun 21", key: "--sun-arc-winter" as ColourKey, pattern: [0.024, 0.009, 0.004, 0.009], labelSide: -1 },
 ] as const;

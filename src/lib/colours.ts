@@ -9,6 +9,12 @@ import { cssColorToHex, normalizeHex, parseCustomProperties, resolveSheet } from
  */
 
 export const COLOUR_KEYS = [
+  "--sidebar-grey",
+  "--viewport-bg",
+  "--sidebar-text",
+  "--sun-card-bg",
+  "--sun-card-border",
+  "--sun-card-on-border",
   "--landing-building-mask",
   "--sheet-fill",
   "--ground-fill",
@@ -247,6 +253,12 @@ export const COLOUR_GROUPS = [
 ] as const satisfies readonly { id: string; title: string; keys: readonly ColourKey[] }[];
 
 export const COLOUR_LABELS: Record<ColourKey, string> = {
+  "--sidebar-grey": "Sidebar grey",
+  "--viewport-bg": "3D sky and landing map tint",
+  "--sidebar-text": "Sidebar text",
+  "--sun-card-bg": "Sun tab card",
+  "--sun-card-border": "Sun tab card border",
+  "--sun-card-on-border": "Selected card border",
   "--landing-building-mask": "Landing building mask",
   "--sheet-fill": "Sheet",
   "--ground-fill": "Ground",

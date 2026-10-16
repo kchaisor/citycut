@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SolarPanel } from "./SolarPanel";
+import { parseClock } from "./SunStudyPlayer";
 import type { SolarViewSettings } from "./SolarHeliodon";
 
 const settings: SolarViewSettings = {
@@ -35,7 +36,7 @@ describe("Sun section", () => {
     const view = render(<SolarPanel embedded settings={settings} onChange={onChange} sideM={500} site={site} />);
     fireEvent.click(screen.getByRole("radio", { name: "21 Jun" }));
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ month: 6, day: 21, hour: 15, minute: 0 }));
-    fireEvent.click(screen.getByRole("radio", { name: "ResCode 22 Sep" }));
+    fireEvent.click(screen.getByRole("radio", { name: "ResCode open space" }));
     const next = onChange.mock.calls.at(-1)![0] as SolarViewSettings;
     expect(next).toMatchObject({ month: 9, day: 22, hour: 9, minute: 0, castShadows: true });
     view.rerender(<SolarPanel embedded settings={next} onChange={onChange} sideM={500} site={site} />);
@@ -43,5 +44,45 @@ describe("Sun section", () => {
     expect([scrub.min, scrub.max]).toEqual(["540", "900"]);
     fireEvent.click(screen.getByRole("button", { name: "Next hour" }));
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ hour: 10, minute: 0 }));
+  });
+
+  it("shows labelled key-date cards (21 Jun, 22 Sep, 22 Dec) and the two presets with their why", () => {
+    render(<SolarPanel embedded settings={settings} onChange={() => undefined} sideM={500} site={site} />);
+    for (const name of ["21 Jun", "22 Sep", "22 Dec"]) expect(screen.getByRole("radio", { name })).toBeTruthy();
+    expect(screen.getByText("Winter solstice")).toBeTruthy();
+    expect(screen.getByText("Summer solstice")).toBeTruthy();
+    expect(screen.getByText("22 Sep · 9am–3pm · Cl. 55.04-3 (B4-3)")).toBeTruthy();
+    expect(screen.getByText("22 Jun 11am–2pm · common practice")).toBeTruthy();
+  });
+
+  it("presets and toggles only change sun settings, never anything else", () => {
+    const onChange = vi.fn();
+    render(<SolarPanel embedded settings={settings} onChange={onChange} sideM={500} site={site} />);
+    fireEvent.click(screen.getByRole("radio", { name: "Public spaces" }));
+    fireEvent.click(screen.getByRole("radio", { name: "22 Dec" }));
+    fireEvent.click(screen.getByLabelText(/Show sun path/));
+    fireEvent.click(screen.getByLabelText(/Cast real-time shadows/));
+    for (const [next] of onChange.mock.calls) expect(Object.keys(next).sort()).toEqual(Object.keys(settings).sort());
+  });
+
+  it("typed time: parses HH:MM, rejects junk, snaps into the slider range", () => {
+    expect(parseClock("9:30")).toBe(570);
+    expect(parseClock("0930")).toBe(570);
+    expect(parseClock("24:00")).toBeNull();
+    expect(parseClock("abc")).toBeNull();
+    const onChange = vi.fn();
+    render(<SolarPanel embedded settings={settings} onChange={onChange} sideM={500} site={site} />);
+    fireEvent.click(screen.getByRole("button", { name: /click to type/ }));
+    const input = screen.getByRole("textbox", { name: "Type time (HH:MM)" });
+    fireEvent.change(input, { target: { value: "03:00" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    const snapped = onChange.mock.calls.at(-1)![0] as SolarViewSettings;
+    const scrub = screen.getByRole("slider", { name: "Time of day" }) as HTMLInputElement;
+    expect(snapped.hour * 60 + snapped.minute).toBe(Number(scrub.min));
+    onChange.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: /click to type/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Type time (HH:MM)" }), { target: { value: "99:99" } });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Type time (HH:MM)" }), { key: "Enter" });
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

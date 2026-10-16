@@ -6,13 +6,13 @@
   --float-grad-top: #F3F3F4;
   --float-grad-bottom: #CFD1D5;
   --float-ink: #1A1916;
-  --float-label: #8E9096;
+  --float-label: var(--sidebar-text);
   --float-line: #1A1916;
   --float-tile-line: #9A9CA1;
   --float-hover: #FFFFFF;
   /* Text over the map and gradients is plain ink. */
   /* No text halos or outlines anywhere in the UI (Kelvin): text is plain ink. */
-  --float-label-on-map: #4A4C52;
+  --float-label-on-map: var(--sidebar-text);
   --grid-cross: #1A1916;
   --grid-cross-opacity: 0.7; /* fully faded-in crosses; levels fade from 0 up to this */
   --grid-cross-arm: 4.2px; /* half the cross width: 4.2 px arms make an 8.4 px cross */
@@ -30,8 +30,9 @@
   --drawing-bg: #E6E7E9;
 }
 
-.app { background: linear-gradient(180deg, var(--float-grad-top) 0%, var(--float-grad-bottom) 100%); }
-.model .viewport { background: linear-gradient(180deg, var(--model-grad-top) 0%, var(--model-grad-bottom) 100%); }
+.app { background: var(--sidebar-grey); }
+.model .viewport { background: var(--viewport-bg); }
+.sidebar { --muted-text: var(--sidebar-text); color: var(--sidebar-text); }
 /* Model sidebar: plain black text, no halo, over the gradient, 3D, drawing and satellite. */
 @media (min-width: 641px) {
   .model .sidebar { text-shadow: none; }
@@ -47,7 +48,7 @@
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  background: linear-gradient(180deg, var(--map-tint-top) 0%, var(--map-tint-bottom) 100%);
+  background: var(--viewport-bg);
   mix-blend-mode: multiply;
 }
 
@@ -55,7 +56,7 @@
 .sidebar-brand-bar,
 .sidebar-rail.icon-rail,
 .sidebar-panel { background: transparent; border: 0; }
-.sidebar-brand:hover, .sidebar-new-cut:hover { background: var(--sidebar-hover); border-radius: 999px; }
+.sidebar-brand:hover { background: var(--sidebar-hover); border-radius: 999px; }
 
 /* Landing (desktop): the map runs under the controls, which float directly on it with no
    backdrop and centres the cut frame on the window. Readability comes from slightly heavier
@@ -86,7 +87,7 @@
 }
 @media (max-width: 640px) {
   .select .select-chrome, .model .sidebar-host {
-    background: linear-gradient(180deg, var(--float-grad-top) 0%, var(--float-grad-bottom) 100%);
+    background: var(--sidebar-grey);
   }
 }
 
@@ -230,7 +231,7 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 :root {
   /* Same vertical gradient as the 3D sky, pinned to the window so the panel matches the sky
      at every screen height. */
-  --panel-3d-bg: linear-gradient(180deg, var(--model-grad-top) 0%, var(--model-grad-bottom) 100%) fixed;
+  --panel-3d-bg: var(--sidebar-grey);
   --panel-3d-line: #00000014;
 }
 @media (min-width: 641px) {
@@ -266,7 +267,7 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 .sun-study-play { flex: none; width: 34px; height: 34px; border-radius: 999px; border: 0; display: grid; place-items: center; background: var(--accent, #FFF500); color: #000000; cursor: pointer; }
 .sun-study-scrub { flex: 1; min-width: 0; accent-color: #000000; }
 .sun-study-time { font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 600; white-space: nowrap; }
-.sun-study-zone, .sun-study-window { font-size: 11px; font-weight: 500; color: #000000; opacity: 0.6; }
+.sun-study-zone, .sun-study-window { font-size: 11px; font-weight: 500; color: var(--sidebar-text); }
 .sun-study-foot { justify-content: space-between; }
 .sun-study .shape-btn { padding: 3px 8px; font-size: 12px; white-space: nowrap; }
 .sun-study-dates { flex-wrap: nowrap; }
@@ -278,3 +279,37 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 .sun-study-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; }
 .sun-study-foot { display: flex; }
 .sun-study-time { font-size: 12px; }
+
+/* Sun tab: key-date cards, assessment presets, typed time (Kelvin, Oct 2026). Hex lives in colours.css. */
+/* Values ported 1:1 from the approved mock-up (/workspace/mock.html). */
+.sun-study-kicker { margin: 14px 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; line-height: normal; color: var(--sidebar-text); }
+.sun-study > .sun-study-kicker + * { margin-top: -10px; }
+.sun-study-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+/* 320px panel (Kelvin): the Sun tab uses 12px of the panel's 24px side padding so the cards stay near-square. */
+.solar-drawer:has(.sun-study) { margin: 0 -12px; }
+.sun-study-presets { grid-template-columns: 1fr 1fr; }
+.sidebar .sun-study-card {
+  all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px;
+  padding: 7px 6px; min-height: 84px; border: 1px solid var(--sun-card-border); border-radius: 8px;
+  background: var(--sun-card-bg); cursor: pointer; color: var(--sidebar-text); text-shadow: none; box-shadow: none;
+}
+.sidebar .sun-study-presets .sun-study-card { min-height: 58px; }
+.sidebar .sun-study-card.on { background: var(--accent); border-color: var(--sun-card-on-border); }
+.sidebar .sun-study-card:focus-visible { outline: 2px solid var(--sun-card-on-border); outline-offset: 1px; }
+.sun-study-card-name { font-size: 11px; font-weight: 600; line-height: 1.2; white-space: nowrap; }
+.sun-study-card-date { font-size: 18px; font-weight: 700; line-height: 1.2; }
+.sun-study-card-why { font-size: 10.5px; line-height: 1.25; color: var(--sidebar-text); }
+.sun-study-other { display: flex; justify-content: space-between; align-items: center; margin-top: -2px; font-size: 12px; color: var(--sidebar-text); }
+.sun-study-other .sun-study-date { margin-left: 0; }
+.sun-study-play { border-radius: 8px; }
+.sun-study-time-btn { font: inherit; font-weight: 600; color: var(--sidebar-text); background: transparent; border: 0; border-bottom: 1px dashed var(--sidebar-text); padding: 0; cursor: text; }
+.sun-study-time-input { width: 5ch; font: inherit; font-weight: 600; color: var(--sidebar-text); background: var(--sun-card-bg); border: 1px solid var(--sun-card-on-border); border-radius: 4px; padding: 1px 3px; }
+.sun-study-time-input[aria-invalid="true"] { border-color: var(--site-boundary); }
+.sun-study-foot { flex-wrap: wrap; }
+.sun-study-foot .sun-study-speed { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; width: 100%; }
+.sidebar .sun-study-speed .shape-btn { width: 100%; height: 30px; line-height: 30px; padding: 0; font-size: 12px; border-radius: 8px; background: var(--sun-card-bg); border: 1px solid var(--sun-card-border); color: var(--sidebar-text); }
+.sidebar .sun-study-speed .shape-btn.on { font-weight: 600; background: var(--accent); border-color: var(--sun-card-on-border); }
+.sun-study *, .sidebar-new-cut { text-shadow: none; filter: none; }
+/* New cut reads as a button: accent fill, black border. */
+.sidebar .sidebar-new-cut { background: var(--accent); color: var(--sidebar-text); border: 1px solid var(--sun-card-on-border); border-radius: 8px; padding: 6px 12px; font-weight: 600; cursor: pointer; }
+.sidebar .sidebar-new-cut:hover { background: var(--accent-hover); }
