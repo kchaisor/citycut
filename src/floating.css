@@ -281,21 +281,23 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 .sun-study-time { font-size: 12px; }
 
 /* Sun tab: key-date cards, assessment presets, typed time (Kelvin, Oct 2026). Hex lives in colours.css. */
-.sun-study-kicker { margin: 6px 0 -4px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--sidebar-text); }
-.sun-study-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-.sun-study-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.sun-study-card {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 84px;
-  padding: 8px; text-align: left; font: inherit; cursor: pointer;
-  color: var(--sidebar-text); background: var(--sun-card-bg);
-  border: 1px solid var(--sun-card-border); border-radius: 8px; box-shadow: none; text-shadow: none;
+/* Values ported 1:1 from the approved mock-up (/workspace/mock.html). */
+.sun-study-kicker { margin: 14px 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; line-height: normal; color: var(--sidebar-text); }
+.sun-study > .sun-study-kicker + * { margin-top: -10px; }
+.sun-study-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.sun-study-presets { grid-template-columns: 1fr 1fr; }
+.sidebar .sun-study-card {
+  all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px;
+  padding: 8px; min-height: 84px; border: 1px solid var(--sun-card-border); border-radius: 8px;
+  background: var(--sun-card-bg); cursor: pointer; color: var(--sidebar-text); text-shadow: none; box-shadow: none;
 }
-.sun-study-presets .sun-study-card { min-height: 58px; }
-.sun-study-card.on { background: var(--accent); border-color: var(--sun-card-on-border); }
+.sidebar .sun-study-presets .sun-study-card { min-height: 58px; }
+.sidebar .sun-study-card.on { background: var(--accent); border-color: var(--sun-card-on-border); }
+.sidebar .sun-study-card:focus-visible { outline: 2px solid var(--sun-card-on-border); outline-offset: 1px; }
 .sun-study-card-name { font-size: 11px; font-weight: 600; line-height: 1.2; }
 .sun-study-card-date { font-size: 18px; font-weight: 700; line-height: 1.2; }
 .sun-study-card-why { font-size: 10.5px; line-height: 1.25; color: var(--sidebar-text); }
-.sun-study-other { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--sidebar-text); }
+.sun-study-other { display: flex; justify-content: space-between; align-items: center; margin-top: -2px; font-size: 12px; color: var(--sidebar-text); }
 .sun-study-other .sun-study-date { margin-left: 0; }
 .sun-study-play { border-radius: 8px; }
 .sun-study-time-btn { font: inherit; font-weight: 600; color: var(--sidebar-text); background: transparent; border: 0; border-bottom: 1px dashed var(--sidebar-text); padding: 0; cursor: text; }
@@ -303,8 +305,8 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 .sun-study-time-input[aria-invalid="true"] { border-color: var(--site-boundary); }
 .sun-study-foot { flex-wrap: wrap; }
 .sun-study-foot .sun-study-speed { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; width: 100%; }
-.sun-study-speed .shape-btn { width: 100%; height: 30px; border-radius: 8px; background: var(--sun-card-bg); border: 1px solid var(--sun-card-border); color: var(--sidebar-text); }
-.sun-study-speed .shape-btn.on { background: var(--accent); border-color: var(--sun-card-on-border); }
+.sidebar .sun-study-speed .shape-btn { width: 100%; height: 30px; line-height: 30px; padding: 0; font-size: 12px; border-radius: 8px; background: var(--sun-card-bg); border: 1px solid var(--sun-card-border); color: var(--sidebar-text); }
+.sidebar .sun-study-speed .shape-btn.on { font-weight: 600; background: var(--accent); border-color: var(--sun-card-on-border); }
 .sun-study *, .sidebar-new-cut { text-shadow: none; filter: none; }
 /* New cut reads as a button: accent fill, black border. */
 .sidebar .sidebar-new-cut { background: var(--accent); color: var(--sidebar-text); border: 1px solid var(--sun-card-on-border); border-radius: 8px; padding: 6px 12px; font-weight: 600; cursor: pointer; }
