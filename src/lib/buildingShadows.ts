@@ -117,30 +117,48 @@ export function terrainShadowOffset(sample: SolarSample, point: Pt, topZ: number
 export function buildingShadowPolygonOnTerrain(
   building: BuildingFeat,
   offsetAt: (point: Pt) => Pt,
+  /** Coordinate grid (m) the pieces are snapped to before the union. */
+  snap = 1e-3,
 ): MultiPolygon | null {
   const footprint = footprintPolygon(building.ring, building.holes);
   if (!footprint) return null;
-  let merged: MultiPolygon = [footprint];
+  const q = (v: number) => Math.round(v / snap) * snap;
+  const qp = (p: Pt): Pair => [q(p[0]), q(p[1])];
+  // Per-vertex offsets differ by float noise, so sweep quads can be slivers or near-collinear.
+  // polygon-clipping throws on those ("Unable to find segment … in SweepLine tree"), so snap every
+  // piece to a grid, drop zero-area pieces, and union them in one call.
+  const pieces: Polygon[] = [footprint.map((ring) => ring.map((pair) => qp(pair as Pt))) as Polygon];
   for (const ringPts of [building.ring, ...building.holes]) {
     const ring = openRing(ringPts);
     const moved = ring.map((p) => translatePoint(p, offsetAt(p)));
     for (let index = 0; index < ring.length; index++) {
       const next = (index + 1) % ring.length;
-      const quad: Polygon = [[
-        [ring[index]![0], ring[index]![1]],
-        [ring[next]![0], ring[next]![1]],
-        [moved[next]![0], moved[next]![1]],
-        [moved[index]![0], moved[index]![1]],
-        [ring[index]![0], ring[index]![1]],
-      ]];
-      merged = union(merged, quad);
+      const quad = [qp(ring[index]!), qp(ring[next]!), qp(moved[next]!), qp(moved[index]!)];
+      if (Math.abs(ringArea(quad)) < snap * snap) continue;
+      pieces.push([[...quad, quad[0]!]]);
     }
     if (ringPts === building.ring) {
-      const roof = closeRing(moved);
-      if (roof.length >= 4) merged = union(merged, [roof]);
+      const roof = moved.map(qp);
+      if (roof.length >= 3 && Math.abs(ringArea(roof)) >= snap * snap) pieces.push([[...roof, roof[0]!]]);
     }
   }
-  return merged;
+  return union(pieces[0]!, ...pieces.slice(1));
+}
+
+function ringArea(ring: Pair[]): number {
+  let sum = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i]!;
+    const b = ring[(i + 1) % ring.length]!;
+    sum += a[0] * b[1] - b[0] * a[1];
+  }
+  return sum / 2;
+}
+
+/** Snap a shadow to a coarser grid: the retry when polygon-clipping rejects the exact one. */
+function snapMulti(multi: MultiPolygon, snap: number): MultiPolygon {
+  const q = (v: number) => Math.round(v / snap) * snap;
+  return multi.map((polygon) => polygon.map((ring) => ring.map(([x, y]) => [q(x), q(y)] as Pair)));
 }
 
 /** Exact shadow footprint for one building (footprint ∪ translation ∪ edge sweeps). */
@@ -206,11 +224,45 @@ function cachedBuildingShadow(
 ): MultiPolygon | null {
   const key = buildingCacheKey(building, sample) + (terrain ? `:t${terrain.key}:${terrain.topZ.toFixed(3)}` : "");
   if (buildingShadowCache.has(key)) return buildingShadowCache.get(key)!;
-  const shadow = terrain
-    ? buildingShadowPolygonOnTerrain(building, (p) => terrainShadowOffset(sample, p, terrain.topZ, terrain.ground) ?? [0, 0])
-    : buildingShadowPolygon(building, offset);
+  let shadow: MultiPolygon | null = null;
+  if (terrain) {
+    const offsetAt = (p: Pt) => terrainShadowOffset(sample, p, terrain.topZ, terrain.ground) ?? [0, 0];
+    // One awkward footprint must never blank the whole shadow layer: retry on a coarser grid, then
+    // fall back to the flat-ground shadow for this building only.
+    for (const snap of [1e-3, 1e-2]) {
+      try {
+        shadow = buildingShadowPolygonOnTerrain(building, offsetAt, snap);
+        break;
+      } catch {
+        shadow = null;
+      }
+    }
+    if (!shadow) shadow = safeFlatShadow(building, offset);
+  } else {
+    shadow = safeFlatShadow(building, offset);
+  }
   buildingShadowCache.set(key, shadow);
   return shadow;
+}
+
+function safeFlatShadow(building: BuildingFeat, offset: Pt): MultiPolygon | null {
+  try {
+    return buildingShadowPolygon(building, offset);
+  } catch {
+    return null;
+  }
+}
+
+/** Union that retries on a snapped grid instead of throwing; returns `merged` unchanged if both fail. */
+function safeUnion(merged: MultiPolygon, shadow: MultiPolygon): MultiPolygon {
+  for (const snap of [0, 1e-3, 1e-2]) {
+    try {
+      return snap === 0 ? union(merged, shadow) : union(snapMulti(merged, snap), snapMulti(shadow, snap));
+    } catch {
+      // try the next grid
+    }
+  }
+  return merged;
 }
 
 function unionCacheLookup(model: CityModel, input: PlanShadowInput, castShadows: boolean): string {
@@ -266,10 +318,15 @@ export function planShadowRings(
       : 0;
     const shadow = cachedBuildingShadow(building, sample, offset, ground ? { ground, topZ, key: terrainKey } : undefined);
     if (!shadow || shadow.length === 0) continue;
-    merged = merged.length === 0 ? shadow : union(merged, shadow);
+    merged = merged.length === 0 ? shadow : safeUnion(merged, shadow);
   }
   if (merged.length === 0) return unionCache;
-  merged = intersection(merged, framePolygon(model.sideM, model.frameShape ?? "square"));
+  const frame = framePolygon(model.sideM, model.frameShape ?? "square");
+  try {
+    merged = intersection(merged, frame);
+  } catch {
+    merged = intersection(snapMulti(merged, 1e-2), frame);
+  }
   unionCache = shadowRingsFromMulti(merged);
   return unionCache;
 }
