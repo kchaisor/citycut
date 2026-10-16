@@ -146,11 +146,11 @@ export function SunStudyPlayer({
         })}
       </div>
       <label className="sun-study-other">
-        <span>Other day</span>
+        <span>Date</span>
         <input
           className="sun-study-date"
           type="date"
-          aria-label="Other day"
+          aria-label="Date"
           value={`${settings.year}-${String(settings.month).padStart(2, "0")}-${String(settings.day).padStart(2, "0")}`}
           onChange={(event) => {
             const [y, m, d] = event.target.value.split("-").map(Number);
