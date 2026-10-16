@@ -115,5 +115,5 @@
 
   /* Rail and panel widths. The viewport sits to the right of both. */
   --sidebar-rail-w: 56px;
-  --sidebar-panel-w: 392px; /* 344px of content: the Sun tab cards match the approved mock-up */
+  --sidebar-panel-w: 320px;
 }

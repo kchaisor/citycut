@@ -210,7 +210,7 @@ export function dateFromDayOfYear(year: number, doy: number): { month: number; d
  */
 export const SUN_STUDY_DATES = [
   { id: "jun21", name: "Winter solstice", label: "21 Jun", why: "Worst-case shadow, lowest sun", month: 6, day: 21 },
-  { id: "sep22", name: "Equinox", label: "22 Sep", why: "Average condition, parks, commercial", month: 9, day: 22 },
+  { id: "sep22", name: "Equinox", label: "22 Sep", why: "Average day, parks, commercial", month: 9, day: 22 },
   { id: "dec22", name: "Summer solstice", label: "22 Dec", why: "Highest sun, shading, passive design", month: 12, day: 22 },
 ] as const;
 

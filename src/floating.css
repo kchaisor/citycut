@@ -285,16 +285,18 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 .sun-study-kicker { margin: 14px 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; line-height: normal; color: var(--sidebar-text); }
 .sun-study > .sun-study-kicker + * { margin-top: -10px; }
 .sun-study-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+/* 320px panel (Kelvin): the Sun tab uses 12px of the panel's 24px side padding so the cards stay near-square. */
+.solar-drawer:has(.sun-study) { margin: 0 -12px; }
 .sun-study-presets { grid-template-columns: 1fr 1fr; }
 .sidebar .sun-study-card {
   all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px;
-  padding: 8px; min-height: 84px; border: 1px solid var(--sun-card-border); border-radius: 8px;
+  padding: 7px 6px; min-height: 84px; border: 1px solid var(--sun-card-border); border-radius: 8px;
   background: var(--sun-card-bg); cursor: pointer; color: var(--sidebar-text); text-shadow: none; box-shadow: none;
 }
 .sidebar .sun-study-presets .sun-study-card { min-height: 58px; }
 .sidebar .sun-study-card.on { background: var(--accent); border-color: var(--sun-card-on-border); }
 .sidebar .sun-study-card:focus-visible { outline: 2px solid var(--sun-card-on-border); outline-offset: 1px; }
-.sun-study-card-name { font-size: 11px; font-weight: 600; line-height: 1.2; }
+.sun-study-card-name { font-size: 11px; font-weight: 600; line-height: 1.2; white-space: nowrap; }
 .sun-study-card-date { font-size: 18px; font-weight: 700; line-height: 1.2; }
 .sun-study-card-why { font-size: 10.5px; line-height: 1.25; color: var(--sidebar-text); }
 .sun-study-other { display: flex; justify-content: space-between; align-items: center; margin-top: -2px; font-size: 12px; color: var(--sidebar-text); }
