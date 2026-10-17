@@ -281,6 +281,8 @@ export type CityModel = {
   terrain?: TerrainField | null;
   /** Set when Terrain was requested and the tiles could not be read. */
   terrainError?: string | null;
+  /** Visible note on which ground surface is shown (contour ground vs Mapterhorn fallback). */
+  terrainNotice?: string | null;
   /** Vicmap zones skipped after a hard failure. */
   useTierFailures?: UseTierFailure[];
   /** Draw contour lines on the site plan. Vicmap when the cut is in Victoria, otherwise the DEM. */

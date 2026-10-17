@@ -52,6 +52,7 @@ import { replaceTreeNote, treeSourceLoadNotes, treeTierCounts } from "./lib/tree
 import { fetchVicmapTreesDetailed, vicmapPointsToTrees, VICMAP_ATTRIBUTION } from "./lib/vicmapTrees";
 import { COM_TREES_CREDIT } from "./lib/comTreesCredit";
 import { loadContoursForCut } from "./lib/vicmapContours";
+import { contourTerrain, contourTerrainNotice } from "./lib/contourTerrain";
 import { fetchOvertureBuildingsForCut } from "./lib/overtureBuildings";
 import { qaForcedCrashFromSearch, qaModeFromSearch } from "./lib/qaCameraBridge";
 import { siteBuildingOverlaps } from "./lib/siteBuildings";
@@ -434,7 +435,8 @@ export default function App() {
           };
         });
       });
-      const contourTask = layers.contours
+      // Contours also load for Terrain: the 3D ground is built from Vicmap metro contours when they cover the cut.
+      const contourTask = layers.contours || layers.terrain
         ? loadContoursForCut({
             center,
             sideM,
@@ -584,8 +586,19 @@ export default function App() {
         : null;
       const trees = assembled ? assembled.trees : [];
       const contours = Boolean(layers.contours && contourLayer && contourLayer.lines.length > 0);
+      // Test version: the 3D ground (and so building bases and plan shadows, which all sample
+      // model.terrain) comes from Vicmap metro 1–5 m contours where they cover the cut.
+      // ?ground=dem keeps the Mapterhorn DEM for comparison.
+      const groundDem = new URLSearchParams(window.location.search).get("ground") === "dem";
+      const contourGround =
+        layers.terrain && !groundDem && contourLayer ? contourTerrain(contourLayer, sideM, terrainResult.field) : null;
+      const groundField = contourGround?.field ?? terrainResult.field;
+      const terrainNotice =
+        layers.terrain && !groundDem ? contourTerrainNotice(contourGround, contourLayer, Boolean(terrainResult.field)) : null;
       let sourceNote = FLAT_GROUND_NOTE;
-      if (terrainResult.field) {
+      if (contourGround) {
+        sourceNote = `Ground is interpolated from Vicmap metro ${contourLayer!.interval} m contours (Laplace on a ${contourGround.field.spacingM.toFixed(1)} m grid, ${Math.round(contourGround.coverage * 100)}% contour-supported${terrainResult.field ? "; Mapterhorn DEM elsewhere" : ""}). Elevations ${contourGround.field.min.toFixed(1)}–${contourGround.field.max.toFixed(1)} m AHD. Each building sits on the lowest sample along its footprint.`;
+      } else if (terrainResult.field) {
         sourceNote = terrainNote(terrainResult.field, contourLayer?.source === "dem");
       }
       const release =
@@ -718,13 +731,14 @@ export default function App() {
             : { kind: "live", reason: prebake.reason },
         placeLabel: label,
         sourceNote,
-        terrain: terrainResult.field,
+        terrain: groundField,
         terrainError: terrainResult.error,
+        terrainNotice,
         useTierFailures,
         enrichmentTilesFailed,
         lidarHeightTierNote: modelLayers.buildings ? lidarLegendLine(enrichmentManifest) : undefined,
         contours,
-        contourLayer,
+        contourLayer: layers.contours ? contourLayer : null,
         hasMicrosoftFootprints: overtureResult.stats.hasMicrosoftFootprints,
         hasEsaLandCover: baseResult.stats.hasEsaLandCover,
         siteAnchor,
