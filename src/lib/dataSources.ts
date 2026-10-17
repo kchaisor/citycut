@@ -152,8 +152,11 @@ export function buildDataSources({ model, comHeights, comMeasuredCount, comError
             id: "terrain",
             label: "Terrain",
             status: "ok",
-            detail: `${model.terrain.source} · z${model.terrain.zoom} · ${model.terrain.metresPerPixel.toFixed(1)} m/px`,
-            notes: [],
+            detail:
+              model.terrain.source === "Vicmap metro contours"
+                ? `Vicmap metro contours · ${model.terrain.spacingM.toFixed(1)} m grid`
+                : `${model.terrain.source} · z${model.terrain.zoom} · ${model.terrain.metresPerPixel.toFixed(1)} m/px`,
+            notes: model.terrainNotice ? [model.terrainNotice] : [],
           }
         : {
             id: "terrain",
