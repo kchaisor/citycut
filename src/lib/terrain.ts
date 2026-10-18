@@ -539,6 +539,11 @@ export function terrainNote(field: TerrainField, contours: boolean): string {
   return `Terrain is Mapterhorn zoom ${field.zoom} (about ${field.metresPerPixel.toFixed(1)} m per tile pixel, gridded every ${field.spacingM.toFixed(1)} m). Elevations ${field.min.toFixed(1)}–${field.max.toFixed(1)} m. Each building sits on the lowest sample along its footprint.${contourText} © Mapterhorn.`;
 }
 
+/** Elevation tint the terrain mesh uses (vertex colour, 0–1 RGB). */
+export function terrainTint(field: Pick<TerrainField, "min" | "max">, z: number): [number, number, number] {
+  return shadeHeight((z - field.min) / Math.max(field.max - field.min, 0.001), 1);
+}
+
 function shadeHeight(t: number, darken: number): [number, number, number] {
   const u = Math.min(1, Math.max(0, t));
   const red = (0.718 + (0.953 - 0.718) * u) * darken;

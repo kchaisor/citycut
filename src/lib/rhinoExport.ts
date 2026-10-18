@@ -117,6 +117,8 @@ export function loadRhino(): Promise<Rhino> {
 }
 
 function layerName(mesh: THREE.Mesh): string {
+  const exportLayer = mesh.userData.exportLayer;
+  if (typeof exportLayer === "string" && exportLayer) return exportLayer;
   return mesh.name || mesh.parent?.name || "Mesh";
 }
 

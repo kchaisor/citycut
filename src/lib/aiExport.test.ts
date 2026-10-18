@@ -383,7 +383,10 @@ describe("Illustrator 3D view", () => {
     const info = await inspect(bytes);
     expect(info.header.startsWith("%PDF-1.6")).toBe(true);
     // Contours is an opt-in layer (3D display toggle), so the default sheet has every other layer.
-    expect(info.layers).toEqual(VIEW_LAYER_ORDER.filter((name) => name !== "Contours"));
+    // With terrain, roads are draped ground (Ground::Roads), so the flat centreline "Roads" layer is absent.
+    expect(info.layers).toEqual(VIEW_LAYER_ORDER.filter((name) => name !== "Contours" && name !== "Roads"));
+    expect(info.layers).toContain("Ground::Roads");
+    expect(info.layers).toContain("Ground::Remaining");
     expect(info.widthMm / info.heightMm).toBeCloseTo(640 / 400, 2);
     expect(info.text).toContain("not to scale");
     expect(info.text).toContain("Test Block");
