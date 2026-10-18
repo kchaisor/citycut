@@ -209,22 +209,25 @@ describe("rhino export", () => {
         if (geometry.objectType !== rhino.ObjectType.Mesh) continue;
         for (let v = 0; v < geometry.vertices().count; v++) {
           const point = geometry.vertices().point3dAt(v);
-          if (name === "Terrain") {
+          if (name === "Ground::Remaining") {
             terrainVertices += 1;
             terrainMin = Math.min(terrainMin, point[2]);
             terrainMax = Math.max(terrainMax, point[2]);
           }
         }
       }
-      expect(names).toContain("Terrain");
+      expect(names).toContain("Ground::Remaining");
+      expect(names).toContain("Ground::Roads");
       expect(names).not.toContain("Ground");
-      expect(terrainVertices).toBe(4);
+      expect(terrainVertices % 3).toBe(0);
+      expect(terrainVertices).toBeGreaterThan(0);
       expect(terrainMax).toBeCloseTo(24, 2);
       expect(terrainMin).toBeCloseTo(15, 2);
       expect(buildingMin).toBeCloseTo(base + SURFACE.building.lift, 2);
       const layers: string[] = [];
       for (let i = 0; i < doc.layers().count; i++) layers.push(doc.layers().get(i).name);
-      expect(layers).toContain("Terrain");
+      expect(layers).toContain("Remaining");
+      expect(layers).toContain("Ground");
     } finally {
       doc.destroy();
     }

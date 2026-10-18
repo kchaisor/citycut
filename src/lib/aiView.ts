@@ -13,7 +13,9 @@ import { getColour, type ColourKey } from "./colours";
 import { formatCoord, openRing, signedArea } from "./geo";
 import { hexRgb } from "./lineweights";
 import { ROAD_COLOR, SURFACE } from "./surfaceLayers";
-import { footprintBase, sampleTerrain } from "./terrain";
+import { footprintBase, sampleTerrain, terrainTint } from "./terrain";
+import { drapeTriangles, GROUND_REMAINING_LAYER, GROUND_ROADS_LAYER, groundRoadPartition, groundTriangles, ROAD_GRADES_BY_PRIORITY } from "./groundRoads";
+import type { TerrainField } from "../types";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { comTreesCreditLine } from "./comTreesCredit";
 import { stableExportModel } from "./exportStableOrder";
@@ -22,7 +24,9 @@ import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
 
 export const VIEW_LAYER_ORDER = [
   "Ground",
+  "Ground::Remaining",
   "Roads",
+  "Ground::Roads",
   "Water",
   "Green",
   "Contours",
@@ -105,6 +109,30 @@ function facesCamera(normal: Vec3, forward: Vec3): boolean {
 }
 
 /** Ground, roads, and roofs should face the sky. Wall quads keep the winding they were given. */
+/** Every `stride`-th terrain node (edges kept), spanning the same cut. */
+function thinField(field: TerrainField, stride: number, sideM: number): TerrainField {
+  if (stride <= 1) return field;
+  const pick = (n: number) => {
+    const out: number[] = [];
+    for (let i = 0; i < n - 1; i += stride) out.push(i);
+    out.push(n - 1);
+    return out;
+  };
+  const cols = pick(field.cols);
+  const rows = pick(field.rows);
+  // Even spacing is required by the grid users; resample at the nearest node.
+  const n = Math.max(cols.length, rows.length);
+  const heights = new Float32Array(n * n);
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      const sc = Math.round((c / (n - 1)) * (field.cols - 1));
+      const sr = Math.round((r / (n - 1)) * (field.rows - 1));
+      heights[r * n + c] = field.heights[sr * field.cols + sc]!;
+    }
+  }
+  return { ...field, cols: n, rows: n, heights, spacingM: sideM / (n - 1) };
+}
+
 function faceUp(corners: Vec3[]): Vec3[] {
   if (corners.length < 3) return corners;
   const normal = cross(
@@ -395,7 +423,7 @@ function pushTri(
   const projected = corners.map((corner) => project(shot, corner, pageW, pageH));
   if (projected.some((point) => point === null)) return;
   const poly = projected as V2[];
-  const shade = lit(color, normal, layer === "Ground" ? 0.22 : 0.58);
+  const shade = lit(color, normal, layer === "Ground" || layer === GROUND_REMAINING_LAYER ? 0.22 : 0.58);
   const depth = poly.reduce((sum, point) => sum + point.z, 0) / poly.length;
   const faceOcc: Occ[] = [];
   for (let i = 1; i < poly.length - 1; i++) {
@@ -459,7 +487,26 @@ function collect(
   const occ: Occ[] = [];
   let nextId = 1;
 
-  if (field) {
+  // With terrain: the same two ground surfaces as the 3D view, one group each (Ground::Remaining,
+  // Ground::Roads), on a terrain grid thinned to ≤ ~1600 cells so the sheet stays light.
+  const groundSplit = field && (model.frameShape ?? "square") === "square" ? groundRoadPartition(model) : null;
+  if (field && groundSplit) {
+    const cells = (field.cols - 1) * (field.rows - 1);
+    const stride = Math.max(1, Math.ceil(Math.sqrt(cells / 1600)));
+    const coarse = thinField(field, stride, model.sideM);
+    const toWorld = (tri: [number, number, number][]) => faceUp(tri.map(([e, n, z]) => worldOf(e, n, z)));
+    for (const tri of drapeTriangles(groundTriangles(groundSplit.remaining, coarse, model.sideM), coarse, model.sideM)) {
+      const z = (tri[0][2] + tri[1][2] + tri[2][2]) / 3;
+      const color: Rgb = style.whiteCard ? cardGround() : terrainTint(field, z);
+      pushTri(fills, edges, occ, nextId++, toWorld(tri), color, GROUND_REMAINING_LAYER, 0, false, shot, pageW, pageH, forward);
+    }
+    for (const grade of ROAD_GRADES_BY_PRIORITY) {
+      const color = style.whiteCard ? cardWhite() : hexRgb(ROAD_COLOR[grade]);
+      for (const tri of drapeTriangles(groundTriangles(groundSplit.roads[grade], coarse, model.sideM), coarse, model.sideM)) {
+        pushTri(fills, edges, occ, nextId++, toWorld(tri), color, GROUND_ROADS_LAYER, 1, false, shot, pageW, pageH, forward);
+      }
+    }
+  } else if (field) {
     const cells = (field.cols - 1) * (field.rows - 1);
     const stride = Math.max(1, Math.ceil(Math.sqrt(cells / 1600)));
     const cols = terrainIndices(field.cols, stride);
@@ -565,7 +612,7 @@ function collect(
   });
 
   const maxStep = field ? 40 : 1e9;
-  for (const road of model.roads) {
+  for (const road of groundSplit ? [] : model.roads) {
     if (road.kind === "rail") continue;
     const grade = road.grade ?? "local";
     const color = style.whiteCard ? cardWhite() : hexRgb(ROAD_COLOR[grade]);

@@ -14,7 +14,8 @@ import { isSiteBuilding } from "./siteBuildings";
 import { siteBoundaryLineGeometry } from "./siteBoundaryDash3d";
 import { clipTransportLines, drapedDashedLineGeometry } from "./dashedTransportLines";
 import { readDrawingStyle } from "./drawingStyle";
-import { footprintBase, sampleTerrain, terrainBuffers } from "./terrain";
+import { footprintBase, sampleTerrain, terrainBuffers, terrainTint } from "./terrain";
+import { drapeTriangles, GROUND_REMAINING_LAYER, GROUND_ROADS_LAYER, groundGeometry, groundRoadPartition, groundTriangles } from "./groundRoads";
 import { clipTrianglesToTerrainGrid, terrainMeshHeight } from "./terrainDrape";
 import type { AreaFeat, BuildingFeat, BuildingUse, CityModel, Pt, Ring, RoadGrade, TerrainField } from "../types";
 
@@ -415,7 +416,24 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const sample = elevationAt(model);
   const terrainGrid: TerrainGrid | null = model.terrain ? { field: model.terrain, sideM: model.sideM } : null;
-  if (model.terrain) {
+  // With terrain the ground is two draped surfaces that tile the cut: roads and the rest.
+  const groundSplit = model.terrain && frameShape === "square" ? groundRoadPartition(model) : null;
+  if (model.terrain && groundSplit) {
+    const field = model.terrain;
+    const remaining = groundGeometry(
+      drapeTriangles(groundTriangles(groundSplit.remaining, field, model.sideM), field, model.sideM),
+      (z) => terrainTint(field, z),
+    );
+    if (remaining) {
+      const material = paint(matteStandardMaterial({ vertexColors: true, side: THREE.DoubleSide }), SURFACE.terrain);
+      const mesh = new THREE.Mesh(remaining, material);
+      // Viewport modes (white card, sun study, edges) key on "Terrain"; exports use the layer.
+      mesh.name = "Terrain";
+      mesh.userData.exportLayer = GROUND_REMAINING_LAYER;
+      order(mesh, SURFACE.terrain.renderOrder);
+      group.add(mesh);
+    }
+  } else if (model.terrain) {
     group.add(terrainMesh(model.terrain, model.sideM, frameShape));
   } else {
     const groundGeo =
@@ -539,12 +557,16 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
             model.sideM,
             frameShape,
           );
-    const geometry = roadFillGeometry(fill.polygons, layer.lift, sample, drapeSpacing, terrainGrid);
+    const geometry =
+      groundSplit && model.terrain
+        ? groundGeometry(drapeTriangles(groundTriangles(groundSplit.roads[grade], model.terrain, model.sideM), model.terrain, model.sideM))
+        : roadFillGeometry(fill.polygons, layer.lift, sample, drapeSpacing, terrainGrid);
     if (!geometry) continue;
     const material = paint(matteStandardMaterial({ color: ROAD_COLOR[grade] }), layer);
     material.name = "Roads";
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = "Roads";
+    if (groundSplit) mesh.userData.exportLayer = GROUND_ROADS_LAYER;
     mesh.userData.layerColor = ROAD_RGB.arterial;
     mesh.userData.objectColor = ROAD_RGB[grade];
     order(mesh, layer.renderOrder);
