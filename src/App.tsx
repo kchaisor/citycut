@@ -56,7 +56,8 @@ import { contourGroundSourceName, contourTerrain, contourTerrainNotice } from ".
 import { detectRegion } from "./lib/region";
 import { fetchNswLayers, type NswLayers } from "./lib/nswLayers";
 import { loadNswContoursForCut } from "./lib/nswContours";
-import { nswSourceNote, nswWaterAreas } from "./lib/nswModel";
+import { nswApplyBuildingUse, nswLightRailLines, nswSourceNote, nswWaterAreas } from "./lib/nswModel";
+import { groundRoadPartition } from "./lib/groundRoads";
 import { NSW_BUILDING_ESTIMATE_NOTE } from "./lib/sources/registry";
 import { fetchOvertureBuildingsForCut } from "./lib/overtureBuildings";
 import { qaForcedCrashFromSearch, qaModeFromSearch } from "./lib/qaCameraBridge";
@@ -736,6 +737,9 @@ export default function App() {
         }
         writeUrl(siteAnchor);
       }
+      // NSW mode: official building use from Spatial Services building complex points where present.
+      const nswUse = nswMode && modelLayers.buildings ? nswApplyBuildingUse(buildings, nswResult) : null;
+      if (nswUse) buildings = nswUse.buildings;
       const draftModel: CityModel = {
         center,
         sideM,
@@ -743,7 +747,7 @@ export default function App() {
         layers: modelLayers,
         buildings,
         roads: modelLayers.roads ? transportResult.roads : [],
-        tramLines: tramResult.lines ?? undefined,
+        tramLines: nswMode ? (modelLayers.roads && nswLightRailLines(nswResult).length > 0 ? nswLightRailLines(nswResult) : undefined) : tramResult.lines ?? undefined,
         tramLinesLoadFailed: tramResult.loadFailed || undefined,
         areas: modelLayers.waterGreen ? withRoundaboutIslands(nswWater ? nswWater.areas : baseResult.areas, modelLayers.roads ? (transportResult.roundabouts ?? []) : [], { sideM, shape: frameShapeRef.current }) : [],
         carParks: modelLayers.waterGreen ? baseResult.carParks : undefined,
@@ -789,10 +793,13 @@ export default function App() {
         comFootprintFetchError: comFootprintFetchError ?? undefined,
         heightSourceLoadWarnings:
           heightSourceLoadWarnings.length > 0 ? heightSourceLoadWarnings : undefined,
-        ...(nswMode ? { region: "nsw" as const, nsw: nswResult, nswWaterNote: nswWater?.note ?? null } : {}),
+        ...(nswMode ? { region: "nsw" as const, nsw: nswResult, nswWaterNote: nswWater?.note ?? null, nswUseMatched: nswUse?.matched ?? 0 } : {}),
       };
       if (modelLayers.roads) {
         draftModel.blocks = computeCityBlocks(draftModel);
+      }
+      if (nswMode && modelLayers.roads && (nswResult?.roadCorridors.length ?? 0) > 0) {
+        draftModel.nswRoadSurface = groundRoadPartition(draftModel).sources ?? null;
       }
       setModel(draftModel);
       setPhase("model");

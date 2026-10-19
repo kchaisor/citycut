@@ -50,6 +50,12 @@ function useSourceLabel(source: BuildingFeat["source"]): string {
   return "—";
 }
 
+/** NSW mode: a use set from a Spatial Services building complex names that facility as the source. */
+function useLineFor(building: BuildingFeat): string {
+  if (building.nswFacility) return `${buildingLabel(building)} · NSW Spatial Services (${building.nswFacility})`;
+  return `${buildingLabel(building)} · ${useSourceLabel(building.source)}`;
+}
+
 function buildingLabel(building: BuildingFeat): string {
   return building.use.replace(/_/g, " ");
 }
@@ -330,7 +336,7 @@ export async function loadBuildingPopupDetails(
   const { lon, lat } = fromLocal(at, center);
   const inCom = isCityOfMelbourne(lat, lon);
 
-  const useLine = `${buildingLabel(building)} · ${useSourceLabel(building.source)}`;
+  const useLine = useLineFor(building);
 
   const displayHeight = buildingDisplayHeightM(building);
   const heightSource = buildingHeightSourceLabelForBuilding(building);
@@ -411,7 +417,7 @@ export async function loadBuildingPopupDetails(
 export function emptyBuildingPopupDetails(building: BuildingFeat): BuildingPopupDetails {
   return {
     ...EMPTY,
-    useLine: `${buildingLabel(building)} · ${useSourceLabel(building.source)}`,
+    useLine: useLineFor(building),
     heightStoreysLine: `${building.height.toFixed(1)} m · ${building.heightManual ? "Manual edit" : "—"}`,
     yearLine: "",
     developmentLine: "",

@@ -36,6 +36,8 @@ export type ExplodedAxoOverlayBundle = {
   transport?: {
     rail: { lines: TransportRailLine; stations: TransportRailStation[] };
     pt: { lines: PublicTransportLine[]; stops: PublicTransportStop[] } | null;
+    /** NSW mode: which source supplied each part of the plate. */
+    note?: string;
   } | "unavailable";
   hydro?: HydroOverlay | "unavailable";
   topography?: TopographyOverlay | "unavailable";
@@ -676,6 +678,7 @@ export function buildExplodedAxoLayers(
           const [x, y] = planToIsoBase(stop.point[0], stop.point[1]);
           markers.push({ x, y, paint: ptPaint(stop.mode, "stop"), radiusM: model.sideM * 0.0038 });
         }
+        if (overlays.transport.note) sourceNote = overlays.transport.note;
         // No "Rail" swatch: no rail lines are drawn. Train and Tram now key the stop markers.
         legend = [
           { label: "Train", paint: "pt-train" },
