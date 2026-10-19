@@ -212,7 +212,16 @@ export type TreeFeat = TreeDimensions & {
  * Geoscience Australia lidar; otherwise the Copernicus geoid height).
  * Row 0 is the south edge. Samples include both edges of the square.
  */
-export type ContourSourceId = "vicmap-metro" | "vicmap-state" | "dem";
+export type ContourSourceId =
+  | "vicmap-metro"
+  | "vicmap-state"
+  /** NSW mode: City of Sydney 1 m contours (2020 survey). */
+  | "cos-1m"
+  /** NSW mode: NSW Spatial Services Elevation theme contours (2 m here). */
+  | "nsw-2m"
+  /** NSW mode: CoS 1 m inside the City of Sydney, NSW contours outside it. */
+  | "cos-nsw"
+  | "dem";
 
 /** One contour polyline in the cut's local east/north frame, clipped to the square. */
 export type StoredContour = {
@@ -233,6 +242,8 @@ export type ContourLayer = {
   featureCount: number;
   /** Network time for the Vicmap queries. Zero for a cache hit or the DEM. */
   fetchMs: number;
+  /** NSW mode: source failures or partial loads behind this layer, shown in Data sources. */
+  notes?: string[];
 };
 
 export type TerrainField = {
@@ -251,6 +262,9 @@ export type TerrainField = {
 };
 
 export type SiteFrameShape = "square" | "circle";
+
+/** State whose open data the cut uses (src/lib/region.ts). */
+export type ModelRegion = "vic" | "nsw";
 
 export type CityModel = {
   placeLabel: string;
@@ -332,6 +346,14 @@ export type CityModel = {
   enrichmentTilesFailed?: boolean;
   /** Offline ELVIS LiDAR bake status for the height-tier legend (e.g. no data, not ordered). */
   lidarHeightTierNote?: string;
+  /**
+   * NSW mode only. Absent on Victorian cuts, so every Victorian path is unchanged.
+   * `region` is set to "nsw" with `nsw` holding the NSW Spatial Services / DPHI layers.
+   */
+  region?: ModelRegion | null;
+  nsw?: import("./lib/nswLayers").NswLayers | null;
+  /** NSW mode: water came from Overture because NSW HydroArea failed (visible note). */
+  nswWaterNote?: string | null;
 };
 
 export type ViewState = {

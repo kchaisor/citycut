@@ -18,6 +18,9 @@ import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import type { CityModel } from "../types";
 import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
+import { NswPlanLabels, NswPlanLines, NswPlanUnder } from "./NswPlanLayers";
+import { nswPlanItems } from "../lib/nswPlan";
+import { readNswPlanStyle } from "../lib/nswPlanStyle";
 import { planShadowRings, type PlanShadowInput } from "../lib/buildingShadows";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
 import { planViewportExtent, type PlanViewport } from "../lib/planViewport";
@@ -200,6 +203,9 @@ export function DrawingPlan({
   const treeFill = getColour("--tree-fill");
   const planEmpty = getColour("--plan-empty");
   const shadowFill = getColour("--shadow-fill");
+  // NSW mode only: null on Victorian cuts, so nothing below renders for them.
+  const nswStyle = useMemo(() => (model.nsw ? readNswPlanStyle() : null), [model.nsw, colourTick]);
+  const nswItems = useMemo(() => (nswStyle ? nswPlanItems(model, nswStyle.hatchM) : null), [model, nswStyle]);
   const shadowRings = useMemo(() => {
     if (!shadowInput || figure) return [];
     return planShadowRings(model, shadowInput, castShadows);
@@ -298,6 +304,7 @@ export function DrawingPlan({
             {plan.blocks.map((rings, index) => (
               <path key={`b${index}`} d={svgRings(rings)} fill={blockFill} />
             ))}
+            {nswItems && nswStyle && <NswPlanUnder items={nswItems} style={nswStyle} />}
             {plan.green.map((rings, index) => (
               <path key={`g${index}`} d={svgRings(rings)} fill={greenFill} {...screenPenAttrs(style.green)} />
             ))}
@@ -337,6 +344,7 @@ export function DrawingPlan({
             {plan.trams.map((tram, index) => (
               <path key={`tr${index}`} d={svgPolyline(tram, false)} fill="none" {...screenPenAttrs(style.tram)} strokeLinecap="round" strokeLinejoin="round" />
             ))}
+            {nswItems && nswStyle && <NswPlanLines items={nswItems} style={nswStyle} />}
             {shadowRings.map((rings, index) => (
               <path
                 key={`sh${index}`}
@@ -381,6 +389,7 @@ export function DrawingPlan({
                 {...screenPenAttrs(style.tree)}
               />
             ))}
+            {nswItems && nswStyle && <NswPlanLabels items={nswItems} style={nswStyle} sizeM={model.sideM * 0.009} />}
             <path d={framePathD} fill="none" {...screenPenAttrs(style.frame, "miter")} />
             {heliodon && (
               <HeliodonPlanOverlay input={heliodon} planScale={planScale} sideM={model.sideM} />

@@ -101,4 +101,18 @@
 
   /* Massing edge in the 3D view. Black, so the volume reads against the roads and the sky. */
   --building-edge: #000000;
+
+  /* NSW mode site-plan layers (lots, easements, centrelines, heritage, zoning). Colours are in colours.css. */
+  --nsw-lot-mm: 0.05;
+  --nsw-lot-dash: none;
+  --nsw-easement-mm: 0.1;
+  --nsw-easement-dash: 0.8 0.4;
+  --nsw-centreline-mm: 0.08;
+  --nsw-centreline-dash: 2 0.6 0.3 0.6;
+  --nsw-heritage-mm: 0.12;
+  --nsw-heritage-dash: none;
+  /* Hatch spacing for heritage and easements, metres on the ground. */
+  --nsw-hatch-m: 4;
+  /* Land zoning fill opacity on the site plan (0–1). */
+  --nsw-zoning-opacity: 0.5;
 }

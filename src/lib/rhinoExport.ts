@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { regionCredit } from "./sources/registry";
 import rhino3dm from "rhino3dm/rhino3dm.module.js";
 import type { RhinoModuleOptions } from "rhino3dm";
 import { BUILDING_USE_META, BUILDING_USES } from "./buildingUse";
@@ -992,9 +993,10 @@ export async function cityModelTo3dm(
     const buildingCredit = plainDataCredit({
       prefix: `CityCut. ${crs.name}. Metres, Z-up. ${CRS_NOTE}`,
       windOn: Boolean(wind?.table),
+      ...(model.region === "nsw" ? { nsw: true } : {}),
     });
     const treesCredit = comTreesCreditLine(model);
-    doc.startSectionComments = [buildingCredit, comCredit, treesCredit].filter(Boolean).join(" ");
+    doc.startSectionComments = [buildingCredit, comCredit, treesCredit, regionCredit(model.region)].filter(Boolean).join(" ");
     doc.settings().modelUnitSystem = rhino.UnitSystem.Meters;
     doc.settings().pageUnitSystem = rhino.UnitSystem.Meters;
     doc.strings().set("CRS", crs.name);

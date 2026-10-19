@@ -96,6 +96,11 @@ export async function fetchPlanningOverlays(
   model: CityModel,
   signal?: AbortSignal,
 ): Promise<OverlayFetchResult<PlanningOverlayPolygon[]>> {
+  if (model.region === "nsw") {
+    // NSW mode: heritage from the EPI Primary Planning Layers already loaded with the model.
+    if (!model.nsw || model.nsw.status.heritage.status === "failed") return { ok: false, unavailable: true };
+    return { ok: true, data: model.nsw.heritage.map((poly) => ({ outer: poly.outer, holes: poly.holes, kind: "heritage" as const })) };
+  }
   const bounds = frameBBox(model);
   const body = await wfsFeatures("open-data-platform:plan_overlay", bounds, "scheme_code,geom", signal);
   if (!body) return { ok: false, unavailable: true };
@@ -137,6 +142,8 @@ export async function fetchTransportRail(
   model: CityModel,
   signal?: AbortSignal,
 ): Promise<OverlayFetchResult<{ lines: TransportRailLine; stations: TransportRailStation[] }>> {
+  // NSW mode: no NSW rail source wired yet (Transport theme Railway is a follow-up); say so, never query Vicmap.
+  if (model.region === "nsw") return { ok: false, unavailable: true };
   let lines = await fetchRailLines(model, "open-data-platform:vmlite_tr_rail", signal);
   if (!lines) lines = await fetchRailLines(model, "open-data-platform:tr_rail", signal);
   const bounds = frameBBox(model);
@@ -173,6 +180,10 @@ export async function fetchHydroOverlays(
   model: CityModel,
   signal?: AbortSignal,
 ): Promise<OverlayFetchResult<HydroOverlay>> {
+  if (model.region === "nsw") {
+    if (!model.nsw || model.nsw.status.water.status === "failed" || model.nsw.water.length === 0) return { ok: false, unavailable: true };
+    return { ok: true, data: { areas: model.nsw.water.map((poly) => ({ outer: poly.outer, holes: poly.holes })), courses: [] } };
+  }
   const bounds = frameBBox(model);
   const [areaBody, courseBody] = await Promise.all([
     wfsFeatures("open-data-platform:hy_water_area_polygon", bounds, "geom", signal),
@@ -226,6 +237,11 @@ export async function fetchTopographyContours(
   model: CityModel,
   signal?: AbortSignal,
 ): Promise<OverlayFetchResult<TopographyOverlay>> {
+  if (model.region === "nsw") {
+    const layer = model.contourLayer;
+    if (!layer || layer.lines.length === 0) return { ok: false, unavailable: true };
+    return { ok: true, data: { contours: layer.lines.map((line) => ({ z: line.z, line: line.points })), sourceLabel: layer.label } };
+  }
   const bounds = frameBBox(model);
   let body = await wfsFeatures("open-data-platform:el_contour_1to5m", bounds, "altitude,geom", signal);
   let sourceLabel = "Vicmap Elevation 1–5 m (WFS)";

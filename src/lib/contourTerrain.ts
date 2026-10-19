@@ -17,6 +17,17 @@ import type { ContourLayer, TerrainField } from "../types";
 
 export const CONTOUR_TERRAIN_SOURCE = "Vicmap metro contours";
 
+/**
+ * Contour sources dense enough to pin the ground grid. Vicmap statewide 10–20 m is too sparse;
+ * NSW mode adds the City of Sydney 1 m set and the NSW Elevation theme (2 m in Sydney).
+ */
+export const PINNABLE_CONTOUR_SOURCES: ReadonlySet<ContourLayer["source"]> = new Set(["vicmap-metro", "cos-1m", "nsw-2m", "cos-nsw"]);
+
+/** `TerrainField.source` and notice wording for a pinned layer. Vicmap keeps its original text. */
+export function contourGroundSourceName(layer: Pick<ContourLayer, "source" | "label">): string {
+  return layer.source === "vicmap-metro" ? CONTOUR_TERRAIN_SOURCE : layer.label;
+}
+
 export type ContourTerrainResult = {
   field: TerrainField;
   /** Share of grid nodes supported by contours (0–1); the rest are Mapterhorn fallback. */
@@ -37,7 +48,7 @@ export function contourTerrain(
   options: { farM?: number; maxIterations?: number; tolerance?: number } = {},
 ): ContourTerrainResult | null {
   const started = typeof performance !== "undefined" ? performance.now() : Date.now();
-  if (layer.source !== "vicmap-metro" || layer.lines.length === 0) return null;
+  if (!PINNABLE_CONTOUR_SOURCES.has(layer.source) || layer.lines.length === 0) return null;
   const cols = base ? base.cols : Math.min(MAX_NODES, Math.max(2, Math.ceil(sideM / 5) + 1));
   const rows = base ? base.rows : cols;
   const dx = sideM / (cols - 1);
@@ -162,7 +173,7 @@ export function contourTerrain(
     spacingM: dx,
     zoom: base?.zoom ?? 0,
     metresPerPixel: base?.metresPerPixel ?? dx,
-    source: CONTOUR_TERRAIN_SOURCE,
+    source: contourGroundSourceName(layer),
   };
   const ended = typeof performance !== "undefined" ? performance.now() : Date.now();
   return { field, coverage: 1 - fallback / n, demOffsetM, pinned, iterations, ms: ended - started };
@@ -178,14 +189,17 @@ export function contourTerrainNotice(
     if (!hadDem) return null;
     const why = !layer
       ? "contours were not loaded"
-      : layer.source === "vicmap-metro"
+      : PINNABLE_CONTOUR_SOURCES.has(layer.source)
         ? "too few contour lines in the cut"
         : layer.source === "vicmap-state"
           ? "this cut is outside Vicmap metro 1–5 m contour coverage"
-          : "no Vicmap contours cover this cut";
+          : layer.notes && layer.notes.length > 0
+            ? "no NSW contours loaded for this cut"
+            : "no Vicmap contours cover this cut";
     return `Ground: Mapterhorn DEM fallback (${why}).`;
   }
   const pct = Math.round(result.coverage * 100);
   if (pct >= 100) return null;
-  return `Ground: Vicmap metro contours over ${pct}% of the cut; the rest falls back to Mapterhorn DEM.`;
+  const name = layer ? contourGroundSourceName(layer) : CONTOUR_TERRAIN_SOURCE;
+  return `Ground: ${name} over ${pct}% of the cut; the rest falls back to Mapterhorn DEM.`;
 }

@@ -17,10 +17,13 @@ import type { CityModel, Pt, RoadGrade, TerrainField } from "../types";
 
 export const GROUND_ROADS_LAYER = "Ground::Roads";
 export const GROUND_REMAINING_LAYER = "Ground::Remaining";
+/** NSW mode: cadastral road corridor outside the carriageway (verges, footpaths). */
+export const GROUND_ROAD_RESERVE_LAYER = "Ground::RoadReserve";
 export const ROAD_GRADES_BY_PRIORITY: RoadGrade[] = ["arterial", "local", "path"];
 
 type Clip = {
   union: (...g: (Polygon | MultiPolygon)[]) => MultiPolygon;
+  intersection: (...g: (Polygon | MultiPolygon)[]) => MultiPolygon;
   difference: (a: Polygon | MultiPolygon, ...b: (Polygon | MultiPolygon)[]) => MultiPolygon;
 };
 function clip(): Clip {
@@ -32,10 +35,12 @@ export type GroundRoadPartition = {
   /** Disjoint road fill per grade, inside the cut. */
   roads: Record<RoadGrade, MultiPolygon>;
   remaining: MultiPolygon;
+  /** NSW road corridors minus the road fill. Empty without cadastral corridors (Victoria). */
+  reserve: MultiPolygon;
   frame: Polygon;
 };
 
-export function groundRoadPartition(model: Pick<CityModel, "roads" | "sideM" | "frameShape">): GroundRoadPartition {
+export function groundRoadPartition(model: Pick<CityModel, "roads" | "sideM" | "frameShape" | "nsw">): GroundRoadPartition {
   const { union, difference } = clip();
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const frame = siteFramePolygon(model.sideM, frameShape) as Polygon;
@@ -57,10 +62,34 @@ export function groundRoadPartition(model: Pick<CityModel, "roads" | "sideM" | "
     // Union the raw fill (not the difference) — polygon-clipping is far more robust that way.
     taken = taken.length ? union(taken, raw[grade]) : raw[grade];
   }
+  // NSW: the cadastral road corridor around the carriageway is its own surface.
+  let reserve: MultiPolygon = [];
+  const corridors = model.nsw?.roadCorridors ?? [];
+  if (corridors.length > 0) {
+    const polys: Polygon[] = corridors.map((c) => [c.outer, ...c.holes].map(closeRing) as Polygon);
+    const corridorUnion = snapMulti(clip().intersection(union(...polys), frame));
+    if (corridorUnion.length > 0) {
+      reserve = taken.length ? difference(corridorUnion, taken) : corridorUnion;
+      taken = taken.length ? union(taken, corridorUnion) : corridorUnion;
+    }
+  }
   const remaining = taken.length ? difference(frame, taken) : [frame];
-  const pieces = [...ROAD_GRADES_BY_PRIORITY.map((g) => roads[g]), remaining].map(snapMulti);
+  if (reserve.length === 0) {
+    const pieces = [...ROAD_GRADES_BY_PRIORITY.map((g) => roads[g]), remaining].map(snapMulti);
+    const welded = weldTJunctions(pieces);
+    return { roads: { arterial: welded[0]!, local: welded[1]!, path: welded[2]! }, remaining: welded[3]!, reserve: [], frame };
+  }
+  const pieces = [...ROAD_GRADES_BY_PRIORITY.map((g) => roads[g]), remaining, reserve].map(snapMulti);
   const welded = weldTJunctions(pieces);
-  return { roads: { arterial: welded[0]!, local: welded[1]!, path: welded[2]! }, remaining: welded[3]!, frame };
+  return { roads: { arterial: welded[0]!, local: welded[1]!, path: welded[2]! }, remaining: welded[3]!, reserve: welded[4]!, frame };
+}
+
+function closeRing(ring: Pt[]): [number, number][] {
+  const out = ring.map(([x, y]) => [x, y] as [number, number]);
+  const a = out[0];
+  const b = out[out.length - 1];
+  if (a && b && (a[0] !== b[0] || a[1] !== b[1])) out.push([a[0], a[1]]);
+  return out;
 }
 
 /** Round to 0.1 mm so near-coincident vertices from separate fills meet exactly. */

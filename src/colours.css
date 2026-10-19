@@ -303,4 +303,25 @@
   --axo-tree-canopy: #8fbf6a;
   --axo-tree-canopy-shade: #5e8f45;
   --axo-tree-trunk: #7a6a55;
+
+  /* NSW mode (site plan and 3D). Zoning fills follow the Standard Instrument families. */
+  --road-reserve-3d: #D6D1C7;
+  --nsw-road-corridor: #E9E5DC;
+  --nsw-lot-line: #5E5E5E;
+  --nsw-easement: #C0392B;
+  --nsw-centreline: #2F6DB5;
+  --nsw-heritage: #8A4B2A;
+  --nsw-hob-label: #6A1B9A;
+  --nsw-fsr-label: #0B6E4F;
+  --nsw-zone-label: #2E2E2E;
+  --nsw-zone-r: #F2A7A2;
+  --nsw-zone-mu: #E7B98A;
+  --nsw-zone-e: #8FB8E8;
+  --nsw-zone-in: #C6A6DC;
+  --nsw-zone-sp: #F6EF9A;
+  --nsw-zone-re: #9FD88A;
+  --nsw-zone-c: #C3E3B0;
+  --nsw-zone-w: #A9D6E8;
+  --nsw-zone-ru: #E8DCB5;
+  --nsw-zone-other: #D9D4E8;
 }

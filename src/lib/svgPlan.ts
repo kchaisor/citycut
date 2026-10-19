@@ -72,7 +72,7 @@ export type PlanPaths = {
   /** Elevation labels for index contours only. */
   contourLabels: { east: number; north: number; text: string }[];
   contourInterval: number | null;
-  contourSource: "vicmap-metro" | "vicmap-state" | "dem" | null;
+  contourSource: import("../types").ContourSourceId | null;
 };
 
 function dedupe(line: Pt[]): Pt[] {

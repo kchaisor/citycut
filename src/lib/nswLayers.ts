@@ -1,0 +1,230 @@
+import { squareBBox, signedArea } from "./geo";
+import { queryArcgisLayer, type ArcgisFetch, type ArcgisResult, type GeoJsonFeature } from "./arcgisQuery";
+import { clipAreaToSiteFrame, clipPolylineSiteFrame, DEFAULT_SITE_FRAME_SHAPE } from "./siteFrame";
+import { linesFromGeometry, polygonsFromGeometry } from "./vicmapWfs";
+import { NSW_LAYERS, nswRoadGrade, type NswLayerKey } from "./sources/nsw";
+import type { LonLat, Pt, RoadGrade, SiteFrameShape } from "../types";
+
+/**
+ * NSW mode layers for one cut, in the cut's local east/north metres and clipped to the frame.
+ * Every layer keeps its own status so the Data sources panel can say exactly what loaded.
+ */
+
+export type NswPolygon = { outer: Pt[]; holes: Pt[][] };
+
+/** Height of building. "rl" is a reduced level (AHD), not a height above ground: label only, never extrude. */
+export type NswHob =
+  | { kind: "height"; metres: number }
+  | { kind: "rl"; rl: number }
+  | { kind: "unknown"; raw: string };
+
+export type NswZone = NswPolygon & { code: string; epi: string; label: Pt | null };
+export type NswHobArea = NswPolygon & { hob: NswHob; epi: string; label: Pt | null };
+export type NswFsrArea = NswPolygon & { fsr: number | null; layClass: string; epi: string; label: Pt | null };
+export type NswHeritageArea = NswPolygon & { name: string; significance: string };
+export type NswCentreline = { line: Pt[]; grade: RoadGrade; name: string };
+
+export type NswLayerStatus = Pick<ArcgisResult, "status" | "note" | "ms" | "pages"> & { id: string; label: string; count: number };
+
+export type NswLayers = {
+  lots: NswPolygon[];
+  easements: NswPolygon[];
+  roadCorridors: NswPolygon[];
+  roadCentrelines: NswCentreline[];
+  water: NswPolygon[];
+  zoning: NswZone[];
+  hob: NswHobArea[];
+  fsr: NswFsrArea[];
+  heritage: NswHeritageArea[];
+  status: Record<Exclude<NswLayerKey, "contours2m" | "contoursCos">, NswLayerStatus>;
+  ms: number;
+};
+
+export function parseHob(value: unknown, units: unknown): NswHob {
+  const n = typeof value === "number" ? value : value == null || value === "" ? NaN : Number(value);
+  const u = typeof units === "string" ? units.trim().toLowerCase() : "";
+  if (!Number.isFinite(n)) return { kind: "unknown", raw: `${value ?? ""} ${units ?? ""}`.trim() };
+  if (u.includes("rl")) return { kind: "rl", rl: n };
+  if (u === "m" || u === "metres" || u === "") return { kind: "height", metres: n };
+  return { kind: "unknown", raw: `${n} ${units}` };
+}
+
+/** Plan label text. RL is always spelled out so it cannot be read as a building height. */
+export function hobLabel(hob: NswHob): string {
+  if (hob.kind === "height") return `HOB ${formatNumber(hob.metres)} m`;
+  if (hob.kind === "rl") return `HOB RL ${formatNumber(hob.rl)} m AHD`;
+  return `HOB ${hob.raw}`;
+}
+
+export function fsrLabel(fsr: number | null, layClass: string): string {
+  return fsr == null ? `FSR ${layClass || "n/a"}` : `FSR ${formatNumber(fsr)}:1`;
+}
+
+function formatNumber(n: number): string {
+  return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
+}
+
+function text(value: unknown): string {
+  return typeof value === "string" ? value.trim() : value == null ? "" : String(value);
+}
+
+function clipPolygons(features: GeoJsonFeature[], origin: LonLat, sideM: number, shape: SiteFrameShape) {
+  const out: { poly: NswPolygon; props: Record<string, unknown> }[] = [];
+  for (const feature of features) {
+    for (const poly of polygonsFromGeometry(feature.geometry, origin)) {
+      const rings = clipAreaToSiteFrame(poly.outer, poly.holes, sideM, shape);
+      if (!rings || Math.abs(signedArea(rings[0]!)) < 0.5) continue;
+      out.push({ poly: { outer: rings[0]!, holes: rings.slice(1) }, props: feature.properties });
+    }
+  }
+  return out;
+}
+
+function pointInRing(ring: Pt[], x: number, y: number): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i]!;
+    const [xj, yj] = ring[j]!;
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+export function pointInPolygon(poly: NswPolygon, x: number, y: number): boolean {
+  return pointInRing(poly.outer, x, y) && !poly.holes.some((hole) => pointInRing(hole, x, y));
+}
+
+/**
+ * Label anchor inside the polygon: the centroid when it is inside, otherwise the grid point
+ * farthest from the edge. Null for slivers under `minAreaM2`.
+ */
+export function labelAnchor(poly: NswPolygon, minAreaM2 = 600): Pt | null {
+  const area = Math.abs(signedArea(poly.outer));
+  if (area < minAreaM2) return null;
+  let a = 0;
+  let cx = 0;
+  let cy = 0;
+  const r = poly.outer;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const f = r[j]![0] * r[i]![1] - r[i]![0] * r[j]![1];
+    a += f;
+    cx += (r[j]![0] + r[i]![0]) * f;
+    cy += (r[j]![1] + r[i]![1]) * f;
+  }
+  if (a !== 0) {
+    const c: Pt = [cx / (3 * a), cy / (3 * a)];
+    if (pointInPolygon(poly, c[0], c[1]) && edgeDistance(poly, c) > 6) return c;
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const [x, y] of r) {
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  let best: Pt | null = null;
+  let bestD = 0;
+  const steps = 14;
+  for (let i = 0; i <= steps; i++) {
+    for (let j = 0; j <= steps; j++) {
+      const x = minX + ((maxX - minX) * i) / steps;
+      const y = minY + ((maxY - minY) * j) / steps;
+      if (!pointInPolygon(poly, x, y)) continue;
+      const d = edgeDistance(poly, [x, y]);
+      if (d > bestD) {
+        bestD = d;
+        best = [x, y];
+      }
+    }
+  }
+  return best;
+}
+
+function edgeDistance(poly: NswPolygon, p: Pt): number {
+  let best = Infinity;
+  for (const ring of [poly.outer, ...poly.holes]) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [ax, ay] = ring[j]!;
+      const [bx, by] = ring[i]!;
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len2 = dx * dx + dy * dy;
+      const t = len2 > 0 ? Math.max(0, Math.min(1, ((p[0] - ax) * dx + (p[1] - ay) * dy) / len2)) : 0;
+      best = Math.min(best, Math.hypot(p[0] - ax - t * dx, p[1] - ay - t * dy));
+    }
+  }
+  return best;
+}
+
+type LayerKey = keyof NswLayers["status"];
+const LAYER_KEYS: LayerKey[] = ["lots", "easements", "roadCorridors", "roadCentrelines", "water", "zoning", "hob", "fsr", "heritage"];
+
+export function nswLayersFromResults(
+  results: Record<LayerKey, ArcgisResult>,
+  origin: LonLat,
+  sideM: number,
+  shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  ms = 0,
+): NswLayers {
+  const status = {} as NswLayers["status"];
+  for (const key of LAYER_KEYS) {
+    const r = results[key];
+    status[key] = { id: r.id, label: NSW_LAYERS[key].label, status: r.status, note: r.note, ms: r.ms, pages: r.pages, count: r.features.length };
+  }
+  const polys = (key: LayerKey) => clipPolygons(results[key].features, origin, sideM, shape);
+  const centrelines: NswCentreline[] = [];
+  for (const feature of results.roadCentrelines.features) {
+    const grade = nswRoadGrade(feature.properties.functionhierarchy);
+    const name = [text(feature.properties.roadnamebase), text(feature.properties.roadnametype)].filter(Boolean).join(" ");
+    for (const line of linesFromGeometry(feature.geometry, origin)) {
+      for (const part of clipPolylineSiteFrame(line, sideM, shape)) {
+        if (part.length >= 2) centrelines.push({ line: part, grade, name });
+      }
+    }
+  }
+  return {
+    lots: polys("lots").map((item) => item.poly),
+    easements: polys("easements").map((item) => item.poly),
+    roadCorridors: polys("roadCorridors").map((item) => item.poly),
+    roadCentrelines: centrelines,
+    water: polys("water").map((item) => item.poly).filter((poly) => Math.abs(signedArea(poly.outer)) >= 200),
+    zoning: polys("zoning").map(({ poly, props }) => ({
+      ...poly,
+      code: text(props.SYM_CODE) || text(props.LAY_CLASS),
+      epi: text(props.EPI_NAME),
+      label: labelAnchor(poly, 1500),
+    })),
+    hob: polys("hob").map(({ poly, props }) => ({
+      ...poly,
+      hob: parseHob(props.MAX_B_H, props.UNITS),
+      epi: text(props.EPI_NAME),
+      label: labelAnchor(poly),
+    })),
+    fsr: polys("fsr").map(({ poly, props }) => {
+      const raw = props.FSR;
+      const fsr = raw == null || raw === "" || !Number.isFinite(Number(raw)) ? null : Number(raw);
+      return { ...poly, fsr, layClass: text(props.LAY_CLASS), epi: text(props.EPI_NAME), label: labelAnchor(poly) };
+    }),
+    heritage: polys("heritage").map(({ poly, props }) => ({ ...poly, name: text(props.H_NAME), significance: text(props.SIG) })),
+    status,
+    ms,
+  };
+}
+
+/** All NSW cut layers in parallel; each layer has its own 20 s limit and status. */
+export async function fetchNswLayers(
+  center: LonLat,
+  sideM: number,
+  options: { signal?: AbortSignal; frameShape?: SiteFrameShape; fetchImpl?: ArcgisFetch; timeoutMs?: number } = {},
+): Promise<NswLayers> {
+  const started = Date.now();
+  const bounds = squareBBox(center, sideM);
+  const entries = await Promise.all(
+    LAYER_KEYS.map(async (key) => [key, await queryArcgisLayer(NSW_LAYERS[key], bounds, options)] as const),
+  );
+  const results = Object.fromEntries(entries) as Record<LayerKey, ArcgisResult>;
+  return nswLayersFromResults(results, center, sideM, options.frameShape ?? DEFAULT_SITE_FRAME_SHAPE, Date.now() - started);
+}

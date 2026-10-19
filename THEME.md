@@ -161,6 +161,25 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-study-surface` | `#FFFFFF` | Ground, roads, and parks in the 3D viewport while the sun path is on. |
 | `--card-white` | `#FAFAF8` | Building and surface massing in white-card 3D display mode. |
 | `--card-ground` | `#F2F2F0` | Ground and terrain in white-card 3D display mode. |
+| `--road-reserve-3d` | `#D6D1C7` | NSW mode: cadastral road corridor outside the carriageway in the 3D view, the 3D-view Illustrator file, and the Rhino `Ground::RoadReserve` layer. |
+| `--nsw-road-corridor` | `#E9E5DC` | NSW mode: cadastral road corridor fill under the carriageway on the site plan. |
+| `--nsw-lot-line` | `#5E5E5E` | NSW mode: cadastral lot boundaries on the site plan. |
+| `--nsw-easement` | `#C0392B` | NSW mode: easement outline and hatch on the site plan. |
+| `--nsw-centreline` | `#2F6DB5` | NSW mode: NSW Transport theme road centrelines on the site plan. |
+| `--nsw-heritage` | `#8A4B2A` | NSW mode: heritage item outline and hatch on the site plan. |
+| `--nsw-hob-label` | `#6A1B9A` | NSW mode: height of building labels on the site plan (RL values are labelled RL). |
+| `--nsw-fsr-label` | `#0B6E4F` | NSW mode: floor space ratio labels on the site plan. |
+| `--nsw-zone-label` | `#2E2E2E` | NSW mode: land zoning code labels on the site plan. |
+| `--nsw-zone-r` | `#F2A7A2` | NSW mode: R1–R5 residential zones on the site plan. |
+| `--nsw-zone-mu` | `#E7B98A` | NSW mode: MU1 mixed use and legacy B zones on the site plan. |
+| `--nsw-zone-e` | `#8FB8E8` | NSW mode: E1–E5 employment zones on the site plan. |
+| `--nsw-zone-in` | `#C6A6DC` | NSW mode: legacy IN industrial zones on the site plan. |
+| `--nsw-zone-sp` | `#F6EF9A` | NSW mode: SP1–SP5 special purpose and infrastructure zones on the site plan. |
+| `--nsw-zone-re` | `#9FD88A` | NSW mode: RE1–RE2 recreation zones on the site plan. |
+| `--nsw-zone-c` | `#C3E3B0` | NSW mode: C1–C4 conservation zones on the site plan. |
+| `--nsw-zone-w` | `#A9D6E8` | NSW mode: W1–W4 waterway zones on the site plan. |
+| `--nsw-zone-ru` | `#E8DCB5` | NSW mode: RU rural zones on the site plan. |
+| `--nsw-zone-other` | `#D9D4E8` | NSW mode: precinct and other zones (for example SEPP precinct codes) on the site plan. |
 | `--tree-fill` | `#6ea35a` | Tree-crown fill on the site plan, on screen and in the Illustrator file. |
 | `--tree-crown` | `#5d8a45` | Tree-crown fill on the 3D-view Illustrator sheet. |
 | `--tree-crown-edge` | `#2c4a28` | Outline around that 3D-view crown. |
@@ -305,6 +324,12 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--site-boundary-mm` | Weight of the searched-property parcel boundary | `0.35` | mm |
 | `--site-boundary-stroke` | Alias of `--site-boundary` for the pen cascade | `var(--site-boundary)` | colour |
 | `--site-boundary-dash` | Dash of the site boundary (long dash, gap, dot, gap) | `2.4 0.6 0.2 0.6` | mm per segment |
+| `--nsw-lot-mm` / `--nsw-lot-dash` | NSW mode: lot boundary pen (colour `--nsw-lot-line`) | `0.05` / `none` | mm |
+| `--nsw-easement-mm` / `--nsw-easement-dash` | NSW mode: easement outline (colour `--nsw-easement`) | `0.1` / `0.8 0.4` | mm |
+| `--nsw-centreline-mm` / `--nsw-centreline-dash` | NSW mode: road centreline pen (colour `--nsw-centreline`) | `0.08` / `2 0.6 0.3 0.6` | mm |
+| `--nsw-heritage-mm` / `--nsw-heritage-dash` | NSW mode: heritage outline (colour `--nsw-heritage`) | `0.12` / `none` | mm |
+| `--nsw-hatch-m` | NSW mode: heritage and easement hatch spacing | `4` | m on the ground |
+| `--nsw-zoning-opacity` | NSW mode: land zoning fill opacity | `0.5` | 0–1 |
 | `--site-building-stroke-mm` | Outline on site-building fills on the site plan | `0.35` | mm |
 | `--site-building-stroke` | Colour of that site-building outline on the plan and in exports | `#3D3010` | colour |
 | `--site-building-dash` | Dash of the site-building outline | `none` | mm, on then off |

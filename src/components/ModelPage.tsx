@@ -73,6 +73,7 @@ import {
   type SidebarSectionId,
 } from "../lib/sidebarSections";
 import { buildDataSources, countLoaded, dataSourceStatusWord } from "../lib/dataSources";
+import { regionCredit } from "../lib/sources/registry";
 import { OSM_TREES_ODBL_CREDIT } from "../lib/treesPrebake";
 import { countTreeCrowns } from "../lib/treeMassing";
 import { capturePresetFromSearch } from "../lib/captureQuery";
@@ -2173,6 +2174,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 : null,
               comTreesHtml: comTreesInCut(model) ? COM_TREES_CREDIT_HTML : null,
               cadastreOn: drawing === "exploded-axo" && tab === "drawing" && axoSettings.layerVisible.cadastre,
+              nswCredit: regionCredit(model.region),
               contourHtml:
                 model.contourLayer && model.contourLayer.source !== "dem"
                   ? `<a href="${model.contourLayer.datasetUrl ?? "https://discover.data.vic.gov.au/dataset/vicmap-elevation-contour-line-1-to-5-metres-covering-metropolitan-melbourne"}" target="_blank" rel="noopener noreferrer">Contours</a> every ${model.contourLayer.interval} m.`
