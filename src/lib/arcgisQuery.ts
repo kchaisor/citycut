@@ -1,3 +1,4 @@
+import { gda94ToGda2020 } from "./gda";
 /**
  * Envelope queries against public ArcGIS REST layers (FeatureServer / MapServer), with paging,
  * Esri JSON → GeoJSON conversion, one shared time limit per layer, and an explicit status.
@@ -5,7 +6,11 @@
  * Rules (source of truth first, never silent):
  *  - "ok" means every page arrived. "partial" means some pages arrived and then the time limit,
  *    the page cap, or an error stopped it; the note says which. "failed" means no usable page.
- *  - 401 / 403 / 429 are not retried. Nothing here retries.
+ *  - 401 / 403 / 429 (and ArcGIS token errors 498 / 499) are never retried: the layer stops and
+ *    says why. Layers with a retry policy retry only timeouts, HTTP 5xx and network errors,
+ *    with backoff, inside the layer's time budget.
+ *  - Coordinates come back in GDA2020 (outSR 7844, server transform) or are converted from
+ *    GDA94 here (datum "gda94"), see gda.ts.
  *  - Only simple GETs with no custom headers, so the browser sends no CORS preflight.
  *
  * NSW Spatial Services (portal.spatial.nsw.gov.au) answers f=geojson with HTTP 503 from its CDN
@@ -29,6 +34,25 @@ export type ArcgisLayerSpec = {
   /** Server-side generalisation in degrees (outSR 4326). 5e-6 ≈ 0.5 m. */
   maxAllowableOffsetDeg?: number;
   geometryPrecision?: number;
+  /** Output spatial reference. 7844 (GDA2020) on the Spatial Services *_multiCRS services. Default 4326. */
+  outSR?: number;
+  /** "gda94": the server returns GDA94 coordinates (no transform on request); convert to GDA2020 here. */
+  datum?: "gda94";
+  /** Retry transient failures (timeouts, 5xx, network) per page. Never 401/403/429. */
+  retry?: RetryPolicy;
+  /** Split the cut into tiles × tiles envelopes fetched in parallel, de-duplicated on idField. */
+  tiles?: number;
+  /** Unique id attribute for de-duplication across tiles (OBJECTID). */
+  idField?: string;
+};
+
+export type RetryPolicy = {
+  /** Total attempts per page, including the first. */
+  attempts: number;
+  /** Wait before retry n (ms); the last value repeats. */
+  backoffMs: number[];
+  /** Time limit for one attempt; the layer budget still caps the total. */
+  attemptTimeoutMs: number;
 };
 
 export type GeoJsonGeometry =
@@ -50,6 +74,10 @@ export type ArcgisResult = {
   ms: number;
   /** Failure or partial reason, one sentence. Null when ok. */
   note: string | null;
+  /** Retries spent (transient failures only). */
+  retries?: number;
+  /** True when the server refused access or rate-limited (401/403/429/498/499): nothing was retried. */
+  refused?: boolean;
 };
 
 export type LonLatBox = { west: number; south: number; east: number; north: number };
@@ -65,7 +93,7 @@ export function arcgisEnvelopeQueryUrl(spec: ArcgisLayerSpec, bounds: LonLatBox,
     geometryType: "esriGeometryEnvelope",
     inSR: "4326",
     spatialRel: "esriSpatialRelIntersects",
-    outSR: "4326",
+    outSR: String(spec.outSR ?? 4326),
     outFields: spec.outFields.join(","),
     returnGeometry: "true",
     resultOffset: String(offset),
@@ -140,6 +168,37 @@ export function esriGeometryToGeoJson(geometry: unknown): GeoJsonGeometry | null
 
 export type ArcgisPage = { features: GeoJsonFeature[]; exceeded: boolean };
 
+/** An ArcGIS error body ({"error": {"code": …}}), which often arrives with HTTP 200. */
+export class ArcgisServerError extends Error {
+  constructor(message: string, readonly code: number | null) {
+    super(message);
+    this.name = "ArcgisServerError";
+  }
+}
+
+const REFUSED_CODES = new Set([401, 403, 429, 498, 499]);
+
+function mapCoords(geometry: GeoJsonGeometry | null, f: (lon: number, lat: number) => [number, number]): GeoJsonGeometry | null {
+  if (!geometry) return null;
+  const pt = (p: number[]): number[] => f(p[0]!, p[1]!);
+  switch (geometry.type) {
+    case "Point":
+      return { type: "Point", coordinates: pt(geometry.coordinates) };
+    case "LineString":
+      return { type: "LineString", coordinates: geometry.coordinates.map(pt) };
+    case "MultiLineString":
+    case "Polygon":
+      return { type: geometry.type, coordinates: geometry.coordinates.map((ring) => ring.map(pt)) } as GeoJsonGeometry;
+    case "MultiPolygon":
+      return { type: "MultiPolygon", coordinates: geometry.coordinates.map((poly) => poly.map((ring) => ring.map(pt))) };
+  }
+}
+
+/** GDA94 → GDA2020 for every coordinate of a parsed page (see gda.ts). */
+export function convertGda94Features(features: GeoJsonFeature[]): GeoJsonFeature[] {
+  return features.map((feature) => ({ ...feature, geometry: mapCoords(feature.geometry, gda94ToGda2020) }));
+}
+
 /** Parse one page in either format. Throws with the server's message on an error body. */
 export function parseArcgisPage(json: unknown, format: ArcgisFormat): ArcgisPage {
   if (!json || typeof json !== "object") throw new Error("The server answered with something that is not JSON.");
@@ -150,7 +209,10 @@ export function parseArcgisPage(json: unknown, format: ArcgisFormat): ArcgisPage
     properties?: { exceededTransferLimit?: boolean };
   };
   if (body.error) {
-    throw new Error(`The server answered with error ${body.error.code ?? ""}: ${body.error.message || "query failed"}`.replace("  ", " "));
+    throw new ArcgisServerError(
+      `The server answered with error ${body.error.code ?? ""}: ${body.error.message || "query failed"}`.replace("  ", " "),
+      typeof body.error.code === "number" ? body.error.code : null,
+    );
   }
   const raw = Array.isArray(body.features) ? body.features : [];
   const exceeded = Boolean(body.exceededTransferLimit || body.properties?.exceededTransferLimit);
@@ -185,6 +247,25 @@ function statusSentence(label: string, status: number): string {
   return `${label}: the server answered HTTP ${status}.`;
 }
 
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve();
+    const timer = setTimeout(done, ms);
+    function done() {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    }
+    signal.addEventListener("abort", done);
+  });
+}
+
+type Attempt =
+  | { ok: true; page: ArcgisPage }
+  | { ok: false; transient: boolean; refused: boolean; note: string; timedOut: boolean };
+
+const retriesText = (n: number) => (n > 0 ? ` after ${n} ${n === 1 ? "retry" : "retries"}` : "");
+
 /**
  * Every feature intersecting the box, page by page. Never throws except when the caller's own
  * signal aborts; every other problem comes back as status + note.
@@ -199,44 +280,104 @@ export async function queryArcgisLayer(
   if (parent?.aborted) throw abortError();
   const timeoutMs = options.timeoutMs ?? ARCGIS_TIMEOUT_MS;
   const fetchImpl = options.fetchImpl ?? defaultFetch;
-  const controller = new AbortController();
-  let timedOut = false;
+  const retry = spec.retry;
+  const budget = new AbortController();
+  let budgetSpent = false;
   const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
+    budgetSpent = true;
+    budget.abort();
   }, timeoutMs);
-  const stop = () => controller.abort();
+  const stop = () => budget.abort();
   parent?.addEventListener("abort", stop);
   const features: GeoJsonFeature[] = [];
   let pages = 0;
-  const finish = (status: ArcgisStatus, note: string | null): ArcgisResult => ({
+  let retries = 0;
+  const finish = (status: ArcgisStatus, note: string | null, refused = false): ArcgisResult => ({
     id: spec.id,
     status,
-    features,
+    features: spec.datum === "gda94" ? convertGda94Features(features) : features,
     pages,
     ms: Date.now() - started,
     note,
+    retries,
+    ...(refused ? { refused: true } : {}),
   });
+
+  const attempt = async (url: string): Promise<Attempt> => {
+    const local = new AbortController();
+    let attemptTimedOut = false;
+    const relay = () => local.abort();
+    budget.signal.addEventListener("abort", relay);
+    const attemptTimer = retry
+      ? setTimeout(() => {
+          attemptTimedOut = true;
+          local.abort();
+        }, retry.attemptTimeoutMs)
+      : null;
+    try {
+      const response = await fetchImpl(url, local.signal);
+      if (REFUSED_CODES.has(response.status)) {
+        return { ok: false, transient: false, refused: true, timedOut: false, note: statusSentence(spec.label, response.status) };
+      }
+      if (response.status < 200 || response.status >= 300) {
+        return { ok: false, transient: response.status >= 500, refused: false, timedOut: false, note: statusSentence(spec.label, response.status) };
+      }
+      return { ok: true, page: parseArcgisPage(await response.json(), spec.format) };
+    } catch (error) {
+      if (parent?.aborted) throw abortError();
+      if (error instanceof ArcgisServerError) {
+        const refused = error.code != null && REFUSED_CODES.has(error.code);
+        return {
+          ok: false,
+          transient: !refused && error.code != null && error.code >= 500,
+          refused,
+          timedOut: false,
+          note: `${spec.label}: ${error.message}${refused ? "; not retried." : ""}`,
+        };
+      }
+      const timedOut = budgetSpent || attemptTimedOut;
+      const seconds = Math.round((budgetSpent ? timeoutMs : retry!.attemptTimeoutMs) / 1000);
+      return {
+        ok: false,
+        transient: true,
+        refused: false,
+        timedOut,
+        note: timedOut
+          ? `${spec.label}: no answer within ${seconds} s${pages > 0 ? ` after ${features.length} features` : ""}`
+          : `${spec.label}: ${error instanceof Error && error.message ? error.message : "the request failed"}`,
+      };
+    } finally {
+      if (attemptTimer) clearTimeout(attemptTimer);
+      budget.signal.removeEventListener("abort", relay);
+    }
+  };
+
   try {
     let offset = 0;
     for (;;) {
       if (pages >= spec.maxPages) {
         return finish("partial", `${spec.label}: stopped after ${pages} pages (${features.length} features); more exist in this cut.`);
       }
-      let page: ArcgisPage;
-      try {
-        const response = await fetchImpl(arcgisEnvelopeQueryUrl(spec, bounds, offset), controller.signal);
-        if (response.status < 200 || response.status >= 300) {
-          const note = statusSentence(spec.label, response.status);
-          return finish(pages > 0 ? "partial" : "failed", note);
+      const url = arcgisEnvelopeQueryUrl(spec, bounds, offset);
+      let tries = 0;
+      let page: ArcgisPage | null = null;
+      for (;;) {
+        tries += 1;
+        const result = await attempt(url);
+        if (result.ok) {
+          page = result.page;
+          break;
         }
-        page = parseArcgisPage(await response.json(), spec.format);
-      } catch (error) {
+        const canRetry = Boolean(retry) && result.transient && !budgetSpent && tries < retry!.attempts;
+        if (!canRetry) {
+          const status = pages > 0 ? "partial" : "failed";
+          const tail = result.refused || /not retried\.$/.test(result.note) ? "" : `${retriesText(tries - 1)}.`;
+          return finish(status, `${result.note.replace(/\.$/, "")}${tail}`.replace(/\.\.$/, "."), result.refused);
+        }
+        retries += 1;
+        const waits = retry!.backoffMs;
+        await sleep(waits[Math.min(tries - 1, waits.length - 1)] ?? 0, budget.signal);
         if (parent?.aborted) throw abortError();
-        const note = timedOut
-          ? `${spec.label}: no answer within ${Math.round(timeoutMs / 1000)} s${pages > 0 ? ` after ${features.length} features` : ""}.`
-          : `${spec.label}: ${error instanceof Error && error.message ? error.message : "the request failed"}`;
-        return finish(pages > 0 ? "partial" : "failed", note);
       }
       pages += 1;
       features.push(...page.features);
@@ -246,5 +387,91 @@ export async function queryArcgisLayer(
   } finally {
     clearTimeout(timer);
     parent?.removeEventListener("abort", stop);
+  }
+}
+
+/** Split a box into n × n equal envelopes, row by row from the south-west. */
+export function splitBounds(bounds: LonLatBox, n: number): LonLatBox[] {
+  const out: LonLatBox[] = [];
+  const dx = (bounds.east - bounds.west) / n;
+  const dy = (bounds.north - bounds.south) / n;
+  for (let r = 0; r < n; r += 1) {
+    for (let c = 0; c < n; c += 1) {
+      out.push({ west: bounds.west + c * dx, east: bounds.west + (c + 1) * dx, south: bounds.south + r * dy, north: bounds.south + (r + 1) * dy });
+    }
+  }
+  return out;
+}
+
+/**
+ * queryArcgisLayer over spec.tiles × spec.tiles envelopes in parallel, de-duplicated on
+ * spec.idField. A refusal (401/403/429) on any tile cancels the rest: refused access is not
+ * something more requests can fix. Partial when some tiles are incomplete; the note says which.
+ */
+export async function queryArcgisTiled(
+  spec: ArcgisLayerSpec,
+  bounds: LonLatBox,
+  options: { signal?: AbortSignal; timeoutMs?: number; fetchImpl?: ArcgisFetch } = {},
+): Promise<ArcgisResult> {
+  const n = Math.max(1, Math.floor(spec.tiles ?? 1));
+  if (n === 1) return queryArcgisLayer(spec, bounds, options);
+  const started = Date.now();
+  if (options.signal?.aborted) throw abortError();
+  const cancel = new AbortController();
+  const relay = () => cancel.abort();
+  options.signal?.addEventListener("abort", relay);
+  let refused: ArcgisResult | null = null;
+  try {
+    const tiles = splitBounds(bounds, n);
+    const results = await Promise.all(
+      tiles.map(async (tile) => {
+        try {
+          const result = await queryArcgisLayer(spec, tile, { ...options, signal: cancel.signal });
+          if (result.refused && !refused) {
+            refused = result;
+            cancel.abort();
+          }
+          return result;
+        } catch (error) {
+          if (options.signal?.aborted) throw error;
+          return null; // cancelled after another tile was refused
+        }
+      }),
+    );
+    const seen = new Set<unknown>();
+    const features: GeoJsonFeature[] = [];
+    for (const result of results) {
+      for (const feature of result?.features ?? []) {
+        const id = spec.idField ? feature.properties[spec.idField] : undefined;
+        if (id != null) {
+          if (seen.has(id)) continue;
+          seen.add(id);
+        }
+        features.push(feature);
+      }
+    }
+    const done = results.filter((result) => result?.status === "ok").length;
+    const pages = results.reduce((sum, result) => sum + (result?.pages ?? 0), 0);
+    const retries = results.reduce((sum, result) => sum + (result?.retries ?? 0), 0);
+    const ms = Date.now() - started;
+    const r = refused as ArcgisResult | null;
+    if (r) {
+      return { id: spec.id, status: features.length > 0 ? "partial" : "failed", features, pages, ms, retries, refused: true, note: `${r.note} Remaining tiles were cancelled.` };
+    }
+    if (done === tiles.length) return { id: spec.id, status: "ok", features, pages, ms, retries, note: null };
+    const problems = results
+      .map((result, index) => (result && result.status !== "ok" ? `tile ${index + 1}: ${(result.note ?? "").replace(`${spec.label}: `, "")}` : null))
+      .filter(Boolean);
+    return {
+      id: spec.id,
+      status: done === 0 && features.length === 0 ? "failed" : "partial",
+      features,
+      pages,
+      ms,
+      retries,
+      note: `${spec.label}: ${done} of ${tiles.length} tiles complete (${features.length} features). ${problems.join("; ")}`,
+    };
+  } finally {
+    options.signal?.removeEventListener("abort", relay);
   }
 }

@@ -14,7 +14,7 @@ import { formatCoord, openRing, signedArea } from "./geo";
 import { hexRgb } from "./lineweights";
 import { ROAD_COLOR, SURFACE } from "./surfaceLayers";
 import { footprintBase, sampleTerrain, terrainTint } from "./terrain";
-import { drapeTriangles, GROUND_REMAINING_LAYER, GROUND_ROAD_RESERVE_LAYER, GROUND_ROADS_LAYER, groundRoadPartition, groundTriangles, ROAD_GRADES_BY_PRIORITY } from "./groundRoads";
+import { drapeTriangles, GROUND_REMAINING_LAYER, GROUND_ROADS_LAYER, groundRoadPartition, groundTriangles, ROAD_GRADES_BY_PRIORITY } from "./groundRoads";
 import type { TerrainField } from "../types";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { comTreesCreditLine } from "./comTreesCredit";
@@ -504,12 +504,6 @@ function collect(
       const color = style.whiteCard ? cardWhite() : hexRgb(ROAD_COLOR[grade]);
       for (const tri of drapeTriangles(groundTriangles(groundSplit.roads[grade], coarse, model.sideM), coarse, model.sideM)) {
         pushTri(fills, edges, occ, nextId++, toWorld(tri), color, GROUND_ROADS_LAYER, 1, false, shot, pageW, pageH, forward);
-      }
-    }
-    if (groundSplit.reserve.length > 0) {
-      const color = style.whiteCard ? cardWhite() : hexRgb(getColour("--road-reserve-3d"));
-      for (const tri of drapeTriangles(groundTriangles(groundSplit.reserve, coarse, model.sideM), coarse, model.sideM)) {
-        pushTri(fills, edges, occ, nextId++, toWorld(tri), color, GROUND_ROAD_RESERVE_LAYER, 1, false, shot, pageW, pageH, forward);
       }
     }
   } else if (field) {

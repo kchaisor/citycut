@@ -24,19 +24,35 @@ export const NSW_SPATIAL_DATASET_URL = "https://portal.spatial.nsw.gov.au/";
 export const NSW_PLANNING_DATASET_URL = "https://www.planningportal.nsw.gov.au/opendata/";
 export const COS_CONTOURS_DATASET_URL = "https://data.cityofsydney.nsw.gov.au/datasets/cityofsydney::terrain-contours/about";
 
-/** Spatial Services CDN answers f=geojson with 503, so these use Esri JSON. */
+/** Timeouts, 5xx and network errors only; 401/403/429 are never retried (arcgisQuery). */
+const SCP_RETRY = { attempts: 3, backoffMs: [800, 2000], attemptTimeoutMs: 8_000 };
+
+/**
+ * Spatial Services layers are read from the *_multiCRS services with outSR=7844: the data is held
+ * in GDA94 and the server applies the official GDA94→GDA2020 conformal + distortion NTv2 grid
+ * (EPSG:8446). The plain services (Web Mercator) return GDA94 coordinates untransformed, about
+ * 1.5 m south-west of GDA2020 at Pyrmont (probed 2026-10-19). Esri JSON, because the Spatial
+ * Services CDN answers f=geojson with 503.
+ */
 const scp = (path: string, id: string, label: string, outFields: string[], extra: Partial<ArcgisLayerSpec> = {}): ArcgisLayerSpec => ({
   id,
   label,
   url: `${NSW_SCP}/${path}`,
-  outFields,
+  outFields: ["OBJECTID", ...outFields],
   format: "esrijson",
   pageSize: 2000,
   maxPages: 10,
-  geometryPrecision: 7,
+  geometryPrecision: 8,
+  outSR: 7844,
+  retry: SCP_RETRY,
+  idField: "OBJECTID",
   ...extra,
 });
 
+/** Cadastre multiCRS layers page at 100 records (maxRecordCount 100). */
+const CADASTRE = { pageSize: 100, maxPages: 20 };
+
+/** DPHI planning layers are stored in GDA94 (4283) and ignore outSR transforms, so convert here. */
 const planning = (layer: number, id: string, label: string, outFields: string[]): ArcgisLayerSpec => ({
   id,
   label,
@@ -45,39 +61,69 @@ const planning = (layer: number, id: string, label: string, outFields: string[])
   format: "geojson",
   pageSize: 2000,
   maxPages: 10,
-  geometryPrecision: 7,
+  geometryPrecision: 8,
+  outSR: 4283,
+  datum: "gda94",
+  retry: SCP_RETRY,
 });
 
 export const NSW_LAYERS = {
-  lots: scp("NSW_Land_Parcel_Property_Theme/FeatureServer/8", "nsw-lots", "NSW lots", [
+  lots: scp("NSW_Land_Parcel_Property_Theme_multiCRS/FeatureServer/8", "nsw-lots", "NSW lots", [
     "lotidstring",
     "planlabel",
     "lotnumber",
+    "sectionnumber",
     "stratumlevel",
-  ]),
-  easements: scp("NSW_Land_Parcel_Property_Theme/FeatureServer/9", "nsw-easements", "NSW easements", [
+    "hasstratum",
+    "classsubtype",
+    "itstitlestatus",
+  ], { ...CADASTRE, tiles: 3 }),
+  easements: scp("NSW_Land_Parcel_Property_Theme_multiCRS/FeatureServer/9", "nsw-easements", "NSW easements", [
     "easementtype",
     "easementwidth",
     "stratumlevel",
-  ]),
-  roadCorridors: scp("NSW_Land_Parcel_Property_Theme/FeatureServer/5", "nsw-road-corridors", "NSW road corridors", [
+    "classsubtype",
+  ], CADASTRE),
+  roadCorridors: scp("NSW_Land_Parcel_Property_Theme_multiCRS/FeatureServer/5", "nsw-road-corridors", "NSW road corridors", [
     "roadnamelabel",
     "roadtype",
     "roadcorridortype",
-  ]),
-  roadCentrelines: scp("NSW_Transport_Theme/FeatureServer/5", "nsw-road-centrelines", "NSW road centrelines", [
+    "classsubtype",
+  ], { ...CADASTRE, tiles: 2 }),
+  roadCentrelines: scp("NSW_Transport_Theme_multiCRS/FeatureServer/5", "nsw-road-centrelines", "NSW road centrelines", [
     "roadnamebase",
     "roadnametype",
     "functionhierarchy",
     "lanecount",
+    "roadontype",
   ]),
-  water: scp("NSW_Water_Theme/FeatureServer/6", "nsw-water", "NSW water (HydroArea)", ["hydroname", "hydrotype", "perenniality"]),
-  contours2m: scp("NSW_Elevation_and_Depth_Theme/FeatureServer/2", "nsw-contours", "NSW contours", ["elevation"]),
+  railways: scp("NSW_Transport_Theme_multiCRS/FeatureServer/7", "nsw-railways", "NSW railways", [
+    "classsubtype",
+    "railontype",
+    "operationalstatus",
+    "railwayname",
+  ]),
+  stations: scp("NSW_FOI_Transport_Facilities_multiCRS/FeatureServer/1", "nsw-stations", "NSW stations and light rail stops", [
+    "classsubtype",
+    "operationalstatus",
+    "generalname",
+  ]),
+  buildingComplexes: scp("NSW_Features_of_Interest_Category_multiCRS/FeatureServer/3", "nsw-building-complexes", "NSW building complexes (points of interest)", [
+    "classsubtype",
+    "buildingcomplextype",
+    "generalname",
+    "operationalstatus",
+  ]),
+  water: scp("NSW_Water_Theme_multiCRS/FeatureServer/6", "nsw-water", "NSW water (HydroArea)", ["hydroname", "hydrotype", "perenniality"]),
+  contours2m: scp("NSW_Elevation_and_Depth_Theme_multiCRS/FeatureServer/2", "nsw-contours", "NSW contours", ["elevation"]),
   zoning: planning(2, "nsw-zoning", "Land zoning", ["SYM_CODE", "LAY_CLASS", "EPI_NAME"]),
   hob: planning(5, "nsw-hob", "Height of building", ["MAX_B_H", "UNITS", "LAY_CLASS", "EPI_NAME"]),
   fsr: planning(1, "nsw-fsr", "Floor space ratio", ["FSR", "LAY_CLASS", "EPI_NAME"]),
   heritage: planning(0, "nsw-heritage", "Heritage", ["H_ID", "H_NAME", "SIG", "EPI_NAME"]),
-  /** 1 m contours, 2020 survey. Tiles of ~300–500 m; 0.5 m generalisation keeps 1 km² near 200 KB gzip. */
+  /**
+   * 1 m contours, 2020 survey, stored in GDA94 / MGA 56 (EPSG:28356). Read as GDA94 lon/lat and
+   * converted here. Tiles of ~300–500 m; 0.5 m generalisation keeps 1 km² near 200 KB gzip.
+   */
   contoursCos: {
     id: "cos-contours",
     label: "City of Sydney 1 m contours",
@@ -87,7 +133,9 @@ export const NSW_LAYERS = {
     pageSize: 2000,
     maxPages: 10,
     maxAllowableOffsetDeg: 0.000005,
-    geometryPrecision: 6,
+    geometryPrecision: 7,
+    outSR: 4283,
+    datum: "gda94",
   },
 } satisfies Record<string, ArcgisLayerSpec>;
 
