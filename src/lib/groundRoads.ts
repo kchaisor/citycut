@@ -4,6 +4,7 @@ import type { MultiPolygon, Polygon } from "polygon-clipping";
 import { carriagewaysOf, unionCarriageways, unionPathRoads } from "./roadFill";
 import { DEFAULT_SITE_FRAME_SHAPE, siteFramePolygon } from "./siteFrame";
 import { clipTrianglesToTerrainGrid, terrainMeshHeight, type Tri } from "./terrainDrape";
+import { pointInPolygon, type NswCentreline, type NswCorridor } from "./nswLayers";
 import type { CityModel, Pt, RoadGrade, TerrainField } from "../types";
 
 /**
@@ -13,12 +14,14 @@ import type { CityModel, Pt, RoadGrade, TerrainField } from "../types";
  * Building footprints are NOT cut out; water and parks stay as their own overlays on top.
  * Both surfaces are triangulated from the same polygon boundary and cut on the same terrain grid,
  * so they share every edge vertex and leave no cracks.
+ *
+ * NSW mode: where NSW Spatial Services road corridors (cadastral road parcels) exist they ARE the
+ * road surface, graded by the NSW centrelines inside them; Overture carriageways fill in only
+ * outside the corridors. `sources` reports which source covers how much of the road surface.
  */
 
 export const GROUND_ROADS_LAYER = "Ground::Roads";
 export const GROUND_REMAINING_LAYER = "Ground::Remaining";
-/** NSW mode: cadastral road corridor outside the carriageway (verges, footpaths). */
-export const GROUND_ROAD_RESERVE_LAYER = "Ground::RoadReserve";
 export const ROAD_GRADES_BY_PRIORITY: RoadGrade[] = ["arterial", "local", "path"];
 
 type Clip = {
@@ -35,10 +38,44 @@ export type GroundRoadPartition = {
   /** Disjoint road fill per grade, inside the cut. */
   roads: Record<RoadGrade, MultiPolygon>;
   remaining: MultiPolygon;
-  /** NSW road corridors minus the road fill. Empty without cadastral corridors (Victoria). */
-  reserve: MultiPolygon;
   frame: Polygon;
+  /** NSW mode only: road surface area by source, m². Absent without NSW road corridors (Victoria). */
+  sources?: RoadSurfaceSources;
 };
+
+export type RoadSurfaceSources = { nswCorridorM2: number; overtureM2: number };
+
+const GRADE_RANK: Record<RoadGrade, number> = { arterial: 0, local: 1, path: 2 };
+
+/** Grade of one NSW corridor: Pathway corridors are paths, else the highest-ranked NSW centreline inside it. */
+export function corridorGrade(corridor: NswCorridor, centrelines: NswCentreline[]): RoadGrade {
+  if (corridor.pathway) return "path";
+  let best: RoadGrade | null = null;
+  for (const centreline of centrelines) {
+    if (best === "arterial") break;
+    if (best && GRADE_RANK[centreline.grade] >= GRADE_RANK[best]) continue;
+    const pts = centreline.line;
+    const hit = pts.some((p, i) => {
+      if (pointInPolygon(corridor, p[0], p[1])) return true;
+      const q = pts[i + 1];
+      return q ? pointInPolygon(corridor, (p[0] + q[0]) / 2, (p[1] + q[1]) / 2) : false;
+    });
+    if (hit) best = centreline.grade;
+  }
+  return best ?? "local";
+}
+
+export function multiArea(multi: MultiPolygon): number {
+  let total = 0;
+  for (const poly of multi) {
+    poly.forEach((ring, index) => {
+      let a = 0;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) a += (ring[j]![0]! - ring[i]![0]!) * (ring[j]![1]! + ring[i]![1]!);
+      total += (index === 0 ? 1 : -1) * Math.abs(a / 2);
+    });
+  }
+  return total;
+}
 
 export function groundRoadPartition(model: Pick<CityModel, "roads" | "sideM" | "frameShape" | "nsw">): GroundRoadPartition {
   const { union, difference } = clip();
@@ -53,6 +90,8 @@ export function groundRoadPartition(model: Pick<CityModel, "roads" | "sideM" | "
       frameShape,
     ).polygons,
   };
+  const corridors = model.nsw?.roadCorridors ?? [];
+  if (corridors.length > 0) return nswCorridorPartition(model, raw, frame, corridors);
   const roads = { arterial: [], local: [], path: [] } as Record<RoadGrade, MultiPolygon>;
   let taken: MultiPolygon = [];
   for (const grade of ROAD_GRADES_BY_PRIORITY) {
@@ -62,26 +101,51 @@ export function groundRoadPartition(model: Pick<CityModel, "roads" | "sideM" | "
     // Union the raw fill (not the difference) — polygon-clipping is far more robust that way.
     taken = taken.length ? union(taken, raw[grade]) : raw[grade];
   }
-  // NSW: the cadastral road corridor around the carriageway is its own surface.
-  let reserve: MultiPolygon = [];
-  const corridors = model.nsw?.roadCorridors ?? [];
-  if (corridors.length > 0) {
-    const polys: Polygon[] = corridors.map((c) => [c.outer, ...c.holes].map(closeRing) as Polygon);
-    const corridorUnion = snapMulti(clip().intersection(union(...polys), frame));
-    if (corridorUnion.length > 0) {
-      reserve = taken.length ? difference(corridorUnion, taken) : corridorUnion;
-      taken = taken.length ? union(taken, corridorUnion) : corridorUnion;
-    }
+  const remaining = taken.length ? difference(frame, taken) : [frame];
+  const pieces = [...ROAD_GRADES_BY_PRIORITY.map((g) => roads[g]), remaining].map(snapMulti);
+  const welded = weldTJunctions(pieces);
+  return { roads: { arterial: welded[0]!, local: welded[1]!, path: welded[2]! }, remaining: welded[3]!, frame };
+}
+
+/** NSW corridors first (by their own grade), then Overture carriageways outside every corridor. */
+function nswCorridorPartition(
+  model: Pick<CityModel, "nsw">,
+  overture: Record<RoadGrade, MultiPolygon>,
+  frame: Polygon,
+  corridors: NswCorridor[],
+): GroundRoadPartition {
+  const { union, difference, intersection } = clip();
+  const centrelines = model.nsw?.roadCentrelines ?? [];
+  const byGrade: Record<RoadGrade, Polygon[]> = { arterial: [], local: [], path: [] };
+  for (const corridor of corridors) byGrade[corridorGrade(corridor, centrelines)].push([corridor.outer, ...corridor.holes].map(closeRing) as Polygon);
+  const nsw: Record<RoadGrade, MultiPolygon> = { arterial: [], local: [], path: [] };
+  let corridorUnion: MultiPolygon = [];
+  for (const grade of ROAD_GRADES_BY_PRIORITY) {
+    if (byGrade[grade].length === 0) continue;
+    nsw[grade] = snapMulti(intersection(union(...byGrade[grade]), frame));
+    corridorUnion = corridorUnion.length ? union(corridorUnion, nsw[grade]) : nsw[grade];
+  }
+  const roads = { arterial: [], local: [], path: [] } as Record<RoadGrade, MultiPolygon>;
+  let taken: MultiPolygon = [];
+  let overtureM2 = 0;
+  for (const grade of ROAD_GRADES_BY_PRIORITY) {
+    const outside = overture[grade].length && corridorUnion.length ? difference(snapMulti(overture[grade]), corridorUnion) : snapMulti(overture[grade]);
+    const fill = nsw[grade].length && outside.length ? union(nsw[grade], outside) : nsw[grade].length ? nsw[grade] : outside;
+    if (fill.length === 0) continue;
+    const mine = taken.length ? difference(fill, taken) : fill;
+    overtureM2 += multiArea(taken.length && outside.length ? difference(outside, taken) : outside);
+    roads[grade] = mine;
+    taken = taken.length ? union(taken, fill) : fill;
   }
   const remaining = taken.length ? difference(frame, taken) : [frame];
-  if (reserve.length === 0) {
-    const pieces = [...ROAD_GRADES_BY_PRIORITY.map((g) => roads[g]), remaining].map(snapMulti);
-    const welded = weldTJunctions(pieces);
-    return { roads: { arterial: welded[0]!, local: welded[1]!, path: welded[2]! }, remaining: welded[3]!, reserve: [], frame };
-  }
-  const pieces = [...ROAD_GRADES_BY_PRIORITY.map((g) => roads[g]), remaining, reserve].map(snapMulti);
+  const pieces = [...ROAD_GRADES_BY_PRIORITY.map((g) => roads[g]), remaining].map(snapMulti);
   const welded = weldTJunctions(pieces);
-  return { roads: { arterial: welded[0]!, local: welded[1]!, path: welded[2]! }, remaining: welded[3]!, reserve: welded[4]!, frame };
+  return {
+    roads: { arterial: welded[0]!, local: welded[1]!, path: welded[2]! },
+    remaining: welded[3]!,
+    frame,
+    sources: { nswCorridorM2: multiArea(corridorUnion), overtureM2 },
+  };
 }
 
 function closeRing(ring: Pt[]): [number, number][] {
