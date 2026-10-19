@@ -1,6 +1,6 @@
 import { screenPenAttrs } from "../lib/drawingStyle";
 import { getColour } from "../lib/colours";
-import { NSW_LABEL_LINE, type NswPlanItems } from "../lib/nswPlan";
+import { type NswPlanItems } from "../lib/nswPlan";
 import type { NswPlanStyle } from "../lib/nswPlanStyle";
 import { svgPolyline, svgRings } from "../lib/svgPlan";
 import type { Pt } from "../types";
@@ -20,6 +20,14 @@ export function NswPlanUnder({ items, style }: { items: NswPlanItems; style: Nsw
       {items.corridors.length > 0 && (
         <path d={items.corridors.map((rings) => svgRings(rings)).join(" ")} fill={style.corridorFill} fillRule="nonzero" stroke="none" />
       )}
+      {/* Decoded lot / easement / corridor attributes as native hover text; invisible, under the buildings. */}
+      <g data-layer="nsw-records" fill="transparent" stroke="none" pointerEvents="fill">
+        {items.records.map((record, index) => (
+          <path key={`r${index}`} d={svgRings(record.rings)} fillRule="evenodd">
+            <title>{record.text}</title>
+          </path>
+        ))}
+      </g>
     </g>
   );
 }
@@ -53,7 +61,7 @@ export function NswPlanLabels({ items, style, sizeM }: { items: NswPlanItems; st
         <text
           key={`nl${index}`}
           x={label.at[0]}
-          y={-label.at[1] + NSW_LABEL_LINE[label.kind] * sizeM * 1.15}
+          y={-label.at[1]}
           fontSize={sizeM}
           fontWeight={label.kind === "zone" ? 700 : 500}
           fill={colour[label.kind]}
