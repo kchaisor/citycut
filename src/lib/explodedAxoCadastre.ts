@@ -17,6 +17,8 @@ export type CadastreOverlay = {
   rawCount: number;
   /** True when the page cap stopped the fetch early. */
   partial: boolean;
+  /** "nsw" when the parcels are NSW Spatial Services lots (NSW mode). Absent for Vicmap. */
+  source?: "nsw";
 };
 
 export type CadastreFetchResult = { ok: true; data: CadastreOverlay } | { ok: false; message: string };
@@ -84,6 +86,14 @@ export async function fetchCadastreOverlay(
   signal?: AbortSignal,
   fetchImpl?: typeof fetch,
 ): Promise<CadastreFetchResult> {
+  if (model.region === "nsw") {
+    const lots = model.nsw?.lots;
+    if (!lots || model.nsw!.status.lots.status === "failed") return { ok: false, message: "Cadastre unavailable: NSW lots did not load" };
+    return {
+      ok: true,
+      data: { parcels: lots.map((lot) => [lot.outer, ...lot.holes]), rawCount: lots.length, partial: model.nsw!.status.lots.status === "partial", source: "nsw" },
+    };
+  }
   const pages: GeoJsonPage[] = [];
   for (let page = 0; page < AXO_CADASTRE_MAX_PAGES; page += 1) {
     const res = await fetchTierJson(cadastreQueryUrl(model, page * AXO_CADASTRE_PAGE_SIZE), {
@@ -102,6 +112,10 @@ export async function fetchCadastreOverlay(
 }
 
 export function axoCadastreNote(data: CadastreOverlay): string {
+  if (data.source === "nsw") {
+    const lots = `Cadastre: NSW Spatial Services lots, ${data.parcels.length} lots`;
+    return data.partial ? `${lots}. Partial: not every page loaded` : lots;
+  }
   const base = `Cadastre: Vicmap Parcel, ${data.parcels.length} parcels (${data.rawCount} records, strata de-duplicated)`;
   return data.partial ? `${base}. Partial: page limit reached` : base;
 }

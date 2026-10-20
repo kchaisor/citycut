@@ -52,7 +52,12 @@ import { replaceTreeNote, treeSourceLoadNotes, treeTierCounts } from "./lib/tree
 import { fetchVicmapTreesDetailed, vicmapPointsToTrees, VICMAP_ATTRIBUTION } from "./lib/vicmapTrees";
 import { COM_TREES_CREDIT } from "./lib/comTreesCredit";
 import { loadContoursForCut } from "./lib/vicmapContours";
-import { contourTerrain, contourTerrainNotice } from "./lib/contourTerrain";
+import { contourGroundSourceName, contourTerrain, contourTerrainNotice } from "./lib/contourTerrain";
+import { detectRegion } from "./lib/region";
+import { fetchNswLayers, type NswLayers } from "./lib/nswLayers";
+import { loadNswContoursForCut } from "./lib/nswContours";
+import { nswSourceNote, nswWaterAreas } from "./lib/nswModel";
+import { NSW_BUILDING_ESTIMATE_NOTE } from "./lib/sources/registry";
 import { fetchOvertureBuildingsForCut } from "./lib/overtureBuildings";
 import { qaForcedCrashFromSearch, qaModeFromSearch } from "./lib/qaCameraBridge";
 import { siteBuildingOverlaps } from "./lib/siteBuildings";
@@ -329,6 +334,8 @@ export default function App() {
       if (controller.signal.aborted) return;
       publishLabel(label);
       const center = { lon: view.lon, lat: view.lat };
+      // NSW mode: a cut whose centre is in NSW uses NSW open data; Victoria (and anywhere else) is unchanged.
+      const nswMode = detectRegion(center).region === "nsw";
       const terrainTask = layers.terrain
         ? fetchTerrainForCut(center, sideM, controller.signal)
             .then((field) => ({ field, error: null as string | null }))
@@ -408,7 +415,7 @@ export default function App() {
       const enrichmentManifestTask = modelLayers.buildings
         ? fetchEnrichmentManifest(controller.signal)
         : Promise.resolve(null);
-      const useTierTask = modelLayers.buildings
+      const useTierTask = modelLayers.buildings && !nswMode
         ? loadUseTiers(bounds, center, { signal: controller.signal }).catch((err: unknown) => {
             if (controller.signal.aborted) throw err;
             const failures: UseTierFailure[] = [
@@ -420,11 +427,11 @@ export default function App() {
       // Trees come from the pre-baked Greater Melbourne file first (treesPrebake.ts). When it is
       // missing, fails, or does not cover the cut, the live servers are the backup: each tree page
       // has its own time limit (treeSourceFetch.ts) and a failure becomes a note in the Tree sizes panel.
-      const prebakeTask: Promise<PrebakeResult | null> = loadTreeTiers
+      const prebakeTask: Promise<PrebakeResult | null> = loadTreeTiers && !nswMode
         ? loadPrebakedTrees(bounds, controller.signal)
         : Promise.resolve(null);
       const comTask = prebakeTask.then((prebake) => {
-        if (!loadTreeTiers) return { rows: [] as ComTree[], partial: false, error: null as string | null };
+        if (!loadTreeTiers || nswMode) return { rows: [] as ComTree[], partial: false, error: null as string | null };
         if (prebake?.ok) return { rows: prebake.trees.com, partial: false, error: null as string | null };
         return fetchComTreesDetailed(bounds, controller.signal).catch((err: unknown) => {
           if (controller.signal.aborted) throw err;
@@ -436,7 +443,18 @@ export default function App() {
         });
       });
       // Contours also load for Terrain: the 3D ground is built from Vicmap metro contours when they cover the cut.
-      const contourTask = layers.contours || layers.terrain
+      const contourTask = (layers.contours || layers.terrain) && nswMode
+        ? loadNswContoursForCut({
+            center,
+            sideM,
+            bounds,
+            signal: controller.signal,
+            terrain: () => terrainTask.then((result) => result.field),
+          }).catch((err: unknown) => {
+            if (controller.signal.aborted) throw err;
+            return null;
+          })
+        : layers.contours || layers.terrain
         ? loadContoursForCut({
             center,
             sideM,
@@ -449,7 +467,7 @@ export default function App() {
           })
         : Promise.resolve(null);
       const vicmapTask = prebakeTask.then((prebake) => {
-        if (!loadTreeTiers) return { rows: [] as VicmapPoint[], partial: false, error: null as string | null };
+        if (!loadTreeTiers || nswMode) return { rows: [] as VicmapPoint[], partial: false, error: null as string | null };
         if (prebake?.ok) return { rows: prebake.trees.vicmap, partial: false, error: null as string | null };
         return fetchVicmapTreesDetailed(bounds, controller.signal).catch((err: unknown) => {
           if (controller.signal.aborted) throw err;
@@ -460,7 +478,13 @@ export default function App() {
           };
         });
       });
-      const tramTask = modelLayers.roads
+      const nswTask: Promise<NswLayers | null> = nswMode
+        ? fetchNswLayers(center, sideM, { signal: controller.signal, frameShape: frameShapeRef.current }).catch((err: unknown) => {
+            if (controller.signal.aborted) throw err;
+            return null;
+          })
+        : Promise.resolve(null);
+      const tramTask = modelLayers.roads && !nswMode
         ? fetchTramLinesForCut(
             { center, sideM, frameShape: frameShapeRef.current, placeLabel: label, layers: modelLayers, buildings: [], roads: [], areas: [], trees: [], roadKm: 0, buildingCapHit: false, sourceNote: "" },
             bounds,
@@ -468,7 +492,7 @@ export default function App() {
           )
         : Promise.resolve({ lines: null, loadFailed: false });
       const comFetchBounds = paddedComFetchBounds(center, sideM);
-      const damTask = modelLayers.buildings
+      const damTask = modelLayers.buildings && !nswMode
         ? fetchDevelopmentFloorRecords(comFetchBounds, controller.signal)
             .then((records) => ({ records, error: null as string | null }))
             .catch((err: unknown) => {
@@ -511,6 +535,7 @@ export default function App() {
         tramResult,
         damResult,
         comHeightsResult,
+        nswResult,
       ] = await Promise.all([
         terrainTask,
         comTask,
@@ -525,6 +550,7 @@ export default function App() {
         tramTask,
         damTask,
         comHeightsTask,
+        nswTask,
       ]);
       const prebake = await prebakeTask;
       // OSM points from the file only when it was baked from the same Overture release as the
@@ -596,7 +622,9 @@ export default function App() {
       const terrainNotice =
         layers.terrain && !groundDem ? contourTerrainNotice(contourGround, contourLayer, Boolean(terrainResult.field)) : null;
       let sourceNote = FLAT_GROUND_NOTE;
-      if (contourGround) {
+      if (contourGround && nswMode) {
+        sourceNote = `Ground is interpolated from ${contourGroundSourceName(contourLayer!)} (Laplace on a ${contourGround.field.spacingM.toFixed(1)} m grid, ${Math.round(contourGround.coverage * 100)}% contour-supported${terrainResult.field ? "; Mapterhorn DEM elsewhere" : ""}). Elevations ${contourGround.field.min.toFixed(1)}–${contourGround.field.max.toFixed(1)} m AHD. Each building sits on the lowest sample along its footprint.`;
+      } else if (contourGround) {
         sourceNote = `Ground is interpolated from Vicmap metro ${contourLayer!.interval} m contours (Laplace on a ${contourGround.field.spacingM.toFixed(1)} m grid, ${Math.round(contourGround.coverage * 100)}% contour-supported${terrainResult.field ? "; Mapterhorn DEM elsewhere" : ""}). Elevations ${contourGround.field.min.toFixed(1)}–${contourGround.field.max.toFixed(1)} m AHD. Each building sits on the lowest sample along its footprint.`;
       } else if (terrainResult.field) {
         sourceNote = terrainNote(terrainResult.field, contourLayer?.source === "dem");
@@ -611,7 +639,9 @@ export default function App() {
           hasEsaLandCover: baseResult.stats.hasEsaLandCover,
         })}.`;
       }
-      if (modelLayers.buildings) {
+      if (modelLayers.buildings && nswMode) {
+        sourceNote = `${sourceNote} ${NSW_BUILDING_ESTIMATE_NOTE}`;
+      } else if (modelLayers.buildings) {
         logLidarEnrichmentStatus(enrichmentManifest);
         sourceNote = `${sourceNote} Building height uses CoM 2023 measured footprints (always applied in Melbourne), then the LiDAR (Vicmap, licensed) tier (${lidarLegendLine(enrichmentManifest).toLowerCase()}), then CoM development floors × 3 m for one building per completed development (approved or under-construction records are ignored), then Overture height, num_floors × 3 m, otherwise Vicmap zone defaults labelled as estimates (3 m under 40 m², else by zone, else 9 m). Manual height edits override every other source. Use follows offline enrichment tiles (Overture class, CoM CLUE, Vicmap zone), with live zones when tiles fail.`;
       }
@@ -627,6 +657,10 @@ export default function App() {
       if (tramResult.loadFailed) {
         heightSourceLoadWarnings.push("PTV tram routes failed to load.");
       }
+      if (nswMode && modelLayers.buildings) heightSourceLoadWarnings.push(NSW_BUILDING_ESTIMATE_NOTE);
+      const nswWater = nswMode && modelLayers.waterGreen ? nswWaterAreas(baseResult.areas, nswResult) : null;
+      if (nswMode) sourceNote = `${sourceNote} ${nswSourceNote(nswResult)}`;
+      if (nswWater?.note) sourceNote = `${sourceNote} ${nswWater.note}`;
       const buildingCapHit = overtureResult.buildingCapHit;
       if (buildingCapHit) sourceNote = `${sourceNote} Building count was capped at 4000.`;
       if (contourLayer && contourLayer.source !== "dem") {
@@ -711,7 +745,7 @@ export default function App() {
         roads: modelLayers.roads ? transportResult.roads : [],
         tramLines: tramResult.lines ?? undefined,
         tramLinesLoadFailed: tramResult.loadFailed || undefined,
-        areas: modelLayers.waterGreen ? withRoundaboutIslands(baseResult.areas, modelLayers.roads ? (transportResult.roundabouts ?? []) : [], { sideM, shape: frameShapeRef.current }) : [],
+        areas: modelLayers.waterGreen ? withRoundaboutIslands(nswWater ? nswWater.areas : baseResult.areas, modelLayers.roads ? (transportResult.roundabouts ?? []) : [], { sideM, shape: frameShapeRef.current }) : [],
         carParks: modelLayers.waterGreen ? baseResult.carParks : undefined,
         trees,
         roadKm: modelLayers.roads ? transportResult.roadKm : 0,
@@ -755,6 +789,7 @@ export default function App() {
         comFootprintFetchError: comFootprintFetchError ?? undefined,
         heightSourceLoadWarnings:
           heightSourceLoadWarnings.length > 0 ? heightSourceLoadWarnings : undefined,
+        ...(nswMode ? { region: "nsw" as const, nsw: nswResult, nswWaterNote: nswWater?.note ?? null } : {}),
       };
       if (modelLayers.roads) {
         draftModel.blocks = computeCityBlocks(draftModel);

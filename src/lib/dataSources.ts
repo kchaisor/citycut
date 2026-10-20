@@ -1,4 +1,5 @@
 import type { CityModel } from "../types";
+import { NSW_BUILDING_ESTIMATE_NOTE } from "./sources/registry";
 import type { ComBuildingHeightsStatus } from "./comBuildingHeightsStatus";
 import { treeTierCounts } from "./trees";
 import { estimatedIslandCount, ROUNDABOUT_ISLAND_ESTIMATE_NOTE } from "./roundabouts";
@@ -153,8 +154,8 @@ export function buildDataSources({ model, comHeights, comMeasuredCount, comError
             label: "Terrain",
             status: "ok",
             detail:
-              model.terrain.source === "Vicmap metro contours"
-                ? `Vicmap metro contours · ${model.terrain.spacingM.toFixed(1)} m grid`
+              model.terrain.source === "Vicmap metro contours" || (model.region === "nsw" && /contours/i.test(model.terrain.source))
+                ? `${model.terrain.source} · ${model.terrain.spacingM.toFixed(1)} m grid`
                 : `${model.terrain.source} · z${model.terrain.zoom} · ${model.terrain.metresPerPixel.toFixed(1)} m/px`,
             notes: model.terrainNotice ? [model.terrainNotice] : [],
           }
@@ -169,14 +170,17 @@ export function buildDataSources({ model, comHeights, comMeasuredCount, comError
   }
 
   if (model.contourLayer) {
+    const notes = model.contourLayer.notes ?? [];
     rows.push({
       id: "contours",
       label: "Contours",
-      status: "ok",
+      status: notes.length > 0 ? "partial" : "ok",
       detail: `${model.contourLayer.label} · every ${model.contourLayer.interval} m`,
-      notes: [],
+      notes,
     });
   }
+
+  if (model.region === "nsw") rows.push(...nswDataSourceRows(model));
 
   const estimatedIslands = estimatedIslandCount(model.areas);
   if (estimatedIslands > 0) {
@@ -272,6 +276,59 @@ export function buildDataSources({ model, comHeights, comMeasuredCount, comError
     );
   }
 
+  if (model.region === "nsw") return nswOnlyRows(model, rows);
+  return rows;
+}
+
+/** Victorian-only rows (CoM, Vicmap, PTV, baked use tiles) say nothing about a NSW cut. */
+const VIC_ONLY_ROWS = new Set(["com-heights", "com-dam", "enrichment", "zones", "coverage", "lidar", "trees-com", "trees-vicmap", "trams", "parcel"]);
+
+function nswOnlyRows(model: CityModel, rows: DataSourceRow[]): DataSourceRow[] {
+  const kept = rows.filter((row) => !VIC_ONLY_ROWS.has(row.id));
+  if (model.layers.buildings) {
+    kept.splice(1, 0, {
+      id: "nsw-building-use",
+      label: "Building use",
+      status: "ok",
+      detail: "Overture building class only (no NSW use tiles yet)",
+      notes: [],
+    });
+  }
+  return kept;
+}
+
+/** NSW mode rows: one per NSW layer, with its own status, count, time and failure note. */
+export function nswDataSourceRows(model: CityModel): DataSourceRow[] {
+  const rows: DataSourceRow[] = [];
+  if (!model.nsw) {
+    rows.push({ id: "nsw", label: "NSW Spatial Services and planning layers", status: "failed", detail: "NSW layers did not load", notes: [] });
+    return rows;
+  }
+  for (const layer of Object.values(model.nsw.status)) {
+    rows.push({
+      id: layer.id,
+      label: layer.label,
+      status: layer.status,
+      detail:
+        layer.status === "failed"
+          ? "Not drawn"
+          : `${count(layer.count, "feature")} · ${(layer.ms / 1000).toFixed(1)} s${layer.pages > 1 ? ` · ${layer.pages} pages` : ""}`,
+      notes: layer.note ? [layer.note] : [],
+    });
+  }
+  if (model.nswWaterNote) {
+    const water = rows.find((row) => row.id === "nsw-water");
+    if (water && !water.notes.includes(model.nswWaterNote)) water.notes.push(model.nswWaterNote);
+  }
+  if (model.layers.buildings) {
+    rows.push({
+      id: "nsw-building-heights",
+      label: "Building heights (estimate)",
+      status: "partial",
+      detail: "Overture/OSM height, floors × 3 m, or default",
+      notes: [NSW_BUILDING_ESTIMATE_NOTE],
+    });
+  }
   return rows;
 }
 

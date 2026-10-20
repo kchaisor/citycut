@@ -184,6 +184,8 @@ export function altitudeOnInterval(z: number, interval: number): boolean {
 }
 
 export const DEFAULT_COARSE_INTERVAL_M = 5;
+/** Sources fine enough (1 m) to thin to the coarse step at small plan scales. */
+const FINE_CONTOUR_SOURCES: ReadonlySet<ContourSourceId> = new Set(["vicmap-metro", "cos-1m", "cos-nsw"]);
 export const DEFAULT_COARSE_FROM_SCALE = 2500;
 
 /**
@@ -198,7 +200,7 @@ export function drawnContourInterval(
   coarseIntervalM = DEFAULT_COARSE_INTERVAL_M,
   coarseFromScale = DEFAULT_COARSE_FROM_SCALE,
 ): number {
-  if (source !== "vicmap-metro") return nativeInterval;
+  if (!FINE_CONTOUR_SOURCES.has(source)) return nativeInterval;
   if (!(coarseIntervalM > nativeInterval) || !(planScale >= coarseFromScale)) return nativeInterval;
   return coarseIntervalM;
 }
@@ -227,8 +229,9 @@ export function contourDrawerLabel(
   coarseFromScale = DEFAULT_COARSE_FROM_SCALE,
 ): string {
   const drawn = drawnContourInterval(layer.source, layer.interval, planScale, coarseIntervalM, coarseFromScale);
-  if (layer.source !== "vicmap-metro" || drawn === layer.interval) return layer.label;
+  if (drawn === layer.interval) return layer.label;
   const fine = finestContourScale(coarseFromScale);
+  if (layer.source !== "vicmap-metro") return `${layer.label}, drawn every ${intervalText(drawn)} m (${intervalText(layer.interval)} m at 1:${fine})`;
   return `Vicmap Elevation ${intervalText(drawn)} m (${intervalText(layer.interval)} m at 1:${fine})`;
 }
 

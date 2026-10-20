@@ -1,3 +1,4 @@
+import { regionCredit } from "./sources/registry";
 import type { PdfChunk, PdfPath, PdfText } from "./aiDocument";
 import { getColour } from "./colours";
 import { hexRgb } from "./lineweights";
@@ -309,9 +310,12 @@ export function explodedAxoChunks(
     satelliteOn: true,
     explodedAxoOverlaysOn: overlayOn,
     cadastreOn: settings.layerVisible.cadastre,
+    ...(model.region === "nsw" ? { nsw: true } : {}),
   });
   const treesCredit = comTreesCreditLine(model);
-  const credited = treesCredit ? `${credit} ${treesCredit}.` : credit;
+  const nswCredit = regionCredit(model.region);
+  const regional = nswCredit ? `${credit} ${nswCredit}.` : credit;
+  const credited = treesCredit ? `${regional} ${treesCredit}.` : regional;
   const withSatellite = satelliteNote ? `${credited} ${satelliteNote}` : credited;
   const note = sourceNotes.length ? `${withSatellite} ${sourceNotes.join(". ")}.` : withSatellite;
   chunks.push({

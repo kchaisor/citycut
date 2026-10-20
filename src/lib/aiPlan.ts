@@ -26,6 +26,8 @@ import { heliodonPlanPdfChunk } from "./heliodonPlanExport";
 import type { HeliodonDiagramExportOptions } from "./heliodonDiagram";
 import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { planPaths } from "./svgPlan";
+import { regionCredit } from "./sources/registry";
+import { NSW_SITE_LAYERS, nswPlanChunks } from "./nswPlanExport";
 import { importedMassingStrokeStyle, planBuildingStrokeStyle } from "./planBuildingFill";
 import { windPlanPdfChunk } from "./windExport";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
@@ -38,7 +40,7 @@ import {
 } from "./explodedAxoExport";
 import { defaultExplodedAxoSettings, type ExplodedAxoSettings } from "./explodedAxo";
 import { stableExportModel } from "./exportStableOrder";
-import type { CityModel, Pt } from "../types";
+import type { CityModel, ContourSourceId, Pt } from "../types";
 
 export const SITE_LAYER_ORDER = [
   "Frame",
@@ -105,10 +107,10 @@ function creditLine(
   model: CityModel,
   layout: SheetLayout,
   interval: number | null,
-  source: "vicmap-metro" | "vicmap-state" | "dem" | null,
+  source: ContourSourceId | null,
   windOn: boolean,
 ): string {
-  const parts = [plainDataCredit({ prefix: "CityCut.", windOn, satelliteOn: false })];
+  const parts = [plainDataCredit({ prefix: "CityCut.", windOn, satelliteOn: false, ...(model.region === "nsw" ? { nsw: true } : {}) })];
   const comCredit = comBuildingHeightCreditLine(model);
   if (comCredit) parts.push(comCredit);
   const treesCredit = comTreesCreditLine(model);
@@ -118,6 +120,8 @@ function creditLine(
   } else if (interval) {
     parts.push(`Contours every ${interval} m.`);
   }
+  const nswCredit = regionCredit(model.region);
+  if (nswCredit) parts.push(`${nswCredit}.`);
   if (layout.note) parts.push(layout.note);
   return parts.join(" ");
 }
@@ -127,7 +131,7 @@ function annotation(
   layout: SheetLayout,
   interval: number | null,
   style: StrokeStyle,
-  source: "vicmap-metro" | "vicmap-state" | "dem" | null = null,
+  source: ContourSourceId | null = null,
   windOn = false,
 ): PdfChunk {
   const ink = hexRgb(style.color);
@@ -387,6 +391,8 @@ export function sitePlanChunks(
       })),
     });
   }
+  // NSW mode only (model.nsw); Victorian sheets get no NSW chunks.
+  const nswChunks = nswPlanChunks(model, layout);
   const roadRings = plan.roadFill.flatMap((polygon) => mapRings(polygon, model.sideM, layout));
   const blockFill = plan.blocks
     .map((rings) => mapRings(rings, model.sideM, layout))
@@ -402,6 +408,7 @@ export function sitePlanChunks(
       })),
     });
   }
+  chunks.push(...nswChunks.under);
   if (roadRings.length > 0) {
     const kerb = style.kerbOn ? pen(style.kerb) : null;
     chunks.push({
@@ -438,6 +445,7 @@ export function sitePlanChunks(
       })),
     });
   }
+  chunks.push(...nswChunks.lines);
   const treePen = pen(style.tree);
   if (plan.trees.length > 0) {
     chunks.push({
@@ -514,6 +522,7 @@ export function sitePlanChunks(
   const siteBoundary = siteBoundaryChunk(model.siteBoundaryLines ?? [], model, layout, style);
   if (siteBoundary) chunks.push(siteBoundary);
   if (resolved.wind?.table) chunks.push(windPlanPdfChunk(resolved.wind.table, resolved.wind.period, layout, model.sideM));
+  chunks.push(...nswChunks.labels);
   chunks.push(frameStroke(layout, style.frame));
   if (heliodon) chunks.push(heliodonPlanPdfChunk(model.sideM, layout, heliodon, scale));
   chunks.push(
@@ -576,6 +585,15 @@ export function sitePlanLayerOrder(chunks: PdfChunk[]): string[] {
   if (!order.includes("Contour labels") && chunks.some((chunk) => chunk.name === "Contour labels")) {
     const at = order.indexOf("Contours");
     order.splice(at + 1, 0, "Contour labels");
+  }
+  // NSW layers only when the sheet has them, so Victorian layer lists are unchanged.
+  const nsw = NSW_SITE_LAYERS.filter((name) => chunks.some((chunk) => chunk.name === name));
+  if (nsw.length > 0) {
+    const under = nsw.filter((name) => name === "NSW zoning" || name === "NSW road corridors");
+    const lines = nsw.filter((name) => name !== "NSW zoning" && name !== "NSW road corridors" && name !== "NSW planning labels");
+    order.splice(order.indexOf("Blocks") + 1, 0, ...under);
+    order.splice(order.indexOf("Trams") + 1, 0, ...lines);
+    if (nsw.includes("NSW planning labels")) order.splice(order.indexOf("Wind") + 1, 0, "NSW planning labels");
   }
   return order;
 }

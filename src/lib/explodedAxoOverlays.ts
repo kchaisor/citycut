@@ -18,6 +18,8 @@ async function publicTransportOverlaysSafe(
   bounds: ReturnType<typeof squareBBox>,
   signal?: AbortSignal,
 ) {
+  // PTV tiles are Victorian; NSW mode has no public transport source yet.
+  if (model.region === "nsw") return null;
   try {
     return await fetchPublicTransportOverlays(model, bounds, signal);
   } catch {
