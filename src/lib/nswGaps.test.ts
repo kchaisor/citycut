@@ -126,6 +126,14 @@ describe("ArcGIS retries and refusals", () => {
   });
 });
 
+describe("ArcGIS without a retry policy", () => {
+  it("reports a network error as failed instead of throwing", async () => {
+    const r = await queryArcgisLayer(spec({ retry: undefined }), BOX, { fetchImpl: async () => { throw new TypeError("Failed to fetch"); } });
+    expect(r.status).toBe("failed");
+    expect(r.note).toMatch(/Failed to fetch/);
+  });
+});
+
 describe("tiled ArcGIS queries", () => {
   it("splits the box into n × n tiles that cover it", () => {
     const tiles = splitBounds(BOX, 3);

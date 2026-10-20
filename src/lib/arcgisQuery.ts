@@ -336,7 +336,7 @@ export async function queryArcgisLayer(
         };
       }
       const timedOut = budgetSpent || attemptTimedOut;
-      const seconds = Math.round((budgetSpent ? timeoutMs : retry!.attemptTimeoutMs) / 1000);
+      const seconds = Math.round((budgetSpent || !retry ? timeoutMs : retry.attemptTimeoutMs) / 1000);
       return {
         ok: false,
         transient: true,
