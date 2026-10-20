@@ -246,8 +246,9 @@ describe("NSW layers reach the site plan and the ground", async () => {
     expect(order.indexOf("NSW zoning")).toBeGreaterThan(order.indexOf("Blocks"));
     expect(JSON.stringify(chunks)).toContain("HOB RL 109 m AHD");
   });
-  it("puts road corridor outside the carriageway into Ground::RoadReserve", () => {
+  it("builds Ground::Roads from NSW road corridors and reports the source split", () => {
     const split = groundRoadPartition(model);
-    expect(split.reserve.length).toBeGreaterThan(0);
+    expect(split.sources?.nswCorridorM2).toBeGreaterThan(0);
+    expect(Object.values(split.roads).some((m) => m.length > 0)).toBe(true);
   });
 });

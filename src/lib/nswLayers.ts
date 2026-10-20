@@ -1,9 +1,10 @@
 import { squareBBox, signedArea } from "./geo";
-import { queryArcgisLayer, type ArcgisFetch, type ArcgisResult, type GeoJsonFeature } from "./arcgisQuery";
-import { clipAreaToSiteFrame, clipPolylineSiteFrame, DEFAULT_SITE_FRAME_SHAPE } from "./siteFrame";
-import { linesFromGeometry, polygonsFromGeometry } from "./vicmapWfs";
+import { queryArcgisTiled, type ArcgisFetch, type ArcgisResult, type GeoJsonFeature } from "./arcgisQuery";
+import { clipAreaToSiteFrame, clipPolylineSiteFrame, DEFAULT_SITE_FRAME_SHAPE, pointInSiteFrame } from "./siteFrame";
+import { linesFromGeometry, pointFromGeometry, polygonsFromGeometry } from "./vicmapWfs";
+import { decodeField, decodeSubtype, UnknownCodes } from "./nswDomains";
 import { NSW_LAYERS, nswRoadGrade, type NswLayerKey } from "./sources/nsw";
-import type { LonLat, Pt, RoadGrade, SiteFrameShape } from "../types";
+import type { BuildingUse, LonLat, Pt, RoadGrade, SiteFrameShape } from "../types";
 
 /**
  * NSW mode layers for one cut, in the cut's local east/north metres and clipped to the frame.
@@ -24,13 +25,29 @@ export type NswFsrArea = NswPolygon & { fsr: number | null; layClass: string; ep
 export type NswHeritageArea = NswPolygon & { name: string; significance: string };
 export type NswCentreline = { line: Pt[]; grade: RoadGrade; name: string };
 
-export type NswLayerStatus = Pick<ArcgisResult, "status" | "note" | "ms" | "pages"> & { id: string; label: string; count: number };
+/** Decoded attributes for a tooltip / inspector: a title and label → text rows. */
+export type NswRecordInfo = { title: string; rows: [string, string][] };
+export type NswLot = NswPolygon & { info: NswRecordInfo };
+export type NswEasement = NswPolygon & { info: NswRecordInfo };
+export type NswCorridor = NswPolygon & { info: NswRecordInfo; name: string; pathway: boolean };
+export type NswRailKind = "heavy" | "light" | "monorail" | "siding" | "other";
+export type NswRail = { line: Pt[]; kind: NswRailKind; operational: boolean; tunnel: boolean; name: string };
+export type NswStation = { at: Pt; name: string; operational: boolean; lightRail: boolean };
+/** Spatial Services BuildingComplexPoint: an official facility point and the CityCut use it implies. */
+export type NswBuildingComplex = { at: Pt; facility: string; type: string; name: string; use: BuildingUse };
+
+export type NswLayerStatus = Pick<ArcgisResult, "status" | "note" | "ms" | "pages"> & { id: string; label: string; count: number; retries: number };
 
 export type NswLayers = {
-  lots: NswPolygon[];
-  easements: NswPolygon[];
-  roadCorridors: NswPolygon[];
+  lots: NswLot[];
+  easements: NswEasement[];
+  roadCorridors: NswCorridor[];
   roadCentrelines: NswCentreline[];
+  railways: NswRail[];
+  stations: NswStation[];
+  buildingComplexes: NswBuildingComplex[];
+  /** Codes missing from the published domains (shown raw), one sentence per layer. */
+  codeNotes: string[];
   water: NswPolygon[];
   zoning: NswZone[];
   hob: NswHobArea[];
@@ -62,6 +79,12 @@ export function fsrLabel(fsr: number | null, layClass: string): string {
 
 function formatNumber(n: number): string {
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
+}
+
+/** "AUSTRALIAN NATIONAL MARITIME MUSEUM" → "Australian National Maritime Museum". */
+function titleCase(value: string): string {
+  if (value !== value.toUpperCase()) return value;
+  return value.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase());
 }
 
 function text(value: unknown): string {
@@ -160,7 +183,82 @@ function edgeDistance(poly: NswPolygon, p: Pt): number {
 }
 
 type LayerKey = keyof NswLayers["status"];
-const LAYER_KEYS: LayerKey[] = ["lots", "easements", "roadCorridors", "roadCentrelines", "water", "zoning", "hob", "fsr", "heritage"];
+const LAYER_KEYS: LayerKey[] = [
+  "lots",
+  "easements",
+  "roadCorridors",
+  "roadCentrelines",
+  "railways",
+  "stations",
+  "buildingComplexes",
+  "water",
+  "zoning",
+  "hob",
+  "fsr",
+  "heritage",
+];
+
+const RAIL_KINDS: Record<string, NswRailKind> = { "1": "heavy", "2": "light", "3": "monorail", "4": "siding" };
+
+/** CityCut use for a Spatial Services building complex (facility subtype, complex type). */
+export function nswComplexUse(subtype: unknown, type: unknown): BuildingUse {
+  const s = Number(subtype);
+  const t = Number(type);
+  if (s === 2 && [4, 21, 22, 24].includes(t)) return "residential";
+  if (s === 4 && t === 10) return "retail";
+  if (s === 4 && t === 7) return "residential";
+  if (s === 1 || s === 2 || s === 3) return "civic";
+  if (s === 4 || s === 5) return "industrial";
+  if (s === 6) return "recreation";
+  return "unclassified";
+}
+
+function lotInfo(props: Record<string, unknown>, unknown: UnknownCodes): NswRecordInfo {
+  const kind = decodeSubtype("lots", props.classsubtype);
+  const title = decodeField("lots", "itstitlestatus", props.itstitlestatus);
+  const hasStratum = decodeField("lots", "hasstratum", props.hasstratum);
+  const level = decodeField("lots", "stratumlevel", props.stratumlevel);
+  unknown.add("classsubtype", kind);
+  unknown.add("itstitlestatus", title);
+  unknown.add("hasstratum", hasStratum);
+  unknown.add("stratumlevel", level);
+  const id = text(props.lotidstring) || [text(props.lotnumber), text(props.planlabel)].filter(Boolean).join(" ");
+  const rows: [string, string][] = [];
+  if (kind) rows.push(["Kind", kind.text]);
+  if (title) rows.push(["Title", title.text]);
+  if (hasStratum && hasStratum.text !== "Undefined") rows.push(["Stratum", hasStratum.text === "True" ? `Yes${level ? `, ${level.text}` : ""}` : hasStratum.text === "False" ? "No" : hasStratum.text]);
+  else if (level && !/^ground level$/i.test(level.text)) rows.push(["Stratum level", level.text]);
+  if (text(props.planlabel)) rows.push(["Plan", text(props.planlabel)]);
+  return { title: id ? `Lot ${id}` : "Lot", rows };
+}
+
+function easementInfo(props: Record<string, unknown>, unknown: UnknownCodes): NswRecordInfo {
+  const kind = decodeSubtype("easements", props.classsubtype);
+  const type = decodeField("easements", "easementtype", props.easementtype, props.classsubtype);
+  const level = decodeField("easements", "stratumlevel", props.stratumlevel);
+  unknown.add("classsubtype", kind);
+  unknown.add("easementtype", type);
+  unknown.add("stratumlevel", level);
+  const rows: [string, string][] = [];
+  if (kind) rows.push(["Class", kind.text]);
+  if (text(props.easementwidth)) rows.push(["Width", text(props.easementwidth)]);
+  if (level && !/^ground level$/i.test(level.text)) rows.push(["Stratum level", level.text]);
+  return { title: type && type.text !== "Undefined" ? type.text : "Easement", rows };
+}
+
+function corridorInfo(props: Record<string, unknown>, unknown: UnknownCodes): NswRecordInfo {
+  const kind = decodeSubtype("roadCorridors", props.classsubtype);
+  const type = decodeField("roadCorridors", "roadcorridortype", props.roadcorridortype, props.classsubtype);
+  const road = decodeField("roadCorridors", "roadtype", props.roadtype);
+  unknown.add("classsubtype", kind);
+  unknown.add("roadcorridortype", type);
+  unknown.add("roadtype", road);
+  const rows: [string, string][] = [];
+  if (kind) rows.push(["Class", kind.text]);
+  if (type && type.text !== "Undefined") rows.push(["Corridor", type.text]);
+  if (road && road.text !== "Undefined") rows.push(["Type", road.text]);
+  return { title: text(props.roadnamelabel) || "Road corridor", rows };
+}
 
 export function nswLayersFromResults(
   results: Record<LayerKey, ArcgisResult>,
@@ -172,9 +270,40 @@ export function nswLayersFromResults(
   const status = {} as NswLayers["status"];
   for (const key of LAYER_KEYS) {
     const r = results[key];
-    status[key] = { id: r.id, label: NSW_LAYERS[key].label, status: r.status, note: r.note, ms: r.ms, pages: r.pages, count: r.features.length };
+    status[key] = { id: r.id, label: NSW_LAYERS[key].label, status: r.status, note: r.note, ms: r.ms, pages: r.pages, count: r.features.length, retries: r.retries ?? 0 };
   }
   const polys = (key: LayerKey) => clipPolygons(results[key].features, origin, sideM, shape);
+  const points = (key: LayerKey) =>
+    results[key].features
+      .map((feature) => ({ at: pointFromGeometry(feature.geometry, origin), props: feature.properties }))
+      .filter((item): item is { at: Pt; props: Record<string, unknown> } => item.at != null && pointInSiteFrame(item.at, sideM, shape));
+  const unknownLots = new UnknownCodes("NSW lots");
+  const unknownEasements = new UnknownCodes("NSW easements");
+  const unknownCorridors = new UnknownCodes("NSW road corridors");
+  const unknownRail = new UnknownCodes("NSW railways");
+  const unknownComplex = new UnknownCodes("NSW building complexes");
+  const railways: NswRail[] = [];
+  for (const feature of results.railways.features) {
+    const props = feature.properties;
+    const kind = decodeSubtype("railways", props.classsubtype);
+    unknownRail.add("classsubtype", kind);
+    const status = decodeField("railways", "operationalstatus", props.operationalstatus);
+    unknownRail.add("operationalstatus", status);
+    const on = decodeField("railways", "railontype", props.railontype);
+    unknownRail.add("railontype", on);
+    for (const line of linesFromGeometry(feature.geometry, origin)) {
+      for (const part of clipPolylineSiteFrame(line, sideM, shape)) {
+        if (part.length < 2) continue;
+        railways.push({
+          line: part,
+          kind: RAIL_KINDS[text(props.classsubtype)] ?? "other",
+          operational: text(props.operationalstatus) === "1",
+          tunnel: text(props.railontype) === "3",
+          name: text(props.railwayname),
+        });
+      }
+    }
+  }
   const centrelines: NswCentreline[] = [];
   for (const feature of results.roadCentrelines.features) {
     const grade = nswRoadGrade(feature.properties.functionhierarchy);
@@ -185,11 +314,45 @@ export function nswLayersFromResults(
       }
     }
   }
+  const lots = polys("lots").map(({ poly, props }) => ({ ...poly, info: lotInfo(props, unknownLots) }));
+  const easements = polys("easements").map(({ poly, props }) => ({ ...poly, info: easementInfo(props, unknownEasements) }));
+  const roadCorridors = polys("roadCorridors").map(({ poly, props }) => ({
+    ...poly,
+    info: corridorInfo(props, unknownCorridors),
+    name: text(props.roadnamelabel),
+    pathway: text(props.classsubtype) === "1" && text(props.roadcorridortype) === "2",
+  }));
+  const stations = points("stations").map(({ at, props }) => {
+    const name = text(props.generalname);
+    return { at, name, operational: text(props.operationalstatus) === "1", lightRail: /\b(SLR|LIGHT RAIL)\b/i.test(name) };
+  });
+  const buildingComplexes = points("buildingComplexes")
+    .filter(({ props }) => text(props.operationalstatus) === "" || text(props.operationalstatus) === "1")
+    .map(({ at, props }) => {
+      const facility = decodeSubtype("buildingComplexes", props.classsubtype);
+      const type = decodeField("buildingComplexes", "buildingcomplextype", props.buildingcomplextype, props.classsubtype);
+      unknownComplex.add("classsubtype", facility);
+      unknownComplex.add("buildingcomplextype", type);
+      return {
+        at,
+        facility: facility?.text ?? "Facility",
+        type: type && type.text !== "Undefined" ? type.text : "",
+        name: titleCase(text(props.generalname)),
+        use: nswComplexUse(props.classsubtype, props.buildingcomplextype),
+      };
+    });
+  const codeNotes = [unknownLots, unknownEasements, unknownCorridors, unknownRail, unknownComplex]
+    .map((codes) => codes.note())
+    .filter((note): note is string => Boolean(note));
   return {
-    lots: polys("lots").map((item) => item.poly),
-    easements: polys("easements").map((item) => item.poly),
-    roadCorridors: polys("roadCorridors").map((item) => item.poly),
+    lots,
+    easements,
+    roadCorridors,
     roadCentrelines: centrelines,
+    railways,
+    stations,
+    buildingComplexes,
+    codeNotes,
     water: polys("water").map((item) => item.poly).filter((poly) => Math.abs(signedArea(poly.outer)) >= 200),
     zoning: polys("zoning").map(({ poly, props }) => ({
       ...poly,
@@ -214,7 +377,10 @@ export function nswLayersFromResults(
   };
 }
 
-/** All NSW cut layers in parallel; each layer has its own 20 s limit and status. */
+/**
+ * All NSW cut layers in parallel; each layer (each tile, for tiled layers) has its own 20 s limit,
+ * transient retries where the spec allows them, and its own status.
+ */
 export async function fetchNswLayers(
   center: LonLat,
   sideM: number,
@@ -223,7 +389,7 @@ export async function fetchNswLayers(
   const started = Date.now();
   const bounds = squareBBox(center, sideM);
   const entries = await Promise.all(
-    LAYER_KEYS.map(async (key) => [key, await queryArcgisLayer(NSW_LAYERS[key], bounds, options)] as const),
+    LAYER_KEYS.map(async (key) => [key, await queryArcgisTiled(NSW_LAYERS[key], bounds, options)] as const),
   );
   const results = Object.fromEntries(entries) as Record<LayerKey, ArcgisResult>;
   return nswLayersFromResults(results, center, sideM, options.frameShape ?? DEFAULT_SITE_FRAME_SHAPE, Date.now() - started);

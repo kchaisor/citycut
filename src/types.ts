@@ -108,6 +108,8 @@ export type BuildingFeat = {
   heightManual?: true;
   use: BuildingUse;
   source: TypologySource;
+  /** NSW mode: Spatial Services building complex (facility type, name) that set `use`. */
+  nswFacility?: string;
   /** Offline enrichment tier (matches pipeline `use_source`). */
   useSourceTier?: BuildingUseSourceTier;
   /** Metres from ELVIS LiDAR bake when tier is lidar. */
@@ -354,6 +356,10 @@ export type CityModel = {
   nsw?: import("./lib/nswLayers").NswLayers | null;
   /** NSW mode: water came from Overture because NSW HydroArea failed (visible note). */
   nswWaterNote?: string | null;
+  /** NSW mode: road surface area by source (NSW road corridors vs Overture carriageways), m². */
+  nswRoadSurface?: { nswCorridorM2: number; overtureM2: number } | null;
+  /** NSW mode: buildings whose use came from a Spatial Services building complex point. */
+  nswUseMatched?: number;
 };
 
 export type ViewState = {

@@ -15,7 +15,7 @@ import { siteBoundaryLineGeometry } from "./siteBoundaryDash3d";
 import { clipTransportLines, drapedDashedLineGeometry } from "./dashedTransportLines";
 import { readDrawingStyle } from "./drawingStyle";
 import { footprintBase, sampleTerrain, terrainBuffers, terrainTint } from "./terrain";
-import { drapeTriangles, GROUND_REMAINING_LAYER, GROUND_ROAD_RESERVE_LAYER, GROUND_ROADS_LAYER, groundGeometry, groundRoadPartition, groundTriangles } from "./groundRoads";
+import { drapeTriangles, GROUND_REMAINING_LAYER, GROUND_ROADS_LAYER, groundGeometry, groundRoadPartition, groundTriangles } from "./groundRoads";
 import { clipTrianglesToTerrainGrid, terrainMeshHeight } from "./terrainDrape";
 import type { AreaFeat, BuildingFeat, BuildingUse, CityModel, Pt, Ring, RoadGrade, TerrainField } from "../types";
 
@@ -571,23 +571,6 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     mesh.userData.objectColor = ROAD_RGB[grade];
     order(mesh, layer.renderOrder);
     group.add(mesh);
-  }
-  // NSW mode: the cadastral road corridor around the carriageway (verges, footpaths). Empty in Victoria.
-  if (groundSplit && model.terrain && groundSplit.reserve.length > 0) {
-    const geometry = groundGeometry(drapeTriangles(groundTriangles(groundSplit.reserve, model.terrain, model.sideM), model.terrain, model.sideM));
-    if (geometry) {
-      const layer = roadGradeLayer("path");
-      const colour = getColour("--road-reserve-3d");
-      const material = paint(matteStandardMaterial({ color: colour }), layer);
-      material.name = "Roads";
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.name = "Roads";
-      mesh.userData.exportLayer = GROUND_ROAD_RESERVE_LAYER;
-      mesh.userData.layerColor = hexRgb(colour);
-      mesh.userData.objectColor = hexRgb(colour);
-      order(mesh, layer.renderOrder);
-      group.add(mesh);
-    }
   }
   const siteFill = getColour("--site-building");
   const siteLayerName = "Buildings::Site";

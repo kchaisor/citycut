@@ -148,7 +148,6 @@ export const COLOUR_KEYS = [
   "--axo-tree-canopy",
   "--axo-tree-canopy-shade",
   "--axo-tree-trunk",
-  "--road-reserve-3d",
   "--nsw-road-corridor",
   "--nsw-lot-line",
   "--nsw-easement",
@@ -273,7 +272,6 @@ export const COLOUR_GROUPS = [
     id: "nsw",
     title: "NSW mode",
     keys: [
-      "--road-reserve-3d",
       "--nsw-road-corridor",
       "--nsw-lot-line",
       "--nsw-easement",
@@ -436,7 +434,6 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--axo-tree-canopy": "Exploded axo tree canopy (lit)",
   "--axo-tree-canopy-shade": "Exploded axo tree canopy (shaded side)",
   "--axo-tree-trunk": "Exploded axo tree trunk",
-  "--road-reserve-3d": "NSW road corridor ground (verge)",
   "--nsw-road-corridor": "NSW road corridor",
   "--nsw-lot-line": "NSW lot line",
   "--nsw-easement": "NSW easement",

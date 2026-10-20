@@ -161,7 +161,6 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-study-surface` | `#FFFFFF` | Ground, roads, and parks in the 3D viewport while the sun path is on. |
 | `--card-white` | `#FAFAF8` | Building and surface massing in white-card 3D display mode. |
 | `--card-ground` | `#F2F2F0` | Ground and terrain in white-card 3D display mode. |
-| `--road-reserve-3d` | `#D6D1C7` | NSW mode: cadastral road corridor outside the carriageway in the 3D view, the 3D-view Illustrator file, and the Rhino `Ground::RoadReserve` layer. |
 | `--nsw-road-corridor` | `#E9E5DC` | NSW mode: cadastral road corridor fill under the carriageway on the site plan. |
 | `--nsw-lot-line` | `#5E5E5E` | NSW mode: cadastral lot boundaries on the site plan. |
 | `--nsw-easement` | `#C0392B` | NSW mode: easement outline and hatch on the site plan. |

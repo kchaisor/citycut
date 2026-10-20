@@ -19,7 +19,7 @@ import { useColourRevision } from "../lib/useColourRevision";
 import type { CityModel } from "../types";
 import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
 import { NswPlanLabels, NswPlanLines, NswPlanUnder } from "./NswPlanLayers";
-import { nswPlanItems } from "../lib/nswPlan";
+import { NSW_PLAN_LABEL_SHARE, nswPlanItems } from "../lib/nswPlan";
 import { readNswPlanStyle } from "../lib/nswPlanStyle";
 import { planShadowRings, type PlanShadowInput } from "../lib/buildingShadows";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
@@ -389,7 +389,7 @@ export function DrawingPlan({
                 {...screenPenAttrs(style.tree)}
               />
             ))}
-            {nswItems && nswStyle && <NswPlanLabels items={nswItems} style={nswStyle} sizeM={model.sideM * 0.009} />}
+            {nswItems && nswStyle && <NswPlanLabels items={nswItems} style={nswStyle} sizeM={model.sideM * NSW_PLAN_LABEL_SHARE} />}
             <path d={framePathD} fill="none" {...screenPenAttrs(style.frame, "miter")} />
             {heliodon && (
               <HeliodonPlanOverlay input={heliodon} planScale={planScale} sideM={model.sideM} />

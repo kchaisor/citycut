@@ -4,7 +4,7 @@ import { dashSegments, type StrokeStyle } from "./drawingStyle";
 import type { SheetLayout } from "./figureGround";
 import { openRing } from "./geo";
 import { hexRgb } from "./lineweights";
-import { NSW_LABEL_LINE, nswPlanItems } from "./nswPlan";
+import { nswPlanItems } from "./nswPlan";
 import { readNswPlanStyle } from "./nswPlanStyle";
 import type { CityModel, Pt } from "../types";
 
@@ -32,6 +32,9 @@ function pen(style: StrokeStyle): Partial<PdfPath> | null {
   return { stroke: hexRgb(style.color), strokeMm: style.mm, ...(dash ? { dashMm: dash } : {}), cap: "butt", join: "miter" };
 }
 
+/** Printed planning label size. */
+export const NSW_LABEL_MM = 1.6;
+
 export function nswPlanChunks(
   model: CityModel,
   layout: SheetLayout,
@@ -39,7 +42,8 @@ export function nswPlanChunks(
   const empty = { under: [], lines: [], labels: [] };
   if (!model.nsw) return empty;
   const style = readNswPlanStyle();
-  const items = nswPlanItems(model, style.hatchM);
+  // Labels are thinned at their printed size (NSW_LABEL_MM on paper, in metres on the ground).
+  const items = nswPlanItems(model, style.hatchM, (NSW_LABEL_MM * layout.scale) / 1000);
   if (!items) return empty;
   const side = model.sideM;
   const ring = (r: Pt[]) => openRing(r).map((p) => sheetPoint(p[0], p[1], side, layout));
@@ -97,7 +101,7 @@ export function nswPlanChunks(
       paths: items.centrelines.map((line) => ({ rings: [line.map((p) => sheetPoint(p[0], p[1], side, layout))], close: false, ...centrePen })),
     });
   }
-  const sizeMm = 1.6;
+  const sizeMm = NSW_LABEL_MM;
   const colour = { zone: style.zoneLabel, hob: style.hobLabel, fsr: style.fsrLabel } as const;
   const labels: PdfChunk[] =
     items.labels.length > 0
@@ -108,7 +112,7 @@ export function nswPlanChunks(
               const [x, y] = sheetPoint(label.at[0], label.at[1], side, layout);
               return {
                 x: x - label.text.length * sizeMm * 0.27,
-                y: y - NSW_LABEL_LINE[label.kind] * sizeMm * 1.15 - sizeMm * 0.35,
+                y: y - sizeMm * 0.35,
                 sizeMm,
                 text: label.text,
                 color: hexRgb(colour[label.kind]),

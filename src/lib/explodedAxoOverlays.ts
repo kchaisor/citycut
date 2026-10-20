@@ -8,6 +8,7 @@ import {
   fetchTransportRail,
 } from "./explodedAxoOverlayFetch";
 import { fetchPublicTransportOverlays } from "./explodedAxoPt";
+import { nswTransportOverlay } from "./nswTransport";
 import { fetchOvertureBaseForCut } from "./overtureBase";
 import { fetchCadastreOverlay } from "./explodedAxoCadastre";
 import { fetchTerrainForCut } from "./fetchTerrain";
@@ -103,6 +104,10 @@ export function useExplodedAxoOverlays(model: CityModel, layerVisible: Record<Ax
       if (layerVisible.transport) {
         tasks.push(
           (async () => {
+            if (model.region === "nsw") {
+              next.transport = (await nswTransportOverlay(model, { signal: controller.signal })) ?? "unavailable";
+              return;
+            }
             const rail = await fetchTransportRail(model, controller.signal);
             const pt = await publicTransportOverlaysSafe(model, bounds, controller.signal);
             if (!rail.ok && !pt) {
@@ -184,6 +189,10 @@ export async function loadExplodedAxoOverlayBundle(
   if (layerVisible.transport) {
     tasks.push(
       (async () => {
+        if (model.region === "nsw") {
+          next.transport = (await nswTransportOverlay(model, { signal: signal })) ?? "unavailable";
+          return;
+        }
         const rail = await fetchTransportRail(model, signal);
         const pt = await publicTransportOverlaysSafe(model, bounds, signal);
         if (!rail.ok && !pt) next.transport = "unavailable";

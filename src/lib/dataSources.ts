@@ -1,5 +1,9 @@
 import type { CityModel } from "../types";
 import { NSW_BUILDING_ESTIMATE_NOTE } from "./sources/registry";
+import { TFNSW_KEY_NOTE } from "./nswTransport";
+
+const NSW_DECODED_ROWS = new Set(["nsw-lots", "nsw-easements", "nsw-road-corridors", "nsw-railways", "nsw-building-complexes"]);
+
 import type { ComBuildingHeightsStatus } from "./comBuildingHeightsStatus";
 import { treeTierCounts } from "./trees";
 import { estimatedIslandCount, ROUNDABOUT_ISLAND_ESTIMATE_NOTE } from "./roundabouts";
@@ -290,7 +294,10 @@ function nswOnlyRows(model: CityModel, rows: DataSourceRow[]): DataSourceRow[] {
       id: "nsw-building-use",
       label: "Building use",
       status: "ok",
-      detail: "Overture building class only (no NSW use tiles yet)",
+      detail:
+        (model.nswUseMatched ?? 0) > 0
+          ? `NSW Spatial Services building complexes for ${count(model.nswUseMatched ?? 0, "building")}; Overture class for the rest`
+          : "Overture building class (no NSW building complex in this cut)",
       notes: [],
     });
   }
@@ -312,10 +319,43 @@ export function nswDataSourceRows(model: CityModel): DataSourceRow[] {
       detail:
         layer.status === "failed"
           ? "Not drawn"
-          : `${count(layer.count, "feature")} · ${(layer.ms / 1000).toFixed(1)} s${layer.pages > 1 ? ` · ${layer.pages} pages` : ""}`,
+          : `${count(layer.count, "feature")} · ${(layer.ms / 1000).toFixed(1)} s${layer.pages > 1 ? ` · ${layer.pages} pages` : ""}${
+              layer.retries > 0 ? ` · ${count(layer.retries, "retry", "retries")}` : ""
+            }${NSW_DECODED_ROWS.has(layer.id) ? " · codes decoded" : ""}`,
       notes: layer.note ? [layer.note] : [],
     });
   }
+  for (const note of model.nsw.codeNotes) {
+    const prefix = note.split(":")[0]!;
+    const row = rows.find((item) => item.label.startsWith(prefix));
+    (row ?? rows[0])!.notes.push(note);
+  }
+  rows.push({
+    id: "nsw-datum",
+    label: "NSW datum",
+    status: "ok",
+    detail: "GDA2020: Spatial Services through the official NTv2 grid (server); planning layers and City of Sydney contours through EPSG:8048",
+    notes: [],
+  });
+  if (model.nswRoadSurface) {
+    const { nswCorridorM2, overtureM2 } = model.nswRoadSurface;
+    const total = nswCorridorM2 + overtureM2;
+    const share = (m2: number) => (total > 0 ? Math.round((m2 / total) * 100) : 0);
+    rows.push({
+      id: "nsw-road-surface",
+      label: "Road surfaces",
+      status: "ok",
+      detail: `NSW road corridors ${share(nswCorridorM2)}% · Overture carriageways ${share(overtureM2)}%`,
+      notes: [],
+    });
+  }
+  rows.push({
+    id: "nsw-public-transport",
+    label: "Public transport stops",
+    status: "ok",
+    detail: "NSW stations and light rail stops; OSM bus stops (exploded axo)",
+    notes: [TFNSW_KEY_NOTE],
+  });
   if (model.nswWaterNote) {
     const water = rows.find((row) => row.id === "nsw-water");
     if (water && !water.notes.includes(model.nswWaterNote)) water.notes.push(model.nswWaterNote);

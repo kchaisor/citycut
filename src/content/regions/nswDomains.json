@@ -1,0 +1,449 @@
+{
+ "source": "ArcGIS layer metadata (coded-value domains and subtypes)",
+ "generated": "2026-10-19",
+ "layers": {
+  "lots": {
+   "sources": [
+    "https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Land_Parcel_Property_Theme/FeatureServer/8",
+    "https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Land_Parcel_Property_Theme/MapServer/8"
+   ],
+   "subtypeField": "classsubtype",
+   "subtypes": {
+    "1": "StandardLot",
+    "2": "StandardPartLot",
+    "3": "Strata",
+    "4": "Stratum"
+   },
+   "fields": {
+    "itstitlestatus": {
+     "0": "Undefined",
+     "1": "ITSTitle",
+     "2": "Manual Volume/Folio",
+     "3": "Old System",
+     "4": "Untitled",
+     "5": "Acquired Land",
+     "6": "ITSTitle Pending",
+     "7": "Cancelled",
+     "8": "Cancelled Residue Remains",
+     "9": "Dummy",
+     "10": "Consolidated Title of Multiple Lots"
+    },
+    "stratumlevel": {
+     "0": "Ground Level",
+     "1": "Level 1",
+     "2": "Level 2",
+     "3": "Level 3",
+     "4": "Level 4",
+     "5": "Level 5",
+     "6": "Level 6",
+     "7": "Level 7",
+     "8": "Level 8",
+     "9": "Level 9",
+     "10": "Level 10",
+     "-10": "Level -10",
+     "-9": "Level -9",
+     "-8": "Level -8",
+     "-7": "Level -7",
+     "-6": "Level -6",
+     "-5": "Level -5",
+     "-4": "Level -4",
+     "-3": "Level -3",
+     "-2": "Level -2",
+     "-1": "Level -1"
+    },
+    "hasstratum": {
+     "0": "Undefined",
+     "1": "False",
+     "2": "True"
+    }
+   },
+   "bySubtype": {}
+  },
+  "easements": {
+   "sources": [
+    "https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Land_Parcel_Property_Theme/FeatureServer/9",
+    "https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Common/Admin_3857/MapServer/25"
+   ],
+   "subtypeField": "classsubtype",
+   "subtypes": {
+    "1": "Primary",
+    "2": "Secondary"
+   },
+   "fields": {
+    "stratumlevel": {
+     "0": "Ground Level",
+     "1": "Level 1",
+     "2": "Level 2",
+     "3": "Level 3",
+     "4": "Level 4",
+     "5": "Level 5",
+     "6": "Level 6",
+     "7": "Level 7",
+     "8": "Level 8",
+     "9": "Level 9",
+     "10": "Level 10",
+     "-10": "Level -10",
+     "-9": "Level -9",
+     "-8": "Level -8",
+     "-7": "Level -7",
+     "-6": "Level -6",
+     "-5": "Level -5",
+     "-4": "Level -4",
+     "-3": "Level -3",
+     "-2": "Level -2",
+     "-1": "Level -1"
+    }
+   },
+   "bySubtype": {
+    "1": {
+     "easementtype": {
+      "0": "Undefined",
+      "1": "Gas",
+      "2": "Electricity",
+      "3": "Water",
+      "4": "Right of way"
+     }
+    },
+    "2": {
+     "easementtype": {
+      "0": "Undefined",
+      "1": "Easement for Access",
+      "2": "Easement for Batter",
+      "3": "Cross easement",
+      "4": "Easement for Support",
+      "5": "Easement for Water Main",
+      "6": "Easement for Drain Water",
+      "7": "Easement for Rising Main",
+      "8": "Easement for Services",
+      "9": "Easement for Sewer",
+      "10": "Easement for Sewerage",
+      "11": "Easement for Sewerage Purposes",
+      "12": "Easement for Drain Sewerage",
+      "13": "Right of Sewerage",
+      "14": "Easement for Railway transmission Line",
+      "15": "Easement for Railway Purposes",
+      "16": "Easement for Railway Viaduct",
+      "17": "Easement for Electricity Purposes",
+      "18": "Easement in Stratum",
+      "19": "Right of Footway",
+      "20": "Easement for Elevated Road",
+      "21": "Easement for Light and Air",
+      "22": "Easement for Overhanging Eaves and Gutters",
+      "23": "Easement for Party Wall",
+      "24": "Easement for Telemetry Line",
+      "25": "Easement for River Gauging Station",
+      "26": "Easement for Scour and Overflow",
+      "27": "Easement for Tunnel",
+      "28": "Easement for Construction",
+      "29": "Easement for Stock Yards"
+     }
+    }
+   }
+  },
+  "roadCorridors": {
+   "sources": [
+    "https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Common/Admin_3857/MapServer/26"
+   ],
+   "subtypeField": "classsubtype",
+   "subtypes": {
+    "0": "Undefined",
+    "1": "PublicRoadInUse",
+    "2": "PrivateRoad",
+    "3": "ProposedRoad"
+   },
+   "fields": {
+    "roadtype": {
+     "0": "Undefined",
+     "1": "Road",
+     "2": "Intersection"
+    }
+   },
+   "bySubtype": {
+    "1": {
+     "roadcorridortype": {
+      "0": "Undefined",
+      "1": "Road",
+      "2": "Pathway"
+     }
+    },
+    "2": {
+     "roadcorridortype": {
+      "0": "Undefined",
+      "1": "Private Access",
+      "2": "Public Street",
+      "3": "Tollway"
+     }
+    },
+    "3": {
+     "roadcorridortype": {
+      "0": "Undefined",
+      "1": "Public Road",
+      "2": "Motorway",
+      "3": "Freeway",
+      "4": "Tollway",
+      "5": "Private Road"
+     }
+    }
+   }
+  },
+  "roadCentrelines": {
+   "sources": [
+    "https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Transport_Theme/FeatureServer/5"
+   ],
+   "subtypeField": null,
+   "subtypes": {},
+   "fields": {
+    "operationalstatus": {
+     "1": "Operational",
+     "2": "UnderConstruction",
+     "3": "Proposed",
+     "4": "Disused",
+     "5": "Dismantled",
+     "6": "Closed",
+     "7": "RestrictPublication",
+     "8": "Notional"
+    },
+    "functionhierarchy": {
+     "1": "Motorway",
+     "2": "PrimaryRoad",
+     "3": "ArterialRoad",
+     "4": "SubArterialRoad",
+     "5": "DistributorRoad",
+     "6": "LocalRoad",
+     "7": "UrbanServiceLane",
+     "8": "Track-Vehicular",
+     "9": "Path",
+     "10": "DedicatedBusWay",
+     "11": "AccessWay"
+    },
+    "roadontype": {
+     "1": "OnGround",
+     "2": "OnBridge",
+     "3": "InTunnel",
+     "4": "OnFloodway",
+     "5": "OnCulvert",
+     "6": "OnDamWall",
+     "7": "ThroughWater",
+     "8": "OnStairs"
+    },
+    "surface": {
+     "0": "UnknownSurface",
+     "1": "SealedSurface",
+     "2": "UnsealedSurface",
+     "3": "Unsealed4WDSurface",
+     "4": "SF_Unsealed4WDSurface"
+    },
+    "lanecount": {
+     "0": "Unknown Lanes",
+     "1": "OneLane",
+     "2": "TwoOrMoreLanes"
+    }
+   },
+   "bySubtype": {}
+  },
+  "railways": {
+   "sources": [
+    "https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Transport_Theme/FeatureServer/7",
+    "https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Transport_Theme/MapServer/7"
+   ],
+   "subtypeField": "classsubtype",
+   "subtypes": {
+    "1": "HeavyRail",
+    "2": "LightRail",
+    "3": "Monorail",
+    "4": "HeavyRailSiding"
+   },
+   "fields": {
+    "operationalstatus": {
+     "1": "Operational",
+     "2": "UnderConstruction",
+     "3": "Proposed",
+     "4": "Disused",
+     "5": "Dismantled",
+     "6": "Closed",
+     "7": "RestrictPublication",
+     "8": "Notional"
+    },
+    "gauge": {
+     "0": "Undefined",
+     "1": "Standard",
+     "2": "Narrow"
+    },
+    "railontype": {
+     "1": "OnGround",
+     "2": "OnBridge",
+     "3": "InTunnel",
+     "4": "OnCulvert"
+    }
+   },
+   "bySubtype": {}
+  },
+  "stations": {
+   "sources": [
+    "https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Transport_Theme/MapServer/0"
+   ],
+   "subtypeField": "classsubtype",
+   "subtypes": {
+    "1": "Airport",
+    "2": "BusInterchange",
+    "3": "Helipad",
+    "4": "Marina",
+    "5": "ParkingArea",
+    "6": "RailwayStation",
+    "7": "RoadsideRestArea",
+    "8": "RoadsideEmergencyTelephone",
+    "9": "HeavyVehicleCheckStation"
+   },
+   "fields": {
+    "operationalstatus": {
+     "1": "Operational",
+     "2": "UnderConstruction",
+     "3": "Proposed",
+     "4": "Disused",
+     "5": "Dismantled",
+     "6": "Closed",
+     "7": "RestrictPublication",
+     "8": "Notional"
+    }
+   },
+   "bySubtype": {}
+  },
+  "buildingComplexes": {
+   "sources": [
+    "https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Features_of_Interest_Category/MapServer/3"
+   ],
+   "subtypeField": "classsubtype",
+   "subtypes": {
+    "1": "EducationFacility",
+    "2": "CommunityFacility",
+    "3": "MedicalFacility",
+    "4": "IndustryFacility",
+    "5": "UtilityFacility",
+    "6": "RecreationFacility"
+   },
+   "fields": {
+    "operationalstatus": {
+     "1": "Operational",
+     "2": "UnderConstruction",
+     "3": "Proposed",
+     "4": "Disused",
+     "5": "Dismantled",
+     "6": "Closed",
+     "7": "RestrictPublication",
+     "8": "Notional"
+    }
+   },
+   "bySubtype": {
+    "1": {
+     "buildingcomplextype": {
+      "0": "Undefined",
+      "1": "PrimarySchool",
+      "2": "HighSchool",
+      "3": "TechnicalCollege",
+      "4": "University",
+      "5": "Academy",
+      "6": "SpecialSchool",
+      "7": "Pre-School",
+      "8": "CombinedPrimarySecondarySchool"
+     }
+    },
+    "2": {
+     "buildingcomplextype": {
+      "0": "Undefined",
+      "1": "Ambulance",
+      "2": "ArtGallery",
+      "4": "NursingHome",
+      "5": "ConventMonastery",
+      "6": "CourtHouse",
+      "7": "EmbassyConsulate",
+      "8": "FireStation-Bush",
+      "9": "FireStation-Urban",
+      "10": "Gaol",
+      "11": "Library",
+      "12": "LocalGovtChambers",
+      "14": "Museum",
+      "15": "Observatory",
+      "16": "PlaceOfWorship",
+      "17": "PoliceStation",
+      "18": "PostOffice",
+      "19": "SES_Facility",
+      "20": "TouristInformationCentre",
+      "21": "RetirementVillage",
+      "22": "RelocatableHomeVillage",
+      "23": "ChildCareCentre",
+      "24": "Tourist Park / Home Village"
+     }
+    },
+    "3": {
+     "buildingcomplextype": {
+      "0": "GeneralHospital",
+      "1": "PsychiatricHospital",
+      "2": "EmergencyHospital",
+      "3": "CommunityMedicalCentre",
+      "4": "ChildrensHospital",
+      "5": "IntegratedHealthService",
+      "6": "MultiPurposeService"
+     }
+    },
+    "4": {
+     "buildingcomplextype": {
+      "0": "Undefined",
+      "1": "Abattoir",
+      "2": "Brickworks",
+      "3": "Co-operative",
+      "4": "Depot",
+      "5": "Depot-NRMA",
+      "6": "Factory",
+      "7": "Homestead",
+      "8": "ResearchStation",
+      "9": "Shipyard",
+      "10": "ShoppingCentre"
+     }
+    },
+    "5": {
+     "buildingcomplextype": {
+      "0": "Undefined",
+      "1": "FiltrationPlant",
+      "2": "GasFacility",
+      "3": "PowerStation-FuelDriven",
+      "4": "PowerStation-GeoThermal",
+      "5": "PowerStation-Hydro",
+      "6": "PowerStation-Solar",
+      "7": "PowerStation-Wind",
+      "8": "PumpingStation",
+      "9": "SewageWorks",
+      "10": "SubStation",
+      "11": "TransmissionStation"
+     }
+    },
+    "6": {
+     "buildingcomplextype": {
+      "0": "Undefined",
+      "2": "CaravanPark",
+      "3": "Club",
+      "12": "SportsCentre",
+      "15": "SwimmingPoolFacility",
+      "17": "TouristAttraction",
+      "18": "Zoo"
+     }
+    }
+   }
+  },
+  "water": {
+   "sources": [
+    "https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Water_Theme/FeatureServer/6"
+   ],
+   "subtypeField": null,
+   "subtypes": {},
+   "fields": {
+    "perenniality": {
+     "0": "NotApplicable",
+     "1": "Perennial",
+     "2": "NonPerennial",
+     "3": "MainlyDry"
+    }
+   },
+   "bySubtype": {}
+  }
+ }
+}
