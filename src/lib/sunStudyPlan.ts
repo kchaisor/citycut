@@ -1,5 +1,6 @@
 import { sunAtMelbourneLocal } from "./solar";
 import { buildingHeightsFingerprint } from "./heightOverrides";
+import { inferHeightTier } from "./buildingHeightResolve";
 import type { PlanShadowInput } from "./buildingShadows";
 import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
 
@@ -152,6 +153,12 @@ export function sunStudyCasterModel(model: CityModel, casters: SunStudyCasters, 
   return { ...model, buildings: model.buildings.filter((building) => ids.has(building.id)) };
 }
 
+/** Same rule as the "Estimated" part of the height bar: zone default or an unmatched real source. */
+export function isEstimatedHeight(building: BuildingFeat): boolean {
+  const tier = inferHeightTier(building);
+  return tier === "zone_default" || tier === "real_source_unmatched";
+}
+
 export function estimatedHeightLabel(building: BuildingFeat): string {
   return `~${Math.round(building.height)} m est.`;
 }
@@ -170,7 +177,7 @@ export function estimatedHeightLabels(
   const ids = new Set(selected);
   const labels: EstLabel[] = [];
   for (const building of casters) {
-    if (!building.heightFromFallback) continue;
+    if (!isEstimatedHeight(building)) continue;
     let minE = Infinity;
     let maxE = -Infinity;
     let e = 0;

@@ -348,12 +348,11 @@ export function DrawingPlan({
           x = start.view.x + ((event.clientX - rect.left) / rect.width) * start.view.w;
           y = start.view.y + ((event.clientY - rect.top) / rect.height) * start.view.h;
         }
-        const hit = pickBuilding(model.buildings, [x, -y]);
-        if (!hit) return;
         // A click is not a pan: undo any sub-threshold drift so picking never moves the view.
         if (onViewportChange) onViewportChange(start.view);
         else setInternalView(start.view);
-        onSunStudyPick(hit.id);
+        const hit = pickBuilding(model.buildings, [x, -y]);
+        if (hit) onSunStudyPick(hit.id);
       }}
     >
       <rect x={view.x} y={view.y} width={view.w} height={view.h} fill={canvas} />

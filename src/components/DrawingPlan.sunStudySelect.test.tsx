@@ -27,13 +27,13 @@ const view = { x: -200, y: -200, w: 400, h: 400 };
 
 afterEach(cleanup);
 
-function setup(selected: number[] = []) {
+function setup(selected: number[] = [], study: typeof date | null = date) {
   const onPick = vi.fn();
   const onView = vi.fn();
   const { container } = render(
     <DrawingPlan
       model={model}
-      sunStudy={date}
+      sunStudy={study}
       sunStudySelected={selected}
       onSunStudyPick={onPick}
       viewport={view}
@@ -57,6 +57,17 @@ describe("DrawingPlan sun study picking", () => {
     fireEvent.pointerUp(svg, { clientX: 102, clientY: 101, pointerId: 1 });
     expect(onPick).toHaveBeenCalledWith(1);
     expect(onView).toHaveBeenLastCalledWith(view);
+  });
+
+  it("with the sun study off, a click neither picks nor resets the view (pan unchanged from before)", () => {
+    const { svg, onPick, onView, container } = setup([2], null);
+    fireEvent.pointerDown(svg, { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(svg, { clientX: 102, clientY: 101, pointerId: 1 });
+    fireEvent.pointerUp(svg, { clientX: 102, clientY: 101, pointerId: 1 });
+    expect(onPick).not.toHaveBeenCalled();
+    expect(onView).toHaveBeenCalledTimes(1);
+    expect(onView).toHaveBeenLastCalledWith({ ...view, x: view.x - 2, y: view.y - 1 });
+    expect(container.querySelectorAll("[data-selected-building], .sun-study-est").length).toBe(0);
   });
 
   it("a drag pans and picks nothing", () => {
