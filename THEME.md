@@ -205,6 +205,14 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--shadow-fill` | `#454545` | Site-plan building shadows on the site plan. |
 | `--sun-study-sun` | `#fff500` | Sun study: hourly sun icons (9am–3pm) on the selected-date path of the site plan sun diagram. Same size as the current-time sun, which hides while the study is on. |
 | `--sun-study-shadow` | `#4a5a70` | Sun study: one site plan shadow layer per hour (9am–3pm), each at 20% opacity. |
+| `--sun-study-block` | `#f4f4f2` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): blocks. |
+| `--sun-study-green` | `#eeeeec` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): parks and green space. |
+| `--sun-study-water` | `#e6e8ea` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): water. |
+| `--sun-study-road` | `#e9e9e7` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): road fill. |
+| `--sun-study-path` | `#f7f7f5` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): footpath fill. |
+| `--sun-study-path-edge` | `#d4d4d0` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): footpath edge. |
+| `--sun-study-building` | `#ffffff` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): buildings (the site building keeps its own colour). |
+| `--sun-study-tree` | `#b8e0b0` | Tree crowns in the sun study muted base plan, at 50% opacity. Pastel green so trees stay visible under the hourly shadows. |
 | `--axo-water` | `#7eb8da` | Exploded axo floodplain / water layer. |
 | `--axo-road` | `#e8883a` | Exploded axo roads layer. |
 | `--axo-green` | `#8fbc8f` | Exploded axo green spaces layer. |

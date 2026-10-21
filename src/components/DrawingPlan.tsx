@@ -24,7 +24,7 @@ import { readNswPlanStyle } from "../lib/nswPlanStyle";
 import { planShadowRings, type PlanShadowInput } from "../lib/buildingShadows";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
 import { planViewportExtent, type PlanViewport } from "../lib/planViewport";
-import { SUN_STUDY_SHADOW_OPACITY, type SunStudyDate } from "../lib/sunStudyPlan";
+import { SUN_STUDY_SHADOW_OPACITY, SUN_STUDY_TREE_OPACITY, type SunStudyDate } from "../lib/sunStudyPlan";
 import { useSunStudyShadows } from "./useSunStudyShadows";
 
 export type DrawingKind = "site" | "figure-ground" | "exploded-axo";
@@ -66,6 +66,7 @@ export function DrawingPlan({
   onViewportChange,
   fitCounter = 0,
   sunStudy = null,
+  sunStudyMuted = false,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -86,6 +87,8 @@ export function DrawingPlan({
   fitCounter?: number;
   /** Site plan sun study: hourly 9am–3pm shadow layers, hourly suns, scale bar and north arrow. */
   sunStudy?: SunStudyDate | null;
+  /** With the sun study on: draw the base plan in the quiet --sun-study-* fills. */
+  sunStudyMuted?: boolean;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
@@ -214,6 +217,8 @@ export function DrawingPlan({
   const study = figure ? null : sunStudy;
   const studyShadows = useSunStudyShadows(model, study);
   const studyShadowFill = getColour("--sun-study-shadow");
+  const muted = Boolean(study) && sunStudyMuted;
+  const mutedFill = (key: Parameters<typeof getColour>[0], normal: string) => (muted ? getColour(key) : normal);
   const annotationInk = figure ? figureFill : getColour("--sun-compass-label");
   const shadowRings = useMemo(() => {
     if (!shadowInput || figure || study) return [];
@@ -316,21 +321,23 @@ export function DrawingPlan({
       ) : (
         <>
             {plan.blocks.map((rings, index) => (
-              <path key={`b${index}`} d={svgRings(rings)} fill={blockFill} />
+              <path key={`b${index}`} d={svgRings(rings)} fill={mutedFill("--sun-study-block", blockFill)} />
             ))}
             {nswItems && nswStyle && <NswPlanUnder items={nswItems} style={nswStyle} />}
             {plan.green.map((rings, index) => (
-              <path key={`g${index}`} d={svgRings(rings)} fill={greenFill} {...screenPenAttrs(style.green)} />
+              <path key={`g${index}`} d={svgRings(rings)} fill={mutedFill("--sun-study-green", greenFill)} {...screenPenAttrs(style.green)} />
             ))}
             {plan.water.map((rings, index) => (
-              <path key={`w${index}`} d={svgRings(rings)} fill={waterFill} {...screenPenAttrs(style.water)} />
+              <path key={`w${index}`} d={svgRings(rings)} fill={mutedFill("--sun-study-water", waterFill)} {...screenPenAttrs(style.water)} />
             ))}
             {plan.pathFill.length > 0 && (
               <path
                 d={plan.pathFill.map((polygon) => svgRings(polygon)).join(" ")}
-                fill={style.pathFill}
+                fill={mutedFill("--sun-study-path", style.pathFill)}
                 fillRule="evenodd"
-                {...footpathEdgeSvgAttrs(style)}
+                {...(muted
+                  ? { stroke: getColour("--sun-study-path-edge"), strokeWidth: screenPx(0.1), vectorEffect: "non-scaling-stroke" as const }
+                  : footpathEdgeSvgAttrs(style))}
               />
             )}
             {plan.contours.map((line, index) => (
@@ -347,7 +354,7 @@ export function DrawingPlan({
             {plan.roadFill.length > 0 && (
               <path
                 d={plan.roadFill.map((polygon) => svgRings(polygon)).join(" ")}
-                fill={style.roadFill}
+                fill={mutedFill("--sun-study-road", style.roadFill)}
                 fillRule="evenodd"
                 {...(style.kerbOn ? screenPenAttrs(style.kerb) : { stroke: "none" })}
               />
@@ -387,7 +394,7 @@ export function DrawingPlan({
               <path
                 key={`b${index}`}
                 d={svgRings(building.rings)}
-                fill={building.fill}
+                fill={muted && !building.site ? getColour("--sun-study-building") : building.fill}
                 fillRule="evenodd"
                 {...screenPenAttrs(
                   building.imported
@@ -413,8 +420,8 @@ export function DrawingPlan({
                 cx={tree.east}
                 cy={-tree.north}
                 r={tree.r}
-                fill={treeFill}
-                fillOpacity={style.treeFillOpacity}
+                fill={mutedFill("--sun-study-tree", treeFill)}
+                fillOpacity={muted ? SUN_STUDY_TREE_OPACITY : style.treeFillOpacity}
                 {...screenPenAttrs(style.tree)}
               />
             ))}

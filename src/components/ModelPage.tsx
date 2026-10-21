@@ -1,4 +1,4 @@
-import type { SunStudyDate } from "../lib/sunStudyPlan";
+import { sunStudyMutedOn, type SunStudyDate } from "../lib/sunStudyPlan";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
@@ -1336,6 +1336,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 castShadows={solar.castShadows}
                 shadowInput={planShadowInput()}
                 sunStudy={sunStudyDate}
+                sunStudyMuted={sunStudyMutedOn(solar.sunStudy, solar.sunStudyMuted)}
                 uniformBuildings={!colourByUse && !showSource}
                 colourBySource={showSource}
                 highlightManual={showManualEdits && overrideResult.manualCount > 0}
