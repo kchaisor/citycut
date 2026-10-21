@@ -332,3 +332,34 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 .view-legend i.view-legend-path { height: 3px; border: 0; background: var(--view-path); }
 .view-walk-speed { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .sidebar .view-walk-speed .shape-btn { width: 100%; height: 30px; padding: 0; font-size: 12px; border-radius: 8px; }
+
+/* Recent searches under the place search (landing sidebar). Text only, no glow. */
+.search-history { margin-top: 12px; display: grid; gap: 4px; }
+.search-history-head { display: flex; align-items: center; justify-content: space-between; }
+.search-history-head .kicker { margin: 0; }
+.search-history ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.sidebar .search-history-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sidebar-text);
+  font-size: 13px;
+  text-align: left;
+  box-shadow: none;
+}
+.sidebar .search-history-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar .search-history-item:hover { background: var(--sun-card-bg); }
+.sidebar .search-history-clear {
+  border: 0;
+  background: transparent;
+  padding: 2px 4px;
+  font-size: 12px;
+  color: var(--sidebar-text);
+  text-decoration: underline;
+  box-shadow: none;
+}
