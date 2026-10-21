@@ -61,6 +61,52 @@ describe("cross cache", () => {
   });
 });
 
+describe("page-square grid", () => {
+  const dandenong = { west: 145.2, south: -37.995, east: 145.23, north: -37.98 };
+
+  it("puts each row on one screen row and each column on one screen column (no MGA convergence tilt)", async () => {
+    const { pageGridCrosses } = await import("./mgaGridLayer");
+    const crosses = pageGridCrosses(dandenong, 100);
+    expect(crosses.length).toBeGreaterThan(100);
+    const rowY = new Map<number, number>();
+    const colX = new Map<number, number>();
+    for (const c of crosses) {
+      const [x, y] = lonLatToMercator(c.lon, c.lat);
+      if (!rowY.has(c.northing)) rowY.set(c.northing, y);
+      if (!colX.has(c.easting)) colX.set(c.easting, x);
+      expect(y).toBeCloseTo(rowY.get(c.northing)!, 12);
+      expect(x).toBeCloseTo(colX.get(c.easting)!, 12);
+    }
+  });
+
+  it("spaces crosses by the step in ground metres, within 0.5%", async () => {
+    const { pageGridCrosses } = await import("./mgaGridLayer");
+    const crosses = pageGridCrosses(dandenong, 100);
+    const a = crosses[0]!;
+    const east = crosses.find((c) => c.northing === a.northing && c.easting === a.easting + 100)!;
+    const north = crosses.find((c) => c.easting === a.easting && c.northing === a.northing + 100)!;
+    const mPerDegLat = 111_132;
+    const mPerDegLon = 111_320 * Math.cos((a.lat * Math.PI) / 180);
+    expect(Math.abs((east.lon - a.lon) * mPerDegLon - 100)).toBeLessThan(0.5);
+    expect(Math.abs((north.lat - a.lat) * mPerDegLat - 100)).toBeLessThan(0.5);
+  });
+
+  it("keeps the same crosses when the cache region moves", async () => {
+    const { pageGridCrosses } = await import("./mgaGridLayer");
+    const a = new Set(pageGridCrosses(dandenong, 100).map((c) => `${c.easting},${c.northing}`));
+    const shifted = pageGridCrosses({ ...dandenong, west: dandenong.west + 0.004, east: dandenong.east + 0.004 }, 100);
+    const shared = shifted.filter((c) => a.has(`${c.easting},${c.northing}`));
+    expect(shared.length).toBeGreaterThan(shifted.length / 2);
+  });
+
+  it("round-trips mercator", async () => {
+    const { mercatorToLonLat } = await import("./mgaGridLayer");
+    const [lon, lat] = mercatorToLonLat(...lonLatToMercator(145.2149, -37.9875));
+    expect(lon).toBeCloseTo(145.2149, 9);
+    expect(lat).toBeCloseTo(-37.9875, 9);
+  });
+});
+
 describe("cross geometry", () => {
   it("builds 3 non-overlapping quads per cross", () => {
     const v = crossVertices([0.1, 0.2, 0.3, 0.4], 6);

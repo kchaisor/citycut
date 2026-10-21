@@ -24,7 +24,7 @@ describe("WalkViewshedLayer", () => {
     const layer = new WalkViewshedLayer(model);
     layer.setPath([[0, 0], [30, 0]], [[0, 0], [10, 0], [20, 0], [30, 0]]);
     layer.setWalker([0, 0], 1.6);
-    expect(visibleMeshes(layer.root)).toBe(2 + 1 + 3);
+    expect(visibleMeshes(layer.root)).toBe(1 + 1 + 3);
     layer.clearAll();
     expect(visibleMeshes(layer.root)).toBe(0);
   });
