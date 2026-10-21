@@ -26,10 +26,9 @@ export class WalkViewshedLayer {
   private readonly points = new THREE.Group();
   private ribbon: THREE.Mesh | null = null;
   private overlay: THREE.Mesh | null = null;
-  private canvas: HTMLCanvasElement | null = null;
-  private context: CanvasRenderingContext2D | null = null;
-  private image: ImageData | null = null;
-  private texture: THREE.CanvasTexture | null = null;
+  /** RGBA bytes, row 0 = southern edge; uploaded straight to the GPU (no canvas round trip). */
+  private pixels: Uint8Array | null = null;
+  private texture: THREE.DataTexture | null = null;
   private grid: HeightGrid | null = null;
   private readonly walker = new THREE.Group();
   private readonly pole: THREE.Mesh;
@@ -70,12 +69,19 @@ export class WalkViewshedLayer {
 
   /** Clicked points as dots and the spline (already sampled finely) as a draped ribbon. */
   setPath(clicked: readonly Pt[], line: readonly Pt[]): void {
-    for (const child of [...this.points.children]) this.points.remove(child);
-    for (const [e, n] of clicked) {
-      const dot = new THREE.Mesh(this.dotGeometry, this.pathMaterial);
-      dot.position.set(e, this.z(e, n) + 1.2, -n);
-      dot.renderOrder = RENDER_ORDER + 9;
-      this.points.add(dot);
+    for (const child of [...this.points.children]) {
+      this.points.remove(child);
+      (child as THREE.InstancedMesh).dispose?.();
+    }
+    if (clicked.length) {
+      // One draw call for all clicks.
+      const dots = new THREE.InstancedMesh(this.dotGeometry, this.pathMaterial, clicked.length);
+      const m = new THREE.Matrix4();
+      clicked.forEach(([e, n], i) => dots.setMatrixAt(i, m.makeTranslation(e, this.z(e, n) + 1.2, -n)));
+      dots.instanceMatrix.needsUpdate = true;
+      dots.computeBoundingSphere();
+      dots.renderOrder = RENDER_ORDER + 9;
+      this.points.add(dots);
     }
     if (this.ribbon) {
       this.root.remove(this.ribbon);
@@ -110,14 +116,10 @@ export class WalkViewshedLayer {
   setGrid(grid: HeightGrid | null): void {
     this.clearOverlay();
     this.grid = grid;
-    if (!grid || typeof document === "undefined") return;
-    this.canvas = document.createElement("canvas");
-    this.canvas.width = grid.cols;
-    this.canvas.height = grid.rows;
-    this.context = this.canvas.getContext("2d");
-    if (!this.context) return;
-    this.image = this.context.createImageData(grid.cols, grid.rows);
-    this.texture = new THREE.CanvasTexture(this.canvas);
+    if (!grid) return;
+    this.pixels = new Uint8Array(grid.cols * grid.rows * 4);
+    this.texture = new THREE.DataTexture(this.pixels, grid.cols, grid.rows, THREE.RGBAFormat);
+    this.texture.flipY = false;
     this.texture.colorSpace = THREE.SRGBColorSpace;
     this.texture.magFilter = THREE.LinearFilter;
     const width = grid.cols * grid.cell;
@@ -152,16 +154,16 @@ export class WalkViewshedLayer {
   /** Paint one frame: visible now, seen earlier (when `seen` is given), not visible. */
   paint(frame: Uint8Array | null, seen: Uint8Array | null): void {
     const grid = this.grid;
-    if (!grid || !this.image || !this.context || !this.texture) return;
+    if (!grid || !this.pixels || !this.texture) return;
     const visible = hexChannels(getColour("--view-visible"));
     const seenRgb = hexChannels(getColour("--view-seen"));
     const blocked = hexChannels(getColour("--view-blocked"));
-    const data = this.image.data;
+    const data = this.pixels;
     const { cols, rows } = grid;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const k = r * cols + c;
-        const o = ((rows - 1 - r) * cols + c) * 4;
+        const o = k * 4;
         const v = frame ? frame[k] : 0;
         let colour: [number, number, number] | null = null;
         let alpha = 0;
@@ -183,7 +185,6 @@ export class WalkViewshedLayer {
         data[o + 3] = alpha;
       }
     }
-    this.context.putImageData(this.image, 0, 0);
     this.texture.needsUpdate = true;
   }
 
@@ -210,9 +211,7 @@ export class WalkViewshedLayer {
     }
     this.texture?.dispose();
     this.texture = null;
-    this.canvas = null;
-    this.context = null;
-    this.image = null;
+    this.pixels = null;
     this.grid = null;
   }
 
