@@ -47,6 +47,8 @@ export type PdfPath = {
   dashMm?: readonly number[];
   cap?: "butt" | "round";
   join?: "miter" | "round";
+  /** Fill and stroke opacity, 0–1. Written as a PDF ExtGState (/ca, /CA); omitted means opaque. */
+  opacity?: number;
 };
 
 export type PdfEllipse = {
@@ -130,6 +132,15 @@ function paintOp(fill: boolean, strokeOn: boolean, evenOdd: boolean) {
   return stroke();
 }
 
+/** Resource name for an ExtGState at this opacity, e.g. 0.2 -> "GSa200". */
+export function opacityStateName(opacity: number): string {
+  return `GSa${Math.round(Math.min(1, Math.max(0, opacity)) * 1000)}`;
+}
+
+function hasOpacity(opacity: number | undefined): opacity is number {
+  return opacity !== undefined && opacity < 1;
+}
+
 function pathOperators(path: PdfPath) {
   const rings = path.rings.filter((ring) => ring.length >= 2);
   if (rings.length === 0) return [];
@@ -138,6 +149,9 @@ function pathOperators(path: PdfPath) {
   const hasStroke = Boolean(path.stroke) && (path.strokeMm ?? 0) > 0;
   if (!hasFill && !hasStroke) return [];
   const ops = [pushGraphicsState()];
+  if (hasOpacity(path.opacity)) {
+    ops.push(PDFOperator.of(PDFOperatorNames.SetGraphicsStateParams, [PDFName.of(opacityStateName(path.opacity))]));
+  }
   if (path.fill) ops.push(setFillingRgbColor(path.fill[0], path.fill[1], path.fill[2]));
   if (hasStroke && path.stroke) {
     ops.push(setStrokingRgbColor(path.stroke[0], path.stroke[1], path.stroke[2]));
@@ -219,6 +233,17 @@ export async function buildLayeredPdf(
   const resources = page.node.Resources();
   if (!resources) throw new Error("The PDF page has no resource dictionary.");
   resources.set(PDFName.of("Properties"), props);
+  const opacities = new Set<number>();
+  for (const chunk of chunks) for (const path of chunk.paths ?? []) if (hasOpacity(path.opacity)) opacities.add(path.opacity);
+  if (opacities.size > 0) {
+    const existing = resources.lookup(PDFName.of("ExtGState"));
+    const states = existing instanceof PDFDict ? existing : PDFDict.withContext(context);
+    for (const opacity of opacities) {
+      const value = Math.round(Math.min(1, Math.max(0, opacity)) * 1000) / 1000;
+      states.set(PDFName.of(opacityStateName(opacity)), context.obj({ Type: "ExtGState", ca: value, CA: value }));
+    }
+    resources.set(PDFName.of("ExtGState"), states);
+  }
 
   const orderArray = PDFArray.withContext(context);
   for (const ref of ocgRefs) orderArray.push(ref);

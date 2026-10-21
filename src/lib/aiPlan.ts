@@ -25,6 +25,7 @@ import { LINE_MM, hexRgb } from "./lineweights";
 import { heliodonPlanPdfChunk } from "./heliodonPlanExport";
 import type { HeliodonDiagramExportOptions } from "./heliodonDiagram";
 import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
+import { SUN_STUDY_SHADOW_OPACITY } from "./sunStudyPlan";
 import { planPaths } from "./svgPlan";
 import { regionCredit } from "./sources/registry";
 import { NSW_SITE_LAYERS, nswPlanChunks } from "./nswPlanExport";
@@ -40,7 +41,7 @@ import {
 } from "./explodedAxoExport";
 import { defaultExplodedAxoSettings, type ExplodedAxoSettings } from "./explodedAxo";
 import { stableExportModel } from "./exportStableOrder";
-import type { CityModel, ContourSourceId, Pt } from "../types";
+import type { CityModel, ContourSourceId, Pt, Ring } from "../types";
 
 export const SITE_LAYER_ORDER = [
   "Frame",
@@ -254,7 +255,17 @@ export type SitePlanExportOptions = {
   highlightManual?: boolean;
   colourBySource?: boolean;
   wind?: { table: import("./windRose").WindRoseTable; period: import("./windRose").WindPeriodId } | null;
+  /**
+   * Sun study: one shadow layer per hour ("Shadow 09:00" …), each at the study opacity, in place
+   * of the single Shadows layer. Rings are the plan shadows already computed for the screen.
+   */
+  sunStudy?: { layers: { hour: number; rings: Ring[][] }[] } | null;
 };
+
+/** Layer name for one sun-study hour, e.g. 9 -> "Shadow 09:00". */
+export function sunStudyLayerName(hour: number): string {
+  return `Shadow ${String(hour).padStart(2, "0")}:00`;
+}
 
 export function siteBoundaryChunk(
   lines: Pt[][],
@@ -289,6 +300,7 @@ function resolveSitePlanExport(
     "castShadows" in exportOptions ||
     "heliodon" in exportOptions ||
     "wind" in exportOptions ||
+    "sunStudy" in exportOptions ||
     "uniformBuildings" in exportOptions
   ) {
     return exportOptions as SitePlanExportOptions;
@@ -465,7 +477,21 @@ export function sitePlanChunks(
       }),
     });
   }
-  const shadowRings = shadowInput ? planShadowRings(model, shadowInput, castShadows) : [];
+  const studyLayers = resolved.sunStudy?.layers ?? null;
+  for (const layer of studyLayers ?? []) {
+    if (layer.rings.length === 0) continue;
+    chunks.push({
+      name: sunStudyLayerName(layer.hour),
+      paths: layer.rings.map((rings) => ({
+        rings: mapRings(rings, model.sideM, layout),
+        fill: fillOf("--sun-study-shadow"),
+        opacity: SUN_STUDY_SHADOW_OPACITY,
+        evenOdd: true,
+        close: true,
+      })),
+    });
+  }
+  const shadowRings = shadowInput && !studyLayers ? planShadowRings(model, shadowInput, castShadows) : [];
   if (shadowRings.length > 0) {
     chunks.push({
       name: "Shadows",
@@ -582,6 +608,8 @@ export function figureGroundChunks(
 
 export function sitePlanLayerOrder(chunks: PdfChunk[]): string[] {
   const order: string[] = [...SITE_LAYER_ORDER];
+  const studyNames = chunks.map((chunk) => chunk.name).filter((name) => /^Shadow \d\d:00$/.test(name));
+  if (studyNames.length > 0) order.splice(order.indexOf("Shadows") + 1, 0, ...studyNames);
   if (!order.includes("Contour labels") && chunks.some((chunk) => chunk.name === "Contour labels")) {
     const at = order.indexOf("Contours");
     order.splice(at + 1, 0, "Contour labels");
@@ -618,6 +646,36 @@ export async function figureGroundPdf(
 ): Promise<Uint8Array> {
   const layout = layoutSheet(model.sideM, scale);
   return buildLayeredPdf(
+    layout.pageWidthMm,
+    layout.pageHeightMm,
+    figureGroundChunks(model, scale, style ?? readDrawingStyle(), heliodon),
+    FIGURE_LAYER_ORDER,
+  );
+}
+
+/** Layered SVG site plan: the same layers and paint order as the .ai. */
+export async function sitePlanSvg(
+  model: CityModel,
+  scale: number,
+  style?: LineStyles,
+  exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
+): Promise<string> {
+  const { buildLayeredSvg } = await import("./svgDocument");
+  const layout = layoutSheet(model.sideM, scale);
+  const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions);
+  return buildLayeredSvg(layout.pageWidthMm, layout.pageHeightMm, chunks, sitePlanLayerOrder(chunks));
+}
+
+/** Layered SVG figure-ground. */
+export async function figureGroundSvg(
+  model: CityModel,
+  scale: number,
+  style?: LineStyles,
+  heliodon?: HeliodonDiagramExportOptions | null,
+): Promise<string> {
+  const { buildLayeredSvg } = await import("./svgDocument");
+  const layout = layoutSheet(model.sideM, scale);
+  return buildLayeredSvg(
     layout.pageWidthMm,
     layout.pageHeightMm,
     figureGroundChunks(model, scale, style ?? readDrawingStyle(), heliodon),
