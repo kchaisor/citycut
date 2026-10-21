@@ -23,6 +23,8 @@
   --sun-card-border: #CECBC6;
   /* Border of a selected card and of the New cut button; the fill is the #FFF500 accent. */
   --sun-card-on-border: #000000;
+  /* Selected hour button under a key date or an assessment preset (9 10 11 12 1 2 3). */
+  --sun-hour-on: #FFF500;
 
   /* Paper and ground */
 

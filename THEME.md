@@ -385,3 +385,4 @@ The same drawer has **Colours**, under Line styles. It lists every fill, with a 
 | `--sun-card-bg` | Sun tab date and preset cards, and the speed buttons. | `#FFFFFF` |
 | `--sun-card-border` | Border of an unselected Sun tab card. | `#CECBC6` |
 | `--sun-card-on-border` | Border of a selected card (fill is the `#FFF500` accent) and of the New cut button. | `#000000` |
+| `--sun-hour-on` | Selected hour button (9 10 11 12 1 2 3) under a key date or an assessment preset in the Sun tab. | `#FFF500` |
