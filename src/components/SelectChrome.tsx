@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Box, Copy, Frame, Layers, Search } from "lucide-react";
+import { Box, Copy, Frame, History, Layers, Search } from "lucide-react";
 import { MAX_SIDE_KM, MIN_SIDE_KM } from "../content/constants";
 import { formatCoord, formatKmSide } from "../lib/geo";
 import { useSidebarCollapsed } from "../lib/sidebarCollapse";
 import { cutFrameLabelKm } from "../lib/placeLabel";
 import { searchPlaces } from "../lib/nominatim";
+import { addSearchHistory, clearSearchHistory, readSearchHistory } from "../lib/searchHistory";
 import { DATA_CREDIT_BASE } from "../lib/dataCredits";
 import type { PlaceHit, SiteFrameShape, UiLayers } from "../types";
 import { Sidebar, type SidebarItem } from "./Sidebar";
@@ -39,6 +40,15 @@ const RAIL: SidebarItem[] = [
   { id: "cut", label: "Cut", icon: <Frame {...iconProps} /> },
   { id: "layers", label: "Layers", icon: <Layers {...iconProps} /> },
 ];
+
+/** window.localStorage, or null where storage is blocked (private mode, tests without a DOM). */
+function storageOrNull(): Storage | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage;
+  } catch {
+    return null;
+  }
+}
 
 export function SelectChrome({
   placeLabel,
@@ -82,6 +92,7 @@ export function SelectChrome({
   const [searchError, setSearchError] = useState<string | null>(null);
   const [resultsOpen, setResultsOpen] = useState(false);
   const [open, setOpen] = useState<string>("search");
+  const [recent, setRecent] = useState<PlaceHit[]>(() => readSearchHistory(storageOrNull()));
   const boxRef = useRef<HTMLDivElement>(null);
   const area =
     frameShape === "circle" ? Math.PI * (sideKm / 2) ** 2 : sideKm * sideKm;
@@ -132,6 +143,7 @@ export function SelectChrome({
   }, []);
 
   function choose(hit: PlaceHit) {
+    setRecent(addSearchHistory(storageOrNull(), hit));
     onPlace(hit);
     setQuery(hit.label);
     setResultsOpen(false);
@@ -257,6 +269,46 @@ export function SelectChrome({
               </div>
             )}
           </div>
+          {recent.length > 0 && (
+            <div className="search-history" aria-label="Recent searches" role="group">
+              <div className="search-history-head">
+                <p className="kicker">Recent searches</p>
+                <button
+                  type="button"
+                  className="search-history-clear"
+                  onClick={() => {
+                    clearSearchHistory(storageOrNull());
+                    setRecent([]);
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+              <ul>
+                {recent.map((hit) => (
+                  <li key={hit.id}>
+                    <button
+                      type="button"
+                      className="search-history-item"
+                      aria-label={`${hit.label}, ${hit.detail}`}
+                      onClick={() => {
+                        // Reload the stored place without re-running the text search (no results popup).
+                        setRecent(addSearchHistory(storageOrNull(), hit));
+                        setResultsOpen(false);
+                        onPlace(hit);
+                      }}
+                    >
+                      <History size={14} strokeWidth={1.75} aria-hidden="true" />
+                      <span className="search-history-text">
+                        <span>{hit.label}</span>
+                        <small>{hit.detail}</small>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         <div className="drawer-section" hidden={open !== "cut"}>
