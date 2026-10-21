@@ -39,7 +39,7 @@ describe("recent searches", () => {
   it("lists stored places, reloads one on click, and clears", () => {
     window.localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify([kew]));
     const onPlace = renderChrome();
-    fireEvent.click(screen.getByRole("button", { name: "Kew" }));
+    fireEvent.click(screen.getByRole("button", { name: "Kew, Victoria, Australia" }));
     expect(onPlace).toHaveBeenCalledWith(expect.objectContaining({ id: "k", lat: -37.8069, lon: 145.0347 }));
     fireEvent.click(screen.getByRole("button", { name: "Clear" }));
     expect(screen.queryByRole("group", { name: "Recent searches" })).toBeNull();

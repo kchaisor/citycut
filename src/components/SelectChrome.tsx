@@ -287,9 +287,22 @@ export function SelectChrome({
               <ul>
                 {recent.map((hit) => (
                   <li key={hit.id}>
-                    <button type="button" className="search-history-item" title={hit.detail} onClick={() => choose(hit)}>
+                    <button
+                      type="button"
+                      className="search-history-item"
+                      aria-label={`${hit.label}, ${hit.detail}`}
+                      onClick={() => {
+                        // Reload the stored place without re-running the text search (no results popup).
+                        setRecent(addSearchHistory(storageOrNull(), hit));
+                        setResultsOpen(false);
+                        onPlace(hit);
+                      }}
+                    >
                       <History size={14} strokeWidth={1.75} aria-hidden="true" />
-                      <span>{hit.label}</span>
+                      <span className="search-history-text">
+                        <span>{hit.label}</span>
+                        <small>{hit.detail}</small>
+                      </span>
                     </button>
                   </li>
                 ))}
