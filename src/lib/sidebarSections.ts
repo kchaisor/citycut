@@ -15,7 +15,8 @@ export const SIDEBAR_SECTION_LABELS: Record<SidebarSectionId, string> = {
   summary: "Model details",
   buildings: "Buildings",
   trees: "Trees",
-  drawing: "Drawing",
+  /** Covers 3D model, Drawing (site plan, figure-ground, exploded axo) and Satellite, so not "Drawing". */
+  drawing: "Display",
   solar: "Sun",
   wind: "Wind",
   view: "View",
