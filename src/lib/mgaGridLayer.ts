@@ -1,4 +1,4 @@
-import { MGA_GRID_MIN_GAP_PX, MGA_GRID_STEPS_M, mgaGridCrosses } from "./mgaGrid";
+import { MGA_GRID_MIN_GAP_PX, MGA_GRID_STEPS_M, type GridCross } from "./mgaGrid";
 
 /**
  * Landing-map MGA crosses, drawn by a MapLibre custom WebGL layer. Every frame the layer draws
@@ -66,11 +66,43 @@ export function cacheCovers(cache: GridCache | null, view: Bounds, step: number)
   );
 }
 
+/** Latitude the page-square grid is scaled at: whole half-degrees, so panning never re-spaces it. */
+export function gridReferenceLat(lat: number): number {
+  return Math.round(lat * 2) / 2;
+}
+
+/**
+ * Crosses on a grid square to the page: rows and columns follow Web Mercator east and north, so
+ * they line up with the screen and the cut frame. (The MGA grid is a Transverse Mercator grid and
+ * sits at the grid convergence to Mercator north, about 1.1° at Dandenong, 1.2° at Kew.) Spacing is
+ * `step` ground metres at the reference latitude; `easting`/`northing` are whole multiples of
+ * `step` counted from the Mercator origin, so a cross keeps its rank as the cache moves.
+ */
+export function pageGridCrosses(region: Bounds, step: number, maxCount = MGA_GRID_MAX_CROSSES): GridCross[] {
+  const refLat = gridReferenceLat((region.south + region.north) / 2);
+  const metresPerUnit = EARTH_CIRCUMFERENCE_M * Math.cos((refLat * Math.PI) / 180);
+  const [x0, y0] = lonLatToMercator(region.west, region.north);
+  const [x1, y1] = lonLatToMercator(region.east, region.south);
+  const i0 = Math.floor((x0 * metresPerUnit) / step);
+  const i1 = Math.ceil((x1 * metresPerUnit) / step);
+  // Northing grows north; Mercator y grows south.
+  const j0 = Math.floor(((1 - y1) * metresPerUnit) / step);
+  const j1 = Math.ceil(((1 - y0) * metresPerUnit) / step);
+  if ((i1 - i0 + 1) * (j1 - j0 + 1) > maxCount) return [];
+  const out: GridCross[] = [];
+  for (let i = i0; i <= i1; i++)
+    for (let j = j0; j <= j1; j++) {
+      const [lon, lat] = mercatorToLonLat((i * step) / metresPerUnit, 1 - (j * step) / metresPerUnit);
+      out.push({ lon, lat, easting: i * step, northing: j * step });
+    }
+  return out;
+}
+
 /** Crosses for a region grouped by rank, as lon/lat pairs. */
 export function buildCache(view: Bounds, step: number): GridCache {
   const region = cacheBounds(view);
   const ranks = new Map<number, number[]>();
-  for (const cross of mgaGridCrosses(region, step, undefined, MGA_GRID_MAX_CROSSES)) {
+  for (const cross of pageGridCrosses(region, step)) {
     const rank = crossRank(cross.easting, cross.northing, step);
     let list = ranks.get(rank);
     if (!list) ranks.set(rank, (list = []));
@@ -107,6 +139,13 @@ export function crossVertices(
 export function lonLatToMercator(lon: number, lat: number): [number, number] {
   const sin = Math.sin((lat * Math.PI) / 180);
   return [(lon + 180) / 360, 0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)];
+}
+
+/** Inverse of lonLatToMercator. */
+export function mercatorToLonLat(x: number, y: number): [number, number] {
+  const lon = x * 360 - 180;
+  const lat = (Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180) / Math.PI;
+  return [lon, lat];
 }
 
 /** `matrix × translate(ox, oy)`, in float64, so float32 vertices can stay relative to an origin. */

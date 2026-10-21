@@ -1,7 +1,7 @@
 import { Pause, Play } from "lucide-react";
 import { useEffect, useState } from "react";
 import { VIEWSHED_RADIUS_OPTIONS_M, VIEWSHED_SAMPLE_SPACING_M } from "../lib/viewshed";
-import { WALK_EYE_MAX_M, WALK_EYE_MIN_M, WALK_SPEEDS, type WalkViewshed } from "./useWalkViewshed";
+import { useWalkPlayback, WALK_EYE_MAX_M, WALK_EYE_MIN_M, WALK_SPEEDS, type WalkViewshed } from "./useWalkViewshed";
 
 function metres(m: number): string {
   return m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`;
@@ -11,6 +11,7 @@ function metres(m: number): string {
 export function ViewPanel({ walk }: { walk: WalkViewshed }) {
   const [eyeText, setEyeText] = useState(walk.eyeM.toFixed(1));
   useEffect(() => setEyeText(walk.eyeM.toFixed(1)), [walk.eyeM]);
+  const at = useWalkPlayback(walk);
   const ready = walk.status === "ready" || walk.status === "computing";
   const last = Math.max(0, walk.sampleCount - 1);
 
@@ -113,13 +114,13 @@ export function ViewPanel({ walk }: { walk: WalkViewshed }) {
           max={last}
           step={1}
           disabled={!ready}
-          value={Math.min(walk.index, last)}
+          value={Math.min(at.index, last)}
           onChange={(event) => {
             walk.setPlaying(false);
             walk.seek(Number(event.target.value));
           }}
         />
-        <span className="sun-study-time">{ready ? metres(walk.distanceM) : "–"}</span>
+        <span className="sun-study-time">{ready ? metres(at.distanceM) : "–"}</span>
       </div>
       <div className="sun-study-speed view-walk-speed" role="radiogroup" aria-label="Playback speed">
         {WALK_SPEEDS.map((s) => (
@@ -144,9 +145,9 @@ export function ViewPanel({ walk }: { walk: WalkViewshed }) {
         <dt>Compute time</dt>
         <dd>{walk.computeMs !== null ? `${(walk.computeMs / 1000).toFixed(1)} s` : "–"}</dd>
         <dt>Visible now, ground in radius</dt>
-        <dd>{walk.visiblePercent !== null ? `${Math.round(walk.visiblePercent)}%` : "–"}</dd>
+        <dd>{at.visiblePercent !== null ? `${Math.round(at.visiblePercent)}%` : "–"}</dd>
         <dt>Seen on walk</dt>
-        <dd>{walk.seenHa !== null ? `${walk.seenHa.toFixed(2)} ha` : "–"}</dd>
+        <dd>{at.seenHa !== null ? `${at.seenHa.toFixed(2)} ha` : "–"}</dd>
       </dl>
 
       <p className="field-note view-walk-limits">

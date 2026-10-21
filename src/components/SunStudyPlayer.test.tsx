@@ -36,7 +36,7 @@ describe("Sun section", () => {
     const view = render(<SolarPanel embedded settings={settings} onChange={onChange} sideM={500} site={site} />);
     fireEvent.click(screen.getByRole("radio", { name: "21 Jun" }));
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ month: 6, day: 21, hour: 15, minute: 0 }));
-    fireEvent.click(screen.getByRole("radio", { name: "ResCode open space" }));
+    fireEvent.click(screen.getByRole("radio", { name: "ResCode Open Space" }));
     const next = onChange.mock.calls.at(-1)![0] as SolarViewSettings;
     expect(next).toMatchObject({ month: 9, day: 22, hour: 9, minute: 0, castShadows: true });
     view.rerender(<SolarPanel embedded settings={next} onChange={onChange} sideM={500} site={site} />);
@@ -51,14 +51,44 @@ describe("Sun section", () => {
     for (const name of ["21 Jun", "22 Sep", "22 Dec"]) expect(screen.getByRole("radio", { name })).toBeTruthy();
     expect(screen.getByText("Winter solstice")).toBeTruthy();
     expect(screen.getByText("Summer solstice")).toBeTruthy();
-    expect(screen.getByText("22 Sep · 9am–3pm · Cl. 55.04-3 (B4-3)")).toBeTruthy();
-    expect(screen.getByText("22 Jun 11am–2pm · common practice")).toBeTruthy();
+    // ResCode card on three lines; no full stops, no "common practice".
+    expect(screen.getByText("ResCode Open Space")).toBeTruthy();
+    expect(screen.getByText("22 Sep 9am – 3pm")).toBeTruthy();
+    expect(screen.getByText("Clause 55.04-3 (B4-3)")).toBeTruthy();
+    expect(screen.getByText("22 Jun 11am – 2pm")).toBeTruthy();
+    const presets = screen.getByRole("radiogroup", { name: "Victorian shadow standards" }).textContent ?? "";
+    expect(presets).not.toMatch(/common practice/i);
+    expect(presets.replace(/\d\.\d/g, "")).not.toContain(".");
+  });
+
+  it("a key date shows hour buttons 9–3 with prev/next; the selected hour is pressed", () => {
+    const onChange = vi.fn();
+    const keyDay = { ...settings, month: 6, day: 21, hour: 11, minute: 0 };
+    const view = render(<SolarPanel embedded settings={keyDay} onChange={onChange} sideM={500} site={site} />);
+    const group = screen.getByRole("group", { name: "Hour on the key date" });
+    const hours = Array.from(group.querySelectorAll(".solar-hour")).map((b) => b.textContent);
+    expect(hours).toEqual(["9", "10", "11", "12", "1", "2", "3"]);
+    const pressed = Array.from(group.querySelectorAll('.solar-hour[aria-pressed="true"]')).map((b) => b.textContent);
+    expect(pressed).toEqual(["11"]);
+    fireEvent.click(screen.getByRole("button", { name: "Next hour" }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ month: 6, day: 21, hour: 12, minute: 0 }));
+    fireEvent.click(screen.getByRole("button", { name: "Previous hour" }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ hour: 10, minute: 0 }));
+    fireEvent.click(screen.getByRole("button", { name: "2" }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ hour: 14, minute: 0 }));
+    view.rerender(<SolarPanel embedded settings={{ ...keyDay, hour: 15 }} onChange={onChange} sideM={500} site={site} />);
+    expect((screen.getByRole("button", { name: "Next hour" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("no hour buttons on a date that is not a key date", () => {
+    render(<SolarPanel embedded settings={{ ...settings, month: 3, day: 5 }} onChange={() => undefined} sideM={500} site={site} />);
+    expect(screen.queryByRole("group", { name: "Hour on the key date" })).toBeNull();
   });
 
   it("presets and toggles only change sun settings, never anything else", () => {
     const onChange = vi.fn();
     render(<SolarPanel embedded settings={settings} onChange={onChange} sideM={500} site={site} />);
-    fireEvent.click(screen.getByRole("radio", { name: "Public spaces" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Public Spaces" }));
     fireEvent.click(screen.getByRole("radio", { name: "22 Dec" }));
     fireEvent.click(screen.getByLabelText(/Show sun path/));
     fireEvent.click(screen.getByLabelText(/Cast real-time shadows/));
