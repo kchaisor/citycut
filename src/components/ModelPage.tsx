@@ -27,10 +27,8 @@ import {
   downloadFigureAi,
   downloadSiteAi,
   downloadSunStudyZip,
-  downloadViewAi,
   pngFilename,
 } from "../lib/download";
-import { VIEW3D_EXPORT_TOOLTIP, view3dExportBlocked } from "../lib/view3dExportTab";
 import { sunStudyDateText } from "../lib/sunStudyExport";
 import {
   AXO_LAYER_LABELS,
@@ -144,6 +142,8 @@ import { SceneBoundary } from "./SceneBoundary";
 import { SolarPanel } from "./SolarPanel";
 import { WindPanel } from "./WindPanel";
 import { WindRoseOverlay } from "./WindRoseOverlay";
+import { ExportTiles } from "./ExportTiles";
+import { exportTiles } from "../lib/exportTiles";
 import { ViewLegend, ViewPanel } from "./ViewPanel";
 import { useWalkViewshed } from "./useWalkViewshed";
 import { fetchWindRoseTable } from "../lib/windFetch";
@@ -224,7 +224,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   const uniform = uniformBuildingColor();
   const [figureScale, setFigureScale] = useState<number>(() => preferredFigureScale(model.sideM));
   const [exportError, setExportError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"3dm" | "png" | "ai-view" | "ai-site" | "ai-figure" | "ai-exploded" | "ai-sun" | null>(null);
+  const [busy, setBusy] = useState<"3dm" | "png" | "ai-site" | "ai-figure" | "ai-exploded" | "ai-sun" | null>(null);
   const [sunStudyProgress, setSunStudyProgress] = useState<string | null>(null);
   const [colourByUse, setColourByUse] = useState(
     () => !capturePresetFromSearch(window.location.search).uniformBuildings,
@@ -1126,28 +1126,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     });
   }
 
-  async function saveViewAi() {
-    setExportError(null);
-    setBusy("ai-view");
-    try {
-      const exporter = exportRef.current;
-      if (!exporter) throw new Error("The 3D view is not ready.");
-      await downloadViewAi(displayModel, exporter.shot(), {
-        uniformBuildings: !colourByUse && !showSource,
-        colourBySource: showSource,
-        whiteCard: view3dDisplay.whiteCard,
-        showOutlines: view3dDisplay.showOutlines,
-        showContours: view3dDisplay.showContours3d,
-        hideTrees: view3dDisplay.hideTrees,
-      });
-    } catch (error) {
-      console.error(error);
-      setExportError("The 3D view could not be written.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
   async function savePng() {
     setExportError(null);
     setBusy("png");
@@ -1183,7 +1161,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     { tier: "real_source_unmatched", label: heightTierLabel("real_source_unmatched") },
     { tier: "manual", label: heightTierLabel("manual") },
   ];
-  const view3dExportDisabled = view3dExportBlocked(tab);
   const dataSources = buildDataSources({
     model,
     comHeights: comHeightsStatus,
@@ -2067,67 +2044,34 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
 
             <div className="drawer-section" hidden={open !== "exports"}>
               <div className="exports">
-                <article className="card">
-                  <div>
-                    <h3>
-                      PNG image <span>.png</span>
-                    </h3>
-                    <p>The current 3D view, in perspective or isometric, at twice the canvas resolution.</p>
-                  </div>
-                  <button
-                    className="ghost"
-                    type="button"
-                    data-autofocus="true"
-                    disabled={busy !== null || view3dExportDisabled}
-                    title={view3dExportDisabled ? VIEW3D_EXPORT_TOOLTIP : undefined}
-                    onClick={savePng}
-                    aria-label="Download PNG"
-                  >
-                    {busy === "png" ? "Preparing…" : "Download"}
-                  </button>
-                </article>
-                <article className="card">
-                  <div>
-                    <h3>
-                      Rhino <span>.3dm</span>
-                    </h3>
-                    <p>
-                      {buildingsAsMesh
-                        ? "Buildings as meshes"
-                        : "Buildings as closed extrusions, one per part"}
-                      ; terrain, roads and trees as meshes. {crs.name}, metres, Z-up, plus a FigureGround layer.
-                    </p>
-                  </div>
-                  <button className="ghost" type="button" disabled={busy !== null} onClick={save3dm} aria-label="Download Rhino">
-                    {busy === "3dm" ? "Preparing…" : "Download"}
-                  </button>
-                </article>
+                <ExportTiles
+                  tiles={exportTiles({
+                    tab,
+                    drawing,
+                    busy,
+                    figureScale,
+                    sunStudyDate: sunStudyDateText({ year: solar.year, month: solar.month, day: solar.day }),
+                    buildingsAsMesh,
+                    crsName: crs.name,
+                  })}
+                  progress={busy === "ai-sun" ? sunStudyProgress : null}
+                  onDownload={(id) => {
+                    if (id === "3dm") void save3dm();
+                    else if (id === "png") void savePng();
+                    else if (id === "sun-zip") void saveSunStudyAi();
+                    else if (drawing === "site") void saveSiteAi();
+                    else if (drawing === "figure-ground") void saveFigureAi();
+                    else void saveExplodedAxoAi();
+                  }}
+                />
                 <label className="check-field rhino-mesh-option">
                   <input
                     type="checkbox"
                     checked={buildingsAsMesh}
                     onChange={(event) => setBuildingsAsMesh(event.target.checked)}
                   />
-                  Buildings as mesh
+                  Rhino: buildings as mesh
                 </label>
-                <article className="card">
-                  <div>
-                    <h3>
-                      3D view <span>.ai</span>
-                    </h3>
-                    <p>The current camera as vectors: filled faces, visible edges, and simplified trees. Not to scale.</p>
-                  </div>
-                  <button
-                    className="ghost"
-                    type="button"
-                    disabled={busy !== null || view3dExportDisabled}
-                    title={view3dExportDisabled ? VIEW3D_EXPORT_TOOLTIP : undefined}
-                    onClick={saveViewAi}
-                    aria-label="Download 3D view Illustrator"
-                  >
-                    {busy === "ai-view" ? "Preparing…" : "Download"}
-                  </button>
-                </article>
                 <label className="scale-field">
                   Plan scale
                   <select
@@ -2147,58 +2091,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     {figureFit}
                   </p>
                 )}
-                <article className="card">
-                  <div>
-                    <h3>
-                      Site plan <span>.ai</span>
-                    </h3>
-                    <p>
-                      True scale at 1:{figureScale}. Building outlines, the road fill and kerb, contours, and the
-                      frame use the line styles on the sheet.
-                    </p>
-                  </div>
-                  <button className="ghost" type="button" disabled={busy !== null} onClick={saveSiteAi} aria-label="Download site plan Illustrator">
-                    {busy === "ai-site" ? "Preparing…" : "Download"}
-                  </button>
-                </article>
-                <article className="card">
-                  <div>
-                    <h3>
-                      Sun study <span>.zip</span>
-                    </h3>
-                    <p>
-                      Site plan .ai with shadows at 1:{figureScale} for each hour 9am–3pm on{" "}
-                      {sunStudyDateText({ year: solar.year, month: solar.month, day: solar.day })}, seven files in one zip.
-                    </p>
-                  </div>
-                  <button className="ghost" type="button" disabled={busy !== null} onClick={saveSunStudyAi} aria-label="Download sun study Illustrator zip">
-                    {busy === "ai-sun" ? `Preparing ${sunStudyProgress ?? ""}…` : "Download"}
-                  </button>
-                </article>
-                <article className="card">
-                  <div>
-                    <h3>
-                      Figure-ground <span>.ai</span>
-                    </h3>
-                    <p>Black footprints on white, with the footpath strips, true scale. A3 landscape or portrait, whichever fits the frame.</p>
-                  </div>
-                  <button className="ghost" type="button" disabled={busy !== null} onClick={saveFigureAi} aria-label="Download figure-ground Illustrator">
-                    {busy === "ai-figure" ? "Preparing…" : "Download"}
-                  </button>
-                </article>
-                <article className="card">
-                  <div>
-                    <h3>
-                      Exploded axo <span>.ai</span>
-                    </h3>
-                    <p>
-                      Stacked isometric layers at 1:{figureScale}, with guides and labels. Satellite is noted in the file when imagery is not embedded.
-                    </p>
-                  </div>
-                  <button className="ghost" type="button" disabled={busy !== null} onClick={saveExplodedAxoAi} aria-label="Download exploded axo Illustrator">
-                    {busy === "ai-exploded" ? "Preparing…" : "Download"}
-                  </button>
-                </article>
               </div>
               <p className="v2">
                 This file includes {layerBits.join(", ") || "an empty block"}. DXF, DAE, and JPG are not available in

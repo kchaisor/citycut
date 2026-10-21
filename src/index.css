@@ -1707,3 +1707,19 @@ input[type="range"]::-moz-range-thumb {
 .massing-field input { width: 100%; box-sizing: border-box; }
 .massing-warning { margin: 6px 0 0; padding: 6px 8px; background: var(--accent-hover); border-left: 3px solid var(--accent-edge); font-size: 12px; }
 .massing-warning.is-error { background: #fde2e2; }
+
+/* Export tab: format tiles (Kelvin, Oct 2026). Same card tokens as the Sun tab; no shadows or glow. */
+.export-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sidebar .export-tile {
+  all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; min-height: 76px; padding: 10px;
+  border: 1px solid var(--sun-card-border); border-radius: 8px; background: var(--sun-card-bg); color: var(--sidebar-text);
+  cursor: pointer; text-shadow: none; box-shadow: none;
+}
+.sidebar .export-tile:hover, .sidebar .export-tile:focus-visible { background: var(--accent); border-color: var(--sun-card-on-border); }
+.sidebar .export-tile:focus-visible { outline: 2px solid var(--sun-card-on-border); outline-offset: 1px; }
+.sidebar .export-tile[aria-disabled="true"] { opacity: 0.42; cursor: not-allowed; }
+.sidebar .export-tile[aria-disabled="true"]:hover { background: var(--sun-card-bg); border-color: var(--sun-card-border); }
+.export-tile-app { font-size: 13px; font-weight: 600; line-height: 1.2; }
+.export-tile-ext { font-size: 18px; font-weight: 700; line-height: 1.2; }
+.export-tile-busy { font-size: 11px; color: var(--sidebar-text); }
+.export-tile-note { min-height: 48px; margin: 10px 0 0; font-size: 12px; line-height: 16px; color: var(--sidebar-text); }
