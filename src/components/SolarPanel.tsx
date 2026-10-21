@@ -22,6 +22,8 @@ export function SolarPanel({
   sideM,
   embedded = false,
   site,
+  selectedCount = 0,
+  onClearSelection,
 }: {
   settings: SolarViewSettings;
   onChange: (next: SolarViewSettings) => void;
@@ -30,6 +32,9 @@ export function SolarPanel({
   embedded?: boolean;
   /** Site lat/lon for the sun sweep. */
   site?: { lat: number; lon: number };
+  /** Buildings picked on the site plan for the sun study. */
+  selectedCount?: number;
+  onClearSelection?: () => void;
 }) {
   const [open, setOpen] = useState(true);
   useColourRevision();
@@ -88,6 +93,40 @@ export function SolarPanel({
             />
             Muted base plan
           </label>
+        )}
+        {settings.sunStudy && (
+          <div className="field sun-study-casters">
+            <span className="kicker">Shadows from</span>
+            <div className="segmented" role="group" aria-label="Sun study shadows from">
+              <button
+                type="button"
+                aria-pressed={settings.sunStudyCasters !== "selected"}
+                onClick={() => patch({ sunStudyCasters: "all" })}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                aria-pressed={settings.sunStudyCasters === "selected"}
+                onClick={() => patch({ sunStudyCasters: "selected" })}
+              >
+                Selected
+              </button>
+            </div>
+            <span className="field-note" data-sun-study-selection>
+              {selectedCount === 0
+                ? "Click buildings on the site plan to select them."
+                : `${selectedCount} building${selectedCount === 1 ? "" : "s"} selected. Click again to deselect.`}
+              {selectedCount > 0 && onClearSelection && (
+                <>
+                  {" "}
+                  <button type="button" className="link-button" onClick={onClearSelection}>
+                    Clear
+                  </button>
+                </>
+              )}
+            </span>
+          </div>
         )}
         {settings.showPath && (
           <label className="field">

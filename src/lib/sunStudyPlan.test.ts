@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   SUN_STUDY_HOURS,
+  estimatedHeightLabels,
+  isClick,
+  pickBuilding,
+  sunStudyCasterModel,
+  toggleSelection,
   hiddenBySunStudy,
   sunStudyDateArc,
   sunStudyHourKey,
@@ -8,7 +13,7 @@ import {
   sunStudyModelKey,
   sunStudySuns,
 } from "./sunStudyPlan";
-import type { CityModel } from "../types";
+import type { BuildingFeat, CityModel } from "../types";
 
 const kew = { lat: -37.8045, lon: 145.0215, year: 2026, month: 9, day: 22 };
 
@@ -50,5 +55,59 @@ describe("sun study plan", () => {
     expect(sunStudyHourKey(key, kew, 9)).not.toBe(sunStudyHourKey(key, kew, 10));
     expect(sunStudyHourKey(key, kew, 9)).not.toBe(sunStudyHourKey(key, { ...kew, day: 23 }, 9));
     expect(sunStudyModelKey({ ...model, sideM: 500 })).not.toBe(key);
+  });
+});
+
+const sq = (id: number, e: number, n: number, size: number, extra: Partial<BuildingFeat> = {}): BuildingFeat => {
+  const h = size / 2;
+  return {
+    id,
+    ring: [[e - h, n - h], [e + h, n - h], [e + h, n + h], [e - h, n + h], [e - h, n - h]],
+    holes: [],
+    height: 12.4,
+    use: "unclassified",
+    source: "none",
+    ...extra,
+  };
+};
+
+describe("sun study selection", () => {
+  it("treats up to 4 px of travel as a click and more as a drag", () => {
+    expect(isClick(0, 0)).toBe(true);
+    expect(isClick(3, 2)).toBe(true);
+    expect(isClick(4, 0)).toBe(true);
+    expect(isClick(4, 1)).toBe(false);
+    expect(isClick(0, -12)).toBe(false);
+  });
+
+  it("picks the smallest footprint under the point and misses empty ground", () => {
+    const big = sq(1, 0, 0, 40);
+    const small = sq(2, 5, 5, 6);
+    expect(pickBuilding([big, small], [5, 5])?.id).toBe(2);
+    expect(pickBuilding([big, small], [-15, -15])?.id).toBe(1);
+    expect(pickBuilding([big, small], [100, 100])).toBeNull();
+  });
+
+  it("toggles ids and limits casters to the selection", () => {
+    expect(toggleSelection([1, 2], 2)).toEqual([1]);
+    expect(toggleSelection([1], 3)).toEqual([1, 3]);
+    const model = { sideM: 200, buildings: [sq(1, 0, 0, 10), sq(2, 30, 0, 10)] } as unknown as CityModel;
+    expect(sunStudyCasterModel(model, "all", [2])).toBe(model);
+    expect(sunStudyCasterModel(model, "selected", [2]).buildings.map((b) => b.id)).toEqual([2]);
+    expect(sunStudyCasterModel(model, "selected", []).buildings).toEqual([]);
+    expect(sunStudyModelKey(sunStudyCasterModel(model, "selected", [2]))).not.toBe(sunStudyModelKey(model));
+  });
+
+  it("labels estimated heights only, always when selected, otherwise when the label fits", () => {
+    const measured = sq(1, 0, 0, 80);
+    const estWide = sq(2, 100, 0, 80, { heightFromFallback: true });
+    const estSmall = sq(3, 200, 0, 4, { heightTier: "real_source_unmatched" });
+    const font = 3;
+    expect(estimatedHeightLabels([measured, estWide, estSmall], [], font).map((l) => l.id)).toEqual([2]);
+    const withSel = estimatedHeightLabels([measured, estWide, estSmall], [3], font);
+    expect(withSel.map((l) => [l.id, l.text])).toEqual([
+      [2, "~12 m est."],
+      [3, "~12 m est."],
+    ]);
   });
 });

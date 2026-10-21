@@ -24,8 +24,20 @@ import { readNswPlanStyle } from "../lib/nswPlanStyle";
 import { planShadowRings, type PlanShadowInput } from "../lib/buildingShadows";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
 import { planViewportExtent, type PlanViewport } from "../lib/planViewport";
-import { SUN_STUDY_SHADOW_OPACITY, SUN_STUDY_TREE_OPACITY, type SunStudyDate } from "../lib/sunStudyPlan";
+import {
+  SUN_STUDY_SHADOW_OPACITY,
+  SUN_STUDY_TREE_OPACITY,
+  estimatedHeightLabels,
+  isClick,
+  pickBuilding,
+  sunStudyCasterModel,
+  type SunStudyCasters,
+  type SunStudyDate,
+} from "../lib/sunStudyPlan";
+import { heliodonLabelFontMetres } from "../lib/heliodonDiagram";
 import { useSunStudyShadows } from "./useSunStudyShadows";
+
+const NO_SELECTION: readonly number[] = [];
 
 export type DrawingKind = "site" | "figure-ground" | "exploded-axo";
 
@@ -67,6 +79,9 @@ export function DrawingPlan({
   fitCounter = 0,
   sunStudy = null,
   sunStudyMuted = false,
+  sunStudyCasters = "all",
+  sunStudySelected = NO_SELECTION,
+  onSunStudyPick,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -89,6 +104,12 @@ export function DrawingPlan({
   sunStudy?: SunStudyDate | null;
   /** With the sun study on: draw the base plan in the quiet --sun-study-* fills. */
   sunStudyMuted?: boolean;
+  /** Which buildings cast the sun-study shadows. */
+  sunStudyCasters?: SunStudyCasters;
+  /** Building ids picked on the plan for the sun study. */
+  sunStudySelected?: readonly number[];
+  /** Click (not drag) on a building while the sun study is on. */
+  onSunStudyPick?: (buildingId: number) => void;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
@@ -215,8 +236,19 @@ export function DrawingPlan({
   const nswStyle = useMemo(() => (model.nsw ? readNswPlanStyle() : null), [model.nsw, colourTick]);
   const nswItems = useMemo(() => (nswStyle ? nswPlanItems(model, nswStyle.hatchM) : null), [model, nswStyle]);
   const study = figure ? null : sunStudy;
-  const studyShadows = useSunStudyShadows(model, study);
+  const casterModel = useMemo(
+    () => sunStudyCasterModel(model, sunStudyCasters, sunStudySelected),
+    [model, sunStudyCasters, sunStudySelected],
+  );
+  const studyShadows = useSunStudyShadows(casterModel, study);
+  const selectedIds = useMemo(() => new Set(sunStudySelected), [sunStudySelected]);
+  const estFont = heliodonLabelFontMetres(planScale, 5);
+  const estLabels = useMemo(
+    () => (study ? estimatedHeightLabels(casterModel.buildings, sunStudySelected, estFont) : []),
+    [study, casterModel, sunStudySelected, estFont],
+  );
   const studyShadowFill = getColour("--sun-study-shadow");
+  const studySunFill = getColour("--sun-study-sun");
   const muted = Boolean(study) && sunStudyMuted;
   const mutedFill = (key: Parameters<typeof getColour>[0], normal: string) => (muted ? getColour(key) : normal);
   const annotationInk = figure ? figureFill : getColour("--sun-compass-label");
@@ -298,8 +330,29 @@ export function DrawingPlan({
         if (onViewportChange) onViewportChange(next);
         else setInternalView(next);
       }}
-      onPointerUp={() => {
+      onPointerUp={(event) => {
+        const start = drag.current;
         drag.current = null;
+        const svg = svgRef.current;
+        if (!start || !svg || !study || !onSunStudyPick) return;
+        if (!isClick(event.clientX - start.px, event.clientY - start.py)) return;
+        const ctm = svg.getScreenCTM?.();
+        let x: number;
+        let y: number;
+        if (ctm) {
+          const local = new DOMPoint(event.clientX, event.clientY).matrixTransform(ctm.inverse());
+          x = local.x;
+          y = local.y;
+        } else {
+          const rect = svg.getBoundingClientRect();
+          x = start.view.x + ((event.clientX - rect.left) / rect.width) * start.view.w;
+          y = start.view.y + ((event.clientY - rect.top) / rect.height) * start.view.h;
+        }
+        // A click is not a pan: undo any sub-threshold drift so picking never moves the view.
+        if (onViewportChange) onViewportChange(start.view);
+        else setInternalView(start.view);
+        const hit = pickBuilding(model.buildings, [x, -y]);
+        if (hit) onSunStudyPick(hit.id);
       }}
     >
       <rect x={view.x} y={view.y} width={view.w} height={view.h} fill={canvas} />
@@ -406,6 +459,22 @@ export function DrawingPlan({
                 )}
               />
             ))}
+            {study &&
+              model.buildings
+                .filter((building) => selectedIds.has(building.id))
+                .map((building) => (
+                  <path
+                    key={`sel${building.id}`}
+                    data-selected-building={building.id}
+                    d={svgRings([building.ring, ...building.holes])}
+                    fill={studySunFill}
+                    fillOpacity={0.85}
+                    fillRule="evenodd"
+                    stroke={annotationInk}
+                    strokeWidth={screenPx(0.35)}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ))}
             {(model.siteBoundaryLines ?? []).map((line, index) => (
               <path
                 key={`sb${index}`}
@@ -431,6 +500,23 @@ export function DrawingPlan({
               <HeliodonPlanOverlay input={heliodon} planScale={planScale} sideM={model.sideM} sunStudy={study} />
             )}
             {study && annotations}
+            {estLabels.length > 0 && (
+              <g className="sun-study-est" aria-hidden="true" fontFamily="Helvetica, Arial, sans-serif">
+                {estLabels.map((label) => (
+                  <text
+                    key={label.id}
+                    x={label.at[0]}
+                    y={-label.at[1]}
+                    fontSize={estFont}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fill={annotationInk}
+                  >
+                    {label.text}
+                  </text>
+                ))}
+              </g>
+            )}
         </>
       )}
       {figure && heliodon && (
