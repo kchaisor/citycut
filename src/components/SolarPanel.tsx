@@ -79,6 +79,16 @@ export function SolarPanel({
           />
           Sun study on site plan (9am–3pm)
         </label>
+        {settings.sunStudy && (
+          <label className="check-field">
+            <input
+              type="checkbox"
+              checked={settings.sunStudyMuted !== false}
+              onChange={(event) => patch({ sunStudyMuted: event.target.checked })}
+            />
+            Muted base plan
+          </label>
+        )}
         {settings.showPath && (
           <label className="field">
             <span className="kicker">Sun path size (× site half-width)</span>

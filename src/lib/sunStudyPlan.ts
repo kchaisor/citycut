@@ -80,3 +80,11 @@ export function sunStudyDateArc(date: SunStudyDate, radiusM: number): Pt[] {
   }
   return points;
 }
+
+/** Tree crown opacity in the sun study muted base plan. */
+export const SUN_STUDY_TREE_OPACITY = 0.5;
+
+/** The muted base plan is on by default with the sun study; only an explicit false turns it off. */
+export function sunStudyMutedOn(sunStudy: boolean | undefined, muted: boolean | undefined): boolean {
+  return Boolean(sunStudy) && muted !== false;
+}
