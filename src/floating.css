@@ -313,3 +313,22 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 /* New cut reads as a button: accent fill, black border. */
 .sidebar .sidebar-new-cut { background: var(--accent); color: var(--sidebar-text); border: 1px solid var(--sun-card-on-border); border-radius: 8px; padding: 6px 12px; font-weight: 600; cursor: pointer; }
 .sidebar .sidebar-new-cut:hover { background: var(--accent-hover); }
+
+/* View section: walk viewshed (Kelvin, Oct 2026). Hex lives in colours.css (--view-*). Desktop only. */
+.view-walk-hint { margin: 0; }
+.view-walk-actions, .view-walk-radius { display: flex; gap: 6px; flex-wrap: wrap; }
+.view-walk-field { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: var(--sidebar-text); }
+.view-walk-eye { width: 6ch; font: inherit; color: var(--sidebar-text); background: var(--sun-card-bg); border: 1px solid var(--sun-card-border); border-radius: 4px; padding: 2px 4px; }
+.sidebar .view-walk-compute { width: 100%; height: 32px; }
+.view-walk-stats { margin: 4px 0 0; }
+.view-walk-limits { margin: 0; }
+.view-legend {
+  position: absolute; left: 12px; bottom: 52px; z-index: 3; display: grid; gap: 4px;
+  padding: 8px 10px; border-radius: 8px; background: var(--panel-bg); border: 1px solid var(--panel-border); color: var(--sidebar-text); font-size: 12px;
+  text-shadow: none; box-shadow: none; pointer-events: none;
+}
+.view-legend span { display: flex; align-items: center; gap: 6px; }
+.view-legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; border: 1px solid var(--panel-border); }
+.view-legend i.view-legend-path { height: 3px; border: 0; background: var(--view-path); }
+.view-walk-speed { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.sidebar .view-walk-speed .shape-btn { width: 100%; height: 30px; padding: 0; font-size: 12px; border-radius: 8px; }

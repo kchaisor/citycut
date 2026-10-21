@@ -69,6 +69,13 @@
   --wind-streak: #2B6CB0;
   --wind-rose: #3d5a73;
 
+  /* View tab walk viewshed: ground visible now, seen earlier on the walk, not visible, path ribbon, walker marker. */
+  --view-visible: #FFF500;
+  --view-seen: #FFF9AA;
+  --view-blocked: #28282E;
+  --view-path: #000000;
+  --view-walker: #FFF500;
+
   /* Residential footprints, legend swatch, and the Residential Rhino layer. */
   --use-residential: #CECBC6;
 

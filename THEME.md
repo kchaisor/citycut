@@ -270,6 +270,11 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--axo-tree-trunk` | `#7a6a55` | Exploded axo tree trunk. |
 | `--wind-streak` | `#2B6CB0` | Animated wind streaks in the 3D viewport (~70% opacity). |
 | `--wind-rose` | `#3d5a73` | On-screen wind rose overlay and Wind export layer. |
+| `--view-visible` | `#FFF500` | View tab: ground visible from the walker right now (3D overlay, ~86% opacity) and its legend swatch. |
+| `--view-seen` | `#FFF9AA` | View tab: ground seen earlier on the walk (lighter tint, ~47% opacity). |
+| `--view-blocked` | `#28282E` | View tab: ground inside the radius that is not visible (~27% opacity). |
+| `--view-path` | `#000000` | View tab: drawn walk path ribbon and its clicked points. |
+| `--view-walker` | `#FFF500` | View tab: walker marker (eye ball on a black pole). |
 
 The contour lines in Rhino use the pen `--contour-stroke` from `src/drawing-style.css`, not a fill.
 
