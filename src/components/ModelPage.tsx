@@ -1,4 +1,4 @@
-import { sunStudyMutedOn, type SunStudyDate } from "../lib/sunStudyPlan";
+import { sunStudyMutedOn, toggleSelection, type SunStudyDate } from "../lib/sunStudyPlan";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
@@ -293,6 +293,8 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     setSolar(next);
   }
 
+  const [sunStudySelected, setSunStudySelected] = useState<number[]>([]);
+  useEffect(() => setSunStudySelected([]), [model]);
   const sunStudyDate = useMemo<SunStudyDate | null>(
     () =>
       solar.sunStudy
@@ -1337,6 +1339,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 shadowInput={planShadowInput()}
                 sunStudy={sunStudyDate}
                 sunStudyMuted={sunStudyMutedOn(solar.sunStudy, solar.sunStudyMuted)}
+                sunStudyCasters={solar.sunStudyCasters ?? "all"}
+                sunStudySelected={sunStudySelected}
+                onSunStudyPick={(id) => setSunStudySelected((current) => toggleSelection(current, id))}
                 uniformBuildings={!colourByUse && !showSource}
                 colourBySource={showSource}
                 highlightManual={showManualEdits && overrideResult.manualCount > 0}
@@ -2019,6 +2024,8 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 onChange={commitSolar}
                 sideM={model.sideM}
                 site={{ lat: model.center.lat, lon: model.center.lon }}
+                selectedCount={sunStudySelected.length}
+                onClearSelection={() => setSunStudySelected([])}
               />
             </div>
 

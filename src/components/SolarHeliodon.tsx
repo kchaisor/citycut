@@ -46,6 +46,8 @@ export type SolarViewSettings = {
   sunStudy?: boolean;
   /** Muted base plan under the sun study. Undefined means on (the default). */
   sunStudyMuted?: boolean;
+  /** Sun study shadow casters: every building (default) or only the ones picked on the plan. */
+  sunStudyCasters?: "all" | "selected";
   /** Later phase (flagged off, no UI): hours-of-sun heatmap on the ground for the chosen day. */
   sunHours?: boolean;
 };
