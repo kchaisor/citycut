@@ -71,6 +71,14 @@ export function SolarPanel({
           />
           Cast real-time shadows
         </label>
+        <label className="check-field">
+          <input
+            type="checkbox"
+            checked={Boolean(settings.sunStudy)}
+            onChange={(event) => patch({ sunStudy: event.target.checked })}
+          />
+          Sun study on site plan (9am–3pm)
+        </label>
         {settings.showPath && (
           <label className="field">
             <span className="kicker">Sun path size (× site half-width)</span>

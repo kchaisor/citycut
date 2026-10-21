@@ -7,6 +7,13 @@ import {
 import { getColour } from "../lib/colours";
 import { svgPolyline } from "../lib/svgPlan";
 import { screenPx } from "../lib/lineweights";
+import { SUN_PATH_STYLES } from "../lib/heliodonSunPaths";
+import {
+  hiddenBySunStudy,
+  sunStudyDateArc,
+  sunStudySuns,
+  type SunStudyDate,
+} from "../lib/sunStudyPlan";
 
 function planLine(points: [number, number][], close = false) {
   return svgPolyline(
@@ -15,8 +22,7 @@ function planLine(points: [number, number][], close = false) {
   );
 }
 
-function SunNowIcon({ cx, cy, size }: { cx: number; cy: number; size: number }) {
-  const core = getColour("--sun-marker");
+function SunNowIcon({ cx, cy, size, core = getColour("--sun-marker") }: { cx: number; cy: number; size: number; core?: string }) {
   const ink = getColour("--sun-compass-label");
   const rays = [0, 45, 90, 135, 180, 225, 270, 315];
   return (
@@ -49,8 +55,11 @@ export function HeliodonPlanOverlay({
   input,
   planScale,
   sideM,
+  sunStudy = null,
 }: {
   input: HeliodonDiagramInput;
+  /** Sun study on: hourly suns on this date's path replace the current-time sun and duplicate hour labels. */
+  sunStudy?: SunStudyDate | null;
   planScale: number;
   /** Clips the diagram to the square site frame. */
   sideM: number;
@@ -64,6 +73,20 @@ export function HeliodonPlanOverlay({
   const R = overlay.radiusM;
   const half = sideM / 2;
   const clipId = `heliodon-frame-${sideM}`;
+  const sunSize = R * 0.065;
+  const hourFont = heliodonLabelFontMetres(planScale, 7);
+  const studySuns = useMemo(
+    () => (sunStudy ? sunStudySuns(sunStudy, R, sunSize, hourFont) : []),
+    [sunStudy, R, sunSize, hourFont],
+  );
+  const studyArc = useMemo(() => {
+    if (!sunStudy) return null;
+    const onSeasonalArc =
+      SUN_PATH_STYLES.some((style) => style.date.month === sunStudy.month && style.date.day === sunStudy.day) ||
+      (sunStudy.month === 3 && sunStudy.day === 20);
+    return onSeasonalArc ? null : sunStudyDateArc(sunStudy, R);
+  }, [sunStudy, R]);
+  const studySunFill = getColour("--sun-study-sun");
 
   return (
     <>
@@ -178,7 +201,16 @@ export function HeliodonPlanOverlay({
           {label.text}
         </text>
       ))}
-      {overlay.hourLabels.map((label) => (
+      {studyArc && studyArc.length >= 2 && (
+        <path
+          d={planLine(studyArc, false)}
+          fill="none"
+          stroke={ink}
+          strokeWidth={screenPx(0.22)}
+          vectorEffect="non-scaling-stroke"
+        />
+      )}
+      {overlay.hourLabels.filter((label) => !hiddenBySunStudy(label, studySuns, R)).map((label) => (
         <text
           key={`${label.text}-${label.east}`}
           x={label.east}
@@ -207,7 +239,24 @@ export function HeliodonPlanOverlay({
           {label.text}
         </text>
       ))}
-      {overlay.sun && <SunNowIcon cx={overlay.sun[0]} cy={-overlay.sun[1]} size={R * 0.065} />}
+      {!sunStudy && overlay.sun && <SunNowIcon cx={overlay.sun[0]} cy={-overlay.sun[1]} size={sunSize} />}
+      {studySuns.map((sun) => (
+        <g key={`study-${sun.hour}`} data-sun-hour={sun.hour}>
+          <SunNowIcon cx={sun.at[0]} cy={-sun.at[1]} size={sunSize} core={studySunFill} />
+          <text
+            x={sun.labelAt[0]}
+            y={-sun.labelAt[1]}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize={hourFont}
+            fontWeight={600}
+            fill={ink}
+            fontFamily="Helvetica, Arial, sans-serif"
+          >
+            {sun.label}
+          </text>
+        </g>
+      ))}
       <text
         x={0}
         y={R + heliodonLabelFontMetres(planScale, 6) * 1.8}

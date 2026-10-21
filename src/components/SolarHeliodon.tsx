@@ -42,6 +42,8 @@ export type SolarViewSettings = {
   day: number;
   hour: number;
   minute: number;
+  /** Site plan sun study: hourly 9am–3pm shadows and suns on the selected date. */
+  sunStudy?: boolean;
   /** Later phase (flagged off, no UI): hours-of-sun heatmap on the ground for the chosen day. */
   sunHours?: boolean;
 };

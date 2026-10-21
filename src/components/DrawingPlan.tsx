@@ -24,6 +24,8 @@ import { readNswPlanStyle } from "../lib/nswPlanStyle";
 import { planShadowRings, type PlanShadowInput } from "../lib/buildingShadows";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
 import { planViewportExtent, type PlanViewport } from "../lib/planViewport";
+import { SUN_STUDY_SHADOW_OPACITY, type SunStudyDate } from "../lib/sunStudyPlan";
+import { useSunStudyShadows } from "./useSunStudyShadows";
 
 export type DrawingKind = "site" | "figure-ground" | "exploded-axo";
 
@@ -63,6 +65,7 @@ export function DrawingPlan({
   viewport,
   onViewportChange,
   fitCounter = 0,
+  sunStudy = null,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -81,6 +84,8 @@ export function DrawingPlan({
   viewport?: PlanViewport;
   onViewportChange?: (view: PlanViewport) => void;
   fitCounter?: number;
+  /** Site plan sun study: hourly 9am–3pm shadow layers, hourly suns, scale bar and north arrow. */
+  sunStudy?: SunStudyDate | null;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
@@ -206,10 +211,64 @@ export function DrawingPlan({
   // NSW mode only: null on Victorian cuts, so nothing below renders for them.
   const nswStyle = useMemo(() => (model.nsw ? readNswPlanStyle() : null), [model.nsw, colourTick]);
   const nswItems = useMemo(() => (nswStyle ? nswPlanItems(model, nswStyle.hatchM) : null), [model, nswStyle]);
+  const study = figure ? null : sunStudy;
+  const studyShadows = useSunStudyShadows(model, study);
+  const studyShadowFill = getColour("--sun-study-shadow");
+  const annotationInk = figure ? figureFill : getColour("--sun-compass-label");
   const shadowRings = useMemo(() => {
-    if (!shadowInput || figure) return [];
+    if (!shadowInput || figure || study) return [];
     return planShadowRings(model, shadowInput, castShadows);
-  }, [castShadows, figure, model, shadowInput]);
+  }, [castShadows, figure, model, shadowInput, study]);
+  const annotations = (
+    <>
+      <g aria-hidden="true" className="plan-north-arrow">
+        <line
+          x1={arrowX}
+          y1={arrowBase}
+          x2={arrowX}
+          y2={arrowTip + head * 1.6}
+          stroke={annotationInk}
+          strokeWidth={notePx}
+          vectorEffect="non-scaling-stroke"
+        />
+        <polygon
+          points={`${arrowX},${arrowTip} ${arrowX - head},${arrowTip + head * 1.7} ${arrowX + head},${arrowTip + head * 1.7}`}
+          fill={annotationInk}
+        />
+        <text
+          x={arrowX + head * 1.5}
+          y={arrowTip + head * 1.15}
+          fontSize={model.sideM * 0.026}
+          fill={annotationInk}
+          fontFamily="Helvetica, Arial, sans-serif"
+        >
+          N
+        </text>
+      </g>
+      <g aria-hidden="true" className="plan-scale-bar">
+        <rect x={-half} y={barY} width={barMetres / 2} height={barThickness} fill={annotationInk} />
+        <rect
+          x={-half}
+          y={barY}
+          width={barMetres}
+          height={barThickness}
+          fill="none"
+          stroke={annotationInk}
+          strokeWidth={notePx}
+          vectorEffect="non-scaling-stroke"
+        />
+        <text
+          x={-half + barMetres + model.sideM * 0.012}
+          y={barY + barThickness * 0.85}
+          fontSize={model.sideM * 0.02}
+          fill={annotationInk}
+          fontFamily="Helvetica, Arial, sans-serif"
+        >
+          {barMetres} m
+        </text>
+      </g>
+    </>
+  );
 
   return (
     <svg
@@ -252,52 +311,7 @@ export function DrawingPlan({
             strokeWidth={framePx}
             vectorEffect="non-scaling-stroke"
           />
-          <g aria-hidden="true">
-            <line
-              x1={arrowX}
-              y1={arrowBase}
-              x2={arrowX}
-              y2={arrowTip + head * 1.6}
-              stroke={figureFill}
-              strokeWidth={notePx}
-              vectorEffect="non-scaling-stroke"
-            />
-            <polygon
-              points={`${arrowX},${arrowTip} ${arrowX - head},${arrowTip + head * 1.7} ${arrowX + head},${arrowTip + head * 1.7}`}
-              fill={figureFill}
-            />
-            <text
-              x={arrowX + head * 1.5}
-              y={arrowTip + head * 1.15}
-              fontSize={model.sideM * 0.026}
-              fill={figureFill}
-              fontFamily="Helvetica, Arial, sans-serif"
-            >
-              N
-            </text>
-          </g>
-          <g aria-hidden="true">
-            <rect x={-half} y={barY} width={barMetres / 2} height={barThickness} fill={figureFill} />
-            <rect
-              x={-half}
-              y={barY}
-              width={barMetres}
-              height={barThickness}
-              fill="none"
-              stroke={figureFill}
-              strokeWidth={notePx}
-              vectorEffect="non-scaling-stroke"
-            />
-            <text
-              x={-half + barMetres + model.sideM * 0.012}
-              y={barY + barThickness * 0.85}
-              fontSize={model.sideM * 0.02}
-              fill={figureFill}
-              fontFamily="Helvetica, Arial, sans-serif"
-            >
-              {barMetres} m
-            </text>
-          </g>
+          {annotations}
         </>
       ) : (
         <>
@@ -345,6 +359,21 @@ export function DrawingPlan({
               <path key={`tr${index}`} d={svgPolyline(tram, false)} fill="none" {...screenPenAttrs(style.tram)} strokeLinecap="round" strokeLinejoin="round" />
             ))}
             {nswItems && nswStyle && <NswPlanLines items={nswItems} style={nswStyle} />}
+            {study &&
+              studyShadows.layers.map((layer) => (
+                <g key={`ss${layer.hour}`} data-shadow-hour={layer.hour}>
+                  {layer.rings.map((rings, index) => (
+                    <path
+                      key={index}
+                      d={svgRings(rings)}
+                      fill={studyShadowFill}
+                      fillOpacity={SUN_STUDY_SHADOW_OPACITY}
+                      fillRule="evenodd"
+                      stroke="none"
+                    />
+                  ))}
+                </g>
+              ))}
             {shadowRings.map((rings, index) => (
               <path
                 key={`sh${index}`}
@@ -392,8 +421,9 @@ export function DrawingPlan({
             {nswItems && nswStyle && <NswPlanLabels items={nswItems} style={nswStyle} sizeM={model.sideM * NSW_PLAN_LABEL_SHARE} />}
             <path d={framePathD} fill="none" {...screenPenAttrs(style.frame, "miter")} />
             {heliodon && (
-              <HeliodonPlanOverlay input={heliodon} planScale={planScale} sideM={model.sideM} />
+              <HeliodonPlanOverlay input={heliodon} planScale={planScale} sideM={model.sideM} sunStudy={study} />
             )}
+            {study && annotations}
         </>
       )}
       {figure && heliodon && (
