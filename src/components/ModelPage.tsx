@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
-import { Building2, Copy, Download, DraftingCompass, Info, Sun, Trees, Upload, Wind } from "lucide-react";
+import { Building2, Copy, Download, DraftingCompass, Eye, Info, Sun, Trees, Upload, Wind } from "lucide-react";
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -142,6 +142,8 @@ import { SceneBoundary } from "./SceneBoundary";
 import { SolarPanel } from "./SolarPanel";
 import { WindPanel } from "./WindPanel";
 import { WindRoseOverlay } from "./WindRoseOverlay";
+import { ViewLegend, ViewPanel } from "./ViewPanel";
+import { useWalkViewshed } from "./useWalkViewshed";
 import { fetchWindRoseTable } from "../lib/windFetch";
 import type { WindRoseTable } from "../lib/windRose";
 import {
@@ -207,6 +209,7 @@ const SECTION_ICONS: Record<SidebarSectionId, typeof Info> = {
   drawing: DraftingCompass,
   solar: Sun,
   wind: Wind,
+  view: Eye,
   import: Upload,
   exports: Download,
 };
@@ -814,6 +817,8 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     }),
     [model, overrideResult, visibleBuildings, comHeightsMeasuredOn],
   );
+  // View tab: the path resets with a new cut; compute uses the buildings as shown (edits, hides).
+  const walk = useWalkViewshed(model, displayModel);
 
   /**
    * Drawing tab and its .ai exports: the display model (hidden buildings already gone) plus plan
@@ -984,6 +989,11 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     };
   });
   const open: SidebarSectionId = resolveSidebarSection(sidebar.section, sectionIds);
+  const walkDrawing = open === "view" && walk.drawing;
+  const { drawing: walkDrawingOn, setDrawing: setWalkDrawing } = walk;
+  useEffect(() => {
+    if (open !== "view" && walkDrawingOn) setWalkDrawing(false);
+  }, [open, walkDrawingOn, setWalkDrawing]);
 
   function selectSection(id: string) {
     dispatchSidebar({ type: "select", id: resolveSidebarSection(id, sectionIds) });
@@ -1247,8 +1257,10 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 cameraMemory={cameraMemory}
                 display={view3dDisplay}
                 importedMassing={massing.group}
-                onScenePoint={massing.onScenePoint}
+                walkLayer={walk.layer.root}
+                onScenePoint={walkDrawing ? walk.addPoint : massing.onScenePoint}
               />
+              {open === "view" && walk.clickCount > 0 && <ViewLegend />}
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
                   table={windTable}
@@ -1997,6 +2009,10 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 animateAnyway={windMotion.animateAnyway}
                 onAnimateAnyway={windMotion.setAnimateAnyway}
               />
+            </div>
+
+            <div className="drawer-section" hidden={open !== "view"}>
+              <ViewPanel walk={walk} />
             </div>
 
             <div className="drawer-section" hidden={open !== "import"}>

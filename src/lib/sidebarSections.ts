@@ -5,7 +5,7 @@
  * storage (the old floating drawer remembered it in `citycut.rail.model`). Whether
  * the panel is collapsed is shared with the landing page; see `sidebarCollapse.ts`.
  */
-export const SIDEBAR_SECTION_IDS = ["summary", "buildings", "trees", "drawing", "solar", "wind", "import", "exports"] as const;
+export const SIDEBAR_SECTION_IDS = ["summary", "buildings", "trees", "drawing", "solar", "wind", "view", "import", "exports"] as const;
 
 export type SidebarSectionId = (typeof SIDEBAR_SECTION_IDS)[number];
 
@@ -18,6 +18,7 @@ export const SIDEBAR_SECTION_LABELS: Record<SidebarSectionId, string> = {
   drawing: "Drawing",
   solar: "Sun",
   wind: "Wind",
+  view: "View",
   import: "Import",
   exports: "Export",
 };

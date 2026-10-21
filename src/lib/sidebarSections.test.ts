@@ -20,6 +20,7 @@ describe("sidebar sections", () => {
       "drawing",
       "solar",
       "wind",
+      "view",
       "import",
       "exports",
     ]);
