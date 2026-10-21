@@ -1,4 +1,5 @@
-import { sunStudyMutedOn, toggleSelection, type SunStudyDate } from "../lib/sunStudyPlan";
+import { sunStudyCasterModel, sunStudyMutedOn, toggleSelection, type SunStudyDate } from "../lib/sunStudyPlan";
+import { sunStudyLayersFor } from "./useSunStudyShadows";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
@@ -27,6 +28,8 @@ import {
   downloadExplodedAxoAi,
   downloadFigureAi,
   downloadSiteAi,
+  downloadSiteSvg,
+  downloadFigureSvg,
   downloadSunStudyZip,
   pngFilename,
 } from "../lib/download";
@@ -144,7 +147,7 @@ import { SolarPanel } from "./SolarPanel";
 import { WindPanel } from "./WindPanel";
 import { WindRoseOverlay } from "./WindRoseOverlay";
 import { ExportTiles } from "./ExportTiles";
-import { exportTiles } from "../lib/exportTiles";
+import { exportTiles, type ExportBusy } from "../lib/exportTiles";
 import { ViewLegend, ViewPanel } from "./ViewPanel";
 import { useWalkViewshed } from "./useWalkViewshed";
 import { fetchWindRoseTable } from "../lib/windFetch";
@@ -225,7 +228,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   const uniform = uniformBuildingColor();
   const [figureScale, setFigureScale] = useState<number>(() => preferredFigureScale(model.sideM));
   const [exportError, setExportError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"3dm" | "png" | "ai-site" | "ai-figure" | "ai-exploded" | "ai-sun" | null>(null);
+  const [busy, setBusy] = useState<ExportBusy>(null);
   const [sunStudyProgress, setSunStudyProgress] = useState<string | null>(null);
   const [colourByUse, setColourByUse] = useState(
     () => !capturePresetFromSearch(window.location.search).uniformBuildings,
@@ -1060,11 +1063,48 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     }
   }
 
+  /** Sun study on: the seven hourly layers for the site plan exports (from the screen's cache). */
+  async function sunStudyExportLayers(): Promise<SitePlanExportOptions["sunStudy"]> {
+    if (!sunStudyDate) return null;
+    const casters = sunStudyCasterModel(drawingModel, solar.sunStudyCasters ?? "all", sunStudySelected);
+    return { layers: await sunStudyLayersFor(casters, sunStudyDate) };
+  }
+
+  async function saveSiteSvg() {
+    setExportError(null);
+    setBusy("svg-site");
+    try {
+      await downloadSiteSvg(drawingModel, figureScale, lineStyles, {
+        ...sitePlanExportOptions(),
+        sunStudy: await sunStudyExportLayers(),
+      });
+    } catch {
+      setExportError("The site plan SVG could not be written.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function saveFigureSvg() {
+    setExportError(null);
+    setBusy("svg-figure");
+    try {
+      await downloadFigureSvg(drawingModel, figureScale, lineStyles, heliodonDiagramExport());
+    } catch {
+      setExportError("The figure-ground SVG could not be written.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function saveSiteAi() {
     setExportError(null);
     setBusy("ai-site");
     try {
-      await downloadSiteAi(drawingModel, figureScale, lineStyles, sitePlanExportOptions());
+      await downloadSiteAi(drawingModel, figureScale, lineStyles, {
+        ...sitePlanExportOptions(),
+        sunStudy: await sunStudyExportLayers(),
+      });
     } catch {
       setExportError("The site plan could not be written.");
     } finally {
@@ -2075,12 +2115,14 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     sunStudyDate: sunStudyDateText({ year: solar.year, month: solar.month, day: solar.day }),
                     buildingsAsMesh,
                     crsName: crs.name,
+                    sunStudy: Boolean(solar.sunStudy),
                   })}
                   progress={busy === "ai-sun" ? sunStudyProgress : null}
                   onDownload={(id) => {
                     if (id === "3dm") void save3dm();
                     else if (id === "png") void savePng();
                     else if (id === "sun-zip") void saveSunStudyAi();
+                    else if (id === "svg") void (drawing === "figure-ground" ? saveFigureSvg() : saveSiteSvg());
                     else if (drawing === "site") void saveSiteAi();
                     else if (drawing === "figure-ground") void saveFigureAi();
                     else void saveExplodedAxoAi();

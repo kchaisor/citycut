@@ -2,8 +2,8 @@
  * Export tab tiles: one tile per format CityCut can write today. Pure, so the enable rules
  * and wording are tested without the page.
  */
-export type ExportTileId = "3dm" | "ai" | "sun-zip" | "png";
-export type ExportBusy = "3dm" | "png" | "ai-site" | "ai-figure" | "ai-exploded" | "ai-sun" | null;
+export type ExportTileId = "3dm" | "ai" | "svg" | "sun-zip" | "png";
+export type ExportBusy = "3dm" | "png" | "ai-site" | "ai-figure" | "ai-exploded" | "ai-sun" | "svg-site" | "svg-figure" | null;
 export type DrawingKindForExport = "site" | "figure-ground" | "exploded-axo";
 
 export type ExportTile = {
@@ -30,10 +30,14 @@ export type ExportTileInput = {
   sunStudyDate: string;
   buildingsAsMesh: boolean;
   crsName: string;
+  /** Sun study on: the site plan .ai and .svg carry one shadow layer per hour. */
+  sunStudy?: boolean;
 };
 
 export const ILLUSTRATOR_DISABLED_TOOLTIP =
   "Illustrator exports the vector drawings. Open the Drawing tab: site plan, figure-ground or exploded axo.";
+export const SVG_DISABLED_TOOLTIP =
+  "SVG exports the site plan or figure-ground. Open the Drawing tab and pick one of those drawings.";
 export const PNG_DISABLED_TOOLTIP = "PNG captures the 3D view. Open the 3D model tab.";
 
 const AI_BY_DRAWING: Record<DrawingKindForExport, { aria: string; busy: ExportBusy; text: (scale: number) => string }> = {
@@ -58,6 +62,11 @@ export function exportTiles(input: ExportTileInput): ExportTile[] {
   const anyBusy = input.busy !== null;
   const vector = input.tab === "drawing";
   const ai = AI_BY_DRAWING[input.drawing];
+  const hourly = input.sunStudy && input.drawing === "site";
+  const svgOn = vector && input.drawing !== "exploded-axo";
+  const svgBusy: ExportBusy = input.drawing === "figure-ground" ? "svg-figure" : "svg-site";
+  const svgAria = input.drawing === "figure-ground" ? "Download figure-ground SVG" : input.drawing === "site" ? "Download site plan SVG" : "Download SVG";
+  const hourlyNote = " With the sun study on, shadows come as one layer per hour 9am–3pm, each at 20% opacity.";
   return [
     {
       id: "3dm",
@@ -73,11 +82,23 @@ export function exportTiles(input: ExportTileInput): ExportTile[] {
       id: "ai",
       app: "Illustrator",
       ext: ".ai",
-      description: vector ? ai.text(input.figureScale) : ILLUSTRATOR_DISABLED_TOOLTIP,
+      description: vector ? ai.text(input.figureScale) + (hourly ? hourlyNote : "") : ILLUSTRATOR_DISABLED_TOOLTIP,
       enabled: vector && !anyBusy,
       disabledReason: vector ? null : ILLUSTRATOR_DISABLED_TOOLTIP,
       ariaLabel: vector ? ai.aria : "Download Illustrator",
       busy: input.busy === ai.busy,
+    },
+    {
+      id: "svg",
+      app: "SVG",
+      ext: ".svg",
+      description: svgOn
+        ? `The ${input.drawing === "site" ? "site plan" : "figure-ground"} as a layered SVG in millimetres at 1:${input.figureScale}, the same layers as the .ai.` + (hourly ? hourlyNote : "")
+        : SVG_DISABLED_TOOLTIP,
+      enabled: svgOn && !anyBusy,
+      disabledReason: svgOn ? null : SVG_DISABLED_TOOLTIP,
+      ariaLabel: svgAria,
+      busy: input.busy === svgBusy,
     },
     {
       id: "sun-zip",

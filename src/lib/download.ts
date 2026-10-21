@@ -90,6 +90,32 @@ export async function downloadSiteAi(
   downloadBytes(aiFilename(model, "site", scale), bytes, "application/pdf");
 }
 
+export function svgFilename(model: CityModel, kind: "site" | "figure", scale: number): string {
+  return aiFilename(model, kind, scale).replace(/\.ai$/, ".svg");
+}
+
+export async function downloadSiteSvg(
+  model: CityModel,
+  scale: number,
+  style?: LineStyles,
+  exportOptions?: SitePlanExportOptions | null,
+): Promise<void> {
+  const { sitePlanSvg } = await import("./aiPlan");
+  const text = await sitePlanSvg(model, scale, style, exportOptions);
+  downloadBlob(svgFilename(model, "site", scale), new Blob([text], { type: "image/svg+xml" }));
+}
+
+export async function downloadFigureSvg(
+  model: CityModel,
+  scale: number,
+  style?: LineStyles,
+  heliodon?: HeliodonDiagramExportOptions | null,
+): Promise<void> {
+  const { figureGroundSvg } = await import("./aiPlan");
+  const text = await figureGroundSvg(model, scale, style, heliodon);
+  downloadBlob(svgFilename(model, "figure", scale), new Blob([text], { type: "image/svg+xml" }));
+}
+
 export async function downloadFigureAi(
   model: CityModel,
   scale: number,

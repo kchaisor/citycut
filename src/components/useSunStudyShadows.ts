@@ -32,6 +32,46 @@ function startWorker(): Worker | null {
 }
 
 /**
+ * All seven hourly layers for an export: cached hours at once, the rest from a worker. Without
+ * Worker support (tests), missing hours come back empty rather than blocking the page.
+ */
+export function sunStudyLayersFor(model: CityModel, date: SunStudyDate): Promise<SunStudyLayer[]> {
+  const modelKey = sunStudyModelKey(model);
+  const collect = () =>
+    SUN_STUDY_HOURS.map((hour) => ({ hour, rings: hourCache.get(sunStudyHourKey(modelKey, date, hour)) ?? [] }));
+  const missing = SUN_STUDY_HOURS.filter((hour) => !hourCache.has(sunStudyHourKey(modelKey, date, hour)));
+  if (missing.length === 0) return Promise.resolve(collect());
+  const worker = startWorker();
+  if (!worker) return Promise.resolve(collect());
+  const id = nextId++;
+  return new Promise((resolve, reject) => {
+    let left = missing.length;
+    worker.onmessage = (event: MessageEvent<SunStudyWorkerMessage>) => {
+      const message = event.data;
+      if (message.id !== id) return;
+      remember(sunStudyHourKey(modelKey, date, message.hour), message.type === "hour" ? message.rings : []);
+      left -= 1;
+      if (left === 0) {
+        worker.terminate();
+        resolve(collect());
+      }
+    };
+    worker.onerror = (event) => {
+      event.preventDefault();
+      worker.terminate();
+      reject(new Error("The sun study shadows could not be computed."));
+    };
+    const request: SunStudyWorkerRequest = {
+      id,
+      model: { sideM: model.sideM, terrain: model.terrain, frameShape: model.frameShape, buildings: model.buildings },
+      date: { lat: date.lat, lon: date.lon, year: date.year, month: date.month, day: date.day },
+      hours: [...missing],
+    };
+    worker.postMessage(request);
+  });
+}
+
+/**
  * Hourly plan shadows for the sun study, computed off the main thread. Layers appear as each hour
  * finishes; hours already in the cache show at once. Returns the layers ready so far and whether
  * any are still pending.
