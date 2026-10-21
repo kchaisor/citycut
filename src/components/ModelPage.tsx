@@ -26,10 +26,12 @@ import {
   downloadExplodedAxoAi,
   downloadFigureAi,
   downloadSiteAi,
+  downloadSunStudyZip,
   downloadViewAi,
   pngFilename,
 } from "../lib/download";
 import { VIEW3D_EXPORT_TOOLTIP, view3dExportBlocked } from "../lib/view3dExportTab";
+import { sunStudyDateText } from "../lib/sunStudyExport";
 import {
   AXO_LAYER_LABELS,
   defaultExplodedAxoGapM,
@@ -222,7 +224,8 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   const uniform = uniformBuildingColor();
   const [figureScale, setFigureScale] = useState<number>(() => preferredFigureScale(model.sideM));
   const [exportError, setExportError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"3dm" | "png" | "ai-view" | "ai-site" | "ai-figure" | "ai-exploded" | null>(null);
+  const [busy, setBusy] = useState<"3dm" | "png" | "ai-view" | "ai-site" | "ai-figure" | "ai-exploded" | "ai-sun" | null>(null);
+  const [sunStudyProgress, setSunStudyProgress] = useState<string | null>(null);
   const [colourByUse, setColourByUse] = useState(
     () => !capturePresetFromSearch(window.location.search).uniformBuildings,
   );
@@ -1054,6 +1057,34 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     } catch {
       setExportError("The site plan could not be written.");
     } finally {
+      setBusy(null);
+    }
+  }
+
+  async function saveSunStudyAi() {
+    setExportError(null);
+    setBusy("ai-sun");
+    setSunStudyProgress("0 of 7");
+    try {
+      const date = { year: solar.year, month: solar.month, day: solar.day };
+      const problem = await downloadSunStudyZip(
+        drawingModel,
+        figureScale,
+        lineStyles,
+        (hour) => ({
+          ...sitePlanExportOptions(),
+          heliodon: null,
+          shadows: { ...planShadowInput(), hour, minute: 0 },
+          castShadows: true,
+        }),
+        date,
+        (done, total) => setSunStudyProgress(`${done} of ${total}`),
+      );
+      if (problem) setExportError(problem);
+    } catch {
+      setExportError("The sun study could not be written.");
+    } finally {
+      setSunStudyProgress(null);
       setBusy(null);
     }
   }
@@ -2128,6 +2159,20 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                   </div>
                   <button className="ghost" type="button" disabled={busy !== null} onClick={saveSiteAi} aria-label="Download site plan Illustrator">
                     {busy === "ai-site" ? "Preparing…" : "Download"}
+                  </button>
+                </article>
+                <article className="card">
+                  <div>
+                    <h3>
+                      Sun study <span>.zip</span>
+                    </h3>
+                    <p>
+                      Site plan .ai with shadows at 1:{figureScale} for each hour 9am–3pm on{" "}
+                      {sunStudyDateText({ year: solar.year, month: solar.month, day: solar.day })}, seven files in one zip.
+                    </p>
+                  </div>
+                  <button className="ghost" type="button" disabled={busy !== null} onClick={saveSunStudyAi} aria-label="Download sun study Illustrator zip">
+                    {busy === "ai-sun" ? `Preparing ${sunStudyProgress ?? ""}…` : "Download"}
                   </button>
                 </article>
                 <article className="card">
