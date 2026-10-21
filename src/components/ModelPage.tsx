@@ -1,3 +1,4 @@
+import type { SunStudyDate } from "../lib/sunStudyPlan";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
@@ -291,6 +292,14 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     writeStoredHeliodonRadiusFactor(window.localStorage, next.radiusFactor);
     setSolar(next);
   }
+
+  const sunStudyDate = useMemo<SunStudyDate | null>(
+    () =>
+      solar.sunStudy
+        ? { lat: model.center.lat, lon: model.center.lon, year: solar.year, month: solar.month, day: solar.day }
+        : null,
+    [solar.sunStudy, model.center.lat, model.center.lon, solar.year, solar.month, solar.day],
+  );
 
   function planShadowInput(): PlanShadowInput {
     return {
@@ -1319,9 +1328,14 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 onScale={onScale}
                 lineStyle={lineStyles}
                 planScale={figureScale}
-                heliodon={heliodonDiagramExport()}
+                heliodon={
+                  sunStudyDate
+                    ? (heliodonDiagramExport() ?? { ...planShadowInput(), sideM: model.sideM, radiusFactor: solar.radiusFactor })
+                    : heliodonDiagramExport()
+                }
                 castShadows={solar.castShadows}
                 shadowInput={planShadowInput()}
+                sunStudy={sunStudyDate}
                 uniformBuildings={!colourByUse && !showSource}
                 colourBySource={showSource}
                 highlightManual={showManualEdits && overrideResult.manualCount > 0}

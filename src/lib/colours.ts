@@ -92,6 +92,8 @@ export const COLOUR_KEYS = [
   "--building-solar-neutral",
   "--heliodon-dial-disc",
   "--shadow-fill",
+  "--sun-study-sun",
+  "--sun-study-shadow",
   "--wind-streak",
   "--wind-rose",
   "--view-visible",
@@ -272,7 +274,7 @@ export const COLOUR_GROUPS = [
   {
     id: "plan-shadows",
     title: "Site plan shadows",
-    keys: ["--shadow-fill"],
+    keys: ["--shadow-fill", "--sun-study-sun", "--sun-study-shadow"],
   },
   {
     id: "nsw",
@@ -384,6 +386,8 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--building-solar-neutral": "Solar neutral buildings",
   "--heliodon-dial-disc": "Heliodon dial disc",
   "--shadow-fill": "Building shadows",
+  "--sun-study-sun": "Sun study suns",
+  "--sun-study-shadow": "Sun study shadows",
   "--wind-streak": "Wind streaks (3D)",
   "--wind-rose": "Wind rose overlay",
   "--view-visible": "View: visible now",

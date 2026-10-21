@@ -256,6 +256,12 @@
   /* Site-plan building shadows (mid-grey, readable under plan fills). */
   --shadow-fill: #454545;
 
+  /* Site plan sun study: hourly sun icons on the selected-date path (9am–3pm). */
+  --sun-study-sun: #fff500;
+
+  /* Site plan sun study: one shadow layer per hour, drawn at 20% so overlaps read darker. */
+  --sun-study-shadow: #4a5a70;
+
   /* Exploded axonometric drawing (on-screen and Illustrator). */
   --axo-water: #7eb8da;
   --axo-road: #6B6C6F;
