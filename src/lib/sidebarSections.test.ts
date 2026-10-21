@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   INITIAL_SIDEBAR_SECTION,
+  SIDEBAR_SECTION_LABELS,
   availableSidebarSections,
   initialSidebarState,
   reduceSidebar,
@@ -46,5 +47,14 @@ describe("sidebar sections", () => {
   it("returns to Model details for a new model", () => {
     const state = reduceSidebar({ section: "exports" }, { type: "new-model" });
     expect(state).toEqual({ section: "summary" });
+  });
+});
+
+describe("Display section label", () => {
+  it("names the 3D / Drawing / Satellite section Display, distinct from its Drawing sub-tab and the View section", () => {
+    expect(SIDEBAR_SECTION_LABELS.drawing).toBe("Display");
+    const labels = Object.values(SIDEBAR_SECTION_LABELS);
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(labels).not.toContain("Drawing");
   });
 });
