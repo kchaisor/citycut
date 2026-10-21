@@ -117,3 +117,23 @@ export async function downloadViewAi(model: CityModel, shot: CameraShot, style: 
   const bytes = await viewAi(model, shot, style);
   downloadBytes(aiFilename(model, "view"), bytes, "application/pdf");
 }
+
+/**
+ * Sun study: the site plan .ai (same writer as the Site plan download, shadows on) for each hour
+ * 9am–3pm on the given date, zipped. Returns the failure sentence (null when all 7 were written);
+ * nothing is downloaded when every frame failed.
+ */
+export async function downloadSunStudyZip(
+  model: CityModel,
+  scale: number,
+  style: LineStyles | undefined,
+  optionsForHour: (hour: number) => SitePlanExportOptions,
+  date: { year: number; month: number; day: number },
+  onProgress?: (done: number, total: number) => void,
+): Promise<string | null> {
+  const [{ sitePlanAi }, study] = await Promise.all([import("./aiPlan"), import("./sunStudyExport")]);
+  const site = study.sunStudySiteSlug(model.placeLabel, model.center);
+  const result = await study.buildSunStudyZip(site, date, (hour) => sitePlanAi(model, scale, style, optionsForHour(hour)), onProgress);
+  if (result.zip) downloadBytes(study.sunStudyZipName(site, date), result.zip, "application/zip");
+  return study.sunStudyFailureText(result);
+}

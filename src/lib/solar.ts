@@ -24,20 +24,32 @@ export type ShadowStandardId = "rescode-sep" | "winter-jun-public";
 
 export const SHADOW_STANDARDS: Record<
   ShadowStandardId,
-  { label: string; detail: string; source: string; month: number; day: number; hours: readonly number[] }
+  {
+    label: string;
+    /** Card line 2: date and test hours. */
+    when: string;
+    /** Card line 3: the planning clause, when there is one. */
+    clause: string | null;
+    source: string;
+    month: number;
+    day: number;
+    hours: readonly number[];
+  }
 > = {
   "rescode-sep": {
-    label: "ResCode open space",
-    detail: "22 Sep · 9am–3pm · Cl. 55.04-3 (B4-3)",
+    label: "ResCode Open Space",
+    when: "22 Sep 9am – 3pm",
+    clause: "Clause 55.04-3 (B4-3)",
     source: "Clause 54.04-3 (A4-3) / 55.04-3 (B4-3), 22 Sep 9am to 3pm",
     month: 9,
     day: 22,
     hours: [9, 10, 11, 12, 13, 14, 15],
   },
   "winter-jun-public": {
-    label: "Public spaces",
-    detail: "22 Jun 11am–2pm · common practice",
-    source: "Common practice, not a clause: 22 Jun 11am to 2pm",
+    label: "Public Spaces",
+    when: "22 Jun 11am – 2pm",
+    clause: null,
+    source: "22 Jun 11am to 2pm",
     month: 6,
     day: 22,
     hours: [11, 12, 13, 14],
@@ -208,6 +220,9 @@ export function dateFromDayOfYear(year: number, doy: number): { month: number; d
  * Sun-study key dates. Solstices are the 2026 AEST dates (USNO: 21 Jun 18:24, 22 Dec 06:50).
  * The equinox card uses 22 Sep, the ResCode test date, not the astronomical 23 Sep.
  */
+/** Hour buttons under a selected key date: 9am to 3pm, Melbourne clock time. */
+export const KEY_DATE_HOURS: readonly number[] = [9, 10, 11, 12, 13, 14, 15];
+
 export const SUN_STUDY_DATES = [
   { id: "jun21", name: "Winter solstice", label: "21 Jun", why: "Worst-case shadow, lowest sun", month: 6, day: 21 },
   { id: "sep22", name: "Equinox", label: "22 Sep", why: "Average day, parks, commercial", month: 9, day: 22 },

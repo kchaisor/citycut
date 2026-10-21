@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
+  KEY_DATE_HOURS,
   SHADOW_STANDARDS,
   SUN_STUDY_DATES,
   daylightWindowMinutes,
@@ -62,6 +63,9 @@ export function SunStudyPlayer({
     ? { sunrise: standard.hours[0]! * 60, sunset: standard.hours[standard.hours.length - 1]! * 60 }
     : daylight;
   const minutes = settings.hour * 60 + settings.minute;
+  const keyDate = standard ? null : SUN_STUDY_DATES.find((d) => settings.month === d.month && settings.day === d.day) ?? null;
+  /** Hour buttons: the standard's test hours, or 9am–3pm under a selected key date. */
+  const stepHours: readonly number[] | null = standard ? standard.hours : keyDate ? KEY_DATE_HOURS : null;
   const [editing, setEditing] = useState<string | null>(null);
   /** Typed HH:MM, snapped into the slider range; invalid text leaves the time unchanged. */
   const commitTyped = () => {
@@ -103,8 +107,8 @@ export function SunStudyPlayer({
 
   const patch = (partial: Partial<SolarViewSettings>) => onChange({ ...settings, ...partial });
   const stepHour = (delta: number) => {
-    if (!standard) return;
-    const hours = standard.hours;
+    if (!stepHours) return;
+    const hours = stepHours;
     // Exact test hour → step from it; between hours → step to the neighbour in that direction.
     const below = hours.filter((h) => h * 60 <= minutes).length - 1;
     const exact = below >= 0 && hours[below]! * 60 === minutes;
@@ -181,7 +185,8 @@ export function SunStudyPlayer({
               }}
             >
               <span className="sun-study-card-name">{set.label}</span>
-              <span className="sun-study-card-why">{set.detail}</span>
+              <span className="sun-study-card-why">{set.when}</span>
+              {set.clause && <span className="sun-study-card-why">{set.clause}</span>}
             </button>
           );
         })}
@@ -263,19 +268,19 @@ export function SunStudyPlayer({
           ))}
         </div>
       </div>
-      {standard && standardId && (
+      {stepHours && (
         <div className="solar-stepper">
-          <div className="solar-stepper-row" role="group" aria-label="Hour in the shadow standard">
+          <div className="solar-stepper-row" role="group" aria-label={standard ? "Hour in the shadow standard" : "Hour on the key date"}>
             <button
               type="button"
               className="solar-step"
               aria-label="Previous hour"
-              disabled={settings.hour <= standard.hours[0]!}
+              disabled={minutes <= stepHours[0]! * 60}
               onClick={() => stepHour(-1)}
             >
               <ChevronLeft size={14} strokeWidth={1.75} aria-hidden />
             </button>
-            {standard.hours.map((hour) => (
+            {stepHours.map((hour) => (
               <button
                 key={hour}
                 type="button"
@@ -293,18 +298,18 @@ export function SunStudyPlayer({
               type="button"
               className="solar-step"
               aria-label="Next hour"
-              disabled={settings.hour >= standard.hours[standard.hours.length - 1]!}
+              disabled={minutes >= stepHours[stepHours.length - 1]! * 60}
               onClick={() => stepHour(1)}
             >
               <ChevronRight size={14} strokeWidth={1.75} aria-hidden />
             </button>
           </div>
           <p className="field-note" aria-live="polite">
-            {standard.hours.includes(settings.hour) && settings.minute === 0
+            {standard && standardId && standard.hours.includes(settings.hour) && settings.minute === 0
               ? shadowStandardStepLabel(standardId, settings.year, standard.hours.indexOf(settings.hour))
-              : `${clock(minutes)} ${zone}`}
+              : `${keyDate ? `${keyDate.label}, ` : ""}${clock(minutes)} ${zone}`}
           </p>
-          <p className="field-note">{standard.source}</p>
+          {standard && <p className="field-note">{standard.source}</p>}
         </div>
       )}
     </div>

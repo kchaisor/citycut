@@ -158,8 +158,9 @@ function crossLayer(map: maplibregl.Map, container: HTMLElement): maplibregl.Cus
 }
 
 /**
- * Map grid on the landing map: thin dark + crosses at MGA easting/northing intersections
- * (GDA2020 / MGA, zone of the view centre; EPSG:7855 in Melbourne). It only reads the camera,
+ * Map grid on the landing map: thin dark + crosses on a 10 m–50 km ladder, square to the page
+ * (rows and columns follow Web Mercator east/north, like the cut frame). Earlier builds used MGA
+ * intersections, which sit at the grid convergence (~1.1° at Dandenong). It only reads the camera,
  * never sets it. `epoch` re-adds the layer after a basemap swap.
  */
 export function MgaGridLayer({ map, epoch }: { map: maplibregl.Map | null; epoch: number }) {
