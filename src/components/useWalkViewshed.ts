@@ -1,12 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   buildHeightGrid,
   groundHeightAt,
   spacedSplineSamples,
-  frameVisibleShare,
   viewshedFrame,
   walkGridBox,
-  CELL_VISIBLE,
   VIEWSHED_DEFAULT_EYE_M,
   VIEWSHED_DEFAULT_RADIUS_M,
   VIEWSHED_SAMPLE_SPACING_M,
@@ -14,6 +12,7 @@ import {
 } from "../lib/viewshed";
 import type { ViewshedWorkerMessage, ViewshedWorkerRequest } from "../lib/viewshed.worker";
 import { WalkViewshedLayer } from "../lib/walkViewshedLayer";
+import { WalkPlayback, type WalkPlaybackSnapshot } from "../lib/walkPlayback";
 import type { CityModel, Pt } from "../types";
 
 /** Base walking pace for playback, metres per second. */
@@ -44,16 +43,19 @@ export type WalkViewshed = {
   progress: number;
   computeMs: number | null;
   compute: () => void;
-  index: number;
+  /** Viewpoint index, distance and readouts; read with useWalkPlayback (not part of page state). */
+  playback: WalkPlayback;
   seek: (index: number) => void;
   playing: boolean;
   setPlaying: (on: boolean) => void;
   speed: WalkSpeed;
   setSpeed: (speed: WalkSpeed) => void;
-  visiblePercent: number | null;
-  seenHa: number | null;
-  distanceM: number;
 };
+
+/** Playback readouts for the View panel. Only the subscriber re-renders as the walk moves. */
+export function useWalkPlayback(walk: Pick<WalkViewshed, "playback">): WalkPlaybackSnapshot {
+  return useSyncExternalStore(walk.playback.subscribe, walk.playback.getSnapshot, walk.playback.getSnapshot);
+}
 
 type Computed = { grid: HeightGrid; frames: (Uint8Array | null)[]; eyeM: number; radiusM: number };
 
@@ -74,6 +76,7 @@ function startWorker(): Worker | null {
 export function useWalkViewshed(model: CityModel, analysisModel: Pick<CityModel, "buildings" | "terrain" | "sideM"> = model): WalkViewshed {
   const layer = useMemo(() => new WalkViewshedLayer(model), [model]);
   useEffect(() => () => layer.dispose(), [layer]);
+  const playback = useMemo(() => new WalkPlayback(layer), [layer]);
 
   const [points, setPoints] = useState<Pt[]>([]);
   const [drawing, setDrawingState] = useState(false);
@@ -83,12 +86,10 @@ export function useWalkViewshed(model: CityModel, analysisModel: Pick<CityModel,
   const [progress, setProgress] = useState(0);
   const [computeMs, setComputeMs] = useState<number | null>(null);
   const [computed, setComputed] = useState<Computed | null>(null);
-  const [index, setIndex] = useState(0);
   const [playing, setPlayingState] = useState(false);
   const [speed, setSpeed] = useState<WalkSpeed>(4);
   const workerRef = useRef<Worker | null>(null);
   const timerRef = useRef<number | null>(null);
-  const seenRef = useRef<{ upTo: number; cells: Uint8Array } | null>(null);
 
   const spline = useMemo(() => spacedSplineSamples(points, VIEWSHED_SAMPLE_SPACING_M), [points]);
   const samples = spline.samples;
@@ -106,12 +107,10 @@ export function useWalkViewshed(model: CityModel, analysisModel: Pick<CityModel,
     setComputed(null);
     setComputeMs(null);
     setProgress(0);
-    setIndex(0);
     setPlayingState(false);
-    seenRef.current = null;
+    playback.load(null, [], 0);
     layer.setGrid(null);
-    layer.setWalker(null, 0);
-  }, [layer, stopCompute]);
+  }, [layer, playback, stopCompute]);
 
   // New model: start over.
   useEffect(() => {
@@ -165,6 +164,7 @@ export function useWalkViewshed(model: CityModel, analysisModel: Pick<CityModel,
     const eyes = samples.map(([e, n]) => groundHeightAt(model, e, n) + eyeM);
     const result: Computed = { grid, frames, eyeM, radiusM };
     layer.setGrid(grid);
+    playback.load(result, samples, spline.lengthM);
     setComputed(result);
     setComputing(true);
     const started = performance.now();
@@ -177,8 +177,10 @@ export function useWalkViewshed(model: CityModel, analysisModel: Pick<CityModel,
     const accept = (i: number, frame: Uint8Array) => {
       frames[i] = frame;
       done++;
-      setProgress(done / frames.length);
-      if (i === 0) setIndex(0);
+      // Progress in 5% steps: about 20 page renders per compute, not one per viewpoint.
+      const pct = Math.floor((20 * done) / frames.length);
+      if (pct !== Math.floor((20 * (done - 1)) / frames.length)) setProgress(pct / 20);
+      playback.frameArrived(i);
     };
     const worker = startWorker();
     if (worker) {
@@ -217,96 +219,45 @@ export function useWalkViewshed(model: CityModel, analysisModel: Pick<CityModel,
       }
     };
     timerRef.current = window.setTimeout(step, 0);
-  }, [analysisModel, eyeM, layer, model, radiusM, resetResult, samples]);
+  }, [analysisModel, eyeM, layer, model, playback, radiusM, resetResult, samples, spline.lengthM]);
 
-  // Seen-so-far: cells visible from any sample up to the current one.
-  const seenCells = useCallback(
-    (upTo: number): Uint8Array | null => {
-      if (!computed) return null;
-      let seen = seenRef.current;
-      if (!seen || seen.upTo > upTo) {
-        seen = { upTo: -1, cells: new Uint8Array(computed.grid.cols * computed.grid.rows) };
-      }
-      for (let i = seen.upTo + 1; i <= upTo; i++) {
-        const frame = computed.frames[i];
-        if (!frame) break;
-        for (let k = 0; k < frame.length; k++) if (frame[k] === CELL_VISIBLE) seen.cells[k] = 1;
-        seen.upTo = i;
-      }
-      seenRef.current = seen;
-      return seen.cells;
-    },
-    [computed],
-  );
-
-  const frame = computed?.frames[index] ?? null;
-  const [stats, setStats] = useState<{ visiblePercent: number | null; seenHa: number | null }>({ visiblePercent: null, seenHa: null });
-
-  // Paint the overlay and walker for the current sample.
+  // Playback runs outside React: rAF moves the walker every frame; the overlay and readouts
+  // change only at a new viewpoint (WalkPlayback), so the page never re-renders per frame.
   useEffect(() => {
-    if (!computed || !frame) {
-      setStats({ visiblePercent: null, seenHa: null });
-      return;
-    }
-    const seen = seenCells(index);
-    layer.paint(frame, seen);
-    const at = samples[index] ?? null;
-    layer.setWalker(at, computed.eyeM);
-    let seenCount = 0;
-    if (seen) for (let k = 0; k < seen.length; k++) seenCount += seen[k]!;
-    const cellArea = computed.grid.cell * computed.grid.cell;
-    setStats({ visiblePercent: frameVisibleShare(frame).percent, seenHa: (seenCount * cellArea) / 10_000 });
-  }, [computed, frame, index, layer, samples, seenCells, progress]);
-
-  // Playback: time based, so the pace holds whatever the frame rate.
-  useEffect(() => {
-    if (!playing || !computed || samples.length < 2) return;
-    const step = spline.lengthM / (samples.length - 1);
+    if (!playing || !computed) return;
     let last = performance.now();
-    let carry = 0;
     let raf = 0;
     const tick = (now: number) => {
-      carry += ((now - last) / 1000) * WALK_PACE_MPS * speed;
+      // rAF timestamps can precede the performance.now() taken when the effect ran.
+      const dt = Math.min(0.25, Math.max(0, (now - last) / 1000));
       last = now;
-      const advance = Math.floor(carry / step);
-      if (advance > 0) {
-        carry -= advance * step;
-        setIndex((i) => {
-          const next = i + advance;
-          const ready = computed.frames.findIndex((f) => !f);
-          const limit = ready === -1 ? samples.length - 1 : Math.max(0, ready - 1);
-          if (next >= samples.length - 1 && ready === -1) {
-            setPlayingState(false);
-            return samples.length - 1;
-          }
-          return Math.min(next, limit);
-        });
+      if (!playback.advance(dt * WALK_PACE_MPS * speed)) {
+        setPlayingState(false);
+        return;
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [computed, playing, samples.length, speed, spline.lengthM]);
+  }, [computed, playback, playing, speed]);
 
   const setPlaying = useCallback(
     (on: boolean) => {
-      if (on && computed && index >= samples.length - 1) setIndex(0);
+      if (on && computed && playback.atEnd) playback.restart();
       setPlayingState(on);
     },
-    [computed, index, samples.length],
+    [computed, playback],
   );
 
   const seek = useCallback(
     (i: number) => {
-      if (!computed) return;
-      setIndex(Math.max(0, Math.min(samples.length - 1, Math.round(i))));
+      if (computed) playback.seekIndex(i);
     },
-    [computed, samples.length],
+    [computed, playback],
   );
 
   const status: WalkStatus = computing ? "computing" : computed ? "ready" : samples.length >= 2 ? "drawn" : "empty";
   const stale = !!computed && (computed.eyeM !== eyeM || computed.radiusM !== radiusM);
-  const distanceM = samples.length > 1 ? (spline.lengthM * index) / (samples.length - 1) : 0;
 
   return {
     layer,
@@ -326,14 +277,11 @@ export function useWalkViewshed(model: CityModel, analysisModel: Pick<CityModel,
     progress,
     computeMs,
     compute,
-    index,
+    playback,
     seek,
     playing,
     setPlaying,
     speed,
     setSpeed,
-    visiblePercent: stats.visiblePercent,
-    seenHa: stats.seenHa,
-    distanceM,
   };
 }
