@@ -11,6 +11,14 @@ export type SidebarSectionId = (typeof SIDEBAR_SECTION_IDS)[number];
 
 export const INITIAL_SIDEBAR_SECTION: SidebarSectionId = "summary";
 
+export const RIGHT_SIDEBAR_SECTION_IDS = ["summary", "buildings", "trees"] as const;
+
+export type RightSidebarSectionId = (typeof RIGHT_SIDEBAR_SECTION_IDS)[number];
+
+export function isRightSidebarSection(id: string | null | undefined): id is RightSidebarSectionId {
+  return Boolean(id && (RIGHT_SIDEBAR_SECTION_IDS as readonly string[]).includes(id));
+}
+
 export const SIDEBAR_SECTION_LABELS: Record<SidebarSectionId, string> = {
   summary: "Model details",
   buildings: "Buildings",
