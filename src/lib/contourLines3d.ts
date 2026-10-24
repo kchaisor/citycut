@@ -8,8 +8,8 @@ import type { CityModel, Pt } from "../types";
 
 const CONTOUR_LIFT = 0.35;
 /** Ground-metre dash and gap for 3D contours, keeping the 2:1 ratio of `--contour-dash` (`1.5 0.75`). */
-export const CONTOUR_3D_DASH_M = 4;
-export const CONTOUR_3D_GAP_M = 2;
+export const CONTOUR_3D_DASH_M = 6;
+export const CONTOUR_3D_GAP_M = 3;
 
 export function contourPolylinesForModel(model: CityModel, planScale = 1000): Pt[][] {
   const style = readDrawingStyle();
