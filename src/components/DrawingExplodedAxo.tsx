@@ -15,6 +15,7 @@ import {
   explodedAxoBounds,
   isoSatelliteImageTransform,
   planToIsoBase,
+  type AxoLayerId,
   type ExplodedAxoSettings,
   type AxoPaintKey,
 } from "../lib/explodedAxo";
@@ -53,6 +54,7 @@ export function DrawingExplodedAxo({
   onScale,
   viewport,
   onViewportChange,
+  onLayerLiftChange,
   fitCounter = 0,
 }: {
   model: CityModel;
@@ -60,10 +62,12 @@ export function DrawingExplodedAxo({
   onScale?: (widthM: number) => void;
   viewport?: PlanViewport;
   onViewportChange?: (view: PlanViewport) => void;
+  onLayerLiftChange?: (id: AxoLayerId, liftM: number) => void;
   fitCounter?: number;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
+  const layerDrag = useRef<{ id: AxoLayerId; startPy: number; startLiftM: number } | null>(null);
   const overlays = useExplodedAxoOverlays(model, settings.layerVisible);
   const fitted = useMemo(() => {
     const bounds = explodedAxoBounds(model, settings);
@@ -163,10 +167,16 @@ export function DrawingExplodedAxo({
         drag.current = { px: event.clientX, py: event.clientY, view };
       }}
       onPointerMove={(event) => {
-        const start = drag.current;
         const svg = svgRef.current;
-        if (!start || !svg) return;
+        if (!svg) return;
         const rect = svg.getBoundingClientRect();
+        if (layerDrag.current && onLayerLiftChange && rect.height > 0) {
+          const dy = ((event.clientY - layerDrag.current.startPy) / rect.height) * view.h;
+          onLayerLiftChange(layerDrag.current.id, Math.max(0, layerDrag.current.startLiftM - dy));
+          return;
+        }
+        const start = drag.current;
+        if (!start) return;
         const dx = ((event.clientX - start.px) / rect.width) * start.view.w;
         const dy = ((event.clientY - start.py) / rect.height) * start.view.h;
         const next = { ...start.view, x: start.view.x - dx, y: start.view.y - dy };
@@ -175,6 +185,7 @@ export function DrawingExplodedAxo({
       }}
       onPointerUp={() => {
         drag.current = null;
+        layerDrag.current = null;
       }}
     >
       <defs>
@@ -230,7 +241,21 @@ export function DrawingExplodedAxo({
         const layerTransform = axoLayerSvgTransform(layer.liftM);
         const legendOrigin = planToIsoLegendOrigin(model.sideM);
         return (
-          <g key={`${layer.id}-${layer.liftM}`} transform={layerTransform}>
+          <g
+            key={layer.id}
+            data-axo-layer={layer.id}
+            transform={layerTransform}
+            style={onLayerLiftChange ? { cursor: "ns-resize" } : undefined}
+            onPointerDown={
+              onLayerLiftChange
+                ? (event) => {
+                    event.stopPropagation();
+                    svgRef.current?.setPointerCapture(event.pointerId);
+                    layerDrag.current = { id: layer.id, startPy: event.clientY, startLiftM: layer.liftM };
+                  }
+                : undefined
+            }
+          >
             {!axoPlateShowsAerial(layer.id) && (
               <path d={layer.plateOutlineD} fill={axoPlateColours(layer.id).tint} fillOpacity={AXO_PLATE_TINT_OPACITY} stroke="none" />
             )}
@@ -255,18 +280,20 @@ export function DrawingExplodedAxo({
                 const paint = resolveStrokePaint(layer.id, si, layer);
                 const scale = layer.strokeWidthScales?.[si] ?? 1;
                 const dashed = layer.strokeDashed?.[si];
-                const tramDash = dashed ? dashScreen(lineStyle.tram.dash) : null;
+                const strokeDash = dashed
+                  ? dashScreen(paint === "contour" ? lineStyle.contour.dash : lineStyle.tram.dash)
+                  : null;
                 return (
                   <path
                     key={`s${si}`}
                     d={d}
                     fill="none"
-                    stroke={dashed ? tramColour : axoPaintColour(paint)}
+                    stroke={dashed && paint !== "contour" ? tramColour : axoPaintColour(paint)}
                     strokeWidth={roadPx * scale}
                     vectorEffect="non-scaling-stroke"
-                    strokeLinecap={tramDash?.cap ?? "round"}
+                    strokeLinecap={strokeDash?.cap ?? "round"}
                     strokeLinejoin="round"
-                    strokeDasharray={tramDash?.array}
+                    strokeDasharray={strokeDash?.array}
                   />
                 );
               })}
@@ -369,7 +396,20 @@ export function DrawingExplodedAxo({
           const label = axoLayerLabelAnchor(model.sideM, layer.liftM, model.frameShape ?? "square");
           const edge = axoPlateColours(layer.id).edge;
           return (
-            <g key={`label-${layer.id}-${layer.liftM}`} className="axo-plate-label">
+            <g
+              key={`label-${layer.id}`}
+              className="axo-plate-label"
+              style={onLayerLiftChange ? { cursor: "ns-resize" } : undefined}
+              onPointerDown={
+                onLayerLiftChange
+                  ? (event) => {
+                      event.stopPropagation();
+                      svgRef.current?.setPointerCapture(event.pointerId);
+                      layerDrag.current = { id: layer.id, startPy: event.clientY, startLiftM: layer.liftM };
+                    }
+                  : undefined
+              }
+            >
               <line
                 x1={label.leader.x1}
                 y1={label.leader.y1}

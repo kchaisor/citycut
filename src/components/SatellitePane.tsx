@@ -10,6 +10,15 @@ import { useColourRevision } from "../lib/useColourRevision";
 import type { PlanViewport } from "../lib/planViewport";
 import type { CityModel } from "../types";
 
+/** World outer ring so the polygon with the cut ring as its hole masks everything outside the cut. */
+const WORLD_OUTER_RING: [number, number][] = [
+  [-180, -85],
+  [180, -85],
+  [180, 85],
+  [-180, 85],
+  [-180, -85],
+];
+
 export function SatellitePane({
   model,
   viewport,
@@ -62,12 +71,26 @@ export function SatellitePane({
             ] as const);
       const coordinates = openRing(localRing.map(([east, north]) => [east, north] as [number, number])).map(
         ([east, north]) => {
-        const { lon, lat } = fromLocal([east, north], model.center);
+          const { lon, lat } = fromLocal([east, north], model.center);
           return [lon, lat] as [number, number];
         },
       );
       map.on("load", () => {
         if (!map) return;
+        map.addSource("cut-mask", {
+          type: "geojson",
+          data: {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "Polygon", coordinates: [WORLD_OUTER_RING, [...coordinates].reverse()] },
+          },
+        });
+        map.addLayer({
+          id: "cut-mask-fill",
+          type: "fill",
+          source: "cut-mask",
+          paint: { "fill-color": getColour("--viewport-bg"), "fill-opacity": 1 },
+        });
         map.addSource("cut", {
           type: "geojson",
           data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates } },

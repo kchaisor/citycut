@@ -3,7 +3,7 @@ import { sunStudyLayersFor } from "./useSunStudyShadows";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
-import { Building2, Copy, Download, DraftingCompass, Eye, Info, Sun, Trees, Upload, Wind } from "lucide-react";
+import { Building2, Copy, Download, DraftingCompass, Eye, GripVertical, Info, Sun, Trees, Upload, Wind } from "lucide-react";
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -42,6 +42,8 @@ import {
   referenceExplodedAxoSettings,
   AXO_REFERENCE_BUILDING_GAP_FACTOR,
   explodedAxoBounds,
+  liftsForLayerOrder,
+  reorderAxoLayer,
   type AxoLayerId,
   type ExplodedAxoSettings,
 } from "../lib/explodedAxo";
@@ -71,11 +73,15 @@ import { cutSizeLabel } from "../lib/placeLabel";
 import { ISO_CORNERS, type IsoCorner } from "../lib/isoCamera";
 import {
   SIDEBAR_SECTION_LABELS,
+  SITE_ANALYSIS_KINDS,
+  SITE_ANALYSIS_LABELS,
   availableSidebarSections,
   initialSidebarState,
+  isRightSidebarSection,
   reduceSidebar,
   resolveSidebarSection,
   type SidebarSectionId,
+  type SiteAnalysisKind,
 } from "../lib/sidebarSections";
 import { buildDataSources, countLoaded, dataSourceStatusWord } from "../lib/dataSources";
 import { regionCredit } from "../lib/sources/registry";
@@ -214,16 +220,21 @@ const SECTION_ICONS: Record<SidebarSectionId, typeof Info> = {
   buildings: Building2,
   trees: Trees,
   drawing: DraftingCompass,
+  analysis: Sun,
+  import: Upload,
+  exports: Download,
+};
+
+const ANALYSIS_ICONS: Record<SiteAnalysisKind, typeof Sun> = {
   solar: Sun,
   wind: Wind,
   view: Eye,
-  import: Upload,
-  exports: Download,
 };
 
 export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHome: () => void; onNewCut: () => void }) {
   const [tab, setTab] = useState<Tab>("3d");
   const [drawing, setDrawing] = useState<DrawingKind>("site");
+  const [analysisKind, setAnalysisKind] = useState<SiteAnalysisKind>("solar");
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
   useColourRevision();
   const uniform = uniformBuildingColor();
@@ -1007,13 +1018,15 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     };
   });
   const open: SidebarSectionId = resolveSidebarSection(sidebar.section, sectionIds);
-  const walkDrawing = open === "view" && walk.drawing;
+  const viewAnalysisOpen = open === "analysis" && analysisKind === "view";
+  const walkDrawing = viewAnalysisOpen && walk.drawing;
   const { drawing: walkDrawingOn, setDrawing: setWalkDrawing } = walk;
   useEffect(() => {
-    if (open !== "view" && walkDrawingOn) setWalkDrawing(false);
-  }, [open, walkDrawingOn, setWalkDrawing]);
+    if (!viewAnalysisOpen && walkDrawingOn) setWalkDrawing(false);
+  }, [viewAnalysisOpen, walkDrawingOn, setWalkDrawing]);
 
   function selectSection(id: string) {
+    if (id === "solar" || id === "wind" || id === "view") setAnalysisKind(id);
     dispatchSidebar({ type: "select", id: resolveSidebarSection(id, sectionIds) });
     setSidebarCollapsed(false);
   }
@@ -1177,16 +1190,24 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     }
   }
 
-  function moveAxoLayer(id: AxoLayerId, direction: -1 | 1) {
+  const draggedAxoLayer = useRef<AxoLayerId | null>(null);
+
+  function dragReorderAxoLayer(from: AxoLayerId, to: AxoLayerId) {
     setAxoSettings((prev) => {
-      const order = [...prev.layerOrder];
-      const index = order.indexOf(id);
-      if (index < 0) return prev;
-      const next = index + direction;
-      if (next < 0 || next >= order.length) return prev;
-      order.splice(index, 1);
-      order.splice(next, 0, id);
-      return { ...prev, layerOrder: order };
+      const order = reorderAxoLayer(prev.layerOrder, from, to);
+      if (order.every((id, i) => id === prev.layerOrder[i])) return prev;
+      const { layerLiftM: _cleared, ...rest } = prev;
+      return { ...rest, layerOrder: order };
+    });
+  }
+
+  function setAxoLayerLift(id: AxoLayerId, liftM: number) {
+    setAxoSettings((prev) => {
+      const base = liftsForLayerOrder(prev.layerOrder, prev.gapM, prev.extraGapAboveM, prev.layerLiftM);
+      base.set(id, Math.round(liftM));
+      const layerLiftM = Object.fromEntries(base.entries()) as Partial<Record<AxoLayerId, number>>;
+      const layerOrder = [...prev.layerOrder].sort((a, b) => (base.get(b) ?? 0) - (base.get(a) ?? 0));
+      return { ...prev, layerOrder, layerLiftM };
     });
   }
 
@@ -1468,7 +1489,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 walkLayer={walk.layer.root}
                 onScenePoint={walkDrawing ? walk.addPoint : massing.onScenePoint}
               />
-              {open === "view" && walk.clickCount > 0 && <ViewLegend />}
+              {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
                   table={windTable}
@@ -1510,6 +1531,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 onScale={onScale}
                 viewport={explodedViewport}
                 onViewportChange={setExplodedViewport}
+                onLayerLiftChange={setAxoLayerLift}
                 fitCounter={fitCounter}
               />
             ) : (
@@ -1546,12 +1568,13 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             <SatellitePane model={displayModel} viewport={planViewport} onViewportChange={setPlanViewport} />
           </div>
         )}
-        <div className="sidebar-host">
+        <div className={isRightSidebarSection(open) ? "sidebar-host is-panel-right" : "sidebar-host"}>
           <Sidebar
             id={SIDEBAR_PANEL_ID}
             items={items}
             active={open}
             collapsed={sidebarCollapsed}
+            panelSide={isRightSidebarSection(open) ? "right" : "left"}
             title={SIDEBAR_SECTION_LABELS[open]}
             onHome={onHome}
             showNewCut
@@ -1649,7 +1672,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                   )}
                 </dl>
                 {model.terrainError && <p className="error">{model.terrainError}</p>}
-                {model.terrainNotice && <p className="legend-note terrain-notice">{model.terrainNotice}</p>}
               </section>
               {showBuildings && heightBar.total > 0 && (
                 <section className="sidebar-group">
@@ -2090,9 +2112,34 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     Default stack
                   </button>
                   <p className="kicker">Layers</p>
-                  <ul className="axo-layer-list">
-                    {axoSettings.layerOrder.map((id, index) => (
-                      <li key={id}>
+                  <ul className="axo-layer-list" aria-label="Exploded axonometric layers (drag to reorder)">
+                    {axoSettings.layerOrder.map((id) => (
+                      <li
+                        key={id}
+                        draggable
+                        data-axo-layer-item={id}
+                        aria-label={`${AXO_LAYER_LABELS[id]} layer (drag up or down)`}
+                        onDragStart={(event) => {
+                          draggedAxoLayer.current = id;
+                          event.dataTransfer.effectAllowed = "move";
+                          event.dataTransfer.setData("text/plain", id);
+                        }}
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = "move";
+                          const from = draggedAxoLayer.current;
+                          if (from && from !== id) dragReorderAxoLayer(from, id);
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          const from = (draggedAxoLayer.current ?? event.dataTransfer.getData("text/plain")) as AxoLayerId;
+                          if (from && from !== id) dragReorderAxoLayer(from, id);
+                          draggedAxoLayer.current = null;
+                        }}
+                        onDragEnd={() => {
+                          draggedAxoLayer.current = null;
+                        }}
+                      >
                         <label className="check-field">
                           <input
                             type="checkbox"
@@ -2106,19 +2153,8 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                           />
                           {AXO_LAYER_LABELS[id]}
                         </label>
-                        <span className="axo-layer-move">
-                          <button type="button" className="ghost" disabled={index === 0} aria-label={`Move ${AXO_LAYER_LABELS[id]} up`} onClick={() => moveAxoLayer(id, -1)}>
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            className="ghost"
-                            disabled={index === axoSettings.layerOrder.length - 1}
-                            aria-label={`Move ${AXO_LAYER_LABELS[id]} down`}
-                            onClick={() => moveAxoLayer(id, 1)}
-                          >
-                            ↓
-                          </button>
+                        <span className="axo-layer-drag-handle" aria-hidden="true" title="Drag up or down to set height">
+                          <GripVertical size={14} strokeWidth={1.6} />
                         </span>
                       </li>
                     ))}
@@ -2132,7 +2168,10 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                       step={1}
                       value={Math.round(axoSettings.gapM)}
                       onChange={(event) =>
-                        setAxoSettings((prev) => ({ ...prev, gapM: Number(event.target.value) }))
+                        setAxoSettings((prev) => {
+                          const { layerLiftM: _cleared, ...rest } = prev;
+                          return { ...rest, gapM: Number(event.target.value) };
+                        })
                       }
                     />
                     <span>{Math.round(axoSettings.gapM)} m</span>
@@ -2241,32 +2280,52 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
               )}
             </div>
 
-            <div className="drawer-section" hidden={open !== "solar"}>
-              <SolarPanel
-                embedded
-                settings={solar}
-                onChange={commitSolar}
-                sideM={model.sideM}
-                site={{ lat: model.center.lat, lon: model.center.lon }}
-                selectedCount={sunStudySelected.length}
-                onClearSelection={() => setSunStudySelected([])}
-              />
-            </div>
-
-            <div className="drawer-section" hidden={open !== "wind"}>
-              <WindPanel
-                embedded
-                settings={windSettings}
-                onChange={commitWind}
-                note={windNote}
-                streaksPaused={windMotion.streaksPaused}
-                animateAnyway={windMotion.animateAnyway}
-                onAnimateAnyway={windMotion.setAnimateAnyway}
-              />
-            </div>
-
-            <div className="drawer-section" hidden={open !== "view"}>
-              <ViewPanel walk={walk} />
+            <div className="drawer-section" hidden={open !== "analysis"}>
+              <div className="tabs site-analysis-tabs" role="tablist" aria-label="Site Analysis">
+                {SITE_ANALYSIS_KINDS.map((kind) => {
+                  const Icon = ANALYSIS_ICONS[kind];
+                  const active = analysisKind === kind;
+                  return (
+                    <button
+                      key={kind}
+                      type="button"
+                      role="tab"
+                      data-analysis={kind}
+                      aria-selected={active}
+                      className={active ? "site-analysis-tab is-active" : "site-analysis-tab"}
+                      onClick={() => setAnalysisKind(kind)}
+                    >
+                      <Icon size={15} strokeWidth={1.75} aria-hidden="true" />
+                      <span>{SITE_ANALYSIS_LABELS[kind]}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div hidden={analysisKind !== "solar"}>
+                <SolarPanel
+                  embedded
+                  settings={solar}
+                  onChange={commitSolar}
+                  sideM={model.sideM}
+                  site={{ lat: model.center.lat, lon: model.center.lon }}
+                  selectedCount={sunStudySelected.length}
+                  onClearSelection={() => setSunStudySelected([])}
+                />
+              </div>
+              <div hidden={analysisKind !== "wind"}>
+                <WindPanel
+                  embedded
+                  settings={windSettings}
+                  onChange={commitWind}
+                  note={windNote}
+                  streaksPaused={windMotion.streaksPaused}
+                  animateAnyway={windMotion.animateAnyway}
+                  onAnimateAnyway={windMotion.setAnimateAnyway}
+                />
+              </div>
+              <div hidden={analysisKind !== "view"}>
+                <ViewPanel walk={walk} />
+              </div>
             </div>
 
             <div className="drawer-section" hidden={open !== "import"}>
@@ -2356,11 +2415,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
         {model.terrainError && (
           <p className="stage-error" role="alert">
             {model.terrainError}
-          </p>
-        )}
-        {!model.terrainError && model.terrainNotice && (
-          <p className="stage-error terrain-notice" role="status">
-            {model.terrainNotice}
           </p>
         )}
         <p
