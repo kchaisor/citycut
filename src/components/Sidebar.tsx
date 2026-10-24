@@ -48,6 +48,7 @@ export function Sidebar({
   onSelect,
   onToggleCollapse,
   onHome,
+  panelSide = "left",
   showNewCut,
   onNewCut,
   children,
@@ -56,6 +57,7 @@ export function Sidebar({
   items: SidebarItem[];
   active: string;
   collapsed: boolean;
+  panelSide?: "left" | "right";
   title: string;
   status?: ReactNode;
   footer?: ReactNode;
@@ -170,7 +172,13 @@ export function Sidebar({
             </span>
           </button>
         </nav>
-        <section id={id} className="sidebar-panel" aria-labelledby={titleId} hidden={collapsed}>
+        <section
+          id={id}
+          className={panelSide === "right" ? "sidebar-panel is-right" : "sidebar-panel"}
+          data-panel-side={panelSide}
+          aria-labelledby={titleId}
+          hidden={collapsed}
+        >
           <header className="sidebar-head">
             <h2 id={titleId}>{title}</h2>
             {status}

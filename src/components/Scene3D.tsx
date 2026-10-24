@@ -524,6 +524,7 @@ function IsoSnap({
   active,
   touchedRef,
   fittedKey,
+  otherOrthoFittedKey,
   sideM,
   groundY,
   siteTopY,
@@ -531,6 +532,7 @@ function IsoSnap({
   solar,
   lat,
   lon,
+  extraBounds,
 }: {
   camera: THREE.OrthographicCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
@@ -540,6 +542,7 @@ function IsoSnap({
   active: boolean;
   touchedRef: RefObject<boolean>;
   fittedKey: MutableRefObject<string | null>;
+  otherOrthoFittedKey?: MutableRefObject<string | null>;
   sideM: number;
   groundY: number;
   siteTopY: number;
@@ -547,9 +550,11 @@ function IsoSnap({
   solar: SolarViewSettings;
   lat: number;
   lon: number;
+  extraBounds?: Aabb | null;
 }) {
   const size = useThree((state) => state.size);
   const place = useCallback(() => {
+    if (!active) return;
     const controls = controlsRef.current;
     if (!controls || size.width < 2 || size.height < 2) return;
     const bounds = boundsRef.current;
@@ -559,7 +564,6 @@ function IsoSnap({
     const sameSnap = fittedKey.current?.startsWith(`${snapId}:`) ?? false;
     // Resizes keep the pose and zoom; only a new snap id refits (see viewportAutoFit.ts).
     if (sameSnap) return;
-    if (!active && fittedKey.current !== null && !sameSnap) return;
     let fitBounds = bounds;
     if (CAMERA_FIT_INCLUDES_HELIODON && solar.showPath) {
       fitBounds = unionAabb(
@@ -583,7 +587,8 @@ function IsoSnap({
     const direction = isoOffset(corner);
     const distance = eyeDistance(fitBounds);
     const eye = isoEye(centre, corner, distance);
-    const planes = orthoNearFar(fitBounds, eye, centre);
+    const clipBounds = extraBounds ? unionAabb(fitBounds, extraBounds) : fitBounds;
+    const planes = orthoNearFar(clipBounds, eye, centre);
     flushControlInertia(controls);
     camera.up.set(ISO_CAMERA_UP[0], ISO_CAMERA_UP[1], ISO_CAMERA_UP[2]);
     camera.position.set(eye[0], eye[1], eye[2]);
@@ -596,9 +601,11 @@ function IsoSnap({
     camera.up.set(ISO_CAMERA_UP[0], ISO_CAMERA_UP[1], ISO_CAMERA_UP[2]);
     holdControlPose(controls as HeldControl<THREE.Vector3>);
     fittedKey.current = key;
+    if (otherOrthoFittedKey) otherOrthoFittedKey.current = null;
     touchedRef.current = false;
   }, [
     active,
+    otherOrthoFittedKey,
     camera,
     controlsRef,
     boundsRef,
@@ -614,6 +621,7 @@ function IsoSnap({
     size.width,
     size.height,
     touchedRef,
+    extraBounds,
   ]);
   useLayoutEffect(() => {
     place();
@@ -635,6 +643,8 @@ function PlanSnap({
   active,
   touchedRef,
   fittedKey,
+  otherOrthoFittedKey,
+  extraBounds,
 }: {
   camera: THREE.OrthographicCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
@@ -646,9 +656,12 @@ function PlanSnap({
   active: boolean;
   touchedRef: RefObject<boolean>;
   fittedKey: MutableRefObject<string | null>;
+  otherOrthoFittedKey?: MutableRefObject<string | null>;
+  extraBounds?: Aabb | null;
 }) {
   const size = useThree((state) => state.size);
   const place = useCallback(() => {
+    if (!active) return;
     const controls = controlsRef.current;
     if (!controls || size.width < 2 || size.height < 2) return;
     const key = `${snapId}:${size.width}x${size.height}`;
@@ -656,7 +669,6 @@ function PlanSnap({
     const sameSnap = fittedKey.current?.startsWith(`${snapId}:`) ?? false;
     // Resizes keep the pose and zoom; only a new snap id refits (see viewportAutoFit.ts).
     if (sameSnap) return;
-    if (!active && fittedKey.current !== null && !sameSnap) return;
     const measured = boundsRef.current;
     const fitBounds = sitePlanBounds(sideM, groundY, siteTopY);
     if (measured) {
@@ -666,7 +678,8 @@ function PlanSnap({
     const centre = frameCentre(fitBounds);
     const distance = planEyeDistance(fitBounds);
     const eye = planEye(centre, distance);
-    const planes = planNearFar(fitBounds, centre);
+    const clipBounds = extraBounds ? unionAabb(fitBounds, extraBounds) : fitBounds;
+    const planes = planNearFar(clipBounds, centre);
     flushControlInertia(controls);
     camera.up.set(0, 0, -1);
     camera.position.set(eye[0], eye[1], eye[2]);
@@ -679,8 +692,9 @@ function PlanSnap({
     camera.up.set(0, 0, -1);
     controls.update();
     fittedKey.current = key;
+    if (otherOrthoFittedKey) otherOrthoFittedKey.current = null;
     touchedRef.current = false;
-  }, [active, camera, controlsRef, boundsRef, groundY, sideM, siteTopY, snapId, size.width, size.height, touchedRef]);
+  }, [active, camera, controlsRef, boundsRef, extraBounds, groundY, otherOrthoFittedKey, sideM, siteTopY, snapId, size.width, size.height, touchedRef]);
   useLayoutEffect(() => {
     place();
   }, [place]);
@@ -695,17 +709,21 @@ function OrthoClip({
   controlsRef,
   boundsRef,
   active,
+  extraBounds,
 }: {
   camera: THREE.OrthographicCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
   boundsRef: RefObject<Aabb | null>;
   active: boolean;
+  /** Extra world bounds that must stay inside near/far (the heliodon dome and sun when shown). */
+  extraBounds?: Aabb | null;
 }) {
   useFrame(() => {
     if (!active) return;
     const controls = controlsRef.current;
-    const bounds = boundsRef.current;
-    if (!controls || !bounds) return;
+    const measured = boundsRef.current;
+    if (!controls || !measured) return;
+    const bounds = extraBounds ? unionAabb(measured, extraBounds) : measured;
     const eye: Vec3 = [camera.position.x, camera.position.y, camera.position.z];
     const target: Vec3 = [controls.target.x, controls.target.y, controls.target.z];
     const planes = orthoNearFar(bounds, eye, target);
@@ -1032,6 +1050,27 @@ export function Cameras({
   const iso = projection === "iso";
   const plan = projection === "plan";
   const orthoView = iso || plan;
+  // The ortho clip planes are fitted to the measured site. Without the dome in that box, the
+  // heliodon, sun and compass sit outside near/far in Iso view and are clipped away entirely.
+  const heliodonClipBounds = useMemo(
+    () =>
+      orthoView && solar.showPath
+        ? heliodonSceneBounds({
+            lat,
+            lon,
+            year: solar.year,
+            month: solar.month,
+            day: solar.day,
+            hour: solar.hour,
+            minute: solar.minute,
+            sideM: side,
+            ringRadiusM: heliodonRadius,
+            groundY,
+            siteTopY,
+          })
+        : null,
+    [orthoView, solar.showPath, solar.year, solar.month, solar.day, solar.hour, solar.minute, lat, lon, side, heliodonRadius, groundY, siteTopY],
+  );
   const persp = perspRef.current;
   const ortho = orthoRef.current;
   const qaMode = typeof window !== "undefined" && qaModeFromSearch(window.location.search);
@@ -1088,9 +1127,10 @@ export function Cameras({
             boundsRef={boundsRef}
             corner={corner}
             snapId={snapId}
-            active={iso && !freeRotate}
+            active={iso}
             touchedRef={touchedRef}
             fittedKey={isoFitKey}
+            otherOrthoFittedKey={planFitKey}
             sideM={side}
             groundY={groundY}
             siteTopY={siteTopY}
@@ -1098,6 +1138,7 @@ export function Cameras({
             solar={solar}
             lat={lat}
             lon={lon}
+            extraBounds={heliodonClipBounds}
           />
           <PlanSnap
             camera={ortho}
@@ -1110,8 +1151,13 @@ export function Cameras({
             active={plan}
             touchedRef={touchedRef}
             fittedKey={planFitKey}
+            otherOrthoFittedKey={isoFitKey}
+            extraBounds={heliodonClipBounds}
           />
-          <OrthoClip camera={ortho} controlsRef={orthoControls} boundsRef={boundsRef} active={orthoView} />
+          <OrthoClip camera={ortho} controlsRef={orthoControls} boundsRef={boundsRef}
+            active={orthoView}
+            extraBounds={heliodonClipBounds}
+          />
           <OrbitControls
             ref={perspControls}
             camera={persp}
@@ -1361,7 +1407,6 @@ export function Scene3D({
         groundY={groundY}
         terrain={model.terrain ?? undefined}
         settings={solar}
-        hideDiagram={projection === "plan"}
       />
       <WindLayer
         sideM={model.sideM}
