@@ -204,6 +204,11 @@ describe("Display panel controls by view tab", () => {
     expect(screen.getByLabelText("Hide trees")).toBeTruthy();
     expect(freeRotate.compareDocumentPosition(displayGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
+    // Viewport hint overlay ("Drag to orbit..." / "Drag to pan...") is not rendered
+    expect(document.querySelector(".viewport-hint")).toBeNull();
+    expect(screen.queryByText(/Drag to orbit/)).toBeNull();
+    expect(screen.queryByText(/Drag to pan/)).toBeNull();
+
     // Building types is NOT shown in Display › 3D model
     expect(screen.queryByRole("region", { name: "Building types" })).toBeNull();
     expect(screen.queryByText("Building types")).toBeNull();

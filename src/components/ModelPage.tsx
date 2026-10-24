@@ -1422,19 +1422,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     },
   ].filter((layer) => layer.available);
 
-  const hint =
-    tab === "3d"
-      ? view.projection === "plan"
-        ? "Drag to pan · scroll to zoom · north up · orthographic"
-        : view.projection === "perspective"
-          ? "Drag to orbit · scroll to zoom · right-drag to pan"
-          : view.freeRotate
-            ? "Drag to orbit · scroll to zoom · right-drag to pan · not true isometric"
-            : "Drag to pan · scroll to zoom"
-      : tab === "drawing"
-        ? "Scroll to zoom · drag to pan · double-click to fit"
-        : "Satellite preview of this frame. It is not included in the downloads.";
-
   return (
     <div className="model">
       <h1 className="sr-only">Your model is ready.</h1>
@@ -2376,7 +2363,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             {model.terrainNotice}
           </p>
         )}
-        <p className="viewport-hint">{hint}</p>
         <p
           className="stage-attrib"
           dangerouslySetInnerHTML={{
