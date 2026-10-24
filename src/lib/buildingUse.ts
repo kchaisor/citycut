@@ -32,9 +32,14 @@ export function uniformBuildingColor(): string {
  * One hue per category. Unclassified stays neutral so a guess from a later
  * tier can still stand out when the view is coloured by source.
  */
-function useSwatch(label: string, key: ColourKey, layer: string): { label: string; layer: string; readonly color: string } {
+function useSwatch(
+  label: string,
+  key: ColourKey,
+  layer: string,
+): { label: string; key: ColourKey; layer: string; readonly color: string } {
   return {
     label,
+    key,
     layer,
     get color() {
       return getColour(key);
@@ -44,7 +49,7 @@ function useSwatch(label: string, key: ColourKey, layer: string): { label: strin
 
 export const BUILDING_USE_META: Record<
   BuildingUse,
-  { label: string; color: string; layer: string }
+  { label: string; key: ColourKey; color: string; layer: string }
 > = {
   residential: useSwatch("Residential", "--use-residential", "Residential"),
   commercial: useSwatch("Commercial", "--use-commercial", "Commercial"),
