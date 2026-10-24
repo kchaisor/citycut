@@ -74,6 +74,7 @@ import {
   SITE_ANALYSIS_LABELS,
   availableSidebarSections,
   initialSidebarState,
+  isRightSidebarSection,
   reduceSidebar,
   resolveSidebarSection,
   type SidebarSectionId,
@@ -1407,12 +1408,13 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             <SatellitePane model={displayModel} viewport={planViewport} onViewportChange={setPlanViewport} />
           </div>
         )}
-        <div className="sidebar-host">
+        <div className={isRightSidebarSection(open) ? "sidebar-host is-panel-right" : "sidebar-host"}>
           <Sidebar
             id={SIDEBAR_PANEL_ID}
             items={items}
             active={open}
             collapsed={sidebarCollapsed}
+            panelSide={isRightSidebarSection(open) ? "right" : "left"}
             title={SIDEBAR_SECTION_LABELS[open]}
             onHome={onHome}
             showNewCut
@@ -1510,7 +1512,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                   )}
                 </dl>
                 {model.terrainError && <p className="error">{model.terrainError}</p>}
-                {model.terrainNotice && <p className="legend-note terrain-notice">{model.terrainNotice}</p>}
               </section>
               {showBuildings && heightBar.total > 0 && (
                 <section className="sidebar-group">
@@ -2202,11 +2203,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
         {model.terrainError && (
           <p className="stage-error" role="alert">
             {model.terrainError}
-          </p>
-        )}
-        {!model.terrainError && model.terrainNotice && (
-          <p className="stage-error terrain-notice" role="status">
-            {model.terrainNotice}
           </p>
         )}
         <p className="viewport-hint">{hint}</p>

@@ -255,18 +255,20 @@ export function DrawingExplodedAxo({
                 const paint = resolveStrokePaint(layer.id, si, layer);
                 const scale = layer.strokeWidthScales?.[si] ?? 1;
                 const dashed = layer.strokeDashed?.[si];
-                const tramDash = dashed ? dashScreen(lineStyle.tram.dash) : null;
+                const strokeDash = dashed
+                  ? dashScreen(paint === "contour" ? lineStyle.contour.dash : lineStyle.tram.dash)
+                  : null;
                 return (
                   <path
                     key={`s${si}`}
                     d={d}
                     fill="none"
-                    stroke={dashed ? tramColour : axoPaintColour(paint)}
+                    stroke={dashed && paint !== "contour" ? tramColour : axoPaintColour(paint)}
                     strokeWidth={roadPx * scale}
                     vectorEffect="non-scaling-stroke"
-                    strokeLinecap={tramDash?.cap ?? "round"}
+                    strokeLinecap={strokeDash?.cap ?? "round"}
                     strokeLinejoin="round"
-                    strokeDasharray={tramDash?.array}
+                    strokeDasharray={strokeDash?.array}
                   />
                 );
               })}

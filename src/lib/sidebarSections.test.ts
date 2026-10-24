@@ -7,6 +7,7 @@ import {
   availableSidebarSections,
   initialSidebarState,
   reduceSidebar,
+  isRightSidebarSection,
   resolveSidebarSection,
 } from "./sidebarSections";
 
@@ -62,5 +63,15 @@ describe("Display section label", () => {
     const labels = Object.values(SIDEBAR_SECTION_LABELS);
     expect(new Set(labels).size).toBe(labels.length);
     expect(labels).not.toContain("Drawing");
+  });
+});
+
+describe("right-hand sidebar panels", () => {
+  it("docks Model details, Buildings, and Trees on the right side of the page", () => {
+    expect(isRightSidebarSection("summary")).toBe(true);
+    expect(isRightSidebarSection("buildings")).toBe(true);
+    expect(isRightSidebarSection("trees")).toBe(true);
+    expect(isRightSidebarSection("drawing")).toBe(false);
+    expect(isRightSidebarSection("exports")).toBe(false);
   });
 });
