@@ -70,11 +70,14 @@ import { cutSizeLabel } from "../lib/placeLabel";
 import { ISO_CORNERS, type IsoCorner } from "../lib/isoCamera";
 import {
   SIDEBAR_SECTION_LABELS,
+  SITE_ANALYSIS_KINDS,
+  SITE_ANALYSIS_LABELS,
   availableSidebarSections,
   initialSidebarState,
   reduceSidebar,
   resolveSidebarSection,
   type SidebarSectionId,
+  type SiteAnalysisKind,
 } from "../lib/sidebarSections";
 import { buildDataSources, countLoaded, dataSourceStatusWord } from "../lib/dataSources";
 import { regionCredit } from "../lib/sources/registry";
