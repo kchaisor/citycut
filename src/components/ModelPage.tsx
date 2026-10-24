@@ -1237,7 +1237,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     total: heightBarParts.reduce((sum, part) => sum + part.value, 0),
   };
 
-  // #87's 3D display modes, housed as switches: Buildings › Display, or Drawing when the model has no buildings.
+  // #87's 3D display modes, housed as switches in Display › 3D model.
   const displaySwitches = (
     <div className="display-switches" role="group" aria-label="3D display">
       {(
@@ -1687,10 +1687,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                   ))}
                 </section>
                 <section className="sidebar-group">
-                  <h3 className="sidebar-gh">Display</h3>
-                  {displaySwitches}
-                </section>
-                <section className="sidebar-group">
                   <h3 className="sidebar-gh">Manual heights</h3>
                   <HiddenBuildingsPanel
                     hidden={[...hiddenMatch.values()]}
@@ -1809,7 +1805,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                   {view.projection === "plan" && (
                     <p className="field-note">Orthographic plan view. Choose Perspective to return to the 3D orbit camera.</p>
                   )}
-                  {!showBuildings && displaySwitches}
                   {view.projection === "iso" && (
                     <>
                       <p className="kicker">Corner</p>
@@ -1847,8 +1842,11 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                       )}
                     </>
                   )}
+                  {displaySwitches}
                 </div>
               )}
+              {tab === "drawing" && (
+                <>
               <div className="plan-switch" role="group" aria-label="Drawing type">
                 <button
                   type="button"
@@ -2025,7 +2023,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 onReset={() => setLineStyles(resetStoredLineStyles())}
               />
               <ColoursEditor onChange={() => setLineStyles(readDrawingStyle())} />
-              {tab === "drawing" && (
                 <div className="field">
                   <div className="field-head">
                     <p className="kicker">View width</p>
@@ -2051,6 +2048,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     Fit frame
                   </button>
                 </div>
+                </>
               )}
               {tab === "satellite" && (
                 <p className="field-note">Satellite is a preview of this frame. It is not included in the downloads.</p>
