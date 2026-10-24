@@ -1734,3 +1734,6 @@ input[type="range"]::-moz-range-thumb {
   text-decoration: underline;
   cursor: pointer;
 }
+
+.site-analysis-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 14px; }
+.site-analysis-tab { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }

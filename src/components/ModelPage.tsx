@@ -213,16 +213,21 @@ const SECTION_ICONS: Record<SidebarSectionId, typeof Info> = {
   buildings: Building2,
   trees: Trees,
   drawing: DraftingCompass,
+  analysis: Sun,
+  import: Upload,
+  exports: Download,
+};
+
+const ANALYSIS_ICONS: Record<SiteAnalysisKind, typeof Sun> = {
   solar: Sun,
   wind: Wind,
   view: Eye,
-  import: Upload,
-  exports: Download,
 };
 
 export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHome: () => void; onNewCut: () => void }) {
   const [tab, setTab] = useState<Tab>("3d");
   const [drawing, setDrawing] = useState<DrawingKind>("site");
+  const [analysisKind, setAnalysisKind] = useState<SiteAnalysisKind>("solar");
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
   useColourRevision();
   const uniform = uniformBuildingColor();
@@ -1006,13 +1011,15 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     };
   });
   const open: SidebarSectionId = resolveSidebarSection(sidebar.section, sectionIds);
-  const walkDrawing = open === "view" && walk.drawing;
+  const viewAnalysisOpen = open === "analysis" && analysisKind === "view";
+  const walkDrawing = viewAnalysisOpen && walk.drawing;
   const { drawing: walkDrawingOn, setDrawing: setWalkDrawing } = walk;
   useEffect(() => {
-    if (open !== "view" && walkDrawingOn) setWalkDrawing(false);
-  }, [open, walkDrawingOn, setWalkDrawing]);
+    if (!viewAnalysisOpen && walkDrawingOn) setWalkDrawing(false);
+  }, [viewAnalysisOpen, walkDrawingOn, setWalkDrawing]);
 
   function selectSection(id: string) {
+    if (id === "solar" || id === "wind" || id === "view") setAnalysisKind(id);
     dispatchSidebar({ type: "select", id: resolveSidebarSection(id, sectionIds) });
     setSidebarCollapsed(false);
   }
@@ -1319,7 +1326,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 walkLayer={walk.layer.root}
                 onScenePoint={walkDrawing ? walk.addPoint : massing.onScenePoint}
               />
-              {open === "view" && walk.clickCount > 0 && <ViewLegend />}
+              {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
                   table={windTable}
@@ -2057,32 +2064,52 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
               )}
             </div>
 
-            <div className="drawer-section" hidden={open !== "solar"}>
-              <SolarPanel
-                embedded
-                settings={solar}
-                onChange={commitSolar}
-                sideM={model.sideM}
-                site={{ lat: model.center.lat, lon: model.center.lon }}
-                selectedCount={sunStudySelected.length}
-                onClearSelection={() => setSunStudySelected([])}
-              />
-            </div>
-
-            <div className="drawer-section" hidden={open !== "wind"}>
-              <WindPanel
-                embedded
-                settings={windSettings}
-                onChange={commitWind}
-                note={windNote}
-                streaksPaused={windMotion.streaksPaused}
-                animateAnyway={windMotion.animateAnyway}
-                onAnimateAnyway={windMotion.setAnimateAnyway}
-              />
-            </div>
-
-            <div className="drawer-section" hidden={open !== "view"}>
-              <ViewPanel walk={walk} />
+            <div className="drawer-section" hidden={open !== "analysis"}>
+              <div className="tabs site-analysis-tabs" role="tablist" aria-label="Site Analysis">
+                {SITE_ANALYSIS_KINDS.map((kind) => {
+                  const Icon = ANALYSIS_ICONS[kind];
+                  const active = analysisKind === kind;
+                  return (
+                    <button
+                      key={kind}
+                      type="button"
+                      role="tab"
+                      data-analysis={kind}
+                      aria-selected={active}
+                      className={active ? "site-analysis-tab is-active" : "site-analysis-tab"}
+                      onClick={() => setAnalysisKind(kind)}
+                    >
+                      <Icon size={15} strokeWidth={1.75} aria-hidden="true" />
+                      <span>{SITE_ANALYSIS_LABELS[kind]}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div hidden={analysisKind !== "solar"}>
+                <SolarPanel
+                  embedded
+                  settings={solar}
+                  onChange={commitSolar}
+                  sideM={model.sideM}
+                  site={{ lat: model.center.lat, lon: model.center.lon }}
+                  selectedCount={sunStudySelected.length}
+                  onClearSelection={() => setSunStudySelected([])}
+                />
+              </div>
+              <div hidden={analysisKind !== "wind"}>
+                <WindPanel
+                  embedded
+                  settings={windSettings}
+                  onChange={commitWind}
+                  note={windNote}
+                  streaksPaused={windMotion.streaksPaused}
+                  animateAnyway={windMotion.animateAnyway}
+                  onAnimateAnyway={windMotion.setAnimateAnyway}
+                />
+              </div>
+              <div hidden={analysisKind !== "view"}>
+                <ViewPanel walk={walk} />
+              </div>
             </div>
 
             <div className="drawer-section" hidden={open !== "import"}>
