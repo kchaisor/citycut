@@ -206,15 +206,17 @@ export function explodedAxoChunks(
       const rings = ringsFromIsoD(stroke, origin, scale, pageHeightMm, liftM);
       const widthScale = layer.strokeWidthScales?.[index] ?? 1;
       const dashed = layer.strokeDashed?.[index];
-      const tramDash = dashed ? dashSegments(readDrawingStyle().tram.dash) : null;
+      const paint = strokePaint(layer, index);
+      const style = readDrawingStyle();
+      const strokeDash = dashed ? dashSegments(paint === "contour" ? style.contour.dash : style.tram.dash) : null;
       for (const ring of rings) {
         if (ring.length >= 2) {
           paths.push({
             rings: [ring],
-            stroke: hexRgb(dashed ? getColour("--tram-line-stroke") : axoPaintColour(strokePaint(layer, index))),
-            strokeMm: (dashed ? readDrawingStyle().tram.mm : 0.25) * widthScale,
+            stroke: hexRgb(dashed && paint !== "contour" ? getColour("--tram-line-stroke") : axoPaintColour(paint)),
+            strokeMm: (dashed && paint !== "contour" ? style.tram.mm : 0.25) * widthScale,
             close: false,
-            ...(tramDash ? { dashMm: tramDash, cap: "round" as const } : {}),
+            ...(strokeDash ? { dashMm: strokeDash, cap: "round" as const } : {}),
           });
         }
       }

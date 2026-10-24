@@ -698,6 +698,7 @@ export function buildExplodedAxoLayers(
           strokeDashed,
           "contour",
           0.55,
+          true,
         );
       }
     } else if (id === "cadastre") {
