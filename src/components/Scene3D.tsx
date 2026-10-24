@@ -695,17 +695,21 @@ function OrthoClip({
   controlsRef,
   boundsRef,
   active,
+  extraBounds,
 }: {
   camera: THREE.OrthographicCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
   boundsRef: RefObject<Aabb | null>;
   active: boolean;
+  /** Extra world bounds that must stay inside near/far (the heliodon dome and sun when shown). */
+  extraBounds?: Aabb | null;
 }) {
   useFrame(() => {
     if (!active) return;
     const controls = controlsRef.current;
-    const bounds = boundsRef.current;
-    if (!controls || !bounds) return;
+    const measured = boundsRef.current;
+    if (!controls || !measured) return;
+    const bounds = extraBounds ? unionAabb(measured, extraBounds) : measured;
     const eye: Vec3 = [camera.position.x, camera.position.y, camera.position.z];
     const target: Vec3 = [controls.target.x, controls.target.y, controls.target.z];
     const planes = orthoNearFar(bounds, eye, target);
@@ -1032,6 +1036,27 @@ export function Cameras({
   const iso = projection === "iso";
   const plan = projection === "plan";
   const orthoView = iso || plan;
+  // The ortho clip planes are fitted to the measured site. Without the dome in that box, the
+  // heliodon, sun and compass sit outside near/far in Iso view and are clipped away entirely.
+  const heliodonClipBounds = useMemo(
+    () =>
+      iso && solar.showPath
+        ? heliodonSceneBounds({
+            lat,
+            lon,
+            year: solar.year,
+            month: solar.month,
+            day: solar.day,
+            hour: solar.hour,
+            minute: solar.minute,
+            sideM: side,
+            ringRadiusM: heliodonRadius,
+            groundY,
+            siteTopY,
+          })
+        : null,
+    [iso, solar.showPath, solar.year, solar.month, solar.day, solar.hour, solar.minute, lat, lon, side, heliodonRadius, groundY, siteTopY],
+  );
   const persp = perspRef.current;
   const ortho = orthoRef.current;
   const qaMode = typeof window !== "undefined" && qaModeFromSearch(window.location.search);
@@ -1111,7 +1136,10 @@ export function Cameras({
             touchedRef={touchedRef}
             fittedKey={planFitKey}
           />
-          <OrthoClip camera={ortho} controlsRef={orthoControls} boundsRef={boundsRef} active={orthoView} />
+          <OrthoClip camera={ortho} controlsRef={orthoControls} boundsRef={boundsRef}
+            active={orthoView}
+            extraBounds={heliodonClipBounds}
+          />
           <OrbitControls
             ref={perspControls}
             camera={persp}
