@@ -524,6 +524,7 @@ function IsoSnap({
   active,
   touchedRef,
   fittedKey,
+  otherOrthoFittedKey,
   sideM,
   groundY,
   siteTopY,
@@ -541,6 +542,7 @@ function IsoSnap({
   active: boolean;
   touchedRef: RefObject<boolean>;
   fittedKey: MutableRefObject<string | null>;
+  otherOrthoFittedKey?: MutableRefObject<string | null>;
   sideM: number;
   groundY: number;
   siteTopY: number;
@@ -599,9 +601,11 @@ function IsoSnap({
     camera.up.set(ISO_CAMERA_UP[0], ISO_CAMERA_UP[1], ISO_CAMERA_UP[2]);
     holdControlPose(controls as HeldControl<THREE.Vector3>);
     fittedKey.current = key;
+    if (otherOrthoFittedKey) otherOrthoFittedKey.current = null;
     touchedRef.current = false;
   }, [
     active,
+    otherOrthoFittedKey,
     camera,
     controlsRef,
     boundsRef,
@@ -639,6 +643,7 @@ function PlanSnap({
   active,
   touchedRef,
   fittedKey,
+  otherOrthoFittedKey,
   extraBounds,
 }: {
   camera: THREE.OrthographicCamera;
@@ -651,6 +656,7 @@ function PlanSnap({
   active: boolean;
   touchedRef: RefObject<boolean>;
   fittedKey: MutableRefObject<string | null>;
+  otherOrthoFittedKey?: MutableRefObject<string | null>;
   extraBounds?: Aabb | null;
 }) {
   const size = useThree((state) => state.size);
@@ -686,8 +692,9 @@ function PlanSnap({
     camera.up.set(0, 0, -1);
     controls.update();
     fittedKey.current = key;
+    if (otherOrthoFittedKey) otherOrthoFittedKey.current = null;
     touchedRef.current = false;
-  }, [active, camera, controlsRef, boundsRef, extraBounds, groundY, sideM, siteTopY, snapId, size.width, size.height, touchedRef]);
+  }, [active, camera, controlsRef, boundsRef, extraBounds, groundY, otherOrthoFittedKey, sideM, siteTopY, snapId, size.width, size.height, touchedRef]);
   useLayoutEffect(() => {
     place();
   }, [place]);
@@ -1120,9 +1127,10 @@ export function Cameras({
             boundsRef={boundsRef}
             corner={corner}
             snapId={snapId}
-            active={iso && !freeRotate}
+            active={iso}
             touchedRef={touchedRef}
             fittedKey={isoFitKey}
+            otherOrthoFittedKey={planFitKey}
             sideM={side}
             groundY={groundY}
             siteTopY={siteTopY}
@@ -1143,6 +1151,7 @@ export function Cameras({
             active={plan}
             touchedRef={touchedRef}
             fittedKey={planFitKey}
+            otherOrthoFittedKey={isoFitKey}
             extraBounds={heliodonClipBounds}
           />
           <OrthoClip camera={ortho} controlsRef={orthoControls} boundsRef={boundsRef}
