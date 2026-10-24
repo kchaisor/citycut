@@ -16,6 +16,7 @@ import {
   defaultExplodedAxoSettings,
   explodedAxoBounds,
   liftsForLayerOrder,
+  reorderAxoLayer,
   planPointToIso,
   type ExplodedAxoSettings,
 } from "./explodedAxo";
@@ -250,5 +251,19 @@ describe("rail and tram stay off the exploded axo", () => {
     expect(roads.strokeDashed ?? []).not.toContain(true);
     expect(roads.strokePaints ?? []).not.toContain("rail-line");
     expect(roads.strokePaints ?? []).not.toContain("pt-tram");
+  });
+});
+
+describe("reorderAxoLayer and layerLiftM", () => {
+  it("moves a dragged layer to the target slot and applies free-dragged lift overrides", () => {
+    expect(reorderAxoLayer(["trees", "buildings", "roads"], "roads", "trees")).toEqual([
+      "roads",
+      "trees",
+      "buildings",
+    ]);
+    const lifts = liftsForLayerOrder(["trees", "buildings", "roads"], 100, {}, { buildings: 140 });
+    expect(lifts.get("roads")).toBe(0);
+    expect(lifts.get("buildings")).toBe(140);
+    expect(lifts.get("trees")).toBe(200);
   });
 });

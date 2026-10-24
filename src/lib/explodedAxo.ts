@@ -145,6 +145,8 @@ export type ExplodedAxoSettings = {
   terrainExaggeration?: number;
   /** Extra vertical gap (iso metres) added directly above the named layer. */
   extraGapAboveM?: Partial<Record<AxoLayerId, number>>;
+  /** Free-dragged lift overrides (iso metres). Cleared when the gap slider, stack order or a preset is applied. */
+  layerLiftM?: Partial<Record<AxoLayerId, number>>;
   /** Draw buildings as extruded massing (walls + roofs). False keeps the flat footprint plate. */
   buildingMassing?: boolean;
   /** Draw trees as 3D canopies sized from crown data. False keeps flat crown discs. */
@@ -280,15 +282,27 @@ export function liftsForLayerOrder(
   order: AxoLayerId[],
   gapM: number,
   extraGapAboveM: Partial<Record<AxoLayerId, number>> = {},
+  layerLiftM: Partial<Record<AxoLayerId, number>> = {},
 ): Map<AxoLayerId, number> {
   const bottomToTop = [...order].reverse();
   const lifts = new Map<AxoLayerId, number>();
   let lift = 0;
   bottomToTop.forEach((id, index) => {
     if (index > 0) lift += gapM + (extraGapAboveM[bottomToTop[index - 1]!] ?? 0);
-    lifts.set(id, lift);
+    lifts.set(id, layerLiftM[id] ?? lift);
   });
   return lifts;
+}
+
+/** Moves `from` to the position of `to` in `order` (top → bottom). */
+export function reorderAxoLayer(order: readonly AxoLayerId[], from: AxoLayerId, to: AxoLayerId): AxoLayerId[] {
+  const next = [...order];
+  const fromIdx = next.indexOf(from);
+  const toIdx = next.indexOf(to);
+  if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return next;
+  next.splice(fromIdx, 1);
+  next.splice(toIdx, 0, from);
+  return next;
 }
 
 /** Plates that carry the aerial image (#85 Esri World Imagery): the satellite plate and the reference base. */
@@ -573,7 +587,7 @@ export function buildExplodedAxoLayers(
   overlays: ExplodedAxoOverlayBundle = {},
 ): { layers: AxoLayerGeometry[]; guides: AxoGuideLine[] } {
   const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
-  const lifts = liftsForLayerOrder(settings.layerOrder, settings.gapM, settings.extraGapAboveM);
+  const lifts = liftsForLayerOrder(settings.layerOrder, settings.gapM, settings.extraGapAboveM, settings.layerLiftM);
   const visibleLifts = settings.layerOrder
     .filter((id) => settings.layerVisible[id])
     .map((id) => lifts.get(id)!);
