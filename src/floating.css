@@ -56,7 +56,7 @@
 .sidebar-brand-bar,
 .sidebar-rail.icon-rail,
 .sidebar-panel { background: transparent; border: 0; }
-.sidebar-brand:hover { background: var(--sidebar-hover); border-radius: 999px; }
+.sidebar-brand:hover, .sidebar-brand:focus-visible { background: transparent; border: 0; border-radius: 0; box-shadow: none; color: var(--accent); }
 
 /* Landing (desktop): the map runs under the controls, which float directly on it with no
    backdrop and centres the cut frame on the window. Readability comes from slightly heavier
@@ -69,7 +69,6 @@
     font-weight: 560;
     text-shadow: none;
   }
-  .select .sidebar-head h2,
   .select .sidebar-group > h3.sidebar-gh,
   .select .field-head label,
   .select .kicker,
@@ -78,6 +77,7 @@
   .select .field-note,
   .select .hint,
   .select .sidebar-status { color: var(--float-label-on-map); font-weight: 500; }
+  .select .sidebar-head h2 { color: var(--float-ink); font-weight: 600; }
   .select .sidebar-place { font-weight: 650; }
   .select .search input { color: var(--float-ink); }
   .select .search input::placeholder { color: var(--float-label-on-map); }
@@ -98,8 +98,15 @@
 /* Selected item: solid accent pill with dark ink, no outline. */
 .sidebar .rail-btn.is-active { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
 
-/* Small light-grey section labels. */
-.sidebar-head h2,
+/* Small light-grey section labels; main tab headers (h2) are slightly larger. */
+.sidebar-head h2 {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--float-ink);
+}
 .sidebar-group > h3.sidebar-gh,
 .sidebar-gh h3,
 .field-head label, .kicker {
@@ -236,7 +243,8 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 }
 @media (min-width: 641px) {
   .model .viewport:not(.is-drawing):not(.is-satellite) > .sidebar-host,
-  .model .viewport:not(.is-drawing):not(.is-satellite) > .sidebar-host .sidebar-panel.is-right {
+  .model .viewport:not(.is-drawing):not(.is-satellite) > .sidebar-host .sidebar-panel.is-right,
+  .model .viewport:not(.is-drawing):not(.is-satellite) > .sidebar-host.is-panel-right .sidebar-rail.icon-rail.is-right-rail {
     background: var(--panel-3d-bg);
     border-right: 0;
     border-left: 0;
@@ -288,7 +296,7 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 .sun-study > .sun-study-kicker + * { margin-top: -10px; }
 .sun-study-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 /* 320px panel (Kelvin): the Sun tab uses 12px of the panel's 24px side padding so the cards stay near-square. */
-.solar-drawer:has(.sun-study) { margin: 0 -12px; }
+/* All sidebar tabs now share uniform 12px horizontal padding. */
 .sun-study-presets { grid-template-columns: 1fr 1fr; }
 .sidebar .sun-study-card {
   all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px;

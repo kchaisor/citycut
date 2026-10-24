@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { CityModel } from "../types";
 import { SELECTED_BUILDING_FILL_OPACITY, buildHeightEditOverlay, disposeObject } from "./buildCity";
-import { hideBuildingForHeightEdit } from "./buildingHeightEditVisibility";
+import { hideBuildingsForHeightEdit } from "./buildingHeightEditVisibility";
 import { auditBuildingSelection, type BuildingSelectionAudit } from "./buildingSelectionAudit";
 import { buildingViewportFill, type BuildingColourMode } from "./buildingViewportColor";
 export { SELECTED_BUILDING_FILL_OPACITY };
@@ -20,28 +20,43 @@ function fillForBuilding(colourMode: BuildingColourMode, building: CityModel["bu
 }
 
 /**
- * Hides the city mesh for one building and mounts the semi-transparent overlay with dashed edges.
+ * Hides the city meshes for one or more selected buildings and mounts semi-transparent overlays with dashed edges.
  * Call restore() on deselect.
  */
-export function mountSelectedBuildingVisual(
+export function mountSelectedBuildingsVisual(
   cityRoot: THREE.Object3D,
   model: CityModel,
-  buildingId: number,
+  buildingIds: readonly number[],
   colourMode: BuildingColourMode,
 ): SelectedBuildingVisual | null {
-  const building = model.buildings.find((item) => item.id === buildingId);
-  if (!building) return null;
-  const restoreHide = hideBuildingForHeightEdit(cityRoot, buildingId);
-  const fill = fillForBuilding(colourMode, building);
-  const overlay = buildHeightEditOverlay(model, buildingId, fill);
-  if (!overlay) {
+  const uniqueIds = [...new Set(buildingIds.map((id) => Number(id)))];
+  const matched = uniqueIds
+    .map((id) => model.buildings.find((item) => item.id === id))
+    .filter((item): item is CityModel["buildings"][number] => item != null);
+  if (matched.length === 0) return null;
+  const matchedIds = matched.map((item) => item.id);
+  const restoreHide = hideBuildingsForHeightEdit(cityRoot, matchedIds);
+  const overlay = new THREE.Group();
+  overlay.name = "HeightEditOverlay";
+  let firstFillMesh: THREE.Mesh | undefined;
+  for (const building of matched) {
+    const fill = fillForBuilding(colourMode, building);
+    const single = buildHeightEditOverlay(model, building.id, fill);
+    if (!single) continue;
+    while (single.children.length > 0) {
+      const child = single.children[0]!;
+      single.remove(child);
+      if (!firstFillMesh && child instanceof THREE.Mesh) firstFillMesh = child;
+      overlay.add(child);
+    }
+  }
+  if (overlay.children.length === 0) {
     restoreHide();
     return null;
   }
-  const fillMesh = overlay.children.find((child) => child instanceof THREE.Mesh) as THREE.Mesh | undefined;
-  const mat = fillMesh?.material as THREE.MeshStandardMaterial | undefined;
+  const mat = firstFillMesh?.material as THREE.MeshStandardMaterial | undefined;
   const overlayOpacity = mat?.opacity ?? SELECTED_BUILDING_FILL_OPACITY;
-  const audit = auditBuildingSelection(cityRoot, buildingId, overlay);
+  const audit = auditBuildingSelection(cityRoot, matchedIds, overlay);
   return {
     overlay,
     overlayOpacity,
@@ -51,6 +66,19 @@ export function mountSelectedBuildingVisual(
       restoreHide();
     },
   };
+}
+
+/**
+ * Hides the city mesh for one building and mounts the semi-transparent overlay with dashed edges.
+ * Call restore() on deselect.
+ */
+export function mountSelectedBuildingVisual(
+  cityRoot: THREE.Object3D,
+  model: CityModel,
+  buildingId: number,
+  colourMode: BuildingColourMode,
+): SelectedBuildingVisual | null {
+  return mountSelectedBuildingsVisual(cityRoot, model, [buildingId], colourMode);
 }
 
 /** Same flow as a 3D building pick after raycast resolved the id. */

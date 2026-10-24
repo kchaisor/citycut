@@ -174,7 +174,7 @@ describe("Display panel controls by view tab", () => {
     cleanup();
   });
 
-  it("shows 3D projection, 3D display switches, and only available 3D layers (without Building types or counts) under 3D model, and hides 2D drawing controls until Drawing is selected", async () => {
+  it("opens on the Display tab by default, splits left and right horizontal top icon rails, and renders View modes -> Projection -> Layers -> Colors in order", async () => {
     const user = userEvent.setup();
     render(
       <ModelPage
@@ -184,25 +184,44 @@ describe("Display panel controls by view tab", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Display" }));
+    // Left and right top horizontal icon rails
+    const leftRail = screen.getByRole("toolbar", { name: "Model tools" });
+    const rightRail = screen.getByRole("toolbar", { name: "Model info" });
+    expect(leftRail.getAttribute("aria-orientation")).toBe("horizontal");
+    expect(rightRail.getAttribute("aria-orientation")).toBe("horizontal");
+    expect(within(leftRail).getByRole("button", { name: "Display" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(leftRail).getByRole("button", { name: "Site Analysis" })).toBeTruthy();
+    expect(within(leftRail).getByRole("button", { name: "Import" })).toBeTruthy();
+    expect(within(leftRail).getByRole("button", { name: "Export" })).toBeTruthy();
+    expect(within(rightRail).getByRole("button", { name: "Model details" })).toBeTruthy();
+    expect(within(rightRail).getByRole("button", { name: "Buildings" })).toBeTruthy();
 
+    // Display tab is already open by default on 3D model
     const tab3d = screen.getByRole("tab", { name: "3D model" });
     const tabDrawing = screen.getByRole("tab", { name: "Drawing" });
     const tabSatellite = screen.getByRole("tab", { name: "Satellite" });
     expect(tab3d.getAttribute("aria-selected")).toBe("true");
 
-    // 3D controls are visible when 3D model is active
-    expect(screen.getByRole("group", { name: "Projection" })).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Isometric" }));
-    expect(screen.getByRole("group", { name: "Isometric corner" })).toBeTruthy();
-    const freeRotate = screen.getByLabelText("Free rotate (axonometric)");
-    const displayGroup = screen.getByRole("group", { name: "3D display" });
-    expect(displayGroup).toBeTruthy();
-    expect(screen.getByLabelText("White card")).toBeTruthy();
-    expect(screen.getByLabelText("Outlines")).toBeTruthy();
-    expect(screen.getByLabelText("Contours in 3D")).toBeTruthy();
-    expect(screen.getByLabelText("Hide trees")).toBeTruthy();
-    expect(freeRotate.compareDocumentPosition(displayGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // 4 sections in Display › 3D model in order: View modes -> Projection -> Layers -> Colors
+    const viewModesSection = screen.getByRole("region", { name: "View modes" });
+    const projectionSection = screen.getByRole("region", { name: "Projection" });
+    const layersSection = screen.getByRole("region", { name: "Layers" });
+    const colorsSection = screen.getByRole("region", { name: "Colors" });
+
+    expect(viewModesSection.compareDocumentPosition(projectionSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(projectionSection.compareDocumentPosition(layersSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(layersSection.compareDocumentPosition(colorsSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // View modes contains White card and Outlines
+    expect(within(viewModesSection).getByLabelText("White card")).toBeTruthy();
+    expect(within(viewModesSection).getByLabelText("Outlines")).toBeTruthy();
+
+    // Projection contains Perspective, Isometric, Plan, and Isometric corner / Free rotate when Isometric is active
+    expect(within(projectionSection).getByRole("group", { name: "Projection" })).toBeTruthy();
+    await user.click(within(projectionSection).getByRole("button", { name: "Isometric" }));
+    expect(within(projectionSection).getByRole("group", { name: "Isometric corner" })).toBeTruthy();
+    const freeRotate = within(projectionSection).getByLabelText("Free rotate (axonometric)");
+    expect(freeRotate.compareDocumentPosition(layersSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     // Viewport hint overlay ("Drag to orbit..." / "Drag to pan...") is not rendered
     expect(document.querySelector(".viewport-hint")).toBeNull();
@@ -213,22 +232,29 @@ describe("Display panel controls by view tab", () => {
     expect(screen.queryByRole("region", { name: "Building types" })).toBeNull();
     expect(screen.queryByText("Building types")).toBeNull();
 
-    // 3D layers section sits underneath 3D display switches and shows ONLY available layers without counts
-    const layersSection = screen.getByRole("region", { name: "3D layers" });
-    expect(displayGroup.compareDocumentPosition(layersSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(layersSection).getByText("Buildings")).toBeTruthy();
-    expect(within(layersSection).getByText("Roads")).toBeTruthy();
-    expect(within(layersSection).getByText("Landscape")).toBeTruthy();
-    expect(within(layersSection).getByText("Contours")).toBeTruthy();
-    expect(within(layersSection).getByText("Ground")).toBeTruthy();
-    // Unavailable layers in this model are omitted
-    expect(within(layersSection).queryByText("Water")).toBeNull();
-    expect(within(layersSection).queryByText("Trees")).toBeNull();
-    expect(within(layersSection).queryByText("Footpaths")).toBeNull();
-    expect(within(layersSection).queryByText("Rail & tram")).toBeNull();
-    expect(within(layersSection).queryByText("Blocks")).toBeNull();
-    // No counts rendered in the 3D layers section
-    expect(layersSection.querySelectorAll("b").length).toBe(0);
+    // Layers section shows ONLY available layers, all turned ON by default
+    for (const label of ["Buildings", "Roads", "Landscape", "Contours", "Ground"]) {
+      const cb = within(layersSection).getByLabelText(label) as HTMLInputElement;
+      expect(cb.checked).toBe(true);
+    }
+    expect(within(layersSection).queryByLabelText("Water")).toBeNull();
+    expect(within(layersSection).queryByLabelText("Trees")).toBeNull();
+    expect(within(layersSection).queryByLabelText("Footpaths")).toBeNull();
+    expect(within(layersSection).queryByLabelText("Rail & tram")).toBeNull();
+    expect(within(layersSection).queryByLabelText("Blocks")).toBeNull();
+
+    // Colors section sits underneath Layers and shows ONLY available layers without counts
+    expect(within(colorsSection).getByText("Buildings")).toBeTruthy();
+    expect(within(colorsSection).getByText("Roads")).toBeTruthy();
+    expect(within(colorsSection).getByText("Landscape")).toBeTruthy();
+    expect(within(colorsSection).getByText("Contours")).toBeTruthy();
+    expect(within(colorsSection).getByText("Ground")).toBeTruthy();
+    expect(within(colorsSection).queryByText("Water")).toBeNull();
+    expect(within(colorsSection).queryByText("Trees")).toBeNull();
+    expect(within(colorsSection).queryByText("Footpaths")).toBeNull();
+    expect(within(colorsSection).queryByText("Rail & tram")).toBeNull();
+    expect(within(colorsSection).queryByText("Blocks")).toBeNull();
+    expect(colorsSection.querySelectorAll("b").length).toBe(0);
 
     // 2D drawing controls must NOT appear when 3D model is selected
     expect(screen.queryByRole("group", { name: "Drawing type" })).toBeNull();
@@ -244,9 +270,10 @@ describe("Display panel controls by view tab", () => {
     // Switching to Drawing shows 2D drawing controls and hides 3D controls
     await user.click(tabDrawing);
     expect(tabDrawing.getAttribute("aria-selected")).toBe("true");
-    expect(screen.queryByRole("group", { name: "Projection" })).toBeNull();
-    expect(screen.queryByRole("group", { name: "3D display" })).toBeNull();
-    expect(screen.queryByRole("region", { name: "3D layers" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "View modes" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Projection" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Layers" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Colors" })).toBeNull();
     expect(screen.getByRole("group", { name: "Drawing type" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Site plan" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Figure-ground" })).toBeTruthy();
@@ -260,9 +287,10 @@ describe("Display panel controls by view tab", () => {
     // Switching to Satellite hides both 3D and 2D drawing controls
     await user.click(tabSatellite);
     expect(tabSatellite.getAttribute("aria-selected")).toBe("true");
-    expect(screen.queryByRole("group", { name: "Projection" })).toBeNull();
-    expect(screen.queryByRole("group", { name: "3D display" })).toBeNull();
-    expect(screen.queryByRole("region", { name: "3D layers" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "View modes" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Projection" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Layers" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Colors" })).toBeNull();
     expect(screen.queryByRole("group", { name: "Drawing type" })).toBeNull();
     expect(screen.queryByRole("combobox", { name: "Plan scale" })).toBeNull();
     expect(screen.queryByText("Line styles")).toBeNull();
@@ -270,7 +298,7 @@ describe("Display panel controls by view tab", () => {
     expect(screen.getByText(/Satellite is a preview of this frame/)).toBeTruthy();
   });
 
-  it("renders Water, Trees, Footpaths, Rail & tram, and Blocks when present in model and updates live 3D layer colours on pick", async () => {
+  it("renders Water, Trees, Footpaths, Rail & tram, and Blocks in Layers and Colors when present, defaults all layers ON, and updates live 3D layer colours on pick", async () => {
     const user = userEvent.setup();
     render(
       <ModelPage
@@ -286,34 +314,43 @@ describe("Display panel controls by view tab", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Display" }));
-    const layersSection = screen.getByRole("region", { name: "3D layers" });
-    expect(within(layersSection).getByText("Buildings")).toBeTruthy();
-    expect(within(layersSection).getByText("Roads")).toBeTruthy();
-    expect(within(layersSection).getByText("Footpaths")).toBeTruthy();
-    expect(within(layersSection).getByText("Trees")).toBeTruthy();
-    expect(within(layersSection).getByText("Landscape")).toBeTruthy();
-    expect(within(layersSection).getByText("Water")).toBeTruthy();
-    expect(within(layersSection).getByText("Blocks")).toBeTruthy();
-    expect(within(layersSection).getByText("Rail & tram")).toBeTruthy();
-    expect(within(layersSection).getByText("Contours")).toBeTruthy();
-    expect(within(layersSection).getByText("Ground")).toBeTruthy();
-    expect(layersSection.querySelectorAll("b").length).toBe(0);
+    const viewModesSection = screen.getByRole("region", { name: "View modes" });
+    const layersSection = screen.getByRole("region", { name: "Layers" });
+    const colorsSection = screen.getByRole("region", { name: "Colors" });
+
+    for (const label of [
+      "Buildings",
+      "Roads",
+      "Footpaths",
+      "Trees",
+      "Landscape",
+      "Water",
+      "Blocks",
+      "Rail & tram",
+      "Contours",
+      "Ground",
+    ]) {
+      const layerToggle = within(layersSection).getByLabelText(label) as HTMLInputElement;
+      expect(layerToggle.checked).toBe(true);
+      expect(within(colorsSection).getByText(label)).toBeTruthy();
+    }
+    expect(colorsSection.querySelectorAll("b").length).toBe(0);
 
     const hex = (six: string) => `${String.fromCharCode(35)}${six}`;
 
-    // Turn on White card and Hide trees first to verify layer colour picks reveal the layer
-    const whiteCardCheckbox = screen.getByLabelText("White card") as HTMLInputElement;
-    const hideTreesCheckbox = screen.getByLabelText("Hide trees") as HTMLInputElement;
-    const contoursCheckbox = screen.getByLabelText("Contours in 3D") as HTMLInputElement;
+    // Turn on White card and turn off Trees and Contours first to verify layer colour picks re-enable the layer
+    const whiteCardCheckbox = within(viewModesSection).getByLabelText("White card") as HTMLInputElement;
+    const treesCheckbox = within(layersSection).getByLabelText("Trees") as HTMLInputElement;
+    const contoursCheckbox = within(layersSection).getByLabelText("Contours") as HTMLInputElement;
     await user.click(whiteCardCheckbox);
-    await user.click(hideTreesCheckbox);
+    await user.click(treesCheckbox);
+    await user.click(contoursCheckbox);
     expect(whiteCardCheckbox.checked).toBe(true);
-    expect(hideTreesCheckbox.checked).toBe(true);
+    expect(treesCheckbox.checked).toBe(false);
     expect(contoursCheckbox.checked).toBe(false);
 
     // Buildings colour
-    fireEvent.change(within(layersSection).getByLabelText("Buildings colour"), {
+    fireEvent.change(within(colorsSection).getByLabelText("Buildings colour"), {
       target: { value: hex("d48855") },
     });
     expect(getColour("--building-uniform").toLowerCase()).toBe(hex("d48855"));
@@ -321,41 +358,41 @@ describe("Display panel controls by view tab", () => {
     expect(whiteCardCheckbox.checked).toBe(false);
 
     // Roads colour
-    fireEvent.change(within(layersSection).getByLabelText("Roads colour"), {
+    fireEvent.change(within(colorsSection).getByLabelText("Roads colour"), {
       target: { value: hex("556677") },
     });
     expect(getColour("--road-local").toLowerCase()).toBe(hex("556677"));
     expect(ROAD_COLOR.local.toLowerCase()).toBe(hex("556677"));
     expect(ROAD_COLOR.arterial.toLowerCase()).toBe(hex("556677"));
 
-    // Trees colour (also unchecks Hide trees)
-    fireEvent.change(within(layersSection).getByLabelText("Trees colour"), {
+    // Trees colour (also re-enables Trees layer)
+    fireEvent.change(within(colorsSection).getByLabelText("Trees colour"), {
       target: { value: hex("2d7a47") },
     });
     expect(getColour("--tree-crown").toLowerCase()).toBe(hex("2d7a47"));
-    expect(hideTreesCheckbox.checked).toBe(false);
+    expect(treesCheckbox.checked).toBe(true);
 
     // Landscape colour
-    fireEvent.change(within(layersSection).getByLabelText("Landscape colour"), {
+    fireEvent.change(within(colorsSection).getByLabelText("Landscape colour"), {
       target: { value: hex("6ea864") },
     });
     expect(getColour("--green-3d").toLowerCase()).toBe(hex("6ea864"));
 
     // Water colour
-    fireEvent.change(within(layersSection).getByLabelText("Water colour"), {
+    fireEvent.change(within(colorsSection).getByLabelText("Water colour"), {
       target: { value: hex("2277bb") },
     });
     expect(getColour("--water-3d").toLowerCase()).toBe(hex("2277bb"));
 
-    // Contours colour (also enables Contours in 3D)
-    fireEvent.change(within(layersSection).getByLabelText("Contours colour"), {
+    // Contours colour (also re-enables Contours layer)
+    fireEvent.change(within(colorsSection).getByLabelText("Contours colour"), {
       target: { value: hex("aa5522") },
     });
     expect(getColour("--outline-contour").toLowerCase()).toBe(hex("aa5522"));
     expect(contoursCheckbox.checked).toBe(true);
 
     // Ground colour (updates both flat ground and 3D terrain tint)
-    fireEvent.change(within(layersSection).getByLabelText("Ground colour"), {
+    fireEvent.change(within(colorsSection).getByLabelText("Ground colour"), {
       target: { value: hex("c2b280") },
     });
     expect(getColour("--ground-fill").toLowerCase()).toBe(hex("c2b280"));
@@ -363,5 +400,25 @@ describe("Display panel controls by view tab", () => {
     expect(r).toBeCloseTo(0xc2 / 255, 2);
     expect(g).toBeCloseTo(0xb2 / 255, 2);
     expect(b).toBeCloseTo(0x80 / 255, 2);
+  });
+
+  it("shows separate Hidden buildings and Edited building heights sections in Buildings and CRS positioning note in Import", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModelPage
+        model={sampleModel()}
+        onHome={() => {}}
+        onNewCut={() => {}}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Buildings" }));
+    expect(screen.getByRole("heading", { name: "Hidden buildings" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Edited building heights" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Manual heights" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Import" }));
+    expect(screen.getByText(/Position geometry in/i)).toBeTruthy();
+    expect(screen.getByText(/matching this cut's .3dm export/i)).toBeTruthy();
   });
 });

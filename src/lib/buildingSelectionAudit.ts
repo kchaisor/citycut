@@ -3,6 +3,7 @@ import { SELECTED_BUILDING_FILL_OPACITY } from "./buildCity";
 
 export type BuildingSelectionAudit = {
   buildingId: number;
+  selectedBuildingIds?: number[];
   hiddenMeshCount: number;
   zeroedGroupCount: number;
   visibleGroupCount: number;
@@ -13,18 +14,22 @@ export type BuildingSelectionAudit = {
   overlayLineDistancesReady: boolean;
 };
 
-function sameBuildingId(stored: unknown, buildingId: number): boolean {
+function matchesBuildingId(stored: unknown, targetIds: ReadonlySet<number>): boolean {
   if (stored == null) return false;
-  return Number(stored) === buildingId;
+  return targetIds.has(Number(stored));
 }
 
 /** Inspect whether the city mesh is hidden and the overlay is configured for QA. */
 export function auditBuildingSelection(
   cityRoot: THREE.Object3D,
-  buildingId: number,
+  buildingIdOrIds: number | readonly number[],
   overlay: THREE.Group | null,
 ): BuildingSelectionAudit {
-  const targetId = Number(buildingId);
+  const ids = Array.isArray(buildingIdOrIds)
+    ? buildingIdOrIds.map((id) => Number(id))
+    : [Number(buildingIdOrIds)];
+  const targetId = ids[0] ?? 0;
+  const targetIds = new Set(ids);
   let hiddenMeshCount = 0;
   let zeroedGroupCount = 0;
   let visibleGroupCount = 0;
@@ -35,7 +40,7 @@ export function auditBuildingSelection(
     const batch = mesh.name || mesh.parent?.name || "";
     if (!batch.startsWith("Buildings") && !batch.startsWith("source:")) return;
 
-    if (sameBuildingId(mesh.userData.buildingId, targetId)) {
+    if (matchesBuildingId(mesh.userData.buildingId, targetIds)) {
       if (!mesh.visible) hiddenMeshCount += 1;
       return;
     }
@@ -44,27 +49,30 @@ export function auditBuildingSelection(
     const groups = mesh.geometry?.groups;
     if (!byGroup?.length || !groups?.length) return;
     for (let index = 0; index < groups.length; index++) {
-      if (!sameBuildingId(byGroup[index], targetId)) continue;
+      if (!matchesBuildingId(byGroup[index], targetIds)) continue;
       if (groups[index]!.count === 0) zeroedGroupCount += 1;
       else visibleGroupCount += 1;
     }
   });
 
   const overlayInScene = overlay != null && overlay.parent != null;
-  const fillMesh = overlay?.children.find((child) => child instanceof THREE.Mesh) as THREE.Mesh | undefined;
+  let fillMesh: THREE.Mesh | undefined;
+  const dashedLines: THREE.LineSegments[] = [];
+  overlay?.traverse((child) => {
+    if (!fillMesh && child instanceof THREE.Mesh) fillMesh = child;
+    if (child instanceof THREE.LineSegments && child.material instanceof THREE.LineDashedMaterial) {
+      dashedLines.push(child);
+    }
+  });
   const fillMat = fillMesh?.material as THREE.MeshStandardMaterial | undefined;
-  const dashedLines =
-    overlay?.children.filter(
-      (child) => child instanceof THREE.LineSegments && child.material instanceof THREE.LineDashedMaterial,
-    ) ?? [];
-  const overlayLineDistancesReady = dashedLines.every((line) => {
-    const segments = line as THREE.LineSegments;
+  const overlayLineDistancesReady = dashedLines.every((segments) => {
     const dist = segments.geometry.getAttribute("lineDistance");
     return dist != null && dist.count > 0;
   });
 
   return {
     buildingId: targetId,
+    selectedBuildingIds: ids,
     hiddenMeshCount,
     zeroedGroupCount,
     visibleGroupCount,

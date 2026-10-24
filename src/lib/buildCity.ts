@@ -566,6 +566,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     material.name = "Roads";
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = "Roads";
+    mesh.userData.roadGrade = grade;
     if (groundSplit) mesh.userData.exportLayer = GROUND_ROADS_LAYER;
     mesh.userData.layerColor = ROAD_RGB.arterial;
     mesh.userData.objectColor = ROAD_RGB[grade];

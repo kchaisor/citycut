@@ -60,6 +60,10 @@ export function ImportMassingPanel(props: Props) {
         {imported.length} imported model{imported.length === 1 ? "" : "s"} · .3dm only · up to 50 MB, 500k triangles, 20
         models
       </p>
+      <p className="legend-note import-crs-note">
+        Position geometry in <strong>{crsName}</strong> coordinates (metres, matching this cut&apos;s .3dm export) so
+        imported models land in the exact site location.
+      </p>
       <div className="panel-toolbar">
         <button type="button" disabled={busy} onClick={() => fileRef.current?.click()}>
           {busy ? "Reading…" : "Import .3dm…"}

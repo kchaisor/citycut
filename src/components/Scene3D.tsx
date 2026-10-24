@@ -16,7 +16,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
 import { attachScenePointPick, attachBuildingPick } from "../lib/buildingPick";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
-import { auditBuildingSelection, mountSelectedBuildingVisual } from "../lib/buildingSelectionVisual";
+import { auditBuildingSelection, mountSelectedBuildingsVisual } from "../lib/buildingSelectionVisual";
 import { CAMERA_FIT_INCLUDES_HELIODON } from "../lib/sceneCameraFit";
 import { shotFromCamera, type CameraShot } from "../lib/cameraShot";
 import { getColour } from "../lib/colours";
@@ -66,7 +66,7 @@ import {
 import { qaModeFromSearch, registerQaCameraBridge, type QaCameraPose } from "../lib/qaCameraBridge";
 import { WebGlContextWatch } from "./WebGlContextWatch";
 import type { ProjectionMode } from "../lib/viewMemory";
-import { treesVisibleIn3d, type View3dDisplaySettings } from "../lib/view3dDisplay";
+import { isLayer3dVisible, treesVisibleIn3d, type View3dDisplaySettings } from "../lib/view3dDisplay";
 import { buildContourLineObject } from "../lib/contourLines3d";
 import {
   applyWhiteCardTint,
@@ -185,23 +185,23 @@ function ScenePointLayer({ onScenePoint }: { onScenePoint: (east: number, north:
 
 function HeightEditOverlayLayer({
   model,
-  buildingId,
+  buildingIds,
   cityRoot,
   colourMode,
 }: {
   model: CityModel;
-  buildingId: number | null;
+  buildingIds: readonly number[];
   cityRoot: THREE.Object3D;
   colourMode: BuildingColourMode;
 }) {
   const [overlay, setOverlay] = useState<THREE.Group | null>(null);
   useLayoutEffect(() => {
-    if (buildingId == null) {
+    if (buildingIds.length === 0) {
       setOverlay(null);
       if (typeof window !== "undefined") delete window.__citycutQaSelectionAudit;
       return;
     }
-    const mounted = mountSelectedBuildingVisual(cityRoot, model, buildingId, colourMode);
+    const mounted = mountSelectedBuildingsVisual(cityRoot, model, buildingIds, colourMode);
     if (!mounted) {
       setOverlay(null);
       if (typeof window !== "undefined") delete window.__citycutQaSelectionAudit;
@@ -210,7 +210,7 @@ function HeightEditOverlayLayer({
     setOverlay(mounted.overlay);
     if (typeof window !== "undefined" && qaModeFromSearch(window.location.search)) {
       const publishAudit = () => {
-        window.__citycutQaSelectionAudit = auditBuildingSelection(cityRoot, buildingId, mounted.overlay);
+        window.__citycutQaSelectionAudit = auditBuildingSelection(cityRoot, buildingIds, mounted.overlay);
         console.info("[CityCut selection]", window.__citycutQaSelectionAudit);
       };
       publishAudit();
@@ -226,7 +226,7 @@ function HeightEditOverlayLayer({
       mounted.restore();
       setOverlay(null);
     };
-  }, [buildingId, cityRoot, colourMode, model]);
+  }, [buildingIds, cityRoot, colourMode, model]);
   return overlay ? <primitive object={overlay} /> : null;
 }
 
@@ -238,6 +238,7 @@ function City({
   solarDiagramOn,
   solarNeutralFill,
   heightEditBuildingId,
+  selectedBuildingIds,
   display,
   onBounds,
   onBuildingPick,
@@ -251,6 +252,7 @@ function City({
   solarDiagramOn: boolean;
   solarNeutralFill: string;
   heightEditBuildingId: number | null;
+  selectedBuildingIds?: readonly number[];
   display: View3dDisplaySettings;
   onBounds: (bounds: Aabb) => void;
   onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
@@ -301,20 +303,80 @@ function City({
     }
     applyWhiteCardTint(group, display.whiteCard);
   }, [group, solarDiagramOn, solarNeutralFill, colourTick, display.whiteCard]);
+  const buildingsVisible = isLayer3dVisible(display, "buildings");
+  const roadsVisible = isLayer3dVisible(display, "roads");
+  const footpathsVisible = isLayer3dVisible(display, "footpaths");
+  const landscapeVisible = isLayer3dVisible(display, "landscape");
+  const waterVisible = isLayer3dVisible(display, "water");
+  const blocksVisible = isLayer3dVisible(display, "blocks");
+  const railVisible = isLayer3dVisible(display, "rail");
+  const contoursVisible = isLayer3dVisible(display, "contours");
+  const groundVisible = isLayer3dVisible(display, "ground");
   useLayoutEffect(() => {
     group.traverse((object) => {
-      if (object.name === "BuildingEdges") object.visible = display.showOutlines;
+      const name = object.name;
+      if (name === "BuildingEdges") {
+        object.visible = display.showOutlines && buildingsVisible;
+        return;
+      }
+      if (
+        name === "Buildings" ||
+        name === "Buildings-manual" ||
+        name === "Buildings-site" ||
+        name.startsWith("Buildings::") ||
+        name.startsWith("source:")
+      ) {
+        object.visible = buildingsVisible;
+        return;
+      }
+      if (name === "Roads") {
+        const grade = object.userData?.roadGrade;
+        object.visible = grade === "path" ? footpathsVisible : roadsVisible;
+        return;
+      }
+      if (name === "Green") {
+        object.visible = landscapeVisible;
+        return;
+      }
+      if (name === "Water") {
+        object.visible = waterVisible;
+        return;
+      }
+      if (name === "Blocks") {
+        object.visible = blocksVisible;
+        return;
+      }
+      if (name === "RailLines" || name === "TramLines") {
+        object.visible = railVisible;
+        return;
+      }
+      if (name === "Ground" || name === "Terrain") {
+        object.visible = groundVisible;
+        return;
+      }
+      if (name === "GroundEdge") {
+        object.visible = display.showOutlines && groundVisible;
+      }
     });
-    const groundEdge = group.getObjectByName("GroundEdge");
-    if (groundEdge) groundEdge.visible = display.showOutlines;
-  }, [group, display.showOutlines]);
+  }, [
+    group,
+    display.showOutlines,
+    buildingsVisible,
+    roadsVisible,
+    footpathsVisible,
+    landscapeVisible,
+    waterVisible,
+    blocksVisible,
+    railVisible,
+    groundVisible,
+  ]);
   useLayoutEffect(() => {
     const trees = group.getObjectByName("Trees");
     if (trees) trees.visible = treesVisibleIn3d(model.layers, display);
-  }, [group, display.hideTrees, model.layers.trees]);
+  }, [group, display.hideTrees, display.layersVisible, model.layers]);
   const contours = useMemo(
-    () => (display.showContours3d ? buildContourLineObject(model) : null),
-    [model, display.showContours3d, colourTick],
+    () => (contoursVisible ? buildContourLineObject(model) : null),
+    [model, contoursVisible, colourTick],
   );
   useLayoutEffect(() => () => disposeObject(group), [group]);
   return (
@@ -323,13 +385,21 @@ function City({
       {contours ? <primitive object={contours} /> : null}
       <HeightEditOverlayLayer
         model={model}
-        buildingId={heightEditBuildingId}
+        buildingIds={
+          buildingsVisible
+            ? selectedBuildingIds && selectedBuildingIds.length > 0
+              ? selectedBuildingIds
+              : heightEditBuildingId != null
+                ? [heightEditBuildingId]
+                : []
+            : []
+        }
         cityRoot={group}
         colourMode={colourMode}
       />
       <BuildingPickLayer
         root={group}
-        enabled={pickBuildings}
+        enabled={pickBuildings && buildingsVisible}
         onBuildingPick={onBuildingPick}
         onClearPick={onClearBuildingPick}
       />
@@ -1266,6 +1336,7 @@ export function Scene3D({
   onBuildingPick,
   onClearBuildingPick,
   heightEditBuildingId,
+  selectedBuildingIds,
   cameraMemory,
   display,
   importedMassing = null,
@@ -1289,6 +1360,7 @@ export function Scene3D({
   onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
   onClearBuildingPick?: () => void;
   heightEditBuildingId: number | null;
+  selectedBuildingIds?: readonly number[];
   /** Survives the 3D tab unmounting; see CameraMemory. Omit to always frame afresh. */
   cameraMemory?: CameraMemoryRef;
   display: View3dDisplaySettings;
@@ -1395,6 +1467,7 @@ export function Scene3D({
         onClearBuildingPick={onClearBuildingPick}
         pickBuildings={model.layers.buildings && !onScenePoint}
         heightEditBuildingId={heightEditBuildingId}
+        selectedBuildingIds={selectedBuildingIds}
         display={display}
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}

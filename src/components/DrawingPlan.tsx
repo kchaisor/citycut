@@ -439,6 +439,7 @@ export function DrawingPlan({
                 key={`sh${index}`}
                 d={svgRings(rings)}
                 fill={shadowFill}
+                fillOpacity={SUN_STUDY_SHADOW_OPACITY}
                 fillRule="evenodd"
                 stroke="none"
               />

@@ -175,8 +175,11 @@ import {
 } from "../lib/heliodonRadius";
 import type { SolarViewSettings } from "./SolarHeliodon";
 import {
-  readStoredView3dDisplay,
+  isLayer3dVisible,
+  setLayer3dVisible,
+  view3dDisplayForModelOpen,
   writeStoredView3dDisplay,
+  type Layer3dId,
   type View3dDisplaySettings,
 } from "../lib/view3dDisplay";
 
@@ -261,10 +264,13 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed();
   const sidebarModelRef = useRef(model);
   useEffect(() => {
-    // A new model always opens the sidebar on Model details.
+    // A new model always opens the sidebar on Display with all 3D layers turned on.
     if (sidebarModelRef.current === model) return;
     sidebarModelRef.current = model;
     dispatchSidebar({ type: "new-model" });
+    const nextDisplay = view3dDisplayForModelOpen(window.localStorage);
+    setView3dDisplay(nextDisplay);
+    writeStoredView3dDisplay(window.localStorage, nextDisplay);
   }, [model]);
   const [planWidth, setPlanWidth] = useState<number | null>(null);
   const [fitCounter, setFitCounter] = useState(0);
@@ -278,9 +284,11 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   // The 3D view unmounts on Drawing/Satellite; this keeps the user's camera for the way back.
   // A new model gets a fresh memory, so a new cut is framed afresh.
   const cameraMemory = useMemo<CameraMemoryRef>(() => ({ current: null }), [model]);
-  const [view3dDisplay, setView3dDisplay] = useState<View3dDisplaySettings>(() =>
-    readStoredView3dDisplay(window.localStorage),
-  );
+  const [view3dDisplay, setView3dDisplay] = useState<View3dDisplaySettings>(() => {
+    const next = view3dDisplayForModelOpen(window.localStorage);
+    writeStoredView3dDisplay(window.localStorage, next);
+    return next;
+  });
   const [windSettings, setWindSettings] = useState<WindViewSettings>(() => {
     const next = windSettingsForModelOpen(window.localStorage);
     writeStoredWindSettings(window.localStorage, next);
@@ -1008,13 +1016,24 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   ].filter(Boolean);
 
   const sectionIds = availableSidebarSections({ buildings: showBuildings, trees: showTrees });
-  const items: SidebarItem[] = sectionIds.map((id, index) => {
+  const leftSectionIds = sectionIds.filter((id) => !isRightSidebarSection(id));
+  const rightSectionIds = sectionIds.filter((id) => isRightSidebarSection(id));
+  const items: SidebarItem[] = leftSectionIds.map((id) => {
     const Icon = SECTION_ICONS[id];
     return {
       id,
       label: SIDEBAR_SECTION_LABELS[id],
       icon: <Icon {...iconProps} />,
-      groupStart: index === 1 || id === "import",
+      groupStart: id === "import",
+    };
+  });
+  const rightItems: SidebarItem[] = rightSectionIds.map((id, index) => {
+    const Icon = SECTION_ICONS[id];
+    return {
+      id,
+      label: SIDEBAR_SECTION_LABELS[id],
+      icon: <Icon {...iconProps} />,
+      groupStart: index === 1,
     };
   });
   const open: SidebarSectionId = resolveSidebarSection(sidebar.section, sectionIds);
@@ -1271,15 +1290,12 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     total: heightBarParts.reduce((sum, part) => sum + part.value, 0),
   };
 
-  // #87's 3D display modes, housed as switches in Display › 3D model.
-  const displaySwitches = (
-    <div className="display-switches" role="group" aria-label="3D display">
+  const viewModesSwitches = (
+    <div className="display-switches" role="group" aria-label="View modes">
       {(
         [
           ["whiteCard", "White card"],
           ["showOutlines", "Outlines"],
-          ["showContours3d", "Contours in 3D"],
-          ["hideTrees", "Hide trees"],
         ] as const
       ).map(([key, label]) => (
         <label key={key} className="check-field">
@@ -1294,154 +1310,165 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     </div>
   );
 
-  const availableLayers3d = [
-    {
-      id: "buildings",
-      label: "Buildings",
-      color: getColour("--building-uniform"),
-      available: showBuildings,
-      onPick: (value: string) => {
-        commitColour("--building-uniform", value);
-        if (colourByUse || showSource) {
-          setShowSource(false);
-          setColourByUse(false);
-        }
-        if (view3dDisplay.whiteCard) {
-          commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
-        }
-        setLineStyles(readDrawingStyle());
+  const availableLayers3d: {
+    id: Layer3dId;
+    label: string;
+    color: string;
+    available: boolean;
+    onPick: (value: string) => void;
+  }[] = (
+    [
+      {
+        id: "buildings" as const,
+        label: "Buildings",
+        color: getColour("--building-uniform"),
+        available: showBuildings,
+        onPick: (value: string) => {
+          commitColour("--building-uniform", value);
+          if (colourByUse || showSource) {
+            setShowSource(false);
+            setColourByUse(false);
+          }
+          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "buildings")) {
+            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "buildings", true));
+          }
+          setLineStyles(readDrawingStyle());
+        },
       },
-    },
-    {
-      id: "roads",
-      label: "Roads",
-      color: getColour("--road-local"),
-      available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade !== "path"),
-      onPick: (value: string) => {
-        commitColour("--road-local", value);
-        commitColour("--road-arterial", value);
-        commitColour("--road-fill", value);
-        if (view3dDisplay.whiteCard) {
-          commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
-        }
-        setLineStyles(readDrawingStyle());
+      {
+        id: "roads" as const,
+        label: "Roads",
+        color: getColour("--road-local"),
+        available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade !== "path"),
+        onPick: (value: string) => {
+          commitColour("--road-local", value);
+          commitColour("--road-arterial", value);
+          commitColour("--road-fill", value);
+          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "roads")) {
+            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "roads", true));
+          }
+          setLineStyles(readDrawingStyle());
+        },
       },
-    },
-    {
-      id: "footpaths",
-      label: "Footpaths",
-      color: getColour("--road-path"),
-      available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade === "path"),
-      onPick: (value: string) => {
-        commitColour("--road-path", value);
-        commitColour("--path-fill", value);
-        if (view3dDisplay.whiteCard) {
-          commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
-        }
-        setLineStyles(readDrawingStyle());
+      {
+        id: "footpaths" as const,
+        label: "Footpaths",
+        color: getColour("--road-path"),
+        available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade === "path"),
+        onPick: (value: string) => {
+          commitColour("--road-path", value);
+          commitColour("--path-fill", value);
+          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "footpaths")) {
+            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "footpaths", true));
+          }
+          setLineStyles(readDrawingStyle());
+        },
       },
-    },
-    {
-      id: "trees",
-      label: "Trees",
-      color: getColour("--tree-crown"),
-      available: model.layers.trees && model.trees.length > 0,
-      onPick: (value: string) => {
-        commitColour("--tree-crown", value);
-        commitColour("--tree-crown-edge", value);
-        commitColour("--tree-fill", value);
-        commitColour("--tree-layer", value);
-        if (view3dDisplay.whiteCard || view3dDisplay.hideTrees) {
-          commitView3dDisplay({ ...view3dDisplay, whiteCard: false, hideTrees: false });
-        }
-        setLineStyles(readDrawingStyle());
+      {
+        id: "trees" as const,
+        label: "Trees",
+        color: getColour("--tree-crown"),
+        available: model.layers.trees && model.trees.length > 0,
+        onPick: (value: string) => {
+          commitColour("--tree-crown", value);
+          commitColour("--tree-crown-edge", value);
+          commitColour("--tree-fill", value);
+          commitColour("--tree-layer", value);
+          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "trees")) {
+            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "trees", true));
+          }
+          setLineStyles(readDrawingStyle());
+        },
       },
-    },
-    {
-      id: "landscape",
-      label: "Landscape",
-      color: getColour("--green-3d"),
-      available: model.layers.waterGreen && model.areas.some((a) => a.kind === "green"),
-      onPick: (value: string) => {
-        commitColour("--green-3d", value);
-        commitColour("--green-fill", value);
-        if (view3dDisplay.whiteCard) {
-          commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
-        }
-        setLineStyles(readDrawingStyle());
+      {
+        id: "landscape" as const,
+        label: "Landscape",
+        color: getColour("--green-3d"),
+        available: model.layers.waterGreen && model.areas.some((a) => a.kind === "green"),
+        onPick: (value: string) => {
+          commitColour("--green-3d", value);
+          commitColour("--green-fill", value);
+          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "landscape")) {
+            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "landscape", true));
+          }
+          setLineStyles(readDrawingStyle());
+        },
       },
-    },
-    {
-      id: "water",
-      label: "Water",
-      color: getColour("--water-3d"),
-      available: model.layers.waterGreen && model.areas.some((a) => a.kind === "water"),
-      onPick: (value: string) => {
-        commitColour("--water-3d", value);
-        commitColour("--water-fill", value);
-        if (view3dDisplay.whiteCard) {
-          commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
-        }
-        setLineStyles(readDrawingStyle());
+      {
+        id: "water" as const,
+        label: "Water",
+        color: getColour("--water-3d"),
+        available: model.layers.waterGreen && model.areas.some((a) => a.kind === "water"),
+        onPick: (value: string) => {
+          commitColour("--water-3d", value);
+          commitColour("--water-fill", value);
+          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "water")) {
+            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "water", true));
+          }
+          setLineStyles(readDrawingStyle());
+        },
       },
-    },
-    {
-      id: "blocks",
-      label: "Blocks",
-      color: getColour("--block-fill"),
-      available: Boolean(model.blocks && model.blocks.length > 0),
-      onPick: (value: string) => {
-        commitColour("--block-fill", value);
-        commitColour("--block-plan", value);
-        if (view3dDisplay.whiteCard) {
-          commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
-        }
-        setLineStyles(readDrawingStyle());
+      {
+        id: "blocks" as const,
+        label: "Blocks",
+        color: getColour("--block-fill"),
+        available: Boolean(model.blocks && model.blocks.length > 0),
+        onPick: (value: string) => {
+          commitColour("--block-fill", value);
+          commitColour("--block-plan", value);
+          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "blocks")) {
+            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "blocks", true));
+          }
+          setLineStyles(readDrawingStyle());
+        },
       },
-    },
-    {
-      id: "rail",
-      label: "Rail & tram",
-      color: getColour("--rail-fill"),
-      available:
-        model.layers.roads &&
-        (model.roads.some((r) => r.kind === "rail") || (model.tramLines?.length ?? 0) > 0),
-      onPick: (value: string) => {
-        commitColour("--rail-fill", value);
-        commitColour("--outline-rail", value);
-        commitColour("--tram-line-stroke", value);
-        commitColour("--outline-tram", value);
-        setLineStyles(readDrawingStyle());
+      {
+        id: "rail" as const,
+        label: "Rail & tram",
+        color: getColour("--rail-fill"),
+        available:
+          model.layers.roads &&
+          (model.roads.some((r) => r.kind === "rail") || (model.tramLines?.length ?? 0) > 0),
+        onPick: (value: string) => {
+          commitColour("--rail-fill", value);
+          commitColour("--outline-rail", value);
+          commitColour("--tram-line-stroke", value);
+          commitColour("--outline-tram", value);
+          if (!isLayer3dVisible(view3dDisplay, "rail")) {
+            commitView3dDisplay(setLayer3dVisible(view3dDisplay, "rail", true));
+          }
+          setLineStyles(readDrawingStyle());
+        },
       },
-    },
-    {
-      id: "contours",
-      label: "Contours",
-      color: getColour("--outline-contour"),
-      available: Boolean(model.contourLayer && model.contourLayer.lines.length > 0),
-      onPick: (value: string) => {
-        commitColour("--outline-contour", value);
-        if (!view3dDisplay.showContours3d) {
-          commitView3dDisplay({ ...view3dDisplay, showContours3d: true });
-        }
-        setLineStyles(readDrawingStyle());
+      {
+        id: "contours" as const,
+        label: "Contours",
+        color: getColour("--outline-contour"),
+        available: Boolean(model.contourLayer && model.contourLayer.lines.length > 0),
+        onPick: (value: string) => {
+          commitColour("--outline-contour", value);
+          if (!isLayer3dVisible(view3dDisplay, "contours")) {
+            commitView3dDisplay(setLayer3dVisible(view3dDisplay, "contours", true));
+          }
+          setLineStyles(readDrawingStyle());
+        },
       },
-    },
-    {
-      id: "ground",
-      label: "Ground",
-      color: getColour("--ground-fill"),
-      available: true,
-      onPick: (value: string) => {
-        commitColour("--ground-fill", value);
-        commitColour("--terrain-layer", value);
-        if (view3dDisplay.whiteCard) {
-          commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
-        }
-        setLineStyles(readDrawingStyle());
+      {
+        id: "ground" as const,
+        label: "Ground",
+        color: getColour("--ground-fill"),
+        available: true,
+        onPick: (value: string) => {
+          commitColour("--ground-fill", value);
+          commitColour("--terrain-layer", value);
+          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "ground")) {
+            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "ground", true));
+          }
+          setLineStyles(readDrawingStyle());
+        },
       },
-    },
-  ].filter((layer) => layer.available);
+    ]
+  ).filter((layer) => layer.available);
 
   return (
     <div className="model">
@@ -1483,6 +1510,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                   setHideSelection([]);
                 }}
                 heightEditBuildingId={heightPick?.buildingId ?? null}
+                selectedBuildingIds={hideSelection.length > 0 ? hideSelection : heightPick ? [heightPick.buildingId] : []}
                 cameraMemory={cameraMemory}
                 display={view3dDisplay}
                 importedMassing={massing.group}
@@ -1572,12 +1600,12 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
           <Sidebar
             id={SIDEBAR_PANEL_ID}
             items={items}
+            rightItems={rightItems}
             active={open}
             collapsed={sidebarCollapsed}
             panelSide={isRightSidebarSection(open) ? "right" : "left"}
             title={SIDEBAR_SECTION_LABELS[open]}
             onHome={onHome}
-            showNewCut
             onNewCut={onNewCut}
             onSelect={selectSection}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -1869,12 +1897,21 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                   ))}
                 </section>
                 <section className="sidebar-group">
-                  <h3 className="sidebar-gh">Manual heights</h3>
+                  <div className="sidebar-gh">
+                    <h3>Hidden buildings</h3>
+                    <span>{hiddenMatch.size.toLocaleString()}</span>
+                  </div>
                   <HiddenBuildingsPanel
                     hidden={[...hiddenMatch.values()]}
                     onShow={(entry) => persistHidden(showHiddenEntry(hiddenStore, entry))}
                     onShowAll={() => persistHidden(showAllInCut(hiddenStore, hiddenMatch.values()))}
                   />
+                </section>
+                <section className="sidebar-group">
+                  <div className="sidebar-gh">
+                    <h3>Edited building heights</h3>
+                    <span>{overrideResult.manualCount.toLocaleString()}</span>
+                  </div>
                   <HeightOverridePanel
                     manualCount={overrideResult.manualCount}
                     unmatchedCount={unmatchedEdits}
@@ -1960,75 +1997,105 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
               </div>
               {tab === "3d" && (
                 <div className="projection-block">
-                  <p className="kicker">Projection</p>
-                  <div className="plan-switch" role="group" aria-label="Projection">
-                    <button
-                      type="button"
-                      aria-pressed={view.projection === "perspective"}
-                      onClick={() => commitView({ ...view, projection: "perspective" }, false)}
-                    >
-                      Perspective
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={view.projection === "iso"}
-                      onClick={() => commitView({ ...view, projection: "iso" }, false)}
-                    >
-                      Isometric
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={view.projection === "plan"}
-                      onClick={() => commitView({ projection: "plan", corner: view.corner, freeRotate: false }, true)}
-                    >
-                      Plan, north-up
-                    </button>
-                  </div>
-                  {view.projection === "plan" && (
-                    <p className="field-note">Orthographic plan view. Choose Perspective to return to the 3D orbit camera.</p>
-                  )}
-                  {view.projection === "iso" && (
-                    <>
-                      <p className="kicker">Corner</p>
-                      <div className="plan-switch" role="group" aria-label="Isometric corner">
-                        {ISO_CORNERS.map((corner) => (
-                          <button
-                            key={corner}
-                            type="button"
-                            aria-pressed={view.corner === corner && !view.freeRotate}
-                            onClick={() => commitView({ projection: "iso", corner, freeRotate: false }, true)}
-                          >
-                            {CORNER_LABEL[corner]}
-                          </button>
-                        ))}
-                      </div>
-                      <label className="check-field">
-                        <input
-                          type="checkbox"
-                          checked={view.freeRotate}
-                          onChange={(event) => {
-                            const freeRotate = event.target.checked;
-                            commitView(
-                              { ...view, projection: "iso", freeRotate },
-                              snapWhenTogglingIsoFreeRotate(),
-                            );
-                          }}
-                        />
-                        Free rotate (axonometric)
-                      </label>
-                      {view.freeRotate && (
-                        <p className="iso-warning">
-                          Free rotate is on, so this is no longer a true isometric view. Turn it off to lock pan-only
-                          at the current angle, or pick a corner for a true isometric view.
-                        </p>
-                      )}
-                    </>
-                  )}
-                  {displaySwitches}
+                  <section className="sidebar-group" aria-label="View modes">
+                    <div className="sidebar-gh">
+                      <h3>View modes</h3>
+                    </div>
+                    {viewModesSwitches}
+                  </section>
+                  <section className="sidebar-group" aria-label="Projection">
+                    <div className="sidebar-gh">
+                      <h3>Projection</h3>
+                    </div>
+                    <div className="plan-switch" role="group" aria-label="Projection">
+                      <button
+                        type="button"
+                        aria-pressed={view.projection === "perspective"}
+                        onClick={() => commitView({ ...view, projection: "perspective" }, false)}
+                      >
+                        Perspective
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={view.projection === "iso"}
+                        onClick={() => commitView({ ...view, projection: "iso" }, false)}
+                      >
+                        Isometric
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={view.projection === "plan"}
+                        onClick={() => commitView({ projection: "plan", corner: view.corner, freeRotate: false }, true)}
+                      >
+                        Plan, north-up
+                      </button>
+                    </div>
+                    {view.projection === "plan" && (
+                      <p className="field-note">Orthographic plan view. Choose Perspective to return to the 3D orbit camera.</p>
+                    )}
+                    {view.projection === "iso" && (
+                      <>
+                        <p className="kicker">Corner</p>
+                        <div className="plan-switch" role="group" aria-label="Isometric corner">
+                          {ISO_CORNERS.map((corner) => (
+                            <button
+                              key={corner}
+                              type="button"
+                              aria-pressed={view.corner === corner && !view.freeRotate}
+                              onClick={() => commitView({ projection: "iso", corner, freeRotate: false }, true)}
+                            >
+                              {CORNER_LABEL[corner]}
+                            </button>
+                          ))}
+                        </div>
+                        <label className="check-field">
+                          <input
+                            type="checkbox"
+                            checked={view.freeRotate}
+                            onChange={(event) => {
+                              const freeRotate = event.target.checked;
+                              commitView(
+                                { ...view, projection: "iso", freeRotate },
+                                snapWhenTogglingIsoFreeRotate(),
+                              );
+                            }}
+                          />
+                          Free rotate (axonometric)
+                        </label>
+                        {view.freeRotate && (
+                          <p className="iso-warning">
+                            Free rotate is on, so this is no longer a true isometric view. Turn it off to lock pan-only
+                            at the current angle, or pick a corner for a true isometric view.
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </section>
                   {availableLayers3d.length > 0 && (
-                    <section className="sidebar-group legend" aria-label="3D layers">
+                    <section className="sidebar-group" aria-label="Layers">
                       <div className="sidebar-gh">
                         <h3>Layers</h3>
+                      </div>
+                      <div className="display-switches" role="group" aria-label="3D layers">
+                        {availableLayers3d.map((layer) => (
+                          <label key={layer.id} className="check-field">
+                            <input
+                              type="checkbox"
+                              checked={isLayer3dVisible(view3dDisplay, layer.id)}
+                              onChange={(event) =>
+                                commitView3dDisplay(setLayer3dVisible(view3dDisplay, layer.id, event.target.checked))
+                              }
+                            />
+                            {layer.label}
+                          </label>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                  {availableLayers3d.length > 0 && (
+                    <section className="sidebar-group legend" aria-label="Colors">
+                      <div className="sidebar-gh">
+                        <h3>Colors</h3>
                       </div>
                       <ul className="legend-two">
                         {availableLayers3d.map((layer) => (
