@@ -486,6 +486,14 @@ export function styleFromProperties(
     const legacyBoundary = parseColor(read(SITE_BOUNDARY_STROKE_VAR));
     if (legacyBoundary) next.siteBoundary.color = legacyBoundary;
   }
+  if (!parseColor(read(STROKE_VARS.rail.color))) {
+    const railColor = parseColor(read("--outline-rail")) ?? parseColor(read("--rail-fill"));
+    if (railColor) next.rail.color = railColor;
+  }
+  if (!parseColor(read(STROKE_VARS.tram.color))) {
+    const tramColor = parseColor(read("--tram-line-stroke")) ?? parseColor(read("--outline-tram"));
+    if (tramColor) next.tram.color = tramColor;
+  }
   return next;
 }
 

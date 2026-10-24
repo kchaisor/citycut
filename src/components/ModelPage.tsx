@@ -13,7 +13,7 @@ import {
   countUses,
   uniformBuildingColor,
 } from "../lib/buildingUse";
-import { commitColour } from "../lib/colours";
+import { commitColour, getColour } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
 import { CRS_NOTE, mgaCrs } from "../lib/crsZone";
 import {
@@ -1273,6 +1273,155 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     </div>
   );
 
+  const availableLayers3d = [
+    {
+      id: "buildings",
+      label: "Buildings",
+      color: getColour("--building-uniform"),
+      available: showBuildings,
+      onPick: (value: string) => {
+        commitColour("--building-uniform", value);
+        if (colourByUse || showSource) {
+          setShowSource(false);
+          setColourByUse(false);
+        }
+        if (view3dDisplay.whiteCard) {
+          commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+        }
+        setLineStyles(readDrawingStyle());
+      },
+    },
+    {
+      id: "roads",
+      label: "Roads",
+      color: getColour("--road-local"),
+      available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade !== "path"),
+      onPick: (value: string) => {
+        commitColour("--road-local", value);
+        commitColour("--road-arterial", value);
+        commitColour("--road-fill", value);
+        if (view3dDisplay.whiteCard) {
+          commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+        }
+        setLineStyles(readDrawingStyle());
+      },
+    },
+    {
+      id: "footpaths",
+      label: "Footpaths",
+      color: getColour("--road-path"),
+      available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade === "path"),
+      onPick: (value: string) => {
+        commitColour("--road-path", value);
+        commitColour("--path-fill", value);
+        if (view3dDisplay.whiteCard) {
+          commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+        }
+        setLineStyles(readDrawingStyle());
+      },
+    },
+    {
+      id: "trees",
+      label: "Trees",
+      color: getColour("--tree-crown"),
+      available: model.layers.trees && model.trees.length > 0,
+      onPick: (value: string) => {
+        commitColour("--tree-crown", value);
+        commitColour("--tree-crown-edge", value);
+        commitColour("--tree-fill", value);
+        commitColour("--tree-layer", value);
+        if (view3dDisplay.whiteCard || view3dDisplay.hideTrees) {
+          commitView3dDisplay({ ...view3dDisplay, whiteCard: false, hideTrees: false });
+        }
+        setLineStyles(readDrawingStyle());
+      },
+    },
+    {
+      id: "landscape",
+      label: "Landscape",
+      color: getColour("--green-3d"),
+      available: model.layers.waterGreen && model.areas.some((a) => a.kind === "green"),
+      onPick: (value: string) => {
+        commitColour("--green-3d", value);
+        commitColour("--green-fill", value);
+        if (view3dDisplay.whiteCard) {
+          commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+        }
+        setLineStyles(readDrawingStyle());
+      },
+    },
+    {
+      id: "water",
+      label: "Water",
+      color: getColour("--water-3d"),
+      available: model.layers.waterGreen && model.areas.some((a) => a.kind === "water"),
+      onPick: (value: string) => {
+        commitColour("--water-3d", value);
+        commitColour("--water-fill", value);
+        if (view3dDisplay.whiteCard) {
+          commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+        }
+        setLineStyles(readDrawingStyle());
+      },
+    },
+    {
+      id: "blocks",
+      label: "Blocks",
+      color: getColour("--block-fill"),
+      available: Boolean(model.blocks && model.blocks.length > 0),
+      onPick: (value: string) => {
+        commitColour("--block-fill", value);
+        commitColour("--block-plan", value);
+        if (view3dDisplay.whiteCard) {
+          commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+        }
+        setLineStyles(readDrawingStyle());
+      },
+    },
+    {
+      id: "rail",
+      label: "Rail & tram",
+      color: getColour("--rail-fill"),
+      available:
+        model.layers.roads &&
+        (model.roads.some((r) => r.kind === "rail") || (model.tramLines?.length ?? 0) > 0),
+      onPick: (value: string) => {
+        commitColour("--rail-fill", value);
+        commitColour("--outline-rail", value);
+        commitColour("--tram-line-stroke", value);
+        commitColour("--outline-tram", value);
+        setLineStyles(readDrawingStyle());
+      },
+    },
+    {
+      id: "contours",
+      label: "Contours",
+      color: getColour("--outline-contour"),
+      available: Boolean(model.contourLayer && model.contourLayer.lines.length > 0),
+      onPick: (value: string) => {
+        commitColour("--outline-contour", value);
+        if (!view3dDisplay.showContours3d) {
+          commitView3dDisplay({ ...view3dDisplay, showContours3d: true });
+        }
+        setLineStyles(readDrawingStyle());
+      },
+    },
+    {
+      id: "ground",
+      label: "Ground",
+      color: getColour("--ground-fill"),
+      available: true,
+      onPick: (value: string) => {
+        commitColour("--ground-fill", value);
+        commitColour("--terrain-layer", value);
+        if (view3dDisplay.whiteCard) {
+          commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+        }
+        setLineStyles(readDrawingStyle());
+      },
+    },
+  ].filter((layer) => layer.available);
+
   const hint =
     tab === "3d"
       ? view.projection === "plan"
@@ -1867,44 +2016,30 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     </>
                   )}
                   {displaySwitches}
-                  {showBuildings && (
-                    <section className="sidebar-group legend" aria-label="Building types">
+                  {availableLayers3d.length > 0 && (
+                    <section className="sidebar-group legend" aria-label="3D layers">
                       <div className="sidebar-gh">
-                        <h3>Building types</h3>
-                        <span>{model.buildings.length.toLocaleString()}</span>
+                        <h3>Layers</h3>
                       </div>
                       <ul className="legend-two">
-                        {BUILDING_USES.filter((use) => useCounts[use] > 0).map((use) => (
-                          <li key={use}>
+                        {availableLayers3d.map((layer) => (
+                          <li key={layer.id}>
                             <label
                               className="legend-swatch"
-                              style={{
-                                background:
-                                  colourByUse && !showSource
-                                    ? BUILDING_USE_META[use].color
-                                    : uniform,
-                              }}
-                              title={`Change ${BUILDING_USE_META[use].label.toLowerCase()} colour`}
+                              style={{ background: layer.color }}
+                              title={`Change ${layer.label.toLowerCase()} colour`}
                             >
-                              {open !== "buildings" && (
-                                <input
-                                  type="color"
-                                  aria-label={`${BUILDING_USE_META[use].label} colour`}
-                                  value={BUILDING_USE_META[use].color.toLowerCase()}
-                                  onChange={(event) => pickBuildingUseColour(use, event.target.value)}
-                                />
-                              )}
+                              <input
+                                type="color"
+                                aria-label={`${layer.label} colour`}
+                                value={layer.color.toLowerCase()}
+                                onChange={(event) => layer.onPick(event.target.value)}
+                              />
                             </label>
-                            <span>{BUILDING_USE_META[use].label}</span>
-                            <b>{useCounts[use].toLocaleString()}</b>
+                            <span>{layer.label}</span>
                           </li>
                         ))}
                       </ul>
-                      {solar.showPath && (
-                        <p className="legend-note">
-                          Buildings render white on screen while sun path is on; exports keep normal colours.
-                        </p>
-                      )}
                     </section>
                   )}
                 </div>
