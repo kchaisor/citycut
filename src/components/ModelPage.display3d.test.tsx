@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BUILDING_USE_META } from "../lib/buildingUse";
+import { getColour, resetStoredColours } from "../lib/colours";
 import { ModelPage } from "./ModelPage";
 import type { CityModel, Pt } from "../types";
 
@@ -42,6 +44,14 @@ function sampleModel(withBuildings: boolean): CityModel {
             use: "residential",
             source: "osm_tag",
           },
+          {
+            id: 2,
+            ring: square(20, 20, 40, 40),
+            holes: [],
+            height: 18,
+            use: "commercial",
+            source: "osm_tag",
+          },
         ]
       : [],
     roads: [],
@@ -74,13 +84,14 @@ function sampleModel(withBuildings: boolean): CityModel {
 describe("Display panel controls by view tab", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    resetStoredColours();
   });
 
   afterEach(() => {
     cleanup();
   });
 
-  it("shows 3D projection and 3D display switches under 3D model (even with buildings on) and hides 2D drawing controls until Drawing is selected", async () => {
+  it("shows 3D projection, 3D display switches, and adjustable Building types colours under 3D model, and hides 2D drawing controls until Drawing is selected", async () => {
     const user = userEvent.setup();
     render(<ModelPage model={sampleModel(true)} onHome={vi.fn()} onNewCut={vi.fn()} />);
 
@@ -105,6 +116,29 @@ describe("Display panel controls by view tab", () => {
     // 3D display switches sit underneath Free rotate (axonometric)
     expect(freeRotate.compareDocumentPosition(displayGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
+    // Building types section sits underneath 3D display switches with adjustable colour inputs
+    const buildingTypesSection = screen.getByRole("region", { name: "Building types" });
+    expect(displayGroup.compareDocumentPosition(buildingTypesSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(buildingTypesSection).getByText("Residential")).toBeTruthy();
+    expect(within(buildingTypesSection).getByText("Commercial")).toBeTruthy();
+
+    const resColourInput = within(buildingTypesSection).getByLabelText("Residential colour") as HTMLInputElement;
+    const comColourInput = within(buildingTypesSection).getByLabelText("Commercial colour") as HTMLInputElement;
+    expect(resColourInput.type).toBe("color");
+    expect(comColourInput.type).toBe("color");
+
+    // Adjusting a building type colour updates the live CSS variable and swatch colour (and clears White card if set)
+    const whiteCardCheckbox = screen.getByLabelText("White card") as HTMLInputElement;
+    await user.click(whiteCardCheckbox);
+    expect(whiteCardCheckbox.checked).toBe(true);
+
+    const nextColour = `${String.fromCharCode(35)}2288cc`;
+    fireEvent.change(resColourInput, { target: { value: nextColour } });
+    expect(getColour("--use-residential").toLowerCase()).toBe(nextColour);
+    expect(BUILDING_USE_META.residential.color.toLowerCase()).toBe(nextColour);
+    expect(resColourInput.value.toLowerCase()).toBe(nextColour);
+    expect(whiteCardCheckbox.checked).toBe(false);
+
     // 2D drawing controls must NOT appear when 3D model is selected
     expect(screen.queryByRole("group", { name: "Drawing type" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Site plan" })).toBeNull();
@@ -121,6 +155,7 @@ describe("Display panel controls by view tab", () => {
     expect(tabDrawing.getAttribute("aria-selected")).toBe("true");
     expect(screen.queryByRole("group", { name: "Projection" })).toBeNull();
     expect(screen.queryByRole("group", { name: "3D display" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Building types" })).toBeNull();
     expect(screen.getByRole("group", { name: "Drawing type" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Site plan" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Figure-ground" })).toBeTruthy();
@@ -136,6 +171,7 @@ describe("Display panel controls by view tab", () => {
     expect(tabSatellite.getAttribute("aria-selected")).toBe("true");
     expect(screen.queryByRole("group", { name: "Projection" })).toBeNull();
     expect(screen.queryByRole("group", { name: "3D display" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Building types" })).toBeNull();
     expect(screen.queryByRole("group", { name: "Drawing type" })).toBeNull();
     expect(screen.queryByRole("combobox", { name: "Plan scale" })).toBeNull();
     expect(screen.queryByText("Line styles")).toBeNull();

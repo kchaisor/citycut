@@ -13,6 +13,7 @@ import {
   countUses,
   uniformBuildingColor,
 } from "../lib/buildingUse";
+import { commitColour } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
 import { CRS_NOTE, mgaCrs } from "../lib/crsZone";
 import {
@@ -1028,6 +1029,18 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     writeStoredView3dDisplay(window.localStorage, next);
   }
 
+  function pickBuildingUseColour(use: BuildingUse, value: string) {
+    commitColour(BUILDING_USE_META[use].key, value);
+    if (!colourByUse || showSource) {
+      setShowSource(false);
+      setColourByUse(true);
+    }
+    if (view3dDisplay.whiteCard) {
+      commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+    }
+    setLineStyles(readDrawingStyle());
+  }
+
   function commitView(next: ViewMemory, snap: boolean) {
     setView(next);
     writeStoredView(window.localStorage, next);
@@ -1610,11 +1623,22 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                   <ul className="legend-two">
                     {BUILDING_USES.filter((use) => useCounts[use] > 0).map((use) => (
                       <li key={use}>
-                        <i
+                        <label
+                          className="legend-swatch"
                           style={{
                             background: colourByUse && !showSource ? BUILDING_USE_META[use].color : uniform,
                           }}
-                        />
+                          title={`Change ${BUILDING_USE_META[use].label.toLowerCase()} colour`}
+                        >
+                          {open === "buildings" && (
+                            <input
+                              type="color"
+                              aria-label={`${BUILDING_USE_META[use].label} colour`}
+                              value={BUILDING_USE_META[use].color.toLowerCase()}
+                              onChange={(event) => pickBuildingUseColour(use, event.target.value)}
+                            />
+                          )}
+                        </label>
                         <span>{BUILDING_USE_META[use].label}</span>
                         <b>{useCounts[use].toLocaleString()}</b>
                       </li>
@@ -1843,6 +1867,46 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     </>
                   )}
                   {displaySwitches}
+                  {showBuildings && (
+                    <section className="sidebar-group legend" aria-label="Building types">
+                      <div className="sidebar-gh">
+                        <h3>Building types</h3>
+                        <span>{model.buildings.length.toLocaleString()}</span>
+                      </div>
+                      <ul className="legend-two">
+                        {BUILDING_USES.filter((use) => useCounts[use] > 0).map((use) => (
+                          <li key={use}>
+                            <label
+                              className="legend-swatch"
+                              style={{
+                                background:
+                                  colourByUse && !showSource
+                                    ? BUILDING_USE_META[use].color
+                                    : uniform,
+                              }}
+                              title={`Change ${BUILDING_USE_META[use].label.toLowerCase()} colour`}
+                            >
+                              {open !== "buildings" && (
+                                <input
+                                  type="color"
+                                  aria-label={`${BUILDING_USE_META[use].label} colour`}
+                                  value={BUILDING_USE_META[use].color.toLowerCase()}
+                                  onChange={(event) => pickBuildingUseColour(use, event.target.value)}
+                                />
+                              )}
+                            </label>
+                            <span>{BUILDING_USE_META[use].label}</span>
+                            <b>{useCounts[use].toLocaleString()}</b>
+                          </li>
+                        ))}
+                      </ul>
+                      {solar.showPath && (
+                        <p className="legend-note">
+                          Buildings render white on screen while sun path is on; exports keep normal colours.
+                        </p>
+                      )}
+                    </section>
+                  )}
                 </div>
               )}
               {tab === "drawing" && (
