@@ -235,9 +235,11 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
   --panel-3d-line: #00000014;
 }
 @media (min-width: 641px) {
-  .model .viewport:not(.is-drawing):not(.is-satellite) > .sidebar-host {
+  .model .viewport:not(.is-drawing):not(.is-satellite) > .sidebar-host,
+  .model .viewport:not(.is-drawing):not(.is-satellite) > .sidebar-host .sidebar-panel.is-right {
     background: var(--panel-3d-bg);
     border-right: 0;
+    border-left: 0;
   }
   .model .viewport:not(.is-drawing):not(.is-satellite) > .sidebar-host .sidebar,
   .model .viewport:not(.is-drawing):not(.is-satellite) > .sidebar-host .sidebar * { text-shadow: none; }
