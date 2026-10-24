@@ -1,5 +1,5 @@
 import { ChevronDown } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { getColour, type ColourKey } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
 import {
@@ -39,9 +39,13 @@ export function SolarPanel({
   const [open, setOpen] = useState(true);
   useColourRevision();
   const panelId = useId();
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
 
   function patch(partial: Partial<SolarViewSettings>) {
-    onChange({ ...settings, ...partial });
+    const next = { ...settingsRef.current, ...partial };
+    settingsRef.current = next;
+    onChange(next);
   }
 
   return (
@@ -59,7 +63,23 @@ export function SolarPanel({
         </button>
       )}
       <div id={panelId} className="solar-panel-body" hidden={!embedded && !open}>
-        {site && <SunStudyPlayer settings={settings} onChange={onChange} lat={site.lat} lon={site.lon} />}
+        {site && (
+          <SunStudyPlayer
+            settings={settings}
+            onChange={(next) =>
+              patch({
+                castShadows: next.castShadows,
+                year: next.year,
+                month: next.month,
+                day: next.day,
+                hour: next.hour,
+                minute: next.minute,
+              })
+            }
+            lat={site.lat}
+            lon={site.lon}
+          />
+        )}
         <label className="check-field">
           <input
             type="checkbox"

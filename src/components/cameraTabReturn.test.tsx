@@ -248,4 +248,22 @@ describe("3D camera across a 3D → Drawing → 3D round trip", () => {
     await second.rerender({ ...iso, freeRotate: false });
     expect(read(second)).toEqual(before);
   });
+
+  it("switching Perspective → Isometric → Plan → Isometric snaps the shared ortho camera to each projection", async () => {
+    const memory: CameraMemoryRef = { current: null };
+    const view = await mount3d(memory, { projection: "perspective" });
+    await view.rerender({ projection: "iso" });
+    const isoPose = read(view);
+    expect(isoPose.kind).toBe("ortho");
+    expect(isoPose.up).toEqual([0, 1, 0]);
+    expect(Math.hypot(isoPose.position[0], isoPose.position[2])).toBeGreaterThan(100);
+
+    await view.rerender({ projection: "plan" });
+    const planPose = read(view);
+    expect(planPose.kind).toBe("ortho");
+    expect(planPose.up).toEqual([0, 0, -1]);
+
+    await view.rerender({ projection: "iso" });
+    expect(read(view)).toEqual(isoPose);
+  });
 });
