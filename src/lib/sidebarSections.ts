@@ -5,9 +5,18 @@
  * storage (the old floating drawer remembered it in `citycut.rail.model`). Whether
  * the panel is collapsed is shared with the landing page; see `sidebarCollapse.ts`.
  */
-export const SIDEBAR_SECTION_IDS = ["summary", "buildings", "trees", "drawing", "solar", "wind", "view", "import", "exports"] as const;
+export const SIDEBAR_SECTION_IDS = ["summary", "buildings", "trees", "drawing", "analysis", "import", "exports"] as const;
 
 export type SidebarSectionId = (typeof SIDEBAR_SECTION_IDS)[number];
+
+/** Sub-tabs inside the Site Analysis section (Sun, Wind, View). */
+export const SITE_ANALYSIS_KINDS = ["solar", "wind", "view"] as const;
+export type SiteAnalysisKind = (typeof SITE_ANALYSIS_KINDS)[number];
+export const SITE_ANALYSIS_LABELS: Record<SiteAnalysisKind, string> = {
+  solar: "Sun",
+  wind: "Wind",
+  view: "View",
+};
 
 export const INITIAL_SIDEBAR_SECTION: SidebarSectionId = "summary";
 
@@ -25,9 +34,7 @@ export const SIDEBAR_SECTION_LABELS: Record<SidebarSectionId, string> = {
   trees: "Trees",
   /** Covers 3D model, Drawing (site plan, figure-ground, exploded axo) and Satellite, so not "Drawing". */
   drawing: "Display",
-  solar: "Sun",
-  wind: "Wind",
-  view: "View",
+  analysis: "Site Analysis",
   import: "Import",
   exports: "Export",
 };
@@ -44,6 +51,9 @@ export function resolveSidebarSection(
   chosen: string | null | undefined,
   available: readonly string[],
 ): SidebarSectionId {
+  if (chosen === "solar" || chosen === "wind" || chosen === "view") {
+    return available.includes("analysis") ? "analysis" : INITIAL_SIDEBAR_SECTION;
+  }
   if (chosen && available.includes(chosen) && (SIDEBAR_SECTION_IDS as readonly string[]).includes(chosen)) {
     return chosen as SidebarSectionId;
   }
