@@ -1,5 +1,7 @@
+import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { drapeContourSegments } from "./contourLines3d";
+import { buildContourLineObject, drapeContourSegments, drapeContourSegmentsWithDistances } from "./contourLines3d";
+import type { CityModel } from "../types";
 
 describe("contour drape", () => {
   it("splits long segments so every piece sits on the sampled terrain", () => {
@@ -17,5 +19,31 @@ describe("contour drape", () => {
   it("keeps a short segment whole and maps north to -Z", () => {
     const positions = drapeContourSegments([[[0, 0], [3, 4]]], () => 2, 25, 0);
     expect(positions).toEqual([0, 2, -0, 3, 2, -4]);
+  });
+
+  it("accumulates lineDistance along draped pieces and builds a dashed 3D line object", () => {
+    const { lineDistances } = drapeContourSegmentsWithDistances([[[0, 0], [10, 0], [10, 20]]], () => 0, 5, 0);
+    expect(lineDistances).toEqual([0, 5, 5, 10, 10, 15, 15, 20, 20, 25, 25, 30]);
+    const model = {
+      center: { lat: -37.8, lon: 145 },
+      sideM: 100,
+      buildings: [],
+      roads: [],
+      water: [],
+      parks: [],
+      trees: [],
+      layers: { buildings: true, roads: true, water: true, parks: true, trees: true, terrain: true },
+      contourLayer: {
+        source: "vicmap-1m",
+        label: "Vicmap",
+        attribution: "",
+        intervalM: 1,
+        lines: [{ z: 10, points: [[-20, 0], [20, 0]] }],
+      },
+    } as unknown as CityModel;
+    const obj = buildContourLineObject(model);
+    expect(obj).not.toBeNull();
+    expect(obj!.material).toBeInstanceOf(THREE.LineDashedMaterial);
+    expect(obj!.geometry.getAttribute("lineDistance")?.count).toBe(obj!.geometry.getAttribute("position")?.count);
   });
 });
