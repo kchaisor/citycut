@@ -115,4 +115,29 @@ describe("Sun section", () => {
     fireEvent.keyDown(screen.getByRole("textbox", { name: "Type time (HH:MM)" }), { key: "Enter" });
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it("playing sun sweep does not overwrite a concurrent Show sun path & compass toggle before re-render", () => {
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const rafSpy = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      rafCallbacks.push(cb);
+      return rafCallbacks.length;
+    });
+    const cafSpy = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+    try {
+      const onChange = vi.fn();
+      render(<SolarPanel embedded settings={settings} onChange={onChange} sideM={500} site={site} />);
+      fireEvent.click(screen.getByRole("button", { name: "Play sun sweep" }));
+      // Toggle Show sun path & compass before the parent re-renders or the next rAF tick runs
+      fireEvent.click(screen.getByLabelText(/Show sun path/));
+      expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ showPath: true, castShadows: true }));
+      const tick = rafCallbacks.at(-1);
+      expect(tick).toBeTypeOf("function");
+      tick!(performance.now() + 100);
+      const last = onChange.mock.calls.at(-1)![0] as SolarViewSettings;
+      expect(last.showPath).toBe(true);
+    } finally {
+      rafSpy.mockRestore();
+      cafSpy.mockRestore();
+    }
+  });
 });

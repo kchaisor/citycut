@@ -531,6 +531,7 @@ function IsoSnap({
   solar,
   lat,
   lon,
+  extraBounds,
 }: {
   camera: THREE.OrthographicCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
@@ -547,9 +548,11 @@ function IsoSnap({
   solar: SolarViewSettings;
   lat: number;
   lon: number;
+  extraBounds?: Aabb | null;
 }) {
   const size = useThree((state) => state.size);
   const place = useCallback(() => {
+    if (!active) return;
     const controls = controlsRef.current;
     if (!controls || size.width < 2 || size.height < 2) return;
     const bounds = boundsRef.current;
@@ -559,7 +562,6 @@ function IsoSnap({
     const sameSnap = fittedKey.current?.startsWith(`${snapId}:`) ?? false;
     // Resizes keep the pose and zoom; only a new snap id refits (see viewportAutoFit.ts).
     if (sameSnap) return;
-    if (!active && fittedKey.current !== null && !sameSnap) return;
     let fitBounds = bounds;
     if (CAMERA_FIT_INCLUDES_HELIODON && solar.showPath) {
       fitBounds = unionAabb(
@@ -583,7 +585,8 @@ function IsoSnap({
     const direction = isoOffset(corner);
     const distance = eyeDistance(fitBounds);
     const eye = isoEye(centre, corner, distance);
-    const planes = orthoNearFar(fitBounds, eye, centre);
+    const clipBounds = extraBounds ? unionAabb(fitBounds, extraBounds) : fitBounds;
+    const planes = orthoNearFar(clipBounds, eye, centre);
     flushControlInertia(controls);
     camera.up.set(ISO_CAMERA_UP[0], ISO_CAMERA_UP[1], ISO_CAMERA_UP[2]);
     camera.position.set(eye[0], eye[1], eye[2]);
@@ -614,6 +617,7 @@ function IsoSnap({
     size.width,
     size.height,
     touchedRef,
+    extraBounds,
   ]);
   useLayoutEffect(() => {
     place();
@@ -635,6 +639,7 @@ function PlanSnap({
   active,
   touchedRef,
   fittedKey,
+  extraBounds,
 }: {
   camera: THREE.OrthographicCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
@@ -646,9 +651,11 @@ function PlanSnap({
   active: boolean;
   touchedRef: RefObject<boolean>;
   fittedKey: MutableRefObject<string | null>;
+  extraBounds?: Aabb | null;
 }) {
   const size = useThree((state) => state.size);
   const place = useCallback(() => {
+    if (!active) return;
     const controls = controlsRef.current;
     if (!controls || size.width < 2 || size.height < 2) return;
     const key = `${snapId}:${size.width}x${size.height}`;
@@ -656,7 +663,6 @@ function PlanSnap({
     const sameSnap = fittedKey.current?.startsWith(`${snapId}:`) ?? false;
     // Resizes keep the pose and zoom; only a new snap id refits (see viewportAutoFit.ts).
     if (sameSnap) return;
-    if (!active && fittedKey.current !== null && !sameSnap) return;
     const measured = boundsRef.current;
     const fitBounds = sitePlanBounds(sideM, groundY, siteTopY);
     if (measured) {
@@ -666,7 +672,8 @@ function PlanSnap({
     const centre = frameCentre(fitBounds);
     const distance = planEyeDistance(fitBounds);
     const eye = planEye(centre, distance);
-    const planes = planNearFar(fitBounds, centre);
+    const clipBounds = extraBounds ? unionAabb(fitBounds, extraBounds) : fitBounds;
+    const planes = planNearFar(clipBounds, centre);
     flushControlInertia(controls);
     camera.up.set(0, 0, -1);
     camera.position.set(eye[0], eye[1], eye[2]);
@@ -680,7 +687,7 @@ function PlanSnap({
     controls.update();
     fittedKey.current = key;
     touchedRef.current = false;
-  }, [active, camera, controlsRef, boundsRef, groundY, sideM, siteTopY, snapId, size.width, size.height, touchedRef]);
+  }, [active, camera, controlsRef, boundsRef, extraBounds, groundY, sideM, siteTopY, snapId, size.width, size.height, touchedRef]);
   useLayoutEffect(() => {
     place();
   }, [place]);
@@ -1040,7 +1047,7 @@ export function Cameras({
   // heliodon, sun and compass sit outside near/far in Iso view and are clipped away entirely.
   const heliodonClipBounds = useMemo(
     () =>
-      iso && solar.showPath
+      orthoView && solar.showPath
         ? heliodonSceneBounds({
             lat,
             lon,
@@ -1055,7 +1062,7 @@ export function Cameras({
             siteTopY,
           })
         : null,
-    [iso, solar.showPath, solar.year, solar.month, solar.day, solar.hour, solar.minute, lat, lon, side, heliodonRadius, groundY, siteTopY],
+    [orthoView, solar.showPath, solar.year, solar.month, solar.day, solar.hour, solar.minute, lat, lon, side, heliodonRadius, groundY, siteTopY],
   );
   const persp = perspRef.current;
   const ortho = orthoRef.current;
@@ -1123,6 +1130,7 @@ export function Cameras({
             solar={solar}
             lat={lat}
             lon={lon}
+            extraBounds={heliodonClipBounds}
           />
           <PlanSnap
             camera={ortho}
@@ -1135,6 +1143,7 @@ export function Cameras({
             active={plan}
             touchedRef={touchedRef}
             fittedKey={planFitKey}
+            extraBounds={heliodonClipBounds}
           />
           <OrthoClip camera={ortho} controlsRef={orthoControls} boundsRef={boundsRef}
             active={orthoView}
@@ -1389,7 +1398,6 @@ export function Scene3D({
         groundY={groundY}
         terrain={model.terrain ?? undefined}
         settings={solar}
-        hideDiagram={projection === "plan"}
       />
       <WindLayer
         sideM={model.sideM}

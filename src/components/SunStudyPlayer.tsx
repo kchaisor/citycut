@@ -96,7 +96,9 @@ export function SunStudyPlayer({
         fraction.current = sweepMinute(fraction.current, dt, hps, w);
         const whole = Math.floor(fraction.current);
         if (whole !== s.hour * 60 + s.minute) {
-          commit({ ...s, castShadows: true, hour: Math.floor(whole / 60), minute: whole % 60 });
+          const next = { ...latest.current.settings, castShadows: true, hour: Math.floor(whole / 60), minute: whole % 60 };
+          latest.current.settings = next;
+          commit(next);
         }
       }
       frame = requestAnimationFrame(tick);
@@ -105,7 +107,11 @@ export function SunStudyPlayer({
     return () => cancelAnimationFrame(frame);
   }, [playing, lat, lon]);
 
-  const patch = (partial: Partial<SolarViewSettings>) => onChange({ ...settings, ...partial });
+  const patch = (partial: Partial<SolarViewSettings>) => {
+    const next = { ...latest.current.settings, ...partial };
+    latest.current.settings = next;
+    onChange(next);
+  };
   const stepHour = (delta: number) => {
     if (!stepHours) return;
     const hours = stepHours;
