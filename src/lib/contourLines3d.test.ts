@@ -29,15 +29,14 @@ describe("contour drape", () => {
       sideM: 100,
       buildings: [],
       roads: [],
-      water: [],
-      parks: [],
+      areas: [],
       trees: [],
-      layers: { buildings: true, roads: true, water: true, parks: true, trees: true, terrain: true },
+      layers: { buildings: true, roads: true, water: true, green: true, trees: true, terrain: true },
       contourLayer: {
         source: "vicmap-1m",
         label: "Vicmap",
         attribution: "",
-        intervalM: 1,
+        interval: 1,
         lines: [{ z: 10, points: [[-20, 0], [20, 0]] }],
       },
     } as unknown as CityModel;
