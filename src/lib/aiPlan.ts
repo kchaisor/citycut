@@ -25,7 +25,7 @@ import { LINE_MM, hexRgb } from "./lineweights";
 import { heliodonPlanPdfChunk } from "./heliodonPlanExport";
 import type { HeliodonDiagramExportOptions } from "./heliodonDiagram";
 import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
-import { SUN_STUDY_SHADOW_OPACITY } from "./sunStudyPlan";
+import { SINGLE_SHADOW_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "./sunStudyPlan";
 import { planPaths } from "./svgPlan";
 import { regionCredit } from "./sources/registry";
 import { NSW_SITE_LAYERS, nswPlanChunks } from "./nswPlanExport";
@@ -498,7 +498,7 @@ export function sitePlanChunks(
       paths: shadowRings.map((rings) => ({
         rings: mapRings(rings, model.sideM, layout),
         fill: fillOf("--shadow-fill"),
-        opacity: SUN_STUDY_SHADOW_OPACITY,
+        opacity: SINGLE_SHADOW_OPACITY,
         evenOdd: true,
         close: true,
       })),

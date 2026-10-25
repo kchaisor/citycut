@@ -10,6 +10,9 @@ export const SUN_STUDY_HOURS = [9, 10, 11, 12, 13, 14, 15] as const;
 /** Per-hour shadow fill opacity; layers overlap so longer-shaded ground reads darker. */
 export const SUN_STUDY_SHADOW_OPACITY = 0.2;
 
+/** Single-hour site-plan cast shadow fill opacity (0.5; 9am-3pm sun study stays at 0.2). */
+export const SINGLE_SHADOW_OPACITY = 0.5;
+
 export function sunStudyHourLabel(hour: number): string {
   if (hour === 12) return "12pm";
   if (hour === 0 || hour === 24) return "12am";
