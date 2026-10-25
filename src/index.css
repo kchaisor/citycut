@@ -605,8 +605,13 @@ input[type="range"]::-moz-range-thumb {
   margin: 0;
   max-width: 20em;
 }
-.plan { touch-action: none; cursor: grab; background: var(--drawing-bg); }
+.plan { touch-action: none; cursor: grab; background: var(--drawing-bg); user-select: none; -webkit-user-select: none; }
 .plan.figure-ground { background: var(--drawing-bg); }
+.plan.exploded-axo,
+.plan.exploded-axo *,
+.plan text,
+.axo-plate-label,
+.axo-legend { user-select: none; -webkit-user-select: none; }
 .plan.exploded-axo { background: var(--drawing-bg); }
 .axo-controls { margin: 0 0 14px; }
 .axo-layer-list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }

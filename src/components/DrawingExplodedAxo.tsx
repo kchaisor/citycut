@@ -48,6 +48,15 @@ function resolveStrokePaint(
   return layer.strokePaints?.[index] ?? axoLayerBasePaint(layerId);
 }
 
+function clearDocumentSelection(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.getSelection?.()?.removeAllRanges?.();
+  } catch {
+    // Ignore selection errors in non-browser test environments.
+  }
+}
+
 export function DrawingExplodedAxo({
   model,
   settings,
@@ -161,9 +170,16 @@ export function DrawingExplodedAxo({
       viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
       role="img"
       aria-label="Exploded axonometric drawing"
+      style={{ userSelect: "none", WebkitUserSelect: "none" }}
       onDoubleClick={() => applyView(fitted)}
+      onMouseDown={(event) => {
+        event.preventDefault();
+        clearDocumentSelection();
+      }}
       onPointerDown={(event) => {
-        event.currentTarget.setPointerCapture(event.pointerId);
+        event.preventDefault();
+        clearDocumentSelection();
+        event.currentTarget.setPointerCapture?.(event.pointerId);
         drag.current = { px: event.clientX, py: event.clientY, view };
       }}
       onPointerMove={(event) => {
@@ -171,12 +187,16 @@ export function DrawingExplodedAxo({
         if (!svg) return;
         const rect = svg.getBoundingClientRect();
         if (layerDrag.current && onLayerLiftChange && rect.height > 0) {
+          event.preventDefault();
+          clearDocumentSelection();
           const dy = ((event.clientY - layerDrag.current.startPy) / rect.height) * view.h;
           onLayerLiftChange(layerDrag.current.id, Math.max(0, layerDrag.current.startLiftM - dy));
           return;
         }
         const start = drag.current;
         if (!start) return;
+        event.preventDefault();
+        clearDocumentSelection();
         const dx = ((event.clientX - start.px) / rect.width) * start.view.w;
         const dy = ((event.clientY - start.py) / rect.height) * start.view.h;
         const next = { ...start.view, x: start.view.x - dx, y: start.view.y - dy };
@@ -184,6 +204,10 @@ export function DrawingExplodedAxo({
         else setInternalView(next);
       }}
       onPointerUp={() => {
+        drag.current = null;
+        layerDrag.current = null;
+      }}
+      onPointerCancel={() => {
         drag.current = null;
         layerDrag.current = null;
       }}
@@ -245,12 +269,14 @@ export function DrawingExplodedAxo({
             key={layer.id}
             data-axo-layer={layer.id}
             transform={layerTransform}
-            style={onLayerLiftChange ? { cursor: "ns-resize" } : undefined}
+            style={onLayerLiftChange ? { cursor: "ns-resize", userSelect: "none", WebkitUserSelect: "none" } : { userSelect: "none", WebkitUserSelect: "none" }}
             onPointerDown={
               onLayerLiftChange
                 ? (event) => {
+                    event.preventDefault();
                     event.stopPropagation();
-                    svgRef.current?.setPointerCapture(event.pointerId);
+                    clearDocumentSelection();
+                    svgRef.current?.setPointerCapture?.(event.pointerId);
                     layerDrag.current = { id: layer.id, startPy: event.clientY, startLiftM: layer.liftM };
                   }
                 : undefined
@@ -399,12 +425,14 @@ export function DrawingExplodedAxo({
             <g
               key={`label-${layer.id}`}
               className="axo-plate-label"
-              style={onLayerLiftChange ? { cursor: "ns-resize" } : undefined}
+              style={onLayerLiftChange ? { cursor: "ns-resize", userSelect: "none", WebkitUserSelect: "none" } : { userSelect: "none", WebkitUserSelect: "none" }}
               onPointerDown={
                 onLayerLiftChange
                   ? (event) => {
+                      event.preventDefault();
                       event.stopPropagation();
-                      svgRef.current?.setPointerCapture(event.pointerId);
+                      clearDocumentSelection();
+                      svgRef.current?.setPointerCapture?.(event.pointerId);
                       layerDrag.current = { id: layer.id, startPy: event.clientY, startLiftM: layer.liftM };
                     }
                   : undefined
