@@ -20,8 +20,8 @@ import type { BuildingFeat, CityModel } from "../types";
 const kew = { lat: -37.8045, lon: 145.0215, year: 2026, month: 9, day: 22 };
 
 describe("sun study plan", () => {
-  it("uses 0.3 opacity for single-hour shadows and keeps 0.2 opacity for 9am-3pm sun study slices", () => {
-    expect(SINGLE_SHADOW_OPACITY).toBe(0.3);
+  it("uses 0.5 opacity for single-hour shadows and keeps 0.2 opacity for 9am-3pm sun study slices", () => {
+    expect(SINGLE_SHADOW_OPACITY).toBe(0.5);
     expect(SUN_STUDY_SHADOW_OPACITY).toBe(0.2);
   });
 
