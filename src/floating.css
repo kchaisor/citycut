@@ -384,3 +384,28 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
   text-decoration: underline;
   box-shadow: none;
 }
+
+/* Prevent browser text-selection blue highlights when dragging Exploded Axonometric layers,
+   viewport panes, or left/right sidebar tabs and panels; keep inputs selectable. */
+.model,
+.model .viewport,
+.plan-wrap,
+svg.plan,
+.plan.exploded-axo,
+.plan.exploded-axo text,
+.axo-plate-label,
+.axo-legend,
+.sidebar-host,
+.select-chrome,
+.sidebar,
+.sidebar-rail,
+.sidebar-panel,
+.drawer-section {
+  user-select: none;
+  -webkit-user-select: none;
+}
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}

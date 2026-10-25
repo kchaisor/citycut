@@ -315,15 +315,24 @@ export function DrawingPlan({
       viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
       role="img"
       aria-label={figure ? "Figure-ground plan" : "Vector site plan"}
+      style={{ userSelect: "none", WebkitUserSelect: "none" }}
       onDoubleClick={() => applyView(fitted)}
+      onMouseDown={(event) => {
+        event.preventDefault();
+        window.getSelection?.()?.removeAllRanges?.();
+      }}
       onPointerDown={(event) => {
-        event.currentTarget.setPointerCapture(event.pointerId);
+        event.preventDefault();
+        window.getSelection?.()?.removeAllRanges?.();
+        event.currentTarget.setPointerCapture?.(event.pointerId);
         drag.current = { px: event.clientX, py: event.clientY, view };
       }}
       onPointerMove={(event) => {
         const start = drag.current;
         const svg = svgRef.current;
         if (!start || !svg) return;
+        event.preventDefault();
+        window.getSelection?.()?.removeAllRanges?.();
         const rect = svg.getBoundingClientRect();
         const dx = ((event.clientX - start.px) / rect.width) * start.view.w;
         const dy = ((event.clientY - start.py) / rect.height) * start.view.h;
