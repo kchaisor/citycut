@@ -1769,9 +1769,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                       None
                     </button>
                   </div>
-                  {solar.showPath && tab === "3d" && (
-                    <p className="legend-note">Buildings render white on screen while sun path is on; exports keep normal colours.</p>
-                  )}
                 </section>
                 <section className="sidebar-group">
                   <div className="sidebar-gh">

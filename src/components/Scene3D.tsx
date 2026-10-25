@@ -294,13 +294,8 @@ function City({
     snapshotWhiteCardColors(group, colourMode);
   }, [group, colourMode]);
   useLayoutEffect(() => {
-    if (!display.whiteCard) {
-      applySunStudySurfaceTint(group, solarDiagramOn);
-      applyBuildingSolarNeutral(group, solarDiagramOn, solarNeutralFill);
-    } else {
-      applySunStudySurfaceTint(group, false);
-      applyBuildingSolarNeutral(group, false, solarNeutralFill);
-    }
+    applySunStudySurfaceTint(group, false);
+    applyBuildingSolarNeutral(group, false, solarNeutralFill);
     applyWhiteCardTint(group, display.whiteCard);
   }, [group, solarDiagramOn, solarNeutralFill, colourTick, display.whiteCard]);
   const buildingsVisible = isLayer3dVisible(display, "buildings");
@@ -975,7 +970,7 @@ function ExportBridge({
       png: async () => {
         const city = scene.getObjectByName("CityCut");
         const render = () => captureViewPng(gl, scene, get().camera, exportFrameSize(gl.domElement));
-        if (city && solarDiagramOn) return withBuildingExportColours(city, true, render);
+        if (city && solarDiagramOn) return withBuildingExportColours(city, false, render);
         return render();
       },
       shot: () => {
