@@ -50,11 +50,9 @@ export const SIDEBAR_SECTION_LABELS: Record<SidebarSectionId, string> = {
   exports: "Export",
 };
 
-/** Sections this model can show. Buildings and Trees only appear when the model has them. */
-export function availableSidebarSections(input: { buildings: boolean; trees: boolean }): SidebarSectionId[] {
-  return SIDEBAR_SECTION_IDS.filter(
-    (id) => (id !== "buildings" || input.buildings) && (id !== "trees" || input.trees),
-  );
+/** Sections this model can show. All left-hand tools and all three right-hand tabs (Model details, Buildings, Trees) are always available. */
+export function availableSidebarSections(_input?: { buildings?: boolean; trees?: boolean }): SidebarSectionId[] {
+  return [...SIDEBAR_SECTION_IDS];
 }
 
 /** The left section to show: the chosen one when available, otherwise Display (or the first available left section). */

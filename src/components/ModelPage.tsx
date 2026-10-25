@@ -1751,8 +1751,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
               </section>
             </div>
 
-            {showBuildings && (
-              <div className="drawer-section legend" hidden={rightOpen !== "buildings"}>
+            <div className="drawer-section legend" hidden={rightOpen !== "buildings"}>
                 <section className="sidebar-group">
                   <h3 className="sidebar-gh">Colour by</h3>
                   <div className="segmented" role="group" aria-label="Colour buildings by">
@@ -1909,11 +1908,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     onImport={importHeightEdits}
                   />
                 </section>
-              </div>
-            )}
+            </div>
 
-            {showTrees && (
-              <div className="drawer-section tree-sizes" hidden={rightOpen !== "trees"}>
+            <div className="drawer-section tree-sizes" hidden={rightOpen !== "trees"}>
                 <ul className="tree-tiers">
                   {(
                     [
@@ -1952,7 +1949,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 )}
                 {tierCounts.vicmap > 0 && <p className="tree-credit">{VICMAP_ATTRIBUTION}</p>}
               </div>
-            )}
               </>
             }
           >

@@ -26,10 +26,20 @@ describe("sidebar sections", () => {
     expect(initialSidebarState()).toEqual({ section: "drawing", rightSection: "summary" });
   });
 
-  it("lists Buildings and Trees only when the model has them and combines Sun/Wind/View into Site Analysis", () => {
+  it("always lists all three right-hand tabs (Model details, Buildings, Trees) and combines Sun/Wind/View into Site Analysis, even when buildings or trees are empty", () => {
     expect(availableSidebarSections({ buildings: true, trees: false })).toEqual([
       "summary",
       "buildings",
+      "trees",
+      "drawing",
+      "analysis",
+      "import",
+      "exports",
+    ]);
+    expect(availableSidebarSections({ buildings: false, trees: false })).toEqual([
+      "summary",
+      "buildings",
+      "trees",
       "drawing",
       "analysis",
       "import",
