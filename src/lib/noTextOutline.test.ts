@@ -13,12 +13,10 @@ function cssFiles(dir: string): string[] {
 }
 
 describe("UI text has no outline or halo (Kelvin)", () => {
-  it("no CSS rule gives UI text or icons a text-shadow, text-stroke, drop-shadow glow or stroke paint-order (except hovered .sidebar-brand-name)", () => {
+  it("no CSS rule gives UI text or icons a text-shadow, text-stroke, drop-shadow glow or stroke paint-order", () => {
     const offenders: string[] = [];
     for (const file of cssFiles(SRC)) {
-      const css = readFileSync(file, "utf8")
-        .replace(/\/\*[\s\S]*?\*\//g, "")
-        .replace(/\.sidebar-brand:hover\s+\.sidebar-brand-name,\s*\.sidebar-brand:focus-visible\s+\.sidebar-brand-name\s*\{[^}]*\}/g, "");
+      const css = readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
       for (const match of css.matchAll(/text-shadow\s*:\s*([^;}]+)/g)) {
         if (match[1]!.trim() !== "none") offenders.push(`${file}: text-shadow: ${match[1]!.trim()}`);
       }
@@ -33,12 +31,6 @@ describe("UI text has no outline or halo (Kelvin)", () => {
       }
     }
     expect(offenders).toEqual([]);
-  });
-
-  it("gives hovered .sidebar-brand-name a black boundary behind the yellow fill", () => {
-    const indexCss = readFileSync(join(SRC, "index.css"), "utf8");
-    expect(indexCss).toMatch(/\.sidebar-brand:hover\s+\.sidebar-brand-name[\s\S]*?-webkit-text-stroke:\s*2px\s+var\(--sidebar-text\)/);
-    expect(indexCss).toMatch(/\.sidebar-brand:hover\s+\.sidebar-brand-name[\s\S]*?paint-order:\s*stroke\s+fill/);
   });
 
   it("no inline React style sets a text shadow or stroke", () => {

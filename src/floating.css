@@ -56,7 +56,7 @@
 .sidebar-brand-bar,
 .sidebar-rail.icon-rail,
 .sidebar-panel { background: transparent; border: 0; }
-.sidebar-brand:hover, .sidebar-brand:focus-visible { background: transparent; border: 0; border-radius: 0; box-shadow: none; color: var(--accent); }
+.sidebar-brand:hover, .sidebar-brand:focus-visible { background: transparent; border: 0; border-radius: 0; box-shadow: none; color: inherit; }
 
 /* Landing (desktop): the map runs under the controls, which float directly on it with no
    backdrop and centres the cut frame on the window. Readability comes from slightly heavier
