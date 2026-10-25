@@ -192,8 +192,10 @@ describe("Display panel controls by view tab", () => {
     expect(within(leftRail).getByRole("button", { name: "Site Analysis" })).toBeTruthy();
     expect(within(leftRail).getByRole("button", { name: "Import" })).toBeTruthy();
     expect(within(leftRail).getByRole("button", { name: "Export" })).toBeTruthy();
-    expect(within(rightRail).getByRole("button", { name: "Model details" })).toBeTruthy();
-    expect(within(rightRail).getByRole("button", { name: "Buildings" })).toBeTruthy();
+    expect(within(rightRail).getByRole("button", { name: "Model details" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(rightRail).getByRole("button", { name: "Buildings" }).getAttribute("aria-pressed")).toBe("false");
+    expect(within(rightRail).getByRole("button", { name: "Trees" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.queryByRole("button", { name: /Export model/i })).toBeNull();
 
     // Display tab is already open by default on 3D model
     const tab3d = screen.getByRole("tab", { name: "3D model" });
@@ -404,13 +406,92 @@ describe("Display panel controls by view tab", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Buildings" }));
+    const leftRail = screen.getByRole("toolbar", { name: "Model tools" });
+    const rightRail = screen.getByRole("toolbar", { name: "Model info" });
+    const leftPanel = document.querySelector("#model-sidebar-panel") as HTMLElement;
+    const rightPanel = document.querySelector("#model-sidebar-right-panel") as HTMLElement;
+    expect(leftPanel).toBeTruthy();
+    expect(rightPanel).toBeTruthy();
+    expect(leftPanel.hidden).toBe(false);
+    expect(rightPanel.hidden).toBe(false);
+    expect(within(leftRail).getByRole("button", { name: "Display" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(rightRail).getByRole("button", { name: "Model details" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByRole("button", { name: /Export model/i })).toBeNull();
+
+    // Clicking Buildings on the right rail switches the right panel while keeping Display on the left rail active and open
+    await user.click(within(rightRail).getByRole("button", { name: "Buildings" }));
+    expect(within(rightRail).getByRole("button", { name: "Buildings" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(rightRail).getByRole("button", { name: "Model details" }).getAttribute("aria-pressed")).toBe("false");
+    expect(within(leftRail).getByRole("button", { name: "Display" }).getAttribute("aria-pressed")).toBe("true");
+    expect(leftPanel.hidden).toBe(false);
+    expect(rightPanel.hidden).toBe(false);
     expect(screen.getByRole("heading", { name: "Hidden buildings" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Edited building heights" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Manual heights" })).toBeNull();
 
-    await user.click(screen.getByRole("button", { name: "Import" }));
+    // Clicking the already-active right tab keeps both active
+    await user.click(within(rightRail).getByRole("button", { name: "Buildings" }));
+    expect(within(rightRail).getByRole("button", { name: "Buildings" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(leftRail).getByRole("button", { name: "Display" }).getAttribute("aria-pressed")).toBe("true");
+
+    // Clicking Import on the left rail switches the left panel while keeping Buildings on the right rail active and open
+    await user.click(within(leftRail).getByRole("button", { name: "Import" }));
+    expect(within(leftRail).getByRole("button", { name: "Import" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(leftRail).getByRole("button", { name: "Display" }).getAttribute("aria-pressed")).toBe("false");
+    expect(within(rightRail).getByRole("button", { name: "Buildings" }).getAttribute("aria-pressed")).toBe("true");
+    expect(leftPanel.hidden).toBe(false);
+    expect(rightPanel.hidden).toBe(false);
     expect(screen.getByText(/Position geometry in/i)).toBeTruthy();
     expect(screen.getByText(/matching this cut's .3dm export/i)).toBeTruthy();
+
+    // Clicking the already-active left tab keeps both active
+    await user.click(within(leftRail).getByRole("button", { name: "Import" }));
+    expect(within(leftRail).getByRole("button", { name: "Import" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(rightRail).getByRole("button", { name: "Buildings" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("keeps all three right-rail tabs (Model details, Buildings, Trees) visible even when buildings and trees are empty, and opens Trees cleanly while keeping Display open", async () => {
+    const user = userEvent.setup();
+    const emptyModel = {
+      ...sampleModel({ withWater: false, withTrees: false }),
+      buildings: [],
+      trees: [],
+    };
+    render(
+      <ModelPage
+        model={emptyModel}
+        onHome={() => {}}
+        onNewCut={() => {}}
+      />,
+    );
+
+    const leftRail = screen.getByRole("toolbar", { name: "Model tools" });
+    const rightRail = screen.getByRole("toolbar", { name: "Model info" });
+    const leftPanel = document.querySelector("#model-sidebar-panel") as HTMLElement;
+    const rightPanel = document.querySelector("#model-sidebar-right-panel") as HTMLElement;
+
+    expect(within(rightRail).getByRole("button", { name: "Model details" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(rightRail).getByRole("button", { name: "Buildings" }).getAttribute("aria-pressed")).toBe("false");
+    expect(within(rightRail).getByRole("button", { name: "Trees" }).getAttribute("aria-pressed")).toBe("false");
+
+    // Clicking Trees when model.trees is empty opens the Trees panel on the right while keeping Display open on the left
+    await user.click(within(rightRail).getByRole("button", { name: "Trees" }));
+    expect(within(rightRail).getByRole("button", { name: "Trees" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(rightRail).getByRole("button", { name: "Model details" }).getAttribute("aria-pressed")).toBe("false");
+    expect(within(leftRail).getByRole("button", { name: "Display" }).getAttribute("aria-pressed")).toBe("true");
+    expect(leftPanel.hidden).toBe(false);
+    expect(rightPanel.hidden).toBe(false);
+    const treeSection = rightPanel.querySelector(".drawer-section.tree-sizes") as HTMLElement;
+    expect(treeSection).toBeTruthy();
+    expect(treeSection.hidden).toBe(false);
+    expect(within(treeSection).getByText("Tree sizes: 0 from data")).toBeTruthy();
+
+    // Clicking Buildings when model.buildings is empty opens the Buildings panel on the right while keeping Display open on the left
+    await user.click(within(rightRail).getByRole("button", { name: "Buildings" }));
+    expect(within(rightRail).getByRole("button", { name: "Buildings" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(leftRail).getByRole("button", { name: "Display" }).getAttribute("aria-pressed")).toBe("true");
+    const buildingsSection = rightPanel.querySelector(".drawer-section.legend") as HTMLElement;
+    expect(buildingsSection).toBeTruthy();
+    expect(buildingsSection.hidden).toBe(false);
   });
 });

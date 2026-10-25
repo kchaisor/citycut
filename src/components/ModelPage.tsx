@@ -79,7 +79,11 @@ import {
   initialSidebarState,
   isRightSidebarSection,
   reduceSidebar,
+  resolveLeftSidebarSection,
+  resolveRightSidebarSection,
   resolveSidebarSection,
+  type LeftSidebarSectionId,
+  type RightSidebarSectionId,
   type SidebarSectionId,
   type SiteAnalysisKind,
 } from "../lib/sidebarSections";
@@ -186,6 +190,7 @@ import {
 type Tab = "3d" | "drawing" | "satellite";
 
 const SIDEBAR_PANEL_ID = "model-sidebar-panel";
+const RIGHT_SIDEBAR_PANEL_ID = "model-sidebar-right-panel";
 const iconProps = { size: 18, strokeWidth: 1.75, "aria-hidden": true as const };
 
 const CORNER_LABEL: Record<IsoCorner, string> = {
@@ -1036,8 +1041,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       groupStart: index === 1,
     };
   });
-  const open: SidebarSectionId = resolveSidebarSection(sidebar.section, sectionIds);
-  const viewAnalysisOpen = open === "analysis" && analysisKind === "view";
+  const leftOpen: LeftSidebarSectionId = resolveLeftSidebarSection(sidebar.section, sectionIds);
+  const rightOpen: RightSidebarSectionId = resolveRightSidebarSection(sidebar.rightSection, sectionIds);
+  const viewAnalysisOpen = leftOpen === "analysis" && analysisKind === "view";
   const walkDrawing = viewAnalysisOpen && walk.drawing;
   const { drawing: walkDrawingOn, setDrawing: setWalkDrawing } = walk;
   useEffect(() => {
@@ -1046,8 +1052,13 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
 
   function selectSection(id: string) {
     if (id === "solar" || id === "wind" || id === "view") setAnalysisKind(id);
-    dispatchSidebar({ type: "select", id: resolveSidebarSection(id, sectionIds) });
-    setSidebarCollapsed(false);
+    const resolved = isRightSidebarSection(id)
+      ? resolveRightSidebarSection(id, sectionIds)
+      : resolveSidebarSection(id, sectionIds);
+    dispatchSidebar({ type: "select", id: resolved });
+    if (!isRightSidebarSection(resolved)) {
+      setSidebarCollapsed(false);
+    }
   }
 
   function retryComHeights() {
@@ -1568,50 +1579,51 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             <SatellitePane model={displayModel} viewport={planViewport} onViewportChange={setPlanViewport} />
           </div>
         )}
-        <div className={isRightSidebarSection(open) ? "sidebar-host is-panel-right" : "sidebar-host"}>
+        <div className="sidebar-host">
           <Sidebar
             id={SIDEBAR_PANEL_ID}
+            rightId={RIGHT_SIDEBAR_PANEL_ID}
             items={items}
             rightItems={rightItems}
-            active={open}
+            active={leftOpen}
+            rightActive={rightOpen}
             collapsed={sidebarCollapsed}
-            panelSide={isRightSidebarSection(open) ? "right" : "left"}
-            title={SIDEBAR_SECTION_LABELS[open]}
+            title={SIDEBAR_SECTION_LABELS[leftOpen]}
+            rightTitle={SIDEBAR_SECTION_LABELS[rightOpen]}
             onHome={onHome}
             onNewCut={onNewCut}
             onSelect={selectSection}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
             status={
-              open === "summary" ? (
+              leftOpen === "import" ? (
+                <span className="sidebar-status">
+                  {massing.imported.length} model{massing.imported.length === 1 ? "" : "s"}
+                </span>
+              ) : null
+            }
+            rightStatus={
+              rightOpen === "summary" ? (
                 <span className="sidebar-status">
                   <i className="status-dot is-ready" aria-hidden="true" />
                   Ready
                 </span>
-              ) : open === "import" ? (
-                <span className="sidebar-status">
-                  {massing.imported.length} model{massing.imported.length === 1 ? "" : "s"}
-                </span>
-              ) : open === "buildings" ? (
+              ) : rightOpen === "buildings" ? (
                 <span className="sidebar-status">
                   {comMeasuredHeightCount.toLocaleString()} of {displayModel.buildings.length.toLocaleString()} measured
                 </span>
               ) : null
             }
-            footer={
-              open === "summary" ? (
-                <button type="button" className="sidebar-primary" onClick={() => selectSection("exports")}>
-                  <Download size={16} strokeWidth={1.75} aria-hidden="true" />
-                  Export model
-                </button>
-              ) : open === "buildings" ? (
+            rightFooter={
+              rightOpen === "buildings" ? (
                 <p className="sidebar-foot-note">
                   {overrideResult.manualCount.toLocaleString()} manual height
                   {overrideResult.manualCount === 1 ? "" : "s"}
                 </p>
               ) : null
             }
-          >
-            <div className="drawer-section" hidden={open !== "summary"}>
+            rightChildren={
+              <>
+            <div className="drawer-section" hidden={rightOpen !== "summary"}>
               <div className="sidebar-hero">
                 <p className="sidebar-place">{model.placeLabel}</p>
                 <p className="sidebar-sub">
@@ -1739,8 +1751,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
               </section>
             </div>
 
-            {showBuildings && (
-              <div className="drawer-section legend" hidden={open !== "buildings"}>
+            <div className="drawer-section legend" hidden={rightOpen !== "buildings"}>
                 <section className="sidebar-group">
                   <h3 className="sidebar-gh">Colour by</h3>
                   <div className="segmented" role="group" aria-label="Colour buildings by">
@@ -1785,7 +1796,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                           }}
                           title={`Change ${BUILDING_USE_META[use].label.toLowerCase()} colour`}
                         >
-                          {open === "buildings" && (
+                          {rightOpen === "buildings" && (
                             <input
                               type="color"
                               aria-label={`${BUILDING_USE_META[use].label} colour`}
@@ -1897,11 +1908,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     onImport={importHeightEdits}
                   />
                 </section>
-              </div>
-            )}
+            </div>
 
-            {showTrees && (
-              <div className="drawer-section tree-sizes" hidden={open !== "trees"}>
+            <div className="drawer-section tree-sizes" hidden={rightOpen !== "trees"}>
                 <ul className="tree-tiers">
                   {(
                     [
@@ -1940,9 +1949,10 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 )}
                 {tierCounts.vicmap > 0 && <p className="tree-credit">{VICMAP_ATTRIBUTION}</p>}
               </div>
-            )}
-
-            <div className="drawer-section" hidden={open !== "drawing"}>
+              </>
+            }
+          >
+            <div className="drawer-section" hidden={leftOpen !== "drawing"}>
               <div className="tabs" role="tablist" aria-label="Model views">
                 {(
                   [
@@ -2316,7 +2326,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
               )}
             </div>
 
-            <div className="drawer-section" hidden={open !== "analysis"}>
+            <div className="drawer-section" hidden={leftOpen !== "analysis"}>
               <div className="tabs site-analysis-tabs" role="tablist" aria-label="Site Analysis">
                 {SITE_ANALYSIS_KINDS.map((kind) => {
                   const Icon = ANALYSIS_ICONS[kind];
@@ -2364,7 +2374,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
               </div>
             </div>
 
-            <div className="drawer-section" hidden={open !== "import"}>
+            <div className="drawer-section" hidden={leftOpen !== "import"}>
               <ImportMassingPanel
                 imported={massing.imported}
                 warnings={massing.warnings}
@@ -2383,7 +2393,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
               />
             </div>
 
-            <div className="drawer-section" hidden={open !== "exports"}>
+            <div className="drawer-section" hidden={leftOpen !== "exports"}>
               <div className="exports">
                 <ExportTiles
                   tiles={exportTiles({

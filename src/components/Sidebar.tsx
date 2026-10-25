@@ -30,17 +30,23 @@ function useNarrow() {
 /**
  * Fixed sidebar with top horizontal icon rails. Left-side section icons sit in the
  * top rail above the left drawer; when `rightItems` are provided, right-side section
- * icons sit in a top rail on the right side above the right drawer.
+ * icons sit in a top rail on the right side above the right drawer, and both left
+ * and right panels stay open independently.
  */
 export function Sidebar({
   id,
+  rightId,
   items,
   rightItems,
   active,
+  rightActive,
   collapsed,
   title,
+  rightTitle,
   status,
+  rightStatus,
   footer,
+  rightFooter,
   onSelect,
   onToggleCollapse,
   onHome,
@@ -48,25 +54,34 @@ export function Sidebar({
   showNewCut,
   onNewCut,
   children,
+  rightChildren,
 }: {
   id: string;
+  rightId?: string;
   items: SidebarItem[];
   rightItems?: SidebarItem[];
   active: string;
+  rightActive?: string;
   collapsed: boolean;
   panelSide?: "left" | "right";
   title: string;
+  rightTitle?: string;
   status?: ReactNode;
+  rightStatus?: ReactNode;
   footer?: ReactNode;
+  rightFooter?: ReactNode;
   onSelect: (id: string) => void;
   onToggleCollapse: () => void;
   onHome: () => void;
   showNewCut?: boolean;
   onNewCut?: () => void;
   children: ReactNode;
+  rightChildren?: ReactNode;
 }) {
   const narrow = useNarrow();
   const titleId = useId();
+  const rightTitleId = useId();
+  const resolvedRightId = rightId ?? `${id}-right`;
 
   function onKeyDown(event: KeyboardEvent<HTMLElement>) {
     const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("[data-rail-item]")];
@@ -98,8 +113,9 @@ export function Sidebar({
   const collapseLabel = collapsed ? "Expand sidebar" : "Collapse sidebar";
   const newCutIcon = showNewCut && onNewCut && collapsed;
 
-  const renderRailButton = (item: SidebarItem) => {
-    const on = item.id === active;
+  const renderRailButton = (item: SidebarItem, isRight = false) => {
+    const on = isRight ? item.id === (rightActive ?? active) : item.id === active;
+    const controlsId = isRight && rightChildren !== undefined ? resolvedRightId : id;
     return (
       <span key={item.id} className="sidebar-rail-slot">
         {item.groupStart && <span className="sidebar-rail-sep" aria-hidden="true" />}
@@ -110,7 +126,7 @@ export function Sidebar({
           data-section={item.id}
           aria-label={item.label}
           aria-pressed={on}
-          aria-controls={id}
+          aria-controls={controlsId}
           onClick={() => onSelect(item.id)}
         >
           {item.icon}
@@ -162,8 +178,10 @@ export function Sidebar({
               <span className="sidebar-rail-sep" aria-hidden="true" />
             </span>
           ) : null}
-          {items.map(renderRailButton)}
-          {narrow && rightItems && rightItems.length > 0 ? rightItems.map(renderRailButton) : null}
+          {items.map((item) => renderRailButton(item, false))}
+          {narrow && rightItems && rightItems.length > 0
+            ? rightItems.map((item) => renderRailButton(item, true))
+            : null}
           <span className="sidebar-rail-spacer" aria-hidden="true" />
           <button
             type="button"
@@ -191,7 +209,7 @@ export function Sidebar({
             aria-orientation="horizontal"
             onKeyDown={onKeyDown}
           >
-            {rightItems.map(renderRailButton)}
+            {rightItems.map((item) => renderRailButton(item, true))}
           </nav>
         ) : null}
         <section
@@ -208,6 +226,22 @@ export function Sidebar({
           <div className="sidebar-body">{children}</div>
           {footer && <div className="sidebar-foot">{footer}</div>}
         </section>
+        {rightChildren !== undefined ? (
+          <section
+            id={resolvedRightId}
+            className="sidebar-panel is-right"
+            data-panel-side="right"
+            aria-labelledby={rightTitleId}
+            hidden={narrow ? collapsed : false}
+          >
+            <header className="sidebar-head">
+              <h2 id={rightTitleId}>{rightTitle}</h2>
+              {rightStatus}
+            </header>
+            <div className="sidebar-body">{rightChildren}</div>
+            {rightFooter && <div className="sidebar-foot">{rightFooter}</div>}
+          </section>
+        ) : null}
       </div>
     </div>
   );
