@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { uniformBuildingColor } from "../lib/buildingUse";
 import { getColour, resetStoredColours } from "../lib/colours";
 import { ROAD_COLOR } from "../lib/surfaceLayers";
-import { terrainTint } from "../lib/terrain";
 import { ModelPage } from "./ModelPage";
 import type { CityModel, Pt } from "../types";
 
@@ -232,27 +231,24 @@ describe("Display panel controls by view tab", () => {
     expect(screen.queryByRole("region", { name: "Building types" })).toBeNull();
     expect(screen.queryByText("Building types")).toBeNull();
 
-    // Layers section shows ONLY available layers: Buildings, Landscape, Contours ON; Roads and Ground OFF by default
-    for (const label of ["Buildings", "Landscape", "Contours"]) {
+    // Layers section omits Ground and shows ONLY available layers, all turned ON by default
+    for (const label of ["Buildings", "Roads", "Landscape", "Contours"]) {
       const cb = within(layersSection).getByLabelText(label) as HTMLInputElement;
       expect(cb.checked).toBe(true);
     }
-    for (const label of ["Roads", "Ground"]) {
-      const cb = within(layersSection).getByLabelText(label) as HTMLInputElement;
-      expect(cb.checked).toBe(false);
-    }
+    expect(within(layersSection).queryByLabelText("Ground")).toBeNull();
     expect(within(layersSection).queryByLabelText("Water")).toBeNull();
     expect(within(layersSection).queryByLabelText("Trees")).toBeNull();
     expect(within(layersSection).queryByLabelText("Footpaths")).toBeNull();
     expect(within(layersSection).queryByLabelText("Rail & tram")).toBeNull();
     expect(within(layersSection).queryByLabelText("Blocks")).toBeNull();
 
-    // Colors section sits underneath Layers and shows ONLY available layers without counts
+    // Colors section sits underneath Layers, omits Ground, and shows ONLY available layers without counts
     expect(within(colorsSection).getByText("Buildings")).toBeTruthy();
     expect(within(colorsSection).getByText("Roads")).toBeTruthy();
     expect(within(colorsSection).getByText("Landscape")).toBeTruthy();
     expect(within(colorsSection).getByText("Contours")).toBeTruthy();
-    expect(within(colorsSection).getByText("Ground")).toBeTruthy();
+    expect(within(colorsSection).queryByText("Ground")).toBeNull();
     expect(within(colorsSection).queryByText("Water")).toBeNull();
     expect(within(colorsSection).queryByText("Trees")).toBeNull();
     expect(within(colorsSection).queryByText("Footpaths")).toBeNull();
@@ -302,7 +298,7 @@ describe("Display panel controls by view tab", () => {
     expect(screen.getByText(/Satellite is a preview of this frame/)).toBeTruthy();
   });
 
-  it("renders Water, Trees, Footpaths, Rail & tram, and Blocks in Layers and Colors when present, defaults Ground/Water/Roads OFF and other layers ON, and updates live 3D layer colours on pick", async () => {
+  it("renders Water, Trees, Footpaths, Rail & tram, and Blocks in Layers and Colors when present, omits Ground, defaults all layers ON, and updates live 3D layer colours on pick", async () => {
     const user = userEvent.setup();
     render(
       <ModelPage
@@ -322,7 +318,6 @@ describe("Display panel controls by view tab", () => {
     const layersSection = screen.getByRole("region", { name: "Layers" });
     const colorsSection = screen.getByRole("region", { name: "Colors" });
 
-    const defaultOffLabels = new Set(["Roads", "Water", "Ground"]);
     for (const label of [
       "Buildings",
       "Roads",
@@ -333,12 +328,13 @@ describe("Display panel controls by view tab", () => {
       "Blocks",
       "Rail & tram",
       "Contours",
-      "Ground",
     ]) {
       const layerToggle = within(layersSection).getByLabelText(label) as HTMLInputElement;
-      expect(layerToggle.checked).toBe(!defaultOffLabels.has(label));
+      expect(layerToggle.checked).toBe(true);
       expect(within(colorsSection).getByText(label)).toBeTruthy();
     }
+    expect(within(layersSection).queryByLabelText("Ground")).toBeNull();
+    expect(within(colorsSection).queryByText("Ground")).toBeNull();
     expect(colorsSection.querySelectorAll("b").length).toBe(0);
 
     const hex = (six: string) => `${String.fromCharCode(35)}${six}`;
@@ -395,16 +391,6 @@ describe("Display panel controls by view tab", () => {
     });
     expect(getColour("--outline-contour").toLowerCase()).toBe(hex("aa5522"));
     expect(contoursCheckbox.checked).toBe(true);
-
-    // Ground colour (updates both flat ground and 3D terrain tint)
-    fireEvent.change(within(colorsSection).getByLabelText("Ground colour"), {
-      target: { value: hex("c2b280") },
-    });
-    expect(getColour("--ground-fill").toLowerCase()).toBe(hex("c2b280"));
-    const [r, g, b] = terrainTint({ min: 0, max: 10 }, 10);
-    expect(r).toBeCloseTo(0xc2 / 255, 2);
-    expect(g).toBeCloseTo(0xb2 / 255, 2);
-    expect(b).toBeCloseTo(0x80 / 255, 2);
   });
 
   it("shows separate Hidden buildings and Edited building heights sections in Buildings and CRS positioning note in Import", async () => {

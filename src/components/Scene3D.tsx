@@ -311,7 +311,6 @@ function City({
   const blocksVisible = isLayer3dVisible(display, "blocks");
   const railVisible = isLayer3dVisible(display, "rail");
   const contoursVisible = isLayer3dVisible(display, "contours");
-  const groundVisible = isLayer3dVisible(display, "ground");
   useLayoutEffect(() => {
     group.traverse((object) => {
       const name = object.name;
@@ -350,12 +349,8 @@ function City({
         object.visible = railVisible;
         return;
       }
-      if (name === "Ground" || name === "Terrain") {
-        object.visible = groundVisible;
-        return;
-      }
       if (name === "GroundEdge") {
-        object.visible = display.showOutlines && groundVisible;
+        object.visible = display.showOutlines;
       }
     });
   }, [
@@ -368,7 +363,6 @@ function City({
     waterVisible,
     blocksVisible,
     railVisible,
-    groundVisible,
   ]);
   useLayoutEffect(() => {
     const trees = group.getObjectByName("Trees");

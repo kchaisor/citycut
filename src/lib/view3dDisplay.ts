@@ -14,7 +14,6 @@ export const LAYER_3D_IDS = [
   "blocks",
   "rail",
   "contours",
-  "ground",
 ] as const;
 
 export type Layer3dId = (typeof LAYER_3D_IDS)[number];
@@ -23,15 +22,14 @@ export type View3dLayerVisibility = Record<Layer3dId, boolean>;
 
 export const DEFAULT_VIEW3D_LAYERS_VISIBLE: View3dLayerVisibility = {
   buildings: true,
-  roads: false,
+  roads: true,
   footpaths: true,
   trees: true,
   landscape: true,
-  water: false,
+  water: true,
   blocks: true,
   rail: true,
   contours: true,
-  ground: false,
 };
 
 export type View3dDisplaySettings = {
@@ -142,9 +140,7 @@ export function readStoredView3dDisplay(storage: KeyValueStore): View3dDisplaySe
 }
 
 /**
- * When a model opens, 3D layers start at DEFAULT_VIEW3D_LAYERS_VISIBLE:
- * Ground, Water, and Roads start turned OFF; Buildings, Footpaths, Trees,
- * Landscape, Blocks, Rail & tram, and Contours start turned ON.
+ * When a model opens, all 3D layers start turned ON.
  */
 export function view3dDisplayForModelOpen(storage: KeyValueStore): View3dDisplaySettings {
   const stored = readStoredView3dDisplay(storage);

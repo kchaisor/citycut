@@ -1453,20 +1453,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
           setLineStyles(readDrawingStyle());
         },
       },
-      {
-        id: "ground" as const,
-        label: "Ground",
-        color: getColour("--ground-fill"),
-        available: true,
-        onPick: (value: string) => {
-          commitColour("--ground-fill", value);
-          commitColour("--terrain-layer", value);
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "ground")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "ground", true));
-          }
-          setLineStyles(readDrawingStyle());
-        },
-      },
     ]
   ).filter((layer) => layer.available);
 
