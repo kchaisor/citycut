@@ -68,7 +68,7 @@ describe("sun study muted base plan", () => {
     expect(normal.trees[0]).not.toContain(getColour("--sun-study-tree").toLowerCase());
   });
 
-  it("renders single-hour shadows with the same #4a5a70 colour and 0.2 fillOpacity as the 9am-3pm sun study", () => {
+  it("renders single-hour shadows with #4a5a70 colour and 0.3 fillOpacity while keeping 9am-3pm sun study slices at 0.2", () => {
     const { container } = render(
       <DrawingPlan
         model={model}
@@ -86,7 +86,7 @@ describe("sun study muted base plan", () => {
     );
     expect(shadowPaths.length).toBeGreaterThan(0);
     for (const path of shadowPaths) {
-      expect(path.getAttribute("fill-opacity")).toBe("0.2");
+      expect(path.getAttribute("fill-opacity")).toBe("0.3");
     }
   });
 });

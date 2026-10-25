@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  SINGLE_SHADOW_OPACITY,
   SUN_STUDY_HOURS,
+  SUN_STUDY_SHADOW_OPACITY,
   estimatedHeightLabels,
   isClick,
   pickBuilding,
@@ -18,6 +20,11 @@ import type { BuildingFeat, CityModel } from "../types";
 const kew = { lat: -37.8045, lon: 145.0215, year: 2026, month: 9, day: 22 };
 
 describe("sun study plan", () => {
+  it("uses 0.3 opacity for single-hour shadows and keeps 0.2 opacity for 9am-3pm sun study slices", () => {
+    expect(SINGLE_SHADOW_OPACITY).toBe(0.3);
+    expect(SUN_STUDY_SHADOW_OPACITY).toBe(0.2);
+  });
+
   it("covers 9am to 3pm with am/pm labels", () => {
     expect([...SUN_STUDY_HOURS]).toEqual([9, 10, 11, 12, 13, 14, 15]);
     expect(SUN_STUDY_HOURS.map(sunStudyHourLabel)).toEqual(["9am", "10am", "11am", "12pm", "1pm", "2pm", "3pm"]);

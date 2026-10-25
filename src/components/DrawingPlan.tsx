@@ -25,6 +25,7 @@ import { planShadowRings, type PlanShadowInput } from "../lib/buildingShadows";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
 import { planViewportExtent, type PlanViewport } from "../lib/planViewport";
 import {
+  SINGLE_SHADOW_OPACITY,
   SUN_STUDY_SHADOW_OPACITY,
   SUN_STUDY_TREE_OPACITY,
   estimatedHeightLabels,
@@ -439,7 +440,7 @@ export function DrawingPlan({
                 key={`sh${index}`}
                 d={svgRings(rings)}
                 fill={shadowFill}
-                fillOpacity={SUN_STUDY_SHADOW_OPACITY}
+                fillOpacity={SINGLE_SHADOW_OPACITY}
                 fillRule="evenodd"
                 stroke="none"
               />
