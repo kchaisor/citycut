@@ -202,7 +202,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-compass-label` | `#1a1916` | Ink of the 3D heliodon dial: horizon ring, 5° and 10° ticks, cardinal ticks, dashed axes, N/E/S/W, hour labels, arc labels and hour-dot outlines (screen only). |
 | `--building-solar-neutral` | `#ffffff` | Single neutral building fill in the 3D viewport while the sun path and compass are on (screen only). |
 | `--heliodon-dial-disc` | `#e8e2d8` | Faint ground disc under the heliodon dial at about 35% opacity (screen only). |
-| `--shadow-fill` | `#454545` | Site-plan building shadows on the site plan. |
+| `--shadow-fill` | `#4a5a70` | Site-plan building shadows on the site plan (20% opacity). |
 | `--sun-study-sun` | `#fff500` | Sun study: hourly sun icons (9am–3pm) on the selected-date path of the site plan sun diagram. Same size as the current-time sun, which hides while the study is on. |
 | `--sun-study-shadow` | `#4a5a70` | Sun study: one site plan shadow layer per hour (9am–3pm), each at 20% opacity. |
 | `--sun-study-block` | `#f4f4f2` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): blocks. |

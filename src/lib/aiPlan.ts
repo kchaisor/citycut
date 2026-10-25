@@ -498,6 +498,7 @@ export function sitePlanChunks(
       paths: shadowRings.map((rings) => ({
         rings: mapRings(rings, model.sideM, layout),
         fill: fillOf("--shadow-fill"),
+        opacity: SUN_STUDY_SHADOW_OPACITY,
         evenOdd: true,
         close: true,
       })),

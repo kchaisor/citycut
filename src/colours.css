@@ -254,7 +254,7 @@
   --heliodon-dial-disc: #e8e2d8;
 
   /* Site-plan building shadows (mid-grey, readable under plan fills). */
-  --shadow-fill: #454545;
+  --shadow-fill: #4a5a70;
 
   /* Site plan sun study: hourly sun icons on the selected-date path (9am–3pm). */
   --sun-study-sun: #fff500;

@@ -4,14 +4,15 @@ type GroupRestore = { mesh: THREE.Mesh; groupIndex: number; count: number };
 type VisibleRestore = { mesh: THREE.Mesh; visible: boolean };
 type EdgeRestore = { object: THREE.Object3D; visible: boolean };
 
-function sameBuildingId(stored: unknown, buildingId: number): boolean {
+function matchesBuildingId(stored: unknown, targetIds: ReadonlySet<number>): boolean {
   if (stored == null) return false;
-  return Number(stored) === buildingId;
+  return targetIds.has(Number(stored));
 }
 
-/** Hide the picked footprint in the city group while the height popover is open. Restores on cleanup. */
-export function hideBuildingForHeightEdit(root: THREE.Object3D, buildingId: number): () => void {
-  const targetId = Number(buildingId);
+/** Hide one or more picked footprints in the city group while selected. Restores on cleanup. */
+export function hideBuildingsForHeightEdit(root: THREE.Object3D, buildingIds: readonly number[]): () => void {
+  const targetIds = new Set(buildingIds.map((id) => Number(id)));
+  if (targetIds.size === 0) return () => {};
   const groupRestores: GroupRestore[] = [];
   const visibleRestores: VisibleRestore[] = [];
   const edgeRestores: EdgeRestore[] = [];
@@ -30,7 +31,7 @@ export function hideBuildingForHeightEdit(root: THREE.Object3D, buildingId: numb
     const batch = mesh.name || mesh.parent?.name || "";
     if (!batch.startsWith("Buildings") && !batch.startsWith("source:")) return;
 
-    if (sameBuildingId(mesh.userData.buildingId, targetId)) {
+    if (matchesBuildingId(mesh.userData.buildingId, targetIds)) {
       visibleRestores.push({ mesh, visible: mesh.visible });
       mesh.visible = false;
       if (mesh.castShadow) {
@@ -45,7 +46,7 @@ export function hideBuildingForHeightEdit(root: THREE.Object3D, buildingId: numb
     if (!byGroup?.length || !groups?.length) return;
     const groupCount = Math.min(byGroup.length, groups.length);
     for (let index = 0; index < groupCount; index++) {
-      if (!sameBuildingId(byGroup[index], targetId)) continue;
+      if (!matchesBuildingId(byGroup[index], targetIds)) continue;
       const group = groups[index]!;
       groupRestores.push({ mesh, groupIndex: index, count: group.count });
       group.count = 0;
@@ -61,4 +62,9 @@ export function hideBuildingForHeightEdit(root: THREE.Object3D, buildingId: numb
     for (const entry of shadowRestores) entry.mesh.castShadow = entry.castShadow;
     for (const entry of edgeRestores) entry.object.visible = entry.visible;
   };
+}
+
+/** Hide the picked footprint in the city group while the height popover is open. Restores on cleanup. */
+export function hideBuildingForHeightEdit(root: THREE.Object3D, buildingId: number): () => void {
+  return hideBuildingsForHeightEdit(root, [buildingId]);
 }

@@ -7,7 +7,7 @@ export type SidebarItem = {
   id: string;
   label: string;
   icon: ReactNode;
-  /** Draw a hairline above this item, to group the rail. */
+  /** Draw a hairline before this item, to group the rail. */
   groupStart?: boolean;
 };
 
@@ -28,18 +28,14 @@ function useNarrow() {
 }
 
 /**
- * Fixed left sidebar with the icon rail built in. The rail picks one section; it never
- * toggles the panel shut. Only the collapse button at the foot of the rail hides the
- * panel. Every section stays mounted (the caller hides the inactive ones), so state in
- * a section survives a switch.
- *
- * Brand (logo + wordmark) sits in a 56 px bar above the rail and panel so the map can
- * use the full window height with no app top bar. On the model page, New cut lives in
- * that bar; when the sidebar is collapsed it becomes a rail icon with a tooltip.
+ * Fixed sidebar with top horizontal icon rails. Left-side section icons sit in the
+ * top rail above the left drawer; when `rightItems` are provided, right-side section
+ * icons sit in a top rail on the right side above the right drawer.
  */
 export function Sidebar({
   id,
   items,
+  rightItems,
   active,
   collapsed,
   title,
@@ -55,6 +51,7 @@ export function Sidebar({
 }: {
   id: string;
   items: SidebarItem[];
+  rightItems?: SidebarItem[];
   active: string;
   collapsed: boolean;
   panelSide?: "left" | "right";
@@ -75,21 +72,55 @@ export function Sidebar({
     const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("[data-rail-item]")];
     const index = buttons.findIndex((button) => button === document.activeElement);
     if (index < 0) return;
-    const previous = narrow ? "ArrowLeft" : "ArrowUp";
-    const next = narrow ? "ArrowRight" : "ArrowDown";
-    if (event.key !== previous && event.key !== next && event.key !== "Home" && event.key !== "End") return;
+    const previous = "ArrowLeft";
+    const next = "ArrowRight";
+    if (
+      event.key !== previous &&
+      event.key !== next &&
+      event.key !== "ArrowUp" &&
+      event.key !== "ArrowDown" &&
+      event.key !== "Home" &&
+      event.key !== "End"
+    ) {
+      return;
+    }
     event.preventDefault();
+    const step = event.key === next || event.key === "ArrowDown" ? 1 : -1;
     const target =
       event.key === "Home"
         ? buttons[0]
         : event.key === "End"
           ? buttons[buttons.length - 1]
-          : buttons[(index + (event.key === next ? 1 : -1) + buttons.length) % buttons.length];
+          : buttons[(index + step + buttons.length) % buttons.length];
     target?.focus();
   }
 
   const collapseLabel = collapsed ? "Expand sidebar" : "Collapse sidebar";
   const newCutIcon = showNewCut && onNewCut && collapsed;
+
+  const renderRailButton = (item: SidebarItem) => {
+    const on = item.id === active;
+    return (
+      <span key={item.id} className="sidebar-rail-slot">
+        {item.groupStart && <span className="sidebar-rail-sep" aria-hidden="true" />}
+        <button
+          type="button"
+          className={on ? "rail-btn is-active" : "rail-btn"}
+          data-rail-item=""
+          data-section={item.id}
+          aria-label={item.label}
+          aria-pressed={on}
+          aria-controls={id}
+          onClick={() => onSelect(item.id)}
+        >
+          {item.icon}
+          <span className="rail-tip" aria-hidden="true">
+            {item.label}
+          </span>
+        </button>
+      </span>
+    );
+  };
 
   return (
     <div className={collapsed ? "sidebar is-collapsed" : "sidebar"}>
@@ -111,7 +142,8 @@ export function Sidebar({
           className="sidebar-rail icon-rail"
           role="toolbar"
           aria-label="Model tools"
-          aria-orientation={narrow ? "horizontal" : "vertical"}
+          aria-orientation="horizontal"
+          data-narrow={narrow ? "true" : undefined}
           onKeyDown={onKeyDown}
         >
           {newCutIcon ? (
@@ -130,29 +162,8 @@ export function Sidebar({
               <span className="sidebar-rail-sep" aria-hidden="true" />
             </span>
           ) : null}
-          {items.map((item) => {
-            const on = item.id === active;
-            return (
-              <span key={item.id} className="sidebar-rail-slot">
-                {item.groupStart && <span className="sidebar-rail-sep" aria-hidden="true" />}
-                <button
-                  type="button"
-                  className={on ? "rail-btn is-active" : "rail-btn"}
-                  data-rail-item=""
-                  data-section={item.id}
-                  aria-label={item.label}
-                  aria-pressed={on}
-                  aria-controls={id}
-                  onClick={() => onSelect(item.id)}
-                >
-                  {item.icon}
-                  <span className="rail-tip" aria-hidden="true">
-                    {item.label}
-                  </span>
-                </button>
-              </span>
-            );
-          })}
+          {items.map(renderRailButton)}
+          {narrow && rightItems && rightItems.length > 0 ? rightItems.map(renderRailButton) : null}
           <span className="sidebar-rail-spacer" aria-hidden="true" />
           <button
             type="button"
@@ -172,6 +183,17 @@ export function Sidebar({
             </span>
           </button>
         </nav>
+        {!narrow && rightItems && rightItems.length > 0 ? (
+          <nav
+            className="sidebar-rail icon-rail is-right-rail"
+            role="toolbar"
+            aria-label="Model info"
+            aria-orientation="horizontal"
+            onKeyDown={onKeyDown}
+          >
+            {rightItems.map(renderRailButton)}
+          </nav>
+        ) : null}
         <section
           id={id}
           className={panelSide === "right" ? "sidebar-panel is-right" : "sidebar-panel"}

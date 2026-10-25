@@ -57,15 +57,26 @@ describe("sun study .ai and .svg", () => {
     expect((ops.match(/\/GSa200 gs/g) ?? []).length).toBe(layers.reduce((sum, layer) => sum + layer.rings.length, 0));
   });
 
-  it("leaves the plain .ai without ExtGState or hourly layers", async () => {
-    const { names, states, ops } = await pdfLayers(
+  it("writes the plain .ai Shadows layer with the same 20% transparency ExtGState and no hourly layers", async () => {
+    const { names, states, ops, doc } = await pdfLayers(
       await sitePlanPdf(model, 1000, undefined, { shadows: { ...date, hour: 12, minute: 0 }, castShadows: true }),
     );
-    const gsNames = states ? states.keys().map((key) => key.decodeText()) : [];
-    expect(gsNames.filter((name) => name.startsWith("GSa"))).toEqual([]);
-    expect(ops).not.toContain(" gs");
+    expect(states).toBeDefined();
+    const gs = doc.context.lookup(states!.get(PDFName.of("GSa200")), PDFDict);
+    expect(gs.lookup(PDFName.of("ca"), PDFNumber).asNumber()).toBe(0.2);
+    expect(gs.lookup(PDFName.of("CA"), PDFNumber).asNumber()).toBe(0.2);
+    expect(ops).toContain("/GSa200 gs");
     expect(names.some((name) => /Shadow \d\d:00/.test(name))).toBe(false);
     expect(names.some((name) => /Shadows/.test(name))).toBe(true);
+  });
+
+  it("writes the plain SVG Shadows layer with matching #4a5a70 fill and 0.2 opacity", async () => {
+    const svg = await sitePlanSvg(model, 1000, undefined, {
+      shadows: { ...date, hour: 12, minute: 0 },
+      castShadows: true,
+    });
+    expect(svg).toContain('inkscape:label="Shadows"');
+    expect(svg).toContain('fill="#4a5a70" fill-rule="evenodd" opacity="0.2"');
   });
 
   it("writes the same layers to a millimetre SVG with group per layer and opacity", async () => {

@@ -6,6 +6,7 @@ import { buildingIdFromIntersection } from "./buildingPick";
 import {
   SELECTED_BUILDING_FILL_OPACITY,
   mountSelectedBuildingVisual,
+  mountSelectedBuildingsVisual,
   selectedBuildingOpacityAfterPick,
 } from "./buildingSelectionVisual";
 
@@ -105,6 +106,37 @@ describe("buildingSelectionVisual", () => {
     mounted!.restore();
     for (let index = 0; index < merged.geometry.groups.length; index++) {
       if (byGroup[index] === 2) expect(merged.geometry.groups[index]!.count).toBeGreaterThan(0);
+    }
+    disposeObject(city);
+  });
+
+  it("mounts translucent overlays and dashed outlines for multiple selected buildings and restores all on deselect", () => {
+    const city = buildCityGroup(model, { uniformBuildings: true });
+    addBuildingEdges(city);
+    const mounted = mountSelectedBuildingsVisual(city, model, [1, 2], colourMode);
+    expect(mounted).not.toBeNull();
+    expect(mounted!.overlayOpacity).toBeCloseTo(0.5, 2);
+
+    const meshes = mounted!.overlay.children.filter((child) => child instanceof THREE.Mesh);
+    const dashedLines = mounted!.overlay.children.filter(
+      (child) => child instanceof THREE.LineSegments && child.material instanceof THREE.LineDashedMaterial,
+    );
+    expect(meshes).toHaveLength(2);
+    expect(dashedLines).toHaveLength(2);
+
+    const merged = mergedBuildingMesh(city)!;
+    const byGroup = merged.userData.buildingIdByGroup as number[];
+    for (let index = 0; index < merged.geometry.groups.length; index++) {
+      if (byGroup[index] === 1 || byGroup[index] === 2) {
+        expect(merged.geometry.groups[index]!.count).toBe(0);
+      }
+    }
+
+    mounted!.restore();
+    for (let index = 0; index < merged.geometry.groups.length; index++) {
+      if (byGroup[index] === 1 || byGroup[index] === 2) {
+        expect(merged.geometry.groups[index]!.count).toBeGreaterThan(0);
+      }
     }
     disposeObject(city);
   });

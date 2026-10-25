@@ -1,7 +1,7 @@
 /**
  * Fixed model sidebar: one section open at a time, chosen from the icon rail.
  *
- * A new model always opens on Model details. The section is not restored from
+ * A new model always opens on Display ("drawing"). The section is not restored from
  * storage (the old floating drawer remembered it in `citycut.rail.model`). Whether
  * the panel is collapsed is shared with the landing page; see `sidebarCollapse.ts`.
  */
@@ -18,7 +18,11 @@ export const SITE_ANALYSIS_LABELS: Record<SiteAnalysisKind, string> = {
   view: "View",
 };
 
-export const INITIAL_SIDEBAR_SECTION: SidebarSectionId = "summary";
+export const INITIAL_SIDEBAR_SECTION: SidebarSectionId = "drawing";
+
+export const LEFT_SIDEBAR_SECTION_IDS = ["drawing", "analysis", "import", "exports"] as const;
+
+export type LeftSidebarSectionId = (typeof LEFT_SIDEBAR_SECTION_IDS)[number];
 
 export const RIGHT_SIDEBAR_SECTION_IDS = ["summary", "buildings", "trees"] as const;
 
@@ -46,24 +50,29 @@ export function availableSidebarSections(input: { buildings: boolean; trees: boo
   );
 }
 
-/** The section to show: the chosen one when this model has it, otherwise Model details. */
+/** The section to show: the chosen one when this model has it, otherwise Display (or the first available section). */
 export function resolveSidebarSection(
   chosen: string | null | undefined,
   available: readonly string[],
 ): SidebarSectionId {
+  const fallback = (): SidebarSectionId => {
+    if (available.includes(INITIAL_SIDEBAR_SECTION)) return INITIAL_SIDEBAR_SECTION;
+    const first = available.find((id) => (SIDEBAR_SECTION_IDS as readonly string[]).includes(id));
+    return (first as SidebarSectionId | undefined) ?? INITIAL_SIDEBAR_SECTION;
+  };
   if (chosen === "solar" || chosen === "wind" || chosen === "view") {
-    return available.includes("analysis") ? "analysis" : INITIAL_SIDEBAR_SECTION;
+    return available.includes("analysis") ? "analysis" : fallback();
   }
   if (chosen && available.includes(chosen) && (SIDEBAR_SECTION_IDS as readonly string[]).includes(chosen)) {
     return chosen as SidebarSectionId;
   }
-  return INITIAL_SIDEBAR_SECTION;
+  return fallback();
 }
 
 /**
  * Section state for one model. Choosing a section never closes the panel (the
  * rail does not toggle); only the collapse button does. A new model resets to
- * Model details.
+ * Display.
  */
 export type SidebarState = { section: SidebarSectionId };
 

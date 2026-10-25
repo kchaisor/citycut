@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   INITIAL_SIDEBAR_SECTION,
+  LEFT_SIDEBAR_SECTION_IDS,
+  RIGHT_SIDEBAR_SECTION_IDS,
   SIDEBAR_SECTION_LABELS,
   SITE_ANALYSIS_KINDS,
   SITE_ANALYSIS_LABELS,
@@ -12,9 +14,9 @@ import {
 } from "./sidebarSections";
 
 describe("sidebar sections", () => {
-  it("opens on Model details", () => {
-    expect(INITIAL_SIDEBAR_SECTION).toBe("summary");
-    expect(initialSidebarState()).toEqual({ section: "summary" });
+  it("opens on Display by default", () => {
+    expect(INITIAL_SIDEBAR_SECTION).toBe("drawing");
+    expect(initialSidebarState()).toEqual({ section: "drawing" });
   });
 
   it("lists Buildings and Trees only when the model has them and combines Sun/Wind/View into Site Analysis", () => {
@@ -32,12 +34,13 @@ describe("sidebar sections", () => {
     expect(SITE_ANALYSIS_LABELS).toEqual({ solar: "Sun", wind: "Wind", view: "View" });
   });
 
-  it("falls back to Model details when the chosen section is not available and maps legacy solar/wind/view to analysis", () => {
-    expect(resolveSidebarSection("trees", ["summary", "drawing"])).toBe("summary");
+  it("falls back to Display when the chosen section is not available and maps legacy solar/wind/view to analysis", () => {
+    expect(resolveSidebarSection("trees", ["summary", "drawing"])).toBe("drawing");
     expect(resolveSidebarSection("drawing", ["summary", "drawing"])).toBe("drawing");
     expect(resolveSidebarSection("solar", ["summary", "analysis"])).toBe("analysis");
     expect(resolveSidebarSection("wind", ["summary", "analysis"])).toBe("analysis");
     expect(resolveSidebarSection("view", ["summary", "analysis"])).toBe("analysis");
+    expect(resolveSidebarSection(null, ["summary", "drawing"])).toBe("drawing");
     expect(resolveSidebarSection(null, ["summary"])).toBe("summary");
   });
 
@@ -51,9 +54,9 @@ describe("sidebar sections", () => {
     expect(state).toEqual({ section: "analysis" });
   });
 
-  it("returns to Model details for a new model", () => {
+  it("returns to Display for a new model", () => {
     const state = reduceSidebar({ section: "exports" }, { type: "new-model" });
-    expect(state).toEqual({ section: "summary" });
+    expect(state).toEqual({ section: "drawing" });
   });
 });
 
@@ -66,12 +69,16 @@ describe("Display section label", () => {
   });
 });
 
-describe("right-hand sidebar panels", () => {
-  it("docks Model details, Buildings, and Trees on the right side of the page", () => {
+describe("left vs right sidebar panels", () => {
+  it("splits left-hand tools (Display, Site Analysis, Import, Export) from right-hand panels (Model details, Buildings, Trees)", () => {
+    expect(LEFT_SIDEBAR_SECTION_IDS).toEqual(["drawing", "analysis", "import", "exports"]);
+    expect(RIGHT_SIDEBAR_SECTION_IDS).toEqual(["summary", "buildings", "trees"]);
     expect(isRightSidebarSection("summary")).toBe(true);
     expect(isRightSidebarSection("buildings")).toBe(true);
     expect(isRightSidebarSection("trees")).toBe(true);
     expect(isRightSidebarSection("drawing")).toBe(false);
+    expect(isRightSidebarSection("analysis")).toBe(false);
+    expect(isRightSidebarSection("import")).toBe(false);
     expect(isRightSidebarSection("exports")).toBe(false);
   });
 });
