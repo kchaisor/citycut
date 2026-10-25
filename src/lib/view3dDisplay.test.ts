@@ -17,12 +17,14 @@ import {
 const srcRoot = fileURLToPath(new URL("..", import.meta.url));
 
 describe("view3d display defaults and persistence", () => {
-  it("defaults all 3D layers (including Contours and Trees) to turned ON", () => {
+  it("defaults Ground, Water, and Roads to OFF and all other 3D layers (including Contours and Trees) to ON", () => {
     expect(DEFAULT_VIEW3D_DISPLAY.showContours3d).toBe(true);
     expect(DEFAULT_VIEW3D_DISPLAY.hideTrees).toBe(false);
+    const defaultOff = new Set(["roads", "water", "ground"]);
     for (const id of LAYER_3D_IDS) {
-      expect(DEFAULT_VIEW3D_LAYERS_VISIBLE[id]).toBe(true);
-      expect(isLayer3dVisible(DEFAULT_VIEW3D_DISPLAY, id)).toBe(true);
+      const expected = !defaultOff.has(id);
+      expect(DEFAULT_VIEW3D_LAYERS_VISIBLE[id]).toBe(expected);
+      expect(isLayer3dVisible(DEFAULT_VIEW3D_DISPLAY, id)).toBe(expected);
     }
   });
 
@@ -59,7 +61,7 @@ describe("view3d display defaults and persistence", () => {
     expect(isLayer3dVisible(saved, "contours")).toBe(true);
   });
 
-  it("turns all 3D layers on when a model opens while keeping view mode preferences", () => {
+  it("resets 3D layers to default visibility (Ground, Water, Roads OFF; others ON) when a model opens while keeping view mode preferences", () => {
     const store = new Map<string, string>();
     const storage = {
       getItem: (k: string) => store.get(k) ?? null,
@@ -75,6 +77,9 @@ describe("view3d display defaults and persistence", () => {
       layersVisible: {
         ...DEFAULT_VIEW3D_LAYERS_VISIBLE,
         buildings: false,
+        roads: true,
+        water: true,
+        ground: true,
         contours: false,
         trees: false,
       },
@@ -82,8 +87,9 @@ describe("view3d display defaults and persistence", () => {
     const opened = view3dDisplayForModelOpen(storage);
     expect(opened.whiteCard).toBe(true);
     expect(opened.showOutlines).toBe(false);
+    const defaultOff = new Set(["roads", "water", "ground"]);
     for (const id of LAYER_3D_IDS) {
-      expect(isLayer3dVisible(opened, id)).toBe(true);
+      expect(isLayer3dVisible(opened, id)).toBe(!defaultOff.has(id));
     }
   });
 });
@@ -220,9 +226,6 @@ describe("3D layer visibility across buildCityGroup meshes", () => {
     applyCityVisibility(group, display);
     expect(buildContourLineObject(model)).not.toBeNull();
 
-    // Toggling footpaths off keeps roads visible
-    display = setLayer3dVisible(display, "footpaths", false);
-    applyCityVisibility(group, display);
     const roadMeshes: THREE.Object3D[] = [];
     const pathMeshes: THREE.Object3D[] = [];
     group.traverse((o) => {
@@ -233,6 +236,30 @@ describe("3D layer visibility across buildCityGroup meshes", () => {
     });
     expect(roadMeshes.length).toBeGreaterThan(0);
     expect(pathMeshes.length).toBeGreaterThan(0);
+
+    // By default: Roads, Water, and Ground start OFF; Footpaths and other layers start ON
+    expect(roadMeshes.every((m) => !m.visible)).toBe(true);
+    expect(pathMeshes.every((m) => m.visible)).toBe(true);
+    expect(group.getObjectByName("Water")?.visible).toBe(false);
+    expect(group.getObjectByName("Ground")?.visible).toBe(false);
+    expect(group.getObjectByName("Buildings")?.visible).toBe(true);
+    expect(group.getObjectByName("Green")?.visible).toBe(true);
+    expect(group.getObjectByName("Blocks")?.visible).toBe(true);
+    expect(group.getObjectByName("RailLines")?.visible).toBe(true);
+    expect(group.getObjectByName("Trees")?.visible).toBe(true);
+
+    // Toggling Roads, Water, and Ground ON shows them in the 3D scene
+    display = setLayer3dVisible(display, "roads", true);
+    display = setLayer3dVisible(display, "water", true);
+    display = setLayer3dVisible(display, "ground", true);
+    applyCityVisibility(group, display);
+    expect(roadMeshes.every((m) => m.visible)).toBe(true);
+    expect(group.getObjectByName("Water")?.visible).toBe(true);
+    expect(group.getObjectByName("Ground")?.visible).toBe(true);
+
+    // Toggling footpaths off keeps street roads visible
+    display = setLayer3dVisible(display, "footpaths", false);
+    applyCityVisibility(group, display);
     expect(roadMeshes.every((m) => m.visible)).toBe(true);
     expect(pathMeshes.every((m) => !m.visible)).toBe(true);
 

@@ -1211,6 +1211,21 @@ input[type="range"]::-moz-range-thumb {
   box-shadow: none;
   color: var(--accent);
 }
+.sidebar-brand:hover .sidebar-brand-name,
+.sidebar-brand:focus-visible .sidebar-brand-name {
+  color: var(--accent);
+  -webkit-text-stroke: 2px var(--sidebar-text);
+  paint-order: stroke fill;
+}
+.sidebar-brand:hover .sidebar-brand-mark .mark rect,
+.sidebar-brand:focus-visible .sidebar-brand-mark .mark rect {
+  fill: var(--accent);
+  stroke: var(--sidebar-text);
+}
+.sidebar-brand:hover .sidebar-brand-mark .mark path,
+.sidebar-brand:focus-visible .sidebar-brand-mark .mark path {
+  stroke: var(--sidebar-text);
+}
 .sidebar-brand-mark {
   flex: none;
   width: 24px;

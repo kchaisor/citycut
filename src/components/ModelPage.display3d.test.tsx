@@ -232,10 +232,14 @@ describe("Display panel controls by view tab", () => {
     expect(screen.queryByRole("region", { name: "Building types" })).toBeNull();
     expect(screen.queryByText("Building types")).toBeNull();
 
-    // Layers section shows ONLY available layers, all turned ON by default
-    for (const label of ["Buildings", "Roads", "Landscape", "Contours", "Ground"]) {
+    // Layers section shows ONLY available layers: Buildings, Landscape, Contours ON; Roads and Ground OFF by default
+    for (const label of ["Buildings", "Landscape", "Contours"]) {
       const cb = within(layersSection).getByLabelText(label) as HTMLInputElement;
       expect(cb.checked).toBe(true);
+    }
+    for (const label of ["Roads", "Ground"]) {
+      const cb = within(layersSection).getByLabelText(label) as HTMLInputElement;
+      expect(cb.checked).toBe(false);
     }
     expect(within(layersSection).queryByLabelText("Water")).toBeNull();
     expect(within(layersSection).queryByLabelText("Trees")).toBeNull();
@@ -298,7 +302,7 @@ describe("Display panel controls by view tab", () => {
     expect(screen.getByText(/Satellite is a preview of this frame/)).toBeTruthy();
   });
 
-  it("renders Water, Trees, Footpaths, Rail & tram, and Blocks in Layers and Colors when present, defaults all layers ON, and updates live 3D layer colours on pick", async () => {
+  it("renders Water, Trees, Footpaths, Rail & tram, and Blocks in Layers and Colors when present, defaults Ground/Water/Roads OFF and other layers ON, and updates live 3D layer colours on pick", async () => {
     const user = userEvent.setup();
     render(
       <ModelPage
@@ -318,6 +322,7 @@ describe("Display panel controls by view tab", () => {
     const layersSection = screen.getByRole("region", { name: "Layers" });
     const colorsSection = screen.getByRole("region", { name: "Colors" });
 
+    const defaultOffLabels = new Set(["Roads", "Water", "Ground"]);
     for (const label of [
       "Buildings",
       "Roads",
@@ -331,7 +336,7 @@ describe("Display panel controls by view tab", () => {
       "Ground",
     ]) {
       const layerToggle = within(layersSection).getByLabelText(label) as HTMLInputElement;
-      expect(layerToggle.checked).toBe(true);
+      expect(layerToggle.checked).toBe(!defaultOffLabels.has(label));
       expect(within(colorsSection).getByText(label)).toBeTruthy();
     }
     expect(colorsSection.querySelectorAll("b").length).toBe(0);
