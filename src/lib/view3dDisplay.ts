@@ -11,7 +11,6 @@ export const LAYER_3D_IDS = [
   "trees",
   "landscape",
   "water",
-  "blocks",
   "rail",
   "contours",
 ] as const;
@@ -27,7 +26,6 @@ export const DEFAULT_VIEW3D_LAYERS_VISIBLE: View3dLayerVisibility = {
   trees: true,
   landscape: true,
   water: true,
-  blocks: true,
   rail: true,
   contours: true,
 };

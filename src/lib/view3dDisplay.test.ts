@@ -17,8 +17,9 @@ import {
 const srcRoot = fileURLToPath(new URL("..", import.meta.url));
 
 describe("view3d display defaults and persistence", () => {
-  it("omits ground and defaults all 3D layers (including Contours and Trees) to ON", () => {
+  it("omits ground and blocks and defaults all 3D layers (including Contours and Trees) to ON", () => {
     expect(LAYER_3D_IDS).not.toContain("ground");
+    expect(LAYER_3D_IDS).not.toContain("blocks");
     expect(DEFAULT_VIEW3D_DISPLAY.showContours3d).toBe(true);
     expect(DEFAULT_VIEW3D_DISPLAY.hideTrees).toBe(false);
     for (const id of LAYER_3D_IDS) {
@@ -125,7 +126,6 @@ describe("3D layer visibility across buildCityGroup meshes", () => {
     const footpathsVisible = isLayer3dVisible(display, "footpaths");
     const landscapeVisible = isLayer3dVisible(display, "landscape");
     const waterVisible = isLayer3dVisible(display, "water");
-    const blocksVisible = isLayer3dVisible(display, "blocks");
     const railVisible = isLayer3dVisible(display, "rail");
     group.traverse((object) => {
       const name = object.name;
@@ -156,10 +156,6 @@ describe("3D layer visibility across buildCityGroup meshes", () => {
         object.visible = waterVisible;
         return;
       }
-      if (name === "Blocks") {
-        object.visible = blocksVisible;
-        return;
-      }
       if (name === "RailLines" || name === "TramLines") {
         object.visible = railVisible;
         return;
@@ -172,7 +168,7 @@ describe("3D layer visibility across buildCityGroup meshes", () => {
     if (trees) trees.visible = isLayer3dVisible(display, "trees");
   }
 
-  it("defaults all 3D layers ON while keeping Ground visible and toggles every 3D layer independently", () => {
+  it("defaults all 3D layers ON while keeping Ground and Blocks visible and toggles every 3D layer independently", () => {
     const model: CityModel = {
       placeLabel: "Test",
       center: { lon: 145, lat: -37.8 },
@@ -257,11 +253,10 @@ describe("3D layer visibility across buildCityGroup meshes", () => {
     expect(group.getObjectByName("Buildings")?.visible).toBe(false);
     expect(group.getObjectByName("BuildingEdges")?.visible).toBe(false);
 
-    // Toggling landscape, water, blocks, rail, trees off hides their objects while Ground stays visible
+    // Toggling landscape, water, rail, trees off hides their objects while Ground and Blocks stay visible
     for (const [id, objName] of [
       ["landscape", "Green"],
       ["water", "Water"],
-      ["blocks", "Blocks"],
       ["rail", "RailLines"],
       ["trees", "Trees"],
     ] as const) {
@@ -270,5 +265,6 @@ describe("3D layer visibility across buildCityGroup meshes", () => {
       expect(group.getObjectByName(objName)?.visible).toBe(false);
     }
     expect(group.getObjectByName("Ground")?.visible).toBe(true);
+    expect(group.getObjectByName("Blocks")?.visible).toBe(true);
   });
 });

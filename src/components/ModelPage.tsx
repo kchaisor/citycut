@@ -1409,20 +1409,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
         },
       },
       {
-        id: "blocks" as const,
-        label: "Blocks",
-        color: getColour("--block-fill"),
-        available: Boolean(model.blocks && model.blocks.length > 0),
-        onPick: (value: string) => {
-          commitColour("--block-fill", value);
-          commitColour("--block-plan", value);
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "blocks")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "blocks", true));
-          }
-          setLineStyles(readDrawingStyle());
-        },
-      },
-      {
         id: "rail" as const,
         label: "Rail & tram",
         color: getColour("--rail-fill"),

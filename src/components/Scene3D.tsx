@@ -308,7 +308,6 @@ function City({
   const footpathsVisible = isLayer3dVisible(display, "footpaths");
   const landscapeVisible = isLayer3dVisible(display, "landscape");
   const waterVisible = isLayer3dVisible(display, "water");
-  const blocksVisible = isLayer3dVisible(display, "blocks");
   const railVisible = isLayer3dVisible(display, "rail");
   const contoursVisible = isLayer3dVisible(display, "contours");
   useLayoutEffect(() => {
@@ -341,10 +340,6 @@ function City({
         object.visible = waterVisible;
         return;
       }
-      if (name === "Blocks") {
-        object.visible = blocksVisible;
-        return;
-      }
       if (name === "RailLines" || name === "TramLines") {
         object.visible = railVisible;
         return;
@@ -361,7 +356,6 @@ function City({
     footpathsVisible,
     landscapeVisible,
     waterVisible,
-    blocksVisible,
     railVisible,
   ]);
   useLayoutEffect(() => {

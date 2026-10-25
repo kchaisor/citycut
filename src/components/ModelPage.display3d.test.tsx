@@ -298,7 +298,7 @@ describe("Display panel controls by view tab", () => {
     expect(screen.getByText(/Satellite is a preview of this frame/)).toBeTruthy();
   });
 
-  it("renders Water, Trees, Footpaths, Rail & tram, and Blocks in Layers and Colors when present, omits Ground, defaults all layers ON, and updates live 3D layer colours on pick", async () => {
+  it("renders Water, Trees, Footpaths, and Rail & tram in Layers and Colors when present, omits Ground and Blocks, defaults all layers ON, and updates live 3D layer colours on pick", async () => {
     const user = userEvent.setup();
     render(
       <ModelPage
@@ -325,7 +325,6 @@ describe("Display panel controls by view tab", () => {
       "Trees",
       "Landscape",
       "Water",
-      "Blocks",
       "Rail & tram",
       "Contours",
     ]) {
@@ -335,6 +334,8 @@ describe("Display panel controls by view tab", () => {
     }
     expect(within(layersSection).queryByLabelText("Ground")).toBeNull();
     expect(within(colorsSection).queryByText("Ground")).toBeNull();
+    expect(within(layersSection).queryByLabelText("Blocks")).toBeNull();
+    expect(within(colorsSection).queryByText("Blocks")).toBeNull();
     expect(colorsSection.querySelectorAll("b").length).toBe(0);
 
     const hex = (six: string) => `${String.fromCharCode(35)}${six}`;
