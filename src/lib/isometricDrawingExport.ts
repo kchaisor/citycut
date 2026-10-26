@@ -110,22 +110,37 @@ export function isometricDrawingChunks(
   const frame = isoSheetFrame(iso.bounds, layout, scale);
   const chunks: PdfChunk[] = [];
 
-  // 1. Frame (ground base polygon + outline)
+  // 1. Frame (ground top surface + architectural plinth side walls + outline)
+  const framePaths: PdfPath[] = [];
   const frameParsed = subpathsToPdfRings(iso.frameD, frame);
   if (frameParsed.rings.length > 0) {
+    framePaths.push({
+      rings: frameParsed.rings,
+      fill: hexRgb(colors.ground),
+      stroke: hexRgb(colors.frameEdge),
+      strokeMm: 0.28,
+      close: true,
+      evenOdd: false,
+      join: "round",
+    });
+  }
+  for (const wall of iso.frameWalls) {
+    const wallParsed = subpathsToPdfRings(wall.d, frame);
+    if (wallParsed.rings.length === 0) continue;
+    framePaths.push({
+      rings: wallParsed.rings,
+      fill: hexRgb(wall.fill),
+      stroke: hexRgb(wall.stroke),
+      strokeMm: 0.28,
+      close: true,
+      evenOdd: false,
+      join: "round",
+    });
+  }
+  if (framePaths.length > 0) {
     chunks.push({
       name: "Frame",
-      paths: [
-        {
-          rings: frameParsed.rings,
-          fill: hexRgb(colors.ground),
-          stroke: hexRgb(colors.frameEdge),
-          strokeMm: 0.28,
-          close: true,
-          evenOdd: false,
-          join: "round",
-        },
-      ],
+      paths: framePaths,
     });
   }
 
@@ -138,6 +153,8 @@ export function isometricDrawingChunks(
       paths.push({
         rings: parsed.rings,
         fill: hexRgb(colors.landscape),
+        stroke: hexRgb(colors.frameEdge),
+        strokeMm: 0.08,
         close: true,
         evenOdd: true,
         join: "round",
@@ -155,6 +172,8 @@ export function isometricDrawingChunks(
       paths.push({
         rings: parsed.rings,
         fill: hexRgb(colors.water),
+        stroke: hexRgb(colors.frameEdge),
+        strokeMm: 0.1,
         close: true,
         evenOdd: true,
         join: "round",
@@ -173,6 +192,8 @@ export function isometricDrawingChunks(
         paths.push({
           rings: parsed.rings,
           fill: hexRgb(colors.footpaths),
+          stroke: hexRgb(colors.footpathEdge),
+          strokeMm: 0.08,
           close: true,
           evenOdd: true,
           join: "round",
@@ -313,9 +334,10 @@ export function isometricDrawingChunks(
           if (trunkParsed.rings.length > 0) {
             paths.push({
               rings: trunkParsed.rings,
-              fill: hexRgb(solid.trunkFill),
-              close: true,
-              evenOdd: false,
+              stroke: hexRgb(solid.trunkFill),
+              strokeMm: 0.14,
+              close: false,
+              cap: "round",
             });
           }
         }
@@ -325,18 +347,10 @@ export function isometricDrawingChunks(
             rings: canopyParsed.rings,
             fill: hexRgb(solid.canopyFill),
             stroke: hexRgb(solid.stroke),
-            strokeMm: 0.1,
+            strokeMm: 0.12,
             close: true,
             evenOdd: false,
-          });
-        }
-        const shadeParsed = subpathsToPdfRings(solid.shadeD, frame);
-        if (shadeParsed.rings.length > 0) {
-          paths.push({
-            rings: shadeParsed.rings,
-            fill: hexRgb(solid.shadeFill),
-            close: true,
-            evenOdd: false,
+            join: "round",
           });
         }
       }
@@ -393,4 +407,8 @@ export async function isometricDrawingSvg(
   return buildLayeredSvg(layout.pageWidthMm, layout.pageHeightMm, chunks, layerOrder);
 }
 
-export { dashScreen };
+export {
+  dashScreen,
+  isometricDrawingPdf as isometricAi,
+  isometricDrawingSvg as isometricSvg,
+};

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildIsometricDrawing,
   DEFAULT_ISO_CORNER,
+  groundPlinthThicknessM,
   ISO_CORNERS,
   isometricDrawingBounds,
   isoPlanDepth,
@@ -12,9 +13,11 @@ import {
 } from "./isometricDrawing";
 import {
   ISOMETRIC_EXPORT_LAYERS,
+  isometricAi,
   isometricDrawingChunks,
   isometricDrawingPdf,
   isometricDrawingSvg,
+  isometricSvg,
 } from "./isometricDrawingExport";
 import { DEFAULT_VIEW3D_DISPLAY, setLayer3dVisible, type View3dDisplaySettings } from "./view3dDisplay";
 import type { CityModel, Pt } from "../types";
@@ -214,7 +217,8 @@ describe("buildIsometricDrawing 3D extrusion, depth sorting, layer toggles, and 
       expect(b.walls.length).toBe(2);
       expect(b.roofFill).toBe(sw.colors.buildings);
       for (const wall of b.walls) {
-        expect(wall.fill).not.toBe(b.roofFill);
+        expect(wall.fill).toBe(b.roofFill);
+        expect(wall.stroke).toBe(sw.colors.buildingEdge);
       }
     }
 
@@ -281,15 +285,81 @@ describe("buildIsometricDrawing 3D extrusion, depth sorting, layer toggles, and 
     const b = iso.solids.find((s) => s.kind === "building");
     const t = iso.solids.find((s) => s.kind === "tree");
     expect(b?.kind === "building" && b.roofFill).toBe(customBuilding);
+    expect(b?.kind === "building" && b.walls.every((w) => w.fill === customBuilding)).toBe(true);
     expect(t?.kind === "tree" && t.canopyFill).toBe(customTree);
+    expect(t?.kind === "tree" && t.shadeD).toBe("");
   });
 
-  it("computes finite isometric drawing bounds for every compass corner", () => {
+  it("generates 2 shaded front-facing ground plinth side walls across all 4 compass corners and expands bounds to encompass the base", () => {
     const m = sampleIsoModel();
+    const expectedThickness = groundPlinthThicknessM(m);
+    expect(expectedThickness).toBeGreaterThan(0);
+
     for (const corner of ISO_CORNERS as readonly IsoCorner[]) {
-      const bounds = isometricDrawingBounds(m, corner);
-      expect(bounds.maxX).toBeGreaterThan(bounds.minX);
-      expect(bounds.maxY).toBeGreaterThan(bounds.minY);
+      const iso = buildIsometricDrawing(m, { corner });
+      expect(iso.slabThicknessM).toBe(expectedThickness);
+      expect(iso.frameWalls).toHaveLength(2);
+      expect(iso.plinthWalls).toEqual(iso.frameWalls);
+
+      const leftWall = iso.frameWalls.find((w) => w.side === "left");
+      const rightWall = iso.frameWalls.find((w) => w.side === "right");
+      expect(leftWall).toBeDefined();
+      expect(rightWall).toBeDefined();
+      expect(leftWall!.d.startsWith("M")).toBe(true);
+      expect(leftWall!.d.endsWith("Z")).toBe(true);
+      expect(rightWall!.d.startsWith("M")).toBe(true);
+      expect(rightWall!.d.endsWith("Z")).toBe(true);
+
+      // Pure vector line drawing: front plinth walls use flat ground fill + crisp frameEdge vector stroke (no 3D massing shading)
+      expect(leftWall!.fill).toBe(iso.colors.ground);
+      expect(rightWall!.fill).toBe(iso.colors.ground);
+      expect(leftWall!.stroke).toBe(iso.colors.frameEdge);
+      expect(rightWall!.stroke).toBe(iso.colors.frameEdge);
+
+      // Each wall extends downward (+y in SVG screen coordinates) by slabThicknessM from top edge to bottom edge
+      const directBounds = isometricDrawingBounds(m, corner);
+      expect(iso.bounds).toEqual(directBounds);
+      for (const wall of iso.frameWalls) {
+        const maxTopY = Math.max(...wall.topPts.map((p) => p[1]));
+        const maxBottomY = Math.max(...wall.bottomPts.map((p) => p[1]));
+        expect(maxBottomY).toBeGreaterThan(maxTopY);
+        expect(maxBottomY - maxTopY).toBeCloseTo(expectedThickness, 3);
+        for (const [, by] of wall.bottomPts) {
+          expect(iso.bounds.maxY).toBeGreaterThan(by);
+        }
+      }
+    }
+  });
+
+  it("drapes the ground plinth top rim along terrain elevation while keeping a flat base plane", () => {
+    const m: CityModel = {
+      ...sampleIsoModel(),
+      terrain: {
+        cols: 3,
+        rows: 3,
+        spacingM: 50,
+        min: 10,
+        max: 26,
+        zoom: 14,
+        metresPerPixel: 4,
+        source: "test",
+        heights: new Float32Array([
+          10, 14, 18,
+          14, 18, 22,
+          18, 22, 26,
+        ]),
+      },
+    };
+    const iso = buildIsometricDrawing(m, { corner: "sw" });
+    expect(iso.frameWalls).toHaveLength(2);
+    for (const wall of iso.frameWalls) {
+      expect(wall.topPts.length).toBeGreaterThan(2);
+      expect(wall.bottomPts).toHaveLength(2);
+      // Every top vertex of the front-facing wall lies on the top ground surface perimeter (frameD)
+      for (const [tx, ty] of wall.topPts) {
+        const token = `${Math.round(tx * 100) / 100} ${Math.round(ty * 100) / 100}`;
+        expect(iso.frameD).toContain(token);
+      }
     }
   });
 });
@@ -298,6 +368,8 @@ describe("isometricDrawingExport (.svg and .ai / PDF vector exports)", () => {
   it("builds layered vector chunks, SVG, and PDF/AI documents reflecting compass corner and layer toggles", async () => {
     const m = sampleIsoModel();
     const { chunks } = isometricDrawingChunks(m, 2500, { corner: "nw" });
+    const frameChunk = chunks.find((c) => c.name === "Frame");
+    expect(frameChunk?.paths).toHaveLength(3); // top surface + front-left plinth wall + front-right plinth wall
     const names = chunks.map((c) => c.name);
     expect(names).toContain("Frame");
     expect(names).toContain("Landscape");
@@ -312,10 +384,18 @@ describe("isometricDrawingExport (.svg and .ai / PDF vector exports)", () => {
       expect(ISOMETRIC_EXPORT_LAYERS).toContain(name);
     }
 
-    const svg = await isometricDrawingSvg(m, 2500, { corner: "nw" });
+    const svg = await isometricSvg(m, 2500, { corner: "nw" });
+    expect(await isometricDrawingSvg(m, 2500, { corner: "nw" })).toBe(svg);
     expect(svg).toContain("<svg");
     expect(svg).toContain("Isometric (NW)");
+    expect(svg).toContain('id="Frame_Sheet"');
     expect(svg).toContain('id="Buildings_trees"');
+    const frameGroupMatch = /<g id="Frame_Sheet"[\s\S]*?<\/g>/.exec(svg);
+    expect(frameGroupMatch).not.toBeNull();
+    expect((frameGroupMatch![0].match(/<path /g) ?? []).length).toBe(3);
+
+    const aiBytes = await isometricAi(m, 2500, { corner: "sw" });
+    expect(new TextDecoder("latin1").decode(aiBytes.slice(0, 8)).startsWith("%PDF-")).toBe(true);
 
     const pdfBytes = await isometricDrawingPdf(m, 2500, { corner: "sw" });
     const pdfHeader = new TextDecoder("latin1").decode(pdfBytes.slice(0, 8));

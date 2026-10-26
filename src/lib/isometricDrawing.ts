@@ -1,5 +1,4 @@
 import { getColour } from "./colours";
-import { shadeHex } from "./explodedAxoMassing";
 import { openRing, signedArea } from "./geo";
 import { DEFAULT_ISO_CORNER, ISO_CORNERS, type IsoCorner } from "./isoCamera";
 import {
@@ -148,6 +147,133 @@ function frameRing(sideM: number, shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHA
   ];
 }
 
+export type IsoPlinthWall = {
+  side: "left" | "right";
+  d: string;
+  fill: string;
+  stroke: string;
+  topPts: Pt[];
+  bottomPts: Pt[];
+};
+
+export function groundPlinthThicknessM(model: Pick<CityModel, "sideM">): number {
+  return Math.max(6, Math.min(80, round(model.sideM * 0.04)));
+}
+
+function buildGroundPlinth(
+  model: CityModel,
+  corner: IsoCorner,
+  colors: IsometricDrawingColors,
+  elevationAt: (east: number, north: number) => number,
+): {
+  slabThicknessM: number;
+  baseZ: number;
+  frameD: string;
+  frameWalls: IsoPlinthWall[];
+} {
+  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
+  const half = model.sideM / 2;
+  const slabThicknessM = groundPlinthThicknessM(model);
+  const baseZ = -slabThicknessM;
+  const leftFill = colors.ground;
+  const rightFill = colors.ground;
+  const stroke = colors.frameEdge;
+
+  if (shape === "circle") {
+    const ring = openRing(circleRing(half, 64));
+    const topPerimeterPts = ring.map(([e, n]) => projectIsoPoint(e, n, elevationAt(e, n), corner));
+    const frameD = isoSvgPolylinePoints(topPerimeterPts, true);
+    const segmentsBySide: Record<"left" | "right", { a: Pt; b: Pt }[]> = {
+      left: [],
+      right: [],
+    };
+    for (let i = 0; i < ring.length; i += 1) {
+      const a = ring[i]!;
+      const b = ring[(i + 1) % ring.length]!;
+      const nx = b[1] - a[1];
+      const ny = -(b[0] - a[0]);
+      const facing = isoWallFacing(nx, ny, corner);
+      if (!facing.visible) continue;
+      segmentsBySide[facing.side].push({ a, b });
+    }
+    const frameWalls: IsoPlinthWall[] = [];
+    for (const side of ["left", "right"] as const) {
+      const segs = segmentsBySide[side];
+      if (segs.length === 0) continue;
+      const orderedPts: Pt[] = [segs[0]!.a];
+      for (const seg of segs) orderedPts.push(seg.b);
+      const topPts = orderedPts.map(([e, n]) => projectIsoPoint(e, n, elevationAt(e, n), corner));
+      const bottomPts = [...orderedPts]
+        .reverse()
+        .map(([e, n]) => projectIsoPoint(e, n, baseZ, corner));
+      const d = isoSvgPolylinePoints([...topPts, ...bottomPts], true);
+      if (d) {
+        frameWalls.push({
+          side,
+          d,
+          fill: side === "left" ? leftFill : rightFill,
+          stroke,
+          topPts,
+          bottomPts,
+        });
+      }
+    }
+    return { slabThicknessM, baseZ, frameD, frameWalls };
+  }
+
+  const squareEdges: { a: Pt; b: Pt; nx: number; ny: number }[] = [
+    { a: [-half, -half], b: [half, -half], nx: 0, ny: -1 },
+    { a: [half, -half], b: [half, half], nx: 1, ny: 0 },
+    { a: [half, half], b: [-half, half], nx: 0, ny: 1 },
+    { a: [-half, half], b: [-half, -half], nx: -1, ny: 0 },
+  ];
+  const edgeSteps = model.terrain
+    ? Math.max(16, Math.min(48, Math.ceil(model.sideM / Math.max(4, model.terrain.spacingM))))
+    : 1;
+
+  const topPerimeterPts: Pt[] = [];
+  for (const { a, b } of squareEdges) {
+    for (let k = 0; k < edgeSteps; k += 1) {
+      const t = k / edgeSteps;
+      const e = a[0] + (b[0] - a[0]) * t;
+      const n = a[1] + (b[1] - a[1]) * t;
+      topPerimeterPts.push(projectIsoPoint(e, n, elevationAt(e, n), corner));
+    }
+  }
+  const frameD = isoSvgPolylinePoints(topPerimeterPts, true);
+
+  const frameWalls: IsoPlinthWall[] = [];
+  for (const { a, b, nx, ny } of squareEdges) {
+    const facing = isoWallFacing(nx, ny, corner);
+    if (!facing.visible) continue;
+    const topPts: Pt[] = [];
+    for (let k = 0; k <= edgeSteps; k += 1) {
+      const t = k / edgeSteps;
+      const e = a[0] + (b[0] - a[0]) * t;
+      const n = a[1] + (b[1] - a[1]) * t;
+      topPts.push(projectIsoPoint(e, n, elevationAt(e, n), corner));
+    }
+    const bottomPts: Pt[] = [
+      projectIsoPoint(b[0], b[1], baseZ, corner),
+      projectIsoPoint(a[0], a[1], baseZ, corner),
+    ];
+    const d = isoSvgPolylinePoints([...topPts, ...bottomPts], true);
+    if (d) {
+      frameWalls.push({
+        side: facing.side,
+        d,
+        fill: facing.side === "left" ? leftFill : rightFill,
+        stroke,
+        topPts,
+        bottomPts,
+      });
+    }
+  }
+
+  frameWalls.sort((u, v) => (u.side === v.side ? 0 : u.side === "left" ? -1 : 1));
+  return { slabThicknessM, baseZ, frameD, frameWalls };
+}
+
 export type IsoSolidItem =
   | {
       kind: "building";
@@ -221,7 +347,10 @@ export type IsometricDrawingGeometry = {
   corner: IsoCorner;
   colors: IsometricDrawingColors;
   layersVisible: Record<Layer3dId, boolean>;
+  slabThicknessM: number;
   frameD: string;
+  frameWalls: IsoPlinthWall[];
+  plinthWalls: IsoPlinthWall[];
   landscapePaths: string[];
   waterPaths: string[];
   footpathPaths: string[];
@@ -302,8 +431,8 @@ function buildBuildingSolids(
       : onSite
         ? colors.siteBuilding
         : colors.buildings;
-    const wallLight = shadeHex(roofBaseColor, 0.86);
-    const wallDark = shadeHex(roofBaseColor, 0.72);
+    const wallLight = roofBaseColor;
+    const wallDark = roofBaseColor;
     const stroke = colors.buildingEdge;
 
     for (const part of parts) {
@@ -388,8 +517,7 @@ function buildTreeSolids(
 ): IsoSolidItem[] {
   const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const canopyFill = colors.trees;
-  const shadeFill = shadeHex(canopyFill, 0.74);
-  const stroke = shadeHex(canopyFill, 0.55);
+  const stroke = colors.buildingEdge;
   const items: IsoSolidItem[] = [];
 
   for (const tree of model.trees) {
@@ -401,18 +529,11 @@ function buildTreeSolids(
     const centreUp = groundZ + height - r;
     const [bx, by] = projectIsoPoint(east, north, groundZ, corner);
     const [cx, cy] = projectIsoPoint(east, north, centreUp, corner);
-    const trunkHalf = Math.max(0.15, (tree.trunk_diameter_m || 0.3) / 2);
     const trunkD =
       centreUp - groundZ > r * 0.2
-        ? `M${round(bx - trunkHalf)} ${round(by)} L${round(bx + trunkHalf)} ${round(by)} L${round(cx + trunkHalf)} ${round(cy)} L${round(cx - trunkHalf)} ${round(cy)} Z`
+        ? `M${round(bx)} ${round(by)} L${round(cx)} ${round(cy)}`
         : null;
     const canopyD = circlePath(cx, cy, r);
-    const shadeArc: Pt[] = [];
-    for (let i = TREE_CROWN_SEGMENTS / 2; i >= 0; i -= 1) {
-      const a = Math.PI * 0.25 + (Math.PI * i) / TREE_CROWN_SEGMENTS;
-      shadeArc.push([cx + Math.cos(a) * r * 0.78 - r * 0.12, cy + Math.sin(a) * r * 0.78 - r * 0.12]);
-    }
-    const shadeD = circlePath(cx, cy, r, Math.PI * 0.25, Math.PI * 1.25, shadeArc);
     items.push({
       kind: "tree",
       id: tree.id,
@@ -422,8 +543,8 @@ function buildTreeSolids(
       trunkFill: colors.treeTrunk,
       canopyD,
       canopyFill,
-      shadeD,
-      shadeFill,
+      shadeD: "",
+      shadeFill: canopyFill,
       stroke,
     });
   }
@@ -461,10 +582,11 @@ export function buildIsometricDrawing(
   const elevationAt = (east: number, north: number): number =>
     model.terrain ? sampleTerrain(model.terrain, east, north, model.sideM) - baseElevation : 0;
 
-  const boundaryRing = frameRing(model.sideM, shape);
-  const frameD = isoSvgPolylinePoints(
-    boundaryRing.map(([e, n]) => projectIsoPoint(e, n, 0, corner)),
-    true,
+  const { slabThicknessM, frameD, frameWalls } = buildGroundPlinth(
+    model,
+    corner,
+    colors,
+    elevationAt,
   );
 
   const landscapePaths: string[] = [];
@@ -643,7 +765,10 @@ export function buildIsometricDrawing(
     corner,
     colors,
     layersVisible,
+    slabThicknessM,
     frameD,
+    frameWalls,
+    plinthWalls: frameWalls,
     landscapePaths,
     waterPaths,
     footpathPaths,
@@ -681,9 +806,12 @@ export function isometricDrawingBounds(
     if (y > maxY) maxY = y;
   };
 
+  const baseZ = -groundPlinthThicknessM(model);
   for (const [e, n] of ring) {
+    const [xBase, yBase] = projectIsoPoint(e, n, baseZ, corner);
     const [x0, y0] = projectIsoPoint(e, n, 0, corner);
     const [x1, y1] = projectIsoPoint(e, n, maxUp, corner);
+    bump(xBase, yBase);
     bump(x0, y0);
     bump(x1, y1);
   }

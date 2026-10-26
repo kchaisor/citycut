@@ -183,7 +183,10 @@ export function DrawingIsometric({
                 d={d}
                 fill={iso.colors.landscape}
                 fillRule="evenodd"
-                stroke="none"
+                stroke={iso.colors.frameEdge}
+                strokeWidth={0.4}
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
               />
             ))}
           </g>
@@ -197,7 +200,10 @@ export function DrawingIsometric({
                 d={d}
                 fill={iso.colors.water}
                 fillRule="evenodd"
-                stroke="none"
+                stroke={iso.colors.frameEdge}
+                strokeWidth={0.45}
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
               />
             ))}
           </g>
@@ -212,7 +218,10 @@ export function DrawingIsometric({
                   d={d}
                   fill={iso.colors.footpaths}
                   fillRule="evenodd"
-                  stroke="none"
+                  stroke={iso.colors.footpathEdge}
+                  strokeWidth={0.35}
+                  vectorEffect="non-scaling-stroke"
+                  strokeLinejoin="round"
                 />
               ) : (
                 <path
@@ -309,6 +318,24 @@ export function DrawingIsometric({
         )}
       </g>
 
+      {iso.frameWalls.length > 0 && (
+        <g className="iso-ground-plinth" data-iso-layer="ground-plinth">
+          {iso.frameWalls.map((wall, i) => (
+            <path
+              key={`plinth-${wall.side}-${i}`}
+              className={`iso-plinth-wall iso-plinth-wall-${wall.side}`}
+              data-plinth-side={wall.side}
+              d={wall.d}
+              fill={wall.fill}
+              stroke={wall.stroke}
+              strokeWidth={1.35}
+              vectorEffect="non-scaling-stroke"
+              strokeLinejoin="round"
+            />
+          ))}
+        </g>
+      )}
+
       <path
         d={iso.frameD}
         fill="none"
@@ -349,15 +376,24 @@ export function DrawingIsometric({
               </g>
             ) : (
               <g key={`t-${item.id}-${idx}`} className="iso-tree" data-tree-id={item.id}>
-                {item.trunkD && <path d={item.trunkD} fill={item.trunkFill} stroke="none" />}
+                {item.trunkD && (
+                  <path
+                    d={item.trunkD}
+                    fill="none"
+                    stroke={item.trunkFill}
+                    strokeWidth={0.85}
+                    vectorEffect="non-scaling-stroke"
+                    strokeLinecap="round"
+                  />
+                )}
                 <path
                   d={item.canopyD}
                   fill={item.canopyFill}
                   stroke={item.stroke}
-                  strokeWidth={0.65}
+                  strokeWidth={0.75}
                   vectorEffect="non-scaling-stroke"
+                  strokeLinejoin="round"
                 />
-                <path d={item.shadeD} fill={item.shadeFill} stroke="none" />
               </g>
             ),
           )}
