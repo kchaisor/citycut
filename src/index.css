@@ -600,10 +600,13 @@ input[type="range"]::-moz-range-thumb {
 .plan.figure-ground { background: var(--drawing-bg); }
 .plan.exploded-axo,
 .plan.exploded-axo *,
+.plan.isometric-drawing,
+.plan.isometric-drawing *,
 .plan text,
 .axo-plate-label,
 .axo-legend { user-select: none; -webkit-user-select: none; }
-.plan.exploded-axo { background: var(--drawing-bg); }
+.plan.exploded-axo,
+.plan.isometric-drawing { background: var(--drawing-bg); }
 .axo-controls { margin: 0 0 14px; }
 .axo-layer-list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
 .axo-layer-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: grab; user-select: none; }
@@ -1548,6 +1551,11 @@ input[type="range"]::-moz-range-thumb {
   background: var(--control-track);
 }
 .sidebar .segmented { margin: 0; }
+.sidebar .plan-switch.drawing-type-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
 .sidebar .segmented button,
 .sidebar .plan-switch button,
 .sidebar .tabs button {

@@ -40,7 +40,7 @@ import { useSunStudyShadows } from "./useSunStudyShadows";
 
 const NO_SELECTION: readonly number[] = [];
 
-export type DrawingKind = "site" | "figure-ground" | "exploded-axo";
+export type DrawingKind = "site" | "figure-ground" | "exploded-axo" | "isometric";
 
 function CasedLine({ d, stroke, paper }: { d: string; stroke: StrokeStyle; paper: string }) {
   if (!(stroke.mm > 0) || !d) return null;

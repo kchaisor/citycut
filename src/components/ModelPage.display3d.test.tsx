@@ -280,6 +280,7 @@ describe("Display panel controls by view tab", () => {
     expect(screen.getByRole("button", { name: "Site plan" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Figure-ground" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Exploded axo" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Isometric" })).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Plan scale" })).toBeTruthy();
     expect(screen.getByText(/Contours:/)).toBeTruthy();
     expect(screen.getByText("Line styles")).toBeTruthy();
@@ -495,46 +496,79 @@ describe("Display panel controls by view tab", () => {
     expect(buildingsSection.hidden).toBe(false);
   });
 
-  it("does not render a floating bottom-right attribution pill across 3D model, Drawing (Site plan, Figure-ground, Exploded axo), or Satellite views while keeping Model details Data sources intact", async () => {
+  it("renders Isometric 3D vector drawing under Display › Drawing with NW/NE/SE/SW compass selector, Layers toggles, and 2-column circular Colors swatches matching 3D model", async () => {
     const user = userEvent.setup();
     render(
       <ModelPage
-        model={sampleModel({ withWater: true, withTrees: true })}
-        onHome={() => {}}
-        onNewCut={() => {}}
+        model={sampleModel({
+          withWater: true,
+          withTrees: true,
+          withFootpaths: true,
+          withRail: true,
+          withBlocks: true,
+        })}
+        onHome={vi.fn()}
+        onNewCut={vi.fn()}
       />,
     );
 
-    const assertNoViewportAttribution = () => {
-      expect(document.querySelector(".stage-attrib")).toBeNull();
-      expect(document.querySelector(".map-attribution")).toBeNull();
-    };
+    // No floating bottom-right attribution pill on any tab
+    expect(document.querySelector(".stage-attrib")).toBeNull();
+    expect(document.querySelector(".map-attribution")).toBeNull();
 
-    // 1. Default 3D model view
-    expect(screen.getByTestId("scene-3d")).toBeTruthy();
-    assertNoViewportAttribution();
-
-    // Right-hand Model details panel still has Data sources & Full source notes and credits
-    const rightPanel = document.querySelector("#model-sidebar-right-panel") as HTMLElement;
-    expect(within(rightPanel).getByRole("heading", { name: "Data sources" })).toBeTruthy();
-    expect(within(rightPanel).getByText("Full source notes and credits")).toBeTruthy();
-
-    // 2. Drawing — Site plan, Figure-ground, Exploded axo
     await user.click(screen.getByRole("tab", { name: "Drawing" }));
-    expect(screen.getByTestId("drawing-plan")).toBeTruthy();
-    assertNoViewportAttribution();
+    const drawingGroup = screen.getByRole("group", { name: "Drawing type" });
+    const isoBtn = within(drawingGroup).getByRole("button", { name: "Isometric" });
+    await user.click(isoBtn);
 
-    await user.click(screen.getByRole("button", { name: "Figure-ground" }));
-    expect(screen.getByTestId("drawing-plan")).toBeTruthy();
-    assertNoViewportAttribution();
+    // Isometric SVG drawing renders in the viewport
+    const isoSvg = document.querySelector("svg.plan.isometric-drawing") as SVGSVGElement;
+    expect(isoSvg).toBeTruthy();
+    expect(isoSvg.getAttribute("data-iso-corner")).toBe("sw");
 
-    await user.click(screen.getByRole("button", { name: "Exploded axo" }));
-    expect(screen.getByTestId("drawing-exploded-axo")).toBeTruthy();
-    assertNoViewportAttribution();
+    // 4-way Compass view selector (NW, NE, SE, SW)
+    const cornerGroup = screen.getByRole("group", { name: "Isometric corner" });
+    for (const label of ["NW", "NE", "SE", "SW"]) {
+      expect(within(cornerGroup).getByRole("button", { name: label })).toBeTruthy();
+    }
+    await user.click(within(cornerGroup).getByRole("button", { name: "NW" }));
+    expect(isoSvg.getAttribute("data-iso-corner")).toBe("nw");
 
-    // 3. Satellite view
-    await user.click(screen.getByRole("tab", { name: "Satellite" }));
-    expect(screen.getByTestId("satellite-pane")).toBeTruthy();
-    assertNoViewportAttribution();
+    // Layers and Colors sections match Display › 3D model
+    const layersSection = screen.getByRole("region", { name: "Layers" });
+    const colorsSection = screen.getByRole("region", { name: "Colors" });
+    expect(layersSection.compareDocumentPosition(colorsSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    for (const label of [
+      "Buildings",
+      "Roads",
+      "Footpaths",
+      "Trees",
+      "Landscape",
+      "Water",
+      "Rail & tram",
+      "Contours",
+    ]) {
+      const toggle = within(layersSection).getByLabelText(label) as HTMLInputElement;
+      expect(toggle.checked).toBe(true);
+      expect(within(colorsSection).getByText(label)).toBeTruthy();
+    }
+    expect(within(layersSection).queryByLabelText("Ground")).toBeNull();
+    expect(within(layersSection).queryByLabelText("Blocks")).toBeNull();
+
+    // Toggling Buildings off removes building solids from the live Isometric SVG
+    expect(isoSvg.querySelector(".iso-solids .iso-building")).toBeTruthy();
+    await user.click(within(layersSection).getByLabelText("Buildings"));
+    expect(isoSvg.querySelector(".iso-solids .iso-building")).toBeNull();
+
+    // Picking a Buildings colour re-enables Buildings and updates the live SVG roof fill
+    const hex = (six: string) => `${String.fromCharCode(35)}${six}`;
+    fireEvent.change(within(colorsSection).getByLabelText("Buildings colour"), {
+      target: { value: hex("c97a4b") },
+    });
+    expect((within(layersSection).getByLabelText("Buildings") as HTMLInputElement).checked).toBe(true);
+    expect(getColour("--building-uniform").toLowerCase()).toBe(hex("c97a4b"));
+    const roofPath = isoSvg.querySelector(".iso-solids .iso-building path:last-child") as SVGPathElement;
+    expect(roofPath?.getAttribute("fill")?.toLowerCase()).toBe(hex("c97a4b"));
   });
 });

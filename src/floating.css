@@ -175,7 +175,8 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
   /* Drawing panes keep their framing in the visible area; the viewport gradient shows through. */
   .model .viewport .plan,
   .model .viewport .plan.figure-ground,
-  .model .viewport .plan.exploded-axo { background: transparent; }
+  .model .viewport .plan.exploded-axo,
+  .model .viewport .plan.isometric-drawing { background: transparent; }
 }
 @media (min-width: 641px) {
   /* The view-wide paper rect of a drawing; the frame-sized paper inside it stays. */
@@ -393,6 +394,8 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 svg.plan,
 .plan.exploded-axo,
 .plan.exploded-axo text,
+.plan.isometric-drawing,
+.plan.isometric-drawing *,
 .axo-plate-label,
 .axo-legend,
 .sidebar-host,

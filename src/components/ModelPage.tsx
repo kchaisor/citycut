@@ -28,6 +28,8 @@ import {
   downloadBlob,
   downloadExplodedAxoAi,
   downloadFigureAi,
+  downloadIsometricAi,
+  downloadIsometricSvg,
   downloadSiteAi,
   downloadSiteSvg,
   downloadFigureSvg,
@@ -146,6 +148,8 @@ import { useImportedMassing } from "./useImportedMassing";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
 import { DrawingExplodedAxo } from "./DrawingExplodedAxo";
+import { DrawingIsometric } from "./DrawingIsometric";
+import { isometricDrawingBounds } from "../lib/isometricDrawing";
 import { LineStylesEditor } from "./LineStyles";
 import { Sidebar, type SidebarItem } from "./Sidebar";
 import { SatellitePane } from "./SatellitePane";
@@ -283,6 +287,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     explodedAxoViewportExtent(explodedAxoBounds(model, defaultExplodedAxoSettings(model.sideM))),
   );
   const [view, setView] = useState<ViewMemory>(loadView);
+  const [isoDrawingViewport, setIsoDrawingViewport] = useState<PlanViewport>(() =>
+    explodedAxoViewportExtent(isometricDrawingBounds(model, loadView().corner)),
+  );
   const [snapId, setSnapId] = useState(0);
   // The 3D view unmounts on Drawing/Satellite; this keeps the user's camera for the way back.
   // A new model gets a fresh memory, so a new cut is framed afresh.
@@ -1218,6 +1225,36 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     }
   }
 
+  async function saveIsometricAi() {
+    setExportError(null);
+    setBusy("ai-isometric");
+    try {
+      await downloadIsometricAi(drawingModel, figureScale, {
+        corner: view.corner,
+        display: view3dDisplay,
+      });
+    } catch {
+      setExportError("The isometric file could not be written.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function saveIsometricSvg() {
+    setExportError(null);
+    setBusy("svg-isometric");
+    try {
+      await downloadIsometricSvg(drawingModel, figureScale, {
+        corner: view.corner,
+        display: view3dDisplay,
+      });
+    } catch {
+      setExportError("The isometric SVG could not be written.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const draggedAxoLayer = useRef<AxoLayerId | null>(null);
 
   function dragReorderAxoLayer(from: AxoLayerId, to: AxoLayerId) {
@@ -1541,6 +1578,17 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 viewport={explodedViewport}
                 onViewportChange={setExplodedViewport}
                 onLayerLiftChange={setAxoLayerLift}
+                fitCounter={fitCounter}
+              />
+            ) : drawing === "isometric" ? (
+              <DrawingIsometric
+                model={drawingModel}
+                corner={view.corner}
+                display={view3dDisplay}
+                planScale={figureScale}
+                onScale={onScale}
+                viewport={isoDrawingViewport}
+                onViewportChange={setIsoDrawingViewport}
                 fitCounter={fitCounter}
               />
             ) : (
@@ -2099,7 +2147,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
               )}
               {tab === "drawing" && (
                 <>
-              <div className="plan-switch" role="group" aria-label="Drawing type">
+              <div className="plan-switch drawing-type-switch" role="group" aria-label="Drawing type">
                 <button
                   type="button"
                   aria-pressed={drawing === "site"}
@@ -2130,7 +2178,90 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 >
                   Exploded axo
                 </button>
+                <button
+                  type="button"
+                  aria-pressed={drawing === "isometric"}
+                  onClick={() => {
+                    setDrawing("isometric");
+                    setTab("drawing");
+                  }}
+                >
+                  Isometric
+                </button>
               </div>
+              {drawing === "isometric" && (
+                <div className="projection-block iso-drawing-controls">
+                  <section className="sidebar-group" aria-label="Compass view">
+                    <div className="sidebar-gh">
+                      <h3>Compass view</h3>
+                    </div>
+                    <div className="plan-switch" role="group" aria-label="Isometric corner">
+                      {ISO_CORNERS.map((corner) => (
+                        <button
+                          key={corner}
+                          type="button"
+                          aria-pressed={view.corner === corner}
+                          onClick={() => {
+                            commitView({ ...view, corner }, false);
+                            setIsoDrawingViewport(
+                              explodedAxoViewportExtent(isometricDrawingBounds(displayModel, corner)),
+                            );
+                          }}
+                        >
+                          {CORNER_LABEL[corner]}
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                  {availableLayers3d.length > 0 && (
+                    <section className="sidebar-group" aria-label="Layers">
+                      <div className="sidebar-gh">
+                        <h3>Layers</h3>
+                      </div>
+                      <div className="display-switches" role="group" aria-label="3D layers">
+                        {availableLayers3d.map((layer) => (
+                          <label key={layer.id} className="check-field">
+                            <input
+                              type="checkbox"
+                              checked={isLayer3dVisible(view3dDisplay, layer.id)}
+                              onChange={(event) =>
+                                commitView3dDisplay(setLayer3dVisible(view3dDisplay, layer.id, event.target.checked))
+                              }
+                            />
+                            {layer.label}
+                          </label>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                  {availableLayers3d.length > 0 && (
+                    <section className="sidebar-group legend" aria-label="Colors">
+                      <div className="sidebar-gh">
+                        <h3>Colors</h3>
+                      </div>
+                      <ul className="legend-two">
+                        {availableLayers3d.map((layer) => (
+                          <li key={layer.id}>
+                            <label
+                              className="legend-swatch"
+                              style={{ background: layer.color }}
+                              title={`Change ${layer.label.toLowerCase()} colour`}
+                            >
+                              <input
+                                type="color"
+                                aria-label={`${layer.label} colour`}
+                                value={layer.color.toLowerCase()}
+                                onChange={(event) => layer.onPick(event.target.value)}
+                              />
+                            </label>
+                            <span>{layer.label}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+                </div>
+              )}
               {drawing === "exploded-axo" && (
                 <div className="axo-controls">
                   <button
@@ -2285,13 +2416,17 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                   )}
                 </p>
               )}
-              <LineStylesEditor
-                style={lineStyles}
-                baseline={lineStyleBaseline()}
-                onChange={(next) => setLineStyles(commitLineStyles(next, lineStyleBaseline()))}
-                onReset={() => setLineStyles(resetStoredLineStyles())}
-              />
-              <ColoursEditor onChange={() => setLineStyles(readDrawingStyle())} />
+              {drawing !== "isometric" && (
+                <>
+                  <LineStylesEditor
+                    style={lineStyles}
+                    baseline={lineStyleBaseline()}
+                    onChange={(next) => setLineStyles(commitLineStyles(next, lineStyleBaseline()))}
+                    onReset={() => setLineStyles(resetStoredLineStyles())}
+                  />
+                  <ColoursEditor onChange={() => setLineStyles(readDrawingStyle())} />
+                </>
+              )}
                 <div className="field">
                   <div className="field-head">
                     <p className="kicker">View width</p>
@@ -2307,6 +2442,10 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                       if (drawing === "exploded-axo") {
                         setExplodedViewport(
                           explodedAxoViewportExtent(explodedAxoBounds(displayModel, axoSettings)),
+                        );
+                      } else if (drawing === "isometric") {
+                        setIsoDrawingViewport(
+                          explodedAxoViewportExtent(isometricDrawingBounds(displayModel, view.corner)),
                         );
                       } else {
                         setPlanViewport(planViewportExtent(displayModel.sideM));
@@ -2409,9 +2548,15 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     if (id === "3dm") void save3dm();
                     else if (id === "png") void savePng();
                     else if (id === "sun-zip") void saveSunStudyAi();
-                    else if (id === "svg") void (drawing === "figure-ground" ? saveFigureSvg() : saveSiteSvg());
+                    else if (id === "svg")
+                      void (drawing === "figure-ground"
+                        ? saveFigureSvg()
+                        : drawing === "isometric"
+                          ? saveIsometricSvg()
+                          : saveSiteSvg());
                     else if (drawing === "site") void saveSiteAi();
                     else if (drawing === "figure-ground") void saveFigureAi();
+                    else if (drawing === "isometric") void saveIsometricAi();
                     else void saveExplodedAxoAi();
                   }}
                 />

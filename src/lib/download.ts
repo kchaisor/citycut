@@ -12,7 +12,7 @@ import type { CityModel } from "../types";
 // like rhinoExport for .3dm, so they stay out of the model-page chunk.
 
 /** Downloads the drawer still offers. glTF, SVG, and figure-ground PDF are gone. */
-export const EXPORT_IDS = ["png", "3dm", "ai-view", "ai-site", "ai-figure", "ai-exploded"] as const;
+export const EXPORT_IDS = ["png", "3dm", "ai-view", "ai-site", "ai-figure", "ai-exploded", "ai-isometric"] as const;
 
 export type ExportId = (typeof EXPORT_IDS)[number];
 
@@ -30,13 +30,14 @@ export function pngFilename(model: CityModel): string {
 
 export function aiFilename(
   model: CityModel,
-  kind: "view" | "site" | "figure" | "exploded",
+  kind: "view" | "site" | "figure" | "exploded" | "isometric",
   scale?: number,
 ): string {
   const stem = fileStem(model);
   if (kind === "view") return `${stem}-view.ai`;
   if (kind === "site") return `${stem}-site-1-${scale}.ai`;
   if (kind === "figure") return `${stem}-figure-ground-1-${scale}.ai`;
+  if (kind === "isometric") return `${stem}-isometric-1-${scale}.ai`;
   return `${stem}-exploded-axo-1-${scale}.ai`;
 }
 
@@ -90,7 +91,7 @@ export async function downloadSiteAi(
   downloadBytes(aiFilename(model, "site", scale), bytes, "application/pdf");
 }
 
-export function svgFilename(model: CityModel, kind: "site" | "figure", scale: number): string {
+export function svgFilename(model: CityModel, kind: "site" | "figure" | "isometric", scale: number): string {
   return aiFilename(model, kind, scale).replace(/\.ai$/, ".svg");
 }
 
@@ -162,4 +163,24 @@ export async function downloadSunStudyZip(
   const result = await study.buildSunStudyZip(site, date, (hour) => sitePlanAi(model, scale, style, optionsForHour(hour)), onProgress);
   if (result.zip) downloadBytes(study.sunStudyZipName(site, date), result.zip, "application/zip");
   return study.sunStudyFailureText(result);
+}
+
+export async function downloadIsometricAi(
+  model: CityModel,
+  scale: number,
+  options?: import("./isometricDrawingExport").IsometricExportOptions,
+): Promise<void> {
+  const { isometricAi } = await import("./aiPlan");
+  const bytes = await isometricAi(model, scale, options);
+  downloadBytes(aiFilename(model, "isometric", scale), bytes, "application/pdf");
+}
+
+export async function downloadIsometricSvg(
+  model: CityModel,
+  scale: number,
+  options?: import("./isometricDrawingExport").IsometricExportOptions,
+): Promise<void> {
+  const { isometricSvg } = await import("./aiPlan");
+  const text = await isometricSvg(model, scale, options);
+  downloadBlob(svgFilename(model, "isometric", scale), new Blob([text], { type: "image/svg+xml" }));
 }

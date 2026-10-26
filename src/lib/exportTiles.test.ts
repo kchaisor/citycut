@@ -30,6 +30,7 @@ describe("export tiles", () => {
     expect(byId({ ...base, tab: "drawing", drawing: "site" }).ai!.ariaLabel).toBe("Download site plan Illustrator");
     expect(byId({ ...base, tab: "drawing", drawing: "figure-ground" }).ai!.ariaLabel).toBe("Download figure-ground Illustrator");
     expect(byId({ ...base, tab: "drawing", drawing: "exploded-axo" }).ai!.ariaLabel).toBe("Download exploded axo Illustrator");
+    expect(byId({ ...base, tab: "drawing", drawing: "isometric" }).ai!.ariaLabel).toBe("Download isometric Illustrator");
     expect(byId({ ...base, tab: "drawing" }).ai!.enabled).toBe(true);
     expect(byId({ ...base, tab: "drawing" }).ai!.description).toContain("1:2500");
   });
@@ -50,15 +51,18 @@ describe("export tiles", () => {
     expect(byId({ ...base, buildingsAsMesh: true })["3dm"]!.description).toContain("meshes");
   });
 
-  it("offers a layered SVG for the site plan and figure-ground only", () => {
+  it("offers a layered SVG for the site plan, figure-ground, and isometric drawing", () => {
     expect(byId(base).svg.enabled).toBe(false);
     expect(byId(base).svg.disabledReason).toBe(SVG_DISABLED_TOOLTIP);
     const site = byId({ ...base, tab: "drawing", drawing: "site" }).svg;
     expect([site.enabled, site.ariaLabel]).toEqual([true, "Download site plan SVG"]);
     const figure = byId({ ...base, tab: "drawing", drawing: "figure-ground" }).svg;
     expect([figure.enabled, figure.ariaLabel]).toEqual([true, "Download figure-ground SVG"]);
+    const iso = byId({ ...base, tab: "drawing", drawing: "isometric" }).svg;
+    expect([iso.enabled, iso.ariaLabel]).toEqual([true, "Download isometric SVG"]);
     expect(byId({ ...base, tab: "drawing", drawing: "exploded-axo" }).svg.enabled).toBe(false);
     expect(byId({ ...base, tab: "drawing", busy: "svg-site" }).svg.busy).toBe(true);
+    expect(byId({ ...base, tab: "drawing", drawing: "isometric", busy: "svg-isometric" }).svg.busy).toBe(true);
   });
 
   it("says the site plan .ai and .svg carry hourly layers while the sun study is on", () => {
