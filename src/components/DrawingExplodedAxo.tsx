@@ -282,9 +282,19 @@ export function DrawingExplodedAxo({
                 : undefined
             }
           >
-            {!axoPlateShowsAerial(layer.id) && (
+            {layer.plinthWalls && layer.plinthWalls.length > 0 ? (
+              <path
+                className="axo-ground-top"
+                d={layer.plateOutlineD}
+                fill={getColour("--ground-fill")}
+                stroke={getColour("--ground-edge")}
+                strokeWidth={outlinePx * 1.15}
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
+              />
+            ) : !axoPlateShowsAerial(layer.id) ? (
               <path d={layer.plateOutlineD} fill={axoPlateColours(layer.id).tint} fillOpacity={AXO_PLATE_TINT_OPACITY} stroke="none" />
-            )}
+            ) : null}
             <g clipPath={clip}>
               {axoPlateShowsAerial(layer.id) && satelliteHref && (
                 <image
@@ -335,12 +345,42 @@ export function DrawingExplodedAxo({
                 />
               ))}
             </g>
+            {layer.plinthWalls && layer.plinthWalls.length > 0 && (
+              <g className="axo-ground-plinth" data-axo-plinth="satellite">
+                {layer.plinthWalls.map((wall, wi) => (
+                  <path
+                    key={`pw${wi}`}
+                    className={`axo-plinth-wall axo-plinth-wall-${wall.side}`}
+                    data-plinth-side={wall.side}
+                    d={wall.d}
+                    fill={wall.fill}
+                    stroke={wall.stroke}
+                    strokeWidth={outlinePx * 1.05}
+                    vectorEffect="non-scaling-stroke"
+                    strokeLinejoin="round"
+                  />
+                ))}
+              </g>
+            )}
             <path
               d={layer.plateOutlineD}
               fill="none"
-              stroke={layer.id === "base" ? colours.base : axoPlateColours(layer.id).edge}
-              strokeWidth={layer.id === "base" ? outlinePx * 2.5 : outlinePx}
+              stroke={
+                layer.plinthWalls && layer.plinthWalls.length > 0
+                  ? getColour("--ground-edge")
+                  : layer.id === "base"
+                    ? colours.base
+                    : axoPlateColours(layer.id).edge
+              }
+              strokeWidth={
+                layer.id === "base"
+                  ? outlinePx * 2.5
+                  : layer.plinthWalls && layer.plinthWalls.length > 0
+                    ? outlinePx * 1.15
+                    : outlinePx
+              }
               vectorEffect="non-scaling-stroke"
+              strokeLinejoin="round"
             />
             {layer.unclippedStrokes?.map((d, ui) => (
               <path

@@ -183,13 +183,36 @@ export function explodedAxoChunks(
     const paths: PdfPath[] = [];
     const liftM = layer.liftM;
     const plateRing = pathFromIsoD(layer.plateOutlineD, origin, scale, pageHeightMm, liftM);
+    const hasPlinth = Boolean(layer.plinthWalls && layer.plinthWalls.length > 0);
     if (plateRing.length >= 3) {
       paths.push({
         rings: [plateRing],
-        stroke: hexRgb(layer.id === "base" ? getColour("--axo-base-outline") : axoPlateColours(layer.id).edge),
-        strokeMm: layer.id === "base" ? 0.3 : 0.12,
+        ...(hasPlinth ? { fill: hexRgb(getColour("--ground-fill")) } : {}),
+        stroke: hexRgb(
+          hasPlinth
+            ? getColour("--ground-edge")
+            : layer.id === "base"
+              ? getColour("--axo-base-outline")
+              : axoPlateColours(layer.id).edge,
+        ),
+        strokeMm: layer.id === "base" ? 0.3 : hasPlinth ? 0.24 : 0.12,
         close: true,
+        ...(hasPlinth ? { join: "round" as const } : {}),
       });
+    }
+    for (const wall of layer.plinthWalls ?? []) {
+      const rings = ringsFromIsoD(wall.d, origin, scale, pageHeightMm, liftM);
+      if (rings.length > 0) {
+        paths.push({
+          rings,
+          fill: hexRgb(wall.fill),
+          stroke: hexRgb(wall.stroke),
+          strokeMm: 0.2,
+          close: true,
+          evenOdd: false,
+          join: "round",
+        });
+      }
     }
     layer.fills.forEach((fill, index) => {
       const rings = ringsFromIsoD(fill, origin, scale, pageHeightMm, liftM);

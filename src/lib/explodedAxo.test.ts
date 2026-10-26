@@ -16,10 +16,14 @@ import {
   defaultExplodedAxoSettings,
   explodedAxoBounds,
   liftsForLayerOrder,
+  axoGroundPlinthThicknessM,
+  buildAxoGroundPlinth,
   reorderAxoLayer,
   planPointToIso,
   type ExplodedAxoSettings,
 } from "./explodedAxo";
+import { explodedAxoChunks } from "./explodedAxoExport";
+import { getColour } from "./colours";
 import type { CityModel } from "../types";
 
 function pathVertices(d: string): [number, number][] {
@@ -265,5 +269,51 @@ describe("reorderAxoLayer and layerLiftM", () => {
     expect(lifts.get("roads")).toBe(0);
     expect(lifts.get("buildings")).toBe(140);
     expect(lifts.get("trees")).toBe(200);
+  });
+});
+
+describe("exploded axo satellite ground base slab (plinth)", () => {
+  it("builds a crisp 3D ground plinth under the aerial (Satellite) plate for square and circle frames", () => {
+    const squareModel = modelWithShape("square");
+    const { layers: sqLayers } = buildExplodedAxoLayers(squareModel, defaultExplodedAxoSettings(squareModel.sideM));
+    const sqAerial = sqLayers.find((layer) => layer.id === "aerial")!;
+    expect(sqAerial.plinthThicknessM).toBe(axoGroundPlinthThicknessM(squareModel.sideM));
+    expect(sqAerial.plinthWalls).toHaveLength(2);
+    expect(sqAerial.plinthWalls!.map((w) => w.side)).toEqual(["left", "right"]);
+    for (const wall of sqAerial.plinthWalls!) {
+      expect(wall.fill).toBe(getColour("--ground-fill"));
+      expect(wall.stroke).toBe(getColour("--ground-edge"));
+      expect(wall.d).toMatch(/^M.*Z$/);
+    }
+
+    const circleModel = modelWithShape("circle");
+    const { layers: cirLayers } = buildExplodedAxoLayers(circleModel, defaultExplodedAxoSettings(circleModel.sideM));
+    const cirAerial = cirLayers.find((layer) => layer.id === "aerial")!;
+    expect(cirAerial.plinthThicknessM).toBe(axoGroundPlinthThicknessM(circleModel.sideM));
+    expect(cirAerial.plinthWalls!.length).toBeGreaterThan(10);
+    expect(cirAerial.plinthWalls!.some((w) => w.side === "left")).toBe(true);
+    expect(cirAerial.plinthWalls!.some((w) => w.side === "right")).toBe(true);
+
+    // Non-satellite layers do not have a ground plinth
+    for (const layer of sqLayers.filter((l) => l.id !== "aerial")) {
+      expect(layer.plinthWalls).toBeUndefined();
+      expect(layer.plinthThicknessM).toBeUndefined();
+    }
+  });
+
+  it("includes the bottom of the satellite base slab in explodedAxoBounds and exports plinth walls in .ai chunks", () => {
+    const m = modelWithShape("square");
+    const settings = defaultExplodedAxoSettings(m.sideM);
+    const bounds = explodedAxoBounds(m, settings);
+    const plinth = buildAxoGroundPlinth(m.sideM, "square");
+    // Front corner is (half, half) at lift 0 => y = half; bottom of plinth is half + slabThicknessM
+    const half = m.sideM / 2;
+    expect(bounds.maxY).toBeGreaterThan(half + plinth.slabThicknessM);
+
+    const chunks = explodedAxoChunks(m, 1000, settings);
+    const aerialChunk = chunks.find((c) => c.name === "Aerial")!;
+    expect(aerialChunk).toBeDefined();
+    // Top plate fill+stroke + 2 plinth walls + omitted satellite note outline
+    expect(aerialChunk.paths!.filter((p) => p.fill && p.stroke).length).toBeGreaterThanOrEqual(3);
   });
 });

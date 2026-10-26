@@ -410,6 +410,96 @@ export function axoPlateLabelText(id: AxoLayerId): string {
   return `${title}.`;
 }
 
+export type AxoPlinthWall = {
+  side: "left" | "right";
+  d: string;
+  fill: string;
+  stroke: string;
+};
+
+/** 3D ground plinth thickness in local metres (matches Isometric drawing view). */
+export function axoGroundPlinthThicknessM(sideM: number): number {
+  return Math.max(6, Math.min(80, roundIso(sideM * 0.04)));
+}
+
+/**
+ * 3D ground base slab (plinth) vertical walls underneath the Satellite plate.
+ * Drops straight down in iso Z from 0 to `-slabThicknessM` along the front-facing
+ * perimeter of the site frame (square or circle).
+ */
+export function buildAxoGroundPlinth(
+  sideM: number,
+  shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+): { slabThicknessM: number; walls: AxoPlinthWall[] } {
+  const half = sideM / 2;
+  const slabThicknessM = axoGroundPlinthThicknessM(sideM);
+  const fill = getColour("--ground-fill");
+  const stroke = getColour("--ground-edge");
+  if (shape === "circle") {
+    const ring = openRing(circleRing(half, 64));
+    const ccw = signedArea(ring) > 0;
+    const walls: AxoPlinthWall[] = [];
+    for (let i = 0; i < ring.length; i += 1) {
+      const a = ring[i]!;
+      const b = ring[(i + 1) % ring.length]!;
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      const nx = ccw ? dy : -dy;
+      const ny = ccw ? -dx : dx;
+      if (nx + ny <= 1e-9) continue;
+      const side: "left" | "right" = nx - ny <= 0 ? "left" : "right";
+      const pts: Pt[] = [
+        planPointToIso(a[0], a[1], 0),
+        planPointToIso(b[0], b[1], 0),
+        planPointToIso(b[0], b[1], -slabThicknessM),
+        planPointToIso(a[0], a[1], -slabThicknessM),
+      ];
+      walls.push({
+        side,
+        d: isoSvgPolyline(pts, true),
+        fill,
+        stroke,
+      });
+    }
+    return { slabThicknessM, walls };
+  }
+  const leftCorners: Pt[] = [
+    [-half, half],
+    [half, half],
+  ];
+  const rightCorners: Pt[] = [
+    [half, half],
+    [half, -half],
+  ];
+  const wallQuad = (a: Pt, b: Pt): string =>
+    isoSvgPolyline(
+      [
+        planPointToIso(a[0], a[1], 0),
+        planPointToIso(b[0], b[1], 0),
+        planPointToIso(b[0], b[1], -slabThicknessM),
+        planPointToIso(a[0], a[1], -slabThicknessM),
+      ],
+      true,
+    );
+  return {
+    slabThicknessM,
+    walls: [
+      {
+        side: "left",
+        d: wallQuad(leftCorners[0]!, leftCorners[1]!),
+        fill,
+        stroke,
+      },
+      {
+        side: "right",
+        d: wallQuad(rightCorners[0]!, rightCorners[1]!),
+        fill,
+        stroke,
+      },
+    ],
+  };
+}
+
 export type AxoLayerGeometry = {
   id: AxoLayerId;
   liftM: number;
@@ -439,6 +529,10 @@ export type AxoLayerGeometry = {
   solids?: AxoSolidFace[];
   /** Visible source note for this plate (e.g. where heights came from). */
   sourceNote?: string;
+  /** 3D ground base slab (plinth) vertical walls underneath the satellite plate. */
+  plinthWalls?: AxoPlinthWall[];
+  /** Plinth slab depth in local metres when this plate carries a 3D base slab. */
+  plinthThicknessM?: number;
 };
 
 function dedupe(line: Pt[]): Pt[] {
@@ -615,6 +709,8 @@ export function buildExplodedAxoLayers(
     let unclippedStrokes: string[] | undefined;
     let solids: AxoSolidFace[] | undefined;
     let sourceNote: string | undefined;
+    let plinthWalls: AxoPlinthWall[] | undefined;
+    let plinthThicknessM: number | undefined;
 
     const areaToPath = (rings: Pt[][]) =>
       rings
@@ -784,6 +880,10 @@ export function buildExplodedAxoLayers(
         const pts = line.map(([e, n]) => planToIsoBase(e, n));
         strokes.push(isoSvgPolyline(pts, false));
       }
+    } else if (id === "aerial") {
+      const plinth = buildAxoGroundPlinth(model.sideM, shape);
+      plinthWalls = plinth.walls;
+      plinthThicknessM = plinth.slabThicknessM;
     }
 
     layers.push({
@@ -801,6 +901,7 @@ export function buildExplodedAxoLayers(
       ...(unclippedStrokes?.length ? { unclippedStrokes } : {}),
       ...(solids?.length ? { solids } : {}),
       ...(sourceNote ? { sourceNote } : {}),
+      ...(plinthWalls?.length ? { plinthWalls, plinthThicknessM } : {}),
     });
   }
 
@@ -928,6 +1029,10 @@ export function explodedAxoBounds(
     for (const pt of ring) {
       const [x, y] = planPointToIso(pt[0], pt[1], layer.liftM);
       bump(x, y);
+      if (layer.plinthThicknessM) {
+        const [bx, by] = planPointToIso(pt[0], pt[1], layer.liftM - layer.plinthThicknessM);
+        bump(bx, by);
+      }
     }
     const label = axoLayerLabelAnchor(model.sideM, layer.liftM, model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE);
     bump(label.x, label.y);

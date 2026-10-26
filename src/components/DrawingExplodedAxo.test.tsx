@@ -4,10 +4,14 @@ import { join } from "node:path";
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DrawingExplodedAxo } from "./DrawingExplodedAxo";
+import * as satellite from "../lib/explodedAxoSatellite";
 import { defaultExplodedAxoSettings, type ExplodedAxoSettings } from "../lib/explodedAxo";
 import type { CityModel } from "../types";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 function makeTestModel(): CityModel {
   return {
@@ -170,5 +174,25 @@ describe("DrawingExplodedAxo and UI drag text-selection prevention", () => {
     expect(onViewportChange).toHaveBeenCalledTimes(1);
 
     fireEvent.pointerUp(svg, { pointerId: 2 });
+  });
+  it("renders the 3D ground base slab (plinth) underneath the Satellite (aerial) plate", () => {
+    vi.spyOn(satellite, "fetchSatelliteFramePng").mockResolvedValue(null);
+    const model = makeTestModel();
+    const settings = defaultExplodedAxoSettings(model.sideM);
+    const { container } = render(<DrawingExplodedAxo model={model} settings={settings} />);
+
+    const aerialGroup = container.querySelector("[data-axo-layer=\"aerial\"]") as SVGGElement | null;
+    expect(aerialGroup).not.toBeNull();
+
+    const groundTop = aerialGroup!.querySelector("path.axo-ground-top") as SVGPathElement | null;
+    expect(groundTop).not.toBeNull();
+
+    const plinthGroup = aerialGroup!.querySelector("g.axo-ground-plinth") as SVGGElement | null;
+    expect(plinthGroup).not.toBeNull();
+
+    const walls = plinthGroup!.querySelectorAll("path.axo-plinth-wall");
+    expect(walls.length).toBe(2);
+    expect(plinthGroup!.querySelector("path.axo-plinth-wall-left")).not.toBeNull();
+    expect(plinthGroup!.querySelector("path.axo-plinth-wall-right")).not.toBeNull();
   });
 });
