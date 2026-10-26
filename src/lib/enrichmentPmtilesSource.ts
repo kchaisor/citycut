@@ -16,7 +16,8 @@ async function fetchRangeOnce(
   headers.set("range", `bytes=${offset}-${offset + length - 1}`);
   // No conditional header: "If-None-Match" makes GitHub Pages answer 304 with no body.
   // Like pmtiles' FetchSource, compare the returned ETag instead.
-  const response = await fetch(url, { signal, headers, cache: "no-store" });
+  // Omit Referer: tiles.overturemaps.org CloudFront WAF blocks *.vercel.app Referer headers with 403.
+  const response = await fetch(url, { signal, headers, cache: "no-store", referrerPolicy: "no-referrer" });
   const rawEtag = response.headers.get("Etag");
   const responseEtag = rawEtag?.startsWith("W/") ? undefined : rawEtag ?? undefined;
   if (etag && responseEtag && responseEtag !== etag) {

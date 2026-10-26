@@ -11,6 +11,10 @@ import type { BuildingUse, BuildingUseSourceTier } from "../types";
 export const ENRICHMENT_TILE_ZOOM = 14;
 const DEFAULT_PMTILES_URL = `${import.meta.env.BASE_URL}building-enrichment.pmtiles`;
 const MANIFEST_URL = `${import.meta.env.BASE_URL}building-enrichment-manifest.json`;
+export const PAGES_ENRICHMENT_PMTILES_URL =
+  "https://kchaisor.github.io/citycut/building-enrichment.pmtiles";
+export const PAGES_ENRICHMENT_MANIFEST_URL =
+  "https://kchaisor.github.io/citycut/building-enrichment-manifest.json";
 
 let cachedPmtilesUrl: string | null = null;
 
@@ -159,16 +163,48 @@ function recordFromProps(props: Record<string, unknown>): BuildingEnrichmentReco
 
 export async function fetchEnrichmentManifest(signal?: AbortSignal): Promise<EnrichmentManifest | null> {
   try {
-    const response = await fetch(MANIFEST_URL, { signal, cache: "default" });
+    const response = await fetch(MANIFEST_URL, {
+      signal,
+      cache: "default",
+      referrerPolicy: "no-referrer",
+    });
     if (response.status === 401 || response.status === 403 || response.status === 429) {
       console.warn(`[CityCut enrichment] manifest HTTP ${response.status}`);
       return null;
     }
     if (!response.ok) return null;
-    return (await response.json()) as EnrichmentManifest;
+    const manifest = (await response.json()) as EnrichmentManifest;
+    // When deployed outside GitHub Pages (e.g. Vercel), public/ contains the small City of
+    // Melbourne committed fallback unless upgraded to the Greater Melbourne release on Pages.
+    if (manifest.regionName?.includes("committed fallback") && !manifest.pmtilesUrl) {
+      try {
+        const pagesResponse = await fetch(PAGES_ENRICHMENT_MANIFEST_URL, {
+          signal,
+          cache: "default",
+          referrerPolicy: "no-referrer",
+        });
+        if (pagesResponse.ok) {
+          const pagesManifest = (await pagesResponse.json()) as EnrichmentManifest;
+          if (pagesManifest?.extent && !pagesManifest.regionName?.includes("committed fallback")) {
+            return {
+              ...pagesManifest,
+              pmtilesUrl: pagesManifest.pmtilesUrl ?? PAGES_ENRICHMENT_PMTILES_URL,
+            };
+          }
+        }
+      } catch {
+        // Keep the local committed fallback manifest when GitHub Pages is unreachable.
+      }
+    }
+    return manifest;
   } catch {
     return null;
   }
+}
+
+/** Test helper. */
+export function clearEnrichmentPmtilesCache(): void {
+  cachedPmtilesUrl = null;
 }
 
 export function isEnrichmentFetchAbort(err: unknown, signal?: AbortSignal): boolean {

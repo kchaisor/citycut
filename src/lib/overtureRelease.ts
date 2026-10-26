@@ -47,7 +47,7 @@ export async function resolveOvertureReleaseWithMeta(
 ): Promise<OvertureReleaseResolution> {
   if (cachedResolution) return cachedResolution;
   try {
-    const response = await fetch(STAC_CATALOG_URL, { signal });
+    const response = await fetch(STAC_CATALOG_URL, { signal, referrerPolicy: "no-referrer" });
     if (!response.ok) {
       cachedResolution = {
         release: OVERTURE_RELEASE_FALLBACK,

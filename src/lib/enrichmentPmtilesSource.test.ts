@@ -50,15 +50,16 @@ describe("EnrichmentPmtilesSource", () => {
     expect(result.data.byteLength).toBe(1);
   });
 
-  it("uses cache no-store on range fetches", async () => {
+  it("uses cache no-store and referrerPolicy no-referrer on range fetches (avoids CloudFront 403 on *.vercel.app)", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (_url, init) => {
         expect(init?.cache).toBe("no-store");
+        expect(init?.referrerPolicy).toBe("no-referrer");
         return new Response(new Uint8Array([0]).buffer, { status: 206 });
       }),
     );
-    const source = new EnrichmentPmtilesSource("https://example.test/enrichment.pmtiles");
+    const source = new EnrichmentPmtilesSource("https://tiles.overturemaps.org/2026-10-21.0/buildings.pmtiles");
     await source.getBytes(0, 1);
   });
 

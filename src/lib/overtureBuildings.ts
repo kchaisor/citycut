@@ -17,6 +17,7 @@ import { dedupeBuildings } from "./footprints";
 import { dedupeConsecutive, openRing, signedArea, toLocal } from "./geo";
 import { footprintArea } from "./useCascade";
 import { overtureBuildingHeight, overtureHeightUsesFallback, overtureMinHeightM } from "./overtureHeight";
+import { EnrichmentPmtilesSource } from "./enrichmentPmtilesSource";
 import { overtureBuildingsUrl, resolveOvertureReleaseWithMeta } from "./overtureRelease";
 import { parseOvertureSources, pickTallestOvertureProps } from "./overtureSources";
 import { pointInPolygon } from "./useCascade";
@@ -338,7 +339,7 @@ export async function fetchOvertureBuildingsForCut(
     release = resolved.release;
     stacWarning = resolved.stacWarning;
   }
-  const pmtiles = new PMTiles(overtureBuildingsUrl(release));
+  const pmtiles = new PMTiles(new EnrichmentPmtilesSource(overtureBuildingsUrl(release)));
   const tiles = tileRange(bounds, OVERTURE_BUILDING_ZOOM);
   const tileResults = await Promise.all(
     tiles.map(async ({ z, x, y }) => {

@@ -21,6 +21,7 @@ import {
   parseSourceTags,
   treeTagsFromLand,
 } from "./overtureBaseMapping";
+import { EnrichmentPmtilesSource } from "./enrichmentPmtilesSource";
 import { overtureBaseUrl, resolveOvertureRelease } from "./overtureRelease";
 import { treeSize } from "./trees";
 import type { CanopyPatch, TreeContext } from "./parseOsm";
@@ -254,7 +255,7 @@ export async function fetchOvertureBaseForCut(
   const frameShape = options.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const t0 = performance.now();
   const release = await resolveOvertureRelease(signal);
-  const pmtiles = new PMTiles(overtureBaseUrl(release));
+  const pmtiles = new PMTiles(new EnrichmentPmtilesSource(overtureBaseUrl(release)));
   const tiles = tileRange(bounds, OVERTURE_BASE_ZOOM);
   const waterFrags: PolyFragment[] = [];
   const waterCenterlines: WaterCenterline[] = [];
