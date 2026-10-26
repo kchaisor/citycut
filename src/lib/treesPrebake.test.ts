@@ -1,13 +1,16 @@
 import { readFileSync } from "node:fs";
 import { PMTiles } from "pmtiles";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   bboxCovers,
+  clearPrebakedTreesCache,
   loadPrebakedTrees,
   OSM_TREES_ODBL_CREDIT,
+  PAGES_TREES_MANIFEST_URL,
   prebakeBackupNote,
   prebakeSourceNote,
   tilesForBounds,
+  TREES_MANIFEST_URL,
   type TreesManifest,
 } from "./treesPrebake";
 import { overtureTreesFromPoints } from "./overtureBase";
@@ -37,6 +40,10 @@ const manifest: TreesManifest = {
 const bounds = { west: 145.005, south: -37.855, east: 145.025, north: -37.84 };
 
 describe("pre-baked tree reader", () => {
+  afterEach(() => {
+    clearPrebakedTreesCache();
+    vi.unstubAllGlobals();
+  });
   it("reads every source for the cut, once each, inside the bounds", async () => {
     const result = await loadPrebakedTrees(bounds, undefined, { fetchManifest: async () => manifest, archive: archive() });
     expect(result.ok).toBe(true);
@@ -84,6 +91,27 @@ describe("pre-baked tree reader", () => {
       archive: { getHeader: async () => { throw new Error("Bad response code: 503"); }, getZxy: async () => undefined },
     });
     expect(broken).toEqual({ ok: false, reason: "trees.pmtiles answered HTTP 503" });
+  });
+
+  it("falls back to GitHub Pages trees-manifest.json when local manifest returns 404 (e.g. on Vercel)", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      expect(init?.referrerPolicy).toBe("no-referrer");
+      if (url === TREES_MANIFEST_URL) {
+        return new Response("Not Found", { status: 404 });
+      }
+      if (url === PAGES_TREES_MANIFEST_URL) {
+        return new Response(JSON.stringify(manifest), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await loadPrebakedTrees(bounds, undefined, { archive: archive() });
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("rethrows an abort instead of falling back", async () => {

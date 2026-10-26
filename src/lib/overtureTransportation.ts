@@ -4,6 +4,7 @@ import { PMTiles } from "pmtiles";
 import { dedupeRoads } from "./footprints";
 import { polylineLength, toLocal } from "./geo";
 import { overtureMaxRoadJumpM, sanitizeRoadFeatures } from "./roadLineValidation";
+import { EnrichmentPmtilesSource } from "./enrichmentPmtilesSource";
 import { overtureTransportationUrl, resolveOvertureRelease } from "./overtureRelease";
 import { clipLineToGroundVisible, hiddenSpansFromOvertureProps } from "./overtureSegmentVisibility";
 import {
@@ -109,7 +110,7 @@ export async function fetchOvertureTransportationForCut(
   const half = sideM / 2;
   const t0 = performance.now();
   const release = await resolveOvertureRelease(signal);
-  const pmtiles = new PMTiles(overtureTransportationUrl(release));
+  const pmtiles = new PMTiles(new EnrichmentPmtilesSource(overtureTransportationUrl(release)));
   const tiles = tileRange(bounds, OVERTURE_TRANSPORT_ZOOM);
   let skippedTomTom = 0;
   let segmentCount = 0;

@@ -94,13 +94,16 @@ describe("resolveOvertureRelease", () => {
     vi.unstubAllGlobals();
   });
 
-  it("resolves from live-shaped catalog without a warning when the catalog loads", async () => {
+  it("resolves from live-shaped catalog with referrerPolicy no-referrer and no warning when the catalog loads", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => liveCatalog,
-      })),
+      vi.fn(async (_url, init) => {
+        expect(init?.referrerPolicy).toBe("no-referrer");
+        return {
+          ok: true,
+          json: async () => liveCatalog,
+        };
+      }),
     );
     await expect(resolveOvertureRelease()).resolves.toBe("2026-09-23.1");
     await expect(resolveOvertureReleaseWithMeta()).resolves.toMatchObject({

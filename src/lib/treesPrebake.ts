@@ -12,6 +12,8 @@ import type { VicmapPoint } from "./vicmapTrees";
 
 export const TREES_PMTILES_URL = `${import.meta.env.BASE_URL}trees.pmtiles`;
 export const TREES_MANIFEST_URL = `${import.meta.env.BASE_URL}trees-manifest.json`;
+export const PAGES_TREES_PMTILES_URL = "https://kchaisor.github.io/citycut/trees.pmtiles";
+export const PAGES_TREES_MANIFEST_URL = "https://kchaisor.github.io/citycut/trees-manifest.json";
 
 /** Credit for the OSM-derived tree points in the pre-baked file (ODbL). */
 export const OSM_TREES_ODBL_CREDIT = "Tree points © OpenStreetMap contributors, ODbL.";
@@ -50,10 +52,27 @@ export type PrebakeDeps = {
 };
 
 let sharedArchive: PMTiles | null = null;
+let sharedArchiveUrl: string | null = null;
+let resolvedPmtilesUrl: string = TREES_PMTILES_URL;
+
+function isTreesManifest(value: unknown): value is TreesManifest {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "bbox" in value &&
+      typeof (value as TreesManifest).zoom === "number",
+  );
+}
+
 function defaultArchive(): PMTiles {
-  if (!sharedArchive) {
-    const url =
-      typeof window !== "undefined" ? new URL(TREES_PMTILES_URL, window.location.href).href : TREES_PMTILES_URL;
+  const url =
+    resolvedPmtilesUrl.startsWith("http")
+      ? resolvedPmtilesUrl
+      : typeof window !== "undefined"
+        ? new URL(resolvedPmtilesUrl, window.location.href).href
+        : resolvedPmtilesUrl;
+  if (!sharedArchive || sharedArchiveUrl !== url) {
+    sharedArchiveUrl = url;
     sharedArchive = new PMTiles(new EnrichmentPmtilesSource(url));
   }
   return sharedArchive;
@@ -62,9 +81,35 @@ function defaultArchive(): PMTiles {
 let manifestPromise: Promise<TreesManifest> | null = null;
 async function defaultFetchManifest(signal?: AbortSignal): Promise<TreesManifest> {
   manifestPromise ??= (async () => {
-    const response = await fetch(TREES_MANIFEST_URL, { signal });
-    if (!response.ok) throw new Error(`the pre-baked tree manifest answered HTTP ${response.status}`);
-    return (await response.json()) as TreesManifest;
+    const response = await fetch(TREES_MANIFEST_URL, { signal, referrerPolicy: "no-referrer" });
+    if (response.ok) {
+      const contentType = response.headers?.get?.("content-type") ?? "application/json";
+      if (!contentType.includes("text/html")) {
+        const parsed = (await response.json()) as TreesManifest;
+        if (isTreesManifest(parsed)) {
+          resolvedPmtilesUrl = TREES_PMTILES_URL;
+          return parsed;
+        }
+      }
+    }
+    // Deployments outside GitHub Pages (e.g. Vercel or local preview without release assets in
+    // public/) fall back to the public Greater Melbourne pre-baked tree archive on GitHub Pages.
+    try {
+      const pagesResponse = await fetch(PAGES_TREES_MANIFEST_URL, {
+        signal,
+        referrerPolicy: "no-referrer",
+      });
+      if (pagesResponse.ok) {
+        const pagesParsed = (await pagesResponse.json()) as TreesManifest;
+        if (isTreesManifest(pagesParsed)) {
+          resolvedPmtilesUrl = PAGES_TREES_PMTILES_URL;
+          return pagesParsed;
+        }
+      }
+    } catch (err) {
+      if (signal?.aborted) throw err;
+    }
+    throw new Error(`the pre-baked tree manifest answered HTTP ${response.status}`);
   })();
   try {
     return await manifestPromise;
@@ -72,6 +117,14 @@ async function defaultFetchManifest(signal?: AbortSignal): Promise<TreesManifest
     manifestPromise = null;
     throw err;
   }
+}
+
+/** Test helper. */
+export function clearPrebakedTreesCache(): void {
+  manifestPromise = null;
+  sharedArchive = null;
+  sharedArchiveUrl = null;
+  resolvedPmtilesUrl = TREES_PMTILES_URL;
 }
 
 /** YYYY-MM-DD from an ISO date, or null. */
