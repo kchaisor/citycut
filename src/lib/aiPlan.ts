@@ -780,3 +780,29 @@ export async function explodedAxoAi(
 ): Promise<Uint8Array> {
   return explodedAxoPdf(model, scale, settings, satelliteNote);
 }
+
+export {
+  isometricDrawingChunks,
+  isometricDrawingPdf,
+  isometricDrawingSvg,
+  ISOMETRIC_EXPORT_LAYERS,
+  type IsometricExportOptions,
+} from "./isometricDrawingExport";
+
+export async function isometricAi(
+  model: CityModel,
+  scale: number,
+  options?: import("./isometricDrawingExport").IsometricExportOptions,
+): Promise<Uint8Array> {
+  const { isometricDrawingPdf } = await import("./isometricDrawingExport");
+  return isometricDrawingPdf(model, scale, options);
+}
+
+export async function isometricSvg(
+  model: CityModel,
+  scale: number,
+  options?: import("./isometricDrawingExport").IsometricExportOptions,
+): Promise<string> {
+  const { isometricDrawingSvg } = await import("./isometricDrawingExport");
+  return isometricDrawingSvg(model, scale, options);
+}

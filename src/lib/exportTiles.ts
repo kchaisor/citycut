@@ -3,8 +3,19 @@
  * and wording are tested without the page.
  */
 export type ExportTileId = "3dm" | "ai" | "svg" | "sun-zip" | "png";
-export type ExportBusy = "3dm" | "png" | "ai-site" | "ai-figure" | "ai-exploded" | "ai-sun" | "svg-site" | "svg-figure" | null;
-export type DrawingKindForExport = "site" | "figure-ground" | "exploded-axo";
+export type ExportBusy =
+  | "3dm"
+  | "png"
+  | "ai-site"
+  | "ai-figure"
+  | "ai-exploded"
+  | "ai-isometric"
+  | "ai-sun"
+  | "svg-site"
+  | "svg-figure"
+  | "svg-isometric"
+  | null;
+export type DrawingKindForExport = "site" | "figure-ground" | "exploded-axo" | "isometric";
 
 export type ExportTile = {
   id: ExportTileId;
@@ -56,6 +67,11 @@ const AI_BY_DRAWING: Record<DrawingKindForExport, { aria: string; busy: ExportBu
     busy: "ai-exploded",
     text: (scale) => `Exploded axo as stacked isometric layers at 1:${scale}, with guides and labels.`,
   },
+  isometric: {
+    aria: "Download isometric Illustrator",
+    busy: "ai-isometric",
+    text: (scale) => `Isometric 3D vector drawing as layered vectors at 1:${scale}: extruded buildings, trees, terrain and streets.`,
+  },
 };
 
 export function exportTiles(input: ExportTileInput): ExportTile[] {
@@ -64,8 +80,26 @@ export function exportTiles(input: ExportTileInput): ExportTile[] {
   const ai = AI_BY_DRAWING[input.drawing];
   const hourly = input.sunStudy && input.drawing === "site";
   const svgOn = vector && input.drawing !== "exploded-axo";
-  const svgBusy: ExportBusy = input.drawing === "figure-ground" ? "svg-figure" : "svg-site";
-  const svgAria = input.drawing === "figure-ground" ? "Download figure-ground SVG" : input.drawing === "site" ? "Download site plan SVG" : "Download SVG";
+  const svgBusy: ExportBusy =
+    input.drawing === "figure-ground"
+      ? "svg-figure"
+      : input.drawing === "isometric"
+        ? "svg-isometric"
+        : "svg-site";
+  const svgAria =
+    input.drawing === "figure-ground"
+      ? "Download figure-ground SVG"
+      : input.drawing === "isometric"
+        ? "Download isometric SVG"
+        : input.drawing === "site"
+          ? "Download site plan SVG"
+          : "Download SVG";
+  const svgLabel =
+    input.drawing === "site"
+      ? "site plan"
+      : input.drawing === "isometric"
+        ? "isometric 3D drawing"
+        : "figure-ground";
   const hourlyNote = " With the sun study on, shadows come as one layer per hour 9am–3pm, each at 20% opacity.";
   return [
     {
@@ -93,7 +127,7 @@ export function exportTiles(input: ExportTileInput): ExportTile[] {
       app: "SVG",
       ext: ".svg",
       description: svgOn
-        ? `The ${input.drawing === "site" ? "site plan" : "figure-ground"} as a layered SVG in millimetres at 1:${input.figureScale}, the same layers as the .ai.` + (hourly ? hourlyNote : "")
+        ? `The ${svgLabel} as a layered SVG in millimetres at 1:${input.figureScale}, the same layers as the .ai.` + (hourly ? hourlyNote : "")
         : SVG_DISABLED_TOOLTIP,
       enabled: svgOn && !anyBusy,
       disabledReason: svgOn ? null : SVG_DISABLED_TOOLTIP,
