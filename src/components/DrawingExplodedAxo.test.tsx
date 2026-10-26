@@ -175,9 +175,22 @@ describe("DrawingExplodedAxo and UI drag text-selection prevention", () => {
 
     fireEvent.pointerUp(svg, { pointerId: 2 });
   });
-  it("renders the 3D ground base slab (plinth) underneath the Satellite (aerial) plate", () => {
+  it("renders the 3D topographic ground base slab (plinth) and 3D ground contours on the Satellite (aerial) plate", () => {
     vi.spyOn(satellite, "fetchSatelliteFramePng").mockResolvedValue(null);
-    const model = makeTestModel();
+    const model: CityModel = {
+      ...makeTestModel(),
+      terrain: {
+        cols: 3,
+        rows: 3,
+        heights: new Float32Array([10, 16, 22, 14, 20, 26, 18, 24, 30]),
+        min: 10,
+        max: 30,
+        spacingM: 50,
+        zoom: 14,
+        metresPerPixel: 4,
+        source: "Mapterhorn",
+      },
+    };
     const settings = defaultExplodedAxoSettings(model.sideM);
     const { container } = render(<DrawingExplodedAxo model={model} settings={settings} />);
 
@@ -186,6 +199,10 @@ describe("DrawingExplodedAxo and UI drag text-selection prevention", () => {
 
     const groundTop = aerialGroup!.querySelector("path.axo-ground-top") as SVGPathElement | null;
     expect(groundTop).not.toBeNull();
+
+    const groundContours = aerialGroup!.querySelector("g.axo-ground-contours") as SVGGElement | null;
+    expect(groundContours).not.toBeNull();
+    expect(groundContours!.querySelectorAll("path").length).toBeGreaterThan(0);
 
     const plinthGroup = aerialGroup!.querySelector("g.axo-ground-plinth") as SVGGElement | null;
     expect(plinthGroup).not.toBeNull();

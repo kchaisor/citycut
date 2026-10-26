@@ -12,6 +12,8 @@ import { getColour, type ColourKey } from "./colours";
 import { bufferOpenLine } from "./bufferLine";
 import { openRing, signedArea } from "./geo";
 import { isVehicularRoad } from "./roadFill";
+import { sampleTerrain } from "./terrain";
+import { demContourLayer } from "./vicmapContours";
 import {
   clipAreaToSiteFrame,
   clipPolylineSiteFrame,
@@ -415,89 +417,192 @@ export type AxoPlinthWall = {
   d: string;
   fill: string;
   stroke: string;
+  topPts: Pt[];
+  bottomPts: Pt[];
 };
 
-/** 3D ground plinth thickness in local metres (matches Isometric drawing view). */
 export function axoGroundPlinthThicknessM(sideM: number): number {
   return Math.max(6, Math.min(80, roundIso(sideM * 0.04)));
 }
 
 /**
- * 3D ground base slab (plinth) vertical walls underneath the Satellite plate.
- * Drops straight down in iso Z from 0 to `-slabThicknessM` along the front-facing
- * perimeter of the site frame (square or circle).
+ * Vertical exaggeration for the 3D topographic ground surface on the bottom Satellite plate.
+ * Uses explicit `terrainExaggeration` when set, or defaults to `DEFAULT_AXO_TERRAIN_EXAGGERATION`
+ * clamped so peak relief never collides with the plate above.
+ */
+export function axoGroundTerrainExaggeration(
+  sideM: number,
+  gapM: number,
+  field?: TerrainField | null,
+  explicitExaggeration?: number,
+): number {
+  if (explicitExaggeration != null) return explicitExaggeration;
+  if (!field) return 1;
+  const reliefM = Math.max(0, field.max - field.min);
+  if (reliefM <= 1e-3) return 1;
+  const targetLiftM = Math.min(sideM * 0.11, gapM * 0.55);
+  const maxAutoLiftM = Math.max(sideM * 0.14, gapM * 0.65);
+  const raw = Math.max(DEFAULT_AXO_TERRAIN_EXAGGERATION, Math.min(6, targetLiftM / reliefM));
+  const clamped = Math.min(raw, maxAutoLiftM / reliefM);
+  return Math.max(1, Math.round(clamped * 2) / 2);
+}
+
+/**
+ * Build the 3D ground base slab (topographic perimeter + front-left and front-right section walls)
+ * under the bottom Satellite (`aerial`) plate in local iso coordinates (lift 0).
+ * When `field` has relief, the top surface rim and wall top edges follow the 3D terrain elevation
+ * `(sampleTerrain(field, e, n, sideM) - field.min) * exaggeration` while the base sits on `-slabThicknessM`.
  */
 export function buildAxoGroundPlinth(
   sideM: number,
   shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
-): { slabThicknessM: number; walls: AxoPlinthWall[] } {
+  field?: TerrainField | null,
+  exaggeration = 1,
+): {
+  slabThicknessM: number;
+  maxReliefM: number;
+  frameD: string;
+  walls: AxoPlinthWall[];
+} {
   const half = sideM / 2;
   const slabThicknessM = axoGroundPlinthThicknessM(sideM);
+  const baseZ = -slabThicknessM;
+  const hasRelief = Boolean(field && field.max - field.min > 1e-3 && exaggeration > 0);
+  const maxReliefM = hasRelief && field ? roundIso((field.max - field.min) * exaggeration) : 0;
+  const elevationAt = (east: number, north: number): number =>
+    hasRelief && field ? Math.max(0, (sampleTerrain(field, east, north, sideM) - field.min) * exaggeration) : 0;
   const fill = getColour("--ground-fill");
   const stroke = getColour("--ground-edge");
+
   if (shape === "circle") {
     const ring = openRing(circleRing(half, 64));
-    const ccw = signedArea(ring) > 0;
-    const walls: AxoPlinthWall[] = [];
+    const topPerimeterPts = ring.map(([e, n]) => planPointToIso(e, n, elevationAt(e, n)));
+    const frameD = hasRelief ? isoSvgPolyline(topPerimeterPts, true) : axoPlateOutlineBaseD(sideM, shape);
+    const leftSegs: [Pt, Pt][] = [];
+    const rightSegs: [Pt, Pt][] = [];
     for (let i = 0; i < ring.length; i += 1) {
       const a = ring[i]!;
       const b = ring[(i + 1) % ring.length]!;
-      const dx = b[0] - a[0];
-      const dy = b[1] - a[1];
-      const nx = ccw ? dy : -dy;
-      const ny = ccw ? -dx : dx;
-      if (nx + ny <= 1e-9) continue;
-      const side: "left" | "right" = nx - ny <= 0 ? "left" : "right";
-      const pts: Pt[] = [
-        planPointToIso(a[0], a[1], 0),
-        planPointToIso(b[0], b[1], 0),
-        planPointToIso(b[0], b[1], -slabThicknessM),
-        planPointToIso(a[0], a[1], -slabThicknessM),
-      ];
-      walls.push({
+      const mx = (a[0] + b[0]) * 0.5;
+      const my = (a[1] + b[1]) * 0.5;
+      if (mx + my <= 1e-9) continue;
+      if (mx - my <= 0) leftSegs.push([a, b]);
+      else rightSegs.push([a, b]);
+    }
+    const buildSideWall = (segs: [Pt, Pt][], side: "left" | "right"): AxoPlinthWall | null => {
+      if (segs.length === 0) return null;
+      let startIdx = 0;
+      for (let i = 0; i < segs.length; i += 1) {
+        const prev = segs[(i - 1 + segs.length) % segs.length]![1];
+        const curr = segs[i]![0];
+        if (Math.hypot(curr[0] - prev[0], curr[1] - prev[1]) > 1e-6) {
+          startIdx = i;
+          break;
+        }
+      }
+      const orderedPts: Pt[] = [segs[startIdx]![0]];
+      for (let k = 0; k < segs.length; k += 1) {
+        const seg = segs[(startIdx + k) % segs.length]!;
+        const last = orderedPts[orderedPts.length - 1]!;
+        if (Math.hypot(seg[0][0] - last[0], seg[0][1] - last[1]) > 1e-6) {
+          orderedPts.push(seg[0]);
+        }
+        orderedPts.push(seg[1]);
+      }
+      const topPts = orderedPts.map(([e, n]) => planPointToIso(e, n, elevationAt(e, n)));
+      const bottomPts = [...orderedPts].reverse().map(([e, n]) => planPointToIso(e, n, baseZ));
+      return {
         side,
-        d: isoSvgPolyline(pts, true),
+        d: isoSvgPolyline([...topPts, ...bottomPts], true),
         fill,
         stroke,
-      });
-    }
-    return { slabThicknessM, walls };
+        topPts,
+        bottomPts,
+      };
+    };
+    const walls: AxoPlinthWall[] = [];
+    const leftWall = buildSideWall(leftSegs, "left");
+    const rightWall = buildSideWall(rightSegs, "right");
+    if (leftWall) walls.push(leftWall);
+    if (rightWall) walls.push(rightWall);
+    return { slabThicknessM, maxReliefM, frameD, walls };
   }
-  const leftCorners: Pt[] = [
-    [-half, half],
-    [half, half],
-  ];
-  const rightCorners: Pt[] = [
-    [half, half],
+
+  const edgeSteps =
+    hasRelief && field
+      ? Math.max(24, Math.min(48, Math.ceil(sideM / Math.max(4, field.spacingM))))
+      : 1;
+  const corners: Pt[] = [
+    [-half, -half],
     [half, -half],
+    [half, half],
+    [-half, half],
   ];
-  const wallQuad = (a: Pt, b: Pt): string =>
-    isoSvgPolyline(
-      [
-        planPointToIso(a[0], a[1], 0),
-        planPointToIso(b[0], b[1], 0),
-        planPointToIso(b[0], b[1], -slabThicknessM),
-        planPointToIso(a[0], a[1], -slabThicknessM),
-      ],
-      true,
-    );
+  const topPerimeterPts: Pt[] = [];
+  for (let c = 0; c < 4; c += 1) {
+    const a = corners[c]!;
+    const b = corners[(c + 1) % 4]!;
+    for (let s = 0; s < edgeSteps; s += 1) {
+      const t = s / edgeSteps;
+      const e = a[0] + (b[0] - a[0]) * t;
+      const n = a[1] + (b[1] - a[1]) * t;
+      topPerimeterPts.push(planPointToIso(e, n, elevationAt(e, n)));
+    }
+  }
+  const frameD = hasRelief ? isoSvgPolyline(topPerimeterPts, true) : axoPlateOutlineBaseD(sideM, shape);
+  const edges: { side: "left" | "right"; a: Pt; b: Pt }[] = [
+    { side: "left", a: [-half, half], b: [half, half] },
+    { side: "right", a: [half, half], b: [half, -half] },
+  ];
+  const walls: AxoPlinthWall[] = [];
+  for (const { side, a, b } of edges) {
+    const topPts: Pt[] = [];
+    for (let s = 0; s <= edgeSteps; s += 1) {
+      const t = s / edgeSteps;
+      const e = a[0] + (b[0] - a[0]) * t;
+      const n = a[1] + (b[1] - a[1]) * t;
+      topPts.push(planPointToIso(e, n, elevationAt(e, n)));
+    }
+    const bottomPts: Pt[] = [
+      planPointToIso(b[0], b[1], baseZ),
+      planPointToIso(a[0], a[1], baseZ),
+    ];
+    walls.push({
+      side,
+      d: isoSvgPolyline([...topPts, ...bottomPts], true),
+      fill,
+      stroke,
+      topPts,
+      bottomPts,
+    });
+  }
   return {
     slabThicknessM,
-    walls: [
-      {
-        side: "left",
-        d: wallQuad(leftCorners[0]!, leftCorners[1]!),
-        fill,
-        stroke,
-      },
-      {
-        side: "right",
-        d: wallQuad(rightCorners[0]!, rightCorners[1]!),
-        fill,
-        stroke,
-      },
-    ],
+    maxReliefM,
+    frameD,
+    walls,
   };
+}
+
+function buildAxoGroundTopoContours(
+  model: CityModel,
+  field: TerrainField,
+  exaggeration: number,
+): string[] {
+  if (field.max - field.min <= 1e-3 || exaggeration <= 0) return [];
+  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
+  const contourLayer = demContourLayer(field, model.sideM);
+  const out: string[] = [];
+  for (const line of contourLayer.lines) {
+    const zLift = Math.max(0, (line.z - field.min) * exaggeration);
+    for (const part of clipPolylineSiteFrame(dedupe(line.points), model.sideM, shape)) {
+      if (part.length < 2) continue;
+      const pts = part.map(([e, n]) => planPointToIso(e, n, zLift));
+      const d = isoSvgPolyline(pts, false);
+      if (d) out.push(d);
+    }
+  }
+  return out;
 }
 
 export type AxoLayerGeometry = {
@@ -533,6 +638,12 @@ export type AxoLayerGeometry = {
   plinthWalls?: AxoPlinthWall[];
   /** Plinth slab depth in local metres when this plate carries a 3D base slab. */
   plinthThicknessM?: number;
+  /** Peak 3D terrain relief above the plate base on the bottom topography/satellite plate. */
+  plinthMaxReliefM?: number;
+  /** Vertical exaggeration applied to the bottom topography/satellite plate. */
+  plinthExaggeration?: number;
+  /** 3D topographic contour polylines draped over the bottom satellite topography surface. */
+  topoContourStrokes?: string[];
 };
 
 function dedupe(line: Pt[]): Pt[] {
@@ -695,8 +806,8 @@ export function buildExplodedAxoLayers(
   for (const id of settings.layerOrder) {
     if (!settings.layerVisible[id]) continue;
     const liftM = lifts.get(id)!;
-    const plateOutlineD = axoPlateOutlineBaseD(model.sideM, shape);
-    const clipD = plateOutlineD;
+    let plateOutlineD = axoPlateOutlineBaseD(model.sideM, shape);
+    let clipD = plateOutlineD;
     const fills: string[] = [];
     const strokes: string[] = [];
     const fillPaints: AxoPaintKey[] = [];
@@ -711,6 +822,9 @@ export function buildExplodedAxoLayers(
     let sourceNote: string | undefined;
     let plinthWalls: AxoPlinthWall[] | undefined;
     let plinthThicknessM: number | undefined;
+    let plinthMaxReliefM: number | undefined;
+    let plinthExaggeration: number | undefined;
+    let topoContourStrokes: string[] | undefined;
 
     const areaToPath = (rings: Pt[][]) =>
       rings
@@ -881,9 +995,23 @@ export function buildExplodedAxoLayers(
         strokes.push(isoSvgPolyline(pts, false));
       }
     } else if (id === "aerial") {
-      const plinth = buildAxoGroundPlinth(model.sideM, shape);
+      const terrainField = model.terrain ?? (overlays.terrain !== "unavailable" ? overlays.terrain : undefined);
+      const terrainEx = axoGroundTerrainExaggeration(
+        model.sideM,
+        settings.gapM,
+        terrainField,
+        settings.terrainExaggeration,
+      );
+      const plinth = buildAxoGroundPlinth(model.sideM, shape, terrainField, terrainEx);
+      plateOutlineD = plinth.frameD;
+      clipD = plinth.frameD;
       plinthWalls = plinth.walls;
       plinthThicknessM = plinth.slabThicknessM;
+      plinthMaxReliefM = plinth.maxReliefM;
+      plinthExaggeration = terrainEx;
+      if (terrainField && terrainField.max - terrainField.min > 1e-3) {
+        topoContourStrokes = buildAxoGroundTopoContours(model, terrainField, terrainEx);
+      }
     }
 
     layers.push({
@@ -901,7 +1029,8 @@ export function buildExplodedAxoLayers(
       ...(unclippedStrokes?.length ? { unclippedStrokes } : {}),
       ...(solids?.length ? { solids } : {}),
       ...(sourceNote ? { sourceNote } : {}),
-      ...(plinthWalls?.length ? { plinthWalls, plinthThicknessM } : {}),
+      ...(plinthWalls?.length ? { plinthWalls, plinthThicknessM, plinthMaxReliefM, plinthExaggeration } : {}),
+      ...(topoContourStrokes?.length ? { topoContourStrokes } : {}),
     });
   }
 

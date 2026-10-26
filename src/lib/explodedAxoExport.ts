@@ -200,6 +200,23 @@ export function explodedAxoChunks(
         ...(hasPlinth ? { join: "round" as const } : {}),
       });
     }
+    if (layer.topoContourStrokes?.length) {
+      const style = readDrawingStyle();
+      const contourDash = dashSegments(style.contour.dash);
+      for (const stroke of layer.topoContourStrokes) {
+        for (const ring of ringsFromIsoD(stroke, origin, scale, pageHeightMm, liftM)) {
+          if (ring.length >= 2) {
+            paths.push({
+              rings: [ring],
+              stroke: hexRgb(axoPaintColour("contour")),
+              strokeMm: 0.12,
+              close: false,
+              ...(contourDash ? { dashMm: contourDash, cap: "round" as const } : {}),
+            });
+          }
+        }
+      }
+    }
     for (const wall of layer.plinthWalls ?? []) {
       const rings = ringsFromIsoD(wall.d, origin, scale, pageHeightMm, liftM);
       if (rings.length > 0) {

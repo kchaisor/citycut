@@ -7,6 +7,7 @@ import {
   axoPlateColours,
   axoPlateLabelText,
   AXO_PLATE_TINT_OPACITY,
+  axoGroundTerrainExaggeration,
   axoLayerColours,
   axoLayerSvgTransform,
   axoLayersForPaint,
@@ -20,7 +21,12 @@ import {
   type AxoPaintKey,
 } from "../lib/explodedAxo";
 import { useExplodedAxoOverlays } from "../lib/explodedAxoOverlays";
-import { fetchSatelliteFramePng, satelliteFrameDataUrl } from "../lib/explodedAxoSatellite";
+import {
+  drapeSatelliteOnTerrain,
+  fetchSatelliteFramePng,
+  satelliteFrameDataUrl,
+  type DrapedSatelliteImage,
+} from "../lib/explodedAxoSatellite";
 import { explodedAxoViewportExtent, type PlanViewport } from "../lib/planViewport";
 import { getColour } from "../lib/colours";
 import { dashScreen, readDrawingStyle } from "../lib/drawingStyle";
@@ -137,7 +143,15 @@ export function DrawingExplodedAxo({
   const colourTick = useColourRevision();
   const colours = useMemo(() => axoLayerColours(), [colourTick]);
   const [satelliteHref, setSatelliteHref] = useState<string | null>(null);
+  const [drapedSatellite, setDrapedSatellite] = useState<DrapedSatelliteImage | null>(null);
   const showAerial = settings.layerVisible.aerial || settings.layerVisible.base;
+  const terrainField = model.terrain ?? (overlays.terrain !== "unavailable" ? overlays.terrain : undefined);
+  const groundTerrainEx = axoGroundTerrainExaggeration(
+    model.sideM,
+    settings.gapM,
+    terrainField,
+    settings.terrainExaggeration,
+  );
 
   useEffect(() => {
     if (!showAerial) return;
@@ -153,6 +167,20 @@ export function DrawingExplodedAxo({
       cancelled = true;
     };
   }, [model, showAerial]);
+
+  useEffect(() => {
+    if (!satelliteHref || !terrainField || terrainField.max - terrainField.min <= 1e-3) {
+      setDrapedSatellite(null);
+      return;
+    }
+    let cancelled = false;
+    void drapeSatelliteOnTerrain(satelliteHref, model.sideM, terrainField, groundTerrainEx).then((draped) => {
+      if (!cancelled) setDrapedSatellite(draped);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [satelliteHref, model.sideM, terrainField, groundTerrainEx]);
 
   const clipIds = paintLayers.map((layer) => `axo-clip-${layer.id}-${layer.liftM}`);
   const outlinePx = model.sideM * 0.0018;
@@ -297,15 +325,51 @@ export function DrawingExplodedAxo({
             ) : null}
             <g clipPath={clip}>
               {axoPlateShowsAerial(layer.id) && satelliteHref && (
-                <image
-                  href={satelliteHref}
-                  x={0}
-                  y={0}
-                  width={model.sideM}
-                  height={model.sideM}
-                  preserveAspectRatio="xMidYMid slice"
-                  transform={isoSatelliteImageTransform(model.sideM)}
-                />
+                layer.id === "aerial" && drapedSatellite ? (
+                  <image
+                    className="axo-satellite-image"
+                    data-draped="true"
+                    href={drapedSatellite.href}
+                    x={drapedSatellite.x}
+                    y={drapedSatellite.y}
+                    width={drapedSatellite.width}
+                    height={drapedSatellite.height}
+                    preserveAspectRatio="none"
+                  />
+                ) : (
+                  <image
+                    className="axo-satellite-image"
+                    data-draped="false"
+                    href={satelliteHref}
+                    x={0}
+                    y={0}
+                    width={model.sideM}
+                    height={model.sideM}
+                    preserveAspectRatio="xMidYMid slice"
+                    transform={isoSatelliteImageTransform(model.sideM)}
+                  />
+                )
+              )}
+              {layer.topoContourStrokes && layer.topoContourStrokes.length > 0 && (
+                <g className="axo-ground-contours" data-axo-ground-contours="true">
+                  {layer.topoContourStrokes.map((d, ci) => {
+                    const contourDash = dashScreen(lineStyle.contour.dash);
+                    return (
+                      <path
+                        key={`gc${ci}`}
+                        d={d}
+                        fill="none"
+                        stroke={axoPaintColour("contour")}
+                        strokeOpacity={satelliteHref ? 0.45 : 0.72}
+                        strokeWidth={roadPx * 0.45}
+                        vectorEffect="non-scaling-stroke"
+                        strokeLinecap={contourDash?.cap ?? "round"}
+                        strokeLinejoin="round"
+                        strokeDasharray={contourDash?.array}
+                      />
+                    );
+                  })}
+                </g>
               )}
               {layer.fills.map((d, fi) => {
                 const paint = resolveFillPaint(layer.id, fi, layer);
