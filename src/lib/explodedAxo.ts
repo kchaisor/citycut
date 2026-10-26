@@ -189,7 +189,7 @@ export function defaultExplodedAxoSettings(sideM: number): ExplodedAxoSettings {
     planning: false,
     water: true,
     hydro: false,
-    transport: false,
+    transport: true,
     topography: false,
     terrain: true,
     roads: true,

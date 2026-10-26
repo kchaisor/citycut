@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { buildTreeGroup, TREE_3D_OPACITY, treeCrownSphereLayout } from "./treeMassing";
+import { buildTreeGroup, treeCrownSphereLayout } from "./treeMassing";
 
 describe("treeCrownSphereLayout", () => {
   it("uses uniform scale equal to crown diameter", () => {
@@ -20,19 +20,18 @@ describe("treeCrownSphereLayout", () => {
     expect(layout.centerY).toBe(4.5);
   });
 
-  it("builds 3D tree trunk and crown meshes at 60% opacity", () => {
+  it("builds opaque 3D tree trunk and crown meshes", () => {
     const group = buildTreeGroup([
       { id: 1, at: [10, 20], height_m: 12, crown_diameter_m: 8, trunk_diameter_m: 0.4, sizeSource: "default" },
     ]);
     expect(group).not.toBeNull();
-    expect(TREE_3D_OPACITY).toBe(0.6);
     expect(group!.children).toHaveLength(2);
     for (const child of group!.children) {
       const mesh = child as THREE.Mesh;
       const mat = mesh.material as THREE.MeshStandardMaterial;
-      expect(mat.transparent).toBe(true);
-      expect(mat.opacity).toBeCloseTo(0.6, 5);
-      expect(mat.depthWrite).toBe(false);
+      expect(mat.transparent).toBe(false);
+      expect(mat.opacity).toBe(1);
+      expect(mat.depthWrite).toBe(true);
     }
   });
 });

@@ -117,7 +117,7 @@ export const EXPLODED_AXO_LAYER_ORDER = [
   "Green",
   "Trees",
   "Buildings",
-  "Aerial",
+  "Aerial image",
   "Terrain",
   "Base",
   "Labels",
@@ -137,7 +137,7 @@ function chunkNameForLayer(id: AxoLayerId): string {
   if (id === "trees") return "Trees";
   if (id === "buildings") return "Buildings";
   if (id === "base") return "Base";
-  return "Aerial";
+  return "Aerial image";
 }
 
 function fillPaint(layer: ReturnType<typeof buildExplodedAxoLayers>["layers"][number], index: number): AxoPaintKey {

@@ -107,7 +107,7 @@ describe("exploded axo frame shape", () => {
       const m = modelWithShape(shape);
       const settings = defaultExplodedAxoSettings(m.sideM);
       const { layers } = buildExplodedAxoLayers(m, settings);
-      expect(layers.length).toBe(7);
+      expect(layers.length).toBe(8);
       for (const layer of layers) {
         expect(layer.clipD).toBe(layer.plateOutlineD);
         if (shape === "circle") {
@@ -358,6 +358,9 @@ describe("exploded axo separate flat Aerial image plate and 3D Terrain plate (me
     const chunks = explodedAxoChunks(m, 1000, settings);
     const terrainChunk = chunks.find((c) => c.name === "Terrain")!;
     expect(terrainChunk).toBeDefined();
+    const aerialChunk = chunks.find((c) => c.name === "Aerial image")!;
+    expect(aerialChunk).toBeDefined();
+    expect(chunks.find((c) => c.name === "Aerial")).toBeUndefined();
     expect(terrainChunk.paths!.filter((p) => p.fill && p.stroke).length).toBeGreaterThanOrEqual(3);
   });
 });

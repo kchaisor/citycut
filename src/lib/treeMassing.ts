@@ -4,8 +4,6 @@ import { getColour } from "./colours";
 import { matteStandardMaterial } from "./matteMaterial";
 import type { TreeFeat } from "../types";
 
-export const TREE_3D_OPACITY = 0.6;
-
 /**
  * Sphere crown layout in local metres (Y up).
  * The crown is a uniform sphere: diameter equals crown width.
@@ -50,18 +48,8 @@ export function buildTreeGroup(
   if (trees.length === 0) return null;
   const trunkColor = getColour("--tree-trunk");
   const crownColor = getColour("--tree-crown");
-  const trunkMaterial = matteStandardMaterial({
-    color: trunkColor,
-    transparent: true,
-    opacity: TREE_3D_OPACITY,
-    depthWrite: false,
-  });
-  const crownMaterial = matteStandardMaterial({
-    color: crownColor,
-    transparent: true,
-    opacity: TREE_3D_OPACITY,
-    depthWrite: false,
-  });
+  const trunkMaterial = matteStandardMaterial({ color: trunkColor });
+  const crownMaterial = matteStandardMaterial({ color: crownColor });
 
   const trunkGeometries: THREE.BufferGeometry[] = [];
   const crownGeometries: THREE.BufferGeometry[] = [];
@@ -97,15 +85,7 @@ export function buildTreeGroup(
   const mergedCrowns = mergeGeometries(crownGeometries, false);
   trunkGeometries.forEach((geometry) => geometry.dispose());
   crownGeometries.forEach((geometry) => geometry.dispose());
-  if (mergedTrunks) {
-    const trunkMesh = new THREE.Mesh(mergedTrunks, trunkMaterial);
-    trunkMesh.renderOrder = 10;
-    group.add(trunkMesh);
-  }
-  if (mergedCrowns) {
-    const crownMesh = new THREE.Mesh(mergedCrowns, crownMaterial);
-    crownMesh.renderOrder = 11;
-    group.add(crownMesh);
-  }
+  if (mergedTrunks) group.add(new THREE.Mesh(mergedTrunks, trunkMaterial));
+  if (mergedCrowns) group.add(new THREE.Mesh(mergedCrowns, crownMaterial));
   return group.children.length > 0 ? group : null;
 }
