@@ -1132,9 +1132,10 @@ input[type="range"]::-moz-range-thumb {
 /* ===== Model sidebar: fixed left sidebar with top horizontal icon rails (A2, accent --accent) ===== */
 .model .viewport {
   --sidebar-w: var(--sidebar-panel-w);
+  --sidebar-r: var(--sidebar-panel-w);
 }
 .model .viewport.sidebar-collapsed { --sidebar-w: 0px; }
-.model .viewport > .fill { left: var(--sidebar-w); }
+.model .viewport > .fill { left: var(--sidebar-w); right: var(--sidebar-r); }
 .model .viewport > .viewport-hint { left: calc(var(--sidebar-w) + 16px); }
 .model .viewport > .stage-error { left: calc(var(--sidebar-w) + 16px); }
 
@@ -1679,9 +1680,10 @@ input[type="range"]::-moz-range-thumb {
 @media (max-width: 640px) {
   .model .viewport {
     --sidebar-h: calc(56px + 52px + min(42vh, 360px));
+    --sidebar-r: 0px;
   }
   .model .viewport.sidebar-collapsed { --sidebar-h: calc(56px + 52px); }
-  .model .viewport > .fill { left: 0; bottom: var(--sidebar-h); }
+  .model .viewport > .fill { left: 0; right: 0; bottom: var(--sidebar-h); }
   .model .viewport > .viewport-hint { left: 12px; right: 12px; bottom: calc(var(--sidebar-h) + 8px); }
   .model .viewport > .stage-error { left: 12px; right: 12px; bottom: calc(var(--sidebar-h) + 96px); }
   .sidebar-host { top: auto; right: 0; height: var(--sidebar-h); }
