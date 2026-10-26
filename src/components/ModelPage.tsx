@@ -88,7 +88,6 @@ import {
   type SiteAnalysisKind,
 } from "../lib/sidebarSections";
 import { buildDataSources, countLoaded, dataSourceStatusWord } from "../lib/dataSources";
-import { regionCredit } from "../lib/sources/registry";
 import { OSM_TREES_ODBL_CREDIT } from "../lib/treesPrebake";
 import { countTreeCrowns } from "../lib/treeMassing";
 import { capturePresetFromSearch } from "../lib/captureQuery";
@@ -125,9 +124,8 @@ import {
 } from "../lib/buildingHeightResolve";
 import { countBuildingHeightTiers, LIDAR_NO_DATA_LINE } from "../lib/lidarTierStatus";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
-import { modelStageCreditHtml } from "../lib/dataCredits";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
-import { COM_TREES_CREDIT, COM_TREES_CREDIT_HTML, COM_TREES_DATASET_URL, comTreesInCut } from "../lib/comTreesCredit";
+import { COM_TREES_CREDIT, COM_TREES_DATASET_URL } from "../lib/comTreesCredit";
 import { openRing, toLocal } from "../lib/geo";
 import { pointInPolygon } from "../lib/useCascade";
 import type { BuildingUse, CityModel } from "../types";
@@ -2463,25 +2461,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             {model.terrainError}
           </p>
         )}
-        <p
-          className="stage-attrib"
-          dangerouslySetInnerHTML={{
-            __html: modelStageCreditHtml({
-              windOn: windSettings.enabled,
-              satelliteOn: tab === "satellite",
-              comHeightsHtml: comHeightsMeasuredOn
-                ? `Building heights: <a href="${COM_BUILDING_HEIGHTS_DATASET_URL}" target="_blank" rel="noopener noreferrer">2023 Building Footprints © City of Melbourne</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>.`
-                : null,
-              comTreesHtml: comTreesInCut(model) ? COM_TREES_CREDIT_HTML : null,
-              cadastreOn: drawing === "exploded-axo" && tab === "drawing" && axoSettings.layerVisible.cadastre,
-              nswCredit: regionCredit(model.region),
-              contourHtml:
-                model.contourLayer && model.contourLayer.source !== "dem"
-                  ? `<a href="${model.contourLayer.datasetUrl ?? "https://discover.data.vic.gov.au/dataset/vicmap-elevation-contour-line-1-to-5-metres-covering-metropolitan-melbourne"}" target="_blank" rel="noopener noreferrer">Contours</a> every ${model.contourLayer.interval} m.`
-                  : null,
-            }),
-          }}
-        />
       </div>
     </div>
   );

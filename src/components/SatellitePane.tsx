@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
-import { MapAttribution } from "./MapAttribution";
 import { applyBasemapStyleToMap, loadBasemapStyle } from "../lib/loadMapStyle";
 import { getColour } from "../lib/colours";
 import { fromLocal, openRing } from "../lib/geo";
@@ -166,7 +165,6 @@ export function SatellitePane({
           Basemap style failed to load.
         </p>
       )}
-      <MapAttribution basemap="satellite" />
     </div>
   );
 }

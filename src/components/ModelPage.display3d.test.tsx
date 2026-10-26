@@ -494,4 +494,47 @@ describe("Display panel controls by view tab", () => {
     expect(buildingsSection).toBeTruthy();
     expect(buildingsSection.hidden).toBe(false);
   });
+
+  it("does not render a floating bottom-right attribution pill across 3D model, Drawing (Site plan, Figure-ground, Exploded axo), or Satellite views while keeping Model details Data sources intact", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModelPage
+        model={sampleModel({ withWater: true, withTrees: true })}
+        onHome={() => {}}
+        onNewCut={() => {}}
+      />,
+    );
+
+    const assertNoViewportAttribution = () => {
+      expect(document.querySelector(".stage-attrib")).toBeNull();
+      expect(document.querySelector(".map-attribution")).toBeNull();
+    };
+
+    // 1. Default 3D model view
+    expect(screen.getByTestId("scene-3d")).toBeTruthy();
+    assertNoViewportAttribution();
+
+    // Right-hand Model details panel still has Data sources & Full source notes and credits
+    const rightPanel = document.querySelector("#model-sidebar-right-panel") as HTMLElement;
+    expect(within(rightPanel).getByRole("heading", { name: "Data sources" })).toBeTruthy();
+    expect(within(rightPanel).getByText("Full source notes and credits")).toBeTruthy();
+
+    // 2. Drawing — Site plan, Figure-ground, Exploded axo
+    await user.click(screen.getByRole("tab", { name: "Drawing" }));
+    expect(screen.getByTestId("drawing-plan")).toBeTruthy();
+    assertNoViewportAttribution();
+
+    await user.click(screen.getByRole("button", { name: "Figure-ground" }));
+    expect(screen.getByTestId("drawing-plan")).toBeTruthy();
+    assertNoViewportAttribution();
+
+    await user.click(screen.getByRole("button", { name: "Exploded axo" }));
+    expect(screen.getByTestId("drawing-exploded-axo")).toBeTruthy();
+    assertNoViewportAttribution();
+
+    // 3. Satellite view
+    await user.click(screen.getByRole("tab", { name: "Satellite" }));
+    expect(screen.getByTestId("satellite-pane")).toBeTruthy();
+    assertNoViewportAttribution();
+  });
 });
