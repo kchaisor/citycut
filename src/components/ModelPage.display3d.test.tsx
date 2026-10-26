@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -570,5 +572,20 @@ describe("Display panel controls by view tab", () => {
     expect(getColour("--building-uniform").toLowerCase()).toBe(hex("c97a4b"));
     const roofPath = isoSvg.querySelector(".iso-solids .iso-building path:last-child") as SVGPathElement;
     expect(roofPath?.getAttribute("fill")?.toLowerCase()).toBe(hex("c97a4b"));
+  });
+  it("keeps the right sidebar panel opaque across Drawing and Satellite views and bounds .fill between both sidebars", () => {
+    const floatingCss = readFileSync(resolve(__dirname, "../floating.css"), "utf8");
+    const indexCss = readFileSync(resolve(__dirname, "../index.css"), "utf8");
+
+    expect(floatingCss).not.toMatch(/\.viewport:not\(\.is-drawing\):not\(\.is-satellite\)\s*>\s*\.sidebar-host/);
+    expect(floatingCss).toMatch(
+      /\.model\s+\.viewport\s*>\s*\.sidebar-host\s+\.sidebar-panel\.is-right[\s\S]*?background:\s*var\(--panel-3d-bg\)/,
+    );
+    expect(floatingCss).toMatch(
+      /\.model\s+\.viewport\s*>\s*\.sidebar-host\s+\.sidebar-rail\.icon-rail\.is-right-rail[\s\S]*?background:\s*var\(--panel-3d-bg\)/,
+    );
+
+    expect(indexCss).toMatch(/\.model\s+\.viewport\s*\{[^}]*--sidebar-r:\s*var\(--sidebar-panel-w\);/);
+    expect(indexCss).toMatch(/\.model\s+\.viewport\s*>\s*\.fill\s*\{\s*left:\s*var\(--sidebar-w\);\s*right:\s*var\(--sidebar-r\);\s*\}/);
   });
 });
