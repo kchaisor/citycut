@@ -107,7 +107,7 @@ describe("exploded axo frame shape", () => {
       const m = modelWithShape(shape);
       const settings = defaultExplodedAxoSettings(m.sideM);
       const { layers } = buildExplodedAxoLayers(m, settings);
-      expect(layers.length).toBe(6);
+      expect(layers.length).toBe(7);
       for (const layer of layers) {
         expect(layer.clipD).toBe(layer.plateOutlineD);
         if (shape === "circle") {
@@ -272,7 +272,7 @@ describe("reorderAxoLayer and layerLiftM", () => {
   });
 });
 
-describe("exploded axo unified bottom Terrain plate (3D terrain mesh + satellite + plinth + 3D contours)", () => {
+describe("exploded axo separate flat Aerial image plate and 3D Terrain plate (mesh + plinth + 3D contours)", () => {
   it("builds a crisp 3D ground plinth under the bottom Terrain plate for square and circle frames", () => {
     const squareModel = modelWithShape("square");
     const { layers: sqLayers } = buildExplodedAxoLayers(squareModel, defaultExplodedAxoSettings(squareModel.sideM));
@@ -293,7 +293,12 @@ describe("exploded axo unified bottom Terrain plate (3D terrain mesh + satellite
     expect(cirTerrain.plinthWalls).toHaveLength(2);
     expect(cirTerrain.plinthWalls!.map((w) => w.side)).toEqual(["left", "right"]);
 
-    // Non-terrain layers do not have a ground plinth
+    // Non-terrain layers (including the flat aerial image layer) do not have a ground plinth
+    const sqAerial = sqLayers.find((l) => l.id === "aerial")!;
+    expect(sqAerial).toBeDefined();
+    expect(sqAerial.plinthWalls).toBeUndefined();
+    expect(sqAerial.unclippedStrokes).toBeUndefined();
+    expect(sqAerial.topoContourStrokes).toBeUndefined();
     for (const layer of sqLayers.filter((l) => l.id !== "terrain")) {
       expect(layer.plinthWalls).toBeUndefined();
       expect(layer.plinthThicknessM).toBeUndefined();

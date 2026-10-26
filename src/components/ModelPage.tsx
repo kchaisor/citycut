@@ -2351,7 +2351,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     />
                     <span>{Math.round(axoSettings.gapM)} m</span>
                   </label>
-                  {(axoSettings.layerVisible.terrain || (axoSettings.layerVisible.aerial && Boolean(displayModel.terrain))) && (
+                  {axoSettings.layerVisible.terrain && (
                     <label className="scale-field">
                       Terrain exaggeration
                       <input

@@ -95,7 +95,7 @@ export const AXO_LAYER_LABELS: Record<AxoLayerId, string> = {
   green: "GREEN SPACES",
   trees: "TREES",
   buildings: "BUILDINGS",
-  aerial: "TERRAIN",
+  aerial: "AERIAL IMAGE",
   base: "BASE OUTLINE",
 };
 
@@ -145,6 +145,7 @@ export const DEFAULT_AXO_LAYER_ORDER: AxoLayerId[] = [
   "green",
   "trees",
   "buildings",
+  "aerial",
   "terrain",
 ];
 
@@ -196,7 +197,7 @@ export function defaultExplodedAxoSettings(sideM: number): ExplodedAxoSettings {
     green: true,
     trees: true,
     buildings: true,
-    aerial: false,
+    aerial: true,
     base: false,
   };
   return {
@@ -320,7 +321,7 @@ export function reorderAxoLayer(order: readonly AxoLayerId[], from: AxoLayerId, 
 
 /** Plates that carry the aerial image (#85 Esri World Imagery): the satellite plate and the reference base. */
 export function axoPlateShowsAerial(id: AxoLayerId): boolean {
-  return id === "terrain" || id === "aerial" || id === "base";
+  return id === "aerial" || id === "base";
 }
 
 /** Kelvin's reference stack, top → bottom (Bern kakemono). */
@@ -1013,7 +1014,7 @@ export function buildExplodedAxoLayers(
         const pts = line.map(([e, n]) => planToIsoBase(e, n));
         strokes.push(isoSvgPolyline(pts, false));
       }
-    } else if (id === "terrain" || id === "aerial") {
+    } else if (id === "terrain") {
       const terrainField = model.terrain ?? (overlays.terrain !== "unavailable" ? overlays.terrain : undefined);
       const terrainEx = axoGroundTerrainExaggeration(
         model.sideM,

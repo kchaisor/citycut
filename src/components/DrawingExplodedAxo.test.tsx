@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DrawingExplodedAxo } from "./DrawingExplodedAxo";
 import * as satellite from "../lib/explodedAxoSatellite";
@@ -175,8 +175,8 @@ describe("DrawingExplodedAxo and UI drag text-selection prevention", () => {
 
     fireEvent.pointerUp(svg, { pointerId: 2 });
   });
-  it("renders the unified bottom Terrain plate with 3D terrain mesh, ground base slab (plinth), and 3D surface-aligned contours", () => {
-    vi.spyOn(satellite, "fetchSatelliteFramePng").mockResolvedValue(null);
+  it("renders a 3D Terrain plate (mesh, plinth, 3D contours, no satellite image) and a separate flat Aerial image plate", async () => {
+    vi.spyOn(satellite, "fetchSatelliteFramePng").mockResolvedValue(new Uint8Array([137, 80, 78, 71]));
     const model: CityModel = {
       ...makeTestModel(),
       terrain: {
@@ -211,5 +211,16 @@ describe("DrawingExplodedAxo and UI drag text-selection prevention", () => {
     expect(walls.length).toBe(2);
     expect(plinthGroup!.querySelector("path.axo-plinth-wall-left")).not.toBeNull();
     expect(plinthGroup!.querySelector("path.axo-plinth-wall-right")).not.toBeNull();
+
+    const aerialGroup = container.querySelector("[data-axo-layer=\"aerial\"]") as SVGGElement | null;
+    expect(aerialGroup).not.toBeNull();
+    expect(aerialGroup!.querySelector("g.axo-ground-plinth")).toBeNull();
+    expect(aerialGroup!.querySelector("path.axo-ground-top")).toBeNull();
+    expect(aerialGroup!.querySelector("g.axo-ground-contours")).toBeNull();
+
+    await waitFor(() => {
+      expect(aerialGroup!.querySelector("image.axo-satellite-image")).not.toBeNull();
+    });
+    expect(terrainGroup!.querySelector("image.axo-satellite-image")).toBeNull();
   });
 });

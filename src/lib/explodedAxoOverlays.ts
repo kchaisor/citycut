@@ -36,7 +36,7 @@ function cadastreTask(model: CityModel, next: ExplodedAxoOverlayBundle, signal?:
   });
 }
 
-const OVERLAY_LAYER_IDS: AxoLayerId[] = ["planning", "hydro", "transport", "topography", "cadastre", "terrain", "aerial"];
+const OVERLAY_LAYER_IDS: AxoLayerId[] = ["planning", "hydro", "transport", "topography", "cadastre", "terrain"];
 
 /** Mapterhorn field for the terrain plate; reuses the model field when Terrain was built. */
 function terrainTask(model: CityModel, next: ExplodedAxoOverlayBundle, signal?: AbortSignal): Promise<void> {
@@ -130,7 +130,7 @@ export function useExplodedAxoOverlays(model: CityModel, layerVisible: Record<Ax
         );
       }
       if (layerVisible.cadastre) tasks.push(cadastreTask(model, next, controller.signal));
-      if (layerVisible.terrain || layerVisible.aerial) tasks.push(terrainTask(model, next, controller.signal));
+      if (layerVisible.terrain) tasks.push(terrainTask(model, next, controller.signal));
 
       try {
         await Promise.all(tasks);
@@ -146,7 +146,7 @@ export function useExplodedAxoOverlays(model: CityModel, layerVisible: Record<Ax
       cancelled = true;
       controller.abort();
     };
-  }, [model, need, layerVisible.planning, layerVisible.hydro, layerVisible.water, layerVisible.transport, layerVisible.topography, layerVisible.cadastre, layerVisible.terrain, layerVisible.aerial]);
+  }, [model, need, layerVisible.planning, layerVisible.hydro, layerVisible.water, layerVisible.transport, layerVisible.topography, layerVisible.cadastre, layerVisible.terrain]);
 
   return need ? state : {};
 }
@@ -213,7 +213,7 @@ export async function loadExplodedAxoOverlayBundle(
     );
   }
   if (layerVisible.cadastre) tasks.push(cadastreTask(model, next, signal));
-  if (layerVisible.terrain || layerVisible.aerial) tasks.push(terrainTask(model, next, signal));
+  if (layerVisible.terrain) tasks.push(terrainTask(model, next, signal));
   await Promise.all(tasks);
   return next;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AXO_TERRAIN_UNAVAILABLE_NOTE, buildAxoTerrainMesh } from "./explodedAxoTerrain";
-import { AXO_LAYER_LABELS, DEFAULT_AXO_LAYER_ORDER, axoPlateLabelText, buildAxoGroundTopoContours, buildExplodedAxoLayers, defaultExplodedAxoSettings, explodedAxoBounds } from "./explodedAxo";
+import { AXO_LAYER_LABELS, DEFAULT_AXO_LAYER_ORDER, axoPlateLabelText, axoPlateShowsAerial, buildAxoGroundTopoContours, buildExplodedAxoLayers, defaultExplodedAxoSettings, explodedAxoBounds } from "./explodedAxo";
 import { explodedAxoChunks } from "./explodedAxoExport";
 import type { CityModel, TerrainField } from "../types";
 
@@ -51,12 +51,16 @@ describe("exploded axo terrain mesh", () => {
     expect(explodedAxoBounds(model(field), on)).toEqual(explodedAxoBounds(model(field), base));
   });
 
-  it("places a single unified Terrain layer at the bottom of the stack with 3D contours aligned to the terrain surface", () => {
+  it("keeps Terrain at the bottom with 3D contours and Aerial image as a separate flat layer", () => {
     expect(DEFAULT_AXO_LAYER_ORDER.at(-1)).toBe("terrain");
+    expect(DEFAULT_AXO_LAYER_ORDER.at(-2)).toBe("aerial");
     expect(DEFAULT_AXO_LAYER_ORDER).not.toContain("topography");
-    expect(DEFAULT_AXO_LAYER_ORDER).not.toContain("aerial");
     expect(AXO_LAYER_LABELS.terrain).toBe("TERRAIN");
     expect(axoPlateLabelText("terrain")).toBe("Terrain.");
+    expect(AXO_LAYER_LABELS.aerial).toBe("AERIAL IMAGE");
+    expect(axoPlateLabelText("aerial")).toBe("Aerial image.");
+    expect(axoPlateShowsAerial("terrain")).toBe(false);
+    expect(axoPlateShowsAerial("aerial")).toBe(true);
 
     const contours = buildAxoGroundTopoContours(model(field), field, 2);
     expect(contours.length).toBeGreaterThan(0);

@@ -117,8 +117,8 @@ export const EXPLODED_AXO_LAYER_ORDER = [
   "Green",
   "Trees",
   "Buildings",
-  "Terrain",
   "Aerial",
+  "Terrain",
   "Base",
   "Labels",
   "Annotation",
@@ -130,14 +130,14 @@ function chunkNameForLayer(id: AxoLayerId): string {
   if (id === "hydro") return "Hydro";
   if (id === "transport") return "Transport";
   if (id === "topography") return "Topography";
-  if (id === "terrain" || id === "aerial") return "Terrain";
+  if (id === "terrain") return "Terrain";
   if (id === "roads") return "Roads";
   if (id === "cadastre") return "Cadastre";
   if (id === "green") return "Green";
   if (id === "trees") return "Trees";
   if (id === "buildings") return "Buildings";
   if (id === "base") return "Base";
-  return "Terrain";
+  return "Aerial";
 }
 
 function fillPaint(layer: ReturnType<typeof buildExplodedAxoLayers>["layers"][number], index: number): AxoPaintKey {
@@ -301,7 +301,7 @@ export function explodedAxoChunks(
         });
       }
     }
-    if ((layer.id === "terrain" || layer.id === "aerial") && satelliteNote) {
+    if (layer.id === "aerial" && satelliteNote) {
       paths.push({
         rings: [plateRing],
         stroke: hexRgb(getColour("--axo-guide")),

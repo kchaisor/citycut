@@ -4,7 +4,7 @@ import { getColour } from "./colours";
 import { matteStandardMaterial } from "./matteMaterial";
 import type { TreeFeat } from "../types";
 
-export const TREE_3D_OPACITY = 0.4;
+export const TREE_3D_OPACITY = 0.6;
 
 /**
  * Sphere crown layout in local metres (Y up).
