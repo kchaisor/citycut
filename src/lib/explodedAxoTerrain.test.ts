@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AXO_TERRAIN_UNAVAILABLE_NOTE, buildAxoTerrainMesh } from "./explodedAxoTerrain";
-import { buildExplodedAxoLayers, defaultExplodedAxoSettings, explodedAxoBounds } from "./explodedAxo";
+import { AXO_LAYER_LABELS, DEFAULT_AXO_LAYER_ORDER, axoPlateLabelText, buildAxoGroundTopoContours, buildExplodedAxoLayers, defaultExplodedAxoSettings, explodedAxoBounds } from "./explodedAxo";
 import { explodedAxoChunks } from "./explodedAxoExport";
 import type { CityModel, TerrainField } from "../types";
 
@@ -49,5 +49,19 @@ describe("exploded axo terrain mesh", () => {
     const base = defaultExplodedAxoSettings(500);
     const on = { ...base, layerVisible: { ...base.layerVisible, terrain: true }, terrainExaggeration: 10 };
     expect(explodedAxoBounds(model(field), on)).toEqual(explodedAxoBounds(model(field), base));
+  });
+
+  it("places a single unified Terrain layer at the bottom of the stack with 3D contours aligned to the terrain surface", () => {
+    expect(DEFAULT_AXO_LAYER_ORDER.at(-1)).toBe("terrain");
+    expect(DEFAULT_AXO_LAYER_ORDER).not.toContain("topography");
+    expect(DEFAULT_AXO_LAYER_ORDER).not.toContain("aerial");
+    expect(AXO_LAYER_LABELS.terrain).toBe("TERRAIN");
+    expect(axoPlateLabelText("terrain")).toBe("Terrain.");
+
+    const contours = buildAxoGroundTopoContours(model(field), field, 2);
+    expect(contours.length).toBeGreaterThan(0);
+    // Higher contour lines are lifted vertically by 2x exaggeration compared to 1x
+    const contoursX1 = buildAxoGroundTopoContours(model(field), field, 1);
+    expect(ys(contours.at(-1)!)[0]).toBeLessThan(ys(contoursX1.at(-1)!)[0]!);
   });
 });

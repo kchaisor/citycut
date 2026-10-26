@@ -112,12 +112,12 @@ export const EXPLODED_AXO_LAYER_ORDER = [
   "Hydro",
   "Transport",
   "Topography",
-  "Terrain",
   "Roads",
   "Cadastre",
   "Green",
   "Trees",
   "Buildings",
+  "Terrain",
   "Aerial",
   "Base",
   "Labels",
@@ -130,14 +130,14 @@ function chunkNameForLayer(id: AxoLayerId): string {
   if (id === "hydro") return "Hydro";
   if (id === "transport") return "Transport";
   if (id === "topography") return "Topography";
-  if (id === "terrain") return "Terrain";
+  if (id === "terrain" || id === "aerial") return "Terrain";
   if (id === "roads") return "Roads";
   if (id === "cadastre") return "Cadastre";
   if (id === "green") return "Green";
   if (id === "trees") return "Trees";
   if (id === "buildings") return "Buildings";
   if (id === "base") return "Base";
-  return "Aerial";
+  return "Terrain";
 }
 
 function fillPaint(layer: ReturnType<typeof buildExplodedAxoLayers>["layers"][number], index: number): AxoPaintKey {
@@ -264,7 +264,7 @@ export function explodedAxoChunks(
     for (const stroke of layer.unclippedStrokes ?? []) {
       for (const ring of ringsFromIsoD(stroke, origin, scale, pageHeightMm, liftM)) {
         if (ring.length >= 2) {
-          paths.push({ rings: [ring], stroke: hexRgb(axoPaintColour(axoLayerBasePaint(layer.id))), strokeMm: 0.08, close: false });
+          paths.push({ rings: [ring], stroke: hexRgb(axoPaintColour("terrain-mesh")), strokeMm: 0.08, close: false });
         }
       }
     }
@@ -301,7 +301,7 @@ export function explodedAxoChunks(
         });
       }
     }
-    if (layer.id === "aerial" && satelliteNote) {
+    if ((layer.id === "terrain" || layer.id === "aerial") && satelliteNote) {
       paths.push({
         rings: [plateRing],
         stroke: hexRgb(getColour("--axo-guide")),

@@ -48,7 +48,7 @@ function setup() {
   const baseSettings = defaultExplodedAxoSettings(model.sideM);
   const settings: ExplodedAxoSettings = {
     ...baseSettings,
-    layerVisible: { ...baseSettings.layerVisible, aerial: false, base: false },
+    layerVisible: { ...baseSettings.layerVisible, terrain: false, aerial: false, base: false },
   };
   const { container } = render(
     <DrawingExplodedAxo
@@ -175,7 +175,7 @@ describe("DrawingExplodedAxo and UI drag text-selection prevention", () => {
 
     fireEvent.pointerUp(svg, { pointerId: 2 });
   });
-  it("renders the 3D topographic ground base slab (plinth) and 3D ground contours on the Satellite (aerial) plate", () => {
+  it("renders the unified bottom Terrain plate with 3D terrain mesh, ground base slab (plinth), and 3D surface-aligned contours", () => {
     vi.spyOn(satellite, "fetchSatelliteFramePng").mockResolvedValue(null);
     const model: CityModel = {
       ...makeTestModel(),
@@ -194,17 +194,17 @@ describe("DrawingExplodedAxo and UI drag text-selection prevention", () => {
     const settings = defaultExplodedAxoSettings(model.sideM);
     const { container } = render(<DrawingExplodedAxo model={model} settings={settings} />);
 
-    const aerialGroup = container.querySelector("[data-axo-layer=\"aerial\"]") as SVGGElement | null;
-    expect(aerialGroup).not.toBeNull();
+    const terrainGroup = container.querySelector("[data-axo-layer=\"terrain\"]") as SVGGElement | null;
+    expect(terrainGroup).not.toBeNull();
 
-    const groundTop = aerialGroup!.querySelector("path.axo-ground-top") as SVGPathElement | null;
+    const groundTop = terrainGroup!.querySelector("path.axo-ground-top") as SVGPathElement | null;
     expect(groundTop).not.toBeNull();
 
-    const groundContours = aerialGroup!.querySelector("g.axo-ground-contours") as SVGGElement | null;
+    const groundContours = terrainGroup!.querySelector("g.axo-ground-contours") as SVGGElement | null;
     expect(groundContours).not.toBeNull();
     expect(groundContours!.querySelectorAll("path").length).toBeGreaterThan(0);
 
-    const plinthGroup = aerialGroup!.querySelector("g.axo-ground-plinth") as SVGGElement | null;
+    const plinthGroup = terrainGroup!.querySelector("g.axo-ground-plinth") as SVGGElement | null;
     expect(plinthGroup).not.toBeNull();
 
     const walls = plinthGroup!.querySelectorAll("path.axo-plinth-wall");

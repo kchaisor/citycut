@@ -156,7 +156,7 @@ export async function drapeSatelliteOnTerrain(
   sideM: number,
   field: TerrainField,
   exaggeration = 1,
-  gridSteps = 36,
+  gridSteps = 40,
 ): Promise<DrapedSatelliteImage | null> {
   if (typeof document === "undefined") return null;
   if (field.max - field.min <= 1e-3 || exaggeration <= 0) return null;

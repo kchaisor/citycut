@@ -89,13 +89,13 @@ export const AXO_LAYER_LABELS: Record<AxoLayerId, string> = {
   hydro: "HYDRO",
   transport: "TRANSPORT",
   topography: "TOPOGRAPHY",
-  terrain: "TERRAIN (DTM)",
+  terrain: "TERRAIN",
   roads: "ROADS",
   cadastre: "CADASTRE",
   green: "GREEN SPACES",
   trees: "TREES",
   buildings: "BUILDINGS",
-  aerial: "SATELLITE",
+  aerial: "TERRAIN",
   base: "BASE OUTLINE",
 };
 
@@ -135,7 +135,18 @@ export type AxoPointMarker = { x: number; y: number; paint: AxoPaintKey; radiusM
  * Default stack. Every listed layer keeps its lift slot even when hidden (so toggles never move
  * the view), so the reference-only base outline plate is left out and the default stack is unchanged.
  */
-export const DEFAULT_AXO_LAYER_ORDER: AxoLayerId[] = AXO_LAYER_IDS.filter((id) => id !== "base");
+export const DEFAULT_AXO_LAYER_ORDER: AxoLayerId[] = [
+  "planning",
+  "water",
+  "hydro",
+  "transport",
+  "roads",
+  "cadastre",
+  "green",
+  "trees",
+  "buildings",
+  "terrain",
+];
 
 export type ExplodedAxoSettings = {
   layerOrder: AxoLayerId[];
@@ -179,13 +190,13 @@ export function defaultExplodedAxoSettings(sideM: number): ExplodedAxoSettings {
     hydro: false,
     transport: false,
     topography: false,
-    terrain: false,
+    terrain: true,
     roads: true,
     cadastre: false,
     green: true,
     trees: true,
     buildings: true,
-    aerial: true,
+    aerial: false,
     base: false,
   };
   return {
@@ -309,7 +320,7 @@ export function reorderAxoLayer(order: readonly AxoLayerId[], from: AxoLayerId, 
 
 /** Plates that carry the aerial image (#85 Esri World Imagery): the satellite plate and the reference base. */
 export function axoPlateShowsAerial(id: AxoLayerId): boolean {
-  return id === "aerial" || id === "base";
+  return id === "terrain" || id === "aerial" || id === "base";
 }
 
 /** Kelvin's reference stack, top → bottom (Bern kakemono). */
@@ -319,7 +330,6 @@ export const AXO_REFERENCE_ORDER: AxoLayerId[] = [
   "roads",
   "cadastre",
   "hydro",
-  "topography",
   "terrain",
   "base",
 ];
@@ -431,20 +441,14 @@ export function axoGroundPlinthThicknessM(sideM: number): number {
  * clamped so peak relief never collides with the plate above.
  */
 export function axoGroundTerrainExaggeration(
-  sideM: number,
-  gapM: number,
+  _sideM: number,
+  _gapM: number,
   field?: TerrainField | null,
   explicitExaggeration?: number,
 ): number {
   if (explicitExaggeration != null) return explicitExaggeration;
-  if (!field) return 1;
-  const reliefM = Math.max(0, field.max - field.min);
-  if (reliefM <= 1e-3) return 1;
-  const targetLiftM = Math.min(sideM * 0.11, gapM * 0.55);
-  const maxAutoLiftM = Math.max(sideM * 0.14, gapM * 0.65);
-  const raw = Math.max(DEFAULT_AXO_TERRAIN_EXAGGERATION, Math.min(6, targetLiftM / reliefM));
-  const clamped = Math.min(raw, maxAutoLiftM / reliefM);
-  return Math.max(1, Math.round(clamped * 2) / 2);
+  if (!field || field.max - field.min <= 1e-3) return 1;
+  return DEFAULT_AXO_TERRAIN_EXAGGERATION;
 }
 
 /**
@@ -528,10 +532,7 @@ export function buildAxoGroundPlinth(
     return { slabThicknessM, maxReliefM, frameD, walls };
   }
 
-  const edgeSteps =
-    hasRelief && field
-      ? Math.max(24, Math.min(48, Math.ceil(sideM / Math.max(4, field.spacingM))))
-      : 1;
+  const edgeSteps = hasRelief && field ? 40 : 1;
   const corners: Pt[] = [
     [-half, -half],
     [half, -half],
@@ -584,20 +585,47 @@ export function buildAxoGroundPlinth(
   };
 }
 
-function buildAxoGroundTopoContours(
+export function buildAxoGroundTopoContours(
   model: CityModel,
-  field: TerrainField,
-  exaggeration: number,
+  field?: TerrainField | null,
+  exaggeration = DEFAULT_AXO_TERRAIN_EXAGGERATION,
+  topoOverlay?: TopographyOverlay | "unavailable",
 ): string[] {
-  if (field.max - field.min <= 1e-3 || exaggeration <= 0) return [];
   const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
-  const contourLayer = demContourLayer(field, model.sideM);
+  const hasFieldRelief = Boolean(field && field.max - field.min > 1e-3 && exaggeration > 0);
+  const rawPolylines: Pt[][] = [];
+  if (hasFieldRelief && field) {
+    const contourLayer = demContourLayer(field, model.sideM);
+    for (const line of contourLayer.lines) {
+      rawPolylines.push(line.points);
+    }
+  } else if (topoOverlay && topoOverlay !== "unavailable" && topoOverlay.contours.length > 0) {
+    for (const c of topoOverlay.contours) {
+      rawPolylines.push(c.line);
+    }
+  }
+  if (rawPolylines.length === 0) return [];
+  const stepM = Math.max(1.5, model.sideM / 80);
+  const elevationAt = (e: number, n: number): number =>
+    hasFieldRelief && field
+      ? Math.max(0, (sampleTerrain(field, e, n, model.sideM) - field.min) * exaggeration)
+      : 0;
   const out: string[] = [];
-  for (const line of contourLayer.lines) {
-    const zLift = Math.max(0, (line.z - field.min) * exaggeration);
-    for (const part of clipPolylineSiteFrame(dedupe(line.points), model.sideM, shape)) {
+  for (const poly of rawPolylines) {
+    for (const part of clipPolylineSiteFrame(dedupe(poly), model.sideM, shape)) {
       if (part.length < 2) continue;
-      const pts = part.map(([e, n]) => planPointToIso(e, n, zLift));
+      const dense: Pt[] = [part[0]!];
+      for (let i = 0; i < part.length - 1; i += 1) {
+        const a = part[i]!;
+        const b = part[i + 1]!;
+        const dist = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        const steps = Math.max(1, Math.ceil(dist / stepM));
+        for (let s = 1; s <= steps; s += 1) {
+          const t = s / steps;
+          dense.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+        }
+      }
+      const pts = dense.map(([e, n]) => planPointToIso(e, n, elevationAt(e, n)));
       const d = isoSvgPolyline(pts, false);
       if (d) out.push(d);
     }
@@ -941,15 +969,6 @@ export function buildExplodedAxoLayers(
         }
         sourceNote = axoCadastreNote(overlays.cadastre);
       }
-    } else if (id === "terrain") {
-      const field = model.terrain ?? (overlays.terrain !== "unavailable" ? overlays.terrain : undefined);
-      if (field) {
-        const ex = settings.terrainExaggeration ?? DEFAULT_AXO_TERRAIN_EXAGGERATION;
-        unclippedStrokes = buildAxoTerrainMesh(model, field, ex);
-        sourceNote = axoTerrainNote(field, ex);
-      } else if (overlays.terrain === "unavailable") {
-        unavailableNote = AXO_TERRAIN_UNAVAILABLE_NOTE;
-      }
     } else if (id === "base") {
       for (const [east, north] of axoGuideAnchorPoints(model.sideM, shape)) {
         const [x, y] = planToIsoBase(east, north);
@@ -994,7 +1013,7 @@ export function buildExplodedAxoLayers(
         const pts = line.map(([e, n]) => planToIsoBase(e, n));
         strokes.push(isoSvgPolyline(pts, false));
       }
-    } else if (id === "aerial") {
+    } else if (id === "terrain" || id === "aerial") {
       const terrainField = model.terrain ?? (overlays.terrain !== "unavailable" ? overlays.terrain : undefined);
       const terrainEx = axoGroundTerrainExaggeration(
         model.sideM,
@@ -1009,8 +1028,15 @@ export function buildExplodedAxoLayers(
       plinthThicknessM = plinth.slabThicknessM;
       plinthMaxReliefM = plinth.maxReliefM;
       plinthExaggeration = terrainEx;
-      if (terrainField && terrainField.max - terrainField.min > 1e-3) {
-        topoContourStrokes = buildAxoGroundTopoContours(model, terrainField, terrainEx);
+      if (terrainField) {
+        unclippedStrokes = buildAxoTerrainMesh(model, terrainField, terrainEx);
+        sourceNote = axoTerrainNote(terrainField, terrainEx);
+      } else if (overlays.terrain === "unavailable") {
+        unavailableNote = AXO_TERRAIN_UNAVAILABLE_NOTE;
+      }
+      const contours = buildAxoGroundTopoContours(model, terrainField, terrainEx, overlays.topography);
+      if (contours.length > 0) {
+        topoContourStrokes = contours;
       }
     }
 
