@@ -482,13 +482,17 @@ export function SelectChrome({
                 <button
                   key={item.key}
                   type="button"
-                  className={isOn ? "l-chip dock-layer-chip is-on" : "l-chip dock-layer-chip is-off"}
+                  className={isOn ? "l-chip on dock-layer-chip is-on" : "l-chip dock-layer-chip is-off"}
                   aria-pressed={isOn}
                   aria-label={item.label}
                   onClick={() => onLayer(item.key, !isOn)}
                 >
                   <span className="l-chip-check dock-chip-dot" aria-hidden="true">
-                    {isOn ? "✓" : ""}
+                    {isOn ? (
+                      <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="2.5 6.5 5 9 9.5 3.5" />
+                      </svg>
+                    ) : null}
                   </span>
                   <span>{item.shortLabel}</span>
                 </button>

@@ -407,10 +407,10 @@ export function MapStage({
           >
             {!circleFrame && (
               <>
-                <span className="frame-handle is-tl" aria-hidden="true" />
-                <span className="frame-handle is-tr" aria-hidden="true" />
-                <span className="frame-handle is-bl" aria-hidden="true" />
-                <span className="frame-handle is-br" aria-hidden="true" />
+                <span className="frame-handle frame-handle-nw is-tl" aria-hidden="true" />
+                <span className="frame-handle frame-handle-ne is-tr" aria-hidden="true" />
+                <span className="frame-handle frame-handle-sw is-bl" aria-hidden="true" />
+                <span className="frame-handle frame-handle-se is-br" aria-hidden="true" />
               </>
             )}
           </div>

@@ -1662,21 +1662,21 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     >
                       {id === "3d" && (
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
-                          <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                          <path d="M2 17l10 5 10-5" />
-                          <path d="M2 12l10 5 10-5" />
+                          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
                         </svg>
                       )}
                       {id === "drawing" && (
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" aria-hidden="true">
-                          <polygon points="12 2 2 7 12 12 22 7 12 2" />
-                          <polyline points="2 12 12 17 22 12" />
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                          <rect x="3" y="3" width="18" height="18" rx="2" />
+                          <line x1="3" y1="9" x2="21" y2="9" />
+                          <line x1="9" y1="21" x2="9" y2="9" />
                         </svg>
                       )}
                       {id === "satellite" && (
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" aria-hidden="true">
-                          <circle cx="12" cy="12" r="9" />
-                          <path d="M3.6 9h16.8M3.6 15h16.8" />
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="2" y1="12" x2="22" y2="12" />
+                          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                         </svg>
                       )}
                       {label}
@@ -1844,22 +1844,22 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             <div className="drawer-section" hidden={rightOpen !== "summary"}>
               <div className="kpi-grid mono" aria-label="In this model">
                 <div className="kpi-cell">
-                  <div className="kpi-num">{model.buildings.length.toLocaleString()}</div>
-                  <div className="kpi-lbl">Bldgs</div>
+                  <div className="kpi-lbl k-lbl">Bldgs</div>
+                  <div className="kpi-num k-val">{model.buildings.length.toLocaleString()}</div>
                 </div>
                 <div className="kpi-cell">
-                  <div className="kpi-num">{model.trees.length.toLocaleString()}</div>
-                  <div className="kpi-lbl">Trees</div>
+                  <div className="kpi-lbl k-lbl">Trees</div>
+                  <div className="kpi-num k-val">{model.trees.length.toLocaleString()}</div>
                 </div>
                 <div className="kpi-cell">
-                  <div className="kpi-num">{formatLengthKm(model.roadKm)}k</div>
-                  <div className="kpi-lbl">Roads</div>
+                  <div className="kpi-lbl k-lbl">Roads</div>
+                  <div className="kpi-num k-val">{formatLengthKm(model.roadKm)}k</div>
                 </div>
                 <div className="kpi-cell">
-                  <div className="kpi-num">
+                  <div className="kpi-lbl k-lbl">Elev</div>
+                  <div className="kpi-num k-val">
                     {model.terrain ? `${model.terrain.min.toFixed(0)}–${model.terrain.max.toFixed(0)}m` : "—"}
                   </div>
-                  <div className="kpi-lbl">Elev</div>
                 </div>
               </div>
               {model.terrainError && <p className="error">{model.terrainError}</p>}
@@ -1883,14 +1883,20 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                         style={{ width: `${Math.max(0, 100 - Math.round((heightBar.measured / heightBar.total) * 100))}%` }}
                       />
                     </div>
-                    <div className="dist-legend">
+                    <div className="dist-legend bar-legend-grid">
                       <span className="dist-leg-item">
-                        <span className="leg-dot is-ink" />
-                        CoM 2023 ({comMeasuredHeightCount.toLocaleString()})
+                        <span className="dl-left">
+                          <span className="leg-dot is-ink" />
+                          <span>CoM 2023</span>
+                        </span>
+                        <b className="dl-val mono">{comMeasuredHeightCount.toLocaleString()}</b>
                       </span>
                       <span className="dist-leg-item">
-                        <span className="leg-dot is-muted" />
-                        Zone est. ({(heightBar.total - comMeasuredHeightCount).toLocaleString()})
+                        <span className="dl-left">
+                          <span className="leg-dot is-muted" />
+                          <span>Zone est.</span>
+                        </span>
+                        <b className="dl-val mono">{(heightBar.total - comMeasuredHeightCount).toLocaleString()}</b>
                       </span>
                     </div>
                   </section>
@@ -1918,20 +1924,26 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                         ) : null,
                       )}
                     </div>
-                    <div className="dist-legend">
+                    <div className="dist-legend bar-legend-grid">
                       {BUILDING_USES.filter((use) => useCounts[use] > 0)
                         .slice(0, 4)
-                        .map((use) => (
-                          <span key={use} className="dist-leg-item">
-                            <span className="leg-dot" style={{ background: BUILDING_USE_META[use].color }} />
-                            {BUILDING_USE_META[use].label} ({useCounts[use].toLocaleString()})
-                          </span>
-                        ))}
+                        .map((use) => {
+                          const pct = Math.round((useCounts[use] / displayModel.buildings.length) * 100);
+                          return (
+                            <span key={use} className="dist-leg-item">
+                              <span className="dl-left">
+                                <span className="leg-dot" style={{ background: BUILDING_USE_META[use].color }} />
+                                <span>{BUILDING_USE_META[use].label}</span>
+                              </span>
+                              <b className="dl-val mono">{pct}%</b>
+                            </span>
+                          );
+                        })}
                     </div>
                   </section>
                 </>
               )}
-              <details className="insp-sources-details">
+              <details className="insp-sources-details sr-only">
                 <summary className="insp-sources-summary mono">
                   <span>
                     Data sources ({sourcesLoaded.loaded}/{sourcesLoaded.total} loaded)
@@ -2249,15 +2261,15 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                         Uniform
                       </button>
                     </div>
-                    <div className="mini-flags display-switches" role="group" aria-label="View modes">
-                      <label className="check-field sr-only">
-                        <input
-                          type="checkbox"
-                          checked={view3dDisplay.whiteCard}
-                          onChange={(event) => commitView3dDisplay({ ...view3dDisplay, whiteCard: event.target.checked })}
-                        />
-                        White card
-                      </label>
+                    <label className="check-field sr-only">
+                      <input
+                        type="checkbox"
+                        checked={view3dDisplay.whiteCard}
+                        onChange={(event) => commitView3dDisplay({ ...view3dDisplay, whiteCard: event.target.checked })}
+                      />
+                      White card
+                    </label>
+                    <div className="mini-flags sub-toggles display-switches" role="group" aria-label="View modes">
                       <label className={view3dDisplay.showOutlines ? "mini-flag is-on check-field" : "mini-flag check-field"}>
                         <input
                           className="sr-only"
