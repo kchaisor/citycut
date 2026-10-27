@@ -209,15 +209,14 @@ describe("Display panel controls by view tab", () => {
     const tabSatellite = screen.getByRole("tab", { name: "Satellite" });
     expect(tab3d.getAttribute("aria-selected")).toBe("true");
 
-    // 4 sections in Display › 3D model in order: View modes -> Projection -> Layers -> Colors
+    // 3 sections in Display › 3D model in order: View modes -> Projection -> Layers (with inline colour swatches)
     const viewModesSection = screen.getByRole("region", { name: "View modes" });
     const projectionSection = screen.getByRole("region", { name: "Projection" });
     const layersSection = screen.getByRole("region", { name: "Layers" });
-    const colorsSection = screen.getByRole("region", { name: "Colors" });
+    expect(screen.queryByRole("region", { name: "Colors" })).toBeNull();
 
     expect(viewModesSection.compareDocumentPosition(projectionSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(projectionSection.compareDocumentPosition(layersSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(layersSection.compareDocumentPosition(colorsSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     // View modes contains White card and Outlines
     expect(within(viewModesSection).getByLabelText("White card")).toBeTruthy();
@@ -251,18 +250,17 @@ describe("Display panel controls by view tab", () => {
     expect(within(layersSection).queryByLabelText("Rail & tram")).toBeNull();
     expect(within(layersSection).queryByLabelText("Blocks")).toBeNull();
 
-    // Colors section sits underneath Layers, omits Ground, and shows ONLY available layers without counts
-    expect(within(colorsSection).getByText("Buildings")).toBeTruthy();
-    expect(within(colorsSection).getByText("Roads")).toBeTruthy();
-    expect(within(colorsSection).getByText("Landscape")).toBeTruthy();
-    expect(within(colorsSection).getByText("Contours")).toBeTruthy();
-    expect(within(colorsSection).queryByText("Ground")).toBeNull();
-    expect(within(colorsSection).queryByText("Water")).toBeNull();
-    expect(within(colorsSection).queryByText("Trees")).toBeNull();
-    expect(within(colorsSection).queryByText("Footpaths")).toBeNull();
-    expect(within(colorsSection).queryByText("Rail & tram")).toBeNull();
-    expect(within(colorsSection).queryByText("Blocks")).toBeNull();
-    expect(colorsSection.querySelectorAll("b").length).toBe(0);
+    // Inline colour swatches sit inside each Scene Layers row, omitting unavailable layers
+    expect(within(layersSection).getByLabelText("Buildings colour")).toBeTruthy();
+    expect(within(layersSection).getByLabelText("Roads colour")).toBeTruthy();
+    expect(within(layersSection).getByLabelText("Landscape colour")).toBeTruthy();
+    expect(within(layersSection).getByLabelText("Contours colour")).toBeTruthy();
+    expect(within(layersSection).queryByLabelText("Ground colour")).toBeNull();
+    expect(within(layersSection).queryByLabelText("Water colour")).toBeNull();
+    expect(within(layersSection).queryByLabelText("Trees colour")).toBeNull();
+    expect(within(layersSection).queryByLabelText("Footpaths colour")).toBeNull();
+    expect(within(layersSection).queryByLabelText("Rail & tram colour")).toBeNull();
+    expect(within(layersSection).queryByLabelText("Blocks colour")).toBeNull();
 
     // 2D drawing controls must NOT appear when 3D model is selected
     expect(screen.queryByRole("group", { name: "Drawing type" })).toBeNull();
@@ -325,7 +323,8 @@ describe("Display panel controls by view tab", () => {
 
     const viewModesSection = screen.getByRole("region", { name: "View modes" });
     const layersSection = screen.getByRole("region", { name: "Layers" });
-    const colorsSection = screen.getByRole("region", { name: "Colors" });
+    const colorsSection = layersSection;
+    expect(screen.queryByRole("region", { name: "Colors" })).toBeNull();
 
     for (const label of [
       "Buildings",
@@ -339,13 +338,12 @@ describe("Display panel controls by view tab", () => {
     ]) {
       const layerToggle = within(layersSection).getByLabelText(label) as HTMLInputElement;
       expect(layerToggle.checked).toBe(true);
-      expect(within(colorsSection).getByText(label)).toBeTruthy();
+      expect(within(layersSection).getByLabelText(`${label} colour`)).toBeTruthy();
     }
     expect(within(layersSection).queryByLabelText("Ground")).toBeNull();
-    expect(within(colorsSection).queryByText("Ground")).toBeNull();
+    expect(within(layersSection).queryByLabelText("Ground colour")).toBeNull();
     expect(within(layersSection).queryByLabelText("Blocks")).toBeNull();
-    expect(within(colorsSection).queryByText("Blocks")).toBeNull();
-    expect(colorsSection.querySelectorAll("b").length).toBe(0);
+    expect(within(layersSection).queryByLabelText("Blocks colour")).toBeNull();
 
     const hex = (six: string) => `${String.fromCharCode(35)}${six}`;
 
@@ -540,10 +538,10 @@ describe("Display panel controls by view tab", () => {
     await user.click(within(cornerGroup).getByRole("button", { name: "NW" }));
     expect(isoSvg.getAttribute("data-iso-corner")).toBe("nw");
 
-    // Layers and Colors sections match Display › 3D model
+    // Scene Layers section matches Display › 3D model with inline colour swatches
     const layersSection = screen.getByRole("region", { name: "Layers" });
-    const colorsSection = screen.getByRole("region", { name: "Colors" });
-    expect(layersSection.compareDocumentPosition(colorsSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const colorsSection = layersSection;
+    expect(screen.queryByRole("region", { name: "Colors" })).toBeNull();
 
     for (const label of [
       "Buildings",
@@ -557,7 +555,7 @@ describe("Display panel controls by view tab", () => {
     ]) {
       const toggle = within(layersSection).getByLabelText(label) as HTMLInputElement;
       expect(toggle.checked).toBe(true);
-      expect(within(colorsSection).getByText(label)).toBeTruthy();
+      expect(within(layersSection).getByLabelText(`${label} colour`)).toBeTruthy();
     }
     expect(within(layersSection).queryByLabelText("Ground")).toBeNull();
     expect(within(layersSection).queryByLabelText("Blocks")).toBeNull();

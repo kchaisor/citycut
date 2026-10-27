@@ -1012,7 +1012,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     }
   }
   const crs = mgaCrs(model.center.lon);
-  const sideKm = model.sideM / 1000;
   const tierCounts = treeTierCounts(model.trees);
   const showBuildings = model.layers.buildings && model.buildings.length > 0;
   // A failed tree source must stay visible even when it leaves the frame with no trees.
@@ -1336,26 +1335,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     total: heightBarParts.reduce((sum, part) => sum + part.value, 0),
   };
 
-  const viewModesSwitches = (
-    <div className="display-switches" role="group" aria-label="View modes">
-      {(
-        [
-          ["whiteCard", "White card"],
-          ["showOutlines", "Outlines"],
-        ] as const
-      ).map(([key, label]) => (
-        <label key={key} className="check-field">
-          <input
-            type="checkbox"
-            checked={view3dDisplay[key]}
-            onChange={(event) => commitView3dDisplay({ ...view3dDisplay, [key]: event.target.checked })}
-          />
-          {label}
-        </label>
-      ))}
-    </div>
-  );
-
   const availableLayers3d: {
     id: Layer3dId;
     label: string;
@@ -1379,6 +1358,23 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
           }
           if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "buildings")) {
             commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "buildings", true));
+          }
+          setLineStyles(readDrawingStyle());
+        },
+      },
+      {
+        id: "trees" as const,
+        label: "Trees",
+        meta: model.trees.length.toLocaleString(),
+        color: getColour("--tree-crown"),
+        available: model.layers.trees && model.trees.length > 0,
+        onPick: (value: string) => {
+          commitColour("--tree-crown", value);
+          commitColour("--tree-crown-edge", value);
+          commitColour("--tree-fill", value);
+          commitColour("--tree-layer", value);
+          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "trees")) {
+            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "trees", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -1410,23 +1406,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
           commitColour("--path-fill", value);
           if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "footpaths")) {
             commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "footpaths", true));
-          }
-          setLineStyles(readDrawingStyle());
-        },
-      },
-      {
-        id: "trees" as const,
-        label: "Trees",
-        meta: model.trees.length.toLocaleString(),
-        color: getColour("--tree-crown"),
-        available: model.layers.trees && model.trees.length > 0,
-        onPick: (value: string) => {
-          commitColour("--tree-crown", value);
-          commitColour("--tree-crown-edge", value);
-          commitColour("--tree-fill", value);
-          commitColour("--tree-layer", value);
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "trees")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "trees", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -1650,20 +1629,21 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             showNewCut
             onSelect={selectSection}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+            rightMeta={`MGA${mgaCrs(model.center.lon).zone}`}
             brandMeta={
               <>
-                <span className="hud-sep" aria-hidden="true" />
-                <span className="studio-breadcrumb-place" title={model.placeLabel}>
+                <span className="v-sep hud-sep" aria-hidden="true" />
+                <span className="place-chip studio-breadcrumb-place" title={model.placeLabel}>
                   {model.placeLabel}
                 </span>
-                <span className="studio-cut-pill">
+                <span className="dim-chip studio-cut-pill mono">
                   {cutSizeLabel(model.sideM, model.frameShape ?? "square")}
                 </span>
               </>
             }
             headerCenter={
               <>
-                <div className="tabs studio-view-tabs" role="tablist" aria-label="Model views">
+                <div className="tabs mode-group studio-view-tabs" role="tablist" aria-label="Model views">
                   {(
                     [
                       ["3d", "3D model"],
@@ -1677,51 +1657,120 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                       role="tab"
                       data-autofocus={index === 0 ? "true" : undefined}
                       aria-selected={tab === id}
-                      className={tab === id ? "active" : ""}
+                      className={tab === id ? "mode-btn active" : "mode-btn"}
                       onClick={() => setTab(id)}
                     >
+                      {id === "3d" && (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+                          <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                          <path d="M2 17l10 5 10-5" />
+                          <path d="M2 12l10 5 10-5" />
+                        </svg>
+                      )}
+                      {id === "drawing" && (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" aria-hidden="true">
+                          <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                          <polyline points="2 12 12 17 22 12" />
+                        </svg>
+                      )}
+                      {id === "satellite" && (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" aria-hidden="true">
+                          <circle cx="12" cy="12" r="9" />
+                          <path d="M3.6 9h16.8M3.6 15h16.8" />
+                        </svg>
+                      )}
                       {label}
                     </button>
                   ))}
                 </div>
-                <div className="studio-submode-pills" aria-label="Quick drawing modes">
-                  {(
-                    [
-                      ["site", "Site plan"],
-                      ["figure-ground", "Figure-ground"],
-                      ["exploded-axo", "Exploded axo"],
-                      ["isometric", "Isometric"],
-                    ] as const
-                  ).map(([kind, label]) => (
+                <span className="v-sep" aria-hidden="true" />
+                {tab === "3d" ? (
+                  <div className="proj-group studio-submode-pills" role="group" aria-label="3D projection">
                     <button
-                      key={kind}
                       type="button"
-                      className={tab === "drawing" && drawing === kind ? "studio-submode-pill is-active" : "studio-submode-pill"}
-                      aria-label={`Quick ${label}`}
-                      aria-pressed={tab === "drawing" && drawing === kind}
-                      onClick={() => {
-                        setDrawing(kind);
-                        setTab("drawing");
-                      }}
+                      className={view.projection === "perspective" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                      aria-pressed={view.projection === "perspective"}
+                      onClick={() => commitView({ ...view, projection: "perspective" }, false)}
                     >
-                      {label}
+                      Perspective
                     </button>
-                  ))}
-                </div>
+                    <button
+                      type="button"
+                      className={view.projection === "iso" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                      aria-pressed={view.projection === "iso"}
+                      onClick={() => commitView({ ...view, projection: "iso" }, false)}
+                    >
+                      Isometric
+                    </button>
+                    <button
+                      type="button"
+                      className={view.projection === "plan" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                      aria-pressed={view.projection === "plan"}
+                      onClick={() => commitView({ projection: "plan", corner: view.corner, freeRotate: false }, true)}
+                    >
+                      Plan
+                    </button>
+                  </div>
+                ) : (
+                  <div className="proj-group studio-submode-pills" aria-label="Quick drawing modes">
+                    {(
+                      [
+                        ["site", "Site plan"],
+                        ["figure-ground", "Figure-ground"],
+                        ["exploded-axo", "Exploded axo"],
+                        ["isometric", "Isometric"],
+                      ] as const
+                    ).map(([kind, label]) => (
+                      <button
+                        key={kind}
+                        type="button"
+                        className={tab === "drawing" && drawing === kind ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                        aria-label={`Quick ${label}`}
+                        aria-pressed={tab === "drawing" && drawing === kind}
+                        onClick={() => {
+                          setDrawing(kind);
+                          setTab("drawing");
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </>
             }
             headerRight={
               <>
-                <span className="studio-status-pill">
-                  <i className="status-dot is-ready" aria-hidden="true" />
+                <span className="ready-dot status-dot is-ready" aria-hidden="true" />
+                <span className="ready-text studio-status-pill mono">
                   Ready · {sourcesLoaded.loaded}/{sourcesLoaded.total} sources
                 </span>
+                <span className="v-sep" aria-hidden="true" />
                 <div className="studio-quick-exports">
                   {tab === "drawing" ? (
                     <>
                       <button
                         type="button"
-                        className="studio-export-btn"
+                        className="btn-export-3dm studio-export-btn is-primary"
+                        aria-label="Quick export Adobe Illustrator .ai"
+                        disabled={busy !== null}
+                        onClick={() => {
+                          if (drawing === "site") void saveSiteAi();
+                          else if (drawing === "figure-ground") void saveFigureAi();
+                          else if (drawing === "isometric") void saveIsometricAi();
+                          else void saveExplodedAxoAi();
+                        }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        .ai
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-export-png studio-export-btn"
                         aria-label="Quick export SVG"
                         disabled={busy !== null || drawing === "exploded-axo"}
                         onClick={() => {
@@ -1732,40 +1781,31 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                       >
                         .svg
                       </button>
-                      <button
-                        type="button"
-                        className="studio-export-btn is-primary"
-                        aria-label="Quick export Adobe Illustrator .ai"
-                        disabled={busy !== null}
-                        onClick={() => {
-                          if (drawing === "site") void saveSiteAi();
-                          else if (drawing === "figure-ground") void saveFigureAi();
-                          else if (drawing === "isometric") void saveIsometricAi();
-                          else void saveExplodedAxoAi();
-                        }}
-                      >
-                        .ai
-                      </button>
                     </>
                   ) : (
                     <>
                       <button
                         type="button"
-                        className="studio-export-btn"
+                        className="btn-export-3dm studio-export-btn is-primary"
+                        aria-label="Quick export Rhino .3dm"
+                        disabled={busy !== null}
+                        onClick={() => void save3dm()}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        Rhino .3dm
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-export-png studio-export-btn"
                         aria-label="Quick export 2x PNG"
                         disabled={busy !== null}
                         onClick={() => void savePng()}
                       >
                         2× PNG
-                      </button>
-                      <button
-                        type="button"
-                        className="studio-export-btn is-primary"
-                        aria-label="Quick export Rhino .3dm"
-                        disabled={busy !== null}
-                        onClick={() => void save3dm()}
-                      >
-                        Rhino .3dm
                       </button>
                     </>
                   )}
@@ -1802,163 +1842,149 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             rightChildren={
               <>
             <div className="drawer-section" hidden={rightOpen !== "summary"}>
-              <div className="sidebar-hero">
-                <p className="sidebar-place">{model.placeLabel}</p>
-                <p className="sidebar-sub">
-                  {cutSizeLabel(model.sideM, model.frameShape ?? "square")} {model.frameShape === "circle" ? "circle" : "square"} ·{" "}
-                  {(sideKm * sideKm).toFixed(2)} km²
-                </p>
-                <p className="sidebar-coord">
-                  <span>
-                    {formatCoord(model.center.lat)}, {formatCoord(model.center.lon)}
-                  </span>
-                  <button
-                    type="button"
-                    className="sidebar-icon-btn"
-                    aria-label="Copy coordinates"
-                    title="Copy coordinates"
-                    onClick={() => {
-                      void navigator.clipboard
-                        ?.writeText(`${formatCoord(model.center.lat)}, ${formatCoord(model.center.lon)}`)
-                        .catch(() => undefined);
-                    }}
-                  >
-                    <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
-                  </button>
-                </p>
+              <div className="kpi-grid mono" aria-label="In this model">
+                <div className="kpi-cell">
+                  <div className="kpi-num">{model.buildings.length.toLocaleString()}</div>
+                  <div className="kpi-lbl">Bldgs</div>
+                </div>
+                <div className="kpi-cell">
+                  <div className="kpi-num">{model.trees.length.toLocaleString()}</div>
+                  <div className="kpi-lbl">Trees</div>
+                </div>
+                <div className="kpi-cell">
+                  <div className="kpi-num">{formatLengthKm(model.roadKm)}k</div>
+                  <div className="kpi-lbl">Roads</div>
+                </div>
+                <div className="kpi-cell">
+                  <div className="kpi-num">
+                    {model.terrain ? `${model.terrain.min.toFixed(0)}–${model.terrain.max.toFixed(0)}m` : "—"}
+                  </div>
+                  <div className="kpi-lbl">Elev</div>
+                </div>
               </div>
-              <section className="sidebar-group">
-                <h3 className="sidebar-gh">In this model</h3>
-                <dl className="stats">
-                  {model.layers.buildings && (
-                    <div>
-                      <dt>Buildings</dt>
-                      <dd>{model.buildings.length.toLocaleString()}</dd>
-                    </div>
-                  )}
-                  {model.layers.trees && (
-                    <div>
-                      <dt>Trees</dt>
-                      <dd>{model.trees.length.toLocaleString()}</dd>
-                    </div>
-                  )}
-                  {model.layers.roads && (
-                    <div>
-                      <dt title="Clipped centerline length of roads, paths, and rail">Roads</dt>
-                      <dd>
-                        {formatLengthKm(model.roadKm)}
-                        <small>km</small>
-                      </dd>
-                    </div>
-                  )}
-                  {model.terrain && (
-                    <div>
-                      <dt>Elevation</dt>
-                      <dd>
-                        {model.terrain.min.toFixed(0)}–{model.terrain.max.toFixed(0)}
-                        <small>m</small>
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-                {model.terrainError && <p className="error">{model.terrainError}</p>}
-              </section>
+              {model.terrainError && <p className="error">{model.terrainError}</p>}
               {showBuildings && heightBar.total > 0 && (
-                <section className="sidebar-group">
-                  <div className="sidebar-gh">
-                    <h3>Building heights</h3>
-                    <span>{Math.round((heightBar.measured / heightBar.total) * 100)}% measured</span>
-                  </div>
-                  <div className="height-bar" aria-hidden="true">
-                    {heightBar.parts.map((part) =>
-                      part.value > 0 ? (
-                        <i
-                          key={part.id}
-                          className={`height-bar-${part.id}`}
-                          style={{ flexGrow: part.value }}
-                        />
-                      ) : null,
-                    )}
-                  </div>
-                  <ul className="height-bar-legend">
-                    {heightBar.parts.map((part) =>
-                      part.value > 0 ? (
-                        <li key={part.id}>
-                          <i className={`height-bar-${part.id}`} />
-                          <span>{part.label}</span>
-                          <b>{part.value.toLocaleString()}</b>
-                        </li>
-                      ) : null,
-                    )}
-                  </ul>
-                </section>
+                <>
+                  <div className="outliner-divider" aria-hidden="true" />
+                  <section className="dist-block">
+                    <div className="dist-head">
+                      <h3 className="dist-title">Height Precision</h3>
+                      <span className="dist-pct mono">
+                        {Math.round((heightBar.measured / heightBar.total) * 100)}% CoM LiDAR
+                      </span>
+                    </div>
+                    <div className="dist-bar" aria-hidden="true">
+                      <div
+                        className="dist-seg is-ink"
+                        style={{ width: `${Math.round((heightBar.measured / heightBar.total) * 100)}%` }}
+                      />
+                      <div
+                        className="dist-seg is-muted"
+                        style={{ width: `${Math.max(0, 100 - Math.round((heightBar.measured / heightBar.total) * 100))}%` }}
+                      />
+                    </div>
+                    <div className="dist-legend">
+                      <span className="dist-leg-item">
+                        <span className="leg-dot is-ink" />
+                        CoM 2023 ({comMeasuredHeightCount.toLocaleString()})
+                      </span>
+                      <span className="dist-leg-item">
+                        <span className="leg-dot is-muted" />
+                        Zone est. ({(heightBar.total - comMeasuredHeightCount).toLocaleString()})
+                      </span>
+                    </div>
+                  </section>
+                </>
               )}
               {showBuildings && displayModel.buildings.length > 0 && (
-                <section className="sidebar-group">
-                  <div className="sidebar-gh">
-                    <h3>Building use mix</h3>
-                    <span>{displayModel.buildings.length.toLocaleString()} total</span>
-                  </div>
-                  <div className="height-bar use-mix-bar" aria-hidden="true">
-                    {BUILDING_USES.map((use) =>
-                      useCounts[use] > 0 ? (
-                        <i
-                          key={use}
-                          style={{
-                            flexGrow: useCounts[use],
-                            background: BUILDING_USE_META[use].color,
-                          }}
-                        />
-                      ) : null,
-                    )}
-                  </div>
-                  <ul className="height-bar-legend">
-                    {BUILDING_USES.map((use) =>
-                      useCounts[use] > 0 ? (
-                        <li key={use}>
-                          <i style={{ background: BUILDING_USE_META[use].color }} />
-                          <span>{BUILDING_USE_META[use].label}</span>
-                          <b>{useCounts[use].toLocaleString()}</b>
-                        </li>
-                      ) : null,
-                    )}
-                  </ul>
-                </section>
-              )}
-              <section className="sidebar-group">
-                <div className="sidebar-gh">
-                  <h3>Data sources</h3>
-                  <span>
-                    {sourcesLoaded.loaded} of {sourcesLoaded.total} loaded
-                  </span>
-                </div>
-                <ul className="source-list">
-                  {dataSources.map((row) => (
-                    <li key={row.id} className={`source-row is-${row.status}`} data-source={row.id}>
-                      <i className={`status-dot is-${row.status}`} aria-hidden="true" />
-                      <div className="source-text">
-                        <span className="source-name">{row.label}</span>
-                        {row.detail && <span className="source-meta">{row.detail}</span>}
-                        {row.notes.map((note) => (
-                          <span key={note} className="source-note" role={row.status === "failed" ? "alert" : undefined}>
-                            {note}
+                <>
+                  <div className="outliner-divider" aria-hidden="true" />
+                  <section className="dist-block">
+                    <div className="dist-head">
+                      <h3 className="dist-title">Building Use Mix</h3>
+                      <span className="dist-pct mono">CLUE + OSM</span>
+                    </div>
+                    <div className="dist-bar" aria-hidden="true">
+                      {BUILDING_USES.map((use) =>
+                        useCounts[use] > 0 ? (
+                          <div
+                            key={use}
+                            className="dist-seg"
+                            style={{
+                              width: `${Math.max(2, Math.round((useCounts[use] / displayModel.buildings.length) * 100))}%`,
+                              background: BUILDING_USE_META[use].color,
+                            }}
+                          />
+                        ) : null,
+                      )}
+                    </div>
+                    <div className="dist-legend">
+                      {BUILDING_USES.filter((use) => useCounts[use] > 0)
+                        .slice(0, 4)
+                        .map((use) => (
+                          <span key={use} className="dist-leg-item">
+                            <span className="leg-dot" style={{ background: BUILDING_USE_META[use].color }} />
+                            {BUILDING_USE_META[use].label} ({useCounts[use].toLocaleString()})
                           </span>
                         ))}
-                        {row.retry === "com-heights" && (
-                          <button type="button" className="sidebar-link" onClick={retryComHeights}>
-                            Retry CoM heights
-                          </button>
-                        )}
-                      </div>
-                      <span className="source-state">{dataSourceStatusWord(row.status)}</span>
-                    </li>
-                  ))}
-                </ul>
-                <details className="source-notes">
-                  <summary>Full source notes and credits</summary>
-                  <p className="meta">{displayModel.sourceNote}</p>
-                </details>
-              </section>
+                    </div>
+                  </section>
+                </>
+              )}
+              <details className="insp-sources-details">
+                <summary className="insp-sources-summary mono">
+                  <span>
+                    Data sources ({sourcesLoaded.loaded}/{sourcesLoaded.total} loaded)
+                  </span>
+                  <span className="insp-sources-caret" aria-hidden="true">▾</span>
+                </summary>
+                <div className="insp-sources-body">
+                  <p className="sidebar-coord">
+                    <span>
+                      {formatCoord(model.center.lat)}, {formatCoord(model.center.lon)}
+                    </span>
+                    <button
+                      type="button"
+                      className="sidebar-icon-btn"
+                      aria-label="Copy coordinates"
+                      title="Copy coordinates"
+                      onClick={() => {
+                        void navigator.clipboard
+                          ?.writeText(`${formatCoord(model.center.lat)}, ${formatCoord(model.center.lon)}`)
+                          .catch(() => undefined);
+                      }}
+                    >
+                      <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
+                    </button>
+                  </p>
+                  <ul className="source-list">
+                    {dataSources.map((row) => (
+                      <li key={row.id} className={`source-row is-${row.status}`} data-source={row.id}>
+                        <i className={`status-dot is-${row.status}`} aria-hidden="true" />
+                        <div className="source-text">
+                          <span className="source-name">{row.label}</span>
+                          {row.detail && <span className="source-meta">{row.detail}</span>}
+                          {row.notes.map((note) => (
+                            <span key={note} className="source-note" role={row.status === "failed" ? "alert" : undefined}>
+                              {note}
+                            </span>
+                          ))}
+                          {row.retry === "com-heights" && (
+                            <button type="button" className="sidebar-link" onClick={retryComHeights}>
+                              Retry CoM heights
+                            </button>
+                          )}
+                        </div>
+                        <span className="source-state">{dataSourceStatusWord(row.status)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <details className="source-notes">
+                    <summary>Full source notes and credits</summary>
+                    <p className="meta">{displayModel.sourceNote}</p>
+                  </details>
+                </div>
+              </details>
             </div>
 
             <div className="drawer-section legend" hidden={rightOpen !== "buildings"}>
@@ -2164,18 +2190,112 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
           >
             <div className="drawer-section" hidden={leftOpen !== "drawing"}>
               {tab === "3d" && (
-                <div className="projection-block">
-                  <section className="sidebar-group" aria-label="View modes">
-                    <div className="sidebar-gh">
-                      <h3>View modes</h3>
+                <div className="projection-block outliner-body">
+                  <section className="sidebar-group outliner-section" aria-label="View modes">
+                    <div className="card-head sidebar-gh">
+                      <h3 className="card-title">Building Style</h3>
+                      <span className="card-meta mono">
+                        {displayModel.buildings.length.toLocaleString()} massings
+                      </span>
                     </div>
-                    {viewModesSwitches}
+                    <div className="style-seg seg-mini" role="group" aria-label="Building style">
+                      <button
+                        type="button"
+                        className={view3dDisplay.whiteCard ? "style-btn active" : "style-btn"}
+                        aria-pressed={view3dDisplay.whiteCard}
+                        onClick={() => commitView3dDisplay({ ...view3dDisplay, whiteCard: !view3dDisplay.whiteCard })}
+                      >
+                        Card
+                      </button>
+                      <button
+                        type="button"
+                        className={!view3dDisplay.whiteCard && colourByUse && !showSource ? "style-btn active" : "style-btn"}
+                        aria-pressed={!view3dDisplay.whiteCard && colourByUse && !showSource}
+                        onClick={() => {
+                          setShowSource(false);
+                          setColourByUse(true);
+                          if (view3dDisplay.whiteCard) {
+                            commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+                          }
+                        }}
+                      >
+                        Use
+                      </button>
+                      <button
+                        type="button"
+                        className={!view3dDisplay.whiteCard && showSource ? "style-btn active" : "style-btn"}
+                        aria-pressed={!view3dDisplay.whiteCard && showSource}
+                        onClick={() => {
+                          setShowSource(true);
+                          if (view3dDisplay.whiteCard) {
+                            commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+                          }
+                        }}
+                      >
+                        Source
+                      </button>
+                      <button
+                        type="button"
+                        className={!view3dDisplay.whiteCard && !colourByUse && !showSource ? "style-btn active" : "style-btn"}
+                        aria-pressed={!view3dDisplay.whiteCard && !colourByUse && !showSource}
+                        onClick={() => {
+                          setShowSource(false);
+                          setColourByUse(false);
+                          if (view3dDisplay.whiteCard) {
+                            commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+                          }
+                        }}
+                      >
+                        Uniform
+                      </button>
+                    </div>
+                    <div className="mini-flags display-switches" role="group" aria-label="View modes">
+                      <label className="check-field sr-only">
+                        <input
+                          type="checkbox"
+                          checked={view3dDisplay.whiteCard}
+                          onChange={(event) => commitView3dDisplay({ ...view3dDisplay, whiteCard: event.target.checked })}
+                        />
+                        White card
+                      </label>
+                      <label className={view3dDisplay.showOutlines ? "mini-flag is-on check-field" : "mini-flag check-field"}>
+                        <input
+                          className="sr-only"
+                          type="checkbox"
+                          checked={view3dDisplay.showOutlines}
+                          onChange={(event) => commitView3dDisplay({ ...view3dDisplay, showOutlines: event.target.checked })}
+                        />
+                        <span>Outlines</span>
+                        <span className={`mini-chk ${view3dDisplay.showOutlines ? "on" : ""}`} aria-hidden="true">{view3dDisplay.showOutlines ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
+                      </label>
+                      <label className={showManualEdits ? "mini-flag is-on check-field" : "mini-flag check-field"}>
+                        <input
+                          className="sr-only"
+                          type="checkbox"
+                          checked={showManualEdits}
+                          onChange={(event) => {
+                            const next = event.target.checked;
+                            setShowManualEdits(next);
+                            writeStoredShowManualHeights(window.localStorage, next);
+                          }}
+                        />
+                        <span>Manual edits</span>
+                        <span className={`mini-chk ${showManualEdits ? "on" : ""}`} aria-hidden="true">{showManualEdits ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
+                      </label>
+                    </div>
                   </section>
-                  <section className="sidebar-group" aria-label="Projection">
-                    <div className="sidebar-gh">
+                  <section
+                    className={
+                      view.projection === "iso"
+                        ? "sidebar-group outliner-section"
+                        : "sidebar-group outliner-section sr-only"
+                    }
+                    aria-label="Projection"
+                  >
+                    <div className="sidebar-gh sr-only">
                       <h3>Projection</h3>
                     </div>
-                    <div className="plan-switch" role="group" aria-label="Projection">
+                    <div className="plan-switch sr-only" role="group" aria-label="Projection">
                       <button
                         type="button"
                         aria-pressed={view.projection === "perspective"}
@@ -2240,58 +2360,58 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     )}
                   </section>
                   {availableLayers3d.length > 0 && (
-                    <section className="sidebar-group" aria-label="Layers">
-                      <div className="sidebar-gh">
-                        <h3>Layers</h3>
-                      </div>
-                      <div className="display-switches" role="group" aria-label="3D layers">
-                        {availableLayers3d.map((layer) => (
-                          <div key={layer.id} className="studio-layer-row">
-                            <label className="check-field">
-                              <input
-                                type="checkbox"
-                                checked={isLayer3dVisible(view3dDisplay, layer.id)}
-                                onChange={(event) =>
-                                  commitView3dDisplay(setLayer3dVisible(view3dDisplay, layer.id, event.target.checked))
-                                }
-                              />
-                              {layer.label}
-                            </label>
-                            {layer.meta ? (
-                              <span className="studio-layer-meta" aria-hidden="true">
-                                {layer.meta}
-                              </span>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                  )}
-                  {availableLayers3d.length > 0 && (
-                    <section className="sidebar-group legend" aria-label="Colors">
-                      <div className="sidebar-gh">
-                        <h3>Colors</h3>
-                      </div>
-                      <ul className="legend-two">
-                        {availableLayers3d.map((layer) => (
-                          <li key={layer.id}>
-                            <label
-                              className="legend-swatch"
-                              style={{ background: layer.color }}
-                              title={`Change ${layer.label.toLowerCase()} colour`}
-                            >
-                              <input
-                                type="color"
-                                aria-label={`${layer.label} colour`}
-                                value={layer.color.toLowerCase()}
-                                onChange={(event) => layer.onPick(event.target.value)}
-                              />
-                            </label>
-                            <span>{layer.label}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
+                    <>
+                      <div className="outliner-divider" aria-hidden="true" />
+                      <section className="sidebar-group outliner-section" aria-label="Layers">
+                        <div className="card-head sidebar-gh">
+                          <h3 className="card-title">Scene Layers</h3>
+                          <span className="card-meta mono">
+                            {availableLayers3d.filter((l) => isLayer3dVisible(view3dDisplay, l.id)).length} visible
+                          </span>
+                        </div>
+                        <div className="outliner-rows display-switches" role="group" aria-label="3D layers">
+                          {availableLayers3d.map((layer) => {
+                            const visible = isLayer3dVisible(view3dDisplay, layer.id);
+                            return (
+                              <div key={layer.id} className="o-row studio-layer-row">
+                                <label className="o-left check-field">
+                                  <input
+                                    className="sr-only"
+                                    type="checkbox"
+                                    checked={visible}
+                                    onChange={(event) =>
+                                      commitView3dDisplay(setLayer3dVisible(view3dDisplay, layer.id, event.target.checked))
+                                    }
+                                  />
+                                  <span className={visible ? "o-eye l-eye on" : "o-eye l-eye off"} aria-hidden="true">{visible ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
+                                  <span className="o-name">{layer.label}</span>
+                                </label>
+                                <span className="o-right">
+                                  {layer.meta ? (
+                                    <span className="o-count studio-layer-meta mono" aria-hidden="true">
+                                      {layer.meta}
+                                    </span>
+                                  ) : null}
+                                  <label
+                                    className="o-swatch-wrap legend-swatch"
+                                    style={{ background: layer.color }}
+                                    title={`Change ${layer.label.toLowerCase()} colour`}
+                                  >
+                                    <input
+                                      type="color"
+                                      className="o-swatch-input"
+                                      aria-label={`${layer.label} colour`}
+                                      value={layer.color.toLowerCase()}
+                                      onChange={(event) => layer.onPick(event.target.value)}
+                                    />
+                                  </label>
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    </>
                   )}
                 </div>
               )}
@@ -2364,57 +2484,54 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     </div>
                   </section>
                   {availableLayers3d.length > 0 && (
-                    <section className="sidebar-group" aria-label="Layers">
-                      <div className="sidebar-gh">
-                        <h3>Layers</h3>
+                    <section className="sidebar-group outliner-section" aria-label="Layers">
+                      <div className="card-head sidebar-gh">
+                        <h3 className="card-title">Scene Layers</h3>
+                        <span className="card-meta mono">
+                          {availableLayers3d.filter((l) => isLayer3dVisible(view3dDisplay, l.id)).length} visible
+                        </span>
                       </div>
-                      <div className="display-switches" role="group" aria-label="3D layers">
-                        {availableLayers3d.map((layer) => (
-                          <div key={layer.id} className="studio-layer-row">
-                            <label className="check-field">
-                              <input
-                                type="checkbox"
-                                checked={isLayer3dVisible(view3dDisplay, layer.id)}
-                                onChange={(event) =>
-                                  commitView3dDisplay(setLayer3dVisible(view3dDisplay, layer.id, event.target.checked))
-                                }
-                              />
-                              {layer.label}
-                            </label>
-                            {layer.meta ? (
-                              <span className="studio-layer-meta" aria-hidden="true">
-                                {layer.meta}
+                      <div className="outliner-rows display-switches" role="group" aria-label="3D layers">
+                        {availableLayers3d.map((layer) => {
+                          const visible = isLayer3dVisible(view3dDisplay, layer.id);
+                          return (
+                            <div key={layer.id} className="o-row studio-layer-row">
+                              <label className="o-left check-field">
+                                <input
+                                  className="sr-only"
+                                  type="checkbox"
+                                  checked={visible}
+                                  onChange={(event) =>
+                                    commitView3dDisplay(setLayer3dVisible(view3dDisplay, layer.id, event.target.checked))
+                                  }
+                                />
+                                <span className={visible ? "o-eye l-eye on" : "o-eye l-eye off"} aria-hidden="true">{visible ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
+                                <span className="o-name">{layer.label}</span>
+                              </label>
+                              <span className="o-right">
+                                {layer.meta ? (
+                                  <span className="o-count studio-layer-meta mono" aria-hidden="true">
+                                    {layer.meta}
+                                  </span>
+                                ) : null}
+                                <label
+                                  className="o-swatch-wrap legend-swatch"
+                                  style={{ background: layer.color }}
+                                  title={`Change ${layer.label.toLowerCase()} colour`}
+                                >
+                                  <input
+                                    type="color"
+                                    className="o-swatch-input"
+                                    aria-label={`${layer.label} colour`}
+                                    value={layer.color.toLowerCase()}
+                                    onChange={(event) => layer.onPick(event.target.value)}
+                                  />
+                                </label>
                               </span>
-                            ) : null}
-                          </div>
-                        ))}
+                            </div>
+                          );
+                        })}
                       </div>
-                    </section>
-                  )}
-                  {availableLayers3d.length > 0 && (
-                    <section className="sidebar-group legend" aria-label="Colors">
-                      <div className="sidebar-gh">
-                        <h3>Colors</h3>
-                      </div>
-                      <ul className="legend-two">
-                        {availableLayers3d.map((layer) => (
-                          <li key={layer.id}>
-                            <label
-                              className="legend-swatch"
-                              style={{ background: layer.color }}
-                              title={`Change ${layer.label.toLowerCase()} colour`}
-                            >
-                              <input
-                                type="color"
-                                aria-label={`${layer.label} colour`}
-                                value={layer.color.toLowerCase()}
-                                onChange={(event) => layer.onPick(event.target.value)}
-                              />
-                            </label>
-                            <span>{layer.label}</span>
-                          </li>
-                        ))}
-                      </ul>
                     </section>
                   )}
                 </div>
@@ -2758,22 +2875,22 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             </div>
           </Sidebar>
         </div>
-        <div className="studio-solar-bar" role="region" aria-label="Solar and camera controls">
+        <div className="bottom-bar studio-solar-bar hud-card" role="region" aria-label="Solar and camera controls">
           <button
             type="button"
-            className={solar.castShadows ? "studio-solar-pill is-active" : "studio-solar-pill"}
+            className={solar.castShadows ? "sun-pill studio-solar-pill is-active" : "sun-pill studio-solar-pill"}
             aria-pressed={solar.castShadows}
             onClick={() => commitSolar({ ...solar, castShadows: !solar.castShadows })}
           >
-            <Sun size={14} strokeWidth={1.8} aria-hidden="true" />
-            <span>{sunStudyDateText({ year: solar.year, month: solar.month, day: solar.day })}</span>
+            <Sun size={12} strokeWidth={2.2} aria-hidden="true" />
+            <span>Equinox · {`${solar.day} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][(solar.month ?? 9) - 1] ?? "Sep"}`}</span>
           </button>
-          <div className="studio-solar-track" role="group" aria-label="Solar hour scrubber">
+          <div className="solar-hours studio-solar-track mono" role="group" aria-label="Solar hour scrubber">
             {[9, 10, 11, 12, 13, 14, 15].map((hour) => (
               <button
                 key={hour}
                 type="button"
-                className={solar.hour === hour ? "studio-solar-tick is-active" : "studio-solar-tick"}
+                className={solar.hour === hour ? "h-tick active studio-solar-tick is-active" : "h-tick studio-solar-tick"}
                 aria-label={`Solar time ${String(hour).padStart(2, "0")}:00`}
                 aria-pressed={solar.hour === hour}
                 onClick={() => commitSolar({ ...solar, hour, minute: 0, castShadows: true })}
@@ -2782,16 +2899,19 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
               </button>
             ))}
           </div>
-          <span className="studio-solar-time">
+          <span className="studio-solar-time mono">
             {String(solar.hour).padStart(2, "0")}:{String(solar.minute).padStart(2, "0")} AEST
           </span>
-          <span className="hud-sep" aria-hidden="true" />
-          <span className="studio-compass-chip" aria-hidden="true">
-            <i className="studio-compass-arrow">▲</i> N
+          <span className="v-sep hud-sep" aria-hidden="true" />
+          <span className="compass-mini studio-compass-chip" aria-hidden="true">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
+              <polygon points="12 2 16 14 12 11 8 14 12 2" fill="currentColor" />
+            </svg>
+            <span className="mono">N</span>
           </span>
           <button
             type="button"
-            className="studio-reset-btn"
+            className="cam-reset studio-reset-btn"
             onClick={() => setSnapId((id) => id + 1)}
           >
             Reset view
