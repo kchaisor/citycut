@@ -191,6 +191,10 @@ describe("Display panel controls by view tab", () => {
     expect(leftRail.getAttribute("aria-orientation")).toBe("horizontal");
     expect(rightRail.getAttribute("aria-orientation")).toBe("horizontal");
     expect(within(leftRail).getByRole("button", { name: "Display" }).getAttribute("aria-pressed")).toBe("true");
+    const siteAnalysisBtn = within(leftRail).getByRole("button", { name: "Site Analysis" });
+    expect(siteAnalysisBtn.querySelector("svg.lucide-radar")).toBeTruthy();
+    const analysisTabs = document.querySelector(".site-analysis-tabs") as HTMLElement;
+    expect(within(analysisTabs).getByRole("tab", { name: "Sun", hidden: true }).querySelector("svg.lucide-sun")).toBeTruthy();
     expect(within(leftRail).getByRole("button", { name: "Site Analysis" })).toBeTruthy();
     expect(within(leftRail).getByRole("button", { name: "Import" })).toBeTruthy();
     expect(within(leftRail).getByRole("button", { name: "Export" })).toBeTruthy();
