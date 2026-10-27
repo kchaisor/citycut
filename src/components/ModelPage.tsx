@@ -3,7 +3,7 @@ import { sunStudyLayersFor } from "./useSunStudyShadows";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
-import { Building2, Copy, Download, DraftingCompass, Eye, GripVertical, Info, Sun, Trees, Upload, Wind } from "lucide-react";
+import { Building2, Copy, Download, DraftingCompass, Eye, GripVertical, Info, Radar, Sun, Trees, Upload, Wind } from "lucide-react";
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -230,7 +230,7 @@ const SECTION_ICONS: Record<SidebarSectionId, typeof Info> = {
   buildings: Building2,
   trees: Trees,
   drawing: DraftingCompass,
-  analysis: Sun,
+  analysis: Radar,
   import: Upload,
   exports: Download,
 };
