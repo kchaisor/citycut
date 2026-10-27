@@ -590,6 +590,6 @@ describe("Display panel controls by view tab", () => {
     );
 
     expect(indexCss).toMatch(/\.model\s+\.viewport\s*\{[^}]*--sidebar-r:\s*var\(--sidebar-panel-w\);/);
-    expect(indexCss).toMatch(/\.model\s+\.viewport\s*>\s*\.fill\s*\{\s*left:\s*var\(--sidebar-w\);\s*right:\s*var\(--sidebar-r\);\s*\}/);
+    expect(indexCss).toMatch(/\.model\s+\.viewport\s*>\s*\.fill\s*\{\s*inset:\s*0;\s*left:\s*0;\s*right:\s*0;\s*\}/);
   });
 });

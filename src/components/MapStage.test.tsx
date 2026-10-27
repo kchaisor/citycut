@@ -101,7 +101,7 @@ vi.mock("maplibre-gl", () => {
       getNorth: () => -37.8,
       getEast: () => 144.97,
     });
-    project = () => ({ x: 100, y: 100 });
+    project = vi.fn(([lng, lat]: [number, number]) => ({ x: 720 + (lng - 144.96) * 20000, y: 450 - (lat - -37.81) * 20000 }));
     container = rectElement({ left: 0, top: 0, right: 1440, bottom: 900 });
     getContainer = () => this.container;
     padding = { left: 0, top: 0, right: 0, bottom: 0 };
@@ -247,5 +247,43 @@ describe("MapStage", () => {
       width.mockRestore();
       height.mockRestore();
     }
+  });
+
+  it("updates cut frame DOM styles directly during 60fps move events and coalesces onView callbacks", async () => {
+    const onView = vi.fn();
+    const { container } = render(<MapStage {...baseProps} onView={onView} />);
+    await waitFor(() => expect(mapInstances).toHaveLength(1));
+    const map = mapInstances[0]!;
+    await waitFor(() => expect(container.querySelector(".frame")).not.toBeNull());
+
+    const frameEl = container.querySelector(".frame") as HTMLElement;
+    const handles = container.querySelectorAll(".frame-handle");
+    const cadTag = container.querySelector(".frame-cad-tag") as HTMLElement;
+    expect(handles).toHaveLength(4);
+    expect(cadTag.textContent).toContain("1,000 × 1,000 m | 1.00 km² · MGA55");
+
+    onView.mockClear();
+    const moveHandlers = [...(map.handlers.get("move") ?? [])];
+    expect(moveHandlers.length).toBeGreaterThan(0);
+
+    // Simulate 10 rapid pointer-move frames during a pan gesture
+    let panOffset = 0;
+    (map as unknown as { project: (pt: [number, number]) => { x: number; y: number } }).project = ([lng, lat]) => ({
+      x: 720 + panOffset + (lng - 144.96) * 20000,
+      y: 450 + panOffset - (lat - -37.81) * 20000,
+    });
+
+    for (let i = 1; i <= 10; i++) {
+      panOffset = i * 5;
+      for (const fn of moveHandlers) fn();
+    }
+
+    // Frame DOM style updated synchronously on the 10th move without waiting for React re-renders
+    const moveEndHandlers = [...(map.handlers.get("moveend") ?? [])];
+    for (const fn of moveEndHandlers) fn();
+
+    // Coalesced: 10 rapid move events + moveend flush at most 1-2 onView calls instead of 10
+    expect(onView.mock.calls.length).toBeLessThanOrEqual(2);
+    expect(frameEl.style.left).not.toBe("");
   });
 });

@@ -53,6 +53,9 @@ export function Sidebar({
   panelSide = "left",
   showNewCut,
   onNewCut,
+  brandMeta,
+  headerCenter,
+  headerRight,
   children,
   rightChildren,
 }: {
@@ -75,6 +78,9 @@ export function Sidebar({
   onHome: () => void;
   showNewCut?: boolean;
   onNewCut?: () => void;
+  brandMeta?: ReactNode;
+  headerCenter?: ReactNode;
+  headerRight?: ReactNode;
   children: ReactNode;
   rightChildren?: ReactNode;
 }) {
@@ -141,17 +147,22 @@ export function Sidebar({
   return (
     <div className={collapsed ? "sidebar is-collapsed" : "sidebar"}>
       <div className="sidebar-brand-bar">
-        <button className="sidebar-brand" type="button" onClick={onHome} aria-label="CityCut home">
-          <span className="sidebar-brand-mark">
-            <Mark />
-          </span>
-          <span className="sidebar-brand-name">CityCut</span>
-        </button>
-        {showNewCut && onNewCut && !collapsed ? (
-          <button className="sidebar-new-cut" type="button" onClick={onNewCut}>
-            New cut
+        <div className="studio-header-left">
+          <button className="sidebar-brand" type="button" onClick={onHome} aria-label="CityCut home">
+            <span className="sidebar-brand-mark">
+              <Mark />
+            </span>
+            <span className="sidebar-brand-name">CityCut</span>
           </button>
-        ) : null}
+          {brandMeta}
+          {showNewCut && onNewCut && !collapsed ? (
+            <button className="sidebar-new-cut" type="button" onClick={onNewCut}>
+              New cut
+            </button>
+          ) : null}
+        </div>
+        {headerCenter ? <div className="studio-header-center">{headerCenter}</div> : null}
+        {headerRight ? <div className="studio-header-right">{headerRight}</div> : null}
       </div>
       <div className="sidebar-main">
         <nav

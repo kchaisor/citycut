@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import { MapAttribution } from "./MapAttribution";
 import { MgaGridLayer } from "./MgaGridLayer";
 import { applyBasemapStyleToMap, loadBasemapStyle } from "../lib/loadMapStyle";
 import { M_PER_DEG_LAT, mPerDegLon, squareBBox } from "../lib/geo";
 import { cutFrameLabelKm } from "../lib/placeLabel";
-import type { SiteFrameShape } from "../types";
+import { mgaZone } from "../lib/crsZone";
+import { siteFrameAreaM2, type SiteFrameShape } from "../lib/siteFrame";
 import { updateMapSiteLayers, removeMapSiteLayers } from "../lib/mapSiteLayers";
 import { fetchOvertureBuildingsForCut } from "../lib/overtureBuildings";
 import { fetchSiteParcelCached, siteBuildingIdsForPreview } from "../lib/sitePreviewCache";
@@ -61,7 +62,19 @@ export function MapStage({
   const onFlyLandedRef = useRef(onFlyLanded);
   const appliedBasemap = useRef<Basemap>(basemap);
   const mountedFly = useRef(fly?.token ?? null);
-  const [frame, setFrame] = useState<Frame | null>(null);
+
+  // Direct DOM refs for 60 fps zero-re-render frame tracking during pan/zoom
+  const frameRef = useRef<Frame | null>(null);
+  const frameVisibleRef = useRef(false);
+  const [frameVisible, setFrameVisible] = useState(false);
+  const frameBoxRef = useRef<HTMLDivElement>(null);
+  const frameLabelRef = useRef<HTMLDivElement>(null);
+  const frameCadRef = useRef<HTMLDivElement>(null);
+  const syncFrameRef = useRef<(() => void) | null>(null);
+  const viewRafRef = useRef<number | null>(null);
+  const pendingViewRef = useRef<ViewState | null>(null);
+  const activeLonRef = useRef(initialView.lon);
+
   const [ready, setReady] = useState(false);
   const [mapEpoch, setMapEpoch] = useState(0);
   const [basemapStyleFailed, setBasemapStyleFailed] = useState(false);
@@ -71,14 +84,55 @@ export function MapStage({
   onViewRef.current = onView;
   onFlyLandedRef.current = onFlyLanded;
 
+  const applyFrameStyles = (next: Frame) => {
+    const box = frameBoxRef.current;
+    if (box) {
+      box.style.left = `${next.left}px`;
+      box.style.top = `${next.top}px`;
+      box.style.width = `${next.width}px`;
+      box.style.height = `${next.height}px`;
+    }
+    const clientW = containerRef.current?.clientWidth || 800;
+    const labelLeft = Math.min(Math.max(next.left + next.width / 2, 88), clientW - 150);
+    const labelEl = frameLabelRef.current;
+    if (labelEl) {
+      labelEl.style.left = `${labelLeft}px`;
+      labelEl.style.top = `${Math.max(next.top, 16)}px`;
+    }
+    const cadEl = frameCadRef.current;
+    if (cadEl) {
+      cadEl.style.left = `${labelLeft}px`;
+      cadEl.style.top = `${next.top + next.height + 14}px`;
+    }
+  };
+
+  useLayoutEffect(() => {
+    if (frameVisible && frameRef.current) {
+      applyFrameStyles(frameRef.current);
+    }
+  }, [frameVisible, sideM, frameShape]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     let map: maplibregl.Map | null = null;
     let cancelled = false;
     let onLoad: (() => void) | null = null;
-    let update: (() => void) | null = null;
+    let onMove: (() => void) | null = null;
     let onMoveEnd: (() => void) | null = null;
+    let onResize: (() => void) | null = null;
+
+    const flushPendingView = () => {
+      if (viewRafRef.current != null) {
+        window.cancelAnimationFrame(viewRafRef.current);
+        viewRafRef.current = null;
+      }
+      if (pendingViewRef.current) {
+        const view = pendingViewRef.current;
+        pendingViewRef.current = null;
+        onViewRef.current(view);
+      }
+    };
 
     void loadBasemapStyle(appliedBasemap.current).then(({ style, styleLoadFailed }) => {
       if (cancelled) return;
@@ -104,45 +158,95 @@ export function MapStage({
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
       mapRef.current = map;
 
-      update = () => {
-        if (!map) return;
+      const syncFrameDom = () => {
+        if (!map) return null;
         const center = map.getCenter();
+        activeLonRef.current = center.lng;
         const half = sideRef.current / 2;
         const dLat = half / M_PER_DEG_LAT;
         const dLon = half / mPerDegLon(center.lat);
         const northWest = map.project([center.lng - dLon, center.lat + dLat]);
         const southEast = map.project([center.lng + dLon, center.lat - dLat]);
-        const left = Math.min(northWest.x, southEast.x);
-        const top = Math.min(northWest.y, southEast.y);
-        setFrame({
-          left,
-          top,
+        const next: Frame = {
+          left: Math.min(northWest.x, southEast.x),
+          top: Math.min(northWest.y, southEast.y),
           width: Math.abs(southEast.x - northWest.x),
           height: Math.abs(southEast.y - northWest.y),
-        });
-        onViewRef.current({ lon: center.lng, lat: center.lat, zoom: map.getZoom() });
+        };
+        frameRef.current = next;
+        applyFrameStyles(next);
+        const shouldShow = next.width > 8;
+        if (shouldShow !== frameVisibleRef.current) {
+          frameVisibleRef.current = shouldShow;
+          setFrameVisible(shouldShow);
+        }
+        return { lon: center.lng, lat: center.lat, zoom: map.getZoom() };
+      };
+      syncFrameRef.current = () => {
+        syncFrameDom();
+      };
+
+      onMove = () => {
+        const nextView = syncFrameDom();
+        if (!nextView) return;
+        pendingViewRef.current = nextView;
+        if (viewRafRef.current == null) {
+          viewRafRef.current = window.requestAnimationFrame(() => {
+            viewRafRef.current = null;
+            if (pendingViewRef.current) {
+              const v = pendingViewRef.current;
+              pendingViewRef.current = null;
+              onViewRef.current(v);
+            }
+          });
+        }
+      };
+
+      onResize = () => {
+        const nextView = syncFrameDom();
+        if (nextView) {
+          pendingViewRef.current = null;
+          onViewRef.current(nextView);
+        }
       };
 
       onLoad = () => {
         setReady(true);
-        update?.();
+        const nextView = syncFrameDom();
+        if (nextView) {
+          pendingViewRef.current = null;
+          onViewRef.current(nextView);
+        }
       };
-      onMoveEnd = () => setMapEpoch((value) => value + 1);
+
+      onMoveEnd = () => {
+        const nextView = syncFrameDom();
+        if (nextView) {
+          pendingViewRef.current = nextView;
+        }
+        flushPendingView();
+        setMapEpoch((value) => value + 1);
+      };
 
       map.on("load", onLoad);
-      map.on("move", update);
+      map.on("move", onMove);
       map.on("moveend", onMoveEnd);
-      map.on("resize", update);
+      map.on("resize", onResize);
     });
 
     return () => {
       cancelled = true;
+      if (viewRafRef.current != null) {
+        window.cancelAnimationFrame(viewRafRef.current);
+        viewRafRef.current = null;
+      }
+      syncFrameRef.current = null;
       const active = map ?? mapRef.current;
-      if (active && onLoad && update && onMoveEnd) {
+      if (active && onLoad && onMove && onMoveEnd && onResize) {
         active.off("load", onLoad);
-        active.off("move", update);
+        active.off("move", onMove);
         active.off("moveend", onMoveEnd);
-        active.off("resize", update);
+        active.off("resize", onResize);
         removeMapSiteLayers(active);
         active.remove();
       }
@@ -158,6 +262,7 @@ export function MapStage({
     frameShapeRef.current = frameShape;
     const map = mapRef.current;
     if (!map || !ready) return;
+    syncFrameRef.current?.();
     map.fire("move");
   }, [sideM, frameShape, ready]);
 
@@ -263,13 +368,23 @@ export function MapStage({
     };
   }, [fly, ready]);
 
-  // The landing map fills the whole window under the floating controls (left column on desktop,
+  // The landing map fills the whole window under the floating controls (perimeter HUD on desktop,
   // bottom sheet on a phone) and is NOT padded for them: the cut frame sits on the middle of
   // the window (Kelvin, PR 112). Only load and a search pick the centre; toggles never move it.
 
   const sideKm = sideM / 1000;
   const label = cutFrameLabelKm(sideKm, frameShape);
   const circleFrame = frameShape === "circle";
+  const roundedM = Math.round(sideM).toLocaleString();
+  const dimMeters = circleFrame ? `⌀ ${roundedM} m` : `${roundedM} × ${roundedM} m`;
+  const areaKm2 = (siteFrameAreaM2(sideM, frameShape) / 1_000_000).toFixed(2);
+  const zone = mgaZone(activeLonRef.current);
+  const cadReadout = `${dimMeters} | ${areaKm2} km² · MGA${zone}`;
+  const currentFrame = frameRef.current;
+  const clientW = containerRef.current?.clientWidth ?? 800;
+  const initialLabelLeft = currentFrame
+    ? Math.min(Math.max(currentFrame.left + currentFrame.width / 2, 88), clientW - 150)
+    : 400;
 
   return (
     <div className={loading ? "map-wrap is-loading" : "map-wrap"}>
@@ -277,23 +392,47 @@ export function MapStage({
       {basemap !== "satellite" && <div className="map-tint" aria-hidden="true" />}
       {ready && <MgaGridLayer map={mapRef.current} epoch={mapEpoch} />}
       <MapAttribution basemap={basemap} />
-      {frame && frame.width > 8 && (
+      {frameVisible && currentFrame && (
         <>
           <div
+            ref={frameBoxRef}
             className={circleFrame ? "frame frame-circle" : "frame"}
-            style={{ left: frame.left, top: frame.top, width: frame.width, height: frame.height }}
-          />
+            data-shape={frameShape}
+            style={{
+              left: currentFrame.left,
+              top: currentFrame.top,
+              width: currentFrame.width,
+              height: currentFrame.height,
+            }}
+          >
+            {!circleFrame && (
+              <>
+                <span className="frame-handle is-tl" aria-hidden="true" />
+                <span className="frame-handle is-tr" aria-hidden="true" />
+                <span className="frame-handle is-bl" aria-hidden="true" />
+                <span className="frame-handle is-br" aria-hidden="true" />
+              </>
+            )}
+          </div>
           <div
+            ref={frameLabelRef}
             className="frame-label"
             style={{
-              left: Math.min(
-                Math.max(frame.left + frame.width / 2, 88),
-                (containerRef.current?.clientWidth ?? 800) - 150,
-              ),
-              top: Math.max(frame.top, 16),
+              left: initialLabelLeft,
+              top: Math.max(currentFrame.top, 16),
             }}
           >
             {label}
+          </div>
+          <div
+            ref={frameCadRef}
+            className="frame-cad-tag"
+            style={{
+              left: initialLabelLeft,
+              top: currentFrame.top + currentFrame.height + 14,
+            }}
+          >
+            {cadReadout}
           </div>
         </>
       )}

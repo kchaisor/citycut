@@ -1135,7 +1135,7 @@ input[type="range"]::-moz-range-thumb {
   --sidebar-r: var(--sidebar-panel-w);
 }
 .model .viewport.sidebar-collapsed { --sidebar-w: 0px; }
-.model .viewport > .fill { left: var(--sidebar-w); right: var(--sidebar-r); }
+.model .viewport > .fill { inset: 0; left: 0; right: 0; }
 .model .viewport > .viewport-hint { left: calc(var(--sidebar-w) + 16px); }
 .model .viewport > .stage-error { left: calc(var(--sidebar-w) + 16px); }
 

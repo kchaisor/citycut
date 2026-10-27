@@ -47,38 +47,32 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
-describe("landing sidebar", () => {
-  it("never changes the map's size or camera when switching sections or flipping toggles", async () => {
+describe("landing perimeter HUD (Variation B)", () => {
+  it("never changes the map's size or camera when flipping shape, basemap, cut size, or layer toggles", async () => {
     const user = userEvent.setup();
     const { container } = render(<AppRoot />);
     const select = container.querySelector(".select")!;
     const sizeClass = select.className;
     const before = camera(stageProps[stageProps.length - 1]);
-    const rail = screen.getByRole("toolbar", { name: "Model tools" });
-    for (const name of ["Cut", "Layers", "Place", "Layers"]) {
-      await user.click(within(rail).getByRole("button", { name: new RegExp(`^${name}$`) }));
+
+    // Verify 4-piece Perimeter HUD is rendered and omnibox has no ⌘K icon
+    expect(container.querySelector(".landing-brand-pill .sidebar-brand-mark svg.mark")).toBeTruthy();
+    expect(container.querySelector(".landing-omnibox")).toBeTruthy();
+    expect(container.querySelector(".landing-omnibox")?.textContent ?? "").not.toContain("⌘K");
+    expect(screen.getByRole("group", { name: "Basemap" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Site area shape" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Layers" })).toBeTruthy();
+
+    for (const toggle of container.querySelectorAll<HTMLButtonElement>(".select-chrome button[aria-pressed]")) {
+      await user.click(toggle);
+      await user.click(toggle);
       expect(select.className).toBe(sizeClass);
       expect(camera(stageProps[stageProps.length - 1])).toBe(before);
     }
-    const panel = container.querySelector("#select-drawer")!;
-    for (const toggle of panel.querySelectorAll<HTMLButtonElement>("button[aria-pressed]")) {
-      await user.click(toggle);
-      await user.click(toggle);
-      expect(select.className).toBe(sizeClass);
-    }
-    // Section switches and layer toggles never touch the camera.
-    await user.click(within(rail).getByRole("button", { name: /^Layers$/ }));
-    for (const toggle of container.querySelectorAll<HTMLButtonElement>(".layers button.toggle")) {
-      await user.click(toggle);
-    }
-    expect(camera(stageProps[stageProps.length - 1])).toBe(before);
-    expect(select.className).toBe(sizeClass);
   });
 
   it("keeps the map's width fixed for every section in CSS", () => {
     const css = readFileSync(resolve(__dirname, "index.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
-    // The only rules that set the landing sidebar's width or height key off the collapse
-    // class, never off the open section, so the map beside it keeps one size.
     const selectors = [...css.matchAll(/([^{};]+)\{\s*--sidebar-[wh]:/g)].map((m) => m[1].trim());
     const landing = new Set(selectors.filter((s) => s.includes(".select")));
     expect([...landing].sort()).toEqual([".select", ".select.sidebar-collapsed"]);
@@ -89,7 +83,6 @@ describe("landing sidebar", () => {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "0");
     const { container } = render(<AppRoot />);
     expect(container.querySelector(".select")!.className).toContain("sidebar-collapsed");
-    expect(container.querySelector<HTMLElement>("#select-drawer")!.hidden).toBe(true);
   });
 
   it("starts open on desktop and honours a stored collapse", () => {
@@ -99,14 +92,12 @@ describe("landing sidebar", () => {
     expect(getSidebarCollapsed()).toBe(true);
   });
 
-  it("shares one collapse setting between the landing and model pages", async () => {
-    const user = userEvent.setup();
+  it("shares one collapse setting between the landing and model pages", () => {
     const { container } = render(<AppRoot />);
-    await user.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+    act(() => setSidebarCollapsed(true));
     expect(getSidebarCollapsed()).toBe(true);
     expect(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)).toBe("1");
     expect(container.querySelector(".select")!.className).toContain("sidebar-collapsed");
-    // The model page reads the same store, so a change there reaches the landing page.
     act(() => setSidebarCollapsed(false));
     expect(container.querySelector(".select")!.className).not.toContain("sidebar-collapsed");
   });

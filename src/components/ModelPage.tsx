@@ -1359,6 +1359,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   const availableLayers3d: {
     id: Layer3dId;
     label: string;
+    meta: string;
     color: string;
     available: boolean;
     onPick: (value: string) => void;
@@ -1367,6 +1368,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       {
         id: "buildings" as const,
         label: "Buildings",
+        meta: displayModel.buildings.length.toLocaleString(),
         color: getColour("--building-uniform"),
         available: showBuildings,
         onPick: (value: string) => {
@@ -1384,6 +1386,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       {
         id: "roads" as const,
         label: "Roads",
+        meta: `${formatLengthKm(model.roadKm)} km`,
         color: getColour("--road-local"),
         available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade !== "path"),
         onPick: (value: string) => {
@@ -1399,6 +1402,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       {
         id: "footpaths" as const,
         label: "Footpaths",
+        meta: model.roads.filter((r) => r.kind === "road" && r.grade === "path").length.toLocaleString(),
         color: getColour("--road-path"),
         available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade === "path"),
         onPick: (value: string) => {
@@ -1413,6 +1417,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       {
         id: "trees" as const,
         label: "Trees",
+        meta: model.trees.length.toLocaleString(),
         color: getColour("--tree-crown"),
         available: model.layers.trees && model.trees.length > 0,
         onPick: (value: string) => {
@@ -1429,6 +1434,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       {
         id: "landscape" as const,
         label: "Landscape",
+        meta: `${model.areas.filter((a) => a.kind === "green").length.toLocaleString()} zones`,
         color: getColour("--green-3d"),
         available: model.layers.waterGreen && model.areas.some((a) => a.kind === "green"),
         onPick: (value: string) => {
@@ -1443,6 +1449,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       {
         id: "water" as const,
         label: "Water",
+        meta: `${model.areas.filter((a) => a.kind === "water").length.toLocaleString()} zones`,
         color: getColour("--water-3d"),
         available: model.layers.waterGreen && model.areas.some((a) => a.kind === "water"),
         onPick: (value: string) => {
@@ -1457,6 +1464,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       {
         id: "rail" as const,
         label: "Rail & tram",
+        meta: `${model.roads.filter((r) => r.kind === "rail").length + (model.tramLines?.length ?? 0)} lines`,
         color: getColour("--rail-fill"),
         available:
           model.layers.roads &&
@@ -1475,6 +1483,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       {
         id: "contours" as const,
         label: "Contours",
+        meta: model.contourLayer ? `${model.contourLayer.interval} m` : "",
         color: getColour("--outline-contour"),
         available: Boolean(model.contourLayer && model.contourLayer.lines.length > 0),
         onPick: (value: string) => {
@@ -1638,8 +1647,131 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             rightTitle={SIDEBAR_SECTION_LABELS[rightOpen]}
             onHome={onHome}
             onNewCut={onNewCut}
+            showNewCut
             onSelect={selectSection}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+            brandMeta={
+              <>
+                <span className="hud-sep" aria-hidden="true" />
+                <span className="studio-breadcrumb-place" title={model.placeLabel}>
+                  {model.placeLabel}
+                </span>
+                <span className="studio-cut-pill">
+                  {cutSizeLabel(model.sideM, model.frameShape ?? "square")}
+                </span>
+              </>
+            }
+            headerCenter={
+              <>
+                <div className="tabs studio-view-tabs" role="tablist" aria-label="Model views">
+                  {(
+                    [
+                      ["3d", "3D model"],
+                      ["drawing", "Drawing"],
+                      ["satellite", "Satellite"],
+                    ] as const
+                  ).map(([id, label], index) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="tab"
+                      data-autofocus={index === 0 ? "true" : undefined}
+                      aria-selected={tab === id}
+                      className={tab === id ? "active" : ""}
+                      onClick={() => setTab(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="studio-submode-pills" aria-label="Quick drawing modes">
+                  {(
+                    [
+                      ["site", "Site plan"],
+                      ["figure-ground", "Figure-ground"],
+                      ["exploded-axo", "Exploded axo"],
+                      ["isometric", "Isometric"],
+                    ] as const
+                  ).map(([kind, label]) => (
+                    <button
+                      key={kind}
+                      type="button"
+                      className={tab === "drawing" && drawing === kind ? "studio-submode-pill is-active" : "studio-submode-pill"}
+                      aria-label={`Quick ${label}`}
+                      aria-pressed={tab === "drawing" && drawing === kind}
+                      onClick={() => {
+                        setDrawing(kind);
+                        setTab("drawing");
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            }
+            headerRight={
+              <>
+                <span className="studio-status-pill">
+                  <i className="status-dot is-ready" aria-hidden="true" />
+                  Ready · {sourcesLoaded.loaded}/{sourcesLoaded.total} sources
+                </span>
+                <div className="studio-quick-exports">
+                  {tab === "drawing" ? (
+                    <>
+                      <button
+                        type="button"
+                        className="studio-export-btn"
+                        aria-label="Quick export SVG"
+                        disabled={busy !== null || drawing === "exploded-axo"}
+                        onClick={() => {
+                          if (drawing === "figure-ground") void saveFigureSvg();
+                          else if (drawing === "isometric") void saveIsometricSvg();
+                          else void saveSiteSvg();
+                        }}
+                      >
+                        .svg
+                      </button>
+                      <button
+                        type="button"
+                        className="studio-export-btn is-primary"
+                        aria-label="Quick export Adobe Illustrator .ai"
+                        disabled={busy !== null}
+                        onClick={() => {
+                          if (drawing === "site") void saveSiteAi();
+                          else if (drawing === "figure-ground") void saveFigureAi();
+                          else if (drawing === "isometric") void saveIsometricAi();
+                          else void saveExplodedAxoAi();
+                        }}
+                      >
+                        .ai
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="studio-export-btn"
+                        aria-label="Quick export 2x PNG"
+                        disabled={busy !== null}
+                        onClick={() => void savePng()}
+                      >
+                        2× PNG
+                      </button>
+                      <button
+                        type="button"
+                        className="studio-export-btn is-primary"
+                        aria-label="Quick export Rhino .3dm"
+                        disabled={busy !== null}
+                        onClick={() => void save3dm()}
+                      >
+                        Rhino .3dm
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
+            }
             status={
               leftOpen === "import" ? (
                 <span className="sidebar-status">
@@ -1755,6 +1887,38 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                           <i className={`height-bar-${part.id}`} />
                           <span>{part.label}</span>
                           <b>{part.value.toLocaleString()}</b>
+                        </li>
+                      ) : null,
+                    )}
+                  </ul>
+                </section>
+              )}
+              {showBuildings && displayModel.buildings.length > 0 && (
+                <section className="sidebar-group">
+                  <div className="sidebar-gh">
+                    <h3>Building use mix</h3>
+                    <span>{displayModel.buildings.length.toLocaleString()} total</span>
+                  </div>
+                  <div className="height-bar use-mix-bar" aria-hidden="true">
+                    {BUILDING_USES.map((use) =>
+                      useCounts[use] > 0 ? (
+                        <i
+                          key={use}
+                          style={{
+                            flexGrow: useCounts[use],
+                            background: BUILDING_USE_META[use].color,
+                          }}
+                        />
+                      ) : null,
+                    )}
+                  </div>
+                  <ul className="height-bar-legend">
+                    {BUILDING_USES.map((use) =>
+                      useCounts[use] > 0 ? (
+                        <li key={use}>
+                          <i style={{ background: BUILDING_USE_META[use].color }} />
+                          <span>{BUILDING_USE_META[use].label}</span>
+                          <b>{useCounts[use].toLocaleString()}</b>
                         </li>
                       ) : null,
                     )}
@@ -1999,27 +2163,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             }
           >
             <div className="drawer-section" hidden={leftOpen !== "drawing"}>
-              <div className="tabs" role="tablist" aria-label="Model views">
-                {(
-                  [
-                    ["3d", "3D model"],
-                    ["drawing", "Drawing"],
-                    ["satellite", "Satellite"],
-                  ] as const
-                ).map(([id, label], index) => (
-                  <button
-                    key={id}
-                    type="button"
-                    role="tab"
-                    data-autofocus={index === 0 ? "true" : undefined}
-                    aria-selected={tab === id}
-                    className={tab === id ? "active" : ""}
-                    onClick={() => setTab(id)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
               {tab === "3d" && (
                 <div className="projection-block">
                   <section className="sidebar-group" aria-label="View modes">
@@ -2103,16 +2246,23 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                       </div>
                       <div className="display-switches" role="group" aria-label="3D layers">
                         {availableLayers3d.map((layer) => (
-                          <label key={layer.id} className="check-field">
-                            <input
-                              type="checkbox"
-                              checked={isLayer3dVisible(view3dDisplay, layer.id)}
-                              onChange={(event) =>
-                                commitView3dDisplay(setLayer3dVisible(view3dDisplay, layer.id, event.target.checked))
-                              }
-                            />
-                            {layer.label}
-                          </label>
+                          <div key={layer.id} className="studio-layer-row">
+                            <label className="check-field">
+                              <input
+                                type="checkbox"
+                                checked={isLayer3dVisible(view3dDisplay, layer.id)}
+                                onChange={(event) =>
+                                  commitView3dDisplay(setLayer3dVisible(view3dDisplay, layer.id, event.target.checked))
+                                }
+                              />
+                              {layer.label}
+                            </label>
+                            {layer.meta ? (
+                              <span className="studio-layer-meta" aria-hidden="true">
+                                {layer.meta}
+                              </span>
+                            ) : null}
+                          </div>
                         ))}
                       </div>
                     </section>
@@ -2220,16 +2370,23 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                       </div>
                       <div className="display-switches" role="group" aria-label="3D layers">
                         {availableLayers3d.map((layer) => (
-                          <label key={layer.id} className="check-field">
-                            <input
-                              type="checkbox"
-                              checked={isLayer3dVisible(view3dDisplay, layer.id)}
-                              onChange={(event) =>
-                                commitView3dDisplay(setLayer3dVisible(view3dDisplay, layer.id, event.target.checked))
-                              }
-                            />
-                            {layer.label}
-                          </label>
+                          <div key={layer.id} className="studio-layer-row">
+                            <label className="check-field">
+                              <input
+                                type="checkbox"
+                                checked={isLayer3dVisible(view3dDisplay, layer.id)}
+                                onChange={(event) =>
+                                  commitView3dDisplay(setLayer3dVisible(view3dDisplay, layer.id, event.target.checked))
+                                }
+                              />
+                              {layer.label}
+                            </label>
+                            {layer.meta ? (
+                              <span className="studio-layer-meta" aria-hidden="true">
+                                {layer.meta}
+                              </span>
+                            ) : null}
+                          </div>
                         ))}
                       </div>
                     </section>
@@ -2600,6 +2757,45 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
               )}
             </div>
           </Sidebar>
+        </div>
+        <div className="studio-solar-bar" role="region" aria-label="Solar and camera controls">
+          <button
+            type="button"
+            className={solar.castShadows ? "studio-solar-pill is-active" : "studio-solar-pill"}
+            aria-pressed={solar.castShadows}
+            onClick={() => commitSolar({ ...solar, castShadows: !solar.castShadows })}
+          >
+            <Sun size={14} strokeWidth={1.8} aria-hidden="true" />
+            <span>{sunStudyDateText({ year: solar.year, month: solar.month, day: solar.day })}</span>
+          </button>
+          <div className="studio-solar-track" role="group" aria-label="Solar hour scrubber">
+            {[9, 10, 11, 12, 13, 14, 15].map((hour) => (
+              <button
+                key={hour}
+                type="button"
+                className={solar.hour === hour ? "studio-solar-tick is-active" : "studio-solar-tick"}
+                aria-label={`Solar time ${String(hour).padStart(2, "0")}:00`}
+                aria-pressed={solar.hour === hour}
+                onClick={() => commitSolar({ ...solar, hour, minute: 0, castShadows: true })}
+              >
+                {String(hour).padStart(2, "0")}
+              </button>
+            ))}
+          </div>
+          <span className="studio-solar-time">
+            {String(solar.hour).padStart(2, "0")}:{String(solar.minute).padStart(2, "0")} AEST
+          </span>
+          <span className="hud-sep" aria-hidden="true" />
+          <span className="studio-compass-chip" aria-hidden="true">
+            <i className="studio-compass-arrow">▲</i> N
+          </span>
+          <button
+            type="button"
+            className="studio-reset-btn"
+            onClick={() => setSnapId((id) => id + 1)}
+          >
+            Reset view
+          </button>
         </div>
         {model.terrainError && (
           <p className="stage-error" role="alert">
