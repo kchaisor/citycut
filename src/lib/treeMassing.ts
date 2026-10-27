@@ -5,25 +5,43 @@ import { matteStandardMaterial } from "./matteMaterial";
 import type { TreeFeat } from "../types";
 
 /**
- * Sphere crown layout in local metres (Y up).
- * The crown is a uniform sphere: diameter equals crown width.
- * Normally the top of the sphere sits at height_m.
- * When crown_diameter_m >= height_m, the sphere is clamped so its bottom is not below ground
- * (centre at crown_diameter_m / 2, top may sit below the nominal height).
+ * Low-poly geodesic ellipsoid crown layout in local metres (Y up).
+ * Horizontal diameter (X/Z) equals crown_diameter_m (clamped to >= 1 m).
+ * Vertical height (Y) is 72% of tree height_m (clamped to >= 1.2 m), leaving ~28% clear trunk below.
+ * The top of the crown sits at height_m (clamped so the bottom never pokes below ground).
  */
 export function treeCrownSphereLayout(height_m: number, crown_diameter_m: number): {
   centerY: number;
   radius: number;
   scale: number;
+  scaleX: number;
+  scaleY: number;
+  scaleZ: number;
+  radiusX: number;
+  radiusY: number;
 } {
-  const radius = Math.max(crown_diameter_m / 2, 0.05);
-  let centerY = height_m - radius;
-  if (height_m < crown_diameter_m) centerY = radius;
-  return { centerY, radius, scale: crown_diameter_m };
+  const scaleX = Math.max(crown_diameter_m, 1);
+  const scaleZ = scaleX;
+  const scaleY = Math.max(1.2, height_m * 0.72);
+  const radiusX = scaleX / 2;
+  const radiusY = scaleY / 2;
+  const centerY = Math.max(radiusY, height_m - radiusY);
+  return {
+    centerY,
+    radius: radiusY,
+    scale: scaleX,
+    scaleX,
+    scaleY,
+    scaleZ,
+    radiusX,
+    radiusY,
+  };
 }
 
-function unitSphereGeometry(): THREE.BufferGeometry {
-  return new THREE.SphereGeometry(0.5, 12, 10);
+function unitCrownGeometry(): THREE.BufferGeometry {
+  const geometry = new THREE.IcosahedronGeometry(0.5, 1);
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 function unitTrunkGeometry(): THREE.BufferGeometry {
@@ -32,15 +50,15 @@ function unitTrunkGeometry(): THREE.BufferGeometry {
   return geometry;
 }
 
-/** Trees drawn in a built scene: the merged crown mesh holds one unit sphere per tree (QA readout). */
+/** Trees drawn in a built scene: the merged crown mesh holds one unit geodesic crown per tree (QA readout). */
 export function countTreeCrowns(root: THREE.Object3D): number {
   const group = root.getObjectByName("Trees");
   const crowns = group?.children[group.children.length - 1] as THREE.Mesh | undefined;
   const vertices = crowns?.geometry?.getAttribute("position")?.count ?? 0;
-  return vertices / unitSphereGeometry().getAttribute("position").count;
+  return vertices / unitCrownGeometry().getAttribute("position").count;
 }
 
-/** Cylinder trunk plus one uniform sphere crown per tree. */
+/** Cylinder trunk plus one low-poly faceted geodesic ellipsoid crown per tree. */
 export function buildTreeGroup(
   trees: TreeFeat[],
   elevationAt: (east: number, north: number) => number = () => 0,
@@ -49,8 +67,12 @@ export function buildTreeGroup(
   const trunkColor = getColour("--tree-trunk");
   const crownColor = getColour("--tree-crown");
   const trunkMaterial = matteStandardMaterial({ color: trunkColor });
-  const crownMaterial = matteStandardMaterial({ color: crownColor });
+  const crownMaterial = matteStandardMaterial({ color: crownColor, flatShading: true });
+  crownMaterial.flatShading = true;
+  crownMaterial.needsUpdate = true;
 
+  const trunkBase = unitTrunkGeometry();
+  const crownBase = unitCrownGeometry();
   const trunkGeometries: THREE.BufferGeometry[] = [];
   const crownGeometries: THREE.BufferGeometry[] = [];
   const matrix = new THREE.Matrix4();
@@ -61,23 +83,25 @@ export function buildTreeGroup(
     const ground = elevationAt(tree.at[0], tree.at[1]);
     const layout = treeCrownSphereLayout(tree.height_m, tree.crown_diameter_m);
     const trunkRadius = Math.max(tree.trunk_diameter_m / 2, 0.04);
-    const trunkHeight = Math.min(tree.height_m, layout.centerY + layout.radius * 0.35);
+    const trunkHeight = Math.max(0.4, Math.min(tree.height_m, layout.centerY + layout.radiusY * 0.35));
 
     position.set(tree.at[0], ground, -tree.at[1]);
     quaternion.identity();
     scale.set(trunkRadius, trunkHeight, trunkRadius);
     matrix.compose(position, quaternion, scale);
-    const trunk = unitTrunkGeometry().clone();
+    const trunk = trunkBase.clone();
     trunk.applyMatrix4(matrix);
     trunkGeometries.push(trunk);
 
     position.set(tree.at[0], ground + layout.centerY, -tree.at[1]);
-    scale.set(layout.scale, layout.scale, layout.scale);
+    scale.set(layout.scaleX, layout.scaleY, layout.scaleZ);
     matrix.compose(position, quaternion, scale);
-    const crown = unitSphereGeometry().clone();
+    const crown = crownBase.clone();
     crown.applyMatrix4(matrix);
     crownGeometries.push(crown);
   }
+  trunkBase.dispose();
+  crownBase.dispose();
 
   const group = new THREE.Group();
   group.name = "Trees";
@@ -86,6 +110,9 @@ export function buildTreeGroup(
   trunkGeometries.forEach((geometry) => geometry.dispose());
   crownGeometries.forEach((geometry) => geometry.dispose());
   if (mergedTrunks) group.add(new THREE.Mesh(mergedTrunks, trunkMaterial));
-  if (mergedCrowns) group.add(new THREE.Mesh(mergedCrowns, crownMaterial));
+  if (mergedCrowns) {
+    mergedCrowns.computeVertexNormals();
+    group.add(new THREE.Mesh(mergedCrowns, crownMaterial));
+  }
   return group.children.length > 0 ? group : null;
 }

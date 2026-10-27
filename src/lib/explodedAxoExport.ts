@@ -112,13 +112,13 @@ export const EXPLODED_AXO_LAYER_ORDER = [
   "Hydro",
   "Transport",
   "Topography",
-  "Terrain",
   "Roads",
   "Cadastre",
   "Green",
   "Trees",
   "Buildings",
-  "Aerial",
+  "Aerial image",
+  "Terrain",
   "Base",
   "Labels",
   "Annotation",
@@ -137,7 +137,7 @@ function chunkNameForLayer(id: AxoLayerId): string {
   if (id === "trees") return "Trees";
   if (id === "buildings") return "Buildings";
   if (id === "base") return "Base";
-  return "Aerial";
+  return "Aerial image";
 }
 
 function fillPaint(layer: ReturnType<typeof buildExplodedAxoLayers>["layers"][number], index: number): AxoPaintKey {
@@ -183,13 +183,53 @@ export function explodedAxoChunks(
     const paths: PdfPath[] = [];
     const liftM = layer.liftM;
     const plateRing = pathFromIsoD(layer.plateOutlineD, origin, scale, pageHeightMm, liftM);
+    const hasPlinth = Boolean(layer.plinthWalls && layer.plinthWalls.length > 0);
     if (plateRing.length >= 3) {
       paths.push({
         rings: [plateRing],
-        stroke: hexRgb(layer.id === "base" ? getColour("--axo-base-outline") : axoPlateColours(layer.id).edge),
-        strokeMm: layer.id === "base" ? 0.3 : 0.12,
+        ...(hasPlinth ? { fill: hexRgb(getColour("--ground-fill")) } : {}),
+        stroke: hexRgb(
+          hasPlinth
+            ? getColour("--ground-edge")
+            : layer.id === "base"
+              ? getColour("--axo-base-outline")
+              : axoPlateColours(layer.id).edge,
+        ),
+        strokeMm: layer.id === "base" ? 0.3 : hasPlinth ? 0.24 : 0.12,
         close: true,
+        ...(hasPlinth ? { join: "round" as const } : {}),
       });
+    }
+    if (layer.topoContourStrokes?.length) {
+      const style = readDrawingStyle();
+      const contourDash = dashSegments(style.contour.dash);
+      for (const stroke of layer.topoContourStrokes) {
+        for (const ring of ringsFromIsoD(stroke, origin, scale, pageHeightMm, liftM)) {
+          if (ring.length >= 2) {
+            paths.push({
+              rings: [ring],
+              stroke: hexRgb(axoPaintColour("contour")),
+              strokeMm: 0.12,
+              close: false,
+              ...(contourDash ? { dashMm: contourDash, cap: "round" as const } : {}),
+            });
+          }
+        }
+      }
+    }
+    for (const wall of layer.plinthWalls ?? []) {
+      const rings = ringsFromIsoD(wall.d, origin, scale, pageHeightMm, liftM);
+      if (rings.length > 0) {
+        paths.push({
+          rings,
+          fill: hexRgb(wall.fill),
+          stroke: hexRgb(wall.stroke),
+          strokeMm: 0.2,
+          close: true,
+          evenOdd: false,
+          join: "round",
+        });
+      }
     }
     layer.fills.forEach((fill, index) => {
       const rings = ringsFromIsoD(fill, origin, scale, pageHeightMm, liftM);
@@ -224,7 +264,7 @@ export function explodedAxoChunks(
     for (const stroke of layer.unclippedStrokes ?? []) {
       for (const ring of ringsFromIsoD(stroke, origin, scale, pageHeightMm, liftM)) {
         if (ring.length >= 2) {
-          paths.push({ rings: [ring], stroke: hexRgb(axoPaintColour(axoLayerBasePaint(layer.id))), strokeMm: 0.08, close: false });
+          paths.push({ rings: [ring], stroke: hexRgb(axoPaintColour("terrain-mesh")), strokeMm: 0.08, close: false });
         }
       }
     }

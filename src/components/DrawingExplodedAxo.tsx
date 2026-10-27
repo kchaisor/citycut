@@ -154,6 +154,7 @@ export function DrawingExplodedAxo({
     };
   }, [model, showAerial]);
 
+
   const clipIds = paintLayers.map((layer) => `axo-clip-${layer.id}-${layer.liftM}`);
   const outlinePx = model.sideM * 0.0018;
   const roadPx = model.sideM * 0.0045;
@@ -282,12 +283,23 @@ export function DrawingExplodedAxo({
                 : undefined
             }
           >
-            {!axoPlateShowsAerial(layer.id) && (
+            {layer.plinthWalls && layer.plinthWalls.length > 0 ? (
+              <path
+                className="axo-ground-top"
+                d={layer.plateOutlineD}
+                fill={getColour("--ground-fill")}
+                stroke={getColour("--ground-edge")}
+                strokeWidth={outlinePx * 1.15}
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
+              />
+            ) : !axoPlateShowsAerial(layer.id) ? (
               <path d={layer.plateOutlineD} fill={axoPlateColours(layer.id).tint} fillOpacity={AXO_PLATE_TINT_OPACITY} stroke="none" />
-            )}
+            ) : null}
             <g clipPath={clip}>
               {axoPlateShowsAerial(layer.id) && satelliteHref && (
                 <image
+                  className="axo-satellite-image"
                   href={satelliteHref}
                   x={0}
                   y={0}
@@ -335,24 +347,76 @@ export function DrawingExplodedAxo({
                 />
               ))}
             </g>
-            <path
-              d={layer.plateOutlineD}
-              fill="none"
-              stroke={layer.id === "base" ? colours.base : axoPlateColours(layer.id).edge}
-              strokeWidth={layer.id === "base" ? outlinePx * 2.5 : outlinePx}
-              vectorEffect="non-scaling-stroke"
-            />
             {layer.unclippedStrokes?.map((d, ui) => (
               <path
                 key={`u${ui}`}
                 d={d}
                 fill="none"
-                stroke={axoPaintColour(axoLayerBasePaint(layer.id))}
-                strokeWidth={outlinePx * 0.6}
+                stroke={axoPaintColour("terrain-mesh")}
+                strokeOpacity={0.72}
+                strokeWidth={outlinePx * 0.55}
                 vectorEffect="non-scaling-stroke"
                 strokeLinejoin="round"
               />
             ))}
+            {layer.topoContourStrokes && layer.topoContourStrokes.length > 0 && (
+              <g className="axo-ground-contours" data-axo-ground-contours="true">
+                {layer.topoContourStrokes.map((d, ci) => {
+                  const contourDash = dashScreen(lineStyle.contour.dash);
+                  return (
+                    <path
+                      key={`gc${ci}`}
+                      d={d}
+                      fill="none"
+                      stroke={axoPaintColour("contour")}
+                      strokeOpacity={0.85}
+                      strokeWidth={roadPx * 0.48}
+                      vectorEffect="non-scaling-stroke"
+                      strokeLinecap={contourDash?.cap ?? "round"}
+                      strokeLinejoin="round"
+                      strokeDasharray={contourDash?.array}
+                    />
+                  );
+                })}
+              </g>
+            )}
+            {layer.plinthWalls && layer.plinthWalls.length > 0 && (
+              <g className="axo-ground-plinth" data-axo-plinth="terrain">
+                {layer.plinthWalls.map((wall, wi) => (
+                  <path
+                    key={`pw${wi}`}
+                    className={`axo-plinth-wall axo-plinth-wall-${wall.side}`}
+                    data-plinth-side={wall.side}
+                    d={wall.d}
+                    fill={wall.fill}
+                    stroke={wall.stroke}
+                    strokeWidth={outlinePx * 1.05}
+                    vectorEffect="non-scaling-stroke"
+                    strokeLinejoin="round"
+                  />
+                ))}
+              </g>
+            )}
+            <path
+              d={layer.plateOutlineD}
+              fill="none"
+              stroke={
+                layer.plinthWalls && layer.plinthWalls.length > 0
+                  ? getColour("--ground-edge")
+                  : layer.id === "base"
+                    ? colours.base
+                    : axoPlateColours(layer.id).edge
+              }
+              strokeWidth={
+                layer.id === "base"
+                  ? outlinePx * 2.5
+                  : layer.plinthWalls && layer.plinthWalls.length > 0
+                    ? outlinePx * 1.15
+                    : outlinePx
+              }
+              vectorEffect="non-scaling-stroke"
+              strokeLinejoin="round"
+            />
             {layer.solids && layer.solids.length > 0 && (
               <g className="axo-solids" stroke={massingEdge} strokeWidth={outlinePx * 0.5} strokeLinejoin="round">
                 {layer.solids.map((face, fi) => (

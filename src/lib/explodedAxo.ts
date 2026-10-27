@@ -12,6 +12,8 @@ import { getColour, type ColourKey } from "./colours";
 import { bufferOpenLine } from "./bufferLine";
 import { openRing, signedArea } from "./geo";
 import { isVehicularRoad } from "./roadFill";
+import { sampleTerrain } from "./terrain";
+import { demContourLayer } from "./vicmapContours";
 import {
   clipAreaToSiteFrame,
   clipPolylineSiteFrame,
@@ -87,13 +89,13 @@ export const AXO_LAYER_LABELS: Record<AxoLayerId, string> = {
   hydro: "HYDRO",
   transport: "TRANSPORT",
   topography: "TOPOGRAPHY",
-  terrain: "TERRAIN (DTM)",
+  terrain: "TERRAIN",
   roads: "ROADS",
   cadastre: "CADASTRE",
   green: "GREEN SPACES",
   trees: "TREES",
   buildings: "BUILDINGS",
-  aerial: "SATELLITE",
+  aerial: "AERIAL IMAGE",
   base: "BASE OUTLINE",
 };
 
@@ -133,7 +135,19 @@ export type AxoPointMarker = { x: number; y: number; paint: AxoPaintKey; radiusM
  * Default stack. Every listed layer keeps its lift slot even when hidden (so toggles never move
  * the view), so the reference-only base outline plate is left out and the default stack is unchanged.
  */
-export const DEFAULT_AXO_LAYER_ORDER: AxoLayerId[] = AXO_LAYER_IDS.filter((id) => id !== "base");
+export const DEFAULT_AXO_LAYER_ORDER: AxoLayerId[] = [
+  "planning",
+  "water",
+  "hydro",
+  "transport",
+  "roads",
+  "cadastre",
+  "green",
+  "trees",
+  "buildings",
+  "aerial",
+  "terrain",
+];
 
 export type ExplodedAxoSettings = {
   layerOrder: AxoLayerId[];
@@ -175,9 +189,9 @@ export function defaultExplodedAxoSettings(sideM: number): ExplodedAxoSettings {
     planning: false,
     water: true,
     hydro: false,
-    transport: false,
+    transport: true,
     topography: false,
-    terrain: false,
+    terrain: true,
     roads: true,
     cadastre: false,
     green: true,
@@ -317,7 +331,6 @@ export const AXO_REFERENCE_ORDER: AxoLayerId[] = [
   "roads",
   "cadastre",
   "hydro",
-  "topography",
   "terrain",
   "base",
 ];
@@ -410,6 +423,217 @@ export function axoPlateLabelText(id: AxoLayerId): string {
   return `${title}.`;
 }
 
+export type AxoPlinthWall = {
+  side: "left" | "right";
+  d: string;
+  fill: string;
+  stroke: string;
+  topPts: Pt[];
+  bottomPts: Pt[];
+};
+
+export function axoGroundPlinthThicknessM(sideM: number): number {
+  return Math.max(6, Math.min(80, roundIso(sideM * 0.04)));
+}
+
+/**
+ * Vertical exaggeration for the 3D topographic ground surface on the bottom Satellite plate.
+ * Uses explicit `terrainExaggeration` when set, or defaults to `DEFAULT_AXO_TERRAIN_EXAGGERATION`
+ * clamped so peak relief never collides with the plate above.
+ */
+export function axoGroundTerrainExaggeration(
+  _sideM: number,
+  _gapM: number,
+  field?: TerrainField | null,
+  explicitExaggeration?: number,
+): number {
+  if (explicitExaggeration != null) return explicitExaggeration;
+  if (!field || field.max - field.min <= 1e-3) return 1;
+  return DEFAULT_AXO_TERRAIN_EXAGGERATION;
+}
+
+/**
+ * Build the 3D ground base slab (topographic perimeter + front-left and front-right section walls)
+ * under the bottom Satellite (`aerial`) plate in local iso coordinates (lift 0).
+ * When `field` has relief, the top surface rim and wall top edges follow the 3D terrain elevation
+ * `(sampleTerrain(field, e, n, sideM) - field.min) * exaggeration` while the base sits on `-slabThicknessM`.
+ */
+export function buildAxoGroundPlinth(
+  sideM: number,
+  shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  field?: TerrainField | null,
+  exaggeration = 1,
+): {
+  slabThicknessM: number;
+  maxReliefM: number;
+  frameD: string;
+  walls: AxoPlinthWall[];
+} {
+  const half = sideM / 2;
+  const slabThicknessM = axoGroundPlinthThicknessM(sideM);
+  const baseZ = -slabThicknessM;
+  const hasRelief = Boolean(field && field.max - field.min > 1e-3 && exaggeration > 0);
+  const maxReliefM = hasRelief && field ? roundIso((field.max - field.min) * exaggeration) : 0;
+  const elevationAt = (east: number, north: number): number =>
+    hasRelief && field ? Math.max(0, (sampleTerrain(field, east, north, sideM) - field.min) * exaggeration) : 0;
+  const fill = getColour("--ground-fill");
+  const stroke = getColour("--ground-edge");
+
+  if (shape === "circle") {
+    const ring = openRing(circleRing(half, 64));
+    const topPerimeterPts = ring.map(([e, n]) => planPointToIso(e, n, elevationAt(e, n)));
+    const frameD = hasRelief ? isoSvgPolyline(topPerimeterPts, true) : axoPlateOutlineBaseD(sideM, shape);
+    const leftSegs: [Pt, Pt][] = [];
+    const rightSegs: [Pt, Pt][] = [];
+    for (let i = 0; i < ring.length; i += 1) {
+      const a = ring[i]!;
+      const b = ring[(i + 1) % ring.length]!;
+      const mx = (a[0] + b[0]) * 0.5;
+      const my = (a[1] + b[1]) * 0.5;
+      if (mx + my <= 1e-9) continue;
+      if (mx - my <= 0) leftSegs.push([a, b]);
+      else rightSegs.push([a, b]);
+    }
+    const buildSideWall = (segs: [Pt, Pt][], side: "left" | "right"): AxoPlinthWall | null => {
+      if (segs.length === 0) return null;
+      let startIdx = 0;
+      for (let i = 0; i < segs.length; i += 1) {
+        const prev = segs[(i - 1 + segs.length) % segs.length]![1];
+        const curr = segs[i]![0];
+        if (Math.hypot(curr[0] - prev[0], curr[1] - prev[1]) > 1e-6) {
+          startIdx = i;
+          break;
+        }
+      }
+      const orderedPts: Pt[] = [segs[startIdx]![0]];
+      for (let k = 0; k < segs.length; k += 1) {
+        const seg = segs[(startIdx + k) % segs.length]!;
+        const last = orderedPts[orderedPts.length - 1]!;
+        if (Math.hypot(seg[0][0] - last[0], seg[0][1] - last[1]) > 1e-6) {
+          orderedPts.push(seg[0]);
+        }
+        orderedPts.push(seg[1]);
+      }
+      const topPts = orderedPts.map(([e, n]) => planPointToIso(e, n, elevationAt(e, n)));
+      const bottomPts = [...orderedPts].reverse().map(([e, n]) => planPointToIso(e, n, baseZ));
+      return {
+        side,
+        d: isoSvgPolyline([...topPts, ...bottomPts], true),
+        fill,
+        stroke,
+        topPts,
+        bottomPts,
+      };
+    };
+    const walls: AxoPlinthWall[] = [];
+    const leftWall = buildSideWall(leftSegs, "left");
+    const rightWall = buildSideWall(rightSegs, "right");
+    if (leftWall) walls.push(leftWall);
+    if (rightWall) walls.push(rightWall);
+    return { slabThicknessM, maxReliefM, frameD, walls };
+  }
+
+  const edgeSteps = hasRelief && field ? 40 : 1;
+  const corners: Pt[] = [
+    [-half, -half],
+    [half, -half],
+    [half, half],
+    [-half, half],
+  ];
+  const topPerimeterPts: Pt[] = [];
+  for (let c = 0; c < 4; c += 1) {
+    const a = corners[c]!;
+    const b = corners[(c + 1) % 4]!;
+    for (let s = 0; s < edgeSteps; s += 1) {
+      const t = s / edgeSteps;
+      const e = a[0] + (b[0] - a[0]) * t;
+      const n = a[1] + (b[1] - a[1]) * t;
+      topPerimeterPts.push(planPointToIso(e, n, elevationAt(e, n)));
+    }
+  }
+  const frameD = hasRelief ? isoSvgPolyline(topPerimeterPts, true) : axoPlateOutlineBaseD(sideM, shape);
+  const edges: { side: "left" | "right"; a: Pt; b: Pt }[] = [
+    { side: "left", a: [-half, half], b: [half, half] },
+    { side: "right", a: [half, half], b: [half, -half] },
+  ];
+  const walls: AxoPlinthWall[] = [];
+  for (const { side, a, b } of edges) {
+    const topPts: Pt[] = [];
+    for (let s = 0; s <= edgeSteps; s += 1) {
+      const t = s / edgeSteps;
+      const e = a[0] + (b[0] - a[0]) * t;
+      const n = a[1] + (b[1] - a[1]) * t;
+      topPts.push(planPointToIso(e, n, elevationAt(e, n)));
+    }
+    const bottomPts: Pt[] = [
+      planPointToIso(b[0], b[1], baseZ),
+      planPointToIso(a[0], a[1], baseZ),
+    ];
+    walls.push({
+      side,
+      d: isoSvgPolyline([...topPts, ...bottomPts], true),
+      fill,
+      stroke,
+      topPts,
+      bottomPts,
+    });
+  }
+  return {
+    slabThicknessM,
+    maxReliefM,
+    frameD,
+    walls,
+  };
+}
+
+export function buildAxoGroundTopoContours(
+  model: CityModel,
+  field?: TerrainField | null,
+  exaggeration = DEFAULT_AXO_TERRAIN_EXAGGERATION,
+  topoOverlay?: TopographyOverlay | "unavailable",
+): string[] {
+  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
+  const hasFieldRelief = Boolean(field && field.max - field.min > 1e-3 && exaggeration > 0);
+  const rawPolylines: Pt[][] = [];
+  if (hasFieldRelief && field) {
+    const contourLayer = demContourLayer(field, model.sideM);
+    for (const line of contourLayer.lines) {
+      rawPolylines.push(line.points);
+    }
+  } else if (topoOverlay && topoOverlay !== "unavailable" && topoOverlay.contours.length > 0) {
+    for (const c of topoOverlay.contours) {
+      rawPolylines.push(c.line);
+    }
+  }
+  if (rawPolylines.length === 0) return [];
+  const stepM = Math.max(1.5, model.sideM / 80);
+  const elevationAt = (e: number, n: number): number =>
+    hasFieldRelief && field
+      ? Math.max(0, (sampleTerrain(field, e, n, model.sideM) - field.min) * exaggeration)
+      : 0;
+  const out: string[] = [];
+  for (const poly of rawPolylines) {
+    for (const part of clipPolylineSiteFrame(dedupe(poly), model.sideM, shape)) {
+      if (part.length < 2) continue;
+      const dense: Pt[] = [part[0]!];
+      for (let i = 0; i < part.length - 1; i += 1) {
+        const a = part[i]!;
+        const b = part[i + 1]!;
+        const dist = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        const steps = Math.max(1, Math.ceil(dist / stepM));
+        for (let s = 1; s <= steps; s += 1) {
+          const t = s / steps;
+          dense.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+        }
+      }
+      const pts = dense.map(([e, n]) => planPointToIso(e, n, elevationAt(e, n)));
+      const d = isoSvgPolyline(pts, false);
+      if (d) out.push(d);
+    }
+  }
+  return out;
+}
+
 export type AxoLayerGeometry = {
   id: AxoLayerId;
   liftM: number;
@@ -439,6 +663,16 @@ export type AxoLayerGeometry = {
   solids?: AxoSolidFace[];
   /** Visible source note for this plate (e.g. where heights came from). */
   sourceNote?: string;
+  /** 3D ground base slab (plinth) vertical walls underneath the satellite plate. */
+  plinthWalls?: AxoPlinthWall[];
+  /** Plinth slab depth in local metres when this plate carries a 3D base slab. */
+  plinthThicknessM?: number;
+  /** Peak 3D terrain relief above the plate base on the bottom topography/satellite plate. */
+  plinthMaxReliefM?: number;
+  /** Vertical exaggeration applied to the bottom topography/satellite plate. */
+  plinthExaggeration?: number;
+  /** 3D topographic contour polylines draped over the bottom satellite topography surface. */
+  topoContourStrokes?: string[];
 };
 
 function dedupe(line: Pt[]): Pt[] {
@@ -601,8 +835,8 @@ export function buildExplodedAxoLayers(
   for (const id of settings.layerOrder) {
     if (!settings.layerVisible[id]) continue;
     const liftM = lifts.get(id)!;
-    const plateOutlineD = axoPlateOutlineBaseD(model.sideM, shape);
-    const clipD = plateOutlineD;
+    let plateOutlineD = axoPlateOutlineBaseD(model.sideM, shape);
+    let clipD = plateOutlineD;
     const fills: string[] = [];
     const strokes: string[] = [];
     const fillPaints: AxoPaintKey[] = [];
@@ -615,6 +849,11 @@ export function buildExplodedAxoLayers(
     let unclippedStrokes: string[] | undefined;
     let solids: AxoSolidFace[] | undefined;
     let sourceNote: string | undefined;
+    let plinthWalls: AxoPlinthWall[] | undefined;
+    let plinthThicknessM: number | undefined;
+    let plinthMaxReliefM: number | undefined;
+    let plinthExaggeration: number | undefined;
+    let topoContourStrokes: string[] | undefined;
 
     const areaToPath = (rings: Pt[][]) =>
       rings
@@ -731,15 +970,6 @@ export function buildExplodedAxoLayers(
         }
         sourceNote = axoCadastreNote(overlays.cadastre);
       }
-    } else if (id === "terrain") {
-      const field = model.terrain ?? (overlays.terrain !== "unavailable" ? overlays.terrain : undefined);
-      if (field) {
-        const ex = settings.terrainExaggeration ?? DEFAULT_AXO_TERRAIN_EXAGGERATION;
-        unclippedStrokes = buildAxoTerrainMesh(model, field, ex);
-        sourceNote = axoTerrainNote(field, ex);
-      } else if (overlays.terrain === "unavailable") {
-        unavailableNote = AXO_TERRAIN_UNAVAILABLE_NOTE;
-      }
     } else if (id === "base") {
       for (const [east, north] of axoGuideAnchorPoints(model.sideM, shape)) {
         const [x, y] = planToIsoBase(east, north);
@@ -784,6 +1014,31 @@ export function buildExplodedAxoLayers(
         const pts = line.map(([e, n]) => planToIsoBase(e, n));
         strokes.push(isoSvgPolyline(pts, false));
       }
+    } else if (id === "terrain") {
+      const terrainField = model.terrain ?? (overlays.terrain !== "unavailable" ? overlays.terrain : undefined);
+      const terrainEx = axoGroundTerrainExaggeration(
+        model.sideM,
+        settings.gapM,
+        terrainField,
+        settings.terrainExaggeration,
+      );
+      const plinth = buildAxoGroundPlinth(model.sideM, shape, terrainField, terrainEx);
+      plateOutlineD = plinth.frameD;
+      clipD = plinth.frameD;
+      plinthWalls = plinth.walls;
+      plinthThicknessM = plinth.slabThicknessM;
+      plinthMaxReliefM = plinth.maxReliefM;
+      plinthExaggeration = terrainEx;
+      if (terrainField) {
+        unclippedStrokes = buildAxoTerrainMesh(model, terrainField, terrainEx);
+        sourceNote = axoTerrainNote(terrainField, terrainEx);
+      } else if (overlays.terrain === "unavailable") {
+        unavailableNote = AXO_TERRAIN_UNAVAILABLE_NOTE;
+      }
+      const contours = buildAxoGroundTopoContours(model, terrainField, terrainEx, overlays.topography);
+      if (contours.length > 0) {
+        topoContourStrokes = contours;
+      }
     }
 
     layers.push({
@@ -801,6 +1056,8 @@ export function buildExplodedAxoLayers(
       ...(unclippedStrokes?.length ? { unclippedStrokes } : {}),
       ...(solids?.length ? { solids } : {}),
       ...(sourceNote ? { sourceNote } : {}),
+      ...(plinthWalls?.length ? { plinthWalls, plinthThicknessM, plinthMaxReliefM, plinthExaggeration } : {}),
+      ...(topoContourStrokes?.length ? { topoContourStrokes } : {}),
     });
   }
 
@@ -928,6 +1185,10 @@ export function explodedAxoBounds(
     for (const pt of ring) {
       const [x, y] = planPointToIso(pt[0], pt[1], layer.liftM);
       bump(x, y);
+      if (layer.plinthThicknessM) {
+        const [bx, by] = planPointToIso(pt[0], pt[1], layer.liftM - layer.plinthThicknessM);
+        bump(bx, by);
+      }
     }
     const label = axoLayerLabelAnchor(model.sideM, layer.liftM, model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE);
     bump(label.x, label.y);

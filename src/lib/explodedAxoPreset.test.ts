@@ -16,7 +16,7 @@ const model = { placeLabel: "T", center: { lat: -37.8136, lon: 144.9631 }, sideM
 describe("exploded axo reference preset", () => {
   it("uses the reference order top → bottom with only those plates visible", () => {
     const s = referenceExplodedAxoSettings(500);
-    expect(s.layerOrder).toEqual(["trees", "buildings", "roads", "cadastre", "hydro", "topography", "terrain", "base"]);
+    expect(s.layerOrder).toEqual(["trees", "buildings", "roads", "cadastre", "hydro", "terrain", "base"]);
     expect(s.layerOrder.filter((id) => s.layerVisible[id])).toEqual(AXO_REFERENCE_ORDER);
     expect(defaultExplodedAxoSettings(500).layerOrder).not.toContain("base");
   });

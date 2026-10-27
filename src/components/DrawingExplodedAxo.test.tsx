@@ -1,13 +1,17 @@
 // @vitest-environment happy-dom
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DrawingExplodedAxo } from "./DrawingExplodedAxo";
+import * as satellite from "../lib/explodedAxoSatellite";
 import { defaultExplodedAxoSettings, type ExplodedAxoSettings } from "../lib/explodedAxo";
 import type { CityModel } from "../types";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 function makeTestModel(): CityModel {
   return {
@@ -44,7 +48,7 @@ function setup() {
   const baseSettings = defaultExplodedAxoSettings(model.sideM);
   const settings: ExplodedAxoSettings = {
     ...baseSettings,
-    layerVisible: { ...baseSettings.layerVisible, aerial: false, base: false },
+    layerVisible: { ...baseSettings.layerVisible, terrain: false, aerial: false, base: false },
   };
   const { container } = render(
     <DrawingExplodedAxo
@@ -170,5 +174,53 @@ describe("DrawingExplodedAxo and UI drag text-selection prevention", () => {
     expect(onViewportChange).toHaveBeenCalledTimes(1);
 
     fireEvent.pointerUp(svg, { pointerId: 2 });
+  });
+  it("renders a 3D Terrain plate (mesh, plinth, 3D contours, no satellite image) and a separate flat Aerial image plate", async () => {
+    vi.spyOn(satellite, "fetchSatelliteFramePng").mockResolvedValue(new Uint8Array([137, 80, 78, 71]));
+    const model: CityModel = {
+      ...makeTestModel(),
+      terrain: {
+        cols: 3,
+        rows: 3,
+        heights: new Float32Array([10, 16, 22, 14, 20, 26, 18, 24, 30]),
+        min: 10,
+        max: 30,
+        spacingM: 50,
+        zoom: 14,
+        metresPerPixel: 4,
+        source: "Mapterhorn",
+      },
+    };
+    const settings = defaultExplodedAxoSettings(model.sideM);
+    const { container } = render(<DrawingExplodedAxo model={model} settings={settings} />);
+
+    const terrainGroup = container.querySelector("[data-axo-layer=\"terrain\"]") as SVGGElement | null;
+    expect(terrainGroup).not.toBeNull();
+
+    const groundTop = terrainGroup!.querySelector("path.axo-ground-top") as SVGPathElement | null;
+    expect(groundTop).not.toBeNull();
+
+    const groundContours = terrainGroup!.querySelector("g.axo-ground-contours") as SVGGElement | null;
+    expect(groundContours).not.toBeNull();
+    expect(groundContours!.querySelectorAll("path").length).toBeGreaterThan(0);
+
+    const plinthGroup = terrainGroup!.querySelector("g.axo-ground-plinth") as SVGGElement | null;
+    expect(plinthGroup).not.toBeNull();
+
+    const walls = plinthGroup!.querySelectorAll("path.axo-plinth-wall");
+    expect(walls.length).toBe(2);
+    expect(plinthGroup!.querySelector("path.axo-plinth-wall-left")).not.toBeNull();
+    expect(plinthGroup!.querySelector("path.axo-plinth-wall-right")).not.toBeNull();
+
+    const aerialGroup = container.querySelector("[data-axo-layer=\"aerial\"]") as SVGGElement | null;
+    expect(aerialGroup).not.toBeNull();
+    expect(aerialGroup!.querySelector("g.axo-ground-plinth")).toBeNull();
+    expect(aerialGroup!.querySelector("path.axo-ground-top")).toBeNull();
+    expect(aerialGroup!.querySelector("g.axo-ground-contours")).toBeNull();
+
+    await waitFor(() => {
+      expect(aerialGroup!.querySelector("image.axo-satellite-image")).not.toBeNull();
+    });
+    expect(terrainGroup!.querySelector("image.axo-satellite-image")).toBeNull();
   });
 });

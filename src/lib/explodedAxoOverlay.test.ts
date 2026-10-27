@@ -53,9 +53,10 @@ describe("exploded axo viewport stability", () => {
     expect(toggledFit).toEqual(baseFit);
   });
 
-  it("keeps six default visible plates in geometry output", () => {
+  it("keeps eight default visible plates in geometry output (including Transport, Aerial image, and Terrain)", () => {
     const m = model();
     const { layers } = buildExplodedAxoLayers(m, defaultExplodedAxoSettings(m.sideM));
-    expect(layers).toHaveLength(6);
+    expect(layers).toHaveLength(8);
+    expect(layers.some((l) => l.id === "transport")).toBe(true);
   });
 });

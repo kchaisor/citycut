@@ -16,10 +16,14 @@ import {
   defaultExplodedAxoSettings,
   explodedAxoBounds,
   liftsForLayerOrder,
+  axoGroundPlinthThicknessM,
+  buildAxoGroundPlinth,
   reorderAxoLayer,
   planPointToIso,
   type ExplodedAxoSettings,
 } from "./explodedAxo";
+import { explodedAxoChunks } from "./explodedAxoExport";
+import { getColour } from "./colours";
 import type { CityModel } from "../types";
 
 function pathVertices(d: string): [number, number][] {
@@ -103,7 +107,7 @@ describe("exploded axo frame shape", () => {
       const m = modelWithShape(shape);
       const settings = defaultExplodedAxoSettings(m.sideM);
       const { layers } = buildExplodedAxoLayers(m, settings);
-      expect(layers.length).toBe(6);
+      expect(layers.length).toBe(8);
       for (const layer of layers) {
         expect(layer.clipD).toBe(layer.plateOutlineD);
         if (shape === "circle") {
@@ -117,21 +121,21 @@ describe("exploded axo frame shape", () => {
 });
 
 describe("exploded axo stack order", () => {
-  it("puts water at the top lift and satellite at the bottom", () => {
+  it("puts water at the top lift and terrain at the bottom", () => {
     const settings = defaultExplodedAxoSettings(500);
     const lifts = liftsForLayerOrder(settings.layerOrder, settings.gapM);
-    expect(lifts.get("aerial")).toBe(0);
+    expect(lifts.get("terrain")).toBe(0);
     expect(lifts.get("water")!).toBeGreaterThan(lifts.get("buildings")!);
   });
 
   it("stores layer geometry at lift 0 for group transforms", () => {
-    const m = modelWithShape("square");
+    const m = { ...modelWithShape("square"), terrain: null };
     const settings = defaultExplodedAxoSettings(m.sideM);
     const { layers } = buildExplodedAxoLayers(m, settings);
-    const aerial = layers.find((layer) => layer.id === "aerial")!;
+    const terrain = layers.find((layer) => layer.id === "terrain")!;
     const water = layers.find((layer) => layer.id === "water")!;
-    expect(aerial.plateOutlineD).toBe(water.plateOutlineD);
-    expect(axoLayerSvgTransform(aerial.liftM)).not.toBe(axoLayerSvgTransform(water.liftM));
+    expect(terrain.plateOutlineD).toBe(water.plateOutlineD);
+    expect(axoLayerSvgTransform(terrain.liftM)).not.toBe(axoLayerSvgTransform(water.liftM));
     expect(water.liftM).toBeGreaterThan(0);
   });
 
@@ -139,7 +143,7 @@ describe("exploded axo stack order", () => {
     const m = modelWithShape("square");
     const { layers } = buildExplodedAxoLayers(m, defaultExplodedAxoSettings(m.sideM));
     const paint = axoLayersForPaint(layers);
-    expect(paint[0]?.id).toBe("aerial");
+    expect(paint[0]?.id).toBe("terrain");
     expect(paint[paint.length - 1]?.id).toBe("water");
   });
 
@@ -265,5 +269,98 @@ describe("reorderAxoLayer and layerLiftM", () => {
     expect(lifts.get("roads")).toBe(0);
     expect(lifts.get("buildings")).toBe(140);
     expect(lifts.get("trees")).toBe(200);
+  });
+});
+
+describe("exploded axo separate flat Aerial image plate and 3D Terrain plate (mesh + plinth + 3D contours)", () => {
+  it("builds a crisp 3D ground plinth under the bottom Terrain plate for square and circle frames", () => {
+    const squareModel = modelWithShape("square");
+    const { layers: sqLayers } = buildExplodedAxoLayers(squareModel, defaultExplodedAxoSettings(squareModel.sideM));
+    const sqTerrain = sqLayers.find((layer) => layer.id === "terrain")!;
+    expect(sqTerrain.plinthThicknessM).toBe(axoGroundPlinthThicknessM(squareModel.sideM));
+    expect(sqTerrain.plinthWalls).toHaveLength(2);
+    expect(sqTerrain.plinthWalls!.map((w) => w.side)).toEqual(["left", "right"]);
+    for (const wall of sqTerrain.plinthWalls!) {
+      expect(wall.fill).toBe(getColour("--ground-fill"));
+      expect(wall.stroke).toBe(getColour("--ground-edge"));
+      expect(wall.d).toMatch(/^M.*Z$/);
+    }
+
+    const circleModel = modelWithShape("circle");
+    const { layers: cirLayers } = buildExplodedAxoLayers(circleModel, defaultExplodedAxoSettings(circleModel.sideM));
+    const cirTerrain = cirLayers.find((layer) => layer.id === "terrain")!;
+    expect(cirTerrain.plinthThicknessM).toBe(axoGroundPlinthThicknessM(circleModel.sideM));
+    expect(cirTerrain.plinthWalls).toHaveLength(2);
+    expect(cirTerrain.plinthWalls!.map((w) => w.side)).toEqual(["left", "right"]);
+
+    // Non-terrain layers (including the flat aerial image layer) do not have a ground plinth
+    const sqAerial = sqLayers.find((l) => l.id === "aerial")!;
+    expect(sqAerial).toBeDefined();
+    expect(sqAerial.plinthWalls).toBeUndefined();
+    expect(sqAerial.unclippedStrokes).toBeUndefined();
+    expect(sqAerial.topoContourStrokes).toBeUndefined();
+    for (const layer of sqLayers.filter((l) => l.id !== "terrain")) {
+      expect(layer.plinthWalls).toBeUndefined();
+      expect(layer.plinthThicknessM).toBeUndefined();
+    }
+  });
+
+  it("undulates the Terrain plate top surface, 3D mesh, 3D contours, and plinth wall top edges with 3D terrain relief above a flat base datum", () => {
+    const slopedModel: CityModel = {
+      ...modelWithShape("square"),
+      terrain: {
+        cols: 3,
+        rows: 3,
+        heights: new Float32Array([10, 18, 26, 14, 22, 30, 18, 26, 34]),
+        min: 10,
+        max: 34,
+        spacingM: 50,
+        zoom: 14,
+        metresPerPixel: 4,
+        source: "Mapterhorn",
+      },
+    };
+    const flatModel: CityModel = { ...slopedModel, terrain: null };
+    const settings = defaultExplodedAxoSettings(slopedModel.sideM);
+
+    const { layers: flatLayers } = buildExplodedAxoLayers(flatModel, settings);
+    const { layers: slopedLayers } = buildExplodedAxoLayers(slopedModel, settings);
+    const flatTerrain = flatLayers.find((l) => l.id === "terrain")!;
+    const slopedTerrain = slopedLayers.find((l) => l.id === "terrain")!;
+
+    // Topographic perimeter has densified vertices lifted by terrain relief
+    expect(pathVertices(slopedTerrain.plateOutlineD).length).toBeGreaterThan(20);
+    expect(slopedTerrain.plateOutlineD).not.toBe(flatTerrain.plateOutlineD);
+    expect(slopedTerrain.plinthMaxReliefM).toBeGreaterThan(20);
+    expect(slopedTerrain.unclippedStrokes?.length).toBeGreaterThan(0);
+    expect(slopedTerrain.topoContourStrokes?.length).toBeGreaterThan(0);
+
+    // Front-left wall top edge rises toward the NE corner while bottom edge sits on the flat base datum
+    const leftWall = slopedTerrain.plinthWalls!.find((w) => w.side === "left")!;
+    const flatLeftWall = flatTerrain.plinthWalls!.find((w) => w.side === "left")!;
+    expect(leftWall.topPts.length).toBeGreaterThan(10);
+    // At the NE front corner (+half, +half), terrain is highest (34m vs 10m min), so screen Y is lifted (smaller Y)
+    const liftedFrontCornerY = leftWall.topPts[leftWall.topPts.length - 1]![1];
+    const flatFrontCornerY = flatLeftWall.topPts[flatLeftWall.topPts.length - 1]![1];
+    expect(liftedFrontCornerY).toBeLessThan(flatFrontCornerY - 20);
+    // Bottom datum points are identical to flat plinth bottom datum
+    expect(leftWall.bottomPts).toEqual(flatLeftWall.bottomPts);
+  });
+
+  it("includes the bottom of the Terrain base slab in explodedAxoBounds and exports plinth walls + 3D contours in .ai chunks", () => {
+    const m = modelWithShape("square");
+    const settings = defaultExplodedAxoSettings(m.sideM);
+    const bounds = explodedAxoBounds(m, settings);
+    const plinth = buildAxoGroundPlinth(m.sideM, "square", m.terrain);
+    const half = m.sideM / 2;
+    expect(bounds.maxY).toBeGreaterThan(half + plinth.slabThicknessM);
+
+    const chunks = explodedAxoChunks(m, 1000, settings);
+    const terrainChunk = chunks.find((c) => c.name === "Terrain")!;
+    expect(terrainChunk).toBeDefined();
+    const aerialChunk = chunks.find((c) => c.name === "Aerial image")!;
+    expect(aerialChunk).toBeDefined();
+    expect(chunks.find((c) => c.name === "Aerial")).toBeUndefined();
+    expect(terrainChunk.paths!.filter((p) => p.fill && p.stroke).length).toBeGreaterThanOrEqual(3);
   });
 });
