@@ -2975,7 +2975,7 @@ body,
 /* 4. Image 05 — Right SITE INTELLIGENCE Card (.right-inspector) 1:1 */
 .model .right-inspector .kpi-cell {
   background: var(--hud-kpi-bg) !important;
-  border: 1px solid rgb(20 20 19 / 6%) !important;
+  border: 0 !important;
   border-radius: 7px !important;
   padding: 7px 8px !important;
   display: flex !important;
@@ -3263,60 +3263,130 @@ body,
   display: none !important;
 }
 
-/* Smooth Studio HUD perimeter island entrance */
+/* Smooth Studio HUD perimeter island entrance (Beat 4 after 2D->3D pitch starts) */
 @keyframes hudEnter {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    translate: 0 8px;
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    translate: 0 0;
+  }
+}
+
+@keyframes introPillExit {
+  0%,
+  55% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-6px);
   }
 }
 
 .model .top-bar,
+.model .top-bar-left,
+.model .top-bar-center,
+.model .top-bar-right,
 .model .left-rail,
+.model .left-tool-rail,
 .model .left-outliner,
 .model .right-rail,
 .model .right-inspector,
 .model .bottom-bar {
-  animation: hudEnter 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: hudEnter 480ms cubic-bezier(0.22, 1, 0.36, 1) 380ms both;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .model .top-bar,
+  .model .top-bar-left,
+  .model .top-bar-center,
+  .model .top-bar-right,
   .model .left-rail,
+  .model .left-tool-rail,
   .model .left-outliner,
   .model .right-rail,
   .model .right-inspector,
-  .model .bottom-bar {
+  .model .bottom-bar,
+  .loading-hud-pill.is-model-bridge {
     animation: none !important;
   }
 }
 
+/* Beat 2: Fade out Landing chrome smoothly while keeping 2D cut + top pill centered */
+.select .omnibox-stack,
+.select .bottom-workbench,
+.select .top-right-tools,
+.select .studio-header-left {
+  transition: opacity 280ms ease, transform 280ms ease;
+}
+
+.select.is-loading .omnibox-stack,
+.select.is-loading .bottom-workbench,
+.select.is-loading .top-right-tools,
+.select.is-loading .studio-header-left {
+  opacity: 0 !important;
+  transform: translateY(8px) !important;
+  pointer-events: none !important;
+}
+
+.loading-shield {
+  background: transparent !important;
+}
+
 /* Studio HUD Loading Pill on 2D Cut -> 3D Transition */
-.loading-hud-pill {
-  position: absolute;
-  top: 72px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 40;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 14px;
-  border-radius: 999px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border-outer);
-  box-shadow: var(--shadow-hud);
-  font-family: var(--mono);
-  font-size: 11.5px;
-  font-weight: 500;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
+.loading-hud-pill,
+.loading-card.loading-hud-pill {
+  position: absolute !important;
+  top: 20px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  z-index: 45 !important;
+  width: auto !important;
+  max-width: calc(100vw - 32px) !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 16px !important;
+  border-radius: 999px !important;
+  background: var(--bg-elev) !important;
+  border: 1px solid var(--border-outer) !important;
+  box-shadow: var(--shadow-hud) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  font-family: var(--mono) !important;
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
+  color: var(--ink) !important;
+  font-variant-numeric: tabular-nums !important;
+  pointer-events: none !important;
+  white-space: nowrap !important;
+}
+
+.loading-hud-pill .loading-hud-row {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.loading-hud-pill strong {
+  margin: 0 !important;
+  font-family: var(--sans) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: var(--ink) !important;
+}
+
+.loading-card.loading-hud-pill p,
+.loading-card.loading-hud-pill .bar {
+  display: none !important;
+}
+
+.loading-hud-pill.is-model-bridge {
+  animation: introPillExit 980ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .loading-pulse-dot {
@@ -3738,4 +3808,45 @@ body,
 .sun-bound,
 .time-readout-pill {
   font-variant-numeric: tabular-nums !important;
+}
+
+/* ============================================================================
+   8. SITE INTELLIGENCE PANEL (.right-inspector) — ZERO GREY BORDER & ZERO INNER GREY FILL
+   ============================================================================ */
+.model .right-inspector,
+.model .right-inspector.hud-card {
+  background: var(--bg-card) !important;
+  border: 0 !important;
+}
+
+.model .viewport > .sidebar-host .sidebar-panel.is-right,
+.model .right-inspector .sidebar-panel.is-right {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.model .viewport > .sidebar-host .sidebar-rail.icon-rail.is-right-rail,
+.model .right-inspector .insp-tabs.is-right-rail {
+  background: var(--hud-sub-toggle-bg) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.model .right-inspector .kpi-cell {
+  border: 0 !important;
+}
+
+.model[data-intro-hold="true"] .top-bar,
+.model[data-intro-hold="true"] .top-bar-left,
+.model[data-intro-hold="true"] .top-bar-center,
+.model[data-intro-hold="true"] .top-bar-right,
+.model[data-intro-hold="true"] .left-rail,
+.model[data-intro-hold="true"] .left-tool-rail,
+.model[data-intro-hold="true"] .left-outliner,
+.model[data-intro-hold="true"] .right-rail,
+.model[data-intro-hold="true"] .right-inspector,
+.model[data-intro-hold="true"] .bottom-bar,
+.model[data-intro-hold="true"] .loading-hud-pill.is-model-bridge {
+  animation-play-state: paused !important;
 }

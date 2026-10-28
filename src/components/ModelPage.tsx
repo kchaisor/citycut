@@ -154,6 +154,14 @@ import { LineStylesEditor } from "./LineStyles";
 import { Sidebar, type SidebarItem } from "./Sidebar";
 import { SatellitePane } from "./SatellitePane";
 import { Scene3D, type SceneExporter } from "./Scene3D";
+
+function shouldShowIntroBridgePill(): boolean {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+  if (/jsdom|HappyDOM/i.test(navigator.userAgent ?? "")) return false;
+  if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+  if (qaModeFromSearch(window.location.search)) return false;
+  return true;
+}
 import type { CameraMemoryRef } from "../lib/cameraMemory";
 import { SceneBoundary } from "./SceneBoundary";
 import { SolarPanel } from "./SolarPanel";
@@ -1530,8 +1538,22 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     ]
   ).filter((layer) => layer.available);
 
+  const modelRootRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = modelRootRef.current;
+    if (!el || !el.hasAttribute("data-intro-hold")) return;
+    if (tab !== "3d") {
+      el.removeAttribute("data-intro-hold");
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      el.removeAttribute("data-intro-hold");
+    }, 1800);
+    return () => window.clearTimeout(timer);
+  }, [tab]);
+
   return (
-    <div className="model">
+    <div ref={modelRootRef} className="model" data-intro-hold={tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}>
       <h1 className="sr-only">Your model is ready.</h1>
       <div
         className={`${
@@ -1540,6 +1562,14 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       >
         {tab === "3d" && (
           <div className="fill">
+            {shouldShowIntroBridgePill() && (
+              <div className="loading-hud-pill is-model-bridge hud-card" aria-hidden="true">
+                <div className="loading-hud-row">
+                  <span className="loading-pulse-dot" />
+                  <strong>Building 3D site cut · LiDAR + Vicmap…</strong>
+                </div>
+              </div>
+            )}
             {model.heightSourceLoadWarnings?.map((line) => (
               <p key={line} className="height-source-notice" role="status">
                 {line}

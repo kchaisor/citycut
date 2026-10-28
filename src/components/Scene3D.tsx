@@ -101,11 +101,11 @@ export type SceneExporter = {
 
 type FiberCamera = (THREE.OrthographicCamera | THREE.PerspectiveCamera) & { manual?: boolean };
 
-export const INTRO_TRANSITION_MS = 1400;
+export const INTRO_TRANSITION_MS = 1600;
+const INTRO_TRANSITION_SEC = INTRO_TRANSITION_MS / 1000;
 
 export function shouldRunIntroTransition(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") return false;
-  if (navigator.webdriver) return false;
   const ua = navigator.userAgent ?? "";
   if (/jsdom|HappyDOM/i.test(ua)) return false;
   if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -113,6 +113,14 @@ export function shouldRunIntroTransition(): boolean {
   }
   if (qaModeFromSearch(window.location.search)) return false;
   return true;
+}
+
+function computeIntroBuildingScale(elapsedSec: number): number {
+  const rawT = Math.min(1, Math.max(0, elapsedSec / INTRO_TRANSITION_SEC));
+  if (rawT >= 1) return 1;
+  const bRaw = Math.min(1, Math.max(0, (rawT - 0.12) / 0.88));
+  const bEase = 1 - Math.pow(1 - bRaw, 3);
+  return 0.01 + 0.99 * bEase;
 }
 
 const scratch = new THREE.Vector3();
@@ -302,24 +310,33 @@ function City({
   useLayoutEffect(() => {
     onBoundsRef.current(measureCity(group));
   }, [group]);
-  const introRef = useRef<{ startMs: number; targets: Array<{ obj: THREE.Object3D; pivotY: number }> } | null>(null);
+  const introRef = useRef<{
+    cutKey: string;
+    elapsedSec: number;
+    frameCount: number;
+    done: boolean;
+    targets: Array<{ obj: THREE.Object3D; pivotY: number }>;
+  } | null>(null);
+  const cutKey = `${model.center.lat.toFixed(5)},${model.center.lon.toFixed(5)},${model.sideM}`;
   useLayoutEffect(() => {
     const targets: Array<{ obj: THREE.Object3D; pivotY: number }> = [];
-    group.traverse((object) => {
+    for (const object of group.children) {
       const name = object.name;
-      const isBuilding =
+      const isExtrudable =
         name === "Buildings" ||
         name === "Buildings-manual" ||
         name === "Buildings-site" ||
         name.startsWith("Buildings::") ||
         name.startsWith("source:") ||
-        name === "BuildingEdges";
-      if (!isBuilding) return;
+        name === "BuildingEdges" ||
+        name === "RoofLines" ||
+        name === "Trees";
+      if (!isExtrudable) continue;
       const geom = (object as THREE.Mesh | THREE.LineSegments).geometry as THREE.BufferGeometry | undefined;
       if (geom && !geom.boundingBox) geom.computeBoundingBox();
       const pivotY = geom?.boundingBox ? geom.boundingBox.min.y : 0;
       targets.push({ obj: object, pivotY });
-    });
+    }
     if (!shouldRunIntroTransition() || targets.length === 0) {
       for (const { obj } of targets) {
         obj.scale.y = 1;
@@ -329,27 +346,64 @@ function City({
       introRef.current = null;
       return;
     }
-    const startScale = 0.02;
+    const existing = introRef.current;
+    if (existing && existing.cutKey === cutKey) {
+      existing.targets = targets;
+      if (existing.done) {
+        for (const { obj } of targets) {
+          obj.scale.y = 1;
+          obj.position.y = 0;
+        }
+        group.userData.introScaleY = 1;
+      } else {
+        const s = existing.frameCount < 2 ? 0.01 : computeIntroBuildingScale(existing.elapsedSec);
+        for (const { obj, pivotY } of targets) {
+          obj.scale.y = s;
+          obj.position.y = pivotY * (1 - s);
+        }
+        group.userData.introScaleY = s;
+      }
+      return;
+    }
+    const startScale = 0.01;
     for (const { obj, pivotY } of targets) {
       obj.scale.y = startScale;
       obj.position.y = pivotY * (1 - startScale);
     }
     group.userData.introScaleY = startScale;
-    introRef.current = { startMs: performance.now(), targets };
-  }, [group]);
-  useFrame(() => {
+    introRef.current = { cutKey, elapsedSec: 0, frameCount: 0, done: false, targets };
+  }, [group, cutKey]);
+  useFrame((state, delta) => {
     const intro = introRef.current;
-    if (!intro) return;
-    const elapsed = performance.now() - intro.startMs;
-    const u = Math.min(1, Math.max(0, elapsed / INTRO_TRANSITION_MS));
-    const ease = 1 - Math.pow(1 - u, 3);
-    const s = u >= 1 ? 1 : 0.02 + 0.98 * ease;
+    if (!intro || intro.done) return;
+    if (intro.frameCount < 3) {
+      intro.frameCount += 1;
+      const s0 = 0.01;
+      for (const { obj, pivotY } of intro.targets) {
+        obj.scale.y = s0;
+        obj.position.y = pivotY * (1 - s0);
+      }
+      group.userData.introScaleY = s0;
+      state.gl.domElement.dataset.introElapsed = "0.00";
+      state.gl.domElement.dataset.introScale = s0.toFixed(3);
+      return;
+    }
+    intro.elapsedSec += Math.min(Math.max(delta, 0.001), 0.033);
+    const done = intro.elapsedSec >= INTRO_TRANSITION_SEC;
+    const s = done ? 1 : computeIntroBuildingScale(intro.elapsedSec);
     for (const { obj, pivotY } of intro.targets) {
       obj.scale.y = s;
-      obj.position.y = u >= 1 ? 0 : pivotY * (1 - s);
+      obj.position.y = done ? 0 : pivotY * (1 - s);
     }
     group.userData.introScaleY = s;
-    if (u >= 1) introRef.current = null;
+    if (intro.elapsedSec >= 0.50 || done) {
+      state.gl.domElement.closest(".model")?.removeAttribute("data-intro-hold");
+    }
+    state.gl.domElement.dataset.introElapsed = (done ? INTRO_TRANSITION_SEC : intro.elapsedSec).toFixed(2);
+    state.gl.domElement.dataset.introScale = s.toFixed(3);
+    if (done) {
+      intro.done = true;
+    }
   });
   useLayoutEffect(() => {
     snapshotBuildingViewportColors(group, colourMode);
@@ -546,7 +600,9 @@ function PerspectiveFit({
 }) {
   const size = useThree((state) => state.size);
   const introAnimRef = useRef<{
-    startMs: number;
+    elapsedSec: number;
+    frameCount: number;
+    done: boolean;
     target: THREE.Vector3;
     endEye: THREE.Vector3;
     startRadius: number;
@@ -556,6 +612,24 @@ function PerspectiveFit({
     startTheta: number;
     endTheta: number;
   } | null>(null);
+  const applyIntroPose = useCallback(
+    (
+      anim: NonNullable<typeof introAnimRef.current>,
+      controls: OrbitControlsImpl,
+    ) => {
+      const rawT = anim.frameCount < 2 ? 0 : Math.min(1, Math.max(0, anim.elapsedSec / INTRO_TRANSITION_SEC));
+      const ease = 1 - Math.pow(1 - rawT, 3);
+      const radius = THREE.MathUtils.lerp(anim.startRadius, anim.endRadius, ease);
+      const phi = THREE.MathUtils.lerp(anim.startPhi, anim.endPhi, ease);
+      const theta = THREE.MathUtils.lerp(anim.startTheta, anim.endTheta, ease);
+      camera.position.setFromSphericalCoords(radius, phi, theta).add(anim.target);
+      controls.target.copy(anim.target);
+      camera.lookAt(controls.target);
+      camera.updateProjectionMatrix();
+      controls.update();
+    },
+    [camera],
+  );
   const place = useCallback(() => {
     const controls = controlsRef.current;
     if (!controls || !active || size.width < 2 || size.height < 2) return;
@@ -580,32 +654,40 @@ function PerspectiveFit({
       aspect: size.width / Math.max(size.height, 1),
     });
     const wasUnfitted = fittedKey.current === null;
+    const runningIntro = introAnimRef.current && !introAnimRef.current.done;
     flushControlInertia(controls);
     camera.near = pose.near;
     camera.far = pose.far;
-    if (introEnabled && wasUnfitted && shouldRunIntroTransition()) {
+    if (introEnabled && shouldRunIntroTransition() && (wasUnfitted || runningIntro)) {
       const targetVec = new THREE.Vector3(pose.target[0], pose.target[1], pose.target[2]);
       const endEyeVec = new THREE.Vector3(pose.eye[0], pose.eye[1], pose.eye[2]);
       const endSpherical = new THREE.Spherical().setFromVector3(endEyeVec.clone().sub(targetVec));
       const startRadius = endSpherical.radius * 0.92;
       const startPhi = 0.05;
       const startTheta = 0;
-      camera.position.setFromSphericalCoords(startRadius, startPhi, startTheta).add(targetVec);
-      controls.target.copy(targetVec);
-      camera.lookAt(controls.target);
-      camera.updateProjectionMatrix();
-      controls.update();
-      introAnimRef.current = {
-        startMs: performance.now(),
-        target: targetVec,
-        endEye: endEyeVec,
-        startRadius,
-        endRadius: endSpherical.radius,
-        startPhi,
-        endPhi: endSpherical.phi,
-        startTheta,
-        endTheta: endSpherical.theta,
-      };
+      if (runningIntro && introAnimRef.current) {
+        introAnimRef.current.target = targetVec;
+        introAnimRef.current.endEye = endEyeVec;
+        introAnimRef.current.startRadius = startRadius;
+        introAnimRef.current.endRadius = endSpherical.radius;
+        introAnimRef.current.endPhi = endSpherical.phi;
+        introAnimRef.current.endTheta = endSpherical.theta;
+      } else {
+        introAnimRef.current = {
+          elapsedSec: 0,
+          frameCount: 0,
+          done: false,
+          target: targetVec,
+          endEye: endEyeVec,
+          startRadius,
+          endRadius: endSpherical.radius,
+          startPhi,
+          endPhi: endSpherical.phi,
+          startTheta,
+          endTheta: endSpherical.theta,
+        };
+      }
+      applyIntroPose(introAnimRef.current, controls);
     } else {
       camera.position.set(pose.eye[0], pose.eye[1], pose.eye[2]);
       controls.target.set(pose.target[0], pose.target[1], pose.target[2]);
@@ -616,6 +698,7 @@ function PerspectiveFit({
     fittedKey.current = key;
     touchedRef.current = false;
   }, [
+    applyIntroPose,
     introEnabled,
     active,
     camera,
@@ -636,36 +719,34 @@ function PerspectiveFit({
   useLayoutEffect(() => {
     place();
   }, [place]);
-  useFrame(() => {
+  useFrame((_state, delta) => {
     place();
     const anim = introAnimRef.current;
-    if (!anim) return;
+    if (!anim || anim.done) return;
     const controls = controlsRef.current;
     if (!active || !controls || touchedRef.current) {
+      anim.done = true;
       introAnimRef.current = null;
       return;
     }
-    const elapsed = performance.now() - anim.startMs;
-    const u = Math.min(1, Math.max(0, elapsed / INTRO_TRANSITION_MS));
-    if (u >= 1) {
+    if (anim.frameCount < 2) {
+      anim.frameCount += 1;
+      applyIntroPose(anim, controls);
+      return;
+    }
+    anim.elapsedSec += Math.min(Math.max(delta, 0.001), 0.033);
+    if (anim.elapsedSec >= INTRO_TRANSITION_SEC) {
       flushControlInertia(controls);
       camera.position.copy(anim.endEye);
       controls.target.copy(anim.target);
       camera.lookAt(controls.target);
       camera.updateProjectionMatrix();
       controls.update();
+      anim.done = true;
       introAnimRef.current = null;
       return;
     }
-    const ease = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
-    const radius = THREE.MathUtils.lerp(anim.startRadius, anim.endRadius, ease);
-    const phi = THREE.MathUtils.lerp(anim.startPhi, anim.endPhi, ease);
-    const theta = THREE.MathUtils.lerp(anim.startTheta, anim.endTheta, ease);
-    camera.position.setFromSphericalCoords(radius, phi, theta).add(anim.target);
-    controls.target.copy(anim.target);
-    camera.lookAt(controls.target);
-    camera.updateProjectionMatrix();
-    controls.update();
+    applyIntroPose(anim, controls);
   });
   return null;
 }

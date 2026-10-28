@@ -589,6 +589,16 @@ describe("Display panel controls by view tab", () => {
 
     expect(indexCss).toMatch(/\.model\s+\.viewport\s*\{[^}]*--sidebar-r:\s*var\(--sidebar-panel-w\);/);
     expect(indexCss).toMatch(/\.model\s+\.viewport\s*>\s*\.fill\s*\{\s*inset:\s*0;\s*left:\s*0;\s*right:\s*0;\s*\}/);
+
+    // Site Intelligence panel (.right-inspector) must have zero grey border and zero inner grey fill
+    expect(floatingCss).toMatch(
+      /\.model\s+\.right-inspector,\s*\.model\s+\.right-inspector\.hud-card\s*\{[\s\S]*?background:\s*var\(--bg-card\)\s*!important;[\s\S]*?border:\s*0\s*!important;/,
+    );
+    expect(floatingCss).toMatch(
+      /\.model\s+\.viewport\s*>\s*\.sidebar-host\s+\.sidebar-panel\.is-right,\s*\.model\s+\.right-inspector\s+\.sidebar-panel\.is-right\s*\{[\s\S]*?background:\s*transparent\s*!important;[\s\S]*?border:\s*0\s*!important;/,
+    );
+    expect(floatingCss).toMatch(/\.model\s+\.right-inspector\s+\.kpi-cell\s*\{[\s\S]*?border:\s*0\s*!important;/);
+    expect(floatingCss).toMatch(/\.select\.is-loading\s+\.omnibox-stack/);
   });
 
   it("renders View Style heading in Display and expands the 2-row Environmental Console with zero left drawer on Analysis", async () => {

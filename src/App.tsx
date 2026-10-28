@@ -86,7 +86,14 @@ function frameFromQuery(): FrameQuery | null {
   return frameFromSearch(window.location.search);
 }
 
-const ModelPage = lazy(() => import("./components/ModelPage").then((mod) => ({ default: mod.ModelPage })));
+let modelPagePromise: Promise<{ default: typeof import("./components/ModelPage").ModelPage }> | null = null;
+function preloadModelPage() {
+  if (!modelPagePromise) {
+    modelPagePromise = import("./components/ModelPage").then((mod) => ({ default: mod.ModelPage }));
+  }
+  return modelPagePromise;
+}
+const ModelPage = lazy(preloadModelPage);
 
 type PlaceAnchor = LonLat & { label: string };
 
@@ -324,6 +331,8 @@ export default function App() {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    const createStartMs = performance.now();
+    void preloadModelPage();
     setLoading(true);
     setError(null);
     try {
@@ -801,6 +810,21 @@ export default function App() {
       if (nswMode && modelLayers.roads && (nswResult?.roadCorridors.length ?? 0) > 0) {
         draftModel.nswRoadSurface = groundRoadPartition(draftModel).sources ?? null;
       }
+      const isAutomatedDomTest =
+        typeof navigator !== "undefined" && /jsdom|HappyDOM/i.test(navigator.userAgent ?? "");
+      const prefersReduced =
+        typeof window !== "undefined" &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const isQa = typeof window !== "undefined" && qaModeFromSearch(window.location.search);
+      if (!isAutomatedDomTest && !prefersReduced && !isQa) {
+        await preloadModelPage().catch(() => undefined);
+        const elapsedMs = performance.now() - createStartMs;
+        if (elapsedMs < 380) {
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 380 - elapsedMs));
+        }
+        if (controller.signal.aborted) return;
+      }
       setModel(draftModel);
       setPhase("model");
     } catch (err) {
@@ -824,10 +848,20 @@ export default function App() {
     document.title = `CityCut — ${headerPlace} · ${headerSize}`;
   }, [headerPlace, headerSize]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const ua = typeof navigator !== "undefined" ? (navigator.userAgent ?? "") : "";
+    if (/jsdom|HappyDOM/i.test(ua)) return;
+    const id = window.setTimeout(() => {
+      void preloadModelPage();
+    }, 120);
+    return () => window.clearTimeout(id);
+  }, []);
+
   return (
     <div className="app">
       {phase === "select" ? (
-        <div className={selectCollapsed ? "select sidebar-collapsed" : "select"}>
+        <div className={["select", selectCollapsed ? "sidebar-collapsed" : "", loading ? "is-loading" : ""].filter(Boolean).join(" ")}>
           <MapStage
             basemap={basemap}
             fitFrameOnLoad={fitFrameOnLoad}
