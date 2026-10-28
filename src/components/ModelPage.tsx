@@ -1552,6 +1552,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
 
   const modelRootRef = useRef<HTMLDivElement | null>(null);
   const introHoldReleasedRef = useRef(false);
+  const introWebglReadyRef = useRef(false);
   useEffect(() => {
     const el = modelRootRef.current;
     if (!el) return;
@@ -1559,15 +1560,24 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       introHoldReleasedRef.current = true;
       el.removeAttribute("data-intro-hold");
     };
+    const markWebglReady = () => {
+      introWebglReadyRef.current = true;
+      el.removeAttribute("data-intro-webgl-wait");
+    };
     if (tab !== "3d" || !shouldShowIntroBridgePill()) {
       release();
+      markWebglReady();
       return;
     }
     el.addEventListener("citycut:intro-hold-release", release);
+    window.addEventListener("citycut:intro-webgl-ready", markWebglReady);
     const timer = window.setTimeout(release, 30000);
+    const webglTimer = window.setTimeout(markWebglReady, 2500);
     return () => {
       el.removeEventListener("citycut:intro-hold-release", release);
+      window.removeEventListener("citycut:intro-webgl-ready", markWebglReady);
       window.clearTimeout(timer);
+      window.clearTimeout(webglTimer);
     };
   }, [tab]);
 
@@ -1576,6 +1586,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       ref={modelRootRef}
       className="model"
       data-intro-hold={!introHoldReleasedRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
+      data-intro-webgl-wait={!introWebglReadyRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
     >
       <h1 className="sr-only">Your model is ready.</h1>
       <div

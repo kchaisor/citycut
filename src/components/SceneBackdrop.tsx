@@ -12,14 +12,27 @@ import { markScreenOnly } from "../lib/screenOnly";
  */
 export function GradientSky({ colourTick, fallback }: { colourTick: number; fallback: string }) {
   const scene = useThree((state) => state.scene);
+  const gl = useThree((state) => state.gl);
   useEffect(() => {
     const previous = scene.background;
     const colour = new THREE.Color(themeColor("--viewport-bg", fallback));
-    scene.background = colour;
-    return () => {
-      if (scene.background === colour) scene.background = previous;
+    const modelRoot = gl.domElement.closest(".model");
+    const syncBackground = () => {
+      if (modelRoot?.hasAttribute("data-intro-hold")) {
+        scene.background = null;
+        gl.setClearColor(colour, 0);
+      } else {
+        scene.background = colour;
+        gl.setClearColor(colour, 1);
+      }
     };
-  }, [scene, colourTick, fallback]);
+    syncBackground();
+    modelRoot?.addEventListener("citycut:intro-hold-release", syncBackground);
+    return () => {
+      modelRoot?.removeEventListener("citycut:intro-hold-release", syncBackground);
+      if (scene.background === colour || scene.background === null) scene.background = previous;
+    };
+  }, [scene, gl, colourTick, fallback]);
   return null;
 }
 

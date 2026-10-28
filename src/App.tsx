@@ -147,6 +147,7 @@ export default function App() {
   const [placeLabel, setPlaceLabel] = useState(placeLabelRef.current);
   const [fly, setFly] = useState<FlyRequest | null>(null);
   const [phase, setPhase] = useState<"select" | "model">("select");
+  const [handoffUnderlay, setHandoffUnderlay] = useState<"none" | "holding" | "fading">("none");
   const [model, setModel] = useState<CityModel | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -829,11 +830,12 @@ export default function App() {
         const minBeat2Ms =
           (typeof window !== "undefined" &&
             (window as Window & { __citycutMinBeat2Ms?: number }).__citycutMinBeat2Ms) ||
-          480;
+          620;
         if (elapsedMs < minBeat2Ms) {
           await new Promise<void>((resolve) => window.setTimeout(resolve, minBeat2Ms - elapsedMs));
         }
         if (controller.signal.aborted) return;
+        setHandoffUnderlay("holding");
       }
       setModel(draftModel);
       setPhase("model");
@@ -868,10 +870,44 @@ export default function App() {
     return () => window.clearTimeout(id);
   }, []);
 
+  useEffect(() => {
+    if (phase !== "model" || handoffUnderlay === "none") return;
+    let fadeTimer: number | null = null;
+    const triggerFade = () => {
+      setHandoffUnderlay((prev) => (prev === "holding" ? "fading" : prev));
+      if (fadeTimer === null) {
+        fadeTimer = window.setTimeout(() => {
+          setHandoffUnderlay("none");
+        }, 1550);
+      }
+    };
+    window.addEventListener("citycut:intro-webgl-ready", triggerFade);
+    const safetyTimer = window.setTimeout(triggerFade, 2500);
+    return () => {
+      window.removeEventListener("citycut:intro-webgl-ready", triggerFade);
+      window.clearTimeout(safetyTimer);
+      if (fadeTimer !== null) window.clearTimeout(fadeTimer);
+    };
+  }, [phase, handoffUnderlay]);
+
+  const showSelectLayer = phase === "select" || handoffUnderlay !== "none";
+  const selectLoadingActive = loading || (phase === "model" && handoffUnderlay !== "none");
+
   return (
     <div className="app">
-      {phase === "select" ? (
-        <div className={["select", selectCollapsed ? "sidebar-collapsed" : "", loading ? "is-loading" : ""].filter(Boolean).join(" ")}>
+      {showSelectLayer ? (
+        <div
+          className={[
+            "select",
+            selectCollapsed ? "sidebar-collapsed" : "",
+            selectLoadingActive ? "is-loading" : "",
+            phase === "model" && handoffUnderlay !== "none" ? "is-handoff-underlay" : "",
+            phase === "model" && handoffUnderlay === "fading" ? "is-fading-out" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          aria-hidden={phase === "model" ? "true" : undefined}
+        >
           <MapStage
             basemap={basemap}
             fitFrameOnLoad={fitFrameOnLoad}
@@ -879,7 +915,7 @@ export default function App() {
             frameShape={frameShape}
             initialView={viewRef.current}
             fly={fly}
-            loading={loading}
+            loading={selectLoadingActive}
             siteSearch={mapSiteSearch}
             onCancel={cancel}
             onView={onView}
@@ -889,7 +925,7 @@ export default function App() {
             placeLabel={placeLabel}
             sideKm={sideKm}
             layers={layers}
-            loading={loading}
+            loading={selectLoadingActive}
             error={error}
             onSideKm={setSideKm}
             frameShape={frameShape}
@@ -903,9 +939,20 @@ export default function App() {
             onHome={onHome}
           />
         </div>
-      ) : model ? (
-        <Suspense fallback={<p className="opening">Opening the model…</p>}>
-          <ModelPage model={model} onHome={onHome} onNewCut={() => setPhase("select")} />
+      ) : null}
+      {phase === "model" && model ? (
+        <Suspense fallback={handoffUnderlay !== "none" ? null : <p className="opening">Opening the model…</p>}>
+          <ModelPage
+            model={model}
+            onHome={() => {
+              setHandoffUnderlay("none");
+              onHome();
+            }}
+            onNewCut={() => {
+              setHandoffUnderlay("none");
+              setPhase("select");
+            }}
+          />
         </Suspense>
       ) : null}
     </div>

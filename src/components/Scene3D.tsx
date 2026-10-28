@@ -102,8 +102,9 @@ export type SceneExporter = {
 
 type FiberCamera = (THREE.OrthographicCamera | THREE.PerspectiveCamera) & { manual?: boolean };
 
-export const INTRO_TRANSITION_MS = 1650;
+export const INTRO_TRANSITION_MS = 2100;
 const INTRO_TRANSITION_SEC = INTRO_TRANSITION_MS / 1000;
+const INTRO_HOLD_RELEASE_SEC = 1.65;
 
 export function shouldRunIntroTransition(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") return false;
@@ -120,12 +121,36 @@ function easeInOutCubic(x: number): number {
   return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
 }
 
-function computeIntroBuildingScale(elapsedSec: number): number {
-  const rawT = Math.min(1, Math.max(0, elapsedSec / INTRO_TRANSITION_SEC));
-  if (rawT >= 1) return 1;
-  const bRaw = Math.min(1, Math.max(0, (rawT - 0.14) / 0.86));
-  const bEase = easeInOutCubic(bRaw);
-  return Math.max(0.001, bEase);
+function easeOutCubic(x: number): number {
+  return 1 - Math.pow(1 - x, 3);
+}
+
+export function computeIntroBuildingBucketScale(elapsedSec: number, bucket: number): number {
+  if (elapsedSec >= INTRO_TRANSITION_SEC) return 1;
+  const clampedBucket = Math.max(0, Math.min(23, bucket));
+  const bStart = (clampedBucket / 23) * 0.55;
+  const u = Math.min(1, Math.max(0, (elapsedSec - bStart) / 0.95));
+  return 0.001 + 0.999 * easeInOutCubic(u);
+}
+
+export function computeIntroTreeBucketScale(elapsedSec: number, bucket: number): number {
+  if (elapsedSec >= INTRO_TRANSITION_SEC) return 1;
+  const clampedBucket = Math.max(0, Math.min(15, bucket));
+  const tStart = 0.56 + (clampedBucket / 15) * 0.54;
+  const rawU = (elapsedSec - tStart) / 0.38;
+  if (rawU <= 0) return 0.001;
+  if (rawU >= 1) return 1;
+  return Math.max(0.001, easeOutCubic(rawU) * (1 + 0.16 * Math.sin(Math.PI * rawU)));
+}
+
+function computeIntroTreeWaveScale(elapsedSec: number): number {
+  if (elapsedSec >= INTRO_TRANSITION_SEC) return 1;
+  let maxScale = 0.001;
+  for (let b = 0; b < 16; b++) {
+    const s = computeIntroTreeBucketScale(elapsedSec, b);
+    if (s > maxScale) maxScale = s;
+  }
+  return maxScale;
 }
 
 const scratch = new THREE.Vector3();
@@ -298,7 +323,8 @@ function City({
     [uniformBuildings, colourBySource],
   );
   const group = useMemo(() => {
-    const city = buildCityGroup(model, { uniformBuildings, colourBySource, highlightManual });
+    const introStagger = shouldRunIntroTransition();
+    const city = buildCityGroup(model, { uniformBuildings, colourBySource, highlightManual, introStagger });
     const ground = city.getObjectByName("Ground");
     if (ground && ground instanceof THREE.Mesh && ground.name === "Ground") {
       const edges = new THREE.LineSegments(
@@ -310,7 +336,7 @@ function City({
       city.add(edges);
     }
     addBuildingEdges(city);
-    if (shouldRunIntroTransition()) {
+    if (introStagger) {
       const ringGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(model.sideM, 1.2, model.sideM));
       const ringMat = new THREE.LineBasicMaterial({
         color: 0xfff500,
@@ -335,13 +361,27 @@ function City({
     elapsedSec: number;
     frameCount: number;
     done: boolean;
-    targets: Array<{ obj: THREE.Object3D; pivotY: number }>;
+    webglReadyDispatched?: boolean;
+    targets: Array<{ obj: THREE.Object3D; pivotY: number; kind: "building" | "tree"; bucket: number }>;
   } | null>(null);
   const cutKey = `${model.center.lat.toFixed(5)},${model.center.lon.toFixed(5)},${model.sideM}`;
   useLayoutEffect(() => {
-    const targets: Array<{ obj: THREE.Object3D; pivotY: number }> = [];
+    const targets: Array<{ obj: THREE.Object3D; pivotY: number; kind: "building" | "tree"; bucket: number }> = [];
     for (const object of group.children) {
       const name = object.name;
+      if (name === "Trees") {
+        const hasBucketChildren = object.children.some((c) => c.name === "TreesBucket");
+        if (hasBucketChildren) {
+          for (const sub of object.children) {
+            const pivotY = typeof sub.userData.introBaseY === "number" ? sub.userData.introBaseY : 0;
+            const bucket = typeof sub.userData.introTreeBucket === "number" ? sub.userData.introTreeBucket : 0;
+            targets.push({ obj: sub, pivotY, kind: "tree", bucket });
+          }
+        } else {
+          targets.push({ obj: object, pivotY: 0, kind: "tree", bucket: 0 });
+        }
+        continue;
+      }
       const isExtrudable =
         name === "Buildings" ||
         name === "Buildings-manual" ||
@@ -349,13 +389,18 @@ function City({
         name.startsWith("Buildings::") ||
         name.startsWith("source:") ||
         name === "BuildingEdges" ||
-        name === "RoofLines" ||
-        name === "Trees";
+        name === "RoofLines";
       if (!isExtrudable) continue;
       const geom = (object as THREE.Mesh | THREE.LineSegments).geometry as THREE.BufferGeometry | undefined;
       if (geom && !geom.boundingBox) geom.computeBoundingBox();
-      const pivotY = geom?.boundingBox ? geom.boundingBox.min.y : 0;
-      targets.push({ obj: object, pivotY });
+      const pivotY =
+        typeof object.userData.introBaseY === "number"
+          ? object.userData.introBaseY
+          : geom?.boundingBox
+            ? geom.boundingBox.min.y
+            : 0;
+      const bucket = typeof object.userData.introBuildingBucket === "number" ? object.userData.introBuildingBucket : 0;
+      targets.push({ obj: object, pivotY, kind: "building", bucket });
     }
     if (!shouldRunIntroTransition() || targets.length === 0) {
       for (const { obj } of targets) {
@@ -376,12 +421,18 @@ function City({
         }
         group.userData.introScaleY = 1;
       } else {
-        const s = existing.frameCount < 3 ? 0.001 : computeIntroBuildingScale(existing.elapsedSec);
-        for (const { obj, pivotY } of targets) {
+        for (const { obj, pivotY, kind, bucket } of targets) {
+          const s =
+            existing.frameCount < 2
+              ? 0.001
+              : kind === "tree"
+                ? computeIntroTreeBucketScale(existing.elapsedSec, bucket)
+                : computeIntroBuildingBucketScale(existing.elapsedSec, bucket);
           obj.scale.y = s;
           obj.position.y = pivotY * (1 - s);
         }
-        group.userData.introScaleY = s;
+        group.userData.introScaleY =
+          existing.frameCount < 2 ? 0.001 : computeIntroBuildingBucketScale(existing.elapsedSec, 0);
       }
       return;
     }
@@ -391,13 +442,13 @@ function City({
       obj.position.y = pivotY * (1 - startScale);
     }
     group.userData.introScaleY = startScale;
-    introRef.current = { cutKey, elapsedSec: 0, frameCount: 0, done: false, targets };
+    introRef.current = { cutKey, elapsedSec: 0, frameCount: 0, done: false, webglReadyDispatched: false, targets };
   }, [group, cutKey]);
   useFrame((state, delta) => {
     const intro = introRef.current;
     if (!intro || intro.done) return;
     const ring = group.getObjectByName("IntroCutRing") as THREE.LineSegments | undefined;
-    if (intro.frameCount < 1) {
+    if (intro.frameCount < 2) {
       intro.frameCount += 1;
       const s0 = 0.001;
       for (const { obj, pivotY } of intro.targets) {
@@ -409,8 +460,22 @@ function City({
         (ring.material as THREE.LineBasicMaterial).opacity = 1;
       }
       group.userData.introScaleY = s0;
-      state.gl.domElement.dataset.introElapsed = "0.00";
-      state.gl.domElement.dataset.introScale = s0.toFixed(3);
+      const ds = state.gl.domElement.dataset;
+      ds.introElapsed = "0.00";
+      ds.introScale = s0.toFixed(3);
+      ds.introBldgInner = s0.toFixed(3);
+      ds.introBldgOuter = s0.toFixed(3);
+      ds.introTreeScale = s0.toFixed(3);
+      if (intro.frameCount >= 2 && !intro.webglReadyDispatched) {
+        intro.webglReadyDispatched = true;
+        const modelRoot = state.gl.domElement.closest(".model");
+        if (modelRoot?.hasAttribute("data-intro-webgl-wait")) {
+          modelRoot.removeAttribute("data-intro-webgl-wait");
+        }
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("citycut:intro-webgl-ready"));
+        }
+      }
       return;
     }
     const introPaused =
@@ -425,27 +490,39 @@ function City({
       intro.elapsedSec += Math.min(Math.max(delta, 0.001), 0.14);
     }
     const done = intro.elapsedSec >= INTRO_TRANSITION_SEC;
-    const s = done ? 1 : computeIntroBuildingScale(intro.elapsedSec);
-    for (const { obj, pivotY } of intro.targets) {
+    const clampedElapsed = done ? INTRO_TRANSITION_SEC : intro.elapsedSec;
+    for (const { obj, pivotY, kind, bucket } of intro.targets) {
+      const s = done
+        ? 1
+        : kind === "tree"
+          ? computeIntroTreeBucketScale(clampedElapsed, bucket)
+          : computeIntroBuildingBucketScale(clampedElapsed, bucket);
       obj.scale.y = s;
       obj.position.y = done ? 0 : pivotY * (1 - s);
     }
+    const bldgInner = done ? 1 : computeIntroBuildingBucketScale(clampedElapsed, 0);
+    const bldgOuter = done ? 1 : computeIntroBuildingBucketScale(clampedElapsed, 23);
+    const treeScale = done ? 1 : computeIntroTreeWaveScale(clampedElapsed);
     if (ring) {
-      const rawT = Math.min(1, intro.elapsedSec / INTRO_TRANSITION_SEC);
+      const rawT = Math.min(1, clampedElapsed / INTRO_TRANSITION_SEC);
       const ringAlpha = done ? 0 : Math.max(0, 1 - rawT * 1.5);
       ring.visible = ringAlpha > 0.01;
       (ring.material as THREE.LineBasicMaterial).opacity = ringAlpha;
     }
-    group.userData.introScaleY = s;
-    if (intro.elapsedSec >= 1.25 || done) {
+    group.userData.introScaleY = bldgInner;
+    if (clampedElapsed >= INTRO_HOLD_RELEASE_SEC || done) {
       const modelRoot = state.gl.domElement.closest(".model");
       if (modelRoot?.hasAttribute("data-intro-hold")) {
-        modelRoot.dispatchEvent(new CustomEvent("citycut:intro-hold-release"));
         modelRoot.removeAttribute("data-intro-hold");
+        modelRoot.dispatchEvent(new CustomEvent("citycut:intro-hold-release"));
       }
     }
-    state.gl.domElement.dataset.introElapsed = (done ? INTRO_TRANSITION_SEC : intro.elapsedSec).toFixed(2);
-    state.gl.domElement.dataset.introScale = s.toFixed(3);
+    const ds = state.gl.domElement.dataset;
+    ds.introElapsed = clampedElapsed.toFixed(2);
+    ds.introScale = bldgInner.toFixed(3);
+    ds.introBldgInner = bldgInner.toFixed(3);
+    ds.introBldgOuter = bldgOuter.toFixed(3);
+    ds.introTreeScale = treeScale.toFixed(3);
     if (done) {
       intro.done = true;
     }
@@ -663,8 +740,8 @@ function PerspectiveFit({
       anim: NonNullable<typeof introAnimRef.current>,
       controls: OrbitControlsImpl,
     ) => {
-      const rawT = anim.frameCount < 1 ? 0 : Math.min(1, Math.max(0, anim.elapsedSec / INTRO_TRANSITION_SEC));
-      const ease = easeInOutCubic(rawT);
+      const rawT = anim.frameCount < 2 ? 0 : Math.min(1, Math.max(0, (anim.elapsedSec - 0.08) / 1.25));
+      const ease = easeOutCubic(rawT);
       const radius = THREE.MathUtils.lerp(anim.startRadius, anim.endRadius, ease);
       const phi = THREE.MathUtils.lerp(anim.startPhi, anim.endPhi, ease);
       const theta = THREE.MathUtils.lerp(anim.startTheta, anim.endTheta, ease);
@@ -784,7 +861,7 @@ function PerspectiveFit({
       introAnimRef.current = null;
       return;
     }
-    if (anim.frameCount < 1) {
+    if (anim.frameCount < 2) {
       anim.frameCount += 1;
       applyIntroPose(anim, controls);
       return;
@@ -1692,7 +1769,7 @@ export function Scene3D({
         dpr={[1, 1.75]}
         gl={{
           antialias: true,
-          alpha: false,
+          alpha: true,
           powerPreference: "high-performance",
           preserveDrawingBuffer: qaModeFromSearch(window.location.search),
         }}

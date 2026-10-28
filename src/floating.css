@@ -2267,21 +2267,16 @@ body,
 }
 
 .select .map-wrap .frame-label {
-  background: var(--ink) !important;
-  color: var(--bg-elev) !important;
-  border: 0 !important;
-  font-family: var(--mono) !important;
-  font-size: 11px !important;
-  font-weight: 600 !important;
-  padding: 3px 9px !important;
-  border-radius: 5px !important;
-  letter-spacing: -0.01em !important;
-  box-shadow: 0 3px 8px rgb(0 0 0 / 15%) !important;
+  display: none !important;
+}
+
+.select .map-wrap .frame-handle {
+  z-index: 30 !important;
 }
 
 .select .map-wrap .frame-cad-tag {
   position: absolute;
-  z-index: 4;
+  z-index: 30 !important;
   transform: translateX(-50%);
   pointer-events: none;
   white-space: nowrap;
@@ -3311,14 +3306,12 @@ body,
   }
 }
 
-/* Beat 2: Isolate centered 2D selection square on #EBEBEB canvas & hide Landing chrome */
+/* Beat 2: Isolate centered 2D selection square with translucent 0.78 outer dim & hide Landing chrome */
 .select .omnibox-stack,
 .select .bottom-workbench,
 .select .top-right-tools,
 .select .studio-header-left,
 .select .frame-label,
-.select .frame-cad-tag,
-.select .frame-handle,
 .select .maplibregl-ctrl,
 .select .map-attrib {
   transition: opacity 150ms ease, transform 200ms ease;
@@ -3329,8 +3322,6 @@ body,
 .select.is-loading .top-right-tools,
 .select.is-loading .studio-header-left,
 .select.is-loading .frame-label,
-.select.is-loading .frame-cad-tag,
-.select.is-loading .frame-handle,
 .select.is-loading .maplibregl-ctrl,
 .select.is-loading .map-attrib {
   opacity: 0 !important;
@@ -3348,14 +3339,61 @@ body,
 }
 
 .select .map-wrap .frame {
-  transition: box-shadow 340ms cubic-bezier(0.22, 1, 0.36, 1), border-color 220ms ease;
+  transition: box-shadow 450ms ease, border-color 220ms ease;
 }
 
 .select.is-loading .map-wrap .frame {
-  border: 2px solid #FFF500 !important;
+  border: 2px dashed #141413 !important;
   background: transparent !important;
-  box-shadow: 0 0 0 9999px var(--viewport-bg), 0 24px 60px rgba(20, 20, 19, 0.14) !important;
+  box-shadow: 0 0 0 9999px rgba(235, 235, 235, 0.78), 0 24px 60px rgba(20, 20, 19, 0.14) !important;
   z-index: 25 !important;
+}
+
+.app {
+  background: var(--viewport-bg) !important;
+}
+
+.select.is-handoff-underlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+  opacity: 1;
+  transition: opacity 1450ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.select.is-handoff-underlay.is-fading-out {
+  opacity: 0 !important;
+}
+
+.select.is-handoff-underlay.is-fading-out .map-wrap .frame {
+  border-color: transparent !important;
+  transition: border-color 180ms ease, box-shadow 1450ms ease !important;
+}
+
+.select.is-handoff-underlay.is-fading-out .map-wrap .frame-handle,
+.select.is-handoff-underlay.is-fading-out .map-wrap .frame-cad-tag,
+.select.is-handoff-underlay.is-fading-out .loading-hud-pill {
+  opacity: 0 !important;
+  transition: opacity 180ms ease !important;
+}
+
+.model {
+  position: relative;
+  z-index: 20;
+  opacity: 1;
+  transition: opacity 260ms ease;
+}
+
+.model[data-intro-hold="true"],
+.model[data-intro-hold="true"] .viewport {
+  background: transparent !important;
+}
+
+.model[data-intro-webgl-wait="true"] {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: none !important;
 }
 
 .loading-shield {
