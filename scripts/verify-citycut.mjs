@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 /**
- * Permanent CityCut UI & 4-Beat 2D->3D Transition Verification Harness (v7)
+ * Permanent CityCut UI & 4-Beat 2D->3D Transition Verification Harness (v8)
  *
  * Launches a dedicated Vite dev server, drives Chromium at 1440x900 (@2x),
  * mechanically asserts all Typography, CSS Surface, 4-Beat 2D->3D Transition
  * (including 0.78 translucent outer dim, zero-blank-frame WebGL handoff,
  * 24-bucket radial building wave, and 16-bucket delayed bouncy tree pop-up),
  * and Site Analysis Direction A invariants, and generates:
- *   - /workspace/pr164-v7-live-transition.mp4
- *   - /workspace/pr164-v7-transition-contact-sheet.png
- *   - /workspace/pr164-v7-beat2-translucent-dim.png
- *   - /workspace/pr164-v7-beat3a-bldg-wave.png
- *   - /workspace/pr164-v7-beat3b-tree-pop.png
- *   - /workspace/pr164-v7-beat4-settled.png
+ *   - /workspace/pr164-v8-live-transition.mp4
+ *   - /workspace/pr164-v8-transition-contact-sheet.png
+ *   - /workspace/pr164-v8-beat2-translucent-dim.png
+ *   - /workspace/pr164-v8-beat3a-bldg-wave.png
+ *   - /workspace/pr164-v8-beat3b-tree-pop.png
+ *   - /workspace/pr164-v8-beat4-settled.png
  *
  * Exits with non-zero code (1) if ANY invariant check fails.
  */
@@ -115,7 +115,7 @@ async function main() {
     });
 
     await context.addInitScript(() => {
-      window.__citycutMinBeat2Ms = 1050;
+      window.__citycutMinBeat2Ms = 1350;
     });
     const page = await context.newPage();
     page.on("pageerror", (err) => console.error("[PAGEERROR]", err.stack || err.message));
@@ -167,20 +167,58 @@ async function main() {
       `cta="${beat1Info.ctaText}", frame=${JSON.stringify(beat1Info.frameRect)}, ratio=${beat1Info.frameRatio?.toFixed(3)}, singlePill=${beat1Info.frameLabelDisplay === "none" && beat1Info.frameCadTagVisible}`,
     );
 
-    // Install zero-blank-frame handoff monitor before clicking Create model
+    // Install zero-blank-frame handoff & DOM progress monitor before clicking Create model
     await page.evaluate(() => {
+      window.__citycutMinBeat2Ms = 2300;
       window.__citycutHandoffMonitor = {
         blankFrames: 0,
         samplesBeforeWebglReady: 0,
         sawUnderlayDuringModelMount: false,
         webglReadyFired: false,
+        introStartFired: false,
+        domProgressSamples: [],
       };
       window.addEventListener("citycut:intro-webgl-ready", () => {
         window.__citycutHandoffMonitor.webglReadyFired = true;
       });
+      window.addEventListener("citycut:intro-start", () => {
+        window.__citycutHandoffMonitor.introStartFired = true;
+      });
       const checkHandoff = () => {
         const mon = window.__citycutHandoffMonitor;
-        if (!mon || mon.webglReadyFired) return;
+        if (!mon) return;
+        const pill = document.querySelector(".select.is-loading .loading-hud-pill");
+        if (pill && pill.dataset.progressPct !== undefined) {
+          const pct = Number(pill.dataset.progressPct);
+          if (
+            Number.isFinite(pct) &&
+            (mon.domProgressSamples.length === 0 ||
+              mon.domProgressSamples[mon.domProgressSamples.length - 1] !== pct)
+          ) {
+            mon.domProgressSamples.push(pct);
+          }
+        }
+        if (mon.webglReadyFired && window.__citycutWebglReadySnap === undefined) {
+          const canvas = document.querySelector(".model canvas");
+          window.__citycutWebglReadySnap = {
+            polar: Number(canvas?.dataset.introPolar ?? 99),
+            bldgInner: Number(canvas?.dataset.introBldgInner ?? 99),
+            radius: Number(canvas?.dataset.introRadius ?? 0),
+            elapsed: Number(canvas?.dataset.introElapsed ?? 99),
+          };
+        }
+        if (typeof window.__citycutFirstTiltFrameMs === "number") {
+          if (window.__citycutFirstTiltSnap === undefined) {
+            const canvas = document.querySelector(".model canvas");
+            window.__citycutFirstTiltSnap = {
+              polar: Number(canvas?.dataset.introPolar ?? 99),
+              bldgInner: Number(canvas?.dataset.introBldgInner ?? 99),
+              radius: Number(canvas?.dataset.introRadius ?? 0),
+              elapsed: Number(canvas?.dataset.introElapsed ?? 99),
+            };
+          }
+          return;
+        }
         mon.samplesBeforeWebglReady += 1;
         const selectEl = document.querySelector(".select");
         const frameEl = document.querySelector(".select .map-wrap .frame");
@@ -264,7 +302,7 @@ async function main() {
     const frame03Path = path.join(TMP_FRAMES_DIR, "frame_03.png");
     await page.screenshot({ path: frame03Path });
     if (fs.existsSync(ARTIFACTS_DIR)) {
-      fs.copyFileSync(frame03Path, path.join(ARTIFACTS_DIR, "pr164-v7-beat2-translucent-dim.png"));
+      fs.copyFileSync(frame03Path, path.join(ARTIFACTS_DIR, "pr164-v8-beat2-translucent-dim.png"));
     }
 
     assertCheck(
@@ -294,7 +332,13 @@ async function main() {
         () => {
           const canvas = document.querySelector(".model canvas[data-intro-bldg-inner][data-intro-tree-scale]");
           const model = document.querySelector(".model");
-          return Boolean(canvas && model && !model.hasAttribute("data-intro-webgl-wait"));
+          return Boolean(
+            canvas &&
+              model &&
+              !model.hasAttribute("data-intro-webgl-wait") &&
+              typeof window.__citycutIntroStartMs === "number" &&
+              typeof window.__citycutFirstTiltFrameMs === "number",
+          );
         },
         { timeout: 15000 },
       );
@@ -306,12 +350,14 @@ async function main() {
         hasModel: Boolean(document.querySelector(".model")),
         hasCanvas: Boolean(document.querySelector(".model canvas")),
         canvasDataset: document.querySelector(".model canvas") ? { ...document.querySelector(".model canvas").dataset } : null,
+        introStartMs: window.__citycutIntroStartMs ?? null,
+        firstTiltFrameMs: window.__citycutFirstTiltFrameMs ?? null,
       }));
       console.error("[DEBUG DOM ON TIMEOUT]", JSON.stringify(debugDom));
       throw e;
     }
 
-    // Pause intro clock immediately when WebGL is ready to inspect Frame 1 & handoff
+    // Pause intro clock immediately after first tilt frame to inspect Frame 1 & handoff latency
     await page.evaluate(() => {
       window.__citycutIntroPaused = true;
     });
@@ -323,21 +369,54 @@ async function main() {
       const leftOutliner = document.querySelector(".model .left-outliner");
       const rightInsp = document.querySelector(".model .right-inspector");
       const bottomBar = document.querySelector(".model .bottom-bar");
-      const handoff = window.__citycutHandoffMonitor ?? { blankFrames: 99, sawUnderlayDuringModelMount: false, webglReadyFired: false };
+      const handoff = window.__citycutHandoffMonitor ?? {
+        blankFrames: 99,
+        sawUnderlayDuringModelMount: false,
+        webglReadyFired: false,
+        introStartFired: false,
+        domProgressSamples: [],
+      };
+      const samples =
+        Array.isArray(window.__citycutProgressSamples) && window.__citycutProgressSamples.length > 0
+          ? window.__citycutProgressSamples
+          : handoff.domProgressSamples;
+      let monotonic = samples.length >= 2;
+      let maxStep = 0;
+      for (let i = 1; i < samples.length; i++) {
+        const diff = samples[i] - samples[i - 1];
+        if (diff < 0) monotonic = false;
+        if (diff > maxStep) maxStep = diff;
+      }
+      const distinctIntermediate = new Set(samples.filter((v) => v > 0 && v < 100)).size;
+      const introStartMs = Number(window.__citycutIntroStartMs ?? 0);
+      const firstTiltFrameMs = Number(window.__citycutFirstTiltFrameMs ?? 99999);
+      const handoffLatencyMs = firstTiltFrameMs - introStartMs;
+      const readySnap = window.__citycutWebglReadySnap ?? window.__citycutFirstTiltSnap;
+      const tiltSnap = window.__citycutFirstTiltSnap;
       return {
-        polar: Number(canvas?.dataset.introPolar ?? 99),
+        polar: readySnap ? readySnap.polar : Number(canvas?.dataset.introPolar ?? 99),
+        firstTiltPolar: tiltSnap ? tiltSnap.polar : Number(canvas?.dataset.introPolar ?? 99),
         scale: Number(canvas?.dataset.introScale ?? 99),
-        bldgInner: Number(canvas?.dataset.introBldgInner ?? 99),
+        bldgInner: readySnap ? readySnap.bldgInner : Number(canvas?.dataset.introBldgInner ?? 99),
         bldgOuter: Number(canvas?.dataset.introBldgOuter ?? 99),
         treeScale: Number(canvas?.dataset.introTreeScale ?? 99),
-        radius: Number(canvas?.dataset.introRadius ?? 0),
-        elapsed: Number(canvas?.dataset.introElapsed ?? 99),
+        radius: readySnap ? readySnap.radius : Number(canvas?.dataset.introRadius ?? 0),
+        elapsed: readySnap ? readySnap.elapsed : Number(canvas?.dataset.introElapsed ?? 99),
         introHold: modelEl?.getAttribute("data-intro-hold") ?? null,
         topOpacity: topBar ? getComputedStyle(topBar).opacity : "1",
         leftOpacity: leftOutliner ? getComputedStyle(leftOutliner).opacity : "1",
         rightOpacity: rightInsp ? getComputedStyle(rightInsp).opacity : "1",
         bottomOpacity: bottomBar ? getComputedStyle(bottomBar).opacity : "1",
         handoff,
+        progressStats: {
+          sampleCount: samples.length,
+          distinctIntermediate,
+          firstSample: samples[0] ?? -1,
+          lastSample: samples[samples.length - 1] ?? -1,
+          monotonic,
+          maxStep,
+          handoffLatencyMs,
+        },
       };
     });
 
@@ -347,6 +426,20 @@ async function main() {
     await page.evaluate(() => {
       window.__citycutIntroPaused = false;
     });
+
+    assertCheck(
+      "beat2-smooth-progress-and-zero-handoff-lag",
+      "Beat 2 progress bar glides smoothly and monotonically from 0% to 100% (>= 6 intermediate samples, max step <= 18%) while <Scene3D> pre-warms 3 WebGL frames in the background, yielding < 50ms handoff latency at 100%",
+      beat3Start.progressStats.monotonic &&
+        beat3Start.progressStats.firstSample <= 5 &&
+        beat3Start.progressStats.lastSample === 100 &&
+        beat3Start.progressStats.distinctIntermediate >= 6 &&
+        beat3Start.progressStats.maxStep <= 18 &&
+        beat3Start.progressStats.handoffLatencyMs >= 0 &&
+        beat3Start.progressStats.handoffLatencyMs < 50 &&
+        beat3Start.firstTiltPolar > 0.008,
+      `samples=${beat3Start.progressStats.sampleCount} (intermediate=${beat3Start.progressStats.distinctIntermediate}, range=${beat3Start.progressStats.firstSample}%->${beat3Start.progressStats.lastSample}%, maxStep=${beat3Start.progressStats.maxStep}%), handoffLatency=${beat3Start.progressStats.handoffLatencyMs.toFixed(1)}ms, firstTiltPolar=${beat3Start.firstTiltPolar}`,
+    );
 
     assertCheck(
       "beat2-to-beat3-zero-blank-handoff",
@@ -410,7 +503,7 @@ async function main() {
         const frame05Path = path.join(TMP_FRAMES_DIR, "frame_05.png");
         await page.screenshot({ path: frame05Path });
         if (fs.existsSync(ARTIFACTS_DIR)) {
-          fs.copyFileSync(frame05Path, path.join(ARTIFACTS_DIR, "pr164-v7-beat3a-bldg-wave.png"));
+          fs.copyFileSync(frame05Path, path.join(ARTIFACTS_DIR, "pr164-v8-beat3a-bldg-wave.png"));
         }
         await page.evaluate(() => {
           window.__citycutIntroPaused = false;
@@ -430,7 +523,7 @@ async function main() {
         const frame06Path = path.join(TMP_FRAMES_DIR, "frame_06.png");
         await page.screenshot({ path: frame06Path });
         if (fs.existsSync(ARTIFACTS_DIR)) {
-          fs.copyFileSync(frame06Path, path.join(ARTIFACTS_DIR, "pr164-v7-beat3b-tree-pop.png"));
+          fs.copyFileSync(frame06Path, path.join(ARTIFACTS_DIR, "pr164-v8-beat3b-tree-pop.png"));
         }
         await page.evaluate(() => {
           window.__citycutIntroPaused = false;
@@ -485,7 +578,7 @@ async function main() {
     const frame08Path = path.join(TMP_FRAMES_DIR, "frame_08.png");
     await page.screenshot({ path: frame08Path });
     if (fs.existsSync(ARTIFACTS_DIR)) {
-      fs.copyFileSync(frame08Path, path.join(ARTIFACTS_DIR, "pr164-v7-beat4-settled.png"));
+      fs.copyFileSync(frame08Path, path.join(ARTIFACTS_DIR, "pr164-v8-beat4-settled.png"));
     }
 
     if (!fs.existsSync(path.join(TMP_FRAMES_DIR, "frame_05.png"))) {
@@ -677,7 +770,7 @@ async function main() {
     // GENERATE 8-FRAME CONTACT SHEET + LIVE TRANSITION MP4 VIDEO
     // -------------------------------------------------------------------------
     if (fs.existsSync(ARTIFACTS_DIR)) {
-      const contactSheetOut = path.join(ARTIFACTS_DIR, "pr164-v7-transition-contact-sheet.png");
+      const contactSheetOut = path.join(ARTIFACTS_DIR, "pr164-v8-transition-contact-sheet.png");
       execFileSync("ffmpeg", [
         "-y",
         "-pattern_type",
@@ -693,7 +786,7 @@ async function main() {
         contactSheetOut,
       ]);
 
-      // Build /workspace/pr164-v7-live-transition.mp4 from the captured real WebGL transition frames
+      // Build /workspace/pr164-v8-live-transition.mp4 from the captured real WebGL transition frames
       let vIdx = 0;
       const frameRepeats = [
         ["frame_01.png", 16], // Beat 1: Landing (0.64s)
@@ -714,7 +807,7 @@ async function main() {
           fs.copyFileSync(src, dst);
         }
       }
-      const mp4Out = path.join(ARTIFACTS_DIR, "pr164-v7-live-transition.mp4");
+      const mp4Out = path.join(ARTIFACTS_DIR, "pr164-v8-live-transition.mp4");
       execFileSync("ffmpeg", [
         "-y",
         "-framerate",

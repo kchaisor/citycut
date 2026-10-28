@@ -3382,7 +3382,7 @@ body,
   position: relative;
   z-index: 20;
   opacity: 1;
-  transition: opacity 260ms ease;
+  transition: none;
 }
 
 .model[data-intro-hold="true"],
@@ -3458,7 +3458,7 @@ body,
   height: 100% !important;
   background: #FFF500 !important;
   border-radius: 99px !important;
-  transition: width 120ms linear !important;
+  transition: none !important;
 }
 
 .loading-prog-pct {

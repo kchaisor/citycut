@@ -336,7 +336,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   }
 
   const [sunStudySelected, setSunStudySelected] = useState<number[]>([]);
-  useEffect(() => setSunStudySelected([]), [model]);
+  useEffect(() => setSunStudySelected((prev) => (prev.length === 0 ? prev : [])), [model]);
   const sunStudyDate = useMemo<SunStudyDate | null>(
     () =>
       solar.sunStudy
@@ -421,7 +421,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   }, []);
 
   useEffect(() => {
-    setComFootprintFetchError(model.comFootprintFetchError ?? null);
+    setComFootprintFetchError((prev) => (prev === (model.comFootprintFetchError ?? null) ? prev : (model.comFootprintFetchError ?? null)));
   }, [
     model.placeLabel,
     model.center.lat,
@@ -441,9 +441,14 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       return;
     }
     if (model.comFootprintPrefetch?.length) {
-      setComFootprints(model.comFootprintPrefetch);
-      setComFootprintFetchError(null);
-      setComFootprintLoading(false);
+      setComFootprints((prev) => (prev === model.comFootprintPrefetch ? prev : model.comFootprintPrefetch!));
+      setComFootprintFetchError((prev) => (prev === null ? prev : null));
+      setComFootprintLoading((prev) => (prev === false ? prev : false));
+      return;
+    }
+    if (model.comFootprintFetchError && comFootprintRetryToken === 0) {
+      setComFootprints((prev) => (prev.length === 0 ? prev : []));
+      setComFootprintLoading((prev) => (prev === false ? prev : false));
       return;
     }
     const bounds = paddedComFetchBounds(model.center, model.sideM);
@@ -778,18 +783,10 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
 
   useEffect(() => {
     if (model.comBuildingHeightsApplied) {
-      setComHeightBuildings(
-        annotateUnresolvedZoneDefaults(
-          model.buildings,
-          model.center,
-          comFootprints,
-          model.developmentDamRecords ?? [],
-        ),
-      );
       return;
     }
     if (comFootprints.length === 0 || model.buildings.length === 0) {
-      setComHeightBuildings(null);
+      setComHeightBuildings((prev) => (prev === null ? prev : null));
       return;
     }
     const controller = new AbortController();
@@ -822,7 +819,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       startWorker();
       return () => controller.abort();
     }
-    const timerId = window.setTimeout(startWorker, 3500);
+    const timerId = window.setTimeout(startWorker, 6200);
     return () => {
       window.clearTimeout(timerId);
       controller.abort();
@@ -851,11 +848,23 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
         : stampPlainZoneDefaultLabels(model.buildings),
     [model.buildings, model.buildingsWithoutCom, model.center, model.developmentDamRecords],
   );
+  const annotatedAppliedBuildings = useMemo(
+    () =>
+      model.comBuildingHeightsApplied
+        ? annotateUnresolvedZoneDefaults(
+            model.buildings,
+            model.center,
+            comFootprints,
+            model.developmentDamRecords ?? [],
+          )
+        : null,
+    [model.comBuildingHeightsApplied, model.buildings, model.center, comFootprints, model.developmentDamRecords],
+  );
   const baseBuildings = useMemo(() => {
     if (comHeightBuildings) return comHeightBuildings;
-    if (model.comBuildingHeightsApplied) return model.buildings;
+    if (annotatedAppliedBuildings) return annotatedAppliedBuildings;
     return fallbackBuildings;
-  }, [comHeightBuildings, fallbackBuildings, model.buildings, model.comBuildingHeightsApplied]);
+  }, [comHeightBuildings, annotatedAppliedBuildings, fallbackBuildings]);
 
   const overrideResult = useMemo(
     () => applyHeightOverrides(baseBuildings, heightOverrideStore, model.center),
@@ -863,7 +872,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   );
 
   useEffect(() => {
-    setUnmatchedEdits(overrideResult.unmatchedCount);
+    setUnmatchedEdits((prev) => (prev === overrideResult.unmatchedCount ? prev : overrideResult.unmatchedCount));
     clearPlanShadowCache();
   }, [overrideResult]);
 
@@ -919,13 +928,17 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   }, [displayModel.buildings, displayModel.comBuildingHeights]);
 
   useEffect(() => {
-    const comDone = comHeightBuildings != null || comFootprints.length === 0;
+    const comDone = Boolean(model.comBuildingHeightsApplied) || comHeightBuildings != null || comFootprints.length === 0;
     if (comDone && heightPerfRef.current.comAppliedMs == null) {
       heightPerfRef.current.comAppliedMs = performance.now() - heightPerfRef.current.modelOpenMs;
     }
   }, [comHeightBuildings, comFootprints.length]);
 
+  const viewportModelKeyRef = useRef(`${displayModel.sideM}:${displayModel.frameShape ?? "square"}`);
   useEffect(() => {
+    const nextViewportKey = `${displayModel.sideM}:${displayModel.frameShape ?? "square"}`;
+    if (viewportModelKeyRef.current === nextViewportKey) return;
+    viewportModelKeyRef.current = nextViewportKey;
     setPlanViewport(planViewportExtent(displayModel.sideM));
     setAxoSettings((prev) => {
       const defaults = defaultExplodedAxoSettings(displayModel.sideM);
@@ -1560,22 +1573,32 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       introHoldReleasedRef.current = true;
       el.removeAttribute("data-intro-hold");
     };
-    const markWebglReady = () => {
+    const revealModel = () => {
       introWebglReadyRef.current = true;
       el.removeAttribute("data-intro-webgl-wait");
     };
+    const onWebglReady = () => {
+      if (typeof window === "undefined" || !window.__citycutAwaitIntroStart || window.__citycutIntroStarted) {
+        revealModel();
+      }
+    };
     if (tab !== "3d" || !shouldShowIntroBridgePill()) {
       release();
-      markWebglReady();
+      revealModel();
       return;
     }
+    if (typeof window !== "undefined" && window.__citycutIntroStarted) {
+      revealModel();
+    }
     el.addEventListener("citycut:intro-hold-release", release);
-    window.addEventListener("citycut:intro-webgl-ready", markWebglReady);
+    window.addEventListener("citycut:intro-webgl-ready", onWebglReady);
+    window.addEventListener("citycut:intro-start", revealModel);
     const timer = window.setTimeout(release, 30000);
-    const webglTimer = window.setTimeout(markWebglReady, 2500);
+    const webglTimer = window.setTimeout(revealModel, 12000);
     return () => {
       el.removeEventListener("citycut:intro-hold-release", release);
-      window.removeEventListener("citycut:intro-webgl-ready", markWebglReady);
+      window.removeEventListener("citycut:intro-webgl-ready", onWebglReady);
+      window.removeEventListener("citycut:intro-start", revealModel);
       window.clearTimeout(timer);
       window.clearTimeout(webglTimer);
     };
@@ -1597,7 +1620,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
         {tab === "3d" && (
           <div className="fill">
             {shouldShowIntroBridgePill() && (
-              <div className="loading-card loading-hud-pill is-model-bridge hud-card" aria-hidden="true">
+              <div className="loading-card loading-hud-pill is-model-bridge hud-card" aria-hidden="true" data-progress-pct={100}>
                 <div className="loading-hud-row">
                   <span className="loading-pulse-dot" />
                   <strong>Building 3D site cut · LiDAR + Vicmap…</strong>

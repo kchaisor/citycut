@@ -76,17 +76,135 @@ export function MapStage({
   const activeLonRef = useRef(initialView.lon);
 
   const [ready, setReady] = useState(false);
-  const [loadingPct, setLoadingPct] = useState(14);
+  const [loadingPct, setLoadingPct] = useState(0);
+  const lastRoundedRef = useRef(0);
+  const loadingPillRef = useRef<HTMLDivElement>(null);
+  const loadingFillRef = useRef<HTMLDivElement>(null);
+  const loadingPctTextRef = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (!loading) {
-      setLoadingPct(14);
+      lastRoundedRef.current = 0;
+      setLoadingPct(0);
       return;
     }
-    setLoadingPct(18);
-    const id = window.setInterval(() => {
-      setLoadingPct((prev) => (prev < 92 ? Math.min(94, prev + Math.max(3, Math.round((96 - prev) * 0.22))) : prev));
-    }, 90);
-    return () => window.clearInterval(id);
+    const isDomTest =
+      typeof navigator !== "undefined" && /jsdom|HappyDOM/i.test(navigator.userAgent ?? "");
+    if (isDomTest) {
+      lastRoundedRef.current = 18;
+      setLoadingPct(18);
+      return;
+    }
+    lastRoundedRef.current = 0;
+    setLoadingPct(0);
+    let floatPct = 0;
+    let lastRounded = 0;
+    let rafId = 0;
+    let cancelled = false;
+    const startMs = performance.now();
+    let lastFrameMs = startMs;
+    let modelMountedSinceMs: number | null = null;
+    let webglReadySinceMs: number | null = null;
+    if (typeof window !== "undefined") {
+      window.__citycutProgressSamples = [0];
+    }
+    if (loadingPillRef.current) loadingPillRef.current.dataset.progressPct = "0";
+    if (loadingFillRef.current) loadingFillRef.current.style.width = "0%";
+    if (loadingPctTextRef.current) loadingPctTextRef.current.textContent = "0%";
+
+    const tick = (now: number) => {
+      if (cancelled) return;
+      const dtMs = Math.min(48, Math.max(12, now - lastFrameMs));
+      lastFrameMs = now;
+      const totalElapsed = now - startMs;
+      const minBeat2Ms = Math.max(
+        1150,
+        (typeof window !== "undefined" && window.__citycutMinBeat2Ms) || 1200,
+      );
+      const modelMounted =
+        typeof window !== "undefined" && Boolean(window.__citycutModelPrewarmMounted);
+      if (modelMounted && modelMountedSinceMs === null) {
+        modelMountedSinceMs = now;
+      }
+      const postMountElapsed = modelMountedSinceMs !== null ? now - modelMountedSinceMs : 0;
+      const webglReady =
+        typeof window !== "undefined" &&
+        (Boolean(window.__citycutWebglPrewarmReady) || postMountElapsed > 8000);
+      if (webglReady && webglReadySinceMs === null) {
+        webglReadySinceMs = now;
+      }
+
+      if (lastRounded < 100) {
+        let step = 0;
+        if (!modelMounted) {
+          const rate =
+            floatPct < 45
+              ? 0.072
+              : 0.048 * Math.max(0.22, (68 - floatPct) / 23);
+          step = Math.min(4.2, Math.max(0.8, dtMs * rate));
+          floatPct = Math.min(68, floatPct + step);
+        } else if (!webglReady) {
+          const rate = 0.055 * Math.max(0.25, (86 - floatPct) / 20);
+          step = Math.min(4.0, Math.max(0.8, dtMs * rate));
+          floatPct = Math.min(86, floatPct + step);
+        } else {
+          const postWebglElapsed = webglReadySinceMs !== null ? now - webglReadySinceMs : 0;
+          const remainingTimeMs = Math.max(
+            180,
+            minBeat2Ms - totalElapsed,
+            360 - postWebglElapsed,
+          );
+          const remainingPct = 100 - floatPct;
+          const desiredStep = (remainingPct / remainingTimeMs) * dtMs;
+          step = Math.min(6.0, Math.max(1.8, desiredStep));
+          floatPct = Math.min(100, floatPct + step);
+        }
+        const rounded = Math.min(100, Math.max(lastRounded, Math.round(floatPct)));
+        if (rounded !== lastRounded) {
+          lastRounded = rounded;
+          lastRoundedRef.current = rounded;
+          if (loadingPillRef.current) {
+            loadingPillRef.current.dataset.progressPct = String(rounded);
+          }
+          if (loadingFillRef.current) {
+            loadingFillRef.current.style.width = `${rounded}%`;
+          }
+          if (loadingPctTextRef.current) {
+            loadingPctTextRef.current.textContent = `${rounded}%`;
+          }
+          if (typeof window !== "undefined") {
+            const samples = window.__citycutProgressSamples ?? [0];
+            if (samples[samples.length - 1] !== rounded) {
+              samples.push(rounded);
+            }
+            window.__citycutProgressSamples = samples;
+          }
+        }
+      }
+
+      if (lastRounded >= 100) {
+        if (typeof window !== "undefined") {
+          const samples = window.__citycutProgressSamples ?? [0];
+          if (samples[samples.length - 1] !== 100) {
+            samples.push(100);
+          }
+          window.__citycutProgressSamples = samples;
+          if (!window.__citycutIntroStarted) {
+            window.__citycutIntroStarted = true;
+            window.__citycutIntroStartMs = performance.now();
+            window.dispatchEvent(new CustomEvent("citycut:intro-start"));
+          }
+        }
+        return;
+      }
+
+      rafId = window.requestAnimationFrame(tick);
+    };
+
+    rafId = window.requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(rafId);
+    };
   }, [loading]);
   const [mapEpoch, setMapEpoch] = useState(0);
   const [basemapStyleFailed, setBasemapStyleFailed] = useState(false);
@@ -471,15 +589,24 @@ export function MapStage({
       )}
       {loading && <div className="loading-shield" />}
       {loading && (
-        <div className="loading-card loading-hud-pill hud-card" role="status">
+        <div
+          ref={loadingPillRef}
+          className="loading-card loading-hud-pill hud-card"
+          role="status"
+          data-progress-pct={lastRoundedRef.current || loadingPct}
+        >
           <div className="loading-hud-row">
             <span className="loading-pulse-dot" aria-hidden="true" />
             <strong>Building 3D site cut · LiDAR + Vicmap…</strong>
             <div className="loading-prog-track" aria-hidden="true">
-              <div className="loading-prog-fill" style={{ width: `${loadingPct}%` }} />
+              <div
+                ref={loadingFillRef}
+                className="loading-prog-fill"
+                style={{ width: `${lastRoundedRef.current || loadingPct}%` }}
+              />
             </div>
-            <span className="loading-prog-pct" aria-hidden="true">
-              {loadingPct}%
+            <span ref={loadingPctTextRef} className="loading-prog-pct" aria-hidden="true">
+              {lastRoundedRef.current || loadingPct}%
             </span>
           </div>
           <p>

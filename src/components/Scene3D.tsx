@@ -352,7 +352,29 @@ function City({
       city.add(cutRing);
     }
     return city;
-  }, [model, uniformBuildings, colourBySource, highlightManual, colourTick]);
+  }, [
+    model.center,
+    model.sideM,
+    model.frameShape,
+    model.layers,
+    model.buildings,
+    model.roads,
+    model.tramLines,
+    model.areas,
+    model.carParks,
+    model.trees,
+    model.terrain,
+    model.contours,
+    model.contourLayer,
+    model.siteBoundaryLines,
+    model.siteBuildingIds,
+    model.blocks,
+    model.nswRoadSurface,
+    uniformBuildings,
+    colourBySource,
+    highlightManual,
+    colourTick,
+  ]);
   useLayoutEffect(() => {
     onBoundsRef.current(measureCity(group));
   }, [group]);
@@ -361,6 +383,7 @@ function City({
     elapsedSec: number;
     frameCount: number;
     done: boolean;
+    playingStarted?: boolean;
     webglReadyDispatched?: boolean;
     targets: Array<{ obj: THREE.Object3D; pivotY: number; kind: "building" | "tree"; bucket: number }>;
   } | null>(null);
@@ -423,7 +446,7 @@ function City({
       } else {
         for (const { obj, pivotY, kind, bucket } of targets) {
           const s =
-            existing.frameCount < 2
+            existing.frameCount < 3 || !existing.playingStarted
               ? 0.001
               : kind === "tree"
                 ? computeIntroTreeBucketScale(existing.elapsedSec, bucket)
@@ -432,7 +455,9 @@ function City({
           obj.position.y = pivotY * (1 - s);
         }
         group.userData.introScaleY =
-          existing.frameCount < 2 ? 0.001 : computeIntroBuildingBucketScale(existing.elapsedSec, 0);
+          existing.frameCount < 3 || !existing.playingStarted
+            ? 0.001
+            : computeIntroBuildingBucketScale(existing.elapsedSec, 0);
       }
       return;
     }
@@ -448,31 +473,49 @@ function City({
     const intro = introRef.current;
     if (!intro || intro.done) return;
     const ring = group.getObjectByName("IntroCutRing") as THREE.LineSegments | undefined;
-    if (intro.frameCount < 2) {
-      intro.frameCount += 1;
-      const s0 = 0.001;
-      for (const { obj, pivotY } of intro.targets) {
-        obj.scale.y = s0;
-        obj.position.y = pivotY * (1 - s0);
-      }
-      if (ring) {
-        ring.visible = true;
-        (ring.material as THREE.LineBasicMaterial).opacity = 1;
-      }
-      group.userData.introScaleY = s0;
+    const waitingForIntroStart =
+      typeof window !== "undefined" &&
+      Boolean(window.__citycutAwaitIntroStart) &&
+      !window.__citycutIntroStarted;
+    if (intro.frameCount < 3 || waitingForIntroStart) {
       const ds = state.gl.domElement.dataset;
-      ds.introElapsed = "0.00";
-      ds.introScale = s0.toFixed(3);
-      ds.introBldgInner = s0.toFixed(3);
-      ds.introBldgOuter = s0.toFixed(3);
-      ds.introTreeScale = s0.toFixed(3);
-      if (intro.frameCount >= 2 && !intro.webglReadyDispatched) {
-        intro.webglReadyDispatched = true;
-        const modelRoot = state.gl.domElement.closest(".model");
-        if (modelRoot?.hasAttribute("data-intro-webgl-wait")) {
-          modelRoot.removeAttribute("data-intro-webgl-wait");
+      if (ds.introPolar || intro.frameCount > 0) {
+        intro.frameCount += 1;
+      }
+      if (intro.frameCount <= 3) {
+        if (intro.frameCount === 1) {
+          try {
+            state.gl.compile(state.scene, state.camera);
+          } catch {
+            // ignore in headless/mock contexts
+          }
         }
+        const s0 = 0.001;
+        for (const { obj, pivotY } of intro.targets) {
+          obj.scale.y = s0;
+          obj.position.y = pivotY * (1 - s0);
+        }
+        if (ring) {
+          ring.visible = true;
+          (ring.material as THREE.LineBasicMaterial).opacity = 1;
+        }
+        group.userData.introScaleY = s0;
+        ds.introElapsed = "0.00";
+        ds.introScale = s0.toFixed(3);
+        ds.introBldgInner = s0.toFixed(3);
+        ds.introBldgOuter = s0.toFixed(3);
+        ds.introTreeScale = s0.toFixed(3);
+      }
+      if (intro.frameCount >= 3 && !intro.webglReadyDispatched) {
+        intro.webglReadyDispatched = true;
         if (typeof window !== "undefined") {
+          window.__citycutWebglPrewarmReady = true;
+          if (!window.__citycutAwaitIntroStart) {
+            const modelRoot = state.gl.domElement.closest(".model");
+            if (modelRoot?.hasAttribute("data-intro-webgl-wait")) {
+              modelRoot.removeAttribute("data-intro-webgl-wait");
+            }
+          }
           window.dispatchEvent(new CustomEvent("citycut:intro-webgl-ready"));
         }
       }
@@ -481,7 +524,13 @@ function City({
     const introPaused =
       typeof window !== "undefined" &&
       Boolean((window as Window & { __citycutIntroPaused?: boolean }).__citycutIntroPaused);
-    if (introPaused) {
+    if (!intro.playingStarted) {
+      intro.playingStarted = true;
+      intro.elapsedSec = 0.02;
+      if (typeof window !== "undefined" && window.__citycutFirstTiltFrameMs === undefined) {
+        window.__citycutFirstTiltFrameMs = performance.now();
+      }
+    } else if (introPaused) {
       (intro as { wasPaused?: boolean }).wasPaused = true;
     } else if ((intro as { wasPaused?: boolean }).wasPaused) {
       (intro as { wasPaused?: boolean }).wasPaused = false;
@@ -726,6 +775,7 @@ function PerspectiveFit({
     elapsedSec: number;
     frameCount: number;
     done: boolean;
+    playingStarted?: boolean;
     target: THREE.Vector3;
     endEye: THREE.Vector3;
     startRadius: number;
@@ -740,7 +790,10 @@ function PerspectiveFit({
       anim: NonNullable<typeof introAnimRef.current>,
       controls: OrbitControlsImpl,
     ) => {
-      const rawT = anim.frameCount < 2 ? 0 : Math.min(1, Math.max(0, (anim.elapsedSec - 0.08) / 1.25));
+      const rawT =
+        anim.frameCount < 3 || !anim.playingStarted
+          ? 0
+          : Math.min(1, Math.max(0, anim.elapsedSec / 1.3));
       const ease = easeOutCubic(rawT);
       const radius = THREE.MathUtils.lerp(anim.startRadius, anim.endRadius, ease);
       const phi = THREE.MathUtils.lerp(anim.startPhi, anim.endPhi, ease);
@@ -861,7 +914,11 @@ function PerspectiveFit({
       introAnimRef.current = null;
       return;
     }
-    if (anim.frameCount < 2) {
+    const waitingForIntroStart =
+      typeof window !== "undefined" &&
+      Boolean(window.__citycutAwaitIntroStart) &&
+      !window.__citycutIntroStarted;
+    if (anim.frameCount < 3 || waitingForIntroStart) {
       anim.frameCount += 1;
       applyIntroPose(anim, controls);
       return;
@@ -869,6 +926,15 @@ function PerspectiveFit({
     const introPaused =
       typeof window !== "undefined" &&
       Boolean((window as Window & { __citycutIntroPaused?: boolean }).__citycutIntroPaused);
+    if (!anim.playingStarted) {
+      anim.playingStarted = true;
+      anim.elapsedSec = 0.02;
+      applyIntroPose(anim, controls);
+      if (typeof window !== "undefined" && window.__citycutFirstTiltFrameMs === undefined) {
+        window.__citycutFirstTiltFrameMs = performance.now();
+      }
+      return;
+    }
     if (introPaused) {
       (anim as { wasPaused?: boolean }).wasPaused = true;
     } else if ((anim as { wasPaused?: boolean }).wasPaused) {

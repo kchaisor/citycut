@@ -148,6 +148,7 @@ export default function App() {
   const [fly, setFly] = useState<FlyRequest | null>(null);
   const [phase, setPhase] = useState<"select" | "model">("select");
   const [handoffUnderlay, setHandoffUnderlay] = useState<"none" | "holding" | "fading">("none");
+  const selectRootRef = useRef<HTMLDivElement>(null);
   const [model, setModel] = useState<CityModel | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -339,6 +340,21 @@ export default function App() {
     const controller = new AbortController();
     abortRef.current = controller;
     const createStartMs = performance.now();
+    const isDomTestStart =
+      typeof navigator !== "undefined" && /jsdom|HappyDOM/i.test(navigator.userAgent ?? "");
+    const prefersReducedStart =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const isQaStart = typeof window !== "undefined" && qaModeFromSearch(window.location.search);
+    if (!isDomTestStart && !prefersReducedStart && !isQaStart && typeof window !== "undefined") {
+      window.__citycutAwaitIntroStart = true;
+      window.__citycutIntroStarted = false;
+      window.__citycutWebglPrewarmReady = false;
+      window.__citycutModelPrewarmMounted = false;
+      window.__citycutIntroStartMs = undefined;
+      window.__citycutFirstTiltFrameMs = undefined;
+    }
     void preloadModelPage();
     setLoading(true);
     setError(null);
@@ -827,14 +843,16 @@ export default function App() {
       if (!isAutomatedDomTest && !prefersReduced && !isQa) {
         await preloadModelPage().catch(() => undefined);
         const elapsedMs = performance.now() - createStartMs;
-        const minBeat2Ms =
-          (typeof window !== "undefined" &&
-            (window as Window & { __citycutMinBeat2Ms?: number }).__citycutMinBeat2Ms) ||
-          620;
-        if (elapsedMs < minBeat2Ms) {
-          await new Promise<void>((resolve) => window.setTimeout(resolve, minBeat2Ms - elapsedMs));
+        const prewarmMountGateMs = 580;
+        if (elapsedMs < prewarmMountGateMs) {
+          await new Promise<void>((resolve) =>
+            window.setTimeout(resolve, prewarmMountGateMs - elapsedMs),
+          );
         }
         if (controller.signal.aborted) return;
+        if (typeof window !== "undefined") {
+          window.__citycutModelPrewarmMounted = true;
+        }
         setHandoffUnderlay("holding");
       }
       setModel(draftModel);
@@ -874,17 +892,28 @@ export default function App() {
     if (phase !== "model" || handoffUnderlay === "none") return;
     let fadeTimer: number | null = null;
     const triggerFade = () => {
-      setHandoffUnderlay((prev) => (prev === "holding" ? "fading" : prev));
+      selectRootRef.current?.classList.add("is-fading-out");
       if (fadeTimer === null) {
         fadeTimer = window.setTimeout(() => {
           setHandoffUnderlay("none");
         }, 1550);
       }
     };
-    window.addEventListener("citycut:intro-webgl-ready", triggerFade);
-    const safetyTimer = window.setTimeout(triggerFade, 2500);
+    if (typeof window !== "undefined" && window.__citycutIntroStarted) {
+      triggerFade();
+    }
+    const onSafetyTimeout = () => {
+      if (typeof window !== "undefined" && !window.__citycutIntroStarted) {
+        window.__citycutIntroStarted = true;
+        window.__citycutIntroStartMs = performance.now();
+        window.dispatchEvent(new CustomEvent("citycut:intro-start"));
+      }
+      triggerFade();
+    };
+    window.addEventListener("citycut:intro-start", triggerFade);
+    const safetyTimer = window.setTimeout(onSafetyTimeout, 12000);
     return () => {
-      window.removeEventListener("citycut:intro-webgl-ready", triggerFade);
+      window.removeEventListener("citycut:intro-start", triggerFade);
       window.clearTimeout(safetyTimer);
       if (fadeTimer !== null) window.clearTimeout(fadeTimer);
     };
@@ -897,6 +926,7 @@ export default function App() {
     <div className="app">
       {showSelectLayer ? (
         <div
+          ref={selectRootRef}
           className={[
             "select",
             selectCollapsed ? "sidebar-collapsed" : "",
