@@ -94,7 +94,9 @@ export function buildTreeGroup(
   const trunkColor = getColour("--tree-trunk");
   const crownColor = getColour("--tree-crown");
   const trunkMaterial = matteStandardMaterial({ color: trunkColor });
+  trunkMaterial.name = "TreeTrunks";
   const crownMaterial = matteStandardMaterial({ color: crownColor, flatShading: true });
+  crownMaterial.name = "TreeCrowns";
   crownMaterial.flatShading = true;
   crownMaterial.needsUpdate = true;
 
@@ -161,13 +163,11 @@ export function buildTreeGroup(
       sub.userData.introBaseY = bucketMinGround.get(b) ?? 0;
       if (mergedTrunks) {
         const tmMesh = new THREE.Mesh(mergedTrunks, trunkMaterial);
-        tmMesh.name = "TreeTrunks";
         sub.add(tmMesh);
       }
       if (mergedCrowns) {
         mergedCrowns.computeVertexNormals();
         const cmMesh = new THREE.Mesh(mergedCrowns, crownMaterial);
-        cmMesh.name = "TreeCrowns";
         sub.add(cmMesh);
       }
       if (sub.children.length > 0) group.add(sub);
@@ -207,10 +207,14 @@ export function buildTreeGroup(
   const mergedCrowns = mergeGeometries(crownGeometries, false);
   trunkGeometries.forEach((geometry) => geometry.dispose());
   crownGeometries.forEach((geometry) => geometry.dispose());
-  if (mergedTrunks) group.add(new THREE.Mesh(mergedTrunks, trunkMaterial));
+  if (mergedTrunks) {
+    const tmMesh = new THREE.Mesh(mergedTrunks, trunkMaterial);
+    group.add(tmMesh);
+  }
   if (mergedCrowns) {
     mergedCrowns.computeVertexNormals();
-    group.add(new THREE.Mesh(mergedCrowns, crownMaterial));
+    const cmMesh = new THREE.Mesh(mergedCrowns, crownMaterial);
+    group.add(cmMesh);
   }
   return group.children.length > 0 ? group : null;
 }

@@ -271,8 +271,9 @@ async function main() {
       const cadTagEl = document.querySelector(".select .map-wrap .frame-cad-tag");
       const omnibox = document.querySelector(".select .omnibox-stack");
       const dock = document.querySelector(".select .bottom-workbench");
-      const selectPill = document.querySelector(".select .loading-hud-pill");
+      const selectPill = document.querySelector(".select .loading-hud-pill.is-processing");
       const modelPill = document.querySelector(".model .loading-hud-pill.is-model-bridge");
+      const frameLoopSvg = frameEl?.querySelector("svg.frame-loop-svg .frame-loop-stroke");
       const frameCs = frameEl ? getComputedStyle(frameEl) : null;
       const handleCs = handleEl ? getComputedStyle(handleEl) : null;
       const cadTagCs = cadTagEl ? getComputedStyle(cadTagEl) : null;
@@ -282,19 +283,22 @@ async function main() {
       const boxShadow = frameCs?.boxShadow ?? "";
       const rgbaMatch = boxShadow.match(/rgba\(\s*235\s*,\s*235\s*,\s*235\s*,\s*([0-9.]+)\s*\)/);
       const outerAlpha = rgbaMatch ? Number(rgbaMatch[1]) : boxShadow.includes("rgb(235, 235, 235)") ? 1.0 : 0;
-      const anyPillVisible =
-        Boolean(selectPill && getComputedStyle(selectPill).opacity !== "0") ||
-        Boolean(modelPillCs && Number(modelPillCs.opacity) > 0);
+      const processingPillVisible = Boolean(selectPill && getComputedStyle(selectPill).opacity !== "0");
+      const processingPillText = selectPill?.textContent?.trim() ?? "";
+      const modelBridgePillVisible = Boolean(modelPillCs && Number(modelPillCs.opacity) > 0);
       return {
+        isProcessingPhaseA: selectEl?.classList.contains("is-processing-phase-a") ?? false,
         isLoadingClass: selectEl?.classList.contains("is-loading") ?? false,
         selectOpacity: selectEl ? getComputedStyle(selectEl).opacity : "0",
         outerAlpha,
-        borderStyle: frameCs?.borderTopStyle ?? "",
         handleOpacity: handleCs?.opacity ?? "0",
         cadTagOpacity: cadTagCs?.opacity ?? "0",
         omniboxOpacity: omniCs?.opacity ?? "0",
         dockOpacity: dockCs?.opacity ?? "0",
-        anyPillVisible,
+        processingPillVisible,
+        processingPillText,
+        hasFrameLoopSvg: Boolean(frameLoopSvg),
+        modelBridgePillVisible,
       };
     });
 
@@ -303,17 +307,19 @@ async function main() {
 
     assertCheck(
       "beat2-silent-background-load",
-      "During Phase A (while model loads behind the scenes before 3D WebGL is ready), nothing on the 2D selection screen changes or fades (outerAlpha === 0, omnibox & dock opacity === '1', no loading bar visible yet)",
-      !beat2Info.isLoadingClass &&
+      "During Phase A (while model loads behind the scenes before 3D WebGL is ready), the 2D map stays un-dimmed (selectOpacity === '1', outerAlpha === 0, dockOpacity === '1') while showing the top processing shimmer pill and looping cut boundary animation",
+      beat2Info.isProcessingPhaseA &&
+        !beat2Info.isLoadingClass &&
         beat2Info.selectOpacity === "1" &&
         beat2Info.outerAlpha === 0 &&
-        beat2Info.borderStyle === "dashed" &&
         beat2Info.handleOpacity === "1" &&
         beat2Info.cadTagOpacity === "1" &&
-        beat2Info.omniboxOpacity === "1" &&
         beat2Info.dockOpacity === "1" &&
-        !beat2Info.anyPillVisible,
-      `isLoadingClass=${beat2Info.isLoadingClass}, selectOpacity=${beat2Info.selectOpacity}, outerAlpha=${beat2Info.outerAlpha}, omnibox=${beat2Info.omniboxOpacity}, dock=${beat2Info.dockOpacity}, anyPillVisible=${beat2Info.anyPillVisible}`,
+        beat2Info.processingPillVisible &&
+        beat2Info.processingPillText.includes("Processing site data") &&
+        beat2Info.hasFrameLoopSvg &&
+        !beat2Info.modelBridgePillVisible,
+      `isProcessingPhaseA=${beat2Info.isProcessingPhaseA}, selectOpacity=${beat2Info.selectOpacity}, outerAlpha=${beat2Info.outerAlpha}, dock=${beat2Info.dockOpacity}, processingPill=${beat2Info.processingPillVisible}, frameLoopSvg=${beat2Info.hasFrameLoopSvg}`,
     );
 
     // -------------------------------------------------------------------------
@@ -588,6 +594,20 @@ async function main() {
 
     const frame08Path = path.join(TMP_FRAMES_DIR, "frame_08.png");
     await page.screenshot({ path: frame08Path });
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v12-3d-plinth-perspective.png") });
+      const isoBtn = page.locator(".model .bottom-bar button", { hasText: "Isometric" }).first();
+      if ((await isoBtn.count()) > 0) {
+        await isoBtn.click();
+        await page.waitForTimeout(260);
+        await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v12-3d-plinth-isometric.png") });
+        const perspBtn = page.locator(".model .bottom-bar button", { hasText: "Perspective" }).first();
+        if ((await perspBtn.count()) > 0) {
+          await perspBtn.click();
+          await page.waitForTimeout(220);
+        }
+      }
+    }
 
     if (!fs.existsSync(path.join(TMP_FRAMES_DIR, "frame_05.png"))) {
       fs.copyFileSync(frame03Path, path.join(TMP_FRAMES_DIR, "frame_05.png"));

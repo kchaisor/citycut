@@ -1,3 +1,4 @@
+import { terrainMeshHeight } from "./terrainDrape";
 import { describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import { buildCityGroup, disposeObject } from "./buildCity";
@@ -18,6 +19,9 @@ import {
   TERRAIN_ELEVATION_MIN_M,
   TERRAIN_SPIKE_M,
   terrariumHeight,
+  basePlinthBottomY,
+  basePlinthBuffers,
+  basePlinthThicknessM,
   terrainBuffers,
   TERRAIN_TILE_SIZE,
   tilesForBBox,
@@ -517,5 +521,76 @@ describe("terrain in the model", () => {
     }
     expect(outside).toBe(0);
     expect(rim).toBeGreaterThan(6);
+  });
+
+  it("builds a watertight 3D BasePlinth matching terrainMeshHeight along the perimeter down to basePlinthBottomY", () => {
+    const model = slopedModel();
+    const field = model.terrain!;
+    const group = buildCityGroup(model);
+    try {
+      const plinth = group.getObjectByName("BasePlinth") as THREE.Mesh;
+      expect(plinth).toBeTruthy();
+      expect(plinth.userData.skipRhinoExport).toBe(true);
+      expect(plinth.userData.noScenePick).toBe(true);
+      const expectedThickness = basePlinthThicknessM(model.sideM);
+      const expectedBottomY = basePlinthBottomY(model.sideM, field);
+      expect(expectedThickness).toBeGreaterThanOrEqual(12);
+      expect(plinth.userData.plinthBottomY).toBeCloseTo(expectedBottomY, 5);
+
+      const pos = plinth.geometry.getAttribute("position");
+      const norm = plinth.geometry.getAttribute("normal");
+      let minY = Infinity;
+      let maxY = -Infinity;
+      let topRimCount = 0;
+      let bottomCapCount = 0;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const y = pos.getY(i);
+        const z = pos.getZ(i);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+        if (Math.abs(y - expectedBottomY) < 1e-4) {
+          if (norm.getY(i) < -0.9) bottomCapCount += 1;
+        } else {
+          const expectedTopY = terrainMeshHeight(field, model.sideM, x, -z);
+          expect(y).toBeCloseTo(expectedTopY, 4);
+          topRimCount += 1;
+        }
+      }
+      expect(minY).toBeCloseTo(expectedBottomY, 4);
+      expect(maxY).toBeCloseTo(field.max, 4);
+      expect(topRimCount).toBeGreaterThan(8);
+      expect(bottomCapCount).toBe(6);
+      expect((plinth.userData.plinthEdgePositions as Float32Array).length).toBeGreaterThan(24);
+    } finally {
+      disposeObject(group);
+    }
+  });
+
+  it("builds a solid 3D BasePlinth for flat ground and circle cuts", () => {
+    const flatModel = { ...slopedModel(), terrain: null, sideM: 1000 };
+    const flatGroup = buildCityGroup(flatModel);
+    const circleGroup = buildCityGroup({ ...slopedModel(), frameShape: "circle" });
+    try {
+      const flatPlinth = flatGroup.getObjectByName("BasePlinth") as THREE.Mesh;
+      expect(flatPlinth).toBeTruthy();
+      flatPlinth.geometry.computeBoundingBox();
+      expect(flatPlinth.geometry.boundingBox!.max.y).toBeCloseTo(0, 4);
+      expect(flatPlinth.geometry.boundingBox!.min.y).toBeCloseTo(-22, 4);
+
+      const circlePlinth = circleGroup.getObjectByName("BasePlinth") as THREE.Mesh;
+      expect(circlePlinth).toBeTruthy();
+      circlePlinth.geometry.computeBoundingBox();
+      expect(circlePlinth.geometry.boundingBox!.min.y).toBeCloseTo(
+        basePlinthBottomY(slopedModel().sideM, slopedModel().terrain),
+        4,
+      );
+      expect(circlePlinth.geometry.boundingBox!.max.y).toBeGreaterThan(0);
+      const circleBuf = basePlinthBuffers(slopedModel().sideM, slopedModel().terrain, "circle");
+      expect(circleBuf.positions.length).toBeGreaterThan(300);
+    } finally {
+      disposeObject(flatGroup);
+      disposeObject(circleGroup);
+    }
   });
 });

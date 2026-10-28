@@ -16,6 +16,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
 import { attachScenePointPick, attachBuildingPick } from "../lib/buildingPick";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
+import { basePlinthBottomY } from "../lib/terrain";
 import { auditBuildingSelection, mountSelectedBuildingsVisual } from "../lib/buildingSelectionVisual";
 import { CAMERA_FIT_INCLUDES_HELIODON } from "../lib/sceneCameraFit";
 import { shotFromCamera, type CameraShot } from "../lib/cameraShot";
@@ -43,6 +44,7 @@ import {
 } from "../lib/buildingViewportColor";
 import {
   applySunStudySurfaceTint,
+  refreshSceneSurfaceColors,
   snapshotSunStudySurfaceColors,
 } from "../lib/sunStudySurfaceViewport";
 import {
@@ -325,8 +327,18 @@ function City({
   const group = useMemo(() => {
     const introStagger = shouldRunIntroTransition();
     const city = buildCityGroup(model, { uniformBuildings, colourBySource, highlightManual, introStagger });
+    const plinth = city.getObjectByName("BasePlinth");
     const ground = city.getObjectByName("Ground");
-    if (ground && ground instanceof THREE.Mesh && ground.name === "Ground") {
+    if (plinth && plinth instanceof THREE.Mesh && plinth.userData.plinthEdgePositions instanceof Float32Array) {
+      const edgeGeo = new THREE.BufferGeometry();
+      edgeGeo.setAttribute("position", new THREE.BufferAttribute(plinth.userData.plinthEdgePositions, 3));
+      const edges = new THREE.LineSegments(
+        edgeGeo,
+        new THREE.LineBasicMaterial({ color: getColour("--ground-edge") }),
+      );
+      edges.name = "GroundEdge";
+      city.add(edges);
+    } else if (ground && ground instanceof THREE.Mesh && ground.name === "Ground") {
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(ground.geometry),
         new THREE.LineBasicMaterial({ color: getColour("--ground-edge") }),
@@ -346,7 +358,8 @@ function City({
       });
       const cutRing = new THREE.LineSegments(ringGeo, ringMat);
       cutRing.name = "IntroCutRing";
-      cutRing.position.y = 0.6;
+      const ringBaseY = model.terrain ? (model.terrain.min + model.terrain.max) / 2 : 0;
+      cutRing.position.y = ringBaseY + 0.6;
       cutRing.raycast = () => {};
       markScreenOnly(cutRing);
       city.add(cutRing);
@@ -373,7 +386,6 @@ function City({
     uniformBuildings,
     colourBySource,
     highlightManual,
-    colourTick,
   ]);
   useLayoutEffect(() => {
     onBoundsRef.current(measureCity(group));
@@ -426,11 +438,13 @@ function City({
       const bucket = typeof object.userData.introBuildingBucket === "number" ? object.userData.introBuildingBucket : 0;
       targets.push({ obj: object, pivotY, kind: "building", bucket });
     }
+    const cutRingObj = group.getObjectByName("IntroCutRing") as THREE.LineSegments | undefined;
     if (!shouldRunIntroTransition() || targets.length === 0) {
       for (const { obj } of targets) {
         obj.scale.y = 1;
         obj.position.y = 0;
       }
+      if (cutRingObj) cutRingObj.visible = false;
       group.userData.introScaleY = 1;
       introRef.current = null;
       return;
@@ -443,8 +457,15 @@ function City({
           obj.scale.y = 1;
           obj.position.y = 0;
         }
+        if (cutRingObj) cutRingObj.visible = false;
         group.userData.introScaleY = 1;
       } else {
+        if (cutRingObj) {
+          const ringOp = Math.max(0, 1 - Math.pow(Math.min(1, existing.elapsedSec / INTRO_TRANSITION_SEC), 2.2));
+          cutRingObj.visible = ringOp > 0.005;
+          const mat = cutRingObj.material as THREE.LineBasicMaterial;
+          if (mat) mat.opacity = ringOp;
+        }
         for (const { obj, pivotY, kind, bucket } of targets) {
           const s =
             existing.frameCount < 3 || !existing.playingStarted
@@ -571,7 +592,7 @@ function City({
     const treeScale = done ? 1 : computeIntroTreeWaveScale(clampedElapsed);
     if (ring) {
       const rawT = Math.min(1, clampedElapsed / INTRO_TRANSITION_SEC);
-      const ringAlpha = done ? 0 : Math.max(0, 1 - rawT * 1.5);
+      const ringAlpha = done ? 0 : Math.max(0, 1 - Math.pow(rawT, 2.2));
       ring.visible = ringAlpha > 0.01;
       (ring.material as THREE.LineBasicMaterial).opacity = ringAlpha;
     }
@@ -625,16 +646,17 @@ function City({
       }
     }
   });
+  const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
+    refreshSceneSurfaceColors(group);
     snapshotBuildingViewportColors(group, colourMode);
     snapshotSunStudySurfaceColors(group);
     snapshotWhiteCardColors(group, colourMode);
-  }, [group, colourMode]);
-  useLayoutEffect(() => {
     applySunStudySurfaceTint(group, false);
     applyBuildingSolarNeutral(group, false, solarNeutralFill);
     applyWhiteCardTint(group, display.whiteCard);
-  }, [group, solarDiagramOn, solarNeutralFill, colourTick, display.whiteCard]);
+    invalidate();
+  }, [group, colourMode, solarDiagramOn, solarNeutralFill, colourTick, display.whiteCard, invalidate]);
   const buildingsVisible = isLayer3dVisible(display, "buildings");
   const roadsVisible = isLayer3dVisible(display, "roads");
   const footpathsVisible = isLayer3dVisible(display, "footpaths");
@@ -696,8 +718,16 @@ function City({
   }, [group, display.hideTrees, display.layersVisible, model.layers]);
   const contours = useMemo(
     () => (contoursVisible ? buildContourLineObject(model) : null),
-    [model, contoursVisible, colourTick],
+    [model, contoursVisible],
   );
+  useLayoutEffect(() => {
+    if (!contours) return;
+    const mat = contours.material as THREE.LineDashedMaterial | undefined;
+    if (mat?.color) {
+      mat.color.setStyle(getColour("--outline-contour"));
+      invalidate();
+    }
+  }, [contours, colourTick, invalidate]);
   useLayoutEffect(() => () => disposeObject(group), [group]);
   return (
     <>
@@ -1839,6 +1869,7 @@ export function Scene3D({
   const sky = getColour("--light-sky");
   const groundLight = getColour("--light-ground");
   const groundY = model.terrain ? model.terrain.min : 0;
+  const plinthBottomY = basePlinthBottomY(model.sideM, model.terrain);
   const solarNeutralFill = useMemo(() => getColour("--building-solar-neutral"), [colourTick]);
   const sunSample = useMelbourneSunSample(model.center.lat, model.center.lon, solar);
   const [glEpoch, setGlEpoch] = useState(0);
@@ -1898,7 +1929,7 @@ export function Scene3D({
         <RendererShadows enabled={solar.castShadows} />
       <SunStudyToneMapping noToneMapping={noToneMapping} />
       <GradientSky colourTick={colourTick} fallback={modelBg} />
-      {projection !== "plan" && <GroundGrid sideM={model.sideM} groundY={groundY} colourTick={colourTick} />}
+      {projection !== "plan" && <GroundGrid sideM={model.sideM} groundY={plinthBottomY} colourTick={colourTick} />}
       <hemisphereLight args={[sky, groundLight, fillHemi]} />
       <ambientLight intensity={fillAmbient} />
       <directionalLight position={[model.sideM * 0.4, model.sideM, model.sideM * 0.2]} intensity={fillKeyLight} />

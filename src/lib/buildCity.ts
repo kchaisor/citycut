@@ -14,7 +14,7 @@ import { isSiteBuilding } from "./siteBuildings";
 import { siteBoundaryLineGeometry } from "./siteBoundaryDash3d";
 import { clipTransportLines, drapedDashedLineGeometry } from "./dashedTransportLines";
 import { readDrawingStyle } from "./drawingStyle";
-import { footprintBase, sampleTerrain, terrainBuffers, terrainTint } from "./terrain";
+import { basePlinthBuffers, footprintBase, sampleTerrain, terrainBuffers, terrainTint } from "./terrain";
 import { drapeTriangles, GROUND_REMAINING_LAYER, GROUND_ROADS_LAYER, groundGeometry, groundRoadPartition, groundTriangles } from "./groundRoads";
 import { clipTrianglesToTerrainGrid, terrainMeshHeight } from "./terrainDrape";
 import type { AreaFeat, BuildingFeat, BuildingUse, CityModel, Pt, Ring, RoadGrade, TerrainField } from "../types";
@@ -399,6 +399,35 @@ function order(object: THREE.Object3D, renderOrder: number) {
   });
 }
 
+function basePlinthMesh(
+  sideM: number,
+  terrain: TerrainField | null | undefined,
+  frameShape = DEFAULT_SITE_FRAME_SHAPE,
+): THREE.Mesh {
+  const buffers = basePlinthBuffers(sideM, terrain, frameShape);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(buffers.positions, 3));
+  geometry.setAttribute("normal", new THREE.BufferAttribute(buffers.normals, 3));
+  geometry.setAttribute("color", new THREE.BufferAttribute(buffers.colors, 3));
+  const surfaceLayer = terrain ? SURFACE.terrain : SURFACE.ground;
+  const material = paint(
+    matteStandardMaterial({
+      vertexColors: true,
+      side: THREE.DoubleSide,
+    }),
+    surfaceLayer,
+  );
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = "BasePlinth";
+  mesh.userData.skipRhinoExport = true;
+  mesh.userData.noScenePick = true;
+  mesh.userData.plinthBottomY = buffers.bottomY;
+  mesh.userData.plinthThicknessM = buffers.thicknessM;
+  mesh.userData.plinthEdgePositions = buffers.edgePositions;
+  order(mesh, surfaceLayer.renderOrder);
+  return mesh;
+}
+
 function terrainMesh(field: TerrainField, sideM: number, frameShape = DEFAULT_SITE_FRAME_SHAPE): THREE.Mesh {
   const buffers = terrainBuffers(field, sideM, frameShape);
   const geometry = new THREE.BufferGeometry();
@@ -474,6 +503,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     order(ground, SURFACE.ground.renderOrder);
     group.add(ground);
   }
+  group.add(basePlinthMesh(model.sideM, model.terrain, frameShape));
 
   const onTerrain = Boolean(sample && model.terrain);
   const blockMat = paint(

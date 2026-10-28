@@ -167,7 +167,7 @@ import { WindRoseOverlay } from "./WindRoseOverlay";
 import { ExportTiles } from "./ExportTiles";
 import { exportTiles, type ExportBusy } from "../lib/exportTiles";
 import { ViewLegend, ViewPanel } from "./ViewPanel";
-import { useWalkViewshed } from "./useWalkViewshed";
+import { useWalkPlayback, useWalkViewshed, WALK_SPEEDS } from "./useWalkViewshed";
 import { fetchWindRoseTable } from "../lib/windFetch";
 import { analyzeWindPeriod, WIND_PERIOD_LABELS, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
 import { daylightWindowMinutes, sunAtMelbourneLocal } from "../lib/solar";
@@ -930,6 +930,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   );
   // View tab: the path resets with a new cut; compute uses the buildings as shown (edits, hides).
   const walk = useWalkViewshed(model, displayModel);
+  const walkAt = useWalkPlayback(walk);
 
   /**
    * Drawing tab and its .ai exports: the display model (hidden buildings already gone) plus plan
@@ -2706,6 +2707,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                                     className="o-swatch-input"
                                     aria-label={`${layer.label} colour`}
                                     value={layer.color.toLowerCase()}
+                                    onInput={(event) => layer.onPick((event.target as HTMLInputElement).value)}
                                     onChange={(event) => layer.onPick(event.target.value)}
                                   />
                                 </label>
@@ -3020,6 +3022,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                                     className="o-swatch-input"
                                     aria-label={`${layer.label} colour`}
                                     value={layer.color.toLowerCase()}
+                                    onInput={(event) => layer.onPick((event.target as HTMLInputElement).value)}
                                     onChange={(event) => layer.onPick(event.target.value)}
                                   />
                                 </label>
@@ -3555,11 +3558,32 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
 
               {analysisKind === "view" && (
                 <>
-                  <div className="date-presets" role="group" aria-label="Viewshed eye height and radius presets">
+                  <button
+                    type="button"
+                    className="play-pill mono"
+                    aria-label={walk.playing ? "Pause walk" : "Play walk"}
+                    disabled={walk.status !== "ready" && walk.status !== "computing"}
+                    onClick={() => walk.setPlaying(!walk.playing)}
+                  >
+                    {walk.playing ? "⏸ Pause" : "▶ Play"}
+                  </button>
+                  <div className="date-presets" role="group" aria-label="Viewshed walk speed, eye height, and radius presets">
+                    {WALK_SPEEDS.map((spd) => (
+                      <button
+                        key={spd}
+                        type="button"
+                        className={walk.speed === spd ? "p-pill active mono" : "p-pill mono"}
+                        aria-label={`${spd}× walk speed`}
+                        aria-pressed={walk.speed === spd}
+                        onClick={() => walk.setSpeed(spd)}
+                      >
+                        {spd}×
+                      </button>
+                    ))}
                     {[
-                      [1.6, "Eye 1.6m"],
-                      [4.5, "Upper 4.5m"],
-                      [10, "Balcony 10m"],
+                      [1.6, "1.6m"],
+                      [4.5, "4.5m"],
+                      [10, "10m"],
                     ].map(([eyeVal, label]) => (
                       <button
                         key={String(label)}
@@ -3589,15 +3613,35 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     )}
                   </div>
                   <div className="daylight-scrubber view-console-bar mono">
-                    <span className="sun-bound">
-                      {walk.drawing
-                        ? "Click ground in 3D view to place walk points"
-                        : walk.clickCount > 0
-                          ? `Walk path · ${Math.round(walk.lengthM)} m (${walk.sampleCount} samples)`
-                          : "Click 'Draw Path' then click ground points"}
-                    </span>
+                    {walk.sampleCount > 1 ? (
+                      <>
+                        <span className="sun-bound">0m</span>
+                        <input
+                          type="range"
+                          className="sun-range"
+                          aria-label="Position along walk"
+                          min={0}
+                          max={Math.max(0, walk.sampleCount - 1)}
+                          step={1}
+                          value={Math.min(walkAt.index, Math.max(0, walk.sampleCount - 1))}
+                          onChange={(event) => {
+                            walk.setPlaying(false);
+                            walk.seek(Number(event.target.value));
+                          }}
+                        />
+                        <span className="sun-bound">{Math.round(walk.lengthM)}m</span>
+                      </>
+                    ) : (
+                      <span className="sun-bound">
+                        {walk.drawing
+                          ? "Click ground in 3D view to place walk points"
+                          : walk.clickCount > 0
+                            ? `Walk path · ${Math.round(walk.lengthM)} m (${walk.sampleCount} samples)`
+                            : "Click 'Draw Path' then click ground points"}
+                      </span>
+                    )}
                     <span className="time-readout-pill">
-                      👁 {walk.eyeM.toFixed(1)}m · {walk.radiusM}m
+                      👁 {walk.sampleCount > 1 ? `${Math.round(walkAt.distanceM)}/${Math.round(walk.lengthM)}m · ` : ""}{walk.eyeM.toFixed(1)}m · {walk.radiusM}m
                     </span>
                   </div>
                 </>

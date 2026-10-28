@@ -1032,6 +1032,7 @@ export default function App() {
   const showSelectLayer = phase === "select" || handoffUnderlay !== "none";
   const selectTransitionActive = phase === "model" && handoffUnderlay === "fading";
   const selectBusy = loading || (phase === "model" && handoffUnderlay !== "none");
+  const selectProcessingPhaseA = selectBusy && !selectTransitionActive;
 
   return (
     <div className="app">
@@ -1041,6 +1042,7 @@ export default function App() {
           className={[
             "select",
             selectCollapsed ? "sidebar-collapsed" : "",
+            selectProcessingPhaseA ? "is-processing-phase-a" : "",
             selectTransitionActive ? "is-loading" : "",
             phase === "model" && handoffUnderlay !== "none" ? "is-handoff-underlay" : "",
             phase === "model" && handoffUnderlay === "fading" ? "is-fading-out" : "",
@@ -1057,6 +1059,8 @@ export default function App() {
             initialView={viewRef.current}
             fly={fly}
             loading={selectBusy}
+            processing={selectProcessingPhaseA}
+            fadingOut={selectTransitionActive}
             siteSearch={mapSiteSearch}
             onCancel={cancel}
             onView={onView}
@@ -1079,6 +1083,23 @@ export default function App() {
             center={cutCenter}
             onHome={onHome}
           />
+          {selectProcessingPhaseA && (
+            <div
+              className="loading-hud-pill is-processing hud-card"
+              role="status"
+              aria-live="polite"
+              data-phase="processing"
+            >
+              <div className="loading-hud-row">
+                <span className="loading-pulse-dot is-processing" aria-hidden="true" />
+                <strong>Processing site data &amp; 3D geometry…</strong>
+                <div className="loading-prog-track is-indeterminate" aria-hidden="true">
+                  <div className="loading-prog-shimmer" />
+                </div>
+                <span className="loading-prog-pct mono">PREP</span>
+              </div>
+            </div>
+          )}
         </div>
       ) : null}
       {phase === "model" && model ? (

@@ -73,7 +73,7 @@ export function snapshotBuildingViewportColors(root: THREE.Object3D, mode: Build
     const { use, sourceKey } = parseBuildingBucketName(name);
     const fill = buildingViewportFill(mode, use, sourceKey);
     forEachStandardMaterial(mesh, (material) => {
-      if (material.userData.viewportFill === undefined) material.userData.viewportFill = fill;
+      material.userData.viewportFill = fill;
       material.color.setStyle(fill);
       applyMatteFinish(material);
     });

@@ -115,7 +115,8 @@ export function DrawingPlan({
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
   const figure = kind === "figure-ground";
-  const style = lineStyle ?? readDrawingStyle();
+  const colourTick = useColourRevision();
+  const style = useMemo(() => lineStyle ?? readDrawingStyle(), [lineStyle, colourTick]);
   const plan = useMemo(
     () =>
       planPaths(
@@ -146,6 +147,7 @@ export function DrawingPlan({
       colourBySource,
       highlightManual,
       style.pathFilletM,
+      colourTick,
     ],
   );
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
@@ -228,7 +230,6 @@ export function DrawingPlan({
   const northWingW = northR * 0.52;
   const northWingY = northCy + northR * 0.68;
   const northNotchY = northCy + northR * 0.32;
-  const colourTick = useColourRevision();
   const canvas = useMemo(() => themeColor("--drawing-bg"), [colourTick]);
   const figureFill = getColour("--figure-fill");
   const blockFill = getColour("--block-plan");
