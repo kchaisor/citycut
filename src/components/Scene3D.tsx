@@ -385,6 +385,7 @@ function City({
     done: boolean;
     playingStarted?: boolean;
     webglReadyDispatched?: boolean;
+    steadyFrames?: number;
     targets: Array<{ obj: THREE.Object3D; pivotY: number; kind: "building" | "tree"; bucket: number }>;
   } | null>(null);
   const cutKey = `${model.center.lat.toFixed(5)},${model.center.lon.toFixed(5)},${model.sideM}`;
@@ -473,6 +474,16 @@ function City({
     const intro = introRef.current;
     if (!intro || intro.done) return;
     const ring = group.getObjectByName("IntroCutRing") as THREE.LineSegments | undefined;
+    if (
+      typeof window !== "undefined" &&
+      intro.frameCount >= 3 &&
+      window.__citycutIntroReadyToFire &&
+      !window.__citycutIntroStarted
+    ) {
+      window.__citycutIntroStarted = true;
+      window.__citycutIntroStartMs = performance.now();
+      window.dispatchEvent(new CustomEvent("citycut:intro-start"));
+    }
     const waitingForIntroStart =
       typeof window !== "undefined" &&
       Boolean(window.__citycutAwaitIntroStart) &&
@@ -481,15 +492,12 @@ function City({
       const ds = state.gl.domElement.dataset;
       if (ds.introPolar || intro.frameCount > 0) {
         intro.frameCount += 1;
+        if (typeof window !== "undefined" && !intro.webglReadyDispatched) {
+          const prewarmProgress = Math.min(0.92, 0.85 + intro.frameCount * 0.02);
+          window.__citycutLoadProgress = Math.max(window.__citycutLoadProgress ?? 0, prewarmProgress);
+        }
       }
       if (intro.frameCount <= 3) {
-        if (intro.frameCount === 1) {
-          try {
-            state.gl.compile(state.scene, state.camera);
-          } catch {
-            // ignore in headless/mock contexts
-          }
-        }
         const s0 = 0.001;
         for (const { obj, pivotY } of intro.targets) {
           obj.scale.y = s0;
@@ -510,6 +518,7 @@ function City({
         intro.webglReadyDispatched = true;
         if (typeof window !== "undefined") {
           window.__citycutWebglPrewarmReady = true;
+          window.__citycutLoadProgress = Math.max(window.__citycutLoadProgress ?? 0, 0.94);
           if (!window.__citycutAwaitIntroStart) {
             const modelRoot = state.gl.domElement.closest(".model");
             if (modelRoot?.hasAttribute("data-intro-webgl-wait")) {
@@ -914,6 +923,7 @@ function PerspectiveFit({
       introAnimRef.current = null;
       return;
     }
+
     const waitingForIntroStart =
       typeof window !== "undefined" &&
       Boolean(window.__citycutAwaitIntroStart) &&
@@ -930,9 +940,6 @@ function PerspectiveFit({
       anim.playingStarted = true;
       anim.elapsedSec = 0.02;
       applyIntroPose(anim, controls);
-      if (typeof window !== "undefined" && window.__citycutFirstTiltFrameMs === undefined) {
-        window.__citycutFirstTiltFrameMs = performance.now();
-      }
       return;
     }
     if (introPaused) {

@@ -16,21 +16,10 @@ export function GradientSky({ colourTick, fallback }: { colourTick: number; fall
   useEffect(() => {
     const previous = scene.background;
     const colour = new THREE.Color(themeColor("--viewport-bg", fallback));
-    const modelRoot = gl.domElement.closest(".model");
-    const syncBackground = () => {
-      if (modelRoot?.hasAttribute("data-intro-hold")) {
-        scene.background = null;
-        gl.setClearColor(colour, 0);
-      } else {
-        scene.background = colour;
-        gl.setClearColor(colour, 1);
-      }
-    };
-    syncBackground();
-    modelRoot?.addEventListener("citycut:intro-hold-release", syncBackground);
+    scene.background = colour;
+    gl.setClearColor(colour, 1);
     return () => {
-      modelRoot?.removeEventListener("citycut:intro-hold-release", syncBackground);
-      if (scene.background === colour || scene.background === null) scene.background = previous;
+      if (scene.background === colour) scene.background = previous;
     };
   }, [scene, gl, colourTick, fallback]);
   return null;

@@ -197,7 +197,7 @@ describe("Display panel controls by view tab", () => {
     expect(within(analysisTabs).getByRole("tab", { name: "Sun", hidden: true }).querySelector("svg.lucide-sun")).toBeTruthy();
     expect(within(leftRail).getByRole("button", { name: "Site Analysis" })).toBeTruthy();
     expect(within(leftRail).getByRole("button", { name: "Import" })).toBeTruthy();
-    expect(within(leftRail).getByRole("button", { name: "Export" })).toBeTruthy();
+    expect(within(leftRail).queryByRole("button", { name: "Export" })).toBeNull();
     expect(within(rightRail).getByRole("button", { name: "Model details" }).getAttribute("aria-pressed")).toBe("true");
     expect(within(rightRail).getByRole("button", { name: "Buildings" }).getAttribute("aria-pressed")).toBe("false");
     expect(within(rightRail).getByRole("button", { name: "Trees" }).getAttribute("aria-pressed")).toBe("false");

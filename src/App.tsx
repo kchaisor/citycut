@@ -77,6 +77,8 @@ import {
   paddedComFetchBounds,
 } from "./lib/comBuildingHeights";
 import { applyDevelopmentFloorsToBuildings, fetchDevelopmentFloorRecords } from "./lib/comDevelopmentFloors";
+import { resolveBuildingHeightsAfterCom } from "./lib/buildingHeightPipeline";
+import { runComBuildingHeightsInWorker } from "./lib/comBuildingHeightsWorkerClient";
 import { buildHeightSourceLoadWarnings } from "./lib/buildHeightSourceLoadWarnings";
 import { buildEnrichmentUseTierFailures } from "./lib/enrichmentUseTierFailures";
 import type { Basemap, CityModel, LonLat, PlaceHit, UiLayers, UseTierFailure, ViewState } from "./types";
@@ -87,6 +89,15 @@ function frameFromQuery(): FrameQuery | null {
 }
 
 let modelPagePromise: Promise<{ default: typeof import("./components/ModelPage").ModelPage }> | null = null;
+function yieldToBrowserFrame(skip: boolean): Promise<void> {
+  if (skip || typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+}
+
 function preloadModelPage() {
   if (!modelPagePromise) {
     modelPagePromise = import("./components/ModelPage")
@@ -350,10 +361,12 @@ export default function App() {
     if (!isDomTestStart && !prefersReducedStart && !isQaStart && typeof window !== "undefined") {
       window.__citycutAwaitIntroStart = true;
       window.__citycutIntroStarted = false;
+      window.__citycutIntroReadyToFire = false;
       window.__citycutWebglPrewarmReady = false;
       window.__citycutModelPrewarmMounted = false;
       window.__citycutIntroStartMs = undefined;
       window.__citycutFirstTiltFrameMs = undefined;
+      window.__citycutLoadProgress = 0.04;
     }
     void preloadModelPage();
     setLoading(true);
@@ -554,6 +567,17 @@ export default function App() {
                 return { footprints: [], fetchMs: 0, error: message };
               })
           : Promise.resolve({ footprints: [], fetchMs: 0, error: null as string | null });
+      let completedFetchCount = 0;
+      const totalFetchCount = 14;
+      const trackFetch = <T extends Promise<unknown>>(task: T): T =>
+        task.then((res) => {
+          completedFetchCount += 1;
+          if (!isDomTestStart && typeof window !== "undefined") {
+            const p = 0.06 + (completedFetchCount / totalFetchCount) * 0.48;
+            window.__citycutLoadProgress = Math.max(window.__citycutLoadProgress ?? 0, p);
+          }
+          return res;
+        }) as T;
       const [
         terrainResult,
         comResult,
@@ -570,20 +594,20 @@ export default function App() {
         comHeightsResult,
         nswResult,
       ] = await Promise.all([
-        terrainTask,
-        comTask,
-        vicmapTask,
-        useTierTask,
-        enrichmentTask,
-        enrichmentManifestTask,
-        contourTask,
-        buildingsTask,
-        transportTask,
-        baseTask,
-        tramTask,
-        damTask,
-        comHeightsTask,
-        nswTask,
+        trackFetch(terrainTask),
+        trackFetch(comTask),
+        trackFetch(vicmapTask),
+        trackFetch(useTierTask),
+        trackFetch(enrichmentTask),
+        trackFetch(enrichmentManifestTask),
+        trackFetch(contourTask),
+        trackFetch(buildingsTask),
+        trackFetch(transportTask),
+        trackFetch(baseTask),
+        trackFetch(tramTask),
+        trackFetch(damTask),
+        trackFetch(comHeightsTask),
+        trackFetch(nswTask),
       ]);
       const prebake = await prebakeTask;
       // OSM points from the file only when it was baked from the same Overture release as the
@@ -620,13 +644,39 @@ export default function App() {
         coverageMessage: coverageMsg,
         zonesFetchIncomplete: enrichmentManifest?.zonesFetch?.complete === false,
       });
+      let comHeightsAppliedAtCreate = false;
+      let buildingsHeightResolvedAtCreate = false;
+      let comWorkerPromise: Promise<Awaited<ReturnType<typeof runComBuildingHeightsInWorker>> | null> | null = null;
+      let withLidarRef: typeof overtureBuildings = [];
       if (modelLayers.buildings) {
+        await yieldToBrowserFrame(isDomTestStart);
+        if (controller.signal.aborted) return;
         const enriched = mergeBuildingEnrichment(overtureBuildings, enrichmentResult.byId);
         const zoned = assignExternalUses(enriched, useTiers.zones);
         const withLidar = applyLidarHeightsFromEnrichment(zoned);
+        withLidarRef = withLidar;
         buildingsWithoutCom = structuredClone(withLidar);
-        buildings = applyDevelopmentFloorsToBuildings(withLidar, center, damResult.records);
+        if (
+          !isDomTestStart &&
+          comFootprintPrefetch &&
+          comFootprintPrefetch.length > 0 &&
+          typeof Worker !== "undefined"
+        ) {
+          comWorkerPromise = runComBuildingHeightsInWorker(
+            withLidar,
+            comFootprintPrefetch,
+            controller.signal,
+            { center, damRecords: damResult.records },
+          ).catch(() => null);
+        } else {
+          buildings = applyDevelopmentFloorsToBuildings(withLidar, center, damResult.records);
+        }
       }
+      if (!isDomTestStart && typeof window !== "undefined") {
+        window.__citycutLoadProgress = Math.max(window.__citycutLoadProgress ?? 0, 0.62);
+      }
+      await yieldToBrowserFrame(isDomTestStart);
+      if (controller.signal.aborted) return;
       const treeContext = {
         ...baseResult.treeContext,
         roads: transportResult.roads.map((road) => ({ line: road.line, width: road.width })),
@@ -644,6 +694,11 @@ export default function App() {
           })
         : null;
       const trees = assembled ? assembled.trees : [];
+      if (!isDomTestStart && typeof window !== "undefined") {
+        window.__citycutLoadProgress = Math.max(window.__citycutLoadProgress ?? 0, 0.68);
+      }
+      await yieldToBrowserFrame(isDomTestStart);
+      if (controller.signal.aborted) return;
       const contours = Boolean(layers.contours && contourLayer && contourLayer.lines.length > 0);
       // Test version: the 3D ground (and so building bases and plan shadows, which all sample
       // model.terrain) comes from Vicmap metro 1–5 m contours where they cover the cut.
@@ -651,6 +706,48 @@ export default function App() {
       const groundDem = new URLSearchParams(window.location.search).get("ground") === "dem";
       const contourGround =
         layers.terrain && !groundDem && contourLayer ? contourTerrain(contourLayer, sideM, terrainResult.field) : null;
+      if (!isDomTestStart && typeof window !== "undefined") {
+        window.__citycutLoadProgress = Math.max(window.__citycutLoadProgress ?? 0, 0.74);
+      }
+      if (modelLayers.buildings && !isDomTestStart) {
+        if (comWorkerPromise) {
+          const workerRes = await comWorkerPromise;
+          if (controller.signal.aborted) return;
+          if (workerRes?.buildings) {
+            buildings = workerRes.resolved
+              ? workerRes.buildings
+              : resolveBuildingHeightsAfterCom(
+                  workerRes.buildings,
+                  center,
+                  comFootprintPrefetch ?? [],
+                  damResult.records,
+                );
+            comHeightsAppliedAtCreate = true;
+            buildingsHeightResolvedAtCreate = true;
+          } else {
+            buildings = resolveBuildingHeightsAfterCom(
+              withLidarRef,
+              center,
+              [],
+              damResult.records,
+            );
+            buildingsHeightResolvedAtCreate = true;
+          }
+        } else {
+          await yieldToBrowserFrame(isDomTestStart);
+          if (controller.signal.aborted) return;
+          buildings = resolveBuildingHeightsAfterCom(
+            withLidarRef,
+            center,
+            [],
+            damResult.records,
+          );
+          buildingsHeightResolvedAtCreate = true;
+        }
+      }
+      if (!isDomTestStart && typeof window !== "undefined") {
+        window.__citycutLoadProgress = Math.max(window.__citycutLoadProgress ?? 0, 0.79);
+      }
       const groundField = contourGround?.field ?? terrainResult.field;
       const terrainNotice =
         layers.terrain && !groundDem ? contourTerrainNotice(contourGround, contourLayer, Boolean(terrainResult.field)) : null;
@@ -820,7 +917,8 @@ export default function App() {
         siteBuildingQa,
         developmentDamRecords: damResult.records.length > 0 ? damResult.records : undefined,
         buildingsWithoutCom,
-        comBuildingHeightsApplied: false,
+        comBuildingHeightsApplied: comHeightsAppliedAtCreate,
+        buildingsHeightResolved: buildingsHeightResolvedAtCreate || undefined,
         comFootprintPrefetch,
         comFootprintFetchError: comFootprintFetchError ?? undefined,
         heightSourceLoadWarnings:
@@ -828,7 +926,12 @@ export default function App() {
         ...(nswMode ? { region: "nsw" as const, nsw: nswResult, nswWaterNote: nswWater?.note ?? null, nswUseMatched: nswUse?.matched ?? 0 } : {}),
       };
       if (modelLayers.roads) {
+        await yieldToBrowserFrame(isDomTestStart);
+        if (controller.signal.aborted) return;
         draftModel.blocks = computeCityBlocks(draftModel);
+      }
+      if (!isDomTestStart && typeof window !== "undefined") {
+        window.__citycutLoadProgress = Math.max(window.__citycutLoadProgress ?? 0, 0.84);
       }
       if (nswMode && modelLayers.roads && (nswResult?.roadCorridors.length ?? 0) > 0) {
         draftModel.nswRoadSurface = groundRoadPartition(draftModel).sources ?? null;
@@ -896,7 +999,7 @@ export default function App() {
       if (fadeTimer === null) {
         fadeTimer = window.setTimeout(() => {
           setHandoffUnderlay("none");
-        }, 1550);
+        }, 850);
       }
     };
     if (typeof window !== "undefined" && window.__citycutIntroStarted) {

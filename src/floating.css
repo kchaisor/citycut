@@ -3975,7 +3975,7 @@ body,
 }
 
 .model[data-intro-hold="true"] .loading-hud-pill.is-model-bridge {
-  opacity: 1 !important;
-  translate: 0 0 !important;
-  transition: none !important;
+  opacity: 0 !important;
+  translate: 0 -10px !important;
+  pointer-events: none !important;
 }

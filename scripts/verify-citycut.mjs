@@ -662,6 +662,7 @@ async function main() {
         ".model .left-outliner .card-title, .model .left-outliner .outliner-section-title",
       );
       const outlinerText = outlinerHeader ? outlinerHeader.innerText.trim() : "";
+      const leftExportBtn = document.querySelector(".model .left-tool-rail button[data-section=\"exports\"]");
 
       const hudSelectors = [
         ".model .top-bar-left",
@@ -704,6 +705,7 @@ async function main() {
         rightPanelBg: rightPanelCs?.backgroundColor ?? "",
         legacyBleedCount,
         outlinerText,
+        hasLeftExportBtn: Boolean(leftExportBtn),
         overlaps,
       };
     });
@@ -725,6 +727,7 @@ async function main() {
         uiInvariants.rightPanelBorder === "0px" &&
         uiInvariants.legacyBleedCount === 0 &&
         uiInvariants.outlinerText.toUpperCase() === "VIEW STYLE" &&
+        !uiInvariants.hasLeftExportBtn &&
         uiInvariants.overlaps.length === 0,
       `rightInspBorder=${uiInvariants.rightInspBorder}, rightPanelBorder=${uiInvariants.rightPanelBorder}, bleed=${uiInvariants.legacyBleedCount}, outliner="${uiInvariants.outlinerText}", overlaps=${uiInvariants.overlaps.length}`,
     );

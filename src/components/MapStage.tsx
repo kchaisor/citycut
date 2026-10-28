@@ -104,6 +104,7 @@ export function MapStage({
     let lastFrameMs = startMs;
     let modelMountedSinceMs: number | null = null;
     let webglReadySinceMs: number | null = null;
+    let hold100Frames = 0;
     if (typeof window !== "undefined") {
       window.__citycutProgressSamples = [0];
     }
@@ -134,28 +135,33 @@ export function MapStage({
       }
 
       if (lastRounded < 100) {
+        const rawLoadProgress =
+          typeof window !== "undefined" && typeof window.__citycutLoadProgress === "number"
+            ? window.__citycutLoadProgress * 100
+            : 0;
         let step = 0;
         if (!modelMounted) {
-          const rate =
-            floatPct < 45
-              ? 0.072
-              : 0.048 * Math.max(0.22, (68 - floatPct) / 23);
-          step = Math.min(4.2, Math.max(0.8, dtMs * rate));
-          floatPct = Math.min(68, floatPct + step);
+          const targetPct = Math.min(78, Math.max(rawLoadProgress, Math.min(64, totalElapsed * 0.032)));
+          const gap = Math.max(0, targetPct - floatPct);
+          const creep = floatPct < 74 ? dtMs * 0.012 : dtMs * 0.004;
+          step = Math.min(3.4, Math.max(creep, gap * Math.min(0.28, dtMs * 0.014)));
+          floatPct = Math.min(78, floatPct + step);
         } else if (!webglReady) {
-          const rate = 0.055 * Math.max(0.25, (86 - floatPct) / 20);
-          step = Math.min(4.0, Math.max(0.8, dtMs * rate));
-          floatPct = Math.min(86, floatPct + step);
+          const targetPct = Math.min(90, Math.max(rawLoadProgress, 84));
+          const gap = Math.max(0, targetPct - floatPct);
+          const creep = floatPct < 89 ? dtMs * 0.018 : dtMs * 0.005;
+          step = Math.min(3.2, Math.max(creep, gap * Math.min(0.32, dtMs * 0.016)));
+          floatPct = Math.min(90, floatPct + step);
         } else {
           const postWebglElapsed = webglReadySinceMs !== null ? now - webglReadySinceMs : 0;
           const remainingTimeMs = Math.max(
-            180,
+            200,
             minBeat2Ms - totalElapsed,
-            360 - postWebglElapsed,
+            300 - postWebglElapsed,
           );
           const remainingPct = 100 - floatPct;
           const desiredStep = (remainingPct / remainingTimeMs) * dtMs;
-          step = Math.min(6.0, Math.max(1.8, desiredStep));
+          step = Math.min(4.8, Math.max(1.4, desiredStep));
           floatPct = Math.min(100, floatPct + step);
         }
         const rounded = Math.min(100, Math.max(lastRounded, Math.round(floatPct)));
@@ -188,10 +194,20 @@ export function MapStage({
             samples.push(100);
           }
           window.__citycutProgressSamples = samples;
-          if (!window.__citycutIntroStarted) {
-            window.__citycutIntroStarted = true;
-            window.__citycutIntroStartMs = performance.now();
-            window.dispatchEvent(new CustomEvent("citycut:intro-start"));
+          hold100Frames += 1;
+          if (hold100Frames < 2) {
+            rafId = window.requestAnimationFrame(tick);
+            return;
+          }
+          if (!window.__citycutIntroStarted && !window.__citycutIntroReadyToFire) {
+            window.__citycutIntroReadyToFire = true;
+            window.setTimeout(() => {
+              if (!window.__citycutIntroStarted) {
+                window.__citycutIntroStarted = true;
+                window.__citycutIntroStartMs = performance.now();
+                window.dispatchEvent(new CustomEvent("citycut:intro-start"));
+              }
+            }, 1500);
           }
         }
         return;

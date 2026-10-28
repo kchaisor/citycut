@@ -293,12 +293,23 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   const [planViewport, setPlanViewport] = useState<PlanViewport>(() => planViewportExtent(model.sideM));
   const [axoSettings, setAxoSettings] = useState<ExplodedAxoSettings>(() => defaultExplodedAxoSettings(model.sideM));
   const [explodedViewport, setExplodedViewport] = useState<PlanViewport>(() =>
-    explodedAxoViewportExtent(explodedAxoBounds(model, defaultExplodedAxoSettings(model.sideM))),
+    planViewportExtent(model.sideM),
   );
   const [view, setView] = useState<ViewMemory>(loadView);
   const [isoDrawingViewport, setIsoDrawingViewport] = useState<PlanViewport>(() =>
-    explodedAxoViewportExtent(isometricDrawingBounds(model, loadView().corner)),
+    planViewportExtent(model.sideM),
   );
+  const drawingViewportsInitializedRef = useRef<CityModel | null>(null);
+  useEffect(() => {
+    if (tab !== "drawing" || drawingViewportsInitializedRef.current === model) return;
+    drawingViewportsInitializedRef.current = model;
+    setExplodedViewport(
+      explodedAxoViewportExtent(explodedAxoBounds(model, defaultExplodedAxoSettings(model.sideM))),
+    );
+    setIsoDrawingViewport(
+      explodedAxoViewportExtent(isometricDrawingBounds(model, loadView().corner)),
+    );
+  }, [tab, model]);
   const [snapId, setSnapId] = useState(0);
   // The 3D view unmounts on Drawing/Satellite; this keeps the user's camera for the way back.
   // A new model gets a fresh memory, so a new cut is framed afresh.
@@ -795,17 +806,22 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       typeof navigator !== "undefined" && /jsdom|HappyDOM/i.test(navigator.userAgent ?? "");
     const startWorker = () => {
       setComHeightsApplyFailed(false);
-      runComBuildingHeightsInWorker(source, comFootprints, controller.signal)
+      runComBuildingHeightsInWorker(source, comFootprints, controller.signal, {
+        center: model.center,
+        damRecords: model.developmentDamRecords ?? [],
+      })
         .then((result) => {
           if (controller.signal.aborted) return;
           // CoM first, then DAM floors on what CoM did not measure, then estimate labels.
           setComHeightBuildings(
-            resolveBuildingHeightsAfterCom(
-              result.buildings,
-              model.center,
-              comFootprints,
-              model.developmentDamRecords ?? [],
-            ),
+            result.resolved
+              ? result.buildings
+              : resolveBuildingHeightsAfterCom(
+                  result.buildings,
+                  model.center,
+                  comFootprints,
+                  model.developmentDamRecords ?? [],
+                ),
           );
         })
         .catch(() => {
@@ -838,27 +854,31 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   // tier order applies (DAM floors, Overture/OSM, zone default) and every default is labelled.
   const fallbackBuildings = useMemo(
     () =>
-      model.buildingsWithoutCom
-        ? resolveBuildingHeightsAfterCom(
-            model.buildingsWithoutCom,
-            model.center,
-            [],
-            model.developmentDamRecords ?? [],
-          )
-        : stampPlainZoneDefaultLabels(model.buildings),
-    [model.buildings, model.buildingsWithoutCom, model.center, model.developmentDamRecords],
+      model.buildingsHeightResolved
+        ? model.buildings
+        : model.buildingsWithoutCom
+          ? resolveBuildingHeightsAfterCom(
+              model.buildingsWithoutCom,
+              model.center,
+              [],
+              model.developmentDamRecords ?? [],
+            )
+          : stampPlainZoneDefaultLabels(model.buildings),
+    [model.buildings, model.buildingsHeightResolved, model.buildingsWithoutCom, model.center, model.developmentDamRecords],
   );
   const annotatedAppliedBuildings = useMemo(
     () =>
       model.comBuildingHeightsApplied
-        ? annotateUnresolvedZoneDefaults(
-            model.buildings,
-            model.center,
-            comFootprints,
-            model.developmentDamRecords ?? [],
-          )
+        ? model.buildingsHeightResolved
+          ? model.buildings
+          : annotateUnresolvedZoneDefaults(
+              model.buildings,
+              model.center,
+              comFootprints,
+              model.developmentDamRecords ?? [],
+            )
         : null,
-    [model.comBuildingHeightsApplied, model.buildings, model.center, comFootprints, model.developmentDamRecords],
+    [model.comBuildingHeightsApplied, model.buildingsHeightResolved, model.buildings, model.center, comFootprints, model.developmentDamRecords],
   );
   const baseBuildings = useMemo(() => {
     if (comHeightBuildings) return comHeightBuildings;
@@ -1060,7 +1080,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   ].filter(Boolean);
 
   const sectionIds = availableSidebarSections({ buildings: showBuildings, trees: showTrees });
-  const leftSectionIds = sectionIds.filter((id) => !isRightSidebarSection(id));
+  const leftSectionIds = sectionIds.filter((id) => !isRightSidebarSection(id) && id !== "exports");
   const rightSectionIds = sectionIds.filter((id) => isRightSidebarSection(id));
   const items: SidebarItem[] = leftSectionIds.map((id) => {
     const Icon = SECTION_ICONS[id];

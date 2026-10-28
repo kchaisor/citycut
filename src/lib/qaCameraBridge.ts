@@ -68,6 +68,8 @@ declare global {
     __citycutIntroStartMs?: number;
     __citycutFirstTiltFrameMs?: number;
     __citycutProgressSamples?: number[];
+    __citycutLoadProgress?: number;
+    __citycutIntroReadyToFire?: boolean;
   }
 }
 
