@@ -4,7 +4,6 @@ import { resolve } from "node:path";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { uniformBuildingColor } from "../lib/buildingUse";
 import { getColour, resetStoredColours } from "../lib/colours";
 import { ROAD_COLOR } from "../lib/surfaceLayers";
 import { ModelPage } from "./ModelPage";
@@ -238,11 +237,12 @@ describe("Display panel controls by view tab", () => {
     expect(screen.queryByRole("region", { name: "Building types" })).toBeNull();
     expect(screen.queryByText("Building types")).toBeNull();
 
-    // Layers section omits Ground and shows ONLY available layers, all turned ON by default
-    for (const label of ["Buildings", "Roads", "Landscape", "Contours"]) {
+    // Layers section omits Ground/single Buildings row and shows present building uses + available scene layers, all ON by default
+    for (const label of ["Residential", "Commercial", "Roads", "Landscape", "Contours"]) {
       const cb = within(layersSection).getByLabelText(label) as HTMLInputElement;
       expect(cb.checked).toBe(true);
     }
+    expect(within(layersSection).queryByLabelText("Buildings")).toBeNull();
     expect(within(layersSection).queryByLabelText("Ground")).toBeNull();
     expect(within(layersSection).queryByLabelText("Water")).toBeNull();
     expect(within(layersSection).queryByLabelText("Trees")).toBeNull();
@@ -251,7 +251,8 @@ describe("Display panel controls by view tab", () => {
     expect(within(layersSection).queryByLabelText("Blocks")).toBeNull();
 
     // Inline colour swatches sit inside each Scene Layers row, omitting unavailable layers
-    expect(within(layersSection).getByLabelText("Buildings colour")).toBeTruthy();
+    expect(within(layersSection).getByLabelText("Residential colour")).toBeTruthy();
+    expect(within(layersSection).getByLabelText("Commercial colour")).toBeTruthy();
     expect(within(layersSection).getByLabelText("Roads colour")).toBeTruthy();
     expect(within(layersSection).getByLabelText("Landscape colour")).toBeTruthy();
     expect(within(layersSection).getByLabelText("Contours colour")).toBeTruthy();
@@ -264,32 +265,32 @@ describe("Display panel controls by view tab", () => {
 
     // 2D drawing controls must NOT appear when 3D model is selected
     expect(screen.queryByRole("group", { name: "Drawing type" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Site plan" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Figure-ground" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Exploded axo" })).toBeNull();
     expect(screen.queryByRole("combobox", { name: "Plan scale" })).toBeNull();
     expect(screen.queryByText(/Contours:/)).toBeNull();
     expect(screen.queryByText("Line styles")).toBeNull();
     expect(screen.queryByText("Colours")).toBeNull();
     expect(screen.queryByRole("button", { name: "Fit frame" })).toBeNull();
 
-    // Switching to Drawing shows 2D drawing controls and hides 3D controls
+    // Switching to Drawing shows the unified Studio HUD outliner (View Style + Plan scale + Scene Layers) with no duplicate Drawing type switcher or Line styles
     await user.click(tabDrawing);
     expect(tabDrawing.getAttribute("aria-selected")).toBe("true");
-    expect(screen.queryByRole("region", { name: "View modes" })).toBeNull();
+    expect(screen.getByRole("region", { name: "View modes" })).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Projection" })).toBeNull();
-    expect(screen.queryByRole("region", { name: "Layers" })).toBeNull();
+    const drawingLayersSection = screen.getByRole("region", { name: "Layers" });
+    expect(drawingLayersSection).toBeTruthy();
+    expect(within(drawingLayersSection).getByLabelText("Residential")).toBeTruthy();
+    expect(within(drawingLayersSection).getByLabelText("Commercial")).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Colors" })).toBeNull();
-    expect(screen.getByRole("group", { name: "Drawing type" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Site plan" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Figure-ground" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Exploded axo" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Isometric" })).toBeTruthy();
+    expect(screen.queryByRole("group", { name: "Drawing type" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Quick Site plan" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Quick Figure-ground" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Quick Exploded axo" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Quick Isometric" })).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Plan scale" })).toBeTruthy();
     expect(screen.getByText(/Contours:/)).toBeTruthy();
-    expect(screen.getByText("Line styles")).toBeTruthy();
-    expect(screen.getByText("Colours")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Fit frame" })).toBeTruthy();
+    expect(screen.queryByText("Line styles")).toBeNull();
+    expect(screen.queryByText("Colours")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Fit frame" })).toBeNull();
 
     // Switching to Satellite hides both 3D and 2D drawing controls
     await user.click(tabSatellite);
@@ -327,7 +328,8 @@ describe("Display panel controls by view tab", () => {
     expect(screen.queryByRole("region", { name: "Colors" })).toBeNull();
 
     for (const label of [
-      "Buildings",
+      "Residential",
+      "Commercial",
       "Roads",
       "Footpaths",
       "Trees",
@@ -340,6 +342,7 @@ describe("Display panel controls by view tab", () => {
       expect(layerToggle.checked).toBe(true);
       expect(within(layersSection).getByLabelText(`${label} colour`)).toBeTruthy();
     }
+    expect(within(layersSection).queryByLabelText("Buildings")).toBeNull();
     expect(within(layersSection).queryByLabelText("Ground")).toBeNull();
     expect(within(layersSection).queryByLabelText("Ground colour")).toBeNull();
     expect(within(layersSection).queryByLabelText("Blocks")).toBeNull();
@@ -358,12 +361,11 @@ describe("Display panel controls by view tab", () => {
     expect(treesCheckbox.checked).toBe(false);
     expect(contoursCheckbox.checked).toBe(false);
 
-    // Buildings colour
-    fireEvent.change(within(colorsSection).getByLabelText("Buildings colour"), {
+    // Residential building use colour
+    fireEvent.change(within(colorsSection).getByLabelText("Residential colour"), {
       target: { value: hex("d48855") },
     });
-    expect(getColour("--building-uniform").toLowerCase()).toBe(hex("d48855"));
-    expect(uniformBuildingColor().toLowerCase()).toBe(hex("d48855"));
+    expect(getColour("--use-residential").toLowerCase()).toBe(hex("d48855"));
     expect(whiteCardCheckbox.checked).toBe(false);
 
     // Roads colour
@@ -521,8 +523,7 @@ describe("Display panel controls by view tab", () => {
     expect(document.querySelector(".map-attribution")).toBeNull();
 
     await user.click(screen.getByRole("tab", { name: "Drawing" }));
-    const drawingGroup = screen.getByRole("group", { name: "Drawing type" });
-    const isoBtn = within(drawingGroup).getByRole("button", { name: "Isometric" });
+    const isoBtn = screen.getByRole("button", { name: "Quick Isometric" });
     await user.click(isoBtn);
 
     // Isometric SVG drawing renders in the viewport
@@ -538,13 +539,14 @@ describe("Display panel controls by view tab", () => {
     await user.click(within(cornerGroup).getByRole("button", { name: "NW" }));
     expect(isoSvg.getAttribute("data-iso-corner")).toBe("nw");
 
-    // Scene Layers section matches Display › 3D model with inline colour swatches
+    // Scene Layers section matches Display › 3D model with per-use building rows and inline colour swatches
     const layersSection = screen.getByRole("region", { name: "Layers" });
     const colorsSection = layersSection;
     expect(screen.queryByRole("region", { name: "Colors" })).toBeNull();
 
     for (const label of [
-      "Buildings",
+      "Residential",
+      "Commercial",
       "Roads",
       "Footpaths",
       "Trees",
@@ -560,20 +562,21 @@ describe("Display panel controls by view tab", () => {
     expect(within(layersSection).queryByLabelText("Ground")).toBeNull();
     expect(within(layersSection).queryByLabelText("Blocks")).toBeNull();
 
-    // Toggling Buildings off removes building solids from the live Isometric SVG
-    expect(isoSvg.querySelector(".iso-solids .iso-building")).toBeTruthy();
-    await user.click(within(layersSection).getByLabelText("Buildings"));
+    // Toggling Residential and Commercial off removes building solids from the live Isometric SVG
+    expect(isoSvg.querySelectorAll(".iso-solids .iso-building").length).toBe(2);
+    await user.click(within(layersSection).getByLabelText("Residential"));
+    expect(isoSvg.querySelectorAll(".iso-solids .iso-building").length).toBe(1);
+    await user.click(within(layersSection).getByLabelText("Commercial"));
     expect(isoSvg.querySelector(".iso-solids .iso-building")).toBeNull();
 
-    // Picking a Buildings colour re-enables Buildings and updates the live SVG roof fill
+    // Picking a Residential colour re-enables Residential and updates the live colour variable
     const hex = (six: string) => `${String.fromCharCode(35)}${six}`;
-    fireEvent.change(within(colorsSection).getByLabelText("Buildings colour"), {
+    fireEvent.change(within(colorsSection).getByLabelText("Residential colour"), {
       target: { value: hex("c97a4b") },
     });
-    expect((within(layersSection).getByLabelText("Buildings") as HTMLInputElement).checked).toBe(true);
-    expect(getColour("--building-uniform").toLowerCase()).toBe(hex("c97a4b"));
-    const roofPath = isoSvg.querySelector(".iso-solids .iso-building path:last-child") as SVGPathElement;
-    expect(roofPath?.getAttribute("fill")?.toLowerCase()).toBe(hex("c97a4b"));
+    expect((within(layersSection).getByLabelText("Residential") as HTMLInputElement).checked).toBe(true);
+    expect(getColour("--use-residential").toLowerCase()).toBe(hex("c97a4b"));
+    expect(isoSvg.querySelectorAll(".iso-solids .iso-building").length).toBe(1);
   });
   it("keeps the right sidebar panel opaque across Drawing and Satellite views and bounds .fill between both sidebars", () => {
     const floatingCss = readFileSync(resolve(__dirname, "../floating.css"), "utf8");

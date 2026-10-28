@@ -17,10 +17,7 @@ import { commitColour, getColour } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
 import { CRS_NOTE, mgaCrs } from "../lib/crsZone";
 import {
-  commitLineStyles,
-  lineStyleBaseline,
   readDrawingStyle,
-  resetStoredLineStyles,
   type LineStyles,
 } from "../lib/drawingStyle";
 import {
@@ -142,7 +139,6 @@ import {
   writeStoredHiddenBuildings,
   type HiddenBuildingStore,
 } from "../lib/hiddenBuildings";
-import { ColoursEditor } from "./Colours";
 import { ImportMassingPanel } from "./ImportMassingPanel";
 import { useImportedMassing } from "./useImportedMassing";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
@@ -150,7 +146,6 @@ import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
 import { DrawingExplodedAxo } from "./DrawingExplodedAxo";
 import { DrawingIsometric } from "./DrawingIsometric";
 import { isometricDrawingBounds } from "../lib/isometricDrawing";
-import { LineStylesEditor } from "./LineStyles";
 import { Sidebar, type SidebarItem } from "./Sidebar";
 import { SatellitePane } from "./SatellitePane";
 import { Scene3D, type SceneExporter } from "./Scene3D";
@@ -277,6 +272,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   const [comFootprintRetryToken, setComFootprintRetryToken] = useState(0);
   const [comHeightsApplyFailed, setComHeightsApplyFailed] = useState(false);
   const [sidebar, dispatchSidebar] = useReducer(reduceSidebar, undefined, initialSidebarState);
+  const [hiddenBuildingUses, setHiddenBuildingUses] = useState<Set<BuildingUse>>(() => new Set());
   const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed();
   const sidebarModelRef = useRef(model);
   useEffect(() => {
@@ -284,6 +280,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     if (sidebarModelRef.current === model) return;
     sidebarModelRef.current = model;
     dispatchSidebar({ type: "new-model" });
+    setHiddenBuildingUses(new Set());
     const nextDisplay = view3dDisplayForModelOpen(window.localStorage);
     setView3dDisplay(nextDisplay);
     writeStoredView3dDisplay(window.localStorage, nextDisplay);
@@ -355,6 +352,8 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
         : null,
     [solar.sunStudy, model.center.lat, model.center.lon, solar.year, solar.month, solar.day],
   );
+  const effectiveSunStudyCasters: "all" | "selected" =
+    sunStudySelected.length > 0 ? "selected" : (solar.sunStudyCasters ?? "all");
 
   function planShadowInput(): PlanShadowInput {
     return {
@@ -900,10 +899,11 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     () => matchHiddenBuildings(overrideResult.buildings, hiddenStore, model.center),
     [overrideResult.buildings, hiddenStore, model.center],
   );
-  const visibleBuildings = useMemo(
-    () => filterHiddenBuildings(overrideResult.buildings, new Set(hiddenMatch.keys())),
-    [overrideResult.buildings, hiddenMatch],
-  );
+  const visibleBuildings = useMemo(() => {
+    const unhidden = filterHiddenBuildings(overrideResult.buildings, new Set(hiddenMatch.keys()));
+    if (hiddenBuildingUses.size === 0) return unhidden;
+    return unhidden.filter((building) => !hiddenBuildingUses.has(building.use ?? "unclassified"));
+  }, [overrideResult.buildings, hiddenMatch, hiddenBuildingUses]);
 
   const displayModel = useMemo(
     () => ({
@@ -922,13 +922,39 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
    * Drawing tab and its .ai exports: the display model (hidden buildings already gone) plus plan
    * footprints of visible imported massing. The 3D view and .3dm keep displayModel, so nothing is drawn twice.
    */
-  const drawingModel = useMemo(
-    () =>
-      massing.drawingBuildings.length
-        ? { ...displayModel, buildings: [...displayModel.buildings, ...massing.drawingBuildings] }
-        : displayModel,
-    [displayModel, massing.drawingBuildings],
-  );
+  const drawingModel = useMemo(() => {
+    const buildingsVisible = isLayer3dVisible(view3dDisplay, "buildings");
+    const treesVisible = isLayer3dVisible(view3dDisplay, "trees");
+    const roadsVisible = isLayer3dVisible(view3dDisplay, "roads");
+    const footpathsVisible = isLayer3dVisible(view3dDisplay, "footpaths");
+    const railVisible = isLayer3dVisible(view3dDisplay, "rail");
+    const landscapeVisible = isLayer3dVisible(view3dDisplay, "landscape");
+    const waterVisible = isLayer3dVisible(view3dDisplay, "water");
+    const contoursVisible = isLayer3dVisible(view3dDisplay, "contours");
+    const baseBuildings = buildingsVisible
+      ? massing.drawingBuildings.length
+        ? [...displayModel.buildings, ...massing.drawingBuildings]
+        : displayModel.buildings
+      : [];
+    return {
+      ...displayModel,
+      buildings: baseBuildings,
+      trees: treesVisible ? displayModel.trees : [],
+      roads: displayModel.roads.filter((r) => {
+        if (r.kind === "rail") return railVisible;
+        if (r.grade === "path") return footpathsVisible;
+        return roadsVisible;
+      }),
+      tramLines: railVisible ? displayModel.tramLines : [],
+      areas: displayModel.areas.filter((a) => {
+        if (a.kind === "green") return landscapeVisible;
+        if (a.kind === "water") return waterVisible;
+        return true;
+      }),
+      contourLayer: contoursVisible ? displayModel.contourLayer : undefined,
+      contours: contoursVisible ? displayModel.contours : false,
+    };
+  }, [displayModel, massing.drawingBuildings, view3dDisplay]);
 
   useEffect(() => {
     qaDisplayBuildingsRef.current = displayModel.buildings;
@@ -1189,9 +1215,15 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       setShowSource(false);
       setColourByUse(true);
     }
-    if (view3dDisplay.whiteCard) {
-      commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+    if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "buildings")) {
+      commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "buildings", true));
     }
+    setHiddenBuildingUses((prev) => {
+      if (!prev.has(use)) return prev;
+      const next = new Set(prev);
+      next.delete(use);
+      return next;
+    });
     setLineStyles(readDrawingStyle());
   }
 
@@ -1233,7 +1265,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   /** Sun study on: the seven hourly layers for the site plan exports (from the screen's cache). */
   async function sunStudyExportLayers(): Promise<SitePlanExportOptions["sunStudy"]> {
     if (!sunStudyDate) return null;
-    const casters = sunStudyCasterModel(drawingModel, solar.sunStudyCasters ?? "all", sunStudySelected);
+    const casters = sunStudyCasterModel(drawingModel, effectiveSunStudyCasters, sunStudySelected);
     return { layers: await sunStudyLayersFor(casters, sunStudyDate) };
   }
 
@@ -1442,6 +1474,10 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     total: heightBarParts.reduce((sum, part) => sum + part.value, 0),
   };
 
+  const presentBuildingUses = showBuildings
+    ? BUILDING_USES.filter((use) => useCounts[use] > 0)
+    : [];
+
   const availableLayers3d: {
     id: Layer3dId;
     label: string;
@@ -1451,24 +1487,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     onPick: (value: string) => void;
   }[] = (
     [
-      {
-        id: "buildings" as const,
-        label: "Buildings",
-        meta: displayModel.buildings.length.toLocaleString(),
-        color: getColour("--building-uniform"),
-        available: showBuildings,
-        onPick: (value: string) => {
-          commitColour("--building-uniform", value);
-          if (colourByUse || showSource) {
-            setShowSource(false);
-            setColourByUse(false);
-          }
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "buildings")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "buildings", true));
-          }
-          setLineStyles(readDrawingStyle());
-        },
-      },
       {
         id: "trees" as const,
         label: "Trees",
@@ -1582,6 +1600,49 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       },
     ]
   ).filter((layer) => layer.available);
+
+  const sceneLayerRows: {
+    id: string;
+    label: string;
+    meta: string;
+    color: string;
+    visible: boolean;
+    onToggle: (checked: boolean) => void;
+    onPick: (value: string) => void;
+  }[] = [
+    ...presentBuildingUses.map((use) => ({
+      id: `use:${use}`,
+      label: BUILDING_USE_META[use].label,
+      meta: useCounts[use].toLocaleString(),
+      color: BUILDING_USE_META[use].color,
+      visible: isLayer3dVisible(view3dDisplay, "buildings") && !hiddenBuildingUses.has(use),
+      onToggle: (checked: boolean) => {
+        setHiddenBuildingUses((prev) => {
+          const next = new Set(prev);
+          if (checked) {
+            next.delete(use);
+          } else {
+            next.add(use);
+          }
+          return next;
+        });
+        if (checked && !isLayer3dVisible(view3dDisplay, "buildings")) {
+          commitView3dDisplay(setLayer3dVisible(view3dDisplay, "buildings", true));
+        }
+      },
+      onPick: (value: string) => pickBuildingUseColour(use, value),
+    })),
+    ...availableLayers3d.map((layer) => ({
+      id: layer.id,
+      label: layer.label,
+      meta: layer.meta,
+      color: layer.color,
+      visible: isLayer3dVisible(view3dDisplay, layer.id),
+      onToggle: (checked: boolean) =>
+        commitView3dDisplay(setLayer3dVisible(view3dDisplay, layer.id, checked)),
+      onPick: layer.onPick,
+    })),
+  ];
 
   const modelRootRef = useRef<HTMLDivElement | null>(null);
   const introHoldReleasedRef = useRef(false);
@@ -1760,9 +1821,18 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 shadowInput={planShadowInput()}
                 sunStudy={sunStudyDate}
                 sunStudyMuted={sunStudyMutedOn(solar.sunStudy, solar.sunStudyMuted)}
-                sunStudyCasters={solar.sunStudyCasters ?? "all"}
+                sunStudyCasters={effectiveSunStudyCasters}
                 sunStudySelected={sunStudySelected}
-                onSunStudyPick={(id) => setSunStudySelected((current) => toggleSelection(current, id))}
+                onSunStudyPick={(id) =>
+                  setSunStudySelected((current) => {
+                    const next = toggleSelection(current, id);
+                    setSolar((prev) => ({
+                      ...prev,
+                      sunStudyCasters: next.length > 0 ? "selected" : "all",
+                    }));
+                    return next;
+                  })
+                }
                 uniformBuildings={!colourByUse && !showSource}
                 colourBySource={showSource}
                 highlightManual={showManualEdits && overrideResult.manualCount > 0}
@@ -1902,6 +1972,31 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     ))}
                   </div>
                 )}
+                <span className="v-sep" aria-hidden="true" />
+                <button
+                  type="button"
+                  className="cam-reset studio-reset-btn"
+                  onClick={() => {
+                    if (tab === "3d") {
+                      setSnapId((id) => id + 1);
+                    } else if (tab === "drawing" && drawing === "exploded-axo") {
+                      setExplodedViewport(
+                        explodedAxoViewportExtent(explodedAxoBounds(displayModel, axoSettings)),
+                      );
+                      setFitCounter((token) => token + 1);
+                    } else if (tab === "drawing" && drawing === "isometric") {
+                      setIsoDrawingViewport(
+                        explodedAxoViewportExtent(isometricDrawingBounds(displayModel, view.corner)),
+                      );
+                      setFitCounter((token) => token + 1);
+                    } else {
+                      setPlanViewport(planViewportExtent(displayModel.sideM));
+                      setFitCounter((token) => token + 1);
+                    }
+                  }}
+                >
+                  Reset view
+                </button>
               </>
             }
             headerRight={
@@ -2536,153 +2631,27 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                       </>
                     )}
                   </section>
-                  {availableLayers3d.length > 0 && (
+                  {sceneLayerRows.length > 0 && (
                     <>
                       <div className="outliner-divider" aria-hidden="true" />
                       <section className="sidebar-group outliner-section" aria-label="Layers">
                         <div className="card-head sidebar-gh">
                           <h3 className="card-title">Scene Layers</h3>
                           <span className="card-meta mono">
-                            {availableLayers3d.filter((l) => isLayer3dVisible(view3dDisplay, l.id)).length} visible
+                            {sceneLayerRows.filter((row) => row.visible).length} visible
                           </span>
                         </div>
                         <div className="outliner-rows display-switches" role="group" aria-label="3D layers">
-                          {availableLayers3d.map((layer) => {
-                            const visible = isLayer3dVisible(view3dDisplay, layer.id);
-                            return (
-                              <div key={layer.id} className="o-row studio-layer-row">
-                                <label className="o-left check-field">
-                                  <input
-                                    className="sr-only"
-                                    type="checkbox"
-                                    checked={visible}
-                                    onChange={(event) =>
-                                      commitView3dDisplay(setLayer3dVisible(view3dDisplay, layer.id, event.target.checked))
-                                    }
-                                  />
-                                  <span className={visible ? "o-eye l-eye on" : "o-eye l-eye off"} aria-hidden="true">{visible ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
-                                  <span className="o-name">{layer.label}</span>
-                                </label>
-                                <span className="o-right">
-                                  {layer.meta ? (
-                                    <span className="o-count studio-layer-meta mono" aria-hidden="true">
-                                      {layer.meta}
-                                    </span>
-                                  ) : null}
-                                  <label
-                                    className="o-swatch-wrap legend-swatch"
-                                    style={{ background: layer.color }}
-                                    title={`Change ${layer.label.toLowerCase()} colour`}
-                                  >
-                                    <input
-                                      type="color"
-                                      className="o-swatch-input"
-                                      aria-label={`${layer.label} colour`}
-                                      value={layer.color.toLowerCase()}
-                                      onChange={(event) => layer.onPick(event.target.value)}
-                                    />
-                                  </label>
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </section>
-                    </>
-                  )}
-                </div>
-              )}
-              {tab === "drawing" && (
-                <>
-              <div className="plan-switch drawing-type-switch" role="group" aria-label="Drawing type">
-                <button
-                  type="button"
-                  aria-pressed={drawing === "site"}
-                  onClick={() => {
-                    setDrawing("site");
-                    setTab("drawing");
-                  }}
-                >
-                  Site plan
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={drawing === "figure-ground"}
-                  onClick={() => {
-                    setDrawing("figure-ground");
-                    setTab("drawing");
-                  }}
-                >
-                  Figure-ground
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={drawing === "exploded-axo"}
-                  onClick={() => {
-                    setDrawing("exploded-axo");
-                    setTab("drawing");
-                  }}
-                >
-                  Exploded axo
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={drawing === "isometric"}
-                  onClick={() => {
-                    setDrawing("isometric");
-                    setTab("drawing");
-                  }}
-                >
-                  Isometric
-                </button>
-              </div>
-              {drawing === "isometric" && (
-                <div className="projection-block iso-drawing-controls">
-                  <section className="sidebar-group" aria-label="Compass view">
-                    <div className="sidebar-gh">
-                      <h3>Compass view</h3>
-                    </div>
-                    <div className="plan-switch" role="group" aria-label="Isometric corner">
-                      {ISO_CORNERS.map((corner) => (
-                        <button
-                          key={corner}
-                          type="button"
-                          aria-pressed={view.corner === corner}
-                          onClick={() => {
-                            commitView({ ...view, corner }, false);
-                            setIsoDrawingViewport(
-                              explodedAxoViewportExtent(isometricDrawingBounds(displayModel, corner)),
-                            );
-                          }}
-                        >
-                          {CORNER_LABEL[corner]}
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-                  {availableLayers3d.length > 0 && (
-                    <section className="sidebar-group outliner-section" aria-label="Layers">
-                      <div className="card-head sidebar-gh">
-                        <h3 className="card-title">Scene Layers</h3>
-                        <span className="card-meta mono">
-                          {availableLayers3d.filter((l) => isLayer3dVisible(view3dDisplay, l.id)).length} visible
-                        </span>
-                      </div>
-                      <div className="outliner-rows display-switches" role="group" aria-label="3D layers">
-                        {availableLayers3d.map((layer) => {
-                          const visible = isLayer3dVisible(view3dDisplay, layer.id);
-                          return (
+                          {sceneLayerRows.map((layer) => (
                             <div key={layer.id} className="o-row studio-layer-row">
                               <label className="o-left check-field">
                                 <input
                                   className="sr-only"
                                   type="checkbox"
-                                  checked={visible}
-                                  onChange={(event) =>
-                                    commitView3dDisplay(setLayer3dVisible(view3dDisplay, layer.id, event.target.checked))
-                                  }
+                                  checked={layer.visible}
+                                  onChange={(event) => layer.onToggle(event.target.checked)}
                                 />
-                                <span className={visible ? "o-eye l-eye on" : "o-eye l-eye off"} aria-hidden="true">{visible ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
+                                <span className={layer.visible ? "o-eye l-eye on" : "o-eye l-eye off"} aria-hidden="true">{layer.visible ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
                                 <span className="o-name">{layer.label}</span>
                               </label>
                               <span className="o-right">
@@ -2706,208 +2675,316 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                                 </label>
                               </span>
                             </div>
-                          );
-                        })}
-                      </div>
-                    </section>
+                          ))}
+                        </div>
+                      </section>
+                    </>
                   )}
                 </div>
               )}
-              {drawing === "exploded-axo" && (
-                <div className="axo-controls">
-                  <button
-                    type="button"
-                    className="ghost"
-                    onClick={() => {
-                      const next = referenceExplodedAxoSettings(displayModel.sideM, axoSettings);
-                      setAxoSettings(next);
-                      setExplodedViewport(explodedAxoViewportExtent(explodedAxoBounds(displayModel, next)));
-                    }}
-                  >
-                    Reference preset
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost"
-                    onClick={() => {
-                      const next = defaultExplodedAxoSettings(displayModel.sideM);
-                      setAxoSettings((prev) => ({ ...next, gapM: prev.gapM, showLabels: prev.showLabels, ...(prev.terrainExaggeration != null ? { terrainExaggeration: prev.terrainExaggeration } : {}) }));
-                      setExplodedViewport(explodedAxoViewportExtent(explodedAxoBounds(displayModel, { ...next, gapM: axoSettings.gapM })));
-                    }}
-                  >
-                    Default stack
-                  </button>
-                  <p className="kicker">Layers</p>
-                  <ul className="axo-layer-list" aria-label="Exploded axonometric layers (drag to reorder)">
-                    {axoSettings.layerOrder.map((id) => (
-                      <li
-                        key={id}
-                        draggable
-                        data-axo-layer-item={id}
-                        aria-label={`${AXO_LAYER_LABELS[id]} layer (drag up or down)`}
-                        onDragStart={(event) => {
-                          draggedAxoLayer.current = id;
-                          event.dataTransfer.effectAllowed = "move";
-                          event.dataTransfer.setData("text/plain", id);
-                        }}
-                        onDragOver={(event) => {
-                          event.preventDefault();
-                          event.dataTransfer.dropEffect = "move";
-                          const from = draggedAxoLayer.current;
-                          if (from && from !== id) dragReorderAxoLayer(from, id);
-                        }}
-                        onDrop={(event) => {
-                          event.preventDefault();
-                          const from = (draggedAxoLayer.current ?? event.dataTransfer.getData("text/plain")) as AxoLayerId;
-                          if (from && from !== id) dragReorderAxoLayer(from, id);
-                          draggedAxoLayer.current = null;
-                        }}
-                        onDragEnd={() => {
-                          draggedAxoLayer.current = null;
-                        }}
+              {tab === "drawing" && (
+                <div
+                  className="projection-block outliner-body"
+                  data-plan-width={planWidth === null ? undefined : Math.round(planWidth)}
+                >
+                  <section className="sidebar-group outliner-section" aria-label="View modes">
+                    <div className="card-head sidebar-gh">
+                      <h3 className="card-title">View Style</h3>
+                      <span className="card-meta mono">
+                        {drawingModel.buildings.length.toLocaleString()} massings
+                      </span>
+                    </div>
+                    {drawing !== "figure-ground" && (
+                      <>
+                        <div className="style-seg seg-mini" role="group" aria-label="Building style">
+                          <button
+                            type="button"
+                            className={colourByUse && !showSource ? "style-btn active" : "style-btn"}
+                            aria-pressed={colourByUse && !showSource}
+                            onClick={() => {
+                              setShowSource(false);
+                              setColourByUse(true);
+                            }}
+                          >
+                            Use
+                          </button>
+                          <button
+                            type="button"
+                            className={showSource ? "style-btn active" : "style-btn"}
+                            aria-pressed={showSource}
+                            onClick={() => {
+                              setShowSource(true);
+                            }}
+                          >
+                            Source
+                          </button>
+                          <button
+                            type="button"
+                            className={!colourByUse && !showSource ? "style-btn active" : "style-btn"}
+                            aria-pressed={!colourByUse && !showSource}
+                            onClick={() => {
+                              setShowSource(false);
+                              setColourByUse(false);
+                            }}
+                          >
+                            Uniform
+                          </button>
+                        </div>
+                        <div className="mini-flags sub-toggles display-switches" role="group" aria-label="View modes">
+                          <label className={showManualEdits ? "mini-flag is-on check-field" : "mini-flag check-field"}>
+                            <input
+                              className="sr-only"
+                              type="checkbox"
+                              checked={showManualEdits}
+                              onChange={(event) => {
+                                const next = event.target.checked;
+                                setShowManualEdits(next);
+                                writeStoredShowManualHeights(window.localStorage, next);
+                              }}
+                            />
+                            <span>Manual edits</span>
+                            <span className={`mini-chk ${showManualEdits ? "on" : ""}`} aria-hidden="true">{showManualEdits ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
+                          </label>
+                        </div>
+                      </>
+                    )}
+                    <label className="scale-field studio-scale-row">
+                      <span>Plan scale</span>
+                      <select
+                        value={figureScale}
+                        aria-label="Plan scale"
+                        onChange={(event) => setFigureScale(Number(event.target.value))}
                       >
+                        {FIGURE_SCALES.map((scale) => (
+                          <option key={scale} value={scale}>
+                            1:{scale}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {figureFit && <p className="fit-note">{figureFit}</p>}
+                    {model.contourLayer && (
+                      <p
+                        className="field-note"
+                        data-contour-source={model.contourLayer.source}
+                        data-contour-features={model.contourLayer.featureCount}
+                        data-contour-lines={model.contourLayer.lines.length}
+                        data-contour-ms={model.contourLayer.fetchMs}
+                        data-contour-interval={model.contourLayer.interval}
+                        data-contour-drawn={contourDrawerLabel(
+                          model.contourLayer,
+                          figureScale,
+                          lineStyles.contourCoarseIntervalM,
+                          lineStyles.contourCoarseFromScale,
+                        )}
+                      >
+                        Contours:{" "}
+                        {contourDrawerLabel(
+                          model.contourLayer,
+                          figureScale,
+                          lineStyles.contourCoarseIntervalM,
+                          lineStyles.contourCoarseFromScale,
+                        )}
+                      </p>
+                    )}
+                  </section>
+                  {drawing === "isometric" && (
+                    <>
+                      <div className="outliner-divider" aria-hidden="true" />
+                      <section className="sidebar-group outliner-section iso-drawing-controls" aria-label="Compass view">
+                        <div className="card-head sidebar-gh">
+                          <h3 className="card-title">Compass view</h3>
+                        </div>
+                        <div className="plan-switch" role="group" aria-label="Isometric corner">
+                          {ISO_CORNERS.map((corner) => (
+                            <button
+                              key={corner}
+                              type="button"
+                              aria-pressed={view.corner === corner}
+                              onClick={() => {
+                                commitView({ ...view, corner }, false);
+                                setIsoDrawingViewport(
+                                  explodedAxoViewportExtent(isometricDrawingBounds(displayModel, corner)),
+                                );
+                              }}
+                            >
+                              {CORNER_LABEL[corner]}
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+                    </>
+                  )}
+                  {drawing === "exploded-axo" && (
+                    <>
+                      <div className="outliner-divider" aria-hidden="true" />
+                      <section className="sidebar-group outliner-section axo-controls" aria-label="Exploded layers">
+                        <div className="card-head sidebar-gh">
+                          <h3 className="card-title">Exploded Stack</h3>
+                        </div>
+                        <button
+                          type="button"
+                          className="ghost"
+                          onClick={() => {
+                            const next = referenceExplodedAxoSettings(displayModel.sideM, axoSettings);
+                            setAxoSettings(next);
+                            setExplodedViewport(explodedAxoViewportExtent(explodedAxoBounds(displayModel, next)));
+                          }}
+                        >
+                          Reference preset
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost"
+                          onClick={() => {
+                            const next = defaultExplodedAxoSettings(displayModel.sideM);
+                            setAxoSettings((prev) => ({ ...next, gapM: prev.gapM, showLabels: prev.showLabels, ...(prev.terrainExaggeration != null ? { terrainExaggeration: prev.terrainExaggeration } : {}) }));
+                            setExplodedViewport(explodedAxoViewportExtent(explodedAxoBounds(displayModel, { ...next, gapM: axoSettings.gapM })));
+                          }}
+                        >
+                          Default stack
+                        </button>
+                        <ul className="axo-layer-list" aria-label="Exploded axonometric layers (drag to reorder)">
+                          {axoSettings.layerOrder.map((id) => (
+                            <li
+                              key={id}
+                              draggable
+                              data-axo-layer-item={id}
+                              aria-label={`${AXO_LAYER_LABELS[id]} layer (drag up or down)`}
+                              onDragStart={(event) => {
+                                draggedAxoLayer.current = id;
+                                event.dataTransfer.effectAllowed = "move";
+                                event.dataTransfer.setData("text/plain", id);
+                              }}
+                              onDragOver={(event) => {
+                                event.preventDefault();
+                                event.dataTransfer.dropEffect = "move";
+                                const from = draggedAxoLayer.current;
+                                if (from && from !== id) dragReorderAxoLayer(from, id);
+                              }}
+                              onDrop={(event) => {
+                                event.preventDefault();
+                                const from = (draggedAxoLayer.current ?? event.dataTransfer.getData("text/plain")) as AxoLayerId;
+                                if (from && from !== id) dragReorderAxoLayer(from, id);
+                                draggedAxoLayer.current = null;
+                              }}
+                              onDragEnd={() => {
+                                draggedAxoLayer.current = null;
+                              }}
+                            >
+                              <label className="check-field">
+                                <input
+                                  type="checkbox"
+                                  checked={axoSettings.layerVisible[id]}
+                                  onChange={(event) =>
+                                    setAxoSettings((prev) => ({
+                                      ...prev,
+                                      layerVisible: { ...prev.layerVisible, [id]: event.target.checked },
+                                    }))
+                                  }
+                                />
+                                {AXO_LAYER_LABELS[id]}
+                              </label>
+                              <span className="axo-layer-drag-handle" aria-hidden="true" title="Drag up or down to set height">
+                                <GripVertical size={14} strokeWidth={1.6} />
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                        <label className="scale-field">
+                          Layer gap, m
+                          <input
+                            type="range"
+                            min={Math.round(defaultExplodedAxoGapM(displayModel.sideM) * 0.5)}
+                            max={1000}
+                            step={1}
+                            value={Math.round(axoSettings.gapM)}
+                            onChange={(event) =>
+                              setAxoSettings((prev) => {
+                                const { layerLiftM: _cleared, ...rest } = prev;
+                                return { ...rest, gapM: Number(event.target.value) };
+                              })
+                            }
+                          />
+                          <span>{Math.round(axoSettings.gapM)} m</span>
+                        </label>
+                        {axoSettings.layerVisible.terrain && (
+                          <label className="scale-field">
+                            Terrain exaggeration
+                            <input
+                              type="range"
+                              min={AXO_TERRAIN_EXAGGERATION_RANGE.min}
+                              max={AXO_TERRAIN_EXAGGERATION_RANGE.max}
+                              step={AXO_TERRAIN_EXAGGERATION_RANGE.step}
+                              value={axoSettings.terrainExaggeration ?? DEFAULT_AXO_TERRAIN_EXAGGERATION}
+                              onChange={(event) =>
+                                setAxoSettings((prev) => ({ ...prev, terrainExaggeration: Number(event.target.value) }))
+                              }
+                            />
+                            <span>×{axoSettings.terrainExaggeration ?? DEFAULT_AXO_TERRAIN_EXAGGERATION}</span>
+                          </label>
+                        )}
                         <label className="check-field">
                           <input
                             type="checkbox"
-                            checked={axoSettings.layerVisible[id]}
-                            onChange={(event) =>
-                              setAxoSettings((prev) => ({
-                                ...prev,
-                                layerVisible: { ...prev.layerVisible, [id]: event.target.checked },
-                              }))
-                            }
+                            checked={axoSettings.showLabels}
+                            onChange={(event) => setAxoSettings((prev) => ({ ...prev, showLabels: event.target.checked }))}
                           />
-                          {AXO_LAYER_LABELS[id]}
+                          Layer labels
                         </label>
-                        <span className="axo-layer-drag-handle" aria-hidden="true" title="Drag up or down to set height">
-                          <GripVertical size={14} strokeWidth={1.6} />
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                  <label className="scale-field">
-                    Layer gap, m
-                    <input
-                      type="range"
-                      min={Math.round(defaultExplodedAxoGapM(displayModel.sideM) * 0.5)}
-                      max={1000}
-                      step={1}
-                      value={Math.round(axoSettings.gapM)}
-                      onChange={(event) =>
-                        setAxoSettings((prev) => {
-                          const { layerLiftM: _cleared, ...rest } = prev;
-                          return { ...rest, gapM: Number(event.target.value) };
-                        })
-                      }
-                    />
-                    <span>{Math.round(axoSettings.gapM)} m</span>
-                  </label>
-                  {axoSettings.layerVisible.terrain && (
-                    <label className="scale-field">
-                      Terrain exaggeration
-                      <input
-                        type="range"
-                        min={AXO_TERRAIN_EXAGGERATION_RANGE.min}
-                        max={AXO_TERRAIN_EXAGGERATION_RANGE.max}
-                        step={AXO_TERRAIN_EXAGGERATION_RANGE.step}
-                        value={axoSettings.terrainExaggeration ?? DEFAULT_AXO_TERRAIN_EXAGGERATION}
-                        onChange={(event) =>
-                          setAxoSettings((prev) => ({ ...prev, terrainExaggeration: Number(event.target.value) }))
-                        }
-                      />
-                      <span>×{axoSettings.terrainExaggeration ?? DEFAULT_AXO_TERRAIN_EXAGGERATION}</span>
-                    </label>
+                      </section>
+                    </>
                   )}
-                  <label className="check-field">
-                    <input
-                      type="checkbox"
-                      checked={axoSettings.showLabels}
-                      onChange={(event) => setAxoSettings((prev) => ({ ...prev, showLabels: event.target.checked }))}
-                    />
-                    Layer labels
-                  </label>
+                  {sceneLayerRows.length > 0 && (
+                    <>
+                      <div className="outliner-divider" aria-hidden="true" />
+                      <section className="sidebar-group outliner-section" aria-label="Layers">
+                        <div className="card-head sidebar-gh">
+                          <h3 className="card-title">Scene Layers</h3>
+                          <span className="card-meta mono">
+                            {sceneLayerRows.filter((row) => row.visible).length} visible
+                          </span>
+                        </div>
+                        <div className="outliner-rows display-switches" role="group" aria-label="3D layers">
+                          {sceneLayerRows.map((layer) => (
+                            <div key={layer.id} className="o-row studio-layer-row">
+                              <label className="o-left check-field">
+                                <input
+                                  className="sr-only"
+                                  type="checkbox"
+                                  checked={layer.visible}
+                                  onChange={(event) => layer.onToggle(event.target.checked)}
+                                />
+                                <span className={layer.visible ? "o-eye l-eye on" : "o-eye l-eye off"} aria-hidden="true">{layer.visible ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
+                                <span className="o-name">{layer.label}</span>
+                              </label>
+                              <span className="o-right">
+                                {layer.meta ? (
+                                  <span className="o-count studio-layer-meta mono" aria-hidden="true">
+                                    {layer.meta}
+                                  </span>
+                                ) : null}
+                                <label
+                                  className="o-swatch-wrap legend-swatch"
+                                  style={{ background: layer.color }}
+                                  title={`Change ${layer.label.toLowerCase()} colour`}
+                                >
+                                  <input
+                                    type="color"
+                                    className="o-swatch-input"
+                                    aria-label={`${layer.label} colour`}
+                                    value={layer.color.toLowerCase()}
+                                    onChange={(event) => layer.onPick(event.target.value)}
+                                  />
+                                </label>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    </>
+                  )}
                 </div>
-              )}
-              <label className="scale-field">
-                Plan scale
-                <select
-                  value={figureScale}
-                  aria-label="Plan scale"
-                  onChange={(event) => setFigureScale(Number(event.target.value))}
-                >
-                  {FIGURE_SCALES.map((scale) => (
-                    <option key={scale} value={scale}>
-                      1:{scale}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {figureFit && <p className="fit-note">{figureFit}</p>}
-              {model.contourLayer && (
-                <p
-                  className="field-note"
-                  data-contour-source={model.contourLayer.source}
-                  data-contour-features={model.contourLayer.featureCount}
-                  data-contour-lines={model.contourLayer.lines.length}
-                  data-contour-ms={model.contourLayer.fetchMs}
-                  data-contour-interval={model.contourLayer.interval}
-                  data-contour-drawn={contourDrawerLabel(
-                    model.contourLayer,
-                    figureScale,
-                    lineStyles.contourCoarseIntervalM,
-                    lineStyles.contourCoarseFromScale,
-                  )}
-                >
-                  Contours:{" "}
-                  {contourDrawerLabel(
-                    model.contourLayer,
-                    figureScale,
-                    lineStyles.contourCoarseIntervalM,
-                    lineStyles.contourCoarseFromScale,
-                  )}
-                </p>
-              )}
-              {drawing !== "isometric" && (
-                <>
-                  <LineStylesEditor
-                    style={lineStyles}
-                    baseline={lineStyleBaseline()}
-                    onChange={(next) => setLineStyles(commitLineStyles(next, lineStyleBaseline()))}
-                    onReset={() => setLineStyles(resetStoredLineStyles())}
-                  />
-                  <ColoursEditor onChange={() => setLineStyles(readDrawingStyle())} />
-                </>
-              )}
-                <div className="field">
-                  <div className="field-head">
-                    <p className="kicker">View width</p>
-                    <strong>{planWidth === null ? "—" : `${Math.round(planWidth)} m`}</strong>
-                  </div>
-                  <p className="field-note">
-                    Width of the drawing in view. The frame is {Math.round(model.sideM)} m on a side.
-                  </p>
-                  <button
-                    className="ghost"
-                    type="button"
-                    onClick={() => {
-                      if (drawing === "exploded-axo") {
-                        setExplodedViewport(
-                          explodedAxoViewportExtent(explodedAxoBounds(displayModel, axoSettings)),
-                        );
-                      } else if (drawing === "isometric") {
-                        setIsoDrawingViewport(
-                          explodedAxoViewportExtent(isometricDrawingBounds(displayModel, view.corner)),
-                        );
-                      } else {
-                        setPlanViewport(planViewportExtent(displayModel.sideM));
-                      }
-                      setFitCounter((token) => token + 1);
-                    }}
-                  >
-                    Fit frame
-                  </button>
-                </div>
-                </>
               )}
               {tab === "satellite" && (
                 <p className="field-note">Satellite is a preview of this frame. It is not included in the downloads.</p>
@@ -3169,15 +3246,17 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
               <div className="overlay-chips" role="group" aria-label="Scene overlay toggles">
                 {analysisKind === "solar" && (
                   <>
-                    <button
-                      type="button"
-                      className={solar.showPath ? "ov-chip on" : "ov-chip"}
-                      aria-pressed={solar.showPath}
-                      onClick={() => commitSolar({ ...solar, showPath: !solar.showPath })}
-                    >
-                      <span className="ov-dot" aria-hidden="true" />
-                      <span>3D Sun Dome</span>
-                    </button>
+                    {tab !== "drawing" && (
+                      <button
+                        type="button"
+                        className={solar.showPath ? "ov-chip on" : "ov-chip"}
+                        aria-pressed={solar.showPath}
+                        onClick={() => commitSolar({ ...solar, showPath: !solar.showPath })}
+                      >
+                        <span className="ov-dot" aria-hidden="true" />
+                        <span>3D Sun Dome</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       className={solar.castShadows ? "ov-chip on" : "ov-chip"}
@@ -3187,21 +3266,36 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                       <span className="ov-dot" aria-hidden="true" />
                       <span>Shadows</span>
                     </button>
-                    <button
-                      type="button"
-                      className={solar.sunStudy ? "ov-chip on" : "ov-chip"}
-                      aria-pressed={Boolean(solar.sunStudy)}
-                      onClick={() =>
-                        commitSolar({
-                          ...solar,
-                          sunStudy: !solar.sunStudy,
-                          sunStudyCasters: solar.sunStudyCasters ?? "all",
-                        })
-                      }
-                    >
-                      <span className="ov-dot" aria-hidden="true" />
-                      <span>9–3pm Plan Fan</span>
-                    </button>
+                    {tab === "drawing" && drawing === "site" && (
+                      <button
+                        type="button"
+                        className={solar.sunStudy ? "ov-chip on" : "ov-chip"}
+                        aria-pressed={Boolean(solar.sunStudy)}
+                        onClick={() =>
+                          commitSolar({
+                            ...solar,
+                            sunStudy: !solar.sunStudy,
+                            sunStudyCasters: sunStudySelected.length > 0 ? "selected" : "all",
+                          })
+                        }
+                      >
+                        <span className="ov-dot" aria-hidden="true" />
+                        <span>9–3pm Plan Fan</span>
+                      </button>
+                    )}
+                    {tab === "drawing" && drawing === "site" && Boolean(solar.sunStudy) && sunStudySelected.length > 0 && (
+                      <button
+                        type="button"
+                        className="ov-chip on"
+                        aria-label={`Clear ${sunStudySelected.length} selected shadow buildings`}
+                        onClick={() => {
+                          setSunStudySelected([]);
+                          commitSolar({ ...solar, sunStudyCasters: "all" });
+                        }}
+                      >
+                        <span>{sunStudySelected.length} selected ×</span>
+                      </button>
+                    )}
                   </>
                 )}
 
@@ -3258,18 +3352,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 )}
               </div>
 
-              <div className="cam-mini-group">
-                <span className="compass-mini studio-compass-chip mono" aria-hidden="true">
-                  N ▲
-                </span>
-                <button
-                  type="button"
-                  className="cam-reset studio-reset-btn"
-                  onClick={() => setSnapId((id) => id + 1)}
-                >
-                  Reset view
-                </button>
-              </div>
             </div>
 
             <div className="env-bottom-row">
@@ -3309,24 +3391,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                         onClick={() => commitSolar({ ...solar, month: 12, day: 22, castShadows: true })}
                       >
                         22 Dec
-                      </button>
-                      <button
-                        type="button"
-                        className={solar.sunStudy ? "p-pill active" : "p-pill"}
-                        aria-pressed={Boolean(solar.sunStudy)}
-                        onClick={() =>
-                          commitSolar({
-                            ...solar,
-                            month: 9,
-                            day: 22,
-                            hour: 15,
-                            minute: 0,
-                            castShadows: true,
-                            showPath: true,
-                          })
-                        }
-                      >
-                        ResCode 9–3
                       </button>
                     </div>
 
@@ -3522,20 +3586,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             <span className="studio-solar-time mono">
               {String(solar.hour).padStart(2, "0")}:{String(solar.minute).padStart(2, "0")} AEST
             </span>
-            <span className="v-sep hud-sep" aria-hidden="true" />
-            <span className="compass-mini studio-compass-chip" aria-hidden="true">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
-                <polygon points="12 2 16 14 12 11 8 14 12 2" fill="currentColor" />
-              </svg>
-              <span className="mono">N</span>
-            </span>
-            <button
-              type="button"
-              className="cam-reset studio-reset-btn"
-              onClick={() => setSnapId((id) => id + 1)}
-            >
-              Reset view
-            </button>
           </div>
         )}
         {model.terrainError && (

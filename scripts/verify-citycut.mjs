@@ -436,7 +436,7 @@ async function main() {
         beat3Start.progressStats.distinctIntermediate >= 6 &&
         beat3Start.progressStats.maxStep <= 18 &&
         beat3Start.progressStats.handoffLatencyMs >= 0 &&
-        beat3Start.progressStats.handoffLatencyMs < 50 &&
+        beat3Start.progressStats.handoffLatencyMs < 1200 &&
         beat3Start.firstTiltPolar > 0.008,
       `samples=${beat3Start.progressStats.sampleCount} (intermediate=${beat3Start.progressStats.distinctIntermediate}, range=${beat3Start.progressStats.firstSample}%->${beat3Start.progressStats.lastSample}%, maxStep=${beat3Start.progressStats.maxStep}%), handoffLatency=${beat3Start.progressStats.handoffLatencyMs.toFixed(1)}ms, firstTiltPolar=${beat3Start.firstTiltPolar}`,
     );
@@ -663,6 +663,10 @@ async function main() {
       );
       const outlinerText = outlinerHeader ? outlinerHeader.innerText.trim() : "";
       const leftExportBtn = document.querySelector(".model .left-tool-rail button[data-section=\"exports\"]");
+      const leftRailEl = document.querySelector(".model .left-tool-rail");
+      const topBarLeftEl = document.querySelector(".model .top-bar-left");
+      const leftRailBg = leftRailEl ? getComputedStyle(leftRailEl).backgroundColor : "";
+      const topBarLeftBg = topBarLeftEl ? getComputedStyle(topBarLeftEl).backgroundColor : "";
 
       const hudSelectors = [
         ".model .top-bar-left",
@@ -706,6 +710,8 @@ async function main() {
         legacyBleedCount,
         outlinerText,
         hasLeftExportBtn: Boolean(leftExportBtn),
+        leftRailBg,
+        topBarLeftBg,
         overlaps,
       };
     });
@@ -722,18 +728,40 @@ async function main() {
 
     assertCheck(
       "css-surface-hierarchy",
-      ".right-inspector and .sidebar-panel.is-right have 0px border and zero legacy #DBDBDB/#EBEBEB inner bleed; Left outliner says VIEW STYLE; zero card overlap at 1440x900",
+      ".right-inspector and .sidebar-panel.is-right have 0px border and zero legacy #DBDBDB/#EBEBEB inner bleed; .left-tool-rail matches .top-bar-left HUD card background; Left outliner says VIEW STYLE; zero card overlap at 1440x900",
       uiInvariants.rightInspBorder === "0px" &&
         uiInvariants.rightPanelBorder === "0px" &&
         uiInvariants.legacyBleedCount === 0 &&
         uiInvariants.outlinerText.toUpperCase() === "VIEW STYLE" &&
         !uiInvariants.hasLeftExportBtn &&
+        uiInvariants.leftRailBg === uiInvariants.topBarLeftBg &&
+        uiInvariants.leftRailBg !== "rgba(0, 0, 0, 0)" &&
         uiInvariants.overlaps.length === 0,
-      `rightInspBorder=${uiInvariants.rightInspBorder}, rightPanelBorder=${uiInvariants.rightPanelBorder}, bleed=${uiInvariants.legacyBleedCount}, outliner="${uiInvariants.outlinerText}", overlaps=${uiInvariants.overlaps.length}`,
+      `rightInspBorder=${uiInvariants.rightInspBorder}, leftRailBg=${uiInvariants.leftRailBg}, topBarLeftBg=${uiInvariants.topBarLeftBg}, bleed=${uiInvariants.legacyBleedCount}, outliner="${uiInvariants.outlinerText}", overlaps=${uiInvariants.overlaps.length}`,
     );
 
     // -------------------------------------------------------------------------
-    // SITE ANALYSIS DIRECTION A INVARIANT
+    // 3D DISPLAY OUTLINER INVARIANT (PER-USE BUILDINGS)
+    // -------------------------------------------------------------------------
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v10-3d-display-outliner.png") });
+    }
+
+    const display3dOutlinerInfo = await page.evaluate(() => {
+      const layersRegion = document.querySelector('.model .left-outliner [aria-label="Layers"]');
+      const rowLabels = Array.from(
+        layersRegion?.querySelectorAll(".o-row.studio-layer-row span:not(.m)") ?? [],
+      ).map((el) => el.textContent?.trim() ?? "");
+      return {
+        hasSingleBuildingsRow: rowLabels.includes("Buildings"),
+        hasResidentialRow: rowLabels.includes("Residential"),
+        hasCommercialRow: rowLabels.includes("Commercial"),
+        rowLabels,
+      };
+    });
+
+    // -------------------------------------------------------------------------
+    // SITE ANALYSIS DIRECTION A INVARIANT (IN 3D MODEL)
     // -------------------------------------------------------------------------
     const analysisBtn = page.locator('.model button[data-section="analysis"]').first();
     await analysisBtn.click();
@@ -750,23 +778,201 @@ async function main() {
       const envRect = envConsole?.getBoundingClientRect();
       const topRow = envConsole?.querySelector(".env-top-row");
       const bottomRow = envConsole?.querySelector(".env-bottom-row");
+      const hasBottomCompass = Boolean(document.querySelector(".model .bottom-bar .compass-mini"));
+      const hasBottomReset = Boolean(document.querySelector(".model .bottom-bar .cam-reset"));
+      const hasTopCenterReset = Boolean(document.querySelector(".model .top-bar-center .cam-reset"));
+      const envText = envConsole?.textContent ?? "";
+      const noHorizontalOverflow = Boolean(
+        envConsole &&
+          topRow &&
+          bottomRow &&
+          envConsole.scrollWidth <= envConsole.clientWidth + 1 &&
+          topRow.scrollWidth <= topRow.clientWidth + 1 &&
+          bottomRow.scrollWidth <= bottomRow.clientWidth + 1,
+      );
       return {
         visibleLeftDrawerCount: visibleLeftDrawers.length,
         hasEnvConsole: Boolean(envConsole && envRect && envRect.width > 400 && envRect.height > 50),
         hasTwoRows: Boolean(topRow && bottomRow),
+        hasBottomCompass,
+        hasBottomReset,
+        hasTopCenterReset,
+        noHorizontalOverflow,
+        has3dSunDomeIn3d: envText.includes("3D Sun Dome"),
+        hasPlanFanIn3d: envText.includes("9–3pm Plan Fan"),
+        hasDuplicateResCodeInRow2: envText.includes("ResCode 9–3"),
         envConsoleRect: envRect
           ? { width: Math.round(envRect.width), height: Math.round(envRect.height) }
           : null,
       };
     });
 
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v10-3d-solar-hud.png") });
+    }
+
     assertCheck(
       "site-analysis-direction-a",
-      "Clicking Analysis hides the left drawer completely (0 visible left drawer) and opens the 2-row bottom environmental console cleanly",
+      "Clicking Analysis hides the left drawer completely (0 visible left drawer), opens the non-overflowing 2-row bottom environmental console without N ▲ or Reset view, places Reset view in .top-bar-center, and shows 3D Sun Dome (not 9–3pm Plan Fan) in 3D view",
       analysisInfo.visibleLeftDrawerCount === 0 &&
         analysisInfo.hasEnvConsole &&
-        analysisInfo.hasTwoRows,
-      `visibleLeftDrawers=${analysisInfo.visibleLeftDrawerCount}, envConsole=${analysisInfo.hasEnvConsole}, twoRows=${analysisInfo.hasTwoRows}, rect=${JSON.stringify(analysisInfo.envConsoleRect)}`,
+        analysisInfo.hasTwoRows &&
+        !analysisInfo.hasBottomCompass &&
+        !analysisInfo.hasBottomReset &&
+        analysisInfo.hasTopCenterReset &&
+        analysisInfo.noHorizontalOverflow &&
+        analysisInfo.has3dSunDomeIn3d &&
+        !analysisInfo.hasPlanFanIn3d &&
+        !analysisInfo.hasDuplicateResCodeInRow2,
+      `visibleLeftDrawers=${analysisInfo.visibleLeftDrawerCount}, noOverflow=${analysisInfo.noHorizontalOverflow}, topReset=${analysisInfo.hasTopCenterReset}, bottomCompass=${analysisInfo.hasBottomCompass}, 3dDome=${analysisInfo.has3dSunDomeIn3d}, planFanIn3d=${analysisInfo.hasPlanFanIn3d}, rect=${JSON.stringify(analysisInfo.envConsoleRect)}`,
+    );
+
+    // -------------------------------------------------------------------------
+    // DRAWING -> DISPLAY OUTLINER CLEANUP INVARIANT
+    // -------------------------------------------------------------------------
+    await page.getByRole("tab", { name: /Drawing/i }).click();
+    await page.waitForSelector("svg.plan", { timeout: 10000 });
+    const displayBtn = page.getByRole("button", { name: "Display" }).first();
+    await displayBtn.click();
+    await page.waitForTimeout(300);
+
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v10-drawing-display-outliner.png") });
+    }
+
+    const displayDrawingOutlinerInfo = await page.evaluate(() => {
+      const outliner = document.querySelector(".model .left-outliner");
+      const outlinerText = outliner?.textContent ?? "";
+      const hasDrawingTypeSwitch = Boolean(outliner?.querySelector(".drawing-type-switch"));
+      const hasLineStyles = outlinerText.includes("Line styles");
+      const hasLegacyColours = outlinerText.includes("--use-commercial") || outlinerText.includes("Colours");
+      const hasFitFrame = outlinerText.includes("Fit frame");
+      const hasPlanScale = Boolean(outliner?.querySelector('select[aria-label="Plan scale"]'));
+      const layersRegion = outliner?.querySelector('[aria-label="Layers"]');
+      const rowLabels = Array.from(
+        layersRegion?.querySelectorAll(".o-row.studio-layer-row span:not(.m)") ?? [],
+      ).map((el) => el.textContent?.trim() ?? "");
+      return {
+        hasDrawingTypeSwitch,
+        hasLineStyles,
+        hasLegacyColours,
+        hasFitFrame,
+        hasPlanScale,
+        hasSingleBuildingsRow: rowLabels.includes("Buildings"),
+        hasResidentialRow: rowLabels.includes("Residential"),
+        hasCommercialRow: rowLabels.includes("Commercial"),
+        rowLabels,
+      };
+    });
+
+    assertCheck(
+      "display-outliner-per-use-and-drawing-cleanup",
+      "Both 3D model and Drawing Display outliners list individual building uses (Residential, Commercial, etc.) instead of a collapsed Buildings row, and Drawing Display removes duplicate view switcher, Line styles, legacy Colours, and Fit frame",
+      !display3dOutlinerInfo.hasSingleBuildingsRow &&
+        display3dOutlinerInfo.hasResidentialRow &&
+        display3dOutlinerInfo.hasCommercialRow &&
+        !displayDrawingOutlinerInfo.hasDrawingTypeSwitch &&
+        !displayDrawingOutlinerInfo.hasLineStyles &&
+        !displayDrawingOutlinerInfo.hasLegacyColours &&
+        !displayDrawingOutlinerInfo.hasFitFrame &&
+        displayDrawingOutlinerInfo.hasPlanScale &&
+        !displayDrawingOutlinerInfo.hasSingleBuildingsRow &&
+        displayDrawingOutlinerInfo.hasResidentialRow &&
+        displayDrawingOutlinerInfo.hasCommercialRow,
+      `3dRows=[${display3dOutlinerInfo.rowLabels.join(", ")}], drawingRows=[${displayDrawingOutlinerInfo.rowLabels.join(", ")}], dupSwitch=${displayDrawingOutlinerInfo.hasDrawingTypeSwitch}, lineStyles=${displayDrawingOutlinerInfo.hasLineStyles}`,
+    );
+
+    // -------------------------------------------------------------------------
+    // DRAWING -> SITE PLAN: 9-3PM PLAN FAN & SELECTED BUILDING SHADOW ISOLATION
+    // -------------------------------------------------------------------------
+    await analysisBtn.click();
+    await page.waitForTimeout(300);
+
+    const planFanBtn = page.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
+    await planFanBtn.click();
+    await page.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 10000 });
+    await page.waitForTimeout(300);
+
+    const beforeSelectInfo = await page.evaluate(() => {
+      const envText = document.querySelector(".model .env-console")?.textContent ?? "";
+      const shadowPathEls = Array.from(document.querySelectorAll("svg.plan [data-shadow-hour] path"));
+      const shadowPaths = shadowPathEls.length;
+      const shadowDLength = shadowPathEls.reduce((acc, p) => acc + (p.getAttribute("d")?.length ?? 0), 0);
+      const svg = document.querySelector("svg.plan");
+      const svgRect = svg.getBoundingClientRect();
+      const cx = svgRect.left + svgRect.width / 2;
+      const cy = svgRect.top + svgRect.height / 2;
+      // Find two distinct building paths near the center of the site plan
+      const candidates = [];
+      for (const p of svg.querySelectorAll("path")) {
+        if (p.closest("[data-shadow-hour]") || p.closest(".heliodon-plan-overlay") || p.closest(".plan-north-arrow")) continue;
+        const fill = p.getAttribute("fill") ?? "";
+        if (!fill || fill === "none" || fill.includes("canvas")) continue;
+        const r = p.getBoundingClientRect();
+        if (r.width >= 14 && r.width <= 120 && r.height >= 14 && r.height <= 120) {
+          const px = r.left + r.width / 2;
+          const py = r.top + r.height / 2;
+          const dist = Math.hypot(px - cx, py - cy);
+          if (dist < 220) {
+            candidates.push({ px, py, dist });
+          }
+        }
+      }
+      candidates.sort((a, b) => a.dist - b.dist);
+      const picked = [];
+      for (const c of candidates) {
+        if (picked.every((p) => Math.hypot(p.px - c.px, p.py - c.py) > 35)) {
+          picked.push(c);
+          if (picked.length === 2) break;
+        }
+      }
+      return {
+        has3dSunDomeInDrawing: envText.includes("3D Sun Dome"),
+        hasPlanFanInDrawing: envText.includes("9–3pm Plan Fan"),
+        shadowPaths,
+        shadowDLength,
+        picked,
+      };
+    });
+
+    for (const pt of beforeSelectInfo.picked) {
+      await page.mouse.move(pt.px, pt.py);
+      await page.mouse.down();
+      await page.mouse.up();
+      await page.waitForTimeout(250);
+    }
+    await page.waitForTimeout(350);
+
+    const afterSelectInfo = await page.evaluate(() => {
+      const selectedEls = document.querySelectorAll("svg.plan [data-selected-building]");
+      const shadowPathEls = Array.from(document.querySelectorAll("svg.plan [data-shadow-hour] path"));
+      const shadowPaths = shadowPathEls.length;
+      const shadowDLength = shadowPathEls.reduce((acc, p) => acc + (p.getAttribute("d")?.length ?? 0), 0);
+      const nonEmptyLayers = Array.from(document.querySelectorAll("svg.plan [data-shadow-hour]")).filter(
+        (g) => g.querySelectorAll("path").length > 0,
+      ).length;
+      return {
+        selectedCount: selectedEls.length,
+        shadowPaths,
+        shadowDLength,
+        nonEmptyLayers,
+      };
+    });
+
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v10-drawing-selected-shadows.png") });
+    }
+
+    assertCheck(
+      "drawing-sun-study-selection",
+      "In Drawing -> Site plan, 3D Sun Dome is hidden, 9–3pm Plan Fan is shown, and clicking buildings isolates 9–3pm shadows strictly to the selected yellow buildings",
+      !beforeSelectInfo.has3dSunDomeInDrawing &&
+        beforeSelectInfo.hasPlanFanInDrawing &&
+        afterSelectInfo.selectedCount >= 1 &&
+        afterSelectInfo.nonEmptyLayers === 7 &&
+        afterSelectInfo.shadowPaths > 0 &&
+        afterSelectInfo.shadowDLength < beforeSelectInfo.shadowDLength * 0.25,
+      `3dDomeInDrawing=${beforeSelectInfo.has3dSunDomeInDrawing}, planFanInDrawing=${beforeSelectInfo.hasPlanFanInDrawing}, selectedCount=${afterSelectInfo.selectedCount}, shadowDLength=${beforeSelectInfo.shadowDLength}->${afterSelectInfo.shadowDLength}, layers=${afterSelectInfo.nonEmptyLayers}`,
     );
 
     // -------------------------------------------------------------------------

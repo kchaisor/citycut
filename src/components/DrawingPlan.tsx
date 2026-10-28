@@ -259,8 +259,8 @@ export function DrawingPlan({
   const annotationInk = figure ? figureFill : getColour("--sun-compass-label");
   const shadowRings = useMemo(() => {
     if (!shadowInput || figure || study) return [];
-    return planShadowRings(model, shadowInput, castShadows);
-  }, [castShadows, figure, model, shadowInput, study]);
+    return planShadowRings(casterModel, shadowInput, castShadows);
+  }, [castShadows, figure, casterModel, shadowInput, study]);
   const annotations = (
     <>
       <g aria-hidden="true" className="plan-north-arrow">

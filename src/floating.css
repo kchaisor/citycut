@@ -1079,11 +1079,16 @@ body,
   z-index: 30;
   height: 42px;
   border-radius: 11px;
-  padding: 0 12px 0 8px;
+  padding: 0 9px 0 8px;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 7px;
   pointer-events: auto;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-outer) !important;
+  box-shadow: var(--shadow-hud) !important;
+  backdrop-filter: blur(18px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
 }
 
 .model .top-bar-left .sidebar-brand {
@@ -1183,6 +1188,11 @@ body,
   align-items: center;
   gap: 3px;
   pointer-events: auto;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-outer) !important;
+  box-shadow: var(--shadow-hud) !important;
+  backdrop-filter: blur(18px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
 }
 
 .model .top-bar-center .header-center-cluster {
@@ -1269,6 +1279,11 @@ body,
   align-items: center;
   gap: 9px;
   pointer-events: auto;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-outer) !important;
+  box-shadow: var(--shadow-hud) !important;
+  backdrop-filter: blur(18px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
 }
 
 .model .top-bar-right .header-right-cluster {
@@ -1338,7 +1353,8 @@ body,
 }
 
 /* 2. Left Vertical Tool Rail (width: 52px at top: 68px; left: 14px) */
-.model .left-tool-rail.sidebar-rail {
+.model .left-tool-rail.sidebar-rail,
+.model .left-tool-rail.sidebar-rail.icon-rail.hud-card {
   position: fixed;
   top: 68px;
   left: 14px;
@@ -1351,6 +1367,11 @@ body,
   flex-direction: column;
   gap: 3px;
   pointer-events: auto;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-outer) !important;
+  box-shadow: var(--shadow-hud) !important;
+  backdrop-filter: blur(18px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
 }
 
 .model .left-tool-rail .rail-btn.icon-rail-btn {
@@ -1391,7 +1412,8 @@ body,
 }
 
 /* Compact 248px Left Outliner Card (top: 68px; left: 74px) */
-.model .left-outliner.sidebar-panel {
+.model .left-outliner.sidebar-panel,
+.model .left-outliner.sidebar-panel.hud-card {
   position: fixed;
   top: 68px;
   left: 74px;
@@ -1406,6 +1428,11 @@ body,
   gap: 10px;
   overflow-y: auto;
   pointer-events: auto;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-outer) !important;
+  box-shadow: var(--shadow-hud) !important;
+  backdrop-filter: blur(18px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
 }
 
 .model .left-outliner .sidebar-head {
@@ -1964,23 +1991,30 @@ body,
   cursor: pointer;
 }
 
+.model .top-bar-center .cam-reset,
 .model .bottom-bar .cam-reset {
-  height: 26px;
-  padding: 0 9px;
-  border-radius: 6px;
-  border: 0;
-  background: var(--bg-sub);
-  font-family: var(--sans);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ink-2);
-  cursor: pointer;
-  white-space: nowrap;
+  height: 26px !important;
+  min-height: 26px !important;
+  padding: 0 9px !important;
+  border-radius: 6px !important;
+  border: 1px solid var(--border-subtle) !important;
+  background: var(--bg-sub) !important;
+  font-family: var(--sans) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  color: var(--ink-2) !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: none !important;
 }
 
+.model .top-bar-center .cam-reset:hover,
 .model .bottom-bar .cam-reset:hover {
-  background: var(--bg-elev);
-  color: var(--ink);
+  background: var(--bg-elev) !important;
+  color: var(--ink) !important;
 }
 
 
@@ -2831,7 +2865,7 @@ body,
 .model .top-bar-center .tabs .mode-btn {
   height: 32px !important;
   min-height: 32px !important;
-  padding: 0 13px !important;
+  padding: 0 10px !important;
   margin: 0 !important;
   border-radius: 7px !important;
   border: 0 !important;
@@ -3216,7 +3250,7 @@ body,
 .model .left-outliner .plan-switch button {
   height: 26px !important;
   min-height: 26px !important;
-  padding: 0 10px !important;
+  padding: 0 7.5px !important;
   border-radius: 5px !important;
   border: 0 !important;
   background: transparent !important;
@@ -3510,12 +3544,16 @@ body,
   left: 50% !important;
   transform: translateX(-50%) !important;
   z-index: 32 !important;
-  width: min(920px, calc(100vw - 140px)) !important;
+  width: max-content !important;
+  min-width: min(720px, calc(100vw - 32px)) !important;
+  max-width: calc(100vw - 32px) !important;
   height: auto !important;
   min-height: 76px !important;
   padding: 7px 11px !important;
   border-radius: 12px !important;
-  background: var(--bg-elev) !important;
+  background: var(--bg-card) !important;
+  backdrop-filter: blur(18px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
   border: 1px solid var(--border-outer) !important;
   box-shadow: var(--shadow-hud) !important;
   display: flex !important;
@@ -3978,4 +4016,40 @@ body,
   opacity: 0 !important;
   translate: 0 -10px !important;
   pointer-events: none !important;
+}
+
+/* Studio HUD Drawing Display outliner scale row */
+.model .outliner-section .studio-scale-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  margin: 6px 0 0 !important;
+  padding: 4px 8px !important;
+  border-radius: 7px !important;
+  background: var(--hud-sub-toggle-bg) !important;
+  border: 0 !important;
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
+  color: var(--ink) !important;
+}
+
+.model .outliner-section .studio-scale-row select {
+  height: 24px !important;
+  border-radius: 5px !important;
+  border: 1px solid var(--border-inner) !important;
+  background: var(--bg-elev) !important;
+  padding: 0 6px !important;
+  font-family: var(--mono) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  color: var(--ink) !important;
+}
+
+.model .outliner-section .fit-note,
+.model .outliner-section .field-note {
+  margin: 4px 0 0 !important;
+  font-size: 10.5px !important;
+  line-height: 1.35 !important;
+  color: var(--hud-muted-2) !important;
 }
