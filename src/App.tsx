@@ -960,6 +960,8 @@ export default function App() {
         }
         setHandoffUnderlay("holding");
       }
+      await yieldToBrowserFrame(isDomTestStart);
+      if (controller.signal.aborted) return;
       setModel(draftModel);
       setPhase("model");
     } catch (err) {

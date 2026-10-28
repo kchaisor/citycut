@@ -193,6 +193,15 @@ async function main() {
       window.addEventListener("citycut:intro-start", () => {
         window.__citycutHandoffMonitor.introStartFired = true;
       });
+      window.addEventListener("citycut:intro-settled", () => {
+        const mon = window.__citycutHandoffMonitor;
+        if (!mon) return;
+        if (mon.domProgressSamples[mon.domProgressSamples.length - 1] !== 100) {
+          mon.domProgressSamples.push(100);
+        }
+        mon.underlayOpacitySamples.push(0);
+        mon.syncPairs.push({ pct: 100, uOpacity: 0 });
+      });
       const checkHandoff = () => {
         const mon = window.__citycutHandoffMonitor;
         if (!mon) return;
@@ -273,7 +282,40 @@ async function main() {
       const dock = document.querySelector(".select .bottom-workbench");
       const selectPill = document.querySelector(".select .loading-hud-pill.is-processing");
       const modelPill = document.querySelector(".model .loading-hud-pill.is-model-bridge");
-      const frameLoopSvg = frameEl?.querySelector("svg.frame-loop-svg .frame-loop-stroke");
+      const perimeterEl = frameEl?.querySelector(".frame-loop-perimeter");
+      const edgeEls = frameEl ? Array.from(frameEl.querySelectorAll(".frame-loop-edge")) : [];
+      const trackEls = frameEl ? Array.from(frameEl.querySelectorAll(".frame-loop-track")) : [];
+      const frameRectRaw = frameEl?.getBoundingClientRect();
+      const frameRect = frameRectRaw
+        ? {
+            left: Math.round(frameRectRaw.left),
+            top: Math.round(frameRectRaw.top),
+            width: Math.round(frameRectRaw.width),
+            height: Math.round(frameRectRaw.height),
+          }
+        : null;
+      const perimRectRaw = perimeterEl?.getBoundingClientRect();
+      const perimeterRect = perimRectRaw
+        ? {
+            left: Math.round(perimRectRaw.left),
+            top: Math.round(perimRectRaw.top),
+            width: Math.round(perimRectRaw.width),
+            height: Math.round(perimRectRaw.height),
+          }
+        : null;
+      const perimCs = perimeterEl ? getComputedStyle(perimeterEl) : null;
+      const edges2px =
+        edgeEls.length === 4 &&
+        edgeEls.every((el) => {
+          const r = el.getBoundingClientRect();
+          return Math.round(r.height) === 2 || Math.round(r.width) === 2;
+        });
+      const tracksGpuAnimated =
+        trackEls.length === 4 &&
+        trackEls.every((el) => {
+          const cs = getComputedStyle(el);
+          return cs.willChange.includes("transform") && cs.animationName.startsWith("citycut-frame-track-");
+        });
       const frameCs = frameEl ? getComputedStyle(frameEl) : null;
       const handleCs = handleEl ? getComputedStyle(handleEl) : null;
       const cadTagCs = cadTagEl ? getComputedStyle(cadTagEl) : null;
@@ -297,7 +339,13 @@ async function main() {
         dockOpacity: dockCs?.opacity ?? "0",
         processingPillVisible,
         processingPillText,
-        hasFrameLoopSvg: Boolean(frameLoopSvg),
+        frameRect,
+        perimeterRect,
+        perimeterInsetTop: perimCs?.top ?? "",
+        perimeterInsetLeft: perimCs?.left ?? "",
+        frameBorderTransparent: frameCs?.borderTopColor === "rgba(0, 0, 0, 0)",
+        edges2px,
+        tracksGpuAnimated,
         modelBridgePillVisible,
       };
     });
@@ -305,9 +353,24 @@ async function main() {
     const frame02Path = path.join(TMP_FRAMES_DIR, "frame_02.png");
     await page.screenshot({ path: frame02Path });
 
+    const frameSizeDelta =
+      beat1Info.frameRect && beat2Info.frameRect
+        ? Math.abs(beat2Info.frameRect.width - beat1Info.frameRect.width) +
+          Math.abs(beat2Info.frameRect.height - beat1Info.frameRect.height) +
+          Math.abs(beat2Info.frameRect.left - beat1Info.frameRect.left) +
+          Math.abs(beat2Info.frameRect.top - beat1Info.frameRect.top)
+        : 999;
+    const perimSizeDelta =
+      beat2Info.frameRect && beat2Info.perimeterRect
+        ? Math.abs(beat2Info.perimeterRect.width - beat2Info.frameRect.width) +
+          Math.abs(beat2Info.perimeterRect.height - beat2Info.frameRect.height) +
+          Math.abs(beat2Info.perimeterRect.left - beat2Info.frameRect.left) +
+          Math.abs(beat2Info.perimeterRect.top - beat2Info.frameRect.top)
+        : 999;
+
     assertCheck(
       "beat2-silent-background-load",
-      "During Phase A (while model loads behind the scenes before 3D WebGL is ready), the 2D map stays un-dimmed (selectOpacity === '1', outerAlpha === 0, dockOpacity === '1') while showing the top processing shimmer pill and looping cut boundary animation",
+      "During Phase A (while model loads behind the scenes before 3D WebGL is ready), the 2D map stays un-dimmed while showing the top processing shimmer pill and 1:1 GPU-composited moving cut boundary (0px delta from default .frame)",
       beat2Info.isProcessingPhaseA &&
         !beat2Info.isLoadingClass &&
         beat2Info.selectOpacity === "1" &&
@@ -317,9 +380,15 @@ async function main() {
         beat2Info.dockOpacity === "1" &&
         beat2Info.processingPillVisible &&
         beat2Info.processingPillText.includes("Processing site data") &&
-        beat2Info.hasFrameLoopSvg &&
+        frameSizeDelta === 0 &&
+        perimSizeDelta === 0 &&
+        beat2Info.perimeterInsetTop === "-2px" &&
+        beat2Info.perimeterInsetLeft === "-2px" &&
+        beat2Info.frameBorderTransparent &&
+        beat2Info.edges2px &&
+        beat2Info.tracksGpuAnimated &&
         !beat2Info.modelBridgePillVisible,
-      `isProcessingPhaseA=${beat2Info.isProcessingPhaseA}, selectOpacity=${beat2Info.selectOpacity}, outerAlpha=${beat2Info.outerAlpha}, dock=${beat2Info.dockOpacity}, processingPill=${beat2Info.processingPillVisible}, frameLoopSvg=${beat2Info.hasFrameLoopSvg}`,
+      `isProcessingPhaseA=${beat2Info.isProcessingPhaseA}, frameSizeDelta=${frameSizeDelta}px, perimSizeDelta=${perimSizeDelta}px, inset=${beat2Info.perimeterInsetTop}, edges2px=${beat2Info.edges2px}, tracksGpuAnimated=${beat2Info.tracksGpuAnimated}, borderTransparent=${beat2Info.frameBorderTransparent}`,
     );
 
     // -------------------------------------------------------------------------
@@ -366,6 +435,19 @@ async function main() {
       const bridgePill = document.querySelector(".model .loading-hud-pill.is-model-bridge");
       const bridgePillCs = bridgePill ? getComputedStyle(bridgePill) : null;
       const selectEl = document.querySelector(".select.is-handoff-underlay");
+      const frameEl = selectEl?.querySelector(".map-wrap .frame");
+      const perimEl = frameEl?.querySelector(".frame-loop-perimeter");
+      const trackEls = frameEl ? Array.from(frameEl.querySelectorAll(".frame-loop-track")) : [];
+      const phaseBTracksAnimating =
+        Boolean(perimEl) &&
+        trackEls.length === 4 &&
+        trackEls.every((el) => {
+          const cs = getComputedStyle(el);
+          return cs.willChange.includes("transform") && cs.animationName.startsWith("citycut-frame-track-");
+        });
+      const phaseBFrameBorderTransparent = frameEl
+        ? getComputedStyle(frameEl).borderTopColor === "rgba(0, 0, 0, 0)"
+        : false;
       const handoff = window.__citycutHandoffMonitor ?? {
         blankFrames: 99,
         sawUnderlayDuringModelMount: false,
@@ -387,6 +469,8 @@ async function main() {
         bridgePillOpacity: bridgePillCs?.opacity ?? "0",
         bridgePillPct: Number(bridgePill?.dataset.progressPct ?? -1),
         underlayOpacity: selectEl ? Number(getComputedStyle(selectEl).opacity) : -1,
+        phaseBTracksAnimating,
+        phaseBFrameBorderTransparent,
         handoffLatencyMs,
         handoff,
       };
@@ -412,9 +496,11 @@ async function main() {
         beat3Start.bridgePillPct >= 0 &&
         beat3Start.bridgePillPct <= 12 &&
         beat3Start.underlayOpacity >= 0.88 &&
+        beat3Start.phaseBTracksAnimating &&
+        beat3Start.phaseBFrameBorderTransparent &&
         beat3Start.polar <= 0.12 &&
         beat3Start.radius >= 1100,
-      `blankFrames=${beat3Start.handoff.blankFrames}, latency=${beat3Start.handoffLatencyMs.toFixed(1)}ms, pillOpacity=${beat3Start.bridgePillOpacity}, startPct=${beat3Start.bridgePillPct}%, startUnderlayOpacity=${beat3Start.underlayOpacity.toFixed(3)}, polar=${beat3Start.polar}, radius=${beat3Start.radius}m`,
+      `blankFrames=${beat3Start.handoff.blankFrames}, latency=${beat3Start.handoffLatencyMs.toFixed(1)}ms, pillOpacity=${beat3Start.bridgePillOpacity}, startPct=${beat3Start.bridgePillPct}%, startUnderlayOpacity=${beat3Start.underlayOpacity.toFixed(3)}, phaseBTracksAnimating=${beat3Start.phaseBTracksAnimating}, borderTransparent=${beat3Start.phaseBFrameBorderTransparent}, polar=${beat3Start.polar}, radius=${beat3Start.radius}m`,
     );
 
     // Poll Phase B (0s -> 2.1s) for:

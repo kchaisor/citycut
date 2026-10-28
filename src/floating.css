@@ -3387,45 +3387,151 @@ body,
 }
 
 .select .map-wrap .frame {
-  transition: box-shadow 550ms ease, border-color 220ms ease;
+  transition: box-shadow 550ms ease;
 }
 
-.select .map-wrap .frame.is-processing {
+.select .map-wrap .frame.is-processing,
+.select.is-loading .map-wrap .frame.is-processing {
   border-color: transparent !important;
 }
 
-.select .map-wrap .frame .frame-loop-svg {
+.select .map-wrap .frame .frame-loop-perimeter {
   position: absolute;
   inset: -2px;
   width: calc(100% + 4px);
   height: calc(100% + 4px);
   pointer-events: none;
-  overflow: visible;
   z-index: 4;
 }
 
-.select .map-wrap .frame .frame-loop-stroke {
-  fill: none;
-  stroke: #141413;
-  stroke-width: 2.5px;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-dasharray: 165 85;
-  stroke-dashoffset: 0;
-  animation: citycut-frame-loop 1.6s linear infinite;
+.select .map-wrap .frame .frame-loop-edge {
+  position: absolute;
+  overflow: hidden;
+  pointer-events: none;
 }
 
-@keyframes citycut-frame-loop {
+.select .map-wrap .frame .frame-loop-edge.is-top {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+}
+
+.select .map-wrap .frame .frame-loop-edge.is-right {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 2px;
+}
+
+.select .map-wrap .frame .frame-loop-edge.is-bottom {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+}
+
+.select .map-wrap .frame .frame-loop-edge.is-left {
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 2px;
+}
+
+.select .map-wrap .frame .frame-loop-track {
+  position: absolute;
+  will-change: transform;
+}
+
+.select .map-wrap .frame .frame-loop-edge.is-top .frame-loop-track {
+  top: 0;
+  bottom: 0;
+  left: -20px;
+  right: -20px;
+  background: repeating-linear-gradient(90deg, var(--ink) 0 6px, transparent 6px 10px);
+  animation: citycut-frame-track-top 0.6s linear infinite;
+}
+
+.select .map-wrap .frame .frame-loop-edge.is-right .frame-loop-track {
+  left: 0;
+  right: 0;
+  top: -20px;
+  bottom: -20px;
+  background: repeating-linear-gradient(180deg, var(--ink) 0 6px, transparent 6px 10px);
+  animation: citycut-frame-track-right 0.6s linear infinite;
+}
+
+.select .map-wrap .frame .frame-loop-edge.is-bottom .frame-loop-track {
+  top: 0;
+  bottom: 0;
+  left: -20px;
+  right: -20px;
+  background: repeating-linear-gradient(90deg, var(--ink) 0 6px, transparent 6px 10px);
+  animation: citycut-frame-track-bottom 0.6s linear infinite;
+}
+
+.select .map-wrap .frame .frame-loop-edge.is-left .frame-loop-track {
+  left: 0;
+  right: 0;
+  top: -20px;
+  bottom: -20px;
+  background: repeating-linear-gradient(180deg, var(--ink) 0 6px, transparent 6px 10px);
+  animation: citycut-frame-track-left 0.6s linear infinite;
+}
+
+@keyframes citycut-frame-track-top {
   from {
-    stroke-dashoffset: 0;
+    transform: translate3d(0, 0, 0);
   }
   to {
-    stroke-dashoffset: -1000;
+    transform: translate3d(20px, 0, 0);
+  }
+}
+
+@keyframes citycut-frame-track-right {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 20px, 0);
+  }
+}
+
+@keyframes citycut-frame-track-bottom {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-20px, 0, 0);
+  }
+}
+
+@keyframes citycut-frame-track-left {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, -20px, 0);
+  }
+}
+
+.select .map-wrap .frame .frame-loop-svg.is-circle {
+  overflow: visible;
+  will-change: transform;
+  animation: citycut-frame-circle-spin 12s linear infinite;
+}
+
+@keyframes citycut-frame-circle-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
   }
 }
 
 .select.is-loading .map-wrap .frame {
-  border: 2px dashed #141413 !important;
+  border: 2px dashed transparent !important;
   background: transparent !important;
   box-shadow: 0 0 0 9999px rgba(235, 235, 235, 0.82), 0 24px 60px rgba(20, 20, 19, 0.14) !important;
   z-index: 25 !important;

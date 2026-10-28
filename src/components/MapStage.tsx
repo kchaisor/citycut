@@ -411,7 +411,7 @@ export function MapStage({
             className={[
               "frame",
               circleFrame ? "frame-circle" : "",
-              processing ? "is-processing" : "",
+              processing || loading || fadingOut ? "is-processing" : "",
               fadingOut ? "is-fading-out" : "",
             ]
               .filter(Boolean)
@@ -424,35 +424,36 @@ export function MapStage({
               height: currentFrame.height,
             }}
           >
-            {processing && !fadingOut && (
-              <svg
-                className="frame-loop-svg"
-                viewBox="0 0 100 100"
-                preserveAspectRatio="none"
-                aria-hidden="true"
-              >
-                {circleFrame ? (
+            {(processing || loading || fadingOut) &&
+              (circleFrame ? (
+                <svg className="frame-loop-perimeter frame-loop-svg is-circle" aria-hidden="true">
                   <circle
                     className="frame-loop-stroke"
-                    cx="50"
-                    cy="50"
-                    r="49.2"
-                    pathLength={1000}
-                    vectorEffect="non-scaling-stroke"
+                    cx="50%"
+                    cy="50%"
+                    r="calc(50% - 1px)"
+                    fill="none"
+                    stroke="var(--ink)"
+                    strokeWidth="2"
+                    strokeDasharray="6 4"
                   />
-                ) : (
-                  <rect
-                    className="frame-loop-stroke"
-                    x="0.8"
-                    y="0.8"
-                    width="98.4"
-                    height="98.4"
-                    pathLength={1000}
-                    vectorEffect="non-scaling-stroke"
-                  />
-                )}
-              </svg>
-            )}
+                </svg>
+              ) : (
+                <div className="frame-loop-perimeter is-square" aria-hidden="true">
+                  <span className="frame-loop-edge is-top">
+                    <span className="frame-loop-track" />
+                  </span>
+                  <span className="frame-loop-edge is-right">
+                    <span className="frame-loop-track" />
+                  </span>
+                  <span className="frame-loop-edge is-bottom">
+                    <span className="frame-loop-track" />
+                  </span>
+                  <span className="frame-loop-edge is-left">
+                    <span className="frame-loop-track" />
+                  </span>
+                </div>
+              ))}
             {!circleFrame && (
               <>
                 <span className="frame-handle frame-handle-nw is-tl" aria-hidden="true" />
