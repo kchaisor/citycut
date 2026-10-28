@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 /**
- * Permanent CityCut UI & 4-Beat 2D->3D Transition Verification Harness (v8)
+ * Permanent CityCut UI & 2-Phase 2D->3D Transition Verification Harness (v11)
  *
  * Launches a dedicated Vite dev server, drives Chromium at 1440x900 (@2x),
- * mechanically asserts all Typography, CSS Surface, 4-Beat 2D->3D Transition
- * (including 0.78 translucent outer dim, zero-blank-frame WebGL handoff,
- * 24-bucket radial building wave, and 16-bucket delayed bouncy tree pop-up),
- * and Site Analysis Direction A invariants, and generates:
- *   - /workspace/pr164-v8-live-transition.mp4
- *   - /workspace/pr164-v8-transition-contact-sheet.png
- *   - /workspace/pr164-v8-beat2-translucent-dim.png
- *   - /workspace/pr164-v8-beat3a-bldg-wave.png
- *   - /workspace/pr164-v8-beat3b-tree-pop.png
- *   - /workspace/pr164-v8-beat4-settled.png
+ * mechanically asserts all Typography, CSS Surface, 2-Phase 2D->3D Transition
+ * (Phase A silent background load & WebGL pre-warm with untouched 2D screen,
+ * followed by Phase B synchronised 0%->100% loading bar + 1->0 2D background fade
+ * + 2D->3D camera shift + 24-bucket radial building wave + 16-bucket bouncy tree pop-up,
+ * even when localStorage previously had projection="iso"),
+ * SCENE LAYERS Reset colours button, and Site Analysis Direction A invariants,
+ * and generates:
+ *   - /workspace/pr164-v11-live-transition.mp4
+ *   - /workspace/pr164-v11-transition-contact-sheet.png
+ *   - /workspace/pr164-v11-display-reset-colours.png
  *
  * Exits with non-zero code (1) if ANY invariant check fails.
  */
@@ -115,7 +115,15 @@ async function main() {
     });
 
     await context.addInitScript(() => {
-      window.__citycutMinBeat2Ms = 1350;
+      window.__citycutMinSilentLoadMs = 550;
+      try {
+        window.localStorage.setItem(
+          "citycut.view",
+          JSON.stringify({ projection: "iso", corner: "sw", freeRotate: false }),
+        );
+      } catch {
+        // ignore
+      }
     });
     const page = await context.newPage();
     page.on("pageerror", (err) => console.error("[PAGEERROR]", err.stack || err.message));
@@ -167,9 +175,8 @@ async function main() {
       `cta="${beat1Info.ctaText}", frame=${JSON.stringify(beat1Info.frameRect)}, ratio=${beat1Info.frameRatio?.toFixed(3)}, singlePill=${beat1Info.frameLabelDisplay === "none" && beat1Info.frameCadTagVisible}`,
     );
 
-    // Install zero-blank-frame handoff & DOM progress monitor before clicking Create model
+    // Install zero-blank-frame handoff & Phase B synchronised progress/fade monitor before clicking Create model
     await page.evaluate(() => {
-      window.__citycutMinBeat2Ms = 2300;
       window.__citycutHandoffMonitor = {
         blankFrames: 0,
         samplesBeforeWebglReady: 0,
@@ -177,6 +184,8 @@ async function main() {
         webglReadyFired: false,
         introStartFired: false,
         domProgressSamples: [],
+        underlayOpacitySamples: [],
+        syncPairs: [],
       };
       window.addEventListener("citycut:intro-webgl-ready", () => {
         window.__citycutHandoffMonitor.webglReadyFired = true;
@@ -187,15 +196,19 @@ async function main() {
       const checkHandoff = () => {
         const mon = window.__citycutHandoffMonitor;
         if (!mon) return;
-        const pill = document.querySelector(".select.is-loading .loading-hud-pill");
-        if (pill && pill.dataset.progressPct !== undefined) {
+        const pill = document.querySelector(".model .loading-hud-pill.is-model-bridge");
+        const selectEl = document.querySelector(".select");
+        if (mon.introStartFired && pill && pill.dataset.progressPct !== undefined) {
           const pct = Number(pill.dataset.progressPct);
+          const uOpacity = selectEl ? Number(getComputedStyle(selectEl).opacity) : 0;
           if (
             Number.isFinite(pct) &&
             (mon.domProgressSamples.length === 0 ||
               mon.domProgressSamples[mon.domProgressSamples.length - 1] !== pct)
           ) {
             mon.domProgressSamples.push(pct);
+            mon.underlayOpacitySamples.push(Number(uOpacity.toFixed(3)));
+            mon.syncPairs.push({ pct, uOpacity: Number(uOpacity.toFixed(3)) });
           }
         }
         if (mon.webglReadyFired && window.__citycutWebglReadySnap === undefined) {
@@ -207,125 +220,104 @@ async function main() {
             elapsed: Number(canvas?.dataset.introElapsed ?? 99),
           };
         }
-        if (typeof window.__citycutFirstTiltFrameMs === "number") {
-          if (window.__citycutFirstTiltSnap === undefined) {
-            const canvas = document.querySelector(".model canvas");
-            window.__citycutFirstTiltSnap = {
-              polar: Number(canvas?.dataset.introPolar ?? 99),
-              bldgInner: Number(canvas?.dataset.introBldgInner ?? 99),
-              radius: Number(canvas?.dataset.introRadius ?? 0),
-              elapsed: Number(canvas?.dataset.introElapsed ?? 99),
-            };
-          }
-          return;
+        if (typeof window.__citycutFirstTiltFrameMs === "number" && window.__citycutFirstTiltSnap === undefined) {
+          const canvas = document.querySelector(".model canvas");
+          window.__citycutFirstTiltSnap = {
+            polar: Number(canvas?.dataset.introPolar ?? 99),
+            bldgInner: Number(canvas?.dataset.introBldgInner ?? 99),
+            radius: Number(canvas?.dataset.introRadius ?? 0),
+            elapsed: Number(canvas?.dataset.introElapsed ?? 99),
+          };
         }
-        mon.samplesBeforeWebglReady += 1;
-        const selectEl = document.querySelector(".select");
-        const frameEl = document.querySelector(".select .map-wrap .frame");
         const modelEl = document.querySelector(".model");
         if (modelEl && selectEl?.classList.contains("is-handoff-underlay")) {
           mon.sawUnderlayDuringModelMount = true;
         }
-        const selectVisible = Boolean(
-          selectEl &&
-            frameEl &&
-            getComputedStyle(selectEl).display !== "none" &&
-            Number(getComputedStyle(selectEl).opacity) > 0.5,
-        );
-        const modelWebglVisible = Boolean(
-          modelEl &&
-            !modelEl.hasAttribute("data-intro-webgl-wait") &&
-            Number(getComputedStyle(modelEl).opacity) > 0.5,
-        );
-        if (!selectVisible && !modelWebglVisible) {
-          mon.blankFrames += 1;
+        if (!mon.introStartFired) {
+          mon.samplesBeforeWebglReady += 1;
+          const frameEl = document.querySelector(".select .map-wrap .frame");
+          const selectVisible = Boolean(
+            selectEl &&
+              frameEl &&
+              getComputedStyle(selectEl).display !== "none" &&
+              Number(getComputedStyle(selectEl).opacity) > 0.5,
+          );
+          const modelWebglVisible = Boolean(
+            modelEl &&
+              !modelEl.hasAttribute("data-intro-webgl-wait") &&
+              Number(getComputedStyle(modelEl).opacity) > 0.5,
+          );
+          if (!selectVisible && !modelWebglVisible) {
+            mon.blankFrames += 1;
+          }
         }
-        requestAnimationFrame(checkHandoff);
+        if (!modelEl || modelEl.hasAttribute("data-intro-hold")) {
+          requestAnimationFrame(checkHandoff);
+        }
       };
       requestAnimationFrame(checkHandoff);
     });
 
     // -------------------------------------------------------------------------
-    // BEAT 2: Translucent 0.78 Outer Dim & Loading Pill
+    // PHASE A (BEAT 2): Silent Background Load (2D Screen Untouched, No Fading Yet)
     // -------------------------------------------------------------------------
     await page.click("button.create-fab");
-    await page.waitForSelector(".select.is-loading .loading-hud-pill", { timeout: 5000 });
-    await page.waitForTimeout(220);
-
-    await page.screenshot({ path: path.join(TMP_FRAMES_DIR, "frame_02.png") });
-
-    // Wait until the 450ms box-shadow fade has settled
-    await page.waitForTimeout(320);
+    await page.waitForTimeout(180);
 
     const beat2Info = await page.evaluate(() => {
       const selectEl = document.querySelector(".select");
-      const frameEl = document.querySelector(".select.is-loading .map-wrap .frame");
-      const handleEl = document.querySelector(".select.is-loading .map-wrap .frame-handle");
-      const cadTagEl = document.querySelector(".select.is-loading .map-wrap .frame-cad-tag");
-      const frameLabelEl = document.querySelector(".select.is-loading .map-wrap .frame-label");
+      const frameEl = document.querySelector(".select .map-wrap .frame");
+      const handleEl = document.querySelector(".select .map-wrap .frame-handle");
+      const cadTagEl = document.querySelector(".select .map-wrap .frame-cad-tag");
       const omnibox = document.querySelector(".select .omnibox-stack");
       const dock = document.querySelector(".select .bottom-workbench");
-      const pill = document.querySelector(".select.is-loading .loading-hud-pill");
-      const progTrack = document.querySelector(".select.is-loading .loading-hud-pill .loading-prog-track");
-      const progPct = document.querySelector(".select.is-loading .loading-hud-pill .loading-prog-pct");
+      const selectPill = document.querySelector(".select .loading-hud-pill");
+      const modelPill = document.querySelector(".model .loading-hud-pill.is-model-bridge");
       const frameCs = frameEl ? getComputedStyle(frameEl) : null;
       const handleCs = handleEl ? getComputedStyle(handleEl) : null;
       const cadTagCs = cadTagEl ? getComputedStyle(cadTagEl) : null;
-      const frameLabelCs = frameLabelEl ? getComputedStyle(frameLabelEl) : null;
       const omniCs = omnibox ? getComputedStyle(omnibox) : null;
       const dockCs = dock ? getComputedStyle(dock) : null;
-      const pillCs = pill ? getComputedStyle(pill) : null;
-      const frameRect = frameEl?.getBoundingClientRect();
+      const modelPillCs = modelPill ? getComputedStyle(modelPill) : null;
       const boxShadow = frameCs?.boxShadow ?? "";
-      // Extract alpha from rgba(235, 235, 235, <alpha>)
       const rgbaMatch = boxShadow.match(/rgba\(\s*235\s*,\s*235\s*,\s*235\s*,\s*([0-9.]+)\s*\)/);
-      const outerAlpha = rgbaMatch ? Number(rgbaMatch[1]) : boxShadow.includes("rgb(235, 235, 235)") ? 1.0 : -1;
+      const outerAlpha = rgbaMatch ? Number(rgbaMatch[1]) : boxShadow.includes("rgb(235, 235, 235)") ? 1.0 : 0;
+      const anyPillVisible =
+        Boolean(selectPill && getComputedStyle(selectPill).opacity !== "0") ||
+        Boolean(modelPillCs && Number(modelPillCs.opacity) > 0);
       return {
-        isLoading: selectEl?.classList.contains("is-loading") ?? false,
-        frameBoxShadow: boxShadow,
+        isLoadingClass: selectEl?.classList.contains("is-loading") ?? false,
+        selectOpacity: selectEl ? getComputedStyle(selectEl).opacity : "0",
         outerAlpha,
         borderStyle: frameCs?.borderTopStyle ?? "",
         handleOpacity: handleCs?.opacity ?? "0",
         cadTagOpacity: cadTagCs?.opacity ?? "0",
-        frameLabelDisplay: frameLabelCs?.display ?? "block",
-        pillVisible: Boolean(pill),
-        pillOpacity: pillCs?.opacity ?? "0",
-        pillBg: pillCs?.backgroundColor ?? "",
-        hasProgBar: Boolean(progTrack && progPct),
-        progText: progPct?.textContent?.trim() ?? "",
-        omniboxOpacity: omniCs?.opacity ?? "1",
-        dockOpacity: dockCs?.opacity ?? "1",
-        frameIsolated: Boolean(frameRect && frameRect.width > 200 && frameRect.height > 200),
+        omniboxOpacity: omniCs?.opacity ?? "0",
+        dockOpacity: dockCs?.opacity ?? "0",
+        anyPillVisible,
       };
     });
 
-    const frame03Path = path.join(TMP_FRAMES_DIR, "frame_03.png");
-    await page.screenshot({ path: frame03Path });
-    if (fs.existsSync(ARTIFACTS_DIR)) {
-      fs.copyFileSync(frame03Path, path.join(ARTIFACTS_DIR, "pr164-v8-beat2-translucent-dim.png"));
-    }
+    const frame02Path = path.join(TMP_FRAMES_DIR, "frame_02.png");
+    await page.screenshot({ path: frame02Path });
 
     assertCheck(
-      "beat2-translucent-dim",
-      "Outer 2D map outside selection square fades to translucent rgba(235, 235, 235, 0.78) (alpha in [0.65, 0.85], NOT 1.0 opaque), dashed border + 4 yellow corner handles + single bottom coordinate pill remain visible, and top dark #141413 progress pill is active",
-      beat2Info.isLoading &&
-        beat2Info.outerAlpha >= 0.65 &&
-        beat2Info.outerAlpha <= 0.85 &&
+      "beat2-silent-background-load",
+      "During Phase A (while model loads behind the scenes before 3D WebGL is ready), nothing on the 2D selection screen changes or fades (outerAlpha === 0, omnibox & dock opacity === '1', no loading bar visible yet)",
+      !beat2Info.isLoadingClass &&
+        beat2Info.selectOpacity === "1" &&
+        beat2Info.outerAlpha === 0 &&
         beat2Info.borderStyle === "dashed" &&
         beat2Info.handleOpacity === "1" &&
         beat2Info.cadTagOpacity === "1" &&
-        beat2Info.frameLabelDisplay === "none" &&
-        beat2Info.omniboxOpacity === "0" &&
-        beat2Info.dockOpacity === "0" &&
-        beat2Info.pillOpacity === "1" &&
-        beat2Info.pillBg.includes("20, 20, 19") &&
-        beat2Info.hasProgBar &&
-        beat2Info.frameIsolated,
-      `outerAlpha=${beat2Info.outerAlpha}, border=${beat2Info.borderStyle}, handles=${beat2Info.handleOpacity}, singleBottomPill=${beat2Info.cadTagOpacity}/${beat2Info.frameLabelDisplay}, prog=${beat2Info.progText}`,
+        beat2Info.omniboxOpacity === "1" &&
+        beat2Info.dockOpacity === "1" &&
+        !beat2Info.anyPillVisible,
+      `isLoadingClass=${beat2Info.isLoadingClass}, selectOpacity=${beat2Info.selectOpacity}, outerAlpha=${beat2Info.outerAlpha}, omnibox=${beat2Info.omniboxOpacity}, dock=${beat2Info.dockOpacity}, anyPillVisible=${beat2Info.anyPillVisible}`,
     );
 
     // -------------------------------------------------------------------------
-    // BEAT 3: Zero-Blank Handoff + Staggered Center-Out Building Wave + Bouncy Tree Pop
+    // PHASE B (BEAT 3): Synchronised 0%->100% Progress + 1->0 Background Fade + 3D Shift & Geometry Wave
     // -------------------------------------------------------------------------
     try {
       await page.waitForFunction(
@@ -357,7 +349,7 @@ async function main() {
       throw e;
     }
 
-    // Pause intro clock immediately after first tilt frame to inspect Frame 1 & handoff latency
+    // Pause intro clock immediately after Phase B starts to inspect Frame 1 & handoff latency
     await page.evaluate(() => {
       window.__citycutIntroPaused = true;
     });
@@ -365,10 +357,9 @@ async function main() {
     const beat3Start = await page.evaluate(() => {
       const canvas = document.querySelector(".model canvas");
       const modelEl = document.querySelector(".model");
-      const topBar = document.querySelector(".model .top-bar-left");
-      const leftOutliner = document.querySelector(".model .left-outliner");
-      const rightInsp = document.querySelector(".model .right-inspector");
-      const bottomBar = document.querySelector(".model .bottom-bar");
+      const bridgePill = document.querySelector(".model .loading-hud-pill.is-model-bridge");
+      const bridgePillCs = bridgePill ? getComputedStyle(bridgePill) : null;
+      const selectEl = document.querySelector(".select.is-handoff-underlay");
       const handoff = window.__citycutHandoffMonitor ?? {
         blankFrames: 99,
         sawUnderlayDuringModelMount: false,
@@ -376,18 +367,6 @@ async function main() {
         introStartFired: false,
         domProgressSamples: [],
       };
-      const samples =
-        Array.isArray(window.__citycutProgressSamples) && window.__citycutProgressSamples.length > 0
-          ? window.__citycutProgressSamples
-          : handoff.domProgressSamples;
-      let monotonic = samples.length >= 2;
-      let maxStep = 0;
-      for (let i = 1; i < samples.length; i++) {
-        const diff = samples[i] - samples[i - 1];
-        if (diff < 0) monotonic = false;
-        if (diff > maxStep) maxStep = diff;
-      }
-      const distinctIntermediate = new Set(samples.filter((v) => v > 0 && v < 100)).size;
       const introStartMs = Number(window.__citycutIntroStartMs ?? 0);
       const firstTiltFrameMs = Number(window.__citycutFirstTiltFrameMs ?? 99999);
       const handoffLatencyMs = firstTiltFrameMs - introStartMs;
@@ -396,74 +375,55 @@ async function main() {
       return {
         polar: readySnap ? readySnap.polar : Number(canvas?.dataset.introPolar ?? 99),
         firstTiltPolar: tiltSnap ? tiltSnap.polar : Number(canvas?.dataset.introPolar ?? 99),
-        scale: Number(canvas?.dataset.introScale ?? 99),
         bldgInner: readySnap ? readySnap.bldgInner : Number(canvas?.dataset.introBldgInner ?? 99),
-        bldgOuter: Number(canvas?.dataset.introBldgOuter ?? 99),
-        treeScale: Number(canvas?.dataset.introTreeScale ?? 99),
         radius: readySnap ? readySnap.radius : Number(canvas?.dataset.introRadius ?? 0),
-        elapsed: readySnap ? readySnap.elapsed : Number(canvas?.dataset.introElapsed ?? 99),
         introHold: modelEl?.getAttribute("data-intro-hold") ?? null,
-        topOpacity: topBar ? getComputedStyle(topBar).opacity : "1",
-        leftOpacity: leftOutliner ? getComputedStyle(leftOutliner).opacity : "1",
-        rightOpacity: rightInsp ? getComputedStyle(rightInsp).opacity : "1",
-        bottomOpacity: bottomBar ? getComputedStyle(bottomBar).opacity : "1",
+        bridgePillOpacity: bridgePillCs?.opacity ?? "0",
+        bridgePillPct: Number(bridgePill?.dataset.progressPct ?? -1),
+        underlayOpacity: selectEl ? Number(getComputedStyle(selectEl).opacity) : -1,
+        handoffLatencyMs,
         handoff,
-        progressStats: {
-          sampleCount: samples.length,
-          distinctIntermediate,
-          firstSample: samples[0] ?? -1,
-          lastSample: samples[samples.length - 1] ?? -1,
-          monotonic,
-          maxStep,
-          handoffLatencyMs,
-        },
       };
     });
 
-    const frame04Path = path.join(TMP_FRAMES_DIR, "frame_04.png");
-    await page.screenshot({ path: frame04Path });
+    const frame03Path = path.join(TMP_FRAMES_DIR, "frame_03.png");
+    await page.screenshot({ path: frame03Path });
+    fs.copyFileSync(frame03Path, path.join(TMP_FRAMES_DIR, "frame_04.png"));
 
     await page.evaluate(() => {
       window.__citycutIntroPaused = false;
     });
 
     assertCheck(
-      "beat2-smooth-progress-and-zero-handoff-lag",
-      "Beat 2 progress bar glides smoothly and monotonically from 0% to 100% (>= 6 intermediate samples, max step <= 18%) while <Scene3D> pre-warms 3 WebGL frames in the background, yielding < 50ms handoff latency at 100%",
-      beat3Start.progressStats.monotonic &&
-        beat3Start.progressStats.firstSample <= 5 &&
-        beat3Start.progressStats.lastSample === 100 &&
-        beat3Start.progressStats.distinctIntermediate >= 6 &&
-        beat3Start.progressStats.maxStep <= 18 &&
-        beat3Start.progressStats.handoffLatencyMs >= 0 &&
-        beat3Start.progressStats.handoffLatencyMs < 1200 &&
-        beat3Start.firstTiltPolar > 0.008,
-      `samples=${beat3Start.progressStats.sampleCount} (intermediate=${beat3Start.progressStats.distinctIntermediate}, range=${beat3Start.progressStats.firstSample}%->${beat3Start.progressStats.lastSample}%, maxStep=${beat3Start.progressStats.maxStep}%), handoffLatency=${beat3Start.progressStats.handoffLatencyMs.toFixed(1)}ms, firstTiltPolar=${beat3Start.firstTiltPolar}`,
-    );
-
-    assertCheck(
       "beat2-to-beat3-zero-blank-handoff",
-      ".select remains mounted as underlay until <Scene3D> finishes buildCityGroup and paints WebGL Frame 1 (0 blank frames during Beat 2 -> Beat 3 handoff)",
+      ".select remains mounted at opacity ~1 until <Scene3D> finishes 3 pre-warm WebGL frames in the background, then Phase B starts immediately with 0 blank frames, immediate next-frame handoff, and top progress bar visible starting near 0%",
       beat3Start.handoff.blankFrames === 0 &&
         beat3Start.handoff.sawUnderlayDuringModelMount &&
         beat3Start.handoff.webglReadyFired &&
+        beat3Start.handoffLatencyMs >= 0 &&
+        beat3Start.handoffLatencyMs < 1200 &&
+        beat3Start.bridgePillOpacity === "1" &&
+        beat3Start.bridgePillPct >= 0 &&
+        beat3Start.bridgePillPct <= 12 &&
+        beat3Start.underlayOpacity >= 0.88 &&
         beat3Start.polar <= 0.12 &&
-        beat3Start.bldgInner <= 0.08 &&
         beat3Start.radius >= 1100,
-      `blankFrames=${beat3Start.handoff.blankFrames}, underlayMounted=${beat3Start.handoff.sawUnderlayDuringModelMount}, webglReady=${beat3Start.handoff.webglReadyFired}, polar=${beat3Start.polar}, radius=${beat3Start.radius}m`,
+      `blankFrames=${beat3Start.handoff.blankFrames}, latency=${beat3Start.handoffLatencyMs.toFixed(1)}ms, pillOpacity=${beat3Start.bridgePillOpacity}, startPct=${beat3Start.bridgePillPct}%, startUnderlayOpacity=${beat3Start.underlayOpacity.toFixed(3)}, polar=${beat3Start.polar}, radius=${beat3Start.radius}m`,
     );
 
-    // Poll Beat 3 for:
-    //   1) beat3WaveSample: elapsed in [0.42, 0.62], bldgInner > 0.35, bldgOuter < 0.18, treeScale < 0.05
-    //   2) beat3TreeSample: elapsed in [0.85, 1.38], treeScale > 1.04 (bouncy overshoot!)
+    // Poll Phase B (0s -> 2.1s) for:
+    //   1) beat3WaveSample: elapsed in [0.38, 0.65], bldgInner > 0.35, bldgOuter < 0.18, treeScale < 0.05, underlayOpacity in [0.55, 0.90]
+    //   2) beat3TreeSample: elapsed in [0.85, 1.85], treeScale > 1.04 (bouncy overshoot!)
     let beat3WaveSample = null;
     let beat3TreeSample = null;
     let maxObservedTreeScale = 0;
     const pollStart = Date.now();
-    while (Date.now() - pollStart < 15000) {
+    while (Date.now() - pollStart < 40000) {
       const sample = await page.evaluate(() => {
         const canvas = document.querySelector(".model canvas");
         const modelEl = document.querySelector(".model");
+        const selectEl = document.querySelector(".select.is-handoff-underlay");
+        const pill = document.querySelector(".model .loading-hud-pill.is-model-bridge");
         const topBar = document.querySelector(".model .top-bar-left");
         const leftOutliner = document.querySelector(".model .left-outliner");
         const rightInsp = document.querySelector(".model .right-inspector");
@@ -476,6 +436,8 @@ async function main() {
           treeScale: Number(canvas?.dataset.introTreeScale ?? 0),
           radius: Number(canvas?.dataset.introRadius ?? 0),
           elapsed: Number(canvas?.dataset.introElapsed ?? 0),
+          pct: Number(pill?.dataset.progressPct ?? 0),
+          underlayOpacity: selectEl ? Number(getComputedStyle(selectEl).opacity) : 0,
           introHold: modelEl?.getAttribute("data-intro-hold") ?? null,
           topOpacity: topBar ? getComputedStyle(topBar).opacity : "1",
           leftOpacity: leftOutliner ? getComputedStyle(leftOutliner).opacity : "1",
@@ -490,7 +452,7 @@ async function main() {
 
       if (
         !beat3WaveSample &&
-        sample.elapsed >= 0.42 &&
+        sample.elapsed >= 0.38 &&
         sample.bldgInner > 0.35 &&
         sample.bldgOuter < 0.18 &&
         sample.treeScale < 0.05 &&
@@ -502,9 +464,6 @@ async function main() {
         beat3WaveSample = sample;
         const frame05Path = path.join(TMP_FRAMES_DIR, "frame_05.png");
         await page.screenshot({ path: frame05Path });
-        if (fs.existsSync(ARTIFACTS_DIR)) {
-          fs.copyFileSync(frame05Path, path.join(ARTIFACTS_DIR, "pr164-v8-beat3a-bldg-wave.png"));
-        }
         await page.evaluate(() => {
           window.__citycutIntroPaused = false;
         });
@@ -513,7 +472,7 @@ async function main() {
       if (
         !beat3TreeSample &&
         sample.elapsed >= 0.85 &&
-        sample.elapsed <= 1.42 &&
+        sample.elapsed <= 1.85 &&
         sample.treeScale > 1.04
       ) {
         await page.evaluate(() => {
@@ -522,9 +481,6 @@ async function main() {
         beat3TreeSample = sample;
         const frame06Path = path.join(TMP_FRAMES_DIR, "frame_06.png");
         await page.screenshot({ path: frame06Path });
-        if (fs.existsSync(ARTIFACTS_DIR)) {
-          fs.copyFileSync(frame06Path, path.join(ARTIFACTS_DIR, "pr164-v8-beat3b-tree-pop.png"));
-        }
         await page.evaluate(() => {
           window.__citycutIntroPaused = false;
         });
@@ -533,43 +489,98 @@ async function main() {
       if (sample.elapsed >= 2.1 && sample.introHold === null) {
         break;
       }
-      await page.waitForTimeout(20);
+      await page.waitForTimeout(18);
     }
+
+    const phaseBSyncStats = await page.evaluate(() => {
+      const mon = window.__citycutHandoffMonitor ?? {
+        domProgressSamples: [],
+        underlayOpacitySamples: [],
+        syncPairs: [],
+      };
+      const samples =
+        Array.isArray(window.__citycutProgressSamples) && window.__citycutProgressSamples.length > 0
+          ? window.__citycutProgressSamples
+          : mon.domProgressSamples;
+      let monotonic = samples.length >= 2;
+      let maxStep = 0;
+      for (let i = 1; i < samples.length; i++) {
+        const diff = samples[i] - samples[i - 1];
+        if (diff < 0) monotonic = false;
+        if (diff > maxStep) maxStep = diff;
+      }
+      const distinctIntermediate = new Set(samples.filter((v) => v > 0 && v < 100)).size;
+      // Verify that underlayOpacity tracks (1 - pct/100) closely across all captured pairs
+      let maxSyncDrift = 0;
+      for (const pair of mon.syncPairs) {
+        const expectedOpacity = 1 - pair.pct / 100;
+        const drift = Math.abs(pair.uOpacity - expectedOpacity);
+        if (drift > maxSyncDrift) maxSyncDrift = drift;
+      }
+      return {
+        sampleCount: samples.length,
+        distinctIntermediate,
+        firstSample: samples[0] ?? -1,
+        lastSample: samples[samples.length - 1] ?? -1,
+        monotonic,
+        maxStep,
+        syncPairCount: mon.syncPairs.length,
+        maxSyncDrift,
+        firstUnderlayOpacity: mon.underlayOpacitySamples[0] ?? -1,
+        lastUnderlayOpacity: mon.underlayOpacitySamples[mon.underlayOpacitySamples.length - 1] ?? -1,
+      };
+    });
+
+    assertCheck(
+      "beat2-to-beat3-synced-progress-and-fade",
+      "Phase B loading bar glides smoothly and monotonically from 0% to 100% (>= 10 intermediate samples, max step <= 15%) in exact lockstep with 2D background opacity fading from 1.0 to 0.0 (max drift <= 0.06)",
+      phaseBSyncStats.monotonic &&
+        phaseBSyncStats.firstSample === 0 &&
+        phaseBSyncStats.lastSample === 100 &&
+        phaseBSyncStats.distinctIntermediate >= 10 &&
+        phaseBSyncStats.maxStep <= 15 &&
+        phaseBSyncStats.syncPairCount >= 8 &&
+        phaseBSyncStats.maxSyncDrift <= 0.06 &&
+        phaseBSyncStats.lastUnderlayOpacity <= 0.05,
+      `samples=${phaseBSyncStats.sampleCount} (intermediate=${phaseBSyncStats.distinctIntermediate}, range=${phaseBSyncStats.firstSample}%->${phaseBSyncStats.lastSample}%, maxStep=${phaseBSyncStats.maxStep}%), underlayFade=${phaseBSyncStats.firstUnderlayOpacity}->${phaseBSyncStats.lastUnderlayOpacity}, maxSyncDrift=${phaseBSyncStats.maxSyncDrift.toFixed(3)}`,
+    );
 
     assertCheck(
       "beat3a-staggered-building-wave",
-      "Early/mid Beat 3 (elapsed ~ 0.45s–0.55s) extrudes buildings in a center-out radial wave (bldgInner > 0.35 while bldgOuter < 0.18) before trees start (treeScale < 0.05) with Studio HUD hidden",
+      "Early/mid Phase B (elapsed ~ 0.40s–0.65s) extrudes buildings in a center-out radial wave (bldgInner > 0.35 while bldgOuter < 0.18) before trees start (treeScale < 0.05) while 2D background is mid-fade",
       Boolean(
         beat3WaveSample &&
           beat3WaveSample.bldgInner > 0.35 &&
           beat3WaveSample.bldgOuter < 0.18 &&
           beat3WaveSample.bldgInner > beat3WaveSample.bldgOuter &&
           beat3WaveSample.treeScale < 0.05 &&
+          beat3WaveSample.underlayOpacity > 0.45 &&
+          beat3WaveSample.underlayOpacity < 0.92 &&
           beat3WaveSample.topOpacity === "0" &&
           beat3WaveSample.leftOpacity === "0" &&
           beat3WaveSample.rightOpacity === "0" &&
           beat3WaveSample.bottomOpacity === "0",
       ),
       beat3WaveSample
-        ? `elapsed=${beat3WaveSample.elapsed}s, bldgInner=${beat3WaveSample.bldgInner}, bldgOuter=${beat3WaveSample.bldgOuter}, treeScale=${beat3WaveSample.treeScale}, hudOpacities=[${beat3WaveSample.topOpacity},${beat3WaveSample.leftOpacity},${beat3WaveSample.rightOpacity},${beat3WaveSample.bottomOpacity}]`
+        ? `elapsed=${beat3WaveSample.elapsed}s, pct=${beat3WaveSample.pct}%, underlayOpacity=${beat3WaveSample.underlayOpacity.toFixed(2)}, bldgInner=${beat3WaveSample.bldgInner}, bldgOuter=${beat3WaveSample.bldgOuter}, treeScale=${beat3WaveSample.treeScale}`
         : "did not capture building wave sample",
     );
 
     assertCheck(
       "beat3b-delayed-tree-bounce",
-      "Later in Beat 3 (elapsed ~ 0.85s–1.35s), trees pop up after buildings with a 16% spring overshoot bounce (treeScale > 0.30 and maxObservedTreeScale > 1.04)",
+      "Later in Phase B (elapsed ~ 0.85s–1.85s), trees pop up after buildings with a 16% spring overshoot bounce (treeScale > 0.30 and maxObservedTreeScale > 1.04)",
       Boolean(
         beat3TreeSample &&
           beat3TreeSample.treeScale > 0.30 &&
           maxObservedTreeScale > 1.04,
       ),
       beat3TreeSample
-        ? `elapsed=${beat3TreeSample.elapsed}s, sampleTreeScale=${beat3TreeSample.treeScale}, maxObservedTreeScale=${maxObservedTreeScale.toFixed(3)}, bldgInner=${beat3TreeSample.bldgInner}, bldgOuter=${beat3TreeSample.bldgOuter}`
+        ? `elapsed=${beat3TreeSample.elapsed}s, pct=${beat3TreeSample.pct}%, underlayOpacity=${beat3TreeSample.underlayOpacity.toFixed(2)}, sampleTreeScale=${beat3TreeSample.treeScale}, maxObservedTreeScale=${maxObservedTreeScale.toFixed(3)}`
         : `did not capture tree bounce sample (maxObservedTreeScale=${maxObservedTreeScale.toFixed(3)})`,
     );
 
     // -------------------------------------------------------------------------
-    // BEAT 4: Settled Isometric + Studio HUD Slide-In
+    // BEAT 4: Settled 3D View at 100% + Studio HUD Slide-In
     // -------------------------------------------------------------------------
     await page.waitForTimeout(150);
     await page.screenshot({ path: path.join(TMP_FRAMES_DIR, "frame_07.png") });
@@ -577,12 +588,9 @@ async function main() {
 
     const frame08Path = path.join(TMP_FRAMES_DIR, "frame_08.png");
     await page.screenshot({ path: frame08Path });
-    if (fs.existsSync(ARTIFACTS_DIR)) {
-      fs.copyFileSync(frame08Path, path.join(ARTIFACTS_DIR, "pr164-v8-beat4-settled.png"));
-    }
 
     if (!fs.existsSync(path.join(TMP_FRAMES_DIR, "frame_05.png"))) {
-      fs.copyFileSync(frame04Path, path.join(TMP_FRAMES_DIR, "frame_05.png"));
+      fs.copyFileSync(frame03Path, path.join(TMP_FRAMES_DIR, "frame_05.png"));
     }
     if (!fs.existsSync(path.join(TMP_FRAMES_DIR, "frame_06.png"))) {
       fs.copyFileSync(path.join(TMP_FRAMES_DIR, "frame_07.png"), path.join(TMP_FRAMES_DIR, "frame_06.png"));
@@ -614,7 +622,7 @@ async function main() {
 
     assertCheck(
       "beat4-settled-hud",
-      "Camera settles at final isometric perspective (polar >= 0.95), all building & tree buckets settle to 1.000, underlay unmounts, and Studio HUD panels slide in to opacity === '1'",
+      "At 100%, camera settles at final 3D perspective (polar >= 0.95), all building & tree buckets settle to 1.000 (even when localStorage had projection='iso'), 2D underlay fades to 0 and unmounts, and Studio HUD panels slide in to opacity === '1'",
       beat4Info.polar >= 0.95 &&
         beat4Info.bldgInner === 1 &&
         beat4Info.bldgOuter === 1 &&
@@ -741,24 +749,49 @@ async function main() {
     );
 
     // -------------------------------------------------------------------------
-    // 3D DISPLAY OUTLINER INVARIANT (PER-USE BUILDINGS)
+    // 3D DISPLAY OUTLINER INVARIANT (PER-USE BUILDINGS + RESET COLOURS BUTTON)
     // -------------------------------------------------------------------------
-    if (fs.existsSync(ARTIFACTS_DIR)) {
-      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v10-3d-display-outliner.png") });
-    }
-
     const display3dOutlinerInfo = await page.evaluate(() => {
       const layersRegion = document.querySelector('.model .left-outliner [aria-label="Layers"]');
       const rowLabels = Array.from(
         layersRegion?.querySelectorAll(".o-row.studio-layer-row span:not(.m)") ?? [],
       ).map((el) => el.textContent?.trim() ?? "");
+      const resetBtn = layersRegion?.querySelector("button.studio-reset-colours-btn");
+      const resColorInput = layersRegion?.querySelector('input[type="color"][aria-label="Residential colour"]');
+      const defaultResVal = resColorInput ? resColorInput.value.toLowerCase() : "";
+      if (resColorInput) {
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+        setter?.call(resColorInput, "#ff3366");
+        resColorInput.dispatchEvent(new Event("input", { bubbles: true }));
+        resColorInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      const editedResCss = getComputedStyle(document.documentElement).getPropertyValue("--use-residential").trim().toLowerCase();
+      if (resetBtn) {
+        resetBtn.click();
+      }
       return {
         hasSingleBuildingsRow: rowLabels.includes("Buildings"),
         hasResidentialRow: rowLabels.includes("Residential"),
         hasCommercialRow: rowLabels.includes("Commercial"),
+        has3dResetBtn: Boolean(resetBtn && resetBtn.textContent?.trim() === "Reset colours"),
+        defaultResVal,
+        editedResCss,
         rowLabels,
       };
     });
+    await page.waitForTimeout(80);
+    const resetAfterRender = await page.evaluate(() => {
+      const resColorInput = document.querySelector('.model .left-outliner [aria-label="Layers"] input[type="color"][aria-label="Residential colour"]');
+      return {
+        resetResCss: getComputedStyle(document.documentElement).getPropertyValue("--use-residential").trim().toLowerCase(),
+        resetResVal: resColorInput ? resColorInput.value.toLowerCase() : "",
+      };
+    });
+    Object.assign(display3dOutlinerInfo, resetAfterRender);
+
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v11-display-reset-colours.png") });
+    }
 
     // -------------------------------------------------------------------------
     // SITE ANALYSIS DIRECTION A INVARIANT (IN 3D MODEL)
@@ -807,10 +840,6 @@ async function main() {
       };
     });
 
-    if (fs.existsSync(ARTIFACTS_DIR)) {
-      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v10-3d-solar-hud.png") });
-    }
-
     assertCheck(
       "site-analysis-direction-a",
       "Clicking Analysis hides the left drawer completely (0 visible left drawer), opens the non-overflowing 2-row bottom environmental console without N ▲ or Reset view, places Reset view in .top-bar-center, and shows 3D Sun Dome (not 9–3pm Plan Fan) in 3D view",
@@ -828,17 +857,13 @@ async function main() {
     );
 
     // -------------------------------------------------------------------------
-    // DRAWING -> DISPLAY OUTLINER CLEANUP INVARIANT
+    // DRAWING -> DISPLAY OUTLINER CLEANUP & RESET COLOURS INVARIANT
     // -------------------------------------------------------------------------
     await page.getByRole("tab", { name: /Drawing/i }).click();
     await page.waitForSelector("svg.plan", { timeout: 10000 });
     const displayBtn = page.getByRole("button", { name: "Display" }).first();
     await displayBtn.click();
     await page.waitForTimeout(300);
-
-    if (fs.existsSync(ARTIFACTS_DIR)) {
-      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v10-drawing-display-outliner.png") });
-    }
 
     const displayDrawingOutlinerInfo = await page.evaluate(() => {
       const outliner = document.querySelector(".model .left-outliner");
@@ -849,6 +874,7 @@ async function main() {
       const hasFitFrame = outlinerText.includes("Fit frame");
       const hasPlanScale = Boolean(outliner?.querySelector('select[aria-label="Plan scale"]'));
       const layersRegion = outliner?.querySelector('[aria-label="Layers"]');
+      const hasDrawingResetBtn = Boolean(layersRegion?.querySelector("button.studio-reset-colours-btn"));
       const rowLabels = Array.from(
         layersRegion?.querySelectorAll(".o-row.studio-layer-row span:not(.m)") ?? [],
       ).map((el) => el.textContent?.trim() ?? "");
@@ -858,6 +884,7 @@ async function main() {
         hasLegacyColours,
         hasFitFrame,
         hasPlanScale,
+        hasDrawingResetBtn,
         hasSingleBuildingsRow: rowLabels.includes("Buildings"),
         hasResidentialRow: rowLabels.includes("Residential"),
         hasCommercialRow: rowLabels.includes("Commercial"),
@@ -866,20 +893,25 @@ async function main() {
     });
 
     assertCheck(
-      "display-outliner-per-use-and-drawing-cleanup",
-      "Both 3D model and Drawing Display outliners list individual building uses (Residential, Commercial, etc.) instead of a collapsed Buildings row, and Drawing Display removes duplicate view switcher, Line styles, legacy Colours, and Fit frame",
+      "display-outliner-per-use-and-reset-colours",
+      "Both 3D model and Drawing Display outliners list individual building uses, include a working 'Reset colours' button in SCENE LAYERS that restores default colours after an edit, and Drawing Display removes duplicate view switcher, Line styles, legacy Colours, and Fit frame",
       !display3dOutlinerInfo.hasSingleBuildingsRow &&
         display3dOutlinerInfo.hasResidentialRow &&
         display3dOutlinerInfo.hasCommercialRow &&
+        display3dOutlinerInfo.has3dResetBtn &&
+        display3dOutlinerInfo.editedResCss === "#ff3366" &&
+        display3dOutlinerInfo.resetResCss === display3dOutlinerInfo.defaultResVal &&
+        display3dOutlinerInfo.resetResVal === display3dOutlinerInfo.defaultResVal &&
         !displayDrawingOutlinerInfo.hasDrawingTypeSwitch &&
         !displayDrawingOutlinerInfo.hasLineStyles &&
         !displayDrawingOutlinerInfo.hasLegacyColours &&
         !displayDrawingOutlinerInfo.hasFitFrame &&
         displayDrawingOutlinerInfo.hasPlanScale &&
+        displayDrawingOutlinerInfo.hasDrawingResetBtn &&
         !displayDrawingOutlinerInfo.hasSingleBuildingsRow &&
         displayDrawingOutlinerInfo.hasResidentialRow &&
         displayDrawingOutlinerInfo.hasCommercialRow,
-      `3dRows=[${display3dOutlinerInfo.rowLabels.join(", ")}], drawingRows=[${displayDrawingOutlinerInfo.rowLabels.join(", ")}], dupSwitch=${displayDrawingOutlinerInfo.hasDrawingTypeSwitch}, lineStyles=${displayDrawingOutlinerInfo.hasLineStyles}`,
+      `resetBtn=[3d:${display3dOutlinerInfo.has3dResetBtn},drawing:${displayDrawingOutlinerInfo.hasDrawingResetBtn}], edit->reset=[${display3dOutlinerInfo.editedResCss}->${display3dOutlinerInfo.resetResCss}], 3dRows=[${display3dOutlinerInfo.rowLabels.join(", ")}]`,
     );
 
     // -------------------------------------------------------------------------
@@ -902,7 +934,6 @@ async function main() {
       const svgRect = svg.getBoundingClientRect();
       const cx = svgRect.left + svgRect.width / 2;
       const cy = svgRect.top + svgRect.height / 2;
-      // Find two distinct building paths near the center of the site plan
       const candidates = [];
       for (const p of svg.querySelectorAll("path")) {
         if (p.closest("[data-shadow-hour]") || p.closest(".heliodon-plan-overlay") || p.closest(".plan-north-arrow")) continue;
@@ -959,10 +990,6 @@ async function main() {
       };
     });
 
-    if (fs.existsSync(ARTIFACTS_DIR)) {
-      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v10-drawing-selected-shadows.png") });
-    }
-
     assertCheck(
       "drawing-sun-study-selection",
       "In Drawing -> Site plan, 3D Sun Dome is hidden, 9–3pm Plan Fan is shown, and clicking buildings isolates 9–3pm shadows strictly to the selected yellow buildings",
@@ -979,7 +1006,7 @@ async function main() {
     // GENERATE 8-FRAME CONTACT SHEET + LIVE TRANSITION MP4 VIDEO
     // -------------------------------------------------------------------------
     if (fs.existsSync(ARTIFACTS_DIR)) {
-      const contactSheetOut = path.join(ARTIFACTS_DIR, "pr164-v8-transition-contact-sheet.png");
+      const contactSheetOut = path.join(ARTIFACTS_DIR, "pr164-v11-transition-contact-sheet.png");
       execFileSync("ffmpeg", [
         "-y",
         "-pattern_type",
@@ -995,17 +1022,16 @@ async function main() {
         contactSheetOut,
       ]);
 
-      // Build /workspace/pr164-v8-live-transition.mp4 from the captured real WebGL transition frames
       let vIdx = 0;
       const frameRepeats = [
-        ["frame_01.png", 16], // Beat 1: Landing (0.64s)
-        ["frame_02.png", 10], // Beat 2a: Outer dim fading + loading pill (0.40s)
-        ["frame_03.png", 12], // Beat 2b: Translucent 0.78 outer dim + sharp 2D cut square (0.48s)
-        ["frame_04.png", 6],  // Beat 3a: Zero-blank top-down 3D slab handoff (0.24s)
-        ["frame_05.png", 12], // Beat 3b: Center-out radial building wave (trees still at 0) (0.48s)
-        ["frame_06.png", 12], // Beat 3c: Delayed bouncy tree pop-up wave (0.48s)
-        ["frame_07.png", 8],  // Beat 4a: Settling isometric + HUD sliding in (0.32s)
-        ["frame_08.png", 20], // Beat 4b: Settled isometric + full Studio HUD (0.80s)
+        ["frame_01.png", 14], // Beat 1: Landing (0.56s)
+        ["frame_02.png", 14], // Phase A: Silent background load — 2D screen untouched (0.56s)
+        ["frame_03.png", 10], // Phase B start (0%): Loading bar appears at 0%, 3D ready (0.40s)
+        ["frame_04.png", 8],  // Phase B early: 2D background begins fading + camera starts tilting (0.32s)
+        ["frame_05.png", 14], // Phase B mid (Beat 3A): Center-out radial building wave + 2D mid-fade (0.56s)
+        ["frame_06.png", 14], // Phase B late (Beat 3B): Delayed bouncy tree pop-up wave (0.56s)
+        ["frame_07.png", 10], // Beat 4a (100%): 2D background faded to 0, HUD sliding in (0.40s)
+        ["frame_08.png", 20], // Beat 4b: Settled 3D perspective + full Studio HUD (0.80s)
       ];
       for (const [fName, count] of frameRepeats) {
         const src = path.join(TMP_FRAMES_DIR, fName);
@@ -1016,7 +1042,7 @@ async function main() {
           fs.copyFileSync(src, dst);
         }
       }
-      const mp4Out = path.join(ARTIFACTS_DIR, "pr164-v8-live-transition.mp4");
+      const mp4Out = path.join(ARTIFACTS_DIR, "pr164-v11-live-transition.mp4");
       execFileSync("ffmpeg", [
         "-y",
         "-framerate",

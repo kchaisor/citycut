@@ -13,11 +13,13 @@ import {
   countUses,
   uniformBuildingColor,
 } from "../lib/buildingUse";
-import { commitColour, getColour } from "../lib/colours";
+import { commitColour, getColour, resetStoredColours } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
 import { CRS_NOTE, mgaCrs } from "../lib/crsZone";
 import {
+  applyOverrides,
   readDrawingStyle,
+  readStoredOverrides,
   type LineStyles,
 } from "../lib/drawingStyle";
 import {
@@ -213,7 +215,11 @@ function loadView(): ViewMemory {
   } catch {
     stored = null;
   }
-  return resolveView(stored, window.location.search);
+  const resolved = resolveView(stored, window.location.search);
+  if (typeof window !== "undefined" && window.__citycutAwaitIntroStart) {
+    return { ...resolved, projection: "perspective", freeRotate: false };
+  }
+  return resolved;
 }
 
 /** Height-source tier to its swatch in the Model details height bar. */
@@ -284,6 +290,13 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     const nextDisplay = view3dDisplayForModelOpen(window.localStorage);
     setView3dDisplay(nextDisplay);
     writeStoredView3dDisplay(window.localStorage, nextDisplay);
+    if (typeof window !== "undefined" && window.__citycutAwaitIntroStart) {
+      setView((prev) => {
+        const next: ViewMemory = { ...prev, projection: "perspective", freeRotate: false };
+        writeStoredView(window.localStorage, next);
+        return next;
+      });
+    }
   }, [model]);
   const [planWidth, setPlanWidth] = useState<number | null>(null);
   const [fitCounter, setFitCounter] = useState(0);
@@ -1227,6 +1240,15 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     setLineStyles(readDrawingStyle());
   }
 
+  function resetSceneLayerColours() {
+    resetStoredColours(undefined, () => {
+      if (typeof window !== "undefined") {
+        applyOverrides(readStoredOverrides(window.localStorage));
+      }
+    });
+    setLineStyles(readDrawingStyle());
+  }
+
   function commitView(next: ViewMemory, snap: boolean) {
     setView(next);
     writeStoredView(window.localStorage, next);
@@ -1674,8 +1696,8 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     el.addEventListener("citycut:intro-hold-release", release);
     window.addEventListener("citycut:intro-webgl-ready", onWebglReady);
     window.addEventListener("citycut:intro-start", revealModel);
-    const timer = window.setTimeout(release, 30000);
-    const webglTimer = window.setTimeout(revealModel, 12000);
+    const timer = window.setTimeout(release, 45000);
+    const webglTimer = window.setTimeout(revealModel, 25000);
     return () => {
       el.removeEventListener("citycut:intro-hold-release", release);
       window.removeEventListener("citycut:intro-webgl-ready", onWebglReady);
@@ -1700,18 +1722,22 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       >
         {tab === "3d" && (
           <div className="fill">
-            {shouldShowIntroBridgePill() && (
-              <div className="loading-card loading-hud-pill is-model-bridge hud-card" aria-hidden="true" data-progress-pct={100}>
-                <div className="loading-hud-row">
-                  <span className="loading-pulse-dot" />
-                  <strong>Building 3D site cut · LiDAR + Vicmap…</strong>
-                  <div className="loading-prog-track">
-                    <div className="loading-prog-fill" style={{ width: "100%" }} />
+            {shouldShowIntroBridgePill() && (() => {
+              const samples = typeof window !== "undefined" ? window.__citycutProgressSamples : undefined;
+              const currentPct = Array.isArray(samples) && samples.length > 0 ? (samples[samples.length - 1] ?? 0) : 0;
+              return (
+                <div className="loading-card loading-hud-pill is-model-bridge hud-card" aria-hidden="true" data-progress-pct={currentPct}>
+                  <div className="loading-hud-row">
+                    <span className="loading-pulse-dot" />
+                    <strong>Building 3D site cut · LiDAR + Vicmap…</strong>
+                    <div className="loading-prog-track">
+                      <div className="loading-prog-fill" style={{ width: `${currentPct}%` }} />
+                    </div>
+                    <span className="loading-prog-pct">{currentPct}%</span>
                   </div>
-                  <span className="loading-prog-pct">100%</span>
                 </div>
-              </div>
-            )}
+              );
+            })()}
             {model.heightSourceLoadWarnings?.map((line) => (
               <p key={line} className="height-source-notice" role="status">
                 {line}
@@ -2637,9 +2663,19 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                       <section className="sidebar-group outliner-section" aria-label="Layers">
                         <div className="card-head sidebar-gh">
                           <h3 className="card-title">Scene Layers</h3>
-                          <span className="card-meta mono">
-                            {sceneLayerRows.filter((row) => row.visible).length} visible
-                          </span>
+                          <div className="studio-layer-head-actions">
+                            <span className="card-meta mono">
+                              {sceneLayerRows.filter((row) => row.visible).length} visible
+                            </span>
+                            <button
+                              type="button"
+                              className="studio-reset-colours-btn"
+                              onClick={resetSceneLayerColours}
+                              title="Reset all layer and building use colours to default"
+                            >
+                              Reset colours
+                            </button>
+                          </div>
                         </div>
                         <div className="outliner-rows display-switches" role="group" aria-label="3D layers">
                           {sceneLayerRows.map((layer) => (
@@ -2941,9 +2977,19 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                       <section className="sidebar-group outliner-section" aria-label="Layers">
                         <div className="card-head sidebar-gh">
                           <h3 className="card-title">Scene Layers</h3>
-                          <span className="card-meta mono">
-                            {sceneLayerRows.filter((row) => row.visible).length} visible
-                          </span>
+                          <div className="studio-layer-head-actions">
+                            <span className="card-meta mono">
+                              {sceneLayerRows.filter((row) => row.visible).length} visible
+                            </span>
+                            <button
+                              type="button"
+                              className="studio-reset-colours-btn"
+                              onClick={resetSceneLayerColours}
+                              title="Reset all layer and building use colours to default"
+                            >
+                              Reset colours
+                            </button>
+                          </div>
                         </div>
                         <div className="outliner-rows display-switches" role="group" aria-label="3D layers">
                           {sceneLayerRows.map((layer) => (

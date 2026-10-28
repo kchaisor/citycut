@@ -104,7 +104,7 @@ type FiberCamera = (THREE.OrthographicCamera | THREE.PerspectiveCamera) & { manu
 
 export const INTRO_TRANSITION_MS = 2100;
 const INTRO_TRANSITION_SEC = INTRO_TRANSITION_MS / 1000;
-const INTRO_HOLD_RELEASE_SEC = 1.65;
+const INTRO_HOLD_RELEASE_SEC = INTRO_TRANSITION_SEC;
 
 export function shouldRunIntroTransition(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") return false;
@@ -128,16 +128,16 @@ function easeOutCubic(x: number): number {
 export function computeIntroBuildingBucketScale(elapsedSec: number, bucket: number): number {
   if (elapsedSec >= INTRO_TRANSITION_SEC) return 1;
   const clampedBucket = Math.max(0, Math.min(23, bucket));
-  const bStart = (clampedBucket / 23) * 0.55;
-  const u = Math.min(1, Math.max(0, (elapsedSec - bStart) / 0.95));
+  const bStart = (clampedBucket / 23) * 0.65;
+  const u = Math.min(1, Math.max(0, (elapsedSec - bStart) / 1.05));
   return 0.001 + 0.999 * easeInOutCubic(u);
 }
 
 export function computeIntroTreeBucketScale(elapsedSec: number, bucket: number): number {
   if (elapsedSec >= INTRO_TRANSITION_SEC) return 1;
   const clampedBucket = Math.max(0, Math.min(15, bucket));
-  const tStart = 0.56 + (clampedBucket / 15) * 0.54;
-  const rawU = (elapsedSec - tStart) / 0.38;
+  const tStart = 0.65 + (clampedBucket / 15) * 0.95;
+  const rawU = (elapsedSec - tStart) / 0.50;
   if (rawU <= 0) return 0.001;
   if (rawU >= 1) return 1;
   return Math.max(0.001, easeOutCubic(rawU) * (1 + 0.16 * Math.sin(Math.PI * rawU)));
@@ -474,62 +474,65 @@ function City({
     const intro = introRef.current;
     if (!intro || intro.done) return;
     const ring = group.getObjectByName("IntroCutRing") as THREE.LineSegments | undefined;
-    if (
-      typeof window !== "undefined" &&
-      intro.frameCount >= 3 &&
-      window.__citycutIntroReadyToFire &&
-      !window.__citycutIntroStarted
-    ) {
-      window.__citycutIntroStarted = true;
-      window.__citycutIntroStartMs = performance.now();
-      window.dispatchEvent(new CustomEvent("citycut:intro-start"));
-    }
-    const waitingForIntroStart =
-      typeof window !== "undefined" &&
-      Boolean(window.__citycutAwaitIntroStart) &&
-      !window.__citycutIntroStarted;
-    if (intro.frameCount < 3 || waitingForIntroStart) {
-      const ds = state.gl.domElement.dataset;
-      if (ds.introPolar || intro.frameCount > 0) {
-        intro.frameCount += 1;
-        if (typeof window !== "undefined" && !intro.webglReadyDispatched) {
-          const prewarmProgress = Math.min(0.92, 0.85 + intro.frameCount * 0.02);
-          window.__citycutLoadProgress = Math.max(window.__citycutLoadProgress ?? 0, prewarmProgress);
-        }
+    const ds = state.gl.domElement.dataset;
+    const canvasExt = state.gl.domElement as HTMLCanvasElement & { __introElapsedSec?: number };
+    const bgCol = new THREE.Color(themeColor("--viewport-bg"));
+    state.scene.background = null;
+    state.gl.setClearColor(bgCol, 0);
+
+    if (intro.frameCount < 3) {
+      intro.frameCount += 1;
+      const s0 = 0.001;
+      for (const { obj, pivotY } of intro.targets) {
+        obj.scale.y = s0;
+        obj.position.y = pivotY * (1 - s0);
       }
-      if (intro.frameCount <= 3) {
-        const s0 = 0.001;
-        for (const { obj, pivotY } of intro.targets) {
-          obj.scale.y = s0;
-          obj.position.y = pivotY * (1 - s0);
-        }
-        if (ring) {
-          ring.visible = true;
-          (ring.material as THREE.LineBasicMaterial).opacity = 1;
-        }
-        group.userData.introScaleY = s0;
-        ds.introElapsed = "0.00";
-        ds.introScale = s0.toFixed(3);
-        ds.introBldgInner = s0.toFixed(3);
-        ds.introBldgOuter = s0.toFixed(3);
-        ds.introTreeScale = s0.toFixed(3);
+      if (ring) {
+        ring.visible = true;
+        (ring.material as THREE.LineBasicMaterial).opacity = 1;
       }
+      group.userData.introScaleY = s0;
+      canvasExt.__introElapsedSec = 0;
+      ds.introElapsed = "0.00";
+      ds.introProgressPct = "0";
+      ds.introUnderlayOpacity = "1.000";
+      ds.introScale = s0.toFixed(3);
+      ds.introBldgInner = s0.toFixed(3);
+      ds.introBldgOuter = s0.toFixed(3);
+      ds.introTreeScale = s0.toFixed(3);
       if (intro.frameCount >= 3 && !intro.webglReadyDispatched) {
         intro.webglReadyDispatched = true;
         if (typeof window !== "undefined") {
           window.__citycutWebglPrewarmReady = true;
-          window.__citycutLoadProgress = Math.max(window.__citycutLoadProgress ?? 0, 0.94);
-          if (!window.__citycutAwaitIntroStart) {
-            const modelRoot = state.gl.domElement.closest(".model");
-            if (modelRoot?.hasAttribute("data-intro-webgl-wait")) {
-              modelRoot.removeAttribute("data-intro-webgl-wait");
-            }
+          const modelRoot = state.gl.domElement.closest(".model");
+          if (modelRoot?.hasAttribute("data-intro-webgl-wait")) {
+            modelRoot.removeAttribute("data-intro-webgl-wait");
           }
-          window.dispatchEvent(new CustomEvent("citycut:intro-webgl-ready"));
+          if (window.__citycutAwaitIntroStart && !window.__citycutIntroStarted) {
+            window.__citycutIntroReadyToFire = true;
+            window.__citycutIntroStarted = true;
+            window.__citycutIntroStartMs = performance.now();
+            window.__citycutLoadProgress = 0;
+            window.__citycutProgressSamples = [0];
+            if (typeof document !== "undefined") {
+              const selectEl = document.querySelector(".select") as HTMLElement | null;
+              if (selectEl) {
+                selectEl.classList.add("is-loading", "is-fading-out");
+                selectEl.style.transition = "none";
+                selectEl.style.opacity = "1";
+                selectEl.dataset.underlayOpacity = "1.000";
+              }
+            }
+            window.dispatchEvent(new CustomEvent("citycut:intro-webgl-ready"));
+            window.dispatchEvent(new CustomEvent("citycut:intro-start"));
+          } else {
+            window.dispatchEvent(new CustomEvent("citycut:intro-webgl-ready"));
+          }
         }
       }
       return;
     }
+
     const introPaused =
       typeof window !== "undefined" &&
       Boolean((window as Window & { __citycutIntroPaused?: boolean }).__citycutIntroPaused);
@@ -549,6 +552,11 @@ function City({
     }
     const done = intro.elapsedSec >= INTRO_TRANSITION_SEC;
     const clampedElapsed = done ? INTRO_TRANSITION_SEC : intro.elapsedSec;
+    canvasExt.__introElapsedSec = clampedElapsed;
+    const progress = done ? 1 : Math.min(1, Math.max(0, clampedElapsed / INTRO_TRANSITION_SEC));
+    const pct = done ? 100 : Math.min(100, Math.round(progress * 100));
+    const underlayOpacity = done ? 0 : Math.max(0, 1 - progress);
+
     for (const { obj, pivotY, kind, bucket } of intro.targets) {
       const s = done
         ? 1
@@ -568,21 +576,53 @@ function City({
       (ring.material as THREE.LineBasicMaterial).opacity = ringAlpha;
     }
     group.userData.introScaleY = bldgInner;
+
+    if (typeof window !== "undefined") {
+      window.__citycutLoadProgress = progress;
+      const samples = (window.__citycutProgressSamples ??= [0]);
+      if (samples[samples.length - 1] !== pct) {
+        samples.push(pct);
+      }
+      if (typeof document !== "undefined") {
+        const pill = document.querySelector(".loading-hud-pill.is-model-bridge") as HTMLElement | null;
+        if (pill) {
+          pill.dataset.progressPct = String(pct);
+          const fill = pill.querySelector(".loading-prog-fill") as HTMLElement | null;
+          if (fill) fill.style.width = `${pct}%`;
+          const pctText = pill.querySelector(".loading-prog-pct") as HTMLElement | null;
+          if (pctText) pctText.textContent = `${pct}%`;
+        }
+        const selectEl = document.querySelector(".select") as HTMLElement | null;
+        if (selectEl) {
+          selectEl.classList.add("is-loading", "is-fading-out");
+          selectEl.style.transition = "none";
+          selectEl.style.opacity = underlayOpacity.toFixed(4);
+          selectEl.dataset.underlayOpacity = underlayOpacity.toFixed(3);
+        }
+      }
+    }
+
     if (clampedElapsed >= INTRO_HOLD_RELEASE_SEC || done) {
+      state.scene.background = bgCol;
+      state.gl.setClearColor(bgCol, 1);
       const modelRoot = state.gl.domElement.closest(".model");
       if (modelRoot?.hasAttribute("data-intro-hold")) {
         modelRoot.removeAttribute("data-intro-hold");
         modelRoot.dispatchEvent(new CustomEvent("citycut:intro-hold-release"));
       }
     }
-    const ds = state.gl.domElement.dataset;
     ds.introElapsed = clampedElapsed.toFixed(2);
+    ds.introProgressPct = String(pct);
+    ds.introUnderlayOpacity = underlayOpacity.toFixed(3);
     ds.introScale = bldgInner.toFixed(3);
     ds.introBldgInner = bldgInner.toFixed(3);
     ds.introBldgOuter = bldgOuter.toFixed(3);
     ds.introTreeScale = treeScale.toFixed(3);
     if (done) {
       intro.done = true;
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("citycut:intro-done"));
+      }
     }
   });
   useLayoutEffect(() => {
@@ -799,10 +839,13 @@ function PerspectiveFit({
       anim: NonNullable<typeof introAnimRef.current>,
       controls: OrbitControlsImpl,
     ) => {
+      const syncedElapsed =
+        (gl.domElement as HTMLCanvasElement & { __introElapsedSec?: number }).__introElapsedSec ??
+        anim.elapsedSec;
       const rawT =
         anim.frameCount < 3 || !anim.playingStarted
           ? 0
-          : Math.min(1, Math.max(0, anim.elapsedSec / 1.3));
+          : Math.min(1, Math.max(0, syncedElapsed / INTRO_TRANSITION_SEC));
       const ease = easeOutCubic(rawT);
       const radius = THREE.MathUtils.lerp(anim.startRadius, anim.endRadius, ease);
       const phi = THREE.MathUtils.lerp(anim.startPhi, anim.endPhi, ease);

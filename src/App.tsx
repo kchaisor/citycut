@@ -350,7 +350,7 @@ export default function App() {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    const createStartMs = performance.now();
+    const createClickMs = typeof performance !== "undefined" ? performance.now() : 0;
     const isDomTestStart =
       typeof navigator !== "undefined" && /jsdom|HappyDOM/i.test(navigator.userAgent ?? "");
     const prefersReducedStart =
@@ -366,7 +366,8 @@ export default function App() {
       window.__citycutModelPrewarmMounted = false;
       window.__citycutIntroStartMs = undefined;
       window.__citycutFirstTiltFrameMs = undefined;
-      window.__citycutLoadProgress = 0.04;
+      window.__citycutLoadProgress = 0;
+      window.__citycutProgressSamples = [];
     }
     void preloadModelPage();
     setLoading(true);
@@ -945,14 +946,15 @@ export default function App() {
       const isQa = typeof window !== "undefined" && qaModeFromSearch(window.location.search);
       if (!isAutomatedDomTest && !prefersReduced && !isQa) {
         await preloadModelPage().catch(() => undefined);
-        const elapsedMs = performance.now() - createStartMs;
-        const prewarmMountGateMs = 580;
-        if (elapsedMs < prewarmMountGateMs) {
-          await new Promise<void>((resolve) =>
-            window.setTimeout(resolve, prewarmMountGateMs - elapsedMs),
-          );
-        }
         if (controller.signal.aborted) return;
+        const minSilentMs = typeof window !== "undefined" && typeof window.__citycutMinSilentLoadMs === "number" ? window.__citycutMinSilentLoadMs : 0;
+        if (minSilentMs > 0) {
+          const elapsedSilent = performance.now() - createClickMs;
+          if (elapsedSilent < minSilentMs) {
+            await new Promise<void>((resolve) => window.setTimeout(resolve, minSilentMs - elapsedSilent));
+          }
+          if (controller.signal.aborted) return;
+        }
         if (typeof window !== "undefined") {
           window.__citycutModelPrewarmMounted = true;
         }
@@ -993,37 +995,43 @@ export default function App() {
 
   useEffect(() => {
     if (phase !== "model" || handoffUnderlay === "none") return;
-    let fadeTimer: number | null = null;
     const triggerFade = () => {
-      selectRootRef.current?.classList.add("is-fading-out");
-      if (fadeTimer === null) {
-        fadeTimer = window.setTimeout(() => {
-          setHandoffUnderlay("none");
-        }, 850);
-      }
+      setHandoffUnderlay((prev) => (prev === "holding" ? "fading" : prev));
+      selectRootRef.current?.classList.add("is-loading", "is-fading-out");
+    };
+    const onIntroDone = () => {
+      setHandoffUnderlay("none");
     };
     if (typeof window !== "undefined" && window.__citycutIntroStarted) {
       triggerFade();
     }
     const onSafetyTimeout = () => {
+      if (
+        typeof window !== "undefined" &&
+        (window as Window & { __citycutIntroPaused?: boolean }).__citycutIntroPaused
+      ) {
+        return;
+      }
       if (typeof window !== "undefined" && !window.__citycutIntroStarted) {
         window.__citycutIntroStarted = true;
         window.__citycutIntroStartMs = performance.now();
         window.dispatchEvent(new CustomEvent("citycut:intro-start"));
       }
-      triggerFade();
+      setHandoffUnderlay("none");
     };
     window.addEventListener("citycut:intro-start", triggerFade);
-    const safetyTimer = window.setTimeout(onSafetyTimeout, 12000);
+    window.addEventListener("citycut:intro-done", onIntroDone);
+    const safetyTimer = window.setTimeout(onSafetyTimeout, 45000);
     return () => {
       window.removeEventListener("citycut:intro-start", triggerFade);
+      window.removeEventListener("citycut:intro-done", onIntroDone);
       window.clearTimeout(safetyTimer);
-      if (fadeTimer !== null) window.clearTimeout(fadeTimer);
     };
   }, [phase, handoffUnderlay]);
 
   const showSelectLayer = phase === "select" || handoffUnderlay !== "none";
-  const selectLoadingActive = loading || (phase === "model" && handoffUnderlay !== "none");
+  const selectTransitionActive = phase === "model" && handoffUnderlay === "fading";
+  const selectBusy = loading || (phase === "model" && handoffUnderlay !== "none");
 
   return (
     <div className="app">
@@ -1033,7 +1041,7 @@ export default function App() {
           className={[
             "select",
             selectCollapsed ? "sidebar-collapsed" : "",
-            selectLoadingActive ? "is-loading" : "",
+            selectTransitionActive ? "is-loading" : "",
             phase === "model" && handoffUnderlay !== "none" ? "is-handoff-underlay" : "",
             phase === "model" && handoffUnderlay === "fading" ? "is-fading-out" : "",
           ]
@@ -1048,7 +1056,7 @@ export default function App() {
             frameShape={frameShape}
             initialView={viewRef.current}
             fly={fly}
-            loading={selectLoadingActive}
+            loading={selectBusy}
             siteSearch={mapSiteSearch}
             onCancel={cancel}
             onView={onView}
@@ -1058,7 +1066,7 @@ export default function App() {
             placeLabel={placeLabel}
             sideKm={sideKm}
             layers={layers}
-            loading={selectLoadingActive}
+            loading={selectBusy}
             error={error}
             onSideKm={setSideKm}
             frameShape={frameShape}

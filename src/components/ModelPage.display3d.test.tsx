@@ -361,6 +361,13 @@ describe("Display panel controls by view tab", () => {
     expect(treesCheckbox.checked).toBe(false);
     expect(contoursCheckbox.checked).toBe(false);
 
+    const defaultResidential = getColour("--use-residential").toLowerCase();
+    const defaultRoadLocal = getColour("--road-local").toLowerCase();
+    const defaultTreeCrown = getColour("--tree-crown").toLowerCase();
+    const defaultGreen3d = getColour("--green-3d").toLowerCase();
+    const defaultWater3d = getColour("--water-3d").toLowerCase();
+    const defaultContour = getColour("--outline-contour").toLowerCase();
+
     // Residential building use colour
     fireEvent.change(within(colorsSection).getByLabelText("Residential colour"), {
       target: { value: hex("d48855") },
@@ -401,6 +408,16 @@ describe("Display panel controls by view tab", () => {
     });
     expect(getColour("--outline-contour").toLowerCase()).toBe(hex("aa5522"));
     expect(contoursCheckbox.checked).toBe(true);
+
+    // Clicking "Reset colours" in Scene Layers restores all edited building use and scene layer colours to default
+    const resetColoursBtn = within(layersSection).getByRole("button", { name: "Reset colours" });
+    await user.click(resetColoursBtn);
+    expect(getColour("--use-residential").toLowerCase()).toBe(defaultResidential);
+    expect(getColour("--road-local").toLowerCase()).toBe(defaultRoadLocal);
+    expect(getColour("--tree-crown").toLowerCase()).toBe(defaultTreeCrown);
+    expect(getColour("--green-3d").toLowerCase()).toBe(defaultGreen3d);
+    expect(getColour("--water-3d").toLowerCase()).toBe(defaultWater3d);
+    expect(getColour("--outline-contour").toLowerCase()).toBe(defaultContour);
   });
 
   it("shows separate Hidden buildings and Edited building heights sections in Buildings and CRS positioning note in Import", async () => {

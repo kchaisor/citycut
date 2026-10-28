@@ -521,8 +521,7 @@ export function SelectChrome({
               <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
               <line x1="12" y1="22.08" x2="12" y2="12" />
             </svg>
-            {loading && <span className="loading-pulse-dot" aria-hidden="true" />}
-            <span>{loading ? "Building 3D site cut · LiDAR + Vicmap…" : "Create model"}</span>
+            <span>Create model</span>
             <span className="create-fab-arrow" aria-hidden="true">→</span>
           </button>
         </div>

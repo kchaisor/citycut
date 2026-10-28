@@ -3393,16 +3393,13 @@ body,
   z-index: 1 !important;
   pointer-events: none !important;
   opacity: 1;
-  transition: opacity 1450ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.select.is-handoff-underlay.is-fading-out {
-  opacity: 0 !important;
-}
-
+.select.is-handoff-underlay .map-wrap .frame,
 .select.is-handoff-underlay.is-fading-out .map-wrap .frame {
   border-color: transparent !important;
-  transition: border-color 180ms ease, box-shadow 1450ms ease !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .select.is-handoff-underlay.is-fading-out .map-wrap .frame-handle,
@@ -4012,10 +4009,43 @@ body,
   transition: none !important;
 }
 
-.model[data-intro-hold="true"] .loading-hud-pill.is-model-bridge {
-  opacity: 0 !important;
-  translate: 0 -10px !important;
+.model[data-intro-hold="true"]:not([data-intro-webgl-wait="true"]) .loading-hud-pill.is-model-bridge {
+  opacity: 1 !important;
+  translate: 0 0 !important;
   pointer-events: none !important;
+}
+
+.select .wb-cta.create-fab:disabled {
+  opacity: 1 !important;
+  cursor: progress !important;
+}
+
+/* Studio HUD Reset colours button in SCENE LAYERS header */
+.model .outliner-section .studio-layer-head-actions {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.model .outliner-section .studio-reset-colours-btn {
+  appearance: none !important;
+  font-family: var(--sans) !important;
+  font-size: 10.5px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  padding: 3px 7px !important;
+  height: 20px !important;
+  border-radius: 5px !important;
+  border: 1px solid var(--border-inner) !important;
+  background: var(--bg-elev) !important;
+  color: var(--muted-text) !important;
+  cursor: pointer !important;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease !important;
+}
+
+.model .outliner-section .studio-reset-colours-btn:hover {
+  color: var(--ink) !important;
+  border-color: var(--ink) !important;
 }
 
 /* Studio HUD Drawing Display outliner scale row */
