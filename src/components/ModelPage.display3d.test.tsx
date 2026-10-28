@@ -590,4 +590,53 @@ describe("Display panel controls by view tab", () => {
     expect(indexCss).toMatch(/\.model\s+\.viewport\s*\{[^}]*--sidebar-r:\s*var\(--sidebar-panel-w\);/);
     expect(indexCss).toMatch(/\.model\s+\.viewport\s*>\s*\.fill\s*\{\s*inset:\s*0;\s*left:\s*0;\s*right:\s*0;\s*\}/);
   });
+
+  it("renders View Style heading in Display and expands the 2-row Environmental Console with zero left drawer on Analysis", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModelPage
+        model={sampleModel({
+          withWater: true,
+          withTrees: true,
+          withFootpaths: true,
+          withRail: true,
+        })}
+        onHome={vi.fn()}
+        onNewCut={vi.fn()}
+      />,
+    );
+
+    const viewModesSection = screen.getByRole("region", { name: "View modes" });
+    expect(within(viewModesSection).getByRole("heading", { name: "View Style" })).toBeTruthy();
+
+    const leftOutliner = document.querySelector(".left-outliner") as HTMLElement;
+    expect(leftOutliner).toBeTruthy();
+    expect(leftOutliner.hidden).toBe(false);
+
+    // Click Analysis on the left rail
+    const leftRail = screen.getByRole("toolbar", { name: "Model tools" });
+    await user.click(within(leftRail).getByRole("button", { name: "Site Analysis" }));
+
+    // Left outliner drawer is hidden while Analysis is active
+    expect(leftOutliner.hidden).toBe(true);
+    expect(leftOutliner.getAttribute("data-active-section")).toBe("analysis");
+
+    // 2-row Environmental Console is active at bottom center
+    const envConsole = screen.getByRole("region", { name: "Environmental analysis console" });
+    expect(envConsole).toBeTruthy();
+    expect(within(envConsole).getByRole("tab", { name: "Solar Study" })).toBeTruthy();
+    expect(within(envConsole).getByRole("tab", { name: "Wind Rose" })).toBeTruthy();
+    expect(within(envConsole).getByRole("tab", { name: "Viewshed Walk" })).toBeTruthy();
+    expect(within(envConsole).getByLabelText("Live solar telemetry").textContent).toContain("ALT");
+
+    // Switch to Wind Rose inside the bottom console
+    await user.click(within(envConsole).getByRole("tab", { name: "Wind Rose" }));
+    expect(within(envConsole).getByLabelText("Live wind telemetry").textContent).toContain("PREVAILING");
+
+    // Switch back to Display -> left drawer reopens and compact solar bar returns
+    await user.click(within(leftRail).getByRole("button", { name: "Display" }));
+    expect(leftOutliner.hidden).toBe(false);
+    expect(screen.queryByRole("region", { name: "Environmental analysis console" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Solar and camera controls" })).toBeTruthy();
+  });
 });

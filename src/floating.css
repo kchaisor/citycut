@@ -431,12 +431,12 @@ textarea {
   --border-outer: rgb(20 20 19 / 13%);
   --border-subtle: rgb(20 20 19 / 8%);
   --shadow-hud: 0 8px 28px -6px rgb(20 20 19 / 12%), 0 2px 6px -1px rgb(20 20 19 / 6%), inset 0 1px 0 0 rgb(255 255 255 / 85%);
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-display: "Outfit", "Inter", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --sans: var(--font-sans);
-  --display: var(--font-display);
-  --mono: var(--font-mono);
+  --font-sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: "Outfit", "Geist", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+  --display: "Outfit", "Geist", sans-serif;
+  --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 body,
@@ -2576,7 +2576,10 @@ body,
    VARIATION B STUDIO HUD — 1:1 MOCKUP COLLISION OVERRIDES
    ============================================================================ */
 :root {
-  --font-sans: var(--sans);
+  --sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --hud-kpi-bg: #F7F6F2;
   --hud-sub-toggle-bg: #F5F4F0;
   --hud-track-bg: #F2F1EC;
@@ -3166,7 +3169,7 @@ body,
 }
 
 .select .bottom-workbench .seg-item.on-white {
-  background: #FFFFFF !important;
+  background: var(--bg-elev) !important;
   color: var(--ink) !important;
   font-family: var(--sans) !important;
   font-weight: 600 !important;
@@ -3247,4 +3250,492 @@ body,
   border-radius: 5px !important;
   box-shadow: 0 1px 2px rgb(20 20 19 / 8%) !important;
   border: 0 !important;
+}
+
+
+/* ============================================================================
+   7. DIRECTION A — CONTEXTUAL 2-ROW ENVIRONMENTAL CONSOLE & ZERO LEFT DRAWER
+   ============================================================================ */
+
+/* Hide the left floating outliner drawer when Analysis is active */
+.model .left-outliner[data-active-section="analysis"],
+.model .left-outliner[hidden] {
+  display: none !important;
+}
+
+/* Smooth Studio HUD perimeter island entrance */
+@keyframes hudEnter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.model .top-bar,
+.model .left-rail,
+.model .left-outliner,
+.model .right-rail,
+.model .right-inspector,
+.model .bottom-bar {
+  animation: hudEnter 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .model .top-bar,
+  .model .left-rail,
+  .model .left-outliner,
+  .model .right-rail,
+  .model .right-inspector,
+  .model .bottom-bar {
+    animation: none !important;
+  }
+}
+
+/* Studio HUD Loading Pill on 2D Cut -> 3D Transition */
+.loading-hud-pill {
+  position: absolute;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-outer);
+  box-shadow: var(--shadow-hud);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.loading-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  border: 1.5px solid var(--ink);
+  box-shadow: 0 0 0 3px rgb(255 245 0 / 35%);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* Contextual 2-Row Bottom Environmental Console */
+.model .bottom-bar.env-console {
+  position: fixed !important;
+  bottom: 12px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  z-index: 32 !important;
+  width: min(920px, calc(100vw - 140px)) !important;
+  height: auto !important;
+  min-height: 76px !important;
+  padding: 7px 11px !important;
+  border-radius: 12px !important;
+  background: var(--bg-elev) !important;
+  border: 1px solid var(--border-outer) !important;
+  box-shadow: var(--shadow-hud) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 6px !important;
+  box-sizing: border-box !important;
+}
+
+.model .bottom-bar.env-console .env-top-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  min-height: 30px !important;
+}
+
+.model .bottom-bar.env-console .env-mode-seg {
+  display: inline-flex !important;
+  align-items: center !important;
+  background: var(--hud-track-bg) !important;
+  padding: 2.5px !important;
+  border-radius: 7px !important;
+  gap: 2px !important;
+  flex-shrink: 0 !important;
+}
+
+.model .bottom-bar.env-console .env-mode-btn {
+  height: 25px !important;
+  padding: 0 9px !important;
+  border-radius: 5px !important;
+  border: 0 !important;
+  background: transparent !important;
+  font-family: var(--sans) !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  color: var(--ink-2) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  box-shadow: none !important;
+}
+
+.model .bottom-bar.env-console .env-mode-btn.active {
+  background: var(--ink) !important;
+  color: var(--bg-elev) !important;
+  font-weight: 600 !important;
+  box-shadow: 0 1px 2px rgb(20 20 19 / 16%) !important;
+}
+
+.model .bottom-bar.env-console .env-mode-btn.active svg {
+  color: var(--accent) !important;
+}
+
+/* Center live telemetry */
+.model .bottom-bar.env-console .solar-telemetry {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 0 10px !important;
+  height: 27px !important;
+  border-radius: 6px !important;
+  background: var(--hud-kpi-bg) !important;
+  border: 1px solid var(--border-subtle) !important;
+  font-family: var(--mono) !important;
+  font-size: 11px !important;
+  font-variant-numeric: tabular-nums !important;
+  white-space: nowrap !important;
+}
+
+.model .bottom-bar.env-console .st-item {
+  display: inline-flex !important;
+  align-items: baseline !important;
+  gap: 4px !important;
+}
+
+.model .bottom-bar.env-console .st-k {
+  font-size: 9.5px !important;
+  font-weight: 600 !important;
+  color: var(--ink-3) !important;
+  letter-spacing: 0.04em !important;
+}
+
+.model .bottom-bar.env-console .st-v {
+  font-weight: 600 !important;
+  color: var(--ink) !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+.model .bottom-bar.env-console .st-dot {
+  color: var(--ink-3) !important;
+  opacity: 0.55 !important;
+}
+
+/* Scene overlay chips */
+.model .bottom-bar.env-console .overlay-chips {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+}
+
+.model .bottom-bar.env-console .ov-chip {
+  height: 26px !important;
+  padding: 0 8.5px !important;
+  border-radius: 6px !important;
+  font-family: var(--sans) !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  color: var(--ink-2) !important;
+  background: var(--hud-kpi-bg) !important;
+  border: 1px solid var(--border-subtle) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  box-shadow: none !important;
+}
+
+.model .bottom-bar.env-console .ov-chip.on {
+  background: rgb(255 245 0 / 28%) !important;
+  border-color: var(--ink) !important;
+  color: var(--ink) !important;
+  font-weight: 600 !important;
+}
+
+.model .bottom-bar.env-console .ov-dot {
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 999px !important;
+  background: var(--ink-3) !important;
+  display: inline-block !important;
+}
+
+.model .bottom-bar.env-console .ov-chip.on .ov-dot {
+  background: var(--ink) !important;
+  box-shadow: 0 0 0 2px var(--accent) !important;
+}
+
+.model .bottom-bar.env-console .cam-mini-group {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  margin-left: auto !important;
+  flex-shrink: 0 !important;
+}
+
+/* Row 2: Presets + Play + Daylight Horizon Scrubber */
+.model .bottom-bar.env-console .env-bottom-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  padding-top: 5px !important;
+  border-top: 1px solid var(--border-subtle) !important;
+  min-height: 31px !important;
+}
+
+.model .bottom-bar.env-console .date-presets {
+  display: inline-flex !important;
+  align-items: center !important;
+  background: var(--hud-track-bg) !important;
+  padding: 2px !important;
+  border-radius: 6px !important;
+  gap: 2px !important;
+  flex-shrink: 0 !important;
+}
+
+.model .bottom-bar.env-console .p-pill {
+  height: 23px !important;
+  padding: 0 7.5px !important;
+  border-radius: 4px !important;
+  border: 0 !important;
+  background: transparent !important;
+  font-family: var(--sans) !important;
+  font-size: 10.5px !important;
+  font-weight: 500 !important;
+  color: var(--ink-2) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  box-shadow: none !important;
+}
+
+.model .bottom-bar.env-console .p-pill.active {
+  background: var(--bg-elev) !important;
+  color: var(--ink) !important;
+  font-weight: 600 !important;
+  box-shadow: 0 1px 2px rgb(20 20 19 / 10%) !important;
+}
+
+.model .bottom-bar.env-console .play-pill {
+  height: 27px !important;
+  padding: 0 8px !important;
+  border-radius: 6px !important;
+  background: var(--hud-kpi-bg) !important;
+  border: 1px solid var(--border-subtle) !important;
+  font-family: var(--mono) !important;
+  font-size: 10.5px !important;
+  font-weight: 600 !important;
+  color: var(--ink) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+  box-shadow: none !important;
+}
+
+.model .bottom-bar.env-console .play-pill.active {
+  background: var(--accent) !important;
+  border-color: var(--ink) !important;
+}
+
+.model .bottom-bar.env-console .daylight-scrubber {
+  flex: 1 !important;
+  height: 28px !important;
+  border-radius: 7px !important;
+  background: var(--hud-kpi-bg) !important;
+  border: 1px solid var(--border-subtle) !important;
+  display: flex !important;
+  align-items: center !important;
+  padding: 0 8px !important;
+  gap: 7px !important;
+  position: relative !important;
+  overflow: hidden !important;
+  min-width: 0 !important;
+}
+
+.model .bottom-bar.env-console .sun-bound {
+  font-family: var(--mono) !important;
+  font-size: 9.5px !important;
+  font-weight: 500 !important;
+  color: var(--ink-3) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 3px !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+.model .bottom-bar.env-console .scrubber-track {
+  flex: 1 !important;
+  height: 18px !important;
+  border-radius: 5px !important;
+  background: linear-gradient(
+    90deg,
+    rgb(20 20 19 / 7%) 0%,
+    rgb(20 20 19 / 7%) 10%,
+    rgb(255 245 0 / 22%) 18%,
+    rgb(255 215 80 / 32%) 50%,
+    rgb(255 245 0 / 22%) 82%,
+    rgb(20 20 19 / 7%) 90%,
+    rgb(20 20 19 / 7%) 100%
+  ) !important;
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 0 6px !important;
+}
+
+.model .bottom-bar.env-console .rescode-window {
+  position: absolute !important;
+  left: 22% !important;
+  width: 56% !important;
+  top: 2px !important;
+  bottom: 2px !important;
+  border-left: 1.5px dashed rgb(20 20 19 / 30%) !important;
+  border-right: 1.5px dashed rgb(20 20 19 / 30%) !important;
+  background: rgb(255 245 0 / 12%) !important;
+  pointer-events: none !important;
+}
+
+.model .bottom-bar.env-console .scrubber-ticks {
+  position: relative !important;
+  z-index: 3 !important;
+  width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+.model .bottom-bar.env-console .scrubber-tick-btn {
+  height: 16px !important;
+  min-width: 18px !important;
+  padding: 0 3px !important;
+  border-radius: 3px !important;
+  border: 0 !important;
+  background: transparent !important;
+  font-family: var(--mono) !important;
+  font-size: 9.5px !important;
+  font-weight: 500 !important;
+  color: var(--ink-3) !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: none !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+.model .bottom-bar.env-console .scrubber-tick-btn.hi {
+  color: var(--ink) !important;
+  font-weight: 600 !important;
+}
+
+.model .bottom-bar.env-console .scrubber-tick-btn.active {
+  background: var(--accent) !important;
+  color: var(--ink) !important;
+  font-weight: 700 !important;
+  box-shadow: inset 0 0 0 1px var(--ink) !important;
+}
+
+.model .bottom-bar.env-console .scrubber-range-input {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  opacity: 0 !important;
+  cursor: pointer !important;
+  z-index: 2 !important;
+  margin: 0 !important;
+}
+
+.model .bottom-bar.env-console .scrubber-thumb {
+  position: absolute !important;
+  top: -1px !important;
+  bottom: -1px !important;
+  width: 4px !important;
+  border-radius: 2px !important;
+  background: var(--ink) !important;
+  box-shadow: 0 0 0 2px var(--accent) !important;
+  pointer-events: none !important;
+  z-index: 1 !important;
+}
+
+.model .bottom-bar.env-console .time-readout-pill {
+  height: 22px !important;
+  padding: 0 8px !important;
+  border-radius: 5px !important;
+  background: var(--ink) !important;
+  color: var(--accent) !important;
+  font-family: var(--mono) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+/* Wind speed scale chips inside Row 2 */
+.model .bottom-bar.env-console .wind-console-bar,
+.model .bottom-bar.env-console .view-console-bar {
+  justify-content: space-between !important;
+}
+
+.model .bottom-bar.env-console .wind-band-pills {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+.model .bottom-bar.env-console .wind-band-chip {
+  height: 18px !important;
+  padding: 0 6px !important;
+  border-radius: 4px !important;
+  font-family: var(--mono) !important;
+  font-size: 9.5px !important;
+  font-weight: 600 !important;
+  color: var(--ink) !important;
+  background: var(--hud-track-bg) !important;
+  border: 1px solid var(--border-subtle) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+/* Ensure numeric readouts across Studio HUD use tabular-nums */
+.kpi-val,
+.card-meta,
+.layer-meta,
+.scale-label,
+.ready-text,
+.studio-solar-time,
+.solar-telemetry,
+.sun-bound,
+.time-readout-pill {
+  font-variant-numeric: tabular-nums !important;
 }

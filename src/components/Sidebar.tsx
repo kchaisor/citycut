@@ -260,8 +260,9 @@ export function Sidebar({
               : "sidebar-panel left-outliner hud-card"
           }
           data-panel-side={panelSide}
+          data-active-section={active}
           aria-labelledby={titleId}
-          hidden={collapsed}
+          hidden={collapsed || (panelSide !== "right" && active === "analysis")}
         >
           <header className={active === "drawing" || active === "display" ? "sidebar-head sr-only" : "sidebar-head"}>
             <h2 id={titleId}>{title}</h2>

@@ -101,6 +101,20 @@ export type SceneExporter = {
 
 type FiberCamera = (THREE.OrthographicCamera | THREE.PerspectiveCamera) & { manual?: boolean };
 
+export const INTRO_TRANSITION_MS = 1400;
+
+export function shouldRunIntroTransition(): boolean {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+  if (navigator.webdriver) return false;
+  const ua = navigator.userAgent ?? "";
+  if (/jsdom|HappyDOM/i.test(ua)) return false;
+  if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    return false;
+  }
+  if (qaModeFromSearch(window.location.search)) return false;
+  return true;
+}
+
 const scratch = new THREE.Vector3();
 
 function measureCity(group: THREE.Object3D): Aabb {
@@ -288,6 +302,55 @@ function City({
   useLayoutEffect(() => {
     onBoundsRef.current(measureCity(group));
   }, [group]);
+  const introRef = useRef<{ startMs: number; targets: Array<{ obj: THREE.Object3D; pivotY: number }> } | null>(null);
+  useLayoutEffect(() => {
+    const targets: Array<{ obj: THREE.Object3D; pivotY: number }> = [];
+    group.traverse((object) => {
+      const name = object.name;
+      const isBuilding =
+        name === "Buildings" ||
+        name === "Buildings-manual" ||
+        name === "Buildings-site" ||
+        name.startsWith("Buildings::") ||
+        name.startsWith("source:") ||
+        name === "BuildingEdges";
+      if (!isBuilding) return;
+      const geom = (object as THREE.Mesh | THREE.LineSegments).geometry as THREE.BufferGeometry | undefined;
+      if (geom && !geom.boundingBox) geom.computeBoundingBox();
+      const pivotY = geom?.boundingBox ? geom.boundingBox.min.y : 0;
+      targets.push({ obj: object, pivotY });
+    });
+    if (!shouldRunIntroTransition() || targets.length === 0) {
+      for (const { obj } of targets) {
+        obj.scale.y = 1;
+        obj.position.y = 0;
+      }
+      group.userData.introScaleY = 1;
+      introRef.current = null;
+      return;
+    }
+    const startScale = 0.02;
+    for (const { obj, pivotY } of targets) {
+      obj.scale.y = startScale;
+      obj.position.y = pivotY * (1 - startScale);
+    }
+    group.userData.introScaleY = startScale;
+    introRef.current = { startMs: performance.now(), targets };
+  }, [group]);
+  useFrame(() => {
+    const intro = introRef.current;
+    if (!intro) return;
+    const elapsed = performance.now() - intro.startMs;
+    const u = Math.min(1, Math.max(0, elapsed / INTRO_TRANSITION_MS));
+    const ease = 1 - Math.pow(1 - u, 3);
+    const s = u >= 1 ? 1 : 0.02 + 0.98 * ease;
+    for (const { obj, pivotY } of intro.targets) {
+      obj.scale.y = s;
+      obj.position.y = u >= 1 ? 0 : pivotY * (1 - s);
+    }
+    group.userData.introScaleY = s;
+    if (u >= 1) introRef.current = null;
+  });
   useLayoutEffect(() => {
     snapshotBuildingViewportColors(group, colourMode);
     snapshotSunStudySurfaceColors(group);
@@ -463,6 +526,7 @@ function PerspectiveFit({
   active,
   touchedRef,
   fittedKey,
+  introEnabled = false,
 }: {
   camera: THREE.PerspectiveCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
@@ -478,8 +542,20 @@ function PerspectiveFit({
   active: boolean;
   touchedRef: RefObject<boolean>;
   fittedKey: MutableRefObject<string | null>;
+  introEnabled?: boolean;
 }) {
   const size = useThree((state) => state.size);
+  const introAnimRef = useRef<{
+    startMs: number;
+    target: THREE.Vector3;
+    endEye: THREE.Vector3;
+    startRadius: number;
+    endRadius: number;
+    startPhi: number;
+    endPhi: number;
+    startTheta: number;
+    endTheta: number;
+  } | null>(null);
   const place = useCallback(() => {
     const controls = controlsRef.current;
     if (!controls || !active || size.width < 2 || size.height < 2) return;
@@ -503,17 +579,44 @@ function PerspectiveFit({
       fov: camera.fov,
       aspect: size.width / Math.max(size.height, 1),
     });
+    const wasUnfitted = fittedKey.current === null;
     flushControlInertia(controls);
-    camera.position.set(pose.eye[0], pose.eye[1], pose.eye[2]);
     camera.near = pose.near;
     camera.far = pose.far;
-    controls.target.set(pose.target[0], pose.target[1], pose.target[2]);
-    camera.lookAt(controls.target);
-    camera.updateProjectionMatrix();
-    controls.update();
+    if (introEnabled && wasUnfitted && shouldRunIntroTransition()) {
+      const targetVec = new THREE.Vector3(pose.target[0], pose.target[1], pose.target[2]);
+      const endEyeVec = new THREE.Vector3(pose.eye[0], pose.eye[1], pose.eye[2]);
+      const endSpherical = new THREE.Spherical().setFromVector3(endEyeVec.clone().sub(targetVec));
+      const startRadius = endSpherical.radius * 0.92;
+      const startPhi = 0.05;
+      const startTheta = 0;
+      camera.position.setFromSphericalCoords(startRadius, startPhi, startTheta).add(targetVec);
+      controls.target.copy(targetVec);
+      camera.lookAt(controls.target);
+      camera.updateProjectionMatrix();
+      controls.update();
+      introAnimRef.current = {
+        startMs: performance.now(),
+        target: targetVec,
+        endEye: endEyeVec,
+        startRadius,
+        endRadius: endSpherical.radius,
+        startPhi,
+        endPhi: endSpherical.phi,
+        startTheta,
+        endTheta: endSpherical.theta,
+      };
+    } else {
+      camera.position.set(pose.eye[0], pose.eye[1], pose.eye[2]);
+      controls.target.set(pose.target[0], pose.target[1], pose.target[2]);
+      camera.lookAt(controls.target);
+      camera.updateProjectionMatrix();
+      controls.update();
+    }
     fittedKey.current = key;
     touchedRef.current = false;
   }, [
+    introEnabled,
     active,
     camera,
     controlsRef,
@@ -535,6 +638,34 @@ function PerspectiveFit({
   }, [place]);
   useFrame(() => {
     place();
+    const anim = introAnimRef.current;
+    if (!anim) return;
+    const controls = controlsRef.current;
+    if (!active || !controls || touchedRef.current) {
+      introAnimRef.current = null;
+      return;
+    }
+    const elapsed = performance.now() - anim.startMs;
+    const u = Math.min(1, Math.max(0, elapsed / INTRO_TRANSITION_MS));
+    if (u >= 1) {
+      flushControlInertia(controls);
+      camera.position.copy(anim.endEye);
+      controls.target.copy(anim.target);
+      camera.lookAt(controls.target);
+      camera.updateProjectionMatrix();
+      controls.update();
+      introAnimRef.current = null;
+      return;
+    }
+    const ease = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+    const radius = THREE.MathUtils.lerp(anim.startRadius, anim.endRadius, ease);
+    const phi = THREE.MathUtils.lerp(anim.startPhi, anim.endPhi, ease);
+    const theta = THREE.MathUtils.lerp(anim.startTheta, anim.endTheta, ease);
+    camera.position.setFromSphericalCoords(radius, phi, theta).add(anim.target);
+    controls.target.copy(anim.target);
+    camera.lookAt(controls.target);
+    camera.updateProjectionMatrix();
+    controls.update();
   });
   return null;
 }
@@ -1064,6 +1195,7 @@ export function Cameras({
   lat,
   lon,
   cameraMemory,
+  introEnabled = false,
 }: {
   side: number;
   lift: number;
@@ -1081,6 +1213,7 @@ export function Cameras({
   lat: number;
   lon: number;
   cameraMemory?: CameraMemoryRef;
+  introEnabled?: boolean;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
@@ -1151,6 +1284,7 @@ export function Cameras({
             active={!orthoView && !qaMode}
             touchedRef={touchedRef}
             fittedKey={perspFitKey}
+            introEnabled={introEnabled}
           />
           <PerspectiveClipPlanes
             camera={persp}
@@ -1489,6 +1623,7 @@ export function Scene3D({
         lat={model.center.lat}
         lon={model.center.lon}
         cameraMemory={cameraMemory}
+        introEnabled
       />
       </Canvas>
     </div>

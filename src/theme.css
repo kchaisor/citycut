@@ -37,7 +37,10 @@
   --muted-text: #6E685E;
 
   /* Font for buttons, labels, and body text. Outfit is already loaded. Avenir Next, Segoe UI, and sans-serif are safe fallbacks. */
-  --font-sans: "Geist", "Avenir Next", "Segoe UI", sans-serif;
+  --font-sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* Font for the large “Your model is ready” title. Fraunces is already loaded. Georgia is the safe fallback. */
   --font-serif: "Geist", "Iowan Old Style", Georgia, serif;

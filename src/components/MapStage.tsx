@@ -452,11 +452,13 @@ export function MapStage({
       )}
       {loading && <div className="loading-shield" />}
       {loading && (
-        <div className="loading-card" role="status">
-          <strong>Cutting this block</strong>
+        <div className="loading-card loading-hud-pill hud-card" role="status">
+          <div className="loading-hud-row">
+            <span className="loading-pulse-dot" aria-hidden="true" />
+            <strong>Building 3D site cut · LiDAR + Vicmap…</strong>
+          </div>
           <p>
-            Fetching buildings, roads, terrain and open space from Overture Maps, Vicmap and Mapterhorn. This often
-            takes a few seconds, sometimes longer.
+            Fetching DEM terrain, Overture massings, roads and 1m contours for this block.
           </p>
           <div className="bar" aria-hidden="true">
             <span />

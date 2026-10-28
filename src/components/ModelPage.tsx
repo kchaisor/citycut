@@ -164,7 +164,8 @@ import { exportTiles, type ExportBusy } from "../lib/exportTiles";
 import { ViewLegend, ViewPanel } from "./ViewPanel";
 import { useWalkViewshed } from "./useWalkViewshed";
 import { fetchWindRoseTable } from "../lib/windFetch";
-import type { WindRoseTable } from "../lib/windRose";
+import { analyzeWindPeriod, WIND_PERIOD_LABELS, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
+import { daylightWindowMinutes, sunAtMelbourneLocal } from "../lib/solar";
 import {
   windSettingsForModelOpen,
   writeStoredWindSettings,
@@ -377,8 +378,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     setWindSettings(next);
   }
 
+  const wantWindTable = windSettings.enabled || (sidebar.section === "analysis" && analysisKind === "wind");
   useEffect(() => {
-    if (!windSettings.enabled) return;
+    if (!wantWindTable) return;
     let cancelled = false;
     const lat = model.siteAnchor?.lat ?? model.center.lat;
     const lon = model.siteAnchor?.lon ?? model.center.lon;
@@ -395,7 +397,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     return () => {
       cancelled = true;
     };
-  }, [windSettings.enabled, model.center.lat, model.center.lon, model.siteAnchor?.lat, model.siteAnchor?.lon]);
+  }, [wantWindTable, model.center.lat, model.center.lon, model.siteAnchor?.lat, model.siteAnchor?.lon]);
 
   function heliodonRhinoExport(): HeliodonGroundExportOptions | null {
     if (!solar.showPath) return null;
@@ -1053,6 +1055,58 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   useEffect(() => {
     if (!viewAnalysisOpen && walkDrawingOn) setWalkDrawing(false);
   }, [viewAnalysisOpen, walkDrawingOn, setWalkDrawing]);
+
+  const [consolePlaying, setConsolePlaying] = useState(false);
+  const consoleDaylight = useMemo(
+    () =>
+      daylightWindowMinutes(
+        model.center.lat,
+        model.center.lon,
+        solar.year,
+        solar.month,
+        solar.day,
+      ) ?? { sunrise: 360, sunset: 1080 },
+    [model.center.lat, model.center.lon, solar.year, solar.month, solar.day],
+  );
+  const consoleSun = useMemo(
+    () =>
+      sunAtMelbourneLocal(
+        model.center.lat,
+        model.center.lon,
+        solar.year,
+        solar.month,
+        solar.day,
+        solar.hour,
+        solar.minute,
+      ),
+    [model.center.lat, model.center.lon, solar.year, solar.month, solar.day, solar.hour, solar.minute],
+  );
+  const consoleWindStats = useMemo(
+    () => (windTable ? analyzeWindPeriod(windTable, windSettings.period) : null),
+    [windTable, windSettings.period],
+  );
+
+  useEffect(() => {
+    if (!consolePlaying) return;
+    let raf = 0;
+    let last = performance.now();
+    let minutesFloat = solar.hour * 60 + solar.minute;
+    const minM = consoleDaylight.sunrise;
+    const maxM = consoleDaylight.sunset;
+    const step = (now: number) => {
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      minutesFloat += dt * 72;
+      if (minutesFloat > maxM) minutesFloat = minM;
+      const rounded = Math.round(minutesFloat);
+      const hour = Math.floor(rounded / 60);
+      const minute = rounded % 60;
+      setSolar((prev) => ({ ...prev, hour, minute, castShadows: true }));
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [consolePlaying, consoleDaylight.sunrise, consoleDaylight.sunset]);
 
   function selectSection(id: string) {
     if (id === "solar" || id === "wind" || id === "view") setAnalysisKind(id);
@@ -2205,7 +2259,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 <div className="projection-block outliner-body">
                   <section className="sidebar-group outliner-section" aria-label="View modes">
                     <div className="card-head sidebar-gh">
-                      <h3 className="card-title">Building Style</h3>
+                      <h3 className="card-title">View Style</h3>
                       <span className="card-meta mono">
                         {displayModel.buildings.length.toLocaleString()} massings
                       </span>
@@ -2887,48 +2941,492 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             </div>
           </Sidebar>
         </div>
-        <div className="bottom-bar studio-solar-bar hud-card" role="region" aria-label="Solar and camera controls">
-          <button
-            type="button"
-            className={solar.castShadows ? "sun-pill studio-solar-pill is-active" : "sun-pill studio-solar-pill"}
-            aria-pressed={solar.castShadows}
-            onClick={() => commitSolar({ ...solar, castShadows: !solar.castShadows })}
+        {leftOpen === "analysis" && tab !== "satellite" ? (
+          <div
+            className="bottom-bar env-console hud-card"
+            role="region"
+            aria-label="Environmental analysis console"
           >
-            <Sun size={12} strokeWidth={2.2} aria-hidden="true" />
-            <span>Equinox · {`${solar.day} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][(solar.month ?? 9) - 1] ?? "Sep"}`}</span>
-          </button>
-          <div className="solar-hours studio-solar-track mono" role="group" aria-label="Solar hour scrubber">
-            {[9, 10, 11, 12, 13, 14, 15].map((hour) => (
-              <button
-                key={hour}
-                type="button"
-                className={solar.hour === hour ? "h-tick active studio-solar-tick is-active" : "h-tick studio-solar-tick"}
-                aria-label={`Solar time ${String(hour).padStart(2, "0")}:00`}
-                aria-pressed={solar.hour === hour}
-                onClick={() => commitSolar({ ...solar, hour, minute: 0, castShadows: true })}
-              >
-                {String(hour).padStart(2, "0")}
-              </button>
-            ))}
+            <div className="env-top-row">
+              <div className="env-mode-seg" role="tablist" aria-label="Environmental analysis sub-mode">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={analysisKind === "solar"}
+                  className={analysisKind === "solar" ? "env-mode-btn active" : "env-mode-btn"}
+                  onClick={() => setAnalysisKind("solar")}
+                >
+                  <Sun size={12} strokeWidth={2.2} aria-hidden="true" />
+                  <span>Solar Study</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={analysisKind === "wind"}
+                  className={analysisKind === "wind" ? "env-mode-btn active" : "env-mode-btn"}
+                  onClick={() => {
+                    setAnalysisKind("wind");
+                    if (!windSettings.enabled) {
+                      commitWind({ ...windSettings, enabled: true });
+                    }
+                  }}
+                >
+                  <Wind size={12} strokeWidth={2.2} aria-hidden="true" />
+                  <span>Wind Rose</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={analysisKind === "view"}
+                  className={analysisKind === "view" ? "env-mode-btn active" : "env-mode-btn"}
+                  onClick={() => setAnalysisKind("view")}
+                >
+                  <Eye size={12} strokeWidth={2.2} aria-hidden="true" />
+                  <span>Viewshed Walk</span>
+                </button>
+              </div>
+
+              <span className="v-sep hud-sep" aria-hidden="true" />
+
+              {analysisKind === "solar" && (() => {
+                const azDeg = Math.round(((consoleSun.azimuthDeg % 360) + 360) % 360);
+                const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+                const cardinal = dirs[Math.round(azDeg / 45) % 8] ?? "N";
+                const dlSpan = Math.max(0, consoleDaylight.sunset - consoleDaylight.sunrise);
+                const dlHours = Math.floor(dlSpan / 60);
+                const dlMins = String(dlSpan % 60).padStart(2, "0");
+                return (
+                  <div className="solar-telemetry mono" aria-label="Live solar telemetry">
+                    <div className="st-item">
+                      <span className="st-k">ALT</span>
+                      <span className="st-v">{consoleSun.altitudeDeg.toFixed(1)}°</span>
+                    </div>
+                    <span className="st-dot" aria-hidden="true">·</span>
+                    <div className="st-item">
+                      <span className="st-k">AZ</span>
+                      <span className="st-v">{azDeg}° {cardinal}</span>
+                    </div>
+                    <span className="st-dot" aria-hidden="true">·</span>
+                    <div className="st-item">
+                      <span className="st-k">DAYLIGHT</span>
+                      <span className="st-v">{dlHours}h {dlMins}m</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {analysisKind === "wind" && (
+                <div className="solar-telemetry mono" aria-label="Live wind telemetry">
+                  <div className="st-item">
+                    <span className="st-k">PREVAILING</span>
+                    <span className="st-v">{consoleWindStats ? consoleWindStats.prevailingLabel : "N, NNE"}</span>
+                  </div>
+                  <span className="st-dot" aria-hidden="true">·</span>
+                  <div className="st-item">
+                    <span className="st-k">MEDIAN</span>
+                    <span className="st-v">{consoleWindStats ? `${Math.round(consoleWindStats.prevailingMedianKmh)} km/h` : "18 km/h"}</span>
+                  </div>
+                  <span className="st-dot" aria-hidden="true">·</span>
+                  <div className="st-item">
+                    <span className="st-k">CALM</span>
+                    <span className="st-v">{consoleWindStats ? `${consoleWindStats.calmPercent.toFixed(1)}%` : "4.2%"}</span>
+                  </div>
+                </div>
+              )}
+
+              {analysisKind === "view" && (
+                <div className="solar-telemetry mono" aria-label="Live viewshed telemetry">
+                  <div className="st-item">
+                    <span className="st-k">EYE</span>
+                    <span className="st-v">{walk.eyeM.toFixed(1)}m</span>
+                  </div>
+                  <span className="st-dot" aria-hidden="true">·</span>
+                  <div className="st-item">
+                    <span className="st-k">RADIUS</span>
+                    <span className="st-v">{walk.radiusM}m</span>
+                  </div>
+                  <span className="st-dot" aria-hidden="true">·</span>
+                  <div className="st-item">
+                    <span className="st-k">PATH</span>
+                    <span className="st-v">{walk.clickCount > 0 ? `${Math.round(walk.lengthM)}m (${walk.clickCount} pts)` : "Click ground"}</span>
+                  </div>
+                </div>
+              )}
+
+              <span className="v-sep hud-sep" aria-hidden="true" />
+
+              <div className="overlay-chips" role="group" aria-label="Scene overlay toggles">
+                {analysisKind === "solar" && (
+                  <>
+                    <button
+                      type="button"
+                      className={solar.showPath ? "ov-chip on" : "ov-chip"}
+                      aria-pressed={solar.showPath}
+                      onClick={() => commitSolar({ ...solar, showPath: !solar.showPath })}
+                    >
+                      <span className="ov-dot" aria-hidden="true" />
+                      <span>3D Sun Dome</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={solar.castShadows ? "ov-chip on" : "ov-chip"}
+                      aria-pressed={solar.castShadows}
+                      onClick={() => commitSolar({ ...solar, castShadows: !solar.castShadows })}
+                    >
+                      <span className="ov-dot" aria-hidden="true" />
+                      <span>Shadows</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={solar.sunStudy ? "ov-chip on" : "ov-chip"}
+                      aria-pressed={Boolean(solar.sunStudy)}
+                      onClick={() =>
+                        commitSolar({
+                          ...solar,
+                          sunStudy: !solar.sunStudy,
+                          sunStudyCasters: solar.sunStudyCasters ?? "all",
+                        })
+                      }
+                    >
+                      <span className="ov-dot" aria-hidden="true" />
+                      <span>9–3pm Plan Fan</span>
+                    </button>
+                  </>
+                )}
+
+                {analysisKind === "wind" && (
+                  <>
+                    <button
+                      type="button"
+                      className={windSettings.enabled ? "ov-chip on" : "ov-chip"}
+                      aria-pressed={windSettings.enabled}
+                      onClick={() => commitWind({ ...windSettings, enabled: !windSettings.enabled })}
+                    >
+                      <span className="ov-dot" aria-hidden="true" />
+                      <span>3D Wind Flow</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={windSettings.enabled && windSettings.showRose ? "ov-chip on" : "ov-chip"}
+                      aria-pressed={windSettings.enabled && windSettings.showRose}
+                      onClick={() =>
+                        commitWind({
+                          ...windSettings,
+                          enabled: true,
+                          showRose: !windSettings.showRose,
+                        })
+                      }
+                    >
+                      <span className="ov-dot" aria-hidden="true" />
+                      <span>Wind Rose</span>
+                    </button>
+                  </>
+                )}
+
+                {analysisKind === "view" && (
+                  <>
+                    <button
+                      type="button"
+                      className={walk.drawing ? "ov-chip on" : "ov-chip"}
+                      aria-pressed={walk.drawing}
+                      onClick={() => walk.setDrawing(!walk.drawing)}
+                    >
+                      <span className="ov-dot" aria-hidden="true" />
+                      <span>{walk.drawing ? "Drawing Path…" : "Draw Path"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={walk.status === "ready" ? "ov-chip on" : "ov-chip"}
+                      disabled={walk.sampleCount < 2 || walk.status === "computing"}
+                      onClick={() => walk.compute()}
+                    >
+                      <span className="ov-dot" aria-hidden="true" />
+                      <span>{walk.status === "ready" ? "Viewshed Ready" : "Compute View"}</span>
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <div className="cam-mini-group">
+                <span className="compass-mini studio-compass-chip mono" aria-hidden="true">
+                  N ▲
+                </span>
+                <button
+                  type="button"
+                  className="cam-reset studio-reset-btn"
+                  onClick={() => setSnapId((id) => id + 1)}
+                >
+                  Reset view
+                </button>
+              </div>
+            </div>
+
+            <div className="env-bottom-row">
+              {analysisKind === "solar" && (() => {
+                const isJun = solar.month === 6 && solar.day === 21;
+                const isSep = solar.month === 9 && solar.day === 22;
+                const isDec = solar.month === 12 && solar.day === 22;
+                const formatMin = (m: number) =>
+                  `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+                const curMin = solar.hour * 60 + solar.minute;
+                const minBound = 5 * 60;
+                const maxBound = 20 * 60;
+                const thumbPct = Math.max(4, Math.min(96, ((curMin - minBound) / (maxBound - minBound)) * 100));
+                return (
+                  <>
+                    <div className="date-presets" role="group" aria-label="Solar date presets">
+                      <button
+                        type="button"
+                        className={isJun ? "p-pill active" : "p-pill"}
+                        aria-pressed={isJun}
+                        onClick={() => commitSolar({ ...solar, month: 6, day: 21, castShadows: true })}
+                      >
+                        21 Jun
+                      </button>
+                      <button
+                        type="button"
+                        className={isSep ? "p-pill active" : "p-pill"}
+                        aria-pressed={isSep}
+                        onClick={() => commitSolar({ ...solar, month: 9, day: 22, castShadows: true })}
+                      >
+                        22 Sep · Equinox
+                      </button>
+                      <button
+                        type="button"
+                        className={isDec ? "p-pill active" : "p-pill"}
+                        aria-pressed={isDec}
+                        onClick={() => commitSolar({ ...solar, month: 12, day: 22, castShadows: true })}
+                      >
+                        22 Dec
+                      </button>
+                      <button
+                        type="button"
+                        className={solar.sunStudy ? "p-pill active" : "p-pill"}
+                        aria-pressed={Boolean(solar.sunStudy)}
+                        onClick={() =>
+                          commitSolar({
+                            ...solar,
+                            month: 9,
+                            day: 22,
+                            hour: 15,
+                            minute: 0,
+                            castShadows: true,
+                            showPath: true,
+                          })
+                        }
+                      >
+                        ResCode 9–3
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      className={consolePlaying ? "play-pill mono active" : "play-pill mono"}
+                      aria-label={consolePlaying ? "Pause solar animation" : "Play solar animation"}
+                      aria-pressed={consolePlaying}
+                      onClick={() => setConsolePlaying((p) => !p)}
+                    >
+                      {consolePlaying ? "❚❚ 1×" : "▶ 1×"}
+                    </button>
+
+                    <div className="daylight-scrubber mono" role="group" aria-label="Daylight horizon scrubber">
+                      <span className="sun-bound" title="Melbourne sunrise">
+                        ▲ {formatMin(consoleDaylight.sunrise)}
+                      </span>
+                      <div className="scrubber-track">
+                        <div className="daylight-band" aria-hidden="true" />
+                        <div className="rescode-window" title="9am–3pm Victorian ResCode assessment window" aria-hidden="true" />
+                        <div className="scrubber-ticks" role="group" aria-label="Solar hour scrubber">
+                          {[6, 9, 10, 11, 12, 13, 14, 15, 18].map((h) => (
+                            <button
+                              key={h}
+                              type="button"
+                              className={
+                                solar.hour === h
+                                  ? "scrubber-tick-btn active"
+                                  : h >= 9 && h <= 15
+                                    ? "scrubber-tick-btn hi"
+                                    : "scrubber-tick-btn"
+                              }
+                              aria-label={`Solar time ${String(h).padStart(2, "0")}:00`}
+                              aria-pressed={solar.hour === h}
+                              onClick={() => {
+                                setConsolePlaying(false);
+                                commitSolar({ ...solar, hour: h, minute: 0, castShadows: true });
+                              }}
+                            >
+                              {String(h).padStart(2, "0")}
+                            </button>
+                          ))}
+                        </div>
+                        <input
+                          type="range"
+                          className="scrubber-range-input"
+                          aria-label="Solar time of day"
+                          min={consoleDaylight.sunrise}
+                          max={consoleDaylight.sunset}
+                          step={5}
+                          value={Math.max(consoleDaylight.sunrise, Math.min(consoleDaylight.sunset, curMin))}
+                          onChange={(e) => {
+                            setConsolePlaying(false);
+                            const total = Number(e.target.value);
+                            commitSolar({
+                              ...solar,
+                              hour: Math.floor(total / 60),
+                              minute: total % 60,
+                              castShadows: true,
+                            });
+                          }}
+                        />
+                        <div className="scrubber-thumb" style={{ left: `${thumbPct}%` }} aria-hidden="true" />
+                      </div>
+                      <span className="sun-bound" title="Melbourne sunset">
+                        ▼ {formatMin(consoleDaylight.sunset)}
+                      </span>
+                      <span className="time-readout-pill">
+                        ☀ {String(solar.hour).padStart(2, "0")}:{String(solar.minute).padStart(2, "0")} AEST
+                      </span>
+                    </div>
+                  </>
+                );
+              })()}
+
+              {analysisKind === "wind" && (
+                <>
+                  <div className="date-presets" role="group" aria-label="Wind season presets">
+                    {(["annual", "summer", "autumn", "winter", "spring"] as const).map((periodId) => (
+                      <button
+                        key={periodId}
+                        type="button"
+                        className={windSettings.period === periodId ? "p-pill active" : "p-pill"}
+                        aria-pressed={windSettings.period === periodId}
+                        onClick={() => commitWind({ ...windSettings, enabled: true, period: periodId as WindPeriodId })}
+                      >
+                        {periodId === "annual"
+                          ? "Annual"
+                          : periodId === "summer"
+                            ? "Summer"
+                            : periodId === "autumn"
+                              ? "Autumn"
+                              : periodId === "winter"
+                                ? "Winter"
+                                : "Spring"}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="daylight-scrubber wind-console-bar mono">
+                    <span className="sun-bound">
+                      {WIND_PERIOD_LABELS[windSettings.period as keyof typeof WIND_PERIOD_LABELS] ?? "Annual"}
+                    </span>
+                    <div className="wind-band-pills" aria-label="Wind speed scale (km/h)">
+                      <span className="wind-band-chip band-0">2–10 km/h</span>
+                      <span className="wind-band-chip band-1">10–20</span>
+                      <span className="wind-band-chip band-2">20–30</span>
+                      <span className="wind-band-chip band-3">30–40</span>
+                      <span className="wind-band-chip band-4">40+ km/h</span>
+                    </div>
+                    <span className="time-readout-pill">
+                      🌬 {consoleWindStats ? `${consoleWindStats.prevailingLabel} · ${Math.round(consoleWindStats.prevailingMedianKmh)} km/h` : "ERA5 10m Wind"}
+                    </span>
+                  </div>
+                </>
+              )}
+
+              {analysisKind === "view" && (
+                <>
+                  <div className="date-presets" role="group" aria-label="Viewshed eye height and radius presets">
+                    {[
+                      [1.6, "Eye 1.6m"],
+                      [4.5, "Upper 4.5m"],
+                      [10, "Balcony 10m"],
+                    ].map(([eyeVal, label]) => (
+                      <button
+                        key={String(label)}
+                        type="button"
+                        className={Math.abs(walk.eyeM - Number(eyeVal)) < 0.15 ? "p-pill active" : "p-pill"}
+                        aria-pressed={Math.abs(walk.eyeM - Number(eyeVal)) < 0.15}
+                        onClick={() => walk.setEyeM(Number(eyeVal))}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    {[100, 200, 400].map((rad) => (
+                      <button
+                        key={rad}
+                        type="button"
+                        className={walk.radiusM === rad ? "p-pill active" : "p-pill"}
+                        aria-pressed={walk.radiusM === rad}
+                        onClick={() => walk.setRadiusM(rad)}
+                      >
+                        {rad}m
+                      </button>
+                    ))}
+                    {walk.clickCount > 0 && (
+                      <button type="button" className="p-pill" onClick={walk.clear}>
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <div className="daylight-scrubber view-console-bar mono">
+                    <span className="sun-bound">
+                      {walk.drawing
+                        ? "Click ground in 3D view to place walk points"
+                        : walk.clickCount > 0
+                          ? `Walk path · ${Math.round(walk.lengthM)} m (${walk.sampleCount} samples)`
+                          : "Click 'Draw Path' then click ground points"}
+                    </span>
+                    <span className="time-readout-pill">
+                      👁 {walk.eyeM.toFixed(1)}m · {walk.radiusM}m
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-          <span className="studio-solar-time mono">
-            {String(solar.hour).padStart(2, "0")}:{String(solar.minute).padStart(2, "0")} AEST
-          </span>
-          <span className="v-sep hud-sep" aria-hidden="true" />
-          <span className="compass-mini studio-compass-chip" aria-hidden="true">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
-              <polygon points="12 2 16 14 12 11 8 14 12 2" fill="currentColor" />
-            </svg>
-            <span className="mono">N</span>
-          </span>
-          <button
-            type="button"
-            className="cam-reset studio-reset-btn"
-            onClick={() => setSnapId((id) => id + 1)}
-          >
-            Reset view
-          </button>
-        </div>
+        ) : (
+          <div className="bottom-bar studio-solar-bar hud-card" role="region" aria-label="Solar and camera controls">
+            <button
+              type="button"
+              className={solar.castShadows ? "sun-pill studio-solar-pill is-active" : "sun-pill studio-solar-pill"}
+              aria-pressed={solar.castShadows}
+              onClick={() => commitSolar({ ...solar, castShadows: !solar.castShadows })}
+            >
+              <Sun size={12} strokeWidth={2.2} aria-hidden="true" />
+              <span>Equinox · {`${solar.day} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][(solar.month ?? 9) - 1] ?? "Sep"}`}</span>
+            </button>
+            <div className="solar-hours studio-solar-track mono" role="group" aria-label="Solar hour scrubber">
+              {[9, 10, 11, 12, 13, 14, 15].map((hour) => (
+                <button
+                  key={hour}
+                  type="button"
+                  className={solar.hour === hour ? "h-tick active studio-solar-tick is-active" : "h-tick studio-solar-tick"}
+                  aria-label={`Solar time ${String(hour).padStart(2, "0")}:00`}
+                  aria-pressed={solar.hour === hour}
+                  onClick={() => commitSolar({ ...solar, hour, minute: 0, castShadows: true })}
+                >
+                  {String(hour).padStart(2, "0")}
+                </button>
+              ))}
+            </div>
+            <span className="studio-solar-time mono">
+              {String(solar.hour).padStart(2, "0")}:{String(solar.minute).padStart(2, "0")} AEST
+            </span>
+            <span className="v-sep hud-sep" aria-hidden="true" />
+            <span className="compass-mini studio-compass-chip" aria-hidden="true">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
+                <polygon points="12 2 16 14 12 11 8 14 12 2" fill="currentColor" />
+              </svg>
+              <span className="mono">N</span>
+            </span>
+            <button
+              type="button"
+              className="cam-reset studio-reset-btn"
+              onClick={() => setSnapId((id) => id + 1)}
+            >
+              Reset view
+            </button>
+          </div>
+        )}
         {model.terrainError && (
           <p className="stage-error" role="alert">
             {model.terrainError}
