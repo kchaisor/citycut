@@ -89,7 +89,13 @@ function frameFromQuery(): FrameQuery | null {
 let modelPagePromise: Promise<{ default: typeof import("./components/ModelPage").ModelPage }> | null = null;
 function preloadModelPage() {
   if (!modelPagePromise) {
-    modelPagePromise = import("./components/ModelPage").then((mod) => ({ default: mod.ModelPage }));
+    modelPagePromise = import("./components/ModelPage")
+      .then((mod) => ({ default: mod.ModelPage }))
+      .catch((err) => {
+        console.error("[PRELOAD_MODELPAGE_ERR]", err);
+        modelPagePromise = null;
+        throw err;
+      });
   }
   return modelPagePromise;
 }
@@ -820,8 +826,12 @@ export default function App() {
       if (!isAutomatedDomTest && !prefersReduced && !isQa) {
         await preloadModelPage().catch(() => undefined);
         const elapsedMs = performance.now() - createStartMs;
-        if (elapsedMs < 380) {
-          await new Promise<void>((resolve) => window.setTimeout(resolve, 380 - elapsedMs));
+        const minBeat2Ms =
+          (typeof window !== "undefined" &&
+            (window as Window & { __citycutMinBeat2Ms?: number }).__citycutMinBeat2Ms) ||
+          480;
+        if (elapsedMs < minBeat2Ms) {
+          await new Promise<void>((resolve) => window.setTimeout(resolve, minBeat2Ms - elapsedMs));
         }
         if (controller.signal.aborted) return;
       }

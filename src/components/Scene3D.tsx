@@ -24,6 +24,7 @@ import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import { captureViewPng } from "../lib/capturePng";
 import { GradientSky, GroundGrid, ViewInset, insetPointerEvents } from "./SceneBackdrop";
+import { markScreenOnly } from "../lib/screenOnly";
 import { cameraForExportFrame, exportFrameSize } from "../lib/exportFrame";
 import { flushControlInertia, holdControlPose, type HeldControl } from "../lib/controlInertia";
 import { shouldSkipViewportSizeRefit } from "../lib/viewportAutoFit";
@@ -101,7 +102,7 @@ export type SceneExporter = {
 
 type FiberCamera = (THREE.OrthographicCamera | THREE.PerspectiveCamera) & { manual?: boolean };
 
-export const INTRO_TRANSITION_MS = 1600;
+export const INTRO_TRANSITION_MS = 1650;
 const INTRO_TRANSITION_SEC = INTRO_TRANSITION_MS / 1000;
 
 export function shouldRunIntroTransition(): boolean {
@@ -115,12 +116,16 @@ export function shouldRunIntroTransition(): boolean {
   return true;
 }
 
+function easeInOutCubic(x: number): number {
+  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+}
+
 function computeIntroBuildingScale(elapsedSec: number): number {
   const rawT = Math.min(1, Math.max(0, elapsedSec / INTRO_TRANSITION_SEC));
   if (rawT >= 1) return 1;
-  const bRaw = Math.min(1, Math.max(0, (rawT - 0.12) / 0.88));
-  const bEase = 1 - Math.pow(1 - bRaw, 3);
-  return 0.01 + 0.99 * bEase;
+  const bRaw = Math.min(1, Math.max(0, (rawT - 0.14) / 0.86));
+  const bEase = easeInOutCubic(bRaw);
+  return Math.max(0.001, bEase);
 }
 
 const scratch = new THREE.Vector3();
@@ -305,6 +310,21 @@ function City({
       city.add(edges);
     }
     addBuildingEdges(city);
+    if (shouldRunIntroTransition()) {
+      const ringGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(model.sideM, 1.2, model.sideM));
+      const ringMat = new THREE.LineBasicMaterial({
+        color: 0xfff500,
+        transparent: true,
+        opacity: 1,
+        depthTest: false,
+      });
+      const cutRing = new THREE.LineSegments(ringGeo, ringMat);
+      cutRing.name = "IntroCutRing";
+      cutRing.position.y = 0.6;
+      cutRing.raycast = () => {};
+      markScreenOnly(cutRing);
+      city.add(cutRing);
+    }
     return city;
   }, [model, uniformBuildings, colourBySource, highlightManual, colourTick]);
   useLayoutEffect(() => {
@@ -356,7 +376,7 @@ function City({
         }
         group.userData.introScaleY = 1;
       } else {
-        const s = existing.frameCount < 2 ? 0.01 : computeIntroBuildingScale(existing.elapsedSec);
+        const s = existing.frameCount < 3 ? 0.001 : computeIntroBuildingScale(existing.elapsedSec);
         for (const { obj, pivotY } of targets) {
           obj.scale.y = s;
           obj.position.y = pivotY * (1 - s);
@@ -365,7 +385,7 @@ function City({
       }
       return;
     }
-    const startScale = 0.01;
+    const startScale = 0.001;
     for (const { obj, pivotY } of targets) {
       obj.scale.y = startScale;
       obj.position.y = pivotY * (1 - startScale);
@@ -376,28 +396,53 @@ function City({
   useFrame((state, delta) => {
     const intro = introRef.current;
     if (!intro || intro.done) return;
-    if (intro.frameCount < 3) {
+    const ring = group.getObjectByName("IntroCutRing") as THREE.LineSegments | undefined;
+    if (intro.frameCount < 1) {
       intro.frameCount += 1;
-      const s0 = 0.01;
+      const s0 = 0.001;
       for (const { obj, pivotY } of intro.targets) {
         obj.scale.y = s0;
         obj.position.y = pivotY * (1 - s0);
+      }
+      if (ring) {
+        ring.visible = true;
+        (ring.material as THREE.LineBasicMaterial).opacity = 1;
       }
       group.userData.introScaleY = s0;
       state.gl.domElement.dataset.introElapsed = "0.00";
       state.gl.domElement.dataset.introScale = s0.toFixed(3);
       return;
     }
-    intro.elapsedSec += Math.min(Math.max(delta, 0.001), 0.033);
+    const introPaused =
+      typeof window !== "undefined" &&
+      Boolean((window as Window & { __citycutIntroPaused?: boolean }).__citycutIntroPaused);
+    if (introPaused) {
+      (intro as { wasPaused?: boolean }).wasPaused = true;
+    } else if ((intro as { wasPaused?: boolean }).wasPaused) {
+      (intro as { wasPaused?: boolean }).wasPaused = false;
+      intro.elapsedSec += 0.032;
+    } else {
+      intro.elapsedSec += Math.min(Math.max(delta, 0.001), 0.14);
+    }
     const done = intro.elapsedSec >= INTRO_TRANSITION_SEC;
     const s = done ? 1 : computeIntroBuildingScale(intro.elapsedSec);
     for (const { obj, pivotY } of intro.targets) {
       obj.scale.y = s;
       obj.position.y = done ? 0 : pivotY * (1 - s);
     }
+    if (ring) {
+      const rawT = Math.min(1, intro.elapsedSec / INTRO_TRANSITION_SEC);
+      const ringAlpha = done ? 0 : Math.max(0, 1 - rawT * 1.5);
+      ring.visible = ringAlpha > 0.01;
+      (ring.material as THREE.LineBasicMaterial).opacity = ringAlpha;
+    }
     group.userData.introScaleY = s;
-    if (intro.elapsedSec >= 0.50 || done) {
-      state.gl.domElement.closest(".model")?.removeAttribute("data-intro-hold");
+    if (intro.elapsedSec >= 1.25 || done) {
+      const modelRoot = state.gl.domElement.closest(".model");
+      if (modelRoot?.hasAttribute("data-intro-hold")) {
+        modelRoot.dispatchEvent(new CustomEvent("citycut:intro-hold-release"));
+        modelRoot.removeAttribute("data-intro-hold");
+      }
     }
     state.gl.domElement.dataset.introElapsed = (done ? INTRO_TRANSITION_SEC : intro.elapsedSec).toFixed(2);
     state.gl.domElement.dataset.introScale = s.toFixed(3);
@@ -599,6 +644,7 @@ function PerspectiveFit({
   introEnabled?: boolean;
 }) {
   const size = useThree((state) => state.size);
+  const gl = useThree((state) => state.gl);
   const introAnimRef = useRef<{
     elapsedSec: number;
     frameCount: number;
@@ -617,8 +663,8 @@ function PerspectiveFit({
       anim: NonNullable<typeof introAnimRef.current>,
       controls: OrbitControlsImpl,
     ) => {
-      const rawT = anim.frameCount < 2 ? 0 : Math.min(1, Math.max(0, anim.elapsedSec / INTRO_TRANSITION_SEC));
-      const ease = 1 - Math.pow(1 - rawT, 3);
+      const rawT = anim.frameCount < 1 ? 0 : Math.min(1, Math.max(0, anim.elapsedSec / INTRO_TRANSITION_SEC));
+      const ease = easeInOutCubic(rawT);
       const radius = THREE.MathUtils.lerp(anim.startRadius, anim.endRadius, ease);
       const phi = THREE.MathUtils.lerp(anim.startPhi, anim.endPhi, ease);
       const theta = THREE.MathUtils.lerp(anim.startTheta, anim.endTheta, ease);
@@ -627,8 +673,10 @@ function PerspectiveFit({
       camera.lookAt(controls.target);
       camera.updateProjectionMatrix();
       controls.update();
+      gl.domElement.dataset.introPolar = phi.toFixed(3);
+      gl.domElement.dataset.introRadius = radius.toFixed(1);
     },
-    [camera],
+    [camera, gl],
   );
   const place = useCallback(() => {
     const controls = controlsRef.current;
@@ -662,13 +710,20 @@ function PerspectiveFit({
       const targetVec = new THREE.Vector3(pose.target[0], pose.target[1], pose.target[2]);
       const endEyeVec = new THREE.Vector3(pose.eye[0], pose.eye[1], pose.eye[2]);
       const endSpherical = new THREE.Spherical().setFromVector3(endEyeVec.clone().sub(targetVec));
-      const startRadius = endSpherical.radius * 0.92;
-      const startPhi = 0.05;
+      const frameRatio =
+        (typeof window !== "undefined" &&
+          (window as Window & { __citycutFrameRatio?: number }).__citycutFrameRatio) ||
+        0.48;
+      const halfFovRad = THREE.MathUtils.degToRad(camera.fov / 2);
+      const startRadius = Math.max(
+        endSpherical.radius * 1.15,
+        side / 2 / (Math.tan(halfFovRad) * frameRatio),
+      );
+      const startPhi = 0.005;
       const startTheta = 0;
       if (runningIntro && introAnimRef.current) {
         introAnimRef.current.target = targetVec;
         introAnimRef.current.endEye = endEyeVec;
-        introAnimRef.current.startRadius = startRadius;
         introAnimRef.current.endRadius = endSpherical.radius;
         introAnimRef.current.endPhi = endSpherical.phi;
         introAnimRef.current.endTheta = endSpherical.theta;
@@ -729,12 +784,22 @@ function PerspectiveFit({
       introAnimRef.current = null;
       return;
     }
-    if (anim.frameCount < 2) {
+    if (anim.frameCount < 1) {
       anim.frameCount += 1;
       applyIntroPose(anim, controls);
       return;
     }
-    anim.elapsedSec += Math.min(Math.max(delta, 0.001), 0.033);
+    const introPaused =
+      typeof window !== "undefined" &&
+      Boolean((window as Window & { __citycutIntroPaused?: boolean }).__citycutIntroPaused);
+    if (introPaused) {
+      (anim as { wasPaused?: boolean }).wasPaused = true;
+    } else if ((anim as { wasPaused?: boolean }).wasPaused) {
+      (anim as { wasPaused?: boolean }).wasPaused = false;
+      anim.elapsedSec += 0.032;
+    } else {
+      anim.elapsedSec += Math.min(Math.max(delta, 0.001), 0.14);
+    }
     if (anim.elapsedSec >= INTRO_TRANSITION_SEC) {
       flushControlInertia(controls);
       camera.position.copy(anim.endEye);
@@ -742,6 +807,8 @@ function PerspectiveFit({
       camera.lookAt(controls.target);
       camera.updateProjectionMatrix();
       controls.update();
+      gl.domElement.dataset.introPolar = anim.endPhi.toFixed(3);
+      gl.domElement.dataset.introRadius = anim.endRadius.toFixed(1);
       anim.done = true;
       introAnimRef.current = null;
       return;
@@ -1435,7 +1502,7 @@ export function Cameras({
             dampingFactor={0.08}
             maxPolarAngle={Math.PI / 2.02}
             minDistance={side * 0.2}
-            maxDistance={Math.max(side * 3.4, heliodonRadius * 2.4)}
+            maxDistance={Math.max(side * 6, heliodonRadius * 2.4)}
             onStart={() => {
               touchedRef.current = true;
             }}

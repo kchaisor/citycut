@@ -3263,41 +3263,35 @@ body,
   display: none !important;
 }
 
-/* Smooth Studio HUD perimeter island entrance (Beat 4 after 2D->3D pitch starts) */
-@keyframes hudEnter {
-  from {
-    opacity: 0;
-    translate: 0 8px;
-  }
-  to {
-    opacity: 1;
-    translate: 0 0;
-  }
-}
-
-@keyframes introPillExit {
-  0%,
-  55% {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-  100% {
-    opacity: 0;
-    transform: translateX(-50%) translateY(-6px);
-  }
-}
-
+/* Smooth Studio HUD perimeter island entrance (Beat 4 after 2D->3D tilt + extrude) */
 .model .top-bar,
 .model .top-bar-left,
 .model .top-bar-center,
-.model .top-bar-right,
+.model .top-bar-right {
+  opacity: 1;
+  translate: 0 0;
+  transition: opacity 480ms cubic-bezier(0.22, 1, 0.36, 1), translate 480ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .model .left-rail,
 .model .left-tool-rail,
-.model .left-outliner,
+.model .left-outliner {
+  opacity: 1;
+  translate: 0 0;
+  transition: opacity 480ms cubic-bezier(0.22, 1, 0.36, 1) 40ms, translate 480ms cubic-bezier(0.22, 1, 0.36, 1) 40ms;
+}
+
 .model .right-rail,
-.model .right-inspector,
+.model .right-inspector {
+  opacity: 1;
+  translate: 0 0;
+  transition: opacity 480ms cubic-bezier(0.22, 1, 0.36, 1) 70ms, translate 480ms cubic-bezier(0.22, 1, 0.36, 1) 70ms;
+}
+
 .model .bottom-bar {
-  animation: hudEnter 480ms cubic-bezier(0.22, 1, 0.36, 1) 380ms both;
+  opacity: 1;
+  translate: 0 0;
+  transition: opacity 480ms cubic-bezier(0.22, 1, 0.36, 1) 90ms, translate 480ms cubic-bezier(0.22, 1, 0.36, 1) 90ms;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3312,36 +3306,67 @@ body,
   .model .right-inspector,
   .model .bottom-bar,
   .loading-hud-pill.is-model-bridge {
+    transition: none !important;
     animation: none !important;
   }
 }
 
-/* Beat 2: Fade out Landing chrome smoothly while keeping 2D cut + top pill centered */
+/* Beat 2: Isolate centered 2D selection square on #EBEBEB canvas & hide Landing chrome */
 .select .omnibox-stack,
 .select .bottom-workbench,
 .select .top-right-tools,
-.select .studio-header-left {
-  transition: opacity 280ms ease, transform 280ms ease;
+.select .studio-header-left,
+.select .frame-label,
+.select .frame-cad-tag,
+.select .frame-handle,
+.select .maplibregl-ctrl,
+.select .map-attrib {
+  transition: opacity 150ms ease, transform 200ms ease;
 }
 
 .select.is-loading .omnibox-stack,
 .select.is-loading .bottom-workbench,
 .select.is-loading .top-right-tools,
-.select.is-loading .studio-header-left {
+.select.is-loading .studio-header-left,
+.select.is-loading .frame-label,
+.select.is-loading .frame-cad-tag,
+.select.is-loading .frame-handle,
+.select.is-loading .maplibregl-ctrl,
+.select.is-loading .map-attrib {
   opacity: 0 !important;
-  transform: translateY(8px) !important;
   pointer-events: none !important;
+}
+
+.select.is-loading .omnibox-stack,
+.select.is-loading .studio-header-left,
+.select.is-loading .top-right-tools {
+  transform: translateY(-12px) !important;
+}
+
+.select.is-loading .bottom-workbench {
+  transform: translateY(14px) !important;
+}
+
+.select .map-wrap .frame {
+  transition: box-shadow 340ms cubic-bezier(0.22, 1, 0.36, 1), border-color 220ms ease;
+}
+
+.select.is-loading .map-wrap .frame {
+  border: 2px solid #FFF500 !important;
+  background: transparent !important;
+  box-shadow: 0 0 0 9999px var(--viewport-bg), 0 24px 60px rgba(20, 20, 19, 0.14) !important;
+  z-index: 25 !important;
 }
 
 .loading-shield {
   background: transparent !important;
 }
 
-/* Studio HUD Loading Pill on 2D Cut -> 3D Transition */
+/* Studio HUD Dark #141413 Loading Pill on Beat 2 & Beat 3 */
 .loading-hud-pill,
 .loading-card.loading-hud-pill {
   position: absolute !important;
-  top: 20px !important;
+  top: 16px !important;
   left: 50% !important;
   transform: translateX(-50%) !important;
   z-index: 45 !important;
@@ -3349,27 +3374,28 @@ body,
   max-width: calc(100vw - 32px) !important;
   height: 36px !important;
   min-height: 36px !important;
-  padding: 0 16px !important;
+  padding: 7px 14px 7px 11px !important;
   border-radius: 999px !important;
-  background: var(--bg-elev) !important;
-  border: 1px solid var(--border-outer) !important;
-  box-shadow: var(--shadow-hud) !important;
+  background: rgba(20, 20, 19, 0.94) !important;
+  color: #FFFFFF !important;
+  border: 1.5px solid #FFF500 !important;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16) !important;
   display: inline-flex !important;
   align-items: center !important;
   gap: 10px !important;
-  font-family: var(--mono) !important;
-  font-size: 11.5px !important;
-  font-weight: 500 !important;
-  color: var(--ink) !important;
+  font-family: var(--sans) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
   font-variant-numeric: tabular-nums !important;
-  pointer-events: none !important;
+  pointer-events: auto !important;
   white-space: nowrap !important;
+  box-sizing: border-box !important;
 }
 
 .loading-hud-pill .loading-hud-row {
   display: inline-flex !important;
   align-items: center !important;
-  gap: 8px !important;
+  gap: 10px !important;
 }
 
 .loading-hud-pill strong {
@@ -3377,7 +3403,34 @@ body,
   font-family: var(--sans) !important;
   font-size: 12px !important;
   font-weight: 600 !important;
-  color: var(--ink) !important;
+  color: #FFFFFF !important;
+  letter-spacing: -0.01em !important;
+}
+
+.loading-prog-track {
+  width: 68px !important;
+  height: 5px !important;
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-radius: 99px !important;
+  overflow: hidden !important;
+  flex-shrink: 0 !important;
+}
+
+.loading-prog-fill {
+  height: 100% !important;
+  background: #FFF500 !important;
+  border-radius: 99px !important;
+  transition: width 120ms linear !important;
+}
+
+.loading-prog-pct {
+  font-family: var(--mono) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  color: #FFF500 !important;
+  min-width: 30px !important;
+  text-align: right !important;
+  font-variant-numeric: tabular-nums !important;
 }
 
 .loading-card.loading-hud-pill p,
@@ -3385,17 +3438,29 @@ body,
   display: none !important;
 }
 
+.loading-card.loading-hud-pill .text-btn {
+  margin: 0 0 0 2px !important;
+  padding: 2px 6px !important;
+  font-size: 10.5px !important;
+  color: rgba(255, 255, 255, 0.68) !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+
 .loading-hud-pill.is-model-bridge {
-  animation: introPillExit 980ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  opacity: 0 !important;
+  translate: 0 -10px !important;
+  transition: opacity 320ms ease, translate 320ms ease !important;
+  pointer-events: none !important;
 }
 
 .loading-pulse-dot {
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: var(--accent);
-  border: 1.5px solid var(--ink);
-  box-shadow: 0 0 0 3px rgb(255 245 0 / 35%);
+  background: #FFF500;
+  border: 0;
+  box-shadow: 0 0 8px #FFF500;
   display: inline-block;
   flex-shrink: 0;
 }
@@ -3840,13 +3905,39 @@ body,
 .model[data-intro-hold="true"] .top-bar,
 .model[data-intro-hold="true"] .top-bar-left,
 .model[data-intro-hold="true"] .top-bar-center,
-.model[data-intro-hold="true"] .top-bar-right,
+.model[data-intro-hold="true"] .top-bar-right {
+  opacity: 0 !important;
+  translate: 0 -22px !important;
+  pointer-events: none !important;
+  transition: none !important;
+}
+
 .model[data-intro-hold="true"] .left-rail,
 .model[data-intro-hold="true"] .left-tool-rail,
-.model[data-intro-hold="true"] .left-outliner,
+.model[data-intro-hold="true"] .left-outliner {
+  opacity: 0 !important;
+  translate: -28px 0 !important;
+  pointer-events: none !important;
+  transition: none !important;
+}
+
 .model[data-intro-hold="true"] .right-rail,
-.model[data-intro-hold="true"] .right-inspector,
-.model[data-intro-hold="true"] .bottom-bar,
+.model[data-intro-hold="true"] .right-inspector {
+  opacity: 0 !important;
+  translate: 28px 0 !important;
+  pointer-events: none !important;
+  transition: none !important;
+}
+
+.model[data-intro-hold="true"] .bottom-bar {
+  opacity: 0 !important;
+  translate: 0 22px !important;
+  pointer-events: none !important;
+  transition: none !important;
+}
+
 .model[data-intro-hold="true"] .loading-hud-pill.is-model-bridge {
-  animation-play-state: paused !important;
+  opacity: 1 !important;
+  translate: 0 0 !important;
+  transition: none !important;
 }

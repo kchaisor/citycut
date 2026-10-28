@@ -76,6 +76,18 @@ export function MapStage({
   const activeLonRef = useRef(initialView.lon);
 
   const [ready, setReady] = useState(false);
+  const [loadingPct, setLoadingPct] = useState(14);
+  useEffect(() => {
+    if (!loading) {
+      setLoadingPct(14);
+      return;
+    }
+    setLoadingPct(18);
+    const id = window.setInterval(() => {
+      setLoadingPct((prev) => (prev < 92 ? Math.min(94, prev + Math.max(3, Math.round((96 - prev) * 0.22))) : prev));
+    }, 90);
+    return () => window.clearInterval(id);
+  }, [loading]);
   const [mapEpoch, setMapEpoch] = useState(0);
   const [basemapStyleFailed, setBasemapStyleFailed] = useState(false);
   const [sitePreviewFailed, setSitePreviewFailed] = useState(false);
@@ -93,6 +105,13 @@ export function MapStage({
       box.style.height = `${next.height}px`;
     }
     const clientW = containerRef.current?.clientWidth || 800;
+    const clientH = containerRef.current?.clientHeight || 900;
+    if (typeof window !== "undefined" && clientH > 0 && next.height > 0) {
+      (window as Window & { __citycutFrameRatio?: number }).__citycutFrameRatio = Math.min(
+        0.75,
+        Math.max(0.25, next.height / clientH),
+      );
+    }
     const labelLeft = Math.min(Math.max(next.left + next.width / 2, 88), clientW - 150);
     const labelEl = frameLabelRef.current;
     if (labelEl) {
@@ -456,6 +475,12 @@ export function MapStage({
           <div className="loading-hud-row">
             <span className="loading-pulse-dot" aria-hidden="true" />
             <strong>Building 3D site cut · LiDAR + Vicmap…</strong>
+            <div className="loading-prog-track" aria-hidden="true">
+              <div className="loading-prog-fill" style={{ width: `${loadingPct}%` }} />
+            </div>
+            <span className="loading-prog-pct" aria-hidden="true">
+              {loadingPct}%
+            </span>
           </div>
           <p>
             Fetching DEM terrain, Overture massings, roads and 1m contours for this block.

@@ -76,7 +76,9 @@ export function GroundGrid({ sideM, groundY, colourTick }: { sideM: number; grou
   const forward = useMemo(() => new THREE.Vector3(), []);
   useFrame(({ camera }) => {
     camera.getWorldDirection(forward);
-    object.visible = forward.y > -0.94;
+    const fade = THREE.MathUtils.clamp((forward.y + 0.96) / 0.22, 0, 1);
+    object.visible = fade > 0.01;
+    (object.material as THREE.LineBasicMaterial).opacity = 0.9 * fade;
   });
   useEffect(() => () => {
     object.geometry.dispose();
