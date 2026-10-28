@@ -10,9 +10,9 @@
  * even when localStorage previously had projection="iso"),
  * SCENE LAYERS Reset colours button, and Site Analysis Direction A invariants,
  * and generates:
- *   - /workspace/pr164-v14-live-transition.mp4
- *   - /workspace/pr164-v14-transition-contact-sheet.png
- *   - /workspace/pr164-v14-display-reset-colours.png
+ *   - /workspace/pr164-v15-live-transition.mp4
+ *   - /workspace/pr164-v15-transition-contact-sheet.png
+ *   - /workspace/pr164-v15-display-reset-colours.png
  *
  * Exits with non-zero code (1) if ANY invariant check fails.
  */
@@ -602,10 +602,10 @@ async function main() {
         if (diff > maxStep) maxStep = diff;
       }
       const distinctIntermediate = new Set(samples.filter((v) => v > 0 && v < 100)).size;
-      // Verify that underlayOpacity tracks (1 - pct/100) closely across all captured pairs
+      // Verify that underlayOpacity tracks the late-tail curve (1 - (pct/100)^1.65) closely across all captured pairs
       let maxSyncDrift = 0;
       for (const pair of mon.syncPairs) {
-        const expectedOpacity = 1 - pair.pct / 100;
+        const expectedOpacity = 1 - Math.pow(pair.pct / 100, 1.65);
         const drift = Math.abs(pair.uOpacity - expectedOpacity);
         if (drift > maxSyncDrift) maxSyncDrift = drift;
       }
@@ -646,8 +646,8 @@ async function main() {
           beat3WaveSample.bldgOuter < 0.18 &&
           beat3WaveSample.bldgInner > beat3WaveSample.bldgOuter &&
           beat3WaveSample.treeScale < 0.05 &&
-          beat3WaveSample.underlayOpacity > 0.45 &&
-          beat3WaveSample.underlayOpacity < 0.92 &&
+          beat3WaveSample.underlayOpacity > 0.55 &&
+          beat3WaveSample.underlayOpacity < 0.95 &&
           beat3WaveSample.topOpacity === "0" &&
           beat3WaveSample.leftOpacity === "0" &&
           beat3WaveSample.rightOpacity === "0" &&
@@ -913,7 +913,7 @@ async function main() {
     Object.assign(display3dOutlinerInfo, resetAfterRender);
 
     if (fs.existsSync(ARTIFACTS_DIR)) {
-      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v14-display-reset-colours.png") });
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v15-display-reset-colours.png") });
     }
 
     // -------------------------------------------------------------------------
@@ -1129,7 +1129,7 @@ async function main() {
     // GENERATE 8-FRAME CONTACT SHEET + LIVE TRANSITION MP4 VIDEO
     // -------------------------------------------------------------------------
     if (fs.existsSync(ARTIFACTS_DIR)) {
-      const contactSheetOut = path.join(ARTIFACTS_DIR, "pr164-v14-transition-contact-sheet.png");
+      const contactSheetOut = path.join(ARTIFACTS_DIR, "pr164-v15-transition-contact-sheet.png");
       execFileSync("ffmpeg", [
         "-y",
         "-pattern_type",
@@ -1165,7 +1165,7 @@ async function main() {
           fs.copyFileSync(src, dst);
         }
       }
-      const mp4Out = path.join(ARTIFACTS_DIR, "pr164-v14-live-transition.mp4");
+      const mp4Out = path.join(ARTIFACTS_DIR, "pr164-v15-live-transition.mp4");
       execFileSync("ffmpeg", [
         "-y",
         "-framerate",

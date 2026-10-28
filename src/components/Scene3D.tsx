@@ -111,6 +111,12 @@ export const INTRO_TRANSITION_MS = 3700;
 const INTRO_TIME_SCALE = INTRO_TRANSITION_MS / INTRO_BASE_MS;
 const INTRO_TRANSITION_SEC = INTRO_TRANSITION_MS / 1000;
 const INTRO_HOLD_RELEASE_SEC = INTRO_TRANSITION_SEC;
+export const INTRO_UNDERLAY_FADE_EXP = 1.65;
+
+export function computeIntroUnderlayOpacity(progress: number): number {
+  const p = Math.min(1, Math.max(0, progress));
+  return Math.max(0, 1 - Math.pow(p, INTRO_UNDERLAY_FADE_EXP));
+}
 
 export function shouldRunIntroTransition(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") return false;
@@ -580,7 +586,7 @@ function City({
     canvasExt.__introElapsedSec = clampedElapsed;
     const progress = done ? 1 : Math.min(1, Math.max(0, clampedElapsed / INTRO_TRANSITION_SEC));
     const pct = done ? 100 : Math.min(100, Math.round(progress * 100));
-    const underlayOpacity = done ? 0 : Math.max(0, 1 - progress);
+    const underlayOpacity = done ? 0 : computeIntroUnderlayOpacity(progress);
 
     for (const { obj, pivotY, kind, bucket } of intro.targets) {
       const s = done
