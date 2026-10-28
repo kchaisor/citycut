@@ -3299,7 +3299,7 @@ body,
 .model .top-bar-right {
   opacity: 1;
   translate: 0 0;
-  transition: opacity 360ms cubic-bezier(0.22, 1, 0.36, 1) 0ms, translate 360ms cubic-bezier(0.22, 1, 0.36, 1) 0ms;
+  transition: opacity 635ms cubic-bezier(0.22, 1, 0.36, 1) 0ms, translate 635ms cubic-bezier(0.22, 1, 0.36, 1) 0ms;
 }
 
 .model .left-rail,
@@ -3307,20 +3307,20 @@ body,
 .model .left-outliner {
   opacity: 1;
   translate: 0 0;
-  transition: opacity 360ms cubic-bezier(0.22, 1, 0.36, 1) 160ms, translate 360ms cubic-bezier(0.22, 1, 0.36, 1) 160ms;
+  transition: opacity 635ms cubic-bezier(0.22, 1, 0.36, 1) 282ms, translate 635ms cubic-bezier(0.22, 1, 0.36, 1) 282ms;
 }
 
 .model .right-rail,
 .model .right-inspector {
   opacity: 1;
   translate: 0 0;
-  transition: opacity 360ms cubic-bezier(0.22, 1, 0.36, 1) 160ms, translate 360ms cubic-bezier(0.22, 1, 0.36, 1) 160ms;
+  transition: opacity 635ms cubic-bezier(0.22, 1, 0.36, 1) 282ms, translate 635ms cubic-bezier(0.22, 1, 0.36, 1) 282ms;
 }
 
 .model .bottom-bar {
   opacity: 1;
   translate: 0 0;
-  transition: opacity 360ms cubic-bezier(0.22, 1, 0.36, 1) 160ms, translate 360ms cubic-bezier(0.22, 1, 0.36, 1) 160ms;
+  transition: opacity 635ms cubic-bezier(0.22, 1, 0.36, 1) 282ms, translate 635ms cubic-bezier(0.22, 1, 0.36, 1) 282ms;
 }
 
 @media (prefers-reduced-motion: reduce) {

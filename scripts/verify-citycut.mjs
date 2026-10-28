@@ -10,9 +10,9 @@
  * even when localStorage previously had projection="iso"),
  * SCENE LAYERS Reset colours button, and Site Analysis Direction A invariants,
  * and generates:
- *   - /workspace/pr164-v11-live-transition.mp4
- *   - /workspace/pr164-v11-transition-contact-sheet.png
- *   - /workspace/pr164-v11-display-reset-colours.png
+ *   - /workspace/pr164-v14-live-transition.mp4
+ *   - /workspace/pr164-v14-transition-contact-sheet.png
+ *   - /workspace/pr164-v14-display-reset-colours.png
  *
  * Exits with non-zero code (1) if ANY invariant check fails.
  */
@@ -193,7 +193,7 @@ async function main() {
       window.addEventListener("citycut:intro-start", () => {
         window.__citycutHandoffMonitor.introStartFired = true;
       });
-      window.addEventListener("citycut:intro-settled", () => {
+      window.addEventListener("citycut:intro-done", () => {
         const mon = window.__citycutHandoffMonitor;
         if (!mon) return;
         if (mon.domProgressSamples[mon.domProgressSamples.length - 1] !== 100) {
@@ -504,13 +504,13 @@ async function main() {
     );
 
     // Poll Phase B (0s -> 2.1s) for:
-    //   1) beat3WaveSample: elapsed in [0.38, 0.65], bldgInner > 0.35, bldgOuter < 0.18, treeScale < 0.05, underlayOpacity in [0.55, 0.90]
-    //   2) beat3TreeSample: elapsed in [0.85, 1.85], treeScale > 1.04 (bouncy overshoot!)
+    //   1) beat3WaveSample: elapsed in [0.67, 1.15], bldgInner > 0.35, bldgOuter < 0.18, treeScale < 0.05, underlayOpacity in [0.55, 0.90]
+    //   2) beat3TreeSample: elapsed in [1.50, 3.26], treeScale > 1.04 (bouncy overshoot!)
     let beat3WaveSample = null;
     let beat3TreeSample = null;
     let maxObservedTreeScale = 0;
     const pollStart = Date.now();
-    while (Date.now() - pollStart < 40000) {
+    while (Date.now() - pollStart < 80000) {
       const sample = await page.evaluate(() => {
         const canvas = document.querySelector(".model canvas");
         const modelEl = document.querySelector(".model");
@@ -544,7 +544,7 @@ async function main() {
 
       if (
         !beat3WaveSample &&
-        sample.elapsed >= 0.38 &&
+        sample.elapsed >= 0.67 &&
         sample.bldgInner > 0.35 &&
         sample.bldgOuter < 0.18 &&
         sample.treeScale < 0.05 &&
@@ -563,8 +563,8 @@ async function main() {
 
       if (
         !beat3TreeSample &&
-        sample.elapsed >= 0.85 &&
-        sample.elapsed <= 1.85 &&
+        sample.elapsed >= 1.5 &&
+        sample.elapsed <= 3.26 &&
         sample.treeScale > 1.04
       ) {
         await page.evaluate(() => {
@@ -578,7 +578,7 @@ async function main() {
         });
       }
 
-      if (sample.elapsed >= 2.1 && sample.introHold === null) {
+      if (sample.elapsed >= 3.7 && sample.introHold === null) {
         break;
       }
       await page.waitForTimeout(18);
@@ -639,7 +639,7 @@ async function main() {
 
     assertCheck(
       "beat3a-staggered-building-wave",
-      "Early/mid Phase B (elapsed ~ 0.40s–0.65s) extrudes buildings in a center-out radial wave (bldgInner > 0.35 while bldgOuter < 0.18) before trees start (treeScale < 0.05) while 2D background is mid-fade",
+      "Early/mid Phase B (elapsed ~ 0.70s–1.15s of the 3.7s stretched Phase B) extrudes buildings in a center-out radial wave (bldgInner > 0.35 while bldgOuter < 0.18) before trees start (treeScale < 0.05) while 2D background is mid-fade",
       Boolean(
         beat3WaveSample &&
           beat3WaveSample.bldgInner > 0.35 &&
@@ -660,7 +660,7 @@ async function main() {
 
     assertCheck(
       "beat3b-delayed-tree-bounce",
-      "Later in Phase B (elapsed ~ 0.85s–1.85s), trees pop up after buildings with a 16% spring overshoot bounce (treeScale > 0.30 and maxObservedTreeScale > 1.04)",
+      "Later in Phase B (elapsed ~ 1.50s–3.26s of the 3.7s stretched Phase B), trees pop up after buildings with a 16% spring overshoot bounce (treeScale > 0.30 and maxObservedTreeScale > 1.04)",
       Boolean(
         beat3TreeSample &&
           beat3TreeSample.treeScale > 0.30 &&
@@ -723,8 +723,25 @@ async function main() {
         rightOpacity: rightInsp ? getComputedStyle(rightInsp).opacity : "0",
         bottomOpacity: bottomBar ? getComputedStyle(bottomBar).opacity : "0",
         bridgePillOpacity: bridgePill ? getComputedStyle(bridgePill).opacity : "1",
+        introElapsed: Number(canvas?.dataset.introElapsed ?? 0),
+        hudTransitions: [topBar, leftOutliner, rightInsp, bottomBar].map((el) => {
+          if (!el) return 0;
+          const cs = getComputedStyle(el);
+          const dur = Math.max(...cs.transitionDuration.split(",").map((v) => parseFloat(v) || 0));
+          const del = Math.max(...cs.transitionDelay.split(",").map((v) => parseFloat(v) || 0));
+          return Math.round((dur + del) * 1000);
+        }),
       };
     });
+
+    const hudEntryMs = Math.max(...beat4Info.hudTransitions);
+    const phaseBTotalMs = Math.round(beat4Info.introElapsed * 1000) + hudEntryMs;
+    assertCheck(
+      "beat3-stretched-phase-b-timing",
+      "Phase B is stretched ~2s (v13 measured 2.10s intro + 0.52s HUD entry = 2.62s; target 3.70s intro + 0.917s HUD entry ~ 4.62s)",
+      Math.abs(beat4Info.introElapsed - 3.7) <= 0.02 && hudEntryMs >= 900 && hudEntryMs <= 930 && phaseBTotalMs >= 4500 && phaseBTotalMs <= 4700,
+      `introElapsed=${beat4Info.introElapsed}s, hudEntry=${hudEntryMs}ms (per panel ${beat4Info.hudTransitions.join("/")}), total=${phaseBTotalMs}ms`,
+    );
 
     assertCheck(
       "beat4-settled-hud",
@@ -896,7 +913,7 @@ async function main() {
     Object.assign(display3dOutlinerInfo, resetAfterRender);
 
     if (fs.existsSync(ARTIFACTS_DIR)) {
-      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v11-display-reset-colours.png") });
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v14-display-reset-colours.png") });
     }
 
     // -------------------------------------------------------------------------
@@ -1112,7 +1129,7 @@ async function main() {
     // GENERATE 8-FRAME CONTACT SHEET + LIVE TRANSITION MP4 VIDEO
     // -------------------------------------------------------------------------
     if (fs.existsSync(ARTIFACTS_DIR)) {
-      const contactSheetOut = path.join(ARTIFACTS_DIR, "pr164-v11-transition-contact-sheet.png");
+      const contactSheetOut = path.join(ARTIFACTS_DIR, "pr164-v14-transition-contact-sheet.png");
       execFileSync("ffmpeg", [
         "-y",
         "-pattern_type",
@@ -1148,7 +1165,7 @@ async function main() {
           fs.copyFileSync(src, dst);
         }
       }
-      const mp4Out = path.join(ARTIFACTS_DIR, "pr164-v11-live-transition.mp4");
+      const mp4Out = path.join(ARTIFACTS_DIR, "pr164-v14-live-transition.mp4");
       execFileSync("ffmpeg", [
         "-y",
         "-framerate",

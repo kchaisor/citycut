@@ -104,7 +104,11 @@ export type SceneExporter = {
 
 type FiberCamera = (THREE.OrthographicCamera | THREE.PerspectiveCamera) & { manual?: boolean };
 
-export const INTRO_TRANSITION_MS = 2100;
+// Phase B was 2100 ms; stretched to 3700 ms (k = 3.7 / 2.1) so, together with the
+// proportionally scaled HUD entry (520 ms -> 917 ms), the visible handoff is ~2 s longer.
+const INTRO_BASE_MS = 2100;
+export const INTRO_TRANSITION_MS = 3700;
+const INTRO_TIME_SCALE = INTRO_TRANSITION_MS / INTRO_BASE_MS;
 const INTRO_TRANSITION_SEC = INTRO_TRANSITION_MS / 1000;
 const INTRO_HOLD_RELEASE_SEC = INTRO_TRANSITION_SEC;
 
@@ -130,16 +134,16 @@ function easeOutCubic(x: number): number {
 export function computeIntroBuildingBucketScale(elapsedSec: number, bucket: number): number {
   if (elapsedSec >= INTRO_TRANSITION_SEC) return 1;
   const clampedBucket = Math.max(0, Math.min(23, bucket));
-  const bStart = (clampedBucket / 23) * 0.65;
-  const u = Math.min(1, Math.max(0, (elapsedSec - bStart) / 1.05));
+  const bStart = (clampedBucket / 23) * 0.65 * INTRO_TIME_SCALE;
+  const u = Math.min(1, Math.max(0, (elapsedSec - bStart) / (1.05 * INTRO_TIME_SCALE)));
   return 0.001 + 0.999 * easeInOutCubic(u);
 }
 
 export function computeIntroTreeBucketScale(elapsedSec: number, bucket: number): number {
   if (elapsedSec >= INTRO_TRANSITION_SEC) return 1;
   const clampedBucket = Math.max(0, Math.min(15, bucket));
-  const tStart = 0.65 + (clampedBucket / 15) * 0.95;
-  const rawU = (elapsedSec - tStart) / 0.50;
+  const tStart = (0.65 + (clampedBucket / 15) * 0.95) * INTRO_TIME_SCALE;
+  const rawU = (elapsedSec - tStart) / (0.5 * INTRO_TIME_SCALE);
   if (rawU <= 0) return 0.001;
   if (rawU >= 1) return 1;
   return Math.max(0.001, easeOutCubic(rawU) * (1 + 0.16 * Math.sin(Math.PI * rawU)));
