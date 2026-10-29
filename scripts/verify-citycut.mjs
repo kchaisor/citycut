@@ -22,6 +22,7 @@ import fs from "node:fs";
 import path from "node:path";
 import net from "node:net";
 import { chromium } from "playwright";
+import { PNG } from "pngjs";
 
 const CHROME_PATH = "/usr/bin/google-chrome";
 const VIEWPORT = { width: 1440, height: 900 };
@@ -1192,6 +1193,56 @@ async function main() {
         afterSelectInfo.shadowDLength < beforeSelectInfo.shadowDLength * 0.25,
       `3dDomeInDrawing=${beforeSelectInfo.has3dSunDomeInDrawing}, planFanInDrawing=${beforeSelectInfo.hasPlanFanInDrawing}, selectedCount=${afterSelectInfo.selectedCount}, shadowDLength=${beforeSelectInfo.shadowDLength}->${afterSelectInfo.shadowDLength}, layers=${afterSelectInfo.nonEmptyLayers}`,
     );
+
+    // -------------------------------------------------------------------------
+    // TONE CONTINUITY: outer dimmed map luminance must not step up across the
+    // select -> Phase A -> handoff -> early Phase B tilt (fresh page, 1440x900 @1x)
+    // -------------------------------------------------------------------------
+    {
+      const toneCtx = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, reducedMotion: "no-preference" });
+      await toneCtx.addInitScript(() => {
+        window.__citycutMinSilentLoadMs = 1500;
+      });
+      const tonePage = await toneCtx.newPage();
+      await tonePage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+      await tonePage.waitForSelector("button.create-fab", { timeout: 20000 });
+      await tonePage.evaluate(() => document.fonts.ready);
+      await tonePage.waitForTimeout(1500);
+      const regionLum = async (clip) => {
+        const png = PNG.sync.read(await tonePage.screenshot({ clip }));
+        let sum = 0;
+        for (let i = 0; i < png.data.length; i += 4) {
+          sum += 0.2126 * png.data[i] + 0.7152 * png.data[i + 1] + 0.0722 * png.data[i + 2];
+        }
+        return sum / (png.data.length / 4);
+      };
+      const outerLum = async () =>
+        ((await regionLum({ x: 40, y: 250, width: 360, height: 400 })) +
+          (await regionLum({ x: 1040, y: 250, width: 360, height: 400 }))) / 2;
+      const toneSamples = [];
+      for (let i = 0; i < 80; i++) {
+        if (i === 2) await tonePage.click("button.create-fab");
+        const st = await tonePage.evaluate(() => ({
+          started: Boolean(window.__citycutIntroStarted),
+          elapsed: Number(document.querySelector(".model canvas")?.dataset.introElapsed ?? 0),
+        }));
+        toneSamples.push({ ...st, outer: Number((await outerLum()).toFixed(1)) });
+        if (st.started && st.elapsed >= 0.5) break;
+      }
+      await toneCtx.close();
+      let maxStepUp = 0;
+      for (let i = 1; i < toneSamples.length; i++) {
+        maxStepUp = Math.max(maxStepUp, toneSamples[i].outer - toneSamples[i - 1].outer);
+      }
+      const baseline = toneSamples[0]?.outer ?? 0;
+      const netRise = Math.max(...toneSamples.map((t) => t.outer)) - baseline;
+      assertCheck(
+        "handoff-tone-continuity",
+        "Outer dimmed map luminance stays continuous from the select screen through Phase A, the 3D handoff, and the first 0.5s of the tilt (no step up > 3/255, net rise <= 3/255)",
+        toneSamples.length >= 6 && toneSamples.some((t) => t.started) && maxStepUp <= 3 && netRise <= 3,
+        `samples=${toneSamples.length}, baseline=${baseline}, maxStepUp=${maxStepUp.toFixed(1)}, netRise=${netRise.toFixed(1)}, trace=[${toneSamples.map((t) => `${t.started ? `B${t.elapsed}` : "A"}:${t.outer}`).join(" ")}]`,
+      );
+    }
 
     // -------------------------------------------------------------------------
     // GENERATE 8-FRAME CONTACT SHEET + LIVE TRANSITION MP4 VIDEO
