@@ -22,6 +22,7 @@ import fs from "node:fs";
 import path from "node:path";
 import net from "node:net";
 import { chromium } from "playwright";
+import { PNG } from "pngjs";
 
 const CHROME_PATH = "/usr/bin/google-chrome";
 const VIEWPORT = { width: 1440, height: 900 };
@@ -196,6 +197,8 @@ async function main() {
       window.addEventListener("citycut:intro-done", () => {
         const mon = window.__citycutHandoffMonitor;
         if (!mon) return;
+        mon.introDoneFired = true;
+        mon.introDoneMs = Math.round(performance.now() - (window.__citycutIntroStartMs ?? performance.now()));
         if (mon.domProgressSamples[mon.domProgressSamples.length - 1] !== 100) {
           mon.domProgressSamples.push(100);
         }
@@ -228,6 +231,29 @@ async function main() {
             radius: Number(canvas?.dataset.introRadius ?? 0),
             elapsed: Number(canvas?.dataset.introElapsed ?? 99),
           };
+        }
+        if (mon.introStartFired) {
+          // Boundary (moving dashed perimeter) effective opacity = product of its own + ancestor opacities
+          const perim = document.querySelector(".select .frame-loop-perimeter");
+          let eff = 0;
+          if (perim) {
+            eff = 1;
+            for (let el = perim; el && el !== document.documentElement; el = el.parentElement) {
+              const cs = getComputedStyle(el);
+              if (cs.display === "none" || cs.visibility === "hidden") { eff = 0; break; }
+              eff *= Number(cs.opacity);
+            }
+          }
+          const canvas = document.querySelector(".model canvas");
+          const startMs = window.__citycutIntroStartMs ?? performance.now();
+          (mon.boundarySamples ??= []).push({
+            t: Math.round(performance.now() - startMs),
+            elapsed: Number(canvas?.dataset.introElapsed ?? 0),
+            polar: Number(canvas?.dataset.introPolar ?? 0),
+            mounted: Boolean(perim),
+            eff: Number(eff.toFixed(3)),
+            introDone: Boolean(mon.introDoneFired),
+          });
         }
         if (typeof window.__citycutFirstTiltFrameMs === "number" && window.__citycutFirstTiltSnap === undefined) {
           const canvas = document.querySelector(".model canvas");
@@ -602,10 +628,10 @@ async function main() {
         if (diff > maxStep) maxStep = diff;
       }
       const distinctIntermediate = new Set(samples.filter((v) => v > 0 && v < 100)).size;
-      // Verify that underlayOpacity tracks the late-tail curve (1 - (pct/100)^1.65) closely across all captured pairs
+      // Verify that underlayOpacity tracks the late-tail curve (1 - min(1, (pct/100) * 3500/3300)^1.65, reaching 0 200ms early) closely across all captured pairs
       let maxSyncDrift = 0;
       for (const pair of mon.syncPairs) {
-        const expectedOpacity = 1 - Math.pow(pair.pct / 100, 1.65);
+        const expectedOpacity = 1 - Math.pow(Math.min(1, (pair.pct / 100) * (3500 / 3300)), 1.65);
         const drift = Math.abs(pair.uOpacity - expectedOpacity);
         if (drift > maxSyncDrift) maxSyncDrift = drift;
       }
@@ -622,6 +648,49 @@ async function main() {
         lastUnderlayOpacity: mon.underlayOpacitySamples[mon.underlayOpacitySamples.length - 1] ?? -1,
       };
     });
+
+    const boundaryFadeStats = await page.evaluate(() => {
+      const mon = window.__citycutHandoffMonitor ?? {};
+      const samples = mon.boundarySamples ?? [];
+      const visible = samples.filter((s) => s.mounted && s.eff > 0.005);
+      const lastVisible = visible[visible.length - 1] ?? null;
+      const firstFading = samples.find((s) => s.mounted && s.eff < 0.98 && s.eff > 0.005) ?? null;
+      const visibleAfterDone = samples.filter((s) => s.introDone && s.mounted && s.eff > 0.005).length;
+      const perim = document.querySelector(".select .frame-loop-perimeter");
+      let settledEff = 0;
+      if (perim) {
+        settledEff = 1;
+        for (let el = perim; el && el !== document.documentElement; el = el.parentElement) {
+          settledEff *= Number(getComputedStyle(el).opacity);
+        }
+      }
+      const pick = [0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 3.5].map((target) => {
+        const s = samples.reduce((best, cur) => (Math.abs(cur.elapsed - target) < Math.abs(best.elapsed - target) ? cur : best), samples[0] ?? { elapsed: -1, eff: -1, mounted: false });
+        return `${s.elapsed}s:${s.mounted ? s.eff : "unmounted"}`;
+      });
+      return {
+        sampleCount: samples.length,
+        lastVisibleElapsed: lastVisible ? lastVisible.elapsed : 0,
+        lastVisibleMs: lastVisible ? lastVisible.t : 0,
+        firstFadingMs: firstFading ? firstFading.t : -1,
+        visibleAfterDone,
+        settledMounted: Boolean(perim),
+        settledEff,
+        introDoneMs: mon.introDoneMs ?? -1,
+        timeline: pick.join(", "),
+        samples,
+      };
+    });
+    fs.writeFileSync("/tmp/citycut-boundary-samples.json", JSON.stringify(boundaryFadeStats.samples, null, 1));
+    assertCheck(
+      "beat3-cut-boundary-fades-before-tilt-ends",
+      "Moving dashed cut boundary fades to opacity 0 well before the 3.50s tilt completes (<= 2.0s intro elapsed), is never visible after citycut:intro-done, and is absent or 0 in the settled 3D view",
+      boundaryFadeStats.sampleCount >= 8 &&
+        boundaryFadeStats.lastVisibleElapsed <= 2.0 &&
+        boundaryFadeStats.visibleAfterDone === 0 &&
+        (!boundaryFadeStats.settledMounted || boundaryFadeStats.settledEff <= 0.005),
+      `lastVisibleElapsed=${boundaryFadeStats.lastVisibleElapsed}s, visibleAfterDone=${boundaryFadeStats.visibleAfterDone}, settled=${boundaryFadeStats.settledMounted ? boundaryFadeStats.settledEff : "unmounted"}, timeline=[${boundaryFadeStats.timeline}]`,
+    );
 
     assertCheck(
       "beat2-to-beat3-synced-progress-and-fade",
@@ -1124,6 +1193,79 @@ async function main() {
         afterSelectInfo.shadowDLength < beforeSelectInfo.shadowDLength * 0.25,
       `3dDomeInDrawing=${beforeSelectInfo.has3dSunDomeInDrawing}, planFanInDrawing=${beforeSelectInfo.hasPlanFanInDrawing}, selectedCount=${afterSelectInfo.selectedCount}, shadowDLength=${beforeSelectInfo.shadowDLength}->${afterSelectInfo.shadowDLength}, layers=${afterSelectInfo.nonEmptyLayers}`,
     );
+
+    // -------------------------------------------------------------------------
+    // TONE CONTINUITY: luminance inside the dashed cut box must not step up across the
+    // select -> Phase A -> handoff -> early Phase B tilt (fresh page, 1440x900 @1x)
+    // -------------------------------------------------------------------------
+    {
+      const toneCtx = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, reducedMotion: "no-preference" });
+      await toneCtx.addInitScript(() => {
+        window.__citycutMinSilentLoadMs = 1500;
+      });
+      const tonePage = await toneCtx.newPage();
+      await tonePage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+      await tonePage.waitForSelector("button.create-fab", { timeout: 20000 });
+      await tonePage.evaluate(() => document.fonts.ready);
+      await tonePage.waitForTimeout(1500);
+      const regionLum = async (clip) => {
+        const png = PNG.sync.read(await tonePage.screenshot({ clip }));
+        let sum = 0;
+        for (let i = 0; i < png.data.length; i += 4) {
+          sum += 0.2126 * png.data[i] + 0.7152 * png.data[i + 1] + 0.0722 * png.data[i + 2];
+        }
+        return sum / (png.data.length / 4);
+      };
+      const outerLum = async () =>
+        ((await regionLum({ x: 40, y: 250, width: 360, height: 400 })) +
+          (await regionLum({ x: 1040, y: 250, width: 360, height: 400 }))) / 2;
+      // Strictly inside the dashed cut boundary: frame rect inset 8px so the 2px dash strips are excluded.
+      let innerClip = null;
+      const innerLum = async () => {
+        const r = await tonePage.evaluate(() => {
+          const b = document.querySelector(".select .map-wrap .frame")?.getBoundingClientRect();
+          return b && b.width > 40 && b.height > 40 ? { x: b.x, y: b.y, width: b.width, height: b.height } : null;
+        });
+        if (r) innerClip = { x: Math.round(r.x + 8), y: Math.round(r.y + 8), width: Math.round(r.width - 16), height: Math.round(r.height - 16) };
+        return innerClip ? regionLum(innerClip) : NaN;
+      };
+      const toneSamples = [];
+      for (let i = 0; i < 80; i++) {
+        if (i === 2) await tonePage.click("button.create-fab");
+        const st = await tonePage.evaluate(() => ({
+          started: Boolean(window.__citycutIntroStarted),
+          elapsed: Number(document.querySelector(".model canvas")?.dataset.introElapsed ?? 0),
+        }));
+        toneSamples.push({ ...st, inner: Number((await innerLum()).toFixed(1)), outer: Number((await outerLum()).toFixed(1)) });
+        if (st.started && st.elapsed >= 0.5) break;
+      }
+      await toneCtx.close();
+      const toneValid = toneSamples.filter((t) => Number.isFinite(t.inner));
+      let maxStepUp = 0;
+      for (let i = 1; i < toneValid.length; i++) {
+        maxStepUp = Math.max(maxStepUp, toneValid[i].inner - toneValid[i - 1].inner);
+      }
+      const baseline = toneValid[0]?.inner ?? 0;
+      const netRise = Math.max(...toneValid.map((t) => t.inner)) - baseline;
+      assertCheck(
+        "handoff-tone-continuity",
+        "Map luminance strictly inside the dashed cut boundary never brightens from the select screen through Phase A, the 3D handoff, and the first 0.5s of the tilt (no step up > 2/255, net rise <= 2/255; darkening into the 3D view is allowed)",
+        toneValid.length >= 6 && toneSamples.some((t) => t.started) && maxStepUp <= 2 && netRise <= 2,
+        `samples=${toneSamples.length}, baseline=${baseline}, maxStepUp=${maxStepUp.toFixed(1)}, netRise=${netRise.toFixed(1)}, trace=[${toneSamples.map((t) => `${t.started ? `B${t.elapsed}` : "A"}:${t.inner}`).join(" ")}]`,
+      );
+      let outerMaxStepUp = 0;
+      for (let i = 1; i < toneSamples.length; i++) {
+        outerMaxStepUp = Math.max(outerMaxStepUp, toneSamples[i].outer - toneSamples[i - 1].outer);
+      }
+      const outerBaseline = toneSamples[0]?.outer ?? 0;
+      const outerNetRise = Math.max(...toneSamples.map((t) => t.outer)) - outerBaseline;
+      assertCheck(
+        "handoff-tone-continuity-outer",
+        "Outer dimmed map luminance (outside the cut) stays continuous from the select screen through Phase A, the 3D handoff, and the first 0.5s of the tilt (no step up > 3/255, net rise <= 3/255)",
+        toneSamples.length >= 6 && toneSamples.some((t) => t.started) && outerMaxStepUp <= 3 && outerNetRise <= 3,
+        `samples=${toneSamples.length}, baseline=${outerBaseline}, maxStepUp=${outerMaxStepUp.toFixed(1)}, netRise=${outerNetRise.toFixed(1)}, trace=[${toneSamples.map((t) => `${t.started ? `B${t.elapsed}` : "A"}:${t.outer}`).join(" ")}]`,
+      );
+    }
 
     // -------------------------------------------------------------------------
     // GENERATE 8-FRAME CONTACT SHEET + LIVE TRANSITION MP4 VIDEO

@@ -112,9 +112,12 @@ const INTRO_TIME_SCALE = INTRO_TRANSITION_MS / INTRO_BASE_MS;
 const INTRO_TRANSITION_SEC = INTRO_TRANSITION_MS / 1000;
 const INTRO_HOLD_RELEASE_SEC = INTRO_TRANSITION_SEC;
 export const INTRO_UNDERLAY_FADE_EXP = 1.65;
+// The 2D plan underlay reaches 0 this many ms before the tilt ends (3.30 s of 3.50 s).
+export const INTRO_UNDERLAY_LEAD_MS = 200;
+const INTRO_UNDERLAY_FADE_SPAN = (INTRO_TRANSITION_MS - INTRO_UNDERLAY_LEAD_MS) / INTRO_TRANSITION_MS;
 
 export function computeIntroUnderlayOpacity(progress: number): number {
-  const p = Math.min(1, Math.max(0, progress));
+  const p = Math.min(1, Math.max(0, progress) / INTRO_UNDERLAY_FADE_SPAN);
   return Math.max(0, 1 - Math.pow(p, INTRO_UNDERLAY_FADE_EXP));
 }
 
