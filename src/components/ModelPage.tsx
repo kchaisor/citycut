@@ -151,6 +151,8 @@ import { isometricDrawingBounds } from "../lib/isometricDrawing";
 import { Sidebar, type SidebarItem } from "./Sidebar";
 import { SatellitePane } from "./SatellitePane";
 import { Scene3D, type SceneExporter } from "./Scene3D";
+import { HeightReliabilityHud } from "./HeightReliabilityHud";
+import { buildingColourModeFromFlags } from "../lib/buildingViewportColor";
 
 function shouldShowIntroBridgePill(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") return false;
@@ -329,6 +331,11 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     writeStoredView3dDisplay(window.localStorage, next);
     return next;
   });
+  const heightReliabilityOn = Boolean(view3dDisplay.heightReliabilityView);
+  const buildingColourMode = useMemo(
+    () => buildingColourModeFromFlags(colourByUse, showSource, heightReliabilityOn),
+    [colourByUse, showSource, heightReliabilityOn],
+  );
   const [windSettings, setWindSettings] = useState<WindViewSettings>(() => {
     const next = windSettingsForModelOpen(window.localStorage);
     writeStoredWindSettings(window.localStorage, next);
@@ -394,8 +401,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       heliodon: heliodonDiagramExport(),
       shadows: planShadowInput(),
       castShadows: solar.castShadows,
-      uniformBuildings: !colourByUse && !showSource,
-      colourBySource: showSource,
+      uniformBuildings: buildingColourMode.uniformBuildings,
+      colourBySource: buildingColourMode.colourBySource,
+      colourByHeightReliability: buildingColourMode.colourByHeightReliability,
       highlightManual: showManualEdits && overrideResult.manualCount > 0,
       wind:
         windSettings.enabled && windTable
@@ -1223,11 +1231,19 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     writeStoredView3dDisplay(window.localStorage, next);
   }
 
+  function leaveHeightReliabilityView() {
+    if (!view3dDisplay.heightReliabilityView) return;
+    commitView3dDisplay({ ...view3dDisplay, heightReliabilityView: false });
+  }
+
   function pickBuildingUseColour(use: BuildingUse, value: string) {
     commitColour(BUILDING_USE_META[use].key, value);
-    if (!colourByUse || showSource) {
+    if (!colourByUse || showSource || heightReliabilityOn) {
       setShowSource(false);
       setColourByUse(true);
+      if (heightReliabilityOn) {
+        commitView3dDisplay({ ...view3dDisplay, heightReliabilityView: false });
+      }
     }
     if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "buildings")) {
       commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "buildings", true));
@@ -1268,8 +1284,8 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
         heliodon: heliodonRhinoExport(),
         shadows: planShadowInput(),
         castShadows: solar.castShadows,
-        uniformBuildings: !colourByUse && !showSource,
-        colourBySource: showSource,
+        uniformBuildings: buildingColourMode.uniformBuildings,
+        colourBySource: buildingColourMode.colourBySource,
         wind:
           windSettings.enabled && windTable
             ? { table: windTable, period: windSettings.period }
@@ -1747,8 +1763,8 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             <SceneBoundary>
               <Scene3D
                 model={displayModel}
-                uniformBuildings={!colourByUse && !showSource}
-                colourBySource={showSource}
+                uniformBuildings={buildingColourMode.uniformBuildings}
+                colourBySource={buildingColourMode.colourBySource}
                 showManualEdits={showManualEdits}
                 projection={view.projection}
                 corner={view.corner}
@@ -1807,10 +1823,16 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 />
               )}
             </SceneBoundary>
+            {heightReliabilityOn && displayModel.buildings.length > 0 ? (
+              <HeightReliabilityHud buildings={displayModel.buildings} />
+            ) : null}
           </div>
         )}
         {tab === "drawing" && (
           <div className="fill is-plan">
+            {heightReliabilityOn && drawingModel.buildings.length > 0 ? (
+              <HeightReliabilityHud buildings={drawingModel.buildings} />
+            ) : null}
             {drawing === "exploded-axo" ? (
               <DrawingExplodedAxo
                 model={drawingModel}
@@ -1820,6 +1842,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 onViewportChange={setExplodedViewport}
                 onLayerLiftChange={setAxoLayerLift}
                 fitCounter={fitCounter}
+                colourByHeightReliability={heightReliabilityOn}
               />
             ) : drawing === "isometric" ? (
               <DrawingIsometric
@@ -1860,8 +1883,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     return next;
                   })
                 }
-                uniformBuildings={!colourByUse && !showSource}
-                colourBySource={showSource}
+                uniformBuildings={buildingColourMode.uniformBuildings}
+                colourBySource={buildingColourMode.colourBySource}
+                colourByHeightReliability={heightReliabilityOn}
                 highlightManual={showManualEdits && overrideResult.manualCount > 0}
                 viewport={planViewport}
                 onViewportChange={setPlanViewport}
@@ -2295,19 +2319,28 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                       data-autofocus="true"
                       aria-pressed={colourByUse && !showSource}
                       onClick={() => {
+                        leaveHeightReliabilityView();
                         setShowSource(false);
                         setColourByUse(true);
                       }}
                     >
                       Use
                     </button>
-                    <button type="button" aria-pressed={showSource} onClick={() => setShowSource(true)}>
+                    <button
+                      type="button"
+                      aria-pressed={showSource}
+                      onClick={() => {
+                        leaveHeightReliabilityView();
+                        setShowSource(true);
+                      }}
+                    >
                       Source
                     </button>
                     <button
                       type="button"
                       aria-pressed={!colourByUse && !showSource}
                       onClick={() => {
+                        leaveHeightReliabilityView();
                         setShowSource(false);
                         setColourByUse(false);
                       }}
@@ -2511,6 +2544,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                         className={!view3dDisplay.whiteCard && colourByUse && !showSource ? "style-btn active" : "style-btn"}
                         aria-pressed={!view3dDisplay.whiteCard && colourByUse && !showSource}
                         onClick={() => {
+                          leaveHeightReliabilityView();
                           setShowSource(false);
                           setColourByUse(true);
                           if (view3dDisplay.whiteCard) {
@@ -2525,6 +2559,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                         className={!view3dDisplay.whiteCard && showSource ? "style-btn active" : "style-btn"}
                         aria-pressed={!view3dDisplay.whiteCard && showSource}
                         onClick={() => {
+                          leaveHeightReliabilityView();
                           setShowSource(true);
                           if (view3dDisplay.whiteCard) {
                             commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
@@ -2538,6 +2573,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                         className={!view3dDisplay.whiteCard && !colourByUse && !showSource ? "style-btn active" : "style-btn"}
                         aria-pressed={!view3dDisplay.whiteCard && !colourByUse && !showSource}
                         onClick={() => {
+                          leaveHeightReliabilityView();
                           setShowSource(false);
                           setColourByUse(false);
                           if (view3dDisplay.whiteCard) {
@@ -2580,6 +2616,31 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                         />
                         <span>Manual edits</span>
                         <span className={`mini-chk ${showManualEdits ? "on" : ""}`} aria-hidden="true">{showManualEdits ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
+                      </label>
+                      <label className={heightReliabilityOn ? "mini-flag is-on check-field" : "mini-flag check-field"}>
+                        <input
+                          className="sr-only"
+                          type="checkbox"
+                          checked={heightReliabilityOn}
+                          onChange={(event) => {
+                            const next = event.target.checked;
+                            if (next) {
+                              setShowSource(false);
+                              setColourByUse(false);
+                            }
+                            let nextDisplay: View3dDisplaySettings = {
+                              ...view3dDisplay,
+                              heightReliabilityView: next,
+                              whiteCard: next ? false : view3dDisplay.whiteCard,
+                            };
+                            if (next && !isLayer3dVisible(view3dDisplay, "buildings")) {
+                              nextDisplay = setLayer3dVisible(nextDisplay, "buildings", true);
+                            }
+                            commitView3dDisplay(nextDisplay);
+                          }}
+                        />
+                        <span>Data reliability</span>
+                        <span className={`mini-chk ${heightReliabilityOn ? "on" : ""}`} aria-hidden="true">{heightReliabilityOn ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
                       </label>
                     </div>
                   </section>
@@ -2751,6 +2812,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                             className={showSource ? "style-btn active" : "style-btn"}
                             aria-pressed={showSource}
                             onClick={() => {
+                              leaveHeightReliabilityView();
                               setShowSource(true);
                             }}
                           >
@@ -2761,6 +2823,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                             className={!colourByUse && !showSource ? "style-btn active" : "style-btn"}
                             aria-pressed={!colourByUse && !showSource}
                             onClick={() => {
+                              leaveHeightReliabilityView();
                               setShowSource(false);
                               setColourByUse(false);
                             }}
@@ -2782,6 +2845,31 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                             />
                             <span>Manual edits</span>
                             <span className={`mini-chk ${showManualEdits ? "on" : ""}`} aria-hidden="true">{showManualEdits ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
+                          </label>
+                          <label className={heightReliabilityOn ? "mini-flag is-on check-field" : "mini-flag check-field"}>
+                            <input
+                              className="sr-only"
+                              type="checkbox"
+                              checked={heightReliabilityOn}
+                              onChange={(event) => {
+                                const next = event.target.checked;
+                                if (next) {
+                                  setShowSource(false);
+                                  setColourByUse(false);
+                                }
+                                let nextDisplay: View3dDisplaySettings = {
+                                  ...view3dDisplay,
+                                  heightReliabilityView: next,
+                                  whiteCard: next ? false : view3dDisplay.whiteCard,
+                                };
+                                if (next && !isLayer3dVisible(view3dDisplay, "buildings")) {
+                                  nextDisplay = setLayer3dVisible(nextDisplay, "buildings", true);
+                                }
+                                commitView3dDisplay(nextDisplay);
+                              }}
+                            />
+                            <span>Data reliability</span>
+                            <span className={`mini-chk ${heightReliabilityOn ? "on" : ""}`} aria-hidden="true">{heightReliabilityOn ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
                           </label>
                         </div>
                       </>

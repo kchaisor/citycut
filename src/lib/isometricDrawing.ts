@@ -1,3 +1,5 @@
+import type { BuildingColourMode } from "./buildingViewportColor";
+import { heightReliabilityFill } from "./buildingHeightReliability";
 import { getColour } from "./colours";
 import { openRing, signedArea } from "./geo";
 import { DEFAULT_ISO_CORNER, ISO_CORNERS, type IsoCorner } from "./isoCamera";
@@ -400,6 +402,7 @@ function buildBuildingSolids(
   corner: IsoCorner,
   colors: IsometricDrawingColors,
   baseElevation: number,
+  buildingColour?: BuildingColourMode,
 ): IsoSolidItem[] {
   const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const items: IsoSolidItem[] = [];
@@ -430,7 +433,9 @@ function buildBuildingSolids(
       ? (building.importedColour ?? colors.importedMassing)
       : onSite
         ? colors.siteBuilding
-        : colors.buildings;
+        : buildingColour?.colourByHeightReliability
+          ? heightReliabilityFill(building)
+          : colors.buildings;
     const wallLight = roofBaseColor;
     const wallDark = roofBaseColor;
     const stroke = colors.buildingEdge;
@@ -559,12 +564,18 @@ export function buildIsometricDrawing(
     display?: View3dDisplaySettings;
     colors?: IsometricDrawingColors;
     planScale?: number;
+    buildingColour?: BuildingColourMode;
   },
 ): IsometricDrawingGeometry {
   const corner = options?.corner ?? DEFAULT_ISO_CORNER;
   const display = options?.display ?? DEFAULT_VIEW3D_DISPLAY;
   const colors = options?.colors ?? readIsometricDrawingColors();
   const planScale = options?.planScale ?? 1000;
+  const buildingColour =
+    options?.buildingColour ??
+    (display.heightReliabilityView
+      ? { colourByUse: false, uniformBuildings: false, colourBySource: false, colourByHeightReliability: true }
+      : undefined);
   const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
 
   const layersVisible: Record<Layer3dId, boolean> = {
@@ -752,7 +763,7 @@ export function buildIsometricDrawing(
 
   const solids: IsoSolidItem[] = [];
   if (layersVisible.buildings) {
-    solids.push(...buildBuildingSolids(model, corner, colors, baseElevation));
+    solids.push(...buildBuildingSolids(model, corner, colors, baseElevation, buildingColour));
   }
   if (layersVisible.trees) {
     solids.push(...buildTreeSolids(model, corner, colors, elevationAt));

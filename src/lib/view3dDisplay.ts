@@ -3,6 +3,7 @@ export const VIEW3D_OUTLINES_KEY = "citycut.view3d.outlines";
 export const VIEW3D_CONTOURS_KEY = "citycut.view3d.contours.v2";
 export const VIEW3D_HIDE_TREES_KEY = "citycut.view3d.hideTrees";
 export const VIEW3D_LAYERS_KEY = "citycut.view3d.layers";
+export const VIEW3D_HEIGHT_RELIABILITY_KEY = "citycut.view3d.heightReliability";
 
 export const LAYER_3D_IDS = [
   "buildings",
@@ -35,6 +36,8 @@ export type View3dDisplaySettings = {
   showOutlines: boolean;
   showContours3d: boolean;
   hideTrees: boolean;
+  /** When on, buildings are coloured by height data reliability class. */
+  heightReliabilityView?: boolean;
   layersVisible?: Partial<View3dLayerVisibility>;
 };
 
@@ -133,6 +136,7 @@ export function readStoredView3dDisplay(storage: KeyValueStore): View3dDisplaySe
     showOutlines: readFlag(storage, VIEW3D_OUTLINES_KEY, DEFAULT_VIEW3D_DISPLAY.showOutlines),
     showContours3d,
     hideTrees,
+    heightReliabilityView: readFlag(storage, VIEW3D_HEIGHT_RELIABILITY_KEY, false),
     layersVisible: readStoredLayers(storage, showContours3d, hideTrees),
   };
 }
@@ -162,6 +166,7 @@ export function writeStoredView3dDisplay(storage: KeyValueStore, settings: View3
     storage.setItem(VIEW3D_OUTLINES_KEY, settings.showOutlines ? "1" : "0");
     storage.setItem(VIEW3D_CONTOURS_KEY, settings.showContours3d ? "1" : "0");
     storage.setItem(VIEW3D_HIDE_TREES_KEY, settings.hideTrees ? "1" : "0");
+    storage.setItem(VIEW3D_HEIGHT_RELIABILITY_KEY, settings.heightReliabilityView ? "1" : "0");
     storage.setItem(VIEW3D_LAYERS_KEY, JSON.stringify(mergedLayers));
   } catch {
     // Private mode can reject localStorage.

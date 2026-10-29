@@ -95,6 +95,21 @@ export function svgFilename(model: CityModel, kind: "site" | "figure" | "isometr
   return aiFilename(model, kind, scale).replace(/\.ai$/, ".svg");
 }
 
+export function dxfFilename(model: CityModel, scale: number): string {
+  return svgFilename(model, "site", scale).replace(/\.svg$/, ".dxf");
+}
+
+export async function downloadSiteDxf(
+  model: CityModel,
+  scale: number,
+  style?: LineStyles,
+  exportOptions?: SitePlanExportOptions | null,
+): Promise<void> {
+  const { sitePlanDxf } = await import("./dxfPlan");
+  const text = sitePlanDxf(model, scale, style, exportOptions);
+  downloadBlob(dxfFilename(model, scale), new Blob([text], { type: "application/dxf" }));
+}
+
 export async function downloadSiteSvg(
   model: CityModel,
   scale: number,

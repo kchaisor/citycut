@@ -25,6 +25,7 @@ import {
   drawContours,
   drawnContourInterval,
 } from "./vicmapContours";
+import { HEIGHT_RELIABILITY_EXPORT_LAYER, heightReliabilityClass } from "./buildingHeightReliability";
 import type { CityModel, Pt } from "../types";
 
 type ClipDifference = (geom: MultiPolygon, ...more: MultiPolygon[]) => MultiPolygon;
@@ -64,7 +65,13 @@ export type PlanPaths = {
   pathUnionMs: number;
   rails: Pt[][];
   trams: Pt[][];
-  buildings: { rings: Pt[][]; fill: string; site: boolean; imported?: boolean }[];
+  buildings: {
+    rings: Pt[][];
+    fill: string;
+    site: boolean;
+    imported?: boolean;
+    heightReliabilityLayer?: string;
+  }[];
   trees: { east: number; north: number; r: number }[];
   contours: Pt[][];
   /** Parallel to `contours`. True on every Nth interval. */
@@ -209,11 +216,14 @@ export function planPaths(
       if (!rings) return null;
       const site = isSiteBuilding(model, building.id);
       const fill = planBuildingFill(model, building, colourMode, highlightManual);
-      return building.importedMassing ? { rings, fill, site: false, imported: true } : { rings, fill, site };
+      const heightReliabilityLayer = colourMode.colourByHeightReliability
+        ? HEIGHT_RELIABILITY_EXPORT_LAYER[heightReliabilityClass(building)]
+        : undefined;
+      return building.importedMassing
+        ? { rings, fill, site: false, imported: true, heightReliabilityLayer }
+        : { rings, fill, site, heightReliabilityLayer };
     })
-    .filter(
-      (building): building is { rings: Pt[][]; fill: string; site: boolean; imported?: boolean } => building !== null,
-    );
+    .filter((building): building is NonNullable<typeof building> => building !== null);
 
   let pathFill: MultiPolygon = footpaths.polygons;
   if (pathFilletM > 0 && carriageway.polygons.length > 0) {

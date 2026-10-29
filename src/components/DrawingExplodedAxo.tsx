@@ -65,6 +65,7 @@ export function DrawingExplodedAxo({
   onViewportChange,
   onLayerLiftChange,
   fitCounter = 0,
+  colourByHeightReliability = false,
 }: {
   model: CityModel;
   settings: ExplodedAxoSettings;
@@ -73,6 +74,7 @@ export function DrawingExplodedAxo({
   onViewportChange?: (view: PlanViewport) => void;
   onLayerLiftChange?: (id: AxoLayerId, liftM: number) => void;
   fitCounter?: number;
+  colourByHeightReliability?: boolean;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
@@ -131,7 +133,7 @@ export function DrawingExplodedAxo({
 
   const colourTick = useColourRevision();
   const { layers, guides } = useMemo(
-    () => buildExplodedAxoLayers(model, settings, overlays),
+    () => buildExplodedAxoLayers(model, settings, overlays, { colourByHeightReliability }),
     [model, settings, overlays, colourTick],
   );
   const paintLayers = useMemo(() => axoLayersForPaint(layers), [layers]);

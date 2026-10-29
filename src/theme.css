@@ -116,6 +116,11 @@
   --height-estimate: #7D7D7D;
   --height-manual: #D4A017;
 
+  /* Data reliability view: surveyed, OSM/Overture tag, and estimated building heights. */
+  --height-reliability-surveyed: #2E6B4F;
+  --height-reliability-osm: #3D5A73;
+  --height-reliability-estimated: #9A9084;
+
   /* Rail and panel widths. The viewport sits to the right of both. */
   --sidebar-rail-w: 56px;
   --sidebar-panel-w: 320px;

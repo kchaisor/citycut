@@ -14,7 +14,7 @@ export function planBuildingFill(
   if (building.importedMassing) return importedMassingFill(building);
   if (highlightManual && building.heightManual) return getColour("--building-manual");
   if (isSiteBuilding(model, building.id)) return getColour("--site-building");
-  return buildingViewportFill(mode, building.use as BuildingUse, building.source);
+  return buildingViewportFill(mode, building.use as BuildingUse, building.source, building);
 }
 
 /** Fill of an imported massing footprint: its per-model colour, else the `--imported-massing` token. */

@@ -11,6 +11,7 @@ import {
   type IsometricDrawingColors,
 } from "./isometricDrawing";
 import { hexRgb } from "./lineweights";
+import { HEIGHT_RELIABILITY_EXPORT_LAYER, heightReliabilityClass } from "./buildingHeightReliability";
 import { DEFAULT_VIEW3D_DISPLAY, type View3dDisplaySettings } from "./view3dDisplay";
 import type { CityModel } from "../types";
 
@@ -298,41 +299,60 @@ export function isometricDrawingChunks(
     if (paths.length > 0) chunks.push({ name: "Rail & tram", paths });
   }
 
+  const splitHeightReliability = Boolean(display.heightReliabilityView);
+  const buildingLayerPaths = new Map<string, PdfPath[]>();
+  const treePaths: PdfPath[] = [];
+  const combinedPaths: PdfPath[] = [];
+
+  function pushBuildingPaths(target: PdfPath[], solid: Extract<(typeof iso.solids)[number], { kind: "building" }>) {
+    for (const wall of solid.walls) {
+      const parsed = subpathsToPdfRings(wall.d, frame);
+      if (parsed.rings.length === 0) continue;
+      target.push({
+        rings: parsed.rings,
+        fill: hexRgb(wall.fill),
+        stroke: hexRgb(wall.stroke),
+        strokeMm: 0.12,
+        close: true,
+        evenOdd: false,
+        join: "round",
+      });
+    }
+    const roofParsed = subpathsToPdfRings(solid.roofD, frame);
+    if (roofParsed.rings.length > 0) {
+      target.push({
+        rings: roofParsed.rings,
+        fill: hexRgb(solid.roofFill),
+        stroke: hexRgb(solid.stroke),
+        strokeMm: 0.16,
+        close: true,
+        evenOdd: true,
+        join: "round",
+      });
+    }
+  }
+
   // 8. Buildings & trees (depth-sorted painter's order so foreground occludes background)
   if (iso.solids.length > 0) {
-    const paths: PdfPath[] = [];
     for (const solid of iso.solids) {
       if (solid.kind === "building") {
-        for (const wall of solid.walls) {
-          const parsed = subpathsToPdfRings(wall.d, frame);
-          if (parsed.rings.length === 0) continue;
-          paths.push({
-            rings: parsed.rings,
-            fill: hexRgb(wall.fill),
-            stroke: hexRgb(wall.stroke),
-            strokeMm: 0.12,
-            close: true,
-            evenOdd: false,
-            join: "round",
-          });
-        }
-        const roofParsed = subpathsToPdfRings(solid.roofD, frame);
-        if (roofParsed.rings.length > 0) {
-          paths.push({
-            rings: roofParsed.rings,
-            fill: hexRgb(solid.roofFill),
-            stroke: hexRgb(solid.stroke),
-            strokeMm: 0.16,
-            close: true,
-            evenOdd: true,
-            join: "round",
-          });
+        if (splitHeightReliability) {
+          const building = model.buildings.find((item) => item.id === solid.id);
+          const layerName = building
+            ? HEIGHT_RELIABILITY_EXPORT_LAYER[heightReliabilityClass(building)]
+            : HEIGHT_RELIABILITY_EXPORT_LAYER.estimated;
+          const layerPaths = buildingLayerPaths.get(layerName) ?? [];
+          pushBuildingPaths(layerPaths, solid);
+          buildingLayerPaths.set(layerName, layerPaths);
+        } else {
+          pushBuildingPaths(combinedPaths, solid);
         }
       } else {
+        const target = splitHeightReliability ? treePaths : combinedPaths;
         if (solid.trunkD) {
           const trunkParsed = subpathsToPdfRings(solid.trunkD, frame);
           if (trunkParsed.rings.length > 0) {
-            paths.push({
+            target.push({
               rings: trunkParsed.rings,
               stroke: hexRgb(solid.trunkFill),
               strokeMm: 0.14,
@@ -343,7 +363,7 @@ export function isometricDrawingChunks(
         }
         const canopyParsed = subpathsToPdfRings(solid.canopyD, frame);
         if (canopyParsed.rings.length > 0) {
-          paths.push({
+          target.push({
             rings: canopyParsed.rings,
             fill: hexRgb(solid.canopyFill),
             stroke: hexRgb(solid.stroke),
@@ -355,7 +375,15 @@ export function isometricDrawingChunks(
         }
       }
     }
-    if (paths.length > 0) chunks.push({ name: "Buildings & trees", paths });
+    if (splitHeightReliability) {
+      for (const layerName of Object.values(HEIGHT_RELIABILITY_EXPORT_LAYER)) {
+        const layerPaths = buildingLayerPaths.get(layerName);
+        if (layerPaths && layerPaths.length > 0) chunks.push({ name: layerName, paths: layerPaths });
+      }
+      if (treePaths.length > 0) chunks.push({ name: "Trees", paths: treePaths });
+    } else if (combinedPaths.length > 0) {
+      chunks.push({ name: "Buildings & trees", paths: combinedPaths });
+    }
   }
 
   // 9. Annotation
