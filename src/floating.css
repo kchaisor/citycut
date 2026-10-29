@@ -3568,10 +3568,15 @@ body,
   box-shadow: 0 0 0 9999px color-mix(in srgb, var(--ink) 8%, transparent) !important;
 }
 
+/* Once the tilt starts, the cut window takes the same 8% ink veil as the map around it
+   (150ms), so no separate, lighter inner plan shows under the tilting 3D slab. */
 .select.is-handoff-underlay.is-fading-out .map-wrap .frame {
   border-color: transparent !important;
-  background: color-mix(in srgb, var(--ink) 2%, transparent) !important;
+  background: color-mix(in srgb, var(--ink) 8%, transparent) !important;
   box-shadow: 0 0 0 9999px color-mix(in srgb, var(--ink) 8%, transparent) !important;
+  transition:
+    box-shadow 1314ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 150ms linear;
 }
 
 .select.is-handoff-underlay.is-fading-out .map-wrap .frame-handle,
