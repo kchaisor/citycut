@@ -3402,6 +3402,17 @@ body,
   height: calc(100% + 4px);
   pointer-events: none;
   z-index: 4;
+  opacity: 1;
+  will-change: opacity;
+}
+
+/* Phase B (2D -> 3D tilt): fade the moving dashed cut boundary out early in the tilt.
+   A CSS opacity transition on the perimeter container runs on the compositor, so it
+   finishes in ~550ms wall time even if the main thread is busy compiling the 3D scene,
+   and the boundary is fully gone long before the 3.50s tilt settles. */
+.select .map-wrap .frame.is-fading-out .frame-loop-perimeter {
+  opacity: 0;
+  transition: opacity 450ms cubic-bezier(0.4, 0, 0.2, 1) 100ms;
 }
 
 .select .map-wrap .frame .frame-loop-edge {

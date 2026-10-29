@@ -196,6 +196,8 @@ async function main() {
       window.addEventListener("citycut:intro-done", () => {
         const mon = window.__citycutHandoffMonitor;
         if (!mon) return;
+        mon.introDoneFired = true;
+        mon.introDoneMs = Math.round(performance.now() - (window.__citycutIntroStartMs ?? performance.now()));
         if (mon.domProgressSamples[mon.domProgressSamples.length - 1] !== 100) {
           mon.domProgressSamples.push(100);
         }
@@ -228,6 +230,29 @@ async function main() {
             radius: Number(canvas?.dataset.introRadius ?? 0),
             elapsed: Number(canvas?.dataset.introElapsed ?? 99),
           };
+        }
+        if (mon.introStartFired) {
+          // Boundary (moving dashed perimeter) effective opacity = product of its own + ancestor opacities
+          const perim = document.querySelector(".select .frame-loop-perimeter");
+          let eff = 0;
+          if (perim) {
+            eff = 1;
+            for (let el = perim; el && el !== document.documentElement; el = el.parentElement) {
+              const cs = getComputedStyle(el);
+              if (cs.display === "none" || cs.visibility === "hidden") { eff = 0; break; }
+              eff *= Number(cs.opacity);
+            }
+          }
+          const canvas = document.querySelector(".model canvas");
+          const startMs = window.__citycutIntroStartMs ?? performance.now();
+          (mon.boundarySamples ??= []).push({
+            t: Math.round(performance.now() - startMs),
+            elapsed: Number(canvas?.dataset.introElapsed ?? 0),
+            polar: Number(canvas?.dataset.introPolar ?? 0),
+            mounted: Boolean(perim),
+            eff: Number(eff.toFixed(3)),
+            introDone: Boolean(mon.introDoneFired),
+          });
         }
         if (typeof window.__citycutFirstTiltFrameMs === "number" && window.__citycutFirstTiltSnap === undefined) {
           const canvas = document.querySelector(".model canvas");
@@ -622,6 +647,49 @@ async function main() {
         lastUnderlayOpacity: mon.underlayOpacitySamples[mon.underlayOpacitySamples.length - 1] ?? -1,
       };
     });
+
+    const boundaryFadeStats = await page.evaluate(() => {
+      const mon = window.__citycutHandoffMonitor ?? {};
+      const samples = mon.boundarySamples ?? [];
+      const visible = samples.filter((s) => s.mounted && s.eff > 0.005);
+      const lastVisible = visible[visible.length - 1] ?? null;
+      const firstFading = samples.find((s) => s.mounted && s.eff < 0.98 && s.eff > 0.005) ?? null;
+      const visibleAfterDone = samples.filter((s) => s.introDone && s.mounted && s.eff > 0.005).length;
+      const perim = document.querySelector(".select .frame-loop-perimeter");
+      let settledEff = 0;
+      if (perim) {
+        settledEff = 1;
+        for (let el = perim; el && el !== document.documentElement; el = el.parentElement) {
+          settledEff *= Number(getComputedStyle(el).opacity);
+        }
+      }
+      const pick = [0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 3.5].map((target) => {
+        const s = samples.reduce((best, cur) => (Math.abs(cur.elapsed - target) < Math.abs(best.elapsed - target) ? cur : best), samples[0] ?? { elapsed: -1, eff: -1, mounted: false });
+        return `${s.elapsed}s:${s.mounted ? s.eff : "unmounted"}`;
+      });
+      return {
+        sampleCount: samples.length,
+        lastVisibleElapsed: lastVisible ? lastVisible.elapsed : 0,
+        lastVisibleMs: lastVisible ? lastVisible.t : 0,
+        firstFadingMs: firstFading ? firstFading.t : -1,
+        visibleAfterDone,
+        settledMounted: Boolean(perim),
+        settledEff,
+        introDoneMs: mon.introDoneMs ?? -1,
+        timeline: pick.join(", "),
+        samples,
+      };
+    });
+    fs.writeFileSync("/tmp/citycut-boundary-samples.json", JSON.stringify(boundaryFadeStats.samples, null, 1));
+    assertCheck(
+      "beat3-cut-boundary-fades-before-tilt-ends",
+      "Moving dashed cut boundary fades to opacity 0 well before the 3.50s tilt completes (<= 2.0s intro elapsed), is never visible after citycut:intro-done, and is absent or 0 in the settled 3D view",
+      boundaryFadeStats.sampleCount >= 8 &&
+        boundaryFadeStats.lastVisibleElapsed <= 2.0 &&
+        boundaryFadeStats.visibleAfterDone === 0 &&
+        (!boundaryFadeStats.settledMounted || boundaryFadeStats.settledEff <= 0.005),
+      `lastVisibleElapsed=${boundaryFadeStats.lastVisibleElapsed}s, visibleAfterDone=${boundaryFadeStats.visibleAfterDone}, settled=${boundaryFadeStats.settledMounted ? boundaryFadeStats.settledEff : "unmounted"}, timeline=[${boundaryFadeStats.timeline}]`,
+    );
 
     assertCheck(
       "beat2-to-beat3-synced-progress-and-fade",
