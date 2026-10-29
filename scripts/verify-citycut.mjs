@@ -10,9 +10,9 @@
  * even when localStorage previously had projection="iso"),
  * SCENE LAYERS Reset colours button, and Site Analysis Direction A invariants,
  * and generates:
- *   - /workspace/pr164-v16-live-transition.mp4
- *   - /workspace/pr164-v16-transition-contact-sheet.png
- *   - /workspace/pr164-v16-display-reset-colours.png
+ *   - /workspace/pr164-v17-live-transition.mp4
+ *   - /workspace/pr164-v17-transition-contact-sheet.png
+ *   - /workspace/pr164-v17-display-reset-colours.png
  *
  * Exits with non-zero code (1) if ANY invariant check fails.
  */
@@ -504,8 +504,8 @@ async function main() {
     );
 
     // Poll Phase B (0s -> 2.1s) for:
-    //   1) beat3WaveSample: elapsed in [0.61, 1.06], bldgInner > 0.35, bldgOuter < 0.18, treeScale < 0.05, underlayOpacity in [0.55, 0.90]
-    //   2) beat3TreeSample: elapsed in [1.38, 3.00], treeScale > 1.04 (bouncy overshoot!)
+    //   1) beat3WaveSample: elapsed in [0.63, 1.08], bldgInner > 0.35, bldgOuter < 0.18, treeScale < 0.05, underlayOpacity in [0.55, 0.90]
+    //   2) beat3TreeSample: elapsed in [1.42, 3.08], treeScale > 1.04 (bouncy overshoot!)
     let beat3WaveSample = null;
     let beat3TreeSample = null;
     let maxObservedTreeScale = 0;
@@ -544,7 +544,7 @@ async function main() {
 
       if (
         !beat3WaveSample &&
-        sample.elapsed >= 0.61 &&
+        sample.elapsed >= 0.63 &&
         sample.bldgInner > 0.35 &&
         sample.bldgOuter < 0.18 &&
         sample.treeScale < 0.05 &&
@@ -563,8 +563,8 @@ async function main() {
 
       if (
         !beat3TreeSample &&
-        sample.elapsed >= 1.38 &&
-        sample.elapsed <= 3.0 &&
+        sample.elapsed >= 1.42 &&
+        sample.elapsed <= 3.08 &&
         sample.treeScale > 1.04
       ) {
         await page.evaluate(() => {
@@ -578,7 +578,7 @@ async function main() {
         });
       }
 
-      if (sample.elapsed >= 3.4 && sample.introHold === null) {
+      if (sample.elapsed >= 3.5 && sample.introHold === null) {
         break;
       }
       await page.waitForTimeout(18);
@@ -639,7 +639,7 @@ async function main() {
 
     assertCheck(
       "beat3a-staggered-building-wave",
-      "Early/mid Phase B (elapsed ~ 0.61s–1.06s of the 3.40s Phase B) extrudes buildings in a center-out radial wave (bldgInner > 0.35 while bldgOuter < 0.18) before trees start (treeScale < 0.05) while 2D background is mid-fade",
+      "Early/mid Phase B (elapsed ~ 0.63s–1.08s of the 3.50s Phase B) extrudes buildings in a center-out radial wave (bldgInner > 0.35 while bldgOuter < 0.18) before trees start (treeScale < 0.05) while 2D background is mid-fade",
       Boolean(
         beat3WaveSample &&
           beat3WaveSample.bldgInner > 0.35 &&
@@ -660,7 +660,7 @@ async function main() {
 
     assertCheck(
       "beat3b-delayed-tree-bounce",
-      "Later in Phase B (elapsed ~ 1.38s–3.00s of the 3.40s Phase B), trees pop up after buildings with a 16% spring overshoot bounce (treeScale > 0.30 and maxObservedTreeScale > 1.04)",
+      "Later in Phase B (elapsed ~ 1.42s–3.08s of the 3.50s Phase B), trees pop up after buildings with a 16% spring overshoot bounce (treeScale > 0.30 and maxObservedTreeScale > 1.04)",
       Boolean(
         beat3TreeSample &&
           beat3TreeSample.treeScale > 0.30 &&
@@ -738,8 +738,8 @@ async function main() {
     const phaseBTotalMs = Math.round(beat4Info.introElapsed * 1000) + hudEntryMs;
     assertCheck(
       "beat3-stretched-phase-b-timing",
-      "Phase B transition is 3.40s + 0.842s staggered HUD entry = 4.242s total (proportionally scaled from 2.10s + 0.52s)",
-      Math.abs(beat4Info.introElapsed - 3.4) <= 0.02 && hudEntryMs >= 830 && hudEntryMs <= 855 && phaseBTotalMs >= 4200 && phaseBTotalMs <= 4300,
+      "Phase B transition is 3.50s + 0.867s staggered HUD entry = 4.367s total (proportionally scaled from 2.10s + 0.52s)",
+      Math.abs(beat4Info.introElapsed - 3.5) <= 0.02 && hudEntryMs >= 855 && hudEntryMs <= 880 && phaseBTotalMs >= 4320 && phaseBTotalMs <= 4420,
       `introElapsed=${beat4Info.introElapsed}s, hudEntry=${hudEntryMs}ms (per panel ${beat4Info.hudTransitions.join("/")}), total=${phaseBTotalMs}ms`,
     );
 
@@ -913,7 +913,7 @@ async function main() {
     Object.assign(display3dOutlinerInfo, resetAfterRender);
 
     if (fs.existsSync(ARTIFACTS_DIR)) {
-      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v16-display-reset-colours.png") });
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v17-display-reset-colours.png") });
     }
 
     // -------------------------------------------------------------------------
@@ -1129,7 +1129,7 @@ async function main() {
     // GENERATE 8-FRAME CONTACT SHEET + LIVE TRANSITION MP4 VIDEO
     // -------------------------------------------------------------------------
     if (fs.existsSync(ARTIFACTS_DIR)) {
-      const contactSheetOut = path.join(ARTIFACTS_DIR, "pr164-v16-transition-contact-sheet.png");
+      const contactSheetOut = path.join(ARTIFACTS_DIR, "pr164-v17-transition-contact-sheet.png");
       execFileSync("ffmpeg", [
         "-y",
         "-pattern_type",
@@ -1165,7 +1165,7 @@ async function main() {
           fs.copyFileSync(src, dst);
         }
       }
-      const mp4Out = path.join(ARTIFACTS_DIR, "pr164-v16-live-transition.mp4");
+      const mp4Out = path.join(ARTIFACTS_DIR, "pr164-v17-live-transition.mp4");
       execFileSync("ffmpeg", [
         "-y",
         "-framerate",

@@ -104,10 +104,10 @@ export type SceneExporter = {
 
 type FiberCamera = (THREE.OrthographicCamera | THREE.PerspectiveCamera) & { manual?: boolean };
 
-// Phase B was 2100 ms; tuned to 3400 ms (k = 3.4 / 2.1) so, together with the
-// proportionally scaled HUD entry (520 ms -> 842 ms), the visible handoff is 4.24 s total.
+// Phase B was 2100 ms; tuned to 3500 ms (k = 3.5 / 2.1 = 5 / 3) so, together with the
+// proportionally scaled HUD entry (520 ms -> 867 ms), the visible handoff is 4.37 s total.
 const INTRO_BASE_MS = 2100;
-export const INTRO_TRANSITION_MS = 3400;
+export const INTRO_TRANSITION_MS = 3500;
 const INTRO_TIME_SCALE = INTRO_TRANSITION_MS / INTRO_BASE_MS;
 const INTRO_TRANSITION_SEC = INTRO_TRANSITION_MS / 1000;
 const INTRO_HOLD_RELEASE_SEC = INTRO_TRANSITION_SEC;

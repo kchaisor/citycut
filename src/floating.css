@@ -3299,7 +3299,7 @@ body,
 .model .top-bar-right {
   opacity: 1;
   translate: 0 0;
-  transition: opacity 583ms cubic-bezier(0.22, 1, 0.36, 1) 0ms, translate 583ms cubic-bezier(0.22, 1, 0.36, 1) 0ms;
+  transition: opacity 600ms cubic-bezier(0.22, 1, 0.36, 1) 0ms, translate 600ms cubic-bezier(0.22, 1, 0.36, 1) 0ms;
 }
 
 .model .left-rail,
@@ -3307,20 +3307,20 @@ body,
 .model .left-outliner {
   opacity: 1;
   translate: 0 0;
-  transition: opacity 583ms cubic-bezier(0.22, 1, 0.36, 1) 259ms, translate 583ms cubic-bezier(0.22, 1, 0.36, 1) 259ms;
+  transition: opacity 600ms cubic-bezier(0.22, 1, 0.36, 1) 267ms, translate 600ms cubic-bezier(0.22, 1, 0.36, 1) 267ms;
 }
 
 .model .right-rail,
 .model .right-inspector {
   opacity: 1;
   translate: 0 0;
-  transition: opacity 583ms cubic-bezier(0.22, 1, 0.36, 1) 259ms, translate 583ms cubic-bezier(0.22, 1, 0.36, 1) 259ms;
+  transition: opacity 600ms cubic-bezier(0.22, 1, 0.36, 1) 267ms, translate 600ms cubic-bezier(0.22, 1, 0.36, 1) 267ms;
 }
 
 .model .bottom-bar {
   opacity: 1;
   translate: 0 0;
-  transition: opacity 583ms cubic-bezier(0.22, 1, 0.36, 1) 259ms, translate 583ms cubic-bezier(0.22, 1, 0.36, 1) 259ms;
+  transition: opacity 600ms cubic-bezier(0.22, 1, 0.36, 1) 267ms, translate 600ms cubic-bezier(0.22, 1, 0.36, 1) 267ms;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3387,7 +3387,7 @@ body,
 }
 
 .select .map-wrap .frame {
-  transition: box-shadow 1470ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: box-shadow 1514ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .select .map-wrap .frame.is-processing,
