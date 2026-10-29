@@ -14,7 +14,7 @@ import { isSiteBuilding } from "./siteBuildings";
 import { siteBoundaryLineGeometry } from "./siteBoundaryDash3d";
 import { clipTransportLines, drapedDashedLineGeometry } from "./dashedTransportLines";
 import { readDrawingStyle } from "./drawingStyle";
-import { footprintBase, sampleTerrain, terrainBuffers, terrainTint } from "./terrain";
+import { basePlinthBuffers, footprintBase, sampleTerrain, terrainBuffers, terrainTint } from "./terrain";
 import { drapeTriangles, GROUND_REMAINING_LAYER, GROUND_ROADS_LAYER, groundGeometry, groundRoadPartition, groundTriangles } from "./groundRoads";
 import { clipTrianglesToTerrainGrid, terrainMeshHeight } from "./terrainDrape";
 import type { AreaFeat, BuildingFeat, BuildingUse, CityModel, Pt, Ring, RoadGrade, TerrainField } from "../types";
@@ -28,7 +28,28 @@ export type CityBuildOptions = {
   splitBuildings?: boolean;
   /** Viewport only. Manual-height buildings render in the manual tint when on. */
   highlightManual?: boolean;
+  /** Viewport intro animation: partition buildings (24 radial buckets) and trees (16 buckets) for staggered pop-up. */
+  introStagger?: boolean;
 };
+
+function introBuildingRadialBucket(building: BuildingFeat, sideM: number, totalBuckets = 24): number {
+  let sumX = 0;
+  let sumY = 0;
+  const n = building.ring.length;
+  if (n > 0) {
+    for (let i = 0; i < n; i++) {
+      sumX += building.ring[i][0];
+      sumY += building.ring[i][1];
+    }
+    sumX /= n;
+    sumY /= n;
+  }
+  const dist = Math.hypot(sumX, sumY);
+  const maxDist = Math.max(1, sideM * 0.56);
+  const jitter = ((Math.imul(building.id | 0, 2654435761) >>> 0) % 1000) / 1000;
+  const norm = Math.min(0.9999, Math.max(0, (dist / maxDist) * 0.92 + jitter * 0.08));
+  return Math.floor(norm * totalBuckets);
+}
 
 function orient(ring: Ring, ccw: boolean): Pt[] {
   const points = openRing(ring);
@@ -378,6 +399,35 @@ function order(object: THREE.Object3D, renderOrder: number) {
   });
 }
 
+function basePlinthMesh(
+  sideM: number,
+  terrain: TerrainField | null | undefined,
+  frameShape = DEFAULT_SITE_FRAME_SHAPE,
+): THREE.Mesh {
+  const buffers = basePlinthBuffers(sideM, terrain, frameShape);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(buffers.positions, 3));
+  geometry.setAttribute("normal", new THREE.BufferAttribute(buffers.normals, 3));
+  geometry.setAttribute("color", new THREE.BufferAttribute(buffers.colors, 3));
+  const surfaceLayer = terrain ? SURFACE.terrain : SURFACE.ground;
+  const material = paint(
+    matteStandardMaterial({
+      vertexColors: true,
+      side: THREE.DoubleSide,
+    }),
+    surfaceLayer,
+  );
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = "BasePlinth";
+  mesh.userData.skipRhinoExport = true;
+  mesh.userData.noScenePick = true;
+  mesh.userData.plinthBottomY = buffers.bottomY;
+  mesh.userData.plinthThicknessM = buffers.thicknessM;
+  mesh.userData.plinthEdgePositions = buffers.edgePositions;
+  order(mesh, surfaceLayer.renderOrder);
+  return mesh;
+}
+
 function terrainMesh(field: TerrainField, sideM: number, frameShape = DEFAULT_SITE_FRAME_SHAPE): THREE.Mesh {
   const buffers = terrainBuffers(field, sideM, frameShape);
   const geometry = new THREE.BufferGeometry();
@@ -453,6 +503,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     order(ground, SURFACE.ground.renderOrder);
     group.add(ground);
   }
+  group.add(basePlinthMesh(model.sideM, model.terrain, frameShape));
 
   const onTerrain = Boolean(sample && model.terrain);
   const blockMat = paint(
@@ -599,6 +650,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     }
   } else {
     const buckets = new Map<string, MergeEntry[]>();
+    const bucketMinBaseY = new Map<string, number>();
     const bucketName = (building: BuildingFeat) => {
       if (bySource) return `source:${building.source}`;
       if (uniform) return "Buildings";
@@ -611,6 +663,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     siteMat.name = "Buildings-site";
     for (const building of model.buildings) {
       const base = (model.terrain ? footprintBase(model.terrain, building.ring, model.sideM) : 0) + SURFACE.building.lift;
+      const radialBucket = options.introStagger ? introBuildingRadialBucket(building, model.sideM) : undefined;
       const geometries = extrudeFootprint(building, base);
       if (options.highlightManual && building.heightManual) {
         for (const geometry of geometries) {
@@ -618,6 +671,10 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
           mesh.name = "Buildings-manual";
           mesh.userData.buildingId = building.id;
           mesh.userData.layerColor = hexRgb(manualColor);
+          if (radialBucket !== undefined) {
+            mesh.userData.introBuildingBucket = radialBucket;
+            mesh.userData.introBaseY = base;
+          }
           order(mesh, SURFACE.building.renderOrder);
           group.add(mesh);
         }
@@ -629,20 +686,32 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
           mesh.name = "Buildings-site";
           mesh.userData.buildingId = building.id;
           mesh.userData.layerColor = hexRgb(siteFill);
+          if (radialBucket !== undefined) {
+            mesh.userData.introBuildingBucket = radialBucket;
+            mesh.userData.introBaseY = base;
+          }
           order(mesh, SURFACE.building.renderOrder);
           group.add(mesh);
         }
         continue;
       }
       for (const geometry of geometries) {
-        const name = bucketName(building);
+        const baseName = bucketName(building);
+        const bucketKey = radialBucket !== undefined ? `${baseName}@@${radialBucket}` : baseName;
         const entry = { geometry, buildingId: building.id };
-        const list = buckets.get(name);
+        const list = buckets.get(bucketKey);
         if (list) list.push(entry);
-        else buckets.set(name, [entry]);
+        else buckets.set(bucketKey, [entry]);
+        const prevBase = bucketMinBaseY.get(bucketKey);
+        if (prevBase === undefined || base < prevBase) {
+          bucketMinBaseY.set(bucketKey, base);
+        }
       }
     }
-    for (const [name, geometries] of buckets) {
+    for (const [bucketKey, geometries] of buckets) {
+      const sepIdx = bucketKey.indexOf("@@");
+      const name = sepIdx >= 0 ? bucketKey.slice(0, sepIdx) : bucketKey;
+      const radialBucket = sepIdx >= 0 ? Number(bucketKey.slice(sepIdx + 2)) : undefined;
       const sourceKey = name.startsWith("source:") ? name.slice("source:".length) : "";
       const sourceMeta = bySource ? SOURCE_META[sourceKey as keyof typeof SOURCE_META] : undefined;
       const use = (Object.keys(BUILDING_USE_META) as BuildingUse[]).find(
@@ -657,6 +726,10 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
       material.name = name;
       const buildings = mergeMeshes(geometries, material, name);
       if (!buildings) continue;
+      if (radialBucket !== undefined) {
+        buildings.userData.introBuildingBucket = radialBucket;
+        buildings.userData.introBaseY = bucketMinBaseY.get(bucketKey) ?? 0;
+      }
       const layerColor = use && !uniform ? hexRgb(BUILDING_USE_META[use].color) : undefined;
       if (layerColor) {
         buildings.traverse((child) => {
@@ -669,7 +742,11 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   }
 
   if (model.layers.trees) {
-    const trees = buildTreeGroup(model.trees, sample ?? undefined);
+    const trees = buildTreeGroup(
+      model.trees,
+      sample ?? undefined,
+      options.introStagger ? { introStagger: true, sideM: model.sideM } : undefined,
+    );
     if (trees) group.add(trees);
   }
 

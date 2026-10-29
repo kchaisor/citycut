@@ -58,6 +58,19 @@ declare global {
       captureViewportPng?: () => Promise<string | null>;
     };
     __citycutQaSelectionAudit?: import("./buildingSelectionAudit").BuildingSelectionAudit;
+    __citycutFrameRatio?: number;
+    __citycutMinBeat2Ms?: number;
+    __citycutMinSilentLoadMs?: number;
+    __citycutIntroPaused?: boolean;
+    __citycutAwaitIntroStart?: boolean;
+    __citycutIntroStarted?: boolean;
+    __citycutWebglPrewarmReady?: boolean;
+    __citycutModelPrewarmMounted?: boolean;
+    __citycutIntroStartMs?: number;
+    __citycutFirstTiltFrameMs?: number;
+    __citycutProgressSamples?: number[];
+    __citycutLoadProgress?: number;
+    __citycutIntroReadyToFire?: boolean;
   }
 }
 

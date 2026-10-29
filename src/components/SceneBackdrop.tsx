@@ -12,14 +12,16 @@ import { markScreenOnly } from "../lib/screenOnly";
  */
 export function GradientSky({ colourTick, fallback }: { colourTick: number; fallback: string }) {
   const scene = useThree((state) => state.scene);
+  const gl = useThree((state) => state.gl);
   useEffect(() => {
     const previous = scene.background;
     const colour = new THREE.Color(themeColor("--viewport-bg", fallback));
     scene.background = colour;
+    gl.setClearColor(colour, 1);
     return () => {
       if (scene.background === colour) scene.background = previous;
     };
-  }, [scene, colourTick, fallback]);
+  }, [scene, gl, colourTick, fallback]);
   return null;
 }
 
@@ -76,7 +78,9 @@ export function GroundGrid({ sideM, groundY, colourTick }: { sideM: number; grou
   const forward = useMemo(() => new THREE.Vector3(), []);
   useFrame(({ camera }) => {
     camera.getWorldDirection(forward);
-    object.visible = forward.y > -0.94;
+    const fade = THREE.MathUtils.clamp((forward.y + 0.96) / 0.22, 0, 1);
+    object.visible = fade > 0.01;
+    (object.material as THREE.LineBasicMaterial).opacity = 0.9 * fade;
   });
   useEffect(() => () => {
     object.geometry.dispose();

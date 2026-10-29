@@ -336,6 +336,8 @@ export type CityModel = {
   buildingsWithoutCom?: BuildingFeat[];
   /** CoM footprints were applied during model create. */
   comBuildingHeightsApplied?: boolean;
+  /** Post-CoM height resolution + zone-default annotation already applied to model.buildings. */
+  buildingsHeightResolved?: boolean;
   /** CoM footprint rows prefetched during model create (Melbourne); ModelPage skips refetch when set. */
   comFootprintPrefetch?: import("./lib/comBuildingHeightsTypes").ComBuildingFootprint[];
   /** CoM 2023 footprint fetch failed at model create (Melbourne cuts). */

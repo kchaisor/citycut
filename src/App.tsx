@@ -77,6 +77,8 @@ import {
   paddedComFetchBounds,
 } from "./lib/comBuildingHeights";
 import { applyDevelopmentFloorsToBuildings, fetchDevelopmentFloorRecords } from "./lib/comDevelopmentFloors";
+import { resolveBuildingHeightsAfterCom } from "./lib/buildingHeightPipeline";
+import { runComBuildingHeightsInWorker } from "./lib/comBuildingHeightsWorkerClient";
 import { buildHeightSourceLoadWarnings } from "./lib/buildHeightSourceLoadWarnings";
 import { buildEnrichmentUseTierFailures } from "./lib/enrichmentUseTierFailures";
 import type { Basemap, CityModel, LonLat, PlaceHit, UiLayers, UseTierFailure, ViewState } from "./types";
@@ -86,7 +88,29 @@ function frameFromQuery(): FrameQuery | null {
   return frameFromSearch(window.location.search);
 }
 
-const ModelPage = lazy(() => import("./components/ModelPage").then((mod) => ({ default: mod.ModelPage })));
+let modelPagePromise: Promise<{ default: typeof import("./components/ModelPage").ModelPage }> | null = null;
+function yieldToBrowserFrame(skip: boolean): Promise<void> {
+  if (skip || typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+}
+
+function preloadModelPage() {
+  if (!modelPagePromise) {
+    modelPagePromise = import("./components/ModelPage")
+      .then((mod) => ({ default: mod.ModelPage }))
+      .catch((err) => {
+        console.error("[PRELOAD_MODELPAGE_ERR]", err);
+        modelPagePromise = null;
+        throw err;
+      });
+  }
+  return modelPagePromise;
+}
+const ModelPage = lazy(preloadModelPage);
 
 type PlaceAnchor = LonLat & { label: string };
 
@@ -134,6 +158,8 @@ export default function App() {
   const [placeLabel, setPlaceLabel] = useState(placeLabelRef.current);
   const [fly, setFly] = useState<FlyRequest | null>(null);
   const [phase, setPhase] = useState<"select" | "model">("select");
+  const [handoffUnderlay, setHandoffUnderlay] = useState<"none" | "holding" | "fading">("none");
+  const selectRootRef = useRef<HTMLDivElement>(null);
   const [model, setModel] = useState<CityModel | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -324,6 +350,26 @@ export default function App() {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    const createClickMs = typeof performance !== "undefined" ? performance.now() : 0;
+    const isDomTestStart =
+      typeof navigator !== "undefined" && /jsdom|HappyDOM/i.test(navigator.userAgent ?? "");
+    const prefersReducedStart =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const isQaStart = typeof window !== "undefined" && qaModeFromSearch(window.location.search);
+    if (!isDomTestStart && !prefersReducedStart && !isQaStart && typeof window !== "undefined") {
+      window.__citycutAwaitIntroStart = true;
+      window.__citycutIntroStarted = false;
+      window.__citycutIntroReadyToFire = false;
+      window.__citycutWebglPrewarmReady = false;
+      window.__citycutModelPrewarmMounted = false;
+      window.__citycutIntroStartMs = undefined;
+      window.__citycutFirstTiltFrameMs = undefined;
+      window.__citycutLoadProgress = 0;
+      window.__citycutProgressSamples = [];
+    }
+    void preloadModelPage();
     setLoading(true);
     setError(null);
     try {
@@ -522,6 +568,17 @@ export default function App() {
                 return { footprints: [], fetchMs: 0, error: message };
               })
           : Promise.resolve({ footprints: [], fetchMs: 0, error: null as string | null });
+      let completedFetchCount = 0;
+      const totalFetchCount = 14;
+      const trackFetch = <T extends Promise<unknown>>(task: T): T =>
+        task.then((res) => {
+          completedFetchCount += 1;
+          if (!isDomTestStart && typeof window !== "undefined") {
+            const p = 0.06 + (completedFetchCount / totalFetchCount) * 0.48;
+            window.__citycutLoadProgress = Math.max(window.__citycutLoadProgress ?? 0, p);
+          }
+          return res;
+        }) as T;
       const [
         terrainResult,
         comResult,
@@ -538,20 +595,20 @@ export default function App() {
         comHeightsResult,
         nswResult,
       ] = await Promise.all([
-        terrainTask,
-        comTask,
-        vicmapTask,
-        useTierTask,
-        enrichmentTask,
-        enrichmentManifestTask,
-        contourTask,
-        buildingsTask,
-        transportTask,
-        baseTask,
-        tramTask,
-        damTask,
-        comHeightsTask,
-        nswTask,
+        trackFetch(terrainTask),
+        trackFetch(comTask),
+        trackFetch(vicmapTask),
+        trackFetch(useTierTask),
+        trackFetch(enrichmentTask),
+        trackFetch(enrichmentManifestTask),
+        trackFetch(contourTask),
+        trackFetch(buildingsTask),
+        trackFetch(transportTask),
+        trackFetch(baseTask),
+        trackFetch(tramTask),
+        trackFetch(damTask),
+        trackFetch(comHeightsTask),
+        trackFetch(nswTask),
       ]);
       const prebake = await prebakeTask;
       // OSM points from the file only when it was baked from the same Overture release as the
@@ -588,13 +645,39 @@ export default function App() {
         coverageMessage: coverageMsg,
         zonesFetchIncomplete: enrichmentManifest?.zonesFetch?.complete === false,
       });
+      let comHeightsAppliedAtCreate = false;
+      let buildingsHeightResolvedAtCreate = false;
+      let comWorkerPromise: Promise<Awaited<ReturnType<typeof runComBuildingHeightsInWorker>> | null> | null = null;
+      let withLidarRef: typeof overtureBuildings = [];
       if (modelLayers.buildings) {
+        await yieldToBrowserFrame(isDomTestStart);
+        if (controller.signal.aborted) return;
         const enriched = mergeBuildingEnrichment(overtureBuildings, enrichmentResult.byId);
         const zoned = assignExternalUses(enriched, useTiers.zones);
         const withLidar = applyLidarHeightsFromEnrichment(zoned);
+        withLidarRef = withLidar;
         buildingsWithoutCom = structuredClone(withLidar);
-        buildings = applyDevelopmentFloorsToBuildings(withLidar, center, damResult.records);
+        if (
+          !isDomTestStart &&
+          comFootprintPrefetch &&
+          comFootprintPrefetch.length > 0 &&
+          typeof Worker !== "undefined"
+        ) {
+          comWorkerPromise = runComBuildingHeightsInWorker(
+            withLidar,
+            comFootprintPrefetch,
+            controller.signal,
+            { center, damRecords: damResult.records },
+          ).catch(() => null);
+        } else {
+          buildings = applyDevelopmentFloorsToBuildings(withLidar, center, damResult.records);
+        }
       }
+      if (!isDomTestStart && typeof window !== "undefined") {
+        window.__citycutLoadProgress = Math.max(window.__citycutLoadProgress ?? 0, 0.62);
+      }
+      await yieldToBrowserFrame(isDomTestStart);
+      if (controller.signal.aborted) return;
       const treeContext = {
         ...baseResult.treeContext,
         roads: transportResult.roads.map((road) => ({ line: road.line, width: road.width })),
@@ -612,6 +695,11 @@ export default function App() {
           })
         : null;
       const trees = assembled ? assembled.trees : [];
+      if (!isDomTestStart && typeof window !== "undefined") {
+        window.__citycutLoadProgress = Math.max(window.__citycutLoadProgress ?? 0, 0.68);
+      }
+      await yieldToBrowserFrame(isDomTestStart);
+      if (controller.signal.aborted) return;
       const contours = Boolean(layers.contours && contourLayer && contourLayer.lines.length > 0);
       // Test version: the 3D ground (and so building bases and plan shadows, which all sample
       // model.terrain) comes from Vicmap metro 1–5 m contours where they cover the cut.
@@ -619,6 +707,48 @@ export default function App() {
       const groundDem = new URLSearchParams(window.location.search).get("ground") === "dem";
       const contourGround =
         layers.terrain && !groundDem && contourLayer ? contourTerrain(contourLayer, sideM, terrainResult.field) : null;
+      if (!isDomTestStart && typeof window !== "undefined") {
+        window.__citycutLoadProgress = Math.max(window.__citycutLoadProgress ?? 0, 0.74);
+      }
+      if (modelLayers.buildings && !isDomTestStart) {
+        if (comWorkerPromise) {
+          const workerRes = await comWorkerPromise;
+          if (controller.signal.aborted) return;
+          if (workerRes?.buildings) {
+            buildings = workerRes.resolved
+              ? workerRes.buildings
+              : resolveBuildingHeightsAfterCom(
+                  workerRes.buildings,
+                  center,
+                  comFootprintPrefetch ?? [],
+                  damResult.records,
+                );
+            comHeightsAppliedAtCreate = true;
+            buildingsHeightResolvedAtCreate = true;
+          } else {
+            buildings = resolveBuildingHeightsAfterCom(
+              withLidarRef,
+              center,
+              [],
+              damResult.records,
+            );
+            buildingsHeightResolvedAtCreate = true;
+          }
+        } else {
+          await yieldToBrowserFrame(isDomTestStart);
+          if (controller.signal.aborted) return;
+          buildings = resolveBuildingHeightsAfterCom(
+            withLidarRef,
+            center,
+            [],
+            damResult.records,
+          );
+          buildingsHeightResolvedAtCreate = true;
+        }
+      }
+      if (!isDomTestStart && typeof window !== "undefined") {
+        window.__citycutLoadProgress = Math.max(window.__citycutLoadProgress ?? 0, 0.79);
+      }
       const groundField = contourGround?.field ?? terrainResult.field;
       const terrainNotice =
         layers.terrain && !groundDem ? contourTerrainNotice(contourGround, contourLayer, Boolean(terrainResult.field)) : null;
@@ -788,7 +918,8 @@ export default function App() {
         siteBuildingQa,
         developmentDamRecords: damResult.records.length > 0 ? damResult.records : undefined,
         buildingsWithoutCom,
-        comBuildingHeightsApplied: false,
+        comBuildingHeightsApplied: comHeightsAppliedAtCreate,
+        buildingsHeightResolved: buildingsHeightResolvedAtCreate || undefined,
         comFootprintPrefetch,
         comFootprintFetchError: comFootprintFetchError ?? undefined,
         heightSourceLoadWarnings:
@@ -796,11 +927,41 @@ export default function App() {
         ...(nswMode ? { region: "nsw" as const, nsw: nswResult, nswWaterNote: nswWater?.note ?? null, nswUseMatched: nswUse?.matched ?? 0 } : {}),
       };
       if (modelLayers.roads) {
+        await yieldToBrowserFrame(isDomTestStart);
+        if (controller.signal.aborted) return;
         draftModel.blocks = computeCityBlocks(draftModel);
+      }
+      if (!isDomTestStart && typeof window !== "undefined") {
+        window.__citycutLoadProgress = Math.max(window.__citycutLoadProgress ?? 0, 0.84);
       }
       if (nswMode && modelLayers.roads && (nswResult?.roadCorridors.length ?? 0) > 0) {
         draftModel.nswRoadSurface = groundRoadPartition(draftModel).sources ?? null;
       }
+      const isAutomatedDomTest =
+        typeof navigator !== "undefined" && /jsdom|HappyDOM/i.test(navigator.userAgent ?? "");
+      const prefersReduced =
+        typeof window !== "undefined" &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const isQa = typeof window !== "undefined" && qaModeFromSearch(window.location.search);
+      if (!isAutomatedDomTest && !prefersReduced && !isQa) {
+        await preloadModelPage().catch(() => undefined);
+        if (controller.signal.aborted) return;
+        const minSilentMs = typeof window !== "undefined" && typeof window.__citycutMinSilentLoadMs === "number" ? window.__citycutMinSilentLoadMs : 0;
+        if (minSilentMs > 0) {
+          const elapsedSilent = performance.now() - createClickMs;
+          if (elapsedSilent < minSilentMs) {
+            await new Promise<void>((resolve) => window.setTimeout(resolve, minSilentMs - elapsedSilent));
+          }
+          if (controller.signal.aborted) return;
+        }
+        if (typeof window !== "undefined") {
+          window.__citycutModelPrewarmMounted = true;
+        }
+        setHandoffUnderlay("holding");
+      }
+      await yieldToBrowserFrame(isDomTestStart);
+      if (controller.signal.aborted) return;
       setModel(draftModel);
       setPhase("model");
     } catch (err) {
@@ -824,10 +985,74 @@ export default function App() {
     document.title = `CityCut — ${headerPlace} · ${headerSize}`;
   }, [headerPlace, headerSize]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const ua = typeof navigator !== "undefined" ? (navigator.userAgent ?? "") : "";
+    if (/jsdom|HappyDOM/i.test(ua)) return;
+    const id = window.setTimeout(() => {
+      void preloadModelPage();
+    }, 120);
+    return () => window.clearTimeout(id);
+  }, []);
+
+  useEffect(() => {
+    if (phase !== "model" || handoffUnderlay === "none") return;
+    const triggerFade = () => {
+      setHandoffUnderlay((prev) => (prev === "holding" ? "fading" : prev));
+      selectRootRef.current?.classList.add("is-loading", "is-fading-out");
+    };
+    const onIntroDone = () => {
+      setHandoffUnderlay("none");
+    };
+    if (typeof window !== "undefined" && window.__citycutIntroStarted) {
+      triggerFade();
+    }
+    const onSafetyTimeout = () => {
+      if (
+        typeof window !== "undefined" &&
+        (window as Window & { __citycutIntroPaused?: boolean }).__citycutIntroPaused
+      ) {
+        return;
+      }
+      if (typeof window !== "undefined" && !window.__citycutIntroStarted) {
+        window.__citycutIntroStarted = true;
+        window.__citycutIntroStartMs = performance.now();
+        window.dispatchEvent(new CustomEvent("citycut:intro-start"));
+      }
+      setHandoffUnderlay("none");
+    };
+    window.addEventListener("citycut:intro-start", triggerFade);
+    window.addEventListener("citycut:intro-done", onIntroDone);
+    const safetyTimer = window.setTimeout(onSafetyTimeout, 45000);
+    return () => {
+      window.removeEventListener("citycut:intro-start", triggerFade);
+      window.removeEventListener("citycut:intro-done", onIntroDone);
+      window.clearTimeout(safetyTimer);
+    };
+  }, [phase, handoffUnderlay]);
+
+  const showSelectLayer = phase === "select" || handoffUnderlay !== "none";
+  const selectTransitionActive = phase === "model" && handoffUnderlay === "fading";
+  const selectBusy = loading || (phase === "model" && handoffUnderlay !== "none");
+  const selectProcessingPhaseA = selectBusy && !selectTransitionActive;
+
   return (
     <div className="app">
-      {phase === "select" ? (
-        <div className={selectCollapsed ? "select sidebar-collapsed" : "select"}>
+      {showSelectLayer ? (
+        <div
+          ref={selectRootRef}
+          className={[
+            "select",
+            selectCollapsed ? "sidebar-collapsed" : "",
+            selectProcessingPhaseA ? "is-processing-phase-a" : "",
+            selectTransitionActive ? "is-loading" : "",
+            phase === "model" && handoffUnderlay !== "none" ? "is-handoff-underlay" : "",
+            phase === "model" && handoffUnderlay === "fading" ? "is-fading-out" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          aria-hidden={phase === "model" ? "true" : undefined}
+        >
           <MapStage
             basemap={basemap}
             fitFrameOnLoad={fitFrameOnLoad}
@@ -835,7 +1060,9 @@ export default function App() {
             frameShape={frameShape}
             initialView={viewRef.current}
             fly={fly}
-            loading={loading}
+            loading={selectBusy}
+            processing={selectProcessingPhaseA}
+            fadingOut={selectTransitionActive}
             siteSearch={mapSiteSearch}
             onCancel={cancel}
             onView={onView}
@@ -845,7 +1072,7 @@ export default function App() {
             placeLabel={placeLabel}
             sideKm={sideKm}
             layers={layers}
-            loading={loading}
+            loading={selectBusy}
             error={error}
             onSideKm={setSideKm}
             frameShape={frameShape}
@@ -858,10 +1085,38 @@ export default function App() {
             center={cutCenter}
             onHome={onHome}
           />
+          {selectProcessingPhaseA && (
+            <div
+              className="loading-hud-pill is-processing hud-card"
+              role="status"
+              aria-live="polite"
+              data-phase="processing"
+            >
+              <div className="loading-hud-row">
+                <span className="loading-pulse-dot is-processing" aria-hidden="true" />
+                <strong>Processing site data &amp; 3D geometry…</strong>
+                <div className="loading-prog-track is-indeterminate" aria-hidden="true">
+                  <div className="loading-prog-shimmer" />
+                </div>
+                <span className="loading-prog-pct mono">PREP</span>
+              </div>
+            </div>
+          )}
         </div>
-      ) : model ? (
-        <Suspense fallback={<p className="opening">Opening the model…</p>}>
-          <ModelPage model={model} onHome={onHome} onNewCut={() => setPhase("select")} />
+      ) : null}
+      {phase === "model" && model ? (
+        <Suspense fallback={handoffUnderlay !== "none" ? null : <p className="opening">Opening the model…</p>}>
+          <ModelPage
+            model={model}
+            onHome={() => {
+              setHandoffUnderlay("none");
+              onHome();
+            }}
+            onNewCut={() => {
+              setHandoffUnderlay("none");
+              setPhase("select");
+            }}
+          />
         </Suspense>
       ) : null}
     </div>

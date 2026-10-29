@@ -1,3 +1,4 @@
+import { terrainMeshHeight } from "./terrainDrape";
 import * as polygonClipping from "polygon-clipping";
 import type { MultiPolygon, Polygon } from "polygon-clipping";
 import { COLOUR_FALLBACK, getColour } from "./colours";
@@ -761,4 +762,201 @@ export function terrainBuffers(
 } {
   if (frameShape === "circle") return terrainBuffersCircle(field, sideM);
   return terrainBuffersSquare(field, sideM);
+}
+
+/** Proportional architectural plinth thickness below the lowest ground/terrain point. */
+export function basePlinthThicknessM(sideM: number): number {
+  return Math.max(12, Math.round(sideM * 0.022 * 100) / 100);
+}
+
+/** World Y coordinate of the flat underside of the 3D architectural plinth base. */
+export function basePlinthBottomY(sideM: number, terrain?: TerrainField | null): number {
+  const minElev = terrain ? terrain.min : 0;
+  return minElev - basePlinthThicknessM(sideM);
+}
+
+function flatGroundRgb(darken = 1): [number, number, number] {
+  const groundHex = getColour("--ground-fill");
+  const r = parseInt(groundHex.slice(1, 3), 16) / 255;
+  const g = parseInt(groundHex.slice(3, 5), 16) / 255;
+  const b = parseInt(groundHex.slice(5, 7), 16) / 255;
+  return [r * darken, g * darken, b * darken];
+}
+
+function subdivideSegmentOnTerrainGrid(
+  a: Pt,
+  b: Pt,
+  field: TerrainField | null | undefined,
+  sideM: number,
+): Pt[] {
+  if (!field) return [a, b];
+  const half = sideM / 2;
+  const s = field.spacingM;
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const ts: number[] = [0, 1];
+  if (Math.abs(dx) > 1e-9) {
+    for (let col = 0; col < field.cols; col++) {
+      const x = -half + col * s;
+      const t = (x - a[0]) / dx;
+      if (t > 1e-6 && t < 1 - 1e-6) ts.push(t);
+    }
+  }
+  if (Math.abs(dy) > 1e-9) {
+    for (let row = 0; row < field.rows; row++) {
+      const y = -half + row * s;
+      const t = (y - a[1]) / dy;
+      if (t > 1e-6 && t < 1 - 1e-6) ts.push(t);
+    }
+  }
+  const dd = dx - dy;
+  if (Math.abs(dd) > 1e-9) {
+    for (let k = -(field.rows - 1); k <= field.cols - 1; k++) {
+      const c = k * s;
+      const t = (c - (a[0] - a[1])) / dd;
+      if (t > 1e-6 && t < 1 - 1e-6) ts.push(t);
+    }
+  }
+  ts.sort((u, v) => u - v);
+  const pts: Pt[] = [];
+  let prevT = -1;
+  for (const t of ts) {
+    if (t - prevT < 1e-6) continue;
+    prevT = t;
+    pts.push([a[0] + t * dx, a[1] + t * dy]);
+  }
+  return pts;
+}
+
+/**
+ * Watertight 3D architectural plinth skirt + flat bottom cap + architectural edge segments
+ * in Three.js coordinates (x = east, y = up, z = -north).
+ * Top vertices match terrainMeshHeight(field, sideM, east, north) (or y = 0 when flat)
+ * at every DEM grid crossing along the cut perimeter.
+ */
+export function basePlinthBuffers(
+  sideM: number,
+  terrain?: TerrainField | null,
+  frameShape: SiteFrameShape = "square",
+): {
+  positions: Float32Array;
+  normals: Float32Array;
+  colors: Float32Array;
+  edgePositions: Float32Array;
+  bottomY: number;
+  thicknessM: number;
+} {
+  const half = sideM / 2;
+  const thicknessM = basePlinthThicknessM(sideM);
+  const bottomY = basePlinthBottomY(sideM, terrain);
+  const relief = terrain ? Math.max(terrain.max - terrain.min, 0.001) : 1;
+
+  const rawRing: Pt[] =
+    frameShape === "circle"
+      ? siteFramePolygon(sideM, "circle")[0]!.slice(0, -1).map(([x, y]) => [x, y] as Pt)
+      : [
+          [-half, -half],
+          [half, -half],
+          [half, half],
+          [-half, half],
+        ];
+
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const colors: number[] = [];
+  const edgePositions: number[] = [];
+
+  const topColorAt = (yTop: number): [number, number, number] =>
+    terrain ? shadeHeight((yTop - terrain.min) / relief, 0.94) : flatGroundRgb(0.95);
+  const bottomWallColor: [number, number, number] = terrain
+    ? shadeHeight(0, 0.86)
+    : flatGroundRgb(0.88);
+  const bottomCapColor: [number, number, number] = terrain
+    ? shadeHeight(0, 0.82)
+    : flatGroundRgb(0.84);
+
+  const pushVertex = (
+    x: number,
+    y: number,
+    z: number,
+    nx: number,
+    ny: number,
+    nz: number,
+    rgb: [number, number, number],
+  ) => {
+    positions.push(x, y, z);
+    normals.push(nx, ny, nz);
+    colors.push(rgb[0], rgb[1], rgb[2]);
+  };
+
+  for (let i = 0; i < rawRing.length; i++) {
+    const a = rawRing[i]!;
+    const b = rawRing[(i + 1) % rawRing.length]!;
+    const de = b[0] - a[0];
+    const dn = b[1] - a[1];
+    const segLen = Math.hypot(de, dn) || 1;
+    // Outward normal in Three.js (x = east, y = up, z = -north) for CCW (east, north) edge:
+    const nx = dn / segLen;
+    const ny = 0;
+    const nz = de / segLen;
+
+    const subPts = subdivideSegmentOnTerrainGrid(a, b, terrain, sideM);
+    for (let j = 0; j < subPts.length - 1; j++) {
+      const p0 = subPts[j]!;
+      const p1 = subPts[j + 1]!;
+      const yTop0 = terrain ? terrainMeshHeight(terrain, sideM, p0[0], p0[1]) : 0;
+      const yTop1 = terrain ? terrainMeshHeight(terrain, sideM, p1[0], p1[1]) : 0;
+      const cTop0 = topColorAt(yTop0);
+      const cTop1 = topColorAt(yTop1);
+
+      const x0 = p0[0];
+      const z0 = -p0[1];
+      const x1 = p1[0];
+      const z1 = -p1[1];
+
+      // Triangle 1: (B0, B1, T1)
+      pushVertex(x0, bottomY, z0, nx, ny, nz, bottomWallColor);
+      pushVertex(x1, bottomY, z1, nx, ny, nz, bottomWallColor);
+      pushVertex(x1, yTop1, z1, nx, ny, nz, cTop1);
+
+      // Triangle 2: (B0, T1, T0)
+      pushVertex(x0, bottomY, z0, nx, ny, nz, bottomWallColor);
+      pushVertex(x1, yTop1, z1, nx, ny, nz, cTop1);
+      pushVertex(x0, yTop0, z0, nx, ny, nz, cTop0);
+
+      // Top rim edge segment
+      edgePositions.push(x0, yTop0, z0, x1, yTop1, z1);
+    }
+
+    // Bottom rim edge segment (straight along the flat baseY chord)
+    edgePositions.push(a[0], bottomY, -a[1], b[0], bottomY, -b[1]);
+  }
+
+  // Vertical corner edges for square cuts
+  if (frameShape === "square") {
+    for (const corner of rawRing) {
+      const yTop = terrain ? terrainMeshHeight(terrain, sideM, corner[0], corner[1]) : 0;
+      edgePositions.push(corner[0], bottomY, -corner[1], corner[0], yTop, -corner[1]);
+    }
+  }
+
+  // Flat bottom cap at y = bottomY with downward normal (0, -1, 0)
+  const p0 = rawRing[0]!;
+  for (let i = 1; i + 1 < rawRing.length; i++) {
+    const p1 = rawRing[i]!;
+    const p2 = rawRing[i + 1]!;
+    // Winding (p0, p2, p1) in (x = east, z = -north) yields normal (0, -1, 0)
+    pushVertex(p0[0], bottomY, -p0[1], 0, -1, 0, bottomCapColor);
+    pushVertex(p2[0], bottomY, -p2[1], 0, -1, 0, bottomCapColor);
+    pushVertex(p1[0], bottomY, -p1[1], 0, -1, 0, bottomCapColor);
+  }
+
+  return {
+    positions: Float32Array.from(positions),
+    normals: Float32Array.from(normals),
+    colors: Float32Array.from(colors),
+    edgePositions: Float32Array.from(edgePositions),
+    bottomY,
+    thicknessM,
+  };
 }

@@ -121,9 +121,19 @@ export function footprintAreaM2(building: BuildingFeat): number {
   return Math.abs(signedArea(openRing(building.ring)));
 }
 
+const buildingLonLatCache = new WeakMap<BuildingFeat, { key: string; lon: number; lat: number }>();
+
 function buildingLonLat(building: BuildingFeat, center: LonLat): { lon: number; lat: number } {
+  const key = `${center.lat},${center.lon}`;
+  const cached = buildingLonLatCache.get(building);
+  if (cached && cached.key === key) {
+    return cached;
+  }
   const at = interiorPoint(building.ring, building.holes);
-  return fromLocal(at, center);
+  const res = fromLocal(at, center);
+  const entry = { key, lon: res.lon, lat: res.lat };
+  buildingLonLatCache.set(building, entry);
+  return entry;
 }
 
 function damRecordLocalPoint(record: DamFloorRecord, center: LonLat): [number, number] {
@@ -183,20 +193,34 @@ export function damRecordsWonByBuilding(
   );
 }
 
+const recipientCache = new WeakMap<BuildingFeat[], Map<DamFloorRecord, BuildingFeat | null>>();
+
 export function pickDamFloorRecipient(
   buildings: BuildingFeat[],
   center: LonLat,
   record: DamFloorRecord,
 ): BuildingFeat | null {
+  let byRecord = recipientCache.get(buildings);
+  if (byRecord && byRecord.has(record)) {
+    return byRecord.get(record) ?? null;
+  }
   const containing = buildingsContainingDamGeopoint(buildings, center, record);
   const eligible =
     containing.length > 0
       ? containing
       : buildingsEligibleNearDamRecord(buildings, center, record);
-  if (eligible.length === 0) return null;
-  return eligible.reduce((best, b) =>
-    footprintAreaM2(b) > footprintAreaM2(best) ? b : best,
-  );
+  const winner =
+    eligible.length === 0
+      ? null
+      : eligible.reduce((best, b) =>
+          footprintAreaM2(b) > footprintAreaM2(best) ? b : best,
+        );
+  if (!byRecord) {
+    byRecord = new Map();
+    recipientCache.set(buildings, byRecord);
+  }
+  byRecord.set(record, winner);
+  return winner;
 }
 
 /** @deprecated use pickDamFloorRecipient — nearest match (old behaviour). */

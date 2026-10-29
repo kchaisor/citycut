@@ -129,12 +129,12 @@ export function DrawingExplodedAxo({
     return () => svg.removeEventListener("wheel", onWheel);
   }, [model.sideM, view, internalView, onViewportChange]);
 
+  const colourTick = useColourRevision();
   const { layers, guides } = useMemo(
     () => buildExplodedAxoLayers(model, settings, overlays),
-    [model, settings, overlays],
+    [model, settings, overlays, colourTick],
   );
   const paintLayers = useMemo(() => axoLayersForPaint(layers), [layers]);
-  const colourTick = useColourRevision();
   const colours = useMemo(() => axoLayerColours(), [colourTick]);
   const [satelliteHref, setSatelliteHref] = useState<string | null>(null);
   const showAerial = settings.layerVisible.aerial || settings.layerVisible.base;

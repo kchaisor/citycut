@@ -115,7 +115,8 @@ export function DrawingPlan({
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
   const figure = kind === "figure-ground";
-  const style = lineStyle ?? readDrawingStyle();
+  const colourTick = useColourRevision();
+  const style = useMemo(() => lineStyle ?? readDrawingStyle(), [lineStyle, colourTick]);
   const plan = useMemo(
     () =>
       planPaths(
@@ -146,6 +147,7 @@ export function DrawingPlan({
       colourBySource,
       highlightManual,
       style.pathFilletM,
+      colourTick,
     ],
   );
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
@@ -220,11 +222,14 @@ export function DrawingPlan({
   const barMetres = scaleBarMetres(model.sideM);
   const barThickness = Math.max(model.sideM * 0.005, 0.6);
   const barY = half + model.sideM * 0.028;
-  const arrowX = half - model.sideM * 0.02;
-  const arrowTip = -half - model.sideM * 0.055;
-  const arrowBase = -half - model.sideM * 0.016;
-  const head = model.sideM * 0.01;
-  const colourTick = useColourRevision();
+  const northR = model.sideM * 0.0155;
+  const northCx = half - northR - model.sideM * 0.004;
+  const northCy = -half - model.sideM * 0.033;
+  const northTick = northR * 0.32;
+  const northApexY = northCy - northR * 1.28;
+  const northWingW = northR * 0.52;
+  const northWingY = northCy + northR * 0.68;
+  const northNotchY = northCy + northR * 0.32;
   const canvas = useMemo(() => themeColor("--drawing-bg"), [colourTick]);
   const figureFill = getColour("--figure-fill");
   const blockFill = getColour("--block-plan");
@@ -255,30 +260,72 @@ export function DrawingPlan({
   const annotationInk = figure ? figureFill : getColour("--sun-compass-label");
   const shadowRings = useMemo(() => {
     if (!shadowInput || figure || study) return [];
-    return planShadowRings(model, shadowInput, castShadows);
-  }, [castShadows, figure, model, shadowInput, study]);
+    return planShadowRings(casterModel, shadowInput, castShadows);
+  }, [castShadows, figure, casterModel, shadowInput, study]);
   const annotations = (
     <>
       <g aria-hidden="true" className="plan-north-arrow">
+        <circle
+          cx={northCx}
+          cy={northCy}
+          r={northR}
+          fill="none"
+          stroke={annotationInk}
+          strokeWidth={1.2}
+          vectorEffect="non-scaling-stroke"
+        />
         <line
-          x1={arrowX}
-          y1={arrowBase}
-          x2={arrowX}
-          y2={arrowTip + head * 1.6}
+          x1={northCx - northR - northTick}
+          y1={northCy}
+          x2={northCx - northR * 0.55}
+          y2={northCy}
+          stroke={annotationInk}
+          strokeWidth={notePx}
+          vectorEffect="non-scaling-stroke"
+        />
+        <line
+          x1={northCx + northR * 0.55}
+          y1={northCy}
+          x2={northCx + northR + northTick}
+          y2={northCy}
+          stroke={annotationInk}
+          strokeWidth={notePx}
+          vectorEffect="non-scaling-stroke"
+        />
+        <line
+          x1={northCx}
+          y1={northCy + northR * 0.45}
+          x2={northCx}
+          y2={northCy + northR + northTick}
           stroke={annotationInk}
           strokeWidth={notePx}
           vectorEffect="non-scaling-stroke"
         />
         <polygon
-          points={`${arrowX},${arrowTip} ${arrowX - head},${arrowTip + head * 1.7} ${arrowX + head},${arrowTip + head * 1.7}`}
+          points={`${northCx},${northApexY} ${northCx - northWingW},${northWingY} ${northCx},${northNotchY}`}
           fill={annotationInk}
+          stroke={annotationInk}
+          strokeWidth={1}
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+        <polygon
+          points={`${northCx},${northApexY} ${northCx + northWingW},${northWingY} ${northCx},${northNotchY}`}
+          fill={canvas}
+          stroke={annotationInk}
+          strokeWidth={1}
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
         />
         <text
-          x={arrowX + head * 1.5}
-          y={arrowTip + head * 1.15}
-          fontSize={model.sideM * 0.026}
+          x={northCx}
+          y={northApexY - northR * 0.38}
+          textAnchor="middle"
+          fontSize={model.sideM * 0.016}
+          fontWeight={700}
+          letterSpacing="0.08em"
           fill={annotationInk}
-          fontFamily="Helvetica, Arial, sans-serif"
+          fontFamily="Inter, Helvetica, Arial, sans-serif"
         >
           N
         </text>

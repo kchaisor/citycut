@@ -38,7 +38,6 @@ function applyTerrainVertexCard(mesh: THREE.Mesh, whiteCardOn: boolean): void {
 }
 
 function snapshotMaterialRest(material: THREE.MeshStandardMaterial): void {
-  if (material.userData.whiteCardRestHex !== undefined) return;
   material.userData.whiteCardRestHex = `#${material.color.getHexString()}`;
 }
 

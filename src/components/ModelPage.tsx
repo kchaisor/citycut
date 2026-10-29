@@ -13,14 +13,13 @@ import {
   countUses,
   uniformBuildingColor,
 } from "../lib/buildingUse";
-import { commitColour, getColour } from "../lib/colours";
+import { commitColour, getColour, resetStoredColours } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
 import { CRS_NOTE, mgaCrs } from "../lib/crsZone";
 import {
-  commitLineStyles,
-  lineStyleBaseline,
+  applyOverrides,
   readDrawingStyle,
-  resetStoredLineStyles,
+  readStoredOverrides,
   type LineStyles,
 } from "../lib/drawingStyle";
 import {
@@ -142,7 +141,6 @@ import {
   writeStoredHiddenBuildings,
   type HiddenBuildingStore,
 } from "../lib/hiddenBuildings";
-import { ColoursEditor } from "./Colours";
 import { ImportMassingPanel } from "./ImportMassingPanel";
 import { useImportedMassing } from "./useImportedMassing";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
@@ -150,10 +148,17 @@ import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
 import { DrawingExplodedAxo } from "./DrawingExplodedAxo";
 import { DrawingIsometric } from "./DrawingIsometric";
 import { isometricDrawingBounds } from "../lib/isometricDrawing";
-import { LineStylesEditor } from "./LineStyles";
 import { Sidebar, type SidebarItem } from "./Sidebar";
 import { SatellitePane } from "./SatellitePane";
 import { Scene3D, type SceneExporter } from "./Scene3D";
+
+function shouldShowIntroBridgePill(): boolean {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+  if (/jsdom|HappyDOM/i.test(navigator.userAgent ?? "")) return false;
+  if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+  if (qaModeFromSearch(window.location.search)) return false;
+  return true;
+}
 import type { CameraMemoryRef } from "../lib/cameraMemory";
 import { SceneBoundary } from "./SceneBoundary";
 import { SolarPanel } from "./SolarPanel";
@@ -162,9 +167,10 @@ import { WindRoseOverlay } from "./WindRoseOverlay";
 import { ExportTiles } from "./ExportTiles";
 import { exportTiles, type ExportBusy } from "../lib/exportTiles";
 import { ViewLegend, ViewPanel } from "./ViewPanel";
-import { useWalkViewshed } from "./useWalkViewshed";
+import { useWalkPlayback, useWalkViewshed, WALK_SPEEDS } from "./useWalkViewshed";
 import { fetchWindRoseTable } from "../lib/windFetch";
-import type { WindRoseTable } from "../lib/windRose";
+import { analyzeWindPeriod, WIND_PERIOD_LABELS, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
+import { daylightWindowMinutes, sunAtMelbourneLocal } from "../lib/solar";
 import {
   windSettingsForModelOpen,
   writeStoredWindSettings,
@@ -209,7 +215,11 @@ function loadView(): ViewMemory {
   } catch {
     stored = null;
   }
-  return resolveView(stored, window.location.search);
+  const resolved = resolveView(stored, window.location.search);
+  if (typeof window !== "undefined" && window.__citycutAwaitIntroStart) {
+    return { ...resolved, projection: "perspective", freeRotate: false };
+  }
+  return resolved;
 }
 
 /** Height-source tier to its swatch in the Model details height bar. */
@@ -268,6 +278,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   const [comFootprintRetryToken, setComFootprintRetryToken] = useState(0);
   const [comHeightsApplyFailed, setComHeightsApplyFailed] = useState(false);
   const [sidebar, dispatchSidebar] = useReducer(reduceSidebar, undefined, initialSidebarState);
+  const [hiddenBuildingUses, setHiddenBuildingUses] = useState<Set<BuildingUse>>(() => new Set());
   const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed();
   const sidebarModelRef = useRef(model);
   useEffect(() => {
@@ -275,21 +286,40 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     if (sidebarModelRef.current === model) return;
     sidebarModelRef.current = model;
     dispatchSidebar({ type: "new-model" });
+    setHiddenBuildingUses(new Set());
     const nextDisplay = view3dDisplayForModelOpen(window.localStorage);
     setView3dDisplay(nextDisplay);
     writeStoredView3dDisplay(window.localStorage, nextDisplay);
+    if (typeof window !== "undefined" && window.__citycutAwaitIntroStart) {
+      setView((prev) => {
+        const next: ViewMemory = { ...prev, projection: "perspective", freeRotate: false };
+        writeStoredView(window.localStorage, next);
+        return next;
+      });
+    }
   }, [model]);
   const [planWidth, setPlanWidth] = useState<number | null>(null);
   const [fitCounter, setFitCounter] = useState(0);
   const [planViewport, setPlanViewport] = useState<PlanViewport>(() => planViewportExtent(model.sideM));
   const [axoSettings, setAxoSettings] = useState<ExplodedAxoSettings>(() => defaultExplodedAxoSettings(model.sideM));
   const [explodedViewport, setExplodedViewport] = useState<PlanViewport>(() =>
-    explodedAxoViewportExtent(explodedAxoBounds(model, defaultExplodedAxoSettings(model.sideM))),
+    planViewportExtent(model.sideM),
   );
   const [view, setView] = useState<ViewMemory>(loadView);
   const [isoDrawingViewport, setIsoDrawingViewport] = useState<PlanViewport>(() =>
-    explodedAxoViewportExtent(isometricDrawingBounds(model, loadView().corner)),
+    planViewportExtent(model.sideM),
   );
+  const drawingViewportsInitializedRef = useRef<CityModel | null>(null);
+  useEffect(() => {
+    if (tab !== "drawing" || drawingViewportsInitializedRef.current === model) return;
+    drawingViewportsInitializedRef.current = model;
+    setExplodedViewport(
+      explodedAxoViewportExtent(explodedAxoBounds(model, defaultExplodedAxoSettings(model.sideM))),
+    );
+    setIsoDrawingViewport(
+      explodedAxoViewportExtent(isometricDrawingBounds(model, loadView().corner)),
+    );
+  }, [tab, model]);
   const [snapId, setSnapId] = useState(0);
   // The 3D view unmounts on Drawing/Satellite; this keeps the user's camera for the way back.
   // A new model gets a fresh memory, so a new cut is framed afresh.
@@ -327,7 +357,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   }
 
   const [sunStudySelected, setSunStudySelected] = useState<number[]>([]);
-  useEffect(() => setSunStudySelected([]), [model]);
+  useEffect(() => setSunStudySelected((prev) => (prev.length === 0 ? prev : [])), [model]);
   const sunStudyDate = useMemo<SunStudyDate | null>(
     () =>
       solar.sunStudy
@@ -335,6 +365,8 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
         : null,
     [solar.sunStudy, model.center.lat, model.center.lon, solar.year, solar.month, solar.day],
   );
+  const effectiveSunStudyCasters: "all" | "selected" =
+    sunStudySelected.length > 0 ? "selected" : (solar.sunStudyCasters ?? "all");
 
   function planShadowInput(): PlanShadowInput {
     return {
@@ -377,8 +409,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     setWindSettings(next);
   }
 
+  const wantWindTable = windSettings.enabled || (sidebar.section === "analysis" && analysisKind === "wind");
   useEffect(() => {
-    if (!windSettings.enabled) return;
+    if (!wantWindTable) return;
     let cancelled = false;
     const lat = model.siteAnchor?.lat ?? model.center.lat;
     const lon = model.siteAnchor?.lon ?? model.center.lon;
@@ -395,7 +428,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     return () => {
       cancelled = true;
     };
-  }, [windSettings.enabled, model.center.lat, model.center.lon, model.siteAnchor?.lat, model.siteAnchor?.lon]);
+  }, [wantWindTable, model.center.lat, model.center.lon, model.siteAnchor?.lat, model.siteAnchor?.lon]);
 
   function heliodonRhinoExport(): HeliodonGroundExportOptions | null {
     if (!solar.showPath) return null;
@@ -411,7 +444,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   }, []);
 
   useEffect(() => {
-    setComFootprintFetchError(model.comFootprintFetchError ?? null);
+    setComFootprintFetchError((prev) => (prev === (model.comFootprintFetchError ?? null) ? prev : (model.comFootprintFetchError ?? null)));
   }, [
     model.placeLabel,
     model.center.lat,
@@ -431,9 +464,14 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       return;
     }
     if (model.comFootprintPrefetch?.length) {
-      setComFootprints(model.comFootprintPrefetch);
-      setComFootprintFetchError(null);
-      setComFootprintLoading(false);
+      setComFootprints((prev) => (prev === model.comFootprintPrefetch ? prev : model.comFootprintPrefetch!));
+      setComFootprintFetchError((prev) => (prev === null ? prev : null));
+      setComFootprintLoading((prev) => (prev === false ? prev : false));
+      return;
+    }
+    if (model.comFootprintFetchError && comFootprintRetryToken === 0) {
+      setComFootprints((prev) => (prev.length === 0 ? prev : []));
+      setComFootprintLoading((prev) => (prev === false ? prev : false));
       return;
     }
     const bounds = paddedComFetchBounds(model.center, model.sideM);
@@ -768,43 +806,52 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
 
   useEffect(() => {
     if (model.comBuildingHeightsApplied) {
-      setComHeightBuildings(
-        annotateUnresolvedZoneDefaults(
-          model.buildings,
-          model.center,
-          comFootprints,
-          model.developmentDamRecords ?? [],
-        ),
-      );
       return;
     }
     if (comFootprints.length === 0 || model.buildings.length === 0) {
-      setComHeightBuildings(null);
+      setComHeightBuildings((prev) => (prev === null ? prev : null));
       return;
     }
     const controller = new AbortController();
     const source = model.buildingsWithoutCom ?? model.buildings;
-    setComHeightsApplyFailed(false);
-    runComBuildingHeightsInWorker(source, comFootprints, controller.signal)
-      .then((result) => {
-        if (controller.signal.aborted) return;
-        // CoM first, then DAM floors on what CoM did not measure, then estimate labels.
-        setComHeightBuildings(
-          resolveBuildingHeightsAfterCom(
-            result.buildings,
-            model.center,
-            comFootprints,
-            model.developmentDamRecords ?? [],
-          ),
-        );
+    const isDomTest =
+      typeof navigator !== "undefined" && /jsdom|HappyDOM/i.test(navigator.userAgent ?? "");
+    const startWorker = () => {
+      setComHeightsApplyFailed(false);
+      runComBuildingHeightsInWorker(source, comFootprints, controller.signal, {
+        center: model.center,
+        damRecords: model.developmentDamRecords ?? [],
       })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setComHeightBuildings(null);
-          setComHeightsApplyFailed(true);
-        }
-      });
-    return () => controller.abort();
+        .then((result) => {
+          if (controller.signal.aborted) return;
+          // CoM first, then DAM floors on what CoM did not measure, then estimate labels.
+          setComHeightBuildings(
+            result.resolved
+              ? result.buildings
+              : resolveBuildingHeightsAfterCom(
+                  result.buildings,
+                  model.center,
+                  comFootprints,
+                  model.developmentDamRecords ?? [],
+                ),
+          );
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) {
+            setComHeightBuildings(null);
+            setComHeightsApplyFailed(true);
+          }
+        });
+    };
+    if (isDomTest) {
+      startWorker();
+      return () => controller.abort();
+    }
+    const timerId = window.setTimeout(startWorker, 6200);
+    return () => {
+      window.clearTimeout(timerId);
+      controller.abort();
+    };
   }, [
     comFootprints,
     comFootprintRetryToken,
@@ -819,21 +866,37 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   // tier order applies (DAM floors, Overture/OSM, zone default) and every default is labelled.
   const fallbackBuildings = useMemo(
     () =>
-      model.buildingsWithoutCom
-        ? resolveBuildingHeightsAfterCom(
-            model.buildingsWithoutCom,
-            model.center,
-            [],
-            model.developmentDamRecords ?? [],
-          )
-        : stampPlainZoneDefaultLabels(model.buildings),
-    [model.buildings, model.buildingsWithoutCom, model.center, model.developmentDamRecords],
+      model.buildingsHeightResolved
+        ? model.buildings
+        : model.buildingsWithoutCom
+          ? resolveBuildingHeightsAfterCom(
+              model.buildingsWithoutCom,
+              model.center,
+              [],
+              model.developmentDamRecords ?? [],
+            )
+          : stampPlainZoneDefaultLabels(model.buildings),
+    [model.buildings, model.buildingsHeightResolved, model.buildingsWithoutCom, model.center, model.developmentDamRecords],
+  );
+  const annotatedAppliedBuildings = useMemo(
+    () =>
+      model.comBuildingHeightsApplied
+        ? model.buildingsHeightResolved
+          ? model.buildings
+          : annotateUnresolvedZoneDefaults(
+              model.buildings,
+              model.center,
+              comFootprints,
+              model.developmentDamRecords ?? [],
+            )
+        : null,
+    [model.comBuildingHeightsApplied, model.buildingsHeightResolved, model.buildings, model.center, comFootprints, model.developmentDamRecords],
   );
   const baseBuildings = useMemo(() => {
     if (comHeightBuildings) return comHeightBuildings;
-    if (model.comBuildingHeightsApplied) return model.buildings;
+    if (annotatedAppliedBuildings) return annotatedAppliedBuildings;
     return fallbackBuildings;
-  }, [comHeightBuildings, fallbackBuildings, model.buildings, model.comBuildingHeightsApplied]);
+  }, [comHeightBuildings, annotatedAppliedBuildings, fallbackBuildings]);
 
   const overrideResult = useMemo(
     () => applyHeightOverrides(baseBuildings, heightOverrideStore, model.center),
@@ -841,7 +904,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   );
 
   useEffect(() => {
-    setUnmatchedEdits(overrideResult.unmatchedCount);
+    setUnmatchedEdits((prev) => (prev === overrideResult.unmatchedCount ? prev : overrideResult.unmatchedCount));
     clearPlanShadowCache();
   }, [overrideResult]);
 
@@ -849,10 +912,11 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     () => matchHiddenBuildings(overrideResult.buildings, hiddenStore, model.center),
     [overrideResult.buildings, hiddenStore, model.center],
   );
-  const visibleBuildings = useMemo(
-    () => filterHiddenBuildings(overrideResult.buildings, new Set(hiddenMatch.keys())),
-    [overrideResult.buildings, hiddenMatch],
-  );
+  const visibleBuildings = useMemo(() => {
+    const unhidden = filterHiddenBuildings(overrideResult.buildings, new Set(hiddenMatch.keys()));
+    if (hiddenBuildingUses.size === 0) return unhidden;
+    return unhidden.filter((building) => !hiddenBuildingUses.has(building.use ?? "unclassified"));
+  }, [overrideResult.buildings, hiddenMatch, hiddenBuildingUses]);
 
   const displayModel = useMemo(
     () => ({
@@ -866,18 +930,45 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   );
   // View tab: the path resets with a new cut; compute uses the buildings as shown (edits, hides).
   const walk = useWalkViewshed(model, displayModel);
+  const walkAt = useWalkPlayback(walk);
 
   /**
    * Drawing tab and its .ai exports: the display model (hidden buildings already gone) plus plan
    * footprints of visible imported massing. The 3D view and .3dm keep displayModel, so nothing is drawn twice.
    */
-  const drawingModel = useMemo(
-    () =>
-      massing.drawingBuildings.length
-        ? { ...displayModel, buildings: [...displayModel.buildings, ...massing.drawingBuildings] }
-        : displayModel,
-    [displayModel, massing.drawingBuildings],
-  );
+  const drawingModel = useMemo(() => {
+    const buildingsVisible = isLayer3dVisible(view3dDisplay, "buildings");
+    const treesVisible = isLayer3dVisible(view3dDisplay, "trees");
+    const roadsVisible = isLayer3dVisible(view3dDisplay, "roads");
+    const footpathsVisible = isLayer3dVisible(view3dDisplay, "footpaths");
+    const railVisible = isLayer3dVisible(view3dDisplay, "rail");
+    const landscapeVisible = isLayer3dVisible(view3dDisplay, "landscape");
+    const waterVisible = isLayer3dVisible(view3dDisplay, "water");
+    const contoursVisible = isLayer3dVisible(view3dDisplay, "contours");
+    const baseBuildings = buildingsVisible
+      ? massing.drawingBuildings.length
+        ? [...displayModel.buildings, ...massing.drawingBuildings]
+        : displayModel.buildings
+      : [];
+    return {
+      ...displayModel,
+      buildings: baseBuildings,
+      trees: treesVisible ? displayModel.trees : [],
+      roads: displayModel.roads.filter((r) => {
+        if (r.kind === "rail") return railVisible;
+        if (r.grade === "path") return footpathsVisible;
+        return roadsVisible;
+      }),
+      tramLines: railVisible ? displayModel.tramLines : [],
+      areas: displayModel.areas.filter((a) => {
+        if (a.kind === "green") return landscapeVisible;
+        if (a.kind === "water") return waterVisible;
+        return true;
+      }),
+      contourLayer: contoursVisible ? displayModel.contourLayer : undefined,
+      contours: contoursVisible ? displayModel.contours : false,
+    };
+  }, [displayModel, massing.drawingBuildings, view3dDisplay]);
 
   useEffect(() => {
     qaDisplayBuildingsRef.current = displayModel.buildings;
@@ -897,13 +988,17 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   }, [displayModel.buildings, displayModel.comBuildingHeights]);
 
   useEffect(() => {
-    const comDone = comHeightBuildings != null || comFootprints.length === 0;
+    const comDone = Boolean(model.comBuildingHeightsApplied) || comHeightBuildings != null || comFootprints.length === 0;
     if (comDone && heightPerfRef.current.comAppliedMs == null) {
       heightPerfRef.current.comAppliedMs = performance.now() - heightPerfRef.current.modelOpenMs;
     }
   }, [comHeightBuildings, comFootprints.length]);
 
+  const viewportModelKeyRef = useRef(`${displayModel.sideM}:${displayModel.frameShape ?? "square"}`);
   useEffect(() => {
+    const nextViewportKey = `${displayModel.sideM}:${displayModel.frameShape ?? "square"}`;
+    if (viewportModelKeyRef.current === nextViewportKey) return;
+    viewportModelKeyRef.current = nextViewportKey;
     setPlanViewport(planViewportExtent(displayModel.sideM));
     setAxoSettings((prev) => {
       const defaults = defaultExplodedAxoSettings(displayModel.sideM);
@@ -1012,7 +1107,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     }
   }
   const crs = mgaCrs(model.center.lon);
-  const sideKm = model.sideM / 1000;
   const tierCounts = treeTierCounts(model.trees);
   const showBuildings = model.layers.buildings && model.buildings.length > 0;
   // A failed tree source must stay visible even when it leaves the frame with no trees.
@@ -1026,7 +1120,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   ].filter(Boolean);
 
   const sectionIds = availableSidebarSections({ buildings: showBuildings, trees: showTrees });
-  const leftSectionIds = sectionIds.filter((id) => !isRightSidebarSection(id));
+  const leftSectionIds = sectionIds.filter((id) => !isRightSidebarSection(id) && id !== "exports");
   const rightSectionIds = sectionIds.filter((id) => isRightSidebarSection(id));
   const items: SidebarItem[] = leftSectionIds.map((id) => {
     const Icon = SECTION_ICONS[id];
@@ -1054,6 +1148,58 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   useEffect(() => {
     if (!viewAnalysisOpen && walkDrawingOn) setWalkDrawing(false);
   }, [viewAnalysisOpen, walkDrawingOn, setWalkDrawing]);
+
+  const [consolePlaying, setConsolePlaying] = useState(false);
+  const consoleDaylight = useMemo(
+    () =>
+      daylightWindowMinutes(
+        model.center.lat,
+        model.center.lon,
+        solar.year,
+        solar.month,
+        solar.day,
+      ) ?? { sunrise: 360, sunset: 1080 },
+    [model.center.lat, model.center.lon, solar.year, solar.month, solar.day],
+  );
+  const consoleSun = useMemo(
+    () =>
+      sunAtMelbourneLocal(
+        model.center.lat,
+        model.center.lon,
+        solar.year,
+        solar.month,
+        solar.day,
+        solar.hour,
+        solar.minute,
+      ),
+    [model.center.lat, model.center.lon, solar.year, solar.month, solar.day, solar.hour, solar.minute],
+  );
+  const consoleWindStats = useMemo(
+    () => (windTable ? analyzeWindPeriod(windTable, windSettings.period) : null),
+    [windTable, windSettings.period],
+  );
+
+  useEffect(() => {
+    if (!consolePlaying) return;
+    let raf = 0;
+    let last = performance.now();
+    let minutesFloat = solar.hour * 60 + solar.minute;
+    const minM = consoleDaylight.sunrise;
+    const maxM = consoleDaylight.sunset;
+    const step = (now: number) => {
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      minutesFloat += dt * 72;
+      if (minutesFloat > maxM) minutesFloat = minM;
+      const rounded = Math.round(minutesFloat);
+      const hour = Math.floor(rounded / 60);
+      const minute = rounded % 60;
+      setSolar((prev) => ({ ...prev, hour, minute, castShadows: true }));
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [consolePlaying, consoleDaylight.sunrise, consoleDaylight.sunset]);
 
   function selectSection(id: string) {
     if (id === "solar" || id === "wind" || id === "view") setAnalysisKind(id);
@@ -1083,9 +1229,24 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       setShowSource(false);
       setColourByUse(true);
     }
-    if (view3dDisplay.whiteCard) {
-      commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+    if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "buildings")) {
+      commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "buildings", true));
     }
+    setHiddenBuildingUses((prev) => {
+      if (!prev.has(use)) return prev;
+      const next = new Set(prev);
+      next.delete(use);
+      return next;
+    });
+    setLineStyles(readDrawingStyle());
+  }
+
+  function resetSceneLayerColours() {
+    resetStoredColours(undefined, () => {
+      if (typeof window !== "undefined") {
+        applyOverrides(readStoredOverrides(window.localStorage));
+      }
+    });
     setLineStyles(readDrawingStyle());
   }
 
@@ -1127,7 +1288,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   /** Sun study on: the seven hourly layers for the site plan exports (from the screen's cache). */
   async function sunStudyExportLayers(): Promise<SitePlanExportOptions["sunStudy"]> {
     if (!sunStudyDate) return null;
-    const casters = sunStudyCasterModel(drawingModel, solar.sunStudyCasters ?? "all", sunStudySelected);
+    const casters = sunStudyCasterModel(drawingModel, effectiveSunStudyCasters, sunStudySelected);
     return { layers: await sunStudyLayersFor(casters, sunStudyDate) };
   }
 
@@ -1336,47 +1497,32 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     total: heightBarParts.reduce((sum, part) => sum + part.value, 0),
   };
 
-  const viewModesSwitches = (
-    <div className="display-switches" role="group" aria-label="View modes">
-      {(
-        [
-          ["whiteCard", "White card"],
-          ["showOutlines", "Outlines"],
-        ] as const
-      ).map(([key, label]) => (
-        <label key={key} className="check-field">
-          <input
-            type="checkbox"
-            checked={view3dDisplay[key]}
-            onChange={(event) => commitView3dDisplay({ ...view3dDisplay, [key]: event.target.checked })}
-          />
-          {label}
-        </label>
-      ))}
-    </div>
-  );
+  const presentBuildingUses = showBuildings
+    ? BUILDING_USES.filter((use) => useCounts[use] > 0)
+    : [];
 
   const availableLayers3d: {
     id: Layer3dId;
     label: string;
+    meta: string;
     color: string;
     available: boolean;
     onPick: (value: string) => void;
   }[] = (
     [
       {
-        id: "buildings" as const,
-        label: "Buildings",
-        color: getColour("--building-uniform"),
-        available: showBuildings,
+        id: "trees" as const,
+        label: "Trees",
+        meta: model.trees.length.toLocaleString(),
+        color: getColour("--tree-crown"),
+        available: model.layers.trees && model.trees.length > 0,
         onPick: (value: string) => {
-          commitColour("--building-uniform", value);
-          if (colourByUse || showSource) {
-            setShowSource(false);
-            setColourByUse(false);
-          }
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "buildings")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "buildings", true));
+          commitColour("--tree-crown", value);
+          commitColour("--tree-crown-edge", value);
+          commitColour("--tree-fill", value);
+          commitColour("--tree-layer", value);
+          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "trees")) {
+            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "trees", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -1384,6 +1530,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       {
         id: "roads" as const,
         label: "Roads",
+        meta: `${formatLengthKm(model.roadKm)} km`,
         color: getColour("--road-local"),
         available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade !== "path"),
         onPick: (value: string) => {
@@ -1399,6 +1546,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       {
         id: "footpaths" as const,
         label: "Footpaths",
+        meta: model.roads.filter((r) => r.kind === "road" && r.grade === "path").length.toLocaleString(),
         color: getColour("--road-path"),
         available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade === "path"),
         onPick: (value: string) => {
@@ -1411,24 +1559,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
         },
       },
       {
-        id: "trees" as const,
-        label: "Trees",
-        color: getColour("--tree-crown"),
-        available: model.layers.trees && model.trees.length > 0,
-        onPick: (value: string) => {
-          commitColour("--tree-crown", value);
-          commitColour("--tree-crown-edge", value);
-          commitColour("--tree-fill", value);
-          commitColour("--tree-layer", value);
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "trees")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "trees", true));
-          }
-          setLineStyles(readDrawingStyle());
-        },
-      },
-      {
         id: "landscape" as const,
         label: "Landscape",
+        meta: `${model.areas.filter((a) => a.kind === "green").length.toLocaleString()} zones`,
         color: getColour("--green-3d"),
         available: model.layers.waterGreen && model.areas.some((a) => a.kind === "green"),
         onPick: (value: string) => {
@@ -1443,6 +1576,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       {
         id: "water" as const,
         label: "Water",
+        meta: `${model.areas.filter((a) => a.kind === "water").length.toLocaleString()} zones`,
         color: getColour("--water-3d"),
         available: model.layers.waterGreen && model.areas.some((a) => a.kind === "water"),
         onPick: (value: string) => {
@@ -1457,6 +1591,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       {
         id: "rail" as const,
         label: "Rail & tram",
+        meta: `${model.roads.filter((r) => r.kind === "rail").length + (model.tramLines?.length ?? 0)} lines`,
         color: getColour("--rail-fill"),
         available:
           model.layers.roads &&
@@ -1475,6 +1610,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       {
         id: "contours" as const,
         label: "Contours",
+        meta: model.contourLayer ? `${model.contourLayer.interval} m` : "",
         color: getColour("--outline-contour"),
         available: Boolean(model.contourLayer && model.contourLayer.lines.length > 0),
         onPick: (value: string) => {
@@ -1488,8 +1624,97 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     ]
   ).filter((layer) => layer.available);
 
+  const sceneLayerRows: {
+    id: string;
+    label: string;
+    meta: string;
+    color: string;
+    visible: boolean;
+    onToggle: (checked: boolean) => void;
+    onPick: (value: string) => void;
+  }[] = [
+    ...presentBuildingUses.map((use) => ({
+      id: `use:${use}`,
+      label: BUILDING_USE_META[use].label,
+      meta: useCounts[use].toLocaleString(),
+      color: BUILDING_USE_META[use].color,
+      visible: isLayer3dVisible(view3dDisplay, "buildings") && !hiddenBuildingUses.has(use),
+      onToggle: (checked: boolean) => {
+        setHiddenBuildingUses((prev) => {
+          const next = new Set(prev);
+          if (checked) {
+            next.delete(use);
+          } else {
+            next.add(use);
+          }
+          return next;
+        });
+        if (checked && !isLayer3dVisible(view3dDisplay, "buildings")) {
+          commitView3dDisplay(setLayer3dVisible(view3dDisplay, "buildings", true));
+        }
+      },
+      onPick: (value: string) => pickBuildingUseColour(use, value),
+    })),
+    ...availableLayers3d.map((layer) => ({
+      id: layer.id,
+      label: layer.label,
+      meta: layer.meta,
+      color: layer.color,
+      visible: isLayer3dVisible(view3dDisplay, layer.id),
+      onToggle: (checked: boolean) =>
+        commitView3dDisplay(setLayer3dVisible(view3dDisplay, layer.id, checked)),
+      onPick: layer.onPick,
+    })),
+  ];
+
+  const modelRootRef = useRef<HTMLDivElement | null>(null);
+  const introHoldReleasedRef = useRef(false);
+  const introWebglReadyRef = useRef(false);
+  useEffect(() => {
+    const el = modelRootRef.current;
+    if (!el) return;
+    const release = () => {
+      introHoldReleasedRef.current = true;
+      el.removeAttribute("data-intro-hold");
+    };
+    const revealModel = () => {
+      introWebglReadyRef.current = true;
+      el.removeAttribute("data-intro-webgl-wait");
+    };
+    const onWebglReady = () => {
+      if (typeof window === "undefined" || !window.__citycutAwaitIntroStart || window.__citycutIntroStarted) {
+        revealModel();
+      }
+    };
+    if (tab !== "3d" || !shouldShowIntroBridgePill()) {
+      release();
+      revealModel();
+      return;
+    }
+    if (typeof window !== "undefined" && window.__citycutIntroStarted) {
+      revealModel();
+    }
+    el.addEventListener("citycut:intro-hold-release", release);
+    window.addEventListener("citycut:intro-webgl-ready", onWebglReady);
+    window.addEventListener("citycut:intro-start", revealModel);
+    const timer = window.setTimeout(release, 45000);
+    const webglTimer = window.setTimeout(revealModel, 25000);
+    return () => {
+      el.removeEventListener("citycut:intro-hold-release", release);
+      window.removeEventListener("citycut:intro-webgl-ready", onWebglReady);
+      window.removeEventListener("citycut:intro-start", revealModel);
+      window.clearTimeout(timer);
+      window.clearTimeout(webglTimer);
+    };
+  }, [tab]);
+
   return (
-    <div className="model">
+    <div
+      ref={modelRootRef}
+      className="model"
+      data-intro-hold={!introHoldReleasedRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
+      data-intro-webgl-wait={!introWebglReadyRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
+    >
       <h1 className="sr-only">Your model is ready.</h1>
       <div
         className={`${
@@ -1498,6 +1723,22 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       >
         {tab === "3d" && (
           <div className="fill">
+            {shouldShowIntroBridgePill() && (() => {
+              const samples = typeof window !== "undefined" ? window.__citycutProgressSamples : undefined;
+              const currentPct = Array.isArray(samples) && samples.length > 0 ? (samples[samples.length - 1] ?? 0) : 0;
+              return (
+                <div className="loading-card loading-hud-pill is-model-bridge hud-card" aria-hidden="true" data-progress-pct={currentPct}>
+                  <div className="loading-hud-row">
+                    <span className="loading-pulse-dot" />
+                    <strong>Building 3D site cut · LiDAR + Vicmap…</strong>
+                    <div className="loading-prog-track">
+                      <div className="loading-prog-fill" style={{ width: `${currentPct}%` }} />
+                    </div>
+                    <span className="loading-prog-pct">{currentPct}%</span>
+                  </div>
+                </div>
+              );
+            })()}
             {model.heightSourceLoadWarnings?.map((line) => (
               <p key={line} className="height-source-notice" role="status">
                 {line}
@@ -1607,9 +1848,18 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 shadowInput={planShadowInput()}
                 sunStudy={sunStudyDate}
                 sunStudyMuted={sunStudyMutedOn(solar.sunStudy, solar.sunStudyMuted)}
-                sunStudyCasters={solar.sunStudyCasters ?? "all"}
+                sunStudyCasters={effectiveSunStudyCasters}
                 sunStudySelected={sunStudySelected}
-                onSunStudyPick={(id) => setSunStudySelected((current) => toggleSelection(current, id))}
+                onSunStudyPick={(id) =>
+                  setSunStudySelected((current) => {
+                    const next = toggleSelection(current, id);
+                    setSolar((prev) => ({
+                      ...prev,
+                      sunStudyCasters: next.length > 0 ? "selected" : "all",
+                    }));
+                    return next;
+                  })
+                }
                 uniformBuildings={!colourByUse && !showSource}
                 colourBySource={showSource}
                 highlightManual={showManualEdits && overrideResult.manualCount > 0}
@@ -1638,8 +1888,217 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             rightTitle={SIDEBAR_SECTION_LABELS[rightOpen]}
             onHome={onHome}
             onNewCut={onNewCut}
+            showNewCut
             onSelect={selectSection}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+            rightMeta={`MGA${mgaCrs(model.center.lon).zone}`}
+            brandMeta={
+              <>
+                <span className="v-sep hud-sep" aria-hidden="true" />
+                <span className="place-chip studio-breadcrumb-place" title={model.placeLabel}>
+                  {model.placeLabel}
+                </span>
+                <span className="dim-chip studio-cut-pill mono">
+                  {cutSizeLabel(model.sideM, model.frameShape ?? "square")}
+                </span>
+              </>
+            }
+            headerCenter={
+              <>
+                <div className="tabs mode-group studio-view-tabs" role="tablist" aria-label="Model views">
+                  {(
+                    [
+                      ["3d", "3D model"],
+                      ["drawing", "Drawing"],
+                      ["satellite", "Satellite"],
+                    ] as const
+                  ).map(([id, label], index) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="tab"
+                      data-autofocus={index === 0 ? "true" : undefined}
+                      aria-selected={tab === id}
+                      className={tab === id ? "mode-btn active" : "mode-btn"}
+                      onClick={() => setTab(id)}
+                    >
+                      {id === "3d" && (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+                          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                        </svg>
+                      )}
+                      {id === "drawing" && (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                          <rect x="3" y="3" width="18" height="18" rx="2" />
+                          <line x1="3" y1="9" x2="21" y2="9" />
+                          <line x1="9" y1="21" x2="9" y2="9" />
+                        </svg>
+                      )}
+                      {id === "satellite" && (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="2" y1="12" x2="22" y2="12" />
+                          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                        </svg>
+                      )}
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <span className="v-sep" aria-hidden="true" />
+                {tab === "3d" ? (
+                  <div className="proj-group studio-submode-pills" role="group" aria-label="3D projection">
+                    <button
+                      type="button"
+                      className={view.projection === "perspective" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                      aria-pressed={view.projection === "perspective"}
+                      onClick={() => commitView({ ...view, projection: "perspective" }, false)}
+                    >
+                      Perspective
+                    </button>
+                    <button
+                      type="button"
+                      className={view.projection === "iso" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                      aria-pressed={view.projection === "iso"}
+                      onClick={() => commitView({ ...view, projection: "iso" }, false)}
+                    >
+                      Isometric
+                    </button>
+                    <button
+                      type="button"
+                      className={view.projection === "plan" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                      aria-pressed={view.projection === "plan"}
+                      onClick={() => commitView({ projection: "plan", corner: view.corner, freeRotate: false }, true)}
+                    >
+                      Plan
+                    </button>
+                  </div>
+                ) : (
+                  <div className="proj-group studio-submode-pills" aria-label="Quick drawing modes">
+                    {(
+                      [
+                        ["site", "Site plan"],
+                        ["figure-ground", "Figure-ground"],
+                        ["exploded-axo", "Exploded axo"],
+                        ["isometric", "Isometric"],
+                      ] as const
+                    ).map(([kind, label]) => (
+                      <button
+                        key={kind}
+                        type="button"
+                        className={tab === "drawing" && drawing === kind ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                        aria-label={`Quick ${label}`}
+                        aria-pressed={tab === "drawing" && drawing === kind}
+                        onClick={() => {
+                          setDrawing(kind);
+                          setTab("drawing");
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <span className="v-sep" aria-hidden="true" />
+                <button
+                  type="button"
+                  className="cam-reset studio-reset-btn"
+                  onClick={() => {
+                    if (tab === "3d") {
+                      setSnapId((id) => id + 1);
+                    } else if (tab === "drawing" && drawing === "exploded-axo") {
+                      setExplodedViewport(
+                        explodedAxoViewportExtent(explodedAxoBounds(displayModel, axoSettings)),
+                      );
+                      setFitCounter((token) => token + 1);
+                    } else if (tab === "drawing" && drawing === "isometric") {
+                      setIsoDrawingViewport(
+                        explodedAxoViewportExtent(isometricDrawingBounds(displayModel, view.corner)),
+                      );
+                      setFitCounter((token) => token + 1);
+                    } else {
+                      setPlanViewport(planViewportExtent(displayModel.sideM));
+                      setFitCounter((token) => token + 1);
+                    }
+                  }}
+                >
+                  Reset view
+                </button>
+              </>
+            }
+            headerRight={
+              <>
+                <span className="ready-dot status-dot is-ready" aria-hidden="true" />
+                <span className="ready-text studio-status-pill mono">
+                  Ready · {sourcesLoaded.loaded}/{sourcesLoaded.total} sources
+                </span>
+                <span className="v-sep" aria-hidden="true" />
+                <div className="studio-quick-exports">
+                  {tab === "drawing" ? (
+                    <>
+                      <button
+                        type="button"
+                        className="btn-export-3dm studio-export-btn is-primary"
+                        aria-label="Quick export Adobe Illustrator .ai"
+                        disabled={busy !== null}
+                        onClick={() => {
+                          if (drawing === "site") void saveSiteAi();
+                          else if (drawing === "figure-ground") void saveFigureAi();
+                          else if (drawing === "isometric") void saveIsometricAi();
+                          else void saveExplodedAxoAi();
+                        }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        .ai
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-export-png studio-export-btn"
+                        aria-label="Quick export SVG"
+                        disabled={busy !== null || drawing === "exploded-axo"}
+                        onClick={() => {
+                          if (drawing === "figure-ground") void saveFigureSvg();
+                          else if (drawing === "isometric") void saveIsometricSvg();
+                          else void saveSiteSvg();
+                        }}
+                      >
+                        .svg
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="btn-export-3dm studio-export-btn is-primary"
+                        aria-label="Quick export Rhino .3dm"
+                        disabled={busy !== null}
+                        onClick={() => void save3dm()}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        Rhino .3dm
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-export-png studio-export-btn"
+                        aria-label="Quick export 2x PNG"
+                        disabled={busy !== null}
+                        onClick={() => void savePng()}
+                      >
+                        2× PNG
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
+            }
             status={
               leftOpen === "import" ? (
                 <span className="sidebar-status">
@@ -1670,131 +2129,161 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             rightChildren={
               <>
             <div className="drawer-section" hidden={rightOpen !== "summary"}>
-              <div className="sidebar-hero">
-                <p className="sidebar-place">{model.placeLabel}</p>
-                <p className="sidebar-sub">
-                  {cutSizeLabel(model.sideM, model.frameShape ?? "square")} {model.frameShape === "circle" ? "circle" : "square"} ·{" "}
-                  {(sideKm * sideKm).toFixed(2)} km²
-                </p>
-                <p className="sidebar-coord">
-                  <span>
-                    {formatCoord(model.center.lat)}, {formatCoord(model.center.lon)}
-                  </span>
-                  <button
-                    type="button"
-                    className="sidebar-icon-btn"
-                    aria-label="Copy coordinates"
-                    title="Copy coordinates"
-                    onClick={() => {
-                      void navigator.clipboard
-                        ?.writeText(`${formatCoord(model.center.lat)}, ${formatCoord(model.center.lon)}`)
-                        .catch(() => undefined);
-                    }}
-                  >
-                    <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
-                  </button>
-                </p>
-              </div>
-              <section className="sidebar-group">
-                <h3 className="sidebar-gh">In this model</h3>
-                <dl className="stats">
-                  {model.layers.buildings && (
-                    <div>
-                      <dt>Buildings</dt>
-                      <dd>{model.buildings.length.toLocaleString()}</dd>
-                    </div>
-                  )}
-                  {model.layers.trees && (
-                    <div>
-                      <dt>Trees</dt>
-                      <dd>{model.trees.length.toLocaleString()}</dd>
-                    </div>
-                  )}
-                  {model.layers.roads && (
-                    <div>
-                      <dt title="Clipped centerline length of roads, paths, and rail">Roads</dt>
-                      <dd>
-                        {formatLengthKm(model.roadKm)}
-                        <small>km</small>
-                      </dd>
-                    </div>
-                  )}
-                  {model.terrain && (
-                    <div>
-                      <dt>Elevation</dt>
-                      <dd>
-                        {model.terrain.min.toFixed(0)}–{model.terrain.max.toFixed(0)}
-                        <small>m</small>
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-                {model.terrainError && <p className="error">{model.terrainError}</p>}
-              </section>
-              {showBuildings && heightBar.total > 0 && (
-                <section className="sidebar-group">
-                  <div className="sidebar-gh">
-                    <h3>Building heights</h3>
-                    <span>{Math.round((heightBar.measured / heightBar.total) * 100)}% measured</span>
-                  </div>
-                  <div className="height-bar" aria-hidden="true">
-                    {heightBar.parts.map((part) =>
-                      part.value > 0 ? (
-                        <i
-                          key={part.id}
-                          className={`height-bar-${part.id}`}
-                          style={{ flexGrow: part.value }}
-                        />
-                      ) : null,
-                    )}
-                  </div>
-                  <ul className="height-bar-legend">
-                    {heightBar.parts.map((part) =>
-                      part.value > 0 ? (
-                        <li key={part.id}>
-                          <i className={`height-bar-${part.id}`} />
-                          <span>{part.label}</span>
-                          <b>{part.value.toLocaleString()}</b>
-                        </li>
-                      ) : null,
-                    )}
-                  </ul>
-                </section>
-              )}
-              <section className="sidebar-group">
-                <div className="sidebar-gh">
-                  <h3>Data sources</h3>
-                  <span>
-                    {sourcesLoaded.loaded} of {sourcesLoaded.total} loaded
-                  </span>
+              <div className="kpi-grid mono" aria-label="In this model">
+                <div className="kpi-cell">
+                  <div className="kpi-lbl k-lbl">Bldgs</div>
+                  <div className="kpi-num k-val">{model.buildings.length.toLocaleString()}</div>
                 </div>
-                <ul className="source-list">
-                  {dataSources.map((row) => (
-                    <li key={row.id} className={`source-row is-${row.status}`} data-source={row.id}>
-                      <i className={`status-dot is-${row.status}`} aria-hidden="true" />
-                      <div className="source-text">
-                        <span className="source-name">{row.label}</span>
-                        {row.detail && <span className="source-meta">{row.detail}</span>}
-                        {row.notes.map((note) => (
-                          <span key={note} className="source-note" role={row.status === "failed" ? "alert" : undefined}>
-                            {note}
-                          </span>
-                        ))}
-                        {row.retry === "com-heights" && (
-                          <button type="button" className="sidebar-link" onClick={retryComHeights}>
-                            Retry CoM heights
-                          </button>
-                        )}
-                      </div>
-                      <span className="source-state">{dataSourceStatusWord(row.status)}</span>
-                    </li>
-                  ))}
-                </ul>
-                <details className="source-notes">
-                  <summary>Full source notes and credits</summary>
-                  <p className="meta">{displayModel.sourceNote}</p>
-                </details>
-              </section>
+                <div className="kpi-cell">
+                  <div className="kpi-lbl k-lbl">Trees</div>
+                  <div className="kpi-num k-val">{model.trees.length.toLocaleString()}</div>
+                </div>
+                <div className="kpi-cell">
+                  <div className="kpi-lbl k-lbl">Roads</div>
+                  <div className="kpi-num k-val">{formatLengthKm(model.roadKm)}k</div>
+                </div>
+                <div className="kpi-cell">
+                  <div className="kpi-lbl k-lbl">Elev</div>
+                  <div className="kpi-num k-val">
+                    {model.terrain ? `${model.terrain.min.toFixed(0)}–${model.terrain.max.toFixed(0)}m` : "—"}
+                  </div>
+                </div>
+              </div>
+              {model.terrainError && <p className="error">{model.terrainError}</p>}
+              {showBuildings && heightBar.total > 0 && (
+                <>
+                  <div className="outliner-divider" aria-hidden="true" />
+                  <section className="dist-block">
+                    <div className="dist-head">
+                      <h3 className="dist-title">Height Precision</h3>
+                      <span className="dist-pct mono">
+                        {Math.round((heightBar.measured / heightBar.total) * 100)}% CoM LiDAR
+                      </span>
+                    </div>
+                    <div className="dist-bar" aria-hidden="true">
+                      <div
+                        className="dist-seg is-ink"
+                        style={{ width: `${Math.round((heightBar.measured / heightBar.total) * 100)}%` }}
+                      />
+                      <div
+                        className="dist-seg is-muted"
+                        style={{ width: `${Math.max(0, 100 - Math.round((heightBar.measured / heightBar.total) * 100))}%` }}
+                      />
+                    </div>
+                    <div className="dist-legend bar-legend-grid">
+                      <span className="dist-leg-item">
+                        <span className="dl-left">
+                          <span className="leg-dot is-ink" />
+                          <span>CoM 2023</span>
+                        </span>
+                        <b className="dl-val mono">{comMeasuredHeightCount.toLocaleString()}</b>
+                      </span>
+                      <span className="dist-leg-item">
+                        <span className="dl-left">
+                          <span className="leg-dot is-muted" />
+                          <span>Zone est.</span>
+                        </span>
+                        <b className="dl-val mono">{(heightBar.total - comMeasuredHeightCount).toLocaleString()}</b>
+                      </span>
+                    </div>
+                  </section>
+                </>
+              )}
+              {showBuildings && displayModel.buildings.length > 0 && (
+                <>
+                  <div className="outliner-divider" aria-hidden="true" />
+                  <section className="dist-block">
+                    <div className="dist-head">
+                      <h3 className="dist-title">Building Use Mix</h3>
+                      <span className="dist-pct mono">CLUE + OSM</span>
+                    </div>
+                    <div className="dist-bar" aria-hidden="true">
+                      {BUILDING_USES.map((use) =>
+                        useCounts[use] > 0 ? (
+                          <div
+                            key={use}
+                            className="dist-seg"
+                            style={{
+                              width: `${Math.max(2, Math.round((useCounts[use] / displayModel.buildings.length) * 100))}%`,
+                              background: BUILDING_USE_META[use].color,
+                            }}
+                          />
+                        ) : null,
+                      )}
+                    </div>
+                    <div className="dist-legend bar-legend-grid">
+                      {BUILDING_USES.filter((use) => useCounts[use] > 0)
+                        .slice(0, 4)
+                        .map((use) => {
+                          const pct = Math.round((useCounts[use] / displayModel.buildings.length) * 100);
+                          return (
+                            <span key={use} className="dist-leg-item">
+                              <span className="dl-left">
+                                <span className="leg-dot" style={{ background: BUILDING_USE_META[use].color }} />
+                                <span>{BUILDING_USE_META[use].label}</span>
+                              </span>
+                              <b className="dl-val mono">{pct}%</b>
+                            </span>
+                          );
+                        })}
+                    </div>
+                  </section>
+                </>
+              )}
+              <details className="insp-sources-details sr-only">
+                <summary className="insp-sources-summary mono">
+                  <span>
+                    Data sources ({sourcesLoaded.loaded}/{sourcesLoaded.total} loaded)
+                  </span>
+                  <span className="insp-sources-caret" aria-hidden="true">▾</span>
+                </summary>
+                <div className="insp-sources-body">
+                  <p className="sidebar-coord">
+                    <span>
+                      {formatCoord(model.center.lat)}, {formatCoord(model.center.lon)}
+                    </span>
+                    <button
+                      type="button"
+                      className="sidebar-icon-btn"
+                      aria-label="Copy coordinates"
+                      title="Copy coordinates"
+                      onClick={() => {
+                        void navigator.clipboard
+                          ?.writeText(`${formatCoord(model.center.lat)}, ${formatCoord(model.center.lon)}`)
+                          .catch(() => undefined);
+                      }}
+                    >
+                      <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
+                    </button>
+                  </p>
+                  <ul className="source-list">
+                    {dataSources.map((row) => (
+                      <li key={row.id} className={`source-row is-${row.status}`} data-source={row.id}>
+                        <i className={`status-dot is-${row.status}`} aria-hidden="true" />
+                        <div className="source-text">
+                          <span className="source-name">{row.label}</span>
+                          {row.detail && <span className="source-meta">{row.detail}</span>}
+                          {row.notes.map((note) => (
+                            <span key={note} className="source-note" role={row.status === "failed" ? "alert" : undefined}>
+                              {note}
+                            </span>
+                          ))}
+                          {row.retry === "com-heights" && (
+                            <button type="button" className="sidebar-link" onClick={retryComHeights}>
+                              Retry CoM heights
+                            </button>
+                          )}
+                        </div>
+                        <span className="source-state">{dataSourceStatusWord(row.status)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <details className="source-notes">
+                    <summary>Full source notes and credits</summary>
+                    <p className="meta">{displayModel.sourceNote}</p>
+                  </details>
+                </div>
+              </details>
             </div>
 
             <div className="drawer-section legend" hidden={rightOpen !== "buildings"}>
@@ -1999,40 +2488,113 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             }
           >
             <div className="drawer-section" hidden={leftOpen !== "drawing"}>
-              <div className="tabs" role="tablist" aria-label="Model views">
-                {(
-                  [
-                    ["3d", "3D model"],
-                    ["drawing", "Drawing"],
-                    ["satellite", "Satellite"],
-                  ] as const
-                ).map(([id, label], index) => (
-                  <button
-                    key={id}
-                    type="button"
-                    role="tab"
-                    data-autofocus={index === 0 ? "true" : undefined}
-                    aria-selected={tab === id}
-                    className={tab === id ? "active" : ""}
-                    onClick={() => setTab(id)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
               {tab === "3d" && (
-                <div className="projection-block">
-                  <section className="sidebar-group" aria-label="View modes">
-                    <div className="sidebar-gh">
-                      <h3>View modes</h3>
+                <div className="projection-block outliner-body">
+                  <section className="sidebar-group outliner-section" aria-label="View modes">
+                    <div className="card-head sidebar-gh">
+                      <h3 className="card-title">View Style</h3>
+                      <span className="card-meta mono">
+                        {displayModel.buildings.length.toLocaleString()} massings
+                      </span>
                     </div>
-                    {viewModesSwitches}
+                    <div className="style-seg seg-mini" role="group" aria-label="Building style">
+                      <button
+                        type="button"
+                        className={view3dDisplay.whiteCard ? "style-btn active" : "style-btn"}
+                        aria-pressed={view3dDisplay.whiteCard}
+                        onClick={() => commitView3dDisplay({ ...view3dDisplay, whiteCard: !view3dDisplay.whiteCard })}
+                      >
+                        Card
+                      </button>
+                      <button
+                        type="button"
+                        className={!view3dDisplay.whiteCard && colourByUse && !showSource ? "style-btn active" : "style-btn"}
+                        aria-pressed={!view3dDisplay.whiteCard && colourByUse && !showSource}
+                        onClick={() => {
+                          setShowSource(false);
+                          setColourByUse(true);
+                          if (view3dDisplay.whiteCard) {
+                            commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+                          }
+                        }}
+                      >
+                        Use
+                      </button>
+                      <button
+                        type="button"
+                        className={!view3dDisplay.whiteCard && showSource ? "style-btn active" : "style-btn"}
+                        aria-pressed={!view3dDisplay.whiteCard && showSource}
+                        onClick={() => {
+                          setShowSource(true);
+                          if (view3dDisplay.whiteCard) {
+                            commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+                          }
+                        }}
+                      >
+                        Source
+                      </button>
+                      <button
+                        type="button"
+                        className={!view3dDisplay.whiteCard && !colourByUse && !showSource ? "style-btn active" : "style-btn"}
+                        aria-pressed={!view3dDisplay.whiteCard && !colourByUse && !showSource}
+                        onClick={() => {
+                          setShowSource(false);
+                          setColourByUse(false);
+                          if (view3dDisplay.whiteCard) {
+                            commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+                          }
+                        }}
+                      >
+                        Uniform
+                      </button>
+                    </div>
+                    <label className="check-field sr-only">
+                      <input
+                        type="checkbox"
+                        checked={view3dDisplay.whiteCard}
+                        onChange={(event) => commitView3dDisplay({ ...view3dDisplay, whiteCard: event.target.checked })}
+                      />
+                      White card
+                    </label>
+                    <div className="mini-flags sub-toggles display-switches" role="group" aria-label="View modes">
+                      <label className={view3dDisplay.showOutlines ? "mini-flag is-on check-field" : "mini-flag check-field"}>
+                        <input
+                          className="sr-only"
+                          type="checkbox"
+                          checked={view3dDisplay.showOutlines}
+                          onChange={(event) => commitView3dDisplay({ ...view3dDisplay, showOutlines: event.target.checked })}
+                        />
+                        <span>Outlines</span>
+                        <span className={`mini-chk ${view3dDisplay.showOutlines ? "on" : ""}`} aria-hidden="true">{view3dDisplay.showOutlines ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
+                      </label>
+                      <label className={showManualEdits ? "mini-flag is-on check-field" : "mini-flag check-field"}>
+                        <input
+                          className="sr-only"
+                          type="checkbox"
+                          checked={showManualEdits}
+                          onChange={(event) => {
+                            const next = event.target.checked;
+                            setShowManualEdits(next);
+                            writeStoredShowManualHeights(window.localStorage, next);
+                          }}
+                        />
+                        <span>Manual edits</span>
+                        <span className={`mini-chk ${showManualEdits ? "on" : ""}`} aria-hidden="true">{showManualEdits ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
+                      </label>
+                    </div>
                   </section>
-                  <section className="sidebar-group" aria-label="Projection">
-                    <div className="sidebar-gh">
+                  <section
+                    className={
+                      view.projection === "iso"
+                        ? "sidebar-group outliner-section"
+                        : "sidebar-group outliner-section sr-only"
+                    }
+                    aria-label="Projection"
+                  >
+                    <div className="sidebar-gh sr-only">
                       <h3>Projection</h3>
                     </div>
-                    <div className="plan-switch" role="group" aria-label="Projection">
+                    <div className="plan-switch sr-only" role="group" aria-label="Projection">
                       <button
                         type="button"
                         aria-pressed={view.projection === "perspective"}
@@ -2096,367 +2658,382 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                       </>
                     )}
                   </section>
-                  {availableLayers3d.length > 0 && (
-                    <section className="sidebar-group" aria-label="Layers">
-                      <div className="sidebar-gh">
-                        <h3>Layers</h3>
-                      </div>
-                      <div className="display-switches" role="group" aria-label="3D layers">
-                        {availableLayers3d.map((layer) => (
-                          <label key={layer.id} className="check-field">
-                            <input
-                              type="checkbox"
-                              checked={isLayer3dVisible(view3dDisplay, layer.id)}
-                              onChange={(event) =>
-                                commitView3dDisplay(setLayer3dVisible(view3dDisplay, layer.id, event.target.checked))
-                              }
-                            />
-                            {layer.label}
-                          </label>
-                        ))}
-                      </div>
-                    </section>
-                  )}
-                  {availableLayers3d.length > 0 && (
-                    <section className="sidebar-group legend" aria-label="Colors">
-                      <div className="sidebar-gh">
-                        <h3>Colors</h3>
-                      </div>
-                      <ul className="legend-two">
-                        {availableLayers3d.map((layer) => (
-                          <li key={layer.id}>
-                            <label
-                              className="legend-swatch"
-                              style={{ background: layer.color }}
-                              title={`Change ${layer.label.toLowerCase()} colour`}
+                  {sceneLayerRows.length > 0 && (
+                    <>
+                      <div className="outliner-divider" aria-hidden="true" />
+                      <section className="sidebar-group outliner-section" aria-label="Layers">
+                        <div className="card-head sidebar-gh">
+                          <h3 className="card-title">Scene Layers</h3>
+                          <div className="studio-layer-head-actions">
+                            <span className="card-meta mono">
+                              {sceneLayerRows.filter((row) => row.visible).length} visible
+                            </span>
+                            <button
+                              type="button"
+                              className="studio-reset-colours-btn"
+                              onClick={resetSceneLayerColours}
+                              title="Reset all layer and building use colours to default"
                             >
-                              <input
-                                type="color"
-                                aria-label={`${layer.label} colour`}
-                                value={layer.color.toLowerCase()}
-                                onChange={(event) => layer.onPick(event.target.value)}
-                              />
-                            </label>
-                            <span>{layer.label}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
+                              Reset colours
+                            </button>
+                          </div>
+                        </div>
+                        <div className="outliner-rows display-switches" role="group" aria-label="3D layers">
+                          {sceneLayerRows.map((layer) => (
+                            <div key={layer.id} className="o-row studio-layer-row">
+                              <label className="o-left check-field">
+                                <input
+                                  className="sr-only"
+                                  type="checkbox"
+                                  checked={layer.visible}
+                                  onChange={(event) => layer.onToggle(event.target.checked)}
+                                />
+                                <span className={layer.visible ? "o-eye l-eye on" : "o-eye l-eye off"} aria-hidden="true">{layer.visible ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
+                                <span className="o-name">{layer.label}</span>
+                              </label>
+                              <span className="o-right">
+                                {layer.meta ? (
+                                  <span className="o-count studio-layer-meta mono" aria-hidden="true">
+                                    {layer.meta}
+                                  </span>
+                                ) : null}
+                                <label
+                                  className="o-swatch-wrap legend-swatch"
+                                  style={{ background: layer.color }}
+                                  title={`Change ${layer.label.toLowerCase()} colour`}
+                                >
+                                  <input
+                                    type="color"
+                                    className="o-swatch-input"
+                                    aria-label={`${layer.label} colour`}
+                                    value={layer.color.toLowerCase()}
+                                    onInput={(event) => layer.onPick((event.target as HTMLInputElement).value)}
+                                    onChange={(event) => layer.onPick(event.target.value)}
+                                  />
+                                </label>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    </>
                   )}
                 </div>
               )}
               {tab === "drawing" && (
-                <>
-              <div className="plan-switch drawing-type-switch" role="group" aria-label="Drawing type">
-                <button
-                  type="button"
-                  aria-pressed={drawing === "site"}
-                  onClick={() => {
-                    setDrawing("site");
-                    setTab("drawing");
-                  }}
+                <div
+                  className="projection-block outliner-body"
+                  data-plan-width={planWidth === null ? undefined : Math.round(planWidth)}
                 >
-                  Site plan
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={drawing === "figure-ground"}
-                  onClick={() => {
-                    setDrawing("figure-ground");
-                    setTab("drawing");
-                  }}
-                >
-                  Figure-ground
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={drawing === "exploded-axo"}
-                  onClick={() => {
-                    setDrawing("exploded-axo");
-                    setTab("drawing");
-                  }}
-                >
-                  Exploded axo
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={drawing === "isometric"}
-                  onClick={() => {
-                    setDrawing("isometric");
-                    setTab("drawing");
-                  }}
-                >
-                  Isometric
-                </button>
-              </div>
-              {drawing === "isometric" && (
-                <div className="projection-block iso-drawing-controls">
-                  <section className="sidebar-group" aria-label="Compass view">
-                    <div className="sidebar-gh">
-                      <h3>Compass view</h3>
+                  <section className="sidebar-group outliner-section" aria-label="View modes">
+                    <div className="card-head sidebar-gh">
+                      <h3 className="card-title">View Style</h3>
+                      <span className="card-meta mono">
+                        {drawingModel.buildings.length.toLocaleString()} massings
+                      </span>
                     </div>
-                    <div className="plan-switch" role="group" aria-label="Isometric corner">
-                      {ISO_CORNERS.map((corner) => (
+                    {drawing !== "figure-ground" && (
+                      <>
+                        <div className="style-seg seg-mini" role="group" aria-label="Building style">
+                          <button
+                            type="button"
+                            className={colourByUse && !showSource ? "style-btn active" : "style-btn"}
+                            aria-pressed={colourByUse && !showSource}
+                            onClick={() => {
+                              setShowSource(false);
+                              setColourByUse(true);
+                            }}
+                          >
+                            Use
+                          </button>
+                          <button
+                            type="button"
+                            className={showSource ? "style-btn active" : "style-btn"}
+                            aria-pressed={showSource}
+                            onClick={() => {
+                              setShowSource(true);
+                            }}
+                          >
+                            Source
+                          </button>
+                          <button
+                            type="button"
+                            className={!colourByUse && !showSource ? "style-btn active" : "style-btn"}
+                            aria-pressed={!colourByUse && !showSource}
+                            onClick={() => {
+                              setShowSource(false);
+                              setColourByUse(false);
+                            }}
+                          >
+                            Uniform
+                          </button>
+                        </div>
+                        <div className="mini-flags sub-toggles display-switches" role="group" aria-label="View modes">
+                          <label className={showManualEdits ? "mini-flag is-on check-field" : "mini-flag check-field"}>
+                            <input
+                              className="sr-only"
+                              type="checkbox"
+                              checked={showManualEdits}
+                              onChange={(event) => {
+                                const next = event.target.checked;
+                                setShowManualEdits(next);
+                                writeStoredShowManualHeights(window.localStorage, next);
+                              }}
+                            />
+                            <span>Manual edits</span>
+                            <span className={`mini-chk ${showManualEdits ? "on" : ""}`} aria-hidden="true">{showManualEdits ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
+                          </label>
+                        </div>
+                      </>
+                    )}
+                    <label className="scale-field studio-scale-row">
+                      <span>Plan scale</span>
+                      <select
+                        value={figureScale}
+                        aria-label="Plan scale"
+                        onChange={(event) => setFigureScale(Number(event.target.value))}
+                      >
+                        {FIGURE_SCALES.map((scale) => (
+                          <option key={scale} value={scale}>
+                            1:{scale}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {figureFit && <p className="fit-note">{figureFit}</p>}
+                    {model.contourLayer && (
+                      <p
+                        className="field-note"
+                        data-contour-source={model.contourLayer.source}
+                        data-contour-features={model.contourLayer.featureCount}
+                        data-contour-lines={model.contourLayer.lines.length}
+                        data-contour-ms={model.contourLayer.fetchMs}
+                        data-contour-interval={model.contourLayer.interval}
+                        data-contour-drawn={contourDrawerLabel(
+                          model.contourLayer,
+                          figureScale,
+                          lineStyles.contourCoarseIntervalM,
+                          lineStyles.contourCoarseFromScale,
+                        )}
+                      >
+                        Contours:{" "}
+                        {contourDrawerLabel(
+                          model.contourLayer,
+                          figureScale,
+                          lineStyles.contourCoarseIntervalM,
+                          lineStyles.contourCoarseFromScale,
+                        )}
+                      </p>
+                    )}
+                  </section>
+                  {drawing === "isometric" && (
+                    <>
+                      <div className="outliner-divider" aria-hidden="true" />
+                      <section className="sidebar-group outliner-section iso-drawing-controls" aria-label="Compass view">
+                        <div className="card-head sidebar-gh">
+                          <h3 className="card-title">Compass view</h3>
+                        </div>
+                        <div className="plan-switch" role="group" aria-label="Isometric corner">
+                          {ISO_CORNERS.map((corner) => (
+                            <button
+                              key={corner}
+                              type="button"
+                              aria-pressed={view.corner === corner}
+                              onClick={() => {
+                                commitView({ ...view, corner }, false);
+                                setIsoDrawingViewport(
+                                  explodedAxoViewportExtent(isometricDrawingBounds(displayModel, corner)),
+                                );
+                              }}
+                            >
+                              {CORNER_LABEL[corner]}
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+                    </>
+                  )}
+                  {drawing === "exploded-axo" && (
+                    <>
+                      <div className="outliner-divider" aria-hidden="true" />
+                      <section className="sidebar-group outliner-section axo-controls" aria-label="Exploded layers">
+                        <div className="card-head sidebar-gh">
+                          <h3 className="card-title">Exploded Stack</h3>
+                        </div>
                         <button
-                          key={corner}
                           type="button"
-                          aria-pressed={view.corner === corner}
+                          className="ghost"
                           onClick={() => {
-                            commitView({ ...view, corner }, false);
-                            setIsoDrawingViewport(
-                              explodedAxoViewportExtent(isometricDrawingBounds(displayModel, corner)),
-                            );
+                            const next = referenceExplodedAxoSettings(displayModel.sideM, axoSettings);
+                            setAxoSettings(next);
+                            setExplodedViewport(explodedAxoViewportExtent(explodedAxoBounds(displayModel, next)));
                           }}
                         >
-                          {CORNER_LABEL[corner]}
+                          Reference preset
                         </button>
-                      ))}
-                    </div>
-                  </section>
-                  {availableLayers3d.length > 0 && (
-                    <section className="sidebar-group" aria-label="Layers">
-                      <div className="sidebar-gh">
-                        <h3>Layers</h3>
-                      </div>
-                      <div className="display-switches" role="group" aria-label="3D layers">
-                        {availableLayers3d.map((layer) => (
-                          <label key={layer.id} className="check-field">
+                        <button
+                          type="button"
+                          className="ghost"
+                          onClick={() => {
+                            const next = defaultExplodedAxoSettings(displayModel.sideM);
+                            setAxoSettings((prev) => ({ ...next, gapM: prev.gapM, showLabels: prev.showLabels, ...(prev.terrainExaggeration != null ? { terrainExaggeration: prev.terrainExaggeration } : {}) }));
+                            setExplodedViewport(explodedAxoViewportExtent(explodedAxoBounds(displayModel, { ...next, gapM: axoSettings.gapM })));
+                          }}
+                        >
+                          Default stack
+                        </button>
+                        <ul className="axo-layer-list" aria-label="Exploded axonometric layers (drag to reorder)">
+                          {axoSettings.layerOrder.map((id) => (
+                            <li
+                              key={id}
+                              draggable
+                              data-axo-layer-item={id}
+                              aria-label={`${AXO_LAYER_LABELS[id]} layer (drag up or down)`}
+                              onDragStart={(event) => {
+                                draggedAxoLayer.current = id;
+                                event.dataTransfer.effectAllowed = "move";
+                                event.dataTransfer.setData("text/plain", id);
+                              }}
+                              onDragOver={(event) => {
+                                event.preventDefault();
+                                event.dataTransfer.dropEffect = "move";
+                                const from = draggedAxoLayer.current;
+                                if (from && from !== id) dragReorderAxoLayer(from, id);
+                              }}
+                              onDrop={(event) => {
+                                event.preventDefault();
+                                const from = (draggedAxoLayer.current ?? event.dataTransfer.getData("text/plain")) as AxoLayerId;
+                                if (from && from !== id) dragReorderAxoLayer(from, id);
+                                draggedAxoLayer.current = null;
+                              }}
+                              onDragEnd={() => {
+                                draggedAxoLayer.current = null;
+                              }}
+                            >
+                              <label className="check-field">
+                                <input
+                                  type="checkbox"
+                                  checked={axoSettings.layerVisible[id]}
+                                  onChange={(event) =>
+                                    setAxoSettings((prev) => ({
+                                      ...prev,
+                                      layerVisible: { ...prev.layerVisible, [id]: event.target.checked },
+                                    }))
+                                  }
+                                />
+                                {AXO_LAYER_LABELS[id]}
+                              </label>
+                              <span className="axo-layer-drag-handle" aria-hidden="true" title="Drag up or down to set height">
+                                <GripVertical size={14} strokeWidth={1.6} />
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                        <label className="scale-field">
+                          Layer gap, m
+                          <input
+                            type="range"
+                            min={Math.round(defaultExplodedAxoGapM(displayModel.sideM) * 0.5)}
+                            max={1000}
+                            step={1}
+                            value={Math.round(axoSettings.gapM)}
+                            onChange={(event) =>
+                              setAxoSettings((prev) => {
+                                const { layerLiftM: _cleared, ...rest } = prev;
+                                return { ...rest, gapM: Number(event.target.value) };
+                              })
+                            }
+                          />
+                          <span>{Math.round(axoSettings.gapM)} m</span>
+                        </label>
+                        {axoSettings.layerVisible.terrain && (
+                          <label className="scale-field">
+                            Terrain exaggeration
                             <input
-                              type="checkbox"
-                              checked={isLayer3dVisible(view3dDisplay, layer.id)}
+                              type="range"
+                              min={AXO_TERRAIN_EXAGGERATION_RANGE.min}
+                              max={AXO_TERRAIN_EXAGGERATION_RANGE.max}
+                              step={AXO_TERRAIN_EXAGGERATION_RANGE.step}
+                              value={axoSettings.terrainExaggeration ?? DEFAULT_AXO_TERRAIN_EXAGGERATION}
                               onChange={(event) =>
-                                commitView3dDisplay(setLayer3dVisible(view3dDisplay, layer.id, event.target.checked))
+                                setAxoSettings((prev) => ({ ...prev, terrainExaggeration: Number(event.target.value) }))
                               }
                             />
-                            {layer.label}
+                            <span>×{axoSettings.terrainExaggeration ?? DEFAULT_AXO_TERRAIN_EXAGGERATION}</span>
                           </label>
-                        ))}
-                      </div>
-                    </section>
-                  )}
-                  {availableLayers3d.length > 0 && (
-                    <section className="sidebar-group legend" aria-label="Colors">
-                      <div className="sidebar-gh">
-                        <h3>Colors</h3>
-                      </div>
-                      <ul className="legend-two">
-                        {availableLayers3d.map((layer) => (
-                          <li key={layer.id}>
-                            <label
-                              className="legend-swatch"
-                              style={{ background: layer.color }}
-                              title={`Change ${layer.label.toLowerCase()} colour`}
-                            >
-                              <input
-                                type="color"
-                                aria-label={`${layer.label} colour`}
-                                value={layer.color.toLowerCase()}
-                                onChange={(event) => layer.onPick(event.target.value)}
-                              />
-                            </label>
-                            <span>{layer.label}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
-                  )}
-                </div>
-              )}
-              {drawing === "exploded-axo" && (
-                <div className="axo-controls">
-                  <button
-                    type="button"
-                    className="ghost"
-                    onClick={() => {
-                      const next = referenceExplodedAxoSettings(displayModel.sideM, axoSettings);
-                      setAxoSettings(next);
-                      setExplodedViewport(explodedAxoViewportExtent(explodedAxoBounds(displayModel, next)));
-                    }}
-                  >
-                    Reference preset
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost"
-                    onClick={() => {
-                      const next = defaultExplodedAxoSettings(displayModel.sideM);
-                      setAxoSettings((prev) => ({ ...next, gapM: prev.gapM, showLabels: prev.showLabels, ...(prev.terrainExaggeration != null ? { terrainExaggeration: prev.terrainExaggeration } : {}) }));
-                      setExplodedViewport(explodedAxoViewportExtent(explodedAxoBounds(displayModel, { ...next, gapM: axoSettings.gapM })));
-                    }}
-                  >
-                    Default stack
-                  </button>
-                  <p className="kicker">Layers</p>
-                  <ul className="axo-layer-list" aria-label="Exploded axonometric layers (drag to reorder)">
-                    {axoSettings.layerOrder.map((id) => (
-                      <li
-                        key={id}
-                        draggable
-                        data-axo-layer-item={id}
-                        aria-label={`${AXO_LAYER_LABELS[id]} layer (drag up or down)`}
-                        onDragStart={(event) => {
-                          draggedAxoLayer.current = id;
-                          event.dataTransfer.effectAllowed = "move";
-                          event.dataTransfer.setData("text/plain", id);
-                        }}
-                        onDragOver={(event) => {
-                          event.preventDefault();
-                          event.dataTransfer.dropEffect = "move";
-                          const from = draggedAxoLayer.current;
-                          if (from && from !== id) dragReorderAxoLayer(from, id);
-                        }}
-                        onDrop={(event) => {
-                          event.preventDefault();
-                          const from = (draggedAxoLayer.current ?? event.dataTransfer.getData("text/plain")) as AxoLayerId;
-                          if (from && from !== id) dragReorderAxoLayer(from, id);
-                          draggedAxoLayer.current = null;
-                        }}
-                        onDragEnd={() => {
-                          draggedAxoLayer.current = null;
-                        }}
-                      >
+                        )}
                         <label className="check-field">
                           <input
                             type="checkbox"
-                            checked={axoSettings.layerVisible[id]}
-                            onChange={(event) =>
-                              setAxoSettings((prev) => ({
-                                ...prev,
-                                layerVisible: { ...prev.layerVisible, [id]: event.target.checked },
-                              }))
-                            }
+                            checked={axoSettings.showLabels}
+                            onChange={(event) => setAxoSettings((prev) => ({ ...prev, showLabels: event.target.checked }))}
                           />
-                          {AXO_LAYER_LABELS[id]}
+                          Layer labels
                         </label>
-                        <span className="axo-layer-drag-handle" aria-hidden="true" title="Drag up or down to set height">
-                          <GripVertical size={14} strokeWidth={1.6} />
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                  <label className="scale-field">
-                    Layer gap, m
-                    <input
-                      type="range"
-                      min={Math.round(defaultExplodedAxoGapM(displayModel.sideM) * 0.5)}
-                      max={1000}
-                      step={1}
-                      value={Math.round(axoSettings.gapM)}
-                      onChange={(event) =>
-                        setAxoSettings((prev) => {
-                          const { layerLiftM: _cleared, ...rest } = prev;
-                          return { ...rest, gapM: Number(event.target.value) };
-                        })
-                      }
-                    />
-                    <span>{Math.round(axoSettings.gapM)} m</span>
-                  </label>
-                  {axoSettings.layerVisible.terrain && (
-                    <label className="scale-field">
-                      Terrain exaggeration
-                      <input
-                        type="range"
-                        min={AXO_TERRAIN_EXAGGERATION_RANGE.min}
-                        max={AXO_TERRAIN_EXAGGERATION_RANGE.max}
-                        step={AXO_TERRAIN_EXAGGERATION_RANGE.step}
-                        value={axoSettings.terrainExaggeration ?? DEFAULT_AXO_TERRAIN_EXAGGERATION}
-                        onChange={(event) =>
-                          setAxoSettings((prev) => ({ ...prev, terrainExaggeration: Number(event.target.value) }))
-                        }
-                      />
-                      <span>×{axoSettings.terrainExaggeration ?? DEFAULT_AXO_TERRAIN_EXAGGERATION}</span>
-                    </label>
+                      </section>
+                    </>
                   )}
-                  <label className="check-field">
-                    <input
-                      type="checkbox"
-                      checked={axoSettings.showLabels}
-                      onChange={(event) => setAxoSettings((prev) => ({ ...prev, showLabels: event.target.checked }))}
-                    />
-                    Layer labels
-                  </label>
+                  {sceneLayerRows.length > 0 && (
+                    <>
+                      <div className="outliner-divider" aria-hidden="true" />
+                      <section className="sidebar-group outliner-section" aria-label="Layers">
+                        <div className="card-head sidebar-gh">
+                          <h3 className="card-title">Scene Layers</h3>
+                          <div className="studio-layer-head-actions">
+                            <span className="card-meta mono">
+                              {sceneLayerRows.filter((row) => row.visible).length} visible
+                            </span>
+                            <button
+                              type="button"
+                              className="studio-reset-colours-btn"
+                              onClick={resetSceneLayerColours}
+                              title="Reset all layer and building use colours to default"
+                            >
+                              Reset colours
+                            </button>
+                          </div>
+                        </div>
+                        <div className="outliner-rows display-switches" role="group" aria-label="3D layers">
+                          {sceneLayerRows.map((layer) => (
+                            <div key={layer.id} className="o-row studio-layer-row">
+                              <label className="o-left check-field">
+                                <input
+                                  className="sr-only"
+                                  type="checkbox"
+                                  checked={layer.visible}
+                                  onChange={(event) => layer.onToggle(event.target.checked)}
+                                />
+                                <span className={layer.visible ? "o-eye l-eye on" : "o-eye l-eye off"} aria-hidden="true">{layer.visible ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
+                                <span className="o-name">{layer.label}</span>
+                              </label>
+                              <span className="o-right">
+                                {layer.meta ? (
+                                  <span className="o-count studio-layer-meta mono" aria-hidden="true">
+                                    {layer.meta}
+                                  </span>
+                                ) : null}
+                                <label
+                                  className="o-swatch-wrap legend-swatch"
+                                  style={{ background: layer.color }}
+                                  title={`Change ${layer.label.toLowerCase()} colour`}
+                                >
+                                  <input
+                                    type="color"
+                                    className="o-swatch-input"
+                                    aria-label={`${layer.label} colour`}
+                                    value={layer.color.toLowerCase()}
+                                    onInput={(event) => layer.onPick((event.target as HTMLInputElement).value)}
+                                    onChange={(event) => layer.onPick(event.target.value)}
+                                  />
+                                </label>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    </>
+                  )}
                 </div>
-              )}
-              <label className="scale-field">
-                Plan scale
-                <select
-                  value={figureScale}
-                  aria-label="Plan scale"
-                  onChange={(event) => setFigureScale(Number(event.target.value))}
-                >
-                  {FIGURE_SCALES.map((scale) => (
-                    <option key={scale} value={scale}>
-                      1:{scale}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {figureFit && <p className="fit-note">{figureFit}</p>}
-              {model.contourLayer && (
-                <p
-                  className="field-note"
-                  data-contour-source={model.contourLayer.source}
-                  data-contour-features={model.contourLayer.featureCount}
-                  data-contour-lines={model.contourLayer.lines.length}
-                  data-contour-ms={model.contourLayer.fetchMs}
-                  data-contour-interval={model.contourLayer.interval}
-                  data-contour-drawn={contourDrawerLabel(
-                    model.contourLayer,
-                    figureScale,
-                    lineStyles.contourCoarseIntervalM,
-                    lineStyles.contourCoarseFromScale,
-                  )}
-                >
-                  Contours:{" "}
-                  {contourDrawerLabel(
-                    model.contourLayer,
-                    figureScale,
-                    lineStyles.contourCoarseIntervalM,
-                    lineStyles.contourCoarseFromScale,
-                  )}
-                </p>
-              )}
-              {drawing !== "isometric" && (
-                <>
-                  <LineStylesEditor
-                    style={lineStyles}
-                    baseline={lineStyleBaseline()}
-                    onChange={(next) => setLineStyles(commitLineStyles(next, lineStyleBaseline()))}
-                    onReset={() => setLineStyles(resetStoredLineStyles())}
-                  />
-                  <ColoursEditor onChange={() => setLineStyles(readDrawingStyle())} />
-                </>
-              )}
-                <div className="field">
-                  <div className="field-head">
-                    <p className="kicker">View width</p>
-                    <strong>{planWidth === null ? "—" : `${Math.round(planWidth)} m`}</strong>
-                  </div>
-                  <p className="field-note">
-                    Width of the drawing in view. The frame is {Math.round(model.sideM)} m on a side.
-                  </p>
-                  <button
-                    className="ghost"
-                    type="button"
-                    onClick={() => {
-                      if (drawing === "exploded-axo") {
-                        setExplodedViewport(
-                          explodedAxoViewportExtent(explodedAxoBounds(displayModel, axoSettings)),
-                        );
-                      } else if (drawing === "isometric") {
-                        setIsoDrawingViewport(
-                          explodedAxoViewportExtent(isometricDrawingBounds(displayModel, view.corner)),
-                        );
-                      } else {
-                        setPlanViewport(planViewportExtent(displayModel.sideM));
-                      }
-                      setFitCounter((token) => token + 1);
-                    }}
-                  >
-                    Fit frame
-                  </button>
-                </div>
-                </>
               )}
               {tab === "satellite" && (
                 <p className="field-note">Satellite is a preview of this frame. It is not included in the downloads.</p>
@@ -2601,6 +3178,506 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             </div>
           </Sidebar>
         </div>
+        {leftOpen === "analysis" && tab !== "satellite" ? (
+          <div
+            className="bottom-bar env-console hud-card"
+            role="region"
+            aria-label="Environmental analysis console"
+          >
+            <div className="env-top-row">
+              <div className="env-mode-seg" role="tablist" aria-label="Environmental analysis sub-mode">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={analysisKind === "solar"}
+                  className={analysisKind === "solar" ? "env-mode-btn active" : "env-mode-btn"}
+                  onClick={() => setAnalysisKind("solar")}
+                >
+                  <Sun size={12} strokeWidth={2.2} aria-hidden="true" />
+                  <span>Solar Study</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={analysisKind === "wind"}
+                  className={analysisKind === "wind" ? "env-mode-btn active" : "env-mode-btn"}
+                  onClick={() => {
+                    setAnalysisKind("wind");
+                    if (!windSettings.enabled) {
+                      commitWind({ ...windSettings, enabled: true });
+                    }
+                  }}
+                >
+                  <Wind size={12} strokeWidth={2.2} aria-hidden="true" />
+                  <span>Wind Rose</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={analysisKind === "view"}
+                  className={analysisKind === "view" ? "env-mode-btn active" : "env-mode-btn"}
+                  onClick={() => setAnalysisKind("view")}
+                >
+                  <Eye size={12} strokeWidth={2.2} aria-hidden="true" />
+                  <span>Viewshed Walk</span>
+                </button>
+              </div>
+
+              <span className="v-sep hud-sep" aria-hidden="true" />
+
+              {analysisKind === "solar" && (() => {
+                const azDeg = Math.round(((consoleSun.azimuthDeg % 360) + 360) % 360);
+                const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+                const cardinal = dirs[Math.round(azDeg / 45) % 8] ?? "N";
+                const dlSpan = Math.max(0, consoleDaylight.sunset - consoleDaylight.sunrise);
+                const dlHours = Math.floor(dlSpan / 60);
+                const dlMins = String(dlSpan % 60).padStart(2, "0");
+                return (
+                  <div className="solar-telemetry mono" aria-label="Live solar telemetry">
+                    <div className="st-item">
+                      <span className="st-k">ALT</span>
+                      <span className="st-v">{consoleSun.altitudeDeg.toFixed(1)}°</span>
+                    </div>
+                    <span className="st-dot" aria-hidden="true">·</span>
+                    <div className="st-item">
+                      <span className="st-k">AZ</span>
+                      <span className="st-v">{azDeg}° {cardinal}</span>
+                    </div>
+                    <span className="st-dot" aria-hidden="true">·</span>
+                    <div className="st-item">
+                      <span className="st-k">DAYLIGHT</span>
+                      <span className="st-v">{dlHours}h {dlMins}m</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {analysisKind === "wind" && (
+                <div className="solar-telemetry mono" aria-label="Live wind telemetry">
+                  <div className="st-item">
+                    <span className="st-k">PREVAILING</span>
+                    <span className="st-v">{consoleWindStats ? consoleWindStats.prevailingLabel : "N, NNE"}</span>
+                  </div>
+                  <span className="st-dot" aria-hidden="true">·</span>
+                  <div className="st-item">
+                    <span className="st-k">MEDIAN</span>
+                    <span className="st-v">{consoleWindStats ? `${Math.round(consoleWindStats.prevailingMedianKmh)} km/h` : "18 km/h"}</span>
+                  </div>
+                  <span className="st-dot" aria-hidden="true">·</span>
+                  <div className="st-item">
+                    <span className="st-k">CALM</span>
+                    <span className="st-v">{consoleWindStats ? `${consoleWindStats.calmPercent.toFixed(1)}%` : "4.2%"}</span>
+                  </div>
+                </div>
+              )}
+
+              {analysisKind === "view" && (
+                <div className="solar-telemetry mono" aria-label="Live viewshed telemetry">
+                  <div className="st-item">
+                    <span className="st-k">EYE</span>
+                    <span className="st-v">{walk.eyeM.toFixed(1)}m</span>
+                  </div>
+                  <span className="st-dot" aria-hidden="true">·</span>
+                  <div className="st-item">
+                    <span className="st-k">RADIUS</span>
+                    <span className="st-v">{walk.radiusM}m</span>
+                  </div>
+                  <span className="st-dot" aria-hidden="true">·</span>
+                  <div className="st-item">
+                    <span className="st-k">PATH</span>
+                    <span className="st-v">{walk.clickCount > 0 ? `${Math.round(walk.lengthM)}m (${walk.clickCount} pts)` : "Click ground"}</span>
+                  </div>
+                </div>
+              )}
+
+              <span className="v-sep hud-sep" aria-hidden="true" />
+
+              <div className="overlay-chips" role="group" aria-label="Scene overlay toggles">
+                {analysisKind === "solar" && (
+                  <>
+                    {tab !== "drawing" && (
+                      <button
+                        type="button"
+                        className={solar.showPath ? "ov-chip on" : "ov-chip"}
+                        aria-pressed={solar.showPath}
+                        onClick={() => commitSolar({ ...solar, showPath: !solar.showPath })}
+                      >
+                        <span className="ov-dot" aria-hidden="true" />
+                        <span>3D Sun Dome</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className={solar.castShadows ? "ov-chip on" : "ov-chip"}
+                      aria-pressed={solar.castShadows}
+                      onClick={() => commitSolar({ ...solar, castShadows: !solar.castShadows })}
+                    >
+                      <span className="ov-dot" aria-hidden="true" />
+                      <span>Shadows</span>
+                    </button>
+                    {tab === "drawing" && drawing === "site" && (
+                      <button
+                        type="button"
+                        className={solar.sunStudy ? "ov-chip on" : "ov-chip"}
+                        aria-pressed={Boolean(solar.sunStudy)}
+                        onClick={() =>
+                          commitSolar({
+                            ...solar,
+                            sunStudy: !solar.sunStudy,
+                            sunStudyCasters: sunStudySelected.length > 0 ? "selected" : "all",
+                          })
+                        }
+                      >
+                        <span className="ov-dot" aria-hidden="true" />
+                        <span>9–3pm Plan Fan</span>
+                      </button>
+                    )}
+                    {tab === "drawing" && drawing === "site" && Boolean(solar.sunStudy) && sunStudySelected.length > 0 && (
+                      <button
+                        type="button"
+                        className="ov-chip on"
+                        aria-label={`Clear ${sunStudySelected.length} selected shadow buildings`}
+                        onClick={() => {
+                          setSunStudySelected([]);
+                          commitSolar({ ...solar, sunStudyCasters: "all" });
+                        }}
+                      >
+                        <span>{sunStudySelected.length} selected ×</span>
+                      </button>
+                    )}
+                  </>
+                )}
+
+                {analysisKind === "wind" && (
+                  <>
+                    <button
+                      type="button"
+                      className={windSettings.enabled ? "ov-chip on" : "ov-chip"}
+                      aria-pressed={windSettings.enabled}
+                      onClick={() => commitWind({ ...windSettings, enabled: !windSettings.enabled })}
+                    >
+                      <span className="ov-dot" aria-hidden="true" />
+                      <span>3D Wind Flow</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={windSettings.enabled && windSettings.showRose ? "ov-chip on" : "ov-chip"}
+                      aria-pressed={windSettings.enabled && windSettings.showRose}
+                      onClick={() =>
+                        commitWind({
+                          ...windSettings,
+                          enabled: true,
+                          showRose: !windSettings.showRose,
+                        })
+                      }
+                    >
+                      <span className="ov-dot" aria-hidden="true" />
+                      <span>Wind Rose</span>
+                    </button>
+                  </>
+                )}
+
+                {analysisKind === "view" && (
+                  <>
+                    <button
+                      type="button"
+                      className={walk.drawing ? "ov-chip on" : "ov-chip"}
+                      aria-pressed={walk.drawing}
+                      onClick={() => walk.setDrawing(!walk.drawing)}
+                    >
+                      <span className="ov-dot" aria-hidden="true" />
+                      <span>{walk.drawing ? "Drawing Path…" : "Draw Path"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={walk.status === "ready" ? "ov-chip on" : "ov-chip"}
+                      disabled={walk.sampleCount < 2 || walk.status === "computing"}
+                      onClick={() => walk.compute()}
+                    >
+                      <span className="ov-dot" aria-hidden="true" />
+                      <span>{walk.status === "ready" ? "Viewshed Ready" : "Compute View"}</span>
+                    </button>
+                  </>
+                )}
+              </div>
+
+            </div>
+
+            <div className="env-bottom-row">
+              {analysisKind === "solar" && (() => {
+                const isJun = solar.month === 6 && solar.day === 21;
+                const isSep = solar.month === 9 && solar.day === 22;
+                const isDec = solar.month === 12 && solar.day === 22;
+                const formatMin = (m: number) =>
+                  `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+                const curMin = solar.hour * 60 + solar.minute;
+                const minBound = 5 * 60;
+                const maxBound = 20 * 60;
+                const thumbPct = Math.max(4, Math.min(96, ((curMin - minBound) / (maxBound - minBound)) * 100));
+                return (
+                  <>
+                    <div className="date-presets" role="group" aria-label="Solar date presets">
+                      <button
+                        type="button"
+                        className={isJun ? "p-pill active" : "p-pill"}
+                        aria-pressed={isJun}
+                        onClick={() => commitSolar({ ...solar, month: 6, day: 21, castShadows: true })}
+                      >
+                        21 Jun
+                      </button>
+                      <button
+                        type="button"
+                        className={isSep ? "p-pill active" : "p-pill"}
+                        aria-pressed={isSep}
+                        onClick={() => commitSolar({ ...solar, month: 9, day: 22, castShadows: true })}
+                      >
+                        22 Sep · Equinox
+                      </button>
+                      <button
+                        type="button"
+                        className={isDec ? "p-pill active" : "p-pill"}
+                        aria-pressed={isDec}
+                        onClick={() => commitSolar({ ...solar, month: 12, day: 22, castShadows: true })}
+                      >
+                        22 Dec
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      className={consolePlaying ? "play-pill mono active" : "play-pill mono"}
+                      aria-label={consolePlaying ? "Pause solar animation" : "Play solar animation"}
+                      aria-pressed={consolePlaying}
+                      onClick={() => setConsolePlaying((p) => !p)}
+                    >
+                      {consolePlaying ? "❚❚ 1×" : "▶ 1×"}
+                    </button>
+
+                    <div className="daylight-scrubber mono" role="group" aria-label="Daylight horizon scrubber">
+                      <span className="sun-bound" title="Melbourne sunrise">
+                        ▲ {formatMin(consoleDaylight.sunrise)}
+                      </span>
+                      <div className="scrubber-track">
+                        <div className="daylight-band" aria-hidden="true" />
+                        <div className="rescode-window" title="9am–3pm Victorian ResCode assessment window" aria-hidden="true" />
+                        <div className="scrubber-ticks" role="group" aria-label="Solar hour scrubber">
+                          {[6, 9, 10, 11, 12, 13, 14, 15, 18].map((h) => (
+                            <button
+                              key={h}
+                              type="button"
+                              className={
+                                solar.hour === h
+                                  ? "scrubber-tick-btn active"
+                                  : h >= 9 && h <= 15
+                                    ? "scrubber-tick-btn hi"
+                                    : "scrubber-tick-btn"
+                              }
+                              aria-label={`Solar time ${String(h).padStart(2, "0")}:00`}
+                              aria-pressed={solar.hour === h}
+                              onClick={() => {
+                                setConsolePlaying(false);
+                                commitSolar({ ...solar, hour: h, minute: 0, castShadows: true });
+                              }}
+                            >
+                              {String(h).padStart(2, "0")}
+                            </button>
+                          ))}
+                        </div>
+                        <input
+                          type="range"
+                          className="scrubber-range-input"
+                          aria-label="Solar time of day"
+                          min={consoleDaylight.sunrise}
+                          max={consoleDaylight.sunset}
+                          step={5}
+                          value={Math.max(consoleDaylight.sunrise, Math.min(consoleDaylight.sunset, curMin))}
+                          onChange={(e) => {
+                            setConsolePlaying(false);
+                            const total = Number(e.target.value);
+                            commitSolar({
+                              ...solar,
+                              hour: Math.floor(total / 60),
+                              minute: total % 60,
+                              castShadows: true,
+                            });
+                          }}
+                        />
+                        <div className="scrubber-thumb" style={{ left: `${thumbPct}%` }} aria-hidden="true" />
+                      </div>
+                      <span className="sun-bound" title="Melbourne sunset">
+                        ▼ {formatMin(consoleDaylight.sunset)}
+                      </span>
+                      <span className="time-readout-pill">
+                        ☀ {String(solar.hour).padStart(2, "0")}:{String(solar.minute).padStart(2, "0")} AEST
+                      </span>
+                    </div>
+                  </>
+                );
+              })()}
+
+              {analysisKind === "wind" && (
+                <>
+                  <div className="date-presets" role="group" aria-label="Wind season presets">
+                    {(["annual", "summer", "autumn", "winter", "spring"] as const).map((periodId) => (
+                      <button
+                        key={periodId}
+                        type="button"
+                        className={windSettings.period === periodId ? "p-pill active" : "p-pill"}
+                        aria-pressed={windSettings.period === periodId}
+                        onClick={() => commitWind({ ...windSettings, enabled: true, period: periodId as WindPeriodId })}
+                      >
+                        {periodId === "annual"
+                          ? "Annual"
+                          : periodId === "summer"
+                            ? "Summer"
+                            : periodId === "autumn"
+                              ? "Autumn"
+                              : periodId === "winter"
+                                ? "Winter"
+                                : "Spring"}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="daylight-scrubber wind-console-bar mono">
+                    <span className="sun-bound">
+                      {WIND_PERIOD_LABELS[windSettings.period as keyof typeof WIND_PERIOD_LABELS] ?? "Annual"}
+                    </span>
+                    <div className="wind-band-pills" aria-label="Wind speed scale (km/h)">
+                      <span className="wind-band-chip band-0">2–10 km/h</span>
+                      <span className="wind-band-chip band-1">10–20</span>
+                      <span className="wind-band-chip band-2">20–30</span>
+                      <span className="wind-band-chip band-3">30–40</span>
+                      <span className="wind-band-chip band-4">40+ km/h</span>
+                    </div>
+                    <span className="time-readout-pill">
+                      🌬 {consoleWindStats ? `${consoleWindStats.prevailingLabel} · ${Math.round(consoleWindStats.prevailingMedianKmh)} km/h` : "ERA5 10m Wind"}
+                    </span>
+                  </div>
+                </>
+              )}
+
+              {analysisKind === "view" && (
+                <>
+                  <button
+                    type="button"
+                    className="play-pill mono"
+                    aria-label={walk.playing ? "Pause walk" : "Play walk"}
+                    disabled={walk.status !== "ready" && walk.status !== "computing"}
+                    onClick={() => walk.setPlaying(!walk.playing)}
+                  >
+                    {walk.playing ? "⏸ Pause" : "▶ Play"}
+                  </button>
+                  <div className="date-presets" role="group" aria-label="Viewshed walk speed, eye height, and radius presets">
+                    {WALK_SPEEDS.map((spd) => (
+                      <button
+                        key={spd}
+                        type="button"
+                        className={walk.speed === spd ? "p-pill active mono" : "p-pill mono"}
+                        aria-label={`${spd}× walk speed`}
+                        aria-pressed={walk.speed === spd}
+                        onClick={() => walk.setSpeed(spd)}
+                      >
+                        {spd}×
+                      </button>
+                    ))}
+                    {[
+                      [1.6, "1.6m"],
+                      [4.5, "4.5m"],
+                      [10, "10m"],
+                    ].map(([eyeVal, label]) => (
+                      <button
+                        key={String(label)}
+                        type="button"
+                        className={Math.abs(walk.eyeM - Number(eyeVal)) < 0.15 ? "p-pill active" : "p-pill"}
+                        aria-pressed={Math.abs(walk.eyeM - Number(eyeVal)) < 0.15}
+                        onClick={() => walk.setEyeM(Number(eyeVal))}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    {[100, 200, 400].map((rad) => (
+                      <button
+                        key={rad}
+                        type="button"
+                        className={walk.radiusM === rad ? "p-pill active" : "p-pill"}
+                        aria-pressed={walk.radiusM === rad}
+                        onClick={() => walk.setRadiusM(rad)}
+                      >
+                        {rad}m
+                      </button>
+                    ))}
+                    {walk.clickCount > 0 && (
+                      <button type="button" className="p-pill" onClick={walk.clear}>
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <div className="daylight-scrubber view-console-bar mono">
+                    {walk.sampleCount > 1 ? (
+                      <>
+                        <span className="sun-bound">0m</span>
+                        <input
+                          type="range"
+                          className="sun-range"
+                          aria-label="Position along walk"
+                          min={0}
+                          max={Math.max(0, walk.sampleCount - 1)}
+                          step={1}
+                          value={Math.min(walkAt.index, Math.max(0, walk.sampleCount - 1))}
+                          onChange={(event) => {
+                            walk.setPlaying(false);
+                            walk.seek(Number(event.target.value));
+                          }}
+                        />
+                        <span className="sun-bound">{Math.round(walk.lengthM)}m</span>
+                      </>
+                    ) : (
+                      <span className="sun-bound">
+                        {walk.drawing
+                          ? "Click ground in 3D view to place walk points"
+                          : walk.clickCount > 0
+                            ? `Walk path · ${Math.round(walk.lengthM)} m (${walk.sampleCount} samples)`
+                            : "Click 'Draw Path' then click ground points"}
+                      </span>
+                    )}
+                    <span className="time-readout-pill">
+                      👁 {walk.sampleCount > 1 ? `${Math.round(walkAt.distanceM)}/${Math.round(walk.lengthM)}m · ` : ""}{walk.eyeM.toFixed(1)}m · {walk.radiusM}m
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="bottom-bar studio-solar-bar hud-card" role="region" aria-label="Solar and camera controls">
+            <button
+              type="button"
+              className={solar.castShadows ? "sun-pill studio-solar-pill is-active" : "sun-pill studio-solar-pill"}
+              aria-pressed={solar.castShadows}
+              onClick={() => commitSolar({ ...solar, castShadows: !solar.castShadows })}
+            >
+              <Sun size={12} strokeWidth={2.2} aria-hidden="true" />
+              <span>Equinox · {`${solar.day} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][(solar.month ?? 9) - 1] ?? "Sep"}`}</span>
+            </button>
+            <div className="solar-hours studio-solar-track mono" role="group" aria-label="Solar hour scrubber">
+              {[9, 10, 11, 12, 13, 14, 15].map((hour) => (
+                <button
+                  key={hour}
+                  type="button"
+                  className={solar.hour === hour ? "h-tick active studio-solar-tick is-active" : "h-tick studio-solar-tick"}
+                  aria-label={`Solar time ${String(hour).padStart(2, "0")}:00`}
+                  aria-pressed={solar.hour === hour}
+                  onClick={() => commitSolar({ ...solar, hour, minute: 0, castShadows: true })}
+                >
+                  {String(hour).padStart(2, "0")}
+                </button>
+              ))}
+            </div>
+            <span className="studio-solar-time mono">
+              {String(solar.hour).padStart(2, "0")}:{String(solar.minute).padStart(2, "0")} AEST
+            </span>
+          </div>
+        )}
         {model.terrainError && (
           <p className="stage-error" role="alert">
             {model.terrainError}

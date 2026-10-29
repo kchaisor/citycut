@@ -1,5 +1,5 @@
 import { openRing, signedArea } from "./geo";
-import { intersectionAreaM2, COM_FALLBACK_MIN_FRACTION } from "./comBuildingHeightsMatch";
+import { intersectionAreaM2, ringBBox, COM_FALLBACK_MIN_FRACTION } from "./comBuildingHeightsMatch";
 import type { ComBuildingFootprint } from "./comBuildingHeightsTypes";
 import {
   damRecordsWonByBuilding,
@@ -26,8 +26,15 @@ export function comAnyOverlapRatio(
 ): number {
   const osmArea = Math.abs(signedArea(openRing(building.ring)));
   if (osmArea <= 0 || footprints.length === 0) return 0;
+  const bBox = ringBBox(building.ring);
   let covered = 0;
   for (const fp of footprints) {
+    if (
+      fp.maxX !== undefined &&
+      (fp.maxX < bBox.minX || fp.minX > bBox.maxX || fp.maxY < bBox.minY || fp.minY > bBox.maxY)
+    ) {
+      continue;
+    }
     covered += intersectionAreaM2(building, fp);
   }
   return covered / osmArea;
@@ -121,6 +128,7 @@ export function applyRealSourceUnmatchedTier(
   footprints: ComBuildingFootprint[],
   damRecords: DamFloorRecord[],
   allBuildings: BuildingFeat[],
+  silent = false,
 ): BuildingFeat {
   if (building.heightManual) return building;
   const tier = inferHeightTier(building);
@@ -130,7 +138,9 @@ export function applyRealSourceUnmatchedTier(
   if (overlaps.length === 0) return building;
 
   const note = formatRealSourceUnmatchedNote(overlaps);
-  console.warn(`[CityCut height] Building ${building.id}: real source unmatched — ${note}`);
+  if (!silent) {
+    console.warn(`[CityCut height] Building ${building.id}: real source unmatched — ${note}`);
+  }
   return {
     ...building,
     heightTier: "real_source_unmatched" satisfies BuildingHeightTier,
@@ -145,7 +155,7 @@ export function applyHeightSourceTruthPass(
   damRecords: DamFloorRecord[],
 ): BuildingFeat[] {
   return buildings.map((b) =>
-    applyRealSourceUnmatchedTier(b, center, footprints, damRecords, buildings),
+    applyRealSourceUnmatchedTier(b, center, footprints, damRecords, buildings, true),
   );
 }
 

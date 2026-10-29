@@ -16,6 +16,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
 import { attachScenePointPick, attachBuildingPick } from "../lib/buildingPick";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
+import { basePlinthBottomY } from "../lib/terrain";
 import { auditBuildingSelection, mountSelectedBuildingsVisual } from "../lib/buildingSelectionVisual";
 import { CAMERA_FIT_INCLUDES_HELIODON } from "../lib/sceneCameraFit";
 import { shotFromCamera, type CameraShot } from "../lib/cameraShot";
@@ -24,6 +25,7 @@ import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import { captureViewPng } from "../lib/capturePng";
 import { GradientSky, GroundGrid, ViewInset, insetPointerEvents } from "./SceneBackdrop";
+import { markScreenOnly } from "../lib/screenOnly";
 import { cameraForExportFrame, exportFrameSize } from "../lib/exportFrame";
 import { flushControlInertia, holdControlPose, type HeldControl } from "../lib/controlInertia";
 import { shouldSkipViewportSizeRefit } from "../lib/viewportAutoFit";
@@ -42,6 +44,7 @@ import {
 } from "../lib/buildingViewportColor";
 import {
   applySunStudySurfaceTint,
+  refreshSceneSurfaceColors,
   snapshotSunStudySurfaceColors,
 } from "../lib/sunStudySurfaceViewport";
 import {
@@ -100,6 +103,67 @@ export type SceneExporter = {
 };
 
 type FiberCamera = (THREE.OrthographicCamera | THREE.PerspectiveCamera) & { manual?: boolean };
+
+// Phase B was 2100 ms; tuned to 3500 ms (k = 3.5 / 2.1 = 5 / 3) so, together with the
+// proportionally scaled HUD entry (520 ms -> 867 ms), the visible handoff is 4.37 s total.
+const INTRO_BASE_MS = 2100;
+export const INTRO_TRANSITION_MS = 3500;
+const INTRO_TIME_SCALE = INTRO_TRANSITION_MS / INTRO_BASE_MS;
+const INTRO_TRANSITION_SEC = INTRO_TRANSITION_MS / 1000;
+const INTRO_HOLD_RELEASE_SEC = INTRO_TRANSITION_SEC;
+export const INTRO_UNDERLAY_FADE_EXP = 1.65;
+
+export function computeIntroUnderlayOpacity(progress: number): number {
+  const p = Math.min(1, Math.max(0, progress));
+  return Math.max(0, 1 - Math.pow(p, INTRO_UNDERLAY_FADE_EXP));
+}
+
+export function shouldRunIntroTransition(): boolean {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent ?? "";
+  if (/jsdom|HappyDOM/i.test(ua)) return false;
+  if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    return false;
+  }
+  if (qaModeFromSearch(window.location.search)) return false;
+  return true;
+}
+
+function easeInOutCubic(x: number): number {
+  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+}
+
+function easeOutCubic(x: number): number {
+  return 1 - Math.pow(1 - x, 3);
+}
+
+export function computeIntroBuildingBucketScale(elapsedSec: number, bucket: number): number {
+  if (elapsedSec >= INTRO_TRANSITION_SEC) return 1;
+  const clampedBucket = Math.max(0, Math.min(23, bucket));
+  const bStart = (clampedBucket / 23) * 0.65 * INTRO_TIME_SCALE;
+  const u = Math.min(1, Math.max(0, (elapsedSec - bStart) / (1.05 * INTRO_TIME_SCALE)));
+  return 0.001 + 0.999 * easeInOutCubic(u);
+}
+
+export function computeIntroTreeBucketScale(elapsedSec: number, bucket: number): number {
+  if (elapsedSec >= INTRO_TRANSITION_SEC) return 1;
+  const clampedBucket = Math.max(0, Math.min(15, bucket));
+  const tStart = (0.65 + (clampedBucket / 15) * 0.95) * INTRO_TIME_SCALE;
+  const rawU = (elapsedSec - tStart) / (0.5 * INTRO_TIME_SCALE);
+  if (rawU <= 0) return 0.001;
+  if (rawU >= 1) return 1;
+  return Math.max(0.001, easeOutCubic(rawU) * (1 + 0.16 * Math.sin(Math.PI * rawU)));
+}
+
+function computeIntroTreeWaveScale(elapsedSec: number): number {
+  if (elapsedSec >= INTRO_TRANSITION_SEC) return 1;
+  let maxScale = 0.001;
+  for (let b = 0; b < 16; b++) {
+    const s = computeIntroTreeBucketScale(elapsedSec, b);
+    if (s > maxScale) maxScale = s;
+  }
+  return maxScale;
+}
 
 const scratch = new THREE.Vector3();
 
@@ -271,9 +335,20 @@ function City({
     [uniformBuildings, colourBySource],
   );
   const group = useMemo(() => {
-    const city = buildCityGroup(model, { uniformBuildings, colourBySource, highlightManual });
+    const introStagger = shouldRunIntroTransition();
+    const city = buildCityGroup(model, { uniformBuildings, colourBySource, highlightManual, introStagger });
+    const plinth = city.getObjectByName("BasePlinth");
     const ground = city.getObjectByName("Ground");
-    if (ground && ground instanceof THREE.Mesh && ground.name === "Ground") {
+    if (plinth && plinth instanceof THREE.Mesh && plinth.userData.plinthEdgePositions instanceof Float32Array) {
+      const edgeGeo = new THREE.BufferGeometry();
+      edgeGeo.setAttribute("position", new THREE.BufferAttribute(plinth.userData.plinthEdgePositions, 3));
+      const edges = new THREE.LineSegments(
+        edgeGeo,
+        new THREE.LineBasicMaterial({ color: getColour("--ground-edge") }),
+      );
+      edges.name = "GroundEdge";
+      city.add(edges);
+    } else if (ground && ground instanceof THREE.Mesh && ground.name === "Ground") {
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(ground.geometry),
         new THREE.LineBasicMaterial({ color: getColour("--ground-edge") }),
@@ -283,21 +358,315 @@ function City({
       city.add(edges);
     }
     addBuildingEdges(city);
+    if (introStagger) {
+      const ringGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(model.sideM, 1.2, model.sideM));
+      const ringMat = new THREE.LineBasicMaterial({
+        color: 0xfff500,
+        transparent: true,
+        opacity: 1,
+        depthTest: false,
+      });
+      const cutRing = new THREE.LineSegments(ringGeo, ringMat);
+      cutRing.name = "IntroCutRing";
+      const ringBaseY = model.terrain ? (model.terrain.min + model.terrain.max) / 2 : 0;
+      cutRing.position.y = ringBaseY + 0.6;
+      cutRing.raycast = () => {};
+      markScreenOnly(cutRing);
+      city.add(cutRing);
+    }
     return city;
-  }, [model, uniformBuildings, colourBySource, highlightManual, colourTick]);
+  }, [
+    model.center,
+    model.sideM,
+    model.frameShape,
+    model.layers,
+    model.buildings,
+    model.roads,
+    model.tramLines,
+    model.areas,
+    model.carParks,
+    model.trees,
+    model.terrain,
+    model.contours,
+    model.contourLayer,
+    model.siteBoundaryLines,
+    model.siteBuildingIds,
+    model.blocks,
+    model.nswRoadSurface,
+    uniformBuildings,
+    colourBySource,
+    highlightManual,
+  ]);
   useLayoutEffect(() => {
     onBoundsRef.current(measureCity(group));
   }, [group]);
+  const introRef = useRef<{
+    cutKey: string;
+    elapsedSec: number;
+    frameCount: number;
+    done: boolean;
+    playingStarted?: boolean;
+    webglReadyDispatched?: boolean;
+    steadyFrames?: number;
+    targets: Array<{ obj: THREE.Object3D; pivotY: number; kind: "building" | "tree"; bucket: number }>;
+  } | null>(null);
+  const cutKey = `${model.center.lat.toFixed(5)},${model.center.lon.toFixed(5)},${model.sideM}`;
   useLayoutEffect(() => {
+    const targets: Array<{ obj: THREE.Object3D; pivotY: number; kind: "building" | "tree"; bucket: number }> = [];
+    for (const object of group.children) {
+      const name = object.name;
+      if (name === "Trees") {
+        const hasBucketChildren = object.children.some((c) => c.name === "TreesBucket");
+        if (hasBucketChildren) {
+          for (const sub of object.children) {
+            const pivotY = typeof sub.userData.introBaseY === "number" ? sub.userData.introBaseY : 0;
+            const bucket = typeof sub.userData.introTreeBucket === "number" ? sub.userData.introTreeBucket : 0;
+            targets.push({ obj: sub, pivotY, kind: "tree", bucket });
+          }
+        } else {
+          targets.push({ obj: object, pivotY: 0, kind: "tree", bucket: 0 });
+        }
+        continue;
+      }
+      const isExtrudable =
+        name === "Buildings" ||
+        name === "Buildings-manual" ||
+        name === "Buildings-site" ||
+        name.startsWith("Buildings::") ||
+        name.startsWith("source:") ||
+        name === "BuildingEdges" ||
+        name === "RoofLines";
+      if (!isExtrudable) continue;
+      const geom = (object as THREE.Mesh | THREE.LineSegments).geometry as THREE.BufferGeometry | undefined;
+      if (geom && !geom.boundingBox) geom.computeBoundingBox();
+      const pivotY =
+        typeof object.userData.introBaseY === "number"
+          ? object.userData.introBaseY
+          : geom?.boundingBox
+            ? geom.boundingBox.min.y
+            : 0;
+      const bucket = typeof object.userData.introBuildingBucket === "number" ? object.userData.introBuildingBucket : 0;
+      targets.push({ obj: object, pivotY, kind: "building", bucket });
+    }
+    const cutRingObj = group.getObjectByName("IntroCutRing") as THREE.LineSegments | undefined;
+    if (!shouldRunIntroTransition() || targets.length === 0) {
+      for (const { obj } of targets) {
+        obj.scale.y = 1;
+        obj.position.y = 0;
+      }
+      if (cutRingObj) cutRingObj.visible = false;
+      group.userData.introScaleY = 1;
+      introRef.current = null;
+      return;
+    }
+    const existing = introRef.current;
+    if (existing && existing.cutKey === cutKey) {
+      existing.targets = targets;
+      if (existing.done) {
+        for (const { obj } of targets) {
+          obj.scale.y = 1;
+          obj.position.y = 0;
+        }
+        if (cutRingObj) cutRingObj.visible = false;
+        group.userData.introScaleY = 1;
+      } else {
+        if (cutRingObj) {
+          const ringOp = Math.max(0, 1 - Math.pow(Math.min(1, existing.elapsedSec / INTRO_TRANSITION_SEC), 2.2));
+          cutRingObj.visible = ringOp > 0.005;
+          const mat = cutRingObj.material as THREE.LineBasicMaterial;
+          if (mat) mat.opacity = ringOp;
+        }
+        for (const { obj, pivotY, kind, bucket } of targets) {
+          const s =
+            existing.frameCount < 3 || !existing.playingStarted
+              ? 0.001
+              : kind === "tree"
+                ? computeIntroTreeBucketScale(existing.elapsedSec, bucket)
+                : computeIntroBuildingBucketScale(existing.elapsedSec, bucket);
+          obj.scale.y = s;
+          obj.position.y = pivotY * (1 - s);
+        }
+        group.userData.introScaleY =
+          existing.frameCount < 3 || !existing.playingStarted
+            ? 0.001
+            : computeIntroBuildingBucketScale(existing.elapsedSec, 0);
+      }
+      return;
+    }
+    const startScale = 0.001;
+    for (const { obj, pivotY } of targets) {
+      obj.scale.y = startScale;
+      obj.position.y = pivotY * (1 - startScale);
+    }
+    group.userData.introScaleY = startScale;
+    introRef.current = { cutKey, elapsedSec: 0, frameCount: 0, done: false, webglReadyDispatched: false, targets };
+  }, [group, cutKey]);
+  useFrame((state, delta) => {
+    const intro = introRef.current;
+    if (!intro || intro.done) return;
+    const ring = group.getObjectByName("IntroCutRing") as THREE.LineSegments | undefined;
+    const ds = state.gl.domElement.dataset;
+    const canvasExt = state.gl.domElement as HTMLCanvasElement & { __introElapsedSec?: number };
+    const bgCol = new THREE.Color(themeColor("--viewport-bg"));
+    state.scene.background = null;
+    state.gl.setClearColor(bgCol, 0);
+
+    if (intro.frameCount < 3) {
+      intro.frameCount += 1;
+      const s0 = 0.001;
+      for (const { obj, pivotY } of intro.targets) {
+        obj.scale.y = s0;
+        obj.position.y = pivotY * (1 - s0);
+      }
+      if (ring) {
+        ring.visible = true;
+        (ring.material as THREE.LineBasicMaterial).opacity = 1;
+      }
+      group.userData.introScaleY = s0;
+      canvasExt.__introElapsedSec = 0;
+      ds.introElapsed = "0.00";
+      ds.introProgressPct = "0";
+      ds.introUnderlayOpacity = "1.000";
+      ds.introScale = s0.toFixed(3);
+      ds.introBldgInner = s0.toFixed(3);
+      ds.introBldgOuter = s0.toFixed(3);
+      ds.introTreeScale = s0.toFixed(3);
+      if (intro.frameCount >= 3 && !intro.webglReadyDispatched) {
+        intro.webglReadyDispatched = true;
+        if (typeof window !== "undefined") {
+          window.__citycutWebglPrewarmReady = true;
+          const modelRoot = state.gl.domElement.closest(".model");
+          if (modelRoot?.hasAttribute("data-intro-webgl-wait")) {
+            modelRoot.removeAttribute("data-intro-webgl-wait");
+          }
+          if (window.__citycutAwaitIntroStart && !window.__citycutIntroStarted) {
+            window.__citycutIntroReadyToFire = true;
+            window.__citycutIntroStarted = true;
+            window.__citycutIntroStartMs = performance.now();
+            window.__citycutLoadProgress = 0;
+            window.__citycutProgressSamples = [0];
+            if (typeof document !== "undefined") {
+              const selectEl = document.querySelector(".select") as HTMLElement | null;
+              if (selectEl) {
+                selectEl.classList.add("is-loading", "is-fading-out");
+                selectEl.style.transition = "none";
+                selectEl.style.opacity = "1";
+                selectEl.dataset.underlayOpacity = "1.000";
+              }
+            }
+            window.dispatchEvent(new CustomEvent("citycut:intro-webgl-ready"));
+            window.dispatchEvent(new CustomEvent("citycut:intro-start"));
+          } else {
+            window.dispatchEvent(new CustomEvent("citycut:intro-webgl-ready"));
+          }
+        }
+      }
+      return;
+    }
+
+    const introPaused =
+      typeof window !== "undefined" &&
+      Boolean((window as Window & { __citycutIntroPaused?: boolean }).__citycutIntroPaused);
+    if (!intro.playingStarted) {
+      intro.playingStarted = true;
+      intro.elapsedSec = 0.02;
+      if (typeof window !== "undefined" && window.__citycutFirstTiltFrameMs === undefined) {
+        window.__citycutFirstTiltFrameMs = performance.now();
+      }
+    } else if (introPaused) {
+      (intro as { wasPaused?: boolean }).wasPaused = true;
+    } else if ((intro as { wasPaused?: boolean }).wasPaused) {
+      (intro as { wasPaused?: boolean }).wasPaused = false;
+      intro.elapsedSec += 0.032;
+    } else {
+      intro.elapsedSec += Math.min(Math.max(delta, 0.001), 0.14);
+    }
+    const done = intro.elapsedSec >= INTRO_TRANSITION_SEC;
+    const clampedElapsed = done ? INTRO_TRANSITION_SEC : intro.elapsedSec;
+    canvasExt.__introElapsedSec = clampedElapsed;
+    const progress = done ? 1 : Math.min(1, Math.max(0, clampedElapsed / INTRO_TRANSITION_SEC));
+    const pct = done ? 100 : Math.min(100, Math.round(progress * 100));
+    const underlayOpacity = done ? 0 : computeIntroUnderlayOpacity(progress);
+
+    for (const { obj, pivotY, kind, bucket } of intro.targets) {
+      const s = done
+        ? 1
+        : kind === "tree"
+          ? computeIntroTreeBucketScale(clampedElapsed, bucket)
+          : computeIntroBuildingBucketScale(clampedElapsed, bucket);
+      obj.scale.y = s;
+      obj.position.y = done ? 0 : pivotY * (1 - s);
+    }
+    const bldgInner = done ? 1 : computeIntroBuildingBucketScale(clampedElapsed, 0);
+    const bldgOuter = done ? 1 : computeIntroBuildingBucketScale(clampedElapsed, 23);
+    const treeScale = done ? 1 : computeIntroTreeWaveScale(clampedElapsed);
+    if (ring) {
+      const rawT = Math.min(1, clampedElapsed / INTRO_TRANSITION_SEC);
+      const ringAlpha = done ? 0 : Math.max(0, 1 - Math.pow(rawT, 2.2));
+      ring.visible = ringAlpha > 0.01;
+      (ring.material as THREE.LineBasicMaterial).opacity = ringAlpha;
+    }
+    group.userData.introScaleY = bldgInner;
+
+    if (typeof window !== "undefined") {
+      window.__citycutLoadProgress = progress;
+      const samples = (window.__citycutProgressSamples ??= [0]);
+      if (samples[samples.length - 1] !== pct) {
+        samples.push(pct);
+      }
+      if (typeof document !== "undefined") {
+        const pill = document.querySelector(".loading-hud-pill.is-model-bridge") as HTMLElement | null;
+        if (pill) {
+          pill.dataset.progressPct = String(pct);
+          const fill = pill.querySelector(".loading-prog-fill") as HTMLElement | null;
+          if (fill) fill.style.width = `${pct}%`;
+          const pctText = pill.querySelector(".loading-prog-pct") as HTMLElement | null;
+          if (pctText) pctText.textContent = `${pct}%`;
+        }
+        const selectEl = document.querySelector(".select") as HTMLElement | null;
+        if (selectEl) {
+          selectEl.classList.add("is-loading", "is-fading-out");
+          selectEl.style.transition = "none";
+          selectEl.style.opacity = underlayOpacity.toFixed(4);
+          selectEl.dataset.underlayOpacity = underlayOpacity.toFixed(3);
+        }
+      }
+    }
+
+    if (clampedElapsed >= INTRO_HOLD_RELEASE_SEC || done) {
+      state.scene.background = bgCol;
+      state.gl.setClearColor(bgCol, 1);
+      const modelRoot = state.gl.domElement.closest(".model");
+      if (modelRoot?.hasAttribute("data-intro-hold")) {
+        modelRoot.removeAttribute("data-intro-hold");
+        modelRoot.dispatchEvent(new CustomEvent("citycut:intro-hold-release"));
+      }
+    }
+    ds.introElapsed = clampedElapsed.toFixed(2);
+    ds.introProgressPct = String(pct);
+    ds.introUnderlayOpacity = underlayOpacity.toFixed(3);
+    ds.introScale = bldgInner.toFixed(3);
+    ds.introBldgInner = bldgInner.toFixed(3);
+    ds.introBldgOuter = bldgOuter.toFixed(3);
+    ds.introTreeScale = treeScale.toFixed(3);
+    if (done) {
+      intro.done = true;
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("citycut:intro-done"));
+      }
+    }
+  });
+  const invalidate = useThree((state) => state.invalidate);
+  useLayoutEffect(() => {
+    refreshSceneSurfaceColors(group);
     snapshotBuildingViewportColors(group, colourMode);
     snapshotSunStudySurfaceColors(group);
     snapshotWhiteCardColors(group, colourMode);
-  }, [group, colourMode]);
-  useLayoutEffect(() => {
     applySunStudySurfaceTint(group, false);
     applyBuildingSolarNeutral(group, false, solarNeutralFill);
     applyWhiteCardTint(group, display.whiteCard);
-  }, [group, solarDiagramOn, solarNeutralFill, colourTick, display.whiteCard]);
+    invalidate();
+  }, [group, colourMode, solarDiagramOn, solarNeutralFill, colourTick, display.whiteCard, invalidate]);
   const buildingsVisible = isLayer3dVisible(display, "buildings");
   const roadsVisible = isLayer3dVisible(display, "roads");
   const footpathsVisible = isLayer3dVisible(display, "footpaths");
@@ -359,8 +728,16 @@ function City({
   }, [group, display.hideTrees, display.layersVisible, model.layers]);
   const contours = useMemo(
     () => (contoursVisible ? buildContourLineObject(model) : null),
-    [model, contoursVisible, colourTick],
+    [model, contoursVisible],
   );
+  useLayoutEffect(() => {
+    if (!contours) return;
+    const mat = contours.material as THREE.LineDashedMaterial | undefined;
+    if (mat?.color) {
+      mat.color.setStyle(getColour("--outline-contour"));
+      invalidate();
+    }
+  }, [contours, colourTick, invalidate]);
   useLayoutEffect(() => () => disposeObject(group), [group]);
   return (
     <>
@@ -463,6 +840,7 @@ function PerspectiveFit({
   active,
   touchedRef,
   fittedKey,
+  introEnabled = false,
 }: {
   camera: THREE.PerspectiveCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
@@ -478,8 +856,50 @@ function PerspectiveFit({
   active: boolean;
   touchedRef: RefObject<boolean>;
   fittedKey: MutableRefObject<string | null>;
+  introEnabled?: boolean;
 }) {
   const size = useThree((state) => state.size);
+  const gl = useThree((state) => state.gl);
+  const introAnimRef = useRef<{
+    elapsedSec: number;
+    frameCount: number;
+    done: boolean;
+    playingStarted?: boolean;
+    target: THREE.Vector3;
+    endEye: THREE.Vector3;
+    startRadius: number;
+    endRadius: number;
+    startPhi: number;
+    endPhi: number;
+    startTheta: number;
+    endTheta: number;
+  } | null>(null);
+  const applyIntroPose = useCallback(
+    (
+      anim: NonNullable<typeof introAnimRef.current>,
+      controls: OrbitControlsImpl,
+    ) => {
+      const syncedElapsed =
+        (gl.domElement as HTMLCanvasElement & { __introElapsedSec?: number }).__introElapsedSec ??
+        anim.elapsedSec;
+      const rawT =
+        anim.frameCount < 3 || !anim.playingStarted
+          ? 0
+          : Math.min(1, Math.max(0, syncedElapsed / INTRO_TRANSITION_SEC));
+      const ease = easeOutCubic(rawT);
+      const radius = THREE.MathUtils.lerp(anim.startRadius, anim.endRadius, ease);
+      const phi = THREE.MathUtils.lerp(anim.startPhi, anim.endPhi, ease);
+      const theta = THREE.MathUtils.lerp(anim.startTheta, anim.endTheta, ease);
+      camera.position.setFromSphericalCoords(radius, phi, theta).add(anim.target);
+      controls.target.copy(anim.target);
+      camera.lookAt(controls.target);
+      camera.updateProjectionMatrix();
+      controls.update();
+      gl.domElement.dataset.introPolar = phi.toFixed(3);
+      gl.domElement.dataset.introRadius = radius.toFixed(1);
+    },
+    [camera, gl],
+  );
   const place = useCallback(() => {
     const controls = controlsRef.current;
     if (!controls || !active || size.width < 2 || size.height < 2) return;
@@ -503,17 +923,60 @@ function PerspectiveFit({
       fov: camera.fov,
       aspect: size.width / Math.max(size.height, 1),
     });
+    const wasUnfitted = fittedKey.current === null;
+    const runningIntro = introAnimRef.current && !introAnimRef.current.done;
     flushControlInertia(controls);
-    camera.position.set(pose.eye[0], pose.eye[1], pose.eye[2]);
     camera.near = pose.near;
     camera.far = pose.far;
-    controls.target.set(pose.target[0], pose.target[1], pose.target[2]);
-    camera.lookAt(controls.target);
-    camera.updateProjectionMatrix();
-    controls.update();
+    if (introEnabled && shouldRunIntroTransition() && (wasUnfitted || runningIntro)) {
+      const targetVec = new THREE.Vector3(pose.target[0], pose.target[1], pose.target[2]);
+      const endEyeVec = new THREE.Vector3(pose.eye[0], pose.eye[1], pose.eye[2]);
+      const endSpherical = new THREE.Spherical().setFromVector3(endEyeVec.clone().sub(targetVec));
+      const frameRatio =
+        (typeof window !== "undefined" &&
+          (window as Window & { __citycutFrameRatio?: number }).__citycutFrameRatio) ||
+        0.48;
+      const halfFovRad = THREE.MathUtils.degToRad(camera.fov / 2);
+      const startRadius = Math.max(
+        endSpherical.radius * 1.15,
+        side / 2 / (Math.tan(halfFovRad) * frameRatio),
+      );
+      const startPhi = 0.005;
+      const startTheta = 0;
+      if (runningIntro && introAnimRef.current) {
+        introAnimRef.current.target = targetVec;
+        introAnimRef.current.endEye = endEyeVec;
+        introAnimRef.current.endRadius = endSpherical.radius;
+        introAnimRef.current.endPhi = endSpherical.phi;
+        introAnimRef.current.endTheta = endSpherical.theta;
+      } else {
+        introAnimRef.current = {
+          elapsedSec: 0,
+          frameCount: 0,
+          done: false,
+          target: targetVec,
+          endEye: endEyeVec,
+          startRadius,
+          endRadius: endSpherical.radius,
+          startPhi,
+          endPhi: endSpherical.phi,
+          startTheta,
+          endTheta: endSpherical.theta,
+        };
+      }
+      applyIntroPose(introAnimRef.current, controls);
+    } else {
+      camera.position.set(pose.eye[0], pose.eye[1], pose.eye[2]);
+      controls.target.set(pose.target[0], pose.target[1], pose.target[2]);
+      camera.lookAt(controls.target);
+      camera.updateProjectionMatrix();
+      controls.update();
+    }
     fittedKey.current = key;
     touchedRef.current = false;
   }, [
+    applyIntroPose,
+    introEnabled,
     active,
     camera,
     controlsRef,
@@ -533,8 +996,57 @@ function PerspectiveFit({
   useLayoutEffect(() => {
     place();
   }, [place]);
-  useFrame(() => {
+  useFrame((_state, delta) => {
     place();
+    const anim = introAnimRef.current;
+    if (!anim || anim.done) return;
+    const controls = controlsRef.current;
+    if (!active || !controls || touchedRef.current) {
+      anim.done = true;
+      introAnimRef.current = null;
+      return;
+    }
+
+    const waitingForIntroStart =
+      typeof window !== "undefined" &&
+      Boolean(window.__citycutAwaitIntroStart) &&
+      !window.__citycutIntroStarted;
+    if (anim.frameCount < 3 || waitingForIntroStart) {
+      anim.frameCount += 1;
+      applyIntroPose(anim, controls);
+      return;
+    }
+    const introPaused =
+      typeof window !== "undefined" &&
+      Boolean((window as Window & { __citycutIntroPaused?: boolean }).__citycutIntroPaused);
+    if (!anim.playingStarted) {
+      anim.playingStarted = true;
+      anim.elapsedSec = 0.02;
+      applyIntroPose(anim, controls);
+      return;
+    }
+    if (introPaused) {
+      (anim as { wasPaused?: boolean }).wasPaused = true;
+    } else if ((anim as { wasPaused?: boolean }).wasPaused) {
+      (anim as { wasPaused?: boolean }).wasPaused = false;
+      anim.elapsedSec += 0.032;
+    } else {
+      anim.elapsedSec += Math.min(Math.max(delta, 0.001), 0.14);
+    }
+    if (anim.elapsedSec >= INTRO_TRANSITION_SEC) {
+      flushControlInertia(controls);
+      camera.position.copy(anim.endEye);
+      controls.target.copy(anim.target);
+      camera.lookAt(controls.target);
+      camera.updateProjectionMatrix();
+      controls.update();
+      gl.domElement.dataset.introPolar = anim.endPhi.toFixed(3);
+      gl.domElement.dataset.introRadius = anim.endRadius.toFixed(1);
+      anim.done = true;
+      introAnimRef.current = null;
+      return;
+    }
+    applyIntroPose(anim, controls);
   });
   return null;
 }
@@ -1064,6 +1576,7 @@ export function Cameras({
   lat,
   lon,
   cameraMemory,
+  introEnabled = false,
 }: {
   side: number;
   lift: number;
@@ -1081,6 +1594,7 @@ export function Cameras({
   lat: number;
   lon: number;
   cameraMemory?: CameraMemoryRef;
+  introEnabled?: boolean;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
@@ -1151,6 +1665,7 @@ export function Cameras({
             active={!orthoView && !qaMode}
             touchedRef={touchedRef}
             fittedKey={perspFitKey}
+            introEnabled={introEnabled}
           />
           <PerspectiveClipPlanes
             camera={persp}
@@ -1220,7 +1735,7 @@ export function Cameras({
             dampingFactor={0.08}
             maxPolarAngle={Math.PI / 2.02}
             minDistance={side * 0.2}
-            maxDistance={Math.max(side * 3.4, heliodonRadius * 2.4)}
+            maxDistance={Math.max(side * 6, heliodonRadius * 2.4)}
             onStart={() => {
               touchedRef.current = true;
             }}
@@ -1364,6 +1879,7 @@ export function Scene3D({
   const sky = getColour("--light-sky");
   const groundLight = getColour("--light-ground");
   const groundY = model.terrain ? model.terrain.min : 0;
+  const plinthBottomY = basePlinthBottomY(model.sideM, model.terrain);
   const solarNeutralFill = useMemo(() => getColour("--building-solar-neutral"), [colourTick]);
   const sunSample = useMelbourneSunSample(model.center.lat, model.center.lon, solar);
   const [glEpoch, setGlEpoch] = useState(0);
@@ -1410,7 +1926,7 @@ export function Scene3D({
         dpr={[1, 1.75]}
         gl={{
           antialias: true,
-          alpha: false,
+          alpha: true,
           powerPreference: "high-performance",
           preserveDrawingBuffer: qaModeFromSearch(window.location.search),
         }}
@@ -1423,7 +1939,7 @@ export function Scene3D({
         <RendererShadows enabled={solar.castShadows} />
       <SunStudyToneMapping noToneMapping={noToneMapping} />
       <GradientSky colourTick={colourTick} fallback={modelBg} />
-      {projection !== "plan" && <GroundGrid sideM={model.sideM} groundY={groundY} colourTick={colourTick} />}
+      {projection !== "plan" && <GroundGrid sideM={model.sideM} groundY={plinthBottomY} colourTick={colourTick} />}
       <hemisphereLight args={[sky, groundLight, fillHemi]} />
       <ambientLight intensity={fillAmbient} />
       <directionalLight position={[model.sideM * 0.4, model.sideM, model.sideM * 0.2]} intensity={fillKeyLight} />
@@ -1489,6 +2005,7 @@ export function Scene3D({
         lat={model.center.lat}
         lon={model.center.lon}
         cameraMemory={cameraMemory}
+        introEnabled
       />
       </Canvas>
     </div>

@@ -1027,7 +1027,7 @@ export async function cityModelTo3dm(
     const meshes: THREE.Mesh[] = [];
     group.traverse((object) => {
       const mesh = object as THREE.Mesh;
-      if (mesh.isMesh) meshes.push(mesh);
+      if (mesh.isMesh && !mesh.userData?.skipRhinoExport) meshes.push(mesh);
     });
     const tally: ExtrusionTally = extrusionTally ?? { extrusions: 0, meshFallback: 0 };
     addMeshesInTraverseLayerOrder(rhino, doc, layers, materials, meshes, model, crs.zone, buildingsAsMesh ? null : tally);
