@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { MapStage, type FlyRequest } from "./components/MapStage";
 import { SelectChrome } from "./components/SelectChrome";
+import { CommandBar } from "./components/CommandBar";
 import { useSidebarCollapsed } from "./lib/sidebarCollapse";
 import { viewportIsNarrow } from "./lib/panelCollapse";
 import {
@@ -158,6 +159,7 @@ export default function App() {
   const [placeLabel, setPlaceLabel] = useState(placeLabelRef.current);
   const [fly, setFly] = useState<FlyRequest | null>(null);
   const [phase, setPhase] = useState<"select" | "model">("select");
+  const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [handoffUnderlay, setHandoffUnderlay] = useState<"none" | "holding" | "fading">("none");
   const selectRootRef = useRef<HTMLDivElement>(null);
   const [model, setModel] = useState<CityModel | null>(null);
@@ -294,6 +296,15 @@ export default function App() {
       lat: place.lat,
       bounds: place.bounds,
     });
+  }
+
+  function commandBarGoToPlace(place: PlaceHit, sideKmOverride: number | null) {
+    if (phase === "model") {
+      setHandoffUnderlay("none");
+      setPhase("select");
+    }
+    if (sideKmOverride != null) setSideKm(sideKmOverride);
+    onPlace(place);
   }
 
   function focusMelbourne() {
@@ -1038,6 +1049,12 @@ export default function App() {
 
   return (
     <div className="app">
+      <CommandBar
+        open={commandBarOpen}
+        onOpenChange={setCommandBarOpen}
+        onGoToPlace={commandBarGoToPlace}
+        modelToolsEnabled={phase === "model"}
+      />
       {showSelectLayer ? (
         <div
           ref={selectRootRef}
@@ -1108,6 +1125,7 @@ export default function App() {
         <Suspense fallback={handoffUnderlay !== "none" ? null : <p className="opening">Opening the model…</p>}>
           <ModelPage
             model={model}
+            commandBarOpen={commandBarOpen}
             onHome={() => {
               setHandoffUnderlay("none");
               onHome();
