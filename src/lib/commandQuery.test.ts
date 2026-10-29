@@ -6,6 +6,7 @@ describe("parseCommandQuery", () => {
     expect(parseCommandQuery("Federation Square")).toEqual({
       placeQuery: "Federation Square",
       sideKm: null,
+      sideClamped: false,
     });
   });
 
@@ -13,6 +14,7 @@ describe("parseCommandQuery", () => {
     expect(parseCommandQuery("Fed Square 200m")).toEqual({
       placeQuery: "Fed Square",
       sideKm: 0.25,
+      sideClamped: true,
     });
   });
 
@@ -20,6 +22,7 @@ describe("parseCommandQuery", () => {
     expect(parseCommandQuery("Southbank 500 m")).toEqual({
       placeQuery: "Southbank",
       sideKm: 0.5,
+      sideClamped: false,
     });
   });
 
@@ -27,6 +30,7 @@ describe("parseCommandQuery", () => {
     expect(parseCommandQuery("Fitzroy 1km")).toEqual({
       placeQuery: "Fitzroy",
       sideKm: 1,
+      sideClamped: false,
     });
   });
 

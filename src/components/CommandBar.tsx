@@ -1,3 +1,4 @@
+import { MIN_SIDE_KM } from "../content/constants";
 import { useEffect, useId, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { filterCommandTools, parseCommandQuery } from "../lib/commandQuery";
@@ -199,7 +200,7 @@ export function CommandBar({
                 <span>{hit.label}</span>
                 <span className="command-bar-row-meta">{hit.detail}</span>
                 {parsed.sideKm != null && (
-                  <span className="command-bar-row-meta mono">{Math.round(parsed.sideKm * 1000)} m cut</span>
+                  <span className="command-bar-row-meta mono">{Math.round(parsed.sideKm * 1000)} m cut{parsed.sideClamped ? (parsed.sideKm === MIN_SIDE_KM ? " (min)" : " (max)") : ""}</span>
                 )}
               </button>
             ))}

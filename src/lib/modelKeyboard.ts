@@ -18,7 +18,6 @@ export const MODEL_SHORTCUT_MAP: Record<
   display: { section: "drawing" },
 };
 
-/** Section Cut sub-tab is not on main; wire here when SITE_ANALYSIS gains a section kind. */
 export function sectionCutShortcutAvailable(): boolean {
   return false;
 }

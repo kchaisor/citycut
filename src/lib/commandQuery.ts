@@ -3,6 +3,7 @@ import { MAX_SIDE_KM, MIN_SIDE_KM } from "../content/constants";
 export type ParsedCommandQuery = {
   placeQuery: string;
   sideKm: number | null;
+  sideClamped: boolean;
 };
 
 const TRAILING_DISTANCE =
@@ -12,23 +13,21 @@ function clampSideKm(km: number): number {
   return Math.min(MAX_SIDE_KM, Math.max(MIN_SIDE_KM, km));
 }
 
-function sideKmFromMatch(value: number, unit: string): number {
-  const u = unit.toLowerCase();
-  if (u.startsWith("k")) return clampSideKm(value);
-  return clampSideKm(value / 1000);
+function requestedSideKm(value: number, unit: string): number {
+  return unit.toLowerCase().startsWith("k") ? value : value / 1000;
 }
 
-/** Split a command-bar query into a place string and an optional cut square side (e.g. "Fed Square 200m"). */
 export function parseCommandQuery(raw: string): ParsedCommandQuery {
   const trimmed = raw.trim();
-  if (!trimmed) return { placeQuery: "", sideKm: null };
+  if (!trimmed) return { placeQuery: "", sideKm: null, sideClamped: false };
   const match = trimmed.match(TRAILING_DISTANCE);
   if (!match || match.index === undefined) {
-    return { placeQuery: trimmed, sideKm: null };
+    return { placeQuery: trimmed, sideKm: null, sideClamped: false };
   }
   const placeQuery = trimmed.slice(0, match.index).trim();
-  const sideKm = sideKmFromMatch(Number(match[1]), match[2]!);
-  return { placeQuery, sideKm };
+  const requested = requestedSideKm(Number(match[1]), match[2]!);
+  const sideKm = clampSideKm(requested);
+  return { placeQuery, sideKm, sideClamped: sideKm !== requested };
 }
 
 export function filterCommandTools<T extends { label: string; keywords: readonly string[] }>(
