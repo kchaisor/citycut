@@ -1195,7 +1195,7 @@ async function main() {
     );
 
     // -------------------------------------------------------------------------
-    // TONE CONTINUITY: outer dimmed map luminance must not step up across the
+    // TONE CONTINUITY: luminance inside the dashed cut box must not step up across the
     // select -> Phase A -> handoff -> early Phase B tilt (fresh page, 1440x900 @1x)
     // -------------------------------------------------------------------------
     {
@@ -1216,9 +1216,16 @@ async function main() {
         }
         return sum / (png.data.length / 4);
       };
-      const outerLum = async () =>
-        ((await regionLum({ x: 40, y: 250, width: 360, height: 400 })) +
-          (await regionLum({ x: 1040, y: 250, width: 360, height: 400 }))) / 2;
+      // Strictly inside the dashed cut boundary: frame rect inset 8px so the 2px dash strips are excluded.
+      let innerClip = null;
+      const innerLum = async () => {
+        const r = await tonePage.evaluate(() => {
+          const b = document.querySelector(".select .map-wrap .frame")?.getBoundingClientRect();
+          return b && b.width > 40 && b.height > 40 ? { x: b.x, y: b.y, width: b.width, height: b.height } : null;
+        });
+        if (r) innerClip = { x: Math.round(r.x + 8), y: Math.round(r.y + 8), width: Math.round(r.width - 16), height: Math.round(r.height - 16) };
+        return innerClip ? regionLum(innerClip) : NaN;
+      };
       const toneSamples = [];
       for (let i = 0; i < 80; i++) {
         if (i === 2) await tonePage.click("button.create-fab");
@@ -1226,21 +1233,22 @@ async function main() {
           started: Boolean(window.__citycutIntroStarted),
           elapsed: Number(document.querySelector(".model canvas")?.dataset.introElapsed ?? 0),
         }));
-        toneSamples.push({ ...st, outer: Number((await outerLum()).toFixed(1)) });
+        toneSamples.push({ ...st, inner: Number((await innerLum()).toFixed(1)) });
         if (st.started && st.elapsed >= 0.5) break;
       }
       await toneCtx.close();
+      const toneValid = toneSamples.filter((t) => Number.isFinite(t.inner));
       let maxStepUp = 0;
-      for (let i = 1; i < toneSamples.length; i++) {
-        maxStepUp = Math.max(maxStepUp, toneSamples[i].outer - toneSamples[i - 1].outer);
+      for (let i = 1; i < toneValid.length; i++) {
+        maxStepUp = Math.max(maxStepUp, toneValid[i].inner - toneValid[i - 1].inner);
       }
-      const baseline = toneSamples[0]?.outer ?? 0;
-      const netRise = Math.max(...toneSamples.map((t) => t.outer)) - baseline;
+      const baseline = toneValid[0]?.inner ?? 0;
+      const netRise = Math.max(...toneValid.map((t) => t.inner)) - baseline;
       assertCheck(
         "handoff-tone-continuity",
-        "Outer dimmed map luminance stays continuous from the select screen through Phase A, the 3D handoff, and the first 0.5s of the tilt (no step up > 3/255, net rise <= 3/255)",
-        toneSamples.length >= 6 && toneSamples.some((t) => t.started) && maxStepUp <= 3 && netRise <= 3,
-        `samples=${toneSamples.length}, baseline=${baseline}, maxStepUp=${maxStepUp.toFixed(1)}, netRise=${netRise.toFixed(1)}, trace=[${toneSamples.map((t) => `${t.started ? `B${t.elapsed}` : "A"}:${t.outer}`).join(" ")}]`,
+        "Map luminance strictly inside the dashed cut boundary never brightens from the select screen through Phase A, the 3D handoff, and the first 0.5s of the tilt (no step up > 2/255, net rise <= 2/255; darkening into the 3D view is allowed)",
+        toneValid.length >= 6 && toneSamples.some((t) => t.started) && maxStepUp <= 2 && netRise <= 2,
+        `samples=${toneSamples.length}, baseline=${baseline}, maxStepUp=${maxStepUp.toFixed(1)}, netRise=${netRise.toFixed(1)}, trace=[${toneSamples.map((t) => `${t.started ? `B${t.elapsed}` : "A"}:${t.inner}`).join(" ")}]`,
       );
     }
 

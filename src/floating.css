@@ -3543,7 +3543,7 @@ body,
 
 .select.is-loading .map-wrap .frame {
   border: 2px dashed transparent !important;
-  background: transparent !important;
+  background: color-mix(in srgb, var(--ink) 2%, transparent) !important;
   box-shadow: 0 0 0 9999px color-mix(in srgb, var(--ink) 8%, transparent), 0 24px 60px rgba(20, 20, 19, 0.14) !important;
   z-index: 25 !important;
 }
@@ -3560,16 +3560,17 @@ body,
   opacity: 1;
 }
 
-/* Keep the outer dim identical to the select screen's 8% ink veil through Phase A and B,
-   so the map tone does not brighten before the 3D tilt. */
+/* Keep the cut's 2% ink fill and the outer 8% ink veil identical to the select screen
+   through Phase A and B, so the map tone inside the dashed box does not brighten before
+   the 3D tilt. */
 .select.is-handoff-underlay:not(.is-fading-out) .map-wrap .frame {
-  background: transparent !important;
+  background: color-mix(in srgb, var(--ink) 2%, transparent) !important;
   box-shadow: 0 0 0 9999px color-mix(in srgb, var(--ink) 8%, transparent) !important;
 }
 
 .select.is-handoff-underlay.is-fading-out .map-wrap .frame {
   border-color: transparent !important;
-  background: transparent !important;
+  background: color-mix(in srgb, var(--ink) 2%, transparent) !important;
   box-shadow: 0 0 0 9999px color-mix(in srgb, var(--ink) 8%, transparent) !important;
 }
 
