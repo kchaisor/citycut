@@ -819,6 +819,7 @@ export function buildExplodedAxoLayers(
   model: CityModel,
   settings: ExplodedAxoSettings,
   overlays: ExplodedAxoOverlayBundle = {},
+  viewOptions: { colourByHeightReliability?: boolean } = {},
 ): { layers: AxoLayerGeometry[]; guides: AxoGuideLine[] } {
   const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const lifts = liftsForLayerOrder(settings.layerOrder, settings.gapM, settings.extraGapAboveM, settings.layerLiftM);
@@ -1005,7 +1006,9 @@ export function buildExplodedAxoLayers(
           if (parts.length) fills.push(parts.join(" "));
         }
       } else {
-        const massing = buildAxoMassingFaces(model);
+        const massing = buildAxoMassingFaces(model, 1, {
+          colourByHeightReliability: viewOptions.colourByHeightReliability,
+        });
         solids = massing.faces;
         sourceNote = axoMassingHeightNote(massing.counts) || undefined;
       }

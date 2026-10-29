@@ -26,6 +26,7 @@ import { heliodonPlanPdfChunk } from "./heliodonPlanExport";
 import type { HeliodonDiagramExportOptions } from "./heliodonDiagram";
 import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { SINGLE_SHADOW_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "./sunStudyPlan";
+import { HEIGHT_RELIABILITY_EXPORT_LAYER } from "./buildingHeightReliability";
 import { planPaths } from "./svgPlan";
 import { regionCredit } from "./sources/registry";
 import { NSW_SITE_LAYERS, nswPlanChunks } from "./nswPlanExport";
@@ -254,6 +255,7 @@ export type SitePlanExportOptions = {
   uniformBuildings?: boolean;
   highlightManual?: boolean;
   colourBySource?: boolean;
+  colourByHeightReliability?: boolean;
   wind?: { table: import("./windRose").WindRoseTable; period: import("./windRose").WindPeriodId } | null;
   /**
    * Sun study: one shadow layer per hour ("Shadow 09:00" …), each at the study opacity, in place
@@ -322,6 +324,7 @@ export function sitePlanChunks(
   const layout = layoutSheet(model.sideM, scale);
   const uniformBuildings = Boolean(resolved.uniformBuildings);
   const colourBySource = Boolean(resolved.colourBySource);
+  const colourByHeightReliability = Boolean(resolved.colourByHeightReliability);
   const highlightManual = Boolean(resolved.highlightManual);
   const plan = planPaths(
     model,
@@ -332,9 +335,10 @@ export function sitePlanChunks(
     style.contourCoarseFromScale,
     {
       buildingColour: {
-        colourByUse: !uniformBuildings && !colourBySource,
+        colourByUse: !uniformBuildings && !colourBySource && !colourByHeightReliability,
         uniformBuildings,
         colourBySource,
+        colourByHeightReliability,
       },
       highlightManual,
       pathFilletM: style.pathFilletM,
@@ -510,16 +514,33 @@ export function sitePlanChunks(
   const importedBuildings = plan.buildings.filter((building) => building.imported);
   const otherBuildings = plan.buildings.filter((building) => !building.site && !building.imported);
   if (otherBuildings.length > 0) {
-    chunks.push({
-      name: "Buildings",
-      paths: otherBuildings.map((building) => ({
-        rings: mapRings(building.rings, model.sideM, layout),
-        fill: hexRgb(building.fill),
-        evenOdd: true,
-        close: true,
-        ...(buildingPen ?? {}),
-      })),
-    });
+    if (colourByHeightReliability) {
+      for (const layerName of Object.values(HEIGHT_RELIABILITY_EXPORT_LAYER)) {
+        const subset = otherBuildings.filter((building) => building.heightReliabilityLayer === layerName);
+        if (subset.length === 0) continue;
+        chunks.push({
+          name: layerName,
+          paths: subset.map((building) => ({
+            rings: mapRings(building.rings, model.sideM, layout),
+            fill: hexRgb(building.fill),
+            evenOdd: true,
+            close: true,
+            ...(buildingPen ?? {}),
+          })),
+        });
+      }
+    } else {
+      chunks.push({
+        name: "Buildings",
+        paths: otherBuildings.map((building) => ({
+          rings: mapRings(building.rings, model.sideM, layout),
+          fill: hexRgb(building.fill),
+          evenOdd: true,
+          close: true,
+          ...(buildingPen ?? {}),
+        })),
+      });
+    }
   }
   if (siteBuildings.length > 0) {
     chunks.push({

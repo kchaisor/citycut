@@ -57,6 +57,11 @@
   /* 3D viewport tint for buildings with a manual height override when “Show manual edits” is on. */
   --building-manual: #D4A017;
 
+  /* Data reliability view fills (keep in sync with theme.css --height-reliability-*). */
+  --fill-height-surveyed: #2E6B4F;
+  --fill-height-osm: #3D5A73;
+  --fill-height-estimated: #9A9084;
+
   /* Buildings on the searched property: site plan, 3D, Rhino Buildings::Site, and Illustrator Site buildings layer. */
   --site-building: #FFF500;
   /* Default colour of imported .3dm massing (3D, Drawing, .ai, .3dm); each model can override it in Import. Dashed outline in Drawing. */

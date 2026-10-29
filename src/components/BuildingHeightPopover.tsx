@@ -1,5 +1,6 @@
 import type { HiddenBuilding } from "../lib/hiddenBuildings";
 import { useEffect, useRef, useState } from "react";
+import { heightReliabilityLabel } from "../lib/buildingHeightReliability";
 import { buildingHeightSourceLabelForBuilding } from "../lib/heightOverrides";
 import {
   emptyBuildingPopupDetails,
@@ -140,6 +141,7 @@ export function BuildingHeightPopover({
           <Field label="Use" value={details.useLine} />
           <Field label="Name / address" value={details.nameLine} />
           <Field label="Height & storeys" value={details.heightStoreysLine} />
+          <Field label="Height data" value={`${heightReliabilityLabel(building)} · ${source}`} />
           <Field label="Zone & overlays" value={details.zoneLine} />
           <Field label="Lot / site" value={details.lotLine} />
           {showCom && <Field label="Year built" value={details.yearLine} />}

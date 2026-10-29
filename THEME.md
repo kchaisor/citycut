@@ -63,6 +63,9 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--height-floors` | CoM development floors in that bar and key. | `#6B4F2E` |
 | `--height-estimate` | Hatching for estimated heights (zone default) and LiDAR in that bar and key. | `#7D7D7D` |
 | `--height-manual` | Manual height edits in that bar and key. | `#D4A017` |
+| `--height-reliability-surveyed` | Data reliability view: surveyed and measured building heights. | `#2E6B4F` |
+| `--height-reliability-osm` | Data reliability view: OSM and Overture tagged heights. | `#3D5A73` |
+| `--height-reliability-estimated` | Data reliability view: zone defaults and unmatched sources. | `#9A9084` |
 | `--sidebar-rail-w` | Width of the icon rail. The model view starts to its right when the sidebar is collapsed. | `56px` |
 | `--sidebar-panel-w` | Width of the sidebar panel next to the rail. | `320px` |
 

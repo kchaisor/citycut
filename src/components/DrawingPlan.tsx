@@ -74,6 +74,7 @@ export function DrawingPlan({
   shadowInput = null,
   uniformBuildings = false,
   colourBySource = false,
+  colourByHeightReliability = false,
   highlightManual = false,
   viewport,
   onViewportChange,
@@ -97,6 +98,7 @@ export function DrawingPlan({
   shadowInput?: PlanShadowInput | null;
   uniformBuildings?: boolean;
   colourBySource?: boolean;
+  colourByHeightReliability?: boolean;
   highlightManual?: boolean;
   viewport?: PlanViewport;
   onViewportChange?: (view: PlanViewport) => void;
@@ -128,9 +130,10 @@ export function DrawingPlan({
         style.contourCoarseFromScale,
         {
           buildingColour: {
-            colourByUse: !uniformBuildings && !colourBySource,
+            colourByUse: !uniformBuildings && !colourBySource && !colourByHeightReliability,
             uniformBuildings,
             colourBySource,
+            colourByHeightReliability,
           },
           highlightManual,
           pathFilletM: style.pathFilletM,
@@ -145,6 +148,7 @@ export function DrawingPlan({
       planScale,
       uniformBuildings,
       colourBySource,
+      colourByHeightReliability,
       highlightManual,
       style.pathFilletM,
       colourTick,

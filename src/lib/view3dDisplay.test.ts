@@ -41,6 +41,7 @@ describe("view3d display defaults and persistence", () => {
       whiteCard: true,
       showContours3d: false,
       hideTrees: true,
+      heightReliabilityView: false,
       layersVisible: {
         ...DEFAULT_VIEW3D_LAYERS_VISIBLE,
         contours: false,

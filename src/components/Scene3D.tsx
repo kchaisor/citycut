@@ -38,6 +38,7 @@ import {
 } from "../lib/cameraMemory";
 import {
   applyBuildingSolarNeutral,
+  buildingColourModeFromFlags,
   snapshotBuildingViewportColors,
   withBuildingExportColours,
   type BuildingColourMode,
@@ -334,17 +335,20 @@ function City({
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
   const colourTick = useColourRevision();
+  const colourByHeightReliability = Boolean(display.heightReliabilityView);
   const colourMode = useMemo<BuildingColourMode>(
-    () => ({
-      colourByUse: !uniformBuildings && !colourBySource,
-      uniformBuildings,
-      colourBySource,
-    }),
-    [uniformBuildings, colourBySource],
+    () => buildingColourModeFromFlags(!uniformBuildings && !colourBySource, colourBySource, colourByHeightReliability),
+    [uniformBuildings, colourBySource, colourByHeightReliability],
   );
   const group = useMemo(() => {
     const introStagger = shouldRunIntroTransition();
-    const city = buildCityGroup(model, { uniformBuildings, colourBySource, highlightManual, introStagger });
+    const city = buildCityGroup(model, {
+      uniformBuildings,
+      colourBySource,
+      colourByHeightReliability,
+      highlightManual,
+      introStagger,
+    });
     const plinth = city.getObjectByName("BasePlinth");
     const ground = city.getObjectByName("Ground");
     if (plinth && plinth instanceof THREE.Mesh && plinth.userData.plinthEdgePositions instanceof Float32Array) {
@@ -403,6 +407,7 @@ function City({
     model.nswRoadSurface,
     uniformBuildings,
     colourBySource,
+    colourByHeightReliability,
     highlightManual,
   ]);
   useLayoutEffect(() => {

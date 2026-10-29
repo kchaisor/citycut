@@ -2,20 +2,47 @@ import * as THREE from "three";
 import { applyMatteFinish } from "./matteMaterial";
 import type { BuildingUse } from "../types";
 import { getColour } from "./colours";
+import {
+  heightReliabilityFill,
+  heightReliabilityClass,
+  heightReliabilityFillForExportLayer,
+  HEIGHT_RELIABILITY_EXPORT_LAYER,
+} from "./buildingHeightReliability";
 import { BUILDING_USE_META, SOURCE_META, buildingLayerName, uniformBuildingColor } from "./buildingUse";
+import type { BuildingFeat } from "../types";
 
 export type BuildingColourMode = {
   colourByUse: boolean;
   uniformBuildings: boolean;
   colourBySource: boolean;
+  colourByHeightReliability?: boolean;
 };
+
+export function buildingColourModeFromFlags(
+  colourByUse: boolean,
+  showSource: boolean,
+  showHeightReliability: boolean,
+): BuildingColourMode {
+  if (showHeightReliability) {
+    return { colourByUse: false, uniformBuildings: false, colourBySource: false, colourByHeightReliability: true };
+  }
+  return {
+    colourByUse,
+    uniformBuildings: !colourByUse && !showSource,
+    colourBySource: showSource,
+  };
+}
 
 /** Pick the viewport fill for one building bucket before any solar neutral override. */
 export function buildingViewportFill(
   mode: BuildingColourMode,
   use: BuildingUse | undefined,
   sourceKey: string | undefined,
+  building?: BuildingFeat,
 ): string {
+  if (mode.colourByHeightReliability && building) {
+    return heightReliabilityFill(building);
+  }
   if (mode.colourBySource && sourceKey) {
     const meta = SOURCE_META[sourceKey as keyof typeof SOURCE_META];
     if (meta) return meta.color;
@@ -24,10 +51,17 @@ export function buildingViewportFill(
   return BUILDING_USE_META[use].color;
 }
 
-export function parseBuildingBucketName(name: string): { use?: BuildingUse; sourceKey?: string } {
+export function parseBuildingBucketName(name: string): { use?: BuildingUse; sourceKey?: string; heightReliability?: string } {
+  if (name.startsWith("heightReliability:")) {
+    return { heightReliability: name.slice("heightReliability:".length) };
+  }
   if (name.startsWith("source:")) return { sourceKey: name.slice("source:".length) };
   const use = (Object.keys(BUILDING_USE_META) as BuildingUse[]).find((key) => buildingLayerName(key) === name);
   return use ? { use } : {};
+}
+
+export function heightReliabilityBucketName(building: BuildingFeat): string {
+  return `heightReliability:${HEIGHT_RELIABILITY_EXPORT_LAYER[heightReliabilityClass(building)]}`;
 }
 
 function buildingMeshes(root: THREE.Object3D): THREE.Mesh[] {
@@ -70,8 +104,11 @@ export function snapshotBuildingViewportColors(root: THREE.Object3D, mode: Build
       });
       continue;
     }
-    const { use, sourceKey } = parseBuildingBucketName(name);
-    const fill = buildingViewportFill(mode, use, sourceKey);
+    const { use, sourceKey, heightReliability } = parseBuildingBucketName(name);
+    const fill =
+      heightReliability && mode.colourByHeightReliability
+        ? (heightReliabilityFillForExportLayer(heightReliability) ?? uniformBuildingColor())
+        : buildingViewportFill(mode, use, sourceKey);
     forEachStandardMaterial(mesh, (material) => {
       material.userData.viewportFill = fill;
       material.color.setStyle(fill);

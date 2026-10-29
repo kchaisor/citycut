@@ -1,5 +1,6 @@
 import { clipAreaToSiteFrame, DEFAULT_SITE_FRAME_SHAPE, type SiteFrameShape } from "./siteFrame";
 import { openRing, signedArea } from "./geo";
+import { heightReliabilityFill } from "./buildingHeightReliability";
 import { getColour } from "./colours";
 import type { BuildingFeat, BuildingHeightTier, CityModel, Pt } from "../types";
 
@@ -80,6 +81,7 @@ function prismsFor(building: BuildingFeat, sideM: number, shape: SiteFrameShape)
 export function buildAxoMassingFaces(
   model: CityModel,
   heightScale = 1,
+  options?: { colourByHeightReliability?: boolean },
 ): { faces: AxoSolidFace[]; counts: Record<AxoHeightSource, number> } {
   const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const counts: Record<AxoHeightSource, number> = { com: 0, dam: 0, overture_osm: 0, estimate: 0 };
@@ -89,7 +91,11 @@ export function buildAxoMassingFaces(
     const list = prismsFor(building, model.sideM, shape);
     if (list.length === 0) continue;
     counts[axoHeightSource(building.heightTier, building.heightFromFallback)] += 1;
-    const fill = building.importedMassing ? (building.importedColour ?? getColour("--imported-massing")) : undefined;
+    const fill = building.importedMassing
+      ? (building.importedColour ?? getColour("--imported-massing"))
+      : options?.colourByHeightReliability
+        ? heightReliabilityFill(building)
+        : undefined;
     prisms.push(...(fill ? list.map((p) => ({ ...p, fill })) : list));
   }
   prisms.sort((a, b) => a.depth - b.depth || a.top - b.top);
