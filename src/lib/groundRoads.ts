@@ -7,19 +7,6 @@ import { clipTrianglesToTerrainGrid, terrainMeshHeight, type Tri } from "./terra
 import { pointInPolygon, type NswCentreline, type NswCorridor } from "./nswLayers";
 import type { CityModel, Pt, RoadGrade, TerrainField } from "../types";
 
-/**
- * The ground split into two draped surfaces that tile the cut exactly:
- *   Ground::Roads     = every road and path fill (arterial > local > path, made disjoint)
- *   Ground::Remaining = the cut minus the roads
- * Building footprints are NOT cut out; water and parks stay as their own overlays on top.
- * Both surfaces are triangulated from the same polygon boundary and cut on the same terrain grid,
- * so they share every edge vertex and leave no cracks.
- *
- * NSW mode: where NSW Spatial Services road corridors (cadastral road parcels) exist they ARE the
- * road surface, graded by the NSW centrelines inside them; Overture carriageways fill in only
- * outside the corridors. `sources` reports which source covers how much of the road surface.
- */
-
 export const GROUND_ROADS_LAYER = "Ground::Roads";
 export const GROUND_REMAINING_LAYER = "Ground::Remaining";
 export const ROAD_GRADES_BY_PRIORITY: RoadGrade[] = ["arterial", "local", "path"];
@@ -35,11 +22,9 @@ function clip(): Clip {
 }
 
 export type GroundRoadPartition = {
-  /** Disjoint road fill per grade, inside the cut. */
   roads: Record<RoadGrade, MultiPolygon>;
   remaining: MultiPolygon;
   frame: Polygon;
-  /** NSW mode only: road surface area by source, m². Absent without NSW road corridors (Victoria). */
   sources?: RoadSurfaceSources;
 };
 
@@ -47,7 +32,6 @@ export type RoadSurfaceSources = { nswCorridorM2: number; overtureM2: number };
 
 const GRADE_RANK: Record<RoadGrade, number> = { arterial: 0, local: 1, path: 2 };
 
-/** Grade of one NSW corridor: Pathway corridors are paths, else the highest-ranked NSW centreline inside it. */
 export function corridorGrade(corridor: NswCorridor, centrelines: NswCentreline[]): RoadGrade {
   if (corridor.pathway) return "path";
   let best: RoadGrade | null = null;
@@ -98,7 +82,6 @@ export function groundRoadPartition(model: Pick<CityModel, "roads" | "sideM" | "
     if (raw[grade].length === 0) continue;
     raw[grade] = snapMulti(raw[grade]);
     roads[grade] = taken.length ? difference(raw[grade], taken) : raw[grade];
-    // Union the raw fill (not the difference) — polygon-clipping is far more robust that way.
     taken = taken.length ? union(taken, raw[grade]) : raw[grade];
   }
   const remaining = taken.length ? difference(frame, taken) : [frame];
@@ -107,7 +90,6 @@ export function groundRoadPartition(model: Pick<CityModel, "roads" | "sideM" | "
   return { roads: { arterial: welded[0]!, local: welded[1]!, path: welded[2]! }, remaining: welded[3]!, frame };
 }
 
-/** NSW corridors first (by their own grade), then Overture carriageways outside every corridor. */
 function nswCorridorPartition(
   model: Pick<CityModel, "nsw">,
   overture: Record<RoadGrade, MultiPolygon>,
@@ -156,16 +138,11 @@ function closeRing(ring: Pt[]): [number, number][] {
   return out;
 }
 
-/** Round to 0.1 mm so near-coincident vertices from separate fills meet exactly. */
 function snapMulti(multi: MultiPolygon): MultiPolygon {
   const q = (v: number) => Math.round(v * 1e4) / 1e4;
   return multi.map((poly) => poly.map((ring) => ring.map(([x, y]) => [q(x!), q(y!)] as [number, number])));
 }
 
-/**
- * Insert into every ring edge any vertex of any piece that lies on that edge, so neighbouring pieces
- * triangulate against the same boundary vertices (no T-junctions, hence no cracks after draping).
- */
 function weldTJunctions(pieces: MultiPolygon[]): MultiPolygon[] {
   const CELL = 4;
   const EPS = 2e-4;
@@ -213,7 +190,6 @@ function weldTJunctions(pieces: MultiPolygon[]): MultiPolygon[] {
   return pieces.map((multi) => multi.map((poly) => poly.map(ringWeld)));
 }
 
-/** Plan triangles of a multipolygon, cut on the terrain grid (no lift). */
 export function groundTriangles(multi: MultiPolygon, field: TerrainField, sideM: number): Tri[] {
   const out: Tri[] = [];
   for (const polygon of multi) {
@@ -236,9 +212,7 @@ export function groundTriangles(multi: MultiPolygon, field: TerrainField, sideM:
 
 export type DrapedTri = [[number, number, number], [number, number, number], [number, number, number]];
 
-/** Triangles with the exact terrain-mesh height at every vertex (east, north, z). */
 export function drapeTriangles(tris: Tri[], field: TerrainField, sideM: number): DrapedTri[] {
-  // Grid crossings computed from either side of a shared edge can differ by a few µm; weld at 0.1 mm.
   const q = (v: number) => Math.round(v * 1e4) / 1e4;
   const out: DrapedTri[] = [];
   for (const tri of tris) {
@@ -250,7 +224,6 @@ export function drapeTriangles(tris: Tri[], field: TerrainField, sideM: number):
   return out;
 }
 
-/** Three.js geometry (x east, y up, z = −north) for draped ground triangles. */
 export function groundGeometry(draped: DrapedTri[], tint?: (z: number) => [number, number, number]): THREE.BufferGeometry | null {
   if (draped.length === 0) return null;
   const positions = new Float32Array(draped.length * 9);

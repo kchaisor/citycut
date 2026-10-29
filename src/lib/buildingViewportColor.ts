@@ -10,7 +10,6 @@ export type BuildingColourMode = {
   colourBySource: boolean;
 };
 
-/** Pick the viewport fill for one building bucket before any solar neutral override. */
 export function buildingViewportFill(
   mode: BuildingColourMode,
   use: BuildingUse | undefined,
@@ -48,7 +47,6 @@ function forEachStandardMaterial(mesh: THREE.Mesh, fn: (material: THREE.MeshStan
   }
 }
 
-/** Remember each building material's intended viewport colour on first touch. */
 export function snapshotBuildingViewportColors(root: THREE.Object3D, mode: BuildingColourMode): void {
   for (const mesh of buildingMeshes(root)) {
     const name = mesh.name || mesh.parent?.name || "";
@@ -80,7 +78,6 @@ export function snapshotBuildingViewportColors(root: THREE.Object3D, mode: Build
   }
 }
 
-/** Apply or remove the solar neutral override without rebuilding geometry. */
 export function applyBuildingSolarNeutral(root: THREE.Object3D, solarDiagramOn: boolean, neutralFill: string): void {
   for (const mesh of buildingMeshes(root)) {
     forEachStandardMaterial(mesh, (material) => {
@@ -99,7 +96,6 @@ export function applyBuildingSolarNeutral(root: THREE.Object3D, solarDiagramOn: 
   }
 }
 
-/** During PNG export, briefly show the ordinary building colours even when the sun diagram is on. */
 export function withBuildingExportColours<T>(root: THREE.Object3D, solarDiagramOn: boolean, work: () => T): T {
   if (!solarDiagramOn) return work();
   const saved: {

@@ -1,11 +1,3 @@
-/**
- * Idempotently ensure pre-baked Greater Melbourne release assets (trees.pmtiles +
- * trees-manifest.json and building-enrichment.pmtiles + building-enrichment-manifest.json)
- * are present in public/ before building on Vercel or other CI hosts without `gh` CLI.
- *
- * Uses public GitHub Release URLs (no token required) and verifies SHA-256 digests before
- * installing into public/. Never fails the build if GitHub Releases is unreachable.
- */
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";

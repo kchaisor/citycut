@@ -10,7 +10,6 @@ export function getPmtilesProtocol(): Protocol {
   return protocolInstance;
 }
 
-/** One PMTiles instance per absolute URL (shared with MapLibre `pmtiles://` and app tile reads). */
 export function sharedPmtilesForAbsoluteUrl(absoluteUrl: string): PMTiles {
   const protocol = getPmtilesProtocol();
   let instance = protocol.tiles.get(absoluteUrl);
@@ -21,7 +20,6 @@ export function sharedPmtilesForAbsoluteUrl(absoluteUrl: string): PMTiles {
   return instance;
 }
 
-/** Register the `pmtiles://` tile protocol once for MapLibre vector sources. */
 export function ensurePmtilesProtocol(): void {
   if (registered || typeof window === "undefined") return;
   if (typeof maplibregl.addProtocol !== "function") return;

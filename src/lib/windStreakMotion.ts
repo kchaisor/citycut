@@ -14,7 +14,6 @@ export function writeWindAnimateAnyway(storage: Storage, value: boolean): void {
   try {
     storage.setItem(WIND_ANIMATE_ANYWAY_KEY, value ? "1" : "0");
   } catch {
-    // ignore
   }
 }
 

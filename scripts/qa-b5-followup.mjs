@@ -1,8 +1,3 @@
-/**
- * Follow-up QA: live footpath junction + contours over roads.
- * npm run build && npm run preview -- --host 127.0.0.1 --port 4173
- * npx vite-node scripts/qa-b5-followup.mjs
- */
 import { chromium } from "playwright";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { PNG } from "pngjs";
@@ -83,7 +78,6 @@ try {
     `${benchText}\ncreate_model_2km_wall_ms=${createBench.wallMsCreateToReady}\n`,
   );
 } catch {
-  /* optional bench-2km-create.json */
 }
 
 const browser = await chromium.launch({

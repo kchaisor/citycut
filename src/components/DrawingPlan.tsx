@@ -87,11 +87,8 @@ export function DrawingPlan({
   model: CityModel;
   kind?: DrawingKind;
   onScale?: (widthM: number) => void;
-  /** Resolved site-plan pens. Omit to read the current CSS cascade. */
   lineStyle?: LineStyles;
-  /** Drawing drawer plan scale. 2500 and smaller thin metro 1 m contours to 5 m. */
   planScale?: number;
-  /** When set, draws the sun path over the plan (same ring radius as the 3D heliodon). */
   heliodon?: HeliodonDiagramInput | null;
   castShadows?: boolean;
   shadowInput?: PlanShadowInput | null;
@@ -101,15 +98,10 @@ export function DrawingPlan({
   viewport?: PlanViewport;
   onViewportChange?: (view: PlanViewport) => void;
   fitCounter?: number;
-  /** Site plan sun study: hourly 9am–3pm shadow layers, hourly suns, scale bar and north arrow. */
   sunStudy?: SunStudyDate | null;
-  /** With the sun study on: draw the base plan in the quiet --sun-study-* fills. */
   sunStudyMuted?: boolean;
-  /** Which buildings cast the sun-study shadows. */
   sunStudyCasters?: SunStudyCasters;
-  /** Building ids picked on the plan for the sun study. */
   sunStudySelected?: readonly number[];
-  /** Click (not drag) on a building while the sun study is on. */
   onSunStudyPick?: (buildingId: number) => void;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -238,7 +230,6 @@ export function DrawingPlan({
   const treeFill = getColour("--tree-fill");
   const planEmpty = getColour("--plan-empty");
   const shadowFill = getColour("--shadow-fill");
-  // NSW mode only: null on Victorian cuts, so nothing below renders for them.
   const nswStyle = useMemo(() => (model.nsw ? readNswPlanStyle() : null), [model.nsw, colourTick]);
   const nswItems = useMemo(() => (nswStyle ? nswPlanItems(model, nswStyle.hatchM) : null), [model, nswStyle]);
   const study = figure ? null : sunStudy;
@@ -405,7 +396,6 @@ export function DrawingPlan({
           x = start.view.x + ((event.clientX - rect.left) / rect.width) * start.view.w;
           y = start.view.y + ((event.clientY - rect.top) / rect.height) * start.view.h;
         }
-        // A click is not a pan: undo any sub-threshold drift so picking never moves the view.
         if (onViewportChange) onViewportChange(start.view);
         else setInternalView(start.view);
         const hit = pickBuilding(model.buildings, [x, -y]);

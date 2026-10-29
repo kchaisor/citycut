@@ -7,18 +7,10 @@ type ClipFns = Pick<typeof import("polygon-clipping"), "intersection" | "union">
 const loaded = polygonClipping as unknown as ClipFns & { default?: ClipFns };
 const clip: ClipFns = typeof loaded.intersection === "function" ? loaded : loaded.default!;
 
-/** Road-surface holes at or below this area are medians, islands or join gaps, not city blocks (m²). */
 export const ROAD_MEDIAN_HOLE_MAX_M2 = 1200;
 
-/**
- * A gap is only a median or island when at least this share of its rim runs along a street
- * (any carriageway that is not a service way). Car-park bays and service loops are rimmed by
- * service ways and stay ground (Dandenong, 40 Cleeland St).
- */
 export const MEDIAN_STREET_RIM_MIN = 0.5;
-/** Slack beyond a street's half width when testing whether a rim point lies on that street (m). */
 const RIM_SLACK_M = 2;
-/** Rim sample spacing (m). */
 const RIM_STEP_M = 1;
 
 type Box = [number, number, number, number];
@@ -45,7 +37,6 @@ function segmentDistance(p: Pair, a: Pt, b: Pt): number {
   return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
 }
 
-/** Share of the hole rim (by length) lying on a street's carriageway edge. */
 export function streetRimShare(hole: Ring, streets: { line: Pt[]; width: number; box: Box }[]): number {
   const box = boxOf(hole);
   const near = streets.filter((s) => overlaps(s.box, [box[0] - 1, box[1] - 1, box[2] + 1, box[3] + 1]));
@@ -75,15 +66,6 @@ function toPolygon(rings: Pt[][]): Polygon {
   return rings.map((ring) => ring.map((p): Pair => [p[0], p[1]]));
 }
 
-/**
- * Fill the small holes in the plan road surface (paper showing between a median or island and the
- * carriageway) with road, leaving green and water in the hole visible. Footpaths in the hole are
- * painted over: the road sits above the kerb/footpath layer, so stray footpath slivers and stubs
- * inside the carriageway (junctions, beside roundabouts, beside rail) do not show. Holes that touch a
- * building stay as they are. When `streets` is given, a hole is only filled if at least
- * MEDIAN_STREET_RIM_MIN of its rim runs along a street, so car-park bays between service ways or
- * aisles stay ground. Plan-only: 3D, .3dm and city blocks use their own unions.
- */
 export function fillRoadMedianGaps(
   road: MultiPolygon,
   keep: { green: Pt[][][]; water: Pt[][][]; buildings: Pt[][][] },
@@ -118,7 +100,6 @@ export function fillRoadMedianGaps(
         continue;
       }
       const near = kept.filter((k) => overlaps(k.box, box)).map((k) => k.poly);
-      // What stays visible inside the hole becomes the new hole(s); road fills the rest.
       const visible = near.length > 0 ? clip.intersection([hole], clip.union(near[0]!, ...near.slice(1))) : [];
       for (const piece of visible) {
         const [pieceOuter, ...islands] = piece;

@@ -3,10 +3,8 @@ import * as polygonClipping from "polygon-clipping";
 import type { MultiPolygon, Polygon, Ring } from "polygon-clipping";
 import { signedArea } from "./geo";
 
-/** Clipper integer scale: 1 mm per unit (0.001 m). */
 export const CLIPPER_SCALE = 1000;
 
-/** Round-join arc tolerance on the ground, in metres. */
 export const CLIPPER_ARC_TOLERANCE_M = 0.05;
 
 type ClipperPoint = { X: number; Y: number };
@@ -105,7 +103,6 @@ function immediateParent(ring: Ring, all: Ring[]): Ring | null {
   return parent;
 }
 
-/** Nesting depth from immediate containment (0 = outermost shell). */
 export function containmentDepth(ring: Ring, all: Ring[]): number {
   let depth = 0;
   let current: Ring | null = ring;
@@ -120,12 +117,6 @@ export function containmentDepth(ring: Ring, all: Ring[]): number {
   return depth;
 }
 
-/**
- * Rebuild polygons from unordered rings: even depth is a shell, odd depth a hole, and each hole
- * belongs to the ring that immediately contains it. A ring's vertex average is not used: a concave
- * hole's vertex average can land inside one of its own islands, which used to drop the hole and
- * fill a whole city block as road (Dandenong shopping centre).
- */
 function normalizeFromRings(rings: Ring[]): MultiPolygon {
   if (rings.length === 0) return [];
   const parents = rings.map((ring) => immediateParent(ring, rings));
@@ -163,12 +154,10 @@ function normalizeFromRings(rings: Ring[]): MultiPolygon {
   return out;
 }
 
-/** Rebuild multipolygons from rings using even/odd nesting depth. */
 export function normalizeMultiPolygonByParity(polygons: MultiPolygon): MultiPolygon {
   return normalizeFromRings(flattenRings(polygons));
 }
 
-/** Offset one closed ring; may split into multiple rings. */
 function offsetSingleRing(open: Ring, deltaM: number, allowEmpty: boolean): Ring[] {
   if (open.length < 3 || !(Math.abs(deltaM) > 1e-9)) {
     const closed = openRing(open);
@@ -211,7 +200,6 @@ function offsetNormalizedByParity(normalized: MultiPolygon, deltaM: number): Mul
   return normalizeFromRings(expanded);
 }
 
-/** Offset every polygon in a multipolygon; round joins, arc tolerance 0.05 m. */
 export function offsetMultiPolygon(polygons: MultiPolygon, deltaM: number): MultiPolygon {
   if (polygons.length === 0 || !(Math.abs(deltaM) > 1e-9)) return polygons;
   const normalized = normalizeMultiPolygonByParity(polygons);
@@ -227,7 +215,6 @@ function intersectMultiPolygon(a: MultiPolygon, b: MultiPolygon): MultiPolygon {
   }
 }
 
-/** Closing: offset +r then −r, clamped to the +r dilation (fills concave pockets only). */
 export function offsetCloseMultiPolygon(polygons: MultiPolygon, radiusM: number): MultiPolygon {
   if (polygons.length === 0 || !(radiusM > 0)) return polygons;
   const normalized = normalizeMultiPolygonByParity(polygons);

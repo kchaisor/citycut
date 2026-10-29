@@ -1,6 +1,5 @@
 import * as THREE from "three";
 
-/** Diffuse-only city surfaces: no specular sheen or environment reflections. */
 export function matteStandardMaterial(
   params: THREE.MeshStandardMaterialParameters,
 ): THREE.MeshStandardMaterial {

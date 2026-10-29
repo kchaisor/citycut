@@ -3,7 +3,6 @@ import { pointInPolygon } from "./useCascade";
 import type { BuildingFeat, LonLat } from "../types";
 import type { ComBuildingFootprint } from "./comBuildingHeightsTypes";
 
-/** Human-readable identity for landmark footprint assertions (OSM / Overture / CoM). */
 export function landmarkFootprintDescriptor(
   building: BuildingFeat,
   options?: { lat: number; lon: number; center: LonLat; comFootprints?: ComBuildingFootprint[] },

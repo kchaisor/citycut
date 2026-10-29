@@ -59,7 +59,6 @@ describe("rhino export", () => {
         ...model.buildings,
         { id: 8, ring: square([60, 0], 16), holes: [], height: 10, use: "civic", source: "zone" },
       ],
-      // Vertex-level check of the mesh writer; the default Extrusion path is covered in rhinoExtrusion.test.ts.
     }, { buildingsAsMesh: true });
     const header = latin1(bytes);
     expect(header.startsWith("3D Geometry File Format")).toBe(true);

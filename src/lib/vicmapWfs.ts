@@ -2,7 +2,6 @@ import { openRing, toLocal } from "./geo";
 import type { FrameBBox } from "./useCascade";
 import type { LonLat, Pt } from "../types";
 
-/** Vicmap Open Data Platform WFS (GeoServer). Bbox is minLon,minLat,maxLon,maxLat,CRS:84. */
 export function vicmapWfsGetFeatureUrl(
   typeName: string,
   bounds: FrameBBox,

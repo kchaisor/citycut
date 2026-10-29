@@ -6,15 +6,10 @@ import {
   type KeyValueStore,
 } from "./heightOverrides";
 
-/**
- * Hidden buildings (massing replacement). Stored like height edits: one store for every cut,
- * keyed by Overture id, OSM way ids, or footprint centroid + area, so each cut only matches its own.
- */
 export const HIDDEN_BUILDINGS_STORAGE_KEY = "citycut.hiddenBuildings";
 export const HIDDEN_BUILDINGS_VERSION = 1 as const;
 
 export type HiddenBuilding = Omit<HeightOverride, "heightM"> & {
-  /** Shown in the hidden list. */
   label?: string;
 };
 
@@ -61,7 +56,6 @@ export function writeStoredHiddenBuildings(storage: KeyValueStore, store: Hidden
   try {
     storage.setItem(HIDDEN_BUILDINGS_STORAGE_KEY, JSON.stringify(store));
   } catch {
-    // Private mode can reject localStorage.
   }
 }
 
@@ -69,7 +63,6 @@ function asOverride(item: HiddenBuilding, index: number): HeightOverride {
   return { ...item, heightM: 0, _i: index } as HeightOverride;
 }
 
-/** Building id → stored entry, for the buildings of this cut that are hidden. */
 export function matchHiddenBuildings(
   buildings: BuildingFeat[],
   store: HiddenBuildingStore,
@@ -122,7 +115,6 @@ export function showHiddenEntry(store: HiddenBuildingStore, entry: HiddenBuildin
   return { v: HIDDEN_BUILDINGS_VERSION, hidden: store.hidden.filter((item) => item !== entry) };
 }
 
-/** Show all: clears only the entries that matched this cut, so other cuts keep theirs. */
 export function showAllInCut(store: HiddenBuildingStore, matched: Iterable<HiddenBuilding>): HiddenBuildingStore {
   const drop = new Set(matched);
   return { v: HIDDEN_BUILDINGS_VERSION, hidden: store.hidden.filter((item) => !drop.has(item)) };

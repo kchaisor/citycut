@@ -18,10 +18,8 @@ import type {
 const MAX_RELATION_MEMBERS = 80;
 const MIN_AREA = 4;
 
-/** Replaced when a terrain heightfield is attached to the model. */
 export const FLAT_GROUND_NOTE = "Ground is flat — no lidar or terrain in this version.";
 
-/** Legacy Overpass-shaped fixtures for unit tests only. */
 export type OverpassElement = {
   type: "node" | "way" | "relation";
   id: number;
@@ -84,7 +82,6 @@ function closeEnough(a: Pt, b: Pt): boolean {
   return Math.hypot(a[0] - b[0], a[1] - b[1]) < 1.2;
 }
 
-/** Join relation member ways that share endpoints into closed rings. */
 export function stitchRings(lines: Pt[][]): Pt[][] {
   const pool = lines.map((line) => line.slice()).filter((line) => line.length >= 2);
   const rings: Pt[][] = [];
@@ -184,7 +181,6 @@ function ringCentroid(points: Pt[]): Pt | null {
   return [east / open.length, north / open.length];
 }
 
-/** Places along a line, including the start, at about `spacing` metres. */
 function pointsAlong(line: Pt[], spacing: number): Pt[] {
   if (line.length === 0) return [];
   const out: Pt[] = [[line[0][0], line[0][1]]];
@@ -328,7 +324,6 @@ function relationRings(
   return { outers, inners, used };
 }
 
-/** Absolute plan area (local m²) for a closed way or multipolygon relation. */
 export function overpassPolygonAreaM2(element: OverpassElement, origin: LonLat): number | null {
   if (element.type === "way") {
     const line = pointsFromGeom(element.geometry, origin);
@@ -369,7 +364,6 @@ function canopyKind(tags: Record<string, string>): CanopyKind | null {
   return null;
 }
 
-/** Canopy polygons and the masks that keep infill off roads, buildings, and water. */
 export function collectTreeContext(elements: OverpassElement[], origin: LonLat, half: number): TreeContext {
   const canopy: CanopyPatch[] = [];
   const water: TreeContext["water"] = [];

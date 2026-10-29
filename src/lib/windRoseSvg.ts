@@ -13,7 +13,6 @@ export type WindRoseSvgOptions = {
   caption?: string;
 };
 
-/** Wedge paths for one rose (sector polygons in 0–1 unit space, centre at 0.5,0.5). */
 export function windRoseWedgePaths(
   table: WindRoseTable,
   period: WindPeriodId,

@@ -16,7 +16,6 @@ function errorParts(error: unknown): { name: string; message: string } {
   return { name: "Error", message: String(error) };
 }
 
-/** Map a render-time failure to a short user-facing reason. */
 export function classifySceneFailure(error: unknown): SceneFallbackDetail {
   const { name, message } = errorParts(error);
   const text = `${name} ${message}`.toLowerCase();
@@ -81,7 +80,6 @@ export function sceneFallbackMessage(detail: SceneFallbackDetail): { lead: strin
   }
 }
 
-/** Best-effort WebGL renderer string for console diagnostics. */
 export function readWebGlRendererLabel(): string | null {
   if (typeof document === "undefined") return null;
   const canvas = document.createElement("canvas");

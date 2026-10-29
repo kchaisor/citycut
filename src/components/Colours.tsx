@@ -12,10 +12,6 @@ import {
 } from "../lib/colours";
 import { applyOverrides, readStoredOverrides } from "../lib/drawingStyle";
 
-/**
- * Live fills. Collapsed until opened, in the same drawer as the line styles.
- * Edits are remembered as `citycut.colours` and applied as inline custom properties.
- */
 export function ColoursEditor({ onChange }: { onChange?: () => void }) {
   const panelId = useId();
   const [open, setOpen] = useState(false);
@@ -97,7 +93,6 @@ export function ColoursEditor({ onChange }: { onChange?: () => void }) {
                   try {
                     applyOverrides(readStoredOverrides(window.localStorage));
                   } catch {
-                    // A locked storage area still leaves the file colours in place.
                   }
                 });
                 onChange?.();

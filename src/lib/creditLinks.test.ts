@@ -14,7 +14,6 @@ function walk(dir: string): string[] {
   });
 }
 
-/** Every <a ...> opening tag with an href, in JSX or HTML strings. */
 function anchorTags(text: string): string[] {
   return text.match(/<a\s[^>]*href=[^>]*>/g) ?? [];
 }

@@ -19,10 +19,6 @@ function fillForBuilding(colourMode: BuildingColourMode, building: CityModel["bu
   return buildingViewportFill(colourMode, building.use, building.source);
 }
 
-/**
- * Hides the city meshes for one or more selected buildings and mounts semi-transparent overlays with dashed edges.
- * Call restore() on deselect.
- */
 export function mountSelectedBuildingsVisual(
   cityRoot: THREE.Object3D,
   model: CityModel,
@@ -68,10 +64,6 @@ export function mountSelectedBuildingsVisual(
   };
 }
 
-/**
- * Hides the city mesh for one building and mounts the semi-transparent overlay with dashed edges.
- * Call restore() on deselect.
- */
 export function mountSelectedBuildingVisual(
   cityRoot: THREE.Object3D,
   model: CityModel,
@@ -81,7 +73,6 @@ export function mountSelectedBuildingVisual(
   return mountSelectedBuildingsVisual(cityRoot, model, [buildingId], colourMode);
 }
 
-/** Same flow as a 3D building pick after raycast resolved the id. */
 export function selectedBuildingOpacityAfterPick(
   cityRoot: THREE.Object3D,
   model: CityModel,

@@ -101,7 +101,6 @@ describe("viewshedFrame on a synthetic grid", () => {
     expect(at(grid, frame, 28, 20)).toBe(CELL_BLOCKED);
     expect(at(grid, frame, 35, 20)).toBe(CELL_BLOCKED);
     expect(at(grid, frame, 15, 20)).toBe(CELL_VISIBLE);
-    // Covered cells (the wall itself) are not scored.
     expect(at(grid, frame, 25, 20)).toBe(CELL_OUTSIDE);
   });
 

@@ -7,102 +7,72 @@
 */
 
 :root {
-  /* Building outline. Thin black edge on the site plan and exports. */
   --building-stroke-mm: 0.08;
   --building-stroke: var(--outline-building);
   --building-dash: none;
 
-  /* Carriageway fill is --road-fill in colours.css. The name is unchanged, so a saved
-     line-style edit still sets it. #333333 is a darker option. */
-
-  /* Kerb outline. "on" draws it on the outer edge of the road fill. "off" hides it. */
   --road-kerb: on;
-  /* Thin edge of the carriageway. Mid grey so it reads on the fill and on #EBEBEB. */
   --road-kerb-mm: 0.22;
   --road-kerb-stroke: #8D8983;
   --road-kerb-dash: none;
 
-  /* Footpath strips. Metres on the ground, 0.6 m each side of the centreline, then unioned.
-     The fill is --path-fill in colours.css: just under the page and well above the road. */
   --path-width-m: 1.2;
-  /* Fillet radius at T and X junctions after the footpath union (m on the ground). */
   --path-fillet-m: 2;
 
-  /* Optional edge on the unioned outline only. "off" leaves the fill with no edge.
-     The old --path-stroke* names are the same edge, if a saved edit still uses them. */
   --path-edge: off;
   --path-edge-mm: 0;
   --path-edge-stroke: #5C5C5C;
   --path-edge-dash: none;
 
-  /* Rail, drawn as a line on top of the road fill where they cross. */
   --rail-stroke-mm: 0.12;
   --rail-stroke: var(--outline-rail);
   --rail-dash: 1.2 0.6;
 
-  /* PTV metro tram routes (dashed black). */
   --tram-stroke-mm: 0.12;
   --tram-stroke: var(--tram-line-stroke);
   --tram-dash: 1.2 0.6;
 
-  /* Edge of a park or other green area. */
   --green-stroke-mm: 0;
   --green-stroke: var(--outline-green);
   --green-dash: none;
 
-  /* Edge of water. */
   --water-stroke-mm: 0.08;
   --water-stroke: var(--outline-water);
   --water-dash: none;
 
-  /* Contours. Dashed, and drawn on top of the road fill so they stay visible. */
   --contour-stroke-mm: 0.02;
   --contour-stroke: #000000;
   --contour-dash: 1.5 0.75;
-  /* Every Nth drawn contour, slightly heavier. 5 is every 5th line. */
   --contour-index-mm: 0.18;
   --contour-index-every: 5;
-  /* Metro contours thinner than this step are drawn at this interval once the
-     plan scale reaches the denominator below. 2500 is 1:2500 and smaller
-     (1:5000, …). 1:500 and 1:1000 keep every metre. Index lines stay every
-     Nth drawn contour, so a 5 m step indexes every 25 m. */
   --contour-coarse-interval-m: 5;
   --contour-coarse-from-scale: 2500;
 
-  /* The square frame around the plan. */
   --frame-stroke-mm: 0.35;
   --frame-stroke: #1C1B17;
   --frame-dash: none;
 
-  /* Scale bar, north arrow, title, and the on-screen N. The weight is the stroke. */
   --annotation-stroke-mm: 0.13;
   --annotation-stroke: #1C1B17;
   --annotation-dash: none;
 
-  /* Outline of a tree crown. Fill is --tree-fill in colours.css. */
   --tree-stroke-mm: 0.08;
   --tree-stroke: var(--outline-tree);
   --tree-dash: none;
-  /* Tree crown fill opacity on the site plan and exports. */
   --tree-fill-opacity: 0.7;
 
-  /* Exploded axo vertical guide lines. */
   --axo-guide-dash: 0.8 0.5;
 
-  /* Dark outline on site-building fills so they read against retail/civic yellows. */
   --site-building-stroke-mm: 0.35;
   --site-building-stroke: #3D3010;
   --site-building-dash: none;
 
-  /* Searched-property parcel boundary on the site plan and in exports. */
   --site-boundary-mm: 0.35;
   --site-boundary-stroke: var(--site-boundary);
   --site-boundary-dash: 2.4 0.6 0.2 0.6;
 
-  /* Massing edge in the 3D view. Black, so the volume reads against the roads and the sky. */
   --building-edge: #000000;
 
-  /* NSW mode site-plan layers (lots, easements, centrelines, heritage, zoning). Colours are in colours.css. */
   --nsw-lot-mm: 0.05;
   --nsw-lot-dash: none;
   --nsw-easement-mm: 0.1;
@@ -111,8 +81,6 @@
   --nsw-centreline-dash: 2 0.6 0.3 0.6;
   --nsw-heritage-mm: 0.12;
   --nsw-heritage-dash: none;
-  /* Hatch spacing for heritage and easements, metres on the ground. */
   --nsw-hatch-m: 4;
-  /* Land zoning fill opacity on the site plan (0–1). */
   --nsw-zoning-opacity: 0.5;
 }
