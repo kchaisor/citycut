@@ -114,6 +114,11 @@ const INTRO_HOLD_RELEASE_SEC = INTRO_TRANSITION_SEC;
 export const INTRO_UNDERLAY_FADE_EXP = 1.65;
 // The 2D plan underlay reaches 0 this many ms before the tilt ends (3.30 s of 3.50 s).
 export const INTRO_UNDERLAY_LEAD_MS = 200;
+// The yellow 3D cut ring fades out over the first 150ms of the tilt.
+export const INTRO_CUT_RING_FADE_SEC = 0.15;
+export function computeIntroCutRingOpacity(elapsedSec: number): number {
+  return Math.max(0, 1 - Math.max(0, elapsedSec) / INTRO_CUT_RING_FADE_SEC);
+}
 const INTRO_UNDERLAY_FADE_SPAN = (INTRO_TRANSITION_MS - INTRO_UNDERLAY_LEAD_MS) / INTRO_TRANSITION_MS;
 
 export function computeIntroUnderlayOpacity(progress: number): number {
@@ -474,7 +479,7 @@ function City({
         group.userData.introScaleY = 1;
       } else {
         if (cutRingObj) {
-          const ringOp = Math.max(0, 1 - Math.pow(Math.min(1, existing.elapsedSec / INTRO_TRANSITION_SEC), 2.2));
+          const ringOp = computeIntroCutRingOpacity(existing.elapsedSec);
           cutRingObj.visible = ringOp > 0.005;
           const mat = cutRingObj.material as THREE.LineBasicMaterial;
           if (mat) mat.opacity = ringOp;
@@ -604,10 +609,10 @@ function City({
     const bldgOuter = done ? 1 : computeIntroBuildingBucketScale(clampedElapsed, 23);
     const treeScale = done ? 1 : computeIntroTreeWaveScale(clampedElapsed);
     if (ring) {
-      const rawT = Math.min(1, clampedElapsed / INTRO_TRANSITION_SEC);
-      const ringAlpha = done ? 0 : Math.max(0, 1 - Math.pow(rawT, 2.2));
+      const ringAlpha = done ? 0 : computeIntroCutRingOpacity(clampedElapsed);
       ring.visible = ringAlpha > 0.01;
       (ring.material as THREE.LineBasicMaterial).opacity = ringAlpha;
+      ds.introCutRingOpacity = ringAlpha.toFixed(3);
     }
     group.userData.introScaleY = bldgInner;
 

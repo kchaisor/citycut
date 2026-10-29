@@ -1268,6 +1268,71 @@ async function main() {
     }
 
     // -------------------------------------------------------------------------
+    // NO SEPARATE INNER PLAN: shortly after tilt start (~0.2s+), the 2D cut window must
+    // carry the same veil as the map around it and the yellow 3D cut ring must be gone.
+    // -------------------------------------------------------------------------
+    {
+      const ipCtx = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, reducedMotion: "no-preference" });
+      await ipCtx.addInitScript(() => {
+        window.__citycutMinSilentLoadMs = 1500;
+      });
+      const ipPage = await ipCtx.newPage();
+      await ipPage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+      await ipPage.waitForSelector("button.create-fab", { timeout: 20000 });
+      await ipPage.waitForTimeout(1500);
+      await ipPage.click("button.create-fab");
+      let ipElapsed = 0;
+      for (let i = 0; i < 1500 && ipElapsed < 0.35; i++) {
+        ipElapsed = await ipPage.evaluate(() => Number(document.querySelector(".model canvas")?.dataset.introElapsed ?? 0));
+        if (ipElapsed < 0.35) await ipPage.waitForTimeout(20);
+      }
+      await ipPage.evaluate(() => {
+        window.__citycutIntroPaused = true;
+      });
+      await ipPage.waitForTimeout(400);
+      const ipInfo = await ipPage.evaluate(() => {
+        const fr = document.querySelector(".select .map-wrap .frame");
+        const r = fr?.getBoundingClientRect();
+        const ring = document.querySelector(".model canvas")?.dataset.introCutRingOpacity;
+        return {
+          elapsed: Number(document.querySelector(".model canvas")?.dataset.introElapsed ?? 0),
+          rect: r ? { x: r.x, y: r.y, width: r.width, height: r.height } : null,
+          ringOpacity: ring === undefined ? 1 : Number(ring),
+        };
+      });
+      // Underlay alone: hide the 3D canvas so the 2D plan layer is measured on its own.
+      await ipPage.evaluate(() => {
+        const m = document.querySelector(".model");
+        if (m) m.style.visibility = "hidden";
+      });
+      const ipLum = async (clip) => {
+        const png = PNG.sync.read(await ipPage.screenshot({ clip }));
+        let sum = 0;
+        for (let i = 0; i < png.data.length; i += 4) sum += 0.2126 * png.data[i] + 0.7152 * png.data[i + 1] + 0.0722 * png.data[i + 2];
+        return sum / (png.data.length / 4);
+      };
+      let innerL = NaN;
+      let outerL = NaN;
+      if (ipInfo.rect) {
+        const { x, y, width, height } = ipInfo.rect;
+        innerL = await ipLum({ x: Math.round(x + 8), y: Math.round(y + 8), width: Math.round(width - 16), height: Math.round(height - 16) });
+        // Same-height bands just outside the cut on both sides.
+        const band = 120;
+        outerL =
+          ((await ipLum({ x: Math.max(0, Math.round(x - 8 - band)), y: Math.round(y + 8), width: band, height: Math.round(height - 16) })) +
+            (await ipLum({ x: Math.round(x + width + 8), y: Math.round(y + 8), width: band, height: Math.round(height - 16) }))) / 2;
+      }
+      await ipCtx.close();
+      const ipDiff = innerL - outerL;
+      assertCheck(
+        "tilt-no-separate-inner-plan",
+        "From tilt start + ~0.2s, no separate inner cut plan or edge is visible: the 2D cut window is no lighter than the map around it (<= 2/255) and the yellow 3D cut ring is hidden (opacity <= 0.01)",
+        Number.isFinite(ipDiff) && ipDiff <= 2 && ipInfo.ringOpacity <= 0.01,
+        `elapsed=${ipInfo.elapsed}, innerLum=${innerL.toFixed(1)}, outerLum=${outerL.toFixed(1)}, innerMinusOuter=${ipDiff.toFixed(1)}, ringOpacity=${ipInfo.ringOpacity}`,
+      );
+    }
+
+    // -------------------------------------------------------------------------
     // GENERATE 8-FRAME CONTACT SHEET + LIVE TRANSITION MP4 VIDEO
     // -------------------------------------------------------------------------
     if (fs.existsSync(ARTIFACTS_DIR)) {
