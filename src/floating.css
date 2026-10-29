@@ -3387,7 +3387,7 @@ body,
 }
 
 .select .map-wrap .frame {
-  transition: box-shadow 1514ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: box-shadow 1314ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .select .map-wrap .frame.is-processing,

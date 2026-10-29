@@ -628,10 +628,10 @@ async function main() {
         if (diff > maxStep) maxStep = diff;
       }
       const distinctIntermediate = new Set(samples.filter((v) => v > 0 && v < 100)).size;
-      // Verify that underlayOpacity tracks the late-tail curve (1 - (pct/100)^1.65) closely across all captured pairs
+      // Verify that underlayOpacity tracks the late-tail curve (1 - min(1, (pct/100) * 3500/3300)^1.65, reaching 0 200ms early) closely across all captured pairs
       let maxSyncDrift = 0;
       for (const pair of mon.syncPairs) {
-        const expectedOpacity = 1 - Math.pow(pair.pct / 100, 1.65);
+        const expectedOpacity = 1 - Math.pow(Math.min(1, (pair.pct / 100) * (3500 / 3300)), 1.65);
         const drift = Math.abs(pair.uOpacity - expectedOpacity);
         if (drift > maxSyncDrift) maxSyncDrift = drift;
       }
@@ -1216,6 +1216,9 @@ async function main() {
         }
         return sum / (png.data.length / 4);
       };
+      const outerLum = async () =>
+        ((await regionLum({ x: 40, y: 250, width: 360, height: 400 })) +
+          (await regionLum({ x: 1040, y: 250, width: 360, height: 400 }))) / 2;
       // Strictly inside the dashed cut boundary: frame rect inset 8px so the 2px dash strips are excluded.
       let innerClip = null;
       const innerLum = async () => {
@@ -1233,7 +1236,7 @@ async function main() {
           started: Boolean(window.__citycutIntroStarted),
           elapsed: Number(document.querySelector(".model canvas")?.dataset.introElapsed ?? 0),
         }));
-        toneSamples.push({ ...st, inner: Number((await innerLum()).toFixed(1)) });
+        toneSamples.push({ ...st, inner: Number((await innerLum()).toFixed(1)), outer: Number((await outerLum()).toFixed(1)) });
         if (st.started && st.elapsed >= 0.5) break;
       }
       await toneCtx.close();
@@ -1249,6 +1252,18 @@ async function main() {
         "Map luminance strictly inside the dashed cut boundary never brightens from the select screen through Phase A, the 3D handoff, and the first 0.5s of the tilt (no step up > 2/255, net rise <= 2/255; darkening into the 3D view is allowed)",
         toneValid.length >= 6 && toneSamples.some((t) => t.started) && maxStepUp <= 2 && netRise <= 2,
         `samples=${toneSamples.length}, baseline=${baseline}, maxStepUp=${maxStepUp.toFixed(1)}, netRise=${netRise.toFixed(1)}, trace=[${toneSamples.map((t) => `${t.started ? `B${t.elapsed}` : "A"}:${t.inner}`).join(" ")}]`,
+      );
+      let outerMaxStepUp = 0;
+      for (let i = 1; i < toneSamples.length; i++) {
+        outerMaxStepUp = Math.max(outerMaxStepUp, toneSamples[i].outer - toneSamples[i - 1].outer);
+      }
+      const outerBaseline = toneSamples[0]?.outer ?? 0;
+      const outerNetRise = Math.max(...toneSamples.map((t) => t.outer)) - outerBaseline;
+      assertCheck(
+        "handoff-tone-continuity-outer",
+        "Outer dimmed map luminance (outside the cut) stays continuous from the select screen through Phase A, the 3D handoff, and the first 0.5s of the tilt (no step up > 3/255, net rise <= 3/255)",
+        toneSamples.length >= 6 && toneSamples.some((t) => t.started) && outerMaxStepUp <= 3 && outerNetRise <= 3,
+        `samples=${toneSamples.length}, baseline=${outerBaseline}, maxStepUp=${outerMaxStepUp.toFixed(1)}, netRise=${outerNetRise.toFixed(1)}, trace=[${toneSamples.map((t) => `${t.started ? `B${t.elapsed}` : "A"}:${t.outer}`).join(" ")}]`,
       );
     }
 
