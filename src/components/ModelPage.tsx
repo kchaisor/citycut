@@ -1,3 +1,4 @@
+import { ReliabilityLegend } from "./ReliabilityLegend";
 import { sunStudyCasterModel, sunStudyMutedOn, toggleSelection, type SunStudyDate } from "../lib/sunStudyPlan";
 import { sunStudyLayersFor } from "./useSunStudyShadows";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
@@ -266,6 +267,18 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     () => !capturePresetFromSearch(window.location.search).uniformBuildings,
   );
   const [showSource, setShowSource] = useState(false);
+  const [showReliability, setShowReliability] = useState(
+    () => capturePresetFromSearch(window.location.search).reliabilityBuildings,
+  );
+  const showSourceOrReliability = showSource || showReliability;
+  function pickSourceStyle(next: boolean) {
+    setShowSource(next);
+    setShowReliability(false);
+  }
+  function pickReliabilityStyle() {
+    setShowSource(false);
+    setShowReliability(true);
+  }
   /** Rhino export: buildings as triangle meshes instead of closed Extrusions. */
   const [buildingsAsMesh, setBuildingsAsMesh] = useState(false);
   const [comFootprints, setComFootprints] = useState<ComBuildingFootprint[]>(
@@ -394,8 +407,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       heliodon: heliodonDiagramExport(),
       shadows: planShadowInput(),
       castShadows: solar.castShadows,
-      uniformBuildings: !colourByUse && !showSource,
+      uniformBuildings: !colourByUse && !showSourceOrReliability,
       colourBySource: showSource,
+      colourByReliability: showReliability,
       highlightManual: showManualEdits && overrideResult.manualCount > 0,
       wind:
         windSettings.enabled && windTable
@@ -1226,7 +1240,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   function pickBuildingUseColour(use: BuildingUse, value: string) {
     commitColour(BUILDING_USE_META[use].key, value);
     if (!colourByUse || showSource) {
-      setShowSource(false);
+      pickSourceStyle(false);
       setColourByUse(true);
     }
     if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "buildings")) {
@@ -1268,8 +1282,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
         heliodon: heliodonRhinoExport(),
         shadows: planShadowInput(),
         castShadows: solar.castShadows,
-        uniformBuildings: !colourByUse && !showSource,
+        uniformBuildings: !colourByUse && !showSourceOrReliability,
         colourBySource: showSource,
+        colourByReliability: showReliability,
         wind:
           windSettings.enabled && windTable
             ? { table: windTable, period: windSettings.period }
@@ -1747,8 +1762,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             <SceneBoundary>
               <Scene3D
                 model={displayModel}
-                uniformBuildings={!colourByUse && !showSource}
+                uniformBuildings={!colourByUse && !showSourceOrReliability}
                 colourBySource={showSource}
+                colourByReliability={showReliability}
                 showManualEdits={showManualEdits}
                 projection={view.projection}
                 corner={view.corner}
@@ -1860,8 +1876,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     return next;
                   })
                 }
-                uniformBuildings={!colourByUse && !showSource}
+                uniformBuildings={!colourByUse && !showSourceOrReliability}
                 colourBySource={showSource}
+                colourByReliability={showReliability}
                 highlightManual={showManualEdits && overrideResult.manualCount > 0}
                 viewport={planViewport}
                 onViewportChange={setPlanViewport}
@@ -2293,22 +2310,25 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     <button
                       type="button"
                       data-autofocus="true"
-                      aria-pressed={colourByUse && !showSource}
+                      aria-pressed={colourByUse && !showSourceOrReliability}
                       onClick={() => {
-                        setShowSource(false);
+                        pickSourceStyle(false);
                         setColourByUse(true);
                       }}
                     >
                       Use
                     </button>
-                    <button type="button" aria-pressed={showSource} onClick={() => setShowSource(true)}>
+                    <button type="button" aria-pressed={showSource} onClick={() => pickSourceStyle(true)}>
                       Source
+                    </button>
+                    <button type="button" aria-pressed={showReliability} onClick={pickReliabilityStyle}>
+                      Reliability
                     </button>
                     <button
                       type="button"
-                      aria-pressed={!colourByUse && !showSource}
+                      aria-pressed={!colourByUse && !showSourceOrReliability}
                       onClick={() => {
-                        setShowSource(false);
+                        pickSourceStyle(false);
                         setColourByUse(false);
                       }}
                     >
@@ -2327,7 +2347,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                         <label
                           className="legend-swatch"
                           style={{
-                            background: colourByUse && !showSource ? BUILDING_USE_META[use].color : uniform,
+                            background: colourByUse && !showSourceOrReliability ? BUILDING_USE_META[use].color : uniform,
                           }}
                           title={`Change ${BUILDING_USE_META[use].label.toLowerCase()} colour`}
                         >
@@ -2508,10 +2528,10 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                       </button>
                       <button
                         type="button"
-                        className={!view3dDisplay.whiteCard && colourByUse && !showSource ? "style-btn active" : "style-btn"}
-                        aria-pressed={!view3dDisplay.whiteCard && colourByUse && !showSource}
+                        className={!view3dDisplay.whiteCard && colourByUse && !showSourceOrReliability ? "style-btn active" : "style-btn"}
+                        aria-pressed={!view3dDisplay.whiteCard && colourByUse && !showSourceOrReliability}
                         onClick={() => {
-                          setShowSource(false);
+                          pickSourceStyle(false);
                           setColourByUse(true);
                           if (view3dDisplay.whiteCard) {
                             commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
@@ -2525,7 +2545,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                         className={!view3dDisplay.whiteCard && showSource ? "style-btn active" : "style-btn"}
                         aria-pressed={!view3dDisplay.whiteCard && showSource}
                         onClick={() => {
-                          setShowSource(true);
+                          pickSourceStyle(true);
                           if (view3dDisplay.whiteCard) {
                             commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
                           }
@@ -2535,10 +2555,24 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                       </button>
                       <button
                         type="button"
-                        className={!view3dDisplay.whiteCard && !colourByUse && !showSource ? "style-btn active" : "style-btn"}
-                        aria-pressed={!view3dDisplay.whiteCard && !colourByUse && !showSource}
+                        className={!view3dDisplay.whiteCard && showReliability ? "style-btn active" : "style-btn"}
+                        aria-pressed={!view3dDisplay.whiteCard && showReliability}
+                        data-style="reliability"
                         onClick={() => {
-                          setShowSource(false);
+                          pickReliabilityStyle();
+                          if (view3dDisplay.whiteCard) {
+                            commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+                          }
+                        }}
+                      >
+                        Reliability
+                      </button>
+                      <button
+                        type="button"
+                        className={!view3dDisplay.whiteCard && !colourByUse && !showSourceOrReliability ? "style-btn active" : "style-btn"}
+                        aria-pressed={!view3dDisplay.whiteCard && !colourByUse && !showSourceOrReliability}
+                        onClick={() => {
+                          pickSourceStyle(false);
                           setColourByUse(false);
                           if (view3dDisplay.whiteCard) {
                             commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
@@ -2548,6 +2582,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                         Uniform
                       </button>
                     </div>
+                    {showReliability && !view3dDisplay.whiteCard && <ReliabilityLegend buildings={displayModel.buildings} />}
                     <label className="check-field sr-only">
                       <input
                         type="checkbox"
@@ -2737,10 +2772,10 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                         <div className="style-seg seg-mini" role="group" aria-label="Building style">
                           <button
                             type="button"
-                            className={colourByUse && !showSource ? "style-btn active" : "style-btn"}
-                            aria-pressed={colourByUse && !showSource}
+                            className={colourByUse && !showSourceOrReliability ? "style-btn active" : "style-btn"}
+                            aria-pressed={colourByUse && !showSourceOrReliability}
                             onClick={() => {
-                              setShowSource(false);
+                              pickSourceStyle(false);
                               setColourByUse(true);
                             }}
                           >
@@ -2751,23 +2786,33 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                             className={showSource ? "style-btn active" : "style-btn"}
                             aria-pressed={showSource}
                             onClick={() => {
-                              setShowSource(true);
+                              pickSourceStyle(true);
                             }}
                           >
                             Source
                           </button>
                           <button
                             type="button"
-                            className={!colourByUse && !showSource ? "style-btn active" : "style-btn"}
-                            aria-pressed={!colourByUse && !showSource}
+                            className={showReliability ? "style-btn active" : "style-btn"}
+                            aria-pressed={showReliability}
+                            data-style="reliability"
+                            onClick={pickReliabilityStyle}
+                          >
+                            Reliability
+                          </button>
+                          <button
+                            type="button"
+                            className={!colourByUse && !showSourceOrReliability ? "style-btn active" : "style-btn"}
+                            aria-pressed={!colourByUse && !showSourceOrReliability}
                             onClick={() => {
-                              setShowSource(false);
+                              pickSourceStyle(false);
                               setColourByUse(false);
                             }}
                           >
                             Uniform
                           </button>
                         </div>
+                        {showReliability && <ReliabilityLegend buildings={displayModel.buildings} />}
                         <div className="mini-flags sub-toggles display-switches" role="group" aria-label="View modes">
                           <label className={showManualEdits ? "mini-flag is-on check-field" : "mini-flag check-field"}>
                             <input

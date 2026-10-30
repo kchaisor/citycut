@@ -121,6 +121,11 @@
   /* Buildings with no tag and no zone, and that legend swatch. */
   --source-none: #B8B8B8;
 
+  --reliability-measured: #2E6B4F;
+  --reliability-recorded: #3D5A73;
+  --reliability-estimated: #7D7D7D;
+  --reliability-manual: #D4A017;
+
   /* Roads and paths */
 
   /* Unioned carriageway on the site plan and the figure-ground, on screen and in the Illustrator file. */

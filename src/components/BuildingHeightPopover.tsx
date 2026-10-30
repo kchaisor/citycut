@@ -7,6 +7,7 @@ import {
   loadBuildingPopupDetails,
   type BuildingPopupDetails,
 } from "../lib/buildingPopupLookup";
+import { ReliabilityBadge } from "./ReliabilityLegend";
 import { interiorPoint } from "../lib/useCascade";
 import { fromLocal } from "../lib/geo";
 import type { DamFloorRecord } from "../lib/comDevelopmentFloors";
@@ -140,6 +141,12 @@ export function BuildingHeightPopover({
           <Field label="Use" value={details.useLine} />
           <Field label="Name / address" value={details.nameLine} />
           <Field label="Height & storeys" value={details.heightStoreysLine} />
+          <p className="building-popup-field" data-field="height-reliability">
+            <span className="field-label">Height reliability</span>
+            <span className="field-value">
+              <ReliabilityBadge building={building} /> · {buildingHeightSourceLabelForBuilding(building)}
+            </span>
+          </p>
           <Field label="Zone & overlays" value={details.zoneLine} />
           <Field label="Lot / site" value={details.lotLine} />
           {showCom && <Field label="Year built" value={details.yearLine} />}

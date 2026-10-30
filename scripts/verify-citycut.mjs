@@ -985,6 +985,56 @@ async function main() {
       await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v17-display-reset-colours.png") });
     }
 
+    const reliabilityBtn = page.locator('.model .left-outliner .style-seg button[data-style="reliability"]').first();
+    const hasReliabilityBtn = (await reliabilityBtn.count()) > 0;
+    if (hasReliabilityBtn) {
+      await reliabilityBtn.click();
+      await page.waitForTimeout(900);
+    }
+    const reliabilityInfo = await page.evaluate(() => {
+      const seg = document.querySelector('.model .left-outliner .style-seg[aria-label="Building style"]');
+      const btn = seg?.querySelector('button[data-style="reliability"]');
+      const legend = document.querySelector(".model .left-outliner .reliability-legend");
+      const counts = Array.from(legend?.querySelectorAll("[data-reliability-count]") ?? []).map((el) =>
+        Number(el.getAttribute("data-reliability-count")),
+      );
+      const total = Number(legend?.getAttribute("data-reliability-total") ?? 0);
+      const labels = Array.from(legend?.querySelectorAll(".reliability-label") ?? []).map((el) => el.textContent?.trim() ?? "");
+      const canvas = document.querySelector(".model canvas");
+      const segButtons = Array.from(seg?.querySelectorAll("button") ?? []);
+      const clipped = segButtons.some((el) => el.scrollWidth > el.clientWidth + 1);
+      return {
+        active: Boolean(btn?.classList.contains("active")),
+        onlyOneActive: segButtons.filter((el) => el.classList.contains("active")).length === 1,
+        total,
+        countSum: counts.reduce((a, b) => a + b, 0),
+        labels,
+        fade: canvas instanceof HTMLCanvasElement ? canvas.dataset.reliabilityFade ?? "" : "",
+        clipped,
+      };
+    });
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "reliability-style-3d.png") });
+    }
+    assertCheck(
+      "reliability-style",
+      "Display › Reliability is the only active building style, shows a Height reliability legend whose per-tier counts sum to its total, labels Measured, Recorded and Estimated tiers, finishes the colour fade, and no style button text is clipped at 1440x900",
+      hasReliabilityBtn &&
+        reliabilityInfo.active &&
+        reliabilityInfo.onlyOneActive &&
+        reliabilityInfo.total > 0 &&
+        reliabilityInfo.countSum === reliabilityInfo.total &&
+        ["Measured", "Recorded", "Estimated"].every((label) => reliabilityInfo.labels.includes(label)) &&
+        reliabilityInfo.fade === "1.00" &&
+        !reliabilityInfo.clipped,
+      JSON.stringify(reliabilityInfo),
+    );
+    const useStyleBtn = page.locator('.model .left-outliner .style-seg button', { hasText: "Use" }).first();
+    if ((await useStyleBtn.count()) > 0) {
+      await useStyleBtn.click();
+      await page.waitForTimeout(150);
+    }
+
     // -------------------------------------------------------------------------
     // SITE ANALYSIS DIRECTION A INVARIANT (IN 3D MODEL)
     // -------------------------------------------------------------------------

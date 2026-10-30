@@ -1,3 +1,4 @@
+import { HEIGHT_RELIABILITY_KEYS, HEIGHT_RELIABILITY_META } from "./heightReliability";
 import * as THREE from "three";
 import { regionCredit } from "./sources/registry";
 import rhino3dm from "rhino3dm/rhino3dm.module.js";
@@ -76,6 +77,9 @@ export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
   for (const use of BUILDING_USES) {
     const layer = BUILDING_USE_META[use].layer;
     keys[`Buildings::${layer}`] = BUILDING_LAYER_KEYS[layer];
+  }
+  for (const reliability of HEIGHT_RELIABILITY_KEYS) {
+    keys[HEIGHT_RELIABILITY_META[reliability].layer] = HEIGHT_RELIABILITY_META[reliability].key;
   }
   return keys;
 }
@@ -288,6 +292,10 @@ function objectAttributes(
   const typologySource = mesh.userData.typologySource;
   if (typeof use === "string") attributes.setUserString("use", use);
   if (typeof typologySource === "string") attributes.setUserString("typology_source", typologySource);
+  const reliability = mesh.userData.heightReliability;
+  const heightSource = mesh.userData.heightSource;
+  if (typeof reliability === "string") attributes.setUserString("height_reliability", reliability);
+  if (typeof heightSource === "string") attributes.setUserString("height_source", heightSource);
   return attributes;
 }
 
@@ -873,6 +881,7 @@ export type CityModelTo3dmOptions = {
   castShadows?: boolean;
   uniformBuildings?: boolean;
   colourBySource?: boolean;
+  colourByReliability?: boolean;
   wind?: { table: WindRoseTable; period: WindPeriodId } | null;
   /** "Hide trees" from the 3D display modes (#87). Trees are left out, as in the 3D view. */
   hideTrees?: boolean;
@@ -943,6 +952,7 @@ function normalize3dmOptions(
     "castShadows" in options ||
     "shadows" in options ||
     "uniformBuildings" in options ||
+    "colourByReliability" in options ||
     "wind" in options ||
     "hideTrees" in options ||
     "importedMassing" in options ||
@@ -966,6 +976,7 @@ export async function cityModelTo3dm(
     castShadows,
     uniformBuildings,
     colourBySource,
+    colourByReliability,
     wind,
     hideTrees,
     importedMassing,
@@ -979,9 +990,10 @@ export async function cityModelTo3dm(
   const rhino = await loadRhino();
   const crs = mgaCrs(model.center.lon);
   const group = buildCityGroup(model, {
-    splitBuildings: !uniformBuildings,
-    uniformBuildings: Boolean(uniformBuildings),
+    splitBuildings: !uniformBuildings || Boolean(colourByReliability),
+    uniformBuildings: Boolean(uniformBuildings) && !colourByReliability,
     colourBySource: Boolean(colourBySource),
+    colourByReliability: Boolean(colourByReliability),
   });
   const doc = new rhino.File3dm();
   try {

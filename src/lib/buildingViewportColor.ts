@@ -2,12 +2,14 @@ import * as THREE from "three";
 import { applyMatteFinish } from "./matteMaterial";
 import type { BuildingUse } from "../types";
 import { getColour } from "./colours";
+import { parseReliabilityBucket, reliabilityFill, type HeightReliability } from "./heightReliability";
 import { BUILDING_USE_META, SOURCE_META, buildingLayerName, uniformBuildingColor } from "./buildingUse";
 
 export type BuildingColourMode = {
   colourByUse: boolean;
   uniformBuildings: boolean;
   colourBySource: boolean;
+  colourByReliability?: boolean;
 };
 
 /** Pick the viewport fill for one building bucket before any solar neutral override. */
@@ -15,7 +17,9 @@ export function buildingViewportFill(
   mode: BuildingColourMode,
   use: BuildingUse | undefined,
   sourceKey: string | undefined,
+  reliability?: HeightReliability,
 ): string {
+  if (mode.colourByReliability && reliability) return reliabilityFill(reliability);
   if (mode.colourBySource && sourceKey) {
     const meta = SOURCE_META[sourceKey as keyof typeof SOURCE_META];
     if (meta) return meta.color;
@@ -24,7 +28,9 @@ export function buildingViewportFill(
   return BUILDING_USE_META[use].color;
 }
 
-export function parseBuildingBucketName(name: string): { use?: BuildingUse; sourceKey?: string } {
+export function parseBuildingBucketName(name: string): { use?: BuildingUse; sourceKey?: string; reliability?: HeightReliability } {
+  const reliability = parseReliabilityBucket(name);
+  if (reliability) return { reliability };
   if (name.startsWith("source:")) return { sourceKey: name.slice("source:".length) };
   const use = (Object.keys(BUILDING_USE_META) as BuildingUse[]).find((key) => buildingLayerName(key) === name);
   return use ? { use } : {};
@@ -36,7 +42,7 @@ function buildingMeshes(root: THREE.Object3D): THREE.Mesh[] {
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh) return;
     const name = mesh.name || mesh.parent?.name || "";
-    if (name.startsWith("Buildings") || name.startsWith("source:")) meshes.push(mesh);
+    if (name.startsWith("Buildings") || name.startsWith("source:") || name.startsWith("reliability:")) meshes.push(mesh);
   });
   return meshes;
 }
@@ -70,8 +76,8 @@ export function snapshotBuildingViewportColors(root: THREE.Object3D, mode: Build
       });
       continue;
     }
-    const { use, sourceKey } = parseBuildingBucketName(name);
-    const fill = buildingViewportFill(mode, use, sourceKey);
+    const { use, sourceKey, reliability } = parseBuildingBucketName(name);
+    const fill = buildingViewportFill(mode, use, sourceKey, reliability);
     forEachStandardMaterial(mesh, (material) => {
       material.userData.viewportFill = fill;
       material.color.setStyle(fill);
@@ -132,4 +138,26 @@ export function withBuildingExportColours<T>(root: THREE.Object3D, solarDiagramO
       entry.material.emissiveIntensity = entry.emissiveIntensity;
     }
   }
+}
+
+export type ColourFade = { material: THREE.MeshStandardMaterial; from: THREE.Color; to: THREE.Color }[];
+
+export function reliabilityColourFade(root: THREE.Object3D, fromFill: string): ColourFade {
+  const fade: ColourFade = [];
+  for (const mesh of buildingMeshes(root)) {
+    const name = mesh.name || mesh.parent?.name || "";
+    if (!name.startsWith("reliability:")) continue;
+    forEachStandardMaterial(mesh, (material) => {
+      const rest = material.userData.viewportFill as string | undefined;
+      if (!rest) return;
+      fade.push({ material, from: new THREE.Color(fromFill), to: new THREE.Color(rest) });
+    });
+  }
+  return fade;
+}
+
+export function stepColourFade(fade: ColourFade, progress: number): void {
+  const t = Math.min(1, Math.max(0, progress));
+  const eased = 1 - (1 - t) ** 3;
+  for (const entry of fade) entry.material.color.copy(entry.from).lerp(entry.to, eased);
 }

@@ -1,3 +1,4 @@
+import { buildingHeightReliability, reliabilityFill } from "./heightReliability";
 import * as THREE from "three";
 import { treesVisibleIn3d } from "./view3dDisplay";
 import type { PdfChunk, Rgb } from "./aiDocument";
@@ -70,6 +71,7 @@ type Occ = ScreenTri;
 export type ViewStyle = {
   uniformBuildings: boolean;
   colourBySource: boolean;
+  colourByReliability?: boolean;
   whiteCard?: boolean;
   showOutlines?: boolean;
   showContours?: boolean;
@@ -193,6 +195,7 @@ function cardGround(): Rgb {
 
 function buildingColor(building: BuildingFeat, style: ViewStyle): Rgb {
   if (style.whiteCard) return cardWhite();
+  if (style.colourByReliability) return hexRgb(reliabilityFill(buildingHeightReliability(building)));
   if (style.colourBySource) return hexRgb(SOURCE_META[building.source].color);
   if (style.uniformBuildings) return hexRgb(uniformBuildingColor());
   return hexRgb(BUILDING_USE_META[building.use].color);

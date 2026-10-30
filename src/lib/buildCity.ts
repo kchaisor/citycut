@@ -12,6 +12,8 @@ import { hexRgb, overlapLift, ROAD_COLOR, ROAD_RGB, roadGradeLayer, SURFACE } fr
 import { matteStandardMaterial } from "./matteMaterial";
 import { isSiteBuilding } from "./siteBuildings";
 import { siteBoundaryLineGeometry } from "./siteBoundaryDash3d";
+import { HEIGHT_RELIABILITY_META, buildingHeightReliability, parseReliabilityBucket, reliabilityBucketName } from "./heightReliability";
+import { buildingHeightSourceLabelForBuilding } from "./heightOverrides";
 import { clipTransportLines, drapedDashedLineGeometry } from "./dashedTransportLines";
 import { readDrawingStyle } from "./drawingStyle";
 import { basePlinthBuffers, footprintBase, sampleTerrain, terrainBuffers, terrainTint } from "./terrain";
@@ -24,6 +26,7 @@ export type CityBuildOptions = {
   uniformBuildings?: boolean;
   /** Viewport only. Recolour by typology source. Inferred tiers are hatched. */
   colourBySource?: boolean;
+  colourByReliability?: boolean;
   /** One mesh per building so a Rhino object can carry use and typology_source. */
   splitBuildings?: boolean;
   /** Viewport only. Manual-height buildings render in the manual tint when on. */
@@ -626,15 +629,18 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   }
   const siteFill = getColour("--site-building");
   const siteLayerName = "Buildings::Site";
-  const bySource = Boolean(options.colourBySource) && !options.splitBuildings;
-  const uniform = Boolean(options.uniformBuildings) && !bySource && !options.splitBuildings;
+  const byReliability = Boolean(options.colourByReliability);
+  const bySource = Boolean(options.colourBySource) && !byReliability && !options.splitBuildings;
+  const uniform = Boolean(options.uniformBuildings) && !bySource && !byReliability && !options.splitBuildings;
   if (options.splitBuildings) {
     for (const building of model.buildings) {
       const base = (model.terrain ? footprintBase(model.terrain, building.ring, model.sideM) : 0) + SURFACE.building.lift;
       const geometries = extrudeFootprint(building, base);
       const onSite = isSiteBuilding(model, building.id);
-      const name = onSite ? siteLayerName : buildingLayerName(building.use);
-      const color = onSite ? siteFill : BUILDING_USE_META[building.use].color;
+      const reliability = buildingHeightReliability(building);
+      const reliabilityMeta = byReliability && !onSite ? HEIGHT_RELIABILITY_META[reliability] : undefined;
+      const name = onSite ? siteLayerName : reliabilityMeta?.layer ?? buildingLayerName(building.use);
+      const color = onSite ? siteFill : reliabilityMeta?.color ?? BUILDING_USE_META[building.use].color;
       const material = paint(matteStandardMaterial({ color }), SURFACE.building);
       material.name = name;
       for (const geometry of geometries) {
@@ -643,6 +649,8 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
         mesh.userData.layerColor = hexRgb(color);
         mesh.userData.use = building.use;
         mesh.userData.typologySource = building.source;
+        mesh.userData.heightReliability = reliability;
+        mesh.userData.heightSource = buildingHeightSourceLabelForBuilding(building);
         mesh.userData.buildingId = building.id;
         order(mesh, SURFACE.building.renderOrder);
         group.add(mesh);
@@ -652,6 +660,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     const buckets = new Map<string, MergeEntry[]>();
     const bucketMinBaseY = new Map<string, number>();
     const bucketName = (building: BuildingFeat) => {
+      if (byReliability) return reliabilityBucketName(buildingHeightReliability(building));
       if (bySource) return `source:${building.source}`;
       if (uniform) return "Buildings";
       return buildingLayerName(building.use);
@@ -714,12 +723,14 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
       const radialBucket = sepIdx >= 0 ? Number(bucketKey.slice(sepIdx + 2)) : undefined;
       const sourceKey = name.startsWith("source:") ? name.slice("source:".length) : "";
       const sourceMeta = bySource ? SOURCE_META[sourceKey as keyof typeof SOURCE_META] : undefined;
+      const reliabilityKey = byReliability ? parseReliabilityBucket(name) : undefined;
+      const reliabilityMeta = reliabilityKey ? HEIGHT_RELIABILITY_META[reliabilityKey] : undefined;
       const use = (Object.keys(BUILDING_USE_META) as BuildingUse[]).find(
         (key) => buildingLayerName(key) === name,
       );
-      const color = sourceMeta?.color ?? (uniform || !use ? uniformBuildingColor() : BUILDING_USE_META[use].color);
+      const color = reliabilityMeta?.color ?? sourceMeta?.color ?? (uniform || !use ? uniformBuildingColor() : BUILDING_USE_META[use].color);
       const material = paint(matteStandardMaterial({ color }), SURFACE.building);
-      if (sourceMeta?.inferred) {
+      if (sourceMeta?.inferred || reliabilityMeta?.estimate) {
         const map = inferredStripeMap();
         if (map) material.map = map;
       }
@@ -730,7 +741,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
         buildings.userData.introBuildingBucket = radialBucket;
         buildings.userData.introBaseY = bucketMinBaseY.get(bucketKey) ?? 0;
       }
-      const layerColor = use && !uniform ? hexRgb(BUILDING_USE_META[use].color) : undefined;
+      const layerColor = reliabilityMeta ? hexRgb(reliabilityMeta.color) : use && !uniform ? hexRgb(BUILDING_USE_META[use].color) : undefined;
       if (layerColor) {
         buildings.traverse((child) => {
           child.userData.layerColor = layerColor;
