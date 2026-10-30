@@ -112,31 +112,128 @@ export function cutLineEndpoints(state: Pick<SectionCutState, "angleDeg" | "offs
 
 type Listener = () => void;
 
+export type SectionCutDef = {
+  id: number;
+  label: string;
+  angleDeg: number;
+  offsetM: number;
+  flipped: boolean;
+  fill: SectionFill;
+};
+
+export type SectionSet = {
+  enabled: boolean;
+  cuts: SectionCutDef[];
+  activeId: number;
+  hoverBuildingId: number | null;
+  drawingOpen: boolean;
+};
+
+const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+export const MAX_SECTION_CUTS = 6;
+
+export function nextSectionLabel(cuts: readonly Pick<SectionCutDef, "label">[]): string {
+  const used = new Set(cuts.map((cut) => cut.label));
+  for (const letter of LETTERS) if (!used.has(letter)) return letter;
+  return `S${cuts.length + 1}`;
+}
+
+export function sectionTitle(label: string): string {
+  return `${label}–${label}′`;
+}
+
+export function activeCut(set: SectionSet): SectionCutDef {
+  return set.cuts.find((cut) => cut.id === set.activeId) ?? set.cuts[0];
+}
+
+function viewOf(set: SectionSet): SectionCutState {
+  const cut = activeCut(set);
+  return { enabled: set.enabled, angleDeg: cut.angleDeg, offsetM: cut.offsetM, flipped: cut.flipped, fill: cut.fill };
+}
+
+export function initialSectionSet(initial: SectionCutState = DEFAULT_SECTION_CUT): SectionSet {
+  return {
+    enabled: initial.enabled,
+    cuts: [{ id: 1, label: "A", angleDeg: initial.angleDeg, offsetM: initial.offsetM, flipped: initial.flipped, fill: initial.fill }],
+    activeId: 1,
+    hoverBuildingId: null,
+    drawingOpen: false,
+  };
+}
+
+export function addSectionCut(set: SectionSet): SectionSet {
+  if (set.cuts.length >= MAX_SECTION_CUTS) return set;
+  const from = activeCut(set);
+  const id = Math.max(...set.cuts.map((cut) => cut.id)) + 1;
+  const cut: SectionCutDef = {
+    id,
+    label: nextSectionLabel(set.cuts),
+    angleDeg: normalizeAngle(from.angleDeg + 90),
+    offsetM: 0,
+    flipped: false,
+    fill: from.fill,
+  };
+  return { ...set, enabled: true, cuts: [...set.cuts, cut], activeId: id };
+}
+
+export function removeSectionCut(set: SectionSet, id: number): SectionSet {
+  if (set.cuts.length <= 1) return { ...set, enabled: false, drawingOpen: false };
+  const cuts = set.cuts.filter((cut) => cut.id !== id);
+  if (cuts.length === set.cuts.length) return set;
+  const activeId = set.activeId === id ? cuts[cuts.length - 1].id : set.activeId;
+  return { ...set, cuts, activeId };
+}
+
 export type SectionCutStore = {
   get: () => SectionCutState;
   set: (patch: Partial<SectionCutState>) => void;
   subscribe: (listener: Listener) => () => void;
+  getSet: () => SectionSet;
+  update: (next: (set: SectionSet) => SectionSet) => void;
 };
 
 export function createSectionCutStore(initial: SectionCutState = DEFAULT_SECTION_CUT): SectionCutStore {
-  let state = initial;
+  let all = initialSectionSet(initial);
+  let view = viewOf(all);
   const listeners = new Set<Listener>();
+  const commit = (next: SectionSet) => {
+    if (next === all) return;
+    all = next;
+    const nextView = viewOf(next);
+    if (
+      nextView.enabled !== view.enabled ||
+      nextView.angleDeg !== view.angleDeg ||
+      nextView.offsetM !== view.offsetM ||
+      nextView.flipped !== view.flipped ||
+      nextView.fill !== view.fill
+    ) {
+      view = nextView;
+    }
+    for (const listener of listeners) listener();
+  };
   return {
-    get: () => state,
+    get: () => view,
+    getSet: () => all,
     set: (patch) => {
-      const next = { ...state, ...patch };
-      if (
-        next.enabled === state.enabled &&
-        next.angleDeg === state.angleDeg &&
-        next.offsetM === state.offsetM &&
-        next.flipped === state.flipped &&
-        next.fill === state.fill
-      ) {
-        return;
-      }
-      state = next;
-      for (const listener of listeners) listener();
+      const { enabled, ...cutPatch } = patch;
+      const cut = activeCut(all);
+      const nextCut = { ...cut, ...cutPatch };
+      const cutSame =
+        nextCut.angleDeg === cut.angleDeg &&
+        nextCut.offsetM === cut.offsetM &&
+        nextCut.flipped === cut.flipped &&
+        nextCut.fill === cut.fill;
+      const nextEnabled = enabled ?? all.enabled;
+      if (cutSame && nextEnabled === all.enabled) return;
+      commit({
+        ...all,
+        enabled: nextEnabled,
+        drawingOpen: nextEnabled ? all.drawingOpen : false,
+        cuts: cutSame ? all.cuts : all.cuts.map((entry) => (entry.id === cut.id ? nextCut : entry)),
+      });
     },
+    update: (next) => commit(next(all)),
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);

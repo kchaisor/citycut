@@ -1359,10 +1359,11 @@ async function main() {
       await scPage.waitForTimeout(1500);
       await scPage.mouse.move(4, 450);
       const onLum = await scLum();
-      const scLayout = await scPage.evaluate(() => {
-        const card = document.querySelector(".model .section-cut-card")?.getBoundingClientRect();
+      const overlapCheck = (cardSel, skip) => {
+        const card = document.querySelector(cardSel)?.getBoundingClientRect();
         const hits = [];
-        for (const sel of [".model .top-bar-left", ".model .top-bar-center", ".model .top-bar-right", ".model .left-rail", ".model .left-outliner", ".model .right-inspector", ".model .bottom-bar"]) {
+        for (const sel of [".model .top-bar-left", ".model .top-bar-center", ".model .top-bar-right", ".model .left-rail", ".model .left-outliner", ".model .right-inspector", ".model .bottom-bar", ".model .section-cut-toggle"]) {
+          if (sel === skip) continue;
           const el = document.querySelector(sel);
           if (!el || !card) continue;
           const r = el.getBoundingClientRect();
@@ -1371,9 +1372,16 @@ async function main() {
           const y = Math.min(card.bottom, r.bottom) - Math.max(card.top, r.top);
           if (x > 1 && y > 1) hits.push(sel);
         }
+        return { inside: Boolean(card && card.width > 0 && card.right <= 1440 && card.bottom <= 900 && card.left >= 0 && card.top >= 0), hits };
+      };
+      const scLayout = await scPage.evaluate(() => {
+        const card = document.querySelector(".model .section-cut-card")?.getBoundingClientRect();
+        const panel = document.querySelector(".model .right-inspector")?.getBoundingClientRect();
         return {
-          inside: Boolean(card && card.right <= 1440 && card.bottom <= 900 && card.left >= 0 && card.top >= 0),
-          hits,
+          inside: Boolean(card && panel && card.left >= panel.left - 1 && card.right <= panel.right + 1 && card.top >= panel.top - 1 && card.right <= 1440),
+          inTab: Boolean(document.querySelector(".model .right-inspector .sections-tab")),
+          oldCard: Boolean(document.querySelector(".model .section-cut-card:not(.sections-tab)")),
+          hits: [],
           handle: document.querySelector(".model canvas")?.dataset.sectionHandle ?? "",
           looking: document.querySelector(".model .section-cut-looking")?.textContent ?? "",
         };
@@ -1398,17 +1406,87 @@ async function main() {
         flipped: document.querySelector(".model .section-cut-card")?.dataset.flipped,
         looking: document.querySelector(".model .section-cut-looking")?.textContent ?? "",
       }));
+      const cutA = await scPage.evaluate(() => ({ ...document.querySelector(".model .sections-tab")?.dataset }));
+      await scPage.click(".model .sections-add");
+      await scPage.waitForTimeout(600);
+      await scPage.mouse.move(4, 450);
+      const cutB = await scPage.evaluate(() => ({
+        ...document.querySelector(".model .sections-tab")?.dataset,
+        chips: [...document.querySelectorAll(".model .sections-chip")].map((el) => el.dataset.label).join(","),
+      }));
+      await scPage.click('.model .sections-chip[data-label="A"]');
+      await scPage.waitForTimeout(500);
+      const backA = await scPage.evaluate(() => ({ ...document.querySelector(".model .sections-tab")?.dataset }));
+      await scPage.click(".model .section-drawing-toggle");
+      await scPage.waitForSelector(".model .section-drawing", { timeout: 5000 });
+      await scPage.waitForTimeout(500);
+      const drawInfo = await scPage.evaluate((fn) => {
+        const check = new Function(`return (${fn})`)()(".model .section-drawing", "");
+        const el = document.querySelector(".model .section-drawing");
+        return {
+          ...check,
+          cut: el?.dataset.cut ?? "",
+          buildings: Number(el?.dataset.buildings ?? "0"),
+          ground: Boolean(el?.querySelector("svg")),
+          datum: /AHD|flat ground/.test(el?.textContent ?? ""),
+          exports: el?.querySelectorAll("button").length ?? 0,
+        };
+      }, overlapCheck.toString());
+      await scPage.screenshot({ path: path.join(TMP_FRAMES_DIR, "section-drawing.png") });
+      const row = await scPage.$(".model .sections-bldg");
+      let hoverInfo = { row: false, list: false, drawing: false };
+      if (row) {
+        const rowId = await row.getAttribute("data-building-id");
+        await row.hover();
+        await scPage.waitForTimeout(500);
+        hoverInfo = await scPage.evaluate((id) => ({
+          row: Boolean(document.querySelector(`.model .sections-bldg.is-hover[data-building-id="${id}"]`)),
+          list: true,
+          drawing: Boolean(document.querySelector(`.model .section-drawing .section-drawing-cut.is-hover[data-building-id="${id}"]`)),
+        }), rowId);
+      }
+      await scPage.mouse.move(700, 300);
+      await scPage.click('.model .studio-view-tabs button[role="tab"]:nth-child(2)');
+      await scPage.waitForTimeout(1500);
+      const planLines = await scPage.evaluate(() => [...document.querySelectorAll(".model .plan-section-line")].map((el) => el.dataset.label).join(","));
+      await scPage.click('.model .studio-view-tabs button[role="tab"]:nth-child(1)');
+      await scPage.waitForTimeout(1500);
+      assertCheck(
+        "section-multi-cut",
+        "Sections tab: adding a cut creates B rotated 90 degrees with its own offset, switching back restores A's offset and angle",
+        cutB.cuts === "2" && cutB.chips === "A,B" && cutB.angle !== cutA.angle && backA.offset === cutA.offset && backA.angle === cutA.angle,
+        `A=${cutA.angle}/${cutA.offset}, B=${cutB.angle}/${cutB.offset}, chips=${cutB.chips}, backA=${backA.angle}/${backA.offset}`,
+      );
+      assertCheck(
+        "section-drawing-panel",
+        "Section drawing: opens for the active cut inside 1440x900 without overlapping HUD islands, shows a datum and export buttons",
+        drawInfo.inside && drawInfo.hits.length === 0 && drawInfo.cut === "A" && drawInfo.ground && drawInfo.datum && drawInfo.exports >= 2,
+        `inside=${drawInfo.inside}, overlaps=[${drawInfo.hits.join(",")}], cut=${drawInfo.cut}, buildings=${drawInfo.buildings}, datum=${drawInfo.datum}, exports=${drawInfo.exports}`,
+      );
+      assertCheck(
+        "section-building-hover",
+        "Sections building list: hovering a row highlights the row and the cut building in the drawing",
+        hoverInfo.list && hoverInfo.row && hoverInfo.drawing,
+        JSON.stringify(hoverInfo),
+      );
+      assertCheck(
+        "section-plan-lines",
+        "2D plan draws a labelled line for every section cut",
+        planLines === "A,B" || planLines === "B,A",
+        `lines=${planLines}`,
+      );
       await scPage.click(".model .section-cut-close");
       await scPage.waitForTimeout(400);
       const closed = (await scPage.$(".model .section-cut-card")) === null;
       await scCtx.close();
       assertCheck(
         "section-cut-live-clip",
-        "Section cut: X stays free, the toggle clips the 3D model visibly, the card sits inside 1440x900 without overlapping HUD islands, dragging the handle moves the plane onto a 5 m snap, Flip swaps the view direction, and close turns it off without page errors",
+        "Section cut: X stays free, the toggle clips the 3D model visibly, the controls live in the right panel Sections tab with no floating card, dragging the handle moves the plane onto a 5 m snap, Flip swaps the view direction, and close turns it off without page errors",
         xFree &&
           Math.abs(onLum - offLum) >= 1 &&
           scLayout.inside &&
-          scLayout.hits.length === 0 &&
+          scLayout.inTab &&
+          !scLayout.oldCard &&
           Number.isFinite(dragged) &&
           Math.abs(dragged) >= 5 &&
           Math.abs(dragged / 5 - Math.round(dragged / 5)) < 1e-6 &&
@@ -1416,7 +1494,7 @@ async function main() {
           flipInfo.looking !== scLayout.looking &&
           closed &&
           scErrors.length === 0,
-        `xFree=${xFree}, lum=${offLum.toFixed(1)}->${onLum.toFixed(1)}, inside=${scLayout.inside}, overlaps=[${scLayout.hits.join(",")}], handle=${scLayout.handle}, offset=${dragged}, flip=${flippedBefore}->${flipInfo.flipped}, looking=${scLayout.looking}->${flipInfo.looking}, closed=${closed}, errors=${scErrors.length}`,
+        `xFree=${xFree}, lum=${offLum.toFixed(1)}->${onLum.toFixed(1)}, inside=${scLayout.inside}, inTab=${scLayout.inTab}, oldCard=${scLayout.oldCard}, handle=${scLayout.handle}, offset=${dragged}, flip=${flippedBefore}->${flipInfo.flipped}, looking=${scLayout.looking}->${flipInfo.looking}, closed=${closed}, errors=${scErrors.length}`,
       );
     }
 

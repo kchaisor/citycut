@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  activeCut,
+  addSectionCut,
+  initialSectionSet,
+  MAX_SECTION_CUTS,
+  nextSectionLabel,
+  removeSectionCut,
+  sectionTitle,
   clampOffset,
   createSectionCutStore,
   cutLineEndpoints,
@@ -98,5 +105,48 @@ describe("section cut store", () => {
     store.set({ enabled: true, offsetM: 5 });
     expect(listener).toHaveBeenCalledTimes(1);
     expect(store.get()).toEqual({ ...DEFAULT_SECTION_CUT, enabled: true, offsetM: 5 });
+  });
+
+  it("adds, switches and removes lettered cuts with their own geometry", () => {
+    const store = createSectionCutStore();
+    store.set({ enabled: true, offsetM: 10 });
+    store.update(addSectionCut);
+    let all = store.getSet();
+    expect(all.cuts.map((cut) => cut.label)).toEqual(["A", "B"]);
+    expect(activeCut(all).label).toBe("B");
+    expect(store.get().angleDeg).toBe(90);
+    expect(store.get().offsetM).toBe(0);
+    store.set({ offsetM: -15, fill: "hatch" });
+    store.update((s) => ({ ...s, activeId: s.cuts[0].id }));
+    expect(store.get()).toMatchObject({ offsetM: 10, angleDeg: 0, fill: "solid" });
+    store.update((s) => removeSectionCut(s, s.cuts[0].id));
+    all = store.getSet();
+    expect(all.cuts.map((cut) => cut.label)).toEqual(["B"]);
+    expect(store.get()).toMatchObject({ offsetM: -15, fill: "hatch", enabled: true });
+    store.update(addSectionCut);
+    expect(store.getSet().cuts.map((cut) => cut.label)).toEqual(["B", "A"]);
+  });
+
+  it("turns off instead of removing the last cut", () => {
+    const store = createSectionCutStore({ ...DEFAULT_SECTION_CUT, enabled: true });
+    store.update((s) => removeSectionCut(s, s.cuts[0].id));
+    expect(store.getSet().cuts).toHaveLength(1);
+    expect(store.get().enabled).toBe(false);
+  });
+
+  it("keeps the active view object stable on hover-only changes", () => {
+    const store = createSectionCutStore();
+    const before = store.get();
+    store.update((s) => ({ ...s, hoverBuildingId: 4 }));
+    expect(store.get()).toBe(before);
+    expect(store.getSet().hoverBuildingId).toBe(4);
+  });
+
+  it("caps the number of cuts and names them by letter", () => {
+    let set = initialSectionSet();
+    for (let i = 0; i < 10; i++) set = addSectionCut(set);
+    expect(set.cuts).toHaveLength(MAX_SECTION_CUTS);
+    expect(nextSectionLabel([{ label: "A" }, { label: "C" }])).toBe("B");
+    expect(sectionTitle("B")).toBe("B–B′");
   });
 });

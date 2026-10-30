@@ -1,9 +1,9 @@
 import { sunStudyCasterModel, sunStudyMutedOn, toggleSelection, type SunStudyDate } from "../lib/sunStudyPlan";
 import { sunStudyLayersFor } from "./useSunStudyShadows";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
-import { Building2, Copy, Download, DraftingCompass, Eye, GripVertical, Info, Radar, Sun, Trees, Upload, Wind } from "lucide-react";
+import { Building2, Copy, Download, DraftingCompass, Eye, GripVertical, Info, Radar, Scissors, Sun, Trees, Upload, Wind } from "lucide-react";
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -151,8 +151,11 @@ import { isometricDrawingBounds } from "../lib/isometricDrawing";
 import { Sidebar, type SidebarItem } from "./Sidebar";
 import { SatellitePane } from "./SatellitePane";
 import { Scene3D, type SceneExporter } from "./Scene3D";
-import { SectionCutPanel, SectionCutToggle } from "./SectionCutPanel";
-import { createSectionCutStore } from "../lib/sectionCut";
+import { SectionCutToggle, SectionsTab } from "./SectionCutPanel";
+import { SectionDrawing } from "./SectionDrawing";
+import { activeCut, createSectionCutStore } from "../lib/sectionCut";
+import { buildSectionProfile, planLineFor } from "../lib/sectionProfile";
+import type { SectionPlanLine } from "./DrawingPlan";
 
 function shouldShowIntroBridgePill(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") return false;
@@ -241,6 +244,7 @@ const SECTION_ICONS: Record<SidebarSectionId, typeof Info> = {
   summary: Info,
   buildings: Building2,
   trees: Trees,
+  sections: Scissors,
   drawing: DraftingCompass,
   analysis: Radar,
   import: Upload,
@@ -256,6 +260,8 @@ const ANALYSIS_ICONS: Record<SiteAnalysisKind, typeof Sun> = {
 export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHome: () => void; onNewCut: () => void }) {
   const [tab, setTab] = useState<Tab>("3d");
   const sectionCut = useMemo(() => createSectionCutStore(), []);
+  const sectionSet = useSyncExternalStore(sectionCut.subscribe, sectionCut.getSet);
+  const deferredSectionSet = useDeferredValue(sectionSet);
   const [drawing, setDrawing] = useState<DrawingKind>("site");
   const [analysisKind, setAnalysisKind] = useState<SiteAnalysisKind>("solar");
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
@@ -931,6 +937,20 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     }),
     [model, overrideResult, visibleBuildings, comHeightsMeasuredOn],
   );
+  const sectionGeometry = deferredSectionSet.enabled ? activeCut(deferredSectionSet) : null;
+  const sectionProfile = useMemo(
+    () => (sectionGeometry ? buildSectionProfile(displayModel, sectionGeometry) : null),
+    [displayModel, sectionGeometry?.angleDeg, sectionGeometry?.offsetM, sectionGeometry?.flipped],
+  );
+  const sectionPlanLines = useMemo<SectionPlanLine[] | null>(() => {
+    if (!sectionSet.enabled) return null;
+    const lines: SectionPlanLine[] = [];
+    for (const cut of sectionSet.cuts) {
+      const line = planLineFor(cut, model.sideM);
+      if (line) lines.push({ label: cut.label, ...line, active: cut.id === sectionSet.activeId });
+    }
+    return lines;
+  }, [sectionSet.enabled, sectionSet.cuts, sectionSet.activeId, model.sideM]);
   // View tab: the path resets with a new cut; compute uses the buildings as shown (edits, hides).
   const walk = useWalkViewshed(model, displayModel);
   const walkAt = useWalkPlayback(walk);
@@ -1772,7 +1792,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                   setHideSelection([]);
                 }}
                 heightEditBuildingId={heightPick?.buildingId ?? null}
-                selectedBuildingIds={hideSelection.length > 0 ? hideSelection : heightPick ? [heightPick.buildingId] : []}
+                selectedBuildingIds={sectionSet.enabled && sectionSet.hoverBuildingId != null ? [sectionSet.hoverBuildingId] : hideSelection.length > 0 ? hideSelection : heightPick ? [heightPick.buildingId] : []}
                 cameraMemory={cameraMemory}
                 display={view3dDisplay}
                 importedMassing={massing.group}
@@ -1780,7 +1800,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 onScenePoint={walkDrawing ? walk.addPoint : massing.onScenePoint}
                 sectionCut={sectionCut}
               />
-              {tab === "3d" && <SectionCutPanel store={sectionCut} />}
+              <SectionDrawing store={sectionCut} profile={sectionProfile} placeLabel={model.placeLabel} />
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
@@ -1855,6 +1875,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 sunStudyMuted={sunStudyMutedOn(solar.sunStudy, solar.sunStudyMuted)}
                 sunStudyCasters={effectiveSunStudyCasters}
                 sunStudySelected={sunStudySelected}
+                sectionLines={sectionPlanLines}
                 onSunStudyPick={(id) =>
                   setSunStudySelected((current) => {
                     const next = toggleSelection(current, id);
@@ -2448,6 +2469,10 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     onImport={importHeightEdits}
                   />
                 </section>
+            </div>
+
+            <div className="drawer-section sections-section" hidden={rightOpen !== "sections"}>
+              {rightOpen === "sections" && <SectionsTab store={sectionCut} profile={sectionProfile} is3d={tab === "3d"} />}
             </div>
 
             <div className="drawer-section tree-sizes" hidden={rightOpen !== "trees"}>
@@ -3657,7 +3682,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
           <div className="bottom-bar studio-solar-bar hud-card" role="region" aria-label="Solar and camera controls">
             {tab === "3d" && (
               <>
-                <SectionCutToggle store={sectionCut} />
+                <SectionCutToggle store={sectionCut} onOpen={() => selectSection("sections")} />
                 <span className="v-sep" aria-hidden="true" />
               </>
             )}

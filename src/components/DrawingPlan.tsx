@@ -16,7 +16,7 @@ import { planPaths, svgPolyline, svgRings } from "../lib/svgPlan";
 import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
-import type { CityModel } from "../types";
+import type { CityModel, Pt } from "../types";
 import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
 import { NswPlanLabels, NswPlanLines, NswPlanUnder } from "./NswPlanLayers";
 import { NSW_PLAN_LABEL_SHARE, nswPlanItems } from "../lib/nswPlan";
@@ -63,6 +63,39 @@ function CasedLine({ d, stroke, paper }: { d: string; stroke: StrokeStyle; paper
   );
 }
 
+export type SectionPlanLine = { label: string; a: Pt; b: Pt; active: boolean; looking: Pt };
+
+function SectionPlanLines({ lines, sideM }: { lines: readonly SectionPlanLine[]; sideM: number }) {
+  const ink = getColour("--cut-line");
+  const font = sideM * 0.026;
+  return (
+    <g className="plan-section-lines" pointerEvents="none">
+      {lines.map((line) => {
+        const w = sideM * (line.active ? 0.0032 : 0.002);
+        const tick = sideM * 0.03;
+        const ends: [Pt, string][] = [
+          [line.a, line.label],
+          [line.b, `${line.label}′`],
+        ];
+        return (
+          <g key={line.label} className="plan-section-line" data-label={line.label} opacity={line.active ? 1 : 0.6}>
+            <line x1={line.a[0]} y1={-line.a[1]} x2={line.b[0]} y2={-line.b[1]} stroke={ink} strokeWidth={w} strokeDasharray={`${sideM * 0.02} ${sideM * 0.008} ${sideM * 0.004} ${sideM * 0.008}`} />
+            {ends.map(([p, text]) => (
+              <g key={text}>
+                <line x1={p[0]} y1={-p[1]} x2={p[0] + line.looking[0] * tick} y2={-(p[1] + line.looking[1] * tick)} stroke={ink} strokeWidth={w * 1.6} />
+                <circle cx={p[0]} cy={-p[1]} r={font * 0.85} fill={ink} />
+                <text x={p[0]} y={-p[1]} textAnchor="middle" dominantBaseline="central" fontSize={font} fontWeight={700} fill={getColour("--sheet-fill")}>
+                  {text}
+                </text>
+              </g>
+            ))}
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
 export function DrawingPlan({
   model,
   kind = "site",
@@ -83,6 +116,7 @@ export function DrawingPlan({
   sunStudyCasters = "all",
   sunStudySelected = NO_SELECTION,
   onSunStudyPick,
+  sectionLines = null,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -111,6 +145,7 @@ export function DrawingPlan({
   sunStudySelected?: readonly number[];
   /** Click (not drag) on a building while the sun study is on. */
   onSunStudyPick?: (buildingId: number) => void;
+  sectionLines?: readonly SectionPlanLine[] | null;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
@@ -580,6 +615,7 @@ export function DrawingPlan({
       {figure && heliodon && (
         <HeliodonPlanOverlay input={heliodon} planScale={planScale} sideM={model.sideM} />
       )}
+      {sectionLines && sectionLines.length > 0 && <SectionPlanLines lines={sectionLines} sideM={model.sideM} />}
       {empty && (
         <text x={0} y={0} textAnchor="middle" fontSize={model.sideM * 0.04} fill={planEmpty}>
           {figure ? "No building footprints in this frame" : "Nothing mapped in this frame"}

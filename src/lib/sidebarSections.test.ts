@@ -31,6 +31,7 @@ describe("sidebar sections", () => {
       "summary",
       "buildings",
       "trees",
+      "sections",
       "drawing",
       "analysis",
       "import",
@@ -40,6 +41,7 @@ describe("sidebar sections", () => {
       "summary",
       "buildings",
       "trees",
+      "sections",
       "drawing",
       "analysis",
       "import",
@@ -100,7 +102,7 @@ describe("Display section label", () => {
 describe("left vs right sidebar panels", () => {
   it("splits left-hand tools (Display, Site Analysis, Import, Export) from right-hand panels (Model details, Buildings, Trees)", () => {
     expect(LEFT_SIDEBAR_SECTION_IDS).toEqual(["drawing", "analysis", "import", "exports"]);
-    expect(RIGHT_SIDEBAR_SECTION_IDS).toEqual(["summary", "buildings", "trees"]);
+    expect(RIGHT_SIDEBAR_SECTION_IDS).toEqual(["summary", "buildings", "trees", "sections"]);
     expect(isRightSidebarSection("summary")).toBe(true);
     expect(isRightSidebarSection("buildings")).toBe(true);
     expect(isRightSidebarSection("trees")).toBe(true);
