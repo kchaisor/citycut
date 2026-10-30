@@ -4765,6 +4765,22 @@ body,
   color: var(--ink-2);
 }
 
+.model .right-inspector .people-lens-walk {
+  display: block;
+  margin-top: 2px;
+  font-size: 9px;
+  line-height: 1.35;
+  color: var(--ink-3);
+}
+
+.model .right-inspector .people-lens-walk.is-estimate {
+  color: var(--status-failed);
+}
+
+.model .right-inspector .people-lens-ring.is-estimate {
+  stroke-dasharray: 2 4;
+}
+
 .model .right-inspector .people-age-ends {
   display: flex;
   justify-content: space-between;

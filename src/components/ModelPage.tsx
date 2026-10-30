@@ -7,6 +7,7 @@ import { PeoplePanel } from "./PeoplePanel";
 import { CensusSa1Layer } from "../lib/censusSa1Layer";
 import { PeopleCityLayer } from "../lib/peopleCityLayer";
 import { PeopleStore } from "../lib/peopleStore";
+import { sessionWalkService } from "../lib/walkIsochrone";
 import { Building2, Copy, Download, DraftingCompass, Eye, GripVertical, Info, Radar, Sun, Trees, Upload, Users, Wind } from "lucide-react";
 import {
   BUILDING_USES,
@@ -938,7 +939,8 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   const walkAt = useWalkPlayback(walk);
   const censusLayer = useMemo(() => new CensusSa1Layer(model, model.frameShape ?? "square"), [model]);
   useEffect(() => () => censusLayer.dispose(), [censusLayer]);
-  const peopleStore = useMemo(() => new PeopleStore(model.sideM, model.frameShape ?? "square"), [model]);
+  const peopleStore = useMemo(() => new PeopleStore(model.sideM, model.frameShape ?? "square", model.center, sessionWalkService()), [model]);
+  useEffect(() => () => peopleStore.dispose(), [peopleStore]);
   const peopleLayer = useMemo(() => new PeopleCityLayer(model, model.frameShape ?? "square"), [model]);
   useEffect(() => () => peopleLayer.dispose(), [peopleLayer]);
   const people3d = useMemo(() => ({ layer: peopleLayer, store: peopleStore }), [peopleLayer, peopleStore]);

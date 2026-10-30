@@ -15,6 +15,7 @@ import type { PeopleCityLayer } from "../lib/peopleCityLayer";
 import { prismHeights, prismMaxHeightM, prismMetricValue, prismSteps } from "../lib/peopleMetrics";
 import { usePeople, type PeopleState, type PeopleStore, type PeopleView } from "../lib/peopleStore";
 import type { SiteFrameShape } from "../lib/siteFrame";
+import { WALK_ATTRIBUTION } from "../lib/walkIsochrone";
 import type { LonLat } from "../types";
 import { CityView, DeckView, LensView } from "./PeopleViews";
 
@@ -56,7 +57,7 @@ function useLayerSync(store: PeopleStore, layer: PeopleCityLayer | undefined, ce
       layer.setDots(s.active && s.city.dots, s.city.modes);
       layer.setPlaying(s.active && s.city.dots && s.city.playing, now);
       const lensOn = s.active && s.view === "lens" && s.lens !== null;
-      layer.setLens(lensOn ? s.centre : null, s.radius);
+      layer.setLens(lensOn ? s.centre : null, lensOn ? s.walk.polygons : null);
       if (!p || p.pins !== s.pins) layer.setPins(s.pins);
       layer.setPinsVisible(lensOn);
       if (!p || p.highlight !== s.highlight) layer.setHighlight(s.highlight?.codes ?? null);
@@ -363,6 +364,7 @@ export function PeoplePanel({
         {view === "deck" ? <DeckView store={store} census={result} /> : null}
         <p className="people-source" data-testid="people-source">
           {CENSUS_ATTRIBUTION}
+          {view === "lens" ? ` · Walking areas ${WALK_ATTRIBUTION}` : ""}
         </p>
       </div>
     );

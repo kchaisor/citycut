@@ -1,13 +1,15 @@
 import { useCallback, useSyncExternalStore } from "react";
 import type { CensusSiteResult } from "./censusPeople";
+import { fromLocal } from "./geo";
 import { aggregateLens, buildLensIndex, clampLensCentre, type LensIndex, type LensMethod, type LensResult } from "./peopleLens";
 import { TRAVEL_MODES, type PrismMetric, type TravelMode } from "./peopleMetrics";
 import type { SiteFrameShape } from "./siteFrame";
-import type { Pt } from "../types";
+import { estimateArea, walkCacheKey, type WalkArea, type WalkIsochroneService, type WalkMinutes, type WalkPolygons } from "./walkIsochrone";
+import type { LonLat, Pt } from "../types";
 
 export type PeopleView = "lens" | "city" | "deck" | "profile";
 
-export type LensPin = { id: string; label: string; centre: Pt; radius: number; method: LensMethod; result: LensResult };
+export type LensPin = { id: string; label: string; centre: Pt; area: WalkArea; method: LensMethod; result: LensResult };
 
 export type PeopleHighlight = { codes: string[]; label: string };
 
@@ -26,7 +28,8 @@ export type PeopleState = {
   index: LensIndex | null;
   view: PeopleView;
   centre: Pt;
-  radius: number;
+  minutes: WalkMinutes;
+  walk: WalkArea;
   method: LensMethod;
   lens: LensResult | null;
   trail: number[];
@@ -38,6 +41,7 @@ export type PeopleState = {
 };
 
 export const TRAIL_LENGTH = 48;
+export const WALK_SETTLE_MS = 350;
 const PIN_LABELS = ["A", "B", "C"];
 
 export function initialPeopleState(): PeopleState {
@@ -47,7 +51,8 @@ export function initialPeopleState(): PeopleState {
     index: null,
     view: "lens",
     centre: [0, 0],
-    radius: 200,
+    minutes: 5,
+    walk: estimateArea([0, 0], 5, "pending", null),
     method: "area",
     lens: null,
     trail: [],
@@ -69,10 +74,17 @@ export function initialPeopleState(): PeopleState {
 export class PeopleStore {
   private state: PeopleState = initialPeopleState();
   private readonly listeners = new Set<() => void>();
+  private contours: { key: string; centre: Pt; polygons: Record<WalkMinutes, WalkPolygons> } | null = null;
+  private failure: { key: string; area: Pick<WalkArea, "reason"> } | null = null;
+  private settleTimer: ReturnType<typeof setTimeout> | null = null;
+  private inflight: AbortController | null = null;
 
   constructor(
     readonly sideM: number,
     readonly shape: SiteFrameShape,
+    readonly origin: LonLat | null = null,
+    private readonly walkService: WalkIsochroneService | null = null,
+    private readonly settleMs = WALK_SETTLE_MS,
   ) {}
 
   get = (): PeopleState => this.state;
@@ -94,51 +106,120 @@ export class PeopleStore {
   setCensus(census: CensusSiteResult | null): void {
     if (this.state.census === census) return;
     const index = census?.status === "ok" ? buildLensIndex(census.sa1, this.sideM, this.shape) : null;
-    const lens = index ? aggregateLens(index, this.state.centre, this.state.radius, this.state.method) : null;
-    this.set({ census, index, lens, trail: lens ? [lens.people] : [], pins: [], selected: null, highlight: null });
+    const walk = this.walkFor(this.state.centre, this.state.minutes);
+    const lens = index ? aggregateLens(index, walk.polygons, this.state.method) : null;
+    this.set({ census, index, walk, lens, trail: lens ? [lens.people] : [], pins: [], selected: null, highlight: null });
+    if (index) this.requestWalk(0);
   }
 
   setView(view: PeopleView): void {
     this.set({ view });
   }
 
-  private recompute(centre: Pt, radius: number, method: LensMethod, extendTrail: boolean): void {
+  private keyFor(centre: Pt): string | null {
+    return this.origin ? walkCacheKey(fromLocal(centre, this.origin)) : null;
+  }
+
+  private walkFor(centre: Pt, minutes: WalkMinutes): WalkArea {
+    const key = this.keyFor(centre);
+    if (key && this.contours?.key === key) {
+      return { minutes, centre, polygons: this.contours.polygons[minutes], status: "live", reason: null };
+    }
+    if (!this.origin || !this.walkService) return estimateArea(centre, minutes, "fallback", "blocked");
+    if (key && this.failure?.key === key) return estimateArea(centre, minutes, "fallback", this.failure.area.reason);
+    if (this.walkService.unavailable) return estimateArea(centre, minutes, "fallback", "blocked");
+    const cached = this.walkService.cached(fromLocal(centre, this.origin));
+    if (cached && key) {
+      this.contours = { key, centre, polygons: cached };
+      return { minutes, centre, polygons: cached[minutes], status: "live", reason: null };
+    }
+    return estimateArea(centre, minutes, "pending", null);
+  }
+
+  private recompute(centre: Pt, minutes: WalkMinutes, method: LensMethod, extendTrail: boolean): void {
     const { index } = this.state;
-    const lens = index ? aggregateLens(index, centre, radius, method) : null;
+    const walk = this.walkFor(centre, minutes);
+    const lens = index ? aggregateLens(index, walk.polygons, method) : null;
     const trail = lens ? (extendTrail ? [...this.state.trail, lens.people].slice(-TRAIL_LENGTH) : [lens.people]) : [];
-    this.set({ centre, radius, method, lens, trail });
+    this.set({ centre, minutes, walk, method, lens, trail });
+  }
+
+  private requestWalk(delayMs: number): void {
+    if (this.settleTimer) clearTimeout(this.settleTimer);
+    this.settleTimer = null;
+    if (this.state.walk.status !== "pending" || !this.origin || !this.walkService) return;
+    if (delayMs > 0) {
+      this.settleTimer = setTimeout(() => {
+        this.settleTimer = null;
+        this.requestWalk(0);
+      }, delayMs);
+      return;
+    }
+    const centre = this.state.centre;
+    const key = this.keyFor(centre);
+    if (!key) return;
+    this.inflight?.abort();
+    const controller = new AbortController();
+    this.inflight = controller;
+    void this.walkService.request(fromLocal(centre, this.origin), this.origin, controller.signal).then((result) => {
+      if (this.inflight === controller) this.inflight = null;
+      if (controller.signal.aborted && result.status !== "ok") return;
+      if (result.status === "ok") {
+        this.contours = { key, centre, polygons: result.contours };
+        this.failure = null;
+      } else {
+        this.failure = { key, area: { reason: result.reason } };
+      }
+      if (this.keyFor(this.state.centre) !== key || this.state.dragging) return;
+      this.recompute(this.state.centre, this.state.minutes, this.state.method, true);
+    });
   }
 
   moveLens(centre: Pt): void {
-    this.recompute(clampLensCentre(centre, this.sideM, this.shape), this.state.radius, this.state.method, true);
+    this.recompute(clampLensCentre(centre, this.sideM, this.shape), this.state.minutes, this.state.method, true);
+    if (!this.state.dragging) this.requestWalk(this.settleMs);
   }
 
-  setRadius(radius: number): void {
-    this.recompute(this.state.centre, radius, this.state.method, false);
+  setMinutes(minutes: WalkMinutes): void {
+    this.recompute(this.state.centre, minutes, this.state.method, false);
   }
 
   setMethod(method: LensMethod): void {
-    this.recompute(this.state.centre, this.state.radius, method, false);
+    this.recompute(this.state.centre, this.state.minutes, method, false);
     const { index } = this.state;
     if (index) {
       this.set({
-        pins: this.state.pins.map((pin) => ({ ...pin, method, result: aggregateLens(index, pin.centre, pin.radius, method) })),
+        pins: this.state.pins.map((pin) => ({ ...pin, method, result: aggregateLens(index, pin.area.polygons, method) })),
       });
     }
   }
 
   setDragging(dragging: boolean): void {
     if (this.state.dragging === dragging) return;
-    this.set(dragging ? { dragging, trail: this.state.lens ? [this.state.lens.people] : [] } : { dragging });
+    if (dragging) {
+      if (this.settleTimer) clearTimeout(this.settleTimer);
+      this.settleTimer = null;
+      this.set({ dragging, trail: this.state.lens ? [this.state.lens.people] : [] });
+      return;
+    }
+    this.set({ dragging });
+    this.requestWalk(0);
+  }
+
+  dispose(): void {
+    if (this.settleTimer) clearTimeout(this.settleTimer);
+    this.settleTimer = null;
+    this.inflight?.abort();
+    this.inflight = null;
   }
 
   pin(): void {
-    const { lens, pins, centre, radius, method } = this.state;
+    const { lens, pins, centre, walk, method } = this.state;
     if (!lens) return;
     const used = new Set(pins.map((p) => p.label));
     const label = PIN_LABELS.find((l) => !used.has(l));
     if (!label) return;
-    this.set({ pins: [...pins, { id: `${label}-${Date.now()}`, label, centre, radius, method, result: lens }] });
+    this.set({ pins: [...pins, { id: `${label}-${Date.now()}`, label, centre, area: walk, method, result: lens }] });
   }
 
   unpin(id: string): void {

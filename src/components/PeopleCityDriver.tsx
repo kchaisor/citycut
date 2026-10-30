@@ -15,7 +15,8 @@ const selectMetric = (s: PeopleState) => s.city.metric;
 const selectBand = (s: PeopleState) => s.city.band;
 const selectLensShown = (s: PeopleState) => s.active && s.view === "lens" && s.lens !== null;
 const selectLensPeople = (s: PeopleState) => s.lens?.people ?? 0;
-const selectLensEst = (s: PeopleState) => s.lens?.estimated ?? false;
+const selectLensMinutes = (s: PeopleState) => s.minutes;
+const selectLensEst = (s: PeopleState) => (s.lens?.estimated ?? false) || s.walk.status !== "live";
 
 export function PeopleCityDriver({ layer, store }: { layer: PeopleCityLayer; store: PeopleStore }) {
   const camera = useThree((state) => state.camera);
@@ -30,6 +31,7 @@ export function PeopleCityDriver({ layer, store }: { layer: PeopleCityLayer; sto
   const lensShown = usePeople(store, selectLensShown);
   const lensPeople = usePeople(store, selectLensPeople);
   const lensEst = usePeople(store, selectLensEst);
+  const lensMinutes = usePeople(store, selectLensMinutes);
 
   useFrame(() => {
     if (layer.update(performance.now())) invalidate();
@@ -128,7 +130,7 @@ export function PeopleCityDriver({ layer, store }: { layer: PeopleCityLayer; sto
         <group ref={badgeRef}>
           <Html zIndexRange={[39, 0]} style={{ pointerEvents: "none" }}>
             <div className="people-lens-badge mono" data-testid="people-lens-badge">
-              {Math.round(lensPeople).toLocaleString("en-AU")} people{lensEst ? " est." : ""}
+              {Math.round(lensPeople).toLocaleString("en-AU")} people{lensEst ? " est." : ""} · {lensMinutes} min walk
             </div>
           </Html>
         </group>

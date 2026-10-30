@@ -3,8 +3,7 @@ import { rasterizeSa1Owners } from "./censusSa1Layer";
 import { siteFrameHalf, type SiteFrameShape } from "./siteFrame";
 import type { Pt } from "../types";
 
-export const LENS_RADII = [100, 200, 400] as const;
-export type LensRadius = (typeof LENS_RADII)[number];
+export type LensPolygons = readonly (readonly (readonly Pt[])[])[];
 export type LensMethod = "centroid" | "area";
 export const LENS_GRID = 160;
 
@@ -112,29 +111,55 @@ export function clampLensCentre(centre: Pt, sideM: number, shape: SiteFrameShape
   return [Math.max(-half, Math.min(half, centre[0])), Math.max(-half, Math.min(half, centre[1]))];
 }
 
-export function lensWeights(index: LensIndex, centre: Pt, radius: number, method: LensMethod): Float64Array {
+export function pointInWalk(point: Pt, polygons: readonly (readonly (readonly Pt[])[])[]): boolean {
+  for (const polygon of polygons) {
+    const [outer, ...holes] = polygon;
+    if (!outer || !pointInRing(point, outer)) continue;
+    if (holes.some((hole) => pointInRing(point, hole))) continue;
+    return true;
+  }
+  return false;
+}
+
+function walkBounds(polygons: readonly (readonly (readonly Pt[])[])[]): [number, number, number, number] {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const polygon of polygons) {
+    for (const [x, y] of polygon[0] ?? []) {
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  return [minX, minY, maxX, maxY];
+}
+
+export function lensWeights(index: LensIndex, polygons: LensPolygons, method: LensMethod): Float64Array {
   const weights = new Float64Array(index.codes.length);
   if (method === "centroid") {
-    index.centroids.forEach(([x, y], i) => {
-      if (Math.hypot(x - centre[0], y - centre[1]) <= radius) weights[i] = 1;
+    index.centroids.forEach((c, i) => {
+      if (pointInWalk(c, polygons)) weights[i] = 1;
     });
     return weights;
   }
   const { size, cell, owners, sideM } = index;
   const half = sideM / 2;
   const cells = new Float64Array(index.codes.length);
-  const r2 = radius * radius;
-  const rowFrom = Math.max(0, Math.floor((centre[1] - radius + half) / cell));
-  const rowTo = Math.min(size - 1, Math.ceil((centre[1] + radius + half) / cell));
-  const colFrom = Math.max(0, Math.floor((centre[0] - radius + half) / cell));
-  const colTo = Math.min(size - 1, Math.ceil((centre[0] + radius + half) / cell));
+  const [minX, minY, maxX, maxY] = walkBounds(polygons);
+  if (!Number.isFinite(minX)) return weights;
+  const rowFrom = Math.max(0, Math.floor((minY + half) / cell));
+  const rowTo = Math.min(size - 1, Math.ceil((maxY + half) / cell));
+  const colFrom = Math.max(0, Math.floor((minX + half) / cell));
+  const colTo = Math.min(size - 1, Math.ceil((maxX + half) / cell));
   for (let row = rowFrom; row <= rowTo; row += 1) {
-    const dy = -half + (row + 0.5) * cell - centre[1];
+    const y = -half + (row + 0.5) * cell;
     for (let col = colFrom; col <= colTo; col += 1) {
-      const dx = -half + (col + 0.5) * cell - centre[0];
-      if (dx * dx + dy * dy > r2) continue;
       const own = owners[row * size + col];
-      if (own >= 0) cells[own] += 1;
+      if (own < 0) continue;
+      if (pointInWalk([-half + (col + 0.5) * cell, y], polygons)) cells[own] += 1;
     }
   }
   const cellArea = cell * cell;
@@ -145,8 +170,8 @@ export function lensWeights(index: LensIndex, centre: Pt, radius: number, method
   return weights;
 }
 
-export function aggregateLens(index: LensIndex, centre: Pt, radius: number, method: LensMethod): LensResult {
-  const weights = lensWeights(index, centre, radius, method);
+export function aggregateLens(index: LensIndex, polygons: LensPolygons, method: LensMethod): LensResult {
+  const weights = lensWeights(index, polygons, method);
   const values = emptyValues();
   const sa1Codes: string[] = [];
   weights.forEach((w, i) => {

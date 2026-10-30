@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { AGE_BANDS, type CensusSiteResult, type SelectedSa1 } from "../lib/censusPeople";
-import { LENS_RADII, lensShares, type LensMethod } from "../lib/peopleLens";
+import { lensGrabRadius } from "../lib/peopleCityLayer";
+import { lensShares, type LensMethod } from "../lib/peopleLens";
 import {
   AGE_CARD_COLOURS,
   PEOPLE_PER_DOT,
@@ -19,6 +20,7 @@ import {
 } from "../lib/peopleMetrics";
 import { usePeople, type PeopleState, type PeopleStore } from "../lib/peopleStore";
 import type { SiteFrameShape } from "../lib/siteFrame";
+import { WALK_FALLBACK_LABEL, WALK_MINUTES, WALK_PENDING_LABEL, WALK_SOURCE_LABEL, walkRadiusM, type WalkArea } from "../lib/walkIsochrone";
 import type { Pt } from "../types";
 
 type OkCensus = Extract<CensusSiteResult, { status: "ok" }>;
@@ -39,6 +41,15 @@ function ringPath(rings: readonly (readonly Pt[])[]): string {
 }
 
 const selectLensState = (s: PeopleState) => s;
+
+function walkPath(polygons: WalkArea["polygons"]): string {
+  return polygons.map((polygon) => ringPath(polygon)).join("");
+}
+
+function walkLabel(walk: WalkArea): string {
+  if (walk.status === "live") return WALK_SOURCE_LABEL;
+  return walk.status === "pending" ? WALK_PENDING_LABEL : WALK_FALLBACK_LABEL;
+}
 
 function Sparkline({ values }: { values: readonly number[] }) {
   const w = 220;
@@ -94,7 +105,7 @@ function LensPlan({
     const p = toLocal(event);
     if (!p) return;
     const [cx, cy] = state.centre;
-    const inside = Math.hypot(p[0] - cx, p[1] - cy) <= state.radius;
+    const inside = Math.hypot(p[0] - cx, p[1] - cy) <= lensGrabRadius(sideM);
     grab.current = inside ? [p[0] - cx, p[1] - cy] : [0, 0];
     event.currentTarget.setPointerCapture(event.pointerId);
     store.setDragging(true);
@@ -148,7 +159,7 @@ function LensPlan({
         )}
         {state.pins.map((pin) => (
           <g key={pin.id}>
-            <circle className="people-lens-pin" cx={pin.centre[0]} cy={pin.centre[1]} r={pin.radius} />
+            <path className="people-lens-pin" d={walkPath(pin.area.polygons)} fillRule="evenodd" clipPath="url(#people-lens-clip)" />
             <text
               className="people-lens-pin-label mono"
               x={pin.centre[0]}
@@ -162,7 +173,14 @@ function LensPlan({
             </text>
           </g>
         ))}
-        <circle className="people-lens-ring" cx={state.centre[0]} cy={state.centre[1]} r={state.radius} data-testid="people-lens-ring" />
+        <path
+          className={state.walk.status === "live" ? "people-lens-ring" : "people-lens-ring is-estimate"}
+          d={walkPath(state.walk.polygons)}
+          fillRule="evenodd"
+          clipPath="url(#people-lens-clip)"
+          data-testid="people-lens-ring"
+          data-status={state.walk.status}
+        />
         <circle className="people-lens-handle" cx={state.centre[0]} cy={state.centre[1]} r={sideM * 0.012} />
       </g>
     </svg>
@@ -189,24 +207,25 @@ export function LensView({
   const v = lens.values;
   const shares = lensShares(v);
   const live = lens.people;
+  const walkEstimate = state.walk.status !== "live";
   const methodLabel: Record<LensMethod, string> = { area: "Area-weighted", centroid: "By SA1 centroid" };
   return (
     <div className="people-view" data-testid="people-lens">
-      <p className="people-lede">Drag the lens on this plan{model3d ? " or on the 3D model" : ""}. Everyone under it is summed live from SA1s.</p>
+      <p className="people-lede">Drag the lens on this plan{model3d ? " or by its handle on the 3D model" : ""}. Everyone within the walk is summed live from SA1s.</p>
       <div className="people-sub people-sub-row">
-        <span>Radius</span>
-        <span className="people-chips" role="radiogroup" aria-label="Lens radius">
-          {LENS_RADII.map((r) => (
+        <span>Walk</span>
+        <span className="people-chips" role="radiogroup" aria-label="Walking time">
+          {WALK_MINUTES.map((m) => (
             <button
-              key={r}
+              key={m}
               type="button"
               role="radio"
-              aria-checked={state.radius === r}
-              className={state.radius === r ? "people-chip is-on" : "people-chip"}
-              data-testid={`people-lens-r${r}`}
-              onClick={() => store.setRadius(r)}
+              aria-checked={state.minutes === m}
+              className={state.minutes === m ? "people-chip is-on" : "people-chip"}
+              data-testid={`people-lens-t${m}`}
+              onClick={() => store.setMinutes(m)}
             >
-              {r === 400 ? "400 m · 5′ walk" : `${r} m`}
+              {m} min
             </button>
           ))}
         </span>
@@ -215,12 +234,20 @@ export function LensView({
       <div className="people-lens-head">
         <div>
           <span className="people-kpi-lbl mono">
-            Under the lens · {lens.sa1Codes.length} SA1s · r {state.radius} m
+            Within {state.minutes} min walk · {lens.sa1Codes.length} SA1s
           </span>
           <div className="people-lens-count">
             <b data-testid="people-lens-count">{fmtInt(live)}</b>
-            <span>people{lens.estimated ? " est." : ""}</span>
+            <span>people{lens.estimated || walkEstimate ? " est." : ""}</span>
           </div>
+          <span
+            className={walkEstimate ? "people-lens-walk is-estimate mono" : "people-lens-walk mono"}
+            role="status"
+            data-testid={state.walk.status === "fallback" ? "people-lens-fallback" : "people-lens-walk"}
+            data-status={state.walk.status}
+          >
+            {walkLabel(state.walk)}
+          </span>
         </div>
         <button type="button" className="people-btn" data-testid="people-lens-pin" disabled={state.pins.length >= 3} onClick={() => store.pin()}>
           Pin lens
@@ -267,7 +294,7 @@ export function LensView({
           {state.pins.map((pin) => (
             <li key={pin.id}>
               <span>
-                Pin {pin.label} · r {pin.radius} m · {pin.result.sa1Codes.length} SA1s
+                Pin {pin.label} · {pin.area.minutes} min{pin.area.status === "live" ? "" : " est."} · {pin.result.sa1Codes.length} SA1s
               </span>
               <b>{fmtInt(pin.result.people)}</b>
               <em>{live - pin.result.people >= 0 ? "+" : "−"}{fmtInt(Math.abs(live - pin.result.people))}</em>
@@ -296,8 +323,11 @@ export function LensView({
       </div>
       <p className="people-note">
         {state.method === "area"
-          ? "Estimate: each SA1's counts are scaled by the share of its area inside the lens."
-          : "Whole SA1s are counted when their centroid falls inside the lens."}{" "}
+          ? "Estimate: each SA1's counts are scaled by the share of its area inside the walking area."
+          : "Whole SA1s are counted when their centroid falls inside the walking area."}{" "}
+        {walkEstimate
+          ? `Without a walking area the lens is a ${walkRadiusM(state.minutes)} m circle (5 km/h in a straight line).`
+          : "The walking area is the pedestrian street network reach from the lens centre."}{" "}
         Medians cannot be summed, so the lens shows shares. Census day was 10 August 2021.
       </p>
     </div>

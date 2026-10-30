@@ -4,7 +4,8 @@ import { getColour, type ColourKey } from "./colours";
 import { sa1Centroid, type LensIndex } from "./peopleLens";
 import { sa1DotModes, TRAVEL_MODES, type TravelMode } from "./peopleMetrics";
 import { markScreenOnly } from "./screenOnly";
-import { siteFrameHalf, type SiteFrameShape } from "./siteFrame";
+import { clipPolygonsToSiteFrame, siteFrameHalf, type SiteFrameShape } from "./siteFrame";
+import type { WalkPolygons } from "./walkIsochrone";
 import { groundHeightAt } from "./viewshed";
 import type { CityModel, Pt } from "../types";
 
@@ -14,6 +15,11 @@ export const WALK_HOLD_MS = 1600;
 const MIN_PRISM_M = 0.6;
 const DOT_LIFT_M = 2.2;
 const LENS_LIFT_M = 1.5;
+const LENS_EDGE_STEP_M = 12;
+
+export function lensGrabRadius(sideM: number): number {
+  return Math.max(18, sideM * 0.05);
+}
 const RAMP: readonly ColourKey[] = ["--people-1", "--people-2", "--people-3", "--people-4", "--people-5"];
 const MODE_KEYS: Record<TravelMode, ColourKey> = Object.fromEntries(TRAVEL_MODES.map((m) => [m.id, m.key])) as Record<
   TravelMode,
@@ -124,10 +130,11 @@ export class PeopleCityLayer {
   private dotsDirty = false;
   private highlight: Set<string> | null = null;
   private selected: string | null = null;
-  private lensRing: THREE.LineLoop | null = null;
+  private lensRing: THREE.LineSegments | null = null;
   private lensFill: THREE.Mesh | null = null;
+  private lensHandle: THREE.Mesh | null = null;
   private lensCentre: Pt | null = null;
-  private lensRadius = 0;
+  private lensPolygons: WalkPolygons | null = null;
   private lensY = 0;
 
   constructor(
@@ -332,14 +339,20 @@ export class PeopleCityLayer {
     this.dotsDirty = true;
   }
 
-  setLens(centre: Pt | null, radius: number): void {
+  setLens(centre: Pt | null, polygons: WalkPolygons | null): void {
+    const moved = centre !== this.lensCentre || polygons !== this.lensPolygons;
+    this.lensRoot.visible = centre !== null && polygons !== null;
+    if (!centre || !polygons) {
+      this.lensCentre = centre;
+      this.lensPolygons = polygons;
+      return;
+    }
+    if (!moved && this.lensRing) return;
     this.lensCentre = centre;
-    this.lensRadius = radius;
-    this.lensRoot.visible = centre !== null;
-    if (!centre) return;
+    this.lensPolygons = polygons;
     if (!this.lensRing) {
       const ringMaterial = new THREE.LineBasicMaterial({ color: tokenColour("--people-lens"), depthTest: false, transparent: true });
-      this.lensRing = new THREE.LineLoop(new THREE.BufferGeometry(), ringMaterial);
+      this.lensRing = new THREE.LineSegments(new THREE.BufferGeometry(), ringMaterial);
       this.lensRing.renderOrder = 962;
       this.lensRing.frustumCulled = false;
       const fillMaterial = new THREE.MeshBasicMaterial({
@@ -350,41 +363,71 @@ export class PeopleCityLayer {
         depthWrite: false,
         side: THREE.DoubleSide,
       });
-      this.lensFill = new THREE.Mesh(new THREE.CircleGeometry(1, 72).rotateX(-Math.PI / 2), fillMaterial);
+      this.lensFill = new THREE.Mesh(new THREE.BufferGeometry(), fillMaterial);
       this.lensFill.renderOrder = 961;
-      this.lensRoot.add(this.lensFill, this.lensRing);
+      this.lensFill.frustumCulled = false;
+      const handleMaterial = new THREE.MeshBasicMaterial({ color: tokenColour("--people-lens"), transparent: true, opacity: 0.85, depthTest: false, depthWrite: false });
+      this.lensHandle = new THREE.Mesh(new THREE.RingGeometry(0.72, 1, 48).rotateX(-Math.PI / 2), handleMaterial);
+      this.lensHandle.renderOrder = 963;
+      this.lensRoot.add(this.lensFill, this.lensRing, this.lensHandle);
     }
+    const clipped = clipPolygonsToSiteFrame(polygons, this.model.sideM, this.shape);
     this.lensY = this.ground(centre[0], centre[1]) + LENS_LIFT_M;
     this.lensRing.geometry.dispose();
-    this.lensRing.geometry = this.ringGeometry(centre, radius);
-    this.lensFill!.position.set(centre[0], this.lensY, -centre[1]);
-    this.lensFill!.scale.set(radius, 1, radius);
+    this.lensRing.geometry = this.edgeGeometry(clipped);
+    this.lensFill!.geometry.dispose();
+    this.lensFill!.geometry = this.fillGeometry(clipped);
+    const grab = lensGrabRadius(this.model.sideM);
+    this.lensHandle!.position.set(centre[0], this.lensY, -centre[1]);
+    this.lensHandle!.scale.set(grab, 1, grab);
   }
 
-  private ringGeometry(centre: Pt, radius: number, segments = 96): THREE.BufferGeometry {
-    const positions = new Float32Array(segments * 3);
-    for (let i = 0; i < segments; i += 1) {
-      const a = (i / segments) * Math.PI * 2;
-      const e = centre[0] + Math.cos(a) * radius;
-      const n = centre[1] + Math.sin(a) * radius;
-      positions[i * 3] = e;
-      positions[i * 3 + 1] = this.ground(e, n) + LENS_LIFT_M;
-      positions[i * 3 + 2] = -n;
+  private fillGeometry(polygons: WalkPolygons): THREE.BufferGeometry {
+    const shapes: THREE.Shape[] = [];
+    for (const [outer, ...holes] of polygons) {
+      if (!outer || outer.length < 3) continue;
+      const shape = new THREE.Shape(outer.map(([e, n]) => new THREE.Vector2(e, n)));
+      for (const hole of holes) if (hole.length >= 3) shape.holes.push(new THREE.Path(hole.map(([e, n]) => new THREE.Vector2(e, n))));
+      shapes.push(shape);
     }
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    const geometry = shapes.length > 0 ? new THREE.ShapeGeometry(shapes) : new THREE.BufferGeometry();
+    geometry.rotateX(-Math.PI / 2);
+    geometry.translate(0, this.lensY, 0);
     return geometry;
   }
 
-  setPins(pins: readonly { centre: Pt; radius: number }[]): void {
+  private edgeGeometry(polygons: WalkPolygons): THREE.BufferGeometry {
+    const positions: number[] = [];
+    const push = (e: number, n: number) => positions.push(e, this.ground(e, n) + LENS_LIFT_M, -n);
+    for (const polygon of polygons) {
+      for (const ring of polygon) {
+        for (let i = 0; i < ring.length; i += 1) {
+          const a = ring[i];
+          const b = ring[(i + 1) % ring.length];
+          const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / LENS_EDGE_STEP_M));
+          for (let k = 0; k < steps; k += 1) {
+            const t0 = k / steps;
+            const t1 = (k + 1) / steps;
+            push(a[0] + (b[0] - a[0]) * t0, a[1] + (b[1] - a[1]) * t0);
+            push(a[0] + (b[0] - a[0]) * t1, a[1] + (b[1] - a[1]) * t1);
+          }
+        }
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(positions), 3));
+    return geometry;
+  }
+
+  setPins(pins: readonly { area: { polygons: WalkPolygons } }[]): void {
     for (const child of [...this.pinRoot.children]) {
       this.pinRoot.remove(child);
       (child as THREE.Line).geometry.dispose();
       ((child as THREE.Line).material as THREE.Material).dispose();
     }
     for (const pin of pins) {
-      const line = new THREE.LineLoop(
-        this.ringGeometry(pin.centre, pin.radius),
+      const line = new THREE.LineSegments(
+        this.edgeGeometry(clipPolygonsToSiteFrame(pin.area.polygons, this.model.sideM, this.shape)),
         new THREE.LineDashedMaterial({ color: tokenColour("--people-pin"), dashSize: 6, gapSize: 5, depthTest: false, transparent: true }),
       );
       line.computeLineDistances();
@@ -407,7 +450,7 @@ export class PeopleCityLayer {
   hitLens(ray: THREE.Ray): boolean {
     if (!this.lensRoot.visible || !this.lensCentre) return false;
     const p = this.pointOnLensPlane(ray);
-    return Boolean(p && Math.hypot(p[0] - this.lensCentre[0], p[1] - this.lensCentre[1]) <= this.lensRadius);
+    return Boolean(p && Math.hypot(p[0] - this.lensCentre[0], p[1] - this.lensCentre[1]) <= lensGrabRadius(this.model.sideM));
   }
 
   pickPrism(raycaster: THREE.Raycaster): string | null {
@@ -429,7 +472,8 @@ export class PeopleCityLayer {
 
   lensAnchor(): THREE.Vector3 | null {
     if (!this.lensCentre || !this.lensRoot.visible) return null;
-    return new THREE.Vector3(this.lensCentre[0] + this.lensRadius * 0.72, this.lensY, -(this.lensCentre[1] - this.lensRadius * 0.72));
+    const offset = lensGrabRadius(this.model.sideM) * 1.2;
+    return new THREE.Vector3(this.lensCentre[0] + offset, this.lensY, -(this.lensCentre[1] - offset));
   }
 
   update(now: number): boolean {
@@ -516,5 +560,7 @@ export class PeopleCityLayer {
     (this.lensRing?.material as THREE.Material | undefined)?.dispose();
     this.lensFill?.geometry.dispose();
     (this.lensFill?.material as THREE.Material | undefined)?.dispose();
+    this.lensHandle?.geometry.dispose();
+    (this.lensHandle?.material as THREE.Material | undefined)?.dispose();
   }
 }

@@ -30,6 +30,25 @@ const DEVICE_SCALE_FACTOR = 2;
 const ARTIFACTS_DIR = "/workspace";
 const TMP_FRAMES_DIR = "/tmp/citycut_verify_frames";
 const TMP_VIDEO_DIR = "/tmp/citycut_verify_video_frames";
+const WALK_MODE = process.env.CITYCUT_VERIFY_WALK ?? "mock";
+
+function mockWalkIsochrone(url) {
+  const raw = new URL(url).searchParams.get("json") ?? "{}";
+  const body = JSON.parse(raw);
+  const { lat, lon } = body.locations?.[0] ?? { lat: 0, lon: 0 };
+  const mPerDegLon = 111320 * Math.cos((lat * Math.PI) / 180);
+  const features = (body.contours ?? []).map(({ time }) => {
+    const ring = [];
+    for (let i = 0; i < 48; i += 1) {
+      const a = (i / 48) * Math.PI * 2;
+      const r = time * 80 * (0.62 + 0.28 * Math.cos(a * 4));
+      ring.push([lon + (Math.cos(a) * r) / mPerDegLon, lat + (Math.sin(a) * r) / 111132]);
+    }
+    ring.push(ring[0]);
+    return { type: "Feature", properties: { contour: time, metric: "time" }, geometry: { type: "Polygon", coordinates: [ring] } };
+  });
+  return { type: "FeatureCollection", features };
+}
 
 function findFreePort() {
   return new Promise((resolve, reject) => {
@@ -126,6 +145,18 @@ async function main() {
         // ignore
       }
     });
+    if (WALK_MODE !== "live") {
+      await context.route("https://valhalla1.openstreetmap.de/isochrone**", (route) =>
+        WALK_MODE === "fallback"
+          ? route.fulfill({ status: 503, headers: { "access-control-allow-origin": "*" }, body: "" })
+          : route.fulfill({
+              status: 200,
+              contentType: "application/json",
+              headers: { "access-control-allow-origin": "*" },
+              body: JSON.stringify(mockWalkIsochrone(route.request().url())),
+            }),
+      );
+    }
     const page = await context.newPage();
     page.on("pageerror", (err) => console.error("[PAGEERROR]", err.stack || err.message));
     page.on("console", (msg) => {
@@ -1013,7 +1044,32 @@ async function main() {
       const countAfter = await lensCount();
       const trail = Number(await page.locator('[data-testid="people-lens-trail"]').getAttribute("data-points").catch(() => "0"));
       assertCheck("PEOPLE-11", "Dragging the People lens changes the resident count", countBefore > 0 && countAfter !== countBefore && trail > 1, `before=${countBefore} after=${countAfter} trail=${trail}`);
-      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "people-v2-lens.png") });
+      const walkChips = await page.locator('[data-testid="people-lens-t5"], [data-testid="people-lens-t10"], [data-testid="people-lens-t15"]').allTextContents();
+      const radiusChips = await page.locator('[data-testid="people-lens-r100"], [data-testid="people-lens-r200"], [data-testid="people-lens-r400"]').count();
+      const walkExpect = WALK_MODE === "fallback" ? "fallback" : "live";
+      await page
+        .waitForSelector(`[data-testid="people-lens-ring"][data-status="${walkExpect}"]`, { timeout: 12000 })
+        .catch(() => {});
+      await page.locator('[data-testid="people-lens-t10"]').click();
+      await page.waitForTimeout(300);
+      const count10 = await lensCount();
+      const walkInfo = await page.evaluate(() => ({
+        status: document.querySelector('[data-testid="people-lens-ring"]')?.getAttribute("data-status") ?? "",
+        label: (document.querySelector('[data-testid="people-lens-walk"], [data-testid="people-lens-fallback"]')?.textContent ?? "").trim(),
+        fallbackShown: Boolean(document.querySelector('[data-testid="people-lens-fallback"]')),
+        source: document.querySelector('[data-testid="people-source"]')?.textContent ?? "",
+      }));
+      const walkLabelOk =
+        walkExpect === "fallback"
+          ? walkInfo.fallbackShown && /straight-line circle/.test(walkInfo.label)
+          : !walkInfo.fallbackShown && /Valhalla/.test(walkInfo.label);
+      assertCheck(
+        "PEOPLE-15",
+        "Lens offers 5 / 10 / 15 min walk chips, shows the walking-area source, and never hides a fallback",
+        walkChips.join("|") === "5 min|10 min|15 min" && radiusChips === 0 && walkInfo.status === walkExpect && walkLabelOk && walkInfo.source.includes("Valhalla") && count10 > 0,
+        `mode=${WALK_MODE} chips=${walkChips.join("|")} radius=${radiusChips} status=${walkInfo.status} label="${walkInfo.label}" count10=${count10}`,
+      );
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, WALK_MODE === "fallback" ? "people-v3-lens-fallback.png" : "people-v3-lens-walk.png") });
       await page.locator('[data-testid="people-view-city"]').click();
       await page.waitForTimeout(300);
       const cityToggle = page.locator('[data-testid="people-city-toggle"] input');
