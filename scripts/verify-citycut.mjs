@@ -991,6 +991,86 @@ async function main() {
         .waitForSelector('[data-testid="people-panel"]:not([data-state="loading"])', { timeout: 20000 })
         .catch(() => {});
       await page.waitForTimeout(300);
+      const tabRow = await page.evaluate(() => {
+        const tabs = [...document.querySelectorAll(".model .right-inspector .insp-tabs.is-right-rail button")];
+        const tops = new Set(tabs.map((t) => Math.round(t.getBoundingClientRect().top)));
+        return { count: tabs.length, rows: tops.size };
+      });
+      assertCheck("PEOPLE-10", "Right-panel tab row sits on one line", tabRow.count >= 4 && tabRow.rows === 1, `tabs=${tabRow.count} rows=${tabRow.rows}`);
+      const canvasShot = () => page.locator(".model canvas").first().screenshot();
+      const lensCount = async () => Number(((await page.locator('[data-testid="people-lens-count"]').textContent()) ?? "0").replace(/[^\d]/g, ""));
+      await page.locator('[data-testid="people-view-lens"]').click();
+      await page.waitForTimeout(300);
+      const countBefore = await lensCount();
+      const plan = await page.locator('[data-testid="people-lens-plan"]').boundingBox();
+      if (plan) {
+        await page.mouse.move(plan.x + plan.width / 2, plan.y + plan.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(plan.x + plan.width * 0.85, plan.y + plan.height * 0.8, { steps: 12 });
+        await page.mouse.up();
+      }
+      await page.waitForTimeout(300);
+      const countAfter = await lensCount();
+      const trail = Number(await page.locator('[data-testid="people-lens-trail"]').getAttribute("data-points").catch(() => "0"));
+      assertCheck("PEOPLE-11", "Dragging the People lens changes the resident count", countBefore > 0 && countAfter !== countBefore && trail > 1, `before=${countBefore} after=${countAfter} trail=${trail}`);
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "people-v2-lens.png") });
+      await page.locator('[data-testid="people-view-city"]').click();
+      await page.waitForTimeout(300);
+      const cityToggle = page.locator('[data-testid="people-city-toggle"] input');
+      const cityDefault = await cityToggle.isChecked();
+      const cityOff = await canvasShot();
+      await cityToggle.check();
+      await page.waitForTimeout(800);
+      const cityOn = await canvasShot();
+      const slider = page.locator('[data-testid="people-age-slider"]');
+      await slider.focus();
+      for (let i = 0; i < 4; i += 1) await page.keyboard.press("ArrowRight");
+      await page.waitForTimeout(800);
+      const cityAge = await canvasShot();
+      assertCheck(
+        "PEOPLE-12",
+        "Living City is off by default; prisms toggle on and the age slider changes them",
+        cityDefault === false && !cityOff.equals(cityOn) && !cityOn.equals(cityAge),
+        `default=${cityDefault} toggled=${!cityOff.equals(cityOn)} age=${!cityOn.equals(cityAge)}`,
+      );
+      const dotsToggle = page.locator('[data-testid="people-dots-toggle"] input');
+      await dotsToggle.check();
+      await page.waitForTimeout(600);
+      const dotsOn = await canvasShot();
+      await page.locator('[data-testid="people-play"]').click();
+      await page.waitForTimeout(1200);
+      const dotsMoved = await canvasShot();
+      assertCheck("PEOPLE-13", "Travel dots show and the play button moves them", !cityAge.equals(dotsOn) && !dotsOn.equals(dotsMoved), `shown=${!cityAge.equals(dotsOn)} moved=${!dotsOn.equals(dotsMoved)}`);
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "people-v2-city.png") });
+      await page.locator('[data-testid="people-play"]').click();
+      await dotsToggle.uncheck();
+      await cityToggle.uncheck();
+      await page.locator('[data-testid="people-view-deck"]').click();
+      await page.waitForTimeout(300);
+      const card = page.locator('[data-testid="people-deck-card"]');
+      const cardBefore = await card.getAttribute("data-card");
+      const cb = await card.boundingBox();
+      if (cb) {
+        await page.mouse.move(cb.x + cb.width * 0.7, cb.y + cb.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(cb.x + cb.width * 0.1, cb.y + cb.height / 2, { steps: 8 });
+        await page.mouse.up();
+      }
+      await page.waitForTimeout(400);
+      const cardAfter = await card.getAttribute("data-card");
+      const met = Number(await page.locator('[data-testid="people-deck-grid"]').getAttribute("data-met"));
+      assertCheck("PEOPLE-14", "Swiping the neighbours deck moves to the next card and fills the 100-person grid", cardBefore !== cardAfter && met > 0, `${cardBefore} -> ${cardAfter} met=${met}`);
+      await page.locator('[data-testid="people-quiz-flip"]').click();
+      await page.waitForTimeout(200);
+      const quiz = await page.evaluate(() => ({
+        real: document.querySelector('[data-testid="people-quiz-real"]')?.textContent ?? "",
+        result: document.querySelector('[data-testid="people-quiz-result"]')?.textContent ?? "",
+        streak: document.querySelector('[data-testid="people-quiz-streak"]')?.textContent ?? "",
+      }));
+      assertCheck("PEOPLE-15", "Quiz flips to the real Census share with a streak", /\d+%/.test(quiz.real) && quiz.result.length > 0 && /streak/i.test(quiz.streak), `${quiz.real} | ${quiz.streak}`);
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "people-v2-deck.png") });
+      await page.locator('[data-testid="people-view-profile"]').click();
+      await page.waitForTimeout(300);
       const peopleInfo = await page.evaluate(() => {
         const text = (id) => document.querySelector(`[data-testid="${id}"]`)?.textContent?.trim() ?? "";
         const panel = document.querySelector('[data-testid="people-panel"]');
@@ -1047,9 +1127,14 @@ async function main() {
       assertCheck("PEOPLE-8", "SA1 map overlay toggle exists and is off by default", overlayDefault === false, `checked=${overlayDefault}`);
       if (overlayDefault === false) {
         const canvas = page.locator(".model canvas").first();
-        const idle = await canvas.screenshot();
-        await page.waitForTimeout(400);
-        const before = await canvas.screenshot();
+        let idle = await canvas.screenshot();
+        let before = idle;
+        for (let i = 0; i < 10; i += 1) {
+          await page.waitForTimeout(400);
+          before = await canvas.screenshot();
+          if (idle.equals(before)) break;
+          idle = before;
+        }
         await toggle.check();
         await page.waitForTimeout(400);
         const after = await canvas.screenshot();

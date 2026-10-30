@@ -5,6 +5,8 @@ import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
 import { PeoplePanel } from "./PeoplePanel";
 import { CensusSa1Layer } from "../lib/censusSa1Layer";
+import { PeopleCityLayer } from "../lib/peopleCityLayer";
+import { PeopleStore } from "../lib/peopleStore";
 import { Building2, Copy, Download, DraftingCompass, Eye, GripVertical, Info, Radar, Sun, Trees, Upload, Users, Wind } from "lucide-react";
 import {
   BUILDING_USES,
@@ -936,6 +938,10 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   const walkAt = useWalkPlayback(walk);
   const censusLayer = useMemo(() => new CensusSa1Layer(model, model.frameShape ?? "square"), [model]);
   useEffect(() => () => censusLayer.dispose(), [censusLayer]);
+  const peopleStore = useMemo(() => new PeopleStore(model.sideM, model.frameShape ?? "square"), [model]);
+  const peopleLayer = useMemo(() => new PeopleCityLayer(model, model.frameShape ?? "square"), [model]);
+  useEffect(() => () => peopleLayer.dispose(), [peopleLayer]);
+  const people3d = useMemo(() => ({ layer: peopleLayer, store: peopleStore }), [peopleLayer, peopleStore]);
 
   /**
    * Drawing tab and its .ai exports: the display model (hidden buildings already gone) plus plan
@@ -1780,6 +1786,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 importedMassing={massing.group}
                 walkLayer={walk.layer.root}
                 censusLayer={censusLayer.root}
+                people={people3d}
                 onScenePoint={walkDrawing ? walk.addPoint : massing.onScenePoint}
               />
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
@@ -2459,6 +2466,8 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 shape={model.frameShape ?? "square"}
                 overlay={censusLayer}
                 overlayShown={tab === "3d"}
+                store={peopleStore}
+                layer={peopleLayer}
               />
             </div>
 

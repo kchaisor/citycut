@@ -185,6 +185,15 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--people-4` | `#A9541F` | People tab (ABS Census 2021): chart and SA1 ramp step 4 of 5, low to high. |
 | `--people-5` | `#5E2412` | People tab (ABS Census 2021): chart and SA1 ramp step 5 of 5, low to high. |
 | `--people-benchmark` | `#1A1916` | People tab: Greater Melbourne benchmark tick on the age and share bars. |
+| `--people-lens` | `#1A1916` | People lens: ring on the site plan and the 3D model. |
+| `--people-lens-fill` | `#FFE14D` | People lens: translucent fill inside the ring, and the counted SA1s on the plan. |
+| `--people-pin` | `#6E6A62` | People lens: pinned lens rings and labels. |
+| `--people-highlight` | `#FFD60A` | People tab: SA1 prisms lit by "Show on model" in Meet your neighbours. |
+| `--people-mode-pt` | `#3F6FD8` | Living City: public transport dots and legend. |
+| `--people-mode-active` | `#2F9A55` | Living City: walk / cycle dots and legend. |
+| `--people-mode-car` | `#D04A32` | Living City: car dots and legend. |
+| `--people-mode-home` | `#1A1916` | Living City: worked-from-home dots and legend. |
+| `--people-mode-other` | `#9461CF` | Living City: multi-mode and other dots and legend. |
 | `--tree-fill` | `#6ea35a` | Tree-crown fill on the site plan, on screen and in the Illustrator file. |
 | `--tree-crown` | `#5d8a45` | Tree-crown fill on the 3D-view Illustrator sheet. |
 | `--tree-crown-edge` | `#2c4a28` | Outline around that 3D-view crown. |

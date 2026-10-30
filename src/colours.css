@@ -358,4 +358,15 @@
   --people-4: #A9541F;
   --people-5: #5E2412;
   --people-benchmark: #1A1916;
+
+  /* People tab: lens, pinned lenses, "Show on model" highlight, and travel-to-work dots. */
+  --people-lens: #1A1916;
+  --people-lens-fill: #FFE14D;
+  --people-pin: #6E6A62;
+  --people-highlight: #FFD60A;
+  --people-mode-pt: #3F6FD8;
+  --people-mode-active: #2F9A55;
+  --people-mode-car: #D04A32;
+  --people-mode-home: #1A1916;
+  --people-mode-other: #9461CF;
 }

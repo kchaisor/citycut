@@ -77,6 +77,7 @@ export type SelectedSa1 = {
   fraction: number;
   clippedKm2: number;
   rings: Pt[][];
+  clipped: Pt[][][];
   containsCentre: boolean;
 };
 
@@ -198,6 +199,7 @@ export function selectSa1s(
         fraction: Math.min(1, clippedArea / fullArea),
         clippedKm2: clippedArea / 1e6,
         rings: local.flat(),
+        clipped: clipped as unknown as Pt[][][],
         containsCentre,
       });
     }

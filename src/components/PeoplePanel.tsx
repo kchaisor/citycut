@@ -10,8 +10,62 @@ import {
   type SelectedSa1,
 } from "../lib/censusPeople";
 import type { CensusSa1Layer } from "../lib/censusSa1Layer";
+import { toLocal } from "../lib/geo";
+import type { PeopleCityLayer } from "../lib/peopleCityLayer";
+import { prismHeights, prismMaxHeightM, prismMetricValue, prismSteps } from "../lib/peopleMetrics";
+import { usePeople, type PeopleState, type PeopleStore, type PeopleView } from "../lib/peopleStore";
 import type { SiteFrameShape } from "../lib/siteFrame";
 import type { LonLat } from "../types";
+import { CityView, DeckView, LensView } from "./PeopleViews";
+
+const MELBOURNE_GPO = { lat: -37.8136, lon: 144.9631 };
+
+const VIEWS: { id: PeopleView; label: string }[] = [
+  { id: "lens", label: "Lens" },
+  { id: "city", label: "Living City" },
+  { id: "deck", label: "Neighbours" },
+  { id: "profile", label: "Profile" },
+];
+
+const selectView = (s: PeopleState) => s.view;
+
+function useLayerSync(store: PeopleStore, layer: PeopleCityLayer | undefined, center: LonLat, sideM: number): void {
+  useEffect(() => {
+    if (!layer) return;
+    let prev: PeopleState | null = null;
+    const apply = () => {
+      const s = store.get();
+      const now = performance.now();
+      const p = prev;
+      prev = s;
+      const sa1 = s.census?.status === "ok" ? s.census.sa1 : [];
+      if (!p || p.census !== s.census) {
+        layer.setSa1(sa1, s.index);
+        layer.setDestinations(toLocal(MELBOURNE_GPO.lat, MELBOURNE_GPO.lon, center), null);
+      }
+      if (!p || p.census !== s.census || p.city.metric !== s.city.metric || p.city.band !== s.city.band) {
+        const max = prismMaxHeightM(sideM);
+        const heights = prismHeights(
+          sa1.map((x) => prismMetricValue(x, s.city.metric, s.city.band)),
+          s.city.metric,
+          max,
+        );
+        layer.setHeights(heights, prismSteps(heights, max), now, Boolean(p && p.census === s.census));
+      }
+      layer.setPrismsVisible(s.active && s.city.prisms);
+      layer.setDots(s.active && s.city.dots, s.city.modes);
+      layer.setPlaying(s.active && s.city.dots && s.city.playing, now);
+      const lensOn = s.active && s.view === "lens" && s.lens !== null;
+      layer.setLens(lensOn ? s.centre : null, s.radius);
+      if (!p || p.pins !== s.pins) layer.setPins(s.pins);
+      layer.setPinsVisible(lensOn);
+      if (!p || p.highlight !== s.highlight) layer.setHighlight(s.highlight?.codes ?? null);
+      layer.setSelected(s.active && s.city.prisms ? s.selected : null);
+    };
+    apply();
+    return store.subscribe(apply);
+  }, [store, layer, center, sideM]);
+}
 
 const RAMP = ["var(--people-1)", "var(--people-2)", "var(--people-3)", "var(--people-4)", "var(--people-5)"];
 const AGE_COLOURS = [
@@ -185,6 +239,8 @@ export function PeoplePanel({
   shape,
   overlay,
   overlayShown,
+  store,
+  layer,
 }: {
   active: boolean;
   center: LonLat;
@@ -192,7 +248,11 @@ export function PeoplePanel({
   shape: SiteFrameShape;
   overlay?: CensusSa1Layer;
   overlayShown?: boolean;
+  store: PeopleStore;
+  layer?: PeopleCityLayer;
 }) {
+  const view = usePeople(store, selectView);
+  useLayerSync(store, layer, center, sideM);
   const siteKey = `${center.lat},${center.lon},${sideM},${shape}`;
   const [loaded, setLoaded] = useState<{ key: string; result: CensusSiteResult } | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
@@ -219,6 +279,14 @@ export function PeoplePanel({
   useEffect(() => {
     overlay?.setHovered(hovered);
   }, [overlay, hovered]);
+
+  useEffect(() => {
+    store.setActive(active);
+  }, [store, active]);
+
+  useEffect(() => {
+    store.setCensus(result);
+  }, [store, result]);
 
   useEffect(() => {
     if (!active || startedKey.current === siteKey) return;
@@ -268,8 +336,41 @@ export function PeoplePanel({
   const scopeLabel = hoveredSa1 ? `SA1 ${hoveredSa1.code}` : `${result.sa1.length} SA1s in the cut`;
   const mapValues = result.sa1.map((s) => metricValue(s, metric));
 
+  const viewTabs = (
+    <div className="people-views" role="tablist" aria-label="People views">
+      {VIEWS.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          role="tab"
+          aria-selected={view === item.id}
+          className={view === item.id ? "people-view-tab is-on" : "people-view-tab"}
+          data-testid={`people-view-${item.id}`}
+          onClick={() => store.setView(item.id)}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (view !== "profile") {
+    return (
+      <div className="people-panel" data-testid="people-panel" data-state="ok" data-view={view}>
+        {viewTabs}
+        {view === "lens" ? <LensView store={store} census={result} sideM={sideM} shape={shape} model3d={Boolean(overlayShown)} /> : null}
+        {view === "city" ? <CityView store={store} census={result} model3d={Boolean(overlayShown)} /> : null}
+        {view === "deck" ? <DeckView store={store} census={result} /> : null}
+        <p className="people-source" data-testid="people-source">
+          {CENSUS_ATTRIBUTION}
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="people-panel" data-testid="people-panel" data-state="ok">
+    <div className="people-panel" data-testid="people-panel" data-state="ok" data-view="profile">
+      {viewTabs}
       <div className="people-scope mono" data-testid="people-scope">
         <span>{scopeLabel}</span>
         <span>SA2 {parentSa2.name}</span>

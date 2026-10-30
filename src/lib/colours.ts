@@ -188,6 +188,15 @@ export const COLOUR_KEYS = [
   "--people-4",
   "--people-5",
   "--people-benchmark",
+  "--people-lens",
+  "--people-lens-fill",
+  "--people-pin",
+  "--people-highlight",
+  "--people-mode-pt",
+  "--people-mode-active",
+  "--people-mode-car",
+  "--people-mode-home",
+  "--people-mode-other",
 ] as const;
 
 export type ColourKey = (typeof COLOUR_KEYS)[number];
@@ -324,6 +333,15 @@ export const COLOUR_GROUPS = [
       "--people-4",
       "--people-5",
       "--people-benchmark",
+      "--people-lens",
+      "--people-lens-fill",
+      "--people-pin",
+      "--people-highlight",
+      "--people-mode-pt",
+      "--people-mode-active",
+      "--people-mode-car",
+      "--people-mode-home",
+      "--people-mode-other",
     ],
   },
 ] as const satisfies readonly { id: string; title: string; keys: readonly ColourKey[] }[];
@@ -508,6 +526,15 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--people-4": "People: high step",
   "--people-5": "People: highest step",
   "--people-benchmark": "People: Greater Melbourne tick",
+  "--people-lens": "People: lens ring",
+  "--people-lens-fill": "People: lens fill",
+  "--people-pin": "People: pinned lens ring",
+  "--people-highlight": "People: Show on model highlight",
+  "--people-mode-pt": "People: public transport dots",
+  "--people-mode-active": "People: walk / cycle dots",
+  "--people-mode-car": "People: car dots",
+  "--people-mode-home": "People: worked from home dots",
+  "--people-mode-other": "People: multi-mode / other dots",
 };
 
 const parsed = resolveSheet(parseCustomProperties(coloursCss));

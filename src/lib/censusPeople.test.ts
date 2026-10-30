@@ -101,7 +101,7 @@ describe("census SA1 selection", () => {
 
 describe("census aggregation", () => {
   it("apportions counts by fraction and population-weights medians", () => {
-    const base = { sa2Code: "x", clippedKm2: 0.5, rings: [], containsCentre: false };
+    const base = { sa2Code: "x", clippedKm2: 0.5, rings: [], clipped: [], containsCentre: false };
     const summary = aggregateSa1s([
       { ...base, code: "a", fraction: 1, values: toValues(raw({ pop: 300, medAge: 30, medHhInc: 2000, tenRent: 90 })) },
       { ...base, code: "b", fraction: 0.5, values: toValues(raw({ pop: 200, medAge: 60, medHhInc: 0, tenRent: 40 })) },
@@ -116,7 +116,7 @@ describe("census aggregation", () => {
 
   it("is not an estimate when every SA1 is wholly inside", () => {
     const summary = aggregateSa1s([
-      { code: "a", sa2Code: "x", clippedKm2: 1, rings: [], containsCentre: true, fraction: 1, values: toValues(raw({ pop: 10 })) },
+      { code: "a", sa2Code: "x", clippedKm2: 1, rings: [], clipped: [], containsCentre: true, fraction: 1, values: toValues(raw({ pop: 10 })) },
     ]);
     expect(summary.estimated).toBe(false);
   });
