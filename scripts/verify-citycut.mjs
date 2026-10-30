@@ -30,6 +30,25 @@ const DEVICE_SCALE_FACTOR = 2;
 const ARTIFACTS_DIR = "/workspace";
 const TMP_FRAMES_DIR = "/tmp/citycut_verify_frames";
 const TMP_VIDEO_DIR = "/tmp/citycut_verify_video_frames";
+const WALK_MODE = process.env.CITYCUT_VERIFY_WALK ?? "mock";
+
+function mockWalkIsochrone(url) {
+  const raw = new URL(url).searchParams.get("json") ?? "{}";
+  const body = JSON.parse(raw);
+  const { lat, lon } = body.locations?.[0] ?? { lat: 0, lon: 0 };
+  const mPerDegLon = 111320 * Math.cos((lat * Math.PI) / 180);
+  const features = (body.contours ?? []).map(({ time }) => {
+    const ring = [];
+    for (let i = 0; i < 48; i += 1) {
+      const a = (i / 48) * Math.PI * 2;
+      const r = time * 80 * (0.62 + 0.28 * Math.cos(a * 4));
+      ring.push([lon + (Math.cos(a) * r) / mPerDegLon, lat + (Math.sin(a) * r) / 111132]);
+    }
+    ring.push(ring[0]);
+    return { type: "Feature", properties: { contour: time, metric: "time" }, geometry: { type: "Polygon", coordinates: [ring] } };
+  });
+  return { type: "FeatureCollection", features };
+}
 
 function findFreePort() {
   return new Promise((resolve, reject) => {
@@ -126,6 +145,18 @@ async function main() {
         // ignore
       }
     });
+    if (WALK_MODE !== "live") {
+      await context.route("https://valhalla1.openstreetmap.de/isochrone**", (route) =>
+        WALK_MODE === "fallback"
+          ? route.fulfill({ status: 503, headers: { "access-control-allow-origin": "*" }, body: "" })
+          : route.fulfill({
+              status: 200,
+              contentType: "application/json",
+              headers: { "access-control-allow-origin": "*" },
+              body: JSON.stringify(mockWalkIsochrone(route.request().url())),
+            }),
+      );
+    }
     const page = await context.newPage();
     page.on("pageerror", (err) => console.error("[PAGEERROR]", err.stack || err.message));
     page.on("console", (msg) => {
@@ -985,6 +1016,198 @@ async function main() {
       await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v17-display-reset-colours.png") });
     }
 
+    {
+      await page.locator('.model button[data-section="people"]').first().click();
+      await page
+        .waitForSelector('[data-testid="people-panel"]:not([data-state="loading"])', { timeout: 20000 })
+        .catch(() => {});
+      await page.waitForTimeout(300);
+      const tabRow = await page.evaluate(() => {
+        const tabs = [...document.querySelectorAll(".model .right-inspector .insp-tabs.is-right-rail button")];
+        const tops = new Set(tabs.map((t) => Math.round(t.getBoundingClientRect().top)));
+        return { count: tabs.length, rows: tops.size };
+      });
+      assertCheck("PEOPLE-10", "Right-panel tab row sits on one line", tabRow.count >= 4 && tabRow.rows === 1, `tabs=${tabRow.count} rows=${tabRow.rows}`);
+      const canvasShot = () => page.locator(".model canvas").first().screenshot();
+      const lensCount = async () => Number(((await page.locator('[data-testid="people-lens-count"]').textContent()) ?? "0").replace(/[^\d]/g, ""));
+      await page.locator('[data-testid="people-view-lens"]').click();
+      await page.waitForTimeout(300);
+      const countBefore = await lensCount();
+      const plan = await page.locator('[data-testid="people-lens-plan"]').boundingBox();
+      if (plan) {
+        await page.mouse.move(plan.x + plan.width / 2, plan.y + plan.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(plan.x + plan.width * 0.85, plan.y + plan.height * 0.8, { steps: 12 });
+        await page.mouse.up();
+      }
+      await page.waitForTimeout(300);
+      const countAfter = await lensCount();
+      const trail = Number(await page.locator('[data-testid="people-lens-trail"]').getAttribute("data-points").catch(() => "0"));
+      assertCheck("PEOPLE-11", "Dragging the People lens changes the resident count", countBefore > 0 && countAfter !== countBefore && trail > 1, `before=${countBefore} after=${countAfter} trail=${trail}`);
+      const walkChips = await page.locator('[data-testid="people-lens-t5"], [data-testid="people-lens-t10"], [data-testid="people-lens-t15"]').allTextContents();
+      const radiusChips = await page.locator('[data-testid="people-lens-r100"], [data-testid="people-lens-r200"], [data-testid="people-lens-r400"]').count();
+      const walkExpect = WALK_MODE === "fallback" ? "fallback" : "live";
+      await page
+        .waitForSelector(`[data-testid="people-lens-ring"][data-status="${walkExpect}"]`, { timeout: 12000 })
+        .catch(() => {});
+      await page.locator('[data-testid="people-lens-t10"]').click();
+      await page.waitForTimeout(300);
+      const count10 = await lensCount();
+      const walkInfo = await page.evaluate(() => ({
+        status: document.querySelector('[data-testid="people-lens-ring"]')?.getAttribute("data-status") ?? "",
+        label: (document.querySelector('[data-testid="people-lens-walk"], [data-testid="people-lens-fallback"]')?.textContent ?? "").trim(),
+        fallbackShown: Boolean(document.querySelector('[data-testid="people-lens-fallback"]')),
+        source: document.querySelector('[data-testid="people-source"]')?.textContent ?? "",
+      }));
+      const walkLabelOk =
+        walkExpect === "fallback"
+          ? walkInfo.fallbackShown && /straight-line circle/.test(walkInfo.label)
+          : !walkInfo.fallbackShown && /Valhalla/.test(walkInfo.label);
+      assertCheck(
+        "PEOPLE-16",
+        "Lens offers 5 / 10 / 15 min walk chips, shows the walking-area source, and never hides a fallback",
+        walkChips.join("|") === "5 min|10 min|15 min" && radiusChips === 0 && walkInfo.status === walkExpect && walkLabelOk && walkInfo.source.includes("Valhalla") && count10 > 0,
+        `mode=${WALK_MODE} chips=${walkChips.join("|")} radius=${radiusChips} status=${walkInfo.status} label="${walkInfo.label}" count10=${count10}`,
+      );
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, WALK_MODE === "fallback" ? "people-v3-lens-fallback.png" : "people-v3-lens-walk.png") });
+      await page.locator('[data-testid="people-view-city"]').click();
+      await page.waitForTimeout(300);
+      const cityToggle = page.locator('[data-testid="people-city-toggle"] input');
+      const cityDefault = await cityToggle.isChecked();
+      const cityOff = await canvasShot();
+      await cityToggle.check();
+      await page.waitForTimeout(800);
+      const cityOn = await canvasShot();
+      const slider = page.locator('[data-testid="people-age-slider"]');
+      await slider.focus();
+      for (let i = 0; i < 4; i += 1) await page.keyboard.press("ArrowRight");
+      await page.waitForTimeout(800);
+      const cityAge = await canvasShot();
+      assertCheck(
+        "PEOPLE-12",
+        "Living City is off by default; prisms toggle on and the age slider changes them",
+        cityDefault === false && !cityOff.equals(cityOn) && !cityOn.equals(cityAge),
+        `default=${cityDefault} toggled=${!cityOff.equals(cityOn)} age=${!cityOn.equals(cityAge)}`,
+      );
+      const dotsToggle = page.locator('[data-testid="people-dots-toggle"] input');
+      await dotsToggle.check();
+      await page.waitForTimeout(600);
+      const dotsOn = await canvasShot();
+      await page.locator('[data-testid="people-play"]').click();
+      await page.waitForTimeout(1200);
+      const dotsMoved = await canvasShot();
+      assertCheck("PEOPLE-13", "Travel dots show and the play button moves them", !cityAge.equals(dotsOn) && !dotsOn.equals(dotsMoved), `shown=${!cityAge.equals(dotsOn)} moved=${!dotsOn.equals(dotsMoved)}`);
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "people-v2-city.png") });
+      await page.locator('[data-testid="people-play"]').click();
+      await dotsToggle.uncheck();
+      await cityToggle.uncheck();
+      await page.locator('[data-testid="people-view-deck"]').click();
+      await page.waitForTimeout(300);
+      const card = page.locator('[data-testid="people-deck-card"]');
+      const cardBefore = await card.getAttribute("data-card");
+      const cb = await card.boundingBox();
+      if (cb) {
+        await page.mouse.move(cb.x + cb.width * 0.7, cb.y + cb.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(cb.x + cb.width * 0.1, cb.y + cb.height / 2, { steps: 8 });
+        await page.mouse.up();
+      }
+      await page.waitForTimeout(400);
+      const cardAfter = await card.getAttribute("data-card");
+      const met = Number(await page.locator('[data-testid="people-deck-grid"]').getAttribute("data-met"));
+      assertCheck("PEOPLE-14", "Swiping the neighbours deck moves to the next card and fills the 100-person grid", cardBefore !== cardAfter && met > 0, `${cardBefore} -> ${cardAfter} met=${met}`);
+      await page.locator('[data-testid="people-quiz-flip"]').click();
+      await page.waitForTimeout(200);
+      const quiz = await page.evaluate(() => ({
+        real: document.querySelector('[data-testid="people-quiz-real"]')?.textContent ?? "",
+        result: document.querySelector('[data-testid="people-quiz-result"]')?.textContent ?? "",
+        streak: document.querySelector('[data-testid="people-quiz-streak"]')?.textContent ?? "",
+      }));
+      assertCheck("PEOPLE-15", "Quiz flips to the real Census share with a streak", /\d+%/.test(quiz.real) && quiz.result.length > 0 && /streak/i.test(quiz.streak), `${quiz.real} | ${quiz.streak}`);
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "people-v2-deck.png") });
+      await page.locator('[data-testid="people-view-profile"]').click();
+      await page.waitForTimeout(300);
+      const peopleInfo = await page.evaluate(() => {
+        const text = (id) => document.querySelector(`[data-testid="${id}"]`)?.textContent?.trim() ?? "";
+        const panel = document.querySelector('[data-testid="people-panel"]');
+        const rect = panel?.getBoundingClientRect();
+        return {
+          state: panel?.getAttribute("data-state") ?? "missing",
+          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+          residents: text("people-kpi-residents"),
+          age: text("people-kpi-age"),
+          income: text("people-kpi-income"),
+          source: text("people-source"),
+          sa2: text("people-sa2"),
+          dots: document.querySelectorAll('[data-testid="people-hundred"] .people-dot').length,
+          sa1Paths: document.querySelectorAll('[data-testid="people-sa1-map"] .people-map-sa1').length,
+        };
+      });
+      const num = (t) => Number((t.match(/[\d,]+(?:\.\d+)?/g) ?? []).map((m) => m.replace(/,/g, "")).find((m) => Number(m) > 0) ?? 0);
+      assertCheck("PEOPLE-1", "People tab loads ABS SA1 data", peopleInfo.state === "ok" && peopleInfo.visible, `state=${peopleInfo.state}`);
+      assertCheck(
+        "PEOPLE-2",
+        "People tab renders real numbers (residents, median age, income)",
+        num(peopleInfo.residents) > 0 && num(peopleInfo.age) >= 15 && num(peopleInfo.age) <= 70 && num(peopleInfo.income) > 300,
+        `${peopleInfo.residents} | ${peopleInfo.age} | ${peopleInfo.income}`,
+      );
+      assertCheck("PEOPLE-3", "100-people chart has exactly 100 dots", peopleInfo.dots === 100, `dots=${peopleInfo.dots}`);
+      assertCheck("PEOPLE-4", "ABS attribution is visible", /ABS Census 2021, CC BY 4\.0/.test(peopleInfo.source), peopleInfo.source);
+      assertCheck("PEOPLE-5", "Official parent SA2 line is shown", /SA2/.test(peopleInfo.sa2), peopleInfo.sa2.slice(0, 80));
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "people-pr-tab.png") });
+      if (peopleInfo.sa1Paths > 0) {
+        const tipBefore = await page.locator('[data-testid="people-map-tip"]').textContent();
+        const mapBox = await page.locator('[data-testid="people-sa1-map"]').boundingBox();
+        if (mapBox) {
+          await page.mouse.move(mapBox.x + mapBox.width / 2 - 10, mapBox.y + mapBox.height / 2 - 10);
+          await page.mouse.move(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2, { steps: 4 });
+        }
+        await page.waitForTimeout(250);
+        const hoverInfo = await page.evaluate(() => ({
+          tip: document.querySelector('[data-testid="people-map-tip"]')?.textContent ?? "",
+          hovered: document.querySelectorAll(".people-map-sa1.is-hovered").length,
+        }));
+        assertCheck(
+          "PEOPLE-6",
+          "Hovering an SA1 cross-highlights it and updates the readout",
+          hoverInfo.hovered === 1 && /SA1/.test(hoverInfo.tip) && hoverInfo.tip !== tipBefore,
+          hoverInfo.tip.slice(0, 80),
+        );
+        await page.screenshot({ path: path.join(ARTIFACTS_DIR, "people-pr-hover.png") });
+        await page.mouse.move(700, 450);
+      } else {
+        assertCheck("PEOPLE-6", "Hovering an SA1 cross-highlights it", false, "no SA1 paths");
+      }
+      const toggle = page.locator('[data-testid="people-overlay-toggle"] input');
+      const overlayDefault = (await toggle.count()) > 0 ? await toggle.isChecked() : null;
+      assertCheck("PEOPLE-8", "SA1 map overlay toggle exists and is off by default", overlayDefault === false, `checked=${overlayDefault}`);
+      if (overlayDefault === false) {
+        const canvas = page.locator(".model canvas").first();
+        let idle = await canvas.screenshot();
+        let before = idle;
+        for (let i = 0; i < 10; i += 1) {
+          await page.waitForTimeout(400);
+          before = await canvas.screenshot();
+          if (idle.equals(before)) break;
+          idle = before;
+        }
+        await toggle.check();
+        await page.waitForTimeout(400);
+        const after = await canvas.screenshot();
+        assertCheck(
+          "PEOPLE-9",
+          "Turning the SA1 overlay on changes the 3D view",
+          (await toggle.isChecked()) && idle.equals(before) && !before.equals(after),
+          `static=${idle.equals(before)} changed=${!before.equals(after)}`,
+        );
+        await page.screenshot({ path: path.join(ARTIFACTS_DIR, "people-pr-overlay.png") });
+        await toggle.uncheck();
+        await page.waitForTimeout(200);
+      }
+      await page.locator('.model button[data-section="summary"]').first().click();
+      await page.waitForTimeout(200);
+    }
+
     // -------------------------------------------------------------------------
     // SITE ANALYSIS DIRECTION A INVARIANT (IN 3D MODEL)
     // -------------------------------------------------------------------------
@@ -1265,6 +1488,34 @@ async function main() {
         toneSamples.length >= 6 && toneSamples.some((t) => t.started) && outerMaxStepUp <= 3 && outerNetRise <= 3,
         `samples=${toneSamples.length}, baseline=${outerBaseline}, maxStepUp=${outerMaxStepUp.toFixed(1)}, netRise=${outerNetRise.toFixed(1)}, trace=[${toneSamples.map((t) => `${t.started ? `B${t.elapsed}` : "A"}:${t.outer}`).join(" ")}]`,
       );
+    }
+
+    {
+      const errCtx = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: DEVICE_SCALE_FACTOR, reducedMotion: "no-preference" });
+      await errCtx.route("**/census/index.json", (route) => route.fulfill({ status: 503, body: "unavailable" }));
+      const errPage = await errCtx.newPage();
+      await errPage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+      await errPage.waitForSelector("button.create-fab", { timeout: 20000 });
+      await errPage.waitForTimeout(800);
+      await errPage.click("button.create-fab");
+      await errPage.waitForSelector('.model button[data-section="people"]', { timeout: 30000 });
+      await errPage.waitForTimeout(2500);
+      await errPage.locator('.model button[data-section="people"]').first().click();
+      await errPage
+        .waitForSelector('[data-testid="people-panel"]:not([data-state="loading"])', { timeout: 15000 })
+        .catch(() => {});
+      const errInfo = await errPage.evaluate(() => ({
+        state: document.querySelector('[data-testid="people-panel"]')?.getAttribute("data-state") ?? "missing",
+        text: document.querySelector('[data-testid="people-error"]')?.textContent ?? "",
+      }));
+      assertCheck(
+        "PEOPLE-7",
+        "People tab shows an error state naming the ABS source when data fails",
+        errInfo.state === "error" && /ABS Census 2021/.test(errInfo.text) && /503/.test(errInfo.text),
+        errInfo.text.slice(0, 120),
+      );
+      await errPage.screenshot({ path: path.join(ARTIFACTS_DIR, "people-pr-error.png") });
+      await errCtx.close();
     }
 
     // -------------------------------------------------------------------------

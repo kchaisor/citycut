@@ -26,6 +26,9 @@ import { useColourRevision } from "../lib/useColourRevision";
 import { captureViewPng } from "../lib/capturePng";
 import { GradientSky, GroundGrid, ViewInset, insetPointerEvents } from "./SceneBackdrop";
 import { markScreenOnly } from "../lib/screenOnly";
+import { PeopleCityDriver } from "./PeopleCityDriver";
+import type { PeopleCityLayer } from "../lib/peopleCityLayer";
+import type { PeopleStore } from "../lib/peopleStore";
 import { cameraForExportFrame, exportFrameSize } from "../lib/exportFrame";
 import { flushControlInertia, holdControlPose, type HeldControl } from "../lib/controlInertia";
 import { shouldSkipViewportSizeRefit } from "../lib/viewportAutoFit";
@@ -1847,6 +1850,8 @@ export function Scene3D({
   display,
   importedMassing = null,
   walkLayer = null,
+  censusLayer = null,
+  people = null,
   onScenePoint = null,
 }: {
   model: CityModel;
@@ -1874,6 +1879,8 @@ export function Scene3D({
   importedMassing?: THREE.Object3D | null;
   /** View tab walk overlay (path, visibility, walker), in the local frame. Never measured for camera framing. */
   walkLayer?: THREE.Object3D | null;
+  censusLayer?: THREE.Object3D | null;
+  people?: { layer: PeopleCityLayer; store: PeopleStore } | null;
   /** Click-to-place: while set, a click reports the scene point (east, north, up) instead of picking a building. */
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
 }) {
@@ -1979,6 +1986,8 @@ export function Scene3D({
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
+      {censusLayer ? <primitive object={censusLayer} /> : null}
+      {people ? <PeopleCityDriver layer={people.layer} store={people.store} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
       <SolarHeliodon
         lat={model.center.lat}

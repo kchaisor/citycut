@@ -26,11 +26,12 @@ describe("sidebar sections", () => {
     expect(initialSidebarState()).toEqual({ section: "drawing", rightSection: "summary" });
   });
 
-  it("always lists all three right-hand tabs (Model details, Buildings, Trees) and combines Sun/Wind/View into Site Analysis, even when buildings or trees are empty", () => {
+  it("always lists all four right-hand tabs (Model details, Buildings, Trees, People) and combines Sun/Wind/View into Site Analysis, even when buildings or trees are empty", () => {
     expect(availableSidebarSections({ buildings: true, trees: false })).toEqual([
       "summary",
       "buildings",
       "trees",
+      "people",
       "drawing",
       "analysis",
       "import",
@@ -40,6 +41,7 @@ describe("sidebar sections", () => {
       "summary",
       "buildings",
       "trees",
+      "people",
       "drawing",
       "analysis",
       "import",
@@ -100,7 +102,8 @@ describe("Display section label", () => {
 describe("left vs right sidebar panels", () => {
   it("splits left-hand tools (Display, Site Analysis, Import, Export) from right-hand panels (Model details, Buildings, Trees)", () => {
     expect(LEFT_SIDEBAR_SECTION_IDS).toEqual(["drawing", "analysis", "import", "exports"]);
-    expect(RIGHT_SIDEBAR_SECTION_IDS).toEqual(["summary", "buildings", "trees"]);
+    expect(RIGHT_SIDEBAR_SECTION_IDS).toEqual(["summary", "buildings", "trees", "people"]);
+    expect(isRightSidebarSection("people")).toBe(true);
     expect(isRightSidebarSection("summary")).toBe(true);
     expect(isRightSidebarSection("buildings")).toBe(true);
     expect(isRightSidebarSection("trees")).toBe(true);

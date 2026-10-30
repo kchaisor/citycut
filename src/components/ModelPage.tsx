@@ -3,7 +3,12 @@ import { sunStudyLayersFor } from "./useSunStudyShadows";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
-import { Building2, Copy, Download, DraftingCompass, Eye, GripVertical, Info, Radar, Sun, Trees, Upload, Wind } from "lucide-react";
+import { PeoplePanel } from "./PeoplePanel";
+import { CensusSa1Layer } from "../lib/censusSa1Layer";
+import { PeopleCityLayer } from "../lib/peopleCityLayer";
+import { PeopleStore } from "../lib/peopleStore";
+import { sessionWalkService } from "../lib/walkIsochrone";
+import { Building2, Copy, Download, DraftingCompass, Eye, GripVertical, Info, Radar, Sun, Trees, Upload, Users, Wind } from "lucide-react";
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -239,6 +244,7 @@ const SECTION_ICONS: Record<SidebarSectionId, typeof Info> = {
   summary: Info,
   buildings: Building2,
   trees: Trees,
+  people: Users,
   drawing: DraftingCompass,
   analysis: Radar,
   import: Upload,
@@ -931,6 +937,13 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   // View tab: the path resets with a new cut; compute uses the buildings as shown (edits, hides).
   const walk = useWalkViewshed(model, displayModel);
   const walkAt = useWalkPlayback(walk);
+  const censusLayer = useMemo(() => new CensusSa1Layer(model, model.frameShape ?? "square"), [model]);
+  useEffect(() => () => censusLayer.dispose(), [censusLayer]);
+  const peopleStore = useMemo(() => new PeopleStore(model.sideM, model.frameShape ?? "square", model.center, sessionWalkService()), [model]);
+  useEffect(() => () => peopleStore.dispose(), [peopleStore]);
+  const peopleLayer = useMemo(() => new PeopleCityLayer(model, model.frameShape ?? "square"), [model]);
+  useEffect(() => () => peopleLayer.dispose(), [peopleLayer]);
+  const people3d = useMemo(() => ({ layer: peopleLayer, store: peopleStore }), [peopleLayer, peopleStore]);
 
   /**
    * Drawing tab and its .ai exports: the display model (hidden buildings already gone) plus plan
@@ -1774,6 +1787,8 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 display={view3dDisplay}
                 importedMassing={massing.group}
                 walkLayer={walk.layer.root}
+                censusLayer={censusLayer.root}
+                people={people3d}
                 onScenePoint={walkDrawing ? walk.addPoint : massing.onScenePoint}
               />
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
@@ -2443,6 +2458,19 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     onImport={importHeightEdits}
                   />
                 </section>
+            </div>
+
+            <div className="drawer-section people-section" hidden={rightOpen !== "people"}>
+              <PeoplePanel
+                active={rightOpen === "people"}
+                center={model.center}
+                sideM={model.sideM}
+                shape={model.frameShape ?? "square"}
+                overlay={censusLayer}
+                overlayShown={tab === "3d"}
+                store={peopleStore}
+                layer={peopleLayer}
+              />
             </div>
 
             <div className="drawer-section tree-sizes" hidden={rightOpen !== "trees"}>

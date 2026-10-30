@@ -204,3 +204,21 @@ export function siteFrameAreaM2(sideM: number, shape: SiteFrameShape): number {
   if (shape === "circle") return Math.PI * (sideM / 2) ** 2;
   return sideM * sideM;
 }
+
+export function clipPolygonsToSiteFrame(
+  polygons: readonly (readonly (readonly Pt[])[])[],
+  sideM: number,
+  shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+): Pt[][][] {
+  const subject = polygons
+    .map((polygon) => polygon.filter((ring) => ring.length >= 3).map((ring) => closeForClip([...ring] as Ring)))
+    .filter((polygon) => polygon.length > 0) as MultiPolygon;
+  if (subject.length === 0) return [];
+  try {
+    return intersection(subject, frameClipPolygon(sideM, shape)).map((polygon) =>
+      polygon.map((ring) => ring.slice(0, -1).map(([x, y]) => [x, y] as Pt)).filter((ring) => ring.length >= 3),
+    );
+  } catch {
+    return [];
+  }
+}
