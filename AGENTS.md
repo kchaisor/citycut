@@ -29,4 +29,4 @@ Vite, React, MapLibre, and three.js. Vite `base` is `/citycut/`. Use `npm run de
 
 - Batch related work into one run and one PR.
 - Run `npm test` and `npm run typecheck` on every PR.
-- Screenshots only for a visual change: one desktop shot by default, adding mobile or 3D only when relevant. Docs-only PRs need no screenshots.
+- Desktop only (1440x900). Screenshots only for a visual change: one desktop shot by default, adding a 3D shot when relevant. Docs-only PRs need no screenshots.
