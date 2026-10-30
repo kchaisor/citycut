@@ -4429,6 +4429,48 @@ body,
   min-height: 12px;
 }
 
+.model .right-inspector .people-map-legend {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 9px;
+  color: var(--ink-3);
+}
+
+.model .right-inspector .people-map-legend .people-swatch {
+  width: 14px;
+  margin-right: 0;
+}
+
+.model .right-inspector .people-map-legend span:first-child {
+  margin-right: 4px;
+}
+
+.model .right-inspector .people-map-legend span:last-child {
+  margin-left: 4px;
+}
+
+.model .right-inspector .people-overlay-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.model .right-inspector .people-overlay-toggle input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.model .right-inspector .people-overlay-toggle em {
+  font-style: normal;
+  font-size: 9px;
+  color: var(--ink-3);
+  margin-left: auto;
+}
+
 .model .right-inspector .people-dots {
   display: grid;
   grid-template-columns: repeat(20, 1fr);

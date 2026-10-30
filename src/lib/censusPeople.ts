@@ -197,7 +197,7 @@ export function selectSa1s(
         values: toValues(sa1.values, fields),
         fraction: Math.min(1, clippedArea / fullArea),
         clippedKm2: clippedArea / 1e6,
-        rings: local.map((polygon) => polygon[0]),
+        rings: local.flat(),
         containsCentre,
       });
     }

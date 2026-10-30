@@ -1042,6 +1042,27 @@ async function main() {
       } else {
         assertCheck("PEOPLE-6", "Hovering an SA1 cross-highlights it", false, "no SA1 paths");
       }
+      const toggle = page.locator('[data-testid="people-overlay-toggle"] input');
+      const overlayDefault = (await toggle.count()) > 0 ? await toggle.isChecked() : null;
+      assertCheck("PEOPLE-8", "SA1 map overlay toggle exists and is off by default", overlayDefault === false, `checked=${overlayDefault}`);
+      if (overlayDefault === false) {
+        const canvas = page.locator(".model canvas").first();
+        const idle = await canvas.screenshot();
+        await page.waitForTimeout(400);
+        const before = await canvas.screenshot();
+        await toggle.check();
+        await page.waitForTimeout(400);
+        const after = await canvas.screenshot();
+        assertCheck(
+          "PEOPLE-9",
+          "Turning the SA1 overlay on changes the 3D view",
+          (await toggle.isChecked()) && idle.equals(before) && !before.equals(after),
+          `static=${idle.equals(before)} changed=${!before.equals(after)}`,
+        );
+        await page.screenshot({ path: path.join(ARTIFACTS_DIR, "people-pr-overlay.png") });
+        await toggle.uncheck();
+        await page.waitForTimeout(200);
+      }
       await page.locator('.model button[data-section="summary"]').first().click();
       await page.waitForTimeout(200);
     }

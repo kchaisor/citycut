@@ -1847,6 +1847,7 @@ export function Scene3D({
   display,
   importedMassing = null,
   walkLayer = null,
+  censusLayer = null,
   onScenePoint = null,
 }: {
   model: CityModel;
@@ -1874,6 +1875,7 @@ export function Scene3D({
   importedMassing?: THREE.Object3D | null;
   /** View tab walk overlay (path, visibility, walker), in the local frame. Never measured for camera framing. */
   walkLayer?: THREE.Object3D | null;
+  censusLayer?: THREE.Object3D | null;
   /** Click-to-place: while set, a click reports the scene point (east, north, up) instead of picking a building. */
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
 }) {
@@ -1979,6 +1981,7 @@ export function Scene3D({
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
+      {censusLayer ? <primitive object={censusLayer} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
       <SolarHeliodon
         lat={model.center.lat}

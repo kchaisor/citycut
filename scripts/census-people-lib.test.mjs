@@ -1,6 +1,9 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   CENSUS_FIELDS,
+  CENSUS_TABLES,
   cellNumber,
   encodeRing,
   extractMetrics,
@@ -37,6 +40,39 @@ describe("census CSV parsing", () => {
     expect(at("hhGroup")).toBe(5);
     expect(at("tenOther")).toBe(3);
     expect(at("twCar")).toBe(0);
+  });
+});
+
+const CACHE_SA1 = path.resolve("tmp/census/gcp-sa1-vic");
+
+function findCsv(dir, name) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const hit = findCsv(full, name);
+      if (hit) return hit;
+    } else if (entry.name === name) {
+      return full;
+    }
+  }
+  return null;
+}
+
+describe("census columns against the real ABS GCP headers", () => {
+  it.skipIf(!fs.existsSync(CACHE_SA1))("reads only columns that exist in the downloaded SA1 CSVs", () => {
+    const read = {};
+    const tables = {};
+    for (const table of CENSUS_TABLES) {
+      read[table] = new Set();
+      tables[table] = new Proxy({}, { get: (_, key) => (read[table].add(String(key)), 1) });
+    }
+    extractMetrics(tables);
+    for (const table of CENSUS_TABLES) {
+      const file = findCsv(CACHE_SA1, `2021Census_${table}_VIC_SA1.csv`);
+      expect(file, table).not.toBeNull();
+      const header = new Set(fs.readFileSync(file, "utf8").split(/\r?\n/)[0].split(",").map((h) => h.trim()));
+      expect([...read[table]].filter((key) => !header.has(key)), table).toEqual([]);
+    }
   });
 });
 

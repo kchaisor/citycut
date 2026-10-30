@@ -9,6 +9,7 @@ import {
   type CensusValues,
   type SelectedSa1,
 } from "../lib/censusPeople";
+import type { CensusSa1Layer } from "../lib/censusSa1Layer";
 import type { SiteFrameShape } from "../lib/siteFrame";
 import type { LonLat } from "../types";
 
@@ -68,6 +69,12 @@ function rampIndex(value: number, breaks: number[]): number {
   let index = 0;
   while (index < breaks.length && value > breaks[index]) index += 1;
   return index;
+}
+
+function rampSteps(sa1: readonly SelectedSa1[], metric: MapMetric): number[] {
+  const values = sa1.map((s) => metricValue(s, metric));
+  const breaks = quantileBreaks(values);
+  return values.map((value) => rampIndex(value, breaks));
 }
 
 function fmtInt(n: number): string {
@@ -133,8 +140,7 @@ function Sa1Map({
 }) {
   const half = sideM / 2;
   const pad = sideM * 0.08;
-  const values = sa1.map((s) => metricValue(s, metric));
-  const breaks = quantileBreaks(values);
+  const steps = rampSteps(sa1, metric);
   const size = sideM + pad * 2;
   return (
     <svg
@@ -156,7 +162,8 @@ function Sa1Map({
             data-sa1={s.code}
             className={hovered === s.code ? "people-map-sa1 is-hovered" : "people-map-sa1"}
             d={s.rings.map((ring) => `M${ring.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join("L")}Z`).join("")}
-            style={{ fill: RAMP[rampIndex(values[i], breaks)] }}
+            fillRule="evenodd"
+            style={{ fill: RAMP[steps[i]] }}
             onMouseEnter={() => onHover(s.code)}
             onMouseLeave={() => onHover(null)}
           />
@@ -176,19 +183,42 @@ export function PeoplePanel({
   center,
   sideM,
   shape,
+  overlay,
+  overlayShown,
 }: {
   active: boolean;
   center: LonLat;
   sideM: number;
   shape: SiteFrameShape;
+  overlay?: CensusSa1Layer;
+  overlayShown?: boolean;
 }) {
   const siteKey = `${center.lat},${center.lon},${sideM},${shape}`;
   const [loaded, setLoaded] = useState<{ key: string; result: CensusSiteResult } | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [band, setBand] = useState<number | null>(null);
   const [metric, setMetric] = useState<MapMetric>("density");
+  const [overlayOn, setOverlayOn] = useState(false);
   const startedKey = useRef<string | null>(null);
   const result = loaded?.key === siteKey ? loaded.result : null;
+
+  useEffect(() => {
+    if (!overlay) return;
+    if (result?.status !== "ok") {
+      overlay.setAreas([]);
+      return;
+    }
+    const steps = rampSteps(result.sa1, metric);
+    overlay.setAreas(result.sa1.map((s, i) => ({ code: s.code, rings: s.rings, step: steps[i] })));
+  }, [overlay, result, metric]);
+
+  useEffect(() => {
+    overlay?.setVisible(overlayOn);
+  }, [overlay, overlayOn]);
+
+  useEffect(() => {
+    overlay?.setHovered(hovered);
+  }, [overlay, hovered]);
 
   useEffect(() => {
     if (!active || startedKey.current === siteKey) return;
@@ -236,6 +266,7 @@ export function PeoplePanel({
   const maxShare = Math.max(...ageShares, ...gmShares, 0.01);
   const est = site.estimated && !hoveredSa1 ? "est." : "";
   const scopeLabel = hoveredSa1 ? `SA1 ${hoveredSa1.code}` : `${result.sa1.length} SA1s in the cut`;
+  const mapValues = result.sa1.map((s) => metricValue(s, metric));
 
   return (
     <div className="people-panel" data-testid="people-panel" data-state="ok">
@@ -295,11 +326,25 @@ export function PeoplePanel({
           </span>
         </div>
         <Sa1Map sa1={result.sa1} sideM={sideM} shape={shape} metric={metric} hovered={hovered} onHover={setHovered} />
+        <div className="people-map-legend mono" aria-hidden="true">
+          <span>{formatMetric(Math.min(...mapValues), metric)}</span>
+          {RAMP.map((fill) => (
+            <span key={fill} className="people-swatch" style={{ background: fill }} />
+          ))}
+          <span>{formatMetric(Math.max(...mapValues), metric)}</span>
+        </div>
         <div className="people-map-tip mono" data-testid="people-map-tip">
           {hoveredSa1
             ? `SA1 ${hoveredSa1.code} · ${fmtInt(hoveredSa1.values.pop)} ppl · ${formatMetric(metricValue(hoveredSa1, metric), metric)}`
             : "Hover an SA1 to see its people"}
         </div>
+        {overlay ? (
+          <label className="people-overlay-toggle" data-testid="people-overlay-toggle">
+            <input type="checkbox" checked={overlayOn} onChange={(event) => setOverlayOn(event.target.checked)} />
+            <span>Show SA1s on the 3D model</span>
+            {overlayOn && !overlayShown ? <em>3D view only</em> : null}
+          </label>
+        ) : null}
       </div>
 
       <div className="people-block" data-testid="people-hundred">

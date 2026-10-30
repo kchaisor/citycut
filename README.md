@@ -123,6 +123,7 @@ Nominatim’s usage policy asks for an identifying User-Agent. Browsers set that
 | Relief / terrain stats | The model page shows the DEM elevation range when terrain loaded |
 | DXF, DAE, JPG | Not in this version. No placeholder downloads |
 | Site lidar, detected trees | Not in this version. Terrain is the Mapterhorn DEM, not a scan of this block |
+| People tab | Real, Victoria only. ABS Census 2021 General Community Profile for the SA1s that intersect the cut, the parent SA2, and Greater Melbourne. Counts are apportioned by the share of each SA1's area inside the cut and labelled as estimates. Medians are population-weighted SA1 medians. An optional SA1 overlay on the 3D model is off by default. Outside Victoria, or if the files fail to load, the tab says so and shows no figures |
 
 ## Limits
 
@@ -141,7 +142,7 @@ Nominatim’s usage policy asks for an identifying User-Agent. Browsers set that
 
 ## Attribution
 
-Map data © OpenStreetMap contributors. Vector tiles © OpenFreeMap / OpenStreetMap. Satellite imagery © Esri, Vantor, Earthstar Geographics, and the GIS User Community. Terrain © [Mapterhorn](https://mapterhorn.com/attribution), including Geoscience Australia’s 5 m DEM (CC BY 4.0) and Copernicus GLO-30 where the 5 m grid is absent. City of Melbourne urban forest © City of Melbourne, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Vicmap Vegetation Tree Urban © State of Victoria (Department of Transport and Planning), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Vicmap Elevation contours © State of Victoria (Department of Transport and Planning), [Creative Commons Attribution 4.0 (CC-BY)](https://creativecommons.org/licenses/by/4.0/).
+Map data © OpenStreetMap contributors. Vector tiles © OpenFreeMap / OpenStreetMap. Satellite imagery © Esri, Vantor, Earthstar Geographics, and the GIS User Community. Terrain © [Mapterhorn](https://mapterhorn.com/attribution), including Geoscience Australia’s 5 m DEM (CC BY 4.0) and Copernicus GLO-30 where the 5 m grid is absent. City of Melbourne urban forest © City of Melbourne, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Vicmap Vegetation Tree Urban © State of Victoria (Department of Transport and Planning), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Vicmap Elevation contours © State of Victoria (Department of Transport and Planning), [Creative Commons Attribution 4.0 (CC-BY)](https://creativecommons.org/licenses/by/4.0/). Census figures and SA1 boundaries: Australian Bureau of Statistics, Census of Population and Housing 2021 General Community Profile and ASGS Edition 3, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). `npm run build:census` downloads them and rewrites `public/census/`.
 
 CityCut is an original interface. Kelvin Chai, Melbourne.
 

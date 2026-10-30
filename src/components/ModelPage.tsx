@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
 import { PeoplePanel } from "./PeoplePanel";
+import { CensusSa1Layer } from "../lib/censusSa1Layer";
 import { Building2, Copy, Download, DraftingCompass, Eye, GripVertical, Info, Radar, Sun, Trees, Upload, Users, Wind } from "lucide-react";
 import {
   BUILDING_USES,
@@ -933,6 +934,8 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   // View tab: the path resets with a new cut; compute uses the buildings as shown (edits, hides).
   const walk = useWalkViewshed(model, displayModel);
   const walkAt = useWalkPlayback(walk);
+  const censusLayer = useMemo(() => new CensusSa1Layer(model, model.frameShape ?? "square"), [model]);
+  useEffect(() => () => censusLayer.dispose(), [censusLayer]);
 
   /**
    * Drawing tab and its .ai exports: the display model (hidden buildings already gone) plus plan
@@ -1776,6 +1779,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 display={view3dDisplay}
                 importedMassing={massing.group}
                 walkLayer={walk.layer.root}
+                censusLayer={censusLayer.root}
                 onScenePoint={walkDrawing ? walk.addPoint : massing.onScenePoint}
               />
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
@@ -2453,6 +2457,8 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 center={model.center}
                 sideM={model.sideM}
                 shape={model.frameShape ?? "square"}
+                overlay={censusLayer}
+                overlayShown={tab === "3d"}
               />
             </div>
 
