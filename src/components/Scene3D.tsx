@@ -177,7 +177,7 @@ function computeIntroTreeWaveScale(elapsedSec: number): number {
 
 const scratch = new THREE.Vector3();
 
-const STUDIO_FILL_RATIO = 0.28;
+const STUDIO_FILL_RATIO = 0.15;
 
 function measureCity(group: THREE.Object3D): Aabb {
   const box = new THREE.Box3().setFromObject(group);

@@ -77,9 +77,9 @@ function StudioComposer({ quality, noToneMapping, sideM }: { quality: RenderQual
         enabled={quality === "high"}
         quality="medium"
         halfRes
-        aoRadius={Math.max(4, sideM * 0.012)}
+        aoRadius={Math.max(4, sideM * 0.018)}
         distanceFalloff={1}
-        intensity={3}
+        intensity={6}
       />
       <ToneMapping mode={noToneMapping ? ToneMappingMode.LINEAR : ToneMappingMode.ACES_FILMIC} />
       <SMAA />
@@ -109,7 +109,7 @@ function bakePlinthShadow(colour: string, shape: SiteFrameShape): THREE.CanvasTe
   context.fillStyle = colour;
   context.shadowColor = colour;
   context.shadowOffsetX = away;
-  context.globalAlpha = 0.55;
+  context.globalAlpha = 0.7;
   context.shadowBlur = size * 0.11;
   footprint(-size * 0.015);
   context.globalAlpha = 0.9;
@@ -143,7 +143,7 @@ function PlinthContactShadow({
   return (
     <mesh ref={setMesh} position={[0, plinthBottomY - 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={-1}>
       <planeGeometry args={[extent, extent]} />
-      <meshBasicMaterial map={texture} transparent opacity={0.5} depthWrite={false} toneMapped={false} />
+      <meshBasicMaterial map={texture} transparent opacity={0.8} depthWrite={false} toneMapped={false} />
     </mesh>
   );
 }
