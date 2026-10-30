@@ -1064,7 +1064,7 @@ async function main() {
           ? walkInfo.fallbackShown && /straight-line circle/.test(walkInfo.label)
           : !walkInfo.fallbackShown && /Valhalla/.test(walkInfo.label);
       assertCheck(
-        "PEOPLE-15",
+        "PEOPLE-16",
         "Lens offers 5 / 10 / 15 min walk chips, shows the walking-area source, and never hides a fallback",
         walkChips.join("|") === "5 min|10 min|15 min" && radiusChips === 0 && walkInfo.status === walkExpect && walkLabelOk && walkInfo.source.includes("Valhalla") && count10 > 0,
         `mode=${WALK_MODE} chips=${walkChips.join("|")} radius=${radiusChips} status=${walkInfo.status} label="${walkInfo.label}" count10=${count10}`,
