@@ -226,6 +226,18 @@
   /* Ground side of the 3D hemisphere light. */
   --light-ground: #c9c0b2;
 
+  /* Soft studio fill light from the side opposite the key light in the 3D view. */
+  --light-fill: #e4e8ee;
+
+  /* Studio gradient behind the 3D model, top of the view. */
+  --viewport-studio-top: #f6f6f5;
+
+  /* Studio gradient behind the 3D model, bottom of the view. */
+  --viewport-studio-bottom: #d9d9d6;
+
+  /* Soft contact shadow under the 3D plinth (screen only). */
+  --plinth-shadow: #1a1916;
+
   /* Frame drawn around the cut on the satellite preview. */
   --cut-line: #f7f4ee;
 

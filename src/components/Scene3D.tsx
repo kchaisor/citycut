@@ -24,7 +24,9 @@ import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import { captureViewPng } from "../lib/capturePng";
-import { GradientSky, GroundGrid, ViewInset, insetPointerEvents } from "./SceneBackdrop";
+import { StudioSky, GroundGrid, ViewInset, insetPointerEvents } from "./SceneBackdrop";
+import { INTRO_ACTIVE_KEY, StudioEffects } from "./StudioEffects";
+import type { RenderQuality } from "../lib/renderQuality";
 import { markScreenOnly } from "../lib/screenOnly";
 import { cameraForExportFrame, exportFrameSize } from "../lib/exportFrame";
 import { flushControlInertia, holdControlPose, type HeldControl } from "../lib/controlInertia";
@@ -174,6 +176,8 @@ function computeIntroTreeWaveScale(elapsedSec: number): number {
 }
 
 const scratch = new THREE.Vector3();
+
+const STUDIO_FILL_RATIO = 0.28;
 
 function measureCity(group: THREE.Object3D): Aabb {
   const box = new THREE.Box3().setFromObject(group);
@@ -419,6 +423,7 @@ function City({
     targets: Array<{ obj: THREE.Object3D; pivotY: number; kind: "building" | "tree"; bucket: number }>;
   } | null>(null);
   const cutKey = `${model.center.lat.toFixed(5)},${model.center.lon.toFixed(5)},${model.sideM}`;
+  const introScene = useThree((state) => state.scene);
   useLayoutEffect(() => {
     const targets: Array<{ obj: THREE.Object3D; pivotY: number; kind: "building" | "tree"; bucket: number }> = [];
     for (const object of group.children) {
@@ -465,6 +470,7 @@ function City({
       if (cutRingObj) cutRingObj.visible = false;
       group.userData.introScaleY = 1;
       introRef.current = null;
+      introScene.userData[INTRO_ACTIVE_KEY] = false;
       return;
     }
     const existing = introRef.current;
@@ -508,7 +514,8 @@ function City({
     }
     group.userData.introScaleY = startScale;
     introRef.current = { cutKey, elapsedSec: 0, frameCount: 0, done: false, webglReadyDispatched: false, targets };
-  }, [group, cutKey]);
+    introScene.userData[INTRO_ACTIVE_KEY] = true;
+  }, [group, cutKey, introScene]);
   useFrame((state, delta) => {
     const intro = introRef.current;
     if (!intro || intro.done) return;
@@ -642,8 +649,6 @@ function City({
     }
 
     if (clampedElapsed >= INTRO_HOLD_RELEASE_SEC || done) {
-      state.scene.background = bgCol;
-      state.gl.setClearColor(bgCol, 1);
       const modelRoot = state.gl.domElement.closest(".model");
       if (modelRoot?.hasAttribute("data-intro-hold")) {
         modelRoot.removeAttribute("data-intro-hold");
@@ -659,6 +664,7 @@ function City({
     ds.introTreeScale = treeScale.toFixed(3);
     if (done) {
       intro.done = true;
+      state.scene.userData[INTRO_ACTIVE_KEY] = false;
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("citycut:intro-done"));
       }
@@ -1848,6 +1854,7 @@ export function Scene3D({
   importedMassing = null,
   walkLayer = null,
   onScenePoint = null,
+  quality = "high",
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -1876,6 +1883,7 @@ export function Scene3D({
   walkLayer?: THREE.Object3D | null;
   /** Click-to-place: while set, a click reports the scene point (east, north, up) instead of picking a building. */
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
+  quality?: RenderQuality;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
@@ -1886,6 +1894,7 @@ export function Scene3D({
   const modelBg = useMemo(() => themeColor("--model-bg"), [colourTick]);
   const sky = getColour("--light-sky");
   const groundLight = getColour("--light-ground");
+  const studioFill = getColour("--light-fill");
   const groundY = model.terrain ? model.terrain.min : 0;
   const plinthBottomY = basePlinthBottomY(model.sideM, model.terrain);
   const solarNeutralFill = useMemo(() => getColour("--building-solar-neutral"), [colourTick]);
@@ -1946,11 +1955,25 @@ export function Scene3D({
         <WebGlContextWatch onContextLost={onGlContextLost} onContextRestored={onGlContextRestored} />
         <RendererShadows enabled={solar.castShadows} />
       <SunStudyToneMapping noToneMapping={noToneMapping} />
-      <GradientSky colourTick={colourTick} fallback={modelBg} />
+      <StudioSky colourTick={colourTick} fallback={modelBg} />
       {projection !== "plan" && <GroundGrid sideM={model.sideM} groundY={plinthBottomY} colourTick={colourTick} />}
       <hemisphereLight args={[sky, groundLight, fillHemi]} />
       <ambientLight intensity={fillAmbient} />
       <directionalLight position={[model.sideM * 0.4, model.sideM, model.sideM * 0.2]} intensity={fillKeyLight} />
+      <directionalLight
+        position={[-model.sideM * 0.6, model.sideM * 0.45, -model.sideM * 0.5]}
+        color={studioFill}
+        intensity={fillKeyLight * STUDIO_FILL_RATIO}
+      />
+      <StudioEffects
+        quality={quality}
+        noToneMapping={noToneMapping}
+        sideM={model.sideM}
+        plinthBottomY={plinthBottomY}
+        showShadow={projection !== "plan"}
+        frameShape={model.frameShape ?? "square"}
+        colourTick={colourTick}
+      />
       <SolarLight
         sample={sunSample}
         sideM={Math.max(model.sideM, heliodonRadius * 0.5)}

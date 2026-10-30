@@ -193,6 +193,10 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--view-ink` | `#24221c` | Outlines and the title plate text on the 3D-view Illustrator sheet. |
 | `--light-sky` | `#f7f4ee` | Sky side of the 3D hemisphere light. |
 | `--light-ground` | `#c9c0b2` | Ground side of the 3D hemisphere light. |
+| `--light-fill` | `#e4e8ee` | Soft studio fill light, from the side opposite the key light in the 3D view. Off while sun shadows are on. |
+| `--viewport-studio-top` | `#f6f6f5` | Top of the studio gradient behind the 3D model. It runs top, then `--viewport-bg`, then bottom. |
+| `--viewport-studio-bottom` | `#d9d9d6` | Bottom of the studio gradient behind the 3D model. |
+| `--plinth-shadow` | `#1a1916` | Soft contact shadow under the 3D plinth. Baked once per cut, screen only (not in the PNG). |
 | `--cut-line` | `#f7f4ee` | Frame drawn around the cut on the satellite preview. |
 | `--sun-arc-summer` | `#1a1916` | Dec 21 sun path in the 3D heliodon, solid line (screen only). Black or grey only. |
 | `--sun-arc-equinox` | `#1a1916` | Sep/Mar sun path in the 3D heliodon, dashed line (screen only). Black or grey only. |
@@ -390,7 +394,7 @@ The same drawer has **Colours**, under Line styles. It lists every fill, with a 
 | Name | What you see on screen | Current value |
 | --- | --- | --- |
 | `--sidebar-grey` | Plain grey behind the sidebar on the landing page and the model page. | `#EBEBEB` |
-| `--viewport-bg` | Flat 3D sky and the flat tint over the landing map. No gradients. | `#EBEBEB` |
+| `--viewport-bg` | Flat tint over the landing map, and the middle stop of the 3D studio gradient. | `#EBEBEB` |
 | `--sidebar-text` | All sidebar text, including section labels and card descriptions. | `#000000` |
 | `--sun-card-bg` | Sun tab date and preset cards, and the speed buttons. | `#FFFFFF` |
 | `--sun-card-border` | Border of an unselected Sun tab card. | `#CECBC6` |
