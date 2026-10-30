@@ -4286,3 +4286,293 @@ body,
   line-height: 1.35 !important;
   color: var(--hud-muted-2) !important;
 }
+
+.model .right-inspector .people-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-family: var(--sans);
+  color: var(--ink);
+}
+
+.model .right-inspector .people-scope {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 9.5px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.model .right-inspector .people-scope span:last-child {
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model .right-inspector .people-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+
+.model .right-inspector .people-kpi {
+  background: var(--bg-sub);
+  border-radius: 7px;
+  padding: 6px 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.model .right-inspector .people-kpi-lbl {
+  font-family: var(--sans);
+  font-size: 8.5px;
+  font-weight: 700;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.model .right-inspector .people-kpi b {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.model .right-inspector .people-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.model .right-inspector .people-sub {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.model .right-inspector .people-sub-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.model .right-inspector .people-chips {
+  display: flex;
+  gap: 2px;
+}
+
+.model .right-inspector .people-chip {
+  border: 0;
+  background: var(--bg-sub);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.model .right-inspector .people-chip.is-on {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.model .right-inspector .people-map {
+  width: 100%;
+  aspect-ratio: 1;
+  background: var(--bg-sub);
+  border-radius: 7px;
+  display: block;
+}
+
+.model .right-inspector .people-map-sa1 {
+  stroke: var(--ink);
+  stroke-width: 3;
+  stroke-opacity: 0.35;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.model .right-inspector .people-map:hover .people-map-sa1:not(.is-hovered) {
+  opacity: 0.55;
+}
+
+.model .right-inspector .people-map-sa1.is-hovered {
+  stroke-opacity: 1;
+  stroke-width: 2;
+}
+
+.model .right-inspector .people-map-frame {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.model .right-inspector .people-map-tip {
+  font-size: 9.5px;
+  color: var(--ink-2);
+  min-height: 12px;
+}
+
+.model .right-inspector .people-dots {
+  display: grid;
+  grid-template-columns: repeat(20, 1fr);
+  gap: 3px;
+}
+
+.model .right-inspector .people-dot {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  outline: 1px solid var(--ink);
+  outline-offset: -1px;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.model .right-inspector .people-dot.is-dim {
+  opacity: 0.18;
+}
+
+.model .right-inspector .people-age-row {
+  display: grid;
+  grid-template-columns: 34px 1fr 20px;
+  align-items: center;
+  gap: 6px;
+  font-size: 9.5px;
+}
+
+.model .right-inspector .people-age-row.is-on .people-age-lbl {
+  font-weight: 700;
+}
+
+.model .right-inspector .people-age-track {
+  position: relative;
+  height: 8px;
+  background: var(--bg-sub);
+  border-radius: 2px;
+}
+
+.model .right-inspector .people-age-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 2px;
+  outline: 1px solid var(--ink);
+  outline-offset: -1px;
+}
+
+.model .right-inspector .people-age-tick {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--people-benchmark);
+}
+
+.model .right-inspector .people-age-tick.is-key {
+  position: static;
+  display: inline-block;
+  height: 9px;
+  vertical-align: middle;
+  margin: 0 4px 0 0;
+}
+
+.model .right-inspector .people-age-val {
+  text-align: right;
+  color: var(--ink-2);
+}
+
+.model .right-inspector .people-tick-key {
+  font-size: 9px;
+  color: var(--ink-3);
+}
+
+.model .right-inspector .people-stack {
+  display: flex;
+  height: 10px;
+  border-radius: 3px;
+  overflow: hidden;
+  gap: 1px;
+  background: var(--ink);
+  padding: 1px;
+}
+
+.model .right-inspector .people-stack-seg {
+  flex-basis: 0;
+  min-width: 0;
+}
+
+.model .right-inspector .people-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  font-size: 9.5px;
+  color: var(--ink-2);
+}
+
+.model .right-inspector .people-legend b {
+  font-family: var(--mono);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.model .right-inspector .people-swatch {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  margin-right: 3px;
+  outline: 1px solid var(--ink);
+  outline-offset: -1px;
+}
+
+.model .right-inspector .people-sa2 span {
+  font-size: 9.5px;
+  color: var(--ink-2);
+  line-height: 1.4;
+}
+
+.model .right-inspector .people-note {
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+
+.model .right-inspector .people-source {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--ink-3);
+}
+
+.model .right-inspector .people-error {
+  background: var(--bg-sub);
+  border-left: 3px solid var(--status-failed);
+  border-radius: 7px;
+  padding: 8px 10px;
+  font-size: 11px;
+}
+
+.model .right-inspector .people-error p {
+  margin: 4px 0 0;
+  color: var(--ink-2);
+  line-height: 1.4;
+}

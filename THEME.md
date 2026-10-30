@@ -179,6 +179,12 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--nsw-zone-w` | `#A9D6E8` | NSW mode: W1–W4 waterway zones on the site plan. |
 | `--nsw-zone-ru` | `#E8DCB5` | NSW mode: RU rural zones on the site plan. |
 | `--nsw-zone-other` | `#D9D4E8` | NSW mode: precinct and other zones (for example SEPP precinct codes) on the site plan. |
+| `--people-1` | `#F6EDB8` | People tab (ABS Census 2021): chart and SA1 ramp step 1 of 5, low to high. |
+| `--people-2` | `#EFCF5E` | People tab (ABS Census 2021): chart and SA1 ramp step 2 of 5, low to high. |
+| `--people-3` | `#D99A2B` | People tab (ABS Census 2021): chart and SA1 ramp step 3 of 5, low to high. |
+| `--people-4` | `#A9541F` | People tab (ABS Census 2021): chart and SA1 ramp step 4 of 5, low to high. |
+| `--people-5` | `#5E2412` | People tab (ABS Census 2021): chart and SA1 ramp step 5 of 5, low to high. |
+| `--people-benchmark` | `#1A1916` | People tab: Greater Melbourne benchmark tick on the age and share bars. |
 | `--tree-fill` | `#6ea35a` | Tree-crown fill on the site plan, on screen and in the Illustrator file. |
 | `--tree-crown` | `#5d8a45` | Tree-crown fill on the 3D-view Illustrator sheet. |
 | `--tree-crown-edge` | `#2c4a28` | Outline around that 3D-view crown. |

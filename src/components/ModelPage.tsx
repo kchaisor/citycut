@@ -3,7 +3,8 @@ import { sunStudyLayersFor } from "./useSunStudyShadows";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
-import { Building2, Copy, Download, DraftingCompass, Eye, GripVertical, Info, Radar, Sun, Trees, Upload, Wind } from "lucide-react";
+import { PeoplePanel } from "./PeoplePanel";
+import { Building2, Copy, Download, DraftingCompass, Eye, GripVertical, Info, Radar, Sun, Trees, Upload, Users, Wind } from "lucide-react";
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -239,6 +240,7 @@ const SECTION_ICONS: Record<SidebarSectionId, typeof Info> = {
   summary: Info,
   buildings: Building2,
   trees: Trees,
+  people: Users,
   drawing: DraftingCompass,
   analysis: Radar,
   import: Upload,
@@ -2443,6 +2445,15 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     onImport={importHeightEdits}
                   />
                 </section>
+            </div>
+
+            <div className="drawer-section people-section" hidden={rightOpen !== "people"}>
+              <PeoplePanel
+                active={rightOpen === "people"}
+                center={model.center}
+                sideM={model.sideM}
+                shape={model.frameShape ?? "square"}
+              />
             </div>
 
             <div className="drawer-section tree-sizes" hidden={rightOpen !== "trees"}>

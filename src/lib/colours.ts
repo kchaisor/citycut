@@ -182,6 +182,12 @@ export const COLOUR_KEYS = [
   "--nsw-zone-w",
   "--nsw-zone-ru",
   "--nsw-zone-other",
+  "--people-1",
+  "--people-2",
+  "--people-3",
+  "--people-4",
+  "--people-5",
+  "--people-benchmark",
 ] as const;
 
 export type ColourKey = (typeof COLOUR_KEYS)[number];
@@ -306,6 +312,18 @@ export const COLOUR_GROUPS = [
       "--nsw-zone-w",
       "--nsw-zone-ru",
       "--nsw-zone-other",
+    ],
+  },
+  {
+    id: "people",
+    title: "People",
+    keys: [
+      "--people-1",
+      "--people-2",
+      "--people-3",
+      "--people-4",
+      "--people-5",
+      "--people-benchmark",
     ],
   },
 ] as const satisfies readonly { id: string; title: string; keys: readonly ColourKey[] }[];
@@ -484,6 +502,12 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--nsw-zone-w": "NSW zone: waterway (W)",
   "--nsw-zone-ru": "NSW zone: rural (RU)",
   "--nsw-zone-other": "NSW zone: other",
+  "--people-1": "People: lowest step",
+  "--people-2": "People: low step",
+  "--people-3": "People: middle step",
+  "--people-4": "People: high step",
+  "--people-5": "People: highest step",
+  "--people-benchmark": "People: Greater Melbourne tick",
 };
 
 const parsed = resolveSheet(parseCustomProperties(coloursCss));

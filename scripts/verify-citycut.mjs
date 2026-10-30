@@ -985,6 +985,67 @@ async function main() {
       await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v17-display-reset-colours.png") });
     }
 
+    {
+      await page.locator('.model button[data-section="people"]').first().click();
+      await page
+        .waitForSelector('[data-testid="people-panel"]:not([data-state="loading"])', { timeout: 20000 })
+        .catch(() => {});
+      await page.waitForTimeout(300);
+      const peopleInfo = await page.evaluate(() => {
+        const text = (id) => document.querySelector(`[data-testid="${id}"]`)?.textContent?.trim() ?? "";
+        const panel = document.querySelector('[data-testid="people-panel"]');
+        const rect = panel?.getBoundingClientRect();
+        return {
+          state: panel?.getAttribute("data-state") ?? "missing",
+          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+          residents: text("people-kpi-residents"),
+          age: text("people-kpi-age"),
+          income: text("people-kpi-income"),
+          source: text("people-source"),
+          sa2: text("people-sa2"),
+          dots: document.querySelectorAll('[data-testid="people-hundred"] .people-dot').length,
+          sa1Paths: document.querySelectorAll('[data-testid="people-sa1-map"] .people-map-sa1').length,
+        };
+      });
+      const num = (t) => Number((t.match(/[\d,]+(?:\.\d+)?/g) ?? []).map((m) => m.replace(/,/g, "")).find((m) => Number(m) > 0) ?? 0);
+      assertCheck("PEOPLE-1", "People tab loads ABS SA1 data", peopleInfo.state === "ok" && peopleInfo.visible, `state=${peopleInfo.state}`);
+      assertCheck(
+        "PEOPLE-2",
+        "People tab renders real numbers (residents, median age, income)",
+        num(peopleInfo.residents) > 0 && num(peopleInfo.age) >= 15 && num(peopleInfo.age) <= 70 && num(peopleInfo.income) > 300,
+        `${peopleInfo.residents} | ${peopleInfo.age} | ${peopleInfo.income}`,
+      );
+      assertCheck("PEOPLE-3", "100-people chart has exactly 100 dots", peopleInfo.dots === 100, `dots=${peopleInfo.dots}`);
+      assertCheck("PEOPLE-4", "ABS attribution is visible", /ABS Census 2021, CC BY 4\.0/.test(peopleInfo.source), peopleInfo.source);
+      assertCheck("PEOPLE-5", "Official parent SA2 line is shown", /SA2/.test(peopleInfo.sa2), peopleInfo.sa2.slice(0, 80));
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "people-pr-tab.png") });
+      if (peopleInfo.sa1Paths > 0) {
+        const tipBefore = await page.locator('[data-testid="people-map-tip"]').textContent();
+        const mapBox = await page.locator('[data-testid="people-sa1-map"]').boundingBox();
+        if (mapBox) {
+          await page.mouse.move(mapBox.x + mapBox.width / 2 - 10, mapBox.y + mapBox.height / 2 - 10);
+          await page.mouse.move(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2, { steps: 4 });
+        }
+        await page.waitForTimeout(250);
+        const hoverInfo = await page.evaluate(() => ({
+          tip: document.querySelector('[data-testid="people-map-tip"]')?.textContent ?? "",
+          hovered: document.querySelectorAll(".people-map-sa1.is-hovered").length,
+        }));
+        assertCheck(
+          "PEOPLE-6",
+          "Hovering an SA1 cross-highlights it and updates the readout",
+          hoverInfo.hovered === 1 && /SA1/.test(hoverInfo.tip) && hoverInfo.tip !== tipBefore,
+          hoverInfo.tip.slice(0, 80),
+        );
+        await page.screenshot({ path: path.join(ARTIFACTS_DIR, "people-pr-hover.png") });
+        await page.mouse.move(700, 450);
+      } else {
+        assertCheck("PEOPLE-6", "Hovering an SA1 cross-highlights it", false, "no SA1 paths");
+      }
+      await page.locator('.model button[data-section="summary"]').first().click();
+      await page.waitForTimeout(200);
+    }
+
     // -------------------------------------------------------------------------
     // SITE ANALYSIS DIRECTION A INVARIANT (IN 3D MODEL)
     // -------------------------------------------------------------------------
@@ -1265,6 +1326,34 @@ async function main() {
         toneSamples.length >= 6 && toneSamples.some((t) => t.started) && outerMaxStepUp <= 3 && outerNetRise <= 3,
         `samples=${toneSamples.length}, baseline=${outerBaseline}, maxStepUp=${outerMaxStepUp.toFixed(1)}, netRise=${outerNetRise.toFixed(1)}, trace=[${toneSamples.map((t) => `${t.started ? `B${t.elapsed}` : "A"}:${t.outer}`).join(" ")}]`,
       );
+    }
+
+    {
+      const errCtx = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: DEVICE_SCALE_FACTOR, reducedMotion: "no-preference" });
+      await errCtx.route("**/census/index.json", (route) => route.fulfill({ status: 503, body: "unavailable" }));
+      const errPage = await errCtx.newPage();
+      await errPage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+      await errPage.waitForSelector("button.create-fab", { timeout: 20000 });
+      await errPage.waitForTimeout(800);
+      await errPage.click("button.create-fab");
+      await errPage.waitForSelector('.model button[data-section="people"]', { timeout: 30000 });
+      await errPage.waitForTimeout(2500);
+      await errPage.locator('.model button[data-section="people"]').first().click();
+      await errPage
+        .waitForSelector('[data-testid="people-panel"]:not([data-state="loading"])', { timeout: 15000 })
+        .catch(() => {});
+      const errInfo = await errPage.evaluate(() => ({
+        state: document.querySelector('[data-testid="people-panel"]')?.getAttribute("data-state") ?? "missing",
+        text: document.querySelector('[data-testid="people-error"]')?.textContent ?? "",
+      }));
+      assertCheck(
+        "PEOPLE-7",
+        "People tab shows an error state naming the ABS source when data fails",
+        errInfo.state === "error" && /ABS Census 2021/.test(errInfo.text) && /503/.test(errInfo.text),
+        errInfo.text.slice(0, 120),
+      );
+      await errPage.screenshot({ path: path.join(ARTIFACTS_DIR, "people-pr-error.png") });
+      await errCtx.close();
     }
 
     // -------------------------------------------------------------------------

@@ -350,4 +350,12 @@
   --nsw-zone-w: #A9D6E8;
   --nsw-zone-ru: #E8DCB5;
   --nsw-zone-other: #D9D4E8;
+
+  /* People tab (ABS Census 2021): five-step ramp for charts and SA1 shading, low to high, and the Greater Melbourne benchmark tick. */
+  --people-1: #F6EDB8;
+  --people-2: #EFCF5E;
+  --people-3: #D99A2B;
+  --people-4: #A9541F;
+  --people-5: #5E2412;
+  --people-benchmark: #1A1916;
 }

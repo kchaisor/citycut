@@ -6,7 +6,7 @@
  * ("summary") on the right. Whether the left panel is collapsed is shared with the
  * landing page; see `sidebarCollapse.ts`.
  */
-export const SIDEBAR_SECTION_IDS = ["summary", "buildings", "trees", "drawing", "analysis", "import", "exports"] as const;
+export const SIDEBAR_SECTION_IDS = ["summary", "buildings", "trees", "people", "drawing", "analysis", "import", "exports"] as const;
 
 export type SidebarSectionId = (typeof SIDEBAR_SECTION_IDS)[number];
 
@@ -23,7 +23,7 @@ export const LEFT_SIDEBAR_SECTION_IDS = ["drawing", "analysis", "import", "expor
 
 export type LeftSidebarSectionId = (typeof LEFT_SIDEBAR_SECTION_IDS)[number];
 
-export const RIGHT_SIDEBAR_SECTION_IDS = ["summary", "buildings", "trees"] as const;
+export const RIGHT_SIDEBAR_SECTION_IDS = ["summary", "buildings", "trees", "people"] as const;
 
 export type RightSidebarSectionId = (typeof RIGHT_SIDEBAR_SECTION_IDS)[number];
 
@@ -43,6 +43,7 @@ export const SIDEBAR_SECTION_LABELS: Record<SidebarSectionId, string> = {
   summary: "Model details",
   buildings: "Buildings",
   trees: "Trees",
+  people: "People",
   /** Covers 3D model, Drawing (site plan, figure-ground, exploded axo) and Satellite, so not "Drawing". */
   drawing: "Display",
   analysis: "Site Analysis",
