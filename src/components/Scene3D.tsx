@@ -26,6 +26,8 @@ import { useColourRevision } from "../lib/useColourRevision";
 import { captureViewPng } from "../lib/capturePng";
 import { GradientSky, GroundGrid, ViewInset, insetPointerEvents } from "./SceneBackdrop";
 import { markScreenOnly } from "../lib/screenOnly";
+import type { SectionCutStore } from "../lib/sectionCut";
+import { SectionCut3D } from "./SectionCut3D";
 import { cameraForExportFrame, exportFrameSize } from "../lib/exportFrame";
 import { flushControlInertia, holdControlPose, type HeldControl } from "../lib/controlInertia";
 import { shouldSkipViewportSizeRefit } from "../lib/viewportAutoFit";
@@ -1848,6 +1850,7 @@ export function Scene3D({
   importedMassing = null,
   walkLayer = null,
   onScenePoint = null,
+  sectionCut = null,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -1876,6 +1879,7 @@ export function Scene3D({
   walkLayer?: THREE.Object3D | null;
   /** Click-to-place: while set, a click reports the scene point (east, north, up) instead of picking a building. */
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
+  sectionCut?: SectionCutStore | null;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
@@ -1980,6 +1984,7 @@ export function Scene3D({
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
+      {sectionCut ? <SectionCut3D store={sectionCut} sideM={model.sideM} bottomY={plinthBottomY} topY={siteTopY} /> : null}
       <SolarHeliodon
         lat={model.center.lat}
         lon={model.center.lon}

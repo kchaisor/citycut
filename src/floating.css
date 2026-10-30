@@ -4286,3 +4286,183 @@ body,
   line-height: 1.35 !important;
   color: var(--hud-muted-2) !important;
 }
+
+.model .bottom-bar .section-cut-toggle {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: var(--bg-sub);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.model .bottom-bar .section-cut-toggle:hover {
+  background: var(--accent-hover);
+}
+
+.model .bottom-bar .section-cut-toggle.is-active {
+  background: var(--accent);
+  border-color: var(--accent-edge);
+  color: var(--accent-ink);
+}
+
+.model .section-cut-card {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 30;
+  width: 292px;
+  border-radius: 12px;
+  padding: 10px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  color: var(--ink);
+  font-family: var(--sans);
+  animation: section-cut-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+@keyframes section-cut-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .model .section-cut-card {
+    animation: none;
+  }
+}
+
+.model .section-cut-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.model .section-cut-tag {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 1px solid var(--accent-edge);
+  border-radius: 4px;
+  padding: 0 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 17px;
+}
+
+.model .section-cut-close {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+.model .section-cut-close:hover {
+  background: var(--bg-sub);
+  color: var(--ink);
+}
+
+.model .section-cut-readout {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.model .section-cut-readout b {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.model .section-cut-offset {
+  display: inline-block;
+  min-width: 52px;
+}
+
+.model .section-cut-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.model .section-cut-btn,
+.model .section-cut-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: var(--bg-sub);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, transform 120ms ease;
+}
+
+.model .section-cut-btn:hover,
+.model .section-cut-seg:hover {
+  background: var(--accent-hover);
+}
+
+.model .section-cut-btn:active {
+  transform: scale(0.94);
+}
+
+.model .section-cut-btn.is-active,
+.model .section-cut-seg.is-active {
+  background: var(--accent);
+  border-color: var(--accent-edge);
+  color: var(--accent-ink);
+}
+
+.model .section-cut-fill {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--bg-sub);
+}
+
+.model .section-cut-fill .section-cut-seg {
+  height: 22px;
+  background: transparent;
+}
+
+.model .section-cut-fill .section-cut-seg.is-active {
+  background: var(--accent);
+}
+
+.model .section-cut-hint {
+  margin: 0;
+  font-size: 10.5px;
+  color: var(--ink-3);
+}

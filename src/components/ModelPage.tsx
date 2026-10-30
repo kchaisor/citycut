@@ -151,6 +151,8 @@ import { isometricDrawingBounds } from "../lib/isometricDrawing";
 import { Sidebar, type SidebarItem } from "./Sidebar";
 import { SatellitePane } from "./SatellitePane";
 import { Scene3D, type SceneExporter } from "./Scene3D";
+import { SectionCutPanel, SectionCutToggle } from "./SectionCutPanel";
+import { createSectionCutStore } from "../lib/sectionCut";
 
 function shouldShowIntroBridgePill(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") return false;
@@ -253,6 +255,7 @@ const ANALYSIS_ICONS: Record<SiteAnalysisKind, typeof Sun> = {
 
 export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHome: () => void; onNewCut: () => void }) {
   const [tab, setTab] = useState<Tab>("3d");
+  const sectionCut = useMemo(() => createSectionCutStore(), []);
   const [drawing, setDrawing] = useState<DrawingKind>("site");
   const [analysisKind, setAnalysisKind] = useState<SiteAnalysisKind>("solar");
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
@@ -1775,7 +1778,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 importedMassing={massing.group}
                 walkLayer={walk.layer.root}
                 onScenePoint={walkDrawing ? walk.addPoint : massing.onScenePoint}
+                sectionCut={sectionCut}
               />
+              {tab === "3d" && <SectionCutPanel store={sectionCut} />}
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
@@ -3650,6 +3655,12 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
           </div>
         ) : (
           <div className="bottom-bar studio-solar-bar hud-card" role="region" aria-label="Solar and camera controls">
+            {tab === "3d" && (
+              <>
+                <SectionCutToggle store={sectionCut} />
+                <span className="v-sep" aria-hidden="true" />
+              </>
+            )}
             <button
               type="button"
               className={solar.castShadows ? "sun-pill studio-solar-pill is-active" : "sun-pill studio-solar-pill"}
