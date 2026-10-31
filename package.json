@@ -12,7 +12,8 @@
     "build:pt": "node scripts/build-pt-pmtiles.mjs",
     "build:enrichment": "node scripts/build-building-enrichment-pmtiles.mjs",
     "test:pipeline": "pytest pipeline/test_build_enrichment.py -q",
-    "verify:ui": "node scripts/verify-citycut.mjs"
+    "verify:ui": "node scripts/verify-citycut.mjs",
+    "match:ref": "node scripts/match-reference.mjs"
   },
   "dependencies": {
     "@fontsource/fraunces": "^5.2.9",
