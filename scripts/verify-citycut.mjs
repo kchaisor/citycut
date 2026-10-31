@@ -1263,6 +1263,24 @@ async function main() {
       `info=${JSON.stringify(hoverShowInfo)}`,
     );
 
+    const hoverHighlightOn = await lensPage.evaluate(() => {
+      const canvas = document.querySelector(".model canvas");
+      const style = canvas instanceof HTMLCanvasElement ? getComputedStyle(canvas) : null;
+      return {
+        highlightId: canvas instanceof HTMLCanvasElement ? canvas.dataset.buildingHoverHighlightId ?? "" : "",
+        highlightActive: canvas instanceof HTMLCanvasElement ? canvas.dataset.buildingHoverHighlightActive === "1" : false,
+        cursor: style?.cursor ?? "",
+      };
+    });
+    assertCheck(
+      "building-hover-highlight-on",
+      "Hovering a building shows mesh highlight and pointer cursor on the 3D canvas",
+      hoverHighlightOn.highlightActive &&
+        hoverHighlightOn.highlightId.length > 0 &&
+        hoverHighlightOn.cursor === "pointer",
+      `info=${JSON.stringify(hoverHighlightOn)}`,
+    );
+
     const hoverPair = await lensPage.evaluate(() => window.__citycutQaModel?.findLensHoverPairQa?.() ?? null);
     if (hoverPair && lensTarget) {
       await lensPage.mouse.move(hoverPair.a.clickX, hoverPair.a.clickY);
@@ -1292,6 +1310,24 @@ async function main() {
       await lensPage.mouse.move(24, 24);
     }
     await lensPage.waitForTimeout(180);
+    const hoverHighlightOff = await lensPage.evaluate(() => {
+      const canvas = document.querySelector(".model canvas");
+      const style = canvas instanceof HTMLCanvasElement ? getComputedStyle(canvas) : null;
+      return {
+        highlightActive: canvas instanceof HTMLCanvasElement ? canvas.dataset.buildingHoverHighlightActive === "1" : false,
+        highlightId: canvas instanceof HTMLCanvasElement ? canvas.dataset.buildingHoverHighlightId ?? "" : "",
+        cursor: style?.cursor ?? "",
+      };
+    });
+    assertCheck(
+      "building-hover-highlight-off",
+      "Moving off buildings clears hover highlight and restores default cursor",
+      !hoverHighlightOff.highlightActive &&
+        hoverHighlightOff.highlightId === "" &&
+        hoverHighlightOff.cursor !== "pointer",
+      `info=${JSON.stringify(hoverHighlightOff)}`,
+    );
+
     const stillUp = await lensPage.evaluate(() => Boolean(document.querySelector('[data-anchored-lens="open"]')));
     await lensPage.waitForTimeout(220);
     const hiddenAfterOut = await lensPage.evaluate(() => !document.querySelector('[data-anchored-lens="open"]'));

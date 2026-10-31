@@ -24,6 +24,11 @@ import {
   pickBuildingHoverAtClient,
   type BuildingHoverPickGate,
 } from "../lib/buildingHoverPick";
+import {
+  createBuildingHoverHighlightSlot,
+  disposeBuildingHoverHighlightSlot,
+  syncBuildingHoverHighlightSlot,
+} from "../lib/buildingHoverHighlight";
 import { LENS_ORBIT_HOVER_COOLDOWN_MS } from "../lib/lensHoverTiming";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { basePlinthBottomY } from "../lib/terrain";
@@ -264,12 +269,14 @@ function BuildingHoverPickLayer({
   gate,
   ignoreHover,
   onHoverBuilding,
+  onHoverHighlight,
 }: {
   root: THREE.Object3D;
   enabled: boolean;
   gate: BuildingHoverPickGate;
   ignoreHover: boolean;
   onHoverBuilding: (buildingId: number | null) => void;
+  onHoverHighlight: (buildingId: number | null) => void;
 }) {
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
@@ -291,8 +298,10 @@ function BuildingHoverPickLayer({
         if (lastId.current !== null) {
           lastId.current = null;
           canvas.style.cursor = "";
+          canvas.dataset.buildingHoverHighlightId = "";
         }
         if (!ignoreHover) onHoverBuilding(null);
+        onHoverHighlight(null);
       }
     };
     const onUp = (event: PointerEvent) => {
@@ -308,7 +317,7 @@ function BuildingHoverPickLayer({
       canvas.removeEventListener("pointerdown", onDown);
       canvas.removeEventListener("pointerup", onUp);
     };
-  }, [enabled, gate, gl.domElement]);
+  }, [enabled, gate, gl.domElement, ignoreHover, onHoverBuilding, onHoverHighlight]);
 
   useFrame(() => {
     if (!enabled) return;
@@ -317,7 +326,9 @@ function BuildingHoverPickLayer({
       if (lastId.current !== null) {
         lastId.current = null;
         canvas.style.cursor = "";
+        canvas.dataset.buildingHoverHighlightId = "";
         if (!ignoreHover) onHoverBuilding(null);
+        onHoverHighlight(null);
       }
       pointer.current.dirty = false;
       return;
@@ -329,7 +340,9 @@ function BuildingHoverPickLayer({
       if (lastId.current !== null) {
         lastId.current = null;
         canvas.style.cursor = "";
+        canvas.dataset.buildingHoverHighlightId = "";
         if (!ignoreHover) onHoverBuilding(null);
+        onHoverHighlight(null);
       }
       return;
     }
@@ -342,20 +355,74 @@ function BuildingHoverPickLayer({
         ? (window.__citycutQaModel?.listBuildings?.().map((row) => row.id) ?? [])
         : undefined;
     const id = pickBuildingHoverAtClient(canvas, camera, root, x, y, clipLookup, ids);
+    const nextDataset = id != null ? String(id) : "";
     canvas.style.cursor = id != null ? "pointer" : "";
-    if (id === lastId.current) return;
+    if (id === lastId.current) {
+      if (canvas.dataset.buildingHoverHighlightId !== nextDataset) {
+        canvas.dataset.buildingHoverHighlightId = nextDataset;
+      }
+      return;
+    }
     lastId.current = id;
+    canvas.dataset.buildingHoverHighlightId = nextDataset;
     if (!ignoreHover) onHoverBuilding(id);
+    onHoverHighlight(id);
   });
 
   useEffect(() => {
     if (!enabled) {
       gl.domElement.style.cursor = "";
+      gl.domElement.dataset.buildingHoverHighlightId = "";
       lastId.current = null;
+      onHoverHighlight(null);
     }
-  }, [enabled, gl.domElement]);
+  }, [enabled, gl.domElement, onHoverHighlight]);
 
   return null;
+}
+
+function BuildingHoverHighlightLayer({
+  model,
+  hoverBuildingId,
+  pinnedBuildingId,
+  colourMode,
+  enabled,
+}: {
+  model: CityModel;
+  hoverBuildingId: number | null;
+  pinnedBuildingId: number | null;
+  colourMode: BuildingColourMode;
+  enabled: boolean;
+}) {
+  const slotRef = useRef(createBuildingHoverHighlightSlot());
+  const gl = useThree((state) => state.gl);
+  const invalidate = useThree((state) => state.invalidate);
+  const colourTick = useColourRevision();
+  useLayoutEffect(() => {
+    const slot = slotRef.current;
+    if (!enabled) {
+      syncBuildingHoverHighlightSlot(slot, model, null, pinnedBuildingId, colourMode);
+      gl.domElement.dataset.buildingHoverHighlightActive = "";
+      invalidate();
+      return;
+    }
+    syncBuildingHoverHighlightSlot(slot, model, hoverBuildingId, pinnedBuildingId, colourMode);
+    gl.domElement.dataset.buildingHoverHighlightActive = slot.group.visible ? "1" : "";
+    invalidate();
+  }, [
+    enabled,
+    hoverBuildingId,
+    pinnedBuildingId,
+    model,
+    colourMode,
+    colourTick,
+    gl.domElement,
+    invalidate,
+  ]);
+  useLayoutEffect(() => () => disposeBuildingHoverHighlightSlot(slotRef.current), []);
+  const slot = slotRef.current;
+  if (!slot.group.visible) return null;
+  return <primitive object={slot.group} />;
 }
 
 function ScenePointLayer({ onScenePoint }: { onScenePoint: (east: number, north: number, up: number) => void }) {
@@ -486,6 +553,7 @@ function City({
   lensHoverGate,
   lensHoverPinned,
   onBuildingHover,
+  onHoverHighlightBuildingId,
   walkRippleTint,
   walkRippleArrivals,
 }: {
@@ -506,11 +574,20 @@ function City({
   lensHoverGate: BuildingHoverPickGate;
   lensHoverPinned: boolean;
   onBuildingHover: (buildingId: number | null) => void;
+  onHoverHighlightBuildingId?: (buildingId: number | null) => void;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
+  const [hoverHighlightBuildingId, setHoverHighlightBuildingId] = useState<number | null>(null);
+  const onHoverHighlight = useCallback(
+    (buildingId: number | null) => {
+      setHoverHighlightBuildingId(buildingId);
+      onHoverHighlightBuildingId?.(buildingId);
+    },
+    [onHoverHighlightBuildingId],
+  );
   const colourTick = useColourRevision();
   const colourMode = useMemo<BuildingColourMode>(
     () => ({
@@ -967,6 +1044,14 @@ function City({
         gate={lensHoverGate}
         ignoreHover={lensHoverPinned}
         onHoverBuilding={onBuildingHover}
+        onHoverHighlight={onHoverHighlight}
+      />
+      <BuildingHoverHighlightLayer
+        model={model}
+        hoverBuildingId={hoverHighlightBuildingId}
+        pinnedBuildingId={heightEditBuildingId}
+        colourMode={colourMode}
+        enabled={lensHoverEnabled && buildingsVisible}
       />
     </>
   );
