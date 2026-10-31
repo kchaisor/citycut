@@ -656,31 +656,39 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
         const canvasRect = canvas.getBoundingClientRect();
         type Candidate = { id: number; clickX: number; clickY: number; height: number; dist: number };
         const candidates: Candidate[] = [];
-        for (const building of qaDisplayBuildingsRef.current) {
-          if (building.height < 30 || building.use === "outbuilding") continue;
-          const { east, north } = buildingCentroid(building);
-          const z = -north;
-          const pt = project({ x: east, y: building.height * 0.55, z });
-          if (!pt) continue;
-          if (
-            pt.x < canvasRect.left + 100 ||
-            pt.x > canvasRect.right - 100 ||
-            pt.y < canvasRect.top + 100 ||
-            pt.y > canvasRect.bottom - 100
-          ) {
-            continue;
+        const sampleHeights = [0.35, 0.55, 0.75];
+        for (const inset of [72, 48, 28]) {
+          for (const building of qaDisplayBuildingsRef.current) {
+            if (building.height < 22 || building.use === "outbuilding") continue;
+            const { east, north } = buildingCentroid(building);
+            const z = -north;
+            let pt: { x: number; y: number } | null = null;
+            for (const share of sampleHeights) {
+              pt = project({ x: east, y: building.height * share, z });
+              if (!pt) continue;
+              if (
+                pt.x >= canvasRect.left + inset &&
+                pt.x <= canvasRect.right - inset &&
+                pt.y >= canvasRect.top + inset &&
+                pt.y <= canvasRect.bottom - inset
+              ) {
+                break;
+              }
+              pt = null;
+            }
+            if (!pt) continue;
+            candidates.push({
+              id: building.id,
+              clickX: Math.round(pt.x),
+              clickY: Math.round(pt.y),
+              height: building.height,
+              dist: Math.hypot(east, north),
+            });
           }
-          candidates.push({
-            id: building.id,
-            clickX: Math.round(pt.x),
-            clickY: Math.round(pt.y),
-            height: building.height,
-            dist: Math.hypot(east, north),
-          });
+          if (candidates.length > 0) break;
         }
         candidates.sort((a, b) => b.height - a.height || a.dist - b.dist);
-        const pick = candidates[0];
-        return pick ?? null;
+        return candidates[0] ?? null;
       },
       pickForegroundBuildingForSelectionQa() {
         const candidates = qaDisplayBuildingsRef.current
