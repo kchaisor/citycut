@@ -168,6 +168,7 @@ import { ExportTiles } from "./ExportTiles";
 import { exportTiles, type ExportBusy } from "../lib/exportTiles";
 import { ViewLegend, ViewPanel } from "./ViewPanel";
 import { WalkRippleLegend, WalkRipplePanel } from "./WalkRipplePanel";
+import { WalkRippleTimeScrubber } from "./WalkRippleTimeScrubber";
 import { useWalkRipple } from "./useWalkRipple";
 import { useWalkPlayback, useWalkViewshed, WALK_SPEEDS } from "./useWalkViewshed";
 import { fetchWindRoseTable } from "../lib/windFetch";
@@ -3737,24 +3738,18 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
               )}
 
               {analysisKind === "walkRipple" && (
-                <div className="daylight-scrubber view-console-bar mono">
-                  <div className="wind-band-pills" aria-label="Walk time bands">
-                    <span className="wind-band-chip band-0">0–5 min</span>
-                    <span className="wind-band-chip band-1">5–10 min</span>
-                    <span className="wind-band-chip band-2">10–15 min</span>
-                  </div>
-                  <span className="time-readout-pill">
-                    {walkRipple.placing
-                      ? "Click ground in 3D view"
-                      : walkRipple.status === "animating"
-                        ? "Walk ripple spreading…"
-                        : walkRipple.times?.mode === "straight"
-                          ? "Straight-line estimate"
-                          : walkRipple.times
-                            ? "Network walk ripple"
-                            : "Pick an origin"}
-                  </span>
-                </div>
+                <WalkRippleTimeScrubber
+                  minutes={walkRipple.rippleMinutes}
+                  reachedBuildingCount={
+                    walkRipple.buildingArrivals
+                      ? [...walkRipple.buildingArrivals.values()].filter((a) => a <= walkRipple.rippleMinutes + 0.04).length
+                      : 0
+                  }
+                  disabled={!walkRipple.times}
+                  playing={walkRipple.ripplePlaying}
+                  onMinutesChange={walkRipple.setRippleMinutes}
+                  onPlayToggle={walkRipple.toggleRipplePlay}
+                />
               )}
             </div>
           </div>

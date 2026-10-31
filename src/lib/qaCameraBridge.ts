@@ -59,6 +59,9 @@ declare global {
     };
     __citycutWalkRippleQa?: {
       setMinutes: (minutes: number) => void;
+      getMinutes: () => number;
+      getUniformMinutes: () => number;
+      countReachedBuildings: (minuteCutoff: number) => number;
     };
     __citycutQaSelectionAudit?: import("./buildingSelectionAudit").BuildingSelectionAudit;
     __citycutFrameRatio?: number;

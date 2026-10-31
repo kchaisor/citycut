@@ -6,10 +6,10 @@ import net from "node:net";
 import { chromium } from "playwright";
 
 const VIEWPORT = { width: 1440, height: 900 };
-const OUT_MID = "/workspace/walk-ripple-mid-spread.png";
-const OUT_FINAL = "/workspace/walk-ripple-final-bands.png";
-const OUT_MP4 = "/workspace/walk-ripple-demo.mp4";
-const TMP_FRAMES = "/tmp/walk_ripple_frames";
+const OUT_4MIN = "/workspace/walk-ripple-scrubber-4min.png";
+const OUT_12MIN = "/workspace/walk-ripple-scrubber-12min.png";
+const OUT_MP4 = "/workspace/walk-ripple-scrubber-drag-replay.mp4";
+const TMP_FRAMES = "/tmp/walk_ripple_scrubber_frames";
 
 function findFreePort() {
   return new Promise((resolve, reject) => {
@@ -46,6 +46,19 @@ async function resolveAppBase(baseUrl) {
     }
   }
   return `${baseUrl}/citycut/`;
+}
+
+async function dragScrubberToPct(page, pct) {
+  const track = page.locator(".model .walk-ripple-scrubber-track");
+  const box = await track.boundingBox();
+  if (!box) throw new Error("scrubber track missing");
+  const x = box.x + box.width * pct;
+  const y = box.y + box.height * 0.5;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 3, y);
+  await page.mouse.up();
+  await page.waitForTimeout(350);
 }
 
 async function runCapture(page) {
@@ -109,29 +122,25 @@ async function runCapture(page) {
   const canvas = page.locator(".model canvas").first();
   const box = await canvas.boundingBox();
   if (!box) throw new Error("No canvas");
-  const cx = box.x + box.width * 0.5;
-  const cy = box.y + box.height * 0.52;
-  await page.mouse.click(cx, cy);
+  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.52);
   await page.waitForFunction(() => Boolean(window.__citycutWalkRippleQa), { timeout: 30000 });
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(900);
 
   let frame = 0;
   const grab = async () => {
     await page.screenshot({ path: path.join(TMP_FRAMES, `f${String(frame++).padStart(3, "0")}.png`) });
   };
 
-  await page.evaluate(() => window.__citycutWalkRippleQa?.setMinutes(7.5));
-  await page.waitForTimeout(400);
+  await dragScrubberToPct(page, 4 / 20);
   await grab();
-  await page.screenshot({ path: OUT_MID, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
+  await page.screenshot({ path: OUT_4MIN, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
 
-  await page.evaluate(() => window.__citycutWalkRippleQa?.setMinutes(16));
-  await page.waitForTimeout(500);
+  await dragScrubberToPct(page, 12 / 20);
   await grab();
-  await page.screenshot({ path: OUT_FINAL, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
+  await page.screenshot({ path: OUT_12MIN, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
 
-  for (const min of [2, 4, 6, 8, 10, 12, 14, 16]) {
-    await page.evaluate((m) => window.__citycutWalkRippleQa?.setMinutes(m), min);
+  await page.getByRole("button", { name: /Replay walk ripple/i }).click();
+  for (let i = 0; i < 28; i++) {
     await page.waitForTimeout(180);
     await grab();
   }
@@ -142,7 +151,11 @@ async function runCapture(page) {
 async function main() {
   fs.rmSync(TMP_FRAMES, { recursive: true, force: true });
   fs.mkdirSync(TMP_FRAMES, { recursive: true });
-  const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome", headless: true });
+  const browser = await chromium.launch({
+    executablePath: "/usr/bin/google-chrome",
+    headless: true,
+    args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-webgl", "--ignore-gpu-blocklist", "--no-sandbox"],
+  });
   const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: 1 });
   await runCapture(page);
   await browser.close();
@@ -165,8 +178,8 @@ async function main() {
     ],
     { stdio: "inherit" },
   );
-  console.log("[ARTIFACT]", OUT_MID);
-  console.log("[ARTIFACT]", OUT_FINAL);
+  console.log("[ARTIFACT]", OUT_4MIN);
+  console.log("[ARTIFACT]", OUT_12MIN);
   console.log("[ARTIFACT]", OUT_MP4);
 }
 

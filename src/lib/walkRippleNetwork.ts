@@ -2,6 +2,7 @@ import type { CityModel, Pt, RoadFeat } from "../types";
 
 export const WALK_RIPPLE_SPEED_MPM = 80;
 export const WALK_RIPPLE_MAX_MIN = 15;
+export const WALK_RIPPLE_TIMELINE_MAX_MIN = 20;
 export const WALK_RIPPLE_BANDS_MIN = [5, 10, 15] as const;
 
 const NODE_EPS_M = 0.35;

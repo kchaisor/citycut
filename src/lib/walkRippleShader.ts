@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { getColour } from "./colours";
+import { WALK_RIPPLE_TIMELINE_MAX_MIN } from "./walkRippleNetwork";
 
 export type RippleShaderUniforms = {
   uRippleTime: { value: number };
@@ -17,7 +18,7 @@ export function rippleColourUniforms(): RippleShaderUniforms {
     uBand1: { value: new THREE.Color(getColour("--walk-ripple-band-1")) },
     uBand2: { value: new THREE.Color(getColour("--walk-ripple-band-2")) },
     uAccent: { value: new THREE.Color(getColour("--walk-ripple-accent")) },
-    uMaxMin: { value: 15 },
+    uMaxMin: { value: WALK_RIPPLE_TIMELINE_MAX_MIN },
   };
 }
 
