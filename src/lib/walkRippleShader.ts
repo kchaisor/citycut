@@ -1,0 +1,133 @@
+import * as THREE from "three";
+import { getColour } from "./colours";
+import { WALK_RIPPLE_TIMELINE_MAX_MIN } from "./walkRippleNetwork";
+
+export type RippleShaderUniforms = {
+  uRippleTime: { value: number };
+  uBand0: { value: THREE.Color };
+  uBand1: { value: THREE.Color };
+  uBand2: { value: THREE.Color };
+  uAccent: { value: THREE.Color };
+  uMaxMin: { value: number };
+};
+
+export function rippleColourUniforms(): RippleShaderUniforms {
+  return {
+    uRippleTime: { value: -1 },
+    uBand0: { value: new THREE.Color(getColour("--walk-ripple-band-0")) },
+    uBand1: { value: new THREE.Color(getColour("--walk-ripple-band-1")) },
+    uBand2: { value: new THREE.Color(getColour("--walk-ripple-band-2")) },
+    uAccent: { value: new THREE.Color(getColour("--walk-ripple-accent")) },
+    uMaxMin: { value: WALK_RIPPLE_TIMELINE_MAX_MIN },
+  };
+}
+
+const RIPPLE_BUILDING_PARS = `
+  attribute float aRippleArrival;
+  uniform float uRippleTime;
+  uniform float uMaxMin;
+  uniform vec3 uBand0;
+  uniform vec3 uBand1;
+  uniform vec3 uBand2;
+  uniform vec3 uAccent;
+`;
+
+const RIPPLE_BUILDING_COLOR = `
+  vec3 rippleBandColour(float arrival) {
+    if (arrival <= 5.0) return uBand0;
+    if (arrival <= 10.0) return uBand1;
+    return uBand2;
+  }
+  vec3 applyRippleBuilding(vec3 base, float arrival) {
+    if (uRippleTime < 0.0 || arrival > uMaxMin + 0.01 || arrival > 998.0) return base;
+    if (uRippleTime < arrival - 0.04) return base;
+    vec3 band = rippleBandColour(arrival);
+    float lit = uRippleTime >= arrival ? 1.0 : 0.0;
+    float pulse = exp(-pow((uRippleTime - arrival) * 7.0, 2.0)) * 0.55;
+    vec3 accent = uAccent;
+    float mixAmt = clamp(0.94 * lit + pulse, 0.0, 1.0);
+    vec3 target = mix(base, band, mixAmt);
+    if (pulse > 0.03) target = mix(target, accent, pulse * 0.5);
+    return target;
+  }
+`;
+
+export function patchBuildingMaterialForRipple(
+  material: THREE.MeshStandardMaterial,
+  uniforms: RippleShaderUniforms,
+): void {
+  const prior = material.onBeforeCompile;
+  material.onBeforeCompile = (shader, renderer) => {
+    prior?.call(material, shader, renderer);
+    shader.uniforms.uRippleTime = uniforms.uRippleTime;
+    shader.uniforms.uMaxMin = uniforms.uMaxMin;
+    shader.uniforms.uBand0 = uniforms.uBand0;
+    shader.uniforms.uBand1 = uniforms.uBand1;
+    shader.uniforms.uBand2 = uniforms.uBand2;
+    shader.uniforms.uAccent = uniforms.uAccent;
+    shader.vertexShader = shader.vertexShader.replace(
+      "#include <common>",
+      `#include <common>\nattribute float aRippleArrival;\nvarying float vRippleArrival;`,
+    );
+    shader.vertexShader = shader.vertexShader.replace(
+      "#include <begin_vertex>",
+      `#include <begin_vertex>\nvRippleArrival = aRippleArrival;`,
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <common>",
+      `#include <common>\n${RIPPLE_BUILDING_PARS.replace("attribute float aRippleArrival;", "")}\nvarying float vRippleArrival;\n${RIPPLE_BUILDING_COLOR}`,
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <color_fragment>",
+      `#include <color_fragment>\ndiffuseColor.rgb = applyRippleBuilding(diffuseColor.rgb, vRippleArrival);`,
+    );
+  };
+  material.customProgramCacheKey = () => "walk-ripple-building";
+  material.needsUpdate = true;
+}
+
+const RIBBON_VERTEX = `
+  attribute float aRippleArrival;
+  uniform float uRippleTime;
+  uniform vec3 uAccent;
+  varying float vMix;
+  void main() {
+    vMix = 0.0;
+    if (uRippleTime >= 0.0) {
+      float pulse = 0.0;
+      if (uRippleTime >= aRippleArrival - 0.12) {
+        pulse = exp(-pow((uRippleTime - aRippleArrival) * 6.5, 2.0));
+      }
+      float trail = uRippleTime >= aRippleArrival ? 0.88 : 0.0;
+      vMix = clamp(max(pulse * 0.95, trail), 0.0, 1.0);
+    }
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const RIBBON_FRAGMENT = `
+  uniform vec3 uAccent;
+  varying float vMix;
+  void main() {
+    if (vMix < 0.04) discard;
+    gl_FragColor = vec4(uAccent, vMix);
+  }
+`;
+
+export function createRippleNetworkRibbonMaterial(uniforms: RippleShaderUniforms): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uRippleTime: uniforms.uRippleTime,
+      uAccent: uniforms.uAccent,
+    },
+    vertexShader: RIBBON_VERTEX,
+    fragmentShader: RIBBON_FRAGMENT,
+    transparent: true,
+    depthWrite: false,
+    toneMapped: false,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -4,
+    polygonOffsetUnits: -4,
+  });
+}

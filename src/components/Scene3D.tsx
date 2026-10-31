@@ -91,6 +91,7 @@ import {
 import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SunHoursLayer } from "./SunHoursLayer";
+import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
 
 const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
@@ -300,6 +301,57 @@ function HeightEditOverlayLayer({
   return overlay ? <primitive object={overlay} /> : null;
 }
 
+function WalkRippleBuildingBinder({
+  city,
+  tint,
+  buildingArrivals,
+  colourTick,
+}: {
+  city: THREE.Group;
+  tint: WalkRippleBuildingTint | null;
+  buildingArrivals: Map<number, number> | null;
+  colourTick: number;
+}) {
+  useLayoutEffect(() => {
+    if (!tint || !buildingArrivals || buildingArrivals.size === 0) {
+      tint?.detach();
+      return;
+    }
+    tint.refreshColours();
+    tint.attach(city, buildingArrivals);
+    return () => tint.detach();
+  }, [city, tint, buildingArrivals, colourTick]);
+  return null;
+}
+
+function WalkRippleTreeDim({ city, active }: { city: THREE.Group; active: boolean }) {
+  useLayoutEffect(() => {
+    if (!active) return;
+    const saved: Array<{ mat: THREE.MeshStandardMaterial; opacity: number; transparent: boolean }> = [];
+    city.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.material) return;
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const item of materials) {
+        if (!(item instanceof THREE.MeshStandardMaterial)) continue;
+        if (item.name !== "TreeCrowns" && item.name !== "TreeTrunks") continue;
+        saved.push({ mat: item, opacity: item.opacity, transparent: item.transparent });
+        item.transparent = true;
+        item.opacity = item.name === "TreeCrowns" ? 0.22 : 0.4;
+        item.needsUpdate = true;
+      }
+    });
+    return () => {
+      for (const entry of saved) {
+        entry.mat.opacity = entry.opacity;
+        entry.mat.transparent = entry.transparent;
+        entry.mat.needsUpdate = true;
+      }
+    };
+  }, [active, city]);
+  return null;
+}
+
 function City({
   model,
   uniformBuildings,
@@ -314,6 +366,8 @@ function City({
   onBuildingPick,
   onClearBuildingPick,
   pickBuildings,
+  walkRippleTint,
+  walkRippleArrivals,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -328,6 +382,8 @@ function City({
   onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
   onClearBuildingPick?: () => void;
   pickBuildings: boolean;
+  walkRippleTint?: WalkRippleBuildingTint | null;
+  walkRippleArrivals?: Map<number, number> | null;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -750,6 +806,16 @@ function City({
   return (
     <>
       <primitive object={group} />
+      <WalkRippleBuildingBinder
+        city={group}
+        tint={walkRippleTint ?? null}
+        buildingArrivals={walkRippleArrivals ?? null}
+        colourTick={colourTick}
+      />
+      <WalkRippleTreeDim
+        city={group}
+        active={Boolean(walkRippleArrivals && walkRippleArrivals.size > 0)}
+      />
       {contours ? <primitive object={contours} /> : null}
       <HeightEditOverlayLayer
         model={model}
@@ -1834,6 +1900,9 @@ export function Scene3D({
   display,
   importedMassing = null,
   walkLayer = null,
+  walkRippleLayer = null,
+  walkRippleTint = null,
+  walkRippleArrivals = null,
   onScenePoint = null,
   quality = "high",
 }: {
@@ -1859,6 +1928,9 @@ export function Scene3D({
   display: View3dDisplaySettings;
   importedMassing?: THREE.Object3D | null;
   walkLayer?: THREE.Object3D | null;
+  walkRippleLayer?: THREE.Object3D | null;
+  walkRippleTint?: WalkRippleBuildingTint | null;
+  walkRippleArrivals?: Map<number, number> | null;
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
   quality?: RenderQuality;
 }) {
@@ -1975,9 +2047,12 @@ export function Scene3D({
         heightEditBuildingId={heightEditBuildingId}
         selectedBuildingIds={selectedBuildingIds}
         display={display}
+        walkRippleTint={walkRippleTint}
+        walkRippleArrivals={walkRippleArrivals}
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
+      {walkRippleLayer ? <primitive object={walkRippleLayer} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
       <SolarHeliodon
         lat={model.center.lat}

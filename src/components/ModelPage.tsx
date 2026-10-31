@@ -7,7 +7,7 @@ import { viewportIsNarrow } from "../lib/panelCollapse";
 import { ShortcutCheatsheet } from "./ShortcutCheatsheet";
 import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
-import { Building2, Copy, Download, DraftingCompass, Eye, GripVertical, Info, Radar, Sun, Trees, Upload, Wind } from "lucide-react";
+import { Building2, Copy, Download, DraftingCompass, Eye, Footprints, GripVertical, Info, Radar, Sun, Trees, Upload, Wind } from "lucide-react";
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -171,6 +171,9 @@ import { WindRoseOverlay } from "./WindRoseOverlay";
 import { ExportTiles } from "./ExportTiles";
 import { exportTiles, type ExportBusy } from "../lib/exportTiles";
 import { ViewLegend, ViewPanel } from "./ViewPanel";
+import { WalkRippleLegend, WalkRipplePanel } from "./WalkRipplePanel";
+import { WalkRippleTimeScrubber } from "./WalkRippleTimeScrubber";
+import { useWalkRipple } from "./useWalkRipple";
 import { useWalkPlayback, useWalkViewshed, WALK_SPEEDS } from "./useWalkViewshed";
 import { fetchWindRoseTable } from "../lib/windFetch";
 import { analyzeWindPeriod, WIND_PERIOD_LABELS, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
@@ -253,6 +256,7 @@ const ANALYSIS_ICONS: Record<SiteAnalysisKind, typeof Sun> = {
   solar: Sun,
   wind: Wind,
   view: Eye,
+  walkRipple: Footprints,
 };
 
 export function ModelPage({
@@ -941,6 +945,15 @@ export function ModelPage({
     [model, overrideResult, visibleBuildings, comHeightsMeasuredOn],
   );
   const walk = useWalkViewshed(model, displayModel);
+  const walkRipple = useWalkRipple(model, displayModel);
+  const [walkRippleToast, setWalkRippleToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (walkRipple.status === "ready") {
+      setWalkRippleToast(walkRipple.modeLabel ?? "Analysis complete. Walk ripple generated.");
+    } else if (walkRipple.status === "idle") {
+      setWalkRippleToast(null);
+    }
+  }, [walkRipple.modeLabel, walkRipple.status]);
   const walkAt = useWalkPlayback(walk);
 
   const drawingModel = useMemo(() => {
@@ -1150,11 +1163,15 @@ export function ModelPage({
   const leftOpen: LeftSidebarSectionId = resolveLeftSidebarSection(sidebar.section, sectionIds);
   const rightOpen: RightSidebarSectionId = resolveRightSidebarSection(sidebar.rightSection, sectionIds);
   const viewAnalysisOpen = leftOpen === "analysis" && analysisKind === "view";
+  const rippleAnalysisOpen = leftOpen === "analysis" && analysisKind === "walkRipple";
   const walkDrawing = viewAnalysisOpen && walk.drawing;
   const { drawing: walkDrawingOn, setDrawing: setWalkDrawing } = walk;
   useEffect(() => {
     if (!viewAnalysisOpen && walkDrawingOn) setWalkDrawing(false);
   }, [viewAnalysisOpen, walkDrawingOn, setWalkDrawing]);
+  useEffect(() => {
+    if (!rippleAnalysisOpen && walkRipple.placing) walkRipple.setPlacing(false);
+  }, [rippleAnalysisOpen, walkRipple]);
 
   const [consolePlaying, setConsolePlaying] = useState(false);
   const consoleDaylight = useMemo(
@@ -1816,10 +1833,25 @@ export function ModelPage({
                 display={view3dDisplay}
                 importedMassing={massing.group}
                 walkLayer={walk.layer.root}
-                onScenePoint={walkDrawing ? walk.addPoint : massing.onScenePoint}
+                walkRippleLayer={rippleAnalysisOpen ? walkRipple.layer.root : null}
+                walkRippleTint={rippleAnalysisOpen ? walkRipple.tint : null}
+                walkRippleArrivals={rippleAnalysisOpen ? walkRipple.buildingArrivals : null}
+                onScenePoint={
+                  walkRipple.placing
+                    ? (east, north) => walkRipple.placePoint(east, north)
+                    : walkDrawing
+                      ? walk.addPoint
+                      : massing.onScenePoint
+                }
                 quality={renderQuality}
               />
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
+              {rippleAnalysisOpen && walkRipple.buildingArrivals && <WalkRippleLegend />}
+              {walkRippleToast ? (
+                <p className="walk-ripple-toast" role="status">
+                  {walkRippleToast}
+                </p>
+              ) : null}
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
                   table={windTable}
@@ -3129,6 +3161,9 @@ export function ModelPage({
               <div hidden={analysisKind !== "view"}>
                 <ViewPanel walk={walk} />
               </div>
+              <div hidden={analysisKind !== "walkRipple"}>
+                <WalkRipplePanel ripple={walkRipple} />
+              </div>
             </div>
 
             <div className="drawer-section" hidden={leftOpen !== "import"}>
@@ -3264,6 +3299,16 @@ export function ModelPage({
                   <Eye size={12} strokeWidth={2.2} aria-hidden="true" />
                   <span>Viewshed Walk</span>
                 </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={analysisKind === "walkRipple"}
+                  className={analysisKind === "walkRipple" ? "env-mode-btn active" : "env-mode-btn"}
+                  onClick={() => setAnalysisKind("walkRipple")}
+                >
+                  <Footprints size={12} strokeWidth={2.2} aria-hidden="true" />
+                  <span>Walk Ripple</span>
+                </button>
               </div>
 
               <span className="v-sep hud-sep" aria-hidden="true" />
@@ -3329,6 +3374,27 @@ export function ModelPage({
                   <div className="st-item">
                     <span className="st-k">PATH</span>
                     <span className="st-v">{walk.clickCount > 0 ? `${Math.round(walk.lengthM)}m (${walk.clickCount} pts)` : "Click ground"}</span>
+                  </div>
+                </div>
+              )}
+
+              {analysisKind === "walkRipple" && (
+                <div className="solar-telemetry mono" aria-label="Walk ripple telemetry">
+                  <div className="st-item">
+                    <span className="st-k">PACE</span>
+                    <span className="st-v">80 m/min</span>
+                  </div>
+                  <span className="st-dot" aria-hidden="true">·</span>
+                  <div className="st-item">
+                    <span className="st-k">BANDS</span>
+                    <span className="st-v">5 · 10 · 15 min</span>
+                  </div>
+                  <span className="st-dot" aria-hidden="true">·</span>
+                  <div className="st-item">
+                    <span className="st-k">MODE</span>
+                    <span className="st-v">
+                      {walkRipple.times?.mode === "straight" ? "Straight-line" : walkRipple.times ? "Network" : "Pick origin"}
+                    </span>
                   </div>
                 </div>
               )}
@@ -3439,6 +3505,29 @@ export function ModelPage({
                     >
                       <span className="ov-dot" aria-hidden="true" />
                       <span>{walk.status === "ready" ? "Viewshed Ready" : "Compute View"}</span>
+                    </button>
+                  </>
+                )}
+
+                {analysisKind === "walkRipple" && (
+                  <>
+                    <button
+                      type="button"
+                      className={walkRipple.placing ? "ov-chip on" : "ov-chip"}
+                      aria-pressed={walkRipple.placing}
+                      onClick={() => walkRipple.setPlacing(!walkRipple.placing)}
+                    >
+                      <span className="ov-dot" aria-hidden="true" />
+                      <span>{walkRipple.placing ? "Click ground…" : "Pick origin"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={walkRipple.status === "ready" ? "ov-chip on" : "ov-chip"}
+                      disabled={!walkRipple.times}
+                      onClick={walkRipple.clear}
+                    >
+                      <span className="ov-dot" aria-hidden="true" />
+                      <span>Clear ripple</span>
                     </button>
                   </>
                 )}
@@ -3688,6 +3777,21 @@ export function ModelPage({
                     </span>
                   </div>
                 </>
+              )}
+
+              {analysisKind === "walkRipple" && (
+                <WalkRippleTimeScrubber
+                  minutes={walkRipple.rippleMinutes}
+                  reachedBuildingCount={
+                    walkRipple.buildingArrivals
+                      ? [...walkRipple.buildingArrivals.values()].filter((a) => a <= walkRipple.rippleMinutes + 0.04).length
+                      : 0
+                  }
+                  disabled={!walkRipple.times}
+                  playing={walkRipple.ripplePlaying}
+                  onMinutesChange={walkRipple.setRippleMinutes}
+                  onPlayToggle={walkRipple.toggleRipplePlay}
+                />
               )}
             </div>
           </div>

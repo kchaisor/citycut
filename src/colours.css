@@ -46,6 +46,13 @@
   --view-path: #000000;
   --view-walker: #FFF500;
 
+  --walk-ripple-accent: #FFF500;
+  --walk-ripple-band-0: #FFF500;
+  --walk-ripple-band-1: #FF8C00;
+  --walk-ripple-band-2: #E85D04;
+  --walk-ripple-label-bg: #1C1C22;
+  --walk-ripple-label-text: #FFFFFF;
+
   --use-residential: #CECBC6;
 
   --use-commercial: #89533D;

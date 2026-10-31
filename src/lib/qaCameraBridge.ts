@@ -49,6 +49,12 @@ declare global {
       }>;
       captureViewportPng?: () => Promise<string | null>;
     };
+    __citycutWalkRippleQa?: {
+      setMinutes: (minutes: number) => void;
+      getMinutes: () => number;
+      getUniformMinutes: () => number;
+      countReachedBuildings: (minuteCutoff: number) => number;
+    };
     __citycutQaSelectionAudit?: import("./buildingSelectionAudit").BuildingSelectionAudit;
     __citycutFrameRatio?: number;
     __citycutMinBeat2Ms?: number;

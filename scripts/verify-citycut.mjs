@@ -808,9 +808,7 @@ async function main() {
       `polar=${beat4Info.polar}, bldg=[${beat4Info.bldgInner},${beat4Info.bldgOuter}], tree=${beat4Info.treeScale}, hudOpacities=[${beat4Info.topOpacity},${beat4Info.leftOpacity},${beat4Info.rightOpacity},${beat4Info.bottomOpacity}], underlay=${beat4Info.hasUnderlay}`,
     );
 
-    // -------------------------------------------------------------------------
     // TYPOGRAPHY & CSS SURFACE INVARIANTS
-    // -------------------------------------------------------------------------
     const uiInvariants = await page.evaluate(() => {
       const bodyFont = getComputedStyle(document.body).fontFamily;
       const monoEl = document.querySelector(".mono, .coord-chip, .right-inspector");
@@ -946,9 +944,7 @@ async function main() {
       `open=${commandBarInfo.open}, font=${commandBarInfo.fontFamily}, bg=${commandBarInfo.bg}`,
     );
 
-    // -------------------------------------------------------------------------
     // 3D DISPLAY OUTLINER INVARIANT (PER-USE BUILDINGS + RESET COLOURS BUTTON)
-    // -------------------------------------------------------------------------
     const display3dOutlinerInfo = await page.evaluate(() => {
       const layersRegion = document.querySelector('.model .left-outliner [aria-label="Layers"]');
       const rowLabels = Array.from(
@@ -991,9 +987,7 @@ async function main() {
       await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v17-display-reset-colours.png") });
     }
 
-    // -------------------------------------------------------------------------
     // SITE ANALYSIS DIRECTION A INVARIANT (IN 3D MODEL)
-    // -------------------------------------------------------------------------
     const analysisBtn = page.locator('.model button[data-section="analysis"]').first();
     await analysisBtn.click();
     await page.waitForTimeout(300);
@@ -1054,9 +1048,94 @@ async function main() {
       `visibleLeftDrawers=${analysisInfo.visibleLeftDrawerCount}, noOverflow=${analysisInfo.noHorizontalOverflow}, topReset=${analysisInfo.hasTopCenterReset}, bottomCompass=${analysisInfo.hasBottomCompass}, 3dDome=${analysisInfo.has3dSunDomeIn3d}, planFanIn3d=${analysisInfo.hasPlanFanIn3d}, rect=${JSON.stringify(analysisInfo.envConsoleRect)}`,
     );
 
-    // -------------------------------------------------------------------------
+    await page.getByRole("tab", { name: /Walk Ripple/i }).click();
+    await page.waitForTimeout(250);
+    await page.getByRole("button", { name: /Pick origin/i }).first().click();
+    const rippleCanvas = page.locator(".model canvas").first();
+    const rippleCanvasBox = await rippleCanvas.boundingBox();
+    if (!rippleCanvasBox) throw new Error("Walk ripple: missing model canvas");
+    await page.mouse.click(
+      rippleCanvasBox.x + rippleCanvasBox.width * 0.5,
+      rippleCanvasBox.y + rippleCanvasBox.height * 0.52,
+    );
+    const scrubTrack = page.locator(".model .walk-ripple-scrubber-track");
+    await page.waitForFunction(
+      () => {
+        const track = document.querySelector(".model .walk-ripple-scrubber-track");
+        return track && track.getAttribute("aria-disabled") === "false";
+      },
+      { timeout: 120000 },
+    );
+    await page.waitForTimeout(800);
+
+    await scrubTrack.waitFor({ state: "visible", timeout: 10000 });
+    const trackBox = await scrubTrack.boundingBox();
+    if (!trackBox) throw new Error("Walk ripple: scrubber track missing");
+
+    const readScrubState = () =>
+      page.evaluate(() => {
+        const readout = document.querySelector(".model .walk-ripple-time-readout");
+        const label = readout?.getAttribute("data-walk-ripple-minutes") ?? "";
+        const reached = Number(readout?.getAttribute("data-walk-ripple-reached") ?? "0");
+        return { label, reached, minutes: Number.parseFloat(label) };
+      });
+
+    const dragScrubToPct = async (pct) => {
+      const box = await scrubTrack.boundingBox();
+      if (!box) throw new Error("Walk ripple: scrubber track missing");
+      const x = box.x + box.width * pct;
+      const y = box.y + box.height * 0.5;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + 2, y);
+      await page.mouse.up();
+      await page.waitForTimeout(280);
+    };
+
+    await dragScrubToPct(0.08);
+    const atLow = await readScrubState();
+
+    await dragScrubToPct(0.62);
+    const atHigh = await readScrubState();
+
+    const rippleOverflow = await page.evaluate(() => {
+      const envConsole = document.querySelector(".model .env-console");
+      const bottomRow = envConsole?.querySelector(".env-bottom-row");
+      return Boolean(
+        envConsole &&
+          bottomRow &&
+          envConsole.scrollWidth <= envConsole.clientWidth + 1 &&
+          bottomRow.scrollWidth <= bottomRow.clientWidth + 1,
+      );
+    });
+
+    assertCheck(
+      "walk-ripple-time-scrubber",
+      "Walk Ripple scrubber accepts Playwright mouse drags, updates minute readout and uRippleTime, increases reached-building count, and keeps the env console row without horizontal overflow",
+      rippleOverflow &&
+        atLow.minutes >= 0.5 &&
+        atLow.minutes <= 4.5 &&
+        atHigh.minutes >= 10 &&
+        atHigh.minutes <= 14.5 &&
+        atHigh.reached > atLow.reached &&
+        atHigh.reached - atLow.reached >= 3,
+      `low=[min=${atLow.minutes}, reached=${atLow.reached}, label=${atLow.label}], high=[min=${atHigh.minutes}, reached=${atHigh.reached}, label=${atHigh.label}], noOverflow=${rippleOverflow}`,
+    );
+
+    await page.getByRole("button", { name: /Replay walk ripple/i }).click();
+    await page.waitForTimeout(400);
+    const replayStart = await readScrubState();
+    assertCheck(
+      "walk-ripple-replay",
+      "Walk Ripple replay button restarts the 0–20 min animation from the scrubber row",
+      replayStart.minutes <= 1.5,
+      `minutesAfterReplayClick=${replayStart.minutes}`,
+    );
+
+    await page.getByRole("tab", { name: /Solar Study/i }).click();
+    await page.waitForTimeout(200);
+
     // DRAWING -> DISPLAY OUTLINER CLEANUP & RESET COLOURS INVARIANT
-    // -------------------------------------------------------------------------
     await page.getByRole("tab", { name: /Drawing/i }).click();
     await page.waitForSelector("svg.plan", { timeout: 10000 });
     const displayBtn = page.getByRole("button", { name: "Display" }).first();
