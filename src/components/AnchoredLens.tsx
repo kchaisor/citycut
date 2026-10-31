@@ -1,6 +1,5 @@
 import { useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useMemo, type RefObject } from "react";
 import * as THREE from "three";
 import { effectiveBuildingHeightM } from "../lib/buildingHeightResolve";
 import { buildingRoofAnchor } from "../lib/buildingRoofAnchor";
@@ -58,6 +57,7 @@ export function AnchoredLensCard({ building, model, sunHoursGrid, actions }: Car
           className="anchored-lens-btn"
           disabled={!actions.rippleEnabled}
           title={actions.rippleEnabled ? undefined : "Coming soon"}
+          data-anchored-lens-tip={actions.rippleEnabled ? undefined : "Coming soon"}
           data-anchored-lens-action="ripple"
           onClick={actions.onRipple}
         >
@@ -68,6 +68,7 @@ export function AnchoredLensCard({ building, model, sunHoursGrid, actions }: Car
           className="anchored-lens-btn"
           disabled={!actions.cutEnabled}
           title={actions.cutEnabled ? undefined : "Coming soon"}
+          data-anchored-lens-tip={actions.cutEnabled ? undefined : "Coming soon"}
           data-anchored-lens-action="cut"
           onClick={actions.onCut}
         >
@@ -78,6 +79,7 @@ export function AnchoredLensCard({ building, model, sunHoursGrid, actions }: Car
           className="anchored-lens-btn"
           disabled={!actions.viewshedEnabled}
           title={actions.viewshedEnabled ? undefined : "Coming soon"}
+          data-anchored-lens-tip={actions.viewshedEnabled ? undefined : "Coming soon"}
           data-anchored-lens-action="viewshed"
           onClick={actions.onViewshed}
         >
@@ -88,26 +90,38 @@ export function AnchoredLensCard({ building, model, sunHoursGrid, actions }: Car
   );
 }
 
-export function AnchoredLens3D({
+export function AnchoredLensViewportLayer({
+  hostRef,
   building,
   model,
   sunHoursGrid,
   actions,
 }: {
+  hostRef: RefObject<HTMLDivElement | null>;
   building: BuildingFeat;
   model: CityModel;
   sunHoursGrid: SunHoursGrid | null;
   actions: AnchoredLensActions;
 }) {
-  const hostRef = useRef<HTMLDivElement>(null);
-  const { camera, size, gl } = useThree();
-  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+  return (
+    <div ref={hostRef} className="anchored-lens-host" data-anchored-lens-visible="0">
+      <AnchoredLensCard building={building} model={model} sunHoursGrid={sunHoursGrid} actions={actions} />
+    </div>
+  );
+}
+
+export function AnchoredLensScreenTracker({
+  model,
+  building,
+  hostRef,
+}: {
+  model: CityModel;
+  building: BuildingFeat;
+  hostRef: RefObject<HTMLDivElement | null>;
+}) {
+  const { camera, size } = useThree();
   const world = useMemo(() => buildingRoofAnchor(model, building), [model, building]);
   const scratch = useMemo(() => new THREE.Vector3(), []);
-
-  useEffect(() => {
-    setPortalRoot(gl.domElement.closest(".scene-viewport") as HTMLElement | null);
-  }, [gl]);
 
   useFrame(() => {
     const host = hostRef.current;
@@ -126,12 +140,5 @@ export function AnchoredLens3D({
     host.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) translate(-50%, calc(-100% - 12px))`;
   });
 
-  if (!portalRoot) return null;
-
-  return createPortal(
-    <div ref={hostRef} className="anchored-lens-host">
-      <AnchoredLensCard building={building} model={model} sunHoursGrid={sunHoursGrid} actions={actions} />
-    </div>,
-    portalRoot,
-  );
+  return null;
 }

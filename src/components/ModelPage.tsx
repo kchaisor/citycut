@@ -647,48 +647,66 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
           rect.right < window.innerWidth - 8;
         return { width, height, centerX, centerY, onScreen };
       },
+      resolveLensBuildingClick(buildingId: number) {
+        const canvas = document.querySelector(".model canvas");
+        if (!canvas) return null;
+        const canvasRect = canvas.getBoundingClientRect();
+        const pickAt = window.__citycutQa?.pickBuildingAtClient;
+        const clip = window.__citycutQaModel?.selectionScreenClip?.(buildingId, 12);
+        if (!clip || clip.width < 12 || clip.height < 12) return null;
+        const steps = 6;
+        for (let row = 0; row < steps; row++) {
+          for (let col = 0; col < steps; col++) {
+            const clickX = Math.round(clip.x + (clip.width * (col + 0.5)) / steps);
+            const clickY = Math.round(clip.y + (clip.height * (row + 0.5)) / steps);
+            if (
+              clickX < canvasRect.left + 40 ||
+              clickX > canvasRect.right - 40 ||
+              clickY < canvasRect.top + 40 ||
+              clickY > canvasRect.bottom - 40
+            ) {
+              continue;
+            }
+            if (pickAt && pickAt(clickX, clickY) !== buildingId) continue;
+            return { clickX, clickY };
+          }
+        }
+        return null;
+      },
       findTallBuildingForLensQa() {
         setHeightPick(null);
         setHideSelection([]);
-        const project = window.__citycutQa?.projectToScreen;
         const canvas = document.querySelector(".model canvas");
-        if (!project || !canvas) return null;
+        if (!canvas) return null;
         const canvasRect = canvas.getBoundingClientRect();
         type Candidate = { id: number; clickX: number; clickY: number; height: number; dist: number };
-        const candidates: Candidate[] = [];
-        const sampleHeights = [0.35, 0.55, 0.75];
-        for (const inset of [72, 48, 28]) {
-          for (const building of qaDisplayBuildingsRef.current) {
-            if (building.height < 22 || building.use === "outbuilding") continue;
-            const { east, north } = buildingCentroid(building);
-            const z = -north;
-            let pt: { x: number; y: number } | null = null;
-            for (const share of sampleHeights) {
-              pt = project({ x: east, y: building.height * share, z });
-              if (!pt) continue;
-              if (
-                pt.x >= canvasRect.left + inset &&
-                pt.x <= canvasRect.right - inset &&
-                pt.y >= canvasRect.top + inset &&
-                pt.y <= canvasRect.bottom - inset
-              ) {
-                break;
-              }
-              pt = null;
-            }
-            if (!pt) continue;
-            candidates.push({
-              id: building.id,
-              clickX: Math.round(pt.x),
-              clickY: Math.round(pt.y),
-              height: building.height,
-              dist: Math.hypot(east, north),
-            });
+        const ranked: Omit<Candidate, "clickX" | "clickY">[] = [];
+        for (const building of qaDisplayBuildingsRef.current) {
+          if (building.height < 22 || building.use === "outbuilding") continue;
+          const clip = window.__citycutQaModel?.selectionScreenClip?.(building.id, 12);
+          if (!clip || clip.width < 12 || clip.height < 12) continue;
+          if (
+            clip.x + clip.width < canvasRect.left + 48 ||
+            clip.x > canvasRect.right - 48 ||
+            clip.y + clip.height < canvasRect.top + 48 ||
+            clip.y > canvasRect.bottom - 48
+          ) {
+            continue;
           }
-          if (candidates.length > 0) break;
+          const { east, north } = buildingCentroid(building);
+          ranked.push({
+            id: building.id,
+            height: building.height,
+            dist: Math.hypot(east, north),
+          });
         }
-        candidates.sort((a, b) => b.height - a.height || a.dist - b.dist);
-        return candidates[0] ?? null;
+        ranked.sort((a, b) => b.height - a.height || a.dist - b.dist);
+        for (const entry of ranked) {
+          const click = window.__citycutQaModel?.resolveLensBuildingClick?.(entry.id);
+          if (!click) continue;
+          return { ...entry, ...click };
+        }
+        return null;
       },
       pickForegroundBuildingForSelectionQa() {
         const candidates = qaDisplayBuildingsRef.current

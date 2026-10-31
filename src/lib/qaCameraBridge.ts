@@ -10,6 +10,7 @@ export type QaCameraBridge = {
   /** Fit the perspective camera to the sun path dome, labels, and sun icon. */
   frameHeliodon: () => void;
   projectToScreen: (world: { x: number; y: number; z: number }) => { x: number; y: number } | null;
+  pickBuildingAtClient: (clientX: number, clientY: number) => number | null;
 };
 
 export type QaSiteSnapshot = {
@@ -46,6 +47,7 @@ declare global {
         height: number;
         dist: number;
       } | null;
+      resolveLensBuildingClick?: (buildingId: number) => { clickX: number; clickY: number } | null;
       /** ~16 m foreground block for selection QA screenshots. */
       pickForegroundBuildingForSelectionQa?: () => number | null;
       frameSelectionBuilding?: (buildingId: number, variant?: "through" | "oblique") => boolean;

@@ -1212,7 +1212,35 @@ async function main() {
     );
 
     if (lensTarget) {
-      await lensPage.mouse.click(lensTarget.clickX, lensTarget.clickY);
+      const reopenClick = await lensPage.evaluate(
+        (id) => window.__citycutQaModel?.resolveLensBuildingClick?.(id) ?? null,
+        lensTarget.id,
+      );
+      if (reopenClick) await lensPage.mouse.click(reopenClick.clickX, reopenClick.clickY);
+    }
+    await lensPage.waitForSelector('[data-anchored-lens="open"]', { timeout: 15000 });
+    await lensPage.waitForTimeout(600);
+    await lensPage.locator('[data-anchored-lens-action="cut"]').hover({ force: true });
+    await lensPage.waitForTimeout(350);
+    const disabledTooltip = await lensPage.evaluate(() => {
+      const btn = document.querySelector('[data-anchored-lens-action="cut"]');
+      return btn?.getAttribute("title") ?? "";
+    });
+    assertCheck(
+      "anchored-lens-disabled-tooltip",
+      "Disabled Cut here button exposes a Coming soon tooltip",
+      disabledTooltip === "Coming soon",
+      `title="${disabledTooltip}"`,
+    );
+
+    await lensPage.keyboard.press("Escape");
+    await lensPage.waitForTimeout(200);
+    if (lensTarget) {
+      const emptyOpenClick = await lensPage.evaluate(
+        (id) => window.__citycutQaModel?.resolveLensBuildingClick?.(id) ?? null,
+        lensTarget.id,
+      );
+      if (emptyOpenClick) await lensPage.mouse.click(emptyOpenClick.clickX, emptyOpenClick.clickY);
     }
     await lensPage.waitForSelector('[data-anchored-lens="open"]', { timeout: 15000 });
     await lensPage.waitForTimeout(200);
@@ -1229,23 +1257,6 @@ async function main() {
       "Clicking empty space closes the anchored lens",
       lensEmptyClosed,
       `closed=${lensEmptyClosed}`,
-    );
-
-    if (lensTarget) {
-      await lensPage.mouse.click(lensTarget.clickX, lensTarget.clickY);
-    }
-    await lensPage.waitForSelector('[data-anchored-lens="open"]', { timeout: 15000 });
-    await lensPage.locator('[data-anchored-lens-action="cut"]').hover();
-    await lensPage.waitForTimeout(350);
-    const disabledTooltip = await lensPage.evaluate(() => {
-      const btn = document.querySelector('[data-anchored-lens-action="cut"]');
-      return btn?.getAttribute("title") ?? "";
-    });
-    assertCheck(
-      "anchored-lens-disabled-tooltip",
-      "Disabled Cut here button exposes a Coming soon tooltip",
-      disabledTooltip === "Coming soon",
-      `title="${disabledTooltip}"`,
     );
     await lensCtx.close();
 

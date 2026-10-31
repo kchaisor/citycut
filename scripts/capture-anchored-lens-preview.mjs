@@ -89,20 +89,28 @@ if (!cardLegible(layout)) throw new Error(`Card not legible after orbit: ${JSON.
 const orbitPath = path.join(OUT, "anchored-lens-orbit-anchor.png");
 await page.screenshot({ path: orbitPath });
 
-await page.locator('[data-anchored-lens-action="cut"]').hover();
+await page.waitForTimeout(600);
+await page.locator('[data-anchored-lens-action="cut"]').hover({ force: true });
 await page.waitForTimeout(450);
 const tipPath = path.join(OUT, "anchored-lens-disabled-tooltip.png");
 await page.screenshot({ path: tipPath });
-const openBytes = fs.readFileSync(openPath);
+const orbitBytes = fs.readFileSync(orbitPath);
 const tipBytes = fs.readFileSync(tipPath);
-if (openBytes.equals(tipBytes)) throw new Error("Tooltip shot is identical to open shot");
+if (orbitBytes.equals(tipBytes)) throw new Error("Tooltip shot is identical to orbit shot");
+if (yellowEdgePixels(tipPath) < yellowEdgePixels(orbitPath)) {
+  throw new Error("Tooltip shot should show at least as much yellow chrome as orbit shot");
+}
 
 const framesDir = "/tmp/anchored_lens_video_frames";
 fs.rmSync(framesDir, { recursive: true, force: true });
 fs.mkdirSync(framesDir, { recursive: true });
 await page.keyboard.press("Escape");
 await page.waitForTimeout(200);
-await page.mouse.click(target.clickX, target.clickY);
+const reopen = await page.evaluate(
+  (id) => window.__citycutQaModel?.resolveLensBuildingClick?.(id) ?? null,
+  target.id,
+);
+if (reopen) await page.mouse.click(reopen.clickX, reopen.clickY);
 await page.waitForSelector('[data-anchored-lens="open"]', { timeout: 15000 });
 let fi = 0;
 for (let i = 0; i < 8; i++) {

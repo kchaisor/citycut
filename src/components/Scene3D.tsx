@@ -14,7 +14,7 @@ import * as THREE from "three";
 import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
-import { attachScenePointPick, attachBuildingPick } from "../lib/buildingPick";
+import { attachScenePointPick, attachBuildingPick, pickBuildingIdAtClient } from "../lib/buildingPick";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { basePlinthBottomY } from "../lib/terrain";
 import { auditBuildingSelection, mountSelectedBuildingsVisual } from "../lib/buildingSelectionVisual";
@@ -89,7 +89,11 @@ import {
 import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SunHoursLayer } from "./SunHoursLayer";
-import { AnchoredLens3D, type AnchoredLensActions } from "./AnchoredLens";
+import {
+  AnchoredLensScreenTracker,
+  AnchoredLensViewportLayer,
+  type AnchoredLensActions,
+} from "./AnchoredLens";
 import type { SunHoursGrid } from "../lib/sunHours";
 
 /** Hours-of-sun heatmap: later phase. Code kept, no UI; flip to preview. */
@@ -1379,6 +1383,7 @@ function QaCameraBridgeRegister({
   lon: number;
 }) {
   const gl = useThree((state) => state.gl);
+  const scene = useThree((state) => state.scene);
   const size = useThree((state) => state.size);
   const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
@@ -1455,12 +1460,18 @@ function QaCameraBridgeRegister({
           y: rect.top + (-vec.y * 0.5 + 0.5) * rect.height,
         };
       },
+      pickBuildingAtClient(clientX, clientY) {
+        const city = scene.getObjectByName("CityCut");
+        if (!city) return null;
+        return pickBuildingIdAtClient(gl.domElement, persp, city, clientX, clientY);
+      },
     });
     return () => registerQaCameraBridge(null);
   }, [
     active,
     controlsRef,
     gl,
+    scene,
     groundY,
     heliodonRadius,
     invalidate,
@@ -1924,6 +1935,7 @@ export function Scene3D({
     for (const building of model.buildings) top = Math.max(top, base + building.height);
     return top;
   }, [model]);
+  const anchoredLensHostRef = useRef<HTMLDivElement | null>(null);
   return (
     <div className="scene-viewport">
       {glContextLost ? (
@@ -1987,11 +1999,10 @@ export function Scene3D({
       {walkLayer ? <primitive object={walkLayer} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
       {anchoredLensBuilding && anchoredLensActions ? (
-        <AnchoredLens3D
-          building={anchoredLensBuilding}
+        <AnchoredLensScreenTracker
           model={model}
-          sunHoursGrid={anchoredLensSunHoursGrid ?? null}
-          actions={anchoredLensActions}
+          building={anchoredLensBuilding}
+          hostRef={anchoredLensHostRef}
         />
       ) : null}
       <SolarHeliodon
@@ -2030,6 +2041,15 @@ export function Scene3D({
         introEnabled
       />
       </Canvas>
+      {anchoredLensBuilding && anchoredLensActions ? (
+        <AnchoredLensViewportLayer
+          hostRef={anchoredLensHostRef}
+          building={anchoredLensBuilding}
+          model={model}
+          sunHoursGrid={anchoredLensSunHoursGrid ?? null}
+          actions={anchoredLensActions}
+        />
+      ) : null}
     </div>
   );
 }
