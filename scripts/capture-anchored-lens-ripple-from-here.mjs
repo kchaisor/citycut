@@ -66,10 +66,17 @@ if (pinClick) {
 }
 
 await page.waitForSelector('[data-anchored-lens="open"]', { timeout: 20000 });
-await page.waitForFunction(
-  () => window.__citycutQaModel?.getAnchoredLensMode?.() === "pinned",
-  { timeout: 15000 },
-);
+const pinnedOk = await page
+  .waitForFunction(() => window.__citycutQaModel?.getAnchoredLensMode?.() === "pinned", { timeout: 12000 })
+  .then(() => true)
+  .catch(() => false);
+if (!pinnedOk) {
+  await page.evaluate((id) => window.__citycutQaModel?.openAnchoredLensForBuilding?.(id), target.id);
+  await page.waitForFunction(
+    () => window.__citycutQaModel?.getAnchoredLensMode?.() === "pinned",
+    { timeout: 20000 },
+  );
+}
 await page.waitForTimeout(400);
 
 const rippleBtn = page.locator('[data-anchored-lens-action="ripple"]');
