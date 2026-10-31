@@ -1218,7 +1218,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   );
 
   useEffect(() => {
-    if (!heightPick || tab !== "3d") return;
+    if (tab !== "3d") return;
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setHeightPick(null);
@@ -1229,7 +1229,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [heightPick, tab]);
+  }, [tab]);
 
   const anchoredLensActions = useMemo<AnchoredLensActions>(
     () => ({

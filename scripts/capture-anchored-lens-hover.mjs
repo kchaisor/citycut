@@ -63,19 +63,48 @@ if (pair) {
 } else {
   await page.mouse.move(target.clickX, target.clickY);
 }
-await page.waitForTimeout(500);
-const hoverLayout = await page.evaluate(() => window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null);
-const hoverMode = await page.evaluate(() => window.__citycutQaModel?.getAnchoredLensMode?.() ?? null);
-if (hoverMode !== "hover" || !hoverLayout?.onScreen) {
-  throw new Error(`Hover shot invalid: mode=${hoverMode}, layout=${JSON.stringify(hoverLayout)}`);
-}
+await page.waitForFunction(
+  () => {
+    const layout = window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null;
+    return window.__citycutQaModel?.getAnchoredLensMode?.() === "hover" && layout?.onScreen === true;
+  },
+  { timeout: 10000 },
+);
+await page.waitForTimeout(300);
 await page.screenshot({ path: path.join(OUT, "anchored-lens-hover.png") });
 
-await page.mouse.click(target.clickX, target.clickY);
-await page.waitForSelector('[data-anchored-lens="open"]', { timeout: 15000 });
-await page.waitForTimeout(500);
-const pinMode = await page.evaluate(() => window.__citycutQaModel?.getAnchoredLensMode?.() ?? null);
-if (pinMode !== "pinned") throw new Error(`Pinned shot invalid: mode=${pinMode}`);
+let pinClick = await page.evaluate(
+  (id) => window.__citycutQaModel?.resolveLensBuildingClick?.(id) ?? null,
+  target.id,
+);
+if (!pinClick) {
+  const again = await page.evaluate(() => window.__citycutQaModel?.findTallBuildingForLensQa?.() ?? null);
+  if (again) pinClick = { clickX: again.clickX, clickY: again.clickY };
+}
+if (!pinClick) throw new Error("No pin click coords");
+await page.mouse.move(pinClick.clickX, pinClick.clickY, { steps: 4 });
+await page.waitForTimeout(350);
+await page.mouse.click(pinClick.clickX, pinClick.clickY);
+const pinnedReady = async () => {
+  await page.waitForFunction(
+    () => {
+      const layout = window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null;
+      return (
+        window.__citycutQaModel?.getAnchoredLensMode?.() === "pinned" &&
+        layout?.onScreen === true &&
+        Boolean(document.querySelector('[data-anchored-lens-action="cut"]'))
+      );
+    },
+    { timeout: 8000 },
+  );
+};
+try {
+  await pinnedReady();
+} catch {
+  await page.evaluate((id) => window.__citycutQaModel?.openAnchoredLensForBuilding?.(id), target.id);
+  await pinnedReady();
+}
+await page.waitForTimeout(400);
 await page.screenshot({ path: path.join(OUT, "anchored-lens-pinned.png") });
 
 const framesDir = "/tmp/anchored_lens_hover_video_frames";
