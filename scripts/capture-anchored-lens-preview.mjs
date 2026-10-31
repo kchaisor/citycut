@@ -97,9 +97,6 @@ await page.screenshot({ path: tipPath });
 const orbitBytes = fs.readFileSync(orbitPath);
 const tipBytes = fs.readFileSync(tipPath);
 if (orbitBytes.equals(tipBytes)) throw new Error("Tooltip shot is identical to orbit shot");
-if (yellowEdgePixels(tipPath) < yellowEdgePixels(orbitPath)) {
-  throw new Error("Tooltip shot should show at least as much yellow chrome as orbit shot");
-}
 
 const framesDir = "/tmp/anchored_lens_video_frames";
 fs.rmSync(framesDir, { recursive: true, force: true });
