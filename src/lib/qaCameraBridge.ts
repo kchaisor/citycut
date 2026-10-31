@@ -32,6 +32,20 @@ declare global {
       selectHeightEditBuilding?: (buildingId: number) => number;
       openAnchoredLensForBuilding?: (buildingId: number) => number;
       getAnchoredLensScreenPosition?: () => { x: number; y: number } | null;
+      getAnchoredLensLayout?: () => {
+        width: number;
+        height: number;
+        centerX: number;
+        centerY: number;
+        onScreen: boolean;
+      } | null;
+      findTallBuildingForLensQa?: () => {
+        id: number;
+        clickX: number;
+        clickY: number;
+        height: number;
+        dist: number;
+      } | null;
       /** ~16 m foreground block for selection QA screenshots. */
       pickForegroundBuildingForSelectionQa?: () => number | null;
       frameSelectionBuilding?: (buildingId: number, variant?: "through" | "oblique") => boolean;

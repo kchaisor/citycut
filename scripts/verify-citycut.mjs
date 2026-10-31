@@ -1130,45 +1130,58 @@ async function main() {
     await lensPage.evaluate(async () => {
       await window.__citycutQaModel?.waitForComHeightsApplied?.(120000);
     });
-    await lensPage.waitForTimeout(800);
-    const lensOpenInfo = await lensPage.evaluate(async () => {
-      const id = window.__citycutQaModel?.pickForegroundBuildingForSelectionQa?.() ?? null;
-      return { id };
-    });
+    await lensPage.waitForTimeout(1200);
+    const lensTarget = await lensPage.evaluate(() => window.__citycutQaModel?.findTallBuildingForLensQa?.() ?? null);
+    if (lensTarget) {
+      await lensPage.mouse.click(lensTarget.clickX, lensTarget.clickY);
+    }
     await lensPage.waitForSelector('[data-anchored-lens="open"]', { timeout: 15000 });
-    const lensOpenPos = await lensPage.evaluate(() => {
-      const card = document.querySelector('[data-anchored-lens="open"]');
-      const pos = window.__citycutQaModel?.getAnchoredLensScreenPosition?.() ?? null;
-      return { hasCard: Boolean(card), pos };
+    await lensPage.waitForTimeout(300);
+    const lensOpenInfo = await lensPage.evaluate(() => {
+      const layout = window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null;
+      return {
+        hasCard: Boolean(document.querySelector('[data-anchored-lens="open"]')),
+        layout,
+      };
     });
-    lensOpenInfo.hasCard = lensOpenPos.hasCard;
-    lensOpenInfo.pos = lensOpenPos.pos;
+    lensOpenInfo.id = lensTarget?.id ?? null;
     assertCheck(
       "anchored-lens-open-on-click",
-      "Clicking a building opens the anchored lens card in the 3D view",
-      lensOpenInfo.id != null && lensOpenInfo.hasCard && lensOpenInfo.pos != null,
-      `id=${lensOpenInfo.id}, pos=${JSON.stringify(lensOpenInfo.pos)}`,
+      "Clicking a building opens a legible anchored lens card (>= 220px wide, on screen)",
+      lensOpenInfo.id != null &&
+        lensOpenInfo.hasCard &&
+        lensOpenInfo.layout?.onScreen === true &&
+        (lensOpenInfo.layout?.width ?? 0) >= 220,
+      `id=${lensOpenInfo.id}, layout=${JSON.stringify(lensOpenInfo.layout)}`,
     );
 
-    const lensOrbitInfo = await lensPage.evaluate(async (buildingId) => {
-      if (buildingId == null) return { moved: false, before: null, after: null };
-      window.__citycutQaModel?.frameSelectionBuilding?.(buildingId, "through");
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      const before = window.__citycutQaModel?.getAnchoredLensScreenPosition?.() ?? null;
-      window.__citycutQaModel?.frameSelectionBuilding?.(buildingId, "oblique");
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      await new Promise((r) => setTimeout(r, 120));
-      const after = window.__citycutQaModel?.getAnchoredLensScreenPosition?.() ?? null;
-      const moved =
-        before &&
-        after &&
-        (Math.abs(before.x - after.x) > 6 || Math.abs(before.y - after.y) > 6);
-      return { moved, before, after };
-    }, lensOpenInfo.id);
+    const canvasBox = await lensPage.locator(".model canvas").boundingBox();
+    const beforeOrbit = await lensPage.evaluate(() => window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null);
+    if (canvasBox) {
+      const cx = canvasBox.x + canvasBox.width * 0.55;
+      const cy = canvasBox.y + canvasBox.height * 0.48;
+      await lensPage.mouse.move(cx, cy);
+      await lensPage.mouse.down();
+      await lensPage.mouse.move(cx + 140, cy - 36, { steps: 18 });
+      await lensPage.mouse.up();
+    }
+    await lensPage.waitForTimeout(400);
+    const afterOrbit = await lensPage.evaluate(() => window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null);
+    const lensOrbitInfo = {
+      moved:
+        beforeOrbit &&
+        afterOrbit &&
+        (Math.abs(beforeOrbit.centerX - afterOrbit.centerX) > 8 ||
+          Math.abs(beforeOrbit.centerY - afterOrbit.centerY) > 8),
+      before: beforeOrbit,
+      after: afterOrbit,
+    };
     assertCheck(
       "anchored-lens-follows-camera",
-      "Anchored lens screen position updates when the camera orbits",
-      Boolean(lensOrbitInfo.moved),
+      "Anchored lens screen position updates when the camera orbits and stays legible",
+      Boolean(lensOrbitInfo.moved) &&
+        afterOrbit?.onScreen === true &&
+        (afterOrbit?.width ?? 0) >= 220,
       `before=${JSON.stringify(lensOrbitInfo.before)}, after=${JSON.stringify(lensOrbitInfo.after)}`,
     );
 
@@ -1184,18 +1197,14 @@ async function main() {
       `closed=${lensEscClosed}`,
     );
 
-    await lensPage.evaluate(() => window.__citycutQaModel?.pickForegroundBuildingForSelectionQa?.());
+    if (lensTarget) {
+      await lensPage.mouse.click(lensTarget.clickX, lensTarget.clickY);
+    }
     await lensPage.waitForSelector('[data-anchored-lens="open"]', { timeout: 15000 });
-    await lensPage.evaluate(() => {
-      window.__citycutQa?.setCamera?.({
-        eye: { x: 0, y: 420, z: 420 },
-        target: { x: 0, y: 0, z: 0 },
-      });
-    });
-    await lensPage.waitForTimeout(350);
-    const canvasBox = await lensPage.locator(".model canvas").boundingBox();
-    if (canvasBox) {
-      await lensPage.mouse.click(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2);
+    await lensPage.waitForTimeout(200);
+    const emptyCanvasBox = await lensPage.locator(".model canvas").boundingBox();
+    if (emptyCanvasBox) {
+      await lensPage.mouse.click(emptyCanvasBox.x + 24, emptyCanvasBox.y + 24);
     }
     await lensPage.waitForTimeout(250);
     const lensEmptyClosed = await lensPage.evaluate(
@@ -1208,15 +1217,19 @@ async function main() {
       `closed=${lensEmptyClosed}`,
     );
 
-    await lensPage.evaluate(() => window.__citycutQaModel?.pickForegroundBuildingForSelectionQa?.());
-    await lensPage.waitForTimeout(300);
+    if (lensTarget) {
+      await lensPage.mouse.click(lensTarget.clickX, lensTarget.clickY);
+    }
+    await lensPage.waitForSelector('[data-anchored-lens="open"]', { timeout: 15000 });
+    await lensPage.locator('[data-anchored-lens-action="cut"]').hover();
+    await lensPage.waitForTimeout(350);
     const disabledTooltip = await lensPage.evaluate(() => {
-      const btn = document.querySelector('[data-anchored-lens-action="ripple"]');
+      const btn = document.querySelector('[data-anchored-lens-action="cut"]');
       return btn?.getAttribute("title") ?? "";
     });
     assertCheck(
       "anchored-lens-disabled-tooltip",
-      "Disabled Ripple from here button exposes a Coming soon tooltip",
+      "Disabled Cut here button exposes a Coming soon tooltip",
       disabledTooltip === "Coming soon",
       `title="${disabledTooltip}"`,
     );

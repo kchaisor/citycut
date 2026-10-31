@@ -579,6 +579,18 @@ input[type="range"]::-moz-range-thumb {
 .scene-viewport {
   position: absolute;
   inset: 0;
+  overflow: visible;
+}
+.anchored-lens-host {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 60;
+  pointer-events: none;
+  transform: translate3d(-9999px, -9999px, 0);
+}
+.anchored-lens-host .anchored-lens-card {
+  pointer-events: auto;
 }
 .webgl-lost-overlay {
   position: absolute;
@@ -705,17 +717,18 @@ input[type="range"]::-moz-range-thumb {
 .legend-note { margin: 6px 0 0; color: var(--muted-text); }
 .height-override-panel { margin: 0 0 10px; }
 .anchored-lens-card {
-  min-width: 168px;
-  max-width: 220px;
-  padding: 10px 12px;
+  box-sizing: border-box;
+  width: 240px;
+  min-width: 240px;
+  max-width: 260px;
+  padding: 12px 14px;
   border-radius: 10px;
-  border: 1px solid var(--anchored-lens-edge);
+  border: 2px solid var(--anchored-lens-edge);
   background: var(--anchored-lens-bg);
   color: var(--anchored-lens-text);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.35;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
-  pointer-events: auto;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
 }
 .anchored-lens-metrics {
   display: grid;

@@ -626,10 +626,61 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
         return buildingId;
       },
       getAnchoredLensScreenPosition() {
+        const layout = window.__citycutQaModel?.getAnchoredLensLayout?.();
+        if (!layout) return null;
+        return { x: layout.centerX, y: layout.centerY };
+      },
+      getAnchoredLensLayout() {
         const card = document.querySelector("[data-anchored-lens=\"open\"]");
         if (!card) return null;
         const rect = card.getBoundingClientRect();
-        return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+        const width = Math.round(rect.width);
+        const height = Math.round(rect.height);
+        const centerX = Math.round(rect.left + rect.width / 2);
+        const centerY = Math.round(rect.top + rect.height / 2);
+        const onScreen =
+          width >= 220 &&
+          height >= 96 &&
+          rect.bottom > 72 &&
+          rect.top < window.innerHeight - 48 &&
+          rect.left > 32 &&
+          rect.right < window.innerWidth - 8;
+        return { width, height, centerX, centerY, onScreen };
+      },
+      findTallBuildingForLensQa() {
+        setHeightPick(null);
+        setHideSelection([]);
+        const project = window.__citycutQa?.projectToScreen;
+        const canvas = document.querySelector(".model canvas");
+        if (!project || !canvas) return null;
+        const canvasRect = canvas.getBoundingClientRect();
+        type Candidate = { id: number; clickX: number; clickY: number; height: number; dist: number };
+        const candidates: Candidate[] = [];
+        for (const building of qaDisplayBuildingsRef.current) {
+          if (building.height < 30 || building.use === "outbuilding") continue;
+          const { east, north } = buildingCentroid(building);
+          const z = -north;
+          const pt = project({ x: east, y: building.height * 0.55, z });
+          if (!pt) continue;
+          if (
+            pt.x < canvasRect.left + 100 ||
+            pt.x > canvasRect.right - 100 ||
+            pt.y < canvasRect.top + 100 ||
+            pt.y > canvasRect.bottom - 100
+          ) {
+            continue;
+          }
+          candidates.push({
+            id: building.id,
+            clickX: Math.round(pt.x),
+            clickY: Math.round(pt.y),
+            height: building.height,
+            dist: Math.hypot(east, north),
+          });
+        }
+        candidates.sort((a, b) => b.height - a.height || a.dist - b.dist);
+        const pick = candidates[0];
+        return pick ?? null;
       },
       pickForegroundBuildingForSelectionQa() {
         const candidates = qaDisplayBuildingsRef.current
@@ -663,7 +714,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
         setHeightPick(null);
       },
       pickTallTowerForSelectionQa() {
-        const candidates = model.buildings
+        const candidates = qaDisplayBuildingsRef.current
           .filter((building) => building.height >= 40 && building.use !== "outbuilding")
           .map((building) => {
             const { east, north } = buildingCentroid(building);

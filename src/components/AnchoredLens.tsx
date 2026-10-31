@@ -1,5 +1,7 @@
-import { Html } from "@react-three/drei";
-import { useMemo } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import * as THREE from "three";
 import { effectiveBuildingHeightM } from "../lib/buildingHeightResolve";
 import { buildingRoofAnchor } from "../lib/buildingRoofAnchor";
 import {
@@ -97,10 +99,39 @@ export function AnchoredLens3D({
   sunHoursGrid: SunHoursGrid | null;
   actions: AnchoredLensActions;
 }) {
-  const position = useMemo(() => buildingRoofAnchor(model, building), [model, building]);
-  return (
-    <Html position={position} center distanceFactor={18} zIndexRange={[80, 0]} transform={false} sprite={false}>
+  const hostRef = useRef<HTMLDivElement>(null);
+  const { camera, size, gl } = useThree();
+  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+  const world = useMemo(() => buildingRoofAnchor(model, building), [model, building]);
+  const scratch = useMemo(() => new THREE.Vector3(), []);
+
+  useEffect(() => {
+    setPortalRoot(gl.domElement.closest(".scene-viewport") as HTMLElement | null);
+  }, [gl]);
+
+  useFrame(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    scratch.copy(world);
+    scratch.project(camera);
+    if (scratch.z > 1) {
+      host.dataset.anchoredLensVisible = "0";
+      host.style.visibility = "hidden";
+      return;
+    }
+    host.dataset.anchoredLensVisible = "1";
+    host.style.visibility = "visible";
+    const x = (scratch.x * 0.5 + 0.5) * size.width;
+    const y = (-scratch.y * 0.5 + 0.5) * size.height;
+    host.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) translate(-50%, calc(-100% - 12px))`;
+  });
+
+  if (!portalRoot) return null;
+
+  return createPortal(
+    <div ref={hostRef} className="anchored-lens-host">
       <AnchoredLensCard building={building} model={model} sunHoursGrid={sunHoursGrid} actions={actions} />
-    </Html>
+    </div>,
+    portalRoot,
   );
 }
