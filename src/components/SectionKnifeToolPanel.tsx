@@ -32,17 +32,9 @@ export function SectionKnifeToolPanel({
       </button>
       {tool.active && (
         <>
-          <div className="style-seg seg-mini section-knife-display" role="group" aria-label="Section display">
-            <button type="button" className="style-btn active" aria-pressed>
-              Wireframe
-            </button>
-            <button type="button" className="style-btn" disabled aria-disabled>
-              Solid
-            </button>
-            <button type="button" className="style-btn" disabled aria-disabled>
-              Shaded
-            </button>
-          </div>
+          <p className="field-note section-knife-mode-note">
+            Near side stays shaded; far side draws as light building ink. Cut faces show black poché with floor lines.
+          </p>
           <div className="sidebar-gh">
             <h3 className="card-title">Sections</h3>
           </div>

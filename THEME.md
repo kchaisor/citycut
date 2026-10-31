@@ -290,6 +290,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--section-knife-floor-line` | `#FFFFFF` | Section Knife: floor-slab lines on cap faces. |
 | `--section-knife-plane` | `#FFFFFF` | Section Knife: translucent cutting plane gizmo. |
 | `--section-knife-elevation-fill` | `#C8C8C8` | Section Knife: terrain fill in the live section panel. |
+| `--section-knife-elevation-sky` | `#F5F5F2` | Section Knife: background of the live section panel chart. |
 
 The contour lines in Rhino use the pen `--contour-stroke` from `src/drawing-style.css`, not a fill.
 

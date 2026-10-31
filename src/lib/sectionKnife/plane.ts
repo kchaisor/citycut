@@ -5,8 +5,8 @@ export type SectionKnifePose = {
   offsetM: number;
 };
 
-export function defaultSectionKnifePose(sideM: number): SectionKnifePose {
-  return { angleRad: 0, offsetM: sideM * 0.08 };
+export function defaultSectionKnifePose(_sideM: number): SectionKnifePose {
+  return { angleRad: 0.55, offsetM: 0 };
 }
 
 export function knifeNormalXZ(pose: SectionKnifePose): THREE.Vector3 {
