@@ -40,8 +40,12 @@ import {
   applyBuildingSolarNeutral,
   snapshotBuildingViewportColors,
   withBuildingExportColours,
+  reliabilityColourFade,
+  stepColourFade,
   type BuildingColourMode,
+  type ColourFade,
 } from "../lib/buildingViewportColor";
+import { uniformBuildingColor } from "../lib/buildingUse";
 import {
   applySunStudySurfaceTint,
   refreshSceneSurfaceColors,
@@ -92,6 +96,7 @@ import { SunHoursLayer } from "./SunHoursLayer";
 
 /** Hours-of-sun heatmap: later phase. Code kept, no UI; flip to preview. */
 const SUN_HOURS_HEATMAP_ENABLED = false;
+const RELIABILITY_FADE_SEC = 0.45;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
 import { WindStaticArrows, WindStreaks } from "./WindStreaks";
 import { analyzeWindPeriod, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
@@ -306,6 +311,7 @@ function City({
   model,
   uniformBuildings,
   colourBySource,
+  colourByReliability,
   highlightManual,
   solarDiagramOn,
   solarNeutralFill,
@@ -320,6 +326,7 @@ function City({
   model: CityModel;
   uniformBuildings: boolean;
   colourBySource: boolean;
+  colourByReliability: boolean;
   highlightManual: boolean;
   solarDiagramOn: boolean;
   solarNeutralFill: string;
@@ -336,15 +343,16 @@ function City({
   const colourTick = useColourRevision();
   const colourMode = useMemo<BuildingColourMode>(
     () => ({
-      colourByUse: !uniformBuildings && !colourBySource,
+      colourByUse: !uniformBuildings && !colourBySource && !colourByReliability,
       uniformBuildings,
       colourBySource,
+      colourByReliability,
     }),
-    [uniformBuildings, colourBySource],
+    [uniformBuildings, colourBySource, colourByReliability],
   );
   const group = useMemo(() => {
     const introStagger = shouldRunIntroTransition();
-    const city = buildCityGroup(model, { uniformBuildings, colourBySource, highlightManual, introStagger });
+    const city = buildCityGroup(model, { uniformBuildings, colourBySource, colourByReliability, highlightManual, introStagger });
     const plinth = city.getObjectByName("BasePlinth");
     const ground = city.getObjectByName("Ground");
     if (plinth && plinth instanceof THREE.Mesh && plinth.userData.plinthEdgePositions instanceof Float32Array) {
@@ -403,6 +411,7 @@ function City({
     model.nswRoadSurface,
     uniformBuildings,
     colourBySource,
+    colourByReliability,
     highlightManual,
   ]);
   useLayoutEffect(() => {
@@ -665,6 +674,7 @@ function City({
     }
   });
   const invalidate = useThree((state) => state.invalidate);
+  const reliabilityFadeRef = useRef<{ fade: ColourFade; elapsed: number } | null>(null);
   useLayoutEffect(() => {
     refreshSceneSurfaceColors(group);
     snapshotBuildingViewportColors(group, colourMode);
@@ -673,8 +683,24 @@ function City({
     applySunStudySurfaceTint(group, false);
     applyBuildingSolarNeutral(group, false, solarNeutralFill);
     applyWhiteCardTint(group, display.whiteCard);
+    if (colourByReliability && !display.whiteCard && !solarDiagramOn) {
+      reliabilityFadeRef.current = { fade: reliabilityColourFade(group, uniformBuildingColor()), elapsed: 0 };
+      stepColourFade(reliabilityFadeRef.current.fade, 0);
+    } else {
+      reliabilityFadeRef.current = null;
+    }
     invalidate();
-  }, [group, colourMode, solarDiagramOn, solarNeutralFill, colourTick, display.whiteCard, invalidate]);
+  }, [group, colourMode, colourByReliability, solarDiagramOn, solarNeutralFill, colourTick, display.whiteCard, invalidate]);
+  useFrame((state, delta) => {
+    const current = reliabilityFadeRef.current;
+    if (!current) return;
+    current.elapsed += delta;
+    const progress = current.elapsed / RELIABILITY_FADE_SEC;
+    stepColourFade(current.fade, progress);
+    state.gl.domElement.dataset.reliabilityFade = Math.min(1, progress).toFixed(2);
+    if (progress >= 1) reliabilityFadeRef.current = null;
+    state.invalidate();
+  });
   const buildingsVisible = isLayer3dVisible(display, "buildings");
   const roadsVisible = isLayer3dVisible(display, "roads");
   const footpathsVisible = isLayer3dVisible(display, "footpaths");
@@ -1828,6 +1854,7 @@ export function Scene3D({
   model,
   uniformBuildings,
   colourBySource,
+  colourByReliability = false,
   showManualEdits,
   projection,
   corner,
@@ -1852,6 +1879,7 @@ export function Scene3D({
   model: CityModel;
   uniformBuildings: boolean;
   colourBySource: boolean;
+  colourByReliability?: boolean;
   showManualEdits: boolean;
   projection: ProjectionMode;
   corner: IsoCorner;
@@ -1966,6 +1994,7 @@ export function Scene3D({
         model={model}
         uniformBuildings={uniformBuildings}
         colourBySource={colourBySource}
+        colourByReliability={colourByReliability}
         highlightManual={showManualEdits && model.manualHeightEditCount !== undefined && model.manualHeightEditCount > 0}
         solarDiagramOn={solar.showPath}
         solarNeutralFill={solarNeutralFill}

@@ -148,6 +148,10 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--block-plan` | `#D4D4D4` | City blocks on the site plan (not the `#EBEBEB` paper). |
 | `--source-zone` | `#A9C4DE` | Buildings whose use was inferred from a planning zone, and that legend swatch. |
 | `--source-none` | `#B8B8B8` | Buildings with no tag and no zone, and that legend swatch. |
+| `--reliability-measured` | `#2E6B4F` | Reliability style, matching `--height-measured`: measured heights (CoM 2023, LiDAR), 3D, plan, legend, and Rhino layer. |
+| `--reliability-recorded` | `#3D5A73` | Reliability style, matching `--height-overture`: recorded levels or height tags (Overture, OSM, CoM development floors). |
+| `--reliability-estimated` | `#7D7D7D` | Reliability style, matching `--height-estimate`: estimated heights (zone default, unmatched source), hatched. |
+| `--reliability-manual` | `#D4A017` | Reliability style, matching `--height-manual`: manual height edits. |
 | `--road-fill` | `#4A4A4A` | Unioned carriageway on the site plan and the figure-ground, on screen and in the Illustrator file. |
 | `--path-fill` | `#D2B48C` | Unioned footpath on the site plan and the figure-ground, on screen and in the Illustrator file. |
 | `--road-arterial` | `#3a3a3a` | Arterial ribbons in the 3D view and the 3D-view Illustrator file, and the Rhino Roads layer. |

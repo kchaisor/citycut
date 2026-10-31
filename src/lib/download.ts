@@ -64,6 +64,7 @@ export type RhinoDownloadOptions = {
   castShadows?: boolean;
   uniformBuildings?: boolean;
   colourBySource?: boolean;
+  colourByReliability?: boolean;
   wind?: { table: import("./windRose").WindRoseTable; period: import("./windRose").WindPeriodId } | null;
   hideTrees?: boolean;
   importedMassing?: import("./rhinoExport").ImportedMassingExport[] | null;

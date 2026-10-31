@@ -1,3 +1,4 @@
+import { buildingHeightReliability } from "./heightReliability";
 import * as THREE from "three";
 import type { CityModel } from "../types";
 import { SELECTED_BUILDING_FILL_OPACITY, buildHeightEditOverlay, disposeObject } from "./buildCity";
@@ -16,7 +17,7 @@ export type SelectedBuildingVisual = {
 };
 
 function fillForBuilding(colourMode: BuildingColourMode, building: CityModel["buildings"][number]): string {
-  return buildingViewportFill(colourMode, building.use, building.source);
+  return buildingViewportFill(colourMode, building.use, building.source, buildingHeightReliability(building));
 }
 
 /**

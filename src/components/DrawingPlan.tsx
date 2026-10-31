@@ -74,6 +74,7 @@ export function DrawingPlan({
   shadowInput = null,
   uniformBuildings = false,
   colourBySource = false,
+  colourByReliability = false,
   highlightManual = false,
   viewport,
   onViewportChange,
@@ -97,6 +98,7 @@ export function DrawingPlan({
   shadowInput?: PlanShadowInput | null;
   uniformBuildings?: boolean;
   colourBySource?: boolean;
+  colourByReliability?: boolean;
   highlightManual?: boolean;
   viewport?: PlanViewport;
   onViewportChange?: (view: PlanViewport) => void;
@@ -131,6 +133,7 @@ export function DrawingPlan({
             colourByUse: !uniformBuildings && !colourBySource,
             uniformBuildings,
             colourBySource,
+            colourByReliability,
           },
           highlightManual,
           pathFilletM: style.pathFilletM,
@@ -145,6 +148,7 @@ export function DrawingPlan({
       planScale,
       uniformBuildings,
       colourBySource,
+      colourByReliability,
       highlightManual,
       style.pathFilletM,
       colourTick,

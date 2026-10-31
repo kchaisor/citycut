@@ -254,6 +254,7 @@ export type SitePlanExportOptions = {
   uniformBuildings?: boolean;
   highlightManual?: boolean;
   colourBySource?: boolean;
+  colourByReliability?: boolean;
   wind?: { table: import("./windRose").WindRoseTable; period: import("./windRose").WindPeriodId } | null;
   /**
    * Sun study: one shadow layer per hour ("Shadow 09:00" …), each at the study opacity, in place
@@ -322,6 +323,7 @@ export function sitePlanChunks(
   const layout = layoutSheet(model.sideM, scale);
   const uniformBuildings = Boolean(resolved.uniformBuildings);
   const colourBySource = Boolean(resolved.colourBySource);
+  const colourByReliability = Boolean(resolved.colourByReliability);
   const highlightManual = Boolean(resolved.highlightManual);
   const plan = planPaths(
     model,
@@ -335,6 +337,7 @@ export function sitePlanChunks(
         colourByUse: !uniformBuildings && !colourBySource,
         uniformBuildings,
         colourBySource,
+        colourByReliability,
       },
       highlightManual,
       pathFilletM: style.pathFilletM,

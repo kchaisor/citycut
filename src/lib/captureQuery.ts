@@ -2,6 +2,7 @@
 
 export type CapturePreset = {
   uniformBuildings: boolean;
+  reliabilityBuildings: boolean;
   solarPath: boolean;
 };
 
@@ -9,6 +10,7 @@ export function capturePresetFromSearch(search: string): CapturePreset {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   return {
     uniformBuildings: params.get("buildings") === "uniform",
+    reliabilityBuildings: params.get("buildings") === "reliability",
     solarPath: params.get("solar") === "path",
   };
 }

@@ -4286,3 +4286,111 @@ body,
   line-height: 1.35 !important;
   color: var(--hud-muted-2) !important;
 }
+
+.model .left-outliner .style-seg.seg-mini {
+  display: flex !important;
+}
+
+.model .left-outliner .style-seg.seg-mini .style-btn {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  white-space: nowrap !important;
+}
+
+.reliability-legend {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.reliability-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-family: var(--sans);
+  font-size: 10px;
+}
+
+.reliability-title {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.reliability-pct {
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.reliability-bar {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  gap: 1px;
+}
+
+.reliability-seg {
+  flex-basis: 0;
+  min-width: 2px;
+  transition: flex-grow 320ms ease, background-color 320ms ease;
+}
+
+.reliability-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.reliability-rows li {
+  display: grid;
+  grid-template-columns: 8px auto 1fr auto;
+  gap: 6px;
+  align-items: center;
+  font-family: var(--sans);
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+
+.reliability-label {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.reliability-detail {
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reliability-rows b {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.reliability-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.reliability-dot.hatch,
+.reliability-seg.hatch {
+  background-image: repeating-linear-gradient(-45deg, var(--panel-bg) 0 1.5px, transparent 1.5px 3.5px);
+}
+
+.reliability-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+}
