@@ -54,7 +54,6 @@ function waitForServer(url, timeoutMs = 25000) {
           return;
         }
       } catch {
-        // retry
       }
       if (Date.now() - start > timeoutMs) {
         reject(new Error(`Timed out waiting for Vite server at ${url}`));
@@ -123,7 +122,6 @@ async function main() {
           JSON.stringify({ projection: "iso", corner: "sw", freeRotate: false }),
         );
       } catch {
-        // ignore
       }
     });
     const page = await context.newPage();
@@ -138,9 +136,6 @@ async function main() {
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(800);
 
-    // -------------------------------------------------------------------------
-    // BEAT 1: Landing Screen
-    // -------------------------------------------------------------------------
     const beat1Info = await page.evaluate(() => {
       const cta = document.querySelector("button.create-fab");
       const frame = document.querySelector(".select .frame");
@@ -176,7 +171,6 @@ async function main() {
       `cta="${beat1Info.ctaText}", frame=${JSON.stringify(beat1Info.frameRect)}, ratio=${beat1Info.frameRatio?.toFixed(3)}, singlePill=${beat1Info.frameLabelDisplay === "none" && beat1Info.frameCadTagVisible}`,
     );
 
-    // Install zero-blank-frame handoff & Phase B synchronised progress/fade monitor before clicking Create model
     await page.evaluate(() => {
       window.__citycutHandoffMonitor = {
         blankFrames: 0,
@@ -233,7 +227,6 @@ async function main() {
           };
         }
         if (mon.introStartFired) {
-          // Boundary (moving dashed perimeter) effective opacity = product of its own + ancestor opacities
           const perim = document.querySelector(".select .frame-loop-perimeter");
           let eff = 0;
           if (perim) {
@@ -293,9 +286,6 @@ async function main() {
       requestAnimationFrame(checkHandoff);
     });
 
-    // -------------------------------------------------------------------------
-    // PHASE A (BEAT 2): Silent Background Load (2D Screen Untouched, No Fading Yet)
-    // -------------------------------------------------------------------------
     await page.click("button.create-fab");
     await page.waitForTimeout(180);
 
@@ -417,9 +407,6 @@ async function main() {
       `isProcessingPhaseA=${beat2Info.isProcessingPhaseA}, frameSizeDelta=${frameSizeDelta}px, perimSizeDelta=${perimSizeDelta}px, inset=${beat2Info.perimeterInsetTop}, edges2px=${beat2Info.edges2px}, tracksGpuAnimated=${beat2Info.tracksGpuAnimated}, borderTransparent=${beat2Info.frameBorderTransparent}`,
     );
 
-    // -------------------------------------------------------------------------
-    // PHASE B (BEAT 3): Synchronised 0%->100% Progress + 1->0 Background Fade + 3D Shift & Geometry Wave
-    // -------------------------------------------------------------------------
     try {
       await page.waitForFunction(
         () => {
@@ -450,7 +437,6 @@ async function main() {
       throw e;
     }
 
-    // Pause intro clock immediately after Phase B starts to inspect Frame 1 & handoff latency
     await page.evaluate(() => {
       window.__citycutIntroPaused = true;
     });
@@ -529,9 +515,6 @@ async function main() {
       `blankFrames=${beat3Start.handoff.blankFrames}, latency=${beat3Start.handoffLatencyMs.toFixed(1)}ms, pillOpacity=${beat3Start.bridgePillOpacity}, startPct=${beat3Start.bridgePillPct}%, startUnderlayOpacity=${beat3Start.underlayOpacity.toFixed(3)}, phaseBTracksAnimating=${beat3Start.phaseBTracksAnimating}, borderTransparent=${beat3Start.phaseBFrameBorderTransparent}, polar=${beat3Start.polar}, radius=${beat3Start.radius}m`,
     );
 
-    // Poll Phase B (0s -> 2.1s) for:
-    //   1) beat3WaveSample: elapsed in [0.63, 1.08], bldgInner > 0.35, bldgOuter < 0.18, treeScale < 0.05, underlayOpacity in [0.55, 0.90]
-    //   2) beat3TreeSample: elapsed in [1.42, 3.08], treeScale > 1.04 (bouncy overshoot!)
     let beat3WaveSample = null;
     let beat3TreeSample = null;
     let maxObservedTreeScale = 0;
@@ -628,7 +611,6 @@ async function main() {
         if (diff > maxStep) maxStep = diff;
       }
       const distinctIntermediate = new Set(samples.filter((v) => v > 0 && v < 100)).size;
-      // Verify that underlayOpacity tracks the late-tail curve (1 - min(1, (pct/100) * 3500/3300)^1.65, reaching 0 200ms early) closely across all captured pairs
       let maxSyncDrift = 0;
       for (const pair of mon.syncPairs) {
         const expectedOpacity = 1 - Math.pow(Math.min(1, (pair.pct / 100) * (3500 / 3300)), 1.65);
@@ -740,9 +722,6 @@ async function main() {
         : `did not capture tree bounce sample (maxObservedTreeScale=${maxObservedTreeScale.toFixed(3)})`,
     );
 
-    // -------------------------------------------------------------------------
-    // BEAT 4: Settled 3D View at 100% + Studio HUD Slide-In
-    // -------------------------------------------------------------------------
     await page.waitForTimeout(150);
     await page.screenshot({ path: path.join(TMP_FRAMES_DIR, "frame_07.png") });
     await page.waitForTimeout(650);
@@ -1133,9 +1112,6 @@ async function main() {
       `resetBtn=[3d:${display3dOutlinerInfo.has3dResetBtn},drawing:${displayDrawingOutlinerInfo.hasDrawingResetBtn}], edit->reset=[${display3dOutlinerInfo.editedResCss}->${display3dOutlinerInfo.resetResCss}], 3dRows=[${display3dOutlinerInfo.rowLabels.join(", ")}]`,
     );
 
-    // -------------------------------------------------------------------------
-    // DRAWING -> SITE PLAN: 9-3PM PLAN FAN & SELECTED BUILDING SHADOW ISOLATION
-    // -------------------------------------------------------------------------
     await analysisBtn.click();
     await page.waitForTimeout(300);
 
@@ -1221,10 +1197,6 @@ async function main() {
       `3dDomeInDrawing=${beforeSelectInfo.has3dSunDomeInDrawing}, planFanInDrawing=${beforeSelectInfo.hasPlanFanInDrawing}, selectedCount=${afterSelectInfo.selectedCount}, shadowDLength=${beforeSelectInfo.shadowDLength}->${afterSelectInfo.shadowDLength}, layers=${afterSelectInfo.nonEmptyLayers}`,
     );
 
-    // -------------------------------------------------------------------------
-    // TONE CONTINUITY: luminance inside the dashed cut box must not step up across the
-    // select -> Phase A -> handoff -> early Phase B tilt (fresh page, 1440x900 @1x)
-    // -------------------------------------------------------------------------
     {
       const toneCtx = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, reducedMotion: "no-preference" });
       await toneCtx.addInitScript(() => {
@@ -1246,7 +1218,6 @@ async function main() {
       const outerLum = async () =>
         ((await regionLum({ x: 40, y: 250, width: 360, height: 400 })) +
           (await regionLum({ x: 1040, y: 250, width: 360, height: 400 }))) / 2;
-      // Strictly inside the dashed cut boundary: frame rect inset 8px so the 2px dash strips are excluded.
       let innerClip = null;
       const innerLum = async () => {
         const r = await tonePage.evaluate(() => {
@@ -1294,10 +1265,6 @@ async function main() {
       );
     }
 
-    // -------------------------------------------------------------------------
-    // NO SEPARATE INNER PLAN: shortly after tilt start (~0.2s+), the 2D cut window must
-    // carry the same veil as the map around it and the yellow 3D cut ring must be gone.
-    // -------------------------------------------------------------------------
     {
       const ipCtx = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, reducedMotion: "no-preference" });
       await ipCtx.addInitScript(() => {
@@ -1327,7 +1294,6 @@ async function main() {
           ringOpacity: ring === undefined ? 1 : Number(ring),
         };
       });
-      // Underlay alone: hide the 3D canvas so the 2D plan layer is measured on its own.
       await ipPage.evaluate(() => {
         const m = document.querySelector(".model");
         if (m) m.style.visibility = "hidden";
@@ -1343,7 +1309,6 @@ async function main() {
       if (ipInfo.rect) {
         const { x, y, width, height } = ipInfo.rect;
         innerL = await ipLum({ x: Math.round(x + 8), y: Math.round(y + 8), width: Math.round(width - 16), height: Math.round(height - 16) });
-        // Same-height bands just outside the cut on both sides.
         const band = 120;
         outerL =
           ((await ipLum({ x: Math.max(0, Math.round(x - 8 - band)), y: Math.round(y + 8), width: band, height: Math.round(height - 16) })) +
@@ -1359,9 +1324,6 @@ async function main() {
       );
     }
 
-    // -------------------------------------------------------------------------
-    // GENERATE 8-FRAME CONTACT SHEET + LIVE TRANSITION MP4 VIDEO
-    // -------------------------------------------------------------------------
     if (fs.existsSync(ARTIFACTS_DIR)) {
       const contactSheetOut = path.join(ARTIFACTS_DIR, "pr164-v17-transition-contact-sheet.png");
       execFileSync("ffmpeg", [
@@ -1381,14 +1343,14 @@ async function main() {
 
       let vIdx = 0;
       const frameRepeats = [
-        ["frame_01.png", 14], // Beat 1: Landing (0.56s)
-        ["frame_02.png", 14], // Phase A: Silent background load — 2D screen untouched (0.56s)
-        ["frame_03.png", 10], // Phase B start (0%): Loading bar appears at 0%, 3D ready (0.40s)
-        ["frame_04.png", 8],  // Phase B early: 2D background begins fading + camera starts tilting (0.32s)
-        ["frame_05.png", 14], // Phase B mid (Beat 3A): Center-out radial building wave + 2D mid-fade (0.56s)
-        ["frame_06.png", 14], // Phase B late (Beat 3B): Delayed bouncy tree pop-up wave (0.56s)
-        ["frame_07.png", 10], // Beat 4a (100%): 2D background faded to 0, HUD sliding in (0.40s)
-        ["frame_08.png", 20], // Beat 4b: Settled 3D perspective + full Studio HUD (0.80s)
+        ["frame_01.png", 14],
+        ["frame_02.png", 14],
+        ["frame_03.png", 10],
+        ["frame_04.png", 8],
+        ["frame_05.png", 14],
+        ["frame_06.png", 14],
+        ["frame_07.png", 10],
+        ["frame_08.png", 20],
       ];
       for (const [fName, count] of frameRepeats) {
         const src = path.join(TMP_FRAMES_DIR, fName);

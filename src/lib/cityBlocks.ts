@@ -56,7 +56,6 @@ function multiToAreas(multi: Multi, startId: number): AreaFeat[] {
   return areas;
 }
 
-/** Road-enclosed parcels: site frame minus carriageways/paths/rail, minus water and green. */
 export function computeCityBlocks(model: Pick<CityModel, "roads" | "areas" | "sideM" | "frameShape">): AreaFeat[] {
   const sideM = model.sideM;
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;

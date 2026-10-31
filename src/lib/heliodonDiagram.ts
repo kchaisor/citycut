@@ -10,13 +10,10 @@ import {
 } from "./solar";
 import type { Pt } from "../types";
 
-/** Sun-path diagram radius on drawings: fraction of the square frame side (not ground metres at 3D scale). */
 export const HELIODON_DIAGRAM_RADIUS_FRACTION = 0.45;
 
-/** Smallest 2D dial radius as a fraction of the frame side (legibility floor). */
 export const HELIODON_DIAGRAM_RADIUS_MIN_FRACTION = 0.12;
 
-/** 2D plan dial radius; default slider value matches the historical 0.45 × side look. */
 export function heliodonDiagramRadiusM(
   sideM: number,
   radiusFactor = HELIODON_RADIUS_FACTOR_DEFAULT,
@@ -27,7 +24,6 @@ export function heliodonDiagramRadiusM(
   return Math.max(min, scaled);
 }
 
-/** ~6.5 pt on paper at `planScale`, in plan viewBox metres. */
 export function heliodonLabelFontMetres(planScale: number, pt = 6.5): number {
   const mm = (pt * 25.4) / 72;
   return (mm / 1000) * planScale;
@@ -218,7 +214,6 @@ export function buildHeliodonDiagramOverlay(input: HeliodonDiagramInput): Heliod
 
 export type HeliodonDiagramExportOptions = HeliodonDiagramInput;
 
-/** Rhino / 3D-scale export in ground metres. */
 export type HeliodonGroundExportOptions = HeliodonDiagramInput & { radiusFactor: number };
 
 export function buildHeliodonGroundOverlay(input: HeliodonGroundExportOptions): HeliodonDiagramOverlay {

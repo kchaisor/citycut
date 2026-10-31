@@ -15,13 +15,10 @@ type NominatimRow = GeocoderRow & {
   boundingbox?: string[];
 };
 
-/** Identifies the app. Browsers strip User-Agent and send Referer instead. */
 export const NOMINATIM_USER_AGENT = "CityCut/0.1 (https://kchaisor.github.io/citycut/)";
 
-/** Nominatim's usage policy: at most one request per second. */
 export const NOMINATIM_MIN_INTERVAL_MS = 1000;
 
-/** Reverse lookup stays at suburb level. */
 export const REVERSE_ZOOM = 14;
 
 const localityCache = new Map<string, string>();
@@ -59,7 +56,6 @@ function abortError(): Error {
   return error;
 }
 
-/** Reserves the next Nominatim slot so search and reverse share one request per second. */
 export function waitForNominatim(signal?: AbortSignal): Promise<void> {
   const now = Date.now();
   const start = Math.max(now, nextSlot);
@@ -138,10 +134,6 @@ async function fetchLocality(lat: number, lon: number, signal?: AbortSignal): Pr
   return (row.address && formatLocality(row.address)) || coordinateLabel(lat, lon);
 }
 
-/**
- * Suburb or locality for a cut centre. Cached by lat/lon rounded to 4 decimals.
- * A failed lookup throws so the caller can show coordinates.
- */
 export function reverseLocality(lat: number, lon: number, signal?: AbortSignal): Promise<string> {
   const key = localityCacheKey(lat, lon);
   const cached = localityCache.get(key);

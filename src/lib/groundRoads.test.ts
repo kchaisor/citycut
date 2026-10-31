@@ -90,7 +90,6 @@ describe("ground split into Roads + Remaining", () => {
       expect(roadMeshes.length).toBeGreaterThan(0);
       expect(roadMeshes.every((r) => r.userData.exportLayer === GROUND_ROADS_LAYER)).toBe(true);
       expect(group.getObjectByName("Water")).toBeTruthy();
-      // Remaining area covers the building footprint (not cut out).
       const pos = terrain.geometry.getAttribute("position");
       let area = 0;
       for (let i = 0; i < pos.count; i += 3) {

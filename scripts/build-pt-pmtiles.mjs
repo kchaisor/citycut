@@ -55,7 +55,6 @@ async function download(url, dest) {
   await pipeline(Readable.fromWeb(response.body), createWriteStream(dest));
 }
 
-/** Resolve current lines/stops URLs (dataset API, else known-good fallback). */
 async function resolveCandidates() {
   const { found, error } = await lookupPtResources();
   if (error) console.warn(`PT dataset lookup: ${error}. Falling back to known-good resource ids where needed.`);
@@ -107,7 +106,6 @@ async function main() {
   const linesCache = `${CACHE}/lines.geojson`;
   const stopsCache = `${CACHE}/stops.geojson`;
   if (process.argv.includes("--resolve-only")) {
-    // Resolve and range-check both URLs without downloading (~380 MB) or running tippecanoe.
     const candidates = await resolveCandidates();
     for (const kind of ["lines", "stops"]) {
       const used = await useFirstWorking(kind, candidates[kind], (url) => probeUrl(url));

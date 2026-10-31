@@ -20,15 +20,10 @@ import { clipTrianglesToTerrainGrid, terrainMeshHeight } from "./terrainDrape";
 import type { AreaFeat, BuildingFeat, BuildingUse, CityModel, Pt, Ring, RoadGrade, TerrainField } from "../types";
 
 export type CityBuildOptions = {
-  /** Viewport only. Exports keep one material, and one Rhino sublayer, per use. */
   uniformBuildings?: boolean;
-  /** Viewport only. Recolour by typology source. Inferred tiers are hatched. */
   colourBySource?: boolean;
-  /** One mesh per building so a Rhino object can carry use and typology_source. */
   splitBuildings?: boolean;
-  /** Viewport only. Manual-height buildings render in the manual tint when on. */
   highlightManual?: boolean;
-  /** Viewport intro animation: partition buildings (24 radial buckets) and trees (16 buckets) for staggered pop-up. */
   introStagger?: boolean;
 };
 
@@ -199,7 +194,6 @@ function drapedRingGeometry(
   return drapedAreaGeometry(area, sample, offset, spacing, grid);
 }
 
-/** Unioned road or path fill, draped on the terrain heightfield. */
 export function drapedMultiPolygonGeometry(
   multi: MultiPolygon,
   sample: (east: number, north: number) => number,
@@ -233,14 +227,8 @@ function roadFillGeometry(
   return drapedMultiPolygonGeometry(multi, heightAt, lift, step, grid);
 }
 
-/** The rendered terrain mesh a ground layer drapes onto. */
 export type TerrainGrid = { field: TerrainField; sideM: number };
 
-/**
- * Parks, water, blocks and roads keep their outline and follow the heightfield. With the terrain
- * grid, triangles are cut along the mesh's grid lines and diagonals and lifted off the exact mesh
- * height, so no piece can dip below the terrain. Without it, the old spacing subdivision applies.
- */
 export function drapedAreaGeometry(
   area: AreaFeat,
   sample: (east: number, north: number) => number,
@@ -280,7 +268,6 @@ export function drapedAreaGeometry(
 
 const stripeMaps = new Map<string, THREE.CanvasTexture | null>();
 
-/** Diagonal stripes so a zone colour reads as a guess. */
 function inferredStripeMap(): THREE.CanvasTexture | null {
   const paper = getColour("--hatch-paper");
   const ink = getColour("--hatch-ink");
@@ -326,12 +313,10 @@ function paint(material: THREE.MeshStandardMaterial, layer: { polygonOffsetFacto
   return material;
 }
 
-/** Draped fills already sit above the heightfield; negative offset pulls them through the terrain. */
 function drapeLayer(layer: { lift: number; polygonOffsetFactor: number; polygonOffsetUnits: number; renderOrder: number }) {
   return { ...layer, polygonOffsetFactor: 0, polygonOffsetUnits: 0 };
 }
 
-/** Draped water keeps a small lift and polygon offset so lakes do not z-fight the terrain mesh. */
 function drapedWaterLayer() {
   return {
     ...SURFACE.water,
@@ -349,12 +334,6 @@ function extrudeShape(shape: THREE.Shape, height: number, base: number): THREE.B
   return layFlat(geometry, base);
 }
 
-/**
- * One extruded building part as the .3dm export rebuilds it: outline and courtyards in the
- * cut's local east/north metres, and the absolute base (terrain + lift + part base) in metres.
- * Stored on the part's geometry (and on merged meshes) so Rhino gets the same outlines,
- * heights and base as the mesh.
- */
 export type ExtrusionPartRecord = { ring: Ring; holes: Ring[]; height: number; base: number };
 
 export function extrudePart(ring: Ring, holes: Ring[], height: number, base: number): THREE.BufferGeometry | null {
@@ -466,7 +445,6 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const sample = elevationAt(model);
   const terrainGrid: TerrainGrid | null = model.terrain ? { field: model.terrain, sideM: model.sideM } : null;
-  // With terrain the ground is two draped surfaces that tile the cut: roads and the rest.
   const groundSplit = model.terrain && frameShape === "square" ? groundRoadPartition(model) : null;
   if (model.terrain && groundSplit) {
     const field = model.terrain;
@@ -477,7 +455,6 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     if (remaining) {
       const material = paint(matteStandardMaterial({ vertexColors: true, side: THREE.DoubleSide }), SURFACE.terrain);
       const mesh = new THREE.Mesh(remaining, material);
-      // Viewport modes (white card, sun study, edges) key on "Terrain"; exports use the layer.
       mesh.name = "Terrain";
       mesh.userData.exportLayer = GROUND_REMAINING_LAYER;
       order(mesh, SURFACE.terrain.renderOrder);
@@ -528,7 +505,6 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
         const geometry = drapedAreaGeometry(area, sample, lift, model.terrain.spacingM, terrainGrid);
         if (geometry) blockGeos.push(geometry);
       } catch {
-        /* skip */
       }
       continue;
     }
@@ -537,7 +513,6 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     try {
       blockGeos.push(layFlat(new THREE.ShapeGeometry(shape), lift));
     } catch {
-      /* skip */
     }
   }
   const blockMesh = mergeMeshes(blockGeos, blockMat, "Blocks");
@@ -565,7 +540,6 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
         if (area.kind === "water") waterGeos.push(geometry);
         else greenGeos.push(geometry);
       } catch {
-        /* Skip a broken polygon rather than failing the whole block. */
       }
       continue;
     }
@@ -576,7 +550,6 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
       if (area.kind === "water") waterGeos.push(geometry);
       else greenGeos.push(geometry);
     } catch {
-      /* Skip a broken polygon rather than failing the whole block. */
     }
   }
   const green = mergeMeshes(greenGeos, greenMat, "Green");
@@ -784,7 +757,6 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   group.traverse((object) => {
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh) return;
-    // A merge that falls back to a group leaves the child meshes unnamed.
     const name = mesh.name || mesh.parent?.name || "";
     const instanced = mesh as THREE.InstancedMesh;
     const building = name.startsWith("Buildings") || name.startsWith("source:");
@@ -796,7 +768,6 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   return group;
 }
 
-/** Viewport opacity when a building is selected (3D pick, height edit, or QA). */
 export const SELECTED_BUILDING_FILL_OPACITY = 0.5;
 
 const HEIGHT_EDIT_FILL_OPACITY = SELECTED_BUILDING_FILL_OPACITY;
@@ -804,10 +775,8 @@ const HEIGHT_EDIT_FILL_OPACITY = SELECTED_BUILDING_FILL_OPACITY;
 export const HEIGHT_EDIT_EDGE_DASH_M = 2;
 export const HEIGHT_EDIT_EDGE_GAP_M = 1.5;
 
-/** Draw after the merged city so the selection overlay is never sorted behind it. */
 export const SELECTION_OVERLAY_RENDER_ORDER = SURFACE.building.renderOrder + 120;
 
-/** Viewport-only clone for the building being height-edited; does not touch shared city materials. */
 export function buildHeightEditOverlay(
   model: CityModel,
   buildingId: number,

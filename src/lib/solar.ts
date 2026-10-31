@@ -2,7 +2,6 @@ import * as SunCalc from "suncalc";
 
 export const MELBOURNE_TZ = "Australia/Melbourne";
 
-/** Southern-hemisphere solstice and equinox dates used for the heliodon presets. */
 export const SOLAR_SUMMER = { month: 12, day: 22, label: "Summer solstice" };
 export const SOLAR_WINTER = { month: 6, day: 21, label: "Winter solstice" };
 export const SOLAR_EQUINOX = { month: 9, day: 22, label: "Equinox" };
@@ -19,16 +18,13 @@ export const SOLAR_PRESETS: Record<
   "winter-12": { label: "Winter solstice 12pm", month: SOLAR_WINTER.month, day: SOLAR_WINTER.day, hour: 12, minute: 0 },
 };
 
-/** Victorian planning shadow tests, stepped hourly in Melbourne clock time. */
 export type ShadowStandardId = "rescode-sep" | "winter-jun-public";
 
 export const SHADOW_STANDARDS: Record<
   ShadowStandardId,
   {
     label: string;
-    /** Card line 2: date and test hours. */
     when: string;
-    /** Card line 3: the planning clause, when there is one. */
     clause: string | null;
     source: string;
     month: number;
@@ -60,12 +56,10 @@ const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Se
 
 const melbourneZone = new Intl.DateTimeFormat("en-AU", { timeZone: MELBOURNE_TZ, timeZoneName: "short" });
 
-/** "AEST" or "AEDT" for the instant, from the same Melbourne time zone the clock conversion uses. */
 export function melbourneZoneName(when: Date): string {
   return melbourneZone.formatToParts(when).find((part) => part.type === "timeZoneName")?.value ?? "";
 }
 
-/** For example "22 Sep, 10:00 AEST (2 of 7)". */
 export function shadowStandardStepLabel(id: ShadowStandardId, year: number, index: number): string {
   const standard = SHADOW_STANDARDS[id];
   const hour = standard.hours[index];
@@ -109,7 +103,6 @@ function readMelbourneParts(date: Date) {
   };
 }
 
-/** Convert a Melbourne local civil time to a UTC instant (DST aware). */
 export function melbourneLocalToUtc(
   year: number,
   month: number,
@@ -133,10 +126,6 @@ export function melbourneLocalToUtc(
   return new Date(guess);
 }
 
-/**
- * Unit direction from the site origin toward the sun in CityCut's Three.js frame:
- * +X east, +Y up, +Z = −north (north is −Z).
- */
 export function sunDirectionFromAzimuthAltitude(azimuthDeg: number, altitudeDeg: number): Vec3 {
   const az = (azimuthDeg * Math.PI) / 180;
   const alt = (altitudeDeg * Math.PI) / 180;
@@ -172,7 +161,6 @@ export function sunAtMelbourneLocal(
   return sunSample(lat, lon, melbourneLocalToUtc(year, month, day, hour, minute));
 }
 
-/** Sample the sun every `stepMinutes` between Melbourne sunrise and sunset on the given local date. */
 export function daylightArcSamples(
   lat: number,
   lon: number,
@@ -195,7 +183,6 @@ export function daylightArcSamples(
 
 export type HourMark = { hour: number; sample: SolarSample };
 
-/** Whole Melbourne clock hours (AEST or AEDT, as the date falls) when the sun is above the horizon. */
 export function daylightHourMarks(lat: number, lon: number, year: number, month: number, day: number): HourMark[] {
   const marks: HourMark[] = [];
   for (let hour = 0; hour < 24; hour++) {
@@ -216,11 +203,6 @@ export function dateFromDayOfYear(year: number, doy: number): { month: number; d
   return { month: date.getUTCMonth() + 1, day: date.getUTCDate() };
 }
 
-/**
- * Sun-study key dates. Solstices are the 2026 AEST dates (USNO: 21 Jun 18:24, 22 Dec 06:50).
- * The equinox card uses 22 Sep, the ResCode test date, not the astronomical 23 Sep.
- */
-/** Hour buttons under a selected key date: 9am to 3pm, Melbourne clock time. */
 export const KEY_DATE_HOURS: readonly number[] = [9, 10, 11, 12, 13, 14, 15];
 
 export const SUN_STUDY_DATES = [
@@ -229,7 +211,6 @@ export const SUN_STUDY_DATES = [
   { id: "dec22", name: "Summer solstice", label: "22 Dec", why: "Highest sun, shading, passive design", month: 12, day: 22 },
 ] as const;
 
-/** Melbourne clock minutes (AEST/AEDT as the date falls) of sunrise and sunset, from SunCalc. */
 export function daylightWindowMinutes(
   lat: number,
   lon: number,
@@ -246,7 +227,6 @@ export function daylightWindowMinutes(
   return { sunrise: Math.ceil(local(times.sunrise)), sunset: Math.floor(local(times.sunset)) };
 }
 
-/** Next sweep minute: advance by `hoursPerSecond` of sun time over `dtSeconds`, wrapping at sunset. */
 export function sweepMinute(
   current: number,
   dtSeconds: number,

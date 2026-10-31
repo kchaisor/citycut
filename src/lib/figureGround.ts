@@ -6,7 +6,6 @@ type ClipFns = {
   intersection: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
 };
 
-// The published ESM bundle default-exports the API; the CJS build and the typings use named exports.
 function clippingFns(): ClipFns {
   const loaded = polygonClipping as unknown as ClipFns & { default?: ClipFns };
   if (typeof loaded.union === "function") return loaded;
@@ -19,31 +18,24 @@ import { signedArea } from "./geo";
 import { DEFAULT_SITE_FRAME_SHAPE, siteFramePolygon, type SiteFrameShape } from "./siteFrame";
 import type { BuildingFeat, CityModel, Pt } from "../types";
 
-/** Finest scale first. 1:5000 is what lets a 1 km frame sit on A3. */
 export const FIGURE_SCALES = [500, 1000, 2500, 5000] as const;
 
 export type FigureScale = (typeof FIGURE_SCALES)[number];
 
-/** ISO 216 A3, millimetres. */
 export const A3_SHORT_MM = 297;
 export const A3_LONG_MM = 420;
 
-/** Outer margin, and the bottom band that holds the scale bar, north arrow, and notes. */
 export const SHEET_EDGE_MM = 10;
 export const SHEET_BAND_MM = 18;
 
 const MIN_FOOTPRINT_M2 = 0.25;
 const MIN_HOLE_M2 = 0.05;
 const SNAP_M = 0.001;
-/** Buildings whose boxes fall inside this gap are unioned together. */
 const TOUCH_M = 0.02;
 
 export type FigureGround = {
-  /** Unioned footprints in local east/north metres. Rings are closed; holes follow the outer ring. */
   polygons: MultiPolygon;
-  /** Building polygons on the model, before union. */
   before: number;
-  /** Outer rings after clipping to the frame and union. */
   after: number;
 };
 
@@ -81,7 +73,6 @@ function num(value: number): string {
   return String(roundMm(value));
 }
 
-/** Paper millimetres for a ground length at 1:scale. 1 m at 1:1000 is 1 mm. */
 export function paperMillimetres(groundMetres: number, scale: number): number {
   return (groundMetres * 1000) / scale;
 }
@@ -92,7 +83,6 @@ function pageSize(orientation: SheetOrientation): { width: number; height: numbe
     : { width: A3_SHORT_MM, height: A3_LONG_MM };
 }
 
-/** Largest square frame that still leaves the edge margin and the bottom band. */
 export function maxFrameMm(orientation: SheetOrientation): number {
   const page = pageSize(orientation);
   const width = page.width - SHEET_EDGE_MM * 2;
@@ -102,7 +92,6 @@ export function maxFrameMm(orientation: SheetOrientation): number {
 
 const BAR_STEPS_M = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
 
-/** A round ground length. Without a scale, about a fifth of the frame (the on-screen bar). */
 export function scaleBarMetres(groundSpanM: number, scale?: number): number {
   if (scale == null) {
     const target = groundSpanM * 0.2;
@@ -123,14 +112,12 @@ export function sheetFitNote(layout: Pick<SheetLayout, "fitsOnA3" | "scale" | "f
   return `Does not fit on A3 at 1:${layout.scale} (${num(layout.frameMm)} mm square; A3 is 297 × 420 mm).`;
 }
 
-/** Sentence for the export card. Null when the frame fits. */
 export function sheetFitMessage(sideM: number, scale: number): string | null {
   const layout = layoutSheet(sideM, scale);
   if (layout.fitsOnA3) return null;
   return `This ${Math.round(sideM)} m frame is ${num(layout.frameMm)} mm square at 1:${scale} and does not fit on A3 (297 × 420 mm). The download stays at true scale, on a ${num(layout.pageWidthMm)} × ${num(layout.pageHeightMm)} mm sheet.`;
 }
 
-/** Finest listed scale that places the frame on A3, or 1:5000 when none do. */
 export function preferredFigureScale(sideM: number): FigureScale {
   for (const scale of FIGURE_SCALES) {
     if (layoutSheet(sideM, scale).fitsOnA3) return scale;
@@ -150,9 +137,6 @@ export function layoutSheet(sideM: number, scale: number): SheetLayout {
   let fitsOnA3: boolean;
   if (fitsLandscape || fitsPortrait) {
     fitsOnA3 = true;
-    // A square uses the short side. Landscape still wins when it fits: the long side
-    // carries the margin note. Portrait is the one that fits a slightly larger square,
-    // because the band sits on the long edge and the short edge only loses two margins.
     orientation = fitsLandscape ? "landscape" : "portrait";
     const page = pageSize(orientation);
     pageWidthMm = page.width;
@@ -314,7 +298,6 @@ function unionCluster(polygons: Polygon[]): MultiPolygon {
   return batch.flat();
 }
 
-/** Union only clusters whose boxes overlap or touch, so a detached house is left as-is. */
 function unionTouching(polygons: Polygon[]): MultiPolygon {
   const count = polygons.length;
   if (count === 0) return [];
@@ -397,10 +380,6 @@ function tidy(polygons: MultiPolygon): MultiPolygon {
   return kept;
 }
 
-/**
- * Building footprints from the model, clipped to the cut square, then unioned
- * where they overlap or touch. Courtyard holes stay holes.
- */
 export function figureGround(
   buildings: BuildingFeat[],
   sideM: number,
@@ -419,7 +398,6 @@ export function figureGround(
   return { polygons, before, after: polygons.length };
 }
 
-/** Flat ground is z = 0. With terrain, the curves sit on the lowest sample, the cut's ground datum. */
 export function figureGroundDatum(model: CityModel): number {
   return model.terrain ? model.terrain.min : 0;
 }
@@ -448,7 +426,6 @@ function modelPath(polygon: Polygon): string {
   return parts.join(" ");
 }
 
-/** Screen-plan paths in local metres, north up (SVG y is minus north). */
 export function figureGroundModelPaths(
   buildings: BuildingFeat[],
   sideM: number,

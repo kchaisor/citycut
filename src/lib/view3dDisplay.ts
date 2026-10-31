@@ -72,10 +72,6 @@ export function setLayer3dVisible(
   };
 }
 
-/**
- * Trees show in the 3D viewport (and so the PNG, which captures it) only when the Trees layer is on
- * AND "Hide trees" is off. The 3D-view .ai (aiView.ts) and the .3dm (rhinoExport.ts) use this too.
- */
 export function treesVisibleIn3d(
   layers: { trees: boolean },
   display: Pick<View3dDisplaySettings, "hideTrees" | "layersVisible">,
@@ -137,9 +133,6 @@ export function readStoredView3dDisplay(storage: KeyValueStore): View3dDisplaySe
   };
 }
 
-/**
- * When a model opens, all 3D layers start turned ON.
- */
 export function view3dDisplayForModelOpen(storage: KeyValueStore): View3dDisplaySettings {
   const stored = readStoredView3dDisplay(storage);
   return {
@@ -164,11 +157,9 @@ export function writeStoredView3dDisplay(storage: KeyValueStore, settings: View3
     storage.setItem(VIEW3D_HIDE_TREES_KEY, settings.hideTrees ? "1" : "0");
     storage.setItem(VIEW3D_LAYERS_KEY, JSON.stringify(mergedLayers));
   } catch {
-    // Private mode can reject localStorage.
   }
 }
 
-/** Display toggles must never refit the orbit camera. */
 export function snapWhenTogglingView3dDisplay(): boolean {
   return false;
 }

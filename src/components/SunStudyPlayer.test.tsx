@@ -51,7 +51,6 @@ describe("Sun section", () => {
     for (const name of ["21 Jun", "22 Sep", "22 Dec"]) expect(screen.getByRole("radio", { name })).toBeTruthy();
     expect(screen.getByText("Winter solstice")).toBeTruthy();
     expect(screen.getByText("Summer solstice")).toBeTruthy();
-    // ResCode card on three lines; no full stops, no "common practice".
     expect(screen.getByText("ResCode Open Space")).toBeTruthy();
     expect(screen.getByText("22 Sep 9am – 3pm")).toBeTruthy();
     expect(screen.getByText("Clause 55.04-3 (B4-3)")).toBeTruthy();
@@ -127,7 +126,6 @@ describe("Sun section", () => {
       const onChange = vi.fn();
       render(<SolarPanel embedded settings={settings} onChange={onChange} sideM={500} site={site} />);
       fireEvent.click(screen.getByRole("button", { name: "Play sun sweep" }));
-      // Toggle Show sun path & compass before the parent re-renders or the next rAF tick runs
       fireEvent.click(screen.getByLabelText(/Show sun path/));
       expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ showPath: true, castShadows: true }));
       const tick = rafCallbacks.at(-1);

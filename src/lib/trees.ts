@@ -1,7 +1,6 @@
 import { explicitLengthUnit, parseLooseNumber, parseMeters } from "./height";
 import type { TreeDimensions, TreeSizeSource, TreeTier } from "../types";
 
-/** Typical Melbourne street tree when nothing else is known. */
 export const DEFAULT_TREE_HEIGHT = 10;
 export const DEFAULT_CROWN_DIAMETER = 6;
 export const DEFAULT_TRUNK_DIAMETER = 0.35;
@@ -15,7 +14,6 @@ const MAX_TRUNK = 2;
 const BARE_DIAMETER_IS_CM = MAX_TRUNK;
 const BARE_GIRTH_IS_CM = MAX_TRUNK * Math.PI;
 export const CROWN_PER_HEIGHT = 1.4;
-/** Minimum crown as a fraction of height when measurements are thin. */
 export const CROWN_HEIGHT_FLOOR = 0.5;
 
 const GENERIC_RATIO = DEFAULT_CROWN_DIAMETER / DEFAULT_TREE_HEIGHT;
@@ -238,10 +236,6 @@ export function describeTrees(trees: { sizeSource: TreeSizeSource; tier?: TreeTi
   return `Trees: ${treeSizeSummary(trees)} (${tiers.com} City of Melbourne, ${tiers.osm} Overture base points, ${tiers.vicmap} Vicmap, ${tiers.canopy} canopy infill). City of Melbourne inventory trees use surveyed species, diameter at breast height, and age; that dataset has no crown or height field. Overture base land points carry OSM tree tags when present. Vicmap Vegetation Tree Urban fills gaps beyond 3 m using height_m and canopy diameter. Wood, forest, and scrub are filled at about 7 m. Otherwise 10 m tall and 6 m across.`;
 }
 
-/**
- * One note per tree source that failed or loaded only part of the frame, in tier order
- * (City of Melbourne, Overture base for OSM points and canopy, Vicmap). Empty when all loaded.
- */
 export function treeSourceLoadNotes(errors: {
   com: string | null;
   vicmap: string | null;

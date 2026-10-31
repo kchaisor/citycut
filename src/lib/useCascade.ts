@@ -55,7 +55,6 @@ export function pointInPolygon(point: Pt, outer: Pt[], holes: Pt[][] = []): bool
   return !holes.some((hole) => pointInRing(point, hole));
 }
 
-/** Area-weighted centroid, then a vertex average, then an edge midpoint. */
 export function interiorPoint(ring: Pt[], holes: Pt[][] = []): Pt {
   const points = openRing(ring);
   if (points.length === 0) return [0, 0];
@@ -252,7 +251,6 @@ export type LoadedTiers = {
   failures: UseTierFailure[];
 };
 
-/** One Vicmap request. A failed response is skipped. No retries. */
 export async function loadUseTiers(
   bounds: FrameBBox,
   origin: LonLat,

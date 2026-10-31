@@ -20,6 +20,7 @@ Vite, React, MapLibre, and three.js. Vite `base` is `/citycut/`. Use `npm run de
 
 ## House rules
 
+- No code comments. Make the code say it: names, types, small functions. The only exception is a short comment for what the code cannot say: an external data or API quirk (e.g. a Vicmap service limit), a browser or host quirk, a non-obvious invariant, a tool directive, or a licence/attribution header. No narration, no chat or agent dialogue, no comments justifying a hack; fix the hack instead.
 - No stray hex or `rgb(` in app TypeScript. `src/lib/colours.test.ts` is the Vitest guard; keep it green.
 - Fills only in `src/colours.css`. Lines only in `src/drawing-style.css`. Update THEME.md when you add a variable.
 - Keep the attribution when you add a data source.
@@ -29,4 +30,4 @@ Vite, React, MapLibre, and three.js. Vite `base` is `/citycut/`. Use `npm run de
 
 - Batch related work into one run and one PR.
 - Run `npm test` and `npm run typecheck` on every PR.
-- Screenshots only for a visual change: one desktop shot by default, adding mobile or 3D only when relevant. Docs-only PRs need no screenshots.
+- Desktop only (1440x900). Screenshots only for a visual change: one desktop shot by default, adding a 3D shot when relevant. Docs-only PRs need no screenshots.

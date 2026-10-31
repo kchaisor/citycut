@@ -42,7 +42,6 @@ export function MapStage({
   onFlyLanded,
 }: {
   basemap: Basemap;
-  /** Fit the whole cut frame into the map when it is first created (phones). */
   fitFrameOnLoad?: boolean;
   sideM: number;
   frameShape: SiteFrameShape;
@@ -51,11 +50,9 @@ export function MapStage({
   loading: boolean;
   processing?: boolean;
   fadingOut?: boolean;
-  /** Geocoded address to highlight before the model is built. */
   siteSearch: MapSiteSearch | null;
   onCancel: () => void;
   onView: (view: ViewState) => void;
-  /** The search or home camera animation has stopped. */
   onFlyLanded: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -67,7 +64,6 @@ export function MapStage({
   const appliedBasemap = useRef<Basemap>(basemap);
   const mountedFly = useRef(fly?.token ?? null);
 
-  // Direct DOM refs for 60 fps zero-re-render frame tracking during pan/zoom
   const frameRef = useRef<Frame | null>(null);
   const frameVisibleRef = useRef(false);
   const [frameVisible, setFrameVisible] = useState(false);
@@ -153,7 +149,6 @@ export function MapStage({
         container,
         style: typeof style === "string" ? undefined : style,
         center: [initialView.lon, initialView.lat],
-        // On a phone, at load only, zoom out so the whole cut frame fits the map.
         zoom: initialLandingZoom({
           zoom: initialView.zoom,
           sideM: sideRef.current,
@@ -379,10 +374,6 @@ export function MapStage({
       map.off("moveend", finish);
     };
   }, [fly, ready]);
-
-  // The landing map fills the whole window under the floating controls (perimeter HUD on desktop,
-  // bottom sheet on a phone) and is NOT padded for them: the cut frame sits on the middle of
-  // the window (Kelvin, PR 112). Only load and a search pick the centre; toggles never move it.
 
   const sideKm = sideM / 1000;
   const label = cutFrameLabelKm(sideKm, frameShape);

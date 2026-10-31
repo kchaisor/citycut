@@ -17,3 +17,4 @@ pipeline/out/
 .trees-work/
 public/trees.pmtiles
 public/trees-manifest.json
+match-ref-out/

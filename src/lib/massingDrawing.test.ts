@@ -35,7 +35,6 @@ const model: CityModel = {
   sourceNote: "test",
 };
 
-/** A 20 × 30 × 40 m box with its base centre at local (60, −60), placed by MGA, rotated 30°. */
 function boxMassing(rotDeg = 0): ImportedMassing {
   const [e, n] = projectLocal([60, -60], origin, zone);
   const p: number[] = [];
@@ -64,8 +63,6 @@ describe("imported massing and hidden buildings in Drawing", () => {
     expect(polygons).toHaveLength(1);
     expect(area(polygons[0]![0] as Pt[])).toBeCloseTo(600, 0);
     expect(topZ).toBeCloseTo(70, 3);
-    // The box is square to MGA grid north, which is ~1.2° off true north here (grid convergence),
-    // so its local extent is a little wider than 20 m. Exact corners come from the same inverse.
     const xs = polygons[0]![0]!.map((p) => p[0]);
     expect(Math.abs(Math.min(...xs) - 50)).toBeLessThan(0.5);
     expect(Math.abs(Math.max(...xs) - 70)).toBeLessThan(0.5);
@@ -85,10 +82,9 @@ describe("imported massing and hidden buildings in Drawing", () => {
     expect(new TextDecoder("latin1").decode(bytes)).toContain("Imported massing");
     const without = await sitePlanAi(display, 1000);
     expect(new TextDecoder("latin1").decode(without)).not.toContain("Imported massing");
-    // Hidden only: one building, nothing yellow.
     expect(planPaths(display).buildings.some((b) => b.imported)).toBe(false);
     expect(planPaths(display).buildings).toHaveLength(1);
-  }, 30_000); // sitePlanAi is slow when the full suite runs in parallel
+  }, 30_000);
 
   it("figure-ground and exploded axo count imported massing as figure and drop hidden buildings", () => {
     const display = { ...model, buildings: [other] };

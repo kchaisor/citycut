@@ -1,8 +1,3 @@
-/**
- * QA for Clipper offset fix: Fitzroy path crossing, tram/median crop, 1 km full frame.
- * npm run build && npm run preview -- --host 127.0.0.1 --port 4173
- * npx vite-node scripts/qa-clipper-offset-fix.mjs
- */
 import { chromium } from "playwright";
 import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
@@ -38,7 +33,6 @@ await saveModel(page, -37.8131, 144.98, 0.35, `${outDir}/fitzroy-model.json`);
 await saveModel(page, -37.8136, 144.9831, 1, `${outDir}/east-model.json`);
 await browser.close();
 
-// Fitzroy Gardens path crossings (local plan metres)
 const fitzroyViewBox = "-65 75 80 80";
 execSync(
   `npx vite-node scripts/render-site-plan-crop.mjs ${outDir}/fitzroy-model.json fitzroy-main "${fitzroyViewBox}" 0`,
@@ -92,7 +86,6 @@ execSync(`cp ${outDir}/footpath-fillet-plan-centre-block-pr.png ${outDir}/clippe
   stdio: "inherit",
 });
 
-// Bench 1 km plan build (PR code)
 execSync(`npx vite-node scripts/bench-plan-1km.mjs ${outDir}/east-model.json pr-clipper-fix`, {
   stdio: "inherit",
 });

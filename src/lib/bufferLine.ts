@@ -1,6 +1,5 @@
 import type { Pt, Ring } from "../types";
 
-/** Simple miter-joined buffer around an open polyline (plan metres). */
 export function bufferOpenLine(line: Pt[], halfWidth: number): Ring | null {
   if (line.length < 2 || halfWidth <= 0) return null;
   const left: Pt[] = [];

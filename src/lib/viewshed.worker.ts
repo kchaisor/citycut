@@ -2,9 +2,7 @@ import { viewshedFrame, type HeightGrid } from "./viewshed";
 
 export type ViewshedWorkerRequest = {
   grid: HeightGrid;
-  /** Interleaved east, north per sample. */
   samples: Float64Array;
-  /** Absolute eye height per sample. */
   eyeZ: Float64Array;
   radius: number;
 };

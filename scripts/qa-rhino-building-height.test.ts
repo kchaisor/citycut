@@ -8,7 +8,6 @@ import { loadRhino } from "../src/lib/rhinoExport";
 import { projectLocal } from "../src/lib/crs";
 import type { BuildingFeat } from "../types";
 
-/** Run with QA report JSON: QA_BUILDING_JSON=/path/to/report.json npm test -- scripts/qa-rhino-building-height.test.ts */
 describe("QA rhino height for picked CBD building", () => {
   it("max mesh Z matches override height", async () => {
     const path = process.env.QA_BUILDING_JSON;

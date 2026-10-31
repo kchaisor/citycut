@@ -50,26 +50,19 @@ export function svgRings(rings: Pt[][]): string {
 }
 
 export type PlanPaths = {
-  /** City blocks, then car-park aisle ground (aisles are left out of the road surface). */
   blocks: Pt[][][];
   green: Pt[][][];
   water: Pt[][][];
-  /** Unioned carriageway, outer rings plus block holes, in local east/north metres. */
   roadFill: Pt[][][];
-  /** Buffer and union time for the carriageway, in milliseconds. */
   roadUnionMs: number;
-  /** Unioned footpath strip. Outer rings plus holes, in local east/north metres. */
   pathFill: Pt[][][];
-  /** Buffer and union time for the footpath strip, in milliseconds. */
   pathUnionMs: number;
   rails: Pt[][];
   trams: Pt[][];
   buildings: { rings: Pt[][]; fill: string; site: boolean; imported?: boolean }[];
   trees: { east: number; north: number; r: number }[];
   contours: Pt[][];
-  /** Parallel to `contours`. True on every Nth interval. */
   contourIndex: boolean[];
-  /** Elevation labels for index contours only. */
   contourLabels: { east: number; north: number; text: string }[];
   contourInterval: number | null;
   contourSource: import("../types").ContourSourceId | null;
@@ -96,7 +89,6 @@ function direction(a: Pt, b: Pt): Pt | null {
   return [dx / length, dy / length];
 }
 
-/** Open polyline offset to the left of its direction. A negative distance offsets to the right. */
 export function offsetPolyline(line: Pt[], distance: number): Pt[] {
   const pts = dedupe(line);
   if (pts.length < 2) return pts;
@@ -144,7 +136,6 @@ function clipLines(line: Pt[], sideM: number, frameShape: import("../types").Sit
 export type PlanPathOptions = {
   buildingColour?: BuildingColourMode;
   highlightManual?: boolean;
-  /** Junction fillet radius for unioned footpaths, in metres on the ground. */
   pathFilletM?: number;
 };
 
@@ -192,7 +183,6 @@ export function planPaths(
     pathFilletM,
     pathWidthM,
   );
-  // Car-park aisles (and service ways inside a mapped car park) are car park, not road white.
   const carPark = carParkWays(model.roads, model.carParks);
   const planRoads = carPark.size > 0 ? model.roads.filter((road) => !carPark.has(road)) : model.roads;
   const carriageway = unionRoadSurface(planRoads, model.tramLines, model.sideM, frameShape);
@@ -221,8 +211,6 @@ export function planPaths(
     pathFill = mergeFootpathFragments(pathFill);
   }
 
-  // Draw car-park ways as block ground so the car park reads as one surface with a clear edge
-  // against the carriageway. City blocks already exclude these strips.
   const aisles = [...carPark];
   if (aisles.length > 0) {
     const strips = unionCarriageways(
@@ -234,7 +222,6 @@ export function planPaths(
     for (const polygon of ground) blocks.push(polygon.map((ring) => ring.map((p): Pt => [p[0], p[1]])));
   }
 
-  // Only gaps rimmed by streets are medians or islands; service ways and aisles do not count.
   const streets = model.roads
     .filter((road) => road.kind === "road" && road.grade !== "path" && !road.service)
     .map((road) => ({ line: road.line, width: road.width }));

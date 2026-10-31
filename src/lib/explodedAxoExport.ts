@@ -23,7 +23,6 @@ import {
 import { stableExportModel } from "./exportStableOrder";
 import type { CityModel, Pt } from "../types";
 
-/** Millimetres on the sheet per metre in iso space at plan scale 1:scale. */
 function mmPerMetre(scale: number): number {
   return 1000 / scale;
 }
@@ -35,7 +34,6 @@ function isoToSheet(point: Pt, origin: Pt, scale: number, pageHeightMm: number):
   return [x, pageHeightMm - yDown];
 }
 
-/** Base iso geometry → sheet coords at `liftM` (matches `axoLayerSvgTransform`). */
 function isoBaseToSheet(
   east: number,
   north: number,
