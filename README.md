@@ -111,7 +111,7 @@ Nominatim’s usage policy asks for an identifying User-Agent. Browsers set that
 | --- | --- |
 | Map, search, square frame, area slider | Real |
 | Buildings, roads and rail, water and green | Real, from Overture Maps PMTiles, clipped to the frame |
-| 3D orbit view | Real |
+| 3D orbit view | Real. Studio gradient backdrop, soft fill light, a baked contact shadow under the plinth, and SMAA. The High/Fast toggle in the top bar sets quality: High adds N8AO ambient occlusion when the camera is at rest, Fast leaves it off. The choice is kept in `citycut.view3d.quality`. The PNG download keeps its flat backdrop and has no ambient occlusion |
 | Drawing tab (SVG, pan/zoom) | Real |
 | glTF `.glb` download | Not offered |
 | Rhino `.3dm` download | Real. Meshes in GDA2020 / MGA metres, Z-up |

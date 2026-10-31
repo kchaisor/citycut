@@ -26,6 +26,5 @@ export function writeWindCache(storage: Storage, table: WindRoseTable): void {
   try {
     storage.setItem(windCacheKey(table.lat, table.lon), JSON.stringify(table));
   } catch {
-    // Private mode or quota.
   }
 }

@@ -20,38 +20,26 @@ import { gda94ToGda2020 } from "./gda";
 export type ArcgisFormat = "esrijson" | "geojson";
 
 export type ArcgisLayerSpec = {
-  /** Stable id, also the Data sources row id. */
   id: string;
   label: string;
-  /** Layer URL, ending in the layer id (…/FeatureServer/8). */
   url: string;
   outFields: string[];
   format: ArcgisFormat;
   where?: string;
-  /** Records per page; must not exceed the layer's maxRecordCount. */
   pageSize: number;
   maxPages: number;
-  /** Server-side generalisation in degrees (outSR 4326). 5e-6 ≈ 0.5 m. */
   maxAllowableOffsetDeg?: number;
   geometryPrecision?: number;
-  /** Output spatial reference. 7844 (GDA2020) on the Spatial Services *_multiCRS services. Default 4326. */
   outSR?: number;
-  /** "gda94": the server returns GDA94 coordinates (no transform on request); convert to GDA2020 here. */
   datum?: "gda94";
-  /** Retry transient failures (timeouts, 5xx, network) per page. Never 401/403/429. */
   retry?: RetryPolicy;
-  /** Split the cut into tiles × tiles envelopes fetched in parallel, de-duplicated on idField. */
   tiles?: number;
-  /** Unique id attribute for de-duplication across tiles (OBJECTID). */
   idField?: string;
 };
 
 export type RetryPolicy = {
-  /** Total attempts per page, including the first. */
   attempts: number;
-  /** Wait before retry n (ms); the last value repeats. */
   backoffMs: number[];
-  /** Time limit for one attempt; the layer budget still caps the total. */
   attemptTimeoutMs: number;
 };
 
@@ -72,9 +60,7 @@ export type ArcgisResult = {
   features: GeoJsonFeature[];
   pages: number;
   ms: number;
-  /** Failure or partial reason, one sentence. Null when ok. */
   note: string | null;
-  /** Retries spent (transient failures only). */
   retries?: number;
   /** True when the server refused access or rate-limited (401/403/429/498/499): nothing was retried. */
   refused?: boolean;
@@ -105,7 +91,6 @@ export function arcgisEnvelopeQueryUrl(spec: ArcgisLayerSpec, bounds: LonLatBox,
   return `${spec.url}/query?${params.toString()}`;
 }
 
-/** Signed area in the source's lon/lat plane (positive = counter-clockwise). */
 function ringArea(ring: number[][]): number {
   let sum = 0;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -126,10 +111,6 @@ function ringContainsPoint(ring: number[][], x: number, y: number): boolean {
 
 const xy = (p: number[]): number[] => [p[0]!, p[1]!];
 
-/**
- * Esri rings → GeoJSON. Esri outer rings run clockwise and holes counter-clockwise; each hole is
- * attached to the outer ring that contains its first vertex (else the last outer ring).
- */
 export function esriRingsToGeoJson(rings: number[][][]): GeoJsonGeometry | null {
   const outers: number[][][][] = [];
   const holes: number[][][] = [];
@@ -140,7 +121,6 @@ export function esriRingsToGeoJson(rings: number[][][]): GeoJsonGeometry | null 
     else holes.push(ring);
   }
   if (outers.length === 0) {
-    // Some servers write every ring counter-clockwise: treat each as its own outer.
     for (const hole of holes) outers.push([hole]);
     holes.length = 0;
   }
@@ -168,7 +148,6 @@ export function esriGeometryToGeoJson(geometry: unknown): GeoJsonGeometry | null
 
 export type ArcgisPage = { features: GeoJsonFeature[]; exceeded: boolean };
 
-/** An ArcGIS error body ({"error": {"code": …}}), which often arrives with HTTP 200. */
 export class ArcgisServerError extends Error {
   constructor(message: string, readonly code: number | null) {
     super(message);
@@ -194,12 +173,10 @@ function mapCoords(geometry: GeoJsonGeometry | null, f: (lon: number, lat: numbe
   }
 }
 
-/** GDA94 → GDA2020 for every coordinate of a parsed page (see gda.ts). */
 export function convertGda94Features(features: GeoJsonFeature[]): GeoJsonFeature[] {
   return features.map((feature) => ({ ...feature, geometry: mapCoords(feature.geometry, gda94ToGda2020) }));
 }
 
-/** Parse one page in either format. Throws with the server's message on an error body. */
 export function parseArcgisPage(json: unknown, format: ArcgisFormat): ArcgisPage {
   if (!json || typeof json !== "object") throw new Error("The server answered with something that is not JSON.");
   const body = json as {
@@ -266,10 +243,6 @@ type Attempt =
 
 const retriesText = (n: number) => (n > 0 ? ` after ${n} ${n === 1 ? "retry" : "retries"}` : "");
 
-/**
- * Every feature intersecting the box, page by page. Never throws except when the caller's own
- * signal aborts; every other problem comes back as status + note.
- */
 export async function queryArcgisLayer(
   spec: ArcgisLayerSpec,
   bounds: LonLatBox,
@@ -390,7 +363,6 @@ export async function queryArcgisLayer(
   }
 }
 
-/** Split a box into n × n equal envelopes, row by row from the south-west. */
 export function splitBounds(bounds: LonLatBox, n: number): LonLatBox[] {
   const out: LonLatBox[] = [];
   const dx = (bounds.east - bounds.west) / n;
@@ -434,7 +406,7 @@ export async function queryArcgisTiled(
           return result;
         } catch (error) {
           if (options.signal?.aborted) throw error;
-          return null; // cancelled after another tile was refused
+          return null;
         }
       }),
     );

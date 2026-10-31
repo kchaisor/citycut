@@ -1,7 +1,3 @@
-/**
- * Blast-radius proof (items 2 & 6): parcel cache avoids a second Vicmap hit;
- * Wind-off site plan has no Wind layer; flow arrows only when Wind export runs.
- */
 import { performance } from "node:perf_hooks";
 import { buildCityGroup, disposeObject } from "../src/lib/buildCity.ts";
 import { sitePlanChunks } from "../src/lib/aiPlan.ts";

@@ -1,38 +1,16 @@
 import type { ContourLayer, TerrainField } from "../types";
 
-/**
- * 3D ground from Vicmap metro 1–5 m contours (test version).
- *
- * Method: Laplace (harmonic) interpolation on the same square grid every terrain consumer already
- * samples (sampleTerrain, footprintBase, buildCity, plan shadows, exploded axo plate). Grid nodes
- * a contour passes through are pinned to its AHD height; every other node relaxes to the average
- * of its neighbours. Chosen over a contour TIN because a TIN built only from contour vertices
- * makes flat triangles along ridges and valley floors, needs a Delaunay dependency and point
- * location on every sample, whereas the grid keeps one data structure and every consumer unchanged.
- *
- * Nodes farther than `farM` from any contour have no contour support: they keep the Mapterhorn
- * height (shifted by the mean contour−DEM offset so the seam has no step) and are counted, so the
- * model can say so. Without a Mapterhorn field they are left to the relaxation.
- */
-
 export const CONTOUR_TERRAIN_SOURCE = "Vicmap metro contours";
 
-/**
- * Contour sources dense enough to pin the ground grid. Vicmap statewide 10–20 m is too sparse;
- * NSW mode adds the City of Sydney 1 m set and the NSW Elevation theme (2 m in Sydney).
- */
 export const PINNABLE_CONTOUR_SOURCES: ReadonlySet<ContourLayer["source"]> = new Set(["vicmap-metro", "cos-1m", "nsw-2m", "cos-nsw"]);
 
-/** `TerrainField.source` and notice wording for a pinned layer. Vicmap keeps its original text. */
 export function contourGroundSourceName(layer: Pick<ContourLayer, "source" | "label">): string {
   return layer.source === "vicmap-metro" ? CONTOUR_TERRAIN_SOURCE : layer.label;
 }
 
 export type ContourTerrainResult = {
   field: TerrainField;
-  /** Share of grid nodes supported by contours (0–1); the rest are Mapterhorn fallback. */
   coverage: number;
-  /** Mean (contour − Mapterhorn) at pinned nodes, metres; null without a Mapterhorn field. */
   demOffsetM: number | null;
   pinned: number;
   iterations: number;
@@ -58,7 +36,6 @@ export function contourTerrain(
   const sum = new Float64Array(n);
   const count = new Uint32Array(n);
 
-  // Pin nodes the contours pass through (segments densified at half a cell).
   const step = Math.min(dx, dy) / 2;
   const pin = (e: number, nn: number, z: number) => {
     const c = Math.round((e + half) / dx);
@@ -91,7 +68,6 @@ export function contourTerrain(
   if (pinned < 3) return null;
   const demOffsetM = base ? offsetSum / pinned : null;
 
-  // Distance (m) from every node to the nearest pinned node: two-pass chamfer transform.
   const dist = new Float64Array(n).fill(Infinity);
   for (let i = 0; i < n; i++) if (fixed[i]) dist[i] = 0;
   const diag = Math.hypot(dx, dy);
@@ -124,7 +100,7 @@ export function contourTerrain(
     if (base) {
       z[i] = base.heights[i]! + demOffsetM!;
       if (dist[i]! > farM) {
-        fixed[i] = 2; // Mapterhorn fallback, pinned
+        fixed[i] = 2;
         fallback += 1;
       }
     } else {
@@ -133,7 +109,6 @@ export function contourTerrain(
     }
   }
 
-  // Successive over-relaxation of Laplace's equation on the free nodes (Neumann edges).
   const maxIterations = options.maxIterations ?? 2000;
   const tolerance = options.tolerance ?? 0.005;
   const omega = 1.85;
@@ -179,7 +154,6 @@ export function contourTerrain(
   return { field, coverage: 1 - fallback / n, demOffsetM, pinned, iterations, ms: ended - started };
 }
 
-/** Visible note for the model: never silent about which ground is shown. */
 export function contourTerrainNotice(
   result: ContourTerrainResult | null,
   layer: ContourLayer | null,

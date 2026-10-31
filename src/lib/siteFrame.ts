@@ -7,7 +7,6 @@ export type SiteFrameShape = "square" | "circle";
 
 export const DEFAULT_SITE_FRAME_SHAPE: SiteFrameShape = "square";
 
-/** Circle boundary segments for clip polygons, flat ground, and plan frame (smooth rim in 3D and exports). */
 export const SITE_FRAME_CIRCLE_SEGMENTS = 128;
 
 type ClipFns = {
@@ -76,7 +75,6 @@ function frameClipPolygon(sideM: number, shape: SiteFrameShape): Polygon {
   return [closeForClip(circleRing(half))];
 }
 
-/** Clip one outer ring (and optional holes) to the site frame; returns outer plus hole rings. */
 export function clipAreaToSiteFrame(
   outer: Pt[],
   holes: Pt[][],
@@ -195,7 +193,6 @@ export function clipPolylineSiteFrame(
   return squareParts.flatMap((part) => clipPolylineToCircle(part, half));
 }
 
-/** polygon-clipping frame for union/intersection helpers (figure-ground, roads). */
 export function siteFramePolygon(sideM: number, shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE): Polygon {
   return frameClipPolygon(sideM, shape);
 }

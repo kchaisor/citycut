@@ -33,5 +33,6 @@ declare module "node:url" {
 
 interface ImportMetaEnv {
   readonly VITE_NOMINATIM_URL?: string;
+  readonly VITE_PREBAKED_TILES_BASE?: string;
   readonly CITYCUT_NETWORK_TESTS?: string;
 }

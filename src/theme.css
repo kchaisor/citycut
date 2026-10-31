@@ -1,122 +1,79 @@
-/*
-  CityCut theme.
-  Kelvin: this is the only file you need for fonts and the main colours.
-  Each setting is a name on the left and a value on the right.
-  Change the value, keep the name. See THEME.md at the top of the project.
-*/
 
 :root {
-  /* The grey behind the whole app. The page, the header, the map surround, the 3D view, and the drawing all use this unless you give one of them its own colour below. */
   --background: #EBEBEB;
 
-  /* Colour of the page itself, behind the header and the map. */
   --page-bg: var(--background);
 
-  /* Landing page header, and the bar across the top of the model. */
   --landing-bg: var(--background);
 
-  /* Colour behind the map while the streets are still loading. */
   --map-bg: var(--background);
 
-  /* Sky colour of the 3D model. The model reads this when it opens. Downloads do not use it. */
   --model-bg: var(--background);
 
-  /* On-screen site plan and figure-ground. The downloaded drawing files do not use it. */
   --drawing-bg: var(--background);
 
-  /* Fill of drawers, panels, and cards. Near-white so they sit clearly on the grey page. */
   --panel-bg: #FFFCF8;
 
-  /* Line around panels, cards, inputs, and the header. Dark enough to show on the grey page. */
   --panel-border: #C8C8C8;
 
-  /* Main text, icons, and the Create model button. */
   --text: #1A1916;
 
-  /* Notes, credits, labels, and other secondary text. */
   --muted-text: #6E685E;
 
-  /* Font for buttons, labels, and body text. Outfit is already loaded. Avenir Next, Segoe UI, and sans-serif are safe fallbacks. */
   --font-sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
   --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Font for the large “Your model is ready” title. Fraunces is already loaded. Georgia is the safe fallback. */
   --font-serif: "Geist", "Iowan Old Style", Georgia, serif;
 
-  /* Size of ordinary text. */
   --font-size: 15px;
 
-  /* Size of the CityCut name in the sidebar brand bar. */
   --font-size-brand: 18px;
 
-  /* Size of a drawer title, such as “Exports” or “Drawing”. */
   --font-size-drawer: 15px;
 
-  /* Size of an export card title, such as “Site plan”. */
   --font-size-card: 16px;
 
-  /* Size of the big numbers in the model summary. */
   --font-size-stat: 22px;
 
-  /* Size of the large title in the model summary. */
   --font-size-title: 28px;
 
-  /* Diameter of the on-screen wind rose diagram (caption scales from this). Default ~1.4× the original 120px rose. */
   --wind-rose-size: 168px;
 
-  /* Selected pill on the landing map area-shape control (Square / Circle). */
   --shape-toggle-on-bg: #1A1916;
   --shape-toggle-on-text: #FFFCF8;
 
-  /* ---- Model sidebar (fixed left sidebar with the icon rail) ---- */
-
-  /* The one accent colour. Only ever a fill, with --accent-ink on top and a 1 px --accent-edge outline:
-     the active rail icon, a switch that is on, the selected segment, and the Ready dot.
-     Never text and never a thin line. Separate from --site-building, even though both are yellow. */
   --accent: #FFF500;
 
-  /* Text and icons on an --accent fill, and the knob of a switch that is on. */
   --accent-ink: #1A1916;
 
-  /* The 1 px outline around every --accent fill. */
   --accent-edge: #1A1916;
 
-  /* An --accent control under the pointer. */
   --accent-hover: #FFF9A6;
 
-  /* Sidebar and rail paper. */
   --sidebar-bg: #EBEBEB;
 
-  /* Hairlines between sidebar groups, and the edge between rail, panel and viewport. */
   --sidebar-hairline: #EEEAE3;
 
-  /* Rail icons that are not selected. */
   --sidebar-icon: #8F897E;
 
-  /* Rail icon and quiet button under the pointer. */
   --sidebar-hover: #F4F1EB;
 
-  /* Track behind a segmented control. */
   --control-track: #F1EEE8;
 
-  /* Track of a switch that is off, and the outline of a secondary button. */
   --control-off: #DCD7CE;
 
-  /* Status dots in Data sources: loaded, failed, and not used. */
   --status-ok: #478C33;
   --status-failed: #8D3418;
   --status-idle: #B8B2A7;
 
-  /* Model details height bar and the Height source key in Buildings. */
   --height-measured: #2E6B4F;
   --height-overture: #3D5A73;
   --height-floors: #6B4F2E;
   --height-estimate: #7D7D7D;
   --height-manual: #D4A017;
 
-  /* Rail and panel widths. The viewport sits to the right of both. */
   --sidebar-rail-w: 56px;
   --sidebar-panel-w: 320px;
 

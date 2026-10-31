@@ -34,11 +34,6 @@ const lat = -37.8127;
 const lon = 144.98061;
 const km = 1;
 
-/**
- * CoM is always on, so this is the only render path. Offline: the committed East Melbourne
- * inputs (496 Overture footprints, 1,240 CoM 2023 footprint components) through the same
- * pipeline as ModelPage, then the same three.js group the viewport and .3dm export build.
- */
 describe("East Melbourne duplicate audit, CoM on (committed fixture)", () => {
   it(
     "draws every building once: no overlapping CoM parts, no IoU > 0.5 pairs, one mesh set per building",
@@ -49,14 +44,11 @@ describe("East Melbourne duplicate audit, CoM on (committed fixture)", () => {
       expect(buildings.length).toBe(496);
       expect(comBuildings.length).toBeGreaterThan(300);
 
-      // Two Overture/CoM footprints for the same building.
       expect(findDuplicateBuildingPairs(buildings)).toEqual([]);
-      // Stacked CoM components drawn as nested prisms (main had 1,127 pairs in 183 buildings).
       const overlaps = buildingMeshOverlaps(buildings);
       expect(overlaps.withinBuildingPairs, JSON.stringify(overlaps.examples)).toBe(0);
       expect(overlaps.acrossBuildingPairs, JSON.stringify(overlaps.examples)).toBe(0);
 
-      // No separate CoM layer: the 3D group holds exactly the parts of the matched buildings.
       const model: CityModel = {
         center: input.center,
         sideM: input.sideM,
@@ -111,7 +103,6 @@ describe.skipIf(!networkTestsEnabled())("East Melbourne duplicate audit", () => 
 
       let buildings = mergeBuildingEnrichment(buildingResult.buildings, enrichment.byId);
       buildings = applyLidarHeightsFromEnrichment(assignExternalUses(buildings, zones));
-      // Same order as ModelPage: CoM always, then DAM, then the truth pass.
       buildings = resolveBuildingHeights(buildings, center, com.footprints, dam);
 
       const model: CityModel = {

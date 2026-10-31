@@ -10,11 +10,6 @@ import {
   NSW_SPATIAL_DATASET_URL,
 } from "./nsw";
 
-/**
- * Per-state source registry: which open dataset feeds which CityCut layer, and its credit.
- * Victoria lists the modules that already existed (unchanged); NSW lists NSW mode.
- * Buildings are national (Overture/OSM) in both.
- */
 export type CityCutLayer =
   | "cadastre"
   | "easements"
@@ -34,7 +29,6 @@ export type RegionSource = {
   datasetUrl: string | null;
 };
 
-/** Built on call so modules that mock the Vicmap fetchers (App tests) never read these constants at import. */
 export function regionSources(region: RegionId): RegionSource[] {
   const all: Record<RegionId, RegionSource[]> = {
     vic: [
@@ -63,7 +57,6 @@ export function regionSources(region: RegionId): RegionSource[] {
   return all[region];
 }
 
-/** One credit line for the cut's state sources, or null outside VIC/NSW. */
 export function regionCredit(region: RegionId | null | undefined): string | null {
   if (region !== "nsw") return null;
   return [NSW_SPATIAL_ATTRIBUTION, NSW_PLANNING_ATTRIBUTION, COS_ATTRIBUTION].join(" · ");

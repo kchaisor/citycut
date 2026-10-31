@@ -13,7 +13,6 @@ import {
 const CBD = { lat: -37.8136, lon: 144.9631 };
 const YEAR = 2026;
 
-/** Highest sun of the Melbourne local day, searched minute by minute from the site lat/lon. */
 function solarNoon(month: number, day: number): { sample: SolarSample; minutes: number } {
   let best = { sample: sunAtMelbourneLocal(CBD.lat, CBD.lon, YEAR, month, day, 10, 0), minutes: 600 };
   for (let minutes = 600; minutes <= 15 * 60; minutes++) {

@@ -34,7 +34,6 @@ function vicmapPage(count: number, exceeded: boolean) {
   };
 }
 
-/** A fetch that never answers until its signal aborts, like a stalled ArcGIS page. */
 function stalled(_url: unknown, init?: RequestInit): Promise<never> {
   return new Promise((_, reject) => {
     init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
@@ -78,7 +77,6 @@ describe("Vicmap tree points", () => {
     expect(result.rows).toHaveLength(2 * VICMAP_PAGE_SIZE);
     expect(result.partial).toBe(true);
     expect(result.error).toMatch(/Vicmap tree points are incomplete: 2 pages \(4000 points\) loaded/);
-    // The compatibility wrapper also keeps a partial load instead of throwing it away.
     calls = 0;
     vi.useFakeTimers();
     try {
@@ -285,7 +283,6 @@ describe("3D, .3dm and the 3D-view .ai agree on trees", () => {
       viewChunks(m, shot, { uniformBuildings: false, colourBySource: false, hideTrees })
         .filter((chunk) => chunk.name === "Trees")
         .flatMap((chunk) => chunk.ellipses ?? []).length;
-    // Scene3D sets the built Trees group visible with treesVisibleIn3d; the PNG captures that scene.
     const sceneShowsTrees = (m: CityModel, hideTrees: boolean) => {
       const group = buildCityGroup(m);
       const trees = group.getObjectByName("Trees");
@@ -297,7 +294,6 @@ describe("3D, .3dm and the 3D-view .ai agree on trees", () => {
       return visible;
     };
     const cases: Array<[boolean, boolean, boolean]> = [
-      // [layer on, hide trees, trees drawn]
       [true, false, true],
       [true, true, false],
       [false, false, false],

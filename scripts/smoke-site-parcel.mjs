@@ -1,7 +1,3 @@
-/**
- * Live Vicmap Property smoke test (not run in CI).
- * Run: npx vite-node scripts/smoke-site-parcel.mjs
- */
 import { fetchSiteParcelAtPoint, siteParcelQueryUrl } from "../src/lib/vicmapSiteParcel.ts";
 
 const POINT = { lon: 145.1266505, lat: -37.8187756 };

@@ -8,11 +8,6 @@ import { clampHeightOutliers } from "./terrain";
 
 const require = createRequire(import.meta.url);
 
-/**
- * Mapterhorn z14 tile 14789/10053, covering Flagstaff Gardens and the Melbourne
- * CBD. The checksum is the sum of elevations in 1/256 m units from libwebp
- * `dwebp`, which is a direct decode of the lossless WebP.
- */
 const TILE_UNITS = 1_149_224_704;
 const TILE_PIXELS: { x: number; y: number; metres: number }[] = [
   { x: 0, y: 0, metres: 35.375 },

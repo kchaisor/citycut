@@ -43,7 +43,6 @@ describe("exploded axo massing", () => {
     const near = box(1, 100, 100, 20, 10, "com");
     const far = box(2, -150, -150, 20, 80, "com");
     const { faces } = buildAxoMassingFaces(model([near, far]));
-    // First roof belongs to the far (tall) box: its y is higher on screen (smaller).
     const roofs = faces.filter((f) => f.paint === "building-roof");
     const firstY = Number(/M[\d.-]+ ([\d.-]+)/.exec(roofs[0]!.d)![1]);
     const lastY = Number(/M[\d.-]+ ([\d.-]+)/.exec(roofs[1]!.d)![1]);

@@ -1,6 +1,5 @@
 import type { Map as MapLibreMap, MapOptions } from "maplibre-gl";
 
-/** Constructor options that keep the landing map flat and north-up. */
 export const FLAT_NORTH_UP_MAP_OPTIONS = {
   maxPitch: 0,
   pitch: 0,
@@ -11,7 +10,6 @@ export const FLAT_NORTH_UP_MAP_OPTIONS = {
   touchZoomRotate: true,
 } as const satisfies Partial<MapOptions>;
 
-/** Disable rotation gestures while keeping pinch zoom and keyboard pan/zoom. */
 export function applyFlatNorthUpMapHandlers(map: MapLibreMap): void {
   map.dragRotate.disable();
   map.touchPitch.disable();

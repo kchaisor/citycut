@@ -10,7 +10,6 @@ const STAC_CATALOG_URL = "https://stac.overturemaps.org/catalog.json";
 
 export type OvertureReleaseResolution = {
   release: string;
-  /** Set only on HTTP 4xx/5xx or network failure; not when the catalog omits `rel=latest`. */
   stacWarning: string | null;
 };
 
@@ -36,12 +35,10 @@ export function overtureBaseUrl(release: string): string {
   return `https://tiles.overturemaps.org/${release}/base.pmtiles`;
 }
 
-/** Same rules as the enrichment pipeline (`shared/overtureStacRelease.js`). */
 export function releaseFromStacCatalog(catalog: StacCatalog): string {
   return releaseFromStacCatalogShared(catalog);
 }
 
-/** Resolve from STAC only (transport/base tiles, or landing when no manifest release). Cached for the session. */
 export async function resolveOvertureReleaseWithMeta(
   signal?: AbortSignal,
 ): Promise<OvertureReleaseResolution> {
@@ -68,10 +65,6 @@ export async function resolveOvertureReleaseWithMeta(
   }
 }
 
-/**
- * Landing / enrichment: prefer the baked manifest release so tile tags match Overture fetches.
- * Falls back to STAC (or pin on error) when the manifest is missing or has no release field.
- */
 export async function resolveOvertureReleaseForApp(
   manifest: { overtureRelease?: string } | null | undefined,
   signal?: AbortSignal,
@@ -87,7 +80,6 @@ export async function resolveOvertureRelease(signal?: AbortSignal): Promise<stri
   return (await resolveOvertureReleaseWithMeta(signal)).release;
 }
 
-/** Test helper. */
 export function clearOvertureReleaseCache(): void {
   cachedResolution = null;
 }

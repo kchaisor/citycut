@@ -28,20 +28,17 @@ const inRing = (p: Pair, ring: Pair[]) => {
   }
   return inside;
 };
-/** Point inside the multipolygon (outer ring in, no hole of that polygon contains it). */
 const covers = (multi: MultiPolygon, p: Pair) =>
   multi.some((poly) => inRing(p, poly[0]!) && !poly.slice(1).some((hole) => inRing(p, hole)));
 
 describe("normalizeMultiPolygonByParity", () => {
   it("keeps a hole whose vertex average falls inside one of its own islands", () => {
-    // Road ring around a 180 m block; an isolated car-park aisle loop sits in the middle of the block.
     const rings: MultiPolygon = [[rect(0, 0, 200, 200), rect(10, 10, 190, 190)], [rect(90, 90, 110, 110), rect(95, 95, 105, 105)]];
     const out = normalizeMultiPolygonByParity(rings);
     expect(area(out)).toBeCloseTo(200 * 200 - 180 * 180 + 20 * 20 - 10 * 10, 3);
     expect(covers(out, [50, 50])).toBe(false);
     expect(covers(out, [100, 100])).toBe(false);
     expect(covers(out, [92, 100])).toBe(true);
-    // The morphological close (offset +r then -r) must not fill the block either.
     expect(covers(offsetMultiPolygon(offsetMultiPolygon(rings, 3), -3), [50, 50])).toBe(false);
   });
 });
@@ -71,7 +68,6 @@ describe("carParkWays", () => {
 
 describe("fillRoadMedianGaps street rim", () => {
   const none = { green: [], water: [], buildings: [] };
-  // 100 x 30 m road with an 80 x 6 m hole between y 12 and 18.
   const road: MultiPolygon = [[rect(0, 0, 100, 30), rect(10, 12, 90, 18)]];
   it("fills a hole rimmed by streets (a median)", () => {
     const streets = [{ line: [[0, 6], [100, 6]] as Pt[], width: 12 }, { line: [[0, 24], [100, 24]] as Pt[], width: 12 }];
@@ -102,13 +98,10 @@ describe("Dandenong site plan ground (40 Cleeland St, Overture 2026-09-23.1)", (
   });
 
   it("does not paint the shopping-centre block or the park car park as road", () => {
-    // Open ground inside the shopping-centre block (was a ~95,000 m² road-white fill on main).
     for (const p of [[103, -314], [200, -250], [250, -300]] as Pair[]) {
       expect(covers(roadFill, p), `road at ${p}`).toBe(false);
       expect(covers(ground, p), `ground at ${p}`).toBe(true);
     }
-    // Car-park bays east of the site, by the park (gap-filled white by #74 on main).
-    // [119, 37] and [110, 3] sit on car-park rows mapped as plain service ways inside the car park.
     for (const p of [[77, 12], [93, 62], [89, 46], [75, -2], [86, 31], [119, 37], [110, 3]] as Pair[]) {
       expect(covers(roadFill, p), `road at ${p}`).toBe(false);
       expect(covers(ground, p), `ground at ${p}`).toBe(true);

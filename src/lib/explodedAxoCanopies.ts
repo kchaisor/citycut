@@ -21,17 +21,12 @@ function circlePath(cx: number, cy: number, r: number, from = 0, to = Math.PI * 
   return `${pts.map((p, i) => `${i === 0 ? "M" : "L"}${round(p[0])} ${round(p[1])}`).join(" ")} Z`;
 }
 
-/** Crown size groups for the visible note. Measured = CoM / Vicmap / OSM tags. */
 export type AxoCrownSource = "measured" | "estimate";
 
 export function axoCrownSource(source: TreeSizeSource | undefined): AxoCrownSource {
   return source === "com" || source === "vicmap" || source === "osm" ? "measured" : "estimate";
 }
 
-/**
- * 3D tree canopies on their own plate: a crown sphere (iso circle of the crown diameter)
- * raised to the tree height, a shaded lower-left crescent, and a trunk. Far → near.
- */
 export function buildAxoCanopyFaces(
   model: CityModel,
 ): { faces: AxoSolidFace[]; counts: Record<AxoCrownSource, number> } {
@@ -56,7 +51,6 @@ export function buildAxoCanopyFaces(
       });
     }
     faces.push({ d: circlePath(cx, cy, r), paint: "tree-canopy" });
-    // Shade: lower half of the sphere, bounded above by an offset arc (crescent).
     const shadeArc: Pt[] = [];
     for (let i = SEGMENTS / 2; i >= 0; i -= 1) {
       const a = Math.PI * 0.25 + (Math.PI * i) / SEGMENTS;

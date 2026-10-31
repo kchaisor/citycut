@@ -34,7 +34,9 @@ import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import { captureViewPng } from "../lib/capturePng";
-import { GradientSky, GroundGrid, ViewInset, insetPointerEvents } from "./SceneBackdrop";
+import { StudioSky, ViewInset, insetPointerEvents } from "./SceneBackdrop";
+import { INTRO_ACTIVE_KEY, StudioEffects } from "./StudioEffects";
+import type { RenderQuality } from "../lib/renderQuality";
 import { markScreenOnly } from "../lib/screenOnly";
 import { cameraForExportFrame, exportFrameSize } from "../lib/exportFrame";
 import { flushControlInertia, holdControlPose, type HeldControl } from "../lib/controlInertia";
@@ -105,8 +107,8 @@ import {
   type AnchoredLensActions,
 } from "./AnchoredLens";
 import type { SunHoursGrid } from "../lib/sunHours";
+import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
 
-/** Hours-of-sun heatmap: later phase. Code kept, no UI; flip to preview. */
 const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
 import { WindStaticArrows, WindStreaks } from "./WindStreaks";
@@ -120,17 +122,13 @@ export type SceneExporter = {
 
 type FiberCamera = (THREE.OrthographicCamera | THREE.PerspectiveCamera) & { manual?: boolean };
 
-// Phase B was 2100 ms; tuned to 3500 ms (k = 3.5 / 2.1 = 5 / 3) so, together with the
-// proportionally scaled HUD entry (520 ms -> 867 ms), the visible handoff is 4.37 s total.
 const INTRO_BASE_MS = 2100;
 export const INTRO_TRANSITION_MS = 3500;
 const INTRO_TIME_SCALE = INTRO_TRANSITION_MS / INTRO_BASE_MS;
 const INTRO_TRANSITION_SEC = INTRO_TRANSITION_MS / 1000;
 const INTRO_HOLD_RELEASE_SEC = INTRO_TRANSITION_SEC;
 export const INTRO_UNDERLAY_FADE_EXP = 1.65;
-// The 2D plan underlay reaches 0 this many ms before the tilt ends (3.30 s of 3.50 s).
 export const INTRO_UNDERLAY_LEAD_MS = 200;
-// The yellow 3D cut ring fades out over the first 150ms of the tilt.
 export const INTRO_CUT_RING_FADE_SEC = 0.15;
 export function computeIntroCutRingOpacity(elapsedSec: number): number {
   return Math.max(0, 1 - Math.max(0, elapsedSec) / INTRO_CUT_RING_FADE_SEC);
@@ -191,6 +189,8 @@ function computeIntroTreeWaveScale(elapsedSec: number): number {
 
 const scratch = new THREE.Vector3();
 
+const STUDIO_FILL_RATIO = 0.28;
+
 function measureCity(group: THREE.Object3D): Aabb {
   const box = new THREE.Box3().setFromObject(group);
   const instanceBox = new THREE.Box3();
@@ -224,7 +224,6 @@ function publishCamera(camera: THREE.Camera, target: THREE.Vector3, element: HTM
   element.dataset.camElevation = elevation.toFixed(3);
   element.dataset.camAxisAngle = axisAngle.toFixed(3);
   element.dataset.camBearing = bearing.toFixed(3);
-  // Full pose for QA: proves a resize or sidebar change leaves the camera where it was.
   element.dataset.camPosition = camera.position.toArray().map((v) => v.toFixed(3)).join(",");
   element.dataset.camTarget = target.toArray().map((v) => v.toFixed(3)).join(",");
   element.dataset.camZoom = (camera as THREE.OrthographicCamera | THREE.PerspectiveCamera).zoom.toFixed(4);
@@ -418,6 +417,57 @@ function HeightEditOverlayLayer({
   return overlay ? <primitive object={overlay} /> : null;
 }
 
+function WalkRippleBuildingBinder({
+  city,
+  tint,
+  buildingArrivals,
+  colourTick,
+}: {
+  city: THREE.Group;
+  tint: WalkRippleBuildingTint | null;
+  buildingArrivals: Map<number, number> | null;
+  colourTick: number;
+}) {
+  useLayoutEffect(() => {
+    if (!tint || !buildingArrivals || buildingArrivals.size === 0) {
+      tint?.detach();
+      return;
+    }
+    tint.refreshColours();
+    tint.attach(city, buildingArrivals);
+    return () => tint.detach();
+  }, [city, tint, buildingArrivals, colourTick]);
+  return null;
+}
+
+function WalkRippleTreeDim({ city, active }: { city: THREE.Group; active: boolean }) {
+  useLayoutEffect(() => {
+    if (!active) return;
+    const saved: Array<{ mat: THREE.MeshStandardMaterial; opacity: number; transparent: boolean }> = [];
+    city.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.material) return;
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const item of materials) {
+        if (!(item instanceof THREE.MeshStandardMaterial)) continue;
+        if (item.name !== "TreeCrowns" && item.name !== "TreeTrunks") continue;
+        saved.push({ mat: item, opacity: item.opacity, transparent: item.transparent });
+        item.transparent = true;
+        item.opacity = item.name === "TreeCrowns" ? 0.22 : 0.4;
+        item.needsUpdate = true;
+      }
+    });
+    return () => {
+      for (const entry of saved) {
+        entry.mat.opacity = entry.opacity;
+        entry.mat.transparent = entry.transparent;
+        entry.mat.needsUpdate = true;
+      }
+    };
+  }, [active, city]);
+  return null;
+}
+
 function City({
   model,
   uniformBuildings,
@@ -436,6 +486,8 @@ function City({
   lensHoverGate,
   lensHoverPinned,
   onBuildingHover,
+  walkRippleTint,
+  walkRippleArrivals,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -454,6 +506,8 @@ function City({
   lensHoverGate: BuildingHoverPickGate;
   lensHoverPinned: boolean;
   onBuildingHover: (buildingId: number | null) => void;
+  walkRippleTint?: WalkRippleBuildingTint | null;
+  walkRippleArrivals?: Map<number, number> | null;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -543,6 +597,7 @@ function City({
     targets: Array<{ obj: THREE.Object3D; pivotY: number; kind: "building" | "tree"; bucket: number }>;
   } | null>(null);
   const cutKey = `${model.center.lat.toFixed(5)},${model.center.lon.toFixed(5)},${model.sideM}`;
+  const introScene = useThree((state) => state.scene);
   useLayoutEffect(() => {
     const targets: Array<{ obj: THREE.Object3D; pivotY: number; kind: "building" | "tree"; bucket: number }> = [];
     for (const object of group.children) {
@@ -589,6 +644,7 @@ function City({
       if (cutRingObj) cutRingObj.visible = false;
       group.userData.introScaleY = 1;
       introRef.current = null;
+      introScene.userData[INTRO_ACTIVE_KEY] = false;
       return;
     }
     const existing = introRef.current;
@@ -632,7 +688,8 @@ function City({
     }
     group.userData.introScaleY = startScale;
     introRef.current = { cutKey, elapsedSec: 0, frameCount: 0, done: false, webglReadyDispatched: false, targets };
-  }, [group, cutKey]);
+    introScene.userData[INTRO_ACTIVE_KEY] = true;
+  }, [group, cutKey, introScene]);
   useFrame((state, delta) => {
     const intro = introRef.current;
     if (!intro || intro.done) return;
@@ -766,8 +823,6 @@ function City({
     }
 
     if (clampedElapsed >= INTRO_HOLD_RELEASE_SEC || done) {
-      state.scene.background = bgCol;
-      state.gl.setClearColor(bgCol, 1);
       const modelRoot = state.gl.domElement.closest(".model");
       if (modelRoot?.hasAttribute("data-intro-hold")) {
         modelRoot.removeAttribute("data-intro-hold");
@@ -783,6 +838,7 @@ function City({
     ds.introTreeScale = treeScale.toFixed(3);
     if (done) {
       intro.done = true;
+      state.scene.userData[INTRO_ACTIVE_KEY] = false;
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("citycut:intro-done"));
       }
@@ -874,6 +930,16 @@ function City({
   return (
     <>
       <primitive object={group} />
+      <WalkRippleBuildingBinder
+        city={group}
+        tint={walkRippleTint ?? null}
+        buildingArrivals={walkRippleArrivals ?? null}
+        colourTick={colourTick}
+      />
+      <WalkRippleTreeDim
+        city={group}
+        active={Boolean(walkRippleArrivals && walkRippleArrivals.size > 0)}
+      />
       {contours ? <primitive object={contours} /> : null}
       <HeightEditOverlayLayer
         model={model}
@@ -906,7 +972,6 @@ function City({
   );
 }
 
-/** Sun-study whites read grey under ACES; use linear output while the diagram is on. */
 function SunStudyToneMapping({ noToneMapping }: { noToneMapping: boolean }) {
   const gl = useThree((state) => state.gl);
   useLayoutEffect(() => {
@@ -924,7 +989,6 @@ function RendererShadows({ enabled }: { enabled: boolean }) {
     gl.shadowMap.enabled = enabled;
     gl.shadowMap.type = THREE.PCFSoftShadowMap;
     gl.shadowMap.needsUpdate = true;
-    // Programs compiled before the toggle lack shadow code until they are rebuilt.
     scene.traverse((object) => {
       const material = (object as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
       for (const item of Array.isArray(material) ? material : material ? [material] : []) item.needsUpdate = true;
@@ -1266,7 +1330,6 @@ function IsoSnap({
     const key = `${snapId}:${size.width}x${size.height}`;
     if (fittedKey.current === key) return;
     const sameSnap = fittedKey.current?.startsWith(`${snapId}:`) ?? false;
-    // Resizes keep the pose and zoom; only a new snap id refits (see viewportAutoFit.ts).
     if (sameSnap) return;
     let fitBounds = bounds;
     if (CAMERA_FIT_INCLUDES_HELIODON && solar.showPath) {
@@ -1371,7 +1434,6 @@ function PlanSnap({
     const key = `${snapId}:${size.width}x${size.height}`;
     if (fittedKey.current === key) return;
     const sameSnap = fittedKey.current?.startsWith(`${snapId}:`) ?? false;
-    // Resizes keep the pose and zoom; only a new snap id refits (see viewportAutoFit.ts).
     if (sameSnap) return;
     const measured = boundsRef.current;
     const fitBounds = sitePlanBounds(sideM, groundY, siteTopY);
@@ -1641,11 +1703,6 @@ function ExportBridge({
   return null;
 }
 
-/**
- * Puts back the camera the user left when the 3D tab was unmounted (Drawing/Satellite round trip),
- * and keeps a copy of the live camera every frame. Runs after both OrbitControls are mounted, and
- * restores the fit keys and the touched flag before the first frame, so no auto-fit fires.
- */
 function CameraMemoryBridge({
   memoryRef,
   snapId,
@@ -1685,7 +1742,6 @@ function CameraMemoryBridge({
     fittedKeys.iso.current = memory.fittedKeys.iso;
     fittedKeys.plan.current = memory.fittedKeys.plan;
     touchedRef.current = memory.touched;
-    // Mount-only: later prop changes must not re-apply an old pose.
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useFrame(() => {
     if (!memoryRef) return;
@@ -1700,7 +1756,6 @@ function CameraMemoryBridge({
       touched: touchedRef.current,
     };
     memoryRef.current = next;
-    // Default priority: a positive priority would take over rendering in react-three-fiber.
   });
   return null;
 }
@@ -1765,8 +1820,6 @@ export function Cameras({
   const iso = projection === "iso";
   const plan = projection === "plan";
   const orthoView = iso || plan;
-  // The ortho clip planes are fitted to the measured site. Without the dome in that box, the
-  // heliodon, sun and compass sit outside near/far in Iso view and are clipped away entirely.
   const heliodonClipBounds = useMemo(
     () =>
       orthoView && solar.showPath
@@ -2007,6 +2060,9 @@ export function Scene3D({
   display,
   importedMassing = null,
   walkLayer = null,
+  walkRippleLayer = null,
+  walkRippleTint = null,
+  walkRippleArrivals = null,
   onScenePoint = null,
   anchoredLensBuilding = null,
   anchoredLensSunHoursGrid = null,
@@ -2015,6 +2071,7 @@ export function Scene3D({
   lensHoverEnabled = false,
   lensHoverPinned = false,
   onBuildingHover = () => {},
+  quality = "high",
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -2034,14 +2091,13 @@ export function Scene3D({
   onClearBuildingPick?: () => void;
   heightEditBuildingId: number | null;
   selectedBuildingIds?: readonly number[];
-  /** Survives the 3D tab unmounting; see CameraMemory. Omit to always frame afresh. */
   cameraMemory?: CameraMemoryRef;
   display: View3dDisplaySettings;
-  /** Imported massing, already in the local frame. Never measured for camera framing. */
   importedMassing?: THREE.Object3D | null;
-  /** View tab walk overlay (path, visibility, walker), in the local frame. Never measured for camera framing. */
   walkLayer?: THREE.Object3D | null;
-  /** Click-to-place: while set, a click reports the scene point (east, north, up) instead of picking a building. */
+  walkRippleLayer?: THREE.Object3D | null;
+  walkRippleTint?: WalkRippleBuildingTint | null;
+  walkRippleArrivals?: Map<number, number> | null;
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
   anchoredLensBuilding?: BuildingFeat | null;
   anchoredLensSunHoursGrid?: SunHoursGrid | null;
@@ -2050,6 +2106,7 @@ export function Scene3D({
   lensHoverEnabled?: boolean;
   lensHoverPinned?: boolean;
   onBuildingHover?: (buildingId: number | null) => void;
+  quality?: RenderQuality;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
@@ -2060,6 +2117,7 @@ export function Scene3D({
   const modelBg = useMemo(() => themeColor("--model-bg"), [colourTick]);
   const sky = getColour("--light-sky");
   const groundLight = getColour("--light-ground");
+  const studioFill = getColour("--light-fill");
   const groundY = model.terrain ? model.terrain.min : 0;
   const plinthBottomY = basePlinthBottomY(model.sideM, model.terrain);
   const solarNeutralFill = useMemo(() => getColour("--building-solar-neutral"), [colourTick]);
@@ -2126,11 +2184,24 @@ export function Scene3D({
         <WebGlContextWatch onContextLost={onGlContextLost} onContextRestored={onGlContextRestored} />
         <RendererShadows enabled={solar.castShadows} />
       <SunStudyToneMapping noToneMapping={noToneMapping} />
-      <GradientSky colourTick={colourTick} fallback={modelBg} />
-      {projection !== "plan" && <GroundGrid sideM={model.sideM} groundY={plinthBottomY} colourTick={colourTick} />}
+      <StudioSky colourTick={colourTick} fallback={modelBg} />
       <hemisphereLight args={[sky, groundLight, fillHemi]} />
       <ambientLight intensity={fillAmbient} />
       <directionalLight position={[model.sideM * 0.4, model.sideM, model.sideM * 0.2]} intensity={fillKeyLight} />
+      <directionalLight
+        position={[-model.sideM * 0.6, model.sideM * 0.45, -model.sideM * 0.5]}
+        color={studioFill}
+        intensity={fillKeyLight * STUDIO_FILL_RATIO}
+      />
+      <StudioEffects
+        quality={quality}
+        noToneMapping={noToneMapping}
+        sideM={model.sideM}
+        plinthBottomY={plinthBottomY}
+        showShadow={projection !== "plan"}
+        frameShape={model.frameShape ?? "square"}
+        colourTick={colourTick}
+      />
       <SolarLight
         sample={sunSample}
         sideM={Math.max(model.sideM, heliodonRadius * 0.5)}
@@ -2160,9 +2231,12 @@ export function Scene3D({
         lensHoverGate={lensHoverGateRef.current}
         lensHoverPinned={lensHoverPinned}
         onBuildingHover={onBuildingHover}
+        walkRippleTint={walkRippleTint}
+        walkRippleArrivals={walkRippleArrivals}
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
+      {walkRippleLayer ? <primitive object={walkRippleLayer} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
       {anchoredLensBuilding && anchoredLensActions ? (
         <AnchoredLensScreenTracker

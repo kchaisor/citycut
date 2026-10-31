@@ -1,6 +1,5 @@
 import { DEFAULT_ISO_CORNER, isIsoCorner, type IsoCorner } from "./isoCamera";
 
-/** Projection, corner, and free-rotate. Separate from the map frame in the URL. */
 export const VIEW_STORAGE_KEY = "citycut.view";
 
 export type ProjectionMode = "perspective" | "iso" | "plan";
@@ -39,11 +38,6 @@ export function parseStoredView(raw: string | null): ViewMemory {
   }
 }
 
-/**
- * `view=iso-sw` (and ne / nw / se) is a locked isometric corner.
- * `view=axo` is orthographic with free rotate on.
- * `view=persp` forces perspective. Anything else is ignored.
- */
 export function viewFromToken(token: string | null): Partial<ViewMemory> | null {
   if (!token) return null;
   const value = token.trim().toLowerCase();
@@ -61,7 +55,6 @@ export function viewFromToken(token: string | null): Partial<ViewMemory> | null 
   return { projection: "iso", corner: match[1], freeRotate: false };
 }
 
-/** A locked isometric corner encodes as `iso-sw`. Perspective adds nothing. Free rotate is `axo`. */
 export function viewToken(view: ViewMemory): string | null {
   if (view.projection === "perspective") return null;
   if (view.projection === "plan") return "plan";
@@ -69,7 +62,6 @@ export function viewToken(view: ViewMemory): string | null {
   return `iso-${view.corner}`;
 }
 
-/** Stored memory, then a `view` query param when that param is one we understand. */
 export function resolveView(stored: string | null, search: string): ViewMemory {
   const base = parseStoredView(stored);
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
@@ -78,10 +70,6 @@ export function resolveView(stored: string | null, search: string): ViewMemory {
   return { ...base, ...override };
 }
 
-/**
- * Sets or removes `view` and leaves lat, lon, km, and label in place.
- * `URLSearchParams` may rewrite the encoding of the other values; the frame they describe does not change.
- */
 export function writeViewSearch(search: string, view: ViewMemory): string {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const token = viewToken(view);
@@ -103,6 +91,5 @@ export function writeStoredView(storage: KeyValueStore, view: ViewMemory): void 
   try {
     storage.setItem(VIEW_STORAGE_KEY, JSON.stringify(view));
   } catch {
-    // Private mode and some embedded browsers throw on localStorage.
   }
 }

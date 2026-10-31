@@ -1,4 +1,3 @@
-/** On-screen plan viewBox in local east/north metres (Y grows south in SVG). */
 export type PlanViewport = {
   x: number;
   y: number;
@@ -6,10 +5,6 @@ export type PlanViewport = {
   h: number;
 };
 
-/**
- * Shared extent for Site plan and Figure-ground so toggling drawing type never
- * changes zoom or pan. Margins fit the figure-ground north arrow and scale bar.
- */
 export function planViewportExtent(sideM: number): PlanViewport {
   const half = sideM / 2;
   const padX = sideM * 0.06;
@@ -27,7 +22,6 @@ export function planViewportEqual(a: PlanViewport, b: PlanViewport): boolean {
   return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 }
 
-/** Fit viewport for exploded axo in isometric screen metres. */
 export function explodedAxoViewportExtent(bounds: {
   minX: number;
   minY: number;

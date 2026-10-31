@@ -122,9 +122,6 @@ describe("tree size", () => {
   });
 
   it("reads centimetre trunk tags instead of stretching the tree to the height cap", () => {
-    // North Melbourne OSM: Ulmus 7816484197 diameter=72, river red gum 7816482682
-    // diameter=79, Agathis 7816484203 diameter=4, and node 10895346193 circumference=311 cm.
-    // Those bare numbers and the cm suffix were treated as metres, so heightFromDbh hit 40 m.
     const elm = treeSize({ genus: "Ulmus", diameter: "72" });
     expect(elm.trunk_diameter_m).toBeCloseTo(0.72);
     expect(elm.height_m).toBeCloseTo(heightFromDbhCm(72));

@@ -11,15 +11,6 @@ import {
   screenPx,
 } from "./lineweights";
 
-/**
- * Site-plan pens. The values in src/drawing-style.css are the ones Kelvin edits.
- * These defaults are only used when a variable is missing. In the browser,
- * `readDrawingStyle` calls `getComputedStyle` on `:root`, so the stylesheet
- * wins over this file and an inline override from the Line styles editor wins
- * over the stylesheet. The Illustrator export calls the same function at
- * export time, which is how a download picks up a live edit.
- */
-
 export type StrokeKey =
   | "building"
   | "kerb"
@@ -36,18 +27,13 @@ export type StrokeKey =
   | "siteBuilding";
 
 export type StrokeStyle = {
-  /** Printed millimetres. */
   mm: number;
-  /** Six-digit hex. */
   color: string;
-  /** `none`, or two millimetre lengths "on off". `0 0.6` is a dotted line. */
   dash: string;
 };
 
 export const SITE_BOUNDARY_MM_VAR = "--site-boundary-mm";
-/** Theme fill in colours.css; editable in the Colours panel. */
 export const SITE_BOUNDARY_COLOUR_VAR = "--site-boundary";
-/** Legacy pen name; aliases `--site-boundary` in drawing-style.css. */
 export const SITE_BOUNDARY_STROKE_VAR = "--site-boundary-stroke";
 export const SITE_BOUNDARY_DASH_VAR = "--site-boundary-dash";
 export const SITE_BUILDING_MM_VAR = "--site-building-stroke-mm";
@@ -56,9 +42,7 @@ export const SITE_BUILDING_DASH_VAR = "--site-building-dash";
 
 export type LineStyles = {
   building: StrokeStyle;
-  /** Outline on site-building fills on the site plan. */
   siteBuilding: StrokeStyle;
-  /** Searched-property parcel boundary. */
   siteBoundary: StrokeStyle;
   kerb: StrokeStyle;
   path: StrokeStyle;
@@ -70,27 +54,17 @@ export type LineStyles = {
   annotation: StrokeStyle;
   tree: StrokeStyle;
   tram: StrokeStyle;
-  /** Tree crown fill opacity on the site plan (0–1). */
   treeFillOpacity: number;
-  /** Dash pattern for exploded axo vertical guides (`none` or mm pair). */
   axoGuideDash: string;
   roadFill: string;
-  /** Drawn on the boundary of the unioned carriageway. */
   kerbOn: boolean;
-  /** Full footpath width in metres on the ground. Half lies each side of the centreline. */
   pathWidthM: number;
-  /** Fillet radius at footpath junctions after the union (m on the ground). */
   pathFilletM: number;
   pathFill: string;
-  /** Stroke on the unioned footpath outline only. */
   pathEdgeOn: boolean;
-  /** Printed millimetres for every Nth contour. Same colour and dash as `contour`. */
   contourIndexMm: number;
-  /** Index every Nth drawn contour. 5 is 5 m on 1 m lines and 25 m once those lines are drawn at 5 m. */
   contourIndexEvery: number;
-  /** Metres between metro contours once the plan scale is small enough to thin them. */
   contourCoarseIntervalM: number;
-  /** Scale denominator at which that coarser interval starts. 2500 is 1:2500 and smaller. */
   contourCoarseFromScale: number;
 };
 
@@ -164,7 +138,6 @@ export const CONTOUR_COARSE_INTERVAL_VAR = "--contour-coarse-interval-m";
 export const CONTOUR_COARSE_FROM_SCALE_VAR = "--contour-coarse-from-scale";
 export const LINE_STYLES_KEY = "citycut.lineStyles";
 
-/** Previous centreline names. Read as the footpath edge when the new names are absent. */
 const LEGACY_PATH_VARS: Record<string, string> = {
   "--path-stroke-mm": "--path-edge-mm",
   "--path-stroke": "--path-edge-stroke",
@@ -277,7 +250,6 @@ export function parseColor(raw: string | undefined | null): string | null {
   return hex.length === 9 ? hex.slice(0, 7) : hex;
 }
 
-/** Ground metres. Rounded to 0.1 m, the editor step. */
 export function parseMetres(raw: string | undefined | null): number | null {
   if (raw == null) return null;
   const text = raw.trim().toLowerCase().replace(/m$/, "").trim();
@@ -304,12 +276,10 @@ export function formatMm(mm: number): string {
   return String(Math.round(mm * 100) / 100);
 }
 
-/** Ground metres between thinned contours. 0 leaves the native interval. */
 export function parseCoarseInterval(raw: string | undefined | null): number | null {
   return parseMetres(raw);
 }
 
-/** Plan-scale denominator, such as 2500 for 1:2500. */
 export function parseScaleDenominator(raw: string | undefined | null): number | null {
   if (raw == null) return null;
   const text = raw.trim().toLowerCase().replace(/^1\s*:\s*/, "");
@@ -319,7 +289,6 @@ export function parseScaleDenominator(raw: string | undefined | null): number | 
   return Math.min(100000, Math.max(1, Math.round(value)));
 }
 
-/** Whole intervals, from 1 to 20. 1 draws every contour as an index line. */
 export function parseIndexEvery(raw: string | undefined | null): number | null {
   if (raw == null) return null;
   const text = raw.trim();
@@ -329,7 +298,6 @@ export function parseIndexEvery(raw: string | undefined | null): number | null {
   return Math.min(20, Math.max(1, Math.round(value)));
 }
 
-/** `none` is solid. Two numbers are on/off mm; four numbers are dash-gap-dot-gap. */
 export function normalizeDash(raw: string | undefined | null): string | null {
   if (raw == null) return null;
   const text = raw.trim().toLowerCase().replace(/,/g, " ").replace(/\s+/g, " ");
@@ -344,7 +312,6 @@ export function normalizeDash(raw: string | undefined | null): string | null {
   return `${formatMm(pair[0])} ${formatMm(pair[1])}`;
 }
 
-/** Dash lengths in mm for SVG/PDF. Null when solid. */
 export function dashSegments(dash: string): readonly number[] | null {
   const norm = normalizeDash(dash);
   if (!norm || norm === "none") return null;
@@ -371,11 +338,6 @@ export function dashPair(dash: string): readonly [number, number] | null {
   return [segments[0], segments[1]];
 }
 
-/**
- * SVG stroke for a pen. A weight of 0 is `stroke="none"` and does not set a
- * width, so the 0.6 px screen floor never turns a hidden edge into a line.
- */
-/** Footpath outline on the unioned strip. Requires `--path-edge: on` and a weight above 0. */
 export function footpathEdgeStroke(style: LineStyles): StrokeStyle | null {
   if (!style.pathEdgeOn || !(style.path.mm > 0)) return null;
   return style.path;
@@ -400,7 +362,6 @@ export function screenPenAttrs(stroke: StrokeStyle, join: "miter" | "round" = "r
   };
 }
 
-/** On-screen dash array. Dots use round caps so a zero-length dash is a dot. */
 export function dashScreen(dash: string): { array?: string; cap: "round" | "butt" } {
   const segments = dashSegments(dash);
   if (!segments) return { cap: "butt" };
@@ -411,7 +372,6 @@ export function dashScreen(dash: string): { array?: string; cap: "round" | "butt
   };
 }
 
-/** Paper-coloured casing so a thin line still reads on the dark carriageway. */
 export function haloMm(mm: number): number {
   if (!(mm > 0)) return 0;
   return Math.round(Math.max(mm * 2.4, mm + 0.18) * 100) / 100;
@@ -425,11 +385,6 @@ function parseKerb(raw: string | undefined | null): boolean | null {
   return null;
 }
 
-/**
- * Build a style from custom-property values. An empty or invalid value keeps
- * the TypeScript default. A present value wins, which is how the CSS file
- * overrides `lineweights.ts`.
- */
 export function styleFromProperties(
   read: (name: string) => string | undefined | null,
   base: LineStyles = DEFAULT_LINE_STYLES,
@@ -497,12 +452,6 @@ export function styleFromProperties(
   return next;
 }
 
-/**
- * Resolved site-plan style. In the browser this is `getComputedStyle` on
- * `document.documentElement` (`:root`), so the cascade is the source of truth
- * at the moment of the call — including Line styles edits applied as inline
- * custom properties. Without a document, the TypeScript defaults are used.
- */
 export function readDrawingStyle(read?: (name: string) => string): LineStyles {
   if (read) return styleFromProperties(read);
   if (typeof document === "undefined") return cloneLineStyles();
@@ -545,7 +494,6 @@ export function writeStoredOverrides(storage: StorageLike, overrides: Record<str
   else storage.setItem(LINE_STYLES_KEY, JSON.stringify(clean));
 }
 
-/** Variables whose resolved value differs from the stylesheet baseline. */
 export function changedVariables(current: LineStyles, baseline: LineStyles): Record<string, string> {
   const out: Record<string, string> = {};
   for (const key of STROKE_KEYS) {
@@ -577,7 +525,6 @@ export function changedVariables(current: LineStyles, baseline: LineStyles): Rec
   return out;
 }
 
-/** Changed variables, split so fills are pasted into colours.css and pens into drawing-style.css. */
 export function copyCssText(current: LineStyles, baseline: LineStyles): string {
   const changed = changedVariables(current, baseline);
   const names = Object.keys(changed);
@@ -616,10 +563,6 @@ export function applyOverrides(overrides: Record<string, string>, root?: HTMLEle
   }
 }
 
-/**
- * Read the stylesheet first (that baseline is what Reset and Copy CSS compare
- * against), then apply anything saved under `citycut.lineStyles`.
- */
 export function hydrateStoredLineStyles(storage?: StorageLike): LineStyles {
   if (typeof document === "undefined") {
     fileBaseline = cloneLineStyles();
@@ -642,7 +585,6 @@ export function commitLineStyles(next: LineStyles, baseline: LineStyles = lineSt
   try {
     if (typeof window !== "undefined") writeStoredOverrides(window.localStorage, overrides);
   } catch {
-    // Private mode can reject localStorage. The on-screen style still updates.
   }
   applyOverrides(overrides);
   return cloneLineStyles(next);
@@ -652,7 +594,6 @@ export function resetStoredLineStyles(): LineStyles {
   try {
     if (typeof window !== "undefined") window.localStorage.removeItem(LINE_STYLES_KEY);
   } catch {
-    // Ignore a locked storage area. Clearing the inline properties is enough.
   }
   applyOverrides({});
   if (typeof document === "undefined") return cloneLineStyles(fileBaseline ?? DEFAULT_LINE_STYLES);

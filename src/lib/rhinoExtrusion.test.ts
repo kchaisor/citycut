@@ -39,7 +39,6 @@ const stacked: BuildingFeat = {
     { ring: square([40, -30], 12), holes: [], height: 28, base: 12 },
   ],
 };
-// Bow-tie: the outline crosses itself, so this part must fall back to a mesh.
 const bowtie: BuildingFeat = {
   id: 4,
   ring: [[60, 40], [80, 60], [80, 40], [60, 60], [60, 40]],
@@ -131,7 +130,6 @@ describe("buildings as Rhino Extrusions", () => {
   it("writes each building part as a closed, capped Extrusion by default", async () => {
     const tally: ExtrusionTally = { extrusions: 0, meshFallback: 0 };
     const objects = await read(await cityModelTo3dm(model, { extrusionTally: tally }));
-    // 1 + 1 courtyard + 2 stacked parts
     expect(objects).toHaveLength(4);
     expect(tally).toEqual({ extrusions: 4, meshFallback: 0 });
     for (const item of objects) {

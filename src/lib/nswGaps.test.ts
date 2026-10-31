@@ -290,8 +290,8 @@ describe("planning label thinning", () => {
     const size = 11.5;
     const zoning = [
       zone(-500, -500, 200, "MU1"),
-      zone(-280, -500, 200, "MU1"), // same text within the repeat radius
-      zone(200, 200, 40, "R1"), // under the minimum area
+      zone(-280, -500, 200, "MU1"),
+      zone(200, 200, 40, "R1"),
       zone(0, -200, 150, "SP2"),
     ];
     const nswLayers = { zoning, hob: [hob(0, -200, 150, 28), hob(5, -195, 140, 30)], fsr: [] } as unknown as NswLayers;

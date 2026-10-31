@@ -54,7 +54,6 @@ function waitForServer(url, timeoutMs = 25000) {
           return;
         }
       } catch {
-        // retry
       }
       if (Date.now() - start > timeoutMs) {
         reject(new Error(`Timed out waiting for Vite server at ${url}`));
@@ -123,7 +122,6 @@ async function main() {
           JSON.stringify({ projection: "iso", corner: "sw", freeRotate: false }),
         );
       } catch {
-        // ignore
       }
     });
     const page = await context.newPage();
@@ -138,9 +136,6 @@ async function main() {
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(800);
 
-    // -------------------------------------------------------------------------
-    // BEAT 1: Landing Screen
-    // -------------------------------------------------------------------------
     const beat1Info = await page.evaluate(() => {
       const cta = document.querySelector("button.create-fab");
       const frame = document.querySelector(".select .frame");
@@ -176,7 +171,6 @@ async function main() {
       `cta="${beat1Info.ctaText}", frame=${JSON.stringify(beat1Info.frameRect)}, ratio=${beat1Info.frameRatio?.toFixed(3)}, singlePill=${beat1Info.frameLabelDisplay === "none" && beat1Info.frameCadTagVisible}`,
     );
 
-    // Install zero-blank-frame handoff & Phase B synchronised progress/fade monitor before clicking Create model
     await page.evaluate(() => {
       window.__citycutHandoffMonitor = {
         blankFrames: 0,
@@ -233,7 +227,6 @@ async function main() {
           };
         }
         if (mon.introStartFired) {
-          // Boundary (moving dashed perimeter) effective opacity = product of its own + ancestor opacities
           const perim = document.querySelector(".select .frame-loop-perimeter");
           let eff = 0;
           if (perim) {
@@ -293,9 +286,6 @@ async function main() {
       requestAnimationFrame(checkHandoff);
     });
 
-    // -------------------------------------------------------------------------
-    // PHASE A (BEAT 2): Silent Background Load (2D Screen Untouched, No Fading Yet)
-    // -------------------------------------------------------------------------
     await page.click("button.create-fab");
     await page.waitForTimeout(180);
 
@@ -417,9 +407,6 @@ async function main() {
       `isProcessingPhaseA=${beat2Info.isProcessingPhaseA}, frameSizeDelta=${frameSizeDelta}px, perimSizeDelta=${perimSizeDelta}px, inset=${beat2Info.perimeterInsetTop}, edges2px=${beat2Info.edges2px}, tracksGpuAnimated=${beat2Info.tracksGpuAnimated}, borderTransparent=${beat2Info.frameBorderTransparent}`,
     );
 
-    // -------------------------------------------------------------------------
-    // PHASE B (BEAT 3): Synchronised 0%->100% Progress + 1->0 Background Fade + 3D Shift & Geometry Wave
-    // -------------------------------------------------------------------------
     try {
       await page.waitForFunction(
         () => {
@@ -450,7 +437,6 @@ async function main() {
       throw e;
     }
 
-    // Pause intro clock immediately after Phase B starts to inspect Frame 1 & handoff latency
     await page.evaluate(() => {
       window.__citycutIntroPaused = true;
     });
@@ -529,9 +515,6 @@ async function main() {
       `blankFrames=${beat3Start.handoff.blankFrames}, latency=${beat3Start.handoffLatencyMs.toFixed(1)}ms, pillOpacity=${beat3Start.bridgePillOpacity}, startPct=${beat3Start.bridgePillPct}%, startUnderlayOpacity=${beat3Start.underlayOpacity.toFixed(3)}, phaseBTracksAnimating=${beat3Start.phaseBTracksAnimating}, borderTransparent=${beat3Start.phaseBFrameBorderTransparent}, polar=${beat3Start.polar}, radius=${beat3Start.radius}m`,
     );
 
-    // Poll Phase B (0s -> 2.1s) for:
-    //   1) beat3WaveSample: elapsed in [0.63, 1.08], bldgInner > 0.35, bldgOuter < 0.18, treeScale < 0.05, underlayOpacity in [0.55, 0.90]
-    //   2) beat3TreeSample: elapsed in [1.42, 3.08], treeScale > 1.04 (bouncy overshoot!)
     let beat3WaveSample = null;
     let beat3TreeSample = null;
     let maxObservedTreeScale = 0;
@@ -628,7 +611,6 @@ async function main() {
         if (diff > maxStep) maxStep = diff;
       }
       const distinctIntermediate = new Set(samples.filter((v) => v > 0 && v < 100)).size;
-      // Verify that underlayOpacity tracks the late-tail curve (1 - min(1, (pct/100) * 3500/3300)^1.65, reaching 0 200ms early) closely across all captured pairs
       let maxSyncDrift = 0;
       for (const pair of mon.syncPairs) {
         const expectedOpacity = 1 - Math.pow(Math.min(1, (pair.pct / 100) * (3500 / 3300)), 1.65);
@@ -740,9 +722,6 @@ async function main() {
         : `did not capture tree bounce sample (maxObservedTreeScale=${maxObservedTreeScale.toFixed(3)})`,
     );
 
-    // -------------------------------------------------------------------------
-    // BEAT 4: Settled 3D View at 100% + Studio HUD Slide-In
-    // -------------------------------------------------------------------------
     await page.waitForTimeout(150);
     await page.screenshot({ path: path.join(TMP_FRAMES_DIR, "frame_07.png") });
     await page.waitForTimeout(650);
@@ -829,9 +808,7 @@ async function main() {
       `polar=${beat4Info.polar}, bldg=[${beat4Info.bldgInner},${beat4Info.bldgOuter}], tree=${beat4Info.treeScale}, hudOpacities=[${beat4Info.topOpacity},${beat4Info.leftOpacity},${beat4Info.rightOpacity},${beat4Info.bottomOpacity}], underlay=${beat4Info.hasUnderlay}`,
     );
 
-    // -------------------------------------------------------------------------
     // TYPOGRAPHY & CSS SURFACE INVARIANTS
-    // -------------------------------------------------------------------------
     const uiInvariants = await page.evaluate(() => {
       const bodyFont = getComputedStyle(document.body).fontFamily;
       const monoEl = document.querySelector(".mono, .coord-chip, .right-inspector");
@@ -940,9 +917,34 @@ async function main() {
       `rightInspBorder=${uiInvariants.rightInspBorder}, leftRailBg=${uiInvariants.leftRailBg}, topBarLeftBg=${uiInvariants.topBarLeftBg}, bleed=${uiInvariants.legacyBleedCount}, outliner="${uiInvariants.outlinerText}", overlaps=${uiInvariants.overlaps.length}`,
     );
 
-    // -------------------------------------------------------------------------
+    await page.keyboard.press("Control+KeyK");
+    await page.waitForTimeout(120);
+    const commandBarInfo = await page.evaluate(() => {
+      const dialog = document.querySelector(".command-bar[role='dialog']");
+      const input = dialog?.querySelector(".command-bar-input");
+      const cs = dialog ? getComputedStyle(dialog) : null;
+      return {
+        open: Boolean(dialog && input),
+        fontFamily: input ? getComputedStyle(input).fontFamily : "",
+        backdrop: Boolean(document.querySelector(".command-bar-backdrop")),
+        bg: cs?.backgroundColor ?? "",
+      };
+    });
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "command-bar-open-desktop.png") });
+    }
+    await page.keyboard.press("Escape");
+    assertCheck(
+      "command-bar-desktop",
+      "Ctrl+K opens the Studio HUD command bar on desktop with a focused search field (Geist, hud-card surface)",
+      commandBarInfo.open &&
+        commandBarInfo.backdrop &&
+        commandBarInfo.fontFamily.startsWith("Geist") &&
+        commandBarInfo.bg.includes("252"),
+      `open=${commandBarInfo.open}, font=${commandBarInfo.fontFamily}, bg=${commandBarInfo.bg}`,
+    );
+
     // 3D DISPLAY OUTLINER INVARIANT (PER-USE BUILDINGS + RESET COLOURS BUTTON)
-    // -------------------------------------------------------------------------
     const display3dOutlinerInfo = await page.evaluate(() => {
       const layersRegion = document.querySelector('.model .left-outliner [aria-label="Layers"]');
       const rowLabels = Array.from(
@@ -985,9 +987,7 @@ async function main() {
       await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v17-display-reset-colours.png") });
     }
 
-    // -------------------------------------------------------------------------
     // SITE ANALYSIS DIRECTION A INVARIANT (IN 3D MODEL)
-    // -------------------------------------------------------------------------
     const analysisBtn = page.locator('.model button[data-section="analysis"]').first();
     await analysisBtn.click();
     await page.waitForTimeout(300);
@@ -1048,9 +1048,94 @@ async function main() {
       `visibleLeftDrawers=${analysisInfo.visibleLeftDrawerCount}, noOverflow=${analysisInfo.noHorizontalOverflow}, topReset=${analysisInfo.hasTopCenterReset}, bottomCompass=${analysisInfo.hasBottomCompass}, 3dDome=${analysisInfo.has3dSunDomeIn3d}, planFanIn3d=${analysisInfo.hasPlanFanIn3d}, rect=${JSON.stringify(analysisInfo.envConsoleRect)}`,
     );
 
-    // -------------------------------------------------------------------------
+    await page.getByRole("tab", { name: /Walk Ripple/i }).click();
+    await page.waitForTimeout(250);
+    await page.getByRole("button", { name: /Pick origin/i }).first().click();
+    const rippleCanvas = page.locator(".model canvas").first();
+    const rippleCanvasBox = await rippleCanvas.boundingBox();
+    if (!rippleCanvasBox) throw new Error("Walk ripple: missing model canvas");
+    await page.mouse.click(
+      rippleCanvasBox.x + rippleCanvasBox.width * 0.5,
+      rippleCanvasBox.y + rippleCanvasBox.height * 0.52,
+    );
+    const scrubTrack = page.locator(".model .walk-ripple-scrubber-track");
+    await page.waitForFunction(
+      () => {
+        const track = document.querySelector(".model .walk-ripple-scrubber-track");
+        return track && track.getAttribute("aria-disabled") === "false";
+      },
+      { timeout: 120000 },
+    );
+    await page.waitForTimeout(800);
+
+    await scrubTrack.waitFor({ state: "visible", timeout: 10000 });
+    const trackBox = await scrubTrack.boundingBox();
+    if (!trackBox) throw new Error("Walk ripple: scrubber track missing");
+
+    const readScrubState = () =>
+      page.evaluate(() => {
+        const readout = document.querySelector(".model .walk-ripple-time-readout");
+        const label = readout?.getAttribute("data-walk-ripple-minutes") ?? "";
+        const reached = Number(readout?.getAttribute("data-walk-ripple-reached") ?? "0");
+        return { label, reached, minutes: Number.parseFloat(label) };
+      });
+
+    const dragScrubToPct = async (pct) => {
+      const box = await scrubTrack.boundingBox();
+      if (!box) throw new Error("Walk ripple: scrubber track missing");
+      const x = box.x + box.width * pct;
+      const y = box.y + box.height * 0.5;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + 2, y);
+      await page.mouse.up();
+      await page.waitForTimeout(280);
+    };
+
+    await dragScrubToPct(0.08);
+    const atLow = await readScrubState();
+
+    await dragScrubToPct(0.62);
+    const atHigh = await readScrubState();
+
+    const rippleOverflow = await page.evaluate(() => {
+      const envConsole = document.querySelector(".model .env-console");
+      const bottomRow = envConsole?.querySelector(".env-bottom-row");
+      return Boolean(
+        envConsole &&
+          bottomRow &&
+          envConsole.scrollWidth <= envConsole.clientWidth + 1 &&
+          bottomRow.scrollWidth <= bottomRow.clientWidth + 1,
+      );
+    });
+
+    assertCheck(
+      "walk-ripple-time-scrubber",
+      "Walk Ripple scrubber accepts Playwright mouse drags, updates minute readout and uRippleTime, increases reached-building count, and keeps the env console row without horizontal overflow",
+      rippleOverflow &&
+        atLow.minutes >= 0.5 &&
+        atLow.minutes <= 4.5 &&
+        atHigh.minutes >= 10 &&
+        atHigh.minutes <= 14.5 &&
+        atHigh.reached > atLow.reached &&
+        atHigh.reached - atLow.reached >= 3,
+      `low=[min=${atLow.minutes}, reached=${atLow.reached}, label=${atLow.label}], high=[min=${atHigh.minutes}, reached=${atHigh.reached}, label=${atHigh.label}], noOverflow=${rippleOverflow}`,
+    );
+
+    await page.getByRole("button", { name: /Replay walk ripple/i }).click();
+    await page.waitForTimeout(400);
+    const replayStart = await readScrubState();
+    assertCheck(
+      "walk-ripple-replay",
+      "Walk Ripple replay button restarts the 0–20 min animation from the scrubber row",
+      replayStart.minutes <= 1.5,
+      `minutesAfterReplayClick=${replayStart.minutes}`,
+    );
+
+    await page.getByRole("tab", { name: /Solar Study/i }).click();
+    await page.waitForTimeout(200);
+
     // DRAWING -> DISPLAY OUTLINER CLEANUP & RESET COLOURS INVARIANT
-    // -------------------------------------------------------------------------
     await page.getByRole("tab", { name: /Drawing/i }).click();
     await page.waitForSelector("svg.plan", { timeout: 10000 });
     const displayBtn = page.getByRole("button", { name: "Display" }).first();
@@ -1298,6 +1383,43 @@ async function main() {
       `id=${lensOpenInfo.id}, layout=${JSON.stringify(lensOpenInfo)}`,
     );
 
+    await lensPage.locator('[data-anchored-lens-action="ripple"]').click();
+    await lensPage.waitForFunction(
+      () => {
+        const tab = document.querySelector('.model .env-mode-btn[aria-selected="true"]');
+        return tab?.textContent?.includes("Walk Ripple") ?? false;
+      },
+      { timeout: 15000 },
+    );
+    await lensPage.waitForFunction(() => Boolean(window.__citycutWalkRippleQa), { timeout: 30000 });
+    await lensPage.waitForFunction(
+      () => {
+        const track = document.querySelector(".model .walk-ripple-scrubber-track");
+        return track && track.getAttribute("aria-disabled") === "false";
+      },
+      { timeout: 120000 },
+    );
+    await lensPage.waitForTimeout(3500);
+    const rippleFromHereInfo = await lensPage.evaluate(() => {
+      const reached = window.__citycutWalkRippleQa?.countReachedBuildings(
+        window.__citycutWalkRippleQa.getMinutes() ?? 0,
+      );
+      const readout = document.querySelector(".model .walk-ripple-time-readout");
+      return {
+        reached: reached ?? 0,
+        readoutReached: Number(readout?.getAttribute("data-walk-ripple-reached") ?? "0"),
+        minutes: window.__citycutWalkRippleQa?.getMinutes() ?? 0,
+      };
+    });
+    assertCheck(
+      "anchored-lens-ripple-from-here",
+      "Ripple from here opens Walk Ripple with origin set and buildings reached after a few seconds",
+      rippleFromHereInfo.reached > 0 &&
+        rippleFromHereInfo.readoutReached > 0 &&
+        rippleFromHereInfo.minutes > 0.5,
+      `info=${JSON.stringify(rippleFromHereInfo)}`,
+    );
+
     const canvasBox = await lensPage.locator(".model canvas").boundingBox();
     const beforeOrbit = await lensPage.evaluate(() => window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null);
     if (canvasBox) {
@@ -1477,10 +1599,6 @@ async function main() {
       `3dDomeInDrawing=${beforeSelectInfo.has3dSunDomeInDrawing}, planFanInDrawing=${beforeSelectInfo.hasPlanFanInDrawing}, selectedCount=${afterSelectInfo.selectedCount}, shadowDLength=${beforeSelectInfo.shadowDLength}->${afterSelectInfo.shadowDLength}, layers=${afterSelectInfo.nonEmptyLayers}`,
     );
 
-    // -------------------------------------------------------------------------
-    // TONE CONTINUITY: luminance inside the dashed cut box must not step up across the
-    // select -> Phase A -> handoff -> early Phase B tilt (fresh page, 1440x900 @1x)
-    // -------------------------------------------------------------------------
     {
       const toneCtx = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, reducedMotion: "no-preference" });
       await toneCtx.addInitScript(() => {
@@ -1502,7 +1620,6 @@ async function main() {
       const outerLum = async () =>
         ((await regionLum({ x: 40, y: 250, width: 360, height: 400 })) +
           (await regionLum({ x: 1040, y: 250, width: 360, height: 400 }))) / 2;
-      // Strictly inside the dashed cut boundary: frame rect inset 8px so the 2px dash strips are excluded.
       let innerClip = null;
       const innerLum = async () => {
         const r = await tonePage.evaluate(() => {
@@ -1550,10 +1667,6 @@ async function main() {
       );
     }
 
-    // -------------------------------------------------------------------------
-    // NO SEPARATE INNER PLAN: shortly after tilt start (~0.2s+), the 2D cut window must
-    // carry the same veil as the map around it and the yellow 3D cut ring must be gone.
-    // -------------------------------------------------------------------------
     {
       const ipCtx = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, reducedMotion: "no-preference" });
       await ipCtx.addInitScript(() => {
@@ -1583,7 +1696,6 @@ async function main() {
           ringOpacity: ring === undefined ? 1 : Number(ring),
         };
       });
-      // Underlay alone: hide the 3D canvas so the 2D plan layer is measured on its own.
       await ipPage.evaluate(() => {
         const m = document.querySelector(".model");
         if (m) m.style.visibility = "hidden";
@@ -1599,7 +1711,6 @@ async function main() {
       if (ipInfo.rect) {
         const { x, y, width, height } = ipInfo.rect;
         innerL = await ipLum({ x: Math.round(x + 8), y: Math.round(y + 8), width: Math.round(width - 16), height: Math.round(height - 16) });
-        // Same-height bands just outside the cut on both sides.
         const band = 120;
         outerL =
           ((await ipLum({ x: Math.max(0, Math.round(x - 8 - band)), y: Math.round(y + 8), width: band, height: Math.round(height - 16) })) +
@@ -1615,9 +1726,6 @@ async function main() {
       );
     }
 
-    // -------------------------------------------------------------------------
-    // GENERATE 8-FRAME CONTACT SHEET + LIVE TRANSITION MP4 VIDEO
-    // -------------------------------------------------------------------------
     if (fs.existsSync(ARTIFACTS_DIR)) {
       const contactSheetOut = path.join(ARTIFACTS_DIR, "pr164-v17-transition-contact-sheet.png");
       execFileSync("ffmpeg", [
@@ -1637,14 +1745,14 @@ async function main() {
 
       let vIdx = 0;
       const frameRepeats = [
-        ["frame_01.png", 14], // Beat 1: Landing (0.56s)
-        ["frame_02.png", 14], // Phase A: Silent background load — 2D screen untouched (0.56s)
-        ["frame_03.png", 10], // Phase B start (0%): Loading bar appears at 0%, 3D ready (0.40s)
-        ["frame_04.png", 8],  // Phase B early: 2D background begins fading + camera starts tilting (0.32s)
-        ["frame_05.png", 14], // Phase B mid (Beat 3A): Center-out radial building wave + 2D mid-fade (0.56s)
-        ["frame_06.png", 14], // Phase B late (Beat 3B): Delayed bouncy tree pop-up wave (0.56s)
-        ["frame_07.png", 10], // Beat 4a (100%): 2D background faded to 0, HUD sliding in (0.40s)
-        ["frame_08.png", 20], // Beat 4b: Settled 3D perspective + full Studio HUD (0.80s)
+        ["frame_01.png", 14],
+        ["frame_02.png", 14],
+        ["frame_03.png", 10],
+        ["frame_04.png", 8],
+        ["frame_05.png", 14],
+        ["frame_06.png", 14],
+        ["frame_07.png", 10],
+        ["frame_08.png", 20],
       ];
       for (const [fName, count] of frameRepeats) {
         const src = path.join(TMP_FRAMES_DIR, fName);

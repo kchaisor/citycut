@@ -66,7 +66,6 @@ function pointInWater(point: Pt, polygonWater: AreaFeat[]): boolean {
   return polygonWater.some((area) => pointInPolygon(point, area.ring, area.holes));
 }
 
-/** Keep only centreline runs whose points are not already inside a water polygon. */
 export function centerlinePartsOutsideWater(line: Pt[], polygonWater: AreaFeat[]): Pt[][] {
   if (line.length < 2) return [];
   const parts: Pt[][] = [];
@@ -103,9 +102,6 @@ export function centerlinePartsOutsideWater(line: Pt[], polygonWater: AreaFeat[]
 
 const MIN_RIBBON_M2 = 4;
 
-/**
- * Buffer centreline gaps only where merged water polygons do not already cover the channel.
- */
 export function waterFallbackFromCenterlines(
   centerlines: WaterCenterline[],
   polygonWater: AreaFeat[],

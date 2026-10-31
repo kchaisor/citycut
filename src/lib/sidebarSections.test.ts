@@ -47,8 +47,8 @@ describe("sidebar sections", () => {
     ]);
     expect(availableSidebarSections({ buildings: false, trees: true })).toContain("trees");
     expect(SIDEBAR_SECTION_LABELS.analysis).toBe("Site Analysis");
-    expect(SITE_ANALYSIS_KINDS).toEqual(["solar", "wind", "view"]);
-    expect(SITE_ANALYSIS_LABELS).toEqual({ solar: "Sun", wind: "Wind", view: "View" });
+    expect(SITE_ANALYSIS_KINDS).toEqual(["solar", "wind", "view", "walkRipple"]);
+    expect(SITE_ANALYSIS_LABELS).toEqual({ solar: "Sun", wind: "Wind", view: "View", walkRipple: "Walk" });
   });
 
   it("falls back to Display on the left and Model details on the right when a section is not available, and maps legacy solar/wind/view to analysis", () => {

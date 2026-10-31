@@ -50,7 +50,6 @@ function NumberField({
   );
 }
 
-/** Import a Rhino .3dm massing model and place it at MGA or by clicking. */
 export function ImportMassingPanel(props: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const { imported, warnings, crsName, placingId, busy, error } = props;

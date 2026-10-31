@@ -15,7 +15,6 @@ function outCode(x: number, y: number, min: number, max: number): number {
   return code;
 }
 
-/** Cohen–Sutherland clip of one segment against an axis-aligned square. */
 export function clipSegment(a: Pt, b: Pt, min: number, max: number): [Pt, Pt] | null {
   let x0 = a[0];
   let y0 = a[1];
@@ -67,7 +66,6 @@ function outCodeRect(x: number, y: number, rect: AxisRect): number {
   return code;
 }
 
-/** Cohen–Sutherland clip of one segment against an axis-aligned rectangle. */
 export function clipSegmentRect(a: Pt, b: Pt, rect: AxisRect): [Pt, Pt] | null {
   let x0 = a[0];
   let y0 = a[1];
@@ -108,7 +106,6 @@ export function clipSegmentRect(a: Pt, b: Pt, rect: AxisRect): [Pt, Pt] | null {
   return null;
 }
 
-/** Clip a polyline to a rectangle, returning one part per visible run (no chords across gaps). */
 export function clipPolylineRect(points: Pt[], rect: AxisRect): Pt[][] {
   const parts: Pt[][] = [];
   let current: Pt[] = [];
@@ -202,7 +199,6 @@ function clipHalf(
   return output;
 }
 
-/** Sutherland–Hodgman clip against the cut square. */
 export function clipPolygon(ring: Pt[], min: number, max: number): Pt[] {
   let output = ring.slice();
   if (output.length >= 2) {

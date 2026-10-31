@@ -18,7 +18,6 @@ function clearDocumentSelection(): void {
   try {
     window.getSelection?.()?.removeAllRanges?.();
   } catch {
-    // Ignore selection errors in non-browser test environments.
   }
 }
 

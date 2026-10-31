@@ -380,7 +380,6 @@ describe("terrain in the model", () => {
       }
       expect(maxY).toBeCloseTo(20, 4);
       expect(minY).toBeCloseTo(0, 4);
-      // Ground::Remaining is a draped triangle soup cut on the terrain grid (roads split out).
       expect(position.count % 3).toBe(0);
       expect(position.count).toBeGreaterThanOrEqual(2 * 3 * (field.cols - 1) * (field.rows - 1));
 

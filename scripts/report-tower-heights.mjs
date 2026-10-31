@@ -1,7 +1,3 @@
-/**
- * Five CBD towers: per-tower Overture frame + CoM (same spot check as PR #37).
- * Run: npx vite-node scripts/report-tower-heights.mjs
- */
 import {
   fetchComBuildingFootprintsWithStats,
   paddedComFetchBounds,

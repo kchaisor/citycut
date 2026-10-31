@@ -3,29 +3,17 @@ import { footprintBase } from "./terrain";
 import { terrainMeshHeight } from "./terrainDrape";
 import type { CityModel, Pt, Ring } from "../types";
 
-/**
- * Ground viewshed on a 2.5D height grid (View tab).
- *
- * The grid holds the ground height of each cell, raised to the roof height where a building
- * footprint covers the cell. Buildings are solid blocks from the ground to the roof, trees are
- * ignored, and only ground cells (not walls or roofs) are scored. A cell is visible when the
- * straight line from the eye to a point 0.3 m above the cell's ground never passes below the
- * grid on the way.
- */
-
 export const VIEWSHED_TARGET_LIFT_M = 0.3;
 export const VIEWSHED_DEFAULT_EYE_M = 1.6;
 export const VIEWSHED_DEFAULT_RADIUS_M = 200;
 export const VIEWSHED_RADIUS_OPTIONS_M = [100, 200, 300, 500] as const;
 export const VIEWSHED_SAMPLE_SPACING_M = 3;
 export const VIEWSHED_CELL_M = 2;
-/** Frame values. */
 export const CELL_OUTSIDE = 0;
 export const CELL_VISIBLE = 1;
 export const CELL_BLOCKED = 2;
 
 export type HeightGrid = {
-  /** Columns (east) and rows (north). Row 0 is the southern edge. */
   cols: number;
   rows: number;
   x0: number;
@@ -33,7 +21,6 @@ export type HeightGrid = {
   cell: number;
   ground: Float32Array;
   surface: Float32Array;
-  /** 1 where a building footprint covers the cell centre. */
   covered: Uint8Array;
 };
 
@@ -49,7 +36,6 @@ function inRing(x: number, y: number, ring: Ring): boolean {
   return inside;
 }
 
-/** Ground height at a local point: the draped terrain mesh, or 0 on a flat cut. */
 export function groundHeightAt(model: Pick<CityModel, "terrain" | "sideM">, east: number, north: number): number {
   return model.terrain ? terrainMeshHeight(model.terrain, model.sideM, east, north) : 0;
 }
@@ -104,10 +90,6 @@ export function buildHeightGrid(
   return { cols, rows, x0: box.x0, y0: box.y0, cell, ground, surface, covered };
 }
 
-/**
- * One viewshed frame: CELL_VISIBLE / CELL_BLOCKED for every uncovered ground cell within `radius`
- * of the eye, CELL_OUTSIDE elsewhere. `eyeZ` is the absolute eye height (ground + eye height).
- */
 export function viewshedFrame(grid: HeightGrid, eyeEast: number, eyeNorth: number, eyeZ: number, radius: number): Uint8Array {
   const { cols, rows, x0, y0, cell, ground, surface, covered } = grid;
   const out = new Uint8Array(cols * rows);
@@ -116,8 +98,6 @@ export function viewshedFrame(grid: HeightGrid, eyeEast: number, eyeNorth: numbe
   const r0 = Math.max(0, Math.floor((eyeNorth - radius - y0) / cell));
   const r1 = Math.min(rows - 1, Math.floor((eyeNorth + radius - y0) / cell));
   const half = cell * 0.5;
-  // A viewpoint inside a footprint (a path drawn through a building) looks out from the
-  // building's edge: the samples still inside the footprint it starts in do not block.
   const ec = Math.floor((eyeEast - x0) / cell);
   const er = Math.floor((eyeNorth - y0) / cell);
   const eyeInside = ec >= 0 && er >= 0 && ec < cols && er < rows && covered[er * cols + ec] === 1;
@@ -154,7 +134,6 @@ export function viewshedFrame(grid: HeightGrid, eyeEast: number, eyeNorth: numbe
   return out;
 }
 
-/** Centripetal Catmull-Rom spline through the clicked points, resampled at even arc-length spacing. */
 export function spacedSplineSamples(points: readonly Pt[], spacing = VIEWSHED_SAMPLE_SPACING_M): { samples: Pt[]; lengthM: number } {
   const clean: Pt[] = [];
   for (const p of points) {
@@ -174,7 +153,6 @@ export function spacedSplineSamples(points: readonly Pt[], spacing = VIEWSHED_SA
   return { samples, lengthM };
 }
 
-/** Analysis box: every sample plus the radius, clipped to the cut. */
 export function walkGridBox(samples: readonly Pt[], radius: number, sideM: number): GridBox {
   const half = sideM / 2;
   let minX = Infinity;
@@ -195,7 +173,6 @@ export function walkGridBox(samples: readonly Pt[], radius: number, sideM: numbe
   };
 }
 
-/** Share of scored cells that are visible (0–100), and the count of scored cells. */
 export function frameVisibleShare(frame: Uint8Array): { percent: number; scored: number } {
   let visible = 0;
   let scored = 0;
