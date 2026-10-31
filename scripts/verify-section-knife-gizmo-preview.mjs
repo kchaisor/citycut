@@ -7,8 +7,7 @@ import path from "node:path";
 const CHROME_PATH = "/usr/bin/google-chrome";
 const VIEWPORT = { width: 1440, height: 900 };
 const PREVIEW_URL =
-  process.env.CITYCUT_PREVIEW_URL ??
-  "https://citycut-git-feat-section-knife-kchai.vercel.app/citycut/";
+  process.env.CITYCUT_PREVIEW_URL ?? "https://citycut-git-feat-section-knife-kchai.vercel.app/";
 const OUT_DIR = "/workspace";
 const FRAME_DIR = "/tmp/citycut-section-knife-preview-frames";
 
@@ -41,8 +40,8 @@ async function main() {
     const page = await context.newPage();
     page.on("pageerror", (err) => console.error("[PAGEERROR]", err.message));
 
-    await page.goto(PREVIEW_URL, { waitUntil: "domcontentloaded", timeout: 60000 });
-    await page.waitForSelector("button.create-fab", { timeout: 30000 });
+    await page.goto(PREVIEW_URL, { waitUntil: "networkidle", timeout: 90000 });
+    await page.waitForSelector("button.create-fab", { timeout: 45000 });
     await page.click("button.create-fab");
     await page.waitForSelector(".model .scene-canvas canvas", { timeout: 120000 });
     await page.waitForTimeout(14000);
