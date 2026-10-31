@@ -919,6 +919,33 @@ async function main() {
       `rightInspBorder=${uiInvariants.rightInspBorder}, leftRailBg=${uiInvariants.leftRailBg}, topBarLeftBg=${uiInvariants.topBarLeftBg}, bleed=${uiInvariants.legacyBleedCount}, outliner="${uiInvariants.outlinerText}", overlaps=${uiInvariants.overlaps.length}`,
     );
 
+    await page.keyboard.press("Control+KeyK");
+    await page.waitForTimeout(120);
+    const commandBarInfo = await page.evaluate(() => {
+      const dialog = document.querySelector(".command-bar[role='dialog']");
+      const input = dialog?.querySelector(".command-bar-input");
+      const cs = dialog ? getComputedStyle(dialog) : null;
+      return {
+        open: Boolean(dialog && input),
+        fontFamily: input ? getComputedStyle(input).fontFamily : "",
+        backdrop: Boolean(document.querySelector(".command-bar-backdrop")),
+        bg: cs?.backgroundColor ?? "",
+      };
+    });
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "command-bar-open-desktop.png") });
+    }
+    await page.keyboard.press("Escape");
+    assertCheck(
+      "command-bar-desktop",
+      "Ctrl+K opens the Studio HUD command bar on desktop with a focused search field (Geist, hud-card surface)",
+      commandBarInfo.open &&
+        commandBarInfo.backdrop &&
+        commandBarInfo.fontFamily.startsWith("Geist") &&
+        commandBarInfo.bg.includes("252"),
+      `open=${commandBarInfo.open}, font=${commandBarInfo.fontFamily}, bg=${commandBarInfo.bg}`,
+    );
+
     // -------------------------------------------------------------------------
     // 3D DISPLAY OUTLINER INVARIANT (PER-USE BUILDINGS + RESET COLOURS BUTTON)
     // -------------------------------------------------------------------------

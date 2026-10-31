@@ -1,6 +1,10 @@
 import { sunStudyCasterModel, sunStudyMutedOn, toggleSelection, type SunStudyDate } from "../lib/sunStudyPlan";
 import { sunStudyLayersFor } from "./useSunStudyShadows";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { handleModelKeyDown, type ModelShortcutAction } from "../lib/modelKeyboard";
+import { registerModelKeyboardBridge } from "../lib/modelKeyboardBridge";
+import { viewportIsNarrow } from "../lib/panelCollapse";
+import { ShortcutCheatsheet } from "./ShortcutCheatsheet";
 import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
 import { Building2, Copy, Download, DraftingCompass, Eye, GripVertical, Info, Radar, Sun, Trees, Upload, Wind } from "lucide-react";
@@ -250,10 +254,21 @@ const ANALYSIS_ICONS: Record<SiteAnalysisKind, typeof Sun> = {
   view: Eye,
 };
 
-export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHome: () => void; onNewCut: () => void }) {
+export function ModelPage({
+  model,
+  onHome,
+  onNewCut,
+  commandBarOpen = false,
+}: {
+  model: CityModel;
+  onHome: () => void;
+  onNewCut: () => void;
+  commandBarOpen?: boolean;
+}) {
   const [tab, setTab] = useState<Tab>("3d");
   const [drawing, setDrawing] = useState<DrawingKind>("site");
   const [analysisKind, setAnalysisKind] = useState<SiteAnalysisKind>("solar");
+  const [shortcutCheatsheetOpen, setShortcutCheatsheetOpen] = useState(false);
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
   useColourRevision();
   const uniform = uniformBuildingColor();
@@ -1197,6 +1212,42 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       setSidebarCollapsed(false);
     }
   }
+
+  const applyShortcut = useCallback(
+    (action: ModelShortcutAction) => {
+      if (action.analysisKind) setAnalysisKind(action.analysisKind as SiteAnalysisKind);
+      selectSection(action.section);
+    },
+    [sectionIds, setSidebarCollapsed],
+  );
+
+  useEffect(() => {
+    if (viewportIsNarrow()) return;
+    registerModelKeyboardBridge({ applyShortcut });
+    return () => registerModelKeyboardBridge(null);
+  }, [applyShortcut]);
+
+  useEffect(() => {
+    if (viewportIsNarrow()) return;
+    function onKeyDown(event: KeyboardEvent) {
+      const result = handleModelKeyDown({
+        key: event.key,
+        metaKey: event.metaKey,
+        ctrlKey: event.ctrlKey,
+        altKey: event.altKey,
+        target: event.target,
+        commandBarOpen,
+        cheatsheetOpen: shortcutCheatsheetOpen,
+      });
+      if (result.type === "none") return;
+      event.preventDefault();
+      if (result.type === "open-cheatsheet") setShortcutCheatsheetOpen(true);
+      else if (result.type === "close-cheatsheet") setShortcutCheatsheetOpen(false);
+      else if (result.type === "shortcut") applyShortcut(result.action);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [applyShortcut, commandBarOpen, shortcutCheatsheetOpen]);
 
   function retryComHeights() {
     setComFootprintFetchError(null);
@@ -3669,6 +3720,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
           </p>
         )}
       </div>
+      <ShortcutCheatsheet open={shortcutCheatsheetOpen} onClose={() => setShortcutCheatsheetOpen(false)} />
     </div>
   );
 }
