@@ -1,7 +1,3 @@
-/**
- * Headless wind streak motion check: two canvas screenshots ~1s apart, pixel diff count.
- * Usage: node scripts/wind-motion-diff.mjs [--base=/citycut/] [--out=label]
- */
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { PNG } from "pngjs";

@@ -173,7 +173,6 @@ vi.mock("./lib/nominatim", () => ({
   reverseLocality: vi.fn().mockResolvedValue("East Melbourne"),
   localityCacheKey: vi.fn(() => "k"),
 }));
-/** City of Melbourne footprints and DAM records are live APIs; the test must not wait on them. */
 vi.mock("./lib/comBuildingHeights", async (importOriginal) => {
   const mod = await importOriginal<typeof import("./lib/comBuildingHeights")>();
   return {
@@ -193,7 +192,6 @@ vi.mock("./lib/treeTiers", () => ({
   assembleTreeTiers: vi.fn(() => ({ trees: [], capHit: false })),
 }));
 
-/** Landing + create-model must not read real enrichment PMTiles (slow range fetches in jsdom). */
 vi.mock("./lib/buildingEnrichmentTiles", async (importOriginal) => {
   const mod = await importOriginal<typeof import("./lib/buildingEnrichmentTiles")>();
   return {

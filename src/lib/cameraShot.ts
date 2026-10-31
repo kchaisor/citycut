@@ -1,13 +1,9 @@
 import * as THREE from "three";
 
-/** The camera that is on screen, in a form the vector export can project. */
 export type CameraShot = {
-  /** Column-major projectionMatrix × matrixWorldInverse. Clip = M × world. */
   projectionView: number[];
   position: [number, number, number];
-  /** World direction the camera looks along. */
   forward: [number, number, number];
-  /** CSS pixel size of the canvas. The page uses this aspect ratio. */
   width: number;
   height: number;
   kind: "perspective" | "orthographic";

@@ -1,7 +1,3 @@
-/**
- * Ensure public/building-enrichment.pmtiles + manifest match the latest release before build.
- * Falls back to committed copies when the release download or hash check fails.
- */
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

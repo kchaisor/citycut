@@ -44,7 +44,6 @@ describe("City of Melbourne urban forest credit", () => {
     const off = modelStageCreditHtml({ windOn: false, satelliteOn: false });
     expect(on).toContain("Trees, with species and dimensions (Urban Forest) © City of Melbourne</a>");
     expect(off).not.toContain("Urban Forest");
-    // Before the byline, like the other conditional credits.
     expect(on.indexOf("Urban Forest")).toBeLessThan(on.indexOf("CityCut · Kelvin Chai"));
   });
 });

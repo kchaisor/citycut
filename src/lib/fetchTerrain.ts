@@ -10,7 +10,6 @@ import {
   type DecodedTile,
 } from "./terrain";
 
-/** null means this zoom has no coverage (HTTP 404) and the caller should step down. */
 async function loadZoom(
   center: LonLat,
   sideM: number,
@@ -32,10 +31,6 @@ async function loadZoom(
   return tiles as DecodedTile[];
 }
 
-/**
- * Fetch the Mapterhorn tiles covering a cut and resample them into local metres.
- * Starts at the preferred zoom and steps down while tiles 404.
- */
 function aborted(signal: AbortSignal | undefined, err: unknown): boolean {
   if (signal?.aborted) return true;
   return err instanceof DOMException && err.name === "AbortError";

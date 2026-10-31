@@ -8,16 +8,11 @@ import { downwindFromSector } from "./windRose";
 export const WIND_ARROW_COUNT = 10;
 export const WIND_ARROW_LIFT_MIN_M = 20;
 export const WIND_ARROW_LIFT_MAX_M = 30;
-/** Opacity ramp over this fraction of each arrow’s travel loop. */
 export const WIND_ARROW_FADE_FRAC = 0.1;
-/** Spawn with the tail this far outside the upwind frame edge (fraction of sideM). */
 export const WIND_ARROW_SPAWN_OUTSIDE_FRAC = 0.1;
-/** Despawn after the head passes this far beyond the downwind frame edge. */
 export const WIND_ARROW_DESPAWN_OUTSIDE_FRAC = 0.135;
-/** Animated arrows may extend this far past the frame edge (fraction of sideM). */
 export const WIND_ARROW_VISIBLE_EXTRA_FRAC = 0.15;
 
-/** Frame-relative drift speed (m/s): cross the site in ~12–20 s, scaled by median wind. */
 export function windStreakSpeedMs(sideM: number, medianKmh: number): number {
   const calmKmh = 8;
   const strongKmh = 32;
@@ -33,7 +28,6 @@ export type WindArrowCurve = {
   positions: Float32Array;
   pointCount: number;
   pathLenM: number;
-  /** 0–1 stagger for drift phase. */
   phase: number;
   headEast: number;
   headNorth: number;
@@ -41,21 +35,13 @@ export type WindArrowCurve = {
   waveAmp: number;
   waveCount: number;
   liftY: number;
-  /** Perpendicular offset from wind axis (m). */
   lateralM: number;
-  /** Downwind axis position of curve centre (m). */
   alongM: number;
-  /** Multiplier on drift speed (~0.85–1.15). */
   speedFactor: number;
-  /** Arrow index for respawn hashing. */
   index: number;
-  /** Current edge fade opacity 0–1 (animation only). */
   opacity: number;
-  /** Internal respawn cycle tracker for lateral respawn. */
   _lastCycle: number;
-  /** Downwind progress within the current loop (m). */
   driftM: number;
-  /** Accumulated time for S-curve wiggle (s). */
   waveTimeS: number;
 };
 
@@ -67,7 +53,6 @@ export type WindArrowBuffer = {
 };
 
 export type ArrowHeadTriangle = {
-  /** x,y,z triples: tip, left base, right base (ground-plane triangle). */
   positions: Float32Array;
 };
 
@@ -85,7 +70,6 @@ function fract(n: number): number {
   return n - Math.floor(n);
 }
 
-/** Wind-relative slot (lateral, along) as fractions of half-extent; staggered 5×2 grid. */
 function arrowSlotWindRelative(index: number): [lateralFrac: number, alongFrac: number] {
   const col = index % 5;
   const row = Math.floor(index / 5);
@@ -116,19 +100,16 @@ function lateralForRespawn(index: number, cycle: number, sideM: number): number 
   return (seed.a - 0.5) * sideM * 0.88;
 }
 
-/** Distance the curve centre travels from upwind spawn to downwind despawn. */
 export function windArrowTravelRangeM(sideM: number, pathLenM: number): number {
   const span =
     sideM * (1 + WIND_ARROW_SPAWN_OUTSIDE_FRAC + WIND_ARROW_DESPAWN_OUTSIDE_FRAC) - pathLenM;
   return Math.max(sideM * 0.35, span);
 }
 
-/** Furthest east/north extent allowed for animated arrow vertices. */
 export function windArrowVisibleExtentM(sideM: number, pathLenM: number): number {
   return sideM / 2 + sideM * WIND_ARROW_VISIBLE_EXTRA_FRAC + pathLenM;
 }
 
-/** Opacity ramp over the first/last fraction of travel; zero at loop endpoints. */
 export function windArrowEdgeOpacity(
   travelledM: number,
   travelRangeM: number,
@@ -270,7 +251,6 @@ function sampleHeight(
   return terrain ? sampleTerrain(terrain, east, north, sideM) : 0;
 }
 
-/** Smooth downwind S-curves on a jittered grid; constant height per arrow. */
 export function buildWindArrowBuffer(
   sideM: number,
   prevailingSector: number,
@@ -421,7 +401,6 @@ function writeWindArrowDriftFrame(
   curve.opacity = op;
 }
 
-/** Advance drift by a real-time step (used in the 3D view). */
 export function stepWindArrowDrift(
   buffer: WindArrowBuffer,
   prevailingSector: number,
@@ -453,7 +432,6 @@ export function stepWindArrowDrift(
   syncAllPositions(buffer);
 }
 
-/** Set drift from absolute time (tests and QA hooks). */
 export function applyWindArrowDriftAtTime(
   buffer: WindArrowBuffer,
   prevailingSector: number,
@@ -487,7 +465,6 @@ export function applyWindArrowDriftAtTime(
   syncAllPositions(buffer);
 }
 
-/** @deprecated Use {@link stepWindArrowDrift} or {@link applyWindArrowDriftAtTime}. */
 export function updateWindArrowDrift(
   buffer: WindArrowBuffer,
   prevailingSector: number,
@@ -497,7 +474,6 @@ export function updateWindArrowDrift(
   applyWindArrowDriftAtTime(buffer, prevailingSector, timeS, speedMs);
 }
 
-/** Ground-plane filled arrowhead (tip + two base corners). */
 export function arrowHeadTriangle(curve: WindArrowCurve): ArrowHeadTriangle {
   const n = curve.pointCount;
   const positions = curve.positions;
@@ -534,7 +510,6 @@ export function arrowHeadTriangle(curve: WindArrowCurve): ArrowHeadTriangle {
   };
 }
 
-/** @deprecated Plan/Rhino use {@link arrowHeadTriangle}; kept for stroke export helpers. */
 export function arrowHeadSegmentPositions(curve: WindArrowCurve, _sideM: number): Float32Array {
   const tri = arrowHeadTriangle(curve);
   const p = tri.positions;
@@ -613,7 +588,6 @@ export function windArrowHeadPositionsMetres(buffer: WindArrowBuffer): WindArrow
   }));
 }
 
-/** Plan/Rhino export: east/north path plus filled head triangle. */
 export function windFlowArrowPolylines(
   sideM: number,
   prevailingSector: number,

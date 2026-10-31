@@ -37,10 +37,8 @@ export const VIEW_LAYER_ORDER = [
   "Annotation",
 ] as const;
 
-/** Visible building edges on the 3D sheet. Not a true-scale pen from the plan table. */
 export const VIEW_OUTLINE_MM = 0.18;
 
-/** Contour lines draped on the terrain in the 3D sheet (own layer, independent of the outlines toggle). */
 export const VIEW_CONTOUR_MM = 0.1;
 
 const PAGE_LONG_MM = 340;
@@ -108,8 +106,6 @@ function facesCamera(normal: Vec3, forward: Vec3): boolean {
   return dot(normal, forward) < -1e-5;
 }
 
-/** Ground, roads, and roofs should face the sky. Wall quads keep the winding they were given. */
-/** Every `stride`-th terrain node (edges kept), spanning the same cut. */
 function thinField(field: TerrainField, stride: number, sideM: number): TerrainField {
   if (stride <= 1) return field;
   const pick = (n: number) => {
@@ -120,7 +116,6 @@ function thinField(field: TerrainField, stride: number, sideM: number): TerrainF
   };
   const cols = pick(field.cols);
   const rows = pick(field.rows);
-  // Even spacing is required by the grid users; resample at the nearest node.
   const n = Math.max(cols.length, rows.length);
   const heights = new Float32Array(n * n);
   for (let r = 0; r < n; r++) {
@@ -224,7 +219,6 @@ function cross2(ax: number, ay: number, bx: number, by: number): number {
   return ax * by - ay * bx;
 }
 
-/** Portion of segment ab inside a CCW triangle, as parameters along ab. */
 function segmentInTri(a: V2, b: V2, tri: Occ): [number, number] | null {
   let p0 = tri.a;
   let p1 = tri.b;
@@ -272,12 +266,6 @@ function baryZ(x: number, y: number, tri: Occ): number | null {
 
 const GRID = 28;
 
-/**
- * Removes the parts of an edge that pass through a nearer face.
- * Depth is NDC z (smaller is closer), interpolated in screen space the way a
- * rasterizer compares fragments. A face does not hide its own edges, and a
- * coplanar neighbour is left alone by the depth bias.
- */
 export function clipEdge(a: V2, b: V2, occluders: Occ[], faceId: number): Array<[V2, V2]> {
   let parts: Array<[V2, V2]> = [[a, b]];
   for (const tri of occluders) {
@@ -487,8 +475,6 @@ function collect(
   const occ: Occ[] = [];
   let nextId = 1;
 
-  // With terrain: the same two ground surfaces as the 3D view, one group each (Ground::Remaining,
-  // Ground::Roads), on a terrain grid thinned to ≤ ~1600 cells so the sheet stays light.
   const groundSplit = field && (model.frameShape ?? "square") === "square" ? groundRoadPartition(model) : null;
   if (field && groundSplit) {
     const cells = (field.cols - 1) * (field.rows - 1);
@@ -582,7 +568,6 @@ function collect(
         .map((ring) => ring.map((point) => worldOf(point[0], point[1], y)));
       const outer = loops[0];
       if (!outer || outer.length < 3) return;
-      // Fan the outer ring; holes are drawn with even-odd by emitting the full loops as one path below.
       const projected = loops.map((loop) => loop.map((corner) => project(shot, corner, pageW, pageH)));
       if (projected.some((loop) => loop.some((point) => point === null))) return;
       const poly = projected as V2[][];
@@ -647,8 +632,6 @@ function collect(
   }
 
   for (const building of model.buildings) {
-    // Same masses as the 3D viewport and .3dm (buildCity extrudeFootprint): one prism per
-    // extrusion part (CoM bands, Overture raised parts), none for a nested footprint.
     if (building.meshDrawnBy != null) continue;
     const footBase = (field ? footprintBase(field, building.ring, model.sideM) : 0) + SURFACE.building.lift;
     const color = buildingColor(building, style);
@@ -702,7 +685,6 @@ function collect(
   }
 
   const trees: Fill[] = [];
-  // Same rule as the 3D scene, PNG and .3dm: treesVisibleIn3d (layer on, Hide trees off).
   for (const tree of treesVisibleIn3d(model.layers, { hideTrees: Boolean(style.hideTrees) }) ? model.trees : []) {
     const east = tree.at[0];
     const north = tree.at[1];
@@ -834,7 +816,6 @@ export function viewChunks(model: CityModel, shot: CameraShot, style: ViewStyle)
   if (railPaths.length > 0) chunks.push({ name: "Rail", paths: railPaths });
   const plate = Math.min(page.widthMm - 8, Math.max(42, label.length * 1.35 + 8));
   const credits = [comCredit, comTreesCreditLine(model)].filter((line): line is string => Boolean(line));
-  // One credit keeps the original 18.4 mm plate; each extra credit adds a 4 mm line above it.
   const boxHeight = credits.length === 0 ? 12.4 : 18.4 + (credits.length - 1) * 4;
   const texts: PdfChunk["texts"] = [
     { x: 4.2, y: boxHeight - 4, sizeMm: 2.6, text: label, color: ink },
@@ -884,10 +865,6 @@ export async function viewAi(model: CityModel, shot: CameraShot, style: ViewStyl
   return buildLayeredPdf(page.widthMm, page.heightMm, chunks, VIEW_LAYER_ORDER);
 }
 
-/**
- * Rail and tram as black dashed lines draped on the terrain: the same dashes the 3D view draws,
- * projected through the camera and clipped where nearer faces cover them, like the outlines.
- */
 function transportPaths(
   model: CityModel,
   shot: CameraShot,

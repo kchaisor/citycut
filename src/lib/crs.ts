@@ -6,11 +6,6 @@ export { CRS_NOTE, mgaCrs, mgaZone, type MgaCrs } from "./crsZone";
 
 const converters = new Map<number, proj4.Converter>();
 
-/**
- * GDA2020 / MGA: Transverse Mercator, GRS80, scale 0.9996,
- * false easting 500 km, false northing 10,000 km.
- * +towgs84=0 keeps WGS84 and GDA2020 coincident.
- */
 function projString(zone: number): string {
   const centralMeridian = zone * 6 - 183;
   return `+proj=tmerc +lat_0=0 +lon_0=${centralMeridian} +k=0.9996 +x_0=500000 +y_0=10000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs`;
@@ -26,7 +21,6 @@ function converterFor(zone: number): proj4.Converter {
   return converter;
 }
 
-/** Project a WGS84 longitude/latitude into the given MGA zone. Returns [easting, northing]. */
 export function projectLonLat(lon: number, lat: number, zone: number): [number, number] {
   const projected = converterFor(zone).forward([lon, lat]);
   return [projected[0], projected[1]];
@@ -42,17 +36,11 @@ export function projectLocal(point: Pt, origin: LonLat, zone: number): [number, 
   return projectLonLat(geographic.lon, geographic.lat, zone);
 }
 
-/** Inverse of {@link projectLonLat}: MGA easting/northing in `zone` back to WGS84. */
 export function unprojectMga(easting: number, northing: number, zone: number): { lon: number; lat: number } {
   const [lon, lat] = converterFor(zone).inverse([easting, northing]);
   return { lon, lat };
 }
 
-/**
- * Exact inverse of {@link projectLocal}: MGA metres to the CityModel's local east/north frame.
- * proj4 inverse, then the same equirectangular step `fromLocal` undoes, so a point exported to
- * the .3dm and read back lands where it started.
- */
 export function mgaToLocal(easting: number, northing: number, origin: LonLat, zone: number): Pt {
   const { lon, lat } = unprojectMga(easting, northing, zone);
   return toLocal(lat, lon, origin);

@@ -222,7 +222,6 @@ function loadView(): ViewMemory {
   return resolved;
 }
 
-/** Height-source tier to its swatch in the Model details height bar. */
 const HEIGHT_TIER_BAR: Record<string, string> = {
   com: "measured",
   lidar: "lidar",
@@ -266,7 +265,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     () => !capturePresetFromSearch(window.location.search).uniformBuildings,
   );
   const [showSource, setShowSource] = useState(false);
-  /** Rhino export: buildings as triangle meshes instead of closed Extrusions. */
   const [buildingsAsMesh, setBuildingsAsMesh] = useState(false);
   const [comFootprints, setComFootprints] = useState<ComBuildingFootprint[]>(
     () => model.comFootprintPrefetch ?? [],
@@ -282,7 +280,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed();
   const sidebarModelRef = useRef(model);
   useEffect(() => {
-    // A new model always opens the sidebar on Display with all 3D layers turned on.
     if (sidebarModelRef.current === model) return;
     sidebarModelRef.current = model;
     dispatchSidebar({ type: "new-model" });
@@ -321,8 +318,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     );
   }, [tab, model]);
   const [snapId, setSnapId] = useState(0);
-  // The 3D view unmounts on Drawing/Satellite; this keeps the user's camera for the way back.
-  // A new model gets a fresh memory, so a new cut is framed afresh.
   const cameraMemory = useMemo<CameraMemoryRef>(() => ({ current: null }), [model]);
   const [view3dDisplay, setView3dDisplay] = useState<View3dDisplaySettings>(() => {
     const next = view3dDisplayForModelOpen(window.localStorage);
@@ -550,7 +545,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   const [hiddenStore, setHiddenStore] = useState<HiddenBuildingStore>(() =>
     readStoredHiddenBuildings(window.localStorage),
   );
-  /** Shift-click multi-selection for Hide selected. Holds the single pick too. */
   const [hideSelection, setHideSelection] = useState<number[]>([]);
   const [heightPick, setHeightPick] = useState<{ buildingId: number; clientX: number; clientY: number } | null>(
     null,
@@ -824,7 +818,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       })
         .then((result) => {
           if (controller.signal.aborted) return;
-          // CoM first, then DAM floors on what CoM did not measure, then estimate labels.
           setComHeightBuildings(
             result.resolved
               ? result.buildings
@@ -862,8 +855,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     model.developmentDamRecords,
   ]);
 
-  // No CoM heights yet (loading, failed, or outside the City of Melbourne): the next source in
-  // tier order applies (DAM floors, Overture/OSM, zone default) and every default is labelled.
   const fallbackBuildings = useMemo(
     () =>
       model.buildingsHeightResolved
@@ -928,14 +919,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     }),
     [model, overrideResult, visibleBuildings, comHeightsMeasuredOn],
   );
-  // View tab: the path resets with a new cut; compute uses the buildings as shown (edits, hides).
   const walk = useWalkViewshed(model, displayModel);
   const walkAt = useWalkPlayback(walk);
 
-  /**
-   * Drawing tab and its .ai exports: the display model (hidden buildings already gone) plus plan
-   * footprints of visible imported massing. The 3D view and .3dm keep displayModel, so nothing is drawn twice.
-   */
   const drawingModel = useMemo(() => {
     const buildingsVisible = isLayer3dVisible(view3dDisplay, "buildings");
     const treesVisible = isLayer3dVisible(view3dDisplay, "trees");
@@ -1285,7 +1271,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     }
   }
 
-  /** Sun study on: the seven hourly layers for the site plan exports (from the screen's cache). */
   async function sunStudyExportLayers(): Promise<SitePlanExportOptions["sunStudy"]> {
     if (!sunStudyDate) return null;
     const casters = sunStudyCasterModel(drawingModel, effectiveSunStudyCasters, sunStudySelected);

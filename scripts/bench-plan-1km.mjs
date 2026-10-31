@@ -1,7 +1,3 @@
-/**
- * Mean planPaths wall time on a 1 km East Melbourne model (3 runs, fillet 2).
- * Usage: npx vite-node scripts/bench-plan-1km.mjs [east-model.json] [label]
- */
 import { readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { planPaths } from "../src/lib/svgPlan.ts";
 import * as roadFill from "../src/lib/roadFill.ts";

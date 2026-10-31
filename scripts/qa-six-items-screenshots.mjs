@@ -1,7 +1,3 @@
-/**
- * QA screenshots for the six-item PR. Run after `npm run build`.
- * npx vite-node scripts/qa-six-items-screenshots.mjs
- */
 import { chromium } from "playwright";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { PNG } from "pngjs";

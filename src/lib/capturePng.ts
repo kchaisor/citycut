@@ -3,23 +3,12 @@ import { getColour } from "./colours";
 import { withScreenOnlyHidden } from "./screenOnly";
 import { cameraForExportFrame, type ExportFrame } from "./exportFrame";
 
-/**
- * Renders the current view into an offscreen target twice the frame's bitmap size on each
- * side and returns a PNG. The on-screen buffer and camera are left alone, so
- * preserveDrawingBuffer is not required and nothing flickers.
- *
- * `frame` is the export frame in CSS pixels (see exportFrame.ts): the whole model area, so the
- * PNG is as wide as the window whether or not the sidebar covers part of it. Without it, the
- * canvas size is used.
- */
 export async function captureViewPng(
   gl: THREE.WebGLRenderer,
   scene: THREE.Scene,
   camera: THREE.Camera,
   frame?: ExportFrame,
 ): Promise<Blob> {
-  // The on-screen clear colour comes from the theme. The PNG keeps the
-  // previous backdrop so a theme edit does not change the download.
   const PNG_BACKGROUND = getColour("--export-backdrop");
   const previousBackground = scene.background;
   const pixelRatio = gl.getPixelRatio();

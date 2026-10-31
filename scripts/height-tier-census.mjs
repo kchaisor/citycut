@@ -1,7 +1,3 @@
-/**
- * Census by final height tier with CoM applied at model create (Melbourne crops).
- * Usage: npm exec vite-node scripts/height-tier-census.mjs -- --lat=-37.8127 --lon=144.98061 --km=1
- */
 import { squareBBox } from "../src/lib/geo.ts";
 import { fetchOvertureBuildingsForCut } from "../src/lib/overtureBuildings.ts";
 import { assignExternalUses, loadUseTiers } from "../src/lib/useCascade.ts";

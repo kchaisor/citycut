@@ -1,7 +1,3 @@
-/**
- * Fetch OSM way geometry for landmark CI (run once when fixture changes):
- *   npx vite-node scripts/fetch-landmark-osm-ways.mjs
- */
 import { writeFileSync } from "node:fs";
 import landmarks from "../src/lib/fixtures/landmark-heights.json" assert { type: "json" };
 

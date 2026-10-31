@@ -1,9 +1,7 @@
 import type { CarParkArea, Pt, RoadFeat } from "../types";
 
-/** `RoadFeat.service` value for car-park aisles. */
 export const PARKING_AISLE = "parking_aisle";
 
-/** Share of a service way's length that must lie inside a car park for the plan to draw it as car park. */
 export const CAR_PARK_WAY_INSIDE_MIN = 0.6;
 const SAMPLE_M = 2;
 
@@ -30,11 +28,6 @@ function inRing(p: Pt, ring: Pt[]): boolean {
   return inside;
 }
 
-/**
- * Ways the site plan draws as car-park ground instead of road white: every parking aisle, plus any
- * other service way (aisle tagged as plain service, drive-through, driveway) that runs mostly
- * inside a mapped car park. Plan-only; 3D, .3dm and city blocks keep every carriageway.
- */
 export function carParkWays(roads: RoadFeat[], carParks: CarParkArea[] | undefined): Set<RoadFeat> {
   const out = new Set<RoadFeat>();
   const parks = (carParks ?? []).filter((p) => p.ring.length >= 4).map((p) => ({ ...p, box: boxOf(p.ring) }));

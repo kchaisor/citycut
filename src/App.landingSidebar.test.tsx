@@ -55,7 +55,6 @@ describe("landing perimeter HUD (Variation B)", () => {
     const sizeClass = select.className;
     const before = camera(stageProps[stageProps.length - 1]);
 
-    // Verify 4-piece Perimeter HUD is rendered and omnibox has no ⌘K icon
     expect(container.querySelector(".landing-brand-pill .sidebar-brand-mark svg.mark")).toBeTruthy();
     expect(container.querySelector(".landing-omnibox")).toBeTruthy();
     expect(container.querySelector(".landing-omnibox")?.textContent ?? "").not.toContain("⌘K");

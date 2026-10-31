@@ -7,7 +7,6 @@ describe("shouldSkipViewportSizeRefit", () => {
   });
 
   it("skips a resize refit at the same snap id even when the camera was not touched", () => {
-    // Sidebar collapse and window resize must not move the camera.
     expect(shouldSkipViewportSizeRefit("3:1064x844", "3:1384x844", 3, false)).toBe(true);
   });
 

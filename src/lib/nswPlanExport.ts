@@ -8,7 +8,6 @@ import { nswPlanItems } from "./nswPlan";
 import { readNswPlanStyle } from "./nswPlanStyle";
 import type { CityModel, Pt } from "../types";
 
-/** Illustrator/PDF layers for NSW mode. Empty for Victorian cuts (no model.nsw). */
 export const NSW_SITE_LAYERS = [
   "NSW zoning",
   "NSW road corridors",
@@ -32,7 +31,6 @@ function pen(style: StrokeStyle): Partial<PdfPath> | null {
   return { stroke: hexRgb(style.color), strokeMm: style.mm, ...(dash ? { dashMm: dash } : {}), cap: "butt", join: "miter" };
 }
 
-/** Printed planning label size. */
 export const NSW_LABEL_MM = 1.6;
 
 export function nswPlanChunks(
@@ -42,7 +40,6 @@ export function nswPlanChunks(
   const empty = { under: [], lines: [], labels: [] };
   if (!model.nsw) return empty;
   const style = readNswPlanStyle();
-  // Labels are thinned at their printed size (NSW_LABEL_MM on paper, in metres on the ground).
   const items = nswPlanItems(model, style.hatchM, (NSW_LABEL_MM * layout.scale) / 1000);
   if (!items) return empty;
   const side = model.sideM;

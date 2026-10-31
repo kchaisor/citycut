@@ -16,7 +16,6 @@ export type GeocoderAddress = {
   city_district?: string;
   town?: string;
   locality?: string;
-  /** Present on many Nominatim rows. Not used as a suburb fallback. */
   city?: string;
   state?: string;
   postcode?: string;
@@ -29,13 +28,10 @@ export type GeocoderRow = {
   address?: GeocoderAddress;
 };
 
-/** Suburb, then city district, town, or locality. First one that is set wins. */
 export const LOCALITY_FIELDS = ["suburb", "city_district", "town", "locality"] as const;
 
-/** A searched address stops applying once the cut centre leaves it. */
 export const MOVED_AWAY_M = 50;
 
-/** Wait until the cut has stopped moving before a reverse lookup. */
 export const REVERSE_DEBOUNCE_MS = 800;
 
 const STATE_ABBR: Record<string, string> = {
@@ -57,7 +53,6 @@ const STATE_ABBR: Record<string, string> = {
   act: "ACT",
 };
 
-/** Australia Post street types used on Melbourne addresses. */
 const STREET_TYPE: Record<string, string> = {
   alley: "Ally",
   arcade: "Arc",
@@ -113,7 +108,6 @@ export function localityName(address: GeocoderAddress): string | null {
   return null;
 }
 
-/** `North Melbourne VIC`. Null when none of the locality fields are set. */
 export function formatLocality(address: GeocoderAddress): string | null {
   const name = localityName(address);
   if (!name) return null;
@@ -127,7 +121,6 @@ function streetName(address: GeocoderAddress): string | null {
   return trimmed || null;
 }
 
-/** `1–9 Gertrude St, Fitzroy VIC 3065`. Null when the row is not a street address. */
 export function formatAustralianAddress(address: GeocoderAddress): string | null {
   const number = address.house_number?.trim();
   const road = streetName(address);
@@ -164,7 +157,6 @@ export function formatDisplayName(display: string): string | null {
   });
 }
 
-/** Full address when the geocoder found one, otherwise the place name. */
 export function labelFromGeocoder(row: GeocoderRow): string {
   if (row.address) {
     const formatted = formatAustralianAddress(row.address);
@@ -182,7 +174,6 @@ export function labelFromGeocoder(row: GeocoderRow): string {
   return row.display_name?.trim() || "Place";
 }
 
-/** `-37.8041, 144.9494` */
 export function coordinateLabel(lat: number, lon: number): string {
   return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
 }
@@ -193,7 +184,6 @@ export function cutSizeLabel(sideM: number, frameShape: "square" | "circle" = "s
   return `${metres} × ${metres} m`;
 }
 
-/** Landing map frame label in kilometres (square side or circle diameter). */
 export function cutFrameLabelKm(sideKm: number, frameShape: "square" | "circle" = "square"): string {
   const km = formatKmSide(sideKm);
   if (frameShape === "circle") return `${km} km ø`;
@@ -202,15 +192,6 @@ export function cutFrameLabelKm(sideKm: number, frameShape: "square" | "circle" 
 
 export type PlaceAnchor = LonLat & { label: string };
 
-/**
- * The block Create model should cut, and the searched address when it still names that block.
- * A null label means the centre has left the search, so the caller reverse-geocodes `center`.
- *
- * Until the search fly lands, the cut is the searched point. The camera can still be on the
- * previous centre (Melbourne CBD for a fresh visit). That centre is far enough for the 50 m
- * rule to drop the address and name the cut from a reverse lookup of the old centre.
- * After the fly lands, the camera is the cut, and a small move keeps the address.
- */
 export function resolveSearchedCut(
   camera: LonLat,
   anchor: PlaceAnchor | null,
@@ -222,10 +203,6 @@ export function resolveSearchedCut(
   return { center, label };
 }
 
-/**
- * The searched point still names the cut while it sits within about 50 m
- * and inside the square. Past either limit the address no longer applies.
- */
 export function addressStillApplies(anchor: LonLat, center: LonLat, sideM: number): boolean {
   const dx = (center.lon - anchor.lon) * mPerDegLon(center.lat);
   const dy = (center.lat - anchor.lat) * M_PER_DEG_LAT;
@@ -234,7 +211,6 @@ export function addressStillApplies(anchor: LonLat, center: LonLat, sideM: numbe
   return Math.abs(dx) <= half && Math.abs(dy) <= half;
 }
 
-/** File-name slug. Reasonably short, and safe on Windows and the web. */
 export function slugifyPlace(label: string, maxLength = 48): string {
   const slug = label
     .normalize("NFKD")

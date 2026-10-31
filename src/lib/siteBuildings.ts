@@ -33,7 +33,6 @@ function totalOverlapM2(building: Pick<BuildingFeat, "ring" | "holes">, parcels:
   return sum;
 }
 
-/** More than half the footprint area must lie inside the parcel (multipolygon and holes). */
 export function siteBuildingIdsFromParcel(
   buildings: BuildingFeat[],
   parcels: ParcelPolygon[],
@@ -49,7 +48,6 @@ export function siteBuildingIdsFromParcel(
   return ids;
 }
 
-/** When there is no parcel, pick the building whose footprint contains the geocoded point. */
 export function siteBuildingIdsFromPoint(buildings: BuildingFeat[], point: Pt): number[] {
   for (const building of buildings) {
     if (pointInPolygon(point, building.ring, building.holes)) return [building.id];
@@ -69,7 +67,6 @@ export type SiteBuildingOverlap = {
   selected: boolean;
 };
 
-/** Overlap fractions for every building that meets the parcel at all (for QA). */
 export function siteBuildingOverlaps(
   buildings: BuildingFeat[],
   parcels: ParcelPolygon[],

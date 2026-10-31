@@ -1,10 +1,3 @@
-/**
- * Overture Maps building footprints from official PMTiles (z14).
- *
- * `building_part` is not used for massing: the parent `building` footprint carries
- * consolidated height and the site-plan ring. Parts would duplicate sub-volumes already
- * represented on the footprint and conflict with CoM height clipping on one outline.
- */
 
 import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
@@ -189,7 +182,6 @@ function ringFromMulti(multi: MultiPoly, dropSliverArea: number): { ring: Ring; 
   return out;
 }
 
-/** Union tile fragments by Overture id and drop tile-buffer slivers under 2 m². */
 export function reassembleBuildingFragments(fragments: Fragment[]): Fragment[] {
   const byId = new Map<string, Fragment[]>();
   for (const fragment of fragments) {
@@ -287,7 +279,6 @@ export function findOvertureBuildingByOsmWayId(
   return buildings.find((building) => building.osmWayIds?.includes(osmWayId));
 }
 
-/** Prefer a footprint containing the tower coordinate; falls back to max intersection area. */
 export function findOvertureBuildingForOsmFootprint(
   buildings: BuildingFeat[],
   seed: { ring: Ring; holes: Ring[] },
@@ -309,7 +300,6 @@ export function findOvertureBuildingForOsmFootprint(
 }
 
 export type OvertureBuildingsForCutOptions = {
-  /** When set (e.g. from enrichment manifest), skip STAC and use this release. */
   overtureRelease?: string;
   stacWarning?: string | null;
 };

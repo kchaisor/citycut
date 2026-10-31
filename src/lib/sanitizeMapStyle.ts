@@ -1,6 +1,5 @@
 import type { StyleSpecification } from "maplibre-gl";
 
-/** Remove attribution strings from a style so MapLibre never HTML-sanitises remote credits. */
 export function sanitizeMapStyle<T extends StyleSpecification>(style: T): T {
   const out = structuredClone(style) as StyleSpecification & { attribution?: string };
   delete out.attribution;

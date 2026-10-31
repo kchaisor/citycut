@@ -7,7 +7,6 @@ import { ptModeFromValue, type PublicTransportLine, type PublicTransportStop } f
 import { clipPolylineSiteFrame, DEFAULT_SITE_FRAME_SHAPE, pointInSiteFrame, type SiteFrameShape } from "./siteFrame";
 import type { CityModel, LonLat, Pt } from "../types";
 
-/** Greater Melbourne extent for the pre-tiled PT dataset. */
 export const PT_METRO_BOUNDS = {
   south: -38.25,
   west: 144.35,
@@ -142,7 +141,6 @@ async function readPmtilesLayer<T>(
   return out;
 }
 
-/** Metro tram centre lines clipped to the cut (PTV PMTiles, MODE METRO TRAM). */
 export type TramLinesFetchResult = {
   lines: Pt[][] | null;
   loadFailed: boolean;

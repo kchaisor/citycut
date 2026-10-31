@@ -266,7 +266,6 @@ describe("MapStage", () => {
     const moveHandlers = [...(map.handlers.get("move") ?? [])];
     expect(moveHandlers.length).toBeGreaterThan(0);
 
-    // Simulate 10 rapid pointer-move frames during a pan gesture
     let panOffset = 0;
     (map as unknown as { project: (pt: [number, number]) => { x: number; y: number } }).project = ([lng, lat]) => ({
       x: 720 + panOffset + (lng - 144.96) * 20000,
@@ -278,11 +277,9 @@ describe("MapStage", () => {
       for (const fn of moveHandlers) fn();
     }
 
-    // Frame DOM style updated synchronously on the 10th move without waiting for React re-renders
     const moveEndHandlers = [...(map.handlers.get("moveend") ?? [])];
     for (const fn of moveEndHandlers) fn();
 
-    // Coalesced: 10 rapid move events + moveend flush at most 1-2 onView calls instead of 10
     expect(onView.mock.calls.length).toBeLessThanOrEqual(2);
     expect(frameEl.style.left).not.toBe("");
   });

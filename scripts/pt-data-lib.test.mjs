@@ -9,7 +9,6 @@ import {
   useFirstWorking,
 } from "./pt-data-lib.mjs";
 
-// Recorded package_show (2026-10-12), trimmed to the resource fields.
 const recorded = JSON.parse(readFileSync(new URL("./fixtures/pt-package-show.json", import.meta.url), "utf8"));
 const res = (o) => ({ success: true, result: { resources: o } });
 

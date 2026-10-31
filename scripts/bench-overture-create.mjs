@@ -1,6 +1,3 @@
-/**
- * Overture building path timing (1 km CBD, 3 runs). Skips Overpass when it is down.
- */
 import { buildCityGroup, disposeObject } from "../src/lib/buildCity.ts";
 import {
   clearComBuildingFootprintCache,

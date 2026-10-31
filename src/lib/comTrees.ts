@@ -11,17 +11,12 @@ import {
   type TreeSourceResult,
 } from "./treeSourceFetch";
 
-/**
- * City of Melbourne "Trees, with species and dimensions (Urban Forest)".
- * Opendatasoft records. DBH is centimetres. There is no crown or height field.
- */
 const ENDPOINT =
   "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets/trees-with-species-and-dimensions-urban-forest/records";
 
 const PAGE = 100;
 const MAX_RECORDS = 4000;
 
-/** Padded City of Melbourne extent. Outside this the inventory has no rows. */
 const CITY = { south: -37.86, west: 144.89, north: -37.77, east: 145 };
 
 export type ComTree = ComMeasure & {
@@ -74,7 +69,6 @@ async function readPage(
   url.searchParams.set("limit", String(PAGE));
   url.searchParams.set("offset", String(offset));
   url.searchParams.set("where", where);
-  // Offset paging needs a stable, unique order; without it pages repeat and skip records.
   url.searchParams.set("order_by", "com_id");
   url.searchParams.set(
     "select",
@@ -103,11 +97,6 @@ async function readPage(
   return { total: json.total_count ?? rows.length, rows, dropped };
 }
 
-/**
- * Trees inside the frame, in API offset order. Nothing outside the City of Melbourne. Each page has
- * its own time limit; when a later page fails, the pages already read are kept and the result says
- * the tier is incomplete. A failure that loads nothing is an error, never a silent zero.
- */
 export async function fetchComTreesDetailed(
   bounds: BBox,
   signal?: AbortSignal,
@@ -146,7 +135,6 @@ export async function fetchComTreesDetailed(
         error ??= errorText(settled.reason, "a page failed");
         continue;
       }
-      // Keep offset order up to the first failed page so a partial load is a clean prefix.
       if (error !== null) continue;
       rows.push(...settled.value.rows);
       dropped += settled.value.dropped;
@@ -163,18 +151,12 @@ export async function fetchComTreesDetailed(
   };
 }
 
-/** Trees inside the frame. Throws when nothing loaded; a partial load returns what arrived. */
 export async function fetchComTrees(bounds: BBox, signal?: AbortSignal): Promise<ComTree[]> {
   const result = await fetchComTreesDetailed(bounds, signal);
   if (result.error && !result.partial) throw new Error(result.error);
   return result.rows;
 }
 
-/**
- * Inventory rows become trees. The dataset is the City of Melbourne urban forest,
- * so a record is already inside that boundary. Crown and height are not published;
- * species, DBH, and age size the tree.
- */
 export function comRecordsToTrees(
   records: ComTree[],
   origin: LonLat,
@@ -228,10 +210,6 @@ function useful(record: ComTree): boolean {
 
 type Located = ComTree & { at: [number, number] };
 
-/**
- * Replace species or generic sizes with a nearby City of Melbourne record.
- * OSM measurements are left alone. One inventory tree is used at most once.
- */
 export function applyComTreeSizes(trees: TreeFeat[], records: ComTree[], origin: LonLat): TreeFeat[] {
   if (trees.length === 0 || records.length === 0) return trees;
   const cell = 16;

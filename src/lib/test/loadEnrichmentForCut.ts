@@ -39,7 +39,6 @@ function tileRange(bounds: { south: number; west: number; north: number; east: n
   return tiles;
 }
 
-/** Vitest/node: read committed public/building-enrichment.pmtiles from disk. */
 export async function loadEnrichmentForCutFromDisk(
   bounds: { south: number; west: number; north: number; east: number },
 ): Promise<{ byId: Map<string, BuildingEnrichmentRecord>; error: string | null }> {

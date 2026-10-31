@@ -70,7 +70,6 @@ export type NswTransportOverlay = {
   note: string;
 };
 
-/** Stations and stops for the axo transport plate in NSW mode, with a note naming every source. */
 export async function nswTransportOverlay(
   model: CityModel,
   options: { signal?: AbortSignal; fetchImpl?: OsmFetch } = {},
