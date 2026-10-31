@@ -8,10 +8,6 @@ import type { HeliodonDiagramExportOptions, HeliodonGroundExportOptions } from "
 import type { PlanShadowInput } from "./buildingShadows";
 import type { CityModel } from "../types";
 
-// The Illustrator writers (aiPlan, aiView, and pdf-lib under them) load on the first .ai export,
-// like rhinoExport for .3dm, so they stay out of the model-page chunk.
-
-/** Downloads the drawer still offers. glTF, SVG, and figure-ground PDF are gone. */
 export const EXPORT_IDS = ["png", "3dm", "ai-view", "ai-site", "ai-figure", "ai-exploded", "ai-isometric"] as const;
 
 export type ExportId = (typeof EXPORT_IDS)[number];
@@ -67,7 +63,6 @@ export type RhinoDownloadOptions = {
   wind?: { table: import("./windRose").WindRoseTable; period: import("./windRose").WindPeriodId } | null;
   hideTrees?: boolean;
   importedMassing?: import("./rhinoExport").ImportedMassingExport[] | null;
-  /** Write buildings as meshes instead of closed Extrusions. */
   buildingsAsMesh?: boolean;
 };
 
@@ -145,11 +140,6 @@ export async function downloadViewAi(model: CityModel, shot: CameraShot, style: 
   downloadBytes(aiFilename(model, "view"), bytes, "application/pdf");
 }
 
-/**
- * Sun study: the site plan .ai (same writer as the Site plan download, shadows on) for each hour
- * 9am–3pm on the given date, zipped. Returns the failure sentence (null when all 7 were written);
- * nothing is downloaded when every frame failed.
- */
 export async function downloadSunStudyZip(
   model: CityModel,
   scale: number,

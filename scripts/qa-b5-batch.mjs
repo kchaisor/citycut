@@ -1,6 +1,3 @@
-/**
- * QA for B5 batch. Requires preview: npm run build && npm run preview -- --host 127.0.0.1 --port 4173
- */
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { PNG } from "pngjs";
@@ -113,7 +110,6 @@ async function cropPng(path, box, dest) {
 
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 
-// (b) Building panel — CBD
 await page.goto(`${base}?qa=1&view=persp&lat=-37.8136&lon=144.9631&km=0.5`, {
   waitUntil: "networkidle",
   timeout: 120_000,
@@ -126,7 +122,6 @@ await page.waitForSelector(".building-detail-panel", { timeout: 15_000 });
 await page.waitForTimeout(2500);
 await page.screenshot({ path: `${outDir}/b5-building-panel-cbd.png` });
 
-// Site plan — Flinders / Swanston corridor
 await page.getByRole("button", { name: "Drawing", exact: true }).click();
 await page.getByRole("button", { name: "Site plan", exact: true }).click();
 await page.waitForTimeout(1500);
@@ -142,7 +137,6 @@ await page.waitForTimeout(4000);
 await page.screenshot({ path: `${outDir}/b5-site-plan-flinders-full.png` });
 await cropPng(`${outDir}/b5-site-plan-flinders-full.png`, { x: 420, y: 320, width: 560, height: 280 }, `${outDir}/b5-road-median-filled.png`);
 
-// Contours vs roads — Fitzroy / Wellington Pde
 await page.goto(`${base}?qa=1&view=persp&lat=-37.8148&lon=144.9845&km=0.45`, {
   waitUntil: "networkidle",
   timeout: 120_000,
@@ -155,7 +149,6 @@ await page.waitForTimeout(5000);
 await page.screenshot({ path: `${outDir}/b5-contours-roads-full.png` });
 await cropPng(`${outDir}/b5-contours-roads-full.png`, { x: 480, y: 200, width: 520, height: 420 }, `${outDir}/b5-contours-under-roads.png`);
 
-// Green without internal edges — Fitzroy Gardens
 await page.goto(`${base}?qa=1&view=persp&lat=-37.8146&lon=144.9788&km=0.35`, {
   waitUntil: "networkidle",
   timeout: 120_000,
@@ -168,7 +161,6 @@ await page.waitForTimeout(4000);
 await page.screenshot({ path: `${outDir}/b5-green-full.png` });
 await cropPng(`${outDir}/b5-green-full.png`, { x: 380, y: 180, width: 520, height: 480 }, `${outDir}/b5-green-no-edges.png`);
 
-// Exploded axo roads after (live UI)
 await page.getByRole("button", { name: "Exploded axo", exact: true }).click();
 await page.waitForTimeout(2500);
 await page.screenshot({ path: `${outDir}/b5-axo-roads-after-ui.png` });
@@ -176,7 +168,6 @@ await cropPng(`${outDir}/b5-axo-roads-after-ui.png`, { x: 320, y: 120, width: 76
 
 await browser.close();
 
-// Rasterise before SVG for PNG review (playwright)
 const b = await chromium.launch({ headless: true });
 const p = await b.newPage();
 await p.setContent(await import("node:fs/promises").then((fs) => fs.readFile(`${outDir}/b5-axo-roads-before.svg`, "utf8")));

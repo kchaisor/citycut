@@ -8,7 +8,6 @@ import { sunAtMelbourneLocal } from "./solar";
 import { projectLocal } from "./crs";
 import type { BuildingFeat, CityModel, Pt, TerrainField } from "../types";
 
-/** Dandenong Market cut, Winter 22 Jun public-spaces preset, 11:00 AEST. */
 const origin = { lon: 145.21555, lat: -37.98382 };
 const zone = 55;
 const when = { lat: origin.lat, lon: origin.lon, year: 2026, month: 6, day: 22, hour: 11, minute: 0 };
@@ -18,7 +17,6 @@ function flatTerrain(z: number): TerrainField {
   return { cols: 3, rows: 3, heights: new Float32Array(9).fill(z), min: z, max: z, spacingM: sideM / 2, zoom: 15, metresPerPixel: 1, source: "test" };
 }
 
-/** A real .3dm in MGA 2020 with a 20 × 20 m box from `bottom` to `top` m AHD, base centre at local `at`. */
 async function importBox(at: Pt, bottom: number, top: number): Promise<ImportedMassing> {
   const r = await (rhino3dm as unknown as () => Promise<any>)();
   const [E, N] = projectLocal(at, origin, zone);
@@ -43,7 +41,6 @@ function model(buildings: BuildingFeat[], terrain: TerrainField): CityModel {
   } as CityModel;
 }
 
-/** Plan shadow length beyond the footprint, along the sun's plan direction (m). */
 function shadowLength(m: CityModel, footprint: Pt[]): number {
   const sample = sunAtMelbourneLocal(when.lat, when.lon, when.year, when.month, when.day, when.hour, when.minute);
   const off = planShadowOffset(sample, 1)!;

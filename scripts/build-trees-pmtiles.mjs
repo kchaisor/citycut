@@ -1,18 +1,4 @@
 #!/usr/bin/env node
-/**
- * Pre-bake Greater Melbourne trees into one PMTiles file for the app (live servers become backup).
- *
- *   node scripts/build-trees-pmtiles.mjs
- *
- * Sources: Vicmap Vegetation Tree Urban (ArcGIS, paged by OBJECTID as pbf), the City of Melbourne
- * Urban Forest export, and OSM tree points from the Overture base PMTiles the app already reads.
- * Writes public/trees.pmtiles and public/trees-manifest.json only after every check passes.
- *
- * Env: TIPPECANOE (binary), TREES_OUT_DIR (default public), TREES_ZOOM (14 or 15, default 15),
- * TREES_ALSO_ZOOM (build a second zoom into the work dir to compare sizes), TREES_PREV_MANIFEST
- * (last build's manifest; skip when every source stamp matches), TREES_FORCE=1, TREES_WORK_DIR,
- * TREES_CONCURRENCY (Vicmap pages in flight, default 3), TREES_VICMAP_FORMAT (pbf|geojson).
- */
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync, closeSync, createWriteStream, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -59,7 +45,6 @@ const TIPPECANOE = process.env.TIPPECANOE ?? "tippecanoe";
 const CONCURRENCY = Number(process.env.TREES_CONCURRENCY ?? 3);
 const VICMAP_FORMAT = process.env.TREES_VICMAP_FORMAT === "geojson" ? "geojson" : "pbf";
 const OVERTURE_BASE_ZOOM = 13;
-/** TREES_SMOKE=1: a few pages and tiles only, count checks off. For trying the script, never for publishing. */
 const SMOKE = process.env.TREES_SMOKE === "1";
 const UA = { "User-Agent": "citycut-trees-prebake (https://github.com/kchaisor/citycut)" };
 
@@ -237,7 +222,7 @@ async function fetchOsm(release) {
 }
 
 function tippecanoe(outPath, zoom) {
-  const detail = zoom >= 15 ? 13 : 14; // about 0.12 m either way (tile edge / 2^detail)
+  const detail = zoom >= 15 ? 13 : 14;
   const args = [
     "-q", "-f", "-o", outPath,
     "-Z", String(zoom), "-z", String(zoom), "-d", String(detail),
@@ -253,16 +238,11 @@ function tippecanoe(outPath, zoom) {
   return statSync(outPath).size;
 }
 
-/**
- * With no tile buffer a tree exactly on a tile edge is written to both tiles. The tile whose
- * half-open square [0, extent) holds it owns it; the app reader uses the same rule.
- */
 function ownsPoint(feature, extent) {
   const p = feature.loadGeometry()[0]?.[0];
   return Boolean(p) && p.x >= 0 && p.x < extent && p.y >= 0 && p.y < extent;
 }
 
-/** Count every feature per layer in a local PMTiles file (no tile buffer, so each tree once). */
 async function countTileFeatures(path) {
   const fd = openSync(path, "r");
   const source = {
@@ -314,8 +294,6 @@ async function main() {
   output("skip", "false");
   if (!vicmapMaxOid || !stamps.vicmapCount) throw new Error("Vicmap layer count or max OBJECTID unknown.");
 
-  // Local only: TREES_REUSE_INPUTS=<manifest> re-tiles the GeoJSON already in TREES_WORK_DIR (for
-  // trying another zoom) instead of paging the sources again. Its source stamps must still match.
   const reuse = process.env.TREES_REUSE_INPUTS ? JSON.parse(readFileSync(process.env.TREES_REUSE_INPUTS, "utf8")) : null;
   if (reuse) {
     const { zoom: _z, ...a } = reuse.sourceStamps ?? {};
@@ -378,7 +356,6 @@ async function main() {
     alsoZoom: alsoZoom ? { zoom: alsoZoom.zoom, bytes: alsoZoom.bytes, tilesWithData: alsoZoom.tilesWithData, sec: alsoZoom.sec } : null,
     timingsSec: { ...timings, total: Math.round((Date.now() - t0) / 1000) },
   };
-  // Publish both files only now, after every check passed: a failed run leaves nothing new behind.
   const finalTiles = join(OUT_DIR, TREES_PMTILES_NAME);
   const finalManifest = join(OUT_DIR, TREES_MANIFEST_NAME);
   renameSync(tmpTiles, finalTiles);

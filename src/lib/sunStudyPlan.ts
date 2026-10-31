@@ -4,13 +4,10 @@ import { inferHeightTier } from "./buildingHeightResolve";
 import type { PlanShadowInput } from "./buildingShadows";
 import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
 
-/** Site plan sun study: one shadow layer per clock hour, 9am to 3pm local time. */
 export const SUN_STUDY_HOURS = [9, 10, 11, 12, 13, 14, 15] as const;
 
-/** Per-hour shadow fill opacity; layers overlap so longer-shaded ground reads darker. */
 export const SUN_STUDY_SHADOW_OPACITY = 0.2;
 
-/** Single-hour site-plan cast shadow fill opacity (0.5; 9am-3pm sun study stays at 0.2). */
 export const SINGLE_SHADOW_OPACITY = 0.5;
 
 export function sunStudyHourLabel(hour: number): string {
@@ -21,7 +18,6 @@ export function sunStudyHourLabel(hour: number): string {
 
 export type SunStudyDate = Pick<PlanShadowInput, "lat" | "lon" | "year" | "month" | "day">;
 
-/** FNV-1a over the text, two 32-bit lanes, so cache keys stay short for big cuts. */
 function hashText(text: string): string {
   let a = 0x811c9dc5;
   let b = 0x01000193 ^ text.length;
@@ -33,7 +29,6 @@ function hashText(text: string): string {
   return `${(a >>> 0).toString(36)}${(b >>> 0).toString(36)}`;
 }
 
-/** Stable key for the geometry that shadows depend on (not the date or hour). */
 export function sunStudyModelKey(model: CityModel): string {
   const t = model.terrain;
   return [
@@ -52,16 +47,10 @@ export function sunStudyHourKey(modelKey: string, date: SunStudyDate, hour: numb
 export type SunStudySun = {
   hour: number;
   label: string;
-  /** Sun position on the plan diagram, metres east and north of the centre. */
   at: Pt;
-  /** Label centre, pulled inward toward the centre so it clears the sun's rays. */
   labelAt: Pt;
 };
 
-/**
- * Hourly sun positions on the selected date's path, on the same diagram radius as the plan
- * heliodon. Hours with the sun below the horizon are skipped.
- */
 export function sunStudySuns(date: SunStudyDate, radiusM: number, sunSize: number, labelSize: number): SunStudySun[] {
   const suns: SunStudySun[] = [];
   for (const hour of SUN_STUDY_HOURS) {
@@ -81,12 +70,10 @@ export function sunStudySuns(date: SunStudyDate, radiusM: number, sunSize: numbe
   return suns;
 }
 
-/** True when a heliodon hour label sits on a sun-study sun and would duplicate it. */
 export function hiddenBySunStudy(label: { east: number; north: number }, suns: SunStudySun[], radiusM: number): boolean {
   return suns.some((sun) => Math.hypot(label.east - sun.at[0], label.north - sun.at[1]) < radiusM * 0.09);
 }
 
-/** Selected-date arc points (east, north) for the plan diagram, 10-minute steps over daylight. */
 export function sunStudyDateArc(date: SunStudyDate, radiusM: number): Pt[] {
   const points: Pt[] = [];
   for (let minutes = 4 * 60; minutes <= 21 * 60; minutes += 10) {
@@ -97,15 +84,12 @@ export function sunStudyDateArc(date: SunStudyDate, radiusM: number): Pt[] {
   return points;
 }
 
-/** Tree crown opacity in the sun study muted base plan. */
 export const SUN_STUDY_TREE_OPACITY = 0.5;
 
-/** The muted base plan is on by default with the sun study; only an explicit false turns it off. */
 export function sunStudyMutedOn(sunStudy: boolean | undefined, muted: boolean | undefined): boolean {
   return Boolean(sunStudy) && muted !== false;
 }
 
-/** Pointer travel (screen px) below which a press on the plan counts as a click, not a pan. */
 export const SUN_STUDY_CLICK_PX = 4;
 
 export function isClick(dxPx: number, dyPx: number): boolean {
@@ -122,7 +106,6 @@ function inRing(point: Pt, ring: Ring): boolean {
   return inside;
 }
 
-/** The building whose footprint contains the plan point (east, north), smallest first when nested. */
 export function pickBuilding(buildings: BuildingFeat[], point: Pt): BuildingFeat | null {
   let best: BuildingFeat | null = null;
   let bestArea = Infinity;
@@ -149,14 +132,12 @@ export function toggleSelection(selected: readonly number[], id: number): number
 
 export type SunStudyCasters = "all" | "selected";
 
-/** Buildings that cast sun-study shadows: all, or only the selected ones. */
 export function sunStudyCasterModel(model: CityModel, casters: SunStudyCasters, selected: readonly number[]): CityModel {
   if (casters === "all") return model;
   const ids = new Set(selected);
   return { ...model, buildings: model.buildings.filter((building) => ids.has(building.id)) };
 }
 
-/** Same rule as the "Estimated" part of the height bar: zone default or an unmatched real source. */
 export function isEstimatedHeight(building: BuildingFeat): boolean {
   const tier = inferHeightTier(building);
   return tier === "zone_default" || tier === "real_source_unmatched";
@@ -168,10 +149,6 @@ export function estimatedHeightLabel(building: BuildingFeat): string {
 
 export type EstLabel = { id: number; text: string; at: Pt };
 
-/**
- * "est." labels for shadow casters whose height is a fallback estimate. Selected buildings are
- * always labelled; other casters only when the label fits inside the footprint's width.
- */
 export function estimatedHeightLabels(
   casters: BuildingFeat[],
   selected: readonly number[],

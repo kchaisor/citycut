@@ -35,7 +35,7 @@ describe("treeCrownSphereLayout & buildTreeGroup", () => {
     const trunkMesh = group!.children[0] as THREE.Mesh;
     const crownMesh = group!.children[1] as THREE.Mesh;
     const crownPos = crownMesh.geometry.getAttribute("position");
-    expect(crownPos.count).toBe(240); // 80 triangles * 3 vertices
+    expect(crownPos.count).toBe(240);
 
     for (const mesh of [trunkMesh, crownMesh]) {
       const mat = mesh.material as THREE.MeshStandardMaterial;

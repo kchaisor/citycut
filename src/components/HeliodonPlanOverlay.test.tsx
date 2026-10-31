@@ -29,7 +29,6 @@ describe("HeliodonPlanOverlay sun study", () => {
     expect(suns.map((g) => g.querySelector("text")!.textContent)).toEqual(["9am", "10am", "11am", "12pm", "1pm", "2pm", "3pm"]);
     for (const g of suns) expect(g.querySelector("circle")!.getAttribute("fill")!.toLowerCase()).toBe("#fff500");
     const texts = [...on.querySelectorAll("text")].map((t) => t.textContent);
-    // the equinox line's own 9h/12h/15h labels are replaced by the study labels
     expect(offNoonLabels).toBe(3);
     expect(texts.filter((t) => t === "12h").length).toBe(2);
     expect(offDiscs).toBeGreaterThan(0);

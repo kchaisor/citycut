@@ -41,14 +41,9 @@ export type DamFloorRecord = {
   lon: number;
   lat: number;
   floorsAbove: number;
-  /**
-   * DAM `status` as published: "COMPLETED", "UNDER CONSTRUCTION", "APPROVED" or "APPLIED" (Oct 2026).
-   * Only completed records describe a building that stands; see {@link damRecordGivesHeight}.
-   */
   status?: string;
 };
 
-/** The DAM status whose floor count describes a built building. */
 export const DAM_COMPLETED_STATUS = "COMPLETED";
 
 /**
@@ -60,7 +55,6 @@ export function damRecordGivesHeight(record: DamFloorRecord): boolean {
   return (record.status ?? "").trim().toUpperCase() === DAM_COMPLETED_STATUS;
 }
 
-/** The DAM records that set heights (completed only). */
 export function heightBearingDamRecords(records: DamFloorRecord[]): DamFloorRecord[] {
   return records.filter(damRecordGivesHeight);
 }
@@ -140,7 +134,6 @@ function damRecordLocalPoint(record: DamFloorRecord, center: LonLat): [number, n
   return toLocal(record.lat, record.lon, center);
 }
 
-/** True when the DAM geopoint falls inside the building footprint. */
 export function buildingContainsDamGeopoint(
   building: BuildingFeat,
   center: LonLat,
@@ -150,7 +143,6 @@ export function buildingContainsDamGeopoint(
   return pointInPolygon(at, building.ring, building.holes);
 }
 
-/** Buildings within {@link MATCH_RADIUS_M} of a DAM point that still qualify for DAM height. */
 export function buildingsEligibleNearDamRecord(
   buildings: BuildingFeat[],
   center: LonLat,
@@ -180,8 +172,6 @@ function buildingsContainingDamGeopoint(
   return out;
 }
 
-/** Pick one building per DAM record: largest footprint among eligible neighbours. */
-/** DAM records for which this building is the largest eligible neighbour (height-tier winner). */
 export function damRecordsWonByBuilding(
   building: BuildingFeat,
   center: LonLat,
@@ -223,7 +213,6 @@ export function pickDamFloorRecipient(
   return winner;
 }
 
-/** @deprecated use pickDamFloorRecipient — nearest match (old behaviour). */
 export function matchDevelopmentFloorsToBuilding(
   building: BuildingFeat,
   center: LonLat,
@@ -255,14 +244,12 @@ export function applyDevelopmentFloorsToBuildings(
     if (!recipient) continue;
     const current = byId.get(recipient.id);
     if (!current) continue;
-    // First record wins; a building already lifted by DAM keeps it.
     if (current.heightTier === "development_floors") continue;
     byId.set(recipient.id, applyDevelopmentFloorsHeight(current, record.floorsAbove));
   }
   return buildings.map((b) => byId.get(b.id) ?? b);
 }
 
-/** Legacy: every eligible building within radius gets the nearest DAM floors (over-assigns). */
 export function applyDevelopmentFloorsToBuildingsLegacy(
   buildings: BuildingFeat[],
   center: LonLat,
@@ -277,7 +264,6 @@ export function applyDevelopmentFloorsToBuildingsLegacy(
 }
 
 export type DamMultiAssignStats = {
-  /** DAM records where more than one building received the same floor height (legacy). */
   recordsWithMultipleBuildings: number;
 };
 
@@ -285,7 +271,6 @@ function damRecordKey(record: DamFloorRecord): string {
   return `${record.lon.toFixed(5)},${record.lat.toFixed(5)},${record.floorsAbove}`;
 }
 
-/** Count DAM records that would lift more than one building (legacy vs current). */
 export function countDamMultiBuildingAssignments(
   buildings: BuildingFeat[],
   center: LonLat,

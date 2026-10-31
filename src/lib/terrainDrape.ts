@@ -2,11 +2,6 @@ import type { Pt, TerrainField } from "../types";
 
 export type Tri = [Pt, Pt, Pt];
 
-/**
- * Height of the rendered terrain mesh at a plan point: the mesh is the DEM grid from −half at
- * `spacingM` steps, each cell split sw→ne into two planar triangles (see `terrainBuffers`).
- * Unlike the bilinear `sampleTerrain`, this is exactly the surface you see.
- */
 export function terrainMeshHeight(field: TerrainField, sideM: number, east: number, north: number): number {
   const half = sideM / 2;
   const s = field.spacingM;
@@ -21,13 +16,11 @@ export function terrainMeshHeight(field: TerrainField, sideM: number, east: numb
   const se = at(col + 1, row);
   const nw = at(col, row + 1);
   const ne = at(col + 1, row + 1);
-  // Lower triangle (sw, se, ne) when ty <= tx, upper (sw, ne, nw) otherwise.
   return ty <= tx ? sw + tx * (se - sw) + ty * (ne - se) : sw + ty * (nw - sw) + tx * (ne - nw);
 }
 
 type Poly = Pt[];
 
-/** Split a convex polygon by the line a·x + b·y = c into (≤ side, ≥ side). */
 function splitConvex(poly: Poly, a: number, b: number, c: number): [Poly, Poly] {
   const below: Poly = [];
   const above: Poly = [];
@@ -59,12 +52,6 @@ function area2(poly: Poly): number {
   return sum;
 }
 
-/**
- * Cut plan triangles along the terrain mesh's grid lines and cell diagonals, so every output
- * triangle lies inside one planar terrain triangle. Draped with `terrainMeshHeight` plus a lift,
- * each piece is then exactly parallel to the terrain under it: nothing can dip below it, and the
- * count only grows with the cells actually covered (no blanket subdivision).
- */
 export function clipTrianglesToTerrainGrid(tris: Tri[], field: TerrainField, sideM: number): Tri[] {
   const half = sideM / 2;
   const s = field.spacingM;
@@ -88,7 +75,6 @@ export function clipTrianglesToTerrainGrid(tris: Tri[], field: TerrainField, sid
     const r0 = cellOf(Math.min(...ys), maxRow);
     const r1 = cellOf(Math.max(...ys), maxRow);
     if (c0 === c1 && r0 === r1) {
-      // One cell: only the diagonal can cut it.
       const x0 = -half + c0 * s;
       const y0 = -half + r0 * s;
       const [lo, hi] = splitConvex(tri, 1, -1, x0 - y0);

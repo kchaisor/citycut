@@ -6,7 +6,6 @@
  * that loads nothing, or only part of the frame, reports why, so the Tree sizes panel can say so.
  */
 
-/** Per-request limit for one page of tree points. */
 export const TREE_PAGE_TIMEOUT_MS = 20_000;
 
 export class TreePageTimeoutError extends Error {
@@ -16,7 +15,6 @@ export class TreePageTimeoutError extends Error {
   }
 }
 
-/** fetch() with its own timeout that also follows the caller's signal. */
 export async function fetchTreePage(
   url: string | URL,
   init: RequestInit,
@@ -44,12 +42,9 @@ export async function fetchTreePage(
   }
 }
 
-/** Points from a paged source, and whether every page arrived. */
 export type TreeSourceResult<T> = {
   rows: T[];
-  /** null when every page loaded (or the source has nothing for this frame). */
   error: string | null;
-  /** True when some pages loaded and a later one failed. */
   partial: boolean;
 };
 
@@ -57,7 +52,6 @@ export function errorText(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
-/** An HTTP answer from a tree source, kept so a retry can tell transient from permanent. */
 export class TreeSourceHttpError extends Error {
   constructor(
     message: string,
@@ -68,7 +62,6 @@ export class TreeSourceHttpError extends Error {
   }
 }
 
-/** Pause before the single retry of a failed page. */
 export const TREE_PAGE_RETRY_MS = 1500;
 
 /**
@@ -80,11 +73,9 @@ export function transientTreePageError(err: unknown): boolean {
   if (err instanceof TreePageTimeoutError) return true;
   if (err instanceof TreeSourceHttpError) return err.status === 400 || err.status === 408 || err.status >= 500;
   if (err instanceof DOMException && err.name === "AbortError") return false;
-  // Network errors (TypeError from fetch) and ArcGIS error bodies.
   return err instanceof TypeError || (err instanceof Error && /unable to perform query|could not be queried/i.test(err.message));
 }
 
-/** Run one page read, and once more after {@link TREE_PAGE_RETRY_MS} when the failure looks transient. */
 export async function readTreePageWithRetry<T>(
   read: () => Promise<T>,
   signal?: AbortSignal,

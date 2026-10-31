@@ -2,10 +2,8 @@ import type { EnrichmentManifest } from "./buildingEnrichmentTiles";
 import type { BuildingFeat, BuildingHeightTier } from "../types";
 import { inferHeightTier } from "./buildingHeightResolve";
 
-/** Manifest `lidar.status` when the tier is wired but no DSM/DTM bake exists. */
 export const LIDAR_STATUS_NO_DATA = "no_data";
 
-/** Single public line for manifest detail, legend, census, and CI logs. */
 export const LIDAR_NO_DATA_LINE = "LiDAR: licensed Vicmap data, not available";
 
 export function defaultLidarManifestEntry(): { status: typeof LIDAR_STATUS_NO_DATA; detail: string } {

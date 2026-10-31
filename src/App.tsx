@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { MapStage, type FlyRequest } from "./components/MapStage";
 import { SelectChrome } from "./components/SelectChrome";
+import { CommandBar } from "./components/CommandBar";
 import { useSidebarCollapsed } from "./lib/sidebarCollapse";
 import { viewportIsNarrow } from "./lib/panelCollapse";
 import {
@@ -128,7 +129,6 @@ export default function App() {
   const urlSiteAnchor =
     typeof window === "undefined" ? null : siteAnchorFromSearch(window.location.search);
   const viewRef = useRef<ViewState>(initialView);
-  // Read once at load: on a phone each new landing map zooms out to fit the frame.
   const [fitFrameOnLoad] = useState(viewportIsNarrow);
   const [cutCenter, setCutCenter] = useState({ lat: initialView.lat, lon: initialView.lon });
   const anchorRef = useRef<PlaceAnchor | null>(
@@ -145,7 +145,6 @@ export default function App() {
   const phaseRef = useRef<"select" | "model">("select");
   const settleTimer = useRef<number | null>(null);
   const lookupGen = useRef(0);
-  /** False while a search fly is still travelling from the previous centre. */
   const flyLandedRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -158,6 +157,7 @@ export default function App() {
   const [placeLabel, setPlaceLabel] = useState(placeLabelRef.current);
   const [fly, setFly] = useState<FlyRequest | null>(null);
   const [phase, setPhase] = useState<"select" | "model">("select");
+  const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [handoffUnderlay, setHandoffUnderlay] = useState<"none" | "holding" | "fading">("none");
   const selectRootRef = useRef<HTMLDivElement>(null);
   const [model, setModel] = useState<CityModel | null>(null);
@@ -245,8 +245,6 @@ export default function App() {
   function onView(view: ViewState) {
     viewRef.current = view;
     if (phaseRef.current !== "select") return;
-    // Positions along the search fly are not the cut. A reverse lookup of one of
-    // them would replace the address with whatever suburb the camera is passing.
     if (anchorRef.current && !flyLandedRef.current) return;
     scheduleSettle();
   }
@@ -294,6 +292,15 @@ export default function App() {
       lat: place.lat,
       bounds: place.bounds,
     });
+  }
+
+  function commandBarGoToPlace(place: PlaceHit, sideKmOverride: number | null) {
+    if (phase === "model") {
+      setHandoffUnderlay("none");
+      setPhase("select");
+    }
+    if (sideKmOverride != null) setSideKm(sideKmOverride);
+    onPlace(place);
   }
 
   function focusMelbourne() {
@@ -381,7 +388,6 @@ export default function App() {
       if (controller.signal.aborted) return;
       publishLabel(label);
       const center = { lon: view.lon, lat: view.lat };
-      // NSW mode: a cut whose centre is in NSW uses NSW open data; Victoria (and anywhere else) is unchanged.
       const nswMode = detectRegion(center).region === "nsw";
       const terrainTask = layers.terrain
         ? fetchTerrainForCut(center, sideM, controller.signal)
@@ -471,9 +477,6 @@ export default function App() {
             return { zones: null, failures };
           })
         : Promise.resolve({ zones: null, failures: [] as UseTierFailure[] });
-      // Trees come from the pre-baked Greater Melbourne file first (treesPrebake.ts). When it is
-      // missing, fails, or does not cover the cut, the live servers are the backup: each tree page
-      // has its own time limit (treeSourceFetch.ts) and a failure becomes a note in the Tree sizes panel.
       const prebakeTask: Promise<PrebakeResult | null> = loadTreeTiers && !nswMode
         ? loadPrebakedTrees(bounds, controller.signal)
         : Promise.resolve(null);
@@ -489,7 +492,6 @@ export default function App() {
           };
         });
       });
-      // Contours also load for Terrain: the 3D ground is built from Vicmap metro contours when they cover the cut.
       const contourTask = (layers.contours || layers.terrain) && nswMode
         ? loadNswContoursForCut({
             center,
@@ -611,8 +613,6 @@ export default function App() {
         trackFetch(nswTask),
       ]);
       const prebake = await prebakeTask;
-      // OSM points from the file only when it was baked from the same Overture release as the
-      // base tiles this cut read; otherwise the base tile's own points are used, as before.
       const prebakeOsm =
         prebake?.ok && baseResult.stats.release && prebake.trees.manifest.sourceStamps?.overtureRelease === baseResult.stats.release
           ? overtureTreesFromPoints(prebake.trees.osm, center, sideM, frameShapeRef.current)
@@ -701,9 +701,6 @@ export default function App() {
       await yieldToBrowserFrame(isDomTestStart);
       if (controller.signal.aborted) return;
       const contours = Boolean(layers.contours && contourLayer && contourLayer.lines.length > 0);
-      // Test version: the 3D ground (and so building bases and plan shadows, which all sample
-      // model.terrain) comes from Vicmap metro 1–5 m contours where they cover the cut.
-      // ?ground=dem keeps the Mapterhorn DEM for comparison.
       const groundDem = new URLSearchParams(window.location.search).get("ground") === "dem";
       const contourGround =
         layers.terrain && !groundDem && contourLayer ? contourTerrain(contourLayer, sideM, terrainResult.field) : null;
@@ -867,7 +864,6 @@ export default function App() {
         }
         writeUrl(siteAnchor);
       }
-      // NSW mode: official building use from Spatial Services building complex points where present.
       const nswUse = nswMode && modelLayers.buildings ? nswApplyBuildingUse(buildings, nswResult) : null;
       if (nswUse) buildings = nswUse.buildings;
       const draftModel: CityModel = {
@@ -1038,6 +1034,12 @@ export default function App() {
 
   return (
     <div className="app">
+      <CommandBar
+        open={commandBarOpen}
+        onOpenChange={setCommandBarOpen}
+        onGoToPlace={commandBarGoToPlace}
+        modelToolsEnabled={phase === "model"}
+      />
       {showSelectLayer ? (
         <div
           ref={selectRootRef}
@@ -1108,6 +1110,7 @@ export default function App() {
         <Suspense fallback={handoffUnderlay !== "none" ? null : <p className="opening">Opening the model…</p>}>
           <ModelPage
             model={model}
+            commandBarOpen={commandBarOpen}
             onHome={() => {
               setHandoffUnderlay("none");
               onHome();

@@ -8,21 +8,14 @@ import type { ComBuildingHeightsStatus } from "./comBuildingHeightsStatus";
 import { treeTierCounts } from "./trees";
 import { estimatedIslandCount, ROUNDABOUT_ISLAND_ESTIMATE_NOTE } from "./roundabouts";
 
-/**
- * The data-source list in Model details. Every row is read from the model and the
- * live CoM state; nothing here is invented. A failed source keeps its note.
- */
 export type DataSourceStatus = "ok" | "loading" | "failed" | "partial" | "idle";
 
 export type DataSourceRow = {
   id: string;
   label: string;
   status: DataSourceStatus;
-  /** One short line under the label. */
   detail: string;
-  /** Failure or coverage notes, shown in full. */
   notes: string[];
-  /** Offer the CoM heights Retry (#81) on this row. */
   retry?: "com-heights";
 };
 
@@ -49,7 +42,6 @@ function count(value: number, one: string, many = `${one}s`): string {
   return `${value.toLocaleString()} ${value === 1 ? one : many}`;
 }
 
-/** The Overture release named in the source note, for example "2025-09-24.0". */
 export function overtureReleaseFromNote(note: string): string | null {
   const match = /Overture Maps \(([^)]+)\)/.exec(note);
   return match ? match[1]!.trim() : null;
@@ -59,7 +51,6 @@ export function buildDataSources({ model, comHeights, comMeasuredCount, comError
   const rows: DataSourceRow[] = [];
   const failures = model.useTierFailures ?? [];
   const warnings = model.heightSourceLoadWarnings ?? [];
-  // Tree-source notes from #88: "base" is the Overture base tile, "com" and "vicmap" the tree tiers.
   const treeNotes = model.treeLoadNotes ?? [];
   const treeNotesFor = (source: string) => treeNotes.filter((note) => note.source === source).map((n) => n.message);
 
@@ -235,7 +226,6 @@ export function buildDataSources({ model, comHeights, comMeasuredCount, comError
       });
     };
     treeRow("com", "City of Melbourne trees", "com");
-    // OpenStreetMap tree points come from the Overture base tile, so a base failure shows here too.
     treeRow("osm", "OpenStreetMap trees", "base");
     treeRow("vicmap", "Vicmap trees", "vicmap");
   }
@@ -284,7 +274,6 @@ export function buildDataSources({ model, comHeights, comMeasuredCount, comError
   return rows;
 }
 
-/** Victorian-only rows (CoM, Vicmap, PTV, baked use tiles) say nothing about a NSW cut. */
 const VIC_ONLY_ROWS = new Set(["com-heights", "com-dam", "enrichment", "zones", "coverage", "lidar", "trees-com", "trees-vicmap", "trams", "parcel"]);
 
 function nswOnlyRows(model: CityModel, rows: DataSourceRow[]): DataSourceRow[] {
@@ -304,7 +293,6 @@ function nswOnlyRows(model: CityModel, rows: DataSourceRow[]): DataSourceRow[] {
   return kept;
 }
 
-/** NSW mode rows: one per NSW layer, with its own status, count, time and failure note. */
 export function nswDataSourceRows(model: CityModel): DataSourceRow[] {
   const rows: DataSourceRow[] = [];
   if (!model.nsw) {

@@ -23,24 +23,16 @@ function clippingFns(): ClipFns {
 
 const { union, intersection, difference } = clippingFns();
 
-/** Centreline points farther than this from the chord are kept. Invisible at 1:500. */
 const SIMPLIFY_M = 0.35;
-/** Final boundary simplification, in metres. */
 const OUTPUT_SIMPLIFY_M = 0.12;
 const SNAP_M = 0.01;
 const MIN_AREA_M2 = 0.8;
 const ARC = Math.PI / 4;
-/** Closes dual-carriageway and tram-corridor gaps after the centreline union. */
 export const ROAD_MORPH_CLOSE_M = 3;
-/** Default fillet radius for unioned footpath junctions (m on the ground). */
 export const DEFAULT_PATH_FILLET_M = 2;
-/** Fillet radius scales with band width: max(theme, width × this factor). */
 export const PATH_FILLET_BAND_SCALE = 1;
-/** Snap footpath centreline ends within this distance before union (m). */
 export const PATH_ENDPOINT_STITCH_M = 1.75;
-/** Final simplification on unioned footpaths after junction fillets (m). */
 export const PATH_OUTPUT_SIMPLIFY_M = 0.12;
-/** Buffer half-width for in-road tram corridors merged into the road fill. */
 export const TRAM_CORRIDOR_WIDTH_M = 9;
 
 export function isVehicularRoad(road: RoadFeat): boolean {
@@ -48,11 +40,8 @@ export function isVehicularRoad(road: RoadFeat): boolean {
 }
 
 export type RoadFill = {
-  /** Unioned carriageway. Each polygon is an outer ring plus holes (city blocks). */
   polygons: MultiPolygon;
-  /** Wall time of buffer, union, and frame clip. */
   ms: number;
-  /** Buffered centreline polygons before the union. */
   inputs: number;
 };
 
@@ -380,7 +369,6 @@ function boxOf(polygon: Polygon): { minX: number; minY: number; maxX: number; ma
   return { minX, minY, maxX, maxY };
 }
 
-/** Union nearby buffers first so a 1 km network does not start from one giant pair. */
 function unionFast(polygons: Polygon[]): MultiPolygon {
   if (polygons.length < 24) return unionList(polygons);
   const cell = 90;
@@ -407,11 +395,6 @@ function capsules(pts: Pt[], half: number): Polygon[] {
   return polygons;
 }
 
-/**
- * One buffered centreline. `width` is the full strip, so half of it lies on each side.
- * Roads keep a 0.4 m minimum. Footpaths pass `minWidth` 0 so 1.2 m stays 0.6 m each side.
- * A closed centreline keeps the island as a hole.
- */
 export function bufferCentreline(line: Pt[], width: number, minWidth = 0.4): Polygon[] {
   const half = Math.max(width, minWidth) / 2;
   const simplified = simplify(dedupe(line), SIMPLIFY_M);
@@ -430,7 +413,6 @@ export function bufferCentreline(line: Pt[], width: number, minWidth = 0.4): Pol
   return unionList(pieces);
 }
 
-/** Clip unioned road/path surfaces to the site frame after dilation or fillets. */
 export function clipSurfaceToSiteFrame(
   polygons: MultiPolygon,
   sideM: number,
@@ -477,7 +459,6 @@ function clipToFrame(
       try {
         kept.push(...intersection(polygon, frame));
       } catch {
-        // A single bad component should not drop the rest of the network.
       }
     }
     return kept;
@@ -516,11 +497,6 @@ function unionStrips(
   return { polygons: merged, ms: performance.now() - started, inputs: inputs.length };
 }
 
-/**
- * Buffer every carriageway by its stored width and union the result.
- * Paths and rail are not included; callers pass carriageways only.
- * The union removes the internal edges that used to cross at junctions.
- */
 export function unionCarriageways(
   roads: { line: Pt[]; width: number }[],
   sideM: number,
@@ -529,7 +505,6 @@ export function unionCarriageways(
   return unionStrips(roads, sideM, 0.4, frameShape);
 }
 
-/** Buffer each path by its stored width and union the strips (3D and exports match the site plan). */
 export function unionPathRoads(
   roads: { line: Pt[]; width: number }[],
   sideM: number,
@@ -556,9 +531,6 @@ function simplifyPathMulti(polygons: MultiPolygon): MultiPolygon {
   return kept;
 }
 
-/**
- * Round concave footpath junctions: Clipper offset close (+r then −r), then clip to frame.
- */
 export function closeFootpathJunctions(
   polygons: MultiPolygon,
   radius: number,
@@ -572,7 +544,6 @@ export function closeFootpathJunctions(
   return simplifyPathMulti(tidy(clipped));
 }
 
-/** Remove footpath fill that closing pushed into the carriageway. */
 export function subtractFootpathBlockers(
   footpaths: MultiPolygon,
   blockers: MultiPolygon,
@@ -586,14 +557,12 @@ export function subtractFootpathBlockers(
       try {
         result = tidy(difference(result, blocker));
       } catch {
-        // Keep going if one blocker fails.
       }
     }
     return result;
   }
 }
 
-/** Re-merge footpath fragments after carriageway subtract so the plan stays one fill. */
 export function mergeFootpathFragments(polygons: MultiPolygon): MultiPolygon {
   if (polygons.length <= 1) return polygons;
   return tidy(unionFast(polygons));
@@ -638,15 +607,10 @@ function roadSurfaceCacheKey(
   return `${roads.length}:${hashRoadFeatures(roads)}:${tram.toString(16)}:${sideM}:${frameShape}`;
 }
 
-/**
- * Plan road surface: every carriageway except car-park aisles. Aisles are car park, which the
- * site plan draws as ground; 3D, .3dm and city blocks still use `carriagewaysOf` on all roads.
- */
 export function planRoadCarriageways(roads: RoadFeat[]): RoadFeat[] {
   return roads.filter((road) => road.service !== PARKING_AISLE);
 }
 
-/** Unioned carriageway (car-park aisles excluded) plus in-road tram corridors, with median gaps closed. */
 export function unionRoadSurface(
   allRoads: RoadFeat[],
   tramLines: Pt[][] | undefined,
@@ -682,11 +646,6 @@ export function unionRoadSurface(
   return result;
 }
 
-/**
- * Centreline of every way the path layer already draws:
- * highway=footway (including footway=sidewalk and footway=crossing),
- * path, cycleway, steps, pedestrian, bridleway, and track.
- */
 export function footpathLines(roads: RoadFeat[]): Pt[][] {
   return roads.filter((road) => road.kind !== "rail" && road.grade === "path").map((road) => road.line);
 }
@@ -757,7 +716,6 @@ export function stitchFootpathStrips(
   return out;
 }
 
-/** Footpath centreline strips using each way's stored width when present. */
 export function footpathStrips(
   roads: RoadFeat[],
   defaultWidthM: number,
@@ -771,11 +729,6 @@ export function footpathStrips(
     }));
 }
 
-/**
- * Buffer each footpath by `widthM` metres (half on each side of the centreline)
- * and union the strips. A width of 0 leaves no geometry. The union is one shape,
- * so joins have no seams and a crossing is covered by the road drawn above it.
- */
 export function unionFootpaths(
   lines: Pt[][],
   widthM: number,

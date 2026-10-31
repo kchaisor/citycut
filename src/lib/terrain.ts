@@ -31,7 +31,6 @@ export const TERRAIN_TILE_SIZE = 512;
 export const TERRAIN_ATTRIBUTION_URL = "https://mapterhorn.com/attribution";
 export const TERRAIN_UNAVAILABLE = "Terrain tiles could not be loaded, so the ground is flat.";
 
-/** Nodes along one side of the heightfield, including both edges. */
 const MAX_GRID_NODES = 193;
 
 const EARTH_M = 2 * Math.PI * 6378137;
@@ -41,16 +40,13 @@ export type DecodedTile = {
   y: number;
   width: number;
   height: number;
-  /** Row 0 is the north edge of the tile. Heights are metres. */
   heights: Float32Array;
 };
 
-/** Mapzen / MapLibre terrarium height in metres. */
 export function terrariumHeight(red: number, green: number, blue: number): number {
   return red * 256 + green + blue / 256 - 32768;
 }
 
-/** Decode a tightly packed RGBA buffer (4 bytes per pixel, row 0 at the north). */
 export function decodeTerrarium(rgba: ArrayLike<number>, width: number, height: number): Float32Array {
   const out = new Float32Array(width * height);
   for (let i = 0, pixel = 0; i < out.length; i++, pixel += 4) {
@@ -59,23 +55,12 @@ export function decodeTerrarium(rgba: ArrayLike<number>, width: number, height: 
   return out;
 }
 
-/**
- * Victorian ground, loosely. A downward Terrarium glitch of one red count is
- * −256 m and falls through the floor. An upward one can still sit under 2,000 m
- * around Melbourne, so the neighbourhood test below is what removes those needles.
- */
 export const TERRAIN_ELEVATION_MIN_M = -50;
 export const TERRAIN_ELEVATION_MAX_M = 2000;
-/**
- * At about 5 m spacing, 15 m is a slope steeper than 70 degrees.
- * A plane of any grade matches the median of its neighbours, so a hillside stays.
- */
 export const TERRAIN_SPIKE_M = 15;
 
 export type HeightClampCounts = {
-  /** Samples replaced because they jumped away from their neighbours. */
   spikes: number;
-  /** Samples pulled back into the Victorian elevation band. */
   clamped: number;
 };
 
@@ -101,12 +86,6 @@ function clampToVictoria(value: number): number {
   return value;
 }
 
-/**
- * Replace single-vertex spikes, then pull anything still outside the Victorian
- * band onto the nearest edge of it. Neighbours are read from the original
- * samples, so one bad pixel cannot talk the others into following it.
- * Writes into `heights` and returns how many samples changed.
- */
 export function clampHeightOutliers(
   heights: Float32Array,
   cols: number,
@@ -164,22 +143,15 @@ function terrainOutlierNote(spikes: number, clamped: number): string | null {
   return `CityCut adjusted terrain elevations: ${parts.join(", ")}.`;
 }
 
-/** Ground metres per pixel at `zoom`. Tiles are 512 px over one XYZ tile. */
 export function metresPerPixel(lat: number, zoom: number): number {
   return (EARTH_M * Math.cos((lat * Math.PI) / 180)) / (TERRAIN_TILE_SIZE * 2 ** zoom);
 }
 
-/**
- * Prefer about 5 m per pixel, the Geoscience Australia lidar spacing, and
- * never ask above z14. Higher zooms are upsampled where that source is absent,
- * and Melbourne's z15 tiles 404. The fetch steps down when a zoom is missing.
- */
 export function preferredTerrainZoom(lat: number): number {
   const zoom = Math.round(Math.log2(metresPerPixel(lat, 0) / 5));
   return Math.min(14, Math.max(8, zoom));
 }
 
-/** Global pixel in the 512 px XYZ grid. Y increases south. */
 export function webMercatorPixel(lon: number, lat: number, zoom: number): { x: number; y: number } {
   const world = TERRAIN_TILE_SIZE * 2 ** zoom;
   const x = ((lon + 180) / 360) * world;
@@ -209,7 +181,6 @@ export function terrainTileUrl(zoom: number, x: number, y: number): string {
   return `https://tiles.mapterhorn.com/${zoom}/${x}/${y}.webp`;
 }
 
-/** Pad the cut so bilinear samples at the square's edge stay inside fetched tiles. */
 export function terrainFetchBBox(center: LonLat, sideM: number, zoom: number) {
   const pad = metresPerPixel(center.lat, zoom) * 4;
   return squareBBox(center, sideM + pad * 2);
@@ -257,7 +228,6 @@ function sampleTiles(tiles: Map<string, DecodedTile>, lon: number, lat: number, 
   return north * (1 - ty) + south * ty;
 }
 
-/** Resample decoded tiles onto a square grid in local east/north metres. */
 export function heightFieldFromTiles(
   decoded: DecodedTile[],
   center: LonLat,
@@ -313,8 +283,6 @@ export function heightFieldFromTiles(
   };
 }
 
-/** Bilinear DEM sample. Points outside the square clamp to the edge. */
-/** Mean elevation across the heightfield inside the site frame. */
 export function meanTerrainElevation(field: TerrainField): number {
   if (field.heights.length === 0) return field.min;
   let sum = 0;
@@ -340,11 +308,6 @@ export function sampleTerrain(field: TerrainField, east: number, north: number, 
   return south * (1 - ty) + northEdge * ty;
 }
 
-/**
- * Base elevation for an extruded footprint: the lowest sample on the outer
- * ring. The whole solid starts there, so a corner cannot float. The uphill
- * side may meet the terrain part-way up the wall.
- */
 export function footprintBase(field: TerrainField, ring: Ring, sideM: number): number {
   let min = Infinity;
   for (let i = 0; i < ring.length; i++) {
@@ -354,10 +317,6 @@ export function footprintBase(field: TerrainField, ring: Ring, sideM: number): n
   return min;
 }
 
-/**
- * Contour interval from the relief across the cut.
- * Under 8 m → 1 m, under 25 m → 2 m, under 80 m → 5 m, otherwise 10 m.
- */
 export function contourInterval(reliefM: number): number {
   if (reliefM < 8) return 1;
   if (reliefM < 25) return 2;
@@ -474,7 +433,6 @@ function stitchContours(segments: { a: Pt; b: Pt }[]): Pt[][] {
 
 export type LeveledContour = { line: Pt[]; z: number };
 
-/** Marching-squares contours in local east/north metres, one polyline per level. */
 export function leveledContourLines(
   field: TerrainField,
   sideM: number,
@@ -530,7 +488,6 @@ export function leveledContourLines(
   return lines;
 }
 
-/** Marching-squares contours in local east/north metres. */
 export function contourLines(field: TerrainField, sideM: number, interval = contourInterval(field.max - field.min)): Pt[][] {
   return leveledContourLines(field, sideM, interval).map((item) => item.line);
 }
@@ -541,7 +498,6 @@ export function terrainNote(field: TerrainField, contours: boolean): string {
   return `Terrain is Mapterhorn zoom ${field.zoom} (about ${field.metresPerPixel.toFixed(1)} m per tile pixel, gridded every ${field.spacingM.toFixed(1)} m). Elevations ${field.min.toFixed(1)}–${field.max.toFixed(1)} m. Each building sits on the lowest sample along its footprint.${contourText} © Mapterhorn.`;
 }
 
-/** Elevation tint the terrain mesh uses (vertex colour, 0–1 RGB). */
 export function terrainTint(field: Pick<TerrainField, "min" | "max">, z: number): [number, number, number] {
   return shadeHeight((z - field.min) / Math.max(field.max - field.min, 0.001), 1);
 }
@@ -750,7 +706,6 @@ function terrainBuffersCircle(field: TerrainField, sideM: number) {
   };
 }
 
-/** One heightfield surface, in Three.js coordinates (x east, y up, z = −north). No skirt or base. */
 export function terrainBuffers(
   field: TerrainField,
   sideM: number,
@@ -764,12 +719,10 @@ export function terrainBuffers(
   return terrainBuffersSquare(field, sideM);
 }
 
-/** Proportional architectural plinth thickness below the lowest ground/terrain point. */
 export function basePlinthThicknessM(sideM: number): number {
   return Math.max(12, Math.round(sideM * 0.022 * 100) / 100);
 }
 
-/** World Y coordinate of the flat underside of the 3D architectural plinth base. */
 export function basePlinthBottomY(sideM: number, terrain?: TerrainField | null): number {
   const minElev = terrain ? terrain.min : 0;
   return minElev - basePlinthThicknessM(sideM);
@@ -828,12 +781,6 @@ function subdivideSegmentOnTerrainGrid(
   return pts;
 }
 
-/**
- * Watertight 3D architectural plinth skirt + flat bottom cap + architectural edge segments
- * in Three.js coordinates (x = east, y = up, z = -north).
- * Top vertices match terrainMeshHeight(field, sideM, east, north) (or y = 0 when flat)
- * at every DEM grid crossing along the cut perimeter.
- */
 export function basePlinthBuffers(
   sideM: number,
   terrain?: TerrainField | null,
@@ -895,7 +842,6 @@ export function basePlinthBuffers(
     const de = b[0] - a[0];
     const dn = b[1] - a[1];
     const segLen = Math.hypot(de, dn) || 1;
-    // Outward normal in Three.js (x = east, y = up, z = -north) for CCW (east, north) edge:
     const nx = dn / segLen;
     const ny = 0;
     const nz = de / segLen;
@@ -914,25 +860,20 @@ export function basePlinthBuffers(
       const x1 = p1[0];
       const z1 = -p1[1];
 
-      // Triangle 1: (B0, B1, T1)
       pushVertex(x0, bottomY, z0, nx, ny, nz, bottomWallColor);
       pushVertex(x1, bottomY, z1, nx, ny, nz, bottomWallColor);
       pushVertex(x1, yTop1, z1, nx, ny, nz, cTop1);
 
-      // Triangle 2: (B0, T1, T0)
       pushVertex(x0, bottomY, z0, nx, ny, nz, bottomWallColor);
       pushVertex(x1, yTop1, z1, nx, ny, nz, cTop1);
       pushVertex(x0, yTop0, z0, nx, ny, nz, cTop0);
 
-      // Top rim edge segment
       edgePositions.push(x0, yTop0, z0, x1, yTop1, z1);
     }
 
-    // Bottom rim edge segment (straight along the flat baseY chord)
     edgePositions.push(a[0], bottomY, -a[1], b[0], bottomY, -b[1]);
   }
 
-  // Vertical corner edges for square cuts
   if (frameShape === "square") {
     for (const corner of rawRing) {
       const yTop = terrain ? terrainMeshHeight(terrain, sideM, corner[0], corner[1]) : 0;
@@ -940,12 +881,10 @@ export function basePlinthBuffers(
     }
   }
 
-  // Flat bottom cap at y = bottomY with downward normal (0, -1, 0)
   const p0 = rawRing[0]!;
   for (let i = 1; i + 1 < rawRing.length; i++) {
     const p1 = rawRing[i]!;
     const p2 = rawRing[i + 1]!;
-    // Winding (p0, p2, p1) in (x = east, z = -north) yields normal (0, -1, 0)
     pushVertex(p0[0], bottomY, -p0[1], 0, -1, 0, bottomCapColor);
     pushVertex(p2[0], bottomY, -p2[1], 0, -1, 0, bottomCapColor);
     pushVertex(p1[0], bottomY, -p1[1], 0, -1, 0, bottomCapColor);

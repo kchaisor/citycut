@@ -9,7 +9,6 @@ import { useColourRevision } from "../lib/useColourRevision";
 import type { PlanViewport } from "../lib/planViewport";
 import type { CityModel } from "../types";
 
-/** World outer ring so the polygon with the cut ring as its hole masks everything outside the cut. */
 const WORLD_OUTER_RING: [number, number][] = [
   [-180, -85],
   [180, -85],
@@ -108,9 +107,6 @@ export function SatellitePane({
         });
         applyingRef.current = false;
       });
-      // A container resize keeps MapLibre's zoom and fires moveend with no originalEvent. Re-fit the
-      // shared viewport instead of writing the container's bounds back, so a window resize never
-      // changes the site plan or figure-ground extent.
       map.on("resize", () => {
         if (!map) return;
         applyingRef.current = true;
@@ -122,7 +118,6 @@ export function SatellitePane({
         applyingRef.current = false;
       });
       map.on("moveend", (event) => {
-        // Only a user pan or zoom (drag, wheel, keys, the +/- buttons) carries an originalEvent.
         if (applyingRef.current || !map || !event.originalEvent) return;
         const bounds = map.getBounds();
         const sw = bounds.getSouthWest();

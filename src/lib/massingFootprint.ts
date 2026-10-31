@@ -5,7 +5,6 @@ import type { BuildingFeat, LonLat, Pt } from "../types";
 
 type UnionFn = (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
 
-/** Same CJS/ESM interop guard as siteFrame.ts: Vite's dev build exposes the API on `default`. */
 function unionFn(): UnionFn {
   const loaded = polygonClipping as unknown as { union?: UnionFn; default?: { union?: UnionFn } };
   if (typeof loaded.union === "function") return loaded.union;
@@ -13,10 +12,8 @@ function unionFn(): UnionFn {
   throw new Error("polygon-clipping did not load.");
 }
 
-/** Ids for drawing-only footprints, well clear of OSM/Overture building ids. */
 const IMPORTED_ID_BASE = -1_000_000;
 
-/** Triangles thinner than this in plan (m²) are walls seen edge-on and add nothing to the footprint. */
 const MIN_PLAN_AREA_M2 = 1e-4;
 const UNION_BATCH = 2000;
 
@@ -27,10 +24,6 @@ function closeRing(ring: Pt[]): Pt[] {
   return first[0] === last[0] && first[1] === last[1] ? ring : [...ring, first];
 }
 
-/**
- * Plan footprint of one placed massing model, in the CityModel's local metres: the union of every
- * triangle projected to plan, using the same MGA → local transform as the 3D view.
- */
 export function massingFootprint(
   massing: Pick<ImportedMassing, "positions" | "indices" | "placement">,
   origin: LonLat,
@@ -60,7 +53,6 @@ export function massingFootprint(
     const batch = tris.slice(i, i + UNION_BATCH);
     merged = union(merged, ...batch);
   }
-  // Each footprint keeps the roof of the geometry above it, not the tallest part of the whole file.
   const polygonTops = merged.map((polygon) => {
     let top = -Infinity;
     const outer = polygon[0] ?? [];
@@ -80,12 +72,6 @@ function pointInRing(x: number, y: number, ring: ReadonlyArray<readonly [number,
   return inside;
 }
 
-/**
- * Ground (AHD m) under a footprint: mean terrain at its vertices. Drawings extrude from the ground, so
- * height must be the top above *terrain*, not above the model's lowest vertex: a model whose base Z
- * sits below or above the terrain (or carries geometry sunk into it) otherwise casts plan shadows
- * from the wrong height. Without terrain, falls back to the placement base.
- */
 function footprintGround(outer: Pt[], base: number, groundAt?: (east: number, north: number) => number): number {
   if (!groundAt || outer.length === 0) return base;
   let sum = 0;
@@ -100,15 +86,10 @@ function footprintGround(outer: Pt[], base: number, groundAt?: (east: number, no
   return count > 0 ? sum / count : base;
 }
 
-/**
- * Drawing-only buildings for the visible imported models: one per footprint polygon, flagged
- * `importedMassing` so the site plan fills it yellow. Figure-ground and exploded axo count them as figure.
- */
 export function massingDrawingBuildings(
   imported: ImportedMassing[],
   origin: LonLat,
   zone: number,
-  /** Terrain (AHD m) at a local point; the same field the 3D view and click placement use. */
   groundAt?: (east: number, north: number) => number,
 ): BuildingFeat[] {
   const out: BuildingFeat[] = [];

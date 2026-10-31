@@ -17,7 +17,6 @@ function normalizeAiBytes(bytes: Uint8Array): string {
     .replace(/\(\d+\)\s*$/gm, "");
 }
 
-/** Two API loads: same trees, response row order and ids differ. */
 function treeLoads(base: CityModel): [CityModel, CityModel] {
   const firstLoad: TreeFeat[] = [
     {

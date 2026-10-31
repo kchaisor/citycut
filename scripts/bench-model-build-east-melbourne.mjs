@@ -1,8 +1,3 @@
-/**
- * Mean model-create stack for 1 km East Melbourne (3 warm runs + optional cold).
- * Matches App.tsx: CoM footprints prefetch in parallel but no worker before first model.
- * --skip-com skips CoM prefetch (main-line behaviour outside Melbourne / off).
- */
 import { squareBBox } from "../src/lib/geo.ts";
 import { fetchOvertureBuildingsForCut } from "../src/lib/overtureBuildings.ts";
 import { assignExternalUses, loadUseTiers } from "../src/lib/useCascade.ts";

@@ -7,7 +7,6 @@ export const VICMAP_COM_DEDUPE_M = 11;
 export const INFILL_SPACING_M = 13;
 export const PATCH_TREE_COVERAGE_M = 22;
 export const MAX_TREE_INSTANCES = 8000;
-/** Extra metres beyond half the mapped road width. */
 export const ROAD_MASK_BUFFER_M = 2;
 
 const TRIM_ORDER: TreeTier[] = ["canopy", "vicmap", "osm", "com"];
@@ -56,7 +55,6 @@ class PointIndex {
     return `${Math.floor(point[0] / this.cell)}:${Math.floor(point[1] / this.cell)}`;
   }
 
-  /** True when another point is strictly closer than `metres`. */
   within(point: Pt, metres: number): boolean {
     const cx = Math.floor(point[0] / this.cell);
     const cy = Math.floor(point[1] / this.cell);
@@ -74,14 +72,12 @@ class PointIndex {
   }
 }
 
-/** Drop incoming trees that sit within `metres` of one already kept. */
 export function omitWithin(existing: Pt[], incoming: TreeFeat[], metres: number): TreeFeat[] {
   if (incoming.length === 0 || existing.length === 0) return incoming.slice();
   const index = new PointIndex(metres, existing);
   return incoming.filter((tree) => !index.within(tree.at, metres));
 }
 
-/** Vicmap dedupe distance against higher tiers: max(8 m, max(5 m, 0.6 × crown radius)). */
 export function vicmapDedupeMetres(tree: TreeFeat): number {
   const crownRadius = tree.crown_diameter_m / 2;
   return Math.max(VICMAP_COM_DEDUPE_M, Math.max(5, crownRadius * 0.6));
@@ -245,10 +241,6 @@ function patchHasRealTrees(patch: CanopyPatch, trees: TreeFeat[]): boolean {
   );
 }
 
-/**
- * Poisson-disc points at about 11 m. Candidates land between one and two
- * spacings from an existing sample, and nothing closer than the spacing is kept.
- */
 export function poissonDisc(
   patch: CanopyPatch,
   spacing: number,

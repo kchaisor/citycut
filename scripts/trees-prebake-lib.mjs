@@ -1,14 +1,9 @@
-/**
- * Pure helpers for the Greater Melbourne tree pre-bake (scripts/build-trees-pmtiles.mjs).
- * Kept free of side effects so Vitest can cover paging, error bodies, size limits and skipping.
- */
 import { decodeEsriPbf } from "./esri-pbf.mjs";
 
 export const TREES_SCHEMA_VERSION = 1;
 export const TREES_PMTILES_NAME = "trees.pmtiles";
 export const TREES_MANIFEST_NAME = "trees-manifest.json";
 
-/** Same extent as the building enrichment job (ABS GCCSA 2GMEL bounding box). */
 export const GREATER_MELBOURNE_BBOX = { west: 144.333634, south: -38.502988, east: 145.878412, north: -37.175099 };
 
 export const VICMAP_LAYER_URL =
@@ -17,15 +12,12 @@ export const COM_DATASET_URL =
   "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets/trees-with-species-and-dimensions-urban-forest";
 export const COM_SELECT = "latitude,longitude,diameter_breast_height,age_description,genus,scientific_name";
 
-/** One page spans this many OBJECTIDs: maxRecordCount 2000 × maxRecordCountFactor 5. */
 export const VICMAP_OID_PAGE = 10000;
 export const VICMAP_RECORD_FACTOR = 5;
 
-/** GitHub's per-file limit is 100 MiB; fail a little earlier at 100 MB (10^8 bytes). */
 export const SIZE_FAIL_BYTES = 100_000_000;
 export const SIZE_WARN_BYTES = 90_000_000;
 
-/** OSM tags treeSize() reads (src/lib/trees.ts). Values are kept verbatim. */
 export const OSM_SIZE_KEYS = [
   "height",
   "est_height",
@@ -42,7 +34,6 @@ export const OSM_SIZE_KEYS = [
 export const TREES_ATTRIBUTION =
   "Vicmap Vegetation Tree Urban © State of Victoria (DTP), CC BY 4.0; City of Melbourne Urban Forest, CC BY; tree points © OpenStreetMap contributors, ODbL (via Overture Maps).";
 
-/** 401/403/429 end the run at once: no retry. */
 export class FatalHttpError extends Error {
   constructor(message, status) {
     super(message);
@@ -51,7 +42,6 @@ export class FatalHttpError extends Error {
   }
 }
 
-/** ArcGIS answers many failures with HTTP 200 and an `{ "error": … }` body. */
 export class ArcgisErrorBody extends Error {
   constructor(message) {
     super(message);
@@ -77,10 +67,9 @@ export function checkArcgisJson(body) {
   return body;
 }
 
-/** Decode a `f=pbf` response. A JSON body here is always an error (HTTP 200 + error body). */
 export function decodeVicmapPbfResponse(bytes, contentType = "") {
   const first = bytes.length > 0 ? bytes[0] : 0;
-  if (/json/i.test(contentType) || first === 0x7b /* "{" */) {
+  if (/json/i.test(contentType) || first === 0x7b) {
     let body;
     try {
       body = JSON.parse(new TextDecoder().decode(bytes));
@@ -108,14 +97,12 @@ export function vicmapOidPageUrl(lo, hiExclusive, format = "pbf") {
   return `${VICMAP_LAYER_URL}/query?${params.toString()}`;
 }
 
-/** OBJECTID windows [lo, hi) covering 1..maxOid. */
 export function vicmapOidPages(maxOid, page = VICMAP_OID_PAGE) {
   const pages = [];
   for (let lo = 1; lo <= maxOid; lo += page) pages.push([lo, Math.min(lo + page, maxOid + 1)]);
   return pages;
 }
 
-/** A page must not be truncated: a full window that reports exceededTransferLimit lost rows. */
 export function checkVicmapPage(page, lo, hi) {
   const span = hi - lo;
   if (page.exceededTransferLimit) {
@@ -176,7 +163,6 @@ export function inBbox(lon, lat, bbox = GREATER_MELBOURNE_BBOX) {
   return lon >= bbox.west && lon <= bbox.east && lat >= bbox.south && lat <= bbox.north;
 }
 
-/** Half-metre steps stored as integers (value × 2). A positive value never rounds to 0. */
 export function halfMetreUnits(value) {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
   return Math.max(1, Math.round(value * 2));
@@ -199,7 +185,6 @@ export function vicmapProps(point) {
   return props;
 }
 
-/** CoM export row → tile properties (live fields kept verbatim: they are not height or crown). */
 export function comProps(row) {
   if (!Number.isFinite(row.latitude) || !Number.isFinite(row.longitude)) return null;
   const props = {};
@@ -210,7 +195,6 @@ export function comProps(row) {
   return props;
 }
 
-/** Overture source_tags → only the OSM size keys, as the same JSON shape the app parses. */
 export function osmSizeTags(sourceTags) {
   if (typeof sourceTags !== "string") return null;
   let parsed;
@@ -225,7 +209,6 @@ export function osmSizeTags(sourceTags) {
   return Object.keys(kept).length > 0 ? JSON.stringify(kept) : null;
 }
 
-/** Same FNV-1a as src/lib/overtureTiles.ts stableNumericId. */
 export function stableNumericId(id) {
   let hash = 2166136261;
   for (let i = 0; i < id.length; i++) {
@@ -249,7 +232,6 @@ export function sizeCheck(bytes) {
   return { level: "ok", message: `trees.pmtiles is ${mb} MB (${bytes} bytes).` };
 }
 
-/** Throws when a count is off. `tolerance` is a fraction of `expected` (0 = exact). */
 export function countCheck(label, expected, got, tolerance = 0) {
   if (!Number.isFinite(expected) || expected <= 0) throw new Error(`${label}: no source count to check against.`);
   const allowed = Math.floor(expected * tolerance);
@@ -258,7 +240,6 @@ export function countCheck(label, expected, got, tolerance = 0) {
   }
 }
 
-/** The fields that decide whether last month's file is still current. */
 export function sourceStamps({ vicmapDataLastEdit, vicmapCount, comDataProcessed, comCount, overtureRelease, zoom }) {
   return {
     schema: TREES_SCHEMA_VERSION,
@@ -271,7 +252,6 @@ export function sourceStamps({ vicmapDataLastEdit, vicmapCount, comDataProcessed
   };
 }
 
-/** Skip only when every stamp is present and equal to the last build's. */
 export function shouldSkip(previousManifest, stamps) {
   const prev = previousManifest?.sourceStamps;
   if (!prev) return { skip: false, reason: "no previous trees manifest" };
@@ -282,7 +262,6 @@ export function shouldSkip(previousManifest, stamps) {
   return { skip: true, reason: "Vicmap, City of Melbourne and Overture sources unchanged since the last build" };
 }
 
-/** XYZ tiles covering a lon/lat box. */
 export function tilesForBbox(bbox, z) {
   const n = 2 ** z;
   const tx = (lon) => Math.min(n - 1, Math.max(0, Math.floor(((lon + 180) / 360) * n)));
@@ -297,7 +276,6 @@ export function tilesForBbox(bbox, z) {
   return out;
 }
 
-/** Run `fn` over `items` with at most `limit` in flight; the first error stops new work and rethrows. */
 export async function mapLimit(items, limit, fn) {
   const results = new Array(items.length);
   let next = 0;

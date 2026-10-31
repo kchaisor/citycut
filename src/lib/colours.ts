@@ -1,13 +1,6 @@
 import coloursCss from "../colours.css?raw";
 import { cssColorToHex, normalizeHex, parseCustomProperties, resolveSheet } from "./cssVars";
 
-/**
- * Fill colours. The values in src/colours.css are the ones Kelvin edits.
- * `COLOUR_FALLBACK` is parsed from that file so tests and Node exports still
- * have a colour when there is no document. In the browser, `getColour` reads
- * the computed custom property, which includes a live edit from the Colours panel.
- */
-
 export const COLOUR_KEYS = [
   "--sidebar-grey",
   "--viewport-bg",
@@ -510,7 +503,6 @@ function fallbackTable(): Record<ColourKey, string> {
   return table;
 }
 
-/** File defaults. Uppercase six-digit hex, one entry per key, parsed from colours.css. */
 export const COLOUR_FALLBACK: Record<ColourKey, string> = fallbackTable();
 
 const KNOWN = new Set<string>(COLOUR_KEYS);
@@ -519,11 +511,6 @@ export function isColourKey(name: string): name is ColourKey {
   return KNOWN.has(name);
 }
 
-/**
- * The fill currently assigned to a colour variable.
- * With a document, this is the computed value, so a Colours edit or a saved
- * override wins over the file. Without a document, the fallback table is used.
- */
 export function getColour(name: ColourKey): string {
   if (typeof document !== "undefined") {
     const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -533,7 +520,6 @@ export function getColour(name: ColourKey): string {
   return COLOUR_FALLBACK[name];
 }
 
-/** 0–255 channels for a fill, for Rhino layer colours. */
 export function colourRgb(name: ColourKey): { r: number; g: number; b: number } {
   const hex = getColour(name);
   const value = Number.parseInt(hex.slice(1), 16);
@@ -610,10 +596,6 @@ export function clearColourOverrides(root?: HTMLElement): void {
   for (const key of COLOUR_KEYS) element.style.removeProperty(key);
 }
 
-/**
- * Apply anything saved under `citycut.colours`. Call this after the line-style
- * hydrate so a fill edited here wins over an older line-style copy of the same name.
- */
 export function hydrateStoredColours(storage?: StorageLike): Partial<Record<ColourKey, string>> {
   if (typeof document === "undefined") return {};
   let stored: Partial<Record<ColourKey, string>> = {};
@@ -638,7 +620,6 @@ export function commitColour(name: ColourKey, value: string, storage?: StorageLi
     try {
       writeStoredColours(area, current);
     } catch {
-      // Private mode can reject localStorage. The on-screen colour still updates.
     }
   }
   if (typeof document !== "undefined") {
@@ -654,14 +635,12 @@ export function resetStoredColours(storage?: StorageLike, afterClear?: () => voi
   try {
     area?.removeItem(COLOURS_KEY);
   } catch {
-    // Ignore a locked storage area. Clearing the inline properties is enough.
   }
   clearColourOverrides();
   afterClear?.();
   notify();
 }
 
-/** Variables whose live value differs from the file. Ready to paste into colours.css. */
 export function colourCssText(current: Partial<Record<ColourKey, string>> = {}): string {
   const lines: string[] = [];
   for (const key of COLOUR_KEYS) {

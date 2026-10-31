@@ -4,11 +4,6 @@ import type { CityModel, Pt } from "../types";
 
 export type SunHoursGrid = { res: number; hours: Float32Array; maxHours: number; steps: number; ms: number; skipped: number };
 
-/**
- * Later phase (flagged off): hours of direct sun on the ground through one day. Samples the plan building shadows
- * every `stepMinutes` from sunrise to sunset and counts, per grid cell, the samples in sun.
- * Buildings only (trees and imported models are not rasterised yet).
- */
 export function sunHoursGrid(
   model: CityModel,
   date: { year: number; month: number; day: number },
@@ -33,9 +28,7 @@ export function sunHoursGrid(
     steps++;
     ctx.clearRect(0, 0, res, res);
     if (!sample.aboveHorizon) continue;
-    ctx.fillStyle = "black"; // mask only, never shown
-    // Raster union: fill each building's footprint, its sun-offset copy and every wall quad.
-    // No polygon clipping, so no degenerate-union failures.
+    ctx.fillStyle = "black";
     const fill = (points: Pt[]) => {
       if (points.length < 3) return;
       ctx.beginPath();
@@ -62,9 +55,8 @@ export function sunHoursGrid(
     const data = ctx.getImageData(0, 0, res, res).data;
     for (let i = 0; i < sunCount.length; i++) if (data[i * 4 + 3]! < 128) sunCount[i]!++;
   }
-  // Roofs are not ground: leave footprints empty.
   ctx.clearRect(0, 0, res, res);
-  ctx.fillStyle = "black"; // mask only, never shown
+  ctx.fillStyle = "black";
   for (const building of model.buildings) {
     ctx.beginPath();
     building.ring.forEach((p, i) => {
@@ -82,7 +74,6 @@ export function sunHoursGrid(
   return { res, hours, maxHours: steps * stepH, steps, skipped, ms: performance.now() - started };
 }
 
-/** Few hours → dark grey, full day → accent yellow. */
 export function sunHoursColour(hours: number, maxHours: number): [number, number, number, number] {
   if (hours < 0) return [0, 0, 0, 0];
   const t = maxHours > 0 ? Math.min(1, Math.max(0, hours / maxHours)) : 0;

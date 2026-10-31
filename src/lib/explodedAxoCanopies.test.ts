@@ -25,7 +25,7 @@ describe("exploded axo tree canopies", () => {
       const xs = [...d.matchAll(/[ML]([\d.-]+) /g)].map((m) => Number(m[1]));
       return Math.max(...xs) - Math.min(...xs);
     };
-    expect(width(crowns[0]!.d)).toBeCloseTo(4, 0); // far small tree first
+    expect(width(crowns[0]!.d)).toBeCloseTo(4, 0);
     expect(width(crowns[1]!.d)).toBeCloseTo(10, 0);
   });
 
