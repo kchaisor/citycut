@@ -5,8 +5,9 @@ import { EnrichmentPmtilesSource } from "./enrichmentPmtilesSource";
 import type { ComTree } from "./comTrees";
 import type { VicmapPoint } from "./vicmapTrees";
 
-export const TREES_PMTILES_URL = `${import.meta.env.BASE_URL}trees.pmtiles`;
-export const TREES_MANIFEST_URL = `${import.meta.env.BASE_URL}trees-manifest.json`;
+const PREBAKED_BASE = import.meta.env.VITE_PREBAKED_TILES_BASE ?? import.meta.env.BASE_URL;
+export const TREES_PMTILES_URL = `${PREBAKED_BASE}trees.pmtiles`;
+export const TREES_MANIFEST_URL = `${PREBAKED_BASE}trees-manifest.json`;
 export const PAGES_TREES_PMTILES_URL = "https://kchaisor.github.io/citycut/trees.pmtiles";
 export const PAGES_TREES_MANIFEST_URL = "https://kchaisor.github.io/citycut/trees-manifest.json";
 
