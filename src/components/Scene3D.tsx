@@ -89,13 +89,15 @@ import {
 import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SunHoursLayer } from "./SunHoursLayer";
+import { AnchoredLens3D, type AnchoredLensActions } from "./AnchoredLens";
+import type { SunHoursGrid } from "../lib/sunHours";
 
 /** Hours-of-sun heatmap: later phase. Code kept, no UI; flip to preview. */
 const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
 import { WindStaticArrows, WindStreaks } from "./WindStreaks";
 import { analyzeWindPeriod, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
-import type { CityModel } from "../types";
+import type { BuildingFeat, CityModel } from "../types";
 
 export type SceneExporter = {
   png: () => Promise<Blob>;
@@ -1848,6 +1850,9 @@ export function Scene3D({
   importedMassing = null,
   walkLayer = null,
   onScenePoint = null,
+  anchoredLensBuilding = null,
+  anchoredLensSunHoursGrid = null,
+  anchoredLensActions = null,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -1876,6 +1881,9 @@ export function Scene3D({
   walkLayer?: THREE.Object3D | null;
   /** Click-to-place: while set, a click reports the scene point (east, north, up) instead of picking a building. */
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
+  anchoredLensBuilding?: BuildingFeat | null;
+  anchoredLensSunHoursGrid?: SunHoursGrid | null;
+  anchoredLensActions?: AnchoredLensActions | null;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
@@ -1980,6 +1988,14 @@ export function Scene3D({
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
+      {anchoredLensBuilding && anchoredLensActions ? (
+        <AnchoredLens3D
+          building={anchoredLensBuilding}
+          model={model}
+          sunHoursGrid={anchoredLensSunHoursGrid ?? null}
+          actions={anchoredLensActions}
+        />
+      ) : null}
       <SolarHeliodon
         lat={model.center.lat}
         lon={model.center.lon}

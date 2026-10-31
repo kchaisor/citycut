@@ -30,6 +30,8 @@ declare global {
       getSummary?: () => { treeCrowns: number; buildingCount: number; roadCount: number; triangleCount: number };
       /** Pick a building for height edit (same path as 3D selection). */
       selectHeightEditBuilding?: (buildingId: number) => number;
+      openAnchoredLensForBuilding?: (buildingId: number) => number;
+      getAnchoredLensScreenPosition?: () => { x: number; y: number } | null;
       /** ~16 m foreground block for selection QA screenshots. */
       pickForegroundBuildingForSelectionQa?: () => number | null;
       frameSelectionBuilding?: (buildingId: number, variant?: "through" | "oblique") => boolean;

@@ -128,7 +128,9 @@ import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import { COM_TREES_CREDIT, COM_TREES_DATASET_URL } from "../lib/comTreesCredit";
 import { openRing, toLocal } from "../lib/geo";
-import { pointInPolygon } from "../lib/useCascade";
+import { interiorPoint, pointInPolygon } from "../lib/useCascade";
+import { sunHoursGrid } from "../lib/sunHours";
+import type { AnchoredLensActions } from "./AnchoredLens";
 import type { BuildingUse, CityModel } from "../types";
 import { BuildingHeightPopover, HeightOverridePanel, HiddenBuildingsPanel } from "./BuildingHeightPopover";
 import {
@@ -619,8 +621,18 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
         setHeightPick({ buildingId, clientX: 640, clientY: 400 });
         return buildingId;
       },
+      openAnchoredLensForBuilding(buildingId: number) {
+        setHeightPick({ buildingId, clientX: 640, clientY: 400 });
+        return buildingId;
+      },
+      getAnchoredLensScreenPosition() {
+        const card = document.querySelector("[data-anchored-lens=\"open\"]");
+        if (!card) return null;
+        const rect = card.getBoundingClientRect();
+        return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+      },
       pickForegroundBuildingForSelectionQa() {
-        const candidates = model.buildings
+        const candidates = qaDisplayBuildingsRef.current
           .filter(
             (building) =>
               building.height >= 10 &&
@@ -1045,6 +1057,47 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     heightPick === null
       ? null
       : (displayModel.buildings.find((building) => building.id === heightPick.buildingId) ?? null);
+
+  const anchoredLensSunGrid = useMemo(
+    () =>
+      solar.sunStudy
+        ? sunHoursGrid(displayModel, { year: solar.year, month: solar.month, day: solar.day })
+        : null,
+    [displayModel, solar.sunStudy, solar.year, solar.month, solar.day],
+  );
+
+  useEffect(() => {
+    if (!heightPick || tab !== "3d") return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setHeightPick(null);
+        setHideSelection([]);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [heightPick, tab]);
+
+  const anchoredLensActions = useMemo<AnchoredLensActions>(
+    () => ({
+      rippleEnabled: false,
+      cutEnabled: false,
+      viewshedEnabled: true,
+      onRipple: () => {},
+      onCut: () => {},
+      onViewshed: () => {
+        if (!pickedBuilding) return;
+        dispatchSidebar({ type: "select", id: "analysis" });
+        setAnalysisKind("view");
+        setTab("3d");
+        const at = interiorPoint(pickedBuilding.ring, pickedBuilding.holes);
+        walk.clear();
+        walk.addPoint(at[0], at[1]);
+        walk.setDrawing(true);
+      },
+    }),
+    [dispatchSidebar, pickedBuilding, walk],
+  );
 
   function persistHidden(next: HiddenBuildingStore) {
     setHiddenStore(next);
@@ -1775,6 +1828,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 importedMassing={massing.group}
                 walkLayer={walk.layer.root}
                 onScenePoint={walkDrawing ? walk.addPoint : massing.onScenePoint}
+                anchoredLensBuilding={tab === "3d" && pickedBuilding ? pickedBuilding : null}
+                anchoredLensSunHoursGrid={anchoredLensSunGrid}
+                anchoredLensActions={anchoredLensActions}
               />
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (

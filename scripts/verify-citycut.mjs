@@ -1107,6 +1107,122 @@ async function main() {
     );
 
     // -------------------------------------------------------------------------
+    // ANCHORED LENS (3D building card)
+    // -------------------------------------------------------------------------
+    const lensCtx = await browser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: DEVICE_SCALE_FACTOR,
+      reducedMotion: "no-preference",
+    });
+    await lensCtx.addInitScript(() => {
+      window.__citycutMinSilentLoadMs = 550;
+    });
+    const lensPage = await lensCtx.newPage();
+    await lensPage.goto(`${baseUrl}/?qa=1&qaHidePopover=1&lat=-37.8136&lon=144.9831&km=1`, {
+      waitUntil: "domcontentloaded",
+    });
+    await lensPage.waitForSelector("button.create-fab", { timeout: 20000 });
+    await lensPage.click("button.create-fab");
+    await lensPage.waitForFunction(
+      () => Boolean(window.__citycutQaModel?.pickForegroundBuildingForSelectionQa),
+      { timeout: 120000 },
+    );
+    await lensPage.evaluate(async () => {
+      await window.__citycutQaModel?.waitForComHeightsApplied?.(120000);
+    });
+    await lensPage.waitForTimeout(800);
+    const lensOpenInfo = await lensPage.evaluate(async () => {
+      const id = window.__citycutQaModel?.pickForegroundBuildingForSelectionQa?.() ?? null;
+      return { id };
+    });
+    await lensPage.waitForSelector('[data-anchored-lens="open"]', { timeout: 15000 });
+    const lensOpenPos = await lensPage.evaluate(() => {
+      const card = document.querySelector('[data-anchored-lens="open"]');
+      const pos = window.__citycutQaModel?.getAnchoredLensScreenPosition?.() ?? null;
+      return { hasCard: Boolean(card), pos };
+    });
+    lensOpenInfo.hasCard = lensOpenPos.hasCard;
+    lensOpenInfo.pos = lensOpenPos.pos;
+    assertCheck(
+      "anchored-lens-open-on-click",
+      "Clicking a building opens the anchored lens card in the 3D view",
+      lensOpenInfo.id != null && lensOpenInfo.hasCard && lensOpenInfo.pos != null,
+      `id=${lensOpenInfo.id}, pos=${JSON.stringify(lensOpenInfo.pos)}`,
+    );
+
+    const lensOrbitInfo = await lensPage.evaluate(async (buildingId) => {
+      if (buildingId == null) return { moved: false, before: null, after: null };
+      window.__citycutQaModel?.frameSelectionBuilding?.(buildingId, "through");
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const before = window.__citycutQaModel?.getAnchoredLensScreenPosition?.() ?? null;
+      window.__citycutQaModel?.frameSelectionBuilding?.(buildingId, "oblique");
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await new Promise((r) => setTimeout(r, 120));
+      const after = window.__citycutQaModel?.getAnchoredLensScreenPosition?.() ?? null;
+      const moved =
+        before &&
+        after &&
+        (Math.abs(before.x - after.x) > 6 || Math.abs(before.y - after.y) > 6);
+      return { moved, before, after };
+    }, lensOpenInfo.id);
+    assertCheck(
+      "anchored-lens-follows-camera",
+      "Anchored lens screen position updates when the camera orbits",
+      Boolean(lensOrbitInfo.moved),
+      `before=${JSON.stringify(lensOrbitInfo.before)}, after=${JSON.stringify(lensOrbitInfo.after)}`,
+    );
+
+    await lensPage.keyboard.press("Escape");
+    await lensPage.waitForTimeout(200);
+    const lensEscClosed = await lensPage.evaluate(
+      () => !document.querySelector('[data-anchored-lens="open"]'),
+    );
+    assertCheck(
+      "anchored-lens-esc-close",
+      "Escape closes the anchored lens",
+      lensEscClosed,
+      `closed=${lensEscClosed}`,
+    );
+
+    await lensPage.evaluate(() => window.__citycutQaModel?.pickForegroundBuildingForSelectionQa?.());
+    await lensPage.waitForSelector('[data-anchored-lens="open"]', { timeout: 15000 });
+    await lensPage.evaluate(() => {
+      window.__citycutQa?.setCamera?.({
+        eye: { x: 0, y: 420, z: 420 },
+        target: { x: 0, y: 0, z: 0 },
+      });
+    });
+    await lensPage.waitForTimeout(350);
+    const canvasBox = await lensPage.locator(".model canvas").boundingBox();
+    if (canvasBox) {
+      await lensPage.mouse.click(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2);
+    }
+    await lensPage.waitForTimeout(250);
+    const lensEmptyClosed = await lensPage.evaluate(
+      () => !document.querySelector('[data-anchored-lens="open"]'),
+    );
+    assertCheck(
+      "anchored-lens-empty-click-close",
+      "Clicking empty space closes the anchored lens",
+      lensEmptyClosed,
+      `closed=${lensEmptyClosed}`,
+    );
+
+    await lensPage.evaluate(() => window.__citycutQaModel?.pickForegroundBuildingForSelectionQa?.());
+    await lensPage.waitForTimeout(300);
+    const disabledTooltip = await lensPage.evaluate(() => {
+      const btn = document.querySelector('[data-anchored-lens-action="ripple"]');
+      return btn?.getAttribute("title") ?? "";
+    });
+    assertCheck(
+      "anchored-lens-disabled-tooltip",
+      "Disabled Ripple from here button exposes a Coming soon tooltip",
+      disabledTooltip === "Coming soon",
+      `title="${disabledTooltip}"`,
+    );
+    await lensCtx.close();
+
+    // -------------------------------------------------------------------------
     // DRAWING -> SITE PLAN: 9-3PM PLAN FAN & SELECTED BUILDING SHADOW ISOLATION
     // -------------------------------------------------------------------------
     await analysisBtn.click();
