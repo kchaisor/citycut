@@ -92,6 +92,10 @@ import { SunHoursLayer } from "./SunHoursLayer";
 import { SectionKnifeScene } from "./SectionKnifeScene";
 import { selectedKnife, type SectionKnifeToolState } from "../lib/sectionKnife/state";
 import type { SectionKnifePose } from "../lib/sectionKnife/plane";
+import {
+  idleSectionKnifeGizmoInteraction,
+  type SectionKnifeGizmoInteraction,
+} from "../lib/sectionKnife/gizmoHit";
 
 /** Hours-of-sun heatmap: later phase. Code kept, no UI; flip to preview. */
 const SUN_HOURS_HEATMAP_ENABLED = false;
@@ -321,6 +325,7 @@ function City({
   pickBuildings,
   sectionKnife,
   onSectionKnifePoseChange,
+  onSectionKnifeGizmoInteractionChange,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -337,6 +342,7 @@ function City({
   pickBuildings: boolean;
   sectionKnife?: SectionKnifeToolState | null;
   onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
+  onSectionKnifeGizmoInteractionChange?: (state: SectionKnifeGizmoInteraction) => void;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -785,6 +791,7 @@ function City({
           active
           pose={selectedKnife(sectionKnife).pose}
           onPoseChange={onSectionKnifePoseChange}
+          onGizmoInteractionChange={onSectionKnifeGizmoInteractionChange}
         />
       ) : null}
     </>
@@ -1601,6 +1608,7 @@ export function Cameras({
   lon,
   cameraMemory,
   introEnabled = false,
+  gizmoOrbitLock = false,
 }: {
   side: number;
   lift: number;
@@ -1619,6 +1627,7 @@ export function Cameras({
   lon: number;
   cameraMemory?: CameraMemoryRef;
   introEnabled?: boolean;
+  gizmoOrbitLock?: boolean;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
@@ -1754,7 +1763,7 @@ export function Cameras({
             ref={perspControls}
             camera={persp}
             makeDefault={!orthoView}
-            enabled={!orthoView}
+            enabled={!orthoView && !gizmoOrbitLock}
             enableDamping
             dampingFactor={0.08}
             maxPolarAngle={Math.PI / 2.02}
@@ -1768,7 +1777,7 @@ export function Cameras({
             ref={orthoControls}
             camera={ortho}
             makeDefault={orthoView}
-            enabled={orthoView}
+            enabled={orthoView && !gizmoOrbitLock}
             enableDamping
             dampingFactor={0.08}
             enableRotate={iso && freeRotate}
@@ -1901,6 +1910,12 @@ export function Scene3D({
   const onBounds = useCallback((bounds: Aabb) => {
     boundsRef.current = bounds;
   }, []);
+  const [sectionKnifeGizmoInteraction, setSectionKnifeGizmoInteraction] = useState<SectionKnifeGizmoInteraction>(
+    () => idleSectionKnifeGizmoInteraction,
+  );
+  const onSectionKnifeGizmoInteractionChange = useCallback((state: SectionKnifeGizmoInteraction) => {
+    setSectionKnifeGizmoInteraction(state);
+  }, []);
   const lift = model.terrain ? (model.terrain.min + model.terrain.max) / 2 : 0;
   const colourTick = useColourRevision();
   const modelBg = useMemo(() => themeColor("--model-bg"), [colourTick]);
@@ -1938,8 +1953,14 @@ export function Scene3D({
     for (const building of model.buildings) top = Math.max(top, base + building.height);
     return top;
   }, [model]);
+  const gizmoCursorClass =
+    sectionKnifeGizmoInteraction.cursor === "grabbing"
+      ? " section-knife-gizmo-grabbing"
+      : sectionKnifeGizmoInteraction.cursor === "grab"
+        ? " section-knife-gizmo-grab"
+        : "";
   return (
-    <div className="scene-viewport">
+    <div className={`scene-viewport${gizmoCursorClass}`}>
       {glContextLost ? (
         <div className="webgl-lost-overlay" role="alert">
           <p>3D view lost (GPU memory)</p>
@@ -2000,6 +2021,7 @@ export function Scene3D({
         display={display}
         sectionKnife={sectionKnife}
         onSectionKnifePoseChange={onSectionKnifePoseChange}
+        onSectionKnifeGizmoInteractionChange={onSectionKnifeGizmoInteractionChange}
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
@@ -2038,6 +2060,7 @@ export function Scene3D({
         lon={model.center.lon}
         cameraMemory={cameraMemory}
         introEnabled
+        gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock}
       />
       </Canvas>
     </div>

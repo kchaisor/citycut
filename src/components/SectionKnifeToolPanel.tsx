@@ -62,7 +62,11 @@ export function SectionKnifeToolPanel({
           >
             + New section knife
           </button>
-          <p className="field-note">
+          <p
+            className="field-note"
+            data-section-knife-offset-m={selected.pose.offsetM.toFixed(3)}
+            data-section-knife-angle-rad={selected.pose.angleRad.toFixed(4)}
+          >
             Drag the yellow handle to move the plane; use the ring at the base to rotate about the vertical axis.
             {selected.label} · offset {selected.pose.offsetM.toFixed(1)} m
           </p>

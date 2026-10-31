@@ -1,12 +1,29 @@
-import { useThree, type ThreeEvent } from "@react-three/fiber";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { getColour } from "../lib/colours";
 import { mountSectionKnifeClip, type SectionKnifeClipMount } from "../lib/sectionKnife/clipCity";
+import {
+  idleSectionKnifeGizmoInteraction,
+  projectToCanvasPixels,
+  screenConstantHitRadiusM,
+  type SectionKnifeGizmoInteraction,
+} from "../lib/sectionKnife/gizmoHit";
 import { knifeNormalXZ, knifePlane, planeCutRect, type SectionKnifePose } from "../lib/sectionKnife/plane";
 import type { CityModel } from "../types";
 
 type DragMode = "move" | "rotate" | null;
+
+const HIT_PX = 28;
+
+function mergeInteraction(
+  hover: "move" | "rotate" | null,
+  drag: DragMode,
+): SectionKnifeGizmoInteraction {
+  if (drag) return { orbitLock: true, cursor: "grabbing" };
+  if (hover) return { orbitLock: true, cursor: "grab" };
+  return idleSectionKnifeGizmoInteraction;
+}
 
 export function SectionKnifeScene({
   city,
@@ -14,19 +31,29 @@ export function SectionKnifeScene({
   active,
   pose,
   onPoseChange,
+  onGizmoInteractionChange,
 }: {
   city: THREE.Object3D;
   model: CityModel;
   active: boolean;
   pose: SectionKnifePose;
   onPoseChange: (pose: SectionKnifePose) => void;
+  onGizmoInteractionChange?: (state: SectionKnifeGizmoInteraction) => void;
 }) {
   const gl = useThree((state) => state.gl);
+  const camera = useThree((state) => state.camera);
+  const size = useThree((state) => state.size);
   const invalidate = useThree((state) => state.invalidate);
   const clipRef = useRef<SectionKnifeClipMount | null>(null);
   const dragRef = useRef<DragMode>(null);
   const dragStartRef = useRef<{ pointer: THREE.Vector2; pose: SectionKnifePose } | null>(null);
+  const hoverRef = useRef<"move" | "rotate" | null>(null);
+  const handleHitRef = useRef<THREE.Mesh>(null);
+  const ringHitRef = useRef<THREE.Mesh>(null);
+  const handleWorldRef = useRef(new THREE.Vector3());
+  const ringWorldRef = useRef(new THREE.Vector3());
   const [hoverHandle, setHoverHandle] = useState(false);
+  const [hoverRing, setHoverRing] = useState(false);
 
   useLayoutEffect(() => {
     gl.localClippingEnabled = true;
@@ -65,6 +92,7 @@ export function SectionKnifeScene({
     const planeMesh = new THREE.Mesh(planeGeo, planeMat);
     planeMesh.name = "SectionKnifePlaneVisual";
     planeMesh.position.y = (groundY + topY) / 2;
+    planeMesh.raycast = () => {};
     group.add(planeMesh);
     return group;
   }, [model.sideM, groundY, topY]);
@@ -100,29 +128,34 @@ export function SectionKnifeScene({
     return p;
   }, [pose, groundY]);
 
-  function beginDrag(mode: DragMode, event: ThreeEvent<PointerEvent>) {
-    event.stopPropagation();
-    dragRef.current = mode;
-    dragStartRef.current = {
-      pointer: new THREE.Vector2(event.nativeEvent.offsetX, event.nativeEvent.offsetY),
-      pose: { ...pose },
-    };
-    (event.target as HTMLElement | null)?.setPointerCapture?.(event.nativeEvent.pointerId);
+  const visualHandleR = Math.max(2.5, model.sideM * 0.012);
+  const visualRingR = Math.max(4, model.sideM * 0.022);
+
+  function publishInteraction() {
+    onGizmoInteractionChange?.(mergeInteraction(hoverRef.current, dragRef.current));
   }
 
-  function endDrag(event: ThreeEvent<PointerEvent>) {
-    dragRef.current = null;
-    dragStartRef.current = null;
-    (event.target as HTMLElement | null)?.releasePointerCapture?.(event.nativeEvent.pointerId);
+  function pointerOnCanvas(event: PointerEvent): THREE.Vector2 {
+    const canvas = gl.domElement;
+    const rect = canvas.getBoundingClientRect();
+    return new THREE.Vector2(event.clientX - rect.left, event.clientY - rect.top);
   }
 
-  function onPointerMove(event: ThreeEvent<PointerEvent>) {
+  function endDragListeners() {
+    window.removeEventListener("pointermove", onWindowPointerMove);
+    window.removeEventListener("pointerup", onWindowPointerUp);
+    window.removeEventListener("pointercancel", onWindowPointerUp);
+  }
+
+  function onWindowPointerMove(event: PointerEvent) {
     const mode = dragRef.current;
     const start = dragStartRef.current;
     if (!mode || !start) return;
+    event.preventDefault();
     event.stopPropagation();
-    const dx = event.nativeEvent.offsetX - start.pointer.x;
-    const dy = event.nativeEvent.offsetY - start.pointer.y;
+    const pointer = pointerOnCanvas(event);
+    const dx = pointer.x - start.pointer.x;
+    const dy = pointer.y - start.pointer.y;
     if (mode === "move") {
       const normal = knifeNormalXZ(start.pose);
       const delta = (dx - dy) * 0.05;
@@ -133,30 +166,166 @@ export function SectionKnifeScene({
     invalidate();
   }
 
+  function onWindowPointerUp(event: PointerEvent) {
+    if (!dragRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragRef.current = null;
+    dragStartRef.current = null;
+    try {
+      gl.domElement.releasePointerCapture(event.pointerId);
+    } catch {
+      // already released
+    }
+    endDragListeners();
+    publishInteraction();
+    invalidate();
+  }
+
+  function beginDrag(mode: DragMode, event: ThreeEvent<PointerEvent>) {
+    event.stopPropagation();
+    dragRef.current = mode;
+    dragStartRef.current = {
+      pointer: pointerOnCanvas(event.nativeEvent),
+      pose: { ...pose },
+    };
+    try {
+      gl.domElement.setPointerCapture(event.nativeEvent.pointerId);
+    } catch {
+      // ignore
+    }
+    window.addEventListener("pointermove", onWindowPointerMove, { passive: false });
+    window.addEventListener("pointerup", onWindowPointerUp, { passive: false });
+    window.addEventListener("pointercancel", onWindowPointerUp, { passive: false });
+    publishInteraction();
+  }
+
+  function setHover(part: "move" | "rotate" | null) {
+    hoverRef.current = part;
+    setHoverHandle(part === "move");
+    setHoverRing(part === "rotate");
+    publishInteraction();
+  }
+
+  useLayoutEffect(() => {
+    if (!active) {
+      dragRef.current = null;
+      dragStartRef.current = null;
+      hoverRef.current = null;
+      endDragListeners();
+      onGizmoInteractionChange?.(idleSectionKnifeGizmoInteraction);
+    }
+  }, [active, onGizmoInteractionChange]);
+
+  useLayoutEffect(() => {
+    for (const mesh of [handleHitRef.current, ringHitRef.current]) {
+      if (mesh) mesh.userData.sectionKnifeGizmoHit = true;
+    }
+  }, [active]);
+
+  useEffect(() => {
+    return () => {
+      endDragListeners();
+    };
+  }, []);
+
+  useFrame(() => {
+    if (!active) {
+      delete gl.domElement.dataset.sectionKnifeHandleX;
+      delete gl.domElement.dataset.sectionKnifeHandleY;
+      delete gl.domElement.dataset.sectionKnifeRingX;
+      delete gl.domElement.dataset.sectionKnifeRingY;
+      return;
+    }
+    handleWorldRef.current.copy(handlePos);
+    ringWorldRef.current.copy(rotatePos);
+    const canvasH = gl.domElement.clientHeight || size.height;
+    const handleR = screenConstantHitRadiusM(camera, handleWorldRef.current, HIT_PX, canvasH);
+    const ringR = screenConstantHitRadiusM(camera, ringWorldRef.current, HIT_PX, canvasH);
+    if (handleHitRef.current) handleHitRef.current.scale.setScalar(handleR);
+    if (ringHitRef.current) ringHitRef.current.scale.setScalar(ringR);
+    const handlePx = projectToCanvasPixels(camera, handleWorldRef.current, gl.domElement);
+    const ringPx = projectToCanvasPixels(camera, ringWorldRef.current, gl.domElement);
+    if (handlePx && !handlePx.behind) {
+      gl.domElement.dataset.sectionKnifeHandleX = handlePx.x.toFixed(1);
+      gl.domElement.dataset.sectionKnifeHandleY = handlePx.y.toFixed(1);
+    } else {
+      delete gl.domElement.dataset.sectionKnifeHandleX;
+      delete gl.domElement.dataset.sectionKnifeHandleY;
+    }
+    if (ringPx && !ringPx.behind) {
+      gl.domElement.dataset.sectionKnifeRingX = ringPx.x.toFixed(1);
+      gl.domElement.dataset.sectionKnifeRingY = ringPx.y.toFixed(1);
+    } else {
+      delete gl.domElement.dataset.sectionKnifeRingX;
+      delete gl.domElement.dataset.sectionKnifeRingY;
+    }
+  });
+
   if (!active) return null;
+
+  const cut = getColour("--section-knife-cut-edge");
+  const handleHighlight = getColour("--section-knife-handle-hover");
 
   return (
     <>
-      <mesh
-        position={handlePos}
-        onPointerDown={(event) => beginDrag("move", event)}
-        onPointerUp={endDrag}
-        onPointerMove={onPointerMove}
-        onPointerOver={() => setHoverHandle(true)}
-        onPointerOut={() => setHoverHandle(false)}
-      >
-        <sphereGeometry args={[Math.max(2.5, model.sideM * 0.012), 16, 16]} />
-        <meshBasicMaterial color={getColour("--section-knife-cut-edge")} depthTest={false} transparent opacity={hoverHandle ? 1 : 0.85} />
-      </mesh>
-      <mesh
-        position={rotatePos}
-        onPointerDown={(event) => beginDrag("rotate", event)}
-        onPointerUp={endDrag}
-        onPointerMove={onPointerMove}
-      >
-        <torusGeometry args={[Math.max(4, model.sideM * 0.022), 0.35, 8, 32]} />
-        <meshBasicMaterial color={getColour("--section-knife-cut-edge")} depthTest={false} wireframe />
-      </mesh>
+      <group position={handlePos} renderOrder={2000}>
+        <mesh renderOrder={2001}>
+          <sphereGeometry args={[visualHandleR, 20, 20]} />
+          <meshBasicMaterial
+            color={hoverHandle ? handleHighlight : cut}
+            depthTest={false}
+            transparent
+            opacity={hoverHandle ? 1 : 0.88}
+          />
+        </mesh>
+        <mesh
+          ref={handleHitRef}
+          renderOrder={2002}
+          onPointerDown={(event) => beginDrag("move", event)}
+          onPointerOver={(event) => {
+            event.stopPropagation();
+            setHover("move");
+          }}
+          onPointerOut={(event) => {
+            event.stopPropagation();
+            if (dragRef.current === "move") return;
+            if (hoverRef.current === "move") setHover(null);
+          }}
+        >
+          <sphereGeometry args={[1, 12, 12]} />
+          <meshBasicMaterial transparent opacity={0.001} depthTest={false} depthWrite={false} color={cut} />
+        </mesh>
+      </group>
+      <group position={rotatePos} renderOrder={2000}>
+        <mesh renderOrder={2001}>
+          <torusGeometry args={[visualRingR, 0.35, 8, 32]} />
+          <meshBasicMaterial
+            color={hoverRing ? handleHighlight : cut}
+            depthTest={false}
+            transparent
+            opacity={hoverRing ? 1 : 0.75}
+            wireframe
+          />
+        </mesh>
+        <mesh
+          ref={ringHitRef}
+          renderOrder={2002}
+          onPointerDown={(event) => beginDrag("rotate", event)}
+          onPointerOver={(event) => {
+            event.stopPropagation();
+            setHover("rotate");
+          }}
+          onPointerOut={(event) => {
+            event.stopPropagation();
+            if (dragRef.current === "rotate") return;
+            if (hoverRef.current === "rotate") setHover(null);
+          }}
+        >
+          <sphereGeometry args={[1, 12, 12]} />
+          <meshBasicMaterial transparent opacity={0.001} depthTest={false} depthWrite={false} color={cut} />
+        </mesh>
+      </group>
     </>
   );
 }

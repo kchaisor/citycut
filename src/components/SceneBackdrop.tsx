@@ -128,6 +128,15 @@ export function ViewInset() {
 }
 
 /** Pointer events against the full-width canvas, so raycasts match the offset projection. */
+function isSectionKnifeGizmoHit(object: THREE.Object3D): boolean {
+  let node: THREE.Object3D | null = object;
+  while (node) {
+    if (node.userData.sectionKnifeGizmoHit) return true;
+    node = node.parent;
+  }
+  return false;
+}
+
 export function insetPointerEvents(store: Parameters<typeof createPointerEvents>[0]): EventManager<HTMLElement> {
   const base = createPointerEvents(store);
   return {
@@ -138,6 +147,11 @@ export function insetPointerEvents(store: Parameters<typeof createPointerEvents>
       const h = canvas.clientHeight || state.size.height;
       state.pointer.set((event.offsetX / w) * 2 - 1, -(event.offsetY / h) * 2 + 1);
       state.raycaster.setFromCamera(state.pointer, state.camera);
+    },
+    filter(items, state) {
+      const baseFiltered = base.filter ? base.filter(items, state) : items;
+      const gizmoHits = baseFiltered.filter((hit) => isSectionKnifeGizmoHit(hit.object));
+      return gizmoHits.length ? gizmoHits : baseFiltered;
     },
   };
 }

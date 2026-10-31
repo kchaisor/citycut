@@ -4341,3 +4341,11 @@ body,
   border-radius: 6px;
   background: var(--bg-elev);
 }
+
+.scene-viewport.section-knife-gizmo-grab canvas.scene-canvas {
+  cursor: grab;
+}
+
+.scene-viewport.section-knife-gizmo-grabbing canvas.scene-canvas {
+  cursor: grabbing;
+}

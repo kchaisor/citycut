@@ -286,6 +286,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--view-path` | `#000000` | View tab: drawn walk path ribbon and its clicked points. |
 | `--view-walker` | `#FFF500` | View tab: walker marker (eye ball on a black pole). |
 | `--section-knife-cut-edge` | `#FFF500` | Section Knife: live cut edge outline in the 3D view (same yellow as `--accent`). |
+| `--section-knife-handle-hover` | `#FFFFA8` | Section Knife: gizmo handle and rotate ring hover highlight. |
 | `--section-knife-poche` | `#000000` | Section Knife: solid poché on clipped cap faces. |
 | `--section-knife-floor-line` | `#FFFFFF` | Section Knife: floor-slab lines on cap faces. |
 | `--section-knife-plane` | `#FFFFFF` | Section Knife: translucent cutting plane gizmo. |
