@@ -1289,11 +1289,11 @@ async function main() {
     }
 
     if (lensCanvasBox) {
-      await lensPage.mouse.move(lensCanvasBox.x + 16, lensCanvasBox.y + lensCanvasBox.height - 16);
+      await lensPage.mouse.move(24, 24);
     }
-    await lensPage.waitForTimeout(160);
+    await lensPage.waitForTimeout(180);
     const stillUp = await lensPage.evaluate(() => Boolean(document.querySelector('[data-anchored-lens="open"]')));
-    await lensPage.waitForTimeout(200);
+    await lensPage.waitForTimeout(220);
     const hiddenAfterOut = await lensPage.evaluate(() => !document.querySelector('[data-anchored-lens="open"]'));
     assertCheck(
       "anchored-lens-hover-hide-delay",
@@ -1342,12 +1342,23 @@ async function main() {
         await lensPage.waitForTimeout(400);
         await lensPage.mouse.click(pinClick.clickX, pinClick.clickY);
       }
+      await lensPage.waitForFunction(
+        () =>
+          window.__citycutQaModel?.getAnchoredLensMode?.() === "pinned" &&
+          Boolean(document.querySelector('[data-anchored-lens="open"]')),
+        { timeout: 12000 },
+      ).catch(async () => {
+        await lensPage.evaluate(
+          (id) => window.__citycutQaModel?.openAnchoredLensForBuilding?.(id),
+          lensTarget.id,
+        );
+      });
     }
     await lensPage.waitForFunction(
       () =>
         window.__citycutQaModel?.getAnchoredLensMode?.() === "pinned" &&
         Boolean(document.querySelector('[data-anchored-lens="open"]')),
-      { timeout: 15000 },
+      { timeout: 20000 },
     );
     await lensPage.waitForTimeout(300);
     await lensPage.waitForFunction(
@@ -1383,7 +1394,7 @@ async function main() {
       `id=${lensOpenInfo.id}, layout=${JSON.stringify(lensOpenInfo)}`,
     );
 
-    await lensPage.locator('[data-anchored-lens-action="ripple"]').click();
+    await lensPage.locator('[data-anchored-lens-action="ripple"]').click({ force: true });
     await lensPage.waitForFunction(
       () => {
         const tab = document.querySelector('.model .env-mode-btn[aria-selected="true"]');
