@@ -1,13 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { resolvePanelCollapsed, viewportIsNarrow } from "./panelCollapse";
 
-/**
- * One collapse setting for the fixed left sidebar, shared by the landing page and the
- * model page. Collapsing on one page keeps it collapsed on the other.
- *
- * On narrow screens the sidebar always starts collapsed, so the cut frame fits above
- * the rail. Elsewhere a stored choice wins, and the default is open.
- */
 export const SIDEBAR_COLLAPSED_KEY = "citycut.sidebar.collapsed";
 
 type Listener = () => void;
@@ -38,12 +31,10 @@ export function setSidebarCollapsed(next: boolean): void {
   try {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
   } catch {
-    // Private mode and some embedded browsers throw on localStorage.
   }
   for (const listener of listeners) listener();
 }
 
-/** Test hook: forget the in-memory value so the next read starts from storage again. */
 export function resetSidebarCollapsedForTests(): void {
   collapsed = null;
 }

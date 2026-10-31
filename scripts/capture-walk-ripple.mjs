@@ -29,7 +29,6 @@ async function waitForServer(url, timeoutMs = 30000) {
       const res = await fetch(url);
       if (res.ok) return;
     } catch {
-      // retry
     }
     await new Promise((r) => setTimeout(r, 200));
   }
@@ -42,7 +41,6 @@ async function resolveAppBase(baseUrl) {
       const res = await fetch(`${baseUrl}${suffix}`);
       if (res.ok) return `${baseUrl}${suffix}`;
     } catch {
-      // try next
     }
   }
   return `${baseUrl}/citycut/`;
@@ -68,7 +66,6 @@ async function runCapture(page) {
     try {
       window.localStorage.setItem("citycut.view", JSON.stringify({ projection: "perspective", corner: "sw", freeRotate: false }));
     } catch {
-      // ignore
     }
   });
   const remoteBase = process.env.CAPTURE_BASE_URL?.replace(/\/$/, "");

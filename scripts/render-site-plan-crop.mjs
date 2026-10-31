@@ -1,7 +1,3 @@
-/**
- * Rasterize site-plan layers (planPaths) at a fixed viewBox for regression shots.
- * Usage: npx vite-node scripts/render-site-plan-crop.mjs <model.json> <label>
- */
 import { readFileSync, writeFileSync } from "node:fs";
 import { chromium } from "playwright";
 import * as roadFill from "../src/lib/roadFill.ts";

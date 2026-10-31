@@ -1,7 +1,3 @@
-/**
- * Offline building use + LiDAR height attributes served as PMTiles on GitHub Pages.
- * Geometry matches Overture building ids at z14; the app joins on {@link BuildingFeat.overtureId}.
- */
 
 import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
@@ -29,7 +25,6 @@ async function resolveEnrichmentPmtilesUrl(signal?: AbortSignal): Promise<string
   return url;
 }
 
-/** Absolute HTTP(S) URL for MapLibre `pmtiles://` sources (manifest override or bundled path). */
 export async function getEnrichmentPmtilesAbsoluteUrl(signal?: AbortSignal): Promise<string> {
   const path = await resolveEnrichmentPmtilesUrl(signal);
   if (path.startsWith("http")) return path;
@@ -64,7 +59,6 @@ const SOURCE_FROM_CODE: Record<number, BuildingUseSourceTier> = {
   0: "unclassified",
   1: "overture",
   2: "clue",
-  // 3 was the retired building-permit (BCA) tier; old tiles never used it.
   4: "zone",
 };
 
@@ -76,7 +70,6 @@ export type EnrichmentManifest = {
   featureCount: number;
   pmtilesBytes: number;
   generatedAt: string;
-  /** When set, fetch PMTiles from this URL instead of the bundled GitHub Pages path. */
   pmtilesUrl?: string;
   lidar?: { status: string; detail?: string };
   zonesFetch?: {
@@ -91,11 +84,8 @@ export type EnrichmentManifest = {
     unclassifiedUnmappedZoneCounts?: Record<string, number>;
   };
   clueLoaded?: boolean;
-  /** SHA-256 of canonical `shared/vicmap-zone-use.json` at bake time. */
   zoneUseTableSha256?: string;
-  /** SHA-256 of canonical `shared/overture-building-use.json` at bake time. */
   overtureBuildingUseSha256?: string;
-  /** Overture Maps release used for the input building fetch at bake time. */
   overtureRelease?: string;
 };
 
@@ -174,8 +164,6 @@ export async function fetchEnrichmentManifest(signal?: AbortSignal): Promise<Enr
     }
     if (!response.ok) return null;
     const manifest = (await response.json()) as EnrichmentManifest;
-    // When deployed outside GitHub Pages (e.g. Vercel), public/ contains the small City of
-    // Melbourne committed fallback unless upgraded to the Greater Melbourne release on Pages.
     if (manifest.regionName?.includes("committed fallback") && !manifest.pmtilesUrl) {
       try {
         const pagesResponse = await fetch(PAGES_ENRICHMENT_MANIFEST_URL, {
@@ -193,7 +181,6 @@ export async function fetchEnrichmentManifest(signal?: AbortSignal): Promise<Enr
           }
         }
       } catch {
-        // Keep the local committed fallback manifest when GitHub Pages is unreachable.
       }
     }
     return manifest;
@@ -202,7 +189,6 @@ export async function fetchEnrichmentManifest(signal?: AbortSignal): Promise<Enr
   }
 }
 
-/** Test helper. */
 export function clearEnrichmentPmtilesCache(): void {
   cachedPmtilesUrl = null;
 }

@@ -85,7 +85,6 @@ type StructureOverlap = {
   maxHeight: number;
 };
 
-/** Sum footprint overlap per CoM structure id (structure-level gate, not per slice). */
 function structureOverlapsForBuilding(
   building: BuildingFeat,
   footprints: ComBuildingFootprint[],
@@ -173,7 +172,6 @@ function attachComMatchMeta(building: BuildingFeat, meta: ComMatchMeta): Buildin
   return { ...building, ...meta };
 }
 
-/** Best CoM structure overlap that clears {@link COM_FALLBACK_MIN_FRACTION} on the OSM footprint. */
 export function pickPrimaryComMatchMeta(
   building: BuildingFeat,
   footprints: ComBuildingFootprint[],
@@ -247,10 +245,6 @@ type StructureAggregate = {
   maxHeight: number;
 };
 
-/**
- * For one large Overture footprint overlapping several CoM structures, sum overlap area per
- * structure_id and use area-weighted height when combined coverage clears the threshold.
- */
 export function aggregateComHeightForMergedFootprint(
   building: BuildingFeat,
   footprints: ComBuildingFootprint[],
@@ -279,18 +273,6 @@ export function aggregateComHeightForMergedFootprint(
   return weighted / covered;
 }
 
-/**
- * CoM 2023 stores one structure as stacked footprint components (`footprint_min/max_elevation`):
- * a podium row, then each setback band above it, each with its own outline and a
- * `structure_extrusion` measured to the top of that band. The outlines overlap in plan (the
- * tower band sits inside the podium band, and the dataset also repeats near-identical outlines).
- *
- * Every part here is extruded from the ground, so emitting one part per component drew the
- * same plan area several times as nested, coincident prisms (doubled walls, z-fighting, and
- * duplicate solids in .3dm). Instead, partition the footprint: walk components tallest first and
- * give each only the area no taller component already claimed. The visible envelope (the max
- * height at every point) and the tallest height are unchanged; each square metre is drawn once.
- */
 function partitionComClips(
   clips: { height: number; id: string; minX: number; multi: MultiPolygon }[],
 ): { parts: ExtrusionPart[]; covered: MultiPolygon | null } {
@@ -449,8 +431,6 @@ function applyComBuildingHeightsCore(
       const height = overlaps[0].footprint.height_m;
       const meta = pickPrimaryComMatchMeta(building, [overlaps[0].footprint]);
       if (Math.abs(height - building.height) < 0.05) {
-        // Height already agrees with CoM: keep it, but record CoM as the source so a lower
-        // tier (DAM floors) cannot claim the building later and the legend counts it as measured.
         if (building.heightManual || building.extrusionParts?.length) return building;
         return attachComMatchMeta(
           { ...building, heightFromFallback: undefined, heightTier: "com", zoneDefaultNote: undefined },
@@ -483,7 +463,6 @@ function applyComBuildingHeightsCore(
   return { buildings: out, updated };
 }
 
-/** @internal d835ce1 fast path (OSM coverage only) for regression diffs. */
 export function applyComBuildingHeightsLegacyOsmOnlyFastPath(
   buildings: BuildingFeat[],
   footprints: ComBuildingFootprint[],
@@ -512,7 +491,6 @@ export function applyComBuildingHeightsLegacyOsmOnlyFastPath(
   return { buildings: out, updated };
 }
 
-/** Clip-only matching (0a8b37a behaviour): always intersect, never whole-footprint fast path. */
 export function applyComBuildingHeightsClipOnly(
   buildings: BuildingFeat[],
   footprints: ComBuildingFootprint[],
@@ -568,7 +546,6 @@ function classifyWithEligible(
   };
 }
 
-/** Classify which path would run for one building (for diagnostics). */
 export function classifyComHeightApplication(
   building: BuildingFeat,
   footprints: ComBuildingFootprint[],
@@ -576,7 +553,6 @@ export function classifyComHeightApplication(
   return classifyWithEligible(building, footprints, singlePartFastPathEligible);
 }
 
-/** Classify legacy d835ce1 OSM-only 80% fast path. */
 export function classifyComHeightApplicationLegacy(
   building: BuildingFeat,
   footprints: ComBuildingFootprint[],
@@ -584,7 +560,6 @@ export function classifyComHeightApplicationLegacy(
   return classifyWithEligible(building, footprints, singlePartLegacyOsmOnlyFastPathEligible);
 }
 
-/** Apply CoM heights with single-part fast path and spatial index. */
 export function applyComBuildingHeights(
   buildings: BuildingFeat[],
   footprints: ComBuildingFootprint[],
@@ -626,7 +601,6 @@ export function applyComBuildingHeightsWithStats(
   };
 }
 
-/** @internal tests */
 export function clipBuildingComExtrusionsForTest(
   building: BuildingFeat,
   footprints: ComBuildingFootprint[],

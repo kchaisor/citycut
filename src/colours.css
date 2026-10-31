@@ -1,84 +1,51 @@
-/*
-  CityCut fills.
-  Kelvin: this file is every fill. The site plan, the figure-ground, the 3D
-  view, the PNG download, the Illustrator files, and the Rhino layer colours
-  all read these names. Line weights, dashes, and strokes stay in
-  drawing-style.css. Change a value, keep the name. See THEME.md.
-*/
 
 :root {
-  /* Sidebar and page chrome */
 
-  /* Plain grey behind the sidebar on the landing page and the model page, and the landing page chrome. */
   --sidebar-grey: #EBEBEB;
 
-  /* Flat 3D viewport sky and the flat landing-map tint (no gradients). */
   --viewport-bg: #EBEBEB;
 
-  /* All sidebar text, section labels and card descriptions included. */
   --sidebar-text: #000000;
 
-  /* Sun tab date and preset cards, and the speed buttons. */
   --sun-card-bg: #FFFFFF;
   --sun-card-border: #CECBC6;
-  /* Border of a selected card and of the New cut button; the fill is the #FFF500 accent. */
   --sun-card-on-border: #000000;
-  /* Selected hour button under a key date or an assessment preset (9 10 11 12 1 2 3). */
   --sun-hour-on: #FFF500;
 
-  /* Paper and ground */
-
-  /* Positron building fill — landing mask above use-coloured footprints outside the cut frame. */
   --landing-building-mask: #EAEAE5;
 
-  /* Illustrator site-plan page, and the casing under a rail so the line still reads on the road. */
   --sheet-fill: #E7E6E6;
 
-  /* Flat 3D ground when the frame has no terrain, the ground on the 3D-view Illustrator sheet, and the Rhino Ground layer. */
   --ground-fill: #EAEAE5;
 
-  /* Backdrop of the 3D PNG download, and the page behind the 3D-view Illustrator drawing. */
   --export-backdrop: #e7e4dc;
 
-  /* Figure-ground buildings, and the black frame, north mark, and scale bar on that drawing. */
   --figure-fill: #000000;
 
-  /* The sentence shown when a plan has nothing in the frame. */
   --plan-empty: #6d675e;
 
-  /* Elevation numbers drawn on the site-plan contours. */
   --contour-label: #FFFFFF;
 
-  /* Building use */
-
-  /* Buildings when colour-by-use is off, the legend swatch in that state, and the Rhino Buildings layer. */
   --building-uniform: #FFFFFF;
 
-  /* 3D viewport tint for buildings with a manual height override when “Show manual edits” is on. */
   --building-manual: #D4A017;
 
-  /* Buildings on the searched property: site plan, 3D, Rhino Buildings::Site, and Illustrator Site buildings layer. */
   --site-building: #FFF500;
-  /* Default colour of imported .3dm massing (3D, Drawing, .ai, .3dm); each model can override it in Import. Dashed outline in Drawing. */
   --imported-massing: #FFFFFF;
   --switch-knob: #000000;
 
-  /* Outline on site buildings in the 3D view so they read against retail/civic fills. */
   --site-building-edge: #3D3010;
 
-  /* Searched-property parcel boundary: site plan, 3D ground line, Rhino Site::Boundary, Illustrator/PDF. */
   --site-boundary: #D7263D;
   --wind-streak: #2B6CB0;
   --wind-rose: #3d5a73;
 
-  /* View tab walk viewshed: ground visible now, seen earlier on the walk, not visible, path ribbon, walker marker. */
   --view-visible: #FFF500;
   --view-seen: #FFF9AA;
   --view-blocked: #28282E;
   --view-path: #000000;
   --view-walker: #FFF500;
 
-  /* Walk ripple analysis: wave accent, 5 / 10 / 15 minute building bands, floating band labels. */
   --walk-ripple-accent: #FFF500;
   --walk-ripple-band-0: #FFF500;
   --walk-ripple-band-1: #FF8C00;
@@ -86,98 +53,61 @@
   --walk-ripple-label-bg: #1C1C22;
   --walk-ripple-label-text: #FFFFFF;
 
-  /* Residential footprints, legend swatch, and the Residential Rhino layer. */
   --use-residential: #CECBC6;
 
-  /* Commercial footprints, legend swatch, and the Commercial Rhino layer. */
   --use-commercial: #89533D;
 
-  /* Retail footprints, legend swatch, and the Retail Rhino layer. */
   --use-retail: #E5C07B;
 
-  /* Mixed-use footprints, legend swatch, and the MixedUse Rhino layer. */
   --use-mixed: #2D3F6D;
 
-  /* Industrial footprints, legend swatch, and the Industrial Rhino layer. */
   --use-industrial: #8228FF;
 
-  /* Civic footprints, legend swatch, and the Civic Rhino layer. */
   --use-civic: #FBAE3C;
 
-  /* Recreation footprints, legend swatch, and the Recreation Rhino layer. */
   --use-recreation: #EA4089;
 
-  /* Outbuilding footprints, legend swatch, and the Outbuilding Rhino layer. */
   --use-outbuilding: #5C6370;
 
-  /* Unclassified footprints, legend swatch, and the Unclassified Rhino layer. */
   --use-unclassified: #B8B8B8;
 
-  /* Source badges */
-
-  /* Buildings whose use came from an OpenStreetMap tag, and that legend swatch. */
   --source-osm: #1F4E79;
   --source-clue: #2E6B4F;
 
-  /* Urban block fabric between roads (under buildings; not site-plan paper #EBEBEB). */
   --block-fill: #D8D8D8;
   --block-plan: #D4D4D4;
 
-  /* Buildings whose use was inferred from a planning zone, and that legend swatch. */
   --source-zone: #A9C4DE;
 
-  /* Buildings with no tag and no zone, and that legend swatch. */
   --source-none: #B8B8B8;
 
-  /* Roads and paths */
-
-  /* Unioned carriageway on the site plan and the figure-ground, on screen and in the Illustrator file. */
   --road-fill: #FFFFFF;
 
-  /* Unioned footpath on the site plan and the figure-ground, on screen and in the Illustrator file. */
   --path-fill: #D2B48C;
 
-  /* Arterial ribbons in the 3D view and the 3D-view Illustrator file, and the Rhino Roads layer. */
   --road-arterial: #FFFFFF;
 
-  /* Local-street ribbons in the 3D view and the 3D-view Illustrator file. */
   --road-local: #FFFFFF;
 
-  /* Path ribbons in the 3D view and the 3D-view Illustrator file. */
   --road-path: #5c5c5c;
 
-  /* Green */
-
-  /* Parks and other green on the site plan, on screen and in the Illustrator file. */
   --green-fill: #D2D7BE;
 
-  /* Green mesh in the 3D view, the 3D-view Illustrator green, and the Rhino Green layer. */
   --green-3d: #D2D7BE;
 
-  /* Water */
-
-  /* Water on the site plan, on screen and in the Illustrator file. */
   --water-fill: #7FBFFF;
 
-  /* Water mesh in the 3D view, the 3D-view Illustrator water, and the Rhino Water layer. */
   --water-3d: #7FBFFF;
 
-  /* Water in the 3D viewport while the sun path diagram is on. */
   --water-sunpath: #4A9FE8;
 
-  /* Ground, roads, and parks in the 3D viewport while the sun path diagram is on. */
   --sun-study-surface: #FFFFFF;
 
-  /* White-card 3D display mode: building massing and ground tints. */
   --card-white: #FAFAF8;
   --card-ground: #F2F2F0;
 
-  /* Trees */
-
-  /* Tree-crown fill on the site plan, on screen and in the Illustrator file. */
   --tree-fill: #478C33;
 
-  /* Site-plan feature outlines (thin black edges). */
   --outline-building: #000000;
   --outline-tree: #000000;
   --outline-road: #000000;
@@ -188,86 +118,61 @@
   --outline-tram: #000000;
   --outline-contour: #000000;
 
-  /* PTV tram routes on the site plan, exploded axo transport plate, and exports. */
   --tram-line-stroke: #000000;
 
-  /* Tree-crown fill on the 3D-view Illustrator sheet. */
   --tree-crown: #478C33;
 
-  /* Outline around that 3D-view crown. */
   --tree-crown-edge: #478C33;
 
-  /* Trunk on the 3D-view Illustrator sheet. */
   --tree-trunk: #3e3428;
 
-  /* Rhino Trees layer. */
   --tree-layer: #478C33;
 
-  /* Rail */
-
-  /* Rail ribbon in the 3D view and the Rhino Rail layer. The site-plan rail line stays in drawing-style.css. */
   --rail-fill: #000000;
 
-  /* 3D-only materials */
-
-  /* Outline drawn around the flat ground slab. */
   --ground-edge: #2c2924;
 
-  /* Light band of the hatch on a zone-inferred building. */
   --hatch-paper: #ffffff;
 
-  /* Dark band of the hatch on a zone-inferred building. */
   --hatch-ink: #7d7d7d;
 
-  /* Rhino Terrain layer. The mesh itself is shaded by elevation. */
   --terrain-layer: #d6cebe;
 
-  /* Rhino layer used when a mesh has no colour of its own. */
   --rhino-fallback: #b4b4b4;
 
-  /* Outlines and the title plate text on the 3D-view Illustrator sheet. */
   --view-ink: #24221c;
 
-  /* Sky side of the 3D hemisphere light. */
   --light-sky: #f7f4ee;
 
-  /* Ground side of the 3D hemisphere light. */
   --light-ground: #c9c0b2;
 
-  /* Frame drawn around the cut on the satellite preview. */
+  --light-fill: #e4e8ee;
+  --viewport-studio-top: #f6f6f5;
+  --viewport-studio-bottom: #d9d9d6;
+  --plinth-shadow: #1a1916;
+
   --cut-line: #f7f4ee;
 
-  /* Summer-solstice sun path in the 3D heliodon (screen only). */
   --sun-arc-summer: #1a1916;
 
-  /* Equinox sun path. */
   --sun-arc-equinox: #1a1916;
 
-  /* Winter-solstice sun path. */
   --sun-arc-winter: #1a1916;
 
-  /* Active sun marker sphere. */
   --sun-marker: #ffcc1a;
 
-  /* Heliodon dial greys: altitude rings, radials, 1° ticks, degree numbers, hour lines. */
   --sun-compass: #45423c;
 
-  /* Heliodon dial ink: horizon ring, 5° and 10° ticks, axes, N/E/S/W, hour and arc labels. */
   --sun-compass-label: #1a1916;
 
-  /* Viewport-only building fill while the sun path and compass are on. */
   --building-solar-neutral: #ffffff;
 
-  /* Faint ground disc under the heliodon dial (screen only). */
   --heliodon-dial-disc: #e8e2d8;
 
-  /* Site-plan building shadows (mid-grey, readable under plan fills). */
   --shadow-fill: #4a5a70;
 
-  /* Site plan sun study: hourly sun icons on the selected-date path (9am–3pm). */
   --sun-study-sun: #fff500;
 
-  /* Sun study muted base plan (on by default with the sun study): quiet fills so hourly shadows read. */
   --sun-study-block: #f4f4f2;
   --sun-study-green: #eeeeec;
   --sun-study-water: #e6e8ea;
@@ -276,13 +181,10 @@
   --sun-study-path-edge: #d4d4d0;
   --sun-study-building: #ffffff;
 
-  /* Tree crowns in the sun study muted plan: pastel green, drawn at 50% opacity. */
   --sun-study-tree: #b8e0b0;
 
-  /* Site plan sun study: one shadow layer per hour, drawn at 20% so overlaps read darker. */
   --sun-study-shadow: #4a5a70;
 
-  /* Exploded axonometric drawing (on-screen and Illustrator). */
   --axo-water: #7eb8da;
   --axo-road: #6B6C6F;
   --axo-green: #7CB942;
@@ -339,7 +241,6 @@
   --axo-tree-canopy-shade: #5e8f45;
   --axo-tree-trunk: #7a6a55;
 
-  /* NSW mode (site plan and 3D). Zoning fills follow the Standard Instrument families. */
   --nsw-road-corridor: #E9E5DC;
   --nsw-lot-line: #5E5E5E;
   --nsw-easement: #C0392B;

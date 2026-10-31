@@ -25,7 +25,6 @@ function parseDashMm(dash: string | undefined, planScale: number): [number, numb
   return [paperMillimetres(parts[0], planScale), paperMillimetres(parts[1], planScale)];
 }
 
-/** Site-plan Sun path layer for PDF / native .ai exports. */
 export function heliodonPlanPdfChunk(
   modelSideM: number,
   layout: SheetLayout,

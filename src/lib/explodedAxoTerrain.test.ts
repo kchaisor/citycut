@@ -4,7 +4,6 @@ import { AXO_LAYER_LABELS, DEFAULT_AXO_LAYER_ORDER, axoPlateLabelText, axoPlateS
 import { explodedAxoChunks } from "./explodedAxoExport";
 import type { CityModel, TerrainField } from "../types";
 
-// 3×3 field: 10 m at the south-west corner, rising to 30 m at the north-east.
 const field: TerrainField = {
   cols: 3,
   rows: 3,
@@ -28,7 +27,6 @@ describe("exploded axo terrain mesh", () => {
     const x1 = buildAxoTerrainMesh(model(), field, 1, 4);
     const x3 = buildAxoTerrainMesh(model(), field, 3, 4);
     expect(x1).toHaveLength(10);
-    // North-east corner point (last point of the last north line) is lifted by 20 m × ex.
     const lastY = (paths: string[]) => ys(paths[paths.length - 1]!).at(-1)!;
     expect(lastY(flat) - lastY(x1)).toBeCloseTo(20, 1);
     expect(lastY(flat) - lastY(x3)).toBeCloseTo(60, 1);
@@ -64,7 +62,6 @@ describe("exploded axo terrain mesh", () => {
 
     const contours = buildAxoGroundTopoContours(model(field), field, 2);
     expect(contours.length).toBeGreaterThan(0);
-    // Higher contour lines are lifted vertically by 2x exaggeration compared to 1x
     const contoursX1 = buildAxoGroundTopoContours(model(field), field, 1);
     expect(ys(contours.at(-1)!)[0]).toBeLessThan(ys(contoursX1.at(-1)!)[0]!);
   });

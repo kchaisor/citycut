@@ -1,6 +1,10 @@
 import { sunStudyCasterModel, sunStudyMutedOn, toggleSelection, type SunStudyDate } from "../lib/sunStudyPlan";
 import { sunStudyLayersFor } from "./useSunStudyShadows";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { handleModelKeyDown, type ModelShortcutAction } from "../lib/modelKeyboard";
+import { registerModelKeyboardBridge } from "../lib/modelKeyboardBridge";
+import { viewportIsNarrow } from "../lib/panelCollapse";
+import { ShortcutCheatsheet } from "./ShortcutCheatsheet";
 import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
 import { Building2, Copy, Download, DraftingCompass, Eye, Footprints, GripVertical, Info, Radar, Sun, Trees, Upload, Wind } from "lucide-react";
@@ -197,6 +201,7 @@ import {
   type Layer3dId,
   type View3dDisplaySettings,
 } from "../lib/view3dDisplay";
+import { readStoredRenderQuality, writeStoredRenderQuality, type RenderQuality } from "../lib/renderQuality";
 
 type Tab = "3d" | "drawing" | "satellite";
 
@@ -225,7 +230,6 @@ function loadView(): ViewMemory {
   return resolved;
 }
 
-/** Height-source tier to its swatch in the Model details height bar. */
 const HEIGHT_TIER_BAR: Record<string, string> = {
   com: "measured",
   lidar: "lidar",
@@ -255,10 +259,21 @@ const ANALYSIS_ICONS: Record<SiteAnalysisKind, typeof Sun> = {
   walkRipple: Footprints,
 };
 
-export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHome: () => void; onNewCut: () => void }) {
+export function ModelPage({
+  model,
+  onHome,
+  onNewCut,
+  commandBarOpen = false,
+}: {
+  model: CityModel;
+  onHome: () => void;
+  onNewCut: () => void;
+  commandBarOpen?: boolean;
+}) {
   const [tab, setTab] = useState<Tab>("3d");
   const [drawing, setDrawing] = useState<DrawingKind>("site");
   const [analysisKind, setAnalysisKind] = useState<SiteAnalysisKind>("solar");
+  const [shortcutCheatsheetOpen, setShortcutCheatsheetOpen] = useState(false);
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
   useColourRevision();
   const uniform = uniformBuildingColor();
@@ -270,7 +285,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     () => !capturePresetFromSearch(window.location.search).uniformBuildings,
   );
   const [showSource, setShowSource] = useState(false);
-  /** Rhino export: buildings as triangle meshes instead of closed Extrusions. */
   const [buildingsAsMesh, setBuildingsAsMesh] = useState(false);
   const [comFootprints, setComFootprints] = useState<ComBuildingFootprint[]>(
     () => model.comFootprintPrefetch ?? [],
@@ -286,7 +300,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed();
   const sidebarModelRef = useRef(model);
   useEffect(() => {
-    // A new model always opens the sidebar on Display with all 3D layers turned on.
     if (sidebarModelRef.current === model) return;
     sidebarModelRef.current = model;
     dispatchSidebar({ type: "new-model" });
@@ -325,14 +338,17 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     );
   }, [tab, model]);
   const [snapId, setSnapId] = useState(0);
-  // The 3D view unmounts on Drawing/Satellite; this keeps the user's camera for the way back.
-  // A new model gets a fresh memory, so a new cut is framed afresh.
   const cameraMemory = useMemo<CameraMemoryRef>(() => ({ current: null }), [model]);
   const [view3dDisplay, setView3dDisplay] = useState<View3dDisplaySettings>(() => {
     const next = view3dDisplayForModelOpen(window.localStorage);
     writeStoredView3dDisplay(window.localStorage, next);
     return next;
   });
+  const [renderQuality, setRenderQuality] = useState<RenderQuality>(() => readStoredRenderQuality(window.localStorage));
+  const commitRenderQuality = useCallback((next: RenderQuality) => {
+    setRenderQuality(next);
+    writeStoredRenderQuality(window.localStorage, next);
+  }, []);
   const [windSettings, setWindSettings] = useState<WindViewSettings>(() => {
     const next = windSettingsForModelOpen(window.localStorage);
     writeStoredWindSettings(window.localStorage, next);
@@ -554,7 +570,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   const [hiddenStore, setHiddenStore] = useState<HiddenBuildingStore>(() =>
     readStoredHiddenBuildings(window.localStorage),
   );
-  /** Shift-click multi-selection for Hide selected. Holds the single pick too. */
   const [hideSelection, setHideSelection] = useState<number[]>([]);
   const [heightPick, setHeightPick] = useState<{ buildingId: number; clientX: number; clientY: number } | null>(
     null,
@@ -828,7 +843,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       })
         .then((result) => {
           if (controller.signal.aborted) return;
-          // CoM first, then DAM floors on what CoM did not measure, then estimate labels.
           setComHeightBuildings(
             result.resolved
               ? result.buildings
@@ -866,8 +880,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     model.developmentDamRecords,
   ]);
 
-  // No CoM heights yet (loading, failed, or outside the City of Melbourne): the next source in
-  // tier order applies (DAM floors, Overture/OSM, zone default) and every default is labelled.
   const fallbackBuildings = useMemo(
     () =>
       model.buildingsHeightResolved
@@ -932,7 +944,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     }),
     [model, overrideResult, visibleBuildings, comHeightsMeasuredOn],
   );
-  // View tab: the path resets with a new cut; compute uses the buildings as shown (edits, hides).
   const walk = useWalkViewshed(model, displayModel);
   const walkRipple = useWalkRipple(model, displayModel);
   const [walkRippleToast, setWalkRippleToast] = useState<string | null>(null);
@@ -945,10 +956,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   }, [walkRipple.modeLabel, walkRipple.status]);
   const walkAt = useWalkPlayback(walk);
 
-  /**
-   * Drawing tab and its .ai exports: the display model (hidden buildings already gone) plus plan
-   * footprints of visible imported massing. The 3D view and .3dm keep displayModel, so nothing is drawn twice.
-   */
   const drawingModel = useMemo(() => {
     const buildingsVisible = isLayer3dVisible(view3dDisplay, "buildings");
     const treesVisible = isLayer3dVisible(view3dDisplay, "trees");
@@ -1229,6 +1236,42 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     }
   }
 
+  const applyShortcut = useCallback(
+    (action: ModelShortcutAction) => {
+      if (action.analysisKind) setAnalysisKind(action.analysisKind as SiteAnalysisKind);
+      selectSection(action.section);
+    },
+    [sectionIds, setSidebarCollapsed],
+  );
+
+  useEffect(() => {
+    if (viewportIsNarrow()) return;
+    registerModelKeyboardBridge({ applyShortcut });
+    return () => registerModelKeyboardBridge(null);
+  }, [applyShortcut]);
+
+  useEffect(() => {
+    if (viewportIsNarrow()) return;
+    function onKeyDown(event: KeyboardEvent) {
+      const result = handleModelKeyDown({
+        key: event.key,
+        metaKey: event.metaKey,
+        ctrlKey: event.ctrlKey,
+        altKey: event.altKey,
+        target: event.target,
+        commandBarOpen,
+        cheatsheetOpen: shortcutCheatsheetOpen,
+      });
+      if (result.type === "none") return;
+      event.preventDefault();
+      if (result.type === "open-cheatsheet") setShortcutCheatsheetOpen(true);
+      else if (result.type === "close-cheatsheet") setShortcutCheatsheetOpen(false);
+      else if (result.type === "shortcut") applyShortcut(result.action);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [applyShortcut, commandBarOpen, shortcutCheatsheetOpen]);
+
   function retryComHeights() {
     setComFootprintFetchError(null);
     setComHeightsApplyFailed(false);
@@ -1302,7 +1345,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     }
   }
 
-  /** Sun study on: the seven hourly layers for the site plan exports (from the screen's cache). */
   async function sunStudyExportLayers(): Promise<SitePlanExportOptions["sunStudy"]> {
     if (!sunStudyDate) return null;
     const casters = sunStudyCasterModel(drawingModel, effectiveSunStudyCasters, sunStudySelected);
@@ -1794,7 +1836,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 walkRippleLayer={rippleAnalysisOpen ? walkRipple.layer.root : null}
                 walkRippleTint={rippleAnalysisOpen ? walkRipple.tint : null}
                 walkRippleArrivals={rippleAnalysisOpen ? walkRipple.buildingArrivals : null}
-                hideGroundGrid={rippleAnalysisOpen && (walkRipple.status === "animating" || walkRipple.status === "ready")}
                 onScenePoint={
                   walkRipple.placing
                     ? (east, north) => walkRipple.placePoint(east, north)
@@ -1802,6 +1843,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                       ? walk.addPoint
                       : massing.onScenePoint
                 }
+                quality={renderQuality}
               />
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
               {rippleAnalysisOpen && walkRipple.buildingArrivals && <WalkRippleLegend />}
@@ -3781,6 +3823,30 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             <span className="studio-solar-time mono">
               {String(solar.hour).padStart(2, "0")}:{String(solar.minute).padStart(2, "0")} AEST
             </span>
+            {tab === "3d" ? (
+              <>
+                <span className="v-sep hud-sep" aria-hidden="true" />
+                <div className="solar-hours studio-quality-pills" role="group" aria-label="Render quality">
+                  {(
+                    [
+                      ["high", "High"],
+                      ["fast", "Fast"],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={renderQuality === id ? "h-tick studio-quality-tick active is-active" : "h-tick studio-quality-tick"}
+                      aria-pressed={renderQuality === id}
+                      aria-label={`${label} render quality`}
+                      onClick={() => commitRenderQuality(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : null}
           </div>
         )}
         {model.terrainError && (
@@ -3789,6 +3855,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
           </p>
         )}
       </div>
+      <ShortcutCheatsheet open={shortcutCheatsheetOpen} onClose={() => setShortcutCheatsheetOpen(false)} />
     </div>
   );
 }

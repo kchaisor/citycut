@@ -15,7 +15,6 @@ import { WalkViewshedLayer } from "../lib/walkViewshedLayer";
 import { WalkPlayback, type WalkPlaybackSnapshot } from "../lib/walkPlayback";
 import type { CityModel, Pt } from "../types";
 
-/** Base walking pace for playback, metres per second. */
 export const WALK_PACE_MPS = 1.4;
 export const WALK_SPEEDS = [1, 4, 8] as const;
 export type WalkSpeed = (typeof WALK_SPEEDS)[number];
@@ -38,12 +37,10 @@ export type WalkViewshed = {
   radiusM: number;
   setRadiusM: (m: number) => void;
   status: WalkStatus;
-  /** Results are from different settings than the current eye height or radius. */
   stale: boolean;
   progress: number;
   computeMs: number | null;
   compute: () => void;
-  /** Viewpoint index, distance and readouts; read with useWalkPlayback (not part of page state). */
   playback: WalkPlayback;
   seek: (index: number) => void;
   playing: boolean;
@@ -52,7 +49,6 @@ export type WalkViewshed = {
   setSpeed: (speed: WalkSpeed) => void;
 };
 
-/** Playback readouts for the View panel. Only the subscriber re-renders as the walk moves. */
 export function useWalkPlayback(walk: Pick<WalkViewshed, "playback">): WalkPlaybackSnapshot {
   return useSyncExternalStore(walk.playback.subscribe, walk.playback.getSnapshot, walk.playback.getSnapshot);
 }
@@ -68,11 +64,6 @@ function startWorker(): Worker | null {
   }
 }
 
-/**
- * State for the View tab walk: the clicked path, its spline samples, the per-sample viewshed
- * frames (computed in a worker) and playback. Changing the model resets everything. Compute
- * reads buildings from `analysisModel` (edited heights, hidden buildings removed) at the time of compute.
- */
 export function useWalkViewshed(model: CityModel, analysisModel: Pick<CityModel, "buildings" | "terrain" | "sideM"> = model): WalkViewshed {
   const layer = useMemo(() => new WalkViewshedLayer(model), [model]);
   useEffect(() => () => layer.dispose(), [layer]);
@@ -112,7 +103,6 @@ export function useWalkViewshed(model: CityModel, analysisModel: Pick<CityModel,
     layer.setGrid(null);
   }, [layer, playback, stopCompute]);
 
-  // New model: start over.
   useEffect(() => {
     setPoints([]);
     setDrawingState(false);
@@ -120,7 +110,6 @@ export function useWalkViewshed(model: CityModel, analysisModel: Pick<CityModel,
   }, [model, resetResult]);
   useEffect(() => stopCompute, [stopCompute]);
 
-  // Path display follows the clicks.
   useEffect(() => {
     const line = points.length >= 2 ? spacedSplineSamples(points, 1).samples : [];
     layer.setPath(points, line);
@@ -177,7 +166,6 @@ export function useWalkViewshed(model: CityModel, analysisModel: Pick<CityModel,
     const accept = (i: number, frame: Uint8Array) => {
       frames[i] = frame;
       done++;
-      // Progress in 5% steps: about 20 page renders per compute, not one per viewpoint.
       const pct = Math.floor((20 * done) / frames.length);
       if (pct !== Math.floor((20 * (done - 1)) / frames.length)) setProgress(pct / 20);
       playback.frameArrived(i);
@@ -203,7 +191,6 @@ export function useWalkViewshed(model: CityModel, analysisModel: Pick<CityModel,
       worker.postMessage(request);
       return;
     }
-    // No worker (old browser or test): compute in small slices so the page stays responsive.
     let i = 0;
     const step = () => {
       const until = performance.now() + 12;
@@ -221,14 +208,11 @@ export function useWalkViewshed(model: CityModel, analysisModel: Pick<CityModel,
     timerRef.current = window.setTimeout(step, 0);
   }, [analysisModel, eyeM, layer, model, playback, radiusM, resetResult, samples, spline.lengthM]);
 
-  // Playback runs outside React: rAF moves the walker every frame; the overlay and readouts
-  // change only at a new viewpoint (WalkPlayback), so the page never re-renders per frame.
   useEffect(() => {
     if (!playing || !computed) return;
     let last = performance.now();
     let raf = 0;
     const tick = (now: number) => {
-      // rAF timestamps can precede the performance.now() taken when the effect ran.
       const dt = Math.min(0.25, Math.max(0, (now - last) / 1000));
       last = now;
       if (!playback.advance(dt * WALK_PACE_MPS * speed)) {

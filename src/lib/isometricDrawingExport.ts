@@ -110,7 +110,6 @@ export function isometricDrawingChunks(
   const frame = isoSheetFrame(iso.bounds, layout, scale);
   const chunks: PdfChunk[] = [];
 
-  // 1. Frame (ground top surface + architectural plinth side walls + outline)
   const framePaths: PdfPath[] = [];
   const frameParsed = subpathsToPdfRings(iso.frameD, frame);
   if (frameParsed.rings.length > 0) {
@@ -144,7 +143,6 @@ export function isometricDrawingChunks(
     });
   }
 
-  // 2. Landscape
   if (iso.landscapePaths.length > 0) {
     const paths: PdfPath[] = [];
     for (const d of iso.landscapePaths) {
@@ -163,7 +161,6 @@ export function isometricDrawingChunks(
     if (paths.length > 0) chunks.push({ name: "Landscape", paths });
   }
 
-  // 3. Water
   if (iso.waterPaths.length > 0) {
     const paths: PdfPath[] = [];
     for (const d of iso.waterPaths) {
@@ -182,7 +179,6 @@ export function isometricDrawingChunks(
     if (paths.length > 0) chunks.push({ name: "Water", paths });
   }
 
-  // 4. Footpaths
   if (iso.footpathPaths.length > 0) {
     const paths: PdfPath[] = [];
     for (const d of iso.footpathPaths) {
@@ -212,7 +208,6 @@ export function isometricDrawingChunks(
     if (paths.length > 0) chunks.push({ name: "Footpaths", paths });
   }
 
-  // 5. Contours
   if (iso.contourLines.length > 0) {
     const dashMm = dashPair(lineStyle.contour.dash);
     const paths: PdfPath[] = [];
@@ -232,7 +227,6 @@ export function isometricDrawingChunks(
     if (paths.length > 0) chunks.push({ name: "Contours", paths });
   }
 
-  // 6. Roads
   if (iso.roadPaths.length > 0 || iso.roadCenterlines.length > 0) {
     const paths: PdfPath[] = [];
     for (const d of iso.roadPaths) {
@@ -265,7 +259,6 @@ export function isometricDrawingChunks(
     if (paths.length > 0) chunks.push({ name: "Roads", paths });
   }
 
-  // 7. Rail & tram
   if (iso.railLines.length > 0 || iso.tramLines.length > 0) {
     const paths: PdfPath[] = [];
     const rawDash = dashPair(lineStyle.tram.dash);
@@ -298,7 +291,6 @@ export function isometricDrawingChunks(
     if (paths.length > 0) chunks.push({ name: "Rail & tram", paths });
   }
 
-  // 8. Buildings & trees (depth-sorted painter's order so foreground occludes background)
   if (iso.solids.length > 0) {
     const paths: PdfPath[] = [];
     for (const solid of iso.solids) {
@@ -358,7 +350,6 @@ export function isometricDrawingChunks(
     if (paths.length > 0) chunks.push({ name: "Buildings & trees", paths });
   }
 
-  // 9. Annotation
   const ink = hexRgb(getColour("--axo-label"));
   const page = layout.pageHeightMm;
   chunks.push({

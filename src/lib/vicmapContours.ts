@@ -27,7 +27,6 @@ export const VICMAP_METRO_DATASET_URL =
 export const VICMAP_STATE_DATASET_URL =
   "https://discover.data.vic.gov.au/dataset/vicmap-elevation-contour-line-10-and-20-metres";
 
-/** Quoted from the layer metadata: Creative Commons Attribution 4.0 (CC-BY). */
 export const VICMAP_CONTOUR_ATTRIBUTION =
   "Vicmap Elevation © State of Victoria (Department of Transport and Planning). Creative Commons Attribution 4.0 (CC-BY).";
 
@@ -35,7 +34,6 @@ export const VICMAP_CONTOUR_PAGE = 2000;
 export const VICMAP_CONTOUR_TIMEOUT_MS = 8000;
 const MAX_PAGES = 8;
 
-/** Rough Victoria extent. A cut that misses this box never calls Vicmap. */
 export const VICTORIA_BOUNDS = {
   west: 140.96,
   south: -39.2,
@@ -102,7 +100,6 @@ function pushCoordinates(target: number[][], value: unknown) {
   target.push([lon, lat]);
 }
 
-/** One GeoJSON page. A feature with no elevation or no line is counted and dropped. */
 export function parseContourPage(json: unknown): Page {
   const collection = asRecord(json) ?? {};
   const features = Array.isArray(collection.features) ? collection.features : [];
@@ -135,17 +132,12 @@ export function parseContourPage(json: unknown): Page {
   return { lines, count: features.length, exceeded };
 }
 
-/** Next resultOffset, or null when this page is the last. A full page is fetched again. */
 export function nextContourOffset(offset: number, page: Pick<Page, "count" | "exceeded">): number | null {
   if (page.count <= 0) return null;
   if (page.count < VICMAP_CONTOUR_PAGE && !page.exceeded) return null;
   return offset + VICMAP_CONTOUR_PAGE;
 }
 
-/**
- * Interval from the elevations actually returned. The smallest positive step
- * is snapped to 0.5, 1, 2, 5, 10, or 20 m. A single elevation keeps the fallback.
- */
 export function inferContourInterval(altitudes: number[], fallback: number): number {
   const unique = [...new Set(altitudes.map((altitude) => Math.round(altitude * 10) / 10))].sort((a, b) => a - b);
   if (unique.length < 2) return fallback;
@@ -168,7 +160,6 @@ export function inferContourInterval(altitudes: number[], fallback: number): num
   return best;
 }
 
-/** True when `z` lands on every Nth interval. N = 5 marks 5 m on 1 m data and 50 m on 10 m data. */
 export function contourIsIndex(z: number, interval: number, every: number): boolean {
   if (!(interval > 0) || !(every >= 2)) return false;
   const step = interval * every;
@@ -176,7 +167,6 @@ export function contourIsIndex(z: number, interval: number, every: number): bool
   return Math.abs(z - nearest) <= Math.max(0.05, interval * 0.05);
 }
 
-/** True when `z` is a multiple of `interval`, within a small tolerance. */
 export function altitudeOnInterval(z: number, interval: number): boolean {
   if (!(interval > 0)) return false;
   const nearest = Math.round(z / interval) * interval;
@@ -184,15 +174,9 @@ export function altitudeOnInterval(z: number, interval: number): boolean {
 }
 
 export const DEFAULT_COARSE_INTERVAL_M = 5;
-/** Sources fine enough (1 m) to thin to the coarse step at small plan scales. */
 const FINE_CONTOUR_SOURCES: ReadonlySet<ContourSourceId> = new Set(["vicmap-metro", "cos-1m", "cos-nsw"]);
 export const DEFAULT_COARSE_FROM_SCALE = 2500;
 
-/**
- * Interval actually drawn at a plan scale.
- * Metro data finer than the coarse step thins to that step at 1:2500 and
- * smaller. Statewide 10/20 m and DEM contours are already coarser, so they stay.
- */
 export function drawnContourInterval(
   source: ContourSourceId,
   nativeInterval: number,
@@ -205,7 +189,6 @@ export function drawnContourInterval(
   return coarseIntervalM;
 }
 
-/** Largest built-in plan scale that still draws the native interval. 2500 → 1000. */
 export function finestContourScale(coarseFromScale: number, scales: readonly number[] = FIGURE_SCALES): number {
   let best = 0;
   for (const scale of scales) {
@@ -218,10 +201,6 @@ function intervalText(interval: number): string {
   return Number.isInteger(interval) ? String(interval) : interval.toFixed(1);
 }
 
-/**
- * Drawer line for the interval in use. Coarsened metro data names both steps,
- * for example "Vicmap Elevation 5 m (1 m at 1:1000)".
- */
 export function contourDrawerLabel(
   layer: Pick<ContourLayer, "source" | "label" | "interval">,
   planScale: number,
@@ -249,7 +228,6 @@ function dedupe(line: Pt[]): Pt[] {
   return out;
 }
 
-/** Project service vertices into the cut and keep only the part inside the square. */
 export function clipContoursToFrame(lines: RawLine[], origin: LonLat, half: number): StoredContour[] {
   const clipped: StoredContour[] = [];
   for (const line of lines) {
@@ -423,11 +401,6 @@ async function defaultFetch(url: string, signal: AbortSignal): Promise<unknown> 
   return json;
 }
 
-/**
- * Contours for one cut. Inside Victoria this tries Vicmap, then the DEM.
- * Outside Victoria, or when Vicmap times out or errors, it uses the DEM
- * when a terrain field is available.
- */
 export async function loadContoursForCut(options: {
   center: LonLat;
   sideM: number;
@@ -467,11 +440,6 @@ export type DrawnContour = { points: Pt[]; z: number; index: boolean };
 
 export type ContourLabel = { east: number; north: number; text: string };
 
-/**
- * Mark every Nth interval and place one small elevation on the longer index
- * lines. Labels closer than 70 m to one already placed are skipped, and the
- * set stops at 16 so a 1 m hill does not fill the sheet with numbers.
- */
 export function drawContours(lines: StoredContour[], interval: number, every: number): {
   lines: DrawnContour[];
   labels: ContourLabel[];

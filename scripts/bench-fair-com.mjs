@@ -1,10 +1,3 @@
-/**
- * Fair timing: 1 km CBD, buildings + CoM only (no Overpass roads/water/trees, no mesh).
- * Compare OSM building fetch (#37) vs Overture (#38).
- *
- * Run Overture (this branch): npx vite-node scripts/bench-fair-com.mjs
- * Run OSM baseline:           npx vite-node scripts/bench-fair-com.mjs osm
- */
 import {
   clearComBuildingFootprintCache,
   fetchComBuildingFootprintsWithStats,

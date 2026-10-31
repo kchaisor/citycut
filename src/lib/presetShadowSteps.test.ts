@@ -9,17 +9,11 @@ import { projectLocal } from "./crs";
 import fixture from "./__fixtures__/dandenongShadowFailures.json";
 import type { BuildingFeat, CityModel, Pt, Ring, TerrainField } from "../types";
 
-/**
- * Live Dandenong cut: two real footprints whose terrain-draped shadows made polygon-clipping throw
- * at ResCode 10:00 and 15:00, which blanked every 2D shadow. Driven through every preset step the
- * way SunStudyPlayer sets the time (hour, minute 0).
- */
 const origin = fixture.center;
 const sideM = fixture.sideM;
 const terrain: TerrainField = { ...(fixture.terrain as Omit<TerrainField, "heights">), heights: new Float32Array(fixture.terrain.heights) };
 const regular = fixture.buildings as unknown as BuildingFeat[];
 
-/** /workspace/shadow-fix/two-part-base27m.3dm: 20 m and 4 m boxes in one MGA file, base 27.26 m AHD. */
 async function twoPart(): Promise<ImportedMassing> {
   const r = await (rhino3dm as unknown as () => Promise<any>)();
   const doc = new r.File3dm();
@@ -73,7 +67,6 @@ describe("2D shadows at every preset step (real Dandenong footprints and terrain
   const all = [...regular, ...imported];
   for (const id of Object.keys(SHADOW_STANDARDS) as ShadowStandardId[]) {
     const preset = SHADOW_STANDARDS[id];
-    // Every preset step, plus the rest of 9am–3pm on the same date.
     for (const hour of [...new Set([...preset.hours, 9, 10, 11, 12, 13, 14, 15])].sort((a, b) => a - b)) {
       it(`${id} ${hour}:00${preset.hours.includes(hour) ? " (step)" : ""} — every regular and imported building casts a shadow`, () => {
         clearPlanShadowCache();

@@ -9,7 +9,6 @@ import {
   unionPathRoads,
 } from "./roadFill";
 
-/** Locked to main union output on east-melbourne-path-trim (legacy strip union). */
 const EAST_CARRIAGEWAY_HASH = "7f20aee6";
 const EAST_PATH_HASH = "b565025b";
 

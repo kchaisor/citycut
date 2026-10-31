@@ -2,13 +2,8 @@ import type { NswBuildingComplex, NswLayers } from "./nswLayers";
 import { NSW_BUILDING_ESTIMATE_NOTE, regionCredit } from "./sources/registry";
 import type { AreaFeat, BuildingFeat, Pt } from "../types";
 
-/** Ids for NSW water areas, clear of Overture base ids. */
 export const NSW_WATER_ID_BASE = 9_000_000;
 
-/**
- * NSW water is HydroArea (Spatial Services) when that layer loaded, replacing Overture water.
- * When it failed, Overture water stays and the note says so. Green and other areas are untouched.
- */
 export function nswWaterAreas(base: AreaFeat[], nsw: NswLayers | null): { areas: AreaFeat[]; note: string | null } {
   if (!nsw) return { areas: base, note: "NSW layers did not load; water is from Overture Maps." };
   const status = nsw.status.water;
@@ -25,11 +20,9 @@ export function nswWaterAreas(base: AreaFeat[], nsw: NswLayers | null): { areas:
   return { areas, note: status.status === "partial" ? status.note : null };
 }
 
-/** How every NSW source reaches GDA2020 (≈ WGS84 for Overture/OSM in Sydney). */
 export const NSW_DATUM_NOTE =
   "Spatial Services layers come from the multiCRS services in GDA2020 (server GDA94→GDA2020 NTv2 conformal + distortion grid, EPSG:8446). Planning layers and City of Sydney contours are GDA94 and are converted in CityCut with the EPSG:8048 7-parameter transformation (within 34 mm of the grid at Pyrmont). GDA2020 is used as WGS84.";
 
-/** Sentences for the model source note: credit plus every NSW layer that did not fully load. */
 export function nswSourceNote(nsw: NswLayers | null): string {
   const parts = [`NSW mode. ${regionCredit("nsw")}.`, NSW_BUILDING_ESTIMATE_NOTE, NSW_DATUM_NOTE];
   if (!nsw) parts.push("NSW layers did not load.");
@@ -61,14 +54,8 @@ function ringDistance(ring: Pt[], x: number, y: number): number {
   return best;
 }
 
-/** A building complex point this far outside every footprint still names the nearest one. */
 export const NSW_COMPLEX_SNAP_M = 8;
 
-/**
- * Official NSW building use where Spatial Services has a building complex point (schools, hospitals,
- * fire stations, museums, substations…): the footprint containing the point (else the nearest within
- * NSW_COMPLEX_SNAP_M) takes the facility's use. Every other building keeps its Overture class.
- */
 export function nswApplyBuildingUse(buildings: BuildingFeat[], nsw: NswLayers | null): { buildings: BuildingFeat[]; matched: number } {
   const complexes = nsw?.buildingComplexes ?? [];
   if (complexes.length === 0 || buildings.length === 0) return { buildings, matched: 0 };
@@ -99,7 +86,6 @@ export function nswApplyBuildingUse(buildings: BuildingFeat[], nsw: NswLayers | 
   return { buildings: next, matched: assigned.size };
 }
 
-/** Operational NSW light rail on the surface (not in tunnel), drawn like Melbourne trams. */
 export function nswLightRailLines(nsw: NswLayers | null): Pt[][] {
   return (nsw?.railways ?? []).filter((rail) => rail.kind === "light" && rail.operational && !rail.tunnel).map((rail) => rail.line);
 }

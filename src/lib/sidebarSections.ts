@@ -1,16 +1,7 @@
-/**
- * Fixed model sidebars: left tool panel and right info panel, each with one section
- * open at a time chosen from its horizontal top icon rail.
- *
- * A new model always opens with Display ("drawing") on the left and Model details
- * ("summary") on the right. Whether the left panel is collapsed is shared with the
- * landing page; see `sidebarCollapse.ts`.
- */
 export const SIDEBAR_SECTION_IDS = ["summary", "buildings", "trees", "drawing", "analysis", "import", "exports"] as const;
 
 export type SidebarSectionId = (typeof SIDEBAR_SECTION_IDS)[number];
 
-/** Sub-tabs inside the Site Analysis section (Sun, Wind, View). */
 export const SITE_ANALYSIS_KINDS = ["solar", "wind", "view", "walkRipple"] as const;
 export type SiteAnalysisKind = (typeof SITE_ANALYSIS_KINDS)[number];
 export const SITE_ANALYSIS_LABELS: Record<SiteAnalysisKind, string> = {
@@ -44,19 +35,16 @@ export const SIDEBAR_SECTION_LABELS: Record<SidebarSectionId, string> = {
   summary: "Model details",
   buildings: "Buildings",
   trees: "Trees",
-  /** Covers 3D model, Drawing (site plan, figure-ground, exploded axo) and Satellite, so not "Drawing". */
   drawing: "Display",
   analysis: "Site Analysis",
   import: "Import",
   exports: "Export",
 };
 
-/** Sections this model can show. All left-hand tools and all three right-hand tabs (Model details, Buildings, Trees) are always available. */
 export function availableSidebarSections(_input?: { buildings?: boolean; trees?: boolean }): SidebarSectionId[] {
   return [...SIDEBAR_SECTION_IDS];
 }
 
-/** The left section to show: the chosen one when available, otherwise Display (or the first available left section). */
 export function resolveLeftSidebarSection(
   chosen: string | null | undefined,
   available: readonly string[],
@@ -75,7 +63,6 @@ export function resolveLeftSidebarSection(
   return fallback();
 }
 
-/** The right section to show: the chosen one when available, otherwise Model details (or the first available right section). */
 export function resolveRightSidebarSection(
   chosen: string | null | undefined,
   available: readonly string[],
@@ -91,7 +78,6 @@ export function resolveRightSidebarSection(
   return fallback();
 }
 
-/** The section to show: the chosen one when this model has it, otherwise Display (or the first available section). */
 export function resolveSidebarSection(
   chosen: string | null | undefined,
   available: readonly string[],
@@ -110,12 +96,6 @@ export function resolveSidebarSection(
   return fallback();
 }
 
-/**
- * Independent left and right section state for one model. Choosing a left section
- * updates only `section` (keeping `rightSection` active), and choosing a right
- * section updates only `rightSection` (keeping `section` active). A new model resets
- * to Display on the left and Model details on the right.
- */
 export type SidebarState = {
   section: LeftSidebarSectionId;
   rightSection: RightSidebarSectionId;

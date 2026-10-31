@@ -31,7 +31,6 @@ type OpenMeteoHourly = {
 let inflight: Promise<WindFetchResult> | null = null;
 let inflightKey = "";
 
-/** One in-flight request per rounded location; no retry on failure. */
 export async function fetchWindRoseTable(
   lat: number,
   lon: number,
@@ -84,7 +83,6 @@ export async function fetchWindRoseTable(
   return inflight;
 }
 
-/** Test helper: reset module-level in-flight guard. */
 export function resetWindFetchInflight(): void {
   inflight = null;
   inflightKey = "";

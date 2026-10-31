@@ -21,7 +21,6 @@ type LandmarkOsm = {
 
 export type LandmarkRow = {
   name: string;
-  /** Snapshot cut key (area bbox in landmark-heights-snapshot.json). */
   cut: string;
   osm: LandmarkOsm;
   lat: number;
@@ -46,7 +45,6 @@ function loadComputedSidecar(): ComputedSidecar {
   return JSON.parse(readFileSync(path, "utf8")) as ComputedSidecar;
 }
 
-/** Genuine pipeline vs independent citation gaps at main's CoM matcher (do not “fix” in CI). */
 export const REAL_DISAGREEMENTS: {
   name: string;
   evidence: string;

@@ -3,9 +3,7 @@ import { openRing, signedArea } from "./geo";
 import { getColour } from "./colours";
 import type { BuildingFeat, BuildingHeightTier, CityModel, Pt } from "../types";
 
-/** One filled face of an extruded solid, in iso base coords (lift 0 = plate). */
 export type AxoSolidFace = {
-  /** Closed iso SVG path (M/L/Z, y down). */
   d: string;
   paint:
     | "building-roof"
@@ -14,11 +12,9 @@ export type AxoSolidFace = {
     | "tree-canopy"
     | "tree-canopy-shade"
     | "tree-trunk";
-  /** Explicit fill overriding `paint` (imported massing in its per-model colour). */
   fill?: string;
 };
 
-/** Scale a #RRGGBB colour toward black (wall shading for imported massing). */
 export function shadeHex(hex: string, factor: number): string {
   const value = Number.parseInt(hex.slice(1), 16);
   const ch = (shift: number) => Math.round(((value >> shift) & 255) * factor).toString(16).padStart(2, "0");
@@ -36,12 +32,10 @@ function pathOf(points: Pt[]): string {
   return `${points.map((p, i) => `${i === 0 ? "M" : "L"}${round(p[0])} ${round(p[1])}`).join(" ")} Z`;
 }
 
-/** Plan depth toward the viewer: larger = nearer (lower on screen). */
 export function axoPlanDepth(east: number, north: number): number {
   return east + north;
 }
 
-/** Height source groups, in the priority order used for the axo note. */
 export type AxoHeightSource = "com" | "dam" | "overture_osm" | "estimate";
 
 export function axoHeightSource(tier: BuildingHeightTier | undefined, fallback?: boolean): AxoHeightSource {
@@ -72,11 +66,6 @@ function prismsFor(building: BuildingFeat, sideM: number, shape: SiteFrameShape)
   return out;
 }
 
-/**
- * Extruded massing faces in painter's order (far → near). Walls facing the viewer
- * get one of two shades by orientation; roofs draw last per prism.
- * `heightScale` lets the stack exaggerate or compress heights (1 = true metres).
- */
 export function buildAxoMassingFaces(
   model: CityModel,
   heightScale = 1,
@@ -100,17 +89,14 @@ export function buildAxoMassingFaces(
     const rings = [prism.outer, ...prism.holes];
     const walls: { d: string; paint: AxoSolidFace["paint"]; depth: number }[] = [];
     rings.forEach((ring, ringIndex) => {
-      // Solid lies inside the outer ring and outside each hole.
       const ccw = (signedArea(ring) > 0) === (ringIndex === 0);
       for (let i = 0; i < ring.length; i += 1) {
         const a = ring[i]!;
         const b = ring[(i + 1) % ring.length]!;
         const dx = b[0] - a[0];
         const dy = b[1] - a[1];
-        // Outward normal of a CCW ring edge is (dy, -dx); flip for CW rings.
         const nx = ccw ? dy : -dy;
         const ny = ccw ? -dx : dx;
-        // Viewer looks from +east/+north toward the plate (screen bottom).
         if (nx + ny <= 1e-9) continue;
         walls.push({
           d: pathOf([iso(a[0], a[1], base), iso(b[0], b[1], base), iso(b[0], b[1], top), iso(a[0], a[1], top)]),
@@ -133,7 +119,6 @@ export function buildAxoMassingFaces(
   return { faces, counts };
 }
 
-/** Short visible note naming the height sources; defaults are called estimates. */
 export function axoMassingHeightNote(counts: Record<AxoHeightSource, number>): string {
   const parts: string[] = [];
   if (counts.com) parts.push(`CoM 2023 ${counts.com}`);

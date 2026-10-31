@@ -16,7 +16,7 @@ import {
 } from "./massingImport";
 import type { CityModel, Pt } from "../types";
 
-const origin = { lon: 144.98038, lat: -37.81356 }; // East Melbourne
+const origin = { lon: 144.98038, lat: -37.81356 };
 const zone = mgaCrs(origin.lon).zone;
 
 function square(center: Pt, size: number): Pt[] {
@@ -46,7 +46,6 @@ const model: CityModel = {
 
 type Rhino = Awaited<ReturnType<typeof loadRhino>>;
 
-/** Closed box mesh in the doc, corners in absolute coordinates. */
 function addBox(rhino: Rhino, doc: InstanceType<Rhino["File3dm"]>, min: number[], max: number[]) {
   const mesh = new rhino.Mesh();
   const v = mesh.vertices();
@@ -76,7 +75,6 @@ describe(".3dm massing import", () => {
     const rhino = await loadRhino();
     const exported = await cityModelTo3dm(model, { hideTrees: true });
     const doc = rhino.File3dm.fromByteArray(exported);
-    // Known local target: 120 m east, 80 m north of the cut centre, 20 × 30 × 45 m, base at Z = 12.5.
     const [e0, n0] = projectLocal([110, 65], origin, zone);
     const [e1, n1] = projectLocal([130, 95], origin, zone);
     addBox(rhino, doc, [e0, n0, 12.5], [e1, n1, 57.5]);
@@ -87,7 +85,6 @@ describe(".3dm massing import", () => {
     expect(parsed.sourceUnits).toBe("Meters");
     expect(parsed.fileZone).toBe(55);
     expect(looksLocal(parsed)).toBe(false);
-    // Our own export carries buildings too; check the box corners specifically.
     const local = placedLocal(parsed, mgaPlacement(parsed), origin, zone);
     const want = [
       [110, 65, 12.5], [130, 95, 57.5],
@@ -99,7 +96,6 @@ describe(".3dm massing import", () => {
       }
       expect(best).toBeLessThan(0.05);
     }
-    // And MGA in = MGA out.
     for (let i = 0; i < parsed.positions.length / 3; i++) {
       const [e, n] = placedMga(parsed, mgaPlacement(parsed), i);
       const back = projectLocal(mgaToLocal(e, n, origin, zone), origin, zone);
@@ -150,7 +146,7 @@ describe(".3dm massing import", () => {
     expect(parsed.unitScale).toBe(0.001);
     expect(parsed.halfExtent.x).toBeCloseTo(5, 6);
     expect(looksLocal(parsed)).toBe(true);
-    expect(parsed.fileZone).toBeNull(); // unset earth anchor is not a zone
+    expect(parsed.fileZone).toBeNull();
     const imported = { ...asImported(parsed, 1), fileZone: 54 };
     const local = placedLocal(imported, imported.placement, origin, zone);
     const warnings = massingWarnings(imported, local, model, zone).join(" ");

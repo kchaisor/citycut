@@ -14,7 +14,6 @@ export const NSW_PLANNING =
 export const COS_TERRAIN_CONTOURS =
   "https://services1.arcgis.com/cNVyNtjGVZybOQWZ/arcgis/rest/services/Terrain_Contours/FeatureServer/0";
 
-/** Exact attribution strings (Kelvin, NSW mode scope). */
 export const NSW_SPATIAL_ATTRIBUTION = "© State of New South Wales (Spatial Services, DCS NSW)";
 export const NSW_PLANNING_ATTRIBUTION =
   "© State Government of NSW and NSW Department of Planning, Housing and Infrastructure";
@@ -49,7 +48,6 @@ const scp = (path: string, id: string, label: string, outFields: string[], extra
   ...extra,
 });
 
-/** Cadastre multiCRS layers page at 100 records (maxRecordCount 100). */
 const CADASTRE = { pageSize: 100, maxPages: 20 };
 
 /** DPHI planning layers are stored in GDA94 (4283) and ignore outSR transforms, so convert here. */
@@ -141,7 +139,6 @@ export const NSW_LAYERS = {
 
 export type NswLayerKey = keyof typeof NSW_LAYERS;
 
-/** NSW functionhierarchy code → CityCut road grade (1 Motorway … 11 AccessWay). */
 export function nswRoadGrade(code: unknown): "arterial" | "local" | "path" {
   const n = typeof code === "number" ? code : Number(code);
   if (n >= 1 && n <= 4) return "arterial";

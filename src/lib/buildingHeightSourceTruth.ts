@@ -19,7 +19,6 @@ export type RealSourceOverlap = {
   overlapRatio?: number;
 };
 
-/** Any CoM footprint intersection / OSM area (includes below match threshold). */
 export function comAnyOverlapRatio(
   building: BuildingFeat,
   footprints: ComBuildingFootprint[],
@@ -46,7 +45,6 @@ function damNearButLost(
   records: DamFloorRecord[],
   allBuildings: BuildingFeat[],
 ): RealSourceOverlap | null {
-  // Non-completed DAM records are not a real source for a standing building; ignore them here too.
   records = heightBearingDamRecords(records);
   const nearFloors = matchDevelopmentFloorsToBuilding(building, center, records);
   if (nearFloors == null) return null;
@@ -67,7 +65,6 @@ function damNearButLost(
   };
 }
 
-/** Real measured/tag sources that overlap this building but did not become the resolved height tier. */
 export function detectRealSourceOverlaps(
   building: BuildingFeat,
   center: LonLat,
@@ -159,7 +156,6 @@ export function applyHeightSourceTruthPass(
   );
 }
 
-/** Guard: zone_default must not coexist with any real-source overlap (CoM overlap > 0, etc.). */
 export function findSilentDefaultViolations(
   buildings: BuildingFeat[],
   center: LonLat,

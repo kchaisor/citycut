@@ -1,7 +1,3 @@
-/**
- * Live overlap report for 1022 Whitehorse Rd (not run in CI).
- * Run: npx vite-node scripts/box-hill-site-overlap.mjs
- */
 import { fetchOvertureBuildingsForCut } from "../src/lib/overtureBuildings.ts";
 import { resolveSiteFrame } from "../src/lib/site.ts";
 import { siteBuildingOverlaps } from "../src/lib/siteBuildings.ts";

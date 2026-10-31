@@ -13,7 +13,6 @@ export type HeldControl<P> = InertiaControl & {
   };
 };
 
-/** Drop OrbitControls damping leftovers. One undamped update applies and clears them. */
 export function flushControlInertia(controls: InertiaControl) {
   const damping = controls.enableDamping;
   controls.enableDamping = false;
@@ -24,10 +23,6 @@ export function flushControlInertia(controls: InertiaControl) {
   }
 }
 
-/**
- * Keep the current pose and throw away in-flight rotate or pan inertia.
- * Used when a camera is parked, so switching back does not resume a damped drag.
- */
 export function holdControlPose<P>(controls: HeldControl<P>) {
   const position = controls.object.position.clone();
   const target = controls.target.clone();

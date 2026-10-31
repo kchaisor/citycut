@@ -7,7 +7,6 @@ import { applyHeightSourceTruthPass } from "./buildingHeightSourceTruth";
 import type { LonLat } from "../types";
 import type { BuildingFeat, BuildingExtrusionPart, BuildingHeightTier } from "../types";
 
-/** Storey height used for floor-count tiers (Overture, DAM, OSM levels). */
 export const STOREY_HEIGHT_M = 3;
 
 /**
@@ -33,9 +32,7 @@ export const STOREY_HEIGHT_M = 3;
  */
 export type BuildingHeightTierMeta = {
   tier: BuildingHeightTier;
-  /** When tier is zone_default but measured data exists nearby — show in the panel. */
   zoneDefaultNote?: string;
-  /** CoM DAM or Overture floor count used for tier 5 / 4. */
   recordedFloors?: number;
 };
 
@@ -43,7 +40,6 @@ function partAreaM2(part: BuildingExtrusionPart): number {
   return Math.abs(signedArea(openRing(part.ring)));
 }
 
-/** Tallest extrusion height; falls back to {@link BuildingFeat.height}. */
 export function effectiveBuildingHeightM(building: BuildingFeat): number {
   return tallestExtrusionHeight(building);
 }
@@ -86,7 +82,6 @@ export function heightTierLabel(tier: BuildingHeightTier, meta?: BuildingHeightT
   }
 }
 
-/** After CoM clip/match, sync scalar height and tier metadata. */
 export function finalizeComMatchedBuilding(building: BuildingFeat): BuildingFeat {
   if (building.heightManual) return building;
   if (!building.extrusionParts?.length) return building;
@@ -100,7 +95,6 @@ export function finalizeComMatchedBuilding(building: BuildingFeat): BuildingFeat
   };
 }
 
-/** Apply aggregate CoM scalar height when extrusions were not created but a match exists. */
 export function applyComScalarHeight(building: BuildingFeat, heightM: number): BuildingFeat {
   if (building.heightManual) return building;
   const height = clampBuildingHeight(heightM);
@@ -114,13 +108,10 @@ export function applyComScalarHeight(building: BuildingFeat, heightM: number): B
   };
 }
 
-/** Apply DAM / development floor count before zone fallback. */
 export function buildingEligibleForDamFloors(building: BuildingFeat): boolean {
   if (building.heightManual) return false;
   if (building.heightTier === "com" || building.extrusionParts?.length) return false;
   if (building.heightTier === "lidar") return false;
-  // A completed DAM record (official council record) outranks Overture/OSM height and floor tags and
-  // zone defaults. Callers pass only completed records (heightBearingDamRecords).
   return true;
 }
 
@@ -148,7 +139,6 @@ export function flagUnresolvedZoneDefault(
   return { ...building, zoneDefaultNote: note };
 }
 
-/** Area-weighted mean height across extrusion parts (diagnostics). */
 export function buildingHasComOverlap(
   building: BuildingFeat,
   footprints: ComBuildingFootprint[],
@@ -162,7 +152,6 @@ export function buildingHasComOverlap(
   return covered / osmArea >= COM_SLIVER_MIN_FRACTION;
 }
 
-/** Plain Vicmap zone fallbacks show an explicit estimate label in the building panel. */
 export function stampPlainZoneDefaultLabels(buildings: BuildingFeat[]): BuildingFeat[] {
   return buildings.map((building) => {
     if (!building.heightFromFallback || building.zoneDefaultNote) return building;

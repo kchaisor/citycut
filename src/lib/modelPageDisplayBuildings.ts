@@ -11,7 +11,6 @@ import type { ComBuildingFootprint } from "./comBuildingHeightsTypes";
 import type { BuildingFeat, LonLat } from "../types";
 import type { ZonePolygon } from "./useCascade";
 
-/** Same building list and scalar heights as ModelPage (CoM always applied, no manual edits). */
 export function modelPageDisplayBuildings(input: {
   center: LonLat;
   overtureBuildings: BuildingFeat[];
