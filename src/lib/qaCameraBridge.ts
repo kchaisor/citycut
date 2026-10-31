@@ -56,6 +56,8 @@ declare global {
       }>;
       /** Offscreen WebGL render for headless 3D QA screenshots. */
       captureViewportPng?: () => Promise<string | null>;
+      setSectionKnifeActive?: (active: boolean) => void;
+      setSectionKnifePose?: (pose: import("./sectionKnife/plane").SectionKnifePose) => void;
     };
     __citycutQaSelectionAudit?: import("./buildingSelectionAudit").BuildingSelectionAudit;
     __citycutFrameRatio?: number;

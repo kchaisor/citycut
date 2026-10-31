@@ -167,6 +167,10 @@ import { WindRoseOverlay } from "./WindRoseOverlay";
 import { ExportTiles } from "./ExportTiles";
 import { exportTiles, type ExportBusy } from "../lib/exportTiles";
 import { ViewLegend, ViewPanel } from "./ViewPanel";
+import { SectionKnifeToolPanel } from "./SectionKnifeToolPanel";
+import { SectionKnifeElevationPanel } from "./SectionKnifeElevationPanel";
+import { initialSectionKnifeToolState, type SectionKnifeToolState } from "../lib/sectionKnife/state";
+import type { SectionKnifePose } from "../lib/sectionKnife/plane";
 import { useWalkPlayback, useWalkViewshed, WALK_SPEEDS } from "./useWalkViewshed";
 import { fetchWindRoseTable } from "../lib/windFetch";
 import { analyzeWindPeriod, WIND_PERIOD_LABELS, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
@@ -329,6 +333,18 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     writeStoredView3dDisplay(window.localStorage, next);
     return next;
   });
+  const [sectionKnifeTool, setSectionKnifeTool] = useState<SectionKnifeToolState>(() =>
+    initialSectionKnifeToolState(model.sideM),
+  );
+  useEffect(() => {
+    setSectionKnifeTool(initialSectionKnifeToolState(model.sideM));
+  }, [model.center.lat, model.center.lon, model.sideM]);
+  const onSectionKnifePoseChange = useCallback((pose: SectionKnifePose) => {
+    setSectionKnifeTool((tool) => ({
+      ...tool,
+      knives: tool.knives.map((knife) => (knife.id === tool.selectedId ? { ...knife, pose } : knife)),
+    }));
+  }, []);
   const [windSettings, setWindSettings] = useState<WindViewSettings>(() => {
     const next = windSettingsForModelOpen(window.localStorage);
     writeStoredWindSettings(window.localStorage, next);
@@ -798,11 +814,17 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
         for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
         return btoa(binary);
       },
+      setSectionKnifeActive(active: boolean) {
+        setSectionKnifeTool((tool) => ({ ...tool, active }));
+      },
+      setSectionKnifePose(pose: SectionKnifePose) {
+        onSectionKnifePoseChange(pose);
+      },
     };
     return () => {
       delete window.__citycutQaModel;
     };
-  }, [model]);
+  }, [model, onSectionKnifePoseChange]);
 
   useEffect(() => {
     if (model.comBuildingHeightsApplied) {
@@ -1775,7 +1797,12 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 importedMassing={massing.group}
                 walkLayer={walk.layer.root}
                 onScenePoint={walkDrawing ? walk.addPoint : massing.onScenePoint}
+                sectionKnife={sectionKnifeTool}
+                onSectionKnifePoseChange={onSectionKnifePoseChange}
               />
+              {tab === "3d" && sectionKnifeTool.active && (
+                <SectionKnifeElevationPanel model={displayModel} tool={sectionKnifeTool} />
+              )}
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
@@ -2556,6 +2583,11 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                       />
                       White card
                     </label>
+                    <SectionKnifeToolPanel
+                      sideM={displayModel.sideM}
+                      tool={sectionKnifeTool}
+                      onChange={setSectionKnifeTool}
+                    />
                     <div className="mini-flags sub-toggles display-switches" role="group" aria-label="View modes">
                       <label className={view3dDisplay.showOutlines ? "mini-flag is-on check-field" : "mini-flag check-field"}>
                         <input

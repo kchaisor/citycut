@@ -830,6 +830,124 @@ async function main() {
     );
 
     // -------------------------------------------------------------------------
+    // SECTION KNIFE: real mouse gizmo drag (no ?qa=1)
+    // -------------------------------------------------------------------------
+    {
+      const isoBtn = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Isometric" }).first();
+      if ((await isoBtn.count()) === 0) {
+        assertCheck(
+          "section-knife-handle-drag",
+          "Isometric view + real mouse drag on Section Knife handle changes offset without camera orbit",
+          false,
+          "Isometric pill missing",
+        );
+        assertCheck(
+          "section-knife-ring-rotate",
+          "Real mouse drag on Section Knife base ring changes angle without camera orbit",
+          false,
+          "Isometric pill missing",
+        );
+      } else {
+        await isoBtn.click();
+        await page.waitForTimeout(450);
+        await page.locator(".section-knife-toggle").click();
+        await page.waitForSelector(".section-knife-elevation", { timeout: 15000 });
+        await page.waitForTimeout(1400);
+
+        const readKnifeState = () =>
+          page.evaluate(() => {
+            const canvas = document.querySelector(".model canvas");
+            const note = document.querySelector("[data-section-knife-offset-m]");
+            return {
+              offset: Number(note?.getAttribute("data-section-knife-offset-m") ?? "0"),
+              angle: Number(note?.getAttribute("data-section-knife-angle-rad") ?? "0"),
+              camPos: canvas?.dataset.camPosition ?? "",
+              camTarget: canvas?.dataset.camTarget ?? "",
+              handleX: Number(canvas?.dataset.sectionKnifeHandleX ?? "NaN"),
+              handleY: Number(canvas?.dataset.sectionKnifeHandleY ?? "NaN"),
+              ringX: Number(canvas?.dataset.sectionKnifeRingX ?? "NaN"),
+              ringY: Number(canvas?.dataset.sectionKnifeRingY ?? "NaN"),
+            };
+          });
+
+        let beforeHandle = await readKnifeState();
+        for (let attempt = 0; attempt < 8 && !Number.isFinite(beforeHandle.handleX); attempt += 1) {
+          await page.waitForTimeout(250);
+          beforeHandle = await readKnifeState();
+        }
+
+        const canvasBox = await page.locator(".model canvas").boundingBox();
+        if (!canvasBox || !Number.isFinite(beforeHandle.handleX)) {
+          assertCheck(
+            "section-knife-handle-drag",
+            "Isometric view + real mouse drag on Section Knife handle changes offset without camera orbit",
+            false,
+            `handle screen coords unavailable (handle=${beforeHandle.handleX},${beforeHandle.handleY})`,
+          );
+        } else {
+          const hx = canvasBox.x + beforeHandle.handleX;
+          const hy = canvasBox.y + beforeHandle.handleY;
+          await page.mouse.move(hx, hy);
+          await page.waitForTimeout(60);
+          await page.mouse.down();
+          for (let i = 0; i < 14; i++) {
+            await page.mouse.move(hx - 10 * (i + 1), hy + 5 * (i + 1), { steps: 2 });
+            await page.waitForTimeout(35);
+          }
+          await page.mouse.up();
+          await page.waitForTimeout(220);
+          const afterHandle = await readKnifeState();
+          const offsetDelta = Math.abs(afterHandle.offset - beforeHandle.offset);
+          const camStable =
+            afterHandle.camPos === beforeHandle.camPos && afterHandle.camTarget === beforeHandle.camTarget;
+          assertCheck(
+            "section-knife-handle-drag",
+            "Isometric view + real mouse drag on Section Knife handle changes offset without camera orbit",
+            offsetDelta > 0.04 && camStable,
+            `offset ${beforeHandle.offset.toFixed(3)} -> ${afterHandle.offset.toFixed(3)}, camPosStable=${camStable}`,
+          );
+
+          let beforeRing = await readKnifeState();
+          for (let attempt = 0; attempt < 8 && !Number.isFinite(beforeRing.ringX); attempt += 1) {
+            await page.waitForTimeout(250);
+            beforeRing = await readKnifeState();
+          }
+          const ringBox = await page.locator(".model canvas").boundingBox();
+          if (!ringBox || !Number.isFinite(beforeRing.ringX)) {
+            assertCheck(
+              "section-knife-ring-rotate",
+              "Real mouse drag on Section Knife base ring changes angle without camera orbit",
+              false,
+              `ring screen coords unavailable (ring=${beforeRing.ringX},${beforeRing.ringY})`,
+            );
+          } else {
+            const rx = ringBox.x + beforeRing.ringX;
+            const ry = ringBox.y + beforeRing.ringY;
+            await page.mouse.move(rx, ry);
+            await page.waitForTimeout(60);
+            await page.mouse.down();
+            for (let i = 0; i < 16; i++) {
+              await page.mouse.move(rx + 12 * (i + 1), ry, { steps: 2 });
+              await page.waitForTimeout(35);
+            }
+            await page.mouse.up();
+            await page.waitForTimeout(220);
+            const afterRing = await readKnifeState();
+            const angleDelta = Math.abs(afterRing.angle - beforeRing.angle);
+            const camStableRing =
+              afterRing.camPos === beforeRing.camPos && afterRing.camTarget === beforeRing.camTarget;
+            assertCheck(
+              "section-knife-ring-rotate",
+              "Real mouse drag on Section Knife base ring changes angle without camera orbit",
+              angleDelta > 0.02 && camStableRing,
+              `angle ${beforeRing.angle.toFixed(4)} -> ${afterRing.angle.toFixed(4)}, camPosStable=${camStableRing}`,
+            );
+          }
+        }
+      }
+    }
+
+    // -------------------------------------------------------------------------
     // TYPOGRAPHY & CSS SURFACE INVARIANTS
     // -------------------------------------------------------------------------
     const uiInvariants = await page.evaluate(() => {

@@ -89,6 +89,13 @@ import {
 import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SunHoursLayer } from "./SunHoursLayer";
+import { SectionKnifeScene } from "./SectionKnifeScene";
+import { selectedKnife, type SectionKnifeToolState } from "../lib/sectionKnife/state";
+import type { SectionKnifePose } from "../lib/sectionKnife/plane";
+import {
+  idleSectionKnifeGizmoInteraction,
+  type SectionKnifeGizmoInteraction,
+} from "../lib/sectionKnife/gizmoHit";
 
 /** Hours-of-sun heatmap: later phase. Code kept, no UI; flip to preview. */
 const SUN_HOURS_HEATMAP_ENABLED = false;
@@ -316,6 +323,9 @@ function City({
   onBuildingPick,
   onClearBuildingPick,
   pickBuildings,
+  sectionKnife,
+  onSectionKnifePoseChange,
+  onSectionKnifeGizmoInteractionChange,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -330,6 +340,9 @@ function City({
   onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
   onClearBuildingPick?: () => void;
   pickBuildings: boolean;
+  sectionKnife?: SectionKnifeToolState | null;
+  onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
+  onSectionKnifeGizmoInteractionChange?: (state: SectionKnifeGizmoInteraction) => void;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -767,10 +780,20 @@ function City({
       />
       <BuildingPickLayer
         root={group}
-        enabled={pickBuildings && buildingsVisible}
+        enabled={pickBuildings && buildingsVisible && !sectionKnife?.active}
         onBuildingPick={onBuildingPick}
         onClearPick={onClearBuildingPick}
       />
+      {sectionKnife?.active && onSectionKnifePoseChange ? (
+        <SectionKnifeScene
+          city={group}
+          model={model}
+          active
+          pose={selectedKnife(sectionKnife).pose}
+          onPoseChange={onSectionKnifePoseChange}
+          onGizmoInteractionChange={onSectionKnifeGizmoInteractionChange}
+        />
+      ) : null}
     </>
   );
 }
@@ -1585,6 +1608,7 @@ export function Cameras({
   lon,
   cameraMemory,
   introEnabled = false,
+  gizmoOrbitLock = false,
 }: {
   side: number;
   lift: number;
@@ -1603,6 +1627,7 @@ export function Cameras({
   lon: number;
   cameraMemory?: CameraMemoryRef;
   introEnabled?: boolean;
+  gizmoOrbitLock?: boolean;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
@@ -1738,7 +1763,7 @@ export function Cameras({
             ref={perspControls}
             camera={persp}
             makeDefault={!orthoView}
-            enabled={!orthoView}
+            enabled={!orthoView && !gizmoOrbitLock}
             enableDamping
             dampingFactor={0.08}
             maxPolarAngle={Math.PI / 2.02}
@@ -1752,7 +1777,7 @@ export function Cameras({
             ref={orthoControls}
             camera={ortho}
             makeDefault={orthoView}
-            enabled={orthoView}
+            enabled={orthoView && !gizmoOrbitLock}
             enableDamping
             dampingFactor={0.08}
             enableRotate={iso && freeRotate}
@@ -1848,6 +1873,8 @@ export function Scene3D({
   importedMassing = null,
   walkLayer = null,
   onScenePoint = null,
+  sectionKnife = null,
+  onSectionKnifePoseChange = undefined,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -1876,10 +1903,18 @@ export function Scene3D({
   walkLayer?: THREE.Object3D | null;
   /** Click-to-place: while set, a click reports the scene point (east, north, up) instead of picking a building. */
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
+  sectionKnife?: SectionKnifeToolState | null;
+  onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
     boundsRef.current = bounds;
+  }, []);
+  const [sectionKnifeGizmoInteraction, setSectionKnifeGizmoInteraction] = useState<SectionKnifeGizmoInteraction>(
+    () => idleSectionKnifeGizmoInteraction,
+  );
+  const onSectionKnifeGizmoInteractionChange = useCallback((state: SectionKnifeGizmoInteraction) => {
+    setSectionKnifeGizmoInteraction(state);
   }, []);
   const lift = model.terrain ? (model.terrain.min + model.terrain.max) / 2 : 0;
   const colourTick = useColourRevision();
@@ -1918,8 +1953,14 @@ export function Scene3D({
     for (const building of model.buildings) top = Math.max(top, base + building.height);
     return top;
   }, [model]);
+  const gizmoCursorClass =
+    sectionKnifeGizmoInteraction.cursor === "grabbing"
+      ? " section-knife-gizmo-grabbing"
+      : sectionKnifeGizmoInteraction.cursor === "grab"
+        ? " section-knife-gizmo-grab"
+        : "";
   return (
-    <div className="scene-viewport">
+    <div className={`scene-viewport${gizmoCursorClass}`}>
       {glContextLost ? (
         <div className="webgl-lost-overlay" role="alert">
           <p>3D view lost (GPU memory)</p>
@@ -1947,7 +1988,9 @@ export function Scene3D({
         <RendererShadows enabled={solar.castShadows} />
       <SunStudyToneMapping noToneMapping={noToneMapping} />
       <GradientSky colourTick={colourTick} fallback={modelBg} />
-      {projection !== "plan" && <GroundGrid sideM={model.sideM} groundY={plinthBottomY} colourTick={colourTick} />}
+      {projection !== "plan" && !sectionKnife?.active && (
+        <GroundGrid sideM={model.sideM} groundY={plinthBottomY} colourTick={colourTick} />
+      )}
       <hemisphereLight args={[sky, groundLight, fillHemi]} />
       <ambientLight intensity={fillAmbient} />
       <directionalLight position={[model.sideM * 0.4, model.sideM, model.sideM * 0.2]} intensity={fillKeyLight} />
@@ -1976,6 +2019,9 @@ export function Scene3D({
         heightEditBuildingId={heightEditBuildingId}
         selectedBuildingIds={selectedBuildingIds}
         display={display}
+        sectionKnife={sectionKnife}
+        onSectionKnifePoseChange={onSectionKnifePoseChange}
+        onSectionKnifeGizmoInteractionChange={onSectionKnifeGizmoInteractionChange}
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
@@ -2014,6 +2060,7 @@ export function Scene3D({
         lon={model.center.lon}
         cameraMemory={cameraMemory}
         introEnabled
+        gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock}
       />
       </Canvas>
     </div>
