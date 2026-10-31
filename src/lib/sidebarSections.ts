@@ -11,12 +11,13 @@ export const SIDEBAR_SECTION_IDS = ["summary", "buildings", "trees", "drawing", 
 export type SidebarSectionId = (typeof SIDEBAR_SECTION_IDS)[number];
 
 /** Sub-tabs inside the Site Analysis section (Sun, Wind, View). */
-export const SITE_ANALYSIS_KINDS = ["solar", "wind", "view"] as const;
+export const SITE_ANALYSIS_KINDS = ["solar", "wind", "view", "walkRipple"] as const;
 export type SiteAnalysisKind = (typeof SITE_ANALYSIS_KINDS)[number];
 export const SITE_ANALYSIS_LABELS: Record<SiteAnalysisKind, string> = {
   solar: "Sun",
   wind: "Wind",
   view: "View",
+  walkRipple: "Walk",
 };
 
 export const LEFT_SIDEBAR_SECTION_IDS = ["drawing", "analysis", "import", "exports"] as const;
@@ -65,7 +66,7 @@ export function resolveLeftSidebarSection(
     const first = available.find((id) => (LEFT_SIDEBAR_SECTION_IDS as readonly string[]).includes(id));
     return (first as LeftSidebarSectionId | undefined) ?? INITIAL_LEFT_SIDEBAR_SECTION;
   };
-  if (chosen === "solar" || chosen === "wind" || chosen === "view") {
+  if (chosen === "solar" || chosen === "wind" || chosen === "view" || chosen === "walkRipple") {
     return available.includes("analysis") ? "analysis" : fallback();
   }
   if (chosen && available.includes(chosen) && isLeftSidebarSection(chosen)) {
@@ -100,7 +101,7 @@ export function resolveSidebarSection(
     const first = available.find((id) => (SIDEBAR_SECTION_IDS as readonly string[]).includes(id));
     return (first as SidebarSectionId | undefined) ?? INITIAL_SIDEBAR_SECTION;
   };
-  if (chosen === "solar" || chosen === "wind" || chosen === "view") {
+  if (chosen === "solar" || chosen === "wind" || chosen === "view" || chosen === "walkRipple") {
     return available.includes("analysis") ? "analysis" : fallback();
   }
   if (chosen && available.includes(chosen) && (SIDEBAR_SECTION_IDS as readonly string[]).includes(chosen)) {

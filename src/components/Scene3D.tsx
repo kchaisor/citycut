@@ -89,6 +89,7 @@ import {
 import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SunHoursLayer } from "./SunHoursLayer";
+import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
 
 /** Hours-of-sun heatmap: later phase. Code kept, no UI; flip to preview. */
 const SUN_HOURS_HEATMAP_ENABLED = false;
@@ -302,6 +303,29 @@ function HeightEditOverlayLayer({
   return overlay ? <primitive object={overlay} /> : null;
 }
 
+function WalkRippleBuildingBinder({
+  city,
+  tint,
+  buildingArrivals,
+  colourTick,
+}: {
+  city: THREE.Group;
+  tint: WalkRippleBuildingTint | null;
+  buildingArrivals: Map<number, number> | null;
+  colourTick: number;
+}) {
+  useLayoutEffect(() => {
+    if (!tint || !buildingArrivals || buildingArrivals.size === 0) {
+      tint?.detach();
+      return;
+    }
+    tint.refreshColours();
+    tint.attach(city, buildingArrivals);
+    return () => tint.detach();
+  }, [city, tint, buildingArrivals, colourTick]);
+  return null;
+}
+
 function City({
   model,
   uniformBuildings,
@@ -316,6 +340,8 @@ function City({
   onBuildingPick,
   onClearBuildingPick,
   pickBuildings,
+  walkRippleTint,
+  walkRippleArrivals,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -330,6 +356,8 @@ function City({
   onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
   onClearBuildingPick?: () => void;
   pickBuildings: boolean;
+  walkRippleTint?: WalkRippleBuildingTint | null;
+  walkRippleArrivals?: Map<number, number> | null;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -750,6 +778,12 @@ function City({
   return (
     <>
       <primitive object={group} />
+      <WalkRippleBuildingBinder
+        city={group}
+        tint={walkRippleTint ?? null}
+        buildingArrivals={walkRippleArrivals ?? null}
+        colourTick={colourTick}
+      />
       {contours ? <primitive object={contours} /> : null}
       <HeightEditOverlayLayer
         model={model}
@@ -1847,6 +1881,10 @@ export function Scene3D({
   display,
   importedMassing = null,
   walkLayer = null,
+  walkRippleLayer = null,
+  walkRippleTint = null,
+  walkRippleArrivals = null,
+  hideGroundGrid = false,
   onScenePoint = null,
 }: {
   model: CityModel;
@@ -1874,6 +1912,10 @@ export function Scene3D({
   importedMassing?: THREE.Object3D | null;
   /** View tab walk overlay (path, visibility, walker), in the local frame. Never measured for camera framing. */
   walkLayer?: THREE.Object3D | null;
+  walkRippleLayer?: THREE.Object3D | null;
+  walkRippleTint?: WalkRippleBuildingTint | null;
+  walkRippleArrivals?: Map<number, number> | null;
+  hideGroundGrid?: boolean;
   /** Click-to-place: while set, a click reports the scene point (east, north, up) instead of picking a building. */
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
 }) {
@@ -1947,7 +1989,9 @@ export function Scene3D({
         <RendererShadows enabled={solar.castShadows} />
       <SunStudyToneMapping noToneMapping={noToneMapping} />
       <GradientSky colourTick={colourTick} fallback={modelBg} />
-      {projection !== "plan" && <GroundGrid sideM={model.sideM} groundY={plinthBottomY} colourTick={colourTick} />}
+      {projection !== "plan" && !hideGroundGrid ? (
+        <GroundGrid sideM={model.sideM} groundY={plinthBottomY} colourTick={colourTick} />
+      ) : null}
       <hemisphereLight args={[sky, groundLight, fillHemi]} />
       <ambientLight intensity={fillAmbient} />
       <directionalLight position={[model.sideM * 0.4, model.sideM, model.sideM * 0.2]} intensity={fillKeyLight} />
@@ -1976,9 +2020,12 @@ export function Scene3D({
         heightEditBuildingId={heightEditBuildingId}
         selectedBuildingIds={selectedBuildingIds}
         display={display}
+        walkRippleTint={walkRippleTint}
+        walkRippleArrivals={walkRippleArrivals}
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
+      {walkRippleLayer ? <primitive object={walkRippleLayer} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
       <SolarHeliodon
         lat={model.center.lat}

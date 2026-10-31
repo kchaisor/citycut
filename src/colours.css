@@ -78,6 +78,14 @@
   --view-path: #000000;
   --view-walker: #FFF500;
 
+  /* Walk ripple analysis: wave accent, 5 / 10 / 15 minute building bands, floating band labels. */
+  --walk-ripple-accent: #FFF500;
+  --walk-ripple-band-0: #FFF500;
+  --walk-ripple-band-1: #E8940F;
+  --walk-ripple-band-2: #C45A12;
+  --walk-ripple-label-bg: #1C1C22;
+  --walk-ripple-label-text: #FFFFFF;
+
   /* Residential footprints, legend swatch, and the Residential Rhino layer. */
   --use-residential: #CECBC6;
 

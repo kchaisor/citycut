@@ -3,7 +3,7 @@ import { sunStudyLayersFor } from "./useSunStudyShadows";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
-import { Building2, Copy, Download, DraftingCompass, Eye, GripVertical, Info, Radar, Sun, Trees, Upload, Wind } from "lucide-react";
+import { Building2, Copy, Download, DraftingCompass, Eye, Footprints, GripVertical, Info, Radar, Sun, Trees, Upload, Wind } from "lucide-react";
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -167,6 +167,8 @@ import { WindRoseOverlay } from "./WindRoseOverlay";
 import { ExportTiles } from "./ExportTiles";
 import { exportTiles, type ExportBusy } from "../lib/exportTiles";
 import { ViewLegend, ViewPanel } from "./ViewPanel";
+import { WalkRippleLegend, WalkRipplePanel } from "./WalkRipplePanel";
+import { useWalkRipple } from "./useWalkRipple";
 import { useWalkPlayback, useWalkViewshed, WALK_SPEEDS } from "./useWalkViewshed";
 import { fetchWindRoseTable } from "../lib/windFetch";
 import { analyzeWindPeriod, WIND_PERIOD_LABELS, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
@@ -249,6 +251,7 @@ const ANALYSIS_ICONS: Record<SiteAnalysisKind, typeof Sun> = {
   solar: Sun,
   wind: Wind,
   view: Eye,
+  walkRipple: Footprints,
 };
 
 export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHome: () => void; onNewCut: () => void }) {
@@ -930,6 +933,15 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   );
   // View tab: the path resets with a new cut; compute uses the buildings as shown (edits, hides).
   const walk = useWalkViewshed(model, displayModel);
+  const walkRipple = useWalkRipple(model, displayModel);
+  const [walkRippleToast, setWalkRippleToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (walkRipple.status === "ready") {
+      setWalkRippleToast(walkRipple.modeLabel ?? "Analysis complete. Walk ripple generated.");
+    } else if (walkRipple.status === "idle") {
+      setWalkRippleToast(null);
+    }
+  }, [walkRipple.modeLabel, walkRipple.status]);
   const walkAt = useWalkPlayback(walk);
 
   /**
@@ -1143,11 +1155,15 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   const leftOpen: LeftSidebarSectionId = resolveLeftSidebarSection(sidebar.section, sectionIds);
   const rightOpen: RightSidebarSectionId = resolveRightSidebarSection(sidebar.rightSection, sectionIds);
   const viewAnalysisOpen = leftOpen === "analysis" && analysisKind === "view";
+  const rippleAnalysisOpen = leftOpen === "analysis" && analysisKind === "walkRipple";
   const walkDrawing = viewAnalysisOpen && walk.drawing;
   const { drawing: walkDrawingOn, setDrawing: setWalkDrawing } = walk;
   useEffect(() => {
     if (!viewAnalysisOpen && walkDrawingOn) setWalkDrawing(false);
   }, [viewAnalysisOpen, walkDrawingOn, setWalkDrawing]);
+  useEffect(() => {
+    if (!rippleAnalysisOpen && walkRipple.placing) walkRipple.setPlacing(false);
+  }, [rippleAnalysisOpen, walkRipple]);
 
   const [consolePlaying, setConsolePlaying] = useState(false);
   const consoleDaylight = useMemo(
@@ -1774,9 +1790,25 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 display={view3dDisplay}
                 importedMassing={massing.group}
                 walkLayer={walk.layer.root}
-                onScenePoint={walkDrawing ? walk.addPoint : massing.onScenePoint}
+                walkRippleLayer={rippleAnalysisOpen ? walkRipple.layer.root : null}
+                walkRippleTint={rippleAnalysisOpen ? walkRipple.tint : null}
+                walkRippleArrivals={rippleAnalysisOpen ? walkRipple.buildingArrivals : null}
+                hideGroundGrid={rippleAnalysisOpen && (walkRipple.status === "animating" || walkRipple.status === "ready")}
+                onScenePoint={
+                  walkRipple.placing
+                    ? (east, north) => walkRipple.placePoint(east, north)
+                    : walkDrawing
+                      ? walk.addPoint
+                      : massing.onScenePoint
+                }
               />
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
+              {rippleAnalysisOpen && walkRipple.buildingArrivals && <WalkRippleLegend />}
+              {walkRippleToast ? (
+                <p className="walk-ripple-toast" role="status">
+                  {walkRippleToast}
+                </p>
+              ) : null}
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
                   table={windTable}
@@ -3086,6 +3118,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
               <div hidden={analysisKind !== "view"}>
                 <ViewPanel walk={walk} />
               </div>
+              <div hidden={analysisKind !== "walkRipple"}>
+                <WalkRipplePanel ripple={walkRipple} />
+              </div>
             </div>
 
             <div className="drawer-section" hidden={leftOpen !== "import"}>
@@ -3221,6 +3256,16 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                   <Eye size={12} strokeWidth={2.2} aria-hidden="true" />
                   <span>Viewshed Walk</span>
                 </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={analysisKind === "walkRipple"}
+                  className={analysisKind === "walkRipple" ? "env-mode-btn active" : "env-mode-btn"}
+                  onClick={() => setAnalysisKind("walkRipple")}
+                >
+                  <Footprints size={12} strokeWidth={2.2} aria-hidden="true" />
+                  <span>Walk Ripple</span>
+                </button>
               </div>
 
               <span className="v-sep hud-sep" aria-hidden="true" />
@@ -3286,6 +3331,27 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                   <div className="st-item">
                     <span className="st-k">PATH</span>
                     <span className="st-v">{walk.clickCount > 0 ? `${Math.round(walk.lengthM)}m (${walk.clickCount} pts)` : "Click ground"}</span>
+                  </div>
+                </div>
+              )}
+
+              {analysisKind === "walkRipple" && (
+                <div className="solar-telemetry mono" aria-label="Walk ripple telemetry">
+                  <div className="st-item">
+                    <span className="st-k">PACE</span>
+                    <span className="st-v">80 m/min</span>
+                  </div>
+                  <span className="st-dot" aria-hidden="true">·</span>
+                  <div className="st-item">
+                    <span className="st-k">BANDS</span>
+                    <span className="st-v">5 · 10 · 15 min</span>
+                  </div>
+                  <span className="st-dot" aria-hidden="true">·</span>
+                  <div className="st-item">
+                    <span className="st-k">MODE</span>
+                    <span className="st-v">
+                      {walkRipple.times?.mode === "straight" ? "Straight-line" : walkRipple.times ? "Network" : "Pick origin"}
+                    </span>
                   </div>
                 </div>
               )}
@@ -3396,6 +3462,29 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     >
                       <span className="ov-dot" aria-hidden="true" />
                       <span>{walk.status === "ready" ? "Viewshed Ready" : "Compute View"}</span>
+                    </button>
+                  </>
+                )}
+
+                {analysisKind === "walkRipple" && (
+                  <>
+                    <button
+                      type="button"
+                      className={walkRipple.placing ? "ov-chip on" : "ov-chip"}
+                      aria-pressed={walkRipple.placing}
+                      onClick={() => walkRipple.setPlacing(!walkRipple.placing)}
+                    >
+                      <span className="ov-dot" aria-hidden="true" />
+                      <span>{walkRipple.placing ? "Click ground…" : "Pick origin"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={walkRipple.status === "ready" ? "ov-chip on" : "ov-chip"}
+                      disabled={!walkRipple.times}
+                      onClick={walkRipple.clear}
+                    >
+                      <span className="ov-dot" aria-hidden="true" />
+                      <span>Clear ripple</span>
                     </button>
                   </>
                 )}
@@ -3645,6 +3734,27 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     </span>
                   </div>
                 </>
+              )}
+
+              {analysisKind === "walkRipple" && (
+                <div className="daylight-scrubber view-console-bar mono">
+                  <div className="wind-band-pills" aria-label="Walk time bands">
+                    <span className="wind-band-chip band-0">0–5 min</span>
+                    <span className="wind-band-chip band-1">5–10 min</span>
+                    <span className="wind-band-chip band-2">10–15 min</span>
+                  </div>
+                  <span className="time-readout-pill">
+                    {walkRipple.placing
+                      ? "Click ground in 3D view"
+                      : walkRipple.status === "animating"
+                        ? "Walk ripple spreading…"
+                        : walkRipple.times?.mode === "straight"
+                          ? "Straight-line estimate"
+                          : walkRipple.times
+                            ? "Network walk ripple"
+                            : "Pick an origin"}
+                  </span>
+                </div>
               )}
             </div>
           </div>
