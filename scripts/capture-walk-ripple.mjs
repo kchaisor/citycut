@@ -36,30 +36,71 @@ async function waitForServer(url, timeoutMs = 30000) {
   throw new Error(`Server not ready: ${url}`);
 }
 
-async function main() {
-  fs.rmSync(TMP_FRAMES, { recursive: true, force: true });
-  fs.mkdirSync(TMP_FRAMES, { recursive: true });
-  const port = await findFreePort();
-  const baseUrl = `http://127.0.0.1:${port}`;
-  const viteProc = spawn(
-    path.join(process.cwd(), "node_modules/.bin/vite"),
-    ["--host", "127.0.0.1", "--port", String(port), "--strictPort"],
-    { cwd: process.cwd(), stdio: "ignore" },
-  );
-  console.log("[capture-walk-ripple] waiting for dev server…");
-  await waitForServer(`${baseUrl}/citycut/`);
-  console.log("[capture-walk-ripple] server up");
-  const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome", headless: true });
-  const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: 1 });
+async function resolveAppBase(baseUrl) {
+  for (const suffix of ["/citycut/", "/"]) {
+    try {
+      const res = await fetch(`${baseUrl}${suffix}`);
+      if (res.ok) return `${baseUrl}${suffix}`;
+    } catch {
+      // try next
+    }
+  }
+  return `${baseUrl}/citycut/`;
+}
+
+async function runCapture(page) {
   await page.addInitScript(() => {
     window.__citycutAwaitIntroStart = true;
     window.__citycutMinSilentLoadMs = 0;
+    try {
+      window.localStorage.setItem("citycut.view", JSON.stringify({ projection: "perspective", corner: "sw", freeRotate: false }));
+    } catch {
+      // ignore
+    }
   });
-  const modelUrl = `${baseUrl}/citycut/?lat=-37.8136&lon=144.9831&km=1&label=East%20Melbourne&qa=1&buildings=uniform`;
-  await page.goto(modelUrl, { waitUntil: "domcontentloaded", timeout: 120000 });
-  await page.getByRole("button", { name: /Create model/i }).click({ timeout: 120000 });
+  const remoteBase = process.env.CAPTURE_BASE_URL?.replace(/\/$/, "");
+  let appBase;
+  let viteProc = null;
+  if (remoteBase) {
+    appBase = await resolveAppBase(remoteBase);
+    console.log("[capture-walk-ripple] remote base", appBase);
+  } else {
+    const port = await findFreePort();
+    const baseUrl = `http://127.0.0.1:${port}`;
+    viteProc = spawn(
+      path.join(process.cwd(), "node_modules/.bin/vite"),
+      ["--host", "127.0.0.1", "--port", String(port), "--strictPort"],
+      { cwd: process.cwd(), stdio: "ignore" },
+    );
+    console.log("[capture-walk-ripple] waiting for dev server…");
+    await waitForServer(`${baseUrl}/citycut/`);
+    appBase = `${baseUrl}/citycut/`;
+  }
+
+  const modelUrl = `${appBase}?lat=-37.8136&lon=144.9831&km=1&label=East%20Melbourne&qa=1`;
+  await page.goto(modelUrl, { waitUntil: "domcontentloaded", timeout: 180000 });
+  await page.getByRole("button", { name: /Create model/i }).click({ timeout: 180000 });
   await page.waitForSelector(".model canvas", { timeout: 180000 });
-  await page.waitForTimeout(2000);
+  await page.waitForFunction(
+    () => {
+      const canvas = document.querySelector(".model canvas");
+      return canvas && canvas.dataset.camKind === "perspective";
+    },
+    { timeout: 60000 },
+  );
+  await page.getByRole("button", { name: "Reset view" }).click({ timeout: 15000 });
+  await page.waitForTimeout(800);
+  await page.getByRole("button", { name: "Reset view" }).click({ timeout: 15000 });
+  await page.waitForTimeout(600);
+  await page.evaluate(() => {
+    const sideM = 1000;
+    const d = sideM * 0.92;
+    window.__citycutQa?.setCamera({
+      eye: { x: d * 0.72, y: d * 0.78, z: -d * 0.72 },
+      target: { x: 0, y: 25, z: 0 },
+    });
+  });
+  await page.waitForTimeout(800);
   await page.locator('.model button[data-section="analysis"]').first().click();
   await page.waitForTimeout(400);
   await page.getByRole("tab", { name: /Walk Ripple/i }).click();
@@ -68,32 +109,50 @@ async function main() {
   const canvas = page.locator(".model canvas").first();
   const box = await canvas.boundingBox();
   if (!box) throw new Error("No canvas");
-  const cx = box.x + box.width * 0.52;
-  const cy = box.y + box.height * 0.54;
+  const cx = box.x + box.width * 0.5;
+  const cy = box.y + box.height * 0.52;
+  await page.mouse.click(cx, cy);
+  await page.waitForFunction(() => Boolean(window.__citycutWalkRippleQa), { timeout: 30000 });
+  await page.waitForTimeout(600);
+
   let frame = 0;
   const grab = async () => {
     await page.screenshot({ path: path.join(TMP_FRAMES, `f${String(frame++).padStart(3, "0")}.png`) });
   };
-  await page.mouse.click(cx, cy);
-  await page.waitForTimeout(900);
+
+  await page.evaluate(() => window.__citycutWalkRippleQa?.setMinutes(7.5));
+  await page.waitForTimeout(400);
   await grab();
-  await page.screenshot({ path: OUT_MID });
-  await page.waitForTimeout(3200);
+  await page.screenshot({ path: OUT_MID, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
+
+  await page.evaluate(() => window.__citycutWalkRippleQa?.setMinutes(16));
+  await page.waitForTimeout(500);
   await grab();
-  await page.screenshot({ path: OUT_FINAL });
-  for (let i = 0; i < 8; i++) {
-    await page.waitForTimeout(120);
+  await page.screenshot({ path: OUT_FINAL, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
+
+  for (const min of [2, 4, 6, 8, 10, 12, 14, 16]) {
+    await page.evaluate((m) => window.__citycutWalkRippleQa?.setMinutes(m), min);
+    await page.waitForTimeout(180);
     await grab();
   }
+
+  if (viteProc) viteProc.kill("SIGTERM");
+}
+
+async function main() {
+  fs.rmSync(TMP_FRAMES, { recursive: true, force: true });
+  fs.mkdirSync(TMP_FRAMES, { recursive: true });
+  const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome", headless: true });
+  const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: 1 });
+  await runCapture(page);
   await browser.close();
-  viteProc.kill("SIGTERM");
   const { execFileSync } = await import("node:child_process");
   execFileSync(
     "ffmpeg",
     [
       "-y",
       "-framerate",
-      "12",
+      "10",
       "-i",
       path.join(TMP_FRAMES, "f%03d.png"),
       "-c:v",
@@ -101,7 +160,7 @@ async function main() {
       "-pix_fmt",
       "yuv420p",
       "-crf",
-      "20",
+      "18",
       OUT_MP4,
     ],
     { stdio: "inherit" },

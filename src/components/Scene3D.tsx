@@ -326,6 +326,34 @@ function WalkRippleBuildingBinder({
   return null;
 }
 
+function WalkRippleTreeDim({ city, active }: { city: THREE.Group; active: boolean }) {
+  useLayoutEffect(() => {
+    if (!active) return;
+    const saved: Array<{ mat: THREE.MeshStandardMaterial; opacity: number; transparent: boolean }> = [];
+    city.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.material) return;
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const item of materials) {
+        if (!(item instanceof THREE.MeshStandardMaterial)) continue;
+        if (item.name !== "TreeCrowns" && item.name !== "TreeTrunks") continue;
+        saved.push({ mat: item, opacity: item.opacity, transparent: item.transparent });
+        item.transparent = true;
+        item.opacity = item.name === "TreeCrowns" ? 0.22 : 0.4;
+        item.needsUpdate = true;
+      }
+    });
+    return () => {
+      for (const entry of saved) {
+        entry.mat.opacity = entry.opacity;
+        entry.mat.transparent = entry.transparent;
+        entry.mat.needsUpdate = true;
+      }
+    };
+  }, [active, city]);
+  return null;
+}
+
 function City({
   model,
   uniformBuildings,
@@ -783,6 +811,10 @@ function City({
         tint={walkRippleTint ?? null}
         buildingArrivals={walkRippleArrivals ?? null}
         colourTick={colourTick}
+      />
+      <WalkRippleTreeDim
+        city={group}
+        active={Boolean(walkRippleArrivals && walkRippleArrivals.size > 0)}
       />
       {contours ? <primitive object={contours} /> : null}
       <HeightEditOverlayLayer

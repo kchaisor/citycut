@@ -8,12 +8,13 @@ import {
   type RippleTimes,
   type WalkNetwork,
 } from "./walkRippleNetwork";
-import { createRippleNetworkLineMaterial, rippleColourUniforms, type RippleShaderUniforms } from "./walkRippleShader";
+import { createRippleNetworkRibbonMaterial, rippleColourUniforms, type RippleShaderUniforms } from "./walkRippleShader";
 import type { CityModel, Pt } from "../types";
 
 const RENDER_ORDER = 940;
 const ORIGIN_LIFT_M = 1.4;
 const LINE_LIFT_M = 0.55;
+const RIBBON_HALF_WIDTH_M = 2.8;
 const RING_SEGMENTS = 64;
 
 function zAt(model: Pick<CityModel, "terrain" | "sideM">, east: number, north: number): number {
@@ -23,7 +24,7 @@ function zAt(model: Pick<CityModel, "terrain" | "sideM">, east: number, north: n
 export class WalkRippleLayer {
   readonly root = new THREE.Group();
   readonly uniforms: RippleShaderUniforms = rippleColourUniforms();
-  private networkMesh: THREE.LineSegments | null = null;
+  private networkMesh: THREE.Mesh | null = null;
   private ringGroup: THREE.Group | null = null;
   private originMarker: THREE.Mesh | null = null;
   private labelGroup: THREE.Group | null = null;
@@ -58,7 +59,8 @@ export class WalkRippleLayer {
       this.originMarker = null;
     }
     const [e, n] = origin;
-    const geo = new THREE.SphereGeometry(3.5, 20, 14);
+    const r = Math.max(4, Math.min(9, this.model.sideM * 0.012));
+    const geo = new THREE.SphereGeometry(r, 20, 14);
     const mat = new THREE.MeshBasicMaterial({
       color: getColour("--walk-ripple-accent"),
       toneMapped: false,
@@ -79,20 +81,34 @@ export class WalkRippleLayer {
     }
     const positions: number[] = [];
     const arrivals: number[] = [];
+    const hw = RIBBON_HALF_WIDTH_M;
     network.edges.forEach((edge, edgeIndex) => {
       const base = edgeIndex * 4;
       const ta = edgeVertexTimes[base]!;
       const tb = edgeVertexTimes[base + 2]!;
-      const zA = zAt(this.model, edge.ax, edge.ay) + LINE_LIFT_M;
-      const zB = zAt(this.model, edge.bx, edge.by) + LINE_LIFT_M;
-      positions.push(edge.ax, zA, -edge.ay, edge.bx, zB, -edge.by);
-      arrivals.push(ta, tb);
+      const dx = edge.bx - edge.ax;
+      const dy = edge.by - edge.ay;
+      const len = Math.hypot(dx, dy) || 1;
+      const ox = (-dy / len) * hw;
+      const oy = (dx / len) * hw;
+      const corner = (e: number, n: number, tMin: number) => {
+        const z = zAt(this.model, e, n) + LINE_LIFT_M;
+        return [e, z, -n, tMin] as const;
+      };
+      const a0 = corner(edge.ax + ox, edge.ay + oy, ta);
+      const a1 = corner(edge.ax - ox, edge.ay - oy, ta);
+      const b0 = corner(edge.bx + ox, edge.by + oy, tb);
+      const b1 = corner(edge.bx - ox, edge.by - oy, tb);
+      for (const c of [a0, a1, b0, a0, b0, b1]) {
+        positions.push(c[0], c[1], c[2]);
+        arrivals.push(c[3]);
+      }
     });
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
     geometry.setAttribute("aRippleArrival", new THREE.Float32BufferAttribute(arrivals, 1));
-    const material = createRippleNetworkLineMaterial(this.uniforms);
-    const lines = new THREE.LineSegments(geometry, material);
+    const material = createRippleNetworkRibbonMaterial(this.uniforms);
+    const lines = new THREE.Mesh(geometry, material);
     lines.renderOrder = RENDER_ORDER + 2;
     this.networkMesh = lines;
     this.disposeGeometries.push(geometry);

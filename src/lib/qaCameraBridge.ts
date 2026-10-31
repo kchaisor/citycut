@@ -57,6 +57,9 @@ declare global {
       /** Offscreen WebGL render for headless 3D QA screenshots. */
       captureViewportPng?: () => Promise<string | null>;
     };
+    __citycutWalkRippleQa?: {
+      setMinutes: (minutes: number) => void;
+    };
     __citycutQaSelectionAudit?: import("./buildingSelectionAudit").BuildingSelectionAudit;
     __citycutFrameRatio?: number;
     __citycutMinBeat2Ms?: number;

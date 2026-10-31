@@ -287,8 +287,8 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--view-walker` | `#FFF500` | View tab: walker marker (eye ball on a black pole). |
 | `--walk-ripple-accent` | `#FFF500` | Walk ripple: origin marker, network wave, and straight-line rings. |
 | `--walk-ripple-band-0` | `#FFF500` | Walk ripple: buildings within 0–5 minutes walk. |
-| `--walk-ripple-band-1` | `#E8940F` | Walk ripple: buildings within 5–10 minutes walk. |
-| `--walk-ripple-band-2` | `#C45A12` | Walk ripple: buildings within 10–15 minutes walk. |
+| `--walk-ripple-band-1` | `#FF8C00` | Walk ripple: buildings within 5–10 minutes walk. |
+| `--walk-ripple-band-2` | `#E85D04` | Walk ripple: buildings within 10–15 minutes walk. |
 | `--walk-ripple-label-bg` | `#1C1C22` | Walk ripple: floating minute-band label fill. |
 | `--walk-ripple-label-text` | `#FFFFFF` | Walk ripple: floating minute-band label text. |
 

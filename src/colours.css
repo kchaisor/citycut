@@ -81,8 +81,8 @@
   /* Walk ripple analysis: wave accent, 5 / 10 / 15 minute building bands, floating band labels. */
   --walk-ripple-accent: #FFF500;
   --walk-ripple-band-0: #FFF500;
-  --walk-ripple-band-1: #E8940F;
-  --walk-ripple-band-2: #C45A12;
+  --walk-ripple-band-1: #FF8C00;
+  --walk-ripple-band-2: #E85D04;
   --walk-ripple-label-bg: #1C1C22;
   --walk-ripple-label-text: #FFFFFF;
 

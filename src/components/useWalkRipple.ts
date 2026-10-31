@@ -7,6 +7,7 @@ import {
   computeRippleTimes,
   type RippleTimes,
 } from "../lib/walkRippleNetwork";
+import { qaModeFromSearch } from "../lib/qaCameraBridge";
 import type { CityModel } from "../types";
 
 export type WalkRippleStatus = "idle" | "placing" | "ready" | "animating";
@@ -58,6 +59,21 @@ export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !qaModeFromSearch(window.location.search)) return;
+    window.__citycutWalkRippleQa = {
+      setMinutes: (minutes: number) => {
+        stopAnim();
+        layer.setRippleTimeMinutes(minutes);
+        tint.setRippleTimeMinutes(minutes);
+        setStatus(minutes >= WALK_RIPPLE_MAX_MIN - 0.01 ? "ready" : "animating");
+      },
+    };
+    return () => {
+      delete window.__citycutWalkRippleQa;
+    };
+  }, [layer, stopAnim, tint]);
 
   const startAnim = useCallback(() => {
     stopAnim();

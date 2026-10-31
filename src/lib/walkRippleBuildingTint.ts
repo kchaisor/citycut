@@ -1,4 +1,6 @@
 import * as THREE from "three";
+import { BUILDING_USE_META, buildingLayerName } from "./buildingUse";
+import type { BuildingUse } from "../types";
 import { getColour } from "./colours";
 import {
   patchBuildingMaterialForRipple,
@@ -8,13 +10,23 @@ import {
 
 type SavedMaterial = THREE.Material | THREE.Material[];
 
+const BUILDING_MESH_NAMES = new Set(
+  (Object.keys(BUILDING_USE_META) as BuildingUse[]).map((use) => buildingLayerName(use)),
+);
+
+function isBuildingMeshName(name: string): boolean {
+  if (name.startsWith("Buildings") || name.startsWith("source:")) return true;
+  if (name === "Buildings-manual" || name === "Buildings-site" || name === "Buildings::Site") return true;
+  return BUILDING_MESH_NAMES.has(name);
+}
+
 function buildingMeshes(root: THREE.Object3D): THREE.Mesh[] {
   const meshes: THREE.Mesh[] = [];
   root.traverse((object) => {
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh) return;
     const name = mesh.name || mesh.parent?.name || "";
-    if (name.startsWith("Buildings") || name.startsWith("source:")) meshes.push(mesh);
+    if (isBuildingMeshName(name)) meshes.push(mesh);
   });
   return meshes;
 }
@@ -44,12 +56,12 @@ function applyArrivalToMesh(mesh: THREE.Mesh, arrivalByBuildingId: Map<number, n
   if (byGroup?.length && geometry.groups?.length) {
     const data = new Float32Array(position.count);
     data.fill(999);
-    for (const group of geometry.groups) {
-      const id = byGroup[group.materialIndex ?? 0];
-      if (id === undefined || id < 0) continue;
+    geometry.groups.forEach((group, groupIndex) => {
+      const id = byGroup[groupIndex];
+      if (id === undefined || id < 0) return;
       const arrival = arrivalByBuildingId.get(id) ?? 999;
       for (let i = group.start; i < group.start + group.count; i++) data[i] = arrival;
-    }
+    });
     geometry.setAttribute("aRippleArrival", new THREE.BufferAttribute(data, 1));
     return;
   }
