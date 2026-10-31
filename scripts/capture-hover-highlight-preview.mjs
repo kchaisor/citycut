@@ -108,14 +108,12 @@ if (pair) {
   fs.copyFileSync(path.join(OUT, "hover-highlight.png"), path.join(OUT, "hover-highlight-switch.png"));
 }
 
-await page.mouse.move(target.clickX, target.clickY, { steps: 4 });
-await page.waitForTimeout(200);
-await page.mouse.click(target.clickX, target.clickY);
+await page.evaluate((id) => window.__citycutQaModel?.openAnchoredLensForBuilding?.(id), target.id);
 await page.waitForFunction(
   () =>
     window.__citycutQaModel?.getAnchoredLensMode?.() === "pinned" &&
     Boolean(document.querySelector('[data-anchored-lens="open"]')),
-  { timeout: 15000 },
+  { timeout: 20000 },
 );
 await page.waitForTimeout(400);
 await page.screenshot({ path: path.join(OUT, "hover-highlight-pinned.png") });
