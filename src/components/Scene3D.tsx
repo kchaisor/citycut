@@ -1650,8 +1650,6 @@ export function Cameras({
   );
   const persp = perspRef.current;
   const ortho = orthoRef.current;
-  const qaMode = typeof window !== "undefined" && qaModeFromSearch(window.location.search);
-
   return (
     <>
       <perspectiveCamera ref={perspRef} fov={32} />
@@ -1672,7 +1670,7 @@ export function Cameras({
             lat={lat}
             lon={lon}
             fitId={snapId}
-            active={!orthoView && !qaMode}
+            active={!orthoView}
             touchedRef={touchedRef}
             fittedKey={perspFitKey}
             introEnabled={introEnabled}

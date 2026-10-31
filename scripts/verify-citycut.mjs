@@ -1116,6 +1116,14 @@ async function main() {
     });
     await lensCtx.addInitScript(() => {
       window.__citycutMinSilentLoadMs = 550;
+      try {
+        window.localStorage.setItem(
+          "citycut.view",
+          JSON.stringify({ projection: "perspective", corner: "sw", freeRotate: false }),
+        );
+      } catch {
+        // ignore
+      }
     });
     const lensPage = await lensCtx.newPage();
     await lensPage.goto(`${baseUrl}/?qa=1&qaHidePopover=1&lat=-37.8136&lon=144.9831&km=1`, {
@@ -1132,6 +1140,12 @@ async function main() {
     });
     await lensPage.waitForTimeout(1200);
     const lensTarget = await lensPage.evaluate(() => window.__citycutQaModel?.findTallBuildingForLensQa?.() ?? null);
+    assertCheck(
+      "anchored-lens-target-building",
+      "QA finds a tall building click target in the default perspective view",
+      lensTarget != null,
+      `target=${JSON.stringify(lensTarget)}`,
+    );
     if (lensTarget) {
       await lensPage.mouse.click(lensTarget.clickX, lensTarget.clickY);
     }
