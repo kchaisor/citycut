@@ -1,0 +1,2 @@
+export const LENS_HOVER_HIDE_MS = 275;
+export const LENS_ORBIT_HOVER_COOLDOWN_MS = 150;

@@ -11,6 +11,8 @@ import {
 import type { SunHoursGrid } from "../lib/sunHours";
 import type { BuildingFeat, CityModel } from "../types";
 
+export type AnchoredLensMode = "hover" | "pinned";
+
 export type AnchoredLensActions = {
   onRipple: () => void;
   onCut: () => void;
@@ -25,16 +27,25 @@ type CardProps = {
   model: CityModel;
   sunHoursGrid: SunHoursGrid | null;
   actions: AnchoredLensActions;
+  mode: AnchoredLensMode;
 };
 
-export function AnchoredLensCard({ building, model, sunHoursGrid, actions }: CardProps) {
+export function AnchoredLensCard({ building, model, sunHoursGrid, actions, mode }: CardProps) {
   const heightM = effectiveBuildingHeightM(building);
   const heightLine = anchoredLensHeightLine(building);
   const floorsLine = anchoredLensFloorsLine(heightM);
   const sunLine = anchoredLensSunHoursLine(model, building, sunHoursGrid);
 
+  const preview = mode === "hover";
+
   return (
-    <div className="anchored-lens-card" data-anchored-lens="open" role="dialog" aria-label="Building lens">
+    <div
+      className="anchored-lens-card"
+      data-anchored-lens="open"
+      data-anchored-lens-mode={mode}
+      role={preview ? "status" : "dialog"}
+      aria-label={preview ? "Building preview" : "Building lens"}
+    >
       <div className="anchored-lens-metrics">
         <p>
           <span className="anchored-lens-k">Height</span>
@@ -51,41 +62,43 @@ export function AnchoredLensCard({ building, model, sunHoursGrid, actions }: Car
           </p>
         ) : null}
       </div>
-      <div className="anchored-lens-actions">
-        <button
-          type="button"
-          className="anchored-lens-btn"
-          disabled={!actions.rippleEnabled}
-          title={actions.rippleEnabled ? undefined : "Coming soon"}
-          data-anchored-lens-tip={actions.rippleEnabled ? undefined : "Coming soon"}
-          data-anchored-lens-action="ripple"
-          onClick={actions.onRipple}
-        >
-          Ripple from here
-        </button>
-        <button
-          type="button"
-          className="anchored-lens-btn"
-          disabled={!actions.cutEnabled}
-          title={actions.cutEnabled ? undefined : "Coming soon"}
-          data-anchored-lens-tip={actions.cutEnabled ? undefined : "Coming soon"}
-          data-anchored-lens-action="cut"
-          onClick={actions.onCut}
-        >
-          Cut here
-        </button>
-        <button
-          type="button"
-          className="anchored-lens-btn"
-          disabled={!actions.viewshedEnabled}
-          title={actions.viewshedEnabled ? undefined : "Coming soon"}
-          data-anchored-lens-tip={actions.viewshedEnabled ? undefined : "Coming soon"}
-          data-anchored-lens-action="viewshed"
-          onClick={actions.onViewshed}
-        >
-          Viewshed
-        </button>
-      </div>
+      {preview ? null : (
+        <div className="anchored-lens-actions">
+          <button
+            type="button"
+            className="anchored-lens-btn"
+            disabled={!actions.rippleEnabled}
+            title={actions.rippleEnabled ? undefined : "Coming soon"}
+            data-anchored-lens-tip={actions.rippleEnabled ? undefined : "Coming soon"}
+            data-anchored-lens-action="ripple"
+            onClick={actions.onRipple}
+          >
+            Ripple from here
+          </button>
+          <button
+            type="button"
+            className="anchored-lens-btn"
+            disabled={!actions.cutEnabled}
+            title={actions.cutEnabled ? undefined : "Coming soon"}
+            data-anchored-lens-tip={actions.cutEnabled ? undefined : "Coming soon"}
+            data-anchored-lens-action="cut"
+            onClick={actions.onCut}
+          >
+            Cut here
+          </button>
+          <button
+            type="button"
+            className="anchored-lens-btn"
+            disabled={!actions.viewshedEnabled}
+            title={actions.viewshedEnabled ? undefined : "Coming soon"}
+            data-anchored-lens-tip={actions.viewshedEnabled ? undefined : "Coming soon"}
+            data-anchored-lens-action="viewshed"
+            onClick={actions.onViewshed}
+          >
+            Viewshed
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -96,16 +109,18 @@ export function AnchoredLensViewportLayer({
   model,
   sunHoursGrid,
   actions,
+  mode,
 }: {
   hostRef: RefObject<HTMLDivElement | null>;
   building: BuildingFeat;
   model: CityModel;
   sunHoursGrid: SunHoursGrid | null;
   actions: AnchoredLensActions;
+  mode: AnchoredLensMode;
 }) {
   return (
     <div ref={hostRef} className="anchored-lens-host" data-anchored-lens-visible="0">
-      <AnchoredLensCard building={building} model={model} sunHoursGrid={sunHoursGrid} actions={actions} />
+      <AnchoredLensCard building={building} model={model} sunHoursGrid={sunHoursGrid} actions={actions} mode={mode} />
     </div>
   );
 }

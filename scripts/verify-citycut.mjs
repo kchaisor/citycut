@@ -1146,27 +1146,156 @@ async function main() {
       lensTarget != null,
       `target=${JSON.stringify(lensTarget)}`,
     );
-    if (lensTarget) {
-      await lensPage.mouse.click(lensTarget.clickX, lensTarget.clickY);
+    const lensCanvasBox = await lensPage.locator(".model canvas").boundingBox();
+    if (lensCanvasBox) {
+      await lensPage.mouse.move(lensCanvasBox.x + lensCanvasBox.width * 0.1, lensCanvasBox.y + lensCanvasBox.height * 0.92);
     }
-    await lensPage.waitForSelector('[data-anchored-lens="open"]', { timeout: 15000 });
+    await lensPage.waitForTimeout(350);
+    if (lensTarget) {
+      await lensPage.mouse.move(lensTarget.clickX, lensTarget.clickY);
+    }
+    await lensPage.waitForFunction(
+      () => {
+        const layout = window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null;
+        return layout?.onScreen === true && window.__citycutQaModel?.getAnchoredLensMode?.() === "hover";
+      },
+      { timeout: 8000 },
+    );
+    const hoverShowInfo = await lensPage.evaluate(() => ({
+      mode: window.__citycutQaModel?.getAnchoredLensMode?.() ?? null,
+      hasCard: Boolean(document.querySelector('[data-anchored-lens="open"]')),
+      hasActions: Boolean(document.querySelector('[data-anchored-lens-action="cut"]')),
+      layout: window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null,
+    }));
+    assertCheck(
+      "anchored-lens-hover-shows",
+      "Hovering a building shows a preview lens card without action buttons",
+      hoverShowInfo.mode === "hover" &&
+        hoverShowInfo.hasCard &&
+        !hoverShowInfo.hasActions &&
+        hoverShowInfo.layout?.onScreen === true &&
+        (hoverShowInfo.layout?.width ?? 0) >= 220,
+      `info=${JSON.stringify(hoverShowInfo)}`,
+    );
+
+    const hoverPair = await lensPage.evaluate(() => window.__citycutQaModel?.findLensHoverPairQa?.() ?? null);
+    if (hoverPair && lensTarget) {
+      await lensPage.mouse.move(hoverPair.a.clickX, hoverPair.a.clickY);
+      await lensPage.waitForTimeout(350);
+      await lensPage.mouse.move(hoverPair.b.clickX, hoverPair.b.clickY, { steps: 6 });
+      await lensPage.waitForTimeout(200);
+      const flickerInfo = await lensPage.evaluate(() => ({
+        mode: window.__citycutQaModel?.getAnchoredLensMode?.() ?? null,
+        hasCard: Boolean(document.querySelector('[data-anchored-lens="open"]')),
+      }));
+      assertCheck(
+        "anchored-lens-hover-adjacent-no-flicker",
+        "Moving between nearby buildings keeps the hover card visible (no hide gap)",
+        flickerInfo.mode === "hover" && flickerInfo.hasCard,
+        `pair=${JSON.stringify(hoverPair)}, after=${JSON.stringify(flickerInfo)}`,
+      );
+    } else {
+      assertCheck(
+        "anchored-lens-hover-adjacent-no-flicker",
+        "Moving between nearby buildings keeps the hover card visible (no hide gap)",
+        true,
+        "skipped (no adjacent pair in view)",
+      );
+    }
+
+    if (lensCanvasBox) {
+      await lensPage.mouse.move(lensCanvasBox.x + 16, lensCanvasBox.y + lensCanvasBox.height - 16);
+    }
+    await lensPage.waitForTimeout(160);
+    const stillUp = await lensPage.evaluate(() => Boolean(document.querySelector('[data-anchored-lens="open"]')));
+    await lensPage.waitForTimeout(200);
+    const hiddenAfterOut = await lensPage.evaluate(() => !document.querySelector('[data-anchored-lens="open"]'));
+    assertCheck(
+      "anchored-lens-hover-hide-delay",
+      "Moving off buildings hides the hover card after ~275ms",
+      stillUp && hiddenAfterOut,
+      `stillUp=${stillUp}, hiddenAfterOut=${hiddenAfterOut}`,
+    );
+
+    if (lensCanvasBox) {
+      await lensPage.mouse.move(lensCanvasBox.x + 20, lensCanvasBox.y + 20);
+      await lensPage.waitForTimeout(400);
+      const cx = lensCanvasBox.x + lensCanvasBox.width * 0.52;
+      const cy = lensCanvasBox.y + lensCanvasBox.height * 0.5;
+      await lensPage.mouse.move(cx, cy);
+      await lensPage.mouse.down();
+      await lensPage.waitForTimeout(120);
+      const midDragHover = await lensPage.evaluate(() => ({
+        mode: window.__citycutQaModel?.getAnchoredLensMode?.() ?? null,
+        hasCard: Boolean(document.querySelector('[data-anchored-lens="open"]')),
+      }));
+      await lensPage.mouse.move(cx + 120, cy - 30, { steps: 10 });
+      await lensPage.mouse.up();
+      assertCheck(
+        "anchored-lens-no-hover-during-orbit",
+        "Orbit drag suppresses hover preview cards",
+        !midDragHover.hasCard && midDragHover.mode !== "hover",
+        `midDrag=${JSON.stringify(midDragHover)}`,
+      );
+      await lensPage.waitForTimeout(500);
+    } else {
+      assertCheck(
+        "anchored-lens-no-hover-during-orbit",
+        "Orbit drag suppresses hover preview cards",
+        false,
+        "no canvas",
+      );
+    }
+
+    if (lensTarget) {
+      const pinClick = await lensPage.evaluate(
+        (id) => window.__citycutQaModel?.resolveLensBuildingClick?.(id) ?? null,
+        lensTarget.id,
+      );
+      if (pinClick) {
+        await lensPage.mouse.move(pinClick.clickX, pinClick.clickY);
+        await lensPage.waitForTimeout(400);
+        await lensPage.mouse.click(pinClick.clickX, pinClick.clickY);
+      }
+    }
+    await lensPage.waitForFunction(
+      () =>
+        window.__citycutQaModel?.getAnchoredLensMode?.() === "pinned" &&
+        Boolean(document.querySelector('[data-anchored-lens="open"]')),
+      { timeout: 15000 },
+    );
     await lensPage.waitForTimeout(300);
+    await lensPage.waitForFunction(
+      () => {
+        const layout = window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null;
+        return (
+          window.__citycutQaModel?.getAnchoredLensMode?.() === "pinned" &&
+          layout?.onScreen === true &&
+          (layout?.width ?? 0) >= 220
+        );
+      },
+      { timeout: 8000 },
+    );
     const lensOpenInfo = await lensPage.evaluate(() => {
       const layout = window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null;
       return {
+        mode: window.__citycutQaModel?.getAnchoredLensMode?.() ?? null,
         hasCard: Boolean(document.querySelector('[data-anchored-lens="open"]')),
+        hasActions: Boolean(document.querySelector('[data-anchored-lens-action="cut"]')),
         layout,
       };
     });
     lensOpenInfo.id = lensTarget?.id ?? null;
     assertCheck(
       "anchored-lens-open-on-click",
-      "Clicking a building opens a legible anchored lens card (>= 220px wide, on screen)",
+      "Clicking a building pins a legible lens card (>= 220px wide, on screen, with actions)",
       lensOpenInfo.id != null &&
+        lensOpenInfo.mode === "pinned" &&
         lensOpenInfo.hasCard &&
+        lensOpenInfo.hasActions &&
         lensOpenInfo.layout?.onScreen === true &&
         (lensOpenInfo.layout?.width ?? 0) >= 220,
-      `id=${lensOpenInfo.id}, layout=${JSON.stringify(lensOpenInfo.layout)}`,
+      `id=${lensOpenInfo.id}, layout=${JSON.stringify(lensOpenInfo)}`,
     );
 
     const canvasBox = await lensPage.locator(".model canvas").boundingBox();

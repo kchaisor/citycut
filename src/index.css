@@ -587,9 +587,12 @@ input[type="range"]::-moz-range-thumb {
   top: 0;
   z-index: 60;
   pointer-events: none;
-  transform: translate3d(-9999px, -9999px, 0);
+  visibility: hidden;
 }
 .anchored-lens-host .anchored-lens-card {
+  pointer-events: none;
+}
+.anchored-lens-host .anchored-lens-card[data-anchored-lens-mode="pinned"] {
   pointer-events: auto;
 }
 .webgl-lost-overlay {

@@ -48,6 +48,11 @@ declare global {
         dist: number;
       } | null;
       resolveLensBuildingClick?: (buildingId: number) => { clickX: number; clickY: number } | null;
+      getAnchoredLensMode?: () => "hover" | "pinned" | null;
+      findLensHoverPairQa?: () => {
+        a: { id: number; clickX: number; clickY: number; height: number; cx: number; cy: number };
+        b: { id: number; clickX: number; clickY: number; height: number; cx: number; cy: number };
+      } | null;
       /** ~16 m foreground block for selection QA screenshots. */
       pickForegroundBuildingForSelectionQa?: () => number | null;
       frameSelectionBuilding?: (buildingId: number, variant?: "through" | "oblique") => boolean;
