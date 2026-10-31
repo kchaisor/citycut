@@ -12,15 +12,6 @@ import {
 import { demContourLayer, inferContourInterval, type LonLatBounds } from "./vicmapContours";
 import type { ContourLayer, LonLat, Pt, StoredContour, TerrainField } from "../types";
 
-/**
- * NSW contours for one cut, best source first:
- *   1. City of Sydney 1 m Terrain contours where the cut touches the City of Sydney;
- *      NSW Elevation theme contours fill the part of the cut outside the City ("cos-nsw").
- *   2. NSW Spatial Services Elevation theme contours (2 m in Sydney) everywhere else ("nsw-2m").
- *   3. Contours traced from the Mapterhorn DEM ("dem").
- * Each failed or partial source leaves a note on the layer; nothing falls back silently.
- */
-
 type Lines = { z: number; coordinates: number[][] }[];
 
 function rawLines(result: ArcgisResult, field: string): Lines {
@@ -44,7 +35,6 @@ function dedupe(line: Pt[]): Pt[] {
   return out;
 }
 
-/** Split lon/lat lines where `keep` changes, keeping runs of kept vertices. */
 export function splitLinesWhere(lines: Lines, keep: (lon: number, lat: number) => boolean): Lines {
   const out: Lines = [];
   for (const line of lines) {

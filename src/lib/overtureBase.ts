@@ -152,11 +152,6 @@ function pushTree(
   });
 }
 
-/** OSM tree points from the pre-baked tree file, sized and framed exactly like base-tile points. */
-/**
- * Neighbouring base tiles both carry a point that sits in their shared buffer. Keep the first
- * copy of each Overture id so a tree on a tile edge is drawn once.
- */
 export function dedupeTreesById(trees: TreeFeat[]): TreeFeat[] {
   const seen = new Set<number>();
   return trees.filter((tree) => {
@@ -246,7 +241,6 @@ export async function fetchOvertureBaseForCut(
   signal?: AbortSignal,
 ): Promise<{
   areas: AreaFeat[];
-  /** Car-park outlines (Overture infrastructure/transit/parking, OSM amenity=parking), plan-only. */
   carParks?: CarParkArea[];
   treeContext: TreeContext;
   overtureTrees: TreeFeat[];

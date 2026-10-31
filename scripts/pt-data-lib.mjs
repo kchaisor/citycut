@@ -1,12 +1,3 @@
-/**
- * Where to download Transport Victoria's PT lines and stops GeoJSON.
- *
- * The dataset's resource ids change when Transport Victoria re-publishes it (on 2026-10-12 both
- * changed and the hard-coded URLs 404'd, breaking the Pages deploy). So at build time we ask the
- * CKAN API (package_show) for the current resources and pick lines/stops by name and format, not
- * by position. If that lookup fails we fall back to the last known-good resource ids. If neither
- * works we throw, naming every URL tried.
- */
 
 export const PT_DATASET_ID = "6d36dfd9-8693-4552-8a03-05eb29a391fd";
 export const PT_PACKAGE_SHOW_URL = `https://opendata.transport.vic.gov.au/api/3/action/package_show?id=${PT_DATASET_ID}`;
@@ -14,7 +5,6 @@ export const PT_PACKAGE_SHOW_URL = `https://opendata.transport.vic.gov.au/api/3/
 const resourceUrl = (id, file) =>
   `https://opendata.transport.vic.gov.au/dataset/${PT_DATASET_ID}/resource/${id}/download/${file}`;
 
-/** Known-good as of 2026-10-12. Only used when the package_show lookup fails. */
 export const PT_FALLBACK = {
   lines: {
     id: "d8e5a974-98ba-4823-af5f-b0d2185263ac",
@@ -33,19 +23,12 @@ const isGeojson = (r) =>
   /geo\+json/i.test(String(r.mimetype ?? "")) ||
   /\.geojson(\?|$)/i.test(String(r.url ?? ""));
 
-/** "lines" matches a name like "Public Transport Lines" or a file public_transport_lines.geojson. */
 function mentions(r, kind) {
   const word = new RegExp(`(^|[^a-z])${kind}([^a-z]|$)`, "i");
   const file = String(r.url ?? "").split("?")[0].split("/").pop() ?? "";
   return word.test(String(r.name ?? "")) || word.test(file);
 }
 
-/**
- * Pick the lines and stops GeoJSON resources from a package_show response.
- * A resource must be GeoJSON, active (when state is given), have an http(s) URL, and name the
- * kind in its name or file name, and not the other kind. With several matches the most recently
- * modified wins. Returns { lines, stops }, each { id, name, url } or null.
- */
 export function matchPtResources(packageShow) {
   const resources = packageShow?.result?.resources;
   const out = { lines: null, stops: null };
@@ -62,7 +45,6 @@ export function matchPtResources(packageShow) {
   return out;
 }
 
-/** Look up current resource URLs. Never throws: returns { found, error }. */
 export async function lookupPtResources({ fetchImpl = fetch, timeoutMs = 30000 } = {}) {
   try {
     const res = await fetchImpl(PT_PACKAGE_SHOW_URL, { signal: AbortSignal.timeout(timeoutMs) });
@@ -75,10 +57,6 @@ export async function lookupPtResources({ fetchImpl = fetch, timeoutMs = 30000 }
   }
 }
 
-/**
- * Ordered download candidates per kind: the looked-up URL first (if any), then the fallback.
- * Each candidate is { url, source } where source says where it came from, for the build log.
- */
 export function ptCandidates(found) {
   const out = {};
   for (const kind of PT_KINDS) {
@@ -92,10 +70,6 @@ export function ptCandidates(found) {
   return out;
 }
 
-/**
- * Try each candidate in order with `attempt(url)` (which should throw on failure). Logs which URL
- * was used. If every candidate fails, throws one error listing each URL and why it failed.
- */
 export async function useFirstWorking(kind, candidates, attempt, log = console.log) {
   const failures = [];
   for (const c of candidates) {
@@ -114,7 +88,6 @@ export async function useFirstWorking(kind, candidates, attempt, log = console.l
   );
 }
 
-/** Cheap reachability check: a 1-byte range GET (some CKAN downloads don't answer HEAD). */
 export async function probeUrl(url, { fetchImpl = fetch, timeoutMs = 30000 } = {}) {
   const res = await fetchImpl(url, { headers: { Range: "bytes=0-0" }, signal: AbortSignal.timeout(timeoutMs) });
   await res.body?.cancel?.();

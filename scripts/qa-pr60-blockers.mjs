@@ -1,4 +1,3 @@
-/** QA for PR60 blockers: site plan trees + axo stack at 400 m and 1000 m. */
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 

@@ -1,7 +1,3 @@
-/**
- * Previous native export that embedded PDF path operators inside EPS layers.
- * Kept behind {@link usePdfIllustratorExport} for comparison only — not valid AI8.
- */
 import type { PdfChunk, PdfEllipse, PdfPath, PdfText, Rgb } from "./aiDocument";
 import { pdfPt } from "./lineweights";
 import { aiLayerLabel } from "./aiNative";

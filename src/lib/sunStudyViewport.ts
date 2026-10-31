@@ -3,16 +3,9 @@ export interface SunStudyLighting {
   fillAmbient: number;
   fillHemi: number;
   sunIntensity: number;
-  /** Keep renderer tone mapping unchanged (`false` = `ACESFilmicToneMapping`). */
   noToneMapping: boolean;
 }
 
-/**
- * Viewport light rig intensities for the 3D scene.
- *
- * Toggling the sun-path diagram (`showPath`) only shows or hides the heliodon and compass
- * overlay; it must not alter scene lighting, shadow intensity, or renderer tone mapping.
- */
 export function sunStudyViewportLighting(options: {
   showPath: boolean;
   castShadows: boolean;

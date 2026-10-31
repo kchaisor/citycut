@@ -2,10 +2,6 @@ import { fromLocal, toLocal } from "./geo";
 import type { LonLat } from "../types";
 import { planViewportEqual, type PlanViewport } from "./planViewport";
 
-/**
- * WGS84 bounds [[west, south], [east, north]] for the plan/SVG viewBox.
- * The viewBox is in local metres with Y growing south, so north = -y.
- */
 export function planViewportLngLatBounds(
   view: PlanViewport,
   center: LonLat,
@@ -18,7 +14,6 @@ export function planViewportLngLatBounds(
   ];
 }
 
-/** Inverse of {@link planViewportLngLatBounds} for a north-up map bounds box. */
 export function planViewportFromLngLatBounds(
   bounds: [[number, number], [number, number]],
   center: LonLat,

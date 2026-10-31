@@ -22,7 +22,6 @@ function area(mp: MultiPolygon): number {
   return total;
 }
 
-/** A roundabout with four approaches and a footway stub that ends inside the ring's island gap. */
 function model(): CityModel {
   const road = (id: number, line: [number, number][], width = 5.5, grade?: "path"): RoadFeat => ({
     id,
@@ -58,7 +57,6 @@ const disc = (r: number): MultiPolygon => [[circleRing([0, 0], r).map(([x, y]) =
 describe("road fill sits above the kerb/footpath layer", () => {
   it("leaves no footpath showing inside the carriageway or its island gap", () => {
     const plan = planPaths(model(), undefined, 5, 1000, 5, 2500, { pathFilletM: 0 });
-    // Inside the ring's outer kerb (less a 0.5 m edge allowance) is carriageway or island gap only.
     const pathInRing = clip.intersection(plan.pathFill, disc(12.25));
     expect(area(pathInRing)).toBeGreaterThan(1);
     expect(area(clip.difference(pathInRing, plan.roadFill))).toBeLessThan(0.01);

@@ -13,10 +13,8 @@ import {
 } from "../lib/solar";
 import type { SolarViewSettings } from "./SolarHeliodon";
 
-/** Sun-time hours per real second. */
 const SPEEDS = [0.5, 1, 2, 4] as const;
 
-/** "9:30", "09:30" or "0930" to minutes past midnight; null when not a real clock time. */
 export function parseClock(text: string): number | null {
   const m = /^\s*(\d{1,2}):?(\d{2})\s*$/.exec(text);
   if (!m) return null;
@@ -32,11 +30,6 @@ function clock(minutes: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-/**
- * Animated sun and shadow study. Sweeps the existing sun (same site lat/lon, Melbourne
- * clock, SunCalc) from sunrise to sunset on a chosen day. Only the sun moves; the camera is
- * never touched. Playing switches cast shadows on.
- */
 export function SunStudyPlayer({
   settings,
   onChange,
@@ -58,16 +51,13 @@ export function SunStudyPlayer({
   standardRef.current = standardId;
   const daylight = daylightWindowMinutes(lat, lon, settings.year, settings.month, settings.day);
   const standard = standardId ? SHADOW_STANDARDS[standardId] : null;
-  /** A shadow standard narrows the sweep and scrubber to its test hours (e.g. 9am–3pm). */
   const window_ = standard
     ? { sunrise: standard.hours[0]! * 60, sunset: standard.hours[standard.hours.length - 1]! * 60 }
     : daylight;
   const minutes = settings.hour * 60 + settings.minute;
   const keyDate = standard ? null : SUN_STUDY_DATES.find((d) => settings.month === d.month && settings.day === d.day) ?? null;
-  /** Hour buttons: the standard's test hours, or 9am–3pm under a selected key date. */
   const stepHours: readonly number[] | null = standard ? standard.hours : keyDate ? KEY_DATE_HOURS : null;
   const [editing, setEditing] = useState<string | null>(null);
-  /** Typed HH:MM, snapped into the slider range; invalid text leaves the time unchanged. */
   const commitTyped = () => {
     const typed = editing === null ? null : parseClock(editing);
     setEditing(null);
@@ -115,7 +105,6 @@ export function SunStudyPlayer({
   const stepHour = (delta: number) => {
     if (!stepHours) return;
     const hours = stepHours;
-    // Exact test hour → step from it; between hours → step to the neighbour in that direction.
     const below = hours.filter((h) => h * 60 <= minutes).length - 1;
     const exact = below >= 0 && hours[below]! * 60 === minutes;
     const from = exact ? below : delta > 0 ? below : below + 1;

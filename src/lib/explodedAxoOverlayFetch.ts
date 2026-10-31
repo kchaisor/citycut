@@ -97,7 +97,6 @@ export async function fetchPlanningOverlays(
   signal?: AbortSignal,
 ): Promise<OverlayFetchResult<PlanningOverlayPolygon[]>> {
   if (model.region === "nsw") {
-    // NSW mode: heritage from the EPI Primary Planning Layers already loaded with the model.
     if (!model.nsw || model.nsw.status.heritage.status === "failed") return { ok: false, unavailable: true };
     return { ok: true, data: model.nsw.heritage.map((poly) => ({ outer: poly.outer, holes: poly.holes, kind: "heritage" as const })) };
   }
@@ -142,7 +141,6 @@ export async function fetchTransportRail(
   model: CityModel,
   signal?: AbortSignal,
 ): Promise<OverlayFetchResult<{ lines: TransportRailLine; stations: TransportRailStation[] }>> {
-  // NSW mode: no NSW rail source wired yet (Transport theme Railway is a follow-up); say so, never query Vicmap.
   if (model.region === "nsw") return { ok: false, unavailable: true };
   let lines = await fetchRailLines(model, "open-data-platform:vmlite_tr_rail", signal);
   if (!lines) lines = await fetchRailLines(model, "open-data-platform:tr_rail", signal);

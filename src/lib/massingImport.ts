@@ -6,37 +6,28 @@ import type { CityModel, LonLat } from "../types";
 type Rhino = Awaited<ReturnType<typeof rhino3dm>>;
 type RhinoDoc = InstanceType<Rhino["File3dm"]>;
 
-/** Browser memory: the file, rhino3dm's wasm-heap copy (2–3× file) and three buffers coexist. */
 export const MASSING_MAX_FILE_BYTES = 50 * 1024 * 1024;
 export const MASSING_WARN_FILE_BYTES = 25 * 1024 * 1024;
 export const MASSING_MAX_TRIANGLES = 500_000;
 export const MASSING_MAX_MODELS = 20;
 
-/** Smaller than any MGA easting/northing in Australia, so smaller coordinates are a local frame. */
 const MGA_MIN_EASTING = 100_000;
 const MGA_MIN_NORTHING = 1_000_000;
 
 export type MassingPlacementMode = "mga" | "click";
 
-/** Where the base centre of the model sits, in MGA metres, and its turn about Z (degrees, CCW). */
 export type MassingPlacement = { e: number; n: number; base: number; rotDeg: number };
 
 export type ParsedMassing = {
-  /** Vertices relative to {@link anchor}, metres, Z-up: x east, y north, z up. */
   positions: Float32Array;
   indices: Uint32Array;
   triangles: number;
-  /** Base centre of the bounding box in the file's coordinates (metres after unit scaling). */
   anchor: { e: number; n: number; z: number };
-  /** Bounding box half extents (metres). */
   halfExtent: { x: number; y: number };
   sourceUnits: string;
   unitScale: number;
-  /** MGA zone named by the file (earth anchor or CRS string), when it names one. */
   fileZone: number | null;
-  /** Surfaces left out because they have no render mesh. */
   rejectedSurfaces: number;
-  /** Notes that stay with the model (units, rejected surfaces, local frame, zone). */
   notes: string[];
 };
 
@@ -47,11 +38,9 @@ export type ImportedMassing = {
   mode: MassingPlacementMode;
   placement: MassingPlacement;
   visible: boolean;
-  /** Per-model colour as #RRGGBB. Unset uses the `--imported-massing` token (white). */
   colour?: string;
 } & ParsedMassing;
 
-/** Valid #RRGGBB, else null (a bad stored value falls back to the token). */
 export function normaliseMassingColour(value: unknown): string | null {
   return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toUpperCase() : null;
 }
@@ -91,7 +80,6 @@ function sameEnum(a: unknown, b: unknown): boolean {
 }
 
 function fileZoneOf(doc: RhinoDoc): number | null {
-  // rhino3dm's typings say getvalue(index); the binding takes the key.
   const getvalue = doc.strings().getvalue as unknown as (key: string) => string | undefined;
   let crs = "";
   try {
@@ -104,7 +92,6 @@ function fileZoneOf(doc: RhinoDoc): number | null {
   const anchor = doc.settings().earthAnchorPoint;
   const lon = anchor?.earthBasepointLongitude;
   const lat = anchor?.earthBasepointLatitude;
-  // An unset anchor reads as 0/0 or ±180; only an anchor inside the MGA zones (90–174°E) names a zone.
   if (Number.isFinite(lon) && Number.isFinite(lat) && lon > 90 && lon < 174 && lat < 0) return mgaZone(lon);
   return null;
 }
@@ -191,7 +178,6 @@ export function parseMassing3dm(rhino: Rhino, bytes: Uint8Array): ParsedMassing 
       const base = world.length / 3;
       const vertices = mesh.vertices();
       for (let v = 0; v < vertices.count; v++) {
-        // Double precision: MGA northings (~5.8e6) lose ~0.5 m in float32.
         const [x, y, z] = vertices.point3dAt(v);
         world.push(x * units.scale, y * units.scale, z * units.scale);
       }
@@ -255,18 +241,15 @@ export function looksLocal(parsed: Pick<ParsedMassing, "anchor">): boolean {
   return Math.abs(parsed.anchor.e) < MGA_MIN_EASTING || Math.abs(parsed.anchor.n) < MGA_MIN_NORTHING;
 }
 
-/** Placement that reproduces the file's own MGA coordinates exactly. */
 export function mgaPlacement(parsed: Pick<ParsedMassing, "anchor">): MassingPlacement {
   return { e: parsed.anchor.e, n: parsed.anchor.n, base: parsed.anchor.z, rotDeg: 0 };
 }
 
-/** MGA of the cut centre (local 0,0): the default for a model drawn in a local frame. */
 export function cutCentrePlacement(model: Pick<CityModel, "center">, zone: number, base: number): MassingPlacement {
   const [e, n] = projectLocal([0, 0], model.center, zone);
   return { e, n, base, rotDeg: 0 };
 }
 
-/** MGA (E, N, Z) of vertex `i` under `placement`. Rotation is about the vertical axis through the base centre. */
 export function placedMga(
   massing: Pick<ParsedMassing, "positions">,
   placement: MassingPlacement,
@@ -281,7 +264,6 @@ export function placedMga(
   return [placement.e + x * cos - y * sin, placement.n + x * sin + y * cos, placement.base + z];
 }
 
-/** Local CityModel frame (east, north, up) of every vertex: the exact inverse of the .3dm export. */
 export function placedLocal(
   massing: Pick<ParsedMassing, "positions">,
   placement: MassingPlacement,
@@ -300,7 +282,6 @@ export function placedLocal(
   return out;
 }
 
-/** Share of vertices outside the cut square (0–1). */
 export function fractionOutsideCut(local: Float64Array, sideM: number): number {
   const half = sideM / 2;
   const count = local.length / 3;
@@ -312,7 +293,6 @@ export function fractionOutsideCut(local: Float64Array, sideM: number): number {
   return outside / count;
 }
 
-/** Live warnings for the Import panel. */
 export function massingWarnings(
   massing: ImportedMassing,
   local: Float64Array,
@@ -341,7 +321,6 @@ export function massingWarnings(
   return out;
 }
 
-/** Same as massingWarnings' total-limit check, before a new file is added. */
 export function canAddMassing(existing: Pick<ImportedMassing, "triangles">[], triangles: number): string | null {
   if (existing.length >= MASSING_MAX_MODELS) return "Up to 20 imported models. Remove one first.";
   const total = existing.reduce((sum, item) => sum + item.triangles, 0) + triangles;

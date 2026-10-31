@@ -9,7 +9,6 @@ function footprintAreaM2(building: Pick<BuildingFeat, "ring" | "holes">): number
   return Math.max(area, 0);
 }
 
-/** Height at a ground point: extrusion part containing the point, else tallest part on footprint. */
 export function landmarkHeightAtPoint(building: BuildingFeat, at: Pt): number {
   const parts = building.extrusionParts;
   if (parts?.length) {
@@ -22,10 +21,6 @@ export function landmarkHeightAtPoint(building: BuildingFeat, at: Pt): number {
   return effectiveBuildingHeightM(building);
 }
 
-/**
- * Building whose footprint contains the point. Overlaps: prefer tallest mass at the point,
- * then larger footprint (DAM-style disambiguation).
- */
 export function pickBuildingAtPoint(
   buildings: BuildingFeat[],
   lat: number,

@@ -67,7 +67,6 @@ export const SITE_LAYER_ORDER = [
 
 export const FIGURE_LAYER_ORDER = ["Frame", "Buildings", "Paths", "Sun path", "Annotation"] as const;
 
-/** Sheet colour. A path or rail casing uses this so it vanishes on the page and reads on the road fill. */
 function fillOf(name: ColourKey): Rgb {
   return hexRgb(getColour(name));
 }
@@ -221,12 +220,6 @@ function frameStroke(layout: SheetLayout, style: StrokeStyle): PdfChunk {
   };
 }
 
-/**
- * Site-plan layers. Colours, weights, and dashes come from `style`, which
- * `readDrawingStyle` fills from `getComputedStyle(document.documentElement)`
- * at export time. That computed style is the drawing-style.css cascade, plus
- * any inline variables the Line styles editor has set.
- */
 function pathStrip(polygons: Pt[][][], model: CityModel, layout: SheetLayout, style: LineStyles): PdfChunk | null {
   const rings = polygons.flatMap((polygon) => mapRings(polygon, model.sideM, layout));
   if (rings.length === 0) return null;
@@ -255,14 +248,9 @@ export type SitePlanExportOptions = {
   highlightManual?: boolean;
   colourBySource?: boolean;
   wind?: { table: import("./windRose").WindRoseTable; period: import("./windRose").WindPeriodId } | null;
-  /**
-   * Sun study: one shadow layer per hour ("Shadow 09:00" …), each at the study opacity, in place
-   * of the single Shadows layer. Rings are the plan shadows already computed for the screen.
-   */
   sunStudy?: { layers: { hour: number; rings: Ring[][] }[] } | null;
 };
 
-/** Layer name for one sun-study hour, e.g. 9 -> "Shadow 09:00". */
 export function sunStudyLayerName(hour: number): string {
   return `Shadow ${String(hour).padStart(2, "0")}:00`;
 }
@@ -403,7 +391,6 @@ export function sitePlanChunks(
       })),
     });
   }
-  // NSW mode only (model.nsw); Victorian sheets get no NSW chunks.
   const nswChunks = nswPlanChunks(model, layout);
   const roadRings = plan.roadFill.flatMap((polygon) => mapRings(polygon, model.sideM, layout));
   const blockFill = plan.blocks
@@ -565,7 +552,6 @@ export function sitePlanChunks(
   return chunks;
 }
 
-/** A paper casing under the stroke, so the line still shows on the dark road fill. */
 function casedLine(ring: number[][], style: StrokeStyle, drawn: Partial<PdfPath>): PdfPath[] {
   const casing = haloMm(style.mm);
   const line: PdfPath = { rings: [ring], close: false, ...drawn, cap: "round", join: "round" };
@@ -615,7 +601,6 @@ export function sitePlanLayerOrder(chunks: PdfChunk[]): string[] {
     const at = order.indexOf("Contours");
     order.splice(at + 1, 0, "Contour labels");
   }
-  // NSW layers only when the sheet has them, so Victorian layer lists are unchanged.
   const nsw = NSW_SITE_LAYERS.filter((name) => chunks.some((chunk) => chunk.name === name));
   if (nsw.length > 0) {
     const under = nsw.filter((name) => name === "NSW zoning" || name === "NSW road corridors");
@@ -627,7 +612,6 @@ export function sitePlanLayerOrder(chunks: PdfChunk[]): string[] {
   return order;
 }
 
-/** PDF/OCG site plan, the default .ai export. */
 export async function sitePlanPdf(
   model: CityModel,
   scale: number,
@@ -654,7 +638,6 @@ export async function figureGroundPdf(
   );
 }
 
-/** Layered SVG site plan: the same layers and paint order as the .ai. */
 export async function sitePlanSvg(
   model: CityModel,
   scale: number,
@@ -667,7 +650,6 @@ export async function sitePlanSvg(
   return buildLayeredSvg(layout.pageWidthMm, layout.pageHeightMm, chunks, sitePlanLayerOrder(chunks));
 }
 
-/** Layered SVG figure-ground. */
 export async function figureGroundSvg(
   model: CityModel,
   scale: number,
@@ -684,7 +666,6 @@ export async function figureGroundSvg(
   );
 }
 
-/** Illustrator 8 EPS site plan. Opt-in with VITE_CITYCUT_AI_NATIVE=true. */
 export function sitePlanAi8(
   model: CityModel,
   scale: number,

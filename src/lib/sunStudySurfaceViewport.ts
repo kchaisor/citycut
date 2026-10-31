@@ -61,7 +61,6 @@ function applyMaterialViewportTint(mesh: THREE.Mesh, material: THREE.MeshStandar
   applyMatteFinish(material);
 }
 
-/** Remember terrain vertex colours and ground material colours before any sun-study tint. */
 export function snapshotSunStudySurfaceColors(root: THREE.Object3D): void {
   root.traverse((object) => {
     const mesh = object as THREE.Mesh;
@@ -71,7 +70,6 @@ export function snapshotSunStudySurfaceColors(root: THREE.Object3D): void {
   });
 }
 
-/** White ground, roads, and parks during sun study; water uses --water-sunpath. Buildings stay separate. */
 export function applySunStudySurfaceTint(root: THREE.Object3D, sunStudyOn: boolean): void {
   root.traverse((object) => {
     const mesh = object as THREE.Mesh;
@@ -84,7 +82,6 @@ export function applySunStudySurfaceTint(root: THREE.Object3D, sunStudyOn: boole
   });
 }
 
-/** Resolve the viewport tint for tests. */
 export function sunStudyViewportFill(meshName: string, sunStudyOn: boolean): string | null {
   if (!sunStudyOn) return null;
   if (meshName === "Water") return getColour("--water-sunpath");
@@ -92,7 +89,6 @@ export function sunStudyViewportFill(meshName: string, sunStudyOn: boolean): str
   return null;
 }
 
-/** Refresh non-building surface, tree, and transport colours in-place from current CSS colour tokens. */
 export function refreshSceneSurfaceColors(root: THREE.Object3D): void {
   const groundFill = getColour("--ground-fill");
   const blockFill = getColour("--block-fill");

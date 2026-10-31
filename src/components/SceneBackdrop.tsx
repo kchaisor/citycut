@@ -5,35 +5,23 @@ import * as THREE from "three";
 import { themeColor } from "../lib/themeColor";
 import { markScreenOnly } from "../lib/screenOnly";
 
-/**
- * Flat sky for the 3D view: one --viewport-bg colour, no gradient (Kelvin, Oct 2026).
- * Set as scene.background, so the camera and picking are untouched. PNG export swaps
- * scene.background for its flat backdrop (capturePng), so downloads keep it.
- */
-export function GradientSky({ colourTick, fallback }: { colourTick: number; fallback: string }) {
+export function StudioSky({ colourTick, fallback }: { colourTick: number; fallback: string }) {
   const scene = useThree((state) => state.scene);
   const gl = useThree((state) => state.gl);
   useEffect(() => {
     const previous = scene.background;
-    const colour = new THREE.Color(themeColor("--viewport-bg", fallback));
-    scene.background = colour;
-    gl.setClearColor(colour, 1);
+    scene.background = null;
+    gl.setClearColor(new THREE.Color(themeColor("--viewport-bg", fallback)), 0);
     return () => {
-      if (scene.background === colour) scene.background = previous;
+      if (scene.background === null) scene.background = previous;
     };
   }, [scene, gl, colourTick, fallback]);
   return null;
 }
 
-/** Spacing of the ground grid (m) and how far it reaches past the cut, in cut widths. */
 const GRID_STEP_M = 50;
 const GRID_REACH = 4;
 
-/**
- * A thin grid plane under and around the site, fading with distance. It sits just below the
- * lowest ground (no z-fighting), shows past the cut edges, and is screen-only: hidden in PNG
- * exports, and never part of the .3dm or .ai (those are built from the model, not the scene).
- */
 export function GroundGrid({ sideM, groundY, colourTick }: { sideM: number; groundY: number; colourTick: number }) {
   const object = useMemo(() => {
     const reach = sideM * GRID_REACH;
@@ -72,9 +60,6 @@ export function GroundGrid({ sideM, groundY, colourTick }: { sideM: number; grou
     markScreenOnly(lines);
     return lines;
   }, [sideM, colourTick]);
-  // Floor grid only in the 3D perspective / isometric views: hidden whenever the camera looks
-  // (near) straight down, as in Plan north and the top-down site-plan framing, so plan-type
-  // views never show it.
   const forward = useMemo(() => new THREE.Vector3(), []);
   useFrame(({ camera }) => {
     camera.getWorldDirection(forward);
@@ -86,17 +71,9 @@ export function GroundGrid({ sideM, groundY, colourTick }: { sideM: number; grou
     object.geometry.dispose();
     (object.material as THREE.Material).dispose();
   }, [object]);
-  // Half a metre below the lowest ground of the cut: under the terrain drape and site base.
   return <primitive object={object} position={[0, groundY - 0.5, 0]} />;
 }
 
-/**
- * Floating mock: the canvas runs full width under the floating sidebar. R3F still sizes and
- * frames against the visible area right of the controls (the .fill box), so every fit, zoom
- * and camera position/target is exactly what it was. The drawing buffer is widened to the
- * left by the sidebar width and the camera gets a projection view offset of the same amount,
- * which adds the extra strip without moving or rescaling anything.
- */
 export function ViewInset() {
   const gl = useThree((state) => state.gl);
   const size = useThree((state) => state.size);
@@ -127,7 +104,6 @@ export function ViewInset() {
   return null;
 }
 
-/** Pointer events against the full-width canvas, so raycasts match the offset projection. */
 export function insetPointerEvents(store: Parameters<typeof createPointerEvents>[0]): EventManager<HTMLElement> {
   const base = createPointerEvents(store);
   return {

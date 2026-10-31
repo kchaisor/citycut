@@ -1,6 +1,3 @@
-/**
- * Full Create-model fetch path (1 km CBD, default map layers). Run: npx vite-node scripts/bench-create-full.mjs
- */
 import { fetchComTrees } from "../src/lib/comTrees.ts";
 import { fetchTerrainForCut } from "../src/lib/fetchTerrain.ts";
 import { squareBBox } from "../src/lib/geo.ts";

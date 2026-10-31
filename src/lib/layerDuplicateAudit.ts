@@ -33,7 +33,6 @@ export type DuplicateAuditCounts = {
   duplicateBuildingPairs: { a: number; b: number; iou: number }[];
 };
 
-/** Fail when two kept footprints overlap heavily (IoU > 0.5). */
 export function findDuplicateBuildingPairs(
   buildings: BuildingFeat[],
   threshold = 0.5,
@@ -133,14 +132,6 @@ function partBBox(part: MeshPart): [number, number, number, number] {
   return [minX, minY, maxX, maxY];
 }
 
-/**
- * Every extruded building mesh starts at the ground, so two meshes whose footprints overlap
- * draw the same volume twice (doubled walls, z-fighting, duplicate .3dm solids). Counts
- * overlapping mesh pairs inside one building (stacked CoM components, any overlap over
- * `minOverlapM2`) and across buildings (a mesh of one building covering at least half of a mesh
- * of another, i.e. the same mass drawn by two buildings). Edge slivers where neighbouring
- * Overture outlines touch are reported separately as `acrossBuildingSlivers`.
- */
 export function buildingMeshOverlaps(
   buildings: BuildingFeat[],
   minOverlapM2 = 0.5,
@@ -193,7 +184,6 @@ export function buildingMeshOverlaps(
   };
 }
 
-/** Building meshes per building id in the split (viewport / .3dm) group. */
 export function countBuildingMeshesById(model: CityModel): Map<number, number> {
   const group = buildCityGroup(model, { splitBuildings: true });
   const counts = new Map<number, number>();

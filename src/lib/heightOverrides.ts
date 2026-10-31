@@ -11,7 +11,6 @@ export const HEIGHT_OVERRIDES_VERSION = 1 as const;
 export type HeightOverride = {
   overtureId?: string;
   osmWayIds?: number[];
-  /** Footprint centroid in WGS84. */
   centroid: [number, number];
   areaM2: number;
   heightM: number;
@@ -29,9 +28,7 @@ export type KeyValueStore = {
 };
 
 export type MatchOverridesResult = {
-  /** Building id → override that applies to it. */
   matched: Map<number, HeightOverride>;
-  /** Overrides with no building in this frame. */
   unmatchedCount: number;
 };
 
@@ -120,7 +117,6 @@ export function writeStoredHeightOverrides(storage: KeyValueStore, store: Height
   try {
     storage.setItem(HEIGHT_OVERRIDES_STORAGE_KEY, JSON.stringify(store));
   } catch {
-    // Private mode can reject localStorage.
   }
 }
 
@@ -138,7 +134,6 @@ export function writeStoredShowManualHeights(storage: KeyValueStore, show: boole
   try {
     storage.setItem(SHOW_MANUAL_HEIGHTS_STORAGE_KEY, show ? "true" : "false");
   } catch {
-    // Private mode can reject localStorage.
   }
 }
 
@@ -155,7 +150,6 @@ function overridesEqual(a: HeightOverride, b: HeightOverride): boolean {
   return Math.abs(a.areaM2 - b.areaM2) / ref <= AREA_TOLERANCE;
 }
 
-/** Merge imported overrides into an existing store, replacing duplicates. */
 export function mergeHeightOverrideStores(
   base: HeightOverrideStore,
   incoming: HeightOverrideStore,
@@ -196,7 +190,6 @@ function areaWithinTolerance(areaM2: number, building: BuildingFeat): boolean {
   return Math.abs(areaM2 - area) / ref <= AREA_TOLERANCE;
 }
 
-/** Match each override to at most one building and each building to at most one override. */
 export function matchOverridesToBuildings(
   buildings: BuildingFeat[],
   overrides: HeightOverride[],
@@ -356,7 +349,6 @@ export function appendManualHeightCredit(note: string, count: number): string {
   return `${note} ${fragment.charAt(0).toUpperCase()}${fragment.slice(1)}.`;
 }
 
-/** Stable fingerprint for cache keys and blast-radius checks. */
 export function buildingHeightsFingerprint(buildings: BuildingFeat[]): string {
   const parts: string[] = [];
   for (const building of buildings) {

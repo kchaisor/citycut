@@ -1,7 +1,3 @@
-/*
-  Floating UI mock (style only): controls float over the canvas with no solid sidebar.
-  Tokens are hex. Accent stays #FFF500 with dark ink.
-*/
 :root {
   --float-grad-top: #F3F3F4;
   --float-grad-bottom: #CFD1D5;
@@ -10,18 +6,15 @@
   --float-line: #1A1916;
   --float-tile-line: #9A9CA1;
   --float-hover: #FFFFFF;
-  /* Text over the map and gradients is plain ink. */
-  /* No text halos or outlines anywhere in the UI (Kelvin): text is plain ink. */
   --float-label-on-map: var(--sidebar-text);
   --grid-cross: #1A1916;
-  --grid-cross-opacity: 0.7; /* fully faded-in crosses; levels fade from 0 up to this */
-  --grid-cross-arm: 4.2px; /* half the cross width: 4.2 px arms make an 8.4 px cross */
+  --grid-cross-opacity: 0.7;
+  --grid-cross-arm: 4.2px;
 
   --sidebar-bg: transparent;
   --sidebar-hairline: transparent;
   --sidebar-hover: #FFFFFF99;
   --model-bg: #DCDDE0;
-  /* v3: one vertical grey gradient for the landing map tint and the 3D sky. */
   --model-grad-top: #F2F2F3;
   --model-grad-bottom: #B9BDC4;
   --map-tint-top: #FFFFFF;
@@ -32,16 +25,15 @@
 
 .app { background: var(--sidebar-grey); }
 .model .viewport { background: var(--viewport-bg); }
+.model .viewport:not(.is-drawing):not(.is-satellite) {
+  background: linear-gradient(180deg, var(--viewport-studio-top) 0%, var(--viewport-bg) 55%, var(--viewport-studio-bottom) 100%);
+}
 .sidebar { --muted-text: var(--sidebar-text); color: var(--sidebar-text); }
-/* Model sidebar: plain black text, no halo, over the gradient, 3D, drawing and satellite. */
 @media (min-width: 641px) {
   .model .sidebar { text-shadow: none; }
   .model .sidebar * { text-shadow: none; }
 }
 
-/* v3 landing map: muted greyscale streets under a screen-space vertical grey gradient.
-   The tint multiplies, so white streets take the gradient and labels stay dark; it never
-   takes pointer events. Satellite is untouched. */
 .map-canvas-muted { filter: grayscale(1) contrast(1.04); }
 .map-tint {
   position: absolute;
@@ -52,18 +44,14 @@
   mix-blend-mode: multiply;
 }
 
-/* No solid panel: brand bar, rail and panel are transparent and borderless. */
 .sidebar-brand-bar,
 .sidebar-rail.icon-rail,
 .sidebar-panel { background: transparent; border: 0; }
 .sidebar-brand:hover, .sidebar-brand:focus-visible { background: transparent; border: 0; border-radius: 0; box-shadow: none; color: inherit; }
 
-/* Landing (desktop): the map runs under the controls, which float directly on it with no
-   backdrop and centres the cut frame on the window. Readability comes from slightly heavier
-   ink only: no text halo or outline (Kelvin). */
 @media (min-width: 641px) {
   .select > .map-wrap { left: 0; }
-  /* Same panel fill as the 3D view sidebar (--panel-3d-bg, below). */ .select .select-chrome { padding: 12px 0 12px 12px; box-sizing: border-box; background: var(--panel-3d-bg); }
+ .select .select-chrome { padding: 12px 0 12px 12px; box-sizing: border-box; background: var(--panel-3d-bg); }
   .select .sidebar {
     color: var(--float-ink);
     font-weight: 560;
@@ -82,7 +70,6 @@
   .select .search input { color: var(--float-ink); }
   .select .search input::placeholder { color: var(--float-label-on-map); }
   .select .rail-btn svg { stroke-width: 1.5; }
-  /* Filled pills keep their own fill; no halo on them. */
   .select .rail-btn.is-active svg, .select .shape-btn.on, .select .sidebar-primary { filter: none; text-shadow: none; }
 }
 @media (max-width: 640px) {
@@ -91,14 +78,11 @@
   }
 }
 
-/* Thin line icons, plain items. */
 .sidebar .rail-btn { color: var(--float-ink); border-radius: 999px; }
 .sidebar .rail-btn svg { stroke-width: 1.25; }
 .sidebar .rail-btn:hover { background: var(--sidebar-hover); }
-/* Selected item: solid accent pill with dark ink, no outline. */
 .sidebar .rail-btn.is-active { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
 
-/* Small light-grey section labels; main tab headers (h2) are slightly larger. */
 .sidebar-head h2 {
   font-size: 16px;
   line-height: 22px;
@@ -119,7 +103,6 @@
 .sidebar-hero, .sidebar-group, .sidebar-foot { border-color: transparent; }
 .sidebar-body { padding-top: 4px; }
 
-/* Thin 1px outline square tiles; selected = accent pill. */
 .shape-btn,
 .sidebar .segmented button,
 .sidebar .plan-switch button,
@@ -146,7 +129,6 @@
   box-shadow: none;
 }
 
-/* Inputs: a hairline under the text instead of a box. */
 .search input,
 .sidebar select {
   background: transparent;
@@ -155,35 +137,28 @@
   border-radius: 0;
 }
 
-/* Thin slider lines. */
 input[type="range"]::-webkit-slider-runnable-track { height: 1px; background: var(--float-line); }
 input[type="range"]::-moz-range-track { height: 1px; background: var(--float-line); }
 input[type="range"]::-webkit-slider-thumb { width: 18px; height: 3px; margin-top: -1px; border-radius: 0; border: 0; box-shadow: none; background: var(--float-ink); }
 input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius: 0; border: 0; background: var(--float-ink); }
 
-/* Primary action (Create model / Export model): ink pill. */
 .sidebar-primary { border-radius: 999px; background: var(--float-ink); color: #FFFFFF; }
 
 
-/* v4: one continuous background. The 3D canvas runs under the controls (ViewInset); the
-   drawing and satellite panes stay in the visible area and let the viewport gradient show. */
 @media (min-width: 641px) {
   .model .viewport > .fill { overflow: visible; }
   .model .viewport .scene-viewport { overflow: visible; }
 }
 @media (min-width: 641px) {
-  /* Drawing panes keep their framing in the visible area; the viewport gradient shows through. */
   .model .viewport .plan,
   .model .viewport .plan.figure-ground,
   .model .viewport .plan.exploded-axo,
   .model .viewport .plan.isometric-drawing { background: transparent; }
 }
 @media (min-width: 641px) {
-  /* The view-wide paper rect of a drawing; the frame-sized paper inside it stays. */
   .model .viewport .plan > rect:first-of-type { fill: transparent; }
 }
 
-/* PR tweaks (Kelvin): all UI text pure black; no track behind segmented groups; bigger brand. */
 .sidebar-host, .select-chrome {
   --text: #000000;
   --muted-text: #000000;
@@ -202,8 +177,6 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 .sidebar-brand { font-size: calc(var(--font-size-brand) * 1.22); }
 .sidebar-brand-mark svg { transform: scale(1.22); }
 
-/* #103 Hide buildings and #104 Import tab in the floating style: thin tiles, accent pills,
-   hairline inputs, no boxes. */
 .sidebar .massing-mode { gap: 6px; }
 .sidebar .massing-mode button,
 .sidebar .hide-buildings-block button,
@@ -232,10 +205,6 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 }
 .sidebar .massing-warning { background: transparent; }
 
-/* Model view: the left and right sidebar panels sit over 3D, drawing and satellite views,
-   so both get an opaque panel background across every model tab. The 3D canvas still runs
-   under the panel (view offset unchanged), and .fill bounds the visible stage between both
-   sidebars so drawings, satellite and 3D stay centred in the visible area. */
 :root {
   --panel-3d-bg: var(--sidebar-grey);
   --panel-3d-line: #00000014;
@@ -261,14 +230,11 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 }
 .building-detail-panel header { border-bottom-color: var(--panel-3d-line); }
 
-/* Phone landing: the map runs under the bottom sheet too, so the cut frame centres on the
-   whole window (Kelvin, PR 112); attribution stays visible above the sheet. */
 @media (max-width: 640px) {
   .select > .map-wrap { bottom: 0; }
   .select > .map-wrap .map-attribution { bottom: var(--sidebar-h); }
 }
 
-/* Sun study player (Sun section). Accent pills, black ink, no extra chrome. */
 .sun-study { display: grid; gap: 10px; padding: 4px 0 14px; color: #000000; }
 .sun-study-dates, .sun-study-speed { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
 .sun-study-date { margin-left: auto; font: inherit; font-size: 12px; color: #000000; background: transparent; border: 0; border-bottom: 1px solid #00000033; padding: 2px 0; }
@@ -289,13 +255,9 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 .sun-study-foot { display: flex; }
 .sun-study-time { font-size: 12px; }
 
-/* Sun tab: key-date cards, assessment presets, typed time (Kelvin, Oct 2026). Hex lives in colours.css. */
-/* Values ported 1:1 from the approved mock-up (/workspace/mock.html). */
 .sun-study-kicker { margin: 14px 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; line-height: normal; color: var(--sidebar-text); }
 .sun-study > .sun-study-kicker + * { margin-top: -10px; }
 .sun-study-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-/* 320px panel (Kelvin): the Sun tab uses 12px of the panel's 24px side padding so the cards stay near-square. */
-/* All sidebar tabs now share uniform 12px horizontal padding. */
 .sun-study-presets { grid-template-columns: 1fr 1fr; }
 .sidebar .sun-study-card {
   all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px;
@@ -319,11 +281,9 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 .sidebar .sun-study-speed .shape-btn { width: 100%; height: 30px; line-height: 30px; padding: 0; font-size: 12px; border-radius: 8px; background: var(--sun-card-bg); border: 1px solid var(--sun-card-border); color: var(--sidebar-text); }
 .sidebar .sun-study-speed .shape-btn.on { font-weight: 600; background: var(--accent); border-color: var(--sun-card-on-border); }
 .sun-study *, .sidebar-new-cut { text-shadow: none; filter: none; }
-/* New cut reads as a button: accent fill, black border. */
 .sidebar .sidebar-new-cut { background: var(--accent); color: var(--sidebar-text); border: 1px solid var(--sun-card-on-border); border-radius: 8px; padding: 6px 12px; font-weight: 600; cursor: pointer; }
 .sidebar .sidebar-new-cut:hover { background: var(--accent-hover); }
 
-/* View section: walk viewshed (Kelvin, Oct 2026). Hex lives in colours.css (--view-*). Desktop only. */
 .view-walk-hint { margin: 0; }
 .view-walk-actions, .view-walk-radius { display: flex; gap: 6px; flex-wrap: wrap; }
 .view-walk-field { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: var(--sidebar-text); }
@@ -342,7 +302,6 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 .view-walk-speed { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .sidebar .view-walk-speed .shape-btn { width: 100%; height: 30px; padding: 0; font-size: 12px; border-radius: 8px; }
 
-/* Selected sun study hour: its own token (--sun-hour-on, #FFF500), fill only, no glow. */
 .sidebar .solar-hour[aria-pressed="true"] {
   background: var(--sun-hour-on);
   border-color: var(--sun-card-on-border);
@@ -350,7 +309,6 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
   box-shadow: none;
 }
 
-/* Recent searches under the place search (landing sidebar). Text only, no glow. */
 .search-history { margin-top: 12px; display: grid; gap: 4px; }
 .search-history-head { display: flex; align-items: center; justify-content: space-between; }
 .search-history-head .kicker { margin: 0; }
@@ -384,8 +342,6 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
   box-shadow: none;
 }
 
-/* Prevent browser text-selection blue highlights when dragging Exploded Axonometric layers,
-   viewport panes, or left/right sidebar tabs and panels; keep inputs selectable. */
 .model,
 .model .viewport,
 .plan-wrap,
@@ -411,12 +367,6 @@ textarea {
   -webkit-user-select: text;
 }
 
-
-/* ============================================================================
-   Variation B — Architectural Studio HUD (1:1 Port from render_variation_b_mocks.mjs)
-   Warm Stone & Ink tokens + Floating Top Header Islands + Left Tool Rail +
-   Compact Outliner + Compact Right Site Intelligence Card + Bottom Scrubber
-   ============================================================================ */
 
 :root {
   --bg-card: rgb(252 251 249 / 94%);
@@ -480,11 +430,6 @@ body,
   flex-shrink: 0;
 }
 
-/* ============================================================================
-   A. LANDING SCREEN (SelectChrome.tsx + MapStage.tsx)
-   ============================================================================ */
-
-/* 1. Top-Left Brand + CRS Pill */
 .select-chrome .top-left-brand.landing-brand-pill {
   position: fixed;
   top: 16px;
@@ -554,7 +499,6 @@ body,
   line-height: 1.2;
 }
 
-/* 2. Top-Center Omnibox + Quick/Recent Chips */
 .select-chrome .omnibox-stack.landing-omnibox-wrap {
   position: fixed;
   top: 16px;
@@ -729,7 +673,6 @@ body,
   cursor: pointer;
 }
 
-/* 3. Top-Right Basemap Switcher */
 .select-chrome .top-right-hud.landing-basemap-pill {
   position: fixed;
   top: 16px;
@@ -767,7 +710,6 @@ body,
   box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
 }
 
-/* 4. On-Canvas CAD Cut Frame (MapStage.tsx) */
 .select-map .frame {
   border: 2px dashed var(--ink);
   background: rgb(255 245 0 / 4%);
@@ -826,7 +768,6 @@ body,
   flex-shrink: 0;
 }
 
-/* 5. Bottom-Center Studio Workbench Dock */
 .select-chrome .bottom-workbench.landing-workbench-dock {
   position: fixed;
   bottom: 18px;
@@ -1067,11 +1008,6 @@ body,
   filter: brightness(0.98);
 }
 
-/* ============================================================================
-   B. MODEL SCREEN (ModelPage.tsx + Sidebar.tsx)
-   ============================================================================ */
-
-/* 1. 3 Separate Floating Top Header Islands (top: 14px, height: 42px) */
 .model .top-bar-left.studio-header-left {
   position: fixed;
   top: 14px;
@@ -1174,7 +1110,6 @@ body,
   color: var(--ink);
 }
 
-/* Island 2 — Top-Center Mode + Camera/Projection Switcher */
 .model .top-bar-center.studio-header-center {
   position: fixed;
   top: 14px;
@@ -1266,7 +1201,6 @@ body,
   box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
 }
 
-/* Island 3 — Top-Right Status + Primary Export Actions */
 .model .top-bar-right.studio-header-right {
   position: fixed;
   top: 14px;
@@ -1352,7 +1286,6 @@ body,
   white-space: nowrap;
 }
 
-/* 2. Left Vertical Tool Rail (width: 52px at top: 68px; left: 14px) */
 .model .left-tool-rail.sidebar-rail,
 .model .left-tool-rail.sidebar-rail.icon-rail.hud-card {
   position: fixed;
@@ -1411,7 +1344,6 @@ body,
   color: var(--ink);
 }
 
-/* Compact 248px Left Outliner Card (top: 68px; left: 74px) */
 .model .left-outliner.sidebar-panel,
 .model .left-outliner.sidebar-panel.hud-card {
   position: fixed;
@@ -1565,7 +1497,6 @@ body,
   width: 100%;
 }
 
-/* Scene Layers Compact Single-Row Outliner */
 .model .left-outliner .outliner-rows {
   display: flex;
   flex-direction: column;
@@ -1664,7 +1595,6 @@ body,
   cursor: pointer;
 }
 
-/* Keep required test selectors for Drawing / Isometric / Exploded Axo */
 .model .sidebar-panel .plan-switch {
   display: flex;
   flex-wrap: nowrap;
@@ -1704,7 +1634,6 @@ body,
   gap: 6px;
 }
 
-/* 3. Right Compact SITE INTELLIGENCE Card (width: 268px at top: 68px; right: 14px) */
 .model .right-inspector {
   position: fixed;
   top: 68px;
@@ -1902,7 +1831,6 @@ body,
   display: none;
 }
 
-/* 4. Bottom-Center Solar & Camera Scrubber Bar */
 .model .bottom-bar.studio-solar-bar {
   position: fixed;
   bottom: 14px;
@@ -1965,6 +1893,14 @@ body,
   border-color: var(--ink);
 }
 
+.model .bottom-bar .h-tick.studio-quality-tick {
+  width: auto;
+  padding: 0 9px;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .model .bottom-bar .solar-readout {
   font-family: var(--mono);
   font-size: 11px;
@@ -2018,7 +1954,6 @@ body,
 }
 
 
-/* Alias rules matching exact JSX class names in ModelPage.tsx & Sidebar.tsx */
 .model .top-bar-left .place-chip.studio-breadcrumb-place {
   font-family: var(--sans);
   font-size: 12.5px;
@@ -2183,7 +2118,6 @@ body,
 }
 
 
-/* Right Inspector exact class rules matching ModelPage.tsx */
 .model .drawer-section[hidden] {
   display: none !important;
 }
@@ -2280,7 +2214,6 @@ body,
 }
 
 
-/* Exact class aliases for MapStage.tsx and SelectChrome.tsx */
 .select .map-wrap .frame {
   border: 2px dashed var(--ink) !important;
   background: rgb(255 245 0 / 4%) !important;
@@ -2427,7 +2360,6 @@ body,
 }
 
 
-/* Exact class rules for Sidebar.tsx in ModelPage */
 .model .top-bar-left .sidebar-brand-mark.brand-mark-sm {
   width: 27px !important;
   height: 27px !important;
@@ -2601,9 +2533,6 @@ body,
 }
 
 
-/* ============================================================================
-   VARIATION B STUDIO HUD — 1:1 MOCKUP COLLISION OVERRIDES
-   ============================================================================ */
 :root {
   --sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
   --font-sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -2617,7 +2546,6 @@ body,
   --hud-zone-orange: #D97724;
 }
 
-/* 1. Image 01 — Zero-footprint sidebar containers on Model Page */
 .model .viewport > .sidebar-host,
 .model .sidebar,
 .model .sidebar-brand-bar,
@@ -2645,7 +2573,6 @@ body,
   border: 0 !important;
 }
 
-/* 2. Image 02 vs 03 — Left Display Outliner Card (.left-outliner) 1:1 */
 .model .left-outliner .style-seg,
 .model .left-outliner .style-seg.seg-mini {
   display: grid !important;
@@ -2848,7 +2775,6 @@ body,
   box-sizing: border-box !important;
 }
 
-/* 3. Image 04 — Top-Center & Top-Right Header Islands */
 .model .top-bar-center .mode-group,
 .model .top-bar-center .tabs.mode-group {
   margin: 0 !important;
@@ -3001,7 +2927,6 @@ body,
   align-items: center !important;
 }
 
-/* 4. Image 05 — Right SITE INTELLIGENCE Card (.right-inspector) 1:1 */
 .model .right-inspector .kpi-cell {
   background: var(--hud-kpi-bg) !important;
   border: 0 !important;
@@ -3079,7 +3004,6 @@ body,
   flex: none !important;
 }
 
-/* 5. Image 06 — Landing Page (SelectChrome.tsx & MapStage.tsx) 1:1 */
 .select .omnibox-stack .omnibox,
 .select .omnibox.search,
 .select-chrome .omnibox.landing-omnibox {
@@ -3220,7 +3144,6 @@ body,
   padding: 0 9px !important;
 }
 
-/* 6. Drawing sub-tabs + 2D Drawing viewport bottom clearance */
 .model .viewport > .fill.is-plan {
   padding-top: 64px !important;
   padding-bottom: 72px !important;
@@ -3282,17 +3205,11 @@ body,
 }
 
 
-/* ============================================================================
-   7. DIRECTION A — CONTEXTUAL 2-ROW ENVIRONMENTAL CONSOLE & ZERO LEFT DRAWER
-   ============================================================================ */
-
-/* Hide the left floating outliner drawer when Analysis is active */
 .model .left-outliner[data-active-section="analysis"],
 .model .left-outliner[hidden] {
   display: none !important;
 }
 
-/* Smooth Studio HUD perimeter island entrance (Beat 4 after 2D->3D tilt + extrude) */
 .model .top-bar,
 .model .top-bar-left,
 .model .top-bar-center,
@@ -3340,7 +3257,6 @@ body,
   }
 }
 
-/* Beat 2 (Phase A) & Beat 3 (Phase B): Cut boundary loop, outer dim & Landing chrome fade */
 .select .omnibox-stack,
 .select .bottom-workbench,
 .select .sidebar-brand-bar,
@@ -3406,10 +3322,6 @@ body,
   will-change: opacity;
 }
 
-/* Phase B (2D -> 3D tilt): fade the moving dashed cut boundary out early in the tilt.
-   A CSS opacity transition on the perimeter container runs on the compositor, so it
-   finishes in ~550ms wall time even if the main thread is busy compiling the 3D scene,
-   and the boundary is fully gone long before the 3.50s tilt settles. */
 .select .map-wrap .frame.is-fading-out .frame-loop-perimeter {
   opacity: 0;
   transition: opacity 450ms cubic-bezier(0.4, 0, 0.2, 1) 100ms;
@@ -3560,16 +3472,11 @@ body,
   opacity: 1;
 }
 
-/* Keep the cut's 2% ink fill and the outer 8% ink veil identical to the select screen
-   through Phase A and B, so the map tone inside the dashed box does not brighten before
-   the 3D tilt. */
 .select.is-handoff-underlay:not(.is-fading-out) .map-wrap .frame {
   background: color-mix(in srgb, var(--ink) 2%, transparent) !important;
   box-shadow: 0 0 0 9999px color-mix(in srgb, var(--ink) 8%, transparent) !important;
 }
 
-/* Once the tilt starts, the cut window takes the same 8% ink veil as the map around it
-   (150ms), so no separate, lighter inner plan shows under the tilting 3D slab. */
 .select.is-handoff-underlay.is-fading-out .map-wrap .frame {
   border-color: transparent !important;
   background: color-mix(in srgb, var(--ink) 8%, transparent) !important;
@@ -3608,7 +3515,6 @@ body,
   background: transparent !important;
 }
 
-/* Studio HUD Dark #141413 Loading Pill on Beat 2 & Beat 3 */
 .loading-hud-pill,
 .loading-card.loading-hud-pill {
   position: absolute !important;
@@ -3736,7 +3642,6 @@ body,
   flex-shrink: 0;
 }
 
-/* Contextual 2-Row Bottom Environmental Console */
 .model .bottom-bar.env-console {
   position: fixed !important;
   bottom: 12px !important;
@@ -3809,7 +3714,6 @@ body,
   color: var(--accent) !important;
 }
 
-/* Center live telemetry */
 .model .bottom-bar.env-console .solar-telemetry {
   display: inline-flex !important;
   align-items: center !important;
@@ -3849,7 +3753,6 @@ body,
   opacity: 0.55 !important;
 }
 
-/* Scene overlay chips */
 .model .bottom-bar.env-console .overlay-chips {
   display: inline-flex !important;
   align-items: center !important;
@@ -3902,7 +3805,6 @@ body,
   flex-shrink: 0 !important;
 }
 
-/* Row 2: Presets + Play + Daylight Horizon Scrubber */
 .model .bottom-bar.env-console .env-bottom-row {
   display: flex !important;
   align-items: center !important;
@@ -4110,7 +4012,6 @@ body,
   font-variant-numeric: tabular-nums !important;
 }
 
-/* Wind speed scale chips inside Row 2 */
 .model .bottom-bar.env-console .wind-console-bar,
 .model .bottom-bar.env-console .view-console-bar {
   justify-content: space-between !important;
@@ -4137,7 +4038,6 @@ body,
   font-variant-numeric: tabular-nums !important;
 }
 
-/* Ensure numeric readouts across Studio HUD use tabular-nums */
 .kpi-val,
 .card-meta,
 .layer-meta,
@@ -4150,9 +4050,6 @@ body,
   font-variant-numeric: tabular-nums !important;
 }
 
-/* ============================================================================
-   8. SITE INTELLIGENCE PANEL (.right-inspector) — ZERO GREY BORDER & ZERO INNER GREY FILL
-   ============================================================================ */
 .model .right-inspector,
 .model .right-inspector.hud-card {
   background: var(--bg-card) !important;
@@ -4223,7 +4120,6 @@ body,
   cursor: progress !important;
 }
 
-/* Studio HUD Reset colours button in SCENE LAYERS header */
 .model .outliner-section .studio-layer-head-actions {
   display: inline-flex !important;
   align-items: center !important;
@@ -4251,7 +4147,6 @@ body,
   border-color: var(--ink) !important;
 }
 
-/* Studio HUD Drawing Display outliner scale row */
 .model .outliner-section .studio-scale-row {
   display: flex !important;
   align-items: center !important;
@@ -4285,4 +4180,151 @@ body,
   font-size: 10.5px !important;
   line-height: 1.35 !important;
   color: var(--hud-muted-2) !important;
+}
+
+@media (min-width: 641px) {
+  .command-bar-backdrop,
+  .shortcut-cheatsheet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 72px 16px 16px;
+    background: rgb(20 20 19 / 28%);
+  }
+
+  .command-bar {
+    width: min(560px, 100%);
+    border-radius: 12px;
+    overflow: hidden;
+    pointer-events: auto;
+  }
+
+  .command-bar-field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border-outer);
+    color: var(--ink-muted);
+  }
+
+  .command-bar-input {
+    flex: 1;
+    border: 0;
+    background: transparent;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--ink);
+    outline: none;
+  }
+
+  .command-bar-input::placeholder {
+    color: var(--ink-muted);
+  }
+
+  .command-bar-hint {
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    border: 1px solid var(--border-outer);
+    color: var(--ink-2);
+  }
+
+  .command-bar-results {
+    max-height: min(360px, 50vh);
+    overflow: auto;
+    padding: 6px;
+  }
+
+  .command-bar-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .command-bar-row:hover,
+  .command-bar-row.is-active {
+    background: rgb(20 20 19 / 6%);
+  }
+
+  .command-bar-row-meta {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--ink-muted);
+  }
+
+  .command-bar-note {
+    margin: 8px 10px;
+    font-size: 13px;
+    color: var(--ink-muted);
+  }
+
+  .shortcut-cheatsheet {
+    width: min(360px, 100%);
+    border-radius: 12px;
+    padding: 12px 14px 10px;
+    pointer-events: auto;
+  }
+
+  .shortcut-cheatsheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .shortcut-cheatsheet-close {
+    border: 0;
+    background: transparent;
+    font-size: 20px;
+    line-height: 1;
+    color: var(--ink-muted);
+    cursor: pointer;
+  }
+
+  .shortcut-cheatsheet-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+  }
+
+  .shortcut-cheatsheet-list li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--ink-2);
+  }
+
+  .shortcut-cheatsheet-list kbd {
+    min-width: 72px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border-outer);
+    background: rgb(20 20 19 / 4%);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink);
+    text-align: center;
+  }
 }

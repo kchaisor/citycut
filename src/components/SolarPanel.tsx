@@ -28,11 +28,8 @@ export function SolarPanel({
   settings: SolarViewSettings;
   onChange: (next: SolarViewSettings) => void;
   sideM: number;
-  /** When true, render inside the left drawer without the floating panel chrome. */
   embedded?: boolean;
-  /** Site lat/lon for the sun sweep. */
   site?: { lat: number; lon: number };
-  /** Buildings picked on the site plan for the sun study. */
   selectedCount?: number;
   onClearSelection?: () => void;
 }) {

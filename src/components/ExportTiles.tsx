@@ -1,11 +1,6 @@
 import { useState } from "react";
 import type { ExportTile, ExportTileId } from "../lib/exportTiles";
 
-/**
- * Export formats as a 2-column grid of tiles (app name + extension). Hover or focus shows the
- * description, or why a tile is disabled, in the line under the grid. Disabled tiles stay
- * focusable (aria-disabled) so the reason can be read.
- */
 export function ExportTiles({
   tiles,
   progress,
