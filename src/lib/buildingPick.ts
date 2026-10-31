@@ -7,6 +7,28 @@ export type BuildingPickHandlers = {
   onClearPick?: () => void;
 };
 
+export function pickBuildingIdAtClient(
+  canvas: HTMLCanvasElement,
+  camera: THREE.Camera,
+  root: THREE.Object3D,
+  clientX: number,
+  clientY: number,
+): number | null {
+  const rect = canvas.getBoundingClientRect();
+  const pointer = new THREE.Vector2(
+    ((clientX - rect.left) / rect.width) * 2 - 1,
+    -((clientY - rect.top) / rect.height) * 2 + 1,
+  );
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObject(root, true);
+  for (const hit of hits) {
+    const buildingId = buildingIdFromIntersection(hit);
+    if (buildingId != null) return buildingId;
+  }
+  return null;
+}
+
 export function buildingIdFromIntersection(intersection: THREE.Intersection): number | null {
   const object = intersection.object as THREE.Mesh;
   if (object.userData.buildingId != null) return Number(object.userData.buildingId);

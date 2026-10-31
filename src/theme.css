@@ -76,4 +76,10 @@
 
   --sidebar-rail-w: 56px;
   --sidebar-panel-w: 320px;
+
+  /* 3D anchored building lens card (dark fill, accent yellow edge). */
+  --anchored-lens-bg: #1A1916;
+  --anchored-lens-text: #FFFCF8;
+  --anchored-lens-muted: #8F897E;
+  --anchored-lens-edge: var(--accent);
 }

@@ -132,7 +132,10 @@ import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import { COM_TREES_CREDIT, COM_TREES_DATASET_URL } from "../lib/comTreesCredit";
 import { openRing, toLocal } from "../lib/geo";
-import { pointInPolygon } from "../lib/useCascade";
+import { interiorPoint, pointInPolygon } from "../lib/useCascade";
+import { sunHoursGrid } from "../lib/sunHours";
+import type { AnchoredLensActions, AnchoredLensMode } from "./AnchoredLens";
+import { LENS_HOVER_HIDE_MS } from "../lib/lensHoverTiming";
 import type { BuildingUse, CityModel } from "../types";
 import { BuildingHeightPopover, HeightOverridePanel, HiddenBuildingsPanel } from "./BuildingHeightPopover";
 import {
@@ -571,9 +574,14 @@ export function ModelPage({
     readStoredHiddenBuildings(window.localStorage),
   );
   const [hideSelection, setHideSelection] = useState<number[]>([]);
-  const [heightPick, setHeightPick] = useState<{ buildingId: number; clientX: number; clientY: number } | null>(
-    null,
-  );
+  const [heightPick, setHeightPick] = useState<{
+    buildingId: number;
+    clientX: number;
+    clientY: number;
+    pinned: boolean;
+  } | null>(null);
+  const [lensHoverTargetId, setLensHoverTargetId] = useState<number | null>(null);
+  const [lensHoverShownId, setLensHoverShownId] = useState<number | null>(null);
 
   const massing = useImportedMassing(model);
 
@@ -635,11 +643,134 @@ export function ModelPage({
         });
       },
       selectHeightEditBuilding(buildingId: number) {
-        setHeightPick({ buildingId, clientX: 640, clientY: 400 });
+        setHeightPick({ buildingId, clientX: 640, clientY: 400, pinned: true });
         return buildingId;
       },
+      openAnchoredLensForBuilding(buildingId: number) {
+        setHeightPick({ buildingId, clientX: 640, clientY: 400, pinned: true });
+        return buildingId;
+      },
+      getAnchoredLensMode(): AnchoredLensMode | null {
+        const card = document.querySelector("[data-anchored-lens=\"open\"]");
+        const mode = card?.getAttribute("data-anchored-lens-mode");
+        return mode === "hover" || mode === "pinned" ? mode : null;
+      },
+      getAnchoredLensScreenPosition() {
+        const layout = window.__citycutQaModel?.getAnchoredLensLayout?.();
+        if (!layout) return null;
+        return { x: layout.centerX, y: layout.centerY };
+      },
+      getAnchoredLensLayout() {
+        const card = document.querySelector("[data-anchored-lens=\"open\"]");
+        if (!card) return null;
+        const rect = card.getBoundingClientRect();
+        const width = Math.round(rect.width);
+        const height = Math.round(rect.height);
+        const centerX = Math.round(rect.left + rect.width / 2);
+        const centerY = Math.round(rect.top + rect.height / 2);
+        const onScreen =
+          width >= 220 &&
+          height >= 96 &&
+          rect.bottom > 72 &&
+          rect.top < window.innerHeight - 48 &&
+          rect.left > 32 &&
+          rect.right < window.innerWidth - 8;
+        return { width, height, centerX, centerY, onScreen };
+      },
+      resolveLensBuildingClick(buildingId: number) {
+        const canvas = document.querySelector(".model canvas");
+        if (!canvas) return null;
+        const canvasRect = canvas.getBoundingClientRect();
+        const pickAt = window.__citycutQa?.pickBuildingAtClient;
+        const clip = window.__citycutQaModel?.selectionScreenClip?.(buildingId, 12);
+        if (!clip || clip.width < 12 || clip.height < 12) return null;
+        const steps = 6;
+        for (let row = 0; row < steps; row++) {
+          for (let col = 0; col < steps; col++) {
+            const clickX = Math.round(clip.x + (clip.width * (col + 0.5)) / steps);
+            const clickY = Math.round(clip.y + (clip.height * (row + 0.5)) / steps);
+            if (
+              clickX < canvasRect.left + 40 ||
+              clickX > canvasRect.right - 40 ||
+              clickY < canvasRect.top + 40 ||
+              clickY > canvasRect.bottom - 40
+            ) {
+              continue;
+            }
+            if (pickAt && pickAt(clickX, clickY) !== buildingId) continue;
+            return { clickX, clickY };
+          }
+        }
+        return null;
+      },
+      findTallBuildingForLensQa() {
+        setHeightPick(null);
+        setHideSelection([]);
+        const canvas = document.querySelector(".model canvas");
+        if (!canvas) return null;
+        const canvasRect = canvas.getBoundingClientRect();
+        type Candidate = { id: number; clickX: number; clickY: number; height: number; dist: number };
+        const ranked: Omit<Candidate, "clickX" | "clickY">[] = [];
+        for (const building of qaDisplayBuildingsRef.current) {
+          if (building.height < 22 || building.use === "outbuilding") continue;
+          const clip = window.__citycutQaModel?.selectionScreenClip?.(building.id, 12);
+          if (!clip || clip.width < 12 || clip.height < 12) continue;
+          if (
+            clip.x + clip.width < canvasRect.left + 48 ||
+            clip.x > canvasRect.right - 48 ||
+            clip.y + clip.height < canvasRect.top + 48 ||
+            clip.y > canvasRect.bottom - 48
+          ) {
+            continue;
+          }
+          const { east, north } = buildingCentroid(building);
+          ranked.push({
+            id: building.id,
+            height: building.height,
+            dist: Math.hypot(east, north),
+          });
+        }
+        ranked.sort((a, b) => b.height - a.height || a.dist - b.dist);
+        for (const entry of ranked) {
+          const click = window.__citycutQaModel?.resolveLensBuildingClick?.(entry.id);
+          if (!click) continue;
+          return { ...entry, ...click };
+        }
+        return null;
+      },
+      findLensHoverPairQa() {
+        const canvas = document.querySelector(".model canvas");
+        if (!canvas) return null;
+        type Row = { id: number; clickX: number; clickY: number; height: number; cx: number; cy: number };
+        const rows: Row[] = [];
+        for (const building of qaDisplayBuildingsRef.current) {
+          if (building.height < 14 || building.use === "outbuilding") continue;
+          const click = window.__citycutQaModel?.resolveLensBuildingClick?.(building.id);
+          if (!click) continue;
+          const clip = window.__citycutQaModel?.selectionScreenClip?.(building.id, 8);
+          if (!clip) continue;
+          rows.push({
+            id: building.id,
+            ...click,
+            height: building.height,
+            cx: clip.x + clip.width / 2,
+            cy: clip.y + clip.height / 2,
+          });
+        }
+        rows.sort((a, b) => b.height - a.height);
+        for (let i = 0; i < rows.length; i++) {
+          for (let j = i + 1; j < rows.length; j++) {
+            const a = rows[i]!;
+            const b = rows[j]!;
+            if (Math.hypot(a.cx - b.cx, a.cy - b.cy) > 140) continue;
+            if (Math.hypot(a.clickX - b.clickX, a.clickY - b.clickY) < 24) continue;
+            return { a, b };
+          }
+        }
+        return null;
+      },
       pickForegroundBuildingForSelectionQa() {
-        const candidates = model.buildings
+        const candidates = qaDisplayBuildingsRef.current
           .filter(
             (building) =>
               building.height >= 10 &&
@@ -663,14 +794,16 @@ export function ModelPage({
           );
         const pick = candidates[0]?.building;
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 640, clientY: 400 });
+        setHeightPick({ buildingId: pick.id, clientX: 640, clientY: 400, pinned: true });
         return pick.id;
       },
       clearHeightSelection() {
         setHeightPick(null);
+        setLensHoverTargetId(null);
+        setLensHoverShownId(null);
       },
       pickTallTowerForSelectionQa() {
-        const candidates = model.buildings
+        const candidates = qaDisplayBuildingsRef.current
           .filter((building) => building.height >= 40 && building.use !== "outbuilding")
           .map((building) => {
             const { east, north } = buildingCentroid(building);
@@ -680,7 +813,7 @@ export function ModelPage({
           .sort((a, b) => b.building.height - a.building.height || a.dist - b.dist);
         const pick = candidates[0]?.building;
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 24, clientY: 72 });
+        setHeightPick({ buildingId: pick.id, clientX: 24, clientY: 72, pinned: true });
         return pick.id;
       },
       frameAerialSelectionBuilding(buildingId: number) {
@@ -759,7 +892,7 @@ export function ModelPage({
           .sort((a, b) => b.height - a.height);
         const pick = midrise[0] ?? fallback[0];
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 72, clientY: 88 });
+        setHeightPick({ buildingId: pick.id, clientX: 72, clientY: 88, pinned: true });
         return pick.id;
       },
       pickBuildingNearGeoQa(lat: number, lon: number) {
@@ -777,7 +910,7 @@ export function ModelPage({
           }
         }
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 640, clientY: 420 });
+        setHeightPick({ buildingId: pick.id, clientX: 640, clientY: 420, pinned: true });
         return pick.id;
       },
       exportPlanSnapshot: () => model,
@@ -786,7 +919,7 @@ export function ModelPage({
         const pick =
           rows.find((b) => b.zoneDefaultNote?.includes("estimate, no measured height")) ?? rows[0];
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 480, clientY: 420 });
+        setHeightPick({ buildingId: pick.id, clientX: 480, clientY: 420, pinned: true });
         return { id: pick.id, height: pick.height, note: pick.zoneDefaultNote ?? "" };
       },
       getHeightPerfTimings: () => ({ ...heightPerfRef.current }),
@@ -1065,6 +1198,86 @@ export function ModelPage({
     heightPick === null
       ? null
       : (displayModel.buildings.find((building) => building.id === heightPick.buildingId) ?? null);
+
+  useEffect(() => {
+    if (heightPick?.pinned) return;
+    if (lensHoverTargetId != null) {
+      setLensHoverShownId(lensHoverTargetId);
+      return;
+    }
+    const timer = window.setTimeout(() => setLensHoverShownId(null), LENS_HOVER_HIDE_MS);
+    return () => clearTimeout(timer);
+  }, [lensHoverTargetId, heightPick?.pinned]);
+
+  const lensPinnedBuilding =
+    heightPick?.pinned && heightPick
+      ? (displayModel.buildings.find((building) => building.id === heightPick.buildingId) ?? null)
+      : null;
+  const lensHoverBuilding =
+    !heightPick?.pinned && lensHoverShownId != null
+      ? (displayModel.buildings.find((building) => building.id === lensHoverShownId) ?? null)
+      : null;
+  const anchoredLensBuildingForView =
+    tab === "3d" ? (lensPinnedBuilding ?? lensHoverBuilding) : null;
+  const anchoredLensMode: AnchoredLensMode = lensPinnedBuilding ? "pinned" : "hover";
+
+  const onBuildingHover = useCallback(
+    (buildingId: number | null) => {
+      if (heightPick?.pinned) return;
+      setLensHoverTargetId(buildingId);
+    },
+    [heightPick?.pinned],
+  );
+
+  const anchoredLensSunGrid = useMemo(
+    () =>
+      solar.sunStudy
+        ? sunHoursGrid(displayModel, { year: solar.year, month: solar.month, day: solar.day })
+        : null,
+    [displayModel, solar.sunStudy, solar.year, solar.month, solar.day],
+  );
+
+  useEffect(() => {
+    if (tab !== "3d") return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setHeightPick(null);
+        setHideSelection([]);
+        setLensHoverTargetId(null);
+        setLensHoverShownId(null);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tab]);
+
+  const anchoredLensActions = useMemo<AnchoredLensActions>(
+    () => ({
+      rippleEnabled: true,
+      cutEnabled: false,
+      viewshedEnabled: true,
+      onRipple: () => {
+        if (!pickedBuilding) return;
+        dispatchSidebar({ type: "select", id: "analysis" });
+        setAnalysisKind("walkRipple");
+        setTab("3d");
+        const at = interiorPoint(pickedBuilding.ring, pickedBuilding.holes);
+        walkRipple.placePoint(at[0], at[1]);
+      },
+      onCut: () => {},
+      onViewshed: () => {
+        if (!pickedBuilding) return;
+        dispatchSidebar({ type: "select", id: "analysis" });
+        setAnalysisKind("view");
+        setTab("3d");
+        const at = interiorPoint(pickedBuilding.ring, pickedBuilding.holes);
+        walk.clear();
+        walk.addPoint(at[0], at[1]);
+        walk.setDrawing(true);
+      },
+    }),
+    [dispatchSidebar, pickedBuilding, walk, walkRipple],
+  );
 
   function persistHidden(next: HiddenBuildingStore) {
     setHiddenStore(next);
@@ -1820,15 +2033,26 @@ export function ModelPage({
                 windAnimateStreaks={windMotion.animateStreaks}
                 onExportReady={onExportReady}
                 onBuildingPick={(buildingId, clientX, clientY, additive) => {
-                  setHeightPick({ buildingId, clientX, clientY });
+                  setHeightPick({ buildingId, clientX, clientY, pinned: true });
+                  setLensHoverTargetId(buildingId);
                   selectForHide(buildingId, additive);
                 }}
                 onClearBuildingPick={() => {
                   setHeightPick(null);
                   setHideSelection([]);
+                  setLensHoverTargetId(null);
                 }}
-                heightEditBuildingId={heightPick?.buildingId ?? null}
-                selectedBuildingIds={hideSelection.length > 0 ? hideSelection : heightPick ? [heightPick.buildingId] : []}
+                onBuildingHover={onBuildingHover}
+                lensHoverEnabled={tab === "3d" && view.projection === "perspective"}
+                lensHoverPinned={Boolean(heightPick?.pinned)}
+                heightEditBuildingId={heightPick?.pinned ? heightPick.buildingId : null}
+                selectedBuildingIds={
+                  hideSelection.length > 0
+                    ? hideSelection
+                    : heightPick?.pinned
+                      ? [heightPick.buildingId]
+                      : []
+                }
                 cameraMemory={cameraMemory}
                 display={view3dDisplay}
                 importedMassing={massing.group}
@@ -1844,6 +2068,10 @@ export function ModelPage({
                       : massing.onScenePoint
                 }
                 quality={renderQuality}
+                anchoredLensBuilding={anchoredLensBuildingForView}
+                anchoredLensMode={anchoredLensMode}
+                anchoredLensSunHoursGrid={anchoredLensSunGrid}
+                anchoredLensActions={anchoredLensActions}
               />
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
               {rippleAnalysisOpen && walkRipple.buildingArrivals && <WalkRippleLegend />}
@@ -1862,7 +2090,7 @@ export function ModelPage({
                 />
               )}
               {pickedBuilding &&
-                heightPick &&
+                heightPick?.pinned &&
                 !qaHideHeightPopoverFromSearch(window.location.search) && (
                 <BuildingHeightPopover
                   building={pickedBuilding}

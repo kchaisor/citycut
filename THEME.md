@@ -65,6 +65,10 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--height-manual` | Manual height edits in that bar and key. | `#D4A017` |
 | `--sidebar-rail-w` | Width of the icon rail. The model view starts to its right when the sidebar is collapsed. | `56px` |
 | `--sidebar-panel-w` | Width of the sidebar panel next to the rail. | `320px` |
+| `--anchored-lens-bg` | Fill of the 3D building lens card anchored to a roof. | `#1A1916` |
+| `--anchored-lens-text` | Text on the anchored lens card. | `#FFFCF8` |
+| `--anchored-lens-muted` | Metric labels on the anchored lens card. | `#8F897E` |
+| `--anchored-lens-edge` | 1 px outline on the anchored lens card (accent yellow). | `var(--accent)` |
 
 `var(--background)` means “use whatever `--background` is set to”. That is why one edit recolours the page, the model, and the drawing together.
 

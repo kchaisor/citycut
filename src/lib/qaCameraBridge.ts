@@ -8,6 +8,7 @@ export type QaCameraBridge = {
   getCamera: () => QaCameraPose | null;
   frameHeliodon: () => void;
   projectToScreen: (world: { x: number; y: number; z: number }) => { x: number; y: number } | null;
+  pickBuildingAtClient: (clientX: number, clientY: number) => number | null;
 };
 
 export type QaSiteSnapshot = {
@@ -26,6 +27,28 @@ declare global {
       pickBuildingNearGeoQa?: (lat: number, lon: number) => number | null;
       getSummary?: () => { treeCrowns: number; buildingCount: number; roadCount: number; triangleCount: number };
       selectHeightEditBuilding?: (buildingId: number) => number;
+      openAnchoredLensForBuilding?: (buildingId: number) => number;
+      getAnchoredLensScreenPosition?: () => { x: number; y: number } | null;
+      getAnchoredLensLayout?: () => {
+        width: number;
+        height: number;
+        centerX: number;
+        centerY: number;
+        onScreen: boolean;
+      } | null;
+      findTallBuildingForLensQa?: () => {
+        id: number;
+        clickX: number;
+        clickY: number;
+        height: number;
+        dist: number;
+      } | null;
+      resolveLensBuildingClick?: (buildingId: number) => { clickX: number; clickY: number } | null;
+      getAnchoredLensMode?: () => "hover" | "pinned" | null;
+      findLensHoverPairQa?: () => {
+        a: { id: number; clickX: number; clickY: number; height: number; cx: number; cy: number };
+        b: { id: number; clickX: number; clickY: number; height: number; cx: number; cy: number };
+      } | null;
       pickForegroundBuildingForSelectionQa?: () => number | null;
       frameSelectionBuilding?: (buildingId: number, variant?: "through" | "oblique") => boolean;
       pickTallTowerForSelectionQa?: () => number | null;

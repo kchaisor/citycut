@@ -14,7 +14,17 @@ import * as THREE from "three";
 import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
-import { attachScenePointPick, attachBuildingPick } from "../lib/buildingPick";
+import {
+  attachScenePointPick,
+  attachBuildingPick,
+  pickBuildingIdAtClient,
+} from "../lib/buildingPick";
+import {
+  hoverPickBlocked,
+  pickBuildingHoverAtClient,
+  type BuildingHoverPickGate,
+} from "../lib/buildingHoverPick";
+import { LENS_ORBIT_HOVER_COOLDOWN_MS } from "../lib/lensHoverTiming";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { basePlinthBottomY } from "../lib/terrain";
 import { auditBuildingSelection, mountSelectedBuildingsVisual } from "../lib/buildingSelectionVisual";
@@ -91,13 +101,19 @@ import {
 import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SunHoursLayer } from "./SunHoursLayer";
+import {
+  AnchoredLensScreenTracker,
+  AnchoredLensViewportLayer,
+  type AnchoredLensActions,
+} from "./AnchoredLens";
+import type { SunHoursGrid } from "../lib/sunHours";
 import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
 
 const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
 import { WindStaticArrows, WindStreaks } from "./WindStreaks";
 import { analyzeWindPeriod, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
-import type { CityModel } from "../types";
+import type { BuildingFeat, CityModel } from "../types";
 
 export type SceneExporter = {
   png: () => Promise<Blob>;
@@ -242,6 +258,106 @@ function BuildingPickLayer({
   return null;
 }
 
+function BuildingHoverPickLayer({
+  root,
+  enabled,
+  gate,
+  ignoreHover,
+  onHoverBuilding,
+}: {
+  root: THREE.Object3D;
+  enabled: boolean;
+  gate: BuildingHoverPickGate;
+  ignoreHover: boolean;
+  onHoverBuilding: (buildingId: number | null) => void;
+}) {
+  const camera = useThree((state) => state.camera);
+  const gl = useThree((state) => state.gl);
+  const pointer = useRef({ x: Number.NaN, y: Number.NaN, dirty: false });
+  const lastId = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const canvas = gl.domElement;
+    const onMove = (event: PointerEvent) => {
+      pointer.current = { x: event.clientX, y: event.clientY, dirty: true };
+    };
+    const onLeave = () => {
+      pointer.current = { x: Number.NaN, y: Number.NaN, dirty: true };
+    };
+    const onDown = (event: PointerEvent) => {
+      if (event.button === 0) {
+        gate.pointerDown = true;
+        if (lastId.current !== null) {
+          lastId.current = null;
+          canvas.style.cursor = "";
+        }
+        if (!ignoreHover) onHoverBuilding(null);
+      }
+    };
+    const onUp = (event: PointerEvent) => {
+      if (event.button === 0) gate.pointerDown = false;
+    };
+    canvas.addEventListener("pointermove", onMove);
+    canvas.addEventListener("pointerleave", onLeave);
+    canvas.addEventListener("pointerdown", onDown);
+    canvas.addEventListener("pointerup", onUp);
+    return () => {
+      canvas.removeEventListener("pointermove", onMove);
+      canvas.removeEventListener("pointerleave", onLeave);
+      canvas.removeEventListener("pointerdown", onDown);
+      canvas.removeEventListener("pointerup", onUp);
+    };
+  }, [enabled, gate, gl.domElement]);
+
+  useFrame(() => {
+    if (!enabled) return;
+    const canvas = gl.domElement;
+    if (hoverPickBlocked(gate)) {
+      if (lastId.current !== null) {
+        lastId.current = null;
+        canvas.style.cursor = "";
+        if (!ignoreHover) onHoverBuilding(null);
+      }
+      pointer.current.dirty = false;
+      return;
+    }
+    if (!pointer.current.dirty) return;
+    pointer.current.dirty = false;
+    const { x, y } = pointer.current;
+    if (!Number.isFinite(x)) {
+      if (lastId.current !== null) {
+        lastId.current = null;
+        canvas.style.cursor = "";
+        if (!ignoreHover) onHoverBuilding(null);
+      }
+      return;
+    }
+    const clipLookup =
+      typeof window !== "undefined" && qaModeFromSearch(window.location.search)
+        ? (buildingId: number) => window.__citycutQaModel?.selectionScreenClip?.(buildingId, 10) ?? null
+        : undefined;
+    const ids =
+      clipLookup && typeof window !== "undefined"
+        ? (window.__citycutQaModel?.listBuildings?.().map((row) => row.id) ?? [])
+        : undefined;
+    const id = pickBuildingHoverAtClient(canvas, camera, root, x, y, clipLookup, ids);
+    canvas.style.cursor = id != null ? "pointer" : "";
+    if (id === lastId.current) return;
+    lastId.current = id;
+    if (!ignoreHover) onHoverBuilding(id);
+  });
+
+  useEffect(() => {
+    if (!enabled) {
+      gl.domElement.style.cursor = "";
+      lastId.current = null;
+    }
+  }, [enabled, gl.domElement]);
+
+  return null;
+}
+
 function ScenePointLayer({ onScenePoint }: { onScenePoint: (east: number, north: number, up: number) => void }) {
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
@@ -366,6 +482,10 @@ function City({
   onBuildingPick,
   onClearBuildingPick,
   pickBuildings,
+  lensHoverEnabled,
+  lensHoverGate,
+  lensHoverPinned,
+  onBuildingHover,
   walkRippleTint,
   walkRippleArrivals,
 }: {
@@ -382,6 +502,10 @@ function City({
   onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
   onClearBuildingPick?: () => void;
   pickBuildings: boolean;
+  lensHoverEnabled: boolean;
+  lensHoverGate: BuildingHoverPickGate;
+  lensHoverPinned: boolean;
+  onBuildingHover: (buildingId: number | null) => void;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
 }) {
@@ -836,6 +960,13 @@ function City({
         enabled={pickBuildings && buildingsVisible}
         onBuildingPick={onBuildingPick}
         onClearPick={onClearBuildingPick}
+      />
+      <BuildingHoverPickLayer
+        root={group}
+        enabled={lensHoverEnabled && pickBuildings && buildingsVisible}
+        gate={lensHoverGate}
+        ignoreHover={lensHoverPinned}
+        onHoverBuilding={onBuildingHover}
       />
     </>
   );
@@ -1439,6 +1570,7 @@ function QaCameraBridgeRegister({
   lon: number;
 }) {
   const gl = useThree((state) => state.gl);
+  const scene = useThree((state) => state.scene);
   const size = useThree((state) => state.size);
   const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
@@ -1515,12 +1647,18 @@ function QaCameraBridgeRegister({
           y: rect.top + (-vec.y * 0.5 + 0.5) * rect.height,
         };
       },
+      pickBuildingAtClient(clientX, clientY) {
+        const city = scene.getObjectByName("CityCut");
+        if (!city) return null;
+        return pickBuildingIdAtClient(gl.domElement, persp, city, clientX, clientY);
+      },
     });
     return () => registerQaCameraBridge(null);
   }, [
     active,
     controlsRef,
     gl,
+    scene,
     groundY,
     heliodonRadius,
     invalidate,
@@ -1640,6 +1778,7 @@ export function Cameras({
   lon,
   cameraMemory,
   introEnabled = false,
+  lensHoverGate,
 }: {
   side: number;
   lift: number;
@@ -1658,6 +1797,7 @@ export function Cameras({
   lon: number;
   cameraMemory?: CameraMemoryRef;
   introEnabled?: boolean;
+  lensHoverGate?: BuildingHoverPickGate;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
@@ -1701,8 +1841,6 @@ export function Cameras({
   );
   const persp = perspRef.current;
   const ortho = orthoRef.current;
-  const qaMode = typeof window !== "undefined" && qaModeFromSearch(window.location.search);
-
   return (
     <>
       <perspectiveCamera ref={perspRef} fov={32} />
@@ -1723,7 +1861,7 @@ export function Cameras({
             lat={lat}
             lon={lon}
             fitId={snapId}
-            active={!orthoView && !qaMode}
+            active={!orthoView}
             touchedRef={touchedRef}
             fittedKey={perspFitKey}
             introEnabled={introEnabled}
@@ -1799,6 +1937,17 @@ export function Cameras({
             maxDistance={Math.max(side * 6, heliodonRadius * 2.4)}
             onStart={() => {
               touchedRef.current = true;
+              if (lensHoverGate) {
+                lensHoverGate.orbitActive = true;
+                lensHoverGate.pointerDown = true;
+              }
+            }}
+            onEnd={() => {
+              if (lensHoverGate) {
+                lensHoverGate.orbitActive = false;
+                lensHoverGate.pointerDown = false;
+                lensHoverGate.orbitCooldownUntil = performance.now() + LENS_ORBIT_HOVER_COOLDOWN_MS;
+              }
             }}
           />
           <OrbitControls
@@ -1824,6 +1973,17 @@ export function Cameras({
             }}
             onStart={() => {
               touchedRef.current = true;
+              if (lensHoverGate) {
+                lensHoverGate.orbitActive = true;
+                lensHoverGate.pointerDown = true;
+              }
+            }}
+            onEnd={() => {
+              if (lensHoverGate) {
+                lensHoverGate.orbitActive = false;
+                lensHoverGate.pointerDown = false;
+                lensHoverGate.orbitCooldownUntil = performance.now() + LENS_ORBIT_HOVER_COOLDOWN_MS;
+              }
             }}
           />
           <CameraMemoryBridge
@@ -1904,6 +2064,13 @@ export function Scene3D({
   walkRippleTint = null,
   walkRippleArrivals = null,
   onScenePoint = null,
+  anchoredLensBuilding = null,
+  anchoredLensSunHoursGrid = null,
+  anchoredLensActions = null,
+  anchoredLensMode = "pinned",
+  lensHoverEnabled = false,
+  lensHoverPinned = false,
+  onBuildingHover = () => {},
   quality = "high",
 }: {
   model: CityModel;
@@ -1932,6 +2099,13 @@ export function Scene3D({
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
+  anchoredLensBuilding?: BuildingFeat | null;
+  anchoredLensSunHoursGrid?: SunHoursGrid | null;
+  anchoredLensActions?: AnchoredLensActions | null;
+  anchoredLensMode?: "hover" | "pinned";
+  lensHoverEnabled?: boolean;
+  lensHoverPinned?: boolean;
+  onBuildingHover?: (buildingId: number | null) => void;
   quality?: RenderQuality;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
@@ -1976,6 +2150,12 @@ export function Scene3D({
     for (const building of model.buildings) top = Math.max(top, base + building.height);
     return top;
   }, [model]);
+  const anchoredLensHostRef = useRef<HTMLDivElement | null>(null);
+  const lensHoverGateRef = useRef<BuildingHoverPickGate>({
+    pointerDown: false,
+    orbitActive: false,
+    orbitCooldownUntil: 0,
+  });
   return (
     <div className="scene-viewport">
       {glContextLost ? (
@@ -2047,6 +2227,10 @@ export function Scene3D({
         heightEditBuildingId={heightEditBuildingId}
         selectedBuildingIds={selectedBuildingIds}
         display={display}
+        lensHoverEnabled={lensHoverEnabled}
+        lensHoverGate={lensHoverGateRef.current}
+        lensHoverPinned={lensHoverPinned}
+        onBuildingHover={onBuildingHover}
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
       />
@@ -2054,6 +2238,13 @@ export function Scene3D({
       {walkLayer ? <primitive object={walkLayer} /> : null}
       {walkRippleLayer ? <primitive object={walkRippleLayer} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
+      {anchoredLensBuilding && anchoredLensActions ? (
+        <AnchoredLensScreenTracker
+          model={model}
+          building={anchoredLensBuilding}
+          hostRef={anchoredLensHostRef}
+        />
+      ) : null}
       <SolarHeliodon
         lat={model.center.lat}
         lon={model.center.lon}
@@ -2088,8 +2279,19 @@ export function Scene3D({
         lon={model.center.lon}
         cameraMemory={cameraMemory}
         introEnabled
+        lensHoverGate={lensHoverGateRef.current}
       />
       </Canvas>
+      {anchoredLensBuilding && anchoredLensActions ? (
+        <AnchoredLensViewportLayer
+          hostRef={anchoredLensHostRef}
+          building={anchoredLensBuilding}
+          model={model}
+          sunHoursGrid={anchoredLensSunHoursGrid ?? null}
+          actions={anchoredLensActions}
+          mode={anchoredLensMode}
+        />
+      ) : null}
     </div>
   );
 }
