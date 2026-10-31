@@ -28,8 +28,10 @@ export async function captureViewPng(
   });
   target.texture.colorSpace = THREE.SRGBColorSpace;
   const previous = gl.getRenderTarget();
+  const previousAutoClear = gl.autoClear;
   const pixels = new Uint8Array(width * height * 4);
   try {
+    gl.autoClear = true;
     gl.setRenderTarget(target);
     withScreenOnlyHidden(scene, () => {
       gl.render(scene, renderCamera);
@@ -37,6 +39,7 @@ export async function captureViewPng(
     gl.readRenderTargetPixels(target, 0, 0, width, height, pixels);
   } finally {
     scene.background = previousBackground;
+    gl.autoClear = previousAutoClear;
     gl.setRenderTarget(previous);
     target.dispose();
   }

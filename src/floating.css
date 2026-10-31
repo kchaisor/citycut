@@ -25,6 +25,9 @@
 
 .app { background: var(--sidebar-grey); }
 .model .viewport { background: var(--viewport-bg); }
+.model .viewport:not(.is-drawing):not(.is-satellite) {
+  background: linear-gradient(180deg, var(--viewport-studio-top) 0%, var(--viewport-bg) 55%, var(--viewport-studio-bottom) 100%);
+}
 .sidebar { --muted-text: var(--sidebar-text); color: var(--sidebar-text); }
 @media (min-width: 641px) {
   .model .sidebar { text-shadow: none; }
@@ -1888,6 +1891,14 @@ body,
   color: var(--ink);
   font-weight: 700;
   border-color: var(--ink);
+}
+
+.model .bottom-bar .h-tick.studio-quality-tick {
+  width: auto;
+  padding: 0 9px;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .model .bottom-bar .solar-readout {

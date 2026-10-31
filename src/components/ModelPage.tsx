@@ -198,6 +198,7 @@ import {
   type Layer3dId,
   type View3dDisplaySettings,
 } from "../lib/view3dDisplay";
+import { readStoredRenderQuality, writeStoredRenderQuality, type RenderQuality } from "../lib/renderQuality";
 
 type Tab = "3d" | "drawing" | "satellite";
 
@@ -339,6 +340,11 @@ export function ModelPage({
     writeStoredView3dDisplay(window.localStorage, next);
     return next;
   });
+  const [renderQuality, setRenderQuality] = useState<RenderQuality>(() => readStoredRenderQuality(window.localStorage));
+  const commitRenderQuality = useCallback((next: RenderQuality) => {
+    setRenderQuality(next);
+    writeStoredRenderQuality(window.localStorage, next);
+  }, []);
   const [windSettings, setWindSettings] = useState<WindViewSettings>(() => {
     const next = windSettingsForModelOpen(window.localStorage);
     writeStoredWindSettings(window.localStorage, next);
@@ -1811,6 +1817,7 @@ export function ModelPage({
                 importedMassing={massing.group}
                 walkLayer={walk.layer.root}
                 onScenePoint={walkDrawing ? walk.addPoint : massing.onScenePoint}
+                quality={renderQuality}
               />
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
@@ -3712,6 +3719,30 @@ export function ModelPage({
             <span className="studio-solar-time mono">
               {String(solar.hour).padStart(2, "0")}:{String(solar.minute).padStart(2, "0")} AEST
             </span>
+            {tab === "3d" ? (
+              <>
+                <span className="v-sep hud-sep" aria-hidden="true" />
+                <div className="solar-hours studio-quality-pills" role="group" aria-label="Render quality">
+                  {(
+                    [
+                      ["high", "High"],
+                      ["fast", "Fast"],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={renderQuality === id ? "h-tick studio-quality-tick active is-active" : "h-tick studio-quality-tick"}
+                      aria-pressed={renderQuality === id}
+                      aria-label={`${label} render quality`}
+                      onClick={() => commitRenderQuality(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : null}
           </div>
         )}
         {model.terrainError && (

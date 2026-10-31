@@ -5,16 +5,15 @@ import * as THREE from "three";
 import { themeColor } from "../lib/themeColor";
 import { markScreenOnly } from "../lib/screenOnly";
 
-export function GradientSky({ colourTick, fallback }: { colourTick: number; fallback: string }) {
+export function StudioSky({ colourTick, fallback }: { colourTick: number; fallback: string }) {
   const scene = useThree((state) => state.scene);
   const gl = useThree((state) => state.gl);
   useEffect(() => {
     const previous = scene.background;
-    const colour = new THREE.Color(themeColor("--viewport-bg", fallback));
-    scene.background = colour;
-    gl.setClearColor(colour, 1);
+    scene.background = null;
+    gl.setClearColor(new THREE.Color(themeColor("--viewport-bg", fallback)), 0);
     return () => {
-      if (scene.background === colour) scene.background = previous;
+      if (scene.background === null) scene.background = previous;
     };
   }, [scene, gl, colourTick, fallback]);
   return null;
