@@ -78,6 +78,12 @@
   --view-path: #000000;
   --view-walker: #FFF500;
 
+  --section-knife-cut-edge: #FFF500;
+  --section-knife-poche: #000000;
+  --section-knife-floor-line: #FFFFFF;
+  --section-knife-plane: #FFFFFF;
+  --section-knife-elevation-fill: #C8C8C8;
+
   /* Residential footprints, legend swatch, and the Residential Rhino layer. */
   --use-residential: #CECBC6;
 

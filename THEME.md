@@ -285,6 +285,11 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--view-blocked` | `#28282E` | View tab: ground inside the radius that is not visible (~27% opacity). |
 | `--view-path` | `#000000` | View tab: drawn walk path ribbon and its clicked points. |
 | `--view-walker` | `#FFF500` | View tab: walker marker (eye ball on a black pole). |
+| `--section-knife-cut-edge` | `#FFF500` | Section Knife: live cut edge outline in the 3D view (same yellow as `--accent`). |
+| `--section-knife-poche` | `#000000` | Section Knife: solid poché on clipped cap faces. |
+| `--section-knife-floor-line` | `#FFFFFF` | Section Knife: floor-slab lines on cap faces. |
+| `--section-knife-plane` | `#FFFFFF` | Section Knife: translucent cutting plane gizmo. |
+| `--section-knife-elevation-fill` | `#C8C8C8` | Section Knife: terrain fill in the live section panel. |
 
 The contour lines in Rhino use the pen `--contour-stroke` from `src/drawing-style.css`, not a fill.
 

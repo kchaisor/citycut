@@ -89,6 +89,9 @@ import {
 import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SunHoursLayer } from "./SunHoursLayer";
+import { SectionKnifeScene } from "./SectionKnifeScene";
+import { selectedKnife, type SectionKnifeToolState } from "../lib/sectionKnife/state";
+import type { SectionKnifePose } from "../lib/sectionKnife/plane";
 
 /** Hours-of-sun heatmap: later phase. Code kept, no UI; flip to preview. */
 const SUN_HOURS_HEATMAP_ENABLED = false;
@@ -316,6 +319,8 @@ function City({
   onBuildingPick,
   onClearBuildingPick,
   pickBuildings,
+  sectionKnife,
+  onSectionKnifePoseChange,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -330,6 +335,8 @@ function City({
   onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
   onClearBuildingPick?: () => void;
   pickBuildings: boolean;
+  sectionKnife?: SectionKnifeToolState | null;
+  onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -767,10 +774,19 @@ function City({
       />
       <BuildingPickLayer
         root={group}
-        enabled={pickBuildings && buildingsVisible}
+        enabled={pickBuildings && buildingsVisible && !sectionKnife?.active}
         onBuildingPick={onBuildingPick}
         onClearPick={onClearBuildingPick}
       />
+      {sectionKnife?.active && onSectionKnifePoseChange ? (
+        <SectionKnifeScene
+          city={group}
+          model={model}
+          active
+          pose={selectedKnife(sectionKnife).pose}
+          onPoseChange={onSectionKnifePoseChange}
+        />
+      ) : null}
     </>
   );
 }
@@ -1848,6 +1864,8 @@ export function Scene3D({
   importedMassing = null,
   walkLayer = null,
   onScenePoint = null,
+  sectionKnife = null,
+  onSectionKnifePoseChange = undefined,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -1876,6 +1894,8 @@ export function Scene3D({
   walkLayer?: THREE.Object3D | null;
   /** Click-to-place: while set, a click reports the scene point (east, north, up) instead of picking a building. */
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
+  sectionKnife?: SectionKnifeToolState | null;
+  onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
@@ -1947,7 +1967,9 @@ export function Scene3D({
         <RendererShadows enabled={solar.castShadows} />
       <SunStudyToneMapping noToneMapping={noToneMapping} />
       <GradientSky colourTick={colourTick} fallback={modelBg} />
-      {projection !== "plan" && <GroundGrid sideM={model.sideM} groundY={plinthBottomY} colourTick={colourTick} />}
+      {projection !== "plan" && !sectionKnife?.active && (
+        <GroundGrid sideM={model.sideM} groundY={plinthBottomY} colourTick={colourTick} />
+      )}
       <hemisphereLight args={[sky, groundLight, fillHemi]} />
       <ambientLight intensity={fillAmbient} />
       <directionalLight position={[model.sideM * 0.4, model.sideM, model.sideM * 0.2]} intensity={fillKeyLight} />
@@ -1976,6 +1998,8 @@ export function Scene3D({
         heightEditBuildingId={heightEditBuildingId}
         selectedBuildingIds={selectedBuildingIds}
         display={display}
+        sectionKnife={sectionKnife}
+        onSectionKnifePoseChange={onSectionKnifePoseChange}
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
