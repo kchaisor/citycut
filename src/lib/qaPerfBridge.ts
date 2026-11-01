@@ -184,6 +184,7 @@ export function tickPerfSample(state: RootState, nowMs: number): void {
     }
   }
   applyQaPerfOverrides(state);
+  state.invalidate();
   if (nowMs - session.startedAt >= session.opts.durationMs) {
     const stats = summarize(session.deltas);
     activeSample = null;

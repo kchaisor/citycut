@@ -7,7 +7,7 @@ import { getColour } from "../lib/colours";
 import { markScreenOnly } from "../lib/screenOnly";
 import type { SiteFrameShape } from "../lib/siteFrame";
 import { qaModeFromSearch } from "../lib/qaCameraBridge";
-import { ambientOcclusionActive, type RenderQuality } from "../lib/renderQuality";
+import { ambientOcclusionActive, studioAoActive, studioSmaaActive, type RenderQuality } from "../lib/renderQuality";
 
 function studioPostEnabled(): boolean {
   if (typeof window === "undefined") return true;
@@ -77,19 +77,26 @@ function StudioComposer({ quality, noToneMapping, sideM }: { quality: RenderQual
     const on = ambientOcclusionActive(qualityRef.current, moving.current);
     if (pass.enabled !== on) pass.enabled = on;
   });
+  const aoRadius = Math.max(4, sideM * 0.012);
   return (
     <EffectComposer multisampling={0} renderPriority={1}>
-      <N8AO
-        ref={setAoPass}
-        enabled={quality === "high"}
-        quality="medium"
-        halfRes
-        aoRadius={Math.max(4, sideM * 0.012)}
-        distanceFalloff={1}
-        intensity={3}
-      />
+      {studioAoActive(quality) ? (
+        <N8AO
+          ref={setAoPass}
+          enabled={quality === "high"}
+          quality="performance"
+          halfRes
+          aoSamples={8}
+          denoiseSamples={2}
+          denoiseRadius={8}
+          depthAwareUpsampling={false}
+          aoRadius={aoRadius}
+          distanceFalloff={1}
+          intensity={3.15}
+        />
+      ) : null}
       <ToneMapping mode={noToneMapping ? ToneMappingMode.LINEAR : ToneMappingMode.ACES_FILMIC} />
-      <SMAA />
+      {studioSmaaActive(quality) ? <SMAA /> : null}
     </EffectComposer>
   );
 }

@@ -26,3 +26,11 @@ export function writeStoredRenderQuality(storage: KeyValueStore, quality: Render
 export function ambientOcclusionActive(quality: RenderQuality, cameraMoving: boolean): boolean {
   return quality === "high" && !cameraMoving;
 }
+
+export function studioSmaaActive(quality: RenderQuality): boolean {
+  return quality === "high";
+}
+
+export function studioAoActive(quality: RenderQuality): boolean {
+  return quality === "high";
+}

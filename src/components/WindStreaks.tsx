@@ -127,6 +127,7 @@ function WindArrowsInner({
     };
   }, []);
 
+  const invalidate = useThree((state) => state.invalidate);
   useFrame((_, delta) => {
     if (!animate) return;
     const dt = Math.min(delta, 0.05);
@@ -142,6 +143,7 @@ function WindArrowsInner({
       arrow.lineMaterial.opacity = 0.55 * edge;
       arrow.headMaterial.opacity = 0.92 * edge;
     }
+    invalidate();
   });
 
   return (

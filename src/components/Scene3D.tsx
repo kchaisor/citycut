@@ -70,6 +70,10 @@ import {
 } from "../lib/planCamera";
 import { qaModeFromSearch, registerQaCameraBridge, type QaCameraPose } from "../lib/qaCameraBridge";
 import { createQaPerfBridge, registerQaPerfBridge, tickPerfSample } from "../lib/qaPerfBridge";
+import {
+  patchSceneContinuousFlags,
+  sceneNeedsContinuousRender,
+} from "../lib/sceneRenderLoop";
 import { WebGlContextWatch } from "./WebGlContextWatch";
 import type { ProjectionMode } from "../lib/viewMemory";
 import { isLayer3dVisible, treesVisibleIn3d, type View3dDisplaySettings } from "../lib/view3dDisplay";
@@ -238,11 +242,67 @@ function QaPerfSampler() {
 
 function AdaptiveViewportDpr() {
   const setDpr = useThree((state) => state.setDpr);
+  const invalidate = useThree((state) => state.invalidate);
   const moving = useCameraMoving();
   useFrame(() => {
     if (typeof window === "undefined") return;
     const cap = Math.min(1.5, window.devicePixelRatio);
     setDpr(moving.current ? 1 : cap);
+  });
+  useLayoutEffect(() => {
+    invalidate();
+  }, [invalidate]);
+  return null;
+}
+
+function SceneDemandBootstrap() {
+  const invalidate = useThree((state) => state.invalidate);
+  useLayoutEffect(() => {
+    invalidate();
+  }, [invalidate]);
+  return null;
+}
+
+function SceneFrameloopGate() {
+  const set = useThree((state) => state.set);
+  const invalidate = useThree((state) => state.invalidate);
+  useLayoutEffect(() => {
+    if (!shouldRunIntroTransition()) {
+      set({ frameloop: "demand" });
+      invalidate();
+    }
+  }, [set, invalidate]);
+  useEffect(() => {
+    if (!shouldRunIntroTransition()) return;
+    const onIntroDone = () => {
+      set({ frameloop: "demand" });
+      invalidate();
+    };
+    window.addEventListener("citycut:intro-done", onIntroDone);
+    return () => window.removeEventListener("citycut:intro-done", onIntroDone);
+  }, [set, invalidate]);
+  return null;
+}
+
+function SceneContinuousBridge({
+  windAnimate,
+  walkRippleActive,
+}: {
+  windAnimate: boolean;
+  walkRippleActive: boolean;
+}) {
+  const scene = useThree((state) => state.scene);
+  const invalidate = useThree((state) => state.invalidate);
+  const moving = useCameraMoving();
+  useLayoutEffect(() => {
+    patchSceneContinuousFlags(scene, { wind: windAnimate, walkRipple: walkRippleActive });
+    invalidate();
+  }, [scene, windAnimate, walkRippleActive, invalidate]);
+  useFrame((state) => {
+    const introActive = state.scene.userData[INTRO_ACTIVE_KEY] === true;
+    if (sceneNeedsContinuousRender(state.scene, introActive, moving.current)) {
+      state.invalidate();
+    }
   });
   return null;
 }
@@ -291,10 +351,12 @@ function HeightEditOverlayLayer({
   colourMode: BuildingColourMode;
 }) {
   const [overlay, setOverlay] = useState<THREE.Group | null>(null);
+  const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
     if (buildingIds.length === 0) {
       setOverlay(null);
       if (typeof window !== "undefined") delete window.__citycutQaSelectionAudit;
+      invalidate();
       return;
     }
     const mounted = mountSelectedBuildingsVisual(cityRoot, model, buildingIds, colourMode);
@@ -304,6 +366,7 @@ function HeightEditOverlayLayer({
       return;
     }
     setOverlay(mounted.overlay);
+    invalidate();
     if (typeof window !== "undefined" && qaModeFromSearch(window.location.search)) {
       const publishAudit = () => {
         window.__citycutQaSelectionAudit = auditBuildingSelection(cityRoot, buildingIds, mounted.overlay);
@@ -322,7 +385,7 @@ function HeightEditOverlayLayer({
       mounted.restore();
       setOverlay(null);
     };
-  }, [buildingIds, cityRoot, colourMode, model]);
+  }, [buildingIds, cityRoot, colourMode, model, invalidate]);
   return overlay ? <primitive object={overlay} /> : null;
 }
 
@@ -337,15 +400,18 @@ function WalkRippleBuildingBinder({
   buildingArrivals: Map<number, number> | null;
   colourTick: number;
 }) {
+  const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
     if (!tint || !buildingArrivals || buildingArrivals.size === 0) {
       tint?.detach();
+      invalidate();
       return;
     }
     tint.refreshColours();
     tint.attach(city, buildingArrivals);
+    invalidate();
     return () => tint.detach();
-  }, [city, tint, buildingArrivals, colourTick]);
+  }, [city, tint, buildingArrivals, colourTick, invalidate]);
   return null;
 }
 
@@ -499,6 +565,7 @@ function City({
   } | null>(null);
   const cutKey = `${model.center.lat.toFixed(5)},${model.center.lon.toFixed(5)},${model.sideM}`;
   const introScene = useThree((state) => state.scene);
+  const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
     const targets: Array<{ obj: THREE.Object3D; pivotY: number; kind: "building" | "tree"; bucket: number }> = [];
     for (const object of group.children) {
@@ -590,7 +657,8 @@ function City({
     group.userData.introScaleY = startScale;
     introRef.current = { cutKey, elapsedSec: 0, frameCount: 0, done: false, webglReadyDispatched: false, targets };
     introScene.userData[INTRO_ACTIVE_KEY] = true;
-  }, [group, cutKey, introScene]);
+    invalidate();
+  }, [group, cutKey, introScene, invalidate]);
   useFrame((state, delta) => {
     const intro = introRef.current;
     if (!intro || intro.done) return;
@@ -621,6 +689,7 @@ function City({
       ds.introBldgInner = s0.toFixed(3);
       ds.introBldgOuter = s0.toFixed(3);
       ds.introTreeScale = s0.toFixed(3);
+      state.invalidate();
       if (intro.frameCount >= 3 && !intro.webglReadyDispatched) {
         intro.webglReadyDispatched = true;
         if (typeof window !== "undefined") {
@@ -743,9 +812,10 @@ function City({
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("citycut:intro-done"));
       }
+    } else {
+      state.invalidate();
     }
   });
-  const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
     refreshSceneSurfaceColors(group);
     snapshotBuildingViewportColors(group, colourMode);
@@ -909,6 +979,7 @@ function FrameCameras({
   ortho: THREE.OrthographicCamera;
 }) {
   const size = useThree((state) => state.size);
+  const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
     if (size.width < 2 || size.height < 2) return;
     persp.aspect = size.width / Math.max(size.height, 1);
@@ -918,7 +989,8 @@ function FrameCameras({
     ortho.top = size.height / 2;
     ortho.bottom = size.height / -2;
     ortho.updateProjectionMatrix();
-  }, [persp, ortho, size.width, size.height]);
+    invalidate();
+  }, [persp, ortho, size.width, size.height, invalidate]);
   return null;
 }
 
@@ -1093,7 +1165,7 @@ function PerspectiveFit({
   useLayoutEffect(() => {
     place();
   }, [place]);
-  useFrame((_state, delta) => {
+  useFrame((state, delta) => {
     place();
     const anim = introAnimRef.current;
     if (!anim || anim.done) return;
@@ -1144,6 +1216,7 @@ function PerspectiveFit({
       return;
     }
     applyIntroPose(anim, controls);
+    state.invalidate();
   });
   return null;
 }
@@ -1727,6 +1800,10 @@ export function Cameras({
   const persp = perspRef.current;
   const ortho = orthoRef.current;
   const qaMode = typeof window !== "undefined" && qaModeFromSearch(window.location.search);
+  const invalidate = useThree((state) => state.invalidate);
+  const onControlsChange = useCallback(() => {
+    invalidate();
+  }, [invalidate]);
 
   return (
     <>
@@ -1825,6 +1902,7 @@ export function Cameras({
             onStart={() => {
               touchedRef.current = true;
             }}
+            onChange={onControlsChange}
           />
           <OrbitControls
             ref={orthoControls}
@@ -1850,6 +1928,7 @@ export function Cameras({
             onStart={() => {
               touchedRef.current = true;
             }}
+            onChange={onControlsChange}
           />
           <CameraMemoryBridge
             memoryRef={cameraMemory}
@@ -1928,6 +2007,7 @@ export function Scene3D({
   walkRippleLayer = null,
   walkRippleTint = null,
   walkRippleArrivals = null,
+  walkRipplePlaying = false,
   onScenePoint = null,
   quality = "high",
 }: {
@@ -1956,6 +2036,7 @@ export function Scene3D({
   walkRippleLayer?: THREE.Object3D | null;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
+  walkRipplePlaying?: boolean;
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
   quality?: RenderQuality;
 }) {
@@ -2027,7 +2108,13 @@ export function Scene3D({
       >
         <ViewInset />
         <WebGlContextWatch onContextLost={onGlContextLost} onContextRestored={onGlContextRestored} />
+        <SceneDemandBootstrap />
+        <SceneFrameloopGate />
         <AdaptiveViewportDpr />
+        <SceneContinuousBridge
+          windAnimate={windEnabled && windAnimateStreaks}
+          walkRippleActive={walkRipplePlaying}
+        />
         {qaModeFromSearch(typeof window === "undefined" ? "" : window.location.search) ? <QaPerfSampler /> : null}
         <RendererShadows enabled={solar.castShadows} />
       <SunStudyToneMapping noToneMapping={noToneMapping} />
