@@ -202,6 +202,16 @@ import {
   type View3dDisplaySettings,
 } from "../lib/view3dDisplay";
 import { readStoredRenderQuality, writeStoredRenderQuality, type RenderQuality } from "../lib/renderQuality";
+import {
+  readStoredView3dLook,
+  signalTraceLookActive,
+  writeStoredView3dLook,
+  type View3dLook,
+} from "../lib/view3dLook";
+import { SIGNAL_TRACE_CENTRALITY_LABEL } from "../lib/signalTraceCentrality";
+import { SIGNAL_TRACE_RAIL_HEADWAY_NOTE } from "../lib/signalTraceHeadway";
+import { useSignalTrace } from "./useSignalTrace";
+import { SignalTraceTimeControl } from "./SignalTraceTimeControl";
 
 type Tab = "3d" | "drawing" | "satellite";
 
@@ -349,6 +359,7 @@ export function ModelPage({
     setRenderQuality(next);
     writeStoredRenderQuality(window.localStorage, next);
   }, []);
+  const [view3dLook, setView3dLook] = useState<View3dLook>(() => readStoredView3dLook(window.localStorage));
   const [windSettings, setWindSettings] = useState<WindViewSettings>(() => {
     const next = windSettingsForModelOpen(window.localStorage);
     writeStoredWindSettings(window.localStorage, next);
@@ -946,6 +957,8 @@ export function ModelPage({
   );
   const walk = useWalkViewshed(model, displayModel);
   const walkRipple = useWalkRipple(model, displayModel);
+  const signalTraceOn = signalTraceLookActive(view3dLook);
+  const signalTrace = useSignalTrace(displayModel, signalTraceOn);
   const [walkRippleToast, setWalkRippleToast] = useState<string | null>(null);
   useEffect(() => {
     if (walkRipple.status === "ready") {
@@ -1281,6 +1294,14 @@ export function ModelPage({
   function commitView3dDisplay(next: View3dDisplaySettings) {
     setView3dDisplay(next);
     writeStoredView3dDisplay(window.localStorage, next);
+  }
+
+  function commitView3dLook(next: View3dLook) {
+    setView3dLook(next);
+    writeStoredView3dLook(window.localStorage, next);
+    if (signalTraceLookActive(next) && view3dDisplay.whiteCard) {
+      commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+    }
   }
 
   function pickBuildingUseColour(use: BuildingUse, value: string) {
@@ -1820,6 +1841,9 @@ export function ModelPage({
                 windAnimateStreaks={windMotion.animateStreaks}
                 onExportReady={onExportReady}
                 onBuildingPick={(buildingId, clientX, clientY, additive) => {
+                  if (signalTraceOn) {
+                    signalTrace.pickSourceBuilding(buildingId);
+                  }
                   setHeightPick({ buildingId, clientX, clientY });
                   selectForHide(buildingId, additive);
                 }}
@@ -1844,6 +1868,11 @@ export function ModelPage({
                       : massing.onScenePoint
                 }
                 quality={renderQuality}
+                signalTraceActive={signalTraceOn}
+                signalTraceLayer={signalTraceOn ? signalTrace.layer.root : null}
+                signalTraceBuildingLook={signalTraceOn ? signalTrace.buildingLook : null}
+                signalTraceSourceBuildingId={signalTrace.sourceBuildingId}
+                signalTraceAdvanceFrame={signalTraceOn ? signalTrace.advanceFrame : null}
               />
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
               {rippleAnalysisOpen && walkRipple.buildingArrivals && <WalkRippleLegend />}
@@ -2572,11 +2601,35 @@ export function ModelPage({
                         {displayModel.buildings.length.toLocaleString()} massings
                       </span>
                     </div>
+                    <div className="style-seg seg-mini" role="group" aria-label="Scene look">
+                      <button
+                        type="button"
+                        className={view3dLook === "default" ? "style-btn active" : "style-btn"}
+                        aria-pressed={view3dLook === "default"}
+                        onClick={() => commitView3dLook("default")}
+                      >
+                        Standard
+                      </button>
+                      <button
+                        type="button"
+                        className={view3dLook === "signalTrace" ? "style-btn active" : "style-btn"}
+                        aria-pressed={view3dLook === "signalTrace"}
+                        onClick={() => commitView3dLook("signalTrace")}
+                      >
+                        Signal Trace
+                      </button>
+                    </div>
+                    {signalTraceOn ? (
+                      <p className="legend-note signal-trace-note" role="status">
+                        {SIGNAL_TRACE_CENTRALITY_LABEL} {SIGNAL_TRACE_RAIL_HEADWAY_NOTE}
+                      </p>
+                    ) : null}
                     <div className="style-seg seg-mini" role="group" aria-label="Building style">
                       <button
                         type="button"
                         className={view3dDisplay.whiteCard ? "style-btn active" : "style-btn"}
                         aria-pressed={view3dDisplay.whiteCard}
+                        disabled={signalTraceOn}
                         onClick={() => commitView3dDisplay({ ...view3dDisplay, whiteCard: !view3dDisplay.whiteCard })}
                       >
                         Card
@@ -3845,6 +3898,13 @@ export function ModelPage({
                     </button>
                   ))}
                 </div>
+                {signalTraceOn ? (
+                  <SignalTraceTimeControl
+                    speed={signalTrace.timeSpeed}
+                    onSpeedChange={signalTrace.setTimeSpeed}
+                    sourceBuildingId={signalTrace.sourceBuildingId}
+                  />
+                ) : null}
               </>
             ) : null}
           </div>

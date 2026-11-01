@@ -295,6 +295,15 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--walk-ripple-band-2` | `#E85D04` | Walk ripple: buildings within 10–15 minutes walk. |
 | `--walk-ripple-label-bg` | `#1C1C22` | Walk ripple: floating minute-band label fill. |
 | `--walk-ripple-label-text` | `#FFFFFF` | Walk ripple: floating minute-band label text. |
+| `--signal-trace-scene-bg` | `#000000` | Signal Trace 3D look: viewport background. |
+| `--signal-trace-ground` | `#1A1A1A` | Signal Trace 3D look: ground slab. |
+| `--signal-trace-building-fill` | `#141820` | Signal Trace 3D look: dark glass building fill. |
+| `--signal-trace-building-rim` | `#B8C0CC` | Signal Trace 3D look: fresnel rim on buildings. |
+| `--signal-trace-source-glow` | `#FFB020` | Signal Trace 3D look: selected source building glow. |
+| `--signal-trace-street-dim` | `#2A2A30` | Signal Trace 3D look: street hairline base. |
+| `--signal-trace-street-pulse` | `#E8C547` | Signal Trace 3D look: walking-speed street pulses. |
+| `--signal-trace-rail-pulse` | `#FFF500` | Signal Trace 3D look: tram and rail pulses. |
+| `--signal-trace-afterglow` | `#FF8C00` | Signal Trace 3D look: walk-minute afterglow on streets. |
 
 The contour lines in Rhino use the pen `--contour-stroke` from `src/drawing-style.css`, not a fill.
 

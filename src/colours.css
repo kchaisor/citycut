@@ -53,6 +53,16 @@
   --walk-ripple-label-bg: #1C1C22;
   --walk-ripple-label-text: #FFFFFF;
 
+  --signal-trace-scene-bg: #000000;
+  --signal-trace-ground: #1A1A1A;
+  --signal-trace-building-fill: #141820;
+  --signal-trace-building-rim: #B8C0CC;
+  --signal-trace-source-glow: #FFB020;
+  --signal-trace-street-dim: #2A2A30;
+  --signal-trace-street-pulse: #E8C547;
+  --signal-trace-rail-pulse: #FFF500;
+  --signal-trace-afterglow: #FF8C00;
+
   --use-residential: #CECBC6;
 
   --use-commercial: #89533D;

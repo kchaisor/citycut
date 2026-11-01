@@ -92,6 +92,7 @@ import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SunHoursLayer } from "./SunHoursLayer";
 import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
+import type { SignalTraceBuildingLook } from "../lib/signalTraceBuildingLook";
 
 const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
@@ -324,6 +325,48 @@ function WalkRippleBuildingBinder({
   return null;
 }
 
+function SignalTraceBuildingBinder({
+  city,
+  look,
+  sourceBuildingId,
+  active,
+  colourTick,
+}: {
+  city: THREE.Group;
+  look: SignalTraceBuildingLook | null;
+  sourceBuildingId: number | null;
+  active: boolean;
+  colourTick: number;
+}) {
+  useLayoutEffect(() => {
+    if (!active || !look) {
+      look?.detach();
+      return;
+    }
+    look.refreshColours();
+    look.attach(city);
+    look.setSourceBuildingId(sourceBuildingId, city);
+    return () => look.detach();
+  }, [city, look, sourceBuildingId, active, colourTick]);
+  return null;
+}
+
+function SignalTraceFrameDriver({
+  active,
+  advanceFrame,
+}: {
+  active: boolean;
+  advanceFrame: ((deltaSec: number) => void) | null;
+}) {
+  const invalidate = useThree((state) => state.invalidate);
+  useFrame((_, delta) => {
+    if (!active || !advanceFrame) return;
+    advanceFrame(delta);
+    invalidate();
+  });
+  return null;
+}
+
 function WalkRippleTreeDim({ city, active }: { city: THREE.Group; active: boolean }) {
   useLayoutEffect(() => {
     if (!active) return;
@@ -368,6 +411,9 @@ function City({
   pickBuildings,
   walkRippleTint,
   walkRippleArrivals,
+  signalTraceActive,
+  signalTraceBuildingLook,
+  signalTraceSourceBuildingId,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -384,6 +430,9 @@ function City({
   pickBuildings: boolean;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
+  signalTraceActive?: boolean;
+  signalTraceBuildingLook?: SignalTraceBuildingLook | null;
+  signalTraceSourceBuildingId?: number | null;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -728,9 +777,9 @@ function City({
     snapshotWhiteCardColors(group, colourMode);
     applySunStudySurfaceTint(group, false);
     applyBuildingSolarNeutral(group, false, solarNeutralFill);
-    applyWhiteCardTint(group, display.whiteCard);
+    applyWhiteCardTint(group, signalTraceActive ? false : display.whiteCard);
     invalidate();
-  }, [group, colourMode, solarDiagramOn, solarNeutralFill, colourTick, display.whiteCard, invalidate]);
+  }, [group, colourMode, solarDiagramOn, solarNeutralFill, colourTick, display.whiteCard, signalTraceActive, invalidate]);
   const buildingsVisible = isLayer3dVisible(display, "buildings");
   const roadsVisible = isLayer3dVisible(display, "roads");
   const footpathsVisible = isLayer3dVisible(display, "footpaths");
@@ -739,10 +788,15 @@ function City({
   const railVisible = isLayer3dVisible(display, "rail");
   const contoursVisible = isLayer3dVisible(display, "contours");
   useLayoutEffect(() => {
+    const trace = Boolean(signalTraceActive);
+    const ground = group.getObjectByName("Ground") as THREE.Mesh | undefined;
+    if (ground?.isMesh && ground.material instanceof THREE.MeshStandardMaterial) {
+      ground.material.color.setStyle(getColour(trace ? "--signal-trace-ground" : "--ground-fill"));
+    }
     group.traverse((object) => {
       const name = object.name;
       if (name === "BuildingEdges") {
-        object.visible = display.showOutlines && buildingsVisible;
+        object.visible = !trace && display.showOutlines && buildingsVisible;
         return;
       }
       if (
@@ -757,23 +811,23 @@ function City({
       }
       if (name === "Roads") {
         const grade = object.userData?.roadGrade;
-        object.visible = grade === "path" ? footpathsVisible : roadsVisible;
+        object.visible = !trace && (grade === "path" ? footpathsVisible : roadsVisible);
         return;
       }
       if (name === "Green") {
-        object.visible = landscapeVisible;
+        object.visible = !trace && landscapeVisible;
         return;
       }
       if (name === "Water") {
-        object.visible = waterVisible;
+        object.visible = !trace && waterVisible;
         return;
       }
       if (name === "RailLines" || name === "TramLines") {
-        object.visible = railVisible;
+        object.visible = !trace && railVisible;
         return;
       }
       if (name === "GroundEdge") {
-        object.visible = display.showOutlines;
+        object.visible = !trace && display.showOutlines;
       }
     });
   }, [
@@ -785,14 +839,16 @@ function City({
     landscapeVisible,
     waterVisible,
     railVisible,
+    signalTraceActive,
+    colourTick,
   ]);
   useLayoutEffect(() => {
     const trees = group.getObjectByName("Trees");
-    if (trees) trees.visible = treesVisibleIn3d(model.layers, display);
-  }, [group, display.hideTrees, display.layersVisible, model.layers]);
+    if (trees) trees.visible = !signalTraceActive && treesVisibleIn3d(model.layers, display);
+  }, [group, display.hideTrees, display.layersVisible, model.layers, signalTraceActive]);
   const contours = useMemo(
-    () => (contoursVisible ? buildContourLineObject(model) : null),
-    [model, contoursVisible],
+    () => (contoursVisible && !signalTraceActive ? buildContourLineObject(model) : null),
+    [model, contoursVisible, signalTraceActive],
   );
   useLayoutEffect(() => {
     if (!contours) return;
@@ -810,6 +866,13 @@ function City({
         city={group}
         tint={walkRippleTint ?? null}
         buildingArrivals={walkRippleArrivals ?? null}
+        colourTick={colourTick}
+      />
+      <SignalTraceBuildingBinder
+        city={group}
+        look={signalTraceBuildingLook ?? null}
+        sourceBuildingId={signalTraceSourceBuildingId ?? null}
+        active={Boolean(signalTraceActive)}
         colourTick={colourTick}
       />
       <WalkRippleTreeDim
@@ -1905,6 +1968,11 @@ export function Scene3D({
   walkRippleArrivals = null,
   onScenePoint = null,
   quality = "high",
+  signalTraceActive = false,
+  signalTraceLayer = null,
+  signalTraceBuildingLook = null,
+  signalTraceSourceBuildingId = null,
+  signalTraceAdvanceFrame = null,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -1933,6 +2001,11 @@ export function Scene3D({
   walkRippleArrivals?: Map<number, number> | null;
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
   quality?: RenderQuality;
+  signalTraceActive?: boolean;
+  signalTraceLayer?: THREE.Object3D | null;
+  signalTraceBuildingLook?: SignalTraceBuildingLook | null;
+  signalTraceSourceBuildingId?: number | null;
+  signalTraceAdvanceFrame?: ((deltaSec: number) => void) | null;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
@@ -1940,7 +2013,10 @@ export function Scene3D({
   }, []);
   const lift = model.terrain ? (model.terrain.min + model.terrain.max) / 2 : 0;
   const colourTick = useColourRevision();
-  const modelBg = useMemo(() => themeColor("--model-bg"), [colourTick]);
+  const modelBg = useMemo(
+    () => (signalTraceActive ? getColour("--signal-trace-scene-bg") : themeColor("--model-bg")),
+    [colourTick, signalTraceActive],
+  );
   const sky = getColour("--light-sky");
   const groundLight = getColour("--light-ground");
   const studioFill = getColour("--light-fill");
@@ -1990,6 +2066,7 @@ export function Scene3D({
         key={glEpoch}
         className="scene-canvas"
         dpr={[1, 1.75]}
+        frameloop={signalTraceActive ? "demand" : "always"}
         gl={{
           antialias: true,
           alpha: true,
@@ -2049,10 +2126,15 @@ export function Scene3D({
         display={display}
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
+        signalTraceActive={signalTraceActive}
+        signalTraceBuildingLook={signalTraceBuildingLook}
+        signalTraceSourceBuildingId={signalTraceSourceBuildingId}
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
       {walkRippleLayer ? <primitive object={walkRippleLayer} /> : null}
+      {signalTraceActive && signalTraceLayer ? <primitive object={signalTraceLayer} /> : null}
+      <SignalTraceFrameDriver active={signalTraceActive} advanceFrame={signalTraceAdvanceFrame} />
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
       <SolarHeliodon
         lat={model.center.lat}
