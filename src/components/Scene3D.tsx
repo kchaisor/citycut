@@ -35,8 +35,8 @@ import {
   applyPose,
   capturePose,
   usableCameraMemory,
-  type CameraMemory,
   type CameraMemoryRef,
+  type CameraPose,
 } from "../lib/cameraMemory";
 import {
   applyBuildingSolarNeutral,
@@ -368,6 +368,7 @@ function City({
   pickBuildings,
   walkRippleTint,
   walkRippleArrivals,
+  introEnabled,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -384,6 +385,7 @@ function City({
   pickBuildings: boolean;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
+  introEnabled: boolean;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -397,7 +399,7 @@ function City({
     [uniformBuildings, colourBySource],
   );
   const group = useMemo(() => {
-    const introStagger = shouldRunIntroTransition();
+    const introStagger = shouldRunIntroTransition() && introEnabled;
     const city = buildCityGroup(model, { uniformBuildings, colourBySource, highlightManual, introStagger });
     const plinth = city.getObjectByName("BasePlinth");
     const ground = city.getObjectByName("Ground");
@@ -458,6 +460,7 @@ function City({
     uniformBuildings,
     colourBySource,
     highlightManual,
+    introEnabled,
   ]);
   useLayoutEffect(() => {
     onBoundsRef.current(measureCity(group));
@@ -512,7 +515,7 @@ function City({
       targets.push({ obj: object, pivotY, kind: "building", bucket });
     }
     const cutRingObj = group.getObjectByName("IntroCutRing") as THREE.LineSegments | undefined;
-    if (!shouldRunIntroTransition() || targets.length === 0) {
+    if (!shouldRunIntroTransition() || !introEnabled || targets.length === 0) {
       for (const { obj } of targets) {
         obj.scale.y = 1;
         obj.position.y = 0;
@@ -565,7 +568,7 @@ function City({
     group.userData.introScaleY = startScale;
     introRef.current = { cutKey, elapsedSec: 0, frameCount: 0, done: false, webglReadyDispatched: false, targets };
     introScene.userData[INTRO_ACTIVE_KEY] = true;
-  }, [group, cutKey, introScene]);
+  }, [group, cutKey, introEnabled, introScene]);
   useFrame((state, delta) => {
     const intro = introRef.current;
     if (!intro || intro.done) return;
@@ -913,6 +916,8 @@ function PerspectiveFit({
   touchedRef,
   fittedKey,
   introEnabled = false,
+  memoryRef,
+  fallbackPerspPoseRef,
 }: {
   camera: THREE.PerspectiveCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
@@ -929,6 +934,8 @@ function PerspectiveFit({
   touchedRef: RefObject<boolean>;
   fittedKey: MutableRefObject<string | null>;
   introEnabled?: boolean;
+  memoryRef?: CameraMemoryRef;
+  fallbackPerspPoseRef?: RefObject<CameraPose | null>;
 }) {
   const size = useThree((state) => state.size);
   const gl = useThree((state) => state.gl);
@@ -976,6 +983,20 @@ function PerspectiveFit({
     const controls = controlsRef.current;
     if (!controls || !active || size.width < 2 || size.height < 2) return;
     const key = `${fitId}:${size.width}x${size.height}`;
+    const saved = usableCameraMemory(memoryRef?.current ?? null, fitId);
+    const returnPose = saved?.persp ?? fallbackPerspPoseRef?.current ?? null;
+    if (!introEnabled && returnPose) {
+      flushControlInertia(controls);
+      applyPose(camera, controls, returnPose);
+      if (saved) {
+        fittedKey.current = saved.fittedKeys.persp ?? key;
+        touchedRef.current = saved.touched;
+      } else {
+        fittedKey.current = key;
+        touchedRef.current = true;
+      }
+      return;
+    }
     if (
       shouldSkipViewportSizeRefit(fittedKey.current, key, fitId, touchedRef.current) &&
       fittedKey.current !== null
@@ -1049,6 +1070,8 @@ function PerspectiveFit({
   }, [
     applyIntroPose,
     introEnabled,
+    memoryRef,
+    fallbackPerspPoseRef,
     active,
     camera,
     controlsRef,
@@ -1574,6 +1597,8 @@ function CameraMemoryBridge({
   orthoControls,
   fittedKeys,
   touchedRef,
+  fallbackPerspPoseRef,
+  onPerspPose,
 }: {
   memoryRef: CameraMemoryRef | undefined;
   snapId: number;
@@ -1587,38 +1612,60 @@ function CameraMemoryBridge({
     plan: MutableRefObject<string | null>;
   };
   touchedRef: MutableRefObject<boolean>;
+  fallbackPerspPoseRef?: RefObject<CameraPose | null>;
+  onPerspPose?: (pose: CameraPose) => void;
 }) {
-  useLayoutEffect(() => {
-    const memory = usableCameraMemory(memoryRef?.current ?? null, snapId);
-    const pc = perspControls.current;
-    const oc = orthoControls.current;
-    if (!memory || !pc || !oc) return;
-    for (const [camera, controls, pose] of [
-      [persp, pc, memory.persp],
-      [ortho, oc, memory.ortho],
-    ] as const) {
-      flushControlInertia(controls);
-      applyPose(camera, controls, pose);
-    }
-    fittedKeys.persp.current = memory.fittedKeys.persp;
-    fittedKeys.iso.current = memory.fittedKeys.iso;
-    fittedKeys.plan.current = memory.fittedKeys.plan;
-    touchedRef.current = memory.touched;
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useFrame(() => {
+  const restoredFromMemoryRef = useRef(false);
+  const persistMemory = useCallback(() => {
     if (!memoryRef) return;
     const pc = perspControls.current;
     const oc = orthoControls.current;
-    if (!pc || !oc) return;
-    const next: CameraMemory = {
+    const prev = memoryRef.current;
+    const perspTarget = pc?.target ?? new THREE.Vector3(...(prev?.persp.target ?? [0, 0, 0]));
+    const orthoTarget = oc?.target ?? new THREE.Vector3(...(prev?.ortho.target ?? [0, 0, 0]));
+    const nextPersp = capturePose(persp, { target: perspTarget });
+    memoryRef.current = {
       snapId,
-      persp: capturePose(persp, pc),
-      ortho: capturePose(ortho, oc),
+      persp: nextPersp,
+      ortho: capturePose(ortho, { target: orthoTarget }),
       fittedKeys: { persp: fittedKeys.persp.current, iso: fittedKeys.iso.current, plan: fittedKeys.plan.current },
       touched: touchedRef.current,
     };
-    memoryRef.current = next;
+    onPerspPose?.(nextPersp);
+  }, [fittedKeys.iso, fittedKeys.persp, fittedKeys.plan, memoryRef, onPerspPose, ortho, persp, snapId, orthoControls, perspControls, touchedRef]);
+  useFrame(() => {
+    if (!restoredFromMemoryRef.current) {
+      const memory = usableCameraMemory(memoryRef?.current ?? null, snapId);
+      const pc = perspControls.current;
+      const oc = orthoControls.current;
+      const perspPose = memory?.persp ?? fallbackPerspPoseRef?.current ?? null;
+      if (perspPose) {
+        if (pc) {
+          flushControlInertia(pc);
+          applyPose(persp, pc, perspPose);
+        } else {
+          applyPose(persp, { target: new THREE.Vector3(...perspPose.target) }, perspPose);
+        }
+        if (memory && oc) {
+          flushControlInertia(oc);
+          applyPose(ortho, oc, memory.ortho);
+        } else if (memory) {
+          applyPose(ortho, { target: new THREE.Vector3(...memory.ortho.target) }, memory.ortho);
+        }
+        if (memory) {
+          fittedKeys.persp.current = memory.fittedKeys.persp;
+          fittedKeys.iso.current = memory.fittedKeys.iso;
+          fittedKeys.plan.current = memory.fittedKeys.plan;
+          touchedRef.current = memory.touched;
+        } else {
+          touchedRef.current = true;
+        }
+        restoredFromMemoryRef.current = true;
+      }
+    }
+    persistMemory();
   });
+  useEffect(() => () => persistMemory(), [persistMemory]);
   return null;
 }
 
@@ -1640,6 +1687,8 @@ export function Cameras({
   lon,
   cameraMemory,
   introEnabled = false,
+  fallbackPerspPoseRef,
+  onPerspPose,
 }: {
   side: number;
   lift: number;
@@ -1658,6 +1707,8 @@ export function Cameras({
   lon: number;
   cameraMemory?: CameraMemoryRef;
   introEnabled?: boolean;
+  fallbackPerspPoseRef?: RefObject<CameraPose | null>;
+  onPerspPose?: (pose: CameraPose) => void;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
@@ -1711,6 +1762,57 @@ export function Cameras({
         <>
           <BindCamera camera={orthoView ? ortho : persp} />
           <FrameCameras persp={persp} ortho={ortho} />
+          <OrbitControls
+            ref={perspControls}
+            camera={persp}
+            makeDefault={!orthoView}
+            enabled={!orthoView}
+            enableDamping
+            dampingFactor={0.08}
+            maxPolarAngle={Math.PI / 2.02}
+            minDistance={side * 0.2}
+            maxDistance={Math.max(side * 6, heliodonRadius * 2.4)}
+            onStart={() => {
+              touchedRef.current = true;
+            }}
+          />
+          <OrbitControls
+            ref={orthoControls}
+            camera={ortho}
+            makeDefault={orthoView}
+            enabled={orthoView}
+            enableDamping
+            dampingFactor={0.08}
+            enableRotate={iso && freeRotate}
+            zoomToCursor
+            maxPolarAngle={Math.PI / 2.02}
+            minDistance={1}
+            maxDistance={Math.max(side * 20, heliodonRadius * 2.4)}
+            mouseButtons={{
+              LEFT: plan || !freeRotate ? MOUSE.PAN : MOUSE.ROTATE,
+              MIDDLE: MOUSE.DOLLY,
+              RIGHT: MOUSE.PAN,
+            }}
+            touches={{
+              ONE: plan || !freeRotate ? TOUCH.PAN : TOUCH.ROTATE,
+              TWO: TOUCH.DOLLY_PAN,
+            }}
+            onStart={() => {
+              touchedRef.current = true;
+            }}
+          />
+          <CameraMemoryBridge
+            memoryRef={cameraMemory}
+            snapId={snapId}
+            persp={persp}
+            ortho={ortho}
+            perspControls={perspControls}
+            orthoControls={orthoControls}
+            fittedKeys={fittedKeys}
+            touchedRef={touchedRef}
+            fallbackPerspPoseRef={fallbackPerspPoseRef}
+            onPerspPose={onPerspPose}
+          />
           <PerspectiveFit
             camera={persp}
             controlsRef={perspControls}
@@ -1727,6 +1829,8 @@ export function Cameras({
             touchedRef={touchedRef}
             fittedKey={perspFitKey}
             introEnabled={introEnabled}
+            memoryRef={cameraMemory}
+            fallbackPerspPoseRef={fallbackPerspPoseRef}
           />
           <PerspectiveClipPlanes
             camera={persp}
@@ -1786,55 +1890,6 @@ export function Cameras({
           <OrthoClip camera={ortho} controlsRef={orthoControls} boundsRef={boundsRef}
             active={orthoView}
             extraBounds={heliodonClipBounds}
-          />
-          <OrbitControls
-            ref={perspControls}
-            camera={persp}
-            makeDefault={!orthoView}
-            enabled={!orthoView}
-            enableDamping
-            dampingFactor={0.08}
-            maxPolarAngle={Math.PI / 2.02}
-            minDistance={side * 0.2}
-            maxDistance={Math.max(side * 6, heliodonRadius * 2.4)}
-            onStart={() => {
-              touchedRef.current = true;
-            }}
-          />
-          <OrbitControls
-            ref={orthoControls}
-            camera={ortho}
-            makeDefault={orthoView}
-            enabled={orthoView}
-            enableDamping
-            dampingFactor={0.08}
-            enableRotate={iso && freeRotate}
-            zoomToCursor
-            maxPolarAngle={Math.PI / 2.02}
-            minDistance={1}
-            maxDistance={Math.max(side * 20, heliodonRadius * 2.4)}
-            mouseButtons={{
-              LEFT: plan || !freeRotate ? MOUSE.PAN : MOUSE.ROTATE,
-              MIDDLE: MOUSE.DOLLY,
-              RIGHT: MOUSE.PAN,
-            }}
-            touches={{
-              ONE: plan || !freeRotate ? TOUCH.PAN : TOUCH.ROTATE,
-              TWO: TOUCH.DOLLY_PAN,
-            }}
-            onStart={() => {
-              touchedRef.current = true;
-            }}
-          />
-          <CameraMemoryBridge
-            memoryRef={cameraMemory}
-            snapId={snapId}
-            persp={persp}
-            ortho={ortho}
-            perspControls={perspControls}
-            orthoControls={orthoControls}
-            fittedKeys={fittedKeys}
-            touchedRef={touchedRef}
           />
           <CameraReadout
             projection={projection}
@@ -1905,6 +1960,9 @@ export function Scene3D({
   walkRippleArrivals = null,
   onScenePoint = null,
   quality = "high",
+  introEnabled = true,
+  fallbackPerspPoseRef,
+  onPerspPose,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -1933,6 +1991,9 @@ export function Scene3D({
   walkRippleArrivals?: Map<number, number> | null;
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
   quality?: RenderQuality;
+  introEnabled?: boolean;
+  fallbackPerspPoseRef?: RefObject<CameraPose | null>;
+  onPerspPose?: (pose: CameraPose) => void;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
@@ -2049,6 +2110,7 @@ export function Scene3D({
         display={display}
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
+        introEnabled={introEnabled}
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
@@ -2087,7 +2149,9 @@ export function Scene3D({
         lat={model.center.lat}
         lon={model.center.lon}
         cameraMemory={cameraMemory}
-        introEnabled
+        introEnabled={introEnabled}
+        fallbackPerspPoseRef={fallbackPerspPoseRef}
+        onPerspPose={onPerspPose}
       />
       </Canvas>
     </div>
