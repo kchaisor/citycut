@@ -129,6 +129,12 @@ import {
 } from "../lib/buildingHeightResolve";
 import { countBuildingHeightTiers, LIDAR_NO_DATA_LINE } from "../lib/lidarTierStatus";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
+import { footprintBase } from "../lib/terrain";
+import {
+  semanticBuildingPose,
+  semanticOverviewPose,
+  semanticWalkPose,
+} from "../lib/semanticHudQaFrame";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import { COM_TREES_CREDIT, COM_TREES_DATASET_URL } from "../lib/comTreesCredit";
 import { openRing, toLocal } from "../lib/geo";
@@ -347,6 +353,9 @@ export function ModelPage({
     setSemanticHudSample(sample);
     const canvas = document.querySelector(".scene-canvas");
     if (canvas instanceof HTMLCanvasElement) canvas.dataset.semanticHudMode = sample.mode;
+    if (typeof window !== "undefined" && qaModeFromSearch(window.location.search)) {
+      window.__citycutSemanticHud = sample;
+    }
   }, []);
   const semanticHudActive = tab === "3d" && view.projection === "perspective";
   const [view3dDisplay, setView3dDisplay] = useState<View3dDisplaySettings>(() => {
@@ -636,45 +645,81 @@ export function ModelPage({
       return { east: east / count, north: north / count };
     }
 
+    function pickForegroundBuildingRow() {
+      const candidates = model.buildings
+        .filter(
+          (building) =>
+            building.height >= 10 &&
+            building.height <= 28 &&
+            building.use !== "outbuilding",
+        )
+        .map((building) => {
+          const { east, north } = buildingCentroid(building);
+          return {
+            building,
+            east,
+            north,
+            dist: Math.hypot(east, north),
+          };
+        })
+        .filter((entry) => entry.dist >= 35 && entry.dist <= 130)
+        .sort(
+          (a, b) =>
+            Math.abs(a.building.height - 16) - Math.abs(b.building.height - 16) ||
+            a.dist - b.dist,
+        );
+      const pick = candidates[0]?.building;
+      if (!pick) return null;
+      const baseY = model.terrain ? footprintBase(model.terrain, pick.ring, model.sideM) : 0;
+      return {
+        id: pick.id,
+        height: pick.height,
+        east: candidates[0]!.east,
+        north: candidates[0]!.north,
+        baseY,
+      };
+    }
+
     window.__citycutQaModel = {
       getSummary: () => qaSummaryRef.current,
       listBuildings() {
         return qaDisplayBuildingsRef.current.map((building) => {
           const { east, north } = buildingCentroid(building);
-          return { id: building.id, height: building.height, east, north };
+          const baseY = model.terrain ? footprintBase(model.terrain, building.ring, model.sideM) : 0;
+          return { id: building.id, height: building.height, east, north, baseY };
         });
+      },
+      semanticSceneFrame() {
+        const groundY = model.terrain?.min ?? 0;
+        const topY = model.terrain?.max ?? groundY + 30;
+        const siteY = model.terrain ? (model.terrain.min + model.terrain.max) / 2 : 8;
+        return { groundY, siteY, topY, sideM: model.sideM };
+      },
+      frameSemanticOverview() {
+        if (!window.__citycutQa?.setCamera || !window.__citycutQaModel?.semanticSceneFrame) return false;
+        window.__citycutQa.setCamera(semanticOverviewPose(window.__citycutQaModel.semanticSceneFrame()));
+        return true;
+      },
+      frameSemanticBuildingClose() {
+        const row = pickForegroundBuildingRow();
+        if (!row || !window.__citycutQa?.setCamera) return false;
+        window.__citycutQa.setCamera(semanticBuildingPose(row));
+        return true;
+      },
+      frameSemanticWalk() {
+        if (!window.__citycutQa?.setCamera || !window.__citycutQaModel?.semanticSceneFrame) return false;
+        window.__citycutQa.setCamera(semanticWalkPose(window.__citycutQaModel.semanticSceneFrame()));
+        return true;
       },
       selectHeightEditBuilding(buildingId: number) {
         setHeightPick({ buildingId, clientX: 640, clientY: 400 });
         return buildingId;
       },
       pickForegroundBuildingForSelectionQa() {
-        const candidates = model.buildings
-          .filter(
-            (building) =>
-              building.height >= 10 &&
-              building.height <= 28 &&
-              building.use !== "outbuilding",
-          )
-          .map((building) => {
-            const { east, north } = buildingCentroid(building);
-            return {
-              building,
-              east,
-              north,
-              dist: Math.hypot(east, north),
-            };
-          })
-          .filter((entry) => entry.dist >= 35 && entry.dist <= 130)
-          .sort(
-            (a, b) =>
-              Math.abs(a.building.height - 16) - Math.abs(b.building.height - 16) ||
-              a.dist - b.dist,
-          );
-        const pick = candidates[0]?.building;
-        if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 640, clientY: 400 });
-        return pick.id;
+        const row = pickForegroundBuildingRow();
+        if (!row) return null;
+        setHeightPick({ buildingId: row.id, clientX: 640, clientY: 400 });
+        return row.id;
       },
       clearHeightSelection() {
         setHeightPick(null);
@@ -696,29 +741,29 @@ export function ModelPage({
       frameAerialSelectionBuilding(buildingId: number) {
         const row = window.__citycutQaModel?.listBuildings?.().find((item) => item.id === buildingId);
         if (!row || !window.__citycutQa?.setCamera) return false;
-        const yMid = row.height * 0.45;
+        const yMid = row.baseY + row.height * 0.45;
         const z = -row.north;
         const dist = 210;
         window.__citycutQa.setCamera({
           eye: { x: row.east - dist * 0.62, y: yMid + dist * 0.52, z: z - dist * 0.62 },
-          target: { x: row.east + 12, y: Math.max(8, yMid * 0.35), z: z + 10 },
+          target: { x: row.east + 12, y: row.baseY + row.height * 0.35, z: z + 10 },
         });
         return true;
       },
       frameSelectionBuilding(buildingId: number, variant: "through" | "oblique" = "through") {
         const row = window.__citycutQaModel?.listBuildings?.().find((item) => item.id === buildingId);
         if (!row || !window.__citycutQa?.setCamera) return false;
-        const y = row.height * 0.45;
+        const y = row.baseY + row.height * 0.45;
         const z = -row.north;
         if (variant === "oblique") {
           window.__citycutQa.setCamera({
             eye: { x: row.east - 95, y: y + 58, z: z + 105 },
-            target: { x: row.east + 8, y: y, z: z },
+            target: { x: row.east + 8, y: row.baseY + row.height * 0.35, z: z },
           });
         } else {
           window.__citycutQa.setCamera({
             eye: { x: row.east - 135, y: y + 32, z: z - 75 },
-            target: { x: row.east + 45, y: y, z: z },
+            target: { x: row.east + 45, y: row.baseY + row.height * 0.35, z: z },
           });
         }
         return true;

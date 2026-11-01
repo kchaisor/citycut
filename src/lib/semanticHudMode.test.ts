@@ -38,6 +38,15 @@ describe("resolveSemanticHudMode", () => {
     ).toBe("walk");
   });
 
+  it("does not use building mode at street eye height even when close", () => {
+    expect(
+      resolveSemanticHudMode(
+        "overview",
+        signals({ eyeHeightM: 6, pitchDeg: 8, nearestBuildingDistanceM: 25, buildingScreenFill: 0.35 }),
+      ),
+    ).toBe("walk");
+  });
+
   it("enters building from distance", () => {
     expect(
       resolveSemanticHudMode("overview", signals({ nearestBuildingDistanceM: 120, pitchDeg: 28, eyeHeightM: 40 })),

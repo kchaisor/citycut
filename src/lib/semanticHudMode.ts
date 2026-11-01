@@ -36,6 +36,8 @@ function walkCandidate(signals: SemanticHudSignals, thresholds: SemanticHudThres
 }
 
 function buildingCandidate(signals: SemanticHudSignals, thresholds: SemanticHudThresholds, entering: boolean): boolean {
+  const walkEyeLimit = entering ? thresholds.walkEnterEyeHeightM : thresholds.walkExitEyeHeightM;
+  if (signals.eyeHeightM <= walkEyeLimit) return false;
   const distanceLimit = entering ? thresholds.buildingEnterDistanceM : thresholds.buildingExitDistanceM;
   const fillLimit = entering ? thresholds.buildingEnterScreenFill : thresholds.buildingExitScreenFill;
   const near =

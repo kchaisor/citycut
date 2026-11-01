@@ -20,6 +20,7 @@ export type QaSiteSnapshot = {
 declare global {
   interface Window {
     __citycutQa?: QaCameraBridge;
+    __citycutSemanticHud?: import("./semanticHudSample").SemanticHudSample;
     __citycutQaSite?: QaSiteSnapshot;
     __citycutQaModel?: {
       openMidriseHeightEdit: () => number | null;
@@ -35,7 +36,11 @@ declare global {
         buildingId: number,
         padPx?: number,
       ) => { x: number; y: number; width: number; height: number } | null;
-      listBuildings?: () => { id: number; height: number; east: number; north: number }[];
+      listBuildings?: () => { id: number; height: number; east: number; north: number; baseY: number }[];
+      semanticSceneFrame?: () => { groundY: number; siteY: number; topY: number; sideM: number };
+      frameSemanticOverview?: () => boolean;
+      frameSemanticBuildingClose?: () => boolean;
+      frameSemanticWalk?: () => boolean;
       exportPlanSnapshot?: () => import("../types").CityModel;
       pickZoneDefaultPanelQa?: () => { id: number; height: number; note: string } | null;
       getHeightPerfTimings?: () => {

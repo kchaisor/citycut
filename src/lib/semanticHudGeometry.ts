@@ -146,7 +146,7 @@ export function lateralBuildingHeights(
   buildings: BuildingFeat[],
   at: Pt,
   tangent: Pt,
-  maxCrossM = 45,
+  maxCrossM = 70,
 ): { leftM: number | null; rightM: number | null } {
   const nx = -tangent[1];
   const ny = tangent[0];

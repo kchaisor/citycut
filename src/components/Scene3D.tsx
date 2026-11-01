@@ -1500,11 +1500,19 @@ function QaCameraBridgeRegister({
       setCamera(pose: QaCameraPose) {
         const controls = controlsRef.current;
         if (!controls) return;
+        flushControlInertia(controls);
         persp.position.set(pose.eye.x, pose.eye.y, pose.eye.z);
         controls.target.set(pose.target.x, pose.target.y, pose.target.z);
+        persp.lookAt(controls.target);
         controls.update();
+        const distance = persp.position.distanceTo(controls.target);
+        persp.near = Math.max(0.1, side / 400);
+        persp.far = perspectiveClipFar(side, heliodonRadius, distance);
         persp.updateProjectionMatrix();
         invalidate();
+        if (typeof window !== "undefined") {
+          window.requestAnimationFrame(() => invalidate());
+        }
       },
       getCamera() {
         const controls = controlsRef.current;
