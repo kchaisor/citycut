@@ -9,7 +9,8 @@ const VIEWPORT = { width: 1440, height: 900 };
 const OUT_PNG = "/opt/cursor/artifacts/walk-ripple-comet-box-hill-wide.png";
 const OUT_MP4 = "/opt/cursor/artifacts/walk-ripple-comet-trail-slider.mp4";
 const TMP_FRAMES = "/tmp/walk_ripple_comet_frames";
-const ADDRESS = "1022 Whitehorse Road, Box Hill VIC 3128";
+const BOX_HILL_LAT = -37.8182;
+const BOX_HILL_LON = 145.1234;
 const KM_WIDE = 1.2;
 
 function findFreePort() {
@@ -56,11 +57,16 @@ async function runCapture(page) {
     } catch {
     }
   });
-  const remoteBase = process.env.CAPTURE_BASE_URL?.replace(/\/$/, "");
+  const captureUrl = process.env.CAPTURE_BASE_URL?.trim();
   let appBase;
   let viteProc = null;
-  if (remoteBase) {
-    appBase = await resolveAppBase(remoteBase);
+  if (captureUrl) {
+    if (captureUrl.includes("_vercel_share=") || captureUrl.includes("?")) {
+      appBase = captureUrl;
+    } else {
+      const remoteBase = captureUrl.replace(/\/$/, "");
+      appBase = await resolveAppBase(remoteBase);
+    }
     console.log("[capture-walk-ripple-comet] remote base", appBase);
   } else {
     const port = await findFreePort();
@@ -74,17 +80,17 @@ async function runCapture(page) {
     appBase = `${baseUrl}/citycut/`;
   }
 
-  await page.goto(`${appBase}?qa=1`, { waitUntil: "domcontentloaded", timeout: 180000 });
-  await page.getByRole("button", { name: "Search", exact: true }).click();
-  const searchInput = page.getByRole("combobox", { name: /Search a place/i });
-  await searchInput.fill(ADDRESS);
-  await page.waitForTimeout(1200);
-  await page.getByRole("option").first().click();
-  await page.waitForTimeout(600);
-  await page.getByRole("button", { name: "Layers", exact: true }).click();
-  const kmSlider = page.locator(".left-drawer input[type='range']").first();
-  await kmSlider.fill(String(KM_WIDE));
-  await page.waitForTimeout(400);
+  const modelQuery = new URLSearchParams({
+    lat: String(BOX_HILL_LAT),
+    lon: String(BOX_HILL_LON),
+    km: String(KM_WIDE),
+    label: "Box Hill VIC",
+    qa: "1",
+  });
+  const entryUrl = appBase.includes("?")
+    ? `${appBase}&${modelQuery}`
+    : `${appBase}?${modelQuery}`;
+  await page.goto(entryUrl, { waitUntil: "domcontentloaded", timeout: 180000 });
   await page.getByRole("button", { name: /Create model/i }).click({ timeout: 180000 });
   await page.waitForSelector(".model canvas", { timeout: 180000 });
   await page.waitForFunction(
@@ -129,17 +135,17 @@ async function runCapture(page) {
   await grab();
   await page.screenshot({ path: OUT_PNG, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
 
-  const trailSlider = page.locator(".walk-ripple-trail-field input[type='range']");
+  const trailSlider = page.locator(".model .env-bottom-row .walk-ripple-console-trail input[type='range']");
   await trailSlider.waitFor({ state: "visible", timeout: 10000 });
-  for (const val of [2, 8, 4, 10, 3]) {
+  for (const val of [2, 8, 4, 10, 3, 7, 5, 9, 1, 6]) {
     await trailSlider.fill(String(val));
-    await page.waitForTimeout(450);
+    await page.waitForTimeout(500);
     await grab();
   }
   await page.evaluate(() => window.__citycutWalkRippleQa?.setMinutes(11));
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(500);
   await trailSlider.fill("6");
-  await page.waitForTimeout(450);
+  await page.waitForTimeout(500);
   await grab();
 
   if (viteProc) viteProc.kill("SIGTERM");
@@ -163,7 +169,7 @@ async function main() {
     [
       "-y",
       "-framerate",
-      "2",
+      "1.5",
       "-i",
       path.join(TMP_FRAMES, "f%03d.png"),
       "-c:v",

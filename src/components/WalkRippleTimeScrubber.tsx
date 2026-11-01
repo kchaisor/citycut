@@ -1,5 +1,6 @@
 import { useCallback, useRef, type KeyboardEvent, type PointerEvent } from "react";
 import { WALK_RIPPLE_BANDS_MIN, WALK_RIPPLE_TIMELINE_MAX_MIN } from "../lib/walkRippleNetwork";
+import { WALK_RIPPLE_TRAIL_MAX, WALK_RIPPLE_TRAIL_MIN } from "../lib/walkRippleShader";
 
 type WalkRippleTimeScrubberProps = {
   minutes: number;
@@ -8,6 +9,8 @@ type WalkRippleTimeScrubberProps = {
   playing: boolean;
   onMinutesChange: (minutes: number) => void;
   onPlayToggle: () => void;
+  trailLengthMin: number;
+  onTrailLengthChange: (minutes: number) => void;
 };
 
 function clampMinutes(value: number): number {
@@ -26,6 +29,8 @@ export function WalkRippleTimeScrubber({
   playing,
   onMinutesChange,
   onPlayToggle,
+  trailLengthMin,
+  onTrailLengthChange,
 }: WalkRippleTimeScrubberProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const scrubRef = useRef<HTMLDivElement>(null);
@@ -149,6 +154,20 @@ export function WalkRippleTimeScrubber({
           ◉ {formatMinuteLabel(minutes)} min
         </span>
       </div>
+      <label className="walk-ripple-console-trail mono">
+        <span className="walk-ripple-console-trail-label">Trail</span>
+        <input
+          type="range"
+          min={WALK_RIPPLE_TRAIL_MIN}
+          max={WALK_RIPPLE_TRAIL_MAX}
+          step={1}
+          value={trailLengthMin}
+          disabled={disabled}
+          aria-label="Comet trail length in minutes"
+          onChange={(event) => onTrailLengthChange(Number(event.target.value))}
+        />
+        <span className="walk-ripple-console-trail-readout">{trailLengthMin}m</span>
+      </label>
     </>
   );
 }

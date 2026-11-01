@@ -4128,6 +4128,28 @@ body,
   box-shadow: 0 0 0 2px var(--walk-ripple-accent), 0 0 0 3px var(--ink) !important;
 }
 
+.model .bottom-bar.env-console .walk-ripple-console-trail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+.model .bottom-bar.env-console .walk-ripple-console-trail-label {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--float-muted);
+}
+.model .bottom-bar.env-console .walk-ripple-console-trail input[type="range"] {
+  width: 72px;
+  flex: 0 0 72px;
+}
+.model .bottom-bar.env-console .walk-ripple-console-trail-readout {
+  font-size: 11px;
+  min-width: 2.2em;
+  color: var(--walk-ripple-accent);
+}
 .model .bottom-bar.env-console .walk-ripple-time-readout {
   background: var(--ink) !important;
   color: var(--walk-ripple-accent) !important;

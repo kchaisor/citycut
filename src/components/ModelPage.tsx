@@ -3791,6 +3791,8 @@ export function ModelPage({
                   playing={walkRipple.ripplePlaying}
                   onMinutesChange={walkRipple.setRippleMinutes}
                   onPlayToggle={walkRipple.toggleRipplePlay}
+                  trailLengthMin={walkRipple.trailLengthMin}
+                  onTrailLengthChange={walkRipple.setTrailLengthMin}
                 />
               )}
             </div>
