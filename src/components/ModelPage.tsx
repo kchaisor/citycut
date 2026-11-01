@@ -604,6 +604,16 @@ export function ModelPage({
   const qaDisplayBuildingsRef = useRef(model.buildings);
   const qaSemanticFocusBuildingIdRef = useRef<number | null>(null);
   const qaSemanticHudModeOverrideRef = useRef<import("../lib/semanticHudMode").SemanticHudMode | null>(null);
+  const [qaSemanticHudModeOverride, setQaSemanticHudModeOverride] = useState<
+    import("../lib/semanticHudMode").SemanticHudMode | null
+  >(null);
+  const setQaSemanticHudMode = useCallback((mode: import("../lib/semanticHudMode").SemanticHudMode | null) => {
+    qaSemanticHudModeOverrideRef.current = mode;
+    setQaSemanticHudModeOverride(mode);
+  }, []);
+  const semanticHudSceneMode = qaSemanticHudModeOverride ?? semanticHudSample.mode;
+  const semanticHudSceneClose =
+    semanticHudActive && (semanticHudSceneMode === "building" || semanticHudSceneMode === "walk");
   const qaNamedStreetWalkSiteRef = useRef<import("../lib/semanticHudNamedStreet").NamedStreetWalkSite | null>(null);
   const heightPerfRef = useRef<{ modelOpenMs: number; firstRenderMs: number | null; comAppliedMs: number | null }>(
     { modelOpenMs: performance.now(), firstRenderMs: null, comAppliedMs: null },
@@ -726,7 +736,7 @@ export function ModelPage({
       },
       frameSemanticOverview() {
         qaSemanticFocusBuildingIdRef.current = null;
-        qaSemanticHudModeOverrideRef.current = null;
+        setQaSemanticHudMode(null);
         qaNamedStreetWalkSiteRef.current = null;
         if (!window.__citycutQa?.setCamera || !window.__citycutQaModel?.semanticSceneFrame) return false;
         window.__citycutQa.setCamera(semanticOverviewPose(window.__citycutQaModel.semanticSceneFrame()));
@@ -736,7 +746,7 @@ export function ModelPage({
         const row = pickForegroundBuildingRow();
         if (!row || !window.__citycutQa?.setCamera) return false;
         qaSemanticFocusBuildingIdRef.current = row.id;
-        qaSemanticHudModeOverrideRef.current = "building";
+        setQaSemanticHudMode("building");
         window.__citycutQa.setCamera(semanticBuildingPose(row));
         return true;
       },
@@ -763,7 +773,7 @@ export function ModelPage({
             : 0);
         site.groundY = surfaceY;
         qaNamedStreetWalkSiteRef.current = site;
-        qaSemanticHudModeOverrideRef.current = "walk";
+        setQaSemanticHudMode("walk");
         const pose = walkCameraFromSite(site, surfaceY);
         window.__citycutQa.setCamera(pose);
         window.requestAnimationFrame(() => window.__citycutQa?.setCamera?.(pose));
@@ -1943,8 +1953,16 @@ export function ModelPage({
                   setHeightPick(null);
                   setHideSelection([]);
                 }}
-                heightEditBuildingId={heightPick?.buildingId ?? null}
-                selectedBuildingIds={hideSelection.length > 0 ? hideSelection : heightPick ? [heightPick.buildingId] : []}
+                heightEditBuildingId={semanticHudSceneClose ? null : heightPick?.buildingId ?? null}
+                selectedBuildingIds={
+                  semanticHudSceneClose
+                    ? []
+                    : hideSelection.length > 0
+                      ? hideSelection
+                      : heightPick
+                        ? [heightPick.buildingId]
+                        : []
+                }
                 cameraMemory={cameraMemory}
                 display={view3dDisplay}
                 importedMassing={massing.group}
@@ -1961,7 +1979,9 @@ export function ModelPage({
                 }
                 quality={renderQuality}
                 semanticHudEnabled={semanticHudActive}
-                semanticHudMode={semanticHudActive ? semanticHudSample.mode : undefined}
+                semanticHudMode={
+                  semanticHudActive ? (qaSemanticHudModeOverride ?? semanticHudSample.mode) : undefined
+                }
                 onSemanticHudSample={onSemanticHudSample}
               />
               <SemanticViewportLabels labels={semanticHudSample.labels} visible={semanticHudActive} />

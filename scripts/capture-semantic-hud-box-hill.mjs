@@ -87,8 +87,17 @@ await page.waitForFunction(
   { timeout: 600_000 },
 );
 await page.waitForFunction(() => typeof window.__citycutQa?.setCamera === "function", null, { timeout: 120_000 });
+await page.getByRole("button", { name: "Model details", exact: true }).click().catch(() => undefined);
 await page.getByRole("button", { name: "Summary", exact: true }).click().catch(() => undefined);
+await page.getByRole("button", { name: "Site Analysis", exact: true }).click().catch(() => undefined);
 await page.getByRole("button", { name: "Analysis", exact: true }).click().catch(() => undefined);
+await page.waitForFunction(
+  () =>
+    Boolean(document.querySelector(".semantic-hud-stack")) ||
+    typeof window.__citycutSemanticHud?.mode === "string",
+  null,
+  { timeout: 180_000 },
+);
 await sleep(2500);
 
 const viewport = page.locator(".model .scene-viewport");
@@ -121,9 +130,13 @@ async function wheelZoom(deltaY, times = 8) {
   await sleep(900);
 }
 
-async function waitHudMode(mode, timeoutMs = 120_000) {
+async function waitHudMode(mode, timeoutMs = 180_000) {
   await page.waitForFunction(
-    (m) => document.querySelector(".semantic-hud-stack")?.getAttribute("data-semantic-mode") === m,
+    (m) => {
+      const stackMode = document.querySelector(".semantic-hud-stack")?.getAttribute("data-semantic-mode");
+      const qaMode = window.__citycutSemanticHud?.mode;
+      return stackMode === m || qaMode === m;
+    },
     mode,
     { timeout: timeoutMs },
   );

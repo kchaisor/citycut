@@ -751,7 +751,7 @@ function City({
     group.traverse((object) => {
       const name = object.name;
       if (name === "BuildingEdges") {
-        object.visible = display.showOutlines && buildingsVisible;
+        object.visible = display.showOutlines && buildingsVisible && !semanticHudClose;
         return;
       }
       if (

@@ -4234,7 +4234,7 @@ body,
   margin-top: 0;
 }
 
-.semantic-hud-building .semantic-kpi-grid {
+.model .right-inspector .semantic-hud-building .kpi-grid.semantic-kpi-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
