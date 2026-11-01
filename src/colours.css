@@ -52,6 +52,10 @@
   --walk-ripple-band-2: #E85D04;
   --walk-ripple-label-bg: #1C1C22;
   --walk-ripple-label-text: #FFFFFF;
+  --walk-ripple-amenity-cafe: #FF6B9D;
+  --walk-ripple-amenity-school: #4CC9F0;
+  --walk-ripple-amenity-park: #52B788;
+  --walk-ripple-amenity-transport: #BDB2FF;
 
   --use-residential: #CECBC6;
 

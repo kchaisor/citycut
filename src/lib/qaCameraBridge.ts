@@ -54,7 +54,12 @@ declare global {
       getMinutes: () => number;
       getUniformMinutes: () => number;
       countReachedBuildings: (minuteCutoff: number) => number;
+      getAmenityCounts?: () => Record<string, number>;
+      getAmenityPoolCount?: () => number;
+      amenitiesUnavailable?: () => boolean;
+      screenPointForFirstReachedAmenity?: () => { x: number; y: number } | null;
     };
+    __citycutWalkRipplePickProbe?: (clientX: number, clientY: number) => string | null;
     __citycutQaSelectionAudit?: import("./buildingSelectionAudit").BuildingSelectionAudit;
     __citycutFrameRatio?: number;
     __citycutMinBeat2Ms?: number;

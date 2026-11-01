@@ -9,8 +9,13 @@ export function WalkRipplePanel({ ripple }: { ripple: WalkRipple }) {
       <p className="field-note">
         {ripple.placing
           ? "Click the ground in the 3D view to set the walk origin."
-          : "A yellow wave spreads along walkable streets and footpaths; buildings tint by walk time."}
+          : "A yellow wave spreads along walkable streets and footpaths; buildings tint by walk time. OpenStreetMap amenities pop as light columns when the wave reaches them."}
       </p>
+      {ripple.amenitiesUnavailable ? (
+        <p className="field-note walk-ripple-amenity-unavailable" role="alert">
+          Amenities unavailable
+        </p>
+      ) : null}
       <label className="view-walk-field">
         <span>Walking speed</span>
         <span className="mono">{WALK_RIPPLE_SPEED_MPM} m/min</span>
