@@ -92,6 +92,8 @@ import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SunHoursLayer } from "./SunHoursLayer";
 import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
+import { SemanticHudSampler } from "./SemanticHudSampler";
+import type { SemanticHudSample } from "../lib/semanticHudSample";
 
 const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
@@ -368,6 +370,7 @@ function City({
   pickBuildings,
   walkRippleTint,
   walkRippleArrivals,
+  cityRootRef,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -384,6 +387,7 @@ function City({
   pickBuildings: boolean;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
+  cityRootRef?: RefObject<THREE.Object3D | null>;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -803,6 +807,12 @@ function City({
     }
   }, [contours, colourTick, invalidate]);
   useLayoutEffect(() => () => disposeObject(group), [group]);
+  useLayoutEffect(() => {
+    if (cityRootRef) cityRootRef.current = group;
+    return () => {
+      if (cityRootRef) cityRootRef.current = null;
+    };
+  }, [cityRootRef, group]);
   return (
     <>
       <primitive object={group} />
@@ -1640,6 +1650,7 @@ export function Cameras({
   lon,
   cameraMemory,
   introEnabled = false,
+  perspControlsRef,
 }: {
   side: number;
   lift: number;
@@ -1658,11 +1669,14 @@ export function Cameras({
   lon: number;
   cameraMemory?: CameraMemoryRef;
   introEnabled?: boolean;
+  perspControlsRef?: RefObject<OrbitControlsImpl | null>;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
-  const perspControls = useRef<OrbitControlsImpl | null>(null);
+  const internalPerspControls = useRef<OrbitControlsImpl | null>(null);
+  const perspControls = perspControlsRef ?? internalPerspControls;
   const orthoControls = useRef<OrbitControlsImpl | null>(null);
+  const invalidate = useThree((state) => state.invalidate);
   const touchedRef = useRef(false);
   const perspFitKey = useRef<string | null>(null);
   const isoFitKey = useRef<string | null>(null);
@@ -1799,7 +1813,9 @@ export function Cameras({
             maxDistance={Math.max(side * 6, heliodonRadius * 2.4)}
             onStart={() => {
               touchedRef.current = true;
+              invalidate();
             }}
+            onChange={() => invalidate()}
           />
           <OrbitControls
             ref={orthoControls}
@@ -1905,6 +1921,8 @@ export function Scene3D({
   walkRippleArrivals = null,
   onScenePoint = null,
   quality = "high",
+  semanticHudEnabled = false,
+  onSemanticHudSample,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -1933,8 +1951,17 @@ export function Scene3D({
   walkRippleArrivals?: Map<number, number> | null;
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
   quality?: RenderQuality;
+  semanticHudEnabled?: boolean;
+  onSemanticHudSample?: (sample: SemanticHudSample) => void;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
+  const cityRootRef = useRef<THREE.Object3D | null>(null);
+  const perspControlsRef = useRef<OrbitControlsImpl | null>(null);
+  const onSemanticHudSampleRef = useRef(onSemanticHudSample);
+  onSemanticHudSampleRef.current = onSemanticHudSample;
+  const handleSemanticHudSample = useCallback((sample: SemanticHudSample) => {
+    onSemanticHudSampleRef.current?.(sample);
+  }, []);
   const onBounds = useCallback((bounds: Aabb) => {
     boundsRef.current = bounds;
   }, []);
@@ -2049,6 +2076,7 @@ export function Scene3D({
         display={display}
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
+        cityRootRef={cityRootRef}
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
@@ -2088,7 +2116,19 @@ export function Scene3D({
         lon={model.center.lon}
         cameraMemory={cameraMemory}
         introEnabled
+        perspControlsRef={perspControlsRef}
       />
+      {semanticHudEnabled && onSemanticHudSample ? (
+        <SemanticHudSampler
+          enabled={projection === "perspective" && semanticHudEnabled}
+          buildings={model.buildings}
+          roads={model.roads}
+          groundY={groundY}
+          cityRootRef={cityRootRef}
+          controlsRef={perspControlsRef}
+          onSample={handleSemanticHudSample}
+        />
+      ) : null}
       </Canvas>
     </div>
   );

@@ -108,6 +108,7 @@ export type RoadFeat = {
    * and only bridges road gaps that are rimmed by streets, not by service ways.
    */
   service?: string;
+  name?: string;
 };
 
 export type CarParkArea = { ring: Ring; holes: Ring[] };

@@ -478,6 +478,7 @@ export function parseCity(
           width: spec.width,
           kind: spec.kind,
           ...(spec.grade ? { grade: spec.grade } : {}),
+          ...(tags.name?.trim() ? { name: tags.name.trim() } : {}),
           ...(spec.kind === "road" && tags.highway?.split(";")[0] === "service"
             ? { service: tags.service || "service" }
             : {}),

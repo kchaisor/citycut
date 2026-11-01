@@ -4168,6 +4168,92 @@ body,
   border: 0 !important;
 }
 
+.semantic-hud-stack {
+  position: relative;
+  min-height: 0;
+}
+
+.semantic-hud-pane {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+
+.semantic-hud-pane.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.semantic-hud-stack .semantic-hud-pane:not(.is-visible) {
+  position: absolute;
+  inset: 0;
+}
+
+.semantic-hud-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.semantic-hud-title {
+  margin: 0;
+  font-size: var(--font-size-drawer);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.semantic-hud-meta {
+  font-size: 12px;
+  color: var(--muted-text);
+}
+
+.semantic-hud-source {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted-text);
+}
+
+.semantic-kpi-grid {
+  margin-top: 0;
+}
+
+.semantic-kpi-wide {
+  grid-column: span 2;
+}
+
+.semantic-viewport-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 2;
+}
+
+.semantic-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg-card) 88%, transparent);
+  color: var(--text);
+  line-height: 1.2;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.semantic-label.is-street {
+  font-weight: 500;
+}
+
+.semantic-label.is-building {
+  color: var(--muted-text);
+}
+
 .model[data-intro-hold="true"] .top-bar,
 .model[data-intro-hold="true"] .top-bar-left,
 .model[data-intro-hold="true"] .top-bar-center,

@@ -22,6 +22,7 @@ import {
 import { clipPolylineSiteFrame, DEFAULT_SITE_FRAME_SHAPE, type SiteFrameShape } from "./siteFrame";
 import type { LonLat, Pt, RoadFeat } from "../types";
 import { circleRing, detectRoundabouts, osmWayKey, type Roundabout } from "./roundabouts";
+import { roadNameFromOvertureProps } from "./overtureRoadName";
 
 export const OVERTURE_TRANSPORT_ZOOM = 14;
 
@@ -41,6 +42,7 @@ type LinePart = {
   spec: NonNullable<ReturnType<typeof roadSpecFromOvertureSegment>>;
   service: string | null;
   key: string | null;
+  name: string | undefined;
 };
 
 function partsFromTile(
@@ -80,6 +82,7 @@ function partsFromTile(
     const underground = hidden(props);
     const service = serviceKindOfSegment(props);
     const key = osmWayKey(props);
+    const name = roadNameFromOvertureProps(props);
     const street = spec.kind === "road" && spec.grade !== "path" && !service;
     for (const coordinates of lineStrings) {
       if (key && street) {
@@ -90,7 +93,7 @@ function partsFromTile(
         const visible = clipLineToGroundVisible(line, underground);
         for (const piece of visible) {
           if (polylineLength(piece) < 1) continue;
-          parts.push({ id: `${id}:${x}:${y}:${parts.length}`, line: piece, spec, service, key });
+          parts.push({ id: `${id}:${x}:${y}:${parts.length}`, line: piece, spec, service, key, name });
         }
       }
     }
@@ -149,6 +152,7 @@ export async function fetchOvertureTransportationForCut(
         width: part.spec.width,
         kind: part.spec.kind,
         ...(part.spec.grade ? { grade: part.spec.grade } : {}),
+        ...(part.name ? { name: part.name } : {}),
         ...(part.service && part.spec.kind === "road" ? { service: part.service } : {}),
       });
     }

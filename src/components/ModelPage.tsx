@@ -155,6 +155,9 @@ import { isometricDrawingBounds } from "../lib/isometricDrawing";
 import { Sidebar, type SidebarItem } from "./Sidebar";
 import { SatellitePane } from "./SatellitePane";
 import { Scene3D, type SceneExporter } from "./Scene3D";
+import { SiteIntelligenceSemantic } from "./SiteIntelligenceSemantic";
+import { SemanticViewportLabels } from "./SemanticViewportLabels";
+import { EMPTY_SEMANTIC_HUD_SAMPLE, type SemanticHudSample } from "../lib/semanticHudSample";
 
 function shouldShowIntroBridgePill(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") return false;
@@ -339,6 +342,13 @@ export function ModelPage({
   }, [tab, model]);
   const [snapId, setSnapId] = useState(0);
   const cameraMemory = useMemo<CameraMemoryRef>(() => ({ current: null }), [model]);
+  const [semanticHudSample, setSemanticHudSample] = useState<SemanticHudSample>(EMPTY_SEMANTIC_HUD_SAMPLE);
+  const onSemanticHudSample = useCallback((sample: SemanticHudSample) => {
+    setSemanticHudSample(sample);
+    const canvas = document.querySelector(".scene-canvas");
+    if (canvas instanceof HTMLCanvasElement) canvas.dataset.semanticHudMode = sample.mode;
+  }, []);
+  const semanticHudActive = tab === "3d" && view.projection === "perspective";
   const [view3dDisplay, setView3dDisplay] = useState<View3dDisplaySettings>(() => {
     const next = view3dDisplayForModelOpen(window.localStorage);
     writeStoredView3dDisplay(window.localStorage, next);
@@ -1844,7 +1854,10 @@ export function ModelPage({
                       : massing.onScenePoint
                 }
                 quality={renderQuality}
+                semanticHudEnabled={semanticHudActive}
+                onSemanticHudSample={onSemanticHudSample}
               />
+              <SemanticViewportLabels labels={semanticHudSample.labels} visible={semanticHudActive} />
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
               {rippleAnalysisOpen && walkRipple.buildingArrivals && <WalkRippleLegend />}
               {walkRippleToast ? (
@@ -2204,6 +2217,11 @@ export function ModelPage({
             rightChildren={
               <>
             <div className="drawer-section" hidden={rightOpen !== "summary"}>
+              <SiteIntelligenceSemantic
+                active={semanticHudActive && rightOpen === "summary"}
+                sample={semanticHudSample}
+                overview={
+                  <>
               <div className="kpi-grid mono" aria-label="In this model">
                 <div className="kpi-cell">
                   <div className="kpi-lbl k-lbl">Bldgs</div>
@@ -2359,6 +2377,9 @@ export function ModelPage({
                   </details>
                 </div>
               </details>
+                  </>
+                }
+              />
             </div>
 
             <div className="drawer-section legend" hidden={rightOpen !== "buildings"}>
