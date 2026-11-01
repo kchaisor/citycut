@@ -2,8 +2,16 @@ import * as THREE from "three";
 import { getColour } from "./colours";
 import { WALK_RIPPLE_TIMELINE_MAX_MIN } from "./walkRippleNetwork";
 
+export const WALK_RIPPLE_TRAIL_MIN = 1;
+export const WALK_RIPPLE_TRAIL_MAX = 10;
+export const WALK_RIPPLE_TRAIL_DEFAULT = 4;
+
 export type RippleShaderUniforms = {
   uRippleTime: { value: number };
+  uTrailLengthMin: { value: number };
+  uCometHead: { value: THREE.Color };
+  uCometTail: { value: THREE.Color };
+  uCometEmber: { value: THREE.Color };
   uBand0: { value: THREE.Color };
   uBand1: { value: THREE.Color };
   uBand2: { value: THREE.Color };
@@ -14,6 +22,10 @@ export type RippleShaderUniforms = {
 export function rippleColourUniforms(): RippleShaderUniforms {
   return {
     uRippleTime: { value: -1 },
+    uTrailLengthMin: { value: WALK_RIPPLE_TRAIL_DEFAULT },
+    uCometHead: { value: new THREE.Color(getColour("--walk-ripple-comet-head")) },
+    uCometTail: { value: new THREE.Color(getColour("--walk-ripple-comet-tail")) },
+    uCometEmber: { value: new THREE.Color(getColour("--walk-ripple-comet-ember")) },
     uBand0: { value: new THREE.Color(getColour("--walk-ripple-band-0")) },
     uBand1: { value: new THREE.Color(getColour("--walk-ripple-band-1")) },
     uBand2: { value: new THREE.Color(getColour("--walk-ripple-band-2")) },
@@ -88,29 +100,51 @@ export function patchBuildingMaterialForRipple(
 
 const RIBBON_VERTEX = `
   attribute float aRippleArrival;
-  uniform float uRippleTime;
-  uniform vec3 uAccent;
-  varying float vMix;
+  varying float vWalkMin;
   void main() {
-    vMix = 0.0;
-    if (uRippleTime >= 0.0) {
-      float pulse = 0.0;
-      if (uRippleTime >= aRippleArrival - 0.12) {
-        pulse = exp(-pow((uRippleTime - aRippleArrival) * 6.5, 2.0));
-      }
-      float trail = uRippleTime >= aRippleArrival ? 0.88 : 0.0;
-      vMix = clamp(max(pulse * 0.95, trail), 0.0, 1.0);
-    }
+    vWalkMin = aRippleArrival;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
 
 const RIBBON_FRAGMENT = `
-  uniform vec3 uAccent;
-  varying float vMix;
+  uniform float uRippleTime;
+  uniform float uTrailLengthMin;
+  uniform vec3 uCometHead;
+  uniform vec3 uCometTail;
+  uniform vec3 uCometEmber;
+  varying float vWalkMin;
+
   void main() {
-    if (vMix < 0.04) discard;
-    gl_FragColor = vec4(uAccent, vMix);
+    if (uRippleTime < 0.0) discard;
+    float age = uRippleTime - vWalkMin;
+    if (age < -0.18) discard;
+
+    float head = exp(-pow(age * 11.5, 2.0));
+    float trailLen = max(uTrailLengthMin, 0.05);
+    vec3 rgb;
+    float alpha;
+
+    if (age < 0.0) {
+      rgb = uCometHead;
+      alpha = head * 0.42;
+    } else if (age <= trailLen) {
+      float u = age / trailLen;
+      float cool = pow(u, 0.82);
+      rgb = mix(uCometHead, uCometTail, cool);
+      rgb = mix(rgb, uCometEmber, smoothstep(0.72, 1.0, u) * 0.35);
+      rgb = mix(rgb, uCometHead, head * 0.92);
+      float tailAlpha = mix(0.88, 0.38, cool);
+      alpha = max(tailAlpha, head * 0.96);
+    } else {
+      float emberFade = exp(-(age - trailLen) * 0.55);
+      rgb = uCometEmber;
+      alpha = 0.26 * emberFade;
+    }
+
+    alpha = clamp(alpha, 0.0, 1.0);
+    if (alpha < 0.035) discard;
+    gl_FragColor = vec4(rgb, alpha);
   }
 `;
 
@@ -118,7 +152,10 @@ export function createRippleNetworkRibbonMaterial(uniforms: RippleShaderUniforms
   return new THREE.ShaderMaterial({
     uniforms: {
       uRippleTime: uniforms.uRippleTime,
-      uAccent: uniforms.uAccent,
+      uTrailLengthMin: uniforms.uTrailLengthMin,
+      uCometHead: uniforms.uCometHead,
+      uCometTail: uniforms.uCometTail,
+      uCometEmber: uniforms.uCometEmber,
     },
     vertexShader: RIBBON_VERTEX,
     fragmentShader: RIBBON_FRAGMENT,
@@ -130,4 +167,10 @@ export function createRippleNetworkRibbonMaterial(uniforms: RippleShaderUniforms
     polygonOffsetFactor: -4,
     polygonOffsetUnits: -4,
   });
+}
+
+export function refreshRippleCometColours(uniforms: RippleShaderUniforms): void {
+  uniforms.uCometHead.value.setStyle(getColour("--walk-ripple-comet-head"));
+  uniforms.uCometTail.value.setStyle(getColour("--walk-ripple-comet-tail"));
+  uniforms.uCometEmber.value.setStyle(getColour("--walk-ripple-comet-ember"));
 }

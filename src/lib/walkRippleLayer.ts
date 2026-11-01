@@ -8,7 +8,12 @@ import {
   type RippleTimes,
   type WalkNetwork,
 } from "./walkRippleNetwork";
-import { createRippleNetworkRibbonMaterial, rippleColourUniforms, type RippleShaderUniforms } from "./walkRippleShader";
+import {
+  createRippleNetworkRibbonMaterial,
+  refreshRippleCometColours,
+  rippleColourUniforms,
+  type RippleShaderUniforms,
+} from "./walkRippleShader";
 import type { CityModel, Pt } from "../types";
 
 const RENDER_ORDER = 940;
@@ -49,6 +54,14 @@ export class WalkRippleLayer {
 
   setRippleTimeMinutes(minutes: number): void {
     this.uniforms.uRippleTime.value = minutes;
+  }
+
+  setTrailLengthMinutes(minutes: number): void {
+    this.uniforms.uTrailLengthMin.value = minutes;
+  }
+
+  refreshCometColours(): void {
+    refreshRippleCometColours(this.uniforms);
   }
 
   showOrigin(origin: Pt): void {

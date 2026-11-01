@@ -1,4 +1,5 @@
 import { WALK_RIPPLE_SPEED_MPM, WALK_RIPPLE_BANDS_MIN } from "../lib/walkRippleNetwork";
+import { WALK_RIPPLE_TRAIL_MAX, WALK_RIPPLE_TRAIL_MIN } from "../lib/walkRippleShader";
 import type { WalkRipple } from "./useWalkRipple";
 
 export function WalkRipplePanel({ ripple }: { ripple: WalkRipple }) {
@@ -14,6 +15,22 @@ export function WalkRipplePanel({ ripple }: { ripple: WalkRipple }) {
       <label className="view-walk-field">
         <span>Walking speed</span>
         <span className="mono">{WALK_RIPPLE_SPEED_MPM} m/min</span>
+      </label>
+      <label className="field walk-ripple-trail-field">
+        <span className="kicker">Comet trail length</span>
+        <input
+          type="range"
+          min={WALK_RIPPLE_TRAIL_MIN}
+          max={WALK_RIPPLE_TRAIL_MAX}
+          step={1}
+          value={ripple.trailLengthMin}
+          disabled={!ready && !ripple.times}
+          aria-label="Comet trail length in minutes"
+          onChange={(event) => ripple.setTrailLengthMin(Number(event.target.value))}
+        />
+        <span className="field-note mono">
+          {ripple.trailLengthMin} min amber tail · cools to ember beyond
+        </span>
       </label>
       <div className="walk-ripple-legend" aria-label="Walk time bands">
         {WALK_RIPPLE_BANDS_MIN.map((min) => (
