@@ -126,75 +126,73 @@ async function setupBoxHillWalkRipple(page) {
   return viteProc;
 }
 
-async function runCapture(page) {
+async function runCapture(page, videoDir) {
   const viteProc = await setupBoxHillWalkRipple(page);
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Page.startScreencast", { format: "jpeg", quality: 92, everyNthFrame: 1 });
-  const frames = [];
-  cdp.on("Page.screencastFrame", async (payload) => {
-    frames.push(Buffer.from(payload.data, "base64"));
-    await cdp.send("Page.screencastFrameAck", { sessionId: payload.sessionId });
-  });
-
   await page.getByRole("button", { name: /Replay walk ripple/i }).click();
-  const recordStart = Date.now();
-  let wideSaved = false;
-  let headSaved = false;
-  while (Date.now() - recordStart < RECORD_MS) {
-    await page.waitForTimeout(40);
-    const elapsed = Date.now() - recordStart;
-    if (!wideSaved && elapsed >= 2800) {
-      await page.screenshot({ path: OUT_WIDE, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
-      wideSaved = true;
-    }
-    if (!headSaved && elapsed >= 3200) {
-      await page.evaluate(() => {
-        window.__citycutQa?.setCamera({
-          eye: { x: 180, y: 95, z: -220 },
-          target: { x: 0, y: 12, z: 0 },
-        });
-      });
-      await page.waitForTimeout(450);
-      await page.screenshot({
-        path: OUT_HEAD,
-        clip: { x: Math.round(VIEWPORT.width * 0.32), y: Math.round(VIEWPORT.height * 0.28), width: 520, height: 420 },
-      });
-      headSaved = true;
-      await page.evaluate(() => {
-        const sideM = 1200;
-        const d = sideM * 0.92;
-        window.__citycutQa?.setCamera({
-          eye: { x: d * 0.68, y: d * 0.74, z: -d * 0.68 },
-          target: { x: 0, y: 28, z: 0 },
-        });
-      });
-      await page.waitForTimeout(300);
-    }
-  }
-  await cdp.send("Page.stopScreencast");
-
-  if (!wideSaved) {
-    await page.screenshot({ path: OUT_WIDE, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
-  }
-  if (!headSaved) {
-    await page.screenshot({ path: OUT_HEAD, clip: { x: 520, y: 240, width: 520, height: 420 } });
-  }
-
-  const tmpDir = "/tmp/walk_ripple_comet_screencast";
-  fs.rmSync(tmpDir, { recursive: true, force: true });
-  fs.mkdirSync(tmpDir, { recursive: true });
-  frames.forEach((buf, i) => {
-    fs.writeFileSync(path.join(tmpDir, `f${String(i).padStart(5, "0")}.jpg`), buf);
+  const waveT0 = Date.now();
+  await page.waitForTimeout(2800);
+  await page.screenshot({ path: OUT_WIDE, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
+  await page.evaluate(() => {
+    window.__citycutQa?.setCamera({
+      eye: { x: 180, y: 95, z: -220 },
+      target: { x: 0, y: 12, z: 0 },
+    });
   });
+  await page.waitForTimeout(500);
+  await page.screenshot({
+    path: OUT_HEAD,
+    clip: { x: Math.round(VIEWPORT.width * 0.32), y: Math.round(VIEWPORT.height * 0.28), width: 520, height: 420 },
+  });
+  await page.evaluate(() => {
+    const sideM = 1200;
+    const d = sideM * 0.92;
+    window.__citycutQa?.setCamera({
+      eye: { x: d * 0.68, y: d * 0.74, z: -d * 0.68 },
+      target: { x: 0, y: 28, z: 0 },
+    });
+  });
+  const elapsed = Date.now() - waveT0;
+  if (elapsed < RECORD_MS) await page.waitForTimeout(RECORD_MS - elapsed);
+  await page.getByRole("button", { name: /Replay walk ripple/i }).click();
+  await page.waitForTimeout(5200);
+  const rawVideo = await page.video()?.path();
+  if (viteProc) viteProc.kill("SIGTERM");
+  return rawVideo;
+}
+
+async function main() {
+  fs.mkdirSync("/opt/cursor/artifacts", { recursive: true });
+  const videoDir = "/tmp/walk_ripple_comet_video";
+  fs.rmSync(videoDir, { recursive: true, force: true });
+  fs.mkdirSync(videoDir, { recursive: true });
+  const browser = await chromium.launch({
+    executablePath: "/usr/bin/google-chrome",
+    headless: true,
+    args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-webgl", "--ignore-gpu-blocklist", "--no-sandbox"],
+  });
+  const context = await browser.newContext({
+    viewport: VIEWPORT,
+    deviceScaleFactor: 1,
+    recordVideo: { dir: videoDir, size: VIEWPORT },
+  });
+  const page = await context.newPage();
+  const rawVideo = await runCapture(page, videoDir);
+  await context.close();
+  await browser.close();
+  if (!rawVideo) throw new Error("Playwright recordVideo missing output");
   const { execFileSync } = await import("node:child_process");
   execFileSync(
     "ffmpeg",
     [
       "-y",
-      "-framerate",
-      "24",
+      "-sseof",
+      "10",
       "-i",
-      path.join(tmpDir, "f%05d.jpg"),
+      rawVideo,
+      "-t",
+      "10",
+      "-r",
+      "24",
       "-c:v",
       "libx264",
       "-pix_fmt",
@@ -205,24 +203,9 @@ async function runCapture(page) {
     ],
     { stdio: "inherit" },
   );
-
-  if (viteProc) viteProc.kill("SIGTERM");
   console.log("[ARTIFACT]", OUT_WIDE);
   console.log("[ARTIFACT]", OUT_HEAD);
   console.log("[ARTIFACT]", OUT_MP4);
-  console.log("[ARTIFACT] screencast frames", frames.length);
-}
-
-async function main() {
-  fs.mkdirSync("/opt/cursor/artifacts", { recursive: true });
-  const browser = await chromium.launch({
-    executablePath: "/usr/bin/google-chrome",
-    headless: true,
-    args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-webgl", "--ignore-gpu-blocklist", "--no-sandbox"],
-  });
-  const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: 1 });
-  await runCapture(page);
-  await browser.close();
 }
 
 main().catch((err) => {
