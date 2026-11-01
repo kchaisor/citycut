@@ -12,7 +12,9 @@ import type { CityModel } from "../types";
 export const WALK_RIPPLE_AMENITY_TIMEOUT_MS = 25_000;
 
 const defaultFetch: OsmFetch = async (url, init) => {
-  const response = await fetch(url, { ...init, headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+  const body = init.body.startsWith("data=") ? decodeURIComponent(init.body.slice(5)) : init.body;
+  const target = `${url}?data=${encodeURIComponent(body)}`;
+  const response = await fetch(target, { method: "GET", signal: init.signal });
   return { status: response.status, json: () => response.json() as Promise<unknown> };
 };
 
@@ -111,9 +113,10 @@ export async function fetchWalkRippleAmenities(
   options.signal?.addEventListener("abort", relay);
 
   try {
+    const query = overpassQuery(model);
     const response = await (options.fetchImpl ?? defaultFetch)(OVERPASS_URL, {
       method: "POST",
-      body: `data=${encodeURIComponent(overpassQuery(model))}`,
+      body: `data=${encodeURIComponent(query)}`,
       signal: controller.signal,
     });
     if (response.status === 429 || response.status < 200 || response.status >= 300) {
