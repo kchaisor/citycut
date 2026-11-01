@@ -135,7 +135,7 @@ import { openRing, toLocal } from "../lib/geo";
 import { interiorPoint, pointInPolygon } from "../lib/useCascade";
 import { sunHoursGrid } from "../lib/sunHours";
 import type { AnchoredLensActions, AnchoredLensMode } from "./AnchoredLens";
-import { LENS_HOVER_HIDE_MS } from "../lib/lensHoverTiming";
+import { resolveAnchoredLensView } from "../lib/anchoredLensDisplay";
 import type { BuildingUse, CityModel } from "../types";
 import { BuildingHeightPopover, HeightOverridePanel, HiddenBuildingsPanel } from "./BuildingHeightPopover";
 import {
@@ -580,8 +580,6 @@ export function ModelPage({
     clientY: number;
     pinned: boolean;
   } | null>(null);
-  const [lensHoverTargetId, setLensHoverTargetId] = useState<number | null>(null);
-  const [lensHoverShownId, setLensHoverShownId] = useState<number | null>(null);
 
   const massing = useImportedMassing(model);
 
@@ -653,7 +651,7 @@ export function ModelPage({
       getAnchoredLensMode(): AnchoredLensMode | null {
         const card = document.querySelector("[data-anchored-lens=\"open\"]");
         const mode = card?.getAttribute("data-anchored-lens-mode");
-        return mode === "hover" || mode === "pinned" ? mode : null;
+        return mode === "pinned" ? mode : null;
       },
       getAnchoredLensScreenPosition() {
         const layout = window.__citycutQaModel?.getAnchoredLensLayout?.();
@@ -799,8 +797,6 @@ export function ModelPage({
       },
       clearHeightSelection() {
         setHeightPick(null);
-        setLensHoverTargetId(null);
-        setLensHoverShownId(null);
       },
       pickTallTowerForSelectionQa() {
         const candidates = qaDisplayBuildingsRef.current
@@ -1199,35 +1195,19 @@ export function ModelPage({
       ? null
       : (displayModel.buildings.find((building) => building.id === heightPick.buildingId) ?? null);
 
-  useEffect(() => {
-    if (heightPick?.pinned) return;
-    if (lensHoverTargetId != null) {
-      setLensHoverShownId(lensHoverTargetId);
-      return;
-    }
-    const timer = window.setTimeout(() => setLensHoverShownId(null), LENS_HOVER_HIDE_MS);
-    return () => clearTimeout(timer);
-  }, [lensHoverTargetId, heightPick?.pinned]);
-
   const lensPinnedBuilding =
     heightPick?.pinned && heightPick
       ? (displayModel.buildings.find((building) => building.id === heightPick.buildingId) ?? null)
       : null;
-  const lensHoverBuilding =
-    !heightPick?.pinned && lensHoverShownId != null
-      ? (displayModel.buildings.find((building) => building.id === lensHoverShownId) ?? null)
-      : null;
+  const anchoredLensView = resolveAnchoredLensView({
+    tab,
+    pinnedBuildingId: lensPinnedBuilding?.id ?? null,
+  });
   const anchoredLensBuildingForView =
-    tab === "3d" ? (lensPinnedBuilding ?? lensHoverBuilding) : null;
-  const anchoredLensMode: AnchoredLensMode = lensPinnedBuilding ? "pinned" : "hover";
-
-  const onBuildingHover = useCallback(
-    (buildingId: number | null) => {
-      if (heightPick?.pinned) return;
-      setLensHoverTargetId(buildingId);
-    },
-    [heightPick?.pinned],
-  );
+    anchoredLensView.buildingId != null
+      ? (displayModel.buildings.find((building) => building.id === anchoredLensView.buildingId) ?? null)
+      : null;
+  const anchoredLensMode: AnchoredLensMode = "pinned";
 
   const anchoredLensSunGrid = useMemo(
     () =>
@@ -1243,8 +1223,6 @@ export function ModelPage({
       if (event.key === "Escape") {
         setHeightPick(null);
         setHideSelection([]);
-        setLensHoverTargetId(null);
-        setLensHoverShownId(null);
       }
     }
     window.addEventListener("keydown", onKey);
@@ -2034,17 +2012,13 @@ export function ModelPage({
                 onExportReady={onExportReady}
                 onBuildingPick={(buildingId, clientX, clientY, additive) => {
                   setHeightPick({ buildingId, clientX, clientY, pinned: true });
-                  setLensHoverTargetId(buildingId);
                   selectForHide(buildingId, additive);
                 }}
                 onClearBuildingPick={() => {
                   setHeightPick(null);
                   setHideSelection([]);
-                  setLensHoverTargetId(null);
                 }}
-                onBuildingHover={onBuildingHover}
                 lensHoverEnabled={tab === "3d" && view.projection === "perspective"}
-                lensHoverPinned={Boolean(heightPick?.pinned)}
                 heightEditBuildingId={heightPick?.pinned ? heightPick.buildingId : null}
                 selectedBuildingIds={
                   hideSelection.length > 0

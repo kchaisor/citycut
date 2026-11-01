@@ -45,6 +45,8 @@ declare global {
       } | null;
       resolveLensBuildingClick?: (buildingId: number) => { clickX: number; clickY: number } | null;
       getAnchoredLensMode?: () => "hover" | "pinned" | null;
+      getBuildingHoverHighlightId?: () => number | null;
+      isBuildingHoverHighlightVisible?: () => boolean;
       findLensHoverPairQa?: () => {
         a: { id: number; clickX: number; clickY: number; height: number; cx: number; cy: number };
         b: { id: number; clickX: number; clickY: number; height: number; cx: number; cy: number };

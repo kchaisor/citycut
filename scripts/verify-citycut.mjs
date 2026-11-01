@@ -1241,26 +1241,45 @@ async function main() {
     }
     await lensPage.waitForFunction(
       () => {
-        const layout = window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null;
-        return layout?.onScreen === true && window.__citycutQaModel?.getAnchoredLensMode?.() === "hover";
+        const canvas = document.querySelector(".model canvas");
+        return (
+          canvas instanceof HTMLCanvasElement &&
+          canvas.dataset.buildingHoverHighlightActive === "1" &&
+          !document.querySelector('[data-anchored-lens="open"]')
+        );
       },
       { timeout: 8000 },
     );
-    const hoverShowInfo = await lensPage.evaluate(() => ({
+    const hoverOnlyInfo = await lensPage.evaluate(() => ({
       mode: window.__citycutQaModel?.getAnchoredLensMode?.() ?? null,
       hasCard: Boolean(document.querySelector('[data-anchored-lens="open"]')),
-      hasActions: Boolean(document.querySelector('[data-anchored-lens-action="cut"]')),
-      layout: window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null,
+      highlightActive:
+        document.querySelector(".model canvas") instanceof HTMLCanvasElement &&
+        document.querySelector(".model canvas").dataset.buildingHoverHighlightActive === "1",
     }));
     assertCheck(
-      "anchored-lens-hover-shows",
-      "Hovering a building shows a preview lens card without action buttons",
-      hoverShowInfo.mode === "hover" &&
-        hoverShowInfo.hasCard &&
-        !hoverShowInfo.hasActions &&
-        hoverShowInfo.layout?.onScreen === true &&
-        (hoverShowInfo.layout?.width ?? 0) >= 220,
-      `info=${JSON.stringify(hoverShowInfo)}`,
+      "anchored-lens-hover-no-card",
+      "Hovering a building shows mesh highlight only (no anchored lens card)",
+      hoverOnlyInfo.mode == null && !hoverOnlyInfo.hasCard && hoverOnlyInfo.highlightActive,
+      `info=${JSON.stringify(hoverOnlyInfo)}`,
+    );
+
+    const hoverHighlightOn = await lensPage.evaluate(() => {
+      const canvas = document.querySelector(".model canvas");
+      const style = canvas instanceof HTMLCanvasElement ? getComputedStyle(canvas) : null;
+      return {
+        highlightId: canvas instanceof HTMLCanvasElement ? canvas.dataset.buildingHoverHighlightId ?? "" : "",
+        highlightActive: canvas instanceof HTMLCanvasElement ? canvas.dataset.buildingHoverHighlightActive === "1" : false,
+        cursor: style?.cursor ?? "",
+      };
+    });
+    assertCheck(
+      "building-hover-highlight-on",
+      "Hovering a building shows mesh highlight and pointer cursor on the 3D canvas",
+      hoverHighlightOn.highlightActive &&
+        hoverHighlightOn.highlightId.length > 0 &&
+        hoverHighlightOn.cursor === "pointer",
+      `info=${JSON.stringify(hoverHighlightOn)}`,
     );
 
     const hoverPair = await lensPage.evaluate(() => window.__citycutQaModel?.findLensHoverPairQa?.() ?? null);
@@ -1269,20 +1288,25 @@ async function main() {
       await lensPage.waitForTimeout(350);
       await lensPage.mouse.move(hoverPair.b.clickX, hoverPair.b.clickY, { steps: 6 });
       await lensPage.waitForTimeout(200);
-      const flickerInfo = await lensPage.evaluate(() => ({
-        mode: window.__citycutQaModel?.getAnchoredLensMode?.() ?? null,
-        hasCard: Boolean(document.querySelector('[data-anchored-lens="open"]')),
-      }));
+      const flickerInfo = await lensPage.evaluate(() => {
+        const canvas = document.querySelector(".model canvas");
+        return {
+          hasCard: Boolean(document.querySelector('[data-anchored-lens="open"]')),
+          highlightActive:
+            canvas instanceof HTMLCanvasElement && canvas.dataset.buildingHoverHighlightActive === "1",
+          highlightId: canvas instanceof HTMLCanvasElement ? canvas.dataset.buildingHoverHighlightId ?? "" : "",
+        };
+      });
       assertCheck(
-        "anchored-lens-hover-adjacent-no-flicker",
-        "Moving between nearby buildings keeps the hover card visible (no hide gap)",
-        flickerInfo.mode === "hover" && flickerInfo.hasCard,
+        "building-hover-adjacent-no-flicker",
+        "Moving between nearby buildings keeps hover highlight active with no card",
+        !flickerInfo.hasCard && flickerInfo.highlightActive && flickerInfo.highlightId.length > 0,
         `pair=${JSON.stringify(hoverPair)}, after=${JSON.stringify(flickerInfo)}`,
       );
     } else {
       assertCheck(
-        "anchored-lens-hover-adjacent-no-flicker",
-        "Moving between nearby buildings keeps the hover card visible (no hide gap)",
+        "building-hover-adjacent-no-flicker",
+        "Moving between nearby buildings keeps hover highlight active with no card",
         true,
         "skipped (no adjacent pair in view)",
       );
@@ -1292,14 +1316,22 @@ async function main() {
       await lensPage.mouse.move(24, 24);
     }
     await lensPage.waitForTimeout(180);
-    const stillUp = await lensPage.evaluate(() => Boolean(document.querySelector('[data-anchored-lens="open"]')));
-    await lensPage.waitForTimeout(220);
-    const hiddenAfterOut = await lensPage.evaluate(() => !document.querySelector('[data-anchored-lens="open"]'));
+    const hoverHighlightOff = await lensPage.evaluate(() => {
+      const canvas = document.querySelector(".model canvas");
+      const style = canvas instanceof HTMLCanvasElement ? getComputedStyle(canvas) : null;
+      return {
+        highlightActive: canvas instanceof HTMLCanvasElement ? canvas.dataset.buildingHoverHighlightActive === "1" : false,
+        highlightId: canvas instanceof HTMLCanvasElement ? canvas.dataset.buildingHoverHighlightId ?? "" : "",
+        cursor: style?.cursor ?? "",
+      };
+    });
     assertCheck(
-      "anchored-lens-hover-hide-delay",
-      "Moving off buildings hides the hover card after ~275ms",
-      stillUp && hiddenAfterOut,
-      `stillUp=${stillUp}, hiddenAfterOut=${hiddenAfterOut}`,
+      "building-hover-highlight-off",
+      "Moving off buildings clears hover highlight and restores default cursor",
+      !hoverHighlightOff.highlightActive &&
+        hoverHighlightOff.highlightId === "" &&
+        hoverHighlightOff.cursor !== "pointer",
+      `info=${JSON.stringify(hoverHighlightOff)}`,
     );
 
     if (lensCanvasBox) {
@@ -1310,16 +1342,20 @@ async function main() {
       await lensPage.mouse.move(cx, cy);
       await lensPage.mouse.down();
       await lensPage.waitForTimeout(120);
-      const midDragHover = await lensPage.evaluate(() => ({
-        mode: window.__citycutQaModel?.getAnchoredLensMode?.() ?? null,
-        hasCard: Boolean(document.querySelector('[data-anchored-lens="open"]')),
-      }));
+      const midDragHover = await lensPage.evaluate(() => {
+        const canvas = document.querySelector(".model canvas");
+        return {
+          hasCard: Boolean(document.querySelector('[data-anchored-lens="open"]')),
+          highlightActive:
+            canvas instanceof HTMLCanvasElement && canvas.dataset.buildingHoverHighlightActive === "1",
+        };
+      });
       await lensPage.mouse.move(cx + 120, cy - 30, { steps: 10 });
       await lensPage.mouse.up();
       assertCheck(
         "anchored-lens-no-hover-during-orbit",
-        "Orbit drag suppresses hover preview cards",
-        !midDragHover.hasCard && midDragHover.mode !== "hover",
+        "Orbit drag shows no lens card and clears hover highlight",
+        !midDragHover.hasCard && !midDragHover.highlightActive,
         `midDrag=${JSON.stringify(midDragHover)}`,
       );
       await lensPage.waitForTimeout(500);
