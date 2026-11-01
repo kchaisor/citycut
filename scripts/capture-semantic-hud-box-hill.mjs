@@ -10,7 +10,7 @@ const BOX_HILL = { lat: -37.8176, lon: 145.1234, km: 1, label: "Box Hill VIC" };
 
 const PREVIEW_BASE =
   process.env.SEMANTIC_HUD_BASE_URL?.replace(/\/$/, "") ??
-  "https://citycut-git-feat-distance-aware-hud-kchai.vercel.app/citycut";
+  "https://citycut-git-feat-distance-aware-hud-kchai.vercel.app";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
