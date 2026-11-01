@@ -130,19 +130,16 @@ async function runCapture(page, videoDir) {
   const viteProc = await setupBoxHillWalkRipple(page);
   await page.getByRole("button", { name: /Replay walk ripple/i }).click();
   const waveT0 = Date.now();
-  await page.waitForTimeout(2800);
+  await page.waitForTimeout(3000);
   await page.screenshot({ path: OUT_WIDE, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
   await page.evaluate(() => {
     window.__citycutQa?.setCamera({
-      eye: { x: 180, y: 95, z: -220 },
-      target: { x: 0, y: 12, z: 0 },
+      eye: { x: 95, y: 58, z: -125 },
+      target: { x: 8, y: 6, z: 0 },
     });
   });
-  await page.waitForTimeout(500);
-  await page.screenshot({
-    path: OUT_HEAD,
-    clip: { x: Math.round(VIEWPORT.width * 0.32), y: Math.round(VIEWPORT.height * 0.28), width: 520, height: 420 },
-  });
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: OUT_HEAD, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
   await page.evaluate(() => {
     const sideM = 1200;
     const d = sideM * 0.92;
@@ -151,6 +148,7 @@ async function runCapture(page, videoDir) {
       target: { x: 0, y: 28, z: 0 },
     });
   });
+  await page.waitForTimeout(400);
   const elapsed = Date.now() - waveT0;
   if (elapsed < RECORD_MS) await page.waitForTimeout(RECORD_MS - elapsed);
   await page.getByRole("button", { name: /Replay walk ripple/i }).click();
@@ -181,18 +179,24 @@ async function main() {
   await browser.close();
   if (!rawVideo) throw new Error("Playwright recordVideo missing output");
   const { execFileSync } = await import("node:child_process");
+  const dur = Number.parseFloat(
+    execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", rawVideo], {
+      encoding: "utf8",
+    }).trim(),
+  );
+  const clipStart = Number.isFinite(dur) && dur > 10.5 ? Math.max(0, dur - 10) : 0;
   execFileSync(
     "ffmpeg",
     [
       "-y",
-      "-sseof",
-      "10",
+      "-ss",
+      String(clipStart),
       "-i",
       rawVideo,
       "-t",
       "10",
-      "-r",
-      "24",
+      "-vf",
+      "fps=24",
       "-c:v",
       "libx264",
       "-pix_fmt",
