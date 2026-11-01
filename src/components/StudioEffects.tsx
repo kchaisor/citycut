@@ -6,7 +6,14 @@ import * as THREE from "three";
 import { getColour } from "../lib/colours";
 import { markScreenOnly } from "../lib/screenOnly";
 import type { SiteFrameShape } from "../lib/siteFrame";
+import { qaModeFromSearch } from "../lib/qaCameraBridge";
 import { ambientOcclusionActive, type RenderQuality } from "../lib/renderQuality";
+
+function studioPostEnabled(): boolean {
+  if (typeof window === "undefined") return true;
+  if (qaModeFromSearch(window.location.search) && window.__citycutPerfOverrides?.disablePost) return false;
+  return true;
+}
 
 export const INTRO_ACTIVE_KEY = "citycutIntroActive";
 
@@ -27,7 +34,7 @@ export function useIntroSettled(): boolean {
   return settled;
 }
 
-function useCameraMoving(): { readonly current: boolean } {
+export function useCameraMoving(): { readonly current: boolean } {
   const camera = useThree((state) => state.camera);
   const moving = useRef(false);
   const still = useRef(0);
@@ -170,7 +177,7 @@ export function StudioEffects({
   return (
     <>
       {showShadow ? <PlinthContactShadow sideM={sideM} plinthBottomY={plinthBottomY} frameShape={frameShape} colourTick={colourTick} /> : null}
-      <StudioComposer quality={quality} noToneMapping={noToneMapping} sideM={sideM} />
+      {studioPostEnabled() ? <StudioComposer quality={quality} noToneMapping={noToneMapping} sideM={sideM} /> : null}
     </>
   );
 }

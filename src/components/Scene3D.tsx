@@ -25,7 +25,7 @@ import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import { captureViewPng } from "../lib/capturePng";
 import { StudioSky, ViewInset, insetPointerEvents } from "./SceneBackdrop";
-import { INTRO_ACTIVE_KEY, StudioEffects } from "./StudioEffects";
+import { INTRO_ACTIVE_KEY, StudioEffects, useCameraMoving } from "./StudioEffects";
 import type { RenderQuality } from "../lib/renderQuality";
 import { markScreenOnly } from "../lib/screenOnly";
 import { cameraForExportFrame, exportFrameSize } from "../lib/exportFrame";
@@ -69,6 +69,12 @@ import {
   sitePlanBounds,
 } from "../lib/planCamera";
 import { qaModeFromSearch, registerQaCameraBridge, type QaCameraPose } from "../lib/qaCameraBridge";
+import {
+  applyQaPerfOverrides,
+  registerQaPerfBridge,
+  rendererSnapshotFromState,
+  sampleFramesFromState,
+} from "../lib/qaPerfBridge";
 import { WebGlContextWatch } from "./WebGlContextWatch";
 import type { ProjectionMode } from "../lib/viewMemory";
 import { isLayer3dVisible, treesVisibleIn3d, type View3dDisplaySettings } from "../lib/view3dDisplay";
@@ -220,6 +226,35 @@ function publishCamera(camera: THREE.Camera, target: THREE.Vector3, element: HTM
     delete element.dataset.camNear;
     delete element.dataset.camFar;
   }
+}
+
+function QaPerfSampler() {
+  const state = useThree();
+  useEffect(() => {
+    if (typeof window === "undefined" || !qaModeFromSearch(window.location.search)) return;
+    registerQaPerfBridge({
+      sampleFrames: (opts) => sampleFramesFromState(state, opts),
+      getRendererSnapshot: () => rendererSnapshotFromState(state),
+      setOverrides: (overrides) => {
+        window.__citycutPerfOverrides = overrides;
+        state.invalidate();
+      },
+    });
+    return () => registerQaPerfBridge(null);
+  }, [state]);
+  useFrame(() => applyQaPerfOverrides(state));
+  return null;
+}
+
+function AdaptiveViewportDpr() {
+  const setDpr = useThree((state) => state.setDpr);
+  const moving = useCameraMoving();
+  useFrame(() => {
+    if (typeof window === "undefined") return;
+    const cap = Math.min(1.5, window.devicePixelRatio);
+    setDpr(moving.current ? 1 : cap);
+  });
+  return null;
 }
 
 function BuildingPickLayer({
@@ -1989,7 +2024,7 @@ export function Scene3D({
       <Canvas
         key={glEpoch}
         className="scene-canvas"
-        dpr={[1, 1.75]}
+        dpr={[1, 1.5]}
         gl={{
           antialias: true,
           alpha: true,
@@ -2002,6 +2037,8 @@ export function Scene3D({
       >
         <ViewInset />
         <WebGlContextWatch onContextLost={onGlContextLost} onContextRestored={onGlContextRestored} />
+        <AdaptiveViewportDpr />
+        {qaModeFromSearch(typeof window === "undefined" ? "" : window.location.search) ? <QaPerfSampler /> : null}
         <RendererShadows enabled={solar.castShadows} />
       <SunStudyToneMapping noToneMapping={noToneMapping} />
       <StudioSky colourTick={colourTick} fallback={modelBg} />
