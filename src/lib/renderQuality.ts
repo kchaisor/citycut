@@ -24,5 +24,17 @@ export function writeStoredRenderQuality(storage: KeyValueStore, quality: Render
 }
 
 export function ambientOcclusionActive(quality: RenderQuality, cameraMoving: boolean): boolean {
-  return quality === "high" && !cameraMoving;
+  if (quality !== "high") return false;
+  if (typeof window !== "undefined" && window.__citycutPerfOverrides?.aoOffWhileMoving) {
+    return !cameraMoving;
+  }
+  return true;
+}
+
+export function studioSmaaActive(quality: RenderQuality): boolean {
+  return quality === "high";
+}
+
+export function studioAoActive(quality: RenderQuality): boolean {
+  return quality === "high";
 }

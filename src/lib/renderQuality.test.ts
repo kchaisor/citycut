@@ -3,6 +3,8 @@ import {
   ambientOcclusionActive,
   readStoredRenderQuality,
   RENDER_QUALITY_KEY,
+  studioAoActive,
+  studioSmaaActive,
   writeStoredRenderQuality,
 } from "./renderQuality";
 
@@ -33,10 +35,17 @@ describe("render quality", () => {
     expect(readStoredRenderQuality(store)).toBe("high");
   });
 
-  it("keeps ambient occlusion off in fast and while the camera moves", () => {
+  it("keeps ambient occlusion on for high and off for fast", () => {
     expect(ambientOcclusionActive("high", false)).toBe(true);
-    expect(ambientOcclusionActive("high", true)).toBe(false);
+    expect(ambientOcclusionActive("high", true)).toBe(true);
     expect(ambientOcclusionActive("fast", false)).toBe(false);
     expect(ambientOcclusionActive("fast", true)).toBe(false);
+  });
+
+  it("enables SMAA and AO only on high", () => {
+    expect(studioSmaaActive("high")).toBe(true);
+    expect(studioSmaaActive("fast")).toBe(false);
+    expect(studioAoActive("high")).toBe(true);
+    expect(studioAoActive("fast")).toBe(false);
   });
 });

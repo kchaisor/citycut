@@ -1836,6 +1836,7 @@ export function ModelPage({
                 walkRippleLayer={rippleAnalysisOpen ? walkRipple.layer.root : null}
                 walkRippleTint={rippleAnalysisOpen ? walkRipple.tint : null}
                 walkRippleArrivals={rippleAnalysisOpen ? walkRipple.buildingArrivals : null}
+                walkRipplePlaying={rippleAnalysisOpen && walkRipple.ripplePlaying}
                 onScenePoint={
                   walkRipple.placing
                     ? (east, north) => walkRipple.placePoint(east, north)

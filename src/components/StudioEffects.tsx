@@ -6,7 +6,14 @@ import * as THREE from "three";
 import { getColour } from "../lib/colours";
 import { markScreenOnly } from "../lib/screenOnly";
 import type { SiteFrameShape } from "../lib/siteFrame";
-import { ambientOcclusionActive, type RenderQuality } from "../lib/renderQuality";
+import { qaModeFromSearch } from "../lib/qaCameraBridge";
+import { ambientOcclusionActive, studioAoActive, studioSmaaActive, type RenderQuality } from "../lib/renderQuality";
+
+function studioPostEnabled(): boolean {
+  if (typeof window === "undefined") return true;
+  if (qaModeFromSearch(window.location.search) && window.__citycutPerfOverrides?.disablePost) return false;
+  return true;
+}
 
 export const INTRO_ACTIVE_KEY = "citycutIntroActive";
 
@@ -27,7 +34,7 @@ export function useIntroSettled(): boolean {
   return settled;
 }
 
-function useCameraMoving(): { readonly current: boolean } {
+export function useCameraMoving(): { readonly current: boolean } {
   const camera = useThree((state) => state.camera);
   const moving = useRef(false);
   const still = useRef(0);
@@ -70,19 +77,26 @@ function StudioComposer({ quality, noToneMapping, sideM }: { quality: RenderQual
     const on = ambientOcclusionActive(qualityRef.current, moving.current);
     if (pass.enabled !== on) pass.enabled = on;
   });
+  const aoRadius = Math.max(4, sideM * 0.012);
   return (
     <EffectComposer multisampling={0} renderPriority={1}>
-      <N8AO
-        ref={setAoPass}
-        enabled={quality === "high"}
-        quality="medium"
-        halfRes
-        aoRadius={Math.max(4, sideM * 0.012)}
-        distanceFalloff={1}
-        intensity={3}
-      />
+      {studioAoActive(quality) ? (
+        <N8AO
+          ref={setAoPass}
+          enabled={quality === "high"}
+          quality="performance"
+          halfRes
+          aoSamples={14}
+          denoiseSamples={4}
+          denoiseRadius={10}
+          depthAwareUpsampling
+          aoRadius={aoRadius}
+          distanceFalloff={1}
+          intensity={3.15}
+        />
+      ) : null}
       <ToneMapping mode={noToneMapping ? ToneMappingMode.LINEAR : ToneMappingMode.ACES_FILMIC} />
-      <SMAA />
+      {studioSmaaActive(quality) ? <SMAA /> : null}
     </EffectComposer>
   );
 }
@@ -170,7 +184,7 @@ export function StudioEffects({
   return (
     <>
       {showShadow ? <PlinthContactShadow sideM={sideM} plinthBottomY={plinthBottomY} frameShape={frameShape} colourTick={colourTick} /> : null}
-      <StudioComposer quality={quality} noToneMapping={noToneMapping} sideM={sideM} />
+      {studioPostEnabled() ? <StudioComposer quality={quality} noToneMapping={noToneMapping} sideM={sideM} /> : null}
     </>
   );
 }
