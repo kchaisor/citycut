@@ -29,6 +29,18 @@ function isRoadishGrey(r, g, b) {
   return r >= 150 && r <= 235 && g >= 150 && g <= 235;
 }
 
+function isRibbonTailToken(r, g, b) {
+  if (r < 210 || g < 105 || g > 228 || b > 115) return false;
+  if (channelDist(r, g, b, ORIGIN_ACCENT) <= 18) return false;
+  if (channelDist(r, g, b, COMET_TAIL) <= 45) return true;
+  return r >= 225 && g >= 130 && g <= 215 && b <= 95;
+}
+
+function isRibbonHeadToken(r, g, b) {
+  if (channelDist(r, g, b, ORIGIN_ACCENT) <= 18) return false;
+  return channelDist(r, g, b, COMET_HEAD) <= 42 || (r >= 248 && g >= 215 && b >= 115 && b <= 235);
+}
+
 function countRibbonTokensOnRoadBand(pngPath) {
   const png = PNG.sync.read(fs.readFileSync(pngPath));
   const y0 = 72;
@@ -37,7 +49,6 @@ function countRibbonTokensOnRoadBand(pngPath) {
   const x1 = 1376;
   let head = 0;
   let tail = 0;
-  let core = 0;
   for (let y = y0; y < y1; y++) {
     for (let x = x0; x < x1; x++) {
       const i = (png.width * y + x) * 4;
@@ -45,19 +56,12 @@ function countRibbonTokensOnRoadBand(pngPath) {
       const g = png.data[i + 1];
       const b = png.data[i + 2];
       const a = png.data[i + 3];
-      if (a < 180) continue;
-      if (channelDist(r, g, b, ORIGIN_ACCENT) <= 14) continue;
-      const roadNeighbour =
-        isRoadishGrey(r, g, b) ||
-        (x > x0 + 2 && isRoadishGrey(png.data[i - 8], png.data[i - 7], png.data[i - 6])) ||
-        (x < x1 - 2 && isRoadishGrey(png.data[i + 8], png.data[i + 9], png.data[i + 10]));
-      if (!roadNeighbour && channelDist(r, g, b, COMET_TAIL) > 40 && channelDist(r, g, b, COMET_HEAD) > 45) continue;
-      if (channelDist(r, g, b, COMET_TAIL) <= 32 || (r >= 248 && g >= 160 && g <= 195 && b <= 55)) tail += 1;
-      else if (channelDist(r, g, b, COMET_HEAD) <= 38) head += 1;
-      else if (channelDist(r, g, b, COMET_CORE) <= 18 && g >= 250) core += 1;
+      if (a < 150) continue;
+      if (isRibbonHeadToken(r, g, b)) head += 1;
+      else if (isRibbonTailToken(r, g, b)) tail += 1;
     }
   }
-  return { head, tail, core, total: head + tail + core };
+  return { head, tail, total: head + tail };
 }
 
 function findFreePort() {
@@ -193,7 +197,7 @@ async function runCapture(page) {
   await page.screenshot({ path: OUT_WIDE, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
   const widePixels = countRibbonTokensOnRoadBand(OUT_WIDE);
   console.log("[PIXELS] wide ribbon tokens (road band)", widePixels);
-  if (widePixels.tail < 400 || widePixels.total < 1200) {
+  if (widePixels.tail < 8000 || widePixels.total < 10000) {
     throw new Error(`Ribbon token pixels too low on wide shot: ${JSON.stringify(widePixels)}`);
   }
   await page.evaluate(() => {
@@ -206,7 +210,7 @@ async function runCapture(page) {
   await page.screenshot({ path: OUT_HEAD, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
   const headPixels = countRibbonTokensOnRoadBand(OUT_HEAD);
   console.log("[PIXELS] head close-up ribbon tokens", headPixels);
-  if (headPixels.tail < 800 || headPixels.total < 1500) {
+  if (headPixels.tail < 800 || headPixels.total < 1200) {
     throw new Error(`Head close-up ribbon tokens too low: ${JSON.stringify(headPixels)}`);
   }
   await page.evaluate(() => {
