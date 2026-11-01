@@ -133,6 +133,9 @@ export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "
       setMinutes: (minutes: number) => {
         applyRippleMinutes(minutes);
       },
+      setBandMixStrength: (strength: number) => {
+        tint.setBandMixStrength(strength);
+      },
       getMinutes: () => rippleMinutes,
       getUniformMinutes: () => layer.uniforms.uRippleTime.value,
       countReachedBuildings: (minuteCutoff: number) => {

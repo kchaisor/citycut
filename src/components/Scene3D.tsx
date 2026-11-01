@@ -327,28 +327,10 @@ function WalkRippleBuildingBinder({
 
 function WalkRippleVisualSync({ layer }: { layer: WalkRippleLayer | null }) {
   const invalidate = useThree((state) => state.invalidate);
-  const camera = useThree((state) => state.camera);
-  const lastWidthRef = useRef(0);
-  useFrame((state) => {
+  useFrame(() => {
     if (!layer || layer.uniforms.uRippleTime.value < 0) return;
-    const dist = camera.position.distanceTo(new THREE.Vector3(0, 25, 0));
-    layer.setRibbonHalfWidthForCamera(dist, state.size.height);
-    if (Math.abs(layer.uniforms.uRibbonHalfWidth.value - lastWidthRef.current) > 0.4) {
-      lastWidthRef.current = layer.uniforms.uRibbonHalfWidth.value;
-    }
     invalidate();
   });
-  return null;
-}
-
-function WalkRippleCityAttach({ city, layer }: { city: THREE.Group; layer: WalkRippleLayer | null }) {
-  useLayoutEffect(() => {
-    if (!layer) return;
-    city.add(layer.root);
-    return () => {
-      city.remove(layer.root);
-    };
-  }, [city, layer]);
   return null;
 }
 
@@ -846,7 +828,6 @@ function City({
         city={group}
         active={Boolean(walkRippleArrivals && walkRippleArrivals.size > 0)}
       />
-      <WalkRippleCityAttach city={group} layer={walkRippleLayer ?? null} />
       <WalkRippleVisualSync layer={walkRippleLayer ?? null} />
       {contours ? <primitive object={contours} /> : null}
       <HeightEditOverlayLayer
@@ -2085,6 +2066,7 @@ export function Scene3D({
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
+      {walkRippleLayer ? <primitive object={walkRippleLayer.root} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
       <SolarHeliodon
         lat={model.center.lat}

@@ -150,26 +150,36 @@ async function runCapture(page, videoDir) {
   await page.getByRole("button", { name: /Replay walk ripple/i }).click();
   const waveT0 = Date.now();
   await page.waitForTimeout(3000);
+  await page.evaluate(() => {
+    window.__citycutWalkRippleQa?.setBandMixStrength?.(0);
+  });
+  await page.waitForTimeout(400);
   const diag = await page.evaluate(() => window.__citycutWalkRippleQa?.getRibbonDiagnostics?.() ?? null);
   console.log("[DIAG]", JSON.stringify(diag));
+  if (diag?.ribbonHalfWidthM != null && (diag.ribbonHalfWidthM < 4 || diag.ribbonHalfWidthM > 6.01)) {
+    throw new Error(`ribbonHalfWidthM out of range: ${diag.ribbonHalfWidthM}`);
+  }
+  if (diag?.maxTriangleEdgeM != null && diag.maxTriangleEdgeM > 520) {
+    throw new Error(`maxTriangleEdgeM too large (cross-edge wedge): ${diag.maxTriangleEdgeM}`);
+  }
   await page.screenshot({ path: OUT_WIDE, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
   const widePixels = countCometPixels(OUT_WIDE);
   console.log("[PIXELS] wide", widePixels);
-  if (widePixels.total < 1000) {
-    throw new Error(`Comet pixel count too low: ${widePixels.total} (need >= 1000)`);
+  if (widePixels.head < 400 || widePixels.tail < 40 || widePixels.total < 800) {
+    throw new Error(`Comet pixel counts too low: ${JSON.stringify(widePixels)}`);
   }
   await page.evaluate(() => {
     window.__citycutQa?.setCamera({
-      eye: { x: 106, y: 150, z: -106 },
-      target: { x: 0, y: 10, z: 0 },
+      eye: { x: 52, y: 150, z: -52 },
+      target: { x: 0, y: 6, z: 0 },
     });
   });
   await page.waitForTimeout(900);
   await page.screenshot({ path: OUT_HEAD, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
   const headPixels = countCometPixels(OUT_HEAD);
   console.log("[PIXELS] head close-up", headPixels);
-  if (headPixels.total < 200) {
-    throw new Error(`Head close-up comet pixels too low: ${headPixels.total}`);
+  if (headPixels.head < 300 || headPixels.tail < 30) {
+    throw new Error(`Head close-up comet pixels too low: ${JSON.stringify(headPixels)}`);
   }
   await page.evaluate(() => {
     const sideM = 1200;

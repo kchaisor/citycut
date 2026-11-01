@@ -5,7 +5,7 @@ import { WALK_RIPPLE_TIMELINE_MAX_MIN } from "./walkRippleNetwork";
 export const WALK_RIPPLE_TRAIL_MIN = 1;
 export const WALK_RIPPLE_TRAIL_MAX = 10;
 export const WALK_RIPPLE_TRAIL_DEFAULT = 4;
-export const WALK_RIPPLE_RIBBON_BASE_HALF_M = 8;
+export { WALK_RIPPLE_RIBBON_HALF_DEFAULT_M as WALK_RIPPLE_RIBBON_BASE_HALF_M } from "./walkRippleRibbon";
 
 export type RippleShaderUniforms = {
   uRippleTime: { value: number };
@@ -27,7 +27,7 @@ export function rippleColourUniforms(): RippleShaderUniforms {
   return {
     uRippleTime: { value: -1 },
     uTrailLengthMin: { value: WALK_RIPPLE_TRAIL_DEFAULT },
-    uRibbonHalfWidth: { value: WALK_RIPPLE_RIBBON_BASE_HALF_M },
+    uRibbonHalfWidth: { value: 5 },
     uBandMixStrength: { value: 1 },
     uCometHead: { value: new THREE.Color(getColour("--walk-ripple-comet-head")) },
     uCometCore: { value: new THREE.Color(getColour("--walk-ripple-comet-core")) },
@@ -157,7 +157,8 @@ const RIBBON_FRAGMENT = `
     }
 
     alpha = clamp(alpha, 0.0, 1.0);
-    if (alpha < 0.02) discard;
+    if (age >= -0.28 && age <= trailLen + 0.35) alpha = max(alpha, 0.72);
+    if (alpha < 0.04) discard;
     gl_FragColor = vec4(rgb, alpha);
   }
 `;
@@ -174,9 +175,10 @@ export function createRippleNetworkRibbonMaterial(uniforms: RippleShaderUniforms
     },
     vertexShader: RIBBON_VERTEX,
     fragmentShader: RIBBON_FRAGMENT,
-    transparent: true,
+    transparent: false,
     depthTest: true,
-    depthWrite: false,
+    depthWrite: true,
+    alphaTest: 0.38,
     toneMapped: false,
     side: THREE.DoubleSide,
     polygonOffset: true,
@@ -192,8 +194,3 @@ export function refreshRippleCometColours(uniforms: RippleShaderUniforms): void 
   uniforms.uCometEmber.value.setStyle(getColour("--walk-ripple-comet-ember"));
 }
 
-export function ribbonHalfWidthForCameraDistance(distanceM: number, viewportHeightPx: number): number {
-  const refDist = Math.max(420, viewportHeightPx * 0.55);
-  const zoomScale = THREE.MathUtils.clamp(distanceM / refDist, 0.95, 3.4);
-  return WALK_RIPPLE_RIBBON_BASE_HALF_M * zoomScale;
-}

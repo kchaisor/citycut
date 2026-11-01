@@ -51,6 +51,7 @@ declare global {
     };
     __citycutWalkRippleQa?: {
       setMinutes: (minutes: number) => void;
+      setBandMixStrength: (strength: number) => void;
       getMinutes: () => number;
       getUniformMinutes: () => number;
       countReachedBuildings: (minuteCutoff: number) => number;

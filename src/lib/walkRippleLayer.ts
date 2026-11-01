@@ -9,11 +9,16 @@ import {
   type WalkNetwork,
 } from "./walkRippleNetwork";
 import {
+  assertRibbonTriangleEdges,
+  buildNetworkRibbonBuffers,
+  clampRibbonHalfWidthM,
+  maxRibbonTriangleEdgeM,
+  WALK_RIPPLE_RIBBON_HALF_DEFAULT_M,
+} from "./walkRippleRibbon";
+import {
   createRippleNetworkRibbonMaterial,
   refreshRippleCometColours,
-  ribbonHalfWidthForCameraDistance,
   rippleColourUniforms,
-  WALK_RIPPLE_RIBBON_BASE_HALF_M,
   type RippleShaderUniforms,
 } from "./walkRippleShader";
 import type { CityModel, Pt } from "../types";
@@ -35,6 +40,7 @@ export type WalkRippleRibbonDiagnostics = {
   arrivalFinite: number;
   uRippleTime: number;
   ribbonHalfWidthM: number;
+  maxTriangleEdgeM: number;
   meshVisible: boolean;
   meshRenderOrder: number;
 };
@@ -48,7 +54,7 @@ export class WalkRippleLayer {
   private labelGroup: THREE.Group | null = null;
   private disposeGeometries: THREE.BufferGeometry[] = [];
   private lastMode: WalkRippleRibbonDiagnostics["mode"] = "none";
-  private ribbonHalfWidthM = WALK_RIPPLE_RIBBON_BASE_HALF_M;
+  private ribbonHalfWidthM = WALK_RIPPLE_RIBBON_HALF_DEFAULT_M;
 
   constructor(private readonly model: Pick<CityModel, "terrain" | "sideM">) {
     this.root.name = "WalkRipple";
@@ -78,16 +84,13 @@ export class WalkRippleLayer {
   }
 
   setRibbonHalfWidthM(halfWidthM: number): void {
-    this.ribbonHalfWidthM = halfWidthM;
-    this.uniforms.uRibbonHalfWidth.value = halfWidthM;
-  }
-
-  setRibbonHalfWidthForCamera(distanceM: number, viewportHeightPx: number): void {
-    this.setRibbonHalfWidthM(ribbonHalfWidthForCameraDistance(distanceM, viewportHeightPx));
+    const clamped = clampRibbonHalfWidthM(halfWidthM);
+    this.ribbonHalfWidthM = clamped;
+    this.uniforms.uRibbonHalfWidth.value = clamped;
   }
 
   resetRibbonHalfWidth(): void {
-    this.setRibbonHalfWidthM(WALK_RIPPLE_RIBBON_BASE_HALF_M);
+    this.setRibbonHalfWidthM(WALK_RIPPLE_RIBBON_HALF_DEFAULT_M);
   }
 
   refreshCometColours(): void {
@@ -111,6 +114,8 @@ export class WalkRippleLayer {
     }
     if (!Number.isFinite(arrivalMin)) arrivalMin = -1;
     if (!Number.isFinite(arrivalMax)) arrivalMax = -1;
+    const posAttr = geo?.getAttribute("position");
+    const posArray = posAttr?.array as Float32Array | undefined;
     return {
       mode: this.lastMode,
       triangleCount: geo ? geo.index ? geo.index.count / 3 : geo.getAttribute("position").count / 3 : 0,
@@ -119,6 +124,7 @@ export class WalkRippleLayer {
       arrivalFinite,
       uRippleTime: this.uniforms.uRippleTime.value,
       ribbonHalfWidthM: this.ribbonHalfWidthM,
+      maxTriangleEdgeM: posArray ? maxRibbonTriangleEdgeM(posArray) : -1,
       meshVisible: this.networkMesh?.visible ?? false,
       meshRenderOrder: this.networkMesh?.renderOrder ?? -1,
     };
@@ -156,34 +162,19 @@ export class WalkRippleLayer {
       (this.networkMesh.material as THREE.Material).dispose();
       this.networkMesh = null;
     }
-    const positions: number[] = [];
-    const arrivals: number[] = [];
-    const hw = this.ribbonHalfWidthM;
-    network.edges.forEach((edge, edgeIndex) => {
-      const base = edgeIndex * 4;
-      const ta = edgeVertexTimes[base]!;
-      const tb = edgeVertexTimes[base + 2]!;
-      const dx = edge.bx - edge.ax;
-      const dy = edge.by - edge.ay;
-      const len = Math.hypot(dx, dy) || 1;
-      const ox = (-dy / len) * hw;
-      const oy = (dx / len) * hw;
-      const corner = (e: number, n: number, tMin: number) => {
-        const z = zAt(this.model, e, n) + LINE_LIFT_M;
-        return [e, z, -n, tMin] as const;
-      };
-      const a0 = corner(edge.ax + ox, edge.ay + oy, ta);
-      const a1 = corner(edge.ax - ox, edge.ay - oy, ta);
-      const b0 = corner(edge.bx + ox, edge.by + oy, tb);
-      const b1 = corner(edge.bx - ox, edge.by - oy, tb);
-      for (const c of [a0, a1, b0, a0, b0, b1]) {
-        positions.push(c[0], c[1], c[2]);
-        arrivals.push(c[3]);
-      }
-    });
+    const buffers = buildNetworkRibbonBuffers(
+      network,
+      edgeVertexTimes,
+      this.ribbonHalfWidthM,
+      (e, n) => zAt(this.model, e, n),
+      LINE_LIFT_M,
+    );
+    this.ribbonHalfWidthM = buffers.halfWidthM;
+    this.uniforms.uRibbonHalfWidth.value = buffers.halfWidthM;
+    assertRibbonTriangleEdges(buffers.positions, buffers.edgeLengthsM, buffers.halfWidthM);
     const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute("aRippleArrival", new THREE.Float32BufferAttribute(arrivals, 1));
+    geometry.setAttribute("position", new THREE.BufferAttribute(buffers.positions, 3));
+    geometry.setAttribute("aRippleArrival", new THREE.BufferAttribute(buffers.arrivals, 1));
     geometry.computeBoundingSphere();
     const material = createRippleNetworkRibbonMaterial(this.uniforms);
     const lines = new THREE.Mesh(geometry, material);
