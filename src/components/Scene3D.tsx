@@ -92,6 +92,8 @@ import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SunHoursLayer } from "./SunHoursLayer";
 import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
+import type { WalkRippleLayer } from "../lib/walkRippleLayer";
+import { WALK_RIPPLE_RIBBON_BASE_HALF_M } from "../lib/walkRippleShader";
 
 const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
@@ -321,6 +323,20 @@ function WalkRippleBuildingBinder({
     tint.attach(city, buildingArrivals);
     return () => tint.detach();
   }, [city, tint, buildingArrivals, colourTick]);
+  return null;
+}
+
+function WalkRippleVisualSync({ layer }: { layer: WalkRippleLayer | null }) {
+  const invalidate = useThree((state) => state.invalidate);
+  const camera = useThree((state) => state.camera);
+  useFrame((state) => {
+    if (!layer || layer.uniforms.uRippleTime.value < 0) return;
+    const dist = camera.position.distanceTo(new THREE.Vector3(0, 25, 0));
+    const refDist = Math.max(420, state.size.height * 0.55);
+    const zoomScale = THREE.MathUtils.clamp(dist / refDist, 0.95, 3.2);
+    layer.setRibbonHalfWidthM(WALK_RIPPLE_RIBBON_BASE_HALF_M * zoomScale);
+    invalidate();
+  });
   return null;
 }
 
@@ -1928,7 +1944,7 @@ export function Scene3D({
   display: View3dDisplaySettings;
   importedMassing?: THREE.Object3D | null;
   walkLayer?: THREE.Object3D | null;
-  walkRippleLayer?: THREE.Object3D | null;
+  walkRippleLayer?: WalkRippleLayer | null;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
@@ -2052,7 +2068,8 @@ export function Scene3D({
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
-      {walkRippleLayer ? <primitive object={walkRippleLayer} /> : null}
+      {walkRippleLayer ? <primitive object={walkRippleLayer.root} /> : null}
+      <WalkRippleVisualSync layer={walkRippleLayer} />
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
       <SolarHeliodon
         lat={model.center.lat}

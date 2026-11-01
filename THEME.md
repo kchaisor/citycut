@@ -295,9 +295,10 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--walk-ripple-band-2` | `#E85D04` | Walk ripple: buildings within 10–15 minutes walk. |
 | `--walk-ripple-label-bg` | `#1C1C22` | Walk ripple: floating minute-band label fill. |
 | `--walk-ripple-label-text` | `#FFFFFF` | Walk ripple: floating minute-band label text. |
-| `--walk-ripple-comet-head` | `#FFF9B0` | Walk ripple: hot white-yellow comet head on street traces at the wavefront. |
-| `--walk-ripple-comet-tail` | `#FF9F1C` | Walk ripple: amber comet tail behind the wavefront on street traces. |
-| `--walk-ripple-comet-ember` | `#5C3018` | Walk ripple: faint ember on street traces after the tail has cooled. |
+| `--walk-ripple-comet-head` | `#FFF4A8` | Walk ripple: hot white-yellow comet head on street traces at the wavefront. |
+| `--walk-ripple-comet-core` | `#FFFFFF` | Walk ripple: short bright core at the comet wavefront on street traces. |
+| `--walk-ripple-comet-tail` | `#FFB020` | Walk ripple: amber comet tail behind the wavefront on street traces. |
+| `--walk-ripple-comet-ember` | `#6B3820` | Walk ripple: faint ember on street traces after the tail has cooled. |
 
 The contour lines in Rhino use the pen `--contour-stroke` from `src/drawing-style.css`, not a fill.
 

@@ -6,12 +6,13 @@ import net from "node:net";
 import { chromium } from "playwright";
 
 const VIEWPORT = { width: 1440, height: 900 };
-const OUT_PNG = "/opt/cursor/artifacts/walk-ripple-comet-box-hill-wide.png";
-const OUT_MP4 = "/opt/cursor/artifacts/walk-ripple-comet-trail-slider.mp4";
-const TMP_FRAMES = "/tmp/walk_ripple_comet_frames";
+const OUT_WIDE = "/opt/cursor/artifacts/walk-ripple-comet-box-hill-wide.png";
+const OUT_HEAD = "/opt/cursor/artifacts/walk-ripple-comet-head-closeup.png";
+const OUT_MP4 = "/opt/cursor/artifacts/walk-ripple-comet-wave-playback.mp4";
 const BOX_HILL_LAT = -37.8182;
 const BOX_HILL_LON = 145.1234;
 const KM_WIDE = 1.2;
+const RECORD_MS = 10000;
 
 function findFreePort() {
   return new Promise((resolve, reject) => {
@@ -48,7 +49,7 @@ async function resolveAppBase(baseUrl) {
   return `${baseUrl}/citycut/`;
 }
 
-async function runCapture(page) {
+async function setupBoxHillWalkRipple(page) {
   await page.addInitScript(() => {
     window.__citycutAwaitIntroStart = true;
     window.__citycutMinSilentLoadMs = 0;
@@ -87,9 +88,7 @@ async function runCapture(page) {
     label: "Box Hill VIC",
     qa: "1",
   });
-  const entryUrl = appBase.includes("?")
-    ? `${appBase}&${modelQuery}`
-    : `${appBase}?${modelQuery}`;
+  const entryUrl = appBase.includes("?") ? `${appBase}&${modelQuery}` : `${appBase}?${modelQuery}`;
   await page.goto(entryUrl, { waitUntil: "domcontentloaded", timeout: 180000 });
   await page.getByRole("button", { name: /Create model/i }).click({ timeout: 180000 });
   await page.waitForSelector(".model canvas", { timeout: 180000 });
@@ -124,54 +123,78 @@ async function runCapture(page) {
   await page.mouse.click(box.x + box.width * 0.48, box.y + box.height * 0.55);
   await page.waitForFunction(() => Boolean(window.__citycutWalkRippleQa), { timeout: 120000 });
   await page.waitForTimeout(1200);
-  await page.evaluate(() => window.__citycutWalkRippleQa?.setMinutes(6));
-  await page.waitForTimeout(500);
-
-  let frame = 0;
-  const grab = async () => {
-    await page.screenshot({ path: path.join(TMP_FRAMES, `f${String(frame++).padStart(3, "0")}.png`) });
-  };
-
-  await grab();
-  await page.screenshot({ path: OUT_PNG, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
-
-  const trailSlider = page.locator(".model .env-bottom-row .walk-ripple-console-trail input[type='range']");
-  await trailSlider.waitFor({ state: "visible", timeout: 10000 });
-  for (const val of [2, 8, 4, 10, 3, 7, 5, 9, 1, 6]) {
-    await trailSlider.fill(String(val));
-    await page.waitForTimeout(500);
-    await grab();
-  }
-  await page.evaluate(() => window.__citycutWalkRippleQa?.setMinutes(11));
-  await page.waitForTimeout(500);
-  await trailSlider.fill("6");
-  await page.waitForTimeout(500);
-  await grab();
-
-  if (viteProc) viteProc.kill("SIGTERM");
+  return viteProc;
 }
 
-async function main() {
-  fs.mkdirSync("/opt/cursor/artifacts", { recursive: true });
-  fs.rmSync(TMP_FRAMES, { recursive: true, force: true });
-  fs.mkdirSync(TMP_FRAMES, { recursive: true });
-  const browser = await chromium.launch({
-    executablePath: "/usr/bin/google-chrome",
-    headless: true,
-    args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-webgl", "--ignore-gpu-blocklist", "--no-sandbox"],
+async function runCapture(page) {
+  const viteProc = await setupBoxHillWalkRipple(page);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Page.startScreencast", { format: "jpeg", quality: 92, everyNthFrame: 1 });
+  const frames = [];
+  cdp.on("Page.screencastFrame", async (payload) => {
+    frames.push(Buffer.from(payload.data, "base64"));
+    await cdp.send("Page.screencastFrameAck", { sessionId: payload.sessionId });
   });
-  const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: 1 });
-  await runCapture(page);
-  await browser.close();
+
+  await page.getByRole("button", { name: /Replay walk ripple/i }).click();
+  const recordStart = Date.now();
+  let wideSaved = false;
+  let headSaved = false;
+  while (Date.now() - recordStart < RECORD_MS) {
+    await page.waitForTimeout(40);
+    const elapsed = Date.now() - recordStart;
+    if (!wideSaved && elapsed >= 2800) {
+      await page.screenshot({ path: OUT_WIDE, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
+      wideSaved = true;
+    }
+    if (!headSaved && elapsed >= 3200) {
+      await page.evaluate(() => {
+        window.__citycutQa?.setCamera({
+          eye: { x: 180, y: 95, z: -220 },
+          target: { x: 0, y: 12, z: 0 },
+        });
+      });
+      await page.waitForTimeout(450);
+      await page.screenshot({
+        path: OUT_HEAD,
+        clip: { x: Math.round(VIEWPORT.width * 0.32), y: Math.round(VIEWPORT.height * 0.28), width: 520, height: 420 },
+      });
+      headSaved = true;
+      await page.evaluate(() => {
+        const sideM = 1200;
+        const d = sideM * 0.92;
+        window.__citycutQa?.setCamera({
+          eye: { x: d * 0.68, y: d * 0.74, z: -d * 0.68 },
+          target: { x: 0, y: 28, z: 0 },
+        });
+      });
+      await page.waitForTimeout(300);
+    }
+  }
+  await cdp.send("Page.stopScreencast");
+
+  if (!wideSaved) {
+    await page.screenshot({ path: OUT_WIDE, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
+  }
+  if (!headSaved) {
+    await page.screenshot({ path: OUT_HEAD, clip: { x: 520, y: 240, width: 520, height: 420 } });
+  }
+
+  const tmpDir = "/tmp/walk_ripple_comet_screencast";
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+  fs.mkdirSync(tmpDir, { recursive: true });
+  frames.forEach((buf, i) => {
+    fs.writeFileSync(path.join(tmpDir, `f${String(i).padStart(5, "0")}.jpg`), buf);
+  });
   const { execFileSync } = await import("node:child_process");
   execFileSync(
     "ffmpeg",
     [
       "-y",
       "-framerate",
-      "1.2",
+      "24",
       "-i",
-      path.join(TMP_FRAMES, "f%03d.png"),
+      path.join(tmpDir, "f%05d.jpg"),
       "-c:v",
       "libx264",
       "-pix_fmt",
@@ -182,8 +205,24 @@ async function main() {
     ],
     { stdio: "inherit" },
   );
-  console.log("[ARTIFACT]", OUT_PNG);
+
+  if (viteProc) viteProc.kill("SIGTERM");
+  console.log("[ARTIFACT]", OUT_WIDE);
+  console.log("[ARTIFACT]", OUT_HEAD);
   console.log("[ARTIFACT]", OUT_MP4);
+  console.log("[ARTIFACT] screencast frames", frames.length);
+}
+
+async function main() {
+  fs.mkdirSync("/opt/cursor/artifacts", { recursive: true });
+  const browser = await chromium.launch({
+    executablePath: "/usr/bin/google-chrome",
+    headless: true,
+    args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-webgl", "--ignore-gpu-blocklist", "--no-sandbox"],
+  });
+  const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: 1 });
+  await runCapture(page);
+  await browser.close();
 }
 
 main().catch((err) => {

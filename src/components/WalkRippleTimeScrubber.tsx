@@ -11,6 +11,7 @@ type WalkRippleTimeScrubberProps = {
   onPlayToggle: () => void;
   trailLengthMin: number;
   onTrailLengthChange: (minutes: number) => void;
+  onScrubActiveChange?: (active: boolean) => void;
 };
 
 function clampMinutes(value: number): number {
@@ -31,6 +32,7 @@ export function WalkRippleTimeScrubber({
   onPlayToggle,
   trailLengthMin,
   onTrailLengthChange,
+  onScrubActiveChange,
 }: WalkRippleTimeScrubberProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const scrubRef = useRef<HTMLDivElement>(null);
@@ -53,6 +55,7 @@ export function WalkRippleTimeScrubber({
   const onTrackPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (disabled) return;
     draggingRef.current = true;
+    onScrubActiveChange?.(true);
     event.currentTarget.setPointerCapture(event.pointerId);
     onMinutesChange(minutesFromClientX(event.clientX));
   };
@@ -65,6 +68,7 @@ export function WalkRippleTimeScrubber({
   const onTrackPointerUp = (event: PointerEvent<HTMLDivElement>) => {
     if (!draggingRef.current) return;
     draggingRef.current = false;
+    onScrubActiveChange?.(false);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }

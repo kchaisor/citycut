@@ -38,6 +38,7 @@ export type WalkRipple = {
   toggleRipplePlay: () => void;
   trailLengthMin: number;
   setTrailLengthMin: (minutes: number) => void;
+  setRippleScrubActive: (active: boolean) => void;
 };
 
 export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "buildings" | "roads" | "terrain" | "sideM">): WalkRipple {
@@ -58,6 +59,7 @@ export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "
   const [rippleMinutes, setRippleMinutesState] = useState(0);
   const [ripplePlaying, setRipplePlaying] = useState(false);
   const [trailLengthMin, setTrailLengthMinState] = useState(WALK_RIPPLE_TRAIL_DEFAULT);
+  const [rippleScrubActive, setRippleScrubActive] = useState(false);
   const rafRef = useRef<number | null>(null);
   const networkRef = useRef(buildWalkNetwork(model.roads));
   const buildingArrivalsRef = useRef<Map<number, number> | null>(null);
@@ -76,7 +78,9 @@ export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "
     setBuildingArrivals(null);
     setRippleMinutesState(0);
     setRipplePlaying(false);
+    setRippleScrubActive(false);
     setTrailLengthMinState(WALK_RIPPLE_TRAIL_DEFAULT);
+    tint.setBandMixStrength(1);
     layer.uniforms.uTrailLengthMin.value = WALK_RIPPLE_TRAIL_DEFAULT;
     layer.clear();
     tint.detach();
@@ -88,6 +92,17 @@ export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "
     rafRef.current = null;
     setRipplePlaying(false);
   }, []);
+
+  const applyWaveFocus = useCallback(
+    (focused: boolean) => {
+      tint.setBandMixStrength(focused ? 0.28 : 1);
+    },
+    [tint],
+  );
+
+  useEffect(() => {
+    applyWaveFocus(ripplePlaying || rippleScrubActive);
+  }, [applyWaveFocus, ripplePlaying, rippleScrubActive]);
 
   const applyTrailLength = useCallback(
     (minutes: number) => {
@@ -228,5 +243,6 @@ export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "
     toggleRipplePlay,
     trailLengthMin,
     setTrailLengthMin: applyTrailLength,
+    setRippleScrubActive,
   };
 }

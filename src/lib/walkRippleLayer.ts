@@ -12,6 +12,7 @@ import {
   createRippleNetworkRibbonMaterial,
   refreshRippleCometColours,
   rippleColourUniforms,
+  WALK_RIPPLE_RIBBON_BASE_HALF_M,
   type RippleShaderUniforms,
 } from "./walkRippleShader";
 import type { CityModel, Pt } from "../types";
@@ -19,7 +20,6 @@ import type { CityModel, Pt } from "../types";
 const RENDER_ORDER = 940;
 const ORIGIN_LIFT_M = 1.4;
 const LINE_LIFT_M = 0.55;
-const RIBBON_HALF_WIDTH_M = 2.8;
 const RING_SEGMENTS = 64;
 
 function zAt(model: Pick<CityModel, "terrain" | "sideM">, east: number, north: number): number {
@@ -50,6 +50,7 @@ export class WalkRippleLayer {
     this.originMarker = null;
     this.labelGroup = null;
     this.uniforms.uRippleTime.value = -1;
+    this.resetRibbonHalfWidth();
   }
 
   setRippleTimeMinutes(minutes: number): void {
@@ -58,6 +59,14 @@ export class WalkRippleLayer {
 
   setTrailLengthMinutes(minutes: number): void {
     this.uniforms.uTrailLengthMin.value = minutes;
+  }
+
+  setRibbonHalfWidthM(halfWidthM: number): void {
+    this.uniforms.uRibbonHalfWidth.value = halfWidthM;
+  }
+
+  resetRibbonHalfWidth(): void {
+    this.uniforms.uRibbonHalfWidth.value = WALK_RIPPLE_RIBBON_BASE_HALF_M;
   }
 
   refreshCometColours(): void {
@@ -92,9 +101,10 @@ export class WalkRippleLayer {
       (this.networkMesh.material as THREE.Material).dispose();
       this.networkMesh = null;
     }
-    const positions: number[] = [];
-    const arrivals: number[] = [];
-    const hw = RIBBON_HALF_WIDTH_M;
+    const cornerPositions: number[] = [];
+    const cornerArrivals: number[] = [];
+    const cornerExpand: number[] = [];
+    const cornerSide: number[] = [];
     network.edges.forEach((edge, edgeIndex) => {
       const base = edgeIndex * 4;
       const ta = edgeVertexTimes[base]!;
@@ -102,27 +112,47 @@ export class WalkRippleLayer {
       const dx = edge.bx - edge.ax;
       const dy = edge.by - edge.ay;
       const len = Math.hypot(dx, dy) || 1;
-      const ox = (-dy / len) * hw;
-      const oy = (dx / len) * hw;
-      const corner = (e: number, n: number, tMin: number) => {
+      const dirE = -dy / len;
+      const dirN = dx / len;
+      const pushCorner = (e: number, n: number, tMin: number, sign: number) => {
         const z = zAt(this.model, e, n) + LINE_LIFT_M;
-        return [e, z, -n, tMin] as const;
+        cornerPositions.push(e, z, -n);
+        cornerArrivals.push(tMin);
+        cornerExpand.push(dirE, dirN);
+        cornerSide.push(sign);
       };
-      const a0 = corner(edge.ax + ox, edge.ay + oy, ta);
-      const a1 = corner(edge.ax - ox, edge.ay - oy, ta);
-      const b0 = corner(edge.bx + ox, edge.by + oy, tb);
-      const b1 = corner(edge.bx - ox, edge.by - oy, tb);
-      for (const c of [a0, a1, b0, a0, b0, b1]) {
-        positions.push(c[0], c[1], c[2]);
-        arrivals.push(c[3]);
-      }
+      pushCorner(edge.ax, edge.ay, ta, 1);
+      pushCorner(edge.ax, edge.ay, ta, -1);
+      pushCorner(edge.bx, edge.by, tb, 1);
+      pushCorner(edge.bx, edge.by, tb, -1);
+    });
+    const triPositions: number[] = [];
+    const triArrivals: number[] = [];
+    const triExpand: number[] = [];
+    const triSide: number[] = [];
+    const copyCorner = (idx: number) => {
+      triPositions.push(cornerPositions[idx * 3]!, cornerPositions[idx * 3 + 1]!, cornerPositions[idx * 3 + 2]!);
+      triArrivals.push(cornerArrivals[idx]!);
+      triExpand.push(cornerExpand[idx * 2]!, cornerExpand[idx * 2 + 1]!);
+      triSide.push(cornerSide[idx]!);
+    };
+    network.edges.forEach((_edge, edgeIndex) => {
+      const vBase = edgeIndex * 4;
+      copyCorner(vBase);
+      copyCorner(vBase + 1);
+      copyCorner(vBase + 2);
+      copyCorner(vBase);
+      copyCorner(vBase + 2);
+      copyCorner(vBase + 3);
     });
     const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute("aRippleArrival", new THREE.Float32BufferAttribute(arrivals, 1));
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(triPositions, 3));
+    geometry.setAttribute("aRippleArrival", new THREE.Float32BufferAttribute(triArrivals, 1));
+    geometry.setAttribute("aExpandDir", new THREE.Float32BufferAttribute(triExpand, 2));
+    geometry.setAttribute("aSideSign", new THREE.Float32BufferAttribute(triSide, 1));
     const material = createRippleNetworkRibbonMaterial(this.uniforms);
     const lines = new THREE.Mesh(geometry, material);
-    lines.renderOrder = RENDER_ORDER + 2;
+    lines.renderOrder = RENDER_ORDER + 3;
     this.networkMesh = lines;
     this.disposeGeometries.push(geometry);
     this.root.add(lines);
