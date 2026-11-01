@@ -5,7 +5,7 @@ import { WALK_RIPPLE_TIMELINE_MAX_MIN } from "./walkRippleNetwork";
 export const WALK_RIPPLE_TRAIL_MIN = 1;
 export const WALK_RIPPLE_TRAIL_MAX = 10;
 export const WALK_RIPPLE_TRAIL_DEFAULT = 4;
-export const WALK_RIPPLE_RIBBON_BASE_HALF_M = 6.5;
+export const WALK_RIPPLE_RIBBON_BASE_HALF_M = 8;
 
 export type RippleShaderUniforms = {
   uRippleTime: { value: number };
@@ -111,18 +111,10 @@ export function patchBuildingMaterialForRipple(
 
 const RIBBON_VERTEX = `
   attribute float aRippleArrival;
-  attribute vec2 aExpandDir;
-  attribute float aSideSign;
-  uniform float uRibbonHalfWidth;
   varying float vWalkMin;
   void main() {
     vWalkMin = aRippleArrival;
-    vec3 expanded = vec3(
-      position.x + aExpandDir.x * aSideSign * uRibbonHalfWidth,
-      position.y,
-      position.z - aExpandDir.y * aSideSign * uRibbonHalfWidth
-    );
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(expanded, 1.0);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
 
@@ -138,7 +130,7 @@ const RIBBON_FRAGMENT = `
   void main() {
     if (uRippleTime < 0.0) discard;
     float age = uRippleTime - vWalkMin;
-    if (age < -0.22) discard;
+    if (age < -0.28) discard;
 
     float core = exp(-pow(age * 24.0, 2.0));
     float head = exp(-pow(age * 8.5, 2.0));
@@ -148,7 +140,7 @@ const RIBBON_FRAGMENT = `
 
     if (age < 0.0) {
       rgb = mix(uCometHead, uCometCore, core * 0.92);
-      alpha = max(head * 0.72, core * 0.98);
+      alpha = max(head * 0.82, core * 0.98);
     } else if (age <= trailLen) {
       float u = age / trailLen;
       float cool = pow(u, 0.68);
@@ -156,16 +148,16 @@ const RIBBON_FRAGMENT = `
       rgb = mix(rgb, uCometEmber, smoothstep(0.68, 1.0, u) * 0.22);
       rgb = mix(rgb, uCometCore, core * 0.88);
       rgb = mix(rgb, uCometHead, head * 0.78);
-      float tailAlpha = mix(0.96, 0.52, cool);
+      float tailAlpha = mix(0.98, 0.58, cool);
       alpha = max(max(tailAlpha, head * 0.99), core * 0.99);
     } else {
       float emberFade = exp(-(age - trailLen) * 0.42);
       rgb = uCometEmber;
-      alpha = 0.38 * emberFade;
+      alpha = 0.42 * emberFade;
     }
 
     alpha = clamp(alpha, 0.0, 1.0);
-    if (alpha < 0.028) discard;
+    if (alpha < 0.02) discard;
     gl_FragColor = vec4(rgb, alpha);
   }
 `;
@@ -175,7 +167,6 @@ export function createRippleNetworkRibbonMaterial(uniforms: RippleShaderUniforms
     uniforms: {
       uRippleTime: uniforms.uRippleTime,
       uTrailLengthMin: uniforms.uTrailLengthMin,
-      uRibbonHalfWidth: uniforms.uRibbonHalfWidth,
       uCometHead: uniforms.uCometHead,
       uCometCore: uniforms.uCometCore,
       uCometTail: uniforms.uCometTail,
@@ -184,12 +175,13 @@ export function createRippleNetworkRibbonMaterial(uniforms: RippleShaderUniforms
     vertexShader: RIBBON_VERTEX,
     fragmentShader: RIBBON_FRAGMENT,
     transparent: true,
+    depthTest: true,
     depthWrite: false,
     toneMapped: false,
     side: THREE.DoubleSide,
     polygonOffset: true,
-    polygonOffsetFactor: -4,
-    polygonOffsetUnits: -4,
+    polygonOffsetFactor: -8,
+    polygonOffsetUnits: -8,
   });
 }
 
@@ -198,4 +190,10 @@ export function refreshRippleCometColours(uniforms: RippleShaderUniforms): void 
   uniforms.uCometCore.value.setStyle(getColour("--walk-ripple-comet-core"));
   uniforms.uCometTail.value.setStyle(getColour("--walk-ripple-comet-tail"));
   uniforms.uCometEmber.value.setStyle(getColour("--walk-ripple-comet-ember"));
+}
+
+export function ribbonHalfWidthForCameraDistance(distanceM: number, viewportHeightPx: number): number {
+  const refDist = Math.max(420, viewportHeightPx * 0.55);
+  const zoomScale = THREE.MathUtils.clamp(distanceM / refDist, 0.95, 3.4);
+  return WALK_RIPPLE_RIBBON_BASE_HALF_M * zoomScale;
 }

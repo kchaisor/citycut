@@ -11,20 +11,33 @@ import {
 import {
   createRippleNetworkRibbonMaterial,
   refreshRippleCometColours,
+  ribbonHalfWidthForCameraDistance,
   rippleColourUniforms,
   WALK_RIPPLE_RIBBON_BASE_HALF_M,
   type RippleShaderUniforms,
 } from "./walkRippleShader";
 import type { CityModel, Pt } from "../types";
 
-const RENDER_ORDER = 940;
+const RENDER_ORDER = 1000;
 const ORIGIN_LIFT_M = 1.4;
-const LINE_LIFT_M = 0.55;
+const LINE_LIFT_M = 1.35;
 const RING_SEGMENTS = 64;
 
 function zAt(model: Pick<CityModel, "terrain" | "sideM">, east: number, north: number): number {
   return groundHeightAt(model, east, north);
 }
+
+export type WalkRippleRibbonDiagnostics = {
+  mode: "network" | "straight" | "none";
+  triangleCount: number;
+  arrivalMin: number;
+  arrivalMax: number;
+  arrivalFinite: number;
+  uRippleTime: number;
+  ribbonHalfWidthM: number;
+  meshVisible: boolean;
+  meshRenderOrder: number;
+};
 
 export class WalkRippleLayer {
   readonly root = new THREE.Group();
@@ -34,6 +47,8 @@ export class WalkRippleLayer {
   private originMarker: THREE.Mesh | null = null;
   private labelGroup: THREE.Group | null = null;
   private disposeGeometries: THREE.BufferGeometry[] = [];
+  private lastMode: WalkRippleRibbonDiagnostics["mode"] = "none";
+  private ribbonHalfWidthM = WALK_RIPPLE_RIBBON_BASE_HALF_M;
 
   constructor(private readonly model: Pick<CityModel, "terrain" | "sideM">) {
     this.root.name = "WalkRipple";
@@ -50,6 +65,7 @@ export class WalkRippleLayer {
     this.originMarker = null;
     this.labelGroup = null;
     this.uniforms.uRippleTime.value = -1;
+    this.lastMode = "none";
     this.resetRibbonHalfWidth();
   }
 
@@ -62,15 +78,50 @@ export class WalkRippleLayer {
   }
 
   setRibbonHalfWidthM(halfWidthM: number): void {
+    this.ribbonHalfWidthM = halfWidthM;
     this.uniforms.uRibbonHalfWidth.value = halfWidthM;
   }
 
+  setRibbonHalfWidthForCamera(distanceM: number, viewportHeightPx: number): void {
+    this.setRibbonHalfWidthM(ribbonHalfWidthForCameraDistance(distanceM, viewportHeightPx));
+  }
+
   resetRibbonHalfWidth(): void {
-    this.uniforms.uRibbonHalfWidth.value = WALK_RIPPLE_RIBBON_BASE_HALF_M;
+    this.setRibbonHalfWidthM(WALK_RIPPLE_RIBBON_BASE_HALF_M);
   }
 
   refreshCometColours(): void {
     refreshRippleCometColours(this.uniforms);
+  }
+
+  getRibbonDiagnostics(): WalkRippleRibbonDiagnostics {
+    const geo = this.networkMesh?.geometry;
+    const attr = geo?.getAttribute("aRippleArrival") as THREE.BufferAttribute | undefined;
+    let arrivalMin = Infinity;
+    let arrivalMax = -Infinity;
+    let arrivalFinite = 0;
+    if (attr) {
+      for (let i = 0; i < attr.count; i++) {
+        const v = attr.getX(i);
+        if (!Number.isFinite(v)) continue;
+        arrivalFinite += 1;
+        if (v < arrivalMin) arrivalMin = v;
+        if (v > arrivalMax) arrivalMax = v;
+      }
+    }
+    if (!Number.isFinite(arrivalMin)) arrivalMin = -1;
+    if (!Number.isFinite(arrivalMax)) arrivalMax = -1;
+    return {
+      mode: this.lastMode,
+      triangleCount: geo ? geo.index ? geo.index.count / 3 : geo.getAttribute("position").count / 3 : 0,
+      arrivalMin,
+      arrivalMax,
+      arrivalFinite,
+      uRippleTime: this.uniforms.uRippleTime.value,
+      ribbonHalfWidthM: this.ribbonHalfWidthM,
+      meshVisible: this.networkMesh?.visible ?? false,
+      meshRenderOrder: this.networkMesh?.renderOrder ?? -1,
+    };
   }
 
   showOrigin(origin: Pt): void {
@@ -86,25 +137,28 @@ export class WalkRippleLayer {
     const mat = new THREE.MeshBasicMaterial({
       color: getColour("--walk-ripple-accent"),
       toneMapped: false,
+      depthTest: true,
+      depthWrite: false,
     });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(e, zAt(this.model, e, n) + ORIGIN_LIFT_M, -n);
     mesh.renderOrder = RENDER_ORDER + 5;
+    mesh.frustumCulled = false;
     this.originMarker = mesh;
     this.root.add(mesh);
   }
 
   setNetworkWave(network: WalkNetwork, edgeVertexTimes: Float32Array): void {
+    this.lastMode = "network";
     if (this.networkMesh) {
       this.root.remove(this.networkMesh);
       this.networkMesh.geometry.dispose();
       (this.networkMesh.material as THREE.Material).dispose();
       this.networkMesh = null;
     }
-    const cornerPositions: number[] = [];
-    const cornerArrivals: number[] = [];
-    const cornerExpand: number[] = [];
-    const cornerSide: number[] = [];
+    const positions: number[] = [];
+    const arrivals: number[] = [];
+    const hw = this.ribbonHalfWidthM;
     network.edges.forEach((edge, edgeIndex) => {
       const base = edgeIndex * 4;
       const ta = edgeVertexTimes[base]!;
@@ -112,53 +166,42 @@ export class WalkRippleLayer {
       const dx = edge.bx - edge.ax;
       const dy = edge.by - edge.ay;
       const len = Math.hypot(dx, dy) || 1;
-      const dirE = -dy / len;
-      const dirN = dx / len;
-      const pushCorner = (e: number, n: number, tMin: number, sign: number) => {
+      const ox = (-dy / len) * hw;
+      const oy = (dx / len) * hw;
+      const corner = (e: number, n: number, tMin: number) => {
         const z = zAt(this.model, e, n) + LINE_LIFT_M;
-        cornerPositions.push(e, z, -n);
-        cornerArrivals.push(tMin);
-        cornerExpand.push(dirE, dirN);
-        cornerSide.push(sign);
+        return [e, z, -n, tMin] as const;
       };
-      pushCorner(edge.ax, edge.ay, ta, 1);
-      pushCorner(edge.ax, edge.ay, ta, -1);
-      pushCorner(edge.bx, edge.by, tb, 1);
-      pushCorner(edge.bx, edge.by, tb, -1);
-    });
-    const triPositions: number[] = [];
-    const triArrivals: number[] = [];
-    const triExpand: number[] = [];
-    const triSide: number[] = [];
-    const copyCorner = (idx: number) => {
-      triPositions.push(cornerPositions[idx * 3]!, cornerPositions[idx * 3 + 1]!, cornerPositions[idx * 3 + 2]!);
-      triArrivals.push(cornerArrivals[idx]!);
-      triExpand.push(cornerExpand[idx * 2]!, cornerExpand[idx * 2 + 1]!);
-      triSide.push(cornerSide[idx]!);
-    };
-    network.edges.forEach((_edge, edgeIndex) => {
-      const vBase = edgeIndex * 4;
-      copyCorner(vBase);
-      copyCorner(vBase + 1);
-      copyCorner(vBase + 2);
-      copyCorner(vBase);
-      copyCorner(vBase + 2);
-      copyCorner(vBase + 3);
+      const a0 = corner(edge.ax + ox, edge.ay + oy, ta);
+      const a1 = corner(edge.ax - ox, edge.ay - oy, ta);
+      const b0 = corner(edge.bx + ox, edge.by + oy, tb);
+      const b1 = corner(edge.bx - ox, edge.by - oy, tb);
+      for (const c of [a0, a1, b0, a0, b0, b1]) {
+        positions.push(c[0], c[1], c[2]);
+        arrivals.push(c[3]);
+      }
     });
     const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.Float32BufferAttribute(triPositions, 3));
-    geometry.setAttribute("aRippleArrival", new THREE.Float32BufferAttribute(triArrivals, 1));
-    geometry.setAttribute("aExpandDir", new THREE.Float32BufferAttribute(triExpand, 2));
-    geometry.setAttribute("aSideSign", new THREE.Float32BufferAttribute(triSide, 1));
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute("aRippleArrival", new THREE.Float32BufferAttribute(arrivals, 1));
+    geometry.computeBoundingSphere();
     const material = createRippleNetworkRibbonMaterial(this.uniforms);
     const lines = new THREE.Mesh(geometry, material);
-    lines.renderOrder = RENDER_ORDER + 3;
+    lines.frustumCulled = false;
+    lines.renderOrder = RENDER_ORDER;
     this.networkMesh = lines;
     this.disposeGeometries.push(geometry);
     this.root.add(lines);
   }
 
   setStraightEstimate(origin: Pt): void {
+    this.lastMode = "straight";
+    if (this.networkMesh) {
+      this.root.remove(this.networkMesh);
+      this.networkMesh.geometry.dispose();
+      (this.networkMesh.material as THREE.Material).dispose();
+      this.networkMesh = null;
+    }
     if (this.ringGroup) {
       this.root.remove(this.ringGroup);
       this.ringGroup.traverse((obj) => {

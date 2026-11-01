@@ -144,6 +144,7 @@ export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "
         }
         return n;
       },
+      getRibbonDiagnostics: () => layer.getRibbonDiagnostics(),
     };
     return () => {
       delete window.__citycutWalkRippleQa;

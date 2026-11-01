@@ -54,6 +54,7 @@ declare global {
       getMinutes: () => number;
       getUniformMinutes: () => number;
       countReachedBuildings: (minuteCutoff: number) => number;
+      getRibbonDiagnostics: () => import("./walkRippleLayer").WalkRippleRibbonDiagnostics;
     };
     __citycutQaSelectionAudit?: import("./buildingSelectionAudit").BuildingSelectionAudit;
     __citycutFrameRatio?: number;

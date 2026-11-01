@@ -93,7 +93,6 @@ import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SunHoursLayer } from "./SunHoursLayer";
 import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
 import type { WalkRippleLayer } from "../lib/walkRippleLayer";
-import { WALK_RIPPLE_RIBBON_BASE_HALF_M } from "../lib/walkRippleShader";
 
 const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
@@ -329,14 +328,27 @@ function WalkRippleBuildingBinder({
 function WalkRippleVisualSync({ layer }: { layer: WalkRippleLayer | null }) {
   const invalidate = useThree((state) => state.invalidate);
   const camera = useThree((state) => state.camera);
+  const lastWidthRef = useRef(0);
   useFrame((state) => {
     if (!layer || layer.uniforms.uRippleTime.value < 0) return;
     const dist = camera.position.distanceTo(new THREE.Vector3(0, 25, 0));
-    const refDist = Math.max(420, state.size.height * 0.55);
-    const zoomScale = THREE.MathUtils.clamp(dist / refDist, 0.95, 3.2);
-    layer.setRibbonHalfWidthM(WALK_RIPPLE_RIBBON_BASE_HALF_M * zoomScale);
+    layer.setRibbonHalfWidthForCamera(dist, state.size.height);
+    if (Math.abs(layer.uniforms.uRibbonHalfWidth.value - lastWidthRef.current) > 0.4) {
+      lastWidthRef.current = layer.uniforms.uRibbonHalfWidth.value;
+    }
     invalidate();
   });
+  return null;
+}
+
+function WalkRippleCityAttach({ city, layer }: { city: THREE.Group; layer: WalkRippleLayer | null }) {
+  useLayoutEffect(() => {
+    if (!layer) return;
+    city.add(layer.root);
+    return () => {
+      city.remove(layer.root);
+    };
+  }, [city, layer]);
   return null;
 }
 
@@ -384,6 +396,7 @@ function City({
   pickBuildings,
   walkRippleTint,
   walkRippleArrivals,
+  walkRippleLayer,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -400,6 +413,7 @@ function City({
   pickBuildings: boolean;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
+  walkRippleLayer?: WalkRippleLayer | null;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -832,6 +846,8 @@ function City({
         city={group}
         active={Boolean(walkRippleArrivals && walkRippleArrivals.size > 0)}
       />
+      <WalkRippleCityAttach city={group} layer={walkRippleLayer ?? null} />
+      <WalkRippleVisualSync layer={walkRippleLayer ?? null} />
       {contours ? <primitive object={contours} /> : null}
       <HeightEditOverlayLayer
         model={model}
@@ -2065,11 +2081,10 @@ export function Scene3D({
         display={display}
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
+        walkRippleLayer={walkRippleLayer}
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
-      {walkRippleLayer ? <primitive object={walkRippleLayer.root} /> : null}
-      <WalkRippleVisualSync layer={walkRippleLayer} />
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
       <SolarHeliodon
         lat={model.center.lat}

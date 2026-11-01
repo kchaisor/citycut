@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import net from "node:net";
 import { chromium } from "playwright";
+import { PNG } from "pngjs";
 
 const VIEWPORT = { width: 1440, height: 900 };
 const OUT_WIDE = "/opt/cursor/artifacts/walk-ripple-comet-box-hill-wide.png";
@@ -13,6 +14,24 @@ const BOX_HILL_LAT = -37.8182;
 const BOX_HILL_LON = 145.1234;
 const KM_WIDE = 1.2;
 const RECORD_MS = 10000;
+
+function countCometPixels(pngPath) {
+  const png = PNG.sync.read(fs.readFileSync(pngPath));
+  let head = 0;
+  let tail = 0;
+  for (let i = 0; i < png.data.length; i += 4) {
+    const r = png.data[i];
+    const g = png.data[i + 1];
+    const b = png.data[i + 2];
+    const a = png.data[i + 3];
+    if (a < 140) continue;
+    const isHead = r >= 235 && g >= 220 && b >= 130 && b <= 220;
+    const isTail = r >= 230 && g >= 150 && g <= 210 && b <= 70;
+    if (isHead) head += 1;
+    else if (isTail) tail += 1;
+  }
+  return { head, tail, total: head + tail };
+}
 
 function findFreePort() {
   return new Promise((resolve, reject) => {
@@ -131,15 +150,27 @@ async function runCapture(page, videoDir) {
   await page.getByRole("button", { name: /Replay walk ripple/i }).click();
   const waveT0 = Date.now();
   await page.waitForTimeout(3000);
+  const diag = await page.evaluate(() => window.__citycutWalkRippleQa?.getRibbonDiagnostics?.() ?? null);
+  console.log("[DIAG]", JSON.stringify(diag));
   await page.screenshot({ path: OUT_WIDE, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
+  const widePixels = countCometPixels(OUT_WIDE);
+  console.log("[PIXELS] wide", widePixels);
+  if (widePixels.total < 1000) {
+    throw new Error(`Comet pixel count too low: ${widePixels.total} (need >= 1000)`);
+  }
   await page.evaluate(() => {
     window.__citycutQa?.setCamera({
-      eye: { x: 95, y: 58, z: -125 },
-      target: { x: 8, y: 6, z: 0 },
+      eye: { x: 106, y: 150, z: -106 },
+      target: { x: 0, y: 10, z: 0 },
     });
   });
-  await page.waitForTimeout(700);
+  await page.waitForTimeout(900);
   await page.screenshot({ path: OUT_HEAD, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
+  const headPixels = countCometPixels(OUT_HEAD);
+  console.log("[PIXELS] head close-up", headPixels);
+  if (headPixels.total < 200) {
+    throw new Error(`Head close-up comet pixels too low: ${headPixels.total}`);
+  }
   await page.evaluate(() => {
     const sideM = 1200;
     const d = sideM * 0.92;
