@@ -156,9 +156,16 @@ await shotMode("overview", "overview", async () => {
 });
 
 await page.evaluate(() => window.__citycutQaModel?.frameSemanticBuildingClose?.());
-await wheelZoom(-140, 10);
+await wheelZoom(-220, 16);
 await dragOrbit(35, -22);
-await sleep(800);
+await sleep(1200);
+await page.waitForFunction(
+  () =>
+    window.__citycutSemanticHud?.mode === "building" ||
+    document.querySelector(".semantic-hud-stack")?.getAttribute("data-semantic-mode") === "building",
+  null,
+  { timeout: 180_000 },
+);
 await shotMode("building", "building", async () => {
   const section = page.locator(".semantic-hud-building");
   await section.waitFor({ state: "visible", timeout: 30_000 });

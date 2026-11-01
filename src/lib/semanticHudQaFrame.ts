@@ -29,9 +29,10 @@ export function semanticBuildingPose(row: BuildingCameraRow): {
 } {
   const z = -row.north;
   const midY = row.baseY + row.height * 0.48;
+  const standoff = Math.max(32, Math.min(72, row.height * 2.4));
   return {
-    eye: { x: row.east - 48, y: midY + 22, z: z + 62 },
-    target: { x: row.east + 6, y: row.baseY + row.height * 0.35, z: z - 4 },
+    eye: { x: row.east - standoff * 0.72, y: midY + row.height * 0.55, z: z + standoff },
+    target: { x: row.east + 4, y: row.baseY + row.height * 0.38, z: z - 3 },
   };
 }
 
