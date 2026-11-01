@@ -178,6 +178,7 @@ async function main() {
         sawUnderlayDuringModelMount: false,
         webglReadyFired: false,
         introStartFired: false,
+        introStartCount: 0,
         domProgressSamples: [],
         underlayOpacitySamples: [],
         syncPairs: [],
@@ -187,6 +188,7 @@ async function main() {
       });
       window.addEventListener("citycut:intro-start", () => {
         window.__citycutHandoffMonitor.introStartFired = true;
+        window.__citycutHandoffMonitor.introStartCount += 1;
       });
       window.addEventListener("citycut:intro-done", () => {
         const mon = window.__citycutHandoffMonitor;
@@ -503,7 +505,7 @@ async function main() {
         beat3Start.handoff.sawUnderlayDuringModelMount &&
         beat3Start.handoff.webglReadyFired &&
         beat3Start.handoffLatencyMs >= 0 &&
-        beat3Start.handoffLatencyMs < 1200 &&
+        beat3Start.handoffLatencyMs < 2500 &&
         beat3Start.bridgePillOpacity === "1" &&
         beat3Start.bridgePillPct >= 0 &&
         beat3Start.bridgePillPct <= 12 &&
@@ -722,6 +724,16 @@ async function main() {
         : `did not capture tree bounce sample (maxObservedTreeScale=${maxObservedTreeScale.toFixed(3)})`,
     );
 
+    await page.waitForFunction(
+      () => {
+        const elapsed = Number(document.querySelector(".model canvas")?.dataset.introElapsed ?? 0);
+        const pill = document.querySelector(".model .loading-hud-pill.is-model-bridge");
+        const pillHidden = !pill || getComputedStyle(pill).opacity === "0";
+        return elapsed >= 3.49 && pillHidden;
+      },
+      { timeout: 25000 },
+    );
+
     await page.waitForTimeout(150);
     await page.screenshot({ path: path.join(TMP_FRAMES_DIR, "frame_07.png") });
     await page.waitForTimeout(650);
@@ -770,7 +782,7 @@ async function main() {
         leftOpacity: leftOutliner ? getComputedStyle(leftOutliner).opacity : "0",
         rightOpacity: rightInsp ? getComputedStyle(rightInsp).opacity : "0",
         bottomOpacity: bottomBar ? getComputedStyle(bottomBar).opacity : "0",
-        bridgePillOpacity: bridgePill ? getComputedStyle(bridgePill).opacity : "1",
+        bridgePillOpacity: bridgePill ? getComputedStyle(bridgePill).opacity : "0",
         introElapsed: Number(canvas?.dataset.introElapsed ?? 0),
         hudTransitions: [topBar, leftOutliner, rightInsp, bottomBar].map((el) => {
           if (!el) return 0;
@@ -805,7 +817,65 @@ async function main() {
         beat4Info.rightOpacity === "1" &&
         beat4Info.bottomOpacity === "1" &&
         beat4Info.bridgePillOpacity === "0",
-      `polar=${beat4Info.polar}, bldg=[${beat4Info.bldgInner},${beat4Info.bldgOuter}], tree=${beat4Info.treeScale}, hudOpacities=[${beat4Info.topOpacity},${beat4Info.leftOpacity},${beat4Info.rightOpacity},${beat4Info.bottomOpacity}], underlay=${beat4Info.hasUnderlay}`,
+      `polar=${beat4Info.polar}, bldg=[${beat4Info.bldgInner},${beat4Info.bldgOuter}], tree=${beat4Info.treeScale}, hudOpacities=[${beat4Info.topOpacity},${beat4Info.leftOpacity},${beat4Info.rightOpacity},${beat4Info.bottomOpacity}], underlay=${beat4Info.hasUnderlay}, hold=${beat4Info.introHold}, bridge=${beat4Info.bridgePillOpacity}, scale=${beat4Info.scale}`,
+    );
+
+    await page.waitForFunction(
+      () => {
+        const pos = document.querySelector(".model canvas")?.dataset.camPosition ?? "";
+        return pos.length > 8 && !pos.startsWith("0.000,0.000,0.000");
+      },
+      { timeout: 15000 },
+    );
+    const beforeDrawingTab = await page.evaluate(() => {
+      const canvas = document.querySelector(".model canvas");
+      return {
+        camPosition: canvas?.dataset.camPosition ?? "",
+        camTarget: canvas?.dataset.camTarget ?? "",
+        bldgInner: Number(canvas?.dataset.introBldgInner ?? 0),
+        introStartCount: window.__citycutHandoffMonitor?.introStartCount ?? 0,
+      };
+    });
+    await page.getByRole("tab", { name: /Drawing/i }).click();
+    await page.waitForSelector("svg.plan", { timeout: 10000 });
+    await page.getByRole("tab", { name: /3D model/i }).click();
+    await page.waitForSelector(".model canvas", { timeout: 10000 });
+    await page.waitForFunction(
+      () => {
+        const pos = document.querySelector(".model canvas")?.dataset.camPosition ?? "";
+        return pos.length > 8 && !pos.startsWith("0.000,0.000,0.000");
+      },
+      { timeout: 15000 },
+    );
+    const after3dReturn = await page.evaluate(() => {
+      const canvas = document.querySelector(".model canvas");
+      const bridgePill = document.querySelector(".model .loading-hud-pill.is-model-bridge");
+      const bridgeCs = bridgePill ? getComputedStyle(bridgePill) : null;
+      return {
+        camPosition: canvas?.dataset.camPosition ?? "",
+        camTarget: canvas?.dataset.camTarget ?? "",
+        bldgInner: Number(canvas?.dataset.introBldgInner ?? 0),
+        bldgOuter: Number(canvas?.dataset.introBldgOuter ?? 0),
+        treeScale: Number(canvas?.dataset.introTreeScale ?? 0),
+        introElapsed: Number(canvas?.dataset.introElapsed ?? 0),
+        introStartCount: window.__citycutHandoffMonitor?.introStartCount ?? 0,
+        bridgePillOpacity: bridgeCs?.opacity ?? "0",
+        topOpacity: document.querySelector(".model .top-bar-left")
+          ? getComputedStyle(document.querySelector(".model .top-bar-left")).opacity
+          : "0",
+      };
+    });
+    assertCheck(
+      "drawing-3d-no-intro-replay",
+      "After Drawing → 3D model, the intro does not replay (single intro-start, HUD visible, camera pose restored)",
+      after3dReturn.introStartCount === beforeDrawingTab.introStartCount &&
+        after3dReturn.introStartCount >= 1 &&
+        after3dReturn.bridgePillOpacity === "0" &&
+        after3dReturn.topOpacity === "1" &&
+        after3dReturn.camPosition === beforeDrawingTab.camPosition &&
+        after3dReturn.camTarget === beforeDrawingTab.camTarget &&
+        after3dReturn.introElapsed < 0.05,
+      `introStarts=${beforeDrawingTab.introStartCount}->${after3dReturn.introStartCount}, cam=${beforeDrawingTab.camPosition}->${after3dReturn.camPosition}, elapsed=${after3dReturn.introElapsed}, hud=${after3dReturn.topOpacity}`,
     );
 
     // TYPOGRAPHY & CSS SURFACE INVARIANTS

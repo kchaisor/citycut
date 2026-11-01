@@ -163,7 +163,8 @@ function shouldShowIntroBridgePill(): boolean {
   if (qaModeFromSearch(window.location.search)) return false;
   return true;
 }
-import type { CameraMemoryRef } from "../lib/cameraMemory";
+import type { CameraMemoryRef, CameraPose } from "../lib/cameraMemory";
+import { introAlreadyPlayedForCut, modelCutSiteId } from "../lib/introPlayed";
 import { SceneBoundary } from "./SceneBoundary";
 import { SolarPanel } from "./SolarPanel";
 import { WindPanel } from "./WindPanel";
@@ -338,7 +339,28 @@ export function ModelPage({
     );
   }, [tab, model]);
   const [snapId, setSnapId] = useState(0);
-  const cameraMemory = useMemo<CameraMemoryRef>(() => ({ current: null }), [model]);
+  const cutSiteId = useMemo(
+    () => modelCutSiteId(model.center, model.sideM),
+    [model.center.lat, model.center.lon, model.sideM],
+  );
+  const [introPlayedCutId, setIntroPlayedCutId] = useState<string | null>(null);
+  const skipModelIntro = introAlreadyPlayedForCut(introPlayedCutId, cutSiteId);
+  const cameraMemory = useRef<CameraMemoryRef>({ current: null });
+  const lastPerspPoseRef = useRef<CameraPose | null>(null);
+  useEffect(() => {
+    setIntroPlayedCutId(null);
+    cameraMemory.current.current = null;
+    lastPerspPoseRef.current = null;
+  }, [model]);
+  const onPerspPose = useCallback((pose: CameraPose) => {
+    lastPerspPoseRef.current = pose;
+  }, []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onIntroDone = () => setIntroPlayedCutId(cutSiteId);
+    window.addEventListener("citycut:intro-done", onIntroDone);
+    return () => window.removeEventListener("citycut:intro-done", onIntroDone);
+  }, [cutSiteId]);
   const [view3dDisplay, setView3dDisplay] = useState<View3dDisplaySettings>(() => {
     const next = view3dDisplayForModelOpen(window.localStorage);
     writeStoredView3dDisplay(window.localStorage, next);
@@ -1745,7 +1767,7 @@ export function ModelPage({
         revealModel();
       }
     };
-    if (tab !== "3d" || !shouldShowIntroBridgePill()) {
+    if (tab !== "3d" || !shouldShowIntroBridgePill() || introAlreadyPlayedForCut(introPlayedCutId, cutSiteId)) {
       release();
       revealModel();
       return;
@@ -1765,14 +1787,16 @@ export function ModelPage({
       window.clearTimeout(timer);
       window.clearTimeout(webglTimer);
     };
-  }, [tab]);
+  }, [tab, cutSiteId, introPlayedCutId]);
+
+  const showIntroBridgePill = shouldShowIntroBridgePill() && !skipModelIntro;
 
   return (
     <div
       ref={modelRootRef}
       className="model"
-      data-intro-hold={!introHoldReleasedRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
-      data-intro-webgl-wait={!introWebglReadyRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
+      data-intro-hold={!introHoldReleasedRef.current && tab === "3d" && showIntroBridgePill ? "true" : undefined}
+      data-intro-webgl-wait={!introWebglReadyRef.current && tab === "3d" && showIntroBridgePill ? "true" : undefined}
     >
       <h1 className="sr-only">Your model is ready.</h1>
       <div
@@ -1782,7 +1806,7 @@ export function ModelPage({
       >
         {tab === "3d" && (
           <div className="fill">
-            {shouldShowIntroBridgePill() && (() => {
+            {showIntroBridgePill && (() => {
               const samples = typeof window !== "undefined" ? window.__citycutProgressSamples : undefined;
               const currentPct = Array.isArray(samples) && samples.length > 0 ? (samples[samples.length - 1] ?? 0) : 0;
               return (
@@ -1829,7 +1853,9 @@ export function ModelPage({
                 }}
                 heightEditBuildingId={heightPick?.buildingId ?? null}
                 selectedBuildingIds={hideSelection.length > 0 ? hideSelection : heightPick ? [heightPick.buildingId] : []}
-                cameraMemory={cameraMemory}
+                cameraMemory={cameraMemory.current}
+                fallbackPerspPoseRef={lastPerspPoseRef}
+                onPerspPose={onPerspPose}
                 display={view3dDisplay}
                 importedMassing={massing.group}
                 walkLayer={walk.layer.root}
@@ -1844,6 +1870,7 @@ export function ModelPage({
                       : massing.onScenePoint
                 }
                 quality={renderQuality}
+                introEnabled={!skipModelIntro}
               />
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
               {rippleAnalysisOpen && walkRipple.buildingArrivals && <WalkRippleLegend />}
