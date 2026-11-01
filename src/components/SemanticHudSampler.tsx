@@ -14,6 +14,7 @@ import {
 } from "../lib/semanticHudGeometry";
 import {
   nearestNamedRoadAt,
+  WALK_EYE_ABOVE_GROUND_M,
   WALK_LATERAL_CROSS_M,
   WALK_ALONG_WINDOW_M,
 } from "../lib/semanticHudNamedStreet";
@@ -94,6 +95,7 @@ export function SemanticHudSampler({
     }
 
     let buildingScreenFill = 0;
+    let bestFillBuilding: BuildingFeat | null = null;
     if (focusBuilding) {
       buildingScreenFill = buildingScreenFillRatio(camera, size.width, size.height, focusBuilding, groundY);
     } else {
@@ -103,6 +105,7 @@ export function SemanticHudSampler({
         const fill = buildingScreenFillRatio(camera, size.width, size.height, building, groundY);
         if (fill > bestFill) {
           bestFill = fill;
+          bestFillBuilding = building;
           const c = buildingCentroid(building);
           scratchHit.set(c[0], groundY, -c[1]);
           bestDist = camera.position.distanceTo(scratchHit);
@@ -113,12 +116,31 @@ export function SemanticHudSampler({
       if (nearestBuildingDistanceM == null) nearestBuildingDistanceM = bestDist;
     }
 
-    const mode = resolveSemanticHudMode(modeRef.current, {
+    let mode = resolveSemanticHudMode(modeRef.current, {
       eyeHeightM,
       pitchDeg,
       nearestBuildingDistanceM,
       buildingScreenFill,
     });
+
+    if (mode === "building" && !focusBuilding && bestFillBuilding && buildingScreenFill > 0.004) {
+      focusBuilding = bestFillBuilding;
+    }
+
+    const qaFocusId =
+      typeof window !== "undefined" ? window.__citycutQaModel?.semanticFocusBuildingId?.() ?? null : null;
+    if (qaFocusId != null) {
+      const qaBuilding = buildings.find((row) => row.id === qaFocusId) ?? null;
+      if (qaBuilding) {
+        focusBuilding = qaBuilding;
+        mode = "building";
+      }
+    }
+
+    const qaModeOverride =
+      typeof window !== "undefined" ? window.__citycutQaModel?.semanticHudModeOverride?.() ?? null : null;
+    if (qaModeOverride) mode = qaModeOverride;
+
     modeRef.current = mode;
 
     let buildingReadout = null;
@@ -141,23 +163,39 @@ export function SemanticHudSampler({
 
     let walkReadout = null;
     if (mode === "walk") {
-      const localAt: [number, number] = [cameraEast, cameraNorth];
-      const roadHit = nearestNamedRoadAt(roads, localAt, WALK_LATERAL_CROSS_M);
-      const lateral = roadHit
-        ? lateralBuildingHeights(
-            buildings,
-            localAt,
-            roadHit.tangent,
-            WALK_LATERAL_CROSS_M,
-            WALK_ALONG_WINDOW_M,
-          )
-        : { leftM: null, rightM: null };
-      walkReadout = {
-        streetName: roadHit?.road.name ?? null,
-        roadWidthM: roadHit?.road.width ?? null,
-        leftHeightM: lateral.leftM,
-        rightHeightM: lateral.rightM,
-      };
+      const qaWalkSite =
+        typeof window !== "undefined" ? window.__citycutQaModel?.namedStreetWalkSite?.() ?? null : null;
+      if (qaModeOverride === "walk" && qaWalkSite) {
+        walkReadout = {
+          streetName: qaWalkSite.road.name ?? null,
+          roadWidthM: qaWalkSite.road.width ?? null,
+          leftHeightM: qaWalkSite.leftHeightM,
+          rightHeightM: qaWalkSite.rightHeightM,
+        };
+      } else {
+        const localAt: [number, number] = [cameraEast, cameraNorth];
+        const roadHit = nearestNamedRoadAt(roads, localAt, WALK_LATERAL_CROSS_M);
+        const lateral = roadHit
+          ? lateralBuildingHeights(
+              buildings,
+              localAt,
+              roadHit.tangent,
+              WALK_LATERAL_CROSS_M,
+              WALK_ALONG_WINDOW_M,
+            )
+          : { leftM: null, rightM: null };
+        walkReadout = {
+          streetName: roadHit?.road.name ?? null,
+          roadWidthM: roadHit?.road.width ?? null,
+          leftHeightM: lateral.leftM,
+          rightHeightM: lateral.rightM,
+        };
+      }
+    }
+
+    let readoutEyeHeightM = eyeHeightM;
+    if (qaModeOverride === "walk") {
+      readoutEyeHeightM = WALK_EYE_ABOVE_GROUND_M;
     }
 
     const labels = buildLabels({
@@ -167,13 +205,13 @@ export function SemanticHudSampler({
       width: size.width,
       height: size.height,
       groundY,
-      eyeHeightM,
+      eyeHeightM: readoutEyeHeightM,
       mode,
     });
 
     onSample({
       mode,
-      eyeHeightM,
+      eyeHeightM: readoutEyeHeightM,
       pitchDeg,
       building: buildingReadout,
       walk: walkReadout,

@@ -109,6 +109,7 @@ export type RoadFeat = {
    */
   service?: string;
   name?: string;
+  osmWayKey?: string;
 };
 
 export type CarParkArea = { ring: Ring; holes: Ring[] };

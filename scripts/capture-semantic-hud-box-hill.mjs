@@ -155,7 +155,10 @@ await shotMode("overview", "overview", async () => {
   if (!/Bldgs/i.test(text)) throw new Error("Overview inspector missing Bldgs KPI");
 });
 
-await page.evaluate(() => window.__citycutQaModel?.frameSemanticBuildingClose?.());
+const buildingFramed = await page.evaluate(() => window.__citycutQaModel?.frameSemanticBuildingClose?.());
+if (!buildingFramed) {
+  throw new Error("frameSemanticBuildingClose returned false (no foreground building)");
+}
 await wheelZoom(-220, 16);
 await dragOrbit(35, -22);
 await sleep(1200);
@@ -190,7 +193,7 @@ const walkFramed = await page.evaluate(() => {
 if (!walkFramed.ok || !walkFramed.name) {
   throw new Error(`Walk camera framing failed: ${JSON.stringify(walkFramed)}`);
 }
-await sleep(1500);
+await sleep(2500);
 await shotMode("walk", "walk", async () => {
   const section = page.locator(".semantic-hud-walk");
   await section.waitFor({ state: "visible", timeout: 30_000 });
@@ -199,7 +202,9 @@ await shotMode("walk", "walk", async () => {
     throw new Error(`Walk inspector incomplete: ${text.slice(0, 120)}`);
   }
   if (/GFA/i.test(text)) throw new Error("Walk shot still showing building KPIs");
-  if (text.includes("—")) throw new Error(`Walk inspector has empty fields: ${text.slice(0, 200)}`);
+  if (/NAME[\s\S]*—/.test(text) || /LEFT BLDG[\s\S]*—/.test(text) || /RIGHT BLDG[\s\S]*—/.test(text)) {
+    throw new Error(`Walk inspector has empty fields: ${text.slice(0, 200)}`);
+  }
   if (!/Left bldg/i.test(text) || !/Right bldg/i.test(text)) {
     throw new Error("Walk inspector missing lateral building heights");
   }

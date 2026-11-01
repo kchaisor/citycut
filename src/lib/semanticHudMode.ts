@@ -21,8 +21,8 @@ export type SemanticHudThresholds = {
 export const DEFAULT_SEMANTIC_HUD_THRESHOLDS: SemanticHudThresholds = {
   walkEnterEyeHeightM: 10,
   walkExitEyeHeightM: 12,
-  walkEnterMaxPitchDeg: 14,
-  walkExitMaxPitchDeg: 18,
+  walkEnterMaxPitchDeg: 22,
+  walkExitMaxPitchDeg: 26,
   buildingEnterDistanceM: 150,
   buildingExitDistanceM: 185,
   buildingEnterScreenFill: 0.1,

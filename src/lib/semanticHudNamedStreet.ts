@@ -3,7 +3,7 @@ import { lateralBuildingHeights, nearestRoadAt, pointToSegmentDistanceM } from "
 import type { BuildingFeat, Pt, RoadFeat, TerrainField } from "../types";
 
 export const WALK_EYE_ABOVE_GROUND_M = 1.7;
-export const WALK_LATERAL_CROSS_M = 40;
+export const WALK_LATERAL_CROSS_M = 55;
 export const WALK_ALONG_WINDOW_M = 55;
 
 const PREFERRED_STREET = [/whitehorse\s*road/i, /whitehorse\s*rd/i, /station\s*street/i, /station\s*st/i];

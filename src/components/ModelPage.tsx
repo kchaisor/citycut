@@ -129,7 +129,7 @@ import {
 } from "../lib/buildingHeightResolve";
 import { countBuildingHeightTiers, LIDAR_NO_DATA_LINE } from "../lib/lidarTierStatus";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
-import { footprintBase } from "../lib/terrain";
+import { footprintBase, sampleTerrain } from "../lib/terrain";
 import {
   semanticBuildingPose,
   semanticOverviewPose,
@@ -138,6 +138,7 @@ import {
   pickNamedStreetWalkSite,
   walkCameraFromSite,
 } from "../lib/semanticHudNamedStreet";
+import { buildingHudFloorField } from "../lib/semanticHudGeometry";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import { COM_TREES_CREDIT, COM_TREES_DATASET_URL } from "../lib/comTreesCredit";
 import { openRing, toLocal } from "../lib/geo";
@@ -601,6 +602,9 @@ export function ModelPage({
 
   const qaSummaryRef = useRef({ treeCrowns: 0, buildingCount: 0, roadCount: 0, triangleCount: 0 });
   const qaDisplayBuildingsRef = useRef(model.buildings);
+  const qaSemanticFocusBuildingIdRef = useRef<number | null>(null);
+  const qaSemanticHudModeOverrideRef = useRef<import("../lib/semanticHudMode").SemanticHudMode | null>(null);
+  const qaNamedStreetWalkSiteRef = useRef<import("../lib/semanticHudNamedStreet").NamedStreetWalkSite | null>(null);
   const heightPerfRef = useRef<{ modelOpenMs: number; firstRenderMs: number | null; comAppliedMs: number | null }>(
     { modelOpenMs: performance.now(), firstRenderMs: null, comAppliedMs: null },
   );
@@ -649,11 +653,33 @@ export function ModelPage({
     }
 
     function pickForegroundBuildingRow() {
+      const minDist = Math.max(28, model.sideM * 0.03);
+      const maxDist = Math.min(220, model.sideM * 0.2);
+      const conflictCandidates = model.buildings
+        .filter((building) => buildingHudFloorField(building).conflictNote)
+        .map((building) => {
+          const { east, north } = buildingCentroid(building);
+          return { building, east, north, dist: Math.hypot(east, north) };
+        })
+        .filter((entry) => entry.dist >= minDist && entry.dist <= maxDist)
+        .sort((a, b) => a.dist - b.dist);
+      const conflictPick = conflictCandidates[0]?.building;
+      if (conflictPick) {
+        const baseY = model.terrain ? footprintBase(model.terrain, conflictPick.ring, model.sideM) : 0;
+        const { east, north } = buildingCentroid(conflictPick);
+        return {
+          id: conflictPick.id,
+          height: conflictPick.height,
+          east,
+          north,
+          baseY,
+        };
+      }
       const candidates = model.buildings
         .filter(
           (building) =>
-            building.height >= 10 &&
-            building.height <= 28 &&
+            building.height >= 8 &&
+            building.height <= 42 &&
             building.use !== "outbuilding",
         )
         .map((building) => {
@@ -665,7 +691,7 @@ export function ModelPage({
             dist: Math.hypot(east, north),
           };
         })
-        .filter((entry) => entry.dist >= 35 && entry.dist <= 130)
+        .filter((entry) => entry.dist >= minDist && entry.dist <= maxDist)
         .sort(
           (a, b) =>
             Math.abs(a.building.height - 16) - Math.abs(b.building.height - 16) ||
@@ -699,6 +725,9 @@ export function ModelPage({
         return { groundY, siteY, topY, sideM: model.sideM };
       },
       frameSemanticOverview() {
+        qaSemanticFocusBuildingIdRef.current = null;
+        qaSemanticHudModeOverrideRef.current = null;
+        qaNamedStreetWalkSiteRef.current = null;
         if (!window.__citycutQa?.setCamera || !window.__citycutQaModel?.semanticSceneFrame) return false;
         window.__citycutQa.setCamera(semanticOverviewPose(window.__citycutQaModel.semanticSceneFrame()));
         return true;
@@ -706,10 +735,19 @@ export function ModelPage({
       frameSemanticBuildingClose() {
         const row = pickForegroundBuildingRow();
         if (!row || !window.__citycutQa?.setCamera) return false;
+        qaSemanticFocusBuildingIdRef.current = row.id;
+        qaSemanticHudModeOverrideRef.current = "building";
         window.__citycutQa.setCamera(semanticBuildingPose(row));
         return true;
       },
+      semanticFocusBuildingId() {
+        return qaSemanticFocusBuildingIdRef.current;
+      },
+      semanticHudModeOverride() {
+        return qaSemanticHudModeOverrideRef.current;
+      },
       frameSemanticWalk() {
+        qaSemanticFocusBuildingIdRef.current = null;
         const site = pickNamedStreetWalkSite(
           model.roads,
           model.buildings,
@@ -717,11 +755,18 @@ export function ModelPage({
           model.sideM,
         );
         if (!site || !window.__citycutQa?.setCamera) return false;
-        window.__citycutQa.setCamera(walkCameraFromSite(site));
+        if (model.terrain) {
+          site.groundY = sampleTerrain(model.terrain, site.at[0], site.at[1], model.sideM);
+        }
+        qaNamedStreetWalkSiteRef.current = site;
+        qaSemanticHudModeOverrideRef.current = "walk";
+        const pose = walkCameraFromSite(site);
+        window.__citycutQa.setCamera(pose);
+        window.requestAnimationFrame(() => window.__citycutQa?.setCamera?.(pose));
         return true;
       },
       namedStreetWalkSite() {
-        return pickNamedStreetWalkSite(model.roads, model.buildings, model.terrain, model.sideM);
+        return qaNamedStreetWalkSiteRef.current ?? pickNamedStreetWalkSite(model.roads, model.buildings, model.terrain, model.sideM);
       },
       selectHeightEditBuilding(buildingId: number) {
         setHeightPick({ buildingId, clientX: 640, clientY: 400 });
