@@ -4216,6 +4216,20 @@ body,
   color: var(--muted-text);
 }
 
+.semantic-hud-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted-text);
+}
+
+.semantic-hud-sub {
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--muted-text);
+}
+
 .semantic-kpi-grid {
   margin-top: 0;
 }

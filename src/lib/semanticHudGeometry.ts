@@ -1,6 +1,11 @@
 import * as THREE from "three";
 import { openRing, signedArea } from "./geo";
-import { effectiveBuildingHeightM, STOREY_HEIGHT_M } from "./buildingHeightResolve";
+import {
+  effectiveBuildingHeightM,
+  heightTierLabel,
+  inferHeightTier,
+  STOREY_HEIGHT_M,
+} from "./buildingHeightResolve";
 import { buildingDisplayHeightM, buildingHeightSourceLabelForBuilding, footprintAreaM2 } from "./heightOverrides";
 import type { BuildingFeat, Pt, RoadFeat } from "../types";
 
@@ -59,32 +64,57 @@ export function buildingFootprintAreaM2(building: BuildingFeat): number {
   return Math.max(area, 0);
 }
 
-export function estimatedFloorCount(building: BuildingFeat): { floors: number; estimated: boolean } {
+export function buildingHudFloorField(building: BuildingFeat) {
+  const heightM = buildingDisplayHeightM(building);
+  const heightTier = inferHeightTier(building);
+  const fromHeight = Math.max(1, Math.round(heightM / STOREY_HEIGHT_M));
   const recorded = building.developmentFloors ?? building.numFloors;
-  if (recorded != null && recorded > 0) return { floors: recorded, estimated: false };
-  const height = effectiveBuildingHeightM(building);
-  if (height <= 0) return { floors: 1, estimated: true };
-  return { floors: Math.max(1, Math.round(height / STOREY_HEIGHT_M)), estimated: true };
-}
-
-export function estimatedGfaM2(building: BuildingFeat): { gfaM2: number; estimated: true } {
-  const { floors } = estimatedFloorCount(building);
-  return { gfaM2: buildingFootprintAreaM2(building) * floors, estimated: true };
+  if (recorded != null && recorded > 0) {
+    const floorTier =
+      building.developmentFloors != null && building.developmentFloors > 0
+        ? ("development_floors" as const)
+        : ("overture_floors" as const);
+    const floorSource = heightTierLabel(floorTier);
+    const impliedHeightM = recorded * STOREY_HEIGHT_M;
+    const conflictsWithHeight = Math.abs(impliedHeightM - heightM) > STOREY_HEIGHT_M * 0.55;
+    return {
+      floors: recorded,
+      floorsEstimated: false,
+      floorsSource: floorSource,
+      conflictNote: conflictsWithHeight
+        ? `Floor record implies ~${impliedHeightM.toFixed(0)} m; height shown is ${heightM.toFixed(1)} m (${heightTierLabel(heightTier)})`
+        : null,
+      gfaFloors: conflictsWithHeight ? fromHeight : recorded,
+      gfaFromHeight: conflictsWithHeight,
+    };
+  }
+  return {
+    floors: fromHeight,
+    floorsEstimated: true,
+    floorsSource: "Estimated from height",
+    conflictNote: null,
+    gfaFloors: fromHeight,
+    gfaFromHeight: true,
+  };
 }
 
 export function buildingHudStats(building: BuildingFeat) {
   const heightM = buildingDisplayHeightM(building);
   const heightSource = buildingHeightSourceLabelForBuilding(building);
-  const floors = estimatedFloorCount(building);
-  const gfa = estimatedGfaM2(building);
+  const floorField = buildingHudFloorField(building);
+  const footprintM2 = footprintAreaM2(building);
+  const gfaM2 = footprintM2 * floorField.gfaFloors;
   return {
     heightM,
     heightSource,
-    floors: floors.floors,
-    floorsEstimated: floors.estimated,
-    footprintM2: footprintAreaM2(building),
-    gfaM2: gfa.gfaM2,
-    gfaEstimated: gfa.estimated,
+    floors: floorField.floors,
+    floorsEstimated: floorField.floorsEstimated,
+    floorsSource: floorField.floorsSource,
+    conflictNote: floorField.conflictNote,
+    footprintM2,
+    gfaM2,
+    gfaEstimated: true,
+    gfaFromHeight: floorField.gfaFromHeight,
   };
 }
 
@@ -146,7 +176,8 @@ export function lateralBuildingHeights(
   buildings: BuildingFeat[],
   at: Pt,
   tangent: Pt,
-  maxCrossM = 70,
+  maxCrossM = 40,
+  maxAlongM = 40,
 ): { leftM: number | null; rightM: number | null } {
   const nx = -tangent[1];
   const ny = tangent[0];
@@ -157,7 +188,7 @@ export function lateralBuildingHeights(
     const offset = (c[0] - at[0]) * nx + (c[1] - at[1]) * ny;
     if (Math.abs(offset) > maxCrossM) continue;
     const along = (c[0] - at[0]) * tangent[0] + (c[1] - at[1]) * tangent[1];
-    if (Math.abs(along) > maxCrossM) continue;
+    if (along < -8 || along > maxAlongM) continue;
     const h = effectiveBuildingHeightM(building);
     if (offset < -1) leftM = leftM == null ? h : Math.max(leftM, h);
     if (offset > 1) rightM = rightM == null ? h : Math.max(rightM, h);

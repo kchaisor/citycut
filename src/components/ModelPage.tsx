@@ -133,8 +133,11 @@ import { footprintBase } from "../lib/terrain";
 import {
   semanticBuildingPose,
   semanticOverviewPose,
-  semanticWalkPose,
 } from "../lib/semanticHudQaFrame";
+import {
+  pickNamedStreetWalkSite,
+  walkCameraFromSite,
+} from "../lib/semanticHudNamedStreet";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import { COM_TREES_CREDIT, COM_TREES_DATASET_URL } from "../lib/comTreesCredit";
 import { openRing, toLocal } from "../lib/geo";
@@ -707,9 +710,18 @@ export function ModelPage({
         return true;
       },
       frameSemanticWalk() {
-        if (!window.__citycutQa?.setCamera || !window.__citycutQaModel?.semanticSceneFrame) return false;
-        window.__citycutQa.setCamera(semanticWalkPose(window.__citycutQaModel.semanticSceneFrame()));
+        const site = pickNamedStreetWalkSite(
+          model.roads,
+          model.buildings,
+          model.terrain,
+          model.sideM,
+        );
+        if (!site || !window.__citycutQa?.setCamera) return false;
+        window.__citycutQa.setCamera(walkCameraFromSite(site));
         return true;
+      },
+      namedStreetWalkSite() {
+        return pickNamedStreetWalkSite(model.roads, model.buildings, model.terrain, model.sideM);
       },
       selectHeightEditBuilding(buildingId: number) {
         setHeightPick({ buildingId, clientX: 640, clientY: 400 });

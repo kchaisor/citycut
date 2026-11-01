@@ -9,10 +9,15 @@ import {
   buildingHudStats,
   buildingScreenFillRatio,
   lateralBuildingHeights,
-  nearestRoadAt,
   projectWorldToScreen,
   buildingCentroid,
 } from "../lib/semanticHudGeometry";
+import {
+  nearestNamedRoadAt,
+  WALK_LATERAL_CROSS_M,
+  WALK_ALONG_WINDOW_M,
+} from "../lib/semanticHudNamedStreet";
+import { sampleTerrain } from "../lib/terrain";
 import {
   cameraPitchDegFromEyeTarget,
   resolveSemanticHudMode,
@@ -21,7 +26,7 @@ import {
 import type { SemanticHudLabel, SemanticHudSample } from "../lib/semanticHudSample";
 import { effectiveBuildingHeightM } from "../lib/buildingHeightResolve";
 import { buildingIdFromIntersection } from "../lib/buildingPick";
-import type { BuildingFeat, RoadFeat } from "../types";
+import type { BuildingFeat, RoadFeat, TerrainField } from "../types";
 
 const EVAL_MIN_INTERVAL_MS = 100;
 const scratchRay = new THREE.Raycaster();
@@ -33,6 +38,8 @@ export function SemanticHudSampler({
   buildings,
   roads,
   groundY,
+  sideM,
+  terrain,
   cityRootRef,
   controlsRef,
   onSample,
@@ -41,6 +48,8 @@ export function SemanticHudSampler({
   buildings: BuildingFeat[];
   roads: RoadFeat[];
   groundY: number;
+  sideM: number;
+  terrain: TerrainField | null | undefined;
   cityRootRef: RefObject<THREE.Object3D | null>;
   controlsRef: RefObject<OrbitControlsImpl | null>;
   onSample: (sample: SemanticHudSample) => void;
@@ -61,7 +70,12 @@ export function SemanticHudSampler({
 
     const eye: [number, number, number] = [camera.position.x, camera.position.y, camera.position.z];
     const target: [number, number, number] = [controls.target.x, controls.target.y, controls.target.z];
-    const eyeHeightM = Math.max(0, eye[1] - groundY);
+    const cameraEast = eye[0];
+    const cameraNorth = -eye[2];
+    const localGroundY = terrain
+      ? sampleTerrain(terrain, cameraEast, cameraNorth, sideM)
+      : groundY;
+    const eyeHeightM = Math.max(0, eye[1] - localGroundY);
     const pitchDeg = cameraPitchDegFromEyeTarget(eye, target);
 
     scratchPointer.set(0, 0);
@@ -116,29 +130,34 @@ export function SemanticHudSampler({
         heightSource: stats.heightSource,
         floors: stats.floors,
         floorsEstimated: stats.floorsEstimated,
+        floorsSource: stats.floorsSource,
+        floorsConflictNote: stats.conflictNote,
         useLabel: BUILDING_USE_META[focusBuilding.use].label,
         footprintM2: stats.footprintM2,
         gfaM2: stats.gfaM2,
+        gfaFromHeightStoreys: stats.gfaFromHeight,
       };
     }
 
     let walkReadout = null;
     if (mode === "walk") {
-      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -groundY);
-      const at = scratchHit;
-      if (scratchRay.ray.intersectPlane(plane, at)) {
-        const localAt: [number, number] = [at.x, -at.z];
-        const roadHit = nearestRoadAt(roads, localAt);
-        const lateral = roadHit
-          ? lateralBuildingHeights(buildings, localAt, roadHit.tangent)
-          : { leftM: null, rightM: null };
-        walkReadout = {
-          streetName: roadHit?.road.name ?? null,
-          roadWidthM: roadHit?.road.width ?? null,
-          leftHeightM: lateral.leftM,
-          rightHeightM: lateral.rightM,
-        };
-      }
+      const localAt: [number, number] = [cameraEast, cameraNorth];
+      const roadHit = nearestNamedRoadAt(roads, localAt, WALK_LATERAL_CROSS_M);
+      const lateral = roadHit
+        ? lateralBuildingHeights(
+            buildings,
+            localAt,
+            roadHit.tangent,
+            WALK_LATERAL_CROSS_M,
+            WALK_ALONG_WINDOW_M,
+          )
+        : { leftM: null, rightM: null };
+      walkReadout = {
+        streetName: roadHit?.road.name ?? null,
+        roadWidthM: roadHit?.road.width ?? null,
+        leftHeightM: lateral.leftM,
+        rightHeightM: lateral.rightM,
+      };
     }
 
     const labels = buildLabels({

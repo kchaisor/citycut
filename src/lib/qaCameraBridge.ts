@@ -41,6 +41,7 @@ declare global {
       frameSemanticOverview?: () => boolean;
       frameSemanticBuildingClose?: () => boolean;
       frameSemanticWalk?: () => boolean;
+      namedStreetWalkSite?: () => import("./semanticHudNamedStreet").NamedStreetWalkSite | null;
       exportPlanSnapshot?: () => import("../types").CityModel;
       pickZoneDefaultPanelQa?: () => { id: number; height: number; note: string } | null;
       getHeightPerfTimings?: () => {

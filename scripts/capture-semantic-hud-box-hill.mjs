@@ -6,7 +6,11 @@ import { PNG } from "pngjs";
 const outDir = "/opt/cursor/artifacts";
 mkdirSync(outDir, { recursive: true });
 
-const BOX_HILL = { lat: -37.8176, lon: 145.1234, km: 0.4, label: "Box Hill VIC" };
+const BOX_HILL = { lat: -37.8176, lon: 145.1234, km: 1, label: "Box Hill VIC" };
+
+const PREVIEW_BASE =
+  process.env.SEMANTIC_HUD_BASE_URL?.replace(/\/$/, "") ??
+  "https://citycut-git-feat-distance-aware-hud-kchai.vercel.app/citycut";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -28,21 +32,25 @@ function canvasVariance(pngPath) {
   return sumSq / n - mean * mean;
 }
 
-const preview = spawn("npm", ["run", "preview", "--", "--host", "127.0.0.1", "--port", "4174"], {
-  cwd: "/workspace",
-  stdio: "ignore",
-});
-for (let i = 0; i < 40; i++) {
-  try {
-    const res = await fetch("http://127.0.0.1:4174/citycut/");
-    if (res.ok) break;
-  } catch {
-    /* retry */
-  }
-  await sleep(500);
-}
+let preview = null;
+let baseUrl = `${PREVIEW_BASE}/?qa=1&lat=${BOX_HILL.lat}&lon=${BOX_HILL.lon}&km=${BOX_HILL.km}&label=${encodeURIComponent(BOX_HILL.label)}`;
 
-const baseUrl = `http://127.0.0.1:4174/citycut/?qa=1&lat=${BOX_HILL.lat}&lon=${BOX_HILL.lon}&km=${BOX_HILL.km}&label=${encodeURIComponent(BOX_HILL.label)}`;
+if (process.env.SEMANTIC_HUD_LOCAL === "1") {
+  preview = spawn("npm", ["run", "preview", "--", "--host", "127.0.0.1", "--port", "4174"], {
+    cwd: "/workspace",
+    stdio: "ignore",
+  });
+  for (let i = 0; i < 40; i++) {
+    try {
+      const res = await fetch("http://127.0.0.1:4174/citycut/");
+      if (res.ok) break;
+    } catch {
+      /* retry */
+    }
+    await sleep(500);
+  }
+  baseUrl = `http://127.0.0.1:4174/citycut/?qa=1&lat=${BOX_HILL.lat}&lon=${BOX_HILL.lon}&km=${BOX_HILL.km}&label=${encodeURIComponent(BOX_HILL.label)}`;
+}
 
 const browser = await chromium.launch({
   headless: true,
@@ -55,6 +63,14 @@ const context = await browser.newContext({
 });
 const page = await context.newPage();
 page.setDefaultTimeout(600_000);
+
+await page.addInitScript(() => {
+  try {
+    window.localStorage.setItem("citycut.sidebar.collapsed", "1");
+  } catch {
+    /* ignore */
+  }
+});
 
 await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
 await page.waitForSelector("button.create-fab", { timeout: 120_000 });
@@ -104,7 +120,7 @@ async function wheelZoom(deltaY, times = 8) {
   await sleep(900);
 }
 
-async function waitHudMode(mode, timeoutMs = 90_000) {
+async function waitHudMode(mode, timeoutMs = 120_000) {
   await page.waitForFunction(
     (m) => document.querySelector(".semantic-hud-stack")?.getAttribute("data-semantic-mode") === m,
     mode,
@@ -150,12 +166,23 @@ await shotMode("building", "building", async () => {
   if (!/Height/i.test(text) || !/GFA/i.test(text)) {
     throw new Error(`Building inspector incomplete: ${text.slice(0, 120)}`);
   }
+  if (/13\.5\s*m/i.test(text) && /15/.test(text) && !/Floor record implies|height shown is/i.test(text)) {
+    throw new Error("Building shot shows height/floor conflict without surfacing note");
+  }
 });
 
 await page.evaluate(() => window.__citycutQaModel?.clearHeightSelection?.());
 await page.evaluate(() => window.__citycutQaModel?.frameSemanticOverview?.());
 await sleep(600);
-await page.evaluate(() => window.__citycutQaModel?.frameSemanticWalk?.());
+
+const walkFramed = await page.evaluate(() => {
+  const ok = window.__citycutQaModel?.frameSemanticWalk?.();
+  const site = window.__citycutQaModel?.namedStreetWalkSite?.();
+  return { ok, name: site?.road?.name ?? null, left: site?.leftHeightM ?? null, right: site?.rightHeightM ?? null };
+});
+if (!walkFramed.ok || !walkFramed.name) {
+  throw new Error(`Walk camera framing failed: ${JSON.stringify(walkFramed)}`);
+}
 await sleep(1500);
 await shotMode("walk", "walk", async () => {
   const section = page.locator(".semantic-hud-walk");
@@ -165,6 +192,10 @@ await shotMode("walk", "walk", async () => {
     throw new Error(`Walk inspector incomplete: ${text.slice(0, 120)}`);
   }
   if (/GFA/i.test(text)) throw new Error("Walk shot still showing building KPIs");
+  if (text.includes("—")) throw new Error(`Walk inspector has empty fields: ${text.slice(0, 200)}`);
+  if (!/Left bldg/i.test(text) || !/Right bldg/i.test(text)) {
+    throw new Error("Walk inspector missing lateral building heights");
+  }
 });
 
 await page.evaluate(() => window.__citycutQaModel?.frameSemanticOverview?.());
@@ -179,7 +210,7 @@ await sleep(1500);
 const videoPath = await page.video()?.path();
 await context.close();
 await browser.close();
-preview.kill("SIGTERM");
+if (preview) preview.kill("SIGTERM");
 
 const mp4Out = `${outDir}/semantic-hud-box-hill-10s.mp4`;
 if (videoPath && existsSync(videoPath)) {
@@ -190,4 +221,4 @@ if (videoPath && existsSync(videoPath)) {
   );
 }
 
-console.log(JSON.stringify({ outDir, mp4Out, ok: true }, null, 2));
+console.log(JSON.stringify({ outDir, mp4Out, baseUrl, ok: true }, null, 2));

@@ -2132,6 +2132,8 @@ export function Scene3D({
           buildings={model.buildings}
           roads={model.roads}
           groundY={groundY}
+          sideM={model.sideM}
+          terrain={model.terrain}
           cityRootRef={cityRootRef}
           controlsRef={perspControlsRef}
           onSample={handleSemanticHudSample}

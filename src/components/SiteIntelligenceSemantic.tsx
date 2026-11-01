@@ -41,13 +41,15 @@ export function SiteIntelligenceSemantic({
               <div className="kpi-cell">
                 <div className="kpi-lbl k-lbl">Height</div>
                 <div className="kpi-num k-val">{sample.building.heightM.toFixed(1)} m</div>
+                <div className="semantic-hud-sub k-lbl">{sample.building.heightSource}</div>
               </div>
               <div className="kpi-cell">
                 <div className="kpi-lbl k-lbl">Floors</div>
                 <div className="kpi-num k-val">
                   {sample.building.floors}
-                  {sample.building.floorsEstimated ? " est." : ""}
+                  {sample.building.floorsEstimated ? " est." : sample.building.floorsConflictNote ? " (record)" : ""}
                 </div>
+                <div className="semantic-hud-sub k-lbl">{sample.building.floorsSource}</div>
               </div>
               <div className="kpi-cell">
                 <div className="kpi-lbl k-lbl">Footprint</div>
@@ -55,10 +57,15 @@ export function SiteIntelligenceSemantic({
               </div>
               <div className="kpi-cell">
                 <div className="kpi-lbl k-lbl">GFA</div>
-                <div className="kpi-num k-val">{formatArea(sample.building.gfaM2)} est.</div>
+                <div className="kpi-num k-val">
+                  {formatArea(sample.building.gfaM2)}
+                  {sample.building.gfaFromHeightStoreys ? " est. (height storeys)" : " est."}
+                </div>
               </div>
             </div>
-            <p className="semantic-hud-source">{sample.building.heightSource}</p>
+            {sample.building.floorsConflictNote ? (
+              <p className="semantic-hud-note">{sample.building.floorsConflictNote}</p>
+            ) : null}
           </section>
         ) : null}
       </div>

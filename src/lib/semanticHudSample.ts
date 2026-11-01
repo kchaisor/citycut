@@ -23,9 +23,12 @@ export type SemanticHudBuildingReadout = {
   heightSource: string;
   floors: number;
   floorsEstimated: boolean;
+  floorsSource: string;
+  floorsConflictNote: string | null;
   useLabel: string;
   footprintM2: number;
   gfaM2: number;
+  gfaFromHeightStoreys: boolean;
 };
 
 export type SemanticHudSample = {
