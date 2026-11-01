@@ -267,15 +267,11 @@ function BuildingHoverPickLayer({
   root,
   enabled,
   gate,
-  ignoreHover,
-  onHoverBuilding,
   onHoverHighlight,
 }: {
   root: THREE.Object3D;
   enabled: boolean;
   gate: BuildingHoverPickGate;
-  ignoreHover: boolean;
-  onHoverBuilding: (buildingId: number | null) => void;
   onHoverHighlight: (buildingId: number | null) => void;
 }) {
   const camera = useThree((state) => state.camera);
@@ -300,7 +296,6 @@ function BuildingHoverPickLayer({
           canvas.style.cursor = "";
           canvas.dataset.buildingHoverHighlightId = "";
         }
-        if (!ignoreHover) onHoverBuilding(null);
         onHoverHighlight(null);
       }
     };
@@ -317,7 +312,7 @@ function BuildingHoverPickLayer({
       canvas.removeEventListener("pointerdown", onDown);
       canvas.removeEventListener("pointerup", onUp);
     };
-  }, [enabled, gate, gl.domElement, ignoreHover, onHoverBuilding, onHoverHighlight]);
+  }, [enabled, gate, gl.domElement, onHoverHighlight]);
 
   useFrame(() => {
     if (!enabled) return;
@@ -327,7 +322,6 @@ function BuildingHoverPickLayer({
         lastId.current = null;
         canvas.style.cursor = "";
         canvas.dataset.buildingHoverHighlightId = "";
-        if (!ignoreHover) onHoverBuilding(null);
         onHoverHighlight(null);
       }
       pointer.current.dirty = false;
@@ -341,7 +335,6 @@ function BuildingHoverPickLayer({
         lastId.current = null;
         canvas.style.cursor = "";
         canvas.dataset.buildingHoverHighlightId = "";
-        if (!ignoreHover) onHoverBuilding(null);
         onHoverHighlight(null);
       }
       return;
@@ -365,7 +358,6 @@ function BuildingHoverPickLayer({
     }
     lastId.current = id;
     canvas.dataset.buildingHoverHighlightId = nextDataset;
-    if (!ignoreHover) onHoverBuilding(id);
     onHoverHighlight(id);
   });
 
@@ -551,8 +543,6 @@ function City({
   pickBuildings,
   lensHoverEnabled,
   lensHoverGate,
-  lensHoverPinned,
-  onBuildingHover,
   onHoverHighlightBuildingId,
   walkRippleTint,
   walkRippleArrivals,
@@ -572,8 +562,6 @@ function City({
   pickBuildings: boolean;
   lensHoverEnabled: boolean;
   lensHoverGate: BuildingHoverPickGate;
-  lensHoverPinned: boolean;
-  onBuildingHover: (buildingId: number | null) => void;
   onHoverHighlightBuildingId?: (buildingId: number | null) => void;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
@@ -1042,8 +1030,6 @@ function City({
         root={group}
         enabled={lensHoverEnabled && pickBuildings && buildingsVisible}
         gate={lensHoverGate}
-        ignoreHover={lensHoverPinned}
-        onHoverBuilding={onBuildingHover}
         onHoverHighlight={onHoverHighlight}
       />
       <BuildingHoverHighlightLayer
@@ -2154,8 +2140,6 @@ export function Scene3D({
   anchoredLensActions = null,
   anchoredLensMode = "pinned",
   lensHoverEnabled = false,
-  lensHoverPinned = false,
-  onBuildingHover = () => {},
   quality = "high",
 }: {
   model: CityModel;
@@ -2189,8 +2173,6 @@ export function Scene3D({
   anchoredLensActions?: AnchoredLensActions | null;
   anchoredLensMode?: "hover" | "pinned";
   lensHoverEnabled?: boolean;
-  lensHoverPinned?: boolean;
-  onBuildingHover?: (buildingId: number | null) => void;
   quality?: RenderQuality;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
@@ -2314,8 +2296,6 @@ export function Scene3D({
         display={display}
         lensHoverEnabled={lensHoverEnabled}
         lensHoverGate={lensHoverGateRef.current}
-        lensHoverPinned={lensHoverPinned}
-        onBuildingHover={onBuildingHover}
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
       />
