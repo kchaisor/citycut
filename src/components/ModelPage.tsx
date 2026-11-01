@@ -969,6 +969,16 @@ export function ModelPage({
   }, [walkRipple.modeLabel, walkRipple.status]);
   const walkAt = useWalkPlayback(walk);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || !qaModeFromSearch(window.location.search)) return;
+    window.__citycutSignalTraceQa = {
+      pickBuilding: (buildingId: number) => signalTrace.pickSourceBuilding(buildingId),
+    };
+    return () => {
+      delete window.__citycutSignalTraceQa;
+    };
+  }, [signalTrace]);
+
   const drawingModel = useMemo(() => {
     const buildingsVisible = isLayer3dVisible(view3dDisplay, "buildings");
     const treesVisible = isLayer3dVisible(view3dDisplay, "trees");
@@ -1799,7 +1809,8 @@ export function ModelPage({
       <div
         className={`${
           tab === "drawing" ? "viewport is-drawing" : tab === "satellite" ? "viewport is-satellite" : "viewport"
-        }${sidebarCollapsed ? " sidebar-collapsed" : ""}`}
+        }${sidebarCollapsed ? " sidebar-collapsed" : ""}${signalTraceOn ? " is-signal-trace" : ""}`}
+        data-signal-trace={signalTraceOn ? "1" : undefined}
       >
         {tab === "3d" && (
           <div className="fill">
@@ -1843,6 +1854,7 @@ export function ModelPage({
                 onBuildingPick={(buildingId, clientX, clientY, additive) => {
                   if (signalTraceOn) {
                     signalTrace.pickSourceBuilding(buildingId);
+                    return;
                   }
                   setHeightPick({ buildingId, clientX, clientY });
                   selectForHide(buildingId, additive);
@@ -2601,7 +2613,7 @@ export function ModelPage({
                         {displayModel.buildings.length.toLocaleString()} massings
                       </span>
                     </div>
-                    <div className="style-seg seg-mini" role="group" aria-label="Scene look">
+                    <div className="style-seg seg-mini style-seg-scene-look" role="group" aria-label="Scene look">
                       <button
                         type="button"
                         className={view3dLook === "default" ? "style-btn active" : "style-btn"}

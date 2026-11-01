@@ -11,6 +11,8 @@ import {
 } from "./signalTraceHeadway";
 import {
   computeRippleTimesNetwork,
+  WALK_RIPPLE_BANDS_MIN,
+  WALK_RIPPLE_SPEED_MPM,
   WALK_RIPPLE_TIMELINE_MAX_MIN,
   type RippleTimesNetwork,
 } from "./walkRippleNetwork";
@@ -26,6 +28,7 @@ const RENDER_ORDER = 950;
 const LINE_LIFT_M = 0.65;
 const STREET_HALF_WIDTH_M = 0.35;
 const RAIL_HALF_WIDTH_M = 0.55;
+const RING_SEGMENTS = 72;
 
 function zAt(model: Pick<CityModel, "terrain" | "sideM">, east: number, north: number): number {
   return groundHeightAt(model, east, north);
@@ -122,6 +125,8 @@ export class SignalTraceLayer {
   private tramMesh: THREE.Mesh | null = null;
   private disposeGeometries: THREE.BufferGeometry[] = [];
   private rippleTimes: RippleTimesNetwork | null = null;
+  private origin: Pt | null = null;
+  private ringGroup: THREE.Group | null = null;
 
   constructor(private readonly model: CityModel) {
     this.root.name = "SignalTrace";
@@ -139,6 +144,60 @@ export class SignalTraceLayer {
     this.streetMesh = null;
     this.railMesh = null;
     this.tramMesh = null;
+    if (this.ringGroup) {
+      this.root.remove(this.ringGroup);
+      this.ringGroup = null;
+    }
+  }
+
+  private syncAfterglowRings(minutes: number): void {
+    if (this.ringGroup) {
+      this.root.remove(this.ringGroup);
+      this.ringGroup.traverse((obj) => {
+        const line = obj as THREE.LineLoop;
+        if (line.isLineLoop) {
+          line.geometry.dispose();
+          (line.material as THREE.Material).dispose();
+        }
+      });
+      this.ringGroup = null;
+    }
+    if (!this.origin || minutes <= 0.05) return;
+    const [ox, oy] = this.origin;
+    const group = new THREE.Group();
+    group.name = "SignalTraceAfterglowRings";
+    const frontierM = minutes * WALK_RIPPLE_SPEED_MPM;
+    const accent = getColour("--signal-trace-afterglow");
+    const dim = getColour("--signal-trace-street-dim");
+    const addRing = (radiusM: number, opacity: number, color: string) => {
+      if (radiusM < 8) return;
+      const points: THREE.Vector3[] = [];
+      for (let i = 0; i <= RING_SEGMENTS; i++) {
+        const a = (i / RING_SEGMENTS) * Math.PI * 2;
+        const e = ox + Math.cos(a) * radiusM;
+        const n = oy + Math.sin(a) * radiusM;
+        points.push(new THREE.Vector3(e, zAt(this.model, e, n) + 0.45, -n));
+      }
+      const geo = new THREE.BufferGeometry().setFromPoints(points);
+      const mat = new THREE.LineBasicMaterial({
+        color,
+        transparent: true,
+        opacity,
+        toneMapped: false,
+        depthWrite: false,
+      });
+      const ring = new THREE.LineLoop(geo, mat);
+      ring.renderOrder = RENDER_ORDER + 3;
+      group.add(ring);
+      this.disposeGeometries.push(geo);
+    };
+    for (const bandMin of WALK_RIPPLE_BANDS_MIN) {
+      const r = bandMin * WALK_RIPPLE_SPEED_MPM;
+      if (minutes >= bandMin - 0.2) addRing(r, 0.22, dim);
+    }
+    addRing(frontierM, 0.72, accent);
+    this.ringGroup = group;
+    this.root.add(group);
   }
 
   rebuild(): void {
@@ -178,12 +237,9 @@ export class SignalTraceLayer {
     const railHz = 1 / (heavyRailPulseSchedule().headwayMin * 60);
     const tramSpacing = pulseSpacingMetres(tramPulseSchedule().headwayMin, SIGNAL_TRACE_RAIL_TRAVEL_MPS);
     const railSpacing = pulseSpacingMetres(heavyRailPulseSchedule().headwayMin, SIGNAL_TRACE_RAIL_TRAVEL_MPS);
-    const tramPulse = (2 * Math.PI) / tramSpacing;
-    const railPulse = (2 * Math.PI) / railSpacing;
-
     const tramBuild: RibbonBuild = { positions: [], pathDist: [], pulseRate: [], rippleArrival: [] };
     for (const line of trams) {
-      const part = polylineRibbon(line, tramPulse, null, 0, this.model, RAIL_HALF_WIDTH_M);
+      const part = polylineRibbon(line, tramSpacing, null, 0, this.model, RAIL_HALF_WIDTH_M);
       tramBuild.positions.push(...part.positions);
       tramBuild.pathDist.push(...part.pathDist);
       tramBuild.pulseRate.push(...part.pulseRate);
@@ -198,7 +254,7 @@ export class SignalTraceLayer {
 
     const railBuild: RibbonBuild = { positions: [], pathDist: [], pulseRate: [], rippleArrival: [] };
     for (const line of rails) {
-      const part = polylineRibbon(line, railPulse, null, 0, this.model, RAIL_HALF_WIDTH_M);
+      const part = polylineRibbon(line, railSpacing, null, 0, this.model, RAIL_HALF_WIDTH_M);
       railBuild.positions.push(...part.positions);
       railBuild.pathDist.push(...part.pathDist);
       railBuild.pulseRate.push(...part.pulseRate);
@@ -212,6 +268,7 @@ export class SignalTraceLayer {
     }
     void tramHz;
     void railHz;
+    this.syncAfterglowRings(this.uniforms.uRippleTime.value >= 0 ? this.uniforms.uRippleTime.value : 0);
   }
 
   setSourceOrigin(east: number, north: number): void {
@@ -223,6 +280,7 @@ export class SignalTraceLayer {
       return;
     }
     this.rippleTimes = computeRippleTimesNetwork(street.network, east, north);
+    this.origin = [east, north];
     this.uniforms.uRippleMax.value = WALK_RIPPLE_TIMELINE_MAX_MIN;
     this.uniforms.uRippleTime.value = 0;
     this.rebuild();
@@ -230,6 +288,7 @@ export class SignalTraceLayer {
 
   clearSource(): void {
     this.rippleTimes = null;
+    this.origin = null;
     this.uniforms.uRippleTime.value = -1;
     this.rebuild();
   }
@@ -239,7 +298,9 @@ export class SignalTraceLayer {
       this.uniforms.uRippleTime.value = -1;
       return;
     }
-    this.uniforms.uRippleTime.value = Math.max(0, Math.min(WALK_RIPPLE_TIMELINE_MAX_MIN, minutes));
+    const clamped = Math.max(0, Math.min(WALK_RIPPLE_TIMELINE_MAX_MIN, minutes));
+    this.uniforms.uRippleTime.value = clamped;
+    this.syncAfterglowRings(clamped);
   }
 
   refreshColours(): void {

@@ -2587,6 +2587,23 @@ body,
   border: 0 !important;
 }
 
+.model .viewport.is-signal-trace {
+  background: var(--signal-trace-scene-bg) !important;
+}
+
+.model .left-outliner .style-seg.style-seg-scene-look {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.model .left-outliner .style-seg.style-seg-scene-look .style-btn {
+  min-width: 0 !important;
+  padding: 0 5px !important;
+  font-size: 10px !important;
+  letter-spacing: -0.01em !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
 .model .left-outliner .style-seg,
 .model .left-outliner .style-seg.seg-mini {
   display: grid !important;

@@ -54,9 +54,9 @@
   --walk-ripple-label-text: #FFFFFF;
 
   --signal-trace-scene-bg: #000000;
-  --signal-trace-ground: #1A1A1A;
-  --signal-trace-building-fill: #141820;
-  --signal-trace-building-rim: #B8C0CC;
+  --signal-trace-ground: #0C0C10;
+  --signal-trace-building-fill: #0E1018;
+  --signal-trace-building-rim: #D8E0EC;
   --signal-trace-source-glow: #FFB020;
   --signal-trace-street-dim: #2A2A30;
   --signal-trace-street-pulse: #E8C547;

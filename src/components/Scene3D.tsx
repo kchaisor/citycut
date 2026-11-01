@@ -93,6 +93,8 @@ import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SunHoursLayer } from "./SunHoursLayer";
 import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
 import type { SignalTraceBuildingLook } from "../lib/signalTraceBuildingLook";
+import { applySignalTraceSurfaceTint } from "../lib/signalTraceSurfaceTint";
+import { signalTraceViewportLighting } from "../lib/signalTraceViewport";
 
 const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
@@ -778,6 +780,7 @@ function City({
     applySunStudySurfaceTint(group, false);
     applyBuildingSolarNeutral(group, false, solarNeutralFill);
     applyWhiteCardTint(group, signalTraceActive ? false : display.whiteCard);
+    applySignalTraceSurfaceTint(group, Boolean(signalTraceActive));
     invalidate();
   }, [group, colourMode, solarDiagramOn, solarNeutralFill, colourTick, display.whiteCard, signalTraceActive, invalidate]);
   const buildingsVisible = isLayer3dVisible(display, "buildings");
@@ -2017,8 +2020,8 @@ export function Scene3D({
     () => (signalTraceActive ? getColour("--signal-trace-scene-bg") : themeColor("--model-bg")),
     [colourTick, signalTraceActive],
   );
-  const sky = getColour("--light-sky");
-  const groundLight = getColour("--light-ground");
+  const sky = signalTraceActive ? getColour("--signal-trace-scene-bg") : getColour("--light-sky");
+  const groundLight = signalTraceActive ? getColour("--signal-trace-ground") : getColour("--light-ground");
   const studioFill = getColour("--light-fill");
   const groundY = model.terrain ? model.terrain.min : 0;
   const plinthBottomY = basePlinthBottomY(model.sideM, model.terrain);
@@ -2035,15 +2038,29 @@ export function Scene3D({
     setGlContextLost(false);
     setGlEpoch((value) => value + 1);
   }, []);
+  const traceLight = signalTraceViewportLighting();
   const viewportLight = sunStudyViewportLighting({
-    showPath: solar.showPath && !display.whiteCard,
-    castShadows: solar.castShadows,
+    showPath: solar.showPath && !display.whiteCard && !signalTraceActive,
+    castShadows: solar.castShadows && !signalTraceActive,
   });
   const cardLight = whiteCardViewportLighting(display.whiteCard);
-  const fillKeyLight = display.whiteCard ? cardLight.fillKeyLight : viewportLight.fillKeyLight;
-  const fillAmbient = display.whiteCard ? cardLight.fillAmbient : viewportLight.fillAmbient;
-  const fillHemi = display.whiteCard ? cardLight.fillHemi : viewportLight.fillHemi;
-  const { sunIntensity, noToneMapping } = viewportLight;
+  const fillKeyLight = signalTraceActive
+    ? traceLight.fillKeyLight
+    : display.whiteCard
+      ? cardLight.fillKeyLight
+      : viewportLight.fillKeyLight;
+  const fillAmbient = signalTraceActive
+    ? traceLight.fillAmbient
+    : display.whiteCard
+      ? cardLight.fillAmbient
+      : viewportLight.fillAmbient;
+  const fillHemi = signalTraceActive
+    ? traceLight.fillHemi
+    : display.whiteCard
+      ? cardLight.fillHemi
+      : viewportLight.fillHemi;
+  const sunIntensity = signalTraceActive ? traceLight.sunIntensity : viewportLight.sunIntensity;
+  const noToneMapping = signalTraceActive ? traceLight.noToneMapping : viewportLight.noToneMapping;
   const heliodonRadius = heliodonRadiusM(model.sideM, solar.radiusFactor);
   const shadowTargetY = groundY;
   const siteTopY = useMemo(() => {
@@ -2095,7 +2112,7 @@ export function Scene3D({
         noToneMapping={noToneMapping}
         sideM={model.sideM}
         plinthBottomY={plinthBottomY}
-        showShadow={projection !== "plan"}
+        showShadow={projection !== "plan" && !signalTraceActive}
         frameShape={model.frameShape ?? "square"}
         colourTick={colourTick}
       />

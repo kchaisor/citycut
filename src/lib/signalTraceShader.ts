@@ -41,9 +41,10 @@ const TRACE_VERTEX = `
     vPulseRate = aPulseRate;
     vRippleMix = 0.0;
     if (uRippleTime >= 0.0 && aRippleArrival <= 998.0) {
-      float trail = uRippleTime >= aRippleArrival ? 0.75 : 0.0;
-      float pulse = exp(-pow((uRippleTime - aRippleArrival) * 6.0, 2.0));
-      vRippleMix = clamp(max(trail, pulse * 0.9), 0.0, 1.0);
+      float trail = uRippleTime >= aRippleArrival ? 1.0 : 0.0;
+      float pulse = exp(-pow((uRippleTime - aRippleArrival) * 5.5, 2.0));
+      float frontier = exp(-pow((aRippleArrival - uRippleTime) * 4.0, 2.0));
+      vRippleMix = clamp(max(trail * 0.85, max(pulse, frontier * 0.7)), 0.0, 1.0);
     }
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
@@ -59,11 +60,15 @@ const TRACE_STREET_FRAGMENT = `
   varying float vPulseRate;
   varying float vRippleMix;
   void main() {
-    float wave = sin((vPathDist - uSignalTime * uWalkSpeed) * vPulseRate * 6.28318);
-    float dash = smoothstep(-0.15, 0.35, wave);
-    vec3 base = mix(uStreetDim, uStreetPulse, dash * 0.85);
-    vec3 colour = mix(base, uRippleAccent, vRippleMix * 0.92);
-    float alpha = clamp(0.22 + dash * 0.78 + vRippleMix * 0.35, 0.0, 1.0);
+    float spacing = mix(20.0, 9.0, clamp((vPulseRate - 0.08) / 0.42, 0.0, 1.0));
+    float along = vPathDist - uSignalTime * uWalkSpeed;
+    float f = fract(along / spacing);
+    float pulse = smoothstep(0.68, 0.82, f) * (1.0 - smoothstep(0.84, 0.96, f));
+    float tail = exp(-pow((1.0 - f) * 4.0, 2.0)) * 0.45;
+    float dash = clamp(pulse + tail, 0.0, 1.0);
+    vec3 base = mix(uStreetDim, uStreetPulse, dash);
+    vec3 colour = mix(base, uRippleAccent, clamp(vRippleMix, 0.0, 1.0));
+    float alpha = clamp(0.12 + dash * 0.88 + vRippleMix * 0.75, 0.0, 1.0);
     if (alpha < 0.04) discard;
     gl_FragColor = vec4(colour, alpha);
   }
@@ -79,7 +84,7 @@ const TRACE_RAIL_FRAGMENT = `
   varying float vPulseRate;
   varying float vRippleMix;
   void main() {
-    float spacing = max(12.0, 6.28318 / max(vPulseRate, 0.02));
+    float spacing = max(14.0, vPulseRate);
     float phase = fract((vPathDist - uSignalTime * uWalkSpeed * 1.35) / spacing);
     float dash = smoothstep(0.35, 0.5, phase) * (1.0 - smoothstep(0.62, 0.78, phase));
     vec3 base = mix(uStreetDim, uRailPulse, dash);
@@ -155,8 +160,9 @@ const BUILDING_COLOR = `
     vec3 n = normalize(vViewNormal);
     vec3 v = normalize(-vViewPos);
     float fresnel = pow(1.0 - max(dot(n, v), 0.0), 2.4);
-    vec3 glass = mix(uGlassFill, uGlassEdge, fresnel * 0.95);
-    glass = mix(glass, uSourceFill, vSourceGlow * 0.82);
+    vec3 glass = mix(uGlassFill, uGlassEdge, fresnel * 0.98);
+    glass = mix(glass, uSourceFill, vSourceGlow * 0.88);
+    glass += uGlassEdge * fresnel * 0.28;
     return glass;
   }
 `;

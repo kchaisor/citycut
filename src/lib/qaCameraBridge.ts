@@ -49,6 +49,9 @@ declare global {
       }>;
       captureViewportPng?: () => Promise<string | null>;
     };
+    __citycutSignalTraceQa?: {
+      pickBuilding: (buildingId: number) => void;
+    };
     __citycutWalkRippleQa?: {
       setMinutes: (minutes: number) => void;
       getMinutes: () => number;
