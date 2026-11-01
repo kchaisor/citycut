@@ -31,6 +31,11 @@ export function attachWalkRippleAmenityPick(
   function onPointerUp(event: PointerEvent) {
     if (event.button !== 0) return;
     if (Math.hypot(event.clientX - downX, event.clientY - downY) > CLICK_MAX_PX) return;
+    const screenPick = layer.pickAmenityAtClient(camera, canvas, event.clientX, event.clientY);
+    if (screenPick) {
+      onPick(screenPick, event.clientX, event.clientY);
+      return;
+    }
     setPointer(event);
     raycaster.setFromCamera(pointer, camera);
     const meshes = layer.beaconMeshes().filter((mesh) => mesh.visible);

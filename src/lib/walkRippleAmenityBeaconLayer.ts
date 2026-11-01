@@ -124,6 +124,7 @@ export class WalkRippleAmenityBeaconLayer {
       });
       mesh.geometry.setAttribute("aArrival", new THREE.InstancedBufferAttribute(arrivalsAttr, 1));
       mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
       beacon.visible = this.typeVisible[type];
       this.meshes.set(type, beacon);
       this.root.add(beacon);
@@ -134,6 +135,41 @@ export class WalkRippleAmenityBeaconLayer {
   setRippleTimeMinutes(minutes: number): void {
     this.rippleMinutes = minutes;
     for (const mesh of this.meshes.values()) setMaterialRippleTime(mesh, minutes);
+  }
+
+  pickAmenityAtClient(
+    camera: THREE.Camera,
+    canvas: HTMLCanvasElement,
+    clientX: number,
+    clientY: number,
+    maxPx = 28,
+  ): AmenityArrival | null {
+    const minute = this.rippleMinutes;
+    const rect = canvas.getBoundingClientRect();
+    const projected = new THREE.Vector3();
+    let best: AmenityArrival | null = null;
+    let bestDist = maxPx;
+    for (const mesh of this.meshes.values()) {
+      if (!mesh.visible) continue;
+      const type = mesh.userData.amenityType;
+      const ids = mesh.userData.amenityIds;
+      for (let index = 0; index < ids.length; index += 1) {
+        const amenity = this.amenityAt(type, index);
+        if (!amenity || amenity.arrivalMin > minute + 0.04) continue;
+        const ground = this.z(amenity.east, amenity.north);
+        projected.set(amenity.east, ground + COLUMN_HEIGHT_M * 0.55, -amenity.north);
+        projected.project(camera);
+        if (projected.z > 1) continue;
+        const sx = rect.left + (projected.x * 0.5 + 0.5) * rect.width;
+        const sy = rect.top + (-projected.y * 0.5 + 0.5) * rect.height;
+        const dist = Math.hypot(clientX - sx, clientY - sy);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = amenity;
+        }
+      }
+    }
+    return best;
   }
 
   beaconMeshes(): BeaconMesh[] {

@@ -18,7 +18,10 @@ import {
   type RippleTimes,
 } from "../lib/walkRippleNetwork";
 import { qaModeFromSearch } from "../lib/qaCameraBridge";
+import { groundHeightAt } from "../lib/viewshed";
 import type { CityModel } from "../types";
+
+const AMENITY_BEACON_PICK_HEIGHT_M = 12;
 
 export type WalkRippleStatus = "idle" | "placing" | "ready" | "animating";
 
@@ -85,6 +88,8 @@ export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "
   const networkRef = useRef(buildWalkNetwork(model.roads));
   const buildingArrivalsRef = useRef<Map<number, number> | null>(null);
   const amenitiesRef = useRef<WalkRippleAmenity[]>([]);
+  const amenityArrivalsRef = useRef<AmenityArrival[]>([]);
+  const rippleMinutesRef = useRef(0);
   const fetchGenRef = useRef(0);
 
   useEffect(() => {
@@ -94,6 +99,14 @@ export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "
   useEffect(() => {
     amenitiesRef.current = amenities;
   }, [amenities]);
+
+  useEffect(() => {
+    amenityArrivalsRef.current = amenityArrivals;
+  }, [amenityArrivals]);
+
+  useEffect(() => {
+    rippleMinutesRef.current = rippleMinutes;
+  }, [rippleMinutes]);
 
   useEffect(() => {
     const gen = ++fetchGenRef.current;
@@ -111,7 +124,7 @@ export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "
       }
       setAmenities(result.amenities);
     });
-  }, [model.center.lat, model.center.lon, model.sideM, model.frameShape, amenityBeacons]);
+  }, [model.center.lat, model.center.lon, model.sideM, model.frameShape]);
 
   useEffect(() => {
     networkRef.current = buildWalkNetwork(model.roads);
@@ -181,11 +194,38 @@ export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "
         return n;
       },
       getAmenityCounts: () => amenityCounts,
+      getAmenityPoolCount: () => amenitiesRef.current.length,
+      amenitiesUnavailable: () => amenitiesUnavailable,
+      screenPointForFirstReachedAmenity: () => {
+        const minute = rippleMinutesRef.current;
+        const reached = amenityArrivalsRef.current
+          .filter((a) => a.arrivalMin <= minute + 0.04)
+          .sort((a, b) => a.arrivalMin - b.arrivalMin);
+        const project = window.__citycutQa?.projectToScreen;
+        if (!project) return null;
+        const canvas =
+          document.querySelector(".scene-canvas canvas") ?? document.querySelector("canvas.scene-canvas");
+        const rect = canvas?.getBoundingClientRect();
+        const bottomHudInsetPx = 150;
+        for (const amenity of reached) {
+          const ground = groundHeightAt(analysisModel, amenity.east, amenity.north);
+          const point = project({
+            x: amenity.east,
+            y: ground + AMENITY_BEACON_PICK_HEIGHT_M,
+            z: -amenity.north,
+          });
+          if (!point || !rect) return point;
+          if (point.x < rect.left + 8 || point.x > rect.right - 8) continue;
+          if (point.y < rect.top + 8 || point.y > rect.bottom - bottomHudInsetPx) continue;
+          return point;
+        }
+        return null;
+      },
     };
     return () => {
       delete window.__citycutWalkRippleQa;
     };
-  }, [applyRippleMinutes, layer, rippleMinutes, amenityCounts]);
+  }, [analysisModel, applyRippleMinutes, layer, rippleMinutes, amenityCounts, amenitiesUnavailable]);
 
   const startAnim = useCallback(() => {
     stopAnim();

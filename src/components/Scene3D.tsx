@@ -260,7 +260,15 @@ function WalkRippleAmenityPickLayer({
   const gl = useThree((state) => state.gl);
   useLayoutEffect(() => {
     if (!enabled) return;
-    return attachWalkRippleAmenityPick(gl.domElement, camera, layer, onPick, onClear);
+    if (qaModeFromSearch(window.location.search)) {
+      window.__citycutWalkRipplePickProbe = (clientX: number, clientY: number) =>
+        layer.pickAmenityAtClient(camera, gl.domElement, clientX, clientY)?.name ?? null;
+    }
+    const detach = attachWalkRippleAmenityPick(gl.domElement, camera, layer, onPick, onClear);
+    return () => {
+      detach();
+      if (qaModeFromSearch(window.location.search)) delete window.__citycutWalkRipplePickProbe;
+    };
   }, [camera, enabled, gl.domElement, layer, onClear, onPick]);
   return null;
 }
