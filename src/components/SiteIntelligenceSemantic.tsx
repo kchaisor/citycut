@@ -83,6 +83,7 @@ export function SiteIntelligenceSemantic({
               <div className="kpi-cell semantic-kpi-wide">
                 <div className="kpi-lbl k-lbl">Name</div>
                 <div className="kpi-num k-val">{sample.walk.streetName ?? "—"}</div>
+                <div className="semantic-hud-sub k-lbl">{sample.walk.streetNameSource}</div>
               </div>
               <div className="kpi-cell">
                 <div className="kpi-lbl k-lbl">Width</div>

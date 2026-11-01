@@ -1,4 +1,3 @@
-import { sampleTerrain } from "./terrain";
 import { lateralBuildingHeights, nearestRoadAt, pointToSegmentDistanceM } from "./semanticHudGeometry";
 import type { BuildingFeat, Pt, RoadFeat, TerrainField } from "../types";
 
@@ -11,6 +10,7 @@ const WALK_CAMERA_BACK_M = 6;
 
 export type NamedStreetWalkSite = {
   at: Pt;
+  roadAt: Pt;
   tangent: Pt;
   road: RoadFeat;
   groundY: number;
@@ -24,6 +24,11 @@ function roadNameScore(name: string | undefined): number {
     if (PREFERRED_STREET[i]!.test(name)) return 100 - i * 10;
   }
   return 10;
+}
+
+function insideSiteFrame(at: Pt, sideM: number, marginM: number): boolean {
+  const half = sideM / 2 - marginM;
+  return Math.abs(at[0]) <= half && Math.abs(at[1]) <= half;
 }
 
 function samplePointsAlongRoad(road: RoadFeat, spacingM: number): { at: Pt; tangent: Pt }[] {
@@ -53,17 +58,20 @@ function walkCameraEastNorth(at: Pt, tangent: Pt): Pt {
 function scoreWalkSamples(
   roads: RoadFeat[],
   buildings: BuildingFeat[],
-  terrain: TerrainField | null | undefined,
   sideM: number,
-  minNameScore: number,
+  requireNamed: boolean,
 ): NamedStreetWalkSite | null {
+  const marginM = Math.min(95, Math.max(55, sideM * 0.09));
   let best: { score: number; site: NamedStreetWalkSite } | null = null;
   for (const road of roads) {
-    if (road.kind !== "road" || !road.name || road.grade === "path" || road.service) continue;
-    const nameScore = roadNameScore(road.name);
-    if (nameScore < minNameScore) continue;
+    if (road.kind !== "road" || road.grade === "path" || road.service) continue;
+    if (requireNamed && !road.name) continue;
+    const nameScore = road.name ? roadNameScore(road.name) : 1;
     for (const sample of samplePointsAlongRoad(road, 22)) {
       const camAt = walkCameraEastNorth(sample.at, sample.tangent);
+      if (!insideSiteFrame(camAt, sideM, marginM)) continue;
+      const lookAt: Pt = [camAt[0] + sample.tangent[0] * 40, camAt[1] + sample.tangent[1] * 40];
+      if (!insideSiteFrame(lookAt, sideM, marginM * 0.85)) continue;
       const lateral = lateralBuildingHeights(
         buildings,
         camAt,
@@ -73,12 +81,12 @@ function scoreWalkSamples(
       );
       if (lateral.leftM == null || lateral.rightM == null) continue;
       if (lateral.leftM < 4 || lateral.rightM < 4) continue;
-      const groundY = terrain ? sampleTerrain(terrain, camAt[0], camAt[1], sideM) : 0;
       const site: NamedStreetWalkSite = {
         at: camAt,
+        roadAt: sample.at,
         tangent: sample.tangent,
         road,
-        groundY,
+        groundY: 0,
         leftHeightM: lateral.leftM,
         rightHeightM: lateral.rightM,
       };
@@ -92,19 +100,27 @@ function scoreWalkSamples(
 export function pickNamedStreetWalkSite(
   roads: RoadFeat[],
   buildings: BuildingFeat[],
-  terrain: TerrainField | null | undefined,
+  _terrain: TerrainField | null | undefined,
   sideM: number,
 ): NamedStreetWalkSite | null {
-  const preferred = scoreWalkSamples(roads, buildings, terrain, sideM, 50);
-  if (preferred) return preferred;
-  return scoreWalkSamples(roads, buildings, terrain, sideM, 1);
+  const preferredNamed = scoreWalkSamples(roads, buildings, sideM, true);
+  if (preferredNamed && preferredNamed.road.name && roadNameScore(preferredNamed.road.name) >= 50) {
+    return preferredNamed;
+  }
+  const anyNamed = scoreWalkSamples(roads, buildings, sideM, true);
+  if (anyNamed) return anyNamed;
+  return scoreWalkSamples(roads, buildings, sideM, false);
 }
 
-export function walkCameraFromSite(site: NamedStreetWalkSite, eyeAboveGroundM = WALK_EYE_ABOVE_GROUND_M) {
+export function walkCameraFromSite(
+  site: NamedStreetWalkSite,
+  groundY: number,
+  eyeAboveGroundM = WALK_EYE_ABOVE_GROUND_M,
+) {
   const [ex, ny] = site.at;
   const [tx, ty] = site.tangent;
-  const eyeY = site.groundY + eyeAboveGroundM;
-  const lookY = site.groundY + 1.45;
+  const eyeY = groundY + eyeAboveGroundM;
+  const lookY = groundY + 1.45;
   return {
     eye: { x: ex, y: eyeY, z: -ny },
     target: { x: ex + tx * 48, y: lookY, z: -(ny + ty * 48) },

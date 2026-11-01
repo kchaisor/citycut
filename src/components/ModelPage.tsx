@@ -755,12 +755,16 @@ export function ModelPage({
           model.sideM,
         );
         if (!site || !window.__citycutQa?.setCamera) return false;
-        if (model.terrain) {
-          site.groundY = sampleTerrain(model.terrain, site.at[0], site.at[1], model.sideM);
-        }
+        const surfaceY =
+          window.__citycutQa.pickSurfaceY?.(site.roadAt[0], site.roadAt[1]) ??
+          window.__citycutQa.pickSurfaceY?.(site.at[0], site.at[1]) ??
+          (model.terrain
+            ? sampleTerrain(model.terrain, site.roadAt[0], site.roadAt[1], model.sideM)
+            : 0);
+        site.groundY = surfaceY;
         qaNamedStreetWalkSiteRef.current = site;
         qaSemanticHudModeOverrideRef.current = "walk";
-        const pose = walkCameraFromSite(site);
+        const pose = walkCameraFromSite(site, surfaceY);
         window.__citycutQa.setCamera(pose);
         window.requestAnimationFrame(() => window.__citycutQa?.setCamera?.(pose));
         return true;
@@ -1957,6 +1961,7 @@ export function ModelPage({
                 }
                 quality={renderQuality}
                 semanticHudEnabled={semanticHudActive}
+                semanticHudMode={semanticHudActive ? semanticHudSample.mode : undefined}
                 onSemanticHudSample={onSemanticHudSample}
               />
               <SemanticViewportLabels labels={semanticHudSample.labels} visible={semanticHudActive} />

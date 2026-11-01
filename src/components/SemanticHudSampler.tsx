@@ -14,10 +14,11 @@ import {
 } from "../lib/semanticHudGeometry";
 import {
   nearestNamedRoadAt,
-  WALK_EYE_ABOVE_GROUND_M,
   WALK_LATERAL_CROSS_M,
   WALK_ALONG_WINDOW_M,
 } from "../lib/semanticHudNamedStreet";
+import { pickCitySurfaceY } from "../lib/citySurfacePick";
+import { roadStreetNameLabel } from "../lib/roadStreetNameSource";
 import { sampleTerrain } from "../lib/terrain";
 import {
   cameraPitchDegFromEyeTarget,
@@ -30,6 +31,8 @@ import { buildingIdFromIntersection } from "../lib/buildingPick";
 import type { BuildingFeat, RoadFeat, TerrainField } from "../types";
 
 const EVAL_MIN_INTERVAL_MS = 100;
+const WALK_LABEL_MAX_M = 150;
+const WALK_LABEL_MAX_COUNT = 4;
 const scratchRay = new THREE.Raycaster();
 const scratchPointer = new THREE.Vector2();
 const scratchHit = new THREE.Vector3();
@@ -73,9 +76,10 @@ export function SemanticHudSampler({
     const target: [number, number, number] = [controls.target.x, controls.target.y, controls.target.z];
     const cameraEast = eye[0];
     const cameraNorth = -eye[2];
-    const localGroundY = terrain
-      ? sampleTerrain(terrain, cameraEast, cameraNorth, sideM)
-      : groundY;
+    const meshGroundY = pickCitySurfaceY(cityRoot, cameraEast, cameraNorth, eye[1] + 120);
+    const localGroundY =
+      meshGroundY ??
+      (terrain ? sampleTerrain(terrain, cameraEast, cameraNorth, sideM) : groundY);
     const eyeHeightM = Math.max(0, eye[1] - localGroundY);
     const pitchDeg = cameraPitchDegFromEyeTarget(eye, target);
 
@@ -166,8 +170,10 @@ export function SemanticHudSampler({
       const qaWalkSite =
         typeof window !== "undefined" ? window.__citycutQaModel?.namedStreetWalkSite?.() ?? null : null;
       if (qaModeOverride === "walk" && qaWalkSite) {
+        const nameField = roadStreetNameLabel(qaWalkSite.road.name);
         walkReadout = {
-          streetName: qaWalkSite.road.name ?? null,
+          streetName: nameField.display === "—" ? null : nameField.display,
+          streetNameSource: nameField.sourceNote,
           roadWidthM: qaWalkSite.road.width ?? null,
           leftHeightM: qaWalkSite.leftHeightM,
           rightHeightM: qaWalkSite.rightHeightM,
@@ -184,18 +190,15 @@ export function SemanticHudSampler({
               WALK_ALONG_WINDOW_M,
             )
           : { leftM: null, rightM: null };
+        const nameField = roadStreetNameLabel(roadHit?.road.name);
         walkReadout = {
-          streetName: roadHit?.road.name ?? null,
+          streetName: nameField.display === "—" ? null : nameField.display,
+          streetNameSource: nameField.sourceNote,
           roadWidthM: roadHit?.road.width ?? null,
           leftHeightM: lateral.leftM,
           rightHeightM: lateral.rightM,
         };
       }
-    }
-
-    let readoutEyeHeightM = eyeHeightM;
-    if (qaModeOverride === "walk") {
-      readoutEyeHeightM = WALK_EYE_ABOVE_GROUND_M;
     }
 
     const labels = buildLabels({
@@ -204,14 +207,16 @@ export function SemanticHudSampler({
       camera,
       width: size.width,
       height: size.height,
-      groundY,
-      eyeHeightM: readoutEyeHeightM,
+      groundY: localGroundY,
+      eyeHeightM,
       mode,
+      cameraEast,
+      cameraNorth,
     });
 
     onSample({
       mode,
-      eyeHeightM: readoutEyeHeightM,
+      eyeHeightM,
       pitchDeg,
       building: buildingReadout,
       walk: walkReadout,
@@ -231,6 +236,8 @@ function buildLabels({
   groundY,
   eyeHeightM,
   mode,
+  cameraEast,
+  cameraNorth,
 }: {
   buildings: BuildingFeat[];
   roads: RoadFeat[];
@@ -240,6 +247,8 @@ function buildLabels({
   groundY: number;
   eyeHeightM: number;
   mode: SemanticHudMode;
+  cameraEast: number;
+  cameraNorth: number;
 }): SemanticHudLabel[] {
   const zoomBand =
     eyeHeightM <= 12 ? "close" : eyeHeightM <= 45 ? "mid" : eyeHeightM <= 120 ? "far" : "wide";
@@ -249,6 +258,8 @@ function buildLabels({
   const labels: SemanticHudLabel[] = [];
   const boxes: { x: number; y: number; w: number; h: number }[] = [];
 
+  type StreetCandidate = { label: SemanticHudLabel; distanceM: number };
+  const streetCandidates: StreetCandidate[] = [];
   for (const road of roads) {
     if (road.kind !== "road") continue;
     if (road.grade === "path" && !showPaths) continue;
@@ -257,6 +268,8 @@ function buildLabels({
     if (road.grade === "local" && zoomBand === "far" && !road.name) continue;
     const mid = road.line[Math.floor(road.line.length / 2)] ?? road.line[0];
     if (!mid) continue;
+    const distanceM = Math.hypot(mid[0] - cameraEast, mid[1] - cameraNorth);
+    if (mode === "walk" && distanceM > WALK_LABEL_MAX_M) continue;
     const projected = projectWorldToScreen(
       camera,
       width,
@@ -267,14 +280,22 @@ function buildLabels({
     const text = road.name ?? (road.grade === "arterial" ? "Road" : null);
     if (!text) continue;
     const scale = zoomBand === "close" ? 1 : zoomBand === "mid" ? 0.92 : zoomBand === "far" ? 0.82 : 0.74;
-    pushLabel(labels, boxes, {
-      id: `road-${road.id}-${mid[0].toFixed(0)}`,
-      text,
-      x: projected.x,
-      y: projected.y,
-      scale,
-      kind: "street",
+    streetCandidates.push({
+      distanceM,
+      label: {
+        id: `road-${road.id}-${mid[0].toFixed(0)}`,
+        text,
+        x: projected.x,
+        y: projected.y,
+        scale,
+        kind: "street",
+      },
     });
+  }
+  streetCandidates.sort((a, b) => a.distanceM - b.distanceM);
+  const streetLimit = mode === "walk" ? WALK_LABEL_MAX_COUNT : streetCandidates.length;
+  for (const entry of streetCandidates.slice(0, streetLimit)) {
+    pushLabel(labels, boxes, entry.label);
   }
 
   for (const building of buildings) {
@@ -306,7 +327,8 @@ function buildLabels({
     });
   }
 
-  return labels.slice(0, zoomBand === "close" ? 28 : zoomBand === "mid" ? 18 : 10);
+  const cap = mode === "walk" ? WALK_LABEL_MAX_COUNT + 2 : zoomBand === "close" ? 28 : zoomBand === "mid" ? 18 : 10;
+  return labels.slice(0, cap);
 }
 
 function pushLabel(

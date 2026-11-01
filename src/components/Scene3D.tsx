@@ -68,7 +68,9 @@ import {
   planNearFar,
   sitePlanBounds,
 } from "../lib/planCamera";
+import { pickCitySurfaceY } from "../lib/citySurfacePick";
 import { qaModeFromSearch, registerQaCameraBridge, type QaCameraPose } from "../lib/qaCameraBridge";
+import type { SemanticHudMode } from "../lib/semanticHudMode";
 import { WebGlContextWatch } from "./WebGlContextWatch";
 import type { ProjectionMode } from "../lib/viewMemory";
 import { isLayer3dVisible, treesVisibleIn3d, type View3dDisplaySettings } from "../lib/view3dDisplay";
@@ -371,6 +373,7 @@ function City({
   walkRippleTint,
   walkRippleArrivals,
   cityRootRef,
+  semanticHudMode,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -388,7 +391,9 @@ function City({
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
   cityRootRef?: RefObject<THREE.Object3D | null>;
+  semanticHudMode?: SemanticHudMode;
 }) {
+  const semanticHudClose = semanticHudMode === "building" || semanticHudMode === "walk";
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
   const colourTick = useColourRevision();
@@ -773,11 +778,12 @@ function City({
         return;
       }
       if (name === "RailLines" || name === "TramLines") {
-        object.visible = railVisible;
+        object.visible = !semanticHudClose && railVisible;
         return;
       }
-      if (name === "GroundEdge") {
-        object.visible = display.showOutlines;
+      if (name === "GroundEdge" || name === "IntroCutRing" || name === "Site::Boundary") {
+        object.visible = !semanticHudClose && (name !== "GroundEdge" || display.showOutlines);
+        return;
       }
     });
   }, [
@@ -789,6 +795,8 @@ function City({
     landscapeVisible,
     waterVisible,
     railVisible,
+    semanticHudClose,
+    semanticHudMode,
   ]);
   useLayoutEffect(() => {
     const trees = group.getObjectByName("Trees");
@@ -826,7 +834,7 @@ function City({
         city={group}
         active={Boolean(walkRippleArrivals && walkRippleArrivals.size > 0)}
       />
-      {contours ? <primitive object={contours} /> : null}
+      {contours && !semanticHudClose ? <primitive object={contours} /> : null}
       <HeightEditOverlayLayer
         model={model}
         buildingIds={
@@ -1435,6 +1443,7 @@ function QaCameraBridgeRegister({
   solar,
   lat,
   lon,
+  cityRootRef,
 }: {
   persp: THREE.PerspectiveCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
@@ -1447,6 +1456,7 @@ function QaCameraBridgeRegister({
   solar: SolarViewSettings;
   lat: number;
   lon: number;
+  cityRootRef: RefObject<THREE.Object3D | null>;
 }) {
   const gl = useThree((state) => state.gl);
   const size = useThree((state) => state.size);
@@ -1523,6 +1533,11 @@ function QaCameraBridgeRegister({
           target: { x: target.x, y: target.y, z: target.z },
         };
       },
+      pickSurfaceY(east: number, north: number) {
+        const root = cityRootRef.current;
+        if (!root) return null;
+        return pickCitySurfaceY(root, east, north, siteTopY + 200);
+      },
       frameHeliodon: placeHeliodon,
       projectToScreen(world) {
         const vec = new THREE.Vector3(world.x, world.y, world.z);
@@ -1551,6 +1566,7 @@ function QaCameraBridgeRegister({
     size.height,
     size.width,
     solar,
+    cityRootRef,
   ]);
   return null;
 }
@@ -1659,6 +1675,7 @@ export function Cameras({
   cameraMemory,
   introEnabled = false,
   perspControlsRef,
+  cityRootRef,
 }: {
   side: number;
   lift: number;
@@ -1678,6 +1695,7 @@ export function Cameras({
   cameraMemory?: CameraMemoryRef;
   introEnabled?: boolean;
   perspControlsRef?: RefObject<OrbitControlsImpl | null>;
+  cityRootRef: RefObject<THREE.Object3D | null>;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
@@ -1769,6 +1787,7 @@ export function Cameras({
             solar={solar}
             lat={lat}
             lon={lon}
+            cityRootRef={cityRootRef}
           />
           <HoldPoseWhenInactive controlsRef={perspControls} active={!orthoView} />
           <HoldPoseWhenInactive controlsRef={orthoControls} active={orthoView} />
@@ -1930,6 +1949,7 @@ export function Scene3D({
   onScenePoint = null,
   quality = "high",
   semanticHudEnabled = false,
+  semanticHudMode,
   onSemanticHudSample,
 }: {
   model: CityModel;
@@ -1960,6 +1980,7 @@ export function Scene3D({
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
   quality?: RenderQuality;
   semanticHudEnabled?: boolean;
+  semanticHudMode?: import("../lib/semanticHudMode").SemanticHudMode;
   onSemanticHudSample?: (sample: SemanticHudSample) => void;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
@@ -2085,6 +2106,7 @@ export function Scene3D({
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
         cityRootRef={cityRootRef}
+        semanticHudMode={semanticHudMode}
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
@@ -2125,6 +2147,7 @@ export function Scene3D({
         cameraMemory={cameraMemory}
         introEnabled
         perspControlsRef={perspControlsRef}
+        cityRootRef={cityRootRef}
       />
       {semanticHudEnabled && onSemanticHudSample ? (
         <SemanticHudSampler

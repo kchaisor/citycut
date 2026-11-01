@@ -12,6 +12,7 @@ export type SemanticHudLabel = {
 
 export type SemanticHudWalkReadout = {
   streetName: string | null;
+  streetNameSource: string;
   roadWidthM: number | null;
   leftHeightM: number | null;
   rightHeightM: number | null;

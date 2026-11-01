@@ -4234,6 +4234,10 @@ body,
   margin-top: 0;
 }
 
+.semantic-hud-building .semantic-kpi-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .semantic-kpi-wide {
   grid-column: span 2;
 }

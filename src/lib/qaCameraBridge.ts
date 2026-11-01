@@ -6,6 +6,7 @@ export type QaCameraPose = {
 export type QaCameraBridge = {
   setCamera: (pose: QaCameraPose) => void;
   getCamera: () => QaCameraPose | null;
+  pickSurfaceY: (east: number, north: number) => number | null;
   frameHeliodon: () => void;
   projectToScreen: (world: { x: number; y: number; z: number }) => { x: number; y: number } | null;
 };

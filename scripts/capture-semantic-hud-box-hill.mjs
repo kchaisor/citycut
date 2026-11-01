@@ -191,7 +191,7 @@ const walkFramed = await page.evaluate(() => {
   const site = window.__citycutQaModel?.namedStreetWalkSite?.();
   return { ok, name: site?.road?.name ?? null, left: site?.leftHeightM ?? null, right: site?.rightHeightM ?? null };
 });
-if (!walkFramed.ok || !walkFramed.name) {
+if (!walkFramed.ok || walkFramed.left == null || walkFramed.right == null) {
   throw new Error(`Walk camera framing failed: ${JSON.stringify(walkFramed)}`);
 }
 await sleep(2500);
@@ -203,8 +203,11 @@ await shotMode("walk", "walk", async () => {
     throw new Error(`Walk inspector incomplete: ${text.slice(0, 120)}`);
   }
   if (/GFA/i.test(text)) throw new Error("Walk shot still showing building KPIs");
-  if (/NAME[\s\S]*—/.test(text) || /LEFT BLDG[\s\S]*—/.test(text) || /RIGHT BLDG[\s\S]*—/.test(text)) {
-    throw new Error(`Walk inspector has empty fields: ${text.slice(0, 200)}`);
+  if (!/Overture transportation/i.test(text)) {
+    throw new Error(`Walk street name source missing: ${text.slice(0, 200)}`);
+  }
+  if (/LEFT BLDG[\s\S]*—/.test(text) || /RIGHT BLDG[\s\S]*—/.test(text)) {
+    throw new Error(`Walk inspector missing lateral building heights: ${text.slice(0, 200)}`);
   }
   if (!/Left bldg/i.test(text) || !/Right bldg/i.test(text)) {
     throw new Error("Walk inspector missing lateral building heights");

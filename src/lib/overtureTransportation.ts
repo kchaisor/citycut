@@ -153,7 +153,6 @@ export async function fetchOvertureTransportationForCut(
         kind: part.spec.kind,
         ...(part.spec.grade ? { grade: part.spec.grade } : {}),
         ...(part.name ? { name: part.name } : {}),
-        ...(part.key ? { osmWayKey: part.key } : {}),
         ...(part.service && part.spec.kind === "road" ? { service: part.service } : {}),
       });
     }

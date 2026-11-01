@@ -39,7 +39,6 @@ import { fetchOvertureBaseForCut, overtureTreesFromPoints } from "./lib/overture
 import { overtureThemeCredit } from "./lib/overtureAttribution";
 import { fetchTramLinesForCut } from "./lib/explodedAxoPt";
 import { fetchOvertureTransportationForCut } from "./lib/overtureTransportation";
-import { applyOsmWayIdNamesToRoads, fetchOsmWayNamesByIds } from "./lib/osmRoadNames";
 import { withRoundaboutIslands } from "./lib/roundabouts";
 import {
   REVERSE_DEBOUNCE_MS,
@@ -867,22 +866,13 @@ export default function App() {
       }
       const nswUse = nswMode && modelLayers.buildings ? nswApplyBuildingUse(buildings, nswResult) : null;
       if (nswUse) buildings = nswUse.buildings;
-      let roadsWithNames = transportResult.roads;
-      if (modelLayers.roads && !nswMode) {
-        const osmIdNames = await fetchOsmWayNamesByIds(
-          transportResult.roads.flatMap((road) => (road.osmWayKey && !road.name ? [road.osmWayKey] : [])),
-          { signal: controller.signal },
-        );
-        roadsWithNames = applyOsmWayIdNamesToRoads(roadsWithNames, osmIdNames.names);
-        if (osmIdNames.note) sourceNote = `${sourceNote} ${osmIdNames.note}`;
-      }
       const draftModel: CityModel = {
         center,
         sideM,
         frameShape: frameShapeRef.current,
         layers: modelLayers,
         buildings,
-        roads: modelLayers.roads ? roadsWithNames : [],
+        roads: modelLayers.roads ? transportResult.roads : [],
         tramLines: nswMode ? (modelLayers.roads && nswLightRailLines(nswResult).length > 0 ? nswLightRailLines(nswResult) : undefined) : tramResult.lines ?? undefined,
         tramLinesLoadFailed: tramResult.loadFailed || undefined,
         areas: modelLayers.waterGreen ? withRoundaboutIslands(nswWater ? nswWater.areas : baseResult.areas, modelLayers.roads ? (transportResult.roundabouts ?? []) : [], { sideM, shape: frameShapeRef.current }) : [],

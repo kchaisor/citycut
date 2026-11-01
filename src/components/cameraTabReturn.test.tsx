@@ -91,6 +91,7 @@ async function mount3d(memory: CameraMemoryRef | undefined, opts: MountOpts = {}
       lat={-37.8127}
       lon={144.98061}
       cameraMemory={memory}
+      cityRootRef={{ current: null }}
     />
   );
   const bounds: { current: Aabb | null } = { current: { min: [-SIDE / 2, 0, -SIDE / 2], max: [SIDE / 2, 60, SIDE / 2] } };

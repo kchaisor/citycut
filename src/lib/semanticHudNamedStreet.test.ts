@@ -63,7 +63,7 @@ describe("pickNamedStreetWalkSite", () => {
     expect(site?.road.name).toBe("Whitehorse Road");
     expect(site?.leftHeightM).toBeGreaterThan(0);
     expect(site?.rightHeightM).toBeGreaterThan(0);
-    const cam = walkCameraFromSite(site!);
-    expect(cam.eye.y).toBeGreaterThan(site!.groundY + 1.6);
+    const cam = walkCameraFromSite(site!, 80);
+    expect(cam.eye.y).toBeGreaterThan(81);
   });
 });
