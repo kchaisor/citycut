@@ -12,6 +12,8 @@ const CHROME_ARGS = [
   "--enable-webgl",
   "--ignore-gpu-blocklist",
   "--disable-dev-shm-usage",
+  "--disable-background-timer-throttling",
+  "--disable-renderer-backgrounding",
   "--no-sandbox",
 ];
 
@@ -116,81 +118,86 @@ async function openPerspectiveModel(page, baseUrl, site, initHooks) {
   }
 }
 
+function summarizeDeltas(samples) {
+  const sorted = [...samples].sort((a, b) => a - b);
+  const sum = sorted.reduce((a, b) => a + b, 0);
+  const pct = (p) => {
+    if (!sorted.length) return 0;
+    const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
+    return sorted[idx];
+  };
+  return {
+    frames: sorted.length,
+    fpsAvg: sorted.length ? Math.round((1000 * sorted.length) / sum) : 0,
+    frameMsAvg: sorted.length ? sum / sorted.length : 0,
+    frameMsP50: pct(50),
+    frameMsP95: pct(95),
+    frameMsP99: pct(99),
+  };
+}
+
 async function samplePerf(page, mode, durationMs) {
-  return page.evaluate(
-    async ({ mode: m, durationMs: ms }) => {
-      if (window.__citycutPerf?.sampleFrames) {
-        const stats = await window.__citycutPerf.sampleFrames({ durationMs: ms, orbit: m === "orbit" });
-        const renderer = window.__citycutPerf.getRendererSnapshot();
-        return { stats, renderer, source: "r3f" };
-      }
-      const samples = [];
-      let orbitAngle = 0;
-      const basePose = window.__citycutQa?.getCamera?.() ?? null;
-      const start = performance.now();
-      await new Promise((resolve) => {
-        const tick = (now) => {
-          const elapsed = now - start;
-          if (m === "orbit" && basePose && window.__citycutQa?.setCamera) {
-            orbitAngle += 0.012;
-            const { eye, target } = basePose;
-            const dx = eye.x - target.x;
-            const dz = eye.z - target.z;
-            const dist = Math.hypot(dx, dz) || 500;
-            const ang = Math.atan2(dz, dx) + orbitAngle;
-            window.__citycutQa.setCamera({
-              eye: {
-                x: target.x + Math.cos(ang) * dist * 1.15,
-                y: eye.y,
-                z: target.z + Math.sin(ang) * dist * 1.15,
-              },
-              target,
-            });
-          }
-          if (samples.length > 0) samples.push(now - samples.last);
-          samples.last = now;
-          if (elapsed >= ms) {
-            resolve(undefined);
-            return;
-          }
-          requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      });
-      samples.shift();
-      const sorted = [...samples].sort((a, b) => a - b);
-      const sum = sorted.reduce((a, b) => a + b, 0);
-      const pct = (p) => {
-        if (!sorted.length) return 0;
-        const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
-        return sorted[idx];
-      };
-      const canvas = document.querySelector(".model canvas");
-      const rect = canvas?.getBoundingClientRect();
-      return {
-        source: "raf",
-        stats: {
-          frames: sorted.length,
-          fpsAvg: sorted.length ? Math.round((1000 * sorted.length) / sum) : 0,
-          frameMsAvg: sorted.length ? sum / sorted.length : 0,
-          frameMsP50: pct(50),
-          frameMsP95: pct(95),
-          frameMsP99: pct(99),
-        },
-        renderer: canvas
-          ? {
-              canvasWidth: canvas.width,
-              canvasHeight: canvas.height,
-              canvasClientWidth: rect?.width ?? 0,
-              canvasClientHeight: rect?.height ?? 0,
-              canvasPixelRatio: canvas.width / Math.max(1, rect?.width ?? 1),
-              devicePixelRatio: window.devicePixelRatio,
-            }
-          : null,
-      };
-    },
-    { mode, durationMs },
-  );
+  const hasR3f = await page.evaluate(() => Boolean(window.__citycutPerf?.startSample));
+  if (hasR3f) {
+    await page.evaluate(
+      ({ mode: m, durationMs: ms }) => {
+        window.__citycutPerf.startSample({ durationMs: ms, orbit: m === "orbit" });
+      },
+      { mode, durationMs },
+    );
+    const deadline = Date.now() + durationMs + 3000;
+    let stats = null;
+    while (Date.now() < deadline) {
+      await page.waitForTimeout(16);
+      stats = await page.evaluate(() => window.__citycutPerf?.readSample?.() ?? null);
+      if (stats) break;
+    }
+    const renderer = await page.evaluate(() => window.__citycutPerf?.getRendererSnapshot?.() ?? null);
+    return { stats: stats ?? summarizeDeltas([]), renderer, source: "r3f" };
+  }
+  const samples = [];
+  let orbitAngle = 0;
+  const start = Date.now();
+  while (Date.now() - start < durationMs) {
+    const t0 = Date.now();
+    if (mode === "orbit") {
+      orbitAngle += 0.012;
+      await page.evaluate((angle) => {
+        const basePose = window.__citycutQa?.getCamera?.();
+        if (!basePose || !window.__citycutQa?.setCamera) return;
+        const { eye, target } = basePose;
+        const dx = eye.x - target.x;
+        const dz = eye.z - target.z;
+        const dist = Math.hypot(dx, dz) || 500;
+        const ang = Math.atan2(dz, dx) + angle;
+        window.__citycutQa.setCamera({
+          eye: {
+            x: target.x + Math.cos(ang) * dist * 1.15,
+            y: eye.y,
+            z: target.z + Math.sin(ang) * dist * 1.15,
+          },
+          target,
+        });
+      }, orbitAngle);
+    }
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    samples.push(Date.now() - t0);
+  }
+  const renderer = await page.evaluate(() => {
+    const canvas = document.querySelector(".model canvas");
+    const rect = canvas?.getBoundingClientRect();
+    return canvas
+      ? {
+          canvasWidth: canvas.width,
+          canvasHeight: canvas.height,
+          canvasClientWidth: rect?.width ?? 0,
+          canvasClientHeight: rect?.height ?? 0,
+          canvasPixelRatio: canvas.width / Math.max(1, rect?.width ?? 1),
+          devicePixelRatio: window.devicePixelRatio,
+        }
+      : null;
+  });
+  return { source: "raf", stats: summarizeDeltas(samples), renderer };
 }
 
 async function getGpuInfo(page) {

@@ -69,12 +69,7 @@ import {
   sitePlanBounds,
 } from "../lib/planCamera";
 import { qaModeFromSearch, registerQaCameraBridge, type QaCameraPose } from "../lib/qaCameraBridge";
-import {
-  applyQaPerfOverrides,
-  registerQaPerfBridge,
-  rendererSnapshotFromState,
-  sampleFramesFromState,
-} from "../lib/qaPerfBridge";
+import { createQaPerfBridge, registerQaPerfBridge, tickPerfSample } from "../lib/qaPerfBridge";
 import { WebGlContextWatch } from "./WebGlContextWatch";
 import type { ProjectionMode } from "../lib/viewMemory";
 import { isLayer3dVisible, treesVisibleIn3d, type View3dDisplaySettings } from "../lib/view3dDisplay";
@@ -232,17 +227,12 @@ function QaPerfSampler() {
   const state = useThree();
   useEffect(() => {
     if (typeof window === "undefined" || !qaModeFromSearch(window.location.search)) return;
-    registerQaPerfBridge({
-      sampleFrames: (opts) => sampleFramesFromState(state, opts),
-      getRendererSnapshot: () => rendererSnapshotFromState(state),
-      setOverrides: (overrides) => {
-        window.__citycutPerfOverrides = overrides;
-        state.invalidate();
-      },
-    });
+    registerQaPerfBridge(createQaPerfBridge(state));
     return () => registerQaPerfBridge(null);
   }, [state]);
-  useFrame(() => applyQaPerfOverrides(state));
+  useFrame(() => {
+    tickPerfSample(state, performance.now());
+  });
   return null;
 }
 

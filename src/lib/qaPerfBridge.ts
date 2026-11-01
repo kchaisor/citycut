@@ -35,8 +35,14 @@ export type QaPerfOverrides = {
   terrainOff?: boolean;
 };
 
+export type QaPerfSampleOpts = {
+  durationMs: number;
+  orbit?: boolean;
+};
+
 export type QaPerfBridge = {
-  sampleFrames: (opts: { durationMs: number; orbit?: boolean }) => Promise<QaPerfFrameStats>;
+  startSample: (opts: QaPerfSampleOpts) => void;
+  readSample: () => QaPerfFrameStats | null;
   getRendererSnapshot: () => QaPerfRendererSnapshot | null;
   setOverrides: (overrides: QaPerfOverrides | null) => void;
 };
@@ -45,8 +51,20 @@ declare global {
   interface Window {
     __citycutPerf?: QaPerfBridge;
     __citycutPerfOverrides?: QaPerfOverrides | null;
+    __citycutPerfLastSample?: QaPerfFrameStats | null;
   }
 }
+
+type SampleSession = {
+  opts: QaPerfSampleOpts;
+  deltas: number[];
+  startedAt: number;
+  lastMs: number;
+  orbitAngle: number;
+  resolve: (stats: QaPerfFrameStats) => void;
+};
+
+let activeSample: SampleSession | null = null;
 
 function percentile(sorted: number[], p: number): number {
   if (sorted.length === 0) return 0;
@@ -82,12 +100,6 @@ export function applyQaPerfOverrides(state: RootState): void {
     state.scene.traverse((object) => {
       const light = object as THREE.DirectionalLight;
       if (light.isDirectionalLight) light.castShadow = false;
-    });
-  }
-  if (overrides.disablePost) {
-    state.scene.traverse((object) => {
-      const composer = object as THREE.Object3D & { enabled?: boolean };
-      if (composer.type === "EffectComposer") composer.visible = false;
     });
   }
   if (overrides.shadowMapSize != null) {
@@ -132,51 +144,65 @@ export function rendererSnapshotFromState(state: RootState): QaPerfRendererSnaps
   };
 }
 
-export async function sampleFramesFromState(
-  state: RootState,
-  opts: { durationMs: number; orbit?: boolean },
-): Promise<QaPerfFrameStats> {
-  const samples: number[] = [];
-  let orbitAngle = 0;
-  const basePose = typeof window !== "undefined" ? window.__citycutQa?.getCamera?.() : null;
-  const start = performance.now();
-  await new Promise<void>((resolve) => {
-    const tick = (now: number) => {
-      const elapsed = now - start;
-      if (opts.orbit && basePose && window.__citycutQa?.setCamera) {
-        orbitAngle += 0.012;
-        const eye = basePose.eye;
-        const target = basePose.target;
-        const dx = eye.x - target.x;
-        const dz = eye.z - target.z;
-        const dist = Math.hypot(dx, dz) || 500;
-        const ang = Math.atan2(dz, dx) + orbitAngle;
-        window.__citycutQa.setCamera({
-          eye: {
-            x: target.x + Math.cos(ang) * dist * 1.15,
-            y: eye.y,
-            z: target.z + Math.sin(ang) * dist * 1.15,
-          },
-          target,
-        });
-      }
-      applyQaPerfOverrides(state);
-      state.invalidate();
-      if (samples.length > 0) samples.push(now - (samples as number[] & { last?: number }).last!);
-      (samples as number[] & { last?: number }).last = now;
-      if (elapsed >= opts.durationMs) {
-        resolve();
-        return;
-      }
-      requestAnimationFrame(tick);
+export function beginPerfSample(opts: QaPerfSampleOpts): Promise<QaPerfFrameStats> {
+  if (activeSample) activeSample.resolve(summarize(activeSample.deltas));
+  const now = performance.now();
+  return new Promise((resolve) => {
+    activeSample = {
+      opts,
+      deltas: [],
+      startedAt: now,
+      lastMs: now,
+      orbitAngle: 0,
+      resolve,
     };
-    requestAnimationFrame(tick);
   });
-  samples.shift();
-  state.gl.info.reset();
-  state.invalidate();
-  await new Promise<void>((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-  });
-  return summarize(samples);
+}
+
+export function tickPerfSample(state: RootState, nowMs: number): void {
+  const session = activeSample;
+  if (!session) return;
+  session.deltas.push(nowMs - session.lastMs);
+  session.lastMs = nowMs;
+  if (session.opts.orbit && typeof window !== "undefined") {
+    const basePose = window.__citycutQa?.getCamera?.();
+    if (basePose && window.__citycutQa?.setCamera) {
+      session.orbitAngle += 0.012;
+      const { eye, target } = basePose;
+      const dx = eye.x - target.x;
+      const dz = eye.z - target.z;
+      const dist = Math.hypot(dx, dz) || 500;
+      const ang = Math.atan2(dz, dx) + session.orbitAngle;
+      window.__citycutQa.setCamera({
+        eye: {
+          x: target.x + Math.cos(ang) * dist * 1.15,
+          y: eye.y,
+          z: target.z + Math.sin(ang) * dist * 1.15,
+        },
+        target,
+      });
+    }
+  }
+  applyQaPerfOverrides(state);
+  if (nowMs - session.startedAt >= session.opts.durationMs) {
+    const stats = summarize(session.deltas);
+    activeSample = null;
+    session.resolve(stats);
+    if (typeof window !== "undefined") window.__citycutPerfLastSample = stats;
+  }
+}
+
+export function createQaPerfBridge(state: RootState): QaPerfBridge {
+  return {
+    startSample: (opts) => {
+      window.__citycutPerfLastSample = null;
+      void beginPerfSample(opts);
+    },
+    readSample: () => window.__citycutPerfLastSample ?? null,
+    getRendererSnapshot: () => rendererSnapshotFromState(state),
+    setOverrides: (overrides) => {
+      window.__citycutPerfOverrides = overrides;
+      state.invalidate();
+    },
+  };
 }
