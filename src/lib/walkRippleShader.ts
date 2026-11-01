@@ -151,14 +151,16 @@ const RIBBON_FRAGMENT = `
       float tailAlpha = mix(0.98, 0.58, cool);
       alpha = max(max(tailAlpha, head * 0.99), core * 0.99);
     } else {
-      float emberFade = exp(-(age - trailLen) * 0.42);
-      rgb = uCometEmber;
-      alpha = 0.42 * emberFade;
+      float u = clamp((age - trailLen) / max(trailLen * 2.5, 0.2), 0.0, 1.0);
+      rgb = mix(uCometTail, uCometEmber, u);
+      alpha = mix(0.88, 0.62, u);
     }
 
+    rgb = mix(rgb, uCometHead, head * 0.85);
+    rgb = mix(rgb, uCometCore, core * 0.75);
+    alpha = max(alpha, max(head * 0.96, core * 0.98));
     alpha = clamp(alpha, 0.0, 1.0);
-    if (age >= -0.28 && age <= trailLen + 0.35) alpha = max(alpha, 0.72);
-    if (alpha < 0.04) discard;
+    if (alpha < 0.08) discard;
     gl_FragColor = vec4(rgb, alpha);
   }
 `;
@@ -175,15 +177,14 @@ export function createRippleNetworkRibbonMaterial(uniforms: RippleShaderUniforms
     },
     vertexShader: RIBBON_VERTEX,
     fragmentShader: RIBBON_FRAGMENT,
-    transparent: false,
-    depthTest: true,
-    depthWrite: true,
-    alphaTest: 0.38,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
     toneMapped: false,
     side: THREE.DoubleSide,
     polygonOffset: true,
-    polygonOffsetFactor: -8,
-    polygonOffsetUnits: -8,
+    polygonOffsetFactor: -6,
+    polygonOffsetUnits: -6,
   });
 }
 

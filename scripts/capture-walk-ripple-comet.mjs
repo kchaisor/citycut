@@ -15,22 +15,49 @@ const BOX_HILL_LON = 145.1234;
 const KM_WIDE = 1.2;
 const RECORD_MS = 10000;
 
-function countCometPixels(pngPath) {
+const COMET_HEAD = { r: 255, g: 244, b: 168 };
+const COMET_TAIL = { r: 255, g: 176, b: 32 };
+const COMET_CORE = { r: 255, g: 255, b: 255 };
+const ORIGIN_ACCENT = { r: 255, g: 245, b: 0 };
+
+function channelDist(r, g, b, ref) {
+  return Math.max(Math.abs(r - ref.r), Math.abs(g - ref.g), Math.abs(b - ref.b));
+}
+
+function isRoadishGrey(r, g, b) {
+  if (Math.abs(r - g) > 22 || Math.abs(g - b) > 22) return false;
+  return r >= 150 && r <= 235 && g >= 150 && g <= 235;
+}
+
+function countRibbonTokensOnRoadBand(pngPath) {
   const png = PNG.sync.read(fs.readFileSync(pngPath));
+  const y0 = 72;
+  const y1 = 780;
+  const x0 = 64;
+  const x1 = 1376;
   let head = 0;
   let tail = 0;
-  for (let i = 0; i < png.data.length; i += 4) {
-    const r = png.data[i];
-    const g = png.data[i + 1];
-    const b = png.data[i + 2];
-    const a = png.data[i + 3];
-    if (a < 140) continue;
-    const isHead = r >= 235 && g >= 220 && b >= 130 && b <= 220;
-    const isTail = r >= 230 && g >= 150 && g <= 210 && b <= 70;
-    if (isHead) head += 1;
-    else if (isTail) tail += 1;
+  let core = 0;
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const i = (png.width * y + x) * 4;
+      const r = png.data[i];
+      const g = png.data[i + 1];
+      const b = png.data[i + 2];
+      const a = png.data[i + 3];
+      if (a < 180) continue;
+      if (channelDist(r, g, b, ORIGIN_ACCENT) <= 14) continue;
+      const roadNeighbour =
+        isRoadishGrey(r, g, b) ||
+        (x > x0 + 2 && isRoadishGrey(png.data[i - 8], png.data[i - 7], png.data[i - 6])) ||
+        (x < x1 - 2 && isRoadishGrey(png.data[i + 8], png.data[i + 9], png.data[i + 10]));
+      if (!roadNeighbour && channelDist(r, g, b, COMET_TAIL) > 40 && channelDist(r, g, b, COMET_HEAD) > 45) continue;
+      if (channelDist(r, g, b, COMET_TAIL) <= 32 || (r >= 248 && g >= 160 && g <= 195 && b <= 55)) tail += 1;
+      else if (channelDist(r, g, b, COMET_HEAD) <= 38) head += 1;
+      else if (channelDist(r, g, b, COMET_CORE) <= 18 && g >= 250) core += 1;
+    }
   }
-  return { head, tail, total: head + tail };
+  return { head, tail, core, total: head + tail + core };
 }
 
 function findFreePort() {
@@ -145,15 +172,16 @@ async function setupBoxHillWalkRipple(page) {
   return viteProc;
 }
 
-async function runCapture(page, videoDir) {
+async function runCapture(page) {
   const viteProc = await setupBoxHillWalkRipple(page);
   await page.getByRole("button", { name: /Replay walk ripple/i }).click();
   const waveT0 = Date.now();
   await page.waitForTimeout(3000);
   await page.evaluate(() => {
     window.__citycutWalkRippleQa?.setBandMixStrength?.(0);
+    window.__citycutWalkRippleQa?.setOriginMarkerVisible?.(false);
   });
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(450);
   const diag = await page.evaluate(() => window.__citycutWalkRippleQa?.getRibbonDiagnostics?.() ?? null);
   console.log("[DIAG]", JSON.stringify(diag));
   if (diag?.ribbonHalfWidthM != null && (diag.ribbonHalfWidthM < 4 || diag.ribbonHalfWidthM > 6.01)) {
@@ -163,10 +191,10 @@ async function runCapture(page, videoDir) {
     throw new Error(`maxTriangleEdgeM too large (cross-edge wedge): ${diag.maxTriangleEdgeM}`);
   }
   await page.screenshot({ path: OUT_WIDE, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
-  const widePixels = countCometPixels(OUT_WIDE);
-  console.log("[PIXELS] wide", widePixels);
-  if (widePixels.head < 400 || widePixels.tail < 40 || widePixels.total < 800) {
-    throw new Error(`Comet pixel counts too low: ${JSON.stringify(widePixels)}`);
+  const widePixels = countRibbonTokensOnRoadBand(OUT_WIDE);
+  console.log("[PIXELS] wide ribbon tokens (road band)", widePixels);
+  if (widePixels.tail < 400 || widePixels.total < 1200) {
+    throw new Error(`Ribbon token pixels too low on wide shot: ${JSON.stringify(widePixels)}`);
   }
   await page.evaluate(() => {
     window.__citycutQa?.setCamera({
@@ -176,10 +204,10 @@ async function runCapture(page, videoDir) {
   });
   await page.waitForTimeout(900);
   await page.screenshot({ path: OUT_HEAD, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
-  const headPixels = countCometPixels(OUT_HEAD);
-  console.log("[PIXELS] head close-up", headPixels);
-  if (headPixels.head < 300 || headPixels.tail < 30) {
-    throw new Error(`Head close-up comet pixels too low: ${JSON.stringify(headPixels)}`);
+  const headPixels = countRibbonTokensOnRoadBand(OUT_HEAD);
+  console.log("[PIXELS] head close-up ribbon tokens", headPixels);
+  if (headPixels.tail < 800 || headPixels.total < 1500) {
+    throw new Error(`Head close-up ribbon tokens too low: ${JSON.stringify(headPixels)}`);
   }
   await page.evaluate(() => {
     const sideM = 1200;
@@ -215,7 +243,7 @@ async function main() {
     recordVideo: { dir: videoDir, size: VIEWPORT },
   });
   const page = await context.newPage();
-  const rawVideo = await runCapture(page, videoDir);
+  const rawVideo = await runCapture(page);
   await context.close();
   await browser.close();
   if (!rawVideo) throw new Error("Playwright recordVideo missing output");

@@ -325,6 +325,20 @@ function WalkRippleBuildingBinder({
   return null;
 }
 
+function WalkRippleCityAttach({ city, layer }: { city: THREE.Group; layer: WalkRippleLayer | null }) {
+  useLayoutEffect(() => {
+    if (!layer) return;
+    layer.root.position.set(0, 0, 0);
+    layer.root.rotation.set(0, 0, 0);
+    layer.root.scale.set(1, 1, 1);
+    city.add(layer.root);
+    return () => {
+      city.remove(layer.root);
+    };
+  }, [city, layer]);
+  return null;
+}
+
 function WalkRippleVisualSync({ layer }: { layer: WalkRippleLayer | null }) {
   const invalidate = useThree((state) => state.invalidate);
   useFrame(() => {
@@ -828,6 +842,7 @@ function City({
         city={group}
         active={Boolean(walkRippleArrivals && walkRippleArrivals.size > 0)}
       />
+      <WalkRippleCityAttach city={group} layer={walkRippleLayer ?? null} />
       <WalkRippleVisualSync layer={walkRippleLayer ?? null} />
       {contours ? <primitive object={contours} /> : null}
       <HeightEditOverlayLayer
@@ -1452,6 +1467,7 @@ function QaCameraBridgeRegister({
   lon: number;
 }) {
   const gl = useThree((state) => state.gl);
+  const scene = useThree((state) => state.scene);
   const size = useThree((state) => state.size);
   const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
@@ -1528,12 +1544,20 @@ function QaCameraBridgeRegister({
           y: rect.top + (-vec.y * 0.5 + 0.5) * rect.height,
         };
       },
+      getCityWorldBBox() {
+        const city = scene.getObjectByName("CityCut");
+        if (!city) return null;
+        city.updateWorldMatrix(true, true);
+        const box = new THREE.Box3().setFromObject(city);
+        return { min: box.min.toArray(), max: box.max.toArray() };
+      },
     });
     return () => registerQaCameraBridge(null);
   }, [
     active,
     controlsRef,
     gl,
+    scene,
     groundY,
     heliodonRadius,
     invalidate,
@@ -2066,7 +2090,6 @@ export function Scene3D({
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
-      {walkRippleLayer ? <primitive object={walkRippleLayer.root} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
       <SolarHeliodon
         lat={model.center.lat}

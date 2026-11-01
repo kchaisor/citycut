@@ -23,9 +23,9 @@ import {
 } from "./walkRippleShader";
 import type { CityModel, Pt } from "../types";
 
-const RENDER_ORDER = 1000;
+const RENDER_ORDER = 1500;
 const ORIGIN_LIFT_M = 1.4;
-const LINE_LIFT_M = 1.35;
+const LINE_LIFT_M = 2.6;
 const RING_SEGMENTS = 64;
 
 function zAt(model: Pick<CityModel, "terrain" | "sideM">, east: number, north: number): number {
@@ -43,6 +43,12 @@ export type WalkRippleRibbonDiagnostics = {
   maxTriangleEdgeM: number;
   meshVisible: boolean;
   meshRenderOrder: number;
+};
+
+export type WalkRippleSpatialDiagnostics = {
+  ribbonLocal: { min: number[]; max: number[] } | null;
+  ribbonWorld: { min: number[]; max: number[] } | null;
+  sideM: number;
 };
 
 export class WalkRippleLayer {
@@ -95,6 +101,23 @@ export class WalkRippleLayer {
 
   refreshCometColours(): void {
     refreshRippleCometColours(this.uniforms);
+  }
+
+  setOriginMarkerVisible(visible: boolean): void {
+    if (this.originMarker) this.originMarker.visible = visible;
+  }
+
+  getSpatialDiagnostics(): WalkRippleSpatialDiagnostics {
+    const empty = { ribbonLocal: null, ribbonWorld: null, sideM: this.model.sideM };
+    if (!this.networkMesh) return empty;
+    const local = new THREE.Box3().setFromObject(this.networkMesh);
+    this.root.updateWorldMatrix(true, true);
+    const world = new THREE.Box3().setFromObject(this.networkMesh);
+    return {
+      ribbonLocal: { min: local.min.toArray(), max: local.max.toArray() },
+      ribbonWorld: { min: world.min.toArray(), max: world.max.toArray() },
+      sideM: this.model.sideM,
+    };
   }
 
   getRibbonDiagnostics(): WalkRippleRibbonDiagnostics {

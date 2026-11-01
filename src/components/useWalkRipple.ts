@@ -136,6 +136,11 @@ export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "
       setBandMixStrength: (strength: number) => {
         tint.setBandMixStrength(strength);
       },
+      setOriginMarkerVisible: (visible: boolean) => {
+        layer.setOriginMarkerVisible(visible);
+      },
+      getSpatialDiagnostics: () => layer.getSpatialDiagnostics(),
+      getCityWorldBBox: () => window.__citycutQa?.getCityWorldBBox?.() ?? null,
       getMinutes: () => rippleMinutes,
       getUniformMinutes: () => layer.uniforms.uRippleTime.value,
       countReachedBuildings: (minuteCutoff: number) => {
