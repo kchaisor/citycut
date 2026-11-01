@@ -171,9 +171,16 @@ import { WindRoseOverlay } from "./WindRoseOverlay";
 import { ExportTiles } from "./ExportTiles";
 import { exportTiles, type ExportBusy } from "../lib/exportTiles";
 import { ViewLegend, ViewPanel } from "./ViewPanel";
+import { WalkRippleAmenityCard } from "./WalkRippleAmenityCard";
+import { WalkRippleAmenityCounts } from "./WalkRippleAmenityCounts";
 import { WalkRippleLegend, WalkRipplePanel } from "./WalkRipplePanel";
 import { WalkRippleTimeScrubber } from "./WalkRippleTimeScrubber";
 import { useWalkRipple } from "./useWalkRipple";
+import {
+  WALK_RIPPLE_AMENITY_COLOUR_TOKEN,
+  WALK_RIPPLE_AMENITY_LABEL,
+  WALK_RIPPLE_AMENITY_TYPES,
+} from "../lib/walkRippleAmenityTypes";
 import { useWalkPlayback, useWalkViewshed, WALK_SPEEDS } from "./useWalkViewshed";
 import { fetchWindRoseTable } from "../lib/windFetch";
 import { analyzeWindPeriod, WIND_PERIOD_LABELS, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
@@ -1834,8 +1841,18 @@ export function ModelPage({
                 importedMassing={massing.group}
                 walkLayer={walk.layer.root}
                 walkRippleLayer={rippleAnalysisOpen ? walkRipple.layer.root : null}
+                walkRippleAmenityBeacons={rippleAnalysisOpen ? walkRipple.amenityBeacons.root : null}
                 walkRippleTint={rippleAnalysisOpen ? walkRipple.tint : null}
                 walkRippleArrivals={rippleAnalysisOpen ? walkRipple.buildingArrivals : null}
+                walkRippleAmenityPickLayer={rippleAnalysisOpen ? walkRipple.amenityBeacons : null}
+                walkRippleAmenityPickEnabled={
+                  rippleAnalysisOpen && !walkRipple.placing && walkRipple.amenityArrivals.length > 0
+                }
+                onWalkRippleAmenityPick={(amenity, clientX, clientY) =>
+                  walkRipple.setSelectedAmenity({ amenity, clientX, clientY })
+                }
+                onClearWalkRippleAmenityPick={() => walkRipple.setSelectedAmenity(null)}
+                walkRippleMinutes={walkRipple.rippleMinutes}
                 onScenePoint={
                   walkRipple.placing
                     ? (east, north) => walkRipple.placePoint(east, north)
@@ -1851,6 +1868,17 @@ export function ModelPage({
                 <p className="walk-ripple-toast" role="status">
                   {walkRippleToast}
                 </p>
+              ) : null}
+              {rippleAnalysisOpen && walkRipple.selectedAmenity ? (
+                <WalkRippleAmenityCard
+                  name={walkRipple.selectedAmenity.amenity.name}
+                  type={walkRipple.selectedAmenity.amenity.type}
+                  arrivalMin={walkRipple.selectedAmenity.amenity.arrivalMin}
+                  osmInferredName={walkRipple.selectedAmenity.amenity.osmInferredName}
+                  clientX={walkRipple.selectedAmenity.clientX}
+                  clientY={walkRipple.selectedAmenity.clientY}
+                  onClose={() => walkRipple.setSelectedAmenity(null)}
+                />
               ) : null}
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
@@ -3396,6 +3424,13 @@ export function ModelPage({
                       {walkRipple.times?.mode === "straight" ? "Straight-line" : walkRipple.times ? "Network" : "Pick origin"}
                     </span>
                   </div>
+                  <span className="st-dot" aria-hidden="true">·</span>
+                  <WalkRippleAmenityCounts
+                    counts={walkRipple.amenityCounts}
+                    filters={walkRipple.amenityFilters}
+                    loading={walkRipple.amenitiesLoading}
+                    unavailable={walkRipple.amenitiesUnavailable}
+                  />
                 </div>
               )}
 
@@ -3529,6 +3564,24 @@ export function ModelPage({
                       <span className="ov-dot" aria-hidden="true" />
                       <span>Clear ripple</span>
                     </button>
+                    {!walkRipple.amenitiesUnavailable &&
+                      WALK_RIPPLE_AMENITY_TYPES.map((type) => (
+                        <button
+                          key={type}
+                          type="button"
+                          className={walkRipple.amenityFilters[type] ? "ov-chip on" : "ov-chip"}
+                          aria-pressed={walkRipple.amenityFilters[type]}
+                          disabled={!walkRipple.times && walkRipple.amenities.length === 0}
+                          onClick={() => walkRipple.setAmenityFilter(type, !walkRipple.amenityFilters[type])}
+                        >
+                          <span
+                            className="ov-dot walk-ripple-amenity-chip-dot"
+                            style={{ background: `var(${WALK_RIPPLE_AMENITY_COLOUR_TOKEN[type]})` }}
+                            aria-hidden="true"
+                          />
+                          <span>{WALK_RIPPLE_AMENITY_LABEL[type].split("/")[0]?.trim() ?? type}</span>
+                        </button>
+                      ))}
                   </>
                 )}
               </div>

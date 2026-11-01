@@ -15,6 +15,9 @@ import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
 import { attachScenePointPick, attachBuildingPick } from "../lib/buildingPick";
+import { attachWalkRippleAmenityPick } from "../lib/walkRippleAmenityPick";
+import type { AmenityArrival } from "../lib/walkRippleAmenityReach";
+import type { WalkRippleAmenityBeaconLayer } from "../lib/walkRippleAmenityBeaconLayer";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { basePlinthBottomY } from "../lib/terrain";
 import { auditBuildingSelection, mountSelectedBuildingsVisual } from "../lib/buildingSelectionVisual";
@@ -239,6 +242,34 @@ function BuildingPickLayer({
     if (!enabled) return;
     return attachBuildingPick(gl.domElement, camera, root, { onBuildingPick, onClearPick });
   }, [camera, enabled, gl.domElement, onBuildingPick, onClearPick, root]);
+  return null;
+}
+
+function WalkRippleAmenityPickLayer({
+  layer,
+  enabled,
+  onPick,
+  onClear,
+}: {
+  layer: WalkRippleAmenityBeaconLayer;
+  enabled: boolean;
+  onPick: (amenity: AmenityArrival, clientX: number, clientY: number) => void;
+  onClear?: () => void;
+}) {
+  const camera = useThree((state) => state.camera);
+  const gl = useThree((state) => state.gl);
+  useLayoutEffect(() => {
+    if (!enabled) return;
+    return attachWalkRippleAmenityPick(gl.domElement, camera, layer, onPick, onClear);
+  }, [camera, enabled, gl.domElement, layer, onClear, onPick]);
+  return null;
+}
+
+function WalkRippleDemandInvalidate({ rippleMinutes }: { rippleMinutes: number }) {
+  const invalidate = useThree((state) => state.invalidate);
+  useLayoutEffect(() => {
+    invalidate();
+  }, [invalidate, rippleMinutes]);
   return null;
 }
 
@@ -1901,8 +1932,14 @@ export function Scene3D({
   importedMassing = null,
   walkLayer = null,
   walkRippleLayer = null,
+  walkRippleAmenityBeacons = null,
   walkRippleTint = null,
   walkRippleArrivals = null,
+  walkRippleAmenityPickLayer = null,
+  walkRippleAmenityPickEnabled = false,
+  onWalkRippleAmenityPick = null,
+  onClearWalkRippleAmenityPick = null,
+  walkRippleMinutes = 0,
   onScenePoint = null,
   quality = "high",
 }: {
@@ -1929,8 +1966,14 @@ export function Scene3D({
   importedMassing?: THREE.Object3D | null;
   walkLayer?: THREE.Object3D | null;
   walkRippleLayer?: THREE.Object3D | null;
+  walkRippleAmenityBeacons?: THREE.Object3D | null;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
+  walkRippleAmenityPickLayer?: WalkRippleAmenityBeaconLayer | null;
+  walkRippleAmenityPickEnabled?: boolean;
+  onWalkRippleAmenityPick?: ((amenity: AmenityArrival, clientX: number, clientY: number) => void) | null;
+  onClearWalkRippleAmenityPick?: (() => void) | null;
+  walkRippleMinutes?: number;
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
   quality?: RenderQuality;
 }) {
@@ -2053,6 +2096,16 @@ export function Scene3D({
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
       {walkRippleLayer ? <primitive object={walkRippleLayer} /> : null}
+      {walkRippleAmenityBeacons ? <primitive object={walkRippleAmenityBeacons} /> : null}
+      {walkRippleLayer ? <WalkRippleDemandInvalidate rippleMinutes={walkRippleMinutes} /> : null}
+      {walkRippleAmenityPickLayer && onWalkRippleAmenityPick ? (
+        <WalkRippleAmenityPickLayer
+          layer={walkRippleAmenityPickLayer}
+          enabled={walkRippleAmenityPickEnabled}
+          onPick={onWalkRippleAmenityPick}
+          onClear={onClearWalkRippleAmenityPick ?? undefined}
+        />
+      ) : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
       <SolarHeliodon
         lat={model.center.lat}

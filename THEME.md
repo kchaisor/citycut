@@ -295,6 +295,10 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--walk-ripple-band-2` | `#E85D04` | Walk ripple: buildings within 10–15 minutes walk. |
 | `--walk-ripple-label-bg` | `#1C1C22` | Walk ripple: floating minute-band label fill. |
 | `--walk-ripple-label-text` | `#FFFFFF` | Walk ripple: floating minute-band label text. |
+| `--walk-ripple-amenity-cafe` | `#FF6B9D` | Walk ripple amenity beacon: café / restaurant (OpenStreetMap). |
+| `--walk-ripple-amenity-school` | `#4CC9F0` | Walk ripple amenity beacon: school (OpenStreetMap). |
+| `--walk-ripple-amenity-park` | `#52B788` | Walk ripple amenity beacon: park (OpenStreetMap). |
+| `--walk-ripple-amenity-transport` | `#BDB2FF` | Walk ripple amenity beacon: public transport stop (OpenStreetMap). |
 
 The contour lines in Rhino use the pen `--contour-stroke` from `src/drawing-style.css`, not a fill.
 
