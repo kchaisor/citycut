@@ -88,6 +88,7 @@ await page.waitForFunction(
 );
 await page.waitForFunction(() => typeof window.__citycutQa?.setCamera === "function", null, { timeout: 120_000 });
 await page.getByRole("button", { name: "Summary", exact: true }).click().catch(() => undefined);
+await page.getByRole("button", { name: "Analysis", exact: true }).click().catch(() => undefined);
 await sleep(2500);
 
 const viewport = page.locator(".model .scene-viewport");
