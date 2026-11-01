@@ -85,7 +85,7 @@ export function SiteIsland(props: SiteIslandProps) {
   } = props;
 
   const [expanded, setExpanded] = useState(false);
-  const showExpanded = expanded || liveMotion;
+  const showExpanded = expanded;
 
   const shadeInput: PlanShadowInput = {
     lat: model.center.lat,
