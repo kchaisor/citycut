@@ -10,9 +10,9 @@ import { SURFACE } from "./surfaceLayers";
 import { themeColor } from "./themeColor";
 import { footprintBase } from "./terrain";
 
-export const BUILDING_HOVER_HIGHLIGHT_FILL_OPACITY = 0.26;
+export const BUILDING_HOVER_HIGHLIGHT_FILL_OPACITY = 1;
 export const BUILDING_HOVER_HIGHLIGHT_EDGE_OPACITY = 0.92;
-export const BUILDING_HOVER_ACCENT_MIX = 0.38;
+export const BUILDING_HOVER_ACCENT_MIX = 0.85;
 
 export type BuildingHoverHighlightState = {
   highlightedBuildingId: number | null;
@@ -61,8 +61,8 @@ export function createBuildingHoverHighlightSlot(): BuildingHoverHighlightSlot {
     opacity: BUILDING_HOVER_HIGHLIGHT_FILL_OPACITY,
     depthWrite: false,
   });
-  fillMaterial.toneMapped = false;
   fillMaterial.depthTest = true;
+  fillMaterial.depthWrite = true;
   const edgeMaterial = new THREE.LineBasicMaterial({
     color: themeColor("--anchored-lens-edge", getColour("--site-building")),
     transparent: true,
@@ -112,7 +112,7 @@ export function syncBuildingHoverHighlightSlot(
   buildingId: number | null,
   pinnedBuildingId: number | null,
   colourMode: BuildingColourMode,
-  accentFill = themeColor("--accent-hover", getColour("--site-building")),
+  accentFill = themeColor("--building-hover-accent", getColour("--accent")),
 ): void {
   const edgeAccent = themeColor("--anchored-lens-edge", getColour("--site-building"));
   slot.edgeMaterial.color.setStyle(edgeAccent);
@@ -120,14 +120,19 @@ export function syncBuildingHoverHighlightSlot(
     clearSlotMeshes(slot);
     return;
   }
+  const building = model.buildings.find((item) => item.id === buildingId);
+  if (!building) {
+    clearSlotMeshes(slot);
+    return;
+  }
+  const fill = mixBuildingHoverFill(fillForBuilding(colourMode, building), accentFill);
   if (slot.mountedBuildingId === buildingId) {
+    slot.fillMaterial.color.setStyle(fill);
+    slot.fillMaterial.opacity = BUILDING_HOVER_HIGHLIGHT_FILL_OPACITY;
     slot.group.visible = true;
     return;
   }
   clearSlotMeshes(slot);
-  const building = model.buildings.find((item) => item.id === buildingId);
-  if (!building) return;
-  const fill = mixBuildingHoverFill(fillForBuilding(colourMode, building), accentFill);
   slot.fillMaterial.color.setStyle(fill);
   slot.fillMaterial.opacity = BUILDING_HOVER_HIGHLIGHT_FILL_OPACITY;
   const geometries = geometriesForBuilding(model, building);

@@ -43,6 +43,26 @@ function findFreePort() {
   });
 }
 
+function isHoverHighlightYellow(r, g, b) {
+  return r >= 185 && g >= 185 && b <= 110 && r + g - b * 2 >= 180;
+}
+
+async function readModelCanvasPixel(page, clientX, clientY) {
+  return page.evaluate(({ clientX, clientY }) => {
+    const canvas = document.querySelector(".model canvas");
+    if (!(canvas instanceof HTMLCanvasElement)) return null;
+    const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+    if (!gl) return null;
+    const rect = canvas.getBoundingClientRect();
+    const ratio = canvas.width / Math.max(rect.width, 1);
+    const px = Math.min(canvas.width - 1, Math.max(0, Math.floor((clientX - rect.left) * ratio)));
+    const py = Math.min(canvas.height - 1, Math.max(0, Math.floor((rect.bottom - clientY) * ratio)));
+    const buf = new Uint8Array(4);
+    gl.readPixels(px, py, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+    return { r: buf[0], g: buf[1], b: buf[2], px, py };
+  }, { clientX, clientY });
+}
+
 function waitForServer(url, timeoutMs = 25000) {
   const start = Date.now();
   return new Promise((resolve, reject) => {
@@ -1281,6 +1301,52 @@ async function main() {
         hoverHighlightOn.cursor === "pointer",
       `info=${JSON.stringify(hoverHighlightOn)}`,
     );
+
+    if (lensTarget) {
+      await lensPage.waitForTimeout(120);
+      const hoverPixel = await readModelCanvasPixel(lensPage, lensTarget.clickX, lensTarget.clickY);
+      const hoverYellow =
+        hoverPixel != null && isHoverHighlightYellow(hoverPixel.r, hoverPixel.g, hoverPixel.b);
+      assertCheck(
+        "building-hover-highlight-yellow-pixel",
+        "Hovered building pixels read as accent yellow (option B mix)",
+        hoverYellow,
+        `pixel=${JSON.stringify(hoverPixel)}`,
+      );
+      await lensPage.waitForTimeout(25000);
+      const idleHover = await lensPage.evaluate(() => {
+        const canvas = document.querySelector(".model canvas");
+        return {
+          highlightActive:
+            canvas instanceof HTMLCanvasElement && canvas.dataset.buildingHoverHighlightActive === "1",
+          highlightId: canvas instanceof HTMLCanvasElement ? canvas.dataset.buildingHoverHighlightId ?? "" : "",
+        };
+      });
+      const idlePixel = await readModelCanvasPixel(lensPage, lensTarget.clickX, lensTarget.clickY);
+      const idleYellow =
+        idlePixel != null && isHoverHighlightYellow(idlePixel.r, idlePixel.g, idlePixel.b);
+      assertCheck(
+        "building-hover-highlight-idle-25s",
+        "Hover highlight stays active and yellow after 25s idle on demand frameloop",
+        idleHover.highlightActive &&
+          idleHover.highlightId.length > 0 &&
+          idleYellow,
+        `idle=${JSON.stringify(idleHover)}, pixel=${JSON.stringify(idlePixel)}`,
+      );
+    } else {
+      assertCheck(
+        "building-hover-highlight-yellow-pixel",
+        "Hovered building pixels read as accent yellow (option B mix)",
+        false,
+        "no hover target",
+      );
+      assertCheck(
+        "building-hover-highlight-idle-25s",
+        "Hover highlight stays active and yellow after 25s idle on demand frameloop",
+        false,
+        "no hover target",
+      );
+    }
 
     const hoverPair = await lensPage.evaluate(() => window.__citycutQaModel?.findLensHoverPairQa?.() ?? null);
     if (hoverPair && lensTarget) {

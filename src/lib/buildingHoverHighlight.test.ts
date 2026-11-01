@@ -38,9 +38,12 @@ describe("resolveHoverHighlightBuildingId", () => {
 });
 
 describe("mixBuildingHoverFill", () => {
-  it("lightens the building fill toward the accent", () => {
-    const mixed = mixBuildingHoverFill("#808080", "#ffffff");
-    expect(mixed.toLowerCase()).not.toBe("#808080");
-    expect(mixed.toLowerCase()).not.toBe("#ffffff");
+  it("mixes most of the accent over a light building fill", () => {
+    const mixed = mixBuildingHoverFill("#ffffff", "#fff500");
+    const color = mixed.toLowerCase();
+    expect(color).not.toBe("#ffffff");
+    expect(parseInt(color.slice(3, 5), 16)).toBeGreaterThan(240);
+    expect(parseInt(color.slice(5, 7), 16)).toBeGreaterThan(230);
+    expect(parseInt(color.slice(7, 9), 16)).toBeLessThan(40);
   });
 });

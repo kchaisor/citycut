@@ -82,4 +82,6 @@
   --anchored-lens-text: #FFFCF8;
   --anchored-lens-muted: #8F897E;
   --anchored-lens-edge: var(--accent);
+
+  --building-hover-accent: var(--accent);
 }
