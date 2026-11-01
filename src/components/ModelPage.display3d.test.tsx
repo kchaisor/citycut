@@ -588,7 +588,7 @@ describe("Display panel controls by view tab", () => {
     expect(floatingCss).toMatch(/\.select\.is-loading\s+\.omnibox-stack/);
   });
 
-  it("renders View Style heading in Display and expands the 2-row Environmental Console with zero left drawer on Analysis", async () => {
+  it("renders View Style heading in Display and shows Site Island on Analysis with zero left drawer", async () => {
     const user = userEvent.setup();
     render(
       <ModelPage
@@ -616,19 +616,13 @@ describe("Display panel controls by view tab", () => {
     expect(leftOutliner.hidden).toBe(true);
     expect(leftOutliner.getAttribute("data-active-section")).toBe("analysis");
 
-    const envConsole = screen.getByRole("region", { name: "Environmental analysis console" });
-    expect(envConsole).toBeTruthy();
-    expect(within(envConsole).getByRole("tab", { name: "Solar Study" })).toBeTruthy();
-    expect(within(envConsole).getByRole("tab", { name: "Wind Rose" })).toBeTruthy();
-    expect(within(envConsole).getByRole("tab", { name: "Viewshed Walk" })).toBeTruthy();
-    expect(within(envConsole).getByLabelText("Live solar telemetry").textContent).toContain("ALT");
-
-    await user.click(within(envConsole).getByRole("tab", { name: "Wind Rose" }));
-    expect(within(envConsole).getByLabelText("Live wind telemetry").textContent).toContain("PREVAILING");
+    const siteIsland = screen.getByRole("region", { name: "Site analysis island" });
+    expect(siteIsland).toBeTruthy();
+    expect(siteIsland.textContent).toMatch(/\d{2}:\d{2}/);
 
     await user.click(within(leftRail).getByRole("button", { name: "Display" }));
     expect(leftOutliner.hidden).toBe(false);
-    expect(screen.queryByRole("region", { name: "Environmental analysis console" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Site analysis island" })).toBeNull();
     expect(screen.getByRole("region", { name: "Solar and camera controls" })).toBeTruthy();
   });
 });
