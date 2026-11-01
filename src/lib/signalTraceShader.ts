@@ -134,8 +134,14 @@ export function createRailTraceMaterial(uniforms: SignalTraceUniforms): THREE.Sh
   });
 }
 
-const BUILDING_PARS = `
+const BUILDING_VERTEX_PARS = `
   attribute float aSourceGlow;
+  varying float vSourceGlow;
+  varying vec3 vViewNormal;
+  varying vec3 vViewPos;
+`;
+
+const BUILDING_FRAGMENT_PARS = `
   uniform vec3 uGlassFill;
   uniform vec3 uGlassEdge;
   uniform vec3 uSourceFill;
@@ -181,7 +187,7 @@ export function patchBuildingMaterialForSignalTrace(
     shader.uniforms.uSourceFill = uniforms.uSourceFill;
     shader.vertexShader = shader.vertexShader.replace(
       "#include <common>",
-      `#include <common>\nattribute float aSourceGlow;\nvarying float vSourceGlow;\nvarying vec3 vViewNormal;\nvarying vec3 vViewPos;`,
+      `#include <common>\n${BUILDING_VERTEX_PARS}`,
     );
     shader.vertexShader = shader.vertexShader.replace(
       "#include <beginnormal_vertex>",
@@ -193,7 +199,7 @@ export function patchBuildingMaterialForSignalTrace(
     );
     shader.fragmentShader = shader.fragmentShader.replace(
       "#include <common>",
-      `#include <common>\n${BUILDING_PARS}\n${BUILDING_COLOR}`,
+      `#include <common>\n${BUILDING_FRAGMENT_PARS}\n${BUILDING_COLOR}`,
     );
     shader.fragmentShader = shader.fragmentShader.replace(
       "#include <color_fragment>",

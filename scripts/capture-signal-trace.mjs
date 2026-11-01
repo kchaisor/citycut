@@ -93,8 +93,7 @@ async function runFlow(page) {
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }, SIDE_M);
   await page.getByRole("button", { name: /Create model/i }).click();
-  await page.waitForURL(/\/model/, { timeout: 240000 });
-  await page.waitForSelector(".scene-canvas", { timeout: 240000 });
+  await page.waitForSelector(".model .scene-canvas", { timeout: 360000 });
   await page.waitForTimeout(4000);
 
   await page.getByRole("tab", { name: /3D model/i }).click({ timeout: 15000 });
