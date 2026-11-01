@@ -45,8 +45,10 @@ describe("walkRippleRibbon", () => {
     const times = computeRippleTimesNetwork(network, 50, 0);
     const hw = 5;
     const buffers = buildNetworkRibbonBuffers(network, times.edgeVertexTimes, hw, flatHeight, 1.2);
+    const o = buffers.offsets;
+    expect(Math.hypot(o[0]!, o[1]!, o[2]!)).toBeCloseTo(hw, 3);
     const p = buffers.positions;
-    const widthAtA = Math.hypot(p[0]! - p[15]!, p[2]! - p[17]!);
+    const widthAtA = Math.hypot(p[0]! - p[15]!, p[1]! - p[16]!, p[2]! - p[17]!);
     expect(widthAtA).toBeCloseTo(hw * 2, 3);
   });
 

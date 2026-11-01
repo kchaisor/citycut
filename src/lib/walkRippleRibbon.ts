@@ -8,6 +8,8 @@ export type RibbonHeightSample = (east: number, north: number) => number;
 
 export type WalkRippleRibbonBuffers = {
   positions: Float32Array;
+  centers: Float32Array;
+  offsets: Float32Array;
   arrivals: Float32Array;
   edgeLengthsM: number[];
   halfWidthM: number;
@@ -26,6 +28,8 @@ export function buildNetworkRibbonBuffers(
 ): WalkRippleRibbonBuffers {
   const hw = clampRibbonHalfWidthM(halfWidthM);
   const positions: number[] = [];
+  const centers: number[] = [];
+  const offsets: number[] = [];
   const arrivals: number[] = [];
   const edgeLengthsM: number[] = [];
 
@@ -43,20 +47,48 @@ export function buildNetworkRibbonBuffers(
 
     const zA = heightAt(edge.ax, edge.ay) + lineLiftM;
     const zB = heightAt(edge.bx, edge.by) + lineLiftM;
-    const aLeft = [edge.ax + ox, zA, -(edge.ay + oy), ta] as const;
-    const aRight = [edge.ax - ox, zA, -(edge.ay - oy), ta] as const;
-    const bLeft = [edge.bx + ox, zB, -(edge.by + oy), tb] as const;
-    const bRight = [edge.bx - ox, zB, -(edge.by - oy), tb] as const;
 
-    for (const c of [aLeft, bLeft, bRight, aLeft, bRight, aRight]) {
-      positions.push(c[0], c[1], c[2]);
-      arrivals.push(c[3]);
-    }
+    const pushCorner = (ex: number, en: number, z: number, tMin: number, offx: number, offy: number) => {
+      const cx = ex;
+      const cy = z;
+      const cz = -en;
+      const ox3 = offx;
+      const oy3 = -offy;
+      const oz3 = 0;
+      centers.push(cx, cy, cz);
+      offsets.push(ox3, oy3, oz3);
+      positions.push(cx + ox3, cy + oy3, cz + oz3);
+      arrivals.push(tMin);
+    };
+
+    pushCorner(edge.ax, edge.ay, zA, ta, ox, oy);
+    pushCorner(edge.ax, edge.ay, zA, ta, -ox, -oy);
+    pushCorner(edge.bx, edge.by, zB, tb, ox, oy);
+    pushCorner(edge.bx, edge.by, zB, tb, -ox, -oy);
   });
 
+  const cornerCount = positions.length / 3;
+  const tris: number[] = [];
+  for (let e = 0; e < cornerCount / 4; e++) {
+    const i = e * 4;
+    tris.push(i, i + 2, i + 3, i, i + 3, i + 1);
+  }
+  const expandedPositions: number[] = [];
+  const expandedCenters: number[] = [];
+  const expandedOffsets: number[] = [];
+  const expandedArrivals: number[] = [];
+  for (const idx of tris) {
+    expandedCenters.push(centers[idx * 3]!, centers[idx * 3 + 1]!, centers[idx * 3 + 2]!);
+    expandedOffsets.push(offsets[idx * 3]!, offsets[idx * 3 + 1]!, offsets[idx * 3 + 2]!);
+    expandedPositions.push(positions[idx * 3]!, positions[idx * 3 + 1]!, positions[idx * 3 + 2]!);
+    expandedArrivals.push(arrivals[idx]!);
+  }
+
   return {
-    positions: new Float32Array(positions),
-    arrivals: new Float32Array(arrivals),
+    positions: new Float32Array(expandedPositions),
+    centers: new Float32Array(expandedCenters),
+    offsets: new Float32Array(expandedOffsets),
+    arrivals: new Float32Array(expandedArrivals),
     edgeLengthsM,
     halfWidthM: hw,
   };
@@ -74,7 +106,7 @@ function segmentLength3(
 }
 
 export function maxRibbonTriangleEdgeM(positions: Float32Array): number {
-  let maxEdge = 0;
+  let max = 0;
   const triCount = positions.length / 9;
   for (let t = 0; t < triCount; t++) {
     const i0 = t * 9;
@@ -83,9 +115,11 @@ export function maxRibbonTriangleEdgeM(positions: Float32Array): number {
       segmentLength3(positions[i0 + 3]!, positions[i0 + 4]!, positions[i0 + 5]!, positions[i0 + 6]!, positions[i0 + 7]!, positions[i0 + 8]!),
       segmentLength3(positions[i0 + 6]!, positions[i0 + 7]!, positions[i0 + 8]!, positions[i0]!, positions[i0 + 1]!, positions[i0 + 2]!),
     ];
-    for (const len of edges) maxEdge = Math.max(maxEdge, len);
+    for (const len of edges) {
+      if (len > max) max = len;
+    }
   }
-  return maxEdge;
+  return max;
 }
 
 export function assertRibbonTriangleEdges(

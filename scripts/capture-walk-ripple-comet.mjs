@@ -17,7 +17,9 @@ const RECORD_MS = 10000;
 
 const COMET_HEAD = { r: 255, g: 244, b: 168 };
 const COMET_TAIL = { r: 255, g: 176, b: 32 };
-const COMET_CORE = { r: 255, g: 255, b: 255 };
+const BAND_0 = { r: 255, g: 245, b: 0 };
+const BAND_1 = { r: 255, g: 140, b: 0 };
+const BAND_2 = { r: 232, g: 93, b: 4 };
 const ORIGIN_ACCENT = { r: 255, g: 245, b: 0 };
 
 function channelDist(r, g, b, ref) {
@@ -29,16 +31,17 @@ function isRoadishGrey(r, g, b) {
   return r >= 150 && r <= 235 && g >= 150 && g <= 235;
 }
 
-function isRibbonTailToken(r, g, b) {
-  if (r < 210 || g < 105 || g > 228 || b > 115) return false;
-  if (channelDist(r, g, b, ORIGIN_ACCENT) <= 18) return false;
+function isRibbonBandToken(r, g, b) {
+  if (channelDist(r, g, b, BAND_0) <= 35) return true;
+  if (channelDist(r, g, b, BAND_1) <= 40) return true;
+  if (channelDist(r, g, b, BAND_2) <= 40) return true;
   if (channelDist(r, g, b, COMET_TAIL) <= 45) return true;
-  return r >= 225 && g >= 130 && g <= 215 && b <= 95;
+  return r >= 220 && g >= 100 && g <= 230 && b <= 100;
 }
 
 function isRibbonHeadToken(r, g, b) {
-  if (channelDist(r, g, b, ORIGIN_ACCENT) <= 18) return false;
-  return channelDist(r, g, b, COMET_HEAD) <= 42 || (r >= 248 && g >= 215 && b >= 115 && b <= 235);
+  if (channelDist(r, g, b, ORIGIN_ACCENT) <= 12 && g > 240) return false;
+  return channelDist(r, g, b, COMET_HEAD) <= 45 || (r >= 248 && g >= 230 && b >= 100 && b <= 240);
 }
 
 function countRibbonTokensOnRoadBand(pngPath) {
@@ -58,7 +61,7 @@ function countRibbonTokensOnRoadBand(pngPath) {
       const a = png.data[i + 3];
       if (a < 150) continue;
       if (isRibbonHeadToken(r, g, b)) head += 1;
-      else if (isRibbonTailToken(r, g, b)) tail += 1;
+      else if (isRibbonBandToken(r, g, b)) tail += 1;
     }
   }
   return { head, tail, total: head + tail };
@@ -180,12 +183,13 @@ async function runCapture(page) {
   const viteProc = await setupBoxHillWalkRipple(page);
   await page.getByRole("button", { name: /Replay walk ripple/i }).click();
   const waveT0 = Date.now();
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(350);
   await page.evaluate(() => {
+    window.__citycutWalkRippleQa?.setMinutes?.(11);
     window.__citycutWalkRippleQa?.setBandMixStrength?.(0);
     window.__citycutWalkRippleQa?.setOriginMarkerVisible?.(false);
   });
-  await page.waitForTimeout(450);
+  await page.waitForTimeout(600);
   const diag = await page.evaluate(() => window.__citycutWalkRippleQa?.getRibbonDiagnostics?.() ?? null);
   console.log("[DIAG]", JSON.stringify(diag));
   if (diag?.ribbonHalfWidthM != null && (diag.ribbonHalfWidthM < 4 || diag.ribbonHalfWidthM > 6.01)) {
@@ -197,7 +201,7 @@ async function runCapture(page) {
   await page.screenshot({ path: OUT_WIDE, clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height } });
   const widePixels = countRibbonTokensOnRoadBand(OUT_WIDE);
   console.log("[PIXELS] wide ribbon tokens (road band)", widePixels);
-  if (widePixels.tail < 8000 || widePixels.total < 10000) {
+  if (widePixels.total < 80000) {
     throw new Error(`Ribbon token pixels too low on wide shot: ${JSON.stringify(widePixels)}`);
   }
   await page.evaluate(() => {

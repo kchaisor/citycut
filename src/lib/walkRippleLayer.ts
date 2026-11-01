@@ -197,6 +197,8 @@ export class WalkRippleLayer {
     assertRibbonTriangleEdges(buffers.positions, buffers.edgeLengthsM, buffers.halfWidthM);
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.BufferAttribute(buffers.positions, 3));
+    geometry.setAttribute("aRibbonCenter", new THREE.BufferAttribute(buffers.centers, 3));
+    geometry.setAttribute("aRibbonOffset", new THREE.BufferAttribute(buffers.offsets, 3));
     geometry.setAttribute("aRippleArrival", new THREE.BufferAttribute(buffers.arrivals, 1));
     geometry.computeBoundingSphere();
     const material = createRippleNetworkRibbonMaterial(this.uniforms);
