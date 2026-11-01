@@ -169,7 +169,7 @@ async function main() {
     [
       "-y",
       "-framerate",
-      "1.5",
+      "1.2",
       "-i",
       path.join(TMP_FRAMES, "f%03d.png"),
       "-c:v",
