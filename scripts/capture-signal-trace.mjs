@@ -78,7 +78,11 @@ async function runFlow(page) {
 
   const errors = [];
   page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
+    if (msg.type() !== "error") return;
+    const text = msg.text();
+    if (text.includes("429")) return;
+    if (text.includes("Failed to load resource")) return;
+    errors.push(text);
   });
   page.on("pageerror", (err) => errors.push(String(err)));
 
