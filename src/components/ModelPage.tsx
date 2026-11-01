@@ -171,7 +171,7 @@ import { WindRoseOverlay } from "./WindRoseOverlay";
 import { ExportTiles } from "./ExportTiles";
 import { exportTiles, type ExportBusy } from "../lib/exportTiles";
 import { ViewLegend, ViewPanel } from "./ViewPanel";
-import { WalkRippleLegend, WalkRipplePanel } from "./WalkRipplePanel";
+import { WalkRippleLegend, WalkRipplePanel, WalkRippleRivalLegend } from "./WalkRipplePanel";
 import { WalkRippleTimeScrubber } from "./WalkRippleTimeScrubber";
 import { useWalkRipple } from "./useWalkRipple";
 import { useWalkPlayback, useWalkViewshed, WALK_SPEEDS } from "./useWalkViewshed";
@@ -1820,6 +1820,20 @@ export function ModelPage({
                 windAnimateStreaks={windMotion.animateStreaks}
                 onExportReady={onExportReady}
                 onBuildingPick={(buildingId, clientX, clientY, additive) => {
+                  if (rippleAnalysisOpen && additive && walkRipple.canAddOrigin) {
+                    const building = displayModel.buildings.find((b) => b.id === buildingId);
+                    if (building && building.ring.length >= 3) {
+                      let sx = 0;
+                      let sy = 0;
+                      for (const [x, y] of building.ring) {
+                        sx += x;
+                        sy += y;
+                      }
+                      const n = building.ring.length;
+                      walkRipple.addOrigin(sx / n, sy / n);
+                      return;
+                    }
+                  }
                   setHeightPick({ buildingId, clientX, clientY });
                   selectForHide(buildingId, additive);
                 }}
@@ -1836,6 +1850,20 @@ export function ModelPage({
                 walkRippleLayer={rippleAnalysisOpen ? walkRipple.layer.root : null}
                 walkRippleTint={rippleAnalysisOpen ? walkRipple.tint : null}
                 walkRippleArrivals={rippleAnalysisOpen ? walkRipple.buildingArrivals : null}
+                walkRippleBuildingOrigins={rippleAnalysisOpen ? walkRipple.buildingOriginById : null}
+                walkRippleRivalCount={
+                  rippleAnalysisOpen && walkRipple.times?.mode === "network" ? walkRipple.times.origins.length : 0
+                }
+                walkRippleShiftPoint={
+                  rippleAnalysisOpen && walkRipple.canAddOrigin
+                    ? (east, north) => walkRipple.addOrigin(east, north)
+                    : null
+                }
+                onWalkRippleOriginDrag={
+                  rippleAnalysisOpen && walkRipple.times ? walkRipple.moveOrigin : null
+                }
+                walkRippleMinutes={walkRipple.rippleMinutes}
+                walkRipplePlaying={walkRipple.ripplePlaying}
                 onScenePoint={
                   walkRipple.placing
                     ? (east, north) => walkRipple.placePoint(east, north)
@@ -1846,7 +1874,12 @@ export function ModelPage({
                 quality={renderQuality}
               />
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
-              {rippleAnalysisOpen && walkRipple.buildingArrivals && <WalkRippleLegend />}
+              {rippleAnalysisOpen && walkRipple.buildingArrivals && walkRipple.originPoints.length < 2 ? (
+                <WalkRippleLegend />
+              ) : null}
+              {rippleAnalysisOpen && walkRipple.originPoints.length >= 2 ? (
+                <WalkRippleRivalLegend originCount={walkRipple.originPoints.length} />
+              ) : null}
               {walkRippleToast ? (
                 <p className="walk-ripple-toast" role="status">
                   {walkRippleToast}
@@ -3386,16 +3419,35 @@ export function ModelPage({
                   </div>
                   <span className="st-dot" aria-hidden="true">·</span>
                   <div className="st-item">
-                    <span className="st-k">BANDS</span>
-                    <span className="st-v">5 · 10 · 15 min</span>
+                    <span className="st-k">{walkRipple.originPoints.length >= 2 ? "RIVAL" : "BANDS"}</span>
+                    <span className="st-v">
+                      {walkRipple.originPoints.length >= 2
+                        ? walkRipple.originShareLabels.join(" · ") || "Shift-click origins"
+                        : "5 · 10 · 15 min"}
+                    </span>
                   </div>
                   <span className="st-dot" aria-hidden="true">·</span>
                   <div className="st-item">
                     <span className="st-k">MODE</span>
                     <span className="st-v">
-                      {walkRipple.times?.mode === "straight" ? "Straight-line" : walkRipple.times ? "Network" : "Pick origin"}
+                      {walkRipple.times?.mode === "straight"
+                        ? "Straight-line"
+                        : walkRipple.times
+                          ? walkRipple.originPoints.length >= 2
+                            ? `${walkRipple.originPoints.length} origins`
+                            : "Network"
+                          : "Pick origin"}
                     </span>
                   </div>
+                  {walkRipple.workerMs != null ? (
+                    <>
+                      <span className="st-dot" aria-hidden="true">·</span>
+                      <div className="st-item">
+                        <span className="st-k">WORKER</span>
+                        <span className="st-v">{`${Math.round(walkRipple.workerMs)} ms`}</span>
+                      </div>
+                    </>
+                  ) : null}
                 </div>
               )}
 

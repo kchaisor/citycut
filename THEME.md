@@ -293,6 +293,10 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--walk-ripple-band-0` | `#FFF500` | Walk ripple: buildings within 0–5 minutes walk. |
 | `--walk-ripple-band-1` | `#FF8C00` | Walk ripple: buildings within 5–10 minutes walk. |
 | `--walk-ripple-band-2` | `#E85D04` | Walk ripple: buildings within 10–15 minutes walk. |
+| `--walk-ripple-origin-0` | `#FFF500` | Walk ripple rival: first origin wave (yellow). |
+| `--walk-ripple-origin-1` | `#00E8FF` | Walk ripple rival: second origin wave (cyan). |
+| `--walk-ripple-origin-2` | `#FFFFFF` | Walk ripple rival: third origin wave (white). |
+| `--walk-ripple-seam` | `#FFFFFF` | Walk ripple rival: equal-time boundary seam. |
 | `--walk-ripple-label-bg` | `#1C1C22` | Walk ripple: floating minute-band label fill. |
 | `--walk-ripple-label-text` | `#FFFFFF` | Walk ripple: floating minute-band label text. |
 

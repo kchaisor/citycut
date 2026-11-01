@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { getColour } from "./colours";
 import { groundHeightAt } from "./viewshed";
+import { equalTimeSplitM } from "./walkRippleMultiSource";
 import {
   WALK_RIPPLE_BANDS_MIN,
   WALK_RIPPLE_MAX_MIN,
@@ -16,6 +17,7 @@ const ORIGIN_LIFT_M = 1.4;
 const LINE_LIFT_M = 0.55;
 const RIBBON_HALF_WIDTH_M = 2.8;
 const RING_SEGMENTS = 64;
+const ORIGIN_COLOUR_VARS = ["--walk-ripple-origin-0", "--walk-ripple-origin-1", "--walk-ripple-origin-2"] as const;
 
 function zAt(model: Pick<CityModel, "terrain" | "sideM">, east: number, north: number): number {
   return groundHeightAt(model, east, north);
@@ -25,13 +27,23 @@ export class WalkRippleLayer {
   readonly root = new THREE.Group();
   readonly uniforms: RippleShaderUniforms = rippleColourUniforms();
   private networkMesh: THREE.Mesh | null = null;
+  private seamLines: THREE.LineSegments | null = null;
   private ringGroup: THREE.Group | null = null;
-  private originMarker: THREE.Mesh | null = null;
+  private originMarkers: THREE.Mesh[] = [];
   private labelGroup: THREE.Group | null = null;
   private disposeGeometries: THREE.BufferGeometry[] = [];
+  private onOriginDrag: ((index: number, east: number, north: number) => void) | null = null;
 
   constructor(private readonly model: Pick<CityModel, "terrain" | "sideM">) {
     this.root.name = "WalkRipple";
+  }
+
+  setOriginDragHandler(handler: ((index: number, east: number, north: number) => void) | null): void {
+    this.onOriginDrag = handler;
+  }
+
+  originMarkerMeshes(): readonly THREE.Mesh[] {
+    return this.originMarkers;
   }
 
   clear(): void {
@@ -40,39 +52,61 @@ export class WalkRippleLayer {
     }
     for (const geo of this.disposeGeometries) geo.dispose();
     this.disposeGeometries = [];
+    for (const marker of this.originMarkers) {
+      marker.geometry.dispose();
+      (marker.material as THREE.Material).dispose();
+    }
+    this.originMarkers = [];
     this.networkMesh = null;
+    this.seamLines = null;
     this.ringGroup = null;
-    this.originMarker = null;
     this.labelGroup = null;
     this.uniforms.uRippleTime.value = -1;
+    this.uniforms.uRivalCount.value = 0;
   }
 
   setRippleTimeMinutes(minutes: number): void {
     this.uniforms.uRippleTime.value = minutes;
   }
 
-  showOrigin(origin: Pt): void {
-    if (this.originMarker) {
-      this.root.remove(this.originMarker);
-      this.originMarker.geometry.dispose();
-      (this.originMarker.material as THREE.Material).dispose();
-      this.originMarker = null;
-    }
-    const [e, n] = origin;
-    const r = Math.max(4, Math.min(9, this.model.sideM * 0.012));
-    const geo = new THREE.SphereGeometry(r, 20, 14);
-    const mat = new THREE.MeshBasicMaterial({
-      color: getColour("--walk-ripple-accent"),
-      toneMapped: false,
-    });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(e, zAt(this.model, e, n) + ORIGIN_LIFT_M, -n);
-    mesh.renderOrder = RENDER_ORDER + 5;
-    this.originMarker = mesh;
-    this.root.add(mesh);
+  setRivalMode(originCount: number): void {
+    this.uniforms.uRivalCount.value = originCount >= 2 ? originCount : 0;
+    this.uniforms.uOrigin0.value.setStyle(getColour("--walk-ripple-origin-0"));
+    this.uniforms.uOrigin1.value.setStyle(getColour("--walk-ripple-origin-1"));
+    this.uniforms.uOrigin2.value.setStyle(getColour("--walk-ripple-origin-2"));
   }
 
-  setNetworkWave(network: WalkNetwork, edgeVertexTimes: Float32Array): void {
+  showOrigins(origins: readonly Pt[]): void {
+    for (const marker of this.originMarkers) {
+      this.root.remove(marker);
+      marker.geometry.dispose();
+      (marker.material as THREE.Material).dispose();
+    }
+    this.originMarkers = [];
+    origins.forEach(([e, n], index) => {
+      const r = Math.max(4, Math.min(9, this.model.sideM * 0.012));
+      const geo = new THREE.SphereGeometry(r, 20, 14);
+      const token = ORIGIN_COLOUR_VARS[index] ?? "--walk-ripple-accent";
+      const mat = new THREE.MeshBasicMaterial({
+        color: getColour(token),
+        toneMapped: false,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(e, zAt(this.model, e, n) + ORIGIN_LIFT_M, -n);
+      mesh.renderOrder = RENDER_ORDER + 5 + index;
+      mesh.userData.walkRippleOriginIndex = index;
+      this.originMarkers.push(mesh);
+      this.root.add(mesh);
+    });
+  }
+
+  setNetworkWave(
+    network: WalkNetwork,
+    edgeVertexTimes: Float32Array,
+    edgeVertexOriginId: Float32Array,
+    nodeTimes?: Float64Array,
+    nodeOriginId?: Uint8Array,
+  ): void {
     if (this.networkMesh) {
       this.root.remove(this.networkMesh);
       this.networkMesh.geometry.dispose();
@@ -81,36 +115,98 @@ export class WalkRippleLayer {
     }
     const positions: number[] = [];
     const arrivals: number[] = [];
+    const origins: number[] = [];
     const hw = RIBBON_HALF_WIDTH_M;
+    const mpm = 1 / WALK_RIPPLE_SPEED_MPM;
     network.edges.forEach((edge, edgeIndex) => {
       const base = edgeIndex * 4;
       const ta = edgeVertexTimes[base]!;
       const tb = edgeVertexTimes[base + 2]!;
-      const dx = edge.bx - edge.ax;
-      const dy = edge.by - edge.ay;
-      const len = Math.hypot(dx, dy) || 1;
-      const ox = (-dy / len) * hw;
-      const oy = (dx / len) * hw;
-      const corner = (e: number, n: number, tMin: number) => {
-        const z = zAt(this.model, e, n) + LINE_LIFT_M;
-        return [e, z, -n, tMin] as const;
+      const oa = edgeVertexOriginId[base]!;
+      const ob = edgeVertexOriginId[base + 2]!;
+      const pushQuad = (
+        ax: number,
+        ay: number,
+        bx: number,
+        by: number,
+        tStart: number,
+        tEnd: number,
+        oStart: number,
+        oEnd: number,
+      ) => {
+        const dx = bx - ax;
+        const dy = by - ay;
+        const len = Math.hypot(dx, dy) || 1;
+        const ox = (-dy / len) * hw;
+        const oy = (dx / len) * hw;
+        const corner = (e: number, n: number, tMin: number, o: number) => {
+          const z = zAt(this.model, e, n) + LINE_LIFT_M;
+          positions.push(e, z, -n);
+          arrivals.push(tMin);
+          origins.push(o);
+        };
+        corner(ax + ox, ay + oy, tStart, oStart);
+        corner(ax - ox, ay - oy, tStart, oStart);
+        corner(bx + ox, by + oy, tEnd, oEnd);
+        corner(ax + ox, ay + oy, tStart, oStart);
+        corner(bx + ox, by + oy, tEnd, oEnd);
+        corner(bx - ox, by - oy, tEnd, oEnd);
       };
-      const a0 = corner(edge.ax + ox, edge.ay + oy, ta);
-      const a1 = corner(edge.ax - ox, edge.ay - oy, ta);
-      const b0 = corner(edge.bx + ox, edge.by + oy, tb);
-      const b1 = corner(edge.bx - ox, edge.by - oy, tb);
-      for (const c of [a0, a1, b0, a0, b0, b1]) {
-        positions.push(c[0], c[1], c[2]);
-        arrivals.push(c[3]);
+      if (oa === ob || !nodeTimes || !nodeOriginId) {
+        pushQuad(edge.ax, edge.ay, edge.bx, edge.by, ta, tb, oa, ob);
+        return;
       }
+      const nodeTa = nodeTimes[edge.a]!;
+      const nodeTb = nodeTimes[edge.b]!;
+      const splitM = equalTimeSplitM(edge, nodeTa, nodeTb);
+      const tAlong = splitM / edge.lengthM;
+      const mx = edge.ax + (edge.bx - edge.ax) * tAlong;
+      const my = edge.ay + (edge.by - edge.ay) * tAlong;
+      const tSplit = nodeTa + splitM * mpm;
+      pushQuad(edge.ax, edge.ay, mx, my, ta, tSplit, oa, oa);
+      pushQuad(mx, my, edge.bx, edge.by, tSplit, tb, ob, ob);
     });
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
     geometry.setAttribute("aRippleArrival", new THREE.Float32BufferAttribute(arrivals, 1));
+    geometry.setAttribute("aRippleOrigin", new THREE.Float32BufferAttribute(origins, 1));
     const material = createRippleNetworkRibbonMaterial(this.uniforms);
     const lines = new THREE.Mesh(geometry, material);
+    lines.userData.noScenePick = true;
     lines.renderOrder = RENDER_ORDER + 2;
     this.networkMesh = lines;
+    this.disposeGeometries.push(geometry);
+    this.root.add(lines);
+  }
+
+  setSeamLines(seamSegments: Float32Array): void {
+    if (this.seamLines) {
+      this.root.remove(this.seamLines);
+      this.seamLines.geometry.dispose();
+      (this.seamLines.material as THREE.Material).dispose();
+      this.seamLines = null;
+    }
+    if (seamSegments.length < 4) return;
+    const positions: number[] = [];
+    for (let i = 0; i < seamSegments.length; i += 4) {
+      const x1 = seamSegments[i]!;
+      const y1 = seamSegments[i + 1]!;
+      const x2 = seamSegments[i + 2]!;
+      const y2 = seamSegments[i + 3]!;
+      const z1 = zAt(this.model, x1, y1) + LINE_LIFT_M + 0.35;
+      const z2 = zAt(this.model, x2, y2) + LINE_LIFT_M + 0.35;
+      positions.push(x1, z1, -y1, x2, z2, -y2);
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    const material = new THREE.LineBasicMaterial({
+      color: getColour("--walk-ripple-seam"),
+      toneMapped: false,
+    });
+    const lines = new THREE.LineSegments(geometry, material);
+    lines.userData.noScenePick = true;
+    lines.renderOrder = RENDER_ORDER + 4;
+    this.seamLines = lines;
     this.disposeGeometries.push(geometry);
     this.root.add(lines);
   }
@@ -203,27 +299,50 @@ export class WalkRippleLayer {
 
   applyResult(times: RippleTimes, network: WalkNetwork | null): void {
     this.clear();
-    this.showOrigin(times.origin);
-    if (times.mode === "network" && network) {
-      this.setNetworkWave(network, times.edgeVertexTimes);
-      this.setBandLabels(times.origin, false);
+    const rivalCount = times.mode === "network" ? times.origins.length : 1;
+    this.setRivalMode(rivalCount);
+    if (times.mode === "network") {
+      this.showOrigins(times.origins);
+      if (network) {
+        this.setNetworkWave(
+          network,
+          times.edgeVertexTimes,
+          times.edgeVertexOriginId,
+          times.nodeTimesMin,
+          times.nodeOriginId,
+        );
+        this.setSeamLines(times.seamSegments);
+      }
+      if (times.origins.length < 2) this.setBandLabels(times.origin, false);
     } else {
+      this.showOrigins([times.origin]);
       this.setStraightEstimate(times.origin);
       this.setBandLabels(times.origin, true);
     }
   }
 
+  updateOriginMarkerPosition(index: number, east: number, north: number): void {
+    const mesh = this.originMarkers[index];
+    if (!mesh) return;
+    mesh.position.set(east, zAt(this.model, east, north) + ORIGIN_LIFT_M, -north);
+  }
+
+  notifyOriginDrag(index: number, east: number, north: number): void {
+    this.onOriginDrag?.(index, east, north);
+  }
+
   dispose(): void {
     this.clear();
-    if (this.originMarker) {
-      this.originMarker.geometry.dispose();
-      (this.originMarker.material as THREE.Material).dispose();
-    }
   }
 }
 
 export function walkRippleModeLabel(times: RippleTimes): string {
-  if (times.mode === "network") return "Walk ripple generated along the street network.";
+  if (times.mode === "network") {
+    if (times.origins.length >= 2) {
+      return `Rival walk ripples from ${times.origins.length} origins along the street network.`;
+    }
+    return "Walk ripple generated along the street network.";
+  }
   return "Straight-line walk estimate (no street network in this cut).";
 }
 

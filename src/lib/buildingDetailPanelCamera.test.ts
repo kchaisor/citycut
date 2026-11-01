@@ -13,7 +13,9 @@ describe("building detail panel camera unchanged", () => {
 
   it("updates selection state without moving the camera on pick or clear", () => {
     const page = readFileSync(`${srcRoot}/components/ModelPage.tsx`, "utf8");
-    const pick = page.match(/onBuildingPick=\{[\s\S]*?\}/)?.[0] ?? "";
+    const pickStart = page.indexOf("onBuildingPick={");
+    const pickEnd = page.indexOf("onClearBuildingPick", pickStart);
+    const pick = pickStart >= 0 && pickEnd > pickStart ? page.slice(pickStart, pickEnd) : "";
     const clear = page.match(/onClearBuildingPick=\{[\s\S]*?\}/)?.[0] ?? "";
     expect(pick).toContain("setHeightPick");
     expect(pick).not.toContain("setSnapId");

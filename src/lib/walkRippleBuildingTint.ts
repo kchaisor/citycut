@@ -31,16 +31,23 @@ function buildingMeshes(root: THREE.Object3D): THREE.Mesh[] {
   return meshes;
 }
 
-function setArrivalAttribute(geometry: THREE.BufferGeometry, arrivalMin: number): void {
+function setArrivalAttribute(geometry: THREE.BufferGeometry, arrivalMin: number, originId: number): void {
   const position = geometry.getAttribute("position");
   if (!position) return;
   const count = position.count;
-  const data = new Float32Array(count);
-  data.fill(arrivalMin);
-  geometry.setAttribute("aRippleArrival", new THREE.BufferAttribute(data, 1));
+  const arrivals = new Float32Array(count);
+  const origins = new Float32Array(count);
+  arrivals.fill(arrivalMin);
+  origins.fill(originId);
+  geometry.setAttribute("aRippleArrival", new THREE.BufferAttribute(arrivals, 1));
+  geometry.setAttribute("aRippleOrigin", new THREE.BufferAttribute(origins, 1));
 }
 
-function applyArrivalToMesh(mesh: THREE.Mesh, arrivalByBuildingId: Map<number, number>): void {
+function applyArrivalToMesh(
+  mesh: THREE.Mesh,
+  arrivalByBuildingId: Map<number, number>,
+  originByBuildingId: Map<number, number>,
+): void {
   const geometry = mesh.geometry;
   const buildingId = mesh.userData.buildingId as number | undefined;
   const byGroup = mesh.userData.buildingIdByGroup as number[] | undefined;
@@ -49,24 +56,32 @@ function applyArrivalToMesh(mesh: THREE.Mesh, arrivalByBuildingId: Map<number, n
 
   if (buildingId !== undefined && buildingId >= 0) {
     const arrival = arrivalByBuildingId.get(buildingId) ?? 999;
-    setArrivalAttribute(geometry, arrival);
+    const origin = originByBuildingId.get(buildingId) ?? 0;
+    setArrivalAttribute(geometry, arrival, origin);
     return;
   }
 
   if (byGroup?.length && geometry.groups?.length) {
-    const data = new Float32Array(position.count);
-    data.fill(999);
+    const arrivals = new Float32Array(position.count);
+    const origins = new Float32Array(position.count);
+    arrivals.fill(999);
+    origins.fill(0);
     geometry.groups.forEach((group, groupIndex) => {
       const id = byGroup[groupIndex];
       if (id === undefined || id < 0) return;
       const arrival = arrivalByBuildingId.get(id) ?? 999;
-      for (let i = group.start; i < group.start + group.count; i++) data[i] = arrival;
+      const origin = originByBuildingId.get(id) ?? 0;
+      for (let i = group.start; i < group.start + group.count; i++) {
+        arrivals[i] = arrival;
+        origins[i] = origin;
+      }
     });
-    geometry.setAttribute("aRippleArrival", new THREE.BufferAttribute(data, 1));
+    geometry.setAttribute("aRippleArrival", new THREE.BufferAttribute(arrivals, 1));
+    geometry.setAttribute("aRippleOrigin", new THREE.BufferAttribute(origins, 1));
     return;
   }
 
-  setArrivalAttribute(geometry, 999);
+  setArrivalAttribute(geometry, 999, 0);
 }
 
 export class WalkRippleBuildingTint {
@@ -74,11 +89,17 @@ export class WalkRippleBuildingTint {
   private saved = new Map<THREE.Mesh, SavedMaterial>();
   private attached = false;
 
-  attach(root: THREE.Object3D, arrivalByBuildingId: Map<number, number>): void {
+  attach(
+    root: THREE.Object3D,
+    arrivalByBuildingId: Map<number, number>,
+    originByBuildingId: Map<number, number>,
+    rivalCount: number,
+  ): void {
     this.detach();
+    this.uniforms.uRivalCount.value = rivalCount >= 2 ? rivalCount : 0;
     for (const mesh of buildingMeshes(root)) {
       this.saved.set(mesh, mesh.material);
-      applyArrivalToMesh(mesh, arrivalByBuildingId);
+      applyArrivalToMesh(mesh, arrivalByBuildingId, originByBuildingId);
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       const next = materials.map((mat) => {
         if (!(mat instanceof THREE.MeshStandardMaterial)) return mat;
@@ -97,6 +118,8 @@ export class WalkRippleBuildingTint {
       mesh.material = material;
       const attr = mesh.geometry.getAttribute("aRippleArrival");
       if (attr) mesh.geometry.deleteAttribute("aRippleArrival");
+      const originAttr = mesh.geometry.getAttribute("aRippleOrigin");
+      if (originAttr) mesh.geometry.deleteAttribute("aRippleOrigin");
     }
     this.saved.clear();
     this.uniforms.uRippleTime.value = -1;
@@ -112,5 +135,8 @@ export class WalkRippleBuildingTint {
     this.uniforms.uBand1.value.setStyle(getColour("--walk-ripple-band-1"));
     this.uniforms.uBand2.value.setStyle(getColour("--walk-ripple-band-2"));
     this.uniforms.uAccent.value.setStyle(getColour("--walk-ripple-accent"));
+    this.uniforms.uOrigin0.value.setStyle(getColour("--walk-ripple-origin-0"));
+    this.uniforms.uOrigin1.value.setStyle(getColour("--walk-ripple-origin-1"));
+    this.uniforms.uOrigin2.value.setStyle(getColour("--walk-ripple-origin-2"));
   }
 }

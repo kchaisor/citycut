@@ -54,6 +54,9 @@ declare global {
       getMinutes: () => number;
       getUniformMinutes: () => number;
       countReachedBuildings: (minuteCutoff: number) => number;
+      getWorkerMs?: () => number | null;
+      getOriginCount?: () => number;
+      addOriginAt?: (east: number, north: number) => void;
     };
     __citycutQaSelectionAudit?: import("./buildingSelectionAudit").BuildingSelectionAudit;
     __citycutFrameRatio?: number;

@@ -308,6 +308,15 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 .walk-ripple-swatch.band-5 { background: var(--walk-ripple-band-0); }
 .walk-ripple-swatch.band-10 { background: transparent; box-shadow: inset 0 0 0 2px var(--walk-ripple-band-0); }
 .walk-ripple-swatch.band-15 { background: transparent; box-shadow: inset 0 0 0 2px var(--walk-ripple-label-text); opacity: 0.55; }
+.walk-ripple-swatch.origin-0 { background: var(--walk-ripple-origin-0); }
+.walk-ripple-swatch.origin-1 { background: var(--walk-ripple-origin-1); }
+.walk-ripple-swatch.origin-2 { background: var(--walk-ripple-origin-2); border-color: var(--panel-border); }
+.walk-ripple-panel .walk-ripple-rival-origins { display: grid; gap: 6px; margin: 8px 0; }
+.walk-ripple-panel .walk-ripple-origin-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+.walk-ripple-panel .walk-ripple-origin-chip { display: inline-flex; align-items: center; gap: 6px; }
+.walk-ripple-panel .walk-ripple-origin-share { font-size: 11px; opacity: 0.92; }
+.walk-ripple-panel .walk-ripple-origin-remove { padding: 2px 8px; font-size: 11px; }
+.view-legend.walk-ripple-rival-legend span i { border: 1px solid var(--panel-border); }
 .walk-ripple-mode { font-weight: 600; }
 .walk-ripple-toast {
   position: absolute; left: 12px; bottom: 12px; z-index: 4; margin: 0; padding: 8px 12px; border-radius: 8px;

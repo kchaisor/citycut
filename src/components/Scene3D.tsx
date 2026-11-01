@@ -14,7 +14,7 @@ import * as THREE from "three";
 import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
-import { attachScenePointPick, attachBuildingPick } from "../lib/buildingPick";
+import { attachScenePointPick, attachBuildingPick, attachShiftScenePointPick } from "../lib/buildingPick";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { basePlinthBottomY } from "../lib/terrain";
 import { auditBuildingSelection, mountSelectedBuildingsVisual } from "../lib/buildingSelectionVisual";
@@ -305,11 +305,15 @@ function WalkRippleBuildingBinder({
   city,
   tint,
   buildingArrivals,
+  buildingOriginById,
+  rivalOriginCount,
   colourTick,
 }: {
   city: THREE.Group;
   tint: WalkRippleBuildingTint | null;
   buildingArrivals: Map<number, number> | null;
+  buildingOriginById: Map<number, number> | null;
+  rivalOriginCount: number;
   colourTick: number;
 }) {
   useLayoutEffect(() => {
@@ -318,9 +322,113 @@ function WalkRippleBuildingBinder({
       return;
     }
     tint.refreshColours();
-    tint.attach(city, buildingArrivals);
+    tint.attach(city, buildingArrivals, buildingOriginById ?? new Map(), rivalOriginCount);
     return () => tint.detach();
-  }, [city, tint, buildingArrivals, colourTick]);
+  }, [city, tint, buildingArrivals, buildingOriginById, rivalOriginCount, colourTick]);
+  return null;
+}
+
+function WalkRippleShiftPickLayer({ onShiftPoint }: { onShiftPoint: (east: number, north: number) => void }) {
+  const { camera, gl, scene } = useThree();
+  useEffect(
+    () => attachShiftScenePointPick(gl.domElement, camera, scene, onShiftPoint),
+    [camera, gl.domElement, onShiftPoint, scene],
+  );
+  return null;
+}
+
+function WalkRippleOriginDragLayer({
+  rippleRoot,
+  enabled,
+  onOriginDrag,
+}: {
+  rippleRoot: THREE.Object3D | null;
+  enabled: boolean;
+  onOriginDrag: (index: number, east: number, north: number) => void;
+}) {
+  const { camera, gl } = useThree();
+  const raycaster = useMemo(() => new THREE.Raycaster(), []);
+  const pointer = useMemo(() => new THREE.Vector2(), []);
+  const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
+  const hitPoint = useMemo(() => new THREE.Vector3(), []);
+  const dragRef = useRef<{ index: number; marker: THREE.Mesh } | null>(null);
+
+  useEffect(() => {
+    if (!enabled || !rippleRoot) return;
+    const canvas = gl.domElement;
+    const markers: THREE.Mesh[] = [];
+    rippleRoot.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (mesh.isMesh && mesh.userData.walkRippleOriginIndex != null) markers.push(mesh);
+    });
+
+    const pickMarker = (event: PointerEvent): THREE.Mesh | null => {
+      const rect = canvas.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObjects(markers, false);
+      return hits[0]?.object as THREE.Mesh | undefined ?? null;
+    };
+
+    const groundPoint = (event: PointerEvent): [number, number] | null => {
+      const rect = canvas.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      if (!raycaster.ray.intersectPlane(plane, hitPoint)) return null;
+      return [hitPoint.x, -hitPoint.z];
+    };
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 0 || event.shiftKey) return;
+      const marker = pickMarker(event);
+      if (!marker) return;
+      const index = marker.userData.walkRippleOriginIndex as number;
+      dragRef.current = { index, marker };
+      canvas.setPointerCapture(event.pointerId);
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag) return;
+      const ground = groundPoint(event);
+      if (!ground) return;
+      drag.marker.position.set(ground[0], drag.marker.position.y, -ground[1]);
+      onOriginDrag(drag.index, ground[0], ground[1]);
+    };
+
+    const onPointerUp = (event: PointerEvent) => {
+      if (!dragRef.current) return;
+      dragRef.current = null;
+      canvas.releasePointerCapture(event.pointerId);
+    };
+
+    canvas.addEventListener("pointerdown", onPointerDown, true);
+    canvas.addEventListener("pointermove", onPointerMove);
+    canvas.addEventListener("pointerup", onPointerUp);
+    canvas.addEventListener("pointercancel", onPointerUp);
+    return () => {
+      canvas.removeEventListener("pointerdown", onPointerDown, true);
+      canvas.removeEventListener("pointermove", onPointerMove);
+      canvas.removeEventListener("pointerup", onPointerUp);
+      canvas.removeEventListener("pointercancel", onPointerUp);
+    };
+  }, [camera, enabled, gl.domElement, onOriginDrag, plane, pointer, raycaster, hitPoint, rippleRoot]);
+
+  return null;
+}
+
+function WalkRippleFrameDemand({ active, rippleMinutes, ripplePlaying }: { active: boolean; rippleMinutes: number; ripplePlaying: boolean }) {
+  const invalidate = useThree((state) => state.invalidate);
+  useEffect(() => {
+    if (active) invalidate();
+  }, [active, invalidate, rippleMinutes, ripplePlaying]);
+  useFrame(() => {
+    if (active && ripplePlaying) invalidate();
+  });
   return null;
 }
 
@@ -368,6 +476,8 @@ function City({
   pickBuildings,
   walkRippleTint,
   walkRippleArrivals,
+  walkRippleBuildingOrigins,
+  walkRippleRivalCount,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -384,6 +494,8 @@ function City({
   pickBuildings: boolean;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
+  walkRippleBuildingOrigins?: Map<number, number> | null;
+  walkRippleRivalCount?: number;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -810,6 +922,8 @@ function City({
         city={group}
         tint={walkRippleTint ?? null}
         buildingArrivals={walkRippleArrivals ?? null}
+        buildingOriginById={walkRippleBuildingOrigins ?? null}
+        rivalOriginCount={walkRippleRivalCount ?? 0}
         colourTick={colourTick}
       />
       <WalkRippleTreeDim
@@ -1903,6 +2017,12 @@ export function Scene3D({
   walkRippleLayer = null,
   walkRippleTint = null,
   walkRippleArrivals = null,
+  walkRippleBuildingOrigins = null,
+  walkRippleRivalCount = 0,
+  walkRippleShiftPoint = null,
+  onWalkRippleOriginDrag = null,
+  walkRippleMinutes = 0,
+  walkRipplePlaying = false,
   onScenePoint = null,
   quality = "high",
 }: {
@@ -1931,9 +2051,16 @@ export function Scene3D({
   walkRippleLayer?: THREE.Object3D | null;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
+  walkRippleBuildingOrigins?: Map<number, number> | null;
+  walkRippleRivalCount?: number;
+  walkRippleShiftPoint?: ((east: number, north: number) => void) | null;
+  onWalkRippleOriginDrag?: ((index: number, east: number, north: number) => void) | null;
+  walkRippleMinutes?: number;
+  walkRipplePlaying?: boolean;
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
   quality?: RenderQuality;
 }) {
+  const walkRippleFrameActive = Boolean(walkRippleArrivals && walkRippleArrivals.size > 0);
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
     boundsRef.current = bounds;
@@ -1989,6 +2116,7 @@ export function Scene3D({
       <Canvas
         key={glEpoch}
         className="scene-canvas"
+        frameloop={walkRippleFrameActive ? "demand" : "always"}
         dpr={[1, 1.75]}
         gl={{
           antialias: true,
@@ -2049,10 +2177,27 @@ export function Scene3D({
         display={display}
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
+        walkRippleBuildingOrigins={walkRippleBuildingOrigins}
+        walkRippleRivalCount={walkRippleRivalCount}
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
       {walkRippleLayer ? <primitive object={walkRippleLayer} /> : null}
+      {walkRippleShiftPoint ? <WalkRippleShiftPickLayer onShiftPoint={walkRippleShiftPoint} /> : null}
+      {onWalkRippleOriginDrag && walkRippleLayer ? (
+        <WalkRippleOriginDragLayer
+          rippleRoot={walkRippleLayer}
+          enabled={walkRippleRivalCount >= 1}
+          onOriginDrag={onWalkRippleOriginDrag}
+        />
+      ) : null}
+      {walkRippleFrameActive ? (
+        <WalkRippleFrameDemand
+          active={walkRippleFrameActive}
+          rippleMinutes={walkRippleMinutes}
+          ripplePlaying={walkRipplePlaying}
+        />
+      ) : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
       <SolarHeliodon
         lat={model.center.lat}
