@@ -33,6 +33,9 @@ export type QaPerfOverrides = {
   shadowMapSize?: number;
   treesOff?: boolean;
   terrainOff?: boolean;
+  aoOffWhileMoving?: boolean;
+  dprDropWhileOrbiting?: boolean;
+  frameloopAlways?: boolean;
 };
 
 export type QaPerfSampleOpts = {

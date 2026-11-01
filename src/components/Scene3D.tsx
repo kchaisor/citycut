@@ -247,7 +247,9 @@ function AdaptiveViewportDpr() {
   useFrame(() => {
     if (typeof window === "undefined") return;
     const cap = Math.min(1.5, window.devicePixelRatio);
-    setDpr(moving.current ? 1 : cap);
+    const drop =
+      typeof window !== "undefined" && window.__citycutPerfOverrides?.dprDropWhileOrbiting === true;
+    setDpr(drop && moving.current ? 1 : cap);
   });
   useLayoutEffect(() => {
     invalidate();
@@ -266,16 +268,20 @@ function SceneDemandBootstrap() {
 function SceneFrameloopGate() {
   const set = useThree((state) => state.set);
   const invalidate = useThree((state) => state.invalidate);
+  const frameloopMode = () =>
+    typeof window !== "undefined" && window.__citycutPerfOverrides?.frameloopAlways === true
+      ? "always"
+      : "demand";
   useLayoutEffect(() => {
     if (!shouldRunIntroTransition()) {
-      set({ frameloop: "demand" });
+      set({ frameloop: frameloopMode() });
       invalidate();
     }
   }, [set, invalidate]);
   useEffect(() => {
     if (!shouldRunIntroTransition()) return;
     const onIntroDone = () => {
-      set({ frameloop: "demand" });
+      set({ frameloop: frameloopMode() });
       invalidate();
     };
     window.addEventListener("citycut:intro-done", onIntroDone);

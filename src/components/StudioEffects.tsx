@@ -86,10 +86,10 @@ function StudioComposer({ quality, noToneMapping, sideM }: { quality: RenderQual
           enabled={quality === "high"}
           quality="performance"
           halfRes
-          aoSamples={8}
-          denoiseSamples={2}
-          denoiseRadius={8}
-          depthAwareUpsampling={false}
+          aoSamples={14}
+          denoiseSamples={4}
+          denoiseRadius={10}
+          depthAwareUpsampling
           aoRadius={aoRadius}
           distanceFalloff={1}
           intensity={3.15}
