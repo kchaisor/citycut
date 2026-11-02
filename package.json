@@ -13,7 +13,9 @@
     "build:enrichment": "node scripts/build-building-enrichment-pmtiles.mjs",
     "test:pipeline": "pytest pipeline/test_build_enrichment.py -q",
     "verify:ui": "node scripts/verify-citycut.mjs",
-    "match:ref": "node scripts/match-reference.mjs"
+    "match:ref": "node scripts/match-reference.mjs",
+    "lint": "node scripts/lint-citycut.mjs",
+    "check:tla": "node scripts/check-tla.mjs"
   },
   "dependencies": {
     "@fontsource/fraunces": "^5.2.9",

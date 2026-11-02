@@ -18,3 +18,6 @@ pipeline/out/
 public/trees.pmtiles
 public/trees-manifest.json
 match-ref-out/
+.tla-tools/
+specs/*TTrace*
+specs/*.bin
