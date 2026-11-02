@@ -26,11 +26,11 @@ async function main() {
   await page.screenshot({ path: path.join(ARTIFACTS_DIR, "preview-cut-handle-drag-before.png") });
 
   let frameIdx = 0;
-  const snap = () => {
+  const snap = async () => {
     frameIdx += 1;
-    page.screenshot({ path: path.join(TMP_FRAMES, `f_${String(frameIdx).padStart(3, "0")}.png`) });
+    await page.screenshot({ path: path.join(TMP_FRAMES, `f_${String(frameIdx).padStart(3, "0")}.png`) });
   };
-  snap();
+  await snap();
 
   const seHandle = page.locator(".select .map-wrap .frame-handle-se");
   const seBox = await seHandle.boundingBox();
@@ -42,20 +42,20 @@ async function main() {
   for (let step = 1; step <= 16; step++) {
     await page.mouse.move(startX + (72 * step) / 16, startY + (72 * step) / 16);
     await page.waitForTimeout(40);
-    snap();
+    await snap();
   }
   await page.mouse.up();
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(ARTIFACTS_DIR, "preview-cut-handle-drag-after.png") });
-  snap();
+  await snap();
 
   await page.click("button.create-fab");
   await page.waitForTimeout(400);
-  snap();
-  await page.waitForSelector(".model", { timeout: 120000 }).catch(() => undefined);
+  await snap();
+  await page.waitForSelector(".model", { timeout: 180000 }).catch(() => undefined);
   for (let i = 0; i < 8; i++) {
     await page.waitForTimeout(500);
-    snap();
+    await snap();
   }
 
   const mp4Out = path.join(ARTIFACTS_DIR, "preview-cut-handle-drag-create.mp4");
