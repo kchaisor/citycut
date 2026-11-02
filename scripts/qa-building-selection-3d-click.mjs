@@ -17,7 +17,8 @@ function auditOk(audit) {
     audit.overlayInScene &&
     audit.overlayFillOpacity === 0 &&
     audit.overlayDashedLineCount > 0 &&
-    audit.hiddenSolidEdgeCount > 0 &&
+    audit.selectionFillMeshCount > 0 &&
+    audit.selectionFillAccentHex?.toLowerCase() === "fff500" &&
     audit.overlayLineDistancesReady
   );
 }

@@ -94,7 +94,7 @@ import {
 } from "../lib/sidebarSections";
 import { buildDataSources, countLoaded, dataSourceStatusWord } from "../lib/dataSources";
 import { OSM_TREES_ODBL_CREDIT } from "../lib/treesPrebake";
-import { countTreeCrowns } from "../lib/treeMassing";
+import { buildTreeGroup, countTreeCrowns, countTreeCrownColourVariants } from "../lib/treeMassing";
 import { capturePresetFromSearch } from "../lib/captureQuery";
 import {
   buildingColourStyleToFlags,
@@ -599,7 +599,13 @@ export function ModelPage({
 
   const massing = useImportedMassing(model);
 
-  const qaSummaryRef = useRef({ treeCrowns: 0, buildingCount: 0, roadCount: 0, triangleCount: 0 });
+  const qaSummaryRef = useRef({
+    treeCrowns: 0,
+    treeCrownVariantCount: 0,
+    buildingCount: 0,
+    roadCount: 0,
+    triangleCount: 0,
+  });
   const qaDisplayBuildingsRef = useRef(model.buildings);
   const heightPerfRef = useRef<{ modelOpenMs: number; firstRenderMs: number | null; comAppliedMs: number | null }>(
     { modelOpenMs: performance.now(), firstRenderMs: null, comAppliedMs: null },
@@ -624,9 +630,20 @@ export function ModelPage({
       }
     });
     const treeCrowns = countTreeCrowns(group);
+    let treeCrownVariantCount = 0;
+    if (model.trees.length > 0) {
+      const treeGroup = buildTreeGroup(model.trees);
+      if (treeGroup) {
+        const probe = new THREE.Group();
+        probe.add(treeGroup);
+        treeCrownVariantCount = countTreeCrownColourVariants(probe);
+        disposeObject(probe);
+      }
+    }
     disposeObject(group);
     qaSummaryRef.current = {
       treeCrowns,
+      treeCrownVariantCount,
       buildingCount: model.buildings.length,
       roadCount: model.roads.length,
       triangleCount: Math.round(triangleCount),

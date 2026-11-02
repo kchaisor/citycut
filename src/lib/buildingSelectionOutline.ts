@@ -9,8 +9,8 @@ import { getColour } from "./colours";
 import { SURFACE } from "./surfaceLayers";
 import { footprintBase } from "./terrain";
 
-export const SELECTION_OUTLINE_DASH_PX = 8;
-export const SELECTION_OUTLINE_GAP_PX = 6;
+export const SELECTION_OUTLINE_DASH_PX = 4;
+export const SELECTION_OUTLINE_GAP_PX = 3;
 export const SELECTION_OUTLINE_WIDTH_PX = 2;
 
 export type SelectionOutlineSlot = {

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
-import { countSolidBuildingEdgesHidden } from "./buildingSelectionSolidEdges";
+import { getColour } from "./colours";
 
 export type BuildingSelectionAudit = {
   buildingId: number;
@@ -14,7 +14,8 @@ export type BuildingSelectionAudit = {
   overlayFillOpacity: number;
   overlayDashedLineCount: number;
   overlayLineDistancesReady: boolean;
-  hiddenSolidEdgeCount: number;
+  selectionFillMeshCount: number;
+  selectionFillAccentHex: string;
 };
 
 function matchesBuildingId(stored: unknown, targetIds: ReadonlySet<number>): boolean {
@@ -59,15 +60,21 @@ export function auditBuildingSelection(
 
   const overlayInScene = overlay != null && overlay.parent != null;
   let fillMesh: THREE.Mesh | undefined;
+  let selectionFillMeshCount = 0;
   const dashedLines: LineSegments2[] = [];
   overlay?.traverse((child) => {
     const outline = child as LineSegments2;
-    if (!fillMesh && child instanceof THREE.Mesh && !outline.isLineSegments2) fillMesh = child;
+    if (child instanceof THREE.Mesh && child.name === "BuildingSelectionFill") {
+      selectionFillMeshCount += 1;
+      if (!fillMesh) fillMesh = child;
+      return;
+    }
     if (outline.isLineSegments2 && outline.material instanceof LineMaterial && outline.material.dashed) {
       dashedLines.push(outline);
     }
   });
   const fillMat = fillMesh?.material as THREE.MeshStandardMaterial | undefined;
+  const selectionFillAccentHex = fillMat?.color.getHexString() ?? "";
   const overlayLineDistancesReady =
     dashedLines.length > 0 &&
     dashedLines.every((segments) => {
@@ -87,8 +94,14 @@ export function auditBuildingSelection(
     overlayFillOpacity: fillMat?.opacity ?? 0,
     overlayDashedLineCount: dashedLines.length,
     overlayLineDistancesReady,
-    hiddenSolidEdgeCount: countSolidBuildingEdgesHidden(cityRoot, ids),
+    selectionFillMeshCount,
+    selectionFillAccentHex,
   };
+}
+
+export function selectionFillMatchesAccent(audit: BuildingSelectionAudit): boolean {
+  const accent = getColour("--building-selection-fill").replace("#", "").toLowerCase();
+  return audit.selectionFillMeshCount > 0 && audit.selectionFillAccentHex.toLowerCase() === accent;
 }
 
 export function selectionAuditOk(audit: BuildingSelectionAudit): boolean {
@@ -96,8 +109,9 @@ export function selectionAuditOk(audit: BuildingSelectionAudit): boolean {
     audit.hiddenMeshCount === 0 &&
     audit.zeroedGroupCount === 0 &&
     audit.overlayDashedLineCount > 0 &&
-    audit.hiddenSolidEdgeCount > 0 &&
-    audit.overlayFillOpacity === 0 &&
+    audit.selectionFillMeshCount > 0 &&
+    selectionFillMatchesAccent(audit) &&
+    audit.overlayFillOpacity >= 0.99 &&
     (!audit.overlayInScene || audit.overlayLineDistancesReady)
   );
 }

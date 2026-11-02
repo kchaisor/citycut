@@ -409,9 +409,7 @@ describe("terrain in the model", () => {
       treeGroup!.traverse((object) => {
         const mesh = object as THREE.Mesh;
         if (!mesh.isMesh) return;
-        mesh.geometry.computeBoundingBox();
-        const box = mesh.geometry.boundingBox;
-        if (!box) return;
+        const box = new THREE.Box3().setFromObject(mesh);
         treeBaseY = Math.min(treeBaseY, box.min.y);
       });
       expect(treeBaseY).toBeCloseTo(sampleTerrain(field, 10, 0, 100), 4);

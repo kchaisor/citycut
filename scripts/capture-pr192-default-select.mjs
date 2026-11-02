@@ -94,6 +94,15 @@ await page.waitForTimeout(800);
 await flushCanvasFrame(page);
 await page.screenshot({ path: path.join(OUT, "pr192-fresh-model-default-uniform.png") });
 
+const treesRow = page.locator('.model .left-outliner [aria-label="Layers"] button.studio-layer-row').filter({ hasText: /^Trees$/ });
+if (await treesRow.count()) {
+  const pressed = await treesRow.getAttribute("aria-pressed");
+  if (pressed !== "true") await treesRow.click();
+  await page.waitForTimeout(1200);
+  await flushCanvasFrame(page);
+  await page.screenshot({ path: path.join(OUT, "pr192-tree-crown-four-variants.png") });
+}
+
 await page.evaluate(() => {
   window.__citycutQaModel?.clearHeightSelection?.();
 });
@@ -138,7 +147,7 @@ await page.waitForFunction(
     return (
       audit &&
       audit.overlayDashedLineCount > 0 &&
-      audit.hiddenSolidEdgeCount > 0 &&
+      audit.selectionFillMeshCount > 0 &&
       audit.hiddenMeshCount === 0
     );
   },
@@ -152,7 +161,8 @@ if (
   audit.overlayDashedLineCount < 1 ||
   audit.hiddenMeshCount !== 0 ||
   audit.zeroedGroupCount !== 0 ||
-  audit.hiddenSolidEdgeCount < 1
+  audit.selectionFillMeshCount < 1 ||
+  audit.selectionFillAccentHex?.toLowerCase() !== "fff500"
 ) {
   throw new Error(`Selection outline audit failed: ${JSON.stringify(audit)}`);
 }

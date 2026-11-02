@@ -183,7 +183,12 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--nsw-zone-ru` | `#E8DCB5` | NSW mode: RU rural zones on the site plan. |
 | `--nsw-zone-other` | `#D9D4E8` | NSW mode: precinct and other zones (for example SEPP precinct codes) on the site plan. |
 | `--tree-fill` | `#6ea35a` | Tree-crown fill on the site plan, on screen and in the Illustrator file. |
-| `--tree-crown` | `#5d8a45` | Tree-crown fill on the 3D-view Illustrator sheet. |
+| `--tree-crown` | `#478C33` | Default tree-crown fill; legacy alias for variant B. |
+| `--tree-crown-a` | `#3f8230` | 3D viewport tree crown variant (deterministic hash). |
+| `--tree-crown-b` | `#478c33` | 3D viewport tree crown variant (deterministic hash). |
+| `--tree-crown-c` | `#50963a` | 3D viewport tree crown variant (deterministic hash). |
+| `--tree-crown-d` | `#58a042` | 3D viewport tree crown variant (deterministic hash). |
+| `--building-selection-fill` | `#fff500` | Solid yellow fill on a clicked building in the 3D viewport (accent family). |
 | `--tree-crown-edge` | `#2c4a28` | Outline around that 3D-view crown. |
 | `--tree-trunk` | `#3e3428` | Trunk on the 3D-view Illustrator sheet. |
 | `--tree-layer` | `#3e8a48` | Rhino Trees layer. The 3D crowns themselves are the shipped tree models. |

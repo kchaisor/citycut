@@ -560,14 +560,6 @@ function ScenePointLayer({ onScenePoint }: { onScenePoint: (east: number, north:
   return null;
 }
 
-function BuildingSelectionDemandSync({ active }: { active: boolean }) {
-  const invalidate = useThree((state) => state.invalidate);
-  useFrame(() => {
-    if (active) invalidate();
-  });
-  return null;
-}
-
 function HeightEditOverlayLayer({
   model,
   buildingIds,
@@ -628,12 +620,7 @@ function HeightEditOverlayLayer({
     invalidate();
   }, [mounted, size.width, size.height, invalidate]);
   if (!mounted) return null;
-  return (
-    <>
-      <BuildingSelectionDemandSync active />
-      <primitive object={mounted.overlay} />
-    </>
-  );
+  return <primitive object={mounted.overlay} />;
 }
 
 function WalkRippleBuildingBinder({

@@ -32,10 +32,11 @@ describe("treeCrownSphereLayout & buildTreeGroup", () => {
     expect(group!.children).toHaveLength(2);
     expect(countTreeCrowns(group!)).toBe(1);
 
-    const trunkMesh = group!.children[0] as THREE.Mesh;
-    const crownMesh = group!.children[1] as THREE.Mesh;
+    const trunkMesh = group!.children[0] as THREE.InstancedMesh;
+    const crownMesh = group!.children[1] as THREE.InstancedMesh;
     const crownPos = crownMesh.geometry.getAttribute("position");
     expect(crownPos.count).toBe(240);
+    expect(crownMesh.count).toBe(1);
 
     for (const mesh of [trunkMesh, crownMesh]) {
       const mat = mesh.material as THREE.MeshStandardMaterial;
@@ -51,9 +52,8 @@ describe("treeCrownSphereLayout & buildTreeGroup", () => {
     const tallGroup = buildTreeGroup([
       { id: 1, at: [0, 0], height_m: 20, crown_diameter_m: 6, trunk_diameter_m: 0.4, sizeSource: "osm" },
     ])!;
-    const tallCrown = tallGroup.children[1] as THREE.Mesh;
-    tallCrown.geometry.computeBoundingBox();
-    const tallBox = tallCrown.geometry.boundingBox!;
+    const tallCrown = tallGroup.children[1] as THREE.InstancedMesh;
+    const tallBox = new THREE.Box3().setFromObject(tallCrown);
     expect(tallBox.max.x - tallBox.min.x).toBeCloseTo(6, 1);
     expect(tallBox.max.z - tallBox.min.z).toBeCloseTo(6, 1);
     expect(tallBox.max.y - tallBox.min.y).toBeCloseTo(14.4, 1);
@@ -62,9 +62,8 @@ describe("treeCrownSphereLayout & buildTreeGroup", () => {
     const wideGroup = buildTreeGroup([
       { id: 2, at: [0, 0], height_m: 10, crown_diameter_m: 14, trunk_diameter_m: 0.5, sizeSource: "osm" },
     ])!;
-    const wideCrown = wideGroup.children[1] as THREE.Mesh;
-    wideCrown.geometry.computeBoundingBox();
-    const wideBox = wideCrown.geometry.boundingBox!;
+    const wideCrown = wideGroup.children[1] as THREE.InstancedMesh;
+    const wideBox = new THREE.Box3().setFromObject(wideCrown);
     expect(wideBox.max.x - wideBox.min.x).toBeCloseTo(14, 1);
     expect(wideBox.max.z - wideBox.min.z).toBeCloseTo(14, 1);
     expect(wideBox.max.y - wideBox.min.y).toBeCloseTo(7.2, 1);

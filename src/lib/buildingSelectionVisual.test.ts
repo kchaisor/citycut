@@ -95,7 +95,7 @@ describe("buildingSelectionVisual", () => {
     addBuildingEdges(city);
     const mounted = mountSelectedBuildingVisual(city, model, 2, colourMode);
     expect(mounted).not.toBeNull();
-    expect(mounted!.audit.hiddenSolidEdgeCount).toBeGreaterThan(0);
+    expect(mounted!.audit.selectionFillMeshCount).toBeGreaterThan(0);
 
     const merged = mergedBuildingMesh(city)!;
     const byGroup = merged.userData.buildingIdByGroup as number[];

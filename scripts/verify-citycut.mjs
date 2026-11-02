@@ -1334,6 +1334,16 @@ async function main() {
       await window.__citycutQaModel?.waitForComHeightsApplied?.(120000);
     });
     await lensPage.waitForTimeout(1200);
+    const treeVariantInfo = await lensPage.evaluate(() => {
+      const summary = window.__citycutQaModel?.getSummary?.() ?? null;
+      return { variantCount: summary?.treeCrownVariantCount ?? 0, treeCrowns: summary?.treeCrowns ?? 0 };
+    });
+    assertCheck(
+      "tree-crown-four-variants",
+      "Tree crowns use four deterministic green fill tokens across the model data",
+      treeVariantInfo.treeCrowns > 0 && treeVariantInfo.variantCount === 4,
+      `summary=${JSON.stringify(treeVariantInfo)}`,
+    );
     await lensPage.evaluate(() => {
       const towerId = window.__citycutQaModel?.pickTallTowerForSelectionQa?.();
       if (towerId != null) {
@@ -1621,11 +1631,12 @@ async function main() {
           clickSelectionAudit.overlayDashedLineCount > 0 &&
           clickSelectionAudit.hiddenMeshCount === 0 &&
           clickSelectionAudit.zeroedGroupCount === 0 &&
-          clickSelectionAudit.hiddenSolidEdgeCount > 0 &&
-          clickSelectionAudit.overlayFillOpacity < 0.01;
+          clickSelectionAudit.selectionFillMeshCount > 0 &&
+          clickSelectionAudit.overlayFillOpacity >= 0.99 &&
+          clickSelectionAudit.selectionFillAccentHex?.toLowerCase() === "fff500";
         assertCheck(
           "building-click-dashed-selection-outline",
-          "Clicking a building shows dashed screen-space selection outlines without hiding the mesh",
+          "Clicking a building shows dashed screen-space selection outlines and solid accent-yellow fill without hiding the mesh",
           clickSelectionOk,
           `audit=${JSON.stringify(clickSelectionAudit)}`,
         );
