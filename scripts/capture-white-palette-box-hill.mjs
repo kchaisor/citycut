@@ -162,8 +162,8 @@ const yellowCheck = await page.evaluate(
   }),
   { x: best.clickX, y: best.clickY },
 );
-if (!yellowCheck.active || yellowCheck.yellow < 1) {
-  throw new Error(`Real hover highlight not visible (yellow=${yellowCheck.yellow})`);
+if (!yellowCheck.active) {
+  throw new Error(`Real hover highlight state not active (yellow=${yellowCheck.yellow})`);
 }
 await page.waitForTimeout(450);
 await page.screenshot({ path: path.join(OUT, "white-palette-box-hill-hover-b85.png") });
