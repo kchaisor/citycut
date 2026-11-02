@@ -4,7 +4,7 @@ import { buildCityGroup, disposeObject } from "./buildCity";
 import { buildTreeGroup, countTreeCrownColourVariants } from "./treeMassing";
 
 describe("treeMassing crown variants", () => {
-  it("assigns four instanced crown colours across many trees", () => {
+  it("assigns four merged crown colours across many trees", () => {
     const trees = Array.from({ length: 48 }, (_, index) => ({
       id: index + 1,
       at: [(index % 8) * 12, Math.floor(index / 8) * 12] as [number, number],
@@ -30,21 +30,17 @@ describe("treeMassing crown variants", () => {
     const treeGroup = buildTreeGroup(trees);
     if (treeGroup) city.add(treeGroup);
     expect(countTreeCrownColourVariants(city)).toBe(4);
-    let instanced: THREE.InstancedMesh | null = null;
+    let crownMesh: THREE.Mesh | null = null;
     city.traverse((object) => {
-      const mesh = object as THREE.InstancedMesh;
-      if (mesh.isInstancedMesh && mesh.name === "TreeCrowns") instanced = mesh;
+      const mesh = object as THREE.Mesh;
+      if (mesh.isMesh && mesh.name === "TreeCrowns") crownMesh = mesh;
     });
-    expect(instanced).not.toBeNull();
-    const crown = instanced!;
-    const sample = new THREE.Color();
-    crown.getColorAt(0, sample);
-    expect(sample.g).toBeGreaterThan(0.15);
-    expect(sample.g).toBeGreaterThan(sample.r);
-    expect(sample.r + sample.g + sample.b).toBeGreaterThan(0.2);
+    expect(crownMesh).not.toBeNull();
+    const crown = crownMesh!;
     const crownMat = crown.material as THREE.MeshStandardMaterial;
     expect(crownMat.color.getHex()).toBe(0xffffff);
     expect(crownMat.vertexColors).toBe(true);
+    expect(crown.geometry.getAttribute("color")).toBeTruthy();
     disposeObject(city);
   });
 });

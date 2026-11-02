@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { getColour } from "./colours";
 import { matteStandardMaterial } from "./matteMaterial";
 import type { TreeFeat } from "../types";
@@ -52,17 +53,20 @@ export type TreeGroupBuildOptions = {
 export function countTreeCrowns(root: THREE.Object3D): number {
   const group = root.getObjectByName("Trees");
   if (!group) return 0;
-  let total = 0;
-  group.traverse((object) => {
-    const instanced = object as THREE.InstancedMesh;
-    if (instanced.isInstancedMesh && instanced.name === "TreeCrowns") total += instanced.count;
-    const mesh = object as THREE.Mesh;
-    if (mesh.isMesh && mesh.name === "TreeCrowns" && !instanced.isInstancedMesh) {
-      const unitCount = unitCrownGeometry().getAttribute("position").count;
-      total += (mesh.geometry?.getAttribute("position")?.count ?? 0) / unitCount;
+  const unitCount = unitCrownGeometry().getAttribute("position").count;
+  let bucketVertices = 0;
+  let hasBucketCrowns = false;
+  group.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (mesh.isMesh && mesh.name === "TreeCrowns") {
+      hasBucketCrowns = true;
+      bucketVertices += mesh.geometry?.getAttribute("position")?.count ?? 0;
     }
   });
-  return total;
+  if (hasBucketCrowns) return bucketVertices / unitCount;
+  const crowns = group.children[group.children.length - 1] as THREE.Mesh | undefined;
+  const vertices = crowns?.geometry?.getAttribute("position")?.count ?? 0;
+  return vertices / unitCount;
 }
 
 function introTreeBucketIndex(tree: TreeFeat, sideM = 500, totalBuckets = 16): number {
@@ -74,9 +78,21 @@ function introTreeBucketIndex(tree: TreeFeat, sideM = 500, totalBuckets = 16): n
   return Math.floor(norm * totalBuckets);
 }
 
+function paintSolidVertexColors(geometry: THREE.BufferGeometry, fill: string) {
+  const tint = new THREE.Color().setStyle(fill);
+  const position = geometry.getAttribute("position");
+  if (!position) return;
+  const colors = new Float32Array(position.count * 3);
+  for (let index = 0; index < position.count; index++) {
+    colors[index * 3] = tint.r;
+    colors[index * 3 + 1] = tint.g;
+    colors[index * 3 + 2] = tint.b;
+  }
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+}
+
 function createTreeMaterials() {
-  const trunkColor = getColour("--tree-trunk");
-  const trunkMaterial = matteStandardMaterial({ color: trunkColor });
+  const trunkMaterial = matteStandardMaterial({ color: getColour("--tree-trunk") });
   trunkMaterial.name = "TreeTrunks";
   const crownMaterial = matteStandardMaterial({ color: 0xffffff, flatShading: true });
   crownMaterial.name = "TreeCrowns";
@@ -86,57 +102,47 @@ function createTreeMaterials() {
   return { trunkMaterial, crownMaterial };
 }
 
-function fillTreeInstances(
-  trees: TreeFeat[],
+function crownGeometryForTree(
+  tree: TreeFeat,
   elevationAt: (east: number, north: number) => number,
-  crownMesh: THREE.InstancedMesh,
-  trunkMesh: THREE.InstancedMesh,
-) {
-  const matrix = new THREE.Matrix4();
-  const position = new THREE.Vector3();
-  const quaternion = new THREE.Quaternion();
-  const scale = new THREE.Vector3();
-  const color = new THREE.Color();
-  for (let index = 0; index < trees.length; index++) {
-    const tree = trees[index]!;
-    const ground = elevationAt(tree.at[0], tree.at[1]);
-    const layout = treeCrownSphereLayout(tree.height_m, tree.crown_diameter_m);
-    const trunkRadius = Math.max(tree.trunk_diameter_m / 2, 0.04);
-    const trunkHeight = Math.max(0.4, Math.min(tree.height_m, layout.centerY + layout.radiusY * 0.35));
-
-    position.set(tree.at[0], ground, -tree.at[1]);
-    quaternion.identity();
-    scale.set(trunkRadius, trunkHeight, trunkRadius);
-    matrix.compose(position, quaternion, scale);
-    trunkMesh.setMatrixAt(index, matrix);
-
-    position.set(tree.at[0], ground + layout.centerY, -tree.at[1]);
-    scale.set(layout.scaleX, layout.scaleY, layout.scaleZ);
-    matrix.compose(position, quaternion, scale);
-    crownMesh.setMatrixAt(index, matrix);
-    color.setStyle(treeCrownColourForId(tree.id));
-    crownMesh.setColorAt(index, color);
-  }
-  crownMesh.instanceMatrix.needsUpdate = true;
-  if (crownMesh.instanceColor) crownMesh.instanceColor.needsUpdate = true;
-  trunkMesh.instanceMatrix.needsUpdate = true;
+  crownBase: THREE.BufferGeometry,
+  matrix: THREE.Matrix4,
+  position: THREE.Vector3,
+  quaternion: THREE.Quaternion,
+  scale: THREE.Vector3,
+): THREE.BufferGeometry {
+  const ground = elevationAt(tree.at[0], tree.at[1]);
+  const layout = treeCrownSphereLayout(tree.height_m, tree.crown_diameter_m);
+  position.set(tree.at[0], ground + layout.centerY, -tree.at[1]);
+  quaternion.identity();
+  scale.set(layout.scaleX, layout.scaleY, layout.scaleZ);
+  matrix.compose(position, quaternion, scale);
+  const crown = crownBase.clone();
+  crown.applyMatrix4(matrix);
+  paintSolidVertexColors(crown, treeCrownColourForId(tree.id));
+  return crown;
 }
 
-function instancedPair(
-  count: number,
-  crownUnit: THREE.BufferGeometry,
-  trunkUnit: THREE.BufferGeometry,
-  materials: ReturnType<typeof createTreeMaterials>,
-) {
-  const crownGeometry = crownUnit.clone();
-  const trunkGeometry = trunkUnit.clone();
-  const crownMesh = new THREE.InstancedMesh(crownGeometry, materials.crownMaterial, count);
-  crownMesh.name = "TreeCrowns";
-  crownMesh.userData.exportLayer = "Trees";
-  const trunkMesh = new THREE.InstancedMesh(trunkGeometry, materials.trunkMaterial, count);
-  trunkMesh.name = "TreeTrunks";
-  trunkMesh.userData.exportLayer = "Trees";
-  return { crownMesh, trunkMesh };
+function trunkGeometryForTree(
+  tree: TreeFeat,
+  elevationAt: (east: number, north: number) => number,
+  trunkBase: THREE.BufferGeometry,
+  matrix: THREE.Matrix4,
+  position: THREE.Vector3,
+  quaternion: THREE.Quaternion,
+  scale: THREE.Vector3,
+): THREE.BufferGeometry {
+  const ground = elevationAt(tree.at[0], tree.at[1]);
+  const layout = treeCrownSphereLayout(tree.height_m, tree.crown_diameter_m);
+  const trunkRadius = Math.max(tree.trunk_diameter_m / 2, 0.04);
+  const trunkHeight = Math.max(0.4, Math.min(tree.height_m, layout.centerY + layout.radiusY * 0.35));
+  position.set(tree.at[0], ground, -tree.at[1]);
+  quaternion.identity();
+  scale.set(trunkRadius, trunkHeight, trunkRadius);
+  matrix.compose(position, quaternion, scale);
+  const trunk = trunkBase.clone();
+  trunk.applyMatrix4(matrix);
+  return trunk;
 }
 
 export function buildTreeGroup(
@@ -145,64 +151,109 @@ export function buildTreeGroup(
   options?: TreeGroupBuildOptions,
 ): THREE.Group | null {
   if (trees.length === 0) return null;
-  const materials = createTreeMaterials();
+  const { trunkMaterial, crownMaterial } = createTreeMaterials();
   const trunkBase = unitTrunkGeometry();
   const crownBase = unitCrownGeometry();
+  const matrix = new THREE.Matrix4();
+  const position = new THREE.Vector3();
+  const quaternion = new THREE.Quaternion();
+  const scale = new THREE.Vector3();
 
   if (options?.introStagger) {
-    const buckets = new Map<number, TreeFeat[]>();
+    const bucketTrunks = new Map<number, THREE.BufferGeometry[]>();
+    const bucketCrowns = new Map<number, THREE.BufferGeometry[]>();
     const bucketMinGround = new Map<number, number>();
     for (const tree of trees) {
-      const b = introTreeBucketIndex(tree, options.sideM ?? 500, 16);
-      const list = buckets.get(b);
-      if (list) list.push(tree);
-      else buckets.set(b, [tree]);
       const ground = elevationAt(tree.at[0], tree.at[1]);
-      const prev = bucketMinGround.get(b);
-      if (prev === undefined || ground < prev) bucketMinGround.set(b, ground);
+      const b = introTreeBucketIndex(tree, options.sideM ?? 500, 16);
+      const trunks = bucketTrunks.get(b) ?? [];
+      trunks.push(trunkGeometryForTree(tree, elevationAt, trunkBase, matrix, position, quaternion, scale));
+      bucketTrunks.set(b, trunks);
+      const crowns = bucketCrowns.get(b) ?? [];
+      crowns.push(crownGeometryForTree(tree, elevationAt, crownBase, matrix, position, quaternion, scale));
+      bucketCrowns.set(b, crowns);
+      const prevGround = bucketMinGround.get(b);
+      if (prevGround === undefined || ground < prevGround) bucketMinGround.set(b, ground);
     }
+    trunkBase.dispose();
+    crownBase.dispose();
+
     const group = new THREE.Group();
     group.name = "Trees";
-    const sortedBuckets = [...buckets.keys()].sort((a, b) => a - b);
+    const sortedBuckets = [...bucketTrunks.keys()].sort((a, b) => a - b);
     for (const b of sortedBuckets) {
-      const bucketTrees = buckets.get(b) ?? [];
-      if (bucketTrees.length === 0) continue;
-      const { crownMesh, trunkMesh } = instancedPair(bucketTrees.length, crownBase, trunkBase, materials);
-      fillTreeInstances(bucketTrees, elevationAt, crownMesh, trunkMesh);
+      const tGeos = bucketTrunks.get(b) ?? [];
+      const cGeos = bucketCrowns.get(b) ?? [];
+      const mergedTrunks = mergeGeometries(tGeos, false);
+      const mergedCrowns = mergeGeometries(cGeos, false);
+      tGeos.forEach((geometry) => geometry.dispose());
+      cGeos.forEach((geometry) => geometry.dispose());
       const sub = new THREE.Group();
       sub.name = "TreesBucket";
       sub.userData.introTreeBucket = b;
       sub.userData.introBaseY = bucketMinGround.get(b) ?? 0;
-      sub.add(trunkMesh);
-      sub.add(crownMesh);
-      group.add(sub);
+      if (mergedTrunks) {
+        const tmMesh = new THREE.Mesh(mergedTrunks, trunkMaterial);
+        tmMesh.name = "TreeTrunks";
+        tmMesh.userData.exportLayer = "Trees";
+        sub.add(tmMesh);
+      }
+      if (mergedCrowns) {
+        mergedCrowns.computeVertexNormals();
+        const cmMesh = new THREE.Mesh(mergedCrowns, crownMaterial);
+        cmMesh.name = "TreeCrowns";
+        cmMesh.userData.exportLayer = "Trees";
+        sub.add(cmMesh);
+      }
+      if (sub.children.length > 0) group.add(sub);
     }
-    crownBase.dispose();
-    trunkBase.dispose();
     return group.children.length > 0 ? group : null;
   }
 
-  const { crownMesh, trunkMesh } = instancedPair(trees.length, crownBase, trunkBase, materials);
-  fillTreeInstances(trees, elevationAt, crownMesh, trunkMesh);
-  crownBase.dispose();
+  const trunkGeometries: THREE.BufferGeometry[] = [];
+  const crownGeometries: THREE.BufferGeometry[] = [];
+  for (const tree of trees) {
+    trunkGeometries.push(trunkGeometryForTree(tree, elevationAt, trunkBase, matrix, position, quaternion, scale));
+    crownGeometries.push(crownGeometryForTree(tree, elevationAt, crownBase, matrix, position, quaternion, scale));
+  }
   trunkBase.dispose();
+  crownBase.dispose();
 
   const group = new THREE.Group();
   group.name = "Trees";
-  group.add(trunkMesh);
-  group.add(crownMesh);
-  return group;
+  const mergedTrunks = mergeGeometries(trunkGeometries, false);
+  const mergedCrowns = mergeGeometries(crownGeometries, false);
+  trunkGeometries.forEach((geometry) => geometry.dispose());
+  crownGeometries.forEach((geometry) => geometry.dispose());
+  if (mergedTrunks) {
+    const tmMesh = new THREE.Mesh(mergedTrunks, trunkMaterial);
+    tmMesh.name = "TreeTrunks";
+    tmMesh.userData.exportLayer = "Trees";
+    group.add(tmMesh);
+  }
+  if (mergedCrowns) {
+    mergedCrowns.computeVertexNormals();
+    const cmMesh = new THREE.Mesh(mergedCrowns, crownMaterial);
+    cmMesh.name = "TreeCrowns";
+    cmMesh.userData.exportLayer = "Trees";
+    group.add(cmMesh);
+  }
+  return group.children.length > 0 ? group : null;
 }
 
 export function countTreeCrownColourVariants(root: THREE.Object3D): number {
   const seen = new Set<string>();
-  const color = new THREE.Color();
   root.traverse((object) => {
-    const instanced = object as THREE.InstancedMesh;
-    if (!instanced.isInstancedMesh || instanced.name !== "TreeCrowns" || !instanced.instanceColor) return;
-    for (let index = 0; index < instanced.count; index++) {
-      instanced.getColorAt(index, color);
-      seen.add(color.getHexString());
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || mesh.name !== "TreeCrowns") return;
+    const attr = mesh.geometry?.getAttribute("color");
+    if (!attr) return;
+    const step = Math.max(1, Math.floor(attr.count / 512));
+    for (let index = 0; index < attr.count; index += step) {
+      const r = Math.round(attr.getX(index) * 255);
+      const g = Math.round(attr.getY(index) * 255);
+      const b = Math.round(attr.getZ(index) * 255);
+      seen.add(`${r},${g},${b}`);
     }
   });
   return seen.size;
