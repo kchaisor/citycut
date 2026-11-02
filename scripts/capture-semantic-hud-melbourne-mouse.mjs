@@ -193,6 +193,7 @@ async function tryReachMode(mode, attempt) {
       await wheelZoom(-160, 12);
     }
   } else if (mode === "walk") {
+    await wheelZoom(160, 10);
     await dragOrbit(attempt === 1 ? 95 : -110, 8);
     await wheelZoom(-260, 22);
     await dragOrbit(-12, 72);

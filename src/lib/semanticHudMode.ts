@@ -9,7 +9,7 @@ export type SemanticHudSignals = {
   maxOrbitDistanceM: number;
   centreGroundDistanceM: number | null;
   centreBuildingDistanceM: number | null;
-  centreHasNamedStreet: boolean;
+  centreHasStreetNear: boolean;
   hasCentreBuilding: boolean;
   buildingScreenFill: number;
 };
@@ -72,9 +72,17 @@ function walkCandidate(signals: SemanticHudSignals, thresholds: SemanticHudThres
   const groundLimit = min * (entering ? thresholds.walkEnterGroundFactor : thresholds.walkExitGroundFactor);
   const polarLimit = entering ? thresholds.walkEnterPolarDeg : thresholds.walkExitPolarDeg;
   if (walkProximityM(signals) > orbitLimit) return false;
-  if (signals.polarDeg < polarLimit) return false;
-  if (signals.centreGroundDistanceM == null || signals.centreGroundDistanceM > groundLimit) return false;
-  if (!signals.centreHasNamedStreet) return false;
+  const pitchLimit = entering ? 20 : 24;
+  const pitchHigh = entering ? 72 : 68;
+  const pitchedLow =
+    signals.polarDeg >= polarLimit ||
+    signals.pitchDeg <= pitchLimit ||
+    signals.pitchDeg >= pitchHigh ||
+    (signals.eyeHeightM <= 6 && signals.pitchDeg >= 55);
+  if (!pitchedLow) return false;
+  const groundDistance = signals.centreGroundDistanceM;
+  if (groundDistance != null && groundDistance > groundLimit) return false;
+  if (!signals.centreHasStreetNear) return false;
   return true;
 }
 

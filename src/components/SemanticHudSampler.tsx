@@ -9,6 +9,7 @@ import {
   buildingHudStats,
   buildingScreenFillRatio,
   lateralBuildingHeights,
+  nearestRoadAt,
   projectWorldToScreen,
   buildingCentroid,
 } from "../lib/semanticHudGeometry";
@@ -107,21 +108,27 @@ export function SemanticHudSampler({
     let centreGroundEast = cameraEast;
     let centreGroundNorth = cameraNorth;
     const rayDir = scratchRay.ray.direction;
+    const planeY = localGroundY;
     if (rayDir.y < -1e-5) {
-      const planeY = localGroundY;
       const tGround = (planeY - eye[1]) / rayDir.y;
       if (tGround > 0) {
         centreGroundDistanceM = tGround;
         centreGroundEast = eye[0] + rayDir.x * tGround;
         centreGroundNorth = -(eye[2] + rayDir.z * tGround);
       }
+    } else {
+      const targetEast = controls.target.x;
+      const targetNorth = -controls.target.z;
+      const flatDist = Math.hypot(targetEast - cameraEast, targetNorth - cameraNorth);
+      if (flatDist > 0) {
+        centreGroundDistanceM = flatDist;
+        centreGroundEast = targetEast;
+        centreGroundNorth = targetNorth;
+      }
     }
-    const centreRoadHit = nearestNamedRoadAt(
-      roads,
-      [centreGroundEast, centreGroundNorth],
-      CENTRE_STREET_MODE_MAX_M,
-    );
-    const centreHasNamedStreet = Boolean(centreRoadHit?.road.name?.trim());
+    const centreStreetHit = nearestRoadAt(roads, [centreGroundEast, centreGroundNorth]);
+    const centreHasStreetNear =
+      centreStreetHit != null && centreStreetHit.distanceM <= CENTRE_STREET_MODE_MAX_M;
 
     let buildingScreenFill = 0;
     let bestFillBuilding: BuildingFeat | null = null;
@@ -154,7 +161,7 @@ export function SemanticHudSampler({
       maxOrbitDistanceM,
       centreGroundDistanceM,
       centreBuildingDistanceM,
-      centreHasNamedStreet,
+      centreHasStreetNear,
       hasCentreBuilding: focusBuilding != null,
       buildingScreenFill,
     });
@@ -246,14 +253,28 @@ export function SemanticHudSampler({
       cameraNorth,
     });
 
-    onSample({
+    const sample = {
       mode,
       eyeHeightM,
       pitchDeg,
       building: buildingReadout,
       walk: walkReadout,
       labels,
-    });
+    };
+    if (typeof window !== "undefined" && window.location.search.includes("qa=1")) {
+      window.__citycutSemanticHudDebug = {
+        centreHasStreetNear,
+        centreGroundDistanceM,
+        polarDeg,
+        pitchDeg,
+        orbitDistanceM,
+        minOrbitDistanceM,
+        centreBuildingDistanceM,
+        buildingScreenFill,
+        mode,
+      };
+    }
+    onSample(sample);
   });
 
   return null;

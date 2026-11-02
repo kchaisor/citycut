@@ -22,6 +22,7 @@ declare global {
   interface Window {
     __citycutQa?: QaCameraBridge;
     __citycutSemanticHud?: import("./semanticHudSample").SemanticHudSample;
+    __citycutSemanticHudDebug?: Record<string, number | boolean | string | null>;
     __citycutQaSite?: QaSiteSnapshot;
     __citycutQaModel?: {
       openMidriseHeightEdit: () => number | null;
