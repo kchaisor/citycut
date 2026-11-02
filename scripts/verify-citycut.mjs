@@ -1035,6 +1035,25 @@ async function main() {
       `open=${commandBarInfo.open}, font=${commandBarInfo.fontFamily}, bg=${commandBarInfo.bg}`,
     );
 
+    const viewStyleDefaultInfo = await page.evaluate(() => {
+      const group = document.querySelector('.model .left-outliner [aria-label="Building style"]');
+      const labels = Array.from(group?.querySelectorAll("button") ?? []).map((button) => ({
+        name: button.textContent?.trim() ?? "",
+        pressed: button.getAttribute("aria-pressed") === "true",
+      }));
+      return {
+        labels,
+        uniformDefault: labels.find((entry) => entry.name === "Uniform")?.pressed === true,
+        noCard: !labels.some((entry) => entry.name === "Card"),
+      };
+    });
+    assertCheck(
+      "view-style-uniform-default-no-card",
+      "Default VIEW STYLE is Uniform (white palette) and the Card style control is removed",
+      viewStyleDefaultInfo.uniformDefault && viewStyleDefaultInfo.noCard,
+      `labels=${JSON.stringify(viewStyleDefaultInfo.labels)}`,
+    );
+
     // 3D DISPLAY OUTLINER INVARIANT (PER-USE BUILDINGS + RESET COLOURS BUTTON)
     const display3dOutlinerInfo = await page.evaluate(() => {
       const layersRegion = document.querySelector('.model .left-outliner [aria-label="Layers"]');
@@ -1595,6 +1614,20 @@ async function main() {
         await lensPage.mouse.move(pinClick.clickX, pinClick.clickY);
         await lensPage.waitForTimeout(400);
         await lensPage.mouse.click(pinClick.clickX, pinClick.clickY);
+        await lensPage.waitForTimeout(500);
+        const clickSelectionAudit = await lensPage.evaluate(() => window.__citycutQaSelectionAudit ?? null);
+        const clickSelectionOk =
+          clickSelectionAudit &&
+          clickSelectionAudit.overlayDashedLineCount > 0 &&
+          clickSelectionAudit.hiddenMeshCount === 0 &&
+          clickSelectionAudit.zeroedGroupCount === 0 &&
+          clickSelectionAudit.overlayFillOpacity === 0;
+        assertCheck(
+          "building-click-dashed-selection-outline",
+          "Clicking a building shows dashed screen-space selection outlines without hiding the mesh",
+          clickSelectionOk,
+          `audit=${JSON.stringify(clickSelectionAudit)}`,
+        );
       }
       const pinnedAfterClick = await lensPage
         .waitForFunction(

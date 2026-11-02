@@ -97,6 +97,13 @@ import { OSM_TREES_ODBL_CREDIT } from "../lib/treesPrebake";
 import { countTreeCrowns } from "../lib/treeMassing";
 import { capturePresetFromSearch } from "../lib/captureQuery";
 import {
+  buildingColourStyleToFlags,
+  DEFAULT_BUILDING_COLOUR_STYLE,
+  flagsToBuildingColourStyle,
+  readStoredBuildingColourStyle,
+  writeStoredBuildingColourStyle,
+} from "../lib/buildingColourStyle";
+import {
   countAccentYellowNearClient,
   maxYellowScoreNearClient,
   readCanvasPixelAtClient,
@@ -289,8 +296,11 @@ export function ModelPage({
   const [exportError, setExportError] = useState<string | null>(null);
   const [busy, setBusy] = useState<ExportBusy>(null);
   const [sunStudyProgress, setSunStudyProgress] = useState<string | null>(null);
-  const [colourByUse, setColourByUse] = useState(false);
-  const [showSource, setShowSource] = useState(false);
+  const initialBuildingColour = buildingColourStyleToFlags(
+    readStoredBuildingColourStyle(window.localStorage),
+  );
+  const [colourByUse, setColourByUse] = useState(initialBuildingColour.colourByUse);
+  const [showSource, setShowSource] = useState(initialBuildingColour.showSource);
   const [buildingsAsMesh, setBuildingsAsMesh] = useState(false);
   const [comFootprints, setComFootprints] = useState<ComBuildingFootprint[]>(
     () => model.comFootprintPrefetch ?? [],
@@ -313,6 +323,9 @@ export function ModelPage({
     const nextDisplay = view3dDisplayForModelOpen(window.localStorage);
     setView3dDisplay(nextDisplay);
     writeStoredView3dDisplay(window.localStorage, nextDisplay);
+    setShowSource(false);
+    setColourByUse(false);
+    writeStoredBuildingColourStyle(window.localStorage, DEFAULT_BUILDING_COLOUR_STYLE);
     if (typeof window !== "undefined" && window.__citycutAwaitIntroStart) {
       setView((prev) => {
         const next: ViewMemory = { ...prev, projection: "perspective", freeRotate: false };
@@ -1547,14 +1560,26 @@ export function ModelPage({
     writeStoredView3dDisplay(window.localStorage, next);
   }
 
+  function commitBuildingColourStyle(nextUse: boolean, nextSource: boolean) {
+    setShowSource(nextSource);
+    setColourByUse(nextUse);
+    writeStoredBuildingColourStyle(
+      window.localStorage,
+      flagsToBuildingColourStyle(nextUse, nextSource),
+    );
+  }
+
+  function applyDefaultBuildingColourStyle() {
+    commitBuildingColourStyle(false, false);
+  }
+
   function pickBuildingUseColour(use: BuildingUse, value: string) {
     commitColour(BUILDING_USE_META[use].key, value);
     if (!colourByUse || showSource) {
-      setShowSource(false);
-      setColourByUse(true);
+      commitBuildingColourStyle(true, false);
     }
-    if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "buildings")) {
-      commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "buildings", true));
+    if (!isLayer3dVisible(view3dDisplay, "buildings")) {
+      commitView3dDisplay(setLayer3dVisible(view3dDisplay, "buildings", true));
     }
     setHiddenBuildingUses((prev) => {
       if (!prev.has(use)) return prev;
@@ -1571,6 +1596,7 @@ export function ModelPage({
         applyOverrides(readStoredOverrides(window.localStorage));
       }
     });
+    applyDefaultBuildingColourStyle();
     setLineStyles(readDrawingStyle());
   }
 
@@ -1844,8 +1870,8 @@ export function ModelPage({
           commitColour("--tree-crown-edge", value);
           commitColour("--tree-fill", value);
           commitColour("--tree-layer", value);
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "trees")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "trees", true));
+          if (!isLayer3dVisible(view3dDisplay, "trees")) {
+            commitView3dDisplay(setLayer3dVisible(view3dDisplay, "trees", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -1860,8 +1886,8 @@ export function ModelPage({
           commitColour("--road-local", value);
           commitColour("--road-arterial", value);
           commitColour("--road-fill", value);
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "roads")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "roads", true));
+          if (!isLayer3dVisible(view3dDisplay, "roads")) {
+            commitView3dDisplay(setLayer3dVisible(view3dDisplay, "roads", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -1875,8 +1901,8 @@ export function ModelPage({
         onPick: (value: string) => {
           commitColour("--road-path", value);
           commitColour("--path-fill", value);
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "footpaths")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "footpaths", true));
+          if (!isLayer3dVisible(view3dDisplay, "footpaths")) {
+            commitView3dDisplay(setLayer3dVisible(view3dDisplay, "footpaths", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -1890,8 +1916,8 @@ export function ModelPage({
         onPick: (value: string) => {
           commitColour("--green-3d", value);
           commitColour("--green-fill", value);
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "landscape")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "landscape", true));
+          if (!isLayer3dVisible(view3dDisplay, "landscape")) {
+            commitView3dDisplay(setLayer3dVisible(view3dDisplay, "landscape", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -1905,8 +1931,8 @@ export function ModelPage({
         onPick: (value: string) => {
           commitColour("--water-3d", value);
           commitColour("--water-fill", value);
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "water")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "water", true));
+          if (!isLayer3dVisible(view3dDisplay, "water")) {
+            commitView3dDisplay(setLayer3dVisible(view3dDisplay, "water", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -2356,6 +2382,7 @@ export function ModelPage({
                   className="cam-reset studio-reset-btn"
                   onClick={() => {
                     if (tab === "3d") {
+                      applyDefaultBuildingColourStyle();
                       setSnapId((id) => id + 1);
                     } else if (tab === "drawing" && drawing === "exploded-axo") {
                       setExplodedViewport(
@@ -2645,23 +2672,17 @@ export function ModelPage({
                       type="button"
                       data-autofocus="true"
                       aria-pressed={colourByUse && !showSource}
-                      onClick={() => {
-                        setShowSource(false);
-                        setColourByUse(true);
-                      }}
+                      onClick={() => commitBuildingColourStyle(true, false)}
                     >
                       Use
                     </button>
-                    <button type="button" aria-pressed={showSource} onClick={() => setShowSource(true)}>
+                    <button type="button" aria-pressed={showSource} onClick={() => commitBuildingColourStyle(false, true)}>
                       Source
                     </button>
                     <button
                       type="button"
                       aria-pressed={!colourByUse && !showSource}
-                      onClick={() => {
-                        setShowSource(false);
-                        setColourByUse(false);
-                      }}
+                      onClick={() => commitBuildingColourStyle(false, false)}
                     >
                       None
                     </button>
@@ -2851,62 +2872,29 @@ export function ModelPage({
                     <div className="style-seg seg-mini" role="group" aria-label="Building style">
                       <button
                         type="button"
-                        className={view3dDisplay.whiteCard ? "style-btn active" : "style-btn"}
-                        aria-pressed={view3dDisplay.whiteCard}
-                        onClick={() => commitView3dDisplay({ ...view3dDisplay, whiteCard: !view3dDisplay.whiteCard })}
-                      >
-                        Card
-                      </button>
-                      <button
-                        type="button"
-                        className={!view3dDisplay.whiteCard && colourByUse && !showSource ? "style-btn active" : "style-btn"}
-                        aria-pressed={!view3dDisplay.whiteCard && colourByUse && !showSource}
-                        onClick={() => {
-                          setShowSource(false);
-                          setColourByUse(true);
-                          if (view3dDisplay.whiteCard) {
-                            commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
-                          }
-                        }}
+                        className={colourByUse && !showSource ? "style-btn active" : "style-btn"}
+                        aria-pressed={colourByUse && !showSource}
+                        onClick={() => commitBuildingColourStyle(true, false)}
                       >
                         Use
                       </button>
                       <button
                         type="button"
-                        className={!view3dDisplay.whiteCard && showSource ? "style-btn active" : "style-btn"}
-                        aria-pressed={!view3dDisplay.whiteCard && showSource}
-                        onClick={() => {
-                          setShowSource(true);
-                          if (view3dDisplay.whiteCard) {
-                            commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
-                          }
-                        }}
+                        className={showSource ? "style-btn active" : "style-btn"}
+                        aria-pressed={showSource}
+                        onClick={() => commitBuildingColourStyle(false, true)}
                       >
                         Source
                       </button>
                       <button
                         type="button"
-                        className={!view3dDisplay.whiteCard && !colourByUse && !showSource ? "style-btn active" : "style-btn"}
-                        aria-pressed={!view3dDisplay.whiteCard && !colourByUse && !showSource}
-                        onClick={() => {
-                          setShowSource(false);
-                          setColourByUse(false);
-                          if (view3dDisplay.whiteCard) {
-                            commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
-                          }
-                        }}
+                        className={!colourByUse && !showSource ? "style-btn active" : "style-btn"}
+                        aria-pressed={!colourByUse && !showSource}
+                        onClick={() => commitBuildingColourStyle(false, false)}
                       >
                         Uniform
                       </button>
                     </div>
-                    <label className="check-field sr-only">
-                      <input
-                        type="checkbox"
-                        checked={view3dDisplay.whiteCard}
-                        onChange={(event) => commitView3dDisplay({ ...view3dDisplay, whiteCard: event.target.checked })}
-                      />
-                      White card
-                    </label>
                     <div className="mini-flags sub-toggles display-switches" role="group" aria-label="View modes">
                       <label className={view3dDisplay.showOutlines ? "mini-flag is-on check-field" : "mini-flag check-field"}>
                         <input
@@ -3090,10 +3078,7 @@ export function ModelPage({
                             type="button"
                             className={colourByUse && !showSource ? "style-btn active" : "style-btn"}
                             aria-pressed={colourByUse && !showSource}
-                            onClick={() => {
-                              setShowSource(false);
-                              setColourByUse(true);
-                            }}
+                            onClick={() => commitBuildingColourStyle(true, false)}
                           >
                             Use
                           </button>
@@ -3101,9 +3086,7 @@ export function ModelPage({
                             type="button"
                             className={showSource ? "style-btn active" : "style-btn"}
                             aria-pressed={showSource}
-                            onClick={() => {
-                              setShowSource(true);
-                            }}
+                            onClick={() => commitBuildingColourStyle(false, true)}
                           >
                             Source
                           </button>
@@ -3111,10 +3094,7 @@ export function ModelPage({
                             type="button"
                             className={!colourByUse && !showSource ? "style-btn active" : "style-btn"}
                             aria-pressed={!colourByUse && !showSource}
-                            onClick={() => {
-                              setShowSource(false);
-                              setColourByUse(false);
-                            }}
+                            onClick={() => commitBuildingColourStyle(false, false)}
                           >
                             Uniform
                           </button>

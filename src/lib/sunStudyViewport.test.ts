@@ -4,8 +4,6 @@ import { applyBuildingSolarNeutral } from "./buildingViewportColor";
 import { getColour } from "./colours";
 import { applySunStudySurfaceTint } from "./sunStudySurfaceViewport";
 import { sunStudyViewportLighting } from "./sunStudyViewport";
-import { applyWhiteCardTint } from "./whiteCardViewport";
-
 describe("sunStudyViewportLighting", () => {
   it("uses pure white for the solar neutral building fill token", () => {
     expect(getColour("--building-solar-neutral").toUpperCase()).toBe("#FFFFFF");
@@ -44,7 +42,6 @@ describe("sunStudyViewportLighting", () => {
     const buildingMat = new THREE.MeshStandardMaterial({ color: "#b35c44" });
     const buildingMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), buildingMat);
     buildingMesh.userData.viewportFill = "#b35c44";
-    buildingMesh.userData.whiteCardRestHex = "#b35c44";
     buildings.add(buildingMesh);
 
     const rail = new THREE.Mesh(
@@ -58,7 +55,6 @@ describe("sunStudyViewportLighting", () => {
 
     applySunStudySurfaceTint(root, false);
     applyBuildingSolarNeutral(root, false, "#ffffff");
-    applyWhiteCardTint(root, false);
 
     expect(buildingMat.color.getHexString()).toBe("b35c44");
     expect(buildingMat.emissive.getHex()).toBe(0x000000);

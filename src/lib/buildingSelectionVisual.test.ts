@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
+import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import { buildCityGroup, disposeObject } from "./buildCity";
 import { addBuildingEdges } from "./buildingEdges";
 import { buildingIdFromIntersection } from "./buildingPick";
 import {
-  SELECTED_BUILDING_FILL_OPACITY,
   mountSelectedBuildingVisual,
   mountSelectedBuildingsVisual,
-  selectedBuildingOpacityAfterPick,
+  selectedBuildingHasOutlineAfterPick,
 } from "./buildingSelectionVisual";
 
 const colourMode = { colourByUse: false, uniformBuildings: true, colourBySource: false };
@@ -65,7 +66,7 @@ function mergedBuildingMesh(root: THREE.Object3D): THREE.Mesh | null {
 }
 
 describe("buildingSelectionVisual", () => {
-  it("gives 0.5 overlay opacity after a 3D pick and restores the mesh on deselect", () => {
+  it("mounts dashed screen-space outlines after a 3D pick without hiding the building mesh", () => {
     const city = buildCityGroup(model, { uniformBuildings: true });
     addBuildingEdges(city);
     const merged = mergedBuildingMesh(city);
@@ -77,8 +78,7 @@ describe("buildingSelectionVisual", () => {
     const buildingId = hits.map(buildingIdFromIntersection).find((id) => id != null) ?? 2;
     expect(buildingId).toBe(2);
 
-    const opacity = selectedBuildingOpacityAfterPick(city, model, buildingId, colourMode);
-    expect(opacity).toBeCloseTo(SELECTED_BUILDING_FILL_OPACITY, 2);
+    expect(selectedBuildingHasOutlineAfterPick(city, model, buildingId, colourMode)).toBe(true);
 
     const groups = merged!.geometry.groups;
     const byGroup = merged!.userData.buildingIdByGroup as number[];
@@ -90,54 +90,41 @@ describe("buildingSelectionVisual", () => {
     disposeObject(city);
   });
 
-  it("zeroes merged geometry groups while selected and restores on deselect", () => {
+  it("keeps merged geometry groups intact while selected and restores outline on deselect", () => {
     const city = buildCityGroup(model, { uniformBuildings: true });
     addBuildingEdges(city);
     const mounted = mountSelectedBuildingVisual(city, model, 2, colourMode);
     expect(mounted).not.toBeNull();
-    expect(mounted!.overlayOpacity).toBeCloseTo(0.5, 2);
 
     const merged = mergedBuildingMesh(city)!;
     const byGroup = merged.userData.buildingIdByGroup as number[];
     for (let index = 0; index < merged.geometry.groups.length; index++) {
-      if (byGroup[index] === 2) expect(merged.geometry.groups[index]!.count).toBe(0);
-    }
-
-    mounted!.restore();
-    for (let index = 0; index < merged.geometry.groups.length; index++) {
       if (byGroup[index] === 2) expect(merged.geometry.groups[index]!.count).toBeGreaterThan(0);
     }
+
+    const dashed = mounted!.overlay.children.filter(
+      (child) => child instanceof LineSegments2 && child.material instanceof LineMaterial,
+    );
+    expect(dashed.length).toBeGreaterThan(0);
+    mounted!.restore();
     disposeObject(city);
   });
 
-  it("mounts translucent overlays and dashed outlines for multiple selected buildings and restores all on deselect", () => {
+  it("mounts dashed outlines for multiple selected buildings", () => {
     const city = buildCityGroup(model, { uniformBuildings: true });
     addBuildingEdges(city);
     const mounted = mountSelectedBuildingsVisual(city, model, [1, 2], colourMode);
     expect(mounted).not.toBeNull();
-    expect(mounted!.overlayOpacity).toBeCloseTo(0.5, 2);
 
-    const meshes = mounted!.overlay.children.filter((child) => child instanceof THREE.Mesh);
     const dashedLines = mounted!.overlay.children.filter(
-      (child) => child instanceof THREE.LineSegments && child.material instanceof THREE.LineDashedMaterial,
+      (child) => child instanceof LineSegments2 && child.material instanceof LineMaterial,
     );
-    expect(meshes).toHaveLength(2);
-    expect(dashedLines).toHaveLength(2);
-
-    const merged = mergedBuildingMesh(city)!;
-    const byGroup = merged.userData.buildingIdByGroup as number[];
-    for (let index = 0; index < merged.geometry.groups.length; index++) {
-      if (byGroup[index] === 1 || byGroup[index] === 2) {
-        expect(merged.geometry.groups[index]!.count).toBe(0);
-      }
-    }
+    expect(dashedLines.length).toBeGreaterThan(0);
+    expect(
+      dashedLines.every((line) => line instanceof LineSegments2 && (line.material as LineMaterial).dashed),
+    ).toBe(true);
 
     mounted!.restore();
-    for (let index = 0; index < merged.geometry.groups.length; index++) {
-      if (byGroup[index] === 1 || byGroup[index] === 2) {
-        expect(merged.geometry.groups[index]!.count).toBeGreaterThan(0);
-      }
-    }
     disposeObject(city);
   });
 });

@@ -214,7 +214,8 @@ describe("Display panel controls by view tab", () => {
     expect(viewModesSection.compareDocumentPosition(projectionSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(projectionSection.compareDocumentPosition(layersSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    expect(within(viewModesSection).getByLabelText("White card")).toBeTruthy();
+    expect(within(viewModesSection).getByRole("button", { name: "Uniform" })).toBeTruthy();
+    expect(within(viewModesSection).queryByRole("button", { name: "Card" })).toBeNull();
     expect(within(viewModesSection).getByLabelText("Outlines")).toBeTruthy();
 
     expect(within(projectionSection).getByRole("group", { name: "Projection" })).toBeTruthy();
@@ -338,13 +339,13 @@ describe("Display panel controls by view tab", () => {
 
     const hex = (six: string) => `${String.fromCharCode(35)}${six}`;
 
-    const whiteCardCheckbox = within(viewModesSection).getByLabelText("White card") as HTMLInputElement;
+    const uniformStyleBtn = within(viewModesSection).getByRole("button", { name: "Uniform" });
+    expect(uniformStyleBtn.getAttribute("aria-pressed")).toBe("true");
+    expect(within(viewModesSection).queryByRole("button", { name: "Card" })).toBeNull();
     const treesCheckbox = within(layersSection).getByLabelText("Trees") as HTMLInputElement;
     const contoursCheckbox = within(layersSection).getByLabelText("Contours") as HTMLInputElement;
-    await user.click(whiteCardCheckbox);
     await user.click(treesCheckbox);
     await user.click(contoursCheckbox);
-    expect(whiteCardCheckbox.checked).toBe(true);
     expect(treesCheckbox.checked).toBe(false);
     expect(contoursCheckbox.checked).toBe(false);
 
@@ -359,7 +360,7 @@ describe("Display panel controls by view tab", () => {
       target: { value: hex("d48855") },
     });
     expect(getColour("--use-residential").toLowerCase()).toBe(hex("d48855"));
-    expect(whiteCardCheckbox.checked).toBe(false);
+    expect(uniformStyleBtn.getAttribute("aria-pressed")).toBe("false");
 
     fireEvent.change(within(colorsSection).getByLabelText("Roads colour"), {
       target: { value: hex("556677") },

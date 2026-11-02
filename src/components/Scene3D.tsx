@@ -94,11 +94,6 @@ import type { ProjectionMode } from "../lib/viewMemory";
 import { isLayer3dVisible, treesVisibleIn3d, type View3dDisplaySettings } from "../lib/view3dDisplay";
 import { buildContourLineObject } from "../lib/contourLines3d";
 import {
-  applyWhiteCardTint,
-  snapshotWhiteCardColors,
-  whiteCardViewportLighting,
-} from "../lib/whiteCardViewport";
-import {
   DEFAULT_PERSPECTIVE_OFFSET,
   heliodonSceneBounds,
   perspectiveFitDistance,
@@ -565,6 +560,14 @@ function ScenePointLayer({ onScenePoint }: { onScenePoint: (east: number, north:
   return null;
 }
 
+function BuildingSelectionDemandSync({ active }: { active: boolean }) {
+  const invalidate = useThree((state) => state.invalidate);
+  useFrame(() => {
+    if (active) invalidate();
+  });
+  return null;
+}
+
 function HeightEditOverlayLayer({
   model,
   buildingIds,
@@ -576,43 +579,61 @@ function HeightEditOverlayLayer({
   cityRoot: THREE.Object3D;
   colourMode: BuildingColourMode;
 }) {
-  const [overlay, setOverlay] = useState<THREE.Group | null>(null);
+  const [mounted, setMounted] = useState<{
+    overlay: THREE.Group;
+    lineMaterials: import("three/examples/jsm/lines/LineMaterial.js").LineMaterial[];
+  } | null>(null);
   const invalidate = useThree((state) => state.invalidate);
+  const size = useThree((state) => state.size);
   useLayoutEffect(() => {
     if (buildingIds.length === 0) {
-      setOverlay(null);
+      setMounted(null);
       if (typeof window !== "undefined") delete window.__citycutQaSelectionAudit;
       invalidate();
       return;
     }
-    const mounted = mountSelectedBuildingsVisual(cityRoot, model, buildingIds, colourMode);
-    if (!mounted) {
-      setOverlay(null);
+    const next = mountSelectedBuildingsVisual(cityRoot, model, buildingIds, colourMode);
+    if (!next) {
+      setMounted(null);
       if (typeof window !== "undefined") delete window.__citycutQaSelectionAudit;
+      invalidate();
       return;
     }
-    setOverlay(mounted.overlay);
+    setMounted({ overlay: next.overlay, lineMaterials: next.lineMaterials });
     invalidate();
     if (typeof window !== "undefined" && qaModeFromSearch(window.location.search)) {
       const publishAudit = () => {
-        window.__citycutQaSelectionAudit = auditBuildingSelection(cityRoot, buildingIds, mounted.overlay);
+        window.__citycutQaSelectionAudit = auditBuildingSelection(cityRoot, buildingIds, next.overlay);
         console.info("[CityCut selection]", window.__citycutQaSelectionAudit);
       };
       publishAudit();
       const frame = window.requestAnimationFrame(publishAudit);
       return () => {
         window.cancelAnimationFrame(frame);
-        mounted.restore();
-        setOverlay(null);
+        next.restore();
+        setMounted(null);
         delete window.__citycutQaSelectionAudit;
       };
     }
     return () => {
-      mounted.restore();
-      setOverlay(null);
+      next.restore();
+      setMounted(null);
     };
   }, [buildingIds, cityRoot, colourMode, model, invalidate]);
-  return overlay ? <primitive object={overlay} /> : null;
+  useEffect(() => {
+    if (!mounted) return;
+    for (const material of mounted.lineMaterials) {
+      material.resolution.set(size.width, size.height);
+    }
+    invalidate();
+  }, [mounted, size.width, size.height, invalidate]);
+  if (!mounted) return null;
+  return (
+    <>
+      <BuildingSelectionDemandSync active />
+      <primitive object={mounted.overlay} />
+    </>
+  );
 }
 
 function WalkRippleBuildingBinder({
@@ -1069,12 +1090,10 @@ function City({
     refreshSceneSurfaceColors(group);
     snapshotBuildingViewportColors(group, colourMode);
     snapshotSunStudySurfaceColors(group);
-    snapshotWhiteCardColors(group, colourMode);
     applySunStudySurfaceTint(group, false);
     applyBuildingSolarNeutral(group, false, solarNeutralFill);
-    applyWhiteCardTint(group, display.whiteCard);
     invalidate();
-  }, [group, colourMode, solarDiagramOn, solarNeutralFill, colourTick, display.whiteCard, invalidate]);
+  }, [group, colourMode, solarDiagramOn, solarNeutralFill, colourTick, invalidate]);
   const buildingsVisible = isLayer3dVisible(display, "buildings");
   const roadsVisible = isLayer3dVisible(display, "roads");
   const footpathsVisible = isLayer3dVisible(display, "footpaths");
@@ -2368,13 +2387,12 @@ export function Scene3D({
     setGlEpoch((value) => value + 1);
   }, []);
   const viewportLight = sunStudyViewportLighting({
-    showPath: solar.showPath && !display.whiteCard,
+    showPath: solar.showPath,
     castShadows: solar.castShadows,
   });
-  const cardLight = whiteCardViewportLighting(display.whiteCard);
-  const fillKeyLight = display.whiteCard ? cardLight.fillKeyLight : viewportLight.fillKeyLight;
-  const fillAmbient = display.whiteCard ? cardLight.fillAmbient : viewportLight.fillAmbient;
-  const fillHemi = display.whiteCard ? cardLight.fillHemi : viewportLight.fillHemi;
+  const fillKeyLight = viewportLight.fillKeyLight;
+  const fillAmbient = viewportLight.fillAmbient;
+  const fillHemi = viewportLight.fillHemi;
   const { sunIntensity, noToneMapping } = viewportLight;
   const heliodonRadius = heliodonRadiusM(model.sideM, solar.radiusFactor);
   const shadowTargetY = groundY;

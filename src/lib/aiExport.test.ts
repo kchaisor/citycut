@@ -411,7 +411,6 @@ describe("Illustrator 3D view", () => {
       await viewAi(withTerrain, shot, {
         uniformBuildings: false,
         colourBySource: false,
-        whiteCard: true,
         showOutlines: false,
         showContours: true,
         hideTrees: true,

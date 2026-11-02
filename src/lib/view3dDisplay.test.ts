@@ -38,7 +38,6 @@ describe("view3d display defaults and persistence", () => {
     };
     let saved: View3dDisplaySettings = {
       ...DEFAULT_VIEW3D_DISPLAY,
-      whiteCard: true,
       showContours3d: false,
       hideTrees: true,
       layersVisible: {
@@ -70,7 +69,6 @@ describe("view3d display defaults and persistence", () => {
       },
     };
     writeStoredView3dDisplay(storage, {
-      whiteCard: true,
       showOutlines: false,
       showContours3d: false,
       hideTrees: true,
@@ -84,7 +82,6 @@ describe("view3d display defaults and persistence", () => {
       },
     });
     const opened = view3dDisplayForModelOpen(storage);
-    expect(opened.whiteCard).toBe(true);
     expect(opened.showOutlines).toBe(false);
     for (const id of LAYER_3D_IDS) {
       expect(isLayer3dVisible(opened, id)).toBe(true);

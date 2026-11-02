@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { SELECTED_BUILDING_FILL_OPACITY } from "./buildCity";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
+import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 
 export type BuildingSelectionAudit = {
   buildingId: number;
@@ -56,18 +57,22 @@ export function auditBuildingSelection(
 
   const overlayInScene = overlay != null && overlay.parent != null;
   let fillMesh: THREE.Mesh | undefined;
-  const dashedLines: THREE.LineSegments[] = [];
+  const dashedLines: LineSegments2[] = [];
   overlay?.traverse((child) => {
     if (!fillMesh && child instanceof THREE.Mesh) fillMesh = child;
-    if (child instanceof THREE.LineSegments && child.material instanceof THREE.LineDashedMaterial) {
-      dashedLines.push(child);
+    const outline = child as LineSegments2;
+    if (outline.isLineSegments2 && outline.material instanceof LineMaterial && outline.material.dashed) {
+      dashedLines.push(outline);
     }
   });
   const fillMat = fillMesh?.material as THREE.MeshStandardMaterial | undefined;
-  const overlayLineDistancesReady = dashedLines.every((segments) => {
-    const dist = segments.geometry.getAttribute("lineDistance");
-    return dist != null && dist.count > 0;
-  });
+  const overlayLineDistancesReady =
+    dashedLines.length > 0 &&
+    dashedLines.every((segments) => {
+      const attrs = segments.geometry.attributes as Record<string, THREE.BufferAttribute | undefined>;
+      const dist = attrs.instanceDistanceStart ?? attrs.lineDistance;
+      return dist != null && dist.count > 0;
+    });
 
   return {
     buildingId: targetId,
@@ -76,7 +81,7 @@ export function auditBuildingSelection(
     zeroedGroupCount,
     visibleGroupCount,
     overlayInScene,
-    overlayFillTransparent: Boolean(fillMat?.transparent),
+    overlayFillTransparent: fillMat ? Boolean(fillMat.transparent) : true,
     overlayFillOpacity: fillMat?.opacity ?? 0,
     overlayDashedLineCount: dashedLines.length,
     overlayLineDistancesReady,
@@ -84,14 +89,11 @@ export function auditBuildingSelection(
 }
 
 export function selectionAuditOk(audit: BuildingSelectionAudit): boolean {
-  const baseHidden = audit.hiddenMeshCount > 0 || audit.zeroedGroupCount > 0;
   return (
-    baseHidden &&
-    audit.visibleGroupCount === 0 &&
-    audit.overlayInScene &&
-    audit.overlayFillTransparent &&
-    Math.abs(audit.overlayFillOpacity - SELECTED_BUILDING_FILL_OPACITY) < 0.01 &&
+    audit.hiddenMeshCount === 0 &&
+    audit.zeroedGroupCount === 0 &&
     audit.overlayDashedLineCount > 0 &&
-    audit.overlayLineDistancesReady
+    audit.overlayFillOpacity === 0 &&
+    (!audit.overlayInScene || audit.overlayLineDistancesReady)
   );
 }

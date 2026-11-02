@@ -47,7 +47,6 @@ await context.addInitScript(() => {
       "citycut.view",
       JSON.stringify({ projection: "perspective", corner: "sw", freeRotate: false }),
     );
-    window.localStorage.setItem("citycut.view3d.whiteCard", "1");
   } catch {
     // ignore
   }
