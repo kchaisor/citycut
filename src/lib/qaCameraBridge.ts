@@ -57,6 +57,15 @@ declare global {
       } | null;
       pickForegroundBuildingForSelectionQa?: () => number | null;
       frameSelectionBuilding?: (buildingId: number, variant?: "through" | "oblique") => boolean;
+      frameHoverHighlightCaptureBuilding?: (buildingId: number, tightness?: number) => boolean;
+      measureHoverCaptureFill?: (buildingId: number) => {
+        fill: number;
+        cx: number;
+        cy: number;
+        clip: { x: number; y: number; width: number; height: number };
+        onScreen: boolean;
+        click: { clickX: number; clickY: number } | null;
+      } | null;
       pickTallTowerForSelectionQa?: () => number | null;
       frameAerialSelectionBuilding?: (buildingId: number) => boolean;
       clearHeightSelection?: () => void;

@@ -877,6 +877,46 @@ export function ModelPage({
         }
         return true;
       },
+      frameHoverHighlightCaptureBuilding(buildingId: number, tightness = 1) {
+        const row = window.__citycutQaModel?.listBuildings?.().find((item) => item.id === buildingId);
+        if (!row || !window.__citycutQa?.setCamera) return false;
+        const y = row.height * 0.45;
+        const z = -row.north;
+        const t = Math.max(0.22, Math.min(1.2, tightness));
+        window.__citycutQa.setCamera({
+          eye: { x: row.east - 95 * t, y: y + 58 * t, z: z + 105 * t },
+          target: { x: row.east + 8, y: y, z: z },
+        });
+        return true;
+      },
+      measureHoverCaptureFill(buildingId: number) {
+        const canvas = document.querySelector(".model canvas");
+        if (!(canvas instanceof HTMLCanvasElement)) return null;
+        const canvasRect = canvas.getBoundingClientRect();
+        const clip = window.__citycutQaModel?.selectionScreenClip?.(buildingId, 8);
+        if (!clip || clip.width < 24 || clip.height < 24) return null;
+        const cx = clip.x + clip.width / 2;
+        const cy = clip.y + clip.height / 2;
+        const canvasArea = canvasRect.width * canvasRect.height;
+        const fill = (clip.width * clip.height) / Math.max(1, canvasArea);
+        const onScreen =
+          clip.x + clip.width > canvasRect.left + 12 &&
+          clip.x < canvasRect.right - 12 &&
+          clip.y + clip.height > canvasRect.top + 12 &&
+          clip.y < canvasRect.bottom - 12 &&
+          cx >= canvasRect.left + 48 &&
+          cx <= canvasRect.right - 48 &&
+          cy >= canvasRect.top + 48 &&
+          cy <= canvasRect.bottom - 48;
+        return {
+          fill,
+          cx,
+          cy,
+          clip,
+          onScreen,
+          click: window.__citycutQaModel?.resolveLensBuildingClick?.(buildingId) ?? null,
+        };
+      },
       selectionScreenClip(buildingId: number, padPx = 48) {
         const building = qaDisplayBuildingsRef.current.find((item) => item.id === buildingId);
         const project = window.__citycutQa?.projectToScreen;

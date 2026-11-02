@@ -41,7 +41,8 @@ export function pickBuildingIdAtClientFromClips(
   }
   if (candidate == null) return null;
   const verified = pickBuildingIdAtClient(canvas, camera, root, clientX, clientY);
-  return verified === candidate ? verified : verified;
+  if (verified != null) return verified;
+  return candidate;
 }
 
 export function pickBuildingHoverAtClient(

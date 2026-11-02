@@ -493,6 +493,14 @@ function BuildingHoverPickLayer({
   return null;
 }
 
+function BuildingHoverHighlightDemandSync({ active }: { active: boolean }) {
+  const invalidate = useThree((state) => state.invalidate);
+  useFrame(() => {
+    if (active) invalidate();
+  });
+  return null;
+}
+
 function BuildingHoverHighlightLayer({
   model,
   hoverBuildingId,
@@ -533,8 +541,16 @@ function BuildingHoverHighlightLayer({
   ]);
   useLayoutEffect(() => () => disposeBuildingHoverHighlightSlot(slotRef.current), []);
   const slot = slotRef.current;
-  if (!slot.group.visible) return null;
-  return <primitive object={slot.group} />;
+  const hoverActive =
+    enabled &&
+    hoverBuildingId != null &&
+    (pinnedBuildingId == null || pinnedBuildingId !== hoverBuildingId);
+  return (
+    <>
+      {hoverActive ? <BuildingHoverHighlightDemandSync active /> : null}
+      {slot.group.visible ? <primitive object={slot.group} /> : null}
+    </>
+  );
 }
 
 function ScenePointLayer({ onScenePoint }: { onScenePoint: (east: number, north: number, up: number) => void }) {
