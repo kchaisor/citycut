@@ -96,6 +96,11 @@ import { buildDataSources, countLoaded, dataSourceStatusWord } from "../lib/data
 import { OSM_TREES_ODBL_CREDIT } from "../lib/treesPrebake";
 import { countTreeCrowns } from "../lib/treeMassing";
 import { capturePresetFromSearch } from "../lib/captureQuery";
+import {
+  countAccentYellowNearClient,
+  maxYellowScoreNearClient,
+  readCanvasPixelAtClient,
+} from "../lib/buildingHoverHighlightQa";
 import { qaHideHeightPopoverFromSearch, qaModeFromSearch } from "../lib/qaCameraBridge";
 import {
   resolveView,
@@ -695,11 +700,41 @@ export function ModelPage({
             ) {
               continue;
             }
-            if (pickAt && pickAt(clickX, clickY) !== buildingId) continue;
+            if (pickAt) {
+              const picked = pickAt(clickX, clickY);
+              if (picked != null && picked !== buildingId) continue;
+            }
+            const top = document.elementFromPoint(clickX, clickY);
+            if (!(top instanceof HTMLCanvasElement)) continue;
             return { clickX, clickY };
           }
         }
         return null;
+      },
+      readCanvasPixelAtClient(clientX: number, clientY: number) {
+        const canvas = document.querySelector(".model canvas");
+        if (!(canvas instanceof HTMLCanvasElement)) return null;
+        return readCanvasPixelAtClient(canvas, clientX, clientY);
+      },
+      countHoverAccentYellowNearClient(clientX: number, clientY: number, radiusPx = 28) {
+        const canvas = document.querySelector(".model canvas");
+        if (!(canvas instanceof HTMLCanvasElement)) return 0;
+        return countAccentYellowNearClient(canvas, clientX, clientY, radiusPx);
+      },
+      maxHoverYellowScoreNearClient(clientX: number, clientY: number, radiusPx = 28) {
+        const canvas = document.querySelector(".model canvas");
+        if (!(canvas instanceof HTMLCanvasElement)) return 0;
+        return maxYellowScoreNearClient(canvas, clientX, clientY, radiusPx);
+      },
+      setBuildingHoverHighlightForQa(buildingId: number | null) {
+        window.dispatchEvent(
+          new CustomEvent("citycut:qa-set-hover-highlight", { detail: { buildingId } }),
+        );
+        const canvas = document.querySelector(".model canvas");
+        if (canvas instanceof HTMLCanvasElement) {
+          canvas.dataset.buildingHoverHighlightId = buildingId != null ? String(buildingId) : "";
+        }
+        return buildingId;
       },
       findTallBuildingForLensQa() {
         setHeightPick(null);

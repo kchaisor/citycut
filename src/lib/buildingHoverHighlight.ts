@@ -62,7 +62,10 @@ export function createBuildingHoverHighlightSlot(): BuildingHoverHighlightSlot {
     depthWrite: false,
   });
   fillMaterial.depthTest = true;
-  fillMaterial.depthWrite = true;
+  fillMaterial.depthWrite = false;
+  fillMaterial.polygonOffset = true;
+  fillMaterial.polygonOffsetFactor = -1;
+  fillMaterial.polygonOffsetUnits = -1;
   const edgeMaterial = new THREE.LineBasicMaterial({
     color: themeColor("--anchored-lens-edge", getColour("--site-building")),
     transparent: true,
@@ -79,7 +82,6 @@ function fillForBuilding(colourMode: BuildingColourMode, building: CityModel["bu
 }
 
 function geometriesForBuilding(model: CityModel, building: CityModel["buildings"][number]): THREE.BufferGeometry[] {
-  if (building.meshDrawnBy != null) return [];
   const base =
     (model.terrain ? footprintBase(model.terrain, building.ring, model.sideM) : 0) + SURFACE.building.lift;
   const parts =
@@ -112,7 +114,7 @@ export function syncBuildingHoverHighlightSlot(
   buildingId: number | null,
   pinnedBuildingId: number | null,
   colourMode: BuildingColourMode,
-  accentFill = themeColor("--building-hover-accent", getColour("--accent")),
+  accentFill = themeColor("--building-hover-accent", getColour("--walk-ripple-accent")),
 ): void {
   const edgeAccent = themeColor("--anchored-lens-edge", getColour("--site-building"));
   slot.edgeMaterial.color.setStyle(edgeAccent);

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import * as THREE from "three";
 import {
   applyHoverHighlightPick,
   mixBuildingHoverFill,
@@ -40,10 +41,9 @@ describe("resolveHoverHighlightBuildingId", () => {
 describe("mixBuildingHoverFill", () => {
   it("mixes most of the accent over a light building fill", () => {
     const mixed = mixBuildingHoverFill("#ffffff", "#fff500");
-    const color = mixed.toLowerCase();
-    expect(color).not.toBe("#ffffff");
-    expect(parseInt(color.slice(3, 5), 16)).toBeGreaterThan(240);
-    expect(parseInt(color.slice(5, 7), 16)).toBeGreaterThan(230);
-    expect(parseInt(color.slice(7, 9), 16)).toBeLessThan(40);
+    const rgb = new THREE.Color(mixed);
+    expect(rgb.r).toBeGreaterThan(0.92);
+    expect(rgb.g).toBeGreaterThan(0.88);
+    expect(rgb.b).toBeLessThan(0.15);
   });
 });

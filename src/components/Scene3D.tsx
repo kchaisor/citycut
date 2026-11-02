@@ -368,6 +368,10 @@ function BuildingHoverPickLayer({
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
   const invalidate = useThree((state) => state.invalidate);
+  const cameraRef = useRef(camera);
+  cameraRef.current = camera;
+  const rootRef = useRef(root);
+  rootRef.current = root;
   const pointer = useRef({ x: Number.NaN, y: Number.NaN, dirty: false });
   const lastId = useRef<number | null>(null);
 
@@ -379,14 +383,71 @@ function BuildingHoverPickLayer({
     [invalidate, onHoverHighlight],
   );
 
+  const applyHoverPickAt = useCallback(
+    (clientX: number, clientY: number) => {
+      const canvas = gl.domElement;
+      if (!enabled) return;
+      if (hoverPickBlocked(gate)) {
+        if (lastId.current !== null) {
+          lastId.current = null;
+          canvas.style.cursor = "";
+          canvas.dataset.buildingHoverHighlightId = "";
+          emitHoverHighlight(null);
+        }
+        return;
+      }
+      if (!Number.isFinite(clientX)) {
+        if (lastId.current !== null) {
+          lastId.current = null;
+          canvas.style.cursor = "";
+          canvas.dataset.buildingHoverHighlightId = "";
+          emitHoverHighlight(null);
+        }
+        return;
+      }
+      const clipLookup =
+        typeof window !== "undefined" && qaModeFromSearch(window.location.search)
+          ? (buildingId: number) => window.__citycutQaModel?.selectionScreenClip?.(buildingId, 10) ?? null
+          : undefined;
+      const ids =
+        clipLookup && typeof window !== "undefined"
+          ? (window.__citycutQaModel?.listBuildings?.().map((row) => row.id) ?? [])
+          : undefined;
+      const id = pickBuildingHoverAtClient(
+        canvas,
+        cameraRef.current,
+        rootRef.current,
+        clientX,
+        clientY,
+        clipLookup,
+        ids,
+      );
+      const nextDataset = id != null ? String(id) : "";
+      canvas.style.cursor = id != null ? "pointer" : "";
+      if (id === lastId.current) {
+        if (canvas.dataset.buildingHoverHighlightId !== nextDataset) {
+          canvas.dataset.buildingHoverHighlightId = nextDataset;
+        }
+        invalidate();
+        return;
+      }
+      lastId.current = id;
+      canvas.dataset.buildingHoverHighlightId = nextDataset;
+      emitHoverHighlight(id);
+    },
+    [emitHoverHighlight, enabled, gate, gl.domElement, invalidate],
+  );
+
   useEffect(() => {
     if (!enabled) return;
     const canvas = gl.domElement;
     const onMove = (event: PointerEvent) => {
       pointer.current = { x: event.clientX, y: event.clientY, dirty: true };
+      applyHoverPickAt(event.clientX, event.clientY);
     };
     const onLeave = () => {
       pointer.current = { x: Number.NaN, y: Number.NaN, dirty: true };
+      applyHoverPickAt(Number.NaN, Number.NaN);
     };
     const onDown = (event: PointerEvent) => {
       if (event.button === 0) {
@@ -402,63 +463,22 @@ function BuildingHoverPickLayer({
     const onUp = (event: PointerEvent) => {
       if (event.button === 0) gate.pointerDown = false;
     };
-    canvas.addEventListener("pointermove", onMove);
-    canvas.addEventListener("pointerleave", onLeave);
-    canvas.addEventListener("pointerdown", onDown);
-    canvas.addEventListener("pointerup", onUp);
+    canvas.addEventListener("pointermove", onMove, true);
+    canvas.addEventListener("pointerleave", onLeave, true);
+    canvas.addEventListener("pointerdown", onDown, true);
+    canvas.addEventListener("pointerup", onUp, true);
     return () => {
-      canvas.removeEventListener("pointermove", onMove);
-      canvas.removeEventListener("pointerleave", onLeave);
-      canvas.removeEventListener("pointerdown", onDown);
-      canvas.removeEventListener("pointerup", onUp);
+      canvas.removeEventListener("pointermove", onMove, true);
+      canvas.removeEventListener("pointerleave", onLeave, true);
+      canvas.removeEventListener("pointerdown", onDown, true);
+      canvas.removeEventListener("pointerup", onUp, true);
     };
-  }, [enabled, emitHoverHighlight, gate, gl.domElement]);
+  }, [applyHoverPickAt, enabled, emitHoverHighlight, gate, gl.domElement]);
 
   useFrame(() => {
-    if (!enabled) return;
-    const canvas = gl.domElement;
-    if (hoverPickBlocked(gate)) {
-      if (lastId.current !== null) {
-        lastId.current = null;
-        canvas.style.cursor = "";
-        canvas.dataset.buildingHoverHighlightId = "";
-        emitHoverHighlight(null);
-      }
-      pointer.current.dirty = false;
-      return;
-    }
-    if (!pointer.current.dirty) return;
+    if (!enabled || !pointer.current.dirty) return;
     pointer.current.dirty = false;
-    const { x, y } = pointer.current;
-    if (!Number.isFinite(x)) {
-      if (lastId.current !== null) {
-        lastId.current = null;
-        canvas.style.cursor = "";
-        canvas.dataset.buildingHoverHighlightId = "";
-        emitHoverHighlight(null);
-      }
-      return;
-    }
-    const clipLookup =
-      typeof window !== "undefined" && qaModeFromSearch(window.location.search)
-        ? (buildingId: number) => window.__citycutQaModel?.selectionScreenClip?.(buildingId, 10) ?? null
-        : undefined;
-    const ids =
-      clipLookup && typeof window !== "undefined"
-        ? (window.__citycutQaModel?.listBuildings?.().map((row) => row.id) ?? [])
-        : undefined;
-    const id = pickBuildingHoverAtClient(canvas, camera, root, x, y, clipLookup, ids);
-    const nextDataset = id != null ? String(id) : "";
-    canvas.style.cursor = id != null ? "pointer" : "";
-    if (id === lastId.current) {
-      if (canvas.dataset.buildingHoverHighlightId !== nextDataset) {
-        canvas.dataset.buildingHoverHighlightId = nextDataset;
-      }
-      return;
-    }
-    lastId.current = id;
-    canvas.dataset.buildingHoverHighlightId = nextDataset;
-    emitHoverHighlight(id);
+    applyHoverPickAt(pointer.current.x, pointer.current.y);
   });
 
   useEffect(() => {
@@ -682,6 +702,15 @@ function City({
     },
     [onHoverHighlightBuildingId],
   );
+  useEffect(() => {
+    if (typeof window === "undefined" || !qaModeFromSearch(window.location.search)) return;
+    const onQaHover = (event: Event) => {
+      const buildingId = (event as CustomEvent<{ buildingId: number | null }>).detail.buildingId;
+      onHoverHighlight(buildingId ?? null);
+    };
+    window.addEventListener("citycut:qa-set-hover-highlight", onQaHover);
+    return () => window.removeEventListener("citycut:qa-set-hover-highlight", onQaHover);
+  }, [onHoverHighlight]);
   const colourTick = useColourRevision();
   const colourMode = useMemo<BuildingColourMode>(
     () => ({
@@ -2050,7 +2079,7 @@ export function Cameras({
             lat={lat}
             lon={lon}
             fitId={snapId}
-            active={!orthoView}
+            active={!orthoView && !qaMode}
             touchedRef={touchedRef}
             fittedKey={perspFitKey}
             introEnabled={introEnabled}

@@ -44,6 +44,10 @@ declare global {
         dist: number;
       } | null;
       resolveLensBuildingClick?: (buildingId: number) => { clickX: number; clickY: number } | null;
+      readCanvasPixelAtClient?: (clientX: number, clientY: number) => { r: number; g: number; b: number } | null;
+      countHoverAccentYellowNearClient?: (clientX: number, clientY: number, radiusPx?: number) => number;
+      maxHoverYellowScoreNearClient?: (clientX: number, clientY: number, radiusPx?: number) => number;
+      setBuildingHoverHighlightForQa?: (buildingId: number | null) => number | null;
       getAnchoredLensMode?: () => "hover" | "pinned" | null;
       getBuildingHoverHighlightId?: () => number | null;
       isBuildingHoverHighlightVisible?: () => boolean;

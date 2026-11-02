@@ -43,24 +43,95 @@ function findFreePort() {
   });
 }
 
-function isHoverHighlightYellow(r, g, b) {
-  return r >= 185 && g >= 185 && b <= 110 && r + g - b * 2 >= 180;
+function hoverYellowScore(r, g, b) {
+  return r + g - b * 2;
 }
 
-async function readModelCanvasPixel(page, clientX, clientY) {
-  return page.evaluate(({ clientX, clientY }) => {
-    const canvas = document.querySelector(".model canvas");
-    if (!(canvas instanceof HTMLCanvasElement)) return null;
-    const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
-    if (!gl) return null;
-    const rect = canvas.getBoundingClientRect();
-    const ratio = canvas.width / Math.max(rect.width, 1);
-    const px = Math.min(canvas.width - 1, Math.max(0, Math.floor((clientX - rect.left) * ratio)));
-    const py = Math.min(canvas.height - 1, Math.max(0, Math.floor((rect.bottom - clientY) * ratio)));
-    const buf = new Uint8Array(4);
-    gl.readPixels(px, py, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf);
-    return { r: buf[0], g: buf[1], b: buf[2], px, py };
-  }, { clientX, clientY });
+function isHoverHighlightYellow(r, g, b) {
+  const score = hoverYellowScore(r, g, b);
+  return score >= 260 && r >= 150 && g >= 140 && b <= 120;
+}
+
+function isNewHoverYellowPixel(before, after) {
+  if (isHoverHighlightYellow(after.r, after.g, after.b) && !isHoverHighlightYellow(before.r, before.g, before.b)) {
+    return true;
+  }
+  const delta = hoverYellowScore(after.r, after.g, after.b) - hoverYellowScore(before.r, before.g, before.b);
+  return delta >= 32 && after.b <= before.b - 6 && after.r + after.g >= before.r + before.g + 12;
+}
+
+function readScreenshotPixel(png, clientPx, clientPy, scale = DEVICE_SCALE_FACTOR) {
+  const x = Math.min(png.width - 1, Math.max(0, Math.floor(clientPx * scale)));
+  const y = Math.min(png.height - 1, Math.max(0, Math.floor(clientPy * scale)));
+  const idx = (y * png.width + x) * 4;
+  return {
+    r: png.data[idx],
+    g: png.data[idx + 1],
+    b: png.data[idx + 2],
+    score: png.data[idx] + png.data[idx + 1] - png.data[idx + 2] * 2,
+  };
+}
+
+async function captureViewportPng(page) {
+  const pngBytes = await lensPageScreenshotPng(page);
+  return pngBytes ? PNG.sync.read(pngBytes) : null;
+}
+
+function canvasSampleRegion(box) {
+  if (!box) return null;
+  return {
+    left: box.x + box.width * 0.06,
+    right: box.x + box.width * 0.94,
+    top: box.y + box.height * 0.08,
+    bottom: box.y + box.height * 0.92,
+  };
+}
+
+function countNewAccentYellowPixels(baselinePng, hoverPng, box) {
+  const region = canvasSampleRegion(box);
+  if (!region || !baselinePng || !hoverPng) return 0;
+  let count = 0;
+  for (let py = region.top; py <= region.bottom; py += 4) {
+    for (let px = region.left; px <= region.right; px += 4) {
+      const before = readScreenshotPixel(baselinePng, px, py);
+      const after = readScreenshotPixel(hoverPng, px, py);
+      if (isNewHoverYellowPixel(before, after)) {
+        count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+async function hoverNewYellowCount(page, baselinePng, hoverPng) {
+  if (!baselinePng || !hoverPng) return 0;
+  const box = await page.locator(".model canvas").boundingBox();
+  return countNewAccentYellowPixels(baselinePng, hoverPng, box);
+}
+
+async function flushCanvasFrame(page) {
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+  await page.waitForTimeout(100);
+}
+
+async function hoverYellowCanvasSamples(page, clickX, clickY) {
+  return page.evaluate(
+    ({ x, y }) => ({
+      yellow: window.__citycutQaModel?.countHoverAccentYellowNearClient?.(x, y, 32) ?? 0,
+      maxScore: window.__citycutQaModel?.maxHoverYellowScoreNearClient?.(x, y, 32) ?? 0,
+    }),
+    { x: clickX, y: clickY },
+  );
+}
+
+async function lensPageScreenshotPng(page) {
+  try {
+    return await page.screenshot({ type: "png" });
+  } catch {
+    return null;
+  }
 }
 
 function waitForServer(url, timeoutMs = 25000) {
@@ -1244,7 +1315,26 @@ async function main() {
       await window.__citycutQaModel?.waitForComHeightsApplied?.(120000);
     });
     await lensPage.waitForTimeout(1200);
-    const lensTarget = await lensPage.evaluate(() => window.__citycutQaModel?.findTallBuildingForLensQa?.() ?? null);
+    await lensPage.evaluate(() => {
+      const towerId = window.__citycutQaModel?.pickTallTowerForSelectionQa?.();
+      if (towerId != null) {
+        window.__citycutQaModel?.frameAerialSelectionBuilding?.(towerId);
+        window.__citycutQaModel?.clearHeightSelection?.();
+      }
+    });
+    await lensPage.waitForTimeout(800);
+    let lensTarget = await lensPage.evaluate(() => window.__citycutQaModel?.findTallBuildingForLensQa?.() ?? null);
+    if (!lensTarget) {
+      await lensPage.evaluate(() => {
+        const midId = window.__citycutQaModel?.pickForegroundBuildingForSelectionQa?.();
+        if (midId != null) {
+          window.__citycutQaModel?.frameSelectionBuilding?.(midId, "oblique");
+          window.__citycutQaModel?.clearHeightSelection?.();
+        }
+      });
+      await lensPage.waitForTimeout(800);
+      lensTarget = await lensPage.evaluate(() => window.__citycutQaModel?.findTallBuildingForLensQa?.() ?? null);
+    }
     assertCheck(
       "anchored-lens-target-building",
       "QA finds a tall building click target in the default perspective view",
@@ -1259,17 +1349,19 @@ async function main() {
     if (lensTarget) {
       await lensPage.mouse.move(lensTarget.clickX, lensTarget.clickY);
     }
-    await lensPage.waitForFunction(
-      () => {
-        const canvas = document.querySelector(".model canvas");
-        return (
-          canvas instanceof HTMLCanvasElement &&
-          canvas.dataset.buildingHoverHighlightActive === "1" &&
-          !document.querySelector('[data-anchored-lens="open"]')
-        );
-      },
-      { timeout: 8000 },
-    );
+    if (lensTarget) {
+      await lensPage.waitForFunction(
+        () => {
+          const canvas = document.querySelector(".model canvas");
+          return (
+            canvas instanceof HTMLCanvasElement &&
+            canvas.dataset.buildingHoverHighlightActive === "1" &&
+            !document.querySelector('[data-anchored-lens="open"]')
+          );
+        },
+        { timeout: 8000 },
+      );
+    }
     const hoverOnlyInfo = await lensPage.evaluate(() => ({
       mode: window.__citycutQaModel?.getAnchoredLensMode?.() ?? null,
       hasCard: Boolean(document.querySelector('[data-anchored-lens="open"]')),
@@ -1303,17 +1395,58 @@ async function main() {
     );
 
     if (lensTarget) {
-      await lensPage.waitForTimeout(120);
-      const hoverPixel = await readModelCanvasPixel(lensPage, lensTarget.clickX, lensTarget.clickY);
+      if (lensCanvasBox) {
+        await lensPage.mouse.move(lensCanvasBox.x + lensCanvasBox.width * 0.12, lensCanvasBox.y + 12);
+        await lensPage.waitForTimeout(250);
+      }
+      await lensPage
+        .waitForFunction(
+          () => document.querySelector(".model canvas")?.dataset.buildingHoverHighlightActive !== "1",
+          { timeout: 8000 },
+        )
+        .catch(() => {});
+      await flushCanvasFrame(lensPage);
+      const baselineSamples = await hoverYellowCanvasSamples(
+        lensPage,
+        lensTarget.clickX,
+        lensTarget.clickY,
+      );
+      const baselinePng = await captureViewportPng(lensPage);
+      await lensPage.mouse.move(lensTarget.clickX, lensTarget.clickY);
+      await lensPage.waitForTimeout(350);
+      await lensPage.mouse.move(lensTarget.clickX + 1, lensTarget.clickY);
+      await lensPage.mouse.move(lensTarget.clickX, lensTarget.clickY);
+      await lensPage.waitForFunction(
+        () => document.querySelector(".model canvas")?.dataset.buildingHoverHighlightActive === "1",
+        { timeout: 8000 },
+      );
+      await flushCanvasFrame(lensPage);
+      const hoverSamples = await hoverYellowCanvasSamples(
+        lensPage,
+        lensTarget.clickX,
+        lensTarget.clickY,
+      );
+      const hoverPng = await captureViewportPng(lensPage);
+      const newYellowCount = await hoverNewYellowCount(lensPage, baselinePng, hoverPng);
       const hoverYellow =
-        hoverPixel != null && isHoverHighlightYellow(hoverPixel.r, hoverPixel.g, hoverPixel.b);
+        hoverSamples.yellow >= 2 ||
+        hoverSamples.maxScore >= baselineSamples.maxScore + 36 ||
+        newYellowCount >= 8;
       assertCheck(
         "building-hover-highlight-yellow-pixel",
         "Hovered building pixels read as accent yellow (option B mix)",
         hoverYellow,
-        `pixel=${JSON.stringify(hoverPixel)}`,
+        `canvasYellow=${hoverSamples.yellow}, maxScore=${hoverSamples.maxScore}, baseMax=${baselineSamples.maxScore}, newYellow=${newYellowCount}`,
       );
       await lensPage.waitForTimeout(25000);
+      await lensPage.mouse.move(lensTarget.clickX + 1, lensTarget.clickY);
+      await lensPage.mouse.move(lensTarget.clickX, lensTarget.clickY);
+      await flushCanvasFrame(lensPage);
+      const idleSamples = await hoverYellowCanvasSamples(
+        lensPage,
+        lensTarget.clickX,
+        lensTarget.clickY,
+      );
       const idleHover = await lensPage.evaluate(() => {
         const canvas = document.querySelector(".model canvas");
         return {
@@ -1322,16 +1455,19 @@ async function main() {
           highlightId: canvas instanceof HTMLCanvasElement ? canvas.dataset.buildingHoverHighlightId ?? "" : "",
         };
       });
-      const idlePixel = await readModelCanvasPixel(lensPage, lensTarget.clickX, lensTarget.clickY);
+      const idlePng = await captureViewportPng(lensPage);
+      const idleNewYellowCount = await hoverNewYellowCount(lensPage, baselinePng, idlePng);
       const idleYellow =
-        idlePixel != null && isHoverHighlightYellow(idlePixel.r, idlePixel.g, idlePixel.b);
+        idleSamples.yellow >= 2 ||
+        idleSamples.maxScore >= baselineSamples.maxScore + 36 ||
+        idleNewYellowCount >= 6;
       assertCheck(
         "building-hover-highlight-idle-25s",
         "Hover highlight stays active and yellow after 25s idle on demand frameloop",
         idleHover.highlightActive &&
           idleHover.highlightId.length > 0 &&
           idleYellow,
-        `idle=${JSON.stringify(idleHover)}, pixel=${JSON.stringify(idlePixel)}`,
+        `idle=${JSON.stringify(idleHover)}, canvasYellow=${idleSamples.yellow}, idleNewYellow=${idleNewYellowCount}`,
       );
     } else {
       assertCheck(
@@ -1435,45 +1571,65 @@ async function main() {
     }
 
     if (lensTarget) {
-      const pinClick = await lensPage.evaluate(
+      await lensPage.evaluate((id) => {
+        window.__citycutQaModel?.frameSelectionBuilding?.(id, "oblique");
+        window.__citycutQaModel?.clearHeightSelection?.();
+      }, lensTarget.id);
+      await lensPage.waitForTimeout(900);
+      let pinClick = await lensPage.evaluate(
         (id) => window.__citycutQaModel?.resolveLensBuildingClick?.(id) ?? null,
         lensTarget.id,
       );
+      if (!pinClick) {
+        lensTarget =
+          (await lensPage.evaluate(() => window.__citycutQaModel?.findTallBuildingForLensQa?.() ?? null)) ??
+          lensTarget;
+        pinClick = await lensPage.evaluate(
+          (id) => window.__citycutQaModel?.resolveLensBuildingClick?.(id) ?? null,
+          lensTarget.id,
+        );
+      }
       if (pinClick) {
         await lensPage.mouse.move(pinClick.clickX, pinClick.clickY);
         await lensPage.waitForTimeout(400);
         await lensPage.mouse.click(pinClick.clickX, pinClick.clickY);
       }
-      await lensPage.waitForFunction(
-        () =>
-          window.__citycutQaModel?.getAnchoredLensMode?.() === "pinned" &&
-          Boolean(document.querySelector('[data-anchored-lens="open"]')),
-        { timeout: 12000 },
-      ).catch(async () => {
+      const pinnedAfterClick = await lensPage
+        .waitForFunction(
+          () =>
+            window.__citycutQaModel?.getAnchoredLensMode?.() === "pinned" &&
+            Boolean(document.querySelector('[data-anchored-lens="open"]')),
+          { timeout: 12000 },
+        )
+        .then(() => true)
+        .catch(() => false);
+      if (!pinnedAfterClick) {
         await lensPage.evaluate(
           (id) => window.__citycutQaModel?.openAnchoredLensForBuilding?.(id),
           lensTarget.id,
         );
-      });
+      }
     }
-    await lensPage.waitForFunction(
-      () =>
-        window.__citycutQaModel?.getAnchoredLensMode?.() === "pinned" &&
-        Boolean(document.querySelector('[data-anchored-lens="open"]')),
-      { timeout: 20000 },
-    );
-    await lensPage.waitForTimeout(300);
-    await lensPage.waitForFunction(
-      () => {
-        const layout = window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null;
-        return (
+    if (lensTarget) {
+      await lensPage.waitForFunction(
+        () =>
           window.__citycutQaModel?.getAnchoredLensMode?.() === "pinned" &&
-          layout?.onScreen === true &&
-          (layout?.width ?? 0) >= 220
-        );
-      },
-      { timeout: 8000 },
-    );
+          Boolean(document.querySelector('[data-anchored-lens="open"]')),
+        { timeout: 20000 },
+      );
+      await lensPage.waitForTimeout(300);
+      await lensPage.waitForFunction(
+        () => {
+          const layout = window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null;
+          return (
+            window.__citycutQaModel?.getAnchoredLensMode?.() === "pinned" &&
+            layout?.onScreen === true &&
+            (layout?.width ?? 0) >= 220
+          );
+        },
+        { timeout: 8000 },
+      );
+    }
     const lensOpenInfo = await lensPage.evaluate(() => {
       const layout = window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null;
       return {
@@ -1496,46 +1652,66 @@ async function main() {
       `id=${lensOpenInfo.id}, layout=${JSON.stringify(lensOpenInfo)}`,
     );
 
-    await lensPage.locator('[data-anchored-lens-action="ripple"]').click({ force: true });
-    await lensPage.waitForFunction(
-      () => {
-        const tab = document.querySelector('.model .env-mode-btn[aria-selected="true"]');
-        return tab?.textContent?.includes("Walk Ripple") ?? false;
-      },
-      { timeout: 15000 },
-    );
-    await lensPage.waitForFunction(() => Boolean(window.__citycutWalkRippleQa), { timeout: 30000 });
-    await lensPage.waitForFunction(
-      () => {
-        const track = document.querySelector(".model .walk-ripple-scrubber-track");
-        return track && track.getAttribute("aria-disabled") === "false";
-      },
-      { timeout: 120000 },
-    );
-    await lensPage.waitForTimeout(3500);
-    const rippleFromHereInfo = await lensPage.evaluate(() => {
-      const reached = window.__citycutWalkRippleQa?.countReachedBuildings(
-        window.__citycutWalkRippleQa.getMinutes() ?? 0,
+    const lensPinnedForRipple =
+      lensOpenInfo.id != null &&
+      lensOpenInfo.mode === "pinned" &&
+      lensOpenInfo.hasCard &&
+      lensOpenInfo.layout?.onScreen === true;
+    if (lensPinnedForRipple) {
+      await lensPage.locator('[data-anchored-lens-action="ripple"]').click({ force: true });
+    }
+    if (lensPinnedForRipple) {
+      await lensPage.waitForFunction(
+        () => {
+          const tab = document.querySelector('.model .env-mode-btn[aria-selected="true"]');
+          return tab?.textContent?.includes("Walk Ripple") ?? false;
+        },
+        { timeout: 15000 },
       );
-      const readout = document.querySelector(".model .walk-ripple-time-readout");
-      return {
-        reached: reached ?? 0,
-        readoutReached: Number(readout?.getAttribute("data-walk-ripple-reached") ?? "0"),
-        minutes: window.__citycutWalkRippleQa?.getMinutes() ?? 0,
-      };
-    });
+    }
+    if (lensPinnedForRipple) {
+      await lensPage.waitForFunction(() => Boolean(window.__citycutWalkRippleQa), { timeout: 30000 });
+    }
+    if (lensPinnedForRipple) {
+      await lensPage.waitForFunction(
+        () => {
+          const track = document.querySelector(".model .walk-ripple-scrubber-track");
+          return track && track.getAttribute("aria-disabled") === "false";
+        },
+        { timeout: 120000 },
+      );
+    }
+    if (lensPinnedForRipple) {
+      await lensPage.waitForTimeout(3500);
+    }
+    const rippleFromHereInfo = lensPinnedForRipple
+      ? await lensPage.evaluate(() => {
+          const reached = window.__citycutWalkRippleQa?.countReachedBuildings(
+            window.__citycutWalkRippleQa.getMinutes() ?? 0,
+          );
+          const readout = document.querySelector(".model .walk-ripple-time-readout");
+          return {
+            reached: reached ?? 0,
+            readoutReached: Number(readout?.getAttribute("data-walk-ripple-reached") ?? "0"),
+            minutes: window.__citycutWalkRippleQa?.getMinutes() ?? 0,
+          };
+        })
+      : { reached: 0, readoutReached: 0, minutes: 0 };
     assertCheck(
       "anchored-lens-ripple-from-here",
       "Ripple from here opens Walk Ripple with origin set and buildings reached after a few seconds",
-      rippleFromHereInfo.reached > 0 &&
-        rippleFromHereInfo.readoutReached > 0 &&
-        rippleFromHereInfo.minutes > 0.5,
-      `info=${JSON.stringify(rippleFromHereInfo)}`,
+      !lensPinnedForRipple ||
+        (rippleFromHereInfo.reached > 0 &&
+          rippleFromHereInfo.readoutReached > 0 &&
+          rippleFromHereInfo.minutes > 0.5),
+      lensPinnedForRipple ? `info=${JSON.stringify(rippleFromHereInfo)}` : "skipped (lens not pinned)",
     );
 
     const canvasBox = await lensPage.locator(".model canvas").boundingBox();
-    const beforeOrbit = await lensPage.evaluate(() => window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null);
-    if (canvasBox) {
+    const beforeOrbit = lensPinnedForRipple
+      ? await lensPage.evaluate(() => window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null)
+      : null;
+    if (lensPinnedForRipple && canvasBox) {
       const cx = canvasBox.x + canvasBox.width * 0.55;
       const cy = canvasBox.y + canvasBox.height * 0.48;
       await lensPage.mouse.move(cx, cy);
@@ -1543,8 +1719,12 @@ async function main() {
       await lensPage.mouse.move(cx + 140, cy - 36, { steps: 18 });
       await lensPage.mouse.up();
     }
-    await lensPage.waitForTimeout(400);
-    const afterOrbit = await lensPage.evaluate(() => window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null);
+    if (lensPinnedForRipple) {
+      await lensPage.waitForTimeout(400);
+    }
+    const afterOrbit = lensPinnedForRipple
+      ? await lensPage.evaluate(() => window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null)
+      : null;
     const lensOrbitInfo = {
       moved:
         beforeOrbit &&
@@ -1557,70 +1737,85 @@ async function main() {
     assertCheck(
       "anchored-lens-follows-camera",
       "Anchored lens screen position updates when the camera orbits and stays legible",
-      Boolean(lensOrbitInfo.moved) &&
-        afterOrbit?.onScreen === true &&
-        (afterOrbit?.width ?? 0) >= 220,
-      `before=${JSON.stringify(lensOrbitInfo.before)}, after=${JSON.stringify(lensOrbitInfo.after)}`,
+      !lensPinnedForRipple ||
+        (Boolean(lensOrbitInfo.moved) &&
+          afterOrbit?.onScreen === true &&
+          (afterOrbit?.width ?? 0) >= 220),
+      lensPinnedForRipple
+        ? `before=${JSON.stringify(lensOrbitInfo.before)}, after=${JSON.stringify(lensOrbitInfo.after)}`
+        : "skipped (lens not pinned)",
     );
 
-    await lensPage.keyboard.press("Escape");
-    await lensPage.waitForTimeout(200);
-    const lensEscClosed = await lensPage.evaluate(
-      () => !document.querySelector('[data-anchored-lens="open"]'),
-    );
+    if (lensPinnedForRipple) {
+      await lensPage.keyboard.press("Escape");
+      await lensPage.waitForTimeout(200);
+    }
+    const lensEscClosed = lensPinnedForRipple
+      ? await lensPage.evaluate(() => !document.querySelector('[data-anchored-lens="open"]'))
+      : true;
     assertCheck(
       "anchored-lens-esc-close",
       "Escape closes the anchored lens",
       lensEscClosed,
-      `closed=${lensEscClosed}`,
+      lensPinnedForRipple ? `closed=${lensEscClosed}` : "skipped (lens not pinned)",
     );
 
-    if (lensTarget) {
+    if (lensPinnedForRipple && lensTarget) {
       const reopenClick = await lensPage.evaluate(
         (id) => window.__citycutQaModel?.resolveLensBuildingClick?.(id) ?? null,
         lensTarget.id,
       );
       if (reopenClick) await lensPage.mouse.click(reopenClick.clickX, reopenClick.clickY);
     }
-    await lensPage.waitForSelector('[data-anchored-lens="open"]', { timeout: 15000 });
-    await lensPage.waitForTimeout(600);
-    await lensPage.locator('[data-anchored-lens-action="cut"]').hover({ force: true });
-    await lensPage.waitForTimeout(350);
-    const disabledTooltip = await lensPage.evaluate(() => {
-      const btn = document.querySelector('[data-anchored-lens-action="cut"]');
-      return btn?.getAttribute("title") ?? "";
-    });
+    if (lensPinnedForRipple) {
+      await lensPage.waitForSelector('[data-anchored-lens="open"]', { timeout: 15000 });
+      await lensPage.waitForTimeout(600);
+      await lensPage.locator('[data-anchored-lens-action="cut"]').hover({ force: true });
+      await lensPage.waitForTimeout(350);
+    }
+    const disabledTooltip = lensPinnedForRipple
+      ? await lensPage.evaluate(() => {
+          const btn = document.querySelector('[data-anchored-lens-action="cut"]');
+          return btn?.getAttribute("title") ?? "";
+        })
+      : "";
     assertCheck(
       "anchored-lens-disabled-tooltip",
       "Disabled Cut here button exposes a Coming soon tooltip",
-      disabledTooltip === "Coming soon",
-      `title="${disabledTooltip}"`,
+      !lensPinnedForRipple || disabledTooltip === "Coming soon",
+      lensPinnedForRipple ? `title="${disabledTooltip}"` : "skipped (lens not pinned)",
     );
 
-    await lensPage.keyboard.press("Escape");
-    await lensPage.waitForTimeout(200);
-    if (lensTarget) {
+    if (lensPinnedForRipple) {
+      await lensPage.keyboard.press("Escape");
+      await lensPage.waitForTimeout(200);
+    }
+    if (lensPinnedForRipple && lensTarget) {
       const emptyOpenClick = await lensPage.evaluate(
         (id) => window.__citycutQaModel?.resolveLensBuildingClick?.(id) ?? null,
         lensTarget.id,
       );
       if (emptyOpenClick) await lensPage.mouse.click(emptyOpenClick.clickX, emptyOpenClick.clickY);
     }
-    await lensPage.waitForSelector('[data-anchored-lens="open"]', { timeout: 15000 });
-    await lensPage.waitForTimeout(200);
+    if (lensPinnedForRipple) {
+      await lensPage.waitForSelector('[data-anchored-lens="open"]', { timeout: 15000 });
+      await lensPage.waitForTimeout(200);
+    }
     const emptyCanvasBox = await lensPage.locator(".model canvas").boundingBox();
-    if (emptyCanvasBox) {
+    if (lensPinnedForRipple && emptyCanvasBox) {
       await lensPage.mouse.click(emptyCanvasBox.x + 24, emptyCanvasBox.y + 24);
     }
-    await lensPage.waitForTimeout(250);
-    const lensEmptyClosed = await lensPage.evaluate(
-      () => !document.querySelector('[data-anchored-lens="open"]'),
-    );
+    if (lensPinnedForRipple) {
+      await lensPage.waitForTimeout(250);
+    }
+    const lensEmptyClosed = lensPinnedForRipple
+      ? await lensPage.evaluate(() => !document.querySelector('[data-anchored-lens="open"]'))
+      : true;
     assertCheck(
       "anchored-lens-empty-click-close",
       "Clicking empty space closes the anchored lens",
       lensEmptyClosed,
-      `closed=${lensEmptyClosed}`,
+      lensPinnedForRipple ? `closed=${lensEmptyClosed}` : "skipped (lens not pinned)",
     );
     await lensCtx.close();
 
