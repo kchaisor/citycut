@@ -23,17 +23,21 @@ async function flushCanvasFrame(page) {
   await page.waitForTimeout(120);
 }
 
-async function waitIntroDone(page) {
-  await page.evaluate(
-    () =>
-      new Promise((resolve) => {
-        window.addEventListener("citycut:intro-done", done, { once: true });
-        function done() {
-          resolve(undefined);
-        }
-        setTimeout(done, 45000);
-      }),
-  );
+async function settleDefaultCamera(page) {
+  const reset = page.getByRole("button", { name: "Reset view" });
+  await reset.click({ timeout: 60000 });
+  await page.waitForTimeout(600);
+  await reset.click({ timeout: 60000 });
+  await page.waitForTimeout(600);
+  await page.evaluate(() => {
+    const sideM = 1000;
+    const d = sideM * 0.92;
+    window.__citycutQa?.setCamera?.({
+      eye: { x: d * 0.72, y: d * 0.78, z: -d * 0.72 },
+      target: { x: 0, y: 25, z: 0 },
+    });
+  });
+  await page.waitForTimeout(900);
 }
 
 fs.mkdirSync(OUT, { recursive: true });
@@ -66,6 +70,7 @@ await context.addInitScript(() => {
   }
 });
 const page = await context.newPage();
+page.setDefaultTimeout(120000);
 await page.goto(modelUrl(baseUrl), { waitUntil: "domcontentloaded", timeout: 180000 });
 await page.waitForSelector("button.create-fab", { timeout: 60000 });
 await page.click("button.create-fab");
@@ -81,7 +86,7 @@ await page.evaluate(async () => {
   await window.__citycutQaModel?.waitForComHeightsApplied?.(180000);
 });
 await page.waitForSelector(".model canvas", { timeout: 60000 });
-await waitIntroDone(page);
+await settleDefaultCamera(page);
 await page.evaluate(() => {
   window.__citycutQaModel?.clearHeightSelection?.();
 });
@@ -89,33 +94,56 @@ await page.waitForTimeout(800);
 await flushCanvasFrame(page);
 await page.screenshot({ path: path.join(OUT, "pr192-fresh-model-default-uniform.png") });
 
-let buildingId = await page.evaluate(() => window.__citycutQaModel?.findTallBuildingForLensQa?.()?.id ?? null);
-if (buildingId == null) {
-  buildingId = await page.evaluate(() => window.__citycutQaModel?.pickForegroundBuildingForSelectionQa?.() ?? null);
-}
-if (buildingId == null) throw new Error("No building for selection capture");
-
 await page.evaluate(() => {
   window.__citycutQaModel?.clearHeightSelection?.();
 });
 await page.waitForTimeout(400);
-
-let click = await page.evaluate(
-  (id) => window.__citycutQaModel?.resolveLensBuildingClick?.(id) ?? null,
-  buildingId,
-);
-if (!click) {
-  click = await page.evaluate(
-    (id) => window.__citycutQaModel?.measureHoverCaptureFill?.(id)?.click ?? null,
-    buildingId,
+const pickAtDefaultCamera = await page.evaluate(() => {
+  const canvas = document.querySelector(".model canvas");
+  const pickAt = window.__citycutQa?.pickBuildingAtClient;
+  if (!(canvas instanceof HTMLCanvasElement) || !pickAt) return null;
+  const rect = canvas.getBoundingClientRect();
+  const heightById = new Map(
+    (window.__citycutQaModel?.listBuildings?.() ?? []).map((row) => [row.id, row.height]),
   );
-}
-if (!click) throw new Error("No click target for building");
+  const cx = rect.left + rect.width * 0.5;
+  const cy = rect.top + rect.height * 0.52;
+  let best = null;
+  for (let y = rect.top + 120; y < rect.bottom - 100; y += 16) {
+    for (let x = rect.left + 220; x < rect.right - 280; x += 16) {
+      const id = pickAt(x, y);
+      if (id == null) continue;
+      const top = document.elementFromPoint(x, y);
+      if (top !== canvas) continue;
+      const height = heightById.get(id) ?? 0;
+      const dist = Math.hypot(x - cx, y - cy);
+      const score = height * 1000 - dist;
+      if (!best || score > best.score) {
+        best = { id, clickX: Math.round(x), clickY: Math.round(y), height, score };
+      }
+    }
+  }
+  return best;
+});
+if (!pickAtDefaultCamera) throw new Error("No building click target at default camera");
+const buildingId = pickAtDefaultCamera.id;
+const click = { clickX: pickAtDefaultCamera.clickX, clickY: pickAtDefaultCamera.clickY };
 
 await page.mouse.move(click.clickX, click.clickY);
 await page.waitForTimeout(280);
-await page.mouse.click(click.clickX, click.clickY);
-await page.waitForTimeout(700);
+await page.mouse.click(click.clickX, click.clickY, { force: true });
+await page.waitForFunction(
+  () => {
+    const audit = window.__citycutQaSelectionAudit;
+    return (
+      audit &&
+      audit.overlayDashedLineCount > 0 &&
+      audit.hiddenSolidEdgeCount > 0 &&
+      audit.hiddenMeshCount === 0
+    );
+  },
+  { timeout: 20000 },
+);
 await flushCanvasFrame(page);
 
 const audit = await page.evaluate(() => window.__citycutQaSelectionAudit ?? null);
