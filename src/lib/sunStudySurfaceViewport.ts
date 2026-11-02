@@ -155,7 +155,8 @@ export function refreshSceneSurfaceColors(root: THREE.Object3D): void {
       if (line.name === "RailLines") mat.color.setStyle(railColor);
       else if (line.name === "TramLines") mat.color.setStyle(tramColor);
       else if (line.name === "Site::Boundary") mat.color.setStyle(siteBoundaryColor);
-      else if (line.name === "BuildingEdges" || line.name === "RoofLines") mat.color.setStyle(buildingEdgeColor);
+      else if (line.name === "BuildingEdges" || line.name === "BuildingEdge" || line.name === "RoofLines")
+        mat.color.setStyle(buildingEdgeColor);
       else if (line.name === "GroundEdge") mat.color.setStyle(groundEdgeColor);
     }
   });

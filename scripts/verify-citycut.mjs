@@ -1621,6 +1621,7 @@ async function main() {
           clickSelectionAudit.overlayDashedLineCount > 0 &&
           clickSelectionAudit.hiddenMeshCount === 0 &&
           clickSelectionAudit.zeroedGroupCount === 0 &&
+          clickSelectionAudit.hiddenSolidEdgeCount > 0 &&
           clickSelectionAudit.overlayFillOpacity < 0.01;
         assertCheck(
           "building-click-dashed-selection-outline",

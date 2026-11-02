@@ -61,7 +61,7 @@ export function createBuildingSelectionOutlineGroup(
         linewidth: SELECTION_OUTLINE_WIDTH_PX,
         transparent: true,
         opacity: 1,
-        depthTest: true,
+        depthTest: false,
         depthWrite: false,
         worldUnits: false,
         dashed: true,

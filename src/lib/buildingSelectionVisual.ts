@@ -7,6 +7,7 @@ import {
   createBuildingSelectionOutlineGroup,
   disposeSelectionOutlineSlot,
 } from "./buildingSelectionOutline";
+import { setSolidBuildingEdgesVisible } from "./buildingSelectionSolidEdges";
 
 export type { BuildingSelectionAudit };
 export { auditBuildingSelection };
@@ -30,12 +31,14 @@ export function mountSelectedBuildingsVisual(
   if (matchedIds.length === 0) return null;
   const slot = createBuildingSelectionOutlineGroup(model, matchedIds);
   if (!slot) return null;
+  const restoreSolidEdges = setSolidBuildingEdgesVisible(cityRoot, matchedIds, false);
   const audit = auditBuildingSelection(cityRoot, matchedIds, slot.group);
   return {
     overlay: slot.group,
     lineMaterials: slot.lineMaterials,
     audit,
     restore: () => {
+      restoreSolidEdges();
       disposeSelectionOutlineSlot(slot);
     },
   };

@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
+import { countSolidBuildingEdgesHidden } from "./buildingSelectionSolidEdges";
 
 export type BuildingSelectionAudit = {
   buildingId: number;
@@ -13,6 +14,7 @@ export type BuildingSelectionAudit = {
   overlayFillOpacity: number;
   overlayDashedLineCount: number;
   overlayLineDistancesReady: boolean;
+  hiddenSolidEdgeCount: number;
 };
 
 function matchesBuildingId(stored: unknown, targetIds: ReadonlySet<number>): boolean {
@@ -85,6 +87,7 @@ export function auditBuildingSelection(
     overlayFillOpacity: fillMat?.opacity ?? 0,
     overlayDashedLineCount: dashedLines.length,
     overlayLineDistancesReady,
+    hiddenSolidEdgeCount: countSolidBuildingEdgesHidden(cityRoot, ids),
   };
 }
 
@@ -93,6 +96,7 @@ export function selectionAuditOk(audit: BuildingSelectionAudit): boolean {
     audit.hiddenMeshCount === 0 &&
     audit.zeroedGroupCount === 0 &&
     audit.overlayDashedLineCount > 0 &&
+    audit.hiddenSolidEdgeCount > 0 &&
     audit.overlayFillOpacity === 0 &&
     (!audit.overlayInScene || audit.overlayLineDistancesReady)
   );

@@ -23,6 +23,19 @@ async function flushCanvasFrame(page) {
   await page.waitForTimeout(120);
 }
 
+async function waitIntroDone(page) {
+  await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        window.addEventListener("citycut:intro-done", done, { once: true });
+        function done() {
+          resolve(undefined);
+        }
+        setTimeout(done, 45000);
+      }),
+  );
+}
+
 fs.mkdirSync(OUT, { recursive: true });
 
 const baseUrl = process.env.CITYCUT_PREVIEW_URL ?? process.env.VERIFY_BASE_URL;
@@ -68,7 +81,11 @@ await page.evaluate(async () => {
   await window.__citycutQaModel?.waitForComHeightsApplied?.(180000);
 });
 await page.waitForSelector(".model canvas", { timeout: 60000 });
-await page.waitForTimeout(2000);
+await waitIntroDone(page);
+await page.evaluate(() => {
+  window.__citycutQaModel?.clearHeightSelection?.();
+});
+await page.waitForTimeout(800);
 await flushCanvasFrame(page);
 await page.screenshot({ path: path.join(OUT, "pr192-fresh-model-default-uniform.png") });
 
@@ -78,11 +95,10 @@ if (buildingId == null) {
 }
 if (buildingId == null) throw new Error("No building for selection capture");
 
-await page.evaluate((id) => {
-  window.__citycutQaModel?.frameSelectionBuilding?.(id, "oblique");
+await page.evaluate(() => {
   window.__citycutQaModel?.clearHeightSelection?.();
-}, buildingId);
-await page.waitForTimeout(900);
+});
+await page.waitForTimeout(400);
 
 let click = await page.evaluate(
   (id) => window.__citycutQaModel?.resolveLensBuildingClick?.(id) ?? null,
@@ -107,11 +123,28 @@ if (
   !audit ||
   audit.overlayDashedLineCount < 1 ||
   audit.hiddenMeshCount !== 0 ||
-  audit.zeroedGroupCount !== 0
+  audit.zeroedGroupCount !== 0 ||
+  audit.hiddenSolidEdgeCount < 1
 ) {
   throw new Error(`Selection outline audit failed: ${JSON.stringify(audit)}`);
 }
 await page.screenshot({ path: path.join(OUT, "pr192-building-click-dashed-outline.png") });
+
+const clip = await page.evaluate(
+  (id) => window.__citycutQaModel?.selectionScreenClip?.(id, 16) ?? null,
+  buildingId,
+);
+if (clip && clip.width >= 48 && clip.height >= 48) {
+  await page.screenshot({
+    path: path.join(OUT, "pr192-building-click-dashed-outline-crop.png"),
+    clip: {
+      x: Math.max(0, clip.x - 8),
+      y: Math.max(0, clip.y - 8),
+      width: Math.min(VIEWPORT.width, clip.width + 16),
+      height: Math.min(VIEWPORT.height, clip.height + 16),
+    },
+  });
+}
 
 const canvasBox = await page.locator(".model canvas").boundingBox();
 if (!canvasBox) throw new Error("No canvas");
