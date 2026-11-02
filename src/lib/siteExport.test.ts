@@ -10,7 +10,7 @@ import type { Pt } from "../types";
 
 describe("site exports", () => {
   it("registers --site-building in the theme", () => {
-    expect(getColour("--site-building").toUpperCase()).toBe("#FFF500");
+    expect(getColour("--site-building").toUpperCase()).toBe("#FFFFFF");
   });
 
   it("registers red --site-boundary on plan pens, exports, and Rhino", () => {

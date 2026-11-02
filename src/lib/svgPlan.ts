@@ -188,8 +188,8 @@ export function planPaths(
   const carriageway = unionRoadSurface(planRoads, model.tramLines, model.sideM, frameShape);
 
   const colourMode: BuildingColourMode = planOptions.buildingColour ?? {
-    colourByUse: true,
-    uniformBuildings: false,
+    colourByUse: false,
+    uniformBuildings: true,
     colourBySource: false,
   };
   const highlightManual = Boolean(planOptions.highlightManual);

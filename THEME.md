@@ -133,7 +133,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--contour-label` | `#6A6A6A` | Elevation numbers on the site plan, on screen and in the Illustrator file. |
 | `--building-uniform` | `#FFFFFF` | Buildings when colour-by-use is off, that legend swatch, and the Rhino Buildings layer. |
 | `--building-manual` | `#D4A017` | 3D viewport tint for buildings with a manual height override when “Show manual edits” is on. |
-| `--site-building` | `#F2C230` | Buildings on the searched property: site plan, 3D, Rhino `Buildings::Site`, and Illustrator Site buildings layer. Manual-height amber and uniform colour apply to non-site buildings only; site buildings stay yellow unless manual-height tint is on for that building (manual wins in 3D). |
+| `--site-building` | `#FFFFFF` | Buildings on the searched property: site plan, 3D, Rhino `Buildings::Site`, and Illustrator Site buildings layer. Same fill as `--building-uniform` in the default white palette; manual-height amber still wins in 3D when “Show manual edits” is on. |
 | `--imported-massing` | `#FFFFFF` | Default colour of imported .3dm massing in 3D, Drawing (site plan, figure-ground, exploded axo), .ai and .3dm. Each imported model can override it with the Colour picker in Import (stored with the model). |
 | `--switch-knob` | `#000000` | Knob of every sidebar switch, on and off, so an off switch reads on its pale `--control-off` track. On = `--accent` track, knob right. |
 | `--site-building-edge` | `#3D3010` | Darker outline on site-building massing in the 3D viewport so they read against retail (`--use-retail`) and civic (`--use-civic`) yellows. |
@@ -157,7 +157,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--path-fill` | `#D2B48C` | Unioned footpath on the site plan and the figure-ground, on screen and in the Illustrator file. |
 | `--road-arterial` | `#3a3a3a` | Arterial ribbons in the 3D view and the 3D-view Illustrator file, and the Rhino Roads layer. |
 | `--road-local` | `#4a4a4a` | Local-street ribbons in the 3D view and the 3D-view Illustrator file. |
-| `--road-path` | `#5c5c5c` | Path ribbons in the 3D view and the 3D-view Illustrator file. |
+| `--road-path` | `#D2B48C` | Path ribbons in the 3D view and the 3D-view Illustrator file (same light tan as `--path-fill`). |
 | `--green-fill` | `#b7d39a` | Parks and other green on the site plan, on screen and in the Illustrator file. |
 | `--green-3d` | `#7f9a62` | Green mesh in the 3D view, the 3D-view Illustrator green, and the Rhino Green layer. |
 | `--water-fill` | `#9ec9d1` | Water on the site plan, on screen and in the Illustrator file. |
