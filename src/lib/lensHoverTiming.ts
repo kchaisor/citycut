@@ -1,0 +1,1 @@
+export const LENS_ORBIT_HOVER_COOLDOWN_MS = 150;

@@ -15,6 +15,16 @@ import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
 import { attachScenePointPick, attachBuildingPick } from "../lib/buildingPick";
+import {
+  hoverPickBlocked,
+  pickBuildingHoverAtClient,
+  type BuildingHoverPickGate,
+} from "../lib/buildingHoverPick";
+import {
+  createBuildingHoverHighlightSlot,
+  disposeBuildingHoverHighlightSlot,
+  syncBuildingHoverHighlightSlot,
+} from "../lib/buildingHoverHighlight";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { basePlinthBottomY } from "../lib/terrain";
 import { auditBuildingSelection, mountSelectedBuildingsVisual } from "../lib/buildingSelectionVisual";
@@ -333,6 +343,151 @@ function BuildingPickLayer({
   return null;
 }
 
+function BuildingHoverPickLayer({
+  root,
+  enabled,
+  gate,
+  onHoverHighlight,
+}: {
+  root: THREE.Object3D;
+  enabled: boolean;
+  gate: BuildingHoverPickGate;
+  onHoverHighlight: (buildingId: number | null) => void;
+}) {
+  const camera = useThree((state) => state.camera);
+  const gl = useThree((state) => state.gl);
+  const pointer = useRef({ x: Number.NaN, y: Number.NaN, dirty: false });
+  const lastId = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const canvas = gl.domElement;
+    const onMove = (event: PointerEvent) => {
+      pointer.current = { x: event.clientX, y: event.clientY, dirty: true };
+    };
+    const onLeave = () => {
+      pointer.current = { x: Number.NaN, y: Number.NaN, dirty: true };
+    };
+    const onDown = (event: PointerEvent) => {
+      if (event.button === 0) {
+        gate.pointerDown = true;
+        if (lastId.current !== null) {
+          lastId.current = null;
+          canvas.style.cursor = "";
+          canvas.dataset.buildingHoverHighlightId = "";
+        }
+        onHoverHighlight(null);
+      }
+    };
+    const onUp = (event: PointerEvent) => {
+      if (event.button === 0) gate.pointerDown = false;
+    };
+    canvas.addEventListener("pointermove", onMove);
+    canvas.addEventListener("pointerleave", onLeave);
+    canvas.addEventListener("pointerdown", onDown);
+    canvas.addEventListener("pointerup", onUp);
+    return () => {
+      canvas.removeEventListener("pointermove", onMove);
+      canvas.removeEventListener("pointerleave", onLeave);
+      canvas.removeEventListener("pointerdown", onDown);
+      canvas.removeEventListener("pointerup", onUp);
+    };
+  }, [enabled, gate, gl.domElement, onHoverHighlight]);
+
+  useFrame(() => {
+    if (!enabled) return;
+    const canvas = gl.domElement;
+    if (hoverPickBlocked(gate)) {
+      if (lastId.current !== null) {
+        lastId.current = null;
+        canvas.style.cursor = "";
+        canvas.dataset.buildingHoverHighlightId = "";
+        onHoverHighlight(null);
+      }
+      pointer.current.dirty = false;
+      return;
+    }
+    if (!pointer.current.dirty) return;
+    pointer.current.dirty = false;
+    const { x, y } = pointer.current;
+    if (!Number.isFinite(x)) {
+      if (lastId.current !== null) {
+        lastId.current = null;
+        canvas.style.cursor = "";
+        canvas.dataset.buildingHoverHighlightId = "";
+        onHoverHighlight(null);
+      }
+      return;
+    }
+    const clipLookup =
+      typeof window !== "undefined" && qaModeFromSearch(window.location.search)
+        ? (buildingId: number) => window.__citycutQaModel?.selectionScreenClip?.(buildingId, 10) ?? null
+        : undefined;
+    const ids =
+      clipLookup && typeof window !== "undefined"
+        ? (window.__citycutQaModel?.listBuildings?.().map((row) => row.id) ?? [])
+        : undefined;
+    const id = pickBuildingHoverAtClient(canvas, camera, root, x, y, clipLookup, ids);
+    const nextDataset = id != null ? String(id) : "";
+    canvas.style.cursor = id != null ? "pointer" : "";
+    if (id === lastId.current) {
+      if (canvas.dataset.buildingHoverHighlightId !== nextDataset) {
+        canvas.dataset.buildingHoverHighlightId = nextDataset;
+      }
+      return;
+    }
+    lastId.current = id;
+    canvas.dataset.buildingHoverHighlightId = nextDataset;
+    onHoverHighlight(id);
+  });
+
+  useEffect(() => {
+    if (!enabled) {
+      gl.domElement.style.cursor = "";
+      gl.domElement.dataset.buildingHoverHighlightId = "";
+      lastId.current = null;
+      onHoverHighlight(null);
+    }
+  }, [enabled, gl.domElement, onHoverHighlight]);
+
+  return null;
+}
+
+function BuildingHoverHighlightLayer({
+  model,
+  hoverBuildingId,
+  pinnedBuildingId,
+  colourMode,
+  enabled,
+}: {
+  model: CityModel;
+  hoverBuildingId: number | null;
+  pinnedBuildingId: number | null;
+  colourMode: BuildingColourMode;
+  enabled: boolean;
+}) {
+  const slotRef = useRef(createBuildingHoverHighlightSlot());
+  const gl = useThree((state) => state.gl);
+  const invalidate = useThree((state) => state.invalidate);
+  const colourTick = useColourRevision();
+  useLayoutEffect(() => {
+    const slot = slotRef.current;
+    if (!enabled) {
+      syncBuildingHoverHighlightSlot(slot, model, null, pinnedBuildingId, colourMode);
+      gl.domElement.dataset.buildingHoverHighlightActive = "";
+      invalidate();
+      return;
+    }
+    syncBuildingHoverHighlightSlot(slot, model, hoverBuildingId, pinnedBuildingId, colourMode);
+    gl.domElement.dataset.buildingHoverHighlightActive = slot.group.visible ? "1" : "";
+    invalidate();
+  }, [enabled, hoverBuildingId, pinnedBuildingId, model, colourMode, colourTick, gl.domElement, invalidate]);
+  useLayoutEffect(() => () => disposeBuildingHoverHighlightSlot(slotRef.current), []);
+  const slot = slotRef.current;
+  if (!slot.group.visible) return null;
+  return <primitive object={slot.group} />;
+}
+
 function ScenePointLayer({ onScenePoint }: { onScenePoint: (east: number, north: number, up: number) => void }) {
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
@@ -465,6 +620,11 @@ function City({
   pickBuildings,
   walkRippleTint,
   walkRippleArrivals,
+  introEnabled,
+  lensHoverEnabled,
+  hoverBuildingId,
+  pinnedBuildingId,
+  onHoverBuilding,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -481,7 +641,17 @@ function City({
   pickBuildings: boolean;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
+  introEnabled: boolean;
+  lensHoverEnabled: boolean;
+  hoverBuildingId: number | null;
+  pinnedBuildingId: number | null;
+  onHoverBuilding: (buildingId: number | null) => void;
 }) {
+  const hoverGateRef = useRef<BuildingHoverPickGate>({
+    pointerDown: false,
+    orbitActive: false,
+    orbitCooldownUntil: 0,
+  });
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
   const colourTick = useColourRevision();
@@ -494,7 +664,7 @@ function City({
     [uniformBuildings, colourBySource],
   );
   const group = useMemo(() => {
-    const introStagger = shouldRunIntroTransition();
+    const introStagger = shouldRunIntroTransition() && introEnabled;
     const city = buildCityGroup(model, { uniformBuildings, colourBySource, highlightManual, introStagger });
     const plinth = city.getObjectByName("BasePlinth");
     const ground = city.getObjectByName("Ground");
@@ -555,6 +725,7 @@ function City({
     uniformBuildings,
     colourBySource,
     highlightManual,
+    introEnabled,
   ]);
   useLayoutEffect(() => {
     onBoundsRef.current(measureCity(group));
@@ -610,7 +781,7 @@ function City({
       targets.push({ obj: object, pivotY, kind: "building", bucket });
     }
     const cutRingObj = group.getObjectByName("IntroCutRing") as THREE.LineSegments | undefined;
-    if (!shouldRunIntroTransition() || targets.length === 0) {
+    if (!shouldRunIntroTransition() || !introEnabled || targets.length === 0) {
       for (const { obj } of targets) {
         obj.scale.y = 1;
         obj.position.y = 0;
@@ -664,7 +835,7 @@ function City({
     introRef.current = { cutKey, elapsedSec: 0, frameCount: 0, done: false, webglReadyDispatched: false, targets };
     introScene.userData[INTRO_ACTIVE_KEY] = true;
     invalidate();
-  }, [group, cutKey, introScene, invalidate]);
+  }, [group, cutKey, introEnabled, introScene, invalidate]);
   useFrame((state, delta) => {
     const intro = introRef.current;
     if (!intro || intro.done) return;
@@ -931,6 +1102,19 @@ function City({
         }
         cityRoot={group}
         colourMode={colourMode}
+      />
+      <BuildingHoverHighlightLayer
+        model={model}
+        hoverBuildingId={hoverBuildingId}
+        pinnedBuildingId={pinnedBuildingId}
+        colourMode={colourMode}
+        enabled={lensHoverEnabled && buildingsVisible}
+      />
+      <BuildingHoverPickLayer
+        root={group}
+        enabled={lensHoverEnabled && pickBuildings && buildingsVisible}
+        gate={hoverGateRef.current}
+        onHoverHighlight={onHoverBuilding}
       />
       <BuildingPickLayer
         root={group}
@@ -2016,6 +2200,11 @@ export function Scene3D({
   walkRipplePlaying = false,
   onScenePoint = null,
   quality = "high",
+  introEnabled = true,
+  lensHoverEnabled = false,
+  hoverBuildingId = null,
+  pinnedBuildingId = null,
+  onHoverBuilding = () => {},
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -2045,6 +2234,11 @@ export function Scene3D({
   walkRipplePlaying?: boolean;
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
   quality?: RenderQuality;
+  introEnabled?: boolean;
+  lensHoverEnabled?: boolean;
+  hoverBuildingId?: number | null;
+  pinnedBuildingId?: number | null;
+  onHoverBuilding?: (buildingId: number | null) => void;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
@@ -2169,6 +2363,11 @@ export function Scene3D({
         display={display}
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
+        introEnabled={introEnabled}
+        lensHoverEnabled={lensHoverEnabled}
+        hoverBuildingId={hoverBuildingId}
+        pinnedBuildingId={pinnedBuildingId}
+        onHoverBuilding={onHoverBuilding}
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
