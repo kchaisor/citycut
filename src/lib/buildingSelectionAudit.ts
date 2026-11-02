@@ -59,8 +59,8 @@ export function auditBuildingSelection(
   let fillMesh: THREE.Mesh | undefined;
   const dashedLines: LineSegments2[] = [];
   overlay?.traverse((child) => {
-    if (!fillMesh && child instanceof THREE.Mesh) fillMesh = child;
     const outline = child as LineSegments2;
+    if (!fillMesh && child instanceof THREE.Mesh && !outline.isLineSegments2) fillMesh = child;
     if (outline.isLineSegments2 && outline.material instanceof LineMaterial && outline.material.dashed) {
       dashedLines.push(outline);
     }
