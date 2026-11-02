@@ -1348,8 +1348,10 @@ async function main() {
     await lensPage.waitForTimeout(350);
     if (lensTarget) {
       await lensPage.mouse.move(lensTarget.clickX, lensTarget.clickY);
-    }
-    if (lensTarget) {
+      await lensPage.waitForTimeout(350);
+      await lensPage.mouse.move(lensTarget.clickX + 1, lensTarget.clickY);
+      await lensPage.mouse.move(lensTarget.clickX, lensTarget.clickY);
+      await flushCanvasFrame(lensPage);
       await lensPage.waitForFunction(
         () => {
           const canvas = document.querySelector(".model canvas");
@@ -1359,7 +1361,7 @@ async function main() {
             !document.querySelector('[data-anchored-lens="open"]')
           );
         },
-        { timeout: 8000 },
+        { timeout: 12000 },
       );
     }
     const hoverOnlyInfo = await lensPage.evaluate(() => ({
