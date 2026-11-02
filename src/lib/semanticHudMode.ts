@@ -3,46 +3,97 @@ export type SemanticHudMode = "overview" | "building" | "walk";
 export type SemanticHudSignals = {
   eyeHeightM: number;
   pitchDeg: number;
-  nearestBuildingDistanceM: number | null;
+  polarDeg: number;
+  orbitDistanceM: number;
+  minOrbitDistanceM: number;
+  maxOrbitDistanceM: number;
+  centreGroundDistanceM: number | null;
+  centreBuildingDistanceM: number | null;
+  centreHasNamedStreet: boolean;
+  hasCentreBuilding: boolean;
   buildingScreenFill: number;
 };
 
 export type SemanticHudThresholds = {
-  walkEnterEyeHeightM: number;
-  walkExitEyeHeightM: number;
-  walkEnterMaxPitchDeg: number;
-  walkExitMaxPitchDeg: number;
-  buildingEnterDistanceM: number;
-  buildingExitDistanceM: number;
+  walkEnterOrbitFactor: number;
+  walkExitOrbitFactor: number;
+  walkEnterGroundFactor: number;
+  walkExitGroundFactor: number;
+  walkEnterPolarDeg: number;
+  walkExitPolarDeg: number;
+  buildingEnterDistanceFactor: number;
+  buildingExitDistanceFactor: number;
+  buildingEnterZoomCloseT: number;
+  buildingExitZoomCloseT: number;
   buildingEnterScreenFill: number;
   buildingExitScreenFill: number;
 };
 
 export const DEFAULT_SEMANTIC_HUD_THRESHOLDS: SemanticHudThresholds = {
-  walkEnterEyeHeightM: 10,
-  walkExitEyeHeightM: 12,
-  walkEnterMaxPitchDeg: 22,
-  walkExitMaxPitchDeg: 26,
-  buildingEnterDistanceM: 150,
-  buildingExitDistanceM: 185,
-  buildingEnterScreenFill: 0.1,
-  buildingExitScreenFill: 0.07,
+  walkEnterOrbitFactor: 1.15,
+  walkExitOrbitFactor: 1.32,
+  walkEnterGroundFactor: 1.35,
+  walkExitGroundFactor: 1.55,
+  walkEnterPolarDeg: 65,
+  walkExitPolarDeg: 58,
+  buildingEnterDistanceFactor: 1.5,
+  buildingExitDistanceFactor: 1.85,
+  buildingEnterZoomCloseT: 0.35,
+  buildingExitZoomCloseT: 0.28,
+  buildingEnterScreenFill: 0.045,
+  buildingExitScreenFill: 0.025,
 };
 
+export function perspectiveOrbitMinDistanceM(sideM: number): number {
+  return Math.max(40, sideM * 0.06);
+}
+
+export function semanticHudModeLabel(mode: SemanticHudMode): string {
+  if (mode === "building") return "Building";
+  if (mode === "walk") return "Street";
+  return "Site";
+}
+
+export function orbitZoomCloseT(signals: SemanticHudSignals): number {
+  const span = signals.maxOrbitDistanceM - signals.minOrbitDistanceM;
+  if (span <= 1e-3) return 0;
+  return Math.min(1, Math.max(0, 1 - (signals.orbitDistanceM - signals.minOrbitDistanceM) / span));
+}
+
 function walkCandidate(signals: SemanticHudSignals, thresholds: SemanticHudThresholds, entering: boolean): boolean {
-  const eyeLimit = entering ? thresholds.walkEnterEyeHeightM : thresholds.walkExitEyeHeightM;
-  const pitchLimit = entering ? thresholds.walkEnterMaxPitchDeg : thresholds.walkExitMaxPitchDeg;
-  return signals.eyeHeightM <= eyeLimit && signals.pitchDeg <= pitchLimit;
+  const min = signals.minOrbitDistanceM;
+  const orbitLimit = min * (entering ? thresholds.walkEnterOrbitFactor : thresholds.walkExitOrbitFactor);
+  const groundLimit = min * (entering ? thresholds.walkEnterGroundFactor : thresholds.walkExitGroundFactor);
+  const polarLimit = entering ? thresholds.walkEnterPolarDeg : thresholds.walkExitPolarDeg;
+  if (signals.orbitDistanceM > orbitLimit) return false;
+  if (signals.polarDeg < polarLimit) return false;
+  if (signals.centreGroundDistanceM == null || signals.centreGroundDistanceM > groundLimit) return false;
+  if (!signals.centreHasNamedStreet) return false;
+  return true;
+}
+
+function buildingBlockedByWalkProximity(signals: SemanticHudSignals): boolean {
+  const min = signals.minOrbitDistanceM;
+  if (signals.centreGroundDistanceM == null) return false;
+  return (
+    signals.centreGroundDistanceM <= min * 1.2 &&
+    signals.polarDeg >= 60 &&
+    signals.orbitDistanceM <= min * 1.4
+  );
 }
 
 function buildingCandidate(signals: SemanticHudSignals, thresholds: SemanticHudThresholds, entering: boolean): boolean {
-  const walkEyeLimit = entering ? thresholds.walkEnterEyeHeightM : thresholds.walkExitEyeHeightM;
-  if (signals.eyeHeightM <= walkEyeLimit) return false;
-  const distanceLimit = entering ? thresholds.buildingEnterDistanceM : thresholds.buildingExitDistanceM;
+  if (walkCandidate(signals, thresholds, true)) return false;
+  if (buildingBlockedByWalkProximity(signals)) return false;
+  const min = signals.minOrbitDistanceM;
+  const distanceLimit = min * (entering ? thresholds.buildingEnterDistanceFactor : thresholds.buildingExitDistanceFactor);
+  const zoomLimit = entering ? thresholds.buildingEnterZoomCloseT : thresholds.buildingExitZoomCloseT;
   const fillLimit = entering ? thresholds.buildingEnterScreenFill : thresholds.buildingExitScreenFill;
-  const near =
-    signals.nearestBuildingDistanceM != null && signals.nearestBuildingDistanceM <= distanceLimit;
-  return near || signals.buildingScreenFill >= fillLimit;
+  const zoomClose = orbitZoomCloseT(signals);
+  const nearCentre =
+    signals.centreBuildingDistanceM != null && signals.centreBuildingDistanceM <= distanceLimit;
+  const zoomBand = zoomClose >= zoomLimit && signals.hasCentreBuilding;
+  return nearCentre || zoomBand || signals.buildingScreenFill >= fillLimit;
 }
 
 export function resolveSemanticHudMode(

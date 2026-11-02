@@ -168,6 +168,7 @@ import { Scene3D, type SceneExporter } from "./Scene3D";
 import { SiteIntelligenceSemantic } from "./SiteIntelligenceSemantic";
 import { SemanticViewportLabels } from "./SemanticViewportLabels";
 import { EMPTY_SEMANTIC_HUD_SAMPLE, type SemanticHudSample } from "../lib/semanticHudSample";
+import { semanticHudModeLabel } from "../lib/semanticHudMode";
 
 function shouldShowIntroBridgePill(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") return false;
@@ -2106,7 +2107,22 @@ export function ModelPage({
             showNewCut
             onSelect={selectSection}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-            rightMeta={`MGA${mgaCrs(model.center.lon).zone}`}
+            rightMeta={
+              <>
+                <span className="mono">MGA{mgaCrs(model.center.lon).zone}</span>
+                {semanticHudActive && rightOpen === "summary" ? (
+                  <>
+                    <span className="v-sep hud-sep" aria-hidden="true" />
+                    <span
+                      className="dim-chip semantic-hud-mode-chip mono"
+                      data-mode={semanticHudSample.mode}
+                    >
+                      {semanticHudModeLabel(semanticHudSample.mode)}
+                    </span>
+                  </>
+                ) : null}
+              </>
+            }
             brandMeta={
               <>
                 <span className="v-sep hud-sep" aria-hidden="true" />

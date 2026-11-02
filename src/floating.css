@@ -1685,6 +1685,14 @@ body,
   color: var(--ink-3);
 }
 
+.model .right-inspector .insp-head .semantic-hud-mode-chip {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
 .model .right-inspector .insp-tabs.is-right-rail {
   position: static;
   width: 100%;

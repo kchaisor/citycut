@@ -82,21 +82,41 @@ export function SemanticHudSampler({
       (terrain ? sampleTerrain(terrain, cameraEast, cameraNorth, sideM) : groundY);
     const eyeHeightM = Math.max(0, eye[1] - localGroundY);
     const pitchDeg = cameraPitchDegFromEyeTarget(eye, target);
+    const orbitDistanceM = camera.position.distanceTo(controls.target);
+    const minOrbitDistanceM = controls.minDistance;
+    const maxOrbitDistanceM = controls.maxDistance;
+    const polarDeg = (controls.getPolarAngle() * 180) / Math.PI;
 
     scratchPointer.set(0, 0);
     scratchRay.setFromCamera(scratchPointer, camera);
     const hits = scratchRay.intersectObject(cityRoot, true);
     let focusBuilding: BuildingFeat | null = null;
-    let nearestBuildingDistanceM: number | null = null;
+    let centreBuildingDistanceM: number | null = null;
     for (const hit of hits) {
       const id = buildingIdFromIntersection(hit);
       if (id == null) continue;
       const building = buildings.find((row) => row.id === id) ?? null;
       if (!building) continue;
       focusBuilding = building;
-      nearestBuildingDistanceM = hit.distance;
+      centreBuildingDistanceM = hit.distance;
       break;
     }
+
+    let centreGroundDistanceM: number | null = null;
+    let centreGroundEast = cameraEast;
+    let centreGroundNorth = cameraNorth;
+    const rayDir = scratchRay.ray.direction;
+    if (rayDir.y < -1e-5) {
+      const planeY = localGroundY;
+      const tGround = (planeY - eye[1]) / rayDir.y;
+      if (tGround > 0) {
+        centreGroundDistanceM = tGround;
+        centreGroundEast = eye[0] + rayDir.x * tGround;
+        centreGroundNorth = -(eye[2] + rayDir.z * tGround);
+      }
+    }
+    const centreRoadHit = nearestNamedRoadAt(roads, [centreGroundEast, centreGroundNorth], WALK_LATERAL_CROSS_M);
+    const centreHasNamedStreet = Boolean(centreRoadHit?.road.name?.trim());
 
     let buildingScreenFill = 0;
     let bestFillBuilding: BuildingFeat | null = null;
@@ -117,13 +137,20 @@ export function SemanticHudSampler({
         }
       }
       buildingScreenFill = bestFill;
-      if (nearestBuildingDistanceM == null) nearestBuildingDistanceM = bestDist;
+      if (centreBuildingDistanceM == null) centreBuildingDistanceM = bestDist;
     }
 
     let mode = resolveSemanticHudMode(modeRef.current, {
       eyeHeightM,
       pitchDeg,
-      nearestBuildingDistanceM,
+      polarDeg,
+      orbitDistanceM,
+      minOrbitDistanceM,
+      maxOrbitDistanceM,
+      centreGroundDistanceM,
+      centreBuildingDistanceM,
+      centreHasNamedStreet,
+      hasCentreBuilding: focusBuilding != null,
       buildingScreenFill,
     });
 

@@ -70,7 +70,7 @@ import {
 } from "../lib/planCamera";
 import { pickCitySurfaceY } from "../lib/citySurfacePick";
 import { qaModeFromSearch, registerQaCameraBridge, type QaCameraPose } from "../lib/qaCameraBridge";
-import type { SemanticHudMode } from "../lib/semanticHudMode";
+import { perspectiveOrbitMinDistanceM, type SemanticHudMode } from "../lib/semanticHudMode";
 import { WebGlContextWatch } from "./WebGlContextWatch";
 import type { ProjectionMode } from "../lib/viewMemory";
 import { isLayer3dVisible, treesVisibleIn3d, type View3dDisplaySettings } from "../lib/view3dDisplay";
@@ -1836,8 +1836,9 @@ export function Cameras({
             enableDamping
             dampingFactor={0.08}
             maxPolarAngle={Math.PI / 2.02}
-            minDistance={side * 0.2}
+            minDistance={perspectiveOrbitMinDistanceM(side)}
             maxDistance={Math.max(side * 6, heliodonRadius * 2.4)}
+            zoomToCursor
             onStart={() => {
               touchedRef.current = true;
               invalidate();
