@@ -94,10 +94,10 @@ await page.waitForTimeout(800);
 await flushCanvasFrame(page);
 await page.screenshot({ path: path.join(OUT, "pr192-fresh-model-default-uniform.png") });
 
-const treesRow = page.locator('.model .left-outliner [aria-label="Layers"] button.studio-layer-row').filter({ hasText: /^Trees$/ });
+const treesRow = page.locator('.model [aria-label="3D layers"] .studio-layer-row').filter({ hasText: "Trees" });
 if (await treesRow.count()) {
-  const pressed = await treesRow.getAttribute("aria-pressed");
-  if (pressed !== "true") await treesRow.click();
+  const checkbox = treesRow.locator('input[type="checkbox"]');
+  if (!(await checkbox.isChecked())) await checkbox.check();
   await page.waitForTimeout(1200);
   await flushCanvasFrame(page);
   await page.screenshot({ path: path.join(OUT, "pr192-tree-crown-four-variants.png") });
