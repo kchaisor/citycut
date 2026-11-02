@@ -77,22 +77,17 @@ function StudioComposer({ quality, noToneMapping, sideM }: { quality: RenderQual
     const on = ambientOcclusionActive(qualityRef.current, moving.current);
     if (pass.enabled !== on) pass.enabled = on;
   });
-  const aoRadius = Math.max(4, sideM * 0.012);
   return (
     <EffectComposer multisampling={0} renderPriority={1}>
       {studioAoActive(quality) ? (
         <N8AO
           ref={setAoPass}
           enabled={quality === "high"}
-          quality="performance"
+          quality="medium"
           halfRes
-          aoSamples={14}
-          denoiseSamples={4}
-          denoiseRadius={10}
-          depthAwareUpsampling
-          aoRadius={aoRadius}
+          aoRadius={Math.max(4, sideM * 0.012)}
           distanceFalloff={1}
-          intensity={3.15}
+          intensity={3}
         />
       ) : null}
       <ToneMapping mode={noToneMapping ? ToneMappingMode.LINEAR : ToneMappingMode.ACES_FILMIC} />

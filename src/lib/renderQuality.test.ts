@@ -35,9 +35,9 @@ describe("render quality", () => {
     expect(readStoredRenderQuality(store)).toBe("high");
   });
 
-  it("keeps ambient occlusion on for high and off for fast", () => {
+  it("keeps ambient occlusion off in fast and while the camera moves", () => {
     expect(ambientOcclusionActive("high", false)).toBe(true);
-    expect(ambientOcclusionActive("high", true)).toBe(true);
+    expect(ambientOcclusionActive("high", true)).toBe(false);
     expect(ambientOcclusionActive("fast", false)).toBe(false);
     expect(ambientOcclusionActive("fast", true)).toBe(false);
   });
