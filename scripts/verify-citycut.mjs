@@ -52,6 +52,10 @@ function isHoverHighlightYellow(r, g, b) {
   return score >= 260 && r >= 150 && g >= 140 && b <= 120;
 }
 
+function isTreeCrownGreen(r, g, b) {
+  return g >= 45 && g > r * 1.05 && g > b * 1.12 && r <= 110 && b <= 95 && r + g + b >= 80;
+}
+
 function isNewHoverYellowPixel(before, after) {
   if (isHoverHighlightYellow(after.r, after.g, after.b) && !isHoverHighlightYellow(before.r, before.g, before.b)) {
     return true;
@@ -1343,6 +1347,48 @@ async function main() {
       "Tree crowns use four deterministic green fill tokens across the model data",
       treeVariantInfo.treeCrowns > 0 && treeVariantInfo.variantCount === 4,
       `summary=${JSON.stringify(treeVariantInfo)}`,
+    );
+    const treesLayerRow = lensPage.locator('.model [aria-label="3D layers"] .studio-layer-row').filter({ hasText: "Trees" });
+    if (await treesLayerRow.count()) {
+      const treesCheckbox = treesLayerRow.locator('input[type="checkbox"]');
+      if (!(await treesCheckbox.isChecked())) await treesCheckbox.check();
+      await lensPage.waitForTimeout(1200);
+    }
+    const treeGreenPixels = await lensPage.evaluate(() => {
+      const canvas = document.querySelector(".model canvas");
+      if (!(canvas instanceof HTMLCanvasElement)) return { green: 0, black: 0, samples: 0 };
+      const rect = canvas.getBoundingClientRect();
+      const off = document.createElement("canvas");
+      off.width = 360;
+      off.height = 220;
+      const ctx = off.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return { green: 0, black: 0, samples: 0 };
+      const sx = rect.width * 0.08;
+      const sy = rect.height * 0.12;
+      const sw = rect.width * 0.84;
+      const sh = rect.height * 0.76;
+      ctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, off.width, off.height);
+      const data = ctx.getImageData(0, 0, off.width, off.height).data;
+      let green = 0;
+      let black = 0;
+      let samples = 0;
+      for (let p = 0; p < data.length; p += 16) {
+        const r = data[p];
+        const g = data[p + 1];
+        const b = data[p + 2];
+        samples += 1;
+        if (r + g + b < 24) black += 1;
+        if (g >= 45 && g > r * 1.05 && g > b * 1.12 && r <= 110) green += 1;
+      }
+      return { green, black, samples };
+    });
+    assertCheck(
+      "tree-crown-green-pixels",
+      "Visible tree crowns read as green (G-dominant) in the 3D viewport, not solid black",
+      treeGreenPixels.samples > 0 &&
+        treeGreenPixels.green >= 12 &&
+        treeGreenPixels.green > treeGreenPixels.black * 2,
+      `pixels=${JSON.stringify(treeGreenPixels)}`,
     );
     await lensPage.evaluate(() => {
       const towerId = window.__citycutQaModel?.pickTallTowerForSelectionQa?.();

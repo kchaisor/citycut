@@ -78,7 +78,7 @@ function createTreeMaterials() {
   const trunkColor = getColour("--tree-trunk");
   const trunkMaterial = matteStandardMaterial({ color: trunkColor });
   trunkMaterial.name = "TreeTrunks";
-  const crownMaterial = matteStandardMaterial({ color: getColour("--tree-crown"), flatShading: true });
+  const crownMaterial = matteStandardMaterial({ color: 0xffffff, flatShading: true });
   crownMaterial.name = "TreeCrowns";
   crownMaterial.vertexColors = true;
   crownMaterial.flatShading = true;
@@ -91,8 +91,6 @@ function fillTreeInstances(
   elevationAt: (east: number, north: number) => number,
   crownMesh: THREE.InstancedMesh,
   trunkMesh: THREE.InstancedMesh,
-  crownBase: THREE.BufferGeometry,
-  trunkBase: THREE.BufferGeometry,
 ) {
   const matrix = new THREE.Matrix4();
   const position = new THREE.Vector3();
@@ -122,15 +120,20 @@ function fillTreeInstances(
   crownMesh.instanceMatrix.needsUpdate = true;
   if (crownMesh.instanceColor) crownMesh.instanceColor.needsUpdate = true;
   trunkMesh.instanceMatrix.needsUpdate = true;
-  void crownBase;
-  void trunkBase;
 }
 
-function instancedPair(count: number, crownBase: THREE.BufferGeometry, trunkBase: THREE.BufferGeometry, materials: ReturnType<typeof createTreeMaterials>) {
-  const crownMesh = new THREE.InstancedMesh(crownBase, materials.crownMaterial, count);
+function instancedPair(
+  count: number,
+  crownUnit: THREE.BufferGeometry,
+  trunkUnit: THREE.BufferGeometry,
+  materials: ReturnType<typeof createTreeMaterials>,
+) {
+  const crownGeometry = crownUnit.clone();
+  const trunkGeometry = trunkUnit.clone();
+  const crownMesh = new THREE.InstancedMesh(crownGeometry, materials.crownMaterial, count);
   crownMesh.name = "TreeCrowns";
   crownMesh.userData.exportLayer = "Trees";
-  const trunkMesh = new THREE.InstancedMesh(trunkBase, materials.trunkMaterial, count);
+  const trunkMesh = new THREE.InstancedMesh(trunkGeometry, materials.trunkMaterial, count);
   trunkMesh.name = "TreeTrunks";
   trunkMesh.userData.exportLayer = "Trees";
   return { crownMesh, trunkMesh };
@@ -165,7 +168,7 @@ export function buildTreeGroup(
       const bucketTrees = buckets.get(b) ?? [];
       if (bucketTrees.length === 0) continue;
       const { crownMesh, trunkMesh } = instancedPair(bucketTrees.length, crownBase, trunkBase, materials);
-      fillTreeInstances(bucketTrees, elevationAt, crownMesh, trunkMesh, crownBase, trunkBase);
+      fillTreeInstances(bucketTrees, elevationAt, crownMesh, trunkMesh);
       const sub = new THREE.Group();
       sub.name = "TreesBucket";
       sub.userData.introTreeBucket = b;
@@ -174,15 +177,15 @@ export function buildTreeGroup(
       sub.add(crownMesh);
       group.add(sub);
     }
-    trunkBase.dispose();
     crownBase.dispose();
+    trunkBase.dispose();
     return group.children.length > 0 ? group : null;
   }
 
   const { crownMesh, trunkMesh } = instancedPair(trees.length, crownBase, trunkBase, materials);
-  fillTreeInstances(trees, elevationAt, crownMesh, trunkMesh, crownBase, trunkBase);
-  trunkBase.dispose();
+  fillTreeInstances(trees, elevationAt, crownMesh, trunkMesh);
   crownBase.dispose();
+  trunkBase.dispose();
 
   const group = new THREE.Group();
   group.name = "Trees";

@@ -1,6 +1,3 @@
-import { spawn } from "node:child_process";
-import net from "node:net";
-import path from "node:path";
 import { chromium } from "playwright";
 
 const CHROME_PATH = "/usr/bin/google-chrome";
@@ -17,54 +14,22 @@ const CHROME_ARGS = [
 ];
 
 const SITE = { lat: -37.8136, lon: 144.9831, km: 1, label: "East Melbourne" };
-const MAIN_URL = process.env.CITYCUT_MAIN_URL ?? "https://kchaisor.github.io/citycut/";
-const BRANCH_PREVIEW_URL =
-  process.env.CITYCUT_PREVIEW_URL ?? process.env.VERIFY_BASE_URL ?? null;
+const MAIN_URL = (process.env.CITYCUT_MAIN_URL ?? "https://citycut-app.vercel.app/").replace(/\/?$/, "/");
+const BRANCH_URL = (
+  process.env.CITYCUT_PREVIEW_URL ??
+  process.env.VERIFY_BASE_URL ??
+  "https://citycut-git-feat-hover-b85-white-palette-kchai.vercel.app/"
+).replace(/\/?$/, "/");
 
-function findFreePort() {
-  return new Promise((resolve, reject) => {
-    const srv = net.createServer();
-    srv.listen(0, "127.0.0.1", () => {
-      const addr = srv.address();
-      const port = typeof addr === "object" && addr ? addr.port : 4173;
-      srv.close(() => resolve(port));
-    });
-    srv.on("error", reject);
-  });
-}
-
-function waitForServer(url, timeoutMs = 60000) {
-  const start = Date.now();
-  return new Promise((resolve, reject) => {
-    const check = async () => {
-      try {
-        const res = await fetch(url);
-        if (res.ok) {
-          resolve();
-          return;
-        }
-      } catch {
-      }
-      if (Date.now() - start > timeoutMs) {
-        reject(new Error(`Timed out waiting for ${url}`));
-        return;
-      }
-      setTimeout(check, 250);
-    };
-    check();
-  });
-}
-
-async function startLocalPreview() {
-  const port = await findFreePort();
-  const proc = spawn(
-    path.join(process.cwd(), "node_modules/.bin/vite"),
-    ["preview", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
-    { cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, BROWSER: "none" } },
-  );
-  const baseUrl = `http://127.0.0.1:${port}/citycut/`;
-  await waitForServer(baseUrl);
-  return { proc, baseUrl };
+function modelUrl(base) {
+  const u = new URL(base);
+  u.searchParams.set("qa", "1");
+  u.searchParams.set("view", "persp");
+  u.searchParams.set("lat", String(SITE.lat));
+  u.searchParams.set("lon", String(SITE.lon));
+  u.searchParams.set("km", String(SITE.km));
+  u.searchParams.set("label", SITE.label);
+  return u.toString();
 }
 
 async function waitIntroDone(page) {
@@ -96,14 +61,6 @@ async function settleDefaultCamera(page) {
   await page.waitForTimeout(600);
   await reset.click({ timeout: 60000 });
   await page.waitForTimeout(600);
-  await page.evaluate(() => {
-    const d = 920;
-    window.__citycutQa?.setCamera?.({
-      eye: { x: d * 0.72, y: d * 0.78, z: -d * 0.72 },
-      target: { x: 0, y: 25, z: 0 },
-    });
-  });
-  await page.waitForTimeout(800);
 }
 
 async function openModel(page, baseUrl) {
@@ -119,8 +76,7 @@ async function openModel(page, baseUrl) {
     } catch {
     }
   });
-  const url = `${baseUrl}?qa=1&view=persp&lat=${SITE.lat}&lon=${SITE.lon}&km=${SITE.km}&label=${encodeURIComponent(SITE.label)}`;
-  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 180000 });
+  await page.goto(modelUrl(baseUrl), { waitUntil: "domcontentloaded", timeout: 180000 });
   await page.locator("button.create-fab").click();
   await page.waitForSelector(".model", { timeout: 600000 });
   await waitForWebGlCanvas(page);
@@ -131,25 +87,18 @@ async function openModel(page, baseUrl) {
   await page.waitForTimeout(400);
 }
 
-function summarizeDeltas(samples) {
-  const sorted = [...samples].sort((a, b) => a - b);
-  const sum = sorted.reduce((a, b) => a + b, 0);
-  const pct = (p) => {
-    if (!sorted.length) return 0;
-    const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
-    return sorted[idx];
-  };
-  return {
-    frames: sorted.length,
-    fpsAvg: sorted.length ? Math.round((1000 * sorted.length) / sum) : 0,
-    frameMsAvg: sorted.length ? sum / sorted.length : 0,
-    frameMsP50: pct(50),
-    frameMsP95: pct(95),
-    frameMsP99: pct(99),
-  };
+async function gpuInfo(page) {
+  return page.evaluate(() => {
+    const canvas = document.querySelector(".model canvas") ?? document.querySelector("canvas");
+    const gl = canvas?.getContext("webgl2") ?? canvas?.getContext("webgl");
+    if (!gl) return { renderer: "none", swiftShader: true };
+    const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+    const renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    return { renderer: String(renderer), swiftShader: /swiftshader/i.test(String(renderer)) };
+  });
 }
 
-async function mouseOrbitSample(page, durationMs) {
+async function mouseDragPerfSample(page, durationMs) {
   const canvas = page.locator(".model canvas");
   const box = await canvas.boundingBox();
   if (!box) throw new Error("no canvas");
@@ -159,53 +108,26 @@ async function mouseOrbitSample(page, durationMs) {
   await page.mouse.down();
   const hasPerf = await page.evaluate(() => Boolean(window.__citycutPerf?.startSample));
   if (hasPerf) {
-    await page.evaluate((ms) => window.__citycutPerf.startSample({ durationMs: ms, orbit: false }), durationMs + 2000);
+    await page.evaluate((ms) => window.__citycutPerf.startSample({ durationMs: ms, orbit: false }), durationMs + 2500);
   }
-  const steps = Math.max(36, Math.round(durationMs / 65));
-  const dx = (box.width * 0.34) / steps;
-  const rafSamples = [];
+  const steps = Math.max(28, Math.round(durationMs / 70));
+  const dx = (box.width * 0.32) / steps;
   for (let i = 0; i < steps; i++) {
     await page.mouse.move(cx + dx * (i + 1), cy + Math.sin(i / 4) * 4, { steps: 2 });
-    const delta = await page.evaluate(async () => {
-      const t0 = performance.now();
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      return performance.now() - t0;
-    });
-    rafSamples.push(delta);
+    await page.waitForTimeout(65);
   }
   await page.mouse.up();
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(250);
   let perfStats = null;
   if (hasPerf) {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + 10000;
     while (Date.now() < deadline) {
       await page.waitForTimeout(32);
       perfStats = await page.evaluate(() => window.__citycutPerf?.readSample?.() ?? null);
       if (perfStats) break;
     }
   }
-  const edgeCounts = await page.evaluate(() => {
-    let buildingEdges = 0;
-    let buildingEdge = 0;
-    let selectionDashed = 0;
-    const canvas = document.querySelector(".model canvas");
-    const scene = canvas && canvas.__r3f?.root?.getState?.()?.scene;
-    if (!scene) return { buildingEdges, buildingEdge, selectionDashed };
-    scene.traverse((object) => {
-      if (object.name === "BuildingEdges") buildingEdges += 1;
-      if (object.name === "BuildingEdge") buildingEdge += 1;
-      if (object.name === "BuildingSelectionOutline") selectionDashed += 1;
-    });
-    return { buildingEdges, buildingEdge, selectionDashed };
-  });
-  const stats = summarizeDeltas(rafSamples);
-  return {
-    stats,
-    perfStats,
-    drawCallsPeak: perfStats?.drawCallsPeak ?? null,
-    edgeCounts,
-  };
+  return perfStats;
 }
 
 async function measureTarget(target) {
@@ -219,45 +141,42 @@ async function measureTarget(target) {
     const page = await context.newPage();
     page.setDefaultTimeout(180000);
     await openModel(page, target.url);
-    const orbit = await mouseOrbitSample(page, 4500);
-    const pan = await mouseOrbitSample(page, 3500);
+    const gpu = await gpuInfo(page);
+    const orbit = await mouseDragPerfSample(page, 4000);
+    const pan = await mouseDragPerfSample(page, 3000);
+    const pick = (stats) =>
+      stats
+        ? {
+            drawCallsPeak: stats.drawCallsPeak,
+            trianglesPeak: stats.trianglesPeak,
+            linesPeak: stats.linesPeak,
+            ...(gpu.swiftShader
+              ? { frameMsNote: "SwiftShader: frame ms omitted" }
+              : {
+                  frameMsP50: stats.frameMsP50,
+                  frameMsP95: stats.frameMsP95,
+                }),
+          }
+        : null;
     return {
       id: target.id,
       url: target.url,
-      orbit: orbit.stats,
-      pan: pan.stats,
-      drawCallsPeakOrbit: orbit.drawCallsPeak,
-      drawCallsPeakPan: pan.drawCallsPeak,
-      edgeCountsOrbit: orbit.edgeCounts,
-      edgeCountsPan: pan.edgeCounts,
+      gpu,
+      orbit: pick(orbit),
+      pan: pick(pan),
     };
   } finally {
     await browser.close();
   }
 }
 
-async function runAll() {
-  let localPreview = null;
-  const branchUrl = BRANCH_PREVIEW_URL;
-  if (!branchUrl) {
-    localPreview = await startLocalPreview();
-  }
-  const targets = [
-    { id: "main", url: MAIN_URL },
-    { id: "branch", url: branchUrl ?? localPreview.baseUrl },
-  ];
-  const results = [];
-  try {
-    for (const target of targets) {
-      results.push(await measureTarget(target));
-    }
-  } finally {
-    localPreview?.proc.kill("SIGTERM");
-  }
-  console.log(JSON.stringify({ site: SITE, mainUrl: MAIN_URL, results }, null, 2));
-}
+const targets = [
+  { id: "main", url: MAIN_URL },
+  { id: "branch", url: BRANCH_URL },
+];
 
-runAll().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+const results = [];
+for (const target of targets) {
+  results.push(await measureTarget(target));
+}
+console.log(JSON.stringify({ site: SITE, results }, null, 2));
