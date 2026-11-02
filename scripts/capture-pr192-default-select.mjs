@@ -72,17 +72,28 @@ await page.waitForTimeout(2000);
 await flushCanvasFrame(page);
 await page.screenshot({ path: path.join(OUT, "pr192-fresh-model-default-uniform.png") });
 
-const buildingId = await page.evaluate(() => {
-  const id = window.__citycutQaModel?.pickForegroundBuildingForSelectionQa?.();
-  if (id != null) {
-    window.__citycutQaModel?.frameSelectionBuilding?.(id, "oblique");
-    window.__citycutQaModel?.clearHeightSelection?.();
-  }
-  return id;
-});
+let buildingId = await page.evaluate(() => window.__citycutQaModel?.findTallBuildingForLensQa?.()?.id ?? null);
+if (buildingId == null) {
+  buildingId = await page.evaluate(() => window.__citycutQaModel?.pickForegroundBuildingForSelectionQa?.() ?? null);
+}
 if (buildingId == null) throw new Error("No building for selection capture");
 
-const click = await page.evaluate((id) => window.__citycutQaModel?.resolveLensBuildingClick?.(id) ?? null, buildingId);
+await page.evaluate((id) => {
+  window.__citycutQaModel?.frameSelectionBuilding?.(id, "oblique");
+  window.__citycutQaModel?.clearHeightSelection?.();
+}, buildingId);
+await page.waitForTimeout(900);
+
+let click = await page.evaluate(
+  (id) => window.__citycutQaModel?.resolveLensBuildingClick?.(id) ?? null,
+  buildingId,
+);
+if (!click) {
+  click = await page.evaluate(
+    (id) => window.__citycutQaModel?.measureHoverCaptureFill?.(id)?.click ?? null,
+    buildingId,
+  );
+}
 if (!click) throw new Error("No click target for building");
 
 await page.mouse.move(click.clickX, click.clickY);
