@@ -115,6 +115,12 @@ vi.mock("maplibre-gl", () => {
     isMoving = () => false;
     fitBounds = vi.fn();
     flyTo = vi.fn();
+    jumpTo = vi.fn();
+    dragPan = { disable: vi.fn(), enable: vi.fn() };
+    unproject = vi.fn(([x, y]: [number, number]) => ({
+      lng: 144.96 + (x - 720) / 20000,
+      lat: -37.81 - (y - 450) / 20000,
+    }));
   }
   return { default: { Map: MockGlMap, NavigationControl } };
 });

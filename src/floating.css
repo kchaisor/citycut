@@ -3072,6 +3072,20 @@ body,
   pointer-events: none !important;
 }
 
+.select .map-wrap.is-cut-handles-active .frame-handle {
+  pointer-events: auto !important;
+  touch-action: none !important;
+}
+
+.select .map-wrap.is-resizing-cut {
+  cursor: nwse-resize;
+}
+
+.select .map-wrap.is-resizing-cut .map-canvas,
+.select .map-wrap.is-resizing-cut .map-canvas-muted {
+  cursor: nwse-resize !important;
+}
+
 .select .map-wrap .frame-handle-nw,
 .select .map-wrap .frame-handle.is-tl {
   top: -6px !important;
