@@ -34,8 +34,8 @@ export const DEFAULT_SEMANTIC_HUD_THRESHOLDS: SemanticHudThresholds = {
   walkExitOrbitFactor: 1.32,
   walkEnterGroundFactor: 1.35,
   walkExitGroundFactor: 1.55,
-  walkEnterPolarDeg: 65,
-  walkExitPolarDeg: 58,
+  walkEnterPolarDeg: 63,
+  walkExitPolarDeg: 57,
   buildingEnterDistanceFactor: 1.5,
   buildingExitDistanceFactor: 1.85,
   buildingEnterZoomCloseT: 0.35,
@@ -60,12 +60,18 @@ export function orbitZoomCloseT(signals: SemanticHudSignals): number {
   return Math.min(1, Math.max(0, 1 - (signals.orbitDistanceM - signals.minOrbitDistanceM) / span));
 }
 
+function walkProximityM(signals: SemanticHudSignals): number {
+  const ground = signals.centreGroundDistanceM;
+  if (ground != null && ground > 0) return Math.min(signals.orbitDistanceM, ground);
+  return signals.orbitDistanceM;
+}
+
 function walkCandidate(signals: SemanticHudSignals, thresholds: SemanticHudThresholds, entering: boolean): boolean {
   const min = signals.minOrbitDistanceM;
   const orbitLimit = min * (entering ? thresholds.walkEnterOrbitFactor : thresholds.walkExitOrbitFactor);
   const groundLimit = min * (entering ? thresholds.walkEnterGroundFactor : thresholds.walkExitGroundFactor);
   const polarLimit = entering ? thresholds.walkEnterPolarDeg : thresholds.walkExitPolarDeg;
-  if (signals.orbitDistanceM > orbitLimit) return false;
+  if (walkProximityM(signals) > orbitLimit) return false;
   if (signals.polarDeg < polarLimit) return false;
   if (signals.centreGroundDistanceM == null || signals.centreGroundDistanceM > groundLimit) return false;
   if (!signals.centreHasNamedStreet) return false;

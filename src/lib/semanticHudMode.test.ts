@@ -54,6 +54,23 @@ describe("resolveSemanticHudMode", () => {
     ).toBe("walk");
   });
 
+  it("uses ground hit distance when orbit target is farther than the street view", () => {
+    expect(
+      resolveSemanticHudMode(
+        "building",
+        signals({
+          orbitDistanceM: MIN * 2.4,
+          polarDeg: 68,
+          centreGroundDistanceM: MIN * 1.05,
+          centreHasNamedStreet: true,
+          hasCentreBuilding: true,
+          centreBuildingDistanceM: MIN * 0.9,
+          buildingScreenFill: 0.3,
+        }),
+      ),
+    ).toBe("walk");
+  });
+
   it("prefers walk over building when both match", () => {
     expect(
       resolveSemanticHudMode(

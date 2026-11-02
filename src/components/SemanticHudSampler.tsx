@@ -31,6 +31,7 @@ import { buildingIdFromIntersection } from "../lib/buildingPick";
 import type { BuildingFeat, RoadFeat, TerrainField } from "../types";
 
 const EVAL_MIN_INTERVAL_MS = 100;
+const CENTRE_STREET_MODE_MAX_M = 50;
 const WALK_LABEL_MAX_M = 150;
 const WALK_LABEL_MAX_COUNT = 4;
 const scratchRay = new THREE.Raycaster();
@@ -115,7 +116,11 @@ export function SemanticHudSampler({
         centreGroundNorth = -(eye[2] + rayDir.z * tGround);
       }
     }
-    const centreRoadHit = nearestNamedRoadAt(roads, [centreGroundEast, centreGroundNorth], WALK_LATERAL_CROSS_M);
+    const centreRoadHit = nearestNamedRoadAt(
+      roads,
+      [centreGroundEast, centreGroundNorth],
+      CENTRE_STREET_MODE_MAX_M,
+    );
     const centreHasNamedStreet = Boolean(centreRoadHit?.road.name?.trim());
 
     let buildingScreenFill = 0;

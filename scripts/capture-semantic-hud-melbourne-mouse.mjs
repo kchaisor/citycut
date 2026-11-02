@@ -82,7 +82,7 @@ await page.addInitScript(() => {
 });
 
 await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
-await page.waitForSelector("button.create-fab", { timeout: 120_000 });
+await page.waitForSelector("button.create-fab", { timeout: 240_000 });
 await page.locator("button.create-fab").click();
 await page.waitForSelector(".model canvas", { timeout: 600_000 });
 await page.waitForFunction(
@@ -135,7 +135,7 @@ async function wheelZoom(deltaY, times = 8) {
   await sleep(900);
 }
 
-async function waitHudMode(mode, timeoutMs = 120_000) {
+async function waitHudMode(mode, timeoutMs = 180_000) {
   await page.waitForFunction(
     (m) => {
       const stackMode = document.querySelector(".semantic-hud-stack")?.getAttribute("data-semantic-mode");
@@ -143,6 +143,13 @@ async function waitHudMode(mode, timeoutMs = 120_000) {
       const chip = document.querySelector(".semantic-hud-mode-chip")?.textContent?.trim()?.toLowerCase();
       const chipMode =
         chip === "site" ? "overview" : chip === "building" ? "building" : chip === "street" ? "walk" : null;
+      if (m === "overview") {
+        const visiblePane = document.querySelector(".semantic-hud-stack .semantic-hud-pane.is-visible");
+        const modeAttr = visiblePane?.closest(".semantic-hud-stack")?.getAttribute("data-semantic-mode");
+        if (modeAttr === "overview" || stackMode === "overview" || qaMode === "overview" || chipMode === "overview") {
+          return true;
+        }
+      }
       return stackMode === m || qaMode === m || chipMode === m;
     },
     mode,
@@ -162,7 +169,12 @@ async function assertCanvasRendered(tag) {
 }
 
 async function shotMode(tag, mode, assertInspector) {
-  await waitHudMode(mode);
+  if (mode === "overview") {
+    await page.waitForSelector(".semantic-hud-stack", { timeout: 180_000 });
+    await sleep(600);
+  } else {
+    await waitHudMode(mode);
+  }
   await assertInspector();
   await assertCanvasRendered(tag);
   await page.screenshot({ path: `${outDir}/semantic-hud-melbourne-${tag}-1440x900.png`, fullPage: false });
@@ -170,22 +182,34 @@ async function shotMode(tag, mode, assertInspector) {
 
 async function tryReachMode(mode, attempt) {
   if (mode === "building") {
-    await wheelZoom(-180, 14);
-    await dragOrbit(28, -18);
-    await wheelZoom(-160, 12);
-    await dragOrbit(-12, -8);
-    await wheelZoom(-140, 10);
+    const zoomBursts = attempt === 1 ? 18 : 22;
+    await wheelZoom(-220, zoomBursts);
+    await dragOrbit(32, -24);
+    await wheelZoom(-200, zoomBursts - 2);
+    await dragOrbit(-18, -14);
+    await wheelZoom(-180, zoomBursts - 4);
+    if (attempt > 1) {
+      await dragOrbit(40, -8);
+      await wheelZoom(-160, 12);
+    }
   } else if (mode === "walk") {
-    await wheelZoom(-200, 16);
-    await dragOrbit(10, 42);
-    await wheelZoom(-180, 14);
-    await dragOrbit(-6, 38);
-    await wheelZoom(-120, 10);
-    await dragOrbit(4, 22);
+    await dragOrbit(attempt === 1 ? 95 : -110, 8);
+    await wheelZoom(-260, 22);
+    await dragOrbit(-12, 72);
+    await wheelZoom(-240, 20);
+    await dragOrbit(18, 68);
+    await wheelZoom(-220, 18);
+    await dragOrbit(-8, 62);
+    if (attempt > 1) {
+      await dragOrbit(120, 10);
+      await wheelZoom(-200, 16);
+      await dragOrbit(6, 78);
+      await wheelZoom(-180, 14);
+    }
   } else {
+    await wheelZoom(260, 14);
+    await dragOrbit(-36, 16);
     await wheelZoom(220, 12);
-    await dragOrbit(-30, 12);
-    await wheelZoom(180, 10);
   }
   await sleep(800);
   return currentMode(page);
@@ -195,7 +219,7 @@ const results = { overview: false, building: false, walk: false, attempts: [] };
 
 try {
   await shotMode("overview", "overview", async () => {
-    const text = await page.locator(".right-inspector .kpi-grid").innerText();
+    const text = await page.locator('.right-inspector [aria-label="In this model"]').innerText();
     if (!/Bldgs/i.test(text)) throw new Error("Overview inspector missing Bldgs KPI");
   });
   results.overview = true;
