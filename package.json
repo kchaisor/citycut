@@ -13,6 +13,9 @@
     "build:enrichment": "node scripts/build-building-enrichment-pmtiles.mjs",
     "test:pipeline": "pytest pipeline/test_build_enrichment.py -q",
     "verify:ui": "node scripts/verify-citycut.mjs",
+    "build:reach": "node scripts/build-reach-data.mjs",
+    "check:tla": "node scripts/check-tla.mjs",
+    "lint:reach-budget": "node scripts/lint-reach-budget.mjs",
     "match:ref": "node scripts/match-reference.mjs"
   },
   "dependencies": {
@@ -24,6 +27,7 @@
     "@react-three/fiber": "^9.3.0",
     "@react-three/postprocessing": "^3.2.2",
     "clipper-lib": "^6.4.2",
+    "h3-js": "^4.5.0",
     "lucide-react": "^0.544.0",
     "maplibre-gl": "^5.6.2",
     "pbf": "^5.1.2",

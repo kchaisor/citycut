@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "h3Resolution": 9,
+  "walkSpeedKmh": 4.8,
+  "waitPolicy": "Scheduled GTFS in-vehicle time plus average headway wait at origin stop (weekday AM 4 min, midday 6 min, weekend 8 min); real-time delays excluded.",
+  "exampleData": false,
+  "sources": {
+    "walking": {
+      "name": "H3 adjacency grid (geodesic edge lengths)",
+      "url": "https://h3geo.org/",
+      "retrieved": "2026-11-03"
+    },
+    "transit": {
+      "name": "PTV GTFS static feed",
+      "url": "https://data.ptv.vic.gov.au/downloads/gtfs.zip",
+      "retrieved": "2026-11-03"
+    }
+  },
+  "cellCount": 3677,
+  "stationCount": 34,
+  "profiles": [
+    "weekday_am",
+    "midday",
+    "weekend"
+  ],
+  "files": {
+    "cells": "cells.json",
+    "graph": "graph.bin",
+    "stations": "stations.json",
+    "weekday_am": "pt-weekday-am.bin",
+    "midday": "pt-midday.bin",
+    "weekend": "pt-weekend.bin"
+  }
+}

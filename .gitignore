@@ -17,4 +17,6 @@ pipeline/out/
 .trees-work/
 public/trees.pmtiles
 public/trees-manifest.json
+public/reach/gtfs/
+public/reach/gtfs.zip
 match-ref-out/

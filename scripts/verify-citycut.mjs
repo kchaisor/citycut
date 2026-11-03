@@ -1135,8 +1135,38 @@ async function main() {
     await page.getByRole("tab", { name: /Solar Study/i }).click();
     await page.waitForTimeout(200);
 
-    // DRAWING -> DISPLAY OUTLINER CLEANUP & RESET COLOURS INVARIANT
     await page.getByRole("tab", { name: /Drawing/i }).click();
+    await page.getByRole("button", { name: /Quick Demographics/i }).click();
+    await page.waitForSelector('[data-reach-map="true"]', { timeout: 25000 });
+    await page.waitForFunction(() => Boolean(window.__citycutReachQa), { timeout: 35000 });
+    const reachBudgetProbe = await page.evaluate(() => {
+      const qa = window.__citycutReachQa;
+      const beforeWalk = qa?.walkKm2 ?? 0;
+      qa?.setBudget?.(25);
+      return { beforeWalk, budget: qa?.budgetMin ?? 0 };
+    });
+    await page.waitForTimeout(500);
+    const reachAfterBudget = await page.evaluate(() => ({
+      walk: window.__citycutReachQa?.walkKm2 ?? 0,
+      transit: window.__citycutReachQa?.transitKm2 ?? 0,
+      budget: window.__citycutReachQa?.budgetMin ?? 0,
+    }));
+    assertCheck(
+      "reach-demographics-explorer",
+      "Drawing → Demographics Reach loads H3 isochrones, exposes QA bridge, and expands walk reach when the time budget increases",
+      reachBudgetProbe.beforeWalk > 0 &&
+        reachAfterBudget.budget === 25 &&
+        reachAfterBudget.walk >= reachBudgetProbe.beforeWalk &&
+        reachAfterBudget.transit >= reachAfterBudget.walk,
+      `beforeWalk=${reachBudgetProbe.beforeWalk}, afterWalk=${reachAfterBudget.walk}, transit=${reachAfterBudget.transit}, budget=${reachAfterBudget.budget}`,
+    );
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "reach-explorer-flinders-1440x900.png") });
+    }
+    await page.getByRole("button", { name: /Quick Site plan/i }).click();
+    await page.waitForTimeout(200);
+
+    // DRAWING -> DISPLAY OUTLINER CLEANUP & RESET COLOURS INVARIANT
     await page.waitForSelector("svg.plan", { timeout: 10000 });
     const displayBtn = page.getByRole("button", { name: "Display" }).first();
     await displayBtn.click();
