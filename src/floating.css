@@ -4427,6 +4427,28 @@ body,
   background: var(--demographics-map-bg);
 }
 
+.model.is-demographics .left-tool-rail.sidebar-rail,
+.model.is-demographics .left-outliner.sidebar-panel {
+  display: none !important;
+}
+
+.model.is-demographics .right-inspector {
+  width: 400px;
+  max-width: calc(100vw - 28px);
+  padding: 14px 16px;
+}
+
+.model.is-demographics .right-inspector .insp-head {
+  display: none;
+}
+
+.model.is-demographics .right-inspector .sidebar-panel.is-right {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .model.is-demographics .right-inspector,
 .model.is-demographics .right-inspector.hud-card {
   background: var(--demographics-panel-bg) !important;
@@ -4445,12 +4467,16 @@ body,
 
 .model.is-demographics .demo-tabs {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
   gap: 6px;
   margin-bottom: 14px;
 }
 
 .model.is-demographics .demo-tab {
+  flex: 0 0 auto;
+  white-space: nowrap;
   appearance: none;
   border: 0;
   border-radius: 999px;
@@ -4634,8 +4660,18 @@ body,
 .model.is-demographics .demo-explorer-head {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
+  flex-shrink: 0;
+}
+
+.model.is-demographics .demo-explorer-head > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.model.is-demographics .demo-mode-toggle {
+  flex-shrink: 0;
 }
 
 .model.is-demographics .demo-explorer-title {
@@ -4699,8 +4735,34 @@ body,
 
 .model.is-demographics .demo-residents {
   margin: 0 0 10px;
-  font-size: 11px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
   color: var(--demographics-panel-text);
+}
+
+.model.is-demographics .demo-pin-tag {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.model.is-demographics .demo-legend-title {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  fill: var(--demographics-panel-text);
+}
+
+.model.is-demographics .demo-legend-sub {
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  fill: var(--demographics-panel-muted);
+}
+
+.model.is-demographics .demo-legend-scale {
+  font-size: 8px;
+  fill: var(--demographics-panel-muted);
 }
 
 .model.is-demographics .demo-pyramid-row {

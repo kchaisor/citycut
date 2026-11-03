@@ -151,13 +151,18 @@ import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
 import { DemographicsExplorerMap } from "./DemographicsExplorerMap";
 import { DemographicsExplorerPanel } from "./DemographicsExplorerPanel";
-import { aggregateCatchmentFromParcels } from "../lib/demographicsCatchment";
+import { aggregateCatchmentForPin } from "../lib/demographicsCatchment";
 import {
   initialDemographicsExplorerState,
   reduceDemographicsExplorer,
 } from "../lib/demographicsExplorerReducer";
-import { buildParcelIndex } from "../lib/demographicsParcels";
-import { loadDemographicsParcels } from "../lib/demographicsParcelLoad";
+import {
+  DEMOGRAPHICS_PIN_CARLTON,
+  DEMOGRAPHICS_PIN_FITZROY,
+  pinFromLonLat,
+} from "../lib/demographicsExplorerPins";
+import { demographicsPlanViewportExtent } from "../lib/planViewport";
+import { useDemographicsParcels } from "./useDemographicsParcels";
 import {
   aggregateDemographicsForCut,
   buildDemographicsIndex,
@@ -298,8 +303,7 @@ export function ModelPage({
   );
   const [demographicsDataset, setDemographicsDataset] = useState<DemographicsDataset | null>(null);
   const [demographicsLoading, setDemographicsLoading] = useState(true);
-  const [demographicsParcels, setDemographicsParcels] = useState<Awaited<ReturnType<typeof loadDemographicsParcels>>>(null);
-  const [demographicsParcelsLoading, setDemographicsParcelsLoading] = useState(true);
+  const demographicsPinsSeededRef = useRef(false);
   const [analysisKind, setAnalysisKind] = useState<SiteAnalysisKind>("solar");
   const [shortcutCheatsheetOpen, setShortcutCheatsheetOpen] = useState(false);
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
@@ -368,19 +372,6 @@ export function ModelPage({
       cancelled = true;
     };
   }, []);
-  useEffect(() => {
-    let cancelled = false;
-    setDemographicsParcelsLoading(true);
-    void loadDemographicsParcels().then((dataset) => {
-      if (!cancelled) {
-        setDemographicsParcels(dataset);
-        setDemographicsParcelsLoading(false);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
   const demographicsIndex = useMemo<DemographicsSpatialIndex | null>(() => {
     if (!demographicsDataset) return null;
     return buildDemographicsIndex(demographicsDataset.units);
@@ -398,38 +389,45 @@ export function ModelPage({
       canopyPct: demographicsCanopyFromModel(model),
     });
   }, [demographicsDataset, demographicsIndex, demographicsInCoverage, model]);
-  const demographicsParcelRecords = demographicsParcels?.parcels ?? [];
-  const demographicsParcelIndex = useMemo(
-    () => (demographicsParcelRecords.length ? buildParcelIndex(demographicsParcelRecords, model.center) : null),
-    [demographicsParcelRecords, model.center],
-  );
+  const {
+    parcels: demographicsParcelRecords,
+    index: demographicsParcelIndex,
+    loading: demographicsParcelsLoading,
+  } = useDemographicsParcels(model, planViewport, demographicsExplorer, demographicsActive);
   const demographicsCatchmentA = useMemo(() => {
     const pin = demographicsExplorer.pins.a;
-    if (!pin || demographicsParcelRecords.length === 0) return null;
-    return aggregateCatchmentFromParcels({
+    if (!pin || !demographicsIndex) return null;
+    return aggregateCatchmentForPin({
       parcels: demographicsParcelRecords,
       center: model.center,
       east: pin.east,
       north: pin.north,
       radiusM: demographicsExplorer.radiusM,
+      index: demographicsIndex,
     });
-  }, [demographicsExplorer.pins.a, demographicsExplorer.radiusM, demographicsParcelRecords, model.center]);
+  }, [
+    demographicsExplorer.pins.a,
+    demographicsExplorer.radiusM,
+    demographicsIndex,
+    demographicsParcelRecords,
+    model.center,
+  ]);
   const demographicsCatchmentB = useMemo(() => {
     const pin = demographicsExplorer.pins.b;
-    if (!pin || demographicsExplorer.panelMode !== "compare" || demographicsParcelRecords.length === 0) {
-      return null;
-    }
-    return aggregateCatchmentFromParcels({
+    if (!pin || demographicsExplorer.panelMode !== "compare" || !demographicsIndex) return null;
+    return aggregateCatchmentForPin({
       parcels: demographicsParcelRecords,
       center: model.center,
       east: pin.east,
       north: pin.north,
       radiusM: demographicsExplorer.radiusM,
+      index: demographicsIndex,
     });
   }, [
     demographicsExplorer.panelMode,
     demographicsExplorer.pins.b,
     demographicsExplorer.radiusM,
+    demographicsIndex,
     demographicsParcelRecords,
     model.center,
   ]);
@@ -438,10 +436,19 @@ export function ModelPage({
     demographicsCatchmentB?.sa1Count ?? 0,
     demographicsStats?.sa1Cells ?? 0,
   );
-  const demographicsExampleData =
-    typeof window !== "undefined" &&
-    (qaModeFromSearch(window.location.search) ||
-      new URLSearchParams(window.location.search).get("demo") === "demographics");
+  useEffect(() => {
+    if (!demographicsActive) return;
+    setPlanViewport(demographicsPlanViewportExtent(model.sideM));
+    if (demographicsPinsSeededRef.current) return;
+    demographicsPinsSeededRef.current = true;
+    const fitzroy = pinFromLonLat(model.center, DEMOGRAPHICS_PIN_FITZROY, "Fitzroy");
+    const carlton = pinFromLonLat(model.center, DEMOGRAPHICS_PIN_CARLTON, "Carlton");
+    dispatchDemographicsExplorer({ type: "ensureComparePins" });
+    dispatchDemographicsExplorer({ type: "movePin", pin: "a", east: fitzroy.east, north: fitzroy.north });
+    dispatchDemographicsExplorer({ type: "movePin", pin: "b", east: carlton.east, north: carlton.north });
+    dispatchDemographicsExplorer({ type: "setPinLabel", pin: "a", label: "Fitzroy" });
+    dispatchDemographicsExplorer({ type: "setPinLabel", pin: "b", label: "Carlton" });
+  }, [demographicsActive, model.center, model.sideM]);
   useEffect(() => {
     if (tab !== "drawing" || drawingViewportsInitializedRef.current === model) return;
     drawingViewportsInitializedRef.current = model;
@@ -2033,7 +2040,8 @@ export function ModelPage({
                 viewport={planViewport}
                 onViewportChange={setPlanViewport}
                 fitCounter={fitCounter}
-                exampleData={demographicsExampleData}
+                statsA={demographicsCatchmentA}
+                statsB={demographicsCatchmentB}
               />
             ) : (
               <DrawingPlan
@@ -2082,10 +2090,10 @@ export function ModelPage({
           <Sidebar
             id={SIDEBAR_PANEL_ID}
             rightId={RIGHT_SIDEBAR_PANEL_ID}
-            items={items}
+            items={demographicsActive ? [] : items}
             rightItems={demographicsActive ? [] : rightItems}
-            rightHeadTitle={demographicsActive ? "Demographics Explorer" : undefined}
-            rightMeta={demographicsActive ? "2GMEL" : `MGA${mgaCrs(model.center.lon).zone}`}
+            rightHeadTitle={demographicsActive ? "" : undefined}
+            rightMeta={demographicsActive ? null : `MGA${mgaCrs(model.center.lon).zone}`}
             active={leftOpen}
             rightActive={rightOpen}
             collapsed={sidebarCollapsed}

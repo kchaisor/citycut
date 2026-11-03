@@ -1,11 +1,11 @@
 import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-const INNER = { west: 144.95, south: -37.81, east: 145.0, north: -37.78 };
+const INNER = { west: 144.94, south: -37.82, east: 145.01, north: -37.77 };
 const WFS = "https://opendata.maps.vic.gov.au/geoserver/ows";
 const TYPE = "open-data-platform:v_parcel_mp";
 const CACHE = "tmp/parcels-cache";
 const OUT = "public";
-const GRID = 4;
+const GRID = 5;
 
 function pointInRing(lon, lat, ring) {
   let inside = false;
@@ -187,7 +187,16 @@ async function main() {
         });
         features.push({
           type: "Feature",
-          properties: { id, residents: stats.residents, sa1: sa1.code },
+          properties: {
+            id,
+            sa1: sa1.code,
+            r: Math.round(stats.residents * 100) / 100,
+            a: Math.round(areaM2),
+            ma: stats.medianAge ?? 0,
+            apt: stats.apartmentShare ?? 0,
+            rp: stats.rentingShare ?? 0,
+            rent: stats.rentMedianWeekly ?? 0,
+          },
           geometry: { type: "Polygon", coordinates: [simplified] },
         });
       }
@@ -197,16 +206,6 @@ async function main() {
 
   const geojsonPath = `${CACHE}/parcels-inner-melbourne.geojson`;
   writeFileSync(geojsonPath, JSON.stringify({ type: "FeatureCollection", features }));
-  const compactPath = `${OUT}/demographics-parcels.json`;
-  writeFileSync(
-    compactPath,
-    JSON.stringify({
-      version: 1,
-      bbox: INNER,
-      parcelCount: compact.length,
-      parcels: compact,
-    }),
-  );
   const pmtilesPath = `${OUT}/demographics-parcels.pmtiles`;
   runTippecanoe(geojsonPath, pmtilesPath);
   writeFileSync(
@@ -215,8 +214,8 @@ async function main() {
       version: 1,
       bbox: INNER,
       parcelCount: compact.length,
-      compactUrl: "demographics-parcels.json",
       pmtilesUrl: "demographics-parcels.pmtiles",
+      delivery: "pmtiles",
       builtAt: new Date().toISOString(),
       source: "Vicmap Property v_parcel_mp WFS",
       licence: "CC BY 4.0",
@@ -226,7 +225,6 @@ async function main() {
   console.log(
     JSON.stringify({
       parcels: compact.length,
-      compactBytes: readFileSync(compactPath).length,
       pmtilesBytes: readFileSync(pmtilesPath).length,
     }),
   );

@@ -18,6 +18,17 @@ export function planViewportExtent(sideM: number): PlanViewport {
   };
 }
 
+export function demographicsPlanViewportExtent(sideM: number): PlanViewport {
+  const half = sideM / 2;
+  const pad = sideM * 0.85;
+  return {
+    x: -half - pad,
+    y: -half - pad,
+    w: sideM + pad * 2,
+    h: sideM + pad * 2,
+  };
+}
+
 export function planViewportEqual(a: PlanViewport, b: PlanViewport): boolean {
   return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 }

@@ -136,7 +136,7 @@ function ColumnBlock({
   stats: DemographicsCatchmentStats | null;
   benchmark: DemographicsBenchmark;
 }) {
-  if (!stats || !stats.enoughData) {
+  if (!stats || stats.population <= 0) {
     return (
       <div className="demo-compare-col">
         <header className="demo-compare-head" style={{ color: getColour(pinId === "a" ? "--demographics-pin-a" : "--demographics-pin-b") }}>
@@ -240,7 +240,7 @@ export function DemographicsExplorerPanel({
   const setMode = (panelMode: DemographicsPanelMode) => dispatch({ type: "setPanelMode", panelMode });
 
   const glance =
-    statsA && statsB && statsA.enoughData && statsB.enoughData ? compareGlance(statsA, statsB) : null;
+    statsA && statsB && statsA.population > 0 && statsB.population > 0 ? compareGlance(statsA, statsB) : null;
 
   return (
     <div className="demo-explorer-panel">

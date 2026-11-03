@@ -1419,13 +1419,71 @@ async function main() {
       await demoPage.getByRole("tab", { name: "Drawing" }).click();
       await demoPage.getByRole("button", { name: "Demographics" }).click();
       await demoPage.waitForSelector(".demo-explorer-title", { timeout: 120000 });
+      await demoPage.waitForFunction(
+        () => !document.querySelector(".demo-status")?.textContent?.includes("Loading"),
+        { timeout: 180000 },
+      );
       const demoInfo = await demoPage.evaluate(() => {
         const title = document.querySelector(".demo-explorer-title")?.textContent?.trim() ?? "";
         const compare = Boolean(document.querySelector(".demo-compare-grid"));
         const pins = document.querySelectorAll("[data-demo-pin]").length;
         const map = Boolean(document.querySelector(".demographics-explorer-map"));
         const residentsBefore = document.querySelector(".demo-residents")?.textContent ?? "";
-        return { title, compare, pins, map, residentsBefore };
+        const leftDrawer = Boolean(document.querySelector(".model.is-demographics .left-outliner:not([hidden])"));
+        const leftDrawerVisible =
+          leftDrawer &&
+          document.querySelector(".model.is-demographics .left-outliner")?.checkVisibility?.() !== false;
+        const tabs = document.querySelector(".demo-tabs");
+        const tabButtons = tabs ? [...tabs.querySelectorAll(".demo-tab")] : [];
+        const tabTops = tabButtons.map((btn) => btn.getBoundingClientRect().top);
+        const tabsOneRow = tabTops.length > 0 && tabTops.every((top) => Math.abs(top - tabTops[0]) < 2);
+        const svg = document.querySelector(".demographics-explorer-map");
+        const paths = svg ? svg.querySelectorAll("path").length : 0;
+        const pinA = document.querySelector("[data-demo-pin='a']");
+        const pinB = document.querySelector("[data-demo-pin='b']");
+        const circleA = pinA?.querySelector("circle");
+        const circleB = pinB?.querySelector("circle");
+        const cxA = circleA ? Number(circleA.getAttribute("cx")) : null;
+        const cyA = circleA ? Number(circleA.getAttribute("cy")) : null;
+        const rA = circleA ? Number(circleA.getAttribute("r")) : null;
+        const cxB = circleB ? Number(circleB.getAttribute("cx")) : null;
+        const cyB = circleB ? Number(circleB.getAttribute("cy")) : null;
+        const rB = circleB ? Number(circleB.getAttribute("r")) : null;
+        let parcelsUnderA = 0;
+        let parcelsUnderB = 0;
+        if (svg && cxA != null && cyA != null && rA != null) {
+          for (const path of svg.querySelectorAll("path")) {
+            const d = path.getAttribute("d") ?? "";
+            const match = d.match(/M\s+([\d.-]+)\s+([\d.-]+)/);
+            if (!match) continue;
+            const px = Number(match[1]);
+            const py = Number(match[2]);
+            const dxA = px - cxA;
+            const dyA = py - cyA;
+            if (dxA * dxA + dyA * dyA <= rA * rA) parcelsUnderA += 1;
+            if (cxB != null && cyB != null && rB != null) {
+              const dxB = px - cxB;
+              const dyB = py - cyB;
+              if (dxB * dxB + dyB * dyB <= rB * rB) parcelsUnderB += 1;
+            }
+          }
+        }
+        const residentCols = [...document.querySelectorAll(".demo-residents")].map((el) => el.textContent?.trim() ?? "");
+        const notEnoughCols = [...document.querySelectorAll(".demo-compare-col .demo-not-enough")].length;
+        return {
+          title,
+          compare,
+          pins,
+          map,
+          residentsBefore,
+          leftDrawerVisible,
+          tabsOneRow,
+          paths,
+          parcelsUnderA,
+          parcelsUnderB,
+          residentCols,
+          notEnoughCols,
+        };
       });
       await demoPage.locator("[data-demo-pin='a']").dispatchEvent("pointerdown", { clientX: 700, clientY: 450 });
       await demoPage.mouse.move(760, 470);
@@ -1450,6 +1508,38 @@ async function main() {
           residentsAfter.length > 0 &&
           residentsAfter !== demoInfo.residentsBefore,
         `before=${demoInfo.residentsBefore} after=${residentsAfter}`,
+      );
+      assertCheck(
+        "demo-explorer-layout",
+        "Demographics hides the left display drawer and keeps topic tabs on one row",
+        !demoInfo.leftDrawerVisible && demoInfo.tabsOneRow,
+        JSON.stringify({
+          leftDrawerVisible: demoInfo.leftDrawerVisible,
+          tabsOneRow: demoInfo.tabsOneRow,
+        }),
+      );
+      assertCheck(
+        "demo-explorer-parcels-coverage",
+        "Vicmap parcels render under both Fitzroy and Carlton pin circles",
+        demoInfo.parcelsUnderA >= 40 &&
+          demoInfo.parcelsUnderB >= 40 &&
+          demoInfo.paths >= 200,
+        JSON.stringify({
+          parcelsUnderA: demoInfo.parcelsUnderA,
+          parcelsUnderB: demoInfo.parcelsUnderB,
+          paths: demoInfo.paths,
+        }),
+      );
+      assertCheck(
+        "demo-explorer-both-stats",
+        "Compare mode shows resident stats for both pins (not column-wide not enough data)",
+        demoInfo.residentCols.length >= 2 &&
+          demoInfo.residentCols.every((text) => /residents/i.test(text)) &&
+          demoInfo.notEnoughCols === 0,
+        JSON.stringify({
+          residentCols: demoInfo.residentCols,
+          notEnoughCols: demoInfo.notEnoughCols,
+        }),
       );
       if (fs.existsSync("/opt/cursor/artifacts")) {
         await demoPage.screenshot({

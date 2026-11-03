@@ -58,21 +58,21 @@ export function aggregateCatchmentFromSa1(input: {
     radiusM: input.radiusM,
   });
   if (!circle) return null;
-  const enoughData = circle.population >= 50;
   return {
     population: Math.round(circle.population),
-    densityPerHa: circle.densityPerHa,
+    densityPerHa: Math.round(circle.densityPerHa),
     parcelCount: 0,
     sa1Count: circle.sa1Cells,
-    medianAge: enoughData ? circle.medianAge : null,
+    medianAge: circle.medianAge,
     ageMale: circle.ageMale,
     ageFemale: circle.ageFemale,
     households: circle.households,
-    apartmentShare: enoughData ? circle.apartmentShare : null,
-    rentingShare: enoughData ? circle.rentingShare : null,
+    apartmentShare: circle.apartmentShare,
+    rentingShare: circle.rentingShare,
     rentBins: circle.rentBins,
-    rentMedianWeekly: enoughData ? circle.rentMedianWeekly : null,
-    enoughData,
+    rentMedianWeekly:
+      circle.rentMedianWeekly != null ? Math.round(circle.rentMedianWeekly) : null,
+    enoughData: circle.population >= 1,
   };
 }
 
@@ -137,25 +137,78 @@ export function aggregateCatchmentFromParcels(input: {
 
   if (parcelCount === 0) return null;
   const areaHa = (Math.PI * input.radiusM * input.radiusM) / 10_000;
-  const enoughData = population >= 50;
   return {
     population: Math.round(population),
     densityPerHa: areaHa > 0 ? Math.round(population / areaHa) : 0,
     parcelCount,
     sa1Count: sa1Codes.size,
-    medianAge: enoughData && ageWeight > 0 ? Math.round((ageWeighted / ageWeight) * 10) / 10 : null,
+    medianAge: ageWeight > 0 ? Math.round((ageWeighted / ageWeight) * 10) / 10 : null,
     ageMale,
     ageFemale,
     households,
     apartmentShare:
-      enoughData && population > 0 ? Math.round((apartmentWeighted / population) * 10) / 10 : null,
+      population > 0 ? Math.round((apartmentWeighted / population) * 10) / 10 : null,
     rentingShare:
-      enoughData && population > 0 ? Math.round((rentingWeighted / population) * 10) / 10 : null,
+      population > 0 ? Math.round((rentingWeighted / population) * 10) / 10 : null,
     rentBins,
-    rentMedianWeekly:
-      enoughData && rentWeight > 0 ? Math.round(rentWeighted / rentWeight) : null,
-    enoughData,
+    rentMedianWeekly: rentWeight > 0 ? Math.round(rentWeighted / rentWeight) : null,
+    enoughData: population >= 1,
   };
+}
+
+function sa1HasDetail(stats: DemographicsCatchmentStats): boolean {
+  const ageTotal = DEMOGRAPHICS_AGE_BANDS.reduce(
+    (sum, band) => sum + stats.ageMale[band] + stats.ageFemale[band],
+    0,
+  );
+  return ageTotal > 0;
+}
+
+export function aggregateCatchmentForPin(input: {
+  parcels: DemographicsParcelRecord[];
+  center: LonLat;
+  east: number;
+  north: number;
+  radiusM: number;
+  index: DemographicsSpatialIndex;
+}): DemographicsCatchmentStats | null {
+  const fromParcels = aggregateCatchmentFromParcels({
+    parcels: input.parcels,
+    center: input.center,
+    east: input.east,
+    north: input.north,
+    radiusM: input.radiusM,
+  });
+  const fromSa1 = aggregateCatchmentFromSa1({
+    index: input.index,
+    units: [],
+    center: input.center,
+    east: input.east,
+    north: input.north,
+    radiusM: input.radiusM,
+  });
+  if (fromSa1 && fromParcels) {
+    const useParcelPop = fromParcels.population >= 25;
+    return {
+      ...fromSa1,
+      population: useParcelPop ? fromParcels.population : fromSa1.population,
+      densityPerHa: useParcelPop ? fromParcels.densityPerHa : fromSa1.densityPerHa,
+      parcelCount: fromParcels.parcelCount,
+      sa1Count: Math.max(fromSa1.sa1Count, fromParcels.sa1Count),
+      enoughData: fromSa1.population >= 1 || fromParcels.population >= 1,
+    };
+  }
+  if (fromSa1) {
+    return {
+      ...fromSa1,
+      parcelCount: fromParcels?.parcelCount ?? 0,
+      enoughData: fromSa1.population >= 1,
+    };
+  }
+  if (fromParcels && (fromParcels.population >= 1 || sa1HasDetail(fromParcels))) {
+    return fromParcels;
+  }
+  return fromParcels?.parcelCount ? { ...fromParcels, enoughData: false } : null;
 }
 
 export function compareGlance(
