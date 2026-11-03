@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import maplibregl from "maplibre-gl";
 import { MapAttribution } from "./MapAttribution";
 import { MgaGridLayer } from "./MgaGridLayer";
@@ -12,6 +12,14 @@ import { fetchOvertureBuildingsForCut } from "../lib/overtureBuildings";
 import { fetchSiteParcelCached, siteBuildingIdsForPreview } from "../lib/sitePreviewCache";
 import { FLAT_NORTH_UP_MAP_OPTIONS, applyFlatNorthUpMapHandlers } from "../lib/mapStageMapOptions";
 import { initialLandingZoom } from "../lib/frameFit";
+import {
+  cutHandleCursor,
+  fixedCornerForHandle,
+  oppositeCutHandle,
+  parseCutFrameHandle,
+  squareCutFromCornerDrag,
+  type CutFrameHandle,
+} from "../lib/cutFrameDrag";
 import type { Basemap, LonLat, ViewState } from "../types";
 
 export type FlyRequest = {
@@ -40,6 +48,7 @@ export function MapStage({
   onCancel,
   onView,
   onFlyLanded,
+  onCutResize,
 }: {
   basemap: Basemap;
   fitFrameOnLoad?: boolean;
@@ -54,6 +63,7 @@ export function MapStage({
   onCancel: () => void;
   onView: (view: ViewState) => void;
   onFlyLanded: () => void;
+  onCutResize?: (next: { sideM: number; center: LonLat }) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -74,8 +84,17 @@ export function MapStage({
   const viewRafRef = useRef<number | null>(null);
   const pendingViewRef = useRef<ViewState | null>(null);
   const activeLonRef = useRef(initialView.lon);
+  const cutResizeRef = useRef<{
+    handle: CutFrameHandle;
+    fixed: LonLat;
+    pointerId: number;
+  } | null>(null);
+  const onCutResizeRef = useRef(onCutResize);
+  onCutResizeRef.current = onCutResize;
 
   const [ready, setReady] = useState(false);
+  const [cutResizing, setCutResizing] = useState(false);
+  const [previewSideM, setPreviewSideM] = useState<number | null>(null);
   void onCancel;
   const [mapEpoch, setMapEpoch] = useState(0);
   const [basemapStyleFailed, setBasemapStyleFailed] = useState(false);
@@ -375,12 +394,81 @@ export function MapStage({
     };
   }, [fly, ready]);
 
-  const sideKm = sideM / 1000;
+  const handlesInteractive = ready && !loading && !processing && !fadingOut && frameShape === "square";
+
+  useEffect(() => {
+    if (!handlesInteractive) return;
+
+    const finishResize = (pointerId: number) => {
+      const session = cutResizeRef.current;
+      if (!session || session.pointerId !== pointerId) return;
+      cutResizeRef.current = null;
+      setCutResizing(false);
+      setPreviewSideM(null);
+      const map = mapRef.current;
+      if (map) map.dragPan.enable();
+      if (map) {
+        const center = map.getCenter();
+        onViewRef.current({ lon: center.lng, lat: center.lat, zoom: map.getZoom() });
+      }
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      const session = cutResizeRef.current;
+      if (!session || event.pointerId !== session.pointerId) return;
+      const map = mapRef.current;
+      const container = containerRef.current;
+      if (!map || !container) return;
+      const rect = container.getBoundingClientRect();
+      const draggedPt = map.unproject([event.clientX - rect.left, event.clientY - rect.top]);
+      const dragged: LonLat = { lon: draggedPt.lng, lat: draggedPt.lat };
+      const fixedHandle = oppositeCutHandle(session.handle);
+      const { center, sideM: nextSideM } = squareCutFromCornerDrag(fixedHandle, session.fixed, dragged);
+      sideRef.current = nextSideM;
+      setPreviewSideM(nextSideM);
+      map.jumpTo({ center: [center.lon, center.lat], zoom: map.getZoom() });
+      activeLonRef.current = center.lon;
+      onCutResizeRef.current?.({ sideM: nextSideM, center });
+      syncFrameRef.current?.();
+    };
+
+    const onPointerUp = (event: PointerEvent) => finishResize(event.pointerId);
+    const onPointerCancel = (event: PointerEvent) => finishResize(event.pointerId);
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerCancel);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
+    };
+  }, [handlesInteractive]);
+
+  const beginHandleResize = (event: ReactPointerEvent<HTMLSpanElement>) => {
+    if (!handlesInteractive || event.button !== 0) return;
+    const map = mapRef.current;
+    if (!map) return;
+    const handle = parseCutFrameHandle(event.currentTarget.className);
+    if (!handle) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const center = map.getCenter();
+    const origin: LonLat = { lon: center.lng, lat: center.lat };
+    const fixed = fixedCornerForHandle(origin, sideRef.current, handle);
+    cutResizeRef.current = { handle, fixed, pointerId: event.pointerId };
+    setCutResizing(true);
+    map.dragPan.disable();
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const displaySideM = previewSideM ?? sideM;
+  const sideKm = displaySideM / 1000;
   const label = cutFrameLabelKm(sideKm, frameShape);
   const circleFrame = frameShape === "circle";
-  const roundedM = Math.round(sideM).toLocaleString();
+  const roundedM = Math.round(displaySideM).toLocaleString();
   const dimMeters = circleFrame ? `⌀ ${roundedM} m` : `${roundedM} × ${roundedM} m`;
-  const areaKm2 = (siteFrameAreaM2(sideM, frameShape) / 1_000_000).toFixed(2);
+  const areaKm2 = (siteFrameAreaM2(displaySideM, frameShape) / 1_000_000).toFixed(2);
   const zone = mgaZone(activeLonRef.current);
   const cadReadout = `${dimMeters} | ${areaKm2} km² · MGA${zone}`;
   const currentFrame = frameRef.current;
@@ -389,8 +477,17 @@ export function MapStage({
     ? Math.min(Math.max(currentFrame.left + currentFrame.width / 2, 88), clientW - 150)
     : 400;
 
+  const mapWrapClass = [
+    "map-wrap",
+    loading ? "is-loading" : "",
+    handlesInteractive ? "is-cut-handles-active" : "",
+    cutResizing ? "is-resizing-cut" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div className={loading ? "map-wrap is-loading" : "map-wrap"}>
+    <div className={mapWrapClass}>
       <div ref={containerRef} className={basemap === "satellite" ? "map-canvas" : "map-canvas map-canvas-muted"} />
       {basemap !== "satellite" && <div className="map-tint" aria-hidden="true" />}
       {ready && <MgaGridLayer map={mapRef.current} epoch={mapEpoch} />}
@@ -447,10 +544,30 @@ export function MapStage({
               ))}
             {!circleFrame && (
               <>
-                <span className="frame-handle frame-handle-nw is-tl" aria-hidden="true" />
-                <span className="frame-handle frame-handle-ne is-tr" aria-hidden="true" />
-                <span className="frame-handle frame-handle-sw is-bl" aria-hidden="true" />
-                <span className="frame-handle frame-handle-se is-br" aria-hidden="true" />
+                <span
+                  className="frame-handle frame-handle-nw is-tl"
+                  aria-hidden="true"
+                  style={handlesInteractive ? { cursor: cutHandleCursor("nw") } : undefined}
+                  onPointerDown={beginHandleResize}
+                />
+                <span
+                  className="frame-handle frame-handle-ne is-tr"
+                  aria-hidden="true"
+                  style={handlesInteractive ? { cursor: cutHandleCursor("ne") } : undefined}
+                  onPointerDown={beginHandleResize}
+                />
+                <span
+                  className="frame-handle frame-handle-sw is-bl"
+                  aria-hidden="true"
+                  style={handlesInteractive ? { cursor: cutHandleCursor("sw") } : undefined}
+                  onPointerDown={beginHandleResize}
+                />
+                <span
+                  className="frame-handle frame-handle-se is-br"
+                  aria-hidden="true"
+                  style={handlesInteractive ? { cursor: cutHandleCursor("se") } : undefined}
+                  onPointerDown={beginHandleResize}
+                />
               </>
             )}
           </div>

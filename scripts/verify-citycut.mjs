@@ -1403,6 +1403,50 @@ async function main() {
       );
     }
 
+    await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".select .map-wrap .frame-handle-se", { timeout: 15000 });
+    await page.waitForTimeout(600);
+
+    const cutHandleDragBefore = await page.evaluate(() => {
+      const cad = document.querySelector(".select .map-wrap .frame-cad-tag");
+      const handle = document.querySelector(".select .map-wrap .frame-handle-se");
+      const handleCs = handle ? getComputedStyle(handle) : null;
+      return {
+        cadText: cad?.textContent?.trim() ?? "",
+        handlePointerEvents: handleCs?.pointerEvents ?? "",
+      };
+    });
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "cut-handle-drag-before.png") });
+
+    const seHandle = page.locator(".select .map-wrap .frame-handle-se");
+    const seBox = await seHandle.boundingBox();
+    let cutHandleDragOk = false;
+    let cutHandleDragAfterText = "";
+    if (seBox) {
+      const startX = seBox.x + seBox.width / 2;
+      const startY = seBox.y + seBox.height / 2;
+      await page.mouse.move(startX, startY);
+      await page.mouse.down();
+      await page.mouse.move(startX + 72, startY + 72, { steps: 12 });
+      await page.mouse.up();
+      await page.waitForTimeout(200);
+      cutHandleDragAfterText = await page.evaluate(
+        () => document.querySelector(".select .map-wrap .frame-cad-tag")?.textContent?.trim() ?? "",
+      );
+      cutHandleDragOk =
+        cutHandleDragAfterText.length > 0 &&
+        cutHandleDragAfterText !== cutHandleDragBefore.cadText &&
+        /×/.test(cutHandleDragAfterText);
+    }
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "cut-handle-drag-after.png") });
+
+    assertCheck(
+      "cut-handle-drag-readout",
+      "Dragging a cut corner handle updates the bottom coordinate pill (W × H m | km² · MGA)",
+      cutHandleDragOk && cutHandleDragBefore.handlePointerEvents === "auto",
+      `before="${cutHandleDragBefore.cadText}", after="${cutHandleDragAfterText}", pointerEvents=${cutHandleDragBefore.handlePointerEvents}`,
+    );
+
     if (fs.existsSync(ARTIFACTS_DIR)) {
       const contactSheetOut = path.join(ARTIFACTS_DIR, "pr164-v17-transition-contact-sheet.png");
       execFileSync("ffmpeg", [

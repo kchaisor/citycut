@@ -249,6 +249,18 @@ export default function App() {
     scheduleSettle();
   }
 
+  function onCutResize(next: { sideM: number; center: LonLat }) {
+    if (phaseRef.current !== "select") return;
+    const km = next.sideM / 1000;
+    sideRef.current = km;
+    setSideKm(km);
+    viewRef.current = {
+      ...viewRef.current,
+      lat: next.center.lat,
+      lon: next.center.lon,
+    };
+  }
+
   function onFlyLanded() {
     flyLandedRef.current = true;
     if (phaseRef.current === "select") scheduleSettle();
@@ -1069,6 +1081,7 @@ export default function App() {
             onCancel={cancel}
             onView={onView}
             onFlyLanded={onFlyLanded}
+            onCutResize={onCutResize}
           />
           <SelectChrome
             placeLabel={placeLabel}
