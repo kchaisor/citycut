@@ -124,6 +124,14 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--ground-fill` | `#e6e0d4` | Flat 3D ground, the ground on the 3D-view Illustrator sheet, and the Rhino Ground layer. |
 | `--export-backdrop` | `#e7e4dc` | Backdrop of the 3D PNG, and the page behind the 3D-view Illustrator drawing. |
 | `--figure-fill` | `#000000` | Figure-ground buildings, the black frame, north mark, and scale bar on that drawing, on screen and in the Illustrator file, and the Rhino FigureGround layer. |
+| `--demographics-map-bg` | `#0f0f10` | Demographics 2D map background behind SA1 shading. |
+| `--demographics-building-fill` | `#2a2a2e` | Building footprints on the demographics map. |
+| `--demographics-cell-fill` | `#fff500` | SA1 population shading on the demographics map. |
+| `--demographics-cut-frame` | `#fff500` | Cut square outline on the demographics map. |
+| `--demographics-panel-bg` | `#161618` | Demographics inspector glass panel background. |
+| `--demographics-panel-text` | `#f4f4f5` | Demographics inspector primary text. |
+| `--demographics-panel-muted` | `#a1a1aa` | Demographics inspector labels and metadata. |
+| `--demographics-panel-ink` | `#09090b` | Text on the yellow demographics tab pill. |
 | `--plan-empty` | `#6d675e` | The sentence shown when a plan has nothing in the frame. |
 | `--contour-label` | `#6A6A6A` | Elevation numbers on the site plan, on screen and in the Illustrator file. |
 | `--building-uniform` | `#FFFFFF` | Buildings when colour-by-use is off, that legend swatch, and the Rhino Buildings layer. |
