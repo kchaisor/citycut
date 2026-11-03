@@ -56,6 +56,7 @@ export function Sidebar({
   headerCenter,
   headerRight,
   rightMeta = "MGA55",
+  rightHeadTitle = "Site Intelligence",
   children,
   rightChildren,
 }: {
@@ -82,6 +83,7 @@ export function Sidebar({
   headerCenter?: ReactNode;
   headerRight?: ReactNode;
   rightMeta?: ReactNode;
+  rightHeadTitle?: string;
   children: ReactNode;
   rightChildren?: ReactNode;
 }) {
@@ -267,7 +269,7 @@ export function Sidebar({
         {(!narrow && rightItems && rightItems.length > 0) || rightChildren !== undefined ? (
           <div className="right-inspector hud-card">
             <div className="insp-head">
-              <span className="card-title">Site Intelligence</span>
+              <span className="card-title">{rightHeadTitle}</span>
               <span className="card-meta mono">{rightMeta}</span>
             </div>
             {!narrow && rightItems && rightItems.length > 0 ? (

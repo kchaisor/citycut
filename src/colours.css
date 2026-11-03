@@ -22,6 +22,15 @@
 
   --figure-fill: #000000;
 
+  --demographics-map-bg: #0f0f10;
+  --demographics-building-fill: #2a2a2e;
+  --demographics-cell-fill: #fff500;
+  --demographics-cut-frame: #fff500;
+  --demographics-panel-bg: #161618;
+  --demographics-panel-text: #f4f4f5;
+  --demographics-panel-muted: #a1a1aa;
+  --demographics-panel-ink: #09090b;
+
   --plan-empty: #6d675e;
 
   --contour-label: #FFFFFF;

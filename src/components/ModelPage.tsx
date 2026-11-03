@@ -149,6 +149,17 @@ import { ImportMassingPanel } from "./ImportMassingPanel";
 import { useImportedMassing } from "./useImportedMassing";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
+import { DemographicsDrawing } from "./DemographicsDrawing";
+import { DemographicsInspector } from "./DemographicsInspector";
+import {
+  aggregateDemographicsForCut,
+  buildDemographicsIndex,
+  demographicsCanopyFromModel,
+  demographicsDatasetInBounds,
+  type DemographicsSpatialIndex,
+} from "../lib/demographicsClip";
+import { loadDemographicsDataset } from "../lib/demographicsLoad";
+import type { DemographicsDataset, DemographicsTab } from "../lib/demographicsTypes";
 import { DrawingExplodedAxo } from "./DrawingExplodedAxo";
 import { DrawingIsometric } from "./DrawingIsometric";
 import { isometricDrawingBounds } from "../lib/isometricDrawing";
@@ -204,6 +215,7 @@ import {
 import { readStoredRenderQuality, writeStoredRenderQuality, type RenderQuality } from "../lib/renderQuality";
 
 type Tab = "3d" | "drawing" | "satellite";
+type StudioDrawing = DrawingKind | "demographics";
 
 const SIDEBAR_PANEL_ID = "model-sidebar-panel";
 const RIGHT_SIDEBAR_PANEL_ID = "model-sidebar-right-panel";
@@ -271,7 +283,10 @@ export function ModelPage({
   commandBarOpen?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("3d");
-  const [drawing, setDrawing] = useState<DrawingKind>("site");
+  const [drawing, setDrawing] = useState<StudioDrawing>("site");
+  const [demographicsTab, setDemographicsTab] = useState<DemographicsTab>("people");
+  const [demographicsDataset, setDemographicsDataset] = useState<DemographicsDataset | null>(null);
+  const [demographicsLoading, setDemographicsLoading] = useState(true);
   const [analysisKind, setAnalysisKind] = useState<SiteAnalysisKind>("solar");
   const [shortcutCheatsheetOpen, setShortcutCheatsheetOpen] = useState(false);
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
@@ -327,6 +342,49 @@ export function ModelPage({
     planViewportExtent(model.sideM),
   );
   const drawingViewportsInitializedRef = useRef<CityModel | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setDemographicsLoading(true);
+    void loadDemographicsDataset().then((dataset) => {
+      if (!cancelled) {
+        setDemographicsDataset(dataset);
+        setDemographicsLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const demographicsIndex = useMemo<DemographicsSpatialIndex | null>(() => {
+    if (!demographicsDataset) return null;
+    return buildDemographicsIndex(demographicsDataset.units);
+  }, [demographicsDataset]);
+  const demographicsActive = tab === "drawing" && drawing === "demographics";
+  const demographicsInCoverage =
+    demographicsDataset !== null && demographicsDatasetInBounds(demographicsDataset, model.center);
+  const demographicsStats = useMemo(() => {
+    if (!demographicsDataset || !demographicsIndex || !demographicsInCoverage) return null;
+    return aggregateDemographicsForCut({
+      dataset: demographicsDataset,
+      index: demographicsIndex,
+      center: model.center,
+      sideM: model.sideM,
+      canopyPct: demographicsCanopyFromModel(model),
+    });
+  }, [demographicsDataset, demographicsIndex, demographicsInCoverage, model]);
+  const demographicsMapUnits = useMemo(() => {
+    if (!demographicsDataset || !demographicsIndex || !demographicsStats) return [];
+    const half = model.sideM / 2;
+    const dLon = half / (111_320 * Math.cos((model.center.lat * Math.PI) / 180));
+    const dLat = half / 111_132;
+    const hits = demographicsIndex.search({
+      minX: model.center.lon - dLon,
+      minY: model.center.lat - dLat,
+      maxX: model.center.lon + dLon,
+      maxY: model.center.lat + dLat,
+    });
+    return hits;
+  }, [demographicsDataset, demographicsIndex, demographicsStats, model.center, model.sideM]);
   useEffect(() => {
     if (tab !== "drawing" || drawingViewportsInitializedRef.current === model) return;
     drawingViewportsInitializedRef.current = model;
@@ -1770,7 +1828,7 @@ export function ModelPage({
   return (
     <div
       ref={modelRootRef}
-      className="model"
+      className={demographicsActive ? "model is-demographics" : "model"}
       data-intro-hold={!introHoldReleasedRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
       data-intro-webgl-wait={!introWebglReadyRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
     >
@@ -1908,6 +1966,14 @@ export function ModelPage({
                 onViewportChange={setIsoDrawingViewport}
                 fitCounter={fitCounter}
               />
+            ) : drawing === "demographics" ? (
+              <DemographicsDrawing
+                model={drawingModel}
+                units={demographicsMapUnits}
+                viewport={planViewport}
+                onViewportChange={setPlanViewport}
+                fitCounter={fitCounter}
+              />
             ) : (
               <DrawingPlan
                 model={drawingModel}
@@ -1956,7 +2022,9 @@ export function ModelPage({
             id={SIDEBAR_PANEL_ID}
             rightId={RIGHT_SIDEBAR_PANEL_ID}
             items={items}
-            rightItems={rightItems}
+            rightItems={demographicsActive ? [] : rightItems}
+            rightHeadTitle={demographicsActive ? "Inspector — Demographics" : undefined}
+            rightMeta={demographicsActive ? "2GMEL" : `MGA${mgaCrs(model.center.lon).zone}`}
             active={leftOpen}
             rightActive={rightOpen}
             collapsed={sidebarCollapsed}
@@ -1967,7 +2035,6 @@ export function ModelPage({
             showNewCut
             onSelect={selectSection}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-            rightMeta={`MGA${mgaCrs(model.center.lon).zone}`}
             brandMeta={
               <>
                 <span className="v-sep hud-sep" aria-hidden="true" />
@@ -2057,6 +2124,7 @@ export function ModelPage({
                         ["figure-ground", "Figure-ground"],
                         ["exploded-axo", "Exploded axo"],
                         ["isometric", "Isometric"],
+                        ["demographics", "Demographics"],
                       ] as const
                     ).map(([kind, label]) => (
                       <button
@@ -2203,6 +2271,16 @@ export function ModelPage({
               ) : null
             }
             rightChildren={
+              demographicsActive ? (
+                <DemographicsInspector
+                  tab={demographicsTab}
+                  onTab={setDemographicsTab}
+                  stats={demographicsStats}
+                  benchmark={demographicsDataset?.benchmark ?? null}
+                  loading={demographicsLoading}
+                  empty={!demographicsInCoverage || !demographicsStats}
+                />
+              ) : (
               <>
             <div className="drawer-section" hidden={rightOpen !== "summary"}>
               <div className="kpi-grid mono" aria-label="In this model">
@@ -2561,6 +2639,7 @@ export function ModelPage({
                 {tierCounts.vicmap > 0 && <p className="tree-credit">{VICMAP_ATTRIBUTION}</p>}
               </div>
               </>
+              )
             }
           >
             <div className="drawer-section" hidden={leftOpen !== "drawing"}>
@@ -3191,7 +3270,7 @@ export function ModelPage({
                 <ExportTiles
                   tiles={exportTiles({
                     tab,
-                    drawing,
+                    drawing: drawing === "demographics" ? "site" : drawing,
                     busy,
                     figureScale,
                     sunStudyDate: sunStudyDateText({ year: solar.year, month: solar.month, day: solar.day }),
@@ -3795,6 +3874,18 @@ export function ModelPage({
                 />
               )}
             </div>
+          </div>
+        ) : demographicsActive ? (
+          <div className="bottom-bar demo-status-bar hud-card mono" role="status" aria-label="Demographics layer status">
+            <span>
+              CURSOR {model.center.lon.toFixed(4)}, {model.center.lat.toFixed(4)}
+            </span>
+            <span className="v-sep hud-sep" aria-hidden="true" />
+            <span>LAYER DEMOGRAPHICS</span>
+            <span className="v-sep hud-sep" aria-hidden="true" />
+            <span>CELLS {demographicsStats?.sa1Cells ?? 0}</span>
+            <span className="demo-status-spacer" aria-hidden="true" />
+            <span className="demo-status-note">ABS Census 2021 · SA1</span>
           </div>
         ) : (
           <div className="bottom-bar studio-solar-bar hud-card" role="region" aria-label="Solar and camera controls">
