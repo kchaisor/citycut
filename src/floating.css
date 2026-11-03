@@ -4465,7 +4465,7 @@ body,
 }
 
 .model.is-demographics .demo-tab.is-active {
-  background: var(--accent);
+  background: var(--demographics-subtab-active);
   color: var(--demographics-panel-ink);
 }
 
@@ -4617,8 +4617,290 @@ body,
   color: var(--demographics-panel-muted);
 }
 
-.plan.demographics-plan {
+.plan.demographics-plan,
+.plan.demographics-explorer-map {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+.model.is-demographics .demo-explorer-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.model.is-demographics .demo-explorer-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.model.is-demographics .demo-explorer-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--demographics-panel-text);
+}
+
+.model.is-demographics .demo-explorer-sub {
+  margin: 4px 0 0;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--demographics-panel-muted);
+}
+
+.model.is-demographics .demo-mode-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 5%);
+}
+
+.model.is-demographics .demo-mode-btn {
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: transparent;
+  color: var(--demographics-panel-muted);
+  cursor: pointer;
+}
+
+.model.is-demographics .demo-mode-btn.is-active {
+  background: var(--demographics-panel-text);
+  color: var(--demographics-map-bg);
+}
+
+.model.is-demographics .demo-compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.model.is-demographics .demo-compare-col {
+  min-width: 0;
+}
+
+.model.is-demographics .demo-compare-head {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.model.is-demographics .demo-residents {
+  margin: 0 0 10px;
+  font-size: 11px;
+  color: var(--demographics-panel-text);
+}
+
+.model.is-demographics .demo-pyramid-row {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.model.is-demographics .demo-pyramid-band {
+  font-size: 9px;
+  color: var(--demographics-panel-muted);
+}
+
+.model.is-demographics .demo-pyramid-bars {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.model.is-demographics .demo-pyramid-half {
+  position: relative;
+  height: 8px;
+  background: rgb(0 0 0 / 6%);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.model.is-demographics .demo-pyramid-half.is-m {
+  direction: rtl;
+}
+
+.model.is-demographics .demo-pyramid-fill {
+  height: 100%;
+}
+
+.model.is-demographics .demo-pyramid-outline {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  border: 1px dashed var(--demographics-panel-text);
+  pointer-events: none;
+}
+
+.model.is-demographics .demo-metric-bar {
+  display: grid;
+  grid-template-columns: 1fr 56px;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.model.is-demographics .demo-metric-track {
+  position: relative;
+  grid-column: 1 / -1;
+  height: 8px;
+  background: rgb(0 0 0 / 6%);
+  border-radius: 2px;
+}
+
+.model.is-demographics .demo-metric-fill {
+  height: 100%;
+  border-radius: 2px;
+}
+
+.model.is-demographics .demo-metric-tick {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 12px;
+  margin-left: -1px;
+  background: var(--demographics-panel-text);
+}
+
+.model.is-demographics .demo-metric-label,
+.model.is-demographics .demo-metric-val {
+  font-size: 10px;
+  color: var(--demographics-panel-text);
+}
+
+.model.is-demographics .demo-rent-hist {
+  margin-top: 10px;
+}
+
+.model.is-demographics .demo-rent-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 48px;
+}
+
+.model.is-demographics .demo-rent-bar {
+  flex: 1;
+  min-width: 0;
+  border-radius: 2px 2px 0 0;
+}
+
+.model.is-demographics .demo-rent-median {
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+.model.is-demographics .demo-rent-delta {
+  margin-left: 6px;
+  color: var(--demographics-panel-muted);
+}
+
+.model.is-demographics .demo-glance {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 4%);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.model.is-demographics .demo-explorer-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--demographics-panel-muted);
+}
+
+.model.is-demographics .demo-not-enough {
+  font-size: 11px;
+  color: var(--demographics-panel-muted);
+}
+
+.model.is-demographics .bottom-bar.demo-explorer-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--demographics-panel-bg) !important;
+  color: var(--demographics-panel-muted);
+}
+
+.model.is-demographics .demo-radius-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model.is-demographics .demo-radius-control input {
+  width: 120px;
+}
+
+.model.is-demographics .demo-colour-by {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.model.is-demographics .demo-colour-btn {
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: transparent;
+  color: var(--demographics-panel-text);
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.model.is-demographics .demo-colour-btn.is-active {
+  background: var(--demographics-panel-text);
+  color: var(--demographics-map-bg);
+}
+
+.model.is-demographics .demo-attribution {
+  font-size: 9px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.model.is-demographics .demo-pin-label {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.model.is-demographics .demo-ramp-title,
+.model.is-demographics .demo-ramp-label {
+  font-size: 9px;
+  fill: var(--demographics-panel-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.model.is-demographics .demo-example-badge {
+  font-size: 9px;
+  font-weight: 700;
+  fill: var(--demographics-panel-ink);
+  letter-spacing: 0.08em;
 }

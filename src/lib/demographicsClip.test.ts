@@ -115,12 +115,14 @@ describe("demographicsClip", () => {
     const half = 500;
     const dLon = half / (111_320 * Math.cos(((-37.8136) * Math.PI) / 180));
     const dLat = half / 111_132;
-    const hits = index.search({
-      minX: 144.9633 - dLon,
-      minY: -37.8136 - dLat,
-      maxX: 144.9633 + dLon,
-      maxY: -37.8136 + dLat,
-    });
+    expect(
+      index.search({
+        minX: 144.9633 - dLon,
+        minY: -37.8136 - dLat,
+        maxX: 144.9633 + dLon,
+        maxY: -37.8136 + dLat,
+      }).length,
+    ).toBeGreaterThan(0);
     const stats = aggregateDemographicsForCut({
       dataset,
       index,

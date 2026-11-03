@@ -149,8 +149,15 @@ import { ImportMassingPanel } from "./ImportMassingPanel";
 import { useImportedMassing } from "./useImportedMassing";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
-import { DemographicsDrawing } from "./DemographicsDrawing";
-import { DemographicsInspector } from "./DemographicsInspector";
+import { DemographicsExplorerMap } from "./DemographicsExplorerMap";
+import { DemographicsExplorerPanel } from "./DemographicsExplorerPanel";
+import { aggregateCatchmentFromParcels } from "../lib/demographicsCatchment";
+import {
+  initialDemographicsExplorerState,
+  reduceDemographicsExplorer,
+} from "../lib/demographicsExplorerReducer";
+import { buildParcelIndex } from "../lib/demographicsParcels";
+import { loadDemographicsParcels } from "../lib/demographicsParcelLoad";
 import {
   aggregateDemographicsForCut,
   buildDemographicsIndex,
@@ -159,7 +166,7 @@ import {
   type DemographicsSpatialIndex,
 } from "../lib/demographicsClip";
 import { loadDemographicsDataset } from "../lib/demographicsLoad";
-import type { DemographicsDataset, DemographicsTab } from "../lib/demographicsTypes";
+import type { DemographicsDataset } from "../lib/demographicsTypes";
 import { DrawingExplodedAxo } from "./DrawingExplodedAxo";
 import { DrawingIsometric } from "./DrawingIsometric";
 import { isometricDrawingBounds } from "../lib/isometricDrawing";
@@ -284,9 +291,15 @@ export function ModelPage({
 }) {
   const [tab, setTab] = useState<Tab>("3d");
   const [drawing, setDrawing] = useState<StudioDrawing>("site");
-  const [demographicsTab, setDemographicsTab] = useState<DemographicsTab>("people");
+  const [demographicsExplorer, dispatchDemographicsExplorer] = useReducer(
+    reduceDemographicsExplorer,
+    undefined,
+    initialDemographicsExplorerState,
+  );
   const [demographicsDataset, setDemographicsDataset] = useState<DemographicsDataset | null>(null);
   const [demographicsLoading, setDemographicsLoading] = useState(true);
+  const [demographicsParcels, setDemographicsParcels] = useState<Awaited<ReturnType<typeof loadDemographicsParcels>>>(null);
+  const [demographicsParcelsLoading, setDemographicsParcelsLoading] = useState(true);
   const [analysisKind, setAnalysisKind] = useState<SiteAnalysisKind>("solar");
   const [shortcutCheatsheetOpen, setShortcutCheatsheetOpen] = useState(false);
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
@@ -355,6 +368,19 @@ export function ModelPage({
       cancelled = true;
     };
   }, []);
+  useEffect(() => {
+    let cancelled = false;
+    setDemographicsParcelsLoading(true);
+    void loadDemographicsParcels().then((dataset) => {
+      if (!cancelled) {
+        setDemographicsParcels(dataset);
+        setDemographicsParcelsLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const demographicsIndex = useMemo<DemographicsSpatialIndex | null>(() => {
     if (!demographicsDataset) return null;
     return buildDemographicsIndex(demographicsDataset.units);
@@ -372,19 +398,50 @@ export function ModelPage({
       canopyPct: demographicsCanopyFromModel(model),
     });
   }, [demographicsDataset, demographicsIndex, demographicsInCoverage, model]);
-  const demographicsMapUnits = useMemo(() => {
-    if (!demographicsDataset || !demographicsIndex || !demographicsStats) return [];
-    const half = model.sideM / 2;
-    const dLon = half / (111_320 * Math.cos((model.center.lat * Math.PI) / 180));
-    const dLat = half / 111_132;
-    const hits = demographicsIndex.search({
-      minX: model.center.lon - dLon,
-      minY: model.center.lat - dLat,
-      maxX: model.center.lon + dLon,
-      maxY: model.center.lat + dLat,
+  const demographicsParcelRecords = demographicsParcels?.parcels ?? [];
+  const demographicsParcelIndex = useMemo(
+    () => (demographicsParcelRecords.length ? buildParcelIndex(demographicsParcelRecords, model.center) : null),
+    [demographicsParcelRecords, model.center],
+  );
+  const demographicsCatchmentA = useMemo(() => {
+    const pin = demographicsExplorer.pins.a;
+    if (!pin || demographicsParcelRecords.length === 0) return null;
+    return aggregateCatchmentFromParcels({
+      parcels: demographicsParcelRecords,
+      center: model.center,
+      east: pin.east,
+      north: pin.north,
+      radiusM: demographicsExplorer.radiusM,
     });
-    return hits;
-  }, [demographicsDataset, demographicsIndex, demographicsStats, model.center, model.sideM]);
+  }, [demographicsExplorer.pins.a, demographicsExplorer.radiusM, demographicsParcelRecords, model.center]);
+  const demographicsCatchmentB = useMemo(() => {
+    const pin = demographicsExplorer.pins.b;
+    if (!pin || demographicsExplorer.panelMode !== "compare" || demographicsParcelRecords.length === 0) {
+      return null;
+    }
+    return aggregateCatchmentFromParcels({
+      parcels: demographicsParcelRecords,
+      center: model.center,
+      east: pin.east,
+      north: pin.north,
+      radiusM: demographicsExplorer.radiusM,
+    });
+  }, [
+    demographicsExplorer.panelMode,
+    demographicsExplorer.pins.b,
+    demographicsExplorer.radiusM,
+    demographicsParcelRecords,
+    model.center,
+  ]);
+  const demographicsSa1Count = Math.max(
+    demographicsCatchmentA?.sa1Count ?? 0,
+    demographicsCatchmentB?.sa1Count ?? 0,
+    demographicsStats?.sa1Cells ?? 0,
+  );
+  const demographicsExampleData =
+    typeof window !== "undefined" &&
+    (qaModeFromSearch(window.location.search) ||
+      new URLSearchParams(window.location.search).get("demo") === "demographics");
   useEffect(() => {
     if (tab !== "drawing" || drawingViewportsInitializedRef.current === model) return;
     drawingViewportsInitializedRef.current = model;
@@ -1967,12 +2024,16 @@ export function ModelPage({
                 fitCounter={fitCounter}
               />
             ) : drawing === "demographics" ? (
-              <DemographicsDrawing
+              <DemographicsExplorerMap
                 model={drawingModel}
-                units={demographicsMapUnits}
+                parcels={demographicsParcelRecords}
+                parcelIndex={demographicsParcelIndex}
+                state={demographicsExplorer}
+                dispatch={dispatchDemographicsExplorer}
                 viewport={planViewport}
                 onViewportChange={setPlanViewport}
                 fitCounter={fitCounter}
+                exampleData={demographicsExampleData}
               />
             ) : (
               <DrawingPlan
@@ -2023,7 +2084,7 @@ export function ModelPage({
             rightId={RIGHT_SIDEBAR_PANEL_ID}
             items={items}
             rightItems={demographicsActive ? [] : rightItems}
-            rightHeadTitle={demographicsActive ? "Inspector — Demographics" : undefined}
+            rightHeadTitle={demographicsActive ? "Demographics Explorer" : undefined}
             rightMeta={demographicsActive ? "2GMEL" : `MGA${mgaCrs(model.center.lon).zone}`}
             active={leftOpen}
             rightActive={rightOpen}
@@ -2272,13 +2333,15 @@ export function ModelPage({
             }
             rightChildren={
               demographicsActive ? (
-                <DemographicsInspector
-                  tab={demographicsTab}
-                  onTab={setDemographicsTab}
-                  stats={demographicsStats}
+                <DemographicsExplorerPanel
+                  state={demographicsExplorer}
+                  dispatch={dispatchDemographicsExplorer}
+                  statsA={demographicsCatchmentA}
+                  statsB={demographicsCatchmentB}
                   benchmark={demographicsDataset?.benchmark ?? null}
-                  loading={demographicsLoading}
-                  empty={!demographicsInCoverage || !demographicsStats}
+                  sa1Count={demographicsSa1Count}
+                  builtAt={demographicsDataset ? null : null}
+                  loading={demographicsLoading || demographicsParcelsLoading}
                 />
               ) : (
               <>
@@ -3876,16 +3939,48 @@ export function ModelPage({
             </div>
           </div>
         ) : demographicsActive ? (
-          <div className="bottom-bar demo-status-bar hud-card mono" role="status" aria-label="Demographics layer status">
-            <span>
-              CURSOR {model.center.lon.toFixed(4)}, {model.center.lat.toFixed(4)}
-            </span>
+          <div className="bottom-bar demo-explorer-bar hud-card mono" role="region" aria-label="Demographics map controls">
+            <label className="demo-radius-control">
+              RADIUS
+              <input
+                type="range"
+                min={200}
+                max={1200}
+                step={50}
+                value={demographicsExplorer.radiusM}
+                onChange={(event) =>
+                  dispatchDemographicsExplorer({ type: "setRadius", radiusM: Number(event.target.value) })
+                }
+              />
+              <span>{demographicsExplorer.radiusM} M</span>
+            </label>
             <span className="v-sep hud-sep" aria-hidden="true" />
-            <span>LAYER DEMOGRAPHICS</span>
-            <span className="v-sep hud-sep" aria-hidden="true" />
-            <span>CELLS {demographicsStats?.sa1Cells ?? 0}</span>
+            <div className="demo-colour-by" role="group" aria-label="Colour parcels by">
+              <span>COLOUR BY</span>
+              {(
+                [
+                  ["density", "Density"],
+                  ["medianAge", "Median age"],
+                  ["rent", "Rent"],
+                  ["rentersPct", "Renters %"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={demographicsExplorer.colourBy === id ? "demo-colour-btn is-active" : "demo-colour-btn"}
+                  aria-pressed={demographicsExplorer.colourBy === id}
+                  onClick={() => dispatchDemographicsExplorer({ type: "setColourBy", colourBy: id })}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <span className="demo-status-spacer" aria-hidden="true" />
-            <span className="demo-status-note">ABS Census 2021 · SA1</span>
+            <span className="demo-status-note">DRAG PINS → LIVE</span>
+            <span className="demo-attribution">
+              Parcels © State of Victoria (DTP), Vicmap Property, CC BY 4.0
+            </span>
           </div>
         ) : (
           <div className="bottom-bar studio-solar-bar hud-card" role="region" aria-label="Solar and camera controls">

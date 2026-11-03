@@ -1403,6 +1403,62 @@ async function main() {
       );
     }
 
+    {
+      const demoCtx = await browser.newContext({
+        viewport: VIEWPORT,
+        deviceScaleFactor: DEVICE_SCALE_FACTOR,
+        reducedMotion: "no-preference",
+      });
+      const demoPage = await demoCtx.newPage();
+      await demoPage.goto(`${baseUrl}/?lat=-37.8053&lon=144.9746&km=1&qa=1&demo=demographics`, {
+        waitUntil: "domcontentloaded",
+      });
+      await demoPage.waitForSelector("button.create-fab", { timeout: 20000 });
+      await demoPage.click("button.create-fab");
+      await demoPage.waitForSelector(".model", { timeout: 180000 });
+      await demoPage.getByRole("tab", { name: "Drawing" }).click();
+      await demoPage.getByRole("button", { name: "Demographics" }).click();
+      await demoPage.waitForSelector(".demo-explorer-title", { timeout: 120000 });
+      const demoInfo = await demoPage.evaluate(() => {
+        const title = document.querySelector(".demo-explorer-title")?.textContent?.trim() ?? "";
+        const compare = Boolean(document.querySelector(".demo-compare-grid"));
+        const pins = document.querySelectorAll("[data-demo-pin]").length;
+        const map = Boolean(document.querySelector(".demographics-explorer-map"));
+        const residentsBefore = document.querySelector(".demo-residents")?.textContent ?? "";
+        return { title, compare, pins, map, residentsBefore };
+      });
+      await demoPage.locator("[data-demo-pin='a']").dispatchEvent("pointerdown", { clientX: 700, clientY: 450 });
+      await demoPage.mouse.move(760, 470);
+      await demoPage.mouse.up();
+      await demoPage.waitForTimeout(400);
+      const residentsAfter = await demoPage.evaluate(
+        () => document.querySelector(".demo-residents")?.textContent ?? "",
+      );
+      assertCheck(
+        "demo-explorer-people-compare",
+        "Drawing → Demographics opens the light explorer map with Compare mode, Fitzroy/Carlton pins, and live stats",
+        demoInfo.title === "Demographics Explorer" &&
+          demoInfo.compare &&
+          demoInfo.pins >= 2 &&
+          demoInfo.map,
+        JSON.stringify(demoInfo),
+      );
+      assertCheck(
+        "demo-explorer-pin-drag",
+        "Dragging pin A updates catchment resident copy in the panel",
+        demoInfo.residentsBefore.length > 0 &&
+          residentsAfter.length > 0 &&
+          residentsAfter !== demoInfo.residentsBefore,
+        `before=${demoInfo.residentsBefore} after=${residentsAfter}`,
+      );
+      if (fs.existsSync("/opt/cursor/artifacts")) {
+        await demoPage.screenshot({
+          path: "/opt/cursor/artifacts/demographics-explorer-compare-fitzroy-carlton-1440x900.png",
+        });
+      }
+      await demoCtx.close();
+    }
+
     if (fs.existsSync(ARTIFACTS_DIR)) {
       const contactSheetOut = path.join(ARTIFACTS_DIR, "pr164-v17-transition-contact-sheet.png");
       execFileSync("ffmpeg", [
