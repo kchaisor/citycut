@@ -22,6 +22,27 @@
 
   --figure-fill: #000000;
 
+  --demographics-map-bg: #f5f3ef;
+  --demographics-building-fill: #e8e6e1;
+  --demographics-building-stroke: #c8c4bc;
+  --demographics-parcel-line: #b8b4ac;
+  --demographics-parcel-outside: #ffffff;
+  --demographics-cut-frame: #1a1a1a;
+  --demographics-density-0: #fbf3d5;
+  --demographics-density-1: #d9edc9;
+  --demographics-density-2: #9fd3b6;
+  --demographics-density-3: #5bae9f;
+  --demographics-density-4: #2b7f83;
+  --demographics-density-5: #14505e;
+  --demographics-pin-a: #ee5441;
+  --demographics-pin-b: #3e63dd;
+  --demographics-panel-bg: #ffffffcc;
+  --demographics-panel-text: #18181b;
+  --demographics-panel-muted: #71717a;
+  --demographics-panel-ink: #09090b;
+  --demographics-subtab-active: #fff500;
+  --demographics-example-badge: #fff500;
+
   --plan-empty: #6d675e;
 
   --contour-label: #FFFFFF;

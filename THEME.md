@@ -124,6 +124,21 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--ground-fill` | `#e6e0d4` | Flat 3D ground, the ground on the 3D-view Illustrator sheet, and the Rhino Ground layer. |
 | `--export-backdrop` | `#e7e4dc` | Backdrop of the 3D PNG, and the page behind the 3D-view Illustrator drawing. |
 | `--figure-fill` | `#000000` | Figure-ground buildings, the black frame, north mark, and scale bar on that drawing, on screen and in the Illustrator file, and the Rhino FigureGround layer. |
+| `--demographics-map-bg` | `#f5f3ef` | Demographics Explorer 2D plan background. |
+| `--demographics-building-fill` | `#e8e6e1` | Building footprints on the demographics map. |
+| `--demographics-building-stroke` | `#c8c4bc` | Building outlines on the demographics map. |
+| `--demographics-parcel-line` | `#b8b4ac` | Vicmap parcel linework outside tint radii. |
+| `--demographics-parcel-outside` | `#ffffff` | Parcel fill outside pin radii. |
+| `--demographics-cut-frame` | `#1a1a1a` | Cut square outline on the demographics map. |
+| `--demographics-density-0` … `--demographics-density-5` | `#fbf3d5` … `#14505e` | Residents/ha density ramp on tinted parcels. |
+| `--demographics-pin-a` | `#ee5441` | Pin A (coral). |
+| `--demographics-pin-b` | `#3e63dd` | Pin B (indigo). |
+| `--demographics-panel-bg` | `#ffffffcc` | Frosted Demographics Explorer sidebar. |
+| `--demographics-panel-text` | `#18181b` | Demographics Explorer primary text. |
+| `--demographics-panel-muted` | `#71717a` | Demographics Explorer labels and metadata. |
+| `--demographics-panel-ink` | `#09090b` | Text on yellow sub-tab pills. |
+| `--demographics-subtab-active` | `#fff500` | Active People/Age/… sub-tab pill. |
+| `--demographics-example-badge` | `#fff500` | “Example data” map badge. |
 | `--plan-empty` | `#6d675e` | The sentence shown when a plan has nothing in the frame. |
 | `--contour-label` | `#6A6A6A` | Elevation numbers on the site plan, on screen and in the Illustrator file. |
 | `--building-uniform` | `#FFFFFF` | Buildings when colour-by-use is off, that legend swatch, and the Rhino Buildings layer. |

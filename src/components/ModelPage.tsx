@@ -149,6 +149,29 @@ import { ImportMassingPanel } from "./ImportMassingPanel";
 import { useImportedMassing } from "./useImportedMassing";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
+import { DemographicsExplorerMap } from "./DemographicsExplorerMap";
+import { DemographicsExplorerPanel } from "./DemographicsExplorerPanel";
+import { aggregateCatchmentForPin } from "../lib/demographicsCatchment";
+import {
+  initialDemographicsExplorerState,
+  reduceDemographicsExplorer,
+} from "../lib/demographicsExplorerReducer";
+import {
+  DEMOGRAPHICS_PIN_CARLTON,
+  DEMOGRAPHICS_PIN_FITZROY,
+  pinFromLonLat,
+} from "../lib/demographicsExplorerPins";
+import { demographicsPlanViewportExtent } from "../lib/planViewport";
+import { useDemographicsParcels } from "./useDemographicsParcels";
+import {
+  aggregateDemographicsForCut,
+  buildDemographicsIndex,
+  demographicsCanopyFromModel,
+  demographicsDatasetInBounds,
+  type DemographicsSpatialIndex,
+} from "../lib/demographicsClip";
+import { loadDemographicsDataset } from "../lib/demographicsLoad";
+import type { DemographicsDataset } from "../lib/demographicsTypes";
 import { DrawingExplodedAxo } from "./DrawingExplodedAxo";
 import { DrawingIsometric } from "./DrawingIsometric";
 import { isometricDrawingBounds } from "../lib/isometricDrawing";
@@ -204,6 +227,7 @@ import {
 import { readStoredRenderQuality, writeStoredRenderQuality, type RenderQuality } from "../lib/renderQuality";
 
 type Tab = "3d" | "drawing" | "satellite";
+type StudioDrawing = DrawingKind | "demographics";
 
 const SIDEBAR_PANEL_ID = "model-sidebar-panel";
 const RIGHT_SIDEBAR_PANEL_ID = "model-sidebar-right-panel";
@@ -271,7 +295,15 @@ export function ModelPage({
   commandBarOpen?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("3d");
-  const [drawing, setDrawing] = useState<DrawingKind>("site");
+  const [drawing, setDrawing] = useState<StudioDrawing>("site");
+  const [demographicsExplorer, dispatchDemographicsExplorer] = useReducer(
+    reduceDemographicsExplorer,
+    undefined,
+    initialDemographicsExplorerState,
+  );
+  const [demographicsDataset, setDemographicsDataset] = useState<DemographicsDataset | null>(null);
+  const [demographicsLoading, setDemographicsLoading] = useState(true);
+  const demographicsPinsSeededRef = useRef(false);
   const [analysisKind, setAnalysisKind] = useState<SiteAnalysisKind>("solar");
   const [shortcutCheatsheetOpen, setShortcutCheatsheetOpen] = useState(false);
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
@@ -327,6 +359,96 @@ export function ModelPage({
     planViewportExtent(model.sideM),
   );
   const drawingViewportsInitializedRef = useRef<CityModel | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setDemographicsLoading(true);
+    void loadDemographicsDataset().then((dataset) => {
+      if (!cancelled) {
+        setDemographicsDataset(dataset);
+        setDemographicsLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const demographicsIndex = useMemo<DemographicsSpatialIndex | null>(() => {
+    if (!demographicsDataset) return null;
+    return buildDemographicsIndex(demographicsDataset.units);
+  }, [demographicsDataset]);
+  const demographicsActive = tab === "drawing" && drawing === "demographics";
+  const demographicsInCoverage =
+    demographicsDataset !== null && demographicsDatasetInBounds(demographicsDataset, model.center);
+  const demographicsStats = useMemo(() => {
+    if (!demographicsDataset || !demographicsIndex || !demographicsInCoverage) return null;
+    return aggregateDemographicsForCut({
+      dataset: demographicsDataset,
+      index: demographicsIndex,
+      center: model.center,
+      sideM: model.sideM,
+      canopyPct: demographicsCanopyFromModel(model),
+    });
+  }, [demographicsDataset, demographicsIndex, demographicsInCoverage, model]);
+  const {
+    parcels: demographicsParcelRecords,
+    index: demographicsParcelIndex,
+    loading: demographicsParcelsLoading,
+  } = useDemographicsParcels(model, planViewport, demographicsExplorer, demographicsActive);
+  const demographicsCatchmentA = useMemo(() => {
+    const pin = demographicsExplorer.pins.a;
+    if (!pin || !demographicsIndex) return null;
+    return aggregateCatchmentForPin({
+      parcels: demographicsParcelRecords,
+      center: model.center,
+      east: pin.east,
+      north: pin.north,
+      radiusM: demographicsExplorer.radiusM,
+      index: demographicsIndex,
+    });
+  }, [
+    demographicsExplorer.pins.a,
+    demographicsExplorer.radiusM,
+    demographicsIndex,
+    demographicsParcelRecords,
+    model.center,
+  ]);
+  const demographicsCatchmentB = useMemo(() => {
+    const pin = demographicsExplorer.pins.b;
+    if (!pin || demographicsExplorer.panelMode !== "compare" || !demographicsIndex) return null;
+    return aggregateCatchmentForPin({
+      parcels: demographicsParcelRecords,
+      center: model.center,
+      east: pin.east,
+      north: pin.north,
+      radiusM: demographicsExplorer.radiusM,
+      index: demographicsIndex,
+    });
+  }, [
+    demographicsExplorer.panelMode,
+    demographicsExplorer.pins.b,
+    demographicsExplorer.radiusM,
+    demographicsIndex,
+    demographicsParcelRecords,
+    model.center,
+  ]);
+  const demographicsSa1Count = Math.max(
+    demographicsCatchmentA?.sa1Count ?? 0,
+    demographicsCatchmentB?.sa1Count ?? 0,
+    demographicsStats?.sa1Cells ?? 0,
+  );
+  useEffect(() => {
+    if (!demographicsActive) return;
+    setPlanViewport(demographicsPlanViewportExtent(model.sideM));
+    if (demographicsPinsSeededRef.current) return;
+    demographicsPinsSeededRef.current = true;
+    const fitzroy = pinFromLonLat(model.center, DEMOGRAPHICS_PIN_FITZROY, "Fitzroy");
+    const carlton = pinFromLonLat(model.center, DEMOGRAPHICS_PIN_CARLTON, "Carlton");
+    dispatchDemographicsExplorer({ type: "ensureComparePins" });
+    dispatchDemographicsExplorer({ type: "movePin", pin: "a", east: fitzroy.east, north: fitzroy.north });
+    dispatchDemographicsExplorer({ type: "movePin", pin: "b", east: carlton.east, north: carlton.north });
+    dispatchDemographicsExplorer({ type: "setPinLabel", pin: "a", label: "Fitzroy" });
+    dispatchDemographicsExplorer({ type: "setPinLabel", pin: "b", label: "Carlton" });
+  }, [demographicsActive, model.center, model.sideM]);
   useEffect(() => {
     if (tab !== "drawing" || drawingViewportsInitializedRef.current === model) return;
     drawingViewportsInitializedRef.current = model;
@@ -1770,7 +1892,7 @@ export function ModelPage({
   return (
     <div
       ref={modelRootRef}
-      className="model"
+      className={demographicsActive ? "model is-demographics" : "model"}
       data-intro-hold={!introHoldReleasedRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
       data-intro-webgl-wait={!introWebglReadyRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
     >
@@ -1908,6 +2030,19 @@ export function ModelPage({
                 onViewportChange={setIsoDrawingViewport}
                 fitCounter={fitCounter}
               />
+            ) : drawing === "demographics" ? (
+              <DemographicsExplorerMap
+                model={drawingModel}
+                parcels={demographicsParcelRecords}
+                parcelIndex={demographicsParcelIndex}
+                state={demographicsExplorer}
+                dispatch={dispatchDemographicsExplorer}
+                viewport={planViewport}
+                onViewportChange={setPlanViewport}
+                fitCounter={fitCounter}
+                statsA={demographicsCatchmentA}
+                statsB={demographicsCatchmentB}
+              />
             ) : (
               <DrawingPlan
                 model={drawingModel}
@@ -1955,8 +2090,10 @@ export function ModelPage({
           <Sidebar
             id={SIDEBAR_PANEL_ID}
             rightId={RIGHT_SIDEBAR_PANEL_ID}
-            items={items}
-            rightItems={rightItems}
+            items={demographicsActive ? [] : items}
+            rightItems={demographicsActive ? [] : rightItems}
+            rightHeadTitle={demographicsActive ? "" : undefined}
+            rightMeta={demographicsActive ? null : `MGA${mgaCrs(model.center.lon).zone}`}
             active={leftOpen}
             rightActive={rightOpen}
             collapsed={sidebarCollapsed}
@@ -1967,7 +2104,6 @@ export function ModelPage({
             showNewCut
             onSelect={selectSection}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-            rightMeta={`MGA${mgaCrs(model.center.lon).zone}`}
             brandMeta={
               <>
                 <span className="v-sep hud-sep" aria-hidden="true" />
@@ -2057,6 +2193,7 @@ export function ModelPage({
                         ["figure-ground", "Figure-ground"],
                         ["exploded-axo", "Exploded axo"],
                         ["isometric", "Isometric"],
+                        ["demographics", "Demographics"],
                       ] as const
                     ).map(([kind, label]) => (
                       <button
@@ -2203,6 +2340,18 @@ export function ModelPage({
               ) : null
             }
             rightChildren={
+              demographicsActive ? (
+                <DemographicsExplorerPanel
+                  state={demographicsExplorer}
+                  dispatch={dispatchDemographicsExplorer}
+                  statsA={demographicsCatchmentA}
+                  statsB={demographicsCatchmentB}
+                  benchmark={demographicsDataset?.benchmark ?? null}
+                  sa1Count={demographicsSa1Count}
+                  builtAt={demographicsDataset ? null : null}
+                  loading={demographicsLoading || demographicsParcelsLoading}
+                />
+              ) : (
               <>
             <div className="drawer-section" hidden={rightOpen !== "summary"}>
               <div className="kpi-grid mono" aria-label="In this model">
@@ -2561,6 +2710,7 @@ export function ModelPage({
                 {tierCounts.vicmap > 0 && <p className="tree-credit">{VICMAP_ATTRIBUTION}</p>}
               </div>
               </>
+              )
             }
           >
             <div className="drawer-section" hidden={leftOpen !== "drawing"}>
@@ -3191,7 +3341,7 @@ export function ModelPage({
                 <ExportTiles
                   tiles={exportTiles({
                     tab,
-                    drawing,
+                    drawing: drawing === "demographics" ? "site" : drawing,
                     busy,
                     figureScale,
                     sunStudyDate: sunStudyDateText({ year: solar.year, month: solar.month, day: solar.day }),
@@ -3795,6 +3945,50 @@ export function ModelPage({
                 />
               )}
             </div>
+          </div>
+        ) : demographicsActive ? (
+          <div className="bottom-bar demo-explorer-bar hud-card mono" role="region" aria-label="Demographics map controls">
+            <label className="demo-radius-control">
+              RADIUS
+              <input
+                type="range"
+                min={200}
+                max={1200}
+                step={50}
+                value={demographicsExplorer.radiusM}
+                onChange={(event) =>
+                  dispatchDemographicsExplorer({ type: "setRadius", radiusM: Number(event.target.value) })
+                }
+              />
+              <span>{demographicsExplorer.radiusM} M</span>
+            </label>
+            <span className="v-sep hud-sep" aria-hidden="true" />
+            <div className="demo-colour-by" role="group" aria-label="Colour parcels by">
+              <span>COLOUR BY</span>
+              {(
+                [
+                  ["density", "Density"],
+                  ["medianAge", "Median age"],
+                  ["rent", "Rent"],
+                  ["rentersPct", "Renters %"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={demographicsExplorer.colourBy === id ? "demo-colour-btn is-active" : "demo-colour-btn"}
+                  aria-pressed={demographicsExplorer.colourBy === id}
+                  onClick={() => dispatchDemographicsExplorer({ type: "setColourBy", colourBy: id })}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <span className="demo-status-spacer" aria-hidden="true" />
+            <span className="demo-status-note">DRAG PINS → LIVE</span>
+            <span className="demo-attribution">
+              Parcels © State of Victoria (DTP), Vicmap Property, CC BY 4.0
+            </span>
           </div>
         ) : (
           <div className="bottom-bar studio-solar-bar hud-card" role="region" aria-label="Solar and camera controls">
