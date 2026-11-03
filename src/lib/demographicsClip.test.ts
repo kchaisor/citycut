@@ -1,3 +1,4 @@
+import { readFileSync, existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   aggregateDemographicsForCut,
@@ -104,6 +105,33 @@ describe("demographicsClip", () => {
       canopyPct: 0,
     });
     expect(stats).toBeNull();
+  });
+
+  it("aggregates household types for a Melbourne CBD cut when metro JSON is present", () => {
+    const path = "public/demographics-metro.json";
+    if (!existsSync(path)) return;
+    const dataset = JSON.parse(readFileSync(path, "utf8")) as DemographicsDataset;
+    const index = buildDemographicsIndex(dataset.units);
+    const half = 500;
+    const dLon = half / (111_320 * Math.cos(((-37.8136) * Math.PI) / 180));
+    const dLat = half / 111_132;
+    const hits = index.search({
+      minX: 144.9633 - dLon,
+      minY: -37.8136 - dLat,
+      maxX: 144.9633 + dLon,
+      maxY: -37.8136 + dLat,
+    });
+    const stats = aggregateDemographicsForCut({
+      dataset,
+      index,
+      center: { lon: 144.9633, lat: -37.8136 },
+      sideM: 1000,
+      canopyPct: 0,
+    });
+    expect(stats).not.toBeNull();
+    expect(stats!.population).toBeGreaterThan(1000);
+    const hhTotal = Object.values(stats!.households).reduce((a, b) => a + b, 0);
+    expect(hhTotal).toBeGreaterThan(100);
   });
 
   it("derives benchmark and cut percentage shares", () => {

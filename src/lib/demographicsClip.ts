@@ -126,6 +126,21 @@ export function aggregateDemographicsForCut(input: {
 
   if (population <= 0 && sa1Cells === 0) return null;
 
+  const householdTotal = DEMOGRAPHICS_HOUSEHOLD_TYPES.reduce((sum, kind) => sum + households[kind], 0);
+  if (population > 0 && householdTotal <= 0) {
+    const benchHouseholds = DEMOGRAPHICS_HOUSEHOLD_TYPES.reduce(
+      (sum, kind) => sum + input.dataset.benchmark.households[kind],
+      0,
+    );
+    if (benchHouseholds > 0) {
+      const avgPersonsPerHousehold = input.dataset.benchmark.population / benchHouseholds;
+      const estimatedHouseholds = population / avgPersonsPerHousehold;
+      for (const kind of DEMOGRAPHICS_HOUSEHOLD_TYPES) {
+        households[kind] = (estimatedHouseholds * input.dataset.benchmark.households[kind]) / benchHouseholds;
+      }
+    }
+  }
+
   const areaKm2 = (input.sideM * input.sideM) / 1_000_000;
   return {
     population: Math.round(population),
