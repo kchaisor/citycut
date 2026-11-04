@@ -259,4 +259,16 @@
   --nsw-zone-w: #A9D6E8;
   --nsw-zone-ru: #E8DCB5;
   --nsw-zone-other: #D9D4E8;
+
+  --reach-walk-fill: #1F9E89;
+  --reach-walk-muted: #B8E6DE;
+  --reach-transit-fill: #7C5CE0;
+  --reach-origin-fill: #FFF500;
+  --reach-hex-edge: #1A1916;
+  --reach-panel-bg: #FFFFFF;
+  --reach-panel-text: #1A1916;
+  --reach-panel-muted: #6E685E;
+  --reach-multiplier-bg: #1A1916;
+  --reach-multiplier-text: #FFFCF8;
+  --reach-multiplier-accent: #FFF500;
 }

@@ -1,0 +1,34 @@
+{
+  "version": 2,
+  "h3Resolution": 10,
+  "walkSpeedKmh": 4.8,
+  "waitPolicy": "Average scheduled wait at boarding stop (weekday AM 4 min, midday 6 min, weekend 8 min) plus GTFS in-vehicle times; real-time delays excluded.",
+  "exampleData": false,
+  "sources": {
+    "walking": {
+      "name": "Geofabrik Victoria extract (Pyrosm walk network)",
+      "url": "https://download.geofabrik.de/australia-oceania/australia/victoria-latest.osm.pbf",
+      "retrieved": "2026-11-04"
+    },
+    "transit": {
+      "name": "PTV GTFS static feed (all metro regions)",
+      "url": "https://data.ptv.vic.gov.au/downloads/gtfs.zip",
+      "retrieved": "2026-11-04"
+    }
+  },
+  "cellCount": 25703,
+  "stationCount": 7673,
+  "profiles": [
+    "weekday_am",
+    "midday",
+    "weekend"
+  ],
+  "files": {
+    "cells": "cells.json",
+    "graph": "graph.bin",
+    "stations": "stations.json",
+    "weekday_am": "pt-weekday-am.bin.gz",
+    "midday": "pt-midday.bin.gz",
+    "weekend": "pt-weekend.bin.gz"
+  }
+}
