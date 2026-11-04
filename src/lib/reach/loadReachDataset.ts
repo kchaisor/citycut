@@ -1,39 +1,33 @@
-import { cellToLatLng, latLngToCell } from "h3-js";
+import { gunzipSync } from "fflate";
+import { latLngToCell } from "h3-js";
 import type { ReachPeriod } from "./constants";
 import { REACH_H3_RES } from "./constants";
 import type { ReachDataset, ReachManifest, ReachStation } from "./types";
+import { assembleReachDataset } from "./assembleReachDataset";
 
 function reachBaseUrl(): string {
   const base = import.meta.env.BASE_URL ?? "/";
   return `${base}reach/`.replace(/\/?$/, "/");
 }
 
-async function fetchArrayBuffer(path: string): Promise<ArrayBuffer> {
-  const res = await fetch(path);
-  if (!res.ok) throw new Error(`Reach data failed: ${path}`);
-  return res.arrayBuffer();
+async function fetchArrayBuffer(relativePath: string): Promise<ArrayBuffer> {
+  const res = await fetch(relativePath);
+  if (!res.ok) throw new Error(`Reach data failed: ${relativePath}`);
+  const buf = await res.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  if (relativePath.endsWith(".gz") && bytes[0] === 0x1f && bytes[1] === 0x8b) {
+    const raw = gunzipSync(bytes);
+    return raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer;
+  }
+  return buf;
 }
 
-function readNeighbors(buf: ArrayBuffer, cellCount: number): { neighbors: Uint16Array[]; edgeMinutes: Float32Array[] } {
-  const view = new DataView(buf);
-  let o = 0;
-  const neighbors: Uint16Array[] = [];
-  const edgeMinutes: Float32Array[] = [];
-  for (let i = 0; i < cellCount; i++) {
-    const count = view.getUint8(o);
-    o += 1;
-    const nbrs = new Uint16Array(count);
-    const weights = new Float32Array(count);
-    for (let k = 0; k < count; k++) {
-      nbrs[k] = view.getUint16(o, true);
-      o += 2;
-      weights[k] = view.getUint16(o, true) / 1000;
-      o += 2;
-    }
-    neighbors.push(nbrs);
-    edgeMinutes.push(weights);
-  }
-  return { neighbors, edgeMinutes };
+export async function fetchReachPtProfile(
+  manifest: ReachManifest,
+  period: ReachPeriod,
+): Promise<ArrayBuffer> {
+  const root = reachBaseUrl();
+  return fetchArrayBuffer(`${root}${manifest.files[period]!}`);
 }
 
 export async function loadReachDataset(): Promise<ReachDataset> {
@@ -41,37 +35,16 @@ export async function loadReachDataset(): Promise<ReachDataset> {
   const manifestRes = await fetch(`${root}reach-manifest.json`);
   if (!manifestRes.ok) throw new Error("Reach manifest missing");
   const manifest = (await manifestRes.json()) as ReachManifest;
-  const cellCount = manifest.cellCount;
-  const [cellsJson, graphBuf, stationsJson, ...ptBuffers] = await Promise.all([
+  const [cellsJson, graphBuf, stationsJson] = await Promise.all([
     fetch(`${root}${manifest.files.cells}`).then((r) => r.json()) as Promise<string[]>,
     fetchArrayBuffer(`${root}${manifest.files.graph}`),
-    fetch(`${root}${manifest.files.stations}`).then((r) => r.json()),
-    ...manifest.profiles.map((p) => fetchArrayBuffer(`${root}${manifest.files[p]}`)),
+    fetch(`${root}${manifest.files.stations}`).then((r) => r.json()) as Promise<ReachStation[]>,
   ]);
-  const h3Indices = cellsJson;
-  const lat = new Float32Array(cellCount);
-  const lng = new Float32Array(cellCount);
-  for (let i = 0; i < cellCount; i++) {
-    const [la, lo] = cellToLatLng(h3Indices[i]!);
-    lat[i] = la;
-    lng[i] = lo;
+  const ptBuffers: ArrayBuffer[] = [];
+  for (const profile of manifest.profiles) {
+    ptBuffers.push(await fetchReachPtProfile(manifest, profile));
   }
-  const { neighbors, edgeMinutes } = readNeighbors(graphBuf, cellCount);
-  const stations = stationsJson as ReachStation[];
-  const ptMinutes = {} as Record<ReachPeriod, Uint8Array>;
-  manifest.profiles.forEach((profile, index) => {
-    ptMinutes[profile] = new Uint8Array(ptBuffers[index]!);
-  });
-  return {
-    manifest,
-    h3Indices,
-    lat,
-    lng,
-    neighbors,
-    edgeMinutes,
-    stations,
-    ptMinutes,
-  };
+  return assembleReachDataset(manifest, cellsJson, graphBuf, stationsJson, ptBuffers);
 }
 
 export function defaultOriginCell(dataset: ReachDataset, lat: number, lng: number): number {

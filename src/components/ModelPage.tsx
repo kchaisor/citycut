@@ -1149,7 +1149,6 @@ export function ModelPage({
   const leftSectionIds = sectionIds.filter((id) => !isRightSidebarSection(id) && id !== "exports");
   const rightSectionIds = sectionIds.filter((id) => isRightSidebarSection(id));
   const demographicsActive = tab === "drawing" && drawing === "demographics";
-  const demographicsReachActive = demographicsActive && demographicsLens === "reach";
   const items: SidebarItem[] = leftSectionIds.map((id) => {
     const Icon = SECTION_ICONS[id];
     return {
@@ -1778,7 +1777,7 @@ export function ModelPage({
   return (
     <div
       ref={modelRootRef}
-      className={demographicsReachActive ? "model is-demographics-reach" : "model"}
+      className={demographicsActive ? "model is-demographics-reach" : "model"}
       data-intro-hold={!introHoldReleasedRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
       data-intro-webgl-wait={!introWebglReadyRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
     >

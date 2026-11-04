@@ -27,6 +27,7 @@
     "@react-three/fiber": "^9.3.0",
     "@react-three/postprocessing": "^3.2.2",
     "clipper-lib": "^6.4.2",
+    "fflate": "^0.8.3",
     "h3-js": "^4.5.0",
     "lucide-react": "^0.544.0",
     "maplibre-gl": "^5.6.2",

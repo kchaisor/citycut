@@ -65,6 +65,100 @@ function waitForServer(url, timeoutMs = 25000) {
   });
 }
 
+async function verifyReachExplorer(page, assertCheck) {
+  await page.getByRole("tab", { name: /Drawing/i }).click({ force: true, timeout: 60000 });
+  await page.getByRole("button", { name: /Quick Demographics/i }).click({ force: true, timeout: 60000 });
+  await page.waitForSelector('[data-reach-map="true"]', { timeout: 180000 });
+  await page.waitForFunction(() => Boolean(window.__citycutReachQa), { timeout: 180000 });
+  await page.waitForFunction(() => Boolean(window.__citycutReachMapQa), { timeout: 180000 });
+  await page.waitForSelector(".reach-map-canvas canvas", { timeout: 60000 });
+  await page.waitForTimeout(1200);
+  const reachHudProbe = await page.evaluate(() => {
+      const controls = document.querySelector('[data-reach-map-controls="true"]');
+      const slider = controls?.querySelector('input[type="range"]');
+      if (!controls || !slider) return { ok: false, reason: "missing-controls" };
+      const rect = slider.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const top = document.elementFromPoint(cx, cy);
+      const ok = top === slider || top === controls || Boolean(top && controls.contains(top));
+      return { ok, tag: top?.tagName ?? null, className: top instanceof HTMLElement ? top.className : null };
+    });
+    assertCheck(
+      "reach-bottom-hud-topmost",
+      "Reach time-budget HUD is the topmost hit target at the slider centre (nothing stacked over it)",
+      reachHudProbe.ok,
+      JSON.stringify(reachHudProbe),
+    );
+  const reachMapLayerBaseline = await page.evaluate(() => {
+      const qa = window.__citycutReachMapQa;
+      return {
+        addLayer: qa?.addLayerCalls ?? -1,
+        removeLayer: qa?.removeLayerCalls ?? -1,
+        removeSource: qa?.removeSourceCalls ?? -1,
+        setStyle: qa?.setStyleCalls ?? -1,
+      };
+    });
+  const slider = page.locator('[data-reach-map-controls="true"] input[type="range"]');
+  await slider.evaluate((el) => {
+    el.value = "22";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await page.waitForTimeout(400);
+  const reachMapLayerAfter = await page.evaluate(() => {
+      const canvas = document.querySelector(".reach-map-canvas canvas");
+      const qa = window.__citycutReachMapQa;
+      const blank =
+        !canvas ||
+        canvas.width === 0 ||
+        canvas.height === 0 ||
+        getComputedStyle(canvas).visibility === "hidden" ||
+        getComputedStyle(canvas).display === "none";
+      return {
+        addLayer: qa?.addLayerCalls ?? -1,
+        removeLayer: qa?.removeLayerCalls ?? -1,
+        removeSource: qa?.removeSourceCalls ?? -1,
+        setStyle: qa?.setStyleCalls ?? -1,
+        canvasBlank: blank,
+      };
+    });
+    assertCheck(
+      "reach-map-stable-layers",
+      "Changing the reach time budget updates GeoJSON in place without recreating MapLibre layers/sources or blanking the canvas",
+      reachMapLayerAfter.addLayer === reachMapLayerBaseline.addLayer &&
+        reachMapLayerAfter.removeLayer === reachMapLayerBaseline.removeLayer &&
+        reachMapLayerAfter.removeSource === reachMapLayerBaseline.removeSource &&
+        reachMapLayerAfter.setStyle === reachMapLayerBaseline.setStyle &&
+        !reachMapLayerAfter.canvasBlank,
+      `baseline=${JSON.stringify(reachMapLayerBaseline)}, after=${JSON.stringify(reachMapLayerAfter)}`,
+    );
+  const reachBudgetProbe = await page.evaluate(() => {
+      const qa = window.__citycutReachQa;
+      const beforeWalk = qa?.walkKm2 ?? 0;
+      qa?.setBudget?.(25);
+      return { beforeWalk, budget: qa?.budgetMin ?? 0 };
+    });
+  await page.waitForTimeout(500);
+  const reachAfterBudget = await page.evaluate(() => ({
+      walk: window.__citycutReachQa?.walkKm2 ?? 0,
+      transit: window.__citycutReachQa?.transitKm2 ?? 0,
+      budget: window.__citycutReachQa?.budgetMin ?? 0,
+    }));
+    assertCheck(
+      "reach-demographics-explorer",
+      "Drawing → Demographics Reach loads H3 isochrones, exposes QA bridge, and expands walk reach when the time budget increases",
+      reachBudgetProbe.beforeWalk > 0 &&
+        reachAfterBudget.budget === 25 &&
+        reachAfterBudget.walk >= reachBudgetProbe.beforeWalk &&
+        reachAfterBudget.transit >= reachAfterBudget.walk,
+      `beforeWalk=${reachBudgetProbe.beforeWalk}, afterWalk=${reachAfterBudget.walk}, transit=${reachAfterBudget.transit}, budget=${reachAfterBudget.budget}`,
+    );
+  if (fs.existsSync(ARTIFACTS_DIR)) {
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "reach-explorer-flinders-1440x900.png") });
+  }
+}
+
 async function main() {
   fs.rmSync(TMP_FRAMES_DIR, { recursive: true, force: true });
   fs.mkdirSync(TMP_FRAMES_DIR, { recursive: true });
@@ -72,7 +166,7 @@ async function main() {
   fs.mkdirSync(TMP_VIDEO_DIR, { recursive: true });
 
   const port = await findFreePort();
-  const baseUrl = `http://127.0.0.1:${port}`;
+  const baseUrl = `http://127.0.0.1:${port}/citycut/`;
   const viteProc = spawn(
     path.join(process.cwd(), "node_modules/.bin/vite"),
     ["--host", "127.0.0.1", "--port", String(port), "--strictPort"],
@@ -410,17 +504,14 @@ async function main() {
     try {
       await page.waitForFunction(
         () => {
-          const canvas = document.querySelector(".model canvas[data-intro-bldg-inner][data-intro-tree-scale]");
           const model = document.querySelector(".model");
-          return Boolean(
-            canvas &&
-              model &&
-              !model.hasAttribute("data-intro-webgl-wait") &&
-              typeof window.__citycutIntroStartMs === "number" &&
-              typeof window.__citycutFirstTiltFrameMs === "number",
+          const canvas = document.querySelector(".model canvas[data-intro-bldg-inner][data-intro-tree-scale]");
+          if (!canvas || !model || model.hasAttribute("data-intro-webgl-wait")) return false;
+          return (
+            typeof window.__citycutIntroStartMs === "number" && typeof window.__citycutFirstTiltFrameMs === "number"
           );
         },
-        { timeout: 15000 },
+        { timeout: 45000 },
       );
     } catch (e) {
       const debugDom = await page.evaluate(() => ({
@@ -1132,37 +1223,9 @@ async function main() {
       `minutesAfterReplayClick=${replayStart.minutes}`,
     );
 
-    await page.getByRole("tab", { name: /Solar Study/i }).click();
-    await page.waitForTimeout(200);
+    await verifyReachExplorer(page, assertCheck);
 
     await page.getByRole("tab", { name: /Drawing/i }).click();
-    await page.getByRole("button", { name: /Quick Demographics/i }).click();
-    await page.waitForSelector('[data-reach-map="true"]', { timeout: 25000 });
-    await page.waitForFunction(() => Boolean(window.__citycutReachQa), { timeout: 35000 });
-    const reachBudgetProbe = await page.evaluate(() => {
-      const qa = window.__citycutReachQa;
-      const beforeWalk = qa?.walkKm2 ?? 0;
-      qa?.setBudget?.(25);
-      return { beforeWalk, budget: qa?.budgetMin ?? 0 };
-    });
-    await page.waitForTimeout(500);
-    const reachAfterBudget = await page.evaluate(() => ({
-      walk: window.__citycutReachQa?.walkKm2 ?? 0,
-      transit: window.__citycutReachQa?.transitKm2 ?? 0,
-      budget: window.__citycutReachQa?.budgetMin ?? 0,
-    }));
-    assertCheck(
-      "reach-demographics-explorer",
-      "Drawing → Demographics Reach loads H3 isochrones, exposes QA bridge, and expands walk reach when the time budget increases",
-      reachBudgetProbe.beforeWalk > 0 &&
-        reachAfterBudget.budget === 25 &&
-        reachAfterBudget.walk >= reachBudgetProbe.beforeWalk &&
-        reachAfterBudget.transit >= reachAfterBudget.walk,
-      `beforeWalk=${reachBudgetProbe.beforeWalk}, afterWalk=${reachAfterBudget.walk}, transit=${reachAfterBudget.transit}, budget=${reachAfterBudget.budget}`,
-    );
-    if (fs.existsSync(ARTIFACTS_DIR)) {
-      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "reach-explorer-flinders-1440x900.png") });
-    }
     await page.getByRole("button", { name: /Quick Site plan/i }).click();
     await page.waitForTimeout(200);
 
@@ -1222,10 +1285,13 @@ async function main() {
     );
 
     await analysisBtn.click();
+    await page.waitForSelector(".model .env-console", { timeout: 15000 });
+    await page.getByRole("tab", { name: "Solar Study" }).click({ force: true });
     await page.waitForTimeout(300);
 
     const planFanBtn = page.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
-    await planFanBtn.click();
+    await planFanBtn.waitFor({ state: "visible", timeout: 15000 });
+    await planFanBtn.click({ force: true });
     await page.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 10000 });
     await page.waitForTimeout(300);
 

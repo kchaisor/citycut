@@ -115,8 +115,10 @@ export function reachMinuteSeries(times: ReachCellTimes, budgetMax: number): Rea
   const transitExtraKm2: number[] = [];
   for (let m = 0; m <= budgetMax; m++) {
     minutes.push(m);
-    walkCumulativeKm2.push(walkHexCount(times.walkMin, m) * REACH_HEX_AREA_KM2);
-    transitExtraKm2.push(combinedHexCount(times.combinedMin, m) * REACH_HEX_AREA_KM2);
+    const walkKm2 = walkHexCount(times.walkMin, m) * REACH_HEX_AREA_KM2;
+    const combinedKm2 = combinedHexCount(times.combinedMin, m) * REACH_HEX_AREA_KM2;
+    walkCumulativeKm2.push(walkKm2);
+    transitExtraKm2.push(Math.max(0, combinedKm2 - walkKm2));
   }
   return { minutes, walkCumulativeKm2, transitExtraKm2 };
 }

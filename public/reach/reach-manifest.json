@@ -1,23 +1,23 @@
 {
-  "version": 1,
-  "h3Resolution": 9,
+  "version": 2,
+  "h3Resolution": 10,
   "walkSpeedKmh": 4.8,
-  "waitPolicy": "Scheduled GTFS in-vehicle time plus average headway wait at origin stop (weekday AM 4 min, midday 6 min, weekend 8 min); real-time delays excluded.",
+  "waitPolicy": "Average scheduled wait at boarding stop (weekday AM 4 min, midday 6 min, weekend 8 min) plus GTFS in-vehicle times; real-time delays excluded.",
   "exampleData": false,
   "sources": {
     "walking": {
-      "name": "H3 adjacency grid (geodesic edge lengths)",
-      "url": "https://h3geo.org/",
-      "retrieved": "2026-11-03"
+      "name": "Geofabrik Victoria extract (Pyrosm walk network)",
+      "url": "https://download.geofabrik.de/australia-oceania/australia/victoria-latest.osm.pbf",
+      "retrieved": "2026-11-04"
     },
     "transit": {
-      "name": "PTV GTFS static feed",
+      "name": "PTV GTFS static feed (all metro regions)",
       "url": "https://data.ptv.vic.gov.au/downloads/gtfs.zip",
-      "retrieved": "2026-11-03"
+      "retrieved": "2026-11-04"
     }
   },
-  "cellCount": 3677,
-  "stationCount": 34,
+  "cellCount": 25703,
+  "stationCount": 7673,
   "profiles": [
     "weekday_am",
     "midday",
@@ -27,8 +27,8 @@
     "cells": "cells.json",
     "graph": "graph.bin",
     "stations": "stations.json",
-    "weekday_am": "pt-weekday-am.bin",
-    "midday": "pt-midday.bin",
-    "weekend": "pt-weekend.bin"
+    "weekday_am": "pt-weekday-am.bin.gz",
+    "midday": "pt-midday.bin.gz",
+    "weekend": "pt-weekend.bin.gz"
   }
 }

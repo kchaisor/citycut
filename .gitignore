@@ -19,4 +19,10 @@ public/trees.pmtiles
 public/trees-manifest.json
 public/reach/gtfs/
 public/reach/gtfs.zip
+public/reach/_cache/
+public/reach/iv-*.bin
+public/reach/pt-*.bin
+public/reach/stations-build.json
+public/reach/pt-build-meta.json
 match-ref-out/
+cache/

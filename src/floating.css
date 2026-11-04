@@ -4427,6 +4427,18 @@ body,
   background: var(--reach-panel-bg);
 }
 
+.model.is-demographics-reach .left-outliner.sidebar-panel,
+.model.is-demographics-reach .bottom-bar {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+.model.is-demographics-reach .viewport.is-drawing > .fill.is-reach-explorer {
+  padding-top: 56px;
+  padding-bottom: 0;
+  box-sizing: border-box;
+}
+
 .reach-explorer-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
@@ -4501,8 +4513,9 @@ body,
 .reach-map-controls {
   position: absolute;
   left: 50%;
-  bottom: 18px;
+  bottom: 24px;
   transform: translateX(-50%);
+  z-index: 30;
   display: flex;
   align-items: center;
   gap: 16px;
@@ -4510,6 +4523,11 @@ body,
   border-radius: 999px;
   background: var(--reach-panel-bg);
   box-shadow: 0 8px 24px rgb(26 25 22 / 10%);
+  pointer-events: auto;
+}
+
+.reach-map-shell {
+  isolation: isolate;
 }
 
 .reach-slider-field {

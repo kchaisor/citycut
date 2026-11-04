@@ -4,9 +4,11 @@ import { useEffect, useMemo, useRef } from "react";
 import { applyBasemapStyleToMap, loadBasemapStyle } from "../../lib/loadMapStyle";
 import { getColour } from "../../lib/colours";
 import { useColourRevision } from "../../lib/useColourRevision";
+import { FLAT_NORTH_UP_MAP_OPTIONS, applyFlatNorthUpMapHandlers } from "../../lib/mapStageMapOptions";
 import {
   REACH_BUDGET_MAX,
   REACH_BUDGET_MIN,
+  REACH_H3_RES,
   REACH_PERIODS,
   REACH_UNREACHABLE,
   type ReachPeriod,
@@ -22,6 +24,92 @@ function hexFeature(h3: string, props: Record<string, string | number>) {
     type: "Feature" as const,
     properties: props,
     geometry: { type: "Polygon" as const, coordinates: [boundary] },
+  };
+}
+
+function ensureReachLayers(map: maplibregl.Map) {
+  if (map.getSource("reach-hexes")) return;
+  map.addSource("reach-hexes", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+  map.addLayer({
+    id: "reach-hex-fill",
+    type: "fill",
+    source: "reach-hexes",
+    paint: {
+      "fill-color": [
+        "match",
+        ["get", "kind"],
+        "origin",
+        getColour("--reach-origin-fill"),
+        "walk",
+        getColour("--reach-walk-fill"),
+        "transit",
+        getColour("--reach-transit-fill"),
+        getColour("--reach-walk-muted"),
+      ],
+      "fill-opacity": [
+        "case",
+        ["==", ["get", "kind"], "walk"],
+        ["interpolate", ["linear"], ["get", "minute"], 1, 0.95, 15, 0.45],
+        0.72,
+      ],
+    },
+  });
+  map.addLayer({
+    id: "reach-hex-line",
+    type: "line",
+    source: "reach-hexes",
+    paint: {
+      "line-color": getColour("--reach-hex-edge"),
+      "line-width": 0.6,
+    },
+  });
+  map.addLayer({
+    id: "reach-hex-label",
+    type: "symbol",
+    source: "reach-hexes",
+    minzoom: 12,
+    layout: {
+      "text-field": ["to-string", ["get", "minute"]],
+      "text-size": 10,
+      "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"],
+      "text-allow-overlap": false,
+    },
+    paint: {
+      "text-color": getColour("--reach-panel-text"),
+    },
+    filter: ["in", ["get", "kind"], ["literal", ["walk", "transit"]]],
+  });
+}
+
+function installReachMapQaHooks(map: maplibregl.Map) {
+  if (typeof window === "undefined") return;
+  const qa = {
+    addLayerCalls: 0,
+    removeLayerCalls: 0,
+    removeSourceCalls: 0,
+    setStyleCalls: 0,
+    canvasBlankFrames: 0,
+  };
+  window.__citycutReachMapQa = qa;
+  const origAddLayer = map.addLayer.bind(map);
+  map.addLayer = (...args: Parameters<maplibregl.Map["addLayer"]>) => {
+    qa.addLayerCalls += 1;
+    return origAddLayer(...args);
+  };
+  const origRemoveLayer = map.removeLayer.bind(map);
+  map.removeLayer = (...args: Parameters<maplibregl.Map["removeLayer"]>) => {
+    qa.removeLayerCalls += 1;
+    return origRemoveLayer(...args);
+  };
+  const origRemoveSource = map.removeSource.bind(map);
+  map.removeSource = (...args: Parameters<maplibregl.Map["removeSource"]>) => {
+    qa.removeSourceCalls += 1;
+    return origRemoveSource(...args);
+  };
+  const origSetStyle = map.setStyle.bind(map);
+  map.setStyle = (...args: Parameters<maplibregl.Map["setStyle"]>) => {
+    qa.setStyleCalls += 1;
+    return origSetStyle(...args);
   };
 }
 
@@ -48,15 +136,21 @@ export function ReachMapExplorer({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const mapReadyRef = useRef(false);
+  const pendingGeojsonRef = useRef<GeoJSON.FeatureCollection | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const onPickCellRef = useRef(onPickCell);
+  onPickCellRef.current = onPickCell;
   const colourTick = useColourRevision();
+
   const ptOnly = useMemo(() => {
     if (!times) return [];
     return classifyPtOnly(times.walkMin, times.combinedMin, budgetMin);
   }, [times, budgetMin]);
 
-  const geojson = useMemo(() => {
+  const geojson = useMemo((): GeoJSON.FeatureCollection => {
     if (!times) {
-      return { type: "FeatureCollection" as const, features: [] as ReturnType<typeof hexFeature>[] };
+      return { type: "FeatureCollection", features: [] };
     }
     const features: ReturnType<typeof hexFeature>[] = [];
     for (let i = 0; i < dataset.h3Indices.length; i++) {
@@ -76,8 +170,41 @@ export function ReachMapExplorer({
       if (kind === "hidden") continue;
       features.push(hexFeature(dataset.h3Indices[i]!, { kind, minute, index: i }));
     }
-    return { type: "FeatureCollection" as const, features };
+    return { type: "FeatureCollection", features };
   }, [budgetMin, dataset.h3Indices, originCellIndex, ptOnly, times]);
+
+  const flushGeojson = (map: maplibregl.Map, data: GeoJSON.FeatureCollection) => {
+    ensureReachLayers(map);
+    const source = map.getSource("reach-hexes") as maplibregl.GeoJSONSource;
+    source.setData(data);
+    map.setPaintProperty("reach-hex-fill", "fill-color", [
+      "match",
+      ["get", "kind"],
+      "origin",
+      getColour("--reach-origin-fill"),
+      "walk",
+      getColour("--reach-walk-fill"),
+      "transit",
+      getColour("--reach-transit-fill"),
+      getColour("--reach-walk-muted"),
+    ]);
+  };
+
+  useEffect(() => {
+    pendingGeojsonRef.current = geojson;
+    const map = mapRef.current;
+    if (!map || !mapReadyRef.current) return;
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      const next = pendingGeojsonRef.current;
+      if (!next || !mapRef.current) return;
+      flushGeojson(mapRef.current, next);
+    });
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    };
+  }, [geojson, colourTick]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -90,45 +217,18 @@ export function ReachMapExplorer({
         container,
         style: typeof style === "string" ? undefined : style,
         center: [MELBOURNE_CBD.lon, MELBOURNE_CBD.lat],
-        zoom: 12.4,
+        zoom: 13,
         attributionControl: false,
-        dragRotate: false,
-        pitch: 0,
-        bearing: 0,
+        ...FLAT_NORTH_UP_MAP_OPTIONS,
       });
       mapRef.current = map;
+      installReachMapQaHooks(map);
       if (typeof style === "string") applyBasemapStyleToMap(map, style);
+      applyFlatNorthUpMapHandlers(map);
       map.on("load", () => {
-        if (!map) return;
-        map.addSource("reach-hexes", { type: "geojson", data: geojson });
-        map.addLayer({
-          id: "reach-hex-fill",
-          type: "fill",
-          source: "reach-hexes",
-          paint: {
-            "fill-color": [
-              "match",
-              ["get", "kind"],
-              "origin",
-              getColour("--reach-origin-fill"),
-              "walk",
-              getColour("--reach-walk-fill"),
-              "transit",
-              getColour("--reach-transit-fill"),
-              getColour("--reach-walk-muted"),
-            ],
-            "fill-opacity": ["case", ["==", ["get", "kind"], "walk"], ["interpolate", ["linear"], ["get", "minute"], 1, 0.95, 15, 0.45], 0.72],
-          },
-        });
-        map.addLayer({
-          id: "reach-hex-line",
-          type: "line",
-          source: "reach-hexes",
-          paint: {
-            "line-color": getColour("--reach-hex-edge"),
-            "line-width": 0.6,
-          },
-        });
+        mapReadyRef.current = true;
+        if (pendingGeojsonRef.current) flushGeojson(map!, pendingGeojsonRef.current);
+        map!.resize();
       });
       map.on("click", (event) => {
         const lng = event.lngLat.lng;
@@ -144,38 +244,26 @@ export function ReachMapExplorer({
             best = i;
           }
         }
-        onPickCell(best);
+        onPickCellRef.current(best);
       });
     });
+    const ro = new ResizeObserver(() => {
+      mapRef.current?.resize();
+    });
+    ro.observe(container);
     return () => {
       cancelled = true;
+      mapReadyRef.current = false;
+      ro.disconnect();
       map?.remove();
       mapRef.current = null;
+      if (typeof window !== "undefined") delete window.__citycutReachMapQa;
     };
-  }, [dataset.lat, dataset.lng, onPickCell]);
+  }, [dataset.lat.length]);
 
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
-    const source = map.getSource("reach-hexes") as maplibregl.GeoJSONSource | undefined;
-    source?.setData(geojson);
-  }, [geojson, colourTick]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
-    map.setPaintProperty("reach-hex-fill", "fill-color", [
-      "match",
-      ["get", "kind"],
-      "origin",
-      getColour("--reach-origin-fill"),
-      "walk",
-      getColour("--reach-walk-fill"),
-      "transit",
-      getColour("--reach-transit-fill"),
-      getColour("--reach-walk-muted"),
-    ]);
-  }, [colourTick]);
+    pendingGeojsonRef.current = geojson;
+  }, [geojson]);
 
   return (
     <div className="reach-map-shell" data-reach-map="true">
@@ -196,9 +284,9 @@ export function ReachMapExplorer({
         <span>
           <i style={{ background: getColour("--reach-origin-fill") }} aria-hidden="true" /> Origin
         </span>
-        <span className="mono reach-legend-meta">H3 res 9 · minutes</span>
+        <span className="mono reach-legend-meta">H3 res {REACH_H3_RES} · minutes</span>
       </div>
-      <div className="reach-map-controls">
+      <div className="reach-map-controls hud-card" data-reach-map-controls="true">
         <label className="reach-slider-field">
           <span className="mono">{budgetMin} min</span>
           <input
@@ -227,4 +315,16 @@ export function ReachMapExplorer({
       </div>
     </div>
   );
+}
+
+declare global {
+  interface Window {
+    __citycutReachMapQa?: {
+      addLayerCalls: number;
+      removeLayerCalls: number;
+      removeSourceCalls: number;
+      setStyleCalls: number;
+      canvasBlankFrames: number;
+    };
+  }
 }

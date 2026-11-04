@@ -49,14 +49,19 @@ try {
     args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-webgl", "--no-sandbox"],
   });
   const page = await browser.newPage({ viewport: VIEWPORT });
+  page.setDefaultTimeout(180000);
   await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
   await page.waitForSelector("button.create-fab", { timeout: 20000 });
   await page.click("button.create-fab");
   await page.waitForSelector(".model", { timeout: 120000 });
   await page.getByRole("tab", { name: /Drawing/i }).click({ force: true });
   await page.getByRole("button", { name: /Quick Demographics/i }).click({ force: true });
-  await page.waitForSelector('[data-reach-map="true"]', { timeout: 30000 });
-  await page.waitForFunction(() => Boolean(window.__citycutReachQa), { timeout: 45000 });
+  page.on("console", (msg) => {
+    if (msg.type() === "error") console.error("[reach-capture]", msg.text());
+  });
+  await page.waitForSelector('[data-reach-map="true"]', { timeout: 180000 });
+  await page.waitForFunction(() => Boolean(window.__citycutReachQa), { timeout: 180000 });
+  await page.waitForSelector(".reach-map-canvas canvas", { timeout: 60000 });
   await page.waitForTimeout(1200);
   const out = path.join(artifactsDir, "reach-explorer-flinders-1440x900.png");
   await page.screenshot({ path: out });
