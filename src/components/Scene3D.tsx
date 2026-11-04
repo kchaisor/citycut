@@ -14,7 +14,22 @@ import * as THREE from "three";
 import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
-import { attachScenePointPick, attachBuildingPick } from "../lib/buildingPick";
+import {
+  attachScenePointPick,
+  attachBuildingPick,
+  pickBuildingIdAtClient,
+} from "../lib/buildingPick";
+import {
+  hoverPickBlocked,
+  pickBuildingHoverAtClient,
+  type BuildingHoverPickGate,
+} from "../lib/buildingHoverPick";
+import {
+  createBuildingHoverHighlightSlot,
+  disposeBuildingHoverHighlightSlot,
+  syncBuildingHoverHighlightSlot,
+} from "../lib/buildingHoverHighlight";
+import { LENS_ORBIT_HOVER_COOLDOWN_MS } from "../lib/lensHoverTiming";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { basePlinthBottomY } from "../lib/terrain";
 import { auditBuildingSelection, mountSelectedBuildingsVisual } from "../lib/buildingSelectionVisual";
@@ -96,13 +111,19 @@ import {
 import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SunHoursLayer } from "./SunHoursLayer";
+import {
+  AnchoredLensScreenTracker,
+  AnchoredLensViewportLayer,
+  type AnchoredLensActions,
+} from "./AnchoredLens";
+import type { SunHoursGrid } from "../lib/sunHours";
 import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
 
 const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
 import { WindStaticArrows, WindStreaks } from "./WindStreaks";
 import { analyzeWindPeriod, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
-import type { CityModel } from "../types";
+import type { BuildingFeat, CityModel } from "../types";
 
 export type SceneExporter = {
   png: () => Promise<Blob>;
@@ -333,6 +354,205 @@ function BuildingPickLayer({
   return null;
 }
 
+function BuildingHoverPickLayer({
+  root,
+  enabled,
+  gate,
+  onHoverHighlight,
+}: {
+  root: THREE.Object3D;
+  enabled: boolean;
+  gate: BuildingHoverPickGate;
+  onHoverHighlight: (buildingId: number | null) => void;
+}) {
+  const camera = useThree((state) => state.camera);
+  const gl = useThree((state) => state.gl);
+  const invalidate = useThree((state) => state.invalidate);
+  const cameraRef = useRef(camera);
+  cameraRef.current = camera;
+  const rootRef = useRef(root);
+  rootRef.current = root;
+  const pointer = useRef({ x: Number.NaN, y: Number.NaN, dirty: false });
+  const lastId = useRef<number | null>(null);
+
+  const emitHoverHighlight = useCallback(
+    (id: number | null) => {
+      onHoverHighlight(id);
+      invalidate();
+    },
+    [invalidate, onHoverHighlight],
+  );
+
+  const applyHoverPickAt = useCallback(
+    (clientX: number, clientY: number) => {
+      const canvas = gl.domElement;
+      if (!enabled) return;
+      if (hoverPickBlocked(gate)) {
+        if (lastId.current !== null) {
+          lastId.current = null;
+          canvas.style.cursor = "";
+          canvas.dataset.buildingHoverHighlightId = "";
+          emitHoverHighlight(null);
+        }
+        return;
+      }
+      if (!Number.isFinite(clientX)) {
+        if (lastId.current !== null) {
+          lastId.current = null;
+          canvas.style.cursor = "";
+          canvas.dataset.buildingHoverHighlightId = "";
+          emitHoverHighlight(null);
+        }
+        return;
+      }
+      const clipLookup =
+        typeof window !== "undefined" && qaModeFromSearch(window.location.search)
+          ? (buildingId: number) => window.__citycutQaModel?.selectionScreenClip?.(buildingId, 10) ?? null
+          : undefined;
+      const ids =
+        clipLookup && typeof window !== "undefined"
+          ? (window.__citycutQaModel?.listBuildings?.().map((row) => row.id) ?? [])
+          : undefined;
+      const id = pickBuildingHoverAtClient(
+        canvas,
+        cameraRef.current,
+        rootRef.current,
+        clientX,
+        clientY,
+        clipLookup,
+        ids,
+      );
+      const nextDataset = id != null ? String(id) : "";
+      canvas.style.cursor = id != null ? "pointer" : "";
+      if (id === lastId.current) {
+        if (canvas.dataset.buildingHoverHighlightId !== nextDataset) {
+          canvas.dataset.buildingHoverHighlightId = nextDataset;
+        }
+        invalidate();
+        return;
+      }
+      lastId.current = id;
+      canvas.dataset.buildingHoverHighlightId = nextDataset;
+      emitHoverHighlight(id);
+    },
+    [emitHoverHighlight, enabled, gate, gl.domElement, invalidate],
+  );
+
+  useEffect(() => {
+    if (!enabled) return;
+    const canvas = gl.domElement;
+    const onMove = (event: PointerEvent) => {
+      pointer.current = { x: event.clientX, y: event.clientY, dirty: true };
+      applyHoverPickAt(event.clientX, event.clientY);
+    };
+    const onLeave = () => {
+      pointer.current = { x: Number.NaN, y: Number.NaN, dirty: true };
+      applyHoverPickAt(Number.NaN, Number.NaN);
+    };
+    const onDown = (event: PointerEvent) => {
+      if (event.button === 0) {
+        gate.pointerDown = true;
+        if (lastId.current !== null) {
+          lastId.current = null;
+          canvas.style.cursor = "";
+          canvas.dataset.buildingHoverHighlightId = "";
+        }
+        emitHoverHighlight(null);
+      }
+    };
+    const onUp = (event: PointerEvent) => {
+      if (event.button === 0) gate.pointerDown = false;
+    };
+    canvas.addEventListener("pointermove", onMove, true);
+    canvas.addEventListener("pointerleave", onLeave, true);
+    canvas.addEventListener("pointerdown", onDown, true);
+    canvas.addEventListener("pointerup", onUp, true);
+    return () => {
+      canvas.removeEventListener("pointermove", onMove, true);
+      canvas.removeEventListener("pointerleave", onLeave, true);
+      canvas.removeEventListener("pointerdown", onDown, true);
+      canvas.removeEventListener("pointerup", onUp, true);
+    };
+  }, [applyHoverPickAt, enabled, emitHoverHighlight, gate, gl.domElement]);
+
+  useFrame(() => {
+    if (!enabled || !pointer.current.dirty) return;
+    pointer.current.dirty = false;
+    applyHoverPickAt(pointer.current.x, pointer.current.y);
+  });
+
+  useEffect(() => {
+    if (!enabled) {
+      gl.domElement.style.cursor = "";
+      gl.domElement.dataset.buildingHoverHighlightId = "";
+      lastId.current = null;
+      emitHoverHighlight(null);
+    }
+  }, [enabled, emitHoverHighlight, gl.domElement]);
+
+  return null;
+}
+
+function BuildingHoverHighlightDemandSync({ active }: { active: boolean }) {
+  const invalidate = useThree((state) => state.invalidate);
+  useFrame(() => {
+    if (active) invalidate();
+  });
+  return null;
+}
+
+function BuildingHoverHighlightLayer({
+  model,
+  hoverBuildingId,
+  pinnedBuildingId,
+  colourMode,
+  enabled,
+}: {
+  model: CityModel;
+  hoverBuildingId: number | null;
+  pinnedBuildingId: number | null;
+  colourMode: BuildingColourMode;
+  enabled: boolean;
+}) {
+  const slotRef = useRef(createBuildingHoverHighlightSlot());
+  const gl = useThree((state) => state.gl);
+  const invalidate = useThree((state) => state.invalidate);
+  const colourTick = useColourRevision();
+  useLayoutEffect(() => {
+    const slot = slotRef.current;
+    if (!enabled) {
+      syncBuildingHoverHighlightSlot(slot, model, null, pinnedBuildingId, colourMode);
+      gl.domElement.dataset.buildingHoverHighlightActive = "";
+      invalidate();
+      return;
+    }
+    syncBuildingHoverHighlightSlot(slot, model, hoverBuildingId, pinnedBuildingId, colourMode);
+    gl.domElement.dataset.buildingHoverHighlightActive = slot.group.visible ? "1" : "";
+    invalidate();
+  }, [
+    enabled,
+    hoverBuildingId,
+    pinnedBuildingId,
+    model,
+    colourMode,
+    colourTick,
+    gl.domElement,
+    invalidate,
+  ]);
+  useLayoutEffect(() => () => disposeBuildingHoverHighlightSlot(slotRef.current), []);
+  const slot = slotRef.current;
+  const hoverActive =
+    enabled &&
+    hoverBuildingId != null &&
+    (pinnedBuildingId == null || pinnedBuildingId !== hoverBuildingId);
+  return (
+    <>
+      {hoverActive ? <BuildingHoverHighlightDemandSync active /> : null}
+      {slot.group.visible ? <primitive object={slot.group} /> : null}
+    </>
+  );
+}
+
 function ScenePointLayer({ onScenePoint }: { onScenePoint: (east: number, north: number, up: number) => void }) {
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
@@ -463,6 +683,9 @@ function City({
   onBuildingPick,
   onClearBuildingPick,
   pickBuildings,
+  lensHoverEnabled,
+  lensHoverGate,
+  onHoverHighlightBuildingId,
   walkRippleTint,
   walkRippleArrivals,
 }: {
@@ -479,11 +702,31 @@ function City({
   onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
   onClearBuildingPick?: () => void;
   pickBuildings: boolean;
+  lensHoverEnabled: boolean;
+  lensHoverGate: BuildingHoverPickGate;
+  onHoverHighlightBuildingId?: (buildingId: number | null) => void;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
+  const [hoverHighlightBuildingId, setHoverHighlightBuildingId] = useState<number | null>(null);
+  const onHoverHighlight = useCallback(
+    (buildingId: number | null) => {
+      setHoverHighlightBuildingId(buildingId);
+      onHoverHighlightBuildingId?.(buildingId);
+    },
+    [onHoverHighlightBuildingId],
+  );
+  useEffect(() => {
+    if (typeof window === "undefined" || !qaModeFromSearch(window.location.search)) return;
+    const onQaHover = (event: Event) => {
+      const buildingId = (event as CustomEvent<{ buildingId: number | null }>).detail.buildingId;
+      onHoverHighlight(buildingId ?? null);
+    };
+    window.addEventListener("citycut:qa-set-hover-highlight", onQaHover);
+    return () => window.removeEventListener("citycut:qa-set-hover-highlight", onQaHover);
+  }, [onHoverHighlight]);
   const colourTick = useColourRevision();
   const colourMode = useMemo<BuildingColourMode>(
     () => ({
@@ -937,6 +1180,19 @@ function City({
         enabled={pickBuildings && buildingsVisible}
         onBuildingPick={onBuildingPick}
         onClearPick={onClearBuildingPick}
+      />
+      <BuildingHoverPickLayer
+        root={group}
+        enabled={lensHoverEnabled && pickBuildings && buildingsVisible}
+        gate={lensHoverGate}
+        onHoverHighlight={onHoverHighlight}
+      />
+      <BuildingHoverHighlightLayer
+        model={model}
+        hoverBuildingId={hoverHighlightBuildingId}
+        pinnedBuildingId={heightEditBuildingId}
+        colourMode={colourMode}
+        enabled={lensHoverEnabled && buildingsVisible}
       />
     </>
   );
@@ -1543,6 +1799,7 @@ function QaCameraBridgeRegister({
   lon: number;
 }) {
   const gl = useThree((state) => state.gl);
+  const scene = useThree((state) => state.scene);
   const size = useThree((state) => state.size);
   const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
@@ -1619,12 +1876,18 @@ function QaCameraBridgeRegister({
           y: rect.top + (-vec.y * 0.5 + 0.5) * rect.height,
         };
       },
+      pickBuildingAtClient(clientX, clientY) {
+        const city = scene.getObjectByName("CityCut");
+        if (!city) return null;
+        return pickBuildingIdAtClient(gl.domElement, persp, city, clientX, clientY);
+      },
     });
     return () => registerQaCameraBridge(null);
   }, [
     active,
     controlsRef,
     gl,
+    scene,
     groundY,
     heliodonRadius,
     invalidate,
@@ -1744,6 +2007,7 @@ export function Cameras({
   lon,
   cameraMemory,
   introEnabled = false,
+  lensHoverGate,
 }: {
   side: number;
   lift: number;
@@ -1762,6 +2026,7 @@ export function Cameras({
   lon: number;
   cameraMemory?: CameraMemoryRef;
   introEnabled?: boolean;
+  lensHoverGate?: BuildingHoverPickGate;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
@@ -1810,7 +2075,6 @@ export function Cameras({
   const onControlsChange = useCallback(() => {
     invalidate();
   }, [invalidate]);
-
   return (
     <>
       <perspectiveCamera ref={perspRef} fov={32} />
@@ -1907,6 +2171,17 @@ export function Cameras({
             maxDistance={Math.max(side * 6, heliodonRadius * 2.4)}
             onStart={() => {
               touchedRef.current = true;
+              if (lensHoverGate) {
+                lensHoverGate.orbitActive = true;
+                lensHoverGate.pointerDown = true;
+              }
+            }}
+            onEnd={() => {
+              if (lensHoverGate) {
+                lensHoverGate.orbitActive = false;
+                lensHoverGate.pointerDown = false;
+                lensHoverGate.orbitCooldownUntil = performance.now() + LENS_ORBIT_HOVER_COOLDOWN_MS;
+              }
             }}
             onChange={onControlsChange}
           />
@@ -1933,6 +2208,17 @@ export function Cameras({
             }}
             onStart={() => {
               touchedRef.current = true;
+              if (lensHoverGate) {
+                lensHoverGate.orbitActive = true;
+                lensHoverGate.pointerDown = true;
+              }
+            }}
+            onEnd={() => {
+              if (lensHoverGate) {
+                lensHoverGate.orbitActive = false;
+                lensHoverGate.pointerDown = false;
+                lensHoverGate.orbitCooldownUntil = performance.now() + LENS_ORBIT_HOVER_COOLDOWN_MS;
+              }
             }}
             onChange={onControlsChange}
           />
@@ -2015,6 +2301,11 @@ export function Scene3D({
   walkRippleArrivals = null,
   walkRipplePlaying = false,
   onScenePoint = null,
+  anchoredLensBuilding = null,
+  anchoredLensSunHoursGrid = null,
+  anchoredLensActions = null,
+  anchoredLensMode = "pinned",
+  lensHoverEnabled = false,
   quality = "high",
 }: {
   model: CityModel;
@@ -2044,6 +2335,11 @@ export function Scene3D({
   walkRippleArrivals?: Map<number, number> | null;
   walkRipplePlaying?: boolean;
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
+  anchoredLensBuilding?: BuildingFeat | null;
+  anchoredLensSunHoursGrid?: SunHoursGrid | null;
+  anchoredLensActions?: AnchoredLensActions | null;
+  anchoredLensMode?: "hover" | "pinned";
+  lensHoverEnabled?: boolean;
   quality?: RenderQuality;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
@@ -2088,6 +2384,12 @@ export function Scene3D({
     for (const building of model.buildings) top = Math.max(top, base + building.height);
     return top;
   }, [model]);
+  const anchoredLensHostRef = useRef<HTMLDivElement | null>(null);
+  const lensHoverGateRef = useRef<BuildingHoverPickGate>({
+    pointerDown: false,
+    orbitActive: false,
+    orbitCooldownUntil: 0,
+  });
   return (
     <div className="scene-viewport">
       {glContextLost ? (
@@ -2167,6 +2469,8 @@ export function Scene3D({
         heightEditBuildingId={heightEditBuildingId}
         selectedBuildingIds={selectedBuildingIds}
         display={display}
+        lensHoverEnabled={lensHoverEnabled}
+        lensHoverGate={lensHoverGateRef.current}
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
       />
@@ -2174,6 +2478,13 @@ export function Scene3D({
       {walkLayer ? <primitive object={walkLayer} /> : null}
       {walkRippleLayer ? <primitive object={walkRippleLayer} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
+      {anchoredLensBuilding && anchoredLensActions ? (
+        <AnchoredLensScreenTracker
+          model={model}
+          building={anchoredLensBuilding}
+          hostRef={anchoredLensHostRef}
+        />
+      ) : null}
       <SolarHeliodon
         lat={model.center.lat}
         lon={model.center.lon}
@@ -2208,8 +2519,19 @@ export function Scene3D({
         lon={model.center.lon}
         cameraMemory={cameraMemory}
         introEnabled
+        lensHoverGate={lensHoverGateRef.current}
       />
       </Canvas>
+      {anchoredLensBuilding && anchoredLensActions ? (
+        <AnchoredLensViewportLayer
+          hostRef={anchoredLensHostRef}
+          building={anchoredLensBuilding}
+          model={model}
+          sunHoursGrid={anchoredLensSunHoursGrid ?? null}
+          actions={anchoredLensActions}
+          mode={anchoredLensMode}
+        />
+      ) : null}
     </div>
   );
 }

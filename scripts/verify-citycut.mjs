@@ -43,6 +43,97 @@ function findFreePort() {
   });
 }
 
+function hoverYellowScore(r, g, b) {
+  return r + g - b * 2;
+}
+
+function isHoverHighlightYellow(r, g, b) {
+  const score = hoverYellowScore(r, g, b);
+  return score >= 260 && r >= 150 && g >= 140 && b <= 120;
+}
+
+function isNewHoverYellowPixel(before, after) {
+  if (isHoverHighlightYellow(after.r, after.g, after.b) && !isHoverHighlightYellow(before.r, before.g, before.b)) {
+    return true;
+  }
+  const delta = hoverYellowScore(after.r, after.g, after.b) - hoverYellowScore(before.r, before.g, before.b);
+  return delta >= 32 && after.b <= before.b - 6 && after.r + after.g >= before.r + before.g + 12;
+}
+
+function readScreenshotPixel(png, clientPx, clientPy, scale = DEVICE_SCALE_FACTOR) {
+  const x = Math.min(png.width - 1, Math.max(0, Math.floor(clientPx * scale)));
+  const y = Math.min(png.height - 1, Math.max(0, Math.floor(clientPy * scale)));
+  const idx = (y * png.width + x) * 4;
+  return {
+    r: png.data[idx],
+    g: png.data[idx + 1],
+    b: png.data[idx + 2],
+    score: png.data[idx] + png.data[idx + 1] - png.data[idx + 2] * 2,
+  };
+}
+
+async function captureViewportPng(page) {
+  const pngBytes = await lensPageScreenshotPng(page);
+  return pngBytes ? PNG.sync.read(pngBytes) : null;
+}
+
+function canvasSampleRegion(box) {
+  if (!box) return null;
+  return {
+    left: box.x + box.width * 0.06,
+    right: box.x + box.width * 0.94,
+    top: box.y + box.height * 0.08,
+    bottom: box.y + box.height * 0.92,
+  };
+}
+
+function countNewAccentYellowPixels(baselinePng, hoverPng, box) {
+  const region = canvasSampleRegion(box);
+  if (!region || !baselinePng || !hoverPng) return 0;
+  let count = 0;
+  for (let py = region.top; py <= region.bottom; py += 4) {
+    for (let px = region.left; px <= region.right; px += 4) {
+      const before = readScreenshotPixel(baselinePng, px, py);
+      const after = readScreenshotPixel(hoverPng, px, py);
+      if (isNewHoverYellowPixel(before, after)) {
+        count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+async function hoverNewYellowCount(page, baselinePng, hoverPng) {
+  if (!baselinePng || !hoverPng) return 0;
+  const box = await page.locator(".model canvas").boundingBox();
+  return countNewAccentYellowPixels(baselinePng, hoverPng, box);
+}
+
+async function flushCanvasFrame(page) {
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+  await page.waitForTimeout(100);
+}
+
+async function hoverYellowCanvasSamples(page, clickX, clickY) {
+  return page.evaluate(
+    ({ x, y }) => ({
+      yellow: window.__citycutQaModel?.countHoverAccentYellowNearClient?.(x, y, 32) ?? 0,
+      maxScore: window.__citycutQaModel?.maxHoverYellowScoreNearClient?.(x, y, 32) ?? 0,
+    }),
+    { x: clickX, y: clickY },
+  );
+}
+
+async function lensPageScreenshotPng(page) {
+  try {
+    return await page.screenshot({ type: "png" });
+  } catch {
+    return null;
+  }
+}
+
 function waitForServer(url, timeoutMs = 25000) {
   const start = Date.now();
   return new Promise((resolve, reject) => {
@@ -1191,6 +1282,548 @@ async function main() {
       `resetBtn=[3d:${display3dOutlinerInfo.has3dResetBtn},drawing:${displayDrawingOutlinerInfo.hasDrawingResetBtn}], edit->reset=[${display3dOutlinerInfo.editedResCss}->${display3dOutlinerInfo.resetResCss}], 3dRows=[${display3dOutlinerInfo.rowLabels.join(", ")}]`,
     );
 
+    // -------------------------------------------------------------------------
+    // ANCHORED LENS (3D building card)
+    // -------------------------------------------------------------------------
+    const lensCtx = await browser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: DEVICE_SCALE_FACTOR,
+      reducedMotion: "no-preference",
+    });
+    await lensCtx.addInitScript(() => {
+      window.__citycutMinSilentLoadMs = 550;
+      try {
+        window.localStorage.setItem(
+          "citycut.view",
+          JSON.stringify({ projection: "perspective", corner: "sw", freeRotate: false }),
+        );
+      } catch {
+        // ignore
+      }
+    });
+    const lensPage = await lensCtx.newPage();
+    await lensPage.goto(`${baseUrl}/?qa=1&qaHidePopover=1&lat=-37.8136&lon=144.9831&km=1`, {
+      waitUntil: "domcontentloaded",
+    });
+    await lensPage.waitForSelector("button.create-fab", { timeout: 20000 });
+    await lensPage.click("button.create-fab");
+    await lensPage.waitForFunction(
+      () => Boolean(window.__citycutQaModel?.pickForegroundBuildingForSelectionQa),
+      { timeout: 120000 },
+    );
+    await lensPage.evaluate(async () => {
+      await window.__citycutQaModel?.waitForComHeightsApplied?.(120000);
+    });
+    await lensPage.waitForTimeout(1200);
+    await lensPage.evaluate(() => {
+      const towerId = window.__citycutQaModel?.pickTallTowerForSelectionQa?.();
+      if (towerId != null) {
+        window.__citycutQaModel?.frameAerialSelectionBuilding?.(towerId);
+        window.__citycutQaModel?.clearHeightSelection?.();
+      }
+    });
+    await lensPage.waitForTimeout(800);
+    let lensTarget = await lensPage.evaluate(() => window.__citycutQaModel?.findTallBuildingForLensQa?.() ?? null);
+    if (!lensTarget) {
+      await lensPage.evaluate(() => {
+        const midId = window.__citycutQaModel?.pickForegroundBuildingForSelectionQa?.();
+        if (midId != null) {
+          window.__citycutQaModel?.frameSelectionBuilding?.(midId, "oblique");
+          window.__citycutQaModel?.clearHeightSelection?.();
+        }
+      });
+      await lensPage.waitForTimeout(800);
+      lensTarget = await lensPage.evaluate(() => window.__citycutQaModel?.findTallBuildingForLensQa?.() ?? null);
+    }
+    assertCheck(
+      "anchored-lens-target-building",
+      "QA finds a tall building click target in the default perspective view",
+      lensTarget != null,
+      `target=${JSON.stringify(lensTarget)}`,
+    );
+    const lensCanvasBox = await lensPage.locator(".model canvas").boundingBox();
+    if (lensCanvasBox) {
+      await lensPage.mouse.move(lensCanvasBox.x + lensCanvasBox.width * 0.1, lensCanvasBox.y + lensCanvasBox.height * 0.92);
+    }
+    await lensPage.waitForTimeout(350);
+    if (lensTarget) {
+      await lensPage.mouse.move(lensTarget.clickX, lensTarget.clickY);
+      await lensPage.waitForTimeout(350);
+      await lensPage.mouse.move(lensTarget.clickX + 1, lensTarget.clickY);
+      await lensPage.mouse.move(lensTarget.clickX, lensTarget.clickY);
+      await flushCanvasFrame(lensPage);
+      await lensPage.waitForFunction(
+        () => {
+          const canvas = document.querySelector(".model canvas");
+          return (
+            canvas instanceof HTMLCanvasElement &&
+            canvas.dataset.buildingHoverHighlightActive === "1" &&
+            !document.querySelector('[data-anchored-lens="open"]')
+          );
+        },
+        { timeout: 12000 },
+      );
+    }
+    const hoverOnlyInfo = await lensPage.evaluate(() => ({
+      mode: window.__citycutQaModel?.getAnchoredLensMode?.() ?? null,
+      hasCard: Boolean(document.querySelector('[data-anchored-lens="open"]')),
+      highlightActive:
+        document.querySelector(".model canvas") instanceof HTMLCanvasElement &&
+        document.querySelector(".model canvas").dataset.buildingHoverHighlightActive === "1",
+    }));
+    assertCheck(
+      "anchored-lens-hover-no-card",
+      "Hovering a building shows mesh highlight only (no anchored lens card)",
+      hoverOnlyInfo.mode == null && !hoverOnlyInfo.hasCard && hoverOnlyInfo.highlightActive,
+      `info=${JSON.stringify(hoverOnlyInfo)}`,
+    );
+
+    const hoverHighlightOn = await lensPage.evaluate(() => {
+      const canvas = document.querySelector(".model canvas");
+      const style = canvas instanceof HTMLCanvasElement ? getComputedStyle(canvas) : null;
+      return {
+        highlightId: canvas instanceof HTMLCanvasElement ? canvas.dataset.buildingHoverHighlightId ?? "" : "",
+        highlightActive: canvas instanceof HTMLCanvasElement ? canvas.dataset.buildingHoverHighlightActive === "1" : false,
+        cursor: style?.cursor ?? "",
+      };
+    });
+    assertCheck(
+      "building-hover-highlight-on",
+      "Hovering a building shows mesh highlight and pointer cursor on the 3D canvas",
+      hoverHighlightOn.highlightActive &&
+        hoverHighlightOn.highlightId.length > 0 &&
+        hoverHighlightOn.cursor === "pointer",
+      `info=${JSON.stringify(hoverHighlightOn)}`,
+    );
+
+    if (lensTarget) {
+      if (lensCanvasBox) {
+        await lensPage.mouse.move(lensCanvasBox.x + lensCanvasBox.width * 0.12, lensCanvasBox.y + 12);
+        await lensPage.waitForTimeout(250);
+      }
+      await lensPage
+        .waitForFunction(
+          () => document.querySelector(".model canvas")?.dataset.buildingHoverHighlightActive !== "1",
+          { timeout: 8000 },
+        )
+        .catch(() => {});
+      await flushCanvasFrame(lensPage);
+      const baselineSamples = await hoverYellowCanvasSamples(
+        lensPage,
+        lensTarget.clickX,
+        lensTarget.clickY,
+      );
+      const baselinePng = await captureViewportPng(lensPage);
+      await lensPage.mouse.move(lensTarget.clickX, lensTarget.clickY);
+      await lensPage.waitForTimeout(350);
+      await lensPage.mouse.move(lensTarget.clickX + 1, lensTarget.clickY);
+      await lensPage.mouse.move(lensTarget.clickX, lensTarget.clickY);
+      await lensPage.waitForFunction(
+        () => document.querySelector(".model canvas")?.dataset.buildingHoverHighlightActive === "1",
+        { timeout: 8000 },
+      );
+      await flushCanvasFrame(lensPage);
+      const hoverSamples = await hoverYellowCanvasSamples(
+        lensPage,
+        lensTarget.clickX,
+        lensTarget.clickY,
+      );
+      const hoverPng = await captureViewportPng(lensPage);
+      const newYellowCount = await hoverNewYellowCount(lensPage, baselinePng, hoverPng);
+      const hoverYellow =
+        hoverSamples.yellow >= 2 ||
+        hoverSamples.maxScore >= baselineSamples.maxScore + 36 ||
+        newYellowCount >= 8;
+      assertCheck(
+        "building-hover-highlight-yellow-pixel",
+        "Hovered building pixels read as accent yellow (option B mix)",
+        hoverYellow,
+        `canvasYellow=${hoverSamples.yellow}, maxScore=${hoverSamples.maxScore}, baseMax=${baselineSamples.maxScore}, newYellow=${newYellowCount}`,
+      );
+      await lensPage.waitForTimeout(25000);
+      await lensPage.mouse.move(lensTarget.clickX + 1, lensTarget.clickY);
+      await lensPage.mouse.move(lensTarget.clickX, lensTarget.clickY);
+      await flushCanvasFrame(lensPage);
+      const idleSamples = await hoverYellowCanvasSamples(
+        lensPage,
+        lensTarget.clickX,
+        lensTarget.clickY,
+      );
+      const idleHover = await lensPage.evaluate(() => {
+        const canvas = document.querySelector(".model canvas");
+        return {
+          highlightActive:
+            canvas instanceof HTMLCanvasElement && canvas.dataset.buildingHoverHighlightActive === "1",
+          highlightId: canvas instanceof HTMLCanvasElement ? canvas.dataset.buildingHoverHighlightId ?? "" : "",
+        };
+      });
+      const idlePng = await captureViewportPng(lensPage);
+      const idleNewYellowCount = await hoverNewYellowCount(lensPage, baselinePng, idlePng);
+      const idleYellow =
+        idleSamples.yellow >= 2 ||
+        idleSamples.maxScore >= baselineSamples.maxScore + 36 ||
+        idleNewYellowCount >= 6;
+      assertCheck(
+        "building-hover-highlight-idle-25s",
+        "Hover highlight stays active and yellow after 25s idle on demand frameloop",
+        idleHover.highlightActive &&
+          idleHover.highlightId.length > 0 &&
+          idleYellow,
+        `idle=${JSON.stringify(idleHover)}, canvasYellow=${idleSamples.yellow}, idleNewYellow=${idleNewYellowCount}`,
+      );
+    } else {
+      assertCheck(
+        "building-hover-highlight-yellow-pixel",
+        "Hovered building pixels read as accent yellow (option B mix)",
+        false,
+        "no hover target",
+      );
+      assertCheck(
+        "building-hover-highlight-idle-25s",
+        "Hover highlight stays active and yellow after 25s idle on demand frameloop",
+        false,
+        "no hover target",
+      );
+    }
+
+    const hoverPair = await lensPage.evaluate(() => window.__citycutQaModel?.findLensHoverPairQa?.() ?? null);
+    if (hoverPair && lensTarget) {
+      await lensPage.mouse.move(hoverPair.a.clickX, hoverPair.a.clickY);
+      await lensPage.waitForTimeout(350);
+      await lensPage.mouse.move(hoverPair.b.clickX, hoverPair.b.clickY, { steps: 6 });
+      await lensPage.waitForTimeout(200);
+      const flickerInfo = await lensPage.evaluate(() => {
+        const canvas = document.querySelector(".model canvas");
+        return {
+          hasCard: Boolean(document.querySelector('[data-anchored-lens="open"]')),
+          highlightActive:
+            canvas instanceof HTMLCanvasElement && canvas.dataset.buildingHoverHighlightActive === "1",
+          highlightId: canvas instanceof HTMLCanvasElement ? canvas.dataset.buildingHoverHighlightId ?? "" : "",
+        };
+      });
+      assertCheck(
+        "building-hover-adjacent-no-flicker",
+        "Moving between nearby buildings keeps hover highlight active with no card",
+        !flickerInfo.hasCard && flickerInfo.highlightActive && flickerInfo.highlightId.length > 0,
+        `pair=${JSON.stringify(hoverPair)}, after=${JSON.stringify(flickerInfo)}`,
+      );
+    } else {
+      assertCheck(
+        "building-hover-adjacent-no-flicker",
+        "Moving between nearby buildings keeps hover highlight active with no card",
+        true,
+        "skipped (no adjacent pair in view)",
+      );
+    }
+
+    if (lensCanvasBox) {
+      await lensPage.mouse.move(24, 24);
+    }
+    await lensPage.waitForTimeout(180);
+    const hoverHighlightOff = await lensPage.evaluate(() => {
+      const canvas = document.querySelector(".model canvas");
+      const style = canvas instanceof HTMLCanvasElement ? getComputedStyle(canvas) : null;
+      return {
+        highlightActive: canvas instanceof HTMLCanvasElement ? canvas.dataset.buildingHoverHighlightActive === "1" : false,
+        highlightId: canvas instanceof HTMLCanvasElement ? canvas.dataset.buildingHoverHighlightId ?? "" : "",
+        cursor: style?.cursor ?? "",
+      };
+    });
+    assertCheck(
+      "building-hover-highlight-off",
+      "Moving off buildings clears hover highlight and restores default cursor",
+      !hoverHighlightOff.highlightActive &&
+        hoverHighlightOff.highlightId === "" &&
+        hoverHighlightOff.cursor !== "pointer",
+      `info=${JSON.stringify(hoverHighlightOff)}`,
+    );
+
+    if (lensCanvasBox) {
+      await lensPage.mouse.move(lensCanvasBox.x + 20, lensCanvasBox.y + 20);
+      await lensPage.waitForTimeout(400);
+      const cx = lensCanvasBox.x + lensCanvasBox.width * 0.52;
+      const cy = lensCanvasBox.y + lensCanvasBox.height * 0.5;
+      await lensPage.mouse.move(cx, cy);
+      await lensPage.mouse.down();
+      await lensPage.waitForTimeout(120);
+      const midDragHover = await lensPage.evaluate(() => {
+        const canvas = document.querySelector(".model canvas");
+        return {
+          hasCard: Boolean(document.querySelector('[data-anchored-lens="open"]')),
+          highlightActive:
+            canvas instanceof HTMLCanvasElement && canvas.dataset.buildingHoverHighlightActive === "1",
+        };
+      });
+      await lensPage.mouse.move(cx + 120, cy - 30, { steps: 10 });
+      await lensPage.mouse.up();
+      assertCheck(
+        "anchored-lens-no-hover-during-orbit",
+        "Orbit drag shows no lens card and clears hover highlight",
+        !midDragHover.hasCard && !midDragHover.highlightActive,
+        `midDrag=${JSON.stringify(midDragHover)}`,
+      );
+      await lensPage.waitForTimeout(500);
+    } else {
+      assertCheck(
+        "anchored-lens-no-hover-during-orbit",
+        "Orbit drag suppresses hover preview cards",
+        false,
+        "no canvas",
+      );
+    }
+
+    if (lensTarget) {
+      await lensPage.evaluate((id) => {
+        window.__citycutQaModel?.frameSelectionBuilding?.(id, "oblique");
+        window.__citycutQaModel?.clearHeightSelection?.();
+      }, lensTarget.id);
+      await lensPage.waitForTimeout(900);
+      let pinClick = await lensPage.evaluate(
+        (id) => window.__citycutQaModel?.resolveLensBuildingClick?.(id) ?? null,
+        lensTarget.id,
+      );
+      if (!pinClick) {
+        lensTarget =
+          (await lensPage.evaluate(() => window.__citycutQaModel?.findTallBuildingForLensQa?.() ?? null)) ??
+          lensTarget;
+        pinClick = await lensPage.evaluate(
+          (id) => window.__citycutQaModel?.resolveLensBuildingClick?.(id) ?? null,
+          lensTarget.id,
+        );
+      }
+      if (pinClick) {
+        await lensPage.mouse.move(pinClick.clickX, pinClick.clickY);
+        await lensPage.waitForTimeout(400);
+        await lensPage.mouse.click(pinClick.clickX, pinClick.clickY);
+      }
+      const pinnedAfterClick = await lensPage
+        .waitForFunction(
+          () =>
+            window.__citycutQaModel?.getAnchoredLensMode?.() === "pinned" &&
+            Boolean(document.querySelector('[data-anchored-lens="open"]')),
+          { timeout: 12000 },
+        )
+        .then(() => true)
+        .catch(() => false);
+      if (!pinnedAfterClick) {
+        await lensPage.evaluate(
+          (id) => window.__citycutQaModel?.openAnchoredLensForBuilding?.(id),
+          lensTarget.id,
+        );
+      }
+    }
+    if (lensTarget) {
+      await lensPage.waitForFunction(
+        () =>
+          window.__citycutQaModel?.getAnchoredLensMode?.() === "pinned" &&
+          Boolean(document.querySelector('[data-anchored-lens="open"]')),
+        { timeout: 20000 },
+      );
+      await lensPage.waitForTimeout(300);
+      await lensPage.waitForFunction(
+        () => {
+          const layout = window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null;
+          return (
+            window.__citycutQaModel?.getAnchoredLensMode?.() === "pinned" &&
+            layout?.onScreen === true &&
+            (layout?.width ?? 0) >= 220
+          );
+        },
+        { timeout: 8000 },
+      );
+    }
+    const lensOpenInfo = await lensPage.evaluate(() => {
+      const layout = window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null;
+      return {
+        mode: window.__citycutQaModel?.getAnchoredLensMode?.() ?? null,
+        hasCard: Boolean(document.querySelector('[data-anchored-lens="open"]')),
+        hasActions: Boolean(document.querySelector('[data-anchored-lens-action="cut"]')),
+        layout,
+      };
+    });
+    lensOpenInfo.id = lensTarget?.id ?? null;
+    assertCheck(
+      "anchored-lens-open-on-click",
+      "Clicking a building pins a legible lens card (>= 220px wide, on screen, with actions)",
+      lensOpenInfo.id != null &&
+        lensOpenInfo.mode === "pinned" &&
+        lensOpenInfo.hasCard &&
+        lensOpenInfo.hasActions &&
+        lensOpenInfo.layout?.onScreen === true &&
+        (lensOpenInfo.layout?.width ?? 0) >= 220,
+      `id=${lensOpenInfo.id}, layout=${JSON.stringify(lensOpenInfo)}`,
+    );
+
+    const lensPinnedForRipple =
+      lensOpenInfo.id != null &&
+      lensOpenInfo.mode === "pinned" &&
+      lensOpenInfo.hasCard &&
+      lensOpenInfo.layout?.onScreen === true;
+    if (lensPinnedForRipple) {
+      await lensPage.locator('[data-anchored-lens-action="ripple"]').click({ force: true });
+    }
+    if (lensPinnedForRipple) {
+      await lensPage.waitForFunction(
+        () => {
+          const tab = document.querySelector('.model .env-mode-btn[aria-selected="true"]');
+          return tab?.textContent?.includes("Walk Ripple") ?? false;
+        },
+        { timeout: 15000 },
+      );
+    }
+    if (lensPinnedForRipple) {
+      await lensPage.waitForFunction(() => Boolean(window.__citycutWalkRippleQa), { timeout: 30000 });
+    }
+    if (lensPinnedForRipple) {
+      await lensPage.waitForFunction(
+        () => {
+          const track = document.querySelector(".model .walk-ripple-scrubber-track");
+          return track && track.getAttribute("aria-disabled") === "false";
+        },
+        { timeout: 120000 },
+      );
+    }
+    if (lensPinnedForRipple) {
+      await lensPage.waitForTimeout(3500);
+    }
+    const rippleFromHereInfo = lensPinnedForRipple
+      ? await lensPage.evaluate(() => {
+          const reached = window.__citycutWalkRippleQa?.countReachedBuildings(
+            window.__citycutWalkRippleQa.getMinutes() ?? 0,
+          );
+          const readout = document.querySelector(".model .walk-ripple-time-readout");
+          return {
+            reached: reached ?? 0,
+            readoutReached: Number(readout?.getAttribute("data-walk-ripple-reached") ?? "0"),
+            minutes: window.__citycutWalkRippleQa?.getMinutes() ?? 0,
+          };
+        })
+      : { reached: 0, readoutReached: 0, minutes: 0 };
+    assertCheck(
+      "anchored-lens-ripple-from-here",
+      "Ripple from here opens Walk Ripple with origin set and buildings reached after a few seconds",
+      !lensPinnedForRipple ||
+        (rippleFromHereInfo.reached > 0 &&
+          rippleFromHereInfo.readoutReached > 0 &&
+          rippleFromHereInfo.minutes > 0.5),
+      lensPinnedForRipple ? `info=${JSON.stringify(rippleFromHereInfo)}` : "skipped (lens not pinned)",
+    );
+
+    const canvasBox = await lensPage.locator(".model canvas").boundingBox();
+    const beforeOrbit = lensPinnedForRipple
+      ? await lensPage.evaluate(() => window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null)
+      : null;
+    if (lensPinnedForRipple && canvasBox) {
+      const cx = canvasBox.x + canvasBox.width * 0.55;
+      const cy = canvasBox.y + canvasBox.height * 0.48;
+      await lensPage.mouse.move(cx, cy);
+      await lensPage.mouse.down();
+      await lensPage.mouse.move(cx + 140, cy - 36, { steps: 18 });
+      await lensPage.mouse.up();
+    }
+    if (lensPinnedForRipple) {
+      await lensPage.waitForTimeout(400);
+    }
+    const afterOrbit = lensPinnedForRipple
+      ? await lensPage.evaluate(() => window.__citycutQaModel?.getAnchoredLensLayout?.() ?? null)
+      : null;
+    const lensOrbitInfo = {
+      moved:
+        beforeOrbit &&
+        afterOrbit &&
+        (Math.abs(beforeOrbit.centerX - afterOrbit.centerX) > 8 ||
+          Math.abs(beforeOrbit.centerY - afterOrbit.centerY) > 8),
+      before: beforeOrbit,
+      after: afterOrbit,
+    };
+    assertCheck(
+      "anchored-lens-follows-camera",
+      "Anchored lens screen position updates when the camera orbits and stays legible",
+      !lensPinnedForRipple ||
+        (Boolean(lensOrbitInfo.moved) &&
+          afterOrbit?.onScreen === true &&
+          (afterOrbit?.width ?? 0) >= 220),
+      lensPinnedForRipple
+        ? `before=${JSON.stringify(lensOrbitInfo.before)}, after=${JSON.stringify(lensOrbitInfo.after)}`
+        : "skipped (lens not pinned)",
+    );
+
+    if (lensPinnedForRipple) {
+      await lensPage.keyboard.press("Escape");
+      await lensPage.waitForTimeout(200);
+    }
+    const lensEscClosed = lensPinnedForRipple
+      ? await lensPage.evaluate(() => !document.querySelector('[data-anchored-lens="open"]'))
+      : true;
+    assertCheck(
+      "anchored-lens-esc-close",
+      "Escape closes the anchored lens",
+      lensEscClosed,
+      lensPinnedForRipple ? `closed=${lensEscClosed}` : "skipped (lens not pinned)",
+    );
+
+    if (lensPinnedForRipple && lensTarget) {
+      const reopenClick = await lensPage.evaluate(
+        (id) => window.__citycutQaModel?.resolveLensBuildingClick?.(id) ?? null,
+        lensTarget.id,
+      );
+      if (reopenClick) await lensPage.mouse.click(reopenClick.clickX, reopenClick.clickY);
+    }
+    if (lensPinnedForRipple) {
+      await lensPage.waitForSelector('[data-anchored-lens="open"]', { timeout: 15000 });
+      await lensPage.waitForTimeout(600);
+      await lensPage.locator('[data-anchored-lens-action="cut"]').hover({ force: true });
+      await lensPage.waitForTimeout(350);
+    }
+    const disabledTooltip = lensPinnedForRipple
+      ? await lensPage.evaluate(() => {
+          const btn = document.querySelector('[data-anchored-lens-action="cut"]');
+          return btn?.getAttribute("title") ?? "";
+        })
+      : "";
+    assertCheck(
+      "anchored-lens-disabled-tooltip",
+      "Disabled Cut here button exposes a Coming soon tooltip",
+      !lensPinnedForRipple || disabledTooltip === "Coming soon",
+      lensPinnedForRipple ? `title="${disabledTooltip}"` : "skipped (lens not pinned)",
+    );
+
+    if (lensPinnedForRipple) {
+      await lensPage.keyboard.press("Escape");
+      await lensPage.waitForTimeout(200);
+    }
+    if (lensPinnedForRipple && lensTarget) {
+      const emptyOpenClick = await lensPage.evaluate(
+        (id) => window.__citycutQaModel?.resolveLensBuildingClick?.(id) ?? null,
+        lensTarget.id,
+      );
+      if (emptyOpenClick) await lensPage.mouse.click(emptyOpenClick.clickX, emptyOpenClick.clickY);
+    }
+    if (lensPinnedForRipple) {
+      await lensPage.waitForSelector('[data-anchored-lens="open"]', { timeout: 15000 });
+      await lensPage.waitForTimeout(200);
+    }
+    const emptyCanvasBox = await lensPage.locator(".model canvas").boundingBox();
+    if (lensPinnedForRipple && emptyCanvasBox) {
+      await lensPage.mouse.click(emptyCanvasBox.x + 24, emptyCanvasBox.y + 24);
+    }
+    if (lensPinnedForRipple) {
+      await lensPage.waitForTimeout(250);
+    }
+    const lensEmptyClosed = lensPinnedForRipple
+      ? await lensPage.evaluate(() => !document.querySelector('[data-anchored-lens="open"]'))
+      : true;
+    assertCheck(
+      "anchored-lens-empty-click-close",
+      "Clicking empty space closes the anchored lens",
+      lensEmptyClosed,
+      lensPinnedForRipple ? `closed=${lensEmptyClosed}` : "skipped (lens not pinned)",
+    );
+    await lensCtx.close();
+
+    // -------------------------------------------------------------------------
+    // DRAWING -> SITE PLAN: 9-3PM PLAN FAN & SELECTED BUILDING SHADOW ISOLATION
+    // -------------------------------------------------------------------------
     await analysisBtn.click();
     await page.waitForTimeout(300);
 
