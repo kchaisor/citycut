@@ -4436,3 +4436,203 @@ body,
     text-align: center;
   }
 }
+
+.model.is-demographics .viewport.is-drawing {
+  background: var(--demographics-map-bg);
+}
+
+.model.is-demographics .right-inspector,
+.model.is-demographics .right-inspector.hud-card {
+  background: var(--demographics-panel-bg) !important;
+  color: var(--demographics-panel-text);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+}
+
+.model.is-demographics .right-inspector .card-title,
+.model.is-demographics .right-inspector .card-meta {
+  color: var(--demographics-panel-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+}
+
+.model.is-demographics .demo-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.model.is-demographics .demo-tab {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: rgb(255 255 255 / 8%);
+  color: var(--demographics-panel-muted);
+  cursor: pointer;
+}
+
+.model.is-demographics .demo-tab.is-active {
+  background: var(--accent);
+  color: var(--demographics-panel-ink);
+}
+
+.model.is-demographics .demo-headline {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--demographics-panel-text);
+}
+
+.model.is-demographics .demo-subline,
+.model.is-demographics .demo-status,
+.model.is-demographics .demo-footnote,
+.model.is-demographics .demo-empty p {
+  margin: 0 0 12px;
+  font-size: 11px;
+  color: var(--demographics-panel-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.model.is-demographics .demo-footnote {
+  margin-top: 16px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+}
+
+.model.is-demographics .demo-footnote a {
+  color: var(--accent);
+}
+
+.model.is-demographics .demo-kpi .kpi-cell {
+  background: rgb(255 255 255 / 5%);
+  border: 1px solid rgb(255 255 255 / 10%) !important;
+}
+
+.model.is-demographics .demo-kpi .kpi-lbl {
+  color: var(--demographics-panel-muted);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.model.is-demographics .demo-kpi .kpi-num {
+  color: var(--demographics-panel-text);
+  font-size: 18px;
+}
+
+.model.is-demographics .demo-block {
+  margin-top: 16px;
+}
+
+.model.is-demographics .demo-block-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--demographics-panel-muted);
+}
+
+.model.is-demographics .demo-bar-row {
+  display: grid;
+  grid-template-columns: 52px 1fr 36px;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.model.is-demographics .demo-bar-label {
+  font-size: 11px;
+  color: var(--demographics-panel-text);
+}
+
+.model.is-demographics .demo-bar-track {
+  position: relative;
+  height: 8px;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 8%);
+  overflow: hidden;
+}
+
+.model.is-demographics .demo-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.model.is-demographics .demo-bar-tick {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 12px;
+  margin-left: -1px;
+  background: var(--demographics-panel-text);
+}
+
+.model.is-demographics .demo-bar-val {
+  text-align: right;
+  font-size: 11px;
+  color: var(--demographics-panel-text);
+}
+
+.model.is-demographics .demo-legend {
+  display: flex;
+  gap: 14px;
+  margin-top: 14px;
+  font-size: 10px;
+  color: var(--demographics-panel-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.model.is-demographics .demo-leg-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  background: var(--accent);
+  vertical-align: middle;
+}
+
+.model.is-demographics .demo-leg-tick {
+  display: inline-block;
+  width: 2px;
+  height: 10px;
+  margin-right: 8px;
+  background: var(--demographics-panel-text);
+  vertical-align: middle;
+}
+
+.model.is-demographics .bottom-bar.demo-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--demographics-panel-muted);
+  background: var(--demographics-panel-bg) !important;
+}
+
+.model.is-demographics .demo-status-spacer {
+  flex: 1;
+}
+
+.model.is-demographics .demo-status-note {
+  color: var(--demographics-panel-muted);
+}
+
+.plan.demographics-plan {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
