@@ -163,7 +163,6 @@ import {
   DEMOGRAPHICS_PIN_FITZROY,
   pinFromLonLat,
 } from "../lib/demographicsExplorerPins";
-import { demographicsPlanViewportExtent } from "../lib/planViewport";
 import { useDemographicsParcels } from "./useDemographicsParcels";
 import {
   aggregateDemographicsForCut,
@@ -395,7 +394,7 @@ export function ModelPage({
     parcels: demographicsParcelRecords,
     index: demographicsParcelIndex,
     loading: demographicsParcelsLoading,
-  } = useDemographicsParcels(model, planViewport, demographicsExplorer, demographicsActive);
+  } = useDemographicsParcels(model, demographicsExplorer, demographicsActive);
   const demographicsParcelsApportioned = useMemo(
     () =>
       demographicsDataset?.units?.length
@@ -454,7 +453,6 @@ export function ModelPage({
   );
   useEffect(() => {
     if (!demographicsActive) return;
-    setPlanViewport(demographicsPlanViewportExtent(model.sideM));
     if (demographicsPinsSeededRef.current) return;
     demographicsPinsSeededRef.current = true;
     const fitzroy = pinFromLonLat(model.center, DEMOGRAPHICS_PIN_FITZROY, "Fitzroy");
@@ -2053,8 +2051,6 @@ export function ModelPage({
                 parcelIndex={demographicsParcelIndexApportioned}
                 state={demographicsExplorer}
                 dispatch={dispatchDemographicsExplorer}
-                viewport={planViewport}
-                onViewportChange={setPlanViewport}
                 fitCounter={fitCounter}
                 statsA={demographicsCatchmentA}
                 statsB={demographicsCatchmentB}
@@ -3962,51 +3958,7 @@ export function ModelPage({
               )}
             </div>
           </div>
-        ) : demographicsActive ? (
-          <div className="bottom-bar demo-explorer-bar hud-card mono" role="region" aria-label="Demographics map controls">
-            <label className="demo-radius-control">
-              RADIUS
-              <input
-                type="range"
-                min={200}
-                max={1200}
-                step={50}
-                value={demographicsExplorer.radiusM}
-                onChange={(event) =>
-                  dispatchDemographicsExplorer({ type: "setRadius", radiusM: Number(event.target.value) })
-                }
-              />
-              <span>{demographicsExplorer.radiusM} M</span>
-            </label>
-            <span className="v-sep hud-sep" aria-hidden="true" />
-            <div className="demo-colour-by" role="group" aria-label="Colour parcels by">
-              <span>COLOUR BY</span>
-              {(
-                [
-                  ["density", "Density"],
-                  ["medianAge", "Median age"],
-                  ["rent", "Rent"],
-                  ["rentersPct", "Renters %"],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={demographicsExplorer.colourBy === id ? "demo-colour-btn is-active" : "demo-colour-btn"}
-                  aria-pressed={demographicsExplorer.colourBy === id}
-                  onClick={() => dispatchDemographicsExplorer({ type: "setColourBy", colourBy: id })}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <span className="demo-status-spacer" aria-hidden="true" />
-            <span className="demo-status-note">DRAG PINS → LIVE</span>
-            <span className="demo-attribution">
-              Parcels © State of Victoria (DTP), Vicmap Property, CC BY 4.0
-            </span>
-          </div>
-        ) : (
+        ) : demographicsActive ? null : (
           <div className="bottom-bar studio-solar-bar hud-card" role="region" aria-label="Solar and camera controls">
             <button
               type="button"

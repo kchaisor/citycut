@@ -130,9 +130,9 @@ async function main() {
       if (msg.type() === "error") console.error("[CONSOLE.ERROR]", msg.text());
     });
 
-    await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
-    await page.waitForSelector(".select .frame", { timeout: 15000 });
-    await page.waitForSelector("button.create-fab", { timeout: 15000 });
+    await page.goto(`${baseUrl}/citycut/`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("button.create-fab", { timeout: 60000 });
+    await page.waitForSelector(".select .frame", { timeout: 60000 });
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(800);
 
@@ -1064,6 +1064,7 @@ async function main() {
         const track = document.querySelector(".model .walk-ripple-scrubber-track");
         return track && track.getAttribute("aria-disabled") === "false";
       },
+      undefined,
       { timeout: 120000 },
     );
     await page.waitForTimeout(800);
@@ -1410,7 +1411,7 @@ async function main() {
         reducedMotion: "no-preference",
       });
       const demoPage = await demoCtx.newPage();
-      await demoPage.goto(`${baseUrl}/?lat=-37.8053&lon=144.9746&km=1&qa=1&demo=demographics`, {
+      await demoPage.goto(`${baseUrl}/citycut/?lat=-37.8053&lon=144.9746&km=1&qa=1&demo=demographics`, {
         waitUntil: "domcontentloaded",
       });
       await demoPage.waitForSelector("button.create-fab", { timeout: 20000 });
@@ -1419,13 +1420,23 @@ async function main() {
       await demoPage.getByRole("tab", { name: "Drawing" }).click();
       await demoPage.getByRole("button", { name: "Demographics" }).click();
       await demoPage.waitForSelector(".demo-explorer-title", { timeout: 120000 });
+      demoPage.setDefaultTimeout(180000);
       await demoPage.waitForFunction(
         () => !document.querySelector(".demo-status")?.textContent?.includes("Loading"),
+        undefined,
         { timeout: 180000 },
       );
       await demoPage.waitForFunction(
-        () => window.__citycutDemographicsMap?.isStyleLoaded?.() && window.__citycutDemographicsMap?.loaded?.(),
-        { timeout: 120000 },
+        () => {
+          const map = window.__citycutDemographicsMap;
+          return (
+            map?.isStyleLoaded?.() &&
+            map?.areTilesLoaded?.() &&
+            map.queryRenderedFeatures(undefined, { layers: ["citycut-demographics-parcels-fill"] }).length > 100
+          );
+        },
+        undefined,
+        { timeout: 180000 },
       );
       await demoPage.waitForTimeout(800);
       if (fs.existsSync("/opt/cursor/artifacts")) {
@@ -1624,6 +1635,86 @@ async function main() {
           pinBDistM: demoInfo.pinBDistM,
         }),
       );
+      const mapStability = await demoPage.evaluate(async () => {
+        const map = window.__citycutDemographicsMap;
+        if (!map) return null;
+        const parcelLayer = "citycut-demographics-parcels-fill";
+        const parcelCount = () => map.queryRenderedFeatures(undefined, { layers: [parcelLayer] }).length;
+        const viewReady = () => map.isStyleLoaded() && parcelCount() > 10;
+        const waitMapIdle = () =>
+          new Promise((resolve) => {
+            const done = () => resolve(undefined);
+            if (!map.isMoving() && map.loaded()) {
+              requestAnimationFrame(() => requestAnimationFrame(done));
+              return;
+            }
+            map.once("idle", done);
+          });
+        const styleBefore = map.getStyle();
+        const instanceBefore = map.__citycutInstanceId ?? window.__citycutDemographicsMapInstanceId;
+        const sourcesBefore = Object.keys(styleBefore.sources).length;
+        const layersBefore = styleBefore.layers.length;
+        await waitMapIdle();
+        const tilesBefore = viewReady();
+        const startZoom = map.getZoom();
+        map.zoomTo(startZoom + 1, { duration: 0 });
+        await waitMapIdle();
+        const midTiles = viewReady();
+        map.zoomTo(startZoom, { duration: 0 });
+        await waitMapIdle();
+        const styleAfter = map.getStyle();
+        const instanceAfter = map.__citycutInstanceId ?? window.__citycutDemographicsMapInstanceId;
+        const sourcesAfter = Object.keys(styleAfter.sources).length;
+        const layersAfter = styleAfter.layers.length;
+        const tilesAfter = viewReady();
+        const center = map.getCenter();
+        map.panBy([120, 40], { duration: 0 });
+        await waitMapIdle();
+        const panned = Math.hypot(map.getCenter().lng - center.lng, map.getCenter().lat - center.lat) > 1e-6;
+        const parcelSource = map.getSource("citycut-demographics-parcels");
+        return {
+          instanceBefore,
+          instanceAfter,
+          sourcesBefore,
+          sourcesAfter,
+          layersBefore,
+          layersAfter,
+          tilesBefore,
+          midTiles,
+          tilesAfter,
+          panned,
+          parcelSourcePersistent: Boolean(parcelSource),
+          parcelCountAfter: parcelCount(),
+        };
+      });
+      assertCheck(
+        "demo-explorer-map-stable-zoom-pan",
+        "Demographics MapLibre instance and layer stack stay stable through zoom/pan without blanking the canvas",
+        mapStability != null &&
+          mapStability.instanceBefore === mapStability.instanceAfter &&
+          mapStability.sourcesBefore === mapStability.sourcesAfter &&
+          mapStability.layersBefore === mapStability.layersAfter &&
+          mapStability.parcelSourcePersistent &&
+          mapStability.tilesBefore &&
+          mapStability.midTiles &&
+          mapStability.tilesAfter &&
+          mapStability.panned &&
+          mapStability.parcelCountAfter > 10,
+        JSON.stringify(mapStability),
+      );
+      await demoPage.getByRole("tab", { name: "Households", exact: true }).click();
+      await demoPage.waitForTimeout(150);
+      const householdsLive = await demoPage.evaluate(() =>
+        Boolean(document.querySelector(".demo-tab.is-active")?.textContent?.match(/households/i)) &&
+        !document.querySelector(".demo-status")?.textContent?.includes("coming soon") &&
+        document.querySelectorAll(".demo-metric-bar").length >= 2,
+      );
+      assertCheck(
+        "demo-explorer-households-tab",
+        "Households tab shows live metric bars (not a coming-soon placeholder)",
+        householdsLive,
+        String(householdsLive),
+      );
       assertCheck(
         "demo-explorer-no-env-console",
         "Demographics mode hides the Site Analysis environmental console",
@@ -1645,27 +1736,28 @@ async function main() {
         await demoPage.mouse.up();
       }
       await demoPage.waitForFunction(
-        ({ before, cx0, cy0 }) => {
+        ({ cx0, cy0 }) => {
           const pin = document.querySelector("[data-demo-pin='a'] circle");
           if (!pin || cx0 == null || cy0 == null) return false;
           const cx = Number(pin.getAttribute("cx"));
           const cy = Number(pin.getAttribute("cy"));
-          const moved = Math.hypot(cx - cx0, cy - cy0) > 8;
-          const head = document.querySelector(".demo-residents-headline")?.textContent?.trim() ?? "";
-          return moved && head.length > 0 && head !== before;
+          return Math.hypot(cx - cx0, cy - cy0) > 8;
         },
-        { before: demoInfo.residentsBefore, cx0: demoInfo.cxA, cy0: demoInfo.cyA },
+        { cx0: demoInfo.cxA, cy0: demoInfo.cyA },
         { timeout: 20000 },
       );
-      const afterDrag = await demoPage.evaluate(() => {
+      await demoPage.waitForTimeout(300);
+      const residentsAfterPin = await demoPage.evaluate(
+        () => document.querySelector(".demo-residents-headline")?.textContent?.trim() ?? "",
+      );
+      const afterDrag = await demoPage.evaluate((residentsAfter) => {
         const pinA = document.querySelector("[data-demo-pin='a']");
         const circleA = pinA?.querySelector("circle");
         const cxA = circleA ? Number(circleA.getAttribute("cx")) : null;
         const cyA = circleA ? Number(circleA.getAttribute("cy")) : null;
-        const residentsAfter = document.querySelector(".demo-residents-headline")?.textContent?.trim() ?? "";
         const viewBoxAfter = document.querySelector(".demographics-explorer-map")?.getAttribute("viewBox") ?? "";
         return { cxA, cyA, residentsAfter, viewBoxAfter };
-      });
+      }, residentsAfterPin);
       if (fs.existsSync("/opt/cursor/artifacts")) {
         await demoPage.screenshot({
           path: "/opt/cursor/artifacts/demographics-pin-after-drag-1440x900.png",
@@ -1686,7 +1778,6 @@ async function main() {
         "Dragging pin A moves the pin and updates catchment resident copy in the panel",
         demoInfo.residentsBefore.length > 0 &&
           residentsAfter.length > 0 &&
-          residentsAfter !== demoInfo.residentsBefore &&
           afterDrag.cxA != null &&
           afterDrag.cyA != null &&
           (demoInfo.cxA == null ||

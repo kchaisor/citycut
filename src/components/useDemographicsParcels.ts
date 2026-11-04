@@ -1,31 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
-import { fromLocal, squareBBox, toLocal } from "../lib/geo";
+import { fromLocal, squareBBox } from "../lib/geo";
+import { demographicsMapSideWithPad } from "../lib/demographicsMapViewport";
 import type { CityModel } from "../types";
-import type { PlanViewport } from "../lib/planViewport";
 import { buildParcelIndex, type DemographicsParcelRecord } from "../lib/demographicsParcels";
 import {
   fetchParcelsFromPmtiles,
   mergeParcelBounds,
 } from "../lib/demographicsParcelsPmtiles";
-import type { DemographicsExplorerState } from "../lib/demographicsExplorerReducer";
-
-function viewBoundsFromViewport(model: CityModel, view: PlanViewport) {
-  const sw = fromLocal([view.x, view.y + view.h], model.center);
-  const ne = fromLocal([view.x + view.w, view.y], model.center);
-  return {
-    south: Math.min(sw.lat, ne.lat),
-    north: Math.max(sw.lat, ne.lat),
-    west: Math.min(sw.lon, ne.lon),
-    east: Math.max(sw.lon, ne.lon),
-  };
-}
+import {
+  DEMOGRAPHICS_RADIUS_MAX_M,
+  type DemographicsExplorerState,
+} from "../lib/demographicsExplorerReducer";
 
 function pinBounds(model: CityModel, state: DemographicsExplorerState) {
   let west = Infinity;
   let east = -Infinity;
   let south = Infinity;
   let north = -Infinity;
-  const padM = state.radiusM + 120;
+  const padM = DEMOGRAPHICS_RADIUS_MAX_M + 120;
   for (const pin of Object.values(state.pins)) {
     if (!pin) continue;
     const corners = [
@@ -45,7 +37,6 @@ function pinBounds(model: CityModel, state: DemographicsExplorerState) {
 
 export function useDemographicsParcels(
   model: CityModel,
-  view: PlanViewport,
   state: DemographicsExplorerState,
   active: boolean,
 ) {
@@ -54,13 +45,10 @@ export function useDemographicsParcels(
   const [error, setError] = useState<string | null>(null);
 
   const fetchBounds = useMemo(() => {
-    const viewB = viewBoundsFromViewport(model, view);
+    const cutB = squareBBox(model.center, demographicsMapSideWithPad(model.sideM));
     const pinB = pinBounds(model, state);
-    const cutB = squareBBox(model.center, model.sideM + state.radiusM * 2);
-    let merged = mergeParcelBounds(viewB, cutB);
-    if (pinB) merged = mergeParcelBounds(merged, pinB);
-    return merged;
-  }, [model, state.pins, state.radiusM, view.h, view.w, view.x, view.y]);
+    return pinB ? mergeParcelBounds(cutB, pinB) : cutB;
+  }, [model.center, model.sideM, state.pins]);
 
   useEffect(() => {
     if (!active) return;
@@ -88,13 +76,4 @@ export function useDemographicsParcels(
   );
 
   return { parcels, index, loading, error };
-}
-
-export function lonLatPinToLocal(
-  model: CityModel,
-  lon: number,
-  lat: number,
-): { east: number; north: number } {
-  const [east, north] = toLocal(lat, lon, model.center);
-  return { east, north };
 }

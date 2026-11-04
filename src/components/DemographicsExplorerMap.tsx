@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { getColour } from "../lib/colours";
 import { toLocal } from "../lib/geo";
 import { planViewportExtent, type PlanViewport } from "../lib/planViewport";
@@ -10,12 +10,12 @@ import type { DemographicsExplorerState, DemographicsPinId } from "../lib/demogr
 import type { DemographicsExplorerAction } from "../lib/demographicsExplorerReducer";
 import type { DemographicsCatchmentStats } from "../lib/demographicsCatchment";
 
-const PIN_HEIGHT_M = 46;
-const PIN_WIDTH_M = 30;
-const PIN_STEM_M = 14;
-const TAG_FONT_M = 26;
-const TAG_PAD_M = 10;
-const TAG_LINE_M = 34;
+const PIN_HEIGHT_M = 52;
+const PIN_WIDTH_M = 38;
+const PIN_STEM_M = 16;
+const TAG_FONT_M = 32;
+const TAG_PAD_M = 12;
+const TAG_LINE_M = 40;
 
 function parcelPath(ring: [number, number][], center: CityModel["center"]): string {
   return (
@@ -60,9 +60,19 @@ export function DemographicsExplorerMap({
   statsB?: DemographicsCatchmentStats | null;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const [dragPin, setDragPin] = useState<{ id: DemographicsPinId; east: number; north: number } | null>(null);
   const view = viewport ?? planViewportExtent(model.sideM);
 
-  const pinList = (["a", "b"] as const).flatMap((id) => (state.pins[id] ? ([[id, state.pins[id]!] as const] ) : []));
+  const effectivePins = useMemo(() => {
+    if (!dragPin) return state.pins;
+    const base = state.pins[dragPin.id];
+    if (!base) return state.pins;
+    return { ...state.pins, [dragPin.id]: { ...base, east: dragPin.east, north: dragPin.north } };
+  }, [dragPin, state.pins]);
+
+  const pinList = (["a", "b"] as const).flatMap((id) =>
+    effectivePins[id] ? ([[id, effectivePins[id]!] as const] ) : [],
+  );
 
   const tintedParcels = useMemo(() => {
     const radius2 = state.radiusM * state.radiusM;
@@ -145,9 +155,8 @@ export function DemographicsExplorerMap({
                 const scale = view.w / rect.width;
                 const dx = (moveEvent.clientX - start.x) * scale;
                 const dy = (moveEvent.clientY - start.y) * scale;
-                dispatch({
-                  type: "movePin",
-                  pin: pinId,
+                setDragPin({
+                  id: pinId,
                   east: start.pin.east + dx,
                   north: start.pin.north + dy,
                 });
@@ -158,6 +167,20 @@ export function DemographicsExplorerMap({
                 event.currentTarget.removeEventListener("pointermove", move);
                 event.currentTarget.removeEventListener("pointerup", up);
                 event.currentTarget.removeEventListener("pointercancel", up);
+                const el = svgRef.current;
+                if (el) {
+                  const rect = el.getBoundingClientRect();
+                  const scale = view.w / rect.width;
+                  const dx = (upEvent.clientX - start.x) * scale;
+                  const dy = (upEvent.clientY - start.y) * scale;
+                  dispatch({
+                    type: "movePin",
+                    pin: pinId,
+                    east: start.pin.east + dx,
+                    north: start.pin.north + dy,
+                  });
+                }
+                setDragPin(null);
               };
               event.currentTarget.addEventListener("pointermove", move);
               event.currentTarget.addEventListener("pointerup", up);

@@ -1,4 +1,5 @@
-import type { PlanViewport } from "../lib/planViewport";
+import { useCallback, useState } from "react";
+import { demographicsPlanViewportExtent, type PlanViewport } from "../lib/planViewport";
 import type { CityModel } from "../types";
 import type { DemographicsParcelIndex, DemographicsParcelRecord } from "../lib/demographicsParcels";
 import type { DemographicsCatchmentStats } from "../lib/demographicsCatchment";
@@ -12,8 +13,6 @@ export function DemographicsExplorerView({
   parcelIndex,
   state,
   dispatch,
-  viewport,
-  onViewportChange,
   fitCounter,
   statsA,
   statsB,
@@ -23,19 +22,24 @@ export function DemographicsExplorerView({
   parcelIndex: DemographicsParcelIndex | null;
   state: DemographicsExplorerState;
   dispatch: (action: DemographicsExplorerAction) => void;
-  viewport: PlanViewport;
-  onViewportChange: (view: PlanViewport) => void;
   fitCounter: number;
   statsA: DemographicsCatchmentStats | null;
   statsB: DemographicsCatchmentStats | null;
 }) {
+  const [overlayViewport, setOverlayViewport] = useState<PlanViewport>(() =>
+    demographicsPlanViewportExtent(model.sideM),
+  );
+  const onOverlayViewport = useCallback((view: PlanViewport) => {
+    setOverlayViewport(view);
+  }, []);
+
   return (
     <div className="demographics-map-stack fill">
       <DemographicsExplorerBasemap
         model={model}
-        viewport={viewport}
-        onViewportChange={onViewportChange}
         fitCounter={fitCounter}
+        radiusM={state.radiusM}
+        onOverlayViewport={onOverlayViewport}
       />
       <DemographicsExplorerMap
         model={model}
@@ -43,7 +47,7 @@ export function DemographicsExplorerView({
         parcelIndex={parcelIndex}
         state={state}
         dispatch={dispatch}
-        viewport={viewport}
+        viewport={overlayViewport}
         fitCounter={fitCounter}
         statsA={statsA}
         statsB={statsB}

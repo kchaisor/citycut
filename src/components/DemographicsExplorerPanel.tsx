@@ -125,21 +125,24 @@ function RentHistogram({
   );
 }
 
-function ColumnBlock({
+function TabColumnContent({
+  tab,
   pinId,
   label,
   stats,
   benchmark,
 }: {
+  tab: DemographicsTab;
   pinId: "a" | "b";
   label: string;
   stats: DemographicsCatchmentStats | null;
   benchmark: DemographicsBenchmark;
 }) {
+  const accent = getColour(pinId === "a" ? "--demographics-pin-a" : "--demographics-pin-b");
   if (!stats || stats.population <= 0) {
     return (
       <div className="demo-compare-col">
-        <header className="demo-compare-head" style={{ color: getColour(pinId === "a" ? "--demographics-pin-a" : "--demographics-pin-b") }}>
+        <header className="demo-compare-head" style={{ color: accent }}>
           {pinId.toUpperCase()} {label}
         </header>
         <p className="demo-not-enough">Not enough data</p>
@@ -157,55 +160,53 @@ function ColumnBlock({
   );
   const hhTotal = DEMOGRAPHICS_HOUSEHOLD_TYPES.reduce((sum, kind) => sum + stats.households[kind], 0);
   const benchHh = benchmarkPercentages(benchmark, "households");
+
   return (
     <div className="demo-compare-col">
-      <header
-        className="demo-compare-head"
-        style={{ color: getColour(pinId === "a" ? "--demographics-pin-a" : "--demographics-pin-b") }}
-      >
+      <header className="demo-compare-head" style={{ color: accent }}>
         {pinId.toUpperCase()} {label}
       </header>
-      <p className="demo-residents-headline">{stats.population.toLocaleString()}</p>
-      <p className="demo-residents-sub mono">
-        residents · {stats.densityPerHa.toLocaleString()}/ha
-      </p>
-      <Pyramid
-        side={pinId}
-        male={malePct}
-        female={femalePct}
-        benchMale={benchAge.male}
-        benchFemale={benchAge.female}
-      />
-      <MetricBar
-        side={pinId}
-        label="Lone person"
-        pct={hhTotal > 0 ? (stats.households.lone / hhTotal) * 100 : 0}
-        benchPct={benchHh.lone ?? 0}
-      />
-      <MetricBar
-        side={pinId}
-        label="Couple, no kids"
-        pct={hhTotal > 0 ? (stats.households.couple / hhTotal) * 100 : 0}
-        benchPct={benchHh.couple ?? 0}
-      />
-      <MetricBar
-        side={pinId}
-        label="Apartment"
-        pct={stats.apartmentShare ?? 0}
-        benchPct={benchmark.apartmentShare ?? 0}
-      />
-      <MetricBar
-        side={pinId}
-        label="Renting"
-        pct={stats.rentingShare ?? 0}
-        benchPct={benchmark.rentingShare ?? 0}
-      />
-      <RentHistogram
-        side={pinId}
-        bins={stats.rentBins}
-        median={stats.rentMedianWeekly}
-        benchMedian={benchmark.rentMedianWeekly ?? null}
-      />
+      {(tab === "people" || tab === "age" || tab === "households" || tab === "dwellings" || tab === "tenure" || tab === "costs") && (
+        <>
+          <p className="demo-residents-headline">{stats.population.toLocaleString()}</p>
+          <p className="demo-residents-sub mono">
+            residents · {stats.densityPerHa.toLocaleString()}/ha
+          </p>
+        </>
+      )}
+      {tab === "people" ? (
+        <>
+          <Pyramid side={pinId} male={malePct} female={femalePct} benchMale={benchAge.male} benchFemale={benchAge.female} />
+          <MetricBar side={pinId} label="Lone person" pct={hhTotal > 0 ? (stats.households.lone / hhTotal) * 100 : 0} benchPct={benchHh.lone ?? 0} />
+          <MetricBar side={pinId} label="Couple, no kids" pct={hhTotal > 0 ? (stats.households.couple / hhTotal) * 100 : 0} benchPct={benchHh.couple ?? 0} />
+          <MetricBar side={pinId} label="Apartment" pct={stats.apartmentShare ?? 0} benchPct={benchmark.apartmentShare ?? 0} />
+          <MetricBar side={pinId} label="Renting" pct={stats.rentingShare ?? 0} benchPct={benchmark.rentingShare ?? 0} />
+          <RentHistogram side={pinId} bins={stats.rentBins} median={stats.rentMedianWeekly} benchMedian={benchmark.rentMedianWeekly ?? null} />
+        </>
+      ) : null}
+      {tab === "age" ? (
+        <>
+          <p className="demo-subline mono">Median age {stats.medianAge ?? "—"} · benchmark {benchmark.medianAge ?? "—"}</p>
+          <Pyramid side={pinId} male={malePct} female={femalePct} benchMale={benchAge.male} benchFemale={benchAge.female} />
+        </>
+      ) : null}
+      {tab === "households" ? (
+        <>
+          <MetricBar side={pinId} label="Lone person" pct={hhTotal > 0 ? (stats.households.lone / hhTotal) * 100 : 0} benchPct={benchHh.lone ?? 0} />
+          <MetricBar side={pinId} label="Couple, no kids" pct={hhTotal > 0 ? (stats.households.couple / hhTotal) * 100 : 0} benchPct={benchHh.couple ?? 0} />
+          <MetricBar side={pinId} label="Family" pct={hhTotal > 0 ? (stats.households.family / hhTotal) * 100 : 0} benchPct={benchHh.family ?? 0} />
+          <MetricBar side={pinId} label="Group" pct={hhTotal > 0 ? (stats.households.group / hhTotal) * 100 : 0} benchPct={benchHh.group ?? 0} />
+        </>
+      ) : null}
+      {tab === "dwellings" ? (
+        <MetricBar side={pinId} label="Apartment" pct={stats.apartmentShare ?? 0} benchPct={benchmark.apartmentShare ?? 0} />
+      ) : null}
+      {tab === "tenure" ? (
+        <MetricBar side={pinId} label="Renting" pct={stats.rentingShare ?? 0} benchPct={benchmark.rentingShare ?? 0} />
+      ) : null}
+      {tab === "costs" ? (
+        <RentHistogram side={pinId} bins={stats.rentBins} median={stats.rentMedianWeekly} benchMedian={benchmark.rentMedianWeekly ?? null} />
+      ) : null}
     </div>
   );
 }
@@ -243,6 +244,28 @@ export function DemographicsExplorerPanel({
   const glance =
     statsA && statsB && statsA.population > 0 && statsB.population > 0 ? compareGlance(statsA, statsB) : null;
 
+  const tabBody =
+    !benchmark ? null : state.panelMode === "compare" ? (
+      <>
+        <div className="demo-compare-grid">
+          <TabColumnContent tab={state.tab} pinId="a" label={state.pins.a?.label ?? "A"} stats={statsA} benchmark={benchmark} />
+          <TabColumnContent tab={state.tab} pinId="b" label={state.pins.b?.label ?? "B"} stats={statsB} benchmark={benchmark} />
+        </div>
+        {state.tab === "people" && glance ? (
+          <div className="demo-glance mono" aria-label="B vs A at a glance">
+            <span>RESIDENTS {glance.residentsPct >= 0 ? "+" : ""}{glance.residentsPct}%</span>
+            <span>
+              MEDIAN AGE {glance.medianAgeA ?? "—"} vs {glance.medianAgeB ?? "—"}
+            </span>
+            <span>RENTERS {glance.rentersPts != null ? `${glance.rentersPts >= 0 ? "+" : ""}${glance.rentersPts} pts` : "—"}</span>
+            <span>RENT {glance.rentDelta != null ? `${glance.rentDelta >= 0 ? "+" : ""}$${glance.rentDelta}/wk` : "—"}</span>
+          </div>
+        ) : null}
+      </>
+    ) : (
+      <TabColumnContent tab={state.tab} pinId="a" label={state.pins.a?.label ?? "A"} stats={statsA} benchmark={benchmark} />
+    );
+
   return (
     <div className="demo-explorer-panel">
       <header className="demo-explorer-head">
@@ -269,6 +292,43 @@ export function DemographicsExplorerPanel({
           </button>
         </div>
       </header>
+      <div className="demo-map-controls mono" role="group" aria-label="Map catchment controls">
+        <label className="demo-radius-control">
+          RADIUS
+          <input
+            type="range"
+            min={200}
+            max={1200}
+            step={50}
+            value={state.radiusM}
+            onChange={(event) =>
+              dispatch({ type: "setRadius", radiusM: Number(event.target.value) })
+            }
+          />
+          <span>{state.radiusM} M</span>
+        </label>
+        <div className="demo-colour-by" aria-label="Colour parcels by">
+          <span>COLOUR BY</span>
+          {(
+            [
+              ["density", "Density"],
+              ["medianAge", "Median age"],
+              ["rent", "Rent"],
+              ["rentersPct", "Renters %"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={state.colourBy === id ? "demo-colour-btn is-active" : "demo-colour-btn"}
+              aria-pressed={state.colourBy === id}
+              onClick={() => dispatch({ type: "setColourBy", colourBy: id })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       <nav className="demo-tabs" role="tablist" aria-label="Demographics topics">
         {tabs.map((item) => (
           <button
@@ -287,34 +347,15 @@ export function DemographicsExplorerPanel({
         <p className="demo-status">Loading census and parcels…</p>
       ) : !benchmark ? (
         <p className="demo-status">No demographics dataset</p>
-      ) : state.tab !== "people" ? (
-        <p className="demo-status">More tabs coming soon — People view is live in this release.</p>
-      ) : state.panelMode === "compare" ? (
-        <>
-          <div className="demo-compare-grid">
-            <ColumnBlock pinId="a" label={state.pins.a?.label ?? "A"} stats={statsA} benchmark={benchmark} />
-            <ColumnBlock pinId="b" label={state.pins.b?.label ?? "B"} stats={statsB} benchmark={benchmark} />
-          </div>
-          {glance ? (
-            <div className="demo-glance mono" aria-label="B vs A at a glance">
-              <span>RESIDENTS {glance.residentsPct >= 0 ? "+" : ""}{glance.residentsPct}%</span>
-              <span>
-                MEDIAN AGE {glance.medianAgeA ?? "—"} vs {glance.medianAgeB ?? "—"}
-              </span>
-              <span>RENTERS {glance.rentersPts != null ? `${glance.rentersPts >= 0 ? "+" : ""}${glance.rentersPts} pts` : "—"}</span>
-              <span>RENT {glance.rentDelta != null ? `${glance.rentDelta >= 0 ? "+" : ""}$${glance.rentDelta}/wk` : "—"}</span>
-            </div>
-          ) : null}
-        </>
       ) : (
-        <ColumnBlock pinId="a" label={state.pins.a?.label ?? "A"} stats={statsA} benchmark={benchmark} />
+        tabBody
       )}
       <footer className="demo-explorer-foot mono">
         <span>
           Drawn from {sa1Count} SA1s · Real Vicmap parcels · 2021 Census schema
           {builtAt ? ` · ${builtAt.slice(0, 10)}` : ""}
         </span>
-        <span>| = MELB AVG</span>
+        <span>| = MELB AVG · Parcels © State of Victoria (DTP), CC BY 4.0</span>
       </footer>
     </div>
   );

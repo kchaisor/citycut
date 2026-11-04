@@ -16,6 +16,19 @@ export function demographicsMapLngLatBounds(center: LonLat, sideM: number): [[nu
   ];
 }
 
+export function demographicsMapInitialFitBounds(
+  center: LonLat,
+  sideM: number,
+  radiusM: number,
+): [[number, number], [number, number]] {
+  const pad = Math.max(720, sideM * 0.52, radiusM * 1.45);
+  const box = squareBBox(center, sideM + pad * 2);
+  return [
+    [box.west, box.south],
+    [box.east, box.north],
+  ];
+}
+
 export function demographicsPlanViewportLngLatBounds(
   view: PlanViewport,
   center: LonLat,
@@ -47,5 +60,6 @@ export function pinDistanceFromCutCenterM(east: number, north: number): number {
 declare global {
   interface Window {
     __citycutDemographicsMap?: import("maplibre-gl").Map;
+    __citycutDemographicsMapInstanceId?: number;
   }
 }
