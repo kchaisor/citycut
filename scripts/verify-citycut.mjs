@@ -27,7 +27,7 @@ import { PNG } from "pngjs";
 const CHROME_PATH = "/usr/bin/google-chrome";
 const VIEWPORT = { width: 1440, height: 900 };
 const DEVICE_SCALE_FACTOR = 2;
-const ARTIFACTS_DIR = "/workspace";
+const ARTIFACTS_DIR = "/opt/cursor/artifacts";
 const TMP_FRAMES_DIR = "/tmp/citycut_verify_frames";
 const TMP_VIDEO_DIR = "/tmp/citycut_verify_video_frames";
 
@@ -66,6 +66,7 @@ function waitForServer(url, timeoutMs = 25000) {
 }
 
 async function main() {
+  fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
   fs.rmSync(TMP_FRAMES_DIR, { recursive: true, force: true });
   fs.mkdirSync(TMP_FRAMES_DIR, { recursive: true });
   fs.rmSync(TMP_VIDEO_DIR, { recursive: true, force: true });
@@ -115,6 +116,7 @@ async function main() {
     });
 
     await context.addInitScript(() => {
+      window.__citycutVerifyHarness = true;
       window.__citycutMinSilentLoadMs = 550;
       try {
         window.localStorage.setItem(
@@ -807,6 +809,88 @@ async function main() {
         beat4Info.bridgePillOpacity === "0",
       `polar=${beat4Info.polar}, bldg=[${beat4Info.bldgInner},${beat4Info.bldgOuter}], tree=${beat4Info.treeScale}, hudOpacities=[${beat4Info.topOpacity},${beat4Info.leftOpacity},${beat4Info.rightOpacity},${beat4Info.bottomOpacity}], underlay=${beat4Info.hasUnderlay}`,
     );
+
+    await page.waitForFunction(() => window.__citycutQaMassing?.simulateDraw != null, null, { timeout: 120_000 });
+    await page.evaluate(() => {
+      for (const key of Object.keys(window.localStorage)) {
+        if (key.startsWith("citycut.massingBlocks.")) window.localStorage.removeItem(key);
+      }
+    });
+    const massingDrawId = await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      if (!api) return null;
+      api.enableTool();
+      return api.simulateDraw(-18, -6, 18, -6);
+    });
+    const massingAfterDraw = await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      const blocks = api?.getBlocks() ?? [];
+      const block = blocks[0];
+      return {
+        count: blocks.length,
+        width: block?.width_m ?? 0,
+        floors: block?.floors ?? 0,
+        dy: block ? Math.abs(block.centerline[1][1] - block.centerline[0][1]) : 0,
+        dx: block ? Math.abs(block.centerline[1][0] - block.centerline[0][0]) : 0,
+      };
+    });
+    assertCheck(
+      "massing-draw-block",
+      "Massing tool simulated drag creates a block near 14 m width on a snapped axis",
+      Boolean(massingDrawId) &&
+        massingAfterDraw.count >= 1 &&
+        Math.abs(massingAfterDraw.width - 14) <= 0.5 &&
+        massingAfterDraw.dx >= 30 &&
+        massingAfterDraw.dy <= 1.5,
+      JSON.stringify(massingAfterDraw),
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-draw-preview.png") });
+
+    await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      const id = api?.getBlocks()?.[0]?.id;
+      if (id) api?.selectBlock(id);
+      api?.setFloors(6);
+    });
+    await page.waitForTimeout(300);
+    const massingAfterHeight = await page.evaluate(() => window.__citycutQaMassing?.getBlocks()?.[0]?.floors ?? 0);
+    assertCheck(
+      "massing-height-floors",
+      "Massing block floor count updates via edit API",
+      massingAfterHeight === 6,
+      `floors=${massingAfterHeight}`,
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-selected-edited.png") });
+
+    const persistedBeforeReload = await page.evaluate(() => window.__citycutQaMassing?.readPersistedCount() ?? 0);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector("button.create-fab", { timeout: 120_000 });
+    await page.click("button.create-fab");
+    await page.waitForFunction(() => window.__citycutQaMassing?.readPersistedCount != null, null, { timeout: 120_000 });
+    const persistedAfterReload = await page.evaluate(() => window.__citycutQaMassing?.readPersistedCount() ?? 0);
+    assertCheck(
+      "massing-persist-reload",
+      "Drawn massing blocks persist in localStorage across reload",
+      persistedBeforeReload >= 1 && persistedAfterReload >= 1,
+      `before=${persistedBeforeReload}, after=${persistedAfterReload}`,
+    );
+
+    await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      api?.enableTool();
+      const id = api?.getBlocks()?.[0]?.id;
+      if (id) api?.selectBlock(id);
+      api?.deleteSelected();
+    });
+    const massingAfterDelete = await page.evaluate(() => window.__citycutQaMassing?.getBlocks()?.length ?? -1);
+    assertCheck(
+      "massing-delete",
+      "Massing delete removes the selected block",
+      massingAfterDelete === 0,
+      `remaining=${massingAfterDelete}`,
+    );
+
+    await page.evaluate(() => window.__citycutQaMassing?.disableTool());
 
     // TYPOGRAPHY & CSS SURFACE INVARIANTS
     const uiInvariants = await page.evaluate(() => {

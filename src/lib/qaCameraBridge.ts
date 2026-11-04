@@ -21,6 +21,16 @@ declare global {
   interface Window {
     __citycutQa?: QaCameraBridge;
     __citycutQaSite?: QaSiteSnapshot;
+    __citycutQaMassing?: {
+      enableTool: () => void;
+      disableTool: () => void;
+      simulateDraw: (east0: number, north0: number, east1: number, north1: number) => string | null;
+      getBlocks: () => import("./massingBlock").MassingBlock[];
+      selectBlock: (id: string) => void;
+      setFloors: (floors: number) => void;
+      deleteSelected: () => void;
+      readPersistedCount: () => number;
+    };
     __citycutQaModel?: {
       openMidriseHeightEdit: () => number | null;
       pickBuildingNearGeoQa?: (lat: number, lon: number) => number | null;
