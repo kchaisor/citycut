@@ -25,7 +25,9 @@
   --demographics-map-bg: #f5f3ef;
   --demographics-building-fill: #e8e6e1;
   --demographics-building-stroke: #c8c4bc;
-  --demographics-parcel-line: #b8b4ac;
+  --demographics-parcel-line: #d6d6d3;
+  --demographics-road-fill: #5c5c5c;
+  --demographics-path-fill: #c4a574;
   --demographics-parcel-outside: #ffffff;
   --demographics-cut-frame: #1a1a1a;
   --demographics-density-0: #fbf3d5;

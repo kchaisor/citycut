@@ -28,6 +28,15 @@ export type DemographicsCatchmentStats = {
   enoughData: boolean;
 };
 
+export function roundDemoAge(value: number | null): number | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  return Math.round(value * 10) / 10;
+}
+
+export function roundDemoCount(value: number): number {
+  return Math.round(value);
+}
+
 function emptyAge(): Record<DemographicsAgeBand, number> {
   return Object.fromEntries(DEMOGRAPHICS_AGE_BANDS.map((band) => [band, 0])) as Record<
     DemographicsAgeBand,
@@ -63,7 +72,7 @@ export function aggregateCatchmentFromSa1(input: {
     densityPerHa: Math.round(circle.densityPerHa),
     parcelCount: 0,
     sa1Count: circle.sa1Cells,
-    medianAge: circle.medianAge,
+    medianAge: roundDemoAge(circle.medianAge),
     ageMale: circle.ageMale,
     ageFemale: circle.ageFemale,
     households: circle.households,
@@ -142,7 +151,7 @@ export function aggregateCatchmentFromParcels(input: {
     densityPerHa: areaHa > 0 ? Math.round(population / areaHa) : 0,
     parcelCount,
     sa1Count: sa1Codes.size,
-    medianAge: ageWeight > 0 ? Math.round((ageWeighted / ageWeight) * 10) / 10 : null,
+    medianAge: ageWeight > 0 ? roundDemoAge(ageWeighted / ageWeight) : null,
     ageMale,
     ageFemale,
     households,
@@ -188,14 +197,20 @@ export function aggregateCatchmentForPin(input: {
     radiusM: input.radiusM,
   });
   if (fromSa1 && fromParcels) {
-    const useParcelPop = fromParcels.population >= 25;
+    const trustParcels =
+      fromParcels.parcelCount >= 30 &&
+      fromParcels.population >= Math.max(2500, fromSa1.population * 0.45);
+    const population = trustParcels ? fromParcels.population : fromSa1.population;
+    const densityPerHa = trustParcels ? fromParcels.densityPerHa : fromSa1.densityPerHa;
+    const ageFromParcels = sa1HasDetail(fromParcels);
     return {
-      ...fromSa1,
-      population: useParcelPop ? fromParcels.population : fromSa1.population,
-      densityPerHa: useParcelPop ? fromParcels.densityPerHa : fromSa1.densityPerHa,
+      ...(ageFromParcels ? fromParcels : fromSa1),
+      population: roundDemoCount(population),
+      densityPerHa: roundDemoCount(densityPerHa),
       parcelCount: fromParcels.parcelCount,
       sa1Count: Math.max(fromSa1.sa1Count, fromParcels.sa1Count),
-      enoughData: fromSa1.population >= 1 || fromParcels.population >= 1,
+      medianAge: roundDemoAge(fromSa1.medianAge),
+      enoughData: population >= 1,
     };
   }
   if (fromSa1) {
@@ -233,8 +248,8 @@ export function compareGlance(
       : null;
   return {
     residentsPct,
-    medianAgeA: a.medianAge,
-    medianAgeB: b.medianAge,
+    medianAgeA: roundDemoAge(a.medianAge),
+    medianAgeB: roundDemoAge(b.medianAge),
     rentersPts,
     rentDelta,
   };

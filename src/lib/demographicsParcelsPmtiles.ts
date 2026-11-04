@@ -5,7 +5,7 @@ import { EnrichmentPmtilesSource } from "./enrichmentPmtilesSource";
 import { DEMOGRAPHICS_AGE_BANDS, DEMOGRAPHICS_HOUSEHOLD_TYPES, DEMOGRAPHICS_RENT_BINS } from "./demographicsTypes";
 import type { DemographicsParcelRecord } from "./demographicsParcels";
 
-const PARCELS_ZOOM = 12;
+const PARCELS_FETCH_ZOOMS = [14, 13, 12] as const;
 
 export const DEMOGRAPHICS_PARCELS_PMTILES_URL = `${import.meta.env.BASE_URL}demographics-parcels.pmtiles`;
 
@@ -95,8 +95,17 @@ export async function fetchParcelsFromPmtiles(
   signal?: AbortSignal,
 ): Promise<DemographicsParcelRecord[]> {
   const pmtiles = pmtilesClient();
-  const tiles = tileRange(bounds, PARCELS_ZOOM);
   const byId = new Map<string, DemographicsParcelRecord>();
+  const tileKeys = new Set<string>();
+  const tiles: { z: number; x: number; y: number }[] = [];
+  for (const zoom of PARCELS_FETCH_ZOOMS) {
+    for (const tile of tileRange(bounds, zoom)) {
+      const key = `${tile.z}/${tile.x}/${tile.y}`;
+      if (tileKeys.has(key)) continue;
+      tileKeys.add(key);
+      tiles.push(tile);
+    }
+  }
   for (const { z, x, y } of tiles) {
     if (signal?.aborted) break;
     const response = await pmtiles.getZxy(z, x, y, signal);

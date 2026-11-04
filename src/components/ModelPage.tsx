@@ -149,9 +149,11 @@ import { ImportMassingPanel } from "./ImportMassingPanel";
 import { useImportedMassing } from "./useImportedMassing";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
-import { DemographicsExplorerMap } from "./DemographicsExplorerMap";
+import { DemographicsExplorerView } from "./DemographicsExplorerView";
 import { DemographicsExplorerPanel } from "./DemographicsExplorerPanel";
 import { aggregateCatchmentForPin } from "../lib/demographicsCatchment";
+import { apportionParcelsFromSa1Units } from "../lib/demographicsApportion";
+import { buildParcelIndex } from "../lib/demographicsParcels";
 import {
   initialDemographicsExplorerState,
   reduceDemographicsExplorer,
@@ -394,11 +396,25 @@ export function ModelPage({
     index: demographicsParcelIndex,
     loading: demographicsParcelsLoading,
   } = useDemographicsParcels(model, planViewport, demographicsExplorer, demographicsActive);
+  const demographicsParcelsApportioned = useMemo(
+    () =>
+      demographicsDataset?.units?.length
+        ? apportionParcelsFromSa1Units(demographicsParcelRecords, demographicsDataset.units)
+        : demographicsParcelRecords,
+    [demographicsDataset, demographicsParcelRecords],
+  );
+  const demographicsParcelIndexApportioned = useMemo(
+    () =>
+      demographicsParcelsApportioned.length
+        ? buildParcelIndex(demographicsParcelsApportioned, model.center)
+        : demographicsParcelIndex,
+    [demographicsParcelIndex, demographicsParcelsApportioned, model.center],
+  );
   const demographicsCatchmentA = useMemo(() => {
     const pin = demographicsExplorer.pins.a;
     if (!pin || !demographicsIndex) return null;
     return aggregateCatchmentForPin({
-      parcels: demographicsParcelRecords,
+      parcels: demographicsParcelsApportioned,
       center: model.center,
       east: pin.east,
       north: pin.north,
@@ -409,14 +425,14 @@ export function ModelPage({
     demographicsExplorer.pins.a,
     demographicsExplorer.radiusM,
     demographicsIndex,
-    demographicsParcelRecords,
+    demographicsParcelsApportioned,
     model.center,
   ]);
   const demographicsCatchmentB = useMemo(() => {
     const pin = demographicsExplorer.pins.b;
     if (!pin || demographicsExplorer.panelMode !== "compare" || !demographicsIndex) return null;
     return aggregateCatchmentForPin({
-      parcels: demographicsParcelRecords,
+      parcels: demographicsParcelsApportioned,
       center: model.center,
       east: pin.east,
       north: pin.north,
@@ -428,7 +444,7 @@ export function ModelPage({
     demographicsExplorer.pins.b,
     demographicsExplorer.radiusM,
     demographicsIndex,
-    demographicsParcelRecords,
+    demographicsParcelsApportioned,
     model.center,
   ]);
   const demographicsSa1Count = Math.max(
@@ -2031,10 +2047,13 @@ export function ModelPage({
                 fitCounter={fitCounter}
               />
             ) : drawing === "demographics" ? (
-              <DemographicsExplorerMap
+              <DemographicsExplorerView
                 model={drawingModel}
-                parcels={demographicsParcelRecords}
-                parcelIndex={demographicsParcelIndex}
+                lineStyle={lineStyles}
+                planScale={figureScale}
+                onScale={onScale}
+                parcels={demographicsParcelsApportioned}
+                parcelIndex={demographicsParcelIndexApportioned}
                 state={demographicsExplorer}
                 dispatch={dispatchDemographicsExplorer}
                 viewport={planViewport}
@@ -3407,7 +3426,7 @@ export function ModelPage({
             </div>
           </Sidebar>
         </div>
-        {leftOpen === "analysis" && tab !== "satellite" ? (
+        {leftOpen === "analysis" && tab !== "satellite" && !demographicsActive ? (
           <div
             className="bottom-bar env-console hud-card"
             role="region"

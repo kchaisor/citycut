@@ -45,17 +45,33 @@ export type DemographicsParcelsDataset = {
   parcels: DemographicsParcelRecord[];
 };
 
+function parcelLocalBounds(parcel: DemographicsParcelRecord, origin: LonLat) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const [lon, lat] of parcel.ring) {
+    const [x, y] = toLocal(lat, lon, origin);
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  }
+  if (!Number.isFinite(minX)) {
+    const [cx, cy] = toLocal(parcel.centroidLat, parcel.centroidLon, origin);
+    return { minX: cx, minY: cy, maxX: cx, maxY: cy };
+  }
+  return { minX, minY, maxX, maxY };
+}
+
 export function buildParcelIndex(parcels: DemographicsParcelRecord[], origin: LonLat): DemographicsParcelIndex {
   const tree = new RBush<IndexedParcel>();
   tree.load(
     parcels.map((parcel) => {
-      const [cx, cy] = toLocal(parcel.centroidLat, parcel.centroidLon, origin);
+      const bounds = parcelLocalBounds(parcel, origin);
       return {
         ...parcel,
-        minX: cx,
-        minY: cy,
-        maxX: cx,
-        maxY: cy,
+        ...bounds,
       };
     }),
   );

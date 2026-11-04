@@ -19,13 +19,13 @@ export function planViewportExtent(sideM: number): PlanViewport {
 }
 
 export function demographicsPlanViewportExtent(sideM: number): PlanViewport {
-  const half = sideM / 2;
-  const pad = sideM * 0.85;
+  const cut = planViewportExtent(sideM);
+  const pad = sideM * 0.42;
   return {
-    x: -half - pad,
-    y: -half - pad,
-    w: sideM + pad * 2,
-    h: sideM + pad * 2,
+    x: cut.x - pad,
+    y: cut.y - pad,
+    w: cut.w + pad * 2,
+    h: cut.h + pad * 2,
   };
 }
 

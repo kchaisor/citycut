@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { getColour } from "../lib/colours";
 import { toLocal } from "../lib/geo";
 import { planViewportExtent, type PlanViewport } from "../lib/planViewport";
@@ -10,9 +10,12 @@ import type { DemographicsExplorerState, DemographicsPinId } from "../lib/demogr
 import type { DemographicsExplorerAction } from "../lib/demographicsExplorerReducer";
 import type { DemographicsCatchmentStats } from "../lib/demographicsCatchment";
 
-function screenPx(mm: number): number {
-  return mm * 3.78;
-}
+const PIN_HEIGHT_M = 46;
+const PIN_WIDTH_M = 30;
+const PIN_STEM_M = 14;
+const TAG_FONT_M = 26;
+const TAG_PAD_M = 10;
+const TAG_LINE_M = 34;
 
 function parcelPath(ring: [number, number][], center: CityModel["center"]): string {
   return (
@@ -59,6 +62,7 @@ export function DemographicsExplorerMap({
   statsB?: DemographicsCatchmentStats | null;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const panRef = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
   const view = viewport ?? planViewportExtent(model.sideM);
 
   const visibleParcels = useMemo(() => {
@@ -74,7 +78,6 @@ export function DemographicsExplorerMap({
 
   const pinList = (["a", "b"] as const).flatMap((id) => (state.pins[id] ? ([[id, state.pins[id]!] as const] ) : []));
 
-  const mapBg = getColour("--demographics-map-bg");
   const parcelLine = getColour("--demographics-parcel-line");
   const outsideFill = getColour("--demographics-parcel-outside");
   const rampStops = [
@@ -86,6 +89,28 @@ export function DemographicsExplorerMap({
     getColour("--demographics-density-5"),
   ];
 
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg || !onViewportChange) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = svg.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const px = (event.clientX - rect.left) / rect.width;
+      const py = (event.clientY - rect.top) / rect.height;
+      const pixels = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+      const factor = Math.exp(pixels * 0.0012);
+      onViewportChange({
+        x: view.x + (view.w - view.w * factor) * px,
+        y: view.y + (view.h - view.h * factor) * py,
+        w: view.w * factor,
+        h: view.h * factor,
+      });
+    };
+    svg.addEventListener("wheel", onWheel, { passive: false });
+    return () => svg.removeEventListener("wheel", onWheel);
+  }, [model.sideM, onViewportChange, view.h, view.w, view.x, view.y]);
+
   return (
     <svg
       ref={svgRef}
@@ -94,13 +119,16 @@ export function DemographicsExplorerMap({
       role="img"
       aria-label="Demographics explorer map"
       data-fit-counter={fitCounter}
+      style={{ touchAction: "none" }}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
         const target = event.target as Element;
         const pinId = target.closest("[data-demo-pin]")?.getAttribute("data-demo-pin") as DemographicsPinId | null;
         if (pinId && state.pins[pinId]) {
           const start = { x: event.clientX, y: event.clientY, pin: state.pins[pinId]! };
+          event.currentTarget.setPointerCapture(event.pointerId);
           const move = (moveEvent: PointerEvent) => {
+            if (moveEvent.pointerId !== event.pointerId) return;
             const el = svgRef.current;
             if (!el) return;
             const rect = el.getBoundingClientRect();
@@ -114,37 +142,51 @@ export function DemographicsExplorerMap({
               north: start.pin.north + dy,
             });
           };
-          const up = () => {
-            window.removeEventListener("pointermove", move);
-            window.removeEventListener("pointerup", up);
+          const up = (upEvent: PointerEvent) => {
+            if (upEvent.pointerId !== event.pointerId) return;
+            event.currentTarget.releasePointerCapture(event.pointerId);
+            event.currentTarget.removeEventListener("pointermove", move);
+            event.currentTarget.removeEventListener("pointerup", up);
+            event.currentTarget.removeEventListener("pointercancel", up);
           };
-          window.removeEventListener("pointerup", up);
-          window.addEventListener("pointermove", move);
-          window.addEventListener("pointerup", up);
+          event.currentTarget.addEventListener("pointermove", move);
+          event.currentTarget.addEventListener("pointerup", up);
+          event.currentTarget.addEventListener("pointercancel", up);
           event.preventDefault();
+          event.stopPropagation();
           return;
         }
         if (!onViewportChange) return;
-        const panStart = { x: event.clientX, y: event.clientY, view: { ...view } };
-        const panMove = (moveEvent: PointerEvent) => {
-          const el = svgRef.current;
-          if (!el) return;
-          const scale = view.w / el.clientWidth;
-          onViewportChange({
-            ...panStart.view,
-            x: panStart.view.x - (moveEvent.clientX - panStart.x) * scale,
-            y: panStart.view.y - (moveEvent.clientY - panStart.y) * scale,
-          });
-        };
-        const panUp = () => {
-          window.removeEventListener("pointermove", panMove);
-          window.removeEventListener("pointerup", panUp);
-        };
-        window.addEventListener("pointermove", panMove);
-        window.addEventListener("pointerup", panUp);
+        panRef.current = { px: event.clientX, py: event.clientY, view: { ...view } };
+        event.currentTarget.setPointerCapture(event.pointerId);
+        event.preventDefault();
+      }}
+      onPointerMove={(event) => {
+        const start = panRef.current;
+        const el = svgRef.current;
+        if (!start || !el || !onViewportChange) return;
+        const scale = view.w / el.clientWidth;
+        onViewportChange({
+          ...start.view,
+          x: start.view.x - (event.clientX - start.px) * scale,
+          y: start.view.y - (event.clientY - start.py) * scale,
+        });
+      }}
+      onPointerUp={(event) => {
+        panRef.current = null;
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
       }}
     >
-      <rect x={view.x - view.w} y={view.y - view.h} width={view.w * 3} height={view.h * 3} fill={mapBg} />
+      <rect
+        x={view.x}
+        y={view.y}
+        width={view.w}
+        height={view.h}
+        fill="transparent"
+        pointerEvents="all"
+      />
       {visibleParcels.map((parcel) => {
         const [cx, cy] = toLocal(parcel.centroidLat, parcel.centroidLon, model.center);
         let tinted = false;
@@ -164,8 +206,9 @@ export function DemographicsExplorerMap({
             d={parcelPath(parcel.ring, model.center)}
             fill={fill}
             stroke={parcelLine}
-            strokeWidth={screenPx(0.05)}
+            strokeWidth={0.35}
             vectorEffect="non-scaling-stroke"
+            pointerEvents="visiblePainted"
           />
         );
       })}
@@ -174,62 +217,92 @@ export function DemographicsExplorerMap({
         const r = state.radiusM;
         const stats = pinId === "a" ? statsA : statsB;
         const tag = pinTag(stats, pin.label);
+        const tipY = pin.north - PIN_HEIGHT_M;
+        const tagX = pin.east + PIN_WIDTH_M * 0.55;
+        const tagY = tipY - TAG_LINE_M;
+        const tagWidth = tag.length * TAG_FONT_M * 0.52 + TAG_PAD_M * 2;
+        const tagHeight = TAG_FONT_M * 1.45;
         return (
-          <g key={pinId} data-demo-pin={pinId} style={{ cursor: "grab" }}>
+          <g key={pinId} data-demo-pin={pinId} style={{ cursor: "grab" }} pointerEvents="all">
             <circle
               cx={pin.east}
               cy={pin.north}
               r={r}
               fill="none"
               stroke={colour}
-              strokeWidth={screenPx(0.28)}
-              strokeDasharray={`${screenPx(2.4)} ${screenPx(1.6)}`}
+              strokeWidth={2.4}
+              strokeDasharray="14 10"
               vectorEffect="non-scaling-stroke"
               opacity={0.95}
+              pointerEvents="none"
             />
             <path
-              d={`M ${pin.east} ${pin.north - screenPx(4.2)} l ${screenPx(2.1)} ${screenPx(4.2)} h ${-screenPx(4.2)} z`}
+              d={`M ${pin.east} ${pin.north - PIN_STEM_M} C ${pin.east + PIN_WIDTH_M * 0.55} ${pin.north - PIN_STEM_M} ${pin.east + PIN_WIDTH_M * 0.55} ${tipY + PIN_HEIGHT_M * 0.35} ${pin.east} ${tipY} C ${pin.east - PIN_WIDTH_M * 0.55} ${tipY + PIN_HEIGHT_M * 0.35} ${pin.east - PIN_WIDTH_M * 0.55} ${pin.north - PIN_STEM_M} ${pin.east} ${pin.north - PIN_STEM_M} Z`}
               fill={colour}
               stroke={getColour("--demographics-panel-text")}
-              strokeWidth={screenPx(0.12)}
+              strokeWidth={0.8}
               vectorEffect="non-scaling-stroke"
             />
-            <circle cx={pin.east} cy={pin.north - screenPx(5.4)} r={screenPx(0.65)} fill={getColour("--demographics-panel-bg")} />
-            <g transform={`translate(${pin.east + screenPx(3.2)} ${pin.north - screenPx(7.5)})`}>
-              <rect
-                x={0}
-                y={0}
-                width={screenPx(tag.length * 0.58)}
-                height={screenPx(4.8)}
-                rx={screenPx(0.6)}
-                fill={getColour("--demographics-panel-bg")}
-                stroke={colour}
-                strokeWidth={screenPx(0.1)}
-                vectorEffect="non-scaling-stroke"
-              />
-              <text x={screenPx(0.8)} y={screenPx(2.9)} className="demo-pin-tag mono" fill={getColour("--demographics-panel-text")}>
-                {tag}
-              </text>
-            </g>
+            <circle
+              cx={pin.east}
+              cy={pin.north - PIN_STEM_M}
+              r={PIN_WIDTH_M * 0.55}
+              fill="transparent"
+              pointerEvents="all"
+            />
+            <circle cx={pin.east} cy={tipY - PIN_HEIGHT_M * 0.08} r={PIN_WIDTH_M * 0.34} fill={getColour("--demographics-panel-bg")} pointerEvents="none" />
+            <text
+              x={pin.east}
+              y={tipY + PIN_HEIGHT_M * 0.02}
+              textAnchor="middle"
+              fontSize={PIN_WIDTH_M * 0.55}
+              fontWeight={700}
+              fill={getColour("--demographics-panel-text")}
+              pointerEvents="none"
+            >
+              {pinId.toUpperCase()}
+            </text>
+            <rect
+              x={tagX}
+              y={tagY}
+              width={tagWidth}
+              height={tagHeight}
+              rx={4}
+              fill={getColour("--demographics-panel-bg")}
+              stroke={colour}
+              strokeWidth={0.8}
+              vectorEffect="non-scaling-stroke"
+              pointerEvents="none"
+            />
+            <text
+              x={tagX + TAG_PAD_M}
+              y={tagY + tagHeight * 0.68}
+              fontSize={TAG_FONT_M}
+              fontWeight={600}
+              fill={getColour("--demographics-panel-text")}
+              pointerEvents="none"
+            >
+              {tag}
+            </text>
           </g>
         );
       })}
-      <g transform={`translate(${view.x + screenPx(4)} ${view.y + screenPx(4)})`}>
+      <g transform={`translate(${view.x + 16} ${view.y + 16})`} pointerEvents="none">
         <rect
           x={0}
           y={0}
-          width={screenPx(42)}
-          height={screenPx(8)}
-          rx={screenPx(0.8)}
+          width={168}
+          height={32}
+          rx={3}
           fill={getColour("--demographics-panel-bg")}
           stroke={getColour("--demographics-parcel-line")}
-          strokeWidth={screenPx(0.08)}
+          strokeWidth={0.35}
           vectorEffect="non-scaling-stroke"
         />
-        <text x={screenPx(1.2)} y={screenPx(2.4)} className="demo-legend-title">
+        <text x={5} y={9} className="demo-legend-title">
           RESIDENTS / HA
         </text>
-        <text x={screenPx(1.2)} y={screenPx(4.6)} className="demo-legend-sub">
+        <text x={5} y={17} className="demo-legend-sub">
           SA1 → PARCEL
         </text>
         <defs>
@@ -239,17 +312,17 @@ export function DemographicsExplorerMap({
             ))}
           </linearGradient>
         </defs>
-        <rect x={screenPx(1.2)} y={screenPx(5.4)} width={screenPx(39)} height={screenPx(1.6)} fill="url(#demo-density-ramp)" />
-        <text x={screenPx(1.2)} y={screenPx(7.6)} className="demo-legend-scale mono">
+        <rect x={5} y={20} width={158} height={6} fill="url(#demo-density-ramp)" />
+        <text x={5} y={30} className="demo-legend-scale">
           0
         </text>
-        <text x={screenPx(14)} y={screenPx(7.6)} className="demo-legend-scale mono">
+        <text x={55} y={30} className="demo-legend-scale">
           40
         </text>
-        <text x={screenPx(26)} y={screenPx(7.6)} className="demo-legend-scale mono">
+        <text x={105} y={30} className="demo-legend-scale">
           80
         </text>
-        <text x={screenPx(36)} y={screenPx(7.6)} className="demo-legend-scale mono">
+        <text x={145} y={30} className="demo-legend-scale">
           160+
         </text>
       </g>

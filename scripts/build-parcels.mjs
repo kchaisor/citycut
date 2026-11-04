@@ -1,4 +1,4 @@
-import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 const INNER = { west: 144.94, south: -37.82, east: 145.01, north: -37.77 };
 const WFS = "https://opendata.maps.vic.gov.au/geoserver/ows";
@@ -43,11 +43,14 @@ function ringCentroid(ring) {
   return [sx / ring.length, sy / ring.length];
 }
 
-function simplifyRing(ring, maxPoints = 12) {
+function simplifyRing(ring, maxPoints = 24) {
   if (ring.length <= maxPoints) return ring;
   const step = Math.ceil(ring.length / maxPoints);
   const out = [];
   for (let i = 0; i < ring.length; i += step) out.push(ring[i]);
+  if (out[0][0] !== out[out.length - 1][0] || out[0][1] !== out[out.length - 1][1]) {
+    out.push(out[0]);
+  }
   return out;
 }
 
@@ -91,36 +94,16 @@ function sa1ForPoint(units, lon, lat) {
   return null;
 }
 
-function apportionParcel(unit, areaM2) {
-  const sa1M2 = unit.areaKm2 * 1_000_000;
-  const share = sa1M2 > 0 ? Math.min(1, areaM2 / sa1M2) : 0;
-  const residents = unit.population * share;
-  const scale = share;
-  const ageMale = {};
-  const ageFemale = {};
-  for (const band of Object.keys(unit.age)) {
-    ageMale[band] = (unit.ageMale?.[band] ?? unit.age[band] * 0.49) * scale;
-    ageFemale[band] = (unit.ageFemale?.[band] ?? unit.age[band] * 0.51) * scale;
-  }
-  const households = {};
-  for (const kind of Object.keys(unit.households)) {
-    households[kind] = unit.households[kind] * scale;
-  }
-  const rentBins = {};
-  for (const bin of Object.keys(unit.rentBins ?? {})) {
-    rentBins[bin] = (unit.rentBins[bin] ?? 0) * scale;
-  }
-  return {
-    residents,
-    medianAge: unit.medianAge ?? null,
-    apartmentShare: unit.apartmentShare ?? null,
-    rentingShare: unit.rentingShare ?? null,
-    rentMedianWeekly: unit.rentMedianWeekly ?? null,
-    ageMale,
-    ageFemale,
-    households,
-    rentBins,
-  };
+function apportionGroup(unit, group) {
+  const totalArea = group.reduce((sum, parcel) => sum + parcel.areaM2, 0);
+  if (totalArea <= 0) return group;
+  return group.map((parcel) => {
+    const share = parcel.areaM2 / totalArea;
+    return {
+      ...parcel,
+      residents: unit.population * share,
+    };
+  });
 }
 
 function runTippecanoe(input, output) {
@@ -132,10 +115,13 @@ function runTippecanoe(input, output) {
     "parcels",
     "--force",
     "--no-tile-compression",
-    "-z14",
-    "-Z10",
-    "--drop-densest-as-needed",
-    "--coalesce-densest-as-needed",
+    "--no-feature-limit",
+    "--no-tile-size-limit",
+    "--extend-zooms-if-still-dropping",
+    "-z15",
+    "-Z11",
+    "--simplification=3",
+    "--detect-shared-borders",
     input,
   ];
   const result = spawnSync(tippecanoe, args, { stdio: "inherit" });
@@ -148,8 +134,7 @@ async function main() {
   const metro = JSON.parse(readFileSync(`${OUT}/demographics-metro.json`, "utf8"));
   const units = metro.units;
 
-  const features = [];
-  const compact = [];
+  const raw = [];
   const seen = new Set();
   for (const tile of gridTiles()) {
     const page = await fetchTile(tile);
@@ -165,44 +150,64 @@ async function main() {
             : [];
       for (const ring of rings) {
         if (!ring?.length) continue;
-        const simplified = simplifyRing(ring.map(([lon, lat]) => [lon, lat]));
+        const coords = ring.map(([lon, lat]) => [lon, lat]);
+        const simplified = simplifyRing(coords);
         const [clon, clat] = ringCentroid(simplified);
         const sa1 = sa1ForPoint(units, clon, clat);
         if (!sa1) continue;
         const areaM2 = ringAreaM2(simplified, clat);
-        if (areaM2 < 8) continue;
-        const stats = apportionParcel(sa1, areaM2);
-        if (stats.residents <= 0.05) continue;
+        if (areaM2 < 4) continue;
         const id = String(feature.properties?.parcel_pfi ?? feature.id ?? `${clon.toFixed(5)}_${clat.toFixed(5)}`);
         if (seen.has(id)) continue;
         seen.add(id);
-        compact.push({
+        raw.push({
           id,
           sa1Code: sa1.code,
+          sa1Unit: sa1,
           centroidLon: clon,
           centroidLat: clat,
           ring: simplified,
           areaM2,
-          ...stats,
-        });
-        features.push({
-          type: "Feature",
-          properties: {
-            id,
-            sa1: sa1.code,
-            r: Math.round(stats.residents * 100) / 100,
-            a: Math.round(areaM2),
-            ma: stats.medianAge ?? 0,
-            apt: stats.apartmentShare ?? 0,
-            rp: stats.rentingShare ?? 0,
-            rent: stats.rentMedianWeekly ?? 0,
-          },
-          geometry: { type: "Polygon", coordinates: [simplified] },
         });
       }
     }
-    console.log(JSON.stringify({ tile, fetched: batch.length, total: compact.length }));
+    console.log(JSON.stringify({ tile, fetched: batch.length, total: raw.length }));
   }
+
+  const bySa1 = new Map();
+  for (const parcel of raw) {
+    const group = bySa1.get(parcel.sa1Code) ?? [];
+    group.push(parcel);
+    bySa1.set(parcel.sa1Code, group);
+  }
+
+  const compact = [];
+  for (const group of bySa1.values()) {
+    const unit = group[0].sa1Unit;
+    const apportioned = apportionGroup(unit, group);
+    for (const parcel of apportioned) {
+      compact.push({
+        id: parcel.id,
+        sa1Code: parcel.sa1Code,
+        centroidLon: parcel.centroidLon,
+        centroidLat: parcel.centroidLat,
+        ring: parcel.ring,
+        areaM2: parcel.areaM2,
+        residents: parcel.residents,
+      });
+    }
+  }
+
+  const features = compact.map((parcel) => ({
+    type: "Feature",
+    properties: {
+      id: parcel.id,
+      sa1: parcel.sa1Code,
+      r: Math.round(parcel.residents * 1000) / 1000,
+      a: Math.round(parcel.areaM2),
+    },
+    geometry: { type: "Polygon", coordinates: [parcel.ring] },
+  }));
 
   const geojsonPath = `${CACHE}/parcels-inner-melbourne.geojson`;
   writeFileSync(geojsonPath, JSON.stringify({ type: "FeatureCollection", features }));

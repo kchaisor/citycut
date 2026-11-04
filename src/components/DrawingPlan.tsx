@@ -66,6 +66,7 @@ function CasedLine({ d, stroke, paper }: { d: string; stroke: StrokeStyle; paper
 export function DrawingPlan({
   model,
   kind = "site",
+  planRole = "default",
   onScale,
   lineStyle,
   planScale = 1000,
@@ -86,6 +87,7 @@ export function DrawingPlan({
 }: {
   model: CityModel;
   kind?: DrawingKind;
+  planRole?: "default" | "demographics-basemap";
   onScale?: (widthM: number) => void;
   lineStyle?: LineStyles;
   planScale?: number;
@@ -107,6 +109,7 @@ export function DrawingPlan({
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
   const figure = kind === "figure-ground";
+  const basemap = planRole === "demographics-basemap";
   const colourTick = useColourRevision();
   const style = useMemo(() => lineStyle ?? readDrawingStyle(), [lineStyle, colourTick]);
   const plan = useMemo(
@@ -169,6 +172,7 @@ export function DrawingPlan({
   }, [onScale, view.w]);
 
   useEffect(() => {
+    if (basemap) return;
     const svg = svgRef.current;
     if (!svg) return;
     const onWheel = (event: WheelEvent) => {
@@ -193,7 +197,7 @@ export function DrawingPlan({
     };
     svg.addEventListener("wheel", onWheel, { passive: false });
     return () => svg.removeEventListener("wheel", onWheel);
-  }, [model.sideM, view, internalView, onViewportChange]);
+  }, [basemap, model.sideM, view, internalView, onViewportChange]);
 
   const half = model.sideM / 2;
   const framePathD = useMemo(() => {
@@ -349,40 +353,57 @@ export function DrawingPlan({
   return (
     <svg
       ref={svgRef}
-      className={figure ? "plan figure-ground" : "plan"}
+      className={
+        basemap ? "plan demographics-site-basemap" : figure ? "plan figure-ground" : "plan"
+      }
       viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
       role="img"
       aria-label={figure ? "Figure-ground plan" : "Vector site plan"}
       style={{ userSelect: "none", WebkitUserSelect: "none" }}
-      onDoubleClick={() => applyView(fitted)}
-      onMouseDown={(event) => {
-        event.preventDefault();
-        window.getSelection?.()?.removeAllRanges?.();
-      }}
-      onPointerDown={(event) => {
-        event.preventDefault();
-        window.getSelection?.()?.removeAllRanges?.();
-        event.currentTarget.setPointerCapture?.(event.pointerId);
-        drag.current = { px: event.clientX, py: event.clientY, view };
-      }}
-      onPointerMove={(event) => {
-        const start = drag.current;
-        const svg = svgRef.current;
-        if (!start || !svg) return;
-        event.preventDefault();
-        window.getSelection?.()?.removeAllRanges?.();
-        const rect = svg.getBoundingClientRect();
-        const dx = ((event.clientX - start.px) / rect.width) * start.view.w;
-        const dy = ((event.clientY - start.py) / rect.height) * start.view.h;
-        const next = { ...start.view, x: start.view.x - dx, y: start.view.y - dy };
-        if (onViewportChange) onViewportChange(next);
-        else setInternalView(next);
-      }}
-      onPointerUp={(event) => {
-        const start = drag.current;
-        drag.current = null;
-        const svg = svgRef.current;
-        if (!start || !svg || !study || !onSunStudyPick) return;
+      onDoubleClick={basemap ? undefined : () => applyView(fitted)}
+      onMouseDown={
+        basemap
+          ? undefined
+          : (event) => {
+              event.preventDefault();
+              window.getSelection?.()?.removeAllRanges?.();
+            }
+      }
+      onPointerDown={
+        basemap
+          ? undefined
+          : (event) => {
+              event.preventDefault();
+              window.getSelection?.()?.removeAllRanges?.();
+              event.currentTarget.setPointerCapture?.(event.pointerId);
+              drag.current = { px: event.clientX, py: event.clientY, view };
+            }
+      }
+      onPointerMove={
+        basemap
+          ? undefined
+          : (event) => {
+              const start = drag.current;
+              const svg = svgRef.current;
+              if (!start || !svg) return;
+              event.preventDefault();
+              window.getSelection?.()?.removeAllRanges?.();
+              const rect = svg.getBoundingClientRect();
+              const dx = ((event.clientX - start.px) / rect.width) * start.view.w;
+              const dy = ((event.clientY - start.py) / rect.height) * start.view.h;
+              const next = { ...start.view, x: start.view.x - dx, y: start.view.y - dy };
+              if (onViewportChange) onViewportChange(next);
+              else setInternalView(next);
+            }
+      }
+      onPointerUp={
+        basemap
+          ? undefined
+          : (event) => {
+              const start = drag.current;
+              drag.current = null;
+              const svg = svgRef.current;
+              if (!start || !svg || !study || !onSunStudyPick) return;
         if (!isClick(event.clientX - start.px, event.clientY - start.py)) return;
         const ctm = svg.getScreenCTM?.();
         let x: number;
@@ -400,7 +421,8 @@ export function DrawingPlan({
         else setInternalView(start.view);
         const hit = pickBuilding(model.buildings, [x, -y]);
         if (hit) onSunStudyPick(hit.id);
-      }}
+            }
+      }
     >
       <rect x={view.x} y={view.y} width={view.w} height={view.h} fill={canvas} />
       <rect x={-half} y={-half} width={model.sideM} height={model.sideM} fill={canvas} />
@@ -543,11 +565,11 @@ export function DrawingPlan({
               />
             ))}
             {nswItems && nswStyle && <NswPlanLabels items={nswItems} style={nswStyle} sizeM={model.sideM * NSW_PLAN_LABEL_SHARE} />}
-            <path d={framePathD} fill="none" {...screenPenAttrs(style.frame, "miter")} />
-            {heliodon && (
+            {!basemap ? <path d={framePathD} fill="none" {...screenPenAttrs(style.frame, "miter")} /> : null}
+            {!basemap && heliodon && (
               <HeliodonPlanOverlay input={heliodon} planScale={planScale} sideM={model.sideM} sunStudy={study} />
             )}
-            {study && annotations}
+            {!basemap && study && annotations}
             {estLabels.length > 0 && (
               <g className="sun-study-est" aria-hidden="true" fontFamily="Helvetica, Arial, sans-serif">
                 {estLabels.map((label) => (

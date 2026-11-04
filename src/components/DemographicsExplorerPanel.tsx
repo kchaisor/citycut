@@ -45,11 +45,11 @@ function Pyramid({
             <div className="demo-pyramid-bars">
               <div className="demo-pyramid-half is-m">
                 <div className="demo-pyramid-fill" style={{ width: `${mPct}%`, background: accent }} />
-                <div className="demo-pyramid-outline" style={{ width: `${bm}%` }} />
+                <div className="demo-pyramid-outline" style={{ width: `${bm}%`, right: 0 }} />
               </div>
               <div className="demo-pyramid-half is-f">
                 <div className="demo-pyramid-fill" style={{ width: `${fPct}%`, background: accent }} />
-                <div className="demo-pyramid-outline" style={{ width: `${bf}%` }} />
+                <div className="demo-pyramid-outline" style={{ width: `${bf}%`, left: 0 }} />
               </div>
             </div>
           </div>
@@ -165,8 +165,9 @@ function ColumnBlock({
       >
         {pinId.toUpperCase()} {label}
       </header>
-      <p className="demo-residents mono">
-        {stats.population.toLocaleString()} residents · {stats.densityPerHa}/ha
+      <p className="demo-residents-headline">{stats.population.toLocaleString()}</p>
+      <p className="demo-residents-sub mono">
+        residents · {stats.densityPerHa.toLocaleString()}/ha
       </p>
       <Pyramid
         side={pinId}

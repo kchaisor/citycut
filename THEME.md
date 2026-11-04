@@ -127,8 +127,10 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--demographics-map-bg` | `#f5f3ef` | Demographics Explorer 2D plan background. |
 | `--demographics-building-fill` | `#e8e6e1` | Building footprints on the demographics map. |
 | `--demographics-building-stroke` | `#c8c4bc` | Building outlines on the demographics map. |
-| `--demographics-parcel-line` | `#b8b4ac` | Vicmap parcel linework outside tint radii. |
+| `--demographics-parcel-line` | `#d6d6d3` | Vicmap parcel linework outside tint radii. |
 | `--demographics-parcel-outside` | `#ffffff` | Parcel fill outside pin radii. |
+| `--demographics-road-fill` | `#5c5c5c` | Road carriageway fill under the demographics parcel fabric. |
+| `--demographics-path-fill` | `#c4a574` | Footpath fill under the demographics parcel fabric. |
 | `--demographics-cut-frame` | `#1a1a1a` | Cut square outline on the demographics map. |
 | `--demographics-density-0` … `--demographics-density-5` | `#fbf3d5` … `#14505e` | Residents/ha density ramp on tinted parcels. |
 | `--demographics-pin-a` | `#ee5441` | Pin A (coral). |
