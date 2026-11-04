@@ -36,15 +36,16 @@ describe("treeCrownSphereLayout & buildTreeGroup", () => {
     const crownMesh = group!.children[1] as THREE.Mesh;
     const crownPos = crownMesh.geometry.getAttribute("position");
     expect(crownPos.count).toBe(240);
+    expect(crownMesh.geometry.getAttribute("color")).toBeTruthy();
 
-    for (const mesh of [trunkMesh, crownMesh]) {
-      const mat = mesh.material as THREE.MeshStandardMaterial;
-      expect(mat.transparent).toBe(false);
-      expect(mat.opacity).toBe(1);
-      expect(mat.depthWrite).toBe(true);
-    }
+    const trunkMat = trunkMesh.material as THREE.MeshStandardMaterial;
+    expect(trunkMat.transparent).toBe(false);
+    expect(trunkMat.opacity).toBe(1);
+    expect(trunkMat.depthWrite).toBe(true);
     const crownMat = crownMesh.material as THREE.MeshStandardMaterial;
-    expect(crownMat.flatShading).toBe(true);
+    expect(crownMat.transparent).toBe(false);
+    expect(crownMat.opacity).toBe(1);
+    expect(crownMat.vertexColors).toBe(true);
   });
 
   it("scales tall narrow vs wide spreading trees into distinct ellipsoid proportions", () => {
@@ -52,8 +53,7 @@ describe("treeCrownSphereLayout & buildTreeGroup", () => {
       { id: 1, at: [0, 0], height_m: 20, crown_diameter_m: 6, trunk_diameter_m: 0.4, sizeSource: "osm" },
     ])!;
     const tallCrown = tallGroup.children[1] as THREE.Mesh;
-    tallCrown.geometry.computeBoundingBox();
-    const tallBox = tallCrown.geometry.boundingBox!;
+    const tallBox = new THREE.Box3().setFromObject(tallCrown);
     expect(tallBox.max.x - tallBox.min.x).toBeCloseTo(6, 1);
     expect(tallBox.max.z - tallBox.min.z).toBeCloseTo(6, 1);
     expect(tallBox.max.y - tallBox.min.y).toBeCloseTo(14.4, 1);
@@ -63,8 +63,7 @@ describe("treeCrownSphereLayout & buildTreeGroup", () => {
       { id: 2, at: [0, 0], height_m: 10, crown_diameter_m: 14, trunk_diameter_m: 0.5, sizeSource: "osm" },
     ])!;
     const wideCrown = wideGroup.children[1] as THREE.Mesh;
-    wideCrown.geometry.computeBoundingBox();
-    const wideBox = wideCrown.geometry.boundingBox!;
+    const wideBox = new THREE.Box3().setFromObject(wideCrown);
     expect(wideBox.max.x - wideBox.min.x).toBeCloseTo(14, 1);
     expect(wideBox.max.z - wideBox.min.z).toBeCloseTo(14, 1);
     expect(wideBox.max.y - wideBox.min.y).toBeCloseTo(7.2, 1);

@@ -8,6 +8,7 @@ export type QaCameraBridge = {
   getCamera: () => QaCameraPose | null;
   frameHeliodon: () => void;
   projectToScreen: (world: { x: number; y: number; z: number }) => { x: number; y: number } | null;
+  pickBuildingAtClient: (clientX: number, clientY: number) => number | null;
 };
 
 export type QaSiteSnapshot = {
@@ -26,8 +27,45 @@ declare global {
       pickBuildingNearGeoQa?: (lat: number, lon: number) => number | null;
       getSummary?: () => { treeCrowns: number; buildingCount: number; roadCount: number; triangleCount: number };
       selectHeightEditBuilding?: (buildingId: number) => number;
+      openAnchoredLensForBuilding?: (buildingId: number) => number;
+      getAnchoredLensScreenPosition?: () => { x: number; y: number } | null;
+      getAnchoredLensLayout?: () => {
+        width: number;
+        height: number;
+        centerX: number;
+        centerY: number;
+        onScreen: boolean;
+      } | null;
+      findTallBuildingForLensQa?: () => {
+        id: number;
+        clickX: number;
+        clickY: number;
+        height: number;
+        dist: number;
+      } | null;
+      resolveLensBuildingClick?: (buildingId: number) => { clickX: number; clickY: number } | null;
+      readCanvasPixelAtClient?: (clientX: number, clientY: number) => { r: number; g: number; b: number } | null;
+      countHoverAccentYellowNearClient?: (clientX: number, clientY: number, radiusPx?: number) => number;
+      maxHoverYellowScoreNearClient?: (clientX: number, clientY: number, radiusPx?: number) => number;
+      setBuildingHoverHighlightForQa?: (buildingId: number | null) => number | null;
+      getAnchoredLensMode?: () => "hover" | "pinned" | null;
+      getBuildingHoverHighlightId?: () => number | null;
+      isBuildingHoverHighlightVisible?: () => boolean;
+      findLensHoverPairQa?: () => {
+        a: { id: number; clickX: number; clickY: number; height: number; cx: number; cy: number };
+        b: { id: number; clickX: number; clickY: number; height: number; cx: number; cy: number };
+      } | null;
       pickForegroundBuildingForSelectionQa?: () => number | null;
       frameSelectionBuilding?: (buildingId: number, variant?: "through" | "oblique") => boolean;
+      frameHoverHighlightCaptureBuilding?: (buildingId: number, tightness?: number) => boolean;
+      measureHoverCaptureFill?: (buildingId: number) => {
+        fill: number;
+        cx: number;
+        cy: number;
+        clip: { x: number; y: number; width: number; height: number };
+        onScreen: boolean;
+        click: { clickX: number; clickY: number } | null;
+      } | null;
       pickTallTowerForSelectionQa?: () => number | null;
       frameAerialSelectionBuilding?: (buildingId: number) => boolean;
       clearHeightSelection?: () => void;

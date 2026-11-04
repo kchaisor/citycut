@@ -8,6 +8,9 @@ export type QaPerfFrameStats = {
   frameMsP50: number;
   frameMsP95: number;
   frameMsP99: number;
+  drawCallsPeak: number;
+  trianglesPeak: number;
+  linesPeak: number;
 };
 
 export type QaPerfRendererSnapshot = {
@@ -64,6 +67,9 @@ type SampleSession = {
   startedAt: number;
   lastMs: number;
   orbitAngle: number;
+  drawCallsPeak: number;
+  trianglesPeak: number;
+  linesPeak: number;
   resolve: (stats: QaPerfFrameStats) => void;
 };
 
@@ -75,7 +81,12 @@ function percentile(sorted: number[], p: number): number {
   return sorted[idx]!;
 }
 
-function summarize(samples: number[]): QaPerfFrameStats {
+function summarize(
+  samples: number[],
+  drawCallsPeak: number,
+  trianglesPeak: number,
+  linesPeak: number,
+): QaPerfFrameStats {
   const sorted = [...samples].sort((a, b) => a - b);
   const sum = sorted.reduce((acc, value) => acc + value, 0);
   return {
@@ -85,6 +96,9 @@ function summarize(samples: number[]): QaPerfFrameStats {
     frameMsP50: percentile(sorted, 50),
     frameMsP95: percentile(sorted, 95),
     frameMsP99: percentile(sorted, 99),
+    drawCallsPeak,
+    trianglesPeak,
+    linesPeak,
   };
 }
 
@@ -148,7 +162,16 @@ export function rendererSnapshotFromState(state: RootState): QaPerfRendererSnaps
 }
 
 export function beginPerfSample(opts: QaPerfSampleOpts): Promise<QaPerfFrameStats> {
-  if (activeSample) activeSample.resolve(summarize(activeSample.deltas));
+  if (activeSample) {
+    activeSample.resolve(
+      summarize(
+        activeSample.deltas,
+        activeSample.drawCallsPeak,
+        activeSample.trianglesPeak,
+        activeSample.linesPeak,
+      ),
+    );
+  }
   const now = performance.now();
   return new Promise((resolve) => {
     activeSample = {
@@ -157,6 +180,9 @@ export function beginPerfSample(opts: QaPerfSampleOpts): Promise<QaPerfFrameStat
       startedAt: now,
       lastMs: now,
       orbitAngle: 0,
+      drawCallsPeak: 0,
+      trianglesPeak: 0,
+      linesPeak: 0,
       resolve,
     };
   });
@@ -167,6 +193,9 @@ export function tickPerfSample(state: RootState, nowMs: number): void {
   if (!session) return;
   session.deltas.push(nowMs - session.lastMs);
   session.lastMs = nowMs;
+  session.drawCallsPeak = Math.max(session.drawCallsPeak, state.gl.info.render.calls);
+  session.trianglesPeak = Math.max(session.trianglesPeak, state.gl.info.render.triangles);
+  session.linesPeak = Math.max(session.linesPeak, state.gl.info.render.lines);
   if (session.opts.orbit && typeof window !== "undefined") {
     const basePose = window.__citycutQa?.getCamera?.();
     if (basePose && window.__citycutQa?.setCamera) {
@@ -189,7 +218,12 @@ export function tickPerfSample(state: RootState, nowMs: number): void {
   applyQaPerfOverrides(state);
   state.invalidate();
   if (nowMs - session.startedAt >= session.opts.durationMs) {
-    const stats = summarize(session.deltas);
+    const stats = summarize(
+      session.deltas,
+      session.drawCallsPeak,
+      session.trianglesPeak,
+      session.linesPeak,
+    );
     activeSample = null;
     session.resolve(stats);
     if (typeof window !== "undefined") window.__citycutPerfLastSample = stats;

@@ -65,6 +65,11 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--height-manual` | Manual height edits in that bar and key. | `#D4A017` |
 | `--sidebar-rail-w` | Width of the icon rail. The model view starts to its right when the sidebar is collapsed. | `56px` |
 | `--sidebar-panel-w` | Width of the sidebar panel next to the rail. | `320px` |
+| `--anchored-lens-bg` | Fill of the 3D building lens card anchored to a roof. | `#1A1916` |
+| `--anchored-lens-text` | Text on the anchored lens card. | `#FFFCF8` |
+| `--anchored-lens-muted` | Metric labels on the anchored lens card. | `#8F897E` |
+| `--anchored-lens-edge` | 1 px outline on the anchored lens card (accent yellow). | `var(--accent)` |
+| `--building-hover-accent` | Accent mixed over a building fill for 3D hover highlight (option B). | `var(--accent)` |
 
 `var(--background)` means “use whatever `--background` is set to”. That is why one edit recolours the page, the model, and the drawing together.
 
@@ -128,7 +133,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--contour-label` | `#6A6A6A` | Elevation numbers on the site plan, on screen and in the Illustrator file. |
 | `--building-uniform` | `#FFFFFF` | Buildings when colour-by-use is off, that legend swatch, and the Rhino Buildings layer. |
 | `--building-manual` | `#D4A017` | 3D viewport tint for buildings with a manual height override when “Show manual edits” is on. |
-| `--site-building` | `#F2C230` | Buildings on the searched property: site plan, 3D, Rhino `Buildings::Site`, and Illustrator Site buildings layer. Manual-height amber and uniform colour apply to non-site buildings only; site buildings stay yellow unless manual-height tint is on for that building (manual wins in 3D). |
+| `--site-building` | `#FFFFFF` | Buildings on the searched property: site plan, 3D, Rhino `Buildings::Site`, and Illustrator Site buildings layer. Same fill as `--building-uniform` in the default white palette; manual-height amber still wins in 3D when “Show manual edits” is on. |
 | `--imported-massing` | `#FFFFFF` | Default colour of imported .3dm massing in 3D, Drawing (site plan, figure-ground, exploded axo), .ai and .3dm. Each imported model can override it with the Colour picker in Import (stored with the model). |
 | `--switch-knob` | `#000000` | Knob of every sidebar switch, on and off, so an off switch reads on its pale `--control-off` track. On = `--accent` track, knob right. |
 | `--site-building-edge` | `#3D3010` | Darker outline on site-building massing in the 3D viewport so they read against retail (`--use-retail`) and civic (`--use-civic`) yellows. |
@@ -152,15 +157,13 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--path-fill` | `#D2B48C` | Unioned footpath on the site plan and the figure-ground, on screen and in the Illustrator file. |
 | `--road-arterial` | `#3a3a3a` | Arterial ribbons in the 3D view and the 3D-view Illustrator file, and the Rhino Roads layer. |
 | `--road-local` | `#4a4a4a` | Local-street ribbons in the 3D view and the 3D-view Illustrator file. |
-| `--road-path` | `#5c5c5c` | Path ribbons in the 3D view and the 3D-view Illustrator file. |
+| `--road-path` | `#D2B48C` | Path ribbons in the 3D view and the 3D-view Illustrator file (same light tan as `--path-fill`). |
 | `--green-fill` | `#b7d39a` | Parks and other green on the site plan, on screen and in the Illustrator file. |
 | `--green-3d` | `#7f9a62` | Green mesh in the 3D view, the 3D-view Illustrator green, and the Rhino Green layer. |
 | `--water-fill` | `#9ec9d1` | Water on the site plan, on screen and in the Illustrator file. |
 | `--water-3d` | `#8ebfc8` | Water mesh in the 3D view, the 3D-view Illustrator water, and the Rhino Water layer. |
 | `--water-sunpath` | `#4A9FE8` | Water in the 3D viewport while the sun path diagram is on. |
 | `--sun-study-surface` | `#FFFFFF` | Ground, roads, and parks in the 3D viewport while the sun path is on. |
-| `--card-white` | `#FAFAF8` | Building and surface massing in white-card 3D display mode. |
-| `--card-ground` | `#F2F2F0` | Ground and terrain in white-card 3D display mode. |
 | `--nsw-road-corridor` | `#E9E5DC` | NSW mode: cadastral road corridor fill under the carriageway on the site plan. |
 | `--nsw-lot-line` | `#5E5E5E` | NSW mode: cadastral lot boundaries on the site plan. |
 | `--nsw-easement` | `#C0392B` | NSW mode: easement outline and hatch on the site plan. |
@@ -180,7 +183,12 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--nsw-zone-ru` | `#E8DCB5` | NSW mode: RU rural zones on the site plan. |
 | `--nsw-zone-other` | `#D9D4E8` | NSW mode: precinct and other zones (for example SEPP precinct codes) on the site plan. |
 | `--tree-fill` | `#6ea35a` | Tree-crown fill on the site plan, on screen and in the Illustrator file. |
-| `--tree-crown` | `#5d8a45` | Tree-crown fill on the 3D-view Illustrator sheet. |
+| `--tree-crown` | `#478C33` | Default tree-crown fill; legacy alias for variant B. |
+| `--tree-crown-a` | `#3f8230` | 3D viewport tree crown variant (deterministic hash). |
+| `--tree-crown-b` | `#478c33` | 3D viewport tree crown variant (deterministic hash). |
+| `--tree-crown-c` | `#50963a` | 3D viewport tree crown variant (deterministic hash). |
+| `--tree-crown-d` | `#58a042` | 3D viewport tree crown variant (deterministic hash). |
+| `--building-selection-fill` | `#fff500` | Solid yellow fill on a clicked building in the 3D viewport (accent family). |
 | `--tree-crown-edge` | `#2c4a28` | Outline around that 3D-view crown. |
 | `--tree-trunk` | `#3e3428` | Trunk on the 3D-view Illustrator sheet. |
 | `--tree-layer` | `#3e8a48` | Rhino Trees layer. The 3D crowns themselves are the shipped tree models. |

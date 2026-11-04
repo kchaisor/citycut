@@ -142,9 +142,18 @@ export function refreshSceneSurfaceColors(root: THREE.Object3D): void {
           applyMatteFinish(mat);
         });
       } else if (mesh.name === "TreeCrowns" || (mesh.material as THREE.Material)?.name === "TreeCrowns") {
-        forEachStandardMaterial(mesh, (mat) => {
-          mat.color.setStyle(treeCrown);
-        });
+        if (mesh.geometry?.getAttribute("color")) {
+          forEachStandardMaterial(mesh, (mat) => {
+            mat.color.setHex(0xffffff);
+            mat.vertexColors = true;
+            applyMatteFinish(mat);
+          });
+        } else {
+          forEachStandardMaterial(mesh, (mat) => {
+            mat.color.setStyle(treeCrown);
+            applyMatteFinish(mat);
+          });
+        }
       }
       return;
     }

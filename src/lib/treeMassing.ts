@@ -3,6 +3,7 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { getColour } from "./colours";
 import { matteStandardMaterial } from "./matteMaterial";
 import type { TreeFeat } from "../types";
+import { treeCrownColourForId } from "./treeCrownVariants";
 
 export function treeCrownSphereLayout(height_m: number, crown_diameter_m: number): {
   centerY: number;
@@ -77,21 +78,80 @@ function introTreeBucketIndex(tree: TreeFeat, sideM = 500, totalBuckets = 16): n
   return Math.floor(norm * totalBuckets);
 }
 
+function paintSolidVertexColors(geometry: THREE.BufferGeometry, fill: string) {
+  const tint = new THREE.Color().setStyle(fill);
+  const position = geometry.getAttribute("position");
+  if (!position) return;
+  const colors = new Float32Array(position.count * 3);
+  for (let index = 0; index < position.count; index++) {
+    colors[index * 3] = tint.r;
+    colors[index * 3 + 1] = tint.g;
+    colors[index * 3 + 2] = tint.b;
+  }
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+}
+
+function createTreeMaterials() {
+  const trunkMaterial = matteStandardMaterial({ color: getColour("--tree-trunk") });
+  trunkMaterial.name = "TreeTrunks";
+  const crownMaterial = matteStandardMaterial({ color: 0xffffff, flatShading: true });
+  crownMaterial.name = "TreeCrowns";
+  crownMaterial.vertexColors = true;
+  crownMaterial.flatShading = true;
+  crownMaterial.needsUpdate = true;
+  return { trunkMaterial, crownMaterial };
+}
+
+function crownGeometryForTree(
+  tree: TreeFeat,
+  elevationAt: (east: number, north: number) => number,
+  crownBase: THREE.BufferGeometry,
+  matrix: THREE.Matrix4,
+  position: THREE.Vector3,
+  quaternion: THREE.Quaternion,
+  scale: THREE.Vector3,
+): THREE.BufferGeometry {
+  const ground = elevationAt(tree.at[0], tree.at[1]);
+  const layout = treeCrownSphereLayout(tree.height_m, tree.crown_diameter_m);
+  position.set(tree.at[0], ground + layout.centerY, -tree.at[1]);
+  quaternion.identity();
+  scale.set(layout.scaleX, layout.scaleY, layout.scaleZ);
+  matrix.compose(position, quaternion, scale);
+  const crown = crownBase.clone();
+  crown.applyMatrix4(matrix);
+  paintSolidVertexColors(crown, treeCrownColourForId(tree.id));
+  return crown;
+}
+
+function trunkGeometryForTree(
+  tree: TreeFeat,
+  elevationAt: (east: number, north: number) => number,
+  trunkBase: THREE.BufferGeometry,
+  matrix: THREE.Matrix4,
+  position: THREE.Vector3,
+  quaternion: THREE.Quaternion,
+  scale: THREE.Vector3,
+): THREE.BufferGeometry {
+  const ground = elevationAt(tree.at[0], tree.at[1]);
+  const layout = treeCrownSphereLayout(tree.height_m, tree.crown_diameter_m);
+  const trunkRadius = Math.max(tree.trunk_diameter_m / 2, 0.04);
+  const trunkHeight = Math.max(0.4, Math.min(tree.height_m, layout.centerY + layout.radiusY * 0.35));
+  position.set(tree.at[0], ground, -tree.at[1]);
+  quaternion.identity();
+  scale.set(trunkRadius, trunkHeight, trunkRadius);
+  matrix.compose(position, quaternion, scale);
+  const trunk = trunkBase.clone();
+  trunk.applyMatrix4(matrix);
+  return trunk;
+}
+
 export function buildTreeGroup(
   trees: TreeFeat[],
   elevationAt: (east: number, north: number) => number = () => 0,
   options?: TreeGroupBuildOptions,
 ): THREE.Group | null {
   if (trees.length === 0) return null;
-  const trunkColor = getColour("--tree-trunk");
-  const crownColor = getColour("--tree-crown");
-  const trunkMaterial = matteStandardMaterial({ color: trunkColor });
-  trunkMaterial.name = "TreeTrunks";
-  const crownMaterial = matteStandardMaterial({ color: crownColor, flatShading: true });
-  crownMaterial.name = "TreeCrowns";
-  crownMaterial.flatShading = true;
-  crownMaterial.needsUpdate = true;
-
+  const { trunkMaterial, crownMaterial } = createTreeMaterials();
   const trunkBase = unitTrunkGeometry();
   const crownBase = unitCrownGeometry();
   const matrix = new THREE.Matrix4();
@@ -105,36 +165,15 @@ export function buildTreeGroup(
     const bucketMinGround = new Map<number, number>();
     for (const tree of trees) {
       const ground = elevationAt(tree.at[0], tree.at[1]);
-      const layout = treeCrownSphereLayout(tree.height_m, tree.crown_diameter_m);
-      const trunkRadius = Math.max(tree.trunk_diameter_m / 2, 0.04);
-      const trunkHeight = Math.max(0.4, Math.min(tree.height_m, layout.centerY + layout.radiusY * 0.35));
       const b = introTreeBucketIndex(tree, options.sideM ?? 500, 16);
-
-      position.set(tree.at[0], ground, -tree.at[1]);
-      quaternion.identity();
-      scale.set(trunkRadius, trunkHeight, trunkRadius);
-      matrix.compose(position, quaternion, scale);
-      const trunk = trunkBase.clone();
-      trunk.applyMatrix4(matrix);
-
-      position.set(tree.at[0], ground + layout.centerY, -tree.at[1]);
-      scale.set(layout.scaleX, layout.scaleY, layout.scaleZ);
-      matrix.compose(position, quaternion, scale);
-      const crown = crownBase.clone();
-      crown.applyMatrix4(matrix);
-
-      const tList = bucketTrunks.get(b);
-      if (tList) tList.push(trunk);
-      else bucketTrunks.set(b, [trunk]);
-
-      const cList = bucketCrowns.get(b);
-      if (cList) cList.push(crown);
-      else bucketCrowns.set(b, [crown]);
-
+      const trunks = bucketTrunks.get(b) ?? [];
+      trunks.push(trunkGeometryForTree(tree, elevationAt, trunkBase, matrix, position, quaternion, scale));
+      bucketTrunks.set(b, trunks);
+      const crowns = bucketCrowns.get(b) ?? [];
+      crowns.push(crownGeometryForTree(tree, elevationAt, crownBase, matrix, position, quaternion, scale));
+      bucketCrowns.set(b, crowns);
       const prevGround = bucketMinGround.get(b);
-      if (prevGround === undefined || ground < prevGround) {
-        bucketMinGround.set(b, ground);
-      }
+      if (prevGround === undefined || ground < prevGround) bucketMinGround.set(b, ground);
     }
     trunkBase.dispose();
     crownBase.dispose();
@@ -155,11 +194,15 @@ export function buildTreeGroup(
       sub.userData.introBaseY = bucketMinGround.get(b) ?? 0;
       if (mergedTrunks) {
         const tmMesh = new THREE.Mesh(mergedTrunks, trunkMaterial);
+        tmMesh.name = "TreeTrunks";
+        tmMesh.userData.exportLayer = "Trees";
         sub.add(tmMesh);
       }
       if (mergedCrowns) {
         mergedCrowns.computeVertexNormals();
         const cmMesh = new THREE.Mesh(mergedCrowns, crownMaterial);
+        cmMesh.name = "TreeCrowns";
+        cmMesh.userData.exportLayer = "Trees";
         sub.add(cmMesh);
       }
       if (sub.children.length > 0) group.add(sub);
@@ -170,25 +213,8 @@ export function buildTreeGroup(
   const trunkGeometries: THREE.BufferGeometry[] = [];
   const crownGeometries: THREE.BufferGeometry[] = [];
   for (const tree of trees) {
-    const ground = elevationAt(tree.at[0], tree.at[1]);
-    const layout = treeCrownSphereLayout(tree.height_m, tree.crown_diameter_m);
-    const trunkRadius = Math.max(tree.trunk_diameter_m / 2, 0.04);
-    const trunkHeight = Math.max(0.4, Math.min(tree.height_m, layout.centerY + layout.radiusY * 0.35));
-
-    position.set(tree.at[0], ground, -tree.at[1]);
-    quaternion.identity();
-    scale.set(trunkRadius, trunkHeight, trunkRadius);
-    matrix.compose(position, quaternion, scale);
-    const trunk = trunkBase.clone();
-    trunk.applyMatrix4(matrix);
-    trunkGeometries.push(trunk);
-
-    position.set(tree.at[0], ground + layout.centerY, -tree.at[1]);
-    scale.set(layout.scaleX, layout.scaleY, layout.scaleZ);
-    matrix.compose(position, quaternion, scale);
-    const crown = crownBase.clone();
-    crown.applyMatrix4(matrix);
-    crownGeometries.push(crown);
+    trunkGeometries.push(trunkGeometryForTree(tree, elevationAt, trunkBase, matrix, position, quaternion, scale));
+    crownGeometries.push(crownGeometryForTree(tree, elevationAt, crownBase, matrix, position, quaternion, scale));
   }
   trunkBase.dispose();
   crownBase.dispose();
@@ -201,12 +227,34 @@ export function buildTreeGroup(
   crownGeometries.forEach((geometry) => geometry.dispose());
   if (mergedTrunks) {
     const tmMesh = new THREE.Mesh(mergedTrunks, trunkMaterial);
+    tmMesh.name = "TreeTrunks";
+    tmMesh.userData.exportLayer = "Trees";
     group.add(tmMesh);
   }
   if (mergedCrowns) {
     mergedCrowns.computeVertexNormals();
     const cmMesh = new THREE.Mesh(mergedCrowns, crownMaterial);
+    cmMesh.name = "TreeCrowns";
+    cmMesh.userData.exportLayer = "Trees";
     group.add(cmMesh);
   }
   return group.children.length > 0 ? group : null;
+}
+
+export function countTreeCrownColourVariants(root: THREE.Object3D): number {
+  const seen = new Set<string>();
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || mesh.name !== "TreeCrowns") return;
+    const attr = mesh.geometry?.getAttribute("color");
+    if (!attr) return;
+    const step = Math.max(1, Math.floor(attr.count / 512));
+    for (let index = 0; index < attr.count; index += step) {
+      const r = Math.round(attr.getX(index) * 255);
+      const g = Math.round(attr.getY(index) * 255);
+      const b = Math.round(attr.getZ(index) * 255);
+      seen.add(`${r},${g},${b}`);
+    }
+  });
+  return seen.size;
 }

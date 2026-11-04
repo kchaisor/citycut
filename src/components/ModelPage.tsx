@@ -94,8 +94,20 @@ import {
 } from "../lib/sidebarSections";
 import { buildDataSources, countLoaded, dataSourceStatusWord } from "../lib/dataSources";
 import { OSM_TREES_ODBL_CREDIT } from "../lib/treesPrebake";
-import { countTreeCrowns } from "../lib/treeMassing";
+import { buildTreeGroup, countTreeCrowns, countTreeCrownColourVariants } from "../lib/treeMassing";
 import { capturePresetFromSearch } from "../lib/captureQuery";
+import {
+  buildingColourStyleToFlags,
+  DEFAULT_BUILDING_COLOUR_STYLE,
+  flagsToBuildingColourStyle,
+  readStoredBuildingColourStyle,
+  writeStoredBuildingColourStyle,
+} from "../lib/buildingColourStyle";
+import {
+  countAccentYellowNearClient,
+  maxYellowScoreNearClient,
+  readCanvasPixelAtClient,
+} from "../lib/buildingHoverHighlightQa";
 import { qaHideHeightPopoverFromSearch, qaModeFromSearch } from "../lib/qaCameraBridge";
 import {
   resolveView,
@@ -132,7 +144,10 @@ import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import { COM_TREES_CREDIT, COM_TREES_DATASET_URL } from "../lib/comTreesCredit";
 import { openRing, toLocal } from "../lib/geo";
-import { pointInPolygon } from "../lib/useCascade";
+import { interiorPoint, pointInPolygon } from "../lib/useCascade";
+import { sunHoursGrid } from "../lib/sunHours";
+import type { AnchoredLensActions, AnchoredLensMode } from "./AnchoredLens";
+import { resolveAnchoredLensView } from "../lib/anchoredLensDisplay";
 import type { BuildingUse, CityModel } from "../types";
 import { BuildingHeightPopover, HeightOverridePanel, HiddenBuildingsPanel } from "./BuildingHeightPopover";
 import {
@@ -281,10 +296,11 @@ export function ModelPage({
   const [exportError, setExportError] = useState<string | null>(null);
   const [busy, setBusy] = useState<ExportBusy>(null);
   const [sunStudyProgress, setSunStudyProgress] = useState<string | null>(null);
-  const [colourByUse, setColourByUse] = useState(
-    () => !capturePresetFromSearch(window.location.search).uniformBuildings,
+  const initialBuildingColour = buildingColourStyleToFlags(
+    readStoredBuildingColourStyle(window.localStorage),
   );
-  const [showSource, setShowSource] = useState(false);
+  const [colourByUse, setColourByUse] = useState(initialBuildingColour.colourByUse);
+  const [showSource, setShowSource] = useState(initialBuildingColour.showSource);
   const [buildingsAsMesh, setBuildingsAsMesh] = useState(false);
   const [comFootprints, setComFootprints] = useState<ComBuildingFootprint[]>(
     () => model.comFootprintPrefetch ?? [],
@@ -307,6 +323,9 @@ export function ModelPage({
     const nextDisplay = view3dDisplayForModelOpen(window.localStorage);
     setView3dDisplay(nextDisplay);
     writeStoredView3dDisplay(window.localStorage, nextDisplay);
+    setShowSource(false);
+    setColourByUse(false);
+    writeStoredBuildingColourStyle(window.localStorage, DEFAULT_BUILDING_COLOUR_STYLE);
     if (typeof window !== "undefined" && window.__citycutAwaitIntroStart) {
       setView((prev) => {
         const next: ViewMemory = { ...prev, projection: "perspective", freeRotate: false };
@@ -571,13 +590,22 @@ export function ModelPage({
     readStoredHiddenBuildings(window.localStorage),
   );
   const [hideSelection, setHideSelection] = useState<number[]>([]);
-  const [heightPick, setHeightPick] = useState<{ buildingId: number; clientX: number; clientY: number } | null>(
-    null,
-  );
+  const [heightPick, setHeightPick] = useState<{
+    buildingId: number;
+    clientX: number;
+    clientY: number;
+    pinned: boolean;
+  } | null>(null);
 
   const massing = useImportedMassing(model);
 
-  const qaSummaryRef = useRef({ treeCrowns: 0, buildingCount: 0, roadCount: 0, triangleCount: 0 });
+  const qaSummaryRef = useRef({
+    treeCrowns: 0,
+    treeCrownVariantCount: 0,
+    buildingCount: 0,
+    roadCount: 0,
+    triangleCount: 0,
+  });
   const qaDisplayBuildingsRef = useRef(model.buildings);
   const heightPerfRef = useRef<{ modelOpenMs: number; firstRenderMs: number | null; comAppliedMs: number | null }>(
     { modelOpenMs: performance.now(), firstRenderMs: null, comAppliedMs: null },
@@ -602,9 +630,20 @@ export function ModelPage({
       }
     });
     const treeCrowns = countTreeCrowns(group);
+    let treeCrownVariantCount = 0;
+    if (model.trees.length > 0) {
+      const treeGroup = buildTreeGroup(model.trees);
+      if (treeGroup) {
+        const probe = new THREE.Group();
+        probe.add(treeGroup);
+        treeCrownVariantCount = countTreeCrownColourVariants(probe);
+        disposeObject(probe);
+      }
+    }
     disposeObject(group);
     qaSummaryRef.current = {
       treeCrowns,
+      treeCrownVariantCount,
       buildingCount: model.buildings.length,
       roadCount: model.roads.length,
       triangleCount: Math.round(triangleCount),
@@ -635,11 +674,164 @@ export function ModelPage({
         });
       },
       selectHeightEditBuilding(buildingId: number) {
-        setHeightPick({ buildingId, clientX: 640, clientY: 400 });
+        setHeightPick({ buildingId, clientX: 640, clientY: 400, pinned: true });
         return buildingId;
       },
+      openAnchoredLensForBuilding(buildingId: number) {
+        setHeightPick({ buildingId, clientX: 640, clientY: 400, pinned: true });
+        return buildingId;
+      },
+      getAnchoredLensMode(): AnchoredLensMode | null {
+        const card = document.querySelector("[data-anchored-lens=\"open\"]");
+        const mode = card?.getAttribute("data-anchored-lens-mode");
+        return mode === "pinned" ? mode : null;
+      },
+      getAnchoredLensScreenPosition() {
+        const layout = window.__citycutQaModel?.getAnchoredLensLayout?.();
+        if (!layout) return null;
+        return { x: layout.centerX, y: layout.centerY };
+      },
+      getAnchoredLensLayout() {
+        const card = document.querySelector("[data-anchored-lens=\"open\"]");
+        if (!card) return null;
+        const rect = card.getBoundingClientRect();
+        const width = Math.round(rect.width);
+        const height = Math.round(rect.height);
+        const centerX = Math.round(rect.left + rect.width / 2);
+        const centerY = Math.round(rect.top + rect.height / 2);
+        const onScreen =
+          width >= 220 &&
+          height >= 96 &&
+          rect.bottom > 72 &&
+          rect.top < window.innerHeight - 48 &&
+          rect.left > 32 &&
+          rect.right < window.innerWidth - 8;
+        return { width, height, centerX, centerY, onScreen };
+      },
+      resolveLensBuildingClick(buildingId: number) {
+        const canvas = document.querySelector(".model canvas");
+        if (!canvas) return null;
+        const canvasRect = canvas.getBoundingClientRect();
+        const pickAt = window.__citycutQa?.pickBuildingAtClient;
+        const clip = window.__citycutQaModel?.selectionScreenClip?.(buildingId, 12);
+        if (!clip || clip.width < 12 || clip.height < 12) return null;
+        const steps = 6;
+        for (let row = 0; row < steps; row++) {
+          for (let col = 0; col < steps; col++) {
+            const clickX = Math.round(clip.x + (clip.width * (col + 0.5)) / steps);
+            const clickY = Math.round(clip.y + (clip.height * (row + 0.5)) / steps);
+            if (
+              clickX < canvasRect.left + 40 ||
+              clickX > canvasRect.right - 40 ||
+              clickY < canvasRect.top + 40 ||
+              clickY > canvasRect.bottom - 40
+            ) {
+              continue;
+            }
+            if (pickAt) {
+              const picked = pickAt(clickX, clickY);
+              if (picked != null && picked !== buildingId) continue;
+            }
+            const top = document.elementFromPoint(clickX, clickY);
+            if (!(top instanceof HTMLCanvasElement)) continue;
+            return { clickX, clickY };
+          }
+        }
+        return null;
+      },
+      readCanvasPixelAtClient(clientX: number, clientY: number) {
+        const canvas = document.querySelector(".model canvas");
+        if (!(canvas instanceof HTMLCanvasElement)) return null;
+        return readCanvasPixelAtClient(canvas, clientX, clientY);
+      },
+      countHoverAccentYellowNearClient(clientX: number, clientY: number, radiusPx = 28) {
+        const canvas = document.querySelector(".model canvas");
+        if (!(canvas instanceof HTMLCanvasElement)) return 0;
+        return countAccentYellowNearClient(canvas, clientX, clientY, radiusPx);
+      },
+      maxHoverYellowScoreNearClient(clientX: number, clientY: number, radiusPx = 28) {
+        const canvas = document.querySelector(".model canvas");
+        if (!(canvas instanceof HTMLCanvasElement)) return 0;
+        return maxYellowScoreNearClient(canvas, clientX, clientY, radiusPx);
+      },
+      setBuildingHoverHighlightForQa(buildingId: number | null) {
+        window.dispatchEvent(
+          new CustomEvent("citycut:qa-set-hover-highlight", { detail: { buildingId } }),
+        );
+        const canvas = document.querySelector(".model canvas");
+        if (canvas instanceof HTMLCanvasElement) {
+          canvas.dataset.buildingHoverHighlightId = buildingId != null ? String(buildingId) : "";
+        }
+        return buildingId;
+      },
+      findTallBuildingForLensQa() {
+        setHeightPick(null);
+        setHideSelection([]);
+        const canvas = document.querySelector(".model canvas");
+        if (!canvas) return null;
+        const canvasRect = canvas.getBoundingClientRect();
+        type Candidate = { id: number; clickX: number; clickY: number; height: number; dist: number };
+        const ranked: Omit<Candidate, "clickX" | "clickY">[] = [];
+        for (const building of qaDisplayBuildingsRef.current) {
+          if (building.height < 22 || building.use === "outbuilding") continue;
+          const clip = window.__citycutQaModel?.selectionScreenClip?.(building.id, 12);
+          if (!clip || clip.width < 12 || clip.height < 12) continue;
+          if (
+            clip.x + clip.width < canvasRect.left + 48 ||
+            clip.x > canvasRect.right - 48 ||
+            clip.y + clip.height < canvasRect.top + 48 ||
+            clip.y > canvasRect.bottom - 48
+          ) {
+            continue;
+          }
+          const { east, north } = buildingCentroid(building);
+          ranked.push({
+            id: building.id,
+            height: building.height,
+            dist: Math.hypot(east, north),
+          });
+        }
+        ranked.sort((a, b) => b.height - a.height || a.dist - b.dist);
+        for (const entry of ranked) {
+          const click = window.__citycutQaModel?.resolveLensBuildingClick?.(entry.id);
+          if (!click) continue;
+          return { ...entry, ...click };
+        }
+        return null;
+      },
+      findLensHoverPairQa() {
+        const canvas = document.querySelector(".model canvas");
+        if (!canvas) return null;
+        type Row = { id: number; clickX: number; clickY: number; height: number; cx: number; cy: number };
+        const rows: Row[] = [];
+        for (const building of qaDisplayBuildingsRef.current) {
+          if (building.height < 14 || building.use === "outbuilding") continue;
+          const click = window.__citycutQaModel?.resolveLensBuildingClick?.(building.id);
+          if (!click) continue;
+          const clip = window.__citycutQaModel?.selectionScreenClip?.(building.id, 8);
+          if (!clip) continue;
+          rows.push({
+            id: building.id,
+            ...click,
+            height: building.height,
+            cx: clip.x + clip.width / 2,
+            cy: clip.y + clip.height / 2,
+          });
+        }
+        rows.sort((a, b) => b.height - a.height);
+        for (let i = 0; i < rows.length; i++) {
+          for (let j = i + 1; j < rows.length; j++) {
+            const a = rows[i]!;
+            const b = rows[j]!;
+            if (Math.hypot(a.cx - b.cx, a.cy - b.cy) > 140) continue;
+            if (Math.hypot(a.clickX - b.clickX, a.clickY - b.clickY) < 24) continue;
+            return { a, b };
+          }
+        }
+        return null;
+      },
       pickForegroundBuildingForSelectionQa() {
-        const candidates = model.buildings
+        const candidates = qaDisplayBuildingsRef.current
           .filter(
             (building) =>
               building.height >= 10 &&
@@ -663,14 +855,14 @@ export function ModelPage({
           );
         const pick = candidates[0]?.building;
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 640, clientY: 400 });
+        setHeightPick({ buildingId: pick.id, clientX: 640, clientY: 400, pinned: true });
         return pick.id;
       },
       clearHeightSelection() {
         setHeightPick(null);
       },
       pickTallTowerForSelectionQa() {
-        const candidates = model.buildings
+        const candidates = qaDisplayBuildingsRef.current
           .filter((building) => building.height >= 40 && building.use !== "outbuilding")
           .map((building) => {
             const { east, north } = buildingCentroid(building);
@@ -680,7 +872,7 @@ export function ModelPage({
           .sort((a, b) => b.building.height - a.building.height || a.dist - b.dist);
         const pick = candidates[0]?.building;
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 24, clientY: 72 });
+        setHeightPick({ buildingId: pick.id, clientX: 24, clientY: 72, pinned: true });
         return pick.id;
       },
       frameAerialSelectionBuilding(buildingId: number) {
@@ -712,6 +904,46 @@ export function ModelPage({
           });
         }
         return true;
+      },
+      frameHoverHighlightCaptureBuilding(buildingId: number, tightness = 1) {
+        const row = window.__citycutQaModel?.listBuildings?.().find((item) => item.id === buildingId);
+        if (!row || !window.__citycutQa?.setCamera) return false;
+        const y = row.height * 0.45;
+        const z = -row.north;
+        const t = Math.max(0.22, Math.min(1.2, tightness));
+        window.__citycutQa.setCamera({
+          eye: { x: row.east - 95 * t, y: y + 58 * t, z: z + 105 * t },
+          target: { x: row.east + 8, y: y, z: z },
+        });
+        return true;
+      },
+      measureHoverCaptureFill(buildingId: number) {
+        const canvas = document.querySelector(".model canvas");
+        if (!(canvas instanceof HTMLCanvasElement)) return null;
+        const canvasRect = canvas.getBoundingClientRect();
+        const clip = window.__citycutQaModel?.selectionScreenClip?.(buildingId, 8);
+        if (!clip || clip.width < 24 || clip.height < 24) return null;
+        const cx = clip.x + clip.width / 2;
+        const cy = clip.y + clip.height / 2;
+        const canvasArea = canvasRect.width * canvasRect.height;
+        const fill = (clip.width * clip.height) / Math.max(1, canvasArea);
+        const onScreen =
+          clip.x + clip.width > canvasRect.left + 12 &&
+          clip.x < canvasRect.right - 12 &&
+          clip.y + clip.height > canvasRect.top + 12 &&
+          clip.y < canvasRect.bottom - 12 &&
+          cx >= canvasRect.left + 48 &&
+          cx <= canvasRect.right - 48 &&
+          cy >= canvasRect.top + 48 &&
+          cy <= canvasRect.bottom - 48;
+        return {
+          fill,
+          cx,
+          cy,
+          clip,
+          onScreen,
+          click: window.__citycutQaModel?.resolveLensBuildingClick?.(buildingId) ?? null,
+        };
       },
       selectionScreenClip(buildingId: number, padPx = 48) {
         const building = qaDisplayBuildingsRef.current.find((item) => item.id === buildingId);
@@ -759,7 +991,7 @@ export function ModelPage({
           .sort((a, b) => b.height - a.height);
         const pick = midrise[0] ?? fallback[0];
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 72, clientY: 88 });
+        setHeightPick({ buildingId: pick.id, clientX: 72, clientY: 88, pinned: true });
         return pick.id;
       },
       pickBuildingNearGeoQa(lat: number, lon: number) {
@@ -777,7 +1009,7 @@ export function ModelPage({
           }
         }
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 640, clientY: 420 });
+        setHeightPick({ buildingId: pick.id, clientX: 640, clientY: 420, pinned: true });
         return pick.id;
       },
       exportPlanSnapshot: () => model,
@@ -786,7 +1018,7 @@ export function ModelPage({
         const pick =
           rows.find((b) => b.zoneDefaultNote?.includes("estimate, no measured height")) ?? rows[0];
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 480, clientY: 420 });
+        setHeightPick({ buildingId: pick.id, clientX: 480, clientY: 420, pinned: true });
         return { id: pick.id, height: pick.height, note: pick.zoneDefaultNote ?? "" };
       },
       getHeightPerfTimings: () => ({ ...heightPerfRef.current }),
@@ -1066,6 +1298,68 @@ export function ModelPage({
       ? null
       : (displayModel.buildings.find((building) => building.id === heightPick.buildingId) ?? null);
 
+  const lensPinnedBuilding =
+    heightPick?.pinned && heightPick
+      ? (displayModel.buildings.find((building) => building.id === heightPick.buildingId) ?? null)
+      : null;
+  const anchoredLensView = resolveAnchoredLensView({
+    tab,
+    pinnedBuildingId: lensPinnedBuilding?.id ?? null,
+  });
+  const anchoredLensBuildingForView =
+    anchoredLensView.buildingId != null
+      ? (displayModel.buildings.find((building) => building.id === anchoredLensView.buildingId) ?? null)
+      : null;
+  const anchoredLensMode: AnchoredLensMode = "pinned";
+
+  const anchoredLensSunGrid = useMemo(
+    () =>
+      solar.sunStudy
+        ? sunHoursGrid(displayModel, { year: solar.year, month: solar.month, day: solar.day })
+        : null,
+    [displayModel, solar.sunStudy, solar.year, solar.month, solar.day],
+  );
+
+  useEffect(() => {
+    if (tab !== "3d") return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setHeightPick(null);
+        setHideSelection([]);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tab]);
+
+  const anchoredLensActions = useMemo<AnchoredLensActions>(
+    () => ({
+      rippleEnabled: true,
+      cutEnabled: false,
+      viewshedEnabled: true,
+      onRipple: () => {
+        if (!pickedBuilding) return;
+        dispatchSidebar({ type: "select", id: "analysis" });
+        setAnalysisKind("walkRipple");
+        setTab("3d");
+        const at = interiorPoint(pickedBuilding.ring, pickedBuilding.holes);
+        walkRipple.placePoint(at[0], at[1]);
+      },
+      onCut: () => {},
+      onViewshed: () => {
+        if (!pickedBuilding) return;
+        dispatchSidebar({ type: "select", id: "analysis" });
+        setAnalysisKind("view");
+        setTab("3d");
+        const at = interiorPoint(pickedBuilding.ring, pickedBuilding.holes);
+        walk.clear();
+        walk.addPoint(at[0], at[1]);
+        walk.setDrawing(true);
+      },
+    }),
+    [dispatchSidebar, pickedBuilding, walk, walkRipple],
+  );
+
   function persistHidden(next: HiddenBuildingStore) {
     setHiddenStore(next);
     writeStoredHiddenBuildings(window.localStorage, next);
@@ -1283,14 +1577,26 @@ export function ModelPage({
     writeStoredView3dDisplay(window.localStorage, next);
   }
 
+  function commitBuildingColourStyle(nextUse: boolean, nextSource: boolean) {
+    setShowSource(nextSource);
+    setColourByUse(nextUse);
+    writeStoredBuildingColourStyle(
+      window.localStorage,
+      flagsToBuildingColourStyle(nextUse, nextSource),
+    );
+  }
+
+  function applyDefaultBuildingColourStyle() {
+    commitBuildingColourStyle(false, false);
+  }
+
   function pickBuildingUseColour(use: BuildingUse, value: string) {
     commitColour(BUILDING_USE_META[use].key, value);
     if (!colourByUse || showSource) {
-      setShowSource(false);
-      setColourByUse(true);
+      commitBuildingColourStyle(true, false);
     }
-    if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "buildings")) {
-      commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "buildings", true));
+    if (!isLayer3dVisible(view3dDisplay, "buildings")) {
+      commitView3dDisplay(setLayer3dVisible(view3dDisplay, "buildings", true));
     }
     setHiddenBuildingUses((prev) => {
       if (!prev.has(use)) return prev;
@@ -1307,6 +1613,7 @@ export function ModelPage({
         applyOverrides(readStoredOverrides(window.localStorage));
       }
     });
+    applyDefaultBuildingColourStyle();
     setLineStyles(readDrawingStyle());
   }
 
@@ -1580,8 +1887,8 @@ export function ModelPage({
           commitColour("--tree-crown-edge", value);
           commitColour("--tree-fill", value);
           commitColour("--tree-layer", value);
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "trees")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "trees", true));
+          if (!isLayer3dVisible(view3dDisplay, "trees")) {
+            commitView3dDisplay(setLayer3dVisible(view3dDisplay, "trees", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -1596,8 +1903,8 @@ export function ModelPage({
           commitColour("--road-local", value);
           commitColour("--road-arterial", value);
           commitColour("--road-fill", value);
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "roads")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "roads", true));
+          if (!isLayer3dVisible(view3dDisplay, "roads")) {
+            commitView3dDisplay(setLayer3dVisible(view3dDisplay, "roads", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -1611,8 +1918,8 @@ export function ModelPage({
         onPick: (value: string) => {
           commitColour("--road-path", value);
           commitColour("--path-fill", value);
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "footpaths")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "footpaths", true));
+          if (!isLayer3dVisible(view3dDisplay, "footpaths")) {
+            commitView3dDisplay(setLayer3dVisible(view3dDisplay, "footpaths", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -1626,8 +1933,8 @@ export function ModelPage({
         onPick: (value: string) => {
           commitColour("--green-3d", value);
           commitColour("--green-fill", value);
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "landscape")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "landscape", true));
+          if (!isLayer3dVisible(view3dDisplay, "landscape")) {
+            commitView3dDisplay(setLayer3dVisible(view3dDisplay, "landscape", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -1641,8 +1948,8 @@ export function ModelPage({
         onPick: (value: string) => {
           commitColour("--water-3d", value);
           commitColour("--water-fill", value);
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "water")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "water", true));
+          if (!isLayer3dVisible(view3dDisplay, "water")) {
+            commitView3dDisplay(setLayer3dVisible(view3dDisplay, "water", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -1820,15 +2127,22 @@ export function ModelPage({
                 windAnimateStreaks={windMotion.animateStreaks}
                 onExportReady={onExportReady}
                 onBuildingPick={(buildingId, clientX, clientY, additive) => {
-                  setHeightPick({ buildingId, clientX, clientY });
+                  setHeightPick({ buildingId, clientX, clientY, pinned: true });
                   selectForHide(buildingId, additive);
                 }}
                 onClearBuildingPick={() => {
                   setHeightPick(null);
                   setHideSelection([]);
                 }}
-                heightEditBuildingId={heightPick?.buildingId ?? null}
-                selectedBuildingIds={hideSelection.length > 0 ? hideSelection : heightPick ? [heightPick.buildingId] : []}
+                lensHoverEnabled={tab === "3d" && view.projection === "perspective"}
+                heightEditBuildingId={heightPick?.pinned ? heightPick.buildingId : null}
+                selectedBuildingIds={
+                  hideSelection.length > 0
+                    ? hideSelection
+                    : heightPick?.pinned
+                      ? [heightPick.buildingId]
+                      : []
+                }
                 cameraMemory={cameraMemory}
                 display={view3dDisplay}
                 importedMassing={massing.group}
@@ -1845,6 +2159,10 @@ export function ModelPage({
                       : massing.onScenePoint
                 }
                 quality={renderQuality}
+                anchoredLensBuilding={anchoredLensBuildingForView}
+                anchoredLensMode={anchoredLensMode}
+                anchoredLensSunHoursGrid={anchoredLensSunGrid}
+                anchoredLensActions={anchoredLensActions}
               />
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
               {rippleAnalysisOpen && walkRipple.buildingArrivals && <WalkRippleLegend />}
@@ -1863,7 +2181,7 @@ export function ModelPage({
                 />
               )}
               {pickedBuilding &&
-                heightPick &&
+                heightPick?.pinned &&
                 !qaHideHeightPopoverFromSearch(window.location.search) && (
                 <BuildingHeightPopover
                   building={pickedBuilding}
@@ -2081,6 +2399,7 @@ export function ModelPage({
                   className="cam-reset studio-reset-btn"
                   onClick={() => {
                     if (tab === "3d") {
+                      applyDefaultBuildingColourStyle();
                       setSnapId((id) => id + 1);
                     } else if (tab === "drawing" && drawing === "exploded-axo") {
                       setExplodedViewport(
@@ -2370,23 +2689,17 @@ export function ModelPage({
                       type="button"
                       data-autofocus="true"
                       aria-pressed={colourByUse && !showSource}
-                      onClick={() => {
-                        setShowSource(false);
-                        setColourByUse(true);
-                      }}
+                      onClick={() => commitBuildingColourStyle(true, false)}
                     >
                       Use
                     </button>
-                    <button type="button" aria-pressed={showSource} onClick={() => setShowSource(true)}>
+                    <button type="button" aria-pressed={showSource} onClick={() => commitBuildingColourStyle(false, true)}>
                       Source
                     </button>
                     <button
                       type="button"
                       aria-pressed={!colourByUse && !showSource}
-                      onClick={() => {
-                        setShowSource(false);
-                        setColourByUse(false);
-                      }}
+                      onClick={() => commitBuildingColourStyle(false, false)}
                     >
                       None
                     </button>
@@ -2576,62 +2889,29 @@ export function ModelPage({
                     <div className="style-seg seg-mini" role="group" aria-label="Building style">
                       <button
                         type="button"
-                        className={view3dDisplay.whiteCard ? "style-btn active" : "style-btn"}
-                        aria-pressed={view3dDisplay.whiteCard}
-                        onClick={() => commitView3dDisplay({ ...view3dDisplay, whiteCard: !view3dDisplay.whiteCard })}
-                      >
-                        Card
-                      </button>
-                      <button
-                        type="button"
-                        className={!view3dDisplay.whiteCard && colourByUse && !showSource ? "style-btn active" : "style-btn"}
-                        aria-pressed={!view3dDisplay.whiteCard && colourByUse && !showSource}
-                        onClick={() => {
-                          setShowSource(false);
-                          setColourByUse(true);
-                          if (view3dDisplay.whiteCard) {
-                            commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
-                          }
-                        }}
+                        className={colourByUse && !showSource ? "style-btn active" : "style-btn"}
+                        aria-pressed={colourByUse && !showSource}
+                        onClick={() => commitBuildingColourStyle(true, false)}
                       >
                         Use
                       </button>
                       <button
                         type="button"
-                        className={!view3dDisplay.whiteCard && showSource ? "style-btn active" : "style-btn"}
-                        aria-pressed={!view3dDisplay.whiteCard && showSource}
-                        onClick={() => {
-                          setShowSource(true);
-                          if (view3dDisplay.whiteCard) {
-                            commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
-                          }
-                        }}
+                        className={showSource ? "style-btn active" : "style-btn"}
+                        aria-pressed={showSource}
+                        onClick={() => commitBuildingColourStyle(false, true)}
                       >
                         Source
                       </button>
                       <button
                         type="button"
-                        className={!view3dDisplay.whiteCard && !colourByUse && !showSource ? "style-btn active" : "style-btn"}
-                        aria-pressed={!view3dDisplay.whiteCard && !colourByUse && !showSource}
-                        onClick={() => {
-                          setShowSource(false);
-                          setColourByUse(false);
-                          if (view3dDisplay.whiteCard) {
-                            commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
-                          }
-                        }}
+                        className={!colourByUse && !showSource ? "style-btn active" : "style-btn"}
+                        aria-pressed={!colourByUse && !showSource}
+                        onClick={() => commitBuildingColourStyle(false, false)}
                       >
                         Uniform
                       </button>
                     </div>
-                    <label className="check-field sr-only">
-                      <input
-                        type="checkbox"
-                        checked={view3dDisplay.whiteCard}
-                        onChange={(event) => commitView3dDisplay({ ...view3dDisplay, whiteCard: event.target.checked })}
-                      />
-                      White card
-                    </label>
                     <div className="mini-flags sub-toggles display-switches" role="group" aria-label="View modes">
                       <label className={view3dDisplay.showOutlines ? "mini-flag is-on check-field" : "mini-flag check-field"}>
                         <input
@@ -2815,10 +3095,7 @@ export function ModelPage({
                             type="button"
                             className={colourByUse && !showSource ? "style-btn active" : "style-btn"}
                             aria-pressed={colourByUse && !showSource}
-                            onClick={() => {
-                              setShowSource(false);
-                              setColourByUse(true);
-                            }}
+                            onClick={() => commitBuildingColourStyle(true, false)}
                           >
                             Use
                           </button>
@@ -2826,9 +3103,7 @@ export function ModelPage({
                             type="button"
                             className={showSource ? "style-btn active" : "style-btn"}
                             aria-pressed={showSource}
-                            onClick={() => {
-                              setShowSource(true);
-                            }}
+                            onClick={() => commitBuildingColourStyle(false, true)}
                           >
                             Source
                           </button>
@@ -2836,10 +3111,7 @@ export function ModelPage({
                             type="button"
                             className={!colourByUse && !showSource ? "style-btn active" : "style-btn"}
                             aria-pressed={!colourByUse && !showSource}
-                            onClick={() => {
-                              setShowSource(false);
-                              setColourByUse(false);
-                            }}
+                            onClick={() => commitBuildingColourStyle(false, false)}
                           >
                             Uniform
                           </button>

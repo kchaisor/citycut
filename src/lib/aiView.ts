@@ -68,7 +68,6 @@ type Occ = ScreenTri;
 export type ViewStyle = {
   uniformBuildings: boolean;
   colourBySource: boolean;
-  whiteCard?: boolean;
   showOutlines?: boolean;
   showContours?: boolean;
   hideTrees?: boolean;
@@ -178,16 +177,7 @@ function orient(ring: Ring, ccw: boolean): Pt[] {
   return points;
 }
 
-function cardWhite(): Rgb {
-  return hexRgb(getColour("--card-white"));
-}
-
-function cardGround(): Rgb {
-  return hexRgb(getColour("--card-ground"));
-}
-
 function buildingColor(building: BuildingFeat, style: ViewStyle): Rgb {
-  if (style.whiteCard) return cardWhite();
   if (style.colourBySource) return hexRgb(SOURCE_META[building.source].color);
   if (style.uniformBuildings) return hexRgb(uniformBuildingColor());
   return hexRgb(BUILDING_USE_META[building.use].color);
@@ -462,9 +452,9 @@ function collect(
 ): { fills: Fill[]; edges: Edge[]; trees: Fill[]; contours: Edge[] } {
   const forward = shot.forward;
   const half = model.sideM / 2;
-  const groundFill = style.whiteCard ? cardGround() : fillOf("--ground-fill");
-  const greenFill = style.whiteCard ? cardWhite() : fillOf("--green-3d");
-  const waterFill = style.whiteCard ? cardWhite() : fillOf("--water-3d");
+  const groundFill = fillOf("--ground-fill");
+  const greenFill = fillOf("--green-3d");
+  const waterFill = fillOf("--water-3d");
   const crownFill = fillOf("--tree-crown");
   const crownEdge = fillOf("--tree-crown-edge");
   const trunkFill = fillOf("--tree-trunk");
@@ -483,11 +473,11 @@ function collect(
     const toWorld = (tri: [number, number, number][]) => faceUp(tri.map(([e, n, z]) => worldOf(e, n, z)));
     for (const tri of drapeTriangles(groundTriangles(groundSplit.remaining, coarse, model.sideM), coarse, model.sideM)) {
       const z = (tri[0][2] + tri[1][2] + tri[2][2]) / 3;
-      const color: Rgb = style.whiteCard ? cardGround() : terrainTint(field, z);
+      const color: Rgb = terrainTint(field, z);
       pushTri(fills, edges, occ, nextId++, toWorld(tri), color, GROUND_REMAINING_LAYER, 0, false, shot, pageW, pageH, forward);
     }
     for (const grade of ROAD_GRADES_BY_PRIORITY) {
-      const color = style.whiteCard ? cardWhite() : hexRgb(ROAD_COLOR[grade]);
+      const color = hexRgb(ROAD_COLOR[grade]);
       for (const tri of drapeTriangles(groundTriangles(groundSplit.roads[grade], coarse, model.sideM), coarse, model.sideM)) {
         pushTri(fills, edges, occ, nextId++, toWorld(tri), color, GROUND_ROADS_LAYER, 1, false, shot, pageW, pageH, forward);
       }
@@ -505,7 +495,7 @@ function collect(
       return [east, y, -north];
     };
     const tint = (col: number, row: number): Rgb =>
-      style.whiteCard ? cardGround() : shadeHeight((field.heights[row * field.cols + col] - field.min) / relief);
+      shadeHeight((field.heights[row * field.cols + col] - field.min) / relief);
     for (let r = 0; r < rows.length - 1; r++) {
       for (let c = 0; c < cols.length - 1; c++) {
         const sw = at(cols[c], rows[r]);
@@ -600,7 +590,7 @@ function collect(
   for (const road of groundSplit ? [] : model.roads) {
     if (road.kind === "rail") continue;
     const grade = road.grade ?? "local";
-    const color = style.whiteCard ? cardWhite() : hexRgb(ROAD_COLOR[grade]);
+    const color = hexRgb(ROAD_COLOR[grade]);
     const lift = grade === "arterial" ? SURFACE.arterial.lift : grade === "path" ? SURFACE.path.lift : SURFACE.local.lift;
     const line = openRing(road.line);
     for (let i = 0; i < line.length - 1; i++) {

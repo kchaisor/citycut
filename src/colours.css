@@ -30,7 +30,7 @@
 
   --building-manual: #D4A017;
 
-  --site-building: #FFF500;
+  --site-building: #FFFFFF;
   --imported-massing: #FFFFFF;
   --switch-knob: #000000;
 
@@ -81,15 +81,15 @@
 
   --source-none: #B8B8B8;
 
-  --road-fill: #FFFFFF;
+  --road-fill: #4A4A4A;
 
   --path-fill: #D2B48C;
 
-  --road-arterial: #FFFFFF;
+  --road-arterial: #3A3A3A;
 
-  --road-local: #FFFFFF;
+  --road-local: #4A4A4A;
 
-  --road-path: #5c5c5c;
+  --road-path: #D2B48C;
 
   --green-fill: #D2D7BE;
 
@@ -102,9 +102,6 @@
   --water-sunpath: #4A9FE8;
 
   --sun-study-surface: #FFFFFF;
-
-  --card-white: #FAFAF8;
-  --card-ground: #F2F2F0;
 
   --tree-fill: #478C33;
 
@@ -122,7 +119,14 @@
 
   --tree-crown: #478C33;
 
+  --tree-crown-a: #3f8230;
+  --tree-crown-b: #478c33;
+  --tree-crown-c: #50963a;
+  --tree-crown-d: #58a042;
+
   --tree-crown-edge: #478C33;
+
+  --building-selection-fill: #fff500;
 
   --tree-trunk: #3e3428;
 

@@ -74,6 +74,45 @@ export function sunHoursGrid(
   return { res, hours, maxHours: steps * stepH, steps, skipped, ms: performance.now() - started };
 }
 
+function gridIndex(grid: SunHoursGrid, east: number, north: number, sideM: number): number {
+  const half = sideM / 2;
+  const px = Math.floor(((east + half) / sideM) * grid.res);
+  const py = Math.floor(((half - north) / sideM) * grid.res);
+  if (px < 0 || py < 0 || px >= grid.res || py >= grid.res) return -1;
+  return py * grid.res + px;
+}
+
+/** Ground sun hours at a plan point; null when the cell is a roof mask or off the cut. */
+export function sunHoursAtEastNorth(
+  grid: SunHoursGrid,
+  east: number,
+  north: number,
+  sideM: number,
+): number | null {
+  const direct = gridIndex(grid, east, north, sideM);
+  if (direct >= 0) {
+    const value = grid.hours[direct]!;
+    if (value >= 0) return value;
+  }
+  const half = sideM / 2;
+  const px = Math.floor(((east + half) / sideM) * grid.res);
+  const py = Math.floor(((half - north) / sideM) * grid.res);
+  const search = Math.max(2, Math.ceil(grid.res / 64));
+  for (let radius = 1; radius <= search; radius++) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
+        const x = px + dx;
+        const y = py + dy;
+        if (x < 0 || y < 0 || x >= grid.res || y >= grid.res) continue;
+        const value = grid.hours[y * grid.res + x]!;
+        if (value >= 0) return value;
+      }
+    }
+  }
+  return null;
+}
+
 export function sunHoursColour(hours: number, maxHours: number): [number, number, number, number] {
   if (hours < 0) return [0, 0, 0, 0];
   const t = maxHours > 0 ? Math.min(1, Math.max(0, hours / maxHours)) : 0;

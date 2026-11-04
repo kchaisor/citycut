@@ -11,14 +11,14 @@ const url = "http://127.0.0.1:4173/citycut/?qa=1&lat=-37.8136&lon=144.9631&km=0.
 
 function auditOk(audit) {
   if (!audit) return false;
-  const hidden = audit.hiddenMeshCount > 0 || audit.zeroedGroupCount > 0;
   return (
-    hidden &&
-    audit.visibleGroupCount === 0 &&
+    audit.hiddenMeshCount === 0 &&
+    audit.zeroedGroupCount === 0 &&
     audit.overlayInScene &&
-    audit.overlayFillTransparent &&
-    Math.abs(audit.overlayFillOpacity - 0.5) < 0.02 &&
+    audit.overlayFillOpacity === 0 &&
     audit.overlayDashedLineCount > 0 &&
+    audit.selectionFillMeshCount > 0 &&
+    audit.selectionFillAccentHex?.toLowerCase() === "fff500" &&
     audit.overlayLineDistancesReady
   );
 }
