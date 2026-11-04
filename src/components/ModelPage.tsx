@@ -1833,7 +1833,7 @@ export function ModelPage({
                 display={view3dDisplay}
                 importedMassing={massing.group}
                 walkLayer={walk.layer.root}
-                walkRippleLayer={rippleAnalysisOpen ? walkRipple.layer.root : null}
+                walkRippleLayer={rippleAnalysisOpen ? walkRipple.layer : null}
                 walkRippleTint={rippleAnalysisOpen ? walkRipple.tint : null}
                 walkRippleArrivals={rippleAnalysisOpen ? walkRipple.buildingArrivals : null}
                 walkRipplePlaying={rippleAnalysisOpen && walkRipple.ripplePlaying}
@@ -3792,6 +3792,9 @@ export function ModelPage({
                   playing={walkRipple.ripplePlaying}
                   onMinutesChange={walkRipple.setRippleMinutes}
                   onPlayToggle={walkRipple.toggleRipplePlay}
+                  trailLengthMin={walkRipple.trailLengthMin}
+                  onTrailLengthChange={walkRipple.setTrailLengthMin}
+                  onScrubActiveChange={walkRipple.setRippleScrubActive}
                 />
               )}
             </div>

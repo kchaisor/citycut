@@ -107,6 +107,10 @@ export class WalkRippleBuildingTint {
     this.uniforms.uRippleTime.value = minutes;
   }
 
+  setBandMixStrength(strength: number): void {
+    this.uniforms.uBandMixStrength.value = strength;
+  }
+
   refreshColours(): void {
     this.uniforms.uBand0.value.setStyle(getColour("--walk-ripple-band-0"));
     this.uniforms.uBand1.value.setStyle(getColour("--walk-ripple-band-1"));

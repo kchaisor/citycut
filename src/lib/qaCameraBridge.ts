@@ -8,6 +8,7 @@ export type QaCameraBridge = {
   getCamera: () => QaCameraPose | null;
   frameHeliodon: () => void;
   projectToScreen: (world: { x: number; y: number; z: number }) => { x: number; y: number } | null;
+  getCityWorldBBox?: () => { min: number[]; max: number[] } | null;
 };
 
 export type QaSiteSnapshot = {
@@ -51,9 +52,14 @@ declare global {
     };
     __citycutWalkRippleQa?: {
       setMinutes: (minutes: number) => void;
+      setBandMixStrength: (strength: number) => void;
+      setOriginMarkerVisible: (visible: boolean) => void;
+      getSpatialDiagnostics: () => import("./walkRippleLayer").WalkRippleSpatialDiagnostics;
+      getCityWorldBBox: () => { min: number[]; max: number[] } | null;
       getMinutes: () => number;
       getUniformMinutes: () => number;
       countReachedBuildings: (minuteCutoff: number) => number;
+      getRibbonDiagnostics: () => import("./walkRippleLayer").WalkRippleRibbonDiagnostics;
     };
     __citycutQaSelectionAudit?: import("./buildingSelectionAudit").BuildingSelectionAudit;
     __citycutFrameRatio?: number;
