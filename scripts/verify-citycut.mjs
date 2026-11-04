@@ -73,6 +73,32 @@ async function verifyReachExplorer(page, assertCheck) {
   await page.waitForFunction(() => Boolean(window.__citycutReachMapQa), { timeout: 180000 });
   await page.waitForSelector(".reach-map-canvas canvas", { timeout: 60000 });
   await page.waitForTimeout(1200);
+  const reachSlider = page.locator('[data-reach-map-controls="true"] input[type="range"]');
+  await reachSlider.evaluate((el) => {
+    el.value = "25";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await page.waitForTimeout(600);
+  const reachVisualProbe = await page.evaluate(() => {
+    const qa = window.__citycutReachMapQa;
+    const labelLayer = qa?.hasHexLabelLayer?.() ?? true;
+    const tooltipAtRest = Boolean(document.querySelector(".reach-hex-tooltip"));
+    const outerTransitOpacity = qa?.outerTransitFillOpacityAtBudget?.(25) ?? 1;
+    return { labelLayer, tooltipAtRest, outerTransitOpacity };
+  });
+  assertCheck(
+    "reach-no-hex-labels-at-rest",
+    "Reach map does not mount a symbol label layer or show minute tooltips until hover",
+    !reachVisualProbe.labelLayer && !reachVisualProbe.tooltipAtRest,
+    JSON.stringify(reachVisualProbe),
+  );
+  assertCheck(
+    "reach-transit-fade-at-limit",
+    "Outermost transit hex fill opacity at the time budget falls below 0.2 (about 0.08 at 25 min)",
+    reachVisualProbe.outerTransitOpacity < 0.2,
+    `outerTransitOpacity=${reachVisualProbe.outerTransitOpacity}`,
+  );
   const reachHudProbe = await page.evaluate(() => {
       const controls = document.querySelector('[data-reach-map-controls="true"]');
       const slider = controls?.querySelector('input[type="range"]');
@@ -99,8 +125,7 @@ async function verifyReachExplorer(page, assertCheck) {
         setStyle: qa?.setStyleCalls ?? -1,
       };
     });
-  const slider = page.locator('[data-reach-map-controls="true"] input[type="range"]');
-  await slider.evaluate((el) => {
+  await reachSlider.evaluate((el) => {
     el.value = "22";
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));

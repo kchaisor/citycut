@@ -4527,7 +4527,23 @@ body,
 }
 
 .reach-map-shell {
+  position: relative;
   isolation: isolate;
+}
+
+.reach-hex-tooltip {
+  position: absolute;
+  z-index: 6;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.2;
+  pointer-events: none;
+  background: var(--reach-panel-bg);
+  color: var(--reach-panel-text);
+  border: 1px solid var(--reach-walk-muted);
+  box-shadow: 0 6px 18px rgb(26 25 22 / 10%);
 }
 
 .reach-slider-field {
