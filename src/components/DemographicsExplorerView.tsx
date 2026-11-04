@@ -1,16 +1,13 @@
-import type { LineStyles } from "../lib/drawingStyle";
 import type { PlanViewport } from "../lib/planViewport";
 import type { CityModel } from "../types";
 import type { DemographicsParcelIndex, DemographicsParcelRecord } from "../lib/demographicsParcels";
 import type { DemographicsCatchmentStats } from "../lib/demographicsCatchment";
 import type { DemographicsExplorerAction, DemographicsExplorerState } from "../lib/demographicsExplorerReducer";
-import { DrawingPlan } from "./DrawingPlan";
+import { DemographicsExplorerBasemap } from "./DemographicsExplorerBasemap";
 import { DemographicsExplorerMap } from "./DemographicsExplorerMap";
 
 export function DemographicsExplorerView({
   model,
-  lineStyle,
-  planScale,
   parcels,
   parcelIndex,
   state,
@@ -20,11 +17,8 @@ export function DemographicsExplorerView({
   fitCounter,
   statsA,
   statsB,
-  onScale,
 }: {
   model: CityModel;
-  lineStyle: LineStyles;
-  planScale: number;
   parcels: DemographicsParcelRecord[];
   parcelIndex: DemographicsParcelIndex | null;
   state: DemographicsExplorerState;
@@ -34,17 +28,11 @@ export function DemographicsExplorerView({
   fitCounter: number;
   statsA: DemographicsCatchmentStats | null;
   statsB: DemographicsCatchmentStats | null;
-  onScale?: (widthM: number) => void;
 }) {
   return (
     <div className="demographics-map-stack fill">
-      <DrawingPlan
+      <DemographicsExplorerBasemap
         model={model}
-        kind="site"
-        planRole="demographics-basemap"
-        onScale={onScale}
-        lineStyle={lineStyle}
-        planScale={planScale}
         viewport={viewport}
         onViewportChange={onViewportChange}
         fitCounter={fitCounter}
@@ -56,7 +44,6 @@ export function DemographicsExplorerView({
         state={state}
         dispatch={dispatch}
         viewport={viewport}
-        onViewportChange={onViewportChange}
         fitCounter={fitCounter}
         statsA={statsA}
         statsB={statsB}

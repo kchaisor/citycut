@@ -2049,9 +2049,6 @@ export function ModelPage({
             ) : drawing === "demographics" ? (
               <DemographicsExplorerView
                 model={drawingModel}
-                lineStyle={lineStyles}
-                planScale={figureScale}
-                onScale={onScale}
                 parcels={demographicsParcelsApportioned}
                 parcelIndex={demographicsParcelIndexApportioned}
                 state={demographicsExplorer}

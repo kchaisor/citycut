@@ -1423,6 +1423,11 @@ async function main() {
         () => !document.querySelector(".demo-status")?.textContent?.includes("Loading"),
         { timeout: 180000 },
       );
+      await demoPage.waitForFunction(
+        () => window.__citycutDemographicsMap?.isStyleLoaded?.() && window.__citycutDemographicsMap?.loaded?.(),
+        { timeout: 120000 },
+      );
+      await demoPage.waitForTimeout(800);
       if (fs.existsSync("/opt/cursor/artifacts")) {
         await demoPage.screenshot({
           path: "/opt/cursor/artifacts/demographics-pin-before-drag-1440x900.png",
@@ -1443,9 +1448,51 @@ async function main() {
         const tabButtons = tabs ? [...tabs.querySelectorAll(".demo-tab")] : [];
         const tabTops = tabButtons.map((btn) => btn.getBoundingClientRect().top);
         const tabsOneRow = tabTops.length > 0 && tabTops.every((top) => Math.abs(top - tabTops[0]) < 2);
-        const basemapSvg = document.querySelector(".demographics-site-basemap");
-        const basemapPaths = basemapSvg ? basemapSvg.querySelectorAll("path").length : 0;
-        const basemapBuildings = basemapSvg ? basemapSvg.querySelectorAll("path[fill-rule='evenodd']").length : 0;
+        const drawingPlanBasemap = Boolean(document.querySelector(".demographics-site-basemap"));
+        const maplibreMounted = Boolean(document.querySelector("[data-demographics-maplibre='true']"));
+        const maplibreStats = (() => {
+          const map = window.__citycutDemographicsMap;
+          if (!map) return null;
+          const parcelFeats = map.queryRenderedFeatures(undefined, { layers: ["citycut-demographics-parcels-fill"] });
+          const allFeats = map.queryRenderedFeatures();
+          const roadFeats = allFeats.filter((f) => /road|highway|street|bridge|tunnel|transport|path/i.test(f.layer.id));
+          const lat = -37.8053;
+          const lon = 144.9746;
+          const sideM = 1000;
+          const half = sideM / 2;
+          const mPerDegLat = 111_132;
+          const mPerDegLon = 111_320 * Math.cos((lat * Math.PI) / 180);
+          const dLat = half / mPerDegLat;
+          const dLon = half / mPerDegLon;
+          const cut = {
+            west: lon - dLon,
+            east: lon + dLon,
+            south: lat - dLat,
+            north: lat + dLat,
+          };
+          const sampleLonLat = (geom) => {
+            if (!geom) return null;
+            if (geom.type === "Point") return geom.coordinates;
+            if (geom.type === "LineString") return geom.coordinates[Math.floor(geom.coordinates.length / 2)];
+            if (geom.type === "MultiLineString") return geom.coordinates[0]?.[Math.floor(geom.coordinates[0].length / 2)];
+            return null;
+          };
+          let roadsOutsideCut = 0;
+          for (const feat of roadFeats) {
+            const pt = sampleLonLat(feat.geometry);
+            if (!pt) continue;
+            const [plon, plat] = pt;
+            if (plon < cut.west || plon > cut.east || plat < cut.south || plat > cut.north) {
+              roadsOutsideCut += 1;
+              if (roadsOutsideCut >= 3) break;
+            }
+          }
+          return {
+            parcelRendered: parcelFeats.length,
+            roadsOutsideCut,
+            roadRendered: roadFeats.length,
+          };
+        })();
         const envConsole = document.querySelector(".bottom-bar.env-console");
         const envConsoleVisible =
           envConsole && envConsole.checkVisibility?.() !== false && getComputedStyle(envConsole).display !== "none";
@@ -1455,6 +1502,7 @@ async function main() {
         const svg = document.querySelector(".demographics-explorer-map");
         const paths = svg ? svg.querySelectorAll("path").length : 0;
         const viewBoxBefore = svg?.getAttribute("viewBox") ?? "";
+        const mapCenterBefore = window.__citycutDemographicsMap?.getCenter()?.toArray?.() ?? null;
         const pinA = document.querySelector("[data-demo-pin='a']");
         const pinB = document.querySelector("[data-demo-pin='b']");
         const circleA = pinA?.querySelector("circle");
@@ -1488,6 +1536,27 @@ async function main() {
           (el) => el.textContent?.trim() ?? "",
         );
         const notEnoughCols = [...document.querySelectorAll(".demo-compare-col .demo-not-enough")].length;
+        const mapCanvas = document.querySelector(".demographics-maplibre");
+        const canvasRect = mapCanvas?.getBoundingClientRect();
+        const overlaySvg = document.querySelector(".demographics-explorer-map");
+        const pinInView = (pinEl) => {
+          if (!pinEl || !canvasRect || !overlaySvg) return false;
+          const c = pinEl.querySelector("circle");
+          if (!c) return false;
+          const pt = overlaySvg.createSVGPoint();
+          pt.x = Number(c.getAttribute("cx"));
+          pt.y = Number(c.getAttribute("cy"));
+          const ctm = overlaySvg.getScreenCTM();
+          if (!ctm) return false;
+          const screen = pt.matrixTransform(ctm);
+          return (
+            screen.x >= canvasRect.left &&
+            screen.x <= canvasRect.right &&
+            screen.y >= canvasRect.top &&
+            screen.y <= canvasRect.bottom
+          );
+        };
+        const pinDistM = (cx, cy) => Math.hypot(cx ?? 0, cy ?? 0);
         return {
           title,
           compare,
@@ -1497,11 +1566,17 @@ async function main() {
           leftDrawerVisible,
           tabsOneRow,
           paths,
-          basemapPaths,
-          basemapBuildings,
+          drawingPlanBasemap,
+          maplibreMounted,
+          maplibreStats,
+          pinAInView: pinInView(pinA),
+          pinBInView: pinInView(pinB),
+          pinADistM: pinDistM(cxA, cyA),
+          pinBDistM: pinDistM(cxB, cyB),
           envConsoleVisible,
           mapMasked,
           viewBoxBefore,
+          mapCenterBefore,
           cxA,
           cyA,
           parcelsUnderA,
@@ -1514,12 +1589,39 @@ async function main() {
       const pinAHandle = demoPage.locator("[data-demo-pin='a'] path").first();
       const pinBox = await pinAHandle.boundingBox();
       assertCheck(
-        "demo-explorer-basemap",
-        "Demographics renders the site-plan basemap (roads and buildings) under the parcel overlay",
-        demoInfo.basemapPaths >= 80 && demoInfo.basemapBuildings >= 20,
+        "demo-explorer-no-drawing-plan",
+        "Demographics does not mount the DrawingPlan site basemap",
+        !demoInfo.drawingPlanBasemap && demoInfo.maplibreMounted,
         JSON.stringify({
-          basemapPaths: demoInfo.basemapPaths,
-          basemapBuildings: demoInfo.basemapBuildings,
+          drawingPlanBasemap: demoInfo.drawingPlanBasemap,
+          maplibreMounted: demoInfo.maplibreMounted,
+        }),
+      );
+      assertCheck(
+        "demo-explorer-maplibre-parcels",
+        "MapLibre Vicmap parcel layer renders more than 2,000 features in the current view",
+        (demoInfo.maplibreStats?.parcelRendered ?? 0) > 2000,
+        JSON.stringify(demoInfo.maplibreStats),
+      );
+      assertCheck(
+        "demo-explorer-roads-outside-cut",
+        "Road features render outside the cut bounding box (surrounding context visible)",
+        (demoInfo.maplibreStats?.roadsOutsideCut ?? 0) >= 3 &&
+          (demoInfo.maplibreStats?.roadRendered ?? 0) > 20,
+        JSON.stringify(demoInfo.maplibreStats),
+      );
+      assertCheck(
+        "demo-explorer-pins-framed",
+        "Both pins are on-screen and within 600 m of the cut centre on load",
+        demoInfo.pinAInView &&
+          demoInfo.pinBInView &&
+          demoInfo.pinADistM <= 600 &&
+          demoInfo.pinBDistM <= 600,
+        JSON.stringify({
+          pinAInView: demoInfo.pinAInView,
+          pinBInView: demoInfo.pinBInView,
+          pinADistM: demoInfo.pinADistM,
+          pinBDistM: demoInfo.pinBDistM,
         }),
       );
       assertCheck(
@@ -1591,21 +1693,25 @@ async function main() {
             Math.hypot(afterDrag.cxA - demoInfo.cxA, afterDrag.cyA - demoInfo.cyA) > 8),
         `before=${demoInfo.residentsBefore} after=${residentsAfter} pinBefore=${demoInfo.cxA},${demoInfo.cyA} pinAfter=${afterDrag.cxA},${afterDrag.cyA}`,
       );
-      await demoPage.mouse.move(520, 420);
-      await demoPage.mouse.down();
-      await demoPage.mouse.move(420, 420, { steps: 8 });
-      await demoPage.mouse.up();
+      const mapCanvas = demoPage.locator(".demographics-maplibre");
+      const mapBox = await mapCanvas.boundingBox();
+      if (mapBox) {
+        await demoPage.mouse.move(mapBox.x + mapBox.width * 0.55, mapBox.y + mapBox.height * 0.5);
+        await demoPage.mouse.down();
+        await demoPage.mouse.move(mapBox.x + mapBox.width * 0.45, mapBox.y + mapBox.height * 0.5, { steps: 8 });
+        await demoPage.mouse.up();
+      }
       await demoPage.waitForTimeout(200);
-      const panned = await demoPage.evaluate(
-        (before) =>
-          document.querySelector(".demographics-explorer-map")?.getAttribute("viewBox") !== before,
-        demoInfo.viewBoxBefore,
-      );
+      const panned = await demoPage.evaluate((before) => {
+        const after = window.__citycutDemographicsMap?.getCenter()?.toArray?.() ?? null;
+        if (!before || !after) return false;
+        return Math.hypot(after[0] - before[0], after[1] - before[1]) > 1e-5;
+      }, demoInfo.mapCenterBefore);
       assertCheck(
         "demo-explorer-map-pan",
         "Demographics map panning updates the viewport (no outside-boundary crop lock)",
         panned,
-        `viewBoxBefore=${demoInfo.viewBoxBefore} viewBoxAfter=${afterDrag.viewBoxAfter}`,
+        JSON.stringify({ mapCenterBefore: demoInfo.mapCenterBefore }),
       );
       await demoPage.getByRole("tab", { name: "People", exact: true }).click();
       await demoPage.getByRole("tab", { name: "Age", exact: true }).click();
@@ -1661,7 +1767,7 @@ async function main() {
       );
       if (fs.existsSync("/opt/cursor/artifacts")) {
         await demoPage.screenshot({
-          path: "/opt/cursor/artifacts/demographics-explorer-compare-fitzroy-carlton-1440x900.png",
+          path: "/opt/cursor/artifacts/demographics-maplibre-parcels-roads-1440x900.png",
         });
       }
       await demoCtx.close();

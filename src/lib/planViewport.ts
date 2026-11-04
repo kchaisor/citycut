@@ -20,7 +20,7 @@ export function planViewportExtent(sideM: number): PlanViewport {
 
 export function demographicsPlanViewportExtent(sideM: number): PlanViewport {
   const cut = planViewportExtent(sideM);
-  const pad = sideM * 0.42;
+  const pad = Math.max(1500, sideM * 0.15);
   return {
     x: cut.x - pad,
     y: cut.y - pad,
