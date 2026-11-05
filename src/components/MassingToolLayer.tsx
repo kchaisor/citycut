@@ -9,18 +9,32 @@ import {
   buildMassingBlockSelectionOutline,
   buildMassingFloorGuides,
   buildMassingHeightHandle,
+  buildMassingPreviewLine,
   buildMassingPreviewMesh,
 } from "../lib/massingBlockMesh";
 import { disposeObject } from "../lib/buildCity";
 import { snapFloorsFromHeight, type MassingBlock } from "../lib/massingBlock";
 import type { MassingToolState } from "../lib/massingToolMachine";
 import type { Ring } from "../types";
+import { ParcelOutlinesLayer } from "./ParcelOutlinesLayer";
+
+declare global {
+  interface Window {
+    __citycutQaMassingPreview?: {
+      phase: string;
+      start: [number, number];
+      end: [number, number];
+      inScene: boolean;
+    } | null;
+  }
+}
 
 type Props = {
   model: CityModel;
   blocks: MassingBlock[];
   tool: MassingToolState;
   previewRing: Ring | null;
+  previewLine: readonly [[number, number], [number, number]] | null;
   active: boolean;
   onPointerDown: (east: number, north: number, hitBlockId: string | null) => void;
   onPointerMove: (east: number, north: number, clientX: number, clientY: number) => void;
@@ -36,6 +50,7 @@ export function MassingToolLayer({
   blocks,
   tool,
   previewRing,
+  previewLine,
   active,
   onPointerDown,
   onPointerMove,
@@ -93,11 +108,27 @@ export function MassingToolLayer({
     return buildMassingPreviewMesh(model, previewRing);
   }, [model, previewRing]);
 
+  const previewLineObj = useMemo(() => {
+    if (!previewLine) return null;
+    return buildMassingPreviewLine(model, previewLine);
+  }, [model, previewLine]);
+
+  useEffect(() => {
+    window.__citycutQaMassingPreview = previewLine
+      ? { phase: tool.phase, start: previewLine[0], end: previewLine[1], inScene: previewLineObj != null }
+      : null;
+    return () => {
+      if (previewLineObj) disposeObject(previewLineObj);
+    };
+  }, [previewLine, previewLineObj, tool.phase]);
+
   // Parent passes inline callbacks that change every render. Keep them in refs so the
   // canvas listeners attach once per drag surface; re-attaching mid-gesture resets the
   // listener's `dragging` flag and drops every pointermove (zero-length draw, no block).
   const groundHandlers = useRef({ onPointerDown, onPointerMove, onPointerUp, onCancel });
   groundHandlers.current = { onPointerDown, onPointerMove, onPointerUp, onCancel };
+  const hoverRef = useRef(false);
+  hoverRef.current = tool.phase === "drawingPreview";
   const heightHandlers = useRef({ onHeightDragStart, onHeightDrag, onHeightDragEnd });
   heightHandlers.current = { onHeightDragStart, onHeightDrag, onHeightDragEnd };
 
@@ -112,6 +143,7 @@ export function MassingToolLayer({
         onPointerMove: (east, north, clientX, clientY) => groundHandlers.current.onPointerMove(east, north, clientX, clientY),
         onPointerUp: () => groundHandlers.current.onPointerUp(),
         onCancel: () => groundHandlers.current.onCancel(),
+        hoverActive: () => hoverRef.current,
       },
       true,
     );
@@ -144,13 +176,15 @@ export function MassingToolLayer({
 
   useEffect(() => {
     invalidate();
-  }, [blocks, invalidate, overlay, previewMesh, tool]);
+  }, [blocks, invalidate, overlay, previewMesh, previewLineObj, tool]);
 
   return (
     <group ref={groupRef}>
       {blockGroup ? <primitive object={blockGroup} /> : null}
       {overlay ? <primitive object={overlay} /> : null}
       {previewMesh ? <primitive object={previewMesh} /> : null}
+      {previewLineObj ? <primitive object={previewLineObj} /> : null}
+      <ParcelOutlinesLayer model={model} />
     </group>
   );
 }

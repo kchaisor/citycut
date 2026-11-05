@@ -1941,18 +1941,14 @@ export function ModelPage({
                       blocks={massingDraw.blocks}
                       tool={massingDraw.tool}
                       previewRing={massingDraw.previewRing}
+                      previewLine={massingDraw.draftCenterline}
                       active={tab === "3d"}
-                      onPointerDown={(east, north, hitBlockId) => {
-                        massingDraw.dispatchTool({ type: "POINTER_DOWN_GROUND", east, north, hitBlockId });
-                      }}
+                      onPointerDown={(east, north, hitBlockId) => massingDraw.pointerDown(east, north, hitBlockId)}
                       onPointerMove={(east, north, clientX, clientY) => {
                         setMassingCursor({ x: clientX, y: clientY });
-                        massingDraw.dispatchTool({ type: "POINTER_MOVE", east, north });
+                        massingDraw.pointerMove(east, north);
                       }}
-                      onPointerUp={() => {
-                        massingDraw.commitDraw();
-                        massingDraw.dispatchTool({ type: "POINTER_UP" });
-                      }}
+                      onPointerUp={() => massingDraw.pointerUp()}
                       onCancel={() => massingDraw.dispatchTool({ type: "CANCEL" })}
                       onHeightDragStart={(blockId) => {
                         const block = massingDraw.blocks.find((item) => item.id === blockId);
@@ -1976,7 +1972,7 @@ export function ModelPage({
                 quality={renderQuality}
               />
               <MassingToolHud
-                visible={massingDraw.tool.toolEnabled && massingDraw.tool.phase === "drawing" && massingDraw.previewMetrics != null}
+                visible={massingDraw.tool.toolEnabled && (massingDraw.tool.phase === "drawing" || massingDraw.tool.phase === "drawingPreview") && massingDraw.previewMetrics != null}
                 widthM={massingDraw.previewMetrics?.widthM ?? 0}
                 lengthM={massingDraw.previewMetrics?.lengthM ?? 0}
                 boundaryM={massingDraw.previewMetrics?.boundaryM ?? 0}

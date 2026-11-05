@@ -3,7 +3,7 @@ import { BUILDING_EDGE_THRESHOLD_DEG } from "./buildingEdges";
 import { getColour } from "./colours";
 import { extrudePart } from "./buildCity";
 import { matteStandardMaterial } from "./matteMaterial";
-import { footprintBase } from "./terrain";
+import { footprintBase, sampleTerrain } from "./terrain";
 import { SURFACE } from "./surfaceLayers";
 import type { CityModel, Ring } from "../types";
 import {
@@ -166,4 +166,68 @@ export function buildMassingPreviewMesh(
   mesh.userData.noScenePick = true;
   mesh.renderOrder = SURFACE.building.renderOrder + 30;
   return mesh;
+}
+
+/**
+ * Ground-draped centreline for an in-progress draw: a world-space line (start → snapped end)
+ * plus endpoint ticks, so it stays glued to the surface under orbit/zoom, unlike a DOM overlay.
+ */
+export function buildMassingPreviewLine(
+  model: Pick<CityModel, "terrain" | "sideM">,
+  centerline: readonly [[number, number], [number, number]],
+): THREE.Group {
+  const group = new THREE.Group();
+  group.name = "MassingPreviewLine";
+  group.userData.noScenePick = true;
+  const [a, b] = centerline;
+  const lift = SURFACE.building.lift + 0.35;
+  const steps = 24;
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+  // Flat ribbon (~1.4 m wide) rather than a 1px GL line so it reads at any zoom.
+  const half = 0.7;
+  const px = (-(b[1] - a[1]) / len) * half;
+  const py = ((b[0] - a[0]) / len) * half;
+  const pts: number[] = [];
+  const index: number[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const e = a[0] + (b[0] - a[0]) * t;
+    const n = a[1] + (b[1] - a[1]) * t;
+    const h = (model.terrain ? sampleTerrain(model.terrain, e, n, model.sideM) : 0) + lift;
+    pts.push(e + px, h, -(n + py), e - px, h, -(n - py));
+    if (i < steps) {
+      const o = i * 2;
+      index.push(o, o + 1, o + 2, o + 1, o + 3, o + 2);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+  geometry.setIndex(index);
+  const material = new THREE.MeshBasicMaterial({
+    color: getColour("--massing-preview-line"),
+    depthTest: false,
+    transparent: true,
+    opacity: 0.95,
+    side: THREE.DoubleSide,
+  });
+  material.toneMapped = false;
+  const line = new THREE.Mesh(geometry, material);
+  line.renderOrder = SURFACE.building.renderOrder + 40;
+  line.userData.noScenePick = true;
+  line.raycast = () => {};
+  group.add(line);
+  for (const [e, n] of [a, b]) {
+    const h = (model.terrain ? sampleTerrain(model.terrain, e, n, model.sideM) : 0) + lift;
+    const dot = new THREE.Mesh(
+      new THREE.CircleGeometry(1.2, 20),
+      new THREE.MeshBasicMaterial({ color: getColour("--massing-preview-line"), depthTest: false, transparent: true }),
+    );
+    dot.rotation.x = -Math.PI / 2;
+    dot.position.set(e, h, -n);
+    dot.renderOrder = SURFACE.building.renderOrder + 41;
+    dot.userData.noScenePick = true;
+    dot.raycast = () => {};
+    group.add(dot);
+  }
+  return group;
 }

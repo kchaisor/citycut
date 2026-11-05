@@ -5,6 +5,8 @@ export type MassingGroundPickHandlers = {
   onPointerMove: (east: number, north: number, clientX: number, clientY: number) => void;
   onPointerUp: () => void;
   onCancel?: () => void;
+  /** When true, pointermove without a pressed button still reports ground hits (click-click preview). */
+  hoverActive?: () => boolean;
 };
 
 function scenePointFromHit(point: THREE.Vector3): [number, number, number] {
@@ -88,7 +90,7 @@ export function attachMassingGroundPick(
   }
 
   function onPointerMove(event: PointerEvent) {
-    if (!dragging) return;
+    if (!dragging && !handlers.hoverActive?.()) return;
     setPointer(event);
     const ground = pickGround(raycaster, root, pointer, camera);
     if (!ground) return;

@@ -849,6 +849,89 @@ async function main() {
     });
     await page.waitForTimeout(300);
 
+    // Click-click drawing: click start, hover (live ground preview line + HUD), click end.
+    await page.evaluate(() => window.__citycutQaMassing?.enableTool());
+    await page.waitForTimeout(300);
+    const sceneHasPreviewLine = () =>
+      page.evaluate(() => ({ qa: window.__citycutQaMassingPreview ?? null }));
+    await page.mouse.click(520, 470);
+    await page.waitForTimeout(250);
+    for (let i = 1; i <= 12; i += 1) {
+      await page.mouse.move(520 + i * 12, 470);
+      await page.waitForTimeout(40);
+    }
+    await page.waitForTimeout(250);
+    const clickPreview = await sceneHasPreviewLine();
+    const clickHud = await page.evaluate(() => document.querySelector(".massing-cursor-pill")?.textContent ?? "");
+    const blocksBeforeSecondClick = await page.evaluate(() => window.__citycutQaMassing?.getBlocks()?.length ?? -1);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-click-preview.png") });
+    await page.mouse.click(664, 470);
+    await page.waitForTimeout(400);
+    const clickBlocks = await page.evaluate(() => {
+      const blocks = window.__citycutQaMassing?.getBlocks() ?? [];
+      const b = blocks[blocks.length - 1];
+      return { count: blocks.length, width: b?.width_m ?? 0 };
+    });
+    assertCheck(
+      "massing-click-click-draw",
+      "Real mouse click → hover → click creates a 14 m block; between clicks a ground preview line and length/width HUD are live and no block exists yet",
+      clickPreview.qa?.phase === "drawingPreview" &&
+        clickPreview.qa?.inScene === true &&
+        Math.hypot(clickPreview.qa.end[0] - clickPreview.qa.start[0], clickPreview.qa.end[1] - clickPreview.qa.start[1]) > 5 &&
+        /14 m ×/.test(clickHud) &&
+        blocksBeforeSecondClick === 0 &&
+        clickBlocks.count === 1 &&
+        Math.abs(clickBlocks.width - 14) <= 0.5,
+      `preview=${JSON.stringify(clickPreview)}, hud="${clickHud}", before=${blocksBeforeSecondClick}, after=${JSON.stringify(clickBlocks)}`,
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-click-committed.png") });
+
+    // Escape cancels an in-progress click-click line without creating a block.
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      for (let i = 0; i < 10 && (api?.getBlocks()?.length ?? 0) > 0; i += 1) {
+        const id = api?.getBlocks()?.[0]?.id;
+        if (id) api?.selectBlock(id);
+        api?.deleteSelected();
+      }
+    });
+    await page.waitForTimeout(300);
+    await page.mouse.click(520, 470);
+    await page.waitForTimeout(200);
+    await page.mouse.move(640, 470, { steps: 8 });
+    await page.waitForTimeout(200);
+    const escBefore = await page.evaluate(() => window.__citycutQaMassingPreview?.phase ?? null);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+    const escAfter = await page.evaluate(() => ({
+      preview: window.__citycutQaMassingPreview ?? null,
+      blocks: window.__citycutQaMassing?.getBlocks()?.length ?? -1,
+    }));
+    assertCheck(
+      "massing-click-escape-cancel",
+      "Escape during a click-click preview removes the preview line and leaves no block",
+      escBefore === "drawingPreview" && escAfter.preview === null && escAfter.blocks === 0,
+      `before=${escBefore}, after=${JSON.stringify(escAfter)}`,
+    );
+
+    // Property parcel outlines on the ground while Massing mode is on.
+    await page
+      .waitForFunction(() => window.__citycutQaParcels?.status && window.__citycutQaParcels.status !== "loading", null, {
+        timeout: 60_000,
+      })
+      .catch(() => {});
+    const parcelInfo = await page.evaluate(() => ({ qa: window.__citycutQaParcels ?? null }));
+    assertCheck(
+      "massing-parcel-outlines",
+      "Massing mode draws Vicmap parcel outlines (line segments) on the 3D ground",
+      parcelInfo.qa?.status === "ready" && parcelInfo.qa.segments > 0,
+      JSON.stringify(parcelInfo),
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-parcel-outlines.png") });
+    await page.evaluate(() => window.__citycutQaMassing?.disableTool());
+    await page.waitForTimeout(200);
+
     const massingDrawId = await page.evaluate(() => {
       const api = window.__citycutQaMassing;
       if (!api) return null;

@@ -1,4 +1,4 @@
-export type MassingToolPhase = "idle" | "drawing" | "selected" | "draggingHeight";
+export type MassingToolPhase = "idle" | "drawing" | "drawingPreview" | "selected" | "draggingHeight";
 
 export type MassingToolState = {
   toolEnabled: boolean;
@@ -45,7 +45,7 @@ export function reduceMassingTool(state: MassingToolState, event: MassingToolEve
         toolEnabled: false,
       };
     case "LEAVE_3D_VIEW":
-      if (state.phase === "drawing" || state.phase === "draggingHeight") {
+      if (state.phase === "drawing" || state.phase === "drawingPreview" || state.phase === "draggingHeight") {
         return {
           ...state,
           phase: state.selectedId ? "selected" : "idle",
@@ -59,7 +59,7 @@ export function reduceMassingTool(state: MassingToolState, event: MassingToolEve
       return state;
     case "CANCEL":
       if (!state.toolEnabled) return state;
-      if (state.phase === "drawing") {
+      if (state.phase === "drawing" || state.phase === "drawingPreview") {
         return { ...state, phase: "idle", drawStart: null, drawEnd: null };
       }
       if (state.phase === "draggingHeight") {
@@ -69,6 +69,10 @@ export function reduceMassingTool(state: MassingToolState, event: MassingToolEve
     case "POINTER_DOWN_GROUND": {
       if (!state.toolEnabled) return state;
       if (state.phase === "draggingHeight") return state;
+      // Second click of a click-click draw: anchor the end point; the hook commits.
+      if (state.phase === "drawingPreview") {
+        return { ...state, drawEnd: [event.east, event.north] };
+      }
       if (event.hitBlockId) {
         return {
           ...state,
@@ -90,13 +94,16 @@ export function reduceMassingTool(state: MassingToolState, event: MassingToolEve
       };
     }
     case "POINTER_MOVE": {
-      if (state.phase !== "drawing" || !state.drawStart) return state;
+      if ((state.phase !== "drawing" && state.phase !== "drawingPreview") || !state.drawStart) return state;
       return { ...state, drawEnd: [event.east, event.north] };
     }
     case "POINTER_UP":
+      // A press-release without a drag-length draw becomes a click-click preview:
+      // the start stays anchored and the end follows the hover until the next click.
+      if (state.phase === "drawing") return { ...state, phase: "drawingPreview" };
       return state;
     case "COMMIT_DRAW":
-      if (state.phase !== "drawing") return state;
+      if (state.phase !== "drawing" && state.phase !== "drawingPreview") return state;
       return { ...state, phase: "idle", drawStart: null, drawEnd: null };
     case "SELECT":
       if (!state.toolEnabled) return state;
@@ -128,5 +135,9 @@ export function reduceMassingTool(state: MassingToolState, event: MassingToolEve
 }
 
 export function massingToolOrbitLocked(state: MassingToolState): boolean {
-  return state.toolEnabled && (state.phase === "drawing" || state.phase === "draggingHeight");
+  return state.toolEnabled && (state.phase === "drawing" || state.phase === "drawingPreview" || state.phase === "draggingHeight");
+}
+
+export function massingToolIsDrawing(state: MassingToolState): boolean {
+  return state.phase === "drawing" || state.phase === "drawingPreview";
 }
