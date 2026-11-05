@@ -27,7 +27,7 @@ import { PNG } from "pngjs";
 const CHROME_PATH = "/usr/bin/google-chrome";
 const VIEWPORT = { width: 1440, height: 900 };
 const DEVICE_SCALE_FACTOR = 2;
-const ARTIFACTS_DIR = "/opt/cursor/artifacts";
+const ARTIFACTS_DIR = process.env.CITYCUT_ARTIFACTS_DIR ?? "/workspace";
 const TMP_FRAMES_DIR = "/tmp/citycut_verify_frames";
 const TMP_VIDEO_DIR = "/tmp/citycut_verify_video_frames";
 
@@ -816,6 +816,39 @@ async function main() {
         if (key.startsWith("citycut.massingBlocks.")) window.localStorage.removeItem(key);
       }
     });
+    // Real pointer gesture: click the HUD Massing button, then press-drag-release on the canvas.
+    // Guards against listener re-attach mid-drag (PR #199 regression: zero-length draw, no block).
+    await page.click('button[aria-label="Massing draw tool"]');
+    await page.waitForTimeout(400);
+    const massingToolOn = await page.evaluate(
+      () => document.querySelector('button[aria-label="Massing draw tool"]')?.getAttribute("aria-pressed") === "true",
+    );
+    await page.mouse.move(560, 470);
+    await page.mouse.down();
+    await page.waitForTimeout(150);
+    for (let i = 1; i <= 15; i += 1) {
+      await page.mouse.move(560 + i * 8, 470);
+      await page.waitForTimeout(50);
+    }
+    const massingHudDuringDrag = await page.evaluate(() => document.querySelector(".massing-cursor-pill")?.textContent ?? "");
+    await page.mouse.up();
+    await page.waitForTimeout(400);
+    const massingPointerCount = await page.evaluate(() => window.__citycutQaMassing?.getBlocks()?.length ?? 0);
+    assertCheck(
+      "massing-pointer-draw",
+      "Massing HUD button enables the tool and a real pointer drag on the canvas creates a block",
+      massingToolOn && massingPointerCount >= 1,
+      `toolOn=${massingToolOn}, blocks=${massingPointerCount}, hud="${massingHudDuringDrag}"`,
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-pointer-draw.png") });
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      for (let i = 0; i < 10 && (api?.getBlocks()?.length ?? 0) > 0; i += 1) api?.deleteSelected();
+      api?.disableTool();
+    });
+    await page.waitForTimeout(300);
+
     const massingDrawId = await page.evaluate(() => {
       const api = window.__citycutQaMassing;
       if (!api) return null;

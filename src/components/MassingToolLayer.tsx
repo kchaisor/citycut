@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { CityModel } from "../types";
@@ -93,47 +93,54 @@ export function MassingToolLayer({
     return buildMassingPreviewMesh(model, previewRing);
   }, [model, previewRing]);
 
+  // Parent passes inline callbacks that change every render. Keep them in refs so the
+  // canvas listeners attach once per drag surface; re-attaching mid-gesture resets the
+  // listener's `dragging` flag and drops every pointermove (zero-length draw, no block).
+  const groundHandlers = useRef({ onPointerDown, onPointerMove, onPointerUp, onCancel });
+  groundHandlers.current = { onPointerDown, onPointerMove, onPointerUp, onCancel };
+  const heightHandlers = useRef({ onHeightDragStart, onHeightDrag, onHeightDragEnd });
+  heightHandlers.current = { onHeightDragStart, onHeightDrag, onHeightDragEnd };
+
   useLayoutEffect(() => {
     if (!active) return;
-    return attachMassingGroundPick(gl.domElement, camera, scene, {
-      onPointerDown,
-      onPointerMove,
-      onPointerUp,
-      onCancel,
-    }, true);
-  }, [active, camera, gl.domElement, onCancel, onPointerDown, onPointerMove, onPointerUp, scene]);
+    return attachMassingGroundPick(
+      gl.domElement,
+      camera,
+      scene,
+      {
+        onPointerDown: (east, north, hitBlockId) => groundHandlers.current.onPointerDown(east, north, hitBlockId),
+        onPointerMove: (east, north, clientX, clientY) => groundHandlers.current.onPointerMove(east, north, clientX, clientY),
+        onPointerUp: () => groundHandlers.current.onPointerUp(),
+        onCancel: () => groundHandlers.current.onCancel(),
+      },
+      true,
+    );
+  }, [active, camera, gl.domElement, scene]);
 
-  const onHeightStart = useCallback(
-    (blockId: string) => {
-      heightDragStartY.current = null;
-      onHeightDragStart(blockId);
-    },
-    [onHeightDragStart],
-  );
-
-  const onHeightMove = useCallback(
-    (clientY: number) => {
-      if (heightDragStartY.current == null) heightDragStartY.current = clientY;
-      onHeightDrag(clientY, heightDragStartY.current);
-    },
-    [onHeightDrag],
-  );
-
-  const onHeightEnd = useCallback(() => {
-    heightDragStartY.current = null;
-    onHeightDragEnd();
-  }, [onHeightDragEnd]);
-
+  const heightActive = active && (tool.phase === "selected" || tool.phase === "draggingHeight");
   useLayoutEffect(() => {
-    if (!active || tool.phase !== "selected") return;
+    if (!heightActive) return;
     return attachMassingHeightDrag(
       gl.domElement,
       camera,
       scene,
-      { onStart: onHeightStart, onMove: onHeightMove, onEnd: onHeightEnd },
+      {
+        onStart: (blockId: string) => {
+          heightDragStartY.current = null;
+          heightHandlers.current.onHeightDragStart(blockId);
+        },
+        onMove: (clientY: number) => {
+          if (heightDragStartY.current == null) heightDragStartY.current = clientY;
+          heightHandlers.current.onHeightDrag(clientY, heightDragStartY.current);
+        },
+        onEnd: () => {
+          heightDragStartY.current = null;
+          heightHandlers.current.onHeightDragEnd();
+        },
+      },
       true,
     );
-  }, [active, camera, gl.domElement, onHeightEnd, onHeightMove, onHeightStart, scene, tool.phase]);
+  }, [heightActive, camera, gl.domElement, scene]);
 
   useEffect(() => {
     invalidate();
