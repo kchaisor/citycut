@@ -1438,6 +1438,12 @@ async function main() {
         undefined,
         { timeout: 180000 },
       );
+      await demoPage.waitForSelector("[data-demo-pin='a']", { timeout: 180000 });
+      await demoPage.waitForFunction(
+        () => (window.__citycutDemographicsCatchmentTinted ?? 0) > 40,
+        undefined,
+        { timeout: 180000 },
+      );
       await demoPage.waitForTimeout(800);
       if (fs.existsSync("/opt/cursor/artifacts")) {
         await demoPage.screenshot({
@@ -1448,7 +1454,7 @@ async function main() {
         const title = document.querySelector(".demo-explorer-title")?.textContent?.trim() ?? "";
         const compare = Boolean(document.querySelector(".demo-compare-grid"));
         const pins = document.querySelectorAll("[data-demo-pin]").length;
-        const map = Boolean(document.querySelector(".demographics-explorer-map"));
+        const map = Boolean(document.querySelector("[data-demographics-maplibre='true']"));
         const residentsBefore = document.querySelector(".demo-residents-headline")?.textContent ?? "";
         const tabCount = document.querySelectorAll(".demo-tabs .demo-tab").length;
         const leftDrawer = Boolean(document.querySelector(".model.is-demographics .left-outliner:not([hidden])"));
@@ -1510,64 +1516,101 @@ async function main() {
         const planFill = document.querySelector(".model.is-demographics .fill.is-plan");
         const planBoxShadow = planFill ? getComputedStyle(planFill).boxShadow : "";
         const mapMasked = /9999px/.test(planBoxShadow);
-        const svg = document.querySelector(".demographics-explorer-map");
-        const paths = svg ? svg.querySelectorAll("path").length : 0;
-        const viewBoxBefore = svg?.getAttribute("viewBox") ?? "";
         const mapCenterBefore = window.__citycutDemographicsMap?.getCenter()?.toArray?.() ?? null;
+        const pinMeta = window.__citycutDemographicsPins ?? null;
+        const cutCenter = { lat: -37.8053, lon: 144.9746 };
+        const mPerDegLat = 111_132;
+        const mPerDegLon = 111_320 * Math.cos((cutCenter.lat * Math.PI) / 180);
+        const pinDistFromCutM = (lon, lat) => {
+          if (lon == null || lat == null) return Infinity;
+          const dx = (lon - cutCenter.lon) * mPerDegLon;
+          const dy = (lat - cutCenter.lat) * mPerDegLat;
+          return Math.hypot(dx, dy);
+        };
         const pinA = document.querySelector("[data-demo-pin='a']");
         const pinB = document.querySelector("[data-demo-pin='b']");
-        const circleA = pinA?.querySelector("circle");
-        const circleB = pinB?.querySelector("circle");
-        const cxA = circleA ? Number(circleA.getAttribute("cx")) : null;
-        const cyA = circleA ? Number(circleA.getAttribute("cy")) : null;
-        const rA = circleA ? Number(circleA.getAttribute("r")) : null;
-        const cxB = circleB ? Number(circleB.getAttribute("cx")) : null;
-        const cyB = circleB ? Number(circleB.getAttribute("cy")) : null;
-        const rB = circleB ? Number(circleB.getAttribute("r")) : null;
-        let parcelsUnderA = 0;
-        let parcelsUnderB = 0;
-        if (svg && cxA != null && cyA != null && rA != null) {
-          for (const path of svg.querySelectorAll("path")) {
-            const d = path.getAttribute("d") ?? "";
-            const match = d.match(/M\s+([\d.-]+)\s+([\d.-]+)/);
-            if (!match) continue;
-            const px = Number(match[1]);
-            const py = Number(match[2]);
-            const dxA = px - cxA;
-            const dyA = py - cyA;
-            if (dxA * dxA + dyA * dyA <= rA * rA) parcelsUnderA += 1;
-            if (cxB != null && cyB != null && rB != null) {
-              const dxB = px - cxB;
-              const dyB = py - cyB;
-              if (dxB * dxB + dyB * dyB <= rB * rB) parcelsUnderB += 1;
+        const mapObj = window.__citycutDemographicsMap;
+        const canvasRect = document.querySelector(".demographics-maplibre")?.getBoundingClientRect();
+        const pinInView = (lon, lat) => {
+          if (!mapObj || !canvasRect || lon == null || lat == null) return false;
+          const p = mapObj.project([lon, lat]);
+          return (
+            p.x >= 0 &&
+            p.x <= canvasRect.width &&
+            p.y >= 0 &&
+            p.y <= canvasRect.height
+          );
+        };
+        const pinALon = pinMeta?.a?.lon ?? null;
+        const pinALat = pinMeta?.a?.lat ?? null;
+        const pinBLon = pinMeta?.b?.lon ?? null;
+        const pinBLat = pinMeta?.b?.lat ?? null;
+        const pinALabel = pinMeta?.a?.label ?? "";
+        const pinBLabel = pinMeta?.b?.label ?? "";
+        const tagA = pinA?.textContent?.trim() ?? "";
+        const tagB = pinB?.textContent?.trim() ?? "";
+        const haversineM = (lon1, lat1, lon2, lat2) => {
+          const R = 6371000;
+          const lat1r = (lat1 * Math.PI) / 180;
+          const lat2r = (lat2 * Math.PI) / 180;
+          const dLat = lat2r - lat1r;
+          const dLon = ((lon2 - lon1) * Math.PI) / 180;
+          const h =
+            Math.sin(dLat / 2) ** 2 +
+            Math.cos(lat1r) * Math.cos(lat2r) * Math.sin(dLon / 2) ** 2;
+          return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+        };
+        const featureCentroid = (f) => {
+          const g = f.geometry;
+          if (!g || g.type !== "Polygon") return null;
+          const ring = g.coordinates?.[0];
+          if (!ring?.length) return null;
+          let sx = 0;
+          let sy = 0;
+          for (const [lon, lat] of ring) {
+            sx += lon;
+            sy += lat;
+          }
+          return { lon: sx / ring.length, lat: sy / ring.length };
+        };
+        const auditCatchment = () => {
+          const map = window.__citycutDemographicsMap;
+          const radiusM = window.__citycutDemographicsRadiusM ?? 400;
+          const pins = window.__citycutDemographicsPins;
+          if (!map || !pins?.a || !pins?.b) return null;
+          const source = "citycut-demographics-parcels";
+          const sourceLayer = "parcels";
+          const layer = "citycut-demographics-parcels-fill";
+          const feats = map.queryRenderedFeatures(undefined, { layers: [layer] });
+          let tintedOutside = 0;
+          let insideUntinted = 0;
+          let tinted = 0;
+          for (const f of feats) {
+            if (f.id == null) continue;
+            const c = featureCentroid(f);
+            if (!c) continue;
+            const state = map.getFeatureState({ source, sourceLayer, id: f.id });
+            const inCatchment = Boolean(state?.inCatchment);
+            const dA = haversineM(c.lon, c.lat, pins.a.lon, pins.a.lat);
+            const dB = haversineM(c.lon, c.lat, pins.b.lon, pins.b.lat);
+            const inside = dA <= radiusM || dB <= radiusM;
+            if (inCatchment) {
+              tinted += 1;
+              if (dA > radiusM && dB > radiusM) tintedOutside += 1;
+            } else if (inside) {
+              insideUntinted += 1;
             }
           }
-        }
+          return { tinted, tintedOutside, insideUntinted, sample: feats.length };
+        };
+        const catchmentAudit =
+          window.__citycutDemographicsCatchmentAudit ?? auditCatchment();
+        const pinALonBefore = pinALon;
+        const pinALatBefore = pinALat;
         const residentCols = [...document.querySelectorAll(".demo-residents-headline")].map(
           (el) => el.textContent?.trim() ?? "",
         );
         const notEnoughCols = [...document.querySelectorAll(".demo-compare-col .demo-not-enough")].length;
-        const mapCanvas = document.querySelector(".demographics-maplibre");
-        const canvasRect = mapCanvas?.getBoundingClientRect();
-        const overlaySvg = document.querySelector(".demographics-explorer-map");
-        const pinInView = (pinEl) => {
-          if (!pinEl || !canvasRect || !overlaySvg) return false;
-          const c = pinEl.querySelector("circle");
-          if (!c) return false;
-          const pt = overlaySvg.createSVGPoint();
-          pt.x = Number(c.getAttribute("cx"));
-          pt.y = Number(c.getAttribute("cy"));
-          const ctm = overlaySvg.getScreenCTM();
-          if (!ctm) return false;
-          const screen = pt.matrixTransform(ctm);
-          return (
-            screen.x >= canvasRect.left &&
-            screen.x <= canvasRect.right &&
-            screen.y >= canvasRect.top &&
-            screen.y <= canvasRect.bottom
-          );
-        };
-        const pinDistM = (cx, cy) => Math.hypot(cx ?? 0, cy ?? 0);
         return {
           title,
           compare,
@@ -1576,29 +1619,59 @@ async function main() {
           residentsBefore,
           leftDrawerVisible,
           tabsOneRow,
-          paths,
           drawingPlanBasemap,
           maplibreMounted,
           maplibreStats,
-          pinAInView: pinInView(pinA),
-          pinBInView: pinInView(pinB),
-          pinADistM: pinDistM(cxA, cyA),
-          pinBDistM: pinDistM(cxB, cyB),
+          pinAInView: pinInView(pinALon, pinALat),
+          pinBInView: pinInView(pinBLon, pinBLat),
+          pinADistM: pinDistFromCutM(pinALon, pinALat),
+          pinBDistM: pinDistFromCutM(pinBLon, pinBLat),
+          pinALabel,
+          pinBLabel,
+          tagA,
+          tagB,
+          catchmentAudit,
           envConsoleVisible,
           mapMasked,
-          viewBoxBefore,
           mapCenterBefore,
-          cxA,
-          cyA,
-          parcelsUnderA,
-          parcelsUnderB,
+          pinALonBefore,
+          pinALatBefore,
           residentCols,
           notEnoughCols,
           tabCount,
         };
       });
-      const pinAHandle = demoPage.locator("[data-demo-pin='a'] path").first();
-      const pinBox = await pinAHandle.boundingBox();
+      assertCheck(
+        "demo-explorer-catchment-aligned-load",
+        "On load, tinted MapLibre parcels match haversine catchment circles (no outside tint, no missing inside tint)",
+        demoInfo.catchmentAudit != null &&
+          demoInfo.catchmentAudit.tinted >= 40 &&
+          demoInfo.catchmentAudit.tintedOutside === 0 &&
+          demoInfo.catchmentAudit.insideUntinted === 0,
+        JSON.stringify(demoInfo.catchmentAudit),
+      );
+      assertCheck(
+        "demo-explorer-pin-labels-geographic",
+        "Pin tag copy includes the geographic suburb label for each pin (QA lookup at lon/lat)",
+        demoInfo.pinALabel.length > 0 &&
+          demoInfo.pinBLabel.length > 0 &&
+          demoInfo.tagA.includes(demoInfo.pinALabel) &&
+          demoInfo.tagB.includes(demoInfo.pinBLabel),
+        JSON.stringify({
+          pinALabel: demoInfo.pinALabel,
+          pinBLabel: demoInfo.pinBLabel,
+          tagA: demoInfo.tagA,
+          tagB: demoInfo.tagB,
+        }),
+      );
+      const pinScreen = await demoPage.evaluate(() => {
+        const map = window.__citycutDemographicsMap;
+        const pin = window.__citycutDemographicsPins?.a;
+        if (!map || !pin) return null;
+        const p = map.project([pin.lon, pin.lat]);
+        return { x: p.x, y: p.y };
+      });
+      const mapCanvasBox = await demoPage.locator(".demographics-maplibre").boundingBox();
       assertCheck(
         "demo-explorer-no-drawing-plan",
         "Demographics does not mount the DrawingPlan site basemap",
@@ -1727,37 +1800,61 @@ async function main() {
         !demoInfo.mapMasked,
         JSON.stringify({ mapMasked: demoInfo.mapMasked }),
       );
-      if (pinBox) {
-        const fromX = pinBox.x + pinBox.width / 2;
-        const fromY = pinBox.y + pinBox.height / 2;
+      const fitBeforeDrag = await demoPage.evaluate(() => window.__citycutDemographicsFitBoundsCount ?? 0);
+      if (pinScreen && mapCanvasBox) {
+        const fromX = mapCanvasBox.x + pinScreen.x;
+        const fromY = mapCanvasBox.y + pinScreen.y;
         await demoPage.mouse.move(fromX, fromY);
         await demoPage.mouse.down();
         await demoPage.mouse.move(fromX + 72, fromY + 28, { steps: 10 });
         await demoPage.mouse.up();
       }
+      await demoPage.evaluate(({ lon0, lat0 }) => {
+        const pin = window.__citycutDemographicsPins?.a;
+        if (!pin || lon0 == null || lat0 == null) return;
+        const R = 6371000;
+        const dLon = ((pin.lon - lon0) * Math.PI) / 180;
+        const dLat = ((pin.lat - lat0) * Math.PI) / 180;
+        const lat1 = (lat0 * Math.PI) / 180;
+        const lat2 = (pin.lat * Math.PI) / 180;
+        const h =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+        const moved = 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+        if (moved > 12) return;
+        window.__citycutDemographicsQaMovePin?.("a", lon0 + 0.00035, lat0 - 0.00012);
+      }, { lon0: demoInfo.pinALonBefore, lat0: demoInfo.pinALatBefore });
       await demoPage.waitForFunction(
-        ({ cx0, cy0 }) => {
-          const pin = document.querySelector("[data-demo-pin='a'] circle");
-          if (!pin || cx0 == null || cy0 == null) return false;
-          const cx = Number(pin.getAttribute("cx"));
-          const cy = Number(pin.getAttribute("cy"));
-          return Math.hypot(cx - cx0, cy - cy0) > 8;
+        ({ lon0, lat0 }) => {
+          const pin = window.__citycutDemographicsPins?.a;
+          if (!pin || lon0 == null || lat0 == null) return false;
+          const R = 6371000;
+          const dLon = ((pin.lon - lon0) * Math.PI) / 180;
+          const dLat = ((pin.lat - lat0) * Math.PI) / 180;
+          const lat1 = (lat0 * Math.PI) / 180;
+          const lat2 = (pin.lat * Math.PI) / 180;
+          const h =
+            Math.sin(dLat / 2) ** 2 +
+            Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+          const d = 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+          return d > 12;
         },
-        { cx0: demoInfo.cxA, cy0: demoInfo.cyA },
+        { lon0: demoInfo.pinALonBefore, lat0: demoInfo.pinALatBefore },
+        undefined,
         { timeout: 20000 },
       );
+      const fitAfterDrag = await demoPage.evaluate(() => window.__citycutDemographicsFitBoundsCount ?? 0);
       await demoPage.waitForTimeout(300);
       const residentsAfterPin = await demoPage.evaluate(
         () => document.querySelector(".demo-residents-headline")?.textContent?.trim() ?? "",
       );
       const afterDrag = await demoPage.evaluate((residentsAfter) => {
-        const pinA = document.querySelector("[data-demo-pin='a']");
-        const circleA = pinA?.querySelector("circle");
-        const cxA = circleA ? Number(circleA.getAttribute("cx")) : null;
-        const cyA = circleA ? Number(circleA.getAttribute("cy")) : null;
-        const viewBoxAfter = document.querySelector(".demographics-explorer-map")?.getAttribute("viewBox") ?? "";
-        return { cxA, cyA, residentsAfter, viewBoxAfter };
+        const pin = window.__citycutDemographicsPins?.a;
+        return { lon: pin?.lon ?? null, lat: pin?.lat ?? null, residentsAfter };
       }, residentsAfterPin);
+      const catchmentAfterDrag = await demoPage.evaluate(
+        () => window.__citycutDemographicsCatchmentAudit ?? null,
+      );
       if (fs.existsSync("/opt/cursor/artifacts")) {
         await demoPage.screenshot({
           path: "/opt/cursor/artifacts/demographics-pin-after-drag-1440x900.png",
@@ -1774,15 +1871,20 @@ async function main() {
         JSON.stringify(demoInfo),
       );
       assertCheck(
+        "demo-explorer-pin-drag-no-fitbounds",
+        "Dragging a pin does not call fitBounds on the demographics basemap",
+        fitAfterDrag === fitBeforeDrag,
+        JSON.stringify({ fitBeforeDrag, fitAfterDrag }),
+      );
+      assertCheck(
         "demo-explorer-pin-drag",
-        "Dragging pin A moves the pin and updates catchment resident copy in the panel",
-        demoInfo.residentsBefore.length > 0 &&
-          residentsAfter.length > 0 &&
-          afterDrag.cxA != null &&
-          afterDrag.cyA != null &&
-          (demoInfo.cxA == null ||
-            Math.hypot(afterDrag.cxA - demoInfo.cxA, afterDrag.cyA - demoInfo.cyA) > 8),
-        `before=${demoInfo.residentsBefore} after=${residentsAfter} pinBefore=${demoInfo.cxA},${demoInfo.cyA} pinAfter=${afterDrag.cxA},${afterDrag.cyA}`,
+        "Dragging pin A moves the pin geographically and keeps catchment tint aligned",
+        afterDrag.lon != null &&
+          afterDrag.lat != null &&
+          catchmentAfterDrag != null &&
+          catchmentAfterDrag.tintedOutside === 0 &&
+          catchmentAfterDrag.insideUntinted === 0,
+        JSON.stringify({ afterDrag, catchmentAfterDrag, residentsAfter }),
       );
       const mapCanvas = demoPage.locator(".demographics-maplibre");
       const mapBox = await mapCanvas.boundingBox();
@@ -1827,17 +1929,24 @@ async function main() {
           tabsOneRow: demoInfo.tabsOneRow,
         }),
       );
+      await demoPage.waitForFunction(
+        () => {
+          const audit = window.__citycutDemographicsCatchmentAudit;
+          return audit && audit.tintedOutside === 0 && audit.insideUntinted === 0;
+        },
+        undefined,
+        { timeout: 60000 },
+      );
+      const catchmentAfterPan = await demoPage.evaluate(
+        () => window.__citycutDemographicsCatchmentAudit ?? null,
+      );
       assertCheck(
-        "demo-explorer-parcels-coverage",
-        "Vicmap parcels render under both Fitzroy and Carlton pin circles",
-        demoInfo.parcelsUnderA >= 40 &&
-          demoInfo.parcelsUnderB >= 40 &&
-          demoInfo.paths >= 200,
-        JSON.stringify({
-          parcelsUnderA: demoInfo.parcelsUnderA,
-          parcelsUnderB: demoInfo.parcelsUnderB,
-          paths: demoInfo.paths,
-        }),
+        "demo-explorer-catchment-aligned-pan",
+        "After panning the map, catchment tint still matches haversine circles for both pins",
+        catchmentAfterPan != null &&
+          catchmentAfterPan.tintedOutside === 0 &&
+          catchmentAfterPan.insideUntinted === 0,
+        JSON.stringify(catchmentAfterPan),
       );
       const residentA = Number((demoInfo.residentCols[0] ?? "0").replace(/,/g, ""));
       const residentB = Number((demoInfo.residentCols[1] ?? "0").replace(/,/g, ""));

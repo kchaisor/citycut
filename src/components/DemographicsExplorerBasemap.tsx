@@ -3,14 +3,15 @@ import maplibregl from "maplibre-gl";
 import { MapAttribution } from "./MapAttribution";
 import { applyBasemapStyleToMap, loadBasemapStyle } from "../lib/loadMapStyle";
 import { applyFlatNorthUpMapHandlers, FLAT_NORTH_UP_MAP_OPTIONS } from "../lib/mapStageMapOptions";
+import { demographicsMapInitialFitBounds } from "../lib/demographicsMapViewport";
 import {
-  demographicsMapInitialFitBounds,
-  demographicsPlanViewportFromLngLatBounds,
-} from "../lib/demographicsMapViewport";
-import { addDemographicsParcelLayers, paintDemographicsParcelLayers } from "../lib/demographicsMapLayers";
+  addDemographicsParcelLayers,
+  paintDemographicsParcelLayers,
+} from "../lib/demographicsMapLayers";
+import { ensureDemographicsOverlayLayers } from "../lib/demographicsMapOverlays";
 import { trimStyleForDemographicsRoads } from "../lib/demographicsMapStyle";
 import { useColourRevision } from "../lib/useColourRevision";
-import type { PlanViewport } from "../lib/planViewport";
+import { visibleBoundsFromMap } from "./useDemographicsParcels";
 import type { CityModel } from "../types";
 
 let demographicsMapInstanceSeq = 0;
@@ -19,25 +20,29 @@ export function DemographicsExplorerBasemap({
   model,
   fitCounter = 0,
   radiusM,
-  onOverlayViewport,
+  onMapReady,
+  onVisibleBounds,
 }: {
   model: CityModel;
   fitCounter?: number;
   radiusM: number;
-  onOverlayViewport: (view: PlanViewport) => void;
+  onMapReady: (map: maplibregl.Map) => void;
+  onVisibleBounds: (bounds: ReturnType<typeof visibleBoundsFromMap>) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const applyingRef = useRef(false);
   const modelRef = useRef(model);
   const radiusRef = useRef(radiusM);
-  const onOverlayRef = useRef(onOverlayViewport);
+  const onMapReadyRef = useRef(onMapReady);
+  const onVisibleBoundsRef = useRef(onVisibleBounds);
   const styleReadyRef = useRef(false);
-  const rafRef = useRef<number | null>(null);
+  const boundsTimerRef = useRef<number | null>(null);
   const colourTick = useColourRevision();
   modelRef.current = model;
   radiusRef.current = radiusM;
-  onOverlayRef.current = onOverlayViewport;
+  onMapReadyRef.current = onMapReady;
+  onVisibleBoundsRef.current = onVisibleBounds;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -64,40 +69,30 @@ export function DemographicsExplorerBasemap({
       if (typeof window !== "undefined") {
         window.__citycutDemographicsMap = map;
         window.__citycutDemographicsMapInstanceId = instanceId;
+        window.__citycutDemographicsFitBoundsCount = 0;
       }
 
-      const syncOverlayViewport = () => {
-        const b = map.getBounds();
-        const sw = b.getSouthWest();
-        const ne = b.getNorthEast();
-        onOverlayRef.current(
-          demographicsPlanViewportFromLngLatBounds(
-            [
-              [sw.lng, sw.lat],
-              [ne.lng, ne.lat],
-            ],
-            modelRef.current.center,
-          ),
-        );
-      };
-
-      const scheduleOverlaySync = () => {
-        if (rafRef.current != null) return;
-        rafRef.current = window.requestAnimationFrame(() => {
-          rafRef.current = null;
+      const scheduleVisibleBounds = () => {
+        if (boundsTimerRef.current != null) window.clearTimeout(boundsTimerRef.current);
+        boundsTimerRef.current = window.setTimeout(() => {
+          boundsTimerRef.current = null;
           if (applyingRef.current) return;
-          syncOverlayViewport();
-        });
+          onVisibleBoundsRef.current(visibleBoundsFromMap(map));
+        }, 280);
       };
 
       const fitInitial = () => {
         applyingRef.current = true;
+        if (typeof window !== "undefined") {
+          window.__citycutDemographicsFitBoundsCount =
+            (window.__citycutDemographicsFitBoundsCount ?? 0) + 1;
+        }
         map.fitBounds(
           demographicsMapInitialFitBounds(modelRef.current.center, sideM, radiusRef.current),
           { padding: 56, duration: 0, animate: false },
         );
         applyingRef.current = false;
-        syncOverlayViewport();
+        onVisibleBoundsRef.current(visibleBoundsFromMap(map));
       };
 
       const onStyleReady = () => {
@@ -105,7 +100,9 @@ export function DemographicsExplorerBasemap({
         styleReadyRef.current = true;
         trimStyleForDemographicsRoads(map);
         addDemographicsParcelLayers(map);
+        ensureDemographicsOverlayLayers(map);
         fitInitial();
+        onMapReadyRef.current(map);
       };
 
       map.on("load", onStyleReady);
@@ -115,15 +112,15 @@ export function DemographicsExplorerBasemap({
 
       map.on("moveend", (event) => {
         if (applyingRef.current || !event.originalEvent) return;
-        scheduleOverlaySync();
+        scheduleVisibleBounds();
       });
     });
 
     return () => {
       cancelled = true;
-      if (rafRef.current != null) {
-        window.cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
+      if (boundsTimerRef.current != null) {
+        window.clearTimeout(boundsTimerRef.current);
+        boundsTimerRef.current = null;
       }
       const map = mapRef.current;
       if (map) {
@@ -142,23 +139,16 @@ export function DemographicsExplorerBasemap({
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
     applyingRef.current = true;
+    if (typeof window !== "undefined") {
+      window.__citycutDemographicsFitBoundsCount =
+        (window.__citycutDemographicsFitBoundsCount ?? 0) + 1;
+    }
     map.fitBounds(
       demographicsMapInitialFitBounds(model.center, model.sideM, radiusRef.current),
       { padding: 56, duration: 0, animate: false },
     );
     applyingRef.current = false;
-    const b = map.getBounds();
-    const sw = b.getSouthWest();
-    const ne = b.getNorthEast();
-    onOverlayRef.current(
-      demographicsPlanViewportFromLngLatBounds(
-        [
-          [sw.lng, sw.lat],
-          [ne.lng, ne.lat],
-        ],
-        model.center,
-      ),
-    );
+    onVisibleBoundsRef.current(visibleBoundsFromMap(map));
   }, [fitCounter, model.center.lat, model.center.lon, model.sideM]);
 
   useEffect(() => {

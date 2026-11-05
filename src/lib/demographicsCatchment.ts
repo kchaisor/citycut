@@ -1,4 +1,4 @@
-import { fromLocal, toLocal } from "./geo";
+import { haversineDistanceM } from "./haversine";
 import type { LonLat } from "../types";
 import {
   DEMOGRAPHICS_AGE_BANDS,
@@ -55,15 +55,13 @@ export function aggregateCatchmentFromSa1(input: {
   index: DemographicsSpatialIndex;
   units: DemographicsSa1Unit[];
   center: LonLat;
-  east: number;
-  north: number;
+  pin: LonLat;
   radiusM: number;
 }): DemographicsCatchmentStats | null {
-  const pinLonLat = fromLocal([input.east, input.north], input.center);
   const circle = aggregateDemographicsForCircle({
     index: input.index,
     center: input.center,
-    pin: pinLonLat,
+    pin: input.pin,
     radiusM: input.radiusM,
   });
   if (!circle) return null;
@@ -87,12 +85,9 @@ export function aggregateCatchmentFromSa1(input: {
 
 export function aggregateCatchmentFromParcels(input: {
   parcels: DemographicsParcelRecord[];
-  center: LonLat;
-  east: number;
-  north: number;
+  pin: LonLat;
   radiusM: number;
 }): DemographicsCatchmentStats | null {
-  const r2 = input.radiusM * input.radiusM;
   let population = 0;
   let parcelCount = 0;
   const sa1Codes = new Set<string>();
@@ -111,10 +106,8 @@ export function aggregateCatchmentFromParcels(input: {
   let ageWeight = 0;
 
   for (const parcel of input.parcels) {
-    const [px, py] = toLocal(parcel.centroidLat, parcel.centroidLon, input.center);
-    const dx = px - input.east;
-    const dy = py - input.north;
-    if (dx * dx + dy * dy > r2) continue;
+    const centroid = { lon: parcel.centroidLon, lat: parcel.centroidLat };
+    if (haversineDistanceM(centroid, input.pin) > input.radiusM) continue;
     parcelCount += 1;
     sa1Codes.add(parcel.sa1Code);
     population += parcel.residents;
@@ -176,24 +169,20 @@ function sa1HasDetail(stats: DemographicsCatchmentStats): boolean {
 export function aggregateCatchmentForPin(input: {
   parcels: DemographicsParcelRecord[];
   center: LonLat;
-  east: number;
-  north: number;
+  pin: LonLat;
   radiusM: number;
   index: DemographicsSpatialIndex;
 }): DemographicsCatchmentStats | null {
   const fromParcels = aggregateCatchmentFromParcels({
     parcels: input.parcels,
-    center: input.center,
-    east: input.east,
-    north: input.north,
+    pin: input.pin,
     radiusM: input.radiusM,
   });
   const fromSa1 = aggregateCatchmentFromSa1({
     index: input.index,
     units: [],
     center: input.center,
-    east: input.east,
-    north: input.north,
+    pin: input.pin,
     radiusM: input.radiusM,
   });
   if (fromSa1 && fromParcels) {

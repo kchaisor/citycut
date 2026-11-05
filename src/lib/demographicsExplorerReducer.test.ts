@@ -33,7 +33,7 @@ describe("demographicsExplorerReducer TLA invariants", () => {
       expect(demographicsExplorerInvariant(state)).toBe(true);
     }
 
-    state = reduceDemographicsExplorer(state, { type: "movePin", pin: "b", east: 500, north: 200 });
+    state = reduceDemographicsExplorer(state, { type: "movePin", pin: "b", lon: 144.98, lat: -37.8 });
     expect(demographicsExplorerInvariant(state)).toBe(true);
   });
 });

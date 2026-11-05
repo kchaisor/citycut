@@ -153,7 +153,10 @@ import { DemographicsExplorerView } from "./DemographicsExplorerView";
 import { DemographicsExplorerPanel } from "./DemographicsExplorerPanel";
 import { aggregateCatchmentForPin } from "../lib/demographicsCatchment";
 import { apportionParcelsFromSa1Units } from "../lib/demographicsApportion";
-import { buildParcelIndex } from "../lib/demographicsParcels";
+import { buildParcelGeoIndex } from "../lib/demographicsParcelGeoIndex";
+import { pinLonLat } from "../lib/demographicsExplorerPins";
+import type { DemographicsPinId } from "../lib/demographicsExplorerReducer";
+import type { LonLat } from "../types";
 import {
   initialDemographicsExplorerState,
   reduceDemographicsExplorer,
@@ -305,6 +308,15 @@ export function ModelPage({
   const [demographicsDataset, setDemographicsDataset] = useState<DemographicsDataset | null>(null);
   const [demographicsLoading, setDemographicsLoading] = useState(true);
   const demographicsPinsSeededRef = useRef(false);
+  const [demographicsVisibleBounds, setDemographicsVisibleBounds] = useState<{
+    west: number;
+    south: number;
+    east: number;
+    north: number;
+  } | null>(null);
+  const [demographicsLivePins, setDemographicsLivePins] = useState<
+    Partial<Record<DemographicsPinId, LonLat>>
+  >({});
   const [analysisKind, setAnalysisKind] = useState<SiteAnalysisKind>("solar");
   const [shortcutCheatsheetOpen, setShortcutCheatsheetOpen] = useState(false);
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
@@ -392,9 +404,14 @@ export function ModelPage({
   }, [demographicsDataset, demographicsIndex, demographicsInCoverage, model]);
   const {
     parcels: demographicsParcelRecords,
-    index: demographicsParcelIndex,
+    geoIndex: demographicsParcelGeoIndex,
     loading: demographicsParcelsLoading,
-  } = useDemographicsParcels(model, demographicsExplorer, demographicsActive);
+  } = useDemographicsParcels(
+    model,
+    demographicsExplorer,
+    demographicsActive,
+    demographicsVisibleBounds,
+  );
   const demographicsParcelsApportioned = useMemo(
     () =>
       demographicsDataset?.units?.length
@@ -402,21 +419,23 @@ export function ModelPage({
         : demographicsParcelRecords,
     [demographicsDataset, demographicsParcelRecords],
   );
-  const demographicsParcelIndexApportioned = useMemo(
+  const demographicsParcelGeoIndexApportioned = useMemo(
     () =>
-      demographicsParcelsApportioned.length
-        ? buildParcelIndex(demographicsParcelsApportioned, model.center)
-        : demographicsParcelIndex,
-    [demographicsParcelIndex, demographicsParcelsApportioned, model.center],
+      buildParcelGeoIndex(
+        demographicsParcelsApportioned.length
+          ? demographicsParcelsApportioned
+          : demographicsParcelRecords,
+      ),
+    [demographicsParcelGeoIndex, demographicsParcelsApportioned, demographicsParcelRecords],
   );
   const demographicsCatchmentA = useMemo(() => {
     const pin = demographicsExplorer.pins.a;
     if (!pin || !demographicsIndex) return null;
+    const live = demographicsLivePins.a ?? pinLonLat(pin);
     return aggregateCatchmentForPin({
       parcels: demographicsParcelsApportioned,
       center: model.center,
-      east: pin.east,
-      north: pin.north,
+      pin: live,
       radiusM: demographicsExplorer.radiusM,
       index: demographicsIndex,
     });
@@ -424,17 +443,18 @@ export function ModelPage({
     demographicsExplorer.pins.a,
     demographicsExplorer.radiusM,
     demographicsIndex,
+    demographicsLivePins.a,
     demographicsParcelsApportioned,
     model.center,
   ]);
   const demographicsCatchmentB = useMemo(() => {
     const pin = demographicsExplorer.pins.b;
     if (!pin || demographicsExplorer.panelMode !== "compare" || !demographicsIndex) return null;
+    const live = demographicsLivePins.b ?? pinLonLat(pin);
     return aggregateCatchmentForPin({
       parcels: demographicsParcelsApportioned,
       center: model.center,
-      east: pin.east,
-      north: pin.north,
+      pin: live,
       radiusM: demographicsExplorer.radiusM,
       index: demographicsIndex,
     });
@@ -443,6 +463,7 @@ export function ModelPage({
     demographicsExplorer.pins.b,
     demographicsExplorer.radiusM,
     demographicsIndex,
+    demographicsLivePins.b,
     demographicsParcelsApportioned,
     model.center,
   ]);
@@ -455,11 +476,11 @@ export function ModelPage({
     if (!demographicsActive) return;
     if (demographicsPinsSeededRef.current) return;
     demographicsPinsSeededRef.current = true;
-    const fitzroy = pinFromLonLat(model.center, DEMOGRAPHICS_PIN_FITZROY, "Fitzroy");
-    const carlton = pinFromLonLat(model.center, DEMOGRAPHICS_PIN_CARLTON, "Carlton");
+    const fitzroy = pinFromLonLat(DEMOGRAPHICS_PIN_FITZROY, "Fitzroy");
+    const carlton = pinFromLonLat(DEMOGRAPHICS_PIN_CARLTON, "Carlton");
     dispatchDemographicsExplorer({ type: "ensureComparePins" });
-    dispatchDemographicsExplorer({ type: "movePin", pin: "a", east: fitzroy.east, north: fitzroy.north });
-    dispatchDemographicsExplorer({ type: "movePin", pin: "b", east: carlton.east, north: carlton.north });
+    dispatchDemographicsExplorer({ type: "movePin", pin: "a", lon: fitzroy.lon, lat: fitzroy.lat });
+    dispatchDemographicsExplorer({ type: "movePin", pin: "b", lon: carlton.lon, lat: carlton.lat });
     dispatchDemographicsExplorer({ type: "setPinLabel", pin: "a", label: "Fitzroy" });
     dispatchDemographicsExplorer({ type: "setPinLabel", pin: "b", label: "Carlton" });
   }, [demographicsActive, model.center, model.sideM]);
@@ -2047,13 +2068,15 @@ export function ModelPage({
             ) : drawing === "demographics" ? (
               <DemographicsExplorerView
                 model={drawingModel}
-                parcels={demographicsParcelsApportioned}
-                parcelIndex={demographicsParcelIndexApportioned}
+                geoIndex={demographicsParcelGeoIndexApportioned}
+                parcelCount={demographicsParcelsApportioned.length || demographicsParcelRecords.length}
                 state={demographicsExplorer}
                 dispatch={dispatchDemographicsExplorer}
                 fitCounter={fitCounter}
                 statsA={demographicsCatchmentA}
                 statsB={demographicsCatchmentB}
+                onLivePins={setDemographicsLivePins}
+                onVisibleBounds={setDemographicsVisibleBounds}
               />
             ) : (
               <DrawingPlan

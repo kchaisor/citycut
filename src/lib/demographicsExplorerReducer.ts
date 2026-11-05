@@ -13,8 +13,8 @@ export type DemographicsPinId = "a" | "b";
 export type DemographicsPanelMode = "single" | "compare";
 
 export type DemographicsPin = {
-  east: number;
-  north: number;
+  lon: number;
+  lat: number;
   label: string;
 };
 
@@ -35,7 +35,7 @@ export type DemographicsExplorerAction =
   | { type: "setColourBy"; colourBy: DemographicsColourBy }
   | { type: "setPanelMode"; panelMode: DemographicsPanelMode }
   | { type: "setTab"; tab: DemographicsExplorerTab }
-  | { type: "movePin"; pin: DemographicsPinId; east: number; north: number }
+  | { type: "movePin"; pin: DemographicsPinId; lon: number; lat: number }
   | { type: "setPinLabel"; pin: DemographicsPinId; label: string }
   | { type: "ensureComparePins" };
 
@@ -77,7 +77,11 @@ export function reduceDemographicsExplorer(
           ...next,
           pins: {
             ...next.pins,
-            b: { east: state.pins.a.east + 650, north: state.pins.a.north - 180, label: "B" },
+            b: {
+              lon: state.pins.a.lon + 0.0065,
+              lat: state.pins.a.lat - 0.0016,
+              label: "B",
+            },
           },
         };
       }
@@ -86,12 +90,12 @@ export function reduceDemographicsExplorer(
       next = { ...state, tab: action.tab };
       break;
     case "movePin": {
-      const existing = state.pins[action.pin] ?? { east: 0, north: 0, label: action.pin.toUpperCase() };
+      const existing = state.pins[action.pin] ?? { lon: 0, lat: 0, label: action.pin.toUpperCase() };
       next = {
         ...state,
         pins: {
           ...state.pins,
-          [action.pin]: { ...existing, east: action.east, north: action.north },
+          [action.pin]: { ...existing, lon: action.lon, lat: action.lat },
         },
       };
       break;
@@ -110,13 +114,13 @@ export function reduceDemographicsExplorer(
       if (!next.pins.a) {
         next.pins = {
           ...next.pins,
-          a: { east: -320, north: 120, label: "Fitzroy" },
+          a: { lon: 144.9778, lat: -37.8032, label: "Fitzroy" },
         };
       }
       if (!next.pins.b) {
         next.pins = {
           ...next.pins,
-          b: { east: 280, north: -40, label: "Carlton" },
+          b: { lon: 144.9705, lat: -37.8045, label: "Carlton" },
         };
       }
       next.panelMode = "compare";
@@ -136,8 +140,8 @@ export function initialDemographicsExplorerState(
     panelMode: "compare",
     tab: "people",
     pins: {
-      a: { east: -320, north: 120, label: "Fitzroy" },
-      b: { east: 280, north: -40, label: "Carlton" },
+      a: { lon: 144.9778, lat: -37.8032, label: "Fitzroy" },
+      b: { lon: 144.9705, lat: -37.8045, label: "Carlton" },
     },
   };
   const merged = { ...base, ...partial, pins: { ...base.pins, ...partial?.pins } };

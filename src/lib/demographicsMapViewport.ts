@@ -61,5 +61,22 @@ declare global {
   interface Window {
     __citycutDemographicsMap?: import("maplibre-gl").Map;
     __citycutDemographicsMapInstanceId?: number;
+    __citycutDemographicsFitBoundsCount?: number;
+    __citycutDemographicsRadiusM?: number;
+    __citycutDemographicsPins?: {
+      a: { lon: number; lat: number; label: string } | null;
+      b: { lon: number; lat: number; label: string } | null;
+    };
+    __citycutDemographicsCatchmentTinted?: number;
+    __citycutDemographicsCatchmentAudit?: {
+      tinted: number;
+      tintedOutside: number;
+      insideUntinted: number;
+    };
+    __citycutDemographicsQaMovePin?: (
+      id: import("./demographicsExplorerReducer").DemographicsPinId,
+      lon: number,
+      lat: number,
+    ) => void;
   }
 }

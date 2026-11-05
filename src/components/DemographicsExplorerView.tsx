@@ -1,37 +1,53 @@
 import { useCallback, useState } from "react";
-import { demographicsPlanViewportExtent, type PlanViewport } from "../lib/planViewport";
+import type maplibregl from "maplibre-gl";
 import type { CityModel } from "../types";
-import type { DemographicsParcelIndex, DemographicsParcelRecord } from "../lib/demographicsParcels";
+import type { DemographicsParcelGeoIndex } from "../lib/demographicsParcelGeoIndex";
 import type { DemographicsCatchmentStats } from "../lib/demographicsCatchment";
-import type { DemographicsExplorerAction, DemographicsExplorerState } from "../lib/demographicsExplorerReducer";
+import type { DemographicsExplorerAction, DemographicsExplorerState, DemographicsPinId } from "../lib/demographicsExplorerReducer";
+import type { LonLat } from "../types";
 import { DemographicsExplorerBasemap } from "./DemographicsExplorerBasemap";
 import { DemographicsExplorerMap } from "./DemographicsExplorerMap";
+import { visibleBoundsFromMap } from "./useDemographicsParcels";
 
 export function DemographicsExplorerView({
   model,
-  parcels,
-  parcelIndex,
+  geoIndex,
+  parcelCount,
   state,
   dispatch,
   fitCounter,
   statsA,
   statsB,
+  onLivePins,
+  onVisibleBounds,
 }: {
   model: CityModel;
-  parcels: DemographicsParcelRecord[];
-  parcelIndex: DemographicsParcelIndex | null;
+  geoIndex: DemographicsParcelGeoIndex | null;
+  parcelCount: number;
   state: DemographicsExplorerState;
   dispatch: (action: DemographicsExplorerAction) => void;
   fitCounter: number;
   statsA: DemographicsCatchmentStats | null;
   statsB: DemographicsCatchmentStats | null;
+  onLivePins: (pins: Partial<Record<DemographicsPinId, LonLat>>) => void;
+  onVisibleBounds: (bounds: ReturnType<typeof visibleBoundsFromMap>) => void;
 }) {
-  const [overlayViewport, setOverlayViewport] = useState<PlanViewport>(() =>
-    demographicsPlanViewportExtent(model.sideM),
+  const [map, setMap] = useState<maplibregl.Map | null>(null);
+
+  const onMapReady = useCallback(
+    (next: maplibregl.Map) => {
+      setMap(next);
+      onVisibleBounds(visibleBoundsFromMap(next));
+    },
+    [onVisibleBounds],
   );
-  const onOverlayViewport = useCallback((view: PlanViewport) => {
-    setOverlayViewport(view);
-  }, []);
+
+  const handleVisibleBounds = useCallback(
+    (bounds: ReturnType<typeof visibleBoundsFromMap>) => {
+      onVisibleBounds(bounds);
+    },
+    [onVisibleBounds],
+  );
 
   return (
     <div className="demographics-map-stack fill">
@@ -39,19 +55,21 @@ export function DemographicsExplorerView({
         model={model}
         fitCounter={fitCounter}
         radiusM={state.radiusM}
-        onOverlayViewport={onOverlayViewport}
+        onMapReady={onMapReady}
+        onVisibleBounds={handleVisibleBounds}
       />
-      <DemographicsExplorerMap
-        model={model}
-        parcels={parcels}
-        parcelIndex={parcelIndex}
-        state={state}
-        dispatch={dispatch}
-        viewport={overlayViewport}
-        fitCounter={fitCounter}
-        statsA={statsA}
-        statsB={statsB}
-      />
+      {map && (
+        <DemographicsExplorerMap
+          map={map}
+          geoIndex={geoIndex}
+          parcelCount={parcelCount}
+          state={state}
+          dispatch={dispatch}
+          statsA={statsA}
+          statsB={statsB}
+          onLivePins={onLivePins}
+        />
+      )}
     </div>
   );
 }

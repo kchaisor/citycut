@@ -4676,10 +4676,25 @@ body,
   height: 100%;
 }
 
-.model.is-demographics .demographics-map-stack .demographics-explorer-map {
+.model.is-demographics .demographics-map-stack .demographics-explorer-map-ui {
   z-index: 1;
   background: transparent;
   pointer-events: none;
+}
+
+.demographics-pin-tag {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  padding: 6px 10px;
+  max-width: 320px;
+  border: 1px solid;
+  border-radius: 4px;
+  background: var(--demographics-panel-bg, rgba(252, 251, 249, 0.96));
+  color: var(--demographics-panel-text, #1a1a1a);
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .model.is-demographics .viewport > .fill.is-plan {

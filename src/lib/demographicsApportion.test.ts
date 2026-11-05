@@ -108,9 +108,7 @@ describe("demographicsApportion", () => {
     }
     const stats = aggregateCatchmentFromParcels({
       parcels,
-      center,
-      east,
-      north,
+      pin: { lon: 145.0, lat: -37.8 },
       radiusM,
     });
     expect(stats).not.toBeNull();
@@ -123,12 +121,10 @@ describe("demographicsApportion", () => {
     ) as DemographicsDataset;
     const center = { lon: 144.9746, lat: -37.8053 };
     const index = buildDemographicsIndex(metro.units);
-    const [east, north] = toLocal(-37.8, 145.0, center);
     const sa1Stats = aggregateCatchmentForPin({
       parcels: [],
       center,
-      east,
-      north,
+      pin: { lon: 145.0, lat: -37.8 },
       radiusM: 400,
       index,
     });
@@ -162,9 +158,7 @@ describe("demographicsApportion", () => {
       const apportioned = apportionParcelsFromSa1Units(parcelRecords, metro.units);
       const parcelStats = aggregateCatchmentFromParcels({
         parcels: apportioned,
-        center,
-        east,
-        north,
+        pin: { lon: 145.0, lat: -37.8 },
         radiusM: 400,
       });
       expect(parcelStats).not.toBeNull();
