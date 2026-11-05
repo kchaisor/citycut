@@ -91,7 +91,10 @@ export function useDemographicsParcels(
     fetchedKeysRef.current.add(key);
     try {
       const loaded = await fetchParcelsFromPmtiles(bounds, signal);
-      if (signal.aborted) return;
+      if (signal.aborted) {
+        fetchedKeysRef.current.delete(key);
+        return;
+      }
       let added = false;
       for (const parcel of loaded) {
         if (!cacheRef.current.has(parcel.id)) {
@@ -102,7 +105,10 @@ export function useDemographicsParcels(
       if (added) setCacheVersion((v) => v + 1);
       setError(null);
     } catch (err: unknown) {
-      if (signal.aborted) return;
+      if (signal.aborted) {
+        fetchedKeysRef.current.delete(key);
+        return;
+      }
       setError(err instanceof Error ? err.message : "Parcel load failed");
     }
   }, []);

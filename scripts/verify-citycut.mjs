@@ -1800,13 +1800,25 @@ async function main() {
         !demoInfo.mapMasked,
         JSON.stringify({ mapMasked: demoInfo.mapMasked }),
       );
+      const QA_TINT_PROBE = () => {
+        const map = window.__citycutDemographicsMap;
+        if (!map || !map.getLayer("citycut-demographics-catchment-fill")) return { rendered: 0, visible: false };
+        const vis = map.getLayoutProperty("citycut-demographics-catchment-fill", "visibility");
+        const rendered = map.queryRenderedFeatures({ layers: ["citycut-demographics-catchment-fill"] }).length;
+        return { rendered, visible: vis !== "none" };
+      };
+      let midDragTint = null;
+      let midPanTint = null;
       const fitBeforeDrag = await demoPage.evaluate(() => window.__citycutDemographicsFitBoundsCount ?? 0);
       if (pinScreen && mapCanvasBox) {
         const fromX = mapCanvasBox.x + pinScreen.x;
         const fromY = mapCanvasBox.y + pinScreen.y;
         await demoPage.mouse.move(fromX, fromY);
         await demoPage.mouse.down();
-        await demoPage.mouse.move(fromX + 72, fromY + 28, { steps: 10 });
+        await demoPage.mouse.move(fromX + 36, fromY + 14, { steps: 5 });
+        await demoPage.waitForTimeout(80);
+        midDragTint = await demoPage.evaluate(QA_TINT_PROBE);
+        await demoPage.mouse.move(fromX + 72, fromY + 28, { steps: 5 });
         await demoPage.mouse.up();
       }
       await demoPage.evaluate(({ lon0, lat0 }) => {
@@ -1891,9 +1903,18 @@ async function main() {
       if (mapBox) {
         await demoPage.mouse.move(mapBox.x + mapBox.width * 0.55, mapBox.y + mapBox.height * 0.5);
         await demoPage.mouse.down();
-        await demoPage.mouse.move(mapBox.x + mapBox.width * 0.45, mapBox.y + mapBox.height * 0.5, { steps: 8 });
+        await demoPage.mouse.move(mapBox.x + mapBox.width * 0.5, mapBox.y + mapBox.height * 0.5, { steps: 4 });
+        await demoPage.waitForTimeout(80);
+        midPanTint = await demoPage.evaluate(QA_TINT_PROBE);
+        await demoPage.mouse.move(mapBox.x + mapBox.width * 0.45, mapBox.y + mapBox.height * 0.5, { steps: 4 });
         await demoPage.mouse.up();
       }
+      assertCheck(
+        "demo-explorer-parcels-visible-mid-gesture",
+        "Catchment parcels stay rendered while a pin is being dragged and while the map is mid-pan (pointer down)",
+        midDragTint?.visible && midDragTint.rendered > 0 && midPanTint?.visible && midPanTint.rendered > 0,
+        JSON.stringify({ midDragTint, midPanTint }),
+      );
       await demoPage.waitForTimeout(200);
       const panned = await demoPage.evaluate((before) => {
         const after = window.__citycutDemographicsMap?.getCenter()?.toArray?.() ?? null;

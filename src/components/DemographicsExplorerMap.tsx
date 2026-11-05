@@ -84,7 +84,7 @@ export function DemographicsExplorerMap({
     if (!isDemographicsQaMode()) return;
     window.__citycutDemographicsQaMovePin = (id: DemographicsPinId, lon: number, lat: number) => {
       dispatch({ type: "movePin", pin: id, lon, lat });
-      scheduleSync();
+      scheduleSyncRef.current();
     };
     return () => {
       delete window.__citycutDemographicsQaMovePin;
@@ -178,6 +178,12 @@ export function DemographicsExplorerMap({
     syncCatchmentPaint();
     setLabelTick((t) => t + 1);
   };
+  // Map/window listeners are registered once (or only when pins change), so they must
+  // always call the latest closure. Calling a stale scheduleSync captured before the
+  // parcel geo-index loaded wrote an EMPTY catchment FeatureCollection on every map
+  // "move" and every pin-drag mousemove — that's what blanked the parcels mid-gesture.
+  const scheduleSyncRef = useRef(scheduleSync);
+  scheduleSyncRef.current = scheduleSync;
 
   useEffect(() => {
     scheduleSync();
@@ -195,7 +201,9 @@ export function DemographicsExplorerMap({
   ]);
 
   useEffect(() => {
-    const onMove = () => scheduleSync();
+    // Camera moves don't change any geography: native layers re-render on their own.
+    // Only the HTML pin labels need reprojecting.
+    const onMove = () => setLabelTick((t) => t + 1);
     map.on("move", onMove);
     map.on("resize", onMove);
     return () => {
@@ -253,13 +261,11 @@ export function DemographicsExplorerMap({
         const after = map.unproject([clientX - rect.left, clientY - rect.top]);
         dispatch({ type: "movePin", pin: id, lon: after.lng, lat: after.lat });
         setDraftPin(null);
-        scheduleSync();
       };
       const onMoveWindow = (ev: MouseEvent) => {
         const rect = map.getCanvas().getBoundingClientRect();
         const after = map.unproject([ev.clientX - rect.left, ev.clientY - rect.top]);
         setDraftPin({ id, lon: after.lng, lat: after.lat });
-        scheduleSync();
       };
       const onUpWindow = (ev: MouseEvent) => {
         finishDrag(ev.clientX, ev.clientY);
