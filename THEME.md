@@ -133,9 +133,11 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--switch-knob` | `#000000` | Knob of every sidebar switch, on and off, so an off switch reads on its pale `--control-off` track. On = `--accent` track, knob right. |
 | `--site-building-edge` | `#3D3010` | Darker outline on site-building massing in the 3D viewport so they read against retail (`--use-retail`) and civic (`--use-civic`) yellows. |
 | `--site-boundary` | `#D7263D` | Searched-property parcel boundary on the site plan, the 3D ground line, Rhino `Site::Boundary`, and Illustrator/PDF Site boundary layer. |
-| `--parcel-outline` | `#6E6860` | Vicmap property outlines on the 3D ground while Massing mode is on (inner Melbourne coverage). |
-| `--parcel-outline-selected` | `#C4A035` | Selected property titles in Massing mode before drawing. |
-| `--parcel-boundary-active` | `#FFF500` | Combined site boundary from one or more selected titles; draw vertices stay inside this outline. |
+| `--parcel-outline` | `#E1B157` | Vicmap/VicPlan property outlines on the 3D ground while Massing mode is on (wide world-unit lines). |
+| `--parcel-outline-selected` | `#FFD966` | Selected property title outlines in Massing mode. |
+| `--parcel-boundary-active` | `#FFFFFF` | Combined site boundary outline from one or more selected titles. |
+| `--parcel-fill-selected` | `#E1B157` | Semi-transparent fill on selected titles (3D terrain). |
+| `--parcel-fill-boundary` | `#E1B157` | Semi-transparent fill inside the combined site boundary. |
 | `--use-residential` | `#E06C75` | Residential footprints, legend swatch, 3D massing, and the Residential Rhino layer. |
 | `--use-commercial` | `#61AFEF` | Commercial footprints, legend swatch, 3D massing, and the Commercial Rhino layer. |
 | `--use-retail` | `#E5C07B` | Retail footprints, legend swatch, 3D massing, and the Retail Rhino layer. |

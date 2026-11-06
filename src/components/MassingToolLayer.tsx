@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
+import type { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import type { CityModel } from "../types";
 import { attachMassingGroundPick, attachMassingHeightDrag } from "../lib/massingBlockPick";
 import {
@@ -43,7 +44,20 @@ type Props = {
   onHeightDrag: (clientY: number, startY: number) => void;
   onHeightDragEnd: () => void;
   parcelOutlineObjects: THREE.Object3D[];
+  parcelOutlineLineMaterials: LineMaterial[];
 };
+
+function MassingParcelLineResolution({ materials }: { materials: LineMaterial[] }) {
+  const size = useThree((state) => state.size);
+  const gl = useThree((state) => state.gl);
+  useLayoutEffect(() => {
+    const dpr = gl.getPixelRatio();
+    const w = size.width * dpr;
+    const h = size.height * dpr;
+    for (const material of materials) material.resolution.set(w, h);
+  }, [gl, materials, size.height, size.width]);
+  return null;
+}
 
 export function MassingToolLayer({
   model,
@@ -60,6 +74,7 @@ export function MassingToolLayer({
   onHeightDrag,
   onHeightDragEnd,
   parcelOutlineObjects,
+  parcelOutlineLineMaterials,
 }: Props) {
   const groupRef = useRef<THREE.Group>(null);
   const camera = useThree((state) => state.camera);
@@ -187,6 +202,9 @@ export function MassingToolLayer({
 
   return (
     <group ref={groupRef}>
+      {parcelOutlineLineMaterials.length ? (
+        <MassingParcelLineResolution materials={parcelOutlineLineMaterials} />
+      ) : null}
       {blockGroup ? <primitive object={blockGroup} /> : null}
       {parcelOutlineObjects.map((object) => (
         <primitive key={object.uuid} object={object} />

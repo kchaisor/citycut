@@ -28,6 +28,20 @@ const CHROME_PATH = "/usr/bin/google-chrome";
 const VIEWPORT = { width: 1440, height: 900 };
 const DEVICE_SCALE_FACTOR = 2;
 const ARTIFACTS_DIR = process.env.CITYCUT_ARTIFACTS_DIR ?? "/workspace";
+
+function countPixelsNearRgb(png, target, tolerance = 48) {
+  let hits = 0;
+  for (let i = 0; i < png.data.length; i += 4) {
+    const dr = Math.abs(png.data[i] - target.r);
+    const dg = Math.abs(png.data[i + 1] - target.g);
+    const db = Math.abs(png.data[i + 2] - target.b);
+    if (dr <= tolerance && dg <= tolerance && db <= tolerance) hits += 1;
+  }
+  return hits;
+}
+
+const PARCEL_OUTLINE_GOLD = { r: 225, g: 177, b: 87 };
+const VIEWPORT_SCENE_CLIP = { x: 180, y: 100, width: 1080, height: 720 };
 const TMP_FRAMES_DIR = "/tmp/citycut_verify_frames";
 const TMP_VIDEO_DIR = "/tmp/citycut_verify_video_frames";
 
@@ -952,13 +966,18 @@ async function main() {
       })
       .catch(() => {});
     const parcelInfo = await page.evaluate(() => ({ qa: window.__citycutQaParcels ?? null }));
+    const parcelOutlinePng = PNG.sync.read(await page.screenshot({ clip: VIEWPORT_SCENE_CLIP }));
+    const parcelOutlinePixels = countPixelsNearRgb(parcelOutlinePng, PARCEL_OUTLINE_GOLD, 55);
     assertCheck(
       "massing-parcel-outlines",
-      "Massing mode draws Vicmap parcel outlines (line segments) on the 3D ground",
-      parcelInfo.qa?.status === "ready" && parcelInfo.qa.segments > 0,
-      JSON.stringify(parcelInfo),
+      "Massing mode draws readable Vicmap/VicPlan parcel outlines on the 3D ground (geometry + visible gold pixels)",
+      parcelInfo.qa?.status === "ready" &&
+        parcelInfo.qa.segments > 0 &&
+        parcelOutlinePixels >= 800,
+      JSON.stringify({ ...parcelInfo, parcelOutlinePixels }),
     );
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-parcel-outlines.png") });
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-parcel-outlines-crop.png"), clip: VIEWPORT_SCENE_CLIP });
 
     const oneSite = await page.evaluate(() => {
       const api = window.__citycutQaMassing;
@@ -976,6 +995,15 @@ async function main() {
       JSON.stringify(oneSite),
     );
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-one-site-boundary.png") });
+    const oneSiteCrop = PNG.sync.read(await page.screenshot({ clip: VIEWPORT_SCENE_CLIP }));
+    const oneSiteGold = countPixelsNearRgb(oneSiteCrop, PARCEL_OUTLINE_GOLD, 60);
+    assertCheck(
+      "massing-one-site-visible",
+      "One selected title shows obvious gold parcel highlight pixels in the 3D viewport",
+      oneSiteGold >= 1200,
+      `goldPixels=${oneSiteGold}`,
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-one-site-boundary-crop.png"), clip: VIEWPORT_SCENE_CLIP });
 
     const threeSites = await page.evaluate(() => {
       const api = window.__citycutQaMassing;
@@ -991,6 +1019,16 @@ async function main() {
       JSON.stringify(threeSites),
     );
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-three-sites-boundary.png") });
+    const threeSiteCrop = PNG.sync.read(await page.screenshot({ clip: VIEWPORT_SCENE_CLIP }));
+    const threeSiteGold = countPixelsNearRgb(threeSiteCrop, { r: 255, g: 255, b: 255 }, 40);
+    const threeSiteFill = countPixelsNearRgb(threeSiteCrop, PARCEL_OUTLINE_GOLD, 60);
+    assertCheck(
+      "massing-three-sites-visible",
+      "Three combined titles show strong gold fill and white combined boundary pixels in the 3D viewport",
+      threeSiteFill >= 1500 && threeSiteGold >= 200,
+      `fillGold=${threeSiteFill}, boundaryWhite=${threeSiteGold}`,
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-three-sites-boundary-crop.png"), clip: VIEWPORT_SCENE_CLIP });
 
     const boundaryClamp = await page.evaluate(() => {
       const api = window.__citycutQaMassing;

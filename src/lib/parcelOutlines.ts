@@ -3,27 +3,48 @@ import { PbfReader } from "pbf";
 import { PMTiles } from "pmtiles";
 import RBush from "rbush";
 import * as THREE from "three";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
+import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
+import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
 import { EnrichmentPmtilesSource } from "./enrichmentPmtilesSource";
-import { toLocal } from "./geo";
+import { fromLocal, openRing, toLocal } from "./geo";
 import { sampleTerrain } from "./terrain";
 import { SURFACE } from "./surfaceLayers";
 import type { MultiPolygon } from "polygon-clipping";
-import type { CityModel, LonLat } from "../types";
+import type { CityModel, LonLat, Pt } from "../types";
+import {
+  AXO_CADASTRE_MAX_PAGES,
+  AXO_CADASTRE_PAGE_SIZE,
+  cadastreQueryUrl,
+} from "./explodedAxoCadastre";
+import { fetchTierJson } from "./useCascade";
+import { polygonsFromGeometry } from "./vicmapSiteParcel";
 
-/**
- * Vicmap property parcel outlines for the 3D massing view.
- *
- * Ported from the Demographics Explorer People map (PR 197,
- * `src/lib/demographicsParcelsPmtiles.ts` + `useDemographicsParcels`): same
- * `demographics-parcels.pmtiles` archive, same z14→z12 tile walk and id de-dupe,
- * same rbush bbox index. Only the ring geometry is kept here.
- */
 export const PARCEL_OUTLINES_PMTILES_URL = `${import.meta.env.BASE_URL}demographics-parcels.pmtiles`;
+export const PARCEL_OUTLINES_MANIFEST_URL = `${import.meta.env.BASE_URL}demographics-parcels-manifest.json`;
 const PARCELS_FETCH_ZOOMS = [14, 13, 12] as const;
+
+export const PARCEL_OUTLINE_RENDER_ORDER = SURFACE.building.renderOrder + 140;
+export const PARCEL_FILL_RENDER_ORDER = PARCEL_OUTLINE_RENDER_ORDER - 2;
 
 export type ParcelOutline = { id: string; ring: [number, number][] };
 type Bbox = { south: number; west: number; north: number; east: number };
 export type IndexedParcel = ParcelOutline & { minX: number; minY: number; maxX: number; maxY: number };
+
+export type MassingParcelOutlineBundle = {
+  objects: THREE.Object3D[];
+  lineMaterials: LineMaterial[];
+  segmentCount: number;
+};
+
+type WideLineStyle = {
+  color: THREE.ColorRepresentation;
+  opacity: number;
+  liftM: number;
+  lineWidthM: number;
+  renderOrder: number;
+  name: string;
+};
 
 function tileRange(bounds: Bbox, z: number) {
   const n = 2 ** z;
@@ -75,14 +96,91 @@ export async function fetchParcelOutlines(bounds: Bbox, signal?: AbortSignal): P
   return [...byId.values()];
 }
 
+export async function fetchVicmapParcelOutlines(
+  model: Pick<CityModel, "center" | "sideM" | "region">,
+  signal?: AbortSignal,
+): Promise<ParcelOutline[]> {
+  if (model.region === "nsw") return [];
+  const byId = new Map<string, ParcelOutline>();
+  for (let page = 0; page < AXO_CADASTRE_MAX_PAGES; page += 1) {
+    const res = await fetchTierJson(cadastreQueryUrl(model as CityModel, page * AXO_CADASTRE_PAGE_SIZE), {
+      signal,
+      timeoutMs: 20_000,
+    });
+    if (!res.ok) break;
+    const body = res.body as {
+      features?: { geometry?: unknown; properties?: Record<string, unknown> | null }[];
+      properties?: { exceededTransferLimit?: boolean };
+      exceededTransferLimit?: boolean;
+    };
+    if (!body?.features) break;
+    for (const feature of body.features) {
+      const props = feature.properties ?? {};
+      const road = String(props.parcel_road ?? "")
+        .trim()
+        .toUpperCase();
+      if (road === "Y") continue;
+      const id = String(props.parcel_pfi ?? "");
+      if (!id || byId.has(id)) continue;
+      const polys = polygonsFromGeometry(feature.geometry as never, model.center);
+      const outer = polys[0]?.outer;
+      if (!outer || outer.length < 3) continue;
+      const ring: [number, number][] = [];
+      for (const [e, n] of outer) {
+        const { lon, lat } = fromLocal([e, n], model.center);
+        ring.push([lon, lat]);
+      }
+      if (ring.length >= 3) byId.set(id, { id, ring });
+    }
+    const more = body.properties?.exceededTransferLimit ?? body.exceededTransferLimit ?? false;
+    if (!more) break;
+  }
+  return [...byId.values()];
+}
+
+export function cutIntersectsDemographicsArchive(bounds: Bbox, archive: Bbox): boolean {
+  return !(bounds.east < archive.west || bounds.west > archive.east || bounds.north < archive.south || bounds.south > archive.north);
+}
+
+export async function fetchParcelOutlinesForCut(
+  model: Pick<CityModel, "center" | "sideM" | "region">,
+  bounds: Bbox,
+  signal?: AbortSignal,
+): Promise<{ parcels: ParcelOutline[]; source: "pmtiles" | "vicmap" | "pmtiles+vicmap" }> {
+  let archiveBbox: Bbox | null = null;
+  try {
+    const res = await fetch(PARCEL_OUTLINES_MANIFEST_URL, { signal });
+    if (res.ok) {
+      const manifest = (await res.json()) as { bbox?: Bbox };
+      if (manifest.bbox) archiveBbox = manifest.bbox;
+    }
+  } catch {
+    archiveBbox = null;
+  }
+  const inArchive = archiveBbox ? cutIntersectsDemographicsArchive(bounds, archiveBbox) : true;
+  const pmtilesParcels = inArchive ? await fetchParcelOutlines(bounds, signal) : [];
+  if (pmtilesParcels.length >= 80) return { parcels: pmtilesParcels, source: "pmtiles" };
+  const vicmapParcels = await fetchVicmapParcelOutlines(model, signal);
+  if (pmtilesParcels.length === 0) return { parcels: vicmapParcels, source: "vicmap" };
+  const merged = new Map<string, ParcelOutline>();
+  for (const parcel of pmtilesParcels) merged.set(parcel.id, parcel);
+  for (const parcel of vicmapParcels) merged.set(parcel.id, parcel);
+  return { parcels: [...merged.values()], source: "pmtiles+vicmap" };
+}
+
 export function buildParcelOutlineIndex(parcels: ParcelOutline[]): RBush<IndexedParcel> {
   const tree = new RBush<IndexedParcel>();
   tree.load(
     parcels.map((p) => {
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
       for (const [lon, lat] of p.ring) {
-        minX = Math.min(minX, lon); maxX = Math.max(maxX, lon);
-        minY = Math.min(minY, lat); maxY = Math.max(maxY, lat);
+        minX = Math.min(minX, lon);
+        maxX = Math.max(maxX, lon);
+        minY = Math.min(minY, lat);
+        maxY = Math.max(maxY, lat);
       }
       return { ...p, minX, minY, maxX, maxY };
     }),
@@ -94,7 +192,6 @@ export function searchParcelOutlines(index: RBush<IndexedParcel>, b: Bbox): Parc
   return index.search({ minX: b.west, minY: b.south, maxX: b.east, maxY: b.north });
 }
 
-/** Liang–Barsky clip of segment a→b to the square [-h, h]². */
 export function clipSegmentToSquare(a: [number, number], b: [number, number], h: number): [[number, number], [number, number]] | null {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
@@ -128,104 +225,290 @@ export function clipSegmentToSquare(a: [number, number], b: [number, number], h:
 
 export const PARCEL_OUTLINES_OBJECT = "MassingParcelOutlines";
 
-type OutlineStyle = {
-  color: THREE.ColorRepresentation;
-  opacity: number;
-  liftM: number;
-  renderOrderOffset: number;
-  name: string;
-};
+function terrainZ(model: Pick<CityModel, "terrain" | "sideM">, east: number, north: number, liftM: number): number {
+  return (model.terrain ? sampleTerrain(model.terrain, east, north, model.sideM) : 0) + liftM;
+}
 
 function appendLocalRingSegments(
   pos: number[],
   model: Pick<CityModel, "terrain" | "sideM" | "center">,
   ring: [number, number][],
   origin: LonLat,
-  style: OutlineStyle,
+  liftM: number,
 ) {
   const half = model.sideM / 2;
-  const height = (e: number, n: number) =>
-    (model.terrain ? sampleTerrain(model.terrain, e, n, model.sideM) : 0) + style.liftM;
   const local = ring.map(([lon, lat]) => toLocal(lat, lon, origin));
   for (let i = 0; i < local.length - 1; i++) {
     const seg = clipSegmentToSquare(local[i]!, local[i + 1]!, half);
     if (!seg) continue;
     const [[e0, n0], [e1, n1]] = seg;
-    pos.push(e0, height(e0, n0), -n0, e1, height(e1, n1), -n1);
+    pos.push(e0, terrainZ(model, e0, n0, liftM), -n0, e1, terrainZ(model, e1, n1, liftM), -n1);
   }
 }
 
-function buildLineSegments(
+function buildWideLineSegments(
   pos: number[],
-  style: OutlineStyle,
-  parcelCount: number,
-): THREE.LineSegments | null {
+  style: WideLineStyle,
+  segmentCount: number,
+): { object: LineSegments2; material: LineMaterial } | null {
   if (!pos.length) return null;
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-  const material = new THREE.LineBasicMaterial({
-    color: style.color,
-    transparent: true,
+  const geometry = new LineSegmentsGeometry();
+  geometry.setPositions(pos);
+  const material = new LineMaterial({
+    color: new THREE.Color(style.color).getHex(),
+    linewidth: style.lineWidthM,
+    worldUnits: true,
+    transparent: style.opacity < 1,
     opacity: style.opacity,
-    depthTest: true,
+    depthTest: false,
     depthWrite: false,
   });
   material.toneMapped = false;
-  const lines = new THREE.LineSegments(geometry, material);
+  const lines = new LineSegments2(geometry, material);
   lines.name = style.name;
-  lines.renderOrder = SURFACE.rail.renderOrder + style.renderOrderOffset;
+  lines.frustumCulled = false;
+  lines.renderOrder = style.renderOrder;
   lines.userData.noScenePick = true;
-  lines.userData.parcelCount = parcelCount;
+  lines.userData.parcelCount = segmentCount;
   lines.raycast = () => {};
-  return lines;
+  return { object: lines, material };
 }
 
-const BASE_PARCEL_STYLE = {
-  opacity: 0.92,
-  liftM: SURFACE.rail.lift + 0.22,
-  renderOrderOffset: 2,
-  name: PARCEL_OUTLINES_OBJECT,
-} satisfies Omit<OutlineStyle, "color">;
+function collectRingPositions(
+  pos: number[],
+  model: Pick<CityModel, "terrain" | "sideM" | "center">,
+  ring: [number, number][],
+  origin: LonLat,
+  liftM: number,
+) {
+  appendLocalRingSegments(pos, model, ring, origin, liftM);
+}
 
-/** Ground-draped strokes in the scene local frame (east, up, -north). */
+function buildLocalFillMesh(
+  model: Pick<CityModel, "terrain" | "sideM">,
+  localRing: Pt[],
+  color: THREE.ColorRepresentation,
+  opacity: number,
+  liftM: number,
+  name: string,
+): THREE.Mesh | null {
+  const local = openRing(localRing);
+  if (local.length < 3) return null;
+  const shape = new THREE.Shape(local.map(([e, n]) => new THREE.Vector2(e, n)));
+  const triangles = THREE.ShapeUtils.triangulateShape(shape.getPoints(), []);
+  if (!triangles.length) return null;
+  const positions: number[] = [];
+  const points = shape.getPoints();
+  for (const [a, b, c] of triangles) {
+    for (const idx of [a, b, c]) {
+      const p = points[idx];
+      if (!p) continue;
+      const e = p.x;
+      const n = p.y;
+      positions.push(e, terrainZ(model, e, n, liftM), -n);
+    }
+  }
+  if (!positions.length) return null;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  const material = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity,
+    depthTest: false,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = name;
+  mesh.renderOrder = PARCEL_FILL_RENDER_ORDER;
+  mesh.userData.noScenePick = true;
+  mesh.raycast = () => {};
+  return mesh;
+}
+
+function buildFillMesh(
+  model: Pick<CityModel, "terrain" | "sideM" | "center">,
+  ring: [number, number][],
+  origin: LonLat,
+  color: THREE.ColorRepresentation,
+  opacity: number,
+  liftM: number,
+  name: string,
+): THREE.Mesh | null {
+  const local = openRing(ring.map(([lon, lat]) => toLocal(lat, lon, origin)));
+  if (local.length < 3) return null;
+  const shape = new THREE.Shape(local.map(([e, n]) => new THREE.Vector2(e, n)));
+  const triangles = THREE.ShapeUtils.triangulateShape(shape.getPoints(), []);
+  if (!triangles.length) return null;
+  const positions: number[] = [];
+  const points = shape.getPoints();
+  for (const [a, b, c] of triangles) {
+    for (const idx of [a, b, c]) {
+      const p = points[idx];
+      if (!p) continue;
+      const e = p.x;
+      const n = p.y;
+      positions.push(e, terrainZ(model, e, n, liftM), -n);
+    }
+  }
+  if (!positions.length) return null;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  const material = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity,
+    depthTest: false,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = name;
+  mesh.renderOrder = PARCEL_FILL_RENDER_ORDER;
+  mesh.userData.noScenePick = true;
+  mesh.raycast = () => {};
+  return mesh;
+}
+
+function bundleFromPositions(
+  pos: number[],
+  style: WideLineStyle,
+  segmentCount: number,
+): MassingParcelOutlineBundle {
+  const lineMaterials: LineMaterial[] = [];
+  const objects: THREE.Object3D[] = [];
+  const built = buildWideLineSegments(pos, style, segmentCount);
+  if (built) {
+    objects.push(built.object);
+    lineMaterials.push(built.material);
+  }
+  return { objects, lineMaterials, segmentCount: pos.length / 6 };
+}
+
+export function buildMassingParcelOutlineBundle(
+  model: Pick<CityModel, "terrain" | "sideM" | "center">,
+  parcels: ParcelOutline[],
+  outlineColor: THREE.ColorRepresentation,
+): MassingParcelOutlineBundle {
+  const origin = model.center;
+  const pos: number[] = [];
+  const liftM = SURFACE.rail.lift + 0.35;
+  for (const parcel of parcels) collectRingPositions(pos, model, parcel.ring, origin, liftM);
+  return bundleFromPositions(pos, {
+    color: outlineColor,
+    opacity: 0.95,
+    liftM,
+    lineWidthM: 0.42,
+    renderOrder: PARCEL_OUTLINE_RENDER_ORDER,
+    name: PARCEL_OUTLINES_OBJECT,
+  }, parcels.length);
+}
+
+export function buildMassingParcelSelectionBundle(
+  model: Pick<CityModel, "terrain" | "sideM" | "center">,
+  parcels: ParcelOutline[],
+  lineColor: THREE.ColorRepresentation,
+  fillColor: THREE.ColorRepresentation,
+): MassingParcelOutlineBundle {
+  const origin = model.center;
+  const pos: number[] = [];
+  const liftM = SURFACE.rail.lift + 0.42;
+  const objects: THREE.Object3D[] = [];
+  const lineMaterials: LineMaterial[] = [];
+  for (const parcel of parcels) {
+    const fill = buildFillMesh(model, parcel.ring, origin, fillColor, 0.38, liftM - 0.04, "MassingParcelSelectedFill");
+    if (fill) objects.push(fill);
+    collectRingPositions(pos, model, parcel.ring, origin, liftM);
+  }
+  const lines = bundleFromPositions(pos, {
+    color: lineColor,
+    opacity: 1,
+    liftM,
+    lineWidthM: 0.72,
+    renderOrder: PARCEL_OUTLINE_RENDER_ORDER + 2,
+    name: "MassingParcelSelected",
+  }, parcels.length);
+  objects.push(...lines.objects);
+  lineMaterials.push(...lines.lineMaterials);
+  return { objects, lineMaterials, segmentCount: lines.segmentCount };
+}
+
+export function buildMassingSiteBoundaryBundle(
+  model: Pick<CityModel, "terrain" | "sideM" | "center">,
+  multi: MultiPolygon,
+  lineColor: THREE.ColorRepresentation,
+  fillColor: THREE.ColorRepresentation,
+): MassingParcelOutlineBundle {
+  const pos: number[] = [];
+  const liftM = SURFACE.rail.lift + 0.48;
+  const objects: THREE.Object3D[] = [];
+  const lineMaterials: LineMaterial[] = [];
+  for (const polygon of multi) {
+    const outer = polygon[0] ?? [];
+    const ring: [number, number][] = outer.map(([e, n]) => [e, n] as [number, number]);
+    if (ring.length >= 3) {
+      const fill = buildLocalFillMesh(model, ring, fillColor, 0.22, liftM - 0.06, "MassingSiteBoundaryFill");
+      if (fill) objects.push(fill);
+    }
+    for (let i = 0; i < outer.length - 1; i++) {
+      const a = outer[i]!;
+      const b = outer[i + 1]!;
+      pos.push(a[0], terrainZ(model, a[0], a[1], liftM), -a[1], b[0], terrainZ(model, b[0], b[1], liftM), -b[1]);
+    }
+  }
+  const lines = bundleFromPositions(pos, {
+    color: lineColor,
+    opacity: 1,
+    liftM,
+    lineWidthM: 1.05,
+    renderOrder: PARCEL_OUTLINE_RENDER_ORDER + 4,
+    name: "MassingSiteBoundary",
+  }, multi.length);
+  objects.push(...lines.objects);
+  lineMaterials.push(...lines.lineMaterials);
+  return { objects, lineMaterials, segmentCount: lines.segmentCount };
+}
+
 export function buildParcelOutlineLines(
   model: Pick<CityModel, "terrain" | "sideM" | "center">,
   parcels: ParcelOutline[],
   color: THREE.ColorRepresentation,
-): THREE.LineSegments | null {
-  const origin: LonLat = model.center;
-  const pos: number[] = [];
-  const style = { ...BASE_PARCEL_STYLE, color };
-  for (const parcel of parcels) appendLocalRingSegments(pos, model, parcel.ring, origin, style);
-  return buildLineSegments(pos, style, parcels.length);
+): THREE.Object3D | null {
+  const bundle = buildMassingParcelOutlineBundle(model, parcels, color);
+  return bundle.objects[0] ?? null;
 }
 
 export function buildParcelSubsetOutlineLines(
   model: Pick<CityModel, "terrain" | "sideM" | "center">,
   parcels: ParcelOutline[],
-  style: OutlineStyle,
-): THREE.LineSegments | null {
-  const origin: LonLat = model.center;
-  const pos: number[] = [];
-  for (const parcel of parcels) appendLocalRingSegments(pos, model, parcel.ring, origin, style);
-  return buildLineSegments(pos, style, parcels.length);
+  style: { color: THREE.ColorRepresentation; opacity: number; liftM: number; renderOrderOffset: number; name: string },
+): THREE.Object3D | null {
+  void style;
+  const bundle = buildMassingParcelSelectionBundle(model, parcels, style.color, style.color);
+  return bundle.objects.find((o) => o.name === "MassingParcelSelected") ?? null;
 }
 
 export function buildLocalBoundaryOutlineLines(
   model: Pick<CityModel, "terrain" | "sideM" | "center">,
   multi: MultiPolygon,
-  style: OutlineStyle,
-): THREE.LineSegments | null {
-  const pos: number[] = [];
-  for (const polygon of multi) {
-    const outer = polygon[0] ?? [];
-    for (let i = 0; i < outer.length - 1; i++) {
-      const a = outer[i]!;
-      const b = outer[i + 1]!;
-      const height = (e: number, n: number) =>
-        (model.terrain ? sampleTerrain(model.terrain, e, n, model.sideM) : 0) + style.liftM;
-      pos.push(a[0], height(a[0], a[1]), -a[1], b[0], height(b[0], b[1]), -b[1]);
-    }
+  style: { color: THREE.ColorRepresentation; opacity: number; liftM: number; renderOrderOffset: number; name: string },
+): THREE.Object3D | null {
+  void style;
+  const bundle = buildMassingSiteBoundaryBundle(model, multi, style.color, style.color);
+  return bundle.objects.find((o) => o.name === "MassingSiteBoundary") ?? null;
+}
+
+export function mergeMassingParcelBundles(...bundles: MassingParcelOutlineBundle[]): MassingParcelOutlineBundle {
+  const objects: THREE.Object3D[] = [];
+  const lineMaterials: LineMaterial[] = [];
+  let segmentCount = 0;
+  for (const bundle of bundles) {
+    objects.push(...bundle.objects);
+    lineMaterials.push(...bundle.lineMaterials);
+    segmentCount += bundle.segmentCount;
   }
-  return buildLineSegments(pos, style, multi.length);
+  return { objects, lineMaterials, segmentCount };
 }

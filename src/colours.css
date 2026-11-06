@@ -33,9 +33,11 @@
   --site-building: #FFF500;
   --imported-massing: #FFFFFF;
   --massing-preview-line: #000000;
-  --parcel-outline: #6E6860;
-  --parcel-outline-selected: #C4A035;
-  --parcel-boundary-active: #FFF500;
+  --parcel-outline: #E1B157;
+  --parcel-outline-selected: #FFD966;
+  --parcel-boundary-active: #FFFFFF;
+  --parcel-fill-selected: #E1B157;
+  --parcel-fill-boundary: #E1B157;
   --switch-knob: #000000;
 
   --site-building-edge: #3D3010;

@@ -1977,6 +1977,7 @@ export function ModelPage({
                       previewLine={massingDraw.draftCenterline}
                       active={tab === "3d"}
                       parcelOutlineObjects={massingParcels.outlineObjects}
+                      parcelOutlineLineMaterials={massingParcels.outlineLineMaterials}
                       onPointerDown={(east, north, hitBlockId) => {
                         if (
                           massingDraw.tool.toolEnabled &&

@@ -11,12 +11,14 @@ import {
   pointInLocalMulti,
   unionParcelsLocal,
 } from "../lib/massingParcelBoundary";
+import type { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import {
-  buildLocalBoundaryOutlineLines,
-  buildParcelOutlineLines,
-  buildParcelSubsetOutlineLines,
+  buildMassingParcelOutlineBundle,
+  buildMassingParcelSelectionBundle,
+  buildMassingSiteBoundaryBundle,
   buildParcelOutlineIndex,
-  fetchParcelOutlines,
+  fetchParcelOutlinesForCut,
+  mergeMassingParcelBundles,
   searchParcelOutlines,
   type IndexedParcel,
   type ParcelOutline,
@@ -30,6 +32,7 @@ declare global {
       status: "loading" | "ready" | "error";
       selectedIds?: string[];
       boundaryPolygons?: number;
+      source?: "pmtiles" | "vicmap" | "pmtiles+vicmap";
     };
   }
 }
@@ -47,6 +50,8 @@ export type MassingParcelApi = {
   nearestIds: (count: number) => string[];
   pointAllowed: (east: number, north: number) => boolean;
   outlineObjects: THREE.Object3D[];
+  outlineLineMaterials: LineMaterial[];
+  parcelSource: "pmtiles" | "vicmap" | "pmtiles+vicmap" | null;
   getSyncState: () => { selectedIds: string[]; boundaryPolygons: number };
   sampleInsideBoundary: () => [number, number] | null;
 };
@@ -57,6 +62,7 @@ export function useMassingParcels(model: CityModel, massingEnabled: boolean): Ma
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [boundary, setBoundary] = useState<MultiPolygon>([]);
+  const [parcelSource, setParcelSource] = useState<"pmtiles" | "vicmap" | "pmtiles+vicmap" | null>(null);
   const cutKey = `${model.center.lat},${model.center.lon},${model.sideM}`;
   const parcelsByIdRef = useRef(new Map<string, ParcelOutline>());
   const syncSelectionRef = useRef<{ selectedIds: string[]; boundary: MultiPolygon }>({
@@ -71,13 +77,14 @@ export function useMassingParcels(model: CityModel, massingEnabled: boolean): Ma
     setParcels(null);
     setIndex(null);
     const bounds = squareBBox(model.center, model.sideM);
-    fetchParcelOutlines(bounds, controller.signal)
-      .then((loaded) => {
+    fetchParcelOutlinesForCut(model, bounds, controller.signal)
+      .then(({ parcels: loaded, source }) => {
         if (controller.signal.aborted) return;
         const tree = buildParcelOutlineIndex(loaded);
         const inCut = searchParcelOutlines(tree, bounds);
         setParcels(inCut);
         setIndex(tree);
+        setParcelSource(source);
         setStatus("ready");
       })
       .catch(() => {
@@ -171,43 +178,35 @@ export function useMassingParcels(model: CityModel, massingEnabled: boolean): Ma
     return [cx / n, cy / n];
   }, []);
 
-  const outlineObjects = useMemo(() => {
-    if (!parcels?.length) return [];
-    const out: THREE.Object3D[] = [];
-    const base = buildParcelOutlineLines(model, parcels, getColour("--parcel-outline"));
-    if (base) out.push(base);
+  const outlineBundle = useMemo(() => {
+    if (!parcels?.length) return { objects: [], lineMaterials: [], segmentCount: 0 };
+    const parts = [buildMassingParcelOutlineBundle(model, parcels, getColour("--parcel-outline"))];
     if (selectedParcels.length) {
-      const selected = buildParcelSubsetOutlineLines(model, selectedParcels, {
-        color: getColour("--parcel-outline-selected"),
-        opacity: 1,
-        liftM: 0.22 + 0.06,
-        renderOrderOffset: 4,
-        name: "MassingParcelSelected",
-      });
-      if (selected) out.push(selected);
+      parts.push(
+        buildMassingParcelSelectionBundle(
+          model,
+          selectedParcels,
+          getColour("--parcel-outline-selected"),
+          getColour("--parcel-fill-selected"),
+        ),
+      );
     }
     if (boundary.length) {
-      const active = buildLocalBoundaryOutlineLines(model, boundary, {
-        color: getColour("--parcel-boundary-active"),
-        opacity: 1,
-        liftM: 0.22 + 0.12,
-        renderOrderOffset: 6,
-        name: "MassingSiteBoundary",
-      });
-      if (active) out.push(active);
+      parts.push(
+        buildMassingSiteBoundaryBundle(
+          model,
+          boundary,
+          getColour("--parcel-boundary-active"),
+          getColour("--parcel-fill-boundary"),
+        ),
+      );
     }
-    return out;
+    return mergeMassingParcelBundles(...parts);
   }, [boundary, model, parcels, selectedParcels]);
 
-  const segmentCount = useMemo(
-    () =>
-      outlineObjects.reduce((sum, object) => {
-        const mesh = object as THREE.LineSegments;
-        const attr = mesh.geometry?.getAttribute("position");
-        return sum + (attr ? attr.count / 2 : 0);
-      }, 0),
-    [outlineObjects],
-  );
+  const outlineObjects = outlineBundle.objects;
+  const outlineLineMaterials = outlineBundle.lineMaterials;
+  const segmentCount = outlineBundle.segmentCount;
 
   useEffect(() => {
     if (typeof window === "undefined" || !massingEnabled) {
@@ -220,8 +219,9 @@ export function useMassingParcels(model: CityModel, massingEnabled: boolean): Ma
       status,
       selectedIds,
       boundaryPolygons: boundary.length,
+      source: parcelSource ?? undefined,
     };
-  }, [boundary.length, massingEnabled, parcels?.length, segmentCount, selectedIds, status]);
+  }, [boundary.length, massingEnabled, parcelSource, parcels?.length, segmentCount, selectedIds, status]);
 
   return {
     status,
@@ -236,6 +236,8 @@ export function useMassingParcels(model: CityModel, massingEnabled: boolean): Ma
     nearestIds,
     pointAllowed,
     outlineObjects,
+    outlineLineMaterials,
+    parcelSource,
     getSyncState,
     sampleInsideBoundary,
   };
