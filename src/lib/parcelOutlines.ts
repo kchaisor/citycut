@@ -157,8 +157,12 @@ export async function fetchParcelOutlinesForCut(
   } catch {
     archiveBbox = null;
   }
-  const inArchive = archiveBbox ? cutIntersectsDemographicsArchive(bounds, archiveBbox) : true;
-  const pmtilesParcels = inArchive ? await fetchParcelOutlines(bounds, signal) : [];
+  const inArchive = archiveBbox ? cutIntersectsDemographicsArchive(bounds, archiveBbox) : false;
+  if (!inArchive) {
+    const vicmapParcels = await fetchVicmapParcelOutlines(model, signal);
+    return { parcels: vicmapParcels, source: "vicmap" };
+  }
+  const pmtilesParcels = await fetchParcelOutlines(bounds, signal);
   if (pmtilesParcels.length >= 80) return { parcels: pmtilesParcels, source: "pmtiles" };
   const vicmapParcels = await fetchVicmapParcelOutlines(model, signal);
   if (pmtilesParcels.length === 0) return { parcels: vicmapParcels, source: "vicmap" };
@@ -377,9 +381,24 @@ function bundleFromPositions(
   pos: number[],
   style: WideLineStyle,
   segmentCount: number,
+  casingColor?: THREE.ColorRepresentation,
 ): MassingParcelOutlineBundle {
   const lineMaterials: LineMaterial[] = [];
   const objects: THREE.Object3D[] = [];
+  if (casingColor) {
+    const casing = buildWideLineSegments(pos, {
+      ...style,
+      color: casingColor,
+      opacity: 0.9,
+      lineWidthM: style.lineWidthM * 1.65,
+      renderOrder: style.renderOrder - 1,
+      name: `${style.name}Casing`,
+    }, segmentCount);
+    if (casing) {
+      objects.push(casing.object);
+      lineMaterials.push(casing.material);
+    }
+  }
   const built = buildWideLineSegments(pos, style, segmentCount);
   if (built) {
     objects.push(built.object);
@@ -392,19 +411,36 @@ export function buildMassingParcelOutlineBundle(
   model: Pick<CityModel, "terrain" | "sideM" | "center">,
   parcels: ParcelOutline[],
   outlineColor: THREE.ColorRepresentation,
+  options?: { fillColor?: THREE.ColorRepresentation; casingColor?: THREE.ColorRepresentation },
 ): MassingParcelOutlineBundle {
   const origin = model.center;
   const pos: number[] = [];
   const liftM = SURFACE.rail.lift + 0.35;
+  const objects: THREE.Object3D[] = [];
+  const lineMaterials: LineMaterial[] = [];
+  if (options?.fillColor) {
+    for (const parcel of parcels) {
+      const fill = buildFillMesh(model, parcel.ring, origin, options.fillColor, 0.16, liftM - 0.05, "MassingParcelTintFill");
+      if (fill) objects.push(fill);
+    }
+  }
   for (const parcel of parcels) collectRingPositions(pos, model, parcel.ring, origin, liftM);
-  return bundleFromPositions(pos, {
-    color: outlineColor,
-    opacity: 0.95,
-    liftM,
-    lineWidthM: 0.42,
-    renderOrder: PARCEL_OUTLINE_RENDER_ORDER,
-    name: PARCEL_OUTLINES_OBJECT,
-  }, parcels.length);
+  const lines = bundleFromPositions(
+    pos,
+    {
+      color: outlineColor,
+      opacity: 1,
+      liftM,
+      lineWidthM: 1.15,
+      renderOrder: PARCEL_OUTLINE_RENDER_ORDER,
+      name: PARCEL_OUTLINES_OBJECT,
+    },
+    parcels.length,
+    options?.casingColor,
+  );
+  objects.push(...lines.objects);
+  lineMaterials.push(...lines.lineMaterials);
+  return { objects, lineMaterials, segmentCount: lines.segmentCount };
 }
 
 export function buildMassingParcelSelectionBundle(
@@ -412,6 +448,7 @@ export function buildMassingParcelSelectionBundle(
   parcels: ParcelOutline[],
   lineColor: THREE.ColorRepresentation,
   fillColor: THREE.ColorRepresentation,
+  casingColor?: THREE.ColorRepresentation,
 ): MassingParcelOutlineBundle {
   const origin = model.center;
   const pos: number[] = [];
@@ -423,14 +460,19 @@ export function buildMassingParcelSelectionBundle(
     if (fill) objects.push(fill);
     collectRingPositions(pos, model, parcel.ring, origin, liftM);
   }
-  const lines = bundleFromPositions(pos, {
-    color: lineColor,
-    opacity: 1,
-    liftM,
-    lineWidthM: 0.72,
-    renderOrder: PARCEL_OUTLINE_RENDER_ORDER + 2,
-    name: "MassingParcelSelected",
-  }, parcels.length);
+  const lines = bundleFromPositions(
+    pos,
+    {
+      color: lineColor,
+      opacity: 1,
+      liftM,
+      lineWidthM: 1.35,
+      renderOrder: PARCEL_OUTLINE_RENDER_ORDER + 2,
+      name: "MassingParcelSelected",
+    },
+    parcels.length,
+    casingColor,
+  );
   objects.push(...lines.objects);
   lineMaterials.push(...lines.lineMaterials);
   return { objects, lineMaterials, segmentCount: lines.segmentCount };
@@ -463,7 +505,7 @@ export function buildMassingSiteBoundaryBundle(
     color: lineColor,
     opacity: 1,
     liftM,
-    lineWidthM: 1.05,
+    lineWidthM: 1.75,
     renderOrder: PARCEL_OUTLINE_RENDER_ORDER + 4,
     name: "MassingSiteBoundary",
   }, multi.length);

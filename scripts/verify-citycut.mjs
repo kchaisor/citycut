@@ -42,6 +42,80 @@ function countPixelsNearRgb(png, target, tolerance = 48) {
 
 const PARCEL_OUTLINE_GOLD = { r: 225, g: 177, b: 87 };
 const VIEWPORT_SCENE_CLIP = { x: 180, y: 100, width: 1080, height: 720 };
+
+async function sceneViewportScreenshot(page, extra = {}) {
+  return page.screenshot({
+    clip: VIEWPORT_SCENE_CLIP,
+    timeout: 60_000,
+    animations: "disabled",
+    scale: "css",
+    ...extra,
+  });
+}
+
+async function verifyMontAlbertParcels(baseUrl, artifactsDir) {
+  const montBrowser = await chromium.launch({
+    executablePath: CHROME_PATH,
+    headless: true,
+    args: [
+      "--use-gl=angle",
+      "--use-angle=swiftshader",
+      "--enable-webgl",
+      "--ignore-gpu-blocklist",
+      "--disable-dev-shm-usage",
+      "--no-sandbox",
+    ],
+  });
+  try {
+    const montContext = await montBrowser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: 1,
+      reducedMotion: "no-preference",
+    });
+    await montContext.addInitScript(() => {
+      window.__citycutVerifyHarness = true;
+      window.__citycutMinSilentLoadMs = 550;
+    });
+    const montAlbertPage = await montContext.newPage();
+    await montAlbertPage.goto(`${baseUrl}/citycut/`, { waitUntil: "domcontentloaded" });
+    await montAlbertPage.waitForSelector("button.create-fab", { timeout: 60000 });
+    await montAlbertPage.getByRole("button", { name: "Mont Albert North" }).click();
+    await montAlbertPage.waitForTimeout(400);
+    await montAlbertPage.click("button.create-fab");
+    await montAlbertPage.waitForFunction(() => document.querySelector(".model canvas"), null, { timeout: 180000 });
+    await montAlbertPage.waitForFunction(
+      () => Number(document.querySelector(".model canvas")?.dataset.introProgressPct ?? 0) >= 100,
+      null,
+      { timeout: 180000 },
+    );
+    await montAlbertPage.evaluate(() => {
+      window.__citycutIntroPaused = true;
+    });
+    await montAlbertPage.waitForTimeout(800);
+    await montAlbertPage.waitForFunction(() => window.__citycutQaMassing?.enableTool != null, null, { timeout: 120000 });
+    await montAlbertPage.click('button[aria-label="Massing tool"]');
+    await montAlbertPage
+      .waitForFunction(() => window.__citycutQaParcels?.status === "ready", null, { timeout: 120000 })
+      .catch(() => {});
+    await montAlbertPage.waitForTimeout(600);
+    const montAlbertParcels = await montAlbertPage.evaluate(() => window.__citycutQaParcels ?? null);
+    const montAlbertCrop = PNG.sync.read(await sceneViewportScreenshot(montAlbertPage));
+    const montAlbertGold = countPixelsNearRgb(montAlbertCrop, PARCEL_OUTLINE_GOLD, 60);
+    await montAlbertPage.screenshot({
+      path: path.join(artifactsDir, "massing-mont-albert-parcels.png"),
+      timeout: 60_000,
+      animations: "disabled",
+      scale: "css",
+    });
+    await sceneViewportScreenshot(montAlbertPage, {
+      path: path.join(artifactsDir, "massing-mont-albert-parcels-crop.png"),
+    });
+    await montContext.close();
+    return { montAlbertParcels, montAlbertGold };
+  } finally {
+    await montBrowser.close();
+  }
+}
 const TMP_FRAMES_DIR = "/tmp/citycut_verify_frames";
 const TMP_VIDEO_DIR = "/tmp/citycut_verify_video_frames";
 
@@ -1066,6 +1140,17 @@ async function main() {
 
     await page.evaluate(() => window.__citycutQaMassing?.disableTool());
     await page.waitForTimeout(200);
+
+    const { montAlbertParcels, montAlbertGold } = await verifyMontAlbertParcels(baseUrl, ARTIFACTS_DIR);
+    assertCheck(
+      "massing-mont-albert-parcels",
+      "Mont Albert North (eastern suburbs, outside inner-Melbourne PMTiles) loads Vicmap parcels and shows readable gold outlines on 3D terrain",
+      montAlbertParcels?.status === "ready" &&
+        montAlbertParcels.source === "vicmap" &&
+        (montAlbertParcels.count ?? 0) >= 500 &&
+        montAlbertGold >= 800,
+      JSON.stringify({ montAlbertParcels, montAlbertGold }),
+    );
 
     const massingDrawId = await page.evaluate(() => {
       const api = window.__citycutQaMassing;

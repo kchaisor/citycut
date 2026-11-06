@@ -134,6 +134,8 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--site-building-edge` | `#3D3010` | Darker outline on site-building massing in the 3D viewport so they read against retail (`--use-retail`) and civic (`--use-civic`) yellows. |
 | `--site-boundary` | `#D7263D` | Searched-property parcel boundary on the site plan, the 3D ground line, Rhino `Site::Boundary`, and Illustrator/PDF Site boundary layer. |
 | `--parcel-outline` | `#E1B157` | Vicmap/VicPlan property outlines on the 3D ground while Massing mode is on (wide world-unit lines). |
+| `--parcel-outline-casing` | `#1A1916` | Dark stroke behind parcel outlines for contrast on light terrain. |
+| `--parcel-fill-base` | `#E1B157` | Light tint fill on every parcel title while Massing is on. |
 | `--parcel-outline-selected` | `#FFD966` | Selected property title outlines in Massing mode. |
 | `--parcel-boundary-active` | `#FFFFFF` | Combined site boundary outline from one or more selected titles. |
 | `--parcel-fill-selected` | `#E1B157` | Semi-transparent fill on selected titles (3D terrain). |

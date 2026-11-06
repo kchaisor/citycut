@@ -34,6 +34,8 @@
   --imported-massing: #FFFFFF;
   --massing-preview-line: #000000;
   --parcel-outline: #E1B157;
+  --parcel-outline-casing: #1A1916;
+  --parcel-fill-base: #E1B157;
   --parcel-outline-selected: #FFD966;
   --parcel-boundary-active: #FFFFFF;
   --parcel-fill-selected: #E1B157;

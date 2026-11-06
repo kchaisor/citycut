@@ -180,7 +180,12 @@ export function useMassingParcels(model: CityModel, massingEnabled: boolean): Ma
 
   const outlineBundle = useMemo(() => {
     if (!parcels?.length) return { objects: [], lineMaterials: [], segmentCount: 0 };
-    const parts = [buildMassingParcelOutlineBundle(model, parcels, getColour("--parcel-outline"))];
+    const parts = [
+      buildMassingParcelOutlineBundle(model, parcels, getColour("--parcel-outline"), {
+        fillColor: getColour("--parcel-fill-base"),
+        casingColor: getColour("--parcel-outline-casing"),
+      }),
+    ];
     if (selectedParcels.length) {
       parts.push(
         buildMassingParcelSelectionBundle(
@@ -188,6 +193,7 @@ export function useMassingParcels(model: CityModel, massingEnabled: boolean): Ma
           selectedParcels,
           getColour("--parcel-outline-selected"),
           getColour("--parcel-fill-selected"),
+          getColour("--parcel-outline-casing"),
         ),
       );
     }
