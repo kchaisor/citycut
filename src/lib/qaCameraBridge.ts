@@ -34,6 +34,7 @@ declare global {
       readPersistedCount: () => number;
       selectParcels: (ids: string[]) => void;
       clearParcels: () => void;
+      qaFocusParcelHover: (parcelId: string) => boolean;
       nearestParcelIds: (count: number) => string[];
       getParcelState: () => { selectedIds: string[]; boundaryPolygons: number };
       sampleInsideBoundary: () => [number, number] | null;

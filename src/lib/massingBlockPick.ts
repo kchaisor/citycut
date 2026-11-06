@@ -2,7 +2,13 @@ import * as THREE from "three";
 
 export type MassingGroundPickHandlers = {
   onPointerDown: (east: number, north: number, hitBlockId: string | null) => void;
-  onPointerMove: (east: number, north: number, clientX: number, clientY: number) => void;
+  onPointerMove: (
+    east: number | null,
+    north: number | null,
+    clientX: number,
+    clientY: number,
+    hitBlockId: string | null,
+  ) => void;
   onPointerUp: () => void;
   onCancel?: () => void;
   /** When true, pointermove without a pressed button still reports ground hits (click-click preview). */
@@ -92,10 +98,23 @@ export function attachMassingGroundPick(
   function onPointerMove(event: PointerEvent) {
     if (!dragging && !handlers.hoverActive?.()) return;
     setPointer(event);
+    const blockId = pickMassingBlock(raycaster, root, pointer, camera);
+    if (blockId) {
+      handlers.onPointerMove(null, null, event.clientX, event.clientY, blockId);
+      return;
+    }
     const ground = pickGround(raycaster, root, pointer, camera);
-    if (!ground) return;
+    if (!ground) {
+      handlers.onPointerMove(null, null, event.clientX, event.clientY, null);
+      return;
+    }
     const [e, n] = scenePointFromHit(ground);
-    handlers.onPointerMove(e, n, event.clientX, event.clientY);
+    handlers.onPointerMove(e, n, event.clientX, event.clientY, null);
+  }
+
+  function onPointerLeave(event: PointerEvent) {
+    if (!handlers.hoverActive?.()) return;
+    handlers.onPointerMove(null, null, event.clientX, event.clientY, null);
   }
 
   function onPointerUp(event: PointerEvent) {
@@ -114,11 +133,13 @@ export function attachMassingGroundPick(
 
   canvas.addEventListener("pointerdown", onPointerDown);
   canvas.addEventListener("pointermove", onPointerMove);
+  canvas.addEventListener("pointerleave", onPointerLeave);
   canvas.addEventListener("pointerup", onPointerUp);
   window.addEventListener("keydown", onKeyDown);
   return () => {
     canvas.removeEventListener("pointerdown", onPointerDown);
     canvas.removeEventListener("pointermove", onPointerMove);
+    canvas.removeEventListener("pointerleave", onPointerLeave);
     canvas.removeEventListener("pointerup", onPointerUp);
     window.removeEventListener("keydown", onKeyDown);
   };

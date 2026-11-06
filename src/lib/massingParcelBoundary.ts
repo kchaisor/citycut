@@ -73,6 +73,42 @@ export function pickParcelAt(
   return best?.id ?? null;
 }
 
+export function samplePointInsideParcelLocal(parcel: ParcelOutline, origin: LonLat): [number, number] | null {
+  const local = openRing(parcel.ring.map(([lon, lat]) => toLocal(lat, lon, origin)));
+  if (local.length < 3) return null;
+  const holes: Pt[][] = [];
+  let cx = 0;
+  let cy = 0;
+  for (const [e, n] of local) {
+    cx += e;
+    cy += n;
+  }
+  const nVerts = local.length;
+  cx /= nVerts;
+  cy /= nVerts;
+  if (pointInPolygon([cx, cy], local, holes)) return [cx, cy];
+  const offsetsM = [0.5, 1, 2, 4, 8, 14];
+  for (let i = 0; i < local.length; i++) {
+    const a = local[i]!;
+    const b = local[(i + 1) % local.length]!;
+    const mx = (a[0] + b[0]) / 2;
+    const my = (a[1] + b[1]) / 2;
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const len = Math.hypot(dx, dy) || 1;
+    const px = -dy / len;
+    const py = dx / len;
+    for (const off of offsetsM) {
+      for (const sign of [-1, 1] as const) {
+        const ex = mx + px * off * sign;
+        const ey = my + py * off * sign;
+        if (pointInPolygon([ex, ey], local, holes)) return [ex, ey];
+      }
+    }
+  }
+  return null;
+}
+
 export function nearestParcelIds(
   parcels: ParcelOutline[],
   origin: LonLat,

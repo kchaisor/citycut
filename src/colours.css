@@ -33,13 +33,15 @@
   --site-building: #FFF500;
   --imported-massing: #FFFFFF;
   --massing-preview-line: #000000;
-  --parcel-outline: #E1B157;
-  --parcel-outline-casing: #1A1916;
+  --parcel-outline: #D4A85C;
+  --parcel-outline-casing: #C8C2BA;
   --parcel-fill-base: #E1B157;
+  --parcel-outline-hover: #F4CA55;
+  --parcel-fill-hover: #F4CA55;
   --parcel-outline-selected: #FFD966;
   --parcel-boundary-active: #FFFFFF;
   --parcel-fill-selected: #E1B157;
-  --parcel-fill-boundary: #E1B157;
+  --parcel-fill-boundary: #C89F3D;
   --switch-knob: #000000;
 
   --site-building-edge: #3D3010;

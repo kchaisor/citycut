@@ -9,10 +9,12 @@ import {
   nearestParcelIds,
   pickParcelAt,
   pointInLocalMulti,
+  samplePointInsideParcelLocal,
   unionParcelsLocal,
 } from "../lib/massingParcelBoundary";
 import type { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import {
+  buildMassingParcelHoverBundle,
   buildMassingParcelOutlineBundle,
   buildMassingParcelSelectionBundle,
   buildMassingSiteBoundaryBundle,
@@ -33,6 +35,7 @@ declare global {
       selectedIds?: string[];
       boundaryPolygons?: number;
       source?: "pmtiles" | "vicmap" | "pmtiles+vicmap";
+      hoverParcelId?: string | null;
     };
   }
 }
@@ -54,6 +57,9 @@ export type MassingParcelApi = {
   parcelSource: "pmtiles" | "vicmap" | "pmtiles+vicmap" | null;
   getSyncState: () => { selectedIds: string[]; boundaryPolygons: number };
   sampleInsideBoundary: () => [number, number] | null;
+  hoveredParcelId: string | null;
+  setHoveredParcelId: (id: string | null) => void;
+  samplePointForParcel: (id: string) => [number, number] | null;
 };
 
 export function useMassingParcels(model: CityModel, massingEnabled: boolean): MassingParcelApi {
@@ -63,6 +69,7 @@ export function useMassingParcels(model: CityModel, massingEnabled: boolean): Ma
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [boundary, setBoundary] = useState<MultiPolygon>([]);
   const [parcelSource, setParcelSource] = useState<"pmtiles" | "vicmap" | "pmtiles+vicmap" | null>(null);
+  const [hoveredParcelId, setHoveredParcelId] = useState<string | null>(null);
   const cutKey = `${model.center.lat},${model.center.lon},${model.sideM}`;
   const parcelsByIdRef = useRef(new Map<string, ParcelOutline>());
   const syncSelectionRef = useRef<{ selectedIds: string[]; boundary: MultiPolygon }>({
@@ -117,6 +124,10 @@ export function useMassingParcels(model: CityModel, massingEnabled: boolean): Ma
     if (!massingEnabled) applySelection([]);
   }, [applySelection, massingEnabled, cutKey]);
 
+  useEffect(() => {
+    if (!massingEnabled) setHoveredParcelId(null);
+  }, [massingEnabled, cutKey]);
+
   const selectedParcels = useMemo(
     () => selectedIds.map((id) => parcelsByIdRef.current.get(id)).filter((p): p is ParcelOutline => p != null),
     [selectedIds, parcels],
@@ -162,6 +173,15 @@ export function useMassingParcels(model: CityModel, massingEnabled: boolean): Ma
     [],
   );
 
+  const samplePointForParcel = useCallback(
+    (id: string): [number, number] | null => {
+      const parcel = parcelsByIdRef.current.get(id);
+      if (!parcel) return null;
+      return samplePointInsideParcelLocal(parcel, model.center);
+    },
+    [model.center],
+  );
+
   const sampleInsideBoundary = useCallback((): [number, number] | null => {
     const active = syncSelectionRef.current.boundary;
     if (!active.length) return [0, 0];
@@ -178,6 +198,11 @@ export function useMassingParcels(model: CityModel, massingEnabled: boolean): Ma
     return [cx / n, cy / n];
   }, []);
 
+  const hoveredParcel = useMemo(() => {
+    if (!hoveredParcelId) return null;
+    return parcelsByIdRef.current.get(hoveredParcelId) ?? null;
+  }, [hoveredParcelId, parcels]);
+
   const outlineBundle = useMemo(() => {
     if (!parcels?.length) return { objects: [], lineMaterials: [], segmentCount: 0 };
     const parts = [
@@ -186,6 +211,17 @@ export function useMassingParcels(model: CityModel, massingEnabled: boolean): Ma
         casingColor: getColour("--parcel-outline-casing"),
       }),
     ];
+    if (hoveredParcel) {
+      parts.push(
+        buildMassingParcelHoverBundle(
+          model,
+          [hoveredParcel],
+          getColour("--parcel-outline-hover"),
+          getColour("--parcel-fill-hover"),
+          getColour("--parcel-outline-casing"),
+        ),
+      );
+    }
     if (selectedParcels.length) {
       parts.push(
         buildMassingParcelSelectionBundle(
@@ -208,7 +244,7 @@ export function useMassingParcels(model: CityModel, massingEnabled: boolean): Ma
       );
     }
     return mergeMassingParcelBundles(...parts);
-  }, [boundary, model, parcels, selectedParcels]);
+  }, [boundary, hoveredParcel, model, parcels, selectedParcels]);
 
   const outlineObjects = outlineBundle.objects;
   const outlineLineMaterials = outlineBundle.lineMaterials;
@@ -226,8 +262,9 @@ export function useMassingParcels(model: CityModel, massingEnabled: boolean): Ma
       selectedIds,
       boundaryPolygons: boundary.length,
       source: parcelSource ?? undefined,
+      hoverParcelId: hoveredParcelId,
     };
-  }, [boundary.length, massingEnabled, parcelSource, parcels?.length, segmentCount, selectedIds, status]);
+  }, [boundary.length, hoveredParcelId, massingEnabled, parcelSource, parcels?.length, segmentCount, selectedIds, status]);
 
   return {
     status,
@@ -246,5 +283,8 @@ export function useMassingParcels(model: CityModel, massingEnabled: boolean): Ma
     parcelSource,
     getSyncState,
     sampleInsideBoundary,
+    hoveredParcelId,
+    setHoveredParcelId,
+    samplePointForParcel,
   };
 }

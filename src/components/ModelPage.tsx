@@ -135,6 +135,8 @@ import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import { COM_TREES_CREDIT, COM_TREES_DATASET_URL } from "../lib/comTreesCredit";
 import { openRing, toLocal } from "../lib/geo";
+import { sampleTerrain } from "../lib/terrain";
+import { SURFACE } from "../lib/surfaceLayers";
 import { pointInPolygon } from "../lib/useCascade";
 import type { BuildingUse, CityModel } from "../types";
 import { BuildingHeightPopover, HeightOverridePanel, HiddenBuildingsPanel } from "./BuildingHeightPopover";
@@ -592,9 +594,42 @@ export function ModelPage({
   massingPointAllowedRef.current = massingParcels.pointAllowed;
   const [massingCursor, setMassingCursor] = useState({ x: 0, y: 0 });
   const massingHeightDragFloors = useRef<number>(4);
+  const massingSceneCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const selectedMassingBlock = useMemo(
     () => massingDraw.blocks.find((item) => item.id === massingDraw.tool.selectedId) ?? null,
     [massingDraw.blocks, massingDraw.tool.selectedId],
+  );
+
+  useEffect(() => {
+    const canvas = massingSceneCanvasRef.current;
+    if (!canvas) return;
+    const titleSelect = massingDraw.tool.toolEnabled && !massingDraw.tool.drawArmed;
+    canvas.style.cursor = titleSelect && massingParcels.hoveredParcelId != null ? "pointer" : "";
+  }, [massingDraw.tool.drawArmed, massingDraw.tool.toolEnabled, massingParcels.hoveredParcelId]);
+
+  const massingGroundPointerMove = useCallback(
+    (
+      east: number | null,
+      north: number | null,
+      _clientX: number,
+      _clientY: number,
+      hitBlockId: string | null,
+    ) => {
+      if (!massingDraw.tool.toolEnabled || massingDraw.tool.drawArmed) {
+        massingParcels.setHoveredParcelId(null);
+        return;
+      }
+      if (hitBlockId) {
+        massingParcels.setHoveredParcelId(null);
+        return;
+      }
+      if (east == null || north == null) {
+        massingParcels.setHoveredParcelId(null);
+        return;
+      }
+      massingParcels.setHoveredParcelId(massingParcels.pickAt(east, north));
+    },
+    [massingDraw.tool.drawArmed, massingDraw.tool.toolEnabled, massingParcels],
   );
 
   useEffect(() => {
@@ -615,6 +650,29 @@ export function ModelPage({
       disableTool: () => massingDraw.setToolEnabled(false),
       armDraw: () => massingDraw.setDrawArmed(true),
       disarmDraw: () => massingDraw.setDrawArmed(false),
+      qaFocusParcelHover: (parcelId: string) => {
+        const c = massingParcels.samplePointForParcel(parcelId);
+        if (!c) return false;
+        const [east, north] = c;
+        const groundY = model.terrain ? sampleTerrain(model.terrain, east, north, model.sideM) : 0;
+        const y = groundY + SURFACE.rail.lift + 0.35;
+        const z = -north;
+        const p = window.__citycutQa?.projectToScreen({ x: east, y, z });
+        if (!p) return false;
+        const canvas = document.querySelector<HTMLCanvasElement>(".model canvas");
+        if (!canvas) return false;
+        canvas.dispatchEvent(
+          new PointerEvent("pointermove", {
+            bubbles: true,
+            clientX: p.x,
+            clientY: p.y,
+            pointerId: 1,
+            buttons: 0,
+            pointerType: "mouse",
+          }),
+        );
+        return true;
+      },
       selectParcels: (ids: string[]) => massingParcels.selectParcels(ids),
       clearParcels: () => massingParcels.clearSelection(),
       nearestParcelIds: (count: number) => massingParcels.nearestIds(count),
@@ -678,11 +736,14 @@ export function ModelPage({
     massingDraw.setToolEnabled,
     massingDraw.updateSelected,
     massingParcels.boundary.length,
+    massingParcels.samplePointForParcel,
     massingParcels.clearSelection,
     massingParcels.nearestIds,
     massingParcels.selectParcels,
     massingParcels.selectedIds,
+    model.center,
     model.sideM,
+    model.terrain,
   ]);
 
   const qaSummaryRef = useRef({ treeCrowns: 0, buildingCount: 0, roadCount: 0, triangleCount: 0 });
@@ -1992,9 +2053,13 @@ export function ModelPage({
                         }
                         massingDraw.pointerDown(east, north, hitBlockId);
                       }}
-                      onPointerMove={(east, north, clientX, clientY) => {
+                      onSceneCanvasMount={(el) => {
+                        massingSceneCanvasRef.current = el;
+                      }}
+                      onPointerMove={(east, north, clientX, clientY, hitBlockId) => {
                         setMassingCursor({ x: clientX, y: clientY });
-                        massingDraw.pointerMove(east, north);
+                        massingGroundPointerMove(east, north, clientX, clientY, hitBlockId);
+                        if (east != null && north != null) massingDraw.pointerMove(east, north);
                       }}
                       onPointerUp={() => massingDraw.pointerUp()}
                       onCancel={() => massingDraw.dispatchTool({ type: "CANCEL" })}

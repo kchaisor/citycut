@@ -40,7 +40,19 @@ function countPixelsNearRgb(png, target, tolerance = 48) {
   return hits;
 }
 
+function countWarmBrightenDelta(beforePng, afterPng, minSumDelta = 22) {
+  let hits = 0;
+  for (let i = 0; i < beforePng.data.length; i += 4) {
+    const dr = afterPng.data[i] - beforePng.data[i];
+    const dg = afterPng.data[i + 1] - beforePng.data[i + 1];
+    const db = afterPng.data[i + 2] - beforePng.data[i + 2];
+    if (dr + dg + db >= minSumDelta && dr >= 4 && dg >= 3) hits += 1;
+  }
+  return hits;
+}
+
 const PARCEL_OUTLINE_GOLD = { r: 225, g: 177, b: 87 };
+const PARCEL_CADASTRE_DEFAULT = { r: 212, g: 168, b: 92 };
 const VIEWPORT_SCENE_CLIP = { x: 180, y: 100, width: 1080, height: 720 };
 
 async function sceneViewportScreenshot(page, extra = {}) {
@@ -100,7 +112,7 @@ async function verifyMontAlbertParcels(baseUrl, artifactsDir) {
     await montAlbertPage.waitForTimeout(600);
     const montAlbertParcels = await montAlbertPage.evaluate(() => window.__citycutQaParcels ?? null);
     const montAlbertCrop = PNG.sync.read(await sceneViewportScreenshot(montAlbertPage));
-    const montAlbertGold = countPixelsNearRgb(montAlbertCrop, PARCEL_OUTLINE_GOLD, 60);
+    const montAlbertDefaultTint = countPixelsNearRgb(montAlbertCrop, PARCEL_CADASTRE_DEFAULT, 55);
     await montAlbertPage.screenshot({
       path: path.join(artifactsDir, "massing-mont-albert-parcels.png"),
       timeout: 60_000,
@@ -110,8 +122,43 @@ async function verifyMontAlbertParcels(baseUrl, artifactsDir) {
     await sceneViewportScreenshot(montAlbertPage, {
       path: path.join(artifactsDir, "massing-mont-albert-parcels-crop.png"),
     });
+    const montAlbertHoverProbe = await montAlbertPage.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      const id = api?.nearestParcelIds(1)?.[0];
+      if (!id || !api?.qaFocusParcelHover) return { ok: false, id: null, moved: false };
+      const moved = api.qaFocusParcelHover(id);
+      return { ok: moved, id, moved };
+    });
+    if (montAlbertHoverProbe.id) {
+      await montAlbertPage
+        .waitForFunction(
+          (exp) => window.__citycutQaParcels?.hoverParcelId === exp,
+          montAlbertHoverProbe.id,
+          { timeout: 3000 },
+        )
+        .catch(() => {});
+    }
+    await montAlbertPage.evaluate(
+      () =>
+        new Promise((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        }),
+    );
+    await montAlbertPage.waitForTimeout(350);
+    const montAlbertHoverParcelId = await montAlbertPage.evaluate(() => window.__citycutQaParcels?.hoverParcelId ?? null);
+    const montAlbertHoverCrop = PNG.sync.read(await sceneViewportScreenshot(montAlbertPage));
+    const montAlbertHoverDelta = countWarmBrightenDelta(montAlbertCrop, montAlbertHoverCrop);
+    await sceneViewportScreenshot(montAlbertPage, {
+      path: path.join(artifactsDir, "massing-mont-albert-parcels-hover-crop.png"),
+    });
     await montContext.close();
-    return { montAlbertParcels, montAlbertGold };
+    return {
+      montAlbertParcels,
+      montAlbertDefaultTint,
+      montAlbertHoverProbe,
+      montAlbertHoverParcelId,
+      montAlbertHoverDelta,
+    };
   } finally {
     await montBrowser.close();
   }
@@ -1041,10 +1088,10 @@ async function main() {
       .catch(() => {});
     const parcelInfo = await page.evaluate(() => ({ qa: window.__citycutQaParcels ?? null }));
     const parcelOutlinePng = PNG.sync.read(await page.screenshot({ clip: VIEWPORT_SCENE_CLIP }));
-    const parcelOutlinePixels = countPixelsNearRgb(parcelOutlinePng, PARCEL_OUTLINE_GOLD, 55);
+    const parcelOutlinePixels = countPixelsNearRgb(parcelOutlinePng, PARCEL_CADASTRE_DEFAULT, 50);
     assertCheck(
       "massing-parcel-outlines",
-      "Massing mode draws readable Vicmap/VicPlan parcel outlines on the 3D ground (geometry + visible gold pixels)",
+      "Massing mode draws readable Vicmap/VicPlan parcel outlines on the 3D ground (geometry + visible cadastre pixels)",
       parcelInfo.qa?.status === "ready" &&
         parcelInfo.qa.segments > 0 &&
         parcelOutlinePixels >= 800,
@@ -1141,15 +1188,31 @@ async function main() {
     await page.evaluate(() => window.__citycutQaMassing?.disableTool());
     await page.waitForTimeout(200);
 
-    const { montAlbertParcels, montAlbertGold } = await verifyMontAlbertParcels(baseUrl, ARTIFACTS_DIR);
+    const {
+      montAlbertParcels,
+      montAlbertDefaultTint,
+      montAlbertHoverProbe,
+      montAlbertHoverParcelId,
+      montAlbertHoverDelta,
+    } = await verifyMontAlbertParcels(baseUrl, ARTIFACTS_DIR);
     assertCheck(
       "massing-mont-albert-parcels",
-      "Mont Albert North (eastern suburbs, outside inner-Melbourne PMTiles) loads Vicmap parcels and shows readable gold outlines on 3D terrain",
+      "Mont Albert North loads Vicmap parcels with a visible default cadastre tint and brighter hover on pointer focus",
       montAlbertParcels?.status === "ready" &&
         montAlbertParcels.source === "vicmap" &&
         (montAlbertParcels.count ?? 0) >= 500 &&
-        montAlbertGold >= 800,
-      JSON.stringify({ montAlbertParcels, montAlbertGold }),
+        montAlbertDefaultTint >= 2200 &&
+        montAlbertHoverProbe.moved === true &&
+        montAlbertHoverProbe.id != null &&
+        montAlbertHoverParcelId === montAlbertHoverProbe.id &&
+        montAlbertHoverDelta >= 420,
+      JSON.stringify({
+        montAlbertParcels,
+        montAlbertDefaultTint,
+        montAlbertHoverProbe,
+        montAlbertHoverParcelId,
+        montAlbertHoverDelta,
+      }),
     );
 
     const massingDrawId = await page.evaluate(() => {

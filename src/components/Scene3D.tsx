@@ -1547,7 +1547,10 @@ function QaCameraBridgeRegister({
   const size = useThree((state) => state.size);
   const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
-    if (!qaModeFromSearch(window.location.search) || !active) {
+    const qaUi =
+      qaModeFromSearch(window.location.search) ||
+      Boolean((window as Window & { __citycutVerifyHarness?: boolean }).__citycutVerifyHarness);
+    if (!qaUi || !active) {
       registerQaCameraBridge(null);
       return;
     }

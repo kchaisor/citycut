@@ -133,13 +133,15 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--switch-knob` | `#000000` | Knob of every sidebar switch, on and off, so an off switch reads on its pale `--control-off` track. On = `--accent` track, knob right. |
 | `--site-building-edge` | `#3D3010` | Darker outline on site-building massing in the 3D viewport so they read against retail (`--use-retail`) and civic (`--use-civic`) yellows. |
 | `--site-boundary` | `#D7263D` | Searched-property parcel boundary on the site plan, the 3D ground line, Rhino `Site::Boundary`, and Illustrator/PDF Site boundary layer. |
-| `--parcel-outline` | `#E1B157` | Vicmap/VicPlan property outlines on the 3D ground while Massing mode is on (wide world-unit lines). |
-| `--parcel-outline-casing` | `#1A1916` | Dark stroke behind parcel outlines for contrast on light terrain. |
-| `--parcel-fill-base` | `#E1B157` | Light tint fill on every parcel title while Massing is on. |
+| `--parcel-outline` | `#D4A85C` | Default cadastre strokes on the 3D ground while Massing is on (world-unit lines). |
+| `--parcel-outline-casing` | `#C8C2BA` | Muted stroke behind default parcel outlines for separation from terrain. |
+| `--parcel-fill-base` | `#E1B157` | Very light default tint on parcel titles (low alpha in mesh). |
+| `--parcel-outline-hover` | `#F4CA55` | Brighter stroke on the title under the pointer (title-select mode). |
+| `--parcel-fill-hover` | `#F4CA55` | Brighter fill on hover (title-select mode). |
 | `--parcel-outline-selected` | `#FFD966` | Selected property title outlines in Massing mode. |
 | `--parcel-boundary-active` | `#FFFFFF` | Combined site boundary outline from one or more selected titles. |
 | `--parcel-fill-selected` | `#E1B157` | Semi-transparent fill on selected titles (3D terrain). |
-| `--parcel-fill-boundary` | `#E1B157` | Semi-transparent fill inside the combined site boundary. |
+| `--parcel-fill-boundary` | `#C89F3D` | Semi-transparent fill inside the combined site boundary. |
 | `--use-residential` | `#E06C75` | Residential footprints, legend swatch, 3D massing, and the Residential Rhino layer. |
 | `--use-commercial` | `#61AFEF` | Commercial footprints, legend swatch, 3D massing, and the Commercial Rhino layer. |
 | `--use-retail` | `#E5C07B` | Retail footprints, legend swatch, 3D massing, and the Retail Rhino layer. |

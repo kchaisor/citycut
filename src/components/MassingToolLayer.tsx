@@ -37,7 +37,13 @@ type Props = {
   previewLine: readonly [[number, number], [number, number]] | null;
   active: boolean;
   onPointerDown: (east: number, north: number, hitBlockId: string | null) => void;
-  onPointerMove: (east: number, north: number, clientX: number, clientY: number) => void;
+  onPointerMove: (
+    east: number | null,
+    north: number | null,
+    clientX: number,
+    clientY: number,
+    hitBlockId: string | null,
+  ) => void;
   onPointerUp: () => void;
   onCancel: () => void;
   onHeightDragStart: (blockId: string) => void;
@@ -45,6 +51,7 @@ type Props = {
   onHeightDragEnd: () => void;
   parcelOutlineObjects: THREE.Object3D[];
   parcelOutlineLineMaterials: LineMaterial[];
+  onSceneCanvasMount?: (canvas: HTMLCanvasElement | null) => void;
 };
 
 function MassingParcelLineResolution({ materials }: { materials: LineMaterial[] }) {
@@ -75,6 +82,7 @@ export function MassingToolLayer({
   onHeightDragEnd,
   parcelOutlineObjects,
   parcelOutlineLineMaterials,
+  onSceneCanvasMount,
 }: Props) {
   const groupRef = useRef<THREE.Group>(null);
   const camera = useThree((state) => state.camera);
@@ -145,8 +153,15 @@ export function MassingToolLayer({
   groundHandlers.current = { onPointerDown, onPointerMove, onPointerUp, onCancel };
   const hoverRef = useRef(false);
   hoverRef.current = tool.drawArmed && tool.phase === "drawingPreview";
+  const parcelHoverRef = useRef(false);
+  parcelHoverRef.current = active && !tool.drawArmed;
   const heightHandlers = useRef({ onHeightDragStart, onHeightDrag, onHeightDragEnd });
   heightHandlers.current = { onHeightDragStart, onHeightDrag, onHeightDragEnd };
+
+  useLayoutEffect(() => {
+    onSceneCanvasMount?.(gl.domElement);
+    return () => onSceneCanvasMount?.(null);
+  }, [gl.domElement, onSceneCanvasMount]);
 
   useLayoutEffect(() => {
     if (!active) return;
@@ -156,10 +171,11 @@ export function MassingToolLayer({
       scene,
       {
         onPointerDown: (east, north, hitBlockId) => groundHandlers.current.onPointerDown(east, north, hitBlockId),
-        onPointerMove: (east, north, clientX, clientY) => groundHandlers.current.onPointerMove(east, north, clientX, clientY),
+        onPointerMove: (east, north, clientX, clientY, hitBlockId) =>
+          groundHandlers.current.onPointerMove(east, north, clientX, clientY, hitBlockId),
         onPointerUp: () => groundHandlers.current.onPointerUp(),
         onCancel: () => groundHandlers.current.onCancel(),
-        hoverActive: () => hoverRef.current,
+        hoverActive: () => hoverRef.current || parcelHoverRef.current,
       },
       true,
     );
