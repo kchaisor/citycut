@@ -24,12 +24,23 @@ declare global {
     __citycutQaMassing?: {
       enableTool: () => void;
       disableTool: () => void;
+      armDraw: () => void;
+      disarmDraw: () => void;
       simulateDraw: (east0: number, north0: number, east1: number, north1: number) => string | null;
       getBlocks: () => import("./massingBlock").MassingBlock[];
       selectBlock: (id: string) => void;
       setFloors: (floors: number) => void;
       deleteSelected: () => void;
       readPersistedCount: () => number;
+      selectParcels: (ids: string[]) => void;
+      clearParcels: () => void;
+      nearestParcelIds: (count: number) => string[];
+      getParcelState: () => { selectedIds: string[]; boundaryPolygons: number };
+      sampleInsideBoundary: () => [number, number] | null;
+      pointInSiteBoundary: (east: number, north: number) => boolean;
+      qaGroundPress: (east: number, north: number) => void;
+      getToolPhase: () => string;
+      drawArmed: () => boolean;
     };
     __citycutQaModel?: {
       openMidriseHeightEdit: () => number | null;

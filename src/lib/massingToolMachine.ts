@@ -2,6 +2,7 @@ export type MassingToolPhase = "idle" | "drawing" | "drawingPreview" | "selected
 
 export type MassingToolState = {
   toolEnabled: boolean;
+  drawArmed: boolean;
   phase: MassingToolPhase;
   selectedId: string | null;
   drawStart: [number, number] | null;
@@ -11,6 +12,7 @@ export type MassingToolState = {
 
 export const INITIAL_MASSING_TOOL_STATE: MassingToolState = {
   toolEnabled: false,
+  drawArmed: false,
   phase: "idle",
   selectedId: null,
   drawStart: null,
@@ -21,6 +23,8 @@ export const INITIAL_MASSING_TOOL_STATE: MassingToolState = {
 export type MassingToolEvent =
   | { type: "ENABLE_TOOL" }
   | { type: "DISABLE_TOOL" }
+  | { type: "ARM_DRAW" }
+  | { type: "DISARM_DRAW" }
   | { type: "LEAVE_3D_VIEW" }
   | { type: "RETURN_3D_VIEW" }
   | { type: "POINTER_DOWN_GROUND"; east: number; north: number; hitBlockId: string | null }
@@ -44,6 +48,17 @@ export function reduceMassingTool(state: MassingToolState, event: MassingToolEve
         ...INITIAL_MASSING_TOOL_STATE,
         toolEnabled: false,
       };
+    case "ARM_DRAW":
+      if (!state.toolEnabled) return state;
+      return { ...state, drawArmed: true };
+    case "DISARM_DRAW":
+      if (!state.drawArmed && state.phase !== "drawing" && state.phase !== "drawingPreview") {
+        return { ...state, drawArmed: false };
+      }
+      if (state.phase === "drawing" || state.phase === "drawingPreview") {
+        return { ...state, drawArmed: false, phase: "idle", drawStart: null, drawEnd: null };
+      }
+      return { ...state, drawArmed: false };
     case "LEAVE_3D_VIEW":
       if (state.phase === "drawing" || state.phase === "drawingPreview" || state.phase === "draggingHeight") {
         return {
@@ -69,10 +84,6 @@ export function reduceMassingTool(state: MassingToolState, event: MassingToolEve
     case "POINTER_DOWN_GROUND": {
       if (!state.toolEnabled) return state;
       if (state.phase === "draggingHeight") return state;
-      // Second click of a click-click draw: anchor the end point; the hook commits.
-      if (state.phase === "drawingPreview") {
-        return { ...state, drawEnd: [event.east, event.north] };
-      }
       if (event.hitBlockId) {
         return {
           ...state,
@@ -82,8 +93,14 @@ export function reduceMassingTool(state: MassingToolState, event: MassingToolEve
           drawEnd: null,
         };
       }
-      if (state.phase === "selected") {
-        return { ...state, phase: "idle", selectedId: null, drawStart: null, drawEnd: null };
+      if (!state.drawArmed) {
+        if (state.phase === "selected") {
+          return { ...state, phase: "idle", selectedId: null, drawStart: null, drawEnd: null };
+        }
+        return state;
+      }
+      if (state.phase === "drawingPreview") {
+        return { ...state, drawEnd: [event.east, event.north] };
       }
       return {
         ...state,
@@ -135,7 +152,8 @@ export function reduceMassingTool(state: MassingToolState, event: MassingToolEve
 }
 
 export function massingToolOrbitLocked(state: MassingToolState): boolean {
-  return state.toolEnabled && (state.phase === "drawing" || state.phase === "drawingPreview" || state.phase === "draggingHeight");
+  const drawing = state.drawArmed && (state.phase === "drawing" || state.phase === "drawingPreview");
+  return drawing || state.phase === "draggingHeight";
 }
 
 export function massingToolIsDrawing(state: MassingToolState): boolean {

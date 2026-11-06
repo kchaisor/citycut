@@ -7,6 +7,7 @@ import { EnrichmentPmtilesSource } from "./enrichmentPmtilesSource";
 import { toLocal } from "./geo";
 import { sampleTerrain } from "./terrain";
 import { SURFACE } from "./surfaceLayers";
+import type { MultiPolygon } from "polygon-clipping";
 import type { CityModel, LonLat } from "../types";
 
 /**
@@ -22,7 +23,7 @@ const PARCELS_FETCH_ZOOMS = [14, 13, 12] as const;
 
 export type ParcelOutline = { id: string; ring: [number, number][] };
 type Bbox = { south: number; west: number; north: number; east: number };
-type IndexedParcel = ParcelOutline & { minX: number; minY: number; maxX: number; maxY: number };
+export type IndexedParcel = ParcelOutline & { minX: number; minY: number; maxX: number; maxY: number };
 
 function tileRange(bounds: Bbox, z: number) {
   const n = 2 ** z;
@@ -127,36 +128,104 @@ export function clipSegmentToSquare(a: [number, number], b: [number, number], h:
 
 export const PARCEL_OUTLINES_OBJECT = "MassingParcelOutlines";
 
-/** Thin ground-draped strokes in the same local frame as buildings (east, up, -north). */
+type OutlineStyle = {
+  color: THREE.ColorRepresentation;
+  opacity: number;
+  liftM: number;
+  renderOrderOffset: number;
+  name: string;
+};
+
+function appendLocalRingSegments(
+  pos: number[],
+  model: Pick<CityModel, "terrain" | "sideM" | "center">,
+  ring: [number, number][],
+  origin: LonLat,
+  style: OutlineStyle,
+) {
+  const half = model.sideM / 2;
+  const height = (e: number, n: number) =>
+    (model.terrain ? sampleTerrain(model.terrain, e, n, model.sideM) : 0) + style.liftM;
+  const local = ring.map(([lon, lat]) => toLocal(lat, lon, origin));
+  for (let i = 0; i < local.length - 1; i++) {
+    const seg = clipSegmentToSquare(local[i]!, local[i + 1]!, half);
+    if (!seg) continue;
+    const [[e0, n0], [e1, n1]] = seg;
+    pos.push(e0, height(e0, n0), -n0, e1, height(e1, n1), -n1);
+  }
+}
+
+function buildLineSegments(
+  pos: number[],
+  style: OutlineStyle,
+  parcelCount: number,
+): THREE.LineSegments | null {
+  if (!pos.length) return null;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  const material = new THREE.LineBasicMaterial({
+    color: style.color,
+    transparent: true,
+    opacity: style.opacity,
+    depthTest: true,
+    depthWrite: false,
+  });
+  material.toneMapped = false;
+  const lines = new THREE.LineSegments(geometry, material);
+  lines.name = style.name;
+  lines.renderOrder = SURFACE.rail.renderOrder + style.renderOrderOffset;
+  lines.userData.noScenePick = true;
+  lines.userData.parcelCount = parcelCount;
+  lines.raycast = () => {};
+  return lines;
+}
+
+const BASE_PARCEL_STYLE = {
+  opacity: 0.92,
+  liftM: SURFACE.rail.lift + 0.22,
+  renderOrderOffset: 2,
+  name: PARCEL_OUTLINES_OBJECT,
+} satisfies Omit<OutlineStyle, "color">;
+
+/** Ground-draped strokes in the scene local frame (east, up, -north). */
 export function buildParcelOutlineLines(
   model: Pick<CityModel, "terrain" | "sideM" | "center">,
   parcels: ParcelOutline[],
   color: THREE.ColorRepresentation,
 ): THREE.LineSegments | null {
-  const half = model.sideM / 2;
-  const lift = SURFACE.rail.lift + 0.06;
   const origin: LonLat = model.center;
   const pos: number[] = [];
-  const height = (e: number, n: number) => (model.terrain ? sampleTerrain(model.terrain, e, n, model.sideM) : 0) + lift;
-  for (const parcel of parcels) {
-    const local = parcel.ring.map(([lon, lat]) => toLocal(lat, lon, origin));
-    for (let i = 0; i < local.length - 1; i++) {
-      const seg = clipSegmentToSquare(local[i], local[i + 1], half);
-      if (!seg) continue;
-      const [[e0, n0], [e1, n1]] = seg;
-      pos.push(e0, height(e0, n0), -n0, e1, height(e1, n1), -n1);
+  const style = { ...BASE_PARCEL_STYLE, color };
+  for (const parcel of parcels) appendLocalRingSegments(pos, model, parcel.ring, origin, style);
+  return buildLineSegments(pos, style, parcels.length);
+}
+
+export function buildParcelSubsetOutlineLines(
+  model: Pick<CityModel, "terrain" | "sideM" | "center">,
+  parcels: ParcelOutline[],
+  style: OutlineStyle,
+): THREE.LineSegments | null {
+  const origin: LonLat = model.center;
+  const pos: number[] = [];
+  for (const parcel of parcels) appendLocalRingSegments(pos, model, parcel.ring, origin, style);
+  return buildLineSegments(pos, style, parcels.length);
+}
+
+export function buildLocalBoundaryOutlineLines(
+  model: Pick<CityModel, "terrain" | "sideM" | "center">,
+  multi: MultiPolygon,
+  style: OutlineStyle,
+): THREE.LineSegments | null {
+  const pos: number[] = [];
+  for (const polygon of multi) {
+    const outer = polygon[0] ?? [];
+    for (let i = 0; i < outer.length - 1; i++) {
+      const a = outer[i]!;
+      const b = outer[i + 1]!;
+      const height = (e: number, n: number) =>
+        (model.terrain ? sampleTerrain(model.terrain, e, n, model.sideM) : 0) + style.liftM;
+      pos.push(a[0], height(a[0], a[1]), -a[1], b[0], height(b[0], b[1]), -b[1]);
     }
   }
-  if (!pos.length) return null;
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-  const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.55, depthWrite: false });
-  material.toneMapped = false;
-  const lines = new THREE.LineSegments(geometry, material);
-  lines.name = PARCEL_OUTLINES_OBJECT;
-  lines.renderOrder = SURFACE.rail.renderOrder + 1;
-  lines.userData.noScenePick = true;
-  lines.userData.parcelCount = parcels.length;
-  lines.raycast = () => {};
-  return lines;
+  return buildLineSegments(pos, style, multi.length);
 }

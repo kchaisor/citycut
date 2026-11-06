@@ -1,94 +1,138 @@
 ---- MODULE massingTool ----
-\* Massing draw/edit tool state machine (mirrors src/lib/massingToolMachine.ts).
-\* Draw paths:
-\*   press-drag-release: idle -> drawing -(release, long enough)-> selected (committed)
-\*   click-click:        idle -> drawing -(release, short)-> drawingPreview
-\*                       -(second click, valid)-> selected (committed)
-\*   Escape / leave 3D:  drawing|drawingPreview -> idle, no block created
+\* Massing tool state machine (mirrors src/lib/massingToolMachine.ts).
+\* Modes: MassingOn (toolEnabled), DrawingArmed (drawArmed), optional site boundary (parcelSelection).
 EXTENDS Naturals
 
 CONSTANT MaxBlocks
+CONSTANT MaxParcels
 
-VARIABLES toolEnabled, phase, selected, blocks, hasDraft
+VARIABLES
+  toolEnabled,
+  drawArmed,
+  phase,
+  selected,
+  blocks,
+  hasDraft,
+  parcelSelection,
+  hasSiteBoundary
 
-vars == <<toolEnabled, phase, selected, blocks, hasDraft>>
+vars ==
+  <<toolEnabled, drawArmed, phase, selected, blocks, hasDraft, parcelSelection, hasSiteBoundary>>
 
 Phases == {"idle", "drawing", "drawingPreview", "selected", "draggingHeight"}
 Drawing == {"drawing", "drawingPreview"}
 
 TypeOK ==
   /\ toolEnabled \in BOOLEAN
+  /\ drawArmed \in BOOLEAN
   /\ phase \in Phases
   /\ selected \in BOOLEAN
   /\ blocks \in 0..MaxBlocks
   /\ hasDraft \in BOOLEAN
+  /\ parcelSelection \in 0..MaxParcels
+  /\ hasSiteBoundary \in BOOLEAN
 
 Init ==
   /\ toolEnabled = FALSE
+  /\ drawArmed = FALSE
   /\ phase = "idle"
   /\ selected = FALSE
   /\ blocks = 0
   /\ hasDraft = FALSE
+  /\ parcelSelection = 0
+  /\ hasSiteBoundary = FALSE
 
 EnableTool ==
   /\ ~toolEnabled
   /\ toolEnabled' = TRUE
-  /\ UNCHANGED <<phase, selected, blocks, hasDraft>>
+  /\ UNCHANGED <<drawArmed, phase, selected, blocks, hasDraft, parcelSelection, hasSiteBoundary>>
 
 DisableTool ==
   /\ toolEnabled
   /\ toolEnabled' = FALSE
+  /\ drawArmed' = FALSE
   /\ phase' = "idle"
   /\ selected' = FALSE
   /\ hasDraft' = FALSE
+  /\ parcelSelection' = 0
+  /\ hasSiteBoundary' = FALSE
   /\ UNCHANGED blocks
 
-\* Press on empty ground (from idle) starts a draft.
+ArmDraw ==
+  /\ toolEnabled
+  /\ ~drawArmed
+  /\ drawArmed' = TRUE
+  /\ UNCHANGED <<toolEnabled, phase, selected, blocks, hasDraft, parcelSelection, hasSiteBoundary>>
+
+DisarmDraw ==
+  /\ drawArmed
+  /\ drawArmed' = FALSE
+  /\ IF phase \in Drawing
+     THEN /\ phase' = "idle"
+          /\ hasDraft' = FALSE
+     ELSE UNCHANGED <<phase, hasDraft>>
+  /\ UNCHANGED <<toolEnabled, selected, blocks, parcelSelection, hasSiteBoundary>>
+
+SelectParcel ==
+  /\ toolEnabled
+  /\ ~drawArmed
+  /\ parcelSelection < MaxParcels
+  /\ parcelSelection' = parcelSelection + 1
+  /\ hasSiteBoundary' = TRUE
+  /\ UNCHANGED <<toolEnabled, drawArmed, phase, selected, blocks, hasDraft>>
+
+ClearParcels ==
+  /\ parcelSelection > 0
+  /\ parcelSelection' = 0
+  /\ hasSiteBoundary' = FALSE
+  /\ UNCHANGED <<toolEnabled, drawArmed, phase, selected, blocks, hasDraft>>
+
 PressGround ==
   /\ toolEnabled
+  /\ drawArmed
   /\ phase = "idle"
   /\ phase' = "drawing"
   /\ hasDraft' = TRUE
   /\ selected' = FALSE
-  /\ UNCHANGED <<toolEnabled, blocks>>
+  /\ UNCHANGED <<toolEnabled, drawArmed, blocks, parcelSelection, hasSiteBoundary>>
 
-\* Press on empty ground while a block is selected just deselects.
 PressGroundDeselect ==
   /\ toolEnabled
+  /\ ~drawArmed
   /\ phase = "selected"
   /\ phase' = "idle"
   /\ selected' = FALSE
-  /\ UNCHANGED <<toolEnabled, blocks, hasDraft>>
+  /\ UNCHANGED <<toolEnabled, drawArmed, blocks, hasDraft, parcelSelection, hasSiteBoundary>>
 
-\* Drag release with a long-enough, in-cut centreline commits.
 ReleaseCommit ==
   /\ phase = "drawing"
+  /\ drawArmed
   /\ blocks < MaxBlocks
   /\ blocks' = blocks + 1
   /\ phase' = "selected"
   /\ selected' = TRUE
   /\ hasDraft' = FALSE
-  /\ UNCHANGED toolEnabled
+  /\ UNCHANGED <<toolEnabled, drawArmed, parcelSelection, hasSiteBoundary>>
 
-\* Short release (a click) enters the hover preview; start stays anchored.
 ReleaseToPreview ==
   /\ phase = "drawing"
+  /\ drawArmed
   /\ phase' = "drawingPreview"
-  /\ UNCHANGED <<toolEnabled, selected, blocks, hasDraft>>
+  /\ UNCHANGED <<toolEnabled, drawArmed, selected, blocks, hasDraft, parcelSelection, hasSiteBoundary>>
 
-\* Second click with a valid end commits.
 SecondClickCommit ==
   /\ phase = "drawingPreview"
+  /\ drawArmed
   /\ blocks < MaxBlocks
   /\ blocks' = blocks + 1
   /\ phase' = "selected"
   /\ selected' = TRUE
   /\ hasDraft' = FALSE
-  /\ UNCHANGED toolEnabled
+  /\ UNCHANGED <<toolEnabled, drawArmed, parcelSelection, hasSiteBoundary>>
 
-\* Second click too short / outside cut: stays in preview, nothing committed.
 SecondClickRejected ==
   /\ phase = "drawingPreview"
+  /\ drawArmed
   /\ UNCHANGED vars
 
 Cancel ==
@@ -96,13 +140,13 @@ Cancel ==
   /\ phase \in Drawing
   /\ phase' = "idle"
   /\ hasDraft' = FALSE
-  /\ UNCHANGED <<toolEnabled, selected, blocks>>
+  /\ UNCHANGED <<toolEnabled, drawArmed, selected, blocks, parcelSelection, hasSiteBoundary>>
 
 Leave3D ==
   /\ phase \in Drawing \cup {"draggingHeight"}
   /\ phase' = IF selected THEN "selected" ELSE "idle"
   /\ hasDraft' = FALSE
-  /\ UNCHANGED <<toolEnabled, selected, blocks>>
+  /\ UNCHANGED <<toolEnabled, drawArmed, selected, blocks, parcelSelection, hasSiteBoundary>>
 
 SelectBlock ==
   /\ toolEnabled
@@ -110,17 +154,17 @@ SelectBlock ==
   /\ blocks > 0
   /\ phase' = "selected"
   /\ selected' = TRUE
-  /\ UNCHANGED <<toolEnabled, blocks, hasDraft>>
+  /\ UNCHANGED <<toolEnabled, drawArmed, blocks, hasDraft, parcelSelection, hasSiteBoundary>>
 
 StartHeightDrag ==
   /\ phase = "selected"
   /\ phase' = "draggingHeight"
-  /\ UNCHANGED <<toolEnabled, selected, blocks, hasDraft>>
+  /\ UNCHANGED <<toolEnabled, drawArmed, selected, blocks, hasDraft, parcelSelection, hasSiteBoundary>>
 
 EndHeightDrag ==
   /\ phase = "draggingHeight"
   /\ phase' = "selected"
-  /\ UNCHANGED <<toolEnabled, selected, blocks, hasDraft>>
+  /\ UNCHANGED <<toolEnabled, drawArmed, selected, blocks, hasDraft, parcelSelection, hasSiteBoundary>>
 
 DeleteSelected ==
   /\ phase = "selected"
@@ -128,10 +172,12 @@ DeleteSelected ==
   /\ blocks' = blocks - 1
   /\ phase' = "idle"
   /\ selected' = FALSE
-  /\ UNCHANGED <<toolEnabled, hasDraft>>
+  /\ UNCHANGED <<toolEnabled, drawArmed, hasDraft, parcelSelection, hasSiteBoundary>>
 
 Next ==
   \/ EnableTool \/ DisableTool
+  \/ ArmDraw \/ DisarmDraw
+  \/ SelectParcel \/ ClearParcels
   \/ PressGround \/ PressGroundDeselect
   \/ ReleaseCommit \/ ReleaseToPreview
   \/ SecondClickCommit \/ SecondClickRejected
@@ -140,16 +186,17 @@ Next ==
 
 Spec == Init /\ [][Next]_vars
 
-OrbitLocked == toolEnabled /\ (phase \in Drawing \/ phase = "draggingHeight")
+OrbitLocked == (drawArmed /\ phase \in Drawing) \/ phase = "draggingHeight"
 
-\* Invariants checked by TLC (specs/massingTool.cfg).
 DraftOnlyWhileDrawing == hasDraft <=> phase \in Drawing
 DrawingNeedsTool == phase \in Drawing \cup {"draggingHeight"} => toolEnabled
+DrawingNeedsArmed == phase \in Drawing => drawArmed
 SelectionConsistent == phase \in {"selected", "draggingHeight"} => selected
 NoSelectionWhileDrawing == phase \in Drawing => ~selected
-OffMeansIdle == ~toolEnabled => (phase = "idle" /\ ~hasDraft)
-
-\* Action property: cancel never creates a block.
+OffMeansIdle == ~toolEnabled => (phase = "idle" /\ ~hasDraft /\ ~drawArmed)
+SiteBoundaryConsistent == hasSiteBoundary <=> parcelSelection > 0
+MassingOffClearsDraw == ~toolEnabled => ~drawArmed
+ParcelSelectNeedsMassing == parcelSelection > 0 => toolEnabled
 CancelCreatesNothing == [][(phase \in Drawing /\ phase' = "idle") => blocks' = blocks]_vars
 
 ====

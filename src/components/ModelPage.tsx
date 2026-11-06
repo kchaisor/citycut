@@ -153,6 +153,7 @@ import { MassingToolHud } from "./MassingToolHud";
 import { MassingToolLayer, floorsFromHeightDrag } from "./MassingToolLayer";
 import { MassingToolPanel } from "./MassingToolPanel";
 import { useImportedMassing } from "./useImportedMassing";
+import { useMassingParcels } from "./useMassingParcels";
 import { useMassingTool } from "./useMassingTool";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
@@ -583,7 +584,12 @@ export function ModelPage({
   );
 
   const massing = useImportedMassing(model);
-  const massingDraw = useMassingTool(model);
+  const massingPointAllowedRef = useRef<(east: number, north: number) => boolean>(() => true);
+  const massingDraw = useMassingTool(model, {
+    pointAllowed: (east, north) => massingPointAllowedRef.current(east, north),
+  });
+  const massingParcels = useMassingParcels(model, massingDraw.tool.toolEnabled);
+  massingPointAllowedRef.current = massingParcels.pointAllowed;
   const [massingCursor, setMassingCursor] = useState({ x: 0, y: 0 });
   const massingHeightDragFloors = useRef<number>(4);
   const selectedMassingBlock = useMemo(
@@ -607,13 +613,25 @@ export function ModelPage({
     window.__citycutQaMassing = {
       enableTool: () => massingDraw.setToolEnabled(true),
       disableTool: () => massingDraw.setToolEnabled(false),
+      armDraw: () => massingDraw.setDrawArmed(true),
+      disarmDraw: () => massingDraw.setDrawArmed(false),
+      selectParcels: (ids: string[]) => massingParcels.selectParcels(ids),
+      clearParcels: () => massingParcels.clearSelection(),
+      nearestParcelIds: (count: number) => massingParcels.nearestIds(count),
+      getParcelState: () => massingParcels.getSyncState(),
+      sampleInsideBoundary: () => massingParcels.sampleInsideBoundary(),
+      pointInSiteBoundary: (east: number, north: number) => massingParcels.pointAllowed(east, north),
+      qaGroundPress: (east: number, north: number) => massingDraw.pointerDown(east, north, null),
+      getToolPhase: () => massingDraw.getToolPhase(),
+      drawArmed: () => massingDraw.isDrawArmed(),
       simulateDraw: (east0: number, north0: number, east1: number, north1: number) => {
         massingDraw.setToolEnabled(true);
         const block = createMassingBlock(massingDraw.cutId, [
           [east0, north0],
           [east1, north1],
         ]);
-        massingDraw.appendBlock(block);
+        const stored = readStoredMassingBlocks(window.localStorage, massingDraw.cutId);
+        massingDraw.setBlocksForQa([...stored.blocks, block]);
         massingDraw.dispatchTool({ type: "SELECT", id: block.id });
         return block.id;
       },
@@ -650,7 +668,22 @@ export function ModelPage({
     return () => {
       delete window.__citycutQaMassing;
     };
-  }, [massingDraw.appendBlock, massingDraw.cutId, massingDraw.dispatchTool, massingDraw.removeBlock, massingDraw.setToolEnabled, massingDraw.updateSelected, model.sideM]);
+  }, [
+    massingDraw.appendBlock,
+    massingDraw.cutId,
+    massingDraw.dispatchTool,
+    massingDraw.removeBlock,
+    massingDraw.setBlocksForQa,
+    massingDraw.setDrawArmed,
+    massingDraw.setToolEnabled,
+    massingDraw.updateSelected,
+    massingParcels.boundary.length,
+    massingParcels.clearSelection,
+    massingParcels.nearestIds,
+    massingParcels.selectParcels,
+    massingParcels.selectedIds,
+    model.sideM,
+  ]);
 
   const qaSummaryRef = useRef({ treeCrowns: 0, buildingCount: 0, roadCount: 0, triangleCount: 0 });
   const qaDisplayBuildingsRef = useRef(model.buildings);
@@ -1943,7 +1976,21 @@ export function ModelPage({
                       previewRing={massingDraw.previewRing}
                       previewLine={massingDraw.draftCenterline}
                       active={tab === "3d"}
-                      onPointerDown={(east, north, hitBlockId) => massingDraw.pointerDown(east, north, hitBlockId)}
+                      parcelOutlineObjects={massingParcels.outlineObjects}
+                      onPointerDown={(east, north, hitBlockId) => {
+                        if (
+                          massingDraw.tool.toolEnabled &&
+                          !massingDraw.tool.drawArmed &&
+                          !hitBlockId
+                        ) {
+                          const parcelId = massingParcels.pickAt(east, north);
+                          if (parcelId) {
+                            massingParcels.toggleParcel(parcelId);
+                            return;
+                          }
+                        }
+                        massingDraw.pointerDown(east, north, hitBlockId);
+                      }}
                       onPointerMove={(east, north, clientX, clientY) => {
                         setMassingCursor({ x: clientX, y: clientY });
                         massingDraw.pointerMove(east, north);
@@ -1972,7 +2019,12 @@ export function ModelPage({
                 quality={renderQuality}
               />
               <MassingToolHud
-                visible={massingDraw.tool.toolEnabled && (massingDraw.tool.phase === "drawing" || massingDraw.tool.phase === "drawingPreview") && massingDraw.previewMetrics != null}
+                visible={
+                  massingDraw.tool.toolEnabled &&
+                  massingDraw.tool.drawArmed &&
+                  (massingDraw.tool.phase === "drawing" || massingDraw.tool.phase === "drawingPreview") &&
+                  massingDraw.previewMetrics != null
+                }
                 widthM={massingDraw.previewMetrics?.widthM ?? 0}
                 lengthM={massingDraw.previewMetrics?.lengthM ?? 0}
                 boundaryM={massingDraw.previewMetrics?.boundaryM ?? 0}
@@ -3977,12 +4029,40 @@ export function ModelPage({
                   type="button"
                   className={massingDraw.tool.toolEnabled ? "sun-pill studio-solar-pill is-active" : "sun-pill studio-solar-pill"}
                   aria-pressed={massingDraw.tool.toolEnabled}
-                  aria-label="Massing draw tool"
+                  aria-label="Massing tool"
                   onClick={() => massingDraw.setToolEnabled(!massingDraw.tool.toolEnabled)}
                 >
                   <Box size={12} strokeWidth={2.2} aria-hidden="true" />
                   <span>{massingDraw.tool.toolEnabled ? "Massing · on" : "Massing"}</span>
                 </button>
+                <button
+                  type="button"
+                  className={
+                    massingDraw.tool.drawArmed
+                      ? "sun-pill studio-solar-pill is-active"
+                      : "sun-pill studio-solar-pill"
+                  }
+                  aria-pressed={massingDraw.tool.drawArmed}
+                  aria-label="Massing draw tool"
+                  disabled={!massingDraw.tool.toolEnabled}
+                  onClick={() => massingDraw.setDrawArmed(!massingDraw.tool.drawArmed)}
+                >
+                  <span>{massingDraw.tool.drawArmed ? "Draw · on" : "Draw"}</span>
+                </button>
+                {massingDraw.tool.toolEnabled && massingParcels.selectedIds.length > 0 ? (
+                  <button
+                    type="button"
+                    className="sun-pill studio-solar-pill"
+                    aria-label="Clear selected property sites"
+                    onClick={() => massingParcels.clearSelection()}
+                  >
+                    <span>
+                      {massingParcels.selectedIds.length === 1
+                        ? "1 site · clear"
+                        : `${massingParcels.selectedIds.length} sites · clear`}
+                    </span>
+                  </button>
+                ) : null}
                 <span className="v-sep hud-sep" aria-hidden="true" />
                 <div className="solar-hours studio-quality-pills" role="group" aria-label="Render quality">
                   {(

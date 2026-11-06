@@ -16,7 +16,6 @@ import { disposeObject } from "../lib/buildCity";
 import { snapFloorsFromHeight, type MassingBlock } from "../lib/massingBlock";
 import type { MassingToolState } from "../lib/massingToolMachine";
 import type { Ring } from "../types";
-import { ParcelOutlinesLayer } from "./ParcelOutlinesLayer";
 
 declare global {
   interface Window {
@@ -43,6 +42,7 @@ type Props = {
   onHeightDragStart: (blockId: string) => void;
   onHeightDrag: (clientY: number, startY: number) => void;
   onHeightDragEnd: () => void;
+  parcelOutlineObjects: THREE.Object3D[];
 };
 
 export function MassingToolLayer({
@@ -59,6 +59,7 @@ export function MassingToolLayer({
   onHeightDragStart,
   onHeightDrag,
   onHeightDragEnd,
+  parcelOutlineObjects,
 }: Props) {
   const groupRef = useRef<THREE.Group>(null);
   const camera = useThree((state) => state.camera);
@@ -128,7 +129,7 @@ export function MassingToolLayer({
   const groundHandlers = useRef({ onPointerDown, onPointerMove, onPointerUp, onCancel });
   groundHandlers.current = { onPointerDown, onPointerMove, onPointerUp, onCancel };
   const hoverRef = useRef(false);
-  hoverRef.current = tool.phase === "drawingPreview";
+  hoverRef.current = tool.drawArmed && tool.phase === "drawingPreview";
   const heightHandlers = useRef({ onHeightDragStart, onHeightDrag, onHeightDragEnd });
   heightHandlers.current = { onHeightDragStart, onHeightDrag, onHeightDragEnd };
 
@@ -176,15 +177,23 @@ export function MassingToolLayer({
 
   useEffect(() => {
     invalidate();
-  }, [blocks, invalidate, overlay, previewMesh, previewLineObj, tool]);
+  }, [blocks, invalidate, overlay, parcelOutlineObjects, previewMesh, previewLineObj, tool]);
+
+  useEffect(() => {
+    return () => {
+      for (const object of parcelOutlineObjects) disposeObject(object);
+    };
+  }, [parcelOutlineObjects]);
 
   return (
     <group ref={groupRef}>
       {blockGroup ? <primitive object={blockGroup} /> : null}
+      {parcelOutlineObjects.map((object) => (
+        <primitive key={object.uuid} object={object} />
+      ))}
       {overlay ? <primitive object={overlay} /> : null}
       {previewMesh ? <primitive object={previewMesh} /> : null}
       {previewLineObj ? <primitive object={previewLineObj} /> : null}
-      <ParcelOutlinesLayer model={model} />
     </group>
   );
 }

@@ -5,47 +5,68 @@ import {
   reduceMassingTool,
 } from "./massingToolMachine";
 
+function enabled() {
+  return reduceMassingTool(INITIAL_MASSING_TOOL_STATE, { type: "ENABLE_TOOL" });
+}
+
+function armed() {
+  return reduceMassingTool(enabled(), { type: "ARM_DRAW" });
+}
+
 describe("massingToolMachine", () => {
   it("starts idle with tool off", () => {
     expect(INITIAL_MASSING_TOOL_STATE.phase).toBe("idle");
     expect(INITIAL_MASSING_TOOL_STATE.toolEnabled).toBe(false);
+    expect(INITIAL_MASSING_TOOL_STATE.drawArmed).toBe(false);
   });
 
-  it("enters drawing on ground pointer down when tool enabled", () => {
-    let state = reduceMassingTool(INITIAL_MASSING_TOOL_STATE, { type: "ENABLE_TOOL" });
+  it("does not enter drawing until draw is armed", () => {
+    let state = enabled();
+    state = reduceMassingTool(state, { type: "POINTER_DOWN_GROUND", east: 1, north: 2, hitBlockId: null });
+    expect(state.phase).toBe("idle");
+    state = reduceMassingTool(state, { type: "ARM_DRAW" });
     state = reduceMassingTool(state, { type: "POINTER_DOWN_GROUND", east: 1, north: 2, hitBlockId: null });
     expect(state.phase).toBe("drawing");
     expect(state.drawStart).toEqual([1, 2]);
   });
 
   it("cancels drawing on Escape path", () => {
-    let state = reduceMassingTool(INITIAL_MASSING_TOOL_STATE, { type: "ENABLE_TOOL" });
+    let state = armed();
     state = reduceMassingTool(state, { type: "POINTER_DOWN_GROUND", east: 0, north: 0, hitBlockId: null });
     state = reduceMassingTool(state, { type: "CANCEL" });
     expect(state.phase).toBe("idle");
     expect(state.drawStart).toBeNull();
   });
 
-  it("selects block on hit", () => {
-    let state = reduceMassingTool(INITIAL_MASSING_TOOL_STATE, { type: "ENABLE_TOOL" });
+  it("selects block on hit without draw armed", () => {
+    let state = enabled();
     state = reduceMassingTool(state, { type: "POINTER_DOWN_GROUND", east: 0, north: 0, hitBlockId: "b1" });
     expect(state.phase).toBe("selected");
     expect(state.selectedId).toBe("b1");
   });
 
-  it("locks orbit while drawing or dragging height", () => {
-    let state = reduceMassingTool(INITIAL_MASSING_TOOL_STATE, { type: "ENABLE_TOOL" });
+  it("locks orbit only while draw armed and drawing or dragging height", () => {
+    let state = enabled();
     expect(massingToolOrbitLocked(state)).toBe(false);
+    state = armed();
     state = reduceMassingTool(state, { type: "POINTER_DOWN_GROUND", east: 0, north: 0, hitBlockId: null });
     expect(massingToolOrbitLocked(state)).toBe(true);
     state = reduceMassingTool(state, { type: "COMMIT_DRAW" });
     state = reduceMassingTool(state, { type: "SELECT", id: "x" });
+    expect(massingToolOrbitLocked(state)).toBe(false);
     state = reduceMassingTool(state, { type: "START_HEIGHT_DRAG", floors: 4 });
     expect(massingToolOrbitLocked(state)).toBe(true);
   });
 
+  it("disabling tool clears draw armed", () => {
+    let state = armed();
+    state = reduceMassingTool(state, { type: "DISABLE_TOOL" });
+    expect(state.toolEnabled).toBe(false);
+    expect(state.drawArmed).toBe(false);
+  });
+
   it("clears drawing when leaving 3D view mid-draw", () => {
-    let state = reduceMassingTool(INITIAL_MASSING_TOOL_STATE, { type: "ENABLE_TOOL" });
+    let state = armed();
     state = reduceMassingTool(state, { type: "POINTER_DOWN_GROUND", east: 0, north: 0, hitBlockId: null });
     state = reduceMassingTool(state, { type: "LEAVE_3D_VIEW" });
     expect(state.phase).toBe("idle");
@@ -53,14 +74,14 @@ describe("massingToolMachine", () => {
   });
 
   it("click-release enters drawingPreview; hover moves end; second down anchors end", () => {
-    let state = reduceMassingTool(INITIAL_MASSING_TOOL_STATE, { type: "ENABLE_TOOL" });
+    let state = armed();
     state = reduceMassingTool(state, { type: "POINTER_DOWN_GROUND", east: 0, north: 0, hitBlockId: null });
     state = reduceMassingTool(state, { type: "POINTER_UP" });
     expect(state.phase).toBe("drawingPreview");
     expect(massingToolOrbitLocked(state)).toBe(true);
     state = reduceMassingTool(state, { type: "POINTER_MOVE", east: 20, north: 0 });
     expect(state.drawEnd).toEqual([20, 0]);
-    state = reduceMassingTool(state, { type: "POINTER_DOWN_GROUND", east: 30, north: 1, hitBlockId: "other" });
+    state = reduceMassingTool(state, { type: "POINTER_DOWN_GROUND", east: 30, north: 1, hitBlockId: null });
     expect(state.phase).toBe("drawingPreview");
     expect(state.drawStart).toEqual([0, 0]);
     expect(state.drawEnd).toEqual([30, 1]);
@@ -69,7 +90,7 @@ describe("massingToolMachine", () => {
   });
 
   it("Escape cancels drawingPreview", () => {
-    let state = reduceMassingTool(INITIAL_MASSING_TOOL_STATE, { type: "ENABLE_TOOL" });
+    let state = armed();
     state = reduceMassingTool(state, { type: "POINTER_DOWN_GROUND", east: 0, north: 0, hitBlockId: null });
     state = reduceMassingTool(state, { type: "POINTER_UP" });
     state = reduceMassingTool(state, { type: "CANCEL" });

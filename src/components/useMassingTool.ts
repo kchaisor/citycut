@@ -36,6 +36,7 @@ export type MassingToolApi = {
   previewRing: ReturnType<typeof footprintFromCenterline> | null;
   previewMetrics: { widthM: number; lengthM: number; boundaryM: number } | null;
   setToolEnabled: (on: boolean) => void;
+  setDrawArmed: (on: boolean) => void;
   dispatchTool: (event: Parameters<typeof reduceMassingTool>[1]) => void;
   commitDraw: () => MassingBlock | null;
   /** Centreline of the in-progress draw (start → snapped end), for the ground preview line. */
@@ -49,10 +50,17 @@ export type MassingToolApi = {
   duplicateSelected: () => void;
   setBlocksForQa: (blocks: MassingBlock[]) => void;
   appendBlock: (block: MassingBlock) => void;
+  getToolPhase: () => MassingToolState["phase"];
+  isDrawArmed: () => boolean;
   snapContext: MassingSnapContext;
 };
 
-export function useMassingTool(model: Pick<CityModel, "center" | "sideM" | "frameShape">): MassingToolApi {
+export function useMassingTool(
+  model: Pick<CityModel, "center" | "sideM" | "frameShape">,
+  options?: { pointAllowed?: (east: number, north: number) => boolean },
+): MassingToolApi {
+  const pointAllowedRef = useRef(options?.pointAllowed ?? (() => true));
+  pointAllowedRef.current = options?.pointAllowed ?? (() => true);
   const cutId = massingCutKey(model.center);
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const [store, setStore] = useState<MassingBlockStore>(() =>
@@ -123,6 +131,10 @@ export function useMassingTool(model: Pick<CityModel, "center" | "sideM" | "fram
     dispatchToolRaw(on ? { type: "ENABLE_TOOL" } : { type: "DISABLE_TOOL" });
   }, [dispatchToolRaw]);
 
+  const setDrawArmed = useCallback((on: boolean) => {
+    dispatchToolRaw(on ? { type: "ARM_DRAW" } : { type: "DISARM_DRAW" });
+  }, [dispatchToolRaw]);
+
   const commitDraw = useCallback((): MassingBlock | null => {
     const draft = draftFrom(toolRef.current, {
       sideM: model.sideM,
@@ -134,6 +146,12 @@ export function useMassingTool(model: Pick<CityModel, "center" | "sideM" | "fram
     const draftCenterline = draft;
     const len = centerlineLengthM(draftCenterline);
     if (len < MASSING_MIN_CENTERLINE_M) return null;
+    if (
+      !pointAllowedRef.current(draftCenterline[0][0], draftCenterline[0][1]) ||
+      !pointAllowedRef.current(draftCenterline[1][0], draftCenterline[1][1])
+    ) {
+      return null;
+    }
     const block = createMassingBlock(cutId, draftCenterline);
     if (!blockFootprintInsideCut(block, model.sideM, frameShape)) return null;
     const blocks = [...blocksRef.current, block];
@@ -145,22 +163,43 @@ export function useMassingTool(model: Pick<CityModel, "center" | "sideM" | "fram
 
   const pointerDown = useCallback(
     (east: number, north: number, hitBlockId: string | null) => {
-      const wasPreview = toolRef.current.phase === "drawingPreview";
+      const current = toolRef.current;
+      if (!current.toolEnabled) return;
+      if (
+        !hitBlockId &&
+        current.drawArmed &&
+        !pointAllowedRef.current(east, north) &&
+        (current.phase === "idle" ||
+          current.phase === "selected" ||
+          current.phase === "drawingPreview" ||
+          current.phase === "drawing")
+      ) {
+        return;
+      }
+      const wasPreview = current.phase === "drawingPreview" && current.drawArmed;
       dispatchToolRaw({ type: "POINTER_DOWN_GROUND", east, north, hitBlockId });
-      // Second click commits; a too-short or out-of-cut line stays in preview.
       if (wasPreview) commitDraw();
     },
     [commitDraw, dispatchToolRaw],
   );
 
   const pointerMove = useCallback(
-    (east: number, north: number) => dispatchToolRaw({ type: "POINTER_MOVE", east, north }),
+    (east: number, north: number) => {
+      const current = toolRef.current;
+      if (
+        (current.phase === "drawing" || current.phase === "drawingPreview") &&
+        current.drawArmed &&
+        !pointAllowedRef.current(east, north)
+      ) {
+        return;
+      }
+      dispatchToolRaw({ type: "POINTER_MOVE", east, north });
+    },
     [dispatchToolRaw],
   );
 
   const pointerUp = useCallback(() => {
-    if (toolRef.current.phase !== "drawing") return;
-    // Dragged far enough → press-drag-release commit; otherwise this was a click → preview.
+    if (toolRef.current.phase !== "drawing" || !toolRef.current.drawArmed) return;
     if (!commitDraw()) dispatchToolRaw({ type: "POINTER_UP" });
   }, [commitDraw, dispatchToolRaw]);
 
@@ -225,6 +264,9 @@ export function useMassingTool(model: Pick<CityModel, "center" | "sideM" | "fram
     [cutId],
   );
 
+  const getToolPhase = useCallback(() => toolRef.current.phase, []);
+  const isDrawArmed = useCallback(() => toolRef.current.drawArmed, []);
+
   return {
     cutId,
     blocks: store.blocks,
@@ -233,6 +275,7 @@ export function useMassingTool(model: Pick<CityModel, "center" | "sideM" | "fram
     previewRing,
     previewMetrics,
     setToolEnabled,
+    setDrawArmed,
     dispatchTool,
     commitDraw,
     draftCenterline,
@@ -245,6 +288,8 @@ export function useMassingTool(model: Pick<CityModel, "center" | "sideM" | "fram
     duplicateSelected,
     setBlocksForQa,
     appendBlock,
+    getToolPhase,
+    isDrawArmed,
     snapContext,
   };
 }
@@ -257,7 +302,7 @@ function draftFrom(
   tool: MassingToolState,
   snapContext: MassingSnapContext,
 ): readonly [[number, number], [number, number]] | null {
-  if (!massingToolIsDrawing(tool) || !tool.drawStart || !tool.drawEnd) return null;
+  if (!tool.drawArmed || !massingToolIsDrawing(tool) || !tool.drawStart || !tool.drawEnd) return null;
   const end = snapDrawEnd(tool.drawStart, tool.drawEnd, snapContext);
   return [tool.drawStart, end] as const;
 }

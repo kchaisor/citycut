@@ -818,10 +818,13 @@ async function main() {
     });
     // Real pointer gesture: click the HUD Massing button, then press-drag-release on the canvas.
     // Guards against listener re-attach mid-drag (PR #199 regression: zero-length draw, no block).
+    await page.click('button[aria-label="Massing tool"]');
     await page.click('button[aria-label="Massing draw tool"]');
     await page.waitForTimeout(400);
     const massingToolOn = await page.evaluate(
-      () => document.querySelector('button[aria-label="Massing draw tool"]')?.getAttribute("aria-pressed") === "true",
+      () =>
+        document.querySelector('button[aria-label="Massing tool"]')?.getAttribute("aria-pressed") === "true" &&
+        document.querySelector('button[aria-label="Massing draw tool"]')?.getAttribute("aria-pressed") === "true",
     );
     await page.mouse.move(560, 470);
     await page.mouse.down();
@@ -850,7 +853,10 @@ async function main() {
     await page.waitForTimeout(300);
 
     // Click-click drawing: click start, hover (live ground preview line + HUD), click end.
-    await page.evaluate(() => window.__citycutQaMassing?.enableTool());
+    await page.evaluate(() => {
+      window.__citycutQaMassing?.enableTool();
+      window.__citycutQaMassing?.armDraw();
+    });
     await page.waitForTimeout(300);
     const sceneHasPreviewLine = () =>
       page.evaluate(() => ({ qa: window.__citycutQaMassingPreview ?? null }));
@@ -915,7 +921,31 @@ async function main() {
       `before=${escBefore}, after=${JSON.stringify(escAfter)}`,
     );
 
-    // Property parcel outlines on the ground while Massing mode is on.
+    await page.evaluate(() => window.__citycutQaMassing?.disarmDraw());
+    await page.waitForTimeout(200);
+    await page.evaluate(() => {
+      window.__citycutQaMassing?.enableTool();
+      window.__citycutQaMassing?.disarmDraw();
+    });
+    const drawPillOff = await page.evaluate(
+      () => document.querySelector('button[aria-label="Massing draw tool"]')?.getAttribute("aria-pressed") !== "true",
+    );
+    const orbitNoDraw = await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      if (!api) return { before: -1 };
+      return { before: api.getBlocks()?.length ?? 0 };
+    });
+    await page.mouse.click(580, 480);
+    await page.waitForTimeout(250);
+    const orbitNoDrawAfter = await page.evaluate(() => window.__citycutQaMassing?.getBlocks()?.length ?? -1);
+    assertCheck(
+      "massing-orbit-no-draw",
+      "Massing on with Draw off: a canvas click does not create a massing block",
+      drawPillOff && orbitNoDrawAfter === orbitNoDraw.before,
+      JSON.stringify({ drawPillOff, ...orbitNoDraw, after: orbitNoDrawAfter }),
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-draw-off-orbit.png") });
+
     await page
       .waitForFunction(() => window.__citycutQaParcels?.status && window.__citycutQaParcels.status !== "loading", null, {
         timeout: 60_000,
@@ -929,6 +959,73 @@ async function main() {
       JSON.stringify(parcelInfo),
     );
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-parcel-outlines.png") });
+
+    const oneSite = await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      api?.enableTool();
+      api?.disarmDraw();
+      api?.clearParcels();
+      const ids = api?.nearestParcelIds(1) ?? [];
+      if (ids[0]) api?.selectParcels([ids[0]]);
+      return { ids, state: api?.getParcelState() ?? null };
+    });
+    assertCheck(
+      "massing-one-site-boundary",
+      "Selecting one property title sets a site draw boundary",
+      oneSite.state?.selectedIds?.length === 1 && (oneSite.state?.boundaryPolygons ?? 0) >= 1,
+      JSON.stringify(oneSite),
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-one-site-boundary.png") });
+
+    const threeSites = await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      api?.clearParcels();
+      const ids = api?.nearestParcelIds(3) ?? [];
+      api?.selectParcels(ids);
+      return { ids, state: api?.getParcelState() ?? null };
+    });
+    assertCheck(
+      "massing-three-sites-boundary",
+      "Selecting three adjacent titles combines into one site boundary outline",
+      threeSites.state?.selectedIds?.length === 3 && (threeSites.state?.boundaryPolygons ?? 0) >= 1,
+      JSON.stringify(threeSites),
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-three-sites-boundary.png") });
+
+    const boundaryClamp = await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      if (!api) return { ok: false };
+      api.disarmDraw();
+      api.armDraw();
+      const edge = 190;
+      const outsideAllowed = api.pointInSiteBoundary(edge, edge);
+      api.qaGroundPress(edge, edge);
+      const phaseOutside = api.getToolPhase();
+      const inside = api.sampleInsideBoundary();
+      if (inside) api.qaGroundPress(inside[0], inside[1]);
+      const phaseInside = api.getToolPhase();
+      return {
+        ok: !outsideAllowed && phaseOutside === "idle" && inside != null && phaseInside === "drawing",
+        outsideAllowed,
+        phaseOutside,
+        phaseInside,
+        inside,
+        armed: api.drawArmed?.(),
+      };
+    });
+    assertCheck(
+      "massing-boundary-clamp",
+      "With a combined site boundary, clicks outside it do not start a draw vertex; inside clicks do",
+      boundaryClamp.ok === true,
+      JSON.stringify(boundaryClamp),
+    );
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => {
+      window.__citycutQaMassing?.disarmDraw();
+      window.__citycutQaMassing?.clearParcels();
+    });
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-draw-inside-boundary.png") });
+
     await page.evaluate(() => window.__citycutQaMassing?.disableTool());
     await page.waitForTimeout(200);
 
@@ -936,6 +1033,8 @@ async function main() {
       const api = window.__citycutQaMassing;
       if (!api) return null;
       api.enableTool();
+      api.disarmDraw();
+      api.clearParcels();
       return api.simulateDraw(-18, -6, 18, -6);
     });
     const massingAfterDraw = await page.evaluate(() => {
