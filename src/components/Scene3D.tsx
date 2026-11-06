@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type MutableRefObject,
+  type ReactNode,
   type RefObject,
 } from "react";
 import * as THREE from "three";
@@ -1546,7 +1547,10 @@ function QaCameraBridgeRegister({
   const size = useThree((state) => state.size);
   const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
-    if (!qaModeFromSearch(window.location.search) || !active) {
+    const qaUi =
+      qaModeFromSearch(window.location.search) ||
+      Boolean((window as Window & { __citycutVerifyHarness?: boolean }).__citycutVerifyHarness);
+    if (!qaUi || !active) {
       registerQaCameraBridge(null);
       return;
     }
@@ -1744,6 +1748,7 @@ export function Cameras({
   lon,
   cameraMemory,
   introEnabled = false,
+  orbitLocked = false,
 }: {
   side: number;
   lift: number;
@@ -1762,6 +1767,7 @@ export function Cameras({
   lon: number;
   cameraMemory?: CameraMemoryRef;
   introEnabled?: boolean;
+  orbitLocked?: boolean;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
@@ -1899,7 +1905,7 @@ export function Cameras({
             ref={perspControls}
             camera={persp}
             makeDefault={!orthoView}
-            enabled={!orthoView}
+            enabled={!orthoView && !orbitLocked}
             enableDamping
             dampingFactor={0.08}
             maxPolarAngle={Math.PI / 2.02}
@@ -1914,7 +1920,7 @@ export function Cameras({
             ref={orthoControls}
             camera={ortho}
             makeDefault={orthoView}
-            enabled={orthoView}
+            enabled={orthoView && !orbitLocked}
             enableDamping
             dampingFactor={0.08}
             enableRotate={iso && freeRotate}
@@ -2015,6 +2021,8 @@ export function Scene3D({
   walkRippleArrivals = null,
   walkRipplePlaying = false,
   onScenePoint = null,
+  massingToolLayer = null,
+  orbitLocked = false,
   quality = "high",
 }: {
   model: CityModel;
@@ -2044,6 +2052,8 @@ export function Scene3D({
   walkRippleArrivals?: Map<number, number> | null;
   walkRipplePlaying?: boolean;
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
+  massingToolLayer?: ReactNode;
+  orbitLocked?: boolean;
   quality?: RenderQuality;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
@@ -2163,7 +2173,7 @@ export function Scene3D({
         onBounds={onBounds}
         onBuildingPick={onBuildingPick}
         onClearBuildingPick={onClearBuildingPick}
-        pickBuildings={model.layers.buildings && !onScenePoint}
+        pickBuildings={model.layers.buildings && !onScenePoint && !massingToolLayer}
         heightEditBuildingId={heightEditBuildingId}
         selectedBuildingIds={selectedBuildingIds}
         display={display}
@@ -2174,6 +2184,7 @@ export function Scene3D({
       {walkLayer ? <primitive object={walkLayer} /> : null}
       {walkRippleLayer ? <primitive object={walkRippleLayer} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
+      {massingToolLayer}
       <SolarHeliodon
         lat={model.center.lat}
         lon={model.center.lon}
@@ -2208,6 +2219,7 @@ export function Scene3D({
         lon={model.center.lon}
         cameraMemory={cameraMemory}
         introEnabled
+        orbitLocked={orbitLocked}
       />
       </Canvas>
     </div>

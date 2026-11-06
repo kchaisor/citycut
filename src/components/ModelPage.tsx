@@ -1,13 +1,16 @@
 import { sunStudyCasterModel, sunStudyMutedOn, toggleSelection, type SunStudyDate } from "../lib/sunStudyPlan";
 import { sunStudyLayersFor } from "./useSunStudyShadows";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { isEditableTarget } from "../lib/keyboardTarget";
 import { handleModelKeyDown, type ModelShortcutAction } from "../lib/modelKeyboard";
+import { createMassingBlock } from "../lib/massingBlock";
+import { readStoredMassingBlocks } from "../lib/massingBlockStore";
 import { registerModelKeyboardBridge } from "../lib/modelKeyboardBridge";
 import { viewportIsNarrow } from "../lib/panelCollapse";
 import { ShortcutCheatsheet } from "./ShortcutCheatsheet";
 import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
-import { Building2, Copy, Download, DraftingCompass, Eye, Footprints, GripVertical, Info, Radar, Sun, Trees, Upload, Wind } from "lucide-react";
+import { Box, Building2, Copy, Download, DraftingCompass, Eye, Footprints, GripVertical, Info, Radar, Sun, Trees, Upload, Wind } from "lucide-react";
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -132,6 +135,8 @@ import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import { COM_TREES_CREDIT, COM_TREES_DATASET_URL } from "../lib/comTreesCredit";
 import { openRing, toLocal } from "../lib/geo";
+import { sampleTerrain } from "../lib/terrain";
+import { SURFACE } from "../lib/surfaceLayers";
 import { pointInPolygon } from "../lib/useCascade";
 import type { BuildingUse, CityModel } from "../types";
 import { BuildingHeightPopover, HeightOverridePanel, HiddenBuildingsPanel } from "./BuildingHeightPopover";
@@ -146,7 +151,12 @@ import {
   type HiddenBuildingStore,
 } from "../lib/hiddenBuildings";
 import { ImportMassingPanel } from "./ImportMassingPanel";
+import { MassingToolHud } from "./MassingToolHud";
+import { MassingToolLayer, floorsFromHeightDrag } from "./MassingToolLayer";
+import { MassingToolPanel } from "./MassingToolPanel";
 import { useImportedMassing } from "./useImportedMassing";
+import { useMassingParcels } from "./useMassingParcels";
+import { useMassingTool } from "./useMassingTool";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
 import { DrawingExplodedAxo } from "./DrawingExplodedAxo";
@@ -576,6 +586,165 @@ export function ModelPage({
   );
 
   const massing = useImportedMassing(model);
+  const massingPointAllowedRef = useRef<(east: number, north: number) => boolean>(() => true);
+  const massingDraw = useMassingTool(model, {
+    pointAllowed: (east, north) => massingPointAllowedRef.current(east, north),
+  });
+  const massingParcels = useMassingParcels(model, massingDraw.tool.toolEnabled);
+  massingPointAllowedRef.current = massingParcels.pointAllowed;
+  const [massingCursor, setMassingCursor] = useState({ x: 0, y: 0 });
+  const massingHeightDragFloors = useRef<number>(4);
+  const massingSceneCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const selectedMassingBlock = useMemo(
+    () => massingDraw.blocks.find((item) => item.id === massingDraw.tool.selectedId) ?? null,
+    [massingDraw.blocks, massingDraw.tool.selectedId],
+  );
+
+  useEffect(() => {
+    const canvas = massingSceneCanvasRef.current;
+    if (!canvas) return;
+    const titleSelect = massingDraw.tool.toolEnabled && !massingDraw.tool.drawArmed;
+    canvas.style.cursor = titleSelect && massingParcels.hoveredParcelId != null ? "pointer" : "";
+  }, [massingDraw.tool.drawArmed, massingDraw.tool.toolEnabled, massingParcels.hoveredParcelId]);
+
+  const massingGroundPointerMove = useCallback(
+    (
+      east: number | null,
+      north: number | null,
+      _clientX: number,
+      _clientY: number,
+      hitBlockId: string | null,
+    ) => {
+      if (!massingDraw.tool.toolEnabled || massingDraw.tool.drawArmed) {
+        massingParcels.setHoveredParcelId(null);
+        return;
+      }
+      if (hitBlockId) {
+        massingParcels.setHoveredParcelId(null);
+        return;
+      }
+      if (east == null || north == null) {
+        massingParcels.setHoveredParcelId(null);
+        return;
+      }
+      massingParcels.setHoveredParcelId(massingParcels.pickAt(east, north));
+    },
+    [massingDraw.tool.drawArmed, massingDraw.tool.toolEnabled, massingParcels],
+  );
+
+  useEffect(() => {
+    if (tab !== "3d") {
+      massingDraw.dispatchTool({ type: "LEAVE_3D_VIEW" });
+    }
+  }, [tab, massingDraw.dispatchTool]);
+
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      (!qaModeFromSearch(window.location.search) && !(window as Window & { __citycutVerifyHarness?: boolean }).__citycutVerifyHarness)
+    ) {
+      return;
+    }
+    window.__citycutQaMassing = {
+      enableTool: () => massingDraw.setToolEnabled(true),
+      disableTool: () => massingDraw.setToolEnabled(false),
+      armDraw: () => massingDraw.setDrawArmed(true),
+      disarmDraw: () => massingDraw.setDrawArmed(false),
+      qaFocusParcelHover: (parcelId: string) => {
+        const c = massingParcels.samplePointForParcel(parcelId);
+        if (!c) return false;
+        const [east, north] = c;
+        const groundY = model.terrain ? sampleTerrain(model.terrain, east, north, model.sideM) : 0;
+        const y = groundY + SURFACE.rail.lift + 0.35;
+        const z = -north;
+        const p = window.__citycutQa?.projectToScreen({ x: east, y, z });
+        if (!p) return false;
+        const canvas = document.querySelector<HTMLCanvasElement>(".model canvas");
+        if (!canvas) return false;
+        canvas.dispatchEvent(
+          new PointerEvent("pointermove", {
+            bubbles: true,
+            clientX: p.x,
+            clientY: p.y,
+            pointerId: 1,
+            buttons: 0,
+            pointerType: "mouse",
+          }),
+        );
+        return true;
+      },
+      selectParcels: (ids: string[]) => massingParcels.selectParcels(ids),
+      clearParcels: () => massingParcels.clearSelection(),
+      nearestParcelIds: (count: number) => massingParcels.nearestIds(count),
+      getParcelState: () => massingParcels.getSyncState(),
+      sampleInsideBoundary: () => massingParcels.sampleInsideBoundary(),
+      pointInSiteBoundary: (east: number, north: number) => massingParcels.pointAllowed(east, north),
+      qaGroundPress: (east: number, north: number) => massingDraw.pointerDown(east, north, null),
+      getToolPhase: () => massingDraw.getToolPhase(),
+      drawArmed: () => massingDraw.isDrawArmed(),
+      simulateDraw: (east0: number, north0: number, east1: number, north1: number) => {
+        massingDraw.setToolEnabled(true);
+        const block = createMassingBlock(massingDraw.cutId, [
+          [east0, north0],
+          [east1, north1],
+        ]);
+        const stored = readStoredMassingBlocks(window.localStorage, massingDraw.cutId);
+        massingDraw.setBlocksForQa([...stored.blocks, block]);
+        massingDraw.dispatchTool({ type: "SELECT", id: block.id });
+        return block.id;
+      },
+      getBlocks: () => readStoredMassingBlocks(window.localStorage, massingDraw.cutId).blocks,
+      selectBlock: (id: string) => {
+        massingDraw.setToolEnabled(true);
+        massingDraw.dispatchTool({ type: "SELECT", id });
+      },
+      setFloors: (floors: number) => {
+        const stored = readStoredMassingBlocks(window.localStorage, massingDraw.cutId);
+        const id = stored.blocks[0]?.id;
+        if (!id) return;
+        massingDraw.dispatchTool({ type: "SELECT", id });
+        massingDraw.updateSelected({ floors });
+      },
+      deleteSelected: () => {
+        const stored = readStoredMassingBlocks(window.localStorage, massingDraw.cutId);
+        const id = stored.blocks[0]?.id;
+        if (id) massingDraw.removeBlock(id);
+        massingDraw.dispatchTool({ type: "DELETE_SELECTED" });
+      },
+      readPersistedCount: () => {
+        const key = `citycut.massingBlocks.${massingDraw.cutId}`;
+        try {
+          const raw = window.localStorage.getItem(key);
+          if (!raw) return 0;
+          const data = JSON.parse(raw) as { blocks?: unknown[] };
+          return Array.isArray(data.blocks) ? data.blocks.length : 0;
+        } catch {
+          return 0;
+        }
+      },
+    };
+    return () => {
+      delete window.__citycutQaMassing;
+    };
+  }, [
+    massingDraw.appendBlock,
+    massingDraw.cutId,
+    massingDraw.dispatchTool,
+    massingDraw.removeBlock,
+    massingDraw.setBlocksForQa,
+    massingDraw.setDrawArmed,
+    massingDraw.setToolEnabled,
+    massingDraw.updateSelected,
+    massingParcels.boundary.length,
+    massingParcels.samplePointForParcel,
+    massingParcels.clearSelection,
+    massingParcels.nearestIds,
+    massingParcels.selectParcels,
+    massingParcels.selectedIds,
+    model.center,
+    model.sideM,
+    model.terrain,
+  ]);
 
   const qaSummaryRef = useRef({ treeCrowns: 0, buildingCount: 0, roadCount: 0, triangleCount: 0 });
   const qaDisplayBuildingsRef = useRef(model.buildings);
@@ -1253,6 +1422,18 @@ export function ModelPage({
   useEffect(() => {
     if (viewportIsNarrow()) return;
     function onKeyDown(event: KeyboardEvent) {
+      if (massingDraw.tool.toolEnabled && !commandBarOpen && !isEditableTarget(event.target)) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          massingDraw.dispatchTool({ type: "CANCEL" });
+          return;
+        }
+        if ((event.key === "Delete" || event.key === "Backspace") && massingDraw.tool.selectedId) {
+          event.preventDefault();
+          massingDraw.deleteSelected();
+          return;
+        }
+      }
       const result = handleModelKeyDown({
         key: event.key,
         metaKey: event.metaKey,
@@ -1270,7 +1451,7 @@ export function ModelPage({
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [applyShortcut, commandBarOpen, shortcutCheatsheetOpen]);
+  }, [applyShortcut, commandBarOpen, massingDraw, shortcutCheatsheetOpen]);
 
   function retryComHeights() {
     setComFootprintFetchError(null);
@@ -1838,13 +2019,83 @@ export function ModelPage({
                 walkRippleArrivals={rippleAnalysisOpen ? walkRipple.buildingArrivals : null}
                 walkRipplePlaying={rippleAnalysisOpen && walkRipple.ripplePlaying}
                 onScenePoint={
-                  walkRipple.placing
-                    ? (east, north) => walkRipple.placePoint(east, north)
-                    : walkDrawing
-                      ? walk.addPoint
-                      : massing.onScenePoint
+                  massingDraw.tool.toolEnabled
+                    ? null
+                    : walkRipple.placing
+                      ? (east, north) => walkRipple.placePoint(east, north)
+                      : walkDrawing
+                        ? walk.addPoint
+                        : massing.onScenePoint
+                }
+                orbitLocked={massingDraw.orbitLocked}
+                massingToolLayer={
+                  massingDraw.tool.toolEnabled ? (
+                    <MassingToolLayer
+                      model={displayModel}
+                      blocks={massingDraw.blocks}
+                      tool={massingDraw.tool}
+                      previewRing={massingDraw.previewRing}
+                      previewLine={massingDraw.draftCenterline}
+                      active={tab === "3d"}
+                      parcelOutlineObjects={massingParcels.outlineObjects}
+                      parcelOutlineLineMaterials={massingParcels.outlineLineMaterials}
+                      onPointerDown={(east, north, hitBlockId) => {
+                        if (
+                          massingDraw.tool.toolEnabled &&
+                          !massingDraw.tool.drawArmed &&
+                          !hitBlockId
+                        ) {
+                          const parcelId = massingParcels.pickAt(east, north);
+                          if (parcelId) {
+                            massingParcels.toggleParcel(parcelId);
+                            return;
+                          }
+                        }
+                        massingDraw.pointerDown(east, north, hitBlockId);
+                      }}
+                      onSceneCanvasMount={(el) => {
+                        massingSceneCanvasRef.current = el;
+                      }}
+                      onPointerMove={(east, north, clientX, clientY, hitBlockId) => {
+                        setMassingCursor({ x: clientX, y: clientY });
+                        massingGroundPointerMove(east, north, clientX, clientY, hitBlockId);
+                        if (east != null && north != null) massingDraw.pointerMove(east, north);
+                      }}
+                      onPointerUp={() => massingDraw.pointerUp()}
+                      onCancel={() => massingDraw.dispatchTool({ type: "CANCEL" })}
+                      onHeightDragStart={(blockId) => {
+                        const block = massingDraw.blocks.find((item) => item.id === blockId);
+                        if (!block) return;
+                        massingHeightDragFloors.current = block.floors;
+                        massingDraw.dispatchTool({ type: "START_HEIGHT_DRAG", floors: block.floors });
+                      }}
+                      onHeightDrag={(clientY, startY) => {
+                        const floors = floorsFromHeightDrag(
+                          clientY - startY,
+                          massingHeightDragFloors.current,
+                          selectedMassingBlock?.floorHeight_m ?? 3.1,
+                        );
+                        massingDraw.updateSelected({ floors });
+                        massingDraw.dispatchTool({ type: "HEIGHT_DRAG", floors });
+                      }}
+                      onHeightDragEnd={() => massingDraw.dispatchTool({ type: "END_HEIGHT_DRAG" })}
+                    />
+                  ) : null
                 }
                 quality={renderQuality}
+              />
+              <MassingToolHud
+                visible={
+                  massingDraw.tool.toolEnabled &&
+                  massingDraw.tool.drawArmed &&
+                  (massingDraw.tool.phase === "drawing" || massingDraw.tool.phase === "drawingPreview") &&
+                  massingDraw.previewMetrics != null
+                }
+                widthM={massingDraw.previewMetrics?.widthM ?? 0}
+                lengthM={massingDraw.previewMetrics?.lengthM ?? 0}
+                boundaryM={massingDraw.previewMetrics?.boundaryM ?? 0}
+                x={massingCursor.x}
+                y={massingCursor.y}
               />
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
               {rippleAnalysisOpen && walkRipple.buildingArrivals && <WalkRippleLegend />}
@@ -2564,6 +2815,19 @@ export function ModelPage({
             }
           >
             <div className="drawer-section" hidden={leftOpen !== "drawing"}>
+              {tab === "3d" && massingDraw.tool.toolEnabled && (
+                <MassingToolPanel
+                  block={selectedMassingBlock}
+                  onFloors={(floors) => massingDraw.updateSelected({ floors })}
+                  onWidth={(width_m) => massingDraw.updateSelected({ width_m })}
+                  onFlip={() =>
+                    selectedMassingBlock &&
+                    massingDraw.updateSelected({ flipped: !selectedMassingBlock.flipped })
+                  }
+                  onDelete={() => massingDraw.deleteSelected()}
+                  onDuplicate={() => massingDraw.duplicateSelected()}
+                />
+              )}
               {tab === "3d" && (
                 <div className="projection-block outliner-body">
                   <section className="sidebar-group outliner-section" aria-label="View modes">
@@ -3826,6 +4090,45 @@ export function ModelPage({
             </span>
             {tab === "3d" ? (
               <>
+                <span className="v-sep hud-sep" aria-hidden="true" />
+                <button
+                  type="button"
+                  className={massingDraw.tool.toolEnabled ? "sun-pill studio-solar-pill is-active" : "sun-pill studio-solar-pill"}
+                  aria-pressed={massingDraw.tool.toolEnabled}
+                  aria-label="Massing tool"
+                  onClick={() => massingDraw.setToolEnabled(!massingDraw.tool.toolEnabled)}
+                >
+                  <Box size={12} strokeWidth={2.2} aria-hidden="true" />
+                  <span>{massingDraw.tool.toolEnabled ? "Massing · on" : "Massing"}</span>
+                </button>
+                <button
+                  type="button"
+                  className={
+                    massingDraw.tool.drawArmed
+                      ? "sun-pill studio-solar-pill is-active"
+                      : "sun-pill studio-solar-pill"
+                  }
+                  aria-pressed={massingDraw.tool.drawArmed}
+                  aria-label="Massing draw tool"
+                  disabled={!massingDraw.tool.toolEnabled}
+                  onClick={() => massingDraw.setDrawArmed(!massingDraw.tool.drawArmed)}
+                >
+                  <span>{massingDraw.tool.drawArmed ? "Draw · on" : "Draw"}</span>
+                </button>
+                {massingDraw.tool.toolEnabled && massingParcels.selectedIds.length > 0 ? (
+                  <button
+                    type="button"
+                    className="sun-pill studio-solar-pill"
+                    aria-label="Clear selected property sites"
+                    onClick={() => massingParcels.clearSelection()}
+                  >
+                    <span>
+                      {massingParcels.selectedIds.length === 1
+                        ? "1 site · clear"
+                        : `${massingParcels.selectedIds.length} sites · clear`}
+                    </span>
+                  </button>
+                ) : null}
                 <span className="v-sep hud-sep" aria-hidden="true" />
                 <div className="solar-hours studio-quality-pills" role="group" aria-label="Render quality">
                   {(
