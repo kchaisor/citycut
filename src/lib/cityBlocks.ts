@@ -1,6 +1,6 @@
-import polygonClipping from "polygon-clipping";
 import type { MultiPolygon, Polygon } from "polygon-clipping";
 import { openRing, signedArea } from "./geo";
+import { clipDifference } from "./polygonClip";
 import {
   circleRing,
   clipAreaToSiteFrame,
@@ -103,8 +103,7 @@ export function computeCityBlocks(model: Pick<CityModel, "roads" | "areas" | "si
         ...holes.map((hole) => hole.map((p) => [p[0], p[1]] as [number, number])),
       ];
     });
-    const diff = polygonClipping.difference(current, roadMulti);
-    return (Array.isArray(diff) ? diff : []) as Multi;
+    return clipDifference(current, roadMulti) as Multi;
   };
 
   site = subtractRoads(site, pathFill);
@@ -115,8 +114,7 @@ export function computeCityBlocks(model: Pick<CityModel, "roads" | "areas" | "si
   for (const area of model.areas) {
     if (area.kind === "block") continue;
     const patch = multiFromRing(area.ring, area.holes);
-    const diff = polygonClipping.difference(site, patch);
-    site = (Array.isArray(diff) ? diff : []) as Multi;
+    site = clipDifference(site, patch) as Multi;
   }
 
   site = clipMultiToFrame(site, sideM, frameShape);

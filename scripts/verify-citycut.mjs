@@ -163,6 +163,70 @@ async function verifyMontAlbertParcels(baseUrl, artifactsDir) {
     await montBrowser.close();
   }
 }
+
+async function verifyRoddPointCreate(baseUrl, artifactsDir) {
+  const browser = await chromium.launch({
+    executablePath: CHROME_PATH,
+    headless: true,
+    args: [
+      "--use-gl=angle",
+      "--use-angle=swiftshader",
+      "--enable-webgl",
+      "--ignore-gpu-blocklist",
+      "--disable-dev-shm-usage",
+      "--no-sandbox",
+    ],
+  });
+  try {
+    const context = await browser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: 1,
+      reducedMotion: "no-preference",
+    });
+    await context.addInitScript(() => {
+      window.__citycutVerifyHarness = true;
+      window.__citycutMinSilentLoadMs = 550;
+    });
+    const page = await context.newPage();
+  const roddUrl = `${baseUrl}/citycut/?lat=-33.86664&lon=151.18311&km=1.35&label=Rodd+Point+NSW&verify=1`;
+    await page.goto(roddUrl, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("button.create-fab", { timeout: 60000 });
+    await page.waitForTimeout(500);
+    await page.click("button.create-fab");
+    const outcomeHandle = await page
+      .waitForFunction(
+        () => {
+          const alert = document.querySelector(".sidebar-foot [role='alert']");
+          const alertText = alert?.textContent?.trim() ?? "";
+          if (/Unable to complete output ring|Last matching segment found ends at/i.test(alertText)) {
+            return { ok: false, alertText };
+          }
+          const canvas = document.querySelector(".model canvas");
+          if (canvas) return { ok: true, hasCanvas: true };
+          return false;
+        },
+        null,
+        { timeout: 300000, polling: 500 },
+      )
+      .catch(() => null);
+    const parsed = outcomeHandle
+      ? await outcomeHandle.jsonValue()
+      : { ok: false, alertText: "timed out waiting for model or error" };
+    if (parsed?.ok) {
+      await page.waitForFunction(
+        () => Number(document.querySelector(".model canvas")?.dataset.introProgressPct ?? 0) >= 100,
+        null,
+        { timeout: 180000 },
+      );
+      await page.screenshot({ path: path.join(artifactsDir, "rodd-point-create-model.png"), timeout: 60000, scale: "css" });
+    }
+    await context.close();
+    return parsed;
+  } finally {
+    await browser.close();
+  }
+}
+
 const TMP_FRAMES_DIR = "/tmp/citycut_verify_frames";
 const TMP_VIDEO_DIR = "/tmp/citycut_verify_video_frames";
 
@@ -1276,6 +1340,14 @@ async function main() {
         montAlbertHoverParcelId,
         montAlbertHoverDelta,
       }),
+    );
+
+    const roddCreate = await verifyRoddPointCreate(baseUrl, ARTIFACTS_DIR);
+    assertCheck(
+      "rodd-point-create-model",
+      "Rodd Point NSW 1.35 km square (harbour-heavy) Create model finishes without polygon ring errors",
+      roddCreate?.ok === true,
+      JSON.stringify(roddCreate),
     );
 
     const massingDrawId = await page.evaluate(() => {

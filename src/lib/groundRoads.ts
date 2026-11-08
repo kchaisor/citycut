@@ -1,6 +1,6 @@
 import * as THREE from "three";
-import * as polygonClipping from "polygon-clipping";
 import type { MultiPolygon, Polygon } from "polygon-clipping";
+import { clipDifference, clipIntersection, clipUnionAll } from "./polygonClip";
 import { carriagewaysOf, unionCarriageways, unionPathRoads } from "./roadFill";
 import { DEFAULT_SITE_FRAME_SHAPE, siteFramePolygon } from "./siteFrame";
 import { clipTrianglesToTerrainGrid, terrainMeshHeight, type Tri } from "./terrainDrape";
@@ -10,16 +10,6 @@ import type { CityModel, Pt, RoadGrade, TerrainField } from "../types";
 export const GROUND_ROADS_LAYER = "Ground::Roads";
 export const GROUND_REMAINING_LAYER = "Ground::Remaining";
 export const ROAD_GRADES_BY_PRIORITY: RoadGrade[] = ["arterial", "local", "path"];
-
-type Clip = {
-  union: (...g: (Polygon | MultiPolygon)[]) => MultiPolygon;
-  intersection: (...g: (Polygon | MultiPolygon)[]) => MultiPolygon;
-  difference: (a: Polygon | MultiPolygon, ...b: (Polygon | MultiPolygon)[]) => MultiPolygon;
-};
-function clip(): Clip {
-  const loaded = polygonClipping as unknown as Clip & { default?: Clip };
-  return typeof loaded.union === "function" ? loaded : loaded.default!;
-}
 
 export type GroundRoadPartition = {
   roads: Record<RoadGrade, MultiPolygon>;
@@ -62,7 +52,8 @@ export function multiArea(multi: MultiPolygon): number {
 }
 
 export function groundRoadPartition(model: Pick<CityModel, "roads" | "sideM" | "frameShape" | "nsw">): GroundRoadPartition {
-  const { union, difference } = clip();
+  const union = (...parts: Array<Polygon | MultiPolygon>) => clipUnionAll(parts);
+  const difference = clipDifference;
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const frame = siteFramePolygon(model.sideM, frameShape) as Polygon;
   const raw: Record<RoadGrade, MultiPolygon> = {
@@ -96,7 +87,9 @@ function nswCorridorPartition(
   frame: Polygon,
   corridors: NswCorridor[],
 ): GroundRoadPartition {
-  const { union, difference, intersection } = clip();
+  const union = (...parts: Array<Polygon | MultiPolygon>) => clipUnionAll(parts);
+  const difference = clipDifference;
+  const intersection = clipIntersection;
   const centrelines = model.nsw?.roadCentrelines ?? [];
   const byGrade: Record<RoadGrade, Polygon[]> = { arterial: [], local: [], path: [] };
   for (const corridor of corridors) byGrade[corridorGrade(corridor, centrelines)].push([corridor.outer, ...corridor.holes].map(closeRing) as Polygon);
