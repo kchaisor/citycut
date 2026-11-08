@@ -22,7 +22,31 @@ const squareCtx = (sideM = 200): MassingSnapContext => ({
 });
 
 describe("massingBlock geometry", () => {
-  it("builds a rectangle footprint with default width from a centerline", () => {
+  it("builds an L footprint that differs from a straight first-to-last bar", () => {
+    const l: [[number, number], [number, number], [number, number]] = [
+      [0, 0],
+      [20, 0],
+      [20, 20],
+    ];
+    const straight: [[number, number], [number, number]] = [
+      [0, 0],
+      [20, 20],
+    ];
+    const lRing = footprintFromCenterline(l, MASSING_DEFAULT_WIDTH_M, false);
+    const straightRing = footprintFromCenterline(straight, MASSING_DEFAULT_WIDTH_M, false);
+    expect(lRing.length).toBeGreaterThan(5);
+    expect(straightRing.length).toBe(5);
+    const lOpen = lRing.slice(0, -1);
+    const diagOpen = straightRing.slice(0, -1);
+    const same =
+      lOpen.length === diagOpen.length &&
+      lOpen.every((p, i) => Math.hypot(p[0] - diagOpen[i]![0], p[1] - diagOpen[i]![1]) < 1e-3);
+    expect(same).toBe(false);
+    const lMaxY = Math.max(...lOpen.map((p) => p[1]));
+    expect(lMaxY).toBeGreaterThan(18);
+  });
+
+  it("builds a rectangle footprint with default width from a two-point centerline", () => {
     const centerline: [[number, number], [number, number]] = [
       [0, 0],
       [20, 0],

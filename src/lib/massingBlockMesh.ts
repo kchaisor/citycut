@@ -5,7 +5,7 @@ import { extrudePart } from "./buildCity";
 import { matteStandardMaterial } from "./matteMaterial";
 import { footprintBase, sampleTerrain } from "./terrain";
 import { SURFACE } from "./surfaceLayers";
-import type { CityModel, Ring } from "../types";
+import type { CityModel, Pt, Ring } from "../types";
 import {
   blockCentroid,
   footprintFromCenterline,
@@ -19,12 +19,20 @@ export function massingBlockRing(block: MassingBlock): Ring {
   return footprintFromCenterline(block.centerline, block.width_m, block.flipped);
 }
 
+function footprintOpenVertices(ring: Ring): Pt[] {
+  if (ring.length < 2) return [];
+  const last = ring[ring.length - 1]!;
+  const first = ring[0]!;
+  if (last[0] === first[0] && last[1] === first[1]) return ring.slice(0, -1);
+  return ring.slice();
+}
+
 export function buildMassingBlockMesh(
   model: Pick<CityModel, "terrain" | "sideM">,
   block: MassingBlock,
 ): THREE.Mesh | null {
   const ring = massingBlockRing(block);
-  const open = ring.slice(0, 4);
+  const open = footprintOpenVertices(ring);
   if (open.length < 3) return null;
   const base =
     (model.terrain ? footprintBase(model.terrain, open, model.sideM) : 0) + SURFACE.building.lift;
@@ -50,7 +58,7 @@ export function buildMassingBlockSelectionOutline(
   block: MassingBlock,
 ): THREE.LineSegments | null {
   const ring = massingBlockRing(block);
-  const open = ring.slice(0, 4);
+  const open = footprintOpenVertices(ring);
   const base =
     (model.terrain ? footprintBase(model.terrain, open, model.sideM) : 0) + SURFACE.building.lift;
   const height = massingBlockHeight(block);
@@ -76,7 +84,7 @@ export function buildMassingFloorGuides(
   const group = new THREE.Group();
   group.userData.noScenePick = true;
   const ring = massingBlockRing(block);
-  const open = ring.slice(0, 4);
+  const open = footprintOpenVertices(ring);
   const base =
     (model.terrain ? footprintBase(model.terrain, open, model.sideM) : 0) + SURFACE.building.lift;
   const material = new THREE.LineDashedMaterial({
@@ -116,7 +124,7 @@ export function buildMassingHeightHandle(
   const centroid = blockCentroid(block.centerline);
   const ring = massingBlockRing(block);
   const base =
-    (model.terrain ? footprintBase(model.terrain, ring.slice(0, 4), model.sideM) : 0) + SURFACE.building.lift;
+    (model.terrain ? footprintBase(model.terrain, footprintOpenVertices(ring), model.sideM) : 0) + SURFACE.building.lift;
   const topY = base + massingBlockHeight(block);
   const x = centroid[0];
   const z = -centroid[1];
@@ -150,7 +158,7 @@ export function buildMassingPreviewMesh(
   ring: Ring,
   opacity = 0.45,
 ): THREE.Mesh | null {
-  const open = ring.slice(0, 4);
+  const open = footprintOpenVertices(ring);
   const base =
     (model.terrain ? footprintBase(model.terrain, open, model.sideM) : 0) + SURFACE.building.lift;
   const geometry = extrudePart(open, [], 0.4, base);
@@ -172,18 +180,14 @@ export function buildMassingPreviewMesh(
  * Ground-draped centreline for an in-progress draw: a world-space line (start → snapped end)
  * plus endpoint ticks, so it stays glued to the surface under orbit/zoom, unlike a DOM overlay.
  */
-export function buildMassingPreviewLine(
+function previewRibbonSegment(
   model: Pick<CityModel, "terrain" | "sideM">,
-  centerline: readonly [[number, number], [number, number]],
-): THREE.Group {
-  const group = new THREE.Group();
-  group.name = "MassingPreviewLine";
-  group.userData.noScenePick = true;
-  const [a, b] = centerline;
-  const lift = SURFACE.building.lift + 0.35;
+  a: [number, number],
+  b: [number, number],
+  lift: number,
+): THREE.Mesh {
   const steps = 24;
   const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
-  // Flat ribbon (~1.4 m wide) rather than a 1px GL line so it reads at any zoom.
   const half = 0.7;
   const px = (-(b[1] - a[1]) / len) * half;
   const py = ((b[0] - a[0]) / len) * half;
@@ -215,19 +219,36 @@ export function buildMassingPreviewLine(
   line.renderOrder = SURFACE.building.renderOrder + 40;
   line.userData.noScenePick = true;
   line.raycast = () => {};
-  group.add(line);
-  for (const [e, n] of [a, b]) {
+  return line;
+}
+
+export function buildMassingPreviewLine(
+  model: Pick<CityModel, "terrain" | "sideM">,
+  polyline: readonly [number, number][],
+): THREE.Group {
+  const group = new THREE.Group();
+  group.name = "MassingPreviewLine";
+  group.userData.noScenePick = true;
+  const lift = SURFACE.building.lift + 0.35;
+  for (let i = 0; i < polyline.length - 1; i++) {
+    group.add(previewRibbonSegment(model, polyline[i]!, polyline[i + 1]!, lift));
+  }
+  const seen = new Set<string>();
+  for (const [e, n] of polyline) {
+    const key = `${e.toFixed(3)},${n.toFixed(3)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     const h = (model.terrain ? sampleTerrain(model.terrain, e, n, model.sideM) : 0) + lift;
-    const dot = new THREE.Mesh(
+    const circle = new THREE.Mesh(
       new THREE.CircleGeometry(1.2, 20),
       new THREE.MeshBasicMaterial({ color: getColour("--massing-preview-line"), depthTest: false, transparent: true }),
     );
-    dot.rotation.x = -Math.PI / 2;
-    dot.position.set(e, h, -n);
-    dot.renderOrder = SURFACE.building.renderOrder + 41;
-    dot.userData.noScenePick = true;
-    dot.raycast = () => {};
-    group.add(dot);
+    circle.rotation.x = -Math.PI / 2;
+    circle.position.set(e, h, -n);
+    circle.renderOrder = SURFACE.building.renderOrder + 41;
+    circle.userData.noScenePick = true;
+    circle.raycast = () => {};
+    group.add(circle);
   }
   return group;
 }

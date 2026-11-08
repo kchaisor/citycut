@@ -1007,25 +1007,88 @@ async function main() {
     const blocksBeforeSecondClick = await page.evaluate(() => window.__citycutQaMassing?.getBlocks()?.length ?? -1);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-click-preview.png") });
     await page.mouse.click(664, 470);
+    await page.waitForTimeout(250);
+    const afterSecondClick = await page.evaluate(() => ({
+      blocks: window.__citycutQaMassing?.getBlocks()?.length ?? -1,
+      preview: window.__citycutQaMassingPreview ?? null,
+    }));
+    await page.keyboard.press("Enter");
     await page.waitForTimeout(400);
     const clickBlocks = await page.evaluate(() => {
       const blocks = window.__citycutQaMassing?.getBlocks() ?? [];
       const b = blocks[blocks.length - 1];
-      return { count: blocks.length, width: b?.width_m ?? 0 };
+      return { count: blocks.length, width: b?.width_m ?? 0, vertices: b?.centerline?.length ?? 0 };
     });
     assertCheck(
       "massing-click-click-draw",
-      "Real mouse click → hover → click creates a 14 m block; between clicks a ground preview line and length/width HUD are live and no block exists yet",
+      "Real mouse click → hover → click → Enter creates a 14 m two-point block; between clicks a ground preview line and length/width HUD are live and no block exists until Enter",
       clickPreview.qa?.phase === "drawingPreview" &&
         clickPreview.qa?.inScene === true &&
         Math.hypot(clickPreview.qa.end[0] - clickPreview.qa.start[0], clickPreview.qa.end[1] - clickPreview.qa.start[1]) > 5 &&
         /14 m ×/.test(clickHud) &&
         blocksBeforeSecondClick === 0 &&
+        afterSecondClick.blocks === 0 &&
+        afterSecondClick.preview?.vertexCount >= 2 &&
         clickBlocks.count === 1 &&
+        clickBlocks.vertices === 2 &&
         Math.abs(clickBlocks.width - 14) <= 0.5,
-      `preview=${JSON.stringify(clickPreview)}, hud="${clickHud}", before=${blocksBeforeSecondClick}, after=${JSON.stringify(clickBlocks)}`,
+      `preview=${JSON.stringify(clickPreview)}, hud="${clickHud}", before=${blocksBeforeSecondClick}, mid=${JSON.stringify(afterSecondClick)}, after=${JSON.stringify(clickBlocks)}`,
     );
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-click-committed.png") });
+
+    await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      for (let i = 0; i < 10 && (api?.getBlocks()?.length ?? 0) > 0; i += 1) api?.deleteSelected();
+    });
+    await page.waitForTimeout(200);
+    await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      api?.enableTool();
+      api?.armDraw();
+      api?.qaGroundPress(-24, -6);
+      api?.qaGroundRelease();
+      api?.qaGroundPress(24, -6);
+      api?.qaGroundPress(24, 24);
+      api?.qaGroundMove(24, 24);
+    });
+    await page.waitForTimeout(350);
+    const polyPreview = await page.evaluate(() => window.__citycutQaMassingPreview ?? null);
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-polyline-preview.png") });
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(450);
+    const polyBlock = await page.evaluate(() => {
+      const b = window.__citycutQaMassing?.getBlocks()?.slice(-1)[0];
+      if (!b || !Array.isArray(b.centerline)) return null;
+      const cl = b.centerline;
+      const legA = cl.length >= 2 ? Math.hypot(cl[1][0] - cl[0][0], cl[1][1] - cl[0][1]) : 0;
+      const legB = cl.length >= 3 ? Math.hypot(cl[2][0] - cl[1][0], cl[2][1] - cl[1][1]) : 0;
+      const elbow = cl[1];
+      const elbowIsCorner =
+        cl.length >= 3 &&
+        Math.abs(elbow[0] - cl[2][0]) < 3 &&
+        Math.abs(elbow[1] - cl[0][1]) < 3;
+      return {
+        vertices: cl.length,
+        legA,
+        legB,
+        elbowIsCorner,
+        cl,
+      };
+    });
+    assertCheck(
+      "massing-polyline-bent-draw",
+      "Three-point massing draw + Enter extrudes a bent bar (3+ centerline vertices), not a collapsed straight first-to-last rectangle",
+      polyPreview?.phase === "drawingPreview" &&
+        (polyPreview?.vertexCount ?? 0) >= 3 &&
+        polyBlock?.vertices >= 3 &&
+        (polyBlock?.legA ?? 0) >= 20 &&
+        (polyBlock?.legB ?? 0) >= 20 &&
+        polyBlock?.elbowIsCorner === true,
+      `preview=${JSON.stringify(polyPreview)}, block=${JSON.stringify(polyBlock)}`,
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-polyline-committed.png") });
 
     // Escape cancels an in-progress click-click line without creating a block.
     await page.keyboard.press("Escape");

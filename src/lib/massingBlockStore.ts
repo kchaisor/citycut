@@ -37,7 +37,7 @@ function isMassingBlock(value: unknown): value is MassingBlock {
   if (!value || typeof value !== "object") return false;
   const row = value as MassingBlock;
   if (typeof row.id !== "string" || typeof row.cutId !== "string") return false;
-  if (!Array.isArray(row.centerline) || row.centerline.length !== 2) return false;
+  if (!Array.isArray(row.centerline) || row.centerline.length < 2) return false;
   for (const pt of row.centerline) {
     if (!Array.isArray(pt) || pt.length !== 2 || !Number.isFinite(pt[0]) || !Number.isFinite(pt[1])) return false;
   }

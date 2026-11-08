@@ -5,8 +5,8 @@ export type MassingToolState = {
   drawArmed: boolean;
   phase: MassingToolPhase;
   selectedId: string | null;
-  drawStart: [number, number] | null;
-  drawEnd: [number, number] | null;
+  drawVertices: [number, number][] | null;
+  drawHover: [number, number] | null;
   heightDragFloors: number | null;
 };
 
@@ -15,8 +15,8 @@ export const INITIAL_MASSING_TOOL_STATE: MassingToolState = {
   drawArmed: false,
   phase: "idle",
   selectedId: null,
-  drawStart: null,
-  drawEnd: null,
+  drawVertices: null,
+  drawHover: null,
   heightDragFloors: null,
 };
 
@@ -31,6 +31,7 @@ export type MassingToolEvent =
   | { type: "POINTER_MOVE"; east: number; north: number }
   | { type: "POINTER_UP" }
   | { type: "CANCEL" }
+  | { type: "ADD_VERTEX"; east: number; north: number }
   | { type: "COMMIT_DRAW" }
   | { type: "SELECT"; id: string }
   | { type: "DESELECT" }
@@ -38,6 +39,10 @@ export type MassingToolEvent =
   | { type: "HEIGHT_DRAG"; floors: number }
   | { type: "END_HEIGHT_DRAG" }
   | { type: "DELETE_SELECTED" };
+
+function clearDrawDraft(state: MassingToolState): MassingToolState {
+  return { ...state, drawVertices: null, drawHover: null };
+}
 
 export function reduceMassingTool(state: MassingToolState, event: MassingToolEvent): MassingToolState {
   switch (event.type) {
@@ -56,18 +61,16 @@ export function reduceMassingTool(state: MassingToolState, event: MassingToolEve
         return { ...state, drawArmed: false };
       }
       if (state.phase === "drawing" || state.phase === "drawingPreview") {
-        return { ...state, drawArmed: false, phase: "idle", drawStart: null, drawEnd: null };
+        return { ...clearDrawDraft({ ...state, drawArmed: false, phase: "idle" }) };
       }
       return { ...state, drawArmed: false };
     case "LEAVE_3D_VIEW":
       if (state.phase === "drawing" || state.phase === "drawingPreview" || state.phase === "draggingHeight") {
-        return {
+        return clearDrawDraft({
           ...state,
           phase: state.selectedId ? "selected" : "idle",
-          drawStart: null,
-          drawEnd: null,
           heightDragFloors: null,
-        };
+        });
       }
       return state;
     case "RETURN_3D_VIEW":
@@ -75,7 +78,7 @@ export function reduceMassingTool(state: MassingToolState, event: MassingToolEve
     case "CANCEL":
       if (!state.toolEnabled) return state;
       if (state.phase === "drawing" || state.phase === "drawingPreview") {
-        return { ...state, phase: "idle", drawStart: null, drawEnd: null };
+        return clearDrawDraft({ ...state, phase: "idle" });
       }
       if (state.phase === "draggingHeight") {
         return { ...state, phase: "selected", heightDragFloors: null };
@@ -85,52 +88,54 @@ export function reduceMassingTool(state: MassingToolState, event: MassingToolEve
       if (!state.toolEnabled) return state;
       if (state.phase === "draggingHeight") return state;
       if (event.hitBlockId) {
-        return {
+        return clearDrawDraft({
           ...state,
           phase: "selected",
           selectedId: event.hitBlockId,
-          drawStart: null,
-          drawEnd: null,
-        };
+        });
       }
       if (!state.drawArmed) {
         if (state.phase === "selected") {
-          return { ...state, phase: "idle", selectedId: null, drawStart: null, drawEnd: null };
+          return clearDrawDraft({ ...state, phase: "idle", selectedId: null });
         }
         return state;
       }
-      if (state.phase === "drawingPreview") {
-        return { ...state, drawEnd: [event.east, event.north] };
-      }
+      if (state.phase === "drawingPreview") return state;
       return {
         ...state,
         phase: "drawing",
         selectedId: null,
-        drawStart: [event.east, event.north],
-        drawEnd: [event.east, event.north],
+        drawVertices: [[event.east, event.north]],
+        drawHover: [event.east, event.north],
+      };
+    }
+    case "ADD_VERTEX": {
+      if (!state.toolEnabled || !state.drawArmed || state.phase !== "drawingPreview") return state;
+      const base = state.drawVertices ?? [];
+      if (base.length === 0) return state;
+      return {
+        ...state,
+        drawVertices: [...base, [event.east, event.north]],
+        drawHover: [event.east, event.north],
       };
     }
     case "POINTER_MOVE": {
-      if ((state.phase !== "drawing" && state.phase !== "drawingPreview") || !state.drawStart) return state;
-      return { ...state, drawEnd: [event.east, event.north] };
+      if ((state.phase !== "drawing" && state.phase !== "drawingPreview") || !state.drawVertices?.length) return state;
+      return { ...state, drawHover: [event.east, event.north] };
     }
     case "POINTER_UP":
-      // A press-release without a drag-length draw becomes a click-click preview:
-      // the start stays anchored and the end follows the hover until the next click.
       if (state.phase === "drawing") return { ...state, phase: "drawingPreview" };
       return state;
     case "COMMIT_DRAW":
       if (state.phase !== "drawing" && state.phase !== "drawingPreview") return state;
-      return { ...state, phase: "idle", drawStart: null, drawEnd: null };
+      return clearDrawDraft({ ...state, phase: "idle" });
     case "SELECT":
       if (!state.toolEnabled) return state;
-      return {
+      return clearDrawDraft({
         ...state,
         phase: "selected",
         selectedId: event.id,
-        drawStart: null,
-        drawEnd: null,
-      };
+      });
     case "DESELECT":
       if (state.phase === "draggingHeight") return state;
       return { ...state, phase: "idle", selectedId: null };

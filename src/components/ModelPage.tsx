@@ -680,6 +680,16 @@ export function ModelPage({
       sampleInsideBoundary: () => massingParcels.sampleInsideBoundary(),
       pointInSiteBoundary: (east: number, north: number) => massingParcels.pointAllowed(east, north),
       qaGroundPress: (east: number, north: number) => massingDraw.pointerDown(east, north, null),
+      qaGroundRelease: () => massingDraw.pointerUp(),
+      qaGroundMove: (east: number, north: number) => massingDraw.pointerMove(east, north),
+      finishDraw: () => massingDraw.finishDraw(),
+      commitPolylineCenterline: (points: [number, number][]) => {
+        if (points.length < 2) return null;
+        const block = createMassingBlock(massingDraw.cutId, points);
+        massingDraw.appendBlock(block);
+        massingDraw.dispatchTool({ type: "SELECT", id: block.id });
+        return block.id;
+      },
       getToolPhase: () => massingDraw.getToolPhase(),
       drawArmed: () => massingDraw.isDrawArmed(),
       simulateDraw: (east0: number, north0: number, east1: number, north1: number) => {
@@ -728,6 +738,7 @@ export function ModelPage({
     };
   }, [
     massingDraw.appendBlock,
+    massingDraw.finishDraw,
     massingDraw.cutId,
     massingDraw.dispatchTool,
     massingDraw.removeBlock,
@@ -1428,6 +1439,15 @@ export function ModelPage({
           massingDraw.dispatchTool({ type: "CANCEL" });
           return;
         }
+        if (
+          (event.key === "Enter" || event.key === "NumpadEnter") &&
+          massingDraw.tool.drawArmed &&
+          (massingDraw.tool.phase === "drawing" || massingDraw.tool.phase === "drawingPreview")
+        ) {
+          event.preventDefault();
+          massingDraw.finishDraw();
+          return;
+        }
         if ((event.key === "Delete" || event.key === "Backspace") && massingDraw.tool.selectedId) {
           event.preventDefault();
           massingDraw.deleteSelected();
@@ -2035,7 +2055,7 @@ export function ModelPage({
                       blocks={massingDraw.blocks}
                       tool={massingDraw.tool}
                       previewRing={massingDraw.previewRing}
-                      previewLine={massingDraw.draftCenterline}
+                      previewLine={massingDraw.draftPolyline}
                       active={tab === "3d"}
                       parcelOutlineObjects={massingParcels.outlineObjects}
                       parcelOutlineLineMaterials={massingParcels.outlineLineMaterials}

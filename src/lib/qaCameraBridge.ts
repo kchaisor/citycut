@@ -40,6 +40,10 @@ declare global {
       sampleInsideBoundary: () => [number, number] | null;
       pointInSiteBoundary: (east: number, north: number) => boolean;
       qaGroundPress: (east: number, north: number) => void;
+      qaGroundRelease: () => void;
+      qaGroundMove: (east: number, north: number) => void;
+      finishDraw: () => import("./massingBlock").MassingBlock | null;
+      commitPolylineCenterline: (points: [number, number][]) => string | null;
       getToolPhase: () => string;
       drawArmed: () => boolean;
     };

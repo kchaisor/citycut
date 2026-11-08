@@ -27,7 +27,7 @@ describe("massingToolMachine", () => {
     state = reduceMassingTool(state, { type: "ARM_DRAW" });
     state = reduceMassingTool(state, { type: "POINTER_DOWN_GROUND", east: 1, north: 2, hitBlockId: null });
     expect(state.phase).toBe("drawing");
-    expect(state.drawStart).toEqual([1, 2]);
+    expect(state.drawVertices).toEqual([[1, 2]]);
   });
 
   it("cancels drawing on Escape path", () => {
@@ -35,7 +35,7 @@ describe("massingToolMachine", () => {
     state = reduceMassingTool(state, { type: "POINTER_DOWN_GROUND", east: 0, north: 0, hitBlockId: null });
     state = reduceMassingTool(state, { type: "CANCEL" });
     expect(state.phase).toBe("idle");
-    expect(state.drawStart).toBeNull();
+    expect(state.drawVertices).toBeNull();
   });
 
   it("selects block on hit without draw armed", () => {
@@ -70,23 +70,28 @@ describe("massingToolMachine", () => {
     state = reduceMassingTool(state, { type: "POINTER_DOWN_GROUND", east: 0, north: 0, hitBlockId: null });
     state = reduceMassingTool(state, { type: "LEAVE_3D_VIEW" });
     expect(state.phase).toBe("idle");
-    expect(state.drawStart).toBeNull();
+    expect(state.drawVertices).toBeNull();
   });
 
-  it("click-release enters drawingPreview; hover moves end; second down anchors end", () => {
+  it("click-release enters drawingPreview; hover moves end; adds vertices without commit", () => {
     let state = armed();
     state = reduceMassingTool(state, { type: "POINTER_DOWN_GROUND", east: 0, north: 0, hitBlockId: null });
     state = reduceMassingTool(state, { type: "POINTER_UP" });
     expect(state.phase).toBe("drawingPreview");
     expect(massingToolOrbitLocked(state)).toBe(true);
     state = reduceMassingTool(state, { type: "POINTER_MOVE", east: 20, north: 0 });
-    expect(state.drawEnd).toEqual([20, 0]);
-    state = reduceMassingTool(state, { type: "POINTER_DOWN_GROUND", east: 30, north: 1, hitBlockId: null });
+    expect(state.drawHover).toEqual([20, 0]);
+    state = reduceMassingTool(state, { type: "ADD_VERTEX", east: 30, north: 1 });
     expect(state.phase).toBe("drawingPreview");
-    expect(state.drawStart).toEqual([0, 0]);
-    expect(state.drawEnd).toEqual([30, 1]);
+    expect(state.drawVertices).toEqual([
+      [0, 0],
+      [30, 1],
+    ]);
+    state = reduceMassingTool(state, { type: "ADD_VERTEX", east: 30, north: 20 });
+    expect(state.drawVertices?.length).toBe(3);
     state = reduceMassingTool(state, { type: "COMMIT_DRAW" });
     expect(state.phase).toBe("idle");
+    expect(state.drawVertices).toBeNull();
   });
 
   it("Escape cancels drawingPreview", () => {
@@ -95,7 +100,7 @@ describe("massingToolMachine", () => {
     state = reduceMassingTool(state, { type: "POINTER_UP" });
     state = reduceMassingTool(state, { type: "CANCEL" });
     expect(state.phase).toBe("idle");
-    expect(state.drawStart).toBeNull();
-    expect(state.drawEnd).toBeNull();
+    expect(state.drawVertices).toBeNull();
+    expect(state.drawHover).toBeNull();
   });
 });

@@ -8,8 +8,9 @@ export const MASSING_FLOOR_HEIGHT_M = 3.1;
 export const MASSING_ANGLE_SNAP_DEG = 5;
 export const MASSING_ENDPOINT_SNAP_M = 1.5;
 export const MASSING_MIN_CENTERLINE_M = 2;
+export const MASSING_LOOP_CLOSE_M = 2.5;
 
-export type MassingCenterline = readonly [Pt, Pt];
+export type MassingCenterline = readonly Pt[];
 
 export type MassingBlock = {
   id: string;
@@ -33,15 +34,95 @@ export function massingBlockHeight(block: Pick<MassingBlock, "floors" | "floorHe
 }
 
 export function centerlineLengthM(centerline: MassingCenterline): number {
-  return polylineLength([centerline[0], centerline[1]]);
+  return polylineLength(centerline as Pt[]);
 }
 
 export function centerlineDirection(centerline: MassingCenterline): Pt {
-  const [a, b] = centerline;
+  if (centerline.length < 2) return [1, 0];
+  const a = centerline[centerline.length - 2]!;
+  const b = centerline[centerline.length - 1]!;
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
   const len = Math.hypot(dx, dy) || 1;
   return [dx / len, dy / len];
+}
+
+function perpAtPoint(from: Pt, to: Pt, at: Pt, half: number, flipped: boolean): [Pt, Pt] {
+  const dx = to[0] - from[0];
+  const dy = to[1] - from[1];
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const sign = flipped ? -1 : 1;
+  const px = -uy * sign;
+  const py = ux * sign;
+  const left: Pt = [at[0] + px * half, at[1] + py * half];
+  const right: Pt = [at[0] - px * half, at[1] - py * half];
+  return [left, right];
+}
+
+function intersectOffsetLines(a0: Pt, a1: Pt, b0: Pt, b1: Pt): Pt | null {
+  const dax = a1[0] - a0[0];
+  const day = a1[1] - a0[1];
+  const dbx = b1[0] - b0[0];
+  const dby = b1[1] - b0[1];
+  const denom = dax * dby - day * dbx;
+  if (Math.abs(denom) < 1e-9) return null;
+  const t = ((b0[0] - a0[0]) * dby - (b0[1] - a0[1]) * dbx) / denom;
+  return [a0[0] + t * dax, a0[1] + t * day];
+}
+
+export function footprintFromPolylineCenterline(
+  vertices: readonly Pt[],
+  widthM: number,
+  flipped: boolean,
+): Ring {
+  const n = vertices.length;
+  if (n < 2) return [];
+  const half = widthM / 2;
+  const left: Pt[] = [];
+  const right: Pt[] = [];
+  for (let i = 0; i < n; i++) {
+    if (i === 0) {
+      const [l, r] = perpAtPoint(vertices[0]!, vertices[1]!, vertices[0]!, half, flipped);
+      left.push(l);
+      right.push(r);
+    } else if (i === n - 1) {
+      const [l, r] = perpAtPoint(vertices[n - 2]!, vertices[n - 1]!, vertices[n - 1]!, half, flipped);
+      left.push(l);
+      right.push(r);
+    } else {
+      const prev = vertices[i - 1]!;
+      const cur = vertices[i]!;
+      const next = vertices[i + 1]!;
+      const [lPrev] = perpAtPoint(prev, cur, prev, half, flipped);
+      const [lCurIn] = perpAtPoint(prev, cur, cur, half, flipped);
+      const [lCurOut] = perpAtPoint(cur, next, cur, half, flipped);
+      const [lNext] = perpAtPoint(cur, next, next, half, flipped);
+      const [, rPrev] = perpAtPoint(prev, cur, prev, half, flipped);
+      const [, rCurIn] = perpAtPoint(prev, cur, cur, half, flipped);
+      const [, rCurOut] = perpAtPoint(cur, next, cur, half, flipped);
+      const [, rNext] = perpAtPoint(cur, next, next, half, flipped);
+      const li = intersectOffsetLines(lPrev, lCurIn, lCurOut, lNext);
+      const ri = intersectOffsetLines(rPrev, rCurIn, rCurOut, rNext);
+      left.push(li ?? lCurIn);
+      right.push(ri ?? rCurIn);
+    }
+  }
+  const open = [...left, ...right.slice().reverse()];
+  return open.length ? [...open, open[0]!] : [];
+}
+
+function footprintFromSegmentCenterline(
+  centerline: readonly [Pt, Pt],
+  widthM: number,
+  flipped: boolean,
+): Ring {
+  const [a, b] = centerline;
+  const half = widthM / 2;
+  const [c0, c1] = perpAtPoint(a, b, a, half, flipped);
+  const [c3, c2] = perpAtPoint(a, b, b, half, flipped);
+  return [c0, c1, c2, c3, c0];
 }
 
 export function footprintFromCenterline(
@@ -49,17 +130,11 @@ export function footprintFromCenterline(
   widthM: number,
   flipped: boolean,
 ): Ring {
-  const [a, b] = centerline;
-  const [ux, uy] = centerlineDirection(centerline);
-  const sign = flipped ? -1 : 1;
-  const px = -uy * sign;
-  const py = ux * sign;
-  const half = widthM / 2;
-  const c0: Pt = [a[0] + px * half, a[1] + py * half];
-  const c1: Pt = [a[0] - px * half, a[1] - py * half];
-  const c2: Pt = [b[0] - px * half, b[1] - py * half];
-  const c3: Pt = [b[0] + px * half, b[1] + py * half];
-  return [c0, c1, c2, c3, c0];
+  if (centerline.length < 2) return [];
+  if (centerline.length === 2) {
+    return footprintFromSegmentCenterline(centerline as readonly [Pt, Pt], widthM, flipped);
+  }
+  return footprintFromPolylineCenterline(centerline, widthM, flipped);
 }
 
 export function footprintCorners(centerline: MassingCenterline, widthM: number, flipped: boolean): Pt[] {
@@ -261,10 +336,9 @@ export function createMassingBlock(
 
 export function duplicateMassingBlock(block: MassingBlock, cutId: string, offsetM = 4): MassingBlock {
   const shift: Pt = [offsetM, offsetM];
-  const centerline: MassingCenterline = [
-    [block.centerline[0][0] + shift[0], block.centerline[0][1] + shift[1]],
-    [block.centerline[1][0] + shift[0], block.centerline[1][1] + shift[1]],
-  ];
+  const centerline: MassingCenterline = block.centerline.map(
+    (pt) => [pt[0] + shift[0], pt[1] + shift[1]] as Pt,
+  );
   return createMassingBlock(cutId, centerline, {
     width_m: block.width_m,
     floors: block.floors,
@@ -278,5 +352,12 @@ export function snapFloorsFromHeight(heightM: number, floorHeightM: number): num
 }
 
 export function blockCentroid(centerline: MassingCenterline): Pt {
-  return [(centerline[0][0] + centerline[1][0]) / 2, (centerline[0][1] + centerline[1][1]) / 2];
+  let sx = 0;
+  let sy = 0;
+  for (const pt of centerline) {
+    sx += pt[0];
+    sy += pt[1];
+  }
+  const n = centerline.length || 1;
+  return [sx / n, sy / n];
 }

@@ -24,6 +24,7 @@ declare global {
       phase: string;
       start: [number, number];
       end: [number, number];
+      vertexCount: number;
       inScene: boolean;
     } | null;
   }
@@ -34,7 +35,7 @@ type Props = {
   blocks: MassingBlock[];
   tool: MassingToolState;
   previewRing: Ring | null;
-  previewLine: readonly [[number, number], [number, number]] | null;
+  previewLine: readonly [number, number][] | null;
   active: boolean;
   onPointerDown: (east: number, north: number, hitBlockId: string | null) => void;
   onPointerMove: (
@@ -139,7 +140,13 @@ export function MassingToolLayer({
 
   useEffect(() => {
     window.__citycutQaMassingPreview = previewLine
-      ? { phase: tool.phase, start: previewLine[0], end: previewLine[1], inScene: previewLineObj != null }
+      ? {
+          phase: tool.phase,
+          start: previewLine[0]!,
+          end: previewLine[previewLine.length - 1]!,
+          vertexCount: previewLine.length,
+          inScene: previewLineObj != null,
+        }
       : null;
     return () => {
       if (previewLineObj) disposeObject(previewLineObj);

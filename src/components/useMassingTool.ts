@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CityModel } from "../types";
+import type { CityModel, Pt } from "../types";
 import { DEFAULT_SITE_FRAME_SHAPE } from "../lib/siteFrame";
 import { massingCutKey } from "../lib/massingStore";
 import {
   MASSING_DEFAULT_WIDTH_M,
+  MASSING_LOOP_CLOSE_M,
   MASSING_MIN_CENTERLINE_M,
   blockFootprintInsideCut,
   centerlineLengthM,
@@ -12,7 +13,9 @@ import {
   duplicateMassingBlock,
   footprintFromCenterline,
   snapDrawEnd,
+  snapEndpoints,
   type MassingBlock,
+  type MassingCenterline,
   type MassingSnapContext,
 } from "../lib/massingBlock";
 import {
@@ -28,6 +31,8 @@ import {
   type MassingToolState,
 } from "../lib/massingToolMachine";
 
+const MASSING_DOUBLE_CLICK_MS = 400;
+
 export type MassingToolApi = {
   cutId: string;
   blocks: MassingBlock[];
@@ -39,8 +44,8 @@ export type MassingToolApi = {
   setDrawArmed: (on: boolean) => void;
   dispatchTool: (event: Parameters<typeof reduceMassingTool>[1]) => void;
   commitDraw: () => MassingBlock | null;
-  /** Centreline of the in-progress draw (start → snapped end), for the ground preview line. */
-  draftCenterline: readonly [[number, number], [number, number]] | null;
+  finishDraw: () => MassingBlock | null;
+  draftPolyline: readonly [number, number][] | null;
   pointerDown: (east: number, north: number, hitBlockId: string | null) => void;
   pointerMove: (east: number, north: number) => void;
   pointerUp: () => void;
@@ -66,10 +71,10 @@ export function useMassingTool(
   const [store, setStore] = useState<MassingBlockStore>(() =>
     typeof window === "undefined" ? { v: 1, cutId, blocks: [] } : readStoredMassingBlocks(window.localStorage, cutId),
   );
-  // Ref-mirrored reducer: canvas listeners fire pointerdown/up faster than React re-renders,
-  // so gesture decisions (commit vs. enter preview) must read the latest state synchronously.
   const [tool, setTool] = useState<MassingToolState>(INITIAL_MASSING_TOOL_STATE);
   const toolRef = useRef<MassingToolState>(INITIAL_MASSING_TOOL_STATE);
+  const lastVertexClickMs = useRef(0);
+  const lastVertexClickPt = useRef<[number, number] | null>(null);
   const dispatchToolRaw = useCallback((event: Parameters<typeof reduceMassingTool>[1]) => {
     const next = reduceMassingTool(toolRef.current, event);
     if (next === toolRef.current) return;
@@ -105,25 +110,30 @@ export function useMassingTool(
     [frameShape, model.sideM, store.blocks, tool.selectedId],
   );
 
-  const draftCenterline = useMemo(() => draftFrom(tool, snapContext), [snapContext, tool]);
+  const snapContextRef = useRef(snapContext);
+  snapContextRef.current = snapContext;
+
+  const draftPolyline = useMemo(() => draftPolylineFrom(tool, snapContext), [snapContext, tool]);
 
   const previewRing = useMemo(() => {
-    if (!draftCenterline) return null;
-    if (centerlineLengthM(draftCenterline) < MASSING_MIN_CENTERLINE_M) return null;
-    return footprintFromCenterline(draftCenterline, MASSING_DEFAULT_WIDTH_M, false);
-  }, [draftCenterline]);
+    const line = draftCenterlineFromPolyline(draftPolyline);
+    if (!line) return null;
+    if (centerlineLengthM(line) < MASSING_MIN_CENTERLINE_M) return null;
+    return footprintFromCenterline(line, MASSING_DEFAULT_WIDTH_M, false);
+  }, [draftPolyline]);
 
   const previewMetrics = useMemo(() => {
-    if (!draftCenterline || !previewRing) return null;
+    const line = draftCenterlineFromPolyline(draftPolyline);
+    if (!line || !previewRing) return null;
     const boundaryM = Math.min(
-      ...previewRing.slice(0, 4).map((p) => distanceBoundary(p, model.sideM, frameShape)),
+      ...previewRing.slice(0, -1).map((p) => distanceBoundary(p, model.sideM, frameShape)),
     );
     return {
       widthM: MASSING_DEFAULT_WIDTH_M,
-      lengthM: centerlineLengthM(draftCenterline),
+      lengthM: centerlineLengthM(line),
       boundaryM,
     };
-  }, [draftCenterline, frameShape, model.sideM, previewRing, snapContext, tool.drawEnd, tool.drawStart]);
+  }, [draftPolyline, frameShape, model.sideM, previewRing]);
 
   const dispatchTool = dispatchToolRaw;
 
@@ -135,31 +145,61 @@ export function useMassingTool(
     dispatchToolRaw(on ? { type: "ARM_DRAW" } : { type: "DISARM_DRAW" });
   }, [dispatchToolRaw]);
 
+  const buildDraftCenterline = useCallback((state: MassingToolState, ctx: MassingSnapContext): MassingCenterline | null => {
+    if (!state.drawArmed || !massingToolIsDrawing(state) || !state.drawVertices?.length) return null;
+    const verts = state.drawVertices;
+  const first = snapEndpoints(verts[0]!, ctx);
+    const snapped: Pt[] = [first];
+    for (let i = 1; i < verts.length; i++) {
+      snapped.push(snapDrawEnd(snapped[i - 1]!, verts[i]!, ctx));
+    }
+    if (state.phase === "drawing" && state.drawHover) {
+      const end = snapDrawEnd(snapped[0]!, state.drawHover, ctx);
+      return [snapped[0]!, end];
+    }
+    if (state.phase === "drawingPreview" && state.drawHover && snapped.length >= 1) {
+      const hover = snapDrawEnd(snapped[snapped.length - 1]!, state.drawHover, ctx);
+      return [...snapped, hover];
+    }
+    if (snapped.length < 2) return null;
+    return snapped;
+  }, []);
+
   const commitDraw = useCallback((): MassingBlock | null => {
-    const draft = draftFrom(toolRef.current, {
+    const state = toolRef.current;
+    let centerline = buildDraftCenterline(state, {
       sideM: model.sideM,
       frameShape,
       blocks: blocksRef.current,
       excludeBlockId: undefined,
     });
-    if (!draft) return null;
-    const draftCenterline = draft;
-    const len = centerlineLengthM(draftCenterline);
-    if (len < MASSING_MIN_CENTERLINE_M) return null;
-    if (
-      !pointAllowedRef.current(draftCenterline[0][0], draftCenterline[0][1]) ||
-      !pointAllowedRef.current(draftCenterline[1][0], draftCenterline[1][1])
-    ) {
-      return null;
+    if (state.phase === "drawingPreview" && state.drawVertices && state.drawVertices.length >= 2) {
+      const ctx = snapContextRef.current;
+      const first = snapEndpoints(state.drawVertices[0]!, ctx);
+      const snapped: Pt[] = [first];
+      for (let i = 1; i < state.drawVertices.length; i++) {
+        snapped.push(snapDrawEnd(snapped[i - 1]!, state.drawVertices[i]!, ctx));
+      }
+      centerline = snapped;
     }
-    const block = createMassingBlock(cutId, draftCenterline);
+    if (!centerline || centerline.length < 2) return null;
+    const len = centerlineLengthM(centerline);
+    if (len < MASSING_MIN_CENTERLINE_M) return null;
+    for (const pt of centerline) {
+      if (!pointAllowedRef.current(pt[0], pt[1])) return null;
+    }
+    const block = createMassingBlock(cutId, centerline);
     if (!blockFootprintInsideCut(block, model.sideM, frameShape)) return null;
     const blocks = [...blocksRef.current, block];
     persist(blocks);
     dispatchToolRaw({ type: "COMMIT_DRAW" });
     dispatchToolRaw({ type: "SELECT", id: block.id });
     return block;
-  }, [cutId, dispatchToolRaw, frameShape, model.sideM, persist]);
+  }, [buildDraftCenterline, cutId, dispatchToolRaw, frameShape, model.sideM, persist]);
+
+  const finishDraw = useCallback((): MassingBlock | null => {
+    return commitDraw();
+  }, [commitDraw]);
 
   const pointerDown = useCallback(
     (east: number, north: number, hitBlockId: string | null) => {
@@ -176,9 +216,38 @@ export function useMassingTool(
       ) {
         return;
       }
-      const wasPreview = current.phase === "drawingPreview" && current.drawArmed;
+      if (current.drawArmed && current.phase === "drawingPreview" && !hitBlockId && current.drawVertices?.length) {
+        const now = performance.now();
+        const first = current.drawVertices[0]!;
+        const nearFirst =
+          current.drawVertices.length >= 2 &&
+          Math.hypot(east - first[0], north - first[1]) <= MASSING_LOOP_CLOSE_M;
+        if (nearFirst) {
+          commitDraw();
+          lastVertexClickMs.current = now;
+          return;
+        }
+        if (
+          now - lastVertexClickMs.current <= MASSING_DOUBLE_CLICK_MS &&
+          current.drawVertices.length >= 2 &&
+          lastVertexClickPt.current &&
+          Math.hypot(east - lastVertexClickPt.current[0], north - lastVertexClickPt.current[1]) <= 1.5
+        ) {
+          commitDraw();
+          lastVertexClickMs.current = now;
+          lastVertexClickPt.current = [east, north];
+          return;
+        }
+        const last = current.drawVertices[current.drawVertices.length - 1]!;
+        const snapped = snapDrawEnd(last, [east, north], snapContextRef.current);
+        dispatchToolRaw({ type: "ADD_VERTEX", east: snapped[0], north: snapped[1] });
+        lastVertexClickMs.current = now;
+        lastVertexClickPt.current = [snapped[0], snapped[1]];
+        return;
+      }
       dispatchToolRaw({ type: "POINTER_DOWN_GROUND", east, north, hitBlockId });
-      if (wasPreview) commitDraw();
+      lastVertexClickMs.current = performance.now();
+      lastVertexClickPt.current = [east, north];
     },
     [commitDraw, dispatchToolRaw],
   );
@@ -199,9 +268,16 @@ export function useMassingTool(
   );
 
   const pointerUp = useCallback(() => {
-    if (toolRef.current.phase !== "drawing" || !toolRef.current.drawArmed) return;
-    if (!commitDraw()) dispatchToolRaw({ type: "POINTER_UP" });
-  }, [commitDraw, dispatchToolRaw]);
+    const current = toolRef.current;
+    if (current.phase !== "drawing" || !current.drawArmed) return;
+    const ctx = snapContextRef.current;
+    const draft = buildDraftCenterline(current, ctx);
+    if (draft && centerlineLengthM(draft) >= MASSING_MIN_CENTERLINE_M) {
+      commitDraw();
+      return;
+    }
+    dispatchToolRaw({ type: "POINTER_UP" });
+  }, [buildDraftCenterline, commitDraw, dispatchToolRaw]);
 
   const updateSelected = useCallback(
     (patch: Partial<Pick<MassingBlock, "width_m" | "floors" | "flipped">>) => {
@@ -278,7 +354,8 @@ export function useMassingTool(
     setDrawArmed,
     dispatchTool,
     commitDraw,
-    draftCenterline,
+    finishDraw,
+    draftPolyline,
     pointerDown,
     pointerMove,
     pointerUp,
@@ -298,11 +375,27 @@ function distanceBoundary(point: [number, number], sideM: number, frameShape: ty
   return distanceToCutBoundaryM(point, sideM, frameShape);
 }
 
-function draftFrom(
-  tool: MassingToolState,
-  snapContext: MassingSnapContext,
-): readonly [[number, number], [number, number]] | null {
-  if (!tool.drawArmed || !massingToolIsDrawing(tool) || !tool.drawStart || !tool.drawEnd) return null;
-  const end = snapDrawEnd(tool.drawStart, tool.drawEnd, snapContext);
-  return [tool.drawStart, end] as const;
+function draftPolylineFrom(tool: MassingToolState, snapContext: MassingSnapContext): readonly [number, number][] | null {
+  if (!tool.drawArmed || !massingToolIsDrawing(tool) || !tool.drawVertices?.length) return null;
+  const verts = tool.drawVertices;
+  const first = snapEndpoints(verts[0]!, snapContext);
+  const fixed: [number, number][] = [first];
+  for (let i = 1; i < verts.length; i++) {
+    const snapped = snapDrawEnd(fixed[i - 1]!, verts[i]!, snapContext);
+    fixed.push(snapped);
+  }
+  if (tool.drawHover) {
+    const from = tool.phase === "drawing" && fixed.length === 1 ? fixed[0]! : fixed[fixed.length - 1]!;
+    const hover =
+      tool.phase === "drawing" && fixed.length === 1
+        ? snapDrawEnd(fixed[0]!, tool.drawHover, snapContext)
+        : snapDrawEnd(from, tool.drawHover, snapContext);
+    return [...fixed, hover];
+  }
+  return fixed.length >= 2 ? fixed : fixed;
+}
+
+function draftCenterlineFromPolyline(polyline: readonly [number, number][] | null): MassingCenterline | null {
+  if (!polyline || polyline.length < 2) return null;
+  return polyline as MassingCenterline;
 }
