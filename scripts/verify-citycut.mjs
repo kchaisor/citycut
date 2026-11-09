@@ -1313,7 +1313,7 @@ async function main() {
     };
     await page.waitForTimeout(600);
     await setWindFromDeg(0);
-    await page.waitForTimeout(2400);
+    await page.waitForTimeout(5200);
     const windFlowAt0 = await page.evaluate(() => {
       const canvas = document.querySelector(".wind-flow-plan-canvas");
       const snap = window.__citycutQaWindFlow?.getSnapshot?.();
@@ -1330,6 +1330,11 @@ async function main() {
         gpuHasStepped: snap?.gpuHasStepped ?? false,
         meanUx: snap?.meanUx ?? 0,
         meanUy: snap?.meanUy ?? 0,
+        gridStats: snap?.gridStats ?? null,
+        maxTrailSegM: snap?.maxTrailSegM ?? 999,
+        binOccupancy: snap?.binOccupancy ?? 0,
+        sideM: snap?.solver?.spec?.sideM ?? 0,
+        nx: snap?.solver?.spec?.nx ?? 256,
       };
     });
     await page.waitForTimeout(1400);
@@ -1344,7 +1349,7 @@ async function main() {
       await page.screenshot({ path: path.join(ARTIFACTS_DIR, "wind-flow-drawing-from-0.png") });
     }
     await setWindFromDeg(135);
-    await page.waitForTimeout(4000);
+    await page.waitForTimeout(5200);
     const windFlowAt135 = await page.evaluate(() => {
       const snap = window.__citycutQaWindFlow?.getSnapshot?.();
       const label = document.querySelector(".model .wind-direction-scrubber .st-v")?.textContent ?? "";
@@ -1368,7 +1373,31 @@ async function main() {
       );
       if (btn && btn.getAttribute("aria-pressed") !== "true") btn.click();
     });
-    await page.waitForTimeout(900);
+    await page.waitForTimeout(2200);
+    const heatmapStats = await page.evaluate(() => {
+      const canvas = document.querySelector(".wind-flow-plan-canvas");
+      const snap = window.__citycutQaWindFlow?.getSnapshot?.();
+      if (!canvas || !snap?.solver) return { variance: 0, alphaHits: 0 };
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return { variance: 0, alphaHits: 0 };
+      const w = canvas.width;
+      const h = canvas.height;
+      const data = ctx.getImageData(0, 0, w, h).data;
+      const speeds = [];
+      let alphaHits = 0;
+      for (let i = 3; i < data.length; i += 4) {
+        const a = data[i];
+        if (a > 40) alphaHits++;
+        const r = data[i - 3];
+        const g = data[i - 2];
+        const b = data[i - 1];
+        speeds.push(0.2126 * r + 0.7152 * g + 0.0722 * b);
+      }
+      if (speeds.length === 0) return { variance: 0, alphaHits: 0 };
+      const mean = speeds.reduce((a, v) => a + v, 0) / speeds.length;
+      const variance = speeds.reduce((a, v) => a + (v - mean) ** 2, 0) / speeds.length;
+      return { variance, alphaHits };
+    });
     if (fs.existsSync(ARTIFACTS_DIR)) {
       await page.screenshot({ path: path.join(ARTIFACTS_DIR, "wind-flow-drawing-heatmap.png") });
     }
@@ -1389,6 +1418,16 @@ async function main() {
       windFlowAt135.gpuHasStepped ||
       windFlowAt0.gpuSteps > 0 ||
       windFlowAt135.gpuSteps > 0;
+    const cellM = windFlowAt0.sideM > 0 ? windFlowAt0.sideM / windFlowAt0.nx : 0.5;
+    const trailOk = windFlowAt0.maxTrailSegM <= cellM * 3.6;
+    const spreadOk = windFlowAt0.binOccupancy >= 0.6;
+    const grid = windFlowAt0.gridStats;
+    const fieldStructured =
+      grid &&
+      grid.maxSpeed > grid.meanSpeed * 1.15 &&
+      grid.obstacleFraction > 0.02 &&
+      grid.obstacleFraction < 0.65;
+    const heatmapOk = heatmapStats.variance > 120 && heatmapStats.alphaHits > 800;
     assertCheck(
       "drawing-wind-rose-flow",
       "In Drawing -> Wind Rose, plan flow canvas renders inside the cut, particles move, GPU steps when available, and mean flow rotates when FROM changes",
@@ -1401,8 +1440,12 @@ async function main() {
         dirOk135 &&
         flowDelta > 0.006 &&
         flowRotated &&
-        gpuOk,
-      `canvas=${windFlowAt0.hasCanvas}, inCut=[${windFlowAt0.inCutRatio.toFixed(2)},${windFlowAt135.inCutRatio.toFixed(2)}], dir=[${windFlowAt0.label}->${windFlowAt135.label}], frames=${windFlowAt0.frame}->${windFlowAfterMove.frame}, flowΔ=${flowDelta.toFixed(4)}, rotated=${flowRotated}, mean0=[${windFlowAt0.meanUx.toFixed(4)},${windFlowAt0.meanUy.toFixed(4)}], mean135=[${windFlowAt135.meanUx.toFixed(4)},${windFlowAt135.meanUy.toFixed(4)}], backend=${windFlowAt0.backend}, gpuHasStepped=${windFlowAt135.gpuHasStepped}, gpuSteps=${windFlowAt135.gpuSteps}`,
+        gpuOk &&
+        trailOk &&
+        spreadOk &&
+        fieldStructured &&
+        heatmapOk,
+      `canvas=${windFlowAt0.hasCanvas}, inCut=[${windFlowAt0.inCutRatio.toFixed(2)},${windFlowAt135.inCutRatio.toFixed(2)}], dir=[${windFlowAt0.label}->${windFlowAt135.label}], frames=${windFlowAt0.frame}->${windFlowAfterMove.frame}, flowΔ=${flowDelta.toFixed(4)}, rotated=${flowRotated}, trail=${windFlowAt0.maxTrailSegM.toFixed(2)}m (cell=${cellM.toFixed(2)}), bins=${windFlowAt0.binOccupancy.toFixed(2)}, grid=[${grid ? `${grid.minSpeed.toFixed(3)}-${grid.maxSpeed.toFixed(3)} mean=${grid.meanSpeed.toFixed(3)} obst=${(grid.obstacleFraction * 100).toFixed(0)}%` : "n/a"}], heatVar=${heatmapStats.variance.toFixed(0)}, backend=${windFlowAt0.backend}`,
     );
 
     {

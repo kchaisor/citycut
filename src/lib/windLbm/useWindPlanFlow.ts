@@ -13,11 +13,18 @@ import {
 import { LbmGpuSurface } from "./lbmGpu";
 import { obstacleMaskFingerprint, rasterizeBuildingObstacles, windLbmGridSpec } from "./obstacleRaster";
 import type { WindLbmBackend, WindLbmFlowSettings, WindLbmSolverState } from "./types";
-import { flowAlignmentScore, meanFlowVector, particlesInsideCutRatio } from "./windFlowQa";
+import {
+  flowAlignmentScore,
+  lbmGridFlowStats,
+  meanFlowVector,
+  particlesInsideCutRatio,
+} from "./windFlowQa";
 import { runWindLbmCpuSteps } from "./windLbmWorkerClient";
 import {
   WIND_PARTICLE_COUNT,
   advectWindParticles,
+  maxParticleTrailSegmentM,
+  particleBinOccupancyFraction,
   particleFingerprint,
   spawnWindParticles,
   type WindFlowParticle,
@@ -35,6 +42,9 @@ export type WindPlanFlowSnapshot = {
   inCutRatio: number;
   gpuSteps: number;
   gpuHasStepped: boolean;
+  gridStats: ReturnType<typeof lbmGridFlowStats> | null;
+  maxTrailSegM: number;
+  binOccupancy: number;
 };
 
 declare global {
@@ -214,12 +224,17 @@ export function useWindPlanFlow({
         inCutRatio: particlesInsideCutRatio(particlesRef.current, half),
         gpuSteps: gpuRef.current?.gpuStepCount() ?? 0,
         gpuHasStepped: gpuHasSteppedRef.current || (gpuRef.current?.gpuStepCount() ?? 0) > 0,
+        gridStats: solverRef.current ? lbmGridFlowStats(solverRef.current) : null,
+        maxTrailSegM: maxParticleTrailSegmentM(particlesRef.current, half),
+        binOccupancy: particleBinOccupancyFraction(particlesRef.current, sideM, 10),
       }),
     };
     return () => {
       delete window.__citycutQaWindFlow;
     };
-  }, [qaExpose, backend, frame, particleHash, directionDeg, half, gpuHasStepped]);
+  }, [qaExpose, backend, frame, particleHash, directionDeg, half, gpuHasStepped, sideM]);
+
+  const gridStats = solverRef.current ? lbmGridFlowStats(solverRef.current) : null;
 
   return {
     backend,
@@ -233,6 +248,9 @@ export function useWindPlanFlow({
     inCutRatio,
     gpuSteps,
     gpuHasStepped,
+    gridStats,
+    maxTrailSegM: maxParticleTrailSegmentM(particles, half),
+    binOccupancy: particleBinOccupancyFraction(particles, sideM, 10),
   };
 }
 

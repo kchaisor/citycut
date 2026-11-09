@@ -25,6 +25,42 @@ export function particlesInsideCutRatio(particles: readonly WindFlowParticle[], 
   return inside / particles.length;
 }
 
+export function lbmGridFlowStats(state: WindLbmSolverState): {
+  minSpeed: number;
+  maxSpeed: number;
+  meanSpeed: number;
+  obstacleFraction: number;
+  fluidCells: number;
+} {
+  let minSpeed = Number.POSITIVE_INFINITY;
+  let maxSpeed = 0;
+  let sum = 0;
+  let fluidCells = 0;
+  let obstacleCells = 0;
+  for (let i = 0; i < state.ux.length; i++) {
+    if (state.obstacle[i]) {
+      obstacleCells++;
+      continue;
+    }
+    const s = Math.hypot(state.ux[i]!, state.uy[i]!);
+    if (!Number.isFinite(s)) continue;
+    minSpeed = Math.min(minSpeed, s);
+    maxSpeed = Math.max(maxSpeed, s);
+    sum += s;
+    fluidCells++;
+  }
+  if (fluidCells === 0) {
+    return { minSpeed: 0, maxSpeed: 0, meanSpeed: 0, obstacleFraction: 1, fluidCells: 0 };
+  }
+  return {
+    minSpeed: Number.isFinite(minSpeed) ? minSpeed : 0,
+    maxSpeed,
+    meanSpeed: sum / fluidCells,
+    obstacleFraction: obstacleCells / state.ux.length,
+    fluidCells,
+  };
+}
+
 export function flowAlignmentScore(ux: number, uy: number, fromDeg: number): number {
   const rad = (fromDeg * Math.PI) / 180;
   const downEast = -Math.sin(rad);

@@ -300,8 +300,16 @@ export class LbmGpuSurface {
           const ux = macro[o]!;
           const uy = macro[o + 1]!;
           const rho = macro[o + 2]!;
-          state.ux[cell] = Number.isFinite(ux) ? ux : 0;
-          state.uy[cell] = Number.isFinite(uy) ? uy : 0;
+          let uxCl = Number.isFinite(ux) ? ux : 0;
+          let uyCl = Number.isFinite(uy) ? uy : 0;
+          const sp = Math.hypot(uxCl, uyCl);
+          if (sp > 0.28) {
+            const k = 0.28 / sp;
+            uxCl *= k;
+            uyCl *= k;
+          }
+          state.ux[cell] = uxCl;
+          state.uy[cell] = uyCl;
           state.rho[cell] = Number.isFinite(rho) ? rho : 1;
         }
       }

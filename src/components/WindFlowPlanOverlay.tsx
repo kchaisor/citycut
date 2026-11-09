@@ -57,11 +57,14 @@ function drawHeatmap(
   fast: string,
 ) {
   const { spec, obstacle, ux, uy } = state;
-  let maxSpeed = 0.001;
+  const samples: number[] = [];
   for (let i = 0; i < ux.length; i++) {
     if (obstacle[i]) continue;
-    maxSpeed = Math.max(maxSpeed, Math.hypot(ux[i]!, uy[i]!));
+    samples.push(Math.hypot(ux[i]!, uy[i]!));
   }
+  samples.sort((a, b) => a - b);
+  const p90 = samples[Math.floor(samples.length * 0.9)] ?? 0.02;
+  const maxSpeed = Math.max(0.012, p90);
   const calmRgb = hexChannels(cssColorToHex(calm));
   const fastRgb = hexChannels(cssColorToHex(fast));
   const img = ctx.createImageData(width, height);
@@ -80,14 +83,76 @@ function drawHeatmap(
         data[o + 3] = 0;
         continue;
       }
-      const t = Math.min(1, Math.hypot(ux[cell]!, uy[cell]!) / maxSpeed);
+      const speed = Math.hypot(ux[cell]!, uy[cell]!);
+      const t = Math.min(1, Math.pow(speed / maxSpeed, 0.55));
       data[o] = Math.round(calmRgb[0] * (1 - t) + fastRgb[0] * t);
       data[o + 1] = Math.round(calmRgb[1] * (1 - t) + fastRgb[1] * t);
       data[o + 2] = Math.round(calmRgb[2] * (1 - t) + fastRgb[2] * t);
-      data[o + 3] = Math.round(42 + t * 78);
+      data[o + 3] = Math.round(128 + t * 112);
     }
   }
   ctx.putImageData(img, 0, 0);
+}
+
+function strokeTrailSegments(
+  ctx: CanvasRenderingContext2D,
+  p: WindFlowParticle,
+  half: number,
+  layoutW: number,
+  layoutH: number,
+  maxSegM: number,
+  streak: string,
+  streakBright: string,
+) {
+  const trail: { east: number; north: number }[] = [];
+  for (let t = 0; t < WIND_TRAIL_SAMPLES; t++) {
+    const idx = (p.trailHead - t + WIND_TRAIL_SAMPLES) % WIND_TRAIL_SAMPLES;
+    const east = p.trailEast[idx]!;
+    const north = p.trailNorth[idx]!;
+    if (Math.abs(east) > half || Math.abs(north) > half) continue;
+    trail.push({ east, north });
+  }
+  if (trail.length < 2) return;
+  const segments: { east: number; north: number }[][] = [];
+  let current: { east: number; north: number }[] = [trail[trail.length - 1]!];
+  for (let i = trail.length - 2; i >= 0; i--) {
+    const a = current[current.length - 1]!;
+    const b = trail[i]!;
+    const jump = Math.hypot(a.east - b.east, a.north - b.north);
+    if (jump > maxSegM) {
+      if (current.length >= 2) segments.push(current);
+      current = [b];
+    } else {
+      current.push(b);
+    }
+  }
+  if (current.length >= 2) segments.push(current);
+  for (const seg of segments) {
+    if (seg.length < 2) continue;
+    const headPx = eastNorthToCutPx(seg[0]!.east, seg[0]!.north, half, layoutW, layoutH);
+    const tailPx = eastNorthToCutPx(seg[seg.length - 1]!.east, seg[seg.length - 1]!.north, half, layoutW, layoutH);
+    const grad = ctx.createLinearGradient(headPx[0], headPx[1], tailPx[0], tailPx[1]);
+    grad.addColorStop(0, streakBright);
+    grad.addColorStop(1, streak);
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 0.95;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(tailPx[0], tailPx[1]);
+    for (let i = seg.length - 2; i >= 0; i--) {
+      const pt = eastNorthToCutPx(seg[i]!.east, seg[i]!.north, half, layoutW, layoutH);
+      const fade = 1 - i / Math.max(1, seg.length - 1);
+      ctx.globalAlpha = 0.38 + fade * 0.55;
+      ctx.lineTo(pt[0], pt[1]);
+    }
+    ctx.stroke();
+    const head = eastNorthToCutPx(seg[0]!.east, seg[0]!.north, half, layoutW, layoutH);
+    ctx.globalAlpha = 0.72;
+    ctx.fillStyle = streakBright;
+    ctx.beginPath();
+    ctx.arc(head[0], head[1], 0.65, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 export function WindFlowPlanOverlay({
@@ -141,46 +206,19 @@ export function WindFlowPlanOverlay({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, layout.width, layout.height);
     if (solver && showHeatmap) {
+      ctx.save();
+      ctx.globalCompositeOperation = "multiply";
       drawHeatmap(ctx, solver, half, layout.width, layout.height, heatCalm, heatFast);
+      ctx.restore();
     }
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
+    ctx.save();
+    ctx.globalCompositeOperation = "source-over";
+    const maxSegM =
+      solver != null ? (solver.spec.sideM / solver.spec.nx) * 3.2 : (sideM / 256) * 3.2;
     for (const p of particles) {
-      const points: [number, number][] = [];
-      for (let t = 0; t < WIND_TRAIL_SAMPLES; t++) {
-        const idx = (p.trailHead - t + WIND_TRAIL_SAMPLES) % WIND_TRAIL_SAMPLES;
-        const east = p.trailEast[idx]!;
-        const north = p.trailNorth[idx]!;
-        if (Math.abs(east) > half || Math.abs(north) > half) continue;
-        points.push(eastNorthToCutPx(east, north, half, layout.width, layout.height));
-      }
-      if (points.length < 2) continue;
-      const head = points[0]!;
-      const tail = points[points.length - 1]!;
-      if (
-        !Number.isFinite(head[0]) ||
-        !Number.isFinite(head[1]) ||
-        !Number.isFinite(tail[0]) ||
-        !Number.isFinite(tail[1])
-      ) {
-        continue;
-      }
-      const grad = ctx.createLinearGradient(head[0], head[1], tail[0], tail[1]);
-      grad.addColorStop(0, streakBright);
-      grad.addColorStop(1, streak);
-      ctx.strokeStyle = grad;
-      ctx.globalAlpha = 0.88;
-      ctx.lineWidth = 1.05;
-      ctx.beginPath();
-      ctx.moveTo(points[points.length - 1]![0], points[points.length - 1]![1]);
-      for (let i = points.length - 2; i >= 0; i--) {
-        const pt = points[i]!;
-        const fade = 1 - i / Math.max(1, points.length - 1);
-        ctx.globalAlpha = 0.18 + fade * 0.72;
-        ctx.lineTo(pt[0], pt[1]);
-      }
-      ctx.stroke();
+      strokeTrailSegments(ctx, p, half, layout.width, layout.height, maxSegM, streak, streakBright);
     }
+    ctx.restore();
     ctx.globalAlpha = 1;
     const legend = legendRef.current;
     if (legend) {
