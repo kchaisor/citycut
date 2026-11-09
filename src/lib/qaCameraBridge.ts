@@ -8,6 +8,7 @@ export type QaCameraBridge = {
   getCamera: () => QaCameraPose | null;
   frameHeliodon: () => void;
   projectToScreen: (world: { x: number; y: number; z: number }) => { x: number; y: number } | null;
+  heliodonInScene?: () => boolean;
 };
 
 export type QaSiteSnapshot = {
@@ -90,6 +91,8 @@ export function qaHideHeightPopoverFromSearch(search: string): boolean {
 
 export function registerQaCameraBridge(bridge: QaCameraBridge | null): void {
   if (typeof window === "undefined") return;
-  if (bridge) window.__citycutQa = bridge;
-  else delete window.__citycutQa;
+  if (bridge) {
+    const probe = window.__citycutQa?.heliodonInScene;
+    window.__citycutQa = probe ? { ...bridge, heliodonInScene: probe } : bridge;
+  } else delete window.__citycutQa;
 }

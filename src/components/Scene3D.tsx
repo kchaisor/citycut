@@ -1543,6 +1543,7 @@ function QaCameraBridgeRegister({
   lon: number;
 }) {
   const gl = useThree((state) => state.gl);
+  const scene = useThree((state) => state.scene);
   const size = useThree((state) => state.size);
   const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
@@ -1619,12 +1620,14 @@ function QaCameraBridgeRegister({
           y: rect.top + (-vec.y * 0.5 + 0.5) * rect.height,
         };
       },
+      heliodonInScene: () => Boolean(scene.getObjectByName("Heliodon")),
     });
     return () => registerQaCameraBridge(null);
   }, [
     active,
     controlsRef,
     gl,
+    scene,
     groundY,
     heliodonRadius,
     invalidate,
@@ -1638,6 +1641,21 @@ function QaCameraBridgeRegister({
     size.width,
     solar,
   ]);
+  return null;
+}
+
+function QaHeliodonProbe({ showPath }: { showPath: boolean }) {
+  const scene = useThree((state) => state.scene);
+  const qa = typeof window !== "undefined" && qaModeFromSearch(window.location.search);
+  useLayoutEffect(() => {
+    if (!qa) return;
+    const probe = () => Boolean(scene.getObjectByName("Heliodon"));
+    const bridge = window.__citycutQa;
+    if (bridge) bridge.heliodonInScene = probe;
+    return () => {
+      if (window.__citycutQa) delete window.__citycutQa.heliodonInScene;
+    };
+  }, [scene, qa, showPath]);
   return null;
 }
 
@@ -2116,6 +2134,7 @@ export function Scene3D({
         <WebGlContextWatch onContextLost={onGlContextLost} onContextRestored={onGlContextRestored} />
         <SceneDemandBootstrap />
         <SceneFrameloopGate />
+        <QaHeliodonProbe showPath={solar.showPath && !display.whiteCard} />
         <AdaptiveViewportDpr />
         <SceneContinuousBridge
           windAnimate={windEnabled && windAnimateStreaks}

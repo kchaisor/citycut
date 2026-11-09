@@ -3451,17 +3451,15 @@ export function ModelPage({
               <div className="overlay-chips" role="group" aria-label="Scene overlay toggles">
                 {analysisKind === "solar" && (
                   <>
-                    {tab !== "drawing" && (
-                      <button
-                        type="button"
-                        className={solar.showPath ? "ov-chip on" : "ov-chip"}
-                        aria-pressed={solar.showPath}
-                        onClick={() => commitSolar({ ...solar, showPath: !solar.showPath })}
-                      >
-                        <span className="ov-dot" aria-hidden="true" />
-                        <span>3D Sun Dome</span>
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className={solar.showPath ? "ov-chip on" : "ov-chip"}
+                      aria-pressed={solar.showPath}
+                      onClick={() => commitSolar({ ...solar, showPath: !solar.showPath })}
+                    >
+                      <span className="ov-dot" aria-hidden="true" />
+                      <span>{tab === "drawing" ? "Sun dome" : "3D Sun Dome"}</span>
+                    </button>
                     <button
                       type="button"
                       className={solar.castShadows ? "ov-chip on" : "ov-chip"}

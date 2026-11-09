@@ -221,8 +221,16 @@ describe("3D view SVG export", () => {
     expect(withSolar).toContain('inkscape:label="Sun path"');
     expect(withSolar).toContain('inkscape:label="Shadows"');
     expect(withSolar).toMatch(/Jun 21|15h/);
-    const without = await viewSvg(m, testShot(), { uniformBuildings: false, colourBySource: false });
+    const without = await viewSvg(m, testShot(), { uniformBuildings: false, colourBySource: false, solarDiagramOn: false });
     expect(without).not.toContain('inkscape:label="Sun path"');
+
+    const domeOff = await viewSvg(
+      m,
+      shot,
+      { uniformBuildings: false, colourBySource: false, solarDiagramOn: false },
+      { ...solarOn, heliodon: null },
+    );
+    expect(domeOff).not.toContain('inkscape:label="Sun path"');
   });
 
   it("keeps most sun-path geometry in the viewBox for a 1 km iso site-framing export", async () => {

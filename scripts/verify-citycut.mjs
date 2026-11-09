@@ -1194,6 +1194,108 @@ async function main() {
     await analysisBtn.click();
     await page.waitForTimeout(300);
 
+    const sunDomeChip = page.locator(".model .env-console .overlay-chips button", { hasText: "Sun dome" });
+    await sunDomeChip.waitFor({ state: "visible", timeout: 10000 });
+    if (fs.existsSync("/opt/cursor/artifacts")) {
+      await page.locator(".model .bottom-bar.env-console").screenshot({
+        path: path.join("/opt/cursor/artifacts", "drawing-solar-bar-sun-dome-toggle.png"),
+      });
+    }
+    if ((await sunDomeChip.getAttribute("aria-pressed")) !== "true") {
+      await sunDomeChip.click();
+      await page.waitForTimeout(400);
+    }
+    const sunDomeOnPlan = await page.evaluate(
+      () => document.querySelectorAll("svg.plan .heliodon-plan").length,
+    );
+    await sunDomeChip.click();
+    await page.waitForFunction(() => {
+      const btn = [...document.querySelectorAll(".model .env-console .overlay-chips button")].find((el) =>
+        (el.textContent ?? "").includes("Sun dome"),
+      );
+      return btn?.getAttribute("aria-pressed") !== "true";
+    });
+    const sunDomeOffPlan = await page.evaluate(
+      () => document.querySelectorAll("svg.plan .heliodon-plan").length,
+    );
+    const drawingDomeOff = (await sunDomeChip.getAttribute("aria-pressed")) !== "true";
+    const dome3dChip = page.locator(".model .env-console .overlay-chips button", { hasText: "3D Sun Dome" });
+    await page.getByRole("tab", { name: /3D model/i }).click();
+    await page.waitForTimeout(600);
+    await page.locator('.model button[data-section="analysis"]').first().click();
+    await page.locator(".env-console").waitFor({ state: "visible", timeout: 10_000 });
+    await page.waitForTimeout(400);
+    await page.waitForFunction(() => {
+      const btn = [...document.querySelectorAll(".model .env-console .overlay-chips button")].find((el) =>
+        (el.textContent ?? "").includes("3D Sun Dome"),
+      );
+      return btn?.getAttribute("aria-pressed") !== "true";
+    });
+    const domeOffPressed = (await dome3dChip.getAttribute("aria-pressed")) !== "true";
+    const heliodonOffScene = await page.evaluate(
+      () => (window.__citycutQa?.heliodonInScene?.() ?? false) === false,
+    );
+    if (fs.existsSync("/opt/cursor/artifacts")) {
+      await page.locator(".model .viewport").screenshot({
+        path: path.join("/opt/cursor/artifacts", "3d-view-sun-dome-off.png"),
+      });
+    }
+    await page.getByRole("tab", { name: /Drawing/i }).click();
+    await page.waitForTimeout(300);
+    await analysisBtn.click();
+    await page.waitForTimeout(300);
+    await sunDomeChip.click();
+    await page.waitForFunction(() => {
+      const btn = [...document.querySelectorAll(".model .env-console .overlay-chips button")].find((el) =>
+        (el.textContent ?? "").includes("Sun dome"),
+      );
+      return btn?.getAttribute("aria-pressed") === "true";
+    });
+    const drawingDomeOn = (await sunDomeChip.getAttribute("aria-pressed")) === "true";
+    const sunDomeOnPlanAgain = await page.evaluate(
+      () => document.querySelectorAll("svg.plan .heliodon-plan").length,
+    );
+    await page.getByRole("tab", { name: /3D model/i }).click();
+    await page.waitForTimeout(600);
+    await page.locator('.model button[data-section="analysis"]').first().click();
+    await page.locator(".env-console").waitFor({ state: "visible", timeout: 10_000 });
+    await page.waitForTimeout(400);
+    await page.waitForFunction(() => {
+      const btn = [...document.querySelectorAll(".model .env-console .overlay-chips button")].find((el) =>
+        (el.textContent ?? "").includes("3D Sun Dome"),
+      );
+      return btn?.getAttribute("aria-pressed") === "true";
+    });
+    const domeOnPressed = (await dome3dChip.getAttribute("aria-pressed")) === "true";
+  let heliodonOnScene = false;
+  await page
+    .waitForFunction(() => (window.__citycutQa?.heliodonInScene?.() ?? false) === true, null, { timeout: 25_000 })
+    .then(() => {
+      heliodonOnScene = true;
+    })
+    .catch(async () => {
+      heliodonOnScene = await page.evaluate(() => window.__citycutQa?.heliodonInScene?.() ?? false);
+    });
+    await page.getByRole("tab", { name: /Drawing/i }).click();
+    await page.waitForTimeout(300);
+    await analysisBtn.click();
+    await page.waitForTimeout(300);
+
+    assertCheck(
+      "drawing-sun-dome-toggle",
+      "Drawing Solar Study bar shows Sun dome chip; toggling it hides/shows plan overlay and keeps 3D Sun Dome in sync",
+      sunDomeOnPlan > 0 &&
+        sunDomeOffPlan === 0 &&
+        drawingDomeOff &&
+        domeOffPressed &&
+        heliodonOffScene &&
+        drawingDomeOn &&
+        sunDomeOnPlanAgain > 0 &&
+        domeOnPressed &&
+        heliodonOnScene,
+      `planOverlay=${sunDomeOnPlan}->${sunDomeOffPlan}->${sunDomeOnPlanAgain}, drawingPressed=${drawingDomeOff}->${drawingDomeOn}, 3dPressed=${domeOffPressed}->${domeOnPressed}, heliodonScene=${heliodonOffScene}->${heliodonOnScene}`,
+    );
+
     const planFanBtn = page.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
     await planFanBtn.click();
     await page.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 10000 });
@@ -1232,7 +1334,8 @@ async function main() {
         }
       }
       return {
-        has3dSunDomeInDrawing: envText.includes("3D Sun Dome"),
+        hasSunDomeInDrawing: envText.includes("Sun dome"),
+        has3dSunDomeLabelInDrawing: envText.includes("3D Sun Dome"),
         hasPlanFanInDrawing: envText.includes("9–3pm Plan Fan"),
         shadowPaths,
         shadowDLength,
@@ -1266,14 +1369,15 @@ async function main() {
 
     assertCheck(
       "drawing-sun-study-selection",
-      "In Drawing -> Site plan, 3D Sun Dome is hidden, 9–3pm Plan Fan is shown, and clicking buildings isolates 9–3pm shadows strictly to the selected yellow buildings",
-      !beforeSelectInfo.has3dSunDomeInDrawing &&
+      "In Drawing -> Site plan, Sun dome chip is shown (not 3D Sun Dome label), 9–3pm Plan Fan is shown, and clicking buildings isolates 9–3pm shadows strictly to the selected yellow buildings",
+      beforeSelectInfo.hasSunDomeInDrawing &&
+        !beforeSelectInfo.has3dSunDomeLabelInDrawing &&
         beforeSelectInfo.hasPlanFanInDrawing &&
         afterSelectInfo.selectedCount >= 1 &&
         afterSelectInfo.nonEmptyLayers === 7 &&
         afterSelectInfo.shadowPaths > 0 &&
         afterSelectInfo.shadowDLength < beforeSelectInfo.shadowDLength * 0.25,
-      `3dDomeInDrawing=${beforeSelectInfo.has3dSunDomeInDrawing}, planFanInDrawing=${beforeSelectInfo.hasPlanFanInDrawing}, selectedCount=${afterSelectInfo.selectedCount}, shadowDLength=${beforeSelectInfo.shadowDLength}->${afterSelectInfo.shadowDLength}, layers=${afterSelectInfo.nonEmptyLayers}`,
+      `sunDomeInDrawing=${beforeSelectInfo.hasSunDomeInDrawing}, 3dLabelInDrawing=${beforeSelectInfo.has3dSunDomeLabelInDrawing}, planFanInDrawing=${beforeSelectInfo.hasPlanFanInDrawing}, selectedCount=${afterSelectInfo.selectedCount}, shadowDLength=${beforeSelectInfo.shadowDLength}->${afterSelectInfo.shadowDLength}, layers=${afterSelectInfo.nonEmptyLayers}`,
     );
 
     {
