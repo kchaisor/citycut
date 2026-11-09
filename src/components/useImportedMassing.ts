@@ -48,6 +48,7 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     let cancelled = false;
     setImported([]);
     void loadStoredMassing(cutKey).then(async (rows) => {
+      if (rows.length > 0) void loadRuntime().then(setRt);
       const out: ImportedMassing[] = [];
       for (const row of rows) {
         try {

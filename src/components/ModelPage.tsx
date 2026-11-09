@@ -54,6 +54,7 @@ import {
 } from "../lib/explodedAxo";
 import { explodedAxoViewportExtent, planViewportExtent, type PlanViewport } from "../lib/planViewport";
 import { FIGURE_SCALES, preferredFigureScale, sheetFitMessage } from "../lib/figureGround";
+import { drawingModelBuildings } from "../lib/drawingModelBuildings";
 import {
   fetchComBuildingFootprints,
   intersectsComCity,
@@ -965,11 +966,11 @@ export function ModelPage({
     const landscapeVisible = isLayer3dVisible(view3dDisplay, "landscape");
     const waterVisible = isLayer3dVisible(view3dDisplay, "water");
     const contoursVisible = isLayer3dVisible(view3dDisplay, "contours");
-    const baseBuildings = buildingsVisible
-      ? massing.drawingBuildings.length
-        ? [...displayModel.buildings, ...massing.drawingBuildings]
-        : displayModel.buildings
-      : [];
+    const baseBuildings = drawingModelBuildings(
+      displayModel.buildings,
+      massing.drawingBuildings,
+      buildingsVisible,
+    );
     return {
       ...displayModel,
       buildings: baseBuildings,

@@ -1,14 +1,23 @@
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
 import { describe, expect, it } from "vitest";
 import { projectLocal } from "./crs";
+import { drawingModelBuildings } from "./drawingModelBuildings";
 import { figureGroundModelPaths } from "./figureGround";
 import { filterHiddenBuildings, hideBuildings, matchHiddenBuildings, emptyHiddenStore } from "./hiddenBuildings";
 import { massingDrawingBuildings, massingFootprint } from "./massingFootprint";
-import type { ImportedMassing } from "./massingImport";
+import { mgaPlacement, parseMassing3dm, type ImportedMassing } from "./massingImport";
+import { loadRhino } from "./rhinoExport";
+import { buildAxoMassingFaces } from "./explodedAxoMassing";
 import { sitePlanAi } from "./aiPlan";
 import { explodedAxoChunks } from "./explodedAxoExport";
 import { defaultExplodedAxoSettings } from "./explodedAxo";
+import { getColour } from "./colours";
+import { hexRgb } from "./lineweights";
 import { planPaths } from "./svgPlan";
 import type { BuildingFeat, CityModel, Pt } from "../types";
+
+const fixture3dm = fileURLToPath(new URL("./__fixtures__/east-melbourne-import-massing.3dm", import.meta.url));
 
 const origin = { lon: 144.98038, lat: -37.81356 };
 const zone = 55;
@@ -86,14 +95,62 @@ describe("imported massing and hidden buildings in Drawing", () => {
     expect(planPaths(display).buildings).toHaveLength(1);
   }, 30_000);
 
-  it("figure-ground and exploded axo count imported massing as figure and drop hidden buildings", () => {
+  it("figure-ground and exploded axo export include imported massing solids", () => {
     const display = { ...model, buildings: [other] };
-    const drawing = { ...display, buildings: [...display.buildings, ...massingDrawingBuildings([boxMassing()], origin, zone)] };
+    const imported = massingDrawingBuildings([boxMassing()], origin, zone);
+    const drawing = { ...display, buildings: [...display.buildings, ...imported] };
     expect(figureGroundModelPaths(display.buildings, model.sideM)).toHaveLength(1);
     expect(figureGroundModelPaths(drawing.buildings, model.sideM)).toHaveLength(2);
-    const axo = (m: CityModel) => JSON.stringify(explodedAxoChunks(m, 1000, defaultExplodedAxoSettings(m.sideM))).length;
-    expect(axo(drawing)).toBeGreaterThan(axo(display));
+    const { faces } = buildAxoMassingFaces(drawing);
+    const importedHex = getColour("--imported-massing");
+    expect(faces.some((face) => face.fill === importedHex)).toBe(true);
+    const chunks = explodedAxoChunks(drawing, 1000, defaultExplodedAxoSettings(model.sideM));
+    const importedRgb = hexRgb(importedHex);
+    const buildingsChunk = chunks.find((chunk) => chunk.name === "Buildings");
+    expect(
+      buildingsChunk?.paths?.some(
+        (path) =>
+          path.fill?.[0] === importedRgb[0] &&
+          path.fill?.[1] === importedRgb[1] &&
+          path.fill?.[2] === importedRgb[2],
+      ),
+    ).toBe(true);
   });
+
+  it("parsed east-melbourne-import-massing.3dm lands in plan and exploded axo exports", async () => {
+    const rhino = await loadRhino();
+    const parsed = parseMassing3dm(rhino, readFileSync(fixture3dm));
+    const item: ImportedMassing = {
+      ...parsed,
+      id: "fixture",
+      name: "east-melbourne-import-massing.3dm",
+      fileBytes: parsed.positions.byteLength,
+      mode: "mga",
+      visible: true,
+      placement: mgaPlacement(parsed),
+    };
+    const imported = massingDrawingBuildings([item], origin, zone);
+    expect(imported).toHaveLength(1);
+    expect(imported[0]!.importedMassing).toBe(true);
+    const drawing = { ...model, buildings: drawingModelBuildings(model.buildings, imported, false) };
+    expect(drawing.buildings).toEqual(imported);
+    const plan = planPaths(drawing);
+    expect(plan.buildings.filter((b) => b.imported)).toHaveLength(1);
+    const bytes = await sitePlanAi(drawing, 1000);
+    expect(new TextDecoder("latin1").decode(bytes)).toContain("Imported massing");
+    const importedHex = getColour("--imported-massing");
+    const importedRgb = hexRgb(importedHex);
+    const chunks = explodedAxoChunks(drawing, 1000, defaultExplodedAxoSettings(model.sideM));
+    const buildingsChunk = chunks.find((chunk) => chunk.name === "Buildings");
+    expect(
+      buildingsChunk?.paths?.some(
+        (path) =>
+          path.fill?.[0] === importedRgb[0] &&
+          path.fill?.[1] === importedRgb[1] &&
+          path.fill?.[2] === importedRgb[2],
+      ),
+    ).toBe(true);
+  }, 30_000);
 
   it("hidden imported models are left out of drawings", () => {
     expect(massingDrawingBuildings([{ ...boxMassing(), visible: false }], origin, zone)).toEqual([]);
