@@ -10,6 +10,7 @@ export type ExportBusy =
   | "svg-site"
   | "svg-figure"
   | "svg-isometric"
+  | "svg-view"
   | null;
 export type DrawingKindForExport = "site" | "figure-ground" | "exploded-axo" | "isometric";
 
@@ -38,7 +39,7 @@ export type ExportTileInput = {
 export const ILLUSTRATOR_DISABLED_TOOLTIP =
   "Illustrator exports the vector drawings. Open the Drawing tab: site plan, figure-ground or exploded axo.";
 export const SVG_DISABLED_TOOLTIP =
-  "SVG exports the site plan or figure-ground. Open the Drawing tab and pick one of those drawings.";
+  "SVG exports the live 3D view or a vector drawing. Open the 3D model tab or switch to Drawing.";
 export const PNG_DISABLED_TOOLTIP = "PNG captures the 3D view. Open the 3D model tab.";
 
 const AI_BY_DRAWING: Record<DrawingKindForExport, { aria: string; busy: ExportBusy; text: (scale: number) => string }> = {
@@ -67,25 +68,29 @@ const AI_BY_DRAWING: Record<DrawingKindForExport, { aria: string; busy: ExportBu
 export function exportTiles(input: ExportTileInput): ExportTile[] {
   const anyBusy = input.busy !== null;
   const vector = input.tab === "drawing";
+  const viewSvg = input.tab === "3d";
   const ai = AI_BY_DRAWING[input.drawing];
   const hourly = input.sunStudy && input.drawing === "site";
-  const svgOn = vector && input.drawing !== "exploded-axo";
-  const svgBusy: ExportBusy =
-    input.drawing === "figure-ground"
+  const svgOn = viewSvg || (vector && input.drawing !== "exploded-axo");
+  const svgBusy: ExportBusy = viewSvg
+    ? "svg-view"
+    : input.drawing === "figure-ground"
       ? "svg-figure"
       : input.drawing === "isometric"
         ? "svg-isometric"
         : "svg-site";
-  const svgAria =
-    input.drawing === "figure-ground"
+  const svgAria = viewSvg
+    ? "Download 3D view SVG"
+    : input.drawing === "figure-ground"
       ? "Download figure-ground SVG"
       : input.drawing === "isometric"
         ? "Download isometric SVG"
         : input.drawing === "site"
           ? "Download site plan SVG"
           : "Download SVG";
-  const svgLabel =
-    input.drawing === "site"
+  const svgLabel = viewSvg
+    ? "3D view"
+    : input.drawing === "site"
       ? "site plan"
       : input.drawing === "isometric"
         ? "isometric 3D drawing"
@@ -117,7 +122,9 @@ export function exportTiles(input: ExportTileInput): ExportTile[] {
       app: "SVG",
       ext: ".svg",
       description: svgOn
-        ? `The ${svgLabel} as a layered SVG in millimetres at 1:${input.figureScale}, the same layers as the .ai.` + (hourly ? hourlyNote : "")
+        ? viewSvg
+          ? "The current 3D view as a layered SVG vector capture, including the sun dome and shadows when Solar Study has them on."
+          : `The ${svgLabel} as a layered SVG in millimetres at 1:${input.figureScale}, the same layers as the .ai.` + (hourly ? hourlyNote : "")
         : SVG_DISABLED_TOOLTIP,
       enabled: svgOn && !anyBusy,
       disabledReason: svgOn ? null : SVG_DISABLED_TOOLTIP,

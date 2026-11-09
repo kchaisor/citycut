@@ -30,7 +30,7 @@ async function sourceFiles(dir: string): Promise<string[]> {
 
 const SOLAR_NEUTRAL_BUILDINGS = "--building-solar-neutral";
 
-const SOLAR_NEUTRAL_BUILDING_ALLOWLIST = new Set(["components/Scene3D.tsx", "lib/colours.ts"]);
+const SOLAR_NEUTRAL_BUILDING_ALLOWLIST = new Set(["components/Scene3D.tsx", "lib/aiView.ts", "lib/colours.ts"]);
 
 describe("colour selection", () => {
   it("keeps solar neutral building fill off the plan drawing", async () => {

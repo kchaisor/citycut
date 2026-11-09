@@ -20,6 +20,10 @@ import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { comTreesCreditLine } from "./comTreesCredit";
 import { stableExportModel } from "./exportStableOrder";
 import { contourDrapeStepM, contourPolylinesForModel, drapeContourSegments } from "./contourLines3d";
+import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
+import type { HeliodonGroundExportOptions } from "./heliodonDiagram";
+import { heliodonViewChunks } from "./heliodonViewExport";
+import { SINGLE_SHADOW_OPACITY } from "./sunStudyPlan";
 import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
 
 export const VIEW_LAYER_ORDER = [
@@ -36,6 +40,17 @@ export const VIEW_LAYER_ORDER = [
   "Outlines",
   "Annotation",
 ] as const;
+
+export function viewLayerOrder(chunks: PdfChunk[]): string[] {
+  const order: string[] = [...VIEW_LAYER_ORDER];
+  if (chunks.some((chunk) => chunk.name === "Shadows")) {
+    order.splice(order.indexOf("Buildings"), 0, "Shadows");
+  }
+  if (chunks.some((chunk) => chunk.name === "Sun path")) {
+    order.splice(order.indexOf("Outlines"), 0, "Sun path");
+  }
+  return order;
+}
 
 export const VIEW_OUTLINE_MM = 0.18;
 
@@ -72,6 +87,14 @@ export type ViewStyle = {
   showOutlines?: boolean;
   showContours?: boolean;
   hideTrees?: boolean;
+  solarDiagramOn?: boolean;
+};
+
+export type ViewSolarExport = {
+  heliodon?: HeliodonGroundExportOptions | null;
+  shadows?: PlanShadowInput | null;
+  castShadows?: boolean;
+  groundY?: number;
 };
 
 type Fill = {
@@ -145,7 +168,7 @@ function lit(color: Rgb, normal: Vec3, strength = 0.58): Rgb {
   return [color[0] * factor, color[1] * factor, color[2] * factor];
 }
 
-function project(shot: CameraShot, world: Vec3, pageW: number, pageH: number): V2 | null {
+export function projectShotPoint(shot: CameraShot, world: Vec3, pageW: number, pageH: number): V2 | null {
   const e = shot.projectionView;
   const x = world[0];
   const y = world[1];
@@ -187,6 +210,7 @@ function cardGround(): Rgb {
 }
 
 function buildingColor(building: BuildingFeat, style: ViewStyle): Rgb {
+  if (style.solarDiagramOn) return hexRgb(getColour("--building-solar-neutral"));
   if (style.whiteCard) return cardWhite();
   if (style.colourBySource) return hexRgb(SOURCE_META[building.source].color);
   if (style.uniformBuildings) return hexRgb(uniformBuildingColor());
@@ -407,11 +431,14 @@ function pushTri(
     [corners[1][0] - corners[0][0], corners[1][1] - corners[0][1], corners[1][2] - corners[0][2]],
     [corners[2][0] - corners[0][0], corners[2][1] - corners[0][1], corners[2][2] - corners[0][2]],
   );
-  if (!facesCamera(normal, forward)) return;
-  const projected = corners.map((corner) => project(shot, corner, pageW, pageH));
+  if (layer !== "Shadows" && !facesCamera(normal, forward)) return;
+  const projected = corners.map((corner) => projectShotPoint(shot, corner, pageW, pageH));
   if (projected.some((point) => point === null)) return;
   const poly = projected as V2[];
-  const shade = lit(color, normal, layer === "Ground" || layer === GROUND_REMAINING_LAYER ? 0.22 : 0.58);
+  const shade =
+    layer === "Shadows"
+      ? color
+      : lit(color, normal, layer === "Ground" || layer === GROUND_REMAINING_LAYER ? 0.22 : 0.58);
   const depth = poly.reduce((sum, point) => sum + point.z, 0) / poly.length;
   const faceOcc: Occ[] = [];
   for (let i = 1; i < poly.length - 1; i++) {
@@ -453,12 +480,46 @@ function shadeHeight(t: number): Rgb {
   return [0.718 + (0.953 - 0.718) * u, 0.655 + (0.925 - 0.655) * u, 0.576 + (0.898 - 0.576) * u];
 }
 
+function appendViewShadowFills(
+  model: CityModel,
+  shot: CameraShot,
+  pageW: number,
+  pageH: number,
+  solar: ViewSolarExport | undefined,
+  fills: Fill[],
+  edges: Edge[],
+  occ: Occ[],
+  nextId: { n: number },
+) {
+  if (!solar?.shadows || !solar.castShadows) return;
+  const forward = shot.forward;
+  const color = fillOf("--shadow-fill");
+  const field = model.terrain;
+  const lift = 0.15;
+  const yAt = (east: number, north: number) =>
+    (field ? sampleTerrain(field, east, north, model.sideM) : solar.groundY ?? 0) + lift;
+  for (const polygon of planShadowRings(model, solar.shadows, true)) {
+    if (polygon.length === 0) continue;
+    const outer = orient(polygon[0]!, true);
+    const holes = polygon.slice(1).map((ring) => orient(ring, false));
+    for (const tri of shapeTriangles(outer, holes, yAt)) {
+      pushTri(fills, edges, occ, nextId.n++, faceUp(tri), color, "Shadows", 3.4, false, shot, pageW, pageH, forward);
+      const path = fills[fills.length - 1]?.chunk.paths?.[0];
+      if (path) {
+        path.opacity = SINGLE_SHADOW_OPACITY;
+        path.evenOdd = holes.length > 0;
+      }
+    }
+  }
+}
+
 function collect(
   model: CityModel,
   shot: CameraShot,
   style: ViewStyle,
   pageW: number,
   pageH: number,
+  solar?: ViewSolarExport,
 ): { fills: Fill[]; edges: Edge[]; trees: Fill[]; contours: Edge[] } {
   const forward = shot.forward;
   const half = model.sideM / 2;
@@ -568,7 +629,7 @@ function collect(
         .map((ring) => ring.map((point) => worldOf(point[0], point[1], y)));
       const outer = loops[0];
       if (!outer || outer.length < 3) return;
-      const projected = loops.map((loop) => loop.map((corner) => project(shot, corner, pageW, pageH)));
+      const projected = loops.map((loop) => loop.map((corner) => projectShotPoint(shot, corner, pageW, pageH)));
       if (projected.some((loop) => loop.some((point) => point === null))) return;
       const poly = projected as V2[][];
       const depth = poly[0].reduce((sum, point) => sum + point.z, 0) / poly[0].length;
@@ -672,7 +733,7 @@ function collect(
       const roofLoops = [orient(part.ring, true), ...part.holes.map((hole) => orient(hole, false))];
       for (const loop of roofLoops) {
         if (loop.length < 3) continue;
-        const projected = loop.map((point) => project(shot, worldOf(point[0], point[1], top), pageW, pageH));
+        const projected = loop.map((point) => projectShotPoint(shot, worldOf(point[0], point[1], top), pageW, pageH));
         if (projected.some((point) => point === null)) continue;
         const poly = projected as V2[];
         if (!facesCamera([0, 1, 0], forward)) continue;
@@ -691,14 +752,14 @@ function collect(
     const groundY = sample ? sample(east, north) : 0;
     const radius = Math.max(tree.crown_diameter_m / 2, 0.4);
     const mid = groundY + tree.height_m * 0.45;
-    const centre = project(shot, worldOf(east, north, mid), pageW, pageH);
-    const eastPoint = project(shot, worldOf(east + radius, north, mid), pageW, pageH);
-    const northPoint = project(shot, worldOf(east, north + radius, mid), pageW, pageH);
+    const centre = projectShotPoint(shot, worldOf(east, north, mid), pageW, pageH);
+    const eastPoint = projectShotPoint(shot, worldOf(east + radius, north, mid), pageW, pageH);
+    const northPoint = projectShotPoint(shot, worldOf(east, north + radius, mid), pageW, pageH);
     if (!centre || !eastPoint || !northPoint) continue;
     const rx = Math.max(0.15, Math.hypot(eastPoint.x - centre.x, eastPoint.y - centre.y));
     const ry = Math.max(0.15, Math.hypot(northPoint.x - centre.x, northPoint.y - centre.y));
-    const base = project(shot, worldOf(east, north, groundY), pageW, pageH);
-    const trunk = project(shot, worldOf(east, north, groundY + Math.min(tree.height_m * 0.34, radius * 1.4)), pageW, pageH);
+    const base = projectShotPoint(shot, worldOf(east, north, groundY), pageW, pageH);
+    const trunk = projectShotPoint(shot, worldOf(east, north, groundY + Math.min(tree.height_m * 0.34, radius * 1.4)), pageW, pageH);
     const paths =
       base && trunk
         ? [
@@ -744,21 +805,28 @@ function collect(
       lift,
     );
     for (let i = 0; i + 5 < positions.length; i += 6) {
-      const pa = project(shot, [positions[i]!, positions[i + 1]!, positions[i + 2]!], pageW, pageH);
-      const pb = project(shot, [positions[i + 3]!, positions[i + 4]!, positions[i + 5]!], pageW, pageH);
+      const pa = projectShotPoint(shot, [positions[i]!, positions[i + 1]!, positions[i + 2]!], pageW, pageH);
+      const pb = projectShotPoint(shot, [positions[i + 3]!, positions[i + 4]!, positions[i + 5]!], pageW, pageH);
       if (pa && pb) contours.push({ a: pa, b: pb, id: -1 });
     }
   }
 
+  appendViewShadowFills(model, shot, pageW, pageH, solar, fills, edges, occ, { n: nextId });
+
   return { fills, edges, trees, contours };
 }
 
-export function viewChunks(model: CityModel, shot: CameraShot, style: ViewStyle): PdfChunk[] {
+export function viewChunks(
+  model: CityModel,
+  shot: CameraShot,
+  style: ViewStyle,
+  solar?: ViewSolarExport,
+): PdfChunk[] {
   model = stableExportModel(model);
   const page = viewPageMm(shot.width, shot.height);
   const ink = fillOf("--view-ink");
   const backdrop = fillOf("--export-backdrop");
-  const { fills, edges, trees, contours } = collect(model, shot, style, page.widthMm, page.heightMm);
+  const { fills, edges, trees, contours } = collect(model, shot, style, page.widthMm, page.heightMm, solar);
   const ordered = [...fills, ...trees].sort((a, b) => b.depth - a.depth || a.rank - b.rank);
   const occ = fills.flatMap((fill) => fill.occ);
   const cells = gridIndex(occ, page.widthMm, page.heightMm);
@@ -838,6 +906,20 @@ export function viewChunks(model: CityModel, shot: CameraShot, style: ViewStyle)
     ],
     texts,
   });
+  if (solar?.heliodon) {
+    const groundY = solar.groundY ?? (model.terrain ? model.terrain.min : 0);
+    chunks.push(
+      ...heliodonViewChunks(
+        projectShotPoint,
+        shot,
+        page.widthMm,
+        page.heightMm,
+        solar.heliodon,
+        model.terrain,
+        groundY,
+      ),
+    );
+  }
   return chunks;
 }
 
@@ -852,17 +934,35 @@ function edgeKey(a: V2, b: V2): string {
   return left < right ? `${left}|${right}` : `${right}|${left}`;
 }
 
-export async function viewAi(model: CityModel, shot: CameraShot, style: ViewStyle): Promise<Uint8Array> {
+export async function viewSvg(
+  model: CityModel,
+  shot: CameraShot,
+  style: ViewStyle,
+  solar?: ViewSolarExport,
+): Promise<string> {
+  const page = viewPageMm(shot.width, shot.height);
+  const { buildLayeredSvg } = await import("./svgDocument");
+  const chunks = viewChunks(model, shot, style, solar);
+  return buildLayeredSvg(page.widthMm, page.heightMm, chunks, viewLayerOrder(chunks));
+}
+
+export async function viewAi(
+  model: CityModel,
+  shot: CameraShot,
+  style: ViewStyle,
+  solar?: ViewSolarExport,
+): Promise<Uint8Array> {
   const page = viewPageMm(shot.width, shot.height);
   const title = `${model.placeLabel} · 3D view · ${formatCoord(model.center.lat)}, ${formatCoord(model.center.lon)}`;
-  const chunks = viewChunks(model, shot, style);
+  const chunks = viewChunks(model, shot, style, solar);
+  const order = viewLayerOrder(chunks);
   if (useNativeAi8Export()) {
-    return buildLayeredNativeAi(page.widthMm, page.heightMm, chunks, VIEW_LAYER_ORDER, title);
+    return buildLayeredNativeAi(page.widthMm, page.heightMm, chunks, order, title);
   }
   if (import.meta.env.VITE_CITYCUT_AI_PDF_OPS === "true") {
-    return buildLayeredNativeAiPdfOps(page.widthMm, page.heightMm, chunks, VIEW_LAYER_ORDER, title);
+    return buildLayeredNativeAiPdfOps(page.widthMm, page.heightMm, chunks, order, title);
   }
-  return buildLayeredPdf(page.widthMm, page.heightMm, chunks, VIEW_LAYER_ORDER);
+  return buildLayeredPdf(page.widthMm, page.heightMm, chunks, order);
 }
 
 function transportPaths(
@@ -888,8 +988,8 @@ function transportPaths(
     geometry.dispose();
     const color = hexRgb(stroke.color);
     for (let i = 0; i + 5 < positions.length; i += 6) {
-      const a = project(shot, [positions[i]!, positions[i + 1]!, positions[i + 2]!], pageW, pageH);
-      const b = project(shot, [positions[i + 3]!, positions[i + 4]!, positions[i + 5]!], pageW, pageH);
+      const a = projectShotPoint(shot, [positions[i]!, positions[i + 1]!, positions[i + 2]!], pageW, pageH);
+      const b = projectShotPoint(shot, [positions[i + 3]!, positions[i + 4]!, positions[i + 5]!], pageW, pageH);
       if (!a || !b) continue;
       for (const [p, q] of clipEdge(a, b, candidates(cells, a, b, pageW, pageH), -1)) {
         paths.push({ rings: [[[p.x, p.y], [q.x, q.y]]], close: false, stroke: color, strokeMm: stroke.mm, cap: "butt", join: "round" });

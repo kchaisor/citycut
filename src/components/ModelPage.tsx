@@ -37,6 +37,7 @@ import {
   downloadSiteSvg,
   downloadFigureSvg,
   downloadSunStudyZip,
+  downloadViewSvg,
   pngFilename,
 } from "../lib/download";
 import { sunStudyDateText } from "../lib/sunStudyExport";
@@ -1511,6 +1512,40 @@ export function ModelPage({
     }
   }
 
+  async function saveViewSvg() {
+    setExportError(null);
+    setBusy("svg-view");
+    try {
+      const exporter = exportRef.current;
+      if (!exporter) throw new Error("The 3D view is not ready.");
+      const shot = exporter.shot();
+      const groundY = model.terrain ? model.terrain.min : 0;
+      await downloadViewSvg(
+        displayModel,
+        shot,
+        {
+          uniformBuildings: !colourByUse && !showSource,
+          colourBySource: showSource,
+          whiteCard: view3dDisplay.whiteCard,
+          showOutlines: view3dDisplay.showOutlines,
+          showContours: isLayer3dVisible(view3dDisplay, "contours"),
+          hideTrees: view3dDisplay.hideTrees,
+          solarDiagramOn: solar.showPath && !view3dDisplay.whiteCard,
+        },
+        {
+          heliodon: heliodonRhinoExport(),
+          shadows: planShadowInput(),
+          castShadows: solar.castShadows,
+          groundY,
+        },
+      );
+    } catch {
+      setExportError("The 3D view SVG could not be written.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const figureFit = sheetFitMessage(model.sideM, figureScale);
   const useCounts = countUses(model.buildings);
   const sourceCounts = countSourcesGrouped(displayModel.buildings);
@@ -2160,6 +2195,15 @@ export function ModelPage({
                           <line x1="12" y1="15" x2="12" y2="3" />
                         </svg>
                         Rhino .3dm
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-export-png studio-export-btn"
+                        aria-label="Quick export SVG"
+                        disabled={busy !== null}
+                        onClick={() => void saveViewSvg()}
+                      >
+                        .svg
                       </button>
                       <button
                         type="button"
@@ -3205,11 +3249,13 @@ export function ModelPage({
                     else if (id === "png") void savePng();
                     else if (id === "sun-zip") void saveSunStudyAi();
                     else if (id === "svg")
-                      void (drawing === "figure-ground"
-                        ? saveFigureSvg()
-                        : drawing === "isometric"
-                          ? saveIsometricSvg()
-                          : saveSiteSvg());
+                      void (tab === "3d"
+                        ? saveViewSvg()
+                        : drawing === "figure-ground"
+                          ? saveFigureSvg()
+                          : drawing === "isometric"
+                            ? saveIsometricSvg()
+                            : saveSiteSvg());
                     else if (drawing === "site") void saveSiteAi();
                     else if (drawing === "figure-ground") void saveFigureAi();
                     else if (drawing === "isometric") void saveIsometricAi();

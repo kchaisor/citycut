@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exportTiles, ILLUSTRATOR_DISABLED_TOOLTIP, PNG_DISABLED_TOOLTIP, SVG_DISABLED_TOOLTIP, type ExportTileInput } from "./exportTiles";
+import { exportTiles, ILLUSTRATOR_DISABLED_TOOLTIP, PNG_DISABLED_TOOLTIP, type ExportTileInput } from "./exportTiles";
 
 const base: ExportTileInput = {
   tab: "3d",
@@ -52,8 +52,8 @@ describe("export tiles", () => {
   });
 
   it("offers a layered SVG for the site plan, figure-ground, and isometric drawing", () => {
-    expect(byId(base).svg.enabled).toBe(false);
-    expect(byId(base).svg.disabledReason).toBe(SVG_DISABLED_TOOLTIP);
+    expect(byId(base).svg.enabled).toBe(true);
+    expect(byId(base).svg.ariaLabel).toBe("Download 3D view SVG");
     const site = byId({ ...base, tab: "drawing", drawing: "site" }).svg;
     expect([site.enabled, site.ariaLabel]).toEqual([true, "Download site plan SVG"]);
     const figure = byId({ ...base, tab: "drawing", drawing: "figure-ground" }).svg;

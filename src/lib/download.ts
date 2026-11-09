@@ -140,6 +140,17 @@ export async function downloadViewAi(model: CityModel, shot: CameraShot, style: 
   downloadBytes(aiFilename(model, "view"), bytes, "application/pdf");
 }
 
+export async function downloadViewSvg(
+  model: CityModel,
+  shot: CameraShot,
+  style: import("./aiView").ViewStyle,
+  solar?: import("./aiView").ViewSolarExport,
+): Promise<void> {
+  const { viewSvg } = await import("./aiView");
+  const text = await viewSvg(model, shot, style, solar);
+  downloadBlob(`${fileStem(model)}-view.svg`, new Blob([text], { type: "image/svg+xml" }));
+}
+
 export async function downloadSunStudyZip(
   model: CityModel,
   scale: number,
