@@ -1,5 +1,5 @@
 import { LBM_Q } from "./lbmConstants";
-import { applyInletOutlet } from "./lbmCpu";
+import { applyInletOutlet } from "./lbmBoundary";
 import type { WindLbmSolverState } from "./types";
 
 type GpuCtx = {

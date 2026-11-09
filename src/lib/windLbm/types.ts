@@ -2,6 +2,7 @@ export type WindLbmGridSpec = {
   nx: number;
   ny: number;
   sideM: number;
+  cutSideM: number;
 };
 
 export type WindLbmInflow = {

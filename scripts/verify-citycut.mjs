@@ -1333,8 +1333,12 @@ async function main() {
         gridStats: snap?.gridStats ?? null,
         maxTrailSegM: snap?.maxTrailSegM ?? 999,
         binOccupancy: snap?.binOccupancy ?? 0,
-        sideM: snap?.solver?.spec?.sideM ?? 0,
+        cutSideM: snap?.solver?.spec?.cutSideM ?? 0,
         nx: snap?.solver?.spec?.nx ?? 256,
+        cutStats: snap?.cutStats ?? null,
+        warmUpSteps: snap?.warmUpSteps ?? 0,
+        normSpeed: snap?.normSpeed ?? 0,
+        lastFrameMs: snap?.lastFrameMs ?? 0,
       };
     });
     await page.waitForTimeout(1400);
@@ -1346,7 +1350,7 @@ async function main() {
       };
     });
   if (fs.existsSync(ARTIFACTS_DIR)) {
-      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "wind-flow-drawing-from-0.png") });
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "wind-flow-cbd-from-0.png") });
     }
     await setWindFromDeg(135);
     await page.waitForTimeout(5200);
@@ -1365,7 +1369,7 @@ async function main() {
       };
     });
     if (fs.existsSync(ARTIFACTS_DIR)) {
-      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "wind-flow-drawing-from-135.png") });
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "wind-flow-cbd-from-135.png") });
     }
     await page.evaluate(() => {
       const btn = [...document.querySelectorAll(".model .env-console .overlay-chips button")].find((el) =>
@@ -1399,7 +1403,7 @@ async function main() {
       return { variance, alphaHits };
     });
     if (fs.existsSync(ARTIFACTS_DIR)) {
-      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "wind-flow-drawing-heatmap.png") });
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "wind-flow-cbd-heatmap.png") });
     }
     const flowDelta = Math.hypot(windFlowAt135.meanUx - windFlowAt0.meanUx, windFlowAt135.meanUy - windFlowAt0.meanUy);
     const scrubDeg = (label) => {
@@ -1418,7 +1422,7 @@ async function main() {
       windFlowAt135.gpuHasStepped ||
       windFlowAt0.gpuSteps > 0 ||
       windFlowAt135.gpuSteps > 0;
-    const cellM = windFlowAt0.sideM > 0 ? windFlowAt0.sideM / windFlowAt0.nx : 0.5;
+    const cellM = windFlowAt0.cutSideM > 0 ? windFlowAt0.cutSideM / windFlowAt0.nx : 0.5;
     const trailOk = windFlowAt0.maxTrailSegM <= cellM * 3.6;
     const spreadOk = windFlowAt0.binOccupancy >= 0.6;
     const grid = windFlowAt0.gridStats;
@@ -1427,6 +1431,13 @@ async function main() {
       grid.maxSpeed > grid.meanSpeed * 1.15 &&
       grid.obstacleFraction > 0.02 &&
       grid.obstacleFraction < 0.65;
+    const cut = windFlowAt0.cutStats;
+    const meanFlowOk =
+      cut &&
+      cut.p95Speed >= cut.inletSpeed * 0.18 &&
+      grid &&
+      grid.meanSpeed >= cut.inletSpeed * 0.35;
+    const rampOk = cut && cut.rampSpan >= 0.45;
     const heatmapOk = heatmapStats.variance > 120 && heatmapStats.alphaHits > 800;
     assertCheck(
       "drawing-wind-rose-flow",
@@ -1444,9 +1455,113 @@ async function main() {
         trailOk &&
         spreadOk &&
         fieldStructured &&
+        meanFlowOk &&
+        rampOk &&
         heatmapOk,
-      `canvas=${windFlowAt0.hasCanvas}, inCut=[${windFlowAt0.inCutRatio.toFixed(2)},${windFlowAt135.inCutRatio.toFixed(2)}], dir=[${windFlowAt0.label}->${windFlowAt135.label}], frames=${windFlowAt0.frame}->${windFlowAfterMove.frame}, flowΔ=${flowDelta.toFixed(4)}, rotated=${flowRotated}, trail=${windFlowAt0.maxTrailSegM.toFixed(2)}m (cell=${cellM.toFixed(2)}), bins=${windFlowAt0.binOccupancy.toFixed(2)}, grid=[${grid ? `${grid.minSpeed.toFixed(3)}-${grid.maxSpeed.toFixed(3)} mean=${grid.meanSpeed.toFixed(3)} obst=${(grid.obstacleFraction * 100).toFixed(0)}%` : "n/a"}], heatVar=${heatmapStats.variance.toFixed(0)}, backend=${windFlowAt0.backend}`,
+      `canvas=${windFlowAt0.hasCanvas}, inCut=[${windFlowAt0.inCutRatio.toFixed(2)},${windFlowAt135.inCutRatio.toFixed(2)}], dir=[${windFlowAt0.label}->${windFlowAt135.label}], warm=${windFlowAt0.warmUpSteps}, inlet=${cut?.inletSpeed?.toFixed(3) ?? "n/a"}, cutMean=${cut?.meanSpeed?.toFixed(3) ?? "n/a"}, p95=${cut?.p95Speed?.toFixed(3) ?? "n/a"}, norm=${cut?.normSpeed?.toFixed(3) ?? "n/a"}, ramp=${cut?.rampSpan?.toFixed(2) ?? "n/a"}, frameMs=${windFlowAt0.lastFrameMs.toFixed(1)}, trail=${windFlowAt0.maxTrailSegM.toFixed(2)}m, grid=[${grid ? `${grid.minSpeed.toFixed(3)}-${grid.maxSpeed.toFixed(3)} mean=${grid.meanSpeed.toFixed(3)} obst=${(grid.obstacleFraction * 100).toFixed(0)}%` : "n/a"}], heatVar=${heatmapStats.variance.toFixed(0)}, backend=${windFlowAt0.backend}`,
     );
+
+    const suburbCtx = await browser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: DEVICE_SCALE_FACTOR,
+      reducedMotion: "no-preference",
+    });
+    await suburbCtx.addInitScript(() => {
+      window.__citycutMinSilentLoadMs = 550;
+    });
+    const suburbPage = await suburbCtx.newPage();
+    suburbPage.setDefaultTimeout(120000);
+    await suburbPage.goto(
+      `${baseUrl}?lat=-37.80&lon=145.13&km=1&label=Box%20Hill%20North&qa=1`,
+      { waitUntil: "domcontentloaded" },
+    );
+    await suburbPage.waitForSelector("button.create-fab", { timeout: 25000 });
+    await suburbPage.click("button.create-fab");
+    await suburbPage.waitForTimeout(3500);
+    await suburbPage.waitForSelector(".model", { timeout: 120000 });
+    await suburbPage.getByRole("tab", { name: /Drawing/i }).click();
+    await suburbPage.waitForSelector("svg.plan", { timeout: 60000 });
+    await suburbPage.getByRole("button", { name: "Analysis" }).first().click();
+    await suburbPage.waitForTimeout(250);
+    await suburbPage.evaluate(() => {
+      const btn = [...document.querySelectorAll(".model .env-mode-btn")].find((el) =>
+        (el.textContent ?? "").includes("Wind Rose"),
+      );
+      btn?.click();
+    });
+    await suburbPage.waitForTimeout(350);
+    await suburbPage.waitForSelector(".wind-direction-scrubber", { timeout: 60000 });
+    await suburbPage.evaluate(() => {
+      const enable = [...document.querySelectorAll(".model .env-console .overlay-chips button")].find((el) =>
+        (el.textContent ?? "").includes("Plan Flow"),
+      );
+      if (enable && enable.getAttribute("aria-pressed") !== "true") enable.click();
+      const play = [...document.querySelectorAll(".model .env-console .overlay-chips button")].find((el) => {
+        const t = el.textContent ?? "";
+        return t.includes("Play") || t.includes("Pause");
+      });
+      if (play && play.getAttribute("aria-pressed") !== "true") play.click();
+    });
+    await suburbPage.evaluate((d) => {
+      const input = document.querySelector(".model .wind-direction-scrubber input[type='range']");
+      if (!input) return;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+      setter?.call(input, String(d));
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }, 0);
+    await suburbPage.waitForTimeout(6000);
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      await suburbPage.screenshot({
+        path: path.join(ARTIFACTS_DIR, "wind-flow-boxhill-from-0.png"),
+        timeout: 120000,
+        animations: "disabled",
+      });
+    }
+    await suburbPage.evaluate((d) => {
+      const input = document.querySelector(".model .wind-direction-scrubber input[type='range']");
+      if (!input) return;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+      setter?.call(input, String(d));
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }, 135);
+    await suburbPage.waitForTimeout(6000);
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      await suburbPage.screenshot({
+        path: path.join(ARTIFACTS_DIR, "wind-flow-boxhill-from-135.png"),
+        timeout: 120000,
+        animations: "disabled",
+      });
+    }
+    await suburbPage.evaluate(() => {
+      const btn = [...document.querySelectorAll(".model .env-console .overlay-chips button")].find((el) =>
+        (el.textContent ?? "").includes("Heatmap"),
+      );
+      if (btn && btn.getAttribute("aria-pressed") !== "true") btn.click();
+    });
+    await suburbPage.waitForTimeout(2200);
+    const suburbSnap = await suburbPage.evaluate(() => window.__citycutQaWindFlow?.getSnapshot?.() ?? null);
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      await suburbPage.screenshot({
+        path: path.join(ARTIFACTS_DIR, "wind-flow-boxhill-heatmap.png"),
+        timeout: 120000,
+        animations: "disabled",
+      });
+    }
+    const suburbCut = suburbSnap?.cutStats;
+    assertCheck(
+      "drawing-wind-rose-flow-suburban",
+      "Box Hill North suburban cut shows warmed plan flow with visible speed ramp across the cut",
+      Boolean(suburbSnap?.solver) &&
+        suburbSnap.maxTrailSegM < 12 &&
+        suburbSnap.binOccupancy >= 0.6 &&
+        suburbCut &&
+        suburbCut.meanSpeed >= suburbCut.inletSpeed * 0.28 &&
+        suburbCut.rampSpan >= 0.5,
+      `inlet=${suburbCut?.inletSpeed?.toFixed(3) ?? "n/a"}, cutMean=${suburbCut?.meanSpeed?.toFixed(3) ?? "n/a"}, p95=${suburbCut?.p95Speed?.toFixed(3) ?? "n/a"}, ramp=${suburbCut?.rampSpan?.toFixed(2) ?? "n/a"}, warm=${suburbSnap?.warmUpSteps ?? 0}, trail=${suburbSnap?.maxTrailSegM?.toFixed(2) ?? "n/a"}, bins=${suburbSnap?.binOccupancy?.toFixed(2) ?? "n/a"}`,
+    );
+    await suburbCtx.close();
 
     {
       const toneCtx = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, reducedMotion: "no-preference" });

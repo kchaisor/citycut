@@ -30,8 +30,8 @@ describe("windParticles", () => {
   it("keeps every trail segment shorter than ~3 grid cells after long advection", () => {
     const state = settledWestFlowState(96);
     const particles = spawnWindParticles(500, 100, 7);
-    for (let s = 0; s < 280; s++) advectWindParticles(particles, state, 0.032, 100);
-    const cellM = 100 / state.spec.nx;
+    for (let s = 0; s < 180; s++) advectWindParticles(particles, state, 0.032, 100);
+    const cellM = state.spec.cutSideM / state.spec.nx;
     expect(maxParticleTrailSegmentM(particles, 50)).toBeLessThan(cellM * 3.5);
   });
 

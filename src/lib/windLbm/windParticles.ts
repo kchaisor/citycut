@@ -1,3 +1,4 @@
+import { flowVisualNormSpeed } from "./flowVisualNorm";
 import type { WindLbmSolverState } from "./types";
 
 export const WIND_PARTICLE_COUNT = 2800;
@@ -66,12 +67,13 @@ function sampleField(
   north: number,
 ): { ux: number; uy: number; blocked: boolean } {
   const { spec, obstacle, ux, uy } = state;
-  const half = spec.sideM / 2;
-  if (east < -half || east > half || north < -half || north > half) {
+  const cutHalf = spec.cutSideM / 2;
+  const domainHalf = spec.sideM / 2;
+  if (east < -cutHalf || east > cutHalf || north < -cutHalf || north > cutHalf) {
     return { ux: 0, uy: 0, blocked: true };
   }
-  const fx = ((east + half) / spec.sideM) * spec.nx;
-  const fy = ((north + half) / spec.sideM) * spec.ny;
+  const fx = ((east + domainHalf) / spec.sideM) * spec.nx;
+  const fy = ((north + domainHalf) / spec.sideM) * spec.ny;
   const i0 = Math.floor(fx);
   const j0 = Math.floor(fy);
   if (i0 < 0 || j0 < 0 || i0 >= spec.nx - 1 || j0 >= spec.ny - 1) {
@@ -94,8 +96,9 @@ function sampleField(
   let uxVal = a.ux * (1 - tx) * (1 - ty) + b.ux * tx * (1 - ty) + c.ux * (1 - tx) * ty + d.ux * tx * ty;
   let uyVal = a.uy * (1 - tx) * (1 - ty) + b.uy * tx * (1 - ty) + c.uy * (1 - tx) * ty + d.uy * tx * ty;
   const speed = Math.hypot(uxVal, uyVal);
-  if (speed > 0.22) {
-    const k = 0.22 / speed;
+  const cap = Math.max(0.3, state.inflow.speedLu * 3.5);
+  if (speed > cap) {
+    const k = cap / speed;
     uxVal *= k;
     uyVal *= k;
   }
@@ -144,9 +147,10 @@ export function advectWindParticles(
   dt: number,
   sideM: number,
 ): void {
-  const half = sideM / 2;
-  const cellM = sideM / state.spec.nx;
-  const advectScale = cellM * 28;
+  const cutHalf = state.spec.cutSideM / 2;
+  const cellM = state.spec.cutSideM / state.spec.nx;
+  const norm = flowVisualNormSpeed(state);
+  const wakeFloor = norm * 0.08;
   for (const p of particles) {
     const field = sampleField(state, p.east, p.north);
     if (field.blocked) {
@@ -154,12 +158,14 @@ export function advectWindParticles(
       continue;
     }
     const speed = Math.hypot(field.ux, field.uy);
-    if (speed < 0.0008) {
+    if (speed < wakeFloor * 0.25) {
       respawn(p, sideM, state, 2);
       continue;
     }
     p.lastUx = field.ux;
     p.lastUy = field.uy;
+    const speedFactor = Math.max(0.12, Math.min(1.35, speed / norm));
+    const advectScale = cellM * 36 * speedFactor;
     const de = field.ux * advectScale * dt;
     const dn = field.uy * advectScale * dt;
     if (!Number.isFinite(de) || !Number.isFinite(dn)) {
@@ -173,12 +179,12 @@ export function advectWindParticles(
     }
     p.east += de;
     p.north += dn;
-    if (p.east < -half || p.east > half || p.north < -half || p.north > half) {
+    if (p.east < -cutHalf || p.east > cutHalf || p.north < -cutHalf || p.north > cutHalf) {
       respawn(p, sideM, state, 3);
       continue;
     }
     const margin = cellM * 0.35;
-    const clamped = clampInside(p.east, p.north, half, margin);
+    const clamped = clampInside(p.east, p.north, cutHalf, margin);
     p.east = clamped[0];
     p.north = clamped[1];
     pushTrail(p, p.east, p.north);

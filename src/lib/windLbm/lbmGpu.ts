@@ -303,8 +303,8 @@ export class LbmGpuSurface {
           let uxCl = Number.isFinite(ux) ? ux : 0;
           let uyCl = Number.isFinite(uy) ? uy : 0;
           const sp = Math.hypot(uxCl, uyCl);
-          if (sp > 0.28) {
-            const k = 0.28 / sp;
+          if (sp > 0.38) {
+            const k = 0.38 / sp;
             uxCl *= k;
             uyCl *= k;
           }

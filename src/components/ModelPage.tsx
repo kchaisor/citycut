@@ -1972,6 +1972,8 @@ export function ModelPage({
                   frame={windPlanFlow.frame}
                   showHeatmap={windSettings.planFlowHeatmap}
                   backend={windPlanFlow.backend}
+                  flowReveal={windPlanFlow.flowReveal}
+                  normSpeed={windPlanFlow.normSpeed}
                 />
               )}
               </>

@@ -1,6 +1,15 @@
 import { downwindEn, sectorCenterDeg } from "../windRose";
+import { applyInletOutlet } from "./lbmBoundary";
 import { LBM_CX, LBM_CY, LBM_OPP, LBM_Q, LBM_W } from "./lbmConstants";
 import type { WindLbmGridSpec, WindLbmInflow, WindLbmSolverState } from "./types";
+
+export { applyInletOutlet };
+
+export const LBM_RELAXATION_TAU = 1.02;
+
+export function defaultLbmOmega(): number {
+  return 1 / LBM_RELAXATION_TAU;
+}
 
 function idx(i: number, j: number, nx: number): number {
   return i + j * nx;
@@ -56,7 +65,7 @@ export function createLbmState(
   spec: WindLbmGridSpec,
   obstacle: Uint8Array,
   inflow: WindLbmInflow,
-  omega = omegaFromKinematicViscosity(0.02),
+  omega = defaultLbmOmega(),
 ): WindLbmSolverState {
   const n = spec.nx * spec.ny;
   const f = new Float32Array(n * LBM_Q);
@@ -84,52 +93,35 @@ export function createLbmState(
   return { spec, obstacle, f, rho, ux, uy, omega, inflow };
 }
 
-function setEquilibriumCell(f: Float32Array, cell: number, rho: number, ux: number, uy: number): void {
-  for (let k = 0; k < LBM_Q; k++) f[cell * LBM_Q + k] = feq(k, rho, ux, uy);
+export function meanFluidSpeed(state: WindLbmSolverState): number {
+  let sum = 0;
+  let n = 0;
+  for (let i = 0; i < state.ux.length; i++) {
+    if (state.obstacle[i]) continue;
+    sum += Math.hypot(state.ux[i]!, state.uy[i]!);
+    n++;
+  }
+  return n > 0 ? sum / n : 0;
 }
 
-export function applyInletOutlet(state: WindLbmSolverState): void {
-  const { spec, obstacle, f, inflow } = state;
-  const { nx, ny } = spec;
-  const interiorUx = inflow.ux;
-  const interiorUy = inflow.uy;
-  for (let j = 0; j < ny; j++) {
-    for (let i = 0; i < nx; i++) {
-      const cell = idx(i, j, nx);
-      if (obstacle[cell]) continue;
-      const onWest = i === 0;
-      const onEast = i === nx - 1;
-      const onSouth = j === 0;
-      const onNorth = j === ny - 1;
-      const inletWest = onWest && interiorUx > 0.002;
-      const inletEast = onEast && interiorUx < -0.002;
-      const inletSouth = onSouth && interiorUy > 0.002;
-      const inletNorth = onNorth && interiorUy < -0.002;
-      if (inletWest || inletEast || inletSouth || inletNorth) {
-        setEquilibriumCell(f, cell, 1, interiorUx, interiorUy);
-        continue;
-      }
-      const outletWest = onWest && interiorUx < -0.002;
-      const outletEast = onEast && interiorUx > 0.002;
-      const outletSouth = onSouth && interiorUy < -0.002;
-      const outletNorth = onNorth && interiorUy > 0.002;
-      if (outletWest && nx > 1) {
-        const src = idx(1, j, nx);
-        for (let k = 0; k < LBM_Q; k++) f[cell * LBM_Q + k] = f[src * LBM_Q + k]!;
-      } else if (outletEast && nx > 1) {
-        const src = idx(nx - 2, j, nx);
-        for (let k = 0; k < LBM_Q; k++) f[cell * LBM_Q + k] = f[src * LBM_Q + k]!;
-      } else if (outletSouth && ny > 1) {
-        const src = idx(i, 1, nx);
-        for (let k = 0; k < LBM_Q; k++) f[cell * LBM_Q + k] = f[src * LBM_Q + k]!;
-      } else if (outletNorth && ny > 1) {
-        const src = idx(i, ny - 2, nx);
-        for (let k = 0; k < LBM_Q; k++) f[cell * LBM_Q + k] = f[src * LBM_Q + k]!;
-      } else if (onWest || onEast || onSouth || onNorth) {
-        setEquilibriumCell(f, cell, 1, interiorUx * 0.2, interiorUy * 0.2);
-      }
-    }
+export function lbmWarmUpSettle(
+  state: WindLbmSolverState,
+  options?: { maxBundles?: number; bundleSteps?: number; relTol?: number; scratch?: Float32Array },
+): { totalSteps: number; meanSpeed: number } {
+  const maxBundles = options?.maxBundles ?? 18;
+  const bundleSteps = options?.bundleSteps ?? 100;
+  const relTol = options?.relTol ?? 0.01;
+  const scratch = options?.scratch;
+  let prev = meanFluidSpeed(state);
+  let total = 0;
+  for (let b = 0; b < maxBundles; b++) {
+    lbmStepMany(state, bundleSteps, scratch);
+    total += bundleSteps;
+    const cur = meanFluidSpeed(state);
+    if (b > 2 && Math.abs(cur - prev) / Math.max(prev, 1e-6) < relTol) break;
+    prev = cur;
   }
+  return { totalSteps: total, meanSpeed: meanFluidSpeed(state) };
 }
 
 export function lbmCpuStep(state: WindLbmSolverState, scratch?: Float32Array): void {
@@ -206,5 +198,6 @@ export function lbmStepMany(state: WindLbmSolverState, steps: number, scratch?: 
 }
 
 export function speedLuFromKmh(kmh: number): number {
-  return Math.min(0.22, Math.max(0.04, (kmh / 100) * 0.14));
+  const bias = 0.09 + (Math.min(40, Math.max(8, kmh)) / 40) * 0.01;
+  return Math.min(0.1, Math.max(0.09, bias));
 }

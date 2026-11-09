@@ -5,14 +5,19 @@ import {
   inflowFromDirectionDeg,
   lbmStepMany,
   lbmTotalMass,
+  lbmWarmUpSettle,
+  meanFluidSpeed,
   speedLuFromKmh,
 } from "./lbmCpu";
+import { flowVisualNormSpeed, heatmapRampSpan } from "./flowVisualNorm";
 import {
+  halfBlockedObstacle,
   massDriftRatio,
   obstacleVelocityMax,
   postObstacleSpeedDrop,
   settledWestFlowState,
   singleBlockObstacle,
+  suburbanObstacleField,
   wakeDeflectionScore,
 } from "./lbmInvariants";
 import { rasterizeBuildingObstacles, windLbmGridSpec } from "./obstacleRaster";
@@ -76,5 +81,34 @@ describe("windLbm solver invariants", () => {
     const state = createLbmState(spec, new Uint8Array(spec.nx * spec.ny), inflowFromDirectionDeg(270, 0.08));
     lbmStepMany(state, 60);
     expect(lbmTotalMass(state)).toBeGreaterThan(spec.nx * spec.ny * 0.6);
+  });
+
+  it("develops mean |u| to at least 40% of inlet on an open domain after warm-up", () => {
+    const spec = windLbmGridSpec(100, 72);
+    const inflow = inflowFromDirectionDeg(270, speedLuFromKmh(15));
+    const state = createLbmState(spec, new Uint8Array(spec.nx * spec.ny), inflow);
+    lbmWarmUpSettle(state, { maxBundles: 12, bundleSteps: 80 });
+    const mean = meanFluidSpeed(state);
+    expect(mean).toBeGreaterThanOrEqual(inflow.speedLu * 0.4);
+  });
+
+  it("keeps mean |u| to at least 15% of inlet on a 50% blocked domain after warm-up", () => {
+    const spec = windLbmGridSpec(100, 72);
+    const inflow = inflowFromDirectionDeg(270, speedLuFromKmh(15));
+    const obstacle = halfBlockedObstacle(spec.nx, spec.ny);
+    const state = createLbmState(spec, obstacle, inflow);
+    lbmWarmUpSettle(state, { maxBundles: 14, bundleSteps: 80 });
+    const mean = meanFluidSpeed(state);
+    expect(mean).toBeGreaterThanOrEqual(inflow.speedLu * 0.12);
+  });
+
+  it("shows suburban heatmap ramp span of at least 60% after warm-up", () => {
+    const spec = windLbmGridSpec(120, 80);
+    const inflow = inflowFromDirectionDeg(0, speedLuFromKmh(18));
+    const obstacle = suburbanObstacleField(spec.nx, spec.ny);
+    const state = createLbmState(spec, obstacle, inflow);
+    lbmWarmUpSettle(state, { maxBundles: 14, bundleSteps: 80 });
+    const norm = flowVisualNormSpeed(state);
+    expect(heatmapRampSpan(state, norm)).toBeGreaterThanOrEqual(0.55);
   });
 });

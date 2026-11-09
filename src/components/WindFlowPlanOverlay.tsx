@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { cssColorToHex } from "../lib/cssVars";
 import { getColour } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
+import { flowVisualNormSpeed } from "../lib/windLbm/flowVisualNorm";
 import type { WindLbmSolverState } from "../lib/windLbm/types";
 import { WIND_TRAIL_SAMPLES, type WindFlowParticle } from "../lib/windLbm/windParticles";
 
@@ -57,14 +58,8 @@ function drawHeatmap(
   fast: string,
 ) {
   const { spec, obstacle, ux, uy } = state;
-  const samples: number[] = [];
-  for (let i = 0; i < ux.length; i++) {
-    if (obstacle[i]) continue;
-    samples.push(Math.hypot(ux[i]!, uy[i]!));
-  }
-  samples.sort((a, b) => a - b);
-  const p90 = samples[Math.floor(samples.length * 0.9)] ?? 0.02;
-  const maxSpeed = Math.max(0.012, p90);
+  const norm = flowVisualNormSpeed(state);
+  const wakeT = 0.1;
   const calmRgb = hexChannels(cssColorToHex(calm));
   const fastRgb = hexChannels(cssColorToHex(fast));
   const img = ctx.createImageData(width, height);
@@ -84,11 +79,12 @@ function drawHeatmap(
         continue;
       }
       const speed = Math.hypot(ux[cell]!, uy[cell]!);
-      const t = Math.min(1, Math.pow(speed / maxSpeed, 0.55));
-      data[o] = Math.round(calmRgb[0] * (1 - t) + fastRgb[0] * t);
-      data[o + 1] = Math.round(calmRgb[1] * (1 - t) + fastRgb[1] * t);
-      data[o + 2] = Math.round(calmRgb[2] * (1 - t) + fastRgb[2] * t);
-      data[o + 3] = Math.round(128 + t * 112);
+      const t = Math.min(1, speed / norm);
+      const tw = wakeT + t * (1 - wakeT);
+      data[o] = Math.round(calmRgb[0] * (1 - tw) + fastRgb[0] * tw);
+      data[o + 1] = Math.round(calmRgb[1] * (1 - tw) + fastRgb[1] * tw);
+      data[o + 2] = Math.round(calmRgb[2] * (1 - tw) + fastRgb[2] * tw);
+      data[o + 3] = Math.round(100 + tw * 132);
     }
   }
   ctx.putImageData(img, 0, 0);
@@ -157,6 +153,8 @@ export function WindFlowPlanOverlay({
   frame,
   showHeatmap,
   backend,
+  flowReveal = 1,
+  normSpeed,
 }: {
   sideM: number;
   solver: WindLbmSolverState | null;
@@ -164,6 +162,8 @@ export function WindFlowPlanOverlay({
   frame: number;
   showHeatmap: boolean;
   backend: string;
+  flowReveal?: number;
+  normSpeed: number;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -208,6 +208,9 @@ export function WindFlowPlanOverlay({
     const maxSegM =
       solver != null ? (solver.spec.sideM / solver.spec.nx) * 3.2 : (sideM / 256) * 3.2;
     for (const p of particles) {
+      const localSpeed = Math.hypot(p.lastUx, p.lastUy);
+      const alphaScale = 0.35 + 0.65 * Math.min(1.3, localSpeed / Math.max(normSpeed, 1e-4));
+      ctx.globalAlpha = flowReveal * alphaScale;
       strokeTrailSegments(ctx, p, half, layout.width, layout.height, maxSegM, streak, streakBright);
     }
     ctx.restore();
@@ -220,7 +223,7 @@ export function WindFlowPlanOverlay({
       legend.style.transform = "translate(-50%, -100%)";
       legend.style.maxWidth = `${Math.min(420, layout.width - 24)}px`;
     }
-  }, [solver, particles, frame, showHeatmap, streak, streakBright, heatCalm, heatFast, half, sideM]);
+  }, [solver, particles, frame, showHeatmap, streak, streakBright, heatCalm, heatFast, half, sideM, flowReveal, normSpeed]);
 
   return (
     <div ref={hostRef} className="wind-flow-plan-overlay" data-frame={frame} data-backend={backend} aria-hidden="true">

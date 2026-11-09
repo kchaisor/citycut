@@ -10,6 +10,33 @@ import { rasterizeBuildingObstacles, windLbmGridSpec } from "./obstacleRaster";
 import type { BuildingFeat } from "../../types";
 import type { WindLbmSolverState } from "./types";
 
+export function halfBlockedObstacle(nx: number, ny: number): Uint8Array {
+  const mask = new Uint8Array(nx * ny);
+  for (let j = 0; j < ny; j++) {
+    for (let i = 0; i < nx; i++) {
+      if ((i + j) % 2 === 0) mask[i + j * nx] = 1;
+    }
+  }
+  return mask;
+}
+
+export function suburbanObstacleField(nx: number, ny: number): Uint8Array {
+  const mask = new Uint8Array(nx * ny);
+  const blocks: [number, number, number, number][] = [
+    [Math.floor(nx * 0.2), Math.floor(ny * 0.25), 6, 8],
+    [Math.floor(nx * 0.45), Math.floor(ny * 0.32), 8, 10],
+    [Math.floor(nx * 0.62), Math.floor(ny * 0.55), 7, 9],
+    [Math.floor(nx * 0.35), Math.floor(ny * 0.6), 5, 7],
+    [Math.floor(nx * 0.72), Math.floor(ny * 0.22), 6, 8],
+  ];
+  for (const [x0, y0, w, h] of blocks) {
+    for (let j = y0; j < Math.min(ny, y0 + h); j++) {
+      for (let i = x0; i < Math.min(nx, x0 + w); i++) mask[i + j * nx] = 1;
+    }
+  }
+  return mask;
+}
+
 export function singleBlockObstacle(nx: number, ny: number, blockW: number, blockH: number): Uint8Array {
   const mask = new Uint8Array(nx * ny);
   const x0 = Math.floor(nx * 0.5 - blockW / 2);
@@ -46,12 +73,12 @@ export function wakeDeflectionScore(state: WindLbmSolverState): number {
   return score;
 }
 
-export function settledWestFlowState(nx = 96): WindLbmSolverState {
+export function settledWestFlowState(nx = 96, steps = 300): WindLbmSolverState {
   const spec = windLbmGridSpec(100, nx);
   const obstacle = singleBlockObstacle(spec.nx, spec.ny, 14, 22);
   const inflow = inflowFromDirectionDeg(270, speedLuFromKmh(18));
   const state = createLbmState(spec, obstacle, inflow);
-  lbmStepMany(state, 220);
+  lbmStepMany(state, steps);
   return state;
 }
 

@@ -6,19 +6,15 @@ import {
   createLbmState,
   inflowFromDirectionDeg,
   inflowFromSector,
-  lbmStepMany,
+  lbmWarmUpSettle,
   resetLbmInflow,
   speedLuFromKmh,
 } from "./lbmCpu";
+import { cutFluidSpeedStats, flowVisualNormSpeed } from "./flowVisualNorm";
 import { LbmGpuSurface } from "./lbmGpu";
 import { obstacleMaskFingerprint, rasterizeBuildingObstacles, windLbmGridSpec } from "./obstacleRaster";
 import type { WindLbmBackend, WindLbmFlowSettings, WindLbmSolverState } from "./types";
-import {
-  flowAlignmentScore,
-  lbmGridFlowStats,
-  meanFlowVector,
-  particlesInsideCutRatio,
-} from "./windFlowQa";
+import { flowAlignmentScore, lbmGridFlowStats, meanFlowVector, particlesInsideCutRatio } from "./windFlowQa";
 import { runWindLbmCpuSteps } from "./windLbmWorkerClient";
 import {
   WIND_PARTICLE_COUNT,
@@ -43,8 +39,13 @@ export type WindPlanFlowSnapshot = {
   gpuSteps: number;
   gpuHasStepped: boolean;
   gridStats: ReturnType<typeof lbmGridFlowStats> | null;
+  cutStats: ReturnType<typeof cutFluidSpeedStats> | null;
   maxTrailSegM: number;
   binOccupancy: number;
+  warmUpSteps: number;
+  flowReveal: number;
+  lastFrameMs: number;
+  normSpeed: number;
 };
 
 declare global {
@@ -61,6 +62,16 @@ function effectiveDirectionDeg(settings: WindLbmFlowSettings, stats: WindPeriodS
   return 270;
 }
 
+function settleSolver(state: WindLbmSolverState, scratch: Float32Array | null): number {
+  const result = lbmWarmUpSettle(state, {
+    maxBundles: 28,
+    bundleSteps: 100,
+    relTol: 0.01,
+    scratch: scratch ?? undefined,
+  });
+  return result.totalSteps;
+}
+
 export function useWindPlanFlow({
   active,
   sideM,
@@ -75,12 +86,15 @@ export function useWindPlanFlow({
   stats: WindPeriodStats | null;
   settings: WindLbmFlowSettings;
   qaExpose?: boolean;
-}): WindPlanFlowSnapshot {
+}): WindPlanFlowSnapshot & { flowReveal: number; normSpeed: number } {
   const [frame, setFrame] = useState(0);
   const [particles, setParticles] = useState<WindFlowParticle[]>(() => spawnWindParticles(WIND_PARTICLE_COUNT, sideM));
   const [backend, setBackend] = useState<WindLbmBackend>("cpu");
   const [gpuSteps, setGpuSteps] = useState(0);
   const [gpuHasStepped, setGpuHasStepped] = useState(false);
+  const [flowReveal, setFlowReveal] = useState(1);
+  const [warmUpSteps, setWarmUpSteps] = useState(0);
+  const [lastFrameMs, setLastFrameMs] = useState(0);
   const solverRef = useRef<WindLbmSolverState | null>(null);
   const scratchRef = useRef<Float32Array | null>(null);
   const gpuRef = useRef<LbmGpuSurface | null>(null);
@@ -91,6 +105,7 @@ export function useWindPlanFlow({
   const particlesRef = useRef(particles);
   const cpuOnlyFramesRef = useRef(0);
   const gpuHasSteppedRef = useRef(false);
+  const flowRevealRef = useRef(1);
 
   const gridLong = useMemo(() => pickWindGridLongSide(sideM), [sideM]);
   const spec = useMemo(() => windLbmGridSpec(sideM, gridLong), [sideM, gridLong]);
@@ -138,25 +153,30 @@ export function useWindPlanFlow({
         : inflowFromDirectionDeg(directionDeg, speedLu);
     let state = solverRef.current;
     const fresh = !state || obstacleKeyRef.current !== obstacleKey;
+  const scratch = scratchRef.current;
+    let warmed = 0;
     if (fresh) {
       const obstacle = rasterizeBuildingObstacles(buildings, spec);
       state = createLbmState(spec, obstacle, inflow);
       obstacleKeyRef.current = obstacleKey;
       inflowKeyRef.current = inflowKey;
-      lbmStepMany(state, 200);
-      cpuOnlyFramesRef.current = 8;
+      warmed = settleSolver(state, scratch);
+      cpuOnlyFramesRef.current = 6;
+      flowRevealRef.current = 0;
+      setFlowReveal(0);
       gpuRef.current?.uploadState(state);
     } else if (state && inflowKeyRef.current !== inflowKey) {
       state = resetLbmInflow(state, inflow);
       inflowKeyRef.current = inflowKey;
-      lbmStepMany(state, 240);
-      cpuOnlyFramesRef.current = 8;
-      particlesRef.current = spawnWindParticles(WIND_PARTICLE_COUNT, sideM, directionDeg);
-      setParticles(particlesRef.current);
+      warmed = settleSolver(state, scratch);
+      cpuOnlyFramesRef.current = 6;
+      flowRevealRef.current = 0;
+      setFlowReveal(0);
       gpuRef.current?.uploadState(state);
     }
     if (!state) return;
     solverRef.current = state;
+    setWarmUpSteps(warmed);
     const n = state.f.length;
     if (!scratchRef.current || scratchRef.current.length !== n) scratchRef.current = new Float32Array(n);
   }, [active, obstacleKey, inflowKey, buildings, spec, stats, settings.directionDeg, directionDeg, speedLu, sideM]);
@@ -172,6 +192,11 @@ export function useWindPlanFlow({
       const last = lastTsRef.current ?? ts;
       lastTsRef.current = ts;
       const dt = Math.min(0.05, (ts - last) / 1000);
+      setLastFrameMs(dt * 1000);
+      if (flowRevealRef.current < 1) {
+        flowRevealRef.current = Math.min(1, flowRevealRef.current + dt * 2.4);
+        setFlowReveal(flowRevealRef.current);
+      }
       const state = solverRef.current;
       if (state) {
         const scratch = scratchRef.current;
@@ -191,8 +216,10 @@ export function useWindPlanFlow({
         } else if (scratch) {
           runWindLbmCpuSteps(state, steps, scratch);
         }
-        advectWindParticles(particlesRef.current, state, dt, sideM);
-        setParticles([...particlesRef.current]);
+        if (flowRevealRef.current > 0.15) {
+          advectWindParticles(particlesRef.current, state, dt, sideM);
+          setParticles([...particlesRef.current]);
+        }
         setFrame((f) => f + 1);
       }
       rafRef.current = requestAnimationFrame(tick);
@@ -208,6 +235,9 @@ export function useWindPlanFlow({
   const mean = meanFlowVector(solverRef.current);
   const inCutRatio = particlesInsideCutRatio(particles, half);
   const particleHash = useMemo(() => particleFingerprint(particles), [particles, frame]);
+  const gridStats = solverRef.current ? lbmGridFlowStats(solverRef.current) : null;
+  const cutStats = solverRef.current ? cutFluidSpeedStats(solverRef.current) : null;
+  const liveNorm = solverRef.current ? flowVisualNormSpeed(solverRef.current) : speedLu;
 
   useEffect(() => {
     if (!qaExpose) return;
@@ -225,16 +255,19 @@ export function useWindPlanFlow({
         gpuSteps: gpuRef.current?.gpuStepCount() ?? 0,
         gpuHasStepped: gpuHasSteppedRef.current || (gpuRef.current?.gpuStepCount() ?? 0) > 0,
         gridStats: solverRef.current ? lbmGridFlowStats(solverRef.current) : null,
+        cutStats: solverRef.current ? cutFluidSpeedStats(solverRef.current) : null,
         maxTrailSegM: maxParticleTrailSegmentM(particlesRef.current, half),
         binOccupancy: particleBinOccupancyFraction(particlesRef.current, sideM, 10),
+        warmUpSteps,
+        flowReveal: flowRevealRef.current,
+        lastFrameMs,
+        normSpeed: solverRef.current ? flowVisualNormSpeed(solverRef.current) : speedLu,
       }),
     };
     return () => {
       delete window.__citycutQaWindFlow;
     };
-  }, [qaExpose, backend, frame, particleHash, directionDeg, half, gpuHasStepped, sideM]);
-
-  const gridStats = solverRef.current ? lbmGridFlowStats(solverRef.current) : null;
+  }, [qaExpose, backend, frame, particleHash, directionDeg, half, gpuHasStepped, sideM, warmUpSteps, lastFrameMs, speedLu]);
 
   return {
     backend,
@@ -249,8 +282,13 @@ export function useWindPlanFlow({
     gpuSteps,
     gpuHasStepped,
     gridStats,
+    cutStats,
     maxTrailSegM: maxParticleTrailSegmentM(particles, half),
     binOccupancy: particleBinOccupancyFraction(particles, sideM, 10),
+    warmUpSteps,
+    flowReveal,
+    lastFrameMs,
+    normSpeed: liveNorm,
   };
 }
 
