@@ -39,6 +39,11 @@
   --site-boundary: #D7263D;
   --wind-streak: #2B6CB0;
   --wind-rose: #3d5a73;
+  --wind-flow-streak: #E1B157;
+  --wind-flow-streak-bright: #F4CA55;
+  --wind-flow-heatmap-calm: #E1B157;
+  --wind-flow-heatmap-fast: #F4CA55;
+  --wind-flow-legend-ink: #1A1916;
 
   --view-visible: #FFF500;
   --view-seen: #FFF9AA;

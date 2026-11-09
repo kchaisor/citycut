@@ -1276,6 +1276,66 @@ async function main() {
       `3dDomeInDrawing=${beforeSelectInfo.has3dSunDomeInDrawing}, planFanInDrawing=${beforeSelectInfo.hasPlanFanInDrawing}, selectedCount=${afterSelectInfo.selectedCount}, shadowDLength=${beforeSelectInfo.shadowDLength}->${afterSelectInfo.shadowDLength}, layers=${afterSelectInfo.nonEmptyLayers}`,
     );
 
+    const analysisOpen = await page.evaluate(() => Boolean(document.querySelector(".model .env-console")));
+    if (!analysisOpen) {
+      await page.locator('.model button[data-section="analysis"]').first().click();
+      await page.waitForTimeout(250);
+    }
+    await page.evaluate(() => {
+      const btn = [...document.querySelectorAll(".model .env-mode-btn")].find((el) =>
+        (el.textContent ?? "").includes("Wind Rose"),
+      );
+      btn?.click();
+    });
+    await page.waitForTimeout(350);
+    await page.evaluate(() => {
+      const btn = [...document.querySelectorAll(".model .env-console .overlay-chips button")].find((el) =>
+        (el.textContent ?? "").includes("Plan Flow"),
+      );
+      if (btn && btn.getAttribute("aria-pressed") !== "true") btn.click();
+    });
+    await page.waitForTimeout(500);
+    const windFlowBefore = await page.evaluate(() => {
+      const canvas = document.querySelector(".wind-flow-plan-canvas");
+      const snap = window.__citycutQaWindFlow?.getSnapshot?.();
+      return {
+        hasCanvas: Boolean(canvas && canvas.width > 0 && canvas.height > 0),
+        frame: snap?.frame ?? -1,
+        hash: snap?.particleHash ?? "",
+        backend: snap?.backend ?? "none",
+      };
+    });
+    await page.waitForTimeout(900);
+    const windFlowAfter = await page.evaluate(() => {
+      const snap = window.__citycutQaWindFlow?.getSnapshot?.();
+      return {
+        frame: snap?.frame ?? -1,
+        hash: snap?.particleHash ?? "",
+        backend: snap?.backend ?? "none",
+      };
+    });
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "wind-flow-drawing-n-e.png") });
+    }
+    await page.locator('.model .wind-direction-scrubber input[type="range"]').evaluate((el) => {
+      el.value = "135";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await page.waitForTimeout(1200);
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "wind-flow-drawing-se.png") });
+    }
+    assertCheck(
+      "drawing-wind-rose-flow",
+      "In Drawing -> Wind Rose, the plan flow canvas renders and particles move between frames",
+      windFlowBefore.hasCanvas &&
+        windFlowAfter.frame > windFlowBefore.frame &&
+        windFlowAfter.hash.length > 0 &&
+        windFlowAfter.hash !== windFlowBefore.hash,
+      `canvas=${windFlowBefore.hasCanvas}, frames=${windFlowBefore.frame}->${windFlowAfter.frame}, backend=${windFlowAfter.backend}, hash=${windFlowBefore.hash}->${windFlowAfter.hash}`,
+    );
+
     {
       const toneCtx = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, reducedMotion: "no-preference" });
       await toneCtx.addInitScript(() => {

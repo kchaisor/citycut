@@ -284,6 +284,11 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--axo-tree-trunk` | `#7a6a55` | Exploded axo tree trunk. |
 | `--wind-streak` | `#2B6CB0` | Animated wind streaks in the 3D viewport (~70% opacity). |
 | `--wind-rose` | `#3d5a73` | On-screen wind rose overlay and Wind export layer. |
+| `--wind-flow-streak` | `#E1B157` | Drawing-plan wind flow particle streak tail. |
+| `--wind-flow-streak-bright` | `#F4CA55` | Drawing-plan wind flow particle streak head. |
+| `--wind-flow-heatmap-calm` | `#E1B157` | Drawing-plan wind speed heatmap (calm / lee). |
+| `--wind-flow-heatmap-fast` | `#F4CA55` | Drawing-plan wind speed heatmap (acceleration / gaps). |
+| `--wind-flow-legend-ink` | `#1A1916` | Drawing-plan wind flow disclaimer legend text. |
 | `--view-visible` | `#FFF500` | View tab: ground visible from the walker right now (3D overlay, ~86% opacity) and its legend swatch. |
 | `--view-seen` | `#FFF9AA` | View tab: ground seen earlier on the walk (lighter tint, ~47% opacity). |
 | `--view-blocked` | `#28282E` | View tab: ground inside the radius that is not visible (~27% opacity). |
