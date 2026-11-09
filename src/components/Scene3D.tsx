@@ -517,7 +517,10 @@ function City({
       edges.name = "GroundEdge";
       city.add(edges);
     }
-    addBuildingEdges(city);
+    try {
+      addBuildingEdges(city);
+    } catch {
+    }
     if (introStagger) {
       const ringGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(model.sideM, 1.2, model.sideM));
       const ringMat = new THREE.LineBasicMaterial({

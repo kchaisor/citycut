@@ -1124,6 +1124,17 @@ export function ModelPage({
     }),
     [model, overrideResult, visibleBuildings, comHeightsMeasuredOn],
   );
+  const sceneBoundaryResetKey = useMemo(
+    () =>
+      `${displayModel.center.lat.toFixed(5)},${displayModel.center.lon.toFixed(5)},${displayModel.sideM},${displayModel.buildings.length},${displayModel.trees.length}`,
+    [
+      displayModel.buildings.length,
+      displayModel.center.lat,
+      displayModel.center.lon,
+      displayModel.sideM,
+      displayModel.trees.length,
+    ],
+  );
   const walk = useWalkViewshed(model, displayModel);
   const walkRipple = useWalkRipple(model, displayModel);
   const [walkRippleToast, setWalkRippleToast] = useState<string | null>(null);
@@ -2004,7 +2015,7 @@ export function ModelPage({
                 {line}
               </p>
             ))}
-            <SceneBoundary>
+            <SceneBoundary resetKey={sceneBoundaryResetKey}>
               <Scene3D
                 model={displayModel}
                 uniformBuildings={!colourByUse && !showSource}

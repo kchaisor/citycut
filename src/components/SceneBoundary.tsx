@@ -6,12 +6,19 @@ import {
   type SceneFallbackDetail,
 } from "../lib/scene3dFallback";
 
-type State = { failed: boolean; detail: SceneFallbackDetail | null };
+type Props = { children: ReactNode; resetKey?: string };
 
-export class SceneBoundary extends Component<{ children: ReactNode }, State> {
-  state: State = { failed: false, detail: null };
+type State = { failed: boolean; detail: SceneFallbackDetail | null; resetKey?: string };
 
-  static getDerivedStateFromError(error: unknown): State {
+export class SceneBoundary extends Component<Props, State> {
+  state: State = { failed: false, detail: null, resetKey: undefined };
+
+  static getDerivedStateFromProps(props: Props, state: State): Partial<State> | null {
+    if (props.resetKey === undefined || props.resetKey === state.resetKey) return null;
+    return { failed: false, detail: null, resetKey: props.resetKey };
+  }
+
+  static getDerivedStateFromError(error: unknown): Partial<State> {
     return { failed: true, detail: classifySceneFailure(error) };
   }
 

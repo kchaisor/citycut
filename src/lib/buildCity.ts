@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { MultiPolygon } from "polygon-clipping";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { safeMergeGeometries } from "./safeMergeGeometries";
 import { BUILDING_EDGE_COLOR, BUILDING_EDGE_THRESHOLD_DEG } from "./buildingEdges";
 import { BUILDING_USE_META, SOURCE_META, buildingLayerName, uniformBuildingColor } from "./buildingUse";
 import { getColour } from "./colours";
@@ -208,9 +209,14 @@ export function drapedMultiPolygonGeometry(
     if (geometry) parts.push(geometry);
   }
   if (parts.length === 0) return null;
-  const merged = mergeGeometries(parts, false);
-  parts.forEach((geometry) => geometry.dispose());
-  merged?.computeVertexNormals();
+  const merged = safeMergeGeometries(parts, false);
+  if (!merged) {
+    const fallback = parts[0]!;
+    parts.slice(1).forEach((geometry) => geometry.dispose());
+    fallback.computeVertexNormals();
+    return fallback;
+  }
+  merged.computeVertexNormals();
   return merged;
 }
 
