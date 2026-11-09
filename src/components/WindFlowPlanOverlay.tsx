@@ -105,7 +105,8 @@ function strokeTrailSegments(
   streakBright: string,
 ) {
   const trail: { east: number; north: number }[] = [];
-  for (let t = 0; t < WIND_TRAIL_SAMPLES; t++) {
+  const drawSamples = Math.min(WIND_TRAIL_SAMPLES, 11);
+  for (let t = 0; t < drawSamples; t++) {
     const idx = (p.trailHead - t + WIND_TRAIL_SAMPLES) % WIND_TRAIL_SAMPLES;
     const east = p.trailEast[idx]!;
     const north = p.trailNorth[idx]!;
@@ -146,12 +147,6 @@ function strokeTrailSegments(
       ctx.lineTo(pt[0], pt[1]);
     }
     ctx.stroke();
-    const head = eastNorthToCutPx(seg[0]!.east, seg[0]!.north, half, layoutW, layoutH);
-    ctx.globalAlpha = 0.72;
-    ctx.fillStyle = streakBright;
-    ctx.beginPath();
-    ctx.arc(head[0], head[1], 0.65, 0, Math.PI * 2);
-    ctx.fill();
   }
 }
 
@@ -206,10 +201,7 @@ export function WindFlowPlanOverlay({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, layout.width, layout.height);
     if (solver && showHeatmap) {
-      ctx.save();
-      ctx.globalCompositeOperation = "multiply";
       drawHeatmap(ctx, solver, half, layout.width, layout.height, heatCalm, heatFast);
-      ctx.restore();
     }
     ctx.save();
     ctx.globalCompositeOperation = "source-over";
