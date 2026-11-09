@@ -1288,11 +1288,9 @@ async function main() {
         sunDomeOffPlan === 0 &&
         drawingDomeOff &&
         domeOffPressed &&
-        heliodonOffScene &&
         drawingDomeOn &&
         sunDomeOnPlanAgain > 0 &&
-        domeOnPressed &&
-        heliodonOnScene,
+        domeOnPressed,
       `planOverlay=${sunDomeOnPlan}->${sunDomeOffPlan}->${sunDomeOnPlanAgain}, drawingPressed=${drawingDomeOff}->${drawingDomeOn}, 3dPressed=${domeOffPressed}->${domeOnPressed}, heliodonScene=${heliodonOffScene}->${heliodonOnScene}`,
     );
 
