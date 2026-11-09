@@ -4435,4 +4435,54 @@ body,
     color: var(--ink);
     text-align: center;
   }
+
+  .massing-cursor-pill {
+    position: fixed;
+    z-index: 40;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    font-size: 11px;
+    border-radius: 999px;
+    box-shadow: var(--hud-shadow);
+  }
+
+  .massing-cursor-sep {
+    opacity: 0.45;
+  }
+
+  .massing-tool-panel {
+    margin-bottom: 12px;
+  }
+
+  .massing-tool-grid {
+    display: grid;
+    gap: 10px;
+  }
+
+  .massing-stepper {
+    display: grid;
+    grid-template-columns: 32px 1fr 32px;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .massing-stepper button {
+    min-height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--border-outer);
+    background: var(--hud-sub-toggle-bg);
+    cursor: pointer;
+  }
+
+  .massing-field input[type="number"] {
+    width: 100%;
+    min-height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--border-outer);
+    padding: 0 8px;
+    font-family: inherit;
+  }
 }

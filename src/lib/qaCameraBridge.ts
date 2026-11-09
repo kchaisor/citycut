@@ -21,6 +21,32 @@ declare global {
   interface Window {
     __citycutQa?: QaCameraBridge;
     __citycutQaSite?: QaSiteSnapshot;
+    __citycutQaMassing?: {
+      enableTool: () => void;
+      disableTool: () => void;
+      armDraw: () => void;
+      disarmDraw: () => void;
+      simulateDraw: (east0: number, north0: number, east1: number, north1: number) => string | null;
+      getBlocks: () => import("./massingBlock").MassingBlock[];
+      selectBlock: (id: string) => void;
+      setFloors: (floors: number) => void;
+      deleteSelected: () => void;
+      readPersistedCount: () => number;
+      selectParcels: (ids: string[]) => void;
+      clearParcels: () => void;
+      qaFocusParcelHover: (parcelId: string) => boolean;
+      nearestParcelIds: (count: number) => string[];
+      getParcelState: () => { selectedIds: string[]; boundaryPolygons: number };
+      sampleInsideBoundary: () => [number, number] | null;
+      pointInSiteBoundary: (east: number, north: number) => boolean;
+      qaGroundPress: (east: number, north: number) => void;
+      qaGroundRelease: () => void;
+      qaGroundMove: (east: number, north: number) => void;
+      finishDraw: () => import("./massingBlock").MassingBlock | null;
+      commitPolylineCenterline: (points: [number, number][]) => string | null;
+      getToolPhase: () => string;
+      drawArmed: () => boolean;
+    };
     __citycutQaModel?: {
       openMidriseHeightEdit: () => number | null;
       pickBuildingNearGeoQa?: (lat: number, lon: number) => number | null;

@@ -40,6 +40,10 @@ export function classifySceneFailure(error: unknown): SceneFallbackDetail {
     text.includes("mergegeometries") ||
     text.includes("extrudegeometry") ||
     text.includes("buffergeometry") ||
+    text.includes("rangeerror") ||
+    text.includes("invalid array length") ||
+    text.includes("effectcomposer") ||
+    text.includes("n8ao") ||
     text.includes("theme.css is missing") ||
     text.includes("drawing-style.css is missing") ||
     text.includes("colours.css is missing")
@@ -72,11 +76,16 @@ export function sceneFallbackMessage(detail: SceneFallbackDetail): { lead: strin
         lead: `The 3D scene failed to build (${detail.errorName}).`,
         hint: "The drawing and the PNG, Rhino, and Illustrator downloads still work.",
       };
-    default:
+    default: {
+      const snippet = detail.errorMessage.trim();
+      const lead = snippet
+        ? `The 3D view could not start (${detail.errorName}: ${snippet}).`
+        : "The 3D view could not start.";
       return {
-        lead: "The 3D view could not start in this browser.",
-        hint: "The drawing and the PNG, Rhino, and Illustrator downloads still work.",
+        lead,
+        hint: "Reload the page or switch Quality to Fast. Drawing and PNG, Rhino, and Illustrator downloads still work.",
       };
+    }
   }
 }
 

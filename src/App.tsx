@@ -71,6 +71,7 @@ import { fetchBuildingEnrichmentForCut, fetchEnrichmentManifest } from "./lib/bu
 import { cutCenterOutsideBuiltBbox, enrichmentCoverageMessage } from "./lib/enrichmentCoverage";
 import { lidarLegendLine, logLidarEnrichmentStatus } from "./lib/lidarTierStatus";
 import { computeCityBlocks } from "./lib/cityBlocks";
+import { formatCreateModelError } from "./lib/createModelErrors";
 import { assignExternalUses, loadUseTiers } from "./lib/useCascade";
 import {
   fetchComBuildingFootprintsWithStats,
@@ -937,13 +938,21 @@ export default function App() {
       if (modelLayers.roads) {
         await yieldToBrowserFrame(isDomTestStart);
         if (controller.signal.aborted) return;
-        draftModel.blocks = computeCityBlocks(draftModel);
+        try {
+          draftModel.blocks = computeCityBlocks(draftModel);
+        } catch {
+          draftModel.blocks = [];
+        }
       }
       if (!isDomTestStart && typeof window !== "undefined") {
         window.__citycutLoadProgress = Math.max(window.__citycutLoadProgress ?? 0, 0.84);
       }
       if (nswMode && modelLayers.roads && (nswResult?.roadCorridors.length ?? 0) > 0) {
-        draftModel.nswRoadSurface = groundRoadPartition(draftModel).sources ?? null;
+        try {
+          draftModel.nswRoadSurface = groundRoadPartition(draftModel).sources ?? null;
+        } catch {
+          draftModel.nswRoadSurface = null;
+        }
       }
       const isAutomatedDomTest =
         typeof navigator !== "undefined" && /jsdom|HappyDOM/i.test(navigator.userAgent ?? "");
@@ -974,7 +983,7 @@ export default function App() {
       setPhase("model");
     } catch (err) {
       if (controller.signal.aborted) return;
-      setError(err instanceof Error ? err.message : "Could not build the model.");
+      setError(formatCreateModelError(err));
     } finally {
       if (abortRef.current === controller) {
         abortRef.current = null;

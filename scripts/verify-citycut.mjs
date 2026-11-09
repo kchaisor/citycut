@@ -27,7 +27,286 @@ import { PNG } from "pngjs";
 const CHROME_PATH = "/usr/bin/google-chrome";
 const VIEWPORT = { width: 1440, height: 900 };
 const DEVICE_SCALE_FACTOR = 2;
-const ARTIFACTS_DIR = "/workspace";
+const ARTIFACTS_DIR = process.env.CITYCUT_ARTIFACTS_DIR ?? "/workspace";
+
+function countPixelsNearRgb(png, target, tolerance = 48) {
+  let hits = 0;
+  for (let i = 0; i < png.data.length; i += 4) {
+    const dr = Math.abs(png.data[i] - target.r);
+    const dg = Math.abs(png.data[i + 1] - target.g);
+    const db = Math.abs(png.data[i + 2] - target.b);
+    if (dr <= tolerance && dg <= tolerance && db <= tolerance) hits += 1;
+  }
+  return hits;
+}
+
+function countWarmBrightenDelta(beforePng, afterPng, minSumDelta = 22) {
+  let hits = 0;
+  for (let i = 0; i < beforePng.data.length; i += 4) {
+    const dr = afterPng.data[i] - beforePng.data[i];
+    const dg = afterPng.data[i + 1] - beforePng.data[i + 1];
+    const db = afterPng.data[i + 2] - beforePng.data[i + 2];
+    if (dr + dg + db >= minSumDelta && dr >= 4 && dg >= 3) hits += 1;
+  }
+  return hits;
+}
+
+const PARCEL_OUTLINE_GOLD = { r: 225, g: 177, b: 87 };
+const PARCEL_CADASTRE_DEFAULT = { r: 212, g: 168, b: 92 };
+const VIEWPORT_SCENE_CLIP = { x: 180, y: 100, width: 1080, height: 720 };
+
+async function sceneViewportScreenshot(page, extra = {}) {
+  return page.screenshot({
+    clip: VIEWPORT_SCENE_CLIP,
+    timeout: 60_000,
+    animations: "disabled",
+    scale: "css",
+    ...extra,
+  });
+}
+
+async function verifyMontAlbertParcels(baseUrl, artifactsDir) {
+  const montBrowser = await chromium.launch({
+    executablePath: CHROME_PATH,
+    headless: true,
+    args: [
+      "--use-gl=angle",
+      "--use-angle=swiftshader",
+      "--enable-webgl",
+      "--ignore-gpu-blocklist",
+      "--disable-dev-shm-usage",
+      "--no-sandbox",
+    ],
+  });
+  try {
+    const montContext = await montBrowser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: 1,
+      reducedMotion: "no-preference",
+    });
+    await montContext.addInitScript(() => {
+      window.__citycutVerifyHarness = true;
+      window.__citycutMinSilentLoadMs = 550;
+    });
+    const montAlbertPage = await montContext.newPage();
+    await montAlbertPage.goto(`${baseUrl}/citycut/`, { waitUntil: "domcontentloaded" });
+    await montAlbertPage.waitForSelector("button.create-fab", { timeout: 60000 });
+    await montAlbertPage.getByRole("button", { name: "Mont Albert North" }).click();
+    await montAlbertPage.waitForTimeout(400);
+    await montAlbertPage.click("button.create-fab");
+    await montAlbertPage.waitForFunction(() => document.querySelector(".model canvas"), null, { timeout: 180000 });
+    await montAlbertPage.waitForFunction(
+      () => Number(document.querySelector(".model canvas")?.dataset.introProgressPct ?? 0) >= 100,
+      null,
+      { timeout: 180000 },
+    );
+    await montAlbertPage.evaluate(() => {
+      window.__citycutIntroPaused = true;
+    });
+    await montAlbertPage.waitForTimeout(800);
+    await montAlbertPage.waitForFunction(() => window.__citycutQaMassing?.enableTool != null, null, { timeout: 120000 });
+    await montAlbertPage.click('button[aria-label="Massing tool"]');
+    await montAlbertPage
+      .waitForFunction(() => window.__citycutQaParcels?.status === "ready", null, { timeout: 120000 })
+      .catch(() => {});
+    await montAlbertPage.waitForTimeout(600);
+    const montAlbertParcels = await montAlbertPage.evaluate(() => window.__citycutQaParcels ?? null);
+    const montAlbertCrop = PNG.sync.read(await sceneViewportScreenshot(montAlbertPage));
+    const montAlbertDefaultTint = countPixelsNearRgb(montAlbertCrop, PARCEL_CADASTRE_DEFAULT, 55);
+    await montAlbertPage.screenshot({
+      path: path.join(artifactsDir, "massing-mont-albert-parcels.png"),
+      timeout: 60_000,
+      animations: "disabled",
+      scale: "css",
+    });
+    await sceneViewportScreenshot(montAlbertPage, {
+      path: path.join(artifactsDir, "massing-mont-albert-parcels-crop.png"),
+    });
+    const montAlbertHoverProbe = await montAlbertPage.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      const id = api?.nearestParcelIds(1)?.[0];
+      if (!id || !api?.qaFocusParcelHover) return { ok: false, id: null, moved: false };
+      const moved = api.qaFocusParcelHover(id);
+      return { ok: moved, id, moved };
+    });
+    if (montAlbertHoverProbe.id) {
+      await montAlbertPage
+        .waitForFunction(
+          (exp) => window.__citycutQaParcels?.hoverParcelId === exp,
+          montAlbertHoverProbe.id,
+          { timeout: 3000 },
+        )
+        .catch(() => {});
+    }
+    await montAlbertPage.evaluate(
+      () =>
+        new Promise((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        }),
+    );
+    await montAlbertPage.waitForTimeout(350);
+    const montAlbertHoverParcelId = await montAlbertPage.evaluate(() => window.__citycutQaParcels?.hoverParcelId ?? null);
+    const montAlbertHoverCrop = PNG.sync.read(await sceneViewportScreenshot(montAlbertPage));
+    const montAlbertHoverDelta = countWarmBrightenDelta(montAlbertCrop, montAlbertHoverCrop);
+    await sceneViewportScreenshot(montAlbertPage, {
+      path: path.join(artifactsDir, "massing-mont-albert-parcels-hover-crop.png"),
+    });
+    await montContext.close();
+    return {
+      montAlbertParcels,
+      montAlbertDefaultTint,
+      montAlbertHoverProbe,
+      montAlbertHoverParcelId,
+      montAlbertHoverDelta,
+    };
+  } finally {
+    await montBrowser.close();
+  }
+}
+
+async function verifyRoddPoint2km3d(baseUrl, artifactsDir) {
+  const browser = await chromium.launch({
+    executablePath: CHROME_PATH,
+    headless: true,
+    args: [
+      "--use-gl=angle",
+      "--use-angle=swiftshader",
+      "--enable-webgl",
+      "--ignore-gpu-blocklist",
+      "--disable-dev-shm-usage",
+      "--no-sandbox",
+    ],
+  });
+  try {
+    const context = await browser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: 1,
+      reducedMotion: "no-preference",
+    });
+    await context.addInitScript(() => {
+      window.__citycutVerifyHarness = true;
+      window.__citycutMinSilentLoadMs = 550;
+    });
+    const page = await context.newPage();
+    const roddUrl = `${baseUrl}/citycut/?lat=-33.866498&lon=151.18355&km=2&label=Rodd+Point+NSW&view=iso-se&verify=1`;
+    await page.goto(roddUrl, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("button.create-fab", { timeout: 60000 });
+    await page.waitForTimeout(500);
+    await page.click("button.create-fab");
+    const outcomeHandle = await page
+      .waitForFunction(
+        () => {
+          const alert = document.querySelector(".sidebar-foot [role='alert']");
+          const alertText = alert?.textContent?.trim() ?? "";
+          if (/Unable to complete output ring|Last matching segment found ends at/i.test(alertText)) {
+            return { ok: false, alertText };
+          }
+          const fallback = document.querySelector(".scene-fallback");
+          if (fallback) {
+            return { ok: false, fallback: fallback.textContent?.trim() ?? "" };
+          }
+          const canvas = document.querySelector(".model canvas");
+          if (canvas) return { ok: true, hasCanvas: true };
+          return false;
+        },
+        null,
+        { timeout: 300000, polling: 500 },
+      )
+      .catch(() => null);
+    const parsed = outcomeHandle
+      ? await outcomeHandle.jsonValue()
+      : { ok: false, alertText: "timed out waiting for model or error" };
+    if (parsed?.ok) {
+      await page.waitForFunction(
+        () => Number(document.querySelector(".model canvas")?.dataset.introProgressPct ?? 0) >= 100,
+        null,
+        { timeout: 180000 },
+      );
+      const sceneOk = await page.evaluate(() => {
+        const fallback = document.querySelector(".scene-fallback");
+        const canvas = document.querySelector(".model canvas");
+        return !fallback && Boolean(canvas);
+      });
+      if (!sceneOk) {
+        await context.close();
+        return { ok: false, alertText: "scene fallback or missing canvas after intro" };
+      }
+      await page.screenshot({
+        path: path.join(artifactsDir, "rodd-point-2km-3d.png"),
+        timeout: 60000,
+        scale: "css",
+      });
+    }
+    await context.close();
+    return parsed;
+  } finally {
+    await browser.close();
+  }
+}
+
+async function verifyRoddPointCreate(baseUrl, artifactsDir) {
+  const browser = await chromium.launch({
+    executablePath: CHROME_PATH,
+    headless: true,
+    args: [
+      "--use-gl=angle",
+      "--use-angle=swiftshader",
+      "--enable-webgl",
+      "--ignore-gpu-blocklist",
+      "--disable-dev-shm-usage",
+      "--no-sandbox",
+    ],
+  });
+  try {
+    const context = await browser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: 1,
+      reducedMotion: "no-preference",
+    });
+    await context.addInitScript(() => {
+      window.__citycutVerifyHarness = true;
+      window.__citycutMinSilentLoadMs = 550;
+    });
+    const page = await context.newPage();
+  const roddUrl = `${baseUrl}/citycut/?lat=-33.86664&lon=151.18311&km=1.35&label=Rodd+Point+NSW&verify=1`;
+    await page.goto(roddUrl, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("button.create-fab", { timeout: 60000 });
+    await page.waitForTimeout(500);
+    await page.click("button.create-fab");
+    const outcomeHandle = await page
+      .waitForFunction(
+        () => {
+          const alert = document.querySelector(".sidebar-foot [role='alert']");
+          const alertText = alert?.textContent?.trim() ?? "";
+          if (/Unable to complete output ring|Last matching segment found ends at/i.test(alertText)) {
+            return { ok: false, alertText };
+          }
+          const canvas = document.querySelector(".model canvas");
+          if (canvas) return { ok: true, hasCanvas: true };
+          return false;
+        },
+        null,
+        { timeout: 300000, polling: 500 },
+      )
+      .catch(() => null);
+    const parsed = outcomeHandle
+      ? await outcomeHandle.jsonValue()
+      : { ok: false, alertText: "timed out waiting for model or error" };
+    if (parsed?.ok) {
+      await page.waitForFunction(
+        () => Number(document.querySelector(".model canvas")?.dataset.introProgressPct ?? 0) >= 100,
+        null,
+        { timeout: 180000 },
+      );
+      await page.screenshot({ path: path.join(artifactsDir, "rodd-point-create-model.png"), timeout: 60000, scale: "css" });
+    }
+    await context.close();
+    return parsed;
+  } finally {
+    await browser.close();
+  }
+}
+
 const TMP_FRAMES_DIR = "/tmp/citycut_verify_frames";
 const TMP_VIDEO_DIR = "/tmp/citycut_verify_video_frames";
 
@@ -66,6 +345,7 @@ function waitForServer(url, timeoutMs = 25000) {
 }
 
 async function main() {
+  fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
   fs.rmSync(TMP_FRAMES_DIR, { recursive: true, force: true });
   fs.mkdirSync(TMP_FRAMES_DIR, { recursive: true });
   fs.rmSync(TMP_VIDEO_DIR, { recursive: true, force: true });
@@ -115,6 +395,7 @@ async function main() {
     });
 
     await context.addInitScript(() => {
+      window.__citycutVerifyHarness = true;
       window.__citycutMinSilentLoadMs = 550;
       try {
         window.localStorage.setItem(
@@ -807,6 +1088,433 @@ async function main() {
         beat4Info.bridgePillOpacity === "0",
       `polar=${beat4Info.polar}, bldg=[${beat4Info.bldgInner},${beat4Info.bldgOuter}], tree=${beat4Info.treeScale}, hudOpacities=[${beat4Info.topOpacity},${beat4Info.leftOpacity},${beat4Info.rightOpacity},${beat4Info.bottomOpacity}], underlay=${beat4Info.hasUnderlay}`,
     );
+
+    await page.waitForFunction(() => window.__citycutQaMassing?.simulateDraw != null, null, { timeout: 120_000 });
+    await page.evaluate(() => {
+      for (const key of Object.keys(window.localStorage)) {
+        if (key.startsWith("citycut.massingBlocks.")) window.localStorage.removeItem(key);
+      }
+    });
+    // Real pointer gesture: click the HUD Massing button, then press-drag-release on the canvas.
+    // Guards against listener re-attach mid-drag (PR #199 regression: zero-length draw, no block).
+    await page.click('button[aria-label="Massing tool"]');
+    await page.click('button[aria-label="Massing draw tool"]');
+    await page.waitForTimeout(400);
+    const massingToolOn = await page.evaluate(
+      () =>
+        document.querySelector('button[aria-label="Massing tool"]')?.getAttribute("aria-pressed") === "true" &&
+        document.querySelector('button[aria-label="Massing draw tool"]')?.getAttribute("aria-pressed") === "true",
+    );
+    await page.mouse.move(560, 470);
+    await page.mouse.down();
+    await page.waitForTimeout(150);
+    for (let i = 1; i <= 15; i += 1) {
+      await page.mouse.move(560 + i * 8, 470);
+      await page.waitForTimeout(50);
+    }
+    const massingHudDuringDrag = await page.evaluate(() => document.querySelector(".massing-cursor-pill")?.textContent ?? "");
+    await page.mouse.up();
+    await page.waitForTimeout(400);
+    const massingPointerCount = await page.evaluate(() => window.__citycutQaMassing?.getBlocks()?.length ?? 0);
+    assertCheck(
+      "massing-pointer-draw",
+      "Massing HUD button enables the tool and a real pointer drag on the canvas creates a block",
+      massingToolOn && massingPointerCount >= 1,
+      `toolOn=${massingToolOn}, blocks=${massingPointerCount}, hud="${massingHudDuringDrag}"`,
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-pointer-draw.png") });
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      for (let i = 0; i < 10 && (api?.getBlocks()?.length ?? 0) > 0; i += 1) api?.deleteSelected();
+      api?.disableTool();
+    });
+    await page.waitForTimeout(300);
+
+    // Click-click drawing: click start, hover (live ground preview line + HUD), click end.
+    await page.evaluate(() => {
+      window.__citycutQaMassing?.enableTool();
+      window.__citycutQaMassing?.armDraw();
+    });
+    await page.waitForTimeout(300);
+    const sceneHasPreviewLine = () =>
+      page.evaluate(() => ({ qa: window.__citycutQaMassingPreview ?? null }));
+    await page.mouse.click(520, 470);
+    await page.waitForTimeout(250);
+    for (let i = 1; i <= 12; i += 1) {
+      await page.mouse.move(520 + i * 12, 470);
+      await page.waitForTimeout(40);
+    }
+    await page.waitForTimeout(250);
+    const clickPreview = await sceneHasPreviewLine();
+    const clickHud = await page.evaluate(() => document.querySelector(".massing-cursor-pill")?.textContent ?? "");
+    const blocksBeforeSecondClick = await page.evaluate(() => window.__citycutQaMassing?.getBlocks()?.length ?? -1);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-click-preview.png") });
+    await page.mouse.click(664, 470);
+    await page.waitForTimeout(250);
+    const afterSecondClick = await page.evaluate(() => ({
+      blocks: window.__citycutQaMassing?.getBlocks()?.length ?? -1,
+      preview: window.__citycutQaMassingPreview ?? null,
+    }));
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(400);
+    const clickBlocks = await page.evaluate(() => {
+      const blocks = window.__citycutQaMassing?.getBlocks() ?? [];
+      const b = blocks[blocks.length - 1];
+      return { count: blocks.length, width: b?.width_m ?? 0, vertices: b?.centerline?.length ?? 0 };
+    });
+    assertCheck(
+      "massing-click-click-draw",
+      "Real mouse click → hover → click → Enter creates a 14 m two-point block; between clicks a ground preview line and length/width HUD are live and no block exists until Enter",
+      clickPreview.qa?.phase === "drawingPreview" &&
+        clickPreview.qa?.inScene === true &&
+        Math.hypot(clickPreview.qa.end[0] - clickPreview.qa.start[0], clickPreview.qa.end[1] - clickPreview.qa.start[1]) > 5 &&
+        /14 m ×/.test(clickHud) &&
+        blocksBeforeSecondClick === 0 &&
+        afterSecondClick.blocks === 0 &&
+        afterSecondClick.preview?.vertexCount >= 2 &&
+        clickBlocks.count === 1 &&
+        clickBlocks.vertices === 2 &&
+        Math.abs(clickBlocks.width - 14) <= 0.5,
+      `preview=${JSON.stringify(clickPreview)}, hud="${clickHud}", before=${blocksBeforeSecondClick}, mid=${JSON.stringify(afterSecondClick)}, after=${JSON.stringify(clickBlocks)}`,
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-click-committed.png") });
+
+    await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      for (let i = 0; i < 10 && (api?.getBlocks()?.length ?? 0) > 0; i += 1) api?.deleteSelected();
+    });
+    await page.waitForTimeout(200);
+    await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      api?.enableTool();
+      api?.armDraw();
+      api?.qaGroundPress(-24, -6);
+      api?.qaGroundRelease();
+      api?.qaGroundPress(24, -6);
+      api?.qaGroundPress(24, 24);
+      api?.qaGroundMove(24, 24);
+    });
+    await page.waitForTimeout(350);
+    const polyPreview = await page.evaluate(() => window.__citycutQaMassingPreview ?? null);
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-polyline-preview.png") });
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(450);
+    const polyBlock = await page.evaluate(() => {
+      const b = window.__citycutQaMassing?.getBlocks()?.slice(-1)[0];
+      if (!b || !Array.isArray(b.centerline)) return null;
+      const cl = b.centerline;
+      const legA = cl.length >= 2 ? Math.hypot(cl[1][0] - cl[0][0], cl[1][1] - cl[0][1]) : 0;
+      const legB = cl.length >= 3 ? Math.hypot(cl[2][0] - cl[1][0], cl[2][1] - cl[1][1]) : 0;
+      const elbow = cl[1];
+      const elbowIsCorner =
+        cl.length >= 3 &&
+        Math.abs(elbow[0] - cl[2][0]) < 3 &&
+        Math.abs(elbow[1] - cl[0][1]) < 3;
+      return {
+        vertices: cl.length,
+        legA,
+        legB,
+        elbowIsCorner,
+        cl,
+      };
+    });
+    assertCheck(
+      "massing-polyline-bent-draw",
+      "Three-point massing draw + Enter extrudes a bent bar (3+ centerline vertices), not a collapsed straight first-to-last rectangle",
+      polyPreview?.phase === "drawingPreview" &&
+        (polyPreview?.vertexCount ?? 0) >= 3 &&
+        polyBlock?.vertices >= 3 &&
+        (polyBlock?.legA ?? 0) >= 20 &&
+        (polyBlock?.legB ?? 0) >= 20 &&
+        polyBlock?.elbowIsCorner === true,
+      `preview=${JSON.stringify(polyPreview)}, block=${JSON.stringify(polyBlock)}`,
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-polyline-committed.png") });
+
+    // Escape cancels an in-progress click-click line without creating a block.
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      for (let i = 0; i < 10 && (api?.getBlocks()?.length ?? 0) > 0; i += 1) {
+        const id = api?.getBlocks()?.[0]?.id;
+        if (id) api?.selectBlock(id);
+        api?.deleteSelected();
+      }
+    });
+    await page.waitForTimeout(300);
+    await page.mouse.click(520, 470);
+    await page.waitForTimeout(200);
+    await page.mouse.move(640, 470, { steps: 8 });
+    await page.waitForTimeout(200);
+    const escBefore = await page.evaluate(() => window.__citycutQaMassingPreview?.phase ?? null);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+    const escAfter = await page.evaluate(() => ({
+      preview: window.__citycutQaMassingPreview ?? null,
+      blocks: window.__citycutQaMassing?.getBlocks()?.length ?? -1,
+    }));
+    assertCheck(
+      "massing-click-escape-cancel",
+      "Escape during a click-click preview removes the preview line and leaves no block",
+      escBefore === "drawingPreview" && escAfter.preview === null && escAfter.blocks === 0,
+      `before=${escBefore}, after=${JSON.stringify(escAfter)}`,
+    );
+
+    await page.evaluate(() => window.__citycutQaMassing?.disarmDraw());
+    await page.waitForTimeout(200);
+    await page.evaluate(() => {
+      window.__citycutQaMassing?.enableTool();
+      window.__citycutQaMassing?.disarmDraw();
+    });
+    const drawPillOff = await page.evaluate(
+      () => document.querySelector('button[aria-label="Massing draw tool"]')?.getAttribute("aria-pressed") !== "true",
+    );
+    const orbitNoDraw = await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      if (!api) return { before: -1 };
+      return { before: api.getBlocks()?.length ?? 0 };
+    });
+    await page.mouse.click(580, 480);
+    await page.waitForTimeout(250);
+    const orbitNoDrawAfter = await page.evaluate(() => window.__citycutQaMassing?.getBlocks()?.length ?? -1);
+    assertCheck(
+      "massing-orbit-no-draw",
+      "Massing on with Draw off: a canvas click does not create a massing block",
+      drawPillOff && orbitNoDrawAfter === orbitNoDraw.before,
+      JSON.stringify({ drawPillOff, ...orbitNoDraw, after: orbitNoDrawAfter }),
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-draw-off-orbit.png") });
+
+    await page
+      .waitForFunction(() => window.__citycutQaParcels?.status && window.__citycutQaParcels.status !== "loading", null, {
+        timeout: 60_000,
+      })
+      .catch(() => {});
+    const parcelInfo = await page.evaluate(() => ({ qa: window.__citycutQaParcels ?? null }));
+    const parcelOutlinePng = PNG.sync.read(await page.screenshot({ clip: VIEWPORT_SCENE_CLIP }));
+    const parcelOutlinePixels = countPixelsNearRgb(parcelOutlinePng, PARCEL_CADASTRE_DEFAULT, 50);
+    assertCheck(
+      "massing-parcel-outlines",
+      "Massing mode draws readable Vicmap/VicPlan parcel outlines on the 3D ground (geometry + visible cadastre pixels)",
+      parcelInfo.qa?.status === "ready" &&
+        parcelInfo.qa.segments > 0 &&
+        parcelOutlinePixels >= 800,
+      JSON.stringify({ ...parcelInfo, parcelOutlinePixels }),
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-parcel-outlines.png") });
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-parcel-outlines-crop.png"), clip: VIEWPORT_SCENE_CLIP });
+
+    const oneSite = await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      api?.enableTool();
+      api?.disarmDraw();
+      api?.clearParcels();
+      const ids = api?.nearestParcelIds(1) ?? [];
+      if (ids[0]) api?.selectParcels([ids[0]]);
+      return { ids, state: api?.getParcelState() ?? null };
+    });
+    assertCheck(
+      "massing-one-site-boundary",
+      "Selecting one property title sets a site draw boundary",
+      oneSite.state?.selectedIds?.length === 1 && (oneSite.state?.boundaryPolygons ?? 0) >= 1,
+      JSON.stringify(oneSite),
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-one-site-boundary.png") });
+    const oneSiteCrop = PNG.sync.read(await page.screenshot({ clip: VIEWPORT_SCENE_CLIP }));
+    const oneSiteGold = countPixelsNearRgb(oneSiteCrop, PARCEL_OUTLINE_GOLD, 60);
+    assertCheck(
+      "massing-one-site-visible",
+      "One selected title shows obvious gold parcel highlight pixels in the 3D viewport",
+      oneSiteGold >= 1200,
+      `goldPixels=${oneSiteGold}`,
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-one-site-boundary-crop.png"), clip: VIEWPORT_SCENE_CLIP });
+
+    const threeSites = await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      api?.clearParcels();
+      const ids = api?.nearestParcelIds(3) ?? [];
+      api?.selectParcels(ids);
+      return { ids, state: api?.getParcelState() ?? null };
+    });
+    assertCheck(
+      "massing-three-sites-boundary",
+      "Selecting three adjacent titles combines into one site boundary outline",
+      threeSites.state?.selectedIds?.length === 3 && (threeSites.state?.boundaryPolygons ?? 0) >= 1,
+      JSON.stringify(threeSites),
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-three-sites-boundary.png") });
+    const threeSiteCrop = PNG.sync.read(await page.screenshot({ clip: VIEWPORT_SCENE_CLIP }));
+    const threeSiteGold = countPixelsNearRgb(threeSiteCrop, { r: 255, g: 255, b: 255 }, 40);
+    const threeSiteFill = countPixelsNearRgb(threeSiteCrop, PARCEL_OUTLINE_GOLD, 60);
+    assertCheck(
+      "massing-three-sites-visible",
+      "Three combined titles show strong gold fill and white combined boundary pixels in the 3D viewport",
+      threeSiteFill >= 1500 && threeSiteGold >= 200,
+      `fillGold=${threeSiteFill}, boundaryWhite=${threeSiteGold}`,
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-three-sites-boundary-crop.png"), clip: VIEWPORT_SCENE_CLIP });
+
+    const boundaryClamp = await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      if (!api) return { ok: false };
+      api.disarmDraw();
+      api.armDraw();
+      const edge = 190;
+      const outsideAllowed = api.pointInSiteBoundary(edge, edge);
+      api.qaGroundPress(edge, edge);
+      const phaseOutside = api.getToolPhase();
+      const inside = api.sampleInsideBoundary();
+      if (inside) api.qaGroundPress(inside[0], inside[1]);
+      const phaseInside = api.getToolPhase();
+      return {
+        ok: !outsideAllowed && phaseOutside === "idle" && inside != null && phaseInside === "drawing",
+        outsideAllowed,
+        phaseOutside,
+        phaseInside,
+        inside,
+        armed: api.drawArmed?.(),
+      };
+    });
+    assertCheck(
+      "massing-boundary-clamp",
+      "With a combined site boundary, clicks outside it do not start a draw vertex; inside clicks do",
+      boundaryClamp.ok === true,
+      JSON.stringify(boundaryClamp),
+    );
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => {
+      window.__citycutQaMassing?.disarmDraw();
+      window.__citycutQaMassing?.clearParcels();
+    });
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-draw-inside-boundary.png") });
+
+    await page.evaluate(() => window.__citycutQaMassing?.disableTool());
+    await page.waitForTimeout(200);
+
+    const {
+      montAlbertParcels,
+      montAlbertDefaultTint,
+      montAlbertHoverProbe,
+      montAlbertHoverParcelId,
+      montAlbertHoverDelta,
+    } = await verifyMontAlbertParcels(baseUrl, ARTIFACTS_DIR);
+    assertCheck(
+      "massing-mont-albert-parcels",
+      "Mont Albert North loads Vicmap parcels with a visible default cadastre tint and brighter hover on pointer focus",
+      montAlbertParcels?.status === "ready" &&
+        montAlbertParcels.source === "vicmap" &&
+        (montAlbertParcels.count ?? 0) >= 500 &&
+        montAlbertDefaultTint >= 2200 &&
+        montAlbertHoverProbe.moved === true &&
+        montAlbertHoverProbe.id != null &&
+        montAlbertHoverParcelId === montAlbertHoverProbe.id &&
+        montAlbertHoverDelta >= 420,
+      JSON.stringify({
+        montAlbertParcels,
+        montAlbertDefaultTint,
+        montAlbertHoverProbe,
+        montAlbertHoverParcelId,
+        montAlbertHoverDelta,
+      }),
+    );
+
+    const roddCreate = await verifyRoddPointCreate(baseUrl, ARTIFACTS_DIR);
+    assertCheck(
+      "rodd-point-create-model",
+      "Rodd Point NSW 1.35 km square (harbour-heavy) Create model finishes without polygon ring errors",
+      roddCreate?.ok === true,
+      JSON.stringify(roddCreate),
+    );
+
+    const rodd2km3d = await verifyRoddPoint2km3d(baseUrl, ARTIFACTS_DIR);
+    assertCheck(
+      "rodd-point-2km-3d",
+      "Rodd Point NSW 2 km cut shows WebGL canvas without scene fallback after Create model",
+      rodd2km3d?.ok === true,
+      JSON.stringify(rodd2km3d),
+    );
+
+    const massingDrawId = await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      if (!api) return null;
+      api.enableTool();
+      api.disarmDraw();
+      api.clearParcels();
+      return api.simulateDraw(-18, -6, 18, -6);
+    });
+    const massingAfterDraw = await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      const blocks = api?.getBlocks() ?? [];
+      const block = blocks[0];
+      return {
+        count: blocks.length,
+        width: block?.width_m ?? 0,
+        floors: block?.floors ?? 0,
+        dy: block ? Math.abs(block.centerline[1][1] - block.centerline[0][1]) : 0,
+        dx: block ? Math.abs(block.centerline[1][0] - block.centerline[0][0]) : 0,
+      };
+    });
+    assertCheck(
+      "massing-draw-block",
+      "Massing tool simulated drag creates a block near 14 m width on a snapped axis",
+      Boolean(massingDrawId) &&
+        massingAfterDraw.count >= 1 &&
+        Math.abs(massingAfterDraw.width - 14) <= 0.5 &&
+        massingAfterDraw.dx >= 30 &&
+        massingAfterDraw.dy <= 1.5,
+      JSON.stringify(massingAfterDraw),
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-draw-preview.png") });
+
+    await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      const id = api?.getBlocks()?.[0]?.id;
+      if (id) api?.selectBlock(id);
+      api?.setFloors(6);
+    });
+    await page.waitForTimeout(300);
+    const massingAfterHeight = await page.evaluate(() => window.__citycutQaMassing?.getBlocks()?.[0]?.floors ?? 0);
+    assertCheck(
+      "massing-height-floors",
+      "Massing block floor count updates via edit API",
+      massingAfterHeight === 6,
+      `floors=${massingAfterHeight}`,
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-selected-edited.png") });
+
+    const persistedBeforeReload = await page.evaluate(() => window.__citycutQaMassing?.readPersistedCount() ?? 0);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector("button.create-fab", { timeout: 120_000 });
+    await page.click("button.create-fab");
+    await page.waitForFunction(() => window.__citycutQaMassing?.readPersistedCount != null, null, { timeout: 120_000 });
+    const persistedAfterReload = await page.evaluate(() => window.__citycutQaMassing?.readPersistedCount() ?? 0);
+    assertCheck(
+      "massing-persist-reload",
+      "Drawn massing blocks persist in localStorage across reload",
+      persistedBeforeReload >= 1 && persistedAfterReload >= 1,
+      `before=${persistedBeforeReload}, after=${persistedAfterReload}`,
+    );
+
+    await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      api?.enableTool();
+      const id = api?.getBlocks()?.[0]?.id;
+      if (id) api?.selectBlock(id);
+      api?.deleteSelected();
+    });
+    const massingAfterDelete = await page.evaluate(() => window.__citycutQaMassing?.getBlocks()?.length ?? -1);
+    assertCheck(
+      "massing-delete",
+      "Massing delete removes the selected block",
+      massingAfterDelete === 0,
+      `remaining=${massingAfterDelete}`,
+    );
+
+    await page.evaluate(() => window.__citycutQaMassing?.disableTool());
 
     // TYPOGRAPHY & CSS SURFACE INVARIANTS
     const uiInvariants = await page.evaluate(() => {

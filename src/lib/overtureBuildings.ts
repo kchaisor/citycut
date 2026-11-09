@@ -3,6 +3,7 @@ import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 import { PMTiles } from "pmtiles";
 import polygonClipping from "polygon-clipping";
+import { clipUnion } from "./polygonClip";
 import { classify } from "./buildingUse";
 import { intersectionAreaM2 } from "./comBuildingHeightsMatch";
 import { clipAreaToSiteFrame, DEFAULT_SITE_FRAME_SHAPE, type SiteFrameShape } from "./siteFrame";
@@ -196,7 +197,7 @@ export function reassembleBuildingFragments(fragments: Fragment[]): Fragment[] {
     let microsoft = parts.some((part) => part.microsoft);
     const osmWayIds = [...new Set(parts.flatMap((part) => part.osmWayIds))];
     for (const part of parts) {
-      union = polygonClipping.union(union, asMultiPoly(part.ring, part.holes)) as MultiPoly;
+      union = clipUnion(union, asMultiPoly(part.ring, part.holes)) as MultiPoly;
       if (part.microsoft) microsoft = true;
     }
     const rings = ringFromMulti(union, SLIVER_AREA_M2);
