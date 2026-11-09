@@ -1,12 +1,17 @@
 import type { WindLbmSolverState } from "./types";
 
+export const WIND_PARTICLE_COUNT = 2800;
+export const WIND_TRAIL_SAMPLES = 28;
+
 export type WindFlowParticle = {
   east: number;
   north: number;
-  age: number;
   seed: number;
   lastUx: number;
   lastUy: number;
+  trailEast: Float32Array;
+  trailNorth: Float32Array;
+  trailHead: number;
 };
 
 export function spawnWindParticles(count: number, sideM: number, seedBase = 0): WindFlowParticle[] {
@@ -16,9 +21,28 @@ export function spawnWindParticles(count: number, sideM: number, seedBase = 0): 
     const t = i + seedBase * 1.317;
     const east = ((t * 73.21) % 1) * sideM - half;
     const north = ((t * 41.89) % 1) * sideM - half;
-    out.push({ east, north, age: (t % 1) * 2.4, seed: t, lastUx: 0.04, lastUy: 0 });
+    const trailEast = new Float32Array(WIND_TRAIL_SAMPLES);
+    const trailNorth = new Float32Array(WIND_TRAIL_SAMPLES);
+    trailEast[0] = east;
+    trailNorth[0] = north;
+    out.push({
+      east,
+      north,
+      seed: t,
+      lastUx: 0.04,
+      lastUy: 0,
+      trailEast,
+      trailNorth,
+      trailHead: 0,
+    });
   }
   return out;
+}
+
+function pushTrail(p: WindFlowParticle, east: number, north: number): void {
+  p.trailHead = (p.trailHead + 1) % WIND_TRAIL_SAMPLES;
+  p.trailEast[p.trailHead] = east;
+  p.trailNorth[p.trailHead] = north;
 }
 
 function sampleField(
@@ -28,6 +52,9 @@ function sampleField(
 ): { ux: number; uy: number; blocked: boolean } {
   const { spec, obstacle, ux, uy } = state;
   const half = spec.sideM / 2;
+  if (east < -half || east > half || north < -half || north > half) {
+    return { ux: 0, uy: 0, blocked: true };
+  }
   const fx = ((east + half) / spec.sideM) * spec.nx;
   const fy = ((north + half) / spec.sideM) * spec.ny;
   const i0 = Math.floor(fx);
@@ -52,6 +79,26 @@ function sampleField(
   return { ux: uxVal, uy: uyVal, blocked: false };
 }
 
+function respawn(p: WindFlowParticle, sideM: number, state: WindLbmSolverState, attempt: number): void {
+  const half = sideM / 2;
+  const inlet = state.inflow;
+  const uLen = Math.hypot(inlet.ux, inlet.uy) || 1;
+  const east = ((p.seed * 19.3 + attempt * 0.71) % 1) * sideM - half;
+  const north = ((p.seed * 31.7 + attempt * 0.53) % 1) * sideM - half;
+  const upwind =
+    (inlet.ux > 0 && east < -half * 0.3) ||
+    (inlet.ux < 0 && east > half * 0.3) ||
+    (inlet.uy > 0 && north < -half * 0.3) ||
+    (inlet.uy < 0 && north > half * 0.3);
+  p.east = upwind ? east : east * 0.6 + (inlet.ux / uLen) * half * 0.15;
+  p.north = upwind ? north : north * 0.6 + (inlet.uy / uLen) * half * 0.15;
+  p.lastUx = inlet.ux;
+  p.lastUy = inlet.uy;
+  p.trailHead = 0;
+  p.trailEast.fill(p.east);
+  p.trailNorth.fill(p.north);
+}
+
 export function advectWindParticles(
   particles: WindFlowParticle[],
   state: WindLbmSolverState,
@@ -59,28 +106,33 @@ export function advectWindParticles(
   sideM: number,
 ): void {
   const half = sideM / 2;
-  const worldScale = sideM * 0.42;
+  const advectScale = sideM * 0.55;
   for (const p of particles) {
     const field = sampleField(state, p.east, p.north);
-    p.age += dt;
-    if (field.blocked || p.age > 2.8) {
-      p.east = ((p.seed * 19.3) % 1) * sideM - half;
-      p.north = ((p.seed * 31.7) % 1) * sideM - half;
-      p.age = 0;
+    if (field.blocked) {
+      respawn(p, sideM, state, 1);
       continue;
     }
     const speed = Math.hypot(field.ux, field.uy);
-    if (speed < 0.002) {
-      p.age = 3;
+    if (speed < 0.0015) {
+      respawn(p, sideM, state, 2);
       continue;
     }
     p.lastUx = field.ux;
     p.lastUy = field.uy;
-    p.east += field.ux * worldScale * dt;
-    p.north += field.uy * worldScale * dt;
-    if (p.east < -half || p.east > half || p.north < -half || p.north > half) {
-      p.age = 3;
+    const de = field.ux * advectScale * dt;
+    const dn = field.uy * advectScale * dt;
+    if (!Number.isFinite(de) || !Number.isFinite(dn)) {
+      respawn(p, sideM, state, 4);
+      continue;
     }
+    p.east += de;
+    p.north += dn;
+    if (p.east < -half || p.east > half || p.north < -half || p.north > half) {
+      respawn(p, sideM, state, 3);
+      continue;
+    }
+    pushTrail(p, p.east, p.north);
   }
 }
 

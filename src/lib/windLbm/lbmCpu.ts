@@ -88,7 +88,7 @@ function setEquilibriumCell(f: Float32Array, cell: number, rho: number, ux: numb
   for (let k = 0; k < LBM_Q; k++) f[cell * LBM_Q + k] = feq(k, rho, ux, uy);
 }
 
-function applyInletOutlet(state: WindLbmSolverState): void {
+export function applyInletOutlet(state: WindLbmSolverState): void {
   const { spec, obstacle, f, inflow } = state;
   const { nx, ny } = spec;
   const interiorUx = inflow.ux;

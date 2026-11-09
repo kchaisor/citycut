@@ -1294,46 +1294,115 @@ async function main() {
       );
       if (btn && btn.getAttribute("aria-pressed") !== "true") btn.click();
     });
-    await page.waitForTimeout(500);
-    const windFlowBefore = await page.evaluate(() => {
+    await page.evaluate(() => {
+      const play = [...document.querySelectorAll(".model .env-console .overlay-chips button")].find((el) => {
+        const t = el.textContent ?? "";
+        return t.includes("Play") || t.includes("Pause");
+      });
+      if (play && play.getAttribute("aria-pressed") !== "true") play.click();
+    });
+    const setWindFromDeg = async (deg) => {
+      await page.evaluate((d) => {
+        const input = document.querySelector(".model .wind-direction-scrubber input[type='range']");
+        if (!input) return;
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+        setter?.call(input, String(d));
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }, deg);
+    };
+    await page.waitForTimeout(600);
+    await setWindFromDeg(0);
+    await page.waitForTimeout(2400);
+    const windFlowAt0 = await page.evaluate(() => {
       const canvas = document.querySelector(".wind-flow-plan-canvas");
       const snap = window.__citycutQaWindFlow?.getSnapshot?.();
+      const label = document.querySelector(".model .wind-direction-scrubber .st-v")?.textContent ?? "";
       return {
         hasCanvas: Boolean(canvas && canvas.width > 0 && canvas.height > 0),
         frame: snap?.frame ?? -1,
         hash: snap?.particleHash ?? "",
         backend: snap?.backend ?? "none",
+        directionDeg: snap?.directionDeg ?? -1,
+        label,
+        inCutRatio: snap?.inCutRatio ?? 0,
+        gpuSteps: snap?.gpuSteps ?? 0,
+        gpuHasStepped: snap?.gpuHasStepped ?? false,
+        meanUx: snap?.meanUx ?? 0,
+        meanUy: snap?.meanUy ?? 0,
       };
     });
-    await page.waitForTimeout(900);
-    const windFlowAfter = await page.evaluate(() => {
+    await page.waitForTimeout(1400);
+    const windFlowAfterMove = await page.evaluate(() => {
       const snap = window.__citycutQaWindFlow?.getSnapshot?.();
       return {
         frame: snap?.frame ?? -1,
         hash: snap?.particleHash ?? "",
+      };
+    });
+  if (fs.existsSync(ARTIFACTS_DIR)) {
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "wind-flow-drawing-from-0.png") });
+    }
+    await setWindFromDeg(135);
+    await page.waitForTimeout(4000);
+    const windFlowAt135 = await page.evaluate(() => {
+      const snap = window.__citycutQaWindFlow?.getSnapshot?.();
+      const label = document.querySelector(".model .wind-direction-scrubber .st-v")?.textContent ?? "";
+      return {
+        label,
+        directionDeg: snap?.directionDeg ?? -1,
+        meanUx: snap?.meanUx ?? 0,
+        meanUy: snap?.meanUy ?? 0,
+        inCutRatio: snap?.inCutRatio ?? 0,
         backend: snap?.backend ?? "none",
+        gpuSteps: snap?.gpuSteps ?? 0,
+        gpuHasStepped: snap?.gpuHasStepped ?? false,
       };
     });
     if (fs.existsSync(ARTIFACTS_DIR)) {
-      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "wind-flow-drawing-n-e.png") });
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "wind-flow-drawing-from-135.png") });
     }
-    await page.locator('.model .wind-direction-scrubber input[type="range"]').evaluate((el) => {
-      el.value = "135";
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-      el.dispatchEvent(new Event("change", { bubbles: true }));
+    await page.evaluate(() => {
+      const btn = [...document.querySelectorAll(".model .env-console .overlay-chips button")].find((el) =>
+        (el.textContent ?? "").includes("Heatmap"),
+      );
+      if (btn && btn.getAttribute("aria-pressed") !== "true") btn.click();
     });
-    await page.waitForTimeout(1200);
+    await page.waitForTimeout(900);
     if (fs.existsSync(ARTIFACTS_DIR)) {
-      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "wind-flow-drawing-se.png") });
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "wind-flow-drawing-heatmap.png") });
     }
+    const flowDelta = Math.hypot(windFlowAt135.meanUx - windFlowAt0.meanUx, windFlowAt135.meanUy - windFlowAt0.meanUy);
+    const scrubDeg = (label) => {
+      const n = Number.parseInt(String(label).replace(/[^\d]/g, ""), 10);
+      return Number.isFinite(n) ? n % 360 : -1;
+    };
+    const dirOk0 = scrubDeg(windFlowAt0.label) === 0;
+    const dirOk135 = scrubDeg(windFlowAt135.label) === 135;
+    const flowRotated =
+      windFlowAt0.meanUy < -0.001 &&
+      windFlowAt135.meanUy > 0.001 &&
+      Math.abs(windFlowAt135.meanUx - windFlowAt0.meanUx) > 0.003;
+    const gpuOk =
+      windFlowAt0.backend !== "gpu" ||
+      windFlowAt0.gpuHasStepped ||
+      windFlowAt135.gpuHasStepped ||
+      windFlowAt0.gpuSteps > 0 ||
+      windFlowAt135.gpuSteps > 0;
     assertCheck(
       "drawing-wind-rose-flow",
-      "In Drawing -> Wind Rose, the plan flow canvas renders and particles move between frames",
-      windFlowBefore.hasCanvas &&
-        windFlowAfter.frame > windFlowBefore.frame &&
-        windFlowAfter.hash.length > 0 &&
-        windFlowAfter.hash !== windFlowBefore.hash,
-      `canvas=${windFlowBefore.hasCanvas}, frames=${windFlowBefore.frame}->${windFlowAfter.frame}, backend=${windFlowAfter.backend}, hash=${windFlowBefore.hash}->${windFlowAfter.hash}`,
+      "In Drawing -> Wind Rose, plan flow canvas renders inside the cut, particles move, GPU steps when available, and mean flow rotates when FROM changes",
+      windFlowAt0.hasCanvas &&
+        windFlowAfterMove.frame > windFlowAt0.frame &&
+        windFlowAfterMove.hash.length > 0 &&
+        windFlowAt0.inCutRatio >= 0.92 &&
+        windFlowAt135.inCutRatio >= 0.92 &&
+        dirOk0 &&
+        dirOk135 &&
+        flowDelta > 0.006 &&
+        flowRotated &&
+        gpuOk,
+      `canvas=${windFlowAt0.hasCanvas}, inCut=[${windFlowAt0.inCutRatio.toFixed(2)},${windFlowAt135.inCutRatio.toFixed(2)}], dir=[${windFlowAt0.label}->${windFlowAt135.label}], frames=${windFlowAt0.frame}->${windFlowAfterMove.frame}, flowΔ=${flowDelta.toFixed(4)}, rotated=${flowRotated}, mean0=[${windFlowAt0.meanUx.toFixed(4)},${windFlowAt0.meanUy.toFixed(4)}], mean135=[${windFlowAt135.meanUx.toFixed(4)},${windFlowAt135.meanUy.toFixed(4)}], backend=${windFlowAt0.backend}, gpuHasStepped=${windFlowAt135.gpuHasStepped}, gpuSteps=${windFlowAt135.gpuSteps}`,
     );
 
     {

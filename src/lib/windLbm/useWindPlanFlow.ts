@@ -6,14 +6,22 @@ import {
   createLbmState,
   inflowFromDirectionDeg,
   inflowFromSector,
-  lbmCpuStep,
+  lbmStepMany,
   resetLbmInflow,
   speedLuFromKmh,
 } from "./lbmCpu";
 import { LbmGpuSurface } from "./lbmGpu";
 import { obstacleMaskFingerprint, rasterizeBuildingObstacles, windLbmGridSpec } from "./obstacleRaster";
 import type { WindLbmBackend, WindLbmFlowSettings, WindLbmSolverState } from "./types";
-import { advectWindParticles, particleFingerprint, spawnWindParticles, type WindFlowParticle } from "./windParticles";
+import { flowAlignmentScore, meanFlowVector, particlesInsideCutRatio } from "./windFlowQa";
+import { runWindLbmCpuSteps } from "./windLbmWorkerClient";
+import {
+  WIND_PARTICLE_COUNT,
+  advectWindParticles,
+  particleFingerprint,
+  spawnWindParticles,
+  type WindFlowParticle,
+} from "./windParticles";
 
 export type WindPlanFlowSnapshot = {
   backend: WindLbmBackend;
@@ -21,6 +29,12 @@ export type WindPlanFlowSnapshot = {
   particles: WindFlowParticle[];
   frame: number;
   particleHash: string;
+  directionDeg: number;
+  meanUx: number;
+  meanUy: number;
+  inCutRatio: number;
+  gpuSteps: number;
+  gpuHasStepped: boolean;
 };
 
 declare global {
@@ -53,8 +67,10 @@ export function useWindPlanFlow({
   qaExpose?: boolean;
 }): WindPlanFlowSnapshot {
   const [frame, setFrame] = useState(0);
-  const [particles, setParticles] = useState<WindFlowParticle[]>(() => spawnWindParticles(220, sideM));
+  const [particles, setParticles] = useState<WindFlowParticle[]>(() => spawnWindParticles(WIND_PARTICLE_COUNT, sideM));
   const [backend, setBackend] = useState<WindLbmBackend>("cpu");
+  const [gpuSteps, setGpuSteps] = useState(0);
+  const [gpuHasStepped, setGpuHasStepped] = useState(false);
   const solverRef = useRef<WindLbmSolverState | null>(null);
   const scratchRef = useRef<Float32Array | null>(null);
   const gpuRef = useRef<LbmGpuSurface | null>(null);
@@ -63,6 +79,8 @@ export function useWindPlanFlow({
   const rafRef = useRef<number | null>(null);
   const lastTsRef = useRef<number | null>(null);
   const particlesRef = useRef(particles);
+  const cpuOnlyFramesRef = useRef(0);
+  const gpuHasSteppedRef = useRef(false);
 
   const gridLong = useMemo(() => pickWindGridLongSide(sideM), [sideM]);
   const spec = useMemo(() => windLbmGridSpec(sideM, gridLong), [sideM, gridLong]);
@@ -74,7 +92,7 @@ export function useWindPlanFlow({
   const inflowKey = `${directionDeg.toFixed(1)}:${speedLu.toFixed(4)}`;
 
   useEffect(() => {
-    particlesRef.current = spawnWindParticles(220, sideM, directionDeg);
+    particlesRef.current = spawnWindParticles(WIND_PARTICLE_COUNT, sideM, directionDeg);
     setParticles(particlesRef.current);
   }, [sideM]);
 
@@ -90,6 +108,9 @@ export function useWindPlanFlow({
     const gpu = new LbmGpuSurface(canvas);
     gpuRef.current = gpu;
     setBackend(gpu.backend);
+    setGpuSteps(0);
+    setGpuHasStepped(false);
+    gpuHasSteppedRef.current = false;
     return () => {
       gpu.dispose();
       gpuRef.current = null;
@@ -106,17 +127,25 @@ export function useWindPlanFlow({
         ? inflowFromSector(stats.prevailingSector, speedLu)
         : inflowFromDirectionDeg(directionDeg, speedLu);
     let state = solverRef.current;
-    if (!state || obstacleKeyRef.current !== obstacleKey) {
+    const fresh = !state || obstacleKeyRef.current !== obstacleKey;
+    if (fresh) {
       const obstacle = rasterizeBuildingObstacles(buildings, spec);
       state = createLbmState(spec, obstacle, inflow);
       obstacleKeyRef.current = obstacleKey;
       inflowKeyRef.current = inflowKey;
-    } else if (inflowKeyRef.current !== inflowKey) {
+      lbmStepMany(state, 200);
+      cpuOnlyFramesRef.current = 8;
+      gpuRef.current?.uploadState(state);
+    } else if (state && inflowKeyRef.current !== inflowKey) {
       state = resetLbmInflow(state, inflow);
       inflowKeyRef.current = inflowKey;
-      particlesRef.current = spawnWindParticles(220, sideM, directionDeg);
+      lbmStepMany(state, 240);
+      cpuOnlyFramesRef.current = 8;
+      particlesRef.current = spawnWindParticles(WIND_PARTICLE_COUNT, sideM, directionDeg);
       setParticles(particlesRef.current);
+      gpuRef.current?.uploadState(state);
     }
+    if (!state) return;
     solverRef.current = state;
     const n = state.f.length;
     if (!scratchRef.current || scratchRef.current.length !== n) scratchRef.current = new Float32Array(n);
@@ -135,13 +164,22 @@ export function useWindPlanFlow({
       const dt = Math.min(0.05, (ts - last) / 1000);
       const state = solverRef.current;
       if (state) {
-        const steps = backend === "gpu" ? 3 : 2;
         const scratch = scratchRef.current;
         const gpu = gpuRef.current;
-        if (gpu) {
+        const steps = gpu?.backend === "gpu" ? 1 : 2;
+        if (cpuOnlyFramesRef.current > 0) {
+          if (scratch) runWindLbmCpuSteps(state, steps + 1, scratch);
+          cpuOnlyFramesRef.current -= 1;
+          if (cpuOnlyFramesRef.current === 0 && gpu?.backend === "gpu") {
+            gpu.uploadState(state);
+          }
+        } else if (gpu?.backend === "gpu") {
           gpu.step(state, steps);
-        } else {
-          for (let s = 0; s < steps; s++) lbmCpuStep(state, scratch ?? undefined);
+          gpuHasSteppedRef.current = true;
+          setGpuHasStepped(true);
+          setGpuSteps(gpu.gpuStepCount());
+        } else if (scratch) {
+          runWindLbmCpuSteps(state, steps, scratch);
         }
         advectWindParticles(particlesRef.current, state, dt, sideM);
         setParticles([...particlesRef.current]);
@@ -156,6 +194,9 @@ export function useWindPlanFlow({
     };
   }, [active, settings.playing, sideM, backend]);
 
+  const half = sideM / 2;
+  const mean = meanFlowVector(solverRef.current);
+  const inCutRatio = particlesInsideCutRatio(particles, half);
   const particleHash = useMemo(() => particleFingerprint(particles), [particles, frame]);
 
   useEffect(() => {
@@ -167,12 +208,18 @@ export function useWindPlanFlow({
         particles: particlesRef.current,
         frame,
         particleHash: particleFingerprint(particlesRef.current),
+        directionDeg,
+        meanUx: meanFlowVector(solverRef.current).ux,
+        meanUy: meanFlowVector(solverRef.current).uy,
+        inCutRatio: particlesInsideCutRatio(particlesRef.current, half),
+        gpuSteps: gpuRef.current?.gpuStepCount() ?? 0,
+        gpuHasStepped: gpuHasSteppedRef.current || (gpuRef.current?.gpuStepCount() ?? 0) > 0,
       }),
     };
     return () => {
       delete window.__citycutQaWindFlow;
     };
-  }, [qaExpose, backend, frame, particleHash]);
+  }, [qaExpose, backend, frame, particleHash, directionDeg, half, gpuHasStepped]);
 
   return {
     backend,
@@ -180,5 +227,13 @@ export function useWindPlanFlow({
     particles,
     frame,
     particleHash,
+    directionDeg,
+    meanUx: mean.ux,
+    meanUy: mean.uy,
+    inCutRatio,
+    gpuSteps,
+    gpuHasStepped,
   };
 }
+
+export { flowAlignmentScore };

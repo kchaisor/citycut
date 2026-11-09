@@ -1966,7 +1966,6 @@ export function ModelPage({
               />
               {windPlanFlowActive && (
                 <WindFlowPlanOverlay
-                  view={planViewport}
                   sideM={drawingModel.sideM}
                   solver={windPlanFlow.solver}
                   particles={windPlanFlow.particles}
