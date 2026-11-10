@@ -2245,6 +2245,7 @@ async function main() {
           () => window.__citycutQaModel?.readSunHoursLostPlan?.() ?? { cellCount: 0, maxLoss: 0 },
         );
         const lossDom = await shadowPage.locator("[data-sun-hours-lost]").count();
+        await shadowPage.waitForSelector("[data-sun-hours-lost-legend]", { timeout: 120000 });
         const shotHoursLost = path.join(CURSOR_ARTIFACTS_DIR, "solar-hours-lost-box-hill.png");
         await shadowPage.locator("svg.plan").screenshot({ path: shotHoursLost });
 
@@ -2255,7 +2256,8 @@ async function main() {
             emptyDom === 0 &&
             withLoss.cellCount > 8 &&
             withLoss.maxLoss > 0.25 &&
-            lossDom > 8,
+            lossDom > 8 &&
+            (withLoss.footprintInside ?? 0) === 0,
           `before=${JSON.stringify(beforeLoss)}, after=${JSON.stringify(withLoss)}, dom=${lossDom}, shot=${shotHoursLost}`,
         );
       };

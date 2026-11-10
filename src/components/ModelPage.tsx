@@ -179,7 +179,7 @@ import { SceneBoundary } from "./SceneBoundary";
 import { SolarPanel } from "./SolarPanel";
 import { useSolarReceptorAssess } from "./useSolarReceptorAssess";
 import { useSunHoursLostPlan } from "./useSunHoursLostPlan";
-import { countPositiveLossCells } from "../lib/sunHoursLostPlan";
+import { countPositiveLossCells, positiveLossCellsInsideFootprints } from "../lib/sunHoursLostPlan";
 import { ringFromCorners } from "../lib/solarAccessB43";
 import type { SolarReceptorArea } from "../lib/solarReceptorAssess";
 import { solarReceptorsForExport } from "../lib/solarReceptorExport";
@@ -796,6 +796,7 @@ export function ModelPage({
 
   const qaSummaryRef = useRef({ treeCrowns: 0, buildingCount: 0, roadCount: 0, triangleCount: 0 });
   const qaDisplayBuildingsRef = useRef(model.buildings);
+  const drawingModelRef = useRef(model);
   const heightPerfRef = useRef<{ modelOpenMs: number; firstRenderMs: number | null; comAppliedMs: number | null }>(
     { modelOpenMs: performance.now(), firstRenderMs: null, comAppliedMs: null },
   );
@@ -1108,11 +1109,13 @@ export function ModelPage({
       },
       readSunHoursLostPlan() {
         const { grid } = sunHoursLostPlanRef.current;
-        if (!grid) return { cellCount: 0, maxLoss: 0, southLossCells: 0 };
+        if (!grid) return { cellCount: 0, maxLoss: 0, southLossCells: 0, footprintInside: 0 };
+        const footprintInside = positiveLossCellsInsideFootprints(drawingModelRef.current, grid).length;
         return {
           cellCount: countPositiveLossCells(grid),
           maxLoss: grid.maxLoss,
           cellM: grid.cellM,
+          footprintInside,
         };
       },
     };
@@ -1306,6 +1309,7 @@ export function ModelPage({
       contours: contoursVisible ? displayModel.contours : false,
     };
   }, [displayModel, drawnMassingBuildings, massing.drawingBuildings, qaProposedMassing, view3dDisplay]);
+  drawingModelRef.current = drawingModel;
 
   const solarReceptorAssess = useSolarReceptorAssess(
     drawingModel,
