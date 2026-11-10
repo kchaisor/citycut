@@ -12,10 +12,10 @@ export function SectionKnifeElevationPanel({ model, tool }: { model: CityModel; 
     [model, knife.pose.angleRad, knife.pose.offsetM],
   );
 
-  const padPlotX = 48;
+  const padPlotX = 54;
   const padRight = 12;
   const padTop = 20;
-  const padBottom = 30;
+  const padBottom = 34;
   const viewW = 356;
   const viewH = 188;
   const plotW = viewW - padPlotX - padRight;
@@ -89,20 +89,16 @@ export function SectionKnifeElevationPanel({ model, tool }: { model: CityModel; 
         </defs>
         <rect x={padPlotX} y={padTop} width={plotW} height={plotH} fill={sky} />
         {rlTicks.map((y) => (
-          <g key={y}>
-            <line
-              x1={padPlotX}
-              y1={yScale(y)}
-              x2={viewW - padRight}
-              y2={yScale(y)}
-              stroke={grid}
-              strokeOpacity={0.07}
-              strokeWidth={1}
-            />
-            <text className="section-knife-rl mono" x={padPlotX - 6} y={yScale(y) + 3} textAnchor="end" fontSize={9} fill={grid} opacity={0.62}>
-              RL {Math.round(y)}
-            </text>
-          </g>
+          <line
+            key={y}
+            x1={padPlotX}
+            y1={yScale(y)}
+            x2={viewW - padRight}
+            y2={yScale(y)}
+            stroke={grid}
+            strokeOpacity={0.07}
+            strokeWidth={1}
+          />
         ))}
         {groundFillPath ? (
           <>
@@ -126,9 +122,8 @@ export function SectionKnifeElevationPanel({ model, tool }: { model: CityModel; 
                 width={w}
                 height={h}
                 fill={fill}
-                stroke={profile.cutByKnife ? "none" : grid}
-                strokeOpacity={profile.cutByKnife ? 0 : 0.22}
-                strokeWidth={profile.cutByKnife ? 0 : 0.6}
+                fillOpacity={profile.cutByKnife ? 1 : 0.38}
+                stroke="none"
               />
               {profile.cutByKnife
                 ? profile.floors.map((floor, index) => (
@@ -151,10 +146,26 @@ export function SectionKnifeElevationPanel({ model, tool }: { model: CityModel; 
         <path d={groundLinePath} fill="none" stroke={terrainInk} strokeWidth={1.35} />
         <line x1={xScale(0)} y1={padTop} x2={xScale(0)} y2={plotBottom} stroke={markerGold} strokeWidth={1.8} />
         <circle cx={xScale(0)} cy={padTop + 3.5} r={2.6} fill={markerGold} />
-        <text className="mono section-knife-end-label" x={xScale(-elevation.halfWidthM)} y={plotBottom - 6} textAnchor="start" fontSize={10} fill={grid} opacity={0.88}>
+        <rect x={0} y={padTop - 2} width={padPlotX} height={plotH + 4} fill={sky} />
+        {rlTicks.map((y) => (
+          <text
+            key={`rl-${y}`}
+            className="section-knife-rl mono"
+            x={padPlotX - 7}
+            y={yScale(y) + 3}
+            textAnchor="end"
+            fontSize={9}
+            fill={grid}
+            opacity={0.72}
+          >
+            RL {Math.round(y)}
+          </text>
+        ))}
+        <line x1={padPlotX} y1={plotBottom} x2={viewW - padRight} y2={plotBottom} stroke={grid} strokeOpacity={0.2} strokeWidth={1} />
+        <text className="mono section-knife-end-label" x={padPlotX} y={plotBottom + 14} textAnchor="start" fontSize={10} fill={grid} opacity={0.9}>
           A
         </text>
-        <text className="mono section-knife-end-label" x={xScale(elevation.halfWidthM)} y={plotBottom - 6} textAnchor="end" fontSize={10} fill={grid} opacity={0.88}>
+        <text className="mono section-knife-end-label" x={padPlotX + plotW} y={plotBottom + 14} textAnchor="end" fontSize={10} fill={grid} opacity={0.9}>
           A&prime;
         </text>
         {distTicks.map((d) => {
@@ -173,7 +184,7 @@ export function SectionKnifeElevationPanel({ model, tool }: { model: CityModel; 
           {Math.round(spanX)} m
         </text>
         {verticalExaggeration > 1.08 ? (
-          <text className="mono" x={padPlotX} y={padTop + 9} fontSize={8} fill={grid} opacity={0.55}>
+          <text className="mono" x={4} y={padTop + 9} fontSize={8} fill={grid} opacity={0.55}>
             Vert. ex. ×{verticalExaggeration.toFixed(1)}
           </text>
         ) : null}

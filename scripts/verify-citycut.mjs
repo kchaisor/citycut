@@ -933,7 +933,15 @@ async function main() {
           const hasGroundFill = rects.length > 0;
           const endLabels = Array.from(chart.querySelectorAll(".section-knife-end-label"));
           const labelTexts = endLabels.map((el) => el.textContent?.trim() ?? "");
-          const endLabelsOk = labelTexts.length === 2 && labelTexts[0] === "A" && labelTexts[1] === "A′";
+          const endLabelRects = endLabels.map((el) => el.getBoundingClientRect());
+          const endLabelsVisible =
+            endLabelRects.length === 2 &&
+            endLabelRects.every((r) => r.width > 2 && r.height > 2 && r.bottom > 0);
+          const endLabelsOk =
+            labelTexts.length === 2 &&
+            labelTexts[0] === "A" &&
+            labelTexts[1] === "A′" &&
+            endLabelsVisible;
           const rlEls = Array.from(chart.querySelectorAll(".section-knife-rl"));
           const rlCountOk = rlEls.length >= 2 && rlEls.length <= 5;
           const rlRects = rlEls.map((el) => el.getBoundingClientRect());
