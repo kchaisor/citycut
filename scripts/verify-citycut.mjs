@@ -2256,9 +2256,31 @@ async function main() {
           () => window.__citycutQaModel?.readSunHoursLostPlan?.() ?? { cellCount: 0, maxLoss: 0 },
         );
         const lossDom = await shadowPage.locator("[data-sun-hours-lost]").count();
-        await shadowPage.waitForSelector("[data-sun-hours-lost-legend]", { timeout: 120000 });
+        await shadowPage.waitForSelector("[data-sun-hours-lost-legend-dock]", { timeout: 120000 });
+        const dockLayout = await shadowPage.evaluate(() => {
+          const legend = document.querySelector("[data-sun-hours-lost-legend-dock]");
+          const results = document.querySelector("[data-solar-results-dock]");
+          if (!legend) return { ok: false, reason: "missing-legend-dock" };
+          const legendBox = legend.getBoundingClientRect();
+          if (!results) return { ok: true, reason: "no-results-dock", legendBox };
+          const resultsBox = results.getBoundingClientRect();
+          const gap = resultsBox.top - legendBox.bottom;
+          const intersect =
+            legendBox.right > resultsBox.left &&
+            legendBox.left < resultsBox.right &&
+            legendBox.bottom > resultsBox.top &&
+            legendBox.top < resultsBox.bottom;
+          return { ok: !intersect && gap >= 0, intersect, gap, legendBox, resultsBox };
+        });
         const shotHoursLost = path.join(CURSOR_ARTIFACTS_DIR, "solar-hours-lost-box-hill.png");
-        await shadowPage.locator("svg.plan").screenshot({ path: shotHoursLost });
+        await shadowPage.locator(".plan-viewport-stack").screenshot({ path: shotHoursLost });
+
+        assertCheck(
+          "solar-hours-lost-legend-dock-clear",
+          "Hours-lost legend dock does not overlap B4-3 results dock",
+          dockLayout.ok === true,
+          JSON.stringify(dockLayout),
+        );
 
         assertCheck(
           "solar-hours-lost-heatmap",

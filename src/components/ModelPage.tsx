@@ -178,6 +178,7 @@ import type { CameraMemoryRef } from "../lib/cameraMemory";
 import { SceneBoundary } from "./SceneBoundary";
 import { SolarPanel } from "./SolarPanel";
 import { SolarReceptorResultsList } from "./SolarReceptorResultsList";
+import { SunHoursLostLegendList } from "./SunHoursLostLegendList";
 import { useSolarReceptorAssess } from "./useSolarReceptorAssess";
 import { useSunHoursLostPlan } from "./useSunHoursLostPlan";
 import { countPositiveLossCells, positiveLossCellsInsideFootprints } from "../lib/sunHoursLostPlan";
@@ -2353,54 +2354,64 @@ export function ModelPage({
                 <DrawingPlan
                   model={drawingModel}
                   kind={drawing}
-                onScale={onScale}
-                lineStyle={lineStyles}
-                planScale={figureScale}
-                heliodon={
-                  sunStudyDate
-                    ? (heliodonDiagramExport() ?? { ...planShadowInput(), sideM: model.sideM, radiusFactor: solar.radiusFactor })
-                    : heliodonDiagramExport()
-                }
-                castShadows={solar.castShadows}
-                shadowInput={planShadowInput()}
-                sunStudy={sunStudyDate}
-                sunStudyMuted={sunStudyMutedOn(solar.sunStudy, solar.sunStudyMuted)}
-                sunStudyCasters={effectiveSunStudyCasters}
-                sunStudySelected={sunStudySelected}
-                onSunStudyPick={(id) =>
-                  setSunStudySelected((current) => {
-                    const next = toggleSelection(current, id);
-                    setSolar((prev) => ({
-                      ...prev,
-                      sunStudyCasters: next.length > 0 ? "selected" : "all",
-                    }));
-                    return next;
-                  })
-                }
-                solarReceptors={solar.solarAccess ? solarReceptors : []}
-                solarReceptorResults={solar.solarAccess ? solarReceptorAssess.results : []}
-                sunHoursLostGrid={solar.sunHoursLost ? sunHoursLostPlan.grid : null}
-                receptorDraw={Boolean(solar.solarAccess && solar.receptorDraw)}
-                onReceptorCommit={(ring) => {
-                  const normalized = normalizeReceptorRing(ring);
-                  if (!normalized) return;
-                  setSolarReceptors((current) => [
-                    ...current,
-                    { id: nextReceptorId(current), ring: normalized },
-                  ]);
-                }}
-                uniformBuildings={!colourByUse && !showSource}
-                colourBySource={showSource}
-                highlightManual={showManualEdits && overrideResult.manualCount > 0}
-                viewport={planViewport}
-                onViewportChange={setPlanViewport}
-                fitCounter={fitCounter}
-              />
-                {solar.solarAccess && solarReceptorAssess.results.length > 0 && (
-                  <div className="plan-solar-results-dock hud-card" data-solar-results-dock>
-                    <SolarReceptorResultsList rows={solarReceptorAssess.results} compact />
+                  onScale={onScale}
+                  lineStyle={lineStyles}
+                  planScale={figureScale}
+                  heliodon={
+                    sunStudyDate
+                      ? (heliodonDiagramExport() ?? { ...planShadowInput(), sideM: model.sideM, radiusFactor: solar.radiusFactor })
+                      : heliodonDiagramExport()
+                  }
+                  castShadows={solar.castShadows}
+                  shadowInput={planShadowInput()}
+                  sunStudy={sunStudyDate}
+                  sunStudyMuted={sunStudyMutedOn(solar.sunStudy, solar.sunStudyMuted)}
+                  sunStudyCasters={effectiveSunStudyCasters}
+                  sunStudySelected={sunStudySelected}
+                  onSunStudyPick={(id) =>
+                    setSunStudySelected((current) => {
+                      const next = toggleSelection(current, id);
+                      setSolar((prev) => ({
+                        ...prev,
+                        sunStudyCasters: next.length > 0 ? "selected" : "all",
+                      }));
+                      return next;
+                    })
+                  }
+                  solarReceptors={solar.solarAccess ? solarReceptors : []}
+                  solarReceptorResults={solar.solarAccess ? solarReceptorAssess.results : []}
+                  sunHoursLostGrid={solar.sunHoursLost ? sunHoursLostPlan.grid : null}
+                  receptorDraw={Boolean(solar.solarAccess && solar.receptorDraw)}
+                  onReceptorCommit={(ring) => {
+                    const normalized = normalizeReceptorRing(ring);
+                    if (!normalized) return;
+                    setSolarReceptors((current) => [
+                      ...current,
+                      { id: nextReceptorId(current), ring: normalized },
+                    ]);
+                  }}
+                  uniformBuildings={!colourByUse && !showSource}
+                  colourBySource={showSource}
+                  highlightManual={showManualEdits && overrideResult.manualCount > 0}
+                  viewport={planViewport}
+                  onViewportChange={setPlanViewport}
+                  fitCounter={fitCounter}
+                />
+                {(solar.sunHoursLost && sunHoursLostPlan.grid) ||
+                (solar.solarAccess && solarReceptorAssess.results.length > 0) ? (
+                  <div className="plan-solar-dock-stack" data-plan-solar-dock-stack>
+                    {solar.sunHoursLost && sunHoursLostPlan.grid ? (
+                      <div className="plan-solar-legend-dock hud-card" data-sun-hours-lost-legend-dock>
+                        <SunHoursLostLegendList compact />
+                      </div>
+                    ) : null}
+                    {solar.solarAccess && solarReceptorAssess.results.length > 0 ? (
+                      <div className="plan-solar-results-dock hud-card" data-solar-results-dock>
+                        <SolarReceptorResultsList rows={solarReceptorAssess.results} compact />
+                      </div>
+                    ) : null}
                   </div>
-                )}
+                ) : null}
               </div>
             ) : (
               <DrawingPlan
