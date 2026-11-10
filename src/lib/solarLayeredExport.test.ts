@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it, beforeEach } from "vitest";
 import { sitePlanSvg } from "./aiPlan";
 import { cityModelTo3dm, loadRhino } from "./rhinoExport";
@@ -133,5 +135,16 @@ describe("solar layered export", () => {
     expect((objectCount.get(existingShadowLayerName(12, 0)) ?? 0)).toBeGreaterThan(0);
     expect((objectCount.get(addedShadowLayerName(12, 0)) ?? 0)).toBeGreaterThan(0);
     expect((objectCount.get("Proposed massing") ?? 0)).toBeGreaterThan(0);
+
+    if (process.env.SOLAR_EXPORT_ARTIFACTS) {
+      const art = process.env.CURSOR_ARTIFACTS_DIR || "/opt/cursor/artifacts";
+      mkdirSync(art, { recursive: true });
+      writeFileSync(path.join(art, "solar-layered-export-box-hill.svg"), svg);
+      writeFileSync(path.join(art, "solar-layered-export-box-hill.3dm"), Buffer.from(bytes));
+      writeFileSync(
+        path.join(art, "solar-layered-export-layer-names.json"),
+        `${JSON.stringify({ svgLayers: [...new Set(labels)].sort(), rhinoLayers: layers.sort() }, null, 2)}\n`,
+      );
+    }
   });
 });
