@@ -2337,55 +2337,87 @@ async function main() {
 
       await boxHillSolarExport();
 
-      const boxHillParkNoAdditional = async () => {
-        await shadowPage.evaluate(() => window.__citycutQaModel?.enableSolarParkAccess?.("melbourne-ddo10-yarra"));
-        await shadowPage.waitForTimeout(400);
-        await shadowPage.evaluate(
-          ({ east, north }) => {
-            window.__citycutQaMassing?.commitPolylineCenterline?.(
-              [
-                [east - 16, north - 4],
-                [east + 22, north - 4],
-                [east + 22, north + 10],
-                [east + 4, north + 10],
-                [east + 4, north + 28],
-              ],
-              { floors: 6, width_m: 14 },
-            );
-            window.__citycutQaModel?.addSolarParkReceptor?.(east - 26, north - 46, east + 12, north - 18, "box-hill-park");
-          },
-          { east: FOCUS_EAST, north: FOCUS_NORTH },
+      const melbourneParkNoAdditional = async () => {
+        const parkPage = await shadowCtx.newPage();
+        const parkUrl = `${baseUrl}/?qa=1&lat=-37.8046&lon=144.9713&km=0.42&label=Carlton&view=persp`;
+        await parkPage.goto(parkUrl, { waitUntil: "domcontentloaded", timeout: 120000 });
+        await parkPage.waitForSelector("button.create-fab", { timeout: 60000 });
+        await parkPage.click("button.create-fab");
+        await parkPage.waitForSelector(".model", { timeout: 300000 });
+        await parkPage.waitForFunction(
+          () =>
+            Boolean(window.__citycutQaModel?.readLargestGreenAreaBounds?.()) &&
+            Boolean(window.__citycutQaMassing?.commitPolylineCenterline),
+          null,
+          { timeout: 300000 },
         );
-        await shadowPage.waitForFunction(
+        await parkPage.locator('.model button[data-section="analysis"]').first().click();
+        await parkPage.waitForTimeout(250);
+        await parkPage.getByRole("tab", { name: /Drawing/i }).click();
+        await parkPage.waitForSelector("svg.plan", { timeout: 120000 });
+        await parkPage.evaluate(() => {
+          window.__citycutQaModel?.enableSolarParkAccess?.("melbourne-c415-ddo8");
+          window.__citycutQaModel?.setSolarPlanTime?.(12, 0);
+        });
+        await parkPage.waitForTimeout(400);
+        const green = await parkPage.evaluate(() => window.__citycutQaModel?.readLargestGreenAreaBounds?.());
+        await parkPage.evaluate(({ bounds }) => {
+          const midN = (bounds.north0 + bounds.north1) / 2;
+          window.__citycutQaMassing?.commitPolylineCenterline?.(
+            [
+              [bounds.east0 - 36, midN - 10],
+              [bounds.east0 - 8, midN - 10],
+              [bounds.east0 - 8, midN + 14],
+              [bounds.east0 - 22, midN + 14],
+            ],
+            { floors: 12, width_m: 14 },
+          );
+          window.__citycutQaModel?.addSolarParkFromLargestGreen?.("carlton-gardens-park", "melbourne-c415-ddo8");
+        }, { bounds: green });
+        await parkPage.waitForFunction(
           () => {
             const rows = window.__citycutQaModel?.readSolarReceptorAssess?.() ?? [];
-            const park = rows.find((row) => row.id === "box-hill-park");
+            const park = rows.find((row) => row.id === "carlton-gardens-park");
             return park?.assessKind === "park" && park.maxAddedM2 > 1 && park.pass === false;
           },
           null,
           { timeout: 360000 },
         );
-        const parkRow = await shadowPage.evaluate(() => {
+        const parkRow = await parkPage.evaluate(() => {
           const rows = window.__citycutQaModel?.readSolarReceptorAssess?.() ?? [];
-          return rows.find((row) => row.id === "box-hill-park");
+          return rows.find((row) => row.id === "carlton-gardens-park");
         });
-        const dock = shadowPage.locator("[data-solar-results-dock]");
+        const midE = (green.east0 + green.east1) / 2;
+        const midN = (green.north0 + green.north1) / 2;
+        const spanM = Math.max(green.east1 - green.east0, green.north1 - green.north0) * 1.8;
+        await parkPage.evaluate(
+          ({ east, north, span }) => window.__citycutQaModel?.setDrawingPlanViewport?.(east, north, span),
+          { east: midE, north: midN, span: spanM },
+        );
+        await parkPage.waitForTimeout(800);
+        const dock = parkPage.locator("[data-solar-results-dock]");
         await dock.waitFor({ state: "visible", timeout: 120000 });
         const parkMetrics = await dock.locator("[data-solar-park-metrics]").first().textContent();
-        const shotPark = path.join(CURSOR_ARTIFACTS_DIR, "solar-park-box-hill-fail.png");
-        await shadowPage.locator(".plan-viewport-stack").screenshot({ path: shotPark });
+        const hatchDom = await parkPage.locator("[data-solar-park-added-shadow]").count();
+        const labelDom = await parkPage.locator("[data-solar-park-label='carlton-gardens-park']").count();
+        const shotPark = path.join(CURSOR_ARTIFACTS_DIR, "solar-park-carlton-fail.png");
+        await parkPage.locator(".plan-viewport-stack").screenshot({ path: shotPark });
         assertCheck(
           "solar-park-no-additional-fail",
-          "Box Hill park no-additional test fails beside 6-storey massing with readable added m² in the dock",
+          "Carlton C415/DDO8 park fails with on-map label, gold hatch clipped to park, and readable added m² in the dock",
           parkRow?.assessKind === "park" &&
+            parkRow?.ruleId === "melbourne-c415-ddo8" &&
             parkRow?.pass === false &&
             (parkRow?.maxAddedM2 ?? 0) > 1 &&
+            hatchDom > 0 &&
+            labelDom === 1 &&
             Boolean(parkMetrics?.includes("m² max")),
-          `park=${JSON.stringify(parkRow)}, metrics=${JSON.stringify(parkMetrics)}, shot=${shotPark}`,
+          `park=${JSON.stringify(parkRow)}, metrics=${JSON.stringify(parkMetrics)}, hatchDom=${hatchDom}, labelDom=${labelDom}, shot=${shotPark}`,
         );
+        await parkPage.close();
       };
 
-      await boxHillParkNoAdditional();
+      await melbourneParkNoAdditional();
 
       const boxHillTreeShadows = async () => {
         await shadowPage.evaluate(() => {

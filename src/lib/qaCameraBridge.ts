@@ -100,6 +100,14 @@ declare global {
         id?: string,
         ruleId?: string,
       ) => string | null;
+      readLargestGreenAreaBounds?: () => {
+        east0: number;
+        north0: number;
+        east1: number;
+        north1: number;
+      } | null;
+      addSolarParkFromLargestGreen?: (id?: string, ruleId?: string) => string | null;
+      setSolarPlanTime?: (hour: number, minute?: number) => boolean;
       enableSunHoursLost?: () => boolean;
       enableTreeShadows?: () => boolean;
       readSunHoursLostPlan?: () => { cellCount: number; maxLoss: number; cellM?: number };
