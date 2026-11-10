@@ -3,14 +3,16 @@ import type { SunStudyWorkerMessage, SunStudyWorkerRequest } from "../lib/sunStu
 import { SUN_STUDY_HOURS, sunStudyHourKey, sunStudyModelKey, type SunStudyDate } from "../lib/sunStudyPlan";
 import type { CityModel, Ring } from "../types";
 
-export type SunStudyLayer = { hour: number; rings: Ring[][] };
+export type SunStudyLayer = { hour: number; rings: Ring[][]; addedRings: Ring[][] };
+
+type CachedHour = { rings: Ring[][]; addedRings: Ring[][] };
 
 const CACHE_LIMIT = 96;
-const hourCache = new Map<string, Ring[][]>();
+const hourCache = new Map<string, CachedHour>();
 
-function remember(key: string, rings: Ring[][]) {
+function remember(key: string, value: CachedHour) {
   hourCache.delete(key);
-  hourCache.set(key, rings);
+  hourCache.set(key, value);
   while (hourCache.size > CACHE_LIMIT) hourCache.delete(hourCache.keys().next().value!);
 }
 
@@ -32,7 +34,10 @@ function startWorker(): Worker | null {
 export function sunStudyLayersFor(model: CityModel, date: SunStudyDate): Promise<SunStudyLayer[]> {
   const modelKey = sunStudyModelKey(model);
   const collect = () =>
-    SUN_STUDY_HOURS.map((hour) => ({ hour, rings: hourCache.get(sunStudyHourKey(modelKey, date, hour)) ?? [] }));
+    SUN_STUDY_HOURS.map((hour) => {
+      const cached = hourCache.get(sunStudyHourKey(modelKey, date, hour));
+      return { hour, rings: cached?.rings ?? [], addedRings: cached?.addedRings ?? [] };
+    });
   const missing = SUN_STUDY_HOURS.filter((hour) => !hourCache.has(sunStudyHourKey(modelKey, date, hour)));
   if (missing.length === 0) return Promise.resolve(collect());
   const worker = startWorker();
@@ -43,7 +48,10 @@ export function sunStudyLayersFor(model: CityModel, date: SunStudyDate): Promise
     worker.onmessage = (event: MessageEvent<SunStudyWorkerMessage>) => {
       const message = event.data;
       if (message.id !== id) return;
-      remember(sunStudyHourKey(modelKey, date, message.hour), message.type === "hour" ? message.rings : []);
+      remember(
+        sunStudyHourKey(modelKey, date, message.hour),
+        message.type === "hour" ? { rings: message.rings, addedRings: message.addedRings } : { rings: [], addedRings: [] },
+      );
       left -= 1;
       if (left === 0) {
         worker.terminate();
@@ -83,7 +91,10 @@ export function useSunStudyShadows(
     worker.onmessage = (event: MessageEvent<SunStudyWorkerMessage>) => {
       const message = event.data;
       if (message.id !== id) return;
-      remember(sunStudyHourKey(modelKey, date, message.hour), message.type === "hour" ? message.rings : []);
+      remember(
+        sunStudyHourKey(modelKey, date, message.hour),
+        message.type === "hour" ? { rings: message.rings, addedRings: message.addedRings } : { rings: [], addedRings: [] },
+      );
       setRevision((value) => value + 1);
     };
     worker.onerror = (event) => {
@@ -106,8 +117,8 @@ export function useSunStudyShadows(
     const layers: SunStudyLayer[] = [];
     let pending = false;
     for (const hour of SUN_STUDY_HOURS) {
-      const rings = hourCache.get(sunStudyHourKey(modelKey, date, hour));
-      if (rings) layers.push({ hour, rings });
+      const cached = hourCache.get(sunStudyHourKey(modelKey, date, hour));
+      if (cached) layers.push({ hour, rings: cached.rings, addedRings: cached.addedRings });
       else pending = true;
     }
     return { layers, pending };

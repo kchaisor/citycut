@@ -133,7 +133,7 @@ import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import { COM_TREES_CREDIT, COM_TREES_DATASET_URL } from "../lib/comTreesCredit";
 import { openRing, toLocal } from "../lib/geo";
 import { pointInPolygon } from "../lib/useCascade";
-import type { BuildingUse, CityModel } from "../types";
+import type { BuildingFeat, BuildingUse, CityModel } from "../types";
 import { BuildingHeightPopover, HeightOverridePanel, HiddenBuildingsPanel } from "./BuildingHeightPopover";
 import {
   filterHiddenBuildings,
@@ -576,6 +576,7 @@ export function ModelPage({
   );
 
   const massing = useImportedMassing(model);
+  const [qaProposedMassing, setQaProposedMassing] = useState<BuildingFeat[]>([]);
 
   const qaSummaryRef = useRef({ treeCrowns: 0, buildingCount: 0, roadCount: 0, triangleCount: 0 });
   const qaDisplayBuildingsRef = useRef(model.buildings);
@@ -817,6 +818,31 @@ export function ModelPage({
         for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
         return btoa(binary);
       },
+      setQaProposedMassingBox(east = 0, north = 0, size = 30, height = 18) {
+        const half = size / 2;
+        setQaProposedMassing([
+          {
+            id: -910001,
+            ring: [
+              [east - half, north - half],
+              [east + half, north - half],
+              [east + half, north + half],
+              [east - half, north + half],
+              [east - half, north - half],
+            ],
+            holes: [],
+            height,
+            use: "unclassified",
+            source: "none",
+            importedMassing: true,
+            overtureName: "QA proposed massing",
+          },
+        ]);
+        return true;
+      },
+      clearQaProposedMassing() {
+        setQaProposedMassing([]);
+      },
     };
     return () => {
       delete window.__citycutQaModel;
@@ -966,9 +992,7 @@ export function ModelPage({
     const waterVisible = isLayer3dVisible(view3dDisplay, "water");
     const contoursVisible = isLayer3dVisible(view3dDisplay, "contours");
     const baseBuildings = buildingsVisible
-      ? massing.drawingBuildings.length
-        ? [...displayModel.buildings, ...massing.drawingBuildings]
-        : displayModel.buildings
+      ? [...displayModel.buildings, ...massing.drawingBuildings, ...qaProposedMassing]
       : [];
     return {
       ...displayModel,
@@ -988,7 +1012,7 @@ export function ModelPage({
       contourLayer: contoursVisible ? displayModel.contourLayer : undefined,
       contours: contoursVisible ? displayModel.contours : false,
     };
-  }, [displayModel, massing.drawingBuildings, view3dDisplay]);
+  }, [displayModel, massing.drawingBuildings, qaProposedMassing, view3dDisplay]);
 
   useEffect(() => {
     qaDisplayBuildingsRef.current = displayModel.buildings;

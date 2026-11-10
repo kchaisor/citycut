@@ -21,11 +21,12 @@ import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
 import { NswPlanLabels, NswPlanLines, NswPlanUnder } from "./NswPlanLayers";
 import { NSW_PLAN_LABEL_SHARE, nswPlanItems } from "../lib/nswPlan";
 import { readNswPlanStyle } from "../lib/nswPlanStyle";
-import { planShadowRings, type PlanShadowInput } from "../lib/buildingShadows";
+import { planShadowSplitRings, proposedMassingInModel, type PlanShadowInput } from "../lib/buildingShadows";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
 import { planViewportExtent, type PlanViewport } from "../lib/planViewport";
 import {
   SINGLE_SHADOW_OPACITY,
+  SUN_STUDY_SHADOW_ADDED_OPACITY,
   SUN_STUDY_SHADOW_OPACITY,
   SUN_STUDY_TREE_OPACITY,
   estimatedHeightLabels,
@@ -245,14 +246,17 @@ export function DrawingPlan({
     [study, casterModel, sunStudySelected, estFont],
   );
   const studyShadowFill = getColour("--sun-study-shadow");
+  const studyShadowAddedFill = getColour("--sun-study-shadow-added");
   const studySunFill = getColour("--sun-study-sun");
   const muted = Boolean(study) && sunStudyMuted;
   const mutedFill = (key: Parameters<typeof getColour>[0], normal: string) => (muted ? getColour(key) : normal);
   const annotationInk = figure ? figureFill : getColour("--sun-compass-label");
-  const shadowRings = useMemo(() => {
-    if (!shadowInput || figure || study) return [];
-    return planShadowRings(casterModel, shadowInput, castShadows);
+  const splitShadow = proposedMassingInModel(casterModel);
+  const shadowSplit = useMemo(() => {
+    if (!castShadows || !shadowInput || figure || study) return { existing: [], added: [] };
+    return planShadowSplitRings(casterModel, shadowInput, true);
   }, [castShadows, figure, casterModel, shadowInput, study]);
+  const addedHatchSize = Math.max(4, model.sideM * 0.01);
   const annotations = (
     <>
       <g aria-hidden="true" className="plan-north-arrow">
@@ -404,6 +408,32 @@ export function DrawingPlan({
     >
       <rect x={view.x} y={view.y} width={view.w} height={view.h} fill={canvas} />
       <rect x={-half} y={-half} width={model.sideM} height={model.sideM} fill={canvas} />
+      {splitShadow && (
+        <defs>
+          <pattern
+            id="sun-study-added-hatch"
+            patternUnits="userSpaceOnUse"
+            width={addedHatchSize}
+            height={addedHatchSize}
+            patternTransform="rotate(45)"
+          >
+            <rect
+              width={addedHatchSize}
+              height={addedHatchSize}
+              fill={studyShadowAddedFill}
+              fillOpacity={SUN_STUDY_SHADOW_ADDED_OPACITY * 0.35}
+            />
+            <line
+              x1={0}
+              y1={0}
+              x2={0}
+              y2={addedHatchSize}
+              stroke={studyShadowAddedFill}
+              strokeWidth={addedHatchSize * 0.12}
+            />
+          </pattern>
+        </defs>
+      )}
       {figure ? (
         <>
           {figurePaths.map((d, index) => (
@@ -479,14 +509,35 @@ export function DrawingPlan({
                       stroke="none"
                     />
                   ))}
+                  {layer.addedRings.map((rings, index) => (
+                    <path
+                      key={`a${index}`}
+                      data-shadow-added
+                      d={svgRings(rings)}
+                      fill="url(#sun-study-added-hatch)"
+                      fillRule="evenodd"
+                      stroke="none"
+                    />
+                  ))}
                 </g>
               ))}
-            {shadowRings.map((rings, index) => (
+            {shadowSplit.existing.map((rings, index) => (
               <path
                 key={`sh${index}`}
                 d={svgRings(rings)}
                 fill={shadowFill}
                 fillOpacity={SINGLE_SHADOW_OPACITY}
+                fillRule="evenodd"
+                stroke="none"
+              />
+            ))}
+            {shadowSplit.added.map((rings, index) => (
+              <path
+                key={`sha${index}`}
+                data-shadow-added
+                d={svgRings(rings)}
+                fill={splitShadow ? "url(#sun-study-added-hatch)" : studyShadowAddedFill}
+                fillOpacity={splitShadow ? 1 : SINGLE_SHADOW_OPACITY}
                 fillRule="evenodd"
                 stroke="none"
               />

@@ -1,4 +1,4 @@
-import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
+import { planShadowSplitRings, type PlanShadowInput } from "./buildingShadows";
 import type { CityModel, Ring } from "../types";
 
 export type SunStudyWorkerRequest = {
@@ -9,7 +9,7 @@ export type SunStudyWorkerRequest = {
 };
 
 export type SunStudyWorkerMessage =
-  | { type: "hour"; id: number; hour: number; rings: Ring[][] }
+  | { type: "hour"; id: number; hour: number; rings: Ring[][]; addedRings: Ring[][] }
   | { type: "error"; id: number; hour: number; message: string };
 
 type WorkerScope = {
@@ -23,8 +23,14 @@ scope.onmessage = (event: MessageEvent<SunStudyWorkerRequest>) => {
   const { id, model, date, hours } = event.data;
   for (const hour of hours) {
     try {
-      const rings = planShadowRings(model as CityModel, { ...date, hour, minute: 0 }, true);
-      scope.postMessage({ type: "hour", id, hour, rings: [...rings] });
+      const split = planShadowSplitRings(model as CityModel, { ...date, hour, minute: 0 }, true);
+      scope.postMessage({
+        type: "hour",
+        id,
+        hour,
+        rings: [...split.existing],
+        addedRings: [...split.added],
+      });
     } catch (error) {
       scope.postMessage({ type: "error", id, hour, message: error instanceof Error ? error.message : String(error) });
     }

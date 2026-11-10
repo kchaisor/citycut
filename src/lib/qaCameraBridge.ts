@@ -48,6 +48,8 @@ declare global {
         firstRenderMs: number | null;
       }>;
       captureViewportPng?: () => Promise<string | null>;
+      setQaProposedMassingBox?: (east?: number, north?: number, size?: number, height?: number) => boolean;
+      clearQaProposedMassing?: () => void;
     };
     __citycutWalkRippleQa?: {
       setMinutes: (minutes: number) => void;
