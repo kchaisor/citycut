@@ -81,6 +81,8 @@ declare global {
       setQaProposedMassingBox?: (east?: number, north?: number, size?: number, height?: number) => boolean;
       clearQaProposedMassing?: () => void;
       setDrawingPlanViewport?: (east: number, north: number, spanM: number) => boolean;
+      setSolarPlanMinimal?: () => boolean;
+      setSolarStudiesFull?: () => boolean;
       enableSolarAccess?: () => boolean;
       addSolarReceptor?: (
         east0: number,
