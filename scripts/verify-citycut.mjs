@@ -28,6 +28,7 @@ const CHROME_PATH = "/usr/bin/google-chrome";
 const VIEWPORT = { width: 1440, height: 900 };
 const DEVICE_SCALE_FACTOR = 2;
 const ARTIFACTS_DIR = process.env.CITYCUT_ARTIFACTS_DIR ?? "/workspace";
+const CURSOR_ARTIFACTS_DIR = "/opt/cursor/artifacts";
 
 function countPixelsNearRgb(png, target, tolerance = 48) {
   let hits = 0;
@@ -320,6 +321,20 @@ function findFreePort() {
     });
     srv.on("error", reject);
   });
+}
+
+function countGoldishPixels(pngBuffer) {
+  const png = PNG.sync.read(pngBuffer);
+  let gold = 0;
+  for (let i = 0; i < png.data.length; i += 4) {
+    const a = png.data[i + 3];
+    if (a < 48) continue;
+    const r = png.data[i];
+    const g = png.data[i + 1];
+    const b = png.data[i + 2];
+    if (r >= 185 && r <= 238 && g >= 140 && g <= 200 && b >= 55 && b <= 125) gold += 1;
+  }
+  return gold;
 }
 
 function waitForServer(url, timeoutMs = 25000) {
@@ -1983,6 +1998,132 @@ async function main() {
         afterSelectInfo.shadowDLength < beforeSelectInfo.shadowDLength * 0.25,
       `3dDomeInDrawing=${beforeSelectInfo.has3dSunDomeInDrawing}, planFanInDrawing=${beforeSelectInfo.hasPlanFanInDrawing}, selectedCount=${afterSelectInfo.selectedCount}, shadowDLength=${beforeSelectInfo.shadowDLength}->${afterSelectInfo.shadowDLength}, layers=${afterSelectInfo.nonEmptyLayers}`,
     );
+
+    {
+      fs.mkdirSync(CURSOR_ARTIFACTS_DIR, { recursive: true });
+      const shadowCtx = await browser.newContext({
+        viewport: VIEWPORT,
+        deviceScaleFactor: DEVICE_SCALE_FACTOR,
+        reducedMotion: "no-preference",
+      });
+      await shadowCtx.addInitScript(() => {
+        window.__citycutMinSilentLoadMs = 900;
+      });
+      const shadowPage = await shadowCtx.newPage();
+      const shadowUrl = `${baseUrl}/?qa=1&lat=-37.80&lon=145.13&km=1&label=Box%20Hill&view=persp`;
+      await shadowPage.goto(shadowUrl, { waitUntil: "domcontentloaded", timeout: 120000 });
+      await shadowPage.waitForSelector("button.create-fab", { timeout: 60000 });
+      await shadowPage.click("button.create-fab");
+      await shadowPage.waitForSelector(".model", { timeout: 300000 });
+      await shadowPage.waitForFunction(
+        () => {
+          const model = document.querySelector(".model");
+          if (!model || getComputedStyle(model).display === "none") return false;
+          return Boolean(model.querySelector("canvas")) || model.getAttribute("data-intro-done") === "true";
+        },
+        null,
+        { timeout: 300000 },
+      );
+      await shadowPage.waitForFunction(
+        () =>
+          Boolean(window.__citycutQaModel?.setDrawingPlanViewport) &&
+          Boolean(window.__citycutQaMassing?.commitPolylineCenterline),
+        null,
+        { timeout: 300000 },
+      );
+
+      const enableSunStudy = async () => {
+        await shadowPage.locator('.model button[data-section="analysis"]').first().click();
+        await shadowPage.waitForTimeout(300);
+        await shadowPage.getByRole("tab", { name: /Drawing/i }).click();
+        await shadowPage.waitForSelector("svg.plan", { timeout: 120000 });
+        const planFan = shadowPage.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
+        await planFan.click();
+        await shadowPage.getByRole("button", { name: /22 Sep/ }).click();
+        await shadowPage.getByRole("button", { name: "Solar time 15:00", exact: true }).click();
+        await shadowPage.waitForSelector("svg.plan [data-shadow-hour]", { timeout: 120000 });
+        await shadowPage.waitForTimeout(800);
+      };
+
+      await enableSunStudy();
+
+      const PLAN_ZOOM_M = 82;
+      const FOCUS_EAST = 14;
+      const FOCUS_NORTH = -10;
+
+      const readAddedShadow = async () =>
+        shadowPage.evaluate(() => {
+          const added = Array.from(document.querySelectorAll("svg.plan [data-shadow-added]"));
+          const dLen = added.reduce((acc, node) => acc + (node.getAttribute("d")?.length ?? 0), 0);
+          return { count: added.length, dLen };
+        });
+
+      const zoomPlanToSite = async () => {
+        await shadowPage.evaluate(
+          ({ span, east, north }) => {
+            window.__citycutQaModel?.setDrawingPlanViewport?.(east, north, span);
+          },
+          { span: PLAN_ZOOM_M, east: FOCUS_EAST, north: FOCUS_NORTH },
+        );
+        await shadowPage.waitForTimeout(700);
+      };
+
+      await shadowPage.evaluate(() => {
+        window.__citycutQaMassing?.clearDrawnBlocks?.();
+        window.__citycutQaModel?.clearQaProposedMassing?.();
+      });
+      await shadowPage.waitForTimeout(1200);
+      await zoomPlanToSite();
+
+      const beforeMassing = await readAddedShadow();
+      const shotNoMassing = path.join(CURSOR_ARTIFACTS_DIR, "solar-shadow-box-hill-no-massing.png");
+      await shadowPage.locator("svg.plan").screenshot({ path: shotNoMassing });
+
+      await shadowPage.evaluate(
+        ({ east, north }) => {
+          window.__citycutQaMassing?.commitPolylineCenterline?.(
+            [
+              [east - 16, north - 4],
+              [east + 22, north - 4],
+              [east + 22, north + 10],
+              [east + 4, north + 10],
+              [east + 4, north + 28],
+            ],
+            { floors: 6, width_m: 14 },
+          );
+        },
+        { east: FOCUS_EAST, north: FOCUS_NORTH },
+      );
+      await shadowPage.waitForTimeout(2500);
+      await shadowPage.waitForFunction(
+        () => {
+          const added = document.querySelectorAll("svg.plan [data-shadow-added]");
+          if (added.length === 0) return false;
+          return Array.from(added).some((node) => (node.getAttribute("d")?.length ?? 0) > 80);
+        },
+        null,
+        { timeout: 120000 },
+      );
+      await zoomPlanToSite();
+
+      const withMassing = await readAddedShadow();
+      const shotWithMassing = path.join(CURSOR_ARTIFACTS_DIR, "solar-shadow-box-hill-with-massing.png");
+      const planShot = await shadowPage.locator("svg.plan").screenshot({ path: shotWithMassing });
+      const goldPixels = countGoldishPixels(planShot);
+
+      assertCheck(
+        "solar-added-shadow-split",
+        "Box Hill plan zoomed ~80m at 22 Sep 3pm shows no added-shadow paths without drawn massing, then hatched added shadow across neighbouring lots after an L-shaped 6-storey draw with visible gold pixels",
+        beforeMassing.count === 0 &&
+          beforeMassing.dLen === 0 &&
+          withMassing.count > 0 &&
+          withMassing.dLen > 220 &&
+          goldPixels > 120,
+        `before=[count=${beforeMassing.count},d=${beforeMassing.dLen}], after=[count=${withMassing.count},d=${withMassing.dLen}], goldPixels=${goldPixels}, zoom=${PLAN_ZOOM_M}m, shots=[${shotNoMassing},${shotWithMassing}]`,
+      );
+
+      await shadowCtx.close();
+    }
 
     {
       const toneCtx = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, reducedMotion: "no-preference" });

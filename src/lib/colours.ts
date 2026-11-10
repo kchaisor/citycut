@@ -101,6 +101,7 @@ export const COLOUR_KEYS = [
   "--shadow-fill",
   "--sun-study-sun",
   "--sun-study-shadow",
+  "--sun-study-shadow-added",
   "--sun-study-block",
   "--sun-study-green",
   "--sun-study-water",
@@ -309,7 +310,7 @@ export const COLOUR_GROUPS = [
   {
     id: "plan-shadows",
     title: "Site plan shadows",
-    keys: ["--shadow-fill", "--sun-study-sun", "--sun-study-shadow", "--sun-study-block", "--sun-study-green", "--sun-study-water", "--sun-study-road", "--sun-study-path", "--sun-study-path-edge", "--sun-study-building", "--sun-study-tree"],
+    keys: ["--shadow-fill", "--sun-study-sun", "--sun-study-shadow", "--sun-study-shadow-added", "--sun-study-block", "--sun-study-green", "--sun-study-water", "--sun-study-road", "--sun-study-path", "--sun-study-path-edge", "--sun-study-building", "--sun-study-tree"],
   },
   {
     id: "nsw",
@@ -437,6 +438,7 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--shadow-fill": "Building shadows",
   "--sun-study-sun": "Sun study suns",
   "--sun-study-shadow": "Sun study shadows",
+  "--sun-study-shadow-added": "Sun study added proposal shadow",
   "--sun-study-block": "Sun study: blocks",
   "--sun-study-green": "Sun study: green space",
   "--sun-study-water": "Sun study: water",

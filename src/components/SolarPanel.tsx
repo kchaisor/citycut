@@ -7,6 +7,7 @@ import {
   HELIODON_RADIUS_FACTOR_MIN,
   heliodonRadiusM,
 } from "../lib/heliodonRadius";
+import { SUN_STUDY_SHADOW_ADDED_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "../lib/sunStudyPlan";
 import type { SolarViewSettings } from "./SolarHeliodon";
 import { SunStudyPlayer } from "./SunStudyPlayer";
 
@@ -110,6 +111,28 @@ export function SolarPanel({
             />
             Muted base plan
           </label>
+        )}
+        {settings.sunStudy && (
+          <ul className="solar-legend" aria-label="Shadow legend">
+            <li>
+              <svg className="solar-legend-swatch" viewBox="0 0 24 12" aria-hidden>
+                <rect x="0" y="0" width="24" height="12" fill={getColour("--sun-study-shadow")} fillOpacity={SUN_STUDY_SHADOW_OPACITY} />
+              </svg>
+              Existing shadow
+            </li>
+            <li>
+              <svg className="solar-legend-swatch" viewBox="0 0 24 12" aria-hidden>
+                <defs>
+                  <pattern id="solar-legend-added-hatch" patternUnits="userSpaceOnUse" width="4" height="4" patternTransform="rotate(45)">
+                    <rect width="4" height="4" fill={getColour("--sun-study-shadow-added")} fillOpacity={SUN_STUDY_SHADOW_ADDED_OPACITY * 0.35} />
+                    <line x1="0" y1="0" x2="0" y2="4" stroke={getColour("--sun-study-shadow-added")} strokeWidth="0.6" />
+                  </pattern>
+                </defs>
+                <rect x="0" y="0" width="24" height="12" fill="url(#solar-legend-added-hatch)" />
+              </svg>
+              Added by proposal
+            </li>
+          </ul>
         )}
         {settings.sunStudy && (
           <div className="field sun-study-casters">

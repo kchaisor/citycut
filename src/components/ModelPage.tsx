@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { isEditableTarget } from "../lib/keyboardTarget";
 import { handleModelKeyDown, type ModelShortcutAction } from "../lib/modelKeyboard";
 import { createMassingBlock } from "../lib/massingBlock";
+import { massingBlocksToBuildingFeats } from "../lib/massingBlockPlan";
 import { readStoredMassingBlocks } from "../lib/massingBlockStore";
 import { registerModelKeyboardBridge } from "../lib/modelKeyboardBridge";
 import { viewportIsNarrow } from "../lib/panelCollapse";
@@ -138,7 +139,7 @@ import { openRing, toLocal } from "../lib/geo";
 import { sampleTerrain } from "../lib/terrain";
 import { SURFACE } from "../lib/surfaceLayers";
 import { pointInPolygon } from "../lib/useCascade";
-import type { BuildingUse, CityModel } from "../types";
+import type { BuildingFeat, BuildingUse, CityModel } from "../types";
 import { BuildingHeightPopover, HeightOverridePanel, HiddenBuildingsPanel } from "./BuildingHeightPopover";
 import {
   filterHiddenBuildings,
@@ -586,6 +587,7 @@ export function ModelPage({
   );
 
   const massing = useImportedMassing(model);
+  const [qaProposedMassing, setQaProposedMassing] = useState<BuildingFeat[]>([]);
   const massingPointAllowedRef = useRef<(east: number, north: number) => boolean>(() => true);
   const massingDraw = useMassingTool(model, {
     pointAllowed: (east, north) => massingPointAllowedRef.current(east, north),
@@ -683,13 +685,17 @@ export function ModelPage({
       qaGroundRelease: () => massingDraw.pointerUp(),
       qaGroundMove: (east: number, north: number) => massingDraw.pointerMove(east, north),
       finishDraw: () => massingDraw.finishDraw(),
-      commitPolylineCenterline: (points: [number, number][]) => {
+      commitPolylineCenterline: (
+        points: [number, number][],
+        partial?: Parameters<typeof createMassingBlock>[2],
+      ) => {
         if (points.length < 2) return null;
-        const block = createMassingBlock(massingDraw.cutId, points);
+        const block = createMassingBlock(massingDraw.cutId, points, partial);
         massingDraw.appendBlock(block);
         massingDraw.dispatchTool({ type: "SELECT", id: block.id });
         return block.id;
       },
+      clearDrawnBlocks: () => massingDraw.setBlocksForQa([]),
       getToolPhase: () => massingDraw.getToolPhase(),
       drawArmed: () => massingDraw.isDrawArmed(),
       simulateDraw: (east0: number, north0: number, east1: number, north1: number) => {
@@ -997,6 +1003,41 @@ export function ModelPage({
         for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
         return btoa(binary);
       },
+      setQaProposedMassingBox(east = 0, north = 0, size = 30, height = 18) {
+        const half = size / 2;
+        setQaProposedMassing([
+          {
+            id: -910001,
+            ring: [
+              [east - half, north - half],
+              [east + half, north - half],
+              [east + half, north + half],
+              [east - half, north + half],
+              [east - half, north - half],
+            ],
+            holes: [],
+            height,
+            use: "unclassified",
+            source: "none",
+            proposedMassing: true,
+            overtureName: "QA proposed massing",
+          },
+        ]);
+        return true;
+      },
+      clearQaProposedMassing() {
+        setQaProposedMassing([]);
+      },
+      setDrawingPlanViewport(east: number, north: number, spanM: number) {
+        const aspect = 1.05;
+        setPlanViewport({
+          x: east - spanM / 2,
+          y: -north - (spanM * aspect) / 2,
+          w: spanM,
+          h: spanM * aspect,
+        });
+        return true;
+      },
     };
     return () => {
       delete window.__citycutQaModel;
@@ -1147,6 +1188,11 @@ export function ModelPage({
   }, [walkRipple.modeLabel, walkRipple.status]);
   const walkAt = useWalkPlayback(walk);
 
+  const drawnMassingBuildings = useMemo(
+    () => massingBlocksToBuildingFeats(massingDraw.blocks),
+    [massingDraw.blocks],
+  );
+
   const drawingModel = useMemo(() => {
     const buildingsVisible = isLayer3dVisible(view3dDisplay, "buildings");
     const treesVisible = isLayer3dVisible(view3dDisplay, "trees");
@@ -1157,9 +1203,12 @@ export function ModelPage({
     const waterVisible = isLayer3dVisible(view3dDisplay, "water");
     const contoursVisible = isLayer3dVisible(view3dDisplay, "contours");
     const baseBuildings = buildingsVisible
-      ? massing.drawingBuildings.length
-        ? [...displayModel.buildings, ...massing.drawingBuildings]
-        : displayModel.buildings
+      ? [
+          ...displayModel.buildings,
+          ...massing.drawingBuildings,
+          ...drawnMassingBuildings,
+          ...qaProposedMassing,
+        ]
       : [];
     return {
       ...displayModel,
@@ -1179,7 +1228,7 @@ export function ModelPage({
       contourLayer: contoursVisible ? displayModel.contourLayer : undefined,
       contours: contoursVisible ? displayModel.contours : false,
     };
-  }, [displayModel, massing.drawingBuildings, view3dDisplay]);
+  }, [displayModel, drawnMassingBuildings, massing.drawingBuildings, qaProposedMassing, view3dDisplay]);
 
   useEffect(() => {
     qaDisplayBuildingsRef.current = displayModel.buildings;

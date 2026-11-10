@@ -43,7 +43,11 @@ declare global {
       qaGroundRelease: () => void;
       qaGroundMove: (east: number, north: number) => void;
       finishDraw: () => import("./massingBlock").MassingBlock | null;
-      commitPolylineCenterline: (points: [number, number][]) => string | null;
+      commitPolylineCenterline: (
+        points: [number, number][],
+        partial?: { width_m?: number; floors?: number; floorHeight_m?: number; flipped?: boolean },
+      ) => string | null;
+      clearDrawnBlocks?: () => void;
       getToolPhase: () => string;
       drawArmed: () => boolean;
     };
@@ -74,6 +78,9 @@ declare global {
         firstRenderMs: number | null;
       }>;
       captureViewportPng?: () => Promise<string | null>;
+      setQaProposedMassingBox?: (east?: number, north?: number, size?: number, height?: number) => boolean;
+      clearQaProposedMassing?: () => void;
+      setDrawingPlanViewport?: (east: number, north: number, spanM: number) => boolean;
     };
     __citycutWalkRippleQa?: {
       setMinutes: (minutes: number) => void;

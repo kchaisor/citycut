@@ -217,7 +217,8 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--heliodon-dial-disc` | `#e8e2d8` | Faint ground disc under the heliodon dial at about 35% opacity (screen only). |
 | `--shadow-fill` | `#4a5a70` | Site-plan building shadows on the site plan (20% opacity). |
 | `--sun-study-sun` | `#fff500` | Sun study: hourly sun icons (9am–3pm) on the selected-date path of the site plan sun diagram. Same size as the current-time sun, which hides while the study is on. |
-| `--sun-study-shadow` | `#4a5a70` | Sun study: one site plan shadow layer per hour (9am–3pm), each at 20% opacity. |
+| `--sun-study-shadow` | `#4a5a70` | Sun study: existing context shadow per hour (9am–3pm), each at 20% opacity. |
+| `--sun-study-shadow-added` | `#E1B157` | Sun study: proposal-only added shadow per hour, hatched at about 55% opacity. |
 | `--sun-study-block` | `#f4f4f2` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): blocks. |
 | `--sun-study-green` | `#eeeeec` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): parks and green space. |
 | `--sun-study-water` | `#e6e8ea` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): water. |
