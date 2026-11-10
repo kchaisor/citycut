@@ -8,7 +8,8 @@ import {
   heliodonRadiusM,
 } from "../lib/heliodonRadius";
 import { RESCODE_B43_STEP_MINUTES } from "../lib/solarAccessB43";
-import { SUN_HOURS_LOST_CELL_M, SUN_HOURS_LOST_LEGEND } from "../lib/sunHoursLost";
+import { SUN_HOURS_LOST_CELL_M } from "../lib/sunHoursLost";
+import { SunHoursLostLegendList } from "./SunHoursLostLegendList";
 import { SUN_STUDY_SHADOW_ADDED_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "../lib/sunStudyPlan";
 import type { SolarReceptorAssessResult } from "../lib/solarReceptorAssess";
 import type { SolarViewSettings } from "./SolarHeliodon";
@@ -195,25 +196,7 @@ export function SolarPanel({
               22 Sep 9am–3pm at 15-minute steps · {SUN_HOURS_LOST_CELL_M} m cells around proposed massing.
               {sunHoursLostPending ? " Computing…" : ""}
             </p>
-            <ul className="sun-hours-lost-legend" aria-label="Hours lost legend">
-              {SUN_HOURS_LOST_LEGEND.map((entry) => (
-                <li key={entry.key}>
-                  <svg className="solar-legend-swatch" viewBox="0 0 24 12" aria-hidden>
-                    <rect
-                      x="0"
-                      y="0"
-                      width="24"
-                      height="12"
-                      fill={getColour(entry.key)}
-                      fillOpacity={entry.key === "--sun-hours-lost-0" ? 0.35 : 0.9}
-                      stroke={entry.key === "--sun-hours-lost-0" ? getColour("--sun-compass-label") : "none"}
-                      strokeWidth="0.5"
-                    />
-                  </svg>
-                  {entry.label} h
-                </li>
-              ))}
-            </ul>
+            <SunHoursLostLegendList />
           </>
         )}
         <label className="check-field">
