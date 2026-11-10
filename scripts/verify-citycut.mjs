@@ -2346,8 +2346,13 @@ async function main() {
         const maxBudget = Math.max(baseline.maxMs * 2.5 + 30, 150);
         const totalBudget = Math.max(baseline.totalMs * 3.5 + 80, 250);
         const shotGuide = path.join(CURSOR_ARTIFACTS_DIR, "solar-access-guide.png");
+        const guidePanel = shadowPage.locator(".right-inspector .solar-panel-body, .right-inspector .solar-drawer").first();
         if ((await shadowPage.locator("[data-solar-access-guide]").count()) > 0) {
-          await shadowPage.locator("[data-solar-access-guide]").screenshot({ path: shotGuide });
+          try {
+            await guidePanel.screenshot({ path: shotGuide, timeout: 15000 });
+          } catch {
+            await shadowPage.locator(".right-inspector").screenshot({ path: shotGuide, timeout: 15000 });
+          }
         }
         assertCheck(
           "solar-plan-zoom-perf",
