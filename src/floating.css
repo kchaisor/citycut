@@ -258,7 +258,21 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 .sun-hours-lost-legend { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 6px 0 10px; padding: 0; list-style: none; font-size: 11px; }
 .sun-hours-lost-legend li { display: flex; align-items: center; gap: 4px; }
 .solar-receptor-results { display: grid; gap: 8px; margin: 8px 0 4px; padding: 0; list-style: none; }
+.solar-receptor-results.is-compact { gap: 6px; margin: 0; }
 .solar-receptor-results li { display: grid; gap: 3px; font-size: 12px; line-height: 1.35; }
+.solar-receptor-results.is-compact li { font-size: 11px; gap: 2px; }
+.plan-viewport-stack { position: relative; width: 100%; height: 100%; min-height: 0; }
+.plan-viewport-stack > svg.plan { display: block; width: 100%; height: 100%; }
+.plan-solar-results-dock {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 4;
+  max-width: min(320px, calc(100% - 24px));
+  padding: 10px 12px;
+  pointer-events: none;
+}
+.plan-solar-results-dock .solar-receptor-metrics { font-size: 11px; }
 .solar-receptor-id { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
 .solar-receptor-metrics .dim { color: var(--sidebar-text); font-weight: 500; }
 .solar-receptor-status.is-pass { color: #1f5f2f; font-weight: 600; }

@@ -2185,24 +2185,35 @@ async function main() {
           `south=${JSON.stringify(south)}, far=${JSON.stringify(far)}`,
         );
 
+        const dock = shadowPage.locator("[data-solar-results-dock]");
+        await dock.waitFor({ state: "visible", timeout: 120000 });
+        const metricsText = await dock.locator(".solar-receptor-metrics").first().textContent();
+        assertCheck(
+          "solar-b43-results-readable",
+          "B4-3 receptor m² existing vs proposed and status labels are visible on the site plan dock",
+          Boolean(metricsText?.includes("m² existing")) &&
+            Boolean(metricsText?.includes("m² proposed")) &&
+            (await dock.locator(".solar-receptor-status").count()) >= 2,
+          `metrics=${JSON.stringify(metricsText)}`,
+        );
         const shotPlan = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-plan.png");
-        await shadowPage.locator("svg.plan").screenshot({ path: shotPlan });
-        const shotPanel = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-panel.png");
-        const resultsEl = shadowPage.locator(".solar-receptor-results");
-        const hasResults = (await resultsEl.count()) > 0;
-        if (hasResults) {
-          try {
-            await resultsEl.scrollIntoViewIfNeeded({ timeout: 8000 });
-            await shadowPage.screenshot({
-              path: shotPanel,
-              clip: { x: 0, y: 72, width: 400, height: 860 },
-              scale: "css",
-            });
-            const shotResults = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-results.png");
-            await resultsEl.screenshot({ path: shotResults });
-          } catch {
-            await shadowPage.screenshot({ path: shotPanel, fullPage: false, scale: "css" });
-          }
+        const planEl = shadowPage.locator("svg.plan");
+        await planEl.screenshot({ path: shotPlan });
+        const shotResults = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-results.png");
+        await dock.screenshot({ path: shotResults });
+        const shotCombo = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-plan-and-results.png");
+        const planBox = await planEl.boundingBox();
+        const dockBox = await dock.boundingBox();
+        if (planBox && dockBox) {
+          const x = Math.floor(Math.min(planBox.x, dockBox.x));
+          const y = Math.floor(Math.min(planBox.y, dockBox.y));
+          const x2 = Math.ceil(Math.max(planBox.x + planBox.width, dockBox.x + dockBox.width));
+          const y2 = Math.ceil(Math.max(planBox.y + planBox.height, dockBox.y + dockBox.height));
+          await shadowPage.screenshot({
+            path: shotCombo,
+            clip: { x, y, width: x2 - x, height: y2 - y },
+            scale: "css",
+          });
         }
       };
 
@@ -2287,6 +2298,10 @@ async function main() {
             text.includes('inkscape:label="Added shadow 12:00"') &&
             text.includes('inkscape:label="Proposed massing"');
           detail = `file=${filename}, bytes=${bytes.length}, hasExisting=${text.includes("Existing shadow 12:00")}, hasAdded=${text.includes("Added shadow 12:00")}`;
+          if (exportOk) {
+            fs.mkdirSync(CURSOR_ARTIFACTS_DIR, { recursive: true });
+            fs.writeFileSync(path.join(CURSOR_ARTIFACTS_DIR, "solar-layered-export-box-hill-download.svg"), text);
+          }
         } catch (error) {
           detail = error instanceof Error ? error.message : String(error);
         }

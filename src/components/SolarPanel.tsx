@@ -12,6 +12,7 @@ import { SUN_HOURS_LOST_CELL_M, SUN_HOURS_LOST_LEGEND } from "../lib/sunHoursLos
 import { SUN_STUDY_SHADOW_ADDED_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "../lib/sunStudyPlan";
 import type { SolarReceptorAssessResult } from "../lib/solarReceptorAssess";
 import type { SolarViewSettings } from "./SolarHeliodon";
+import { SolarReceptorResultsList } from "./SolarReceptorResultsList";
 import { SunStudyPlayer } from "./SunStudyPlayer";
 
 const SOLAR_LEGEND: { key: ColourKey; label: string; dash?: string }[] = [
@@ -157,18 +158,7 @@ export function SolarPanel({
           </p>
         )}
         {settings.solarAccess && receptorAssess.length > 0 && (
-          <ul className="solar-receptor-results" aria-label="B4-3 receptor results">
-            {receptorAssess.map((row) => (
-              <li key={row.id} data-solar-receptor={row.id} data-solar-receptor-status={row.statusTone}>
-                <span className="solar-receptor-id mono">{row.id}</span>
-                <span className="solar-receptor-metrics mono">
-                  ≥5 h: {row.existingSunlitM2.toFixed(0)} m² existing · {row.proposedSunlitM2.toFixed(0)} m² proposed
-                  <span className="dim"> (need {row.requiredSunlitM2.toFixed(0)} m²)</span>
-                </span>
-                <span className={`solar-receptor-status is-${row.statusTone}`}>{row.statusLabel}</span>
-              </li>
-            ))}
-          </ul>
+          <SolarReceptorResultsList rows={receptorAssess} />
         )}
         {canMarkReceptors && (
           <label className="check-field">
