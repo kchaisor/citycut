@@ -889,6 +889,11 @@ input[type="range"]::-moz-range-thumb {
   display: block;
   pointer-events: none;
 }
+.wind-flow-legend-3d {
+  z-index: 28;
+  bottom: calc(var(--env-console-height, 148px) + 12px);
+  pointer-events: none;
+}
 .wind-flow-legend {
   position: absolute;
   left: 50%;

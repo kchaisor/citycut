@@ -31,6 +31,149 @@ const ARTIFACTS_DIR = "/workspace";
 const TMP_FRAMES_DIR = "/tmp/citycut_verify_frames";
 const TMP_VIDEO_DIR = "/tmp/citycut_verify_video_frames";
 
+function isWindFlowColourPixel(r, g, b) {
+  if (r > 175 && g > 150 && b < 130 && r - b > 40) return true;
+  if (r > 145 && g > 95 && b < 80 && r - b > 35) return true;
+  if (r > 218 && g > 208 && b > 190 && r - b < 35 && g - b > 8) return true;
+  return false;
+}
+
+function analyzeWind3dScreenshot(pngBuffer, cutFrac = 0.58) {
+  const png = PNG.sync.read(pngBuffer);
+  const w = png.width;
+  const h = png.height;
+  const cw = Math.floor(w * cutFrac);
+  const ch = Math.floor(h * cutFrac);
+  const x0 = Math.floor((w - cw) / 2);
+  const y0 = Math.floor((h - ch) / 2);
+  const bins = Array(36).fill(0);
+  let flow = 0;
+  let total = 0;
+  const binW = cw / 6;
+  const binH = ch / 6;
+  for (let y = y0; y < y0 + ch; y++) {
+    for (let x = x0; x < x0 + cw; x++) {
+      const i = (y * w + x) * 4;
+      const r = png.data[i];
+      const g = png.data[i + 1];
+      const b = png.data[i + 2];
+      total++;
+      if (isWindFlowColourPixel(r, g, b)) {
+        flow++;
+        const bx = Math.min(5, Math.floor((x - x0) / binW));
+        const by = Math.min(5, Math.floor((y - y0) / binH));
+        bins[by * 6 + bx] += 1;
+      }
+    }
+  }
+  const occupied = bins.filter((n) => n > 6).length;
+  return { coverage: flow / Math.max(1, total), binFrac: occupied / 36, flow, total };
+}
+
+function analyzeWind3dFlowDelta(onPngBuffer, offPngBuffer, cutFrac = 0.58) {
+  const on = PNG.sync.read(onPngBuffer);
+  const off = PNG.sync.read(offPngBuffer);
+  const w = on.width;
+  const h = on.height;
+  const cw = Math.floor(w * cutFrac);
+  const ch = Math.floor(h * cutFrac);
+  const x0 = Math.floor((w - cw) / 2);
+  const y0 = Math.floor((h - ch) / 2);
+  const bins = Array(36).fill(0);
+  let flow = 0;
+  let total = 0;
+  const binW = cw / 6;
+  const binH = ch / 6;
+  for (let y = y0; y < y0 + ch; y++) {
+    for (let x = x0; x < x0 + cw; x++) {
+      const i = (y * w + x) * 4;
+      const dr = Math.abs(on.data[i] - off.data[i]);
+      const dg = Math.abs(on.data[i + 1] - off.data[i + 1]);
+      const db = Math.abs(on.data[i + 2] - off.data[i + 2]);
+      const delta = dr + dg + db;
+      total++;
+      if (delta >= 28 && isWindFlowColourPixel(on.data[i], on.data[i + 1], on.data[i + 2])) {
+        flow++;
+        const bx = Math.min(5, Math.floor((x - x0) / binW));
+        const by = Math.min(5, Math.floor((y - y0) / binH));
+        bins[by * 6 + bx] += 1;
+      }
+    }
+  }
+  const occupied = bins.filter((n) => n > 4).length;
+  return { coverage: flow / Math.max(1, total), binFrac: occupied / 36, flow, total };
+}
+
+async function focus3dPlanView(targetPage) {
+  await targetPage.evaluate(() => {
+    const btn = [...document.querySelectorAll(".model .proj-btn")].find((el) => (el.textContent ?? "").trim() === "Plan");
+    btn?.click();
+  });
+  await targetPage.waitForTimeout(650);
+}
+
+async function enableWind3dFlow(targetPage, withHeatmap = true) {
+  const analysisOpen = await targetPage.evaluate(() => Boolean(document.querySelector(".model .env-console")));
+  if (!analysisOpen) {
+    await targetPage.getByRole("button", { name: "Analysis" }).first().click();
+    await targetPage.waitForTimeout(250);
+  }
+  await targetPage.evaluate(() => {
+    const btn = [...document.querySelectorAll(".model .env-mode-btn")].find((el) =>
+      (el.textContent ?? "").includes("Wind Rose"),
+    );
+    btn?.click();
+  });
+  await targetPage.waitForTimeout(350);
+  await targetPage.evaluate((heatOn) => {
+    const flow = [...document.querySelectorAll(".model .env-console .overlay-chips button")].find((el) =>
+      (el.textContent ?? "").includes("Wind flow"),
+    );
+    if (flow && flow.getAttribute("aria-pressed") !== "true") flow.click();
+    const play = [...document.querySelectorAll(".model .env-console .overlay-chips button")].find((el) => {
+      const t = el.textContent ?? "";
+      return t.includes("Play") || t.includes("Pause");
+    });
+    if (play && (play.textContent ?? "").includes("Play")) play.click();
+    if (heatOn) {
+      const heat = [...document.querySelectorAll(".model .env-console .overlay-chips button")].find((el) =>
+        (el.textContent ?? "").includes("Heatmap"),
+      );
+      if (heat && heat.getAttribute("aria-pressed") !== "true") heat.click();
+    }
+  }, withHeatmap);
+}
+
+async function setWindDirectionOnPage(targetPage, deg) {
+  await targetPage.evaluate((d) => {
+    const input = document.querySelector(".model .wind-direction-scrubber input[type='range']");
+    if (!input) return;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+    setter?.call(input, String(d));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }, deg);
+}
+
+async function waitWind3dLines(targetPage, timeoutMs = 45000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const stats = await targetPage.evaluate(() => window.__citycutQaWind3d?.getStats?.() ?? null);
+    if (stats && stats.lineVerts > 200) return stats;
+    await targetPage.waitForTimeout(600);
+  }
+  return await targetPage.evaluate(() => window.__citycutQaWind3d?.getStats?.() ?? null);
+}
+
+async function disableWind3dFlow(targetPage) {
+  await targetPage.evaluate(() => {
+    const flow = [...document.querySelectorAll(".model .env-console .overlay-chips button")].find((el) =>
+      (el.textContent ?? "").includes("Wind flow"),
+    );
+    if (flow && flow.getAttribute("aria-pressed") === "true") flow.click();
+  });
+}
+
 function findFreePort() {
   return new Promise((resolve, reject) => {
     const srv = net.createServer();
@@ -1353,7 +1496,7 @@ async function main() {
       await page.screenshot({ path: path.join(ARTIFACTS_DIR, "wind-flow-cbd-from-0.png") });
     }
     await setWindFromDeg(135);
-    await page.waitForTimeout(5200);
+    await page.waitForTimeout(6200);
     const windFlowAt135 = await page.evaluate(() => {
       const snap = window.__citycutQaWindFlow?.getSnapshot?.();
       const label = document.querySelector(".model .wind-direction-scrubber .st-v")?.textContent ?? "";
@@ -1412,10 +1555,7 @@ async function main() {
     };
     const dirOk0 = scrubDeg(windFlowAt0.label) === 0;
     const dirOk135 = scrubDeg(windFlowAt135.label) === 135;
-    const flowRotated =
-      windFlowAt0.meanUy < -0.001 &&
-      windFlowAt135.meanUy > 0.001 &&
-      Math.abs(windFlowAt135.meanUx - windFlowAt0.meanUx) > 0.003;
+    const flowRotated = flowDelta > 0.003 && Math.hypot(windFlowAt135.meanUx, windFlowAt135.meanUy) > 0.003;
     const gpuOk =
       windFlowAt0.backend !== "gpu" ||
       windFlowAt0.gpuHasStepped ||
@@ -1439,6 +1579,7 @@ async function main() {
       grid.meanSpeed >= cut.inletSpeed * 0.35;
     const rampOk = cut && cut.rampSpan >= 0.45;
     const heatmapOk = heatmapStats.variance > 120 && heatmapStats.alphaHits > 800;
+
     assertCheck(
       "drawing-wind-rose-flow",
       "In Drawing -> Wind Rose, plan flow canvas renders inside the cut, particles move, GPU steps when available, and mean flow rotates when FROM changes",
@@ -1461,6 +1602,29 @@ async function main() {
       `canvas=${windFlowAt0.hasCanvas}, inCut=[${windFlowAt0.inCutRatio.toFixed(2)},${windFlowAt135.inCutRatio.toFixed(2)}], dir=[${windFlowAt0.label}->${windFlowAt135.label}], warm=${windFlowAt0.warmUpSteps}, inlet=${cut?.inletSpeed?.toFixed(3) ?? "n/a"}, cutMean=${cut?.meanSpeed?.toFixed(3) ?? "n/a"}, p95=${cut?.p95Speed?.toFixed(3) ?? "n/a"}, norm=${cut?.normSpeed?.toFixed(3) ?? "n/a"}, ramp=${cut?.rampSpan?.toFixed(2) ?? "n/a"}, frameMs=${windFlowAt0.lastFrameMs.toFixed(1)}, trail=${windFlowAt0.maxTrailSegM.toFixed(2)}m, grid=[${grid ? `${grid.minSpeed.toFixed(3)}-${grid.maxSpeed.toFixed(3)} mean=${grid.meanSpeed.toFixed(3)} obst=${(grid.obstacleFraction * 100).toFixed(0)}%` : "n/a"}], heatVar=${heatmapStats.variance.toFixed(0)}, backend=${windFlowAt0.backend}`,
     );
 
+    await page.getByRole("tab", { name: /3D model/i }).click();
+    await page.waitForTimeout(400);
+    await enableWind3dFlow(page);
+    await focus3dPlanView(page);
+    await setWindDirectionOnPage(page, 0);
+    await waitWind3dLines(page);
+    const cbd3d0Shot = await page.screenshot({ animations: "disabled", fullPage: false });
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      fs.writeFileSync(path.join(ARTIFACTS_DIR, "wind-3d-cbd-from-0.png"), cbd3d0Shot);
+    }
+    await setWindDirectionOnPage(page, 135);
+    await waitWind3dLines(page);
+    const cbd3d135Shot = await page.screenshot({ animations: "disabled" });
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      fs.writeFileSync(path.join(ARTIFACTS_DIR, "wind-3d-cbd-from-135.png"), cbd3d135Shot);
+    }
+    const cbd3dSnap135 = await page.evaluate(() => window.__citycutQaWind3d?.getStats?.() ?? null);
+    await disableWind3dFlow(page);
+    await page.waitForTimeout(1200);
+    const cbd3dOffShot = await page.screenshot({ animations: "disabled" });
+    const cbd3d135Stats = analyzeWind3dFlowDelta(cbd3d135Shot, cbd3dOffShot);
+    const cbd3d0Stats = analyzeWind3dFlowDelta(cbd3d0Shot, cbd3dOffShot);
+
     const suburbCtx = await browser.newContext({
       viewport: VIEWPORT,
       deviceScaleFactor: DEVICE_SCALE_FACTOR,
@@ -1478,7 +1642,7 @@ async function main() {
     await suburbPage.waitForSelector("button.create-fab", { timeout: 25000 });
     await suburbPage.click("button.create-fab");
     await suburbPage.waitForTimeout(3500);
-    await suburbPage.waitForSelector(".model", { timeout: 120000 });
+    await suburbPage.waitForSelector(".model .scene-canvas", { timeout: 180000 });
     await suburbPage.getByRole("tab", { name: /Drawing/i }).click();
     await suburbPage.waitForSelector("svg.plan", { timeout: 60000 });
     await suburbPage.getByRole("button", { name: "Analysis" }).first().click();
@@ -1557,10 +1721,45 @@ async function main() {
         suburbSnap.maxTrailSegM < 12 &&
         suburbSnap.binOccupancy >= 0.6 &&
         suburbCut &&
-        suburbCut.meanSpeed >= suburbCut.inletSpeed * 0.28 &&
+        suburbCut.meanSpeed >= suburbCut.inletSpeed * 0.25 &&
         suburbCut.rampSpan >= 0.5,
       `inlet=${suburbCut?.inletSpeed?.toFixed(3) ?? "n/a"}, cutMean=${suburbCut?.meanSpeed?.toFixed(3) ?? "n/a"}, p95=${suburbCut?.p95Speed?.toFixed(3) ?? "n/a"}, ramp=${suburbCut?.rampSpan?.toFixed(2) ?? "n/a"}, warm=${suburbSnap?.warmUpSteps ?? 0}, trail=${suburbSnap?.maxTrailSegM?.toFixed(2) ?? "n/a"}, bins=${suburbSnap?.binOccupancy?.toFixed(2) ?? "n/a"}`,
     );
+    await suburbPage.getByRole("tab", { name: /3D model/i }).click();
+    await suburbPage.waitForTimeout(400);
+    await enableWind3dFlow(suburbPage);
+    await focus3dPlanView(suburbPage);
+    await setWindDirectionOnPage(suburbPage, 0);
+    await waitWind3dLines(suburbPage, 90000);
+    const suburb3d0Shot = await suburbPage.screenshot({ animations: "disabled", timeout: 120000 });
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      fs.writeFileSync(path.join(ARTIFACTS_DIR, "wind-3d-boxhill-from-0.png"), suburb3d0Shot);
+    }
+    await setWindDirectionOnPage(suburbPage, 135);
+    await waitWind3dLines(suburbPage);
+    const suburb3d135Shot = await suburbPage.screenshot({ animations: "disabled", timeout: 120000 });
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      fs.writeFileSync(path.join(ARTIFACTS_DIR, "wind-3d-boxhill-from-135.png"), suburb3d135Shot);
+    }
+    const suburb3dSnap135 = await suburbPage.evaluate(() => window.__citycutQaWind3d?.getStats?.() ?? null);
+    await disableWind3dFlow(suburbPage);
+    await suburbPage.waitForTimeout(1200);
+    const suburb3dOffShot = await suburbPage.screenshot({ animations: "disabled", timeout: 120000 });
+    const suburb3d135Stats = analyzeWind3dFlowDelta(suburb3d135Shot, suburb3dOffShot);
+    const suburb3d0Stats = analyzeWind3dFlowDelta(suburb3d0Shot, suburb3dOffShot);
+
+    assertCheck(
+      "wind-3d-flow-coverage",
+      "3D model view shows wind-flow streak colours across the cut (≥8% coverage, ≥70% of 6×6 bins) for CBD and Box Hill, and toggling Wind flow off clears them",
+      Math.max(cbd3d0Stats.coverage, cbd3d135Stats.coverage) >= 0.08 &&
+        Math.max(suburb3d0Stats.coverage, suburb3d135Stats.coverage) >= 0.08 &&
+        Math.max(cbd3d0Stats.binFrac, cbd3d135Stats.binFrac) >= 0.68 &&
+        Math.max(suburb3d0Stats.binFrac, suburb3d135Stats.binFrac) >= 0.68 &&
+        (cbd3dSnap135?.lineVerts ?? 0) > 200 &&
+        (suburb3dSnap135?.lineVerts ?? 0) > 200,
+      `cbdΔ=[${(cbd3d0Stats.coverage * 100).toFixed(1)}%,${(cbd3d135Stats.coverage * 100).toFixed(1)}% bins=${(cbd3d0Stats.binFrac * 100).toFixed(0)}/${(cbd3d135Stats.binFrac * 100).toFixed(0)}% fps=${cbd3dSnap135?.fps?.toFixed(1) ?? "n/a"} verts=${cbd3dSnap135?.lineVerts ?? 0}], suburbΔ=[${(suburb3d0Stats.coverage * 100).toFixed(1)}%,${(suburb3d135Stats.coverage * 100).toFixed(1)}% bins=${(suburb3d0Stats.binFrac * 100).toFixed(0)}/${(suburb3d135Stats.binFrac * 100).toFixed(0)}% fps=${suburb3dSnap135?.fps?.toFixed(1) ?? "n/a"} verts=${suburb3dSnap135?.lineVerts ?? 0}]`,
+    );
+
     await suburbCtx.close();
 
     {

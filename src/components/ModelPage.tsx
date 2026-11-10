@@ -1211,13 +1211,21 @@ export function ModelPage({
     analysisKind === "wind" &&
     windSettings.enabled &&
     (drawing === "site" || drawing === "figure-ground");
+  const windModel3dFlowActive =
+    tab === "3d" && leftOpen === "analysis" && analysisKind === "wind" && windSettings.enabled;
+  const windLbmFlowActive = windPlanFlowActive || windModel3dFlowActive;
+  const windFlowSource =
+    tab === "3d"
+      ? { sideM: displayModel.sideM, buildings: displayModel.buildings }
+      : { sideM: drawingModel.sideM, buildings: drawingModel.buildings };
   const windPlanFlow = useWindPlanFlow({
-    active: windPlanFlowActive,
-    sideM: drawingModel.sideM,
-    buildings: drawingModel.buildings,
+    active: windLbmFlowActive,
+    sideM: windFlowSource.sideM,
+    buildings: windFlowSource.buildings,
     stats: consoleWindStats,
     settings: windLbmFlowFromSettings(windSettings),
-    qaExpose: windPlanFlowActive || qaModeFromSearch(typeof window !== "undefined" ? window.location.search : ""),
+    qaExpose:
+      windLbmFlowActive || qaModeFromSearch(typeof window !== "undefined" ? window.location.search : ""),
   });
   const windDirectionUiDeg =
     windSettings.planFlowDirectionDeg ??
@@ -1838,6 +1846,16 @@ export function ModelPage({
                 windTable={windTable}
                 windPeriod={windSettings.period}
                 windAnimateStreaks={windMotion.animateStreaks}
+                windModelFlow={{
+                  active: windModel3dFlowActive,
+                  playing: windSettings.planFlowPlaying,
+                  particles: windPlanFlow.particles,
+                  solver: windPlanFlow.solver,
+                  frame: windPlanFlow.frame,
+                  showHeatmap: windSettings.planFlowHeatmap,
+                  normSpeed: windPlanFlow.normSpeed,
+                  flowReveal: windPlanFlow.flowReveal,
+                }}
                 onExportReady={onExportReady}
                 onBuildingPick={(buildingId, clientX, clientY, additive) => {
                   setHeightPick({ buildingId, clientX, clientY });
@@ -1873,6 +1891,11 @@ export function ModelPage({
                   {walkRippleToast}
                 </p>
               ) : null}
+              {windModel3dFlowActive && (
+                <p className="wind-flow-legend wind-flow-legend-3d" role="note">
+                  Indicative ground-level 2D flow around cut footprints — not engineering CFD.
+                </p>
+              )}
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
                   table={windTable}
@@ -3502,8 +3525,44 @@ export function ModelPage({
                         onClick={() => commitWind({ ...windSettings, enabled: !windSettings.enabled })}
                       >
                         <span className="ov-dot" aria-hidden="true" />
-                        <span>3D Wind Flow</span>
+                        <span>Wind flow</span>
                       </button>
+                    )}
+                    {tab !== "drawing" && (
+                      <>
+                        <button
+                          type="button"
+                          className={windSettings.planFlowPlaying ? "ov-chip on" : "ov-chip"}
+                          aria-pressed={windSettings.planFlowPlaying}
+                          disabled={!windSettings.enabled}
+                          onClick={() =>
+                            commitWind({
+                              ...windSettings,
+                              enabled: true,
+                              planFlowPlaying: !windSettings.planFlowPlaying,
+                            })
+                          }
+                        >
+                          <span className="ov-dot" aria-hidden="true" />
+                          <span>{windSettings.planFlowPlaying ? "Pause" : "Play"}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={windSettings.planFlowHeatmap ? "ov-chip on" : "ov-chip"}
+                          aria-pressed={windSettings.planFlowHeatmap}
+                          disabled={!windSettings.enabled}
+                          onClick={() =>
+                            commitWind({
+                              ...windSettings,
+                              enabled: true,
+                              planFlowHeatmap: !windSettings.planFlowHeatmap,
+                            })
+                          }
+                        >
+                          <span className="ov-dot" aria-hidden="true" />
+                          <span>Heatmap</span>
+                        </button>
+                      </>
                     )}
                     {tab !== "drawing" && (
                       <button
@@ -3725,8 +3784,7 @@ export function ModelPage({
 
               {analysisKind === "wind" && (
                 <>
-                  {tab === "drawing" && (
-                    <>
+                  <>
                       <div className="wind-direction-scrubber mono" aria-label="Wind from direction">
                         <span className="st-k">FROM</span>
                         <input
@@ -3773,7 +3831,6 @@ export function ModelPage({
                         ))}
                       </div>
                     </>
-                  )}
                   <div className="date-presets" role="group" aria-label="Wind season presets">
                     {(["annual", "summer", "autumn", "winter", "spring"] as const).map((periodId) => (
                       <button

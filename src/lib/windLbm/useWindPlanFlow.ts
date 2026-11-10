@@ -106,6 +106,13 @@ export function useWindPlanFlow({
   const cpuOnlyFramesRef = useRef(0);
   const gpuHasSteppedRef = useRef(false);
   const flowRevealRef = useRef(1);
+  const [docVisible, setDocVisible] = useState(() => typeof document === "undefined" || !document.hidden);
+
+  useEffect(() => {
+    const onVis = () => setDocVisible(!document.hidden);
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
 
   const gridLong = useMemo(() => pickWindGridLongSide(sideM), [sideM]);
   const spec = useMemo(() => windLbmGridSpec(sideM, gridLong), [sideM, gridLong]);
@@ -182,7 +189,7 @@ export function useWindPlanFlow({
   }, [active, obstacleKey, inflowKey, buildings, spec, stats, settings.directionDeg, directionDeg, speedLu, sideM]);
 
   useEffect(() => {
-    if (!active || !settings.playing) {
+    if (!active || !settings.playing || !docVisible) {
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
       lastTsRef.current = null;
@@ -229,7 +236,7 @@ export function useWindPlanFlow({
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     };
-  }, [active, settings.playing, sideM, backend]);
+  }, [active, settings.playing, sideM, backend, docVisible]);
 
   const half = sideM / 2;
   const mean = meanFlowVector(solverRef.current);
