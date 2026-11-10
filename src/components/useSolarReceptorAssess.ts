@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { SolarReceptorWorkerMessage, SolarReceptorWorkerRequest } from "../lib/solarReceptorAssess.worker";
 import { sunStudyModelKey } from "../lib/sunStudyPlan";
-import type { SolarReceptorArea, SolarReceptorAssessResult } from "../lib/solarReceptorAssess";
+import type { SolarAssessRow, SolarReceptorArea } from "../lib/solarReceptorAssess";
 import type { CityModel } from "../types";
 
 let nextId = 1;
@@ -20,13 +20,13 @@ export function useSolarReceptorAssess(
   receptors: readonly SolarReceptorArea[],
   year: number,
   enabled: boolean,
-): { results: SolarReceptorAssessResult[]; pending: boolean } {
+): { results: SolarAssessRow[]; pending: boolean } {
   const modelKey = useMemo(() => sunStudyModelKey(model), [model]);
   const receptorKey = useMemo(
     () => receptors.map((receptor) => `${receptor.id}:${receptor.ring.map((p) => p.join(",")).join(";")}`).join("|"),
     [receptors],
   );
-  const [results, setResults] = useState<SolarReceptorAssessResult[]>([]);
+  const [results, setResults] = useState<SolarAssessRow[]>([]);
   const [pending, setPending] = useState(false);
 
   useEffect(() => {

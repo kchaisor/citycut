@@ -2337,6 +2337,56 @@ async function main() {
 
       await boxHillSolarExport();
 
+      const boxHillParkNoAdditional = async () => {
+        await shadowPage.evaluate(() => window.__citycutQaModel?.enableSolarParkAccess?.("melbourne-ddo10-yarra"));
+        await shadowPage.waitForTimeout(400);
+        await shadowPage.evaluate(
+          ({ east, north }) => {
+            window.__citycutQaMassing?.commitPolylineCenterline?.(
+              [
+                [east - 16, north - 4],
+                [east + 22, north - 4],
+                [east + 22, north + 10],
+                [east + 4, north + 10],
+                [east + 4, north + 28],
+              ],
+              { floors: 6, width_m: 14 },
+            );
+            window.__citycutQaModel?.addSolarParkReceptor?.(east - 26, north - 46, east + 12, north - 18, "box-hill-park");
+          },
+          { east: FOCUS_EAST, north: FOCUS_NORTH },
+        );
+        await shadowPage.waitForFunction(
+          () => {
+            const rows = window.__citycutQaModel?.readSolarReceptorAssess?.() ?? [];
+            const park = rows.find((row) => row.id === "box-hill-park");
+            return park?.assessKind === "park" && park.maxAddedM2 > 1 && park.pass === false;
+          },
+          null,
+          { timeout: 360000 },
+        );
+        const parkRow = await shadowPage.evaluate(() => {
+          const rows = window.__citycutQaModel?.readSolarReceptorAssess?.() ?? [];
+          return rows.find((row) => row.id === "box-hill-park");
+        });
+        const dock = shadowPage.locator("[data-solar-results-dock]");
+        await dock.waitFor({ state: "visible", timeout: 120000 });
+        const parkMetrics = await dock.locator("[data-solar-park-metrics]").first().textContent();
+        const shotPark = path.join(CURSOR_ARTIFACTS_DIR, "solar-park-box-hill-fail.png");
+        await shadowPage.locator(".plan-viewport-stack").screenshot({ path: shotPark });
+        assertCheck(
+          "solar-park-no-additional-fail",
+          "Box Hill park no-additional test fails beside 6-storey massing with readable added m² in the dock",
+          parkRow?.assessKind === "park" &&
+            parkRow?.pass === false &&
+            (parkRow?.maxAddedM2 ?? 0) > 1 &&
+            Boolean(parkMetrics?.includes("m² max")),
+          `park=${JSON.stringify(parkRow)}, metrics=${JSON.stringify(parkMetrics)}, shot=${shotPark}`,
+        );
+      };
+
+      await boxHillParkNoAdditional();
+
       await shadowCtx.close();
     }
 

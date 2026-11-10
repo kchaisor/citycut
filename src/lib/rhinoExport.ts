@@ -922,10 +922,10 @@ function addSolarReceptorPlan(
       materials,
       model,
       zone,
-      receptorLayerName(receptor.id, receptor.statusTone),
+      receptor.layerName ?? receptorLayerName(receptor.id, receptor.statusTone),
       [[openRing(receptor.ring)]],
       solarReceptorExportFill(receptor.statusTone),
-      receptorLayerName(receptor.id, receptor.statusTone),
+      receptor.layerName ?? receptorLayerName(receptor.id, receptor.statusTone),
     );
   }
 }

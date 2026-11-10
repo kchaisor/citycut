@@ -41,7 +41,7 @@ import { useSunStudyShadows } from "./useSunStudyShadows";
 import { SunHoursLostPlanOverlay } from "./SunHoursLostPlanOverlay";
 import type { SunHoursLostGrid } from "../lib/sunHoursLostPlan";
 import { ringFromCorners } from "../lib/solarAccessB43";
-import type { SolarReceptorArea, SolarReceptorAssessResult } from "../lib/solarReceptorAssess";
+import type { SolarAssessRow, SolarReceptorArea } from "../lib/solarReceptorAssess";
 import type { Ring } from "../types";
 
 const NO_SELECTION: readonly number[] = [];
@@ -115,7 +115,7 @@ export function DrawingPlan({
   sunStudySelected?: readonly number[];
   onSunStudyPick?: (buildingId: number) => void;
   solarReceptors?: readonly SolarReceptorArea[];
-  solarReceptorResults?: readonly SolarReceptorAssessResult[];
+  solarReceptorResults?: readonly SolarAssessRow[];
   receptorDraw?: boolean;
   onReceptorCommit?: (ring: Ring) => void;
   sunHoursLostGrid?: SunHoursLostGrid | null;

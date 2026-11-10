@@ -90,7 +90,16 @@ declare global {
         id?: string,
       ) => string | null;
       clearSolarReceptors?: () => void;
-      readSolarReceptorAssess?: () => import("./solarReceptorAssess").SolarReceptorAssessResult[];
+      readSolarReceptorAssess?: () => import("./solarReceptorAssess").SolarAssessRow[];
+      enableSolarParkAccess?: (ruleId?: string) => boolean;
+      addSolarParkReceptor?: (
+        east0: number,
+        north0: number,
+        east1: number,
+        north1: number,
+        id?: string,
+        ruleId?: string,
+      ) => string | null;
       enableSunHoursLost?: () => boolean;
       readSunHoursLostPlan?: () => { cellCount: number; maxLoss: number; cellM?: number };
     };

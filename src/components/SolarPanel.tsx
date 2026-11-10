@@ -11,9 +11,10 @@ import { RESCODE_B43_STEP_MINUTES } from "../lib/solarAccessB43";
 import { SUN_HOURS_LOST_CELL_M } from "../lib/sunHoursLost";
 import { SunHoursLostLegendList } from "./SunHoursLostLegendList";
 import { SUN_STUDY_SHADOW_ADDED_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "../lib/sunStudyPlan";
-import type { SolarReceptorAssessResult } from "../lib/solarReceptorAssess";
+import { PARK_NO_ADDITIONAL_TOLERANCE_M2, PARK_SOLAR_RULE_IDS, defaultParkRuleId, solarRuleDefinition } from "../lib/solarRuleRegistry";
+import type { SolarAssessRow } from "../lib/solarReceptorAssess";
 import type { SolarViewSettings } from "./SolarHeliodon";
-import { SolarReceptorResultsList } from "./SolarReceptorResultsList";
+import { SolarAssessResultsList } from "./SolarAssessResultsList";
 import { SunStudyPlayer } from "./SunStudyPlayer";
 
 const SOLAR_LEGEND: { key: ColourKey; label: string; dash?: string }[] = [
@@ -36,6 +37,10 @@ export function SolarPanel({
   receptorAssessPending = false,
   onClearReceptors,
   sunHoursLostPending = false,
+  parkGreenAreas = [],
+  onAddParkFromArea,
+  parkReceptorCount = 0,
+  onClearParkReceptors,
 }: {
   settings: SolarViewSettings;
   onChange: (next: SolarViewSettings) => void;
@@ -46,10 +51,14 @@ export function SolarPanel({
   onClearSelection?: () => void;
   canMarkReceptors?: boolean;
   receptorCount?: number;
-  receptorAssess?: SolarReceptorAssessResult[];
+  receptorAssess?: SolarAssessRow[];
   receptorAssessPending?: boolean;
   onClearReceptors?: () => void;
   sunHoursLostPending?: boolean;
+  parkGreenAreas?: { areaId: number; label: string }[];
+  onAddParkFromArea?: (areaId: number) => void;
+  parkReceptorCount?: number;
+  onClearParkReceptors?: () => void;
 }) {
   const [open, setOpen] = useState(true);
   useColourRevision();
@@ -158,8 +167,87 @@ export function SolarPanel({
             )}
           </p>
         )}
-        {settings.solarAccess && receptorAssess.length > 0 && (
-          <SolarReceptorResultsList rows={receptorAssess} />
+        {settings.solarAccess && receptorAssess.some((row) => row.assessKind === "b43") && (
+          <SolarAssessResultsList rows={receptorAssess.filter((row) => row.assessKind === "b43")} />
+        )}
+        <label className="check-field">
+          <input
+            type="checkbox"
+            checked={Boolean(settings.solarParkAccess)}
+            onChange={(event) => {
+              const on = event.target.checked;
+              patch({
+                solarParkAccess: on,
+                parkRuleId: settings.parkRuleId ?? defaultParkRuleId(),
+                castShadows: on ? true : settings.castShadows,
+              });
+            }}
+          />
+          Parks / public realm (no additional shadow)
+        </label>
+        {settings.solarParkAccess && (
+          <>
+            <label className="field-note" htmlFor={`${panelId}-park-rule`}>
+              Test rule
+            </label>
+            <select
+              id={`${panelId}-park-rule`}
+              className="mono"
+              value={settings.parkRuleId ?? defaultParkRuleId()}
+              onChange={(event) => patch({ parkRuleId: event.target.value })}
+            >
+              {PARK_SOLAR_RULE_IDS.map((ruleId) => {
+                const rule = solarRuleDefinition(ruleId);
+                return (
+                  <option key={ruleId} value={ruleId}>
+                    {rule.label} — {rule.statusNote}
+                  </option>
+                );
+              })}
+            </select>
+            <p className="field-note">
+              Pass when max added shadow ≤ {PARK_NO_ADDITIONAL_TOLERANCE_M2} m² per step ({settings.year}). Indicative only.
+            </p>
+            {canMarkReceptors && (
+              <label className="check-field">
+                <input
+                  type="checkbox"
+                  checked={Boolean(settings.parkReceptorDraw)}
+                  onChange={(event) => patch({ parkReceptorDraw: event.target.checked })}
+                />
+                Draw park test area on site plan
+              </label>
+            )}
+            {parkGreenAreas.length > 0 && onAddParkFromArea && (
+              <ul className="solar-park-pick-list" data-solar-park-pick-list>
+                {parkGreenAreas.map((area) => (
+                  <li key={area.areaId}>
+                    <button type="button" className="link-button" onClick={() => onAddParkFromArea(area.areaId)}>
+                      Add park from map: {area.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {parkReceptorCount > 0 && (
+              <p className="field-note" data-solar-park-receptor-summary>
+                {receptorAssessPending
+                  ? `Computing ${parkReceptorCount} park test${parkReceptorCount === 1 ? "" : "s"}…`
+                  : `${parkReceptorCount} park test area${parkReceptorCount === 1 ? "" : "s"}.`}
+                {onClearParkReceptors && (
+                  <>
+                    {" "}
+                    <button type="button" className="link-button" onClick={onClearParkReceptors}>
+                      Clear parks
+                    </button>
+                  </>
+                )}
+              </p>
+            )}
+            {receptorAssess.some((row) => row.assessKind === "park") && (
+              <SolarAssessResultsList rows={receptorAssess.filter((row) => row.assessKind === "park")} />
+            )}
+          </>
         )}
         {canMarkReceptors && (
           <label className="check-field">

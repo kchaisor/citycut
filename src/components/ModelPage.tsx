@@ -177,7 +177,7 @@ function shouldShowIntroBridgePill(): boolean {
 import type { CameraMemoryRef } from "../lib/cameraMemory";
 import { SceneBoundary } from "./SceneBoundary";
 import { SolarPanel } from "./SolarPanel";
-import { SolarReceptorResultsList } from "./SolarReceptorResultsList";
+import { SolarAssessResultsList } from "./SolarAssessResultsList";
 import { SunHoursLostLegendList } from "./SunHoursLostLegendList";
 import { useSolarReceptorAssess } from "./useSolarReceptorAssess";
 import { useSunHoursLostPlan } from "./useSunHoursLostPlan";
@@ -185,8 +185,10 @@ import { countPositiveLossCells, positiveLossCellsInsideFootprints } from "../li
 import { ringFromCorners } from "../lib/solarAccessB43";
 import type { SolarReceptorArea } from "../lib/solarReceptorAssess";
 import { solarReceptorsForExport } from "../lib/solarReceptorExport";
+import { defaultParkRuleId, type ParkSolarRuleId } from "../lib/solarRuleRegistry";
 import {
   loadSolarReceptors,
+  nextParkReceptorId,
   nextReceptorId,
   normalizeReceptorRing,
   saveSolarReceptors,
@@ -394,12 +396,15 @@ export function ModelPage({
     day: 22,
     hour: 15,
     minute: 0,
+    parkRuleId: defaultParkRuleId(),
   }));
 
   function commitSolar(next: SolarViewSettings) {
     writeStoredHeliodonRadiusFactor(window.localStorage, next.radiusFactor);
     setSolar(next);
   }
+  const solarRef = useRef(solar);
+  solarRef.current = solar;
 
   const [sunStudySelected, setSunStudySelected] = useState<number[]>([]);
   useEffect(() => setSunStudySelected((prev) => (prev.length === 0 ? prev : [])), [model]);
@@ -412,7 +417,7 @@ export function ModelPage({
   }, [model.center, solarReceptors]);
   const solarReceptorsRef = useRef(solarReceptors);
   solarReceptorsRef.current = solarReceptors;
-  const solarReceptorAssessRef = useRef<{ results: import("../lib/solarReceptorAssess").SolarReceptorAssessResult[]; pending: boolean }>({
+  const solarReceptorAssessRef = useRef<{ results: import("../lib/solarReceptorAssess").SolarAssessRow[]; pending: boolean }>({
     results: [],
     pending: false,
   });
@@ -448,7 +453,7 @@ export function ModelPage({
   }
 
   function solarReceptorsExport() {
-    if (!solar.solarAccess || solarReceptors.length === 0) return null;
+    if (solarReceptors.length === 0 || (!solar.solarAccess && !solar.solarParkAccess)) return null;
     return solarReceptorsForExport(solarReceptors, solarReceptorAssess.results);
   }
 
@@ -1089,7 +1094,29 @@ export function ModelPage({
         const normalized = normalizeReceptorRing(ring);
         if (!normalized) return null;
         const receptorId = id ?? nextReceptorId(solarReceptorsRef.current);
-        setSolarReceptors((current) => [...current, { id: receptorId, ring: normalized }]);
+        setSolarReceptors((current) => [...current, { id: receptorId, ring: normalized, kind: "yard" }]);
+        return receptorId;
+      },
+      enableSolarParkAccess(ruleId?: string) {
+        setSolar((prev) => ({
+          ...prev,
+          solarParkAccess: true,
+          parkRuleId: ruleId ?? prev.parkRuleId ?? defaultParkRuleId(),
+          castShadows: true,
+          parkReceptorDraw: true,
+        }));
+        return true;
+      },
+      addSolarParkReceptor(east0: number, north0: number, east1: number, north1: number, id?: string, ruleId?: string) {
+        const ring = ringFromCorners([east0, north0], [east1, north1]);
+        const normalized = normalizeReceptorRing(ring);
+        if (!normalized) return null;
+        const receptorId = id ?? nextParkReceptorId(solarReceptorsRef.current);
+        const resolvedRule = (ruleId ?? solarRef.current.parkRuleId ?? defaultParkRuleId()) as ParkSolarRuleId;
+        setSolarReceptors((current) => [
+          ...current,
+          { id: receptorId, ring: normalized, kind: "park", ruleId: resolvedRule },
+        ]);
         return receptorId;
       },
       clearSolarReceptors() {
@@ -1313,11 +1340,42 @@ export function ModelPage({
   }, [displayModel, drawnMassingBuildings, massing.drawingBuildings, qaProposedMassing, view3dDisplay]);
   drawingModelRef.current = drawingModel;
 
+  const visibleSolarReceptors = useMemo(() => {
+    const out: SolarReceptorArea[] = [];
+    if (solar.solarAccess) out.push(...solarReceptors.filter((receptor) => (receptor.kind ?? "yard") !== "park"));
+    if (solar.solarParkAccess) out.push(...solarReceptors.filter((receptor) => receptor.kind === "park"));
+    return out;
+  }, [solar.solarAccess, solar.solarParkAccess, solarReceptors]);
+  const solarAssessEnabled = Boolean(
+    (solar.solarAccess || solar.solarParkAccess) && visibleSolarReceptors.length > 0,
+  );
+  const parkGreenAreas = useMemo(
+    () =>
+      displayModel.areas
+        .filter((area) => area.kind === "green")
+        .map((area, index) => ({ areaId: area.id, label: `Open space ${area.id || index + 1}` })),
+    [displayModel.areas],
+  );
+  const addParkFromArea = useCallback(
+    (areaId: number) => {
+      const area = displayModel.areas.find((item) => item.id === areaId && item.kind === "green");
+      if (!area) return;
+      const normalized = normalizeReceptorRing(area.ring, 8);
+      if (!normalized) return;
+      const receptorId = nextParkReceptorId(solarReceptorsRef.current);
+      const ruleId = (solarRef.current.parkRuleId ?? defaultParkRuleId()) as ParkSolarRuleId;
+      setSolarReceptors((current) => [
+        ...current,
+        { id: receptorId, ring: normalized, kind: "park", ruleId, label: `area-${areaId}` },
+      ]);
+    },
+    [displayModel.areas],
+  );
   const solarReceptorAssess = useSolarReceptorAssess(
     drawingModel,
-    solarReceptors,
+    visibleSolarReceptors,
     solar.year,
-    Boolean(solar.solarAccess),
+    solarAssessEnabled,
   );
   solarReceptorAssessRef.current = solarReceptorAssess;
   const sunHoursLostPlan = useSunHoursLostPlan(
@@ -2378,18 +2436,28 @@ export function ModelPage({
                       return next;
                     })
                   }
-                  solarReceptors={solar.solarAccess ? solarReceptors : []}
-                  solarReceptorResults={solar.solarAccess ? solarReceptorAssess.results : []}
-                  sunHoursLostGrid={solar.sunHoursLost ? sunHoursLostPlan.grid : null}
-                  receptorDraw={Boolean(solar.solarAccess && solar.receptorDraw)}
-                  onReceptorCommit={(ring) => {
-                    const normalized = normalizeReceptorRing(ring);
-                    if (!normalized) return;
+                solarReceptors={visibleSolarReceptors}
+                solarReceptorResults={solarAssessEnabled ? solarReceptorAssess.results : []}
+                sunHoursLostGrid={solar.sunHoursLost ? sunHoursLostPlan.grid : null}
+                receptorDraw={Boolean(
+                  (solar.solarAccess && solar.receptorDraw) || (solar.solarParkAccess && solar.parkReceptorDraw),
+                )}
+                onReceptorCommit={(ring) => {
+                  const normalized = normalizeReceptorRing(ring);
+                  if (!normalized) return;
+                  if (solar.parkReceptorDraw && solar.solarParkAccess) {
+                    const ruleId = (solar.parkRuleId ?? defaultParkRuleId()) as ParkSolarRuleId;
                     setSolarReceptors((current) => [
                       ...current,
-                      { id: nextReceptorId(current), ring: normalized },
+                      { id: nextParkReceptorId(current), ring: normalized, kind: "park", ruleId },
                     ]);
-                  }}
+                    return;
+                  }
+                  setSolarReceptors((current) => [
+                    ...current,
+                    { id: nextReceptorId(current), ring: normalized, kind: "yard" },
+                  ]);
+                }}
                   uniformBuildings={!colourByUse && !showSource}
                   colourBySource={showSource}
                   highlightManual={showManualEdits && overrideResult.manualCount > 0}
@@ -2397,17 +2465,17 @@ export function ModelPage({
                   onViewportChange={setPlanViewport}
                   fitCounter={fitCounter}
                 />
-                {(solar.sunHoursLost && sunHoursLostPlan.grid) ||
-                (solar.solarAccess && solarReceptorAssess.results.length > 0) ? (
+                {((solar.sunHoursLost && sunHoursLostPlan.grid) ||
+                  (solarAssessEnabled && solarReceptorAssess.results.length > 0)) ? (
                   <div className="plan-solar-dock-stack" data-plan-solar-dock-stack>
                     {solar.sunHoursLost && sunHoursLostPlan.grid ? (
                       <div className="plan-solar-legend-dock hud-card" data-sun-hours-lost-legend-dock>
                         <SunHoursLostLegendList compact />
                       </div>
                     ) : null}
-                    {solar.solarAccess && solarReceptorAssess.results.length > 0 ? (
+                    {solarAssessEnabled && solarReceptorAssess.results.length > 0 ? (
                       <div className="plan-solar-results-dock hud-card" data-solar-results-dock>
-                        <SolarReceptorResultsList rows={solarReceptorAssess.results} compact />
+                        <SolarAssessResultsList rows={solarReceptorAssess.results} compact />
                       </div>
                     ) : null}
                   </div>
@@ -3647,11 +3715,19 @@ export function ModelPage({
                   selectedCount={sunStudySelected.length}
                   onClearSelection={() => setSunStudySelected([])}
                   canMarkReceptors={tab === "drawing" && drawing === "site"}
-                  receptorCount={solarReceptors.length}
+                  receptorCount={solarReceptors.filter((receptor) => (receptor.kind ?? "yard") !== "park").length}
+                  parkReceptorCount={solarReceptors.filter((receptor) => receptor.kind === "park").length}
                   receptorAssess={solarReceptorAssess.results}
                   receptorAssessPending={solarReceptorAssess.pending}
                   sunHoursLostPending={sunHoursLostPlan.pending}
-                  onClearReceptors={() => setSolarReceptors([])}
+                  parkGreenAreas={parkGreenAreas}
+                  onAddParkFromArea={addParkFromArea}
+                  onClearReceptors={() =>
+                    setSolarReceptors((current) => current.filter((receptor) => receptor.kind === "park"))
+                  }
+                  onClearParkReceptors={() =>
+                    setSolarReceptors((current) => current.filter((receptor) => (receptor.kind ?? "yard") !== "park"))
+                  }
                 />
               </div>
               <div hidden={analysisKind !== "wind"}>

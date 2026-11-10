@@ -258,6 +258,7 @@ export type SolarReceptorExport = {
   id: string;
   ring: Ring;
   statusTone: string;
+  layerName?: string;
 };
 
 export type SitePlanExportOptions = {
@@ -585,7 +586,7 @@ export function sitePlanChunks(
   }
   for (const receptor of resolved.solarReceptors ?? []) {
     chunks.push({
-      name: receptorLayerName(receptor.id, receptor.statusTone),
+      name: receptor.layerName ?? receptorLayerName(receptor.id, receptor.statusTone),
       paths: [
         {
           rings: mapRings([receptor.ring], model.sideM, layout),
