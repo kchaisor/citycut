@@ -2189,14 +2189,21 @@ async function main() {
         await shadowPage.locator("svg.plan").screenshot({ path: shotPlan });
         const shotPanel = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-panel.png");
         const resultsEl = shadowPage.locator(".solar-receptor-results");
-        await resultsEl.scrollIntoViewIfNeeded();
-        await shadowPage.screenshot({
-          path: shotPanel,
-          clip: { x: 0, y: 72, width: 400, height: 860 },
-          scale: "css",
-        });
-        const shotResults = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-results.png");
-        await resultsEl.screenshot({ path: shotResults });
+        const hasResults = (await resultsEl.count()) > 0;
+        if (hasResults) {
+          try {
+            await resultsEl.scrollIntoViewIfNeeded({ timeout: 8000 });
+            await shadowPage.screenshot({
+              path: shotPanel,
+              clip: { x: 0, y: 72, width: 400, height: 860 },
+              scale: "css",
+            });
+            const shotResults = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-results.png");
+            await resultsEl.screenshot({ path: shotResults });
+          } catch {
+            await shadowPage.screenshot({ path: shotPanel, fullPage: false, scale: "css" });
+          }
+        }
       };
 
       await boxHillB43();
