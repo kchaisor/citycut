@@ -51,6 +51,7 @@ export type SolarViewSettings = {
   parkRuleId?: string;
   parkReceptorDraw?: boolean;
   sunHoursLost?: boolean;
+  treesCastShadow?: boolean;
 };
 
 const OVERLAY_ORDER = 1000;

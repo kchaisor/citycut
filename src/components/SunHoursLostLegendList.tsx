@@ -2,7 +2,13 @@ import { getColour } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
 import { SUN_HOURS_LOST_LEGEND } from "../lib/sunHoursLost";
 
-export function SunHoursLostLegendList({ compact = false }: { compact?: boolean }) {
+export function SunHoursLostLegendList({
+  compact = false,
+  includesTrees = false,
+}: {
+  compact?: boolean;
+  includesTrees?: boolean;
+}) {
   useColourRevision();
   return (
     <ul
@@ -10,6 +16,11 @@ export function SunHoursLostLegendList({ compact = false }: { compact?: boolean 
       aria-label="Hours lost legend"
       data-sun-hours-lost-legend
     >
+      {includesTrees && (
+        <li className="sun-hours-lost-trees-note" data-sun-hours-lost-trees-note>
+          Includes tree crown shadows
+        </li>
+      )}
       {SUN_HOURS_LOST_LEGEND.map((entry) => (
         <li key={entry.key}>
           <svg className="solar-legend-swatch" viewBox="0 0 24 12" aria-hidden>

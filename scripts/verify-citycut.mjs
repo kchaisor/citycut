@@ -2387,6 +2387,26 @@ async function main() {
 
       await boxHillParkNoAdditional();
 
+      const boxHillTreeShadows = async () => {
+        await shadowPage.evaluate(() => {
+          window.__citycutQaModel?.enableSunHoursLost?.();
+          window.__citycutQaModel?.enableTreeShadows?.();
+        });
+        await shadowPage.waitForTimeout(600);
+        await shadowPage.waitForSelector("[data-sun-hours-lost-trees-note]", { timeout: 120000 });
+        const shotTrees = path.join(CURSOR_ARTIFACTS_DIR, "solar-tree-shadows-box-hill.png");
+        await shadowPage.locator(".plan-viewport-stack").screenshot({ path: shotTrees });
+        const treeDom = await shadowPage.locator("[data-sun-hours-lost]").count();
+        assertCheck(
+          "solar-tree-shadows-visual",
+          "Tree crown shadows on: hours-lost legend notes trees and heatmap cells render at site zoom",
+          treeDom > 0,
+          `dom=${treeDom}, shot=${shotTrees}`,
+        );
+      };
+
+      await boxHillTreeShadows();
+
       await shadowCtx.close();
     }
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { SunHoursLostWorkerMessage, SunHoursLostWorkerRequest } from "../lib/sunHoursLost.worker";
-import { proposedMassingInModel } from "../lib/buildingShadows";
+import { proposedMassingInModel, type PlanShadowTreeMode } from "../lib/buildingShadows";
 import { SUN_HOURS_LOST_CELL_M } from "../lib/sunHoursLost";
 import type { SunHoursLostGrid } from "../lib/sunHoursLostPlan";
 import { sunStudyModelKey } from "../lib/sunStudyPlan";
@@ -21,6 +21,7 @@ export function useSunHoursLostPlan(
   model: CityModel,
   year: number,
   enabled: boolean,
+  treeMode: PlanShadowTreeMode = "off",
 ): { grid: SunHoursLostGrid | null; pending: boolean } {
   const modelKey = useMemo(() => sunStudyModelKey(model), [model]);
   const hasProposal = useMemo(() => proposedMassingInModel(model), [model]);
@@ -36,7 +37,7 @@ export function useSunHoursLostPlan(
     const worker = startWorker();
     if (!worker) {
       import("../lib/sunHoursLostPlan").then(({ computeSunHoursLostGrid }) => {
-        setGrid(computeSunHoursLostGrid(model, year, SUN_HOURS_LOST_CELL_M));
+        setGrid(computeSunHoursLostGrid(model, year, SUN_HOURS_LOST_CELL_M, treeMode));
         setPending(false);
       });
       return;
@@ -63,13 +64,15 @@ export function useSunHoursLostPlan(
         terrain: model.terrain,
         frameShape: model.frameShape,
         buildings: model.buildings,
+        trees: model.trees,
       },
       year,
       cellM: SUN_HOURS_LOST_CELL_M,
+      treeMode,
     };
     worker.postMessage(request);
     return () => worker.terminate();
-  }, [enabled, hasProposal, model, modelKey, year]);
+  }, [enabled, hasProposal, model, modelKey, treeMode, year]);
 
   return { grid, pending };
 }

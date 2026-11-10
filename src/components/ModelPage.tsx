@@ -1136,6 +1136,10 @@ export function ModelPage({
         }));
         return true;
       },
+      enableTreeShadows() {
+        setSolar((prev) => ({ ...prev, treesCastShadow: true, castShadows: true }));
+        return true;
+      },
       readSunHoursLostPlan() {
         const { grid } = sunHoursLostPlanRef.current;
         if (!grid) return { cellCount: 0, maxLoss: 0, southLossCells: 0, footprintInside: 0 };
@@ -1382,6 +1386,7 @@ export function ModelPage({
     drawingModel,
     solar.year,
     Boolean(solar.sunHoursLost && tab === "drawing" && drawing === "site"),
+    solar.treesCastShadow ? "proposed-only" : "off",
   );
   const sunHoursLostPlanRef = useRef(sunHoursLostPlan);
   sunHoursLostPlanRef.current = sunHoursLostPlan;
@@ -2439,6 +2444,7 @@ export function ModelPage({
                 solarReceptors={visibleSolarReceptors}
                 solarReceptorResults={solarAssessEnabled ? solarReceptorAssess.results : []}
                 sunHoursLostGrid={solar.sunHoursLost ? sunHoursLostPlan.grid : null}
+                treesCastShadow={Boolean(solar.treesCastShadow)}
                 receptorDraw={Boolean(
                   (solar.solarAccess && solar.receptorDraw) || (solar.solarParkAccess && solar.parkReceptorDraw),
                 )}
@@ -2470,7 +2476,7 @@ export function ModelPage({
                   <div className="plan-solar-dock-stack" data-plan-solar-dock-stack>
                     {solar.sunHoursLost && sunHoursLostPlan.grid ? (
                       <div className="plan-solar-legend-dock hud-card" data-sun-hours-lost-legend-dock>
-                        <SunHoursLostLegendList compact />
+                        <SunHoursLostLegendList compact includesTrees={Boolean(solar.treesCastShadow)} />
                       </div>
                     ) : null}
                     {solarAssessEnabled && solarReceptorAssess.results.length > 0 ? (

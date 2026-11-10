@@ -5,7 +5,10 @@ import { siteFramePolygon } from "./siteFrame";
 import { sunAtMelbourneLocal, type SolarSample } from "./solar";
 import { buildingHeightsFingerprint } from "./heightOverrides";
 import { footprintBase, sampleTerrain } from "./terrain";
-import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
+import { planTreeShadowMulti } from "./solarTreePlanShadow";
+import type { BuildingFeat, CityModel, Pt, Ring, TreeFeat } from "../types";
+
+export type PlanShadowTreeMode = "off" | "both" | "proposed-only";
 
 type ClipFns = {
   union: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
@@ -332,19 +335,38 @@ export type PlanShadowSplitRings = {
   added: Ring[][];
 };
 
+function shadowWithTrees(
+  model: CityModel,
+  input: PlanShadowInput,
+  buildings: readonly BuildingFeat[],
+  trees: readonly TreeFeat[],
+): MultiPolygon {
+  const built = buildings.length > 0 ? planShadowMultiForBuildings(model, input, [...buildings]) : [];
+  const treeMulti = trees.length > 0 ? planTreeShadowMulti(model, input, trees) : [];
+  if (built.length === 0) return treeMulti;
+  if (treeMulti.length === 0) return built;
+  return safeUnion(built, treeMulti);
+}
+
 export function planShadowSplitRings(
   model: CityModel,
   input: PlanShadowInput,
   castShadows: boolean,
+  treeMode: PlanShadowTreeMode = "off",
 ): PlanShadowSplitRings {
-  if (!castShadows || model.buildings.length === 0) return { existing: [], added: [] };
+  if (!castShadows) return { existing: [], added: [] };
+  const trees = model.trees ?? [];
+  const treeExisting = treeMode === "both" ? trees : [];
+  const treeProposed = treeMode === "off" ? [] : trees;
+  if (model.buildings.length === 0 && treeProposed.length === 0) return { existing: [], added: [] };
   const context = model.buildings.filter((building) => !isProposedMassingBuilding(building));
   const proposed = model.buildings.filter(isProposedMassingBuilding);
-  const full = planShadowMultiForBuildings(model, input, model.buildings);
+  const full = shadowWithTrees(model, input, model.buildings, treeMode === "proposed-only" ? trees : treeProposed);
   if (proposed.length === 0) {
-    return { existing: shadowRingsFromMulti(full), added: [] };
+  const existingMulti = shadowWithTrees(model, input, model.buildings, treeExisting);
+    return { existing: shadowRingsFromMulti(existingMulti), added: [] };
   }
-  const contextOnly = planShadowMultiForBuildings(model, input, context);
+  const contextOnly = shadowWithTrees(model, input, context, treeExisting);
   const addedMulti = safeDifference(full, contextOnly);
   return {
     existing: shadowRingsFromMulti(contextOnly),

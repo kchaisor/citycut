@@ -94,6 +94,7 @@ export function DrawingPlan({
   receptorDraw = false,
   onReceptorCommit,
   sunHoursLostGrid = null,
+  treesCastShadow = false,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -119,6 +120,7 @@ export function DrawingPlan({
   receptorDraw?: boolean;
   onReceptorCommit?: (ring: Ring) => void;
   sunHoursLostGrid?: SunHoursLostGrid | null;
+  treesCastShadow?: boolean;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
@@ -255,7 +257,7 @@ export function DrawingPlan({
     () => sunStudyCasterModel(model, sunStudyCasters, sunStudySelected),
     [model, sunStudyCasters, sunStudySelected],
   );
-  const studyShadows = useSunStudyShadows(casterModel, study);
+  const studyShadows = useSunStudyShadows(casterModel, study, treesCastShadow ? "both" : "off");
   const selectedIds = useMemo(() => new Set(sunStudySelected), [sunStudySelected]);
   const estFont = heliodonLabelFontMetres(planScale, 5);
   const estLabels = useMemo(

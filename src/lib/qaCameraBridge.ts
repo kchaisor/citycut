@@ -101,6 +101,7 @@ declare global {
         ruleId?: string,
       ) => string | null;
       enableSunHoursLost?: () => boolean;
+      enableTreeShadows?: () => boolean;
       readSunHoursLostPlan?: () => { cellCount: number; maxLoss: number; cellM?: number };
     };
     __citycutWalkRippleQa?: {

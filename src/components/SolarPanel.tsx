@@ -249,6 +249,14 @@ export function SolarPanel({
             )}
           </>
         )}
+        <label className="check-field">
+          <input
+            type="checkbox"
+            checked={Boolean(settings.treesCastShadow)}
+            onChange={(event) => patch({ treesCastShadow: event.target.checked, castShadows: true })}
+          />
+          Trees cast shadow (visual only)
+        </label>
         {canMarkReceptors && (
           <label className="check-field">
             <input
@@ -274,7 +282,7 @@ export function SolarPanel({
               22 Sep 9am–3pm at 15-minute steps · {SUN_HOURS_LOST_CELL_M} m cells around proposed massing.
               {sunHoursLostPending ? " Computing…" : ""}
             </p>
-            <SunHoursLostLegendList />
+            <SunHoursLostLegendList includesTrees={Boolean(settings.treesCastShadow)} />
           </>
         )}
         <label className="check-field">
