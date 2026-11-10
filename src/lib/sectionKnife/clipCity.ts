@@ -14,6 +14,59 @@ type MeshRest = {
   material: THREE.Material | THREE.Material[];
 };
 
+const contourRestPositions = new WeakMap<THREE.LineSegments, Float32Array>();
+
+function planeSignedDistance(plane: THREE.Plane, x: number, y: number, z: number): number {
+  return plane.normal.x * x + plane.normal.y * y + plane.normal.z * z + plane.constant;
+}
+
+function clipContourSegmentsToKeep(positions: Float32Array, plane: THREE.Plane): Float32Array {
+  const out: number[] = [];
+  for (let i = 0; i < positions.length; i += 6) {
+    const ax = positions[i]!;
+    const ay = positions[i + 1]!;
+    const az = positions[i + 2]!;
+    const bx = positions[i + 3]!;
+    const by = positions[i + 4]!;
+    const bz = positions[i + 5]!;
+    const da = planeSignedDistance(plane, ax, ay, az);
+    const db = planeSignedDistance(plane, bx, by, bz);
+    const keepA = da >= -0.05;
+    const keepB = db >= -0.05;
+    if (keepA && keepB) {
+      out.push(ax, ay, az, bx, by, bz);
+    } else if (keepA !== keepB) {
+      const t = da / (da - db);
+      const ix = ax + (bx - ax) * t;
+      const iy = ay + (by - ay) * t;
+      const iz = az + (bz - az) * t;
+      if (keepA) out.push(ax, ay, az, ix, iy, iz);
+      else out.push(ix, iy, iz, bx, by, bz);
+    }
+  }
+  return new Float32Array(out.length ? out : [0, 0, 0, 0, 0, 1]);
+}
+
+function applyContourGeometryClip(mesh: THREE.LineSegments, plane: THREE.Plane | null, active: boolean) {
+  const geo = mesh.geometry as THREE.BufferGeometry;
+  const positionAttr = geo.getAttribute("position");
+  if (!positionAttr) return;
+  let rest = contourRestPositions.get(mesh);
+  if (!rest) {
+    rest = (positionAttr.array as Float32Array).slice();
+    contourRestPositions.set(mesh, rest);
+  }
+  if (!active || !plane) {
+    geo.setAttribute("position", new THREE.BufferAttribute(rest.slice(), 3));
+    geo.computeBoundingSphere();
+    return;
+  }
+  const clipped = clipContourSegmentsToKeep(rest, plane);
+  geo.setAttribute("position", new THREE.BufferAttribute(clipped, 3));
+  geo.deleteAttribute("lineDistance");
+  geo.computeBoundingSphere();
+}
+
 export type SectionKnifeClipApplyResult = {
   lineClipOk: boolean;
   contourPresent: boolean;
@@ -290,9 +343,8 @@ export function mountSectionKnifeClip(
         if (!material.clippingPlanes || material.clippingPlanes.length !== 1) return false;
       }
     }
-    if (extraClipRoots.some((root) => root.visible !== false && root.name === "Contours3d")) {
-      const contourMesh = clipTargets.find((mesh) => mesh.name === "Contours3d");
-      if (!contourMesh) return false;
+    const contourMesh = clipTargets.find((mesh) => mesh.name === "Contours3d");
+    if (contourMesh?.visible) {
       for (const material of meshMaterials(contourMesh)) {
         if (!material.clippingPlanes || material.clippingPlanes.length !== 1) return false;
       }
@@ -359,6 +411,9 @@ export function mountSectionKnifeClip(
     }
 
     for (const mesh of clipTargets) {
+      if (mesh.name === "Contours3d") {
+        applyContourGeometryClip(mesh as unknown as THREE.LineSegments, keep, active);
+      }
       for (const material of meshMaterials(mesh)) {
         if (active) {
           material.clippingPlanes = [keep];
