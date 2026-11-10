@@ -47,6 +47,9 @@ export type SolarViewSettings = {
   sunHours?: boolean;
   solarAccess?: boolean;
   receptorDraw?: boolean;
+  solarParkAccess?: boolean;
+  parkRuleId?: string;
+  parkReceptorDraw?: boolean;
   sunHoursLost?: boolean;
 };
 

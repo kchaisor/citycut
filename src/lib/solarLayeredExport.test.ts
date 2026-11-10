@@ -9,6 +9,7 @@ import { massingBlocksToBuildingFeats } from "./massingBlockPlan";
 import { SUN_STUDY_HOURS } from "./sunStudyPlan";
 import { existingShadowLayerName, addedShadowLayerName, receptorLayerName } from "./solarStudyLayers";
 import { assessSolarReceptors, type SolarReceptorArea } from "./solarReceptorAssess";
+import { solarReceptorsForExport } from "./solarReceptorExport";
 import type { BuildingFeat, CityModel } from "../types";
 
 const BOX_HILL = { lat: -37.8185, lon: 145.123 };
@@ -97,11 +98,7 @@ describe("solar layered export", () => {
       { id: "R1", ring: [[-45, -20], [45, -20], [45, -5], [-45, -5], [-45, -20]] },
     ];
     const results = assessSolarReceptors(model, receptors, 2026);
-    const solarReceptors = receptors.map((receptor, index) => ({
-      id: receptor.id,
-      ring: receptor.ring,
-      statusTone: results[index]!.statusTone,
-    }));
+    const solarReceptors = solarReceptorsForExport(receptors, results);
     const studyLayers = sunStudyLayers(model);
     const study = { layers: studyLayers };
     const svg = await sitePlanSvg(model, 1000, undefined, { sunStudy: study, solarReceptors, castShadows: true });

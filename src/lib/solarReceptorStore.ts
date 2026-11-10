@@ -30,6 +30,15 @@ export function saveSolarReceptors(center: LonLat, receptors: readonly SolarRece
   }
 }
 
+export function nextParkReceptorId(receptors: readonly SolarReceptorArea[]): string {
+  let max = 0;
+  for (const receptor of receptors) {
+    const match = /^park-(\d+)$/.exec(receptor.id);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `park-${max + 1}`;
+}
+
 export function nextReceptorId(receptors: readonly SolarReceptorArea[]): string {
   let max = 0;
   for (const receptor of receptors) {

@@ -14,6 +14,10 @@ export function receptorLayerName(id: string, statusTone: string): string {
   return `Receptor ${id} (${statusTone})`;
 }
 
+export function parkReceptorLayerName(id: string, ruleLabel: string, statusTone: string): string {
+  return `Park ${id} — ${ruleLabel} (${statusTone})`;
+}
+
 export function isSunStudyShadowLayerName(name: string): boolean {
   return /^Existing shadow \d{2}:\d{2}$/.test(name) || /^Added shadow \d{2}:\d{2}$/.test(name);
 }

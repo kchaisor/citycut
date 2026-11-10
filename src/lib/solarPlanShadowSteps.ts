@@ -6,11 +6,11 @@ import {
   type PlanShadowInput,
 } from "./buildingShadows";
 import { pointInPolygon } from "./useCascade";
-import { rescodeB43AssessmentSteps } from "./solarAccessB43";
+import { solarRuleAssessmentSteps, solarRuleDefinition, type SolarRuleDefinition } from "./solarRuleRegistry";
 import { planShadowRingsToMulti } from "./solarReceptorAssess";
 import type { BuildingFeat, CityModel, Ring } from "../types";
 
-export type StepShadow = { existing: MultiPolygon; proposed: MultiPolygon };
+export type StepShadow = { hour: number; minute: number; existing: MultiPolygon; proposed: MultiPolygon };
 
 const SHADOW_CONTEXT_MARGIN_M = 160;
 
@@ -54,24 +54,45 @@ export function clipModelForRings(model: CityModel, rings: readonly Ring[]): Cit
 }
 
 export function buildRescodeStepShadows(model: CityModel, year: number, clipRings: readonly Ring[] = []): StepShadow[] {
+  return buildRuleStepShadows(model, year, solarRuleDefinition("rescode-b43"), clipRings);
+}
+
+export function buildRuleStepShadows(
+  model: CityModel,
+  year: number,
+  rule: SolarRuleDefinition,
+  clipRings: readonly Ring[] = [],
+): StepShadow[] {
   const contextBuildings = model.buildings.filter((building) => !isProposedMassingBuilding(building));
   const context = { ...model, buildings: contextBuildings };
   const clipped = clipRings.length > 0 ? clipModelForRings(model, clipRings) : model;
-  const steps = rescodeB43AssessmentSteps(model.center.lat, model.center.lon, year);
-  const dateBase: Omit<PlanShadowInput, "hour" | "minute"> = {
-    lat: model.center.lat,
-    lon: model.center.lon,
-    year,
-    month: 9,
-    day: 22,
-  };
+  const steps = solarRuleAssessmentSteps(model.center.lat, model.center.lon, year, rule);
   return steps.map((step) => {
-    const when: PlanShadowInput = { ...dateBase, hour: step.hour, minute: step.minute };
+    const when: PlanShadowInput = {
+      lat: model.center.lat,
+      lon: model.center.lon,
+      year,
+      month: rule.month,
+      day: rule.day,
+      hour: step.hour,
+      minute: step.minute,
+    };
     return {
+      hour: step.hour,
+      minute: step.minute,
       existing: planShadowRingsToMulti(planShadowSplitRings(context, when, true).existing),
       proposed: planShadowRingsToMulti(planShadowRings(clipped, when, true)),
     };
   });
+}
+
+export function buildRescodeRuleStepShadows(
+  model: CityModel,
+  year: number,
+  clipRings: readonly Ring[] = [],
+): StepShadow[] {
+  const rule = solarRuleDefinition("rescode-b43");
+  return buildRuleStepShadows(model, year, rule, clipRings);
 }
 
 export function gridPointsInRing(ring: Ring, stepM: number): [number, number][] {

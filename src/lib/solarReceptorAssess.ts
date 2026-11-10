@@ -12,7 +12,9 @@ import {
   ringAxisMinDimensionM,
   type B43ProposalStatus,
 } from "./solarAccessB43";
-import { buildRescodeStepShadows, clipModelForRings, gridPointsInRing } from "./solarPlanShadowSteps";
+import { assessParkWithRule, type SolarParkAssessResult } from "./solarParkAssess";
+import { defaultParkRuleId, parkRuleForReceptor, type SolarReceptorKind, type ParkSolarRuleId } from "./solarRuleRegistry";
+import { buildRescodeStepShadows, buildRuleStepShadows, clipModelForRings, gridPointsInRing } from "./solarPlanShadowSteps";
 import type { CityModel, Ring } from "../types";
 
 export const SOLAR_RECEPTOR_GRID_M = 2;
@@ -21,9 +23,12 @@ export type SolarReceptorArea = {
   id: string;
   ring: Ring;
   label?: string;
+  kind?: SolarReceptorKind;
+  ruleId?: ParkSolarRuleId;
 };
 
 export type SolarReceptorAssessResult = {
+  assessKind: "b43";
   id: string;
   areaM2: number;
   requiredSunlitM2: number;
@@ -37,6 +42,16 @@ export type SolarReceptorAssessResult = {
   statusTone: "pass" | "fail" | "warn";
   minDimensionOk: boolean;
 };
+
+export type SolarAssessRow = SolarReceptorAssessResult | SolarParkAssessResult;
+
+export function isParkAssessRow(row: SolarAssessRow): row is SolarParkAssessResult {
+  return row.assessKind === "park";
+}
+
+export function isB43AssessRow(row: SolarAssessRow): row is SolarReceptorAssessResult {
+  return row.assessKind === "b43";
+}
 
 function closePairRing(ring: Ring): Pair[] {
   const out: Pair[] = ring.map(([east, north]) => [east, north] as Pair);
@@ -99,6 +114,7 @@ function assessOneReceptor(
   const status = b43ProposalStatus(existingSunlitM2, proposedSunlitM2, areaM2, addedShadowM2H);
 
   return {
+    assessKind: "b43",
     id: receptor.id,
     areaM2,
     requiredSunlitM2,
@@ -130,10 +146,43 @@ export function assessSolarReceptors(
   receptors: readonly SolarReceptorArea[],
   year: number,
   gridM = SOLAR_RECEPTOR_GRID_M,
-): SolarReceptorAssessResult[] {
+): SolarAssessRow[] {
   if (receptors.length === 0) return [];
-  const rings = receptors.map((receptor) => receptor.ring);
-  const clipped = clipModelForRings(model, rings);
-  const stepShadows = buildRescodeStepShadows(clipped, year, rings);
-  return receptors.map((receptor) => assessOneReceptor(receptor, stepShadows, gridM));
+  const yards = receptors.filter((receptor) => (receptor.kind ?? "yard") !== "park");
+  const parks = receptors.filter((receptor) => receptor.kind === "park");
+  const out: SolarAssessRow[] = [];
+
+  if (yards.length > 0) {
+    const rings = yards.map((receptor) => receptor.ring);
+    const clipped = clipModelForRings(model, rings);
+    const stepShadows = buildRescodeStepShadows(clipped, year, rings);
+    for (const receptor of yards) out.push(assessOneReceptor(receptor, stepShadows, gridM));
+  }
+
+  for (const receptor of parks) {
+    const rule = parkRuleForReceptor(receptor);
+    if (!rule) {
+      out.push({
+        assessKind: "park",
+        id: receptor.id,
+        ruleId: receptor.ruleId ?? defaultParkRuleId(),
+        ruleLabel: "Unknown rule",
+        statusNote: "",
+        areaM2: receptorAreaM2(receptor.ring),
+        stepAddedM2: [],
+        totalAddedM2: 0,
+        maxAddedM2: 0,
+        pass: false,
+        statusLabel: "Fails — no rule",
+        statusTone: "fail",
+        toleranceM2: 0.5,
+      });
+      continue;
+    }
+    const clipped = clipModelForRings(model, [receptor.ring]);
+    const stepShadows = buildRuleStepShadows(clipped, year, rule, [receptor.ring]);
+    out.push(assessParkWithRule(receptor, stepShadows, rule, gridM));
+  }
+
+  return out;
 }

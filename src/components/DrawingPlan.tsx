@@ -42,7 +42,8 @@ import { useSunStudyShadows } from "./useSunStudyShadows";
 import { SunHoursLostPlanOverlay } from "./SunHoursLostPlanOverlay";
 import type { SunHoursLostGrid } from "../lib/sunHoursLostPlan";
 import { ringFromCorners } from "../lib/solarAccessB43";
-import type { SolarReceptorArea, SolarReceptorAssessResult } from "../lib/solarReceptorAssess";
+import { isParkAssessRow, type SolarAssessRow, type SolarReceptorArea } from "../lib/solarReceptorAssess";
+import { parkAddedShadowForAssess } from "../lib/solarParkPlanOverlay";
 import type { Ring } from "../types";
 
 const NO_SELECTION: readonly number[] = [];
@@ -116,7 +117,7 @@ export function DrawingPlan({
   sunStudySelected?: readonly number[];
   onSunStudyPick?: (buildingId: number) => void;
   solarReceptors?: readonly SolarReceptorArea[];
-  solarReceptorResults?: readonly SolarReceptorAssessResult[];
+  solarReceptorResults?: readonly SolarAssessRow[];
   receptorDraw?: boolean;
   onReceptorCommit?: (ring: Ring) => void;
   sunHoursLostGrid?: SunHoursLostGrid | null;
@@ -301,6 +302,31 @@ export function DrawingPlan({
     () => new Map(solarReceptorResults.map((row) => [row.id, row])),
     [solarReceptorResults],
   );
+  const parkPlanOverlays = useMemo(() => {
+    const year = shadowInput?.year ?? new Date().getFullYear();
+    return solarReceptors
+      .filter((receptor) => (receptor.kind ?? "yard") === "park")
+      .map((receptor) => {
+        const row = receptorResultById.get(receptor.id);
+        const hatch =
+          row && isParkAssessRow(row) ? parkAddedShadowForAssess(model, receptor.ring, row, year) : [];
+        let sumE = 0;
+        let sumN = 0;
+        const count = Math.max(1, receptor.ring.length - 1);
+        for (let index = 0; index < count; index++) {
+          const [east, north] = receptor.ring[index]!;
+          sumE += east;
+          sumN += north;
+        }
+        return {
+          id: receptor.id,
+          ring: receptor.ring,
+          hatch,
+          labelX: sumE / count,
+          labelY: sumN / count,
+        };
+      });
+  }, [model, shadowInput?.year, solarReceptors, receptorResultById]);
 
   function planPointFromClient(clientX: number, clientY: number, planView: PlanViewport): Pt {
     const svg = svgRef.current;
@@ -493,7 +519,7 @@ export function DrawingPlan({
     >
       <rect x={view.x} y={view.y} width={view.w} height={view.h} fill={canvas} />
       <rect x={-half} y={-half} width={model.sideM} height={model.sideM} fill={canvas} />
-      {splitShadow && (
+      {(splitShadow || parkPlanOverlays.some((overlay) => overlay.hatch.length > 0)) && (
         <defs>
           <pattern
             id="sun-study-added-hatch"
@@ -526,6 +552,13 @@ export function DrawingPlan({
               strokeOpacity={0.75}
             />
           </pattern>
+          {parkPlanOverlays.map((overlay) =>
+            overlay.hatch.length > 0 ? (
+              <clipPath key={`park-clip-${overlay.id}`} id={`solar-park-clip-${overlay.id}`}>
+                <path d={svgRings([overlay.ring])} fillRule="evenodd" />
+              </clipPath>
+            ) : null,
+          )}
         </defs>
       )}
       {figure ? (
@@ -688,21 +721,71 @@ export function DrawingPlan({
               />
             ))}
             {sunHoursLostGrid && <SunHoursLostPlanOverlay grid={sunHoursLostGrid} />}
+            {parkPlanOverlays.map((overlay) =>
+              overlay.hatch.length > 0 ? (
+                <g
+                  key={`park-hatch-${overlay.id}`}
+                  clipPath={`url(#solar-park-clip-${overlay.id})`}
+                  data-solar-park-added-shadow={overlay.id}
+                >
+                  {overlay.hatch.map((rings, index) => (
+                    <path
+                      key={index}
+                      d={svgRings(rings)}
+                      fill="url(#sun-study-added-hatch)"
+                      fillRule="evenodd"
+                      stroke="none"
+                    />
+                  ))}
+                </g>
+              ) : null,
+            )}
             {solarReceptors.map((receptor) => {
               const row = receptorResultById.get(receptor.id);
+              const isPark = (receptor.kind ?? "yard") === "park";
+              let sumE = 0;
+              let sumN = 0;
+              const labelCount = Math.max(1, receptor.ring.length - 1);
+              for (let index = 0; index < labelCount; index++) {
+                const [east, north] = receptor.ring[index]!;
+                sumE += east;
+                sumN += north;
+              }
               return (
-                <path
-                  key={`sr${receptor.id}`}
-                  data-solar-receptor-overlay={receptor.id}
-                  data-solar-receptor-status={row?.statusTone ?? "pass"}
-                  d={svgRings([receptor.ring])}
-                  fill={receptorFill(row?.statusTone)}
-                  fillOpacity={0.52}
-                  fillRule="evenodd"
-                  stroke={receptorOutline}
-                  strokeWidth={screenPx(0.35)}
-                  vectorEffect="non-scaling-stroke"
-                />
+                <g key={`sr${receptor.id}`} data-solar-receptor-group={receptor.id}>
+                  <path
+                    data-solar-receptor-overlay={receptor.id}
+                    data-solar-park-receptor={isPark ? receptor.id : undefined}
+                    data-solar-receptor-status={row?.statusTone ?? "pass"}
+                    d={svgRings([receptor.ring])}
+                    fill={receptorFill(row?.statusTone)}
+                    fillOpacity={isPark ? 0.35 : 0.52}
+                    fillRule="evenodd"
+                    stroke={receptorOutline}
+                    strokeWidth={screenPx(isPark ? 0.6 : 0.35)}
+                    strokeDasharray={isPark ? "7 4" : undefined}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  {isPark && (
+                    <text
+                      data-solar-park-label={receptor.id}
+                      x={sumE / labelCount}
+                      y={-(sumN / labelCount)}
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fontSize={Math.max(model.sideM * 0.018, 3.2)}
+                      fontWeight={700}
+                      letterSpacing="0.06em"
+                      fill={receptorOutline}
+                      fontFamily="Geist, Helvetica, Arial, sans-serif"
+                      stroke={canvas}
+                      strokeWidth={screenPx(0.2)}
+                      paintOrder="stroke"
+                    >
+                      {receptor.id.replace(/-/g, " ").toUpperCase()}
+                    </text>
+                  )}
+                </g>
               );
             })}
             {receptorPreview && (
