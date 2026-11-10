@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { clearPlanShadowCache } from "./buildingShadows";
 import { createMassingBlock } from "./massingBlock";
 import { massingBlocksToBuildingFeats } from "./massingBlockPlan";
-import { computeSunHoursLostGrid, countPositiveLossCells } from "./sunHoursLostPlan";
+import { computeSunHoursLostGrid, countPositiveLossCells, positiveLossCellsInsideFootprints } from "./sunHoursLostPlan";
 import type { BuildingFeat, CityModel } from "../types";
 
 const at = { lat: -37.8136, lon: 144.9631 };
@@ -47,5 +47,6 @@ describe("sun hours lost plan grid", () => {
     expect(grid).not.toBeNull();
     expect(countPositiveLossCells(grid!)).toBeGreaterThan(8);
     expect(grid!.maxLoss).toBeGreaterThan(0.5);
+    expect(positiveLossCellsInsideFootprints(model([proposed]), grid!)).toEqual([]);
   });
 });

@@ -40,6 +40,7 @@ import { heliodonLabelFontMetres } from "../lib/heliodonDiagram";
 import { useSunStudyShadows } from "./useSunStudyShadows";
 import { SunHoursLostPlanOverlay } from "./SunHoursLostPlanOverlay";
 import type { SunHoursLostGrid } from "../lib/sunHoursLostPlan";
+import { SunHoursLostPlanLegend } from "./SunHoursLostPlanLegend";
 import { ringFromCorners } from "../lib/solarAccessB43";
 import type { SolarReceptorArea, SolarReceptorAssessResult } from "../lib/solarReceptorAssess";
 import type { Ring } from "../types";
@@ -665,6 +666,7 @@ export function DrawingPlan({
               />
             ))}
             {sunHoursLostGrid && <SunHoursLostPlanOverlay grid={sunHoursLostGrid} />}
+            {sunHoursLostGrid && <SunHoursLostPlanLegend view={view} />}
             {solarReceptors.map((receptor) => {
               const row = receptorResultById.get(receptor.id);
               return (

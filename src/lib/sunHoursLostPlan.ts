@@ -1,5 +1,6 @@
 import { isProposedMassingBuilding } from "./buildingShadows";
 import { pointInLocalMulti } from "./massingParcelBoundary";
+import { pointInPolygon } from "./useCascade";
 import { RESCODE_B43_STEP_MINUTES } from "./solarAccessB43";
 import { buildRescodeStepShadows } from "./solarPlanShadowSteps";
 import { sunHoursLostFromStepCounts } from "./sunHoursLost";
@@ -51,6 +52,28 @@ function clipModelToBounds(model: CityModel, bounds: ReturnType<typeof proposedB
   return buildings.length === model.buildings.length ? model : { ...model, buildings };
 }
 
+function lossCellCenterInsideBuilding(model: CityModel, east: number, north: number): boolean {
+  const point: Pt = [east, north];
+  for (const building of model.buildings) {
+    if (pointInPolygon(point, building.ring, building.holes ?? [])) return true;
+  }
+  return false;
+}
+
+export function positiveLossCellsInsideFootprints(model: CityModel, grid: SunHoursLostGrid, minHours = 0.01): Pt[] {
+  const inside: Pt[] = [];
+  for (let row = 0; row < grid.rows; row++) {
+    for (let col = 0; col < grid.cols; col++) {
+      const hours = grid.lossHours[row * grid.cols + col]!;
+      if (hours < minHours) continue;
+      const east = grid.originEast + (col + 0.5) * grid.cellM;
+      const north = grid.originNorth + (row + 0.5) * grid.cellM;
+      if (lossCellCenterInsideBuilding(model, east, north)) inside.push([east, north]);
+    }
+  }
+  return inside;
+}
+
 function focusRing(bounds: NonNullable<ReturnType<typeof proposedBounds>>): Ring {
   return [
     [bounds.minE, bounds.minN],
@@ -93,10 +116,19 @@ export function computeSunHoursLostGrid(
 
   const lossHours = new Float32Array(cols * rows);
   let maxLoss = 0;
-  for (let index = 0; index < lossHours.length; index++) {
-    const loss = sunHoursLostFromStepCounts(existingLit[index]!, proposedLit[index]!, RESCODE_B43_STEP_MINUTES);
-    lossHours[index] = loss;
-    maxLoss = Math.max(maxLoss, loss);
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const index = row * cols + col;
+      const east = originEast + (col + 0.5) * cellM;
+      const north = originNorth + (row + 0.5) * cellM;
+      if (lossCellCenterInsideBuilding(clipped, east, north)) {
+        lossHours[index] = 0;
+        continue;
+      }
+      const loss = sunHoursLostFromStepCounts(existingLit[index]!, proposedLit[index]!, RESCODE_B43_STEP_MINUTES);
+      lossHours[index] = loss;
+      maxLoss = Math.max(maxLoss, loss);
+    }
   }
 
   return { cellM, originEast, originNorth, cols, rows, lossHours, maxLoss };
