@@ -1919,7 +1919,7 @@ async function main() {
 
     const planFanBtn = page.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
     await planFanBtn.click();
-    await page.waitForSelector("svg.plan [data-shadow-hour] image, svg.plan [data-shadow-hour] path", { timeout: 10000 });
+    await page.waitForSelector("svg.plan [data-shadow-hour]", { timeout: 120000 });
     await page.waitForTimeout(300);
 
     const beforeSelectInfo = await page.evaluate(() => {
