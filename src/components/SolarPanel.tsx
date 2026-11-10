@@ -7,7 +7,9 @@ import {
   HELIODON_RADIUS_FACTOR_MIN,
   heliodonRadiusM,
 } from "../lib/heliodonRadius";
+import { RESCODE_B43_STEP_MINUTES } from "../lib/solarAccessB43";
 import { SUN_STUDY_SHADOW_ADDED_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "../lib/sunStudyPlan";
+import type { SolarReceptorAssessResult } from "../lib/solarReceptorAssess";
 import type { SolarViewSettings } from "./SolarHeliodon";
 import { SunStudyPlayer } from "./SunStudyPlayer";
 
@@ -25,6 +27,11 @@ export function SolarPanel({
   site,
   selectedCount = 0,
   onClearSelection,
+  canMarkReceptors = false,
+  receptorCount = 0,
+  receptorAssess = [],
+  receptorAssessPending = false,
+  onClearReceptors,
 }: {
   settings: SolarViewSettings;
   onChange: (next: SolarViewSettings) => void;
@@ -33,6 +40,11 @@ export function SolarPanel({
   site?: { lat: number; lon: number };
   selectedCount?: number;
   onClearSelection?: () => void;
+  canMarkReceptors?: boolean;
+  receptorCount?: number;
+  receptorAssess?: SolarReceptorAssessResult[];
+  receptorAssessPending?: boolean;
+  onClearReceptors?: () => void;
 }) {
   const [open, setOpen] = useState(true);
   useColourRevision();
@@ -94,6 +106,67 @@ export function SolarPanel({
           />
           Cast real-time shadows
         </label>
+        <label className="check-field">
+          <input
+            type="checkbox"
+            checked={Boolean(settings.solarAccess)}
+            onChange={(event) => {
+              const on = event.target.checked;
+              patch({
+                solarAccess: on,
+                sunStudy: on ? true : settings.sunStudy,
+                month: on ? 9 : settings.month,
+                day: on ? 22 : settings.day,
+                castShadows: on ? true : settings.castShadows,
+              });
+            }}
+          />
+          B4-3 / A4-3 overshadowing (22 Sep)
+        </label>
+        {settings.solarAccess && (
+          <p className="field-note">
+            Assessed at {RESCODE_B43_STEP_MINUTES}-minute steps, 9am–3pm ({settings.year}). Indicative only — councils may count fences and trees differently.
+          </p>
+        )}
+        {settings.solarAccess && canMarkReceptors && (
+          <label className="check-field">
+            <input
+              type="checkbox"
+              checked={Boolean(settings.receptorDraw)}
+              onChange={(event) => patch({ receptorDraw: event.target.checked })}
+            />
+            Mark receptor areas on site plan
+          </label>
+        )}
+        {settings.solarAccess && receptorCount > 0 && (
+          <p className="field-note" data-solar-receptor-summary>
+            {receptorAssessPending
+              ? `Computing ${receptorCount} receptor${receptorCount === 1 ? "" : "s"}…`
+              : `${receptorCount} receptor area${receptorCount === 1 ? "" : "s"} marked.`}
+            {onClearReceptors && (
+              <>
+                {" "}
+                <button type="button" className="link-button" onClick={onClearReceptors}>
+                  Clear
+                </button>
+              </>
+            )}
+          </p>
+        )}
+        {settings.solarAccess && receptorAssess.length > 0 && (
+          <ul className="solar-receptor-results" aria-label="B4-3 receptor results">
+            {receptorAssess.map((row) => (
+              <li key={row.id} data-solar-receptor={row.id} data-solar-receptor-status={row.statusTone}>
+                <span className="solar-receptor-id mono">{row.id}</span>
+                <span className="solar-receptor-metrics mono">
+                  ≥5 h: {row.existingSunlitM2.toFixed(0)} m² existing · {row.proposedSunlitM2.toFixed(0)} m² proposed
+                  <span className="dim"> (need {row.requiredSunlitM2.toFixed(0)} m²)</span>
+                </span>
+                <span className={`solar-receptor-status is-${row.statusTone}`}>{row.statusLabel}</span>
+              </li>
+            ))}
+          </ul>
+        )}
         <label className="check-field">
           <input
             type="checkbox"

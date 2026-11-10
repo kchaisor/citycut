@@ -81,6 +81,16 @@ declare global {
       setQaProposedMassingBox?: (east?: number, north?: number, size?: number, height?: number) => boolean;
       clearQaProposedMassing?: () => void;
       setDrawingPlanViewport?: (east: number, north: number, spanM: number) => boolean;
+      enableSolarAccess?: () => boolean;
+      addSolarReceptor?: (
+        east0: number,
+        north0: number,
+        east1: number,
+        north1: number,
+        id?: string,
+      ) => string | null;
+      clearSolarReceptors?: () => void;
+      readSolarReceptorAssess?: () => import("./solarReceptorAssess").SolarReceptorAssessResult[];
     };
     __citycutWalkRippleQa?: {
       setMinutes: (minutes: number) => void;

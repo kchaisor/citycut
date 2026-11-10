@@ -255,6 +255,13 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 .sun-study-foot { display: flex; }
 .sun-study-time { font-size: 12px; }
 
+.solar-receptor-results { display: grid; gap: 8px; margin: 8px 0 4px; padding: 0; list-style: none; }
+.solar-receptor-results li { display: grid; gap: 3px; font-size: 12px; line-height: 1.35; }
+.solar-receptor-id { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.solar-receptor-metrics .dim { color: var(--sidebar-text); font-weight: 500; }
+.solar-receptor-status.is-pass { color: #1f5f2f; font-weight: 600; }
+.solar-receptor-status.is-fail { color: #8b1c1c; font-weight: 600; }
+.solar-receptor-status.is-warn { color: #7a5a12; font-weight: 600; }
 .sun-study-kicker { margin: 14px 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; line-height: normal; color: var(--sidebar-text); }
 .sun-study > .sun-study-kicker + * { margin-top: -10px; }
 .sun-study-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
