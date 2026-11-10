@@ -5,6 +5,8 @@ import {
   planShadowSplitRings,
   proposedMassingInModel,
 } from "./buildingShadows";
+import { createMassingBlock } from "./massingBlock";
+import { massingBlocksToBuildingFeats } from "./massingBlockPlan";
 import type { BuildingFeat, CityModel, Ring } from "../types";
 
 function ringArea(ring: Ring): number {
@@ -93,5 +95,22 @@ describe("plan shadow split (existing vs proposed massing)", () => {
     const parts = shadowArea(split.existing) + shadowArea(split.added);
     expect(parts).toBeGreaterThan(full * 0.92);
     expect(parts).toBeLessThan(full * 1.08);
+  });
+
+  it("treats user-drawn massing blocks as proposed and adds shadow", () => {
+    const drawn = createMassingBlock("cut-test", [
+      [12, -6],
+      [42, -6],
+      [42, 8],
+      [28, 8],
+      [28, 32],
+    ], { floors: 6, width_m: 14 });
+    const proposed = massingBlocksToBuildingFeats([drawn])[0]!;
+    const m = model([box(1, -30, 0, 24, 14), proposed]);
+    expect(proposed.proposedMassing).toBe(true);
+    expect(proposedMassingInModel(m)).toBe(true);
+    const split = planShadowSplitRings(m, when, true);
+    expect(split.added.length).toBeGreaterThan(0);
+    expect(shadowArea(split.added)).toBeGreaterThan(35);
   });
 });

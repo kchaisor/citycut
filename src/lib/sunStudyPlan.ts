@@ -8,7 +8,7 @@ export const SUN_STUDY_HOURS = [9, 10, 11, 12, 13, 14, 15] as const;
 
 export const SUN_STUDY_SHADOW_OPACITY = 0.2;
 
-export const SUN_STUDY_SHADOW_ADDED_OPACITY = 0.55;
+export const SUN_STUDY_SHADOW_ADDED_OPACITY = 0.72;
 
 export const SINGLE_SHADOW_OPACITY = 0.5;
 

@@ -23,7 +23,7 @@ function clippingFns(): ClipFns {
 const { union, intersection, difference } = clippingFns();
 
 export function isProposedMassingBuilding(building: BuildingFeat): boolean {
-  return Boolean(building.importedMassing);
+  return Boolean(building.importedMassing || building.proposedMassing);
 }
 
 export function proposedMassingInModel(model: CityModel): boolean {

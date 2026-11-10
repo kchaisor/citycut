@@ -256,7 +256,7 @@ export function DrawingPlan({
     if (!castShadows || !shadowInput || figure || study) return { existing: [], added: [] };
     return planShadowSplitRings(casterModel, shadowInput, true);
   }, [castShadows, figure, casterModel, shadowInput, study]);
-  const addedHatchSize = Math.max(4, model.sideM * 0.01);
+  const addedHatchSize = Math.max(3.5, model.sideM * 0.008);
   const annotations = (
     <>
       <g aria-hidden="true" className="plan-north-arrow">
@@ -421,7 +421,7 @@ export function DrawingPlan({
               width={addedHatchSize}
               height={addedHatchSize}
               fill={studyShadowAddedFill}
-              fillOpacity={SUN_STUDY_SHADOW_ADDED_OPACITY * 0.35}
+              fillOpacity={SUN_STUDY_SHADOW_ADDED_OPACITY * 0.48}
             />
             <line
               x1={0}
@@ -429,7 +429,16 @@ export function DrawingPlan({
               x2={0}
               y2={addedHatchSize}
               stroke={studyShadowAddedFill}
-              strokeWidth={addedHatchSize * 0.12}
+              strokeWidth={addedHatchSize * 0.22}
+            />
+            <line
+              x1={addedHatchSize * 0.45}
+              y1={0}
+              x2={addedHatchSize * 0.45}
+              y2={addedHatchSize}
+              stroke={studyShadowAddedFill}
+              strokeWidth={addedHatchSize * 0.14}
+              strokeOpacity={0.75}
             />
           </pattern>
         </defs>
