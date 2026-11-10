@@ -1172,6 +1172,10 @@ export function ModelPage({
         setSolar((prev) => ({ ...prev, treesCastShadow: true, castShadows: true }));
         return true;
       },
+      setTreesCastShadow(on: boolean) {
+        setSolar((prev) => ({ ...prev, treesCastShadow: on, castShadows: true }));
+        return true;
+      },
       readSunHoursLostPlan() {
         const { grid } = sunHoursLostPlanRef.current;
         if (!grid) return { cellCount: 0, maxLoss: 0, southLossCells: 0, footprintInside: 0 };

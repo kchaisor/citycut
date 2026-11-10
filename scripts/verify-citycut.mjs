@@ -2395,6 +2395,7 @@ async function main() {
           { east: midE, north: midN, span: spanM },
         );
         await parkPage.waitForTimeout(800);
+        await parkPage.waitForSelector("[data-solar-park-added-shadow]", { timeout: 120000 });
         const dock = parkPage.locator("[data-solar-results-dock]");
         await dock.waitFor({ state: "visible", timeout: 120000 });
         const parkMetrics = await dock.locator("[data-solar-park-metrics]").first().textContent();
@@ -2420,20 +2421,38 @@ async function main() {
       await melbourneParkNoAdditional();
 
       const boxHillTreeShadows = async () => {
-        await shadowPage.evaluate(() => {
-          window.__citycutQaModel?.enableSunHoursLost?.();
-          window.__citycutQaModel?.enableTreeShadows?.();
-        });
-        await shadowPage.waitForTimeout(600);
-        await shadowPage.waitForSelector("[data-sun-hours-lost-trees-note]", { timeout: 120000 });
-        const shotTrees = path.join(CURSOR_ARTIFACTS_DIR, "solar-tree-shadows-box-hill.png");
-        await shadowPage.locator(".plan-viewport-stack").screenshot({ path: shotTrees });
-        const treeDom = await shadowPage.locator("[data-sun-hours-lost]").count();
+        const readTreeShadowDom = async () =>
+          shadowPage.evaluate(() => {
+            const nodes = Array.from(document.querySelectorAll("[data-tree-crown-shadow]"));
+            const dLen = nodes.reduce((acc, node) => acc + (node.getAttribute("d")?.length ?? 0), 0);
+            return { count: nodes.length, dLen };
+          });
+        await shadowPage.getByRole("tab", { name: /Drawing/i }).click();
+        await shadowPage.waitForSelector("svg.plan", { timeout: 120000 });
+        await shadowPage.evaluate(
+          ({ east, north }) => {
+            window.__citycutQaModel?.setSolarPlanTime?.(15, 0);
+            window.__citycutQaModel?.setTreesCastShadow?.(false);
+            window.__citycutQaModel?.setDrawingPlanViewport?.(east - 22, north + 12, 46);
+          },
+          { east: FOCUS_EAST, north: FOCUS_NORTH },
+        );
+        await shadowPage.waitForTimeout(700);
+        const treesOff = await readTreeShadowDom();
+        const shotOff = path.join(CURSOR_ARTIFACTS_DIR, "solar-tree-shadows-off.png");
+        await shadowPage.locator(".plan-viewport-stack").screenshot({ path: shotOff });
+        await shadowPage.evaluate(() => window.__citycutQaModel?.setTreesCastShadow?.(true));
+        await shadowPage.waitForTimeout(900);
+        const treesOn = await readTreeShadowDom();
+        const shotOn = path.join(CURSOR_ARTIFACTS_DIR, "solar-tree-shadows-on.png");
+        await shadowPage.locator(".plan-viewport-stack").screenshot({ path: shotOn });
+        const shotCompare = path.join(CURSOR_ARTIFACTS_DIR, "solar-tree-shadows-compare.png");
+        execFileSync("ffmpeg", ["-y", "-i", shotOff, "-i", shotOn, "-filter_complex", "hstack=inputs=2", shotCompare]);
         assertCheck(
           "solar-tree-shadows-visual",
-          "Tree crown shadows on: hours-lost legend notes trees and heatmap cells render at site zoom",
-          treeDom > 0,
-          `dom=${treeDom}, shot=${shotTrees}`,
+          "Trees off vs on at 22 Sep 3pm: grey crown-shadow ellipses appear on plan (heatmap change at this zoom is minor)",
+          treesOn.count > 0 && treesOn.dLen > treesOff.dLen + 120,
+          `off=${JSON.stringify(treesOff)}, on=${JSON.stringify(treesOn)}, compare=${shotCompare}, offShot=${shotOff}, onShot=${shotOn}`,
         );
       };
 

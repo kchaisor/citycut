@@ -34,20 +34,8 @@ export function parkAddedShadowClipRings(
     hour,
     minute,
   };
-  const context = { ...model, buildings: model.buildings.filter((building) => !isProposedMassingBuilding(building)) };
-  const existingSplit = planShadowSplitRings(context, when, true);
-  const proposedSplit = planShadowSplitRings(model, when, true);
-  const existingMulti = planShadowRingsToMulti([...existingSplit.existing, ...existingSplit.added]);
-  const proposedMulti = planShadowRingsToMulti([...proposedSplit.existing, ...proposedSplit.added]);
-  if (proposedMulti.length === 0) return [];
-  let addedMulti: MultiPolygon = [];
-  try {
-    addedMulti = proposedMulti.length > 0 && existingMulti.length > 0
-      ? (polygonClipping.difference(proposedMulti, existingMulti) as MultiPolygon)
-      : proposedMulti;
-  } catch {
-    return [];
-  }
+  const proposedSplit = planShadowSplitRings(model, when, true, "off");
+  const addedMulti = planShadowRingsToMulti(proposedSplit.added);
   if (addedMulti.length === 0) return [];
   const parkMulti = planShadowRingsToMulti([[parkRing]]);
   try {

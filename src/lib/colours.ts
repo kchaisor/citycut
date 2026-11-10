@@ -110,6 +110,7 @@ export const COLOUR_KEYS = [
   "--sun-study-path-edge",
   "--sun-study-building",
   "--sun-study-tree",
+  "--sun-study-tree-shadow",
   "--solar-receptor-pass",
   "--solar-receptor-fail",
   "--solar-receptor-warn",
@@ -321,7 +322,7 @@ export const COLOUR_GROUPS = [
   {
     id: "plan-shadows",
     title: "Site plan shadows",
-    keys: ["--shadow-fill", "--sun-study-sun", "--sun-study-shadow", "--sun-study-shadow-added", "--sun-study-block", "--sun-study-green", "--sun-study-water", "--sun-study-road", "--sun-study-path", "--sun-study-path-edge", "--sun-study-building", "--sun-study-tree", "--solar-receptor-pass", "--solar-receptor-fail", "--solar-receptor-warn", "--solar-receptor-outline", "--solar-receptor-preview", "--sun-hours-lost-0", "--sun-hours-lost-1", "--sun-hours-lost-2", "--sun-hours-lost-3", "--sun-hours-lost-4", "--sun-hours-lost-5plus"],
+    keys: ["--shadow-fill", "--sun-study-sun", "--sun-study-shadow", "--sun-study-shadow-added", "--sun-study-block", "--sun-study-green", "--sun-study-water", "--sun-study-road", "--sun-study-path", "--sun-study-path-edge", "--sun-study-building", "--sun-study-tree", "--sun-study-tree-shadow", "--solar-receptor-pass", "--solar-receptor-fail", "--solar-receptor-warn", "--solar-receptor-outline", "--solar-receptor-preview", "--sun-hours-lost-0", "--sun-hours-lost-1", "--sun-hours-lost-2", "--sun-hours-lost-3", "--sun-hours-lost-4", "--sun-hours-lost-5plus"],
   },
   {
     id: "nsw",
@@ -458,6 +459,7 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--sun-study-path-edge": "Sun study: footpath edge",
   "--sun-study-building": "Sun study: buildings",
   "--sun-study-tree": "Sun study: trees",
+  "--sun-study-tree-shadow": "Tree crown ground shadow (visual)",
   "--solar-receptor-pass": "Solar receptor B4-3 pass fill",
   "--solar-receptor-fail": "Solar receptor B4-3 fail fill",
   "--solar-receptor-warn": "Solar receptor already non-compliant fill",

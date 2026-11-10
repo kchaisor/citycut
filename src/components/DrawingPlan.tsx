@@ -21,7 +21,8 @@ import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
 import { NswPlanLabels, NswPlanLines, NswPlanUnder } from "./NswPlanLayers";
 import { NSW_PLAN_LABEL_SHARE, nswPlanItems } from "../lib/nswPlan";
 import { readNswPlanStyle } from "../lib/nswPlanStyle";
-import { planShadowSplitRings, proposedMassingInModel, type PlanShadowInput } from "../lib/buildingShadows";
+import { planShadowSplitRings, proposedMassingInModel, shadowRingsFromMulti, type PlanShadowInput } from "../lib/buildingShadows";
+import { planTreeShadowMulti } from "../lib/solarTreePlanShadow";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
 import { planViewportExtent, type PlanViewport } from "../lib/planViewport";
 import {
@@ -267,6 +268,7 @@ export function DrawingPlan({
   );
   const studyShadowFill = getColour("--sun-study-shadow");
   const studyShadowAddedFill = getColour("--sun-study-shadow-added");
+  const treeCrownShadowFill = getColour("--sun-study-tree-shadow");
   const studySunFill = getColour("--sun-study-sun");
   const muted = Boolean(study) && sunStudyMuted;
   const mutedFill = (key: Parameters<typeof getColour>[0], normal: string) => (muted ? getColour(key) : normal);
@@ -328,8 +330,14 @@ export function DrawingPlan({
   }
   const shadowSplit = useMemo(() => {
     if (!castShadows || !shadowInput || figure || study) return { existing: [], added: [] };
-    return planShadowSplitRings(casterModel, shadowInput, true);
+    return planShadowSplitRings(casterModel, shadowInput, true, "off");
   }, [castShadows, figure, casterModel, shadowInput, study]);
+  const scrubbedTreeCrownShadows = useMemo(() => {
+    if (!treesCastShadow || !castShadows || !shadowInput || figure) return [];
+    const trees = model.trees ?? [];
+    if (trees.length === 0) return [];
+    return shadowRingsFromMulti(planTreeShadowMulti(model, shadowInput, trees));
+  }, [treesCastShadow, castShadows, shadowInput, figure, model]);
   const addedHatchSize = Math.max(3.5, model.sideM * 0.008);
   const annotations = (
     <>
@@ -646,6 +654,20 @@ export function DrawingPlan({
                 fillOpacity={splitShadow ? 1 : SINGLE_SHADOW_OPACITY}
                 fillRule="evenodd"
                 stroke="none"
+              />
+            ))}
+            {scrubbedTreeCrownShadows.map((rings, index) => (
+              <path
+                key={`tcs${index}`}
+                data-tree-crown-shadow
+                d={svgRings(rings)}
+                fill={treeCrownShadowFill}
+                fillOpacity={0.68}
+                fillRule="evenodd"
+                stroke={treeCrownShadowFill}
+                strokeWidth={screenPx(0.22)}
+                strokeOpacity={0.9}
+                vectorEffect="non-scaling-stroke"
               />
             ))}
             {plan.buildings.map((building, index) => (

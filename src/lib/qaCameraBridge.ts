@@ -110,6 +110,7 @@ declare global {
       setSolarPlanTime?: (hour: number, minute?: number) => boolean;
       enableSunHoursLost?: () => boolean;
       enableTreeShadows?: () => boolean;
+      setTreesCastShadow?: (on: boolean) => boolean;
       readSunHoursLostPlan?: () => { cellCount: number; maxLoss: number; cellM?: number };
     };
     __citycutWalkRippleQa?: {
