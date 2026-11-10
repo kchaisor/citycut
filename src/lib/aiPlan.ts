@@ -25,7 +25,13 @@ import { LINE_MM, hexRgb } from "./lineweights";
 import { heliodonPlanPdfChunk } from "./heliodonPlanExport";
 import type { HeliodonDiagramExportOptions } from "./heliodonDiagram";
 import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
-import { SINGLE_SHADOW_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "./sunStudyPlan";
+import { SINGLE_SHADOW_OPACITY, SUN_STUDY_SHADOW_ADDED_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "./sunStudyPlan";
+import {
+  addedShadowLayerName,
+  existingShadowLayerName,
+  isSunStudyShadowLayerName,
+  receptorLayerName,
+} from "./solarStudyLayers";
 import { planPaths } from "./svgPlan";
 import { regionCredit } from "./sources/registry";
 import { NSW_SITE_LAYERS, nswPlanChunks } from "./nswPlanExport";
@@ -57,6 +63,7 @@ export const SITE_LAYER_ORDER = [
   "Buildings",
   "Site buildings",
   "Imported massing",
+  "Proposed massing",
   "Site boundary",
   "Trees",
   "Shadows",
@@ -240,6 +247,19 @@ function pathStrip(polygons: Pt[][][], model: CityModel, layout: SheetLayout, st
   };
 }
 
+export type SunStudyExportLayer = {
+  hour: number;
+  minute?: number;
+  existingRings: Ring[][];
+  addedRings: Ring[][];
+};
+
+export type SolarReceptorExport = {
+  id: string;
+  ring: Ring;
+  statusTone: string;
+};
+
 export type SitePlanExportOptions = {
   heliodon?: HeliodonDiagramExportOptions | null;
   shadows?: PlanShadowInput | null;
@@ -248,7 +268,8 @@ export type SitePlanExportOptions = {
   highlightManual?: boolean;
   colourBySource?: boolean;
   wind?: { table: import("./windRose").WindRoseTable; period: import("./windRose").WindPeriodId } | null;
-  sunStudy?: { layers: { hour: number; rings: Ring[][] }[] } | null;
+  sunStudy?: { layers: SunStudyExportLayer[] } | null;
+  solarReceptors?: SolarReceptorExport[] | null;
 };
 
 export function sunStudyLayerName(hour: number): string {
@@ -289,6 +310,7 @@ function resolveSitePlanExport(
     "heliodon" in exportOptions ||
     "wind" in exportOptions ||
     "sunStudy" in exportOptions ||
+    "solarReceptors" in exportOptions ||
     "uniformBuildings" in exportOptions
   ) {
     return exportOptions as SitePlanExportOptions;
@@ -466,17 +488,31 @@ export function sitePlanChunks(
   }
   const studyLayers = resolved.sunStudy?.layers ?? null;
   for (const layer of studyLayers ?? []) {
-    if (layer.rings.length === 0) continue;
-    chunks.push({
-      name: sunStudyLayerName(layer.hour),
-      paths: layer.rings.map((rings) => ({
-        rings: mapRings(rings, model.sideM, layout),
-        fill: fillOf("--sun-study-shadow"),
-        opacity: SUN_STUDY_SHADOW_OPACITY,
-        evenOdd: true,
-        close: true,
-      })),
-    });
+    const minute = layer.minute ?? 0;
+    if (layer.existingRings.length > 0) {
+      chunks.push({
+        name: existingShadowLayerName(layer.hour, minute),
+        paths: layer.existingRings.map((rings) => ({
+          rings: mapRings(rings, model.sideM, layout),
+          fill: fillOf("--sun-study-shadow"),
+          opacity: SUN_STUDY_SHADOW_OPACITY,
+          evenOdd: true,
+          close: true,
+        })),
+      });
+    }
+    if (layer.addedRings.length > 0) {
+      chunks.push({
+        name: addedShadowLayerName(layer.hour, minute),
+        paths: layer.addedRings.map((rings) => ({
+          rings: mapRings(rings, model.sideM, layout),
+          fill: fillOf("--sun-study-shadow-added"),
+          opacity: SUN_STUDY_SHADOW_ADDED_OPACITY,
+          evenOdd: true,
+          close: true,
+        })),
+      });
+    }
   }
   const shadowRings = shadowInput && !studyLayers ? planShadowRings(model, shadowInput, castShadows) : [];
   if (shadowRings.length > 0) {
@@ -495,7 +531,8 @@ export function sitePlanChunks(
   const siteBuildingPen = pen(style.siteBuilding, "miter");
   const siteBuildings = plan.buildings.filter((building) => building.site);
   const importedBuildings = plan.buildings.filter((building) => building.imported);
-  const otherBuildings = plan.buildings.filter((building) => !building.site && !building.imported);
+  const proposedBuildings = plan.buildings.filter((building) => building.proposed);
+  const otherBuildings = plan.buildings.filter((building) => !building.site && !building.imported && !building.proposed);
   if (otherBuildings.length > 0) {
     chunks.push({
       name: "Buildings",
@@ -531,6 +568,40 @@ export function sitePlanChunks(
         close: true,
         ...(importedPen ?? buildingPen ?? {}),
       })),
+    });
+  }
+  if (proposedBuildings.length > 0) {
+    const proposedPen = pen(importedMassingStrokeStyle(style), "miter");
+    chunks.push({
+      name: "Proposed massing",
+      paths: proposedBuildings.map((building) => ({
+        rings: mapRings(building.rings, model.sideM, layout),
+        fill: hexRgb(building.fill),
+        evenOdd: true,
+        close: true,
+        ...(proposedPen ?? buildingPen ?? {}),
+      })),
+    });
+  }
+  for (const receptor of resolved.solarReceptors ?? []) {
+    chunks.push({
+      name: receptorLayerName(receptor.id, receptor.statusTone),
+      paths: [
+        {
+          rings: mapRings([receptor.ring], model.sideM, layout),
+          fill: fillOf(
+            receptor.statusTone === "fail"
+              ? "--solar-receptor-fail"
+              : receptor.statusTone === "warn"
+                ? "--solar-receptor-warn"
+                : "--solar-receptor-pass",
+          ),
+          evenOdd: true,
+          close: true,
+          stroke: fillOf("--solar-receptor-outline"),
+          strokeMm: Math.max(style.building.mm, 0.35),
+        },
+      ],
     });
   }
   const siteBoundary = siteBoundaryChunk(model.siteBoundaryLines ?? [], model, layout, style);
@@ -595,8 +666,14 @@ export function figureGroundChunks(
 
 export function sitePlanLayerOrder(chunks: PdfChunk[]): string[] {
   const order: string[] = [...SITE_LAYER_ORDER];
-  const studyNames = chunks.map((chunk) => chunk.name).filter((name) => /^Shadow \d\d:00$/.test(name));
+  const studyNames = chunks.map((chunk) => chunk.name).filter(isSunStudyShadowLayerName);
   if (studyNames.length > 0) order.splice(order.indexOf("Shadows") + 1, 0, ...studyNames);
+  const receptorNames = chunks
+    .map((chunk) => chunk.name)
+    .filter((name) => name.startsWith("Receptor "));
+  if (receptorNames.length > 0) {
+    order.splice(order.indexOf("Site boundary"), 0, ...receptorNames);
+  }
   if (!order.includes("Contour labels") && chunks.some((chunk) => chunk.name === "Contour labels")) {
     const at = order.indexOf("Contours");
     order.splice(at + 1, 0, "Contour labels");

@@ -9,7 +9,15 @@ import { colourRgb, type ColourKey } from "./colours";
 import { CRS_NOTE, mgaCrs, projectLocal, projectLonLat } from "./crs";
 import { readDrawingStyle } from "./drawingStyle";
 import { figureGround, figureGroundDatum } from "./figureGround";
-import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
+import { isProposedMassingBuilding, planShadowRings, type PlanShadowInput } from "./buildingShadows";
+import type { SunStudyExportLayer, SolarReceptorExport } from "./aiPlan";
+import {
+  addedShadowLayerName,
+  existingShadowLayerName,
+  receptorLayerName,
+} from "./solarStudyLayers";
+import { solarReceptorExportFill } from "./solarReceptorExport";
+import { openRing } from "./geo";
 import { buildHeliodonGroundOverlay, type HeliodonGroundExportOptions } from "./heliodonDiagram";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { comTreesCreditLine } from "./comTreesCredit";
@@ -820,6 +828,122 @@ function addHeliodonPlan(
   for (const line of overlay.hourLines) addPolyline(line, "Hour line");
 }
 
+function addPlanPolygonRings(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  model: CityModel,
+  zone: number,
+  layerName: string,
+  multi: Pt[][][],
+  colorKey: ColourKey,
+  objectName: string,
+) {
+  if (multi.length === 0) return;
+  const z = model.terrain ? model.terrain.min : 0;
+  const layerIndex = ensureLayer(rhino, doc, layers, materials, layerName, colourRgb(colorKey));
+  let index = 0;
+  for (const polygon of multi) {
+    for (const ring of polygon) {
+      if (ring.length < 3) continue;
+      const points = ring.map(([east, north]) => {
+        const [easting, northing] = projectLocal([east, north], model.center, zone);
+        return [easting, northing, z];
+      });
+      points.push(points[0]!);
+      const attributes = new rhino.ObjectAttributes();
+      attributes.name = `${objectName} ${index}`;
+      index += 1;
+      attributes.layerIndex = layerIndex;
+      applyByLayerAttributes(rhino, attributes);
+      doc.objects().addPolyline(points, attributes);
+      release(attributes);
+    }
+  }
+}
+
+function addSunStudyPlanShadows(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  model: CityModel,
+  zone: number,
+  studyLayers: SunStudyExportLayer[],
+) {
+  for (const layer of studyLayers) {
+    const minute = layer.minute ?? 0;
+    if (layer.existingRings.length > 0) {
+      addPlanPolygonRings(
+        rhino,
+        doc,
+        layers,
+        materials,
+        model,
+        zone,
+        existingShadowLayerName(layer.hour, minute),
+        layer.existingRings,
+        "--sun-study-shadow",
+        existingShadowLayerName(layer.hour, minute),
+      );
+    }
+    if (layer.addedRings.length > 0) {
+      addPlanPolygonRings(
+        rhino,
+        doc,
+        layers,
+        materials,
+        model,
+        zone,
+        addedShadowLayerName(layer.hour, minute),
+        layer.addedRings,
+        "--sun-study-shadow-added",
+        addedShadowLayerName(layer.hour, minute),
+      );
+    }
+  }
+}
+
+function addSolarReceptorPlan(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  model: CityModel,
+  zone: number,
+  receptors: SolarReceptorExport[],
+) {
+  for (const receptor of receptors) {
+    addPlanPolygonRings(
+      rhino,
+      doc,
+      layers,
+      materials,
+      model,
+      zone,
+      receptorLayerName(receptor.id, receptor.statusTone),
+      [[openRing(receptor.ring)]],
+      solarReceptorExportFill(receptor.statusTone),
+      receptorLayerName(receptor.id, receptor.statusTone),
+    );
+  }
+}
+
+function addProposedMassingFootprints(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  model: CityModel,
+  zone: number,
+) {
+  const footprints = model.buildings
+    .filter(isProposedMassingBuilding)
+    .map((building) => [openRing(building.ring)]);
+  addPlanPolygonRings(rhino, doc, layers, materials, model, zone, "Proposed massing", footprints, "--imported-massing", "Proposed massing");
+}
+
 function addPlanShadows(
   rhino: Rhino,
   doc: InstanceType<Rhino["File3dm"]>,
@@ -859,6 +983,8 @@ export type CityModelTo3dmOptions = {
   uniformBuildings?: boolean;
   colourBySource?: boolean;
   wind?: { table: WindRoseTable; period: WindPeriodId } | null;
+  sunStudy?: { layers: SunStudyExportLayer[] } | null;
+  solarReceptors?: SolarReceptorExport[] | null;
   hideTrees?: boolean;
   importedMassing?: ImportedMassingExport[] | null;
   /**
@@ -925,6 +1051,8 @@ function normalize3dmOptions(
     "shadows" in options ||
     "uniformBuildings" in options ||
     "wind" in options ||
+    "sunStudy" in options ||
+    "solarReceptors" in options ||
     "hideTrees" in options ||
     "importedMassing" in options ||
     "buildingsAsMesh" in options ||
@@ -947,6 +1075,8 @@ export async function cityModelTo3dm(
     uniformBuildings,
     colourBySource,
     wind,
+    sunStudy,
+    solarReceptors,
     hideTrees,
     importedMassing,
     buildingsAsMesh,
@@ -1016,6 +1146,9 @@ export async function cityModelTo3dm(
     addContours(rhino, doc, layers, materials, model, crs.zone);
     if (heliodon) addHeliodonPlan(rhino, doc, layers, materials, model, crs.zone, heliodon);
     if (shadows) addPlanShadows(rhino, doc, layers, materials, model, crs.zone, shadows, Boolean(castShadows));
+    if (sunStudy?.layers?.length) addSunStudyPlanShadows(rhino, doc, layers, materials, model, crs.zone, sunStudy.layers);
+    if (solarReceptors?.length) addSolarReceptorPlan(rhino, doc, layers, materials, model, crs.zone, solarReceptors);
+    addProposedMassingFootprints(rhino, doc, layers, materials, model, crs.zone);
     if (wind?.table) addWindRose(rhino, doc, layers, materials, model, crs.zone, wind.table, wind.period);
     if (importedMassing?.length) addImportedMassing(rhino, doc, layers, materials, importedMassing);
 

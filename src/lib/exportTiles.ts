@@ -90,7 +90,8 @@ export function exportTiles(input: ExportTileInput): ExportTile[] {
       : input.drawing === "isometric"
         ? "isometric 3D drawing"
         : "figure-ground";
-  const hourlyNote = " With the sun study on, shadows come as one layer per hour 9am–3pm, each at 20% opacity.";
+  const hourlyNote =
+    " With the sun study on, shadows export as Existing shadow and Added shadow layers per hour 9am–3pm (20% and 72% opacity).";
   return [
     {
       id: "3dm",

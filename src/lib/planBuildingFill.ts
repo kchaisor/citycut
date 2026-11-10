@@ -10,7 +10,7 @@ export function planBuildingFill(
   mode: BuildingColourMode,
   highlightManual: boolean,
 ): string {
-  if (building.importedMassing) return importedMassingFill(building);
+  if (building.importedMassing || building.proposedMassing) return importedMassingFill(building);
   if (highlightManual && building.heightManual) return getColour("--building-manual");
   if (isSiteBuilding(model, building.id)) return getColour("--site-building");
   return buildingViewportFill(mode, building.use as BuildingUse, building.source);
