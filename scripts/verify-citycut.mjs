@@ -2185,18 +2185,36 @@ async function main() {
           `south=${JSON.stringify(south)}, far=${JSON.stringify(far)}`,
         );
 
+        const dock = shadowPage.locator("[data-solar-results-dock]");
+        await dock.waitFor({ state: "visible", timeout: 120000 });
+        const metricsText = await dock.locator(".solar-receptor-metrics").first().textContent();
+        assertCheck(
+          "solar-b43-results-readable",
+          "B4-3 receptor m² existing vs proposed and status labels are visible on the site plan dock",
+          Boolean(metricsText?.includes("m² existing")) &&
+            Boolean(metricsText?.includes("m² proposed")) &&
+            (await dock.locator(".solar-receptor-status").count()) >= 2,
+          `metrics=${JSON.stringify(metricsText)}`,
+        );
         const shotPlan = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-plan.png");
-        await shadowPage.locator("svg.plan").screenshot({ path: shotPlan });
-        const shotPanel = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-panel.png");
-        const resultsEl = shadowPage.locator(".solar-receptor-results");
-        await resultsEl.scrollIntoViewIfNeeded();
-        await shadowPage.screenshot({
-          path: shotPanel,
-          clip: { x: 0, y: 72, width: 400, height: 860 },
-          scale: "css",
-        });
+        const planEl = shadowPage.locator("svg.plan");
+        await planEl.screenshot({ path: shotPlan });
         const shotResults = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-results.png");
-        await resultsEl.screenshot({ path: shotResults });
+        await dock.screenshot({ path: shotResults });
+        const shotCombo = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-plan-and-results.png");
+        const planBox = await planEl.boundingBox();
+        const dockBox = await dock.boundingBox();
+        if (planBox && dockBox) {
+          const x = Math.floor(Math.min(planBox.x, dockBox.x));
+          const y = Math.floor(Math.min(planBox.y, dockBox.y));
+          const x2 = Math.ceil(Math.max(planBox.x + planBox.width, dockBox.x + dockBox.width));
+          const y2 = Math.ceil(Math.max(planBox.y + planBox.height, dockBox.y + dockBox.height));
+          await shadowPage.screenshot({
+            path: shotCombo,
+            clip: { x, y, width: x2 - x, height: y2 - y },
+            scale: "css",
+          });
+        }
       };
 
       await boxHillB43();

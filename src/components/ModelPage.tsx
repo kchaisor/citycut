@@ -177,6 +177,7 @@ function shouldShowIntroBridgePill(): boolean {
 import type { CameraMemoryRef } from "../lib/cameraMemory";
 import { SceneBoundary } from "./SceneBoundary";
 import { SolarPanel } from "./SolarPanel";
+import { SolarReceptorResultsList } from "./SolarReceptorResultsList";
 import { useSolarReceptorAssess } from "./useSolarReceptorAssess";
 import { ringFromCorners } from "../lib/solarAccessB43";
 import type { SolarReceptorArea } from "../lib/solarReceptorAssess";
@@ -2295,10 +2296,11 @@ export function ModelPage({
                 onViewportChange={setIsoDrawingViewport}
                 fitCounter={fitCounter}
               />
-            ) : (
-              <DrawingPlan
-                model={drawingModel}
-                kind={drawing}
+            ) : drawing === "site" ? (
+              <div className="plan-viewport-stack">
+                <DrawingPlan
+                  model={drawingModel}
+                  kind={drawing}
                 onScale={onScale}
                 lineStyle={lineStyles}
                 planScale={figureScale}
@@ -2334,6 +2336,29 @@ export function ModelPage({
                     { id: nextReceptorId(current), ring: normalized },
                   ]);
                 }}
+                uniformBuildings={!colourByUse && !showSource}
+                colourBySource={showSource}
+                highlightManual={showManualEdits && overrideResult.manualCount > 0}
+                viewport={planViewport}
+                onViewportChange={setPlanViewport}
+                fitCounter={fitCounter}
+              />
+                {solar.solarAccess && solarReceptorAssess.results.length > 0 && (
+                  <div className="plan-solar-results-dock hud-card" data-solar-results-dock>
+                    <SolarReceptorResultsList rows={solarReceptorAssess.results} compact />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <DrawingPlan
+                model={drawingModel}
+                kind={drawing}
+                onScale={onScale}
+                lineStyle={lineStyles}
+                planScale={figureScale}
+                heliodon={heliodonDiagramExport()}
+                castShadows={solar.castShadows}
+                shadowInput={planShadowInput()}
                 uniformBuildings={!colourByUse && !showSource}
                 colourBySource={showSource}
                 highlightManual={showManualEdits && overrideResult.manualCount > 0}
