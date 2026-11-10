@@ -255,6 +255,8 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 .sun-study-foot { display: flex; }
 .sun-study-time { font-size: 12px; }
 
+.sun-hours-lost-legend { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 6px 0 10px; padding: 0; list-style: none; font-size: 11px; }
+.sun-hours-lost-legend li { display: flex; align-items: center; gap: 4px; }
 .solar-receptor-results { display: grid; gap: 8px; margin: 8px 0 4px; padding: 0; list-style: none; }
 .solar-receptor-results li { display: grid; gap: 3px; font-size: 12px; line-height: 1.35; }
 .solar-receptor-id { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }

@@ -232,6 +232,12 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--solar-receptor-warn` | `#f0d59a` | B4-3 solar receptor overlay when already non-compliant. |
 | `--solar-receptor-outline` | `#2e4a2e` | Outline for marked solar receptor areas on the site plan. |
 | `--solar-receptor-preview` | `#6b8f71` | Preview fill while drawing a solar receptor on the site plan. |
+| `--sun-hours-lost-0` | `#ffffff` | Hours-lost heatmap legend swatch for zero loss (not drawn on plan). |
+| `--sun-hours-lost-1` | `#fff7c2` | Hours-lost heatmap up to 1 h. |
+| `--sun-hours-lost-2` | `#ffd27a` | Hours-lost heatmap 1–2 h. |
+| `--sun-hours-lost-3` | `#ff9a4a` | Hours-lost heatmap 2–3 h. |
+| `--sun-hours-lost-4` | `#e85c3a` | Hours-lost heatmap 3–4 h. |
+| `--sun-hours-lost-5plus` | `#8b2e1a` | Hours-lost heatmap 5+ h. |
 | `--axo-water` | `#7eb8da` | Exploded axo floodplain / water layer. |
 | `--axo-road` | `#e8883a` | Exploded axo roads layer. |
 | `--axo-green` | `#8fbc8f` | Exploded axo green spaces layer. |

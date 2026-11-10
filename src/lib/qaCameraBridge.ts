@@ -91,6 +91,8 @@ declare global {
       ) => string | null;
       clearSolarReceptors?: () => void;
       readSolarReceptorAssess?: () => import("./solarReceptorAssess").SolarReceptorAssessResult[];
+      enableSunHoursLost?: () => boolean;
+      readSunHoursLostPlan?: () => { cellCount: number; maxLoss: number; cellM?: number };
     };
     __citycutWalkRippleQa?: {
       setMinutes: (minutes: number) => void;

@@ -178,6 +178,8 @@ import type { CameraMemoryRef } from "../lib/cameraMemory";
 import { SceneBoundary } from "./SceneBoundary";
 import { SolarPanel } from "./SolarPanel";
 import { useSolarReceptorAssess } from "./useSolarReceptorAssess";
+import { useSunHoursLostPlan } from "./useSunHoursLostPlan";
+import { countPositiveLossCells } from "../lib/sunHoursLostPlan";
 import { ringFromCorners } from "../lib/solarAccessB43";
 import type { SolarReceptorArea } from "../lib/solarReceptorAssess";
 import {
@@ -1086,6 +1088,26 @@ export function ModelPage({
       readSolarReceptorAssess() {
         return solarReceptorAssessRef.current.results;
       },
+      enableSunHoursLost() {
+        setSolar((prev) => ({
+          ...prev,
+          sunHoursLost: true,
+          sunStudy: true,
+          month: 9,
+          day: 22,
+          castShadows: true,
+        }));
+        return true;
+      },
+      readSunHoursLostPlan() {
+        const { grid } = sunHoursLostPlanRef.current;
+        if (!grid) return { cellCount: 0, maxLoss: 0, southLossCells: 0 };
+        return {
+          cellCount: countPositiveLossCells(grid),
+          maxLoss: grid.maxLoss,
+          cellM: grid.cellM,
+        };
+      },
     };
     return () => {
       delete window.__citycutQaModel;
@@ -1285,6 +1307,13 @@ export function ModelPage({
     Boolean(solar.solarAccess),
   );
   solarReceptorAssessRef.current = solarReceptorAssess;
+  const sunHoursLostPlan = useSunHoursLostPlan(
+    drawingModel,
+    solar.year,
+    Boolean(solar.sunHoursLost && tab === "drawing" && drawing === "site"),
+  );
+  const sunHoursLostPlanRef = useRef(sunHoursLostPlan);
+  sunHoursLostPlanRef.current = sunHoursLostPlan;
 
   useEffect(() => {
     qaDisplayBuildingsRef.current = displayModel.buildings;
@@ -2325,6 +2354,7 @@ export function ModelPage({
                 }
                 solarReceptors={solar.solarAccess ? solarReceptors : []}
                 solarReceptorResults={solar.solarAccess ? solarReceptorAssess.results : []}
+                sunHoursLostGrid={solar.sunHoursLost ? sunHoursLostPlan.grid : null}
                 receptorDraw={Boolean(solar.solarAccess && solar.receptorDraw)}
                 onReceptorCommit={(ring) => {
                   const normalized = normalizeReceptorRing(ring);
@@ -3561,6 +3591,7 @@ export function ModelPage({
                   receptorCount={solarReceptors.length}
                   receptorAssess={solarReceptorAssess.results}
                   receptorAssessPending={solarReceptorAssess.pending}
+                  sunHoursLostPending={sunHoursLostPlan.pending}
                   onClearReceptors={() => setSolarReceptors([])}
                 />
               </div>

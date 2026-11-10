@@ -200,6 +200,12 @@
   --solar-receptor-warn: #f0d59a;
   --solar-receptor-outline: #2e4a2e;
   --solar-receptor-preview: #6b8f71;
+  --sun-hours-lost-0: #ffffff;
+  --sun-hours-lost-1: #fff7c2;
+  --sun-hours-lost-2: #ffd27a;
+  --sun-hours-lost-3: #ff9a4a;
+  --sun-hours-lost-4: #e85c3a;
+  --sun-hours-lost-5plus: #8b2e1a;
 
   --axo-water: #7eb8da;
   --axo-road: #6B6C6F;
