@@ -13,6 +13,7 @@ import { SunHoursLostLegendList } from "./SunHoursLostLegendList";
 import { SUN_STUDY_SHADOW_ADDED_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "../lib/sunStudyPlan";
 import type { SolarReceptorAssessResult } from "../lib/solarReceptorAssess";
 import type { SolarViewSettings } from "./SolarHeliodon";
+import { SolarReceptorResultsList } from "./SolarReceptorResultsList";
 import { SunStudyPlayer } from "./SunStudyPlayer";
 
 const SOLAR_LEGEND: { key: ColourKey; label: string; dash?: string }[] = [
@@ -77,6 +78,14 @@ export function SolarPanel({
         </button>
       )}
       <div id={panelId} className="solar-panel-body" hidden={!embedded && !open}>
+        <ol className="solar-access-guide" data-solar-access-guide aria-label="Solar access workflow">
+          <li>Open <strong>Analysis</strong> (left rail), then the <strong>Drawing</strong> tab.</li>
+          <li>Draw proposed <strong>massing</strong> on 3D or plan first (shadows need a proposal).</li>
+          <li>Turn on <strong>B4-3</strong>, tick <strong>Mark receptor areas</strong>, drag rectangles on the site plan.</li>
+          <li>Optional: <strong>Hours lost heatmap</strong> (22 Sep, needs massing). Results appear in the plan dock.</li>
+          <li>Optional: <strong>Sun study</strong> shows 9am–3pm layers; scrub time in the player below.</li>
+          <li><strong>Quick export SVG</strong> in Drawing downloads shadow + massing layers.</li>
+        </ol>
         {site && (
           <SunStudyPlayer
             settings={settings}
@@ -158,18 +167,7 @@ export function SolarPanel({
           </p>
         )}
         {settings.solarAccess && receptorAssess.length > 0 && (
-          <ul className="solar-receptor-results" aria-label="B4-3 receptor results">
-            {receptorAssess.map((row) => (
-              <li key={row.id} data-solar-receptor={row.id} data-solar-receptor-status={row.statusTone}>
-                <span className="solar-receptor-id mono">{row.id}</span>
-                <span className="solar-receptor-metrics mono">
-                  ≥5 h: {row.existingSunlitM2.toFixed(0)} m² existing · {row.proposedSunlitM2.toFixed(0)} m² proposed
-                  <span className="dim"> (need {row.requiredSunlitM2.toFixed(0)} m²)</span>
-                </span>
-                <span className={`solar-receptor-status is-${row.statusTone}`}>{row.statusLabel}</span>
-              </li>
-            ))}
-          </ul>
+          <SolarReceptorResultsList rows={receptorAssess} />
         )}
         {canMarkReceptors && (
           <label className="check-field">

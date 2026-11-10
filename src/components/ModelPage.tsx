@@ -184,6 +184,7 @@ import { useSunHoursLostPlan } from "./useSunHoursLostPlan";
 import { countPositiveLossCells, positiveLossCellsInsideFootprints } from "../lib/sunHoursLostPlan";
 import { ringFromCorners } from "../lib/solarAccessB43";
 import type { SolarReceptorArea } from "../lib/solarReceptorAssess";
+import { solarReceptorsForExport } from "../lib/solarReceptorExport";
 import {
   loadSolarReceptors,
   nextReceptorId,
@@ -446,6 +447,11 @@ export function ModelPage({
     };
   }
 
+  function solarReceptorsExport() {
+    if (!solar.solarAccess || solarReceptors.length === 0) return null;
+    return solarReceptorsForExport(solarReceptors, solarReceptorAssess.results);
+  }
+
   function sitePlanExportOptions(): SitePlanExportOptions {
     return {
       heliodon: heliodonDiagramExport(),
@@ -458,6 +464,7 @@ export function ModelPage({
         windSettings.enabled && windTable
           ? { table: windTable, period: windSettings.period }
           : null,
+      solarReceptors: solarReceptorsExport(),
     };
   }
 
@@ -1063,6 +1070,30 @@ export function ModelPage({
           w: spanM,
           h: spanM * aspect,
         });
+        return true;
+      },
+      setSolarPlanMinimal() {
+        setSolar((prev) => ({
+          ...prev,
+          solarAccess: false,
+          sunHoursLost: false,
+          sunStudy: false,
+          castShadows: true,
+          receptorDraw: false,
+        }));
+        return true;
+      },
+      setSolarStudiesFull() {
+        setSolar((prev) => ({
+          ...prev,
+          solarAccess: true,
+          sunHoursLost: true,
+          sunStudy: true,
+          month: 9,
+          day: 22,
+          castShadows: true,
+          receptorDraw: true,
+        }));
         return true;
       },
       enableSolarAccess() {
@@ -1686,6 +1717,8 @@ export function ModelPage({
           windSettings.enabled && windTable
             ? { table: windTable, period: windSettings.period }
             : null,
+        sunStudy: solar.sunStudy ? await sunStudyExportLayers() : null,
+        solarReceptors: solarReceptorsExport(),
         hideTrees: view3dDisplay.hideTrees,
         importedMassing: massing.forExport.length ? massing.forExport : null,
         buildingsAsMesh,
@@ -1700,7 +1733,15 @@ export function ModelPage({
   async function sunStudyExportLayers(): Promise<SitePlanExportOptions["sunStudy"]> {
     if (!sunStudyDate) return null;
     const casters = sunStudyCasterModel(drawingModel, effectiveSunStudyCasters, sunStudySelected);
-    return { layers: await sunStudyLayersFor(casters, sunStudyDate) };
+    const layers = await sunStudyLayersFor(casters, sunStudyDate);
+    return {
+      layers: layers.map((layer) => ({
+        hour: layer.hour,
+        minute: 0,
+        existingRings: layer.rings,
+        addedRings: layer.addedRings,
+      })),
+    };
   }
 
   async function saveSiteSvg() {
@@ -1751,6 +1792,8 @@ export function ModelPage({
     setSunStudyProgress("0 of 7");
     try {
       const date = { year: solar.year, month: solar.month, day: solar.day };
+      const study = await sunStudyExportLayers();
+      const byHour = new Map((study?.layers ?? []).map((layer) => [layer.hour, layer]));
       const problem = await downloadSunStudyZip(
         drawingModel,
         figureScale,
@@ -1758,8 +1801,8 @@ export function ModelPage({
         (hour) => ({
           ...sitePlanExportOptions(),
           heliodon: null,
-          shadows: { ...planShadowInput(), hour, minute: 0 },
-          castShadows: true,
+          shadows: null,
+          sunStudy: byHour.has(hour) ? { layers: [byHour.get(hour)!] } : { layers: [] },
         }),
         date,
         (done, total) => setSunStudyProgress(`${done} of ${total}`),

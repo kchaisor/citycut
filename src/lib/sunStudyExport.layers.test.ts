@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber, PDFRawStream, PDFString, decodePDFRawStream } from "pdf-lib";
-import { sitePlanPdf, sitePlanSvg, sunStudyLayerName } from "./aiPlan";
+import { sitePlanPdf, sitePlanSvg } from "./aiPlan";
 import { buildLayeredSvg } from "./svgDocument";
-import { planShadowRings } from "./buildingShadows";
+import { planShadowSplitRings } from "./buildingShadows";
 import { SUN_STUDY_HOURS } from "./sunStudyPlan";
+import { addedShadowLayerName, existingShadowLayerName } from "./solarStudyLayers";
 import type { BuildingFeat, CityModel } from "../types";
 
 const at = { lat: -37.8045, lon: 145.0215 };
@@ -26,7 +27,10 @@ const model = {
   terrain: null,
 } as unknown as CityModel;
 const date = { ...at, year: 2026, month: 9, day: 22 };
-const layers = SUN_STUDY_HOURS.map((hour) => ({ hour, rings: [...planShadowRings(model, { ...date, hour, minute: 0 }, true)] }));
+const layers = SUN_STUDY_HOURS.map((hour) => {
+  const split = planShadowSplitRings(model, { ...date, hour, minute: 0 }, true);
+  return { hour, minute: 0, existingRings: split.existing, addedRings: split.added };
+});
 
 async function pdfLayers(bytes: Uint8Array) {
   const doc = await PDFDocument.load(bytes);
@@ -45,16 +49,17 @@ async function pdfLayers(bytes: Uint8Array) {
 }
 
 describe("sun study .ai and .svg", () => {
-  it("writes one .ai layer per hour with a 20% transparency ExtGState", async () => {
+  it("writes existing and added shadow layers per hour with matching opacity ExtGState", async () => {
     const { names, states, ops, doc } = await pdfLayers(await sitePlanPdf(model, 1000, undefined, { sunStudy: { layers } }));
-    const hourly = names.filter((name) => /Shadow \d\d:00/.test(name));
-    expect(hourly.map((name) => name.replace(/^.*(Shadow \d\d:00).*$/, "$1"))).toEqual(SUN_STUDY_HOURS.map(sunStudyLayerName));
+    const hourly = names.filter((name) => /^Existing shadow \d{2}:\d{2}$/.test(name));
+    expect(hourly).toEqual(SUN_STUDY_HOURS.map((hour) => existingShadowLayerName(hour, 0)));
     expect(names.some((name) => /Shadows$/.test(name))).toBe(false);
     expect(states).toBeDefined();
     const gs = doc.context.lookup(states!.get(PDFName.of("GSa200")), PDFDict);
     expect(gs.lookup(PDFName.of("ca"), PDFNumber).asNumber()).toBe(0.2);
     expect(gs.lookup(PDFName.of("CA"), PDFNumber).asNumber()).toBe(0.2);
-    expect((ops.match(/\/GSa200 gs/g) ?? []).length).toBe(layers.reduce((sum, layer) => sum + layer.rings.length, 0));
+    const existingPaths = layers.reduce((sum, layer) => sum + layer.existingRings.length, 0);
+    expect((ops.match(/\/GSa200 gs/g) ?? []).length).toBe(existingPaths);
   });
 
   it("writes the plain .ai Shadows layer with 50% transparency ExtGState (0.5 opacity) and no hourly layers", async () => {
@@ -66,7 +71,7 @@ describe("sun study .ai and .svg", () => {
     expect(gs.lookup(PDFName.of("ca"), PDFNumber).asNumber()).toBe(0.5);
     expect(gs.lookup(PDFName.of("CA"), PDFNumber).asNumber()).toBe(0.5);
     expect(ops).toContain("/GSa500 gs");
-    expect(names.some((name) => /Shadow \d\d:00/.test(name))).toBe(false);
+    expect(names.some((name) => /^Existing shadow /.test(name))).toBe(false);
     expect(names.some((name) => /Shadows/.test(name))).toBe(true);
   });
 
@@ -84,10 +89,25 @@ describe("sun study .ai and .svg", () => {
     expect(svg.startsWith("<?xml")).toBe(true);
     expect(svg).toMatch(/<svg [^>]*width="[\d.]+mm" height="[\d.]+mm" viewBox="0 0 [\d.]+ [\d.]+"/);
     const groups = [...svg.matchAll(/inkscape:label="([^"]+)"/g)].map((m) => m[1]!);
-    expect(groups.filter((name) => /Shadow \d\d:00/.test(name))).toHaveLength(7);
+    expect(groups.filter((name) => /^Existing shadow \d{2}:\d{2}$/.test(name))).toHaveLength(7);
     expect(groups).toContain("Buildings");
-    expect((svg.match(/opacity="0.2"/g) ?? []).length).toBe(layers.reduce((sum, layer) => sum + layer.rings.length, 0));
+    expect((svg.match(/opacity="0.2"/g) ?? []).length).toBe(layers.reduce((sum, layer) => sum + layer.existingRings.length, 0));
     expect(svg).not.toMatch(/NaN|undefined/);
+  });
+
+  it("labels added shadow hours when proposal massing adds shadow", async () => {
+    const proposal = {
+      ...box(3, 25, 10, 22),
+      proposedMassing: true as const,
+    };
+    const withProposal = { ...model, buildings: [...model.buildings, proposal] } as CityModel;
+    const splitLayers = SUN_STUDY_HOURS.map((hour) => {
+      const split = planShadowSplitRings(withProposal, { ...date, hour, minute: 0 }, true);
+      return { hour, minute: 0, existingRings: split.existing, addedRings: split.added };
+    });
+    const svg = await sitePlanSvg(withProposal, 1000, undefined, { sunStudy: { layers: splitLayers } });
+    const groups = [...svg.matchAll(/inkscape:label="([^"]+)"/g)].map((m) => m[1]!);
+    expect(groups).toContain(addedShadowLayerName(12, 0));
   });
 
   it("flips y, escapes text and skips empty layers in the SVG writer", () => {

@@ -273,10 +273,20 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 }
 .plan-solar-legend-dock,
 .plan-solar-results-dock { padding: 10px 12px; pointer-events: none; }
+.solar-access-guide {
+  margin: 0 0 12px;
+  padding: 0 0 0 18px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--sidebar-text);
+}
+.solar-access-guide li { margin: 0 0 6px; }
+.solar-access-guide strong { color: var(--sidebar-label); font-weight: 600; }
 .solar-receptor-results { display: grid; gap: 8px; margin: 8px 0 4px; padding: 0; list-style: none; }
 .solar-receptor-results.is-compact { gap: 6px; margin: 0; }
-.solar-receptor-results.is-compact li { font-size: 11px; gap: 2px; }
 .solar-receptor-results li { display: grid; gap: 3px; font-size: 12px; line-height: 1.35; }
+.solar-receptor-results.is-compact li { font-size: 11px; gap: 2px; }
+.plan-solar-results-dock .solar-receptor-metrics { font-size: 11px; }
 .solar-receptor-id { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
 .solar-receptor-metrics .dim { color: var(--sidebar-text); font-weight: 500; }
 .solar-receptor-status.is-pass { color: #1f5f2f; font-weight: 600; }

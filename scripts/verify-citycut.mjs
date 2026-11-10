@@ -2185,18 +2185,36 @@ async function main() {
           `south=${JSON.stringify(south)}, far=${JSON.stringify(far)}`,
         );
 
+        const dock = shadowPage.locator("[data-solar-results-dock]");
+        await dock.waitFor({ state: "visible", timeout: 120000 });
+        const metricsText = await dock.locator(".solar-receptor-metrics").first().textContent();
+        assertCheck(
+          "solar-b43-results-readable",
+          "B4-3 receptor m² existing vs proposed and status labels are visible on the site plan dock",
+          Boolean(metricsText?.includes("m² existing")) &&
+            Boolean(metricsText?.includes("m² proposed")) &&
+            (await dock.locator(".solar-receptor-status").count()) >= 2,
+          `metrics=${JSON.stringify(metricsText)}`,
+        );
         const shotPlan = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-plan.png");
-        await shadowPage.locator("svg.plan").screenshot({ path: shotPlan });
-        const shotPanel = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-panel.png");
-        const resultsEl = shadowPage.locator(".solar-receptor-results");
-        await resultsEl.scrollIntoViewIfNeeded();
-        await shadowPage.screenshot({
-          path: shotPanel,
-          clip: { x: 0, y: 72, width: 400, height: 860 },
-          scale: "css",
-        });
+        const planEl = shadowPage.locator("svg.plan");
+        await planEl.screenshot({ path: shotPlan });
         const shotResults = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-results.png");
-        await resultsEl.screenshot({ path: shotResults });
+        await dock.screenshot({ path: shotResults });
+        const shotCombo = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-plan-and-results.png");
+        const planBox = await planEl.boundingBox();
+        const dockBox = await dock.boundingBox();
+        if (planBox && dockBox) {
+          const x = Math.floor(Math.min(planBox.x, dockBox.x));
+          const y = Math.floor(Math.min(planBox.y, dockBox.y));
+          const x2 = Math.ceil(Math.max(planBox.x + planBox.width, dockBox.x + dockBox.width));
+          const y2 = Math.ceil(Math.max(planBox.y + planBox.height, dockBox.y + dockBox.height));
+          await shadowPage.screenshot({
+            path: shotCombo,
+            clip: { x, y, width: x2 - x, height: y2 - y },
+            scale: "css",
+          });
+        }
       };
 
       await boxHillB43();
@@ -2278,6 +2296,108 @@ async function main() {
       };
 
       await boxHillHoursLost();
+
+      const measurePlanZoomLongTasks = async (page) =>
+        page.evaluate(async () => {
+          const durations = [];
+          const obs = new PerformanceObserver((list) => {
+            for (const entry of list.getEntries()) durations.push(entry.duration);
+          });
+          obs.observe({ type: "longtask", buffered: true });
+          const svg = document.querySelector("svg.plan");
+          if (!svg) {
+            obs.disconnect();
+            return { ok: false, reason: "no-plan" };
+          }
+          const rect = svg.getBoundingClientRect();
+          const cx = rect.left + rect.width / 2;
+          const cy = rect.top + rect.height / 2;
+          for (let i = 0; i < 28; i++) {
+            svg.dispatchEvent(
+              new WheelEvent("wheel", {
+                deltaY: i % 2 === 0 ? -90 : 90,
+                clientX: cx,
+                clientY: cy,
+                bubbles: true,
+                cancelable: true,
+              }),
+            );
+          }
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          obs.disconnect();
+          const totalMs = durations.reduce((sum, value) => sum + value, 0);
+          const maxMs = durations.length ? Math.max(...durations) : 0;
+          return { ok: true, count: durations.length, totalMs, maxMs };
+        });
+
+      const boxHillSolarPlanZoomPerf = async () => {
+        await shadowPage.getByRole("tab", { name: /Drawing/i }).click();
+        await shadowPage.waitForSelector("svg.plan", { timeout: 120000 });
+        await shadowPage.evaluate(
+          ({ east, north }) => window.__citycutQaModel?.setDrawingPlanViewport?.(east, north, 80),
+          { east: FOCUS_EAST, north: FOCUS_NORTH },
+        );
+        await shadowPage.evaluate(() => window.__citycutQaModel?.setSolarPlanMinimal?.());
+        await shadowPage.waitForTimeout(400);
+        const baseline = await measurePlanZoomLongTasks(shadowPage);
+        await shadowPage.evaluate(() => window.__citycutQaModel?.setSolarStudiesFull?.());
+        await shadowPage.waitForTimeout(2800);
+        const loaded = await measurePlanZoomLongTasks(shadowPage);
+        const maxBudget = Math.max(baseline.maxMs * 2.5 + 30, 150);
+        const totalBudget = Math.max(baseline.totalMs * 3.5 + 80, 250);
+        const shotGuide = path.join(CURSOR_ARTIFACTS_DIR, "solar-access-guide.png");
+        if ((await shadowPage.locator("[data-solar-access-guide]").count()) > 0) {
+          await shadowPage.locator("[data-solar-access-guide]").screenshot({ path: shotGuide });
+        }
+        assertCheck(
+          "solar-plan-zoom-perf",
+          "Plan wheel-zoom long tasks stay within budget vs solar-off baseline (pan/zoom must not restart shadow studies)",
+          Boolean(baseline.ok && loaded.ok && loaded.maxMs <= maxBudget && loaded.totalMs <= totalBudget),
+          `baseline=${JSON.stringify(baseline)}, loaded=${JSON.stringify(loaded)}, maxBudget=${maxBudget.toFixed(1)}, totalBudget=${totalBudget.toFixed(1)}, guide=${shotGuide}`,
+        );
+      };
+
+      await boxHillSolarPlanZoomPerf();
+
+      const boxHillSolarExport = async () => {
+        let exportOk = false;
+        let detail = "";
+        try {
+          await shadowPage.evaluate(() => window.__citycutQaModel?.enableSolarAccess?.());
+          await shadowPage.getByRole("tab", { name: /Drawing/i }).click();
+          await shadowPage.waitForSelector("svg.plan", { timeout: 120000 });
+          await shadowPage.waitForTimeout(1200);
+          const downloadPromise = shadowPage.waitForEvent("download", { timeout: 240000 });
+          await shadowPage.getByRole("button", { name: /Quick export SVG/i }).click();
+          const download = await downloadPromise;
+          const filename = download.suggestedFilename();
+          const chunks = [];
+          for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+          const bytes = Buffer.concat(chunks);
+          const text = bytes.toString("utf8");
+          exportOk =
+            filename.endsWith(".svg") &&
+            bytes.length > 2000 &&
+            text.includes('inkscape:label="Existing shadow 12:00"') &&
+            text.includes('inkscape:label="Added shadow 12:00"') &&
+            text.includes('inkscape:label="Proposed massing"');
+          detail = `file=${filename}, bytes=${bytes.length}, hasExisting=${text.includes("Existing shadow 12:00")}, hasAdded=${text.includes("Added shadow 12:00")}`;
+          if (exportOk) {
+            fs.mkdirSync(CURSOR_ARTIFACTS_DIR, { recursive: true });
+            fs.writeFileSync(path.join(CURSOR_ARTIFACTS_DIR, "solar-layered-export-box-hill-download.svg"), text);
+          }
+        } catch (error) {
+          detail = error instanceof Error ? error.message : String(error);
+        }
+        assertCheck(
+          "solar-layered-export-download",
+          "Quick export SVG downloads site plan with Existing/Added shadow and Proposed massing layers when sun study is on",
+          exportOk,
+          detail,
+        );
+      };
+
+      await boxHillSolarExport();
 
       await shadowCtx.close();
     }
