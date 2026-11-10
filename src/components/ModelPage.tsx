@@ -110,7 +110,7 @@ import {
 } from "../lib/viewMemory";
 import { treeSizeSummary, treeTierCounts } from "../lib/trees";
 import { contourDrawerLabel } from "../lib/vicmapContours";
-import { clearPlanShadowCache } from "../lib/buildingShadows";
+import { clearPlanShadowCache, proposedMassingInModel } from "../lib/buildingShadows";
 import {
   appendManualHeightCredit,
   applyHeightOverrides,
@@ -176,6 +176,7 @@ function shouldShowIntroBridgePill(): boolean {
 }
 import type { CameraMemoryRef } from "../lib/cameraMemory";
 import { SceneBoundary } from "./SceneBoundary";
+import { SolarAccessConsole } from "./SolarAccessConsole";
 import { SolarPanel } from "./SolarPanel";
 import { SolarAssessResultsList } from "./SolarAssessResultsList";
 import { SunHoursLostLegendList } from "./SunHoursLostLegendList";
@@ -4443,6 +4444,15 @@ export function ModelPage({
                 />
               )}
             </div>
+
+            {analysisKind === "solar" && (
+              <SolarAccessConsole
+                settings={solar}
+                onChange={commitSolar}
+                canMarkReceptors={tab === "drawing" && drawing === "site"}
+                hasProposedMassing={proposedMassingInModel(model)}
+              />
+            )}
           </div>
         ) : (
           <div className="bottom-bar studio-solar-bar hud-card" role="region" aria-label="Solar and camera controls">

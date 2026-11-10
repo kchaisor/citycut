@@ -3882,6 +3882,35 @@ body,
   min-height: 31px !important;
 }
 
+.model .bottom-bar.env-console .env-solar-access-row {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 6px !important;
+  padding-top: 6px !important;
+  border-top: 1px solid var(--border-subtle) !important;
+}
+
+.model .bottom-bar.env-console .env-solar-hint {
+  margin: 0 !important;
+  font-family: var(--sans) !important;
+  font-size: 10.5px !important;
+  line-height: 1.35 !important;
+  color: var(--ink-2) !important;
+}
+
+.model .bottom-bar.env-console .env-solar-hint.is-compact {
+  font-size: 10px !important;
+  color: var(--ink-3) !important;
+}
+
+.model .bottom-bar.env-console .env-solar-access-chips {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 5px !important;
+}
+
 .model .bottom-bar.env-console .date-presets {
   display: inline-flex !important;
   align-items: center !important;

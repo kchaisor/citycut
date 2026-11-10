@@ -90,10 +90,11 @@ export function SolarPanel({
         <ol className="solar-access-guide" data-solar-access-guide aria-label="Solar access workflow">
           <li>Open <strong>Analysis</strong> (left rail), then the <strong>Drawing</strong> tab.</li>
           <li>Draw proposed <strong>massing</strong> on 3D or plan first (shadows need a proposal).</li>
-          <li>Turn on <strong>B4-3</strong>, tick <strong>Mark receptor areas</strong>, drag rectangles on the site plan.</li>
-          <li>Optional: <strong>Hours lost heatmap</strong> (22 Sep, needs massing). Results appear in the plan dock.</li>
-          <li>Optional: <strong>Sun study</strong> shows 9am–3pm layers; scrub time in the player below.</li>
-          <li><strong>Quick export SVG</strong> in Drawing downloads shadow + massing layers.</li>
+          <li>Turn on <strong>B4-3</strong>, tick <strong>Mark receptor areas</strong>, drag yard rectangles on the site plan.</li>
+          <li>Optional: <strong>Park / public realm</strong> — pick a rule, add from green areas or draw a park receptor; gold hatch shows added shadow on the park.</li>
+          <li>Optional: <strong>Hours lost heatmap</strong> (22 Sep, needs massing). Results stack in the plan dock.</li>
+          <li>Optional: <strong>Sun study</strong> (9am–3pm layers). <strong>Trees cast shadow</strong> is visual only (compliance ignores trees).</li>
+          <li><strong>Quick export SVG</strong> in Drawing downloads shadow, receptor, and park layers.</li>
         </ol>
         {site && (
           <SunStudyPlayer
