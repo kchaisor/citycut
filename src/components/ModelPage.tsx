@@ -185,7 +185,8 @@ import { countPositiveLossCells, positiveLossCellsInsideFootprints } from "../li
 import { ringFromCorners } from "../lib/solarAccessB43";
 import type { SolarReceptorArea } from "../lib/solarReceptorAssess";
 import { solarReceptorsForExport } from "../lib/solarReceptorExport";
-import { defaultParkRuleId, type ParkSolarRuleId } from "../lib/solarRuleRegistry";
+import { defaultParkRuleId, solarRuleDefinition, type ParkSolarRuleId } from "../lib/solarRuleRegistry";
+import { largestGreenAreaBounds } from "../lib/solarGreenPick";
 import {
   loadSolarReceptors,
   nextParkReceptorId,
@@ -1098,14 +1099,45 @@ export function ModelPage({
         return receptorId;
       },
       enableSolarParkAccess(ruleId?: string) {
+        const resolved = (ruleId ?? solarRef.current.parkRuleId ?? defaultParkRuleId()) as ParkSolarRuleId;
+        const rule = solarRuleDefinition(resolved);
         setSolar((prev) => ({
           ...prev,
           solarParkAccess: true,
-          parkRuleId: ruleId ?? prev.parkRuleId ?? defaultParkRuleId(),
+          parkRuleId: resolved,
+          month: rule.month,
+          day: rule.day,
           castShadows: true,
           parkReceptorDraw: true,
         }));
         return true;
+      },
+      readLargestGreenAreaBounds() {
+        return largestGreenAreaBounds(drawingModelRef.current);
+      },
+      setSolarPlanTime(hour: number, minute = 0) {
+        setSolar((prev) => ({ ...prev, hour, minute, castShadows: true, sunStudy: false }));
+        return true;
+      },
+      addSolarParkFromLargestGreen(id?: string, ruleId?: string) {
+        const bounds = largestGreenAreaBounds(drawingModelRef.current);
+        if (!bounds) return null;
+        const inset = 4;
+        const east0 = bounds.east0 + inset;
+        const north0 = bounds.north0 + inset;
+        const east1 = bounds.east1 - inset;
+        const north1 = bounds.north1 - inset;
+        if (east1 - east0 < 8 || north1 - north0 < 8) return null;
+        const ring = ringFromCorners([east0, north0], [east1, north1]);
+        const normalized = normalizeReceptorRing(ring);
+        if (!normalized) return null;
+        const receptorId = id ?? nextParkReceptorId(solarReceptorsRef.current);
+        const resolvedRule = (ruleId ?? solarRef.current.parkRuleId ?? defaultParkRuleId()) as ParkSolarRuleId;
+        setSolarReceptors((current) => [
+          ...current,
+          { id: receptorId, ring: normalized, kind: "park", ruleId: resolvedRule },
+        ]);
+        return receptorId;
       },
       addSolarParkReceptor(east0: number, north0: number, east1: number, north1: number, id?: string, ruleId?: string) {
         const ring = ringFromCorners([east0, north0], [east1, north1]);
