@@ -273,6 +273,15 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 }
 .plan-solar-legend-dock,
 .plan-solar-results-dock { padding: 10px 12px; pointer-events: none; }
+.solar-access-guide {
+  margin: 0 0 12px;
+  padding: 0 0 0 18px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--sidebar-text);
+}
+.solar-access-guide li { margin: 0 0 6px; }
+.solar-access-guide strong { color: var(--sidebar-label); font-weight: 600; }
 .solar-receptor-results { display: grid; gap: 8px; margin: 8px 0 4px; padding: 0; list-style: none; }
 .solar-receptor-results.is-compact { gap: 6px; margin: 0; }
 .solar-receptor-results li { display: grid; gap: 3px; font-size: 12px; line-height: 1.35; }

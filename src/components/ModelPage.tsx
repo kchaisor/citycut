@@ -1078,6 +1078,30 @@ export function ModelPage({
         });
         return true;
       },
+      setSolarPlanMinimal() {
+        setSolar((prev) => ({
+          ...prev,
+          solarAccess: false,
+          sunHoursLost: false,
+          sunStudy: false,
+          castShadows: true,
+          receptorDraw: false,
+        }));
+        return true;
+      },
+      setSolarStudiesFull() {
+        setSolar((prev) => ({
+          ...prev,
+          solarAccess: true,
+          sunHoursLost: true,
+          sunStudy: true,
+          month: 9,
+          day: 22,
+          castShadows: true,
+          receptorDraw: true,
+        }));
+        return true;
+      },
       enableSolarAccess() {
         setSolar((prev) => ({
           ...prev,

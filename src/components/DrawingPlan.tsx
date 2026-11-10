@@ -24,6 +24,7 @@ import { readNswPlanStyle } from "../lib/nswPlanStyle";
 import { planShadowSplitRings, proposedMassingInModel, shadowRingsFromMulti, type PlanShadowInput } from "../lib/buildingShadows";
 import { planTreeShadowMulti } from "../lib/solarTreePlanShadow";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
+import { createThrottledViewportSink } from "../lib/planViewportThrottle";
 import { planViewportExtent, type PlanViewport } from "../lib/planViewport";
 import {
   SINGLE_SHADOW_OPACITY,
@@ -171,15 +172,26 @@ export function DrawingPlan({
   );
   const fitted = useMemo(() => planViewportExtent(model.sideM), [model.sideM]);
   const [internalView, setInternalView] = useState<PlanViewport>(fitted);
-  const view = viewport ?? internalView;
+  const [liveView, setLiveView] = useState<PlanViewport | null>(null);
+  const viewportSinkRef = useRef<ReturnType<typeof createThrottledViewportSink> | null>(null);
+  if (onViewportChange && !viewportSinkRef.current) {
+    viewportSinkRef.current = createThrottledViewportSink(onViewportChange);
+  }
+  const view = liveView ?? viewport ?? internalView;
+  const resolveView = () => liveView ?? viewport ?? internalView;
   const applyView = (next: PlanViewport | ((current: PlanViewport) => PlanViewport)) => {
-    const resolved = typeof next === "function" ? next(viewport ?? internalView) : next;
-    if (onViewportChange) onViewportChange(resolved);
+    const resolved = typeof next === "function" ? next(resolveView()) : next;
+    setLiveView(resolved);
+    if (onViewportChange) viewportSinkRef.current?.push(resolved);
     else setInternalView(resolved);
   };
 
   useEffect(() => {
-    if (fitCounter > 0) applyView(fitted);
+    if (fitCounter > 0) {
+      setLiveView(null);
+      viewportSinkRef.current?.flush();
+      applyView(fitted);
+    }
   }, [fitCounter, fitted]);
 
   useEffect(() => {
@@ -187,9 +199,19 @@ export function DrawingPlan({
   }, [model.sideM, model.frameShape, fitted, viewport]);
 
   useEffect(() => {
+    setLiveView(null);
+  }, [viewport]);
+
+  useEffect(() => () => viewportSinkRef.current?.flush(), []);
+
+  useEffect(() => {
     onScale?.(view.w);
   }, [onScale, view.w]);
 
+  const applyViewRef = useRef(applyView);
+  applyViewRef.current = applyView;
+  const sideMRef = useRef(model.sideM);
+  sideMRef.current = model.sideM;
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg) return;
@@ -201,10 +223,11 @@ export function DrawingPlan({
       const py = (event.clientY - rect.top) / rect.height;
       const pixels = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
       const factor = Math.exp(pixels * 0.0012);
-      applyView((current) => {
+      const sideM = sideMRef.current;
+      applyViewRef.current((current) => {
         const w = current.w * factor;
         const h = current.h * factor;
-        if (w < model.sideM * 0.04 || w > model.sideM * 6) return current;
+        if (w < sideM * 0.04 || w > sideM * 6) return current;
         return {
           x: current.x + (current.w - w) * px,
           y: current.y + (current.h - h) * py,
@@ -215,7 +238,7 @@ export function DrawingPlan({
     };
     svg.addEventListener("wheel", onWheel, { passive: false });
     return () => svg.removeEventListener("wheel", onWheel);
-  }, [model.sideM, view, internalView, onViewportChange]);
+  }, []);
 
   const half = model.sideM / 2;
   const framePathD = useMemo(() => {

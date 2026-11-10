@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { SunHoursLostWorkerMessage, SunHoursLostWorkerRequest } from "../lib/sunHoursLost.worker";
 import { proposedMassingInModel, type PlanShadowTreeMode } from "../lib/buildingShadows";
 import { SUN_HOURS_LOST_CELL_M } from "../lib/sunHoursLost";
@@ -27,6 +27,8 @@ export function useSunHoursLostPlan(
   const hasProposal = useMemo(() => proposedMassingInModel(model), [model]);
   const [grid, setGrid] = useState<SunHoursLostGrid | null>(null);
   const [pending, setPending] = useState(false);
+  const modelRef = useRef(model);
+  modelRef.current = model;
 
   useEffect(() => {
     if (!enabled || !hasProposal) {
@@ -35,9 +37,10 @@ export function useSunHoursLostPlan(
       return;
     }
     const worker = startWorker();
+    const currentModel = modelRef.current;
     if (!worker) {
       import("../lib/sunHoursLostPlan").then(({ computeSunHoursLostGrid }) => {
-        setGrid(computeSunHoursLostGrid(model, year, SUN_HOURS_LOST_CELL_M, treeMode));
+        setGrid(computeSunHoursLostGrid(currentModel, year, SUN_HOURS_LOST_CELL_M, treeMode));
         setPending(false);
       });
       return;
@@ -59,12 +62,12 @@ export function useSunHoursLostPlan(
     const request: SunHoursLostWorkerRequest = {
       id,
       model: {
-        center: model.center,
-        sideM: model.sideM,
-        terrain: model.terrain,
-        frameShape: model.frameShape,
-        buildings: model.buildings,
-        trees: model.trees,
+        center: currentModel.center,
+        sideM: currentModel.sideM,
+        terrain: currentModel.terrain,
+        frameShape: currentModel.frameShape,
+        buildings: currentModel.buildings,
+        trees: currentModel.trees,
       },
       year,
       cellM: SUN_HOURS_LOST_CELL_M,
@@ -72,7 +75,7 @@ export function useSunHoursLostPlan(
     };
     worker.postMessage(request);
     return () => worker.terminate();
-  }, [enabled, hasProposal, model, modelKey, treeMode, year]);
+  }, [enabled, hasProposal, modelKey, treeMode, year]);
 
   return { grid, pending };
 }

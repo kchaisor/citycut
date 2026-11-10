@@ -1,9 +1,9 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { getColour } from "../lib/colours";
 import { sunHoursLostColourKey } from "../lib/sunHoursLost";
 import type { SunHoursLostGrid } from "../lib/sunHoursLostPlan";
 
-export function SunHoursLostPlanOverlay({ grid }: { grid: SunHoursLostGrid }) {
+export const SunHoursLostPlanOverlay = memo(function SunHoursLostPlanOverlay({ grid }: { grid: SunHoursLostGrid }) {
   const cells = useMemo(() => {
     const out: { key: string; east: number; north: number; hours: number; fill: string }[] = [];
     const { cellM, originEast, originNorth, cols, rows, lossHours } = grid;
@@ -46,4 +46,4 @@ export function SunHoursLostPlanOverlay({ grid }: { grid: SunHoursLostGrid }) {
       ))}
     </g>
   );
-}
+});
