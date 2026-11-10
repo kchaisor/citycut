@@ -38,6 +38,9 @@ import {
 } from "../lib/sunStudyPlan";
 import { heliodonLabelFontMetres } from "../lib/heliodonDiagram";
 import { useSunStudyShadows } from "./useSunStudyShadows";
+import { SunHoursLostPlanOverlay } from "./SunHoursLostPlanOverlay";
+import type { SunHoursLostGrid } from "../lib/sunHoursLostPlan";
+import { SunHoursLostPlanLegend } from "./SunHoursLostPlanLegend";
 import { ringFromCorners } from "../lib/solarAccessB43";
 import type { SolarReceptorArea, SolarReceptorAssessResult } from "../lib/solarReceptorAssess";
 import type { Ring } from "../types";
@@ -91,6 +94,7 @@ export function DrawingPlan({
   solarReceptorResults = [],
   receptorDraw = false,
   onReceptorCommit,
+  sunHoursLostGrid = null,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -115,6 +119,7 @@ export function DrawingPlan({
   solarReceptorResults?: readonly SolarReceptorAssessResult[];
   receptorDraw?: boolean;
   onReceptorCommit?: (ring: Ring) => void;
+  sunHoursLostGrid?: SunHoursLostGrid | null;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
@@ -660,6 +665,8 @@ export function DrawingPlan({
                 {...screenPenAttrs(style.tree)}
               />
             ))}
+            {sunHoursLostGrid && <SunHoursLostPlanOverlay grid={sunHoursLostGrid} />}
+            {sunHoursLostGrid && <SunHoursLostPlanLegend view={view} />}
             {solarReceptors.map((receptor) => {
               const row = receptorResultById.get(receptor.id);
               return (

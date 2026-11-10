@@ -2219,6 +2219,62 @@ async function main() {
 
       await boxHillB43();
 
+      const boxHillHoursLost = async () => {
+        await shadowPage.evaluate(() => {
+          window.__citycutQaMassing?.clearDrawnBlocks?.();
+          window.__citycutQaModel?.clearQaProposedMassing?.();
+          window.__citycutQaModel?.enableSunHoursLost?.();
+        });
+        await shadowPage.waitForTimeout(800);
+        await zoomPlanToSite();
+        const beforeLoss = await shadowPage.evaluate(
+          () => window.__citycutQaModel?.readSunHoursLostPlan?.() ?? { cellCount: 0, maxLoss: 0 },
+        );
+        const emptyDom = await shadowPage.locator("[data-sun-hours-lost]").count();
+
+        await shadowPage.evaluate(
+          ({ east, north }) => {
+            window.__citycutQaMassing?.commitPolylineCenterline?.(
+              [
+                [east - 16, north - 4],
+                [east + 22, north - 4],
+                [east + 22, north + 10],
+                [east + 4, north + 10],
+                [east + 4, north + 28],
+              ],
+              { floors: 6, width_m: 14 },
+            );
+          },
+          { east: FOCUS_EAST, north: FOCUS_NORTH },
+        );
+        await shadowPage.waitForFunction(
+          () => (window.__citycutQaModel?.readSunHoursLostPlan?.().cellCount ?? 0) > 8,
+          null,
+          { timeout: 360000 },
+        );
+        const withLoss = await shadowPage.evaluate(
+          () => window.__citycutQaModel?.readSunHoursLostPlan?.() ?? { cellCount: 0, maxLoss: 0 },
+        );
+        const lossDom = await shadowPage.locator("[data-sun-hours-lost]").count();
+        await shadowPage.waitForSelector("[data-sun-hours-lost-legend]", { timeout: 120000 });
+        const shotHoursLost = path.join(CURSOR_ARTIFACTS_DIR, "solar-hours-lost-box-hill.png");
+        await shadowPage.locator("svg.plan").screenshot({ path: shotHoursLost });
+
+        assertCheck(
+          "solar-hours-lost-heatmap",
+          "Box Hill hours-lost heatmap: no cells without massing, non-zero 3 m cells south of 6-storey proposal when enabled",
+          beforeLoss.cellCount === 0 &&
+            emptyDom === 0 &&
+            withLoss.cellCount > 8 &&
+            withLoss.maxLoss > 0.25 &&
+            lossDom > 8 &&
+            (withLoss.footprintInside ?? 0) === 0,
+          `before=${JSON.stringify(beforeLoss)}, after=${JSON.stringify(withLoss)}, dom=${lossDom}, shot=${shotHoursLost}`,
+        );
+      };
+
+      await boxHillHoursLost();
+
       await shadowCtx.close();
     }
 

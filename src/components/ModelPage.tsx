@@ -179,6 +179,8 @@ import { SceneBoundary } from "./SceneBoundary";
 import { SolarPanel } from "./SolarPanel";
 import { SolarReceptorResultsList } from "./SolarReceptorResultsList";
 import { useSolarReceptorAssess } from "./useSolarReceptorAssess";
+import { useSunHoursLostPlan } from "./useSunHoursLostPlan";
+import { countPositiveLossCells, positiveLossCellsInsideFootprints } from "../lib/sunHoursLostPlan";
 import { ringFromCorners } from "../lib/solarAccessB43";
 import type { SolarReceptorArea } from "../lib/solarReceptorAssess";
 import {
@@ -788,6 +790,7 @@ export function ModelPage({
 
   const qaSummaryRef = useRef({ treeCrowns: 0, buildingCount: 0, roadCount: 0, triangleCount: 0 });
   const qaDisplayBuildingsRef = useRef(model.buildings);
+  const drawingModelRef = useRef(model);
   const heightPerfRef = useRef<{ modelOpenMs: number; firstRenderMs: number | null; comAppliedMs: number | null }>(
     { modelOpenMs: performance.now(), firstRenderMs: null, comAppliedMs: null },
   );
@@ -1087,6 +1090,28 @@ export function ModelPage({
       readSolarReceptorAssess() {
         return solarReceptorAssessRef.current.results;
       },
+      enableSunHoursLost() {
+        setSolar((prev) => ({
+          ...prev,
+          sunHoursLost: true,
+          sunStudy: true,
+          month: 9,
+          day: 22,
+          castShadows: true,
+        }));
+        return true;
+      },
+      readSunHoursLostPlan() {
+        const { grid } = sunHoursLostPlanRef.current;
+        if (!grid) return { cellCount: 0, maxLoss: 0, southLossCells: 0, footprintInside: 0 };
+        const footprintInside = positiveLossCellsInsideFootprints(drawingModelRef.current, grid).length;
+        return {
+          cellCount: countPositiveLossCells(grid),
+          maxLoss: grid.maxLoss,
+          cellM: grid.cellM,
+          footprintInside,
+        };
+      },
     };
     return () => {
       delete window.__citycutQaModel;
@@ -1278,6 +1303,7 @@ export function ModelPage({
       contours: contoursVisible ? displayModel.contours : false,
     };
   }, [displayModel, drawnMassingBuildings, massing.drawingBuildings, qaProposedMassing, view3dDisplay]);
+  drawingModelRef.current = drawingModel;
 
   const solarReceptorAssess = useSolarReceptorAssess(
     drawingModel,
@@ -1286,6 +1312,13 @@ export function ModelPage({
     Boolean(solar.solarAccess),
   );
   solarReceptorAssessRef.current = solarReceptorAssess;
+  const sunHoursLostPlan = useSunHoursLostPlan(
+    drawingModel,
+    solar.year,
+    Boolean(solar.sunHoursLost && tab === "drawing" && drawing === "site"),
+  );
+  const sunHoursLostPlanRef = useRef(sunHoursLostPlan);
+  sunHoursLostPlanRef.current = sunHoursLostPlan;
 
   useEffect(() => {
     qaDisplayBuildingsRef.current = displayModel.buildings;
@@ -2327,6 +2360,7 @@ export function ModelPage({
                 }
                 solarReceptors={solar.solarAccess ? solarReceptors : []}
                 solarReceptorResults={solar.solarAccess ? solarReceptorAssess.results : []}
+                sunHoursLostGrid={solar.sunHoursLost ? sunHoursLostPlan.grid : null}
                 receptorDraw={Boolean(solar.solarAccess && solar.receptorDraw)}
                 onReceptorCommit={(ring) => {
                   const normalized = normalizeReceptorRing(ring);
@@ -3586,6 +3620,7 @@ export function ModelPage({
                   receptorCount={solarReceptors.length}
                   receptorAssess={solarReceptorAssess.results}
                   receptorAssessPending={solarReceptorAssess.pending}
+                  sunHoursLostPending={sunHoursLostPlan.pending}
                   onClearReceptors={() => setSolarReceptors([])}
                 />
               </div>

@@ -47,6 +47,7 @@ export type SolarViewSettings = {
   sunHours?: boolean;
   solarAccess?: boolean;
   receptorDraw?: boolean;
+  sunHoursLost?: boolean;
 };
 
 const OVERLAY_ORDER = 1000;
