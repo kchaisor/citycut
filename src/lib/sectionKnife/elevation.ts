@@ -44,22 +44,29 @@ export function sectionElevationRlTicks(
   minYM: number,
   maxYM: number,
   yScale: (y: number) => number,
-  maxCount = 5,
-  minGapPx = 22,
+  maxCount = 4,
+  minGapPx = 28,
 ): number[] {
   const span = Math.max(1, maxYM - minYM);
-  const stepCandidates = span > 50 ? [20, 10, 25, 15, 5] : span > 25 ? [10, 5, 15, 20] : [5, 10, 2];
+  const stepCandidates = span > 50 ? [20, 25, 10, 15] : span > 25 ? [10, 15, 5, 20] : [5, 10, 2];
   for (const step of stepCandidates) {
     const start = Math.ceil(minYM / step) * step;
+    const candidates: number[] = [];
+    for (let y = start; y <= maxYM + 0.01; y += step) candidates.push(Math.round(y));
     const ticks: number[] = [];
-    for (let y = start; y <= maxYM + 0.01; y += step) ticks.push(Math.round(y * 10) / 10);
-    if (ticks.length < 2 || ticks.length > maxCount) continue;
-    let spaced = true;
-    for (let i = 1; i < ticks.length; i++) {
-      if (Math.abs(yScale(ticks[i]!) - yScale(ticks[i - 1]!)) < minGapPx) spaced = false;
+    for (const y of candidates) {
+      if (ticks.length === 0) {
+        ticks.push(y);
+        continue;
+      }
+      if (Math.abs(yScale(y) - yScale(ticks[ticks.length - 1]!)) >= minGapPx) ticks.push(y);
+      if (ticks.length >= maxCount) break;
     }
-    if (spaced) return ticks;
+    if (ticks.length >= 2 && ticks.length <= maxCount) return ticks;
   }
-  const mid = (minYM + maxYM) / 2;
-  return [Math.round(minYM), Math.round(mid), Math.round(maxYM)];
+  const mid = Math.round((minYM + maxYM) / 2);
+  const lo = Math.round(minYM);
+  const hi = Math.round(maxYM);
+  if (Math.abs(yScale(mid) - yScale(lo)) >= minGapPx && Math.abs(yScale(hi) - yScale(mid)) >= minGapPx) return [lo, mid, hi];
+  return [lo, hi];
 }

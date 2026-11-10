@@ -38,14 +38,22 @@ async function main() {
     }
     await page.locator(".section-knife-toggle").click();
     await page.waitForSelector(".section-knife-elevation", { timeout: 20000 });
-    await page.waitForTimeout(1800);
+    await page.waitForTimeout(2000);
     const header = await page.locator(".model .top-bar-left").textContent();
     if (!header?.includes("Mont Albert North")) {
       throw new Error(`Expected Mont Albert North in header, got: ${header?.slice(0, 80)}`);
     }
+  const clipOk = await page.evaluate(() => {
+      const canvas = document.querySelector(".model canvas");
+      return (
+        canvas?.dataset.sectionKnifeLineClipOk === "1" &&
+        canvas?.dataset.sectionKnifeContourClipped === "1"
+      );
+    });
+    if (!clipOk) throw new Error("Section Knife line/contour clip audit failed on preview");
     const shot3d = path.join(OUT_DIR, "section-knife-mont-albert-north-3d-1440x900.png");
     const shotHud = path.join(OUT_DIR, "section-knife-mont-albert-north-hud-1440x900.png");
-    await page.screenshot({ path: shot3d, fullPage: false });
+    await page.locator(".model canvas").screenshot({ path: shot3d });
     await page.locator(".section-knife-elevation").screenshot({ path: shotHud });
     console.log(`[ARTIFACT] ${shot3d}`);
     console.log(`[ARTIFACT] ${shotHud}`);
