@@ -2395,6 +2395,7 @@ async function main() {
           { east: midE, north: midN, span: spanM },
         );
         await parkPage.waitForTimeout(800);
+        await parkPage.waitForSelector("[data-solar-park-added-shadow]", { timeout: 120000 });
         const dock = parkPage.locator("[data-solar-results-dock]");
         await dock.waitFor({ state: "visible", timeout: 120000 });
         const parkMetrics = await dock.locator("[data-solar-park-metrics]").first().textContent();
