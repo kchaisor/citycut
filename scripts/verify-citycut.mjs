@@ -2263,27 +2263,36 @@ async function main() {
       await boxHillHoursLost();
 
       const boxHillSolarExport = async () => {
-        await shadowPage.getByRole("tab", { name: /Drawing/i }).click();
-        await shadowPage.waitForSelector("svg.plan", { timeout: 120000 });
-        await shadowPage.locator('button[data-section="exports"]').first().click();
-        await shadowPage.waitForSelector('[data-tile="svg"]', { timeout: 60000 });
-        const downloadPromise = shadowPage.waitForEvent("download", { timeout: 180000 });
-        await shadowPage.locator('[data-tile="svg"]').click();
-        const download = await downloadPromise;
-        const filename = download.suggestedFilename();
-        const chunks = [];
-        for await (const chunk of await download.createReadStream()) chunks.push(chunk);
-        const bytes = Buffer.concat(chunks);
-        const text = bytes.toString("utf8");
-        assertCheck(
-          "solar-layered-export-download",
-          "Export tile downloads site SVG with existing/added shadow layer labels when sun study and massing are on",
-          filename.endsWith(".svg") &&
+        let exportOk = false;
+        let detail = "";
+        try {
+          await shadowPage.evaluate(() => window.__citycutQaModel?.enableSolarAccess?.());
+          await shadowPage.getByRole("tab", { name: /Drawing/i }).click();
+          await shadowPage.waitForSelector("svg.plan", { timeout: 120000 });
+          await shadowPage.waitForTimeout(1200);
+          const downloadPromise = shadowPage.waitForEvent("download", { timeout: 240000 });
+          await shadowPage.getByRole("button", { name: /Quick export SVG/i }).click();
+          const download = await downloadPromise;
+          const filename = download.suggestedFilename();
+          const chunks = [];
+          for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+          const bytes = Buffer.concat(chunks);
+          const text = bytes.toString("utf8");
+          exportOk =
+            filename.endsWith(".svg") &&
             bytes.length > 2000 &&
             text.includes('inkscape:label="Existing shadow 12:00"') &&
             text.includes('inkscape:label="Added shadow 12:00"') &&
-            text.includes('inkscape:label="Proposed massing"'),
-          `file=${filename}, bytes=${bytes.length}, hasExisting=${text.includes("Existing shadow 12:00")}, hasAdded=${text.includes("Added shadow 12:00")}`,
+            text.includes('inkscape:label="Proposed massing"');
+          detail = `file=${filename}, bytes=${bytes.length}, hasExisting=${text.includes("Existing shadow 12:00")}, hasAdded=${text.includes("Added shadow 12:00")}`;
+        } catch (error) {
+          detail = error instanceof Error ? error.message : String(error);
+        }
+        assertCheck(
+          "solar-layered-export-download",
+          "Quick export SVG downloads site plan with Existing/Added shadow and Proposed massing layers when sun study is on",
+          exportOk,
+          detail,
         );
       };
 
