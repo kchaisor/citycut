@@ -74,7 +74,7 @@ export function SectionKnifeScene({
       gl.domElement.dataset.sectionKnifeLineClipOk = result.lineClipOk ? "1" : "0";
       gl.domElement.dataset.sectionKnifeContourPresent = result.contourPresent ? "1" : "0";
       gl.domElement.dataset.sectionKnifeContourClipped =
-        active && result.contourPresent ? (result.lineClipOk ? "1" : "0") : active ? "n/a" : "0";
+        active && result.contourPresent ? (result.contourClipped ? "1" : "0") : active ? "n/a" : "0";
     } else {
       delete gl.domElement.dataset.sectionKnifeLineClipOk;
       delete gl.domElement.dataset.sectionKnifeContourClipped;

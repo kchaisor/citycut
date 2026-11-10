@@ -67,9 +67,24 @@ function applyContourGeometryClip(mesh: THREE.LineSegments, plane: THREE.Plane |
   geo.computeBoundingSphere();
 }
 
+type ClipTarget = THREE.Mesh | THREE.Line;
+
+function isClipLineName(name: string): boolean {
+  return (
+    name === "Contours3d" ||
+    name === "Site::Boundary" ||
+    name === "RailLines" ||
+    name === "TramLines" ||
+    name === "RoofLines" ||
+    name === "BuildingEdges" ||
+    name === "GroundEdge"
+  );
+}
+
 export type SectionKnifeClipApplyResult = {
   lineClipOk: boolean;
   contourPresent: boolean;
+  contourClipped: boolean;
 };
 
 export type SectionKnifeClipMount = {
@@ -85,12 +100,12 @@ function isSolidBatch(name: string): boolean {
   return true;
 }
 
-function meshMaterials(mesh: THREE.Mesh): THREE.Material[] {
-  return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+function meshMaterials(target: ClipTarget): THREE.Material[] {
+  return Array.isArray(target.material) ? target.material : [target.material];
 }
 
-function setMeshMaterials(mesh: THREE.Mesh, materials: THREE.Material[]): void {
-  mesh.material = materials.length === 1 ? materials[0] : materials;
+function setMeshMaterials(target: ClipTarget, materials: THREE.Material[]): void {
+  target.material = materials.length === 1 ? materials[0] : materials;
 }
 
 function cloneMaterial(material: THREE.Material): THREE.Material {
@@ -202,18 +217,24 @@ function rebuildPlaneFrame(
 
 function registerClipMeshes(
   roots: THREE.Object3D[],
-  clipTargets: THREE.Mesh[],
+  clipTargets: ClipTarget[],
   matRest: WeakMap<THREE.Material, MatRest>,
-  meshRest: WeakMap<THREE.Mesh, MeshRest>,
+  meshRest: WeakMap<ClipTarget, MeshRest>,
   solidOnly: boolean,
 ) {
   for (const root of roots) {
     root.traverse((object) => {
       const mesh = object as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      if (solidOnly && !isSolidBatch(mesh.name)) return;
-      if (clipTargets.includes(mesh)) return;
-      clipTargets.push(mesh);
+      const line = object as THREE.Line;
+      const name = object.name;
+      let target: ClipTarget | null = null;
+      if (mesh.isMesh) {
+        if (!solidOnly || isSolidBatch(name)) target = mesh;
+      } else if (line.isLine && (!solidOnly || isClipLineName(name))) {
+        target = line;
+      }
+      if (!target || clipTargets.includes(target)) return;
+      clipTargets.push(target);
     });
   }
   for (const mesh of clipTargets) {
@@ -240,8 +261,8 @@ export function mountSectionKnifeClip(
   extraClipRoots: THREE.Object3D[] = [],
 ): SectionKnifeClipMount {
   const matRest = new WeakMap<THREE.Material, MatRest>();
-  const meshRest = new WeakMap<THREE.Mesh, MeshRest>();
-  const clipTargets: THREE.Mesh[] = [];
+  const meshRest = new WeakMap<ClipTarget, MeshRest>();
+  const clipTargets: ClipTarget[] = [];
   registerClipMeshes([city], clipTargets, matRest, meshRest, true);
   registerClipMeshes(extraClipRoots, clipTargets, matRest, meshRest, false);
 
@@ -429,7 +450,24 @@ export function mountSectionKnifeClip(
     pocheMat.clippingPlanes = active ? [keep] : null;
     pocheMat.needsUpdate = true;
     const contourPresent = Boolean(city.getObjectByName("Contours3d"));
-    return { lineClipOk: active ? lineClipAudit() : true, contourPresent };
+    const contourTarget = clipTargets.find((target) => target.name === "Contours3d");
+    let contourClipped = !contourPresent || !active;
+    if (active && contourPresent) {
+      if (!contourTarget?.visible) {
+        contourClipped = true;
+      } else {
+        const rest = contourRestPositions.get(contourTarget as THREE.LineSegments);
+        const posAttr = (contourTarget as THREE.LineSegments).geometry.getAttribute("position");
+        const restVerts = rest ? rest.length / 3 : 0;
+        const clipVerts = posAttr ? (posAttr.array as Float32Array).length / 3 : 0;
+        let matsOk = true;
+        for (const material of meshMaterials(contourTarget)) {
+          if (!material.clippingPlanes || material.clippingPlanes.length !== 1) matsOk = false;
+        }
+        contourClipped = matsOk && restVerts > 6 && clipVerts > 0 && clipVerts < restVerts * 0.92;
+      }
+    }
+    return { lineClipOk: active ? lineClipAudit() : true, contourPresent, contourClipped };
   }
 
   function dispose() {
