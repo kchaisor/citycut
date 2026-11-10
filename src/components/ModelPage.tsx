@@ -177,6 +177,16 @@ function shouldShowIntroBridgePill(): boolean {
 import type { CameraMemoryRef } from "../lib/cameraMemory";
 import { SceneBoundary } from "./SceneBoundary";
 import { SolarPanel } from "./SolarPanel";
+import { SolarReceptorResultsList } from "./SolarReceptorResultsList";
+import { useSolarReceptorAssess } from "./useSolarReceptorAssess";
+import { ringFromCorners } from "../lib/solarAccessB43";
+import type { SolarReceptorArea } from "../lib/solarReceptorAssess";
+import {
+  loadSolarReceptors,
+  nextReceptorId,
+  normalizeReceptorRing,
+  saveSolarReceptors,
+} from "../lib/solarReceptorStore";
 import { WindPanel } from "./WindPanel";
 import { WindRoseOverlay } from "./WindRoseOverlay";
 import { ExportTiles } from "./ExportTiles";
@@ -389,6 +399,19 @@ export function ModelPage({
 
   const [sunStudySelected, setSunStudySelected] = useState<number[]>([]);
   useEffect(() => setSunStudySelected((prev) => (prev.length === 0 ? prev : [])), [model]);
+  const [solarReceptors, setSolarReceptors] = useState<SolarReceptorArea[]>(() => loadSolarReceptors(model.center));
+  useEffect(() => {
+    setSolarReceptors(loadSolarReceptors(model.center));
+  }, [model.center.lat, model.center.lon]);
+  useEffect(() => {
+    saveSolarReceptors(model.center, solarReceptors);
+  }, [model.center, solarReceptors]);
+  const solarReceptorsRef = useRef(solarReceptors);
+  solarReceptorsRef.current = solarReceptors;
+  const solarReceptorAssessRef = useRef<{ results: import("../lib/solarReceptorAssess").SolarReceptorAssessResult[]; pending: boolean }>({
+    results: [],
+    pending: false,
+  });
   const sunStudyDate = useMemo<SunStudyDate | null>(
     () =>
       solar.sunStudy
@@ -1038,6 +1061,32 @@ export function ModelPage({
         });
         return true;
       },
+      enableSolarAccess() {
+        setSolar((prev) => ({
+          ...prev,
+          solarAccess: true,
+          sunStudy: true,
+          month: 9,
+          day: 22,
+          castShadows: true,
+          receptorDraw: true,
+        }));
+        return true;
+      },
+      addSolarReceptor(east0: number, north0: number, east1: number, north1: number, id?: string) {
+        const ring = ringFromCorners([east0, north0], [east1, north1]);
+        const normalized = normalizeReceptorRing(ring);
+        if (!normalized) return null;
+        const receptorId = id ?? nextReceptorId(solarReceptorsRef.current);
+        setSolarReceptors((current) => [...current, { id: receptorId, ring: normalized }]);
+        return receptorId;
+      },
+      clearSolarReceptors() {
+        setSolarReceptors([]);
+      },
+      readSolarReceptorAssess() {
+        return solarReceptorAssessRef.current.results;
+      },
     };
     return () => {
       delete window.__citycutQaModel;
@@ -1229,6 +1278,14 @@ export function ModelPage({
       contours: contoursVisible ? displayModel.contours : false,
     };
   }, [displayModel, drawnMassingBuildings, massing.drawingBuildings, qaProposedMassing, view3dDisplay]);
+
+  const solarReceptorAssess = useSolarReceptorAssess(
+    drawingModel,
+    solarReceptors,
+    solar.year,
+    Boolean(solar.solarAccess),
+  );
+  solarReceptorAssessRef.current = solarReceptorAssess;
 
   useEffect(() => {
     qaDisplayBuildingsRef.current = displayModel.buildings;
@@ -2239,10 +2296,11 @@ export function ModelPage({
                 onViewportChange={setIsoDrawingViewport}
                 fitCounter={fitCounter}
               />
-            ) : (
-              <DrawingPlan
-                model={drawingModel}
-                kind={drawing}
+            ) : drawing === "site" ? (
+              <div className="plan-viewport-stack">
+                <DrawingPlan
+                  model={drawingModel}
+                  kind={drawing}
                 onScale={onScale}
                 lineStyle={lineStyles}
                 planScale={figureScale}
@@ -2267,6 +2325,40 @@ export function ModelPage({
                     return next;
                   })
                 }
+                solarReceptors={solar.solarAccess ? solarReceptors : []}
+                solarReceptorResults={solar.solarAccess ? solarReceptorAssess.results : []}
+                receptorDraw={Boolean(solar.solarAccess && solar.receptorDraw)}
+                onReceptorCommit={(ring) => {
+                  const normalized = normalizeReceptorRing(ring);
+                  if (!normalized) return;
+                  setSolarReceptors((current) => [
+                    ...current,
+                    { id: nextReceptorId(current), ring: normalized },
+                  ]);
+                }}
+                uniformBuildings={!colourByUse && !showSource}
+                colourBySource={showSource}
+                highlightManual={showManualEdits && overrideResult.manualCount > 0}
+                viewport={planViewport}
+                onViewportChange={setPlanViewport}
+                fitCounter={fitCounter}
+              />
+                {solar.solarAccess && solarReceptorAssess.results.length > 0 && (
+                  <div className="plan-solar-results-dock hud-card" data-solar-results-dock>
+                    <SolarReceptorResultsList rows={solarReceptorAssess.results} compact />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <DrawingPlan
+                model={drawingModel}
+                kind={drawing}
+                onScale={onScale}
+                lineStyle={lineStyles}
+                planScale={figureScale}
+                heliodon={heliodonDiagramExport()}
+                castShadows={solar.castShadows}
+                shadowInput={planShadowInput()}
                 uniformBuildings={!colourByUse && !showSource}
                 colourBySource={showSource}
                 highlightManual={showManualEdits && overrideResult.manualCount > 0}
@@ -3490,6 +3582,11 @@ export function ModelPage({
                   site={{ lat: model.center.lat, lon: model.center.lon }}
                   selectedCount={sunStudySelected.length}
                   onClearSelection={() => setSunStudySelected([])}
+                  canMarkReceptors={tab === "drawing" && drawing === "site"}
+                  receptorCount={solarReceptors.length}
+                  receptorAssess={solarReceptorAssess.results}
+                  receptorAssessPending={solarReceptorAssess.pending}
+                  onClearReceptors={() => setSolarReceptors([])}
                 />
               </div>
               <div hidden={analysisKind !== "wind"}>

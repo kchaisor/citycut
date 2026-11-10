@@ -2122,6 +2122,103 @@ async function main() {
         `before=[count=${beforeMassing.count},d=${beforeMassing.dLen}], after=[count=${withMassing.count},d=${withMassing.dLen}], goldPixels=${goldPixels}, zoom=${PLAN_ZOOM_M}m, shots=[${shotNoMassing},${shotWithMassing}]`,
       );
 
+      const boxHillB43 = async () => {
+        await shadowPage.locator('.model button[data-section="analysis"]').first().click();
+        await shadowPage.waitForTimeout(300);
+        await shadowPage.getByRole("tab", { name: /Drawing/i }).click();
+        await shadowPage.waitForSelector("svg.plan", { timeout: 120000 });
+        await shadowPage.evaluate(() => {
+          window.__citycutQaModel?.clearSolarReceptors?.();
+          window.__citycutQaModel?.enableSolarAccess?.();
+        });
+        await shadowPage.waitForTimeout(400);
+
+        await shadowPage.evaluate(
+          ({ east, north }) => {
+            window.__citycutQaMassing?.commitPolylineCenterline?.(
+              [
+                [east - 16, north - 4],
+                [east + 22, north - 4],
+                [east + 22, north + 10],
+                [east + 4, north + 10],
+                [east + 4, north + 28],
+              ],
+              { floors: 6, width_m: 14 },
+            );
+          },
+          { east: FOCUS_EAST, north: FOCUS_NORTH },
+        );
+        await shadowPage.waitForTimeout(2000);
+        await zoomPlanToSite();
+
+        const receptorIds = await shadowPage.evaluate(
+          ({ east, north }) => {
+            const api = window.__citycutQaModel;
+            const south = api?.addSolarReceptor?.(east - 2, north - 26, east + 16, north - 12, "south-yard");
+            const far = api?.addSolarReceptor?.(east - 38, north - 38, east - 22, north - 24, "far-yard");
+            return { south, far };
+          },
+          { east: FOCUS_EAST, north: FOCUS_NORTH },
+        );
+
+        await shadowPage.waitForFunction(
+          () => {
+            const rows = window.__citycutQaModel?.readSolarReceptorAssess?.() ?? [];
+            return rows.length >= 2 && rows.every((row) => !Number.isNaN(row.proposedSunlitM2));
+          },
+          null,
+          { timeout: 360000 },
+        );
+
+        const assess = await shadowPage.evaluate(() => window.__citycutQaModel?.readSolarReceptorAssess?.() ?? []);
+        const south = assess.find((row) => row.id === receptorIds.south);
+        const far = assess.find((row) => row.id === receptorIds.far);
+
+        assertCheck(
+          "solar-b43-receptor-assess",
+          "Box Hill B4-3 receptors: south yard fails proposed while existing passes; distant yard passes both",
+          south?.existingPass === true &&
+            south?.proposedPass === false &&
+            south?.status?.kind === "fail-proposal" &&
+            far?.existingPass === true &&
+            far?.proposedPass === true,
+          `south=${JSON.stringify(south)}, far=${JSON.stringify(far)}`,
+        );
+
+        const dock = shadowPage.locator("[data-solar-results-dock]");
+        await dock.waitFor({ state: "visible", timeout: 120000 });
+        const metricsText = await dock.locator(".solar-receptor-metrics").first().textContent();
+        assertCheck(
+          "solar-b43-results-readable",
+          "B4-3 receptor m² existing vs proposed and status labels are visible on the site plan dock",
+          Boolean(metricsText?.includes("m² existing")) &&
+            Boolean(metricsText?.includes("m² proposed")) &&
+            (await dock.locator(".solar-receptor-status").count()) >= 2,
+          `metrics=${JSON.stringify(metricsText)}`,
+        );
+        const shotPlan = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-plan.png");
+        const planEl = shadowPage.locator("svg.plan");
+        await planEl.screenshot({ path: shotPlan });
+        const shotResults = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-results.png");
+        await dock.screenshot({ path: shotResults });
+        const shotCombo = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-plan-and-results.png");
+        const planBox = await planEl.boundingBox();
+        const dockBox = await dock.boundingBox();
+        if (planBox && dockBox) {
+          const x = Math.floor(Math.min(planBox.x, dockBox.x));
+          const y = Math.floor(Math.min(planBox.y, dockBox.y));
+          const x2 = Math.ceil(Math.max(planBox.x + planBox.width, dockBox.x + dockBox.width));
+          const y2 = Math.ceil(Math.max(planBox.y + planBox.height, dockBox.y + dockBox.height));
+          await shadowPage.screenshot({
+            path: shotCombo,
+            clip: { x, y, width: x2 - x, height: y2 - y },
+            scale: "css",
+          });
+        }
+      };
+
+      await boxHillB43();
+
       await shadowCtx.close();
     }
 

@@ -195,6 +195,11 @@
 
   --sun-study-shadow: #4a5a70;
   --sun-study-shadow-added: #E1B157;
+  --solar-receptor-pass: #9fd89f;
+  --solar-receptor-fail: #e8a4a4;
+  --solar-receptor-warn: #f0d59a;
+  --solar-receptor-outline: #2e4a2e;
+  --solar-receptor-preview: #6b8f71;
 
   --axo-water: #7eb8da;
   --axo-road: #6B6C6F;

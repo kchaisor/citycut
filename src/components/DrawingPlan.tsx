@@ -16,7 +16,7 @@ import { planPaths, svgPolyline, svgRings } from "../lib/svgPlan";
 import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
-import type { CityModel } from "../types";
+import type { CityModel, Pt } from "../types";
 import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
 import { NswPlanLabels, NswPlanLines, NswPlanUnder } from "./NswPlanLayers";
 import { NSW_PLAN_LABEL_SHARE, nswPlanItems } from "../lib/nswPlan";
@@ -38,6 +38,9 @@ import {
 } from "../lib/sunStudyPlan";
 import { heliodonLabelFontMetres } from "../lib/heliodonDiagram";
 import { useSunStudyShadows } from "./useSunStudyShadows";
+import { ringFromCorners } from "../lib/solarAccessB43";
+import type { SolarReceptorArea, SolarReceptorAssessResult } from "../lib/solarReceptorAssess";
+import type { Ring } from "../types";
 
 const NO_SELECTION: readonly number[] = [];
 
@@ -84,6 +87,10 @@ export function DrawingPlan({
   sunStudyCasters = "all",
   sunStudySelected = NO_SELECTION,
   onSunStudyPick,
+  solarReceptors = [],
+  solarReceptorResults = [],
+  receptorDraw = false,
+  onReceptorCommit,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -104,9 +111,15 @@ export function DrawingPlan({
   sunStudyCasters?: SunStudyCasters;
   sunStudySelected?: readonly number[];
   onSunStudyPick?: (buildingId: number) => void;
+  solarReceptors?: readonly SolarReceptorArea[];
+  solarReceptorResults?: readonly SolarReceptorAssessResult[];
+  receptorDraw?: boolean;
+  onReceptorCommit?: (ring: Ring) => void;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
+  const receptorDrag = useRef<{ a: Ring[number]; b: Ring[number]; moved: boolean } | null>(null);
+  const [receptorPreview, setReceptorPreview] = useState<Ring | null>(null);
   const figure = kind === "figure-ground";
   const colourTick = useColourRevision();
   const style = useMemo(() => lineStyle ?? readDrawingStyle(), [lineStyle, colourTick]);
@@ -252,6 +265,35 @@ export function DrawingPlan({
   const mutedFill = (key: Parameters<typeof getColour>[0], normal: string) => (muted ? getColour(key) : normal);
   const annotationInk = figure ? figureFill : getColour("--sun-compass-label");
   const splitShadow = proposedMassingInModel(casterModel);
+  const receptorPassFill = getColour("--solar-receptor-pass");
+  const receptorFailFill = getColour("--solar-receptor-fail");
+  const receptorWarnFill = getColour("--solar-receptor-warn");
+  const receptorOutline = getColour("--solar-receptor-outline");
+  const receptorPreviewFill = getColour("--solar-receptor-preview");
+  const receptorResultById = useMemo(
+    () => new Map(solarReceptorResults.map((row) => [row.id, row])),
+    [solarReceptorResults],
+  );
+
+  function planPointFromClient(clientX: number, clientY: number, planView: PlanViewport): Pt {
+    const svg = svgRef.current;
+    if (!svg) return [0, 0];
+    const ctm = svg.getScreenCTM?.();
+    if (ctm) {
+      const local = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
+      return [local.x, -local.y];
+    }
+    const rect = svg.getBoundingClientRect();
+    const x = planView.x + ((clientX - rect.left) / rect.width) * planView.w;
+    const y = planView.y + ((clientY - rect.top) / rect.height) * planView.h;
+    return [x, -y];
+  }
+
+  function receptorFill(tone: "pass" | "fail" | "warn" | undefined): string {
+    if (tone === "fail") return receptorFailFill;
+    if (tone === "warn") return receptorWarnFill;
+    return receptorPassFill;
+  }
   const shadowSplit = useMemo(() => {
     if (!castShadows || !shadowInput || figure || study) return { existing: [], added: [] };
     return planShadowSplitRings(casterModel, shadowInput, true);
@@ -367,9 +409,24 @@ export function DrawingPlan({
         event.preventDefault();
         window.getSelection?.()?.removeAllRanges?.();
         event.currentTarget.setPointerCapture?.(event.pointerId);
+        if (receptorDraw && onReceptorCommit) {
+          const at = planPointFromClient(event.clientX, event.clientY, view);
+          receptorDrag.current = { a: at, b: at, moved: false };
+          setReceptorPreview(ringFromCorners(at, at));
+          return;
+        }
         drag.current = { px: event.clientX, py: event.clientY, view };
       }}
       onPointerMove={(event) => {
+        const draw = receptorDrag.current;
+        if (draw && onReceptorCommit) {
+          event.preventDefault();
+          const at = planPointFromClient(event.clientX, event.clientY, view);
+          draw.b = at;
+          draw.moved = true;
+          setReceptorPreview(ringFromCorners(draw.a, draw.b));
+          return;
+        }
         const start = drag.current;
         const svg = svgRef.current;
         if (!start || !svg) return;
@@ -383,26 +440,27 @@ export function DrawingPlan({
         else setInternalView(next);
       }}
       onPointerUp={(event) => {
+        const draw = receptorDrag.current;
+        if (draw && onReceptorCommit) {
+          receptorDrag.current = null;
+          const ring = ringFromCorners(draw.a, draw.b);
+          setReceptorPreview(null);
+          const minE = Math.min(draw.a[0], draw.b[0]);
+          const maxE = Math.max(draw.a[0], draw.b[0]);
+          const minN = Math.min(draw.a[1], draw.b[1]);
+          const maxN = Math.max(draw.a[1], draw.b[1]);
+          if (maxE - minE >= 2 && maxN - minN >= 2) onReceptorCommit(ring);
+          return;
+        }
         const start = drag.current;
         drag.current = null;
         const svg = svgRef.current;
         if (!start || !svg || !study || !onSunStudyPick) return;
         if (!isClick(event.clientX - start.px, event.clientY - start.py)) return;
-        const ctm = svg.getScreenCTM?.();
-        let x: number;
-        let y: number;
-        if (ctm) {
-          const local = new DOMPoint(event.clientX, event.clientY).matrixTransform(ctm.inverse());
-          x = local.x;
-          y = local.y;
-        } else {
-          const rect = svg.getBoundingClientRect();
-          x = start.view.x + ((event.clientX - rect.left) / rect.width) * start.view.w;
-          y = start.view.y + ((event.clientY - rect.top) / rect.height) * start.view.h;
-        }
+        const local = planPointFromClient(event.clientX, event.clientY, start.view);
         if (onViewportChange) onViewportChange(start.view);
         else setInternalView(start.view);
-        const hit = pickBuilding(model.buildings, [x, -y]);
+        const hit = pickBuilding(model.buildings, local);
         if (hit) onSunStudyPick(hit.id);
       }}
     >
@@ -602,6 +660,36 @@ export function DrawingPlan({
                 {...screenPenAttrs(style.tree)}
               />
             ))}
+            {solarReceptors.map((receptor) => {
+              const row = receptorResultById.get(receptor.id);
+              return (
+                <path
+                  key={`sr${receptor.id}`}
+                  data-solar-receptor-overlay={receptor.id}
+                  data-solar-receptor-status={row?.statusTone ?? "pass"}
+                  d={svgRings([receptor.ring])}
+                  fill={receptorFill(row?.statusTone)}
+                  fillOpacity={0.52}
+                  fillRule="evenodd"
+                  stroke={receptorOutline}
+                  strokeWidth={screenPx(0.35)}
+                  vectorEffect="non-scaling-stroke"
+                />
+              );
+            })}
+            {receptorPreview && (
+              <path
+                data-solar-receptor-preview
+                d={svgRings([receptorPreview])}
+                fill={receptorPreviewFill}
+                fillOpacity={0.35}
+                fillRule="evenodd"
+                stroke={receptorOutline}
+                strokeWidth={screenPx(0.35)}
+                strokeDasharray="4 3"
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
             {nswItems && nswStyle && <NswPlanLabels items={nswItems} style={nswStyle} sizeM={model.sideM * NSW_PLAN_LABEL_SHARE} />}
             <path d={framePathD} fill="none" {...screenPenAttrs(style.frame, "miter")} />
             {heliodon && (

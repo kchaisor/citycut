@@ -227,6 +227,11 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-study-path-edge` | `#d4d4d0` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): footpath edge. |
 | `--sun-study-building` | `#ffffff` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): buildings (the site building keeps its own colour). |
 | `--sun-study-tree` | `#b8e0b0` | Tree crowns in the sun study muted base plan, at 50% opacity. Pastel green so trees stay visible under the hourly shadows. |
+| `--solar-receptor-pass` | `#9fd89f` | B4-3 solar receptor overlay when existing and proposed pass. |
+| `--solar-receptor-fail` | `#e8a4a4` | B4-3 solar receptor overlay when the proposal causes failure. |
+| `--solar-receptor-warn` | `#f0d59a` | B4-3 solar receptor overlay when already non-compliant. |
+| `--solar-receptor-outline` | `#2e4a2e` | Outline for marked solar receptor areas on the site plan. |
+| `--solar-receptor-preview` | `#6b8f71` | Preview fill while drawing a solar receptor on the site plan. |
 | `--axo-water` | `#7eb8da` | Exploded axo floodplain / water layer. |
 | `--axo-road` | `#e8883a` | Exploded axo roads layer. |
 | `--axo-green` | `#8fbc8f` | Exploded axo green spaces layer. |

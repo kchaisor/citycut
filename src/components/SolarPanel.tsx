@@ -7,8 +7,11 @@ import {
   HELIODON_RADIUS_FACTOR_MIN,
   heliodonRadiusM,
 } from "../lib/heliodonRadius";
+import { RESCODE_B43_STEP_MINUTES } from "../lib/solarAccessB43";
 import { SUN_STUDY_SHADOW_ADDED_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "../lib/sunStudyPlan";
+import type { SolarReceptorAssessResult } from "../lib/solarReceptorAssess";
 import type { SolarViewSettings } from "./SolarHeliodon";
+import { SolarReceptorResultsList } from "./SolarReceptorResultsList";
 import { SunStudyPlayer } from "./SunStudyPlayer";
 
 const SOLAR_LEGEND: { key: ColourKey; label: string; dash?: string }[] = [
@@ -25,6 +28,11 @@ export function SolarPanel({
   site,
   selectedCount = 0,
   onClearSelection,
+  canMarkReceptors = false,
+  receptorCount = 0,
+  receptorAssess = [],
+  receptorAssessPending = false,
+  onClearReceptors,
 }: {
   settings: SolarViewSettings;
   onChange: (next: SolarViewSettings) => void;
@@ -33,6 +41,11 @@ export function SolarPanel({
   site?: { lat: number; lon: number };
   selectedCount?: number;
   onClearSelection?: () => void;
+  canMarkReceptors?: boolean;
+  receptorCount?: number;
+  receptorAssess?: SolarReceptorAssessResult[];
+  receptorAssessPending?: boolean;
+  onClearReceptors?: () => void;
 }) {
   const [open, setOpen] = useState(true);
   useColourRevision();
@@ -94,6 +107,56 @@ export function SolarPanel({
           />
           Cast real-time shadows
         </label>
+        <label className="check-field">
+          <input
+            type="checkbox"
+            checked={Boolean(settings.solarAccess)}
+            onChange={(event) => {
+              const on = event.target.checked;
+              patch({
+                solarAccess: on,
+                sunStudy: on ? true : settings.sunStudy,
+                month: on ? 9 : settings.month,
+                day: on ? 22 : settings.day,
+                castShadows: on ? true : settings.castShadows,
+              });
+            }}
+          />
+          B4-3 / A4-3 overshadowing (22 Sep)
+        </label>
+        {settings.solarAccess && (
+          <p className="field-note">
+            Assessed at {RESCODE_B43_STEP_MINUTES}-minute steps, 9am–3pm ({settings.year}). Indicative only — councils may count fences and trees differently.
+          </p>
+        )}
+        {settings.solarAccess && canMarkReceptors && (
+          <label className="check-field">
+            <input
+              type="checkbox"
+              checked={Boolean(settings.receptorDraw)}
+              onChange={(event) => patch({ receptorDraw: event.target.checked })}
+            />
+            Mark receptor areas on site plan
+          </label>
+        )}
+        {settings.solarAccess && receptorCount > 0 && (
+          <p className="field-note" data-solar-receptor-summary>
+            {receptorAssessPending
+              ? `Computing ${receptorCount} receptor${receptorCount === 1 ? "" : "s"}…`
+              : `${receptorCount} receptor area${receptorCount === 1 ? "" : "s"} marked.`}
+            {onClearReceptors && (
+              <>
+                {" "}
+                <button type="button" className="link-button" onClick={onClearReceptors}>
+                  Clear
+                </button>
+              </>
+            )}
+          </p>
+        )}
+        {settings.solarAccess && receptorAssess.length > 0 && (
+          <SolarReceptorResultsList rows={receptorAssess} />
+        )}
         <label className="check-field">
           <input
             type="checkbox"
