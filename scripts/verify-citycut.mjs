@@ -928,18 +928,48 @@ async function main() {
           if (!chart) return { ok: false, detail: "chart missing" };
           const text = chart.textContent ?? "";
           const hasRl = text.includes("RL ");
-          const hasA = /\bA\b/.test(text) && text.includes("A′");
           const hasScale = text.includes("250") && text.includes("500");
           const rects = chart.querySelectorAll("rect");
           const hasGroundFill = rects.length > 0;
-          return { ok: hasRl && hasA && hasScale && hasGroundFill, hasRl, hasA, hasScale, hasGroundFill };
+          const endLabels = Array.from(chart.querySelectorAll(".section-knife-end-label"));
+          const labelTexts = endLabels.map((el) => el.textContent?.trim() ?? "");
+          const endLabelsOk = labelTexts.length === 2 && labelTexts[0] === "A" && labelTexts[1] === "A′";
+          const rlEls = Array.from(chart.querySelectorAll(".section-knife-rl"));
+          const rlCountOk = rlEls.length >= 2 && rlEls.length <= 5;
+          const rlRects = rlEls.map((el) => el.getBoundingClientRect());
+          let rlOverlap = false;
+          for (let i = 0; i < rlRects.length; i++) {
+            for (let j = i + 1; j < rlRects.length; j++) {
+              const a = rlRects[i];
+              const b = rlRects[j];
+              const xOverlap = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+              const yOverlap = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+              if (xOverlap > 1 && yOverlap > 1) rlOverlap = true;
+            }
+          }
+          const ok = hasRl && hasScale && hasGroundFill && endLabelsOk && rlCountOk && !rlOverlap;
+          return {
+            ok,
+            hasRl,
+            hasScale,
+            hasGroundFill,
+            endLabelsOk,
+            rlCount: rlEls.length,
+            rlOverlap,
+            labelTexts,
+          };
         });
         assertCheck(
           "section-knife-hud-drawing",
           "Section HUD reads as an architectural section (RL grid, distance scale, A/A′ labels, filled ground mass)",
           hudAudit.ok,
-          hudAudit.detail ??
-            `rl=${hudAudit.hasRl}, a=${hudAudit.hasA}, scale=${hudAudit.hasScale}, groundFill=${hudAudit.hasGroundFill}`,
+          `end=${hudAudit.labelTexts?.join("/")}, rlCount=${hudAudit.rlCount}, rlOverlap=${hudAudit.rlOverlap}`,
+        );
+        assertCheck(
+          "section-knife-hud-axis-labels",
+          "Section HUD RL labels do not overlap and A/A′ are not duplicated",
+          hudAudit.endLabelsOk && hudAudit.rlCount >= 2 && hudAudit.rlCount <= 5 && !hudAudit.rlOverlap,
+          `end=${hudAudit.labelTexts?.join("/")}, rlCount=${hudAudit.rlCount}, rlOverlap=${hudAudit.rlOverlap}`,
         );
 
         if (fs.existsSync(ARTIFACTS_DIR)) {

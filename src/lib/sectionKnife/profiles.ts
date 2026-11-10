@@ -58,6 +58,7 @@ function profileFromRing(
   groundY: number,
   terrain: CityModel["terrain"],
   sideM: number,
+  elevationView: boolean,
 ): SectionProfile | null {
   const normal = axis.normal;
   const offsetM = axis.offsetM;
@@ -77,8 +78,18 @@ function profileFromRing(
     maxD = Math.max(maxD, d);
     if (Math.abs(d) < 4) tValues.push(tangentCoord(e, sceneZ(n), axis.tangent));
   }
-  if (minD > 3 && maxD > 3) return null;
-  if (maxD < -3 && minD < -3) return null;
+  if (elevationView) {
+    if (maxD < -3 && minD < -3) return null;
+    if (tValues.length === 0) {
+      for (const [e, n] of pts) {
+        const d = signedPlaneDistance(e, sceneZ(n), normal, offsetM);
+        if (d > 0.35) tValues.push(tangentCoord(e, sceneZ(n), axis.tangent));
+      }
+    }
+  } else {
+    if (minD > 3 && maxD > 3) return null;
+    if (maxD < -3 && minD < -3) return null;
+  }
   if (tValues.length === 0) return null;
   let tMin = Math.min(...tValues);
   let tMax = Math.max(...tValues);
@@ -92,7 +103,8 @@ function profileFromRing(
     baseY = sampleTerrain(terrain, midX, -midZ, sideM);
   }
   const topY = baseY + building.height;
-  const cutByKnife = minD * maxD <= 0 || (minD <= 0.4 && maxD >= -0.4);
+  const cutByKnife = minD * maxD <= 0 || (minD <= 0.35 && maxD >= -0.35);
+  const cutByKnifeFinal = elevationView && minD > 0.5 && maxD > 0.5 ? false : cutByKnife;
   return {
     id: building.id,
     tangentMin: tMin,
@@ -100,7 +112,7 @@ function profileFromRing(
     baseY,
     topY,
     floors: floorLinesForBuilding(building, baseY, topY),
-    cutByKnife,
+    cutByKnife: cutByKnifeFinal,
   };
 }
 
@@ -118,13 +130,26 @@ export function sectionAxis(model: CityModel, pose: SectionKnifePose): SectionAx
   };
 }
 
+export function collectElevationProfiles(model: CityModel, pose: SectionKnifePose): SectionProfile[] {
+  const axis = sectionAxis(model, pose);
+  const groundY = model.terrain ? model.terrain.min : 0;
+  const out: SectionProfile[] = [];
+  for (const building of model.buildings) {
+    if (building.meshDrawnBy != null) continue;
+    const profile = profileFromRing(building.ring, building, axis, groundY, model.terrain, model.sideM, true);
+    if (profile) out.push(profile);
+  }
+  out.sort((a, b) => a.tangentMin - b.tangentMin);
+  return out;
+}
+
 export function collectSectionProfiles(model: CityModel, pose: SectionKnifePose): SectionProfile[] {
   const axis = sectionAxis(model, pose);
   const groundY = model.terrain ? model.terrain.min : 0;
   const out: SectionProfile[] = [];
   for (const building of model.buildings) {
     if (building.meshDrawnBy != null) continue;
-    const profile = profileFromRing(building.ring, building, axis, groundY, model.terrain, model.sideM);
+    const profile = profileFromRing(building.ring, building, axis, groundY, model.terrain, model.sideM, false);
     if (profile) out.push(profile);
   }
   out.sort((a, b) => a.tangentMin - b.tangentMin);

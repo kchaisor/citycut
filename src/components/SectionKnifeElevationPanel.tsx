@@ -1,6 +1,6 @@
 import { useId, useMemo } from "react";
 import { getColour } from "../lib/colours";
-import { buildSectionElevation } from "../lib/sectionKnife/elevation";
+import { buildSectionElevation, sectionElevationRlTicks } from "../lib/sectionKnife/elevation";
 import { selectedKnife, type SectionKnifeToolState } from "../lib/sectionKnife/state";
 import type { CityModel } from "../types";
 
@@ -12,19 +12,26 @@ export function SectionKnifeElevationPanel({ model, tool }: { model: CityModel; 
     [model, knife.pose.angleRad, knife.pose.offsetM],
   );
 
-  const padX = 12;
+  const padPlotX = 48;
+  const padRight = 12;
   const padTop = 20;
-  const padBottom = 34;
+  const padBottom = 30;
   const viewW = 356;
   const viewH = 188;
-  const plotW = viewW - padX * 2;
+  const plotW = viewW - padPlotX - padRight;
   const plotH = viewH - padTop - padBottom;
   const spanX = elevation.halfWidthM * 2;
   const spanY = Math.max(12, elevation.maxYM - elevation.minYM);
   const plotBottom = viewH - padBottom;
 
-  const xScale = (tangent: number) => padX + ((tangent + elevation.halfWidthM) / spanX) * plotW;
+  const xScale = (tangent: number) => padPlotX + ((tangent + elevation.halfWidthM) / spanX) * plotW;
   const yScale = (y: number) => padTop + (1 - (y - elevation.minYM) / spanY) * plotH;
+
+  const rlTicks = useMemo(
+    () => sectionElevationRlTicks(elevation.minYM, elevation.maxYM, yScale),
+    [elevation.minYM, elevation.maxYM, spanY, plotH],
+  );
+
   const groundPoche = getColour("--section-knife-elevation-ground");
   const beyondFill = getColour("--section-knife-elevation-beyond");
   const cutFill = getColour("--section-knife-poche");
@@ -52,17 +59,16 @@ export function SectionKnifeElevationPanel({ model, tool }: { model: CityModel; 
   const metersPerPxY = spanY / plotH;
   const verticalExaggeration = metersPerPxX / metersPerPxY;
 
-  const rlStepM = spanY > 40 ? 10 : 5;
-  const rlTicks: number[] = [];
-  const yStart = Math.ceil(elevation.minYM / rlStepM) * rlStepM;
-  for (let y = yStart; y <= elevation.maxYM; y += rlStepM) rlTicks.push(y);
+  const distTicks = [250, 500, 750].filter((d) => d < spanX - 40);
 
-  const distTicks = [0, 250, 500, 750, Math.round(spanX)].filter((d, index, arr) => d <= spanX + 1 && (index === 0 || d > arr[index - 1]!));
-
-  const knifeLabel = knife.label.replace(/Section Knife\s*/i, "").trim() || knife.label;
+  const beyondCount = elevation.profiles.filter((p) => !p.cutByKnife).length;
 
   return (
-    <div className="section-knife-elevation hud-card" aria-label="Street section">
+    <div
+      className="section-knife-elevation hud-card"
+      aria-label="Street section"
+      data-section-knife-beyond-count={beyondCount}
+    >
       <div className="section-knife-elevation-head">
         <strong>Section</strong>
         <span className="mono section-knife-elevation-knife-id">{knife.label}</span>
@@ -81,19 +87,19 @@ export function SectionKnifeElevationPanel({ model, tool }: { model: CityModel; 
             <line x1="0" y1="0" x2="0" y2="5" stroke={groundPoche} strokeWidth="1.2" opacity="0.35" />
           </pattern>
         </defs>
-        <rect x={padX} y={padTop} width={plotW} height={plotH} fill={sky} />
+        <rect x={padPlotX} y={padTop} width={plotW} height={plotH} fill={sky} />
         {rlTicks.map((y) => (
           <g key={y}>
             <line
-              x1={padX}
+              x1={padPlotX}
               y1={yScale(y)}
-              x2={viewW - padX}
+              x2={viewW - padRight}
               y2={yScale(y)}
               stroke={grid}
               strokeOpacity={0.07}
               strokeWidth={1}
             />
-            <text className="section-knife-rl mono" x={padX - 4} y={yScale(y) + 3} textAnchor="end" fontSize={9} fill={grid} opacity={0.58}>
+            <text className="section-knife-rl mono" x={padPlotX - 6} y={yScale(y) + 3} textAnchor="end" fontSize={9} fill={grid} opacity={0.62}>
               RL {Math.round(y)}
             </text>
           </g>
@@ -114,7 +120,16 @@ export function SectionKnifeElevationPanel({ model, tool }: { model: CityModel; 
           const fill = profile.cutByKnife ? cutFill : beyondFill;
           return (
             <g key={profile.id}>
-              <rect x={x0} y={yTop} width={w} height={h} fill={fill} />
+              <rect
+                x={x0}
+                y={yTop}
+                width={w}
+                height={h}
+                fill={fill}
+                stroke={profile.cutByKnife ? "none" : grid}
+                strokeOpacity={profile.cutByKnife ? 0 : 0.22}
+                strokeWidth={profile.cutByKnife ? 0 : 0.6}
+              />
               {profile.cutByKnife
                 ? profile.floors.map((floor, index) => (
                     <line
@@ -136,29 +151,29 @@ export function SectionKnifeElevationPanel({ model, tool }: { model: CityModel; 
         <path d={groundLinePath} fill="none" stroke={terrainInk} strokeWidth={1.35} />
         <line x1={xScale(0)} y1={padTop} x2={xScale(0)} y2={plotBottom} stroke={markerGold} strokeWidth={1.8} />
         <circle cx={xScale(0)} cy={padTop + 3.5} r={2.6} fill={markerGold} />
+        <text className="mono section-knife-end-label" x={xScale(-elevation.halfWidthM)} y={plotBottom - 6} textAnchor="start" fontSize={10} fill={grid} opacity={0.88}>
+          A
+        </text>
+        <text className="mono section-knife-end-label" x={xScale(elevation.halfWidthM)} y={plotBottom - 6} textAnchor="end" fontSize={10} fill={grid} opacity={0.88}>
+          A&prime;
+        </text>
         {distTicks.map((d) => {
           const t = d - elevation.halfWidthM;
           const x = xScale(t);
           return (
             <g key={d}>
               <line x1={x} y1={plotBottom} x2={x} y2={plotBottom + 4} stroke={grid} strokeWidth={1} opacity={0.45} />
-              <text className="mono" x={x} y={viewH - 10} textAnchor="middle" fontSize={9} fill={grid} opacity={0.72}>
+              <text className="mono" x={x} y={viewH - 6} textAnchor="middle" fontSize={9} fill={grid} opacity={0.72}>
                 {d}
               </text>
             </g>
           );
         })}
-        <text className="mono" x={xScale(-elevation.halfWidthM) + 2} y={plotBottom + 16} textAnchor="start" fontSize={10} fill={grid} opacity={0.85}>
-          A{knifeLabel ? ` (${knifeLabel})` : ""}
-        </text>
-        <text className="mono" x={xScale(elevation.halfWidthM) - 2} y={plotBottom + 16} textAnchor="end" fontSize={10} fill={grid} opacity={0.85}>
-          A&prime;
-        </text>
-        <text className="mono" x={viewW - padX} y={padTop + 9} textAnchor="end" fontSize={8} fill={grid} opacity={0.55}>
+        <text className="mono" x={viewW - padRight} y={padTop + 9} textAnchor="end" fontSize={8} fill={grid} opacity={0.55}>
           {Math.round(spanX)} m
         </text>
         {verticalExaggeration > 1.08 ? (
-          <text className="mono" x={padX} y={padTop + 9} fontSize={8} fill={grid} opacity={0.55}>
+          <text className="mono" x={padPlotX} y={padTop + 9} fontSize={8} fill={grid} opacity={0.55}>
             Vert. ex. ×{verticalExaggeration.toFixed(1)}
           </text>
         ) : null}
