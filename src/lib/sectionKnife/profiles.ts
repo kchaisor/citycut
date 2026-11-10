@@ -11,6 +11,7 @@ export type SectionProfile = {
   baseY: number;
   topY: number;
   floors: SectionFloorLine[];
+  cutByKnife: boolean;
 };
 
 export type SectionAxis = {
@@ -91,6 +92,7 @@ function profileFromRing(
     baseY = sampleTerrain(terrain, midX, -midZ, sideM);
   }
   const topY = baseY + building.height;
+  const cutByKnife = minD * maxD <= 0 || (minD <= 0.4 && maxD >= -0.4);
   return {
     id: building.id,
     tangentMin: tMin,
@@ -98,6 +100,7 @@ function profileFromRing(
     baseY,
     topY,
     floors: floorLinesForBuilding(building, baseY, topY),
+    cutByKnife,
   };
 }
 

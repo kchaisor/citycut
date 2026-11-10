@@ -759,11 +759,17 @@ function City({
       invalidate();
     }
   }, [contours, colourTick, invalidate]);
+  useLayoutEffect(() => {
+    if (!contours) return;
+    group.add(contours);
+    return () => {
+      contours.removeFromParent();
+    };
+  }, [contours, group, invalidate]);
   useLayoutEffect(() => () => disposeObject(group), [group]);
   return (
     <>
       <primitive object={group} />
-      {contours ? <primitive object={contours} /> : null}
       <HeightEditOverlayLayer
         model={model}
         buildingIds={

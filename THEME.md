@@ -292,6 +292,10 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--section-knife-plane` | `#FFFFFF` | Section Knife: translucent cutting plane gizmo. |
 | `--section-knife-elevation-fill` | `#C8C8C8` | Section Knife: terrain fill in the live section panel. |
 | `--section-knife-elevation-sky` | `#F5F5F2` | Section Knife: background of the live section panel chart. |
+| `--section-knife-elevation-ground` | `#1E1D1B` | Section Knife: ground poché in the live section panel. |
+| `--section-knife-elevation-beyond` | `#C4C0B8` | Section Knife: beyond-cut building elevation in the section panel. |
+| `--section-knife-elevation-grid` | `#1A1916` | Section Knife: grid and axis ink in the section panel. |
+| `--section-knife-marker-gold` | `#E1B157` | Section Knife: knife marker accent (JT gold). |
 
 The contour lines in Rhino use the pen `--contour-stroke` from `src/drawing-style.css`, not a fill.
 

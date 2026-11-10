@@ -854,6 +854,103 @@ async function main() {
         await page.waitForSelector(".section-knife-elevation", { timeout: 15000 });
         await page.waitForTimeout(1400);
 
+        const readClipAudit = () =>
+          page.evaluate(() => {
+            const canvas = document.querySelector(".model canvas");
+            const scaleX = canvas ? canvas.width / (canvas.clientWidth || 1) : 1;
+            const scaleY = canvas ? canvas.height / (canvas.clientHeight || 1) : 1;
+            const farClientX = Number(canvas?.dataset.sectionKnifeFarSampleX ?? "NaN");
+            const farClientY = Number(canvas?.dataset.sectionKnifeFarSampleY ?? "NaN");
+            return {
+              lineClipOk: canvas?.dataset.sectionKnifeLineClipOk === "1",
+              contourPresent: canvas?.dataset.sectionKnifeContourPresent === "1",
+              contourClipped: canvas?.dataset.sectionKnifeContourClipped === "1",
+              farX: Number.isFinite(farClientX) ? farClientX * scaleX : Number.NaN,
+              farY: Number.isFinite(farClientY) ? farClientY * scaleY : Number.NaN,
+            };
+          });
+        let clipAudit = await readClipAudit();
+        for (let attempt = 0; attempt < 10 && !clipAudit.lineClipOk; attempt += 1) {
+          await page.waitForTimeout(250);
+          clipAudit = await readClipAudit();
+        }
+        const clipOk = clipAudit.lineClipOk && (!clipAudit.contourPresent || clipAudit.contourClipped);
+        assertCheck(
+          "section-knife-line-clip",
+          "Section Knife clips 3D contour and line layers so they do not render on the cut-away side (dataset audit)",
+          clipOk,
+          `lineClipOk=${clipAudit.lineClipOk}, contourPresent=${clipAudit.contourPresent}, contourClipped=${clipAudit.contourClipped}`,
+        );
+
+        const measureFarDarkRatio = (pngPath, farX, farY) => {
+          const png = PNG.sync.read(fs.readFileSync(pngPath));
+          const { width, height, data } = png;
+          const cx = Number.isFinite(farX) ? Math.round(farX) : Math.floor(width * 0.22);
+          const cy = Number.isFinite(farY) ? Math.round(farY) : Math.floor(height * 0.45);
+          const half = 48;
+          let inkPx = 0;
+          let samples = 0;
+          for (let y = Math.max(0, cy - half); y < Math.min(height, cy + half); y++) {
+            for (let x = Math.max(0, cx - half); x < Math.min(width, cx + half); x++) {
+              const i = (width * y + x) * 4;
+              const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+              samples += 1;
+              if (lum < 55) inkPx += 1;
+            }
+          }
+          return samples > 0 ? inkPx / samples : 0;
+        };
+        const cutawayShotOn = path.join(TMP_FRAMES_DIR, "section-knife-cutaway-contours-on.png");
+        await page.locator(".model canvas").screenshot({ path: cutawayShotOn });
+        const ratioContoursOn = measureFarDarkRatio(cutawayShotOn, clipAudit.farX, clipAudit.farY);
+        const contoursRow = page.locator(".model .left-outliner .layer-row", { hasText: /^Contours/ }).first();
+        if ((await contoursRow.count()) > 0) {
+          await contoursRow.click();
+          await page.waitForTimeout(350);
+        }
+        const cutawayShotOff = path.join(TMP_FRAMES_DIR, "section-knife-cutaway-contours-off.png");
+        await page.locator(".model canvas").screenshot({ path: cutawayShotOff });
+        const ratioContoursOff = measureFarDarkRatio(cutawayShotOff, clipAudit.farX, clipAudit.farY);
+        if ((await contoursRow.count()) > 0) {
+          await contoursRow.click();
+          await page.waitForTimeout(250);
+        }
+        const contourDelta = Math.abs(ratioContoursOn - ratioContoursOff);
+        assertCheck(
+          "section-knife-cutaway-contour-leak",
+          "Contours on the cut-away side are clipped (toggling contours off does not change far-side ink)",
+          contourDelta < 0.035,
+          `contoursOn=${ratioContoursOn.toFixed(3)}, contoursOff=${ratioContoursOff.toFixed(3)}, delta=${contourDelta.toFixed(3)}`,
+        );
+
+        const hudAudit = await page.evaluate(() => {
+          const chart = document.querySelector(".section-knife-elevation-chart");
+          if (!chart) return { ok: false, detail: "chart missing" };
+          const text = chart.textContent ?? "";
+          const hasRl = text.includes("RL ");
+          const hasA = /\bA\b/.test(text) && text.includes("A′");
+          const hasScale = text.includes("250") && text.includes("500");
+          const rects = chart.querySelectorAll("rect");
+          const hasGroundFill = rects.length > 0;
+          return { ok: hasRl && hasA && hasScale && hasGroundFill, hasRl, hasA, hasScale, hasGroundFill };
+        });
+        assertCheck(
+          "section-knife-hud-drawing",
+          "Section HUD reads as an architectural section (RL grid, distance scale, A/A′ labels, filled ground mass)",
+          hudAudit.ok,
+          hudAudit.detail ??
+            `rl=${hudAudit.hasRl}, a=${hudAudit.hasA}, scale=${hudAudit.hasScale}, groundFill=${hudAudit.hasGroundFill}`,
+        );
+
+        if (fs.existsSync(ARTIFACTS_DIR)) {
+          await page.locator(".model canvas").screenshot({
+            path: path.join(ARTIFACTS_DIR, "section-knife-3d-no-contour-leak-1440x900.png"),
+          });
+          await page.locator(".section-knife-elevation").screenshot({
+            path: path.join(ARTIFACTS_DIR, "section-knife-hud-1440x900.png"),
+          });
+        }
+
         const readKnifeState = () =>
           page.evaluate(() => {
             const canvas = document.querySelector(".model canvas");

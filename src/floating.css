@@ -4321,7 +4321,7 @@ body,
   right: calc(268px + 14px + 16px);
   z-index: 25;
   width: min(380px, calc(100vw - 268px - 14px - 320px - 48px));
-  padding: 10px 12px 12px;
+  padding: 8px 10px 10px;
   pointer-events: none;
 }
 
@@ -4334,12 +4334,22 @@ body,
   font-size: 12px;
 }
 
-.section-knife-elevation svg {
+.section-knife-elevation-chart {
   display: block;
   width: 100%;
   height: auto;
   border-radius: 6px;
   background: var(--bg-elev);
+}
+
+.section-knife-elevation .section-knife-rl,
+.section-knife-elevation .mono {
+  font-family: var(--font-mono);
+}
+
+.section-knife-elevation-knife-id {
+  font-size: 11px;
+  opacity: 0.78;
 }
 
 .scene-viewport.section-knife-gizmo-grab canvas.scene-canvas {

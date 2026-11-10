@@ -69,9 +69,18 @@ export function SectionKnifeScene({
   }, [city, model]);
 
   useLayoutEffect(() => {
-    clipRef.current?.apply(active, pose);
+    const result = clipRef.current?.apply(active, pose);
+    if (result) {
+      gl.domElement.dataset.sectionKnifeLineClipOk = result.lineClipOk ? "1" : "0";
+      gl.domElement.dataset.sectionKnifeContourPresent = result.contourPresent ? "1" : "0";
+      gl.domElement.dataset.sectionKnifeContourClipped =
+        active && result.contourPresent ? (result.lineClipOk ? "1" : "0") : active ? "n/a" : "0";
+    } else {
+      delete gl.domElement.dataset.sectionKnifeLineClipOk;
+      delete gl.domElement.dataset.sectionKnifeContourClipped;
+    }
     invalidate();
-  }, [active, pose, invalidate]);
+  }, [active, pose, invalidate, gl]);
 
   const groundY = model.terrain ? model.terrain.min : 0;
   let topY = groundY + 25;
@@ -259,6 +268,20 @@ export function SectionKnifeScene({
     } else {
       delete gl.domElement.dataset.sectionKnifeRingX;
       delete gl.domElement.dataset.sectionKnifeRingY;
+    }
+    const normal = knifeNormalXZ(pose);
+    const farWorld = new THREE.Vector3(
+      -normal.x * (pose.offsetM + model.sideM * 0.22),
+      groundY + 6,
+      -normal.z * (pose.offsetM + model.sideM * 0.22),
+    );
+    const farPx = projectToCanvasPixels(camera, farWorld, gl.domElement);
+    if (farPx && !farPx.behind) {
+      gl.domElement.dataset.sectionKnifeFarSampleX = farPx.x.toFixed(1);
+      gl.domElement.dataset.sectionKnifeFarSampleY = farPx.y.toFixed(1);
+    } else {
+      delete gl.domElement.dataset.sectionKnifeFarSampleX;
+      delete gl.domElement.dataset.sectionKnifeFarSampleY;
     }
   });
 

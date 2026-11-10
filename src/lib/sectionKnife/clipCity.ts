@@ -14,8 +14,13 @@ type MeshRest = {
   material: THREE.Material | THREE.Material[];
 };
 
+export type SectionKnifeClipApplyResult = {
+  lineClipOk: boolean;
+  contourPresent: boolean;
+};
+
 export type SectionKnifeClipMount = {
-  apply: (active: boolean, pose: SectionKnifePose) => void;
+  apply: (active: boolean, pose: SectionKnifePose) => SectionKnifeClipApplyResult;
   dispose: () => void;
 };
 
@@ -142,18 +147,24 @@ function rebuildPlaneFrame(
   geo.setAttribute("position", new THREE.BufferAttribute(array, 3));
 }
 
-export function mountSectionKnifeClip(city: THREE.Object3D, model: CityModel): SectionKnifeClipMount {
-  const matRest = new WeakMap<THREE.Material, MatRest>();
-  const meshRest = new WeakMap<THREE.Mesh, MeshRest>();
-  const clipTargets: THREE.Mesh[] = [];
-  city.traverse((object) => {
-    const mesh = object as THREE.Mesh;
-    if (!mesh.isMesh) return;
-    if (!isSolidBatch(mesh.name)) return;
-    clipTargets.push(mesh);
-  });
-
+function registerClipMeshes(
+  roots: THREE.Object3D[],
+  clipTargets: THREE.Mesh[],
+  matRest: WeakMap<THREE.Material, MatRest>,
+  meshRest: WeakMap<THREE.Mesh, MeshRest>,
+  solidOnly: boolean,
+) {
+  for (const root of roots) {
+    root.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      if (solidOnly && !isSolidBatch(mesh.name)) return;
+      if (clipTargets.includes(mesh)) return;
+      clipTargets.push(mesh);
+    });
+  }
   for (const mesh of clipTargets) {
+    if (meshRest.has(mesh)) continue;
     const materials = meshMaterials(mesh);
     meshRest.set(mesh, { material: mesh.material });
     const cloned = materials.map((material) => {
@@ -168,6 +179,18 @@ export function mountSectionKnifeClip(city: THREE.Object3D, model: CityModel): S
     });
     setMeshMaterials(mesh, cloned);
   }
+}
+
+export function mountSectionKnifeClip(
+  city: THREE.Object3D,
+  model: CityModel,
+  extraClipRoots: THREE.Object3D[] = [],
+): SectionKnifeClipMount {
+  const matRest = new WeakMap<THREE.Material, MatRest>();
+  const meshRest = new WeakMap<THREE.Mesh, MeshRest>();
+  const clipTargets: THREE.Mesh[] = [];
+  registerClipMeshes([city], clipTargets, matRest, meshRest, true);
+  registerClipMeshes(extraClipRoots, clipTargets, matRest, meshRest, false);
 
   const pocheGroup = new THREE.Group();
   pocheGroup.name = "SectionKnifePocheGroup";
@@ -259,6 +282,24 @@ export function mountSectionKnifeClip(city: THREE.Object3D, model: CityModel): S
   let topY = groundY + 30;
   for (const building of model.buildings) topY = Math.max(topY, groundY + building.height);
 
+  function lineClipAudit(): boolean {
+    const lineNames = new Set(["Contours3d", "Site::Boundary", "RailLines", "TramLines", "RoofLines"]);
+    for (const mesh of clipTargets) {
+      if (!lineNames.has(mesh.name) || !mesh.visible) continue;
+      for (const material of meshMaterials(mesh)) {
+        if (!material.clippingPlanes || material.clippingPlanes.length !== 1) return false;
+      }
+    }
+    if (extraClipRoots.some((root) => root.visible !== false && root.name === "Contours3d")) {
+      const contourMesh = clipTargets.find((mesh) => mesh.name === "Contours3d");
+      if (!contourMesh) return false;
+      for (const material of meshMaterials(contourMesh)) {
+        if (!material.clippingPlanes || material.clippingPlanes.length !== 1) return false;
+      }
+    }
+    return true;
+  }
+
   function apply(active: boolean, pose: SectionKnifePose) {
     const keep = knifePlane(pose);
     const far = knifePlaneInverted(pose);
@@ -332,6 +373,8 @@ export function mountSectionKnifeClip(city: THREE.Object3D, model: CityModel): S
     }
     pocheMat.clippingPlanes = active ? [keep] : null;
     pocheMat.needsUpdate = true;
+    const contourPresent = Boolean(city.getObjectByName("Contours3d"));
+    return { lineClipOk: active ? lineClipAudit() : true, contourPresent };
   }
 
   function dispose() {
