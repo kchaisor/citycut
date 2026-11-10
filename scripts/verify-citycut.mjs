@@ -2297,6 +2297,68 @@ async function main() {
 
       await boxHillHoursLost();
 
+      const measurePlanZoomLongTasks = async (page) =>
+        page.evaluate(async () => {
+          const durations = [];
+          const obs = new PerformanceObserver((list) => {
+            for (const entry of list.getEntries()) durations.push(entry.duration);
+          });
+          obs.observe({ type: "longtask", buffered: true });
+          const svg = document.querySelector("svg.plan");
+          if (!svg) {
+            obs.disconnect();
+            return { ok: false, reason: "no-plan" };
+          }
+          const rect = svg.getBoundingClientRect();
+          const cx = rect.left + rect.width / 2;
+          const cy = rect.top + rect.height / 2;
+          for (let i = 0; i < 28; i++) {
+            svg.dispatchEvent(
+              new WheelEvent("wheel", {
+                deltaY: i % 2 === 0 ? -90 : 90,
+                clientX: cx,
+                clientY: cy,
+                bubbles: true,
+                cancelable: true,
+              }),
+            );
+          }
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          obs.disconnect();
+          const totalMs = durations.reduce((sum, value) => sum + value, 0);
+          const maxMs = durations.length ? Math.max(...durations) : 0;
+          return { ok: true, count: durations.length, totalMs, maxMs };
+        });
+
+      const boxHillSolarPlanZoomPerf = async () => {
+        await shadowPage.getByRole("tab", { name: /Drawing/i }).click();
+        await shadowPage.waitForSelector("svg.plan", { timeout: 120000 });
+        await shadowPage.evaluate(
+          ({ east, north }) => window.__citycutQaModel?.setDrawingPlanViewport?.(east, north, 80),
+          { east: FOCUS_EAST, north: FOCUS_NORTH },
+        );
+        await shadowPage.evaluate(() => window.__citycutQaModel?.setSolarPlanMinimal?.());
+        await shadowPage.waitForTimeout(400);
+        const baseline = await measurePlanZoomLongTasks(shadowPage);
+        await shadowPage.evaluate(() => window.__citycutQaModel?.setSolarStudiesFull?.());
+        await shadowPage.waitForTimeout(2800);
+        const loaded = await measurePlanZoomLongTasks(shadowPage);
+        const maxBudget = Math.max(baseline.maxMs * 2.5 + 30, 150);
+        const totalBudget = Math.max(baseline.totalMs * 3.5 + 80, 250);
+        const shotGuide = path.join(CURSOR_ARTIFACTS_DIR, "solar-access-guide.png");
+        if ((await shadowPage.locator("[data-solar-access-guide]").count()) > 0) {
+          await shadowPage.locator("[data-solar-access-guide]").screenshot({ path: shotGuide });
+        }
+        assertCheck(
+          "solar-plan-zoom-perf",
+          "Plan wheel-zoom long tasks stay within budget vs solar-off baseline (pan/zoom must not restart shadow studies)",
+          Boolean(baseline.ok && loaded.ok && loaded.maxMs <= maxBudget && loaded.totalMs <= totalBudget),
+          `baseline=${JSON.stringify(baseline)}, loaded=${JSON.stringify(loaded)}, maxBudget=${maxBudget.toFixed(1)}, totalBudget=${totalBudget.toFixed(1)}, guide=${shotGuide}`,
+        );
+      };
+
+      await boxHillSolarPlanZoomPerf();
+
       const boxHillSolarExport = async () => {
         let exportOk = false;
         let detail = "";

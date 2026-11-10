@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { SolarReceptorWorkerMessage, SolarReceptorWorkerRequest } from "../lib/solarReceptorAssess.worker";
 import { sunStudyModelKey } from "../lib/sunStudyPlan";
 import type { SolarReceptorArea, SolarReceptorAssessResult } from "../lib/solarReceptorAssess";
@@ -28,17 +28,23 @@ export function useSolarReceptorAssess(
   );
   const [results, setResults] = useState<SolarReceptorAssessResult[]>([]);
   const [pending, setPending] = useState(false);
+  const modelRef = useRef(model);
+  const receptorsRef = useRef(receptors);
+  modelRef.current = model;
+  receptorsRef.current = receptors;
 
   useEffect(() => {
-    if (!enabled || receptors.length === 0) {
+    if (!enabled || receptorsRef.current.length === 0) {
       setResults([]);
       setPending(false);
       return;
     }
     const worker = startWorker();
+    const currentModel = modelRef.current;
+    const currentReceptors = receptorsRef.current;
     if (!worker) {
       import("../lib/solarReceptorAssess").then(({ assessSolarReceptors }) => {
-        setResults(assessSolarReceptors(model, receptors, year));
+        setResults(assessSolarReceptors(currentModel, currentReceptors, year));
         setPending(false);
       });
       return;
@@ -59,18 +65,18 @@ export function useSolarReceptorAssess(
     const request: SolarReceptorWorkerRequest = {
       id,
       model: {
-        center: model.center,
-        sideM: model.sideM,
-        terrain: model.terrain,
-        frameShape: model.frameShape,
-        buildings: model.buildings,
+        center: currentModel.center,
+        sideM: currentModel.sideM,
+        terrain: currentModel.terrain,
+        frameShape: currentModel.frameShape,
+        buildings: currentModel.buildings,
       },
-      receptors: [...receptors],
+      receptors: [...currentReceptors],
       year,
     };
     worker.postMessage(request);
     return () => worker.terminate();
-  }, [enabled, model, modelKey, receptorKey, receptors, year]);
+  }, [enabled, modelKey, receptorKey, year]);
 
   return { results, pending };
 }
