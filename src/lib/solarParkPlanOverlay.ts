@@ -1,6 +1,6 @@
 import type { MultiPolygon } from "polygon-clipping";
 import * as polygonClipping from "polygon-clipping";
-import { isProposedMassingBuilding, planShadowSplitRings, shadowRingsFromMulti, type PlanShadowInput } from "./buildingShadows";
+import { planShadowSplitRings, shadowRingsFromMulti, type PlanShadowInput } from "./buildingShadows";
 import { planShadowRingsToMulti } from "./solarReceptorAssess";
 import { solarRuleDefinition, type ParkSolarRuleId } from "./solarRuleRegistry";
 import type { SolarParkAssessResult, SolarParkStepAdded } from "./solarParkAssess";
