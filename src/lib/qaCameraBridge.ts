@@ -74,6 +74,7 @@ declare global {
       exportSitePlanFrameSvg: () => Promise<string>;
       zoomPlanToImportedMassing: () => boolean;
       zoom3dToImportedMassing: () => boolean;
+      setPlanSunMode: (hour: number, castShadows: boolean, sunStudy: boolean) => boolean;
     };
   }
 }

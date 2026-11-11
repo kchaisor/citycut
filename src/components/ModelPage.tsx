@@ -1363,11 +1363,13 @@ export function ModelPage({
     exportFrameSvg: () => Promise<string>;
     zoomToImportedMassing: () => boolean;
     zoom3dToImportedMassing: () => boolean;
+    setPlanSunMode: (hour: number, castShadows: boolean, sunStudy: boolean) => boolean;
   }>({
     upperLevelGroupCount: () => 0,
     exportFrameSvg: async () => "",
     zoomToImportedMassing: () => false,
     zoom3dToImportedMassing: () => false,
+    setPlanSunMode: () => false,
   });
   qaPlanBridgeRef.current = {
     upperLevelGroupCount: () => document.querySelectorAll("svg.plan [data-upper-z]").length,
@@ -1416,6 +1418,17 @@ export function ModelPage({
       });
       return true;
     },
+    setPlanSunMode: (hour, castShadows, sunStudy) => {
+      commitSolar({
+        ...solar,
+        hour,
+        minute: 0,
+        castShadows,
+        sunStudy,
+        sunStudyCasters: sunStudySelected.length > 0 ? "selected" : "all",
+      });
+      return true;
+    },
   };
 
   useEffect(() => {
@@ -1425,6 +1438,8 @@ export function ModelPage({
       exportSitePlanFrameSvg: () => qaPlanBridgeRef.current.exportFrameSvg(),
       zoomPlanToImportedMassing: () => qaPlanBridgeRef.current.zoomToImportedMassing(),
       zoom3dToImportedMassing: () => qaPlanBridgeRef.current.zoom3dToImportedMassing(),
+      setPlanSunMode: (hour, castShadows, sunStudy) =>
+        qaPlanBridgeRef.current.setPlanSunMode(hour, castShadows, sunStudy),
     };
     return () => {
       delete window.__citycutQaPlan;

@@ -1911,13 +1911,6 @@ async function main() {
         /inkscape:label="Shadow (09|15):00"/.test(frameSvg),
         "per-hour shadow layers present",
       );
-      await importPage.locator('button[data-section="analysis"]').click({ timeout: 30_000 });
-      await importPage.waitForTimeout(250);
-      if ((await envShadowsBtn.count()) > 0 && (await envShadowsBtn.getAttribute("aria-pressed")) !== "true") {
-        await envShadowsBtn.click({ timeout: 30_000 });
-      }
-      await importPage.locator('button[data-section="drawing"]').click({ timeout: 30_000 });
-      await importPage.waitForTimeout(300);
       const singleShadowSignature = () =>
         importPage.evaluate(() =>
           [...document.querySelectorAll('svg.plan [data-plan-shadow="single"]')]
@@ -1925,7 +1918,10 @@ async function main() {
             .join("\n"),
         );
       async function captureSingleShadowHour(hour, filename) {
-        await clickSolarHour(hour);
+        await importPage.evaluate((h) => {
+          if (!window.__citycutQaPlan?.setPlanSunMode) throw new Error("missing setPlanSunMode");
+          window.__citycutQaPlan.setPlanSunMode(h, true, false);
+        }, hour);
         await importPage.waitForFunction(
           () => document.querySelectorAll('svg.plan [data-plan-shadow="single"]').length >= 1,
           null,
