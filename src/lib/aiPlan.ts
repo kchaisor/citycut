@@ -683,6 +683,28 @@ export async function sitePlanSvg(
   return buildLayeredSvg(layout.pageWidthMm, layout.pageHeightMm, chunks, sitePlanLayerOrder(chunks));
 }
 
+export async function sitePlanFrameSvg(
+  model: CityModel,
+  scale: number,
+  style?: LineStyles,
+  exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
+): Promise<string> {
+  const layout = layoutSheet(model.sideM, scale);
+  const full = await sitePlanSvg(model, scale, style, exportOptions);
+  const n = (value: number) => {
+    const rounded = Math.round(value * 1000) / 1000;
+    return Object.is(rounded, -0) ? "0" : String(rounded);
+  };
+  const x = layout.frameX;
+  const y = layout.pageHeightMm - layout.frameY - layout.frameMm;
+  const w = layout.frameMm;
+  const h = layout.frameMm;
+  return full.replace(
+    /(<svg[^>]*?)width="[\d.]+mm" height="[\d.]+mm" viewBox="[\d.]+ [\d.]+ [\d.]+ [\d.]+"/,
+    `$1width="${n(w)}mm" height="${n(h)}mm" viewBox="${n(x)} ${n(y)} ${n(w)} ${n(h)}"`,
+  );
+}
+
 export async function figureGroundSvg(
   model: CityModel,
   scale: number,

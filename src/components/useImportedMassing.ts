@@ -10,6 +10,8 @@ import {
   updateStoredMassing,
 } from "../lib/massingStore";
 import { sampleTerrain } from "../lib/terrain";
+import { qaMassingFromSearch } from "../lib/qaCameraBridge";
+import { qaPodiumTowerMassing } from "../lib/qaMassingFixture";
 import type { CityModel } from "../types";
 
 type Runtime = typeof import("../lib/massingRuntime");
@@ -44,7 +46,22 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     [model.terrain, model.sideM],
   );
 
+  const qaMassing =
+    typeof window !== "undefined" ? qaMassingFromSearch(window.location.search) : null;
+
   useEffect(() => {
+    if (qaMassing === "podium") {
+      let cancelled = false;
+      void loadRuntime().then((runtime) => {
+        if (cancelled) return;
+        setRt(runtime);
+        const base = model.terrain ? groundAt(0, 0) : 0;
+        setImported([qaPodiumTowerMassing(model.center, zone, base)]);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
     let cancelled = false;
     setImported([]);
     void loadStoredMassing(cutKey).then(async (rows) => {
@@ -61,7 +78,7 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     return () => {
       cancelled = true;
     };
-  }, [cutKey]);
+  }, [cutKey, qaMassing, model.center, model.terrain, zone, groundAt]);
 
   const importFile = useCallback(
     async (file: File) => {

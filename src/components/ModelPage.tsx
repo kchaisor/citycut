@@ -1353,6 +1353,35 @@ export function ModelPage({
     return { layers: await sunStudyLayersFor(casters, sunStudyDate) };
   }
 
+  const qaPlanBridgeRef = useRef<{
+    upperLevelGroupCount: () => number;
+    exportFrameSvg: () => Promise<string>;
+  }>({
+    upperLevelGroupCount: () => 0,
+    exportFrameSvg: async () => "",
+  });
+  qaPlanBridgeRef.current = {
+    upperLevelGroupCount: () => document.querySelectorAll("svg.plan [data-upper-z]").length,
+    exportFrameSvg: async () => {
+      const { sitePlanFrameSvg } = await import("../lib/aiPlan");
+      return sitePlanFrameSvg(drawingModel, figureScale, lineStyles, {
+        ...sitePlanExportOptions(),
+        sunStudy: await sunStudyExportLayers(),
+      });
+    },
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !qaModeFromSearch(window.location.search)) return;
+    window.__citycutQaPlan = {
+      upperLevelGroupCount: () => qaPlanBridgeRef.current.upperLevelGroupCount(),
+      exportSitePlanFrameSvg: () => qaPlanBridgeRef.current.exportFrameSvg(),
+    };
+    return () => {
+      delete window.__citycutQaPlan;
+    };
+  }, []);
+
   async function saveSiteSvg() {
     setExportError(null);
     setBusy("svg-site");
