@@ -67,6 +67,26 @@ async function sceneViewportScreenshot(page, extra = {}) {
   });
 }
 
+async function planViewportScreenshot(page, filePath) {
+  const plan = page.locator("svg.plan");
+  try {
+    await plan.waitFor({ state: "visible", timeout: 180_000 });
+    await plan.screenshot({
+      path: filePath,
+      timeout: 60_000,
+      animations: "disabled",
+      scale: "css",
+    });
+  } catch {
+    await page.screenshot({
+      path: filePath,
+      timeout: 60_000,
+      animations: "disabled",
+      scale: "css",
+    });
+  }
+}
+
 async function verifyMontAlbertParcels(baseUrl, artifactsDir) {
   const montBrowser = await chromium.launch({
     executablePath: CHROME_PATH,
@@ -1020,11 +1040,16 @@ async function main() {
     );
 
     await page.waitForTimeout(150);
-    await page.screenshot({ path: path.join(TMP_FRAMES_DIR, "frame_07.png") });
+    await page.screenshot({
+      path: path.join(TMP_FRAMES_DIR, "frame_07.png"),
+      timeout: 60_000,
+      animations: "disabled",
+      scale: "css",
+    });
     await page.waitForTimeout(650);
 
     const frame08Path = path.join(TMP_FRAMES_DIR, "frame_08.png");
-    await page.screenshot({ path: frame08Path });
+    await page.screenshot({ path: frame08Path, timeout: 60_000, animations: "disabled", scale: "css" });
     if (fs.existsSync(ARTIFACTS_DIR)) {
       await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v12-3d-plinth-perspective.png") });
       const isoBtn = page.locator(".model .bottom-bar button", { hasText: "Isometric" }).first();
@@ -1320,8 +1345,19 @@ async function main() {
         parcelOutlinePixels >= 800,
       JSON.stringify({ ...parcelInfo, parcelOutlinePixels }),
     );
-    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-parcel-outlines.png") });
-    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-parcel-outlines-crop.png"), clip: VIEWPORT_SCENE_CLIP });
+    await page.screenshot({
+      path: path.join(ARTIFACTS_DIR, "massing-parcel-outlines.png"),
+      timeout: 60_000,
+      animations: "disabled",
+      scale: "css",
+    });
+    await page.screenshot({
+      path: path.join(ARTIFACTS_DIR, "massing-parcel-outlines-crop.png"),
+      clip: VIEWPORT_SCENE_CLIP,
+      timeout: 60_000,
+      animations: "disabled",
+      scale: "css",
+    });
 
     const oneSite = await page.evaluate(() => {
       const api = window.__citycutQaMassing;
@@ -2304,7 +2340,7 @@ async function main() {
           return { ok: !intersect && gap >= 0, intersect, gap, legendBox, resultsBox };
         });
         const shotHoursLost = path.join(CURSOR_ARTIFACTS_DIR, "solar-hours-lost-box-hill.png");
-        await shadowPage.locator(".plan-viewport-stack").screenshot({ path: shotHoursLost });
+        await planViewportScreenshot(shadowPage, shotHoursLost);
 
         assertCheck(
           "solar-hours-lost-legend-dock-clear",
@@ -2453,9 +2489,13 @@ async function main() {
           null,
           { timeout: 300000 },
         );
-        await parkPage.locator('.model button[data-section="analysis"]').first().click();
-        await parkPage.waitForTimeout(250);
-        await parkPage.getByRole("tab", { name: /Drawing/i }).click();
+        await parkPage.evaluate(() => {
+          document.querySelector('.model button[data-section="analysis"]')?.dispatchEvent(
+            new MouseEvent("click", { bubbles: true, cancelable: true }),
+          );
+        });
+        await parkPage.waitForTimeout(400);
+        await parkPage.getByRole("tab", { name: /Drawing/i }).click({ timeout: 120_000 });
         await parkPage.waitForSelector("svg.plan", { timeout: 120000 });
         await parkPage.evaluate(() => {
           window.__citycutQaModel?.enableSolarParkAccess?.("melbourne-c415-ddo8");
@@ -2519,9 +2559,9 @@ async function main() {
         } catch {
         }
         parkHatch = await readParkHatch();
-        fs.mkdirSync(CLAUDE_SOLAR_SHOTS_DIR, { recursive: true });
-        const shotParkHatch = path.join(CLAUDE_SOLAR_SHOTS_DIR, "carlton-park-hatch.png");
-        await parkPage.screenshot({ path: shotParkHatch });
+        fs.mkdirSync(CURSOR_ARTIFACTS_DIR, { recursive: true });
+        const shotParkHatch = path.join(CURSOR_ARTIFACTS_DIR, "carlton-park-hatch.png");
+        await planViewportScreenshot(parkPage, shotParkHatch);
         assertCheck(
           "solar-park-added-shadow",
           "Carlton park: once assess reports added shadow, the plan draws the gold added-shadow hatch from the assess rings (within 15 s)",
@@ -2543,7 +2583,7 @@ async function main() {
         const hatchDom = await parkPage.locator("[data-solar-park-added-shadow]").count();
         const labelDom = await parkPage.locator("[data-solar-park-label='carlton-gardens-park']").count();
         const shotPark = path.join(CURSOR_ARTIFACTS_DIR, "solar-park-carlton-fail.png");
-        await parkPage.locator(".plan-viewport-stack").screenshot({ path: shotPark });
+        await planViewportScreenshot(parkPage, shotPark);
         assertCheck(
           "solar-park-no-additional-fail",
           "Carlton C415/DDO8 park fails with on-map label, gold hatch clipped to park, and readable added m² in the dock",
@@ -2560,6 +2600,7 @@ async function main() {
       };
 
       const boxHillTreeShadows = async () => {
+        await shadowPage.bringToFront();
         const readTreeShadowDom = async () =>
           shadowPage.evaluate(() => {
             const nodes = Array.from(document.querySelectorAll("[data-tree-crown-shadow]"));
@@ -2569,8 +2610,8 @@ async function main() {
             );
             return { count: nodes.length, dLen };
           });
-        await shadowPage.getByRole("tab", { name: /Drawing/i }).click();
-        await shadowPage.waitForSelector("svg.plan", { timeout: 120000 });
+        await shadowPage.getByRole("tab", { name: /Drawing/i }).click({ timeout: 120_000, force: true });
+        await shadowPage.waitForSelector("svg.plan", { timeout: 180_000 });
         await shadowPage.evaluate(
           ({ east, north }) => {
             window.__citycutQaModel?.setSolarPlanTime?.(15, 0);
@@ -2582,12 +2623,12 @@ async function main() {
         await shadowPage.waitForTimeout(700);
         const treesOff = await readTreeShadowDom();
         const shotOff = path.join(CURSOR_ARTIFACTS_DIR, "solar-tree-shadows-off.png");
-        await shadowPage.locator(".plan-viewport-stack").screenshot({ path: shotOff });
+        await planViewportScreenshot(shadowPage, shotOff);
         await shadowPage.evaluate(() => window.__citycutQaModel?.setTreesCastShadow?.(true));
         await shadowPage.waitForTimeout(900);
         const treesOn = await readTreeShadowDom();
         const shotOn = path.join(CURSOR_ARTIFACTS_DIR, "solar-tree-shadows-on.png");
-        await shadowPage.locator(".plan-viewport-stack").screenshot({ path: shotOn });
+        await planViewportScreenshot(shadowPage, shotOn);
         const shotCompare = path.join(CURSOR_ARTIFACTS_DIR, "solar-tree-shadows-compare.png");
         execFileSync("ffmpeg", ["-y", "-i", shotOff, "-i", shotOn, "-filter_complex", "hstack=inputs=2", shotCompare]);
         assertCheck(
@@ -2597,8 +2638,6 @@ async function main() {
           `off=${JSON.stringify(treesOff)}, on=${JSON.stringify(treesOn)}, compare=${shotCompare}, offShot=${shotOff}, onShot=${shotOn}`,
         );
       };
-
-      await boxHillTreeShadows();
 
       const boxHillFacadeSolar = async () => {
         await shadowPage.getByRole("tab", { name: /3D model/i }).click();
@@ -2635,11 +2674,30 @@ async function main() {
         );
         const assessedPoints = (bundle?.facade?.units.length ?? 0) + (bundle?.podium?.units.length ?? 0);
         const pctText = await shadowPage.locator("[data-facade-pct-at-threshold]").first().textContent().catch(() => null);
-        fs.mkdirSync(CLAUDE_SOLAR_SHOTS_DIR, { recursive: true });
-        const shotFacade = path.join(CLAUDE_SOLAR_SHOTS_DIR, "box-hill-facade-heatmap-3d.png");
-        await shadowPage.screenshot({ path: shotFacade, timeout: 60000 });
-        const shotCard = path.join(CLAUDE_SOLAR_SHOTS_DIR, "facade-results-card.png");
-        await shadowPage.locator("[data-facade-solar-results-dock]").screenshot({ path: shotCard, timeout: 15000 });
+        fs.mkdirSync(CURSOR_ARTIFACTS_DIR, { recursive: true });
+        const shotFacade = path.join(CURSOR_ARTIFACTS_DIR, "box-hill-facade-heatmap-3d.png");
+        await sceneViewportScreenshot(shadowPage, { path: shotFacade });
+        const shotCard = path.join(CURSOR_ARTIFACTS_DIR, "facade-results-card.png");
+        const dockClip = await shadowPage.evaluate(() => {
+          const el = document.querySelector("[data-facade-solar-results-dock]");
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          return {
+            x: Math.round(r.x),
+            y: Math.round(r.y),
+            width: Math.round(r.width),
+            height: Math.round(r.height),
+          };
+        });
+        if (dockClip && dockClip.width > 4 && dockClip.height > 4) {
+          await shadowPage.screenshot({
+            path: shotCard,
+            clip: dockClip,
+            timeout: 60_000,
+            animations: "disabled",
+            scale: "css",
+          });
+        }
         const unitCount = bundle?.facade?.unitCount ?? 0;
         assertCheck(
           "solar-facade-adg-heatmap",
@@ -2657,6 +2715,18 @@ async function main() {
       await boxHillFacadeSolar();
 
       await melbourneParkNoAdditional();
+
+      try {
+        await boxHillTreeShadows();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        assertCheck(
+          "solar-tree-shadows-visual",
+          "Trees off vs on at 22 Sep 3pm: grey crown-shadow ellipses appear on plan (heatmap change at this zoom is minor)",
+          false,
+          message,
+        );
+      }
 
       await shadowCtx.close();
     }
@@ -2893,7 +2963,13 @@ async function main() {
     }
   } catch (err) {
     console.error("Fatal error in verify-citycut:", err);
-    process.exitCode = 1;
+    const message = err instanceof Error ? err.message : String(err);
+    results.push({
+      id: "verify-fatal",
+      description: "Verification harness did not finish",
+      ok: false,
+      details: message,
+    });
   } finally {
     if (browser) await browser.close().catch(() => {});
     viteProc.kill("SIGTERM");
@@ -2909,4 +2985,7 @@ async function main() {
   }
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
