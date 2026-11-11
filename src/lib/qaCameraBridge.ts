@@ -72,6 +72,7 @@ declare global {
     __citycutQaPlan?: {
       upperLevelGroupCount: () => number;
       exportSitePlanFrameSvg: () => Promise<string>;
+      zoomPlanToImportedMassing: () => boolean;
     };
   }
 }

@@ -29,6 +29,13 @@ describe("imported Rhino massing upper-level outlines", () => {
     expect(towerOutlineCount(item, origin, zone)).toBeGreaterThanOrEqual(1);
   });
 
+  it("Rozelle campus: three podiums and five tower outlines on plan", async () => {
+    const item = await importMassingFixture("rozelleCampus", origin, zone);
+    const { podiumRings, towerRings } = massingPlanOutlineSummary(item, origin, zone);
+    expect(podiumRings.length).toBeGreaterThanOrEqual(3);
+    expect(towerRings.length).toBeGreaterThanOrEqual(5);
+  });
+
   it("separate multi-object fixture: podium outline and tower outline both present on plan", async () => {
     const item = await importMassingFixture("separate", origin, zone);
     const { podiumRings, towerRings } = massingPlanOutlineSummary(item, origin, zone);

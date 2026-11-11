@@ -52,7 +52,12 @@ import {
   type AxoLayerId,
   type ExplodedAxoSettings,
 } from "../lib/explodedAxo";
-import { explodedAxoViewportExtent, planViewportExtent, type PlanViewport } from "../lib/planViewport";
+import {
+  explodedAxoViewportExtent,
+  planViewportExtent,
+  planViewportForBounds,
+  type PlanViewport,
+} from "../lib/planViewport";
 import { FIGURE_SCALES, preferredFigureScale, sheetFitMessage } from "../lib/figureGround";
 import {
   fetchComBuildingFootprints,
@@ -1356,9 +1361,11 @@ export function ModelPage({
   const qaPlanBridgeRef = useRef<{
     upperLevelGroupCount: () => number;
     exportFrameSvg: () => Promise<string>;
+    zoomToImportedMassing: () => boolean;
   }>({
     upperLevelGroupCount: () => 0,
     exportFrameSvg: async () => "",
+    zoomToImportedMassing: () => false,
   });
   qaPlanBridgeRef.current = {
     upperLevelGroupCount: () => document.querySelectorAll("svg.plan [data-upper-z]").length,
@@ -1369,6 +1376,29 @@ export function ModelPage({
         sunStudy: await sunStudyExportLayers(),
       });
     },
+    zoomToImportedMassing: () => {
+      const points: [number, number][] = [];
+      for (const building of drawingModel.buildings) {
+        if (!building.importedMassing || building.importedMassingShadowCaster) continue;
+        for (const [e, n] of building.ring) points.push([e, n]);
+      }
+      for (const level of drawingModel.importedMassingUpperLevels ?? []) {
+        for (const line of level.lines) for (const [e, n] of line) points.push([e, n]);
+      }
+      if (points.length === 0) return false;
+      let minE = Infinity;
+      let maxE = -Infinity;
+      let minN = Infinity;
+      let maxN = -Infinity;
+      for (const [e, n] of points) {
+        minE = Math.min(minE, e);
+        maxE = Math.max(maxE, e);
+        minN = Math.min(minN, n);
+        maxN = Math.max(maxN, n);
+      }
+      setPlanViewport(planViewportForBounds(minE, minN, maxE, maxN));
+      return true;
+    },
   };
 
   useEffect(() => {
@@ -1376,6 +1406,7 @@ export function ModelPage({
     window.__citycutQaPlan = {
       upperLevelGroupCount: () => qaPlanBridgeRef.current.upperLevelGroupCount(),
       exportSitePlanFrameSvg: () => qaPlanBridgeRef.current.exportFrameSvg(),
+      zoomPlanToImportedMassing: () => qaPlanBridgeRef.current.zoomToImportedMassing(),
     };
     return () => {
       delete window.__citycutQaPlan;

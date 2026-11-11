@@ -249,7 +249,6 @@ export function DrawingPlan({
     [study, casterModel, sunStudySelected, estFont],
   );
   const studyShadowFill = getColour("--sun-study-shadow");
-  const upperTone = getColour("--imported-massing-upper-tone");
   const upperStroke = useMemo(() => importedMassingUpperStrokeStyle(style), [style]);
   const studySunFill = getColour("--sun-study-sun");
   const muted = Boolean(study) && sunStudyMuted;
@@ -535,16 +534,6 @@ export function DrawingPlan({
             ))}
             {plan.importedUpperLevels.map((level, levelIndex) => (
               <g key={`imu${levelIndex}`} data-upper-z={level.z} aria-hidden="true">
-                {level.lines.map((line, lineIndex) => (
-                  <path
-                    key={`imuf${lineIndex}`}
-                    d={svgRings([line])}
-                    fill={upperTone}
-                    fillOpacity={0.28}
-                    fillRule="evenodd"
-                    stroke="none"
-                  />
-                ))}
                 {level.lines.map((line, lineIndex) => (
                   <path
                     key={`imul${lineIndex}`}

@@ -50,7 +50,75 @@ function meshBox(
   doc.objects().addMesh(mesh, new r.ObjectAttributes());
 }
 
-export type MassingFixtureKind = "separate" | "setback" | "millimetres" | "edgeTower";
+export type MassingFixtureKind =
+  | "separate"
+  | "setback"
+  | "millimetres"
+  | "edgeTower"
+  | "rozelleCampus"
+  | "rozelleCampusMm";
+
+const PODIUM_Z = 20;
+
+type CampusTower = { x0: number; y0: number; x1: number; y1: number; height: number };
+type CampusPodium = { x0: number; y0: number; x1: number; y1: number; towers: CampusTower[] };
+
+const ROZELLE_CAMPUS: CampusPodium[] = [
+  {
+    x0: -85,
+    y0: -40,
+    x1: -25,
+    y1: 30,
+    towers: [
+      { x0: -68, y0: -18, x1: -52, y1: -2, height: 95 },
+      { x0: -58, y0: 8, x1: -42, y1: 22, height: 140 },
+    ],
+  },
+  {
+    x0: -20,
+    y0: -35,
+    x1: 40,
+    y1: 35,
+    towers: [{ x0: 2, y0: -8, x1: 18, y1: 10, height: 120 }],
+  },
+  {
+    x0: 50,
+    y0: -45,
+    x1: 115,
+    y1: 25,
+    towers: [
+      { x0: 62, y0: -28, x1: 78, y1: -12, height: 85 },
+      { x0: 82, y0: 2, x1: 98, y1: 18, height: 110 },
+    ],
+  },
+];
+
+function addRozelleCampusMeshes(
+  r: Rhino,
+  doc: RhinoDoc,
+  baseE: number,
+  baseN: number,
+  scale: number,
+): void {
+  const ox = (x: number) => baseE + x * scale;
+  const oy = (y: number) => baseN + y * scale;
+  const oz = (z: number) => z * scale;
+  for (const podium of ROZELLE_CAMPUS) {
+    meshBox(r, doc, ox(podium.x0), oy(podium.y0), ox(podium.x1), oy(podium.y1), oz(0), oz(PODIUM_Z));
+    for (const tower of podium.towers) {
+      meshBox(
+        r,
+        doc,
+        ox(tower.x0),
+        oy(tower.y0),
+        ox(tower.x1),
+        oy(tower.y1),
+        oz(PODIUM_Z),
+        oz(PODIUM_Z + tower.height),
+      );
+    }
+  }
+}
 
 export async function buildMassingFixtureBytes(
   kind: MassingFixtureKind,
@@ -60,13 +128,17 @@ export async function buildMassingFixtureBytes(
   const r = await loadRhino();
   const doc = new r.File3dm();
   const [baseE, baseN] = projectLocal([0, 0], center, zone);
-  const scale = kind === "millimetres" ? 1000 : 1;
+  const scale = kind === "millimetres" || kind === "rozelleCampusMm" ? 1000 : 1;
   const ox = (dx: number) => baseE + dx * scale;
   const oy = (dy: number) => baseN + dy * scale;
   const oz = (dz: number) => dz * scale;
-  if (kind === "millimetres") doc.settings().modelUnitSystem = r.UnitSystem.Millimeters;
+  if (kind === "millimetres" || kind === "rozelleCampusMm") doc.settings().modelUnitSystem = r.UnitSystem.Millimeters;
   else doc.settings().modelUnitSystem = r.UnitSystem.Meters;
 
+  if (kind === "rozelleCampus" || kind === "rozelleCampusMm") {
+    addRozelleCampusMeshes(r, doc, baseE, baseN, scale);
+    return doc.toByteArray();
+  }
   if (kind === "separate") {
     meshBox(r, doc, ox(0), oy(0), ox(30), oy(20), oz(0), oz(12));
     meshBox(r, doc, ox(5), oy(5), ox(15), oy(15), oz(12), oz(38));

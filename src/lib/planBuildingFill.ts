@@ -41,9 +41,5 @@ export function importedMassingStrokeStyle(
 export function importedMassingUpperStrokeStyle(
   style: import("./drawingStyle").LineStyles,
 ): import("./drawingStyle").StrokeStyle {
-  return {
-    mm: Math.min(0.22, Math.max(0.14, style.building.mm * 0.65)),
-    color: getColour("--imported-massing-upper-stroke"),
-    dash: "none",
-  };
+  return { ...planBuildingStrokeStyle(style, true, false), dash: "none" };
 }

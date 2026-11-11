@@ -1695,13 +1695,18 @@ async function main() {
     }
     await podiumCtx.close();
     const rozelleFixturePath = path.join(cursorArtifacts, "rozelle-import-massing.3dm");
+    const rozelleFixtureMmPath = path.join(cursorArtifacts, "rozelle-import-massing-mm.3dm");
     execFileSync(
       path.join(process.cwd(), "node_modules/.bin/vitest"),
       ["run", "scripts/writeRozelleMassingFixture.test.ts"],
       {
         cwd: process.cwd(),
         stdio: "inherit",
-        env: { ...process.env, ROZELLE_FIXTURE_PATH: rozelleFixturePath },
+        env: {
+          ...process.env,
+          ROZELLE_FIXTURE_PATH: rozelleFixturePath,
+          ROZELLE_FIXTURE_MM_PATH: rozelleFixtureMmPath,
+        },
       },
     );
     const importCtx = await browser.newContext({
@@ -1714,7 +1719,7 @@ async function main() {
     });
     const importPage = await importCtx.newPage();
     const rozelleQuery =
-      "qa=1&lat=-33.8572&lon=151.21512&km=1.45&label=Rozelle+NSW&siteLat=-33.8572&siteLon=151.21512";
+      "qa=1&lat=-33.8572&lon=151.21512&km=0.55&label=Rozelle+NSW&siteLat=-33.8572&siteLon=151.21512";
     try {
       await importPage.goto(`${baseUrl}/?${rozelleQuery}`, { waitUntil: "domcontentloaded", timeout: 120_000 });
       await importPage.waitForSelector("button.create-fab", { timeout: 30_000 });
@@ -1774,13 +1779,13 @@ async function main() {
       assertCheck(
         "rozelle-import-podium-outlines",
         "Real multi-object .3dm import shows podium outlines (data-imported-podium) on Rozelle Drawing site plan",
-        importPlanState.podiumPaths >= 1,
+        importPlanState.podiumPaths >= 3,
         `podiumPaths=${importPlanState.podiumPaths}`,
       );
       assertCheck(
         "rozelle-import-upper-level-outlines",
         "Real .3dm import shows inner tower outlines (data-upper-z) on Rozelle Drawing site plan",
-        importPlanState.upperGroups >= 1,
+        importPlanState.upperGroups >= 5,
         `upperGroups=${importPlanState.upperGroups}`,
       );
       assertCheck(
@@ -1797,15 +1802,70 @@ async function main() {
       );
       await importPage.locator('button[data-section="drawing"]').click({ timeout: 30_000 });
       await importPage.waitForTimeout(200);
-      const fitFrame = importPage.getByRole("button", { name: "Fit frame" });
-      if ((await fitFrame.count()) > 0) await fitFrame.click({ timeout: 15_000 });
-      await importPage.waitForTimeout(600);
+      await importPage.waitForFunction(
+        () =>
+          typeof window.__citycutQaPlan?.zoomPlanToImportedMassing === "function" &&
+          window.__citycutQaPlan.zoomPlanToImportedMassing(),
+        null,
+        { timeout: 60_000 },
+      );
+      await importPage.waitForTimeout(800);
       await importPage.screenshot({
         path: path.join(cursorArtifacts, "drawing-podium-tower-outlines.png"),
         clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
       });
+      const planImportSvgPath = path.join(cursorArtifacts, "rozelle-import-plan.svg");
+      const frameSvg = await importPage.evaluate(async () => {
+        if (!window.__citycutQaPlan) throw new Error("missing __citycutQaPlan");
+        return window.__citycutQaPlan.exportSitePlanFrameSvg();
+      });
+      fs.writeFileSync(planImportSvgPath, frameSvg);
+      assertCheck(
+        "rozelle-import-plan-svg-outlines",
+        "Exported frame SVG contains imported podium strokes and upper tower outlines",
+        frameSvg.includes('stroke-dasharray="1.2 0.6"') &&
+          frameSvg.includes('inkscape:label="Imported::Upper levels"'),
+        `bytes=${frameSvg.length}`,
+      );
+      assertCheck(
+        "rozelle-import-plan-svg-shadows",
+        "Exported frame SVG contains sun-study shadow fills for plan fan",
+        /inkscape:label="Shadow (09|15):00"/.test(frameSvg),
+        "per-hour shadow layers present",
+      );
+      async function scrubSolarHour(hour) {
+        await importPage.locator('button[data-section="analysis"]').click({ timeout: 30_000 });
+        await importPage.waitForTimeout(200);
+        await importPage
+          .locator(".model .env-console .overlay-chips button", { hasText: "Shadows" })
+          .click({ timeout: 30_000 });
+        await importPage
+          .locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" })
+          .click({ timeout: 30_000 });
+        const hourBtn = importPage.locator(".model .env-console button", {
+          hasText: new RegExp(`^${String(hour).padStart(2, "0")}$`),
+        });
+        await hourBtn.first().click({ timeout: 30_000 });
+        await importPage.waitForTimeout(1200);
+      }
+      await scrubSolarHour(9);
+      await importPage.waitForFunction(
+        () => document.querySelectorAll("svg.plan [data-shadow-hour='9'] path").length >= 1,
+        null,
+        { timeout: 120_000 },
+      );
       await importPage.screenshot({
-        path: path.join(cursorArtifacts, "drawing-imported-shadows.png"),
+        path: path.join(cursorArtifacts, "drawing-imported-shadows-9am.png"),
+        clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+      });
+      await scrubSolarHour(15);
+      await importPage.waitForFunction(
+        () => document.querySelectorAll("svg.plan [data-shadow-hour='15'] path").length >= 1,
+        null,
+        { timeout: 120_000 },
+      );
+      await importPage.screenshot({
+        path: path.join(cursorArtifacts, "drawing-imported-shadows-3pm.png"),
         clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
       });
     } catch (err) {
