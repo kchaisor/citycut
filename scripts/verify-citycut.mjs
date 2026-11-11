@@ -1714,7 +1714,7 @@ async function main() {
     });
     const importPage = await importCtx.newPage();
     const rozelleQuery =
-      "qa=1&lat=-33.86726&lon=151.18125&km=1.45&label=Rozelle+NSW&siteLat=-33.8572&siteLon=151.21512";
+      "qa=1&lat=-33.8572&lon=151.21512&km=1.45&label=Rozelle+NSW&siteLat=-33.8572&siteLon=151.21512";
     try {
       await importPage.goto(`${baseUrl}/?${rozelleQuery}`, { waitUntil: "domcontentloaded", timeout: 120_000 });
       await importPage.waitForSelector("button.create-fab", { timeout: 30_000 });
@@ -1725,8 +1725,10 @@ async function main() {
         { timeout: 300_000 },
       );
       await importPage.locator('button[data-section="import"]').click({ timeout: 30_000 });
-      await importPage.waitForSelector('input[type="file"][accept=".3dm"]', { timeout: 30_000 });
-      await importPage.getByRole("button", { name: /Import \.3dm/i }).click({ timeout: 30_000 }).catch(() => {});
+      await importPage.waitForSelector('input[type="file"][accept=".3dm"]', {
+        state: "attached",
+        timeout: 30_000,
+      });
       await importPage.locator('input[type="file"][accept=".3dm"]').setInputFiles(rozelleFixturePath);
       await importPage.waitForFunction(
         () => document.querySelectorAll(".massing-item").length >= 1,
