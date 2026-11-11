@@ -30,8 +30,17 @@ import {
   writeSiteAnchorSearch,
   type FrameQuery,
 } from "./lib/frameQuery";
+import {
+  closestA3ScaleForSideM,
+  cutSpecFromA3,
+  cutSpecFromSquare,
+  cutSpecSideM,
+  type A3DrawingScale,
+  type CutSpec,
+} from "./lib/cutSpec";
 import { resolveSiteFrame, shouldResolveSite, siteAttributionNote } from "./lib/site";
 import { squareBBox } from "./lib/geo";
+import { cutFrameSize } from "./lib/modelFrame";
 import { siteFrameAreaM2, type SiteFrameShape } from "./lib/siteFrame";
 import { localityCacheKey, reverseLocality } from "./lib/nominatim";
 import { FLAT_GROUND_NOTE } from "./lib/parseOsm";
@@ -150,8 +159,13 @@ export default function App() {
 
   const [sideKm, setSideKm] = useState(queried?.sideKm ?? DEFAULT_SIDE_KM);
   const [frameShape, setFrameShape] = useState<SiteFrameShape>(queried?.frameShape ?? "square");
+  const [cut, setCut] = useState<CutSpec>(
+    queried?.cut ?? cutSpecFromSquare((queried?.sideKm ?? DEFAULT_SIDE_KM) * 1000),
+  );
   const frameShapeRef = useRef(frameShape);
   frameShapeRef.current = frameShape;
+  const cutRef = useRef(cut);
+  cutRef.current = cut;
   const [layers, setLayers] = useState<UiLayers>(DEFAULT_LAYERS);
   const [basemap, setBasemap] = useState<Basemap>("map");
   const [placeLabel, setPlaceLabel] = useState(placeLabelRef.current);
@@ -182,6 +196,7 @@ export default function App() {
       sideKm: sideRef.current,
       label: placeLabelRef.current,
       frameShape: frameShapeRef.current,
+      cut: cutRef.current,
     });
     if (siteAnchor !== null) search = writeSiteAnchorSearch(search, siteAnchor);
     const nextUrl = `${window.location.pathname}${search}${window.location.hash}`;
@@ -249,11 +264,55 @@ export default function App() {
     scheduleSettle();
   }
 
-  function onCutResize(next: { sideM: number; center: LonLat }) {
+  function applyCut(next: CutSpec) {
+    cutRef.current = next;
+    setCut(next);
+    const shape: SiteFrameShape = next.shape === "a3" ? "a3" : next.shape;
+    frameShapeRef.current = shape;
+    setFrameShape(shape);
+    const km = cutSpecSideM(next) / 1000;
+    sideRef.current = km;
+    setSideKm(km);
+    writeUrl();
+  }
+
+  function onSideKmChange(km: number) {
+    if (frameShapeRef.current === "circle") {
+      applyCut({ shape: "circle", orientation: "landscape", widthM: km * 1000, heightM: km * 1000 });
+      return;
+    }
+    if (frameShapeRef.current === "a3") {
+      const scale = closestA3ScaleForSideM(
+        km * 1000,
+        cutRef.current.orientation,
+      ) as A3DrawingScale;
+      applyCut(cutSpecFromA3(scale, cutRef.current.orientation));
+      return;
+    }
+    applyCut(cutSpecFromSquare(km * 1000));
+  }
+
+  function onCutResize(next: {
+    sideM: number;
+    center: LonLat;
+    widthM?: number;
+    heightM?: number;
+  }) {
     if (phaseRef.current !== "select") return;
     const km = next.sideM / 1000;
     sideRef.current = km;
     setSideKm(km);
+  if (next.widthM != null && next.heightM != null && frameShapeRef.current === "a3") {
+      applyCut({
+        shape: "a3",
+        orientation: cutRef.current.orientation,
+        scale: cutRef.current.scale,
+        widthM: next.widthM,
+        heightM: next.heightM,
+      });
+    } else if (frameShapeRef.current === "square") {
+      applyCut(cutSpecFromSquare(next.sideM));
+    }
     viewRef.current = {
       ...viewRef.current,
       lat: next.center.lat,
@@ -311,7 +370,7 @@ export default function App() {
       setHandoffUnderlay("none");
       setPhase("select");
     }
-    if (sideKmOverride != null) setSideKm(sideKmOverride);
+    if (sideKmOverride != null) onSideKmChange(sideKmOverride);
     onPlace(place);
   }
 
@@ -345,7 +404,11 @@ export default function App() {
 
   async function createModel() {
     const view = viewRef.current;
-    const sideM = sideKm * 1000;
+    const activeCut = cutRef.current;
+    const sideM = cutSpecSideM(activeCut);
+    const widthM = activeCut.widthM;
+    const heightM = activeCut.heightM;
+    const frameSize = cutFrameSize(widthM, heightM, sideM);
     const modelLayers = {
       buildings: layers.buildings,
       roads: layers.roads,
@@ -358,7 +421,10 @@ export default function App() {
       setError("Turn on Buildings, Roads and rail, Water and green, Trees, Terrain, or Contours.");
       return;
     }
-    if (siteFrameAreaM2(sideM, frameShapeRef.current) > MAX_AREA_M2 + 1) {
+    if (
+      siteFrameAreaM2(sideM, frameShapeRef.current, { widthM, heightM }) >
+      MAX_AREA_M2 + 1
+    ) {
       setError("That frame is over the 4 km² limit for this version.");
       return;
     }
@@ -412,7 +478,15 @@ export default function App() {
         : Promise.resolve({ field: null, error: null as string | null });
       const bounds = squareBBox(view, sideM);
       const buildingsTask = modelLayers.buildings
-        ? fetchOvertureBuildingsForCut(bounds, center, sideM, controller.signal, frameShapeRef.current)
+        ? fetchOvertureBuildingsForCut(
+            bounds,
+            center,
+            sideM,
+            controller.signal,
+            frameShapeRef.current,
+            undefined,
+            frameSize,
+          )
         : Promise.resolve({
             buildings: [],
             buildingCapHit: false,
@@ -426,7 +500,7 @@ export default function App() {
             },
           });
       const transportTask = modelLayers.roads
-        ? fetchOvertureTransportationForCut(bounds, center, sideM, controller.signal, frameShapeRef.current)
+        ? fetchOvertureTransportationForCut(bounds, center, sideM, controller.signal, frameShapeRef.current, frameSize)
         : Promise.resolve({
             roads: [],
             roadKm: 0,
@@ -461,6 +535,7 @@ export default function App() {
                 waterGreen: modelLayers.waterGreen,
                 trees: loadTreeTiers,
                 frameShape: frameShapeRef.current,
+                frameSize,
               },
               controller.signal,
             )
@@ -540,7 +615,11 @@ export default function App() {
         });
       });
       const nswTask: Promise<NswLayers | null> = nswMode
-        ? fetchNswLayers(center, sideM, { signal: controller.signal, frameShape: frameShapeRef.current }).catch((err: unknown) => {
+        ? fetchNswLayers(center, sideM, {
+            signal: controller.signal,
+            frameShape: frameShapeRef.current,
+            frameSize,
+          }).catch((err: unknown) => {
             if (controller.signal.aborted) throw err;
             return null;
           })
@@ -627,7 +706,7 @@ export default function App() {
       const prebake = await prebakeTask;
       const prebakeOsm =
         prebake?.ok && baseResult.stats.release && prebake.trees.manifest.sourceStamps?.overtureRelease === baseResult.stats.release
-          ? overtureTreesFromPoints(prebake.trees.osm, center, sideM, frameShapeRef.current)
+          ? overtureTreesFromPoints(prebake.trees.osm, center, sideM, frameShapeRef.current, frameSize)
           : null;
       const overtureBuildings = overtureResult.buildings;
       let buildingsWithoutCom: typeof overtureBuildings | undefined;
@@ -881,13 +960,23 @@ export default function App() {
       const draftModel: CityModel = {
         center,
         sideM,
+        widthM,
+        heightM,
+        cutScale: activeCut.scale,
+        cutOrientation: activeCut.orientation,
         frameShape: frameShapeRef.current,
         layers: modelLayers,
         buildings,
         roads: modelLayers.roads ? transportResult.roads : [],
         tramLines: nswMode ? (modelLayers.roads && nswLightRailLines(nswResult).length > 0 ? nswLightRailLines(nswResult) : undefined) : tramResult.lines ?? undefined,
         tramLinesLoadFailed: tramResult.loadFailed || undefined,
-        areas: modelLayers.waterGreen ? withRoundaboutIslands(nswWater ? nswWater.areas : baseResult.areas, modelLayers.roads ? (transportResult.roundabouts ?? []) : [], { sideM, shape: frameShapeRef.current }) : [],
+        areas: modelLayers.waterGreen
+          ? withRoundaboutIslands(
+              nswWater ? nswWater.areas : baseResult.areas,
+              modelLayers.roads ? (transportResult.roundabouts ?? []) : [],
+              { sideM, shape: frameShapeRef.current, size: frameSize },
+            )
+          : [],
         carParks: modelLayers.waterGreen ? baseResult.carParks : undefined,
         trees,
         roadKm: modelLayers.roads ? transportResult.roadKm : 0,
@@ -987,7 +1076,12 @@ export default function App() {
   const headerPlace = phase === "model" && model ? model.placeLabel : placeLabel;
   const headerSide = phase === "model" && model ? model.sideM : sideKm * 1000;
   const headerShape = phase === "model" && model ? (model.frameShape ?? "square") : frameShape;
-  const headerSize = cutSizeLabel(headerSide, headerShape);
+  const headerSize = cutSizeLabel(headerSide, headerShape, {
+    widthM: phase === "model" && model ? (model.widthM ?? model.sideM) : cut.widthM,
+    heightM: phase === "model" && model ? (model.heightM ?? model.sideM) : cut.heightM,
+    scale: (phase === "model" && model ? model.cutScale : cut.scale) as A3DrawingScale | undefined,
+    orientation: phase === "model" && model ? model.cutOrientation : cut.orientation,
+  });
 
   useEffect(() => {
     document.title = `CityCut — ${headerPlace} · ${headerSize}`;
@@ -1070,7 +1164,10 @@ export default function App() {
           <MapStage
             basemap={basemap}
             fitFrameOnLoad={fitFrameOnLoad}
-            sideM={sideKm * 1000}
+            sideM={cutSpecSideM(cut)}
+            widthM={cut.widthM}
+            heightM={cut.heightM}
+            cutOrientation={cut.orientation}
             frameShape={frameShape}
             initialView={viewRef.current}
             fly={fly}
@@ -1089,9 +1186,11 @@ export default function App() {
             layers={layers}
             loading={selectBusy}
             error={error}
-            onSideKm={setSideKm}
+            onSideKm={onSideKmChange}
             frameShape={frameShape}
             onFrameShape={setFrameShape}
+            cut={cut}
+            onCut={applyCut}
             onLayer={onLayer}
             onPlace={onPlace}
             onCreate={createModel}

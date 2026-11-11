@@ -16,7 +16,7 @@ import {
 } from "./drawingStyle";
 import {
   figureGround,
-  layoutSheet,
+  layoutForModel,
   paperMillimetres,
   type SheetLayout,
 } from "./figureGround";
@@ -92,9 +92,14 @@ function pen(style: StrokeStyle, join: "miter" | "round" = "round"): Partial<Pdf
 }
 
 function sheetPoint(east: number, north: number, sideM: number, layout: SheetLayout): [number, number] {
-  const half = sideM / 2;
-  const x = layout.frameX + ((east + half) / sideM) * layout.frameMm;
-  const yDown = layout.frameY + ((half - north) / sideM) * layout.frameMm;
+  const widthM = layout.widthM ?? sideM;
+  const heightM = layout.heightM ?? sideM;
+  const halfW = widthM / 2;
+  const halfH = heightM / 2;
+  const frameW = layout.frameWidthMm ?? layout.frameMm;
+  const frameH = layout.frameHeightMm ?? layout.frameMm;
+  const x = layout.frameX + ((east + halfW) / widthM) * frameW;
+  const yDown = layout.frameY + ((halfH - north) / heightM) * frameH;
   return [x, layout.pageHeightMm - yDown];
 }
 
@@ -317,7 +322,7 @@ export function sitePlanChunks(
   const heliodon = resolved.heliodon ?? null;
   const shadowInput = resolved.shadows ?? null;
   const castShadows = Boolean(resolved.castShadows);
-  const layout = layoutSheet(model.sideM, scale);
+  const layout = layoutForModel(model, scale);
   const uniformBuildings = Boolean(resolved.uniformBuildings);
   const colourBySource = Boolean(resolved.colourBySource);
   const highlightManual = Boolean(resolved.highlightManual);
@@ -612,7 +617,7 @@ export function figureGroundChunks(
   heliodon?: HeliodonDiagramExportOptions | null,
 ): PdfChunk[] {
   model = stableExportModel(model);
-  const layout = layoutSheet(model.sideM, scale);
+  const layout = layoutForModel(model, scale);
   const frameShape = model.frameShape ?? "square";
   const ground = figureGround(model.buildings, model.sideM, frameShape);
   const chunks: PdfChunk[] = [];
@@ -657,7 +662,7 @@ export async function sitePlanPdf(
   style?: LineStyles,
   exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): Promise<Uint8Array> {
-  const layout = layoutSheet(model.sideM, scale);
+  const layout = layoutForModel(model, scale);
   const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions);
   return buildLayeredPdf(layout.pageWidthMm, layout.pageHeightMm, chunks, sitePlanLayerOrder(chunks));
 }
@@ -668,7 +673,7 @@ export async function figureGroundPdf(
   style?: LineStyles,
   heliodon?: HeliodonDiagramExportOptions | null,
 ): Promise<Uint8Array> {
-  const layout = layoutSheet(model.sideM, scale);
+  const layout = layoutForModel(model, scale);
   return buildLayeredPdf(
     layout.pageWidthMm,
     layout.pageHeightMm,
@@ -684,7 +689,7 @@ export async function sitePlanSvg(
   exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): Promise<string> {
   const { buildLayeredSvg } = await import("./svgDocument");
-  const layout = layoutSheet(model.sideM, scale);
+  const layout = layoutForModel(model, scale);
   const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions);
   return buildLayeredSvg(layout.pageWidthMm, layout.pageHeightMm, chunks, sitePlanLayerOrder(chunks));
 }
@@ -695,7 +700,7 @@ export async function sitePlanFrameSvg(
   style?: LineStyles,
   exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): Promise<string> {
-  const layout = layoutSheet(model.sideM, scale);
+  const layout = layoutForModel(model, scale);
   const full = await sitePlanSvg(model, scale, style, exportOptions);
   const n = (value: number) => {
     const rounded = Math.round(value * 1000) / 1000;
@@ -718,7 +723,7 @@ export async function figureGroundSvg(
   heliodon?: HeliodonDiagramExportOptions | null,
 ): Promise<string> {
   const { buildLayeredSvg } = await import("./svgDocument");
-  const layout = layoutSheet(model.sideM, scale);
+  const layout = layoutForModel(model, scale);
   return buildLayeredSvg(
     layout.pageWidthMm,
     layout.pageHeightMm,
@@ -733,7 +738,7 @@ export function sitePlanAi8(
   style?: LineStyles,
   exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): Uint8Array {
-  const layout = layoutSheet(model.sideM, scale);
+  const layout = layoutForModel(model, scale);
   const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions);
   return buildLayeredNativeAi(
     layout.pageWidthMm,
@@ -750,7 +755,7 @@ export function figureGroundAi8(
   style?: LineStyles,
   heliodon?: HeliodonDiagramExportOptions | null,
 ): Uint8Array {
-  const layout = layoutSheet(model.sideM, scale);
+  const layout = layoutForModel(model, scale);
   return buildLayeredNativeAi(
     layout.pageWidthMm,
     layout.pageHeightMm,
@@ -768,7 +773,7 @@ export async function sitePlanAi(
 ): Promise<Uint8Array> {
   if (useNativeAi8Export()) return sitePlanAi8(model, scale, style, exportOptions);
   if (import.meta.env.VITE_CITYCUT_AI_PDF_OPS === "true") {
-    const layout = layoutSheet(model.sideM, scale);
+    const layout = layoutForModel(model, scale);
     const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions);
     return buildLayeredNativeAiPdfOps(
       layout.pageWidthMm,
@@ -789,7 +794,7 @@ export async function figureGroundAi(
 ): Promise<Uint8Array> {
   if (useNativeAi8Export()) return figureGroundAi8(model, scale, style, heliodon);
   if (import.meta.env.VITE_CITYCUT_AI_PDF_OPS === "true") {
-    const layout = layoutSheet(model.sideM, scale);
+    const layout = layoutForModel(model, scale);
     return buildLayeredNativeAiPdfOps(
       layout.pageWidthMm,
       layout.pageHeightMm,

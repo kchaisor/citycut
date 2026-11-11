@@ -1,6 +1,12 @@
 import { squareBBox, signedArea } from "./geo";
 import { queryArcgisTiled, type ArcgisFetch, type ArcgisResult, type GeoJsonFeature } from "./arcgisQuery";
-import { clipAreaToSiteFrame, clipPolylineSiteFrame, DEFAULT_SITE_FRAME_SHAPE, pointInSiteFrame } from "./siteFrame";
+import {
+  clipAreaToSiteFrame,
+  clipPolylineSiteFrame,
+  DEFAULT_SITE_FRAME_SHAPE,
+  pointInSiteFrame,
+  type FrameGroundSize,
+} from "./siteFrame";
 import { linesFromGeometry, pointFromGeometry, polygonsFromGeometry } from "./vicmapWfs";
 import { decodeField, decodeSubtype, UnknownCodes } from "./nswDomains";
 import { NSW_LAYERS, nswRoadGrade, type NswLayerKey } from "./sources/nsw";
@@ -80,11 +86,17 @@ function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : value == null ? "" : String(value);
 }
 
-function clipPolygons(features: GeoJsonFeature[], origin: LonLat, sideM: number, shape: SiteFrameShape) {
+function clipPolygons(
+  features: GeoJsonFeature[],
+  origin: LonLat,
+  sideM: number,
+  shape: SiteFrameShape,
+  size?: FrameGroundSize,
+) {
   const out: { poly: NswPolygon; props: Record<string, unknown> }[] = [];
   for (const feature of features) {
     for (const poly of polygonsFromGeometry(feature.geometry, origin)) {
-      const rings = clipAreaToSiteFrame(poly.outer, poly.holes, sideM, shape);
+      const rings = clipAreaToSiteFrame(poly.outer, poly.holes, sideM, shape, size);
       if (!rings || Math.abs(signedArea(rings[0]!)) < 0.5) continue;
       out.push({ poly: { outer: rings[0]!, holes: rings.slice(1) }, props: feature.properties });
     }
@@ -250,17 +262,21 @@ export function nswLayersFromResults(
   sideM: number,
   shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
   ms = 0,
+  size?: FrameGroundSize,
 ): NswLayers {
   const status = {} as NswLayers["status"];
   for (const key of LAYER_KEYS) {
     const r = results[key];
     status[key] = { id: r.id, label: NSW_LAYERS[key].label, status: r.status, note: r.note, ms: r.ms, pages: r.pages, count: r.features.length, retries: r.retries ?? 0 };
   }
-  const polys = (key: LayerKey) => clipPolygons(results[key].features, origin, sideM, shape);
+  const polys = (key: LayerKey) => clipPolygons(results[key].features, origin, sideM, shape, size);
   const points = (key: LayerKey) =>
     results[key].features
       .map((feature) => ({ at: pointFromGeometry(feature.geometry, origin), props: feature.properties }))
-      .filter((item): item is { at: Pt; props: Record<string, unknown> } => item.at != null && pointInSiteFrame(item.at, sideM, shape));
+      .filter(
+        (item): item is { at: Pt; props: Record<string, unknown> } =>
+          item.at != null && pointInSiteFrame(item.at, sideM, shape, size),
+      );
   const unknownLots = new UnknownCodes("NSW lots");
   const unknownEasements = new UnknownCodes("NSW easements");
   const unknownCorridors = new UnknownCodes("NSW road corridors");
@@ -276,7 +292,7 @@ export function nswLayersFromResults(
     const on = decodeField("railways", "railontype", props.railontype);
     unknownRail.add("railontype", on);
     for (const line of linesFromGeometry(feature.geometry, origin)) {
-      for (const part of clipPolylineSiteFrame(line, sideM, shape)) {
+      for (const part of clipPolylineSiteFrame(line, sideM, shape, size)) {
         if (part.length < 2) continue;
         railways.push({
           line: part,
@@ -293,7 +309,7 @@ export function nswLayersFromResults(
     const grade = nswRoadGrade(feature.properties.functionhierarchy);
     const name = [text(feature.properties.roadnamebase), text(feature.properties.roadnametype)].filter(Boolean).join(" ");
     for (const line of linesFromGeometry(feature.geometry, origin)) {
-      for (const part of clipPolylineSiteFrame(line, sideM, shape)) {
+      for (const part of clipPolylineSiteFrame(line, sideM, shape, size)) {
         if (part.length >= 2) centrelines.push({ line: part, grade, name });
       }
     }
@@ -368,7 +384,13 @@ export function nswLayersFromResults(
 export async function fetchNswLayers(
   center: LonLat,
   sideM: number,
-  options: { signal?: AbortSignal; frameShape?: SiteFrameShape; fetchImpl?: ArcgisFetch; timeoutMs?: number } = {},
+  options: {
+    signal?: AbortSignal;
+    frameShape?: SiteFrameShape;
+    frameSize?: FrameGroundSize;
+    fetchImpl?: ArcgisFetch;
+    timeoutMs?: number;
+  } = {},
 ): Promise<NswLayers> {
   const started = Date.now();
   const bounds = squareBBox(center, sideM);
@@ -376,5 +398,12 @@ export async function fetchNswLayers(
     LAYER_KEYS.map(async (key) => [key, await queryArcgisTiled(NSW_LAYERS[key], bounds, options)] as const),
   );
   const results = Object.fromEntries(entries) as Record<LayerKey, ArcgisResult>;
-  return nswLayersFromResults(results, center, sideM, options.frameShape ?? DEFAULT_SITE_FRAME_SHAPE, Date.now() - started);
+  return nswLayersFromResults(
+    results,
+    center,
+    sideM,
+    options.frameShape ?? DEFAULT_SITE_FRAME_SHAPE,
+    Date.now() - started,
+    options.frameSize,
+  );
 }

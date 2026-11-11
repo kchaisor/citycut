@@ -3,7 +3,8 @@ import type { MultiPolygon } from "./safePolygonClip";
 import { clipIntersection as clipIntersectionSafe } from "./safePolygonClip";
 import { COLOUR_FALLBACK, getColour } from "./colours";
 import { fromLocal, squareBBox } from "./geo";
-import { siteFramePolygon, type SiteFrameShape } from "./siteFrame";
+import { clipPolygonRect } from "./clip";
+import { frameHalfExtents, siteFramePolygon, type FrameGroundSize, type SiteFrameShape } from "./siteFrame";
 import type { LonLat, Pt, Ring, TerrainField } from "../types";
 
 /**
@@ -608,6 +609,42 @@ function appendGridTriangleClippedToCircle(
   }
 }
 
+function clipTriangleToRect(tri: TerrainTri, halfW: number, halfH: number): Pt[][] {
+  const clipped = clipPolygonRect([tri[0], tri[1], tri[2]], halfW, halfH);
+  if (clipped.length < 3) return [];
+  return [clipped];
+}
+
+function appendGridTriangleClippedToRect(
+  positions: number[],
+  colors: number[],
+  indexList: number[],
+  tri: TerrainTri,
+  heights: [number, number, number],
+  halfW: number,
+  halfH: number,
+  field: TerrainField,
+  relief: number,
+): void {
+  for (const ring of clipTriangleToRect(tri, halfW, halfH)) {
+    for (const part of fanTriangulate(ring)) {
+      pushClippedTriangle(positions, colors, indexList, tri, heights, part, field, relief);
+    }
+  }
+}
+
+function rectCoversTriangle(tri: TerrainTri, halfW: number, halfH: number): boolean {
+  return tri.every(([x, y]) => Math.abs(x) <= halfW + 0.001 && Math.abs(y) <= halfH + 0.001);
+}
+
+function rectTouchesTriangle(tri: TerrainTri, halfW: number, halfH: number): boolean {
+  const xs = tri.map((p) => p[0]);
+  const ys = tri.map((p) => p[1]);
+  if (Math.max(...xs) < -halfW - 0.001 || Math.min(...xs) > halfW + 0.001) return false;
+  if (Math.max(...ys) < -halfH - 0.001 || Math.min(...ys) > halfH + 0.001) return false;
+  return true;
+}
+
 function terrainBuffersSquare(field: TerrainField, sideM: number) {
   const { cols, rows } = field;
   const half = sideM / 2;
@@ -640,6 +677,69 @@ function terrainBuffersSquare(field: TerrainField, sideM: number) {
     }
   }
   return { positions, indices: Uint32Array.from(indexList), colors };
+}
+
+function terrainBuffersRect(field: TerrainField, sideM: number, halfW: number, halfH: number) {
+  const { cols, rows } = field;
+  const half = sideM / 2;
+  const relief = Math.max(field.max - field.min, 0.001);
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const indexList: number[] = [];
+
+  for (let row = 0; row < rows - 1; row++) {
+    for (let col = 0; col < cols - 1; col++) {
+      const swH = field.heights[row * cols + col]!;
+      const seH = field.heights[row * cols + col + 1]!;
+      const nwH = field.heights[(row + 1) * cols + col]!;
+      const neH = field.heights[(row + 1) * cols + col + 1]!;
+      const sw: Pt = [-half + col * field.spacingM, -half + row * field.spacingM];
+      const se: Pt = [-half + (col + 1) * field.spacingM, -half + row * field.spacingM];
+      const nw: Pt = [-half + col * field.spacingM, -half + (row + 1) * field.spacingM];
+      const ne: Pt = [-half + (col + 1) * field.spacingM, -half + (row + 1) * field.spacingM];
+      const triA: TerrainTri = [sw, se, ne];
+      const triB: TerrainTri = [sw, ne, nw];
+      if (rectTouchesTriangle(triA, halfW, halfH)) {
+        if (rectCoversTriangle(triA, halfW, halfH)) {
+          const base = positions.length / 3;
+          for (const [point, y] of [
+            [sw, swH],
+            [se, seH],
+            [ne, neH],
+          ] as const) {
+            positions.push(point[0], y, -point[1]);
+            const tint = shadeHeight((y - field.min) / relief, 1);
+            colors.push(tint[0], tint[1], tint[2]);
+          }
+          indexList.push(base, base + 1, base + 2);
+        } else {
+          appendGridTriangleClippedToRect(positions, colors, indexList, triA, [swH, seH, neH], halfW, halfH, field, relief);
+        }
+      }
+      if (rectTouchesTriangle(triB, halfW, halfH)) {
+        if (rectCoversTriangle(triB, halfW, halfH)) {
+          const base = positions.length / 3;
+          for (const [point, y] of [
+            [sw, swH],
+            [ne, neH],
+            [nw, nwH],
+          ] as const) {
+            positions.push(point[0], y, -point[1]);
+            const tint = shadeHeight((y - field.min) / relief, 1);
+            colors.push(tint[0], tint[1], tint[2]);
+          }
+          indexList.push(base, base + 1, base + 2);
+        } else {
+          appendGridTriangleClippedToRect(positions, colors, indexList, triB, [swH, neH, nwH], halfW, halfH, field, relief);
+        }
+      }
+    }
+  }
+  return {
+    positions: Float32Array.from(positions),
+    colors: Float32Array.from(colors),
+    indices: Uint32Array.from(indexList),
+  };
 }
 
 function terrainBuffersCircle(field: TerrainField, sideM: number) {
@@ -698,12 +798,17 @@ export function terrainBuffers(
   field: TerrainField,
   sideM: number,
   frameShape: SiteFrameShape = "square",
+  frameSize?: FrameGroundSize,
 ): {
   positions: Float32Array;
   indices: Uint32Array;
   colors: Float32Array;
 } {
   if (frameShape === "circle") return terrainBuffersCircle(field, sideM);
+  const { halfW, halfH } = frameHalfExtents(sideM, frameShape, frameSize);
+  if (frameShape === "a3" || Math.abs(halfW - halfH) > 0.01) {
+    return terrainBuffersRect(field, sideM, halfW, halfH);
+  }
   return terrainBuffersSquare(field, sideM);
 }
 
@@ -773,6 +878,7 @@ export function basePlinthBuffers(
   sideM: number,
   terrain?: TerrainField | null,
   frameShape: SiteFrameShape = "square",
+  frameSize?: FrameGroundSize,
 ): {
   positions: Float32Array;
   normals: Float32Array;
@@ -781,7 +887,6 @@ export function basePlinthBuffers(
   bottomY: number;
   thicknessM: number;
 } {
-  const half = sideM / 2;
   const thicknessM = basePlinthThicknessM(sideM);
   const bottomY = basePlinthBottomY(sideM, terrain);
   const relief = terrain ? Math.max(terrain.max - terrain.min, 0.001) : 1;
@@ -789,12 +894,7 @@ export function basePlinthBuffers(
   const rawRing: Pt[] =
     frameShape === "circle"
       ? siteFramePolygon(sideM, "circle")[0]!.slice(0, -1).map(([x, y]) => [x, y] as Pt)
-      : [
-          [-half, -half],
-          [half, -half],
-          [half, half],
-          [-half, half],
-        ];
+      : siteFramePolygon(sideM, frameShape, frameSize)[0]!.slice(0, -1).map(([x, y]) => [x, y] as Pt);
 
   const positions: number[] = [];
   const normals: number[] = [];

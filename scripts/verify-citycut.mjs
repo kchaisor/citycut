@@ -202,6 +202,203 @@ async function main() {
       `cta="${beat1Info.ctaText}", frame=${JSON.stringify(beat1Info.frameRect)}, ratio=${beat1Info.frameRatio?.toFixed(3)}, singlePill=${beat1Info.frameLabelDisplay === "none" && beat1Info.frameCadTagVisible}`,
     );
 
+    const cursorArtifacts = "/opt/cursor/artifacts";
+    fs.mkdirSync(cursorArtifacts, { recursive: true });
+  const a3Url = `${baseUrl}/citycut/?lat=-37.8136&lon=144.9631&shape=a3&a3scale=2500&a3ori=landscape&km=1.05&label=Melbourne%20CBD`;
+    await page.goto(a3Url, { waitUntil: "networkidle", timeout: 60_000 });
+    await page.waitForSelector('.select .frame[data-shape="a3"]', { timeout: 20_000 });
+    await page.waitForTimeout(600);
+    const a3Landing = await page.evaluate(() => {
+      const frame = document.querySelector(".select .frame[data-shape='a3']");
+      const rect = frame?.getBoundingClientRect();
+      const a3On = document.querySelector('.shape-btn.on[aria-label="A3"]');
+      return {
+        width: rect?.width ?? 0,
+        height: rect?.height ?? 0,
+        a3Selected: Boolean(a3On),
+        readout: document.querySelector(".dock-readout")?.textContent?.trim() ?? "",
+      };
+    });
+    const a3AspectExpected = 420 / 297;
+    const a3Aspect = a3Landing.width / Math.max(a3Landing.height, 1);
+    await page.screenshot({ path: path.join(cursorArtifacts, "a3-landing-map-selection.png"), fullPage: false });
+    assertCheck(
+      "a3-landing-aspect",
+      "A3 1:2500 landscape cut on the landing map keeps the √2 frame aspect and shows the scale readout",
+      a3Landing.a3Selected &&
+        a3Landing.readout.includes("1:2500") &&
+        Math.abs(a3Aspect - a3AspectExpected) < 0.08,
+      `aspect=${a3Aspect.toFixed(3)} expected≈${a3AspectExpected.toFixed(3)} readout="${a3Landing.readout}"`,
+    );
+    await page.locator("button.create-fab").click({ timeout: 30_000 });
+    await page.waitForSelector(".model", { timeout: 240_000 });
+    await page.getByRole("tab", { name: /Drawing/i }).click({ timeout: 120_000 });
+    await page.waitForSelector("svg.plan", { timeout: 120_000 });
+    await page.waitForTimeout(800);
+    const drawingAspect = await page.evaluate(() => {
+      const canvas = document.querySelector('svg.plan rect[data-cut-frame="1"]');
+      if (!canvas) return null;
+      const w = Number(canvas.getAttribute("width"));
+      const h = Number(canvas.getAttribute("height"));
+      if (!Number.isFinite(w) || !Number.isFinite(h) || h === 0) return null;
+      return w / h;
+    });
+    const drawingChrome = await page.evaluate(() => ({
+      fitNote: document.querySelector(".fit-note")?.textContent?.trim() ?? "",
+      planScale: document.querySelector(".studio-scale-row select")?.value ?? "",
+    }));
+    assertCheck(
+      "a3-drawing-fit-note",
+      "An A3 cut at its 1:2500 plan scale shows no 'does not fit on A3' warning",
+      !/does not fit on A3/i.test(drawingChrome.fitNote) && drawingChrome.planScale === "2500",
+      `fitNote="${drawingChrome.fitNote}", planScale=${drawingChrome.planScale}`,
+    );
+    const [a3AiDownload] = await Promise.all([
+      page.waitForEvent("download", { timeout: 120_000 }),
+      page.getByRole("button", { name: "Quick export Adobe Illustrator .ai" }).click({ timeout: 30_000 }),
+    ]);
+    const a3AiPath = path.join(cursorArtifacts, "a3-cut-site-plan.ai");
+    await a3AiDownload.saveAs(a3AiPath);
+    const a3AiText = fs.readFileSync(a3AiPath, "latin1");
+    const media = a3AiText.match(/\/MediaBox\s*\[\s*0(?:\s+0)?\s+([\d.]+)\s+([\d.]+)\s*\]/);
+    const pageWidthMm = media ? (Number(media[1]) * 25.4) / 72 : 0;
+    const pageHeightMm = media ? (Number(media[2]) * 25.4) / 72 : 0;
+    const [a3SvgDownload] = await Promise.all([
+      page.waitForEvent("download", { timeout: 120_000 }),
+      page.getByRole("button", { name: "Quick export SVG" }).click({ timeout: 30_000 }),
+    ]);
+    const a3SvgPath = path.join(cursorArtifacts, "a3-cut-site-plan.svg");
+    await a3SvgDownload.saveAs(a3SvgPath);
+    const a3SvgText = fs.readFileSync(a3SvgPath, "utf8");
+    const svgWidthMm = Number((a3SvgText.match(/width="([\d.]+)mm"/) ?? [])[1] ?? 0);
+    const svgHeightMm = Number((a3SvgText.match(/height="([\d.]+)mm"/) ?? [])[1] ?? 0);
+    await page.screenshot({ path: path.join(cursorArtifacts, "a3-drawing-view.png"), fullPage: false });
+    assertCheck(
+      "a3-drawing-aspect",
+      "Drawing view for an A3 1:2500 landscape cut keeps the cut rectangle aspect on the plan canvas",
+      drawingAspect != null && Math.abs(drawingAspect - a3AspectExpected) < 0.02,
+      `planAspect=${drawingAspect?.toFixed(4) ?? "null"}`,
+    );
+    assertCheck(
+      "a3-export-sheet-size",
+      "A3 1:2500 .ai and .svg exports use a 420 × 297 mm page with no 'does not fit' note in the PDF",
+      Math.abs(pageWidthMm - 420) <= 1 &&
+        Math.abs(pageHeightMm - 297) <= 1 &&
+        Math.abs(svgWidthMm - 420) <= 1 &&
+        Math.abs(svgHeightMm - 297) <= 1 &&
+        !/does not fit on A3/i.test(a3AiText),
+      `ai=${pageWidthMm.toFixed(1)}×${pageHeightMm.toFixed(1)} mm svg=${svgWidthMm.toFixed(1)}×${svgHeightMm.toFixed(1)} mm`,
+    );
+
+    const rozelleA3Url =
+      `${baseUrl}/citycut/?lat=-33.86721&lon=151.18163&shape=a3&a3scale=3000&a3ori=landscape&label=Rozelle%20NSW`;
+    await page.goto(rozelleA3Url, { waitUntil: "networkidle", timeout: 60_000 });
+    await page.waitForSelector('.select .frame[data-shape="a3"]', { timeout: 20_000 });
+    await page.locator("button.create-fab").click({ timeout: 30_000 });
+    await page.waitForSelector(".model", { timeout: 360_000 });
+    await page.waitForFunction(
+      () => {
+        const sceneCanvas = document.querySelector(".scene-viewport canvas");
+        const modelCanvas = document.querySelector(".model canvas");
+        const canvas = sceneCanvas ?? modelCanvas;
+        if (!canvas) return false;
+        const spanX = Number(sceneCanvas?.dataset.citycutGroundSpanX ?? 0);
+        const spanZ = Number(sceneCanvas?.dataset.citycutGroundSpanZ ?? 0);
+        const polar = Number(modelCanvas?.dataset.introPolar ?? canvas.dataset.introPolar ?? 0);
+        const underlay = document.querySelector(".select.is-handoff-underlay");
+        const bridgePill = document.querySelector(".model .loading-hud-pill.is-model-bridge");
+        const bridgeOpacity = bridgePill ? Number(getComputedStyle(bridgePill).opacity) : 0;
+        const ready = /Ready ·\s*\d+\/\d+ sources/.test(document.body.innerText);
+        return (
+          ready &&
+          spanX > 100 &&
+          spanZ > 100 &&
+          polar >= 0.95 &&
+          !underlay &&
+          bridgeOpacity <= 0.05
+        );
+      },
+      { timeout: 360_000 },
+    );
+    await page.locator(".mode-btn", { hasText: "3D model" }).click({ timeout: 30_000 });
+    await page.waitForTimeout(400);
+    const rozelle3d = await page.evaluate(() => {
+      const sceneCanvas = document.querySelector(".scene-viewport canvas");
+      const spanX = Number(sceneCanvas?.dataset.citycutGroundSpanX ?? 0);
+      const spanZ = Number(sceneCanvas?.dataset.citycutGroundSpanZ ?? 0);
+      return { spanX, spanZ, aspect: spanZ > 0 ? spanX / spanZ : 0 };
+    });
+    await page.screenshot({
+      path: path.join(cursorArtifacts, "rozelle-a3-3000-3d.png"),
+      fullPage: false,
+      clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+    });
+    const planProj = page.locator(".model .proj-group button", { hasText: "Plan" }).first();
+    if ((await planProj.count()) > 0) {
+      await planProj.click({ timeout: 30_000 });
+      await page.waitForTimeout(600);
+    }
+    await page.screenshot({
+      path: path.join(cursorArtifacts, "rozelle-a3-3000-3d-plan.png"),
+      fullPage: false,
+      clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+    });
+    assertCheck(
+      "rozelle-a3-3d-ground-aspect",
+      "Rozelle A3 1:3000 landscape cut clips 3D ground to the rectangular frame (~1.41:1)",
+      Math.abs(rozelle3d.aspect - 420 / 297) <= 0.02,
+      `spanX=${rozelle3d.spanX.toFixed(1)} spanZ=${rozelle3d.spanZ.toFixed(1)} aspect=${rozelle3d.aspect.toFixed(4)}`,
+    );
+    await page.getByRole("tab", { name: /Drawing/i }).click({ timeout: 120_000 });
+    await page.waitForSelector("svg.plan", { timeout: 120_000 });
+    await page.waitForTimeout(1200);
+    const rozelleDrawing = await page.evaluate(() => {
+      const frame = document.querySelector('svg.plan rect[data-cut-frame="1"]');
+      const w = Number(frame?.getAttribute("width") ?? 0);
+      const h = Number(frame?.getAttribute("height") ?? 0);
+      const halfW = w / 2;
+      const halfH = h / 2;
+      const planScale = document.querySelector(".studio-scale-row select")?.value ?? "";
+      const leaks = [];
+      for (const pathEl of document.querySelectorAll('[data-layer^="nsw-"] path')) {
+        if (!(pathEl instanceof SVGGraphicsElement)) continue;
+        let box;
+        try {
+          box = pathEl.getBBox();
+        } catch {
+          continue;
+        }
+        if (
+          box.x < -halfW - 0.5 ||
+          box.x + box.width > halfW + 0.5 ||
+          box.y < -halfH - 0.5 ||
+          box.y + box.height > halfH + 0.5
+        ) {
+          leaks.push({ layer: pathEl.closest("[data-layer]")?.getAttribute("data-layer") ?? "path", box });
+        }
+      }
+      return { planScale, frameW: w, frameH: h, leakCount: leaks.length, leaks: leaks.slice(0, 3) };
+    });
+    await page.screenshot({
+      path: path.join(cursorArtifacts, "rozelle-a3-3000-drawing.png"),
+      fullPage: false,
+    });
+    assertCheck(
+      "rozelle-a3-drawing-scale",
+      "Rozelle A3 1:3000 cut defaults Drawing plan scale to 1:3000",
+      rozelleDrawing.planScale === "3000",
+      `planScale=${rozelleDrawing.planScale}`,
+    );
+    assertCheck(
+      "rozelle-a3-nsw-clip",
+      "Rozelle A3 drawing clips NSW zoning, records, and labels inside the cut frame",
+      rozelleDrawing.leakCount === 0,
+      `leaks=${rozelleDrawing.leakCount} sample=${JSON.stringify(rozelleDrawing.leaks)} frame=${rozelleDrawing.frameW.toFixed(0)}×${rozelleDrawing.frameH.toFixed(0)}`,
+    );
+
+    await page.goto(`${baseUrl}/citycut/`, { waitUntil: "networkidle", timeout: 60_000 });
+    await page.waitForSelector(".select .frame", { timeout: 20_000 });
+
     await page.evaluate(() => {
       window.__citycutHandoffMonitor = {
         blankFrames: 0,
@@ -1953,7 +2150,6 @@ async function main() {
       console.log(`[ARTIFACT] Video saved to ${mp4Out}`);
       console.log(`[ARTIFACT] Contact sheet saved to ${contactSheetOut}`);
     }
-    const cursorArtifacts = "/opt/cursor/artifacts";
     fs.mkdirSync(cursorArtifacts, { recursive: true });
   const sydneyCtx = await browser.newContext({
       viewport: VIEWPORT,

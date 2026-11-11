@@ -187,7 +187,7 @@ export type TerrainField = {
   source: string;
 };
 
-export type SiteFrameShape = "square" | "circle";
+export type SiteFrameShape = "square" | "circle" | "a3";
 
 export type ModelRegion = "vic" | "nsw";
 
@@ -195,6 +195,10 @@ export type CityModel = {
   placeLabel: string;
   center: LonLat;
   sideM: number;
+  widthM?: number;
+  heightM?: number;
+  cutScale?: number;
+  cutOrientation?: "landscape" | "portrait";
   frameShape?: SiteFrameShape;
   layers: ModelLayers;
   buildings: BuildingFeat[];

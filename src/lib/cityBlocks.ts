@@ -2,12 +2,13 @@ import type { MultiPolygon, Polygon } from "./safePolygonClip";
 import { clipDifference } from "./safePolygonClip";
 import { openRing, signedArea } from "./geo";
 import {
-  circleRing,
   clipAreaToSiteFrame,
   DEFAULT_SITE_FRAME_SHAPE,
-  siteFrameHalf,
+  siteFramePolygon,
+  type FrameGroundSize,
   type SiteFrameShape,
 } from "./siteFrame";
+import { modelFrameSize } from "./modelFrame";
 import { unionCarriageways, unionPathRoads } from "./roadFill";
 import type { AreaFeat, CityModel, Pt, Ring, RoadFeat } from "../types";
 
@@ -21,14 +22,14 @@ function multiFromRing(outer: Ring, holes: Ring[] = []): Multi {
   return [[ringToClip(outer), ...holes.map((hole) => ringToClip(hole))]];
 }
 
-function clipMultiToFrame(multi: Multi, sideM: number, frameShape: SiteFrameShape): Multi {
+function clipMultiToFrame(multi: Multi, sideM: number, frameShape: SiteFrameShape, size?: FrameGroundSize): Multi {
   const out: Multi = [];
   for (const poly of multi) {
     const outer = poly[0];
     if (!outer) continue;
     const ring: Ring = outer.map(([x, y]) => [x, y] as Pt);
     const holes: Ring[] = poly.slice(1).map((hole) => hole.map(([x, y]) => [x, y] as Pt));
-    const clipped = clipAreaToSiteFrame(ring, holes, sideM, frameShape);
+    const clipped = clipAreaToSiteFrame(ring, holes, sideM, frameShape, size);
     if (!clipped || clipped[0]!.length < 3) continue;
     out.push([
       clipped[0]!.map((p) => [p[0], p[1]] as [number, number]),
@@ -56,41 +57,39 @@ function multiToAreas(multi: Multi, startId: number): AreaFeat[] {
   return areas;
 }
 
-export function computeCityBlocks(model: Pick<CityModel, "roads" | "areas" | "sideM" | "frameShape">): AreaFeat[] {
+export function computeCityBlocks(
+  model: Pick<CityModel, "roads" | "areas" | "sideM" | "widthM" | "heightM" | "frameShape">,
+): AreaFeat[] {
   const sideM = model.sideM;
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
-  const half = siteFrameHalf(sideM);
-  let site: Multi =
-    frameShape === "circle" ? multiFromRing(circleRing(half)) : multiFromRing(
-          [
-            [-half, -half],
-            [half, -half],
-            [half, half],
-            [-half, half],
-            [-half, -half],
-          ],
-        );
+  const frameSize = modelFrameSize(model);
+  const frameRing = siteFramePolygon(sideM, frameShape, frameSize)[0]!;
+  let site: Multi = multiFromRing(frameRing.map(([x, y]) => [x, y] as Pt));
 
   const roads = model.roads;
   const pathFill = unionPathRoads(
     roads.filter((r) => r.kind === "road" && r.grade === "path").map((r) => ({ line: r.line, width: r.width })),
     sideM,
     frameShape,
+    frameSize,
   );
   const localFill = unionCarriageways(
     roads.filter((r) => r.kind === "road" && (r.grade ?? "local") === "local").map(roadPoly),
     sideM,
     frameShape,
+    frameSize,
   );
   const arterialFill = unionCarriageways(
     roads.filter((r) => r.kind === "road" && r.grade === "arterial").map(roadPoly),
     sideM,
     frameShape,
+    frameSize,
   );
   const railFill = unionCarriageways(
     roads.filter((r) => r.kind === "rail").map(roadPoly),
     sideM,
     frameShape,
+    frameSize,
   );
 
   const subtractRoads = (current: Multi, fill: { polygons: Ring[][] }): Multi => {
@@ -121,7 +120,7 @@ export function computeCityBlocks(model: Pick<CityModel, "roads" | "areas" | "si
     }) as Multi;
   }
 
-  site = clipMultiToFrame(site, sideM, frameShape);
+  site = clipMultiToFrame(site, sideM, frameShape, frameSize);
   return multiToAreas(site, 1);
 }
 

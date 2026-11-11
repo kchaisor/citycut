@@ -1,11 +1,13 @@
 import { M_PER_DEG_LAT, mPerDegLon } from "./geo";
 import { MAX_SIDE_KM, MIN_SIDE_KM } from "../content/constants";
 import type { LonLat } from "../types";
+import { a3RatioLockedDrag, type CutOrientation } from "./cutSpec";
 
 export type CutFrameHandle = "nw" | "ne" | "sw" | "se";
 
 const MIN_SIDE_M = MIN_SIDE_KM * 1000;
 const MAX_SIDE_M = MAX_SIDE_KM * 1000;
+const A3_MAX_WIDTH_FACTOR = 2.1;
 
 export function oppositeCutHandle(handle: CutFrameHandle): CutFrameHandle {
   if (handle === "nw") return "se";
@@ -23,6 +25,23 @@ export function fixedCornerForHandle(center: LonLat, sideM: number, dragged: Cut
   const half = sideM / 2;
   const dLon = half / mPerDegLon(center.lat);
   const dLat = half / M_PER_DEG_LAT;
+  if (fixed === "nw") return { lon: center.lon - dLon, lat: center.lat + dLat };
+  if (fixed === "ne") return { lon: center.lon + dLon, lat: center.lat + dLat };
+  if (fixed === "sw") return { lon: center.lon - dLon, lat: center.lat - dLat };
+  return { lon: center.lon + dLon, lat: center.lat - dLat };
+}
+
+export function fixedCornerForHandleRect(
+  center: LonLat,
+  widthM: number,
+  heightM: number,
+  dragged: CutFrameHandle,
+): LonLat {
+  const fixed = oppositeCutHandle(dragged);
+  const halfW = widthM / 2;
+  const halfH = heightM / 2;
+  const dLon = halfW / mPerDegLon(center.lat);
+  const dLat = halfH / M_PER_DEG_LAT;
   if (fixed === "nw") return { lon: center.lon - dLon, lat: center.lat + dLat };
   if (fixed === "ne") return { lon: center.lon + dLon, lat: center.lat + dLat };
   if (fixed === "sw") return { lon: center.lon - dLon, lat: center.lat - dLat };
@@ -91,4 +110,39 @@ export function parseCutFrameHandle(className: string): CutFrameHandle | null {
   if (className.includes("frame-handle-ne") || className.includes("is-tr")) return "ne";
   if (className.includes("frame-handle-nw") || className.includes("is-tl")) return "nw";
   return null;
+}
+
+function centerFromFixedRect(
+  fixed: CutFrameHandle,
+  fixedPt: LonLat,
+  widthM: number,
+  heightM: number,
+): LonLat {
+  const halfW = widthM / 2;
+  const halfH = heightM / 2;
+  const mLon = mPerDegLon(fixedPt.lat);
+  if (fixed === "nw") {
+    return { lon: fixedPt.lon + halfW / mLon, lat: fixedPt.lat - halfH / M_PER_DEG_LAT };
+  }
+  if (fixed === "se") {
+    return { lon: fixedPt.lon - halfW / mLon, lat: fixedPt.lat + halfH / M_PER_DEG_LAT };
+  }
+  if (fixed === "ne") {
+    return { lon: fixedPt.lon - halfW / mLon, lat: fixedPt.lat - halfH / M_PER_DEG_LAT };
+  }
+  return { lon: fixedPt.lon + halfW / mLon, lat: fixedPt.lat + halfH / M_PER_DEG_LAT };
+}
+
+export function a3CutFromCornerDrag(
+  fixed: CutFrameHandle,
+  fixedPt: LonLat,
+  draggedPt: LonLat,
+  orientation: CutOrientation,
+): { center: LonLat; widthM: number; heightM: number; sideM: number } {
+  const { eastM, northM } = spansFromFixed(fixed, fixedPt, draggedPt);
+  const locked = a3RatioLockedDrag(Math.max(eastM, MIN_SIDE_M), Math.max(northM, MIN_SIDE_M), orientation);
+  const widthM = Math.min(MAX_SIDE_M * A3_MAX_WIDTH_FACTOR, Math.max(MIN_SIDE_M, locked.widthM));
+  const heightM = Math.min(MAX_SIDE_M, Math.max(MIN_SIDE_M, locked.heightM));
+  const center = centerFromFixedRect(fixed, fixedPt, widthM, heightM);
+  return { center, widthM, heightM, sideM: Math.max(widthM, heightM) };
 }

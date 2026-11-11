@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SIDE_KM, DEFAULT_ZOOM, MAX_SIDE_KM, MIN_SIDE_KM } from "../content/constants";
+import { cutSpecFromSquare } from "./cutSpec";
 import { explicitLabel, frameFromSearch, siteAnchorFromSearch, writeFrameSearch, writeSiteAnchorSearch } from "./frameQuery";
 
 const melbourne = {
@@ -7,6 +8,7 @@ const melbourne = {
   sideKm: DEFAULT_SIDE_KM,
   label: "Melbourne CBD",
   frameShape: "square" as const,
+  cut: cutSpecFromSquare(DEFAULT_SIDE_KM * 1000),
 };
 
 describe("frameFromSearch", () => {
@@ -25,8 +27,16 @@ describe("frameFromSearch", () => {
     expect(frameFromSearch("?lat=91&lon=144.9631&km=abc")).toEqual(melbourne);
     expect(frameFromSearch("?lat=-37.8136&lon=181")).toEqual(melbourne);
     expect(frameFromSearch("?lat=-90.1&lon=-180.1&km=")).toEqual(melbourne);
-    expect(frameFromSearch("?lat=-37.8041&km=1")).toEqual({ ...melbourne, sideKm: 1 });
-    expect(frameFromSearch("?lon=144.94944&km=1")).toEqual({ ...melbourne, sideKm: 1 });
+    expect(frameFromSearch("?lat=-37.8041&km=1")).toEqual({
+      ...melbourne,
+      sideKm: 1,
+      cut: cutSpecFromSquare(1000),
+    });
+    expect(frameFromSearch("?lon=144.94944&km=1")).toEqual({
+      ...melbourne,
+      sideKm: 1,
+      cut: cutSpecFromSquare(1000),
+    });
   });
 
   it("keeps a shared frame when a camera view param is also present", () => {
@@ -35,6 +45,7 @@ describe("frameFromSearch", () => {
       sideKm: 1,
       label: "North Melbourne",
       frameShape: "square",
+      cut: cutSpecFromSquare(1000),
     });
     expect(frameFromSearch("?view=iso-ne")).toEqual(melbourne);
   });
@@ -45,6 +56,7 @@ describe("frameFromSearch", () => {
       sideKm: 1,
       label: "Selected frame",
       frameShape: "square",
+      cut: cutSpecFromSquare(1000),
     });
     expect(frameFromSearch("?lat=-37.8041&lon=144.94944&km=1&label=North%20Melbourne").label).toBe(
       "North Melbourne",
@@ -54,6 +66,7 @@ describe("frameFromSearch", () => {
       sideKm: 0.5,
       label: "Selected frame",
       frameShape: "square",
+      cut: cutSpecFromSquare(500),
     });
     expect(frameFromSearch("?lat=90&lon=180&km=1").view).toMatchObject({ lat: 90, lon: 180 });
     expect(frameFromSearch("?lat=-90&lon=-180&km=1").view).toMatchObject({ lat: -90, lon: -180 });

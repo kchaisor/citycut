@@ -264,6 +264,23 @@ describe("Illustrator plans", () => {
     expect(paints).toContain("B*");
   });
 
+  it("exports an A3 landscape cut at 1:2500 as a 420 × 297 mm sheet with a matching scale line", async () => {
+    const a3Model: CityModel = {
+      ...model(),
+      sideM: 1050,
+      widthM: 1050,
+      heightM: 742.5,
+      frameShape: "a3",
+      cutScale: 2500,
+      cutOrientation: "landscape",
+    };
+    const info = await inspect(await sitePlanPdf(a3Model, 2500));
+    expect(info.widthMm).toBeCloseTo(420, 0);
+    expect(info.heightMm).toBeCloseTo(297, 0);
+    expect(info.text).toContain("1:2500");
+    expect(info.text).not.toMatch(/does not fit on A3/i);
+  });
+
   it("draws the kerb only when the toggle is on, and reads an edited contour style", async () => {
     const off = cloneLineStyles(DEFAULT_LINE_STYLES);
     off.kerbOn = false;

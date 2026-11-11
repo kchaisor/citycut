@@ -1,17 +1,29 @@
 import type { Polygon } from "./safePolygonClip";
 import { cleanRingForFrame, clipIntersection } from "./safePolygonClip";
-import { clipPolygon, clipPolyline } from "./clip";
+import { clipPolygonRect, clipPolyline, clipPolylineRect, type AxisRect } from "./clip";
 import type { Pt, Ring } from "../types";
 
-export type SiteFrameShape = "square" | "circle";
+export type SiteFrameShape = "square" | "circle" | "a3";
 
 export const DEFAULT_SITE_FRAME_SHAPE: SiteFrameShape = "square";
 
 export const SITE_FRAME_CIRCLE_SEGMENTS = 128;
 
+export type FrameGroundSize = {
+  widthM: number;
+  heightM: number;
+};
+
+export function frameGroundSize(sideM: number, widthM?: number, heightM?: number): FrameGroundSize {
+  const width = widthM ?? sideM;
+  const height = heightM ?? sideM;
+  return { widthM: width, heightM: height };
+}
+
 export function readSiteFrameShape(raw: string | null): SiteFrameShape {
   const value = raw?.trim().toLowerCase();
   if (value === "circle") return "circle";
+  if (value === "a3") return "a3";
   return "square";
 }
 
@@ -19,12 +31,26 @@ export function siteFrameHalf(sideM: number): number {
   return sideM / 2;
 }
 
-export function pointInSiteFrame(point: Pt, sideM: number, shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE): boolean {
-  const half = siteFrameHalf(sideM);
-  if (shape === "square") {
-    return Math.abs(point[0]) <= half + 0.001 && Math.abs(point[1]) <= half + 0.001;
+export function frameHalfExtents(sideM: number, shape: SiteFrameShape, size?: FrameGroundSize): { halfW: number; halfH: number } {
+  const ground = size ?? frameGroundSize(sideM);
+  if (shape === "circle") {
+    const half = siteFrameHalf(sideM);
+    return { halfW: half, halfH: half };
   }
-  return point[0] * point[0] + point[1] * point[1] <= half * half + 0.001;
+  return { halfW: ground.widthM / 2, halfH: ground.heightM / 2 };
+}
+
+export function pointInSiteFrame(
+  point: Pt,
+  sideM: number,
+  shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  size?: FrameGroundSize,
+): boolean {
+  const { halfW, halfH } = frameHalfExtents(sideM, shape, size);
+  if (shape === "circle") {
+    return point[0] * point[0] + point[1] * point[1] <= halfW * halfW + 0.001;
+  }
+  return Math.abs(point[0]) <= halfW + 0.001 && Math.abs(point[1]) <= halfH + 0.001;
 }
 
 export function circleRing(radius: number, segments = SITE_FRAME_CIRCLE_SEGMENTS): Ring {
@@ -46,20 +72,20 @@ function closeForClip(ring: Ring): [number, number][] {
   return pts;
 }
 
-function frameClipPolygon(sideM: number, shape: SiteFrameShape): Polygon {
-  const half = siteFrameHalf(sideM);
-  if (shape === "square") {
+function frameClipPolygon(sideM: number, shape: SiteFrameShape, size?: FrameGroundSize): Polygon {
+  const { halfW, halfH } = frameHalfExtents(sideM, shape, size);
+  if (shape === "square" || shape === "a3") {
     return [
       [
-        [-half, -half],
-        [half, -half],
-        [half, half],
-        [-half, half],
-        [-half, -half],
+        [-halfW, -halfH],
+        [halfW, -halfH],
+        [halfW, halfH],
+        [-halfW, halfH],
+        [-halfW, -halfH],
       ],
     ];
   }
-  return [closeForClip(circleRing(half))];
+  return [closeForClip(circleRing(halfW))];
 }
 
 export function clipAreaToSiteFrame(
@@ -67,14 +93,15 @@ export function clipAreaToSiteFrame(
   holes: Pt[][],
   sideM: number,
   shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  size?: FrameGroundSize,
 ): Pt[][] | null {
-  const half = siteFrameHalf(sideM);
-  const clippedOuter = clipPolygon(cleanRingForFrame(outer), -half, half);
+  const { halfW, halfH } = frameHalfExtents(sideM, shape, size);
+  const clippedOuter = clipPolygonRect(cleanRingForFrame(outer), halfW, halfH);
   if (clippedOuter.length < 3) return null;
   const clippedHoles = holes
-    .map((hole) => clipPolygon(cleanRingForFrame(hole), -half, half))
+    .map((hole) => clipPolygonRect(cleanRingForFrame(hole), halfW, halfH))
     .filter((hole) => hole.length >= 3);
-  if (shape === "square") return [clippedOuter, ...clippedHoles];
+  if (shape === "square" || shape === "a3") return [clippedOuter, ...clippedHoles];
   const subject: Polygon = [closeForClip(clippedOuter), ...clippedHoles.map((hole) => closeForClip(hole))];
   try {
     const result = clipIntersection(subject, frameClipPolygon(sideM, "circle"), {
@@ -96,9 +123,15 @@ export function clipPolygonSiteFrame(
   ring: Pt[],
   sideM: number,
   shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  size?: FrameGroundSize,
 ): Pt[] {
-  const rings = clipAreaToSiteFrame(ring, [], sideM, shape);
+  const rings = clipAreaToSiteFrame(ring, [], sideM, shape, size);
   return rings?.[0] ?? [];
+}
+
+function frameAxisRect(sideM: number, shape: SiteFrameShape, size?: FrameGroundSize): AxisRect {
+  const { halfW, halfH } = frameHalfExtents(sideM, shape, size);
+  return { minE: -halfW, maxE: halfW, minN: -halfH, maxN: halfH };
 }
 
 function intersectSegmentCircle(a: Pt, b: Pt, radius: number): number[] {
@@ -176,18 +209,32 @@ export function clipPolylineSiteFrame(
   points: Pt[],
   sideM: number,
   shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  size?: FrameGroundSize,
 ): Pt[][] {
+  const rect = frameAxisRect(sideM, shape, size);
+  const squareParts =
+    shape === "square" && (!size || (size.widthM === sideM && size.heightM === sideM))
+      ? clipPolyline(points, -sideM / 2, sideM / 2)
+      : clipPolylineRect(points, rect);
+  if (shape === "square" || shape === "a3") return squareParts;
   const half = siteFrameHalf(sideM);
-  const squareParts = clipPolyline(points, -half, half);
-  if (shape === "square") return squareParts;
   return squareParts.flatMap((part) => clipPolylineToCircle(part, half));
 }
 
-export function siteFramePolygon(sideM: number, shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE): Polygon {
-  return frameClipPolygon(sideM, shape);
+export function siteFramePolygon(
+  sideM: number,
+  shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  size?: FrameGroundSize,
+): Polygon {
+  return frameClipPolygon(sideM, shape, size);
 }
 
-export function siteFrameAreaM2(sideM: number, shape: SiteFrameShape): number {
+export function siteFrameAreaM2(
+  sideM: number,
+  shape: SiteFrameShape,
+  size?: FrameGroundSize,
+): number {
   if (shape === "circle") return Math.PI * (sideM / 2) ** 2;
-  return sideM * sideM;
+  const ground = size ?? frameGroundSize(sideM);
+  return ground.widthM * ground.heightM;
 }
