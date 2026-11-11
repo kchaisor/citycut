@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { sectionPlanMarkerClip, sectionPlanMarkerGeometry } from "../lib/sectionKnife/marker";
 import {
@@ -13,10 +13,18 @@ import {
   PLAN_MARKER_GOLD_UNDERLAY_PX,
   PLAN_MARKER_LABEL_PX,
   PLAN_MARKER_LINE_SW_PX,
+  planMarkerCssToM,
   sectionPlanMarkerEnds,
 } from "../lib/sectionKnife/planMarkerDraw";
 import type { SectionKnifeToolState } from "../lib/sectionKnife/state";
 import type { CityModel } from "../types";
+
+function svgCssPxPerUserUnit(svg: SVGSVGElement | null): number {
+  if (!svg) return 1;
+  const m = svg.getScreenCTM();
+  if (!m) return 1;
+  return Math.hypot(m.a, m.b);
+}
 
 function viewArrowPointsPx(viewEast: number, viewNorthSvg: number, len = PLAN_MARKER_ARROW_LEN_PX): string {
   const vlen = Math.hypot(viewEast, viewNorthSvg) || 1;
@@ -104,7 +112,9 @@ export function SectionKnifePlanMarkers({
   svgRef: RefObject<SVGSVGElement | null>;
   viewWidthM: number;
 }) {
-  const [, setScaleTick] = useState(0);
+  const [scaleTick, setScaleTick] = useState(0);
+  const scaleMulRef = useRef(1);
+  const [pxScale, setPxScale] = useState(1);
   useLayoutEffect(() => {
     const el = svgRef.current;
     if (!el) return;
@@ -112,9 +122,33 @@ export function SectionKnifePlanMarkers({
     ro.observe(el);
     return () => ro.disconnect();
   }, [svgRef]);
-  const planWidthPx = Math.max(svgRef.current?.getBoundingClientRect().width ?? 1, 1);
-  const metresPerCssPx = viewWidthM / planWidthPx;
-  const pxScale = metresPerCssPx * 2;
+  const cssPerUser = svgCssPxPerUserUnit(svgRef.current);
+  const basePxScale = cssPerUser > 0 ? 1 / cssPerUser : viewWidthM / Math.max(svgRef.current?.getBoundingClientRect().width ?? 1, 1);
+  useLayoutEffect(() => {
+    scaleMulRef.current = 1;
+    setPxScale(basePxScale);
+  }, [basePxScale, tool.active, tool.knives.length, tool.selectedId]);
+  useLayoutEffect(() => {
+    const svg = svgRef.current;
+    if (!svg || !tool.active) return;
+    let pass = 0;
+    const tune = () => {
+      if (pass > 4) return;
+      pass += 1;
+      const bubble = svg.querySelector('[data-section-knife-marker-end-label="A"]')?.parentElement?.querySelector(".section-knife-marker-bubble");
+      if (!bubble) return;
+      const diam = bubble.getBoundingClientRect().width;
+      if (diam < 2) return;
+      const err = Math.abs(diam - PLAN_MARKER_BUBBLE_DIAM_PX);
+      if (err <= 1) return;
+      const mul = PLAN_MARKER_BUBBLE_DIAM_PX / diam;
+      scaleMulRef.current *= mul;
+      setPxScale(basePxScale * scaleMulRef.current);
+      requestAnimationFrame(tune);
+    };
+    requestAnimationFrame(tune);
+  }, [basePxScale, viewWidthM, scaleTick, tool.active, tool.knives.length, tool.selectedId]);
+  const metresPerCssPx = basePxScale;
   const markers = useMemo(() => {
     if (!tool.active) return [];
     return tool.knives.map((knife) => {
@@ -130,7 +164,7 @@ export function SectionKnifePlanMarkers({
     });
   }, [model, tool, metresPerCssPx]);
   if (markers.length === 0) return null;
-  const segHalfM = PLAN_MARKER_END_SEG_LEN_PX * 0.5 * metresPerCssPx;
+  const segHalfM = planMarkerCssToM(metresPerCssPx, PLAN_MARKER_END_SEG_LEN_PX * 0.5);
   const viewNorthSvg = (geom: (typeof markers)[0]["geom"]) => -geom.viewNorth;
 
   return (
@@ -217,7 +251,7 @@ export function SectionKnifePlanMarkers({
           data-section-knife-snap-cue="1"
           cx={tool.snapCue.east}
           cy={-tool.snapCue.north}
-          r={10 * metresPerCssPx}
+          r={planMarkerCssToM(metresPerCssPx, 10)}
           fill="none"
           stroke={planMarkerPalette(true).gold}
           strokeWidth={1}
