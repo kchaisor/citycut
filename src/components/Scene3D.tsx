@@ -101,6 +101,8 @@ import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
 
 const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
+import { FacadeSolarPointsLayer } from "./FacadeSolarPointsLayer";
+import type { FacadeAssessBundle } from "../lib/facadeSolarTypes";
 import { WindStaticArrows, WindStreaks } from "./WindStreaks";
 import { analyzeWindPeriod, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
 import type { CityModel } from "../types";
@@ -2027,6 +2029,7 @@ export function Scene3D({
   massingToolLayer = null,
   orbitLocked = false,
   quality = "high",
+  facadeSolarBundle = null,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -2058,6 +2061,7 @@ export function Scene3D({
   massingToolLayer?: ReactNode;
   orbitLocked?: boolean;
   quality?: RenderQuality;
+  facadeSolarBundle?: FacadeAssessBundle | null;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
@@ -2166,6 +2170,9 @@ export function Scene3D({
       {SUN_HOURS_HEATMAP_ENABLED && solar.sunHours && (
         <SunHoursLayer model={model} year={solar.year} month={solar.month} day={solar.day} groundY={groundY} />
       )}
+      {solar.facadeSolarAccess && facadeSolarBundle ? (
+        <FacadeSolarPointsLayer model={model} bundle={facadeSolarBundle} />
+      ) : null}
       <City
         model={model}
         uniformBuildings={uniformBuildings}

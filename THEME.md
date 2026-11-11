@@ -239,6 +239,10 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-hours-lost-3` | `#ff9a4a` | Hours-lost heatmap 2–3 h. |
 | `--sun-hours-lost-4` | `#e85c3a` | Hours-lost heatmap 3–4 h. |
 | `--sun-hours-lost-5plus` | `#8b2e1a` | Hours-lost heatmap 5+ h. |
+| `--facade-hours-ok` | `#3d8f5a` | 3D facade sample meets ADG threshold hours. |
+| `--facade-hours-warn` | `#e8a820` | 3D facade sample just below threshold. |
+| `--facade-hours-low` | `#e07030` | 3D facade sample low direct-sun hours. |
+| `--facade-hours-none` | `#8b3a45` | 3D facade sample with no counted direct sun. |
 | `--axo-water` | `#7eb8da` | Exploded axo floodplain / water layer. |
 | `--axo-road` | `#e8883a` | Exploded axo roads layer. |
 | `--axo-green` | `#8fbc8f` | Exploded axo green spaces layer. |

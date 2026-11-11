@@ -17,6 +17,7 @@ import {
   receptorLayerName,
 } from "./solarStudyLayers";
 import { solarReceptorExportFill } from "./solarReceptorExport";
+import type { FacadePointExport } from "./facadeSolarExport";
 import { openRing } from "./geo";
 import { buildHeliodonGroundOverlay, type HeliodonGroundExportOptions } from "./heliodonDiagram";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
@@ -839,9 +840,10 @@ function addPlanPolygonRings(
   multi: Pt[][][],
   colorKey: ColourKey,
   objectName: string,
+  zOverride?: number,
 ) {
   if (multi.length === 0) return;
-  const z = model.terrain ? model.terrain.min : 0;
+  const z = zOverride ?? (model.terrain ? model.terrain.min : 0);
   const layerIndex = ensureLayer(rhino, doc, layers, materials, layerName, colourRgb(colorKey));
   let index = 0;
   for (const polygon of multi) {
@@ -985,6 +987,7 @@ export type CityModelTo3dmOptions = {
   wind?: { table: WindRoseTable; period: WindPeriodId } | null;
   sunStudy?: { layers: SunStudyExportLayer[] } | null;
   solarReceptors?: SolarReceptorExport[] | null;
+  facadeSolarPoints?: FacadePointExport[] | null;
   hideTrees?: boolean;
   importedMassing?: ImportedMassingExport[] | null;
   /**
@@ -998,6 +1001,42 @@ export type CityModelTo3dmOptions = {
 export type ImportedMassingExport = Pick<ImportedMassing, "name" | "positions" | "indices" | "placement" | "colour">;
 
 export const IMPORTED_MASSING_LAYER = "Imported massing";
+export const FACADE_SOLAR_LAYER = "Facade hours (ADG proxy)";
+
+function addFacadeSolarPoints(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  model: CityModel,
+  zone: number,
+  points: readonly FacadePointExport[],
+) {
+  if (points.length === 0) return;
+  const half = 0.35;
+  for (const point of points) {
+    const ring: Pt[] = [
+      [point.east - half, point.north - half],
+      [point.east + half, point.north - half],
+      [point.east + half, point.north + half],
+      [point.east - half, point.north + half],
+      [point.east - half, point.north - half],
+    ];
+    addPlanPolygonRings(
+      rhino,
+      doc,
+      layers,
+      materials,
+      model,
+      zone,
+      FACADE_SOLAR_LAYER,
+      [[ring]],
+      point.colourKey,
+      `${point.hours.toFixed(1)} h facade`,
+      point.yM,
+    );
+  }
+}
 
 /** Imported models straight from their placement to MGA, so an MGA-placed model round-trips exactly. */
 function addImportedMassing(
@@ -1053,6 +1092,7 @@ function normalize3dmOptions(
     "wind" in options ||
     "sunStudy" in options ||
     "solarReceptors" in options ||
+    "facadeSolarPoints" in options ||
     "hideTrees" in options ||
     "importedMassing" in options ||
     "buildingsAsMesh" in options ||
@@ -1077,6 +1117,7 @@ export async function cityModelTo3dm(
     wind,
     sunStudy,
     solarReceptors,
+    facadeSolarPoints,
     hideTrees,
     importedMassing,
     buildingsAsMesh,
@@ -1148,6 +1189,7 @@ export async function cityModelTo3dm(
     if (shadows) addPlanShadows(rhino, doc, layers, materials, model, crs.zone, shadows, Boolean(castShadows));
     if (sunStudy?.layers?.length) addSunStudyPlanShadows(rhino, doc, layers, materials, model, crs.zone, sunStudy.layers);
     if (solarReceptors?.length) addSolarReceptorPlan(rhino, doc, layers, materials, model, crs.zone, solarReceptors);
+    if (facadeSolarPoints?.length) addFacadeSolarPoints(rhino, doc, layers, materials, model, crs.zone, facadeSolarPoints);
     addProposedMassingFootprints(rhino, doc, layers, materials, model, crs.zone);
     if (wind?.table) addWindRose(rhino, doc, layers, materials, model, crs.zone, wind.table, wind.period);
     if (importedMassing?.length) addImportedMassing(rhino, doc, layers, materials, importedMassing);

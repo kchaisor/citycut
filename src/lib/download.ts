@@ -68,6 +68,7 @@ export type RhinoDownloadOptions = {
   buildingsAsMesh?: boolean;
   sunStudy?: { layers: SunStudyExportLayer[] } | null;
   solarReceptors?: SolarReceptorExport[] | null;
+  facadeSolarPoints?: import("./facadeSolarExport").FacadePointExport[] | null;
 };
 
 export async function download3dm(

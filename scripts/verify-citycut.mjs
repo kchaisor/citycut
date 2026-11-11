@@ -2562,6 +2562,50 @@ async function main() {
 
       await boxHillTreeShadows();
 
+      const boxHillFacadeSolar = async () => {
+        await shadowPage.getByRole("tab", { name: /3D model/i }).click();
+        await shadowPage.evaluate(
+          ({ east, north }) => {
+            window.__citycutQaMassing?.commitPolylineCenterline?.(
+              [
+                [east - 10, north - 6],
+                [east + 18, north - 6],
+                [east + 18, north + 8],
+              ],
+              { floors: 5, width_m: 12 },
+            );
+            window.__citycutQaModel?.enableFacadeSolar?.();
+          },
+          { east: FOCUS_EAST, north: FOCUS_NORTH },
+        );
+        await shadowPage.waitForFunction(
+          () => {
+            const ms = Number(document.documentElement.dataset.facadeSolarAssessMs ?? "0");
+            const overlay = document.querySelector("[data-facade-solar-overlay]");
+            const dock = document.querySelector("[data-facade-solar-results-dock]");
+            const pct = document.querySelector("[data-facade-pct-at-threshold]");
+            return ms > 0 && overlay && dock && pct && pct.textContent?.includes("%");
+          },
+          null,
+          { timeout: 360000 },
+        );
+        const bundle = await shadowPage.evaluate(() => window.__citycutQaModel?.readFacadeSolarAssess?.() ?? null);
+        const assessMs = Number(await shadowPage.evaluate(() => document.documentElement.dataset.facadeSolarAssessMs ?? "0"));
+        const shotFacade = path.join(CURSOR_ARTIFACTS_DIR, "solar-facade-heatmap-3d.png");
+        await shadowPage.locator(".model .fill").first().screenshot({ path: shotFacade, timeout: 60000 });
+        const shotCard = path.join(CURSOR_ARTIFACTS_DIR, "solar-facade-results-card.png");
+        await shadowPage.locator("[data-facade-solar-results-dock]").screenshot({ path: shotCard, timeout: 15000 });
+        const unitCount = bundle?.facade?.unitCount ?? 0;
+        assertCheck(
+          "solar-facade-adg-heatmap",
+          "Facade ADG 4A-1: 3D overlay points, readable results card, timing attribute on Box Hill proposal",
+          unitCount > 4 && assessMs > 0 && assessMs < 120000,
+          `units=${unitCount}, assessMs=${assessMs}, pctAt=${bundle?.facade?.pctAtThreshold}, pctNone=${bundle?.facade?.pctNone}, pass=${bundle?.facade?.pass}, heatmap=${shotFacade}, card=${shotCard}`,
+        );
+      };
+
+      await boxHillFacadeSolar();
+
       await shadowCtx.close();
     }
 
