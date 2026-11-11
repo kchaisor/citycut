@@ -1,7 +1,3 @@
-/**
- * QA screenshots for seven-item batch. Run after preview on 4173.
- * npx vite-node scripts/qa-seven-items-batch.mjs
- */
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 

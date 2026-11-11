@@ -16,7 +16,6 @@ export const DEFAULT_WIND_SETTINGS: WindViewSettings = {
   showRose: true,
 };
 
-/** Wind is off when a model opens; period and rose preference still come from storage. */
 export function windSettingsForModelOpen(storage: Storage): WindViewSettings {
   return { ...readStoredWindSettings(storage), enabled: false };
 }
@@ -50,6 +49,5 @@ export function writeStoredWindSettings(storage: Storage, settings: WindViewSett
     storage.setItem(WIND_PERIOD_KEY, settings.period);
     storage.setItem(WIND_SHOW_ROSE_KEY, settings.showRose ? "1" : "0");
   } catch {
-    // ignore
   }
 }

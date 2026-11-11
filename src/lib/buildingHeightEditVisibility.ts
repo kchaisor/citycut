@@ -9,7 +9,6 @@ function matchesBuildingId(stored: unknown, targetIds: ReadonlySet<number>): boo
   return targetIds.has(Number(stored));
 }
 
-/** Hide one or more picked footprints in the city group while selected. Restores on cleanup. */
 export function hideBuildingsForHeightEdit(root: THREE.Object3D, buildingIds: readonly number[]): () => void {
   const targetIds = new Set(buildingIds.map((id) => Number(id)));
   if (targetIds.size === 0) return () => {};
@@ -64,7 +63,6 @@ export function hideBuildingsForHeightEdit(root: THREE.Object3D, buildingIds: re
   };
 }
 
-/** Hide the picked footprint in the city group while the height popover is open. Restores on cleanup. */
 export function hideBuildingForHeightEdit(root: THREE.Object3D, buildingId: number): () => void {
   return hideBuildingsForHeightEdit(root, [buildingId]);
 }

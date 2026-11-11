@@ -3,7 +3,6 @@ import { getColour } from "./colours";
 import { CELL_BLOCKED, CELL_VISIBLE, groundHeightAt, type HeightGrid } from "./viewshed";
 import type { CityModel, Pt } from "../types";
 
-/** Overlay opacity per state (0–255). Colours come from the --view-* tokens in colours.css. */
 export const VIEW_ALPHA = { visible: 220, seen: 120, blocked: 70 } as const;
 const OVERLAY_LIFT_M = 0.35;
 const PATH_LIFT_M = 0.9;
@@ -16,17 +15,11 @@ function hexChannels(hex: string): [number, number, number] {
   return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
 }
 
-/**
- * Three.js objects for the View tab walk: the draped visibility overlay, the drawn path
- * (clicked points and a ribbon along the spline) and the walker marker. Lives in the same
- * local frame as the city (x east, y up, z = -north). Never touches the camera.
- */
 export class WalkViewshedLayer {
   readonly root = new THREE.Group();
   private readonly points = new THREE.Group();
   private ribbon: THREE.Mesh | null = null;
   private overlay: THREE.Mesh | null = null;
-  /** RGBA bytes, row 0 = southern edge; uploaded straight to the GPU (no canvas round trip). */
   private pixels: Uint8Array | null = null;
   private texture: THREE.DataTexture | null = null;
   private grid: HeightGrid | null = null;
@@ -67,14 +60,12 @@ export class WalkViewshedLayer {
     return groundHeightAt(this.model, east, north);
   }
 
-  /** Clicked points as dots and the spline (already sampled finely) as a draped ribbon. */
   setPath(clicked: readonly Pt[], line: readonly Pt[]): void {
     for (const child of [...this.points.children]) {
       this.points.remove(child);
       (child as THREE.InstancedMesh).dispose?.();
     }
     if (clicked.length) {
-      // One draw call for all clicks.
       const dots = new THREE.InstancedMesh(this.dotGeometry, this.pathMaterial, clicked.length);
       const m = new THREE.Matrix4();
       clicked.forEach(([e, n], i) => dots.setMatrixAt(i, m.makeTranslation(e, this.z(e, n) + 1.2, -n)));
@@ -112,7 +103,6 @@ export class WalkViewshedLayer {
     this.root.add(this.ribbon);
   }
 
-  /** Allocate the draped overlay for a computed grid. */
   setGrid(grid: HeightGrid | null): void {
     this.clearOverlay();
     this.grid = grid;
@@ -151,7 +141,6 @@ export class WalkViewshedLayer {
     this.root.add(this.overlay);
   }
 
-  /** Paint one frame: visible now, seen earlier (when `seen` is given), not visible. */
   paint(frame: Uint8Array | null, seen: Uint8Array | null): void {
     const grid = this.grid;
     if (!grid || !this.pixels || !this.texture) return;

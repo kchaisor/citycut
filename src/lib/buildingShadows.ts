@@ -1,25 +1,11 @@
-import * as polygonClipping from "polygon-clipping";
-import type { MultiPolygon, Pair, Polygon } from "polygon-clipping";
+import type { MultiPolygon, Pair, Polygon } from "./safePolygonClip";
+import { clipIntersection as intersection, clipUnion as union } from "./safePolygonClip";
 import { openRing } from "./geo";
 import { siteFramePolygon } from "./siteFrame";
 import { sunAtMelbourneLocal, type SolarSample } from "./solar";
 import { buildingHeightsFingerprint } from "./heightOverrides";
 import { footprintBase, sampleTerrain } from "./terrain";
 import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
-
-type ClipFns = {
-  union: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
-  intersection: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
-};
-
-function clippingFns(): ClipFns {
-  const loaded = polygonClipping as unknown as ClipFns & { default?: ClipFns };
-  if (typeof loaded.union === "function") return loaded;
-  if (loaded.default && typeof loaded.default.union === "function") return loaded.default;
-  throw new Error("polygon-clipping did not load.");
-}
-
-const { union, intersection } = clippingFns();
 
 export type PlanShadowInput = {
   lat: number;
@@ -77,7 +63,6 @@ function edgeShadowQuad(a: Pt, b: Pt, offset: Pt): Polygon {
   ];
 }
 
-/** Plan offset from a vertical extrusion of `height` m toward the sun. */
 export function planShadowOffset(sample: SolarSample, height: number): Pt | null {
   if (!sample.aboveHorizon || sample.direction[1] <= 1e-6 || height <= 0) return null;
   const [dx, dy, dz] = sample.direction;
@@ -87,15 +72,10 @@ export function planShadowOffset(sample: SolarSample, height: number): Pt | null
 
 type Ground = (east: number, north: number) => number;
 
-/**
- * Plan offset of a roof point at absolute height `topZ` to where its shadow meets the terrain:
- * marches along the sun's plan direction until the ray drops below the ground. On a slope the
- * shadow is shorter uphill and longer downhill, exactly as in the 3D view.
- */
 export function terrainShadowOffset(sample: SolarSample, point: Pt, topZ: number, ground: Ground): Pt | null {
   const unit = planShadowOffset(sample, 1);
   if (!unit) return null;
-  const perMetre = Math.hypot(unit[0], unit[1]); // plan metres per metre of drop
+  const perMetre = Math.hypot(unit[0], unit[1]);
   const u: Pt = [unit[0] / perMetre, unit[1] / perMetre];
   const above = (t: number) => topZ - t / perMetre - ground(point[0] + u[0] * t, point[1] + u[1] * t);
   if (above(0) <= 0) return [0, 0];
@@ -113,20 +93,15 @@ export function terrainShadowOffset(sample: SolarSample, point: Pt, topZ: number
   return [u[0] * hi, u[1] * hi];
 }
 
-/** Shadow footprint when each vertex has its own offset (roof shadow draped on terrain). */
 export function buildingShadowPolygonOnTerrain(
   building: BuildingFeat,
   offsetAt: (point: Pt) => Pt,
-  /** Coordinate grid (m) the pieces are snapped to before the union. */
   snap = 1e-3,
 ): MultiPolygon | null {
   const footprint = footprintPolygon(building.ring, building.holes);
   if (!footprint) return null;
   const q = (v: number) => Math.round(v / snap) * snap;
   const qp = (p: Pt): Pair => [q(p[0]), q(p[1])];
-  // Per-vertex offsets differ by float noise, so sweep quads can be slivers or near-collinear.
-  // polygon-clipping throws on those ("Unable to find segment … in SweepLine tree"), so snap every
-  // piece to a grid, drop zero-area pieces, and union them in one call.
   const pieces: Polygon[] = [footprint.map((ring) => ring.map((pair) => qp(pair as Pt))) as Polygon];
   for (const ringPts of [building.ring, ...building.holes]) {
     const ring = openRing(ringPts);
@@ -155,13 +130,11 @@ function ringArea(ring: Pair[]): number {
   return sum / 2;
 }
 
-/** Snap a shadow to a coarser grid: the retry when polygon-clipping rejects the exact one. */
 function snapMulti(multi: MultiPolygon, snap: number): MultiPolygon {
   const q = (v: number) => Math.round(v / snap) * snap;
   return multi.map((polygon) => polygon.map((ring) => ring.map(([x, y]) => [q(x), q(y)] as Pair)));
 }
 
-/** Exact shadow footprint for one building (footprint ∪ translation ∪ edge sweeps). */
 export function buildingShadowPolygon(building: BuildingFeat, offset: Pt): MultiPolygon | null {
   const footprint = footprintPolygon(building.ring, building.holes);
   if (!footprint) return null;
@@ -189,7 +162,6 @@ function clipRingFromClipRing(ring: ClipRing): import("../types").Ring {
   return points;
 }
 
-/** MultiPolygon → site-plan rings (outer plus holes per polygon). */
 export function shadowRingsFromMulti(multi: MultiPolygon): Ring[][] {
   const out: Ring[][] = [];
   for (const polygon of multi) {
@@ -227,8 +199,6 @@ function cachedBuildingShadow(
   let shadow: MultiPolygon | null = null;
   if (terrain) {
     const offsetAt = (p: Pt) => terrainShadowOffset(sample, p, terrain.topZ, terrain.ground) ?? [0, 0];
-    // One awkward footprint must never blank the whole shadow layer: retry on a coarser grid, then
-    // fall back to the flat-ground shadow for this building only.
     for (const snap of [1e-3, 1e-2]) {
       try {
         shadow = buildingShadowPolygonOnTerrain(building, offsetAt, snap);
@@ -253,13 +223,11 @@ function safeFlatShadow(building: BuildingFeat, offset: Pt): MultiPolygon | null
   }
 }
 
-/** Union that retries on a snapped grid instead of throwing; returns `merged` unchanged if both fail. */
 function safeUnion(merged: MultiPolygon, shadow: MultiPolygon): MultiPolygon {
   for (const snap of [0, 1e-3, 1e-2]) {
     try {
       return snap === 0 ? union(merged, shadow) : union(snapMulti(merged, snap), snapMulti(shadow, snap));
     } catch {
-      // try the next grid
     }
   }
   return merged;
@@ -281,7 +249,6 @@ function unionCacheLookup(model: CityModel, input: PlanShadowInput, castShadows:
   ].join("|");
 }
 
-/** Union of all building shadows on the site frame, clipped to the cut square. */
 export function planShadowRings(
   model: CityModel,
   input: PlanShadowInput,
@@ -304,8 +271,6 @@ export function planShadowRings(
   );
   if (!sample.aboveHorizon) return unionCache;
 
-  // With terrain, shadows land on the ground the 3D view shows: regular buildings stand on their
-  // lowest footprint sample (as buildCity extrudes them), imported massing keeps its own roof Z.
   const field = model.terrain;
   const ground: Ground | null = field ? (east, north) => sampleTerrain(field, east, north, model.sideM) : null;
   const terrainKey = field ? `${field.cols}x${field.rows}:${field.min}:${field.max}:${model.sideM}` : "";
@@ -331,7 +296,6 @@ export function planShadowRings(
   return unionCache;
 }
 
-/** @internal test helper */
 export function clearPlanShadowCache(): void {
   buildingShadowCache.clear();
   unionCacheKey = "";

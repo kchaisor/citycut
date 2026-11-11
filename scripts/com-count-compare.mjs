@@ -1,7 +1,3 @@
-/**
- * CoM-updated building count on 1 km CBD: OSM (#37) vs Overture (#38).
- * Run: npx vite-node scripts/com-count-compare.mjs
- */
 import {
   countBuildingsWithComDerivedExtrusion,
   fetchComBuildingFootprintsWithStats,

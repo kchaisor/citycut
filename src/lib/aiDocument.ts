@@ -37,7 +37,6 @@ import { pdfPt } from "./lineweights";
 export type Rgb = readonly [number, number, number];
 
 export type PdfPath = {
-  /** Rings in millimetres, origin at the bottom-left, y up. The first ring is the outer. */
   rings: number[][][];
   close?: boolean;
   fill?: Rgb;
@@ -47,7 +46,6 @@ export type PdfPath = {
   dashMm?: readonly number[];
   cap?: "butt" | "round";
   join?: "miter" | "round";
-  /** Fill and stroke opacity, 0–1. Written as a PDF ExtGState (/ca, /CA); omitted means opaque. */
   opacity?: number;
 };
 
@@ -68,11 +66,9 @@ export type PdfText = {
   sizeMm: number;
   text: string;
   color: Rgb;
-  /** Degrees counter-clockwise in PDF y-up space. */
   rotateDeg?: number;
 };
 
-/** One marked-content block. The same layer name may appear more than once so paint order can interleave. */
 export type PdfChunk = {
   name: string;
   paths?: PdfPath[];
@@ -132,7 +128,6 @@ function paintOp(fill: boolean, strokeOn: boolean, evenOdd: boolean) {
   return stroke();
 }
 
-/** Resource name for an ExtGState at this opacity, e.g. 0.2 -> "GSa200". */
 export function opacityStateName(opacity: number): string {
   return `GSa${Math.round(Math.min(1, Math.max(0, opacity)) * 1000)}`;
 }
@@ -186,11 +181,6 @@ function ellipseOperators(ellipse: PdfEllipse) {
   return ops;
 }
 
-/**
- * One-page PDF 1.6 with optional-content layers.
- * Coordinates on the chunks are millimetres, y up. Text stays Helvetica, not outlines.
- * There are no image XObjects.
- */
 export async function buildLayeredPdf(
   widthMm: number,
   heightMm: number,
@@ -298,17 +288,11 @@ export async function buildLayeredPdf(
     }
     ops.push(endMarked());
     if (ops.length <= 2) continue;
-    // One layer can hold every visible edge. Spreading that list into a single
-    // call blows the argument limit, so the stream is filled in batches.
-    // Consecutive batches stay in one content stream and concatenate in order.
     const batch = 800;
     for (let i = 0; i < ops.length; i += batch) page.pushOperators(...ops.slice(i, i + batch));
   }
 
   const bytes = await doc.save({ useObjectStreams: false });
-  // pdf-lib's writer always emits %PDF-1.7. The file uses only PDF 1.5
-  // features (optional content groups, DeviceRGB, a standard font), so the
-  // header is relabelled 1.6. Illustrator opens either version as a native file.
   if (
     bytes[0] === 0x25 &&
     bytes[1] === 0x50 &&

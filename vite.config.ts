@@ -3,19 +3,7 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   base: "/citycut/",
-  plugins: [
-    react(),
-    {
-      name: "citycut-vercel-prebaked-pmtiles",
-      apply: "build",
-      async buildStart() {
-        if (process.env.VERCEL === "1") {
-          const { fetchPrebakedPmtiles } = await import("./scripts/fetch-prebaked-pmtiles.mjs");
-          await fetchPrebakedPmtiles();
-        }
-      },
-    },
-  ],
+  plugins: [react()],
   server: {
     host: "0.0.0.0",
     port: 5173,

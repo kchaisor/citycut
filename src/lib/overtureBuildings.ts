@@ -1,15 +1,9 @@
-/**
- * Overture Maps building footprints from official PMTiles (z14).
- *
- * `building_part` is not used for massing: the parent `building` footprint carries
- * consolidated height and the site-plan ring. Parts would duplicate sub-volumes already
- * represented on the footprint and conflict with CoM height clipping on one outline.
- */
 
 import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 import { PMTiles } from "pmtiles";
-import polygonClipping from "polygon-clipping";
+import type { MultiPolygon } from "./safePolygonClip";
+import { clipUnion } from "./safePolygonClip";
 import { classify } from "./buildingUse";
 import { intersectionAreaM2 } from "./comBuildingHeightsMatch";
 import { clipAreaToSiteFrame, DEFAULT_SITE_FRAME_SHAPE, type SiteFrameShape } from "./siteFrame";
@@ -149,7 +143,7 @@ function fragmentsFromTile(
   return out;
 }
 
-type MultiPoly = polygonClipping.MultiPolygon;
+type MultiPoly = MultiPolygon;
 
 function asMultiPoly(ring: Ring, holes: Ring[]): MultiPoly {
   const outer = openRing(ring).map((point) => [point[0], point[1]] as [number, number]);
@@ -189,7 +183,6 @@ function ringFromMulti(multi: MultiPoly, dropSliverArea: number): { ring: Ring; 
   return out;
 }
 
-/** Union tile fragments by Overture id and drop tile-buffer slivers under 2 m². */
 export function reassembleBuildingFragments(fragments: Fragment[]): Fragment[] {
   const byId = new Map<string, Fragment[]>();
   for (const fragment of fragments) {
@@ -204,7 +197,11 @@ export function reassembleBuildingFragments(fragments: Fragment[]): Fragment[] {
     let microsoft = parts.some((part) => part.microsoft);
     const osmWayIds = [...new Set(parts.flatMap((part) => part.osmWayIds))];
     for (const part of parts) {
-      union = polygonClipping.union(union, asMultiPoly(part.ring, part.holes)) as MultiPoly;
+      union = clipUnion(union, asMultiPoly(part.ring, part.holes), {
+        layer: "Overture building",
+        operation: "union",
+        featureId: id,
+      }) as MultiPoly;
       if (part.microsoft) microsoft = true;
     }
     const rings = ringFromMulti(union, SLIVER_AREA_M2);
@@ -287,7 +284,6 @@ export function findOvertureBuildingByOsmWayId(
   return buildings.find((building) => building.osmWayIds?.includes(osmWayId));
 }
 
-/** Prefer a footprint containing the tower coordinate; falls back to max intersection area. */
 export function findOvertureBuildingForOsmFootprint(
   buildings: BuildingFeat[],
   seed: { ring: Ring; holes: Ring[] },
@@ -309,7 +305,6 @@ export function findOvertureBuildingForOsmFootprint(
 }
 
 export type OvertureBuildingsForCutOptions = {
-  /** When set (e.g. from enrichment manifest), skip STAC and use this release. */
   overtureRelease?: string;
   stacWarning?: string | null;
 };

@@ -1,32 +1,21 @@
 import { daylightArcSamples, sunSample, type SolarSample, type Vec3 } from "./solar";
 
-/** World-space ground height (Y) at a plan position (X east, Z = −north). */
 export type GroundHeight = (x: number, z: number) => number;
 
-/** Lift above the draped terrain so dial lines clear the road surfaces. */
 export const HELIODON_LIFT_M = 1.5;
 
-/** Small lift above the flat dial plane to avoid z-fighting with terrain. */
 export const DIAL_PLANE_EPSILON_M = 0.08;
 
-/** Ground dial on one horizontal elevation (metres, world Y). */
 export function flatDialGround(elevationM: number): GroundHeight {
   return () => elevationM;
 }
 
-/**
- * The heliodon's shared projection. Plan position is the orthographic polar
- * chart (radius · cos altitude), so arcs, the horizon ring and the altitude
- * rings line up in plan. Height is the terrain under that plan point plus
- * radius · sin altitude, so altitude 0° lands on the draped horizon ring.
- */
 export function heliodonPoint(direction: Vec3, radius: number, ground: GroundHeight): Vec3 {
   const x = direction[0] * radius;
   const z = direction[2] * radius;
   return [x, ground(x, z) + HELIODON_LIFT_M + Math.max(0, direction[1]) * radius, z];
 }
 
-/** A point on a flat dial circle at compass bearing `deg` (0° = true north, clockwise). */
 export function dialPoint(deg: number, radius: number, ground: GroundHeight): Vec3 {
   const t = (deg * Math.PI) / 180;
   const x = Math.sin(t) * radius;
@@ -34,7 +23,6 @@ export function dialPoint(deg: number, radius: number, ground: GroundHeight): Ve
   return [x, ground(x, z) + HELIODON_LIFT_M, z];
 }
 
-/** Plan radius of the altitude ring for `altitudeDeg`, in the same projection as the arcs. */
 export function altitudeRingRadius(altitudeDeg: number, radius: number): number {
   return radius * Math.cos((altitudeDeg * Math.PI) / 180);
 }
@@ -49,10 +37,6 @@ function horizonCrossing(below: SolarSample, above: SolarSample): Vec3 {
   return [x / length, 0, z / length];
 }
 
-/**
- * Sun directions for one day, from the sunrise to the sunset horizon crossing.
- * The ends are interpolated to altitude 0° exactly, so they sit on the horizon ring.
- */
 export function horizonArcDirections(
   lat: number,
   lon: number,

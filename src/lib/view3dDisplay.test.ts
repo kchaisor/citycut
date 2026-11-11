@@ -225,7 +225,6 @@ describe("3D layer visibility across buildCityGroup meshes", () => {
     expect(roadMeshes.length).toBeGreaterThan(0);
     expect(pathMeshes.length).toBeGreaterThan(0);
 
-    // By default: all 3D layers and Ground start ON
     expect(roadMeshes.every((m) => m.visible)).toBe(true);
     expect(pathMeshes.every((m) => m.visible)).toBe(true);
     expect(group.getObjectByName("Water")?.visible).toBe(true);
@@ -236,24 +235,20 @@ describe("3D layer visibility across buildCityGroup meshes", () => {
     expect(group.getObjectByName("RailLines")?.visible).toBe(true);
     expect(group.getObjectByName("Trees")?.visible).toBe(true);
 
-    // Toggling footpaths off keeps street roads visible
     display = setLayer3dVisible(display, "footpaths", false);
     applyCityVisibility(group, display);
     expect(roadMeshes.every((m) => m.visible)).toBe(true);
     expect(pathMeshes.every((m) => !m.visible)).toBe(true);
 
-    // Toggling roads off hides street roads
     display = setLayer3dVisible(display, "roads", false);
     applyCityVisibility(group, display);
     expect(roadMeshes.every((m) => !m.visible)).toBe(true);
 
-    // Toggling buildings off hides Buildings and BuildingEdges
     display = setLayer3dVisible(display, "buildings", false);
     applyCityVisibility(group, display);
     expect(group.getObjectByName("Buildings")?.visible).toBe(false);
     expect(group.getObjectByName("BuildingEdges")?.visible).toBe(false);
 
-    // Toggling landscape, water, rail, trees off hides their objects while Ground and Blocks stay visible
     for (const [id, objName] of [
       ["landscape", "Green"],
       ["water", "Water"],

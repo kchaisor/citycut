@@ -20,9 +20,7 @@ type Props = {
   onSave: (heightM: number) => void;
   onReset: () => void;
   onClose: () => void;
-  /** Buildings in the shift-click selection (at least 1: this one). */
   selectedCount?: number;
-  /** Buildings hidden in this cut. */
   hiddenCount?: number;
   onHideSelected?: () => void;
   onShowAll?: () => void;

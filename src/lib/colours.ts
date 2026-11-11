@@ -1,13 +1,6 @@
 import coloursCss from "../colours.css?raw";
 import { cssColorToHex, normalizeHex, parseCustomProperties, resolveSheet } from "./cssVars";
 
-/**
- * Fill colours. The values in src/colours.css are the ones Kelvin edits.
- * `COLOUR_FALLBACK` is parsed from that file so tests and Node exports still
- * have a colour when there is no document. In the browser, `getColour` reads
- * the computed custom property, which includes a live edit from the Colours panel.
- */
-
 export const COLOUR_KEYS = [
   "--sidebar-grey",
   "--viewport-bg",
@@ -28,6 +21,8 @@ export const COLOUR_KEYS = [
   "--site-building",
   "--site-building-edge",
   "--imported-massing",
+  "--imported-massing-upper-stroke",
+  "--imported-massing-upper-tone",
   "--switch-knob",
   "--site-boundary",
   "--use-residential",
@@ -82,6 +77,10 @@ export const COLOUR_KEYS = [
   "--view-ink",
   "--light-sky",
   "--light-ground",
+  "--light-fill",
+  "--viewport-studio-top",
+  "--viewport-studio-bottom",
+  "--plinth-shadow",
   "--cut-line",
   "--sun-arc-summer",
   "--sun-arc-equinox",
@@ -121,6 +120,12 @@ export const COLOUR_KEYS = [
   "--section-knife-elevation-grid",
   "--section-knife-marker-gold",
   "--section-knife-plan-marker-ink",
+  "--walk-ripple-accent",
+  "--walk-ripple-band-0",
+  "--walk-ripple-band-1",
+  "--walk-ripple-band-2",
+  "--walk-ripple-label-bg",
+  "--walk-ripple-label-text",
   "--axo-water",
   "--axo-road",
   "--axo-green",
@@ -220,6 +225,8 @@ export const COLOUR_GROUPS = [
       "--building-manual",
       "--site-building",
       "--imported-massing",
+      "--imported-massing-upper-stroke",
+      "--imported-massing-upper-tone",
       "--site-boundary",
       "--use-residential",
       "--use-commercial",
@@ -274,6 +281,10 @@ export const COLOUR_GROUPS = [
       "--view-ink",
       "--light-sky",
       "--light-ground",
+      "--light-fill",
+      "--viewport-studio-top",
+      "--viewport-studio-bottom",
+      "--plinth-shadow",
       "--cut-line",
     ],
   },
@@ -342,6 +353,8 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--site-building": "Site buildings",
   "--site-building-edge": "Site building outline (3D)",
   "--imported-massing": "Imported massing",
+  "--imported-massing-upper-stroke": "Imported massing upper roof lines",
+  "--imported-massing-upper-tone": "Imported massing upper roof tone",
   "--switch-knob": "Knob of every sidebar switch (on and off), so an off switch reads on its pale track",
   "--site-boundary": "Site parcel boundary",
   "--use-residential": "Residential",
@@ -396,6 +409,10 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--view-ink": "3D sheet ink",
   "--light-sky": "Sky light",
   "--light-ground": "Ground light",
+  "--light-fill": "Studio fill light",
+  "--viewport-studio-top": "3D studio backdrop top",
+  "--viewport-studio-bottom": "3D studio backdrop bottom",
+  "--plinth-shadow": "Plinth contact shadow",
   "--cut-line": "Satellite frame",
   "--sun-arc-summer": "Sun path, summer",
   "--sun-arc-equinox": "Sun path, equinox",
@@ -435,6 +452,12 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--section-knife-elevation-grid": "Section Knife: section panel grid",
   "--section-knife-marker-gold": "Section Knife: JT gold accent marker",
   "--section-knife-plan-marker-ink": "Section Knife: plan section mark ink",
+  "--walk-ripple-accent": "Walk ripple: wave accent",
+  "--walk-ripple-band-0": "Walk ripple: 0–5 min band",
+  "--walk-ripple-band-1": "Walk ripple: 5–10 min band",
+  "--walk-ripple-band-2": "Walk ripple: 10–15 min band",
+  "--walk-ripple-label-bg": "Walk ripple: label background",
+  "--walk-ripple-label-text": "Walk ripple: label text",
   "--axo-water": "Exploded axo water",
   "--axo-road": "Exploded axo roads",
   "--axo-green": "Exploded axo green",
@@ -522,7 +545,6 @@ function fallbackTable(): Record<ColourKey, string> {
   return table;
 }
 
-/** File defaults. Uppercase six-digit hex, one entry per key, parsed from colours.css. */
 export const COLOUR_FALLBACK: Record<ColourKey, string> = fallbackTable();
 
 const KNOWN = new Set<string>(COLOUR_KEYS);
@@ -531,11 +553,6 @@ export function isColourKey(name: string): name is ColourKey {
   return KNOWN.has(name);
 }
 
-/**
- * The fill currently assigned to a colour variable.
- * With a document, this is the computed value, so a Colours edit or a saved
- * override wins over the file. Without a document, the fallback table is used.
- */
 export function getColour(name: ColourKey): string {
   if (typeof document !== "undefined") {
     const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -545,7 +562,6 @@ export function getColour(name: ColourKey): string {
   return COLOUR_FALLBACK[name];
 }
 
-/** 0–255 channels for a fill, for Rhino layer colours. */
 export function colourRgb(name: ColourKey): { r: number; g: number; b: number } {
   const hex = getColour(name);
   const value = Number.parseInt(hex.slice(1), 16);
@@ -622,10 +638,6 @@ export function clearColourOverrides(root?: HTMLElement): void {
   for (const key of COLOUR_KEYS) element.style.removeProperty(key);
 }
 
-/**
- * Apply anything saved under `citycut.colours`. Call this after the line-style
- * hydrate so a fill edited here wins over an older line-style copy of the same name.
- */
 export function hydrateStoredColours(storage?: StorageLike): Partial<Record<ColourKey, string>> {
   if (typeof document === "undefined") return {};
   let stored: Partial<Record<ColourKey, string>> = {};
@@ -650,7 +662,6 @@ export function commitColour(name: ColourKey, value: string, storage?: StorageLi
     try {
       writeStoredColours(area, current);
     } catch {
-      // Private mode can reject localStorage. The on-screen colour still updates.
     }
   }
   if (typeof document !== "undefined") {
@@ -666,14 +677,12 @@ export function resetStoredColours(storage?: StorageLike, afterClear?: () => voi
   try {
     area?.removeItem(COLOURS_KEY);
   } catch {
-    // Ignore a locked storage area. Clearing the inline properties is enough.
   }
   clearColourOverrides();
   afterClear?.();
   notify();
 }
 
-/** Variables whose live value differs from the file. Ready to paste into colours.css. */
 export function colourCssText(current: Partial<Record<ColourKey, string>> = {}): string {
   const lines: string[] = [];
   for (const key of COLOUR_KEYS) {

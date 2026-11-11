@@ -35,32 +35,23 @@ import {
 export type SolarViewSettings = {
   showPath: boolean;
   castShadows: boolean;
-  /** Horizon-ring radius as a multiple of the site half-width. */
   radiusFactor: number;
   year: number;
   month: number;
   day: number;
   hour: number;
   minute: number;
-  /** Site plan sun study: hourly 9am–3pm shadows and suns on the selected date. */
   sunStudy?: boolean;
-  /** Muted base plan under the sun study. Undefined means on (the default). */
   sunStudyMuted?: boolean;
-  /** Sun study shadow casters: every building (default) or only the ones picked on the plan. */
   sunStudyCasters?: "all" | "selected";
-  /** Later phase (flagged off, no UI): hours-of-sun heatmap on the ground for the chosen day. */
   sunHours?: boolean;
 };
 
-/** Paint after the city so the heliodon sits over it. */
 const OVERLAY_ORDER = 1000;
 
 export { SUN_PATH_STYLES } from "../lib/heliodonSunPaths";
-/** Opacity of the second pass that draws heliodon lines where buildings hide them. */
 const GHOST_OPACITY = 0.38;
-/** Labels on the ground keep more of their ink when hidden, so they stay legible. */
 const LABEL_GHOST_OPACITY = 0.35;
-/** Extra screen pixels of background-coloured casing around each dial hairline. */
 const CASING_PX = 1.5;
 
 const vec = (point: Vec3) => new THREE.Vector3(point[0], point[1], point[2]);
@@ -84,7 +75,6 @@ function registerDialLod(root: HeliodonRoot, material: LineMaterial, tier: DialL
   root.userData.lodMaterials.push({ tier, material, baseOpacity });
 }
 
-/** Adds a visible pass and, unless it is a casing, a ghosted pass that only paints where something is in front. */
 function addTwoPass(
   root: HeliodonRoot,
   object: THREE.Mesh | LineSegments2,
@@ -102,7 +92,6 @@ function addTwoPass(
   const material = ghostMaterial(object.material as THREE.Material);
   hidden.material = material;
   if ((material as LineMaterial).isLineMaterial) {
-    // Overlapping segment caps would blend twice and read as beads along the line.
     material.depthWrite = true;
     root.userData.lineMaterials.push(material as LineMaterial);
     if (lod) registerDialLod(root, material as LineMaterial, lod.tier, lod.baseOpacity * GHOST_OPACITY);
@@ -118,7 +107,6 @@ function polylineTube(points: THREE.Vector3[], radius: number): THREE.TubeGeomet
   return new THREE.TubeGeometry(path, Math.max(2, (points.length - 1) * 2), radius, 5, false);
 }
 
-/** A thin tube along `points`, cut into dashes when `pattern` (metres) is given. */
 function strokeGeometry(points: THREE.Vector3[], radius: number, pattern: readonly number[] | null): THREE.BufferGeometry | null {
   if (!pattern) return polylineTube(points, radius);
   const pieces: THREE.BufferGeometry[] = [];
@@ -158,7 +146,6 @@ function strokeGeometry(points: THREE.Vector3[], radius: number, pattern: readon
 
 type LineWeight = { color: string; widthPx: number; opacity?: number; dash?: [number, number]; cased?: boolean };
 
-/** One merged screen-space-width line batch per weight, with an optional casing in the background colour. */
 class LineBatch {
   readonly positions: number[] = [];
   segment(a: Vec3, b: Vec3) {
@@ -228,7 +215,6 @@ function textSprite(
   return sprite;
 }
 
-/** Depth-tests a ground label and adds a faint child copy that shows where buildings hide it. */
 function groundLabel(sprite: THREE.Sprite): THREE.Sprite {
   const material = sprite.material as THREE.SpriteMaterial;
   material.depthTest = true;
@@ -298,7 +284,6 @@ function disposeTree(root: THREE.Object3D) {
   });
 }
 
-/** Holds a built Object3D and disposes its GPU resources when it is replaced or unmounted. */
 function useDisposable<T extends THREE.Object3D>(build: () => T, deps: readonly unknown[]): T {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const object = useMemo(build, deps);
@@ -314,7 +299,6 @@ export function useMelbourneSunSample(lat: number, lon: number, settings: SolarV
   );
 }
 
-/** A label that may sit at one of several spots, or hide when every spot collides. */
 type MovableLabel = { sprite: THREE.Sprite; spots: THREE.Vector3[] };
 
 type HeliodonRoot = THREE.Group & {
@@ -327,7 +311,6 @@ type HeliodonRoot = THREE.Group & {
   };
 };
 
-/** Faint ring under the horizon ticks only; the site centre stays clear. */
 function buildDialAnnulus(root: HeliodonRoot, radius: number, ground: GroundHeight) {
   const geometry = new THREE.RingGeometry(radius * 0.992, radius * 1.008, 96);
   geometry.rotateX(-Math.PI / 2);
@@ -511,7 +494,6 @@ function overlaps(a: ScreenBox, b: ScreenBox, margin = 6): boolean {
   return Math.abs(a.x - b.x) < a.w + b.w + margin && Math.abs(a.y - b.y) < a.h + b.h + margin;
 }
 
-/** Keeps line widths in screen pixels, fades far-side degree numbers, and moves labels off the cardinals and the sun. */
 function useHeliodonFrame(
   root: HeliodonRoot | null,
   sun: THREE.Object3D | null,
@@ -590,7 +572,6 @@ export function SolarHeliodon({
   groundY: number;
   terrain?: TerrainField;
   settings: SolarViewSettings;
-  /** Plan orthographic view shows the 2D overlay instead. */
   hideDiagram?: boolean;
 }) {
   const sample = useMelbourneSunSample(lat, lon, settings);
@@ -641,7 +622,6 @@ export function SolarHeliodon({
   );
 }
 
-/** Sun-coloured directional light whose orthographic shadow camera is fitted to the site bounds. */
 export function SolarLight({
   sample,
   sideM,
@@ -655,7 +635,6 @@ export function SolarLight({
   enabled: boolean;
   intensity?: number;
   targetY: number;
-  /** Highest point in the cut (tallest roof or terrain peak), world Y. */
   topY: number;
 }) {
   const lightRef = useRef<THREE.DirectionalLight>(null);

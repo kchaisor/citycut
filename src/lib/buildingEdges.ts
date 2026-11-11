@@ -4,32 +4,16 @@ import { getColour } from "./colours";
 import { drawingSheetColor } from "./drawingSheet";
 import { SURFACE } from "./surfaceLayers";
 
-/**
- * Degrees. A flat roof or wall is triangulated at about 0°. Corners, eaves,
- * and roof ridges on these extrusions are about 90°. 25° keeps those and
- * drops the seams.
- */
 export const BUILDING_EDGE_THRESHOLD_DEG = 25;
 
-/**
- * Ink for the massing edge. The value is --building-edge in drawing-style.css.
- * A black line stays crisp against the roads and the model background.
- */
 export const BUILDING_EDGE_COLOR = drawingSheetColor("--building-edge");
 
-/**
- * Pushes filled faces away from the camera so edge lines, left on the
- * extruded vertices, win the depth test. Three.js polygonOffset only affects
- * filled primitives, so the bias has to live on the building material.
- * Positive factor and units increase fragment depth.
- */
 const FILL_OFFSET_FACTOR = 1;
 const FILL_OFFSET_UNITS = 1;
 
 export type BuildingEdgeStats = {
   batches: number;
   segments: number;
-  /** Milliseconds spent building the edge geometry. Not per frame. */
   ms: number;
 };
 
@@ -94,12 +78,6 @@ function pushFillBehindLines(mesh: THREE.Mesh) {
   }
 }
 
-/**
- * The fill used to sit closer than the terrain by a tuned bias. After it
- * moves behind the outlines, the terrain and the flat ground move back by
- * the same step so that gap stays put. Roads are left alone: a polygon
- * offset on those ribbons makes them vanish at a low camera.
- */
 function keepGroundGap(root: THREE.Object3D) {
   const deltaFactor = FILL_OFFSET_FACTOR - SURFACE.building.polygonOffsetFactor;
   const deltaUnits = FILL_OFFSET_UNITS - SURFACE.building.polygonOffsetUnits;
@@ -115,10 +93,6 @@ function keepGroundGap(root: THREE.Object3D) {
   });
 }
 
-/**
- * One LineSegments per merged building batch. Built once, with the city.
- * Viewport only: callers that write glTF or .3dm should not use this.
- */
 export function addBuildingEdges(root: THREE.Object3D): BuildingEdgeStats {
   const started = performance.now();
   const batches: THREE.Object3D[] = [];

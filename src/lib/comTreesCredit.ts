@@ -9,16 +9,13 @@ import type { CityModel } from "../types";
 export const COM_TREES_DATASET_URL =
   "https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/";
 
-/** Plain-text credit for the Trees panel, source notes, PDF/.ai and Rhino metadata. */
 export const COM_TREES_CREDIT =
   "Trees: Trees, with species and dimensions (Urban Forest) © City of Melbourne, CC BY 4.0";
 
-/** True when at least one tree in the cut came from the City of Melbourne inventory. */
 export function comTreesInCut(model: Pick<CityModel, "trees">): boolean {
   return treeTierCounts(model.trees ?? []).com > 0;
 }
 
-/** Export credit line, or null when the cut has no CoM trees. */
 export function comTreesCreditLine(model: Pick<CityModel, "trees">): string | null {
   return comTreesInCut(model) ? COM_TREES_CREDIT : null;
 }

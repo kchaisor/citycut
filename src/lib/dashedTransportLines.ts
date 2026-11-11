@@ -3,7 +3,6 @@ import { dashSegments, type StrokeStyle } from "./drawingStyle";
 import { clipPolylineSiteFrame, DEFAULT_SITE_FRAME_SHAPE } from "./siteFrame";
 import type { CityModel, Pt } from "../types";
 
-/** Metre dash pattern from a plan stroke at 1:1000 (1 mm on sheet = 1 m on ground). */
 export function strokeDashMetres(stroke: StrokeStyle, sideM: number, scaleDenominator = 1000): number[] {
   const segments = dashSegments(stroke.dash);
   if (!segments || segments.length < 2) return [];

@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import { cameraForExportFrame } from "./exportFrame";
 
-// The floating sidebar shifts the on-screen 3D view with a projection view offset. Exports must
-// never carry it: the PNG frames exactly as a camera with no offset.
 describe("export camera ignores the on-screen view offset", () => {
   for (const make of [
     () => new THREE.PerspectiveCamera(35, 1000 / 900, 1, 10000),

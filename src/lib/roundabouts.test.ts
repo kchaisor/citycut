@@ -15,7 +15,6 @@ import type { AreaFeat, Pt } from "../types";
 const poly = (c: Pt, r: number, n: number, phase = 0.3): Pt[] =>
   Array.from({ length: n }, (_, i): Pt => [c[0] + r * Math.cos(phase + (i / n) * 2 * Math.PI), c[1] + r * Math.sin(phase + (i / n) * 2 * Math.PI)]);
 
-/** A z14-style roundabout ring: 4 segments of 3 vertices each, from one OSM way. */
 function ringSegments(c: Pt, r: number, key = "w1"): { key: string; line: Pt[]; width: number }[] {
   const pts = poly(c, r, 8);
   return [0, 2, 4, 6].map((i) => ({ key, width: 5.5, line: [pts[i]!, pts[i + 1]!, pts[(i + 2) % 8]!] }));
@@ -38,11 +37,8 @@ describe("roundabouts", () => {
   it("detects a ring cut into segments, not an open arc or a straight street", () => {
     const parts = [
       ...ringSegments([0, 0], 10, "w1"),
-      // Half a ring (cut by the frame): not closed.
       ...ringSegments([100, 0], 10, "w2").slice(0, 2),
-      // Straight street.
       { key: "w3", width: 7, line: [[0, 50], [40, 50], [80, 50], [120, 50]] as Pt[] },
-      // Too large to be a roundabout.
       ...ringSegments([0, 300], 120, "w4"),
     ];
     const found = detectRoundabouts(parts);
@@ -100,7 +96,7 @@ describe("roundabout island in the plan road fill", async () => {
   const { fillRoadMedianGaps } = await import("./roadMedianFill");
   it("the median fill paints an unmapped island as road, and keeps the added island green", () => {
     const road = bufferCentreline(circleRing([0, 0], 10), 5.5);
-    expect(road[0]!.length).toBe(2); // the ring keeps its island hole
+    expect(road[0]!.length).toBe(2);
     const streets = [{ line: circleRing([0, 0], 10), width: 5.5 }];
     const keep = { water: [], buildings: [] };
     const without = fillRoadMedianGaps(road, { ...keep, green: [] }, undefined, streets);

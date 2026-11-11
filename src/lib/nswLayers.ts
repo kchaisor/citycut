@@ -6,14 +6,8 @@ import { decodeField, decodeSubtype, UnknownCodes } from "./nswDomains";
 import { NSW_LAYERS, nswRoadGrade, type NswLayerKey } from "./sources/nsw";
 import type { BuildingUse, LonLat, Pt, RoadGrade, SiteFrameShape } from "../types";
 
-/**
- * NSW mode layers for one cut, in the cut's local east/north metres and clipped to the frame.
- * Every layer keeps its own status so the Data sources panel can say exactly what loaded.
- */
-
 export type NswPolygon = { outer: Pt[]; holes: Pt[][] };
 
-/** Height of building. "rl" is a reduced level (AHD), not a height above ground: label only, never extrude. */
 export type NswHob =
   | { kind: "height"; metres: number }
   | { kind: "rl"; rl: number }
@@ -25,7 +19,6 @@ export type NswFsrArea = NswPolygon & { fsr: number | null; layClass: string; ep
 export type NswHeritageArea = NswPolygon & { name: string; significance: string };
 export type NswCentreline = { line: Pt[]; grade: RoadGrade; name: string };
 
-/** Decoded attributes for a tooltip / inspector: a title and label → text rows. */
 export type NswRecordInfo = { title: string; rows: [string, string][] };
 export type NswLot = NswPolygon & { info: NswRecordInfo };
 export type NswEasement = NswPolygon & { info: NswRecordInfo };
@@ -33,7 +26,6 @@ export type NswCorridor = NswPolygon & { info: NswRecordInfo; name: string; path
 export type NswRailKind = "heavy" | "light" | "monorail" | "siding" | "other";
 export type NswRail = { line: Pt[]; kind: NswRailKind; operational: boolean; tunnel: boolean; name: string };
 export type NswStation = { at: Pt; name: string; operational: boolean; lightRail: boolean };
-/** Spatial Services BuildingComplexPoint: an official facility point and the CityCut use it implies. */
 export type NswBuildingComplex = { at: Pt; facility: string; type: string; name: string; use: BuildingUse };
 
 export type NswLayerStatus = Pick<ArcgisResult, "status" | "note" | "ms" | "pages"> & { id: string; label: string; count: number; retries: number };
@@ -46,7 +38,6 @@ export type NswLayers = {
   railways: NswRail[];
   stations: NswStation[];
   buildingComplexes: NswBuildingComplex[];
-  /** Codes missing from the published domains (shown raw), one sentence per layer. */
   codeNotes: string[];
   water: NswPolygon[];
   zoning: NswZone[];
@@ -66,7 +57,6 @@ export function parseHob(value: unknown, units: unknown): NswHob {
   return { kind: "unknown", raw: `${n} ${units}` };
 }
 
-/** Plan label text. RL is always spelled out so it cannot be read as a building height. */
 export function hobLabel(hob: NswHob): string {
   if (hob.kind === "height") return `HOB ${formatNumber(hob.metres)} m`;
   if (hob.kind === "rl") return `HOB RL ${formatNumber(hob.rl)} m AHD`;
@@ -81,7 +71,6 @@ function formatNumber(n: number): string {
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
 }
 
-/** "AUSTRALIAN NATIONAL MARITIME MUSEUM" → "Australian National Maritime Museum". */
 function titleCase(value: string): string {
   if (value !== value.toUpperCase()) return value;
   return value.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase());
@@ -117,10 +106,6 @@ export function pointInPolygon(poly: NswPolygon, x: number, y: number): boolean 
   return pointInRing(poly.outer, x, y) && !poly.holes.some((hole) => pointInRing(hole, x, y));
 }
 
-/**
- * Label anchor inside the polygon: the centroid when it is inside, otherwise the grid point
- * farthest from the edge. Null for slivers under `minAreaM2`.
- */
 export function labelAnchor(poly: NswPolygon, minAreaM2 = 600): Pt | null {
   const area = Math.abs(signedArea(poly.outer));
   if (area < minAreaM2) return null;
@@ -200,7 +185,6 @@ const LAYER_KEYS: LayerKey[] = [
 
 const RAIL_KINDS: Record<string, NswRailKind> = { "1": "heavy", "2": "light", "3": "monorail", "4": "siding" };
 
-/** CityCut use for a Spatial Services building complex (facility subtype, complex type). */
 export function nswComplexUse(subtype: unknown, type: unknown): BuildingUse {
   const s = Number(subtype);
   const t = Number(type);

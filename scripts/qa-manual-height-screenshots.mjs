@@ -1,7 +1,3 @@
-/**
- * CBD manual-height before/after screenshots with locked camera.
- * Run: npx vite-node scripts/qa-manual-height-screenshots.mjs
- */
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { execSync } from "node:child_process";
@@ -92,7 +88,6 @@ function cameraPose(target) {
   return { eye, look };
 }
 
-/** Same meshes `cityModelTo3dm` extrudes; Rhino Z equals this Y. */
 function exportMeshTopM(building, heightM) {
   const overridden = applyOverrideToBuilding(building, heightM);
   const model = {

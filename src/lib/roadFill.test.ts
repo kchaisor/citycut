@@ -72,7 +72,6 @@ function inside(multi: MultiPolygon, x: number, y: number): boolean {
   return hits % 2 === 1;
 }
 
-/** An internal seam has the fill on both sides of an edge. A real kerb does not. */
 function hasInternalSeam(multi: MultiPolygon): boolean {
   for (const polygon of multi) {
     for (const ring of polygon) {

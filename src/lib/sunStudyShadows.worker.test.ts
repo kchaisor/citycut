@@ -44,7 +44,6 @@ describe("sun study shadow worker", () => {
       ["hour", 7, 15],
     ]);
     for (const m of posted) if (m.type === "hour") expect(m.rings.length).toBeGreaterThan(0);
-    // morning shadow falls west of the building, afternoon shadow east
     const xs = (m: SunStudyWorkerMessage) => (m.type === "hour" ? m.rings.flat(2).map((p) => p[0]) : []);
     expect(Math.min(...xs(posted[0]!))).toBeLessThan(-15);
     expect(Math.max(...xs(posted[2]!))).toBeGreaterThan(15);

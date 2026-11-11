@@ -1,10 +1,3 @@
-/**
- * Pages build: copy the pre-baked trees.pmtiles + trees-manifest.json from the release into public/.
- * There is no committed fallback: when the release is missing or fails its SHA-256 check, nothing is
- * installed and the app uses the live tree servers (with a visible note). Never fails the build.
- *
- * Env: GH_TOKEN, TREES_RELEASE (default trees-latest).
- */
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -27,7 +20,6 @@ try {
   const result = resolveTreesDeploy({ tempDir, downloadOk: download.status === 0, downloadError: download.stderr || download.stdout || "" });
   if (result.ok) {
     mkdirSync(publicDir, { recursive: true });
-    // Manifest last: the app only trusts the tiles once the manifest exists.
     copyFileSync(join(tempDir, TREES_PMTILES_NAME), join(publicDir, TREES_PMTILES_NAME));
     copyFileSync(join(tempDir, TREES_MANIFEST_NAME), join(publicDir, TREES_MANIFEST_NAME));
     console.info(`[trees] Installed ${TREES_RELEASE} (${result.bytes} bytes, built ${result.generatedAt}) into ${publicDir}/`);
@@ -37,7 +29,6 @@ try {
     console.warn(`[trees] ${result.message}; the site will use the live tree servers.`);
   }
 } catch (err) {
-  // Never fail the Pages build over trees: without the file the app uses the live servers.
   rmSync(join(publicDir, TREES_PMTILES_NAME), { force: true });
   rmSync(join(publicDir, TREES_MANIFEST_NAME), { force: true });
   console.warn(`[trees] install failed (${err instanceof Error ? err.message : err}); the site will use the live tree servers.`);

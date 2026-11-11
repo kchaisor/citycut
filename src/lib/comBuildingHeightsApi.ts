@@ -9,12 +9,10 @@ export const COM_FETCH_BUFFER_M = 20;
 export const COM_RECORDS_PAGE_SIZE = 100;
 export const COM_RECORDS_SELECT = "structure_id,structure_extrusion,geo_shape";
 
-/** Expand a cut square by {@link COM_FETCH_BUFFER_M} on each side for CoM queries. */
 export function paddedComFetchBounds(center: LonLat, sideM: number, bufferM = COM_FETCH_BUFFER_M): BBox {
   return squareBBox(center, sideM + bufferM * 2);
 }
 
-/** WKT POLYGON (lon lat) for ODS `intersects(geo_shape, geom'…')`. Ring is closed. */
 export function comRecordsWhereIntersects(bounds: BBox): string {
   const ring = [
     [bounds.west, bounds.south],
@@ -37,7 +35,6 @@ export function comRecordsQueryUrl(bounds: BBox, offset: number): string {
 }
 
 export function estimateFetchPayloadBytes(recordCount: number): number {
-  // Empirical ~450 bytes per row with geo_shape for CBD frames.
   return Math.round(recordCount * 450);
 }
 

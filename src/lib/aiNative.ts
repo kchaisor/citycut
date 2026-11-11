@@ -3,7 +3,6 @@ import { pdfPt } from "./lineweights";
 
 const KAPPA = 0.5522847498;
 
-/** Illustrator display names for CityCut chunk ids. */
 export const AI_LAYER_LABELS: Record<string, string> = {
   Frame: "Frame/Sheet",
   Paths: "Footpaths",
@@ -113,7 +112,6 @@ function paintEllipse(ellipse: PdfEllipse): string[] {
   return ops;
 }
 
-/** Point text (type 0): revisable block only; final-form Tx omitted. */
 function pointTextOps(text: PdfText): string[] {
   if (!text.text) return [];
   const size = pdfPt(text.sizeMm);
@@ -169,15 +167,6 @@ const AI8_PROLOG = [
   "%%EndProlog",
 ] as const;
 
-/**
- * Illustrator 8 EPS with %AI5_BeginLayer blocks and AI paint operators (Xa/XA, m/l/c, *u/*U).
- * Coordinates on the chunks are millimetres, y up.
- *
- * Reference structure compared to Adobe Illustrator EPS conventions:
- * - Adobe Illustrator File Format Specification 3.0 (operators through AI8 EPS):
- *   https://www.moon-soft.com/program/format/graphics/ai30.pdf
- * - Operator summary (Xa, *u, layers): https://docs.aspose.com/page/net/what-is-ai-file/
- */
 export function buildLayeredNativeAi(
   widthMm: number,
   heightMm: number,
@@ -235,7 +224,6 @@ export function buildLayeredNativeAi(
   return new TextEncoder().encode(script);
 }
 
-/** Layer names in paint order as written to the native Illustrator file. */
 export function parseNativeAiLayers(bytes: Uint8Array): string[] {
   const text = new TextDecoder("latin1").decode(bytes);
   const layers: string[] = [];
@@ -253,7 +241,6 @@ export function nativeAiLooksLikeEps(bytes: Uint8Array): boolean {
 const PDF_ONLY_OP =
   /(^|\n)\s*(q|Q|rg|RG|re|h|B\*|f\*|moveto|show|findfont|scalefont|setfont)\s*($|\n)/m;
 
-/** Body script must not use PDF graphics operators (Illustrator uses Xa/m/f and procsets). */
 export function nativeAiBodyUsesPdfOperators(bytes: Uint8Array): boolean {
   const text = new TextDecoder("latin1").decode(bytes);
   const prologEnd = text.indexOf("%%EndProlog");

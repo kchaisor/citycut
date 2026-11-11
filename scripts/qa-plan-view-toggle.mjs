@@ -1,7 +1,3 @@
-/**
- * QA: Site plan and Figure-ground share the same framing at one cut URL.
- * npx vite-node scripts/qa-plan-view-toggle.mjs
- */
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 

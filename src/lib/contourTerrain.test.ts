@@ -6,7 +6,6 @@ import type { BuildingFeat, CityModel, ContourLayer, Pt, TerrainField } from "..
 
 const sideM = 400;
 
-/** A hill: z = 100 − r/10 (cone), contoured every 2 m between r = 40 and 180 m. */
 function hillLayer(maxR = 180): ContourLayer {
   const lines = [];
   for (let z = 96; 100 - z / 1 >= 0 && (100 - z) * 10 <= maxR; z -= 2) {
@@ -35,13 +34,11 @@ describe("contour ground", () => {
   });
 
   it("keeps the DEM grid, shifts the DEM to the contours, and falls back to it far from contours (flagged)", () => {
-    // DEM 3 m low everywhere; contours only within r ≤ 100 m.
     const dem = demField((e, n) => 100 - Math.hypot(e, n) / 10 - 3);
     const res = contourTerrain(hillLayer(100), sideM, dem)!;
     expect(res.field.cols).toBe(dem.cols);
     expect(res.demOffsetM!).toBeCloseTo(3, 0);
     expect(res.coverage).toBeLessThan(1);
-    // Corner: no contour support → DEM + offset, no seam step.
     expect(sampleTerrain(res.field, 195, 195, sideM)).toBeCloseTo(100 - Math.hypot(195, 195) / 10, 0);
     expect(contourTerrainNotice(res, hillLayer(100), true)).toMatch(/falls back to Mapterhorn/);
   });
@@ -66,7 +63,6 @@ describe("contour ground", () => {
     clearPlanShadowCache();
     const onFlat = planShadowRings(flat, { lat: -37.8, lon: 145.03, year: 2026, month: 6, day: 22, hour: 12, minute: 0 }, true);
     expect(onHill.length).toBeGreaterThan(0);
-    // Noon sun is north; the shadow falls south, downhill toward the hill's south side? It must differ from flat.
     expect(JSON.stringify(onHill)).not.toBe(JSON.stringify(onFlat));
   });
 });

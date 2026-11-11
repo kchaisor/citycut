@@ -28,7 +28,6 @@ import { drawingSheetColor } from "./drawingSheet";
  * are not capped, so the 1.5 mm dash stays a dash.
  */
 export const LINE_MM = {
-  /** 0 means no building outline. A positive value is the cut line, in millimetres. */
   buildingCut: 0,
   propertyRoad: 0.22,
   secondary: 0.15,
@@ -39,11 +38,6 @@ export const LINE_MM = {
 
 export type LineRole = keyof typeof LINE_MM;
 
-/**
- * Footpath strip on the ground. 1.2 m is 0.6 m each side of the centreline.
- * The width is metres in map space, so it scales with zoom and with the sheet scale.
- * The footpath fill in colours.css is only slightly darker than the page and clearly lighter than the road.
- */
 export const PATH_WIDTH_M = 1.2;
 export const PATH_FILL = COLOUR_FALLBACK["--path-fill"];
 
@@ -51,7 +45,6 @@ export const CONTOUR_COLOR = drawingSheetColor("--contour-stroke");
 export const CONTOUR_DASH_MM = 1.5;
 export const CONTOUR_GAP_MM = 0.75;
 
-/** CSS pixels in one millimetre at 96 dpi, the usual 100% browser zoom. */
 export const PX_PER_MM = 96 / 25.4;
 
 const STROKE_MIN_PX = 0.6;
@@ -62,17 +55,11 @@ function penScale(): number {
   return thin < STROKE_MIN_PX ? STROKE_MIN_PX / thin : 1;
 }
 
-/**
- * On-screen stroke width for a print pen, in CSS pixels.
- * Positive weights share the contour lift (at least 0.6 px) and the 2.4 px cap.
- * Zero bypasses that floor and stays 0, which is no stroke.
- */
 export function screenPx(mm: number): number {
   if (!(mm > 0)) return 0;
   return Math.min(STROKE_MAX_PX, mm * PX_PER_MM * penScale());
 }
 
-/** On-screen dash or gap length. Same lift as the pens, without the stroke cap. */
 export function screenDashPx(mm: number): number {
   return mm * PX_PER_MM * penScale();
 }
@@ -81,7 +68,6 @@ export function mmToPt(mm: number): number {
   return (mm * 72) / 25.4;
 }
 
-/** Points written into a PDF content stream, rounded to 1/10000 pt. */
 export function pdfPt(mm: number): number {
   return Math.round(mmToPt(mm) * 10000) / 10000;
 }

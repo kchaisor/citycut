@@ -41,7 +41,6 @@ function setup(selected: number[] = [], study: typeof date | null = date) {
     />,
   );
   const svg = container.querySelector("svg.plan") as SVGSVGElement;
-  // 400 x 400 px box: one plan metre per pixel; no CTM in happy-dom, so the rect fallback is used.
   svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 400, right: 400, bottom: 400, x: 0, y: 0, toJSON() {} }) as DOMRect;
   (svg as unknown as { getScreenCTM?: unknown }).getScreenCTM = undefined;
   svg.setPointerCapture = () => {};
@@ -51,7 +50,6 @@ function setup(selected: number[] = [], study: typeof date | null = date) {
 describe("DrawingPlan sun study picking", () => {
   it("a click on a building picks it and leaves the view where it was", () => {
     const { svg, onPick, onView } = setup();
-    // building 1 is centred at east -100, north +100 -> svg (-100, -100) -> pixel (100, 100)
     fireEvent.pointerDown(svg, { clientX: 100, clientY: 100, pointerId: 1 });
     fireEvent.pointerMove(svg, { clientX: 102, clientY: 101, pointerId: 1 });
     fireEvent.pointerUp(svg, { clientX: 102, clientY: 101, pointerId: 1 });

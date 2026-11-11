@@ -1,11 +1,8 @@
-/** Which OSM area tags count as open water for the model, site plan, and exports. */
 
-/** Untagged `natural=water` (no `water=*`) is kept only from this size upward (local m²). */
 export const UNTAGGED_WATER_MIN_AREA_M2 = 10_000;
 
 const KEEP_WATERWAY = new Set(["riverbank", "river", "canal", "dock"]);
 
-/** `water=*` values kept at any polygon area. */
 const KEEP_WATER_TAG = new Set([
   "lake",
   "lagoon",
@@ -30,7 +27,6 @@ const EXCLUDED_BASIN_VALUES = new Set(["detention", "retention", "infiltration"]
 
 const EXCLUDED_MAN_MADE = new Set(["reservoir_covered", "water_tank"]);
 
-/** Documented in the product report: any other `water=*` on a polygon is hidden. */
 export const UNLISTED_WATER_SUBTAGS = [
   "lock",
   "moat",
@@ -69,7 +65,6 @@ function excludedWaterFeature(tags: Record<string, string>): boolean {
   return false;
 }
 
-/** River and riverbank polygons (also used in tests). */
 export function isRiverWaterArea(tags: Record<string, string>): boolean {
   const waterway = tags.waterway?.split(";")[0];
   if (waterway && KEEP_WATERWAY.has(waterway)) return true;
@@ -85,10 +80,6 @@ function keepReservoir(tags: Record<string, string>): boolean {
   return false;
 }
 
-/**
- * True when an OSM area should fill the water layer.
- * Pass `areaM2` (absolute area in local metres) for untagged `natural=water` sizing.
- */
 export function isOpenWaterArea(tags: Record<string, string>, areaM2?: number): boolean {
   if (excludedWaterFeature(tags)) return false;
 
@@ -109,7 +100,6 @@ export function isOpenWaterArea(tags: Record<string, string>, areaM2?: number): 
   return false;
 }
 
-/** Tag pairs used in tests. */
 export const OPEN_WATER_TAG_FIXTURES = {
   included: [
     { natural: "water", water: "lake" },

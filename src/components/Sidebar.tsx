@@ -8,7 +8,6 @@ export type SidebarItem = {
   label: string;
   shortLabel?: string;
   icon: ReactNode;
-  /** Draw a hairline before this item, to group the rail. */
   groupStart?: boolean;
 };
 
@@ -33,12 +32,6 @@ function useNarrow() {
   return narrow;
 }
 
-/**
- * Variation B Studio HUD shell:
- * - Top floating islands (`.studio-header-left`, `.studio-header-center`, `.studio-header-right`)
- * - Left vertical tool rail (`52px` wide at `top: 68px; left: 14px`) + compact `248px` Left Outliner card (`top: 68px; left: 74px`)
- * - Right unified `SITE INTELLIGENCE` floating card (`268px` wide at `top: 68px; right: 14px`) with 3-way text tab bar (`Overview | Buildings | Trees`) + inspector body
- */
 export function Sidebar({
   id,
   rightId,

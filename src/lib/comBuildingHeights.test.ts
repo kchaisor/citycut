@@ -136,7 +136,6 @@ describe("comBuildingHeights matching", () => {
       ],
       22,
     );
-    // Same ring as OSM so both coverage fractions are 100%.
     const applied = applyComBuildingHeights([osm], [bulk]);
     expect(applied.updated).toBe(1);
     expect(applied.buildings[0]?.height).toBe(22);
@@ -400,8 +399,6 @@ describe("CoM stacked footprint components (one structure, several bands)", () =
 
   it("partitions podium, tower band and a repeated outline so no two parts overlap", () => {
     const osm = building(7, sq(0, 0, 40, 40), 9);
-    // CoM 2023 rows for one structure_id: podium, the same podium outline traced again,
-    // a setback band and the tower top; each structure_extrusion is measured to its own top.
     const rows = [
       footprint("801082", sq(0, 0, 40, 40), 25.7),
       footprint("801082", sq(0.05, 0, 40, 40), 25.7),
@@ -417,7 +414,6 @@ describe("CoM stacked footprint components (one structure, several bands)", () =
         expect(intersectionAreaM2(parts[i], parts[j])).toBeLessThan(1e-6);
       }
     }
-    // Parts tile the footprint exactly once and keep the max height at every point.
     const total = parts.reduce((sum, part) => sum + area(part.ring) - part.holes.reduce((h, hole) => h + area(hole), 0), 0);
     expect(total).toBeCloseTo(1600, 3);
     const heightAt = (x: number, y: number) =>

@@ -1,6 +1,5 @@
 import type { LonLat, Pt } from "../types";
 
-/** Mean meters per degree of latitude. Fine for a 2 km block. */
 export const M_PER_DEG_LAT = 111_132;
 
 export function mPerDegLon(lat: number): number {
@@ -59,7 +58,6 @@ export function dedupeConsecutive(ring: Pt[], epsilon = 0.05): Pt[] {
   return out;
 }
 
-/** Drop a repeated closing vertex so callers can close the ring themselves. */
 export function openRing(ring: Pt[]): Pt[] {
   const points = dedupeConsecutive(ring);
   if (points.length >= 2) {

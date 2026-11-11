@@ -15,7 +15,6 @@ export type ComHeightsWorkerResponse = {
   buildings: BuildingFeat[];
   updated: number;
   resolved?: boolean;
-  /** Set when matching threw; buildings are unchanged. */
   failed?: boolean;
 };
 

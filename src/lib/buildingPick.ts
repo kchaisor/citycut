@@ -3,9 +3,7 @@ import * as THREE from "three";
 const CLICK_MAX_PX = 5;
 
 export type BuildingPickHandlers = {
-  /** additive is true on shift-click (multi-select). */
   onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
-  /** Fired on a click that did not hit a building (empty space). */
   onClearPick?: () => void;
 };
 
@@ -27,7 +25,6 @@ export function buildingIdFromIntersection(intersection: THREE.Intersection): nu
   return null;
 }
 
-/** Pointer picking that ignores drags so orbit controls keep working. */
 export function attachBuildingPick(
   canvas: HTMLCanvasElement,
   camera: THREE.Camera,
@@ -79,7 +76,6 @@ export function attachBuildingPick(
   };
 }
 
-/** Click-to-place: first mesh hit under a click (drags ignored), skipping the imported massing itself. */
 export function attachScenePointPick(
   canvas: HTMLCanvasElement,
   camera: THREE.Camera,

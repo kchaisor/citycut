@@ -1,9 +1,3 @@
-/**
- * Minimal decoder for ArcGIS FeatureServer `f=pbf` query responses
- * (esriPBuffer.FeatureCollectionPBuffer). Only what the tree pre-bake needs:
- * point features, attribute values, the coordinate transform, and the
- * exceededTransferLimit flag. Count-only results are decoded too.
- */
 import { PbfReader } from "pbf";
 
 function readValue(pbf, end) {

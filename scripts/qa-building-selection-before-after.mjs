@@ -1,7 +1,3 @@
-/**
- * Before/after selection proof: tall tower, aerial 3/4, popover hidden, crop.
- * npx vite-node scripts/qa-building-selection-before-after.mjs
- */
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 

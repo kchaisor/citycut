@@ -1,6 +1,3 @@
-/**
- * Buildings for Kelvin review: clip (0a8b37a logic) vs d835ce1 legacy fast vs bidirectional fix.
- */
 import {
   applyComBuildingHeightsClipOnly,
   applyComBuildingHeightsLegacyOsmOnlyFastPath,

@@ -2,35 +2,15 @@ import { signedArea } from "./geo";
 import { clipAreaToSiteFrame, type SiteFrameShape } from "./siteFrame";
 import type { AreaFeat, Pt } from "../types";
 
-/**
- * Roundabouts in the Overture road network, and their centre islands.
- *
- * Overture carries no junction tag, and its z14 tiles cut an OSM junction=roundabout ring into
- * 2–3 vertex segments, so the ring (and the island the road union leaves inside it) is a coarse
- * polygon. The island polygon itself, when OSM maps one (landuse=grass, leisure=garden), is either
- * simplified to ~8 vertices in the z13 base tiles or absent. With no green inside, the plan median
- * fill paints the hole as road and the island disappears.
- *
- * Cheap fix, no general arc smoothing: group segments by their OSM way, keep groups that close into
- * a small near-circular loop, fit one circle, and redraw that ring and its island with a fixed
- * segment count.
- */
-
-/** Vertices in a redrawn roundabout ring or island. */
 export const ROUNDABOUT_SEGMENTS = 48;
-/** Centreline radius limits for a roundabout (m). Larger loops are left alone. */
 export const ROUNDABOUT_MIN_R_M = 3;
 export const ROUNDABOUT_MAX_R_M = 40;
-/** Largest allowed radial deviation from the fitted circle, as a share of the radius. */
 const MAX_RADIAL_DEVIATION = 0.25;
-/** Largest angular gap in the ring's vertices (radians); a closed ring has none. */
 const MAX_ANGULAR_GAP = Math.PI / 2.5;
-/** Islands smaller than this radius are not drawn (m). */
 export const ISLAND_MIN_R_M = 1.5;
 
 export type Roundabout = { center: Pt; radius: number; width: number; key: string };
 
-/** OSM way key ("w32921419") of an Overture segment, from its `sources` record id. */
 export function osmWayKey(props: Record<string, unknown>): string | null {
   const raw = props.sources;
   if (typeof raw !== "string" || !raw.includes("record_id")) return null;
@@ -38,7 +18,6 @@ export function osmWayKey(props: Record<string, unknown>): string | null {
   return match ? match[1]! : null;
 }
 
-/** Least-squares (Kåsa) circle through points; null when degenerate. */
 export function fitCircle(points: Pt[]): { center: Pt; radius: number } | null {
   const n = points.length;
   if (n < 3) return null;
@@ -69,7 +48,6 @@ export function fitCircle(points: Pt[]): { center: Pt; radius: number } | null {
   return { center: [mx + uc, my + vc], radius };
 }
 
-/** Circle as a closed ring (first point repeated), counter-clockwise. */
 export function circleRing(center: Pt, radius: number, segments = ROUNDABOUT_SEGMENTS): Pt[] {
   const ring: Pt[] = [];
   for (let i = 0; i < segments; i++) {
@@ -80,7 +58,6 @@ export function circleRing(center: Pt, radius: number, segments = ROUNDABOUT_SEG
   return ring;
 }
 
-/** True when the points lie near one circle all the way round. */
 export function nearCircle(points: Pt[], fit: { center: Pt; radius: number }, maxDeviation = MAX_RADIAL_DEVIATION): boolean {
   const { center, radius } = fit;
   const angles: number[] = [];
@@ -129,15 +106,8 @@ function centroid(ring: Pt[]): Pt {
   return [x, y];
 }
 
-/** Model details wording for an inferred island. */
 export const ROUNDABOUT_ISLAND_ESTIMATE_NOTE = "Roundabout island (estimate): no island in the loaded map data (OpenStreetMap via Overture), inferred from the road ring";
 
-/**
- * Only greens inside a roundabout ring are touched. A mapped island (a green area whose centroid
- * is near the ring centre and that lies wholly inside the ring) becomes a circle of the same area.
- * Where none is mapped, an estimated island is added (radius = ring radius less half the
- * carriageway) and flagged `estimate`. Circles the site frame cuts are clipped to it.
- */
 export function withRoundaboutIslands(
   areas: AreaFeat[],
   roundabouts: Roundabout[],
@@ -176,7 +146,6 @@ export function withRoundaboutIslands(
   return [...areas.map((area) => replaced.get(area) ?? area), ...added];
 }
 
-/** Count of inferred (estimated) roundabout islands in a model. */
 export function estimatedIslandCount(areas: AreaFeat[]): number {
   return areas.filter((area) => area.estimate === "roundabout-island").length;
 }

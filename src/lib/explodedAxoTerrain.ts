@@ -11,11 +11,6 @@ export const AXO_TERRAIN_EXAGGERATION_RANGE = { min: 1, max: 10, step: 0.5 } as 
 
 const MESH_DIVISIONS = 20;
 
-/**
- * Isometric wireframe heightfield over the site frame, sampled from the Mapterhorn DEM.
- * Elevations are measured above `field.min` and scaled by `exaggeration` so subtle urban
- * relief reads clearly in the exploded stack.
- */
 export function buildAxoTerrainMesh(
   model: CityModel,
   field: TerrainField,

@@ -19,7 +19,6 @@ function matchesBuildingId(stored: unknown, targetIds: ReadonlySet<number>): boo
   return targetIds.has(Number(stored));
 }
 
-/** Inspect whether the city mesh is hidden and the overlay is configured for QA. */
 export function auditBuildingSelection(
   cityRoot: THREE.Object3D,
   buildingIdOrIds: number | readonly number[],

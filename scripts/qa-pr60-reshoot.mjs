@@ -1,6 +1,3 @@
-/**
- * QA re-shoot for PR #60 review fixes. Preview on 4173 required.
- */
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 
@@ -14,12 +11,10 @@ const browser = await chromium.launch({
 });
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 
-/** Landing: Yarra + park, coloured inside frame. */
 await page.goto(`${base}?qa=1&lat=-37.8202&lon=144.9678&km=0.5`, { waitUntil: "networkidle", timeout: 120_000 });
 await page.waitForTimeout(10_000);
 await page.screenshot({ path: `${outDir}/qa-landing-colour-frame.png`, fullPage: false });
 
-/** Site plan Fitzroy 0.5 km + detail crop. */
 await page.goto(`${base}?qa=1&view=persp&lat=-37.81313&lon=144.98122&km=0.5`, {
   waitUntil: "networkidle",
   timeout: 120_000,
@@ -35,7 +30,6 @@ await page.getByRole("button", { name: "Site plan", exact: true }).click();
 await page.waitForTimeout(2500);
 await page.screenshot({ path: `${outDir}/qa-site-plan-fitzroy-outlines-trees.png`, fullPage: false });
 
-/** Exploded axo: trees on, gap 1000 m. */
 await page.getByRole("button", { name: "Exploded axo", exact: true }).click();
 await page.locator(".axo-layer-list label.check-field").filter({ hasText: "TREES" }).locator("input").check();
 await page.locator('label.scale-field:has-text("Layer gap") input[type="range"]').evaluate((el) => {
@@ -80,7 +74,6 @@ if (planSvgBox) {
   });
 }
 
-/** Popup: Collins / Swanston CLUE + address. */
 await page.goto(`${base}?qa=1&view=persp&lat=-37.8136&lon=144.9631&km=0.5`, {
   waitUntil: "networkidle",
   timeout: 120_000,
@@ -99,7 +92,6 @@ await page.evaluate(() => window.__citycutQaModel?.pickBuildingNearGeoQa?.(-37.8
 await page.waitForTimeout(6000);
 await page.screenshot({ path: `${outDir}/qa-building-popup-cbd.png`, fullPage: false });
 
-/** Popup with development data (GPO / Bourke). */
 await page.evaluate(() => window.__citycutQaModel?.pickBuildingNearGeoQa?.(-37.8136, 144.96329));
 await page.waitForTimeout(6000);
 await page.screenshot({ path: `${outDir}/qa-building-popup-development.png`, fullPage: false });

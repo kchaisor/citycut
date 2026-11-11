@@ -16,10 +16,6 @@ import {
   type StrokeKey,
 } from "../lib/drawingStyle";
 
-/**
- * Live site-plan pens. Collapsed until opened so the Drawing drawer stays short,
- * including in the mobile bottom sheet, which scrolls the same block.
- */
 export function LineStylesEditor({
   style,
   baseline,

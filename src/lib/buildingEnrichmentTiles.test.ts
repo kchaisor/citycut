@@ -22,7 +22,6 @@ describe("shared enrichment PMTiles", () => {
   });
 });
 
-/** Minimal decode check for compact tile attributes (u/s) vs legacy strings. */
 function decodeUseSource(props: Record<string, unknown>): { use: string; useSource: string } | null {
   const USE_FROM_CODE: Record<number, string> = {
     0: "unclassified",

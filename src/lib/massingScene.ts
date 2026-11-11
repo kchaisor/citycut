@@ -3,7 +3,6 @@ import { placedLocal, type ImportedMassing } from "./massingImport";
 import { getColour } from "./colours";
 import type { LonLat } from "../types";
 
-/** Imported massing as three meshes in the CityModel frame (x east, y up, z = −north). */
 export function buildMassingGroup(imported: ImportedMassing[], origin: LonLat, zone: number): THREE.Group | null {
   const visible = imported.filter((item) => item.visible);
   if (visible.length === 0) return null;

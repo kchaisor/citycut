@@ -1,6 +1,3 @@
-/**
- * Overture buildings (DuckDB GeoParquet for large bboxes), Python enrichment, tippecanoe → public/.
- */
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -30,7 +27,6 @@ const OUT_GEO = "pipeline/out/overture-input.geojson";
 const ENRICHED = "pipeline/out/enrichment.geojson";
 const PMTILES_OUT = "public/building-enrichment.pmtiles";
 const MANIFEST = "public/building-enrichment-manifest.json";
-// The app reads enrichment at z14 only (ENRICHMENT_TILE_ZOOM); lower zooms are never requested.
 const MIN_ZOOM = Number(process.env.BUILD_ENRICHMENT_MIN_ZOOM ?? "14");
 const MAX_ZOOM = Number(process.env.BUILD_ENRICHMENT_MAX_ZOOM ?? "14");
 

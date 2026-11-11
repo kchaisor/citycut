@@ -1,8 +1,3 @@
-/**
- * Compare 2 km create-model wall time: current build vs another ref (set BENCH_GIT_REF=main).
- * npm run build && npm run preview -- --host 127.0.0.1 --port 4173
- * BENCH_GIT_REF=main npx vite-node scripts/bench-2km-compare.mjs
- */
 import { chromium } from "playwright";
 import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";

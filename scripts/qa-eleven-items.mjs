@@ -1,7 +1,3 @@
-/**
- * QA screenshots for the eleven-item batch. Run after preview on 4173.
- * npx vite-node scripts/qa-eleven-items.mjs
- */
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 

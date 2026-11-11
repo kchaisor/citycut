@@ -1,7 +1,3 @@
-/**
- * Blast-radius proof: with Wind off, sitePlanChunks has no Wind layer;
- * uniform white and dash-dot boundary are the intentional deltas.
- */
 import { performance } from "node:perf_hooks";
 import { buildCityGroup, disposeObject } from "../src/lib/buildCity.ts";
 import { sitePlanChunks } from "../src/lib/aiPlan.ts";

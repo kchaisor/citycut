@@ -53,7 +53,6 @@ function clearDocumentSelection(): void {
   try {
     window.getSelection?.()?.removeAllRanges?.();
   } catch {
-    // Ignore selection errors in non-browser test environments.
   }
 }
 
@@ -527,7 +526,6 @@ export function DrawingExplodedAxo({
   );
 }
 
-/** Lower-left on the plate in iso base coords for legends and notes. */
 function planToIsoLegendOrigin(sideM: number): { x: number; y: number } {
   const half = sideM / 2;
   const [x, y] = planToIsoBase(-half + sideM * 0.06, half - sideM * 0.08);

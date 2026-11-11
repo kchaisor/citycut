@@ -4,11 +4,6 @@ import { nswZoneColourKey } from "./nswPlanStyle";
 import type { ColourKey } from "./colours";
 import type { CityModel, Pt } from "../types";
 
-/**
- * Site-plan geometry for NSW mode, shared by the on-screen plan and the Illustrator export.
- * Hatches are real line segments (not SVG patterns) so both outputs draw the same marks.
- */
-
 export type NswPlanLabel = { at: Pt; text: string; kind: "zone" | "hob" | "fsr" };
 
 export type NswPlanItems = {
@@ -21,27 +16,20 @@ export type NswPlanItems = {
   heritageHatch: [Pt, Pt][];
   centrelines: Pt[][];
   labels: NswPlanLabel[];
-  /** Decoded cadastre records for hover text: lots, then easements, then road corridors. */
   records: { rings: Pt[][]; text: string }[];
 };
 
-/** Hover text for a decoded record: title line, then "Label: value" lines. */
 export function recordText(info: NswRecordInfo): string {
   return [info.title, ...info.rows.map(([label, value]) => `${label}: ${value}`)].join("\n");
 }
 
 const rings = (poly: NswPolygon): Pt[][] => [poly.outer, ...poly.holes];
 
-/**
- * Parallel hatch segments inside a polygon (even-odd over outer and holes), spacing in metres,
- * angle in degrees from east. Scanline in a rotated frame.
- */
 export function hatchSegments(poly: NswPolygon, spacingM: number, angleDeg = 45): [Pt, Pt][] {
   if (!(spacingM > 0)) return [];
   const a = (angleDeg * Math.PI) / 180;
   const cos = Math.cos(a);
   const sin = Math.sin(a);
-  // Rotate so hatch lines are horizontal: v = -x sin + y cos.
   const rot = ([x, y]: Pt): Pt => [x * cos + y * sin, -x * sin + y * cos];
   const back = ([u, v]: Pt): Pt => [u * cos - v * sin, u * sin + v * cos];
   const all = rings(poly).map((ring) => ring.map(rot));
@@ -71,15 +59,10 @@ export function hatchSegments(poly: NswPolygon, spacingM: number, angleDeg = 45)
   return out;
 }
 
-/** Label thinning knobs, in label heights (sizeM). */
 export const NSW_LABEL_RULES = {
-  /** A polygon needs at least (minSide × sizeM)² of area to carry a label. */
   minSide: 8,
-  /** The same text of the same kind is shown once within this radius. */
   repeatRadius: 22,
-  /** Gap kept between label boxes. */
   pad: 0.15,
-  /** Average glyph width (Helvetica, mixed case and digits) as a share of the size. */
   glyph: 0.58,
 } as const;
 
@@ -87,14 +70,6 @@ const KIND_RANK: Record<NswPlanLabel["kind"], number> = { zone: 0, hob: 1, fsr: 
 
 type Box = { x0: number; y0: number; x1: number; y1: number };
 
-/**
- * Collision-aware placement for zone / HOB / FSR labels at one label size (metres):
- *  - polygons smaller than (minSide · size)² get no label;
- *  - identical text of the same kind repeats at most once per repeatRadius;
- *  - by priority (zone, then HOB, then FSR; larger polygons first) a label is placed at its anchor,
- *    or one line above / below it, only where its box clears every placed box and the frame edge.
- * Returns the placed labels (final positions) and how many were dropped.
- */
 export function placeNswLabels(nsw: NswLayers, sizeM: number, sideM: number): { labels: NswPlanLabel[]; dropped: number } {
   const rules = NSW_LABEL_RULES;
   const minArea = (rules.minSide * sizeM) ** 2;
@@ -156,5 +131,4 @@ export function nswPlanItems(model: Pick<CityModel, "nsw" | "sideM">, hatchM = 4
   };
 }
 
-/** On-screen planning label size as a share of the cut side (1 km → 11.5 m). */
 export const NSW_PLAN_LABEL_SHARE = 0.0115;

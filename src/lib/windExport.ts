@@ -5,7 +5,6 @@ import type { SheetLayout } from "./figureGround";
 import { windFlowArrowPolylines } from "./windArrowGeometry";
 import { analyzeWindPeriod, sectorCenterDeg, type WindPeriodId, type WindRoseTable } from "./windRose";
 
-/** Rose placement: lower-right of site frame on sheet (mm). */
 export function windRoseSheetLayout(layout: SheetLayout): { cx: number; cy: number; radiusMm: number } {
   const radiusMm = Math.min(layout.frameMm * 0.11, 28);
   const cx = layout.frameX + layout.frameMm - radiusMm - 4;
@@ -20,7 +19,6 @@ function sheetPoint(east: number, north: number, sideM: number, layout: SheetLay
   return [x, layout.pageHeightMm - yDown];
 }
 
-/** Wedge rose, prevailing-direction arrows, and frame-scale flow arrows on the site-plan sheet. */
 export function windPlanPdfChunk(
   table: WindRoseTable,
   period: WindPeriodId,

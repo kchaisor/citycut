@@ -19,7 +19,6 @@ const sq: Ring = [
   [-15, 15],
   [-15, -15],
 ];
-/** Overture building with an explicit height tag, DAM geopoint inside its footprint. */
 const overture = (): BuildingFeat => ({
   id: 1,
   ring: sq,
@@ -29,7 +28,6 @@ const overture = (): BuildingFeat => ({
   use: "commercial",
   source: "overture_class",
 });
-/** Zone-default building, DAM geopoint inside its footprint. */
 const zoneDefault = (): BuildingFeat => ({
   id: 2,
   ring: sq,

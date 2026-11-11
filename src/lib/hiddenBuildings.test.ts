@@ -107,7 +107,6 @@ describe("hidden buildings", () => {
     const storage = memoryStorage();
     writeStoredHiddenBuildings(storage, store);
     const reloaded = readStoredHiddenBuildings(storage);
-    // A reload rebuilds buildings with new ids; centroid + area still match.
     const renumbered = model.buildings.map((b) => ({ ...b, id: b.id + 100 }));
     const matched = matchHiddenBuildings(renumbered, reloaded, origin);
     expect([...matched.keys()].sort()).toEqual([101, 103]);
@@ -116,7 +115,7 @@ describe("hidden buildings", () => {
 
   it("does not match in another cut, and Show all clears only this cut", () => {
     const store = hideBuildings(emptyHiddenStore(), [pullman], origin);
-    const elsewhere = { lon: 145.0122, lat: -37.8402 }; // Toorak
+    const elsewhere = { lon: 145.0122, lat: -37.8402 };
     expect(matchHiddenBuildings(model.buildings, store, elsewhere).size).toBe(0);
     const both = hideBuildings(store, [{ ...other, ring: square([500, 500], 16) }], origin);
     const matched = matchHiddenBuildings(model.buildings, both, origin);

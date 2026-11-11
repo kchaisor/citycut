@@ -23,15 +23,10 @@ export const TYPOLOGY_SOURCES = [
   "none",
 ] as const satisfies readonly TypologySource[];
 
-/** Previous single colour, used when the use colours are turned off. */
 export function uniformBuildingColor(): string {
   return getColour("--building-uniform");
 }
 
-/**
- * One hue per category. Unclassified stays neutral so a guess from a later
- * tier can still stand out when the view is coloured by source.
- */
 function useSwatch(
   label: string,
   key: ColourKey,
@@ -62,10 +57,6 @@ export const BUILDING_USE_META: Record<
   unclassified: useSwatch("Unclassified", "--use-unclassified", "Unclassified"),
 };
 
-/**
- * Viewport colours for the source toggle. An OSM tag is solid.
- * A zone is inferred, so it stays lighter and is hatched.
- */
 function sourceSwatch(
   label: string,
   key: ColourKey,
@@ -91,7 +82,6 @@ export const SOURCE_META: Record<
   none: sourceSwatch("Unclassified", "--source-none", false),
 };
 
-/** Legend order for source counts. `none` is shown as unclassified. */
 export const SOURCE_COUNT_KEYS = [
   "overture_class",
   "clue",
@@ -99,19 +89,11 @@ export const SOURCE_COUNT_KEYS = [
   "none",
 ] as const satisfies readonly TypologySource[];
 
-/**
- * `building` and `building:use` values. `yes` is omitted on purpose: a bare
- * yes has no tag match and falls through the cascade.
- * Hut, shed, garage, and the other outbuildings used to be left unknown or
- * called residential; they are outbuildings here.
- */
-/** Shared with pipeline via `shared/overture-building-use.json` (kept in sync by tests). */
 export const OSM_BUILDING_USE: Record<string, BuildingUse> = overtureBuildingUseTable as Record<
   string,
   BuildingUse
 >;
 
-/** Amenity values already read off the building element itself. */
 const ELEMENT_AMENITY_USE: Record<string, BuildingUse> = {
   school: "civic",
   university: "civic",
@@ -139,10 +121,6 @@ const ELEMENT_AMENITY_USE: Record<string, BuildingUse> = {
   bank: "retail",
 };
 
-/**
- * `landuse` values already on the building element. Institutional land is
- * civic. This is still an OSM tag: it is not a separate area query.
- */
 const ELEMENT_LANDUSE_USE: Record<string, BuildingUse> = {
   residential: "residential",
   commercial: "commercial",
@@ -161,10 +139,8 @@ const TAG_PRIORITY: BuildingUse[] = [
   "outbuilding",
 ];
 
-/** Vicmap zone codes after schedule digits are stripped. C1Z is absent: height decides retail or commercial. */
 export { ZONE_USE } from "./zoneUseTable";
 
-/** C1Z below this resolved height is retail. At 15 m and above it stays commercial. */
 export const C1Z_RETAIL_BELOW_M = 15;
 
 function tokens(value: string | undefined): string[] {
@@ -212,21 +188,10 @@ export function classify(tags: Record<string, string>): BuildingUse | null {
   return null;
 }
 
-/**
- * Strip a schedule number that trails the code (GRZ1, PUZ6, SUZ6).
- * A digit that sits before a final Z is part of the code (C1Z, IN3Z, B4Z).
- */
 export function normaliseZoneCode(code: string): string {
   return code.trim().toUpperCase().replace(/\d+$/, "");
 }
 
-/**
- * Planning zone for a building.
- * `heightM` is the resolved height the extruder already uses: Overture/OSM height,
- * otherwise building:levels × 3 m, otherwise Vicmap zone defaults (see buildingFallbackHeight),
- * then clamped to 3–420 m. C1Z under 15 m is retail; 15 m and taller stays commercial.
- * Overlays (DDO and the rest) and zones outside the table do not match.
- */
 export function useFromZone(code: string | null | undefined, heightM: number): BuildingUse | null {
   if (!code) return null;
   const normalised = normaliseZoneCode(code);
@@ -240,7 +205,6 @@ export type CascadeSignals = {
   heightM: number;
 };
 
-/** OSM tags, then a Vicmap zone, then unclassified. */
 export function cascadeUse(signals: CascadeSignals): { use: BuildingUse; source: TypologySource } {
   if (signals.tags) {
     const tagged = classify(signals.tags);
@@ -274,7 +238,6 @@ export function countSources(buildings: { source: TypologySource }[]): Record<Ty
   return counts;
 }
 
-/** Legend counts grouped for the model UI. */
 export function countSourcesGrouped(buildings: { source: TypologySource }[]): Record<
   (typeof SOURCE_COUNT_KEYS)[number],
   number

@@ -1,8 +1,3 @@
-/**
- * Headless Chrome: 2 km Melbourne CBD create-model timing and memory.
- * Run after `npm run build && npm run preview` on port 4173.
- * npx vite-node scripts/bench-2km-create.mjs
- */
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 

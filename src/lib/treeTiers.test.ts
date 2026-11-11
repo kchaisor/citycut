@@ -71,7 +71,7 @@ describe("tree tier dedupe", () => {
     expect(ids).toContain(1);
     expect(ids).not.toContain(2);
     expect(ids).toContain(3);
-    expect(ids).not.toContain(4); // Vicmap at 22 m is within 8 m of osm at 20 m
+    expect(ids).not.toContain(4);
     expect(ids).toContain(5);
     expect(ids).toContain(6);
     expect(assembled.capHit).toBe(false);

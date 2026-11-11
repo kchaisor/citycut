@@ -1,7 +1,3 @@
-/**
- * QA: 50% selected building with dashed outline — two camera angles.
- * npx vite-node scripts/qa-building-selection-3d-click.mjs
- */
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 

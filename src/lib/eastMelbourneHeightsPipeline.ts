@@ -93,7 +93,6 @@ export async function refreshEastMelbourneHeightFixtures(): Promise<void> {
   );
 }
 
-/** @deprecated use modelPageHeightSignature */
 export function buildingHeightSignature(buildings: BuildingFeat[]): { id: number; heightM: number }[] {
   return modelPageHeightSignature(buildings);
 }

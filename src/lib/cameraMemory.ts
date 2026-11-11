@@ -3,7 +3,6 @@ import type * as THREE from "three";
 type V3 = [number, number, number];
 type Q4 = [number, number, number, number];
 
-/** One camera plus its OrbitControls target, copied by value. */
 export type CameraPose = {
   position: V3;
   quaternion: Q4;
@@ -12,17 +11,9 @@ export type CameraPose = {
   zoom: number;
   near: number;
   far: number;
-  /** Perspective only. */
   fov?: number;
 };
 
-/**
- * The 3D view's camera state, kept by the model page while the 3D tab is unmounted
- * (Drawing or Satellite), so returning to 3D puts back exactly what the user left.
- * Both cameras are kept so a projection switch after the round trip also finds its own pose.
- * The fit keys and the "user moved the camera" flag are kept too, so the auto-fit logic
- * (snap id, #81 resize rules) behaves as if the view had never been torn down.
- */
 export type CameraMemory = {
   snapId: number;
   persp: CameraPose;
@@ -51,7 +42,6 @@ export function capturePose(camera: THREE.PerspectiveCamera | THREE.Orthographic
   return pose;
 }
 
-/** Write a pose back. Does not call controls.update(); the caller flushes inertia first. */
 export function applyPose(
   camera: THREE.PerspectiveCamera | THREE.OrthographicCamera,
   controls: ControlsLike,
@@ -71,7 +61,6 @@ export function applyPose(
   controls.target.set(pose.target[0], pose.target[1], pose.target[2]);
 }
 
-/** Memory is only reused for the same snap id; a new snap (or a new model page) frames afresh. */
 export function usableCameraMemory(memory: CameraMemory | null, snapId: number): CameraMemory | null {
   return memory && memory.snapId === snapId ? memory : null;
 }

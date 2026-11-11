@@ -7,7 +7,6 @@ function lonScale(lat: number): number {
   return M_PER_DEG_LAT * Math.cos((lat * Math.PI) / 180);
 }
 
-/** Centre and square side for a snapshot cut covering all fixture rows in that cut. */
 export function landmarkCutBounds(
   rows: LandmarkRow[],
   marginM = 120,
@@ -30,7 +29,6 @@ export function landmarkCutBounds(
   return { center, sideM };
 }
 
-/** Distance from a point to the nearest edge of a square cut (local metres). */
 export function insetFromCutEdgeM(row: LonLat, center: LonLat, sideM: number): number {
   const half = sideM / 2;
   const x = (row.lon - center.lon) * lonScale(center.lat);

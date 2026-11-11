@@ -7,7 +7,6 @@ import { sampleTerrain } from "./terrain";
 import type { CityModel, Pt } from "../types";
 
 const CONTOUR_LIFT = 0.35;
-/** Ground-metre dash and gap for 3D contours, keeping the 2:1 ratio of `--contour-dash` (`1.5 0.75`). */
 export const CONTOUR_3D_DASH_M = 6;
 export const CONTOUR_3D_GAP_M = 3;
 
@@ -24,14 +23,6 @@ export function contourPolylinesForModel(model: CityModel, planScale = 1000): Pt
   return plan.contours;
 }
 
-/**
- * Splits each contour segment so no piece is longer than half the terrain grid spacing, then
- * samples the terrain at every point. A straight chord between two far-apart contour vertices
- * cuts under convex ground and the line breaks up; short pieces follow the surface.
- *
- * Also returns cumulative along-contour distances so `LineDashedMaterial` continues the dash
- * pattern smoothly across short draped sub-segments instead of restarting at every vertex.
- */
 export function drapeContourSegmentsWithDistances(
   lines: Pt[][],
   sample: (east: number, north: number) => number,

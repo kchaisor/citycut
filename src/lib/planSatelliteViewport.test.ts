@@ -27,7 +27,6 @@ describe("plan satellite viewport mapping", () => {
     const mid = toLocal((south + north) / 2, (west + east) / 2, center);
     expect(mid[0]).toBeCloseTo(view.x + view.w / 2, 3);
     expect(mid[1]).toBeCloseTo(-(view.y + view.h / 2), 3);
-    // Panning the plan 100 m north (viewBox y decreases) moves the map 100 m north too.
     const panned = planViewportLngLatBounds({ ...view, y: view.y - 100 }, center);
     const pannedMid = toLocal((panned[0][1] + panned[1][1]) / 2, (panned[0][0] + panned[1][0]) / 2, center);
     expect(pannedMid[1] - mid[1]).toBeCloseTo(100, 3);

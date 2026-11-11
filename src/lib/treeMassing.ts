@@ -4,12 +4,6 @@ import { getColour } from "./colours";
 import { matteStandardMaterial } from "./matteMaterial";
 import type { TreeFeat } from "../types";
 
-/**
- * Low-poly geodesic ellipsoid crown layout in local metres (Y up).
- * Horizontal diameter (X/Z) equals crown_diameter_m (clamped to >= 1 m).
- * Vertical height (Y) is 72% of tree height_m (clamped to >= 1.2 m), leaving ~28% clear trunk below.
- * The top of the crown sits at height_m (clamped so the bottom never pokes below ground).
- */
 export function treeCrownSphereLayout(height_m: number, crown_diameter_m: number): {
   centerY: number;
   radius: number;
@@ -55,7 +49,6 @@ export type TreeGroupBuildOptions = {
   sideM?: number;
 };
 
-/** Trees drawn in a built scene: the merged crown mesh holds one unit geodesic crown per tree (QA readout). */
 export function countTreeCrowns(root: THREE.Object3D): number {
   const group = root.getObjectByName("Trees");
   if (!group) return 0;
@@ -84,7 +77,6 @@ function introTreeBucketIndex(tree: TreeFeat, sideM = 500, totalBuckets = 16): n
   return Math.floor(norm * totalBuckets);
 }
 
-/** Cylinder trunk plus one low-poly faceted geodesic ellipsoid crown per tree. */
 export function buildTreeGroup(
   trees: TreeFeat[],
   elevationAt: (east: number, north: number) => number = () => 0,

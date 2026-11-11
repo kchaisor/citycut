@@ -1,9 +1,3 @@
-/**
- * East Melbourne footpath fillet QA at fixed street corner crop + full frame.
- * Uses live site plan (Drawing) for before/after when responsive; planPaths fallback in render script.
- * npm run build && npm run preview -- --host 127.0.0.1 --port 4173
- * npx vite-node scripts/qa-footpath-fillet-east-melbourne.mjs
- */
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { execSync } from "node:child_process";

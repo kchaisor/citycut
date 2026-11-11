@@ -36,7 +36,6 @@ const manifest: TreesManifest = {
     overtureRelease: "2026-09-23.1",
   },
 };
-// Spans the z14 tile edge at lon 145.01953125 (x 14791 | 14792).
 const bounds = { west: 145.005, south: -37.855, east: 145.025, north: -37.84 };
 
 describe("pre-baked tree reader", () => {
@@ -50,7 +49,6 @@ describe("pre-baked tree reader", () => {
     if (!result.ok) return;
     const { vicmap, com, osm, tiles } = result.trees;
     expect(tiles).toBe(tilesForBounds(bounds, 14).length);
-    // 3 Vicmap points in bounds (one outside is dropped); the edge point is in two tiles but read once.
     expect(vicmap).toHaveLength(3);
     const first = vicmap.find((p) => Math.abs(p.lon - 145.01) < 1e-6)!;
     expect(first).toMatchObject({ height_m: 10.5, crown_m: 6.5, dense: false });
@@ -60,7 +58,6 @@ describe("pre-baked tree reader", () => {
     expect(com.find((c) => c.genus === "Ulmus")).toMatchObject({ dbh_cm: 42, age: "Mature", scientific: "Ulmus procera" });
     expect(com.find((c) => c.genus === null)?.dbh_cm).toBeNull();
     expect(osm.map((o) => o.sid).sort((a, b) => a - b)).toEqual([42, 123456789]);
-    // Placement survives the tile grid to about a decimetre.
     expect(Math.abs(first.lat - -37.848)).toBeLessThan(1.5e-6);
   });
 

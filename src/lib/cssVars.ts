@@ -1,4 +1,3 @@
-/** Parse `:root` custom properties out of a stylesheet. Comments are removed first. */
 
 export function parseCustomProperties(css: string): Record<string, string> {
   const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -9,7 +8,6 @@ export function parseCustomProperties(css: string): Record<string, string> {
   return values;
 }
 
-/** Three-, six-, and eight-digit hex become uppercase six- or eight-digit hex. */
 export function normalizeHex(value: string): string | null {
   const text = value.trim();
   const hex = text.match(/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i);
@@ -19,7 +17,6 @@ export function normalizeHex(value: string): string | null {
   return `#${body.toUpperCase()}`;
 }
 
-/** A stylesheet colour, or a computed red-green-blue function, as six-digit hex. */
 export function cssColorToHex(raw: string | undefined | null): string | null {
   if (!raw) return null;
   const hex = normalizeHex(raw);
@@ -35,7 +32,6 @@ export function cssColorToHex(raw: string | undefined | null): string | null {
   return `#${channel(rgb[1])}${channel(rgb[2])}${channel(rgb[3])}`;
 }
 
-/** Resolve a single `var(--name)` against the same sheet, then normalise a hex. */
 export function resolveSheet(sheet: Record<string, string>): Record<string, string> {
   const resolved: Record<string, string> = {};
   const visit = (name: string, seen: Set<string>): string => {

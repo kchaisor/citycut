@@ -46,20 +46,11 @@ const SIN30 = 0.5;
 const round = (v: number) => Math.round(v * 100) / 100;
 const TREE_CROWN_SEGMENTS = 14;
 
-/**
- * Corner signs matching `isoCamera.ts` (`CORNER_SIGN`, where `south = -north`):
- * - `sw`: viewer sits SW (-east, -north), looking NE (+east, +north)
- * - `se`: viewer sits SE (+east, -north), looking NW (-east, +north)
- * - `nw`: viewer sits NW (-east, +north), looking SE (+east, -north)
- * - `ne`: viewer sits NE (+east, +north), looking SW (-east, -north)
- */
 const CORNER_VECTORS: Record<
   IsoCorner,
   {
-    /** Rightward horizontal ground unit vector (rx, ry) in (east, north). */
     rx: number;
     ry: number;
-    /** Toward-viewer ground unit vector (vx, vy) in (east, north); larger dot = nearer (lower on screen). */
     vx: number;
     vy: number;
   }
@@ -70,11 +61,6 @@ const CORNER_VECTORS: Record<
   ne: { rx: -1, ry: 1, vx: 1, vy: 1 },
 };
 
-/**
- * Project local `(east, north, upM)` metres into 2D isometric SVG screen coordinates `(x, y)`
- * (where `+x` is right and `+y` is down on screen, and vertical elevation `upM` goes straight up `-upM`).
- * Uses true 30° isometric ground foreshortening (`cos 30° = √3/2`, `sin 30° = 0.5`).
- */
 export function projectIsoPoint(
   east: number,
   north: number,
@@ -87,10 +73,6 @@ export function projectIsoPoint(
   return [u * 2 * COS30, v * 2 * SIN30 - upM];
 }
 
-/**
- * Depth along the viewer direction in the ground plane: larger value = closer to the viewer
- * (drawn later in painter's back-to-front order).
- */
 export function isoPlanDepth(
   east: number,
   north: number,
@@ -100,10 +82,6 @@ export function isoPlanDepth(
   return east * c.vx + north * c.vy;
 }
 
-/**
- * Outward normal test for a vertical wall face with plan normal `(nx, ny)`:
- * positive when the wall faces toward the viewer from `corner`.
- */
 export function isoWallFacing(
   nx: number,
   ny: number,

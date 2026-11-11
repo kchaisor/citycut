@@ -8,7 +8,6 @@ import {
 } from "./buildingEnrichmentTiles";
 import { buildEnrichmentUseTierFailures } from "./enrichmentUseTierFailures";
 
-/** Shape of a manifest baked before the building-permit (BCA) tier was retired. */
 const OLD_MANIFEST = {
   extent: { west: 144.3, south: -38.5, east: 145.9, north: -37.2 },
   bca: { status: "blocked", detail: "BCA xlsb HTTP 403", url: "https://example.invalid/permits.xlsb" },

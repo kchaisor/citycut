@@ -1,6 +1,5 @@
 import type { UseTierFailure } from "../types";
 
-/** Non-blocking use-tier legend lines for enrichment manifest / tile fetch outcomes. */
 export function buildEnrichmentUseTierFailures(input: {
   baseFailures: UseTierFailure[];
   enrichmentError: string | null;

@@ -3,24 +3,12 @@ import cityOfSydney from "../content/regions/cityOfSydney.json";
 import { mPerDegLon, M_PER_DEG_LAT } from "./geo";
 import type { LonLat } from "../types";
 
-/**
- * Which state's open data a cut uses. Detected from the cut centre against bundled state outlines
- * (Natural Earth 1:10m admin-1, public domain, simplified to ~150 m). A centre offshore (harbour,
- * bay) takes the nearest state within {@link REGION_SNAP_KM}. ACT and everything else is null:
- * no state layers, only the national sources (Overture, Mapterhorn).
- *
- * The old VICTORIA_BOUNDS box is not used for this because it also covers southern NSW
- * (Albury, the Riverina) and Canberra.
- */
 export type RegionId = "vic" | "nsw";
 
 export type RegionDetection = {
   region: RegionId | null;
-  /** "inside" = centre in the outline; "nearest" = offshore snap; "outside" = none in reach. */
   how: "inside" | "nearest" | "outside";
-  /** Set when the centre falls in a place with no state layers (for example the ACT). */
   note: string | null;
-  /** Kilometres from the centre to the chosen state's outline when snapped. */
   snapKm?: number;
 };
 
@@ -45,7 +33,6 @@ function ringContains(ring: number[][], lon: number, lat: number): boolean {
   return inside;
 }
 
-/** Even-odd test over outer ring and holes of every polygon. */
 export function multiContains(multi: Multi, lon: number, lat: number): boolean {
   for (const polygon of multi) {
     if (!polygon[0] || !ringContains(polygon[0], lon, lat)) continue;
@@ -91,7 +78,6 @@ export function detectRegion(center: LonLat): RegionDetection {
   return { region: null, how: "outside", note: null };
 }
 
-/** City of Sydney LGA (NSW Spatial Services, generalised 5 m): where the CoS 1 m contours exist. */
 export const CITY_OF_SYDNEY_RINGS: number[][][] = (cityOfSydney as { rings: number[][][] }).rings;
 
 export function insideCityOfSydney(lon: number, lat: number): boolean {
@@ -112,7 +98,6 @@ export function boundsTouchCityOfSydney(bounds: { west: number; south: number; e
     }
   }
   if (bounds.east < w || bounds.west > e || bounds.north < s || bounds.south > n) return false;
-  // Any corner or the centre inside, or any outline vertex inside the box.
   const pts: [number, number][] = [
     [bounds.west, bounds.south],
     [bounds.east, bounds.south],

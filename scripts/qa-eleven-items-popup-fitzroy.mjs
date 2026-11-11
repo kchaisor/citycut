@@ -1,4 +1,3 @@
-/** Finish QA captures that need a warm model (popup + Fitzroy). */
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 

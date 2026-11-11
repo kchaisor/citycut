@@ -14,7 +14,7 @@ describe("heliodon palette", () => {
   it("uses the same background key as the 3D canvas", async () => {
     const scene = await readFile(fileURLToPath(new URL("../components/Scene3D.tsx", import.meta.url)), "utf8");
     expect(scene).toContain(`themeColor("${HELIODON_BACKGROUND_KEY}")`);
-    expect(scene).toContain("<GradientSky colourTick={colourTick} fallback={modelBg} />");
+    expect(scene).toContain("<StudioSky colourTick={colourTick} fallback={modelBg} />");
   });
 
   it("draws every heliodon halo and casing from the palette, not a fixed colour key", async () => {

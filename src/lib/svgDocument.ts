@@ -1,11 +1,6 @@
 import { aiLayerLabel } from "./aiNative";
 import type { PdfChunk, PdfEllipse, PdfPath, PdfText, Rgb } from "./aiDocument";
 
-/**
- * Layered SVG from the same chunks as the .ai writer. Units are millimetres (viewBox in mm, y
- * flipped from the PDF's y-up). Each layer is a top-level <g> with an id and an Inkscape layer
- * label, which Illustrator, Inkscape and Figma all open as layers. Text stays live Helvetica.
- */
 export function buildLayeredSvg(widthMm: number, heightMm: number, chunks: PdfChunk[], order: readonly string[]): string {
   const present = new Set(chunks.map((chunk) => chunk.name));
   const names = order.filter((name) => present.has(name));

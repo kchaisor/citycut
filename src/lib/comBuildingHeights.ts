@@ -46,7 +46,6 @@ export {
 export const COM_BUILDING_HEIGHT_ATTRIBUTION =
   "2023 Building Footprints © City of Melbourne (CC BY 4.0).";
 
-/** Padded City of Melbourne extent. Outside this the inventory has no rows. */
 export const COM_CITY_EXTENT = { south: -37.86, west: 144.89, north: -37.77, east: 145.0 };
 
 type GeoShape = {
@@ -219,7 +218,6 @@ export async function fetchComBuildingFootprintsWithStats(
   };
 }
 
-/** @internal test helper */
 export function clearComBuildingFootprintCache(): void {
   footprintCache.clear();
 }

@@ -1,12 +1,6 @@
 import { getColour, type ColourKey } from "./colours";
 import { normalizeDash, parseMm, type StrokeStyle } from "./drawingStyle";
 
-/**
- * NSW mode site-plan pens and fills. Colours are colours.css tokens (`--nsw-*`); weights, dashes,
- * hatch spacing and zoning opacity are drawing-style.css variables. The numbers below are only the
- * fallback when a variable is missing (tests, Node exports) and match drawing-style.css.
- */
-
 export type NswPlanStyle = {
   lot: StrokeStyle;
   easement: StrokeStyle;
@@ -70,7 +64,6 @@ export function readNswPlanStyle(read?: (name: string) => string): NswPlanStyle 
   };
 }
 
-/** Standard Instrument zone family → colour token. */
 export function nswZoneColourKey(code: string): ColourKey {
   const c = code.trim().toUpperCase();
   if (/^RU/.test(c)) return "--nsw-zone-ru";

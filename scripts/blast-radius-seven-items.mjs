@@ -1,7 +1,3 @@
-/**
- * Blast-radius for area cap, circle terrain clip, and draped water lift.
- * Run: npx vite-node scripts/blast-radius-seven-items.mjs
- */
 import { buildCityGroup, disposeObject } from "../src/lib/buildCity.ts";
 import { planPaths } from "../src/lib/svgPlan.ts";
 import { terrainBuffers } from "../src/lib/terrain.ts";

@@ -36,9 +36,8 @@ describe("sun study plan", () => {
     expect(suns[0]!.at[0]).toBeGreaterThan(0);
     expect(suns[6]!.at[0]).toBeLessThan(0);
     for (const sun of suns) {
-      expect(sun.at[1]).toBeGreaterThan(0); // southern hemisphere: sun to the north
+      expect(sun.at[1]).toBeGreaterThan(0);
       expect(Math.hypot(...sun.at)).toBeLessThanOrEqual(100.0001);
-      // label pulled inward, clear of the sun icon
       expect(Math.hypot(...sun.labelAt)).toBeLessThan(Math.hypot(...sun.at) - 6.5);
     }
   });

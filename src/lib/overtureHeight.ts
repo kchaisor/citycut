@@ -24,7 +24,6 @@ function floorCount(props: OvertureHeightProps): number | null {
     : parseLooseNumber(typeof floorsRaw === "string" ? floorsRaw : undefined);
 }
 
-/** True when height would come from footprint area and/or planning zone, not Overture tags. */
 export function overtureHeightUsesFallback(props: OvertureHeightProps): boolean {
   const tagged = taggedHeightM(props);
   if (tagged !== null && tagged > 0) return false;
@@ -32,7 +31,6 @@ export function overtureHeightUsesFallback(props: OvertureHeightProps): boolean 
   return floors === null || floors <= 0;
 }
 
-/** Height for extrusion before CoM override: Overture height, then floors × storey height, then fallback. */
 export function overtureBuildingHeight(
   props: OvertureHeightProps,
   options: OvertureHeightOptions = {},
@@ -62,7 +60,6 @@ export function overtureMinHeightM(
   return Math.min(parsed, overtureBuildingHeight(props, options) - 1);
 }
 
-/** CoM wins when supplied; used in tests for the full priority stack. */
 export function resolveBuildingHeight(
   props: OvertureHeightProps,
   comHeight?: number | null,

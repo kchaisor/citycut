@@ -1,13 +1,11 @@
 import { normaliseZoneCode } from "./buildingUse";
 
-/** Footprints below this area use the shed height when height and floors are missing. */
 export const SHED_MAX_FOOTPRINT_AREA_M2 = 40;
 export const SHED_FALLBACK_HEIGHT_M = 3;
 export const UNKNOWN_ZONE_FALLBACK_HEIGHT_M = 9;
 
 export type ZoneFallbackHeightM = 6 | 7 | 8 | 9 | 10 | 12;
 
-/** Default extrusion height (m) by normalised Vicmap zone code. Unlisted codes use {@link UNKNOWN_ZONE_FALLBACK_HEIGHT_M}. */
 export const ZONE_FALLBACK_HEIGHT_M: Readonly<Record<string, ZoneFallbackHeightM>> = {
   NRZ: 6,
   GRZ: 7,
@@ -34,12 +32,10 @@ export function zoneFallbackHeightM(code: string | null | undefined): ZoneFallba
 }
 
 export type FallbackHeightInput = {
-  /** When null or unknown, the shed rule is skipped. */
   footprintAreaM2: number | null;
   zoneCode?: string | null;
 };
 
-/** Last-resort height when Overture/OSM height and floor count are both absent. */
 export function fallbackBuildingHeightM(input: FallbackHeightInput): number {
   const { footprintAreaM2, zoneCode } = input;
   if (footprintAreaM2 !== null && footprintAreaM2 > 0 && footprintAreaM2 < SHED_MAX_FOOTPRINT_AREA_M2) {

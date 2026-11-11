@@ -149,7 +149,6 @@ describe("isometric 30° projection across NW / NE / SE / SW compass corners", (
     expect(DEFAULT_ISO_CORNER).toBe("sw");
     expect(ISO_CORNERS).toEqual(["ne", "nw", "se", "sw"]);
 
-    // Pure vertical displacement shifts SVG y by -upM regardless of compass corner
     for (const corner of ISO_CORNERS) {
       const [x0, y0] = projectIsoPoint(0, 0, 0, corner);
       const [xUp, yUp] = projectIsoPoint(0, 0, 25, corner);
@@ -159,7 +158,6 @@ describe("isometric 30° projection across NW / NE / SE / SW compass corners", (
       expect(yUp).toBeCloseTo(-25, 5);
     }
 
-    // SW corner: viewer sits SW (-east, -north) looking NE, so +east goes up-right and +north goes up-left
     const [swEastX, swEastY] = projectIsoPoint(10, 0, 0, "sw");
     const [swNorthX, swNorthY] = projectIsoPoint(0, 10, 0, "sw");
     expect(swEastX).toBeCloseTo(10 * COS30, 5);
@@ -167,7 +165,6 @@ describe("isometric 30° projection across NW / NE / SE / SW compass corners", (
     expect(swNorthX).toBeCloseTo(-10 * COS30, 5);
     expect(swNorthY).toBeCloseTo(-10 * SIN30, 5);
 
-    // NW corner: viewer sits NW (-east, +north) looking SE, so +east goes up-left and +north goes down-left
     const [nwEastX, nwEastY] = projectIsoPoint(10, 0, 0, "nw");
     const [nwNorthX, nwNorthY] = projectIsoPoint(0, 10, 0, "nw");
     expect(nwEastX).toBeCloseTo(-10 * COS30, 5);
@@ -175,12 +172,10 @@ describe("isometric 30° projection across NW / NE / SE / SW compass corners", (
     expect(nwNorthX).toBeCloseTo(-10 * COS30, 5);
     expect(nwNorthY).toBeCloseTo(10 * SIN30, 5);
 
-    // NE corner is 180° opposite SW on the ground plane
     const [neEastX, neEastY] = projectIsoPoint(10, 0, 0, "ne");
     expect(neEastX).toBeCloseTo(-swEastX, 5);
     expect(neEastY).toBeCloseTo(-swEastY, 5);
 
-    // SE corner is 180° opposite NW on the ground plane
     const [seEastX, seEastY] = projectIsoPoint(10, 0, 0, "se");
     expect(seEastX).toBeCloseTo(-nwEastX, 5);
     expect(seEastY).toBeCloseTo(-nwEastY, 5);
@@ -194,10 +189,8 @@ describe("isometric 30° projection across NW / NE / SE / SW compass corners", (
   });
 
   it("culls back-facing walls and keeps front-facing walls for a building edge", () => {
-    // Outward normal (0, -1) faces a SW viewer; outward normal (0, +1) faces away from a SW viewer
     expect(isoWallFacing(0, -1, "sw").visible).toBe(true);
     expect(isoWallFacing(0, 1, "sw").visible).toBe(false);
-    // Outward normal (-1, 0) faces left in SW view; outward normal (0, -1) faces right in SW view
     expect(isoWallFacing(-1, 0, "sw")).toEqual({ visible: true, side: "left" });
     expect(isoWallFacing(0, -1, "sw")).toEqual({ visible: true, side: "right" });
   });
@@ -310,13 +303,11 @@ describe("buildIsometricDrawing 3D extrusion, depth sorting, layer toggles, and 
       expect(rightWall!.d.startsWith("M")).toBe(true);
       expect(rightWall!.d.endsWith("Z")).toBe(true);
 
-      // Pure vector line drawing: front plinth walls use flat ground fill + crisp frameEdge vector stroke (no 3D massing shading)
       expect(leftWall!.fill).toBe(iso.colors.ground);
       expect(rightWall!.fill).toBe(iso.colors.ground);
       expect(leftWall!.stroke).toBe(iso.colors.frameEdge);
       expect(rightWall!.stroke).toBe(iso.colors.frameEdge);
 
-      // Each wall extends downward (+y in SVG screen coordinates) by slabThicknessM from top edge to bottom edge
       const directBounds = isometricDrawingBounds(m, corner);
       expect(iso.bounds).toEqual(directBounds);
       for (const wall of iso.frameWalls) {
@@ -355,7 +346,6 @@ describe("buildIsometricDrawing 3D extrusion, depth sorting, layer toggles, and 
     for (const wall of iso.frameWalls) {
       expect(wall.topPts.length).toBeGreaterThan(2);
       expect(wall.bottomPts).toHaveLength(2);
-      // Every top vertex of the front-facing wall lies on the top ground surface perimeter (frameD)
       for (const [tx, ty] of wall.topPts) {
         const token = `${Math.round(tx * 100) / 100} ${Math.round(ty * 100) / 100}`;
         expect(iso.frameD).toContain(token);
@@ -369,7 +359,7 @@ describe("isometricDrawingExport (.svg and .ai / PDF vector exports)", () => {
     const m = sampleIsoModel();
     const { chunks } = isometricDrawingChunks(m, 2500, { corner: "nw" });
     const frameChunk = chunks.find((c) => c.name === "Frame");
-    expect(frameChunk?.paths).toHaveLength(3); // top surface + front-left plinth wall + front-right plinth wall
+    expect(frameChunk?.paths).toHaveLength(3);
     const names = chunks.map((c) => c.name);
     expect(names).toContain("Frame");
     expect(names).toContain("Landscape");

@@ -1,7 +1,3 @@
-/**
- * Minimal ZIP writer (stored, no compression). The .ai files are PDF streams that are already
- * compressed, so deflate would gain little; this keeps the bundle free of a zip dependency.
- */
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -27,7 +23,6 @@ function dosDateTime(when: Date): { time: number; date: number } {
   return { time, date };
 }
 
-/** One .zip holding the entries in order. Names are written as UTF-8. */
 export function zipStore(entries: readonly ZipEntry[], when: Date = new Date()): Uint8Array {
   const encoder = new TextEncoder();
   const { time, date } = dosDateTime(when);
@@ -42,8 +37,8 @@ export function zipStore(entries: readonly ZipEntry[], when: Date = new Date()):
     const lv = new DataView(local.buffer);
     lv.setUint32(0, 0x04034b50, true);
     lv.setUint16(4, 20, true);
-    lv.setUint16(6, 0x0800, true); // UTF-8 names
-    lv.setUint16(8, 0, true); // stored
+    lv.setUint16(6, 0x0800, true);
+    lv.setUint16(8, 0, true);
     lv.setUint16(10, time, true);
     lv.setUint16(12, date, true);
     lv.setUint32(14, crc, true);

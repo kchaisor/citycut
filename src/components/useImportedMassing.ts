@@ -10,6 +10,8 @@ import {
   updateStoredMassing,
 } from "../lib/massingStore";
 import { sampleTerrain } from "../lib/terrain";
+import { qaMassingFromSearch } from "../lib/qaCameraBridge";
+import { qaPodiumTowerMassing } from "../lib/qaMassingFixture";
 import type { CityModel } from "../types";
 
 type Runtime = typeof import("../lib/massingRuntime");
@@ -19,7 +21,6 @@ function loadRuntime(): Promise<Runtime> {
   return runtimePromise;
 }
 
-/** Same limit as MASSING_MAX_FILE_BYTES, checked before the runtime loads. */
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
 async function parseBytes(bytes: Uint8Array) {
@@ -27,10 +28,6 @@ async function parseBytes(bytes: Uint8Array) {
   return runtime.parseMassing3dm(await runtime.loadRhino(), bytes);
 }
 
-/**
- * Imported .3dm massing for one cut: parsed geometry, placement, IndexedDB persistence,
- * the three group for the scene and live warnings. Nothing here touches the camera.
- */
 export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "terrain">) {
   const zone = mgaCrs(model.center.lon).zone;
   const cutKey = massingCutKey(model.center);
@@ -49,7 +46,22 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     [model.terrain, model.sideM],
   );
 
+  const qaMassing =
+    typeof window !== "undefined" ? qaMassingFromSearch(window.location.search) : null;
+
   useEffect(() => {
+    if (qaMassing === "podium") {
+      let cancelled = false;
+      void loadRuntime().then((runtime) => {
+        if (cancelled) return;
+        setRt(runtime);
+        const base = model.terrain ? groundAt(0, 0) : 0;
+        setImported([qaPodiumTowerMassing(model.center, zone, base)]);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
     let cancelled = false;
     setImported([]);
     void loadStoredMassing(cutKey).then(async (rows) => {
@@ -59,7 +71,6 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
           const parsed = await parseBytes(new Uint8Array(row.bytes));
           out.push({ ...parsed, id: row.id, name: row.name, fileBytes: row.bytes.byteLength, mode: row.mode, placement: row.placement, visible: row.visible, ...(normaliseMassingColour(row.colour) ? { colour: normaliseMassingColour(row.colour)! } : {}) });
         } catch {
-          // A stored file that no longer parses is skipped, not deleted.
         }
       }
       if (!cancelled) setImported(out);
@@ -67,7 +78,7 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     return () => {
       cancelled = true;
     };
-  }, [cutKey]);
+  }, [cutKey, qaMassing, model.center, model.terrain, zone, groundAt]);
 
   const importFile = useCallback(
     async (file: File) => {
@@ -165,7 +176,6 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     [imported, patch],
   );
 
-  /** Colour only: rebuilds the massing meshes and footprints, never the camera. */
   const setColour = useCallback(
     (id: string, colour: string) => {
       const next = normaliseMassingColour(colour);
@@ -180,7 +190,6 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     void deleteStoredMassing(id);
   }, []);
 
-  /** Click-to-place: base centre goes where the click hit (ground or roof). */
   const onScenePoint = useMemo(() => {
     if (!placingId || !rt) return null;
     return (east: number, north: number, up: number) => {
@@ -209,14 +218,12 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     return out;
   }, [rt, imported, model, zone]);
 
-  /** Plan footprints for Drawing (site plan, figure-ground, exploded axo) and their .ai exports. */
   const drawingBuildings = useMemo(
     () => {
       if (!rt || !imported.some((item) => item.visible)) return [];
       try {
         return rt.massingDrawingBuildings(imported, model.center, zone, model.terrain ? groundAt : undefined);
       } catch (err) {
-        // A footprint that fails to union must not take the model page down; the 3D view still shows it.
         console.warn("[CityCut] imported massing footprint failed", err);
         return [];
       }
@@ -224,12 +231,27 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     [rt, imported, model.center, zone, model.terrain, groundAt],
   );
 
+  const drawingUpperLevels = useMemo(() => {
+    if (!rt || !imported.some((item) => item.visible)) return [];
+    try {
+      return rt.massingUpperLevelPlanLines(
+        imported.filter((item) => item.visible),
+        model.center,
+        zone,
+      );
+    } catch (err) {
+      console.warn("[CityCut] imported massing upper levels failed", err);
+      return [];
+    }
+  }, [rt, imported, model.center, zone]);
+
   const forExport = useMemo(() => imported.filter((item) => item.visible), [imported]);
 
   return {
     imported,
     forExport,
     drawingBuildings,
+    drawingUpperLevels,
     group,
     warnings,
     placingId,

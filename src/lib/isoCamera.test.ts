@@ -33,7 +33,6 @@ const AXES: Vec3[] = [
   [0, 0, 1],
 ];
 
-/** A 1 km cut, 80 m of relief and towers, centred on the origin in plan. */
 const CUT: Aabb = {
   min: [-500, 8, -500],
   max: [500, 280, 500],

@@ -46,7 +46,6 @@ describe("remove top bar", () => {
     const css = readFileSync(resolve(__dirname, "index.css"), "utf8");
     expect(css).not.toMatch(/\.topbar\s*\{/);
     expect(css).toMatch(/\.sidebar-brand-bar\s*\{[^}]*height:\s*56px/);
-    // Map and 3D fill use inset:0; sidebar only shifts left (or bottom on narrow).
     expect(css).toMatch(/\.map-wrap\s*\{\s*position:\s*absolute;\s*inset:\s*0;/);
     expect(css).toMatch(/\.fill\s*\{\s*position:\s*absolute;\s*inset:\s*0;/);
     const fillOverride = [...css.matchAll(/\.model \.viewport > \.fill\s*\{([^}]*)\}/g)].map((m) => m[1]);
@@ -59,7 +58,6 @@ describe("remove top bar", () => {
     for (const body of mapOverride) {
       expect(body).not.toMatch(/(^|;)\s*top\s*:/);
     }
-    // building detail panel no longer clears a 56 px top bar
     expect(css).toMatch(/\.building-detail-panel\s*\{[^}]*top:\s*0;/);
   });
 

@@ -62,7 +62,6 @@ const LAYER_ITEMS: {
   { key: "trees", label: "Trees", shortLabel: "Trees" },
 ];
 
-/** window.localStorage, or null where storage is blocked (private mode, tests without a DOM). */
 function storageOrNull(): Storage | null {
   try {
     return typeof window === "undefined" ? null : window.localStorage;
@@ -183,7 +182,6 @@ export function SelectChrome({
 
   return (
     <div className="select-chrome">
-      {/* 1. Top-Left Brand + CRS Pill */}
       <div className="sidebar-brand-bar top-left-brand landing-brand-pill hud-surface">
         <button className="sidebar-brand" type="button" onClick={onHome} aria-label="CityCut home">
           <span className="sidebar-brand-mark brand-mark">
@@ -197,7 +195,6 @@ export function SelectChrome({
         </span>
       </div>
 
-      {/* 2. Top-Center Floating Omnibox + Recent / Quick Chips */}
       <div className="omnibox-stack landing-omnibox-wrap" ref={boxRef}>
         <div className="search omnibox landing-omnibox hud-surface">
           <Search className="search-icon" size={15} strokeWidth={2.2} aria-hidden="true" />
@@ -352,7 +349,6 @@ export function SelectChrome({
         ) : null}
       </div>
 
-      {/* 3. Top-Right Basemap Segmented Switcher */}
       <div className="top-right-hud landing-basemap-pill hud-surface" role="group" aria-label="Basemap">
         <button
           type="button"
@@ -382,9 +378,7 @@ export function SelectChrome({
         </button>
       </div>
 
-      {/* 4. Bottom-Center Studio Workbench Dock */}
       <div className="bottom-workbench landing-workbench-dock hud-surface">
-        {/* Group 1: Cut Size */}
         <div className="wb-group dock-section">
           <div className="wb-head">
             <label className="wb-label dock-group-label" htmlFor={sliderId}>
@@ -436,7 +430,6 @@ export function SelectChrome({
 
         <div className="wb-divider dock-sep" aria-hidden="true" />
 
-        {/* Group 2: Shape */}
         <div className="wb-group dock-section">
           <div className="wb-head">
             <span className="wb-label dock-group-label">Shape</span>
@@ -467,7 +460,6 @@ export function SelectChrome({
 
         <div className="wb-divider dock-sep" aria-hidden="true" />
 
-        {/* Group 3: Included Layers (3x2 grid) */}
         <div className="wb-group dock-section">
           <div className="wb-head">
             <span className="wb-label dock-group-label">Included Layers</span>
@@ -503,7 +495,6 @@ export function SelectChrome({
 
         <div className="wb-divider dock-sep" aria-hidden="true" />
 
-        {/* Group 4: Primary Action */}
         <div className="sidebar-foot dock-cta-wrap">
           {error && (
             <p className="error sidebar-foot-error" role="alert">

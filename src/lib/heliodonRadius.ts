@@ -1,4 +1,3 @@
-/** Heliodon horizon-ring radius as a multiple of the site half-width (sideM / 2). */
 export const HELIODON_RADIUS_FACTOR_MIN = 0.75;
 export const HELIODON_RADIUS_FACTOR_MAX = 3;
 export const HELIODON_RADIUS_FACTOR_DEFAULT = 1.75;
@@ -39,11 +38,9 @@ export function writeStoredHeliodonRadiusFactor(storage: KeyValueStore, factor: 
   try {
     storage.setItem(HELIODON_RADIUS_STORAGE_KEY, String(clampHeliodonRadiusFactor(factor)));
   } catch {
-    // Private mode can reject localStorage.
   }
 }
 
-/** Optional `heliodon=1.75` query param (site half-extent multiplier). */
 export function heliodonRadiusFromSearch(search: string): number | null {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   return parseHeliodonRadiusFactor(params.get("heliodon"));

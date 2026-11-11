@@ -2,7 +2,6 @@ import { overtureBuildingHeight } from "./overtureHeight";
 
 export type OvertureSourceMeta = {
   microsoft: boolean;
-  /** OSM way ids from `record_id` values such as `w13307317`. */
   osmWayIds: number[];
 };
 
@@ -19,7 +18,6 @@ function osmWayIdFromRecordId(recordId: string): number | null {
   return Number.isFinite(id) ? id : null;
 }
 
-/** Parse Overture `sources` JSON for attribution and OSM lineage. */
 export function parseOvertureSources(raw: unknown): OvertureSourceMeta {
   if (typeof raw !== "string") return { microsoft: false, osmWayIds: [] };
   try {
@@ -45,7 +43,6 @@ export function parseOvertureSources(raw: unknown): OvertureSourceMeta {
   }
 }
 
-/** When tile fragments disagree, keep height metadata from the tallest part. */
 export function pickTallestOvertureProps(parts: { props: Record<string, unknown> }[]): Record<string, unknown> {
   if (parts.length === 0) return {};
   let best = parts[0].props;

@@ -225,8 +225,6 @@ describe("building edges", () => {
 
   it("drops a coplanar triangulation seam that a 0° threshold would keep", () => {
     const geometry = new THREE.BufferGeometry();
-    // Two coplanar triangles of a flat roof, plus no wall. The shared diagonal
-    // is a seam; the boundary is a real edge.
     const positions = [
       0, 0, 0, 2, 0, 0, 2, 0, 2,
       0, 0, 0, 2, 0, 2, 0, 0, 2,

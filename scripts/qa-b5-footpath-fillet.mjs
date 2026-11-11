@@ -1,7 +1,3 @@
-/**
- * Footpath junction before/after fillet PNGs (synthetic T junction, not a crossing blob).
- * npx vite-node scripts/qa-b5-footpath-fillet.mjs
- */
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { planPaths, svgRings } from "../src/lib/svgPlan.ts";

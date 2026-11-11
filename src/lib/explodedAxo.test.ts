@@ -293,7 +293,6 @@ describe("exploded axo separate flat Aerial image plate and 3D Terrain plate (me
     expect(cirTerrain.plinthWalls).toHaveLength(2);
     expect(cirTerrain.plinthWalls!.map((w) => w.side)).toEqual(["left", "right"]);
 
-    // Non-terrain layers (including the flat aerial image layer) do not have a ground plinth
     const sqAerial = sqLayers.find((l) => l.id === "aerial")!;
     expect(sqAerial).toBeDefined();
     expect(sqAerial.plinthWalls).toBeUndefined();
@@ -328,22 +327,18 @@ describe("exploded axo separate flat Aerial image plate and 3D Terrain plate (me
     const flatTerrain = flatLayers.find((l) => l.id === "terrain")!;
     const slopedTerrain = slopedLayers.find((l) => l.id === "terrain")!;
 
-    // Topographic perimeter has densified vertices lifted by terrain relief
     expect(pathVertices(slopedTerrain.plateOutlineD).length).toBeGreaterThan(20);
     expect(slopedTerrain.plateOutlineD).not.toBe(flatTerrain.plateOutlineD);
     expect(slopedTerrain.plinthMaxReliefM).toBeGreaterThan(20);
     expect(slopedTerrain.unclippedStrokes?.length).toBeGreaterThan(0);
     expect(slopedTerrain.topoContourStrokes?.length).toBeGreaterThan(0);
 
-    // Front-left wall top edge rises toward the NE corner while bottom edge sits on the flat base datum
     const leftWall = slopedTerrain.plinthWalls!.find((w) => w.side === "left")!;
     const flatLeftWall = flatTerrain.plinthWalls!.find((w) => w.side === "left")!;
     expect(leftWall.topPts.length).toBeGreaterThan(10);
-    // At the NE front corner (+half, +half), terrain is highest (34m vs 10m min), so screen Y is lifted (smaller Y)
     const liftedFrontCornerY = leftWall.topPts[leftWall.topPts.length - 1]![1];
     const flatFrontCornerY = flatLeftWall.topPts[flatLeftWall.topPts.length - 1]![1];
     expect(liftedFrontCornerY).toBeLessThan(flatFrontCornerY - 20);
-    // Bottom datum points are identical to flat plinth bottom datum
     expect(leftWall.bottomPts).toEqual(flatLeftWall.bottomPts);
   });
 

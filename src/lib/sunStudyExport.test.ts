@@ -10,7 +10,6 @@ import {
 } from "./sunStudyExport";
 
 
-/** Read a stored zip back: entry names and bytes, checking CRCs and the central directory. */
 function readZip(zip: Uint8Array): { name: string; bytes: Uint8Array }[] {
   const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
   const end = zip.length - 22;

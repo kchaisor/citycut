@@ -19,10 +19,8 @@ import {
   type Vec3,
 } from "./isoCamera";
 
-/** Margin when fitting the perspective camera to the heliodon. */
 export const HELIODON_FIT_MARGIN = 1.38;
 
-/** Default orbit direction (target → eye), matching the original CityCut perspective. */
 export const DEFAULT_PERSPECTIVE_OFFSET: Vec3 = normalize([0.78, 0.6, 0.86]);
 
 export function siteBounds(sideM: number, groundY: number, siteTopY: number): Aabb {
@@ -62,7 +60,6 @@ export type HeliodonFramingInput = {
   siteTopY: number;
 };
 
-/** World-space box that contains the site, horizon ring, labels, arcs, and the sun icon. */
 export function heliodonSceneBounds(input: HeliodonFramingInput): Aabb {
   const { sideM, ringRadiusM, groundY, siteTopY } = input;
   const ground: GroundHeight = () => groundY;
@@ -138,7 +135,6 @@ function fitsFrustum(
   return true;
 }
 
-/** Smallest distance along `eyeOffsetUnit` from `target` that fits `bounds` in a perspective frustum. */
 export function perspectiveFitDistance(
   bounds: Aabb,
   target: Vec3,

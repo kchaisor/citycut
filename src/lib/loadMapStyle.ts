@@ -22,7 +22,6 @@ export async function loadBasemapStyle(basemap: Basemap): Promise<BasemapStyleLo
   }
 }
 
-/** Strip remote attribution whenever MapLibre loads or swaps a style (URL fallback). */
 export function transformMapStyle(
   _previous: StyleSpecification | undefined,
   next: StyleSpecification,
@@ -30,7 +29,6 @@ export function transformMapStyle(
   return sanitizeMapStyle(next);
 }
 
-/** Apply a basemap style; URL styles are loaded with {@link transformMapStyle}. */
 export function applyBasemapStyleToMap(map: MapLibreMap, style: StyleSpecification | string): void {
   if (typeof style === "string") {
     map.setStyle(style, { transformStyle: transformMapStyle });

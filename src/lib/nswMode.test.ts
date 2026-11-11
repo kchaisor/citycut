@@ -18,8 +18,8 @@ describe("state detection", () => {
     expect(detectRegion(PYRMONT)).toMatchObject({ region: "nsw", how: "inside" });
   });
   it("splits the Murray border towns correctly", () => {
-    expect(detectRegion({ lon: 146.916, lat: -36.08 }).region).toBe("nsw"); // Albury
-    expect(detectRegion({ lon: 146.888, lat: -36.121 }).region).toBe("vic"); // Wodonga
+    expect(detectRegion({ lon: 146.916, lat: -36.08 }).region).toBe("nsw");
+    expect(detectRegion({ lon: 146.888, lat: -36.121 }).region).toBe("vic");
   });
   it("leaves Canberra without a state and says why", () => {
     const act = detectRegion({ lon: 149.13, lat: -35.28 });
@@ -30,18 +30,18 @@ describe("state detection", () => {
     const harbour = detectRegion({ lon: 151.26, lat: -33.85 });
     expect(harbour.region).toBe("nsw");
     expect(detectRegion({ lon: 160, lat: -30 }).region).toBeNull();
-    expect(detectRegion({ lon: 115.86, lat: -31.95 }).region).toBeNull(); // Perth
+    expect(detectRegion({ lon: 115.86, lat: -31.95 }).region).toBeNull();
   });
   it("knows which cuts the City of Sydney 1 m contours cover", () => {
     expect(insideCityOfSydney(PYRMONT.lon, PYRMONT.lat)).toBe(true);
-    expect(insideCityOfSydney(151.1, -33.8)).toBe(false); // Ryde area
+    expect(insideCityOfSydney(151.1, -33.8)).toBe(false);
   });
 });
 
 describe("Esri JSON to GeoJSON", () => {
   it("keeps clockwise outers and attaches counter-clockwise holes", () => {
-    const outer = [[0, 0], [0, 10], [10, 10], [10, 0], [0, 0]]; // clockwise
-    const hole = [[2, 2], [4, 2], [4, 4], [2, 4], [2, 2]]; // counter-clockwise
+    const outer = [[0, 0], [0, 10], [10, 10], [10, 0], [0, 0]];
+    const hole = [[2, 2], [4, 2], [4, 4], [2, 4], [2, 2]];
     const other = [[20, 0], [20, 5], [25, 5], [25, 0], [20, 0]];
     expect(esriGeometryToGeoJson({ rings: [outer, hole] })).toEqual({ type: "Polygon", coordinates: [outer, hole] });
     const multi = esriGeometryToGeoJson({ rings: [outer, other, hole] });
@@ -210,7 +210,6 @@ describe("NSW layers reach the site plan and the ground", async () => {
   const { sitePlanChunks, sitePlanLayerOrder } = await import("./aiPlan");
   const { DEFAULT_LINE_STYLES, cloneLineStyles } = await import("./drawingStyle");
   const { groundRoadPartition } = await import("./groundRoads");
-  // ~110 m square around Pyrmont centre, clockwise in lon/lat for GeoJSON input.
   const ring = [[151.1934, -33.8705], [151.1934, -33.8695], [151.1946, -33.8695], [151.1946, -33.8705], [151.1934, -33.8705]];
   const poly = { type: "Polygon" as const, coordinates: [ring] };
   const results = Object.fromEntries(

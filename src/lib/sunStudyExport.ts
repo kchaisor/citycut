@@ -1,7 +1,6 @@
 import { slugifyPlace } from "./placeLabel";
 import { zipStore, type ZipEntry } from "./zip";
 
-/** Sun study frames: each hour from 9am to 3pm, Melbourne clock time (the app's solar clock). */
 export const SUN_STUDY_HOURS = [9, 10, 11, 12, 13, 14, 15] as const;
 
 export type SunStudyDate = { year: number; month: number; day: number };
@@ -12,7 +11,6 @@ export function sunStudyDateText(date: SunStudyDate): string {
   return `${date.year}-${pad(date.month)}-${pad(date.day)}`;
 }
 
-/** Site slug for file names: the place slug, else the rounded centre ("37.8069S-145.0347E"). */
 export function sunStudySiteSlug(placeLabel: string, center: { lat: number; lon: number }): string {
   const slug = slugifyPlace(placeLabel);
   if (slug) return slug;
@@ -21,12 +19,10 @@ export function sunStudySiteSlug(placeLabel: string, center: { lat: number; lon:
   return `${lat}-${lon}`;
 }
 
-/** CityCut_<site-slug>_SunStudy_<YYYY-MM-DD>_<HHMM>.ai */
 export function sunStudyFrameName(site: string, date: SunStudyDate, hour: number): string {
   return `CityCut_${site}_SunStudy_${sunStudyDateText(date)}_${pad(hour)}00.ai`;
 }
 
-/** CityCut_<site-slug>_SunStudy_<YYYY-MM-DD>.zip */
 export function sunStudyZipName(site: string, date: SunStudyDate): string {
   return `CityCut_${site}_SunStudy_${sunStudyDateText(date)}.zip`;
 }
@@ -43,7 +39,6 @@ function hourText(hour: number): string {
   return hour === 12 ? "12pm" : hour > 12 ? `${hour - 12}pm` : `${hour}am`;
 }
 
-/** Plain sentence naming every failed frame, or null when all were written. */
 export function sunStudyFailureText(result: Pick<SunStudyResult, "failures" | "files">): string | null {
   if (result.failures.length === 0) return null;
   const hours = result.failures.map((f) => `${hourText(f.hour)} (${f.message})`).join(", ");
@@ -51,10 +46,6 @@ export function sunStudyFailureText(result: Pick<SunStudyResult, "failures" | "f
   return `Sun study zip is missing ${result.failures.length} of ${SUN_STUDY_HOURS.length} frames: ${hours}. The other ${result.files.length} are in the zip.`;
 }
 
-/**
- * Render one .ai per sun study hour with `renderFrame` (the existing site plan .ai writer)
- * and zip them in hour order. Every frame is attempted; failures are collected, never dropped.
- */
 export async function buildSunStudyZip(
   site: string,
   date: SunStudyDate,

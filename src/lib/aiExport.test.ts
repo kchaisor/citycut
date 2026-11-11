@@ -382,8 +382,6 @@ describe("Illustrator 3D view", () => {
     const bytes = await viewAi(model(), shot, { uniformBuildings: false, colourBySource: false });
     const info = await inspect(bytes);
     expect(info.header.startsWith("%PDF-1.6")).toBe(true);
-    // Contours is an opt-in layer (3D display toggle), so the default sheet has every other layer.
-    // With terrain, roads are draped ground (Ground::Roads), so the flat centreline "Roads" layer is absent.
     expect(info.layers).toEqual(VIEW_LAYER_ORDER.filter((name) => name !== "Contours" && name !== "Roads"));
     expect(info.layers).toContain("Ground::Roads");
     expect(info.layers).toContain("Ground::Remaining");
@@ -397,7 +395,6 @@ describe("Illustrator 3D view", () => {
     for (const name of info.layers) expect(info.counts.get(name) ?? 0).toBeGreaterThan(0);
     const widths = info.widthsMm.map((mm) => Math.round(mm * 1000) / 1000);
     expect(widths).toContain(VIEW_OUTLINE_MM);
-    // The rail in the test model is drawn as dashed black segments on its own layer.
     expect(info.counts.get("Rail") ?? 0).toBeGreaterThan(0);
     expect(widths).toContain(Math.round(DEFAULT_LINE_STYLES.rail.mm * 1000) / 1000);
   });

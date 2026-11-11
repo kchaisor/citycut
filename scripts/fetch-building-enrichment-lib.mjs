@@ -1,6 +1,3 @@
-/**
- * Pure decision logic for Pages deploy enrichment asset resolution.
- */
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";

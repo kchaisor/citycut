@@ -6,7 +6,6 @@ export const DEFAULT_ZOOM = 15;
 export const MIN_SIDE_KM = 0.25;
 export const MAX_SIDE_KM = 2;
 export const DEFAULT_SIDE_KM = 1;
-/** Square side² or circle π (side/2)² cap in m² (2 km square → 4 km²). */
 export const MAX_AREA_M2 = 4_000_000;
 
 export const DEFAULT_LAYERS: UiLayers = {
@@ -15,8 +14,6 @@ export const DEFAULT_LAYERS: UiLayers = {
   terrain: true,
   contours: true,
   waterGreen: true,
-  // On since #85: the site plan always carries trees (#60), so the 3D model, .3dm and 3D-view .ai
-  // show them by default too. The Trees switch still turns them off in all three.
   trees: true,
   satellite: false,
 };

@@ -1,7 +1,3 @@
-/**
- * Blast-radius proof: zero manual overrides → same building heights and mesh bounds.
- * Run: npx vite-node scripts/blast-radius-manual-heights.mjs
- */
 import * as THREE from "three";
 import { applyHeightOverrides, buildingHeightsFingerprint, clearAllHeightOverrides } from "../src/lib/heightOverrides.ts";
 import { buildCityGroup, disposeObject } from "../src/lib/buildCity.ts";

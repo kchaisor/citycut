@@ -1,6 +1,3 @@
-/**
- * Create model timing for 1 km CBD. Run: npx vite-node scripts/bench-create-model.mjs
- */
 import { buildCityGroup, disposeObject } from "../src/lib/buildCity.ts";
 import {
   applyComBuildingHeightsWithStats,

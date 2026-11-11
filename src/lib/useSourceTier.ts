@@ -1,6 +1,5 @@
 import type { BuildingFeat, BuildingUseSourceTier } from "../types";
 
-/** Canonical offline / live tier for source legend and QA counts. */
 export function resolveUseSourceTier(building: BuildingFeat): BuildingUseSourceTier {
   if (building.use === "unclassified") return "unclassified";
   if (building.useSourceTier && building.useSourceTier !== "unclassified") {

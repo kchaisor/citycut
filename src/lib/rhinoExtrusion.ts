@@ -1,22 +1,17 @@
 import type { ExtrusionPartRecord } from "./buildCity";
 import type { Pt, Ring } from "../types";
 
-/** A building part ready for a Rhino Extrusion: closed MGA rings, origin, base and plan bounds. */
 export type ExtrusionPoints = {
-  /** First MGA vertex of the outer ring. Profiles are built relative to it, then moved back. */
   origin: [number, number];
-  /** Closed rings (first point repeated last) in full MGA easting/northing. */
   outer: number[][];
   holes: number[][][];
   base: number;
   height: number;
-  /** [minE, minN, maxE, maxN] of the outer ring. */
   bounds: [number, number, number, number];
 };
 
 const MIN_GAP_M = 0.001;
 
-/** Open ring with consecutive duplicates (within 1 mm) and a repeated closing point removed. */
 function cleanRing(ring: Ring, project: (pt: Pt) => [number, number]): number[][] {
   const points: number[][] = [];
   for (const pt of ring) {
@@ -71,7 +66,6 @@ function segmentsCross(a: number[], b: number[], c: number[], d: number[]): bool
   return false;
 }
 
-/** True when any two non-adjacent edges across all rings touch or cross. */
 export function ringsSelfIntersect(rings: number[][][]): boolean {
   const edges: { a: number[]; b: number[]; ring: number; index: number; count: number }[] = [];
   rings.forEach((ring, r) => {
@@ -109,10 +103,6 @@ function inside(point: number[], ring: number[][]): boolean {
 
 const close = (ring: number[][]) => [...ring, [...ring[0]]];
 
-/**
- * MGA rings for one building part, or null when it should stay a mesh: fewer than 3 points,
- * no area or height, a self-intersecting outline, or a courtyard not inside the outline.
- */
 export function buildingExtrusionPoints(
   part: ExtrusionPartRecord,
   project: (pt: Pt) => [number, number],

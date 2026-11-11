@@ -128,7 +128,6 @@ function crossLayer(map: maplibregl.Map, container: HTMLElement): maplibregl.Cus
       const mpp = metresPerPixel(map.getZoom(), map.getCenter().lat);
       const step = finestVisibleStep(mpp);
       container.dataset.gridStep = String(step);
-      // Rebuilt synchronously inside the frame: nothing is ever missing for a frame.
       if (!cacheCovers(cache, view, step)) rebuild(gl, view, step);
       const canvas = map.getCanvas();
       gl.useProgram(program);
@@ -157,12 +156,6 @@ function crossLayer(map: maplibregl.Map, container: HTMLElement): maplibregl.Cus
   };
 }
 
-/**
- * Map grid on the landing map: thin dark + crosses on a 10 m–50 km ladder, square to the page
- * (rows and columns follow Web Mercator east/north, like the cut frame). Earlier builds used MGA
- * intersections, which sit at the grid convergence (~1.1° at Dandenong). It only reads the camera,
- * never sets it. `epoch` re-adds the layer after a basemap swap.
- */
 export function MgaGridLayer({ map, epoch }: { map: maplibregl.Map | null; epoch: number }) {
   useEffect(() => {
     if (!map || typeof map.addLayer !== "function" || typeof map.getLayer !== "function" || typeof map.getContainer !== "function" || typeof map.getCanvas !== "function") return;
@@ -171,7 +164,6 @@ export function MgaGridLayer({ map, epoch }: { map: maplibregl.Map | null; epoch
       try {
         if (!map.getLayer(MGA_GRID_LAYER_ID)) map.addLayer(crossLayer(map, container));
       } catch {
-        // Style mid-swap: the next styledata/idle event retries.
       }
     };
     ensure();
@@ -183,7 +175,6 @@ export function MgaGridLayer({ map, epoch }: { map: maplibregl.Map | null; epoch
       try {
         if (map.getLayer(MGA_GRID_LAYER_ID)) map.removeLayer(MGA_GRID_LAYER_ID);
       } catch {
-        // Map already torn down.
       }
     };
   }, [map, epoch]);

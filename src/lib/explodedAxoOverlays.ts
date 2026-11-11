@@ -19,7 +19,6 @@ async function publicTransportOverlaysSafe(
   bounds: ReturnType<typeof squareBBox>,
   signal?: AbortSignal,
 ) {
-  // PTV tiles are Victorian; NSW mode has no public transport source yet.
   if (model.region === "nsw") return null;
   try {
     return await fetchPublicTransportOverlays(model, bounds, signal);
@@ -38,7 +37,6 @@ function cadastreTask(model: CityModel, next: ExplodedAxoOverlayBundle, signal?:
 
 const OVERLAY_LAYER_IDS: AxoLayerId[] = ["planning", "hydro", "transport", "topography", "cadastre", "terrain"];
 
-/** Mapterhorn field for the terrain plate; reuses the model field when Terrain was built. */
 function terrainTask(model: CityModel, next: ExplodedAxoOverlayBundle, signal?: AbortSignal): Promise<void> {
   if (model.terrain) return Promise.resolve();
   return fetchTerrainForCut(model.center, model.sideM, signal).then(
@@ -135,7 +133,6 @@ export function useExplodedAxoOverlays(model: CityModel, layerVisible: Record<Ax
       try {
         await Promise.all(tasks);
       } catch {
-        // Aborted by a toggle or unmount; the next run reloads.
         return;
       }
       if (!cancelled) setState(next);

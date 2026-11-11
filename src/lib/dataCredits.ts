@@ -1,4 +1,3 @@
-/** Short on-screen and export attribution strings (single OSM mention via Overture ODbL). */
 
 export const DATA_CREDIT_BASE =
   "© Overture Maps Foundation, OpenStreetMap contributors (ODbL), Microsoft. Terrain © Mapterhorn. Vicmap © State of Victoria (CC BY 4.0).";
@@ -19,14 +18,10 @@ export const CITYCUT_BYLINE = "CityCut · Kelvin Chai";
 export type StageCreditOptions = {
   windOn: boolean;
   satelliteOn: boolean;
-  /** Linked CoM building heights line when the toggle is on. */
   comHeightsHtml?: string | null;
-  /** Linked CoM urban forest credit when the cut has CoM trees. */
   comTreesHtml?: string | null;
   contourHtml?: string | null;
-  /** Vicmap Property parcels on the exploded axo cadastre plate. */
   cadastreOn?: boolean;
-  /** NSW mode credit line (exact strings from sources/registry). */
   nswCredit?: string | null;
 };
 
@@ -37,9 +32,7 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/** Footer on the model viewport (may include HTML links). */
 export function modelStageCreditHtml(options: StageCreditOptions): string {
-  // NSW mode (nswCredit set) uses no Vicmap data, so the Vicmap credit is dropped there only.
   const base = DATA_CREDIT_BASE.replace(
     options.nswCredit ? " Vicmap © State of Victoria (CC BY 4.0)." : "Vicmap © State of Victoria (CC BY 4.0).",
     options.nswCredit ? "" : `${VICMAP_LINK}.`,
@@ -59,19 +52,14 @@ export function modelStageCreditHtml(options: StageCreditOptions): string {
 export type PlainCreditOptions = {
   windOn?: boolean;
   satelliteOn?: boolean;
-  /** Include Vicmap planning/hydro/rail/contour and PT Vic attributions for exploded axo exports. */
   explodedAxoOverlaysOn?: boolean;
-  /** Vicmap Property parcels on the exploded axo cadastre plate. */
   cadastreOn?: boolean;
-  /** Prefix such as "CityCut." for export bars. */
   prefix?: string;
-  /** NSW mode: no Victorian data is used, so the Vicmap and PTV credits are left out. */
   nsw?: boolean;
 };
 
 const VICMAP_BASE_CREDIT = " Vicmap © State of Victoria (CC BY 4.0).";
 
-/** Plain text for PDF, AI, Rhino, and PNG overlays. */
 export function plainDataCredit(options: PlainCreditOptions = {}): string {
   const chunks: string[] = [];
   if (options.prefix) chunks.push(options.prefix);

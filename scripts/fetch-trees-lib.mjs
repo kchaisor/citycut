@@ -5,7 +5,6 @@ import { TREES_MANIFEST_NAME, TREES_PMTILES_NAME } from "./trees-prebake-lib.mjs
 
 export const TREES_RELEASE = process.env.TREES_RELEASE?.trim() || "trees-latest";
 
-/** Decide whether downloaded release assets may be installed into public/. */
 export function resolveTreesDeploy({ tempDir, downloadOk, downloadError = "" }) {
   if (!downloadOk) return { ok: false, message: `release ${TREES_RELEASE} not downloaded (${downloadError.trim() || "unknown error"})` };
   const tiles = join(tempDir, TREES_PMTILES_NAME);

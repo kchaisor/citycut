@@ -98,11 +98,10 @@ describe("sidebar brand bar", () => {
     const iconBtn = screen.getByRole("button", { name: "New cut" });
     expect(iconBtn.className).toContain("sidebar-new-cut-icon");
     expect(iconBtn.getAttribute("aria-label")).toBe("New cut");
-    expect(within(iconBtn).getByText("New cut")).toBeTruthy(); // rail-tip
+    expect(within(iconBtn).getByText("New cut")).toBeTruthy();
     await user.click(iconBtn);
     expect(onNewCut).toHaveBeenCalledTimes(2);
 
-    // Home still works when collapsed (mark only).
     const onHome = vi.fn();
     rerender(
       <Sidebar

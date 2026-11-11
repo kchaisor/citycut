@@ -1,5 +1,5 @@
-import polygonClipping from "polygon-clipping";
-import type { MultiPolygon, Polygon } from "polygon-clipping";
+import type { MultiPolygon, Polygon } from "./safePolygonClip";
+import { clipDifference } from "./safePolygonClip";
 import { openRing, signedArea } from "./geo";
 import {
   circleRing,
@@ -56,7 +56,6 @@ function multiToAreas(multi: Multi, startId: number): AreaFeat[] {
   return areas;
 }
 
-/** Road-enclosed parcels: site frame minus carriageways/paths/rail, minus water and green. */
 export function computeCityBlocks(model: Pick<CityModel, "roads" | "areas" | "sideM" | "frameShape">): AreaFeat[] {
   const sideM = model.sideM;
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
@@ -104,8 +103,7 @@ export function computeCityBlocks(model: Pick<CityModel, "roads" | "areas" | "si
         ...holes.map((hole) => hole.map((p) => [p[0], p[1]] as [number, number])),
       ];
     });
-    const diff = polygonClipping.difference(current, roadMulti);
-    return (Array.isArray(diff) ? diff : []) as Multi;
+    return clipDifference(current, roadMulti, { layer: "city block", operation: "difference" }) as Multi;
   };
 
   site = subtractRoads(site, pathFill);
@@ -116,8 +114,11 @@ export function computeCityBlocks(model: Pick<CityModel, "roads" | "areas" | "si
   for (const area of model.areas) {
     if (area.kind === "block") continue;
     const patch = multiFromRing(area.ring, area.holes);
-    const diff = polygonClipping.difference(site, patch);
-    site = (Array.isArray(diff) ? diff : []) as Multi;
+    site = clipDifference(site, patch, {
+      layer: "city block",
+      operation: "difference",
+      featureId: area.id,
+    }) as Multi;
   }
 
   site = clipMultiToFrame(site, sideM, frameShape);

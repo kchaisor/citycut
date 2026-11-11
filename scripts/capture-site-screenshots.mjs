@@ -1,7 +1,3 @@
-/**
- * Site boundary QA: 3D oblique + site plan for an address frame (live Vicmap).
- * Run: npx vite-node scripts/capture-site-screenshots.mjs
- */
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 

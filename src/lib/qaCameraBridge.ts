@@ -1,4 +1,3 @@
-/** Dev / QA only: programmatic perspective camera when `?qa=1` is in the URL. */
 export type QaCameraPose = {
   eye: { x: number; y: number; z: number };
   target: { x: number; y: number; z: number };
@@ -7,7 +6,6 @@ export type QaCameraPose = {
 export type QaCameraBridge = {
   setCamera: (pose: QaCameraPose) => void;
   getCamera: () => QaCameraPose | null;
-  /** Fit the perspective camera to the sun path dome, labels, and sun icon. */
   frameHeliodon: () => void;
   projectToScreen: (world: { x: number; y: number; z: number }) => { x: number; y: number } | null;
 };
@@ -29,9 +27,7 @@ declare global {
       openMidriseHeightEdit: () => number | null;
       pickBuildingNearGeoQa?: (lat: number, lon: number) => number | null;
       getSummary?: () => { treeCrowns: number; buildingCount: number; roadCount: number; triangleCount: number };
-      /** Pick a building for height edit (same path as 3D selection). */
       selectHeightEditBuilding?: (buildingId: number) => number;
-      /** ~16 m foreground block for selection QA screenshots. */
       pickForegroundBuildingForSelectionQa?: () => number | null;
       frameSelectionBuilding?: (buildingId: number, variant?: "through" | "oblique") => boolean;
       pickTallTowerForSelectionQa?: () => number | null;
@@ -41,9 +37,7 @@ declare global {
         buildingId: number,
         padPx?: number,
       ) => { x: number; y: number; width: number; height: number } | null;
-      /** Footprints for QA framing (local metres). */
       listBuildings?: () => { id: number; height: number; east: number; north: number }[];
-      /** Minimal city model for plan-path QA exports (`?qa=1` only). */
       exportPlanSnapshot?: () => import("../types").CityModel;
       pickZoneDefaultPanelQa?: () => { id: number; height: number; note: string } | null;
       getHeightPerfTimings?: () => {
@@ -55,11 +49,16 @@ declare global {
         comAppliedMs: number | null;
         firstRenderMs: number | null;
       }>;
-      /** Offscreen WebGL render for headless 3D QA screenshots. */
       captureViewportPng?: () => Promise<string | null>;
       setSectionKnifeActive?: (active: boolean) => void;
       setSectionKnifePose?: (pose: import("./sectionKnife/plane").SectionKnifePose) => void;
       auditSectionExport?: () => { ok: boolean; layers: string[] };
+    };
+    __citycutWalkRippleQa?: {
+      setMinutes: (minutes: number) => void;
+      getMinutes: () => number;
+      getUniformMinutes: () => number;
+      countReachedBuildings: (minuteCutoff: number) => number;
     };
     __citycutQaSelectionAudit?: import("./buildingSelectionAudit").BuildingSelectionAudit;
     __citycutFrameRatio?: number;
@@ -75,6 +74,10 @@ declare global {
     __citycutProgressSamples?: number[];
     __citycutLoadProgress?: number;
     __citycutIntroReadyToFire?: boolean;
+    __citycutQaPlan?: {
+      upperLevelGroupCount: () => number;
+      exportSitePlanFrameSvg: () => Promise<string>;
+    };
   }
 }
 
@@ -83,7 +86,13 @@ export function qaModeFromSearch(search: string): boolean {
   return params.get("qa") === "1";
 }
 
-/** Dev-only: `?qa=crash` throws on the next render so QA can capture the app error boundary. */
+export function qaMassingFromSearch(search: string): string | null {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  const value = params.get("qaMassing");
+  if (!value) return null;
+  return value === "podium" ? "podium" : null;
+}
+
 export function qaForcedCrashFromSearch(search: string): boolean {
   if (!import.meta.env.DEV) return false;
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);

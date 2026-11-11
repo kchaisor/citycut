@@ -6,7 +6,6 @@ import type { CityModel, Ring } from "../types";
 export type SunStudyLayer = { hour: number; rings: Ring[][] };
 
 const CACHE_LIMIT = 96;
-/** Per-hour shadow cache shared by every plan: key = model geometry + date + hour. */
 const hourCache = new Map<string, Ring[][]>();
 
 function remember(key: string, rings: Ring[][]) {
@@ -15,7 +14,6 @@ function remember(key: string, rings: Ring[][]) {
   while (hourCache.size > CACHE_LIMIT) hourCache.delete(hourCache.keys().next().value!);
 }
 
-/** @internal test helper */
 export function sunStudyCacheSize(): number {
   return hourCache.size;
 }
@@ -31,10 +29,6 @@ function startWorker(): Worker | null {
   }
 }
 
-/**
- * All seven hourly layers for an export: cached hours at once, the rest from a worker. Without
- * Worker support (tests), missing hours come back empty rather than blocking the page.
- */
 export function sunStudyLayersFor(model: CityModel, date: SunStudyDate): Promise<SunStudyLayer[]> {
   const modelKey = sunStudyModelKey(model);
   const collect = () =>
@@ -71,11 +65,6 @@ export function sunStudyLayersFor(model: CityModel, date: SunStudyDate): Promise
   });
 }
 
-/**
- * Hourly plan shadows for the sun study, computed off the main thread. Layers appear as each hour
- * finishes; hours already in the cache show at once. Returns the layers ready so far and whether
- * any are still pending.
- */
 export function useSunStudyShadows(
   model: CityModel,
   date: SunStudyDate | null,

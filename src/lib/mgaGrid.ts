@@ -1,11 +1,8 @@
 import { mgaZone, projectLonLat, unprojectMga } from "./crs";
 
-/** Grid steps (m), finest first. The overlay picks the finest one that stays readable. */
 export const MGA_GRID_STEPS_M = [10, 50, 100, 500, 1000, 5000, 10000, 50000] as const;
-/** Smallest on-screen gap between grid lines (CSS px). */
 export const MGA_GRID_MIN_GAP_PX = 72;
 
-/** Finest step whose lines sit at least MGA_GRID_MIN_GAP_PX apart at this scale. */
 export function mgaGridStep(metresPerPixel: number, minGapPx = MGA_GRID_MIN_GAP_PX): number {
   for (const step of MGA_GRID_STEPS_M) if (step / metresPerPixel >= minGapPx) return step;
   return MGA_GRID_STEPS_M[MGA_GRID_STEPS_M.length - 1]!;

@@ -50,7 +50,6 @@ function useSourceLabel(source: BuildingFeat["source"]): string {
   return "—";
 }
 
-/** NSW mode: a use set from a Spatial Services building complex names that facility as the source. */
 function useLineFor(building: BuildingFeat): string {
   if (building.nswFacility) return `${buildingLabel(building)} · NSW Spatial Services (${building.nswFacility})`;
   return `${buildingLabel(building)} · ${useSourceLabel(building.source)}`;
@@ -264,7 +263,6 @@ function damStatusRank(status: string | undefined): number {
   return DAM_STATUS_RANK[key] ?? 25;
 }
 
-/** Prefer completed over approved; note a secondary approved record when both exist. */
 export function pickDamDevelopmentDisplayRows(
   rows: { status?: string; floors_above?: number; resi_dwellings?: number }[],
 ): string | null {
@@ -290,7 +288,6 @@ export function pickDamDevelopmentDisplayRows(
   return primary;
 }
 
-/** Same winner rule as {@link applyDevelopmentFloorsToBuildings}; skips nearest-point mismatches. */
 export async function lookupDevelopmentForBuilding(
   building: BuildingFeat,
   center: LonLat,

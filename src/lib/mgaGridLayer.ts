@@ -9,10 +9,8 @@ import { MGA_GRID_MIN_GAP_PX, MGA_GRID_STEPS_M, type GridCross } from "./mgaGrid
  * crosses stay fully drawn, and no zoom is ever left without crosses.
  */
 export const MGA_GRID_LAYER_ID = "citycut-mga-grid-crosses";
-/** On-screen spacing (CSS px) where a level starts to fade in, and where it is fully drawn. */
 export const MGA_GRID_FADE_START_PX = 28;
 export const MGA_GRID_FADE_FULL_PX = MGA_GRID_MIN_GAP_PX;
-/** Largest number of cached crosses; the cache covers the view plus half a view on each side. */
 export const MGA_GRID_MAX_CROSSES = 16000;
 
 const EARTH_CIRCUMFERENCE_M = 40075016.686;
@@ -21,7 +19,6 @@ export function metresPerPixel(zoom: number, lat: number): number {
   return (EARTH_CIRCUMFERENCE_M * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
 }
 
-/** Opacity of one level from its on-screen spacing: 0 below the start, 1 at full, smooth between. */
 export function levelOpacity(step: number, metresPerPx: number): number {
   const gap = step / metresPerPx;
   const t = (gap - MGA_GRID_FADE_START_PX) / (MGA_GRID_FADE_FULL_PX - MGA_GRID_FADE_START_PX);
@@ -29,13 +26,11 @@ export function levelOpacity(step: number, metresPerPx: number): number {
   return c * c * (3 - 2 * c);
 }
 
-/** Finest step that is at least starting to show at this scale (the cache's grid step). */
 export function finestVisibleStep(metresPerPx: number): number {
   for (const step of MGA_GRID_STEPS_M) if (step / metresPerPx > MGA_GRID_FADE_START_PX) return step;
   return MGA_GRID_STEPS_M[MGA_GRID_STEPS_M.length - 1]!;
 }
 
-/** Coarsest ladder step that divides both coordinates (a 1 km cross is also a 500 m one). */
 export function crossRank(easting: number, northing: number, finest: number): number {
   let rank = finest;
   for (const step of MGA_GRID_STEPS_M) {
@@ -48,7 +43,6 @@ export function crossRank(easting: number, northing: number, finest: number): nu
 export type Bounds = { west: number; south: number; east: number; north: number };
 export type GridCache = Bounds & { step: number; ranks: Map<number, number[]> };
 
-/** Cache region: the view plus half a view on each side. */
 export function cacheBounds(view: Bounds): Bounds {
   const w = (view.east - view.west) / 2;
   const h = (view.north - view.south) / 2;
@@ -66,18 +60,10 @@ export function cacheCovers(cache: GridCache | null, view: Bounds, step: number)
   );
 }
 
-/** Latitude the page-square grid is scaled at: whole half-degrees, so panning never re-spaces it. */
 export function gridReferenceLat(lat: number): number {
   return Math.round(lat * 2) / 2;
 }
 
-/**
- * Crosses on a grid square to the page: rows and columns follow Web Mercator east and north, so
- * they line up with the screen and the cut frame. (The MGA grid is a Transverse Mercator grid and
- * sits at the grid convergence to Mercator north, about 1.1° at Dandenong, 1.2° at Kew.) Spacing is
- * `step` ground metres at the reference latitude; `easting`/`northing` are whole multiples of
- * `step` counted from the Mercator origin, so a cross keeps its rank as the cache moves.
- */
 export function pageGridCrosses(region: Bounds, step: number, maxCount = MGA_GRID_MAX_CROSSES): GridCross[] {
   const refLat = gridReferenceLat((region.south + region.north) / 2);
   const metresPerUnit = EARTH_CIRCUMFERENCE_M * Math.cos((refLat * Math.PI) / 180);
@@ -85,7 +71,6 @@ export function pageGridCrosses(region: Bounds, step: number, maxCount = MGA_GRI
   const [x1, y1] = lonLatToMercator(region.east, region.south);
   const i0 = Math.floor((x0 * metresPerUnit) / step);
   const i1 = Math.ceil((x1 * metresPerUnit) / step);
-  // Northing grows north; Mercator y grows south.
   const j0 = Math.floor(((1 - y1) * metresPerUnit) / step);
   const j1 = Math.ceil(((1 - y0) * metresPerUnit) / step);
   if ((i1 - i0 + 1) * (j1 - j0 + 1) > maxCount) return [];
@@ -98,7 +83,6 @@ export function pageGridCrosses(region: Bounds, step: number, maxCount = MGA_GRI
   return out;
 }
 
-/** Crosses for a region grouped by rank, as lon/lat pairs. */
 export function buildCache(view: Bounds, step: number): GridCache {
   const region = cacheBounds(view);
   const ranks = new Map<number, number[]>();
@@ -111,7 +95,6 @@ export function buildCache(view: Bounds, step: number): GridCache {
   return { ...region, step, ranks };
 }
 
-/** Two thin quads per cross (horizontal and vertical arm), as triangles: centre + pixel offset. */
 export function crossVertices(
   centres: ArrayLike<number>,
   arm: number,
@@ -135,20 +118,17 @@ export function crossVertices(
   return { centres: outCentres, offsets: outOffsets, count: n * per };
 }
 
-/** Web Mercator in MapLibre's 0..1 world units. */
 export function lonLatToMercator(lon: number, lat: number): [number, number] {
   const sin = Math.sin((lat * Math.PI) / 180);
   return [(lon + 180) / 360, 0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)];
 }
 
-/** Inverse of lonLatToMercator. */
 export function mercatorToLonLat(x: number, y: number): [number, number] {
   const lon = x * 360 - 180;
   const lat = (Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180) / Math.PI;
   return [lon, lat];
 }
 
-/** `matrix × translate(ox, oy)`, in float64, so float32 vertices can stay relative to an origin. */
 export function translateMatrix(matrix: ArrayLike<number>, ox: number, oy: number): Float32Array {
   const out = new Float32Array(16);
   for (let i = 0; i < 16; i++) out[i] = matrix[i]!;

@@ -58,10 +58,8 @@ export function HeliodonPlanOverlay({
   sunStudy = null,
 }: {
   input: HeliodonDiagramInput;
-  /** Sun study on: hourly suns on this date's path replace the current-time sun and duplicate hour labels. */
   sunStudy?: SunStudyDate | null;
   planScale: number;
-  /** Clips the diagram to the square site frame. */
   sideM: number;
 }) {
   const overlay = useMemo(() => buildHeliodonDiagramOverlay(input), [input]);

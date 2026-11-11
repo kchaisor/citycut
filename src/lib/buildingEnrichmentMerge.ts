@@ -45,7 +45,6 @@ export function enrichmentBeatsBuilding(
   return USE_SOURCE_RANK[record.useSource] > currentRank;
 }
 
-/** Apply offline use + zone metadata from enrichment tiles (geometry stays Overture). */
 export function mergeBuildingEnrichment(
   buildings: BuildingFeat[],
   byId: Map<string, BuildingEnrichmentRecord>,
@@ -82,7 +81,6 @@ export function mergeBuildingEnrichment(
   });
 }
 
-/** LiDAR from tiles — after CoM/DAM resolution, before Overture height tags win. */
 export function applyLidarHeightsFromEnrichment(buildings: BuildingFeat[]): BuildingFeat[] {
   return buildings.map((building) => {
     if (building.heightManual) return building;

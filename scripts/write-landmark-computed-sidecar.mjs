@@ -1,7 +1,3 @@
-/**
- * Write landmark-computed.json from committed snapshot + fixture (no network).
- *   npx vite-node scripts/write-landmark-computed-sidecar.mjs
- */
 import { writeFileSync, readFileSync } from "node:fs";
 import landmarks from "../src/lib/fixtures/landmark-heights.json" assert { type: "json" };
 import { resolveLandmarkCut } from "../src/lib/landmarkHeightPipeline.ts";

@@ -14,7 +14,6 @@ function parcelCacheKey(anchor: LonLat, center: LonLat, sideM: number): string {
   return `${anchor.lat.toFixed(6)},${anchor.lon.toFixed(6)}|${center.lat.toFixed(6)},${center.lon.toFixed(6)}|${sideM}`;
 }
 
-/** One Vicmap Property hit per anchor/cut; reused by the search map and model build. */
 export async function fetchSiteParcelCached(
   anchor: LonLat,
   center: LonLat,

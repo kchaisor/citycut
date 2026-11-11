@@ -7,7 +7,6 @@ function metres(m: number): string {
   return m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`;
 }
 
-/** View section: draw a walk, compute what can be seen along it, play it back. */
 export function ViewPanel({ walk }: { walk: WalkViewshed }) {
   const [eyeText, setEyeText] = useState(walk.eyeM.toFixed(1));
   useEffect(() => setEyeText(walk.eyeM.toFixed(1)), [walk.eyeM]);
@@ -159,7 +158,6 @@ export function ViewPanel({ walk }: { walk: WalkViewshed }) {
   );
 }
 
-/** Viewport legend for the walk overlay. */
 export function ViewLegend() {
   return (
     <div className="view-legend" aria-label="View legend">

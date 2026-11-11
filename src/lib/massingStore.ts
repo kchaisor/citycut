@@ -1,20 +1,17 @@
 import type { LonLat } from "../types";
 import type { MassingPlacement, MassingPlacementMode } from "./massingImport";
 
-/** Imported .3dm files persist in IndexedDB (localStorage's ~5 MB is too small for a 50 MB file). */
 const DB_NAME = "citycut-massing";
 const STORE = "models";
 
 export type StoredMassing = {
   id: string;
-  /** Cut this model belongs to: centre to ~1 m. */
   cutKey: string;
   name: string;
   bytes: ArrayBuffer;
   mode: MassingPlacementMode;
   placement: MassingPlacement;
   visible: boolean;
-  /** Per-model colour (#RRGGBB); absent = default token. */
   colour?: string;
   addedAt: string;
 };
@@ -64,7 +61,6 @@ export async function saveStoredMassing(row: StoredMassing): Promise<void> {
   }
 }
 
-/** Placement/visibility only; the file bytes stay as stored. */
 export async function updateStoredMassing(
   id: string,
   patch: Partial<Pick<StoredMassing, "mode" | "placement" | "visible" | "colour">>,

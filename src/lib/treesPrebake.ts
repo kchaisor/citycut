@@ -1,8 +1,3 @@
-/**
- * Greater Melbourne trees pre-baked by the monthly job (scripts/build-trees-pmtiles.mjs) into
- * trees.pmtiles on Pages. The app reads a cut's trees from here first; the live Vicmap and City of
- * Melbourne servers are the backup. Vicmap height and crown are stored in half-metre steps.
- */
 import { VectorTile, type VectorTileFeature } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 import { PMTiles } from "pmtiles";
@@ -10,12 +5,12 @@ import { EnrichmentPmtilesSource } from "./enrichmentPmtilesSource";
 import type { ComTree } from "./comTrees";
 import type { VicmapPoint } from "./vicmapTrees";
 
-export const TREES_PMTILES_URL = `${import.meta.env.BASE_URL}trees.pmtiles`;
-export const TREES_MANIFEST_URL = `${import.meta.env.BASE_URL}trees-manifest.json`;
+const PREBAKED_BASE = import.meta.env.VITE_PREBAKED_TILES_BASE ?? import.meta.env.BASE_URL;
+export const TREES_PMTILES_URL = `${PREBAKED_BASE}trees.pmtiles`;
+export const TREES_MANIFEST_URL = `${PREBAKED_BASE}trees-manifest.json`;
 export const PAGES_TREES_PMTILES_URL = "https://kchaisor.github.io/citycut/trees.pmtiles";
 export const PAGES_TREES_MANIFEST_URL = "https://kchaisor.github.io/citycut/trees-manifest.json";
 
-/** Credit for the OSM-derived tree points in the pre-baked file (ODbL). */
 export const OSM_TREES_ODBL_CREDIT = "Tree points © OpenStreetMap contributors, ODbL.";
 
 type BBox = { south: number; west: number; north: number; east: number };
@@ -92,8 +87,6 @@ async function defaultFetchManifest(signal?: AbortSignal): Promise<TreesManifest
         }
       }
     }
-    // Deployments outside GitHub Pages (e.g. Vercel or local preview without release assets in
-    // public/) fall back to the public Greater Melbourne pre-baked tree archive on GitHub Pages.
     try {
       const pagesResponse = await fetch(PAGES_TREES_MANIFEST_URL, {
         signal,
@@ -119,7 +112,6 @@ async function defaultFetchManifest(signal?: AbortSignal): Promise<TreesManifest
   }
 }
 
-/** Test helper. */
 export function clearPrebakedTreesCache(): void {
   manifestPromise = null;
   sharedArchive = null;
@@ -127,14 +119,12 @@ export function clearPrebakedTreesCache(): void {
   resolvedPmtilesUrl = TREES_PMTILES_URL;
 }
 
-/** YYYY-MM-DD from an ISO date, or null. */
 export function isoDay(value: string | null | undefined): string | null {
   if (!value) return null;
   const match = /^\d{4}-\d{2}-\d{2}/.exec(value);
   return match ? match[0] : null;
 }
 
-/** Source-note sentence naming the data dates in the pre-baked file. */
 export function prebakeSourceNote(manifest: TreesManifest, usedOsm: boolean): string {
   const stamps = manifest.sourceStamps ?? {};
   const parts = [
@@ -146,7 +136,6 @@ export function prebakeSourceNote(manifest: TreesManifest, usedOsm: boolean): st
   return `Trees read from the pre-baked tree file${built ? ` built ${built}` : ""}${parts.length > 0 ? ` (${parts.join(", ")})` : ""}; Vicmap heights and crowns are rounded to 0.5 m.`;
 }
 
-/** Note shown in the Trees panel and Model details whenever the live servers were used instead. */
 export function prebakeBackupNote(reason: string): string {
   return `Trees came from the live servers (backup) because the pre-baked tree file could not be used: ${reason}.`;
 }
@@ -169,10 +158,6 @@ export function tilesForBounds(bounds: BBox, z: number): { z: number; x: number;
   return out;
 }
 
-/**
- * The file has no tile buffer, so a tree exactly on a tile edge is in both tiles. The tile whose
- * half-open square [0, extent) holds the point owns it (same rule as the job's count check).
- */
 export function ownsPoint(feature: VectorTileFeature, extent: number): boolean {
   const p = feature.loadGeometry()[0]?.[0];
   return Boolean(p) && p!.x >= 0 && p!.x < extent && p!.y >= 0 && p!.y < extent;
@@ -181,7 +166,6 @@ export function ownsPoint(feature: VectorTileFeature, extent: number): boolean {
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
 
-/** Decode one tile; points outside `bounds` are left out, like the live bbox queries. */
 export function decodeTreeTile(
   data: ArrayBuffer,
   z: number,
@@ -230,7 +214,6 @@ export function decodeTreeTile(
   });
 }
 
-/** Trees for the cut from the pre-baked file, or the reason it could not be used. Never throws, except on abort. */
 export async function loadPrebakedTrees(bounds: BBox, signal?: AbortSignal, deps: PrebakeDeps = {}): Promise<PrebakeResult> {
   const fetchManifest = deps.fetchManifest ?? defaultFetchManifest;
   try {

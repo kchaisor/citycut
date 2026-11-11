@@ -55,7 +55,6 @@ export function wayCoverageByBuilding(building: BuildingFeat, wayRing: Ring): nu
   return overlap / wayArea;
 }
 
-/** Prefer the containing footprint that best covers the fixture OSM way polygon. */
 export function pickLandmarkBuildingAtPoint(
   buildings: BuildingFeat[],
   lm: LandmarkRow,

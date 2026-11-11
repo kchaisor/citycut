@@ -130,6 +130,8 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--building-manual` | `#D4A017` | 3D viewport tint for buildings with a manual height override when “Show manual edits” is on. |
 | `--site-building` | `#F2C230` | Buildings on the searched property: site plan, 3D, Rhino `Buildings::Site`, and Illustrator Site buildings layer. Manual-height amber and uniform colour apply to non-site buildings only; site buildings stay yellow unless manual-height tint is on for that building (manual wins in 3D). |
 | `--imported-massing` | `#FFFFFF` | Default colour of imported .3dm massing in 3D, Drawing (site plan, figure-ground, exploded axo), .ai and .3dm. Each imported model can override it with the Colour picker in Import (stored with the model). |
+| `--imported-massing-upper-stroke` | `#6E6E6E` | Solid linework for upper roof/setback outlines inside imported footprints. |
+| `--imported-massing-upper-tone` | `#E6E6E6` | Light plan fill behind upper-level outlines on screen. |
 | `--switch-knob` | `#000000` | Knob of every sidebar switch, on and off, so an off switch reads on its pale `--control-off` track. On = `--accent` track, knob right. |
 | `--site-building-edge` | `#3D3010` | Darker outline on site-building massing in the 3D viewport so they read against retail (`--use-retail`) and civic (`--use-civic`) yellows. |
 | `--site-boundary` | `#D7263D` | Searched-property parcel boundary on the site plan, the 3D ground line, Rhino `Site::Boundary`, and Illustrator/PDF Site boundary layer. |
@@ -193,6 +195,10 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--view-ink` | `#24221c` | Outlines and the title plate text on the 3D-view Illustrator sheet. |
 | `--light-sky` | `#f7f4ee` | Sky side of the 3D hemisphere light. |
 | `--light-ground` | `#c9c0b2` | Ground side of the 3D hemisphere light. |
+| `--light-fill` | `#e4e8ee` | Soft studio fill light, from the side opposite the key light in the 3D view. Off while sun shadows are on. |
+| `--viewport-studio-top` | `#f6f6f5` | Top of the studio gradient behind the 3D model. It runs top, then `--viewport-bg`, then bottom. |
+| `--viewport-studio-bottom` | `#d9d9d6` | Bottom of the studio gradient behind the 3D model. |
+| `--plinth-shadow` | `#1a1916` | Soft contact shadow under the 3D plinth. Baked once per cut, screen only (not in the PNG). |
 | `--cut-line` | `#f7f4ee` | Frame drawn around the cut on the satellite preview. |
 | `--sun-arc-summer` | `#1a1916` | Dec 21 sun path in the 3D heliodon, solid line (screen only). Black or grey only. |
 | `--sun-arc-equinox` | `#1a1916` | Sep/Mar sun path in the 3D heliodon, dashed line (screen only). Black or grey only. |
@@ -297,6 +303,12 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--section-knife-elevation-grid` | `#1A1916` | Section Knife: grid and axis ink in the section panel. |
 | `--section-knife-marker-gold` | `#E1B157` | Section Knife: knife marker accent (JT gold). |
 | `--section-knife-plan-marker-ink` | `#1a1a1a` | Section Knife: plan section mark ink (bubbles, dash, arrows). |
+| `--walk-ripple-accent` | `#FFF500` | Walk ripple: origin marker, network wave, and straight-line rings. |
+| `--walk-ripple-band-0` | `#FFF500` | Walk ripple: buildings within 0–5 minutes walk. |
+| `--walk-ripple-band-1` | `#FF8C00` | Walk ripple: buildings within 5–10 minutes walk. |
+| `--walk-ripple-band-2` | `#E85D04` | Walk ripple: buildings within 10–15 minutes walk. |
+| `--walk-ripple-label-bg` | `#1C1C22` | Walk ripple: floating minute-band label fill. |
+| `--walk-ripple-label-text` | `#FFFFFF` | Walk ripple: floating minute-band label text. |
 
 The contour lines in Rhino use the pen `--contour-stroke` from `src/drawing-style.css`, not a fill.
 
@@ -402,7 +414,7 @@ The same drawer has **Colours**, under Line styles. It lists every fill, with a 
 | Name | What you see on screen | Current value |
 | --- | --- | --- |
 | `--sidebar-grey` | Plain grey behind the sidebar on the landing page and the model page. | `#EBEBEB` |
-| `--viewport-bg` | Flat 3D sky and the flat tint over the landing map. No gradients. | `#EBEBEB` |
+| `--viewport-bg` | Flat tint over the landing map, and the middle stop of the 3D studio gradient. | `#EBEBEB` |
 | `--sidebar-text` | All sidebar text, including section labels and card descriptions. | `#000000` |
 | `--sun-card-bg` | Sun tab date and preset cards, and the speed buttons. | `#FFFFFF` |
 | `--sun-card-border` | Border of an unselected Sun tab card. | `#CECBC6` |

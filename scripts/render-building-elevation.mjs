@@ -1,7 +1,3 @@
-/**
- * Orthographic side elevation (three.js, looking north) for main vs PR building heights.
- * Usage: npm exec vite-node scripts/render-building-elevation.mjs
- */
 import { mkdirSync, copyFileSync } from "node:fs";
 import { chromium } from "playwright";
 import { squareBBox, openRing, signedArea } from "../src/lib/geo.ts";

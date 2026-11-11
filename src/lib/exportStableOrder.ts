@@ -14,7 +14,6 @@ function treeSpeciesLabel(tree: TreeFeat): string {
   return tree.species ?? tree.genus ?? tree.taxon ?? "";
 }
 
-/** Trees are sorted by geometry and tags; API row ids are not stable. */
 export function compareTreesForExport(a: TreeFeat, b: TreeFeat): number {
   const ax = Math.round(a.at[0] * 1000);
   const ay = Math.round(a.at[1] * 1000);
@@ -40,7 +39,6 @@ function comparePolyline(a: Pt[], b: Pt[]): number {
   return compareNum(a.length, b.length);
 }
 
-/** Stable feature order for byte-identical exports (same cut, same options). */
 export function stableExportModel(model: CityModel): CityModel {
   return {
     ...model,

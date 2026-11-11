@@ -8,17 +8,14 @@ export function installPreloadErrorGuard(): void {
       if (sessionStorage.getItem(PRELOAD_RELOAD_KEY)) return;
       sessionStorage.setItem(PRELOAD_RELOAD_KEY, "1");
     } catch {
-      /* sessionStorage may be blocked; still try one reload. */
     }
     window.location.reload();
   });
 }
 
-/** @internal */
 export function clearPreloadReloadFlagForTests(): void {
   try {
     sessionStorage.removeItem(PRELOAD_RELOAD_KEY);
   } catch {
-    /* ignore */
   }
 }

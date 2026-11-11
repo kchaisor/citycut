@@ -9,7 +9,6 @@ import {
   refreshEastMelbourneHeightFixtures,
 } from "./eastMelbourneHeightsPipeline";
 
-/** Heights are pinned to committed fixtures, not live Overture STAC (refresh only via REFRESH_EAST_MELBOURNE_HEIGHTS=1). */
 const FIXTURE = fileURLToPath(new URL("./fixtures/east-melbourne-heights-main.json", import.meta.url));
 
 type Snapshot = {
@@ -18,13 +17,6 @@ type Snapshot = {
   buildings: { id: number; heightM: number }[];
 };
 
-/**
- * Main dropped CoM Development Activity Monitor floors from the displayed model (the CoM worker
- * ran on the pre-DAM list). DAM now applies after CoM, above Overture/OSM tags and zone defaults,
- * so exactly these non-CoM buildings change. Only COMPLETED DAM records count (#84): 772906255
- * (APPROVED / APPLIED records) and 2700911224 (APPROVED) keep main's height. Every other building,
- * including every CoM-matched one, must keep main's height.
- */
 const DAM_RESTORED: { id: number; mainM: number; damM: number; mainTier: string }[] = [
   { id: 29225853, mainM: 12, damM: 9, mainTier: "zone_default" },
   { id: 2141905945, mainM: 7, damM: 12, mainTier: "real_source_unmatched" },

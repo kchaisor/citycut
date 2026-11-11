@@ -11,15 +11,6 @@ import {
 } from "./treeSourceFetch";
 import type { LonLat, TreeFeat } from "../types";
 
-/**
- * Vicmap Vegetation Tree Urban, hosted by the Vicmap ArcGIS organisation
- * (Department of Transport and Planning). Creative Commons Attribution 4.0.
- * https://discover.data.vic.gov.au/dataset/vicmap-vegetation-tree-urban-point
- *
- * A page of 2,000 points as GeoJSON, with only height, canopy radius, and
- * dense_canopy, at six decimal places, is about 316 KB. The same page as
- * protocol buffers is about 80 KB and would need a protobuf decoder.
- */
 export const VICMAP_TREES_URL =
   "https://services-ap1.arcgis.com/P744lA0wf4LlBZ84/ArcGIS/rest/services/Vicmap_Vegetation_Tree_Urban/FeatureServer/0";
 
@@ -33,7 +24,6 @@ export type VicmapPoint = {
   lat: number;
   lon: number;
   height_m: number;
-  /** Crown diameter in metres when the radius was a positive number. */
   crown_m: number | null;
   dense: boolean;
 };
@@ -90,13 +80,11 @@ function denseCanopy(value: unknown): boolean {
 
 export type VicmapPage = {
   points: VicmapPoint[];
-  /** Features whose height or position could not be used, plus unusable radii. */
   dropped: number;
   count: number;
   exceeded: boolean;
 };
 
-/** One GeoJSON page. A bad height or position drops the tree. A bad radius is derived later. */
 export function parseVicmapPage(json: unknown): VicmapPage {
   const collection = (json ?? {}) as GeoCollection;
   const features = Array.isArray(collection.features) ? collection.features : [];
@@ -129,7 +117,6 @@ export function parseVicmapPage(json: unknown): VicmapPage {
   return { points, dropped, count: features.length, exceeded };
 }
 
-/** Next resultOffset, or null when this page is the last. A full page is fetched again. */
 export function nextVicmapOffset(offset: number, page: Pick<VicmapPage, "count" | "exceeded">): number | null {
   if (page.count <= 0) return null;
   if (page.count < VICMAP_PAGE_SIZE && !page.exceeded) return null;

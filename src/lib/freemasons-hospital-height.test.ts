@@ -63,7 +63,6 @@ describe("Freemasons Hospital height regression (East Melbourne)", () => {
     };
     for (const record of hospitalDam) {
       expect(damRecordsWonByBuilding(parkStub, center, [record], [building, parkStub]).length).toBe(0);
-      // Only a COMPLETED record can be won; the APPROVED redevelopment record sets no height.
       expect(damRecordsWonByBuilding(building, center, [record], [building, parkStub]).length).toBe(
         damRecordGivesHeight(record) ? 1 : 0,
       );

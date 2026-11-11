@@ -1,7 +1,3 @@
-/**
- * Regenerate committed landmark snapshot (network). Run:
- *   REFRESH_LANDMARK_SNAPSHOT=1 npx vitest run src/lib/landmarkHeights.refresh.test.ts
- */
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";

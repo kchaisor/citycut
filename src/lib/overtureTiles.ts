@@ -26,7 +26,6 @@ function tileLat(y: number, n: number): number {
   return (rad * 180) / Math.PI;
 }
 
-/** Tile corners in east/north metres relative to `origin`. */
 export function tileLocalRect(
   z: number,
   x: number,
@@ -83,7 +82,6 @@ export function clipPolygonToRect(
   const min = Math.max(rect.minE, rect.minN);
   const max = Math.min(rect.maxE, rect.maxN);
   if (min >= max) return [];
-  // Approximate: clip to cut-style square containing intersection (tiles are small)
   const minE = rect.minE;
   const maxE = rect.maxE;
   const minN = rect.minN;

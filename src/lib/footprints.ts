@@ -32,7 +32,6 @@ function ringDistance(point: Pt, ring: Pt[]): number {
   return best;
 }
 
-/** Same outline, allowing a metre or two of node jitter from a duplicate import. */
 export function footprintsMatch(a: Pt[], b: Pt[]): boolean {
   const left = centroid(a);
   const right = centroid(b);
@@ -92,7 +91,6 @@ function buildingScore(building: BuildingFeat): number {
   return known + building.height * 100 + Math.abs(signedArea(building.ring));
 }
 
-/** Drop ways and relation parts that trace the same footprint. Keeps the tagged use. */
 export function dedupeBuildings(buildings: BuildingFeat[]): BuildingFeat[] {
   const cell = 8;
   const buckets = new Map<string, BuildingFeat[]>();
@@ -120,7 +118,6 @@ export function dedupeBuildings(buildings: BuildingFeat[]): BuildingFeat[] {
   return kept;
 }
 
-/** Drop a second copy of the same park or water polygon. */
 export function dedupeAreas(areas: AreaFeat[]): AreaFeat[] {
   const cell = 12;
   const buckets = new Map<string, AreaFeat[]>();
@@ -154,7 +151,6 @@ function roadKey(road: RoadFeat): string {
   return `${road.kind}|${line}`;
 }
 
-/** Drop a second copy of the same centerline. The wider carriageway stays. */
 export function dedupeRoads(roads: RoadFeat[]): { roads: RoadFeat[]; metres: number } {
   const seen = new Map<string, number>();
   const kept: RoadFeat[] = [];

@@ -5,7 +5,6 @@ import { buildCityGroup } from "./buildCity";
 import { clipTrianglesToTerrainGrid, terrainMeshHeight } from "./terrainDrape";
 import type { CityModel, TerrainField } from "../types";
 
-/** Hilly synthetic terrain on a 2.4 m grid: 6 m rolls plus 15 cm of noise. */
 function hills(sideM: number, spacingM: number): TerrainField {
   const cols = Math.round(sideM / spacingM) + 1;
   const heights = new Float32Array(cols * cols);
@@ -56,7 +55,6 @@ describe("ground layers draped on terrain", () => {
           const q = tri[(k + 1) % 3]!;
           longest = Math.max(longest, Math.hypot(p[0] - q[0], p[2] - q[2]));
         }
-        // Corners, centroid and edge midpoints of the flat triangle against the mesh under it.
         const weights = [
           [1, 0, 0], [0, 1, 0], [0, 0, 1], [1 / 3, 1 / 3, 1 / 3], [0.5, 0.5, 0], [0, 0.5, 0.5], [0.5, 0, 0.5],
         ];

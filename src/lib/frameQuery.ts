@@ -16,7 +16,6 @@ export type FrameQuery = {
   frameShape: SiteFrameShape;
 };
 
-/** Empty and whitespace-only values are missing. Anything else must be a finite number. */
 function readNumber(raw: string | null): number | null {
   if (raw == null || raw.trim() === "") return null;
   const value = Number(raw);
@@ -35,7 +34,6 @@ function readSideKm(raw: string | null): number {
   return Math.min(MAX_SIDE_KM, Math.max(MIN_SIDE_KM, value));
 }
 
-/** Parse `lat`, `lon`, and `km` from a query string. A leading `?` is optional. */
 export function frameFromSearch(search: string): FrameQuery {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const lat = readCoordinate(params.get("lat"), -90, 90);
@@ -58,7 +56,6 @@ export function frameFromSearch(search: string): FrameQuery {
   };
 }
 
-/** A shared link named the cut. Missing and blank labels do not. */
 export function explicitLabel(search: string): string | null {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const label = params.get("label");
@@ -74,9 +71,6 @@ function trimKm(km: number): string {
   return String(Math.round(km * 1000) / 1000);
 }
 
-/**
- * Writes `lat`, `lon`, `km`, and `label`, and leaves other params (such as `view`) in place.
- */
 export function writeFrameSearch(
   search: string,
   frame: { lat: number; lon: number; sideKm: number; label: string; frameShape?: SiteFrameShape },
@@ -93,7 +87,6 @@ export function writeFrameSearch(
   return next ? `?${next}` : "";
 }
 
-/** Persisted geocoded search point so a reload restores site detection. */
 export function siteAnchorFromSearch(search: string): LonLat | null {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const lat = readCoordinate(params.get("siteLat"), -90, 90);

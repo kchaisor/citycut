@@ -23,13 +23,15 @@ import {
 import { formatCoord, openRing } from "./geo";
 import { LINE_MM, hexRgb } from "./lineweights";
 import { heliodonPlanPdfChunk } from "./heliodonPlanExport";
+import { planFrameAnnotationChunks } from "./planFrameAnnotations";
+import type { SunStudyDate } from "./sunStudyPlan";
 import type { HeliodonDiagramExportOptions } from "./heliodonDiagram";
 import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { SINGLE_SHADOW_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "./sunStudyPlan";
 import { planPaths } from "./svgPlan";
 import { regionCredit } from "./sources/registry";
 import { NSW_SITE_LAYERS, nswPlanChunks } from "./nswPlanExport";
-import { importedMassingStrokeStyle, planBuildingStrokeStyle } from "./planBuildingFill";
+import { importedMassingStrokeStyle, importedMassingUpperStrokeStyle, planBuildingStrokeStyle } from "./planBuildingFill";
 import { windPlanPdfChunk } from "./windExport";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { comTreesCreditLine } from "./comTreesCredit";
@@ -55,21 +57,23 @@ export const SITE_LAYER_ORDER = [
   "Blocks",
   "Rail",
   "Trams",
+  "Shadows",
   "Buildings",
   "Site buildings",
   "Imported massing",
+  "Imported::Upper levels",
   "Site boundary",
   "Section markers",
   "Trees",
-  "Shadows",
   "Sun path",
+  "North arrow",
+  "Scale bar",
   "Wind",
   "Annotation",
 ] as const;
 
 export const FIGURE_LAYER_ORDER = ["Frame", "Buildings", "Paths", "Sun path", "Annotation"] as const;
 
-/** Sheet colour. A path or rail casing uses this so it vanishes on the page and reads on the road fill. */
 function fillOf(name: ColourKey): Rgb {
   return hexRgb(getColour(name));
 }
@@ -223,12 +227,6 @@ function frameStroke(layout: SheetLayout, style: StrokeStyle): PdfChunk {
   };
 }
 
-/**
- * Site-plan layers. Colours, weights, and dashes come from `style`, which
- * `readDrawingStyle` fills from `getComputedStyle(document.documentElement)`
- * at export time. That computed style is the drawing-style.css cascade, plus
- * any inline variables the Line styles editor has set.
- */
 function pathStrip(polygons: Pt[][][], model: CityModel, layout: SheetLayout, style: LineStyles): PdfChunk | null {
   const rings = polygons.flatMap((polygon) => mapRings(polygon, model.sideM, layout));
   if (rings.length === 0) return null;
@@ -257,15 +255,11 @@ export type SitePlanExportOptions = {
   highlightManual?: boolean;
   colourBySource?: boolean;
   wind?: { table: import("./windRose").WindRoseTable; period: import("./windRose").WindPeriodId } | null;
-  /**
-   * Sun study: one shadow layer per hour ("Shadow 09:00" …), each at the study opacity, in place
-   * of the single Shadows layer. Rings are the plan shadows already computed for the screen.
-   */
   sunStudy?: { layers: { hour: number; rings: Ring[][] }[] } | null;
   sectionKnife?: import("./sectionKnife/state").SectionKnifeToolState | null;
+  sunStudyDate?: SunStudyDate | null;
 };
 
-/** Layer name for one sun-study hour, e.g. 9 -> "Shadow 09:00". */
 export function sunStudyLayerName(hour: number): string {
   return `Shadow ${String(hour).padStart(2, "0")}:00`;
 }
@@ -407,7 +401,6 @@ export function sitePlanChunks(
       })),
     });
   }
-  // NSW mode only (model.nsw); Victorian sheets get no NSW chunks.
   const nswChunks = nswPlanChunks(model, layout);
   const roadRings = plan.roadFill.flatMap((polygon) => mapRings(polygon, model.sideM, layout));
   const blockFill = plan.blocks
@@ -462,25 +455,6 @@ export function sitePlanChunks(
     });
   }
   chunks.push(...nswChunks.lines);
-  const treePen = pen(style.tree);
-  if (plan.trees.length > 0) {
-    chunks.push({
-      name: "Trees",
-      ellipses: plan.trees.map((tree) => {
-        const [cx, cy] = sheetPoint(tree.east, tree.north, model.sideM, layout);
-        const radius = paperMillimetres(tree.r, scale);
-        return {
-          kind: "ellipse" as const,
-          cx,
-          cy,
-          rx: radius,
-          ry: radius,
-          fill: fillOf("--tree-fill"),
-          ...(treePen ?? {}),
-        };
-      }),
-    });
-  }
   const studyLayers = resolved.sunStudy?.layers ?? null;
   for (const layer of studyLayers ?? []) {
     if (layer.rings.length === 0) continue;
@@ -550,14 +524,60 @@ export function sitePlanChunks(
       })),
     });
   }
+  const upperPen = pen(importedMassingUpperStrokeStyle(style), "miter");
+  if (plan.importedUpperLevels.length > 0 && upperPen) {
+    chunks.push({
+      name: "Imported::Upper levels",
+      paths: plan.importedUpperLevels.flatMap((level) =>
+        level.lines.map((line) => ({
+          rings: [mapRing(line, model.sideM, layout)],
+          close: true,
+          ...(upperPen ?? {}),
+        })),
+      ),
+    });
+  }
   const siteBoundary = siteBoundaryChunk(model.siteBoundaryLines ?? [], model, layout, style);
   if (siteBoundary) chunks.push(siteBoundary);
   const sectionMarkers = sectionMarkerPlanChunk(model, layout, resolved.sectionKnife);
   if (sectionMarkers) chunks.push(sectionMarkers);
+  const treePen = pen(style.tree);
+  if (plan.trees.length > 0) {
+    chunks.push({
+      name: "Trees",
+      ellipses: plan.trees.map((tree) => {
+        const [cx, cy] = sheetPoint(tree.east, tree.north, model.sideM, layout);
+        const radius = paperMillimetres(tree.r, scale);
+        return {
+          kind: "ellipse" as const,
+          cx,
+          cy,
+          rx: radius,
+          ry: radius,
+          fill: fillOf("--tree-fill"),
+          ...(treePen ?? {}),
+        };
+      }),
+    });
+  }
   if (resolved.wind?.table) chunks.push(windPlanPdfChunk(resolved.wind.table, resolved.wind.period, layout, model.sideM));
   chunks.push(...nswChunks.labels);
   chunks.push(frameStroke(layout, style.frame));
-  if (heliodon) chunks.push(heliodonPlanPdfChunk(model.sideM, layout, heliodon, scale));
+  if (heliodon) {
+    const studyDate =
+      resolved.sunStudyDate ??
+      (studyLayers && shadowInput
+        ? {
+            lat: shadowInput.lat,
+            lon: shadowInput.lon,
+            year: shadowInput.year,
+            month: shadowInput.month,
+            day: shadowInput.day,
+          }
+        : null);
+    chunks.push(heliodonPlanPdfChunk(model.sideM, layout, heliodon, scale, studyDate));
+  }
+  if (studyLayers) chunks.push(...planFrameAnnotationChunks(layout, model.sideM));
   chunks.push(
     annotation(
       model,
@@ -571,7 +591,6 @@ export function sitePlanChunks(
   return chunks;
 }
 
-/** A paper casing under the stroke, so the line still shows on the dark road fill. */
 function casedLine(ring: number[][], style: StrokeStyle, drawn: Partial<PdfPath>): PdfPath[] {
   const casing = haloMm(style.mm);
   const line: PdfPath = { rings: [ring], close: false, ...drawn, cap: "round", join: "round" };
@@ -621,7 +640,6 @@ export function sitePlanLayerOrder(chunks: PdfChunk[]): string[] {
     const at = order.indexOf("Contours");
     order.splice(at + 1, 0, "Contour labels");
   }
-  // NSW layers only when the sheet has them, so Victorian layer lists are unchanged.
   const nsw = NSW_SITE_LAYERS.filter((name) => chunks.some((chunk) => chunk.name === name));
   if (nsw.length > 0) {
     const under = nsw.filter((name) => name === "NSW zoning" || name === "NSW road corridors");
@@ -633,7 +651,6 @@ export function sitePlanLayerOrder(chunks: PdfChunk[]): string[] {
   return order;
 }
 
-/** PDF/OCG site plan, the default .ai export. */
 export async function sitePlanPdf(
   model: CityModel,
   scale: number,
@@ -660,7 +677,6 @@ export async function figureGroundPdf(
   );
 }
 
-/** Layered SVG site plan: the same layers and paint order as the .ai. */
 export async function sitePlanSvg(
   model: CityModel,
   scale: number,
@@ -673,7 +689,28 @@ export async function sitePlanSvg(
   return buildLayeredSvg(layout.pageWidthMm, layout.pageHeightMm, chunks, sitePlanLayerOrder(chunks));
 }
 
-/** Layered SVG figure-ground. */
+export async function sitePlanFrameSvg(
+  model: CityModel,
+  scale: number,
+  style?: LineStyles,
+  exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
+): Promise<string> {
+  const layout = layoutSheet(model.sideM, scale);
+  const full = await sitePlanSvg(model, scale, style, exportOptions);
+  const n = (value: number) => {
+    const rounded = Math.round(value * 1000) / 1000;
+    return Object.is(rounded, -0) ? "0" : String(rounded);
+  };
+  const x = layout.frameX;
+  const y = layout.pageHeightMm - layout.frameY - layout.frameMm;
+  const w = layout.frameMm;
+  const h = layout.frameMm;
+  return full.replace(
+    /(<svg[^>]*?)width="[\d.]+mm" height="[\d.]+mm" viewBox="[\d.]+ [\d.]+ [\d.]+ [\d.]+"/,
+    `$1width="${n(w)}mm" height="${n(h)}mm" viewBox="${n(x)} ${n(y)} ${n(w)} ${n(h)}"`,
+  );
+}
+
 export async function figureGroundSvg(
   model: CityModel,
   scale: number,
@@ -690,7 +727,6 @@ export async function figureGroundSvg(
   );
 }
 
-/** Illustrator 8 EPS site plan. Opt-in with VITE_CITYCUT_AI_NATIVE=true. */
 export function sitePlanAi8(
   model: CityModel,
   scale: number,

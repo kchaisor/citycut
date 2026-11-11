@@ -1,7 +1,3 @@
-/**
- * Rebuild committed City of Melbourne fallback tiles in public/.
- * Same pipeline as GM; bbox matches manifest builtBbox (144.89–145°E, −37.86–−37.77°S).
- */
 import { spawnSync } from "node:child_process";
 
 const env = {

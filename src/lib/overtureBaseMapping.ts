@@ -13,7 +13,6 @@ export function parseSourceTags(raw: unknown): Record<string, string> {
   }
 }
 
-/** Map Overture base water class/subtype (+ OSM source_tags) to tags for PR #35 water rules. */
 export function waterTagsFromOverture(props: Record<string, unknown>): Record<string, string> {
   const tags = parseSourceTags(props.source_tags);
   const className = String(props.class ?? "").toLowerCase();
@@ -126,7 +125,6 @@ export function treeTagsFromLand(props: Record<string, unknown>): Record<string,
   return parseSourceTags(props.source_tags);
 }
 
-/** Overture base `infrastructure` car parks (OSM amenity=parking): subtype transit, class parking. */
 export function isOvertureCarPark(props: Record<string, unknown>): boolean {
   return String(props.class ?? "").toLowerCase() === "parking";
 }

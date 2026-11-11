@@ -1,9 +1,13 @@
 import { sunStudyCasterModel, sunStudyMutedOn, toggleSelection, type SunStudyDate } from "../lib/sunStudyPlan";
 import { sunStudyLayersFor } from "./useSunStudyShadows";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { handleModelKeyDown, type ModelShortcutAction } from "../lib/modelKeyboard";
+import { registerModelKeyboardBridge } from "../lib/modelKeyboardBridge";
+import { viewportIsNarrow } from "../lib/panelCollapse";
+import { ShortcutCheatsheet } from "./ShortcutCheatsheet";
 import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
-import { Building2, Copy, Download, DraftingCompass, Eye, GripVertical, Info, Radar, Sun, Trees, Upload, Wind } from "lucide-react";
+import { Building2, Copy, Download, DraftingCompass, Eye, Footprints, GripVertical, Info, Radar, Sun, Trees, Upload, Wind } from "lucide-react";
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -175,6 +179,9 @@ import type { SectionKnifePose } from "../lib/sectionKnife/plane";
 import { snapPoseToModel } from "../lib/sectionKnife/snap";
 import { selectedKnife } from "../lib/sectionKnife/state";
 import { buildSectionExportSvg, sectionExportLayerNames } from "../lib/sectionKnife/sectionExport";
+import { WalkRippleLegend, WalkRipplePanel } from "./WalkRipplePanel";
+import { WalkRippleTimeScrubber } from "./WalkRippleTimeScrubber";
+import { useWalkRipple } from "./useWalkRipple";
 import { useWalkPlayback, useWalkViewshed, WALK_SPEEDS } from "./useWalkViewshed";
 import { fetchWindRoseTable } from "../lib/windFetch";
 import { analyzeWindPeriod, WIND_PERIOD_LABELS, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
@@ -202,6 +209,7 @@ import {
   type Layer3dId,
   type View3dDisplaySettings,
 } from "../lib/view3dDisplay";
+import { readStoredRenderQuality, writeStoredRenderQuality, type RenderQuality } from "../lib/renderQuality";
 
 type Tab = "3d" | "drawing" | "satellite";
 
@@ -230,7 +238,6 @@ function loadView(): ViewMemory {
   return resolved;
 }
 
-/** Height-source tier to its swatch in the Model details height bar. */
 const HEIGHT_TIER_BAR: Record<string, string> = {
   com: "measured",
   lidar: "lidar",
@@ -257,12 +264,24 @@ const ANALYSIS_ICONS: Record<SiteAnalysisKind, typeof Sun> = {
   solar: Sun,
   wind: Wind,
   view: Eye,
+  walkRipple: Footprints,
 };
 
-export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHome: () => void; onNewCut: () => void }) {
+export function ModelPage({
+  model,
+  onHome,
+  onNewCut,
+  commandBarOpen = false,
+}: {
+  model: CityModel;
+  onHome: () => void;
+  onNewCut: () => void;
+  commandBarOpen?: boolean;
+}) {
   const [tab, setTab] = useState<Tab>("3d");
   const [drawing, setDrawing] = useState<DrawingKind>("site");
   const [analysisKind, setAnalysisKind] = useState<SiteAnalysisKind>("solar");
+  const [shortcutCheatsheetOpen, setShortcutCheatsheetOpen] = useState(false);
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
   useColourRevision();
   const uniform = uniformBuildingColor();
@@ -274,7 +293,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     () => !capturePresetFromSearch(window.location.search).uniformBuildings,
   );
   const [showSource, setShowSource] = useState(false);
-  /** Rhino export: buildings as triangle meshes instead of closed Extrusions. */
   const [buildingsAsMesh, setBuildingsAsMesh] = useState(false);
   const [comFootprints, setComFootprints] = useState<ComBuildingFootprint[]>(
     () => model.comFootprintPrefetch ?? [],
@@ -290,7 +308,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed();
   const sidebarModelRef = useRef(model);
   useEffect(() => {
-    // A new model always opens the sidebar on Display with all 3D layers turned on.
     if (sidebarModelRef.current === model) return;
     sidebarModelRef.current = model;
     dispatchSidebar({ type: "new-model" });
@@ -329,8 +346,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     );
   }, [tab, model]);
   const [snapId, setSnapId] = useState(0);
-  // The 3D view unmounts on Drawing/Satellite; this keeps the user's camera for the way back.
-  // A new model gets a fresh memory, so a new cut is framed afresh.
   const cameraMemory = useMemo<CameraMemoryRef>(() => ({ current: null }), [model]);
   const [view3dDisplay, setView3dDisplay] = useState<View3dDisplaySettings>(() => {
     const next = view3dDisplayForModelOpen(window.localStorage);
@@ -365,6 +380,11 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     },
     [model],
   );
+  const [renderQuality, setRenderQuality] = useState<RenderQuality>(() => readStoredRenderQuality(window.localStorage));
+  const commitRenderQuality = useCallback((next: RenderQuality) => {
+    setRenderQuality(next);
+    writeStoredRenderQuality(window.localStorage, next);
+  }, []);
   const [windSettings, setWindSettings] = useState<WindViewSettings>(() => {
     const next = windSettingsForModelOpen(window.localStorage);
     writeStoredWindSettings(window.localStorage, next);
@@ -433,6 +453,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       uniformBuildings: !colourByUse && !showSource,
       colourBySource: showSource,
       highlightManual: showManualEdits && overrideResult.manualCount > 0,
+      sunStudyDate: solar.sunStudy ? sunStudyDate : null,
       wind:
         windSettings.enabled && windTable
           ? { table: windTable, period: windSettings.period }
@@ -586,7 +607,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   const [hiddenStore, setHiddenStore] = useState<HiddenBuildingStore>(() =>
     readStoredHiddenBuildings(window.localStorage),
   );
-  /** Shift-click multi-selection for Hide selected. Holds the single pick too. */
   const [hideSelection, setHideSelection] = useState<number[]>([]);
   const [heightPick, setHeightPick] = useState<{ buildingId: number; clientX: number; clientY: number } | null>(
     null,
@@ -894,7 +914,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       })
         .then((result) => {
           if (controller.signal.aborted) return;
-          // CoM first, then DAM floors on what CoM did not measure, then estimate labels.
           setComHeightBuildings(
             result.resolved
               ? result.buildings
@@ -932,8 +951,6 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     model.developmentDamRecords,
   ]);
 
-  // No CoM heights yet (loading, failed, or outside the City of Melbourne): the next source in
-  // tier order applies (DAM floors, Overture/OSM, zone default) and every default is labelled.
   const fallbackBuildings = useMemo(
     () =>
       model.buildingsHeightResolved
@@ -998,14 +1015,18 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     }),
     [model, overrideResult, visibleBuildings, comHeightsMeasuredOn],
   );
-  // View tab: the path resets with a new cut; compute uses the buildings as shown (edits, hides).
   const walk = useWalkViewshed(model, displayModel);
+  const walkRipple = useWalkRipple(model, displayModel);
+  const [walkRippleToast, setWalkRippleToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (walkRipple.status === "ready") {
+      setWalkRippleToast(walkRipple.modeLabel ?? "Analysis complete. Walk ripple generated.");
+    } else if (walkRipple.status === "idle") {
+      setWalkRippleToast(null);
+    }
+  }, [walkRipple.modeLabel, walkRipple.status]);
   const walkAt = useWalkPlayback(walk);
 
-  /**
-   * Drawing tab and its .ai exports: the display model (hidden buildings already gone) plus plan
-   * footprints of visible imported massing. The 3D view and .3dm keep displayModel, so nothing is drawn twice.
-   */
   const drawingModel = useMemo(() => {
     const buildingsVisible = isLayer3dVisible(view3dDisplay, "buildings");
     const treesVisible = isLayer3dVisible(view3dDisplay, "trees");
@@ -1023,6 +1044,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     return {
       ...displayModel,
       buildings: baseBuildings,
+      importedMassingUpperLevels: massing.drawingUpperLevels,
       trees: treesVisible ? displayModel.trees : [],
       roads: displayModel.roads.filter((r) => {
         if (r.kind === "rail") return railVisible;
@@ -1038,7 +1060,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       contourLayer: contoursVisible ? displayModel.contourLayer : undefined,
       contours: contoursVisible ? displayModel.contours : false,
     };
-  }, [displayModel, massing.drawingBuildings, view3dDisplay]);
+  }, [displayModel, massing.drawingBuildings, massing.drawingUpperLevels, view3dDisplay]);
 
   useEffect(() => {
     qaDisplayBuildingsRef.current = displayModel.buildings;
@@ -1213,11 +1235,15 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   const leftOpen: LeftSidebarSectionId = resolveLeftSidebarSection(sidebar.section, sectionIds);
   const rightOpen: RightSidebarSectionId = resolveRightSidebarSection(sidebar.rightSection, sectionIds);
   const viewAnalysisOpen = leftOpen === "analysis" && analysisKind === "view";
+  const rippleAnalysisOpen = leftOpen === "analysis" && analysisKind === "walkRipple";
   const walkDrawing = viewAnalysisOpen && walk.drawing;
   const { drawing: walkDrawingOn, setDrawing: setWalkDrawing } = walk;
   useEffect(() => {
     if (!viewAnalysisOpen && walkDrawingOn) setWalkDrawing(false);
   }, [viewAnalysisOpen, walkDrawingOn, setWalkDrawing]);
+  useEffect(() => {
+    if (!rippleAnalysisOpen && walkRipple.placing) walkRipple.setPlacing(false);
+  }, [rippleAnalysisOpen, walkRipple]);
 
   const [consolePlaying, setConsolePlaying] = useState(false);
   const consoleDaylight = useMemo(
@@ -1281,6 +1307,42 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       setSidebarCollapsed(false);
     }
   }
+
+  const applyShortcut = useCallback(
+    (action: ModelShortcutAction) => {
+      if (action.analysisKind) setAnalysisKind(action.analysisKind as SiteAnalysisKind);
+      selectSection(action.section);
+    },
+    [sectionIds, setSidebarCollapsed],
+  );
+
+  useEffect(() => {
+    if (viewportIsNarrow()) return;
+    registerModelKeyboardBridge({ applyShortcut });
+    return () => registerModelKeyboardBridge(null);
+  }, [applyShortcut]);
+
+  useEffect(() => {
+    if (viewportIsNarrow()) return;
+    function onKeyDown(event: KeyboardEvent) {
+      const result = handleModelKeyDown({
+        key: event.key,
+        metaKey: event.metaKey,
+        ctrlKey: event.ctrlKey,
+        altKey: event.altKey,
+        target: event.target,
+        commandBarOpen,
+        cheatsheetOpen: shortcutCheatsheetOpen,
+      });
+      if (result.type === "none") return;
+      event.preventDefault();
+      if (result.type === "open-cheatsheet") setShortcutCheatsheetOpen(true);
+      else if (result.type === "close-cheatsheet") setShortcutCheatsheetOpen(false);
+      else if (result.type === "shortcut") applyShortcut(result.action);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [applyShortcut, commandBarOpen, shortcutCheatsheetOpen]);
 
   function retryComHeights() {
     setComFootprintFetchError(null);
@@ -1365,12 +1427,40 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     }
   }
 
-  /** Sun study on: the seven hourly layers for the site plan exports (from the screen's cache). */
   async function sunStudyExportLayers(): Promise<SitePlanExportOptions["sunStudy"]> {
     if (!sunStudyDate) return null;
     const casters = sunStudyCasterModel(drawingModel, effectiveSunStudyCasters, sunStudySelected);
     return { layers: await sunStudyLayersFor(casters, sunStudyDate) };
   }
+
+  const qaPlanBridgeRef = useRef<{
+    upperLevelGroupCount: () => number;
+    exportFrameSvg: () => Promise<string>;
+  }>({
+    upperLevelGroupCount: () => 0,
+    exportFrameSvg: async () => "",
+  });
+  qaPlanBridgeRef.current = {
+    upperLevelGroupCount: () => document.querySelectorAll("svg.plan [data-upper-z]").length,
+    exportFrameSvg: async () => {
+      const { sitePlanFrameSvg } = await import("../lib/aiPlan");
+      return sitePlanFrameSvg(drawingModel, figureScale, lineStyles, {
+        ...sitePlanExportOptions(),
+        sunStudy: await sunStudyExportLayers(),
+      });
+    },
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !qaModeFromSearch(window.location.search)) return;
+    window.__citycutQaPlan = {
+      upperLevelGroupCount: () => qaPlanBridgeRef.current.upperLevelGroupCount(),
+      exportSitePlanFrameSvg: () => qaPlanBridgeRef.current.exportFrameSvg(),
+    };
+    return () => {
+      delete window.__citycutQaPlan;
+    };
+  }, []);
 
   async function saveSiteSvg() {
     setExportError(null);
@@ -1854,14 +1944,31 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                 display={view3dDisplay}
                 importedMassing={massing.group}
                 walkLayer={walk.layer.root}
-                onScenePoint={walkDrawing ? walk.addPoint : massing.onScenePoint}
+                walkRippleLayer={rippleAnalysisOpen ? walkRipple.layer.root : null}
+                walkRippleTint={rippleAnalysisOpen ? walkRipple.tint : null}
+                walkRippleArrivals={rippleAnalysisOpen ? walkRipple.buildingArrivals : null}
+                walkRipplePlaying={rippleAnalysisOpen && walkRipple.ripplePlaying}
+                onScenePoint={
+                  walkRipple.placing
+                    ? (east, north) => walkRipple.placePoint(east, north)
+                    : walkDrawing
+                      ? walk.addPoint
+                      : massing.onScenePoint
+                }
                 sectionKnife={sectionKnifeTool}
                 onSectionKnifePoseChange={onSectionKnifePoseChange}
+                quality={renderQuality}
               />
               {tab === "3d" && sectionKnifeTool.active && (
                 <SectionKnifeElevationPanel model={displayModel} tool={sectionKnifeTool} />
               )}
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
+              {rippleAnalysisOpen && walkRipple.buildingArrivals && <WalkRippleLegend />}
+              {walkRippleToast ? (
+                <p className="walk-ripple-toast" role="status">
+                  {walkRippleToast}
+                </p>
+              ) : null}
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
                   table={windTable}
@@ -3179,6 +3286,9 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
               <div hidden={analysisKind !== "view"}>
                 <ViewPanel walk={walk} />
               </div>
+              <div hidden={analysisKind !== "walkRipple"}>
+                <WalkRipplePanel ripple={walkRipple} />
+              </div>
             </div>
 
             <div className="drawer-section" hidden={leftOpen !== "import"}>
@@ -3314,6 +3424,16 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                   <Eye size={12} strokeWidth={2.2} aria-hidden="true" />
                   <span>Viewshed Walk</span>
                 </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={analysisKind === "walkRipple"}
+                  className={analysisKind === "walkRipple" ? "env-mode-btn active" : "env-mode-btn"}
+                  onClick={() => setAnalysisKind("walkRipple")}
+                >
+                  <Footprints size={12} strokeWidth={2.2} aria-hidden="true" />
+                  <span>Walk Ripple</span>
+                </button>
               </div>
 
               <span className="v-sep hud-sep" aria-hidden="true" />
@@ -3379,6 +3499,27 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                   <div className="st-item">
                     <span className="st-k">PATH</span>
                     <span className="st-v">{walk.clickCount > 0 ? `${Math.round(walk.lengthM)}m (${walk.clickCount} pts)` : "Click ground"}</span>
+                  </div>
+                </div>
+              )}
+
+              {analysisKind === "walkRipple" && (
+                <div className="solar-telemetry mono" aria-label="Walk ripple telemetry">
+                  <div className="st-item">
+                    <span className="st-k">PACE</span>
+                    <span className="st-v">80 m/min</span>
+                  </div>
+                  <span className="st-dot" aria-hidden="true">·</span>
+                  <div className="st-item">
+                    <span className="st-k">BANDS</span>
+                    <span className="st-v">5 · 10 · 15 min</span>
+                  </div>
+                  <span className="st-dot" aria-hidden="true">·</span>
+                  <div className="st-item">
+                    <span className="st-k">MODE</span>
+                    <span className="st-v">
+                      {walkRipple.times?.mode === "straight" ? "Straight-line" : walkRipple.times ? "Network" : "Pick origin"}
+                    </span>
                   </div>
                 </div>
               )}
@@ -3489,6 +3630,29 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     >
                       <span className="ov-dot" aria-hidden="true" />
                       <span>{walk.status === "ready" ? "Viewshed Ready" : "Compute View"}</span>
+                    </button>
+                  </>
+                )}
+
+                {analysisKind === "walkRipple" && (
+                  <>
+                    <button
+                      type="button"
+                      className={walkRipple.placing ? "ov-chip on" : "ov-chip"}
+                      aria-pressed={walkRipple.placing}
+                      onClick={() => walkRipple.setPlacing(!walkRipple.placing)}
+                    >
+                      <span className="ov-dot" aria-hidden="true" />
+                      <span>{walkRipple.placing ? "Click ground…" : "Pick origin"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={walkRipple.status === "ready" ? "ov-chip on" : "ov-chip"}
+                      disabled={!walkRipple.times}
+                      onClick={walkRipple.clear}
+                    >
+                      <span className="ov-dot" aria-hidden="true" />
+                      <span>Clear ripple</span>
                     </button>
                   </>
                 )}
@@ -3739,6 +3903,21 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                   </div>
                 </>
               )}
+
+              {analysisKind === "walkRipple" && (
+                <WalkRippleTimeScrubber
+                  minutes={walkRipple.rippleMinutes}
+                  reachedBuildingCount={
+                    walkRipple.buildingArrivals
+                      ? [...walkRipple.buildingArrivals.values()].filter((a) => a <= walkRipple.rippleMinutes + 0.04).length
+                      : 0
+                  }
+                  disabled={!walkRipple.times}
+                  playing={walkRipple.ripplePlaying}
+                  onMinutesChange={walkRipple.setRippleMinutes}
+                  onPlayToggle={walkRipple.toggleRipplePlay}
+                />
+              )}
             </div>
           </div>
         ) : (
@@ -3769,6 +3948,30 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             <span className="studio-solar-time mono">
               {String(solar.hour).padStart(2, "0")}:{String(solar.minute).padStart(2, "0")} AEST
             </span>
+            {tab === "3d" ? (
+              <>
+                <span className="v-sep hud-sep" aria-hidden="true" />
+                <div className="solar-hours studio-quality-pills" role="group" aria-label="Render quality">
+                  {(
+                    [
+                      ["high", "High"],
+                      ["fast", "Fast"],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={renderQuality === id ? "h-tick studio-quality-tick active is-active" : "h-tick studio-quality-tick"}
+                      aria-pressed={renderQuality === id}
+                      aria-label={`${label} render quality`}
+                      onClick={() => commitRenderQuality(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : null}
           </div>
         )}
         {model.terrainError && (
@@ -3777,6 +3980,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
           </p>
         )}
       </div>
+      <ShortcutCheatsheet open={shortcutCheatsheetOpen} onClose={() => setShortcutCheatsheetOpen(false)} />
     </div>
   );
 }

@@ -5,7 +5,6 @@ import { clipPolylineToRect, lineFromGeoJson } from "./overtureTiles";
 import { maxConsecutiveJump } from "./roadLineValidation";
 import type { Pt } from "../types";
 
-/** Previous tile clip: half-plane chain that chorded across outside gaps. */
 function clipPolylineToRectLegacy(line: Pt[], rect: { minE: number; maxE: number; minN: number; maxN: number }): Pt[][] {
   let current = line.slice();
   const slack = 1e-6;

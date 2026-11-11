@@ -33,7 +33,6 @@ export type OvertureTransportStats = {
   skippedTomTom: number;
 };
 
-/** A whole street segment (not frame-clipped) from an OSM way, for fitting roundabout rings. */
 type RingCandidate = { key: string; line: Pt[]; width: number };
 
 type LinePart = {
@@ -41,7 +40,6 @@ type LinePart = {
   line: Pt[];
   spec: NonNullable<ReturnType<typeof roadSpecFromOvertureSegment>>;
   service: string | null;
-  /** OSM way key, used to reassemble roundabout rings cut into segments. */
   key: string | null;
 };
 
@@ -126,9 +124,6 @@ export async function fetchOvertureTransportationForCut(
     parts.push(...fromTile.parts);
     ringCandidates.push(...fromTile.ringCandidates);
   }
-  // Redraw each roundabout ring as one smooth closed centreline (fixed segment count).
-  // Fitted on whole segments, so a ring the frame cuts is still found; only rings near the frame
-  // matter (a candidate must reach within one radius of it).
   const roundabouts = detectRoundabouts(ringCandidates).filter(
     (rb) => Math.abs(rb.center[0]) - rb.radius <= half && Math.abs(rb.center[1]) - rb.radius <= half,
   );

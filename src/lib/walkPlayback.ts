@@ -2,9 +2,7 @@ import { CELL_VISIBLE, frameVisibleShare, type HeightGrid } from "./viewshed";
 import type { Pt } from "../types";
 
 export type WalkPlaybackSnapshot = {
-  /** Current viewpoint (sample) index. */
   index: number;
-  /** Distance walked, metres, at the current viewpoint. */
   distanceM: number;
   visiblePercent: number | null;
   seenHa: number | null;
@@ -17,12 +15,6 @@ export type WalkPlaybackTarget = {
 
 const EMPTY: WalkPlaybackSnapshot = { index: 0, distanceM: 0, visiblePercent: null, seenHa: null };
 
-/**
- * Walk playback outside React. The walker moves every animation frame along the spline
- * (interpolated between viewpoints); the overlay is repainted and the readouts change only when
- * the walk reaches a new viewpoint. Subscribers (the View panel) get a new snapshot then, so the
- * model page and the 3D scene never re-render during playback.
- */
 export class WalkPlayback {
   private snapshot: WalkPlaybackSnapshot = EMPTY;
   private readonly listeners = new Set<() => void>();
@@ -35,7 +27,6 @@ export class WalkPlayback {
   private seenUpTo = -1;
   private seenCount = 0;
   private shown = -1;
-  /** Distance along the walk, metres (continuous). */
   private distance = 0;
 
   constructor(private readonly target: WalkPlaybackTarget) {}
@@ -52,7 +43,6 @@ export class WalkPlayback {
     for (const listener of this.listeners) listener();
   }
 
-  /** New result (or null to clear). Frames may still be arriving. */
   load(result: { grid: HeightGrid; frames: readonly (Uint8Array | null)[]; eyeM: number } | null, samples: readonly Pt[], lengthM: number) {
     this.grid = result?.grid ?? null;
     this.frames = result?.frames ?? [];
@@ -78,7 +68,6 @@ export class WalkPlayback {
     return this.samples.length > 1 ? this.lengthM / (this.samples.length - 1) : 0;
   }
 
-  /** Highest index whose frame (and every earlier one) has arrived. */
   readyUpTo(): number {
     let i = 0;
     while (i < this.frames.length && this.frames[i]) i++;
@@ -89,12 +78,10 @@ export class WalkPlayback {
     return this.samples.length < 2 || this.distance >= this.lengthM - 1e-6;
   }
 
-  /** Called as frames arrive: shows the first one as soon as it is there. */
   frameArrived(index: number) {
     if (index === 0 && this.shown < 0) this.seekIndex(0);
   }
 
-  /** Jump to a viewpoint (scrub). */
   seekIndex(index: number) {
     const i = Math.max(0, Math.min(this.samples.length - 1, Math.round(index)));
     this.distance = i * this.step;
@@ -106,10 +93,6 @@ export class WalkPlayback {
     this.seekIndex(0);
   }
 
-  /**
-   * Advance by `metres` (one animation frame). Never passes the last computed frame.
-   * Returns false when the walk has reached its end.
-   */
   advance(metres: number): boolean {
     if (!this.grid || this.samples.length < 2) return false;
     const ready = this.readyUpTo();

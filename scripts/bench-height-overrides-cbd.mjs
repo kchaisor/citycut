@@ -1,7 +1,3 @@
-/**
- * CBD frame: cost of applyHeightOverrides with an empty store.
- * Run: npx vite-node scripts/bench-height-overrides-cbd.mjs
- */
 import { applyHeightOverrides, clearAllHeightOverrides } from "../src/lib/heightOverrides.ts";
 import { runComBuildingHeightsInWorker } from "../src/lib/comBuildingHeightsWorkerClient.ts";
 import {

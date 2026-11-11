@@ -8,10 +8,6 @@ import type { ProjectionMode } from "../lib/viewMemory";
 import type { SolarViewSettings } from "./SolarHeliodon";
 import { Cameras } from "./Scene3D";
 
-// Runs the real camera rig (fits, both OrbitControls, the memory bridge) in react-three-fiber with a
-// stub renderer. Unmounting the root is what the 3D tab does when the user opens Drawing.
-
-// <Canvas> registers the THREE catalogue itself; a bare root has to.
 extend(THREE as unknown as Parameters<typeof extend>[0]);
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -149,7 +145,6 @@ function read(rig: Rig) {
   };
 }
 
-/** A user orbit + zoom + pan, applied the way OrbitControls does (move eye and target, then update). */
 async function userOrbit(rig: Rig) {
   const { camera, controls } = rig.state();
   const offset = camera.position.clone().sub(controls!.target);
@@ -157,7 +152,6 @@ async function userOrbit(rig: Rig) {
   controls!.target.add(new THREE.Vector3(130, 0, -70));
   camera.position.copy(controls!.target).add(offset);
   controls!.update();
-  // The rig counts any drag as "touched" through OrbitControls' start event.
   (controls as unknown as THREE.EventDispatcher<{ start: object }>).dispatchEvent({ type: "start" });
   await frames(6);
 }
@@ -172,8 +166,8 @@ describe("3D camera across a 3D → Drawing → 3D round trip", () => {
     expect(before.position).not.toEqual(fitted.position);
     expect(before.target).not.toEqual(fitted.target);
 
-    await first.unmount(); // 3D → Drawing
-    const second = await mount3d(memory); // Drawing → 3D
+    await first.unmount();
+    const second = await mount3d(memory);
     await frames(10);
     expect(read(second)).toEqual(before);
   });

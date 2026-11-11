@@ -1,6 +1,3 @@
-/**
- * Performance benchmark for 1 km CBD CoM heights. Run: npx vite-node scripts/bench-com-clip.mjs
- */
 import { buildCityGroup, disposeObject } from "../src/lib/buildCity.ts";
 import {
   applyComBuildingHeightsWithStats,

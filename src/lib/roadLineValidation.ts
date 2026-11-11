@@ -1,7 +1,6 @@
 import type { LonLat, Pt, RoadFeat } from "../types";
 import { tileLocalRect } from "./overtureTiles";
 
-/** Largest distance between consecutive vertices along a polyline. */
 export function maxConsecutiveJump(line: Pt[]): number {
   let max = 0;
   for (let i = 1; i < line.length; i++) {
@@ -10,7 +9,6 @@ export function maxConsecutiveJump(line: Pt[]): number {
   return max;
 }
 
-/** Split where consecutive vertices jump farther than `maxJumpM`. */
 export function splitPolylineAtJumps(line: Pt[], maxJumpM: number): Pt[][] {
   if (line.length < 2) return [];
   const parts: Pt[][] = [];
@@ -30,7 +28,6 @@ export function splitPolylineAtJumps(line: Pt[], maxJumpM: number): Pt[][] {
   return parts;
 }
 
-/** Overture z14 tile span at the cut origin, times two for a safety margin. */
 export function overtureMaxRoadJumpM(z: number, origin: LonLat): number {
   const n = 2 ** z;
   const x = Math.floor(((origin.lon + 180) / 360) * n);
@@ -43,7 +40,6 @@ export function overtureMaxRoadJumpM(z: number, origin: LonLat): number {
 
 export type SanitizeRoadsResult = { roads: RoadFeat[]; dropped: number; split: number };
 
-/** Drop or split road centerlines with impossible vertex jumps (tile clip chords, bad merges). */
 export function sanitizeRoadFeatures(
   roads: RoadFeat[],
   maxJumpM: number,

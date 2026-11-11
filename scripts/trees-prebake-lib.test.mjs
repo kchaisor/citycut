@@ -66,7 +66,6 @@ describe("ArcGIS error bodies", () => {
   it("treats HTTP 200 with an error body as a failure", () => {
     expect(() => checkArcgisJson(errorBody)).toThrow(/ArcGIS error 400: Unable to perform query/);
     expect(() => decodeVicmapPbfResponse(enc(errorBody), "application/json; charset=utf-8")).toThrow(ArcgisErrorBody);
-    // Even when the content type claims pbf, a JSON body is an error.
     expect(() => decodeVicmapPbfResponse(enc(errorBody), "application/x-protobuf")).toThrow(ArcgisErrorBody);
   });
 });

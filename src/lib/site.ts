@@ -10,7 +10,6 @@ import {
 import type { BuildingFeat, LonLat } from "../types";
 
 export type SiteFrame = {
-  /** Geocoded address search point. */
   anchor: LonLat;
   parcel: SiteParcel | null;
   siteBuildingIds: number[];
@@ -27,7 +26,6 @@ export type SiteResolveInput = {
   fetchImpl?: import("./vicmapSiteParcel").ParcelFetch;
 };
 
-/** True when the URL label looks like a searched street address (shared links). */
 export function labelLooksLikeAddress(label: string): boolean {
   const trimmed = label.trim();
   if (!trimmed || trimmed === "Selected frame") return false;

@@ -1,24 +1,17 @@
-import * as polygonClipping from "polygon-clipping";
-import type { MultiPolygon, Polygon } from "polygon-clipping";
+import type { MultiPolygon, Polygon } from "./safePolygonClip";
+import { clipUnion as unionFnLoaded } from "./safePolygonClip";
 import { placedLocal, type ImportedMassing } from "./massingImport";
 import type { BuildingFeat, LonLat, Pt } from "../types";
 
-type UnionFn = (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
+const unionFn = unionFnLoaded;
 
-/** Same CJS/ESM interop guard as siteFrame.ts: Vite's dev build exposes the API on `default`. */
-function unionFn(): UnionFn {
-  const loaded = polygonClipping as unknown as { union?: UnionFn; default?: { union?: UnionFn } };
-  if (typeof loaded.union === "function") return loaded.union;
-  if (typeof loaded.default?.union === "function") return loaded.default.union;
-  throw new Error("polygon-clipping did not load.");
-}
-
-/** Ids for drawing-only footprints, well clear of OSM/Overture building ids. */
 const IMPORTED_ID_BASE = -1_000_000;
 
-/** Triangles thinner than this in plan (m²) are walls seen edge-on and add nothing to the footprint. */
 const MIN_PLAN_AREA_M2 = 1e-4;
 const UNION_BATCH = 2000;
+const UP_FACE_MIN_NZ = 0.92;
+const ROOF_Z_BUCKET_M = 0.03;
+const ROOF_MIN_ABOVE_M = 0.05;
 
 function closeRing(ring: Pt[]): Pt[] {
   const first = ring[0];
@@ -27,10 +20,11 @@ function closeRing(ring: Pt[]): Pt[] {
   return first[0] === last[0] && first[1] === last[1] ? ring : [...ring, first];
 }
 
-/**
- * Plan footprint of one placed massing model, in the CityModel's local metres: the union of every
- * triangle projected to plan, using the same MGA → local transform as the 3D view.
- */
+export type ImportedMassingUpperLevel = {
+  z: number;
+  lines: Pt[][];
+};
+
 export function massingFootprint(
   massing: Pick<ImportedMassing, "positions" | "indices" | "placement">,
   origin: LonLat,
@@ -54,13 +48,11 @@ export function massingFootprint(
     tris.push(area > 0 ? [[[ax, ay], [bx, by], [cx, cy], [ax, ay]]] : [[[ax, ay], [cx, cy], [bx, by], [ax, ay]]]);
   }
   if (tris.length === 0) return { polygons: [], topZ, polygonTops: [] };
-  const union = unionFn();
   let merged: MultiPolygon = [];
   for (let i = 0; i < tris.length; i += UNION_BATCH) {
     const batch = tris.slice(i, i + UNION_BATCH);
-    merged = union(merged, ...batch);
+    merged = unionFn(merged, ...batch, { layer: "imported massing", operation: "union" });
   }
-  // Each footprint keeps the roof of the geometry above it, not the tallest part of the whole file.
   const polygonTops = merged.map((polygon) => {
     let top = -Infinity;
     const outer = polygon[0] ?? [];
@@ -80,12 +72,6 @@ function pointInRing(x: number, y: number, ring: ReadonlyArray<readonly [number,
   return inside;
 }
 
-/**
- * Ground (AHD m) under a footprint: mean terrain at its vertices. Drawings extrude from the ground, so
- * height must be the top above *terrain*, not above the model's lowest vertex: a model whose base Z
- * sits below or above the terrain (or carries geometry sunk into it) otherwise casts plan shadows
- * from the wrong height. Without terrain, falls back to the placement base.
- */
 function footprintGround(outer: Pt[], base: number, groundAt?: (east: number, north: number) => number): number {
   if (!groundAt || outer.length === 0) return base;
   let sum = 0;
@@ -100,15 +86,105 @@ function footprintGround(outer: Pt[], base: number, groundAt?: (east: number, no
   return count > 0 ? sum / count : base;
 }
 
-/**
- * Drawing-only buildings for the visible imported models: one per footprint polygon, flagged
- * `importedMassing` so the site plan fills it yellow. Figure-ground and exploded axo count them as figure.
- */
+function upwardRoofBuckets(
+  massing: Pick<ImportedMassing, "positions" | "indices" | "placement">,
+  origin: LonLat,
+  zone: number,
+): Map<number, Polygon[]> {
+  const local = placedLocal(massing, massing.placement, origin, zone);
+  const buckets = new Map<number, Polygon[]>();
+  for (let t = 0; t + 2 < massing.indices.length; t += 3) {
+    const ia = massing.indices[t]! * 3;
+    const ib = massing.indices[t + 1]! * 3;
+    const ic = massing.indices[t + 2]! * 3;
+    const ax = local[ia]!, ay = local[ia + 1]!, az = local[ia + 2]!;
+    const bx = local[ib]!, by = local[ib + 1]!, bz = local[ib + 2]!;
+    const cx = local[ic]!, cy = local[ic + 1]!, cz = local[ic + 2]!;
+    const flatZ = Math.abs(az - bz) < 1e-6 && Math.abs(bz - cz) < 1e-6;
+    const planArea = ((bx - ax) * (cy - ay) - (cx - ax) * (by - ay)) / 2;
+    if (flatZ) {
+      if (!(planArea > MIN_PLAN_AREA_M2)) continue;
+    } else {
+      const ux = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
+      const uy = (bz - az) * (cy - ay) - (cz - az) * (by - ay);
+      const uz = (bx - ax) * (cz - az) - (cx - ax) * (bz - az);
+      const length = Math.hypot(ux, uy, uz);
+      if (!(length > 1e-9)) continue;
+      const nz = Math.abs(uz) / length;
+      if (nz < UP_FACE_MIN_NZ || uz <= 0) continue;
+    }
+    const topZ = Math.max(az, bz, cz);
+    const bucket = Math.round(topZ / ROOF_Z_BUCKET_M) * ROOF_Z_BUCKET_M;
+    if (!flatZ && Math.abs(planArea) < MIN_PLAN_AREA_M2) continue;
+    const poly: Polygon =
+      planArea > 0
+        ? [[[ax, ay], [bx, by], [cx, cy], [ax, ay]]]
+        : [[[ax, ay], [cx, cy], [bx, by], [ax, ay]]];
+    const list = buckets.get(bucket) ?? [];
+    list.push(poly);
+    buckets.set(bucket, list);
+  }
+  return buckets;
+}
+
+function unionBucket(polys: Polygon[]): MultiPolygon {
+  if (polys.length === 0) return [];
+  let merged: MultiPolygon = [];
+  for (let i = 0; i < polys.length; i += UNION_BATCH) {
+    const batch = polys.slice(i, i + UNION_BATCH);
+    merged = unionFn(merged, ...batch, { layer: "imported massing upper", operation: "union" });
+  }
+  return merged;
+}
+
+function ringsFromMerged(merged: MultiPolygon): Pt[][] {
+  const lines: Pt[][] = [];
+  for (const polygon of merged) {
+    for (const ring of polygon) {
+      if ((ring as Pt[]).length < 4) continue;
+      lines.push(closeRing(ring as Pt[]));
+    }
+  }
+  return lines;
+}
+
+export function massingUpperLevelOutlines(
+  massing: Pick<ImportedMassing, "positions" | "indices" | "placement">,
+  origin: LonLat,
+  zone: number,
+): ImportedMassingUpperLevel[] {
+  const buckets = upwardRoofBuckets(massing, origin, zone);
+  if (buckets.size <= 1) return [];
+  const levels = [...buckets.keys()].sort((a, b) => a - b);
+  const minZ = levels[0]!;
+  const out: ImportedMassingUpperLevel[] = [];
+  for (const z of levels) {
+    if (z <= minZ + ROOF_MIN_ABOVE_M) continue;
+    const merged = unionBucket(buckets.get(z) ?? []);
+    const lines = ringsFromMerged(merged);
+    if (lines.length === 0) continue;
+    out.push({ z, lines });
+  }
+  return out;
+}
+
+export function massingUpperLevelPlanLines(
+  imported: ImportedMassing[],
+  origin: LonLat,
+  zone: number,
+): ImportedMassingUpperLevel[] {
+  const out: ImportedMassingUpperLevel[] = [];
+  for (const item of imported) {
+    if (!item.visible) continue;
+    out.push(...massingUpperLevelOutlines(item, origin, zone));
+  }
+  return out;
+}
+
 export function massingDrawingBuildings(
   imported: ImportedMassing[],
   origin: LonLat,
   zone: number,
-  /** Terrain (AHD m) at a local point; the same field the 3D view and click placement use. */
   groundAt?: (east: number, north: number) => number,
 ): BuildingFeat[] {
   const out: BuildingFeat[] = [];

@@ -14,7 +14,6 @@ export function parseLooseNumber(raw: string | undefined): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-/** True when the tag names a unit. A bare number stays in metres. */
 export function explicitLengthUnit(raw: string | undefined): "mm" | "cm" | "ft" | "m" | null {
   if (!raw) return null;
   const text = raw.trim().toLowerCase();
@@ -25,7 +24,6 @@ export function explicitLengthUnit(raw: string | undefined): "mm" | "cm" | "ft" 
   return null;
 }
 
-/** Parse an OSM length tag. Feet, centimetres, and millimetres are converted; bare numbers are metres. */
 export function parseMeters(raw: string | undefined): number | null {
   if (!raw) return null;
   const value = parseLooseNumber(raw);
@@ -41,7 +39,6 @@ export function clampBuildingHeight(meters: number): number {
   return Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, meters));
 }
 
-/** True when height would come from footprint area and/or planning zone, not OSM tags. */
 export function buildingHeightUsesFallback(tags: Record<string, string>): boolean {
   const tagged =
     parseMeters(tags.height) ??

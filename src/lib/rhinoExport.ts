@@ -38,7 +38,6 @@ function contourLayerColor(): Rgb {
   return { r: (value >> 16) & 255, g: (value >> 8) & 255, b: value & 255 };
 }
 
-/** Layer swatches, read when the file is written so a live colour edit is included. */
 const BUILDING_LAYER_KEYS: Record<string, ColourKey> = {
   Residential: "--use-residential",
   Commercial: "--use-commercial",
@@ -51,7 +50,6 @@ const BUILDING_LAYER_KEYS: Record<string, ColourKey> = {
   Unclassified: "--use-unclassified",
 };
 
-/** Full layer path → theme key (or contour pen) for every Rhino layer CityCut writes. */
 export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
   const keys: Record<string, ColourKey | "contour"> = {
     Buildings: "--building-uniform",
@@ -254,12 +252,10 @@ function addWorldVertex(
   model: CityModel,
   zone: number,
 ) {
-  // Three.js is Y-up: x east, y elevation, z = −north.
   const [easting, northing] = projectLocal([vertex.x, -vertex.z], model.center, zone);
   vertices.addPoint3d(easting, northing, vertex.y);
 }
 
-/** Per-export count of building parts written as Rhino Extrusions vs the mesh fallback. */
 export type ExtrusionTally = { extrusions: number; meshFallback: number };
 
 function extrusionPartsOf(mesh: THREE.Mesh): ExtrusionPartRecord[] | null {
@@ -335,8 +331,6 @@ export function partExtrusion(rhino: Rhino, points: ExtrusionPoints): RhinoExtru
     };
     Plane: { worldXY(): unknown };
   };
-  // World XY profile plane: with Extrusion.create the profile frame follows the first edge, and
-  // inner profiles are then read in that rotated frame (courtyards land in the wrong place).
   const plane = api.Plane.worldXY();
   const [oe, on] = points.origin;
   const local = (ring: number[][]) => ring.map(([e, n]) => [e - oe, n - on, 0]);
@@ -362,8 +356,6 @@ export function partExtrusion(rhino: Rhino, points: ExtrusionPoints): RhinoExtru
     if (!extrusion.isValid || !extrusion.isSolid || extrusion.profileCount !== 1 + points.holes.length) {
       throw new Error("not a valid closed solid");
     }
-    // Extrusion and Brep bounding boxes are loose (profile-frame / NURBS hulls), so check the
-    // corner points of the solid instead: they must span exactly the outline, base and top.
     const brep = (extrusion as unknown as { toBrep(split: boolean): RhinoBrep | null }).toBrep(false);
     if (!brep) throw new Error("no brep");
     const box = { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] };
@@ -405,7 +397,6 @@ export function partExtrusion(rhino: Rhino, points: ExtrusionPoints): RhinoExtru
   }
 }
 
-/** Building parts as Extrusions; any part that fails is written as its own mesh, as before. */
 function addBuildingExtrusions(
   rhino: Rhino,
   doc: InstanceType<Rhino["File3dm"]>,
@@ -518,7 +509,6 @@ function addMesh(
   release(attributes);
 }
 
-/** Unioned footprints as closed polylines on FigureGround, at the ground datum. */
 function addFigureGround(
   rhino: Rhino,
   doc: InstanceType<Rhino["File3dm"]>,
@@ -557,11 +547,6 @@ function addFigureGround(
   }
 }
 
-/**
- * Contour polylines on a Contours layer, at their true elevation.
- * The 3dm did not previously contain contour curves. These are new, and they
- * sit at the contour's own Z because the rest of the file is Z-up metres.
- */
 const PROPERTY_BOUNDARY_LINETYPE = "Property boundary";
 const RAIL_LINETYPE = "Rail dashed";
 const TRAM_LINETYPE = "Tram dashed";
@@ -874,16 +859,13 @@ export type CityModelTo3dmOptions = {
   uniformBuildings?: boolean;
   colourBySource?: boolean;
   wind?: { table: WindRoseTable; period: WindPeriodId } | null;
-  /** "Hide trees" from the 3D display modes (#87). Trees are left out, as in the 3D view. */
   hideTrees?: boolean;
-  /** Imported massing models (#massing), written in MGA on their own layer. */
   importedMassing?: ImportedMassingExport[] | null;
   /**
    * Write buildings as triangle meshes (the pre-extrusion export). Off by default: each building
    * part is a capped Rhino Extrusion, with a per-part mesh fallback.
    */
   buildingsAsMesh?: boolean;
-  /** Filled in with how many parts became Extrusions and how many fell back to meshes. */
   extrusionTally?: ExtrusionTally;
 };
 
@@ -920,7 +902,6 @@ function addImportedMassing(
     attributes.layerIndex = layerIndex;
     applyByLayerAttributes(rhino, attributes);
     if (massing.colour) {
-      // Per-model colour rides on the object (display + plot); the layer keeps the --imported-massing default.
       const value = Number.parseInt(massing.colour.slice(1), 16);
       const rgba = { r: (value >> 16) & 255, g: (value >> 8) & 255, b: value & 255, a: 255 };
       attributes.colorSource = rhino.ObjectColorSource.ColorFromObject;
@@ -954,7 +935,6 @@ function normalize3dmOptions(
   return { heliodon: options as HeliodonGroundExportOptions };
 }
 
-/** Current city meshes as a Rhino .3dm in MGA metres, Z-up. */
 export async function cityModelTo3dm(
   model: CityModel,
   options?: HeliodonGroundExportOptions | CityModelTo3dmOptions | null,
@@ -972,7 +952,6 @@ export async function cityModelTo3dm(
     buildingsAsMesh,
     extrusionTally,
   } = normalize3dmOptions(options);
-  // One rule for the 3D view, PNG, 3D-view .ai and .3dm: trees only when the layer is on and Hide trees is off.
   if (!treesVisibleIn3d(model.layers, { hideTrees: Boolean(hideTrees) })) {
     model = { ...model, layers: { ...model.layers, trees: false }, trees: [] };
   }

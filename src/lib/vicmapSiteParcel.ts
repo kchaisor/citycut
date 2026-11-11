@@ -4,11 +4,6 @@ import { pointInPolygon } from "./useCascade";
 import { VICTORIA_BOUNDS, boundsIntersect, type LonLatBounds } from "./vicmapContours";
 import type { LonLat, Pt, Ring } from "../types";
 
-/**
- * Vicmap Property title parcel polygons (PARCEL_MP), Department of Transport and Planning.
- * Creative Commons Attribution 4.0 International.
- * https://discover.data.vic.gov.au/dataset/vicmap-property
- */
 export const VICMAP_PROPERTY_URL =
   "https://services-ap1.arcgis.com/P744lA0wf4LlBZ84/ArcGIS/rest/services/Vicmap_Parcel/FeatureServer/0";
 
@@ -26,11 +21,8 @@ export type ParcelPolygon = {
 
 export type SiteParcel = {
   parcelPfi: string;
-  /** Title SPI (may contain a backslash). */
   parcelSpi: string | null;
-  /** Outer rings with holes, in local east/north metres at the cut centre. */
   polygons: ParcelPolygon[];
-  /** Boundary polylines clipped to the cut square, for plan and exports. */
   boundaryLines: Pt[][];
 };
 
@@ -121,7 +113,6 @@ function featureContainsPoint(feature: GeoFeature, point: LonLat, origin: LonLat
   return polygons.some((poly) => pointInPolygon(local, poly.outer, poly.holes));
 }
 
-/** When Vicmap returns more than one hit, pick the lot polygon that contains the geocoded point. */
 export function pickSiteParcelFeature(json: unknown, point: LonLat, origin: LonLat): GeoFeature | null {
   const collection = (json ?? {}) as GeoCollection;
   const features = Array.isArray(collection.features) ? collection.features : [];
@@ -169,7 +160,6 @@ function clipBoundaryLines(lines: Pt[][], half: number): Pt[][] {
   return out;
 }
 
-/** GeoJSON page → one site parcel at the cut centre. */
 export function parseSiteParcelFeature(
   json: unknown,
   point: LonLat,

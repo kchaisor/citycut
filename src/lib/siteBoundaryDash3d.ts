@@ -2,7 +2,6 @@ import * as THREE from "three";
 import { dashSegments, readDrawingStyle } from "./drawingStyle";
 import type { Pt } from "../types";
 
-/** At 1:1000 on the plan, 1 mm on the sheet equals 1 m on the ground. */
 export function siteBoundaryDashMetres(sideM: number, scaleDenominator = 1000): number[] {
   const dash = readDrawingStyle().siteBoundary.dash;
   const segments = dashSegments(dash);
@@ -11,7 +10,6 @@ export function siteBoundaryDashMetres(sideM: number, scaleDenominator = 1000): 
   return segments.map((mm) => mm * metresPerMm);
 }
 
-/** Expand polylines into dashed segments in ground metres (x east, z = −north, y up). */
 export function dashedSiteBoundaryPositions(
   lines: Pt[][],
   sampleZ: (east: number, north: number) => number,

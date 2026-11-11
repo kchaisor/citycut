@@ -1,7 +1,3 @@
-/**
- * Export tab tiles: one tile per format CityCut can write today. Pure, so the enable rules
- * and wording are tested without the page.
- */
 export type ExportTileId = "3dm" | "ai" | "svg" | "sun-zip" | "png";
 export type ExportBusy =
   | "3dm"
@@ -19,16 +15,11 @@ export type DrawingKindForExport = "site" | "figure-ground" | "exploded-axo" | "
 
 export type ExportTile = {
   id: ExportTileId;
-  /** App name, e.g. "Rhino 5+". */
   app: string;
-  /** File extension with the dot. */
   ext: string;
-  /** Shown on hover / focus. */
   description: string;
   enabled: boolean;
-  /** Why it is disabled; shown instead of the description. */
   disabledReason: string | null;
-  /** Kept identical to the old Export cards so QA scripts and screen readers still find them. */
   ariaLabel: string;
   busy: boolean;
 };
@@ -41,7 +32,6 @@ export type ExportTileInput = {
   sunStudyDate: string;
   buildingsAsMesh: boolean;
   crsName: string;
-  /** Sun study on: the site plan .ai and .svg carry one shadow layer per hour. */
   sunStudy?: boolean;
 };
 

@@ -9,7 +9,6 @@ import { projectLocal } from "./crs";
 import realTerrain from "./__fixtures__/dandenongTerrain.json";
 import type { BuildingFeat, CityModel, Pt, TerrainField } from "../types";
 
-/** Dandenong Market, Winter 22 Jun preset, 11:00 AEST; real MGA 2020 zone 55 projection. */
 const origin = { lon: 145.21555, lat: -37.98382 };
 const zone = 55;
 const when = { lat: origin.lat, lon: origin.lon, year: 2026, month: 6, day: 22, hour: 11, minute: 0 };
@@ -19,22 +18,19 @@ const cot = 1 / Math.tan((sample.altitudeDeg * Math.PI) / 180);
 const unit = (() => { const o = planShadowOffset(sample, 1)!; const l = Math.hypot(o[0], o[1]); return [o[0] / l, o[1] / l] as Pt; })();
 const along = (e: number, n: number) => e * unit[0] + n * unit[1];
 
-/** Real Dandenong terrain (21–49 m AHD), downsampled from the live Mapterhorn fetch. */
 const terrain: TerrainField = { ...(realTerrain as Omit<TerrainField, "heights">), heights: new Float32Array(realTerrain.heights) };
 const ground = (e: number, n: number) => sampleTerrain(terrain, e, n, sideM);
 
-/** Where a ray from (e,n,z) away from the sun meets the terrain (the 3D shadow tip). */
 function tip3d(e: number, n: number, z: number): Pt {
   let lo = 0, hi = 2000;
   for (let i = 0; i < 80; i++) {
-    const t = (lo + hi) / 2; // t = plan distance
+    const t = (lo + hi) / 2;
     const pe = e + unit[0] * t, pn = n + unit[1] * t;
     if (z - t / cot > ground(pe, pn)) lo = t; else hi = t;
   }
   return [e + unit[0] * lo, n + unit[1] * lo];
 }
 
-/** A .3dm in MGA with boxes [cx, cy, size, bottom AHD, top AHD] (local metres for the centre). */
 async function importFile(boxes: [number, number, number, number, number][]): Promise<ImportedMassing> {
   const r = await (rhino3dm as unknown as () => Promise<any>)();
   const doc = new r.File3dm();
@@ -62,7 +58,6 @@ function model(buildings: BuildingFeat[]): CityModel {
   } as CityModel;
 }
 
-/** Furthest 2D shadow reach (along the sun) for one building drawn alone. */
 function reach2d(b: BuildingFeat): number {
   clearPlanShadowCache();
   let far = -Infinity;
@@ -70,7 +65,6 @@ function reach2d(b: BuildingFeat): number {
   return far;
 }
 
-/** Furthest 3D shadow reach: every top vertex ray-cast onto the terrain. */
 function reach3d(points: [number, number, number][]): number {
   let far = -Infinity;
   for (const [e, n, z] of points) { const [te, tn] = tip3d(e, n, z); far = Math.max(far, along(te, tn)); }
@@ -79,7 +73,6 @@ function reach3d(points: [number, number, number][]): number {
 
 describe("2D plan shadows land where the 3D shadows do, in metres (real Dandenong terrain, MGA 2020 projection)", () => {
   it("imported .3dm with a tall and a low part: each part's 2D shadow ends where 3D does", async () => {
-    // Tall block 20 m above ground, low pavilion 4 m above ground, in ONE file.
     const g1 = ground(-40, 0), g2 = ground(40, 0);
     const item = await importFile([[-40, 0, 20, g1 - 2, g1 + 20], [40, 0, 20, g2 - 2, g2 + 4]]);
     const drawn = massingDrawingBuildings([item], origin, zone, ground);

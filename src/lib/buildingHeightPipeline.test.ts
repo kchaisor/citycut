@@ -47,7 +47,6 @@ describe("carveNestedBuildings (Overture outline inside another)", () => {
   });
 
   it("a nested building with the same CoM mass as its container draws nothing; the container draws it", () => {
-    // Container drawn as CoM bands (podium + tower); the nested outline matched the tower band.
     const bands = [
       { ring: sq(0, 0, 60, 60), holes: [sq(20, 20, 40, 40)], height: 25 },
       { ring: sq(20, 20, 40, 40), holes: [], height: 80 },

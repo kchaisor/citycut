@@ -5,12 +5,9 @@ import type { NswPlanStyle } from "../lib/nswPlanStyle";
 import { svgPolyline, svgRings } from "../lib/svgPlan";
 import type { Pt } from "../types";
 
-/** NSW mode site-plan layers. Rendered only when the model carries NSW layers. */
-
 const segmentsPath = (segments: [Pt, Pt][]) =>
   segments.map(([a, b]) => `M${a[0].toFixed(1)} ${(-a[1]).toFixed(1)}L${b[0].toFixed(1)} ${(-b[1]).toFixed(1)}`).join("");
 
-/** Zoning tint and cadastral road corridors, drawn just above the block ground. */
 export function NswPlanUnder({ items, style }: { items: NswPlanItems; style: NswPlanStyle }) {
   return (
     <g data-layer="nsw-under">
@@ -20,7 +17,6 @@ export function NswPlanUnder({ items, style }: { items: NswPlanItems; style: Nsw
       {items.corridors.length > 0 && (
         <path d={items.corridors.map((rings) => svgRings(rings)).join(" ")} fill={style.corridorFill} fillRule="nonzero" stroke="none" />
       )}
-      {/* Decoded lot / easement / corridor attributes as native hover text; invisible, under the buildings. */}
       <g data-layer="nsw-records" fill="transparent" stroke="none" pointerEvents="fill">
         {items.records.map((record, index) => (
           <path key={`r${index}`} d={svgRings(record.rings)} fillRule="evenodd">
@@ -32,7 +28,6 @@ export function NswPlanUnder({ items, style }: { items: NswPlanItems; style: Nsw
   );
 }
 
-/** Lots, easements, heritage hatch and road centrelines, above the road fill and below buildings. */
 export function NswPlanLines({ items, style }: { items: NswPlanItems; style: NswPlanStyle }) {
   return (
     <g data-layer="nsw-lines" fill="none">
@@ -52,7 +47,6 @@ export function NswPlanLines({ items, style }: { items: NswPlanItems; style: Nsw
   );
 }
 
-/** Zone codes, height of building (RL spelled out) and FSR labels. Plain fills, no outline or halo. */
 export function NswPlanLabels({ items, style, sizeM }: { items: NswPlanItems; style: NswPlanStyle; sizeM: number }) {
   const colour = { zone: style.zoneLabel, hob: style.hobLabel, fsr: style.fsrLabel } as const;
   return (

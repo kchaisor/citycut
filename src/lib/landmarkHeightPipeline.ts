@@ -28,10 +28,6 @@ export function enrichmentMapFromRecords(records: BuildingEnrichmentRecord[]): M
   return byId;
 }
 
-/**
- * Only the enrichment records a cut can use: resolveLandmarkCut looks records up by
- * the overtureId of the cut's own buildings, so every other record is dead weight in a fixture.
- */
 export function enrichmentRecordsForBuildings(
   buildings: BuildingFeat[],
   records: Iterable<BuildingEnrichmentRecord>,

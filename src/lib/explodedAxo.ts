@@ -38,22 +38,17 @@ export type ExplodedAxoOverlayBundle = {
   transport?: {
     rail: { lines: TransportRailLine; stations: TransportRailStation[] };
     pt: { lines: PublicTransportLine[]; stops: PublicTransportStop[] } | null;
-    /** NSW mode: which source supplied each part of the plate. */
     note?: string;
   } | "unavailable";
   hydro?: HydroOverlay | "unavailable";
   topography?: TopographyOverlay | "unavailable";
-  /** Overture water polygons fetched for the frame when the model has none. */
   overtureWater?: AreaFeat[];
-  /** Vicmap Parcel outlines for the cadastre plate. */
   cadastre?: CadastreOverlay | "unavailable";
-  /** Mapterhorn terrain field for the terrain mesh plate when the model has none. */
   terrain?: TerrainField | "unavailable";
 };
 
 const roundIso = (value: number) => Math.round(value * 100) / 100;
 
-/** Iso screen path (y down). Do not use site-plan svgPolyline — it negates y. */
 export function isoSvgPolyline(points: Pt[], close: boolean): string {
   if (points.length < 2) return "";
   const body = points
@@ -62,7 +57,6 @@ export function isoSvgPolyline(points: Pt[], close: boolean): string {
   return close ? `${body} Z` : body;
 }
 
-/** Layer ids, default stack top → bottom. */
 export const AXO_LAYER_IDS = [
   "planning",
   "water",
@@ -80,7 +74,6 @@ export const AXO_LAYER_IDS = [
 ] as const;
 export type AxoLayerId = (typeof AXO_LAYER_IDS)[number];
 
-/** Layers that were in the original exploded axo release (default on). */
 export const AXO_LEGACY_LAYER_IDS = ["water", "roads", "green", "buildings", "aerial"] as const satisfies readonly AxoLayerId[];
 
 export const AXO_LAYER_LABELS: Record<AxoLayerId, string> = {
@@ -131,10 +124,6 @@ export type AxoLegendSwatch = { label: string; paint: AxoPaintKey };
 
 export type AxoPointMarker = { x: number; y: number; paint: AxoPaintKey; radiusM: number };
 
-/**
- * Default stack. Every listed layer keeps its lift slot even when hidden (so toggles never move
- * the view), so the reference-only base outline plate is left out and the default stack is unchanged.
- */
 export const DEFAULT_AXO_LAYER_ORDER: AxoLayerId[] = [
   "planning",
   "water",
@@ -152,22 +141,15 @@ export const DEFAULT_AXO_LAYER_ORDER: AxoLayerId[] = [
 export type ExplodedAxoSettings = {
   layerOrder: AxoLayerId[];
   layerVisible: Record<AxoLayerId, boolean>;
-  /** Vertical separation between layers, in local metres (iso lift). */
   gapM: number;
   showLabels: boolean;
-  /** Vertical exaggeration of the terrain mesh plate (1 = true scale). */
   terrainExaggeration?: number;
-  /** Extra vertical gap (iso metres) added directly above the named layer. */
   extraGapAboveM?: Partial<Record<AxoLayerId, number>>;
-  /** Free-dragged lift overrides (iso metres). Cleared when the gap slider, stack order or a preset is applied. */
   layerLiftM?: Partial<Record<AxoLayerId, number>>;
-  /** Draw buildings as extruded massing (walls + roofs). False keeps the flat footprint plate. */
   buildingMassing?: boolean;
-  /** Draw trees as 3D canopies sized from crown data. False keeps flat crown discs. */
   treeCanopies?: boolean;
 };
 
-/** Vertical span of one frame plate in iso screen metres (same lift). */
 export function axoPlateProjectedHeight(sideM: number): number {
   const half = sideM / 2;
   const ys = [
@@ -179,7 +161,6 @@ export function axoPlateProjectedHeight(sideM: number): number {
   return Math.max(...ys) - Math.min(...ys);
 }
 
-/** Default vertical gap between layers (~40% of one plate height, per reference). */
 export function defaultExplodedAxoGapM(sideM: number): number {
   return axoPlateProjectedHeight(sideM) * 0.4;
 }
@@ -210,7 +191,6 @@ export function defaultExplodedAxoSettings(sideM: number): ExplodedAxoSettings {
 
 const COS30 = Math.sqrt(3) / 2;
 const SIN30 = 0.5;
-/** Plan east/north metres → isometric screen metres (y grows down). */
 export function planPointToIso(east: number, north: number, liftM: number): Pt {
   return [(east - north) * COS30, (east + north) * SIN30 - liftM];
 }
@@ -220,12 +200,10 @@ export function isoPathFromPlanRing(ring: Pt[], liftM: number, close = true): st
   return isoSvgPolyline(pts, close);
 }
 
-/** SVG transform stacking one layer vertically (base geometry at lift 0). */
 export function axoLayerSvgTransform(liftM: number): string {
   return `translate(0 ${roundIso(-liftM)})`;
 }
 
-/** Plan → iso at lift 0 (for geometry drawn inside a lifted group). */
 export function planToIsoBase(east: number, north: number): Pt {
   return [(east - north) * COS30, (east + north) * SIN30];
 }
@@ -235,7 +213,6 @@ export function isoPathFromPlanRingBase(ring: Pt[], close = true): string {
   return isoSvgPolyline(pts, close);
 }
 
-/** Closed frame boundary in plan east/north (square or circle). */
 export function axoFrameBoundaryRing(sideM: number, shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE): Pt[] {
   const half = sideM / 2;
   if (shape === "square") {
@@ -250,10 +227,6 @@ export function axoFrameBoundaryRing(sideM: number, shape: SiteFrameShape = DEFA
   return circleRing(half, 64);
 }
 
-/**
- * Four guide anchors in plan metres: square corners, or circle rim at E/W/N/S.
- * Projected to iso these are the left/right/front/back rim of the ellipse.
- */
 export function axoGuideAnchorPoints(sideM: number, shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE): Pt[] {
   const half = sideM / 2;
   if (shape === "square") {
@@ -274,7 +247,6 @@ export function axoGuideAnchorPoints(sideM: number, shape: SiteFrameShape = DEFA
 
 export type AxoGuideLine = { x: number; yTop: number; yBottom: number };
 
-/** Screen-vertical guides between the lowest and highest visible layer lifts. */
 export function axoGuideLines(
   sideM: number,
   shape: SiteFrameShape,
@@ -291,7 +263,6 @@ export function axoGuideLines(
   });
 }
 
-/** Lift in iso metres: aerial = 0 (bottom), water = highest (top of stack). */
 export function liftsForLayerOrder(
   order: AxoLayerId[],
   gapM: number,
@@ -308,7 +279,6 @@ export function liftsForLayerOrder(
   return lifts;
 }
 
-/** Moves `from` to the position of `to` in `order` (top → bottom). */
 export function reorderAxoLayer(order: readonly AxoLayerId[], from: AxoLayerId, to: AxoLayerId): AxoLayerId[] {
   const next = [...order];
   const fromIdx = next.indexOf(from);
@@ -319,12 +289,10 @@ export function reorderAxoLayer(order: readonly AxoLayerId[], from: AxoLayerId, 
   return next;
 }
 
-/** Plates that carry the aerial image (#85 Esri World Imagery): the satellite plate and the reference base. */
 export function axoPlateShowsAerial(id: AxoLayerId): boolean {
   return id === "aerial" || id === "base";
 }
 
-/** Kelvin's reference stack, top → bottom (Bern kakemono). */
 export const AXO_REFERENCE_ORDER: AxoLayerId[] = [
   "trees",
   "buildings",
@@ -335,14 +303,8 @@ export const AXO_REFERENCE_ORDER: AxoLayerId[] = [
   "base",
 ];
 
-/** Extra gap above the buildings plate in the reference preset, as a share of the normal gap. */
 export const AXO_REFERENCE_BUILDING_GAP_FACTOR = 1.5;
 
-/**
- * Reference preset: exactly the reference plates in the reference order (all visible), a bigger
- * gap above buildings, and the base outline plate. Other layers leave the stack (hidden layers
- * would still take lift slots); "Default stack" brings them back.
- */
 export function referenceExplodedAxoSettings(sideM: number, current?: ExplodedAxoSettings): ExplodedAxoSettings {
   const defaults = defaultExplodedAxoSettings(sideM);
   const gapM = current?.gapM ?? defaults.gapM;
@@ -360,17 +322,14 @@ export function referenceExplodedAxoSettings(sideM: number, current?: ExplodedAx
   };
 }
 
-/** Painter's order: bottom layer first, top layer last (so water draws on top). */
 export function axoLayersForPaint(layers: AxoLayerGeometry[]): AxoLayerGeometry[] {
   return [...layers].sort((a, b) => a.liftM - b.liftM);
 }
 
-/** Label beside the plate when geometry lives in a group with `axoLayerSvgTransform`. */
 export function axoLayerLabelAnchorBase(sideM: number): { x: number; y: number; rotateDeg: number } {
   return axoLayerLabelAnchor(sideM, 0);
 }
 
-/** Keep axo plate labels upright; flip 180° when the edge direction points left. */
 export function axoLabelRotationDeg(edgeDx: number, edgeDy: number): number {
   let deg = (Math.atan2(edgeDy, edgeDx) * 180) / Math.PI;
   if (edgeDx < 0) deg += 180;
@@ -380,16 +339,12 @@ export function axoLabelRotationDeg(edgeDx: number, edgeDy: number): number {
 }
 
 export type AxoLayerLabelAnchor = {
-  /** Text baseline start (horizontal text, left-aligned). */
   x: number;
   y: number;
-  /** Always 0: labels are horizontal. Kept for callers that still pass a rotate(). */
   rotateDeg: number;
-  /** Short leader from the plate's right corner to the label. */
   leader: { x1: number; y1: number; x2: number; y2: number };
 };
 
-/** Right-most point of the plate in iso (square corner or circle rim). */
 export function axoPlateRightCorner(sideM: number, shape: SiteFrameShape, liftM: number): Pt {
   const half = sideM / 2;
   if (shape === "circle") {
@@ -399,7 +354,6 @@ export function axoPlateRightCorner(sideM: number, shape: SiteFrameShape, liftM:
   return planPointToIso(half, -half, liftM);
 }
 
-/** Horizontal label at the plate's right corner with a short leader line (per Kelvin's reference). */
 export function axoLayerLabelAnchor(
   sideM: number,
   liftM: number,
@@ -416,7 +370,6 @@ export function axoLayerLabelAnchor(
   };
 }
 
-/** Plate label text as in the reference ("Trees.", "Buildings."). */
 export function axoPlateLabelText(id: AxoLayerId): string {
   const raw = AXO_LAYER_LABELS[id];
   const title = raw.charAt(0) + raw.slice(1).toLowerCase();
@@ -436,11 +389,6 @@ export function axoGroundPlinthThicknessM(sideM: number): number {
   return Math.max(6, Math.min(80, roundIso(sideM * 0.04)));
 }
 
-/**
- * Vertical exaggeration for the 3D topographic ground surface on the bottom Satellite plate.
- * Uses explicit `terrainExaggeration` when set, or defaults to `DEFAULT_AXO_TERRAIN_EXAGGERATION`
- * clamped so peak relief never collides with the plate above.
- */
 export function axoGroundTerrainExaggeration(
   _sideM: number,
   _gapM: number,
@@ -452,12 +400,6 @@ export function axoGroundTerrainExaggeration(
   return DEFAULT_AXO_TERRAIN_EXAGGERATION;
 }
 
-/**
- * Build the 3D ground base slab (topographic perimeter + front-left and front-right section walls)
- * under the bottom Satellite (`aerial`) plate in local iso coordinates (lift 0).
- * When `field` has relief, the top surface rim and wall top edges follow the 3D terrain elevation
- * `(sampleTerrain(field, e, n, sideM) - field.min) * exaggeration` while the base sits on `-slabThicknessM`.
- */
 export function buildAxoGroundPlinth(
   sideM: number,
   shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
@@ -637,41 +579,24 @@ export function buildAxoGroundTopoContours(
 export type AxoLayerGeometry = {
   id: AxoLayerId;
   liftM: number;
-  /** Filled regions as SVG d strings (evenodd). */
   fills: string[];
-  /** Stroked centre lines (roads). */
   strokes: string[];
-  /** Optional paint key per fill/stroke (defaults to the layer base colour). */
   fillPaints?: AxoPaintKey[];
   strokePaints?: AxoPaintKey[];
   strokeWidthScales?: number[];
-  /** When true, the stroke at the same index is dashed (e.g. tram routes). */
   strokeDashed?: boolean[];
   markers?: AxoPointMarker[];
-  /** Frame plate outline at this lift. */
   plateOutlineD: string;
-  /** Clip path d (same as plate interior). */
   clipD: string;
   unavailableNote?: string;
   legend?: AxoLegendSwatch[];
-  /** Strokes drawn without the plate clip (terrain mesh rises above the plate). */
   unclippedStrokes?: string[];
-  /**
-   * Extruded solids (building massing) in painter's order, far to near. Drawn after the
-   * plate fills and not clipped to the plate, so tall masses can rise above it.
-   */
   solids?: AxoSolidFace[];
-  /** Visible source note for this plate (e.g. where heights came from). */
   sourceNote?: string;
-  /** 3D ground base slab (plinth) vertical walls underneath the satellite plate. */
   plinthWalls?: AxoPlinthWall[];
-  /** Plinth slab depth in local metres when this plate carries a 3D base slab. */
   plinthThicknessM?: number;
-  /** Peak 3D terrain relief above the plate base on the bottom topography/satellite plate. */
   plinthMaxReliefM?: number;
-  /** Vertical exaggeration applied to the bottom topography/satellite plate. */
   plinthExaggeration?: number;
-  /** 3D topographic contour polylines draped over the bottom satellite topography surface. */
   topoContourStrokes?: string[];
 };
 
@@ -708,7 +633,6 @@ function clipRoadLines(model: CityModel): Pt[][] {
   return lines;
 }
 
-/** True when at least one model water polygon survives site-frame clipping. */
 export function modelHasClippedWaterInFrame(model: CityModel): boolean {
   return areaRings(model, "water").length > 0;
 }
@@ -756,12 +680,10 @@ export function axoPlateOutlineBaseD(sideM: number, shape: SiteFrameShape): stri
   return isoPathFromPlanRingBase(axoFrameBoundaryRing(sideM, shape), true);
 }
 
-/** @deprecated use base outline + axoLayerSvgTransform */
 export function axoPlateOutlineD(sideM: number, shape: SiteFrameShape, liftM: number): string {
   return isoPathFromPlanRing(axoFrameBoundaryRing(sideM, shape), liftM, true);
 }
 
-/** True when the closed iso path is a circle rim (enough segments, not 4 corners). */
 export function axoPlateIsCircularRing(_sideM: number, shape: SiteFrameShape): boolean {
   return shape === "circle";
 }
@@ -916,8 +838,6 @@ export function buildExplodedAxoLayers(
       if (overlays.transport === "unavailable") {
         unavailableNote = "unavailable";
       } else if (overlays.transport) {
-        // Rail, train and tram lines are not drawn on the exploded axo: they show only in the 3D view and on
-        // the site plan. Stations, stops and bus routes stay.
         for (const station of overlays.transport.rail.stations) {
           const [x, y] = planToIsoBase(station[0], station[1]);
           markers.push({ x, y, paint: "rail-station", radiusM: model.sideM * 0.0045 });
@@ -932,7 +852,6 @@ export function buildExplodedAxoLayers(
           markers.push({ x, y, paint: ptPaint(stop.mode, "stop"), radiusM: model.sideM * 0.0038 });
         }
         if (overlays.transport.note) sourceNote = overlays.transport.note;
-        // No "Rail" swatch: no rail lines are drawn. Train and Tram now key the stop markers.
         legend = [
           { label: "Train", paint: "pt-train" },
           { label: "Tram", paint: "pt-tram" },
@@ -1131,7 +1050,6 @@ export function axoLayerColours(): Record<AxoLayerId | "guide" | "label", string
   };
 }
 
-/** Per-layer plate tint (fill) and edge colours, from colours.css tokens. */
 export function axoPlateColours(id: AxoLayerId): { tint: string; edge: string } {
   return {
     tint: getColour(`--axo-plate-${id}` as ColourKey),
@@ -1139,14 +1057,10 @@ export function axoPlateColours(id: AxoLayerId): { tint: string; edge: string } 
   };
 }
 
-/** Opacity of the plate tint on screen, so lower plates still read through (reference look). */
 export const AXO_PLATE_TINT_OPACITY = 0.55;
 
-/** Hatch pattern ids for planning fills (referenced from SVG defs). */
 export const AXO_HATCH_PAINTS: AxoPaintKey[] = ["plan-flood", "plan-heritage", "plan-ddo", "plan-bmo"];
 
-/** Iso bounds of the stacked drawing for fitting the viewport. */
-/** SVG transform mapping a plan-aligned satellite image onto the iso plate at `liftM`. */
 export function isoSatelliteImageTransform(sideM: number, _liftM = 0): string {
   const half = sideM / 2;
   const [x0, y0] = planToIsoBase(-half, -half);

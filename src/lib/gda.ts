@@ -1,22 +1,9 @@
-/**
- * GDA94 → GDA2020, the ICSM 7-parameter similarity transformation (EPSG:8048,
- * "GDA94 to GDA2020 (1)", coordinate-frame rotation), on the GRS80 ellipsoid.
- *
- * Used for NSW sources that are stored in GDA94 and whose servers do not transform on request
- * (DPHI EPI Primary Planning Layers, City of Sydney contours). NSW Spatial Services layers are
- * read from the *_multiCRS services with outSR=7844 instead, which apply the official
- * conformal + distortion NTv2 grid (EPSG:8446) server-side. At Pyrmont the two agree to 34 mm.
- *
- * GDA2020 is then treated as WGS84 for Overture/OSM, which in Sydney are traced against
- * GDA2020-registered imagery; plate motion since 2020 (~7 cm/yr) is not applied.
- */
 
 const A = 6378137;
 const F = 1 / 298.257222101;
 const E2 = F * (2 - F);
 const ARCSEC = Math.PI / (180 * 3600);
 
-// EPSG:8048 parameters (metres, arc-seconds, ppm).
 const TX = 0.06155;
 const TY = -0.01087;
 const TZ = -0.04019;
@@ -50,7 +37,6 @@ function toGeodetic(x: number, y: number, z: number): [number, number] {
 export function gda94ToGda2020(lon: number, lat: number): [number, number] {
   const [x, y, z] = toCartesian(lon, lat);
   const s = 1 + DS;
-  // Coordinate-frame convention: X' = T + s · R · X with R = [[1, rz, -ry], [-rz, 1, rx], [ry, -rx, 1]].
   const x2 = TX + s * (x + RZ * y - RY * z);
   const y2 = TY + s * (-RZ * x + y + RX * z);
   const z2 = TZ + s * (RY * x - RX * y + z);

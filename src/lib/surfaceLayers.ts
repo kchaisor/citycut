@@ -1,16 +1,6 @@
 import type { RoadGrade } from "../types";
 import { getColour, type ColourKey } from "./colours";
 
-/**
- * Draw order for surfaces that share the ground plane.
- * `lift` is metres above the terrain sample (or above the flat ground).
- * A small negative polygon offset pulls a broad surface toward the camera.
- * Roads and rail leave it at zero: a large bias clips a near-horizontal
- * ribbon when the camera is low, so the street vanishes. Their lift is
- * what keeps them above the ground. `renderOrder` draws later layers after.
- * Bottom to top: terrain, green, water, paths, local streets, arterials, rail.
- * Building floors sit just above the terrain so their underside is not coplanar with it.
- */
 export type SurfaceLayer = {
   lift: number;
   polygonOffsetFactor: number;
@@ -31,7 +21,6 @@ export const SURFACE = {
   building: { lift: 0.03, polygonOffsetFactor: -2, polygonOffsetUnits: -4, renderOrder: 8 },
 } as const satisfies Record<string, SurfaceLayer>;
 
-/** Extra lift so overlapping polygons in one layer are not the same plane. Stays under the next layer. */
 export function overlapLift(index: number): number {
   return (Math.abs(index) % 4) * 0.008;
 }
@@ -42,7 +31,6 @@ const ROAD_KEYS = {
   path: "--road-path",
 } as const satisfies Record<RoadGrade, ColourKey>;
 
-/** Asphalt. Minor streets and footways are a step lighter than the carriageway. */
 export const ROAD_COLOR: Record<RoadGrade, string> = {
   get arterial() {
     return getColour(ROAD_KEYS.arterial);

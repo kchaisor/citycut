@@ -15,7 +15,6 @@ function square(center: Pt, size: number): Pt[] {
   ];
 }
 
-/** API row order with non-monotonic ids (same as main traverse order). */
 function layerTreeFixture(): CityModel {
   const buildingUses: BuildingUse[] = [
     "residential",
@@ -67,7 +66,6 @@ function docLayerFullPaths(doc: { layers: () => { count: number; get: (i: number
   return paths;
 }
 
-/** Layer tree order on main (traverse order, Buildings subs in API use order). */
 const MAIN_RHINO_LAYER_TREE = [
   "Ground",
   "Green",

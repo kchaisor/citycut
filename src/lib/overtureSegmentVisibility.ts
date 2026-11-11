@@ -93,7 +93,6 @@ function subtractHidden(from: number, to: number, hidden: Array<[number, number]
   return visible.filter(([a, b]) => b - a > 1e-6);
 }
 
-/** Normalised spans along the segment centreline that should not appear at ground level. */
 export function hiddenSpansFromOvertureProps(props: Record<string, unknown>): Array<[number, number]> {
   const spans = [...parseFlagSpans(props.road_flags), ...parseFlagSpans(props.rail_flags), ...parseLevelSpans(props.level_rules)];
   return mergeIntervals(
@@ -122,7 +121,6 @@ function pointAt(line: Pt[], t: number): Pt {
   return [last[0], last[1]];
 }
 
-/** Keep the parts of a centreline that are not tunnel, covered, or underground level. */
 export function clipLineToGroundVisible(line: Pt[], hidden: Array<[number, number]>): Pt[][] {
   if (line.length < 2 || polylineLength(line) < 0.2) return [];
   if (hidden.length === 0) return [line];

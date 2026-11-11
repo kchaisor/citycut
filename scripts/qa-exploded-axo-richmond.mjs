@@ -3,7 +3,6 @@ import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 
 const base = process.env.QA_BASE ?? "http://localhost:4173/citycut/";
-// Richmond: shift ~700 m east so the Yarra centreline falls inside the 1 km frame (still same neighbourhood).
 const queryCircle = "?lat=-37.8270&lon=145.0040&km=1&shape=circle";
 const querySquare = "?lat=-37.8270&lon=145.0040&km=1";
 

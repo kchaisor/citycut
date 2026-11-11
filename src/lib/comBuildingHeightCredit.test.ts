@@ -15,10 +15,8 @@ import type { CityModel } from "../types";
 import { explodedAxoAi } from "./aiPlan";
 import { COM_TREES_CREDIT } from "./comTreesCredit";
 
-// PostScript strings escape parentheses, so allow a backslash before each.
 const TREES_RE = /Trees: Trees, with species and dimensions \\?\(Urban Forest\\?\) .*City of Melbourne, CC BY 4\.0/;
 
-/** Same block plus one City of Melbourne inventory tree (or an OSM one). */
 function treeModel(tier: "com" | "osm"): CityModel {
   return {
     ...baseModel(false),

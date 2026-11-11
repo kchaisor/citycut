@@ -7,10 +7,6 @@ import { cssColorToHex, parseCustomProperties, resolveSheet } from "./cssVars";
 
 const srcRoot = fileURLToPath(new URL("..", import.meta.url));
 
-/**
- * Files that are allowed to keep a colour literal, with the reason.
- * Fills, the plan, the 3D view, and the exporters are not on this list.
- */
 const HEX_ALLOWLIST: Record<string, string> = {};
 
 const HEX = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b|rgb\(/g;
@@ -34,7 +30,6 @@ async function sourceFiles(dir: string): Promise<string[]> {
 
 const SOLAR_NEUTRAL_BUILDINGS = "--building-solar-neutral";
 
-/** Files allowed to reference the viewport-only solar neutral building fill. */
 const SOLAR_NEUTRAL_BUILDING_ALLOWLIST = new Set(["components/Scene3D.tsx", "lib/colours.ts"]);
 
 describe("colour selection", () => {

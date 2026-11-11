@@ -3,7 +3,6 @@ import type { CityModel } from "../types";
 
 const TILE = 256;
 
-/** Web Mercator pixel coords for standard 256 px raster tiles (Esri, OSM). */
 function webMercatorPixel256(lon: number, lat: number, zoom: number): { x: number; y: number } {
   const world = TILE * 2 ** zoom;
   const x = ((lon + 180) / 360) * world;
@@ -14,7 +13,6 @@ function webMercatorPixel256(lon: number, lat: number, zoom: number): { x: numbe
 const SATELLITE_URL =
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 
-/** Same zoom as the in-app Satellite preview (`SatellitePane`). */
 const SATELLITE_ZOOMS = [15, 14, 13, 12] as const;
 
 function tileUrl(z: number, x: number, y: number): string {
@@ -105,7 +103,6 @@ async function stitchAtZoom(
   return out;
 }
 
-/** Stitched Esri World Imagery for the cut, as PNG bytes. Returns null when tiles fail. */
 export async function fetchSatelliteFramePng(
   model: CityModel,
   sizePx = 512,
