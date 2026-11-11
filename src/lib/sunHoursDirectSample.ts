@@ -40,6 +40,8 @@ function footprintBaseY(model: CityModel, ring: Ring): number {
   return (model.terrain ? footprintBase(model.terrain, ring, model.sideM) : 0) + BUILDING_SURFACE_LIFT_M;
 }
 
+const DIRECT_SUN_HOURS_MAX_SAMPLES = 9000;
+
 function wallSamplesOnEdge(
   a: Pt,
   b: Pt,
@@ -48,18 +50,22 @@ function wallSamplesOnEdge(
   floor: number,
   buildingId: number,
   edgeIndex: number,
+  alongCellM = SUN_HOURS_GROUND_CELL_M,
+  midBandOnly = false,
 ): DirectSunHoursSample[] {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
   const length = Math.hypot(dx, dy);
   if (length < 0.35) return [];
-  const bayCount = Math.max(1, Math.ceil(length / SUN_HOURS_GROUND_CELL_M));
+  const bayCount = Math.max(1, Math.ceil(length / alongCellM));
   const bandCount = Math.max(1, Math.ceil(MASSING_FLOOR_HEIGHT_M / SUN_HOURS_GROUND_CELL_M));
+  const bandStart = midBandOnly ? Math.floor(bandCount / 2) : 0;
+  const bandEnd = midBandOnly ? bandStart + 1 : bandCount;
   const out: DirectSunHoursSample[] = [];
   for (let bay = 0; bay < bayCount; bay++) {
-    const along = Math.min(length, (bay + 0.5) * SUN_HOURS_GROUND_CELL_M);
+    const along = Math.min(length, (bay + 0.5) * alongCellM);
     const t = along / length;
-    for (let band = 0; band < bandCount; band++) {
+    for (let band = bandStart; band < bandEnd; band++) {
       const yM = baseYM + floor * MASSING_FLOOR_HEIGHT_M + (band + 0.5) * SUN_HOURS_GROUND_CELL_M;
       out.push({
         id: `direct-${buildingId}-f${floor}-e${edgeIndex}-b${bay}-u${band}`,
@@ -108,7 +114,11 @@ function samplesForBuilding(model: CityModel, building: BuildingFeat): DirectSun
   return units;
 }
 
-function samplesForBuildingCoarse(model: CityModel, building: BuildingFeat): DirectSunHoursSample[] {
+function samplesForBuildingCoarse(
+  model: CityModel,
+  building: BuildingFeat,
+  alongCellM = SUN_HOURS_GROUND_CELL_M,
+): DirectSunHoursSample[] {
   const open = openRing(building.ring);
   if (open.length < 3) return [];
   const closed = [...open, open[0]!];
@@ -120,11 +130,21 @@ function samplesForBuildingCoarse(model: CityModel, building: BuildingFeat): Dir
   for (let edge = 0; edge < closed.length - 1; edge++) {
     const outward = edgeOutwardNormal(closed[edge]!, closed[edge + 1]!, outwardSign);
     units.push(
-      ...wallSamplesOnEdge(closed[edge]!, closed[edge + 1]!, outward, baseYM, midFloor, building.id, edge).slice(0, 1),
+      ...wallSamplesOnEdge(
+        closed[edge]!,
+        closed[edge + 1]!,
+        outward,
+        baseYM,
+        midFloor,
+        building.id,
+        edge,
+        alongCellM,
+        true,
+      ),
     );
   }
   const roofY = baseYM + building.height - 0.04;
-  const roofPoints = gridPointsInRing(building.ring, SUN_HOURS_GROUND_CELL_M * 2);
+  const roofPoints = gridPointsInRing(building.ring, alongCellM);
   let roofIndex = 0;
   for (const [east, north] of roofPoints) {
     units.push({
@@ -141,11 +161,24 @@ function samplesForBuildingCoarse(model: CityModel, building: BuildingFeat): Dir
   return units;
 }
 
-export function directSunHoursSamplesForModel(model: CityModel): DirectSunHoursSample[] {
+function directSunHoursSamples(model: CityModel, alongCellM: number): DirectSunHoursSample[] {
   const coarse = model.buildings.length > 120;
   const units: DirectSunHoursSample[] = [];
   for (const building of model.buildings) {
-    units.push(...(coarse ? samplesForBuildingCoarse(model, building) : samplesForBuilding(model, building)));
+    units.push(
+      ...(coarse ? samplesForBuildingCoarse(model, building, alongCellM) : samplesForBuilding(model, building)),
+    );
+  }
+  return units;
+}
+
+export function directSunHoursSamplesForModel(model: CityModel): DirectSunHoursSample[] {
+  const coarse = model.buildings.length > 120;
+  let alongCellM = coarse ? SUN_HOURS_GROUND_CELL_M * 2 : SUN_HOURS_GROUND_CELL_M;
+  let units = directSunHoursSamples(model, alongCellM);
+  while (units.length > DIRECT_SUN_HOURS_MAX_SAMPLES && alongCellM < SUN_HOURS_GROUND_CELL_M * 4) {
+    alongCellM *= 2;
+    units = directSunHoursSamples(model, alongCellM);
   }
   return units;
 }

@@ -2366,6 +2366,25 @@ async function main() {
       await boxHillHoursLost();
 
       const boxHillSunHoursGround = async () => {
+        await shadowPage.evaluate(() => {
+          window.__citycutQaMassing?.clearDrawnBlocks?.();
+          window.__citycutQaModel?.clearQaProposedMassing?.();
+        });
+        await shadowPage.locator('.model button[data-section="analysis"]').first().click();
+        await shadowPage.waitForSelector("[data-solar-access-console]", { timeout: 60000 });
+        const hoursLostChip = shadowPage
+          .locator("[data-solar-access-console] button.ov-chip.on")
+          .filter({ hasText: "Hours lost" });
+        if ((await hoursLostChip.count()) > 0) await hoursLostChip.click();
+        const sunHoursChip = shadowPage.locator("[data-sun-hours-ground-chip]");
+        const chipCount = await sunHoursChip.count();
+        assertCheck(
+          "solar-sun-hours-ground-chip",
+          "Direct Sun Hours chip is visible in the Site Analysis solar console",
+          chipCount === 1,
+          `chipCount=${chipCount}`,
+        );
+
         const off = await shadowPage.evaluate(() => window.__citycutQaModel?.readSunHoursGround?.() ?? null);
         const emptyOverlay = await shadowPage.locator("[data-sun-hours-ground-overlay]").count();
         assertCheck(
@@ -2375,13 +2394,18 @@ async function main() {
           `off=${JSON.stringify(off)}, overlay=${emptyOverlay}`,
         );
 
-        await shadowPage.evaluate(() => window.__citycutQaModel?.enableSunHoursGround?.());
+        await sunHoursChip.click();
+        await shadowPage.waitForFunction(
+          () => document.documentElement.dataset.sunHoursGroundReady === "1",
+          null,
+          { timeout: 360000 },
+        );
         await shadowPage.waitForFunction(
           () =>
-            document.documentElement.dataset.sunHoursGroundReady === "1" &&
+            document.documentElement.dataset.sunHoursDirectSurfacesReady === "1" &&
             Number(document.documentElement.dataset.sunHoursDirectSurfaces ?? "0") > 80,
           null,
-          { timeout: 480000 },
+          { timeout: 360000 },
         );
         const enabled = await shadowPage.evaluate(() => window.__citycutQaModel?.readSunHoursGround?.() ?? null);
         const overlayDom = await shadowPage.locator("[data-sun-hours-ground-overlay]");

@@ -32,7 +32,7 @@ function isLitAtStep(
     if (dot < FACING_DOT_MIN) return false;
   } else if (sunDir.y < FACING_DOT_MIN) return false;
   const origin = planToWorld(sample.east, sample.north, sample.yM);
-  const ray = new THREE.Ray(new THREE.Vector3(origin[0], origin[1], origin[2]), sunDir.clone().normalize());
+  const ray = new THREE.Ray(new THREE.Vector3(origin[0], origin[1], origin[2]), sunDir);
   ray.origin.addScaledVector(ray.direction, SELF_SKIP_M);
   const hit = mesh.geometry.boundsTree?.raycastFirst(ray);
   return !hit || hit.distance > RAY_MAX_M;
@@ -47,10 +47,9 @@ function daylightSteps(lat: number, lon: number, year: number, month: number, da
     const minute = minuteOfDay % 60;
     const sample = sunAtMelbourneLocal(lat, lon, year, month, day, hour, minute);
     if (!sample.aboveHorizon) continue;
-    steps.push({
-      dir: new THREE.Vector3(sample.direction[0], sample.direction[1], sample.direction[2]),
-      above: true,
-    });
+    const dir = new THREE.Vector3(sample.direction[0], sample.direction[1], sample.direction[2]);
+    dir.normalize();
+    steps.push({ dir, above: true });
   }
   return steps;
 }
@@ -158,6 +157,7 @@ export function assessDirectSunHoursOverlay(
   }
   const litCounts = new Uint16Array(samples.length);
   for (const { dir, above } of sunDirs) {
+    if (!above) continue;
     for (let index = 0; index < samples.length; index++) {
       if (isLitAtStep(mesh, samples[index]!, dir, above)) litCounts[index]! += 1;
     }

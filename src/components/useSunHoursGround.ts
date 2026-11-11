@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SunHoursDirectOverlay } from "../lib/sunHoursDirectAssess";
+import type { SunHoursDirectWorkerMessage, SunHoursDirectWorkerRequest } from "../lib/sunHoursDirectAssess.worker";
 import type { SunHoursGroundWorkerMessage, SunHoursGroundWorkerRequest } from "../lib/sunHoursGround.worker";
 import type { PlanShadowTreeMode } from "../lib/buildingShadows";
 import { SUN_HOURS_GROUND_CELL_M } from "../lib/sunHoursGround";
@@ -13,6 +14,15 @@ function startWorker(): Worker | null {
   if (typeof Worker === "undefined") return null;
   try {
     return new Worker(new URL("../lib/sunHoursGround.worker.ts", import.meta.url), { type: "module" });
+  } catch {
+    return null;
+  }
+}
+
+function startDirectWorker(): Worker | null {
+  if (typeof Worker === "undefined") return null;
+  try {
+    return new Worker(new URL("../lib/sunHoursDirectAssess.worker.ts", import.meta.url), { type: "module" });
   } catch {
     return null;
   }
@@ -53,12 +63,18 @@ export function useSunHoursGround(
       document.documentElement.dataset.sunHoursGroundMaxHours = String(scale);
       document.documentElement.dataset.sunHoursGroundSteps = String(nextGrid.steps);
       document.documentElement.dataset.sunHoursDirectSurfaces = String(nextOverlay?.cellCount ?? 0);
+      if ((nextOverlay?.cellCount ?? 0) > 0) {
+        document.documentElement.dataset.sunHoursDirectSurfacesReady = "1";
+      } else {
+        delete document.documentElement.dataset.sunHoursDirectSurfacesReady;
+      }
     } else {
       delete document.documentElement.dataset.sunHoursGroundReady;
       delete document.documentElement.dataset.sunHoursGroundCellM;
       delete document.documentElement.dataset.sunHoursGroundMaxHours;
       delete document.documentElement.dataset.sunHoursGroundSteps;
       delete document.documentElement.dataset.sunHoursDirectSurfaces;
+      delete document.documentElement.dataset.sunHoursDirectSurfacesReady;
     }
   }
 
@@ -82,13 +98,49 @@ export function useSunHoursGround(
         publishReady(null, null);
         return;
       }
+      publishReady(nextGrid, null);
       setPendingSurfaces(true);
-      import("../lib/sunHoursDirectAssess").then(({ assessDirectSunHoursOverlay }) => {
-        const nextOverlay = assessDirectSunHoursOverlay(currentModel, year, month, day, nextGrid.maxSunHours);
+      const scaleHint = nextGrid.maxSunHours;
+      const settleSurfaces = (nextOverlay: SunHoursDirectOverlay | null) => {
         setOverlay(nextOverlay);
         publishReady(nextGrid, nextOverlay);
         setPendingSurfaces(false);
-      });
+      };
+      const directWorker = startDirectWorker();
+      if (!directWorker) {
+        import("../lib/sunHoursDirectAssess").then(({ assessDirectSunHoursOverlay }) => {
+          settleSurfaces(assessDirectSunHoursOverlay(currentModel, year, month, day, scaleHint));
+        });
+        return;
+      }
+      const directId = nextId++;
+      directWorker.onmessage = (event: MessageEvent<SunHoursDirectWorkerMessage>) => {
+        const message = event.data;
+        if (message.id !== directId) return;
+        if (message.type === "done") settleSurfaces(message.overlay);
+        if (message.type === "empty") settleSurfaces(null);
+        directWorker.terminate();
+      };
+      directWorker.onerror = () => {
+        settleSurfaces(null);
+        directWorker.terminate();
+      };
+      const directRequest: SunHoursDirectWorkerRequest = {
+        id: directId,
+        model: {
+          center: currentModel.center,
+          sideM: currentModel.sideM,
+          terrain: currentModel.terrain,
+          frameShape: currentModel.frameShape,
+          buildings: currentModel.buildings,
+          trees: currentModel.trees,
+        },
+        year,
+        month,
+        day,
+        scaleMaxHours: scaleHint,
+      };
+      directWorker.postMessage(directRequest);
     };
     if (!worker) {
       setPending(true);
