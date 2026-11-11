@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   haloMm,
   footpathEdgeSvgAttrs,
@@ -117,6 +117,16 @@ export function DrawingPlan({
   sectionKnife?: SectionKnifeToolState | null;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const [svgWidthPx, setSvgWidthPx] = useState(960);
+  useLayoutEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const update = () => setSvgWidthPx(el.clientWidth || 960);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
   const figure = kind === "figure-ground";
   const colourTick = useColourRevision();
@@ -162,6 +172,7 @@ export function DrawingPlan({
   const fitted = useMemo(() => planViewportExtent(model.sideM), [model.sideM]);
   const [internalView, setInternalView] = useState<PlanViewport>(fitted);
   const view = viewport ?? internalView;
+  const metresPerCssPx = view.w / Math.max(svgWidthPx, 1);
   const applyView = (next: PlanViewport | ((current: PlanViewport) => PlanViewport)) => {
     const resolved = typeof next === "function" ? next(viewport ?? internalView) : next;
     if (onViewportChange) onViewportChange(resolved);
@@ -538,7 +549,11 @@ export function DrawingPlan({
                   />
                 ))}
             {sectionKnife?.active ? (
-              <SectionKnifePlanMarkers model={model} tool={sectionKnife} />
+              <SectionKnifePlanMarkers
+                model={model}
+                tool={sectionKnife}
+                metresPerCssPx={metresPerCssPx}
+              />
             ) : null}
             {(model.siteBoundaryLines ?? []).map((line, index) => (
               <path

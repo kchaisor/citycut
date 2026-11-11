@@ -5,6 +5,8 @@ import type { CityModel } from "../../types";
 import type { SectionKnifePose } from "./plane";
 import { sectionPlanMarkerGeometry } from "./marker";
 
+export const SECTION_HORIZONTAL_PRINT_SCALE = 1000;
+
 export const SECTION_EXPORT_LAYERS = [
   "Section::Ground",
   "Section::Cut buildings",
@@ -80,20 +82,27 @@ export function buildSectionExportSvg(
     )
     .join("");
   layers.push(`<g id="Section_Grid" inkscape:label="Section::Grid">${gridLines}</g>`);
+  const rlFont = 5.5;
   const rlLabels = rlTicks
     .map(
       (ym) =>
-        `<text x="${(padX - 4).toFixed(2)}" y="${yScale(ym).toFixed(2)}" text-anchor="end" font-size="2.8" fill="${grid}">RL ${Math.round(ym)}</text>`,
+        `<text x="${(padX - 4).toFixed(2)}" y="${yScale(ym).toFixed(2)}" text-anchor="end" font-size="${rlFont}" fill="${grid}">RL ${Math.round(ym)}</text>`,
     )
     .join("");
   layers.push(`<g id="Section_RL" inkscape:label="Section::RL">${rlLabels}</g>`);
-  const vertNote = options.applyVerticalExaggeration ? "Vertical exaggeration applied (HUD match)." : "True scale (1:1 m); vertical exaggeration not applied.";
+  const vertNote = options.applyVerticalExaggeration
+    ? "Vertical exaggeration applied (HUD match)."
+  : "RL and profile distances in metres (true section).";
+  const scaleNote = `Drawing scale 1:${SECTION_HORIZONTAL_PRINT_SCALE} horizontal (profile ${Math.round(spanX)} m wide).`;
   const letter = options.knife.label.match(/\b([A-Z])\s*$/)?.[1] ?? "A";
+  const labelFont = 7;
+  const noteFont = 5;
   const annotations = [
-    `<text x="${padX}" y="${(padY + plotH + 8).toFixed(2)}" font-size="3.2">${letter}</text>`,
-    `<text x="${(padX + plotW).toFixed(2)}" y="${(padY + plotH + 8).toFixed(2)}" text-anchor="end" font-size="3.2">${letter}′</text>`,
-    `<text x="${padX}" y="${(padY - 6).toFixed(2)}" font-size="2.4">${esc(vertNote)}</text>`,
-    `<text x="${(padX + plotW).toFixed(2)}" y="${(padY - 6).toFixed(2)}" text-anchor="end" font-size="2.4">${Math.round(spanX)} m</text>`,
+    `<text x="${padX}" y="${(padY + plotH + 10).toFixed(2)}" font-size="${labelFont}">${letter}</text>`,
+    `<text x="${(padX + plotW).toFixed(2)}" y="${(padY + plotH + 10).toFixed(2)}" text-anchor="end" font-size="${labelFont}">${letter}′</text>`,
+    `<text x="${padX}" y="${(padY - 8).toFixed(2)}" font-size="${noteFont}">${esc(scaleNote)}</text>`,
+    `<text x="${padX}" y="${(padY - 14).toFixed(2)}" font-size="${noteFont - 0.8}">${esc(vertNote)}</text>`,
+    `<text x="${(padX + plotW).toFixed(2)}" y="${(padY - 8).toFixed(2)}" text-anchor="end" font-size="${noteFont}">${Math.round(spanX)} m</text>`,
     `<line x1="${x(0).toFixed(2)}" y1="${padY}" x2="${x(0).toFixed(2)}" y2="${(padY + plotH).toFixed(2)}" stroke="${marker}" stroke-width="0.35"/>`,
   ].join("");
   layers.push(`<g id="Section_Annotations" inkscape:label="Section::Annotations">${annotations}</g>`);

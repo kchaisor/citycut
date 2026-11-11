@@ -989,6 +989,44 @@ async function main() {
           planMarkerCount > 0,
           `markerGroups=${planMarkerCount}`,
         );
+        const planMarkerBubbleAudit = await page.evaluate(() => {
+          const bubbles = Array.from(document.querySelectorAll(".section-knife-marker-bubble"));
+          const radiiPx = bubbles.map((el) => {
+            const circle = el;
+            const rAttr = Number(circle.getAttribute("r") ?? "0");
+            const svgEl = circle.ownerSVGElement;
+            if (!svgEl) return Number.POSITIVE_INFINITY;
+            const ctm = circle.getScreenCTM();
+            if (!ctm) return Number.POSITIVE_INFINITY;
+            const centre = svgEl.createSVGPoint();
+            centre.x = Number(circle.getAttribute("cx") ?? "0");
+            centre.y = Number(circle.getAttribute("cy") ?? "0");
+            const edge = svgEl.createSVGPoint();
+            edge.x = centre.x + rAttr;
+            edge.y = centre.y;
+            const cScr = centre.matrixTransform(ctm);
+            const eScr = edge.matrixTransform(ctm);
+            return Math.hypot(eScr.x - cScr.x, eScr.y - cScr.y);
+          });
+          const labels = Array.from(document.querySelectorAll(".section-knife-marker-end-label"));
+          const labelTexts = labels.map((el) => (el.textContent ?? "").trim());
+          const hasA = labels.some((el) => el.getAttribute("data-section-knife-marker-end-label") === "A");
+          const hasAprime = labels.some((el) => el.getAttribute("data-section-knife-marker-end-label") === "Aprime");
+          const maxRadiusPx = radiiPx.length === 0 ? 0 : Math.max(...radiiPx);
+          return {
+            bubbleCount: bubbles.length,
+            maxRadiusPx,
+            labelCount: labels.length,
+            labelTexts,
+            ok: radiiPx.every((r) => r <= 12) && hasA && hasAprime && labels.length >= 2,
+          };
+        });
+        assertCheck(
+          "section-drawing-set-plan-marker",
+          "Plan section mark uses small screen-constant bubbles with A/A′ labels",
+          planMarkerBubbleAudit.ok,
+          `bubbles=${planMarkerBubbleAudit.bubbleCount}, maxR=${planMarkerBubbleAudit.maxRadiusPx.toFixed(1)}px, labels=${planMarkerBubbleAudit.labelTexts?.join("/")}`,
+        );
         await page.locator(".mode-btn", { hasText: "3D model" }).click();
         await page.waitForTimeout(400);
         const isoRestore = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Isometric" }).first();

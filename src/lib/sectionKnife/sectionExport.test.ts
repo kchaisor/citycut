@@ -20,6 +20,6 @@ describe("section export", () => {
     }
     expect(svg).toMatch(/Section::Ground/);
     expect(svg).toMatch(/polyline|path/);
-    expect(svg).toContain("True scale");
+    expect(svg).toContain("Drawing scale 1:1000");
   });
 });

@@ -1,26 +1,26 @@
 import { useMemo } from "react";
-import { getColour } from "../lib/colours";
 import { sectionPlanMarkerGeometry } from "../lib/sectionKnife/marker";
+import {
+  knifeMarkerLetter,
+  planMarkerBubbleRadiusM,
+  planMarkerInk,
+  PLAN_MARKER_ARROW_PX,
+  PLAN_MARKER_END_TICK_PX,
+  viewArrowTriangleEn,
+} from "../lib/sectionKnife/planMarkerDraw";
 import type { SectionKnifeToolState } from "../lib/sectionKnife/state";
 import type { CityModel } from "../types";
 import { screenPx } from "../lib/lineweights";
-import { themeColor } from "../lib/themeColor";
-
-function knifeLetter(label: string): string {
-  const match = label.match(/\b([A-Z])\s*$/);
-  return match?.[1] ?? "A";
-}
 
 export function SectionKnifePlanMarkers({
   model,
   tool,
+  metresPerCssPx,
 }: {
   model: CityModel;
   tool: SectionKnifeToolState;
+  metresPerCssPx: number;
 }) {
-  const unit = model.sideM * 0.007;
-  const ink = getColour("--section-knife-marker-gold");
-  const muted = getColour("--section-knife-elevation-grid");
   const markers = useMemo(() => {
     if (!tool.active) return [];
     return tool.knives.map((knife) => ({
@@ -30,36 +30,34 @@ export function SectionKnifePlanMarkers({
     }));
   }, [model, tool]);
   if (markers.length === 0) return null;
-  const dash = `${screenPx(14)} ${screenPx(3.2)}`;
+  const bubbleR = planMarkerBubbleRadiusM(metresPerCssPx);
+  const tickLen = PLAN_MARKER_END_TICK_PX * metresPerCssPx;
+  const dash = `${screenPx(16)} ${screenPx(4)}`;
+  const fontPx = screenPx(11);
+  const labelOffset = bubbleR * 0.15;
+
   return (
     <g className="section-knife-plan-markers" data-section-knife-plan-markers="1">
       {markers.map(({ knife, geom, selected }) => {
-        const stroke = selected ? ink : muted;
-        const sw = selected ? screenPx(1.35) : screenPx(1.05);
+        const ink = planMarkerInk(selected);
+        const sw = selected ? screenPx(1.45) : screenPx(1.25);
         const x0 = geom.east0;
         const y0 = -geom.north0;
         const x1 = geom.east1;
         const y1 = -geom.north1;
         const te = geom.tangentEast;
         const tn = -geom.tangentNorth;
-        const tick = unit * 12;
         const perpE = -tn;
         const perpN = te;
-        const letter = knifeLetter(knife.label);
-        const mx = (x0 + x1) / 2;
-        const my = (y0 + y1) / 2;
-        const arrow = unit * 32;
-        const ax = mx + geom.viewEast * arrow * 0.35;
-        const ay = my + -geom.viewNorth * arrow * 0.35;
-        const wing = unit * 9;
-        const ve = geom.viewEast;
-        const vn = -geom.viewNorth;
+        const letter = knifeMarkerLetter(knife.label);
+        const arrow0 = viewArrowTriangleEn(geom, geom.east0, geom.north0, metresPerCssPx, false);
+        const arrow1 = viewArrowTriangleEn(geom, geom.east1, geom.north1, metresPerCssPx, false);
         return (
-          <g key={knife.id} data-section-knife-marker-id={knife.id} opacity={selected ? 1 : 0.72}>
+          <g key={knife.id} data-section-knife-marker-id={knife.id} opacity={selected ? 1 : 0.88}>
             <path
               d={`M ${x0} ${y0} L ${x1} ${y1}`}
               fill="none"
-              stroke={stroke}
+              stroke={ink.line}
               strokeWidth={sw}
               strokeDasharray={dash}
               strokeLinecap="square"
@@ -71,26 +69,61 @@ export function SectionKnifePlanMarkers({
             ].map(([ex, ey], i) => (
               <path
                 key={i}
-                d={`M ${ex - perpE * tick} ${ey - perpN * tick} L ${ex + perpE * tick} ${ey + perpN * tick}`}
+                d={`M ${ex - perpE * tickLen} ${ey - perpN * tickLen} L ${ex + perpE * tickLen} ${ey + perpN * tickLen}`}
                 fill="none"
-                stroke={stroke}
-                strokeWidth={sw * 1.5}
+                stroke={ink.line}
+                strokeWidth={sw * 1.65}
                 vectorEffect="non-scaling-stroke"
               />
             ))}
-            <path
-              d={`M ${ax - ve * wing + -vn * wing * 0.55} ${ay - vn * wing + ve * wing * 0.55} L ${ax} ${ay} L ${ax - ve * wing + vn * wing * 0.55} ${ay - vn * wing + -ve * wing * 0.55}`}
-              fill="none"
-              stroke={stroke}
-              strokeWidth={sw}
+            <polygon points={arrow0} fill={ink.line} stroke="none" vectorEffect="non-scaling-stroke" />
+            <polygon points={arrow1} fill={ink.line} stroke="none" vectorEffect="non-scaling-stroke" />
+            <circle
+              className="section-knife-marker-bubble"
+              data-section-knife-marker-bubble="1"
+              cx={x0}
+              cy={y0}
+              r={bubbleR}
+              fill={ink.fill}
+              stroke={ink.line}
+              strokeWidth={screenPx(0.9)}
               vectorEffect="non-scaling-stroke"
             />
-            <circle cx={x0} cy={y0} r={unit * 16} fill={themeColor("--bg-elev")} stroke={stroke} strokeWidth={sw * 0.9} vectorEffect="non-scaling-stroke" />
-            <circle cx={x1} cy={y1} r={unit * 16} fill={themeColor("--bg-elev")} stroke={stroke} strokeWidth={sw * 0.9} vectorEffect="non-scaling-stroke" />
-            <text x={x0} y={y0 + unit * 14} textAnchor="middle" fontSize={screenPx(11)} className="mono" fill={stroke}>
+            <circle
+              className="section-knife-marker-bubble"
+              data-section-knife-marker-bubble="1"
+              cx={x1}
+              cy={y1}
+              r={bubbleR}
+              fill={ink.fill}
+              stroke={ink.line}
+              strokeWidth={screenPx(0.9)}
+              vectorEffect="non-scaling-stroke"
+            />
+            <text
+              className="mono section-knife-marker-end-label"
+              data-section-knife-marker-end-label="A"
+              x={x0}
+              y={y0 + labelOffset}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontSize={fontPx}
+              vectorEffect="non-scaling-stroke"
+              fill={ink.text}
+            >
               {letter}
             </text>
-            <text x={x1} y={y1 + unit * 14} textAnchor="middle" fontSize={screenPx(11)} className="mono" fill={stroke}>
+            <text
+              className="mono section-knife-marker-end-label"
+              data-section-knife-marker-end-label="Aprime"
+              x={x1}
+              y={y1 + labelOffset}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontSize={fontPx}
+              vectorEffect="non-scaling-stroke"
+              fill={ink.text}
+            >
               {letter}′
             </text>
           </g>
@@ -102,11 +135,11 @@ export function SectionKnifePlanMarkers({
           data-section-knife-snap-cue="1"
           cx={tool.snapCue.east}
           cy={-tool.snapCue.north}
-          r={unit * 20}
+          r={PLAN_MARKER_ARROW_PX * metresPerCssPx}
           fill="none"
-          stroke={ink}
-          strokeWidth={screenPx(1.2)}
-          strokeDasharray={`${screenPx(4)} ${screenPx(3)}`}
+          stroke={planMarkerInk(true).line}
+          strokeWidth={screenPx(1)}
+          strokeDasharray={`${screenPx(3)} ${screenPx(2)}`}
           vectorEffect="non-scaling-stroke"
         />
       ) : null}
