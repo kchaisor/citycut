@@ -2527,8 +2527,6 @@ async function main() {
         await parkPage.close();
       };
 
-      await melbourneParkNoAdditional();
-
       const boxHillTreeShadows = async () => {
         const readTreeShadowDom = async () =>
           shadowPage.evaluate(() => {
@@ -2592,7 +2590,8 @@ async function main() {
             const overlay = document.querySelector("[data-facade-solar-overlay]");
             const dock = document.querySelector("[data-facade-solar-results-dock]");
             const pct = document.querySelector("[data-facade-pct-at-threshold]");
-            return ms > 0 && overlay && dock && pct && pct.textContent?.includes("%");
+            const unitCount = window.__citycutQaModel?.readFacadeSolarAssess?.()?.facade?.unitCount ?? 0;
+            return ms > 0 && unitCount > 4 && overlay && dock && pct && pct.textContent?.includes("%");
           },
           null,
           { timeout: 360000 },
@@ -2613,6 +2612,8 @@ async function main() {
       };
 
       await boxHillFacadeSolar();
+
+      await melbourneParkNoAdditional();
 
       await shadowCtx.close();
     }

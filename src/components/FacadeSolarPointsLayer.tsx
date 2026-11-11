@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
-import { facadeBayUnitsForModel } from "../lib/facadeSolarSample";
+import { facadeBayUnitsForModel, podiumReceptorUnitsForModel } from "../lib/facadeSolarSample";
 import { facadeHoursFill } from "../lib/facadeSolarAssess";
 import { getColour } from "../lib/colours";
 import type { FacadeAssessBundle } from "../lib/facadeSolarTypes";
@@ -20,7 +20,7 @@ export function FacadeSolarPointsLayer({
   bundle: FacadeAssessBundle;
 }) {
   const { points, threshold } = useMemo(() => {
-    const samples = facadeBayUnitsForModel(model);
+    const samples = [...facadeBayUnitsForModel(model), ...podiumReceptorUnitsForModel(model)];
     const summary = bundle.facade;
     const thresholdHours = summary?.thresholdHours ?? 3;
     const byId = new Map((summary?.units ?? []).map((unit) => [unit.id, unit]));

@@ -1384,6 +1384,18 @@ export function ModelPage({
     () => massingBlocksToBuildingFeats(massingDraw.blocks),
     [massingDraw.blocks],
   );
+  const facadeMassingModel = useMemo(
+    () => ({
+      ...displayModel,
+      buildings: [
+        ...displayModel.buildings,
+        ...massing.drawingBuildings,
+        ...drawnMassingBuildings,
+        ...qaProposedMassing,
+      ],
+    }),
+    [displayModel, massing.drawingBuildings, drawnMassingBuildings, qaProposedMassing],
+  );
 
   const drawingModel = useMemo(() => {
     const buildingsVisible = isLayer3dVisible(view3dDisplay, "buildings");
@@ -1454,8 +1466,8 @@ export function ModelPage({
     },
     [displayModel.areas],
   );
-  const facadeSolarEnabled = Boolean(solar.facadeSolarAccess && proposedMassingInModel(model));
-  const facadeSolarAssess = useFacadeSolarAssess(model, solar.year, facadeSolarEnabled);
+  const facadeSolarEnabled = Boolean(solar.facadeSolarAccess && proposedMassingInModel(facadeMassingModel));
+  const facadeSolarAssess = useFacadeSolarAssess(facadeMassingModel, solar.year, facadeSolarEnabled);
   const facadeSolarAssessRef = useRef(facadeSolarAssess);
   facadeSolarAssessRef.current = facadeSolarAssess;
   const solarReceptorAssess = useSolarReceptorAssess(
@@ -2429,6 +2441,7 @@ export function ModelPage({
                 }
                 quality={renderQuality}
                 facadeSolarBundle={facadeSolarEnabled ? facadeSolarAssess.bundle : null}
+                facadeSolarModel={facadeMassingModel}
               />
               <MassingToolHud
                 visible={

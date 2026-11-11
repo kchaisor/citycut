@@ -43,16 +43,28 @@ export function useFacadeSolarAssess(
     }
     setPending(true);
     const id = nextId++;
+    const settleMainThread = () => {
+      import("../lib/facadeSolarAssess").then(({ assessFacadeSolar }) => {
+        const live = modelRef.current;
+        setBundle(assessFacadeSolar(live, live.center.lat, live.center.lon, year));
+        setPending(false);
+      });
+    };
     worker.onmessage = (event: MessageEvent<FacadeSolarWorkerMessage>) => {
       const message = event.data;
       if (message.id !== id) return;
-      if (message.type === "done") setBundle(message.result);
-      setPending(false);
+      if (message.type === "done") {
+        setBundle(message.result);
+        setPending(false);
+        worker.terminate();
+        return;
+      }
       worker.terminate();
+      settleMainThread();
     };
     worker.onerror = () => {
-      setPending(false);
       worker.terminate();
+      settleMainThread();
     };
     const request: FacadeSolarWorkerRequest = {
       id,
