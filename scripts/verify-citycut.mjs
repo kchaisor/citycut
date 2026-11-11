@@ -1833,41 +1833,29 @@ async function main() {
         /inkscape:label="Shadow (09|15):00"/.test(frameSvg),
         "per-hour shadow layers present",
       );
-      async function scrubSolarHour(hour) {
-        await importPage.locator('button[data-section="analysis"]').click({ timeout: 30_000 });
-        await importPage.waitForTimeout(200);
-        await importPage
-          .locator(".model .env-console .overlay-chips button", { hasText: "Shadows" })
-          .click({ timeout: 30_000 });
-        await importPage
-          .locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" })
-          .click({ timeout: 30_000 });
-        const hourBtn = importPage.locator(".model .env-console button", {
-          hasText: new RegExp(`^${String(hour).padStart(2, "0")}$`),
+      async function captureStudyHour(hour, filename) {
+        await importPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
+        await importPage.locator('button[data-section="drawing"]').click({ timeout: 30_000 }).catch(() => {});
+        const label = String(hour).padStart(2, "0");
+        const tick = importPage.locator(".h-tick.studio-solar-tick", { hasText: label });
+        if ((await tick.count()) > 0) {
+          await tick.first().click({ timeout: 30_000 });
+        } else {
+          await importPage.getByRole("button", { name: `Solar time ${label}:00` }).click({ timeout: 30_000 });
+        }
+        await importPage.waitForFunction(
+          (h) => document.querySelectorAll(`svg.plan [data-shadow-hour="${h}"] path`).length >= 1,
+          hour,
+          { timeout: 180_000 },
+        );
+        await importPage.waitForTimeout(600);
+        await importPage.screenshot({
+          path: path.join(cursorArtifacts, filename),
+          clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
         });
-        await hourBtn.first().click({ timeout: 30_000 });
-        await importPage.waitForTimeout(1200);
       }
-      await scrubSolarHour(9);
-      await importPage.waitForFunction(
-        () => document.querySelectorAll("svg.plan [data-shadow-hour='9'] path").length >= 1,
-        null,
-        { timeout: 120_000 },
-      );
-      await importPage.screenshot({
-        path: path.join(cursorArtifacts, "drawing-imported-shadows-9am.png"),
-        clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
-      });
-      await scrubSolarHour(15);
-      await importPage.waitForFunction(
-        () => document.querySelectorAll("svg.plan [data-shadow-hour='15'] path").length >= 1,
-        null,
-        { timeout: 120_000 },
-      );
-      await importPage.screenshot({
-        path: path.join(cursorArtifacts, "drawing-imported-shadows-3pm.png"),
-        clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
-      });
+      await captureStudyHour(9, "drawing-imported-shadows-9am.png");
+      await captureStudyHour(15, "drawing-imported-shadows-3pm.png");
     } catch (err) {
       assertCheck(
         "rozelle-import-flow",
