@@ -514,6 +514,7 @@ export function DrawingPlan({
             {plan.buildings.map((building, index) => (
               <path
                 key={`b${index}`}
+                {...(building.imported ? { "data-imported-podium": true } : {})}
                 d={svgRings(building.rings)}
                 fill={muted && !building.site ? getColour("--sun-study-building") : building.fill}
                 fillRule="evenodd"

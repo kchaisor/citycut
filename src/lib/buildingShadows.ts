@@ -276,6 +276,7 @@ export function planShadowRings(
   const terrainKey = field ? `${field.cols}x${field.rows}:${field.min}:${field.max}:${model.sideM}` : "";
   let merged: MultiPolygon = [];
   for (const building of model.buildings) {
+    if (building.importedMassingSkipShadow) continue;
     const offset = planShadowOffset(sample, building.height);
     if (!offset) continue;
     const topZ = ground

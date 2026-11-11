@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import { projectLocal } from "./crs";
 import { figureGroundModelPaths } from "./figureGround";
 import { filterHiddenBuildings, hideBuildings, matchHiddenBuildings, emptyHiddenStore } from "./hiddenBuildings";
-import { massingDrawingBuildings, massingFootprint, massingUpperLevelOutlines } from "./massingFootprint";
+import {
+  massingDrawingBuildings,
+  massingFootprint,
+  massingPodiumRoofFootprints,
+  massingUpperLevelOutlines,
+} from "./massingFootprint";
 import type { ImportedMassing } from "./massingImport";
 import { sitePlanAi } from "./aiPlan";
 import { explodedAxoChunks } from "./explodedAxoExport";
@@ -93,6 +98,7 @@ function podiumTowerMassing(): ImportedMassing {
     positions: new Float32Array(positions),
     indices: new Uint32Array(indices),
     triangles: indices.length / 3,
+    partTriangleStarts: [0, indices.length / 3],
     anchor: { e, n, z: 30 },
     halfExtent: { x: 15, y: 10 },
     sourceUnits: "Meters",
@@ -113,7 +119,7 @@ function boxMassing(rotDeg = 0): ImportedMassing {
   for (const [a, b, c, d] of quads) idx.push(a!, b!, c!, a!, c!, d!);
   return {
     id: "m", name: "massing.3dm", fileBytes: 1, mode: "mga", visible: true,
-    positions: new Float32Array(p), indices: new Uint32Array(idx), triangles: 12,
+    positions: new Float32Array(p), indices: new Uint32Array(idx), triangles: 12, partTriangleStarts: [0, 12],
     anchor: { e, n, z: 30 }, halfExtent: { x: 10, y: 15 }, sourceUnits: "Meters", unitScale: 1,
     fileZone: 55, rejectedSurfaces: 0, notes: [],
     placement: { e, n, base: 30, rotDeg },
@@ -184,7 +190,8 @@ describe("imported massing and hidden buildings in Drawing", () => {
     const widest = Math.max(
       ...upper.flatMap((level) => level.lines.map((ring) => area(openRing(ring)))),
     );
-    const podiumArea = area(massingFootprint(item, origin, zone).polygons[0]![0] as Pt[]);
+    const { polygons: podiumPolys } = massingPodiumRoofFootprints(item, origin, zone);
+    const podiumArea = area((podiumPolys[0]?.[0] ?? massingFootprint(item, origin, zone).polygons[0]![0]) as Pt[]);
     expect(widest).toBeLessThan(podiumArea * 0.5);
   });
 });

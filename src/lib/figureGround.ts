@@ -376,6 +376,7 @@ export function figureGround(
   const frame = framePolygon(sideM, frameShape);
   const clipped: Polygon[] = [];
   for (const building of buildings) {
+    if (building.importedMassingShadowCaster) continue;
     const polygon = buildingPolygon(building);
     if (!polygon) continue;
     clipped.push(...clipPolygonToFrame(polygon, frame));

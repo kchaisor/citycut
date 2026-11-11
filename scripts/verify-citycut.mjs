@@ -1694,6 +1694,97 @@ async function main() {
       fs.writeFileSync(path.join(cursorArtifacts, "upper-levels-export.png"), podiumExportBuf);
     }
     await podiumCtx.close();
+    const { buildMassingFixtureBytes } = await import("../src/lib/massingFixture3dm.ts");
+    const { mgaCrs } = await import("../src/lib/crsZone.ts");
+    const rozelleSite = { lon: 151.21512, lat: -33.8572 };
+    const rozelleZone = mgaCrs(rozelleSite.lon).zone;
+    const rozelleFixture = await buildMassingFixtureBytes("separate", rozelleSite, rozelleZone);
+    const rozelleFixturePath = path.join(cursorArtifacts, "rozelle-import-massing.3dm");
+    fs.writeFileSync(rozelleFixturePath, Buffer.from(rozelleFixture));
+    const importCtx = await browser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: 1,
+      reducedMotion: "reduce",
+    });
+    await importCtx.addInitScript(() => {
+      window.__citycutMinSilentLoadMs = 0;
+    });
+    const importPage = await importCtx.newPage();
+    const rozelleQuery =
+      "lat=-33.86726&lon=151.18125&km=1.45&label=Rozelle+NSW&siteLat=-33.8572&siteLon=151.21512";
+    await importPage.goto(`${baseUrl}/?${rozelleQuery}`, { waitUntil: "domcontentloaded", timeout: 120_000 });
+    await importPage.waitForSelector("button.create-fab", { timeout: 30_000 });
+    await importPage.click("button.create-fab");
+    await importPage.waitForFunction(
+      () => Boolean(document.querySelector(".model canvas")),
+      null,
+      { timeout: 300_000 },
+    );
+    await importPage.locator('input[type="file"][accept=".3dm"]').setInputFiles(rozelleFixturePath);
+    await importPage.waitForFunction(
+      () => document.querySelectorAll(".massing-item").length >= 1,
+      null,
+      { timeout: 120_000 },
+    );
+    await importPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
+    await importPage.getByRole("button", { name: "Site plan" }).click({ timeout: 60_000 });
+    await importPage.waitForSelector("svg.plan", { timeout: 120_000 });
+    await importPage.getByRole("button", { name: "Analysis" }).first().click({ timeout: 60_000 });
+    await importPage.waitForTimeout(300);
+    const shadowsChip = importPage.locator(".model .env-console .overlay-chips button", { hasText: "Shadows" });
+  await shadowsChip.click({ timeout: 30_000 });
+    const importPlanFanBtn = importPage.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
+    await importPlanFanBtn.click({ timeout: 30_000 });
+    await importPage.waitForFunction(
+      () =>
+        document.querySelectorAll("svg.plan [data-upper-z]").length >= 1 &&
+        document.querySelectorAll("svg.plan [data-imported-podium]").length >= 1,
+      null,
+      { timeout: 180_000 },
+    );
+    await importPage.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 120_000 });
+    const importPlanState = await importPage.evaluate(() => ({
+      upperGroups: document.querySelectorAll("svg.plan [data-upper-z]").length,
+      podiumPaths: document.querySelectorAll("svg.plan [data-imported-podium]").length,
+      shadowPaths: document.querySelectorAll("svg.plan [data-shadow-hour] path").length,
+    }));
+    assertCheck(
+      "rozelle-import-podium-outlines",
+      "Real multi-object .3dm import shows podium outlines (data-imported-podium) on Rozelle Drawing site plan",
+      importPlanState.podiumPaths >= 1,
+      `podiumPaths=${importPlanState.podiumPaths}`,
+    );
+    assertCheck(
+      "rozelle-import-upper-level-outlines",
+      "Real .3dm import shows inner tower outlines (data-upper-z) on Rozelle Drawing site plan",
+      importPlanState.upperGroups >= 1,
+      `upperGroups=${importPlanState.upperGroups}`,
+    );
+    assertCheck(
+      "rozelle-import-plan-shadows",
+      "Real .3dm import casts sun-study plan shadows on Rozelle Drawing site plan",
+      importPlanState.shadowPaths >= 6,
+      `shadowPaths=${importPlanState.shadowPaths}, podiumPaths=${importPlanState.podiumPaths}`,
+    );
+    const fitFrame = importPage.getByRole("button", { name: "Fit frame" });
+    if ((await fitFrame.count()) > 0) await fitFrame.click({ timeout: 15_000 });
+    await importPage.waitForTimeout(400);
+    await importPage.screenshot({
+      path: path.join(cursorArtifacts, "rozelle-import-drawing-desktop.png"),
+      clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+    });
+    const upperGroup = importPage.locator("svg.plan [data-upper-z]").first();
+    const upperBox = await upperGroup.boundingBox();
+    if (upperBox) {
+      const pad = 20;
+      const cx = Math.max(0, Math.round(upperBox.x + upperBox.width / 2 - 200));
+      const cy = Math.max(0, Math.round(upperBox.y + upperBox.height / 2 - 200));
+      await importPage.screenshot({
+        path: path.join(cursorArtifacts, "rozelle-import-podium-crop.png"),
+        clip: { x: cx, y: cy, width: 400, height: 400 },
+      });
+    }
+    await importCtx.close();
     await sydneyCtx.close();
   } catch (err) {
     console.error("Fatal error in verify-citycut:", err);

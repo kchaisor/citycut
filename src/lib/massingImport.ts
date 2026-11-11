@@ -22,6 +22,7 @@ export type ParsedMassing = {
   positions: Float32Array;
   indices: Uint32Array;
   triangles: number;
+  partTriangleStarts: number[];
   anchor: { e: number; n: number; z: number };
   halfExtent: { x: number; y: number };
   sourceUnits: string;
@@ -173,8 +174,10 @@ export function parseMassing3dm(rhino: Rhino, bytes: Uint8Array): ParsedMassing 
 
     const world: number[] = [];
     const indices = new Uint32Array(triangles * 3);
+    const partTriangleStarts: number[] = [];
     let t = 0;
     for (const mesh of meshes) {
+      partTriangleStarts.push(t / 3);
       const base = world.length / 3;
       const vertices = mesh.vertices();
       for (let v = 0; v < vertices.count; v++) {
@@ -194,6 +197,7 @@ export function parseMassing3dm(rhino: Rhino, bytes: Uint8Array): ParsedMassing 
         }
       }
     }
+    partTriangleStarts.push(t / 3);
 
     let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (let i = 0; i < world.length; i += 3) {
@@ -224,6 +228,7 @@ export function parseMassing3dm(rhino: Rhino, bytes: Uint8Array): ParsedMassing 
       positions,
       indices,
       triangles,
+      partTriangleStarts,
       anchor,
       halfExtent: { x: (maxX - minX) / 2, y: (maxY - minY) / 2 },
       sourceUnits: units.name,
