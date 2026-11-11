@@ -45,7 +45,6 @@ import { SunHoursLostPlanOverlay } from "./SunHoursLostPlanOverlay";
 import type { SunHoursLostGrid } from "../lib/sunHoursLostPlan";
 import { ringFromCorners } from "../lib/solarAccessB43";
 import { isParkAssessRow, type SolarAssessRow, type SolarReceptorArea } from "../lib/solarReceptorAssess";
-import { parkAddedShadowForAssess } from "../lib/solarParkPlanOverlay";
 import type { Ring } from "../types";
 
 const NO_SELECTION: readonly number[] = [];
@@ -309,13 +308,11 @@ export function DrawingPlan({
     [solarReceptorResults],
   );
   const parkPlanOverlays = useMemo(() => {
-    const year = shadowInput?.year ?? new Date().getFullYear();
     return solarReceptors
       .filter((receptor) => (receptor.kind ?? "yard") === "park")
       .map((receptor) => {
         const row = receptorResultById.get(receptor.id);
-        const hatch =
-          row && isParkAssessRow(row) ? parkAddedShadowForAssess(model, receptor.ring, row, year) : [];
+        const hatch = row && isParkAssessRow(row) ? row.addedShadowRings : [];
         let sumE = 0;
         let sumN = 0;
         const count = Math.max(1, receptor.ring.length - 1);
@@ -332,7 +329,7 @@ export function DrawingPlan({
           labelY: sumN / count,
         };
       });
-  }, [model, shadowInput?.year, solarReceptors, receptorResultById]);
+  }, [solarReceptors, receptorResultById]);
 
   function planPointFromClient(clientX: number, clientY: number, planView: PlanViewport): Pt {
     const svg = svgRef.current;

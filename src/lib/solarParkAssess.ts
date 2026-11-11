@@ -1,3 +1,6 @@
+import * as polygonClipping from "polygon-clipping";
+import type { MultiPolygon, Pair } from "polygon-clipping";
+import { shadowRingsFromMulti } from "./buildingShadows";
 import { pointInLocalMulti } from "./massingParcelBoundary";
 import {
   PARK_NO_ADDITIONAL_TOLERANCE_M2,
@@ -9,7 +12,7 @@ import {
 import { receptorAreaM2 } from "./solarAccessB43";
 import type { SolarReceptorArea } from "./solarReceptorAssess";
 import { buildRuleStepShadows, gridPointsInRing } from "./solarPlanShadowSteps";
-import type { CityModel } from "../types";
+import type { CityModel, Pt, Ring } from "../types";
 
 export type SolarParkStepAdded = {
   hour: number;
@@ -27,11 +30,60 @@ export type SolarParkAssessResult = {
   stepAddedM2: SolarParkStepAdded[];
   totalAddedM2: number;
   maxAddedM2: number;
+  addedShadowRings: Ring[][];
   pass: boolean;
   statusLabel: string;
   statusTone: "pass" | "fail";
   toleranceM2: number;
 };
+
+export function representativeParkStep(steps: readonly SolarParkStepAdded[]): number {
+  let bestIndex = -1;
+  for (let index = 0; index < steps.length; index++) {
+    if (steps[index]!.addedM2 < 0.01) continue;
+    if (bestIndex < 0 || steps[index]!.addedM2 > steps[bestIndex]!.addedM2) bestIndex = index;
+  }
+  return bestIndex;
+}
+
+function closedPairs(ring: Ring): Pair[] {
+  const pairs = ring.map(([east, north]) => [east, north] as Pair);
+  const first = pairs[0]!;
+  const last = pairs[pairs.length - 1]!;
+  if (first[0] !== last[0] || first[1] !== last[1]) pairs.push([first[0], first[1]]);
+  return pairs;
+}
+
+function addedCellRings(addedPoints: readonly Pt[], gridM: number): Ring[][] {
+  const half = gridM / 2;
+  return addedPoints.map(([east, north]) => [
+    [
+      [east - half, north - half],
+      [east + half, north - half],
+      [east + half, north + half],
+      [east - half, north + half],
+      [east - half, north - half],
+    ],
+  ]);
+}
+
+export function parkAddedShadowRings(
+  parkRing: Ring,
+  stepShadow: { existing: MultiPolygon; proposed: MultiPolygon },
+  addedPoints: readonly Pt[],
+  gridM: number,
+): Ring[][] {
+  if (addedPoints.length === 0) return [];
+  try {
+    const added = polygonClipping.difference(stepShadow.proposed, stepShadow.existing);
+    const clipped = polygonClipping.intersection(added, [[closedPairs(parkRing)]]);
+    const rings = shadowRingsFromMulti(clipped);
+    if (rings.length > 0) return rings;
+  } catch {
+    return addedCellRings(addedPoints, gridM);
+  }
+  return addedCellRings(addedPoints, gridM);
+}
 
 export function parkNoAdditionalPass(maxAddedM2: number, toleranceM2 = PARK_NO_ADDITIONAL_TOLERANCE_M2): boolean {
   return maxAddedM2 <= toleranceM2 + 1e-9;
@@ -57,16 +109,18 @@ export function assessParkWithRule(
   const points = gridPointsInRing(ring, gridM);
   const cellM2 = gridM * gridM;
   const stepAddedM2: SolarParkStepAdded[] = [];
+  const stepAddedPoints: Pt[][] = [];
 
   for (const stepShadow of stepShadows) {
-    let added = 0;
-    for (const point of points) {
-      const inProposed = pointInLocalMulti(point, stepShadow.proposed);
-      const inExisting = pointInLocalMulti(point, stepShadow.existing);
-      if (inProposed && !inExisting) added += cellM2;
-    }
-    stepAddedM2.push({ hour: stepShadow.hour, minute: stepShadow.minute, addedM2: added });
+    const addedPoints = points.filter(
+      (point) => pointInLocalMulti(point, stepShadow.proposed) && !pointInLocalMulti(point, stepShadow.existing),
+    );
+    stepAddedPoints.push(addedPoints);
+    stepAddedM2.push({ hour: stepShadow.hour, minute: stepShadow.minute, addedM2: addedPoints.length * cellM2 });
   }
+  const worstStep = representativeParkStep(stepAddedM2);
+  const addedShadowRings =
+    worstStep < 0 ? [] : parkAddedShadowRings(ring, stepShadows[worstStep]!, stepAddedPoints[worstStep]!, gridM);
 
   const totalAddedM2 = stepAddedM2.reduce((sum, row) => sum + row.addedM2, 0);
   const maxAddedM2 = stepAddedM2.reduce((max, row) => Math.max(max, row.addedM2), 0);
@@ -83,6 +137,7 @@ export function assessParkWithRule(
     stepAddedM2,
     totalAddedM2,
     maxAddedM2,
+    addedShadowRings,
     pass,
     statusLabel: parkStatusLabel(pass, maxAddedM2, toleranceM2),
     statusTone: pass ? "pass" : "fail",

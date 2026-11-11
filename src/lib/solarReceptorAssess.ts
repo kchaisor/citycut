@@ -172,6 +172,7 @@ export function assessSolarReceptors(
         stepAddedM2: [],
         totalAddedM2: 0,
         maxAddedM2: 0,
+        addedShadowRings: [],
         pass: false,
         statusLabel: "Fails — no rule",
         statusTone: "fail",
