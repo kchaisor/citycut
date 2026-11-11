@@ -50,13 +50,62 @@ function meshBox(
   doc.objects().addMesh(mesh, new r.ObjectAttributes());
 }
 
+function meshGableHouse(
+  r: Rhino,
+  doc: RhinoDoc,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  z0: number,
+  zEave: number,
+  zPeak: number,
+) {
+  const mesh = new r.Mesh();
+  const mx0 = (x0 + x1) / 2;
+  const my = (y0 + y1) / 2;
+  const verts = [
+    [x0, y0, z0],
+    [x1, y0, z0],
+    [x1, y1, z0],
+    [x0, y1, z0],
+    [x0, y0, zEave],
+    [x1, y0, zEave],
+    [x1, y1, zEave],
+    [x0, y1, zEave],
+    [mx0, my, zPeak],
+    [x1, my, zPeak],
+  ];
+  for (const [x, y, z] of verts) mesh.vertices().add(x, y, z);
+  mesh.faces().addTriFace(0, 2, 1);
+  mesh.faces().addTriFace(0, 3, 2);
+  const walls = [
+    [0, 1, 5, 4],
+    [1, 2, 6, 5],
+    [2, 3, 7, 6],
+    [3, 0, 4, 7],
+  ];
+  for (const [a, b, c, d] of walls) {
+    mesh.faces().addTriFace(a, b, c);
+    mesh.faces().addTriFace(a, c, d);
+  }
+  mesh.faces().addTriFace(4, 5, 9);
+  mesh.faces().addTriFace(4, 9, 8);
+  mesh.faces().addTriFace(6, 7, 8);
+  mesh.faces().addTriFace(6, 8, 9);
+  mesh.faces().addTriFace(4, 7, 8);
+  mesh.faces().addTriFace(5, 6, 9);
+  doc.objects().addMesh(mesh, new r.ObjectAttributes());
+}
+
 export type MassingFixtureKind =
   | "separate"
   | "setback"
   | "millimetres"
   | "edgeTower"
   | "rozelleCampus"
-  | "rozelleCampusMm";
+  | "rozelleCampusMm"
+  | "gableSingle";
 
 const PODIUM_Z = 20;
 
@@ -153,6 +202,10 @@ export async function buildMassingFixtureBytes(
   if (kind === "millimetres") {
     meshBox(r, doc, ox(0), oy(0), ox(30), oy(20), oz(0), oz(12));
     meshBox(r, doc, ox(8), oy(8), ox(18), oy(18), oz(12), oz(42));
+    return doc.toByteArray();
+  }
+  if (kind === "gableSingle") {
+    meshGableHouse(r, doc, ox(0), oy(0), ox(30), oy(20), oz(0), oz(12), oz(22));
     return doc.toByteArray();
   }
   meshBox(r, doc, ox(0), oy(0), ox(30), oy(20), oz(0), oz(12));

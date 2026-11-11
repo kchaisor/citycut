@@ -3,6 +3,7 @@ import { mgaCrs } from "./crsZone";
 import {
   massingDrawingBuildings,
   massingPlanOutlineSummary,
+  massingUpperLevelOutlines,
   massingUpperLevelPlanLines,
 } from "./massingFootprint";
 import { clearPlanShadowCache, importedPlanShadowRings, planShadowRings } from "./buildingShadows";
@@ -62,6 +63,19 @@ describe("imported Rhino massing upper-level outlines", () => {
     expect(plan.buildings.filter((b) => b.imported).length).toBeGreaterThanOrEqual(1);
     expect(plan.importedUpperLevels.length).toBeGreaterThanOrEqual(1);
     expect(plan.importedUpperLevels.reduce((n, level) => n + level.lines.length, 0)).toBeGreaterThanOrEqual(1);
+  });
+
+  it("single-part gable roof yields no upper-level outlines", async () => {
+    const item = await importMassingFixture("gableSingle", origin, zone);
+    expect(massingUpperLevelOutlines(item, origin, zone)).toEqual([]);
+    expect(massingUpperLevelPlanLines([item], origin, zone)).toEqual([]);
+  });
+
+  it("podium plus towers fixture still yields tower upper outlines", async () => {
+    const item = await importMassingFixture("separate", origin, zone);
+    expect(towerOutlineCount(item, origin, zone)).toBeGreaterThanOrEqual(1);
+    const upper = massingUpperLevelPlanLines([item], origin, zone);
+    expect(upper.reduce((n, level) => n + level.lines.length, 0)).toBeGreaterThanOrEqual(1);
   });
 
   it("per-roof shadow casters produce imported plan shadows", async () => {

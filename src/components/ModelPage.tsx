@@ -158,6 +158,7 @@ import {
 } from "../lib/hiddenBuildings";
 import { ImportMassingPanel } from "./ImportMassingPanel";
 import { useImportedMassing } from "./useImportedMassing";
+import { drawingMassingCount } from "../lib/massingFootprint";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
 import { DrawingExplodedAxo } from "./DrawingExplodedAxo";
@@ -2963,7 +2964,7 @@ export function ModelPage({
                     <div className="card-head sidebar-gh">
                       <h3 className="card-title">View Style</h3>
                       <span className="card-meta mono">
-                        {drawingModel.buildings.length.toLocaleString()} massings
+                        {drawingMassingCount(drawingModel.buildings).toLocaleString()} massings
                       </span>
                     </div>
                     {drawing !== "figure-ground" && (

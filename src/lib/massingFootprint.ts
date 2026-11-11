@@ -10,11 +10,9 @@ const IMPORTED_SHADOW_ID_BASE = -2_000_000;
 
 const MIN_PLAN_AREA_M2 = 1e-4;
 const UNION_BATCH = 2000;
-const UP_FACE_MIN_NZ = 0.92;
+const UP_FACE_MIN_NZ = 0.95;
 const ROOF_Z_BUCKET_M = 0.03;
 const ROOF_MIN_ABOVE_M = 0.05;
-const ROOF_FLAT_EPS_M = 0.05;
-
 function closeRing(ring: Pt[]): Pt[] {
   const first = ring[0];
   const last = ring[ring.length - 1];
@@ -124,18 +122,13 @@ function upwardRoofHits(
     const bx = local[ib]!, by = local[ib + 1]!, bz = local[ib + 2]!;
     const cx = local[ic]!, cy = local[ic + 1]!, cz = local[ic + 2]!;
     const planArea = ((bx - ax) * (cy - ay) - (cx - ax) * (by - ay)) / 2;
-    const dzMax = Math.max(Math.abs(az - bz), Math.abs(bz - cz), Math.abs(az - cz));
-    if (dzMax <= ROOF_FLAT_EPS_M) {
-      if (Math.abs(planArea) < MIN_PLAN_AREA_M2) continue;
-    } else {
-      const ux = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
-      const uy = (bz - az) * (cy - ay) - (cz - az) * (by - ay);
-      const uz = (bx - ax) * (cz - az) - (cx - ax) * (bz - az);
-      const length = Math.hypot(ux, uy, uz);
-      if (!(length > 1e-9)) continue;
-      if (Math.abs(uz) / length < UP_FACE_MIN_NZ) continue;
-      if (Math.abs(planArea) < MIN_PLAN_AREA_M2) continue;
-    }
+    const nx = (by - ay) * (cz - az) - (bz - az) * (cy - ay);
+    const ny = (bz - az) * (cx - ax) - (bx - ax) * (cz - az);
+    const nz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+    const length = Math.hypot(nx, ny, nz);
+    if (!(length > 1e-9)) continue;
+    if (Math.abs(nz) / length < UP_FACE_MIN_NZ) continue;
+    if (Math.abs(planArea) < MIN_PLAN_AREA_M2) continue;
     const topZ = Math.max(az, bz, cz);
     const bucket = Math.round(topZ / ROOF_Z_BUCKET_M) * ROOF_Z_BUCKET_M;
     const poly: Polygon =
@@ -249,6 +242,11 @@ export function massingUpperLevelOutlines(
   const buckets = roofBucketsForMassing(massing, origin, zone);
   const levels = roofLevelsAboveFloor(buckets, massing.placement);
   if (levels.length <= 1) return [];
+  const starts = partTriangleStarts(massing);
+  if (starts.length === 2 && levels.length === 2) {
+    const [low, high] = levels;
+    if (low != null && high != null && high - low <= ROOF_MIN_ABOVE_M) return [];
+  }
   const podiumRoofZ = levels[0]!;
   const out: ImportedMassingUpperLevel[] = [];
   for (const z of levels) {
@@ -365,6 +363,10 @@ function massingShadowCasters(
     }
   }
   return out;
+}
+
+export function drawingMassingCount(buildings: BuildingFeat[]): number {
+  return buildings.filter((building) => !building.importedMassingShadowCaster).length;
 }
 
 export function massingDrawingBuildings(
