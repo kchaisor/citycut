@@ -1997,8 +1997,8 @@ async function main() {
     const sydneyAnalysis = sydneyPage.getByRole("button", { name: "Analysis" }).first();
     await sydneyAnalysis.click({ timeout: 60_000 });
     await sydneyPage.waitForTimeout(400);
-    const planFanBtn = sydneyPage.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
-    await planFanBtn.click({ timeout: 30_000 });
+    const sydneyPlanFanBtn = sydneyPage.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
+    await sydneyPlanFanBtn.click({ timeout: 30_000 });
     await sydneyPage.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 60_000 });
     await sydneyPage.waitForSelector("svg.plan .plan-north-arrow", { timeout: 60_000 });
     await sydneyPage.waitForSelector("svg.plan .heliodon-plan", { timeout: 120_000 });
