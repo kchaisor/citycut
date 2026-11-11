@@ -149,6 +149,11 @@ import { ImportMassingPanel } from "./ImportMassingPanel";
 import { useImportedMassing } from "./useImportedMassing";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
+import { DemographicsReachView } from "./reach/DemographicsReachView";
+import type { DemographicsExplorerLens } from "../lib/reach/constants";
+import { MELBOURNE_CBD } from "../lib/reach/constants";
+
+type StudioDrawing = DrawingKind | "demographics";
 import { DrawingExplodedAxo } from "./DrawingExplodedAxo";
 import { DrawingIsometric } from "./DrawingIsometric";
 import { isometricDrawingBounds } from "../lib/isometricDrawing";
@@ -271,7 +276,8 @@ export function ModelPage({
   commandBarOpen?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("3d");
-  const [drawing, setDrawing] = useState<DrawingKind>("site");
+  const [drawing, setDrawing] = useState<StudioDrawing>("site");
+  const [demographicsLens, setDemographicsLens] = useState<DemographicsExplorerLens>("reach");
   const [analysisKind, setAnalysisKind] = useState<SiteAnalysisKind>("solar");
   const [shortcutCheatsheetOpen, setShortcutCheatsheetOpen] = useState(false);
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
@@ -1144,6 +1150,7 @@ export function ModelPage({
   const sectionIds = availableSidebarSections({ buildings: showBuildings, trees: showTrees });
   const leftSectionIds = sectionIds.filter((id) => !isRightSidebarSection(id) && id !== "exports");
   const rightSectionIds = sectionIds.filter((id) => isRightSidebarSection(id));
+  const demographicsActive = tab === "drawing" && drawing === "demographics";
   const items: SidebarItem[] = leftSectionIds.map((id) => {
     const Icon = SECTION_ICONS[id];
     return {
@@ -1801,7 +1808,7 @@ export function ModelPage({
   return (
     <div
       ref={modelRootRef}
-      className="model"
+      className={demographicsActive ? "model is-demographics-reach" : "model"}
       data-intro-hold={!introHoldReleasedRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
       data-intro-webgl-wait={!introWebglReadyRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
     >
@@ -1917,8 +1924,15 @@ export function ModelPage({
           </div>
         )}
         {tab === "drawing" && (
-          <div className="fill is-plan">
-            {drawing === "exploded-axo" ? (
+          <div className={`fill${drawing === "demographics" ? " is-reach-explorer" : " is-plan"}`}>
+            {drawing === "demographics" ? (
+              <DemographicsReachView
+                lens={demographicsLens}
+                onLens={setDemographicsLens}
+                defaultLat={MELBOURNE_CBD.lat}
+                defaultLng={MELBOURNE_CBD.lon}
+              />
+            ) : drawing === "exploded-axo" ? (
               <DrawingExplodedAxo
                 model={drawingModel}
                 settings={axoSettings}
@@ -2088,12 +2102,17 @@ export function ModelPage({
                         ["figure-ground", "Figure-ground"],
                         ["exploded-axo", "Exploded axo"],
                         ["isometric", "Isometric"],
+                        ["demographics", "Demographics"],
                       ] as const
                     ).map(([kind, label]) => (
                       <button
                         key={kind}
                         type="button"
-                        className={tab === "drawing" && drawing === kind ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                        className={
+                          tab === "drawing" && drawing === kind
+                            ? `proj-btn active studio-submode-pill is-active${kind === "demographics" ? " is-demographics-tab" : ""}`
+                            : "proj-btn studio-submode-pill"
+                        }
                         aria-label={`Quick ${label}`}
                         aria-pressed={tab === "drawing" && drawing === kind}
                         onClick={() => {
@@ -3222,7 +3241,7 @@ export function ModelPage({
                 <ExportTiles
                   tiles={exportTiles({
                     tab,
-                    drawing,
+                    drawing: drawing === "demographics" ? "site" : drawing,
                     busy,
                     figureScale,
                     sunStudyDate: sunStudyDateText({ year: solar.year, month: solar.month, day: solar.day }),

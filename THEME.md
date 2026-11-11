@@ -296,6 +296,17 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--walk-ripple-band-1` | `#FF8C00` | Walk ripple: buildings within 5–10 minutes walk. |
 | `--walk-ripple-band-2` | `#E85D04` | Walk ripple: buildings within 10–15 minutes walk. |
 | `--walk-ripple-label-bg` | `#1C1C22` | Walk ripple: floating minute-band label fill. |
+| `--reach-walk-fill` | `#1F9E89` | Demographics Reach: walk isochrone hex fill. |
+| `--reach-walk-muted` | `#B8E6DE` | Demographics Reach: walk hex fallback. |
+| `--reach-transit-fill` | `#7C5CE0` | Demographics Reach: transit-only hex fill. |
+| `--reach-origin-fill` | `#FFF500` | Demographics Reach: origin hex. |
+| `--reach-hex-edge` | `#1A1916` | Demographics Reach: hex outline on the map. |
+| `--reach-panel-bg` | `#FFFFFF` | Demographics Reach: inspector panel background. |
+| `--reach-panel-text` | `#1A1916` | Demographics Reach: inspector primary text. |
+| `--reach-panel-muted` | `#6E685E` | Demographics Reach: inspector secondary text. |
+| `--reach-multiplier-bg` | `#1A1916` | Demographics Reach: transit multiplier card. |
+| `--reach-multiplier-text` | `#FFFCF8` | Demographics Reach: multiplier card body text. |
+| `--reach-multiplier-accent` | `#FFF500` | Demographics Reach: multiplier headline. |
 | `--walk-ripple-label-text` | `#FFFFFF` | Walk ripple: floating minute-band label text. |
 
 The contour lines in Rhino use the pen `--contour-stroke` from `src/drawing-style.css`, not a fill.

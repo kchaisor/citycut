@@ -187,6 +187,17 @@ export const COLOUR_KEYS = [
   "--nsw-zone-w",
   "--nsw-zone-ru",
   "--nsw-zone-other",
+  "--reach-walk-fill",
+  "--reach-walk-muted",
+  "--reach-transit-fill",
+  "--reach-origin-fill",
+  "--reach-hex-edge",
+  "--reach-panel-bg",
+  "--reach-panel-text",
+  "--reach-panel-muted",
+  "--reach-multiplier-bg",
+  "--reach-multiplier-text",
+  "--reach-multiplier-accent",
 ] as const;
 
 export type ColourKey = (typeof COLOUR_KEYS)[number];
@@ -294,6 +305,23 @@ export const COLOUR_GROUPS = [
     id: "plan-shadows",
     title: "Site plan shadows",
     keys: ["--shadow-fill", "--sun-study-sun", "--sun-study-shadow", "--sun-study-block", "--sun-study-green", "--sun-study-water", "--sun-study-road", "--sun-study-path", "--sun-study-path-edge", "--sun-study-building", "--sun-study-tree"],
+  },
+  {
+    id: "reach",
+    title: "Demographics reach",
+    keys: [
+      "--reach-walk-fill",
+      "--reach-walk-muted",
+      "--reach-transit-fill",
+      "--reach-origin-fill",
+      "--reach-hex-edge",
+      "--reach-panel-bg",
+      "--reach-panel-text",
+      "--reach-panel-muted",
+      "--reach-multiplier-bg",
+      "--reach-multiplier-text",
+      "--reach-multiplier-accent",
+    ],
   },
   {
     id: "nsw",
@@ -507,6 +535,17 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--nsw-zone-w": "NSW zone: waterway (W)",
   "--nsw-zone-ru": "NSW zone: rural (RU)",
   "--nsw-zone-other": "NSW zone: other",
+  "--reach-walk-fill": "Reach walk isochrone",
+  "--reach-walk-muted": "Reach walk muted",
+  "--reach-transit-fill": "Reach transit isochrone",
+  "--reach-origin-fill": "Reach origin hex",
+  "--reach-hex-edge": "Reach hex outline",
+  "--reach-panel-bg": "Reach panel background",
+  "--reach-panel-text": "Reach panel text",
+  "--reach-panel-muted": "Reach panel muted text",
+  "--reach-multiplier-bg": "Reach multiplier card",
+  "--reach-multiplier-text": "Reach multiplier text",
+  "--reach-multiplier-accent": "Reach multiplier accent",
 };
 
 const parsed = resolveSheet(parseCustomProperties(coloursCss));

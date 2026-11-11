@@ -1,0 +1,6 @@
+{
+  "source": "Geofabrik Victoria extract (Pyrosm walk network)",
+  "url": "https://download.geofabrik.de/australia-oceania/australia/victoria-latest.osm.pbf",
+  "walkSpeedKmh": 4.8,
+  "edgeCount": 179921
+}
