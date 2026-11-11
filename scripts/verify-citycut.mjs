@@ -1531,19 +1531,32 @@ async function main() {
       null,
       { timeout: 300_000 },
     );
-    await sydneyPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
-    await sydneyPage.getByRole("button", { name: "Site plan" }).click({ timeout: 60_000 });
-    await sydneyPage.waitForSelector("svg.plan", { timeout: 120_000 });
-    const sydneyState = await sydneyPage.evaluate(() => ({
+    const sydneyBuildState = await sydneyPage.evaluate(() => ({
       buildError: document.querySelector(".sidebar-foot-error")?.textContent?.trim() ?? null,
-      hasPlan: Boolean(document.querySelector("svg.plan")),
       has3d: Boolean(document.querySelector(".model canvas")),
     }));
     assertCheck(
       "sydney-harbour-create-model",
       "Sydney Rozelle 1.3 km square (all layers) builds without a footer error and opens the model viewport",
-      !sydneyState.buildError && sydneyState.hasPlan && sydneyState.has3d,
-      `error=${sydneyState.buildError ?? "none"}`,
+      !sydneyBuildState.buildError && sydneyBuildState.has3d,
+      `error=${sydneyBuildState.buildError ?? "none"}, has3d=${sydneyBuildState.has3d}`,
+    );
+    await sydneyPage.screenshot({
+      path: path.join(cursorArtifacts, "sydney-rozelle-3d-model.png"),
+      clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+    });
+    await sydneyPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
+    await sydneyPage.getByRole("button", { name: "Site plan" }).click({ timeout: 60_000 });
+    await sydneyPage.waitForSelector("svg.plan", { timeout: 120_000 });
+    const sydneyPlanState = await sydneyPage.evaluate(() => ({
+      buildError: document.querySelector(".sidebar-foot-error")?.textContent?.trim() ?? null,
+      hasPlan: Boolean(document.querySelector("svg.plan")),
+    }));
+    assertCheck(
+      "sydney-harbour-site-plan",
+      "Sydney Rozelle cut renders a 2D site plan after Create model",
+      !sydneyPlanState.buildError && sydneyPlanState.hasPlan,
+      `error=${sydneyPlanState.buildError ?? "none"}, hasPlan=${sydneyPlanState.hasPlan}`,
     );
     await sydneyPage.screenshot({
       path: path.join(cursorArtifacts, "sydney-rozelle-2d-plan.png"),
@@ -1552,10 +1565,6 @@ async function main() {
     const planSvg = await sydneyPage.$("svg.plan");
     if (planSvg) {
       await planSvg.screenshot({ path: path.join(cursorArtifacts, "sydney-rozelle-2d-plan-crop.png") });
-    }
-    await sydneyPage.screenshot({
-      path: path.join(cursorArtifacts, "sydney-rozelle-3d-model.png"),
-      clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
     });
     await sydneyCtx.close();
   } catch (err) {
