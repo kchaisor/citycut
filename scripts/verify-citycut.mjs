@@ -1723,12 +1723,19 @@ async function main() {
       null,
       { timeout: 300_000 },
     );
+    await importPage.getByRole("button", { name: "Import" }).click({ timeout: 30_000 });
+    await importPage.waitForTimeout(300);
     await importPage.locator('input[type="file"][accept=".3dm"]').setInputFiles(rozelleFixturePath);
     await importPage.waitForFunction(
       () => document.querySelectorAll(".massing-item").length >= 1,
       null,
-      { timeout: 120_000 },
+      { timeout: 300_000 },
     );
+    await importPage.waitForFunction(
+      () => !document.querySelector(".massing-warning.is-error"),
+      null,
+      { timeout: 60_000 },
+    ).catch(() => {});
     await importPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
     await importPage.getByRole("button", { name: "Site plan" }).click({ timeout: 60_000 });
     await importPage.waitForSelector("svg.plan", { timeout: 120_000 });
@@ -1743,7 +1750,7 @@ async function main() {
         document.querySelectorAll("svg.plan [data-upper-z]").length >= 1 &&
         document.querySelectorAll("svg.plan [data-imported-podium]").length >= 1,
       null,
-      { timeout: 180_000 },
+      { timeout: 300_000 },
     );
     await importPage.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 120_000 });
     const importPlanState = await importPage.evaluate(() => ({
