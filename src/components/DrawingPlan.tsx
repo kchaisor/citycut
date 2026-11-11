@@ -676,16 +676,16 @@ export function DrawingPlan({
               ))}
             {!studyIsolateCasters &&
               studyShadowRasters.map((layer) => (
-                <image
-                  key={`ssr${layer.hour}`}
-                  data-shadow-hour={layer.hour}
-                  href={layer.href}
-                  x={layer.east}
-                  y={-(layer.north + layer.heightM)}
-                  width={layer.widthM}
-                  height={layer.heightM}
-                  preserveAspectRatio="none"
-                />
+                <g key={`ssr${layer.hour}`} data-shadow-hour={layer.hour}>
+                  <image
+                    href={layer.href}
+                    x={layer.east}
+                    y={-(layer.north + layer.heightM)}
+                    width={layer.widthM}
+                    height={layer.heightM}
+                    preserveAspectRatio="none"
+                  />
+                </g>
               ))}
             {shadowSplit.existing.map((rings, index) => (
               <path

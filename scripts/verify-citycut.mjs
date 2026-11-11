@@ -1929,14 +1929,20 @@ async function main() {
 
     const beforeSelectInfo = await page.evaluate(() => {
       const envText = document.querySelector(".model .env-console")?.textContent ?? "";
-      const shadowPathEls = Array.from(
-        document.querySelectorAll("svg.plan [data-shadow-hour] path, svg.plan [data-shadow-hour] image"),
-      );
-      const shadowPaths = shadowPathEls.length;
-      const shadowDLength = shadowPathEls.reduce(
-        (acc, p) => acc + (p.getAttribute("d")?.length ?? p.getAttribute("href")?.length ?? 0),
-        0,
-      );
+      const shadowInkLength = () => {
+        let total = 0;
+        for (const layer of document.querySelectorAll("svg.plan [data-shadow-hour]")) {
+          for (const path of layer.querySelectorAll("path")) {
+            total += path.getAttribute("d")?.length ?? 0;
+          }
+          for (const image of layer.querySelectorAll("image")) {
+            total += image.getAttribute("href")?.length ?? 0;
+          }
+        }
+        return total;
+      };
+      const shadowPaths = document.querySelectorAll("svg.plan [data-shadow-hour] path, svg.plan [data-shadow-hour] image").length;
+      const shadowDLength = shadowInkLength();
       const svg = document.querySelector("svg.plan");
       const svgRect = svg.getBoundingClientRect();
       const cx = svgRect.left + svgRect.width / 2;
@@ -1983,16 +1989,22 @@ async function main() {
 
     const afterSelectInfo = await page.evaluate(() => {
       const selectedEls = document.querySelectorAll("svg.plan [data-selected-building]");
-      const shadowPathEls = Array.from(
-        document.querySelectorAll("svg.plan [data-shadow-hour] path, svg.plan [data-shadow-hour] image"),
-      );
-      const shadowPaths = shadowPathEls.length;
-      const shadowDLength = shadowPathEls.reduce(
-        (acc, p) => acc + (p.getAttribute("d")?.length ?? p.getAttribute("href")?.length ?? 0),
-        0,
-      );
+      const shadowInkLength = () => {
+        let total = 0;
+        for (const layer of document.querySelectorAll("svg.plan [data-shadow-hour]")) {
+          for (const path of layer.querySelectorAll("path")) {
+            total += path.getAttribute("d")?.length ?? 0;
+          }
+          for (const image of layer.querySelectorAll("image")) {
+            total += image.getAttribute("href")?.length ?? 0;
+          }
+        }
+        return total;
+      };
+      const shadowPaths = document.querySelectorAll("svg.plan [data-shadow-hour] path, svg.plan [data-shadow-hour] image").length;
+      const shadowDLength = shadowInkLength();
       const nonEmptyLayers = Array.from(document.querySelectorAll("svg.plan [data-shadow-hour]")).filter(
-        (g) => g.querySelectorAll("path, image").length > 0,
+        (layer) => layer.querySelectorAll("path, image").length > 0,
       ).length;
       return {
         selectedCount: selectedEls.length,
