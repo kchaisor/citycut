@@ -108,6 +108,23 @@ export function sheetFitMessage(sideM: number, scale: number): string | null {
   return `This ${Math.round(sideM)} m frame is ${num(layout.frameMm)} mm square at 1:${scale} and does not fit on A3 (297 × 420 mm). The download stays at true scale, on a ${num(layout.pageWidthMm)} × ${num(layout.pageHeightMm)} mm sheet.`;
 }
 
+export function sheetFitMessageForModel(
+  model: Pick<CityModel, "sideM" | "widthM" | "heightM" | "frameShape" | "cutOrientation">,
+  scale: number,
+): string | null {
+  const layout = layoutForModel(model, scale);
+  if (layout.fitsOnA3) return null;
+  if (model.frameShape === "a3") {
+    const widthM = model.widthM ?? model.sideM;
+    const heightM = model.heightM ?? model.sideM;
+    const fw = layout.frameWidthMm ?? paperMillimetres(widthM, scale);
+    const fh = layout.frameHeightMm ?? paperMillimetres(heightM, scale);
+    const page = pageSize(model.cutOrientation ?? "landscape");
+    return `This A3 cut is ${Math.round(widthM).toLocaleString()} × ${Math.round(heightM).toLocaleString()} m at 1:${scale} (${num(fw)} × ${num(fh)} mm on paper). That is larger than an A3 sheet (${page.height} × ${page.width} mm). The download stays at true scale, on a ${num(layout.pageWidthMm)} × ${num(layout.pageHeightMm)} mm sheet.`;
+  }
+  return sheetFitMessage(model.sideM, scale);
+}
+
 export function preferredFigureScale(sideM: number): FigureScale {
   for (const scale of FIGURE_SCALES) {
     if (layoutSheet(sideM, scale).fitsOnA3) return scale;
@@ -184,6 +201,25 @@ export function layoutA3CutSheet(
   const frameWidthMm = paperMillimetres(widthM, scale);
   const frameHeightMm = paperMillimetres(heightM, scale);
   const page = pageSize(orientation);
+  const fitsOnA3 = frameWidthMm <= page.width + 1e-6 && frameHeightMm <= page.height + 1e-6;
+  let pageWidthMm = page.width;
+  let pageHeightMm = page.height;
+  let frameX = 0;
+  let frameY = 0;
+  if (!fitsOnA3) {
+    pageWidthMm = frameWidthMm + SHEET_EDGE_MM * 2;
+    pageHeightMm = frameHeightMm + SHEET_EDGE_MM + SHEET_BAND_MM;
+    frameX = SHEET_EDGE_MM;
+    frameY = SHEET_EDGE_MM;
+  } else if (
+    Math.abs(frameWidthMm - page.width) > 1e-3 ||
+    Math.abs(frameHeightMm - page.height) > 1e-3
+  ) {
+    const availW = page.width - SHEET_EDGE_MM * 2;
+    const availH = page.height - SHEET_EDGE_MM - SHEET_BAND_MM;
+    frameX = SHEET_EDGE_MM + (availW - frameWidthMm) / 2;
+    frameY = SHEET_EDGE_MM + (availH - frameHeightMm) / 2;
+  }
   const barMetres = scaleBarMetres(Math.max(widthM, heightM), scale);
   const barMm = paperMillimetres(barMetres, scale);
   const layout: SheetLayout = {
@@ -194,30 +230,34 @@ export function layoutA3CutSheet(
     frameHeightMm,
     widthM,
     heightM,
-    fitsOnA3: true,
+    fitsOnA3,
     orientation,
-    pageWidthMm: page.width,
-    pageHeightMm: page.height,
-    frameX: SHEET_EDGE_MM,
-    frameY: SHEET_EDGE_MM,
+    pageWidthMm,
+    pageHeightMm,
+    frameX,
+    frameY,
     edgeMm: SHEET_EDGE_MM,
     bandMm: SHEET_BAND_MM,
     barMetres,
     barMm,
     barX: SHEET_EDGE_MM,
-    barY: page.height - 15.2,
+    barY: pageHeightMm - 15.2,
     barHeightMm: 2.2,
     northX: SHEET_EDGE_MM + barMm + 16,
-    northTipY: page.height - 15.8,
-    northBaseY: page.height - 11.2,
-    titleY: page.height - 7.6,
-    creditY: page.height - 3.5,
+    northTipY: pageHeightMm - 15.8,
+    northBaseY: pageHeightMm - 11.2,
+    titleY: pageHeightMm - 7.6,
+    creditY: pageHeightMm - 3.5,
     note: null,
   };
+  layout.note = sheetFitNote(layout);
   return layout;
 }
 
-export function layoutForModel(model: Pick<CityModel, "sideM" | "widthM" | "heightM" | "frameShape" | "cutScale" | "cutOrientation">, scale: number): SheetLayout {
+export function layoutForModel(
+  model: Pick<CityModel, "sideM" | "widthM" | "heightM" | "frameShape" | "cutOrientation">,
+  scale: number,
+): SheetLayout {
   if (model.frameShape === "a3") {
     const widthM = model.widthM ?? model.sideM;
     const heightM = model.heightM ?? model.sideM;

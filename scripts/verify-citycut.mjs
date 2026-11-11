@@ -243,12 +243,51 @@ async function main() {
       if (!Number.isFinite(w) || !Number.isFinite(h) || h === 0) return null;
       return w / h;
     });
+    const drawingChrome = await page.evaluate(() => ({
+      fitNote: document.querySelector(".fit-note")?.textContent?.trim() ?? "",
+      planScale: document.querySelector(".studio-scale-row select")?.value ?? "",
+    }));
+    assertCheck(
+      "a3-drawing-fit-note",
+      "An A3 cut at its 1:2500 plan scale shows no 'does not fit on A3' warning",
+      !/does not fit on A3/i.test(drawingChrome.fitNote) && drawingChrome.planScale === "2500",
+      `fitNote="${drawingChrome.fitNote}", planScale=${drawingChrome.planScale}`,
+    );
+    const [a3AiDownload] = await Promise.all([
+      page.waitForEvent("download", { timeout: 120_000 }),
+      page.getByRole("button", { name: "Quick export Adobe Illustrator .ai" }).click({ timeout: 30_000 }),
+    ]);
+    const a3AiPath = path.join(cursorArtifacts, "a3-cut-site-plan.ai");
+    await a3AiDownload.saveAs(a3AiPath);
+    const a3AiText = fs.readFileSync(a3AiPath, "latin1");
+    const media = a3AiText.match(/\/MediaBox\s*\[\s*0(?:\s+0)?\s+([\d.]+)\s+([\d.]+)\s*\]/);
+    const pageWidthMm = media ? (Number(media[1]) * 25.4) / 72 : 0;
+    const pageHeightMm = media ? (Number(media[2]) * 25.4) / 72 : 0;
+    const [a3SvgDownload] = await Promise.all([
+      page.waitForEvent("download", { timeout: 120_000 }),
+      page.getByRole("button", { name: "Quick export SVG" }).click({ timeout: 30_000 }),
+    ]);
+    const a3SvgPath = path.join(cursorArtifacts, "a3-cut-site-plan.svg");
+    await a3SvgDownload.saveAs(a3SvgPath);
+    const a3SvgText = fs.readFileSync(a3SvgPath, "utf8");
+    const svgWidthMm = Number((a3SvgText.match(/width="([\d.]+)mm"/) ?? [])[1] ?? 0);
+    const svgHeightMm = Number((a3SvgText.match(/height="([\d.]+)mm"/) ?? [])[1] ?? 0);
     await page.screenshot({ path: path.join(cursorArtifacts, "a3-drawing-view.png"), fullPage: false });
     assertCheck(
       "a3-drawing-aspect",
       "Drawing view for an A3 1:2500 landscape cut keeps the cut rectangle aspect on the plan canvas",
       drawingAspect != null && Math.abs(drawingAspect - a3AspectExpected) < 0.02,
       `planAspect=${drawingAspect?.toFixed(4) ?? "null"}`,
+    );
+    assertCheck(
+      "a3-export-sheet-size",
+      "A3 1:2500 .ai and .svg exports use a 420 × 297 mm page with no 'does not fit' note in the PDF",
+      Math.abs(pageWidthMm - 420) <= 1 &&
+        Math.abs(pageHeightMm - 297) <= 1 &&
+        Math.abs(svgWidthMm - 420) <= 1 &&
+        Math.abs(svgHeightMm - 297) <= 1 &&
+        !/does not fit on A3/i.test(a3AiText),
+      `ai=${pageWidthMm.toFixed(1)}×${pageHeightMm.toFixed(1)} mm svg=${svgWidthMm.toFixed(1)}×${svgHeightMm.toFixed(1)} mm`,
     );
     await page.goto(`${baseUrl}/citycut/`, { waitUntil: "networkidle", timeout: 60_000 });
     await page.waitForSelector(".select .frame", { timeout: 20_000 });
