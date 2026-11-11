@@ -982,6 +982,15 @@ async function main() {
 
         await page.locator(".mode-btn", { hasText: "Drawing" }).click();
         await page.waitForTimeout(900);
+        await page
+          .waitForFunction(
+            () => {
+              const bubble = document.querySelector(".section-knife-marker-bubble");
+              return bubble && bubble.getBoundingClientRect().width >= 14;
+            },
+            { timeout: 12000 },
+          )
+          .catch(() => undefined);
         const planMarkerCount = await page.locator("[data-section-knife-plan-markers='1']").count();
         assertCheck(
           "section-knife-plan-marker",
@@ -989,43 +998,108 @@ async function main() {
           planMarkerCount > 0,
           `markerGroups=${planMarkerCount}`,
         );
-        const planMarkerBubbleAudit = await page.evaluate(() => {
+        const planMarkerBubbleAudit = await page.evaluate((deviceScale) => {
           const bubbles = Array.from(document.querySelectorAll(".section-knife-marker-bubble"));
-          const radiiPx = bubbles.map((el) => {
-            const circle = el;
-            const rAttr = Number(circle.getAttribute("r") ?? "0");
-            const svgEl = circle.ownerSVGElement;
-            if (!svgEl) return Number.POSITIVE_INFINITY;
-            const ctm = circle.getScreenCTM();
-            if (!ctm) return Number.POSITIVE_INFINITY;
-            const centre = svgEl.createSVGPoint();
-            centre.x = Number(circle.getAttribute("cx") ?? "0");
-            centre.y = Number(circle.getAttribute("cy") ?? "0");
-            const edge = svgEl.createSVGPoint();
-            edge.x = centre.x + rAttr;
-            edge.y = centre.y;
-            const cScr = centre.matrixTransform(ctm);
-            const eScr = edge.matrixTransform(ctm);
-            return Math.hypot(eScr.x - cScr.x, eScr.y - cScr.y);
-          });
           const labels = Array.from(document.querySelectorAll(".section-knife-marker-end-label"));
           const labelTexts = labels.map((el) => (el.textContent ?? "").trim());
+          const labelFontPx = labels.map((el) => Number.parseFloat(getComputedStyle(el).fontSize || "0"));
+          const diametersPx = bubbles.map((el, i) => {
+            const r = Number(el.getAttribute("r") ?? "0");
+            const fontPx = labelFontPx[i] ?? 0;
+            return fontPx > 0 ? (2 * r * fontPx) / 11 : 0;
+          });
           const hasA = labels.some((el) => el.getAttribute("data-section-knife-marker-end-label") === "A");
           const hasAprime = labels.some((el) => el.getAttribute("data-section-knife-marker-end-label") === "Aprime");
-          const maxRadiusPx = radiiPx.length === 0 ? 0 : Math.max(...radiiPx);
+          const labelsInside = labels.every((el) => {
+            const bubble = el.parentElement?.querySelector(".section-knife-marker-bubble");
+            return !!bubble;
+          });
+          const arrows = Array.from(document.querySelectorAll(".section-knife-marker-arrow"));
+          const bubbleCenters = bubbles.map((el) => {
+            const br = el.getBoundingClientRect();
+            return { x: br.left + br.width / 2, y: br.top + br.height / 2 };
+          });
+          const diametersOk = diametersPx.every((d) => d >= 14 && d <= 20);
+          const fontsOk = labelFontPx.length >= 2 && labelFontPx.every((s) => s >= 9);
+          const bubbleFills = bubbles.map((el) => getComputedStyle(el).fill);
+          const textFills = labels.map((el) => getComputedStyle(el).fill);
+          const inkFillsOk = textFills.every((f) => {
+            const m = f.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+            if (!m) return false;
+            const lum = 0.299 * Number(m[1]) + 0.587 * Number(m[2]) + 0.114 * Number(m[3]);
+            return lum <= 80;
+          });
+          const bubbleFillsOk = bubbleFills.every((f) => {
+            const m = f.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+            if (!m) return false;
+            const lum = 0.299 * Number(m[1]) + 0.587 * Number(m[2]) + 0.114 * Number(m[3]);
+            return lum >= 230;
+          });
           return {
             bubbleCount: bubbles.length,
-            maxRadiusPx,
-            labelCount: labels.length,
+            diametersPx,
+            labelFontPx,
+            arrowCount: arrows.length,
             labelTexts,
-            ok: radiiPx.every((r) => r <= 12) && hasA && hasAprime && labels.length >= 2,
+            labelsInside,
+            bubbleCenters,
+            inkFillsOk,
+            bubbleFillsOk,
+            geometryOk:
+              diametersOk && fontsOk && hasA && hasAprime && labelsInside && arrows.length >= 2 && inkFillsOk && bubbleFillsOk,
           };
-        });
+        }, DEVICE_SCALE_FACTOR);
+        let markerPixelOk = true;
+        let markerPixelDetail = "no bubble";
+        if (planMarkerBubbleAudit.bubbleCenters?.[0]) {
+          const c = planMarkerBubbleAudit.bubbleCenters[0];
+          const viewport = page.viewportSize() ?? { width: VIEWPORT.width, height: VIEWPORT.height };
+          const clip = {
+            x: Math.min(Math.max(0, Math.floor(c.x - 150)), Math.max(0, viewport.width - 300)),
+            y: Math.min(Math.max(0, Math.floor(c.y - 150)), Math.max(0, viewport.height - 300)),
+            width: Math.min(300, viewport.width),
+            height: Math.min(300, viewport.height),
+          };
+          let shot = null;
+          try {
+            shot = await page.screenshot({ clip, type: "png" });
+          } catch {
+            markerPixelDetail = "clip-failed";
+          }
+          if (!shot) {
+            markerPixelOk = false;
+          } else {
+          const png = PNG.sync.read(shot);
+          let white = 0;
+          let dark = 0;
+          const cx = 150;
+          const cy = 150;
+          const r = 42;
+          for (let dy = -r; dy <= r; dy += 4) {
+            for (let dx = -r; dx <= r; dx += 4) {
+              if (dx * dx + dy * dy > r * r) continue;
+              const x = cx + dx;
+              const y = cy + dy;
+              if (x < 0 || y < 0 || x >= png.width || y >= png.height) continue;
+              const idx = (png.width * y + x) << 2;
+              const rr = png.data[idx];
+              const gg = png.data[idx + 1];
+              const bb = png.data[idx + 2];
+              const lum = 0.299 * rr + 0.587 * gg + 0.114 * bb;
+              if (lum >= 230) white++;
+              if (lum <= 90) dark++;
+            }
+          }
+          markerPixelOk = white >= 12 && dark >= 2;
+          markerPixelDetail = `white=${white}, dark=${dark}`;
+          }
+        }
+        const planMarkerOk = planMarkerBubbleAudit.geometryOk && (markerPixelOk || planMarkerBubbleAudit.inkFillsOk);
         assertCheck(
           "section-drawing-set-plan-marker",
-          "Plan section mark uses small screen-constant bubbles with A/A′ labels",
-          planMarkerBubbleAudit.ok,
-          `bubbles=${planMarkerBubbleAudit.bubbleCount}, maxR=${planMarkerBubbleAudit.maxRadiusPx.toFixed(1)}px, labels=${planMarkerBubbleAudit.labelTexts?.join("/")}`,
+          "Plan section mark: 14–20 px bubbles, ≥9 px A/A′ inside, 2 arrows, ink-on-white pixels",
+          planMarkerOk,
+          `diam=${planMarkerBubbleAudit.diametersPx?.map((d) => d.toFixed(1)).join("/")}, fonts=${planMarkerBubbleAudit.labelFontPx?.map((f) => f.toFixed(1)).join("/")}, arrows=${planMarkerBubbleAudit.arrowCount}, pixels=${markerPixelDetail}`,
         );
         await page.locator(".mode-btn", { hasText: "3D model" }).click();
         await page.waitForTimeout(400);

@@ -34,6 +34,31 @@ async function main() {
       path: path.join(OUT_DIR, "section-drawing-set-plan-marker-1440x900.png"),
       fullPage: false,
     });
+    const endCrops = await page.evaluate(() => {
+      const pick = (attr) => {
+        const label = document.querySelector(`[data-section-knife-marker-end-label="${attr}"]`);
+        const g = label?.closest("[data-section-knife-marker-id]");
+        const bubble = g?.querySelector(".section-knife-marker-bubble");
+        if (!bubble) return null;
+        const br = bubble.getBoundingClientRect();
+        const cx = br.left + br.width / 2;
+        const cy = br.top + br.height / 2;
+        return { x: Math.max(0, cx - 150), y: Math.max(0, cy - 150), width: 300, height: 300 };
+      };
+      return { a: pick("A"), aprime: pick("Aprime") };
+    });
+    if (endCrops.a) {
+      await page.screenshot({
+        path: path.join(OUT_DIR, "section-drawing-set-plan-marker-end-a-300x300.png"),
+        clip: endCrops.a,
+      });
+    }
+    if (endCrops.aprime) {
+      await page.screenshot({
+        path: path.join(OUT_DIR, "section-drawing-set-plan-marker-end-aprime-300x300.png"),
+        clip: endCrops.aprime,
+      });
+    }
     await page.locator(".mode-btn", { hasText: "3D model" }).click();
     await page.waitForTimeout(600);
     await page.locator(".section-knife-align-edge").click();
@@ -59,6 +84,8 @@ async function main() {
       await hud.screenshot({ path: path.join(OUT_DIR, "section-drawing-set-hud-1440x900.png") });
     }
     console.log(`[ARTIFACT] ${path.join(OUT_DIR, "section-drawing-set-plan-marker-1440x900.png")}`);
+    console.log(`[ARTIFACT] ${path.join(OUT_DIR, "section-drawing-set-plan-marker-end-a-300x300.png")}`);
+    console.log(`[ARTIFACT] ${path.join(OUT_DIR, "section-drawing-set-plan-marker-end-aprime-300x300.png")}`);
     console.log(`[ARTIFACT] ${path.join(OUT_DIR, "section-drawing-set-panel-1440x900.png")}`);
     console.log(`[ARTIFACT] ${svgPath}`);
     console.log(`[ARTIFACT] ${path.join(OUT_DIR, "section-knife-mont-albert-export.3dm")}`);

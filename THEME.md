@@ -296,6 +296,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--section-knife-elevation-beyond` | `#D9D5CD` | Section Knife: beyond-cut building elevation in the section panel. |
 | `--section-knife-elevation-grid` | `#1A1916` | Section Knife: grid and axis ink in the section panel. |
 | `--section-knife-marker-gold` | `#E1B157` | Section Knife: knife marker accent (JT gold). |
+| `--section-knife-plan-marker-ink` | `#1a1a1a` | Section Knife: plan section mark ink (bubbles, dash, arrows). |
 
 The contour lines in Rhino use the pen `--contour-stroke` from `src/drawing-style.css`, not a fill.
 

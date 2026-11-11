@@ -1,7 +1,8 @@
+import type { Pt } from "../../types";
 import type { CityModel } from "../../types";
+import { clipPolylineSiteFrame, DEFAULT_SITE_FRAME_SHAPE } from "../siteFrame";
 import { knifeNormalXZ, type SectionKnifePose } from "./plane";
 import { sectionAxis } from "./profiles";
-
 export type SectionPlanMarkerGeometry = {
   east0: number;
   north0: number;
@@ -11,6 +12,13 @@ export type SectionPlanMarkerGeometry = {
   viewNorth: number;
   tangentEast: number;
   tangentNorth: number;
+};
+
+export type SectionPlanMarkerClip = {
+  east0: number;
+  north0: number;
+  east1: number;
+  north1: number;
 };
 
 function sceneToEn(x: number, z: number): { east: number; north: number } {
@@ -45,6 +53,25 @@ export function sectionPlanMarkerGeometry(model: CityModel, pose: SectionKnifePo
     tangentEast: tangent.east / tlen,
     tangentNorth: tangent.north / tlen,
   };
+}
+
+export function sectionPlanMarkerClip(model: CityModel, geom: SectionPlanMarkerGeometry): SectionPlanMarkerClip {
+  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
+  const midE = (geom.east0 + geom.east1) * 0.5;
+  const midN = (geom.north0 + geom.north1) * 0.5;
+  const ext = model.sideM * 2;
+  const line: Pt[] = [
+    [midE - geom.tangentEast * ext, midN - geom.tangentNorth * ext],
+    [midE + geom.tangentEast * ext, midN + geom.tangentNorth * ext],
+  ];
+  const parts = clipPolylineSiteFrame(line, model.sideM, shape);
+  if (!parts[0] || parts[0].length < 2) {
+    return { east0: geom.east0, north0: geom.north0, east1: geom.east1, north1: geom.north1 };
+  }
+  const part = parts[0];
+  const a = part[0]!;
+  const b = part[part.length - 1]!;
+  return { east0: a[0], north0: a[1], east1: b[0], north1: b[1] };
 }
 
 export function sectionKnifeKeepSidePositive(pose: SectionKnifePose, east: number, north: number): boolean {
