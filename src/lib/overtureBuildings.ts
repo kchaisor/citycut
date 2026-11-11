@@ -2,7 +2,8 @@
 import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 import { PMTiles } from "pmtiles";
-import polygonClipping from "polygon-clipping";
+import type { MultiPolygon } from "./safePolygonClip";
+import { clipUnion } from "./safePolygonClip";
 import { classify } from "./buildingUse";
 import { intersectionAreaM2 } from "./comBuildingHeightsMatch";
 import { clipAreaToSiteFrame, DEFAULT_SITE_FRAME_SHAPE, type SiteFrameShape } from "./siteFrame";
@@ -142,7 +143,7 @@ function fragmentsFromTile(
   return out;
 }
 
-type MultiPoly = polygonClipping.MultiPolygon;
+type MultiPoly = MultiPolygon;
 
 function asMultiPoly(ring: Ring, holes: Ring[]): MultiPoly {
   const outer = openRing(ring).map((point) => [point[0], point[1]] as [number, number]);
@@ -196,7 +197,11 @@ export function reassembleBuildingFragments(fragments: Fragment[]): Fragment[] {
     let microsoft = parts.some((part) => part.microsoft);
     const osmWayIds = [...new Set(parts.flatMap((part) => part.osmWayIds))];
     for (const part of parts) {
-      union = polygonClipping.union(union, asMultiPoly(part.ring, part.holes)) as MultiPoly;
+      union = clipUnion(union, asMultiPoly(part.ring, part.holes), {
+        layer: "Overture building",
+        operation: "union",
+        featureId: id,
+      }) as MultiPoly;
       if (part.microsoft) microsoft = true;
     }
     const rings = ringFromMulti(union, SLIVER_AREA_M2);

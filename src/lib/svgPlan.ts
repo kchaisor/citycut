@@ -4,7 +4,7 @@ import { isSiteBuilding } from "./siteBuildings";
 import { clipAreaToSiteFrame, clipPolylineSiteFrame, pointInSiteFrame, DEFAULT_SITE_FRAME_SHAPE } from "./siteFrame";
 import { openRing } from "./geo";
 import { PATH_WIDTH_M } from "./lineweights";
-import type { MultiPolygon } from "polygon-clipping";
+import type { MultiPolygon } from "./safePolygonClip";
 import {
   DEFAULT_PATH_FILLET_M,
   footpathStrips,
@@ -14,7 +14,7 @@ import {
   unionFootpathStrips,
   unionRoadSurface,
 } from "./roadFill";
-import * as polygonClipping from "polygon-clipping";
+import { clipDifference } from "./safePolygonClip";
 import { fillRoadMedianGaps } from "./roadMedianFill";
 import { carParkWays } from "./planCarParks";
 import {
@@ -26,11 +26,6 @@ import {
   drawnContourInterval,
 } from "./vicmapContours";
 import type { CityModel, Pt } from "../types";
-
-type ClipDifference = (geom: MultiPolygon, ...more: MultiPolygon[]) => MultiPolygon;
-const clipModule = polygonClipping as unknown as { difference?: ClipDifference; default?: { difference: ClipDifference } };
-const clipDifference: ClipDifference =
-  typeof clipModule.difference === "function" ? clipModule.difference : clipModule.default!.difference;
 
 const round = (value: number) => Math.round(value * 10) / 10;
 

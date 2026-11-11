@@ -1,5 +1,5 @@
 import type { Pt, RoadFeat } from "../types";
-import type { MultiPolygon, Polygon } from "polygon-clipping";
+import type { MultiPolygon, Polygon } from "./safePolygonClip";
 
 export function mixGeometryHash(hash: number, value: number): number {
   return Math.imul(hash ^ value, 16777619) >>> 0;

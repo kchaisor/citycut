@@ -1,5 +1,5 @@
-import * as polygonClipping from "polygon-clipping";
-import type { MultiPolygon, Polygon } from "polygon-clipping";
+import type { Polygon } from "./safePolygonClip";
+import { cleanRingForFrame, clipIntersection } from "./safePolygonClip";
 import { clipPolygon, clipPolyline } from "./clip";
 import type { Pt, Ring } from "../types";
 
@@ -8,19 +8,6 @@ export type SiteFrameShape = "square" | "circle";
 export const DEFAULT_SITE_FRAME_SHAPE: SiteFrameShape = "square";
 
 export const SITE_FRAME_CIRCLE_SEGMENTS = 128;
-
-type ClipFns = {
-  intersection: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
-};
-
-function clippingFns(): ClipFns {
-  const loaded = polygonClipping as unknown as ClipFns & { default?: ClipFns };
-  if (typeof loaded.intersection === "function") return loaded;
-  if (loaded.default && typeof loaded.default.intersection === "function") return loaded.default;
-  throw new Error("polygon-clipping did not load.");
-}
-
-const { intersection } = clippingFns();
 
 export function readSiteFrameShape(raw: string | null): SiteFrameShape {
   const value = raw?.trim().toLowerCase();
@@ -82,15 +69,18 @@ export function clipAreaToSiteFrame(
   shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
 ): Pt[][] | null {
   const half = siteFrameHalf(sideM);
-  const clippedOuter = clipPolygon(outer, -half, half);
+  const clippedOuter = clipPolygon(cleanRingForFrame(outer), -half, half);
   if (clippedOuter.length < 3) return null;
   const clippedHoles = holes
-    .map((hole) => clipPolygon(hole, -half, half))
+    .map((hole) => clipPolygon(cleanRingForFrame(hole), -half, half))
     .filter((hole) => hole.length >= 3);
   if (shape === "square") return [clippedOuter, ...clippedHoles];
   const subject: Polygon = [closeForClip(clippedOuter), ...clippedHoles.map((hole) => closeForClip(hole))];
   try {
-    const result = intersection(subject, frameClipPolygon(sideM, "circle"));
+    const result = clipIntersection(subject, frameClipPolygon(sideM, "circle"), {
+      layer: "site frame",
+      operation: "intersection",
+    });
     if (result.length === 0 || result[0]!.length === 0) return null;
     const polygon = result[0]!;
     const rings = polygon

@@ -1,6 +1,6 @@
 import { terrainMeshHeight } from "./terrainDrape";
-import * as polygonClipping from "polygon-clipping";
-import type { MultiPolygon, Polygon } from "polygon-clipping";
+import type { MultiPolygon } from "./safePolygonClip";
+import { clipIntersection as clipIntersectionSafe } from "./safePolygonClip";
 import { COLOUR_FALLBACK, getColour } from "./colours";
 import { fromLocal, squareBBox } from "./geo";
 import { siteFramePolygon, type SiteFrameShape } from "./siteFrame";
@@ -520,18 +520,6 @@ function shadeHeight(t: number, darken: number): [number, number, number] {
 
 type TerrainTri = [Pt, Pt, Pt];
 
-type ClipFns = {
-  intersection: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
-};
-
-function terrainClipFns(): ClipFns {
-  const loaded = polygonClipping as unknown as ClipFns & { default?: ClipFns };
-  if (typeof loaded.intersection === "function") return loaded;
-  if (loaded.default && typeof loaded.default.intersection === "function") return loaded.default;
-  throw new Error("polygon-clipping did not load.");
-}
-
-const { intersection: clipIntersection } = terrainClipFns();
 
 function barycentric(p: Pt, a: Pt, b: Pt, c: Pt): [number, number, number] | null {
   const denom = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
@@ -556,7 +544,7 @@ function clipTriangleToCircle(tri: TerrainTri, sideM: number): Pt[][] {
   const frame = siteFramePolygon(sideM, "circle");
   let result: MultiPolygon;
   try {
-    result = clipIntersection([closeTriangleRing(tri)], frame);
+    result = clipIntersectionSafe([closeTriangleRing(tri)], frame, { layer: "terrain", operation: "intersection" });
   } catch {
     return [];
   }

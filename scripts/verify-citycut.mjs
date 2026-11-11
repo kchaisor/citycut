@@ -1506,6 +1506,58 @@ async function main() {
       console.log(`[ARTIFACT] Video saved to ${mp4Out}`);
       console.log(`[ARTIFACT] Contact sheet saved to ${contactSheetOut}`);
     }
+    const cursorArtifacts = "/opt/cursor/artifacts";
+    fs.mkdirSync(cursorArtifacts, { recursive: true });
+  const sydneyCtx = await browser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: 1,
+      reducedMotion: "reduce",
+    });
+    await sydneyCtx.addInitScript(() => {
+      window.__citycutMinSilentLoadMs = 0;
+    });
+    const sydneyPage = await sydneyCtx.newPage();
+    const sydneyQuery =
+      "qa=1&lat=-33.86727&lon=151.18147&km=1.3&siteLat=-33.8572&siteLon=151.21512";
+    await sydneyPage.goto(`${baseUrl}/?${sydneyQuery}`, { waitUntil: "domcontentloaded", timeout: 120_000 });
+    await sydneyPage.waitForSelector("button.create-fab", { timeout: 30_000 });
+    await sydneyPage.click("button.create-fab");
+    await sydneyPage.waitForFunction(
+      () => {
+        const err = document.querySelector(".sidebar-foot-error")?.textContent?.trim();
+        if (err) return true;
+        return Boolean(document.querySelector(".model canvas"));
+      },
+      null,
+      { timeout: 300_000 },
+    );
+    await sydneyPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
+    await sydneyPage.getByRole("button", { name: "Site plan" }).click({ timeout: 60_000 });
+    await sydneyPage.waitForSelector("svg.plan", { timeout: 120_000 });
+    const sydneyState = await sydneyPage.evaluate(() => ({
+      buildError: document.querySelector(".sidebar-foot-error")?.textContent?.trim() ?? null,
+      hasPlan: Boolean(document.querySelector("svg.plan")),
+      has3d: Boolean(document.querySelector(".model canvas")),
+    }));
+    assertCheck(
+      "sydney-harbour-create-model",
+      "Sydney Rozelle 1.3 km square (all layers) builds without a footer error and opens the model viewport",
+      !sydneyState.buildError && sydneyState.hasPlan && sydneyState.has3d,
+      `error=${sydneyState.buildError ?? "none"}`,
+    );
+    await sydneyPage.screenshot({
+      path: path.join(cursorArtifacts, "sydney-rozelle-2d-plan.png"),
+      fullPage: false,
+    });
+    const planSvg = await sydneyPage.$("svg.plan");
+    if (planSvg) {
+      await planSvg.screenshot({ path: path.join(cursorArtifacts, "sydney-rozelle-2d-plan-crop.png") });
+    }
+    await sydneyPage.screenshot({
+      path: path.join(cursorArtifacts, "sydney-rozelle-3d-model.png"),
+      clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+    });
+    await sydneyCtx.close();
   } catch (err) {
     console.error("Fatal error in verify-citycut:", err);
     process.exitCode = 1;

@@ -1,19 +1,5 @@
-import * as polygonClipping from "polygon-clipping";
-import type { MultiPolygon, Pair, Polygon, Ring } from "polygon-clipping";
-
-type ClipFns = {
-  union: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
-  intersection: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
-};
-
-function clippingFns(): ClipFns {
-  const loaded = polygonClipping as unknown as ClipFns & { default?: ClipFns };
-  if (typeof loaded.union === "function") return loaded;
-  if (loaded.default && typeof loaded.default.union === "function") return loaded.default;
-  throw new Error("polygon-clipping did not load.");
-}
-
-const { union, intersection } = clippingFns();
+import type { MultiPolygon, Pair, Polygon, Ring } from "./safePolygonClip";
+import { clipIntersection as intersection, clipUnion as union } from "./safePolygonClip";
 import { signedArea } from "./geo";
 import { DEFAULT_SITE_FRAME_SHAPE, siteFramePolygon, type SiteFrameShape } from "./siteFrame";
 import type { BuildingFeat, CityModel, Pt } from "../types";

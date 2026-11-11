@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { MultiPolygon } from "polygon-clipping";
+import type { MultiPolygon } from "./safePolygonClip";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { BUILDING_EDGE_COLOR, BUILDING_EDGE_THRESHOLD_DEG } from "./buildingEdges";
 import { BUILDING_USE_META, SOURCE_META, buildingLayerName, uniformBuildingColor } from "./buildingUse";

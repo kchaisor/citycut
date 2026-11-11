@@ -1,16 +1,9 @@
-import * as polygonClipping from "polygon-clipping";
-import type { MultiPolygon, Polygon } from "polygon-clipping";
+import type { MultiPolygon, Polygon } from "./safePolygonClip";
+import { clipUnion as unionFnLoaded } from "./safePolygonClip";
 import { placedLocal, type ImportedMassing } from "./massingImport";
 import type { BuildingFeat, LonLat, Pt } from "../types";
 
-type UnionFn = (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
-
-function unionFn(): UnionFn {
-  const loaded = polygonClipping as unknown as { union?: UnionFn; default?: { union?: UnionFn } };
-  if (typeof loaded.union === "function") return loaded.union;
-  if (typeof loaded.default?.union === "function") return loaded.default.union;
-  throw new Error("polygon-clipping did not load.");
-}
+const unionFn = unionFnLoaded;
 
 const IMPORTED_ID_BASE = -1_000_000;
 
@@ -47,11 +40,10 @@ export function massingFootprint(
     tris.push(area > 0 ? [[[ax, ay], [bx, by], [cx, cy], [ax, ay]]] : [[[ax, ay], [cx, cy], [bx, by], [ax, ay]]]);
   }
   if (tris.length === 0) return { polygons: [], topZ, polygonTops: [] };
-  const union = unionFn();
   let merged: MultiPolygon = [];
   for (let i = 0; i < tris.length; i += UNION_BATCH) {
     const batch = tris.slice(i, i + UNION_BATCH);
-    merged = union(merged, ...batch);
+    merged = unionFn(merged, ...batch, { layer: "imported massing", operation: "union" });
   }
   const polygonTops = merged.map((polygon) => {
     let top = -Infinity;
