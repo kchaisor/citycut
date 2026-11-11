@@ -66,6 +66,27 @@ export type RhinoDownloadOptions = {
   buildingsAsMesh?: boolean;
 };
 
+export async function downloadSectionDrawing(
+  model: CityModel,
+  knife: import("./sectionKnife/state").SectionKnifeEntry,
+  applyVerticalExaggeration: boolean,
+): Promise<{ svg: string; layers: string[] }> {
+  const { buildSectionExportSvg, buildSectionExport3dm, sectionExportLayerNames } = await import(
+    "./sectionKnife/sectionExport"
+  );
+  const svg = buildSectionExportSvg(model, knife.pose, { applyVerticalExaggeration, knife });
+  const layers = sectionExportLayerNames(svg);
+  const bytes = await buildSectionExport3dm(model, knife.pose, { applyVerticalExaggeration, knife });
+  const stem = fileStem(model);
+  downloadBlob(`${stem}-section-${knife.id}.svg`, new Blob([svg], { type: "image/svg+xml" }));
+  downloadBytes(`${stem}-section-${knife.id}.3dm`, bytes, "application/octet-stream");
+  if (typeof document !== "undefined") {
+    document.body.dataset.sectionExportLayers = layers.join("|");
+    document.body.dataset.sectionExportHasGround = layers.includes("Section::Ground") ? "1" : "0";
+  }
+  return { svg, layers };
+}
+
 export async function download3dm(
   model: CityModel,
   options?: HeliodonGroundExportOptions | RhinoDownloadOptions | null,

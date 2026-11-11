@@ -35,6 +35,7 @@ import {
   downloadIsometricSvg,
   downloadSiteAi,
   downloadSiteSvg,
+  downloadSectionDrawing,
   downloadFigureSvg,
   downloadSunStudyZip,
   pngFilename,
@@ -171,6 +172,13 @@ import { WindRoseOverlay } from "./WindRoseOverlay";
 import { ExportTiles } from "./ExportTiles";
 import { exportTiles, type ExportBusy } from "../lib/exportTiles";
 import { ViewLegend, ViewPanel } from "./ViewPanel";
+import { SectionKnifeToolPanel } from "./SectionKnifeToolPanel";
+import { SectionKnifeElevationPanel } from "./SectionKnifeElevationPanel";
+import { initialSectionKnifeToolState, type SectionKnifeToolState } from "../lib/sectionKnife/state";
+import type { SectionKnifePose } from "../lib/sectionKnife/plane";
+import { snapPoseToModel } from "../lib/sectionKnife/snap";
+import { selectedKnife } from "../lib/sectionKnife/state";
+import { buildSectionExportSvg, sectionExportLayerNames } from "../lib/sectionKnife/sectionExport";
 import { WalkRippleLegend, WalkRipplePanel } from "./WalkRipplePanel";
 import { WalkRippleTimeScrubber } from "./WalkRippleTimeScrubber";
 import { useWalkRipple } from "./useWalkRipple";
@@ -344,6 +352,34 @@ export function ModelPage({
     writeStoredView3dDisplay(window.localStorage, next);
     return next;
   });
+  const [sectionKnifeTool, setSectionKnifeTool] = useState<SectionKnifeToolState>(() =>
+    initialSectionKnifeToolState(model.sideM),
+  );
+  useEffect(() => {
+    setSectionKnifeTool(initialSectionKnifeToolState(model.sideM));
+  }, [model.center.lat, model.center.lon, model.sideM]);
+  const onSectionKnifePoseChange = useCallback(
+    (pose: SectionKnifePose, meta?: { shiftKey?: boolean; snapWhileDrag?: boolean }) => {
+      setSectionKnifeTool((tool) => {
+        let nextPose = pose;
+        let snapCue = tool.snapCue;
+        const shouldSnap = tool.snap && !meta?.shiftKey && meta?.snapWhileDrag;
+        if (shouldSnap) {
+          const snap = snapPoseToModel(model, nextPose);
+          nextPose = snap.pose;
+          if (snap.cue) {
+            snapCue = { kind: snap.cue.kind, east: snap.cue.east, north: snap.cue.north, untilMs: Date.now() + 2200 };
+          }
+        }
+        return {
+          ...tool,
+          snapCue,
+          knives: tool.knives.map((knife) => (knife.id === tool.selectedId ? { ...knife, pose: nextPose } : knife)),
+        };
+      });
+    },
+    [model],
+  );
   const [renderQuality, setRenderQuality] = useState<RenderQuality>(() => readStoredRenderQuality(window.localStorage));
   const commitRenderQuality = useCallback((next: RenderQuality) => {
     setRenderQuality(next);
@@ -818,11 +854,45 @@ export function ModelPage({
         for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
         return btoa(binary);
       },
+      setSectionKnifeActive(active: boolean) {
+        setSectionKnifeTool((tool) => ({ ...tool, active }));
+      },
+      setSectionKnifePose(pose: SectionKnifePose) {
+        onSectionKnifePoseChange(pose);
+      },
+      auditSectionExport() {
+        const knife = selectedKnife(sectionKnifeTool);
+        const svg = buildSectionExportSvg(model, knife.pose, { applyVerticalExaggeration: false, knife });
+        const layers = sectionExportLayerNames(svg);
+        const hasGround = svg.includes("Section::Ground") && /polyline|path/i.test(svg);
+        return {
+          ok: layers.includes("Section::Ground") && layers.includes("Section::Annotations") && hasGround,
+          layers,
+          svg,
+        };
+      },
     };
     return () => {
       delete window.__citycutQaModel;
     };
-  }, [model]);
+  }, [model, onSectionKnifePoseChange, sectionKnifeTool]);
+
+  useEffect(() => {
+    window.__citycutSectionExportAudit = () => {
+      const knife = selectedKnife(sectionKnifeTool);
+      const svg = buildSectionExportSvg(model, knife.pose, { applyVerticalExaggeration: false, knife });
+      const layers = sectionExportLayerNames(svg);
+      const hasGround = svg.includes("Section::Ground") && /polyline|path/i.test(svg);
+      return {
+        ok: layers.includes("Section::Ground") && layers.includes("Section::Annotations") && hasGround,
+        layers,
+        svg,
+      };
+    };
+    return () => {
+      delete window.__citycutSectionExportAudit;
+    };
+  }, [model, sectionKnifeTool]);
 
   useEffect(() => {
     if (model.comBuildingHeightsApplied) {
@@ -1320,6 +1390,16 @@ export function ModelPage({
     const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     if (nextUrl !== current) window.history.replaceState(window.history.state, "", nextUrl);
     if (snap) setSnapId((id) => id + 1);
+  }
+
+  async function exportSectionDrawing(applyVerticalExaggeration: boolean) {
+    setExportError(null);
+    try {
+      const knife = selectedKnife(sectionKnifeTool);
+      await downloadSectionDrawing(displayModel, knife, applyVerticalExaggeration);
+    } catch {
+      setExportError("The section export could not be written.");
+    }
   }
 
   async function save3dm() {
@@ -1875,8 +1955,13 @@ export function ModelPage({
                       ? walk.addPoint
                       : massing.onScenePoint
                 }
+                sectionKnife={sectionKnifeTool}
+                onSectionKnifePoseChange={onSectionKnifePoseChange}
                 quality={renderQuality}
               />
+              {tab === "3d" && sectionKnifeTool.active && (
+                <SectionKnifeElevationPanel model={displayModel} tool={sectionKnifeTool} />
+              )}
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
               {rippleAnalysisOpen && walkRipple.buildingArrivals && <WalkRippleLegend />}
               {walkRippleToast ? (
@@ -1942,6 +2027,7 @@ export function ModelPage({
             ) : (
               <DrawingPlan
                 model={drawingModel}
+                sectionKnife={sectionKnifeTool}
                 kind={drawing}
                 onScale={onScale}
                 lineStyle={lineStyles}
@@ -2663,6 +2749,13 @@ export function ModelPage({
                       />
                       White card
                     </label>
+                    <SectionKnifeToolPanel
+                      sideM={displayModel.sideM}
+                      model={displayModel}
+                      tool={sectionKnifeTool}
+                      onChange={setSectionKnifeTool}
+                      onExportSection={exportSectionDrawing}
+                    />
                     <div className="mini-flags sub-toggles display-switches" role="group" aria-label="View modes">
                       <label className={view3dDisplay.showOutlines ? "mini-flag is-on check-field" : "mini-flag check-field"}>
                         <input

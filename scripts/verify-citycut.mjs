@@ -18,6 +18,7 @@
  */
 
 import { spawn, execFileSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import net from "node:net";
@@ -838,6 +839,422 @@ async function main() {
       `polar=${beat4Info.polar}, bldg=[${beat4Info.bldgInner},${beat4Info.bldgOuter}], tree=${beat4Info.treeScale}, hudOpacities=[${beat4Info.topOpacity},${beat4Info.leftOpacity},${beat4Info.rightOpacity},${beat4Info.bottomOpacity}], underlay=${beat4Info.hasUnderlay}`,
     );
 
+    // -------------------------------------------------------------------------
+    // SECTION KNIFE: real mouse gizmo drag (no ?qa=1)
+    // -------------------------------------------------------------------------
+    {
+      const isoBtn = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Isometric" }).first();
+      if ((await isoBtn.count()) === 0) {
+        assertCheck(
+          "section-knife-handle-drag",
+          "Isometric view + real mouse drag on Section Knife handle changes offset without camera orbit",
+          false,
+          "Isometric pill missing",
+        );
+        assertCheck(
+          "section-knife-ring-rotate",
+          "Real mouse drag on Section Knife base ring changes angle without camera orbit",
+          false,
+          "Isometric pill missing",
+        );
+      } else {
+        await isoBtn.click();
+        await page.waitForTimeout(450);
+        await page.locator(".section-knife-toggle").click();
+        await page.waitForSelector(".section-knife-elevation", { timeout: 15000 });
+        await page.waitForTimeout(1400);
+
+        const readClipAudit = () =>
+          page.evaluate(() => {
+            const canvas = document.querySelector(".model canvas");
+            const scaleX = canvas ? canvas.width / (canvas.clientWidth || 1) : 1;
+            const scaleY = canvas ? canvas.height / (canvas.clientHeight || 1) : 1;
+            const farClientX = Number(canvas?.dataset.sectionKnifeFarSampleX ?? "NaN");
+            const farClientY = Number(canvas?.dataset.sectionKnifeFarSampleY ?? "NaN");
+            return {
+              lineClipOk: canvas?.dataset.sectionKnifeLineClipOk === "1",
+              contourPresent: canvas?.dataset.sectionKnifeContourPresent === "1",
+              contourClipped: canvas?.dataset.sectionKnifeContourClipped === "1",
+              farX: Number.isFinite(farClientX) ? farClientX * scaleX : Number.NaN,
+              farY: Number.isFinite(farClientY) ? farClientY * scaleY : Number.NaN,
+            };
+          });
+        let clipAudit = await readClipAudit();
+        for (let attempt = 0; attempt < 10 && !clipAudit.lineClipOk; attempt += 1) {
+          await page.waitForTimeout(250);
+          clipAudit = await readClipAudit();
+        }
+        const clipOk = clipAudit.lineClipOk && (!clipAudit.contourPresent || clipAudit.contourClipped);
+        assertCheck(
+          "section-knife-line-clip",
+          "Section Knife clips 3D contour and line layers so they do not render on the cut-away side (dataset audit)",
+          clipOk,
+          `lineClipOk=${clipAudit.lineClipOk}, contourPresent=${clipAudit.contourPresent}, contourClipped=${clipAudit.contourClipped}`,
+        );
+
+        const measureFarDarkRatio = (pngPath, farX, farY) => {
+          const png = PNG.sync.read(fs.readFileSync(pngPath));
+          const { width, height, data } = png;
+          const cx = Number.isFinite(farX) ? Math.round(farX) : Math.floor(width * 0.22);
+          const cy = Number.isFinite(farY) ? Math.round(farY) : Math.floor(height * 0.45);
+          const half = 48;
+          let inkPx = 0;
+          let samples = 0;
+          for (let y = Math.max(0, cy - half); y < Math.min(height, cy + half); y++) {
+            for (let x = Math.max(0, cx - half); x < Math.min(width, cx + half); x++) {
+              const i = (width * y + x) * 4;
+              const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+              samples += 1;
+              if (lum < 55) inkPx += 1;
+            }
+          }
+          return samples > 0 ? inkPx / samples : 0;
+        };
+        const cutawayShotOn = path.join(TMP_FRAMES_DIR, "section-knife-cutaway-contours-on.png");
+        await page.locator(".model canvas").screenshot({ path: cutawayShotOn });
+        const ratioContoursOn = measureFarDarkRatio(cutawayShotOn, clipAudit.farX, clipAudit.farY);
+        const contoursRow = page.locator(".model .left-outliner .layer-row", { hasText: /^Contours/ }).first();
+        if ((await contoursRow.count()) > 0) {
+          await contoursRow.click();
+          await page.waitForTimeout(350);
+        }
+        const cutawayShotOff = path.join(TMP_FRAMES_DIR, "section-knife-cutaway-contours-off.png");
+        await page.locator(".model canvas").screenshot({ path: cutawayShotOff });
+        const ratioContoursOff = measureFarDarkRatio(cutawayShotOff, clipAudit.farX, clipAudit.farY);
+        if ((await contoursRow.count()) > 0) {
+          await contoursRow.click();
+          await page.waitForTimeout(250);
+        }
+        const contourDelta = Math.abs(ratioContoursOn - ratioContoursOff);
+        assertCheck(
+          "section-knife-cutaway-contour-leak",
+          "Contours on the cut-away side are clipped (toggling contours off does not change far-side ink)",
+          contourDelta < 0.035,
+          `contoursOn=${ratioContoursOn.toFixed(3)}, contoursOff=${ratioContoursOff.toFixed(3)}, delta=${contourDelta.toFixed(3)}`,
+        );
+
+        const hudAudit = await page.evaluate(() => {
+          const chart = document.querySelector(".section-knife-elevation-chart");
+          if (!chart) return { ok: false, detail: "chart missing" };
+          const text = chart.textContent ?? "";
+          const hasRl = text.includes("RL ");
+          const hasScale = text.includes("250") && text.includes("500");
+          const rects = chart.querySelectorAll("rect");
+          const hasGroundFill = rects.length > 0;
+          const endLabels = Array.from(chart.querySelectorAll(".section-knife-end-label"));
+          const labelTexts = endLabels.map((el) => el.textContent?.trim() ?? "");
+          const endLabelRects = endLabels.map((el) => el.getBoundingClientRect());
+          const endLabelsVisible =
+            endLabelRects.length === 2 &&
+            endLabelRects.every((r) => r.width > 2 && r.height > 2 && r.bottom > 0);
+          const endLabelsOk =
+            labelTexts.length === 2 &&
+            labelTexts[0] === "A" &&
+            labelTexts[1] === "A′" &&
+            endLabelsVisible;
+          const rlEls = Array.from(chart.querySelectorAll(".section-knife-rl"));
+          const rlCountOk = rlEls.length >= 2 && rlEls.length <= 5;
+          const rlRects = rlEls.map((el) => el.getBoundingClientRect());
+          let rlOverlap = false;
+          for (let i = 0; i < rlRects.length; i++) {
+            for (let j = i + 1; j < rlRects.length; j++) {
+              const a = rlRects[i];
+              const b = rlRects[j];
+              const xOverlap = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+              const yOverlap = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+              if (xOverlap > 1 && yOverlap > 1) rlOverlap = true;
+            }
+          }
+          const ok = hasRl && hasScale && hasGroundFill && endLabelsOk && rlCountOk && !rlOverlap;
+          return {
+            ok,
+            hasRl,
+            hasScale,
+            hasGroundFill,
+            endLabelsOk,
+            rlCount: rlEls.length,
+            rlOverlap,
+            labelTexts,
+          };
+        });
+        assertCheck(
+          "section-knife-hud-drawing",
+          "Section HUD reads as an architectural section (RL grid, distance scale, A/A′ labels, filled ground mass)",
+          hudAudit.ok,
+          `end=${hudAudit.labelTexts?.join("/")}, rlCount=${hudAudit.rlCount}, rlOverlap=${hudAudit.rlOverlap}`,
+        );
+        assertCheck(
+          "section-knife-hud-axis-labels",
+          "Section HUD RL labels do not overlap and A/A′ are not duplicated",
+          hudAudit.endLabelsOk && hudAudit.rlCount >= 2 && hudAudit.rlCount <= 5 && !hudAudit.rlOverlap,
+          `end=${hudAudit.labelTexts?.join("/")}, rlCount=${hudAudit.rlCount}, rlOverlap=${hudAudit.rlOverlap}`,
+        );
+
+        await page.locator(".mode-btn", { hasText: "Drawing" }).click();
+        await page.waitForTimeout(900);
+        await page
+          .waitForFunction(
+            () => {
+              const bubble = document
+                .querySelector('[data-section-knife-marker-end-label="A"]')
+                ?.parentElement?.querySelector(".section-knife-marker-bubble");
+              return bubble && bubble.getBoundingClientRect().width >= 16;
+            },
+            { timeout: 20000 },
+          )
+          .catch(() => undefined);
+        const planMarkerCount = await page.locator("[data-section-knife-plan-markers='1']").count();
+        assertCheck(
+          "section-knife-plan-marker",
+          "Site plan shows a live section marker while Section Knife is on",
+          planMarkerCount > 0,
+          `markerGroups=${planMarkerCount}`,
+        );
+        const measurePlanMarkerRendered = () =>
+          page.evaluate(() => {
+            const measureOne = (key) => {
+              const bubble = document
+                .querySelector(`[data-section-knife-marker-end-label="${key}"]`)
+                ?.parentElement?.querySelector(".section-knife-marker-bubble");
+              const label = document.querySelector(`[data-section-knife-marker-end-label="${key}"]`);
+              const arrow = document
+                .querySelector(`[data-section-knife-marker-end-label="${key}"]`)
+                ?.parentElement?.querySelector(".section-knife-marker-arrow");
+              const br = bubble?.getBoundingClientRect();
+              const lr = label?.getBoundingClientRect();
+              const ar = arrow?.getBoundingClientRect();
+              return {
+                key,
+                bubbleDiam: br?.width ?? 0,
+                labelH: lr?.height ?? 0,
+                arrowMax: ar ? Math.max(ar.width, ar.height) : 0,
+                center: br ? { x: br.left + br.width / 2, y: br.top + br.height / 2 } : null,
+                text: label?.textContent?.trim() ?? "",
+              };
+            };
+            const a = measureOne("A");
+            const aprime = measureOne("Aprime");
+            const okOne = (m) => m.bubbleDiam >= 16 && m.bubbleDiam <= 18 && m.labelH >= 8 && m.arrowMax >= 8;
+            const sep =
+              a.center && aprime.center
+                ? Math.hypot(a.center.x - aprime.center.x, a.center.y - aprime.center.y)
+                : 0;
+            return { a, aprime, ok: okOne(a) && okOne(aprime) && sep > 80 };
+          });
+        const planWheelSteps = async (stepsIn) => {
+          const deltaY = stepsIn < 0 ? -200 : 200;
+          for (let i = 0; i < Math.abs(stepsIn); i++) {
+            await page.evaluate((dy) => {
+              const svg = document.querySelector("svg.plan");
+              if (!svg) return;
+              const rect = svg.getBoundingClientRect();
+              svg.dispatchEvent(
+                new WheelEvent("wheel", {
+                  deltaY: dy,
+                  deltaMode: 0,
+                  clientX: rect.left + rect.width / 2,
+                  clientY: rect.top + rect.height / 2,
+                  bubbles: true,
+                  cancelable: true,
+                }),
+              );
+            }, deltaY);
+            await page.waitForTimeout(150);
+          }
+        };
+        const baseRender = await measurePlanMarkerRendered();
+        await planWheelSteps(-2);
+        await page.waitForTimeout(300);
+        const zoomInRender = await measurePlanMarkerRendered();
+        await planWheelSteps(2);
+        await page.waitForTimeout(300);
+        const zoomBackRender = await measurePlanMarkerRendered();
+        await planWheelSteps(2);
+        await page.waitForTimeout(300);
+        const zoomOutRender = await measurePlanMarkerRendered();
+        const cropClipForKey = async (key) =>
+          page.evaluate((k) => {
+            const bubble = document
+              .querySelector(`[data-section-knife-marker-end-label="${k}"]`)
+              ?.parentElement?.querySelector(".section-knife-marker-bubble");
+            const br = bubble?.getBoundingClientRect();
+            if (!br) return null;
+            const cx = br.left + br.width / 2;
+            const cy = br.top + br.height / 2;
+            return {
+              x: Math.max(0, Math.floor(cx - 150)),
+              y: Math.max(0, Math.floor(cy - 150)),
+              width: 300,
+              height: 300,
+            };
+          }, key);
+        const clipA = await cropClipForKey("A");
+        const clipAprime = await cropClipForKey("Aprime");
+        let cropHashOk = false;
+        let cropHashDetail = "no-clips";
+        if (clipA && clipAprime) {
+          const dist = Math.hypot(clipA.x - clipAprime.x, clipA.y - clipAprime.y);
+          const hA = crypto.createHash("md5").update(await page.screenshot({ clip: clipA, type: "png" })).digest("hex");
+          const hAprime = crypto
+            .createHash("md5")
+            .update(await page.screenshot({ clip: clipAprime, type: "png" }))
+            .digest("hex");
+          cropHashOk = hA !== hAprime && dist > 40;
+          cropHashDetail = `dist=${dist.toFixed(0)}, hA=${hA.slice(0, 8)}, hAprime=${hAprime.slice(0, 8)}`;
+        }
+        const zoomOk = zoomInRender.ok && zoomBackRender.ok && zoomOutRender.ok;
+        const planMarkerOk = baseRender.ok && zoomOk && cropHashOk;
+        const fmtEnd = (m) =>
+          `${m.key}:d=${m.bubbleDiam.toFixed(1)},textH=${m.labelH.toFixed(1)},arrow=${m.arrowMax.toFixed(1)}(${m.text})`;
+        assertCheck(
+          "section-drawing-set-plan-marker",
+          "Plan section mark: rendered 17±1 px bubbles, ≥8 px A/A′ text and arrows (getBoundingClientRect), stable across plan zoom, distinct A/A′ crops",
+          planMarkerOk,
+          `base=[${fmtEnd(baseRender.a)}|${fmtEnd(baseRender.aprime)}], zoomIn=${zoomInRender.ok}, back=${zoomBackRender.ok}, out=${zoomOutRender.ok}, crops=${cropHashDetail}`,
+        );
+        await page.locator(".mode-btn", { hasText: "3D model" }).click();
+        await page.waitForTimeout(400);
+        const isoRestore = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Isometric" }).first();
+        if ((await isoRestore.count()) > 0) await isoRestore.click();
+        await page.waitForTimeout(450);
+        const snapToggle = page.locator(".section-knife-tools label.check-field input[type=checkbox]").first();
+        if (await snapToggle.isChecked()) await snapToggle.click();
+        await page.waitForTimeout(200);
+
+        const exportAudit = await page.evaluate(() => {
+          const audit = window.__citycutSectionExportAudit?.();
+          if (!audit) return { ok: false, detail: "audit missing" };
+          return audit;
+        });
+        assertCheck(
+          "section-knife-export-layers",
+          "Section export SVG contains Section:: layers and a ground profile",
+          exportAudit.ok,
+          `layers=${exportAudit.layers?.join(",") ?? exportAudit.detail}`,
+        );
+
+        if (fs.existsSync(ARTIFACTS_DIR)) {
+          await page.locator(".model canvas").screenshot({
+            path: path.join(ARTIFACTS_DIR, "section-knife-3d-no-contour-leak-1440x900.png"),
+          });
+          await page.locator(".section-knife-elevation").screenshot({
+            path: path.join(ARTIFACTS_DIR, "section-knife-hud-1440x900.png"),
+          });
+        }
+
+        const readKnifeState = () =>
+          page.evaluate(() => {
+            const canvas = document.querySelector(".model canvas");
+            const note = document.querySelector("[data-section-knife-offset-m]");
+            return {
+              offset: Number(note?.getAttribute("data-section-knife-offset-m") ?? "0"),
+              angle: Number(note?.getAttribute("data-section-knife-angle-rad") ?? "0"),
+              camPos: canvas?.dataset.camPosition ?? "",
+              camTarget: canvas?.dataset.camTarget ?? "",
+              handleX: Number(canvas?.dataset.sectionKnifeHandleX ?? "NaN"),
+              handleY: Number(canvas?.dataset.sectionKnifeHandleY ?? "NaN"),
+              ringX: Number(canvas?.dataset.sectionKnifeRingX ?? "NaN"),
+              ringY: Number(canvas?.dataset.sectionKnifeRingY ?? "NaN"),
+            };
+          });
+
+        let beforeHandle = await readKnifeState();
+        for (let attempt = 0; attempt < 8 && !Number.isFinite(beforeHandle.handleX); attempt += 1) {
+          await page.waitForTimeout(250);
+          beforeHandle = await readKnifeState();
+        }
+
+        const canvasBox = await page.locator(".model canvas").boundingBox();
+        if (!canvasBox || !Number.isFinite(beforeHandle.handleX)) {
+          assertCheck(
+            "section-knife-handle-drag",
+            "Isometric view + real mouse drag on Section Knife handle changes offset without camera orbit",
+            false,
+            `handle screen coords unavailable (handle=${beforeHandle.handleX},${beforeHandle.handleY})`,
+          );
+        } else {
+          const hx = canvasBox.x + beforeHandle.handleX;
+          const hy = canvasBox.y + beforeHandle.handleY;
+          await page.mouse.move(hx, hy);
+          await page.waitForTimeout(60);
+          await page.mouse.down();
+          for (let i = 0; i < 14; i++) {
+            await page.mouse.move(hx - 10 * (i + 1), hy + 5 * (i + 1), { steps: 2 });
+            await page.waitForTimeout(35);
+          }
+          await page.mouse.up();
+          await page.waitForTimeout(220);
+          const afterHandle = await readKnifeState();
+          const offsetDelta = Math.abs(afterHandle.offset - beforeHandle.offset);
+          const camStable =
+            afterHandle.camPos === beforeHandle.camPos && afterHandle.camTarget === beforeHandle.camTarget;
+          assertCheck(
+            "section-knife-handle-drag",
+            "Isometric view + real mouse drag on Section Knife handle changes offset without camera orbit",
+            offsetDelta > 0.04 && camStable,
+            `offset ${beforeHandle.offset.toFixed(3)} -> ${afterHandle.offset.toFixed(3)}, camPosStable=${camStable}`,
+          );
+
+          let beforeRing = await readKnifeState();
+          for (let attempt = 0; attempt < 8 && !Number.isFinite(beforeRing.ringX); attempt += 1) {
+            await page.waitForTimeout(250);
+            beforeRing = await readKnifeState();
+          }
+          const ringBox = await page.locator(".model canvas").boundingBox();
+          if (!ringBox || !Number.isFinite(beforeRing.ringX)) {
+            assertCheck(
+              "section-knife-ring-rotate",
+              "Real mouse drag on Section Knife base ring changes angle without camera orbit",
+              false,
+              `ring screen coords unavailable (ring=${beforeRing.ringX},${beforeRing.ringY})`,
+            );
+          } else {
+            const rx = ringBox.x + beforeRing.ringX;
+            const ry = ringBox.y + beforeRing.ringY;
+            await page.mouse.move(rx, ry);
+            await page.waitForTimeout(60);
+            await page.mouse.down();
+            for (let i = 0; i < 16; i++) {
+              await page.mouse.move(rx + 12 * (i + 1), ry, { steps: 2 });
+              await page.waitForTimeout(35);
+            }
+            await page.mouse.up();
+            await page.waitForTimeout(220);
+            const afterRing = await readKnifeState();
+            const angleDelta = Math.abs(afterRing.angle - beforeRing.angle);
+            const camStableRing =
+              afterRing.camPos === beforeRing.camPos && afterRing.camTarget === beforeRing.camTarget;
+            assertCheck(
+              "section-knife-ring-rotate",
+              "Real mouse drag on Section Knife base ring changes angle without camera orbit",
+              angleDelta > 0.015 && camStableRing,
+              `angle ${beforeRing.angle.toFixed(4)} -> ${afterRing.angle.toFixed(4)}, camPosStable=${camStableRing}`,
+            );
+          }
+        }
+
+        const offsetBefore = await page.evaluate(() =>
+          Number(document.querySelector("[data-section-knife-offset-m]")?.getAttribute("data-section-knife-offset-m") ?? "0"),
+        );
+        const offsetInput = page.locator(".section-knife-offset-input");
+        if ((await offsetInput.count()) > 0) {
+          await offsetInput.fill("6");
+          await offsetInput.dispatchEvent("change");
+        }
+        await page.waitForTimeout(350);
+        const offsetAfter = await page.evaluate(() =>
+          Number(document.querySelector("[data-section-knife-offset-m]")?.getAttribute("data-section-knife-offset-m") ?? "0"),
+        );
+        assertCheck(
+          "section-knife-numeric-offset",
+          "Section Knife offset input moves the active plane",
+          Math.abs(offsetAfter - 6) < 0.6 && Math.abs(offsetAfter - offsetBefore) > 0.4,
+          `before=${offsetBefore.toFixed(2)}, after=${offsetAfter.toFixed(2)}`,
+        );
+      }
+    }
+
+    // -------------------------------------------------------------------------
     // TYPOGRAPHY & CSS SURFACE INVARIANTS
     const uiInvariants = await page.evaluate(() => {
       const bodyFont = getComputedStyle(document.body).fontFamily;
@@ -1580,8 +1997,8 @@ async function main() {
     const sydneyAnalysis = sydneyPage.getByRole("button", { name: "Analysis" }).first();
     await sydneyAnalysis.click({ timeout: 60_000 });
     await sydneyPage.waitForTimeout(400);
-    const planFanBtn = sydneyPage.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
-    await planFanBtn.click({ timeout: 30_000 });
+    const sydneyPlanFanBtn = sydneyPage.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
+    await sydneyPlanFanBtn.click({ timeout: 30_000 });
     await sydneyPage.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 60_000 });
     await sydneyPage.waitForSelector("svg.plan .plan-north-arrow", { timeout: 60_000 });
     await sydneyPage.waitForSelector("svg.plan .heliodon-plan", { timeout: 120_000 });

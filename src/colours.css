@@ -48,6 +48,19 @@
   --view-path: #000000;
   --view-walker: #FFF500;
 
+  --section-knife-cut-edge: #FFF500;
+  --section-knife-handle-hover: #FFFFA8;
+  --section-knife-poche: #000000;
+  --section-knife-floor-line: #FFFFFF;
+  --section-knife-plane: #FFFFFF;
+  --section-knife-elevation-fill: #C8C8C8;
+  --section-knife-elevation-sky: #F5F5F2;
+  --section-knife-elevation-ground: #1E1D1B;
+  --section-knife-elevation-beyond: #D9D5CD;
+  --section-knife-elevation-grid: #1A1916;
+  --section-knife-marker-gold: #E1B157;
+  --section-knife-plan-marker-ink: #1a1a1a;
+
   --walk-ripple-accent: #FFF500;
   --walk-ripple-band-0: #FFF500;
   --walk-ripple-band-1: #FF8C00;
@@ -55,6 +68,7 @@
   --walk-ripple-label-bg: #1C1C22;
   --walk-ripple-label-text: #FFFFFF;
 
+  /* Residential footprints, legend swatch, and the Residential Rhino layer. */
   --use-residential: #CECBC6;
 
   --use-commercial: #89533D;

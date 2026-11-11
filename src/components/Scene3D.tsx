@@ -24,7 +24,7 @@ import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import { captureViewPng } from "../lib/capturePng";
-import { StudioSky, ViewInset, insetPointerEvents } from "./SceneBackdrop";
+import { GroundGrid, StudioSky, ViewInset, insetPointerEvents } from "./SceneBackdrop";
 import { INTRO_ACTIVE_KEY, StudioEffects, useCameraMoving } from "./StudioEffects";
 import type { RenderQuality } from "../lib/renderQuality";
 import { markScreenOnly } from "../lib/screenOnly";
@@ -96,6 +96,13 @@ import {
 import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SunHoursLayer } from "./SunHoursLayer";
+import { SectionKnifeScene } from "./SectionKnifeScene";
+import { selectedKnife, type SectionKnifeToolState } from "../lib/sectionKnife/state";
+import type { SectionKnifePose } from "../lib/sectionKnife/plane";
+import {
+  idleSectionKnifeGizmoInteraction,
+  type SectionKnifeGizmoInteraction,
+} from "../lib/sectionKnife/gizmoHit";
 import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
 
 const SUN_HOURS_HEATMAP_ENABLED = false;
@@ -463,6 +470,10 @@ function City({
   onBuildingPick,
   onClearBuildingPick,
   pickBuildings,
+  sectionKnife,
+  onSectionKnifePoseChange,
+  onSectionKnifeGizmoInteractionChange,
+  projection,
   walkRippleTint,
   walkRippleArrivals,
 }: {
@@ -479,6 +490,10 @@ function City({
   onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
   onClearBuildingPick?: () => void;
   pickBuildings: boolean;
+  sectionKnife?: SectionKnifeToolState | null;
+  onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
+  onSectionKnifeGizmoInteractionChange?: (state: SectionKnifeGizmoInteraction) => void;
+  projection: ProjectionMode;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
 }) {
@@ -903,6 +918,13 @@ function City({
       invalidate();
     }
   }, [contours, colourTick, invalidate]);
+  useLayoutEffect(() => {
+    if (!contours) return;
+    group.add(contours);
+    return () => {
+      contours.removeFromParent();
+    };
+  }, [contours, group, invalidate]);
   useLayoutEffect(() => () => disposeObject(group), [group]);
   return (
     <>
@@ -934,10 +956,22 @@ function City({
       />
       <BuildingPickLayer
         root={group}
-        enabled={pickBuildings && buildingsVisible}
+        enabled={pickBuildings && buildingsVisible && !sectionKnife?.active}
         onBuildingPick={onBuildingPick}
         onClearPick={onClearBuildingPick}
       />
+      {sectionKnife?.active && onSectionKnifePoseChange ? (
+        <SectionKnifeScene
+          city={group}
+          model={model}
+          active
+          pose={selectedKnife(sectionKnife).pose}
+          onPoseChange={onSectionKnifePoseChange}
+          onGizmoInteractionChange={onSectionKnifeGizmoInteractionChange}
+          planView={projection === "plan"}
+          snapWhileDrag={sectionKnife.snap}
+        />
+      ) : null}
     </>
   );
 }
@@ -1744,6 +1778,7 @@ export function Cameras({
   lon,
   cameraMemory,
   introEnabled = false,
+  gizmoOrbitLock = false,
 }: {
   side: number;
   lift: number;
@@ -1762,6 +1797,7 @@ export function Cameras({
   lon: number;
   cameraMemory?: CameraMemoryRef;
   introEnabled?: boolean;
+  gizmoOrbitLock?: boolean;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
@@ -1899,7 +1935,7 @@ export function Cameras({
             ref={perspControls}
             camera={persp}
             makeDefault={!orthoView}
-            enabled={!orthoView}
+            enabled={!orthoView && !gizmoOrbitLock}
             enableDamping
             dampingFactor={0.08}
             maxPolarAngle={Math.PI / 2.02}
@@ -1914,7 +1950,7 @@ export function Cameras({
             ref={orthoControls}
             camera={ortho}
             makeDefault={orthoView}
-            enabled={orthoView}
+            enabled={orthoView && !gizmoOrbitLock}
             enableDamping
             dampingFactor={0.08}
             enableRotate={iso && freeRotate}
@@ -2015,6 +2051,8 @@ export function Scene3D({
   walkRippleArrivals = null,
   walkRipplePlaying = false,
   onScenePoint = null,
+  sectionKnife = null,
+  onSectionKnifePoseChange = undefined,
   quality = "high",
 }: {
   model: CityModel;
@@ -2044,11 +2082,19 @@ export function Scene3D({
   walkRippleArrivals?: Map<number, number> | null;
   walkRipplePlaying?: boolean;
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
+  sectionKnife?: SectionKnifeToolState | null;
+  onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
   quality?: RenderQuality;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
     boundsRef.current = bounds;
+  }, []);
+  const [sectionKnifeGizmoInteraction, setSectionKnifeGizmoInteraction] = useState<SectionKnifeGizmoInteraction>(
+    () => idleSectionKnifeGizmoInteraction,
+  );
+  const onSectionKnifeGizmoInteractionChange = useCallback((state: SectionKnifeGizmoInteraction) => {
+    setSectionKnifeGizmoInteraction(state);
   }, []);
   const lift = model.terrain ? (model.terrain.min + model.terrain.max) / 2 : 0;
   const colourTick = useColourRevision();
@@ -2088,8 +2134,14 @@ export function Scene3D({
     for (const building of model.buildings) top = Math.max(top, base + building.height);
     return top;
   }, [model]);
+  const gizmoCursorClass =
+    sectionKnifeGizmoInteraction.cursor === "grabbing"
+      ? " section-knife-gizmo-grabbing"
+      : sectionKnifeGizmoInteraction.cursor === "grab"
+        ? " section-knife-gizmo-grab"
+        : "";
   return (
-    <div className="scene-viewport">
+    <div className={`scene-viewport${gizmoCursorClass}`}>
       {glContextLost ? (
         <div className="webgl-lost-overlay" role="alert">
           <p>3D view lost (GPU memory)</p>
@@ -2125,6 +2177,9 @@ export function Scene3D({
         <RendererShadows enabled={solar.castShadows} />
       <SunStudyToneMapping noToneMapping={noToneMapping} />
       <StudioSky colourTick={colourTick} fallback={modelBg} />
+      {projection !== "plan" && !sectionKnife?.active && (
+        <GroundGrid sideM={model.sideM} groundY={plinthBottomY} colourTick={colourTick} />
+      )}
       <hemisphereLight args={[sky, groundLight, fillHemi]} />
       <ambientLight intensity={fillAmbient} />
       <directionalLight position={[model.sideM * 0.4, model.sideM, model.sideM * 0.2]} intensity={fillKeyLight} />
@@ -2167,6 +2222,10 @@ export function Scene3D({
         heightEditBuildingId={heightEditBuildingId}
         selectedBuildingIds={selectedBuildingIds}
         display={display}
+        sectionKnife={sectionKnife}
+        onSectionKnifePoseChange={onSectionKnifePoseChange}
+        onSectionKnifeGizmoInteractionChange={onSectionKnifeGizmoInteractionChange}
+        projection={projection}
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
       />
@@ -2208,6 +2267,7 @@ export function Scene3D({
         lon={model.center.lon}
         cameraMemory={cameraMemory}
         introEnabled
+        gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock}
       />
       </Canvas>
     </div>

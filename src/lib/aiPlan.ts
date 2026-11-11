@@ -43,6 +43,7 @@ import {
 } from "./explodedAxoExport";
 import { defaultExplodedAxoSettings, type ExplodedAxoSettings } from "./explodedAxo";
 import { stableExportModel } from "./exportStableOrder";
+import { sectionMarkerPlanChunk } from "./sectionKnife/sectionMarkerPlanChunk";
 import type { CityModel, ContourSourceId, Pt, Ring } from "../types";
 
 export const SITE_LAYER_ORDER = [
@@ -62,6 +63,7 @@ export const SITE_LAYER_ORDER = [
   "Imported massing",
   "Imported::Upper levels",
   "Site boundary",
+  "Section markers",
   "Trees",
   "Sun path",
   "North arrow",
@@ -254,6 +256,7 @@ export type SitePlanExportOptions = {
   colourBySource?: boolean;
   wind?: { table: import("./windRose").WindRoseTable; period: import("./windRose").WindPeriodId } | null;
   sunStudy?: { layers: { hour: number; rings: Ring[][] }[] } | null;
+  sectionKnife?: import("./sectionKnife/state").SectionKnifeToolState | null;
   sunStudyDate?: SunStudyDate | null;
 };
 
@@ -295,7 +298,8 @@ function resolveSitePlanExport(
     "heliodon" in exportOptions ||
     "wind" in exportOptions ||
     "sunStudy" in exportOptions ||
-    "uniformBuildings" in exportOptions
+    "uniformBuildings" in exportOptions ||
+    "sectionKnife" in exportOptions
   ) {
     return exportOptions as SitePlanExportOptions;
   }
@@ -535,6 +539,8 @@ export function sitePlanChunks(
   }
   const siteBoundary = siteBoundaryChunk(model.siteBoundaryLines ?? [], model, layout, style);
   if (siteBoundary) chunks.push(siteBoundary);
+  const sectionMarkers = sectionMarkerPlanChunk(model, layout, resolved.sectionKnife);
+  if (sectionMarkers) chunks.push(sectionMarkers);
   const treePen = pen(style.tree);
   if (plan.trees.length > 0) {
     chunks.push({
