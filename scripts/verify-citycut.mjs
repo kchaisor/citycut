@@ -2379,7 +2379,7 @@ async function main() {
         await shadowPage.waitForFunction(
           () =>
             document.documentElement.dataset.sunHoursGroundReady === "1" &&
-            Number(document.documentElement.dataset.sunHoursDirectSurfaces ?? "0") > 200,
+            Number(document.documentElement.dataset.sunHoursDirectSurfaces ?? "0") > 80,
           null,
           { timeout: 480000 },
         );

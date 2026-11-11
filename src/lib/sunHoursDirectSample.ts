@@ -108,10 +108,44 @@ function samplesForBuilding(model: CityModel, building: BuildingFeat): DirectSun
   return units;
 }
 
+function samplesForBuildingCoarse(model: CityModel, building: BuildingFeat): DirectSunHoursSample[] {
+  const open = openRing(building.ring);
+  if (open.length < 3) return [];
+  const closed = [...open, open[0]!];
+  const outwardSign = ringSignedArea(building.ring) >= 0 ? 1 : -1;
+  const baseYM = footprintBaseY(model, building.ring);
+  const floors = Math.max(1, Math.ceil(building.height / MASSING_FLOOR_HEIGHT_M));
+  const units: DirectSunHoursSample[] = [];
+  const midFloor = Math.floor(floors / 2);
+  for (let edge = 0; edge < closed.length - 1; edge++) {
+    const outward = edgeOutwardNormal(closed[edge]!, closed[edge + 1]!, outwardSign);
+    units.push(
+      ...wallSamplesOnEdge(closed[edge]!, closed[edge + 1]!, outward, baseYM, midFloor, building.id, edge).slice(0, 1),
+    );
+  }
+  const roofY = baseYM + building.height - 0.04;
+  const roofPoints = gridPointsInRing(building.ring, SUN_HOURS_GROUND_CELL_M * 2);
+  let roofIndex = 0;
+  for (const [east, north] of roofPoints) {
+    units.push({
+      id: `direct-roof-${building.id}-${roofIndex++}`,
+      kind: "roof-cell",
+      buildingId: building.id,
+      east,
+      north,
+      yM: roofY,
+      outwardEast: 0,
+      outwardNorth: 0,
+    });
+  }
+  return units;
+}
+
 export function directSunHoursSamplesForModel(model: CityModel): DirectSunHoursSample[] {
+  const coarse = model.buildings.length > 120;
   const units: DirectSunHoursSample[] = [];
   for (const building of model.buildings) {
-    units.push(...samplesForBuilding(model, building));
+    units.push(...(coarse ? samplesForBuildingCoarse(model, building) : samplesForBuilding(model, building)));
   }
   return units;
 }
