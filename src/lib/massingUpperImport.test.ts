@@ -5,7 +5,7 @@ import {
   massingPlanOutlineSummary,
   massingUpperLevelPlanLines,
 } from "./massingFootprint";
-import { clearPlanShadowCache, planShadowRings } from "./buildingShadows";
+import { clearPlanShadowCache, importedPlanShadowRings, planShadowRings } from "./buildingShadows";
 import { importMassingFixture, ringArea, towerOutlineCount } from "./massingFixture3dm";
 import { planPaths } from "./svgPlan";
 import type { CityModel } from "../types";
@@ -94,5 +94,7 @@ describe("imported Rhino massing upper-level outlines", () => {
       true,
     );
     expect(rings.length).toBeGreaterThan(0);
+    const importedOnly = importedPlanShadowRings(model, { lat: origin.lat, lon: origin.lon, year: 2026, month: 9, day: 22, hour: 15, minute: 0 }, true);
+    expect(importedOnly.length).toBeGreaterThan(0);
   });
 });

@@ -297,6 +297,31 @@ export function massingUpperLevelPlanLines(
     .map(([z, lines]) => ({ z, lines: dedupeRings(lines) }));
 }
 
+function pushShadowCaster(
+  out: BuildingFeat[],
+  ring: Pt[],
+  holes: Pt[][],
+  z: number,
+  item: ImportedMassing,
+  groundAt: ((east: number, north: number) => number) | undefined,
+  nextId: () => number,
+): void {
+  const ground = footprintGround(ring, item.placement.base, groundAt);
+  const height = Math.max(0.5, z - ground);
+  out.push({
+    id: nextId(),
+    ring: closeRing(ring),
+    holes: holes.map((hole) => closeRing(hole)),
+    height,
+    use: "unclassified",
+    source: "none",
+    importedMassing: true,
+    importedMassingShadowCaster: true,
+    importedTopZ: z,
+    overtureName: item.name,
+  });
+}
+
 function massingShadowCasters(
   item: ImportedMassing,
   origin: LonLat,
@@ -305,28 +330,38 @@ function massingShadowCasters(
   nextId: () => number,
 ): BuildingFeat[] {
   const buckets = roofBucketsForMassing(item, origin, zone);
-  const levels = [...buckets.keys()].sort((a, b) => a - b);
+  const floorCutoff = item.placement.base + ROOF_MIN_ABOVE_M;
+  const levels = [...buckets.keys()].filter((z) => z > floorCutoff).sort((a, b) => a - b);
   const out: BuildingFeat[] = [];
   for (const z of levels) {
     const merged = unionBucket(buckets.get(z) ?? []);
     for (const polygon of merged) {
       const [outer, ...holes] = polygon;
       if (!outer || outer.length < 4) continue;
-      const ring = closeRing(outer as Pt[]);
-      const ground = footprintGround(ring, item.placement.base, groundAt);
-      const height = Math.max(0.5, z - ground);
-      out.push({
-        id: nextId(),
-        ring,
-        holes: holes.map((hole) => closeRing(hole as Pt[])),
-        height,
-        use: "unclassified",
-        source: "none",
-        importedMassing: true,
-        importedMassingShadowCaster: true,
-        importedTopZ: z,
-        overtureName: item.name,
-      });
+      pushShadowCaster(out, outer as Pt[], holes as Pt[][], z, item, groundAt, nextId);
+    }
+  }
+  if (out.length > 0) return out;
+  const { podiumZ, polygons } = massingPodiumRoofFootprints(item, origin, zone);
+  if (polygons.length > 0) {
+    for (const polygon of polygons) {
+      const [outer, ...holes] = polygon;
+      if (!outer || outer.length < 4) continue;
+      pushShadowCaster(out, outer as Pt[], holes as Pt[][], podiumZ, item, groundAt, nextId);
+    }
+  }
+  for (const level of massingUpperLevelOutlines(item, origin, zone)) {
+    for (const ring of level.lines) {
+      pushShadowCaster(out, ring, [], level.z, item, groundAt, nextId);
+    }
+  }
+  if (out.length === 0) {
+    const { polygons, polygonTops } = massingFootprint(item, origin, zone);
+    for (const [index, polygon] of polygons.entries()) {
+      const topZ = polygonTops[index]!;
+      const [outer, ...holes] = polygon;
+      if (!outer || outer.length < 4) continue;
+      pushShadowCaster(out, outer as Pt[], holes as Pt[][], topZ, item, groundAt, nextId);
     }
   }
   return out;

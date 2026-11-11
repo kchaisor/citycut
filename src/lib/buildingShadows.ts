@@ -302,3 +302,17 @@ export function clearPlanShadowCache(): void {
   unionCacheKey = "";
   unionCache = [];
 }
+
+export function importedMassingShadowCasters(buildings: BuildingFeat[]): BuildingFeat[] {
+  return buildings.filter((building) => building.importedMassingShadowCaster);
+}
+
+export function importedPlanShadowRings(
+  model: CityModel,
+  input: PlanShadowInput,
+  castShadows: boolean,
+): Ring[][] {
+  const casters = importedMassingShadowCasters(model.buildings);
+  if (!castShadows || casters.length === 0) return [];
+  return planShadowRings({ ...model, buildings: casters }, input, true);
+}

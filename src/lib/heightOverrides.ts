@@ -353,7 +353,16 @@ export function buildingHeightsFingerprint(buildings: BuildingFeat[]): string {
   const parts: string[] = [];
   for (const building of buildings) {
     parts.push(
-      `${building.id}:${building.height.toFixed(4)}:${building.heightManual ? 1 : 0}:${building.extrusionParts?.length ?? 0}`,
+      [
+        building.id,
+        building.height.toFixed(4),
+        building.heightManual ? 1 : 0,
+        building.extrusionParts?.length ?? 0,
+        building.importedMassingShadowCaster ? 1 : 0,
+        building.importedMassingSkipShadow ? 1 : 0,
+        (building.importedTopZ ?? 0).toFixed(4),
+        building.ring.length,
+      ].join(":"),
     );
   }
   return parts.join("|");

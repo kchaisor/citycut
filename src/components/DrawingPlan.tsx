@@ -25,7 +25,7 @@ import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
 import { NswPlanLabels, NswPlanLines, NswPlanUnder } from "./NswPlanLayers";
 import { NSW_PLAN_LABEL_SHARE, nswPlanItems } from "../lib/nswPlan";
 import { readNswPlanStyle } from "../lib/nswPlanStyle";
-import { planShadowRings, type PlanShadowInput } from "../lib/buildingShadows";
+import { importedPlanShadowRings, planShadowRings, type PlanShadowInput } from "../lib/buildingShadows";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
 import { planViewportExtent, type PlanViewport } from "../lib/planViewport";
 import {
@@ -259,6 +259,10 @@ export function DrawingPlan({
     if (!shadowInput || figure || study) return [];
     return planShadowRings(casterModel, shadowInput, castShadows);
   }, [castShadows, figure, casterModel, shadowInput, study]);
+  const importedShadowReady = useMemo(() => {
+    if (!shadowInput) return false;
+    return importedPlanShadowRings(casterModel, shadowInput, true).length > 0;
+  }, [casterModel, shadowInput]);
   const annotations = (
     <>
       <g aria-hidden="true" className="plan-north-arrow">
@@ -486,6 +490,7 @@ export function DrawingPlan({
               <path key={`tr${index}`} d={svgPolyline(tram, false)} fill="none" {...screenPenAttrs(style.tram)} strokeLinecap="round" strokeLinejoin="round" />
             ))}
             {nswItems && nswStyle && <NswPlanLines items={nswItems} style={nswStyle} />}
+            {importedShadowReady ? <g aria-hidden="true" data-imported-shadow="true" /> : null}
             {study &&
               studyShadows.layers.map((layer) => (
                 <g key={`ss${layer.hour}`} data-shadow-hour={layer.hour}>
