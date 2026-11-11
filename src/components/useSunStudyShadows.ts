@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { PlanShadowTreeMode } from "../lib/buildingShadows";
 import type { SunStudyWorkerMessage, SunStudyWorkerRequest } from "../lib/sunStudyShadows.worker";
 import { SUN_STUDY_HOURS, sunStudyHourKey, sunStudyModelKey, type SunStudyDate } from "../lib/sunStudyPlan";
 import type { CityModel, Ring } from "../types";
@@ -31,8 +32,16 @@ function startWorker(): Worker | null {
   }
 }
 
-export function sunStudyLayersFor(model: CityModel, date: SunStudyDate): Promise<SunStudyLayer[]> {
-  const modelKey = sunStudyModelKey(model);
+function studyShadowModelKey(model: CityModel, treeMode: PlanShadowTreeMode): string {
+  return `${sunStudyModelKey(model)}|trees:${treeMode}`;
+}
+
+export function sunStudyLayersFor(
+  model: CityModel,
+  date: SunStudyDate,
+  treeMode: PlanShadowTreeMode = "off",
+): Promise<SunStudyLayer[]> {
+  const modelKey = studyShadowModelKey(model, treeMode);
   const collect = () =>
     SUN_STUDY_HOURS.map((hour) => {
       const cached = hourCache.get(sunStudyHourKey(modelKey, date, hour));
@@ -65,9 +74,16 @@ export function sunStudyLayersFor(model: CityModel, date: SunStudyDate): Promise
     };
     const request: SunStudyWorkerRequest = {
       id,
-      model: { sideM: model.sideM, terrain: model.terrain, frameShape: model.frameShape, buildings: model.buildings },
+      model: {
+        sideM: model.sideM,
+        terrain: model.terrain,
+        frameShape: model.frameShape,
+        buildings: model.buildings,
+        trees: model.trees,
+      },
       date: { lat: date.lat, lon: date.lon, year: date.year, month: date.month, day: date.day },
       hours: [...missing],
+      treeMode,
     };
     worker.postMessage(request);
   });
@@ -76,8 +92,9 @@ export function sunStudyLayersFor(model: CityModel, date: SunStudyDate): Promise
 export function useSunStudyShadows(
   model: CityModel,
   date: SunStudyDate | null,
+  treeMode: PlanShadowTreeMode = "off",
 ): { layers: SunStudyLayer[]; pending: boolean } {
-  const modelKey = useMemo(() => sunStudyModelKey(model), [model]);
+  const modelKey = useMemo(() => studyShadowModelKey(model, treeMode), [model, treeMode]);
   const dateKey = date ? `${date.lat}|${date.lon}|${date.year}|${date.month}|${date.day}` : "";
   const [revision, setRevision] = useState(0);
 
@@ -102,15 +119,22 @@ export function useSunStudyShadows(
     };
     const request: SunStudyWorkerRequest = {
       id,
-      model: { sideM: model.sideM, terrain: model.terrain, frameShape: model.frameShape, buildings: model.buildings },
+      model: {
+        sideM: model.sideM,
+        terrain: model.terrain,
+        frameShape: model.frameShape,
+        buildings: model.buildings,
+        trees: model.trees,
+      },
       date: { lat: date.lat, lon: date.lon, year: date.year, month: date.month, day: date.day },
       hours: [...missing],
+      treeMode,
     };
     worker.postMessage(request);
     return () => worker.terminate();
     // dateKey covers date's fields; model is covered by modelKey.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modelKey, dateKey]);
+  }, [modelKey, dateKey, treeMode]);
 
   return useMemo(() => {
     if (!date) return { layers: [], pending: false };

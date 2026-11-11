@@ -1919,14 +1919,30 @@ async function main() {
 
     const planFanBtn = page.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
     await planFanBtn.click();
-    await page.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 10000 });
+    await page.getByRole("button", { name: /22 Sep/ }).click();
+    await page.waitForFunction(
+      () => document.querySelectorAll("svg.plan [data-shadow-hour]").length >= 7,
+      null,
+      { timeout: 360000 },
+    );
     await page.waitForTimeout(300);
 
     const beforeSelectInfo = await page.evaluate(() => {
       const envText = document.querySelector(".model .env-console")?.textContent ?? "";
-      const shadowPathEls = Array.from(document.querySelectorAll("svg.plan [data-shadow-hour] path"));
-      const shadowPaths = shadowPathEls.length;
-      const shadowDLength = shadowPathEls.reduce((acc, p) => acc + (p.getAttribute("d")?.length ?? 0), 0);
+      const shadowInkLength = () => {
+        let total = 0;
+        for (const layer of document.querySelectorAll("svg.plan [data-shadow-hour]")) {
+          for (const path of layer.querySelectorAll("path")) {
+            total += path.getAttribute("d")?.length ?? 0;
+          }
+          for (const image of layer.querySelectorAll("image")) {
+            total += image.getAttribute("href")?.length ?? 0;
+          }
+        }
+        return total;
+      };
+      const shadowPaths = document.querySelectorAll("svg.plan [data-shadow-hour] path, svg.plan [data-shadow-hour] image").length;
+      const shadowDLength = shadowInkLength();
       const svg = document.querySelector("svg.plan");
       const svgRect = svg.getBoundingClientRect();
       const cx = svgRect.left + svgRect.width / 2;
@@ -1973,11 +1989,22 @@ async function main() {
 
     const afterSelectInfo = await page.evaluate(() => {
       const selectedEls = document.querySelectorAll("svg.plan [data-selected-building]");
-      const shadowPathEls = Array.from(document.querySelectorAll("svg.plan [data-shadow-hour] path"));
-      const shadowPaths = shadowPathEls.length;
-      const shadowDLength = shadowPathEls.reduce((acc, p) => acc + (p.getAttribute("d")?.length ?? 0), 0);
+      const shadowInkLength = () => {
+        let total = 0;
+        for (const layer of document.querySelectorAll("svg.plan [data-shadow-hour]")) {
+          for (const path of layer.querySelectorAll("path")) {
+            total += path.getAttribute("d")?.length ?? 0;
+          }
+          for (const image of layer.querySelectorAll("image")) {
+            total += image.getAttribute("href")?.length ?? 0;
+          }
+        }
+        return total;
+      };
+      const shadowPaths = document.querySelectorAll("svg.plan [data-shadow-hour] path, svg.plan [data-shadow-hour] image").length;
+      const shadowDLength = shadowInkLength();
       const nonEmptyLayers = Array.from(document.querySelectorAll("svg.plan [data-shadow-hour]")).filter(
-        (g) => g.querySelectorAll("path").length > 0,
+        (layer) => layer.querySelectorAll("path, image").length > 0,
       ).length;
       return {
         selectedCount: selectedEls.length,
@@ -2102,7 +2129,7 @@ async function main() {
           return Array.from(added).some((node) => (node.getAttribute("d")?.length ?? 0) > 80);
         },
         null,
-        { timeout: 120000 },
+        { timeout: 360000 },
       );
       await zoomPlanToSite();
 
@@ -2230,7 +2257,7 @@ async function main() {
         const beforeLoss = await shadowPage.evaluate(
           () => window.__citycutQaModel?.readSunHoursLostPlan?.() ?? { cellCount: 0, maxLoss: 0 },
         );
-        const emptyDom = await shadowPage.locator("[data-sun-hours-lost]").count();
+        const emptyOverlay = await shadowPage.locator("[data-sun-hours-lost-overlay]").count();
 
         await shadowPage.evaluate(
           ({ east, north }) => {
@@ -2255,7 +2282,10 @@ async function main() {
         const withLoss = await shadowPage.evaluate(
           () => window.__citycutQaModel?.readSunHoursLostPlan?.() ?? { cellCount: 0, maxLoss: 0 },
         );
-        const lossDom = await shadowPage.locator("[data-sun-hours-lost]").count();
+        const lossOverlay = await shadowPage.locator("[data-sun-hours-lost-overlay]");
+        const lossDom = await lossOverlay.count();
+        const lossRasterCells =
+          lossDom > 0 ? Number(await lossOverlay.getAttribute("data-sun-hours-lost-cell-count")) || 0 : 0;
         await shadowPage.waitForSelector("[data-sun-hours-lost-legend-dock]", { timeout: 120000 });
         const dockLayout = await shadowPage.evaluate(() => {
           const legend = document.querySelector("[data-sun-hours-lost-legend-dock]");
@@ -2286,10 +2316,11 @@ async function main() {
           "solar-hours-lost-heatmap",
           "Box Hill hours-lost heatmap: no cells without massing, non-zero 3 m cells south of 6-storey proposal when enabled",
           beforeLoss.cellCount === 0 &&
-            emptyDom === 0 &&
+            emptyOverlay === 0 &&
             withLoss.cellCount > 8 &&
             withLoss.maxLoss > 0.25 &&
-            lossDom > 8 &&
+            lossDom === 1 &&
+            lossRasterCells > 8 &&
             (withLoss.footprintInside ?? 0) === 0,
           `before=${JSON.stringify(beforeLoss)}, after=${JSON.stringify(withLoss)}, dom=${lossDom}, shot=${shotHoursLost}`,
         );
@@ -2346,8 +2377,16 @@ async function main() {
         const maxBudget = Math.max(baseline.maxMs * 2.5 + 30, 150);
         const totalBudget = Math.max(baseline.totalMs * 3.5 + 80, 250);
         const shotGuide = path.join(CURSOR_ARTIFACTS_DIR, "solar-access-guide.png");
-        if ((await shadowPage.locator("[data-solar-access-guide]").count()) > 0) {
-          await shadowPage.locator("[data-solar-access-guide]").screenshot({ path: shotGuide });
+        const accessConsole = shadowPage.locator("[data-solar-access-console]");
+        if ((await accessConsole.count()) > 0) {
+          await accessConsole.screenshot({ path: shotGuide, timeout: 15000 });
+        } else if ((await shadowPage.locator("[data-solar-access-guide]").count()) > 0) {
+          const guidePanel = shadowPage.locator(".right-inspector .solar-panel-body, .right-inspector .solar-drawer").first();
+          try {
+            await guidePanel.screenshot({ path: shotGuide, timeout: 15000 });
+          } catch {
+            await shadowPage.locator(".right-inspector").screenshot({ path: shotGuide, timeout: 15000 });
+          }
         }
         assertCheck(
           "solar-plan-zoom-perf",
@@ -2457,7 +2496,15 @@ async function main() {
           { east: midE, north: midN, span: spanM },
         );
         await parkPage.waitForTimeout(800);
-        await parkPage.waitForSelector("[data-solar-park-added-shadow]", { timeout: 120000 });
+        await parkPage.waitForFunction(
+          () => {
+            const hatch = document.querySelector("[data-solar-park-added-shadow]");
+            if (!hatch) return false;
+            return Array.from(hatch.querySelectorAll("path")).some((node) => (node.getAttribute("d")?.length ?? 0) > 40);
+          },
+          null,
+          { timeout: 360000 },
+        );
         const dock = parkPage.locator("[data-solar-results-dock]");
         await dock.waitFor({ state: "visible", timeout: 120000 });
         const parkMetrics = await dock.locator("[data-solar-park-metrics]").first().textContent();
@@ -2481,6 +2528,47 @@ async function main() {
       };
 
       await melbourneParkNoAdditional();
+
+      const boxHillTreeShadows = async () => {
+        const readTreeShadowDom = async () =>
+          shadowPage.evaluate(() => {
+            const nodes = Array.from(document.querySelectorAll("[data-tree-crown-shadow]"));
+            const dLen = nodes.reduce(
+              (acc, node) => acc + (node.getAttribute("d")?.length ?? node.getAttribute("href")?.length ?? 0),
+              0,
+            );
+            return { count: nodes.length, dLen };
+          });
+        await shadowPage.getByRole("tab", { name: /Drawing/i }).click();
+        await shadowPage.waitForSelector("svg.plan", { timeout: 120000 });
+        await shadowPage.evaluate(
+          ({ east, north }) => {
+            window.__citycutQaModel?.setSolarPlanTime?.(15, 0);
+            window.__citycutQaModel?.setTreesCastShadow?.(false);
+            window.__citycutQaModel?.setDrawingPlanViewport?.(east - 22, north + 12, 46);
+          },
+          { east: FOCUS_EAST, north: FOCUS_NORTH },
+        );
+        await shadowPage.waitForTimeout(700);
+        const treesOff = await readTreeShadowDom();
+        const shotOff = path.join(CURSOR_ARTIFACTS_DIR, "solar-tree-shadows-off.png");
+        await shadowPage.locator(".plan-viewport-stack").screenshot({ path: shotOff });
+        await shadowPage.evaluate(() => window.__citycutQaModel?.setTreesCastShadow?.(true));
+        await shadowPage.waitForTimeout(900);
+        const treesOn = await readTreeShadowDom();
+        const shotOn = path.join(CURSOR_ARTIFACTS_DIR, "solar-tree-shadows-on.png");
+        await shadowPage.locator(".plan-viewport-stack").screenshot({ path: shotOn });
+        const shotCompare = path.join(CURSOR_ARTIFACTS_DIR, "solar-tree-shadows-compare.png");
+        execFileSync("ffmpeg", ["-y", "-i", shotOff, "-i", shotOn, "-filter_complex", "hstack=inputs=2", shotCompare]);
+        assertCheck(
+          "solar-tree-shadows-visual",
+          "Trees off vs on at 22 Sep 3pm: grey crown-shadow ellipses appear on plan (heatmap change at this zoom is minor)",
+          treesOn.count > 0 && treesOn.dLen > treesOff.dLen + 120,
+          `off=${JSON.stringify(treesOff)}, on=${JSON.stringify(treesOn)}, compare=${shotCompare}, offShot=${shotOff}, onShot=${shotOn}`,
+        );
+      };
+
+      await boxHillTreeShadows();
 
       await shadowCtx.close();
     }

@@ -1,4 +1,4 @@
-import { isProposedMassingBuilding } from "./buildingShadows";
+import { isProposedMassingBuilding, type PlanShadowTreeMode } from "./buildingShadows";
 import { pointInLocalMulti } from "./massingParcelBoundary";
 import { pointInPolygon } from "./useCascade";
 import { RESCODE_B43_STEP_MINUTES } from "./solarAccessB43";
@@ -88,11 +88,12 @@ export function computeSunHoursLostGrid(
   model: CityModel,
   year: number,
   cellM: number,
+  treeMode: PlanShadowTreeMode = "off",
 ): SunHoursLostGrid | null {
   const bounds = proposedBounds(model, SUN_HOURS_LOST_FOCUS_MARGIN_M);
   if (!bounds) return null;
   const clipped = clipModelToBounds(model, bounds);
-  const stepShadows = buildRescodeStepShadows(clipped, year, [focusRing(bounds)]);
+  const stepShadows = buildRescodeStepShadows(clipped, year, [focusRing(bounds)], treeMode);
   const cols = Math.max(1, Math.ceil((bounds.maxE - bounds.minE) / cellM));
   const rows = Math.max(1, Math.ceil((bounds.maxN - bounds.minN) / cellM));
   const originEast = bounds.minE;

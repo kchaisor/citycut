@@ -21,7 +21,8 @@ import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
 import { NswPlanLabels, NswPlanLines, NswPlanUnder } from "./NswPlanLayers";
 import { NSW_PLAN_LABEL_SHARE, nswPlanItems } from "../lib/nswPlan";
 import { readNswPlanStyle } from "../lib/nswPlanStyle";
-import { planShadowSplitRings, proposedMassingInModel, type PlanShadowInput } from "../lib/buildingShadows";
+import { planShadowSplitRings, proposedMassingInModel, shadowRingsFromMulti, type PlanShadowInput } from "../lib/buildingShadows";
+import { planTreeShadowMulti } from "../lib/solarTreePlanShadow";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
 import { createThrottledViewportSink } from "../lib/planViewportThrottle";
 import { planViewportExtent, type PlanViewport } from "../lib/planViewport";
@@ -39,6 +40,7 @@ import {
 } from "../lib/sunStudyPlan";
 import { heliodonLabelFontMetres } from "../lib/heliodonDiagram";
 import { useSunStudyShadows } from "./useSunStudyShadows";
+import { rasterizePlanShadowRings, rasterizeSunStudyLayers } from "../lib/sunStudyShadowRaster";
 import { SunHoursLostPlanOverlay } from "./SunHoursLostPlanOverlay";
 import type { SunHoursLostGrid } from "../lib/sunHoursLostPlan";
 import { ringFromCorners } from "../lib/solarAccessB43";
@@ -96,6 +98,7 @@ export function DrawingPlan({
   receptorDraw = false,
   onReceptorCommit,
   sunHoursLostGrid = null,
+  treesCastShadow = false,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -121,6 +124,7 @@ export function DrawingPlan({
   receptorDraw?: boolean;
   onReceptorCommit?: (ring: Ring) => void;
   sunHoursLostGrid?: SunHoursLostGrid | null;
+  treesCastShadow?: boolean;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
@@ -279,7 +283,7 @@ export function DrawingPlan({
     () => sunStudyCasterModel(model, sunStudyCasters, sunStudySelected),
     [model, sunStudyCasters, sunStudySelected],
   );
-  const studyShadows = useSunStudyShadows(casterModel, study);
+  const studyShadows = useSunStudyShadows(casterModel, study, treesCastShadow ? "both" : "off");
   const selectedIds = useMemo(() => new Set(sunStudySelected), [sunStudySelected]);
   const estFont = heliodonLabelFontMetres(planScale, 5);
   const estLabels = useMemo(
@@ -288,6 +292,8 @@ export function DrawingPlan({
   );
   const studyShadowFill = getColour("--sun-study-shadow");
   const studyShadowAddedFill = getColour("--sun-study-shadow-added");
+  const studyIsolateCasters = sunStudySelected.length > 0;
+  const treeCrownShadowFill = getColour("--sun-study-tree-shadow");
   const studySunFill = getColour("--sun-study-sun");
   const muted = Boolean(study) && sunStudyMuted;
   const mutedFill = (key: Parameters<typeof getColour>[0], normal: string) => (muted ? getColour(key) : normal);
@@ -349,8 +355,33 @@ export function DrawingPlan({
   }
   const shadowSplit = useMemo(() => {
     if (!castShadows || !shadowInput || figure || study) return { existing: [], added: [] };
-    return planShadowSplitRings(casterModel, shadowInput, true);
+    return planShadowSplitRings(casterModel, shadowInput, true, "off");
   }, [castShadows, figure, casterModel, shadowInput, study]);
+  const scrubbedTreeCrownShadows = useMemo(() => {
+    if (!treesCastShadow || !castShadows || !shadowInput || figure) return [];
+    const trees = model.trees ?? [];
+    if (trees.length === 0) return [];
+    return shadowRingsFromMulti(planTreeShadowMulti(model, shadowInput, trees));
+  }, [treesCastShadow, castShadows, shadowInput, figure, model]);
+  const studyShadowRasters = useMemo(() => {
+    if (!study || studyIsolateCasters || studyShadows.layers.length === 0) return [];
+    const layers = splitShadow
+      ? studyShadows.layers.map((layer) => ({ ...layer, addedRings: [] as typeof layer.addedRings }))
+      : studyShadows.layers;
+    return rasterizeSunStudyLayers(layers, model.sideM);
+  }, [study, studyIsolateCasters, splitShadow, studyShadows.layers, model.sideM]);
+  const studyScrubAddedRings = useMemo(() => {
+    if (!study || studyIsolateCasters || !splitShadow || !shadowInput) return [];
+    const layer = studyShadows.layers.find((entry) => entry.hour === shadowInput.hour);
+    return layer?.addedRings ?? [];
+  }, [study, studyIsolateCasters, splitShadow, shadowInput, studyShadows.layers]);
+  const treeCrownShadowRaster = useMemo(
+    () =>
+      scrubbedTreeCrownShadows.length > 0
+        ? rasterizePlanShadowRings(scrubbedTreeCrownShadows, model.sideM, treeCrownShadowFill, 0.68)
+        : null,
+    [scrubbedTreeCrownShadows, model.sideM, treeCrownShadowFill],
+  );
   const addedHatchSize = Math.max(3.5, model.sideM * 0.008);
   const annotations = (
     <>
@@ -623,7 +654,7 @@ export function DrawingPlan({
               <path key={`tr${index}`} d={svgPolyline(tram, false)} fill="none" {...screenPenAttrs(style.tram)} strokeLinecap="round" strokeLinejoin="round" />
             ))}
             {nswItems && nswStyle && <NswPlanLines items={nswItems} style={nswStyle} />}
-            {study &&
+            {studyIsolateCasters &&
               studyShadows.layers.map((layer) => (
                 <g key={`ss${layer.hour}`} data-shadow-hour={layer.hour}>
                   {layer.rings.map((rings, index) => (
@@ -648,6 +679,29 @@ export function DrawingPlan({
                   ))}
                 </g>
               ))}
+            {!studyIsolateCasters &&
+              studyShadowRasters.map((layer) => (
+                <g key={`ssr${layer.hour}`} data-shadow-hour={layer.hour}>
+                  <image
+                    href={layer.href}
+                    x={layer.east}
+                    y={-(layer.north + layer.heightM)}
+                    width={layer.widthM}
+                    height={layer.heightM}
+                    preserveAspectRatio="none"
+                  />
+                </g>
+              ))}
+            {studyScrubAddedRings.map((rings, index) => (
+              <path
+                key={`sscrub-a${index}`}
+                data-shadow-added
+                d={svgRings(rings)}
+                fill="url(#sun-study-added-hatch)"
+                fillRule="evenodd"
+                stroke="none"
+              />
+            ))}
             {shadowSplit.existing.map((rings, index) => (
               <path
                 key={`sh${index}`}
@@ -669,6 +723,17 @@ export function DrawingPlan({
                 stroke="none"
               />
             ))}
+            {treeCrownShadowRaster && (
+              <image
+                data-tree-crown-shadow
+                href={treeCrownShadowRaster.href}
+                x={treeCrownShadowRaster.east}
+                y={-(treeCrownShadowRaster.north + treeCrownShadowRaster.heightM)}
+                width={treeCrownShadowRaster.widthM}
+                height={treeCrownShadowRaster.heightM}
+                preserveAspectRatio="none"
+              />
+            )}
             {plan.buildings.map((building, index) => (
               <path
                 key={`b${index}`}

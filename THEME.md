@@ -227,6 +227,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-study-path-edge` | `#d4d4d0` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): footpath edge. |
 | `--sun-study-building` | `#ffffff` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): buildings (the site building keeps its own colour). |
 | `--sun-study-tree` | `#b8e0b0` | Tree crowns in the sun study muted base plan, at 50% opacity. Pastel green so trees stay visible under the hourly shadows. |
+| `--sun-study-tree-shadow` | `#b0b8c4` | Tree crown ground shadows on the site plan when **Trees cast shadow** is on (visual only; compliance ignores trees). |
 | `--solar-receptor-pass` | `#9fd89f` | B4-3 solar receptor overlay when existing and proposed pass. |
 | `--solar-receptor-fail` | `#e8a4a4` | B4-3 solar receptor overlay when the proposal causes failure. |
 | `--solar-receptor-warn` | `#f0d59a` | B4-3 solar receptor overlay when already non-compliant. |
