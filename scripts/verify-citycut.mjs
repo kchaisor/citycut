@@ -29,6 +29,7 @@ const VIEWPORT = { width: 1440, height: 900 };
 const DEVICE_SCALE_FACTOR = 2;
 const ARTIFACTS_DIR = process.env.CITYCUT_ARTIFACTS_DIR ?? "/workspace";
 const CURSOR_ARTIFACTS_DIR = "/opt/cursor/artifacts";
+const CLAUDE_SOLAR_SHOTS_DIR = "/workspace/claude-solar-shots";
 
 function countPixelsNearRgb(png, target, tolerance = 48) {
   let hits = 0;
@@ -2496,14 +2497,45 @@ async function main() {
           { east: midE, north: midN, span: spanM },
         );
         await parkPage.waitForTimeout(800);
-        await parkPage.waitForFunction(
-          () => {
-            const hatch = document.querySelector("[data-solar-park-added-shadow]");
-            if (!hatch) return false;
-            return Array.from(hatch.querySelectorAll("path")).some((node) => (node.getAttribute("d")?.length ?? 0) > 40);
-          },
-          null,
-          { timeout: 360000 },
+        const readParkHatch = () =>
+          parkPage.evaluate(() => {
+            const hatch = document.querySelector("[data-solar-park-added-shadow='carlton-gardens-park']");
+            const paths = hatch ? Array.from(hatch.querySelectorAll("path")) : [];
+            const dLen = paths.reduce((sum, node) => sum + (node.getAttribute("d")?.length ?? 0), 0);
+            const fills = paths.map((node) => node.getAttribute("fill"));
+            const box = hatch?.getBoundingClientRect();
+            return { paths: paths.length, dLen, fills, width: box?.width ?? 0, height: box?.height ?? 0 };
+          });
+        let parkHatch = await readParkHatch();
+        try {
+          await parkPage.waitForFunction(
+            () => {
+              const hatch = document.querySelector("[data-solar-park-added-shadow='carlton-gardens-park']");
+              return Boolean(hatch) && Array.from(hatch.querySelectorAll("path")).some((node) => (node.getAttribute("d")?.length ?? 0) > 40);
+            },
+            null,
+            { timeout: 15000 },
+          );
+        } catch {
+        }
+        parkHatch = await readParkHatch();
+        fs.mkdirSync(CLAUDE_SOLAR_SHOTS_DIR, { recursive: true });
+        const shotParkHatch = path.join(CLAUDE_SOLAR_SHOTS_DIR, "carlton-park-hatch.png");
+        await parkPage.screenshot({ path: shotParkHatch });
+        assertCheck(
+          "solar-park-added-shadow",
+          "Carlton park: once assess reports added shadow, the plan draws the gold added-shadow hatch from the assess rings (within 15 s)",
+          parkHatch.paths > 0 &&
+            parkHatch.dLen > 40 &&
+            parkHatch.fills.every((fill) => fill === "url(#sun-study-added-hatch)") &&
+            parkHatch.width > 2 &&
+            parkHatch.height > 2,
+          `hatch=${JSON.stringify({ ...parkHatch, fills: [...new Set(parkHatch.fills)] })}, rings=${JSON.stringify(
+            await parkPage.evaluate(() => {
+              const rows = window.__citycutQaModel?.readSolarReceptorAssess?.() ?? [];
+              return rows.find((row) => row.id === "carlton-gardens-park")?.addedShadowRings?.length ?? null;
+            }),
+          )}, shot=${shotParkHatch}`,
         );
         const dock = parkPage.locator("[data-solar-results-dock]");
         await dock.waitFor({ state: "visible", timeout: 120000 });
@@ -2595,19 +2627,30 @@ async function main() {
           },
           null,
           { timeout: 360000 },
-        );
+        ).catch(() => {});
         const bundle = await shadowPage.evaluate(() => window.__citycutQaModel?.readFacadeSolarAssess?.() ?? null);
         const assessMs = Number(await shadowPage.evaluate(() => document.documentElement.dataset.facadeSolarAssessMs ?? "0"));
-        const shotFacade = path.join(CURSOR_ARTIFACTS_DIR, "solar-facade-heatmap-3d.png");
-        await shadowPage.locator(".model .fill").first().screenshot({ path: shotFacade, timeout: 60000 });
-        const shotCard = path.join(CURSOR_ARTIFACTS_DIR, "solar-facade-results-card.png");
+        const overlayPoints = Number(
+          await shadowPage.evaluate(() => document.documentElement.dataset.facadeSolarOverlay ?? "0"),
+        );
+        const assessedPoints = (bundle?.facade?.units.length ?? 0) + (bundle?.podium?.units.length ?? 0);
+        const pctText = await shadowPage.locator("[data-facade-pct-at-threshold]").first().textContent().catch(() => null);
+        fs.mkdirSync(CLAUDE_SOLAR_SHOTS_DIR, { recursive: true });
+        const shotFacade = path.join(CLAUDE_SOLAR_SHOTS_DIR, "box-hill-facade-heatmap-3d.png");
+        await shadowPage.screenshot({ path: shotFacade, timeout: 60000 });
+        const shotCard = path.join(CLAUDE_SOLAR_SHOTS_DIR, "facade-results-card.png");
         await shadowPage.locator("[data-facade-solar-results-dock]").screenshot({ path: shotCard, timeout: 15000 });
         const unitCount = bundle?.facade?.unitCount ?? 0;
         assertCheck(
           "solar-facade-adg-heatmap",
-          "Facade ADG 4A-1: 3D overlay points, readable results card, timing attribute on Box Hill proposal",
-          unitCount > 4 && assessMs > 0 && assessMs < 120000,
-          `units=${unitCount}, assessMs=${assessMs}, pctAt=${bundle?.facade?.pctAtThreshold}, pctNone=${bundle?.facade?.pctNone}, pass=${bundle?.facade?.pass}, heatmap=${shotFacade}, card=${shotCard}`,
+          "Facade ADG 4A-1: 3D overlay draws every assessed unit, readable results card, timing attribute on Box Hill proposal",
+          unitCount > 4 &&
+            assessMs > 0 &&
+            assessMs < 120000 &&
+            overlayPoints > 0 &&
+            overlayPoints === assessedPoints &&
+            Boolean(pctText?.includes("%")),
+          `units=${unitCount}, overlayPoints=${overlayPoints}, assessedPoints=${assessedPoints}, assessMs=${assessMs}, pctAt=${bundle?.facade?.pctAtThreshold}, pctNone=${bundle?.facade?.pctNone}, pass=${bundle?.facade?.pass}, pctText=${JSON.stringify(pctText)}, heatmap=${shotFacade}, card=${shotCard}`,
         );
       };
 
