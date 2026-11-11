@@ -24,6 +24,7 @@ declare global {
     __citycutQa?: QaCameraBridge;
     __citycutQaSite?: QaSiteSnapshot;
     /** QA only: programmatic height-edit pick for screenshots. */
+    __citycutSectionExportAudit?: () => { ok: boolean; layers: string[]; svg?: string };
     __citycutQaModel?: {
       openMidriseHeightEdit: () => number | null;
       pickBuildingNearGeoQa?: (lat: number, lon: number) => number | null;
@@ -58,6 +59,7 @@ declare global {
       captureViewportPng?: () => Promise<string | null>;
       setSectionKnifeActive?: (active: boolean) => void;
       setSectionKnifePose?: (pose: import("./sectionKnife/plane").SectionKnifePose) => void;
+      auditSectionExport?: () => { ok: boolean; layers: string[] };
     };
     __citycutQaSelectionAudit?: import("./buildingSelectionAudit").BuildingSelectionAudit;
     __citycutFrameRatio?: number;

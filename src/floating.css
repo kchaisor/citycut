@@ -4347,6 +4347,23 @@ body,
   font-family: var(--font-mono);
 }
 
+.section-knife-placement-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.section-knife-placement-fields input {
+  width: 100%;
+}
+
+.section-knife-preset-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
 .section-knife-elevation-knife-id {
   font-size: 11px;
   opacity: 0.78;

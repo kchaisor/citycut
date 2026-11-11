@@ -326,6 +326,7 @@ function City({
   sectionKnife,
   onSectionKnifePoseChange,
   onSectionKnifeGizmoInteractionChange,
+  projection,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -343,6 +344,7 @@ function City({
   sectionKnife?: SectionKnifeToolState | null;
   onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
   onSectionKnifeGizmoInteractionChange?: (state: SectionKnifeGizmoInteraction) => void;
+  projection: ProjectionMode;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -798,6 +800,8 @@ function City({
           pose={selectedKnife(sectionKnife).pose}
           onPoseChange={onSectionKnifePoseChange}
           onGizmoInteractionChange={onSectionKnifeGizmoInteractionChange}
+          planView={projection === "plan"}
+          snapWhileDrag={sectionKnife.snap}
         />
       ) : null}
     </>
@@ -2028,6 +2032,7 @@ export function Scene3D({
         sectionKnife={sectionKnife}
         onSectionKnifePoseChange={onSectionKnifePoseChange}
         onSectionKnifeGizmoInteractionChange={onSectionKnifeGizmoInteractionChange}
+        projection={projection}
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}

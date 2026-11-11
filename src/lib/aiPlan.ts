@@ -41,6 +41,7 @@ import {
 } from "./explodedAxoExport";
 import { defaultExplodedAxoSettings, type ExplodedAxoSettings } from "./explodedAxo";
 import { stableExportModel } from "./exportStableOrder";
+import { sectionMarkerPlanChunk } from "./sectionKnife/sectionMarkerPlanChunk";
 import type { CityModel, ContourSourceId, Pt, Ring } from "../types";
 
 export const SITE_LAYER_ORDER = [
@@ -58,6 +59,7 @@ export const SITE_LAYER_ORDER = [
   "Site buildings",
   "Imported massing",
   "Site boundary",
+  "Section markers",
   "Trees",
   "Shadows",
   "Sun path",
@@ -260,6 +262,7 @@ export type SitePlanExportOptions = {
    * of the single Shadows layer. Rings are the plan shadows already computed for the screen.
    */
   sunStudy?: { layers: { hour: number; rings: Ring[][] }[] } | null;
+  sectionKnife?: import("./sectionKnife/state").SectionKnifeToolState | null;
 };
 
 /** Layer name for one sun-study hour, e.g. 9 -> "Shadow 09:00". */
@@ -301,7 +304,8 @@ function resolveSitePlanExport(
     "heliodon" in exportOptions ||
     "wind" in exportOptions ||
     "sunStudy" in exportOptions ||
-    "uniformBuildings" in exportOptions
+    "uniformBuildings" in exportOptions ||
+    "sectionKnife" in exportOptions
   ) {
     return exportOptions as SitePlanExportOptions;
   }
@@ -548,6 +552,8 @@ export function sitePlanChunks(
   }
   const siteBoundary = siteBoundaryChunk(model.siteBoundaryLines ?? [], model, layout, style);
   if (siteBoundary) chunks.push(siteBoundary);
+  const sectionMarkers = sectionMarkerPlanChunk(model, layout, resolved.sectionKnife);
+  if (sectionMarkers) chunks.push(sectionMarkers);
   if (resolved.wind?.table) chunks.push(windPlanPdfChunk(resolved.wind.table, resolved.wind.period, layout, model.sideM));
   chunks.push(...nswChunks.labels);
   chunks.push(frameStroke(layout, style.frame));

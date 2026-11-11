@@ -31,6 +31,7 @@ import {
   downloadIsometricSvg,
   downloadSiteAi,
   downloadSiteSvg,
+  downloadSectionDrawing,
   downloadFigureSvg,
   downloadSunStudyZip,
   pngFilename,
@@ -171,6 +172,9 @@ import { SectionKnifeToolPanel } from "./SectionKnifeToolPanel";
 import { SectionKnifeElevationPanel } from "./SectionKnifeElevationPanel";
 import { initialSectionKnifeToolState, type SectionKnifeToolState } from "../lib/sectionKnife/state";
 import type { SectionKnifePose } from "../lib/sectionKnife/plane";
+import { snapPoseToModel } from "../lib/sectionKnife/snap";
+import { selectedKnife } from "../lib/sectionKnife/state";
+import { buildSectionExportSvg, sectionExportLayerNames } from "../lib/sectionKnife/sectionExport";
 import { useWalkPlayback, useWalkViewshed, WALK_SPEEDS } from "./useWalkViewshed";
 import { fetchWindRoseTable } from "../lib/windFetch";
 import { analyzeWindPeriod, WIND_PERIOD_LABELS, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
@@ -339,12 +343,28 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
   useEffect(() => {
     setSectionKnifeTool(initialSectionKnifeToolState(model.sideM));
   }, [model.center.lat, model.center.lon, model.sideM]);
-  const onSectionKnifePoseChange = useCallback((pose: SectionKnifePose) => {
-    setSectionKnifeTool((tool) => ({
-      ...tool,
-      knives: tool.knives.map((knife) => (knife.id === tool.selectedId ? { ...knife, pose } : knife)),
-    }));
-  }, []);
+  const onSectionKnifePoseChange = useCallback(
+    (pose: SectionKnifePose, meta?: { shiftKey?: boolean; snapWhileDrag?: boolean }) => {
+      setSectionKnifeTool((tool) => {
+        let nextPose = pose;
+        let snapCue = tool.snapCue;
+        const shouldSnap = tool.snap && !meta?.shiftKey && meta?.snapWhileDrag;
+        if (shouldSnap) {
+          const snap = snapPoseToModel(model, nextPose);
+          nextPose = snap.pose;
+          if (snap.cue) {
+            snapCue = { kind: snap.cue.kind, east: snap.cue.east, north: snap.cue.north, untilMs: Date.now() + 2200 };
+          }
+        }
+        return {
+          ...tool,
+          snapCue,
+          knives: tool.knives.map((knife) => (knife.id === tool.selectedId ? { ...knife, pose: nextPose } : knife)),
+        };
+      });
+    },
+    [model],
+  );
   const [windSettings, setWindSettings] = useState<WindViewSettings>(() => {
     const next = windSettingsForModelOpen(window.localStorage);
     writeStoredWindSettings(window.localStorage, next);
@@ -820,11 +840,39 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
       setSectionKnifePose(pose: SectionKnifePose) {
         onSectionKnifePoseChange(pose);
       },
+      auditSectionExport() {
+        const knife = selectedKnife(sectionKnifeTool);
+        const svg = buildSectionExportSvg(model, knife.pose, { applyVerticalExaggeration: false, knife });
+        const layers = sectionExportLayerNames(svg);
+        const hasGround = svg.includes("Section::Ground") && /polyline|path/i.test(svg);
+        return {
+          ok: layers.includes("Section::Ground") && layers.includes("Section::Annotations") && hasGround,
+          layers,
+          svg,
+        };
+      },
     };
     return () => {
       delete window.__citycutQaModel;
     };
-  }, [model, onSectionKnifePoseChange]);
+  }, [model, onSectionKnifePoseChange, sectionKnifeTool]);
+
+  useEffect(() => {
+    window.__citycutSectionExportAudit = () => {
+      const knife = selectedKnife(sectionKnifeTool);
+      const svg = buildSectionExportSvg(model, knife.pose, { applyVerticalExaggeration: false, knife });
+      const layers = sectionExportLayerNames(svg);
+      const hasGround = svg.includes("Section::Ground") && /polyline|path/i.test(svg);
+      return {
+        ok: layers.includes("Section::Ground") && layers.includes("Section::Annotations") && hasGround,
+        layers,
+        svg,
+      };
+    };
+    return () => {
+      delete window.__citycutSectionExportAudit;
+    };
+  }, [model, sectionKnifeTool]);
 
   useEffect(() => {
     if (model.comBuildingHeightsApplied) {
@@ -1280,6 +1328,16 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
     const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     if (nextUrl !== current) window.history.replaceState(window.history.state, "", nextUrl);
     if (snap) setSnapId((id) => id + 1);
+  }
+
+  async function exportSectionDrawing(applyVerticalExaggeration: boolean) {
+    setExportError(null);
+    try {
+      const knife = selectedKnife(sectionKnifeTool);
+      await downloadSectionDrawing(displayModel, knife, applyVerticalExaggeration);
+    } catch {
+      setExportError("The section export could not be written.");
+    }
   }
 
   async function save3dm() {
@@ -1862,6 +1920,7 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
             ) : (
               <DrawingPlan
                 model={drawingModel}
+                sectionKnife={sectionKnifeTool}
                 kind={drawing}
                 onScale={onScale}
                 lineStyle={lineStyles}
@@ -2585,8 +2644,10 @@ export function ModelPage({ model, onHome, onNewCut }: { model: CityModel; onHom
                     </label>
                     <SectionKnifeToolPanel
                       sideM={displayModel.sideM}
+                      model={displayModel}
                       tool={sectionKnifeTool}
                       onChange={setSectionKnifeTool}
+                      onExportSection={exportSectionDrawing}
                     />
                     <div className="mini-flags sub-toggles display-switches" role="group" aria-label="View modes">
                       <label className={view3dDisplay.showOutlines ? "mini-flag is-on check-field" : "mini-flag check-field"}>

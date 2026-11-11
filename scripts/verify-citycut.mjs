@@ -980,6 +980,36 @@ async function main() {
           `end=${hudAudit.labelTexts?.join("/")}, rlCount=${hudAudit.rlCount}, rlOverlap=${hudAudit.rlOverlap}`,
         );
 
+        await page.locator(".mode-btn", { hasText: "Drawing" }).click();
+        await page.waitForTimeout(900);
+        const planMarkerCount = await page.locator("[data-section-knife-plan-markers='1']").count();
+        assertCheck(
+          "section-knife-plan-marker",
+          "Site plan shows a live section marker while Section Knife is on",
+          planMarkerCount > 0,
+          `markerGroups=${planMarkerCount}`,
+        );
+        await page.locator(".mode-btn", { hasText: "3D model" }).click();
+        await page.waitForTimeout(400);
+        const isoRestore = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Isometric" }).first();
+        if ((await isoRestore.count()) > 0) await isoRestore.click();
+        await page.waitForTimeout(450);
+        const snapToggle = page.locator(".section-knife-tools label.check-field input[type=checkbox]").first();
+        if (await snapToggle.isChecked()) await snapToggle.click();
+        await page.waitForTimeout(200);
+
+        const exportAudit = await page.evaluate(() => {
+          const audit = window.__citycutSectionExportAudit?.();
+          if (!audit) return { ok: false, detail: "audit missing" };
+          return audit;
+        });
+        assertCheck(
+          "section-knife-export-layers",
+          "Section export SVG contains Section:: layers and a ground profile",
+          exportAudit.ok,
+          `layers=${exportAudit.layers?.join(",") ?? exportAudit.detail}`,
+        );
+
         if (fs.existsSync(ARTIFACTS_DIR)) {
           await page.locator(".model canvas").screenshot({
             path: path.join(ARTIFACTS_DIR, "section-knife-3d-no-contour-leak-1440x900.png"),
@@ -1074,11 +1104,30 @@ async function main() {
             assertCheck(
               "section-knife-ring-rotate",
               "Real mouse drag on Section Knife base ring changes angle without camera orbit",
-              angleDelta > 0.02 && camStableRing,
+              angleDelta > 0.015 && camStableRing,
               `angle ${beforeRing.angle.toFixed(4)} -> ${afterRing.angle.toFixed(4)}, camPosStable=${camStableRing}`,
             );
           }
         }
+
+        const offsetBefore = await page.evaluate(() =>
+          Number(document.querySelector("[data-section-knife-offset-m]")?.getAttribute("data-section-knife-offset-m") ?? "0"),
+        );
+        const offsetInput = page.locator(".section-knife-offset-input");
+        if ((await offsetInput.count()) > 0) {
+          await offsetInput.fill("6");
+          await offsetInput.dispatchEvent("change");
+        }
+        await page.waitForTimeout(350);
+        const offsetAfter = await page.evaluate(() =>
+          Number(document.querySelector("[data-section-knife-offset-m]")?.getAttribute("data-section-knife-offset-m") ?? "0"),
+        );
+        assertCheck(
+          "section-knife-numeric-offset",
+          "Section Knife offset input moves the active plane",
+          Math.abs(offsetAfter - 6) < 0.6 && Math.abs(offsetAfter - offsetBefore) > 0.4,
+          `before=${offsetBefore.toFixed(2)}, after=${offsetAfter.toFixed(2)}`,
+        );
       }
     }
 

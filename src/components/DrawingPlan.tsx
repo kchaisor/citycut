@@ -17,6 +17,8 @@ import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import type { CityModel } from "../types";
+import type { SectionKnifeToolState } from "../lib/sectionKnife/state";
+import { SectionKnifePlanMarkers } from "./SectionKnifePlanMarkers";
 import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
 import { NswPlanLabels, NswPlanLines, NswPlanUnder } from "./NswPlanLayers";
 import { NSW_PLAN_LABEL_SHARE, nswPlanItems } from "../lib/nswPlan";
@@ -83,6 +85,7 @@ export function DrawingPlan({
   sunStudyCasters = "all",
   sunStudySelected = NO_SELECTION,
   onSunStudyPick,
+  sectionKnife,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -111,6 +114,7 @@ export function DrawingPlan({
   sunStudySelected?: readonly number[];
   /** Click (not drag) on a building while the sun study is on. */
   onSunStudyPick?: (buildingId: number) => void;
+  sectionKnife?: SectionKnifeToolState | null;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
@@ -533,6 +537,9 @@ export function DrawingPlan({
                     vectorEffect="non-scaling-stroke"
                   />
                 ))}
+            {sectionKnife?.active ? (
+              <SectionKnifePlanMarkers model={model} tool={sectionKnife} />
+            ) : null}
             {(model.siteBoundaryLines ?? []).map((line, index) => (
               <path
                 key={`sb${index}`}

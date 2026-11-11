@@ -10,6 +10,7 @@ import {
   type SectionKnifeGizmoInteraction,
 } from "../lib/sectionKnife/gizmoHit";
 import { knifeNormalXZ, knifePlane, planeCutRect, type SectionKnifePose } from "../lib/sectionKnife/plane";
+import { sectionPlanMarkerGeometry } from "../lib/sectionKnife/marker";
 import type { CityModel } from "../types";
 
 type DragMode = "move" | "rotate" | null;
@@ -32,12 +33,16 @@ export function SectionKnifeScene({
   pose,
   onPoseChange,
   onGizmoInteractionChange,
+  planView = false,
+  snapWhileDrag = true,
 }: {
   city: THREE.Object3D;
   model: CityModel;
   active: boolean;
   pose: SectionKnifePose;
-  onPoseChange: (pose: SectionKnifePose) => void;
+  onPoseChange: (pose: SectionKnifePose, meta?: { shiftKey?: boolean; snapWhileDrag?: boolean }) => void;
+  planView?: boolean;
+  snapWhileDrag?: boolean;
   onGizmoInteractionChange?: (state: SectionKnifeGizmoInteraction) => void;
 }) {
   const gl = useThree((state) => state.gl);
@@ -140,6 +145,32 @@ export function SectionKnifeScene({
   const visualHandleR = Math.max(2.5, model.sideM * 0.012);
   const visualRingR = Math.max(4, model.sideM * 0.022);
 
+  const planLine = useMemo(() => {
+    if (!planView) return null;
+    const geom = sectionPlanMarkerGeometry(model, pose);
+    const y = groundY + 0.25;
+    const positions = new Float32Array([
+      geom.east0,
+      y,
+      -geom.north0,
+      geom.east1,
+      y,
+      -geom.north1,
+    ]);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    const material = new THREE.LineDashedMaterial({
+      color: getColour("--section-knife-marker-gold"),
+      dashSize: 4,
+      gapSize: 1.2,
+      scale: 1,
+    });
+    const line = new THREE.Line(geometry, material);
+    line.name = "SectionKnifePlanMarker";
+    line.computeLineDistances();
+    return line;
+  }, [planView, model, pose, groundY]);
+
   function publishInteraction() {
     onGizmoInteractionChange?.(mergeInteraction(hoverRef.current, dragRef.current));
   }
@@ -165,12 +196,16 @@ export function SectionKnifeScene({
     const pointer = pointerOnCanvas(event);
     const dx = pointer.x - start.pointer.x;
     const dy = pointer.y - start.pointer.y;
+    const meta = { shiftKey: event.shiftKey, snapWhileDrag: snapWhileDrag && !event.shiftKey };
     if (mode === "move") {
       const normal = knifeNormalXZ(start.pose);
       const delta = (dx - dy) * 0.05;
-      onPoseChange({ ...start.pose, offsetM: start.pose.offsetM + delta * (normal.x + normal.z) * 0.7 });
+      onPoseChange(
+        { ...start.pose, offsetM: start.pose.offsetM + delta * (normal.x + normal.z) * 0.7 },
+        meta,
+      );
     } else if (mode === "rotate") {
-      onPoseChange({ ...start.pose, angleRad: start.pose.angleRad - dx * 0.008 });
+      onPoseChange({ ...start.pose, angleRad: start.pose.angleRad - dx * 0.008 }, meta);
     }
     invalidate();
   }
@@ -291,7 +326,8 @@ export function SectionKnifeScene({
   const handleHighlight = getColour("--section-knife-handle-hover");
 
   return (
-    <>
+  <>
+      {planLine ? <primitive object={planLine} /> : null}
       <group position={handlePos} renderOrder={2000}>
         <mesh renderOrder={2001}>
           <sphereGeometry args={[visualHandleR, 20, 20]} />

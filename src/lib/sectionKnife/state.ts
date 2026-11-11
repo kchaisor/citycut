@@ -1,4 +1,5 @@
 import { defaultSectionKnifePose, type SectionKnifePose } from "./plane";
+import type { SnapEdgeKind } from "./snap";
 
 export type SectionKnifeEntry = {
   id: string;
@@ -6,10 +7,19 @@ export type SectionKnifeEntry = {
   pose: SectionKnifePose;
 };
 
+export type SectionKnifeSnapCue = {
+  kind: SnapEdgeKind;
+  east: number;
+  north: number;
+  untilMs: number;
+};
+
 export type SectionKnifeToolState = {
   active: boolean;
   selectedId: string;
   knives: SectionKnifeEntry[];
+  snap: boolean;
+  snapCue: SectionKnifeSnapCue | null;
 };
 
 let knifeSerial = 0;
@@ -26,7 +36,7 @@ export function createSectionKnifeEntry(sideM: number, label?: string): SectionK
 
 export function initialSectionKnifeToolState(sideM: number): SectionKnifeToolState {
   const first = createSectionKnifeEntry(sideM, "Section Knife A");
-  return { active: false, selectedId: first.id, knives: [first] };
+  return { active: false, selectedId: first.id, knives: [first], snap: true, snapCue: null };
 }
 
 export function selectedKnife(state: SectionKnifeToolState): SectionKnifeEntry {
