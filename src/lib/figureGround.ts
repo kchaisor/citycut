@@ -31,6 +31,10 @@ export type SheetLayout = {
   scale: number;
   sideM: number;
   frameMm: number;
+  frameWidthMm?: number;
+  frameHeightMm?: number;
+  widthM?: number;
+  heightM?: number;
   fitsOnA3: boolean;
   orientation: SheetOrientation;
   pageWidthMm: number;
@@ -169,6 +173,58 @@ export function layoutSheet(sideM: number, scale: number): SheetLayout {
   };
   layout.note = sheetFitNote(layout);
   return layout;
+}
+
+export function layoutA3CutSheet(
+  widthM: number,
+  heightM: number,
+  scale: number,
+  orientation: SheetOrientation,
+): SheetLayout {
+  const frameWidthMm = paperMillimetres(widthM, scale);
+  const frameHeightMm = paperMillimetres(heightM, scale);
+  const page = pageSize(orientation);
+  const barMetres = scaleBarMetres(Math.max(widthM, heightM), scale);
+  const barMm = paperMillimetres(barMetres, scale);
+  const layout: SheetLayout = {
+    scale,
+    sideM: Math.max(widthM, heightM),
+    frameMm: Math.max(frameWidthMm, frameHeightMm),
+    frameWidthMm,
+    frameHeightMm,
+    widthM,
+    heightM,
+    fitsOnA3: true,
+    orientation,
+    pageWidthMm: page.width,
+    pageHeightMm: page.height,
+    frameX: SHEET_EDGE_MM,
+    frameY: SHEET_EDGE_MM,
+    edgeMm: SHEET_EDGE_MM,
+    bandMm: SHEET_BAND_MM,
+    barMetres,
+    barMm,
+    barX: SHEET_EDGE_MM,
+    barY: page.height - 15.2,
+    barHeightMm: 2.2,
+    northX: SHEET_EDGE_MM + barMm + 16,
+    northTipY: page.height - 15.8,
+    northBaseY: page.height - 11.2,
+    titleY: page.height - 7.6,
+    creditY: page.height - 3.5,
+    note: null,
+  };
+  return layout;
+}
+
+export function layoutForModel(model: Pick<CityModel, "sideM" | "widthM" | "heightM" | "frameShape" | "cutScale" | "cutOrientation">, scale: number): SheetLayout {
+  if (model.frameShape === "a3") {
+    const widthM = model.widthM ?? model.sideM;
+    const heightM = model.heightM ?? model.sideM;
+    const orientation = model.cutOrientation ?? "landscape";
+    return layoutA3CutSheet(widthM, heightM, scale, orientation);
+  }
+  return layoutSheet(model.sideM, scale);
 }
 
 function snapPoint(point: Pt): Pair {

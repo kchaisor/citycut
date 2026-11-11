@@ -10,6 +10,7 @@ describe("siteFrame", () => {
   it("reads shape=circle from the URL and defaults to square", () => {
     expect(readSiteFrameShape(null)).toBe("square");
     expect(readSiteFrameShape("circle")).toBe("circle");
+    expect(readSiteFrameShape("a3")).toBe("a3");
     expect(readSiteFrameShape("Square")).toBe("square");
   });
 

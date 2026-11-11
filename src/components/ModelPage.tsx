@@ -297,7 +297,9 @@ export function ModelPage({
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
   useColourRevision();
   const uniform = uniformBuildingColor();
-  const [figureScale, setFigureScale] = useState<number>(() => preferredFigureScale(model.sideM));
+  const [figureScale, setFigureScale] = useState<number>(() =>
+    model.frameShape === "a3" && model.cutScale ? model.cutScale : preferredFigureScale(model.sideM),
+  );
   const [exportError, setExportError] = useState<string | null>(null);
   const [busy, setBusy] = useState<ExportBusy>(null);
   const [sunStudyProgress, setSunStudyProgress] = useState<string | null>(null);
@@ -1750,7 +1752,10 @@ export function ModelPage({
     }
   }
 
-  const figureFit = sheetFitMessage(model.sideM, figureScale);
+  const figureFit =
+    model.frameShape === "a3" && model.cutScale === figureScale
+      ? null
+      : sheetFitMessage(model.sideM, figureScale);
   const useCounts = countUses(model.buildings);
   const sourceCounts = countSourcesGrouped(displayModel.buildings);
   const heightTierCounts = countBuildingHeightTiers(displayModel.buildings);
@@ -2220,7 +2225,12 @@ export function ModelPage({
                   {model.placeLabel}
                 </span>
                 <span className="dim-chip studio-cut-pill mono">
-                  {cutSizeLabel(model.sideM, model.frameShape ?? "square")}
+                  {cutSizeLabel(model.sideM, model.frameShape ?? "square", {
+                    widthM: model.widthM,
+                    heightM: model.heightM,
+                    scale: model.cutScale as import("../lib/cutSpec").A3DrawingScale | undefined,
+                    orientation: model.cutOrientation,
+                  })}
                 </span>
               </>
             }

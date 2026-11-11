@@ -13,13 +13,16 @@ import { fetchSiteParcelCached, siteBuildingIdsForPreview } from "../lib/sitePre
 import { FLAT_NORTH_UP_MAP_OPTIONS, applyFlatNorthUpMapHandlers } from "../lib/mapStageMapOptions";
 import { initialLandingZoom } from "../lib/frameFit";
 import {
+  a3CutFromCornerDrag,
   cutHandleCursor,
   fixedCornerForHandle,
+  fixedCornerForHandleRect,
   oppositeCutHandle,
   parseCutFrameHandle,
   squareCutFromCornerDrag,
   type CutFrameHandle,
 } from "../lib/cutFrameDrag";
+import { formatCutReadout, type CutOrientation } from "../lib/cutSpec";
 import type { Basemap, LonLat, ViewState } from "../types";
 
 export type FlyRequest = {
@@ -38,6 +41,9 @@ export function MapStage({
   basemap,
   fitFrameOnLoad = false,
   sideM,
+  widthM = sideM,
+  heightM = sideM,
+  cutOrientation = "landscape",
   frameShape,
   initialView,
   fly,
@@ -53,6 +59,9 @@ export function MapStage({
   basemap: Basemap;
   fitFrameOnLoad?: boolean;
   sideM: number;
+  widthM?: number;
+  heightM?: number;
+  cutOrientation?: CutOrientation;
   frameShape: SiteFrameShape;
   initialView: ViewState;
   fly: FlyRequest | null;
@@ -63,11 +72,14 @@ export function MapStage({
   onCancel: () => void;
   onView: (view: ViewState) => void;
   onFlyLanded: () => void;
-  onCutResize?: (next: { sideM: number; center: LonLat }) => void;
+  onCutResize?: (next: { sideM: number; center: LonLat; widthM?: number; heightM?: number }) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const sideRef = useRef(sideM);
+  const widthRef = useRef(widthM);
+  const heightRef = useRef(heightM);
+  const orientationRef = useRef(cutOrientation);
   const frameShapeRef = useRef(frameShape);
   const onViewRef = useRef(onView);
   const onFlyLandedRef = useRef(onFlyLanded);
@@ -100,6 +112,9 @@ export function MapStage({
   const [basemapStyleFailed, setBasemapStyleFailed] = useState(false);
   const [sitePreviewFailed, setSitePreviewFailed] = useState(false);
   sideRef.current = sideM;
+  widthRef.current = widthM;
+  heightRef.current = heightM;
+  orientationRef.current = cutOrientation;
   frameShapeRef.current = frameShape;
   onViewRef.current = onView;
   onFlyLandedRef.current = onFlyLanded;
@@ -137,7 +152,7 @@ export function MapStage({
     if (frameVisible && frameRef.current) {
       applyFrameStyles(frameRef.current);
     }
-  }, [frameVisible, sideM, frameShape]);
+  }, [frameVisible, sideM, widthM, heightM, frameShape]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -188,11 +203,13 @@ export function MapStage({
         if (!map) return null;
         const center = map.getCenter();
         activeLonRef.current = center.lng;
-        const half = sideRef.current / 2;
-        const dLat = half / M_PER_DEG_LAT;
-        const dLon = half / mPerDegLon(center.lat);
-        const northWest = map.project([center.lng - dLon, center.lat + dLat]);
-        const southEast = map.project([center.lng + dLon, center.lat - dLat]);
+        const halfW = widthRef.current / 2;
+        const halfH = heightRef.current / 2;
+        const dLatNorth = halfH / M_PER_DEG_LAT;
+        const dLatSouth = halfH / M_PER_DEG_LAT;
+        const dLon = halfW / mPerDegLon(center.lat);
+        const northWest = map.project([center.lng - dLon, center.lat + dLatNorth]);
+        const southEast = map.project([center.lng + dLon, center.lat - dLatSouth]);
         const next: Frame = {
           left: Math.min(northWest.x, southEast.x),
           top: Math.min(northWest.y, southEast.y),
@@ -394,7 +411,8 @@ export function MapStage({
     };
   }, [fly, ready]);
 
-  const handlesInteractive = ready && !loading && !processing && !fadingOut && frameShape === "square";
+  const handlesInteractive =
+    ready && !loading && !processing && !fadingOut && (frameShape === "square" || frameShape === "a3");
 
   useEffect(() => {
     if (!handlesInteractive) return;
@@ -423,12 +441,33 @@ export function MapStage({
       const draggedPt = map.unproject([event.clientX - rect.left, event.clientY - rect.top]);
       const dragged: LonLat = { lon: draggedPt.lng, lat: draggedPt.lat };
       const fixedHandle = oppositeCutHandle(session.handle);
-      const { center, sideM: nextSideM } = squareCutFromCornerDrag(fixedHandle, session.fixed, dragged);
-      sideRef.current = nextSideM;
-      setPreviewSideM(nextSideM);
-      map.jumpTo({ center: [center.lon, center.lat], zoom: map.getZoom() });
-      activeLonRef.current = center.lon;
-      onCutResizeRef.current?.({ sideM: nextSideM, center });
+      if (frameShapeRef.current === "a3") {
+        const next = a3CutFromCornerDrag(
+          fixedHandle,
+          session.fixed,
+          dragged,
+          orientationRef.current,
+        );
+        sideRef.current = next.sideM;
+        widthRef.current = next.widthM;
+        heightRef.current = next.heightM;
+        setPreviewSideM(next.sideM);
+        map.jumpTo({ center: [next.center.lon, next.center.lat], zoom: map.getZoom() });
+        activeLonRef.current = next.center.lon;
+        onCutResizeRef.current?.({
+          sideM: next.sideM,
+          center: next.center,
+          widthM: next.widthM,
+          heightM: next.heightM,
+        });
+      } else {
+        const { center, sideM: nextSideM } = squareCutFromCornerDrag(fixedHandle, session.fixed, dragged);
+        sideRef.current = nextSideM;
+        setPreviewSideM(nextSideM);
+        map.jumpTo({ center: [center.lon, center.lat], zoom: map.getZoom() });
+        activeLonRef.current = center.lon;
+        onCutResizeRef.current?.({ sideM: nextSideM, center });
+      }
       syncFrameRef.current?.();
     };
 
@@ -455,7 +494,10 @@ export function MapStage({
     event.stopPropagation();
     const center = map.getCenter();
     const origin: LonLat = { lon: center.lng, lat: center.lat };
-    const fixed = fixedCornerForHandle(origin, sideRef.current, handle);
+    const fixed =
+      frameShapeRef.current === "a3"
+        ? fixedCornerForHandleRect(origin, widthRef.current, heightRef.current, handle)
+        : fixedCornerForHandle(origin, sideRef.current, handle);
     cutResizeRef.current = { handle, fixed, pointerId: event.pointerId };
     setCutResizing(true);
     map.dragPan.disable();
@@ -463,12 +505,28 @@ export function MapStage({
   };
 
   const displaySideM = previewSideM ?? sideM;
+  const displayWidthM = widthM;
+  const displayHeightM = heightM;
   const sideKm = displaySideM / 1000;
-  const label = cutFrameLabelKm(sideKm, frameShape);
+  const label =
+    frameShape === "a3"
+      ? formatCutReadout({
+          shape: "a3",
+          orientation: cutOrientation,
+          widthM: displayWidthM,
+          heightM: displayHeightM,
+        })
+      : cutFrameLabelKm(sideKm, frameShape === "circle" ? "circle" : "square");
   const circleFrame = frameShape === "circle";
-  const roundedM = Math.round(displaySideM).toLocaleString();
-  const dimMeters = circleFrame ? `⌀ ${roundedM} m` : `${roundedM} × ${roundedM} m`;
-  const areaKm2 = (siteFrameAreaM2(displaySideM, frameShape) / 1_000_000).toFixed(2);
+  const a3Frame = frameShape === "a3";
+  const dimMeters = circleFrame
+    ? `⌀ ${Math.round(displayWidthM).toLocaleString()} m`
+    : a3Frame
+      ? `${Math.round(displayWidthM).toLocaleString()} × ${Math.round(displayHeightM).toLocaleString()} m`
+      : `${Math.round(displaySideM).toLocaleString()} × ${Math.round(displaySideM).toLocaleString()} m`;
+  const areaKm2 = (
+    siteFrameAreaM2(displaySideM, frameShape, { widthM: displayWidthM, heightM: displayHeightM }) / 1_000_000
+  ).toFixed(2);
   const zone = mgaZone(activeLonRef.current);
   const cadReadout = `${dimMeters} | ${areaKm2} km² · MGA${zone}`;
   const currentFrame = frameRef.current;

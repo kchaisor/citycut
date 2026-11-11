@@ -463,10 +463,12 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   } else if (model.terrain) {
     group.add(terrainMesh(model.terrain, model.sideM, frameShape));
   } else {
+    const widthM = model.widthM ?? model.sideM;
+    const heightM = model.heightM ?? model.sideM;
     const groundGeo =
       frameShape === "circle"
         ? new THREE.CircleGeometry(model.sideM / 2, SITE_FRAME_CIRCLE_SEGMENTS)
-        : new THREE.PlaneGeometry(model.sideM, model.sideM);
+        : new THREE.PlaneGeometry(widthM, heightM);
     groundGeo.rotateX(-Math.PI / 2);
     const groundMat = paint(
       matteStandardMaterial({

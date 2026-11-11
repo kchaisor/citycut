@@ -202,6 +202,57 @@ async function main() {
       `cta="${beat1Info.ctaText}", frame=${JSON.stringify(beat1Info.frameRect)}, ratio=${beat1Info.frameRatio?.toFixed(3)}, singlePill=${beat1Info.frameLabelDisplay === "none" && beat1Info.frameCadTagVisible}`,
     );
 
+    const cursorArtifacts = "/opt/cursor/artifacts";
+    fs.mkdirSync(cursorArtifacts, { recursive: true });
+  const a3Url = `${baseUrl}/citycut/?lat=-37.8136&lon=144.9631&shape=a3&a3scale=2500&a3ori=landscape&km=1.05&label=Melbourne%20CBD`;
+    await page.goto(a3Url, { waitUntil: "networkidle", timeout: 60_000 });
+    await page.waitForSelector('.select .frame[data-shape="a3"]', { timeout: 20_000 });
+    await page.waitForTimeout(600);
+    const a3Landing = await page.evaluate(() => {
+      const frame = document.querySelector(".select .frame[data-shape='a3']");
+      const rect = frame?.getBoundingClientRect();
+      const a3On = document.querySelector('.shape-btn.on[aria-label="A3"]');
+      return {
+        width: rect?.width ?? 0,
+        height: rect?.height ?? 0,
+        a3Selected: Boolean(a3On),
+        readout: document.querySelector(".dock-readout")?.textContent?.trim() ?? "",
+      };
+    });
+    const a3AspectExpected = 420 / 297;
+    const a3Aspect = a3Landing.width / Math.max(a3Landing.height, 1);
+    await page.screenshot({ path: path.join(cursorArtifacts, "a3-landing-map-selection.png"), fullPage: false });
+    assertCheck(
+      "a3-landing-aspect",
+      "A3 1:2500 landscape cut on the landing map keeps the √2 frame aspect and shows the scale readout",
+      a3Landing.a3Selected &&
+        a3Landing.readout.includes("1:2500") &&
+        Math.abs(a3Aspect - a3AspectExpected) < 0.08,
+      `aspect=${a3Aspect.toFixed(3)} expected≈${a3AspectExpected.toFixed(3)} readout="${a3Landing.readout}"`,
+    );
+    await page.locator("button.create-fab").click({ timeout: 30_000 });
+    await page.waitForSelector(".model", { timeout: 240_000 });
+    await page.getByRole("tab", { name: /Drawing/i }).click({ timeout: 120_000 });
+    await page.waitForSelector("svg.plan", { timeout: 120_000 });
+    await page.waitForTimeout(800);
+    const drawingAspect = await page.evaluate(() => {
+      const canvas = document.querySelector('svg.plan rect[data-cut-frame="1"]');
+      if (!canvas) return null;
+      const w = Number(canvas.getAttribute("width"));
+      const h = Number(canvas.getAttribute("height"));
+      if (!Number.isFinite(w) || !Number.isFinite(h) || h === 0) return null;
+      return w / h;
+    });
+    await page.screenshot({ path: path.join(cursorArtifacts, "a3-drawing-view.png"), fullPage: false });
+    assertCheck(
+      "a3-drawing-aspect",
+      "Drawing view for an A3 1:2500 landscape cut keeps the cut rectangle aspect on the plan canvas",
+      drawingAspect != null && Math.abs(drawingAspect - a3AspectExpected) < 0.02,
+      `planAspect=${drawingAspect?.toFixed(4) ?? "null"}`,
+    );
+    await page.goto(`${baseUrl}/citycut/`, { waitUntil: "networkidle", timeout: 60_000 });
+    await page.waitForSelector(".select .frame", { timeout: 20_000 });
+
     await page.evaluate(() => {
       window.__citycutHandoffMonitor = {
         blankFrames: 0,
@@ -1953,7 +2004,6 @@ async function main() {
       console.log(`[ARTIFACT] Video saved to ${mp4Out}`);
       console.log(`[ARTIFACT] Contact sheet saved to ${contactSheetOut}`);
     }
-    const cursorArtifacts = "/opt/cursor/artifacts";
     fs.mkdirSync(cursorArtifacts, { recursive: true });
   const sydneyCtx = await browser.newContext({
       viewport: VIEWPORT,
