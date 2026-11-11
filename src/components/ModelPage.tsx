@@ -1,4 +1,10 @@
-import { sunStudyCasterModel, sunStudyMutedOn, toggleSelection, type SunStudyDate } from "../lib/sunStudyPlan";
+import {
+  sunStudyCasterModel,
+  sunStudyMutedOn,
+  sunStudyShadowCasters,
+  toggleSelection,
+  type SunStudyDate,
+} from "../lib/sunStudyPlan";
 import { sunStudyLayersFor } from "./useSunStudyShadows";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { handleModelKeyDown, type ModelShortcutAction } from "../lib/modelKeyboard";
@@ -414,9 +420,20 @@ export function ModelPage({
     };
   }
 
+  function planHeliodonForExport(): HeliodonDiagramExportOptions | null {
+    const direct = heliodonDiagramExport();
+    if (direct) return direct;
+    if (!sunStudyDate) return null;
+    return {
+      ...planShadowInput(),
+      sideM: model.sideM,
+      radiusFactor: solar.radiusFactor,
+    };
+  }
+
   function sitePlanExportOptions(): SitePlanExportOptions {
     return {
-      heliodon: heliodonDiagramExport(),
+      heliodon: planHeliodonForExport(),
       shadows: planShadowInput(),
       castShadows: solar.castShadows,
       uniformBuildings: !colourByUse && !showSource,
@@ -1364,11 +1381,21 @@ export function ModelPage({
     zoomToImportedMassing: () => boolean;
     zoom3dToImportedMassing: () => boolean;
     setPlanSunMode: (hour: number, castShadows: boolean, sunStudy: boolean) => boolean;
+    selectSunStudyBuilding: (id: number) => boolean;
+    clearSunStudySelection: () => boolean;
+    sunStudyPickBuildingId: () => number | null;
+    firstImportedDisplayBuildingId: () => number | null;
+    sunStudyCasterStats: () => { total: number; podiumLevel: number; shadowPathChars: number };
   }>({
     upperLevelGroupCount: () => 0,
     exportFrameSvg: async () => "",
     zoomToImportedMassing: () => false,
     zoom3dToImportedMassing: () => false,
+    selectSunStudyBuilding: () => false,
+    clearSunStudySelection: () => false,
+    sunStudyPickBuildingId: () => null,
+    firstImportedDisplayBuildingId: () => null,
+    sunStudyCasterStats: () => ({ total: 0, podiumLevel: 0, shadowPathChars: 0 }),
     setPlanSunMode: () => false,
   });
   qaPlanBridgeRef.current = {
@@ -1429,6 +1456,37 @@ export function ModelPage({
       });
       return true;
     },
+    selectSunStudyBuilding: (id) => {
+      setSunStudySelected([id]);
+      commitSolar({ ...solar, sunStudyCasters: "selected" });
+      return true;
+    },
+    clearSunStudySelection: () => {
+      setSunStudySelected([]);
+      commitSolar({ ...solar, sunStudyCasters: "all" });
+      return true;
+    },
+    sunStudyPickBuildingId: () => {
+      const pick = drawingModel.buildings.find(
+        (building) => !building.importedMassingShadowCaster && building.height >= 4,
+      );
+      return pick?.id ?? drawingModel.buildings[0]?.id ?? null;
+    },
+    firstImportedDisplayBuildingId: () =>
+      drawingModel.buildings.find((building) => building.importedMassingSkipShadow)?.id ?? null,
+    sunStudyCasterStats: () => {
+      const casters = sunStudyShadowCasters(
+        drawingModel.buildings,
+        effectiveSunStudyCasters,
+        sunStudySelected,
+      ).filter((building) => building.importedMassingShadowCaster || !building.importedMassing);
+      const podiumLevel = casters.filter((building) => (building.importedTopZ ?? 0) <= 30).length;
+      const shadowPathChars = [...document.querySelectorAll("svg.plan [data-shadow-hour] path")].reduce(
+        (sum, path) => sum + (path.getAttribute("d")?.length ?? 0),
+        0,
+      );
+      return { total: casters.length, podiumLevel, shadowPathChars };
+    },
   };
 
   useEffect(() => {
@@ -1440,6 +1498,11 @@ export function ModelPage({
       zoom3dToImportedMassing: () => qaPlanBridgeRef.current.zoom3dToImportedMassing(),
       setPlanSunMode: (hour, castShadows, sunStudy) =>
         qaPlanBridgeRef.current.setPlanSunMode(hour, castShadows, sunStudy),
+      selectSunStudyBuilding: (id) => qaPlanBridgeRef.current.selectSunStudyBuilding(id),
+      clearSunStudySelection: () => qaPlanBridgeRef.current.clearSunStudySelection(),
+      sunStudyPickBuildingId: () => qaPlanBridgeRef.current.sunStudyPickBuildingId(),
+      firstImportedDisplayBuildingId: () => qaPlanBridgeRef.current.firstImportedDisplayBuildingId(),
+      sunStudyCasterStats: () => qaPlanBridgeRef.current.sunStudyCasterStats(),
     };
     return () => {
       delete window.__citycutQaPlan;

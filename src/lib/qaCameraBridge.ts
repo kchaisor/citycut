@@ -75,6 +75,11 @@ declare global {
       zoomPlanToImportedMassing: () => boolean;
       zoom3dToImportedMassing: () => boolean;
       setPlanSunMode: (hour: number, castShadows: boolean, sunStudy: boolean) => boolean;
+      selectSunStudyBuilding: (id: number) => boolean;
+      clearSunStudySelection: () => boolean;
+      sunStudyPickBuildingId: () => number | null;
+      firstImportedDisplayBuildingId: () => number | null;
+      sunStudyCasterStats: () => { total: number; podiumLevel: number; shadowPathChars: number };
     };
   }
 }

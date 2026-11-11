@@ -14,6 +14,7 @@ import {
 } from "./buildingShadows";
 import { sampleTerrain } from "./terrain";
 import { sunAtMelbourneLocal } from "./solar";
+import { sunStudyCasterModel } from "./sunStudyPlan";
 import type { BuildingFeat, CityModel, Pt } from "../types";
 
 const origin = { lon: 151.21512, lat: -33.8572 };
@@ -143,5 +144,36 @@ describe("Rozelle campus imported massing", () => {
     expect(reach15).toBeGreaterThan(reach9 * 1.12);
     expect(shadowReach(model, 15, tower) / tower.height).toBeCloseTo(cotAltitude(15), 2);
     expect(shadowReach(model, 9, tower) / tower.height).toBeCloseTo(cotAltitude(9), 2);
+  });
+
+  it("casts plan-fan shadows when only the visible imported footprint is selected", async () => {
+    const item = await importMassingFixture("rozelleCampus", origin, zone);
+    const buildings = massingDrawingBuildings([item], origin, zone);
+    const display = buildings.find((building) => building.importedMassingSkipShadow);
+    expect(display).toBeTruthy();
+    const base: CityModel = {
+      placeLabel: "Rozelle",
+      center: origin,
+      sideM,
+      layers: { buildings: true, roads: false, waterGreen: false, trees: false },
+      buildings,
+      roads: [],
+      areas: [],
+      trees: [],
+      roadKm: 0,
+      buildingCapHit: false,
+      sourceNote: "test",
+    };
+    clearPlanShadowCache();
+    const study = { lat: origin.lat, lon: origin.lon, year: 2026, month: 6, day: 21, hour: 12, minute: 0 };
+    const casterModel = sunStudyCasterModel(base, "selected", [display!.id]);
+    const selectedCasters = casterModel.buildings.filter((building) => building.importedMassingShadowCaster);
+    expect(selectedCasters.length).toBeGreaterThanOrEqual(2);
+    expect(selectedCasters.some((building) => (building.importedTopZ ?? 0) <= 30)).toBe(true);
+    expect(selectedCasters.some((building) => building.height > 40)).toBe(true);
+    const fullCasters = buildings.filter((building) => building.importedMassingShadowCaster);
+    const tower = selectedCasters.reduce((best, building) => (building.height > best.height ? building : best));
+    expect(fullCasters.some((building) => building.id === tower.id)).toBe(true);
+    expect(planShadowRings(casterModel, study, true).length).toBeGreaterThan(0);
   });
 });
