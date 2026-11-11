@@ -31,6 +31,8 @@ import {
   type FrameQuery,
 } from "./lib/frameQuery";
 import {
+  closestA3ScaleForSideM,
+  cutSpecFromA3,
   cutSpecFromSquare,
   cutSpecSideM,
   type A3DrawingScale,
@@ -275,15 +277,19 @@ export default function App() {
   }
 
   function onSideKmChange(km: number) {
-    sideRef.current = km;
-    setSideKm(km);
     if (frameShapeRef.current === "circle") {
       applyCut({ shape: "circle", orientation: "landscape", widthM: km * 1000, heightM: km * 1000 });
       return;
     }
-    if (frameShapeRef.current !== "a3") {
-      applyCut(cutSpecFromSquare(km * 1000));
+    if (frameShapeRef.current === "a3") {
+      const scale = closestA3ScaleForSideM(
+        km * 1000,
+        cutRef.current.orientation,
+      ) as A3DrawingScale;
+      applyCut(cutSpecFromA3(scale, cutRef.current.orientation));
+      return;
     }
+    applyCut(cutSpecFromSquare(km * 1000));
   }
 
   function onCutResize(next: {
@@ -364,7 +370,7 @@ export default function App() {
       setHandoffUnderlay("none");
       setPhase("select");
     }
-    if (sideKmOverride != null) setSideKm(sideKmOverride);
+    if (sideKmOverride != null) onSideKmChange(sideKmOverride);
     onPlace(place);
   }
 

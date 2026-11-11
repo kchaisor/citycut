@@ -72,3 +72,17 @@ export function a3RatioLockedDrag(
 export function defaultA3Scale(): A3DrawingScale {
   return 2500;
 }
+
+export function closestA3ScaleForSideM(targetSideM: number, orientation: CutOrientation): A3DrawingScale {
+  let best: A3DrawingScale = defaultA3Scale();
+  let bestDelta = Infinity;
+  for (const scale of A3_DRAWING_SCALES) {
+    const sideM = cutSpecSideM(cutSpecFromA3(scale, orientation));
+    const delta = Math.abs(sideM - targetSideM);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      best = scale;
+    }
+  }
+  return best;
+}
