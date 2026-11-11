@@ -363,13 +363,18 @@ export function DrawingPlan({
     if (trees.length === 0) return [];
     return shadowRingsFromMulti(planTreeShadowMulti(model, shadowInput, trees));
   }, [treesCastShadow, castShadows, shadowInput, figure, model]);
-  const studyShadowRasters = useMemo(
-    () =>
-      study && !studyIsolateCasters && studyShadows.layers.length > 0
-        ? rasterizeSunStudyLayers(studyShadows.layers, model.sideM)
-        : [],
-    [study, studyIsolateCasters, studyShadows.layers, model.sideM],
-  );
+  const studyShadowRasters = useMemo(() => {
+    if (!study || studyIsolateCasters || studyShadows.layers.length === 0) return [];
+    const layers = splitShadow
+      ? studyShadows.layers.map((layer) => ({ ...layer, addedRings: [] as typeof layer.addedRings }))
+      : studyShadows.layers;
+    return rasterizeSunStudyLayers(layers, model.sideM);
+  }, [study, studyIsolateCasters, splitShadow, studyShadows.layers, model.sideM]);
+  const studyScrubAddedRings = useMemo(() => {
+    if (!study || studyIsolateCasters || !splitShadow || !shadowInput) return [];
+    const layer = studyShadows.layers.find((entry) => entry.hour === shadowInput.hour);
+    return layer?.addedRings ?? [];
+  }, [study, studyIsolateCasters, splitShadow, shadowInput, studyShadows.layers]);
   const treeCrownShadowRaster = useMemo(
     () =>
       scrubbedTreeCrownShadows.length > 0
@@ -687,6 +692,16 @@ export function DrawingPlan({
                   />
                 </g>
               ))}
+            {studyScrubAddedRings.map((rings, index) => (
+              <path
+                key={`sscrub-a${index}`}
+                data-shadow-added
+                d={svgRings(rings)}
+                fill="url(#sun-study-added-hatch)"
+                fillRule="evenodd"
+                stroke="none"
+              />
+            ))}
             {shadowSplit.existing.map((rings, index) => (
               <path
                 key={`sh${index}`}
