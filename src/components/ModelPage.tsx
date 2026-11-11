@@ -112,6 +112,12 @@ import { treeSizeSummary, treeTierCounts } from "../lib/trees";
 import { contourDrawerLabel } from "../lib/vicmapContours";
 import { clearPlanShadowCache, proposedMassingInModel } from "../lib/buildingShadows";
 import {
+  facadeOverlayWallQa,
+  primaryProposedMassingBbox,
+  proposedMassingBboxes,
+  proposedMassingObliqueCamera,
+} from "../lib/facadeSolarQa";
+import {
   appendManualHeightCredit,
   applyHeightOverrides,
   clearAllHeightOverrides,
@@ -181,6 +187,7 @@ import { FacadeSolarLegend } from "./FacadeSolarLegend";
 import { FacadeSolarResultsCard } from "./FacadeSolarResultsCard";
 import { SolarPanel } from "./SolarPanel";
 import { useFacadeSolarAssess } from "./useFacadeSolarAssess";
+import { facadeOverlayCellNormals } from "../lib/facadeSolarAssess";
 import { facadeSolarPointsForExport, facadeSolarSvgTable } from "../lib/facadeSolarExport";
 import { SolarAssessResultsList } from "./SolarAssessResultsList";
 import { SunHoursLostLegendList } from "./SunHoursLostLegendList";
@@ -809,6 +816,7 @@ export function ModelPage({
 
   const qaSummaryRef = useRef({ treeCrowns: 0, buildingCount: 0, roadCount: 0, triangleCount: 0 });
   const qaDisplayBuildingsRef = useRef(model.buildings);
+  const facadeMassingModelRef = useRef(model);
   const drawingModelRef = useRef(model);
   const heightPerfRef = useRef<{ modelOpenMs: number; firstRenderMs: number | null; comAppliedMs: number | null }>(
     { modelOpenMs: performance.now(), firstRenderMs: null, comAppliedMs: null },
@@ -1200,6 +1208,22 @@ export function ModelPage({
       readFacadeSolarAssess() {
         return facadeSolarAssessRef.current.bundle;
       },
+      readFacadeOverlayNormals() {
+        const bundle = facadeSolarAssessRef.current.bundle;
+        return bundle ? facadeOverlayCellNormals(bundle) : [];
+      },
+      frameProposedMassingOblique(side: "nw" | "se") {
+        const box = primaryProposedMassingBbox(proposedMassingBboxes(facadeMassingModelRef.current));
+        if (!box || !window.__citycutQa?.setCamera) return false;
+        window.__citycutQa.setCamera(proposedMassingObliqueCamera(box, side));
+        return true;
+      },
+      readFacadeOverlayWallQa() {
+        const bundle = facadeSolarAssessRef.current.bundle;
+        if (!bundle) return null;
+        const target = window.__citycutQa?.getCamera?.()?.target;
+        return facadeOverlayWallQa(bundle, facadeMassingModelRef.current, target ?? undefined);
+      },
       enableSunHoursLost() {
         setSolar((prev) => ({
           ...prev,
@@ -1489,6 +1513,10 @@ export function ModelPage({
   useEffect(() => {
     qaDisplayBuildingsRef.current = displayModel.buildings;
   }, [displayModel.buildings]);
+
+  useEffect(() => {
+    facadeMassingModelRef.current = facadeMassingModel;
+  }, [facadeMassingModel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1854,7 +1882,7 @@ export function ModelPage({
         sunStudy: solar.sunStudy ? await sunStudyExportLayers() : null,
         solarReceptors: solarReceptorsExport(),
         facadeSolarPoints: facadeSolarEnabled
-          ? facadeSolarPointsForExport(displayModel, facadeSolarAssess.bundle)
+          ? facadeSolarPointsForExport(facadeSolarAssess.bundle)
           : null,
         hideTrees: view3dDisplay.hideTrees,
         importedMassing: massing.forExport.length ? massing.forExport : null,
@@ -2441,7 +2469,9 @@ export function ModelPage({
                 }
                 quality={renderQuality}
                 facadeSolarBundle={facadeSolarEnabled ? facadeSolarAssess.bundle : null}
-                facadeSolarModel={facadeMassingModel}
+                drawnMassingBlocksForFacade={
+                  facadeSolarEnabled && !massingDraw.tool.toolEnabled ? massingDraw.blocks : null
+                }
               />
               <MassingToolHud
                 visible={

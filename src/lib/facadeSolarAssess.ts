@@ -9,7 +9,18 @@ import {
   vicD8ExtraPass,
 } from "./facadeSolarRules";
 import { facadeBayUnitsForModel, podiumReceptorUnitsForModel } from "./facadeSolarSample";
-import { FACADE_PODIUM_GRID_M, planToWorld, worldOutward3, type FacadeAssessBundle, type FacadeUnitResult, type FacadeUnitSample } from "./facadeSolarTypes";
+import { getColour } from "./colours";
+import {
+  FACADE_BAY_WIDTH_M,
+  FACADE_PODIUM_GRID_M,
+  FACADE_WALL_OFFSET_M,
+  planToWorld,
+  worldOutward3,
+  type FacadeAssessBundle,
+  type FacadeUnitKind,
+  type FacadeUnitResult,
+  type FacadeUnitSample,
+} from "./facadeSolarTypes";
 import type { CityModel } from "../types";
 
 const FACING_DOT_MIN = 0.04;
@@ -73,6 +84,11 @@ function assessUnits(
       kind: sample.kind,
       buildingId: sample.buildingId,
       floor: sample.floor,
+      east: sample.east,
+      north: sample.north,
+      yM: sample.yM,
+      outwardEast: sample.outwardEast,
+      outwardNorth: sample.outwardNorth,
       hoursDirect,
       meetsThreshold: hoursDirect + 1e-6 >= thresholdHours,
       none: hoursDirect < 0.5,
@@ -137,4 +153,158 @@ export function facadeHoursFill(
   if (hoursDirect < 0.5) return "--facade-hours-none";
   if (hoursDirect + 1e-6 >= threshold - 1) return "--facade-hours-warn";
   return "--facade-hours-low";
+}
+
+export type FacadeOverlayPoint = {
+  id: string;
+  kind: FacadeUnitKind;
+  east: number;
+  north: number;
+  yM: number;
+  outwardEast: number;
+  outwardNorth: number;
+  hoursDirect: number;
+  fill: ReturnType<typeof facadeHoursFill>;
+};
+
+export type FacadeOverlayCellNormal = {
+  id: string;
+  kind: FacadeUnitKind;
+  nx: number;
+  ny: number;
+  nz: number;
+};
+
+const FACADE_CELL_WIDTH_M = FACADE_BAY_WIDTH_M * 0.9;
+const FACADE_CELL_HEIGHT_M = 2.35;
+const PODIUM_CELL_M = FACADE_PODIUM_GRID_M * 0.88;
+
+export function facadeOverlayPoints(bundle: FacadeAssessBundle | null): FacadeOverlayPoint[] {
+  if (!bundle) return [];
+  return [bundle.facade, bundle.podium].flatMap((summary) =>
+    (summary?.units ?? []).map((unit) => ({
+      id: unit.id,
+      kind: unit.kind,
+      east: unit.east,
+      north: unit.north,
+      yM: unit.yM,
+      outwardEast: unit.outwardEast,
+      outwardNorth: unit.outwardNorth,
+      hoursDirect: unit.hoursDirect,
+      fill: facadeHoursFill(unit.hoursDirect, summary!.thresholdHours),
+    })),
+  );
+}
+
+function pushQuad(
+  positions: number[],
+  colors: number[],
+  color: [number, number, number],
+  ax: number,
+  ay: number,
+  az: number,
+  bx: number,
+  by: number,
+  bz: number,
+  cx: number,
+  cy: number,
+  cz: number,
+  dx: number,
+  dy: number,
+  dz: number,
+) {
+  const tri = (x: number, y: number, z: number) => {
+    positions.push(x, y, z);
+    colors.push(...color);
+  };
+  tri(ax, ay, az);
+  tri(bx, by, bz);
+  tri(cx, cy, cz);
+  tri(ax, ay, az);
+  tri(cx, cy, cz);
+  tri(dx, dy, dz);
+}
+
+export function facadeOverlayCellNormals(bundle: FacadeAssessBundle): FacadeOverlayCellNormal[] {
+  const overlay = facadeOverlayPoints(bundle);
+  return overlay
+    .filter((point) => point.kind === "facade-bay")
+    .map((point) => {
+      const [nx, ny, nz] = worldOutward3(point.outwardEast, point.outwardNorth);
+      return { id: point.id, kind: point.kind, nx, ny, nz };
+    });
+}
+
+export function buildFacadeWallOverlayMesh(bundle: FacadeAssessBundle): {
+  positions: Float32Array;
+  colors: Float32Array;
+} {
+  return buildFacadeOverlayMesh(bundle, (point) => point.kind === "facade-bay");
+}
+
+export function buildFacadeOverlayMesh(
+  bundle: FacadeAssessBundle,
+  includePoint: (point: FacadeOverlayPoint) => boolean = () => true,
+): {
+  positions: Float32Array;
+  colors: Float32Array;
+  cellCount: number;
+} {
+  const overlay = facadeOverlayPoints(bundle).filter(includePoint);
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const fillColours = new Map<string, [number, number, number]>();
+  for (const point of overlay) {
+    if (!fillColours.has(point.fill)) {
+      const c = new THREE.Color(getColour(point.fill));
+      fillColours.set(point.fill, [c.r, c.g, c.b]);
+    }
+  }
+  for (const point of overlay) {
+    const colour = fillColours.get(point.fill)!;
+    const [cx, cy, cz] = planToWorld(point.east, point.north, point.yM);
+    if (point.kind === "facade-bay") {
+      const [nx, , nz] = worldOutward3(point.outwardEast, point.outwardNorth);
+      const len = Math.hypot(nx, nz) || 1;
+      const tx = nz / len;
+      const tz = -nx / len;
+      const hw = FACADE_CELL_WIDTH_M * 0.5;
+      const hh = FACADE_CELL_HEIGHT_M * 0.5;
+      const offset = FACADE_WALL_OFFSET_M;
+      const corner = (along: number, up: number) => [
+        cx + tx * along + nx * offset,
+        cy + up,
+        cz + tz * along + nz * offset,
+      ];
+      const [a0, a1, a2] = corner(-hw, -hh);
+      const [b0, b1, b2] = corner(hw, -hh);
+      const [c0, c1, c2] = corner(hw, hh);
+      const [d0, d1, d2] = corner(-hw, hh);
+      pushQuad(positions, colors, colour, a0, a1, a2, b0, b1, b2, c0, c1, c2, d0, d1, d2);
+    } else {
+      const half = PODIUM_CELL_M * 0.5;
+      pushQuad(
+        positions,
+        colors,
+        colour,
+        cx - half,
+        cy + 0.04,
+        cz - half,
+        cx + half,
+        cy + 0.04,
+        cz - half,
+        cx + half,
+        cy + 0.04,
+        cz + half,
+        cx - half,
+        cy + 0.04,
+        cz + half,
+      );
+    }
+  }
+  return {
+    positions: new Float32Array(positions),
+    colors: new Float32Array(colors),
+    cellCount: overlay.length,
+  };
 }

@@ -116,6 +116,9 @@ declare global {
       readSunHoursLostPlan?: () => { cellCount: number; maxLoss: number; cellM?: number };
       enableFacadeSolar?: () => boolean;
       readFacadeSolarAssess?: () => import("./facadeSolarTypes").FacadeAssessBundle | null;
+      readFacadeOverlayNormals?: () => import("./facadeSolarAssess").FacadeOverlayCellNormal[];
+      frameProposedMassingOblique?: (side: "nw" | "se") => boolean;
+      readFacadeOverlayWallQa?: () => import("./facadeSolarQa").FacadeOverlayWallQa | null;
     };
     __citycutWalkRippleQa?: {
       setMinutes: (minutes: number) => void;

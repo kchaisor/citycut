@@ -45,7 +45,6 @@ import { SunHoursLostPlanOverlay } from "./SunHoursLostPlanOverlay";
 import type { SunHoursLostGrid } from "../lib/sunHoursLostPlan";
 import { ringFromCorners } from "../lib/solarAccessB43";
 import { isParkAssessRow, type SolarAssessRow, type SolarReceptorArea } from "../lib/solarReceptorAssess";
-import { parkAddedShadowForAssess } from "../lib/solarParkPlanOverlay";
 import type { Ring } from "../types";
 
 const NO_SELECTION: readonly number[] = [];
@@ -309,13 +308,11 @@ export function DrawingPlan({
     [solarReceptorResults],
   );
   const parkPlanOverlays = useMemo(() => {
-    const year = shadowInput?.year ?? new Date().getFullYear();
     return solarReceptors
       .filter((receptor) => (receptor.kind ?? "yard") === "park")
       .map((receptor) => {
         const row = receptorResultById.get(receptor.id);
-        const hatch =
-          row && isParkAssessRow(row) ? parkAddedShadowForAssess(model, receptor.ring, row, year) : [];
+        const hatch = row && isParkAssessRow(row) ? row.addedShadowRings : [];
         let sumE = 0;
         let sumN = 0;
         const count = Math.max(1, receptor.ring.length - 1);
@@ -332,7 +329,7 @@ export function DrawingPlan({
           labelY: sumN / count,
         };
       });
-  }, [model, shadowInput?.year, solarReceptors, receptorResultById]);
+  }, [solarReceptors, receptorResultById]);
 
   function planPointFromClient(clientX: number, clientY: number, planView: PlanViewport): Pt {
     const svg = svgRef.current;
@@ -563,7 +560,7 @@ export function DrawingPlan({
               width={addedHatchSize}
               height={addedHatchSize}
               fill={studyShadowAddedFill}
-              fillOpacity={SUN_STUDY_SHADOW_ADDED_OPACITY * 0.48}
+              fillOpacity={SUN_STUDY_SHADOW_ADDED_OPACITY * 0.62}
             />
             <line
               x1={0}
@@ -571,7 +568,7 @@ export function DrawingPlan({
               x2={0}
               y2={addedHatchSize}
               stroke={studyShadowAddedFill}
-              strokeWidth={addedHatchSize * 0.22}
+              strokeWidth={addedHatchSize * 0.38}
             />
             <line
               x1={addedHatchSize * 0.45}
@@ -579,8 +576,7 @@ export function DrawingPlan({
               x2={addedHatchSize * 0.45}
               y2={addedHatchSize}
               stroke={studyShadowAddedFill}
-              strokeWidth={addedHatchSize * 0.14}
-              strokeOpacity={0.75}
+              strokeWidth={addedHatchSize * 0.22}
             />
           </pattern>
           {parkPlanOverlays.map((overlay) =>
@@ -799,7 +795,9 @@ export function DrawingPlan({
                       d={svgRings(rings)}
                       fill="url(#sun-study-added-hatch)"
                       fillRule="evenodd"
-                      stroke="none"
+                      stroke={studyShadowAddedFill}
+                      strokeWidth={Math.max(0.35, addedHatchSize * 0.16)}
+                      strokeLinejoin="round"
                     />
                   ))}
                 </g>

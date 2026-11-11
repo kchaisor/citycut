@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { assessFacadeSolar } from "./facadeSolarAssess";
-import { facadeBayUnitsForModel } from "./facadeSolarSample";
+import { assessFacadeSolar, facadeOverlayCellNormals, facadeOverlayPoints } from "./facadeSolarAssess";
+import { facadeOverlayGeometry } from "../components/FacadeSolarPointsLayer";
+import { facadeBayUnitsForModel, podiumReceptorUnitsForModel } from "./facadeSolarSample";
 import { sunAtMelbourneLocal } from "./solar";
 import { planToWorld, worldOutward3, type FacadeUnitSample } from "./facadeSolarTypes";
 import type { CityModel } from "../types";
@@ -107,5 +108,46 @@ describe("facade solar assess", () => {
     const analytic = analyticFacingHours(sample, 6, 21);
     expect(Math.abs(assessed - analytic)).toBeLessThanOrEqual(1);
     void planToWorld(sample.east, sample.north, sample.yM);
+  });
+
+  it("3D overlay draws every assessed unit at its assessed position, without resampling the scene model", () => {
+    const proposed = proposedBox(
+      -9004,
+      [
+        [-10, -6],
+        [10, -6],
+        [10, 6],
+        [-10, 6],
+        [-10, -6],
+      ],
+      15.5,
+    );
+    const assessModel = stubModel([proposed]);
+    const bundle = assessFacadeSolar(assessModel, LAT, LON, YEAR);
+    const facadeSamples = facadeBayUnitsForModel(assessModel);
+    const podiumSamples = podiumReceptorUnitsForModel(assessModel);
+    expect(bundle.facade?.unitCount).toBe(facadeSamples.length);
+
+    const overlay = facadeOverlayPoints(bundle);
+    expect(overlay.length).toBe(facadeSamples.length + podiumSamples.length);
+    const samplesById = new Map([...facadeSamples, ...podiumSamples].map((sample) => [sample.id, sample]));
+    for (const point of overlay) {
+      const sample = samplesById.get(point.id)!;
+      expect([point.east, point.north, point.yM]).toEqual([sample.east, sample.north, sample.yM]);
+    }
+    const podiumPoint = overlay.find((point) => point.id.startsWith("podium-"))!;
+    const podiumUnit = bundle.podium!.units.find((unit) => unit.id === podiumPoint.id)!;
+    expect(podiumPoint.hoursDirect).toBe(podiumUnit.hoursDirect);
+
+    const geometry = facadeOverlayGeometry(bundle);
+    expect(geometry.attributes.position!.count).toBe(facadeSamples.length * 6);
+    expect(geometry.boundingSphere?.radius ?? 0).toBeGreaterThan(5);
+    const normals = facadeOverlayCellNormals(bundle);
+    expect(normals.length).toBe(facadeSamples.length);
+    for (const cell of normals) {
+      expect(Math.abs(cell.ny)).toBeLessThan(0.3);
+      expect(Math.abs(cell.nz)).toBeLessThan(1.05);
+    }
+    expect(facadeOverlayGeometry({ facade: null, podium: null, assessMs: 0 }).attributes.position!.count).toBe(0);
   });
 });

@@ -1,68 +1,61 @@
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
-import { facadeBayUnitsForModel, podiumReceptorUnitsForModel } from "../lib/facadeSolarSample";
-import { facadeHoursFill } from "../lib/facadeSolarAssess";
-import { getColour } from "../lib/colours";
+import { buildFacadeWallOverlayMesh, facadeOverlayPoints } from "../lib/facadeSolarAssess";
 import type { FacadeAssessBundle } from "../lib/facadeSolarTypes";
-import type { CityModel } from "../types";
 
-function hexToRgb(hex: string): [number, number, number] {
-  const clean = hex.replace("#", "");
-  const value = Number.parseInt(clean.length === 3 ? clean.replace(/./g, (c) => c + c) : clean, 16);
-  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+export function facadeOverlayGeometry(bundle: FacadeAssessBundle): THREE.BufferGeometry {
+  const { positions, colors } = buildFacadeWallOverlayMesh(bundle);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
+  return geometry;
 }
 
-export function FacadeSolarPointsLayer({
-  model,
-  bundle,
-}: {
-  model: CityModel;
-  bundle: FacadeAssessBundle;
-}) {
-  const { points, threshold } = useMemo(() => {
-    const samples = [...facadeBayUnitsForModel(model), ...podiumReceptorUnitsForModel(model)];
-    const summary = bundle.facade;
-    const thresholdHours = summary?.thresholdHours ?? 3;
-    const byId = new Map((summary?.units ?? []).map((unit) => [unit.id, unit]));
-    const positions: number[] = [];
-    const colors: number[] = [];
-    for (const sample of samples) {
-      const unit = byId.get(sample.id);
-      const fill = getColour(facadeHoursFill(unit?.hoursDirect ?? 0, thresholdHours));
-      const [r, g, b] = hexToRgb(fill);
-      positions.push(sample.east, sample.yM, -sample.north);
-      colors.push(r / 255, g / 255, b / 255);
-    }
-  const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
-    return { points: geometry, threshold: thresholdHours };
-  }, [model, bundle]);
+export function FacadeSolarPointsLayer({ bundle }: { bundle: FacadeAssessBundle }) {
+  const { geometry, cellCount } = useMemo(() => {
+    const wallPoints = facadeOverlayPoints(bundle).filter((point) => point.kind === "facade-bay");
+    const cellCount = wallPoints.length;
+    const { positions, colors } = buildFacadeWallOverlayMesh(bundle);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
+    return { geometry, cellCount };
+  }, [bundle]);
 
   useEffect(() => {
-    if (typeof document !== "undefined") {
-      document.documentElement.dataset.facadeSolarAssessMs = String(Math.round(bundle.assessMs));
-    }
+    const root = document.documentElement;
+    root.dataset.facadeSolarAssessMs = String(Math.round(bundle.assessMs));
     return () => {
-      points.dispose();
+      geometry.dispose();
+      delete root.dataset.facadeSolarOverlay;
     };
-  }, [bundle.assessMs, points]);
+  }, [bundle.assessMs, geometry]);
 
-  if (points.attributes.position.count === 0) return null;
+  if (cellCount === 0) return null;
 
-  void threshold;
   return (
-    <group data-facade-solar-overlay>
-      <points geometry={points} renderOrder={1200}>
-        <pointsMaterial
-          size={5.5}
-          sizeAttenuation
-          vertexColors
-          depthTest
-          depthWrite={false}
-          toneMapped={false}
-        />
-      </points>
-    </group>
+    <mesh
+      geometry={geometry}
+      renderOrder={1200}
+      data-facade-solar-overlay=""
+      onBeforeRender={() => {
+        document.documentElement.dataset.facadeSolarOverlay = String(cellCount);
+      }}
+    >
+      <meshBasicMaterial
+        vertexColors
+        depthTest
+        depthWrite={false}
+        toneMapped={false}
+        side={THREE.FrontSide}
+        polygonOffset
+        polygonOffsetFactor={-2}
+        polygonOffsetUnits={-2}
+      />
+    </mesh>
   );
 }

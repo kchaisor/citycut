@@ -29,6 +29,7 @@ const VIEWPORT = { width: 1440, height: 900 };
 const DEVICE_SCALE_FACTOR = 2;
 const ARTIFACTS_DIR = process.env.CITYCUT_ARTIFACTS_DIR ?? "/workspace";
 const CURSOR_ARTIFACTS_DIR = "/opt/cursor/artifacts";
+const CLAUDE_SOLAR_SHOTS_DIR = "/workspace/claude-solar-shots";
 
 function countPixelsNearRgb(png, target, tolerance = 48) {
   let hits = 0;
@@ -64,6 +65,26 @@ async function sceneViewportScreenshot(page, extra = {}) {
     scale: "css",
     ...extra,
   });
+}
+
+async function planViewportScreenshot(page, filePath) {
+  const plan = page.locator("svg.plan");
+  try {
+    await plan.waitFor({ state: "visible", timeout: 180_000 });
+    await plan.screenshot({
+      path: filePath,
+      timeout: 60_000,
+      animations: "disabled",
+      scale: "css",
+    });
+  } catch {
+    await page.screenshot({
+      path: filePath,
+      timeout: 60_000,
+      animations: "disabled",
+      scale: "css",
+    });
+  }
 }
 
 async function verifyMontAlbertParcels(baseUrl, artifactsDir) {
@@ -1019,11 +1040,16 @@ async function main() {
     );
 
     await page.waitForTimeout(150);
-    await page.screenshot({ path: path.join(TMP_FRAMES_DIR, "frame_07.png") });
+    await page.screenshot({
+      path: path.join(TMP_FRAMES_DIR, "frame_07.png"),
+      timeout: 60_000,
+      animations: "disabled",
+      scale: "css",
+    });
     await page.waitForTimeout(650);
 
     const frame08Path = path.join(TMP_FRAMES_DIR, "frame_08.png");
-    await page.screenshot({ path: frame08Path });
+    await page.screenshot({ path: frame08Path, timeout: 60_000, animations: "disabled", scale: "css" });
     if (fs.existsSync(ARTIFACTS_DIR)) {
       await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v12-3d-plinth-perspective.png") });
       const isoBtn = page.locator(".model .bottom-bar button", { hasText: "Isometric" }).first();
@@ -1319,8 +1345,19 @@ async function main() {
         parcelOutlinePixels >= 800,
       JSON.stringify({ ...parcelInfo, parcelOutlinePixels }),
     );
-    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-parcel-outlines.png") });
-    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-parcel-outlines-crop.png"), clip: VIEWPORT_SCENE_CLIP });
+    await page.screenshot({
+      path: path.join(ARTIFACTS_DIR, "massing-parcel-outlines.png"),
+      timeout: 60_000,
+      animations: "disabled",
+      scale: "css",
+    });
+    await page.screenshot({
+      path: path.join(ARTIFACTS_DIR, "massing-parcel-outlines-crop.png"),
+      clip: VIEWPORT_SCENE_CLIP,
+      timeout: 60_000,
+      animations: "disabled",
+      scale: "css",
+    });
 
     const oneSite = await page.evaluate(() => {
       const api = window.__citycutQaMassing;
@@ -2303,7 +2340,7 @@ async function main() {
           return { ok: !intersect && gap >= 0, intersect, gap, legendBox, resultsBox };
         });
         const shotHoursLost = path.join(CURSOR_ARTIFACTS_DIR, "solar-hours-lost-box-hill.png");
-        await shadowPage.locator(".plan-viewport-stack").screenshot({ path: shotHoursLost });
+        await planViewportScreenshot(shadowPage, shotHoursLost);
 
         assertCheck(
           "solar-hours-lost-legend-dock-clear",
@@ -2452,9 +2489,13 @@ async function main() {
           null,
           { timeout: 300000 },
         );
-        await parkPage.locator('.model button[data-section="analysis"]').first().click();
-        await parkPage.waitForTimeout(250);
-        await parkPage.getByRole("tab", { name: /Drawing/i }).click();
+        await parkPage.evaluate(() => {
+          document.querySelector('.model button[data-section="analysis"]')?.dispatchEvent(
+            new MouseEvent("click", { bubbles: true, cancelable: true }),
+          );
+        });
+        await parkPage.waitForTimeout(400);
+        await parkPage.getByRole("tab", { name: /Drawing/i }).click({ timeout: 120_000 });
         await parkPage.waitForSelector("svg.plan", { timeout: 120000 });
         await parkPage.evaluate(() => {
           window.__citycutQaModel?.enableSolarParkAccess?.("melbourne-c415-ddo8");
@@ -2490,20 +2531,51 @@ async function main() {
         });
         const midE = (green.east0 + green.east1) / 2;
         const midN = (green.north0 + green.north1) / 2;
-        const spanM = Math.max(green.east1 - green.east0, green.north1 - green.north0) * 1.8;
+        const spanM = Math.max(green.east1 - green.east0, green.north1 - green.north0) * 0.42;
         await parkPage.evaluate(
           ({ east, north, span }) => window.__citycutQaModel?.setDrawingPlanViewport?.(east, north, span),
           { east: midE, north: midN, span: spanM },
         );
         await parkPage.waitForTimeout(800);
-        await parkPage.waitForFunction(
-          () => {
-            const hatch = document.querySelector("[data-solar-park-added-shadow]");
-            if (!hatch) return false;
-            return Array.from(hatch.querySelectorAll("path")).some((node) => (node.getAttribute("d")?.length ?? 0) > 40);
-          },
-          null,
-          { timeout: 360000 },
+        const readParkHatch = () =>
+          parkPage.evaluate(() => {
+            const hatch = document.querySelector("[data-solar-park-added-shadow='carlton-gardens-park']");
+            const paths = hatch ? Array.from(hatch.querySelectorAll("path")) : [];
+            const dLen = paths.reduce((sum, node) => sum + (node.getAttribute("d")?.length ?? 0), 0);
+            const fills = paths.map((node) => node.getAttribute("fill"));
+            const box = hatch?.getBoundingClientRect();
+            return { paths: paths.length, dLen, fills, width: box?.width ?? 0, height: box?.height ?? 0 };
+          });
+        let parkHatch = await readParkHatch();
+        try {
+          await parkPage.waitForFunction(
+            () => {
+              const hatch = document.querySelector("[data-solar-park-added-shadow='carlton-gardens-park']");
+              return Boolean(hatch) && Array.from(hatch.querySelectorAll("path")).some((node) => (node.getAttribute("d")?.length ?? 0) > 40);
+            },
+            null,
+            { timeout: 15000 },
+          );
+        } catch {
+        }
+        parkHatch = await readParkHatch();
+        fs.mkdirSync(CURSOR_ARTIFACTS_DIR, { recursive: true });
+        const shotParkHatch = path.join(CURSOR_ARTIFACTS_DIR, "carlton-park-hatch.png");
+        await planViewportScreenshot(parkPage, shotParkHatch);
+        assertCheck(
+          "solar-park-added-shadow",
+          "Carlton park: once assess reports added shadow, the plan draws the gold added-shadow hatch from the assess rings (within 15 s)",
+          parkHatch.paths > 0 &&
+            parkHatch.dLen > 40 &&
+            parkHatch.fills.every((fill) => fill === "url(#sun-study-added-hatch)") &&
+            parkHatch.width > 2 &&
+            parkHatch.height > 2,
+          `hatch=${JSON.stringify({ ...parkHatch, fills: [...new Set(parkHatch.fills)] })}, rings=${JSON.stringify(
+            await parkPage.evaluate(() => {
+              const rows = window.__citycutQaModel?.readSolarReceptorAssess?.() ?? [];
+              return rows.find((row) => row.id === "carlton-gardens-park")?.addedShadowRings?.length ?? null;
+            }),
+          )}, shot=${shotParkHatch}`,
         );
         const dock = parkPage.locator("[data-solar-results-dock]");
         await dock.waitFor({ state: "visible", timeout: 120000 });
@@ -2511,7 +2583,7 @@ async function main() {
         const hatchDom = await parkPage.locator("[data-solar-park-added-shadow]").count();
         const labelDom = await parkPage.locator("[data-solar-park-label='carlton-gardens-park']").count();
         const shotPark = path.join(CURSOR_ARTIFACTS_DIR, "solar-park-carlton-fail.png");
-        await parkPage.locator(".plan-viewport-stack").screenshot({ path: shotPark });
+        await planViewportScreenshot(parkPage, shotPark);
         assertCheck(
           "solar-park-no-additional-fail",
           "Carlton C415/DDO8 park fails with on-map label, gold hatch clipped to park, and readable added m² in the dock",
@@ -2528,6 +2600,10 @@ async function main() {
       };
 
       const boxHillTreeShadows = async () => {
+        await shadowPage.bringToFront();
+        await shadowPage.getByRole("tab", { name: /Drawing/i }).click({ timeout: 120_000, force: true });
+        await shadowPage.waitForSelector("svg.plan", { timeout: 180_000 });
+        await shadowPage.waitForTimeout(400);
         const readTreeShadowDom = async () =>
           shadowPage.evaluate(() => {
             const nodes = Array.from(document.querySelectorAll("[data-tree-crown-shadow]"));
@@ -2537,8 +2613,6 @@ async function main() {
             );
             return { count: nodes.length, dLen };
           });
-        await shadowPage.getByRole("tab", { name: /Drawing/i }).click();
-        await shadowPage.waitForSelector("svg.plan", { timeout: 120000 });
         await shadowPage.evaluate(
           ({ east, north }) => {
             window.__citycutQaModel?.setSolarPlanTime?.(15, 0);
@@ -2550,12 +2624,12 @@ async function main() {
         await shadowPage.waitForTimeout(700);
         const treesOff = await readTreeShadowDom();
         const shotOff = path.join(CURSOR_ARTIFACTS_DIR, "solar-tree-shadows-off.png");
-        await shadowPage.locator(".plan-viewport-stack").screenshot({ path: shotOff });
+        await planViewportScreenshot(shadowPage, shotOff);
         await shadowPage.evaluate(() => window.__citycutQaModel?.setTreesCastShadow?.(true));
         await shadowPage.waitForTimeout(900);
         const treesOn = await readTreeShadowDom();
         const shotOn = path.join(CURSOR_ARTIFACTS_DIR, "solar-tree-shadows-on.png");
-        await shadowPage.locator(".plan-viewport-stack").screenshot({ path: shotOn });
+        await planViewportScreenshot(shadowPage, shotOn);
         const shotCompare = path.join(CURSOR_ARTIFACTS_DIR, "solar-tree-shadows-compare.png");
         execFileSync("ffmpeg", ["-y", "-i", shotOff, "-i", shotOn, "-filter_complex", "hstack=inputs=2", shotCompare]);
         assertCheck(
@@ -2566,10 +2640,9 @@ async function main() {
         );
       };
 
-      await boxHillTreeShadows();
-
       const boxHillFacadeSolar = async () => {
         await shadowPage.getByRole("tab", { name: /3D model/i }).click();
+        await shadowPage.evaluate(() => window.__citycutQaMassing?.clearDrawnBlocks?.());
         await shadowPage.evaluate(
           ({ east, north }) => {
             window.__citycutQaMassing?.commitPolylineCenterline?.(
@@ -2595,23 +2668,72 @@ async function main() {
           },
           null,
           { timeout: 360000 },
-        );
+        ).catch(() => {});
         const bundle = await shadowPage.evaluate(() => window.__citycutQaModel?.readFacadeSolarAssess?.() ?? null);
         const assessMs = Number(await shadowPage.evaluate(() => document.documentElement.dataset.facadeSolarAssessMs ?? "0"));
-        const shotFacade = path.join(CURSOR_ARTIFACTS_DIR, "solar-facade-heatmap-3d.png");
-        await shadowPage.locator(".model .fill").first().screenshot({ path: shotFacade, timeout: 60000 });
-        const shotCard = path.join(CURSOR_ARTIFACTS_DIR, "solar-facade-results-card.png");
-        await shadowPage.locator("[data-facade-solar-results-dock]").screenshot({ path: shotCard, timeout: 15000 });
+        const overlayPoints = Number(
+          await shadowPage.evaluate(() => document.documentElement.dataset.facadeSolarOverlay ?? "0"),
+        );
+        const assessedFacadePoints = bundle?.facade?.units.length ?? 0;
+        const pctText = await shadowPage.locator("[data-facade-pct-at-threshold]").first().textContent().catch(() => null);
+        const facadeNormals = await shadowPage.evaluate(
+          () => window.__citycutQaModel?.readFacadeOverlayNormals?.() ?? [],
+        );
+        const bayNormals = facadeNormals.filter((cell) => cell.kind === "facade-bay");
+        const normalsVertical =
+          bayNormals.length > 20 &&
+          bayNormals.every((cell) => Math.abs(cell.ny) < 0.3 && Math.hypot(cell.nx, cell.nz) > 0.75);
+        const framedNw = await shadowPage.evaluate(() =>
+          Boolean(window.__citycutQaModel?.frameProposedMassingOblique?.("nw")),
+        );
+        const wallQaNw = await shadowPage.evaluate(() => window.__citycutQaModel?.readFacadeOverlayWallQa?.() ?? null);
+        assertCheck(
+          "solar-facade-oblique-camera",
+          "Facade heatmap camera target sits inside proposed massing bbox (oblique NW on drawn massing)",
+          framedNw && wallQaNw?.targetInsideMassing && (wallQaNw?.bboxes?.length ?? 0) > 0,
+          `framedNw=${framedNw}, wallQaNw=${JSON.stringify(wallQaNw)}`,
+        );
+        await shadowPage.waitForTimeout(1200);
+        fs.mkdirSync(CURSOR_ARTIFACTS_DIR, { recursive: true });
+        const shotFacadeNw = path.join(CURSOR_ARTIFACTS_DIR, "facade-3d-oblique-nw.png");
+        await sceneViewportScreenshot(shadowPage, { path: shotFacadeNw });
+        const framedSe = await shadowPage.evaluate(() =>
+          Boolean(window.__citycutQaModel?.frameProposedMassingOblique?.("se")),
+        );
+        await shadowPage.waitForTimeout(1200);
+        const shotFacadeSe = path.join(CURSOR_ARTIFACTS_DIR, "facade-3d-oblique-se.png");
+        await sceneViewportScreenshot(shadowPage, { path: shotFacadeSe });
+        const shotFacade = shotFacadeNw;
+        const wallQa = await shadowPage.evaluate(() => window.__citycutQaModel?.readFacadeOverlayWallQa?.() ?? null);
+        const shotCard = path.join(CURSOR_ARTIFACTS_DIR, "facade-results-card.png");
+        const dock = shadowPage.locator("[data-facade-solar-results-dock]");
+        await dock.waitFor({ state: "visible", timeout: 60_000 });
+        await dock.screenshot({ path: shotCard, timeout: 60_000, animations: "disabled", scale: "css" });
         const unitCount = bundle?.facade?.unitCount ?? 0;
+        const overlayOnWalls =
+          Boolean(wallQa?.verticesOnWalls) &&
+          Boolean(wallQa?.wallHeightSpanOk) &&
+          Boolean(wallQa?.targetInsideMassing);
+        const winterContrast = (wallQa?.northSouthHourSpread ?? 0) > 0.75;
         assertCheck(
           "solar-facade-adg-heatmap",
-          "Facade ADG 4A-1: 3D overlay points, readable results card, timing attribute on Box Hill proposal",
-          unitCount > 4 && assessMs > 0 && assessMs < 120000,
-          `units=${unitCount}, assessMs=${assessMs}, pctAt=${bundle?.facade?.pctAtThreshold}, pctNone=${bundle?.facade?.pctNone}, pass=${bundle?.facade?.pass}, heatmap=${shotFacade}, card=${shotCard}`,
+          "Facade ADG 4A-1: coloured wall quads on proposed massing, camera on massing, N/S winter contrast, readable results card",
+          unitCount > 4 &&
+            assessMs > 0 &&
+            assessMs < 120000 &&
+            overlayPoints > 0 &&
+            overlayPoints === assessedFacadePoints &&
+            normalsVertical &&
+            overlayOnWalls &&
+            winterContrast &&
+            Boolean(pctText?.includes("%")),
+          `units=${unitCount}, overlayPoints=${overlayPoints}, assessedFacadePoints=${assessedFacadePoints}, assessMs=${assessMs}, bayNormals=${bayNormals.length}, wallQa=${JSON.stringify(wallQa)}, pctAt=${bundle?.facade?.pctAtThreshold}, pctNone=${bundle?.facade?.pctNone}, pass=${bundle?.facade?.pass}, pctText=${JSON.stringify(pctText)}, heatmapNw=${shotFacadeNw}, heatmapSe=${shotFacadeSe}, card=${shotCard}`,
         );
       };
 
       await boxHillFacadeSolar();
+
+      await boxHillTreeShadows();
 
       await melbourneParkNoAdditional();
 
@@ -2850,7 +2972,13 @@ async function main() {
     }
   } catch (err) {
     console.error("Fatal error in verify-citycut:", err);
-    process.exitCode = 1;
+    const message = err instanceof Error ? err.message : String(err);
+    results.push({
+      id: "verify-fatal",
+      description: "Verification harness did not finish",
+      ok: false,
+      details: message,
+    });
   } finally {
     if (browser) await browser.close().catch(() => {});
     viteProc.kill("SIGTERM");
@@ -2866,4 +2994,7 @@ async function main() {
   }
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
