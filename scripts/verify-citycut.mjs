@@ -2019,6 +2019,51 @@ async function main() {
         (await sydneyPage.locator("svg.plan .heliodon-plan").count()) > 0,
       "north arrow and heliodon layer present",
     );
+    const sydneySunDome = sydneyPage.locator(".model .env-console .overlay-chips button", {
+      hasText: "3D Sun Dome",
+    });
+    if ((await sydneySunDome.count()) > 0 && (await sydneySunDome.getAttribute("aria-pressed")) === "true") {
+      await sydneySunDome.click({ timeout: 30_000 });
+    }
+    const exportHasLayer = (bytes, label) => {
+      const text = Buffer.from(bytes).toString("latin1");
+      return text.includes(label) || text.includes(`CityCut ${label}`);
+    };
+    const [sydneyAiDownload] = await Promise.all([
+      sydneyPage.waitForEvent("download", { timeout: 120_000 }),
+      sydneyPage.getByRole("button", { name: "Quick export Adobe Illustrator .ai" }).click({ timeout: 30_000 }),
+    ]);
+    const sydneyAiPath = path.join(cursorArtifacts, "site-plan-button-download.ai");
+    await sydneyAiDownload.saveAs(sydneyAiPath);
+    const sydneyAiBuf = fs.readFileSync(sydneyAiPath);
+    assertCheck(
+      "site-plan-ai-heliodon-layer",
+      "Quick-export .ai includes the Sun path heliodon layer while 9–3pm Plan Fan is on without 3D Sun Dome",
+      exportHasLayer(sydneyAiBuf, "Sun path") && sydneyAiBuf.length > 2000,
+      `bytes=${sydneyAiBuf.length}`,
+    );
+  try {
+    execFileSync(
+      "pdftoppm",
+      ["-png", "-singlefile", "-f", "1", "-l", "1", sydneyAiPath, path.join(cursorArtifacts, "ai-export-render")],
+      { stdio: "pipe" },
+    );
+  } catch {
+  }
+    const [sydneySvgDownload] = await Promise.all([
+      sydneyPage.waitForEvent("download", { timeout: 120_000 }),
+      sydneyPage.getByRole("button", { name: "Quick export SVG" }).click({ timeout: 30_000 }),
+    ]);
+    const sydneySvgPath = path.join(cursorArtifacts, "site-plan-button-download.svg");
+    await sydneySvgDownload.saveAs(sydneySvgPath);
+    const sydneySvgText = fs.readFileSync(sydneySvgPath, "utf8");
+    assertCheck(
+      "site-plan-svg-heliodon-layer",
+      "Quick-export .svg includes the Sun path diagram while plan fan is on",
+      sydneySvgText.includes('inkscape:label="Sun path"') &&
+        (sydneySvgText.match(/<ellipse /g) ?? []).length >= 7,
+      `bytes=${sydneySvgText.length}`,
+    );
     await sydneyPage.screenshot({
       path: path.join(cursorArtifacts, "sydney-rozelle-2d-plan.png"),
       fullPage: false,
@@ -2111,6 +2156,322 @@ async function main() {
       fs.writeFileSync(path.join(cursorArtifacts, "upper-levels-export.png"), podiumExportBuf);
     }
     await podiumCtx.close();
+    const rozelleFixturePath = path.join(cursorArtifacts, "rozelle-import-massing.3dm");
+    const rozelleFixtureMmPath = path.join(cursorArtifacts, "rozelle-import-massing-mm.3dm");
+    execFileSync(
+      path.join(process.cwd(), "node_modules/.bin/vitest"),
+      ["run", "scripts/writeRozelleMassingFixture.test.ts"],
+      {
+        cwd: process.cwd(),
+        stdio: "inherit",
+        env: {
+          ...process.env,
+          ROZELLE_FIXTURE_PATH: rozelleFixturePath,
+          ROZELLE_FIXTURE_MM_PATH: rozelleFixtureMmPath,
+        },
+      },
+    );
+    const importCtx = await browser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: 1,
+      reducedMotion: "reduce",
+    });
+    await importCtx.addInitScript(() => {
+      window.__citycutMinSilentLoadMs = 0;
+    });
+    const importPage = await importCtx.newPage();
+    const rozelleQuery =
+      "qa=1&lat=-33.8572&lon=151.21512&km=0.55&label=Rozelle+NSW&siteLat=-33.8572&siteLon=151.21512";
+    try {
+      await importPage.goto(`${baseUrl}/?${rozelleQuery}`, { waitUntil: "domcontentloaded", timeout: 120_000 });
+      await importPage.waitForSelector("button.create-fab", { timeout: 30_000 });
+      await importPage.click("button.create-fab");
+      await importPage.waitForFunction(
+        () => Boolean(document.querySelector(".model canvas")),
+        null,
+        { timeout: 300_000 },
+      );
+      await importPage.locator('button[data-section="import"]').click({ timeout: 30_000 });
+      await importPage.waitForSelector('input[type="file"][accept=".3dm"]', {
+        state: "attached",
+        timeout: 30_000,
+      });
+      await importPage.locator('input[type="file"][accept=".3dm"]').setInputFiles(rozelleFixturePath);
+      await importPage.waitForFunction(
+        () => document.querySelectorAll(".massing-item").length >= 1,
+        null,
+        { timeout: 300_000 },
+      );
+      await importPage.getByRole("tab", { name: "3D" }).click({ timeout: 60_000 });
+      await importPage.locator('button[data-section="analysis"]').click({ timeout: 30_000 });
+      const importShadowsOn = importPage.locator(".model .env-console .overlay-chips button", { hasText: "Shadows" });
+      if ((await importShadowsOn.getAttribute("aria-pressed")) !== "true") {
+        await importShadowsOn.click({ timeout: 30_000 });
+      }
+      await importPage.waitForFunction(
+        () => Boolean(window.__citycutQaPlan?.zoom3dToImportedMassing?.()),
+        null,
+        { timeout: 60_000 },
+      );
+      await importPage.waitForTimeout(2000);
+      await importPage.screenshot({
+        path: path.join(cursorArtifacts, "3d-imported.png"),
+        clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+      });
+      await importPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
+      await importPage.getByRole("button", { name: "Site plan" }).click({ timeout: 60_000 });
+      await importPage.waitForSelector("svg.plan", { timeout: 120_000 });
+      await importPage.locator('button[data-section="analysis"]').click({ timeout: 60_000 });
+      await importPage.waitForTimeout(300);
+      const shadowsChip = importPage.locator(".model .env-console .overlay-chips button", { hasText: "Shadows" });
+      await shadowsChip.click({ timeout: 30_000 });
+      const importPlanFanBtn = importPage.locator(".model .env-console .overlay-chips button", {
+        hasText: "9–3pm Plan Fan",
+      });
+      await importPlanFanBtn.click({ timeout: 30_000 });
+      await importPage.waitForFunction(
+        () =>
+          document.querySelectorAll("svg.plan [data-upper-z]").length >= 1 &&
+          document.querySelectorAll("svg.plan [data-imported-podium]").length >= 1,
+        null,
+        { timeout: 300_000 },
+      );
+      await importPage.waitForFunction(
+        () => document.querySelector("svg.plan [data-imported-shadow]") !== null,
+        null,
+        { timeout: 300_000 },
+      );
+      await importPage.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 300_000 });
+      const importPlanState = await importPage.evaluate(() => ({
+        upperGroups: document.querySelectorAll("svg.plan [data-upper-z]").length,
+        podiumPaths: document.querySelectorAll("svg.plan [data-imported-podium]").length,
+        importedShadow: document.querySelectorAll("svg.plan [data-imported-shadow]").length,
+        shadowPaths: document.querySelectorAll("svg.plan [data-shadow-hour] path").length,
+      }));
+      assertCheck(
+        "rozelle-import-podium-outlines",
+        "Real multi-object .3dm import shows podium outlines (data-imported-podium) on Rozelle Drawing site plan",
+        importPlanState.podiumPaths >= 3,
+        `podiumPaths=${importPlanState.podiumPaths}`,
+      );
+      assertCheck(
+        "rozelle-import-upper-level-outlines",
+        "Real .3dm import shows inner tower outlines (data-upper-z) on Rozelle Drawing site plan",
+        importPlanState.upperGroups >= 5,
+        `upperGroups=${importPlanState.upperGroups}`,
+      );
+      assertCheck(
+        "rozelle-import-plan-shadows",
+        "Real .3dm import casts sun-study plan shadows on Rozelle Drawing site plan",
+        importPlanState.shadowPaths >= 6,
+        `shadowPaths=${importPlanState.shadowPaths}`,
+      );
+      assertCheck(
+        "rozelle-import-massing-shadows",
+        "Imported massing casters produce plan shadows (data-imported-shadow)",
+        importPlanState.importedShadow >= 1,
+        `importedShadow=${importPlanState.importedShadow}`,
+      );
+      const fanShadowLength = async () =>
+        importPage.evaluate(() =>
+          [...document.querySelectorAll("svg.plan [data-shadow-hour] path")].reduce(
+            (n, p) => n + (p.getAttribute("d")?.length ?? 0),
+            0,
+          ),
+        );
+      await importPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
+      await importPage.waitForTimeout(300);
+      const fanLenBeforeHourScrub = await fanShadowLength();
+      async function clickSolarHour(hour) {
+        const label = String(hour).padStart(2, "0");
+        const tick = importPage.locator(".h-tick.studio-solar-tick", { hasText: label });
+        if ((await tick.count()) > 0) await tick.first().click({ timeout: 30_000 });
+        else await importPage.getByRole("button", { name: `Solar time ${label}:00` }).click({ timeout: 30_000 });
+      }
+      await clickSolarHour(9);
+      await importPage.waitForTimeout(600);
+      const fanLenHour9 = await fanShadowLength();
+      await clickSolarHour(15);
+      await importPage.waitForTimeout(600);
+      const fanLenHour15 = await fanShadowLength();
+      assertCheck(
+        "plan-fan-stacks-all-hours",
+        "9–3pm Plan Fan paints every hour at once, so scrubbing solar time does not change stacked shadow geometry (yellow massing and imported use the same layers)",
+        fanLenBeforeHourScrub === fanLenHour9 && fanLenHour9 === fanLenHour15 && fanLenHour15 > 1000,
+        `shadowDLength=${fanLenBeforeHourScrub}/${fanLenHour9}/${fanLenHour15}`,
+      );
+      const jun21Btn = importPage.getByRole("button", { name: "21 Jun" });
+      if ((await jun21Btn.count()) > 0) await jun21Btn.click({ timeout: 30_000 });
+      await importPage.waitForTimeout(600);
+      const fanAllStats = await importPage.evaluate(() => window.__citycutQaPlan?.sunStudyCasterStats?.());
+      const importPickId = await importPage.evaluate(() =>
+        window.__citycutQaPlan?.firstImportedDisplayBuildingId?.(),
+      );
+      assertCheck(
+        "rozelle-import-sun-study-caster-stats",
+        "Rozelle plan fan exposes caster stats for QA",
+        Boolean(fanAllStats && fanAllStats.shadowPathChars > 500 && fanAllStats.total >= 8),
+        JSON.stringify(fanAllStats ?? null),
+      );
+      if (importPickId != null) {
+        await importPage.evaluate((id) => {
+          if (!window.__citycutQaPlan?.selectSunStudyBuilding) throw new Error("missing selectSunStudyBuilding");
+          window.__citycutQaPlan.selectSunStudyBuilding(id);
+        }, importPickId);
+        await importPage.waitForFunction(
+          () => document.querySelectorAll("svg.plan [data-selected-building]").length >= 1,
+          null,
+          { timeout: 30_000 },
+        );
+        await importPage.waitForFunction(
+          () => (window.__citycutQaPlan?.sunStudyCasterStats?.().shadowPathChars ?? 0) > 200,
+          null,
+          { timeout: 180_000 },
+        );
+        await importPage.waitForTimeout(500);
+        const fanSelectedStats = await importPage.evaluate(() => window.__citycutQaPlan?.sunStudyCasterStats?.());
+        await importPage.screenshot({
+          path: path.join(cursorArtifacts, "selected-shadows-fan.png"),
+          clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+        });
+        assertCheck(
+          "rozelle-import-selected-fan-shadows",
+          "One selected imported podium keeps plan-fan shadows from podium-height casters, not tower tops only",
+          Boolean(
+            fanSelectedStats &&
+              fanSelectedStats.podiumLevel >= 1 &&
+              fanSelectedStats.total >= 2 &&
+              fanSelectedStats.shadowPathChars > Math.min(400, fanAllStats.shadowPathChars * 0.12),
+          ),
+          `all=${JSON.stringify(fanAllStats)}, selected=${JSON.stringify(fanSelectedStats)}`,
+        );
+      } else {
+        assertCheck(
+          "rozelle-import-selected-fan-shadows",
+          "One selected imported podium keeps plan-fan shadows from podium-height casters, not tower tops only",
+          false,
+          "no imported display building id",
+        );
+      }
+      await importPage.locator('button[data-section="drawing"]').click({ timeout: 30_000 });
+      await importPage.waitForTimeout(200);
+      await importPage.waitForFunction(
+        () =>
+          typeof window.__citycutQaPlan?.zoomPlanToImportedMassing === "function" &&
+          window.__citycutQaPlan.zoomPlanToImportedMassing(),
+        null,
+        { timeout: 60_000 },
+      );
+      await importPage.waitForTimeout(400);
+      await importPage.locator('button[data-section="analysis"]').click({ timeout: 30_000 });
+      await importPage.waitForTimeout(250);
+      const envFanBtn = importPage.locator(".model .env-console .overlay-chips button", {
+        hasText: "9–3pm Plan Fan",
+      });
+      const envShadowsBtn = importPage.locator(".model .env-console .overlay-chips button", { hasText: "Shadows" });
+      if ((await envFanBtn.count()) > 0 && (await envFanBtn.getAttribute("aria-pressed")) === "true") {
+        await envFanBtn.click({ timeout: 30_000 });
+      }
+      if ((await envShadowsBtn.count()) > 0 && (await envShadowsBtn.getAttribute("aria-pressed")) === "true") {
+        await envShadowsBtn.click({ timeout: 30_000 });
+      }
+      await importPage.locator('button[data-section="drawing"]').click({ timeout: 30_000 });
+      await importPage.waitForTimeout(300);
+      await importPage.waitForTimeout(400);
+      const upperStrokeWidths = await importPage.evaluate(() => {
+        const upper = document.querySelector("svg.plan [data-imported-upper-outline]");
+        const podium = document.querySelector("svg.plan [data-imported-podium]");
+        if (!upper || !podium) return null;
+        return {
+          upper: Number.parseFloat(getComputedStyle(upper).strokeWidth),
+          podium: Number.parseFloat(getComputedStyle(podium).strokeWidth),
+        };
+      });
+      assertCheck(
+        "rozelle-import-upper-stroke-weight",
+        "Imported tower-top outlines use the same on-screen stroke weight as podium massing outlines",
+        upperStrokeWidths &&
+          Math.abs(upperStrokeWidths.upper - upperStrokeWidths.podium) < 0.05 &&
+          upperStrokeWidths.upper >= 0.9,
+        `upper=${upperStrokeWidths?.upper}, podium=${upperStrokeWidths?.podium}`,
+      );
+      await importPage.screenshot({
+        path: path.join(cursorArtifacts, "drawing-podium-tower-outlines.png"),
+        clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+      });
+      await importPage.locator('button[data-section="analysis"]').click({ timeout: 30_000 });
+      await importPage.waitForTimeout(250);
+      if ((await envFanBtn.count()) > 0 && (await envFanBtn.getAttribute("aria-pressed")) !== "true") {
+        await envFanBtn.click({ timeout: 30_000 });
+      }
+      await importPage.locator('button[data-section="drawing"]').click({ timeout: 30_000 });
+      await importPage.waitForTimeout(400);
+      await importPage.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 180_000 });
+      const planImportSvgPath = path.join(cursorArtifacts, "rozelle-import-plan.svg");
+      const frameSvg = await importPage.evaluate(async () => {
+        if (!window.__citycutQaPlan) throw new Error("missing __citycutQaPlan");
+        return window.__citycutQaPlan.exportSitePlanFrameSvg();
+      });
+      fs.writeFileSync(planImportSvgPath, frameSvg);
+      assertCheck(
+        "rozelle-import-plan-svg-outlines",
+        "Exported frame SVG contains imported podium strokes and upper tower outlines",
+        frameSvg.includes('stroke-dasharray="1.2 0.6"') &&
+          frameSvg.includes('inkscape:label="Imported::Upper levels"'),
+        `bytes=${frameSvg.length}`,
+      );
+      assertCheck(
+        "rozelle-import-plan-svg-shadows",
+        "Exported frame SVG contains sun-study shadow fills for plan fan",
+        /inkscape:label="Shadow (09|15):00"/.test(frameSvg),
+        "per-hour shadow layers present",
+      );
+      await importPage.evaluate(() => {
+        if (!window.__citycutQaPlan?.clearSunStudySelection) throw new Error("missing clearSunStudySelection");
+        window.__citycutQaPlan.clearSunStudySelection();
+      });
+      await importPage.waitForTimeout(400);
+      const singleShadowSignature = () =>
+        importPage.evaluate(() =>
+          [...document.querySelectorAll('svg.plan [data-plan-shadow="single"]')]
+            .map((p) => p.getAttribute("d") ?? "")
+            .join("\n"),
+        );
+      async function captureSingleShadowHour(hour, filename) {
+        await importPage.evaluate((h) => {
+          if (!window.__citycutQaPlan?.setPlanSunMode) throw new Error("missing setPlanSunMode");
+          window.__citycutQaPlan.setPlanSunMode(h, true, false);
+        }, hour);
+        await importPage.waitForFunction(
+          () => document.querySelectorAll('svg.plan [data-plan-shadow="single"]').length >= 1,
+          null,
+          { timeout: 180_000 },
+        );
+        await importPage.waitForTimeout(800);
+        await importPage.screenshot({
+          path: path.join(cursorArtifacts, filename),
+          clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+        });
+      }
+      await captureSingleShadowHour(9, "drawing-imported-shadows-9am.png");
+      const sig9 = await singleShadowSignature();
+      await captureSingleShadowHour(15, "drawing-imported-shadows-3pm.png");
+      const sig15 = await singleShadowSignature();
+      assertCheck(
+        "rozelle-single-shadow-hour-scrub",
+        "With Plan Fan off, imported casters use the same single-shadow path as yellow massing and shadow geometry changes between 09:00 and 15:00",
+        sig9.length > 200 && sig15.length > 200 && sig9 !== sig15,
+        `sigLen9=${sig9.length}, sigLen15=${sig15.length}`,
+      );
+    } catch (err) {
+      assertCheck(
+        "rozelle-import-flow",
+        "Rozelle multi-object .3dm import (file input) reaches Drawing plan with outlines and shadows",
+        false,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+    await importCtx.close();
     await sydneyCtx.close();
   } catch (err) {
     console.error("Fatal error in verify-citycut:", err);

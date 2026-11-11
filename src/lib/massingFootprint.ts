@@ -1,23 +1,42 @@
 import type { MultiPolygon, Polygon } from "./safePolygonClip";
 import { clipUnion as unionFnLoaded } from "./safePolygonClip";
-import { placedLocal, type ImportedMassing } from "./massingImport";
+import { placedLocal, type ImportedMassing, type MassingPlacement } from "./massingImport";
 import type { BuildingFeat, LonLat, Pt } from "../types";
 
 const unionFn = unionFnLoaded;
 
 const IMPORTED_ID_BASE = -1_000_000;
+const IMPORTED_SHADOW_ID_BASE = -2_000_000;
 
 const MIN_PLAN_AREA_M2 = 1e-4;
 const UNION_BATCH = 2000;
-const UP_FACE_MIN_NZ = 0.92;
+const UP_FACE_MIN_NZ = 0.95;
 const ROOF_Z_BUCKET_M = 0.03;
 const ROOF_MIN_ABOVE_M = 0.05;
-
 function closeRing(ring: Pt[]): Pt[] {
   const first = ring[0];
   const last = ring[ring.length - 1];
   if (!first || !last) return ring;
   return first[0] === last[0] && first[1] === last[1] ? ring : [...ring, first];
+}
+
+function partTriangleStarts(massing: Pick<ImportedMassing, "indices" | "partTriangleStarts">): number[] {
+  const total = massing.indices.length / 3;
+  const starts = massing.partTriangleStarts;
+  if (starts && starts.length >= 2) return starts;
+  return [0, total];
+}
+
+function sliceMassingTriangles(
+  massing: Pick<ImportedMassing, "positions" | "indices" | "placement">,
+  triStart: number,
+  triEnd: number,
+): Pick<ImportedMassing, "positions" | "indices" | "placement"> {
+  return {
+    positions: massing.positions,
+    placement: massing.placement,
+    indices: massing.indices.subarray(triStart * 3, triEnd * 3),
+  };
 }
 
 export type ImportedMassingUpperLevel = {
@@ -86,13 +105,15 @@ function footprintGround(outer: Pt[], base: number, groundAt?: (east: number, no
   return count > 0 ? sum / count : base;
 }
 
-function upwardRoofBuckets(
+type RoofHit = { bucket: number; poly: Polygon };
+
+function upwardRoofHits(
   massing: Pick<ImportedMassing, "positions" | "indices" | "placement">,
   origin: LonLat,
   zone: number,
-): Map<number, Polygon[]> {
+): RoofHit[] {
   const local = placedLocal(massing, massing.placement, origin, zone);
-  const buckets = new Map<number, Polygon[]>();
+  const hits: RoofHit[] = [];
   for (let t = 0; t + 2 < massing.indices.length; t += 3) {
     const ia = massing.indices[t]! * 3;
     const ib = massing.indices[t + 1]! * 3;
@@ -100,29 +121,31 @@ function upwardRoofBuckets(
     const ax = local[ia]!, ay = local[ia + 1]!, az = local[ia + 2]!;
     const bx = local[ib]!, by = local[ib + 1]!, bz = local[ib + 2]!;
     const cx = local[ic]!, cy = local[ic + 1]!, cz = local[ic + 2]!;
-    const flatZ = Math.abs(az - bz) < 1e-6 && Math.abs(bz - cz) < 1e-6;
     const planArea = ((bx - ax) * (cy - ay) - (cx - ax) * (by - ay)) / 2;
-    if (flatZ) {
-      if (!(planArea > MIN_PLAN_AREA_M2)) continue;
-    } else {
-      const ux = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
-      const uy = (bz - az) * (cy - ay) - (cz - az) * (by - ay);
-      const uz = (bx - ax) * (cz - az) - (cx - ax) * (bz - az);
-      const length = Math.hypot(ux, uy, uz);
-      if (!(length > 1e-9)) continue;
-      const nz = Math.abs(uz) / length;
-      if (nz < UP_FACE_MIN_NZ || uz <= 0) continue;
-    }
+    const nx = (by - ay) * (cz - az) - (bz - az) * (cy - ay);
+    const ny = (bz - az) * (cx - ax) - (bx - ax) * (cz - az);
+    const nz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+    const length = Math.hypot(nx, ny, nz);
+    if (!(length > 1e-9)) continue;
+    if (Math.abs(nz) / length < UP_FACE_MIN_NZ) continue;
+    if (Math.abs(planArea) < MIN_PLAN_AREA_M2) continue;
     const topZ = Math.max(az, bz, cz);
     const bucket = Math.round(topZ / ROOF_Z_BUCKET_M) * ROOF_Z_BUCKET_M;
-    if (!flatZ && Math.abs(planArea) < MIN_PLAN_AREA_M2) continue;
     const poly: Polygon =
       planArea > 0
         ? [[[ax, ay], [bx, by], [cx, cy], [ax, ay]]]
         : [[[ax, ay], [cx, cy], [bx, by], [ax, ay]]];
-    const list = buckets.get(bucket) ?? [];
-    list.push(poly);
-    buckets.set(bucket, list);
+    hits.push({ bucket, poly });
+  }
+  return hits;
+}
+
+function bucketRoofPolygons(hits: RoofHit[]): Map<number, Polygon[]> {
+  const buckets = new Map<number, Polygon[]>();
+  for (const hit of hits) {
+    const list = buckets.get(hit.bucket) ?? [];
+    list.push(hit.poly);
+    buckets.set(hit.bucket, list);
   }
   return buckets;
 }
@@ -148,24 +171,109 @@ function ringsFromMerged(merged: MultiPolygon): Pt[][] {
   return lines;
 }
 
+function ringKey(ring: Pt[]): string {
+  const open = ring.length > 0 && ring[0]![0] === ring[ring.length - 1]![0] && ring[0]![1] === ring[ring.length - 1]![1]
+    ? ring.slice(0, -1)
+    : ring;
+  return open
+    .map((p) => `${p[0]!.toFixed(3)},${p[1]!.toFixed(3)}`)
+    .sort()
+    .join("|");
+}
+
+function dedupeRings(rings: Pt[][]): Pt[][] {
+  const seen = new Set<string>();
+  const out: Pt[][] = [];
+  for (const ring of rings) {
+    const key = ringKey(ring);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(ring);
+  }
+  return out;
+}
+
+function roofBucketsForMassing(
+  massing: Pick<ImportedMassing, "positions" | "indices" | "placement" | "partTriangleStarts">,
+  origin: LonLat,
+  zone: number,
+): Map<number, Polygon[]> {
+  const starts = partTriangleStarts(massing);
+  const merged = new Map<number, Polygon[]>();
+  for (let part = 0; part + 1 < starts.length; part++) {
+    const slice = sliceMassingTriangles(massing, starts[part]!, starts[part + 1]!);
+    const partBuckets = bucketRoofPolygons(upwardRoofHits(slice, origin, zone));
+    for (const [bucket, polys] of partBuckets) {
+      const list = merged.get(bucket) ?? [];
+      list.push(...polys);
+      merged.set(bucket, list);
+    }
+  }
+  return merged;
+}
+
+function roofLevelsAboveFloor(
+  buckets: Map<number, Polygon[]>,
+  placement: MassingPlacement,
+): number[] {
+  const floorCutoff = placement.base + ROOF_MIN_ABOVE_M;
+  return [...buckets.keys()].filter((z) => z > floorCutoff).sort((a, b) => a - b);
+}
+
+export function massingPodiumRoofFootprints(
+  massing: Pick<ImportedMassing, "positions" | "indices" | "placement" | "partTriangleStarts">,
+  origin: LonLat,
+  zone: number,
+): { podiumZ: number; polygons: MultiPolygon } {
+  const buckets = roofBucketsForMassing(massing, origin, zone);
+  const levels = roofLevelsAboveFloor(buckets, massing.placement);
+  if (levels.length === 0) {
+    return { podiumZ: massing.placement.base, polygons: [] };
+  }
+  const podiumZ = levels[0]!;
+  return { podiumZ, polygons: unionBucket(buckets.get(podiumZ) ?? []) };
+}
+
 export function massingUpperLevelOutlines(
-  massing: Pick<ImportedMassing, "positions" | "indices" | "placement">,
+  massing: Pick<ImportedMassing, "positions" | "indices" | "placement" | "partTriangleStarts">,
   origin: LonLat,
   zone: number,
 ): ImportedMassingUpperLevel[] {
-  const buckets = upwardRoofBuckets(massing, origin, zone);
-  if (buckets.size <= 1) return [];
-  const levels = [...buckets.keys()].sort((a, b) => a - b);
-  const minZ = levels[0]!;
+  const buckets = roofBucketsForMassing(massing, origin, zone);
+  const levels = roofLevelsAboveFloor(buckets, massing.placement);
+  if (levels.length <= 1) return [];
+  const starts = partTriangleStarts(massing);
+  if (starts.length === 2 && levels.length === 2) {
+    const [low, high] = levels;
+    if (low != null && high != null && high - low <= ROOF_MIN_ABOVE_M) return [];
+  }
+  const podiumRoofZ = levels[0]!;
   const out: ImportedMassingUpperLevel[] = [];
   for (const z of levels) {
-    if (z <= minZ + ROOF_MIN_ABOVE_M) continue;
+    if (z <= podiumRoofZ + ROOF_MIN_ABOVE_M) continue;
     const merged = unionBucket(buckets.get(z) ?? []);
-    const lines = ringsFromMerged(merged);
+    const lines = dedupeRings(ringsFromMerged(merged));
     if (lines.length === 0) continue;
     out.push({ z, lines });
   }
   return out;
+}
+
+export type MassingPlanOutlineSummary = {
+  podiumZ: number;
+  podiumRings: Pt[][];
+  towerRings: Pt[][];
+};
+
+export function massingPlanOutlineSummary(
+  massing: Pick<ImportedMassing, "positions" | "indices" | "placement" | "partTriangleStarts">,
+  origin: LonLat,
+  zone: number,
+): MassingPlanOutlineSummary {
+  const { podiumZ, polygons } = massingPodiumRoofFootprints(massing, origin, zone);
+  const podiumRings = dedupeRings(ringsFromMerged(polygons));
+  const towerRings = dedupeRings(massingUpperLevelOutlines(massing, origin, zone).flatMap((level) => level.lines));
+  return { podiumZ, podiumRings, towerRings };
 }
 
 export function massingUpperLevelPlanLines(
@@ -173,12 +281,92 @@ export function massingUpperLevelPlanLines(
   origin: LonLat,
   zone: number,
 ): ImportedMassingUpperLevel[] {
-  const out: ImportedMassingUpperLevel[] = [];
+  const byZ = new Map<number, Pt[][]>();
   for (const item of imported) {
     if (!item.visible) continue;
-    out.push(...massingUpperLevelOutlines(item, origin, zone));
+    for (const level of massingUpperLevelOutlines(item, origin, zone)) {
+      const lines = byZ.get(level.z) ?? [];
+      lines.push(...level.lines);
+      byZ.set(level.z, lines);
+    }
+  }
+  return [...byZ.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([z, lines]) => ({ z, lines: dedupeRings(lines) }));
+}
+
+function pushShadowCaster(
+  out: BuildingFeat[],
+  ring: Pt[],
+  holes: Pt[][],
+  z: number,
+  item: ImportedMassing,
+  groundAt: ((east: number, north: number) => number) | undefined,
+  nextId: () => number,
+): void {
+  const ground = footprintGround(ring, item.placement.base, groundAt);
+  const height = Math.max(0.5, z - ground);
+  out.push({
+    id: nextId(),
+    ring: closeRing(ring),
+    holes: holes.map((hole) => closeRing(hole)),
+    height,
+    use: "unclassified",
+    source: "none",
+    importedMassing: true,
+    importedMassingShadowCaster: true,
+    importedTopZ: z,
+    overtureName: item.name,
+  });
+}
+
+function massingShadowCasters(
+  item: ImportedMassing,
+  origin: LonLat,
+  zone: number,
+  groundAt: ((east: number, north: number) => number) | undefined,
+  nextId: () => number,
+): BuildingFeat[] {
+  const buckets = roofBucketsForMassing(item, origin, zone);
+  const floorCutoff = item.placement.base + ROOF_MIN_ABOVE_M;
+  const levels = [...buckets.keys()].filter((z) => z > floorCutoff).sort((a, b) => a - b);
+  const out: BuildingFeat[] = [];
+  for (const z of levels) {
+    const merged = unionBucket(buckets.get(z) ?? []);
+    for (const polygon of merged) {
+      const [outer, ...holes] = polygon;
+      if (!outer || outer.length < 4) continue;
+      pushShadowCaster(out, outer as Pt[], holes as Pt[][], z, item, groundAt, nextId);
+    }
+  }
+  if (out.length > 0) return out;
+  const { podiumZ, polygons } = massingPodiumRoofFootprints(item, origin, zone);
+  if (polygons.length > 0) {
+    for (const polygon of polygons) {
+      const [outer, ...holes] = polygon;
+      if (!outer || outer.length < 4) continue;
+      pushShadowCaster(out, outer as Pt[], holes as Pt[][], podiumZ, item, groundAt, nextId);
+    }
+  }
+  for (const level of massingUpperLevelOutlines(item, origin, zone)) {
+    for (const ring of level.lines) {
+      pushShadowCaster(out, ring, [], level.z, item, groundAt, nextId);
+    }
+  }
+  if (out.length === 0) {
+    const { polygons, polygonTops } = massingFootprint(item, origin, zone);
+    for (const [index, polygon] of polygons.entries()) {
+      const topZ = polygonTops[index]!;
+      const [outer, ...holes] = polygon;
+      if (!outer || outer.length < 4) continue;
+      pushShadowCaster(out, outer as Pt[], holes as Pt[][], topZ, item, groundAt, nextId);
+    }
   }
   return out;
+}
+
+export function drawingMassingCount(buildings: BuildingFeat[]): number {
+  return buildings.filter((building) => !building.importedMassingShadowCaster).length;
 }
 
 export function massingDrawingBuildings(
@@ -188,27 +376,34 @@ export function massingDrawingBuildings(
   groundAt?: (east: number, north: number) => number,
 ): BuildingFeat[] {
   const out: BuildingFeat[] = [];
-  let next = IMPORTED_ID_BASE;
+  let nextFill = IMPORTED_ID_BASE;
+  let nextShadow = IMPORTED_SHADOW_ID_BASE;
   for (const item of imported) {
     if (!item.visible) continue;
-    const { polygons, polygonTops } = massingFootprint(item, origin, zone);
-    for (const [index, polygon] of polygons.entries()) {
+    const { podiumZ, polygons } = massingPodiumRoofFootprints(item, origin, zone);
+  const { polygons: fallbackPolys, polygonTops } =
+      polygons.length > 0 ? { polygons, polygonTops: polygons.map(() => podiumZ) } : massingFootprint(item, origin, zone);
+    for (const [index, polygon] of fallbackPolys.entries()) {
       const topZ = polygonTops[index]!;
       const [outer, ...holes] = polygon;
       if (!outer || outer.length < 4) continue;
       out.push({
-        id: next--,
+        id: nextFill--,
         ring: closeRing(outer as Pt[]),
         holes: holes.map((hole) => closeRing(hole as Pt[])),
         height: Math.max(1, topZ - footprintGround(outer as Pt[], item.placement.base, groundAt)),
         use: "unclassified",
         source: "none",
         importedMassing: true,
+        importedMassingSkipShadow: true,
         importedTopZ: topZ,
         ...(item.colour ? { importedColour: item.colour } : {}),
         overtureName: item.name,
       });
     }
+    out.push(
+      ...massingShadowCasters(item, origin, zone, groundAt, () => nextShadow--),
+    );
   }
   return out;
 }

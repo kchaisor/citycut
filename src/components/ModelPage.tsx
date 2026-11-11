@@ -1,4 +1,10 @@
-import { sunStudyCasterModel, sunStudyMutedOn, toggleSelection, type SunStudyDate } from "../lib/sunStudyPlan";
+import {
+  sunStudyCasterModel,
+  sunStudyMutedOn,
+  sunStudyShadowCasters,
+  toggleSelection,
+  type SunStudyDate,
+} from "../lib/sunStudyPlan";
 import { sunStudyLayersFor } from "./useSunStudyShadows";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { handleModelKeyDown, type ModelShortcutAction } from "../lib/modelKeyboard";
@@ -53,7 +59,12 @@ import {
   type AxoLayerId,
   type ExplodedAxoSettings,
 } from "../lib/explodedAxo";
-import { explodedAxoViewportExtent, planViewportExtent, type PlanViewport } from "../lib/planViewport";
+import {
+  explodedAxoViewportExtent,
+  planViewportExtent,
+  planViewportForBounds,
+  type PlanViewport,
+} from "../lib/planViewport";
 import { FIGURE_SCALES, preferredFigureScale, sheetFitMessage } from "../lib/figureGround";
 import {
   fetchComBuildingFootprints,
@@ -148,6 +159,7 @@ import {
 } from "../lib/hiddenBuildings";
 import { ImportMassingPanel } from "./ImportMassingPanel";
 import { useImportedMassing } from "./useImportedMassing";
+import { drawingMassingCount } from "../lib/massingFootprint";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
 import { DrawingExplodedAxo } from "./DrawingExplodedAxo";
@@ -445,9 +457,20 @@ export function ModelPage({
     };
   }
 
+  function planHeliodonForExport(): HeliodonDiagramExportOptions | null {
+    const direct = heliodonDiagramExport();
+    if (direct) return direct;
+    if (!sunStudyDate) return null;
+    return {
+      ...planShadowInput(),
+      sideM: model.sideM,
+      radiusFactor: solar.radiusFactor,
+    };
+  }
+
   function sitePlanExportOptions(): SitePlanExportOptions {
     return {
-      heliodon: heliodonDiagramExport(),
+      heliodon: planHeliodonForExport(),
       shadows: planShadowInput(),
       castShadows: solar.castShadows,
       uniformBuildings: !colourByUse && !showSource,
@@ -1436,9 +1459,25 @@ export function ModelPage({
   const qaPlanBridgeRef = useRef<{
     upperLevelGroupCount: () => number;
     exportFrameSvg: () => Promise<string>;
+    zoomToImportedMassing: () => boolean;
+    zoom3dToImportedMassing: () => boolean;
+    setPlanSunMode: (hour: number, castShadows: boolean, sunStudy: boolean) => boolean;
+    selectSunStudyBuilding: (id: number) => boolean;
+    clearSunStudySelection: () => boolean;
+    sunStudyPickBuildingId: () => number | null;
+    firstImportedDisplayBuildingId: () => number | null;
+    sunStudyCasterStats: () => { total: number; podiumLevel: number; shadowPathChars: number };
   }>({
     upperLevelGroupCount: () => 0,
     exportFrameSvg: async () => "",
+    zoomToImportedMassing: () => false,
+    zoom3dToImportedMassing: () => false,
+    selectSunStudyBuilding: () => false,
+    clearSunStudySelection: () => false,
+    sunStudyPickBuildingId: () => null,
+    firstImportedDisplayBuildingId: () => null,
+    sunStudyCasterStats: () => ({ total: 0, podiumLevel: 0, shadowPathChars: 0 }),
+    setPlanSunMode: () => false,
   });
   qaPlanBridgeRef.current = {
     upperLevelGroupCount: () => document.querySelectorAll("svg.plan [data-upper-z]").length,
@@ -1449,6 +1488,86 @@ export function ModelPage({
         sunStudy: await sunStudyExportLayers(),
       });
     },
+    zoomToImportedMassing: () => {
+      const points: [number, number][] = [];
+      for (const building of drawingModel.buildings) {
+        if (!building.importedMassing || building.importedMassingShadowCaster) continue;
+        for (const [e, n] of building.ring) points.push([e, n]);
+      }
+      for (const level of drawingModel.importedMassingUpperLevels ?? []) {
+        for (const line of level.lines) for (const [e, n] of line) points.push([e, n]);
+      }
+      if (points.length === 0) return false;
+      let minE = Infinity;
+      let maxE = -Infinity;
+      let minN = Infinity;
+      let maxN = -Infinity;
+      for (const [e, n] of points) {
+        minE = Math.min(minE, e);
+        maxE = Math.max(maxE, e);
+        minN = Math.min(minN, n);
+        maxN = Math.max(maxN, n);
+      }
+      setPlanViewport(planViewportForBounds(minE, minN, maxE, maxN));
+      return true;
+    },
+    zoom3dToImportedMassing: () => {
+      const group = massing.group;
+      if (!group || typeof window === "undefined" || !window.__citycutQa?.setCamera) return false;
+      const box = new THREE.Box3().setFromObject(group);
+      if (box.isEmpty()) return false;
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const span = Math.max(size.x, size.z, 80);
+      const eyeY = center.y + Math.max(size.y * 0.55, 45);
+      window.__citycutQa.setCamera({
+        eye: { x: center.x - span * 0.85, y: eyeY + span * 0.65, z: center.z + span * 1.05 },
+        target: { x: center.x, y: center.y + size.y * 0.2, z: center.z },
+      });
+      return true;
+    },
+    setPlanSunMode: (hour, castShadows, sunStudy) => {
+      commitSolar({
+        ...solar,
+        hour,
+        minute: 0,
+        castShadows,
+        sunStudy,
+        sunStudyCasters: sunStudySelected.length > 0 ? "selected" : "all",
+      });
+      return true;
+    },
+    selectSunStudyBuilding: (id) => {
+      setSunStudySelected([id]);
+      commitSolar({ ...solar, sunStudyCasters: "selected" });
+      return true;
+    },
+    clearSunStudySelection: () => {
+      setSunStudySelected([]);
+      commitSolar({ ...solar, sunStudyCasters: "all" });
+      return true;
+    },
+    sunStudyPickBuildingId: () => {
+      const pick = drawingModel.buildings.find(
+        (building) => !building.importedMassingShadowCaster && building.height >= 4,
+      );
+      return pick?.id ?? drawingModel.buildings[0]?.id ?? null;
+    },
+    firstImportedDisplayBuildingId: () =>
+      drawingModel.buildings.find((building) => building.importedMassingSkipShadow)?.id ?? null,
+    sunStudyCasterStats: () => {
+      const casters = sunStudyShadowCasters(
+        drawingModel.buildings,
+        effectiveSunStudyCasters,
+        sunStudySelected,
+      ).filter((building) => building.importedMassingShadowCaster || !building.importedMassing);
+      const podiumLevel = casters.filter((building) => (building.importedTopZ ?? 0) <= 30).length;
+      const shadowPathChars = [...document.querySelectorAll("svg.plan [data-shadow-hour] path")].reduce(
+        (sum, path) => sum + (path.getAttribute("d")?.length ?? 0),
+        0,
+      );
+      return { total: casters.length, podiumLevel, shadowPathChars };
+    },
   };
 
   useEffect(() => {
@@ -1456,6 +1575,15 @@ export function ModelPage({
     window.__citycutQaPlan = {
       upperLevelGroupCount: () => qaPlanBridgeRef.current.upperLevelGroupCount(),
       exportSitePlanFrameSvg: () => qaPlanBridgeRef.current.exportFrameSvg(),
+      zoomPlanToImportedMassing: () => qaPlanBridgeRef.current.zoomToImportedMassing(),
+      zoom3dToImportedMassing: () => qaPlanBridgeRef.current.zoom3dToImportedMassing(),
+      setPlanSunMode: (hour, castShadows, sunStudy) =>
+        qaPlanBridgeRef.current.setPlanSunMode(hour, castShadows, sunStudy),
+      selectSunStudyBuilding: (id) => qaPlanBridgeRef.current.selectSunStudyBuilding(id),
+      clearSunStudySelection: () => qaPlanBridgeRef.current.clearSunStudySelection(),
+      sunStudyPickBuildingId: () => qaPlanBridgeRef.current.sunStudyPickBuildingId(),
+      firstImportedDisplayBuildingId: () => qaPlanBridgeRef.current.firstImportedDisplayBuildingId(),
+      sunStudyCasterStats: () => qaPlanBridgeRef.current.sunStudyCasterStats(),
     };
     return () => {
       delete window.__citycutQaPlan;
@@ -2929,7 +3057,7 @@ export function ModelPage({
                     <div className="card-head sidebar-gh">
                       <h3 className="card-title">View Style</h3>
                       <span className="card-meta mono">
-                        {drawingModel.buildings.length.toLocaleString()} massings
+                        {drawingMassingCount(drawingModel.buildings).toLocaleString()} massings
                       </span>
                     </div>
                     {drawing !== "figure-ground" && (

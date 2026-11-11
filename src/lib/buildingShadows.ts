@@ -276,6 +276,7 @@ export function planShadowRings(
   const terrainKey = field ? `${field.cols}x${field.rows}:${field.min}:${field.max}:${model.sideM}` : "";
   let merged: MultiPolygon = [];
   for (const building of model.buildings) {
+    if (building.importedMassingSkipShadow) continue;
     const offset = planShadowOffset(sample, building.height);
     if (!offset) continue;
     const topZ = ground
@@ -300,4 +301,18 @@ export function clearPlanShadowCache(): void {
   buildingShadowCache.clear();
   unionCacheKey = "";
   unionCache = [];
+}
+
+export function importedMassingShadowCasters(buildings: BuildingFeat[]): BuildingFeat[] {
+  return buildings.filter((building) => building.importedMassingShadowCaster);
+}
+
+export function importedPlanShadowRings(
+  model: CityModel,
+  input: PlanShadowInput,
+  castShadows: boolean,
+): Ring[][] {
+  const casters = importedMassingShadowCasters(model.buildings);
+  if (!castShadows || casters.length === 0) return [];
+  return planShadowRings({ ...model, buildings: casters }, input, true);
 }

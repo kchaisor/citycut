@@ -27,7 +27,7 @@ import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
 import { NswPlanLabels, NswPlanLines, NswPlanUnder } from "./NswPlanLayers";
 import { NSW_PLAN_LABEL_SHARE, nswPlanItems } from "../lib/nswPlan";
 import { readNswPlanStyle } from "../lib/nswPlanStyle";
-import { planShadowRings, type PlanShadowInput } from "../lib/buildingShadows";
+import { importedPlanShadowRings, planShadowRings, type PlanShadowInput } from "../lib/buildingShadows";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
 import { planViewportExtent, type PlanViewport } from "../lib/planViewport";
 import {
@@ -253,7 +253,6 @@ export function DrawingPlan({
     [study, casterModel, sunStudySelected, estFont],
   );
   const studyShadowFill = getColour("--sun-study-shadow");
-  const upperTone = getColour("--imported-massing-upper-tone");
   const upperStroke = useMemo(() => importedMassingUpperStrokeStyle(style), [style]);
   const studySunFill = getColour("--sun-study-sun");
   const muted = Boolean(study) && sunStudyMuted;
@@ -263,6 +262,10 @@ export function DrawingPlan({
     if (!shadowInput || figure || study) return [];
     return planShadowRings(casterModel, shadowInput, castShadows);
   }, [castShadows, figure, casterModel, shadowInput, study]);
+  const importedShadowReady = useMemo(() => {
+    if (!shadowInput) return false;
+    return importedPlanShadowRings(casterModel, shadowInput, true).length > 0;
+  }, [casterModel, shadowInput]);
   const annotations = (
     <>
       <g aria-hidden="true" className="plan-north-arrow">
@@ -490,6 +493,7 @@ export function DrawingPlan({
               <path key={`tr${index}`} d={svgPolyline(tram, false)} fill="none" {...screenPenAttrs(style.tram)} strokeLinecap="round" strokeLinejoin="round" />
             ))}
             {nswItems && nswStyle && <NswPlanLines items={nswItems} style={nswStyle} />}
+            {importedShadowReady ? <g aria-hidden="true" data-imported-shadow="true" /> : null}
             {study &&
               studyShadows.layers.map((layer) => (
                 <g key={`ss${layer.hour}`} data-shadow-hour={layer.hour}>
@@ -508,6 +512,7 @@ export function DrawingPlan({
             {shadowRings.map((rings, index) => (
               <path
                 key={`sh${index}`}
+                data-plan-shadow="single"
                 d={svgRings(rings)}
                 fill={shadowFill}
                 fillOpacity={SINGLE_SHADOW_OPACITY}
@@ -518,6 +523,7 @@ export function DrawingPlan({
             {plan.buildings.map((building, index) => (
               <path
                 key={`b${index}`}
+                {...(building.imported ? { "data-imported-podium": true } : {})}
                 d={svgRings(building.rings)}
                 fill={muted && !building.site ? getColour("--sun-study-building") : building.fill}
                 fillRule="evenodd"
@@ -535,17 +541,8 @@ export function DrawingPlan({
               <g key={`imu${levelIndex}`} data-upper-z={level.z} aria-hidden="true">
                 {level.lines.map((line, lineIndex) => (
                   <path
-                    key={`imuf${lineIndex}`}
-                    d={svgRings([line])}
-                    fill={upperTone}
-                    fillOpacity={0.28}
-                    fillRule="evenodd"
-                    stroke="none"
-                  />
-                ))}
-                {level.lines.map((line, lineIndex) => (
-                  <path
                     key={`imul${lineIndex}`}
+                    data-imported-upper-outline="true"
                     d={svgPolyline(openRing(line), true)}
                     fill="none"
                     {...screenPenAttrs(upperStroke, "miter")}
