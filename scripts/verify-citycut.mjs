@@ -1817,11 +1817,19 @@ async function main() {
             0,
           ),
         );
+      await importPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
+      await importPage.waitForTimeout(300);
       const fanLenBeforeHourScrub = await fanShadowLength();
-      await importPage.locator(".h-tick.studio-solar-tick", { hasText: "09" }).first().click({ timeout: 30_000 });
+      async function clickSolarHour(hour) {
+        const label = String(hour).padStart(2, "0");
+        const tick = importPage.locator(".h-tick.studio-solar-tick", { hasText: label });
+        if ((await tick.count()) > 0) await tick.first().click({ timeout: 30_000 });
+        else await importPage.getByRole("button", { name: `Solar time ${label}:00` }).click({ timeout: 30_000 });
+      }
+      await clickSolarHour(9);
       await importPage.waitForTimeout(600);
       const fanLenHour9 = await fanShadowLength();
-      await importPage.locator(".h-tick.studio-solar-tick", { hasText: "15" }).first().click({ timeout: 30_000 });
+      await clickSolarHour(15);
       await importPage.waitForTimeout(600);
       const fanLenHour15 = await fanShadowLength();
       assertCheck(
@@ -1904,8 +1912,7 @@ async function main() {
             .join("\n"),
         );
       async function captureSingleShadowHour(hour, filename) {
-        const label = String(hour).padStart(2, "0");
-        await importPage.locator(".h-tick.studio-solar-tick", { hasText: label }).first().click({ timeout: 30_000 });
+        await clickSolarHour(hour);
         await importPage.waitForFunction(
           () => document.querySelectorAll('svg.plan [data-plan-shadow="single"]').length >= 1,
           null,
