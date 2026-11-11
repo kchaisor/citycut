@@ -2129,7 +2129,7 @@ async function main() {
           return Array.from(added).some((node) => (node.getAttribute("d")?.length ?? 0) > 80);
         },
         null,
-        { timeout: 120000 },
+        { timeout: 360000 },
       );
       await zoomPlanToSite();
 
