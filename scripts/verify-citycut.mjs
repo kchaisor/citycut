@@ -1848,15 +1848,20 @@ async function main() {
         { timeout: 60_000 },
       );
       await importPage.waitForTimeout(400);
-      const importPlanFanBtnOff = importPage.locator(".model .env-console .overlay-chips button", {
+      await importPage.locator('button[data-section="analysis"]').click({ timeout: 30_000 });
+      await importPage.waitForTimeout(250);
+      const envFanBtn = importPage.locator(".model .env-console .overlay-chips button", {
         hasText: "9–3pm Plan Fan",
       });
-      if ((await importPlanFanBtnOff.getAttribute("aria-pressed")) === "true") {
-        await importPlanFanBtnOff.click({ timeout: 30_000 });
+      const envShadowsBtn = importPage.locator(".model .env-console .overlay-chips button", { hasText: "Shadows" });
+      if ((await envFanBtn.count()) > 0 && (await envFanBtn.getAttribute("aria-pressed")) === "true") {
+        await envFanBtn.click({ timeout: 30_000 });
       }
-      if ((await shadowsChip.getAttribute("aria-pressed")) === "true") {
-        await shadowsChip.click({ timeout: 30_000 });
+      if ((await envShadowsBtn.count()) > 0 && (await envShadowsBtn.getAttribute("aria-pressed")) === "true") {
+        await envShadowsBtn.click({ timeout: 30_000 });
       }
+      await importPage.locator('button[data-section="drawing"]').click({ timeout: 30_000 });
+      await importPage.waitForTimeout(300);
       await importPage.waitForTimeout(400);
       const upperStrokeWidths = await importPage.evaluate(() => {
         const upper = document.querySelector("svg.plan [data-imported-upper-outline]");
@@ -1879,9 +1884,13 @@ async function main() {
         path: path.join(cursorArtifacts, "drawing-podium-tower-outlines.png"),
         clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
       });
-      if ((await importPlanFanBtn.getAttribute("aria-pressed")) !== "true") {
-        await importPlanFanBtn.click({ timeout: 30_000 });
+      await importPage.locator('button[data-section="analysis"]').click({ timeout: 30_000 });
+      await importPage.waitForTimeout(250);
+      if ((await envFanBtn.count()) > 0 && (await envFanBtn.getAttribute("aria-pressed")) !== "true") {
+        await envFanBtn.click({ timeout: 30_000 });
       }
+      await importPage.locator('button[data-section="drawing"]').click({ timeout: 30_000 });
+      await importPage.waitForTimeout(400);
       await importPage.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 180_000 });
       const planImportSvgPath = path.join(cursorArtifacts, "rozelle-import-plan.svg");
       const frameSvg = await importPage.evaluate(async () => {
@@ -1902,9 +1911,13 @@ async function main() {
         /inkscape:label="Shadow (09|15):00"/.test(frameSvg),
         "per-hour shadow layers present",
       );
-      if ((await shadowsChip.getAttribute("aria-pressed")) !== "true") {
-        await shadowsChip.click({ timeout: 30_000 });
+      await importPage.locator('button[data-section="analysis"]').click({ timeout: 30_000 });
+      await importPage.waitForTimeout(250);
+      if ((await envShadowsBtn.count()) > 0 && (await envShadowsBtn.getAttribute("aria-pressed")) !== "true") {
+        await envShadowsBtn.click({ timeout: 30_000 });
       }
+      await importPage.locator('button[data-section="drawing"]').click({ timeout: 30_000 });
+      await importPage.waitForTimeout(300);
       const singleShadowSignature = () =>
         importPage.evaluate(() =>
           [...document.querySelectorAll('svg.plan [data-plan-shadow="single"]')]
