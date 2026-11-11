@@ -298,22 +298,50 @@ async function main() {
     await page.waitForSelector(".model", { timeout: 360_000 });
     await page.waitForFunction(
       () => {
-        const canvas = document.querySelector(".scene-viewport canvas");
-        const spanX = Number(canvas?.dataset.citycutGroundSpanX ?? 0);
-        const spanZ = Number(canvas?.dataset.citycutGroundSpanZ ?? 0);
-        return spanX > 100 && spanZ > 100;
+        const sceneCanvas = document.querySelector(".scene-viewport canvas");
+        const modelCanvas = document.querySelector(".model canvas");
+        const canvas = sceneCanvas ?? modelCanvas;
+        if (!canvas) return false;
+        const spanX = Number(sceneCanvas?.dataset.citycutGroundSpanX ?? 0);
+        const spanZ = Number(sceneCanvas?.dataset.citycutGroundSpanZ ?? 0);
+        const polar = Number(modelCanvas?.dataset.introPolar ?? canvas.dataset.introPolar ?? 0);
+        const underlay = document.querySelector(".select.is-handoff-underlay");
+        const bridgePill = document.querySelector(".model .loading-hud-pill.is-model-bridge");
+        const bridgeOpacity = bridgePill ? Number(getComputedStyle(bridgePill).opacity) : 0;
+        const ready = /Ready ·\s*\d+\/\d+ sources/.test(document.body.innerText);
+        return (
+          ready &&
+          spanX > 100 &&
+          spanZ > 100 &&
+          polar >= 0.95 &&
+          !underlay &&
+          bridgeOpacity <= 0.05
+        );
       },
-      { timeout: 180_000 },
+      { timeout: 360_000 },
     );
+    await page.locator(".mode-btn", { hasText: "3D model" }).click({ timeout: 30_000 });
+    await page.waitForTimeout(400);
     const rozelle3d = await page.evaluate(() => {
-      const canvas = document.querySelector(".scene-viewport canvas");
-      const spanX = Number(canvas?.dataset.citycutGroundSpanX ?? 0);
-      const spanZ = Number(canvas?.dataset.citycutGroundSpanZ ?? 0);
+      const sceneCanvas = document.querySelector(".scene-viewport canvas");
+      const spanX = Number(sceneCanvas?.dataset.citycutGroundSpanX ?? 0);
+      const spanZ = Number(sceneCanvas?.dataset.citycutGroundSpanZ ?? 0);
       return { spanX, spanZ, aspect: spanZ > 0 ? spanX / spanZ : 0 };
     });
     await page.screenshot({
       path: path.join(cursorArtifacts, "rozelle-a3-3000-3d.png"),
       fullPage: false,
+      clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+    });
+    const planProj = page.locator(".model .proj-group button", { hasText: "Plan" }).first();
+    if ((await planProj.count()) > 0) {
+      await planProj.click({ timeout: 30_000 });
+      await page.waitForTimeout(600);
+    }
+    await page.screenshot({
+      path: path.join(cursorArtifacts, "rozelle-a3-3000-3d-plan.png"),
+      fullPage: false,
+      clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
     });
     assertCheck(
       "rozelle-a3-3d-ground-aspect",
