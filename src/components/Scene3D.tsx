@@ -24,7 +24,7 @@ import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import { captureViewPng } from "../lib/capturePng";
-import { StudioSky, ViewInset, insetPointerEvents } from "./SceneBackdrop";
+import { GroundGrid, StudioSky, ViewInset, insetPointerEvents } from "./SceneBackdrop";
 import { INTRO_ACTIVE_KEY, StudioEffects, useCameraMoving } from "./StudioEffects";
 import type { RenderQuality } from "../lib/renderQuality";
 import { markScreenOnly } from "../lib/screenOnly";
