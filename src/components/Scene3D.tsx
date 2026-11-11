@@ -101,7 +101,9 @@ import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
 
 const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
+import { DrawnMassingBlocksVisual } from "./DrawnMassingBlocksVisual";
 import { FacadeSolarPointsLayer } from "./FacadeSolarPointsLayer";
+import type { MassingBlock } from "../lib/massingBlock";
 import type { FacadeAssessBundle } from "../lib/facadeSolarTypes";
 import { WindStaticArrows, WindStreaks } from "./WindStreaks";
 import { analyzeWindPeriod, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
@@ -2030,6 +2032,7 @@ export function Scene3D({
   orbitLocked = false,
   quality = "high",
   facadeSolarBundle = null,
+  drawnMassingBlocksForFacade = null,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -2062,6 +2065,7 @@ export function Scene3D({
   orbitLocked?: boolean;
   quality?: RenderQuality;
   facadeSolarBundle?: FacadeAssessBundle | null;
+  drawnMassingBlocksForFacade?: readonly MassingBlock[] | null;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
@@ -2170,9 +2174,6 @@ export function Scene3D({
       {SUN_HOURS_HEATMAP_ENABLED && solar.sunHours && (
         <SunHoursLayer model={model} year={solar.year} month={solar.month} day={solar.day} groundY={groundY} />
       )}
-      {solar.facadeSolarAccess && facadeSolarBundle ? (
-        <FacadeSolarPointsLayer bundle={facadeSolarBundle} />
-      ) : null}
       <City
         model={model}
         uniformBuildings={uniformBuildings}
@@ -2195,6 +2196,12 @@ export function Scene3D({
       {walkRippleLayer ? <primitive object={walkRippleLayer} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
       {massingToolLayer}
+      {solar.facadeSolarAccess && drawnMassingBlocksForFacade && drawnMassingBlocksForFacade.length > 0 ? (
+        <DrawnMassingBlocksVisual model={model} blocks={drawnMassingBlocksForFacade} />
+      ) : null}
+      {solar.facadeSolarAccess && facadeSolarBundle ? (
+        <FacadeSolarPointsLayer bundle={facadeSolarBundle} />
+      ) : null}
       <SolarHeliodon
         lat={model.center.lat}
         lon={model.center.lon}

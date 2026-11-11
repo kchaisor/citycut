@@ -15,7 +15,8 @@ export function facadeOverlayGeometry(bundle: FacadeAssessBundle): THREE.BufferG
 
 export function FacadeSolarPointsLayer({ bundle }: { bundle: FacadeAssessBundle }) {
   const { geometry, cellCount } = useMemo(() => {
-    const cellCount = facadeOverlayPoints(bundle).length;
+    const wallPoints = facadeOverlayPoints(bundle).filter((point) => point.kind === "facade-bay");
+    const cellCount = wallPoints.length;
     const { positions, colors } = buildFacadeWallOverlayMesh(bundle);
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
@@ -45,7 +46,16 @@ export function FacadeSolarPointsLayer({ bundle }: { bundle: FacadeAssessBundle 
         document.documentElement.dataset.facadeSolarOverlay = String(cellCount);
       }}
     >
-      <meshBasicMaterial vertexColors depthTest depthWrite={false} toneMapped={false} side={THREE.DoubleSide} />
+      <meshBasicMaterial
+        vertexColors
+        depthTest
+        depthWrite={false}
+        toneMapped={false}
+        side={THREE.FrontSide}
+        polygonOffset
+        polygonOffsetFactor={-2}
+        polygonOffsetUnits={-2}
+      />
     </mesh>
   );
 }

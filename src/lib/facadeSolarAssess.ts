@@ -13,6 +13,7 @@ import { getColour } from "./colours";
 import {
   FACADE_BAY_WIDTH_M,
   FACADE_PODIUM_GRID_M,
+  FACADE_WALL_OFFSET_M,
   planToWorld,
   worldOutward3,
   type FacadeAssessBundle,
@@ -269,10 +270,11 @@ export function buildFacadeOverlayMesh(
       const tz = -nx / len;
       const hw = FACADE_CELL_WIDTH_M * 0.5;
       const hh = FACADE_CELL_HEIGHT_M * 0.5;
+      const offset = FACADE_WALL_OFFSET_M;
       const corner = (along: number, up: number) => [
-        cx + tx * along + nx * 0.04,
+        cx + tx * along + nx * offset,
         cy + up,
-        cz + tz * along + nz * 0.04,
+        cz + tz * along + nz * offset,
       ];
       const [a0, a1, a2] = corner(-hw, -hh);
       const [b0, b1, b2] = corner(hw, -hh);

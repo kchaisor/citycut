@@ -2642,6 +2642,7 @@ async function main() {
 
       const boxHillFacadeSolar = async () => {
         await shadowPage.getByRole("tab", { name: /3D model/i }).click();
+        await shadowPage.evaluate(() => window.__citycutQaMassing?.clearDrawnBlocks?.());
         await shadowPage.evaluate(
           ({ east, north }) => {
             window.__citycutQaMassing?.commitPolylineCenterline?.(
@@ -2673,7 +2674,7 @@ async function main() {
         const overlayPoints = Number(
           await shadowPage.evaluate(() => document.documentElement.dataset.facadeSolarOverlay ?? "0"),
         );
-        const assessedPoints = (bundle?.facade?.units.length ?? 0) + (bundle?.podium?.units.length ?? 0);
+        const assessedFacadePoints = bundle?.facade?.units.length ?? 0;
         const pctText = await shadowPage.locator("[data-facade-pct-at-threshold]").first().textContent().catch(() => null);
         const facadeNormals = await shadowPage.evaluate(
           () => window.__citycutQaModel?.readFacadeOverlayNormals?.() ?? [],
@@ -2682,51 +2683,51 @@ async function main() {
         const normalsVertical =
           bayNormals.length > 20 &&
           bayNormals.every((cell) => Math.abs(cell.ny) < 0.3 && Math.hypot(cell.nx, cell.nz) > 0.75);
-        const framed = await shadowPage.evaluate(
-          ({ east, north }) => {
-            const buildings = window.__citycutQaModel?.listBuildings?.() ?? [];
-            let pick = null;
-            let bestScore = Infinity;
-            for (const row of buildings) {
-              const d = Math.hypot(row.east - east, row.north - north);
-              if (row.height < 12 || row.height > 24 || d > 80) continue;
-              const score = d + Math.abs(row.height - 15.5) * 3;
-              if (score < bestScore) {
-                bestScore = score;
-                pick = row;
-              }
-            }
-            if (!pick) return false;
-            return Boolean(window.__citycutQaModel?.frameSelectionBuilding?.(pick.id, "oblique"));
-          },
-          { east: FOCUS_EAST, north: FOCUS_NORTH },
+        const framedNw = await shadowPage.evaluate(() =>
+          Boolean(window.__citycutQaModel?.frameProposedMassingOblique?.("nw")),
         );
+        const wallQaNw = await shadowPage.evaluate(() => window.__citycutQaModel?.readFacadeOverlayWallQa?.() ?? null);
         assertCheck(
           "solar-facade-oblique-camera",
-          "Facade heatmap screenshot uses an oblique camera aimed at the nearest proposed massing",
-          framed,
-          `framed=${framed}`,
+          "Facade heatmap camera target sits inside proposed massing bbox (oblique NW on drawn massing)",
+          framedNw && wallQaNw?.targetInsideMassing && (wallQaNw?.bboxes?.length ?? 0) > 0,
+          `framedNw=${framedNw}, wallQaNw=${JSON.stringify(wallQaNw)}`,
         );
         await shadowPage.waitForTimeout(1200);
         fs.mkdirSync(CURSOR_ARTIFACTS_DIR, { recursive: true });
-        const shotFacade = path.join(CURSOR_ARTIFACTS_DIR, "box-hill-facade-heatmap-3d.png");
-        await sceneViewportScreenshot(shadowPage, { path: shotFacade });
+        const shotFacadeNw = path.join(CURSOR_ARTIFACTS_DIR, "facade-3d-oblique-nw.png");
+        await sceneViewportScreenshot(shadowPage, { path: shotFacadeNw });
+        const framedSe = await shadowPage.evaluate(() =>
+          Boolean(window.__citycutQaModel?.frameProposedMassingOblique?.("se")),
+        );
+        await shadowPage.waitForTimeout(1200);
+        const shotFacadeSe = path.join(CURSOR_ARTIFACTS_DIR, "facade-3d-oblique-se.png");
+        await sceneViewportScreenshot(shadowPage, { path: shotFacadeSe });
+        const shotFacade = shotFacadeNw;
+        const wallQa = await shadowPage.evaluate(() => window.__citycutQaModel?.readFacadeOverlayWallQa?.() ?? null);
         const shotCard = path.join(CURSOR_ARTIFACTS_DIR, "facade-results-card.png");
         const dock = shadowPage.locator("[data-facade-solar-results-dock]");
         await dock.waitFor({ state: "visible", timeout: 60_000 });
         await dock.screenshot({ path: shotCard, timeout: 60_000, animations: "disabled", scale: "css" });
         const unitCount = bundle?.facade?.unitCount ?? 0;
+        const overlayOnWalls =
+          Boolean(wallQa?.verticesOnWalls) &&
+          Boolean(wallQa?.wallHeightSpanOk) &&
+          Boolean(wallQa?.targetInsideMassing);
+        const winterContrast = (wallQa?.northSouthHourSpread ?? 0) > 0.75;
         assertCheck(
           "solar-facade-adg-heatmap",
-          "Facade ADG 4A-1: wall quads on proposed massing (facade cell normals horizontal: |ny|<0.3, |nz|<0.3 vs vertical), full overlay count, readable results card",
+          "Facade ADG 4A-1: coloured wall quads on proposed massing, camera on massing, N/S winter contrast, readable results card",
           unitCount > 4 &&
             assessMs > 0 &&
             assessMs < 120000 &&
             overlayPoints > 0 &&
-            overlayPoints === assessedPoints &&
+            overlayPoints === assessedFacadePoints &&
             normalsVertical &&
+            overlayOnWalls &&
+            winterContrast &&
             Boolean(pctText?.includes("%")),
-          `units=${unitCount}, overlayPoints=${overlayPoints}, assessedPoints=${assessedPoints}, assessMs=${assessMs}, bayNormals=${bayNormals.length}, pctAt=${bundle?.facade?.pctAtThreshold}, pctNone=${bundle?.facade?.pctNone}, pass=${bundle?.facade?.pass}, pctText=${JSON.stringify(pctText)}, heatmap=${shotFacade}, card=${shotCard}`,
+          `units=${unitCount}, overlayPoints=${overlayPoints}, assessedFacadePoints=${assessedFacadePoints}, assessMs=${assessMs}, bayNormals=${bayNormals.length}, wallQa=${JSON.stringify(wallQa)}, pctAt=${bundle?.facade?.pctAtThreshold}, pctNone=${bundle?.facade?.pctNone}, pass=${bundle?.facade?.pass}, pctText=${JSON.stringify(pctText)}, heatmapNw=${shotFacadeNw}, heatmapSe=${shotFacadeSe}, card=${shotCard}`,
         );
       };
 
