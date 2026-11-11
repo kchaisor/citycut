@@ -508,6 +508,7 @@ export function DrawingPlan({
             {shadowRings.map((rings, index) => (
               <path
                 key={`sh${index}`}
+                data-plan-shadow="single"
                 d={svgRings(rings)}
                 fill={shadowFill}
                 fillOpacity={SINGLE_SHADOW_OPACITY}
@@ -537,6 +538,7 @@ export function DrawingPlan({
                 {level.lines.map((line, lineIndex) => (
                   <path
                     key={`imul${lineIndex}`}
+                    data-imported-upper-outline="true"
                     d={svgPolyline(openRing(line), true)}
                     fill="none"
                     {...screenPenAttrs(upperStroke, "miter")}

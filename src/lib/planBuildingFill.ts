@@ -41,5 +41,6 @@ export function importedMassingStrokeStyle(
 export function importedMassingUpperStrokeStyle(
   style: import("./drawingStyle").LineStyles,
 ): import("./drawingStyle").StrokeStyle {
-  return { ...planBuildingStrokeStyle(style, true, false), dash: "none" };
+  const base = importedMassingStrokeStyle(style);
+  return { mm: base.mm, color: base.color, dash: "none" };
 }

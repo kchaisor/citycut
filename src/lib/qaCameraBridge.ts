@@ -73,6 +73,7 @@ declare global {
       upperLevelGroupCount: () => number;
       exportSitePlanFrameSvg: () => Promise<string>;
       zoomPlanToImportedMassing: () => boolean;
+      zoom3dToImportedMassing: () => boolean;
     };
   }
 }

@@ -1741,6 +1741,16 @@ async function main() {
         { timeout: 300_000 },
       );
       await importPage.getByRole("tab", { name: "3D" }).click({ timeout: 60_000 });
+      await importPage.locator('button[data-section="analysis"]').click({ timeout: 30_000 });
+      const importShadowsOn = importPage.locator(".model .env-console .overlay-chips button", { hasText: "Shadows" });
+      if ((await importShadowsOn.getAttribute("aria-pressed")) !== "true") {
+        await importShadowsOn.click({ timeout: 30_000 });
+      }
+      await importPage.waitForFunction(
+        () => Boolean(window.__citycutQaPlan?.zoom3dToImportedMassing?.()),
+        null,
+        { timeout: 60_000 },
+      );
       await importPage.waitForTimeout(2000);
       await importPage.screenshot({
         path: path.join(cursorArtifacts, "3d-imported.png"),
@@ -1800,6 +1810,26 @@ async function main() {
         importPlanState.importedShadow >= 1,
         `importedShadow=${importPlanState.importedShadow}`,
       );
+      const fanShadowLength = async () =>
+        importPage.evaluate(() =>
+          [...document.querySelectorAll("svg.plan [data-shadow-hour] path")].reduce(
+            (n, p) => n + (p.getAttribute("d")?.length ?? 0),
+            0,
+          ),
+        );
+      const fanLenBeforeHourScrub = await fanShadowLength();
+      await importPage.locator(".h-tick.studio-solar-tick", { hasText: "09" }).first().click({ timeout: 30_000 });
+      await importPage.waitForTimeout(600);
+      const fanLenHour9 = await fanShadowLength();
+      await importPage.locator(".h-tick.studio-solar-tick", { hasText: "15" }).first().click({ timeout: 30_000 });
+      await importPage.waitForTimeout(600);
+      const fanLenHour15 = await fanShadowLength();
+      assertCheck(
+        "plan-fan-stacks-all-hours",
+        "9–3pm Plan Fan paints every hour at once, so scrubbing solar time does not change stacked shadow geometry (yellow massing and imported use the same layers)",
+        fanLenBeforeHourScrub === fanLenHour9 && fanLenHour9 === fanLenHour15 && fanLenHour15 > 1000,
+        `shadowDLength=${fanLenBeforeHourScrub}/${fanLenHour9}/${fanLenHour15}`,
+      );
       await importPage.locator('button[data-section="drawing"]').click({ timeout: 30_000 });
       await importPage.waitForTimeout(200);
       await importPage.waitForFunction(
@@ -1809,11 +1839,42 @@ async function main() {
         null,
         { timeout: 60_000 },
       );
-      await importPage.waitForTimeout(800);
+      await importPage.waitForTimeout(400);
+      const importPlanFanBtnOff = importPage.locator(".model .env-console .overlay-chips button", {
+        hasText: "9–3pm Plan Fan",
+      });
+      if ((await importPlanFanBtnOff.getAttribute("aria-pressed")) === "true") {
+        await importPlanFanBtnOff.click({ timeout: 30_000 });
+      }
+      if ((await shadowsChip.getAttribute("aria-pressed")) === "true") {
+        await shadowsChip.click({ timeout: 30_000 });
+      }
+      await importPage.waitForTimeout(400);
+      const upperStrokeWidths = await importPage.evaluate(() => {
+        const upper = document.querySelector("svg.plan [data-imported-upper-outline]");
+        const podium = document.querySelector("svg.plan [data-imported-podium]");
+        if (!upper || !podium) return null;
+        return {
+          upper: Number.parseFloat(getComputedStyle(upper).strokeWidth),
+          podium: Number.parseFloat(getComputedStyle(podium).strokeWidth),
+        };
+      });
+      assertCheck(
+        "rozelle-import-upper-stroke-weight",
+        "Imported tower-top outlines use the same on-screen stroke weight as podium massing outlines",
+        upperStrokeWidths &&
+          Math.abs(upperStrokeWidths.upper - upperStrokeWidths.podium) < 0.05 &&
+          upperStrokeWidths.upper >= 0.9,
+        `upper=${upperStrokeWidths?.upper}, podium=${upperStrokeWidths?.podium}`,
+      );
       await importPage.screenshot({
         path: path.join(cursorArtifacts, "drawing-podium-tower-outlines.png"),
         clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
       });
+      if ((await importPlanFanBtn.getAttribute("aria-pressed")) !== "true") {
+        await importPlanFanBtn.click({ timeout: 30_000 });
+      }
+      await importPage.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 180_000 });
       const planImportSvgPath = path.join(cursorArtifacts, "rozelle-import-plan.svg");
       const frameSvg = await importPage.evaluate(async () => {
         if (!window.__citycutQaPlan) throw new Error("missing __citycutQaPlan");
@@ -1833,29 +1894,39 @@ async function main() {
         /inkscape:label="Shadow (09|15):00"/.test(frameSvg),
         "per-hour shadow layers present",
       );
-      async function captureStudyHour(hour, filename) {
-        await importPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
-        await importPage.locator('button[data-section="drawing"]').click({ timeout: 30_000 }).catch(() => {});
+      if ((await shadowsChip.getAttribute("aria-pressed")) !== "true") {
+        await shadowsChip.click({ timeout: 30_000 });
+      }
+      const singleShadowSignature = () =>
+        importPage.evaluate(() =>
+          [...document.querySelectorAll('svg.plan [data-plan-shadow="single"]')]
+            .map((p) => p.getAttribute("d") ?? "")
+            .join("\n"),
+        );
+      async function captureSingleShadowHour(hour, filename) {
         const label = String(hour).padStart(2, "0");
-        const tick = importPage.locator(".h-tick.studio-solar-tick", { hasText: label });
-        if ((await tick.count()) > 0) {
-          await tick.first().click({ timeout: 30_000 });
-        } else {
-          await importPage.getByRole("button", { name: `Solar time ${label}:00` }).click({ timeout: 30_000 });
-        }
+        await importPage.locator(".h-tick.studio-solar-tick", { hasText: label }).first().click({ timeout: 30_000 });
         await importPage.waitForFunction(
-          (h) => document.querySelectorAll(`svg.plan [data-shadow-hour="${h}"] path`).length >= 1,
-          hour,
+          () => document.querySelectorAll('svg.plan [data-plan-shadow="single"]').length >= 1,
+          null,
           { timeout: 180_000 },
         );
-        await importPage.waitForTimeout(600);
+        await importPage.waitForTimeout(800);
         await importPage.screenshot({
           path: path.join(cursorArtifacts, filename),
           clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
         });
       }
-      await captureStudyHour(9, "drawing-imported-shadows-9am.png");
-      await captureStudyHour(15, "drawing-imported-shadows-3pm.png");
+      await captureSingleShadowHour(9, "drawing-imported-shadows-9am.png");
+      const sig9 = await singleShadowSignature();
+      await captureSingleShadowHour(15, "drawing-imported-shadows-3pm.png");
+      const sig15 = await singleShadowSignature();
+      assertCheck(
+        "rozelle-single-shadow-hour-scrub",
+        "With Plan Fan off, imported casters use the same single-shadow path as yellow massing and shadow geometry changes between 09:00 and 15:00",
+        sig9.length > 200 && sig15.length > 200 && sig9 !== sig15,
+        `sigLen9=${sig9.length}, sigLen15=${sig15.length}`,
+      );
     } catch (err) {
       assertCheck(
         "rozelle-import-flow",

@@ -1362,10 +1362,12 @@ export function ModelPage({
     upperLevelGroupCount: () => number;
     exportFrameSvg: () => Promise<string>;
     zoomToImportedMassing: () => boolean;
+    zoom3dToImportedMassing: () => boolean;
   }>({
     upperLevelGroupCount: () => 0,
     exportFrameSvg: async () => "",
     zoomToImportedMassing: () => false,
+    zoom3dToImportedMassing: () => false,
   });
   qaPlanBridgeRef.current = {
     upperLevelGroupCount: () => document.querySelectorAll("svg.plan [data-upper-z]").length,
@@ -1399,6 +1401,21 @@ export function ModelPage({
       setPlanViewport(planViewportForBounds(minE, minN, maxE, maxN));
       return true;
     },
+    zoom3dToImportedMassing: () => {
+      const group = massing.group;
+      if (!group || typeof window === "undefined" || !window.__citycutQa?.setCamera) return false;
+      const box = new THREE.Box3().setFromObject(group);
+      if (box.isEmpty()) return false;
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const span = Math.max(size.x, size.z, 80);
+      const eyeY = center.y + Math.max(size.y * 0.55, 45);
+      window.__citycutQa.setCamera({
+        eye: { x: center.x - span * 0.85, y: eyeY + span * 0.65, z: center.z + span * 1.05 },
+        target: { x: center.x, y: center.y + size.y * 0.2, z: center.z },
+      });
+      return true;
+    },
   };
 
   useEffect(() => {
@@ -1407,6 +1424,7 @@ export function ModelPage({
       upperLevelGroupCount: () => qaPlanBridgeRef.current.upperLevelGroupCount(),
       exportSitePlanFrameSvg: () => qaPlanBridgeRef.current.exportFrameSvg(),
       zoomPlanToImportedMassing: () => qaPlanBridgeRef.current.zoomToImportedMassing(),
+      zoom3dToImportedMassing: () => qaPlanBridgeRef.current.zoom3dToImportedMassing(),
     };
     return () => {
       delete window.__citycutQaPlan;
