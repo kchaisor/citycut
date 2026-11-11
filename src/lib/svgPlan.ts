@@ -191,6 +191,7 @@ export function planPaths(
   const highlightManual = Boolean(planOptions.highlightManual);
   const buildings = model.buildings
     .map((building) => {
+      if (building.importedMassingShadowCaster) return null;
       const rings = clipRings(building.ring, building.holes, model.sideM, frameShape);
       if (!rings) return null;
       const site = isSiteBuilding(model, building.id);

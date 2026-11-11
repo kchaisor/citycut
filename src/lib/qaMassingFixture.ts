@@ -61,6 +61,7 @@ export function qaPodiumTowerMassing(center: LonLat, zone: number, base: number)
     positions: new Float32Array(positions),
     indices: new Uint32Array(indices),
     triangles: indices.length / 3,
+    partTriangleStarts: [0, indices.length / 3],
     anchor: { e: anchorE, n: anchorN, z: base },
     halfExtent: { x: 15, y: 10 },
     sourceUnits: "Meters",

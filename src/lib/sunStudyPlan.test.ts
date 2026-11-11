@@ -7,6 +7,7 @@ import {
   isClick,
   pickBuilding,
   sunStudyCasterModel,
+  sunStudyShadowCasters,
   toggleSelection,
   hiddenBySunStudy,
   sunStudyDateArc,
@@ -94,6 +95,15 @@ describe("sun study selection", () => {
     expect(pickBuilding([big, small], [100, 100])).toBeNull();
   });
 
+  it("prefers an imported display footprint over a shadow caster at the same point", () => {
+    const display = sq(-1_000_001, 0, 0, 80, { importedMassing: true, importedMassingSkipShadow: true });
+    const caster = sq(-2_000_001, 10, 10, 12, {
+      importedMassing: true,
+      importedMassingShadowCaster: true,
+    });
+    expect(pickBuilding([display, caster], [10, 10])?.id).toBe(display.id);
+  });
+
   it("toggles ids and limits casters to the selection", () => {
     expect(toggleSelection([1, 2], 2)).toEqual([1]);
     expect(toggleSelection([1], 3)).toEqual([1, 3]);
@@ -102,6 +112,30 @@ describe("sun study selection", () => {
     expect(sunStudyCasterModel(model, "selected", [2]).buildings.map((b) => b.id)).toEqual([2]);
     expect(sunStudyCasterModel(model, "selected", []).buildings).toEqual([]);
     expect(sunStudyModelKey(sunStudyCasterModel(model, "selected", [2]))).not.toBe(sunStudyModelKey(model));
+  });
+
+  it("maps a selected imported footprint to every shadow caster above that podium", () => {
+    const display = sq(-1_000_001, 0, 0, 80, {
+      importedMassing: true,
+      importedMassingSkipShadow: true,
+    });
+    const podium = sq(-2_000_002, 0, 0, 60, {
+      importedMassing: true,
+      importedMassingShadowCaster: true,
+      height: 14,
+      importedTopZ: 20,
+    });
+    const tower = sq(-2_000_001, 10, 10, 14, {
+      importedMassing: true,
+      importedMassingShadowCaster: true,
+      height: 48,
+      importedTopZ: 68,
+    });
+    const model = { sideM: 200, buildings: [display, podium, tower] } as unknown as CityModel;
+    const fromDisplay = sunStudyShadowCasters(model.buildings, "selected", [display.id]).map((b) => b.id);
+    expect(fromDisplay).toEqual(expect.arrayContaining([podium.id, tower.id]));
+    const fromTower = sunStudyShadowCasters(model.buildings, "selected", [tower.id]).map((b) => b.id);
+    expect(fromTower).toEqual(expect.arrayContaining([podium.id, tower.id]));
   });
 
   it("labels estimated heights only, always when selected, otherwise when the label fits", () => {

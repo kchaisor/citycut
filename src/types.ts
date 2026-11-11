@@ -75,6 +75,8 @@ export type BuildingFeat = {
   comMatchHeightM?: number;
   comMatchOverlapRatio?: number;
   importedMassing?: true;
+  importedMassingShadowCaster?: true;
+  importedMassingSkipShadow?: true;
   importedTopZ?: number;
   importedColour?: string;
   heightManual?: true;
