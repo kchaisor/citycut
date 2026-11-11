@@ -1,33 +1,29 @@
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
-import { facadeOverlayPoints } from "../lib/facadeSolarAssess";
-import { getColour } from "../lib/colours";
-import { planToWorld, type FacadeAssessBundle } from "../lib/facadeSolarTypes";
+import { buildFacadeWallOverlayMesh, facadeOverlayPoints } from "../lib/facadeSolarAssess";
+import type { FacadeAssessBundle } from "../lib/facadeSolarTypes";
 
 export function facadeOverlayGeometry(bundle: FacadeAssessBundle): THREE.BufferGeometry {
-  const overlay = facadeOverlayPoints(bundle);
-  const positions = new Float32Array(overlay.length * 3);
-  const colors = new Float32Array(overlay.length * 3);
-  const fillColours = new Map<string, THREE.Color>();
-  overlay.forEach((point, index) => {
-    let colour = fillColours.get(point.fill);
-    if (!colour) {
-      colour = new THREE.Color(getColour(point.fill));
-      fillColours.set(point.fill, colour);
-    }
-    positions.set(planToWorld(point.east, point.north, point.yM), index * 3);
-    colors.set([colour.r, colour.g, colour.b], index * 3);
-  });
+  const { positions, colors } = buildFacadeWallOverlayMesh(bundle);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
   return geometry;
 }
 
 export function FacadeSolarPointsLayer({ bundle }: { bundle: FacadeAssessBundle }) {
-  const geometry = useMemo(() => facadeOverlayGeometry(bundle), [bundle]);
-  const pointCount = geometry.attributes.position!.count;
+  const { geometry, cellCount } = useMemo(() => {
+    const cellCount = facadeOverlayPoints(bundle).length;
+    const { positions, colors } = buildFacadeWallOverlayMesh(bundle);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
+    return { geometry, cellCount };
+  }, [bundle]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -38,17 +34,18 @@ export function FacadeSolarPointsLayer({ bundle }: { bundle: FacadeAssessBundle 
     };
   }, [bundle.assessMs, geometry]);
 
-  if (pointCount === 0) return null;
+  if (cellCount === 0) return null;
 
   return (
-    <points
+    <mesh
       geometry={geometry}
       renderOrder={1200}
+      data-facade-solar-overlay=""
       onBeforeRender={() => {
-        document.documentElement.dataset.facadeSolarOverlay = String(pointCount);
+        document.documentElement.dataset.facadeSolarOverlay = String(cellCount);
       }}
     >
-      <pointsMaterial size={5.5} sizeAttenuation vertexColors depthTest depthWrite={false} toneMapped={false} />
-    </points>
+      <meshBasicMaterial vertexColors depthTest depthWrite={false} toneMapped={false} side={THREE.DoubleSide} />
+    </mesh>
   );
 }

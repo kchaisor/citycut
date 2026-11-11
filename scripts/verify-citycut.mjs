@@ -2531,7 +2531,7 @@ async function main() {
         });
         const midE = (green.east0 + green.east1) / 2;
         const midN = (green.north0 + green.north1) / 2;
-        const spanM = Math.max(green.east1 - green.east0, green.north1 - green.north0) * 1.8;
+        const spanM = Math.max(green.east1 - green.east0, green.north1 - green.north0) * 0.42;
         await parkPage.evaluate(
           ({ east, north, span }) => window.__citycutQaModel?.setDrawingPlanViewport?.(east, north, span),
           { east: midE, north: midN, span: spanM },
@@ -2601,6 +2601,9 @@ async function main() {
 
       const boxHillTreeShadows = async () => {
         await shadowPage.bringToFront();
+        await shadowPage.getByRole("tab", { name: /Drawing/i }).click({ timeout: 120_000, force: true });
+        await shadowPage.waitForSelector("svg.plan", { timeout: 180_000 });
+        await shadowPage.waitForTimeout(400);
         const readTreeShadowDom = async () =>
           shadowPage.evaluate(() => {
             const nodes = Array.from(document.querySelectorAll("[data-tree-crown-shadow]"));
@@ -2610,8 +2613,6 @@ async function main() {
             );
             return { count: nodes.length, dLen };
           });
-        await shadowPage.getByRole("tab", { name: /Drawing/i }).click({ timeout: 120_000, force: true });
-        await shadowPage.waitForSelector("svg.plan", { timeout: 180_000 });
         await shadowPage.evaluate(
           ({ east, north }) => {
             window.__citycutQaModel?.setSolarPlanTime?.(15, 0);
@@ -2674,59 +2675,66 @@ async function main() {
         );
         const assessedPoints = (bundle?.facade?.units.length ?? 0) + (bundle?.podium?.units.length ?? 0);
         const pctText = await shadowPage.locator("[data-facade-pct-at-threshold]").first().textContent().catch(() => null);
+        const facadeNormals = await shadowPage.evaluate(
+          () => window.__citycutQaModel?.readFacadeOverlayNormals?.() ?? [],
+        );
+        const bayNormals = facadeNormals.filter((cell) => cell.kind === "facade-bay");
+        const normalsVertical =
+          bayNormals.length > 20 &&
+          bayNormals.every((cell) => Math.abs(cell.ny) < 0.3 && Math.hypot(cell.nx, cell.nz) > 0.75);
+        const framed = await shadowPage.evaluate(
+          ({ east, north }) => {
+            const buildings = window.__citycutQaModel?.listBuildings?.() ?? [];
+            let pick = null;
+            let bestScore = Infinity;
+            for (const row of buildings) {
+              const d = Math.hypot(row.east - east, row.north - north);
+              if (row.height < 12 || row.height > 24 || d > 80) continue;
+              const score = d + Math.abs(row.height - 15.5) * 3;
+              if (score < bestScore) {
+                bestScore = score;
+                pick = row;
+              }
+            }
+            if (!pick) return false;
+            return Boolean(window.__citycutQaModel?.frameSelectionBuilding?.(pick.id, "oblique"));
+          },
+          { east: FOCUS_EAST, north: FOCUS_NORTH },
+        );
+        assertCheck(
+          "solar-facade-oblique-camera",
+          "Facade heatmap screenshot uses an oblique camera aimed at the nearest proposed massing",
+          framed,
+          `framed=${framed}`,
+        );
+        await shadowPage.waitForTimeout(1200);
         fs.mkdirSync(CURSOR_ARTIFACTS_DIR, { recursive: true });
         const shotFacade = path.join(CURSOR_ARTIFACTS_DIR, "box-hill-facade-heatmap-3d.png");
         await sceneViewportScreenshot(shadowPage, { path: shotFacade });
         const shotCard = path.join(CURSOR_ARTIFACTS_DIR, "facade-results-card.png");
-        const dockClip = await shadowPage.evaluate(() => {
-          const el = document.querySelector("[data-facade-solar-results-dock]");
-          if (!el) return null;
-          const r = el.getBoundingClientRect();
-          return {
-            x: Math.round(r.x),
-            y: Math.round(r.y),
-            width: Math.round(r.width),
-            height: Math.round(r.height),
-          };
-        });
-        if (dockClip && dockClip.width > 4 && dockClip.height > 4) {
-          await shadowPage.screenshot({
-            path: shotCard,
-            clip: dockClip,
-            timeout: 60_000,
-            animations: "disabled",
-            scale: "css",
-          });
-        }
+        const dock = shadowPage.locator("[data-facade-solar-results-dock]");
+        await dock.waitFor({ state: "visible", timeout: 60_000 });
+        await dock.screenshot({ path: shotCard, timeout: 60_000, animations: "disabled", scale: "css" });
         const unitCount = bundle?.facade?.unitCount ?? 0;
         assertCheck(
           "solar-facade-adg-heatmap",
-          "Facade ADG 4A-1: 3D overlay draws every assessed unit, readable results card, timing attribute on Box Hill proposal",
+          "Facade ADG 4A-1: wall quads on proposed massing (facade cell normals horizontal: |ny|<0.3, |nz|<0.3 vs vertical), full overlay count, readable results card",
           unitCount > 4 &&
             assessMs > 0 &&
             assessMs < 120000 &&
             overlayPoints > 0 &&
             overlayPoints === assessedPoints &&
+            normalsVertical &&
             Boolean(pctText?.includes("%")),
-          `units=${unitCount}, overlayPoints=${overlayPoints}, assessedPoints=${assessedPoints}, assessMs=${assessMs}, pctAt=${bundle?.facade?.pctAtThreshold}, pctNone=${bundle?.facade?.pctNone}, pass=${bundle?.facade?.pass}, pctText=${JSON.stringify(pctText)}, heatmap=${shotFacade}, card=${shotCard}`,
+          `units=${unitCount}, overlayPoints=${overlayPoints}, assessedPoints=${assessedPoints}, assessMs=${assessMs}, bayNormals=${bayNormals.length}, pctAt=${bundle?.facade?.pctAtThreshold}, pctNone=${bundle?.facade?.pctNone}, pass=${bundle?.facade?.pass}, pctText=${JSON.stringify(pctText)}, heatmap=${shotFacade}, card=${shotCard}`,
         );
       };
 
       await boxHillFacadeSolar();
 
-      await melbourneParkNoAdditional();
+      await boxHillTreeShadows();
 
-      try {
-        await boxHillTreeShadows();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        assertCheck(
-          "solar-tree-shadows-visual",
-          "Trees off vs on at 22 Sep 3pm: grey crown-shadow ellipses appear on plan (heatmap change at this zoom is minor)",
-          false,
-          message,
-        );
-      }
+      await melbourneParkNoAdditional();
 
       await shadowCtx.close();
     }

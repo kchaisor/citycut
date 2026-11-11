@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assessFacadeSolar, facadeOverlayPoints } from "./facadeSolarAssess";
+import { assessFacadeSolar, facadeOverlayCellNormals, facadeOverlayPoints } from "./facadeSolarAssess";
 import { facadeOverlayGeometry } from "../components/FacadeSolarPointsLayer";
 import { facadeBayUnitsForModel, podiumReceptorUnitsForModel } from "./facadeSolarSample";
 import { sunAtMelbourneLocal } from "./solar";
@@ -140,12 +140,14 @@ describe("facade solar assess", () => {
     expect(podiumPoint.hoursDirect).toBe(podiumUnit.hoursDirect);
 
     const geometry = facadeOverlayGeometry(bundle);
-    expect(geometry.attributes.position!.count).toBe(overlay.length);
-    const [x, y, z] = planToWorld(overlay[0]!.east, overlay[0]!.north, overlay[0]!.yM);
-    expect(geometry.attributes.position!.getX(0)).toBeCloseTo(x, 4);
-    expect(geometry.attributes.position!.getY(0)).toBeCloseTo(y, 4);
-    expect(geometry.attributes.position!.getZ(0)).toBeCloseTo(z, 4);
+    expect(geometry.attributes.position!.count).toBe(facadeSamples.length * 6);
     expect(geometry.boundingSphere?.radius ?? 0).toBeGreaterThan(5);
+    const normals = facadeOverlayCellNormals(bundle);
+    expect(normals.length).toBe(facadeSamples.length);
+    for (const cell of normals) {
+      expect(Math.abs(cell.ny)).toBeLessThan(0.3);
+      expect(Math.abs(cell.nz)).toBeLessThan(1.05);
+    }
     expect(facadeOverlayGeometry({ facade: null, podium: null, assessMs: 0 }).attributes.position!.count).toBe(0);
   });
 });

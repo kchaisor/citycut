@@ -560,7 +560,7 @@ export function DrawingPlan({
               width={addedHatchSize}
               height={addedHatchSize}
               fill={studyShadowAddedFill}
-              fillOpacity={SUN_STUDY_SHADOW_ADDED_OPACITY * 0.48}
+              fillOpacity={SUN_STUDY_SHADOW_ADDED_OPACITY * 0.62}
             />
             <line
               x1={0}
@@ -568,7 +568,7 @@ export function DrawingPlan({
               x2={0}
               y2={addedHatchSize}
               stroke={studyShadowAddedFill}
-              strokeWidth={addedHatchSize * 0.22}
+              strokeWidth={addedHatchSize * 0.38}
             />
             <line
               x1={addedHatchSize * 0.45}
@@ -576,8 +576,7 @@ export function DrawingPlan({
               x2={addedHatchSize * 0.45}
               y2={addedHatchSize}
               stroke={studyShadowAddedFill}
-              strokeWidth={addedHatchSize * 0.14}
-              strokeOpacity={0.75}
+              strokeWidth={addedHatchSize * 0.22}
             />
           </pattern>
           {parkPlanOverlays.map((overlay) =>
@@ -796,7 +795,9 @@ export function DrawingPlan({
                       d={svgRings(rings)}
                       fill="url(#sun-study-added-hatch)"
                       fillRule="evenodd"
-                      stroke="none"
+                      stroke={studyShadowAddedFill}
+                      strokeWidth={Math.max(0.35, addedHatchSize * 0.16)}
+                      strokeLinejoin="round"
                     />
                   ))}
                 </g>

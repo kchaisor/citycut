@@ -28,6 +28,8 @@ export type FacadeUnitResult = {
   east: number;
   north: number;
   yM: number;
+  outwardEast: number;
+  outwardNorth: number;
   hoursDirect: number;
   meetsThreshold: boolean;
   none: boolean;

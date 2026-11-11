@@ -181,6 +181,7 @@ import { FacadeSolarLegend } from "./FacadeSolarLegend";
 import { FacadeSolarResultsCard } from "./FacadeSolarResultsCard";
 import { SolarPanel } from "./SolarPanel";
 import { useFacadeSolarAssess } from "./useFacadeSolarAssess";
+import { facadeOverlayCellNormals } from "../lib/facadeSolarAssess";
 import { facadeSolarPointsForExport, facadeSolarSvgTable } from "../lib/facadeSolarExport";
 import { SolarAssessResultsList } from "./SolarAssessResultsList";
 import { SunHoursLostLegendList } from "./SunHoursLostLegendList";
@@ -1199,6 +1200,10 @@ export function ModelPage({
       },
       readFacadeSolarAssess() {
         return facadeSolarAssessRef.current.bundle;
+      },
+      readFacadeOverlayNormals() {
+        const bundle = facadeSolarAssessRef.current.bundle;
+        return bundle ? facadeOverlayCellNormals(bundle) : [];
       },
       enableSunHoursLost() {
         setSolar((prev) => ({
