@@ -1,8 +1,6 @@
 import { getColour } from "./colours";
-import { facadeBayUnitsForModel } from "./facadeSolarSample";
 import { facadeHoursFill } from "./facadeSolarAssess";
 import type { FacadeAssessBundle } from "./facadeSolarTypes";
-import type { CityModel } from "../types";
 
 export function facadeSolarSvgTable(bundle: FacadeAssessBundle | null): string {
   const summary = bundle?.facade;
@@ -25,24 +23,16 @@ export type FacadePointExport = {
   colourKey: ReturnType<typeof facadeHoursFill>;
 };
 
-export function facadeSolarPointsForExport(model: CityModel, bundle: FacadeAssessBundle | null): FacadePointExport[] {
+export function facadeSolarPointsForExport(bundle: FacadeAssessBundle | null): FacadePointExport[] {
   const summary = bundle?.facade;
   if (!summary) return [];
-  const byId = new Map(summary.units.map((unit) => [unit.id, unit]));
-  const threshold = summary.thresholdHours;
-  return facadeBayUnitsForModel(model).flatMap((sample) => {
-    const unit = byId.get(sample.id);
-    if (!unit) return [];
-    return [
-      {
-        east: sample.east,
-        north: sample.north,
-        yM: sample.yM,
-        hours: unit.hoursDirect,
-        colourKey: facadeHoursFill(unit.hoursDirect, threshold),
-      },
-    ];
-  });
+  return summary.units.map((unit) => ({
+    east: unit.east,
+    north: unit.north,
+    yM: unit.yM,
+    hours: unit.hoursDirect,
+    colourKey: facadeHoursFill(unit.hoursDirect, summary.thresholdHours),
+  }));
 }
 
 export function facadePointExportColour(key: FacadePointExport["colourKey"]): string {

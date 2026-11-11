@@ -2030,7 +2030,6 @@ export function Scene3D({
   orbitLocked = false,
   quality = "high",
   facadeSolarBundle = null,
-  facadeSolarModel = null,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -2063,9 +2062,7 @@ export function Scene3D({
   orbitLocked?: boolean;
   quality?: RenderQuality;
   facadeSolarBundle?: FacadeAssessBundle | null;
-  facadeSolarModel?: CityModel | null;
 }) {
-  const facadePointsModel = facadeSolarModel ?? model;
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
     boundsRef.current = bounds;
@@ -2174,7 +2171,7 @@ export function Scene3D({
         <SunHoursLayer model={model} year={solar.year} month={solar.month} day={solar.day} groundY={groundY} />
       )}
       {solar.facadeSolarAccess && facadeSolarBundle ? (
-        <FacadeSolarPointsLayer model={facadePointsModel} bundle={facadeSolarBundle} />
+        <FacadeSolarPointsLayer bundle={facadeSolarBundle} />
       ) : null}
       <City
         model={model}

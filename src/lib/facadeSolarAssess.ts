@@ -73,6 +73,9 @@ function assessUnits(
       kind: sample.kind,
       buildingId: sample.buildingId,
       floor: sample.floor,
+      east: sample.east,
+      north: sample.north,
+      yM: sample.yM,
       hoursDirect,
       meetsThreshold: hoursDirect + 1e-6 >= thresholdHours,
       none: hoursDirect < 0.5,
@@ -137,4 +140,27 @@ export function facadeHoursFill(
   if (hoursDirect < 0.5) return "--facade-hours-none";
   if (hoursDirect + 1e-6 >= threshold - 1) return "--facade-hours-warn";
   return "--facade-hours-low";
+}
+
+export type FacadeOverlayPoint = {
+  id: string;
+  east: number;
+  north: number;
+  yM: number;
+  hoursDirect: number;
+  fill: ReturnType<typeof facadeHoursFill>;
+};
+
+export function facadeOverlayPoints(bundle: FacadeAssessBundle | null): FacadeOverlayPoint[] {
+  if (!bundle) return [];
+  return [bundle.facade, bundle.podium].flatMap((summary) =>
+    (summary?.units ?? []).map((unit) => ({
+      id: unit.id,
+      east: unit.east,
+      north: unit.north,
+      yM: unit.yM,
+      hoursDirect: unit.hoursDirect,
+      fill: facadeHoursFill(unit.hoursDirect, summary!.thresholdHours),
+    })),
+  );
 }

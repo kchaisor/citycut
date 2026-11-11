@@ -1854,7 +1854,7 @@ export function ModelPage({
         sunStudy: solar.sunStudy ? await sunStudyExportLayers() : null,
         solarReceptors: solarReceptorsExport(),
         facadeSolarPoints: facadeSolarEnabled
-          ? facadeSolarPointsForExport(displayModel, facadeSolarAssess.bundle)
+          ? facadeSolarPointsForExport(facadeSolarAssess.bundle)
           : null,
         hideTrees: view3dDisplay.hideTrees,
         importedMassing: massing.forExport.length ? massing.forExport : null,
@@ -2441,7 +2441,6 @@ export function ModelPage({
                 }
                 quality={renderQuality}
                 facadeSolarBundle={facadeSolarEnabled ? facadeSolarAssess.bundle : null}
-                facadeSolarModel={facadeMassingModel}
               />
               <MassingToolHud
                 visible={

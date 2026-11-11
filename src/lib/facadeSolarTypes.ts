@@ -25,6 +25,9 @@ export type FacadeUnitResult = {
   kind: FacadeUnitKind;
   buildingId: number;
   floor: number;
+  east: number;
+  north: number;
+  yM: number;
   hoursDirect: number;
   meetsThreshold: boolean;
   none: boolean;
