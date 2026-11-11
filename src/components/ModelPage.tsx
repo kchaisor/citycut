@@ -417,6 +417,7 @@ export function ModelPage({
       uniformBuildings: !colourByUse && !showSource,
       colourBySource: showSource,
       highlightManual: showManualEdits && overrideResult.manualCount > 0,
+      sunStudyDate: solar.sunStudy ? sunStudyDate : null,
       wind:
         windSettings.enabled && windTable
           ? { table: windTable, period: windSettings.period }
@@ -973,6 +974,7 @@ export function ModelPage({
     return {
       ...displayModel,
       buildings: baseBuildings,
+      importedMassingUpperLevels: massing.drawingUpperLevels,
       trees: treesVisible ? displayModel.trees : [],
       roads: displayModel.roads.filter((r) => {
         if (r.kind === "rail") return railVisible;
@@ -988,7 +990,7 @@ export function ModelPage({
       contourLayer: contoursVisible ? displayModel.contourLayer : undefined,
       contours: contoursVisible ? displayModel.contours : false,
     };
-  }, [displayModel, massing.drawingBuildings, view3dDisplay]);
+  }, [displayModel, massing.drawingBuildings, massing.drawingUpperLevels, view3dDisplay]);
 
   useEffect(() => {
     qaDisplayBuildingsRef.current = displayModel.buildings;
@@ -1350,6 +1352,35 @@ export function ModelPage({
     const casters = sunStudyCasterModel(drawingModel, effectiveSunStudyCasters, sunStudySelected);
     return { layers: await sunStudyLayersFor(casters, sunStudyDate) };
   }
+
+  const qaPlanBridgeRef = useRef<{
+    upperLevelGroupCount: () => number;
+    exportFrameSvg: () => Promise<string>;
+  }>({
+    upperLevelGroupCount: () => 0,
+    exportFrameSvg: async () => "",
+  });
+  qaPlanBridgeRef.current = {
+    upperLevelGroupCount: () => document.querySelectorAll("svg.plan [data-upper-z]").length,
+    exportFrameSvg: async () => {
+      const { sitePlanFrameSvg } = await import("../lib/aiPlan");
+      return sitePlanFrameSvg(drawingModel, figureScale, lineStyles, {
+        ...sitePlanExportOptions(),
+        sunStudy: await sunStudyExportLayers(),
+      });
+    },
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !qaModeFromSearch(window.location.search)) return;
+    window.__citycutQaPlan = {
+      upperLevelGroupCount: () => qaPlanBridgeRef.current.upperLevelGroupCount(),
+      exportSitePlanFrameSvg: () => qaPlanBridgeRef.current.exportFrameSvg(),
+    };
+    return () => {
+      delete window.__citycutQaPlan;
+    };
+  }, []);
 
   async function saveSiteSvg() {
     setExportError(null);

@@ -69,12 +69,23 @@ declare global {
     __citycutProgressSamples?: number[];
     __citycutLoadProgress?: number;
     __citycutIntroReadyToFire?: boolean;
+    __citycutQaPlan?: {
+      upperLevelGroupCount: () => number;
+      exportSitePlanFrameSvg: () => Promise<string>;
+    };
   }
 }
 
 export function qaModeFromSearch(search: string): boolean {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   return params.get("qa") === "1";
+}
+
+export function qaMassingFromSearch(search: string): string | null {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  const value = params.get("qaMassing");
+  if (!value) return null;
+  return value === "podium" ? "podium" : null;
 }
 
 export function qaForcedCrashFromSearch(search: string): boolean {

@@ -10,6 +10,8 @@ import {
   updateStoredMassing,
 } from "../lib/massingStore";
 import { sampleTerrain } from "../lib/terrain";
+import { qaMassingFromSearch } from "../lib/qaCameraBridge";
+import { qaPodiumTowerMassing } from "../lib/qaMassingFixture";
 import type { CityModel } from "../types";
 
 type Runtime = typeof import("../lib/massingRuntime");
@@ -44,7 +46,22 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     [model.terrain, model.sideM],
   );
 
+  const qaMassing =
+    typeof window !== "undefined" ? qaMassingFromSearch(window.location.search) : null;
+
   useEffect(() => {
+    if (qaMassing === "podium") {
+      let cancelled = false;
+      void loadRuntime().then((runtime) => {
+        if (cancelled) return;
+        setRt(runtime);
+        const base = model.terrain ? groundAt(0, 0) : 0;
+        setImported([qaPodiumTowerMassing(model.center, zone, base)]);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
     let cancelled = false;
     setImported([]);
     void loadStoredMassing(cutKey).then(async (rows) => {
@@ -61,7 +78,7 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     return () => {
       cancelled = true;
     };
-  }, [cutKey]);
+  }, [cutKey, qaMassing, model.center, model.terrain, zone, groundAt]);
 
   const importFile = useCallback(
     async (file: File) => {
@@ -214,12 +231,27 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     [rt, imported, model.center, zone, model.terrain, groundAt],
   );
 
+  const drawingUpperLevels = useMemo(() => {
+    if (!rt || !imported.some((item) => item.visible)) return [];
+    try {
+      return rt.massingUpperLevelPlanLines(
+        imported.filter((item) => item.visible),
+        model.center,
+        zone,
+      );
+    } catch (err) {
+      console.warn("[CityCut] imported massing upper levels failed", err);
+      return [];
+    }
+  }, [rt, imported, model.center, zone]);
+
   const forExport = useMemo(() => imported.filter((item) => item.visible), [imported]);
 
   return {
     imported,
     forExport,
     drawingBuildings,
+    drawingUpperLevels,
     group,
     warnings,
     placingId,

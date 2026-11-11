@@ -61,6 +61,7 @@ export type PlanPaths = {
   contourLabels: { east: number; north: number; text: string }[];
   contourInterval: number | null;
   contourSource: import("../types").ContourSourceId | null;
+  importedUpperLevels: { z: number; lines: Pt[][] }[];
 };
 
 function dedupe(line: Pt[]): Pt[] {
@@ -257,6 +258,16 @@ export function planPaths(
       : clipped;
   const drawn = layer && visible.length > 0 ? drawContours(visible, drawnInterval, contourIndexEvery) : null;
 
+  const importedUpperLevels = (model.importedMassingUpperLevels ?? [])
+    .map((level) => {
+      const lines = level.lines
+        .flatMap((line) => clipPolylineSiteFrame(line, model.sideM, frameShape))
+        .map(dedupe)
+        .filter((part) => part.length >= 3);
+      return lines.length > 0 ? { z: level.z, lines: lines.map((part) => closeOpen(part)) } : null;
+    })
+    .filter((level): level is { z: number; lines: Pt[][] } => level !== null);
+
   return {
     blocks,
     green,
@@ -274,5 +285,14 @@ export function planPaths(
     contourLabels: [],
     contourInterval: drawn && layer ? drawnInterval : null,
     contourSource: drawn && layer ? layer.source : null,
+    importedUpperLevels,
   };
+}
+
+function closeOpen(line: Pt[]): Pt[] {
+  if (line.length < 3) return line;
+  const first = line[0]!;
+  const last = line[line.length - 1]!;
+  if (first[0] === last[0] && first[1] === last[1]) return line;
+  return [...line, first];
 }

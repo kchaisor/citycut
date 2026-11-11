@@ -37,3 +37,13 @@ export function importedMassingStrokeStyle(
 ): import("./drawingStyle").StrokeStyle {
   return { mm: Math.max(0.35, style.building.mm), color: style.building.color, dash: "1.2 0.6" };
 }
+
+export function importedMassingUpperStrokeStyle(
+  style: import("./drawingStyle").LineStyles,
+): import("./drawingStyle").StrokeStyle {
+  return {
+    mm: Math.min(0.22, Math.max(0.14, style.building.mm * 0.65)),
+    color: getColour("--imported-massing-upper-stroke"),
+    dash: "none",
+  };
+}

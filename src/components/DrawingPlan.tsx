@@ -11,7 +11,11 @@ import { figureGroundModelPaths, scaleBarMetres } from "../lib/figureGround";
 import { circleRing, DEFAULT_SITE_FRAME_SHAPE } from "../lib/siteFrame";
 import { openRing } from "../lib/geo";
 import { LINE_MM, screenPx } from "../lib/lineweights";
-import { importedMassingStrokeStyle, planBuildingStrokeStyle } from "../lib/planBuildingFill";
+import {
+  importedMassingStrokeStyle,
+  importedMassingUpperStrokeStyle,
+  planBuildingStrokeStyle,
+} from "../lib/planBuildingFill";
 import { planPaths, svgPolyline, svgRings } from "../lib/svgPlan";
 import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
@@ -245,6 +249,8 @@ export function DrawingPlan({
     [study, casterModel, sunStudySelected, estFont],
   );
   const studyShadowFill = getColour("--sun-study-shadow");
+  const upperTone = getColour("--imported-massing-upper-tone");
+  const upperStroke = useMemo(() => importedMassingUpperStrokeStyle(style), [style]);
   const studySunFill = getColour("--sun-study-sun");
   const muted = Boolean(study) && sunStudyMuted;
   const mutedFill = (key: Parameters<typeof getColour>[0], normal: string) => (muted ? getColour(key) : normal);
@@ -409,6 +415,20 @@ export function DrawingPlan({
           {figurePaths.map((d, index) => (
             <path key={`f${index}`} d={d} fill={figureFill} fillRule="evenodd" />
           ))}
+          {plan.importedUpperLevels.map((level, levelIndex) => (
+            <g key={`fig-imu${levelIndex}`} aria-hidden="true">
+              {level.lines.map((line, lineIndex) => (
+                <path
+                  key={`fig-imul${lineIndex}`}
+                  d={svgPolyline(openRing(line), true)}
+                  fill="none"
+                  stroke={getColour("--imported-massing-upper-stroke")}
+                  strokeWidth={screenPx(upperStroke.mm)}
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+            </g>
+          ))}
           <path
             d={framePathD}
             fill="none"
@@ -506,6 +526,28 @@ export function DrawingPlan({
                   "miter",
                 )}
               />
+            ))}
+            {plan.importedUpperLevels.map((level, levelIndex) => (
+              <g key={`imu${levelIndex}`} data-upper-z={level.z} aria-hidden="true">
+                {level.lines.map((line, lineIndex) => (
+                  <path
+                    key={`imuf${lineIndex}`}
+                    d={svgRings([line])}
+                    fill={upperTone}
+                    fillOpacity={0.28}
+                    fillRule="evenodd"
+                    stroke="none"
+                  />
+                ))}
+                {level.lines.map((line, lineIndex) => (
+                  <path
+                    key={`imul${lineIndex}`}
+                    d={svgPolyline(openRing(line), true)}
+                    fill="none"
+                    {...screenPenAttrs(upperStroke, "miter")}
+                  />
+                ))}
+              </g>
             ))}
             {study &&
               model.buildings

@@ -9,6 +9,9 @@ const IMPORTED_ID_BASE = -1_000_000;
 
 const MIN_PLAN_AREA_M2 = 1e-4;
 const UNION_BATCH = 2000;
+const UP_FACE_MIN_NZ = 0.92;
+const ROOF_Z_BUCKET_M = 0.03;
+const ROOF_MIN_ABOVE_M = 0.05;
 
 function closeRing(ring: Pt[]): Pt[] {
   const first = ring[0];
@@ -16,6 +19,11 @@ function closeRing(ring: Pt[]): Pt[] {
   if (!first || !last) return ring;
   return first[0] === last[0] && first[1] === last[1] ? ring : [...ring, first];
 }
+
+export type ImportedMassingUpperLevel = {
+  z: number;
+  lines: Pt[][];
+};
 
 export function massingFootprint(
   massing: Pick<ImportedMassing, "positions" | "indices" | "placement">,
@@ -76,6 +84,101 @@ function footprintGround(outer: Pt[], base: number, groundAt?: (east: number, no
     }
   }
   return count > 0 ? sum / count : base;
+}
+
+function upwardRoofBuckets(
+  massing: Pick<ImportedMassing, "positions" | "indices" | "placement">,
+  origin: LonLat,
+  zone: number,
+): Map<number, Polygon[]> {
+  const local = placedLocal(massing, massing.placement, origin, zone);
+  const buckets = new Map<number, Polygon[]>();
+  for (let t = 0; t + 2 < massing.indices.length; t += 3) {
+    const ia = massing.indices[t]! * 3;
+    const ib = massing.indices[t + 1]! * 3;
+    const ic = massing.indices[t + 2]! * 3;
+    const ax = local[ia]!, ay = local[ia + 1]!, az = local[ia + 2]!;
+    const bx = local[ib]!, by = local[ib + 1]!, bz = local[ib + 2]!;
+    const cx = local[ic]!, cy = local[ic + 1]!, cz = local[ic + 2]!;
+    const flatZ = Math.abs(az - bz) < 1e-6 && Math.abs(bz - cz) < 1e-6;
+    const planArea = ((bx - ax) * (cy - ay) - (cx - ax) * (by - ay)) / 2;
+    if (flatZ) {
+      if (!(planArea > MIN_PLAN_AREA_M2)) continue;
+    } else {
+      const ux = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
+      const uy = (bz - az) * (cy - ay) - (cz - az) * (by - ay);
+      const uz = (bx - ax) * (cz - az) - (cx - ax) * (bz - az);
+      const length = Math.hypot(ux, uy, uz);
+      if (!(length > 1e-9)) continue;
+      const nz = Math.abs(uz) / length;
+      if (nz < UP_FACE_MIN_NZ || uz <= 0) continue;
+    }
+    const topZ = Math.max(az, bz, cz);
+    const bucket = Math.round(topZ / ROOF_Z_BUCKET_M) * ROOF_Z_BUCKET_M;
+    if (!flatZ && Math.abs(planArea) < MIN_PLAN_AREA_M2) continue;
+    const poly: Polygon =
+      planArea > 0
+        ? [[[ax, ay], [bx, by], [cx, cy], [ax, ay]]]
+        : [[[ax, ay], [cx, cy], [bx, by], [ax, ay]]];
+    const list = buckets.get(bucket) ?? [];
+    list.push(poly);
+    buckets.set(bucket, list);
+  }
+  return buckets;
+}
+
+function unionBucket(polys: Polygon[]): MultiPolygon {
+  if (polys.length === 0) return [];
+  let merged: MultiPolygon = [];
+  for (let i = 0; i < polys.length; i += UNION_BATCH) {
+    const batch = polys.slice(i, i + UNION_BATCH);
+    merged = unionFn(merged, ...batch, { layer: "imported massing upper", operation: "union" });
+  }
+  return merged;
+}
+
+function ringsFromMerged(merged: MultiPolygon): Pt[][] {
+  const lines: Pt[][] = [];
+  for (const polygon of merged) {
+    for (const ring of polygon) {
+      if ((ring as Pt[]).length < 4) continue;
+      lines.push(closeRing(ring as Pt[]));
+    }
+  }
+  return lines;
+}
+
+export function massingUpperLevelOutlines(
+  massing: Pick<ImportedMassing, "positions" | "indices" | "placement">,
+  origin: LonLat,
+  zone: number,
+): ImportedMassingUpperLevel[] {
+  const buckets = upwardRoofBuckets(massing, origin, zone);
+  if (buckets.size <= 1) return [];
+  const levels = [...buckets.keys()].sort((a, b) => a - b);
+  const minZ = levels[0]!;
+  const out: ImportedMassingUpperLevel[] = [];
+  for (const z of levels) {
+    if (z <= minZ + ROOF_MIN_ABOVE_M) continue;
+    const merged = unionBucket(buckets.get(z) ?? []);
+    const lines = ringsFromMerged(merged);
+    if (lines.length === 0) continue;
+    out.push({ z, lines });
+  }
+  return out;
+}
+
+export function massingUpperLevelPlanLines(
+  imported: ImportedMassing[],
+  origin: LonLat,
+  zone: number,
+): ImportedMassingUpperLevel[] {
+  const out: ImportedMassingUpperLevel[] = [];
+  for (const item of imported) {
+    if (!item.visible) continue;
+    out.push(...massingUpperLevelOutlines(item, origin, zone));
+  }
+  return out;
 }
 
 export function massingDrawingBuildings(

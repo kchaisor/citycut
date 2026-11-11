@@ -43,6 +43,36 @@ function findFreePort() {
   });
 }
 
+async function rasterizeSvgPng(browser, svg, width, height) {
+  const page = await browser.newPage();
+  await page.setViewportSize({
+    width: Math.max(1, Math.round(width)),
+    height: Math.max(1, Math.round(height)),
+  });
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;width:100%;height:100%;background:#fff}svg{display:block;width:100%;height:100%}</style></head><body>${svg}</body></html>`;
+  await page.setContent(html, { waitUntil: "load", timeout: 60_000 });
+  const buf = await page.screenshot({ type: "png" });
+  await page.close();
+  return buf;
+}
+
+function hstackPngBuffers(leftBuf, rightBuf, gap = 6) {
+  const left = PNG.sync.read(leftBuf);
+  const right = PNG.sync.read(rightBuf);
+  const height = Math.max(left.height, right.height);
+  const width = left.width + gap + right.width;
+  const out = new PNG({ width, height });
+  for (let i = 0; i < out.data.length; i += 4) {
+    out.data[i] = 255;
+    out.data[i + 1] = 255;
+    out.data[i + 2] = 255;
+    out.data[i + 3] = 255;
+  }
+  PNG.bitblt(left, out, 0, 0, left.width, left.height, 0, 0);
+  PNG.bitblt(right, out, 0, 0, right.width, right.height, left.width + gap, 0);
+  return PNG.sync.write(out);
+}
+
 function waitForServer(url, timeoutMs = 25000) {
   const start = Date.now();
   return new Promise((resolve, reject) => {
@@ -1517,8 +1547,7 @@ async function main() {
       window.__citycutMinSilentLoadMs = 0;
     });
     const sydneyPage = await sydneyCtx.newPage();
-    const sydneyQuery =
-      "qa=1&lat=-33.86727&lon=151.18147&km=1.3&siteLat=-33.8572&siteLon=151.21512";
+    const sydneyQuery = "qa=1&lat=-33.861&lon=151.171&km=1.3";
     await sydneyPage.goto(`${baseUrl}/?${sydneyQuery}`, { waitUntil: "domcontentloaded", timeout: 120_000 });
     await sydneyPage.waitForSelector("button.create-fab", { timeout: 30_000 });
     await sydneyPage.click("button.create-fab");
@@ -1548,6 +1577,14 @@ async function main() {
     await sydneyPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
     await sydneyPage.getByRole("button", { name: "Site plan" }).click({ timeout: 60_000 });
     await sydneyPage.waitForSelector("svg.plan", { timeout: 120_000 });
+    const sydneyAnalysis = sydneyPage.getByRole("button", { name: "Analysis" }).first();
+    await sydneyAnalysis.click({ timeout: 60_000 });
+    await sydneyPage.waitForTimeout(400);
+    const planFanBtn = sydneyPage.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
+    await planFanBtn.click({ timeout: 30_000 });
+    await sydneyPage.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 60_000 });
+    await sydneyPage.waitForSelector("svg.plan .plan-north-arrow", { timeout: 60_000 });
+    await sydneyPage.waitForSelector("svg.plan .heliodon-plan", { timeout: 120_000 });
     const sydneyPlanState = await sydneyPage.evaluate(() => ({
       buildError: document.querySelector(".sidebar-foot-error")?.textContent?.trim() ?? null,
       hasPlan: Boolean(document.querySelector("svg.plan")),
@@ -1558,14 +1595,105 @@ async function main() {
       !sydneyPlanState.buildError && sydneyPlanState.hasPlan,
       `error=${sydneyPlanState.buildError ?? "none"}, hasPlan=${sydneyPlanState.hasPlan}`,
     );
+    assertCheck(
+      "sydney-harbour-sun-study-plan-chrome",
+      "Sun study on the site plan shows the on-frame north arrow and heliodon overlay",
+      await sydneyPage.locator("svg.plan .plan-north-arrow").count() > 0 &&
+        (await sydneyPage.locator("svg.plan .heliodon-plan").count()) > 0,
+      "north arrow and heliodon layer present",
+    );
     await sydneyPage.screenshot({
       path: path.join(cursorArtifacts, "sydney-rozelle-2d-plan.png"),
       fullPage: false,
     });
-    const planSvg = await sydneyPage.$("svg.plan");
-    if (planSvg) {
-      await planSvg.screenshot({ path: path.join(cursorArtifacts, "sydney-rozelle-2d-plan-crop.png") });
+    const sydneyPlan = sydneyPage.locator("svg.plan");
+    const sydneyPlanBox = await sydneyPlan.boundingBox();
+    if (sydneyPlanBox) {
+      const screenPlanBuf = await sydneyPlan.screenshot({ type: "png" });
+      const frameSvg = await sydneyPage.evaluate(async () => {
+        if (!window.__citycutQaPlan) throw new Error("missing __citycutQaPlan");
+        return window.__citycutQaPlan.exportSitePlanFrameSvg();
+      });
+      fs.writeFileSync(path.join(cursorArtifacts, "parity-export-frame.svg"), frameSvg);
+      const exportPlanBuf = await rasterizeSvgPng(
+        browser,
+        frameSvg,
+        sydneyPlanBox.width,
+        sydneyPlanBox.height,
+      );
+      fs.writeFileSync(path.join(cursorArtifacts, "parity-export-plan.png"), exportPlanBuf);
+      fs.writeFileSync(path.join(cursorArtifacts, "parity-screen-plan.png"), screenPlanBuf);
+      fs.writeFileSync(
+        path.join(cursorArtifacts, "parity-side-by-side.png"),
+        hstackPngBuffers(screenPlanBuf, exportPlanBuf),
+      );
+      assertCheck(
+        "site-plan-export-frame-svg",
+        "QA bridge exports a frame-clipped site plan SVG for parity checks",
+        frameSvg.includes('viewBox="') && frameSvg.includes("<path"),
+        `bytes=${frameSvg.length}`,
+      );
+    } else {
+      assertCheck(
+        "site-plan-export-frame-svg",
+        "QA bridge exports a frame-clipped site plan SVG for parity checks",
+        false,
+        "svg.plan bounding box missing",
+      );
     }
+    const podiumCtx = await browser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: 1,
+      reducedMotion: "reduce",
+    });
+    await podiumCtx.addInitScript(() => {
+      window.__citycutMinSilentLoadMs = 0;
+    });
+    const podiumPage = await podiumCtx.newPage();
+    const podiumQuery = "qa=1&lat=-37.8045&lon=145.1065&km=0.65&qaMassing=podium";
+    await podiumPage.goto(`${baseUrl}/?${podiumQuery}`, { waitUntil: "domcontentloaded", timeout: 120_000 });
+    await podiumPage.waitForSelector("button.create-fab", { timeout: 30_000 });
+    await podiumPage.click("button.create-fab");
+    await podiumPage.waitForFunction(
+      () => Boolean(document.querySelector(".model canvas")),
+      null,
+      { timeout: 300_000 },
+    );
+    await podiumPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
+    await podiumPage.getByRole("button", { name: "Site plan" }).click({ timeout: 60_000 });
+    await podiumPage.waitForSelector("svg.plan", { timeout: 120_000 });
+    await podiumPage.waitForFunction(
+      () => document.querySelectorAll("svg.plan [data-upper-z]").length >= 2,
+      null,
+      { timeout: 180_000 },
+    );
+    const podiumUpper = await podiumPage.locator("svg.plan [data-upper-z]").count();
+    assertCheck(
+      "qa-podium-upper-level-outlines",
+      "qaMassing=podium shows inner tower outlines (data-upper-z) on the Drawing site plan",
+      podiumUpper >= 2,
+      `upperGroups=${podiumUpper}`,
+    );
+    await podiumPage.screenshot({
+      path: path.join(cursorArtifacts, "upper-levels-drawing.png"),
+      clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+    });
+    const podiumPlan = podiumPage.locator("svg.plan");
+    const podiumPlanBox = await podiumPlan.boundingBox();
+    if (podiumPlanBox) {
+      const podiumSvg = await podiumPage.evaluate(async () => {
+        if (!window.__citycutQaPlan) throw new Error("missing __citycutQaPlan");
+        return window.__citycutQaPlan.exportSitePlanFrameSvg();
+      });
+      const podiumExportBuf = await rasterizeSvgPng(
+        browser,
+        podiumSvg,
+        podiumPlanBox.width,
+        podiumPlanBox.height,
+      );
+      fs.writeFileSync(path.join(cursorArtifacts, "upper-levels-export.png"), podiumExportBuf);
+    }
+    await podiumCtx.close();
     await sydneyCtx.close();
   } catch (err) {
     console.error("Fatal error in verify-citycut:", err);
