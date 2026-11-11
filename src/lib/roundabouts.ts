@@ -1,5 +1,5 @@
 import { signedArea } from "./geo";
-import { clipAreaToSiteFrame, type SiteFrameShape } from "./siteFrame";
+import { clipAreaToSiteFrame, type FrameGroundSize, type SiteFrameShape } from "./siteFrame";
 import type { AreaFeat, Pt } from "../types";
 
 export const ROUNDABOUT_SEGMENTS = 48;
@@ -111,14 +111,14 @@ export const ROUNDABOUT_ISLAND_ESTIMATE_NOTE = "Roundabout island (estimate): no
 export function withRoundaboutIslands(
   areas: AreaFeat[],
   roundabouts: Roundabout[],
-  frame?: { sideM: number; shape: SiteFrameShape },
+  frame?: { sideM: number; shape: SiteFrameShape; size?: FrameGroundSize },
 ): AreaFeat[] {
   if (roundabouts.length === 0) return areas;
   const replaced = new Map<AreaFeat, AreaFeat | null>();
   const added: AreaFeat[] = [];
   const fitFrame = (ring: Pt[]): Pt[] | null => {
     if (!frame) return ring;
-    const rings = clipAreaToSiteFrame(ring.slice(0, -1), [], frame.sideM, frame.shape);
+    const rings = clipAreaToSiteFrame(ring.slice(0, -1), [], frame.sideM, frame.shape, frame.size);
     const outer = rings?.[0];
     if (!outer || outer.length < 3) return null;
     const first = outer[0]!, last = outer.at(-1)!;

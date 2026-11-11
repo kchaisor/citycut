@@ -38,6 +38,7 @@ import {
 } from "./lib/cutSpec";
 import { resolveSiteFrame, shouldResolveSite, siteAttributionNote } from "./lib/site";
 import { squareBBox } from "./lib/geo";
+import { cutFrameSize } from "./lib/modelFrame";
 import { siteFrameAreaM2, type SiteFrameShape } from "./lib/siteFrame";
 import { localityCacheKey, reverseLocality } from "./lib/nominatim";
 import { FLAT_GROUND_NOTE } from "./lib/parseOsm";
@@ -401,6 +402,7 @@ export default function App() {
     const sideM = cutSpecSideM(activeCut);
     const widthM = activeCut.widthM;
     const heightM = activeCut.heightM;
+    const frameSize = cutFrameSize(widthM, heightM, sideM);
     const modelLayers = {
       buildings: layers.buildings,
       roads: layers.roads,
@@ -470,7 +472,15 @@ export default function App() {
         : Promise.resolve({ field: null, error: null as string | null });
       const bounds = squareBBox(view, sideM);
       const buildingsTask = modelLayers.buildings
-        ? fetchOvertureBuildingsForCut(bounds, center, sideM, controller.signal, frameShapeRef.current)
+        ? fetchOvertureBuildingsForCut(
+            bounds,
+            center,
+            sideM,
+            controller.signal,
+            frameShapeRef.current,
+            undefined,
+            frameSize,
+          )
         : Promise.resolve({
             buildings: [],
             buildingCapHit: false,
@@ -484,7 +494,7 @@ export default function App() {
             },
           });
       const transportTask = modelLayers.roads
-        ? fetchOvertureTransportationForCut(bounds, center, sideM, controller.signal, frameShapeRef.current)
+        ? fetchOvertureTransportationForCut(bounds, center, sideM, controller.signal, frameShapeRef.current, frameSize)
         : Promise.resolve({
             roads: [],
             roadKm: 0,
@@ -519,6 +529,7 @@ export default function App() {
                 waterGreen: modelLayers.waterGreen,
                 trees: loadTreeTiers,
                 frameShape: frameShapeRef.current,
+                frameSize,
               },
               controller.signal,
             )
@@ -598,7 +609,11 @@ export default function App() {
         });
       });
       const nswTask: Promise<NswLayers | null> = nswMode
-        ? fetchNswLayers(center, sideM, { signal: controller.signal, frameShape: frameShapeRef.current }).catch((err: unknown) => {
+        ? fetchNswLayers(center, sideM, {
+            signal: controller.signal,
+            frameShape: frameShapeRef.current,
+            frameSize,
+          }).catch((err: unknown) => {
             if (controller.signal.aborted) throw err;
             return null;
           })
@@ -685,7 +700,7 @@ export default function App() {
       const prebake = await prebakeTask;
       const prebakeOsm =
         prebake?.ok && baseResult.stats.release && prebake.trees.manifest.sourceStamps?.overtureRelease === baseResult.stats.release
-          ? overtureTreesFromPoints(prebake.trees.osm, center, sideM, frameShapeRef.current)
+          ? overtureTreesFromPoints(prebake.trees.osm, center, sideM, frameShapeRef.current, frameSize)
           : null;
       const overtureBuildings = overtureResult.buildings;
       let buildingsWithoutCom: typeof overtureBuildings | undefined;
@@ -949,7 +964,13 @@ export default function App() {
         roads: modelLayers.roads ? transportResult.roads : [],
         tramLines: nswMode ? (modelLayers.roads && nswLightRailLines(nswResult).length > 0 ? nswLightRailLines(nswResult) : undefined) : tramResult.lines ?? undefined,
         tramLinesLoadFailed: tramResult.loadFailed || undefined,
-        areas: modelLayers.waterGreen ? withRoundaboutIslands(nswWater ? nswWater.areas : baseResult.areas, modelLayers.roads ? (transportResult.roundabouts ?? []) : [], { sideM, shape: frameShapeRef.current }) : [],
+        areas: modelLayers.waterGreen
+          ? withRoundaboutIslands(
+              nswWater ? nswWater.areas : baseResult.areas,
+              modelLayers.roads ? (transportResult.roundabouts ?? []) : [],
+              { sideM, shape: frameShapeRef.current, size: frameSize },
+            )
+          : [],
         carParks: modelLayers.waterGreen ? baseResult.carParks : undefined,
         trees,
         roadKm: modelLayers.roads ? transportResult.roadKm : 0,

@@ -533,7 +533,9 @@ function City({
     }
     addBuildingEdges(city);
     if (introStagger) {
-      const ringGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(model.sideM, 1.2, model.sideM));
+      const cutW = model.widthM ?? model.sideM;
+      const cutH = model.heightM ?? model.sideM;
+      const ringGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(cutW, 1.2, cutH));
       const ringMat = new THREE.LineBasicMaterial({
         color: 0xfff500,
         transparent: true,
@@ -1411,6 +1413,8 @@ function PlanSnap({
   controlsRef,
   boundsRef,
   sideM,
+  frameWidthM,
+  frameHeightM,
   groundY,
   siteTopY,
   snapId,
@@ -1424,6 +1428,8 @@ function PlanSnap({
   controlsRef: RefObject<OrbitControlsImpl | null>;
   boundsRef: RefObject<Aabb | null>;
   sideM: number;
+  frameWidthM: number;
+  frameHeightM: number;
   groundY: number;
   siteTopY: number;
   snapId: number;
@@ -1443,8 +1449,12 @@ function PlanSnap({
     const sameSnap = fittedKey.current?.startsWith(`${snapId}:`) ?? false;
     if (sameSnap) return;
     const measured = boundsRef.current;
-    const fitBounds = sitePlanBounds(sideM, groundY, siteTopY);
+    const fitBounds = sitePlanBounds(sideM, groundY, siteTopY, frameWidthM, frameHeightM);
     if (measured) {
+      fitBounds.min[0] = Math.max(fitBounds.min[0], measured.min[0]);
+      fitBounds.max[0] = Math.min(fitBounds.max[0], measured.max[0]);
+      fitBounds.min[2] = Math.max(fitBounds.min[2], measured.min[2]);
+      fitBounds.max[2] = Math.min(fitBounds.max[2], measured.max[2]);
       fitBounds.min[1] = Math.min(fitBounds.min[1], measured.min[1]);
       fitBounds.max[1] = Math.max(fitBounds.max[1], measured.max[1]);
     }
@@ -1467,7 +1477,23 @@ function PlanSnap({
     fittedKey.current = key;
     if (otherOrthoFittedKey) otherOrthoFittedKey.current = null;
     touchedRef.current = false;
-  }, [active, camera, controlsRef, boundsRef, extraBounds, groundY, otherOrthoFittedKey, sideM, siteTopY, snapId, size.width, size.height, touchedRef]);
+  }, [
+    active,
+    camera,
+    controlsRef,
+    boundsRef,
+    extraBounds,
+    frameHeightM,
+    frameWidthM,
+    groundY,
+    otherOrthoFittedKey,
+    sideM,
+    siteTopY,
+    snapId,
+    size.width,
+    size.height,
+    touchedRef,
+  ]);
   useLayoutEffect(() => {
     place();
   }, [place]);
@@ -1779,6 +1805,8 @@ export function Cameras({
   cameraMemory,
   introEnabled = false,
   gizmoOrbitLock = false,
+  frameWidthM,
+  frameHeightM,
 }: {
   side: number;
   lift: number;
@@ -1798,6 +1826,8 @@ export function Cameras({
   cameraMemory?: CameraMemoryRef;
   introEnabled?: boolean;
   gizmoOrbitLock?: boolean;
+  frameWidthM: number;
+  frameHeightM: number;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
@@ -1918,6 +1948,8 @@ export function Cameras({
             controlsRef={orthoControls}
             boundsRef={boundsRef}
             sideM={side}
+            frameWidthM={frameWidthM}
+            frameHeightM={frameHeightM}
             groundY={groundY}
             siteTopY={siteTopY}
             snapId={snapId}
@@ -2089,6 +2121,13 @@ export function Scene3D({
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
     boundsRef.current = bounds;
+    if (typeof document === "undefined") return;
+    const canvas = document.querySelector(".scene-viewport canvas");
+    if (!(canvas instanceof HTMLElement)) return;
+    const spanX = bounds.max[0] - bounds.min[0];
+    const spanZ = bounds.max[2] - bounds.min[2];
+    canvas.dataset.citycutGroundSpanX = spanX.toFixed(3);
+    canvas.dataset.citycutGroundSpanZ = spanZ.toFixed(3);
   }, []);
   const [sectionKnifeGizmoInteraction, setSectionKnifeGizmoInteraction] = useState<SectionKnifeGizmoInteraction>(
     () => idleSectionKnifeGizmoInteraction,
@@ -2251,6 +2290,8 @@ export function Scene3D({
       />
       <Cameras
         side={model.sideM}
+        frameWidthM={model.widthM ?? model.sideM}
+        frameHeightM={model.heightM ?? model.sideM}
         lift={lift}
         groundY={groundY}
         siteTopY={siteTopY}

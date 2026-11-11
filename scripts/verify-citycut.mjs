@@ -289,6 +289,85 @@ async function main() {
         !/does not fit on A3/i.test(a3AiText),
       `ai=${pageWidthMm.toFixed(1)}×${pageHeightMm.toFixed(1)} mm svg=${svgWidthMm.toFixed(1)}×${svgHeightMm.toFixed(1)} mm`,
     );
+
+    const rozelleA3Url =
+      `${baseUrl}/citycut/?lat=-33.86721&lon=151.18163&shape=a3&a3scale=3000&a3ori=landscape&label=Rozelle%20NSW`;
+    await page.goto(rozelleA3Url, { waitUntil: "networkidle", timeout: 60_000 });
+    await page.waitForSelector('.select .frame[data-shape="a3"]', { timeout: 20_000 });
+    await page.locator("button.create-fab").click({ timeout: 30_000 });
+    await page.waitForSelector(".model", { timeout: 360_000 });
+    await page.waitForFunction(
+      () => {
+        const canvas = document.querySelector(".scene-viewport canvas");
+        const spanX = Number(canvas?.dataset.citycutGroundSpanX ?? 0);
+        const spanZ = Number(canvas?.dataset.citycutGroundSpanZ ?? 0);
+        return spanX > 100 && spanZ > 100;
+      },
+      { timeout: 180_000 },
+    );
+    const rozelle3d = await page.evaluate(() => {
+      const canvas = document.querySelector(".scene-viewport canvas");
+      const spanX = Number(canvas?.dataset.citycutGroundSpanX ?? 0);
+      const spanZ = Number(canvas?.dataset.citycutGroundSpanZ ?? 0);
+      return { spanX, spanZ, aspect: spanZ > 0 ? spanX / spanZ : 0 };
+    });
+    await page.screenshot({
+      path: path.join(cursorArtifacts, "rozelle-a3-3000-3d.png"),
+      fullPage: false,
+    });
+    assertCheck(
+      "rozelle-a3-3d-ground-aspect",
+      "Rozelle A3 1:3000 landscape cut clips 3D ground to the rectangular frame (~1.41:1)",
+      Math.abs(rozelle3d.aspect - 420 / 297) <= 0.02,
+      `spanX=${rozelle3d.spanX.toFixed(1)} spanZ=${rozelle3d.spanZ.toFixed(1)} aspect=${rozelle3d.aspect.toFixed(4)}`,
+    );
+    await page.getByRole("tab", { name: /Drawing/i }).click({ timeout: 120_000 });
+    await page.waitForSelector("svg.plan", { timeout: 120_000 });
+    await page.waitForTimeout(1200);
+    const rozelleDrawing = await page.evaluate(() => {
+      const frame = document.querySelector('svg.plan rect[data-cut-frame="1"]');
+      const w = Number(frame?.getAttribute("width") ?? 0);
+      const h = Number(frame?.getAttribute("height") ?? 0);
+      const halfW = w / 2;
+      const halfH = h / 2;
+      const planScale = document.querySelector(".studio-scale-row select")?.value ?? "";
+      const leaks = [];
+      for (const pathEl of document.querySelectorAll('[data-layer^="nsw-"] path')) {
+        if (!(pathEl instanceof SVGGraphicsElement)) continue;
+        let box;
+        try {
+          box = pathEl.getBBox();
+        } catch {
+          continue;
+        }
+        if (
+          box.x < -halfW - 0.5 ||
+          box.x + box.width > halfW + 0.5 ||
+          box.y < -halfH - 0.5 ||
+          box.y + box.height > halfH + 0.5
+        ) {
+          leaks.push({ layer: pathEl.closest("[data-layer]")?.getAttribute("data-layer") ?? "path", box });
+        }
+      }
+      return { planScale, frameW: w, frameH: h, leakCount: leaks.length, leaks: leaks.slice(0, 3) };
+    });
+    await page.screenshot({
+      path: path.join(cursorArtifacts, "rozelle-a3-3000-drawing.png"),
+      fullPage: false,
+    });
+    assertCheck(
+      "rozelle-a3-drawing-scale",
+      "Rozelle A3 1:3000 cut defaults Drawing plan scale to 1:3000",
+      rozelleDrawing.planScale === "3000",
+      `planScale=${rozelleDrawing.planScale}`,
+    );
+    assertCheck(
+      "rozelle-a3-nsw-clip",
+      "Rozelle A3 drawing clips NSW zoning, records, and labels inside the cut frame",
+      rozelleDrawing.leakCount === 0,
+      `leaks=${rozelleDrawing.leakCount} sample=${JSON.stringify(rozelleDrawing.leaks)} frame=${rozelleDrawing.frameW.toFixed(0)}×${rozelleDrawing.frameH.toFixed(0)}`,
+    );
+
     await page.goto(`${baseUrl}/citycut/`, { waitUntil: "networkidle", timeout: 60_000 });
     await page.waitForSelector(".select .frame", { timeout: 20_000 });
 

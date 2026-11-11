@@ -298,6 +298,10 @@ export function ModelPage({
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
   useColourRevision();
   const uniform = uniformBuildingColor();
+  const planScaleOptions = useMemo(
+    () => (model.frameShape === "a3" ? [...A3_DRAWING_SCALES] : [...FIGURE_SCALES]),
+    [model.frameShape],
+  );
   const [figureScale, setFigureScale] = useState<number>(() => {
     if (model.frameShape === "a3") {
       if (model.cutScale) return model.cutScale;
@@ -3144,7 +3148,7 @@ export function ModelPage({
                         aria-label="Plan scale"
                         onChange={(event) => setFigureScale(Number(event.target.value))}
                       >
-                        {FIGURE_SCALES.map((scale) => (
+                        {planScaleOptions.map((scale) => (
                           <option key={scale} value={scale}>
                             1:{scale}
                           </option>
@@ -3506,7 +3510,7 @@ export function ModelPage({
                     aria-label="Export plan scale"
                     onChange={(event) => setFigureScale(Number(event.target.value))}
                   >
-                    {FIGURE_SCALES.map((scale) => (
+                    {planScaleOptions.map((scale) => (
                       <option key={scale} value={scale}>
                         1:{scale}
                       </option>

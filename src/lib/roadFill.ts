@@ -5,7 +5,13 @@ import {
   clipUnion as union,
 } from "./safePolygonClip";
 import { polylineLength, signedArea } from "./geo";
-import { DEFAULT_SITE_FRAME_SHAPE, pointInSiteFrame, siteFramePolygon, type SiteFrameShape } from "./siteFrame";
+import {
+  DEFAULT_SITE_FRAME_SHAPE,
+  pointInSiteFrame,
+  siteFramePolygon,
+  type FrameGroundSize,
+  type SiteFrameShape,
+} from "./siteFrame";
 import type { Pt, RoadFeat } from "../types";
 import { hashLineCoords, hashRoadFeatures, mixGeometryHash } from "./geometryHash";
 import { normalizeMultiPolygonByParity, offsetCloseMultiPolygon } from "./polygonOffset";
@@ -406,8 +412,9 @@ export function clipSurfaceToSiteFrame(
   polygons: MultiPolygon,
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  frameSize?: FrameGroundSize,
 ): MultiPolygon {
-  return clipToFrame(polygons, sideM, frameShape);
+  return clipToFrame(polygons, sideM, frameShape, frameSize);
 }
 
 export function surfaceVerticesOutsideFrame(
@@ -437,9 +444,10 @@ function clipToFrame(
   polygons: MultiPolygon,
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  frameSize?: FrameGroundSize,
 ): MultiPolygon {
   if (polygons.length === 0 || !(sideM > 0)) return [];
-  const frame = siteFramePolygon(sideM, frameShape);
+  const frame = siteFramePolygon(sideM, frameShape, frameSize);
   try {
     return intersection(polygons, frame);
   } catch {
@@ -475,6 +483,7 @@ function unionStrips(
   sideM: number,
   minWidth: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  frameSize?: FrameGroundSize,
 ): RoadFill {
   const started = performance.now();
   const inputs: Polygon[] = [];
@@ -482,7 +491,7 @@ function unionStrips(
     if (road.line.length < 2 || !(road.width > 0)) continue;
     inputs.push(...bufferCentreline(road.line, road.width, minWidth));
   }
-  const merged = tidy(clipToFrame(unionFast(inputs), sideM, frameShape));
+  const merged = tidy(clipToFrame(unionFast(inputs), sideM, frameShape, frameSize));
   return { polygons: merged, ms: performance.now() - started, inputs: inputs.length };
 }
 
@@ -490,16 +499,18 @@ export function unionCarriageways(
   roads: { line: Pt[]; width: number }[],
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  frameSize?: FrameGroundSize,
 ): RoadFill {
-  return unionStrips(roads, sideM, 0.4, frameShape);
+  return unionStrips(roads, sideM, 0.4, frameShape, frameSize);
 }
 
 export function unionPathRoads(
   roads: { line: Pt[]; width: number }[],
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  frameSize?: FrameGroundSize,
 ): RoadFill {
-  return unionStrips(roads, sideM, 0, frameShape);
+  return unionStrips(roads, sideM, 0, frameShape, frameSize);
 }
 
 export function carriagewaysOf(roads: RoadFeat[]): { line: Pt[]; width: number }[] {
@@ -525,11 +536,12 @@ export function closeFootpathJunctions(
   radius: number,
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  frameSize?: FrameGroundSize,
 ): MultiPolygon {
   if (!(radius > 0) || polygons.length === 0) return polygons;
   const simplified = simplifyPathMulti(polygons);
   const closed = offsetCloseMultiPolygon(simplified, radius);
-  const clipped = normalizeMultiPolygonByParity(clipToFrame(closed, sideM, frameShape));
+  const clipped = normalizeMultiPolygonByParity(clipToFrame(closed, sideM, frameShape, frameSize));
   return simplifyPathMulti(tidy(clipped));
 }
 
@@ -605,6 +617,7 @@ export function unionRoadSurface(
   tramLines: Pt[][] | undefined,
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  frameSize?: FrameGroundSize,
 ): RoadFill {
   const roads = planRoadCarriageways(allRoads);
   const key = roadSurfaceCacheKey(roads, tramLines, sideM, frameShape);
@@ -612,15 +625,19 @@ export function unionRoadSurface(
   if (cached) return cached;
 
   const started = performance.now();
-  const carriageway = unionCarriageways(carriagewaysOf(roads), sideM, frameShape);
+  const carriageway = unionCarriageways(carriagewaysOf(roads), sideM, frameShape, frameSize);
   const tramInputs = (tramLines ?? [])
     .filter((line) => line.length >= 2)
     .map((line) => ({ line, width: TRAM_CORRIDOR_WIDTH_M }));
   const withTram =
-    tramInputs.length > 0 ? unionCarriageways(tramInputs, sideM, frameShape) : { polygons: [] as MultiPolygon, ms: 0, inputs: 0 };
+    tramInputs.length > 0
+      ? unionCarriageways(tramInputs, sideM, frameShape, frameSize)
+      : { polygons: [] as MultiPolygon, ms: 0, inputs: 0 };
   const merged = unionMulti(carriageway.polygons, withTram.polygons);
   const closed = tidy(
-    normalizeMultiPolygonByParity(clipToFrame(offsetCloseMultiPolygon(merged, ROAD_MORPH_CLOSE_M), sideM, frameShape)),
+    normalizeMultiPolygonByParity(
+      clipToFrame(offsetCloseMultiPolygon(merged, ROAD_MORPH_CLOSE_M), sideM, frameShape, frameSize),
+    ),
   );
   const result: RoadFill = {
     polygons: closed,
@@ -740,6 +757,7 @@ export function unionFootpathStrips(
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
   filletM: number = DEFAULT_PATH_FILLET_M,
   typicalBandWidthM = 1.2,
+  frameSize?: FrameGroundSize,
 ): RoadFill {
   const widthM = strips.reduce((max, strip) => Math.max(max, strip.width), 0);
   if (!(widthM > 0)) return { polygons: [], ms: 0, inputs: 0 };
@@ -749,16 +767,16 @@ export function unionFootpathStrips(
 
   const started = performance.now();
   const stitched = stitchFootpathStrips(strips);
-  const merged = unionStrips(stitched, sideM, 0, frameShape);
+  const merged = unionStrips(stitched, sideM, 0, frameShape, frameSize);
   const typical = strips.reduce((sum, s) => sum + s.width, 0) / Math.max(1, strips.length);
   const bandTypical = typicalBandWidthM > 0 ? typicalBandWidthM : typical;
   const filletRadius =
     filletM > 0 ? Math.max(filletM, bandTypical * PATH_FILLET_BAND_SCALE) : 0;
   const filleted =
     filletRadius > 0
-      ? closeFootpathJunctions(merged.polygons, filletRadius, sideM, frameShape)
+      ? closeFootpathJunctions(merged.polygons, filletRadius, sideM, frameShape, frameSize)
       : simplifyPathMulti(merged.polygons);
-  const polygons = tidy(clipToFrame(filleted, sideM, frameShape));
+  const polygons = tidy(clipToFrame(filleted, sideM, frameShape, frameSize));
   const result: RoadFill = {
     polygons,
     ms: performance.now() - started,

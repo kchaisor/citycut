@@ -19,7 +19,13 @@ import {
   tileLocalRect,
   tileRange,
 } from "./overtureTiles";
-import { clipPolylineSiteFrame, DEFAULT_SITE_FRAME_SHAPE, type SiteFrameShape } from "./siteFrame";
+import {
+  clipPolylineSiteFrame,
+  DEFAULT_SITE_FRAME_SHAPE,
+  pointInSiteFrame,
+  type FrameGroundSize,
+  type SiteFrameShape,
+} from "./siteFrame";
 import type { LonLat, Pt, RoadFeat } from "../types";
 import { circleRing, detectRoundabouts, osmWayKey, type Roundabout } from "./roundabouts";
 
@@ -104,6 +110,7 @@ export async function fetchOvertureTransportationForCut(
   sideM: number,
   signal?: AbortSignal,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  frameSize?: FrameGroundSize,
 ): Promise<{ roads: RoadFeat[]; roadKm: number; roundabouts: Roundabout[]; stats: OvertureTransportStats }> {
   const half = sideM / 2;
   const t0 = performance.now();
@@ -124,8 +131,8 @@ export async function fetchOvertureTransportationForCut(
     parts.push(...fromTile.parts);
     ringCandidates.push(...fromTile.ringCandidates);
   }
-  const roundabouts = detectRoundabouts(ringCandidates).filter(
-    (rb) => Math.abs(rb.center[0]) - rb.radius <= half && Math.abs(rb.center[1]) - rb.radius <= half,
+  const roundabouts = detectRoundabouts(ringCandidates).filter((rb) =>
+    pointInSiteFrame(rb.center, sideM, frameShape, frameSize),
   );
   if (roundabouts.length > 0) {
     const byKey = new Map(roundabouts.map((rb) => [rb.key, rb]));
@@ -141,7 +148,7 @@ export async function fetchOvertureTransportationForCut(
   }
   const roads: RoadFeat[] = [];
   for (const part of parts) {
-    for (const line of clipPolylineSiteFrame(part.line, sideM, frameShape)) {
+    for (const line of clipPolylineSiteFrame(part.line, sideM, frameShape, frameSize)) {
       if (polylineLength(line) < 1) continue;
       roads.push({
         id: stableNumericId(`${part.id}:${roads.length}`),

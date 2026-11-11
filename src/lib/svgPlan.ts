@@ -193,10 +193,11 @@ export function planPaths(
     frameShape,
     pathFilletM,
     pathWidthM,
+    frameSize,
   );
   const carPark = carParkWays(model.roads, model.carParks);
   const planRoads = carPark.size > 0 ? model.roads.filter((road) => !carPark.has(road)) : model.roads;
-  const carriageway = unionRoadSurface(planRoads, model.tramLines, model.sideM, frameShape);
+  const carriageway = unionRoadSurface(planRoads, model.tramLines, model.sideM, frameShape, frameSize);
 
   const colourMode: BuildingColourMode = planOptions.buildingColour ?? {
     colourByUse: true,
@@ -229,6 +230,7 @@ export function planPaths(
       aisles.map((road) => ({ line: road.line, width: road.width })),
       model.sideM,
       frameShape,
+      frameSize,
     ).polygons;
     const ground = carriageway.polygons.length > 0 ? clipDifference(strips, carriageway.polygons) : strips;
     for (const polygon of ground) blocks.push(polygon.map((ring) => ring.map((p): Pt => [p[0], p[1]])));
