@@ -190,10 +190,14 @@ import { useFacadeSolarAssess } from "./useFacadeSolarAssess";
 import { facadeOverlayCellNormals } from "../lib/facadeSolarAssess";
 import { facadeSolarPointsForExport, facadeSolarSvgTable } from "../lib/facadeSolarExport";
 import { SolarAssessResultsList } from "./SolarAssessResultsList";
+import { SunHoursGroundLegendList } from "./SunHoursGroundLegendList";
 import { SunHoursLostLegendList } from "./SunHoursLostLegendList";
 import { useSolarReceptorAssess } from "./useSolarReceptorAssess";
 import { useSunHoursLostPlan } from "./useSunHoursLostPlan";
+import { useSunHoursGround } from "./useSunHoursGround";
 import { countPositiveLossCells, positiveLossCellsInsideFootprints } from "../lib/sunHoursLostPlan";
+import { countSunHoursGroundCells, footprintMaskedCells } from "../lib/sunHoursGroundPlan";
+import { sunHoursGroundPaletteEndpointKeys } from "../lib/sunHoursGround";
 import { ringFromCorners } from "../lib/solarAccessB43";
 import type { SolarReceptorArea } from "../lib/solarReceptorAssess";
 import { solarReceptorsForExport } from "../lib/solarReceptorExport";
@@ -1096,6 +1100,7 @@ export function ModelPage({
           ...prev,
           solarAccess: false,
           sunHoursLost: false,
+          sunHours: false,
           sunStudy: false,
           castShadows: true,
           receptorDraw: false,
@@ -1253,6 +1258,58 @@ export function ModelPage({
           cellM: grid.cellM,
           footprintInside,
         };
+      },
+      enableSunHoursGround() {
+        setSolar((prev) => ({
+          ...prev,
+          sunHours: true,
+          month: 6,
+          day: 21,
+          castShadows: true,
+        }));
+        return true;
+      },
+      readSunHoursGround() {
+        const { grid, overlay, scaleMaxHours } = sunHoursGroundRef.current;
+        const endpoints = sunHoursGroundPaletteEndpointKeys();
+        return {
+          enabled: Boolean(solarRef.current.sunHours),
+          month: solarRef.current.month,
+          day: solarRef.current.day,
+          cellM: grid?.cellM ?? 0,
+          cellCount: grid ? countSunHoursGroundCells(grid) : 0,
+          maskedFootprints: grid ? footprintMaskedCells(grid) : 0,
+          maxSunHours: scaleMaxHours || grid?.maxSunHours || 0,
+          surfaceCells: overlay?.cellCount ?? 0,
+          paletteMin: getColour(endpoints.minKey),
+          paletteMax: getColour(endpoints.maxKey),
+        };
+      },
+      frameSunHoursGroundPlan() {
+        if (!window.__citycutQa?.setCamera) return false;
+        const cut = drawingModelRef.current;
+        const side = cut.sideM;
+        const lift = cut.terrain ? (cut.terrain.min + cut.terrain.max) / 2 : 0;
+        const groundY = cut.terrain ? cut.terrain.min : 0;
+        const altitude = Math.max(side * 0.9, 120);
+        window.__citycutQa.setCamera({
+          eye: { x: 0, y: groundY + altitude, z: 0 },
+          target: { x: 0, y: lift, z: 0 },
+        });
+        return true;
+      },
+      frameSunHoursGroundOblique() {
+        if (!window.__citycutQa?.setCamera) return false;
+        const cut = drawingModelRef.current;
+        const side = cut.sideM;
+        const groundY = cut.terrain ? cut.terrain.min : 0;
+        const lift = cut.terrain ? (cut.terrain.min + cut.terrain.max) / 2 : 0;
+        const span = side * 0.55;
+        window.__citycutQa.setCamera({
+          eye: { x: -span, y: groundY + span * 0.55, z: span * 0.75 },
+          target: { x: 0, y: lift, z: 0 },
+        });
+        return true;
       },
     };
     return () => {
@@ -1509,6 +1566,17 @@ export function ModelPage({
   );
   const sunHoursLostPlanRef = useRef(sunHoursLostPlan);
   sunHoursLostPlanRef.current = sunHoursLostPlan;
+  const sunHoursGroundModel = tab === "drawing" ? drawingModel : displayModel;
+  const sunHoursGround = useSunHoursGround(
+    sunHoursGroundModel,
+    solar.year,
+    solar.month,
+    solar.day,
+    Boolean(solar.sunHours),
+    solar.treesCastShadow ? "proposed-only" : "off",
+  );
+  const sunHoursGroundRef = useRef(sunHoursGround);
+  sunHoursGroundRef.current = sunHoursGround;
 
   useEffect(() => {
     qaDisplayBuildingsRef.current = displayModel.buildings;
@@ -2472,6 +2540,9 @@ export function ModelPage({
                 drawnMassingBlocksForFacade={
                   facadeSolarEnabled && !massingDraw.tool.toolEnabled ? massingDraw.blocks : null
                 }
+                sunHoursGroundGrid={solar.sunHours ? sunHoursGround.grid : null}
+                sunHoursDirectOverlay={solar.sunHours ? sunHoursGround.overlay : null}
+                sunHoursScaleMax={solar.sunHours ? sunHoursGround.scaleMaxHours : 0}
               />
               <MassingToolHud
                 visible={
@@ -2589,6 +2660,8 @@ export function ModelPage({
                 solarReceptors={visibleSolarReceptors}
                 solarReceptorResults={solarAssessEnabled ? solarReceptorAssess.results : []}
                 sunHoursLostGrid={solar.sunHoursLost ? sunHoursLostPlan.grid : null}
+                sunHoursGroundGrid={solar.sunHours ? sunHoursGround.grid : null}
+                sunHoursGroundScaleMax={solar.sunHours ? sunHoursGround.scaleMaxHours : 0}
                 treesCastShadow={Boolean(solar.treesCastShadow)}
                 receptorDraw={Boolean(
                   (solar.solarAccess && solar.receptorDraw) || (solar.solarParkAccess && solar.parkReceptorDraw),
@@ -2616,9 +2689,19 @@ export function ModelPage({
                   onViewportChange={setPlanViewport}
                   fitCounter={fitCounter}
                 />
-                {((solar.sunHoursLost && sunHoursLostPlan.grid) ||
+                {((solar.sunHours && sunHoursGround.grid) ||
+                  (solar.sunHoursLost && sunHoursLostPlan.grid) ||
                   (solarAssessEnabled && solarReceptorAssess.results.length > 0)) ? (
                   <div className="plan-solar-dock-stack" data-plan-solar-dock-stack>
+                    {solar.sunHours && sunHoursGround.grid ? (
+                      <div className="plan-solar-legend-dock hud-card" data-sun-hours-ground-legend-dock>
+                        <SunHoursGroundLegendList
+                          compact
+                          maxHours={sunHoursGround.scaleMaxHours || sunHoursGround.grid.maxSunHours}
+                          pending={sunHoursGround.pending || sunHoursGround.pendingSurfaces}
+                        />
+                      </div>
+                    ) : null}
                     {solar.sunHoursLost && sunHoursLostPlan.grid ? (
                       <div className="plan-solar-legend-dock hud-card" data-sun-hours-lost-legend-dock>
                         <SunHoursLostLegendList compact includesTrees={Boolean(solar.treesCastShadow)} />
@@ -3871,6 +3954,8 @@ export function ModelPage({
                   receptorAssess={solarReceptorAssess.results}
                   receptorAssessPending={solarReceptorAssess.pending}
                   sunHoursLostPending={sunHoursLostPlan.pending}
+                  sunHoursGroundPending={sunHoursGround.pending || sunHoursGround.pendingSurfaces}
+                  sunHoursGroundMaxHours={sunHoursGround.scaleMaxHours || sunHoursGround.grid?.maxSunHours || 0}
                   parkGreenAreas={parkGreenAreas}
                   onAddParkFromArea={addParkFromArea}
                   onClearReceptors={() =>

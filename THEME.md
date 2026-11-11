@@ -239,6 +239,13 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-hours-lost-3` | `#ff9a4a` | Hours-lost heatmap 2–3 h. |
 | `--sun-hours-lost-4` | `#e85c3a` | Hours-lost heatmap 3–4 h. |
 | `--sun-hours-lost-5plus` | `#8b2e1a` | Hours-lost heatmap 5+ h. |
+| `--sun-hours-direct-0` | `#313695` | Direct sun hours 0 h (blue). |
+| `--sun-hours-direct-15` | `#4575b4` | Direct sun hours low blue. |
+| `--sun-hours-direct-30` | `#a5006a` | Direct sun hours purple. |
+| `--sun-hours-direct-50` | `#d73027` | Direct sun hours red mid. |
+| `--sun-hours-direct-70` | `#f46d43` | Direct sun hours orange. |
+| `--sun-hours-direct-90` | `#fdae61` | Direct sun hours light orange. |
+| `--sun-hours-direct-max` | `#fee825` | Direct sun hours max (yellow). |
 | `--facade-hours-ok` | `#3d8f5a` | 3D facade sample meets ADG threshold hours. |
 | `--facade-hours-warn` | `#e8a820` | 3D facade sample just below threshold. |
 | `--facade-hours-low` | `#e07030` | 3D facade sample low direct-sun hours. |

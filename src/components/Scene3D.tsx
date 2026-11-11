@@ -97,9 +97,9 @@ import {
 import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SunHoursLayer } from "./SunHoursLayer";
+import type { SunHoursDirectOverlay } from "../lib/sunHoursDirectAssess";
+import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
 import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
-
-const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
 import { DrawnMassingBlocksVisual } from "./DrawnMassingBlocksVisual";
 import { FacadeSolarPointsLayer } from "./FacadeSolarPointsLayer";
@@ -460,6 +460,7 @@ function City({
   colourBySource,
   highlightManual,
   solarDiagramOn,
+  directSunHoursOn,
   solarNeutralFill,
   heightEditBuildingId,
   selectedBuildingIds,
@@ -476,6 +477,7 @@ function City({
   colourBySource: boolean;
   highlightManual: boolean;
   solarDiagramOn: boolean;
+  directSunHoursOn: boolean;
   solarNeutralFill: string;
   heightEditBuildingId: number | null;
   selectedBuildingIds?: readonly number[];
@@ -836,10 +838,10 @@ function City({
     snapshotSunStudySurfaceColors(group);
     snapshotWhiteCardColors(group, colourMode);
     applySunStudySurfaceTint(group, false);
-    applyBuildingSolarNeutral(group, false, solarNeutralFill);
+    applyBuildingSolarNeutral(group, solarDiagramOn || directSunHoursOn, solarNeutralFill);
     applyWhiteCardTint(group, display.whiteCard);
     invalidate();
-  }, [group, colourMode, solarDiagramOn, solarNeutralFill, colourTick, display.whiteCard, invalidate]);
+  }, [group, colourMode, solarDiagramOn, directSunHoursOn, solarNeutralFill, colourTick, display.whiteCard, invalidate]);
   const buildingsVisible = isLayer3dVisible(display, "buildings");
   const roadsVisible = isLayer3dVisible(display, "roads");
   const footpathsVisible = isLayer3dVisible(display, "footpaths");
@@ -2033,6 +2035,9 @@ export function Scene3D({
   quality = "high",
   facadeSolarBundle = null,
   drawnMassingBlocksForFacade = null,
+  sunHoursGroundGrid = null,
+  sunHoursDirectOverlay = null,
+  sunHoursScaleMax = 0,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -2066,6 +2071,9 @@ export function Scene3D({
   quality?: RenderQuality;
   facadeSolarBundle?: FacadeAssessBundle | null;
   drawnMassingBlocksForFacade?: readonly MassingBlock[] | null;
+  sunHoursGroundGrid?: SunHoursGroundGrid | null;
+  sunHoursDirectOverlay?: SunHoursDirectOverlay | null;
+  sunHoursScaleMax?: number;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
@@ -2171,8 +2179,14 @@ export function Scene3D({
         targetY={shadowTargetY}
         topY={siteTopY}
       />
-      {SUN_HOURS_HEATMAP_ENABLED && solar.sunHours && (
-        <SunHoursLayer model={model} year={solar.year} month={solar.month} day={solar.day} groundY={groundY} />
+      {solar.sunHours && sunHoursGroundGrid && (
+        <SunHoursLayer
+          grid={sunHoursGroundGrid}
+          overlay={sunHoursDirectOverlay}
+          scaleMaxHours={sunHoursScaleMax || sunHoursGroundGrid.maxSunHours}
+          model={model}
+          groundY={groundY}
+        />
       )}
       <City
         model={model}
@@ -2180,6 +2194,7 @@ export function Scene3D({
         colourBySource={colourBySource}
         highlightManual={showManualEdits && model.manualHeightEditCount !== undefined && model.manualHeightEditCount > 0}
         solarDiagramOn={solar.showPath}
+        directSunHoursOn={Boolean(solar.sunHours && sunHoursDirectOverlay)}
         solarNeutralFill={solarNeutralFill}
         onBounds={onBounds}
         onBuildingPick={onBuildingPick}

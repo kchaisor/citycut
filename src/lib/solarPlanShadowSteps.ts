@@ -6,11 +6,18 @@ import {
   type PlanShadowTreeMode,
 } from "./buildingShadows";
 import { pointInPolygon } from "./useCascade";
+import { daylightWindowMinutes, sunAtMelbourneLocal } from "./solar";
 import { solarRuleAssessmentSteps, solarRuleDefinition, type SolarRuleDefinition } from "./solarRuleRegistry";
 import { planShadowRingsToMulti } from "./solarReceptorAssess";
 import type { BuildingFeat, CityModel, Ring } from "../types";
 
-export type StepShadow = { hour: number; minute: number; existing: MultiPolygon; proposed: MultiPolygon };
+export type StepShadow = {
+  hour: number;
+  minute: number;
+  existing: MultiPolygon;
+  proposed: MultiPolygon;
+  buildingShadow: MultiPolygon;
+};
 
 const SHADOW_CONTEXT_MARGIN_M = 160;
 
@@ -86,13 +93,44 @@ export function buildRuleStepShadows(
     const existingSplit = planShadowSplitRings(context, when, true, treeMode);
     const proposedSplit = planShadowSplitRings(clipped, when, true, treeMode);
   const proposedRings = [...proposedSplit.existing, ...proposedSplit.added];
+    const existing = planShadowRingsToMulti(existingSplit.existing);
+    const proposed = planShadowRingsToMulti(proposedRings);
     return {
       hour: step.hour,
       minute: step.minute,
-      existing: planShadowRingsToMulti(existingSplit.existing),
-      proposed: planShadowRingsToMulti(proposedRings),
+      existing,
+      proposed,
+      buildingShadow: proposed,
     };
   });
+}
+
+export function buildDaylightGroundStepShadows(
+  model: CityModel,
+  year: number,
+  month: number,
+  day: number,
+  stepMinutes = 15,
+  treeMode: PlanShadowTreeMode = "off",
+): StepShadow[] {
+  const lat = model.center.lat;
+  const lon = model.center.lon;
+  const window = daylightWindowMinutes(lat, lon, year, month, day);
+  if (!window) return [];
+  const out: StepShadow[] = [];
+  for (let minuteOfDay = window.sunrise; minuteOfDay <= window.sunset; minuteOfDay += stepMinutes) {
+    const hour = Math.floor(minuteOfDay / 60);
+    const minute = minuteOfDay % 60;
+    const sample = sunAtMelbourneLocal(lat, lon, year, month, day, hour, minute);
+    if (!sample.aboveHorizon) continue;
+    const when: PlanShadowInput = { lat, lon, year, month, day, hour, minute };
+    const split = planShadowSplitRings(model, when, true, treeMode);
+    const allRings = [...split.existing, ...split.added];
+    const buildingShadow = planShadowRingsToMulti(allRings);
+    const empty: MultiPolygon = [];
+    out.push({ hour, minute, existing: empty, proposed: buildingShadow, buildingShadow });
+  }
+  return out;
 }
 
 export function buildRescodeRuleStepShadows(

@@ -2365,6 +2365,74 @@ async function main() {
 
       await boxHillHoursLost();
 
+      const boxHillSunHoursGround = async () => {
+        const off = await shadowPage.evaluate(() => window.__citycutQaModel?.readSunHoursGround?.() ?? null);
+        const emptyOverlay = await shadowPage.locator("[data-sun-hours-ground-overlay]").count();
+        assertCheck(
+          "solar-sun-hours-ground-off",
+          "Ground sun-hours layer off by default with no plan overlay",
+          off?.enabled === false && emptyOverlay === 0,
+          `off=${JSON.stringify(off)}, overlay=${emptyOverlay}`,
+        );
+
+        await shadowPage.evaluate(() => window.__citycutQaModel?.enableSunHoursGround?.());
+        await shadowPage.waitForFunction(
+          () =>
+            document.documentElement.dataset.sunHoursGroundReady === "1" &&
+            Number(document.documentElement.dataset.sunHoursDirectSurfaces ?? "0") > 200,
+          null,
+          { timeout: 480000 },
+        );
+        const enabled = await shadowPage.evaluate(() => window.__citycutQaModel?.readSunHoursGround?.() ?? null);
+        const overlayDom = await shadowPage.locator("[data-sun-hours-ground-overlay]");
+        const overlayCount = await overlayDom.count();
+        const rasterCells =
+          overlayCount > 0 ? Number(await overlayDom.getAttribute("data-sun-hours-ground-cell-count")) || 0 : 0;
+        await shadowPage.waitForSelector("[data-sun-hours-ground-legend-dock]", { timeout: 120000 });
+        const shotDrawing = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-drawing-plan.png");
+        await planViewportScreenshot(shadowPage, shotDrawing);
+
+        await shadowPage.getByRole("tab", { name: /3D model/i }).click();
+        await shadowPage.waitForTimeout(600);
+        await shadowPage.evaluate(() => window.__citycutQaModel?.frameSunHoursGroundPlan?.());
+        await shadowPage.waitForTimeout(1200);
+        const shotPlan = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-3d-plan.png");
+        await sceneViewportScreenshot(shadowPage, { path: shotPlan });
+        await shadowPage.evaluate(() => window.__citycutQaModel?.frameSunHoursGroundOblique?.());
+        await shadowPage.waitForTimeout(1200);
+        const shotOblique = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-3d-oblique.png");
+        await sceneViewportScreenshot(shadowPage, { path: shotOblique });
+
+        const paletteBlue = { r: 49, g: 54, b: 149 };
+        const paletteYellow = { r: 254, g: 232, b: 37 };
+        const planPng = PNG.sync.read(fs.readFileSync(shotDrawing));
+        const obliquePng = PNG.sync.read(fs.readFileSync(shotOblique));
+        const blueHits = countPixelsNearRgb(planPng, paletteBlue, 80);
+        const yellowHits = countPixelsNearRgb(obliquePng, paletteYellow, 72);
+
+        assertCheck(
+          "solar-sun-hours-ground-heatmap",
+          "Box Hill Direct Sun Hours: winter 21 Jun, 3 m grid, blue–yellow Ladybug scale on ground + roofs + walls",
+          enabled?.enabled === true &&
+            enabled.month === 6 &&
+            enabled.day === 21 &&
+            enabled.cellM === 3 &&
+            (enabled.maskedFootprints ?? 0) > 20 &&
+            (enabled.cellCount ?? 0) > 100 &&
+            (enabled.surfaceCells ?? 0) > 200 &&
+            (enabled.maxSunHours ?? 0) > 2 &&
+            enabled.paletteMin?.toLowerCase() === "#313695" &&
+            enabled.paletteMax?.toLowerCase() === "#fee825" &&
+            overlayCount === 1 &&
+            rasterCells > 100 &&
+            blueHits > 80 &&
+            yellowHits > 40,
+          `enabled=${JSON.stringify(enabled)}, overlay=${overlayCount}, raster=${rasterCells}, blueHits=${blueHits}, yellowHits=${yellowHits}, drawing=${shotDrawing}, plan3d=${shotPlan}, oblique=${shotOblique}`,
+        );
+      };
+
+      await boxHillSunHoursGround();
+
       const measurePlanZoomLongTasks = async (page) =>
         page.evaluate(async () => {
           const durations = [];

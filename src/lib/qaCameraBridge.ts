@@ -114,6 +114,20 @@ declare global {
       enableTreeShadows?: () => boolean;
       setTreesCastShadow?: (on: boolean) => boolean;
       readSunHoursLostPlan?: () => { cellCount: number; maxLoss: number; cellM?: number };
+      enableSunHoursGround?: () => boolean;
+      readSunHoursGround?: () => {
+        enabled: boolean;
+        month: number;
+        day: number;
+        cellM: number;
+        cellCount: number;
+        maskedFootprints: number;
+        maxSunHours: number;
+        paletteMin: string;
+        paletteMax: string;
+      };
+      frameSunHoursGroundPlan?: () => boolean;
+      frameSunHoursGroundOblique?: () => boolean;
       enableFacadeSolar?: () => boolean;
       readFacadeSolarAssess?: () => import("./facadeSolarTypes").FacadeAssessBundle | null;
       readFacadeOverlayNormals?: () => import("./facadeSolarAssess").FacadeOverlayCellNormal[];

@@ -41,7 +41,9 @@ import {
 import { heliodonLabelFontMetres } from "../lib/heliodonDiagram";
 import { useSunStudyShadows } from "./useSunStudyShadows";
 import { rasterizePlanShadowRings, rasterizeSunStudyLayers } from "../lib/sunStudyShadowRaster";
+import { SunHoursGroundPlanOverlay } from "./SunHoursGroundPlanOverlay";
 import { SunHoursLostPlanOverlay } from "./SunHoursLostPlanOverlay";
+import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
 import type { SunHoursLostGrid } from "../lib/sunHoursLostPlan";
 import { ringFromCorners } from "../lib/solarAccessB43";
 import { isParkAssessRow, type SolarAssessRow, type SolarReceptorArea } from "../lib/solarReceptorAssess";
@@ -97,6 +99,8 @@ export function DrawingPlan({
   receptorDraw = false,
   onReceptorCommit,
   sunHoursLostGrid = null,
+  sunHoursGroundGrid = null,
+  sunHoursGroundScaleMax = 0,
   treesCastShadow = false,
 }: {
   model: CityModel;
@@ -123,6 +127,8 @@ export function DrawingPlan({
   receptorDraw?: boolean;
   onReceptorCommit?: (ring: Ring) => void;
   sunHoursLostGrid?: SunHoursLostGrid | null;
+  sunHoursGroundGrid?: SunHoursGroundGrid | null;
+  sunHoursGroundScaleMax?: number;
   treesCastShadow?: boolean;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -781,6 +787,9 @@ export function DrawingPlan({
                 {...screenPenAttrs(style.tree)}
               />
             ))}
+            {sunHoursGroundGrid && (
+              <SunHoursGroundPlanOverlay grid={sunHoursGroundGrid} scaleMaxHours={sunHoursGroundScaleMax || sunHoursGroundGrid.maxSunHours} />
+            )}
             {sunHoursLostGrid && <SunHoursLostPlanOverlay grid={sunHoursLostGrid} />}
             {parkPlanOverlays.map((overlay) =>
               overlay.hatch.length > 0 ? (
