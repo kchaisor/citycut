@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { parseNativeAiLayers } from "./aiNative";
-import { sitePlanAi8 } from "./aiPlan";
-import { projectLocal } from "./crs";
+import { sitePlanAi8, sunStudyLayerName } from "./aiPlan";
+import { planShadowRings } from "./buildingShadows";
+import { projectLocal, mgaCrs } from "./crs";
 import { model } from "./aiExport.test";
 import { cityModelTo3dm, loadRhino } from "./rhinoExport";
+import { planHeliodonForExport } from "./planHeliodonExport";
 import { localFromSheetPoint, sitePlanRhinoLayerNames, sitePlanTo3dm } from "./planRhinoExport";
 import { layoutSheet } from "./figureGround";
+import { massingDrawingBuildings, massingUpperLevelPlanLines } from "./massingFootprint";
+import { placedMga } from "./massingImport";
+import { qaPodiumTowerMassing } from "./qaMassingFixture";
+import { SUN_STUDY_HOURS } from "./sunStudyPlan";
 import type { CityModel, Pt } from "../types";
 
 const melbourne = { lon: 144.9631, lat: -37.8136 };
@@ -59,6 +65,22 @@ function curvePointsOnLayer(
     for (let p = 0; p < curve.pointCount; p++) out.push(curve.point(p));
   }
   return out;
+}
+
+function curveCountOnLayer(
+  rhino: Awaited<ReturnType<typeof loadRhino>>,
+  doc: InstanceType<Awaited<ReturnType<typeof loadRhino>>["File3dm"]>,
+  layerName: string,
+): number {
+  let count = 0;
+  for (let i = 0; i < doc.objects().count; i++) {
+    const object = doc.objects().get(i);
+    const layer = doc.layers().get(object.attributes().layerIndex).fullPath;
+    if (layer !== layerName) continue;
+    const curve = object.geometry() as unknown as ReadCurve;
+    if (curve.objectType === rhino.ObjectType.Curve) count += 1;
+  }
+  return count;
 }
 
 
@@ -143,6 +165,94 @@ describe("site plan .3dm", () => {
     } finally {
       planDoc.destroy();
       solidDoc.destroy();
+    }
+  });
+
+  it("includes sun-study shadow and Sun path layers matching the .ai export", async () => {
+    const date = { lat: melbourne.lat, lon: melbourne.lon, year: 2026, month: 9, day: 22 };
+    const studyLayers = SUN_STUDY_HOURS.map((hour) => ({
+      hour,
+      rings: [...planShadowRings(melbourneModel, { ...date, hour, minute: 0 }, true)],
+    }));
+    const diagram = {
+      ...date,
+      hour: 12,
+      minute: 0,
+      sideM: melbourneModel.sideM,
+      radiusFactor: 1,
+    };
+    const exportOpts = {
+      sunStudy: { layers: studyLayers },
+      heliodon: planHeliodonForExport({
+        showPath: false,
+        sunStudyActive: true,
+        sunStudyDate: date,
+        diagram,
+      }),
+      shadows: null,
+      castShadows: true,
+      sunStudyDate: date,
+    };
+    const aiLayers = parseNativeAiLayers(sitePlanAi8(melbourneModel, 1000, undefined, exportOpts)).filter(
+      (name) => name !== "Frame/Sheet" && name !== "Frame" && name !== "Annotation",
+    );
+    const rhinoLayers = sitePlanRhinoLayerNames(melbourneModel, 1000, undefined, exportOpts);
+    expect(rhinoLayers.sort()).toEqual(aiLayers.sort());
+    expect(rhinoLayers).toContain("Sun path");
+    expect(rhinoLayers).toContain(sunStudyLayerName(12));
+    const bytes = await sitePlanTo3dm(melbourneModel, 1000, undefined, exportOpts);
+    const buf = Buffer.from(bytes);
+    const layerLabelInFile = (label: string) =>
+      buf.includes(Buffer.from(label, "utf8")) || buf.includes(Buffer.from(label, "utf16le"));
+    expect(layerLabelInFile("Sun path")).toBe(true);
+    expect(layerLabelInFile(sunStudyLayerName(12))).toBe(true);
+    const rhino = await loadRhino();
+    const doc = rhino.File3dm.fromByteArray(bytes);
+    try {
+      expect(curveCountOnLayer(rhino, doc, "Sun path")).toBeGreaterThan(0);
+      expect(curveCountOnLayer(rhino, doc, sunStudyLayerName(12))).toBeGreaterThan(0);
+      const noon = curvePointsOnLayer(rhino, doc, sunStudyLayerName(12));
+      expect(noon.some((point) => Math.abs(point[2]!) < 0.01)).toBe(true);
+    } finally {
+      doc.destroy();
+    }
+  });
+
+  it("exports imported podium footprints and upper tower outlines at source MGA", async () => {
+    const center = { lon: 145.1065, lat: -37.8045 };
+    const zone = mgaCrs(center.lon).zone;
+    const massing = qaPodiumTowerMassing(center, zone, 30);
+    const podiumCorner = placedMga(massing, massing.placement, 0);
+    const towerCorner = placedMga(massing, massing.placement, 8);
+    const withMassing: CityModel = {
+      ...melbourneModel,
+      center,
+      sideM: 650,
+      buildings: [
+        ...melbourneModel.buildings,
+        ...massingDrawingBuildings([massing], center, zone),
+      ],
+      importedMassingUpperLevels: massingUpperLevelPlanLines([massing], center, zone),
+    };
+    const bytes = await sitePlanTo3dm(withMassing, 1000);
+    const rhino = await loadRhino();
+    const doc = rhino.File3dm.fromByteArray(bytes);
+    try {
+      expect(docLayerPaths(doc)).toContain("Imported massing");
+      expect(docLayerPaths(doc)).toContain("Imported::Upper levels");
+      expect(curveCountOnLayer(rhino, doc, "Imported massing")).toBeGreaterThan(0);
+      expect(curveCountOnLayer(rhino, doc, "Imported::Upper levels")).toBeGreaterThan(0);
+      const podiumPts = curvePointsOnLayer(rhino, doc, "Imported massing");
+      const upperPts = curvePointsOnLayer(rhino, doc, "Imported::Upper levels");
+      const near = (pts: number[][], e: number, n: number) =>
+        pts.some(
+          (point) =>
+            Math.hypot(point[0]! - e, point[1]! - n) < 0.05 && Math.abs(point[2]!) < 0.01,
+        );
+      expect(near(podiumPts, podiumCorner[0], podiumCorner[1])).toBe(true);
+      expect(near(upperPts, towerCorner[0], towerCorner[1])).toBe(true);
+    } finally {
+      doc.destroy();
     }
   });
 

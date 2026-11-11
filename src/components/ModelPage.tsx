@@ -20,6 +20,7 @@ import {
 import { commitColour, getColour, resetStoredColours } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
 import { CRS_NOTE, mgaCrs } from "../lib/crsZone";
+import { planHeliodonForExport } from "../lib/planHeliodonExport";
 import {
   applyOverrides,
   readDrawingStyle,
@@ -446,9 +447,26 @@ export function ModelPage({
     };
   }
 
+  function heliodonPlanDiagramBase(): HeliodonDiagramExportOptions {
+    return {
+      ...planShadowInput(),
+      sideM: model.sideM,
+      radiusFactor: solar.radiusFactor,
+    };
+  }
+
+  function planHeliodonForSiteExport(): HeliodonDiagramExportOptions | null {
+    return planHeliodonForExport({
+      showPath: solar.showPath,
+      sunStudyActive: Boolean(solar.sunStudy),
+      sunStudyDate,
+      diagram: heliodonPlanDiagramBase(),
+    });
+  }
+
   function sitePlanExportOptions(): SitePlanExportOptions {
     return {
-      heliodon: heliodonDiagramExport(),
+      heliodon: planHeliodonForSiteExport(),
       shadows: planShadowInput(),
       castShadows: solar.castShadows,
       uniformBuildings: !colourByUse && !showSource,
@@ -2048,11 +2066,7 @@ export function ModelPage({
                 onScale={onScale}
                 lineStyle={lineStyles}
                 planScale={figureScale}
-                heliodon={
-                  sunStudyDate
-                    ? (heliodonDiagramExport() ?? { ...planShadowInput(), sideM: model.sideM, radiusFactor: solar.radiusFactor })
-                    : heliodonDiagramExport()
-                }
+                heliodon={planHeliodonForSiteExport()}
                 castShadows={solar.castShadows}
                 shadowInput={planShadowInput()}
                 sunStudy={sunStudyDate}
