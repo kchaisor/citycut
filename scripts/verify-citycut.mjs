@@ -1694,13 +1694,16 @@ async function main() {
       fs.writeFileSync(path.join(cursorArtifacts, "upper-levels-export.png"), podiumExportBuf);
     }
     await podiumCtx.close();
-    const { buildMassingFixtureBytes } = await import("../src/lib/massingFixture3dm.ts");
-    const { mgaCrs } = await import("../src/lib/crsZone.ts");
-    const rozelleSite = { lon: 151.21512, lat: -33.8572 };
-    const rozelleZone = mgaCrs(rozelleSite.lon).zone;
-    const rozelleFixture = await buildMassingFixtureBytes("separate", rozelleSite, rozelleZone);
     const rozelleFixturePath = path.join(cursorArtifacts, "rozelle-import-massing.3dm");
-    fs.writeFileSync(rozelleFixturePath, Buffer.from(rozelleFixture));
+    execFileSync(
+      path.join(process.cwd(), "node_modules/.bin/vitest"),
+      ["run", "scripts/writeRozelleMassingFixture.test.ts"],
+      {
+        cwd: process.cwd(),
+        stdio: "inherit",
+        env: { ...process.env, ROZELLE_FIXTURE_PATH: rozelleFixturePath },
+      },
+    );
     const importCtx = await browser.newContext({
       viewport: VIEWPORT,
       deviceScaleFactor: 1,
