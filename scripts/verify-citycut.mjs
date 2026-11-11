@@ -2023,6 +2023,46 @@ async function main() {
       path: path.join(cursorArtifacts, "sydney-rozelle-2d-plan.png"),
       fullPage: false,
     });
+    let sitePlan3dmOk = false;
+    let sitePlan3dmDetail = "";
+    try {
+      const downloadPromise = sydneyPage.waitForEvent("download", { timeout: 180_000 });
+      await sydneyPage.getByRole("button", { name: /^Quick export 3dm$/i }).click();
+      const download = await downloadPromise;
+      const filename = download.suggestedFilename();
+      const chunks = [];
+      for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+      const bytes = Buffer.concat(chunks);
+      const header = bytes.toString("latin1", 0, Math.min(bytes.length, 8000));
+      const rhinoModule = await import(
+        new URL("../node_modules/rhino3dm/rhino3dm.module.js", import.meta.url).href
+      );
+      const { readFile } = await import("node:fs/promises");
+      const { createRequire } = await import("node:module");
+      const require = createRequire(import.meta.url);
+      const wasmPath = require.resolve("rhino3dm/rhino3dm.wasm");
+      const rhino = await rhinoModule.default({ wasmBinary: await readFile(wasmPath) });
+      const doc = rhino.File3dm.fromByteArray(bytes);
+      const layerNames = [];
+      for (let i = 0; i < doc.layers().count; i++) layerNames.push(doc.layers().get(i).fullPath);
+      let objectCount = doc.objects().count;
+      doc.destroy();
+      sitePlan3dmOk =
+        filename.endsWith(".3dm") &&
+        bytes.length > 800 &&
+        header.includes("EPSG:7856") &&
+        layerNames.includes("Buildings") &&
+        objectCount > 0;
+      sitePlan3dmDetail = `file=${filename}, bytes=${bytes.length}, layers=${layerNames.slice(0, 12).join("|")}, objects=${objectCount}`;
+    } catch (error) {
+      sitePlan3dmDetail = error instanceof Error ? error.message : String(error);
+    }
+    assertCheck(
+      "sydney-site-plan-3dm-download",
+      "Drawing quick export .3dm downloads a layered Sydney site plan in MGA zone 56 with curve objects",
+      sitePlan3dmOk,
+      sitePlan3dmDetail,
+    );
     const sydneyPlan = sydneyPage.locator("svg.plan");
     const sydneyPlanBox = await sydneyPlan.boundingBox();
     if (sydneyPlanBox) {

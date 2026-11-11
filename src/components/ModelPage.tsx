@@ -34,6 +34,7 @@ import {
   downloadIsometricAi,
   downloadIsometricSvg,
   downloadSiteAi,
+  downloadSite3dm,
   downloadSiteSvg,
   downloadSectionDrawing,
   downloadFigureSvg,
@@ -1504,6 +1505,21 @@ export function ModelPage({
     }
   }
 
+  async function saveSite3dm() {
+    setExportError(null);
+    setBusy("3dm-site");
+    try {
+      await downloadSite3dm(drawingModel, figureScale, lineStyles, {
+        ...sitePlanExportOptions(),
+        sunStudy: await sunStudyExportLayers(),
+      });
+    } catch {
+      setExportError("The site plan .3dm could not be written.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function saveSunStudyAi() {
     setExportError(null);
     setBusy("ai-sun");
@@ -2260,6 +2276,15 @@ export function ModelPage({
                         }}
                       >
                         .svg
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-export-3dm studio-export-btn"
+                        aria-label="Quick export 3dm"
+                        disabled={busy !== null || drawing !== "site"}
+                        onClick={() => void saveSite3dm()}
+                      >
+                        .3dm
                       </button>
                     </>
                   ) : (

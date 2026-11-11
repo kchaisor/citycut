@@ -143,6 +143,10 @@ function chunkOps(chunk: PdfChunk): string[] {
   return ops;
 }
 
+export function pdfChunkHasDrawableOps(chunk: PdfChunk): boolean {
+  return chunkOps(chunk).length > 0;
+}
+
 function layerBlock(label: string, ops: string[], layerIndex: number): string {
   if (ops.length === 0) return "";
   const id = layerIndex % 256;
