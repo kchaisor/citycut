@@ -1565,7 +1565,7 @@ async function main() {
     const planSvg = await sydneyPage.$("svg.plan");
     if (planSvg) {
       await planSvg.screenshot({ path: path.join(cursorArtifacts, "sydney-rozelle-2d-plan-crop.png") });
-    });
+    }
     await sydneyCtx.close();
   } catch (err) {
     console.error("Fatal error in verify-citycut:", err);
