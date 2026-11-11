@@ -29,6 +29,7 @@ import { planViewportExtent, type PlanViewport } from "../lib/planViewport";
 import {
   SINGLE_SHADOW_OPACITY,
   SUN_STUDY_SHADOW_ADDED_OPACITY,
+  SUN_STUDY_SHADOW_OPACITY,
   SUN_STUDY_TREE_OPACITY,
   estimatedHeightLabels,
   isClick,
@@ -289,7 +290,9 @@ export function DrawingPlan({
     () => (study ? estimatedHeightLabels(casterModel.buildings, sunStudySelected, estFont) : []),
     [study, casterModel, sunStudySelected, estFont],
   );
+  const studyShadowFill = getColour("--sun-study-shadow");
   const studyShadowAddedFill = getColour("--sun-study-shadow-added");
+  const studyIsolateCasters = sunStudySelected.length > 0;
   const treeCrownShadowFill = getColour("--sun-study-tree-shadow");
   const studySunFill = getColour("--sun-study-sun");
   const muted = Boolean(study) && sunStudyMuted;
@@ -361,8 +364,11 @@ export function DrawingPlan({
     return shadowRingsFromMulti(planTreeShadowMulti(model, shadowInput, trees));
   }, [treesCastShadow, castShadows, shadowInput, figure, model]);
   const studyShadowRasters = useMemo(
-    () => (study && studyShadows.layers.length > 0 ? rasterizeSunStudyLayers(studyShadows.layers, model.sideM) : []),
-    [study, studyShadows.layers, model.sideM],
+    () =>
+      study && !studyIsolateCasters && studyShadows.layers.length > 0
+        ? rasterizeSunStudyLayers(studyShadows.layers, model.sideM)
+        : [],
+    [study, studyIsolateCasters, studyShadows.layers, model.sideM],
   );
   const treeCrownShadowRaster = useMemo(
     () =>
@@ -643,18 +649,44 @@ export function DrawingPlan({
               <path key={`tr${index}`} d={svgPolyline(tram, false)} fill="none" {...screenPenAttrs(style.tram)} strokeLinecap="round" strokeLinejoin="round" />
             ))}
             {nswItems && nswStyle && <NswPlanLines items={nswItems} style={nswStyle} />}
-            {studyShadowRasters.map((layer) => (
-              <image
-                key={`ssr${layer.hour}`}
-                data-shadow-hour={layer.hour}
-                href={layer.href}
-                x={layer.east}
-                y={-(layer.north + layer.heightM)}
-                width={layer.widthM}
-                height={layer.heightM}
-                preserveAspectRatio="none"
-              />
-            ))}
+            {studyIsolateCasters &&
+              studyShadows.layers.map((layer) => (
+                <g key={`ss${layer.hour}`} data-shadow-hour={layer.hour}>
+                  {layer.rings.map((rings, index) => (
+                    <path
+                      key={index}
+                      d={svgRings(rings)}
+                      fill={studyShadowFill}
+                      fillOpacity={SUN_STUDY_SHADOW_OPACITY}
+                      fillRule="evenodd"
+                      stroke="none"
+                    />
+                  ))}
+                  {layer.addedRings.map((rings, index) => (
+                    <path
+                      key={`a${index}`}
+                      data-shadow-added
+                      d={svgRings(rings)}
+                      fill="url(#sun-study-added-hatch)"
+                      fillRule="evenodd"
+                      stroke="none"
+                    />
+                  ))}
+                </g>
+              ))}
+            {!studyIsolateCasters &&
+              studyShadowRasters.map((layer) => (
+                <image
+                  key={`ssr${layer.hour}`}
+                  data-shadow-hour={layer.hour}
+                  href={layer.href}
+                  x={layer.east}
+                  y={-(layer.north + layer.heightM)}
+                  width={layer.widthM}
+                  height={layer.heightM}
+                  preserveAspectRatio="none"
+                />
+              ))}
             {shadowSplit.existing.map((rings, index) => (
               <path
                 key={`sh${index}`}
