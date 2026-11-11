@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import { projectLocal } from "./crs";
 import { figureGroundModelPaths } from "./figureGround";
 import { filterHiddenBuildings, hideBuildings, matchHiddenBuildings, emptyHiddenStore } from "./hiddenBuildings";
-import { massingDrawingBuildings, massingFootprint } from "./massingFootprint";
+import { massingDrawingBuildings, massingFootprint, massingUpperLevelOutlines } from "./massingFootprint";
 import type { ImportedMassing } from "./massingImport";
 import { sitePlanAi } from "./aiPlan";
 import { explodedAxoChunks } from "./explodedAxoExport";
 import { defaultExplodedAxoSettings } from "./explodedAxo";
 import { planPaths } from "./svgPlan";
+import { openRing } from "./geo";
 import type { BuildingFeat, CityModel, Pt } from "../types";
 
 const origin = { lon: 144.98038, lat: -37.81356 };
@@ -34,6 +35,74 @@ const model: CityModel = {
   buildingCapHit: false,
   sourceNote: "test",
 };
+
+function meshBox(
+  positions: number[],
+  indices: number[],
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  z0: number,
+  z1: number,
+  vertexBase: number,
+): { positions: number[]; indices: number[]; next: number } {
+  const verts = [
+    [x0, y0, z0],
+    [x1, y0, z0],
+    [x1, y1, z0],
+    [x0, y1, z0],
+    [x0, y0, z1],
+    [x1, y0, z1],
+    [x1, y1, z1],
+    [x0, y1, z1],
+  ];
+  for (const [x, y, z] of verts) positions.push(x, y, z);
+  const quads = [
+    [0, 3, 2, 1],
+    [4, 5, 6, 7],
+    [0, 1, 5, 4],
+    [1, 2, 6, 5],
+    [2, 3, 7, 6],
+    [3, 0, 4, 7],
+  ];
+  for (const [a, b, c, d] of quads) {
+    const va = vertexBase + a!;
+    const vb = vertexBase + b!;
+    const vc = vertexBase + c!;
+    const vd = vertexBase + d!;
+    indices.push(va, vb, vc, va, vc, vd);
+  }
+  return { positions, indices, next: vertexBase + 8 };
+}
+
+function podiumTowerMassing(): ImportedMassing {
+  const [e, n] = projectLocal([60, -60], origin, zone);
+  const positions: number[] = [];
+  const indices: number[] = [];
+  let vtx = 0;
+  ({ next: vtx } = meshBox(positions, indices, -15, -10, 15, 10, 0, 12, vtx));
+  ({ next: vtx } = meshBox(positions, indices, -8, 2, -2, 8, 12, 38, vtx));
+  ({ next: vtx } = meshBox(positions, indices, 4, -6, 10, 0, 12, 28, vtx));
+  return {
+    id: "podium",
+    name: "podium-towers.3dm",
+    fileBytes: 1,
+    mode: "mga",
+    visible: true,
+    positions: new Float32Array(positions),
+    indices: new Uint32Array(indices),
+    triangles: indices.length / 3,
+    anchor: { e, n, z: 30 },
+    halfExtent: { x: 15, y: 10 },
+    sourceUnits: "Meters",
+    unitScale: 1,
+    fileZone: 55,
+    rejectedSurfaces: 0,
+    notes: [],
+    placement: { e, n, base: 30, rotDeg: 0 },
+  };
+}
 
 function boxMassing(rotDeg = 0): ImportedMassing {
   const [e, n] = projectLocal([60, -60], origin, zone);
@@ -97,5 +166,25 @@ describe("imported massing and hidden buildings in Drawing", () => {
 
   it("hidden imported models are left out of drawings", () => {
     expect(massingDrawingBuildings([{ ...boxMassing(), visible: false }], origin, zone)).toEqual([]);
+  });
+
+  it("draws upper roof outlines for a podium with two towers", () => {
+    const item = podiumTowerMassing();
+    const upper = massingUpperLevelOutlines(item, origin, zone);
+    expect(upper.length).toBeGreaterThanOrEqual(2);
+    const lineCount = upper.reduce((sum, level) => sum + level.lines.length, 0);
+    expect(lineCount).toBeGreaterThanOrEqual(2);
+    const drawing = {
+      ...model,
+      buildings: [...model.buildings, ...massingDrawingBuildings([item], origin, zone)],
+      importedMassingUpperLevels: upper,
+    };
+    const plan = planPaths(drawing);
+    expect(plan.importedUpperLevels.length).toBeGreaterThanOrEqual(2);
+    const widest = Math.max(
+      ...upper.flatMap((level) => level.lines.map((ring) => area(openRing(ring)))),
+    );
+    const podiumArea = area(massingFootprint(item, origin, zone).polygons[0]![0] as Pt[]);
+    expect(widest).toBeLessThan(podiumArea * 0.5);
   });
 });

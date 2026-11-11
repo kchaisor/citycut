@@ -241,6 +241,7 @@ export type CityModel = {
   nswWaterNote?: string | null;
   nswRoadSurface?: { nswCorridorM2: number; overtureM2: number } | null;
   nswUseMatched?: number;
+  importedMassingUpperLevels?: { z: number; lines: Pt[][] }[];
 };
 
 export type ViewState = {

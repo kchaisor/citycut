@@ -417,6 +417,7 @@ export function ModelPage({
       uniformBuildings: !colourByUse && !showSource,
       colourBySource: showSource,
       highlightManual: showManualEdits && overrideResult.manualCount > 0,
+      sunStudyDate: solar.sunStudy ? sunStudyDate : null,
       wind:
         windSettings.enabled && windTable
           ? { table: windTable, period: windSettings.period }
@@ -973,6 +974,7 @@ export function ModelPage({
     return {
       ...displayModel,
       buildings: baseBuildings,
+      importedMassingUpperLevels: massing.drawingUpperLevels,
       trees: treesVisible ? displayModel.trees : [],
       roads: displayModel.roads.filter((r) => {
         if (r.kind === "rail") return railVisible;
@@ -988,7 +990,7 @@ export function ModelPage({
       contourLayer: contoursVisible ? displayModel.contourLayer : undefined,
       contours: contoursVisible ? displayModel.contours : false,
     };
-  }, [displayModel, massing.drawingBuildings, view3dDisplay]);
+  }, [displayModel, massing.drawingBuildings, massing.drawingUpperLevels, view3dDisplay]);
 
   useEffect(() => {
     qaDisplayBuildingsRef.current = displayModel.buildings;

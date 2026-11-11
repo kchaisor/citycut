@@ -116,6 +116,15 @@ export function buildAxoMassingFaces(
     const roof = rings.map((ring) => pathOf(ring.map(([e, n]) => iso(e, n, top)))).join(" ");
     faces.push(prism.fill ? { d: roof, paint: "building-roof", fill: prism.fill } : { d: roof, paint: "building-roof" });
   }
+  for (const level of model.importedMassingUpperLevels ?? []) {
+    const tone = getColour("--imported-massing-upper-tone");
+    for (const line of level.lines) {
+      const ring = openRing(line);
+      if (ring.length < 3) continue;
+      const d = pathOf(ring.map(([e, n]) => iso(e, n, level.z)));
+      faces.push({ d, paint: "building-roof", fill: tone });
+    }
+  }
   return { faces, counts };
 }
 

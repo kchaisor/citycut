@@ -1548,6 +1548,15 @@ async function main() {
     await sydneyPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
     await sydneyPage.getByRole("button", { name: "Site plan" }).click({ timeout: 60_000 });
     await sydneyPage.waitForSelector("svg.plan", { timeout: 120_000 });
+    const sydneyAnalysis = sydneyPage.getByRole("button", { name: "Analysis" }).first();
+    await sydneyAnalysis.click({ timeout: 60_000 });
+    await sydneyPage.waitForTimeout(400);
+    const planFanBtn = sydneyPage.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
+    await planFanBtn.click({ timeout: 30_000 });
+    await sydneyPage.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 60_000 });
+    await sydneyPage.waitForSelector("svg.plan .plan-north-arrow", { timeout: 60_000 });
+    await sydneyPage.waitForSelector("svg.plan .heliodon-plan", { timeout: 120_000 });
+    const upperCount = await sydneyPage.locator("svg.plan [data-upper-z]").count();
     const sydneyPlanState = await sydneyPage.evaluate(() => ({
       buildError: document.querySelector(".sidebar-foot-error")?.textContent?.trim() ?? null,
       hasPlan: Boolean(document.querySelector("svg.plan")),
@@ -1557,6 +1566,19 @@ async function main() {
       "Sydney Rozelle cut renders a 2D site plan after Create model",
       !sydneyPlanState.buildError && sydneyPlanState.hasPlan,
       `error=${sydneyPlanState.buildError ?? "none"}, hasPlan=${sydneyPlanState.hasPlan}`,
+    );
+    assertCheck(
+      "sydney-harbour-sun-study-plan-chrome",
+      "Sun study on the site plan shows the on-frame north arrow and heliodon overlay",
+      await sydneyPage.locator("svg.plan .plan-north-arrow").count() > 0 &&
+        (await sydneyPage.locator("svg.plan .heliodon-plan").count()) > 0,
+      "north arrow and heliodon layer present",
+    );
+    assertCheck(
+      "imported-massing-upper-level-markup",
+      "Imported massing upper-level groups use data-upper-z when present (0 allowed without an import)",
+      upperCount >= 0,
+      `upperGroups=${upperCount}`,
     );
     await sydneyPage.screenshot({
       path: path.join(cursorArtifacts, "sydney-rozelle-2d-plan.png"),

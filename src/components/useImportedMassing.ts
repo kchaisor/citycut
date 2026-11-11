@@ -214,12 +214,27 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     [rt, imported, model.center, zone, model.terrain, groundAt],
   );
 
+  const drawingUpperLevels = useMemo(() => {
+    if (!rt || !imported.some((item) => item.visible)) return [];
+    try {
+      return rt.massingUpperLevelPlanLines(
+        imported.filter((item) => item.visible),
+        model.center,
+        zone,
+      );
+    } catch (err) {
+      console.warn("[CityCut] imported massing upper levels failed", err);
+      return [];
+    }
+  }, [rt, imported, model.center, zone]);
+
   const forExport = useMemo(() => imported.filter((item) => item.visible), [imported]);
 
   return {
     imported,
     forExport,
     drawingBuildings,
+    drawingUpperLevels,
     group,
     warnings,
     placingId,
