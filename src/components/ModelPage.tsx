@@ -38,7 +38,7 @@ import {
   downloadIsometricAi,
   downloadIsometricSvg,
   downloadSiteAi,
-  downloadSiteSvg,
+  svgFilename,
   downloadFigureSvg,
   downloadSunStudyZip,
   pngFilename,
@@ -177,7 +177,11 @@ function shouldShowIntroBridgePill(): boolean {
 import type { CameraMemoryRef } from "../lib/cameraMemory";
 import { SceneBoundary } from "./SceneBoundary";
 import { SolarAccessConsole } from "./SolarAccessConsole";
+import { FacadeSolarLegend } from "./FacadeSolarLegend";
+import { FacadeSolarResultsCard } from "./FacadeSolarResultsCard";
 import { SolarPanel } from "./SolarPanel";
+import { useFacadeSolarAssess } from "./useFacadeSolarAssess";
+import { facadeSolarPointsForExport, facadeSolarSvgTable } from "../lib/facadeSolarExport";
 import { SolarAssessResultsList } from "./SolarAssessResultsList";
 import { SunHoursLostLegendList } from "./SunHoursLostLegendList";
 import { useSolarReceptorAssess } from "./useSolarReceptorAssess";
@@ -1182,6 +1186,20 @@ export function ModelPage({
       readSolarReceptorAssess() {
         return solarReceptorAssessRef.current.results;
       },
+      enableFacadeSolar() {
+        setSolar((prev) => ({
+          ...prev,
+          facadeSolarAccess: true,
+          month: 6,
+          day: 21,
+          hour: 12,
+          castShadows: true,
+        }));
+        return true;
+      },
+      readFacadeSolarAssess() {
+        return facadeSolarAssessRef.current.bundle;
+      },
       enableSunHoursLost() {
         setSolar((prev) => ({
           ...prev,
@@ -1366,6 +1384,18 @@ export function ModelPage({
     () => massingBlocksToBuildingFeats(massingDraw.blocks),
     [massingDraw.blocks],
   );
+  const facadeMassingModel = useMemo(
+    () => ({
+      ...displayModel,
+      buildings: [
+        ...displayModel.buildings,
+        ...massing.drawingBuildings,
+        ...drawnMassingBuildings,
+        ...qaProposedMassing,
+      ],
+    }),
+    [displayModel, massing.drawingBuildings, drawnMassingBuildings, qaProposedMassing],
+  );
 
   const drawingModel = useMemo(() => {
     const buildingsVisible = isLayer3dVisible(view3dDisplay, "buildings");
@@ -1436,6 +1466,10 @@ export function ModelPage({
     },
     [displayModel.areas],
   );
+  const facadeSolarEnabled = Boolean(solar.facadeSolarAccess && proposedMassingInModel(facadeMassingModel));
+  const facadeSolarAssess = useFacadeSolarAssess(facadeMassingModel, solar.year, facadeSolarEnabled);
+  const facadeSolarAssessRef = useRef(facadeSolarAssess);
+  facadeSolarAssessRef.current = facadeSolarAssess;
   const solarReceptorAssess = useSolarReceptorAssess(
     drawingModel,
     visibleSolarReceptors,
@@ -1819,6 +1853,9 @@ export function ModelPage({
             : null,
         sunStudy: solar.sunStudy ? await sunStudyExportLayers() : null,
         solarReceptors: solarReceptorsExport(),
+        facadeSolarPoints: facadeSolarEnabled
+          ? facadeSolarPointsForExport(displayModel, facadeSolarAssess.bundle)
+          : null,
         hideTrees: view3dDisplay.hideTrees,
         importedMassing: massing.forExport.length ? massing.forExport : null,
         buildingsAsMesh,
@@ -1848,10 +1885,16 @@ export function ModelPage({
     setExportError(null);
     setBusy("svg-site");
     try {
-      await downloadSiteSvg(drawingModel, figureScale, lineStyles, {
+      const facadeTable = facadeSolarEnabled
+        ? facadeSolarSvgTable(facadeSolarAssess.bundle)
+        : "";
+      const { sitePlanSvg } = await import("../lib/aiPlan");
+      let svg = await sitePlanSvg(drawingModel, figureScale, lineStyles, {
         ...sitePlanExportOptions(),
         sunStudy: await sunStudyExportLayers(),
       });
+      if (facadeTable) svg = svg.replace("</svg>", `${facadeTable}</svg>`);
+      downloadBlob(svgFilename(drawingModel, "site", figureScale), new Blob([svg], { type: "image/svg+xml" }));
     } catch {
       setExportError("The site plan SVG could not be written.");
     } finally {
@@ -2397,6 +2440,8 @@ export function ModelPage({
                   ) : null
                 }
                 quality={renderQuality}
+                facadeSolarBundle={facadeSolarEnabled ? facadeSolarAssess.bundle : null}
+                facadeSolarModel={facadeMassingModel}
               />
               <MassingToolHud
                 visible={
@@ -2418,6 +2463,15 @@ export function ModelPage({
                   {walkRippleToast}
                 </p>
               ) : null}
+              {tab === "3d" && solar.facadeSolarAccess && (
+                <div className="facade-solar-dock-stack" data-facade-solar-dock-stack>
+                  <FacadeSolarLegend compact />
+                  <FacadeSolarResultsCard
+                    summary={facadeSolarAssess.bundle?.facade ?? null}
+                    pending={facadeSolarAssess.pending}
+                  />
+                </div>
+              )}
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
                   table={windTable}

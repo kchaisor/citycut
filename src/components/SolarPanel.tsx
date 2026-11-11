@@ -266,6 +266,22 @@ export function SolarPanel({
           />
           Trees cast shadow (visual only)
         </label>
+        <label className="check-field">
+          <input
+            type="checkbox"
+            checked={Boolean(settings.facadeSolarAccess)}
+            onChange={(event) =>
+              patch({
+                facadeSolarAccess: event.target.checked,
+                month: 6,
+                day: 21,
+                hour: 12,
+                castShadows: true,
+              })
+            }
+          />
+          Facade hours — NSW ADG 4A-1 unit proxy (21 Jun, 3D)
+        </label>
         {canMarkReceptors && (
           <label className="check-field">
             <input

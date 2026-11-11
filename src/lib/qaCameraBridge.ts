@@ -114,6 +114,8 @@ declare global {
       enableTreeShadows?: () => boolean;
       setTreesCastShadow?: (on: boolean) => boolean;
       readSunHoursLostPlan?: () => { cellCount: number; maxLoss: number; cellM?: number };
+      enableFacadeSolar?: () => boolean;
+      readFacadeSolarAssess?: () => import("./facadeSolarTypes").FacadeAssessBundle | null;
     };
     __citycutWalkRippleQa?: {
       setMinutes: (minutes: number) => void;

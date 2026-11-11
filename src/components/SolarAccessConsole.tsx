@@ -87,6 +87,23 @@ export function SolarAccessConsole({
           <span className="ov-dot" aria-hidden="true" />
           Tree shadows
         </button>
+        <button
+          type="button"
+          className={settings.facadeSolarAccess ? "ov-chip on" : "ov-chip"}
+          aria-pressed={Boolean(settings.facadeSolarAccess)}
+          onClick={() =>
+            patch({
+              facadeSolarAccess: !settings.facadeSolarAccess,
+              month: 6,
+              day: 21,
+              hour: 12,
+              castShadows: true,
+            })
+          }
+        >
+          <span className="ov-dot" aria-hidden="true" />
+          Facade hours (ADG)
+        </button>
         {canMarkReceptors && settings.solarAccess && (
           <button
             type="button"
