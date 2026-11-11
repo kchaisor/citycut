@@ -1,5 +1,9 @@
-import * as polygonClipping from "polygon-clipping";
-import type { MultiPolygon, Polygon } from "polygon-clipping";
+import type { MultiPolygon, Polygon } from "./safePolygonClip";
+import {
+  clipDifferenceRaw as difference,
+  clipIntersectionRaw as intersection,
+  clipUnionRaw as union,
+} from "./safePolygonClip";
 import RBush from "rbush";
 import { openRing, signedArea } from "./geo";
 import type { BuildingFeat, Ring } from "../types";
@@ -12,21 +16,6 @@ export const COM_SLIVER_MIN_M2 = 2;
 export const COM_SLIVER_MIN_FRACTION = 0.05;
 export const COM_FALLBACK_MIN_FRACTION = 0.2;
 export const COM_SINGLE_PART_COVERAGE = 0.8;
-
-type ClipFns = {
-  intersection: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
-  difference: (subject: Polygon | MultiPolygon, ...clips: Array<Polygon | MultiPolygon>) => MultiPolygon;
-  union: (...geoms: Array<Polygon | MultiPolygon>) => MultiPolygon;
-};
-
-function clippingFns(): ClipFns {
-  const loaded = polygonClipping as unknown as ClipFns & { default?: ClipFns };
-  if (typeof loaded.intersection === "function") return loaded;
-  if (loaded.default && typeof loaded.default.intersection === "function") return loaded.default;
-  throw new Error("polygon-clipping did not load.");
-}
-
-const { intersection, difference, union } = clippingFns();
 
 type IndexedFootprint = ComBuildingFootprint & { i: number };
 

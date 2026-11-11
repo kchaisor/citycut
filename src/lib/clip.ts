@@ -1,4 +1,5 @@
 import type { Pt } from "../types";
+import { cleanRingForFrame } from "./safePolygonClip";
 
 const INSIDE = 0;
 const LEFT = 1;
@@ -200,7 +201,7 @@ function clipHalf(
 }
 
 export function clipPolygon(ring: Pt[], min: number, max: number): Pt[] {
-  let output = ring.slice();
+  let output = cleanRingForFrame(ring.slice());
   if (output.length >= 2) {
     const a = output[0];
     const b = output[output.length - 1];

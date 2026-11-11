@@ -1,25 +1,11 @@
-import * as polygonClipping from "polygon-clipping";
-import type { MultiPolygon, Polygon } from "polygon-clipping";
+import type { MultiPolygon, Polygon } from "./safePolygonClip";
+import { clipDifference as difference, clipUnion as union } from "./safePolygonClip";
 import { bufferOpenLine } from "./bufferLine";
 import { openRing, polylineLength } from "./geo";
 import { waterLineHalfWidthM } from "./overtureBaseMapping";
 import { stableNumericId } from "./overtureTiles";
 import { pointInPolygon } from "./useCascade";
 import type { AreaFeat, Pt, Ring } from "../types";
-
-type ClipFns = {
-  difference: (subject: Polygon | MultiPolygon, ...clips: Array<Polygon | MultiPolygon>) => MultiPolygon;
-  union: (...geoms: Array<Polygon | MultiPolygon>) => MultiPolygon;
-};
-
-function clippingFns(): ClipFns {
-  const loaded = polygonClipping as unknown as ClipFns & { default?: ClipFns };
-  if (typeof loaded.difference === "function") return loaded;
-  if (loaded.default && typeof loaded.default.difference === "function") return loaded.default;
-  throw new Error("polygon-clipping did not load.");
-}
-
-const { difference, union } = clippingFns();
 
 export type WaterCenterline = {
   id: string;
@@ -45,11 +31,11 @@ function areaPolygon(area: AreaFeat): Polygon | null {
 function unionWaterPolygons(areas: AreaFeat[]): MultiPolygon | null {
   const polys = areas.map(areaPolygon).filter((p): p is Polygon => p !== null);
   if (polys.length === 0) return null;
-  try {
-    return union(...polys);
-  } catch {
-    return polys;
+  let merged: MultiPolygon = [];
+  for (const polygon of polys) {
+    merged = merged.length === 0 ? [polygon] : union(merged, polygon, { layer: "water ribbon", operation: "union" });
   }
+  return merged.length > 0 ? merged : null;
 }
 
 function ringsFromClipResult(result: MultiPolygon): Ring[][] {

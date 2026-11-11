@@ -1,5 +1,9 @@
-import * as polygonClipping from "polygon-clipping";
-import type { MultiPolygon, Pair, Polygon, Ring } from "polygon-clipping";
+import type { MultiPolygon, Pair, Polygon, Ring } from "./safePolygonClip";
+import {
+  clipDifference as difference,
+  clipIntersection as intersection,
+  clipUnion as union,
+} from "./safePolygonClip";
 import { polylineLength, signedArea } from "./geo";
 import { DEFAULT_SITE_FRAME_SHAPE, pointInSiteFrame, siteFramePolygon, type SiteFrameShape } from "./siteFrame";
 import type { Pt, RoadFeat } from "../types";
@@ -7,21 +11,6 @@ import { hashLineCoords, hashRoadFeatures, mixGeometryHash } from "./geometryHas
 import { normalizeMultiPolygonByParity, offsetCloseMultiPolygon } from "./polygonOffset";
 import { PARKING_AISLE } from "./planCarParks";
 export { PARKING_AISLE };
-
-type ClipFns = {
-  union: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
-  intersection: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
-  difference: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
-};
-
-function clippingFns(): ClipFns {
-  const loaded = polygonClipping as unknown as ClipFns & { default?: ClipFns };
-  if (typeof loaded.union === "function") return loaded;
-  if (loaded.default && typeof loaded.default.union === "function") return loaded.default;
-  throw new Error("polygon-clipping did not load.");
-}
-
-const { union, intersection, difference } = clippingFns();
 
 const SIMPLIFY_M = 0.35;
 const OUTPUT_SIMPLIFY_M = 0.12;

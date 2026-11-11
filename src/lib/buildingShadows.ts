@@ -1,25 +1,11 @@
-import * as polygonClipping from "polygon-clipping";
-import type { MultiPolygon, Pair, Polygon } from "polygon-clipping";
+import type { MultiPolygon, Pair, Polygon } from "./safePolygonClip";
+import { clipIntersection as intersection, clipUnion as union } from "./safePolygonClip";
 import { openRing } from "./geo";
 import { siteFramePolygon } from "./siteFrame";
 import { sunAtMelbourneLocal, type SolarSample } from "./solar";
 import { buildingHeightsFingerprint } from "./heightOverrides";
 import { footprintBase, sampleTerrain } from "./terrain";
 import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
-
-type ClipFns = {
-  union: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
-  intersection: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
-};
-
-function clippingFns(): ClipFns {
-  const loaded = polygonClipping as unknown as ClipFns & { default?: ClipFns };
-  if (typeof loaded.union === "function") return loaded;
-  if (loaded.default && typeof loaded.default.union === "function") return loaded.default;
-  throw new Error("polygon-clipping did not load.");
-}
-
-const { union, intersection } = clippingFns();
 
 export type PlanShadowInput = {
   lat: number;
