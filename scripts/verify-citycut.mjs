@@ -2496,7 +2496,15 @@ async function main() {
           { east: midE, north: midN, span: spanM },
         );
         await parkPage.waitForTimeout(800);
-        await parkPage.waitForSelector("[data-solar-park-added-shadow]", { timeout: 120000 });
+        await parkPage.waitForFunction(
+          () => {
+            const hatch = document.querySelector("[data-solar-park-added-shadow]");
+            if (!hatch) return false;
+            return Array.from(hatch.querySelectorAll("path")).some((node) => (node.getAttribute("d")?.length ?? 0) > 40);
+          },
+          null,
+          { timeout: 360000 },
+        );
         const dock = parkPage.locator("[data-solar-results-dock]");
         await dock.waitFor({ state: "visible", timeout: 120000 });
         const parkMetrics = await dock.locator("[data-solar-park-metrics]").first().textContent();
