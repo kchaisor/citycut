@@ -824,6 +824,7 @@ export function buildHeightEditOverlay(
   });
   for (const geometry of geometries) {
     const mesh = new THREE.Mesh(geometry, fillMaterial);
+    mesh.userData.buildingId = buildingId;
     mesh.renderOrder = SELECTION_OVERLAY_RENDER_ORDER;
     group.add(mesh);
     const edges = new THREE.EdgesGeometry(geometry, BUILDING_EDGE_THRESHOLD_DEG);

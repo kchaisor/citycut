@@ -2198,6 +2198,7 @@ export function ModelPage({
                 onExportReady={onExportReady}
                 onSceneInspectPick={(selection) => {
                   setSceneSelection(selection);
+                  setInspectHudScreen({ clientX: selection.clientX, clientY: selection.clientY, inView: true });
                   if (selection.kind === "building") {
                     selectForHide(selection.buildingId, selection.additive);
                   } else {

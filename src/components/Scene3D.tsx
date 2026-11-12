@@ -337,12 +337,16 @@ function SceneInspectPickLayer({
   root,
   model,
   enabled,
+  buildingsPickable,
+  treesPickable,
   onPick,
   onClear,
 }: {
   root: THREE.Object3D;
   model: CityModel;
   enabled: boolean;
+  buildingsPickable: boolean;
+  treesPickable: boolean;
   onPick: (selection: SceneSelection) => void;
   onClear?: () => void;
 }) {
@@ -354,10 +358,28 @@ function SceneInspectPickLayer({
       gl.domElement,
       camera,
       root,
-      { trees: model.trees, terrain: model.terrain, sideM: model.sideM },
+      {
+        trees: model.trees,
+        terrain: model.terrain,
+        sideM: model.sideM,
+        buildingsPickable,
+        treesPickable,
+      },
       { onPick, onClear },
     );
-  }, [camera, enabled, gl.domElement, model.sideM, model.terrain, model.trees, onClear, onPick, root]);
+  }, [
+    buildingsPickable,
+    camera,
+    enabled,
+    gl.domElement,
+    model.sideM,
+    model.terrain,
+    model.trees,
+    onClear,
+    onPick,
+    root,
+    treesPickable,
+  ]);
   return null;
 }
 
@@ -384,22 +406,19 @@ function HeightEditOverlayLayer({
   cityRoot: THREE.Object3D;
   colourMode: BuildingColourMode;
 }) {
-  const [overlay, setOverlay] = useState<THREE.Group | null>(null);
   const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
     if (buildingIds.length === 0) {
-      setOverlay(null);
       if (typeof window !== "undefined") delete window.__citycutQaSelectionAudit;
       invalidate();
       return;
     }
     const mounted = mountSelectedBuildingsVisual(cityRoot, model, buildingIds, colourMode);
     if (!mounted) {
-      setOverlay(null);
       if (typeof window !== "undefined") delete window.__citycutQaSelectionAudit;
       return;
     }
-    setOverlay(mounted.overlay);
+    cityRoot.add(mounted.overlay);
     invalidate();
     if (typeof window !== "undefined" && qaModeFromSearch(window.location.search)) {
       const publishAudit = () => {
@@ -410,17 +429,17 @@ function HeightEditOverlayLayer({
       const frame = window.requestAnimationFrame(publishAudit);
       return () => {
         window.cancelAnimationFrame(frame);
+        cityRoot.remove(mounted.overlay);
         mounted.restore();
-        setOverlay(null);
         delete window.__citycutQaSelectionAudit;
       };
     }
     return () => {
+      cityRoot.remove(mounted.overlay);
       mounted.restore();
-      setOverlay(null);
     };
   }, [buildingIds, cityRoot, colourMode, model, invalidate]);
-  return overlay ? <primitive object={overlay} /> : null;
+  return null;
 }
 
 function WalkRippleBuildingBinder({
@@ -491,6 +510,7 @@ function City({
   onSceneInspectPick,
   onClearSceneInspect,
   pickBuildings,
+  onScenePoint,
   sectionKnife,
   onSectionKnifePoseChange,
   onSectionKnifeGizmoInteractionChange,
@@ -511,6 +531,7 @@ function City({
   onSceneInspectPick: (selection: SceneSelection) => void;
   onClearSceneInspect?: () => void;
   pickBuildings: boolean;
+  onScenePoint?: ((east: number, north: number, up: number) => void) | null;
   sectionKnife?: SectionKnifeToolState | null;
   onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
   onSectionKnifeGizmoInteractionChange?: (state: SectionKnifeGizmoInteraction) => void;
@@ -890,6 +911,7 @@ function City({
   const waterVisible = isLayer3dVisible(display, "water");
   const railVisible = isLayer3dVisible(display, "rail");
   const contoursVisible = isLayer3dVisible(display, "contours");
+  const treesVisible = treesVisibleIn3d(model.layers, display);
   useLayoutEffect(() => {
     group.traverse((object) => {
       const name = object.name;
@@ -993,7 +1015,9 @@ function City({
       <SceneInspectPickLayer
         root={group}
         model={model}
-        enabled={pickBuildings && buildingsVisible && !sectionKnife?.active}
+        enabled={!sectionKnife?.active && !onScenePoint}
+        buildingsPickable={pickBuildings && buildingsVisible}
+        treesPickable={Boolean(model.layers.trees) && treesVisible}
         onPick={onSceneInspectPick}
         onClear={onClearSceneInspect}
       />
@@ -2297,6 +2321,7 @@ export function Scene3D({
         onSceneInspectPick={onSceneInspectPick}
         onClearSceneInspect={onClearSceneInspect}
         pickBuildings={model.layers.buildings && !onScenePoint}
+        onScenePoint={onScenePoint}
         heightEditBuildingId={heightEditBuildingId}
         selectedBuildingIds={selectedBuildingIds}
         display={display}
