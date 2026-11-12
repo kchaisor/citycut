@@ -88,7 +88,7 @@ export function useSunHoursGround(
       publishReady(null, null);
       return;
     }
-    const worker = startWorker();
+    const groundWorker = typeof document === "undefined" ? startWorker() : null;
     const currentModel = modelRef.current;
   const finishGround = (nextGrid: SunHoursGroundGrid | null) => {
       setGrid(nextGrid);
@@ -142,25 +142,40 @@ export function useSunHoursGround(
       };
       directWorker.postMessage(directRequest);
     };
-    if (!worker) {
-      setPending(true);
-      import("../lib/sunHoursGroundPlan").then(({ computeSunHoursGroundGrid }) => {
-        finishGround(computeSunHoursGroundGrid(currentModel, year, month, day, SUN_HOURS_GROUND_CELL_M, treeMode));
-      });
-      return;
-    }
     setPending(true);
+    if (!groundWorker) {
+      let cancelled = false;
+      const run = () => {
+        if (cancelled) return;
+        import("../lib/sunHoursGroundPlan").then(({ computeSunHoursGroundGrid }) => {
+          if (cancelled) return;
+          finishGround(computeSunHoursGroundGrid(currentModel, year, month, day, SUN_HOURS_GROUND_CELL_M, treeMode));
+        });
+      };
+      if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
+        const idleId = window.requestIdleCallback(run, { timeout: 4000 });
+        return () => {
+          cancelled = true;
+          window.cancelIdleCallback(idleId);
+        };
+      }
+      const timeoutId = window.setTimeout(run, 0);
+      return () => {
+        cancelled = true;
+        window.clearTimeout(timeoutId);
+      };
+    }
     const id = nextId++;
-    worker.onmessage = (event: MessageEvent<SunHoursGroundWorkerMessage>) => {
+    groundWorker.onmessage = (event: MessageEvent<SunHoursGroundWorkerMessage>) => {
       const message = event.data;
       if (message.id !== id) return;
       if (message.type === "done") finishGround(message.grid);
       if (message.type === "empty") finishGround(null);
-      worker.terminate();
+      groundWorker.terminate();
     };
-    worker.onerror = () => {
+    groundWorker.onerror = () => {
       setPending(false);
-      worker.terminate();
+      groundWorker.terminate();
     };
     const request: SunHoursGroundWorkerRequest = {
       id,
@@ -178,8 +193,8 @@ export function useSunHoursGround(
       cellM: SUN_HOURS_GROUND_CELL_M,
       treeMode,
     };
-    worker.postMessage(request);
-    return () => worker.terminate();
+    groundWorker.postMessage(request);
+    return () => groundWorker.terminate();
   }, [enabled, modelKey, treeMode, year, month, day]);
 
   return { grid, overlay, scaleMaxHours, pending, pendingSurfaces };
