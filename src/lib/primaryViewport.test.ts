@@ -1,7 +1,11 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import { getColour } from "./colours";
-import { applyPrimaryViewportTint, snapshotPrimaryViewportColors } from "./primaryViewport";
+import {
+  applyPrimaryViewportTint,
+  primaryRoadReadsOnCanvas,
+  snapshotPrimaryViewportColors,
+} from "./primaryViewport";
 import { DEFAULT_VIEW3D_DISPLAY, view3dDisplayForModelOpen } from "./view3dDisplay";
 
 describe("primary viewport", () => {
@@ -22,9 +26,33 @@ describe("primary viewport", () => {
     root.add(road, foot);
     snapshotPrimaryViewportColors(root, { colourByUse: false, uniformBuildings: true, colourBySource: false });
     applyPrimaryViewportTint(root, true);
-    const roadMat = road.material as THREE.MeshStandardMaterial;
-    const footMat = foot.material as THREE.MeshStandardMaterial;
-    expect(`#${roadMat.color.getHexString()}`.toLowerCase()).toBe(getColour("--primary-road").toLowerCase());
-    expect(`#${footMat.color.getHexString()}`.toLowerCase()).toBe(getColour("--primary-footpath").toLowerCase());
+    expect(road.material).toBeInstanceOf(THREE.MeshBasicMaterial);
+    expect(foot.material).toBeInstanceOf(THREE.MeshBasicMaterial);
+    expect(primaryRoadReadsOnCanvas(road.material)).toBe(true);
+    if (foot.material instanceof THREE.MeshBasicMaterial) {
+      expect(`#${foot.material.color.getHexString()}`.toLowerCase()).toBe(getColour("--primary-footpath").toLowerCase());
+    }
+    applyPrimaryViewportTint(root, false);
+    expect(road.material).toBeInstanceOf(THREE.MeshStandardMaterial);
+  });
+
+  it("whitens BasePlinth cut faces in Primary view", () => {
+    const geometry = new THREE.BufferGeometry();
+    const colors = new Float32Array([0.5, 0.5, 0.5, 0.6, 0.6, 0.6]);
+    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3));
+    const plinth = new THREE.Mesh(
+      geometry,
+      new THREE.MeshStandardMaterial({ vertexColors: true, color: "#ffffff" }),
+    );
+    plinth.name = "BasePlinth";
+    const root = new THREE.Group();
+    root.add(plinth);
+    snapshotPrimaryViewportColors(root, { colourByUse: false, uniformBuildings: true, colourBySource: false });
+    applyPrimaryViewportTint(root, true);
+    const attr = geometry.getAttribute("color");
+    expect(attr.getX(0)).toBeCloseTo(1, 3);
+    expect(attr.getY(0)).toBeCloseTo(1, 3);
+    expect(attr.getZ(0)).toBeCloseTo(1, 3);
   });
 });

@@ -6,6 +6,7 @@ import type { CityModel } from "../types";
 import {
   buildGroundWindParticles,
   groundWindBaseVector,
+  groundWindGlyphScaleM,
   groundWindHeightAt,
   GROUND_WIND_LOOP_SEC,
   groundWindVectorAt,
@@ -23,10 +24,12 @@ export function GroundWindFlow({
   model,
   stats,
   animate,
+  primaryView,
 }: {
   model: CityModel;
   stats: WindPeriodStats | null;
   animate: boolean;
+  primaryView: boolean;
 }) {
   const particles = useMemo(() => buildGroundWindParticles(model, stats), [model, stats]);
   const blocks = useMemo(() => buildingBlocks(model), [model]);
@@ -34,14 +37,18 @@ export function GroundWindFlow({
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const scratch = useMemo(() => new THREE.Object3D(), []);
   const phase = useRef(0);
-  const color = useMemo(() => new THREE.Color(getColour("--ground-wind-glyph")), []);
-  const geometry = useMemo(() => new THREE.PlaneGeometry(2.4, 0.55), []);
+  const { length, width } = useMemo(() => groundWindGlyphScaleM(model.sideM), [model.sideM]);
+  const geometry = useMemo(() => new THREE.PlaneGeometry(length, width), [length, width]);
+  const color = useMemo(
+    () => new THREE.Color(primaryView ? getColour("--primary-road") : getColour("--ground-wind-glyph")),
+    [primaryView],
+  );
   const material = useMemo(
     () =>
       new THREE.MeshBasicMaterial({
         color,
         transparent: true,
-        opacity: 0.82,
+        opacity: 0.88,
         depthWrite: false,
         side: THREE.DoubleSide,
         toneMapped: false,
@@ -51,6 +58,8 @@ export function GroundWindFlow({
   const reduced = reducedMotionPreferred();
   const active = animate && !reduced;
   const invalidate = useThree((state) => state.invalidate);
+  const camera = useThree((state) => state.camera);
+  const flowAxis = useMemo(() => new THREE.Vector3(), []);
 
   useEffect(
     () => () => {
@@ -60,6 +69,10 @@ export function GroundWindFlow({
     [geometry, material],
   );
 
+  useEffect(() => {
+    material.color.setStyle(primaryView ? getColour("--primary-road") : getColour("--ground-wind-glyph"));
+  }, [material, primaryView]);
+
   useFrame((_, delta) => {
     const mesh = meshRef.current;
     if (!mesh) return;
@@ -67,7 +80,7 @@ export function GroundWindFlow({
     const t = phase.current / GROUND_WIND_LOOP_SEC;
     const half = model.sideM / 2;
     particles.forEach((particle: GroundWindParticle, index) => {
-      const travel = ((t + particle.phase) % 1) * model.sideM * 0.95;
+      const travel = ((t + particle.phase) % 1) * model.sideM * particle.lane;
       const startE = particle.east;
       const startN = particle.north;
       const flow = groundWindVectorAt(startE, startN, model, blocks, base);
@@ -76,16 +89,20 @@ export function GroundWindFlow({
       const wrappedE = east > half ? east - model.sideM : east < -half ? east + model.sideM : east;
       const wrappedN = north > half ? north - model.sideM : north < -half ? north + model.sideM : north;
       const y = groundWindHeightAt(model, wrappedE, wrappedN);
-      const angle = Math.atan2(flow.east, flow.north);
+      flowAxis.set(flow.east, 0, -flow.north).normalize();
+      const yaw = Math.atan2(flowAxis.x, flowAxis.z);
       scratch.position.set(wrappedE, y, -wrappedN);
-      scratch.rotation.set(-Math.PI / 2, 0, -angle);
-      const fade = 0.35 + 0.65 * Math.sin((t + particle.phase) * Math.PI * 2);
-      scratch.scale.set(1, fade, 1);
+      scratch.rotation.set(-Math.PI / 2, 0, yaw);
+      const dist = camera.position.distanceTo(scratch.position);
+      const lift = Math.max(1, dist / (model.sideM * 0.55));
+      const pulse = 0.55 + 0.45 * Math.sin((t + particle.phase) * Math.PI * 2);
+      const along = pulse * (0.85 + 0.3 * Math.min(1, Math.max(0, flow.speed)));
+      scratch.scale.set(along * lift, lift, 1);
       scratch.updateMatrix();
       mesh.setMatrixAt(index, scratch.matrix);
     });
     mesh.instanceMatrix.needsUpdate = true;
-    material.opacity = active ? 0.82 : 0.55;
+    material.opacity = active ? 0.88 : 0.62;
     invalidate();
   });
 

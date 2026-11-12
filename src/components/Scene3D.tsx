@@ -2057,12 +2057,14 @@ function WindLayer({
   period,
   enabled,
   animateStreaks,
+  primaryView,
 }: {
   model: CityModel;
   table: WindRoseTable | null;
   period: WindPeriodId;
   enabled: boolean;
   animateStreaks: boolean;
+  primaryView: boolean;
 }) {
   const [visible, setVisible] = useState(() => typeof document !== "undefined" && !document.hidden);
   useEffect(() => {
@@ -2072,7 +2074,9 @@ function WindLayer({
   }, []);
   if (!enabled) return null;
   const stats = table ? analyzeWindPeriod(table, period) : null;
-  return <GroundWindFlow model={model} stats={stats} animate={visible && animateStreaks} />;
+  return (
+    <GroundWindFlow model={model} stats={stats} animate={visible && animateStreaks} primaryView={primaryView} />
+  );
 }
 
 export function Scene3D({
@@ -2316,6 +2320,7 @@ export function Scene3D({
         period={windPeriod}
         enabled={windEnabled}
         animateStreaks={windAnimateStreaks}
+        primaryView={display.primaryView}
       />
       <Cameras
         side={model.sideM}

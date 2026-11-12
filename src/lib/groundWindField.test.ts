@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildGroundWindParticles,
   groundWindBaseVector,
+  groundWindGlyphScaleM,
   GROUND_WIND_PARTICLE_COUNT,
 } from "./groundWindField";
 import type { CityModel, Pt } from "../types";
@@ -45,6 +46,12 @@ describe("groundWindField", () => {
     const fallback = groundWindBaseVector(null);
     expect(Math.hypot(withStats.east, withStats.north)).toBeCloseTo(1, 5);
     expect(Math.hypot(fallback.east, fallback.north)).toBeCloseTo(1, 5);
+  });
+
+  it("scales glyphs for kilometre cuts", () => {
+    const km = groundWindGlyphScaleM(1000);
+    expect(km.length).toBeGreaterThanOrEqual(20);
+    expect(km.width).toBeGreaterThanOrEqual(3);
   });
 
   it("builds a dense particle field", () => {

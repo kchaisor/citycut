@@ -12,7 +12,13 @@ export type GroundWindParticle = {
   north: number;
   phase: number;
   speed: number;
+  lane: number;
 };
+
+export function groundWindGlyphScaleM(sideM: number): { length: number; width: number } {
+  const length = Math.max(11, sideM * 0.024);
+  return { length, width: Math.max(1.8, length * 0.16) };
+}
 
 function hash01(seed: number): number {
   return (Math.imul(seed, 2654435761) >>> 0) / 4294967296;
@@ -84,16 +90,23 @@ export function buildGroundWindParticles(model: CityModel, stats: WindPeriodStat
   const base = groundWindBaseVector(stats);
   const blocks = buildingBlocks(model);
   const half = model.sideM / 2;
+  const step = model.sideM / GROUND_WIND_GRID;
   const out: GroundWindParticle[] = [];
-  for (let i = 0; i < GROUND_WIND_PARTICLE_COUNT; i++) {
+  let attempts = 0;
+  for (let i = 0; out.length < GROUND_WIND_PARTICLE_COUNT && attempts < GROUND_WIND_PARTICLE_COUNT * 8; i++) {
+    attempts += 1;
     const east = hash01(i * 17 + 3) * model.sideM - half;
     const north = hash01(i * 31 + 7) * model.sideM - half;
+    const ci = Math.min(GROUND_WIND_GRID - 1, Math.max(0, Math.floor((east + half) / step)));
+    const cj = Math.min(GROUND_WIND_GRID - 1, Math.max(0, Math.floor((north + half) / step)));
+    if (blocks[ci]?.[cj] && hash01(i * 97 + 5) < 0.92) continue;
     const flow = groundWindVectorAt(east, north, model, blocks, base);
     out.push({
       east,
       north,
       phase: hash01(i * 53 + 11),
       speed: flow.speed * (0.75 + hash01(i * 71) * 0.4),
+      lane: 0.55 + hash01(i * 83) * 0.45,
     });
   }
   return out;
@@ -101,5 +114,5 @@ export function buildGroundWindParticles(model: CityModel, stats: WindPeriodStat
 
 export function groundWindHeightAt(model: CityModel, east: number, north: number): number {
   const y = model.terrain ? sampleTerrain(model.terrain, east, north, model.sideM) : 0;
-  return y + 0.35;
+  return y + Math.max(0.8, model.sideM * 0.0014);
 }
