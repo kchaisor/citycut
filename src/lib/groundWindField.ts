@@ -16,8 +16,8 @@ export type GroundWindParticle = {
 };
 
 export function groundWindGlyphScaleM(sideM: number): { length: number; width: number } {
-  const length = Math.max(14, sideM * 0.028);
-  return { length, width: Math.max(2.2, length * 0.14) };
+  const length = Math.max(16, sideM * 0.034);
+  return { length, width: Math.max(3.8, length * 0.22) };
 }
 
 function hash01(seed: number): number {
@@ -99,7 +99,7 @@ export function buildGroundWindParticles(model: CityModel, stats: WindPeriodStat
     const north = hash01(i * 31 + 7) * model.sideM - half;
     const ci = Math.min(GROUND_WIND_GRID - 1, Math.max(0, Math.floor((east + half) / step)));
     const cj = Math.min(GROUND_WIND_GRID - 1, Math.max(0, Math.floor((north + half) / step)));
-    if (blocks[ci]?.[cj] && hash01(i * 97 + 5) < 0.92) continue;
+    if (blocks[ci]?.[cj] && hash01(i * 97 + 5) < 0.97) continue;
     const flow = groundWindVectorAt(east, north, model, blocks, base);
     out.push({
       east,

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { bakeGroundWindGlyphTexture } from "./groundWindGlyph";
+import { bakeGroundWindGlyphTexture, bakeGroundWindHaloTexture } from "./groundWindGlyph";
 
 describe("ground wind glyph", () => {
-  it("bakes a streak texture for instanced glyphs", () => {
-    const texture = bakeGroundWindGlyphTexture();
-    expect(texture.image.width).toBeGreaterThan(0);
-    expect(texture.image.height).toBeGreaterThan(0);
-    texture.dispose();
+  it("bakes lozenge and halo textures for instanced flow", () => {
+    const glyph = bakeGroundWindGlyphTexture();
+    const halo = bakeGroundWindHaloTexture();
+    expect(glyph.image.width).toBeGreaterThan(0);
+    expect(halo.image.height).toBeGreaterThan(0);
+    glyph.dispose();
+    halo.dispose();
   });
 });

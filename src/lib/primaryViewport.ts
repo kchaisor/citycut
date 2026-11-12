@@ -61,6 +61,30 @@ function restorePrimaryRoadMaterial(mesh: THREE.Mesh): void {
   delete mesh.userData.primaryRoadRestMaterial;
 }
 
+function restorePrimaryPlinthMaterial(mesh: THREE.Mesh): void {
+  const rest = mesh.userData.primaryPlinthRestMaterial as THREE.Material | undefined;
+  if (!rest) return;
+  const basic = mesh.material;
+  mesh.material = rest;
+  if (basic instanceof THREE.MeshBasicMaterial && basic !== rest) basic.dispose();
+  delete mesh.userData.primaryPlinthRestMaterial;
+}
+
+function applyPrimaryPlinthMaterial(mesh: THREE.Mesh, primaryOn: boolean): void {
+  if (!primaryOn) {
+    restorePrimaryPlinthMaterial(mesh);
+    return;
+  }
+  if (!(mesh.material instanceof THREE.MeshBasicMaterial)) {
+    mesh.userData.primaryPlinthRestMaterial = mesh.material;
+    mesh.material = new THREE.MeshBasicMaterial({
+      color: getColour("--plinth-wall"),
+      toneMapped: false,
+      side: THREE.DoubleSide,
+    });
+  }
+}
+
 function applyPrimaryRoadMaterial(mesh: THREE.Mesh, primaryOn: boolean): void {
   if (!primaryOn) {
     restorePrimaryRoadMaterial(mesh);
@@ -117,15 +141,7 @@ export function applyPrimaryViewportTint(root: THREE.Object3D, primaryOn: boolea
     }
     if (mesh.name === "BasePlinth") {
       applyPlinthPrimary(mesh, primaryOn);
-      forEachStandardMaterial(mesh, (material) => {
-        const rest = material.userData.primaryRestHex as string | undefined;
-        if (primaryOn) {
-          material.color.setStyle(getColour("--plinth-wall"));
-        } else if (rest) {
-          material.color.setStyle(rest);
-        }
-        applyMatteFinish(material);
-      });
+      applyPrimaryPlinthMaterial(mesh, primaryOn);
       return;
     }
     if (mesh.name === "Roads") {
@@ -146,6 +162,12 @@ export function applyPrimaryViewportTint(root: THREE.Object3D, primaryOn: boolea
       applyMatteFinish(material);
     });
   });
+}
+
+export function primaryPlinthReadsOnCanvas(material: THREE.Material): boolean {
+  if (!(material instanceof THREE.MeshBasicMaterial)) return false;
+  const hex = `#${material.color.getHexString()}`.toLowerCase();
+  return hex === getColour("--plinth-wall").toLowerCase();
 }
 
 export function primaryRoadReadsOnCanvas(material: THREE.Material): boolean {

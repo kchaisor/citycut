@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { getColour } from "./colours";
 import {
   applyPrimaryViewportTint,
+  primaryPlinthReadsOnCanvas,
   primaryRoadReadsOnCanvas,
   snapshotPrimaryViewportColors,
 } from "./primaryViewport";
@@ -54,7 +55,9 @@ describe("primary viewport", () => {
     expect(attr.getX(0)).toBeCloseTo(1, 3);
     expect(attr.getY(0)).toBeCloseTo(1, 3);
     expect(attr.getZ(0)).toBeCloseTo(1, 3);
-    const mat = plinth.material as THREE.MeshStandardMaterial;
-    expect(`#${mat.color.getHexString()}`.toLowerCase()).toBe(getColour("--plinth-wall").toLowerCase());
+    expect(plinth.material).toBeInstanceOf(THREE.MeshBasicMaterial);
+    expect(primaryPlinthReadsOnCanvas(plinth.material)).toBe(true);
+    applyPrimaryViewportTint(root, false);
+    expect(plinth.material).toBeInstanceOf(THREE.MeshStandardMaterial);
   });
 });
