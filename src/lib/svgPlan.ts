@@ -55,7 +55,7 @@ export type PlanPaths = {
   pathUnionMs: number;
   rails: Pt[][];
   trams: Pt[][];
-  buildings: { rings: Pt[][]; fill: string; site: boolean; imported?: boolean; proposed?: boolean }[];
+  buildings: { id: number; rings: Pt[][]; fill: string; site: boolean; imported?: boolean; proposed?: boolean }[];
   trees: { east: number; north: number; r: number }[];
   contours: Pt[][];
   contourIndex: boolean[];
@@ -212,9 +212,9 @@ export function planPaths(
     if (!rings) continue;
     const site = isSiteBuilding(model, building.id);
     const fill = planBuildingFill(model, building, colourMode, highlightManual);
-    if (building.importedMassing) buildings.push({ rings, fill, site: false, imported: true });
-    else if (building.proposedMassing) buildings.push({ rings, fill, site: false, proposed: true });
-    else buildings.push({ rings, fill, site });
+    if (building.importedMassing) buildings.push({ id: building.id, rings, fill, site: false, imported: true });
+    else if (building.proposedMassing) buildings.push({ id: building.id, rings, fill, site: false, proposed: true });
+    else buildings.push({ id: building.id, rings, fill, site });
   }
 
   let pathFill: MultiPolygon = footpaths.polygons;

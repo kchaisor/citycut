@@ -1,4 +1,4 @@
-import { sunStudyCasterModel, sunStudyShadowCasters, SunStudyDate } from "../../lib/sunStudyPlan";
+import { sunStudyCasterModel, sunStudyMutedOn, sunStudyShadowCasters, SunStudyDate } from "../../lib/sunStudyPlan";
 
 import { sunStudyLayersFor } from "../useSunStudyShadows";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
@@ -473,6 +473,8 @@ export function useModelPage({
       colourBySource: showSource,
       highlightManual: showManualEdits && overrideResult.manualCount > 0,
       sunStudyDate: solar.sunStudy ? sunStudyDate : null,
+      sunStudyMuted: solar.sunStudy ? sunStudyMutedOn(solar.sunStudy, solar.sunStudyMuted) : undefined,
+      sunStudySelected: solar.sunStudy ? sunStudySelected : undefined,
       wind:
         windSettings.enabled && windTable
           ? { table: windTable, period: windSettings.period }
