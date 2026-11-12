@@ -22,6 +22,10 @@ import {
   squareCutFromCornerDrag,
   type CutFrameHandle,
 } from "../lib/cutFrameDrag";
+import {
+  frameCadTagPlacement,
+  readLandingDockRect,
+} from "../lib/frameCadTagPlacement";
 import { formatCutReadout, type CutOrientation } from "../lib/cutSpec";
 import type { Basemap, LonLat, ViewState } from "../types";
 
@@ -142,9 +146,16 @@ export function MapStage({
       labelEl.style.top = `${Math.max(next.top, 16)}px`;
     }
     const cadEl = frameCadRef.current;
-    if (cadEl) {
-      cadEl.style.left = `${labelLeft}px`;
-      cadEl.style.top = `${next.top + next.height + 14}px`;
+    const mapWrap = frameBoxRef.current?.parentElement;
+    if (cadEl && mapWrap) {
+      const chip = {
+        width: cadEl.offsetWidth > 0 ? cadEl.offsetWidth : 240,
+        height: cadEl.offsetHeight > 0 ? cadEl.offsetHeight : 22,
+      };
+      const placement = frameCadTagPlacement(next, readLandingDockRect(mapWrap), chip, clientW);
+      cadEl.style.left = `${placement.centerX}px`;
+      cadEl.style.top = `${placement.top}px`;
+      cadEl.dataset.placement = placement.mode;
     }
   };
 
@@ -152,7 +163,17 @@ export function MapStage({
     if (frameVisible && frameRef.current) {
       applyFrameStyles(frameRef.current);
     }
-  }, [frameVisible, sideM, widthM, heightM, frameShape]);
+  });
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    widthRef.current = widthM;
+    heightRef.current = heightM;
+    orientationRef.current = cutOrientation;
+    syncFrameRef.current?.();
+    map.fire("move");
+  }, [widthM, heightM, cutOrientation, ready]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -639,14 +660,7 @@ export function MapStage({
           >
             {label}
           </div>
-          <div
-            ref={frameCadRef}
-            className="frame-cad-tag"
-            style={{
-              left: initialLabelLeft,
-              top: currentFrame.top + currentFrame.height + 14,
-            }}
-          >
+          <div ref={frameCadRef} className="frame-cad-tag">
             {cadReadout}
           </div>
         </>
