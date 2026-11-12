@@ -58,7 +58,7 @@ export function SunHoursLayer({
   const texture = useMemo(() => {
     if (!showGround) return null;
     const scaledGrid = { ...grid, maxSunHours: scaleMaxHours };
-    const canvas = rasterizeSunHoursGroundGridFor3d(scaledGrid);
+    const canvas = rasterizeSunHoursGroundGridFor3d(scaledGrid, scaleMaxHours, model);
     if (!canvas) return null;
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;

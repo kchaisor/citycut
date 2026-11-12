@@ -1,4 +1,6 @@
 import { openRing } from "./geo";
+import { extrudedFootprintsForBuilding } from "./extrudedBuildingFootprint";
+import { ringCentroid } from "./sunHoursRoofFootprint";
 import { SUN_HOURS_GROUND_CELL_M } from "./sunHoursGround";
 import { gridPointsInRing } from "./solarPlanShadowSteps";
 import { footprintBase } from "./terrain";
@@ -42,17 +44,33 @@ function footprintBaseY(model: CityModel, ring: Ring): number {
 }
 
 function roofSamplesForBuilding(model: CityModel, building: BuildingFeat): DirectSunHoursSample[] {
-  const open = openRing(building.ring);
-  if (open.length < 3) return [];
+  const footprints = extrudedFootprintsForBuilding(building);
+  if (footprints.length === 0) return [];
   const baseYM = footprintBaseY(model, building.ring);
-  const roofY = baseYM + building.height - 0.04;
+  const roofY = baseYM + Math.max(...footprints.map((part) => part.height)) - 0.04;
   const cellM = SUN_HOURS_GROUND_CELL_M;
-  const roofPoints = gridPointsInRing(building.ring, cellM);
   const units: DirectSunHoursSample[] = [];
   let roofIndex = 0;
-  for (const [east, north] of roofPoints) {
+  for (const part of footprints) {
+    const roofPoints = gridPointsInRing(part.ring, cellM);
+    for (const [east, north] of roofPoints) {
+      units.push({
+        id: `direct-roof-${building.id}-${roofIndex++}`,
+        kind: "roof-cell",
+        buildingId: building.id,
+        east,
+        north,
+        yM: roofY,
+        outwardEast: 0,
+        outwardNorth: 0,
+        spanM: cellM,
+      });
+    }
+  }
+  if (units.length === 0) {
+    const [east, north] = ringCentroid(footprints[0]!.ring);
     units.push({
-      id: `direct-roof-${building.id}-${roofIndex++}`,
+      id: `direct-roof-${building.id}-centroid`,
       kind: "roof-cell",
       buildingId: building.id,
       east,
@@ -67,6 +85,8 @@ function roofSamplesForBuilding(model: CityModel, building: BuildingFeat): Direc
 }
 
 function wallSamplesForBuilding(model: CityModel, building: BuildingFeat, cellM: number): DirectSunHoursSample[] {
+  const footprints = extrudedFootprintsForBuilding(building);
+  if (footprints.length === 0) return [];
   const open = openRing(building.ring);
   if (open.length < 3) return [];
   const closed = [...open, open[0]!];

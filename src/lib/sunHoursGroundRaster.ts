@@ -1,5 +1,7 @@
 import { sunHoursGroundRgba } from "./sunHoursGround";
+import { planPointInsideAnyBuilding, sampleSunHoursGroundCell } from "./sunHoursGroundPlan";
 import type { SunHoursGroundGrid } from "./sunHoursGroundPlan";
+import type { CityModel } from "../types";
 
 export type SunHoursGroundRaster = {
   href: string;
@@ -63,22 +65,34 @@ export function rasterizeSunHoursGroundGrid(
 export function rasterizeSunHoursGroundGridFor3d(
   grid: SunHoursGroundGrid,
   scaleMaxHours = grid.maxSunHours,
+  model?: CityModel,
 ): HTMLCanvasElement | null {
-  const { cols, rows, sunHours, masked } = grid;
+  const { cellM, originEast, originNorth, cols, rows } = grid;
   if (cols <= 0 || rows <= 0 || scaleMaxHours <= 0) return null;
+  const widthM = cols * cellM;
+  const heightM = rows * cellM;
+  const ppm = Math.max(2, Math.min(8, Math.round(4 / cellM)));
+  const widthPx = Math.max(cols, Math.ceil(widthM * ppm));
+  const heightPx = Math.max(rows, Math.ceil(heightM * ppm));
   const canvas = document.createElement("canvas");
-  canvas.width = cols;
-  canvas.height = rows;
+  canvas.width = widthPx;
+  canvas.height = heightPx;
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
-  const image = ctx.createImageData(cols, rows);
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const index = row * cols + col;
-      const canvasRow = rows - 1 - row;
-      const px = (canvasRow * cols + col) * 4;
-      const rgba = sunHoursGroundRgba(sunHours[index]!, scaleMaxHours, Boolean(masked[index]));
-      image.data.set(rgba, px);
+  const image = ctx.createImageData(widthPx, heightPx);
+  for (let py = 0; py < heightPx; py++) {
+    for (let px = 0; px < widthPx; px++) {
+      const east = originEast + ((px + 0.5) / widthPx) * widthM;
+      const north = originNorth + ((heightPx - py - 0.5) / heightPx) * heightM;
+      const footprintMasked = model ? planPointInsideAnyBuilding(model, east, north) : false;
+      const { hours, masked } = sampleSunHoursGroundCell(grid, east, north);
+      const hide = footprintMasked || masked || hours < 0;
+      const rgba = sunHoursGroundRgba(hours, scaleMaxHours, hide);
+      const offset = (py * widthPx + px) * 4;
+      image.data[offset] = rgba[0]!;
+      image.data[offset + 1] = rgba[1]!;
+      image.data[offset + 2] = rgba[2]!;
+      image.data[offset + 3] = rgba[3]!;
     }
   }
   ctx.putImageData(image, 0, 0);

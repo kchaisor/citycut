@@ -2,7 +2,7 @@ import { planShadowOffset } from "./buildingShadows";
 import { daylightWindowMinutes, sunAtMelbourneLocal } from "./solar";
 import { pointInLocalMulti } from "./massingParcelBoundary";
 import { buildDaylightGroundStepShadows } from "./solarPlanShadowSteps";
-import { pointInPolygon } from "./useCascade";
+import { planPointUnderExtrudedBuildingRoof } from "./extrudedBuildingFootprint";
 import { sunHoursGroundFromLitSteps, SUN_HOURS_GROUND_CELL_M, SUN_HOURS_GROUND_STEP_MINUTES } from "./sunHoursGround";
 import type { PlanShadowTreeMode } from "./buildingShadows";
 import type { CityModel, Pt } from "../types";
@@ -24,12 +24,24 @@ function siteBounds(model: CityModel) {
   return { minE: -half, maxE: half, minN: -half, maxN: half };
 }
 
+export function planPointInsideAnyBuilding(model: CityModel, east: number, north: number): boolean {
+  return planPointUnderExtrudedBuildingRoof(model.buildings, east, north);
+}
+
 function cellCenterInsideBuilding(model: CityModel, east: number, north: number): boolean {
-  const point: Pt = [east, north];
-  for (const building of model.buildings) {
-    if (pointInPolygon(point, building.ring, building.holes ?? [])) return true;
-  }
-  return false;
+  return planPointUnderExtrudedBuildingRoof(model.buildings, east, north);
+}
+
+export function sampleSunHoursGroundCell(
+  grid: SunHoursGroundGrid,
+  east: number,
+  north: number,
+): { hours: number; masked: boolean } {
+  const col = Math.floor((east - grid.originEast) / grid.cellM);
+  const row = Math.floor((north - grid.originNorth) / grid.cellM);
+  if (col < 0 || row < 0 || col >= grid.cols || row >= grid.rows) return { hours: -1, masked: true };
+  const index = row * grid.cols + col;
+  return { hours: grid.sunHours[index]!, masked: Boolean(grid.masked[index]) };
 }
 
 function canvasLitStepCount(
