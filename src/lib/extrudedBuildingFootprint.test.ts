@@ -1,9 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import * as buildCity from "./buildCity";
 import { computeSunHoursGroundGrid } from "./sunHoursGroundPlan";
 import { sunHoursGroundRgba } from "./sunHoursGround";
+import { rasterizeSunHoursGroundGridFor3d } from "./sunHoursGroundRaster";
 import {
+  buildExtrudedFootprintMask,
   extrudedFootprintsForBuilding,
   planPointUnderExtrudedBuildingRoof,
+  planPointUnderExtrudedFootprintMask,
 } from "./extrudedBuildingFootprint";
 import type { BuildingFeat, CityModel } from "../types";
 
@@ -134,5 +138,80 @@ describe("extrudedBuildingFootprint ground mask", () => {
     const roofRow = Math.floor((0 - grid!.originNorth) / grid!.cellM);
     expect(grid!.masked[roofRow * grid!.cols + roofCol]).toBe(1);
     expect(cellRgbaAt(grid!, roofCol, roofRow, maxHours)[3]).toBe(0);
+  });
+
+  it("calls extrudePart at most once per eligible part, never per grid cell or raster pixel", () => {
+    const spy = vi.spyOn(buildCity, "extrudePart");
+    const buildings: BuildingFeat[] = [];
+    for (let index = 0; index < 24; index++) {
+      const o = index * 22;
+      buildings.push({
+        id: index + 1,
+        ring: [
+          [o, -30],
+          [o + 14, -30],
+          [o + 14, 10],
+          [o, 10],
+          [o, -30],
+        ],
+        holes: [],
+        height: 8 + (index % 3),
+        use: "residential",
+        source: "none",
+      });
+    }
+    const shell: BuildingFeat = {
+      id: 900,
+      ring: [
+        [-80, -80],
+        [80, -80],
+        [80, 80],
+        [-80, 80],
+        [-80, -80],
+      ],
+      holes: [],
+      height: 12,
+      use: "commercial",
+      source: "none",
+      extrusionParts: [
+        {
+          ring: [
+            [-8, -8],
+            [8, -8],
+            [8, 8],
+            [-8, 8],
+            [-8, -8],
+          ],
+          holes: [],
+          height: 12,
+        },
+      ],
+    };
+    buildings.push(shell);
+    const city = model(buildings);
+    const mask = buildExtrudedFootprintMask(city.buildings);
+    const extrudeBudget = spy.mock.calls.length;
+    const partSlots =
+      buildings.filter((b) => b.meshDrawnBy == null).length +
+      (shell.extrusionParts?.length ?? 1) -
+      1;
+    expect(extrudeBudget).toBeLessThanOrEqual(partSlots + buildings.length);
+    spy.mockClear();
+    const grid = computeSunHoursGroundGrid(city, 2026, 6, 21);
+    expect(grid).not.toBeNull();
+    expect(spy).toHaveBeenCalledTimes(0);
+    spy.mockClear();
+    for (let row = 0; row < grid!.rows; row++) {
+      for (let col = 0; col < grid!.cols; col++) {
+        const east = grid!.originEast + (col + 0.5) * grid!.cellM;
+        const north = grid!.originNorth + (row + 0.5) * grid!.cellM;
+        planPointUnderExtrudedFootprintMask(mask, east, north);
+      }
+    }
+    expect(spy).toHaveBeenCalledTimes(0);
+    spy.mockClear();
+    rasterizeSunHoursGroundGridFor3d(grid!);
+    expect(spy).toHaveBeenCalledTimes(0);
+    spy.mockRestore();
   });
 });

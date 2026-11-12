@@ -127,7 +127,6 @@ declare global {
         paletteMax: string;
       };
       frameSunHoursGroundPlan?: () => boolean;
-      frameSunHoursGroundPlanCloseup?: () => boolean;
       frameSunHoursGroundOblique?: () => boolean;
       frameSunHoursTerrainEdge?: () => boolean;
       readSunHoursTerrainRelief?: () => { relief: number; min: number; max: number };

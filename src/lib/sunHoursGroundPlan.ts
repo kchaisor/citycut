@@ -2,7 +2,11 @@ import { planShadowOffset } from "./buildingShadows";
 import { daylightWindowMinutes, sunAtMelbourneLocal } from "./solar";
 import { pointInLocalMulti } from "./massingParcelBoundary";
 import { buildDaylightGroundStepShadows } from "./solarPlanShadowSteps";
-import { planPointUnderExtrudedBuildingRoof } from "./extrudedBuildingFootprint";
+import {
+  buildExtrudedFootprintMask,
+  planPointUnderExtrudedFootprintMask,
+  type ExtrudedFootprintMaskPart,
+} from "./extrudedBuildingFootprint";
 import { sunHoursGroundFromLitSteps, SUN_HOURS_GROUND_CELL_M, SUN_HOURS_GROUND_STEP_MINUTES } from "./sunHoursGround";
 import type { PlanShadowTreeMode } from "./buildingShadows";
 import type { CityModel, Pt } from "../types";
@@ -24,12 +28,22 @@ function siteBounds(model: CityModel) {
   return { minE: -half, maxE: half, minN: -half, maxN: half };
 }
 
-export function planPointInsideAnyBuilding(model: CityModel, east: number, north: number): boolean {
-  return planPointUnderExtrudedBuildingRoof(model.buildings, east, north);
+export function planPointInsideAnyBuilding(
+  model: CityModel,
+  east: number,
+  north: number,
+  footprintMask?: readonly ExtrudedFootprintMaskPart[],
+): boolean {
+  const mask = footprintMask ?? buildExtrudedFootprintMask(model.buildings);
+  return planPointUnderExtrudedFootprintMask(mask, east, north);
 }
 
-function cellCenterInsideBuilding(model: CityModel, east: number, north: number): boolean {
-  return planPointUnderExtrudedBuildingRoof(model.buildings, east, north);
+function cellCenterInsideExtrudedFootprint(
+  mask: readonly ExtrudedFootprintMaskPart[],
+  east: number,
+  north: number,
+): boolean {
+  return planPointUnderExtrudedFootprintMask(mask, east, north);
 }
 
 export function sampleSunHoursGroundCell(
@@ -56,6 +70,7 @@ function canvasLitStepCount(
   cellM: number,
   stepMinutes: number,
   treeMode: PlanShadowTreeMode,
+  footprintMask: readonly ExtrudedFootprintMaskPart[],
 ): { litSteps: Uint16Array; masked: Uint8Array; steps: number } | null {
   if (typeof document === "undefined") return null;
   const window = daylightWindowMinutes(model.center.lat, model.center.lon, year, month, day);
@@ -82,7 +97,7 @@ function canvasLitStepCount(
     for (let col = 0; col < cols; col++) {
       const east = originEast + (col + 0.5) * cellM;
       const north = originNorth + (row + 0.5) * cellM;
-      if (cellCenterInsideBuilding(model, east, north)) masked[row * cols + col] = 1;
+      if (cellCenterInsideExtrudedFootprint(footprintMask, east, north)) masked[row * cols + col] = 1;
     }
   }
   const litSteps = new Uint16Array(cols * rows);
@@ -129,6 +144,7 @@ function computeSunHoursGroundGridMulti(
   rows: number,
   originEast: number,
   originNorth: number,
+  footprintMask: readonly ExtrudedFootprintMaskPart[],
 ): SunHoursGroundGrid | null {
   const stepShadows = buildDaylightGroundStepShadows(model, year, month, day, stepMinutes, treeMode);
   if (stepShadows.length === 0) return null;
@@ -138,7 +154,7 @@ function computeSunHoursGroundGridMulti(
     for (let col = 0; col < cols; col++) {
       const east = originEast + (col + 0.5) * cellM;
       const north = originNorth + (row + 0.5) * cellM;
-      if (cellCenterInsideBuilding(model, east, north)) masked[row * cols + col] = 1;
+      if (cellCenterInsideExtrudedFootprint(footprintMask, east, north)) masked[row * cols + col] = 1;
     }
   }
   for (const stepShadow of stepShadows) {
@@ -190,6 +206,7 @@ export function computeSunHoursGroundGrid(
   const rows = Math.max(1, Math.ceil((bounds.maxN - bounds.minN) / cellM));
   const originEast = bounds.minE;
   const originNorth = bounds.minN;
+  const footprintMask = buildExtrudedFootprintMask(model.buildings);
   if (typeof document === "undefined") {
     return computeSunHoursGroundGridMulti(
       model,
@@ -203,9 +220,23 @@ export function computeSunHoursGroundGrid(
       rows,
       originEast,
       originNorth,
+      footprintMask,
     );
   }
-  const raster = canvasLitStepCount(model, year, month, day, cols, rows, originEast, originNorth, cellM, stepMinutes, treeMode);
+  const raster = canvasLitStepCount(
+    model,
+    year,
+    month,
+    day,
+    cols,
+    rows,
+    originEast,
+    originNorth,
+    cellM,
+    stepMinutes,
+    treeMode,
+    footprintMask,
+  );
   if (!raster || raster.steps === 0) return null;
   const { litSteps, masked, steps } = raster;
   const sunHours = new Float32Array(cols * rows);

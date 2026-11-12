@@ -1303,21 +1303,6 @@ export function ModelPage({
         });
         return true;
       },
-      frameSunHoursGroundPlanCloseup() {
-        if (!window.__citycutQa?.setCamera) return false;
-        const cut = drawingModelRef.current;
-        const side = cut.sideM;
-        const lift = cut.terrain ? (cut.terrain.min + cut.terrain.max) / 2 : 0;
-        const groundY = cut.terrain ? cut.terrain.min : 0;
-        const focusX = side * 0.04;
-        const focusZ = -side * 0.028;
-        const altitude = Math.max(side * 0.11, 52);
-        window.__citycutQa.setCamera({
-          eye: { x: focusX, y: groundY + altitude, z: focusZ },
-          target: { x: focusX, y: lift, z: focusZ },
-        });
-        return true;
-      },
       frameSunHoursGroundOblique() {
         if (!window.__citycutQa?.setCamera) return false;
         const cut = drawingModelRef.current;
