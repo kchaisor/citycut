@@ -30,7 +30,6 @@ import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { SINGLE_SHADOW_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "./sunStudyPlan";
 import { planPaths } from "./svgPlan";
 import { regionCredit } from "./sources/registry";
-import { NSW_SITE_LAYERS, nswPlanChunks } from "./nswPlanExport";
 import { importedMassingStrokeStyle, importedMassingUpperStrokeStyle, planBuildingStrokeStyle } from "./planBuildingFill";
 import { windPlanPdfChunk } from "./windExport";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
@@ -406,7 +405,6 @@ export function sitePlanChunks(
       })),
     });
   }
-  const nswChunks = nswPlanChunks(model, layout);
   const roadRings = plan.roadFill.flatMap((polygon) => mapRings(polygon, model.sideM, layout));
   const blockFill = plan.blocks
     .map((rings) => mapRings(rings, model.sideM, layout))
@@ -422,7 +420,6 @@ export function sitePlanChunks(
       })),
     });
   }
-  chunks.push(...nswChunks.under);
   if (roadRings.length > 0) {
     const kerb = style.kerbOn ? pen(style.kerb) : null;
     chunks.push({
@@ -459,7 +456,6 @@ export function sitePlanChunks(
       })),
     });
   }
-  chunks.push(...nswChunks.lines);
   const studyLayers = resolved.sunStudy?.layers ?? null;
   for (const layer of studyLayers ?? []) {
     if (layer.rings.length === 0) continue;
@@ -566,7 +562,6 @@ export function sitePlanChunks(
     });
   }
   if (resolved.wind?.table) chunks.push(windPlanPdfChunk(resolved.wind.table, resolved.wind.period, layout, model.sideM));
-  chunks.push(...nswChunks.labels);
   chunks.push(frameStroke(layout, style.frame));
   if (heliodon) {
     const studyDate =
@@ -644,14 +639,6 @@ export function sitePlanLayerOrder(chunks: PdfChunk[]): string[] {
   if (!order.includes("Contour labels") && chunks.some((chunk) => chunk.name === "Contour labels")) {
     const at = order.indexOf("Contours");
     order.splice(at + 1, 0, "Contour labels");
-  }
-  const nsw = NSW_SITE_LAYERS.filter((name) => chunks.some((chunk) => chunk.name === name));
-  if (nsw.length > 0) {
-    const under = nsw.filter((name) => name === "NSW zoning" || name === "NSW road corridors");
-    const lines = nsw.filter((name) => name !== "NSW zoning" && name !== "NSW road corridors" && name !== "NSW planning labels");
-    order.splice(order.indexOf("Blocks") + 1, 0, ...under);
-    order.splice(order.indexOf("Trams") + 1, 0, ...lines);
-    if (nsw.includes("NSW planning labels")) order.splice(order.indexOf("Wind") + 1, 0, "NSW planning labels");
   }
   return order;
 }
