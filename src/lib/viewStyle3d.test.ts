@@ -16,7 +16,7 @@ describe("viewStyle3d", () => {
     expect(viewStyleFootpathChipColor(false, false, true)).toBe(getColour("--primary-footpath"));
   });
 
-  it("maps White Card layer chips to white surface", () => {
+  it("maps Card view layer chips to white surface", () => {
     expect(isWhiteCard3dView(false, false, false)).toBe(true);
     expect(viewStyleRoadChipColor(false, false, false)).toBe(getColour("--primary-surface"));
     expect(viewStyleFootpathChipColor(false, false, false)).toBe(getColour("--primary-surface"));

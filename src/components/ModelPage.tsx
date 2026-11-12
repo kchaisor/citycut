@@ -3061,7 +3061,7 @@ export function ModelPage({
                           }
                         }}
                       >
-                        White Card
+                        Card
                       </button>
                     </div>
                     <label className="check-field sr-only">

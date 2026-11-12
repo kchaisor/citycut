@@ -1,9 +1,9 @@
-export const VIEW_STYLE_SEG_TRACK_PADDING_PX = 4;
-export const VIEW_STYLE_SEG_GAP_PX = 4;
-export const VIEW_STYLE_SEG_COLUMNS = 2;
+export const VIEW_STYLE_SEG_TRACK_PADDING_PX = 3;
+export const VIEW_STYLE_SEG_GAP_PX = 2;
+export const VIEW_STYLE_SEG_COLUMNS = 4;
 export const VIEW_STYLE_SEG_CELL_PADDING_X_PX = 12;
 
-export const VIEW_STYLE_SEG_LABELS = ["Primary", "Use", "Source", "White Card"] as const;
+export const VIEW_STYLE_SEG_LABELS = ["Primary", "Use", "Source", "Card"] as const;
 
 export function viewStyleSegCellWidth(trackWidthPx: number): number {
   const inner = trackWidthPx - VIEW_STYLE_SEG_TRACK_PADDING_PX * 2;
