@@ -21,12 +21,11 @@ import {
   warmGroundWindParticles,
   type GroundWindParticles,
 } from "../lib/groundWindParticles";
-import { qaModeFromSearch } from "../lib/qaCameraBridge";
 import { useColourRevision } from "../lib/useColourRevision";
 import type { WindPeriodStats } from "../lib/windRose";
 
 const FIELD_BUDGET_MS = 5;
-const WARM_LIVE_S = 0.9;
+const WARM_LIVE_S = 1.4;
 const WARM_FROZEN_S = 2.4;
 const MAX_FRAME_DT = 0.05;
 
@@ -40,6 +39,7 @@ attribute float along1;
 uniform float widthM;
 varying float vAlpha;
 varying float vSide;
+varying float vAlong;
 void main() {
   float end = position.y;
   float side = position.x;
@@ -47,11 +47,12 @@ void main() {
   float len = length(d.xz);
   vec2 perp = len > 1e-4 ? vec2(-d.z, d.x) / len : vec2(0.0);
   float along = mix(along0, along1, end);
-  float w = widthM * mix(0.3, 1.0, along) * step(1e-4, len);
+  float w = widthM * mix(0.22, 1.0, along) * step(1e-4, len);
   vec3 centre = mix(p0, p1, end);
   vec3 worldPos = centre + vec3(perp.x, 0.0, perp.y) * side * w;
   vAlpha = mix(a0, a1, end);
   vSide = abs(side);
+  vAlong = along;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(worldPos, 1.0);
 }
 `;
@@ -59,13 +60,16 @@ void main() {
 const FRAGMENT_SHADER = `
 uniform vec3 edgeColour;
 uniform vec3 coreColour;
+uniform vec3 glowColour;
 uniform float opacity;
 varying float vAlpha;
 varying float vSide;
+varying float vAlong;
 void main() {
-  float core = 1.0 - vSide * vSide;
-  vec3 colour = mix(edgeColour, coreColour, core * 0.6);
-  float alpha = vAlpha * opacity * mix(1.0, 0.4, vSide);
+  float core = 1.0 - pow(vSide, 1.6);
+  vec3 colour = mix(edgeColour, coreColour, core * 0.82 + vAlong * 0.08);
+  colour = mix(colour, glowColour, core * core * 0.55);
+  float alpha = vAlpha * opacity * mix(0.65, 1.0, core);
   gl_FragColor = vec4(colour, alpha);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -77,13 +81,9 @@ function reducedMotionPreferred(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-function qaFrozen(): boolean {
-  return typeof window !== "undefined" && qaModeFromSearch(window.location.search);
-}
-
 function ribbonWidthM(sideM: number, cameraDistance: number): number {
-  const base = Math.max(0.5, sideM * 0.0026);
-  const lift = Math.min(3, Math.max(1, cameraDistance / (sideM * 0.45)));
+  const base = Math.max(0.55, sideM * 0.0029);
+  const lift = Math.min(3.2, Math.max(1, cameraDistance / (sideM * 0.42)));
   return base * lift;
 }
 
@@ -118,7 +118,7 @@ export function GroundWindFlow({
   const base = useMemo(() => groundWindBaseVector(sector), [sector]);
   const metresPerSecond = groundWindMetresPerSecond(model.sideM, stats?.prevailingMedianKmh);
   const heightAt = useCallback((east: number, north: number) => groundWindHeightAt(model, east, north), [model]);
-  const frozen = !animate || reducedMotionPreferred() || qaFrozen();
+  const frozen = !animate || reducedMotionPreferred();
   const frozenRef = useRef(frozen);
   frozenRef.current = frozen;
 
@@ -131,15 +131,23 @@ export function GroundWindFlow({
         fragmentShader: FRAGMENT_SHADER,
         uniforms: {
           widthM: { value: 1 },
-          opacity: { value: 0.92 },
+          opacity: { value: 1.08 },
           edgeColour: { value: new THREE.Color() },
           coreColour: { value: new THREE.Color() },
+          glowColour: { value: new THREE.Color() },
         },
         transparent: true,
         depthWrite: false,
         depthTest: true,
         side: THREE.DoubleSide,
         toneMapped: false,
+        blending: THREE.CustomBlending,
+        blendSrc: THREE.SrcAlphaFactor,
+        blendDst: THREE.OneMinusSrcAlphaFactor,
+        blendEquation: THREE.AddEquation,
+        blendSrcAlpha: THREE.OneFactor,
+        blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+        blendEquationAlpha: THREE.AddEquation,
       }),
     [],
   );
@@ -148,6 +156,7 @@ export function GroundWindFlow({
   useEffect(() => {
     (material.uniforms.edgeColour!.value as THREE.Color).set(getColour("--ground-wind-flow"));
     (material.uniforms.coreColour!.value as THREE.Color).set(getColour("--ground-wind-core"));
+    (material.uniforms.glowColour!.value as THREE.Color).set(getColour("--ground-wind-glow"));
   }, [material, colourRevision]);
 
   useEffect(

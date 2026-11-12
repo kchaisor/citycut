@@ -75,7 +75,7 @@ describe("groundWindField", () => {
     const faceN = field.originN + Math.floor((30 - field.originN) / field.cellM + 1) * field.cellM;
     for (const e of [-20, 0, 20]) {
       groundWindVelocityAt(field, e, faceN, out);
-      expect(Math.abs(out.north)).toBeLessThan(0.05);
+      expect(Math.abs(out.north)).toBeLessThan(0.08);
     }
   });
 

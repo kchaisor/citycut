@@ -10,7 +10,7 @@ export const GROUND_WIND_COARSE_FACTOR = 4;
 export const GROUND_WIND_COARSE_SWEEPS = 160;
 export const GROUND_WIND_FINE_SWEEPS = 70;
 export const GROUND_WIND_SOR_OMEGA = 1.82;
-export const GROUND_WIND_SHELTER_FLOOR = 0.22;
+export const GROUND_WIND_SHELTER_FLOOR = 0.14;
 export const GROUND_WIND_WAKE_HEIGHT_MULTIPLE = 3;
 export const GROUND_WIND_WAKE_MIN_M = 12;
 export const GROUND_WIND_WAKE_MAX_M = 90;
@@ -420,7 +420,11 @@ export function groundWindVelocityAt(field: GroundWindField, east: number, north
   const u = bilinear(field.faceU, field.cols + 1, field.rows, gx, gy - 0.5);
   const v = bilinear(field.faceV, field.cols, field.rows + 1, gx - 0.5, gy);
   const shelter = bilinear(field.shelter, field.cols, field.rows, gx - 0.5, gy - 0.5);
-  const scale = Math.max(GROUND_WIND_SPEED_MIN, shelter);
+  const mag = Math.hypot(u, v);
+  const stream = Math.hypot(field.base.east, field.base.north) || 1;
+  const gapBoost =
+    shelter > 0.88 && mag > stream * 1.02 ? 1 + Math.min(0.38, (mag / stream - 1.02) * 5) : 1;
+  const scale = Math.max(GROUND_WIND_SPEED_MIN, shelter) * gapBoost;
   out.east = u * scale;
   out.north = v * scale;
   return out;

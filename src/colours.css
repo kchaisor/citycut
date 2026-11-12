@@ -173,8 +173,9 @@
   --primary-plinth-wall: #000000;
   --uniform-road: #555555;
   --plinth-wall: #ffffff;
-  --ground-wind-flow: #3d7ab8;
-  --ground-wind-core: #e4f0fb;
+  --ground-wind-flow: #1e4f7a;
+  --ground-wind-core: #4a9ae8;
+  --ground-wind-glow: #7ec4ff;
   --plinth-shadow: #1a1916;
 
   --cut-line: #f7f4ee;

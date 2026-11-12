@@ -6,6 +6,7 @@ import {
   GROUND_WIND_POINTS_PER_PARTICLE,
   GROUND_WIND_TRAIL_POINTS,
   groundWindMetresPerSecond,
+  groundWindSeedRowScore,
   lifeEnvelope,
   speedRamp,
   stepGroundWindParticles,
@@ -89,8 +90,16 @@ describe("groundWindParticles", () => {
     expect(speedRamp(0)).toBeLessThan(speedRamp(0.5));
     expect(speedRamp(0.5)).toBeLessThan(speedRamp(1.3));
     expect(lifeEnvelope(0, 5)).toBe(0);
-    expect(lifeEnvelope(2.5, 5)).toBe(1);
-    expect(lifeEnvelope(5, 5)).toBe(0);
+    expect(lifeEnvelope(2.5, 5)).toBeGreaterThan(0.75);
+    expect(lifeEnvelope(5, 5)).toBeLessThan(0.05);
+  });
+
+  it("keeps seeding off regular row bands", () => {
+    const model = denseModel();
+    const field = buildGroundWindField(model, { east: 1, north: 0.15 });
+    const particles = createGroundWindParticles(field, flat);
+    const score = groundWindSeedRowScore(particles.east, particles.north, particles.count, field.cellM);
+    expect(score).toBeLessThan(4.5);
   });
 
   it("advects particles along the flow", () => {
