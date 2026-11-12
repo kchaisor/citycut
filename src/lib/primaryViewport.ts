@@ -87,20 +87,41 @@ function applyPrimaryPlinthMaterial(mesh: THREE.Mesh, primaryOn: boolean): void 
   }
 }
 
-function applyPrimaryRoadMaterial(mesh: THREE.Mesh, primaryOn: boolean): void {
-  if (!primaryOn) {
+export type CanvasRoadTintMode = "off" | "primary" | "white";
+
+function roadFillForCanvas(mode: Exclude<CanvasRoadTintMode, "off">, grade: string | undefined): string {
+  if (mode === "white") return getColour("--primary-surface");
+  return grade === "path" ? getColour("--primary-footpath") : getColour("--primary-road");
+}
+
+function applyCanvasRoadMaterial(mesh: THREE.Mesh, mode: CanvasRoadTintMode): void {
+  if (mode === "off") {
     restorePrimaryRoadMaterial(mesh);
     return;
   }
+  const grade = mesh.userData.roadGrade as string | undefined;
+  const fill = roadFillForCanvas(mode, grade);
   if (!(mesh.material instanceof THREE.MeshBasicMaterial)) {
     mesh.userData.primaryRoadRestMaterial = mesh.material;
-    const grade = mesh.userData.roadGrade as string | undefined;
-    const fill = grade === "path" ? getColour("--primary-footpath") : getColour("--primary-road");
     mesh.material = new THREE.MeshBasicMaterial({
       color: fill,
       toneMapped: false,
     });
+    return;
   }
+  mesh.material.color.setStyle(fill);
+}
+
+function applyPrimaryRoadMaterial(mesh: THREE.Mesh, primaryOn: boolean): void {
+  applyCanvasRoadMaterial(mesh, primaryOn ? "primary" : "off");
+}
+
+export function applyCanvasRoadTint(root: THREE.Object3D, mode: CanvasRoadTintMode): void {
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || mesh.name !== "Roads") return;
+    applyCanvasRoadMaterial(mesh, mode);
+  });
 }
 
 function snapshotMaterialRest(material: THREE.MeshStandardMaterial): void {

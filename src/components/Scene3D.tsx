@@ -82,9 +82,10 @@ import { buildContourLineObject } from "../lib/contourLines3d";
 import {
   applyPrimaryViewportTint,
   snapshotPrimaryViewportColors,
+  applyCanvasRoadTint,
   primaryViewportLighting,
 } from "../lib/primaryViewport";
-import { applyUniformRoadTint } from "../lib/uniformViewport";
+import { applyWhiteCardGroundTint, snapshotWhiteCardTerrainColors } from "../lib/whiteCardViewport";
 import { studioNorthNeedleDeg } from "../lib/studioCompass";
 import {
   DEFAULT_PERSPECTIVE_OFFSET,
@@ -864,11 +865,22 @@ function City({
     snapshotBuildingViewportColors(group, colourMode);
     snapshotSunStudySurfaceColors(group);
     snapshotPrimaryViewportColors(group, colourMode);
+    snapshotWhiteCardTerrainColors(group);
     applySunStudySurfaceTint(group, false);
     applyBuildingSolarNeutral(group, false, solarNeutralFill);
     applyPrimaryViewportTint(group, display.primaryView);
-    const uniformRoadsOn = colourMode.uniformBuildings && !display.primaryView;
-    applyUniformRoadTint(group, uniformRoadsOn);
+    if (display.primaryView) {
+      applyWhiteCardGroundTint(group, false);
+    } else if (colourMode.colourByUse || colourMode.colourBySource) {
+      applyCanvasRoadTint(group, "primary");
+      applyWhiteCardGroundTint(group, false);
+    } else if (colourMode.uniformBuildings) {
+      applyCanvasRoadTint(group, "white");
+      applyWhiteCardGroundTint(group, true);
+    } else {
+      applyCanvasRoadTint(group, "off");
+      applyWhiteCardGroundTint(group, false);
+    }
     invalidate();
   }, [group, colourMode, solarDiagramOn, solarNeutralFill, colourTick, display.primaryView, invalidate]);
   const buildingsVisible = isLayer3dVisible(display, "buildings");

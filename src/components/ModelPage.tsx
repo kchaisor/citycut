@@ -24,6 +24,7 @@ import {
   uniformBuildingColor,
 } from "../lib/buildingUse";
 import { commitColour, getColour, resetStoredColours } from "../lib/colours";
+import { viewStyleFootpathChipColor, viewStyleRoadChipColor } from "../lib/viewStyle3d";
 import { useColourRevision } from "../lib/useColourRevision";
 import { CRS_NOTE, mgaCrs } from "../lib/crsZone";
 import { planHeliodonForExport } from "../lib/planHeliodonExport";
@@ -1966,7 +1967,7 @@ export function ModelPage({
         id: "roads" as const,
         label: "Roads",
         meta: `${formatLengthKm(model.roadKm)} km`,
-        color: view3dDisplay.primaryView ? getColour("--primary-road") : getColour("--road-local"),
+        color: viewStyleRoadChipColor(view3dDisplay.primaryView, colourByUse, showSource),
         available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade !== "path"),
         onPick: (value: string) => {
           commitColour("--road-local", value);
@@ -1982,7 +1983,7 @@ export function ModelPage({
         id: "footpaths" as const,
         label: "Footpaths",
         meta: model.roads.filter((r) => r.kind === "road" && r.grade === "path").length.toLocaleString(),
-        color: view3dDisplay.primaryView ? getColour("--primary-footpath") : getColour("--road-path"),
+        color: viewStyleFootpathChipColor(view3dDisplay.primaryView, colourByUse, showSource),
         available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade === "path"),
         onPick: (value: string) => {
           commitColour("--road-path", value);
@@ -3059,7 +3060,7 @@ export function ModelPage({
                           }
                         }}
                       >
-                        Uniform
+                        White Card
                       </button>
                     </div>
                     <label className="check-field sr-only">

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import { getColour } from "./colours";
 import {
+  applyCanvasRoadTint,
   applyPrimaryViewportTint,
   primaryPlinthReadsOnCanvas,
   primaryRoadReadsOnCanvas,
@@ -14,6 +15,27 @@ describe("primary viewport", () => {
     const storage = { getItem: () => null, setItem: () => {} };
     expect(view3dDisplayForModelOpen(storage).primaryView).toBe(true);
     expect(DEFAULT_VIEW3D_DISPLAY.primaryView).toBe(true);
+  });
+
+  it("applies MeshBasic primary roads without full Primary viewport tint", () => {
+    const root = new THREE.Group();
+    const road = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#cccccc" }));
+    road.name = "Roads";
+    road.userData.roadGrade = "local";
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#cccccc" }));
+    foot.name = "Roads";
+    foot.userData.roadGrade = "path";
+    root.add(road, foot);
+    snapshotPrimaryViewportColors(root, { colourByUse: true, uniformBuildings: false, colourBySource: false });
+    applyCanvasRoadTint(root, "primary");
+    expect(road.material).toBeInstanceOf(THREE.MeshBasicMaterial);
+    expect(foot.material).toBeInstanceOf(THREE.MeshBasicMaterial);
+    expect(primaryRoadReadsOnCanvas(road.material)).toBe(true);
+    if (foot.material instanceof THREE.MeshBasicMaterial) {
+      expect(`#${foot.material.color.getHexString()}`.toLowerCase()).toBe(getColour("--primary-footpath").toLowerCase());
+    }
+    applyCanvasRoadTint(root, "off");
+    expect(road.material).toBeInstanceOf(THREE.MeshStandardMaterial);
   });
 
   it("tints roads and footpaths with primary tokens", () => {

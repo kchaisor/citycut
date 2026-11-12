@@ -1,10 +1,6 @@
 import * as THREE from "three";
 import { getColour } from "./colours";
 import { applyMatteFinish } from "./matteMaterial";
-import { snapshotBuildingViewportColors, type BuildingColourMode } from "./buildingViewportColor";
-import { snapshotSunStudySurfaceColors } from "./sunStudySurfaceViewport";
-
-const BUILDING_NAMES = /^Buildings|^source:/;
 
 function forEachStandardMaterial(mesh: THREE.Mesh, fn: (material: THREE.MeshStandardMaterial) => void) {
   const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -24,7 +20,7 @@ function applyTerrainVertexCard(mesh: THREE.Mesh, whiteCardOn: boolean): void {
   const base = mesh.userData.whiteCardVertexColors as Float32Array | undefined;
   if (!attr || !base) return;
   if (whiteCardOn) {
-    const card = new THREE.Color(getColour("--card-ground"));
+    const card = new THREE.Color(getColour("--primary-surface"));
     for (let i = 0; i < base.length; i += 3) {
       attr.array[i] = card.r;
       attr.array[i + 1] = card.g;
@@ -36,50 +32,36 @@ function applyTerrainVertexCard(mesh: THREE.Mesh, whiteCardOn: boolean): void {
   attr.needsUpdate = true;
 }
 
-function snapshotMaterialRest(material: THREE.MeshStandardMaterial): void {
-  material.userData.whiteCardRestHex = `#${material.color.getHexString()}`;
-}
-
-export function snapshotWhiteCardColors(root: THREE.Object3D, colourMode: BuildingColourMode): void {
-  snapshotBuildingViewportColors(root, colourMode);
-  snapshotSunStudySurfaceColors(root);
+export function snapshotWhiteCardTerrainColors(root: THREE.Object3D): void {
   root.traverse((object) => {
     const mesh = object as THREE.Mesh;
-    if (!mesh.isMesh) return;
-    if (mesh.name === "Terrain") snapshotTerrainVertexColors(mesh);
-    forEachStandardMaterial(mesh, snapshotMaterialRest);
+    if (mesh.isMesh && mesh.name === "Terrain") snapshotTerrainVertexColors(mesh);
   });
 }
 
-function cardFillForMesh(mesh: THREE.Mesh): string {
-  if (mesh.name === "Ground" || mesh.name === "Terrain") return getColour("--card-ground");
-  return getColour("--card-white");
-}
-
-export function applyWhiteCardTint(root: THREE.Object3D, whiteCardOn: boolean): void {
+export function applyWhiteCardGroundTint(root: THREE.Object3D, whiteCardOn: boolean): void {
+  const groundFill = getColour("--primary-surface");
   root.traverse((object) => {
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh) return;
     if (mesh.name === "Terrain") {
       applyTerrainVertexCard(mesh, whiteCardOn);
+      forEachStandardMaterial(mesh, (material) => {
+        const rest = material.userData.primaryRestHex as string | undefined;
+        if (!rest) return;
+        material.color.setStyle(whiteCardOn ? groundFill : rest);
+        applyMatteFinish(material);
+      });
       return;
     }
-    const name = mesh.name || mesh.parent?.name || "";
-    const surface =
-      BUILDING_NAMES.test(name) ||
-      name === "Buildings-manual" ||
-      name === "Buildings-site" ||
-      name === "Ground" ||
-      name === "Green" ||
-      name === "Water" ||
-      name === "Roads";
-    if (!surface) return;
-    forEachStandardMaterial(mesh, (material) => {
-      const rest = material.userData.whiteCardRestHex as string | undefined;
-      if (!rest) return;
-      material.color.setStyle(whiteCardOn ? cardFillForMesh(mesh) : rest);
-      applyMatteFinish(material);
-    });
+    if (mesh.name === "Ground") {
+      forEachStandardMaterial(mesh, (material) => {
+        const rest = material.userData.primaryRestHex as string | undefined;
+        if (!rest) return;
+        material.color.setStyle(whiteCardOn ? groundFill : rest);
+        applyMatteFinish(material);
+      });
+    }
   });
 }
 
