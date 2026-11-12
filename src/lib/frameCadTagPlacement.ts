@@ -10,21 +10,12 @@ export type FrameCadTagPlacement = {
   mode: "below" | "inside-bottom" | "above";
 };
 
-function rectsIntersect(a: LayoutRect, b: LayoutRect): boolean {
-  return !(
-    a.left + a.width <= b.left ||
-    a.left >= b.left + b.width ||
-    a.top + a.height <= b.top ||
-    a.top >= b.top + b.height
-  );
-}
-
-function chipRect(centerX: number, top: number, chip: LayoutRect): LayoutRect {
-  return { left: centerX - chip.width / 2, top, width: chip.width, height: chip.height };
-}
-
 export function frameCadTagCenterX(frame: LayoutRect, viewportWidth: number): number {
   return Math.min(Math.max(frame.left + frame.width / 2, 88), viewportWidth - 150);
+}
+
+function chipBottomClearsDock(top: number, chip: Pick<LayoutRect, "height">, dock: LayoutRect): boolean {
+  return top + chip.height <= dock.top - FRAME_CAD_DOCK_GAP_PX;
 }
 
 export function frameCadTagPlacement(
@@ -36,24 +27,24 @@ export function frameCadTagPlacement(
   const centerX = frameCadTagCenterX(frame, viewportWidth);
   const belowTop = frame.top + frame.height + FRAME_CAD_BELOW_GAP_PX;
   const nearDock = dock != null && frame.top + frame.height >= dock.top - FRAME_CAD_DOCK_GAP_PX;
-  const belowHitsDock = dock != null && rectsIntersect(chipRect(centerX, belowTop, chip as LayoutRect), dock);
 
-  if (!nearDock && !belowHitsDock) {
+  if (dock == null || (!nearDock && chipBottomClearsDock(belowTop, chip, dock))) {
     return { centerX, top: belowTop, mode: "below" };
   }
 
   const insideBottomTop = frame.top + frame.height - chip.height - FRAME_CAD_INSET_PX;
   const insideFitsInFrame = insideBottomTop >= frame.top + FRAME_CAD_INSET_PX;
-  const insideClear =
-    dock == null ||
-    !rectsIntersect(chipRect(centerX, insideBottomTop, chip as LayoutRect), dock);
-
-  if (insideFitsInFrame && insideClear) {
+  if (insideFitsInFrame && chipBottomClearsDock(insideBottomTop, chip, dock)) {
     return { centerX, top: insideBottomTop, mode: "inside-bottom" };
   }
 
   const aboveTop = Math.max(FRAME_CAD_INSET_PX, frame.top - chip.height - FRAME_CAD_BELOW_GAP_PX);
-  return { centerX, top: aboveTop, mode: "above" };
+  if (chipBottomClearsDock(aboveTop, chip, dock)) {
+    return { centerX, top: aboveTop, mode: "above" };
+  }
+
+  const pinnedTop = dock.top - FRAME_CAD_DOCK_GAP_PX - chip.height;
+  return { centerX, top: Math.max(FRAME_CAD_INSET_PX, pinnedTop), mode: "above" };
 }
 
 export function readLandingDockRect(mapWrap: HTMLElement): LayoutRect | null {

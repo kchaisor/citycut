@@ -46,6 +46,7 @@ function expectClearOfDock(
   const placement = frameCadTagPlacement(frame, dock, CHIP, viewportWidth);
   const chip = chipLayoutRect(placement.centerX, placement.top);
   expect(rectsIntersect(chip, dock)).toBe(false);
+  expect(chip.top + chip.height).toBeLessThanOrEqual(dock.top - 8);
   expect(placement.mode).not.toBe("below");
 }
 

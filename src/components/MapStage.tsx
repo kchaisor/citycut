@@ -163,7 +163,17 @@ export function MapStage({
     if (frameVisible && frameRef.current) {
       applyFrameStyles(frameRef.current);
     }
-  }, [frameVisible, sideM, widthM, heightM, frameShape]);
+  });
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    widthRef.current = widthM;
+    heightRef.current = heightM;
+    orientationRef.current = cutOrientation;
+    syncFrameRef.current?.();
+    map.fire("move");
+  }, [widthM, heightM, cutOrientation, ready]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -542,18 +552,9 @@ export function MapStage({
   const cadReadout = `${dimMeters} | ${areaKm2} km² · MGA${zone}`;
   const currentFrame = frameRef.current;
   const clientW = containerRef.current?.clientWidth ?? 800;
-  const initialCadPlacement =
-    currentFrame != null
-      ? frameCadTagPlacement(
-          currentFrame,
-          null,
-          { width: 240, height: 22 },
-          clientW,
-        )
-      : null;
-  const initialLabelLeft = initialCadPlacement?.centerX ?? 400;
-  const initialCadTop =
-    initialCadPlacement?.top ?? (currentFrame ? currentFrame.top + currentFrame.height + 14 : 0);
+  const initialLabelLeft = currentFrame
+    ? Math.min(Math.max(currentFrame.left + currentFrame.width / 2, 88), clientW - 150)
+    : 400;
 
   const mapWrapClass = [
     "map-wrap",
@@ -659,14 +660,7 @@ export function MapStage({
           >
             {label}
           </div>
-          <div
-            ref={frameCadRef}
-            className="frame-cad-tag"
-            style={{
-              left: initialLabelLeft,
-              top: initialCadTop,
-            }}
-          >
+          <div ref={frameCadRef} className="frame-cad-tag">
             {cadReadout}
           </div>
         </>
