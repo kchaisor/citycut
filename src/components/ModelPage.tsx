@@ -171,6 +171,14 @@ import { isometricDrawingBounds } from "../lib/isometricDrawing";
 import { Sidebar, type SidebarItem } from "./Sidebar";
 import { SatellitePane } from "./SatellitePane";
 import { Scene3D, type SceneExporter } from "./Scene3D";
+import {
+  buildingHoverHighlightId,
+  buildingInfoCardDisplayBuildingId,
+  buildingInfoCardVisible,
+  INITIAL_BUILDING_INFO_CARD,
+  reduceBuildingInfoCard,
+} from "../lib/buildingInfoCardFlow";
+import { introAlreadyPlayedForCut, modelCutSiteId } from "../lib/introPlayed";
 
 function shouldShowIntroBridgePill(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") return false;
@@ -662,9 +670,27 @@ export function ModelPage({
     readStoredHiddenBuildings(window.localStorage),
   );
   const [hideSelection, setHideSelection] = useState<number[]>([]);
-  const [heightPick, setHeightPick] = useState<{ buildingId: number; clientX: number; clientY: number } | null>(
-    null,
-  );
+  const [heightPick, setHeightPick] = useState<{
+    buildingId: number;
+    clientX: number;
+    clientY: number;
+    pinned: boolean;
+  } | null>(null);
+  const [buildingCard, dispatchBuildingCard] = useReducer(reduceBuildingInfoCard, INITIAL_BUILDING_INFO_CARD);
+  const cutSiteId = useMemo(() => modelCutSiteId(model.center, model.sideM), [model.center.lat, model.center.lon, model.sideM]);
+  const [introPlayedCutId, setIntroPlayedCutId] = useState<string | null>(null);
+  const skipModelIntro = introAlreadyPlayedForCut(introPlayedCutId, cutSiteId);
+
+  const clearBuildingCard = useCallback(() => {
+    dispatchBuildingCard({ type: "click_empty" });
+    setHeightPick(null);
+    setHideSelection([]);
+  }, []);
+
+  const onHoverBuilding = useCallback((buildingId: number | null) => {
+    if (buildingId == null) dispatchBuildingCard({ type: "unhover" });
+    else dispatchBuildingCard({ type: "hover", buildingId });
+  }, []);
 
   const massing = useImportedMassing(model);
 
@@ -726,7 +752,8 @@ export function ModelPage({
         });
       },
       selectHeightEditBuilding(buildingId: number) {
-        setHeightPick({ buildingId, clientX: 640, clientY: 400 });
+        dispatchBuildingCard({ type: "click_building", buildingId });
+        setHeightPick({ buildingId, clientX: 640, clientY: 400, pinned: true });
         return buildingId;
       },
       pickForegroundBuildingForSelectionQa() {
@@ -754,10 +781,12 @@ export function ModelPage({
           );
         const pick = candidates[0]?.building;
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 640, clientY: 400 });
+        dispatchBuildingCard({ type: "click_building", buildingId: pick.id });
+        setHeightPick({ buildingId: pick.id, clientX: 640, clientY: 400, pinned: true });
         return pick.id;
       },
       clearHeightSelection() {
+        dispatchBuildingCard({ type: "click_empty" });
         setHeightPick(null);
       },
       pickTallTowerForSelectionQa() {
@@ -771,7 +800,8 @@ export function ModelPage({
           .sort((a, b) => b.building.height - a.building.height || a.dist - b.dist);
         const pick = candidates[0]?.building;
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 24, clientY: 72 });
+        dispatchBuildingCard({ type: "click_building", buildingId: pick.id });
+        setHeightPick({ buildingId: pick.id, clientX: 24, clientY: 72, pinned: true });
         return pick.id;
       },
       frameAerialSelectionBuilding(buildingId: number) {
@@ -850,7 +880,8 @@ export function ModelPage({
           .sort((a, b) => b.height - a.height);
         const pick = midrise[0] ?? fallback[0];
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 72, clientY: 88 });
+        dispatchBuildingCard({ type: "click_building", buildingId: pick.id });
+        setHeightPick({ buildingId: pick.id, clientX: 72, clientY: 88, pinned: true });
         return pick.id;
       },
       pickBuildingNearGeoQa(lat: number, lon: number) {
@@ -868,7 +899,8 @@ export function ModelPage({
           }
         }
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 640, clientY: 420 });
+        dispatchBuildingCard({ type: "click_building", buildingId: pick.id });
+        setHeightPick({ buildingId: pick.id, clientX: 640, clientY: 420, pinned: true });
         return pick.id;
       },
       exportPlanSnapshot: () => model,
@@ -877,7 +909,8 @@ export function ModelPage({
         const pick =
           rows.find((b) => b.zoneDefaultNote?.includes("estimate, no measured height")) ?? rows[0];
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 480, clientY: 420 });
+        dispatchBuildingCard({ type: "click_building", buildingId: pick.id });
+        setHeightPick({ buildingId: pick.id, clientX: 480, clientY: 420, pinned: true });
         return { id: pick.id, height: pick.height, note: pick.zoneDefaultNote ?? "" };
       },
       getHeightPerfTimings: () => ({ ...heightPerfRef.current }),
@@ -1187,10 +1220,11 @@ export function ModelPage({
     };
   }, [model]);
 
+  const pinnedBuildingId = buildingInfoCardDisplayBuildingId(buildingCard);
   const pickedBuilding =
-    heightPick === null
+    pinnedBuildingId == null
       ? null
-      : (displayModel.buildings.find((building) => building.id === heightPick.buildingId) ?? null);
+      : (displayModel.buildings.find((building) => building.id === pinnedBuildingId) ?? null);
 
   function persistHidden(next: HiddenBuildingStore) {
     setHiddenStore(next);
@@ -1379,6 +1413,11 @@ export function ModelPage({
   useEffect(() => {
     if (viewportIsNarrow()) return;
     function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && buildingInfoCardVisible(buildingCard)) {
+        clearBuildingCard();
+        event.preventDefault();
+        return;
+      }
       const result = handleModelKeyDown({
         key: event.key,
         metaKey: event.metaKey,
@@ -1396,7 +1435,7 @@ export function ModelPage({
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [applyShortcut, commandBarOpen, shortcutCheatsheetOpen]);
+  }, [applyShortcut, buildingCard, clearBuildingCard, commandBarOpen, shortcutCheatsheetOpen]);
 
   function retryComHeights() {
     setComFootprintFetchError(null);
@@ -2012,25 +2051,23 @@ export function ModelPage({
   ];
 
   const modelRootRef = useRef<HTMLDivElement | null>(null);
-  const introHoldReleasedRef = useRef(false);
-  const introWebglReadyRef = useRef(false);
+  const [introHoldReleased, setIntroHoldReleased] = useState(false);
+  const [introWebglReady, setIntroWebglReady] = useState(false);
   useEffect(() => {
     const el = modelRootRef.current;
     if (!el) return;
     const release = () => {
-      introHoldReleasedRef.current = true;
-      el.removeAttribute("data-intro-hold");
+      setIntroHoldReleased(true);
     };
     const revealModel = () => {
-      introWebglReadyRef.current = true;
-      el.removeAttribute("data-intro-webgl-wait");
+      setIntroWebglReady(true);
     };
     const onWebglReady = () => {
       if (typeof window === "undefined" || !window.__citycutAwaitIntroStart || window.__citycutIntroStarted) {
         revealModel();
       }
     };
-    if (tab !== "3d" || !shouldShowIntroBridgePill()) {
+    if (tab !== "3d" || !shouldShowIntroBridgePill() || skipModelIntro) {
       release();
       revealModel();
       return;
@@ -2041,23 +2078,40 @@ export function ModelPage({
     el.addEventListener("citycut:intro-hold-release", release);
     window.addEventListener("citycut:intro-webgl-ready", onWebglReady);
     window.addEventListener("citycut:intro-start", revealModel);
+    window.addEventListener("citycut:intro-done", release);
     const timer = window.setTimeout(release, 45000);
     const webglTimer = window.setTimeout(revealModel, 25000);
     return () => {
       el.removeEventListener("citycut:intro-hold-release", release);
       window.removeEventListener("citycut:intro-webgl-ready", onWebglReady);
       window.removeEventListener("citycut:intro-start", revealModel);
+      window.removeEventListener("citycut:intro-done", release);
       window.clearTimeout(timer);
       window.clearTimeout(webglTimer);
     };
-  }, [tab]);
+  }, [tab, cutSiteId, skipModelIntro]);
+
+  useEffect(() => {
+    setIntroHoldReleased(false);
+    setIntroWebglReady(false);
+  }, [cutSiteId, skipModelIntro]);
+
+  useEffect(() => {
+    const onIntroDone = () => setIntroPlayedCutId(cutSiteId);
+    window.addEventListener("citycut:intro-done", onIntroDone);
+    return () => window.removeEventListener("citycut:intro-done", onIntroDone);
+  }, [cutSiteId]);
 
   return (
     <div
       ref={modelRootRef}
       className="model"
-      data-intro-hold={!introHoldReleasedRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
-      data-intro-webgl-wait={!introWebglReadyRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
+      data-intro-hold={
+        !introHoldReleased && tab === "3d" && shouldShowIntroBridgePill() && !skipModelIntro ? "true" : undefined
+      }
+      data-intro-webgl-wait={
+        !introWebglReady && tab === "3d" && shouldShowIntroBridgePill() && !skipModelIntro ? "true" : undefined
+      }
     >
       <h1 className="sr-only">Your model is ready.</h1>
       <div
@@ -2105,15 +2159,24 @@ export function ModelPage({
                 windAnimateStreaks={windMotion.animateStreaks}
                 onExportReady={onExportReady}
                 onBuildingPick={(buildingId, clientX, clientY, additive) => {
-                  setHeightPick({ buildingId, clientX, clientY });
+                  dispatchBuildingCard({ type: "click_building", buildingId });
+                  setHeightPick({ buildingId, clientX, clientY, pinned: true });
                   selectForHide(buildingId, additive);
                 }}
-                onClearBuildingPick={() => {
-                  setHeightPick(null);
-                  setHideSelection([]);
-                }}
-                heightEditBuildingId={heightPick?.buildingId ?? null}
-                selectedBuildingIds={hideSelection.length > 0 ? hideSelection : heightPick ? [heightPick.buildingId] : []}
+                onClearBuildingPick={clearBuildingCard}
+                introEnabled={!skipModelIntro}
+                lensHoverEnabled={tab === "3d" && view.projection === "perspective"}
+                hoverBuildingId={buildingHoverHighlightId(buildingCard)}
+                pinnedBuildingId={pinnedBuildingId}
+                onHoverBuilding={onHoverBuilding}
+                heightEditBuildingId={heightPick?.pinned ? heightPick.buildingId : null}
+                selectedBuildingIds={
+                  hideSelection.length > 0
+                    ? hideSelection
+                    : heightPick?.pinned
+                      ? [heightPick.buildingId]
+                      : []
+                }
                 cameraMemory={cameraMemory}
                 display={view3dDisplay}
                 importedMassing={massing.group}
@@ -2153,7 +2216,7 @@ export function ModelPage({
                 />
               )}
               {pickedBuilding &&
-                heightPick &&
+                heightPick?.pinned &&
                 !qaHideHeightPopoverFromSearch(window.location.search) && (
                 <BuildingHeightPopover
                   building={pickedBuilding}
@@ -2162,10 +2225,7 @@ export function ModelPage({
                   damRecords={displayModel.developmentDamRecords ?? []}
                   onSave={(heightM) => saveBuildingHeight(pickedBuilding.id, heightM)}
                   onReset={() => resetBuildingHeight(pickedBuilding.id)}
-                  onClose={() => {
-                    setHeightPick(null);
-                    setHideSelection([]);
-                  }}
+                  onClose={clearBuildingCard}
                   selectedCount={Math.max(1, hideSelection.length)}
                   hiddenCount={hiddenMatch.size}
                   onHideSelected={hideSelectedBuildings}
