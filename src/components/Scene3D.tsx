@@ -107,7 +107,10 @@ import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
 
 const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
+import { WindFlow3D } from "./WindFlow3D";
 import { WindStaticArrows, WindStreaks } from "./WindStreaks";
+import type { WindFlowParticle } from "../lib/windLbm/windParticles";
+import type { WindLbmSolverState } from "../lib/windLbm/types";
 import { analyzeWindPeriod, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
 import type { CityModel } from "../types";
 
@@ -2069,6 +2072,7 @@ export function Scene3D({
   windTable,
   windPeriod,
   windAnimateStreaks,
+  windModelFlow = null,
   onExportReady,
   onBuildingPick,
   onClearBuildingPick,
@@ -2100,6 +2104,16 @@ export function Scene3D({
   windTable: WindRoseTable | null;
   windPeriod: WindPeriodId;
   windAnimateStreaks: boolean;
+  windModelFlow?: {
+    active: boolean;
+    playing: boolean;
+    particles: readonly WindFlowParticle[];
+    solver: WindLbmSolverState | null;
+    frame: number;
+    showHeatmap: boolean;
+    normSpeed: number;
+    flowReveal: number;
+  } | null;
   onExportReady: (exporter: SceneExporter | null) => void;
   onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
   onClearBuildingPick?: () => void;
@@ -2209,7 +2223,9 @@ export function Scene3D({
         <SceneFrameloopGate />
         <AdaptiveViewportDpr />
         <SceneContinuousBridge
-          windAnimate={windEnabled && windAnimateStreaks}
+          windAnimate={
+            (windModelFlow?.active && windModelFlow.playing) || (windEnabled && windAnimateStreaks && !windModelFlow?.active)
+          }
           walkRippleActive={walkRipplePlaying}
         />
         {qaModeFromSearch(typeof window === "undefined" ? "" : window.location.search) ? <QaPerfSampler /> : null}
@@ -2280,14 +2296,29 @@ export function Scene3D({
         terrain={model.terrain ?? undefined}
         settings={solar}
       />
-      <WindLayer
-        sideM={model.sideM}
-        terrain={model.terrain}
-        table={windTable}
-        period={windPeriod}
-        enabled={windEnabled}
-        animateStreaks={windAnimateStreaks}
-      />
+      {windModelFlow?.active ? (
+        <WindFlow3D
+          sideM={model.sideM}
+          terrain={model.terrain}
+          plinthBottomY={plinthBottomY}
+          particles={windModelFlow.particles}
+          solver={windModelFlow.solver}
+          frame={windModelFlow.frame}
+          showHeatmap={windModelFlow.showHeatmap}
+          normSpeed={windModelFlow.normSpeed}
+          flowReveal={windModelFlow.flowReveal}
+          playing={windModelFlow.playing}
+        />
+      ) : (
+        <WindLayer
+          sideM={model.sideM}
+          terrain={model.terrain}
+          table={windTable}
+          period={windPeriod}
+          enabled={windEnabled}
+          animateStreaks={windAnimateStreaks}
+        />
+      )}
       <Cameras
         side={model.sideM}
         frameWidthM={model.widthM ?? model.sideM}
