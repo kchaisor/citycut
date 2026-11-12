@@ -24,9 +24,6 @@ import type { CityModel } from "../types";
 import type { SectionKnifeToolState } from "../lib/sectionKnife/state";
 import { SectionKnifePlanMarkers } from "./SectionKnifePlanMarkers";
 import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
-import { NswPlanLabels, NswPlanLines, NswPlanUnder } from "./NswPlanLayers";
-import { NSW_PLAN_LABEL_SHARE, nswPlanItems } from "../lib/nswPlan";
-import { readNswPlanStyle } from "../lib/nswPlanStyle";
 import { importedPlanShadowRings, planShadowRings, type PlanShadowInput } from "../lib/buildingShadows";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
 import { modelFrameSize } from "../lib/modelFrame";
@@ -244,8 +241,6 @@ export function DrawingPlan({
   const treeFill = getColour("--tree-fill");
   const planEmpty = getColour("--plan-empty");
   const shadowFill = getColour("--shadow-fill");
-  const nswStyle = useMemo(() => (model.nsw ? readNswPlanStyle() : null), [model.nsw, colourTick]);
-  const nswItems = useMemo(() => (nswStyle ? nswPlanItems(model, nswStyle.hatchM) : null), [model, nswStyle]);
   const study = figure ? null : sunStudy;
   const casterModel = useMemo(
     () => sunStudyCasterModel(model, sunStudyCasters, sunStudySelected),
@@ -463,7 +458,6 @@ export function DrawingPlan({
             {plan.blocks.map((rings, index) => (
               <path key={`b${index}`} d={svgRings(rings)} fill={mutedFill("--sun-study-block", blockFill)} />
             ))}
-            {nswItems && nswStyle && <NswPlanUnder items={nswItems} style={nswStyle} />}
             {plan.green.map((rings, index) => (
               <path key={`g${index}`} d={svgRings(rings)} fill={mutedFill("--sun-study-green", greenFill)} {...screenPenAttrs(style.green)} />
             ))}
@@ -505,7 +499,6 @@ export function DrawingPlan({
             {plan.trams.map((tram, index) => (
               <path key={`tr${index}`} d={svgPolyline(tram, false)} fill="none" {...screenPenAttrs(style.tram)} strokeLinecap="round" strokeLinejoin="round" />
             ))}
-            {nswItems && nswStyle && <NswPlanLines items={nswItems} style={nswStyle} />}
             {importedShadowReady ? <g aria-hidden="true" data-imported-shadow="true" /> : null}
             {study &&
               studyShadows.layers.map((layer) => (
@@ -606,7 +599,6 @@ export function DrawingPlan({
                 viewWidthM={view.w}
               />
             ) : null}
-            {nswItems && nswStyle && <NswPlanLabels items={nswItems} style={nswStyle} sizeM={model.sideM * NSW_PLAN_LABEL_SHARE} />}
             <path d={framePathD} fill="none" {...screenPenAttrs(style.frame, "miter")} />
             {heliodon && (
               <HeliodonPlanOverlay input={heliodon} planScale={planScale} sideM={model.sideM} sunStudy={study} />

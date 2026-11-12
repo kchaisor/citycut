@@ -442,31 +442,9 @@ async function main() {
     await page.waitForSelector("svg.plan", { timeout: 120_000 });
     await page.waitForTimeout(1200);
     const rozelleDrawing = await page.evaluate(() => {
-      const frame = document.querySelector('svg.plan rect[data-cut-frame="1"]');
-      const w = Number(frame?.getAttribute("width") ?? 0);
-      const h = Number(frame?.getAttribute("height") ?? 0);
-      const halfW = w / 2;
-      const halfH = h / 2;
       const planScale = document.querySelector(".studio-scale-row select")?.value ?? "";
-      const leaks = [];
-      for (const pathEl of document.querySelectorAll('[data-layer^="nsw-"] path')) {
-        if (!(pathEl instanceof SVGGraphicsElement)) continue;
-        let box;
-        try {
-          box = pathEl.getBBox();
-        } catch {
-          continue;
-        }
-        if (
-          box.x < -halfW - 0.5 ||
-          box.x + box.width > halfW + 0.5 ||
-          box.y < -halfH - 0.5 ||
-          box.y + box.height > halfH + 0.5
-        ) {
-          leaks.push({ layer: pathEl.closest("[data-layer]")?.getAttribute("data-layer") ?? "path", box });
-        }
-      }
-      return { planScale, frameW: w, frameH: h, leakCount: leaks.length, leaks: leaks.slice(0, 3) };
+      const nswLayerCount = document.querySelectorAll('[data-layer^="nsw-"]').length;
+      return { planScale, nswLayerCount };
     });
     await page.screenshot({
       path: path.join(cursorArtifacts, "rozelle-a3-3000-drawing.png"),
@@ -479,10 +457,10 @@ async function main() {
       `planScale=${rozelleDrawing.planScale}`,
     );
     assertCheck(
-      "rozelle-a3-nsw-clip",
-      "Rozelle A3 drawing clips NSW zoning, records, and labels inside the cut frame",
-      rozelleDrawing.leakCount === 0,
-      `leaks=${rozelleDrawing.leakCount} sample=${JSON.stringify(rozelleDrawing.leaks)} frame=${rozelleDrawing.frameW.toFixed(0)}×${rozelleDrawing.frameH.toFixed(0)}`,
+      "rozelle-a3-no-nsw-overlays",
+      "Rozelle A3 Drawing view omits NSW planning overlay layers",
+      rozelleDrawing.nswLayerCount === 0,
+      `nswLayerCount=${rozelleDrawing.nswLayerCount}`,
     );
 
     await page.goto(`${baseUrl}/citycut/`, { waitUntil: "networkidle", timeout: 60_000 });
