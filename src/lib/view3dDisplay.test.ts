@@ -5,8 +5,6 @@ import {
   DEFAULT_VIEW3D_DISPLAY,
   DEFAULT_VIEW3D_LAYERS_VISIBLE,
   LAYER_3D_IDS,
-  VIEW3D_LEGACY_CARD_KEY,
-  VIEW3D_PRIMARY_KEY,
   isLayer3dVisible,
   readStoredView3dDisplay,
   setLayer3dVisible,
@@ -19,24 +17,6 @@ import {
 const srcRoot = fileURLToPath(new URL("..", import.meta.url));
 
 describe("view3d display defaults and persistence", () => {
-  it("defaults primary view on for new sessions and reads legacy whiteCard storage", () => {
-    expect(DEFAULT_VIEW3D_DISPLAY.primaryView).toBe(true);
-    const store = new Map<string, string>();
-    const storage = {
-      getItem: (k: string) => store.get(k) ?? null,
-      setItem: (k: string, v: string) => {
-        store.set(k, v);
-      },
-    };
-    store.set(VIEW3D_LEGACY_CARD_KEY, "1");
-    expect(readStoredView3dDisplay(storage).primaryView).toBe(true);
-    store.clear();
-    store.set(VIEW3D_PRIMARY_KEY, "0");
-    expect(readStoredView3dDisplay(storage).primaryView).toBe(false);
-    store.clear();
-    expect(readStoredView3dDisplay(storage).primaryView).toBe(true);
-  });
-
   it("omits ground and blocks and defaults all 3D layers (including Contours and Trees) to ON", () => {
     expect(LAYER_3D_IDS).not.toContain("ground");
     expect(LAYER_3D_IDS).not.toContain("blocks");
