@@ -50,8 +50,17 @@ export function SunHoursLayer({
         </mesh>
       ) : null}
       {surfaceGeometry ? (
-        <mesh geometry={surfaceGeometry} renderOrder={1100} data-sun-hours-direct-surfaces>
-          <meshBasicMaterial vertexColors toneMapped={false} depthTest depthWrite side={THREE.FrontSide} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
+        <mesh geometry={surfaceGeometry} renderOrder={1500} data-sun-hours-direct-surfaces>
+          <meshBasicMaterial
+            vertexColors
+            toneMapped={false}
+            depthTest
+            depthWrite={false}
+            side={THREE.DoubleSide}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
+          />
         </mesh>
       ) : null}
     </>

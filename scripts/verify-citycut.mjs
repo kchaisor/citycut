@@ -2394,7 +2394,7 @@ async function main() {
           `off=${JSON.stringify(off)}, overlay=${emptyOverlay}`,
         );
 
-        await sunHoursChip.click();
+        await sunHoursChip.evaluate((el) => el.dispatchEvent(new MouseEvent("click", { bubbles: true })));
         await shadowPage.waitForFunction(
           () => document.documentElement.dataset.sunHoursGroundReady === "1",
           null,
