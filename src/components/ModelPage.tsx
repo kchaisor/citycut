@@ -1321,12 +1321,14 @@ export function ModelPage({
         const cut = drawingModelRef.current;
         const side = cut.sideM;
         const groundY = cut.terrain ? cut.terrain.min : 0;
-        const edgeX = -side * 0.46;
-        const edgeLift = groundY + (cut.terrain ? (cut.terrain.max - cut.terrain.min) * 0.22 : 0);
-        const span = side * 0.38;
+        const relief = cut.terrain ? cut.terrain.max - cut.terrain.min : 0;
+        const westEdge = -side * 0.5 + side * 0.06;
+        const southEdge = -side * 0.42;
+        const slopeY = groundY + relief * 0.35;
+        const span = side * 0.34;
         window.__citycutQa.setCamera({
-          eye: { x: edgeX - span * 0.35, y: edgeLift + span * 0.55, z: span * 0.2 },
-          target: { x: edgeX + span * 0.12, y: edgeLift, z: -span * 0.08 },
+          eye: { x: westEdge - span * 0.95, y: slopeY + span * 0.62, z: southEdge + span * 0.45 },
+          target: { x: westEdge + span * 0.18, y: slopeY + relief * 0.08, z: southEdge - span * 0.06 },
         });
         return true;
       },
