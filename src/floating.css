@@ -4187,6 +4187,7 @@ body,
 .model[data-intro-hold="true"] .top-bar-center,
 .model[data-intro-hold="true"] .top-bar-right {
   opacity: 0 !important;
+  visibility: hidden !important;
   translate: 0 -22px !important;
   pointer-events: none !important;
   transition: none !important;

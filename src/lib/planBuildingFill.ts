@@ -45,10 +45,19 @@ export function importedMassingUpperStrokeStyle(
   return { mm: base.mm, color: base.color, dash: "none" };
 }
 
-export function storedSiteStructureStrokeStyle(): import("./drawingStyle").StrokeStyle {
+export function storedSiteStructureStrokeStyle(
+  style: import("./drawingStyle").LineStyles,
+): import("./drawingStyle").StrokeStyle {
   return {
-    mm: 0.18,
+    mm: style.kerb.mm,
     color: getColour("--stored-site-structure-stroke"),
     dash: "none",
   };
+}
+
+export function storedSiteStructureScreenStroke(
+  style: import("./drawingStyle").LineStyles,
+): import("./drawingStyle").StrokeStyle {
+  const base = storedSiteStructureStrokeStyle(style);
+  return { ...base, mm: style.kerb.mm };
 }

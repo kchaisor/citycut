@@ -531,12 +531,12 @@ export function sitePlanChunks(
     });
   }
   if (plan.storedStructures.length > 0) {
-    const structurePen = pen(storedSiteStructureStrokeStyle(), "miter");
+    const structurePen = pen(storedSiteStructureStrokeStyle(style), "miter");
     chunks.push({
       name: "Structures",
-      paths: plan.storedStructures.map((rings) => ({
-        rings: mapRings(rings, model.sideM, layout),
-        close: true,
+      paths: plan.storedStructures.map((line) => ({
+        rings: [mapRing(line, model.sideM, layout)],
+        close: false,
         ...(structurePen ?? {}),
       })),
     });

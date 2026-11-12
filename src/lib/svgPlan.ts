@@ -27,6 +27,7 @@ import {
 } from "./vicmapContours";
 import { modelFrameSize } from "./modelFrame";
 import type { CityModel, Pt } from "../types";
+import { deckPlanStrokePaths } from "./storedSiteLayers/structurePlan";
 
 const round = (value: number) => Math.round(value * 10) / 10;
 
@@ -56,7 +57,7 @@ export type PlanPaths = {
   rails: Pt[][];
   trams: Pt[][];
   buildings: { rings: Pt[][]; fill: string; site: boolean; imported?: boolean }[];
-  storedStructures: Pt[][][];
+  storedStructures: Pt[][];
   trees: { east: number; north: number; r: number }[];
   contours: Pt[][];
   contourIndex: boolean[];
@@ -277,9 +278,12 @@ export function planPaths(
       : clipped;
   const drawn = layer && visible.length > 0 ? drawContours(visible, drawnInterval, contourIndexEvery) : null;
 
-  const storedStructures = (model.storedSiteStructures ?? [])
-    .map((structure) => clipRings(structure.ring, structure.holes, model.sideM, frameShape, frameSize))
-    .filter((rings): rings is Pt[][] => rings != null);
+  const storedStructures: Pt[][] = (model.storedSiteStructures ?? []).flatMap((structure) => {
+    const paths = deckPlanStrokePaths(structure.ring);
+    return paths
+      .flatMap((path) => clipPolylineSiteFrame(path, model.sideM, frameShape, frameSize))
+      .filter((part) => part.length >= 2);
+  });
 
   const importedUpperLevels = (model.importedMassingUpperLevels ?? [])
     .map((level) => {

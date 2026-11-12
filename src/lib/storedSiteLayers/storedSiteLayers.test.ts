@@ -11,7 +11,7 @@ import {
 import { mgaLonLatRoundTripErrorM } from "./transform";
 import { mgaCrs } from "../crsZone";
 import {
-  hideOvertureBuildingsOverlappingStoredMesh,
+  hideNonMeshBuildingsOverlappingStoredSite,
   overtureBuildingOverlapsStoredFootprint,
   slabAndStructureFootprintsNeverHide,
 } from "./overlap";
@@ -94,7 +94,7 @@ describe("stored site overlap hiding", () => {
   };
 
   it("removes an overlapping Overture footprint and keeps a separate one", () => {
-    const { buildings, hiddenCount } = hideOvertureBuildingsOverlappingStoredMesh(
+    const { buildings, hiddenCount } = hideNonMeshBuildingsOverlappingStoredSite(
       [overlapping, separate],
       [meshFootprint],
     );
@@ -105,7 +105,7 @@ describe("stored site overlap hiding", () => {
   it("slab and structure footprints never hide Overture buildings", () => {
     expect(slabAndStructureFootprintsNeverHide([slabFootprint], overlapping)).toBe(false);
     expect(overtureBuildingOverlapsStoredFootprint(overlapping, slabFootprint).overlaps).toBe(true);
-    const { hiddenCount } = hideOvertureBuildingsOverlappingStoredMesh([overlapping], [slabFootprint]);
+    const { hiddenCount } = hideNonMeshBuildingsOverlappingStoredSite([overlapping], [slabFootprint]);
     expect(hiddenCount).toBe(0);
   });
 });

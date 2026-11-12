@@ -2077,7 +2077,7 @@ export function ModelPage({
               const samples = typeof window !== "undefined" ? window.__citycutProgressSamples : undefined;
               const currentPct = Array.isArray(samples) && samples.length > 0 ? (samples[samples.length - 1] ?? 0) : 0;
               return (
-                <div className="loading-card loading-hud-pill is-model-bridge hud-card" aria-hidden="true" data-progress-pct={currentPct}>
+                <div className="loading-hud-pill is-model-bridge" aria-hidden="true" data-progress-pct={currentPct}>
                   <div className="loading-hud-row">
                     <span className="loading-pulse-dot" />
                     <strong>Building 3D site cut · LiDAR + Vicmap…</strong>

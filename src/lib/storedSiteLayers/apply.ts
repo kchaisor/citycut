@@ -1,6 +1,6 @@
 import type { BuildingFeat, CityModel, LonLat } from "../../types";
 import type { FrameGroundSize, SiteFrameShape } from "../siteFrame";
-import { hideOvertureBuildingsOverlappingStoredMesh } from "./overlap";
+import { hideNonMeshBuildingsOverlappingStoredSite } from "./overlap";
 import { storedMeshBuildingsFromFootprints } from "./buildings";
 import { loadStoredSiteLayerPack } from "./load";
 import type { StoredSiteLayerState, StoredSiteStructureOutline } from "./types";
@@ -30,13 +30,14 @@ export async function applyStoredSiteLayerToCut(input: {
     return { buildings: input.buildings, layer: null, structures: [] };
   }
   const buildingFootprints = pack.footprints.filter((fp) => fp.props.role === "building");
-  const { buildings: filtered, hiddenCount } = hideOvertureBuildingsOverlappingStoredMesh(
+  const { buildings: filtered, hiddenCount } = hideNonMeshBuildingsOverlappingStoredSite(
     input.buildings,
     pack.footprints,
   );
   const mesh = storedMeshBuildingsFromFootprints(buildingFootprints);
+  const scrubbed = hideNonMeshBuildingsOverlappingStoredSite([...filtered, ...mesh.buildings], pack.footprints);
   return {
-    buildings: [...filtered, ...mesh.buildings],
+    buildings: scrubbed.buildings,
     structures: pack.structures,
     layer: {
       id: pack.manifest.id,

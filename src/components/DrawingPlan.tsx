@@ -527,13 +527,19 @@ export function DrawingPlan({
                 stroke="none"
               />
             ))}
-            {plan.storedStructures.map((rings, index) => (
+            {plan.storedStructures.map((line, index) => (
               <path
                 key={`ss${index}`}
                 data-stored-structure="true"
-                d={svgRings(rings)}
+                d={svgPolyline(openRing(line), line.length > 2 && line[0]![0] === line[line.length - 1]![0])}
                 fill="none"
-                {...screenPenAttrs(storedSiteStructureStrokeStyle(), "miter")}
+                {...screenPenAttrs(storedSiteStructureStrokeStyle(style), "miter")}
+                strokeWidth={Math.max(
+                  screenPx(storedSiteStructureStrokeStyle(style).mm),
+                  Math.max(screenPx(style.water.mm), 1),
+                )}
+                strokeLinecap="square"
+                strokeLinejoin="miter"
               />
             ))}
             {plan.buildings.map((building, index) => (

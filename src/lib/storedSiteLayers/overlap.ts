@@ -25,7 +25,7 @@ export function overtureBuildingOverlapsStoredFootprint(
   return { overlaps: byArea || byFraction, intersectionM2 };
 }
 
-export function hideOvertureBuildingsOverlappingStoredMesh(
+export function hideNonMeshBuildingsOverlappingStoredSite(
   buildings: BuildingFeat[],
   footprints: StoredSiteFootprint[],
 ): { buildings: BuildingFeat[]; hiddenCount: number } {
@@ -34,6 +34,10 @@ export function hideOvertureBuildingsOverlappingStoredMesh(
   let hiddenCount = 0;
   const kept: BuildingFeat[] = [];
   for (const building of buildings) {
+    if (building.storedSiteMesh) {
+      kept.push(building);
+      continue;
+    }
     let hide = false;
     for (const mask of masks) {
       if (overtureBuildingOverlapsStoredFootprint(building, mask).overlaps) {
@@ -46,6 +50,8 @@ export function hideOvertureBuildingsOverlappingStoredMesh(
   }
   return { buildings: kept, hiddenCount };
 }
+
+export const hideOvertureBuildingsOverlappingStoredMesh = hideNonMeshBuildingsOverlappingStoredSite;
 
 export function slabAndStructureFootprintsNeverHide(
   footprints: StoredSiteFootprint[],
