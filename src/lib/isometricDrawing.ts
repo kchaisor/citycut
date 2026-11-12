@@ -307,7 +307,7 @@ export function readIsometricDrawingColors(): IsometricDrawingColors {
     buildingEdge: getColour("--outline-building"),
     siteBuilding: getColour("--site-building"),
     importedMassing: getColour("--imported-massing"),
-    roads: getColour("--uniform-road"),
+    roads: getColour("--road-local"),
     roadEdge: getColour("--outline-road"),
     footpaths: getColour("--road-path"),
     footpathEdge: getColour("--outline-path"),

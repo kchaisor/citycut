@@ -340,11 +340,9 @@ export function ModelPage({
   const [exportError, setExportError] = useState<string | null>(null);
   const [busy, setBusy] = useState<ExportBusy>(null);
   const [sunStudyProgress, setSunStudyProgress] = useState<string | null>(null);
-  const [colourByUse, setColourByUse] = useState(() => {
-    const preset = capturePresetFromSearch(window.location.search);
-    if (preset.uniformBuildings) return false;
-    return false;
-  });
+  const [colourByUse, setColourByUse] = useState(
+    () => !capturePresetFromSearch(window.location.search).uniformBuildings,
+  );
   const [showSource, setShowSource] = useState(false);
   const [buildingsAsMesh, setBuildingsAsMesh] = useState(false);
   const [comFootprints, setComFootprints] = useState<ComBuildingFootprint[]>(

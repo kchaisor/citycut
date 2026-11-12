@@ -488,13 +488,7 @@ export function DrawingPlan({
             {plan.roadFill.length > 0 && (
               <path
                 d={plan.roadFill.map((polygon) => svgRings(polygon)).join(" ")}
-                fill={
-                  muted
-                    ? mutedFill("--sun-study-road", style.roadFill)
-                    : uniformBuildings
-                      ? getColour("--uniform-road")
-                      : style.roadFill
-                }
+                fill={muted ? mutedFill("--sun-study-road", style.roadFill) : style.roadFill}
                 fillRule="evenodd"
                 {...(style.kerbOn ? screenPenAttrs(style.kerb) : { stroke: "none" })}
               />
