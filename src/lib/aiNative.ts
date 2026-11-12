@@ -237,6 +237,23 @@ export function parseNativeAiLayers(bytes: Uint8Array): string[] {
   return layers;
 }
 
+export function parseNativeAiLayerFillRgbs(bytes: Uint8Array, layerLabel: string): Rgb[] {
+  const text = new TextDecoder("latin1").decode(bytes);
+  const fills: Rgb[] = [];
+  const blockRe = /%AI5_BeginLayer[\s\S]*?\(([^)]*)\)\s+Ln([\s\S]*?)%AI5_EndLayer/g;
+  let block: RegExpExecArray | null;
+  const fillRe = /([\d.]+) ([\d.]+) ([\d.]+) Xa/g;
+  while ((block = blockRe.exec(text))) {
+    const label = block[1].replace(/\\([()\\])/g, "$1");
+    if (label !== layerLabel) continue;
+    let fill: RegExpExecArray | null;
+    while ((fill = fillRe.exec(block[2]))) {
+      fills.push([Number(fill[1]), Number(fill[2]), Number(fill[3])]);
+    }
+  }
+  return fills;
+}
+
 export function nativeAiLooksLikeEps(bytes: Uint8Array): boolean {
   const head = new TextDecoder("latin1").decode(bytes.subarray(0, 64));
   return head.startsWith("%!PS-Adobe") && head.includes("Adobe Illustrator");
