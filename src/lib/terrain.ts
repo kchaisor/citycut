@@ -903,9 +903,12 @@ export function basePlinthBuffers(
 
   const topColorAt = (yTop: number): [number, number, number] =>
     terrain ? shadeHeight((yTop - terrain.min) / relief, 0.94) : flatGroundRgb(0.95);
-  const bottomWallColor: [number, number, number] = terrain
-    ? shadeHeight(0, 0.86)
-    : flatGroundRgb(0.88);
+  const plinthWall = getColour("--plinth-wall");
+  const bottomWallColor: [number, number, number] = [
+    parseInt(plinthWall.slice(1, 3), 16) / 255,
+    parseInt(plinthWall.slice(3, 5), 16) / 255,
+    parseInt(plinthWall.slice(5, 7), 16) / 255,
+  ];
   const bottomCapColor: [number, number, number] = terrain
     ? shadeHeight(0, 0.82)
     : flatGroundRgb(0.84);

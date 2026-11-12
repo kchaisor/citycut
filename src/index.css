@@ -707,21 +707,21 @@ input[type="range"]::-moz-range-thumb {
 .building-detail-panel {
   position: fixed;
   z-index: 40;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 340px;
-  max-width: calc(100vw - 72px);
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--panel-border);
+  border: 1px solid var(--panel-border);
   background: #fff;
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.12);
   font-size: 13px;
+  pointer-events: auto;
+}
+.building-detail-panel.is-floating,
+.building-detail-panel.inspect-hud {
+  width: min(280px, calc(100vw - 24px));
+  max-height: min(72vh, 460px);
+  border-radius: 10px;
 }
 .building-detail-panel.is-minimised {
-  bottom: auto;
-  height: auto;
   max-height: none;
 }
 .building-detail-panel header {
@@ -804,21 +804,10 @@ input[type="range"]::-moz-range-thumb {
   cursor: pointer;
 }
 @media (max-width: 639px) {
-  .building-detail-panel {
-    top: auto;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    width: auto;
-    max-width: none;
-    max-height: min(72vh, 520px);
-    border-left: none;
-    border-top: 1px solid var(--panel-border);
-    border-radius: 14px 14px 0 0;
-    box-shadow: 0 -6px 28px rgba(0, 0, 0, 0.12);
-  }
-  .building-detail-panel.is-minimised {
-    max-height: none;
+  .building-detail-panel.is-floating,
+  .building-detail-panel.inspect-hud {
+    width: min(300px, calc(100vw - 16px));
+    max-height: min(68vh, 420px);
   }
 }
 .legend ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
@@ -828,6 +817,22 @@ input[type="range"]::-moz-range-thumb {
   background-image: repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.72) 0 2px, transparent 2px 4px);
 }
 .legend b { font-weight: 560; font-variant-numeric: tabular-nums; }
+
+.studio-compass {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 6;
+  pointer-events: none;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+.studio-compass-rose {
+  display: block;
+  transform-origin: 50% 55%;
+}
 
 .viewport-hint,
 .stage-error {

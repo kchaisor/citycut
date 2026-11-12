@@ -14,7 +14,8 @@ import * as THREE from "three";
 import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
-import { attachScenePointPick, attachBuildingPick } from "../lib/buildingPick";
+import { attachScenePointPick } from "../lib/buildingPick";
+import { attachSceneInspectPick, type SceneInspectWorld, type SceneSelection } from "../lib/sceneInspectPick";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { basePlinthBottomY } from "../lib/terrain";
 import { auditBuildingSelection, mountSelectedBuildingsVisual } from "../lib/buildingSelectionVisual";
@@ -24,7 +25,7 @@ import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import { captureViewPng } from "../lib/capturePng";
-import { GroundGrid, StudioSky, ViewInset, insetPointerEvents } from "./SceneBackdrop";
+import { StudioSky, ViewInset, insetPointerEvents } from "./SceneBackdrop";
 import { INTRO_ACTIVE_KEY, StudioEffects, useCameraMoving } from "./StudioEffects";
 import type { RenderQuality } from "../lib/renderQuality";
 import { markScreenOnly } from "../lib/screenOnly";
@@ -79,10 +80,12 @@ import type { ProjectionMode } from "../lib/viewMemory";
 import { isLayer3dVisible, treesVisibleIn3d, type View3dDisplaySettings } from "../lib/view3dDisplay";
 import { buildContourLineObject } from "../lib/contourLines3d";
 import {
-  applyWhiteCardTint,
-  snapshotWhiteCardColors,
-  whiteCardViewportLighting,
-} from "../lib/whiteCardViewport";
+  applyPrimaryViewportTint,
+  snapshotPrimaryViewportColors,
+  primaryViewportLighting,
+} from "../lib/primaryViewport";
+import { applyUniformRoadTint } from "../lib/uniformViewport";
+import { studioNorthNeedleDeg } from "../lib/studioCompass";
 import {
   DEFAULT_PERSPECTIVE_OFFSET,
   heliodonSceneBounds,
@@ -107,7 +110,8 @@ import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
 
 const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
-import { WindStaticArrows, WindStreaks } from "./WindStreaks";
+import { GroundWindFlow } from "./GroundWindFlow";
+import { InspectHudProjector, type InspectHudScreen } from "./InspectHudProjector";
 import { analyzeWindPeriod, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
 import type { CityModel } from "../types";
 
@@ -297,6 +301,14 @@ function SceneFrameloopGate() {
   return null;
 }
 
+function StudioCompassTracker({ onNeedle }: { onNeedle: (deg: number) => void }) {
+  const camera = useThree((state) => state.camera);
+  useFrame(() => {
+    onNeedle(studioNorthNeedleDeg(camera));
+  });
+  return null;
+}
+
 function SceneContinuousBridge({
   windAnimate,
   walkRippleActive,
@@ -320,23 +332,31 @@ function SceneContinuousBridge({
   return null;
 }
 
-function BuildingPickLayer({
+function SceneInspectPickLayer({
   root,
+  model,
   enabled,
-  onBuildingPick,
-  onClearPick,
+  onPick,
+  onClear,
 }: {
   root: THREE.Object3D;
+  model: CityModel;
   enabled: boolean;
-  onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
-  onClearPick?: () => void;
+  onPick: (selection: SceneSelection) => void;
+  onClear?: () => void;
 }) {
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
   useLayoutEffect(() => {
     if (!enabled) return;
-    return attachBuildingPick(gl.domElement, camera, root, { onBuildingPick, onClearPick });
-  }, [camera, enabled, gl.domElement, onBuildingPick, onClearPick, root]);
+    return attachSceneInspectPick(
+      gl.domElement,
+      camera,
+      root,
+      { trees: model.trees, terrain: model.terrain, sideM: model.sideM },
+      { onPick, onClear },
+    );
+  }, [camera, enabled, gl.domElement, model.sideM, model.terrain, model.trees, onClear, onPick, root]);
   return null;
 }
 
@@ -467,8 +487,8 @@ function City({
   selectedBuildingIds,
   display,
   onBounds,
-  onBuildingPick,
-  onClearBuildingPick,
+  onSceneInspectPick,
+  onClearSceneInspect,
   pickBuildings,
   sectionKnife,
   onSectionKnifePoseChange,
@@ -487,8 +507,8 @@ function City({
   selectedBuildingIds?: readonly number[];
   display: View3dDisplaySettings;
   onBounds: (bounds: Aabb) => void;
-  onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
-  onClearBuildingPick?: () => void;
+  onSceneInspectPick: (selection: SceneSelection) => void;
+  onClearSceneInspect?: () => void;
   pickBuildings: boolean;
   sectionKnife?: SectionKnifeToolState | null;
   onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
@@ -843,12 +863,14 @@ function City({
     refreshSceneSurfaceColors(group);
     snapshotBuildingViewportColors(group, colourMode);
     snapshotSunStudySurfaceColors(group);
-    snapshotWhiteCardColors(group, colourMode);
+    snapshotPrimaryViewportColors(group, colourMode);
     applySunStudySurfaceTint(group, false);
     applyBuildingSolarNeutral(group, false, solarNeutralFill);
-    applyWhiteCardTint(group, display.whiteCard);
+    applyPrimaryViewportTint(group, display.primaryView);
+    const uniformRoadsOn = colourMode.uniformBuildings && !display.primaryView;
+    applyUniformRoadTint(group, uniformRoadsOn);
     invalidate();
-  }, [group, colourMode, solarDiagramOn, solarNeutralFill, colourTick, display.whiteCard, invalidate]);
+  }, [group, colourMode, solarDiagramOn, solarNeutralFill, colourTick, display.primaryView, invalidate]);
   const buildingsVisible = isLayer3dVisible(display, "buildings");
   const roadsVisible = isLayer3dVisible(display, "roads");
   const footpathsVisible = isLayer3dVisible(display, "footpaths");
@@ -956,11 +978,12 @@ function City({
         cityRoot={group}
         colourMode={colourMode}
       />
-      <BuildingPickLayer
+      <SceneInspectPickLayer
         root={group}
+        model={model}
         enabled={pickBuildings && buildingsVisible && !sectionKnife?.active}
-        onBuildingPick={onBuildingPick}
-        onClearPick={onClearBuildingPick}
+        onPick={onSceneInspectPick}
+        onClear={onClearSceneInspect}
       />
       {sectionKnife?.active && onSectionKnifePoseChange ? (
         <SectionKnifeScene
@@ -2029,15 +2052,13 @@ export function Cameras({
 }
 
 function WindLayer({
-  sideM,
-  terrain,
+  model,
   table,
   period,
   enabled,
   animateStreaks,
 }: {
-  sideM: number;
-  terrain?: import("../types").TerrainField | null;
+  model: CityModel;
   table: WindRoseTable | null;
   period: WindPeriodId;
   enabled: boolean;
@@ -2049,10 +2070,9 @@ function WindLayer({
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
-  if (!enabled || !table) return null;
-  const stats = analyzeWindPeriod(table, period);
-  if (!animateStreaks) return <WindStaticArrows sideM={sideM} stats={stats} terrain={terrain} />;
-  return <WindStreaks sideM={sideM} stats={stats} animate={visible} terrain={terrain} />;
+  if (!enabled) return null;
+  const stats = table ? analyzeWindPeriod(table, period) : null;
+  return <GroundWindFlow model={model} stats={stats} animate={visible && animateStreaks} />;
 }
 
 export function Scene3D({
@@ -2070,8 +2090,10 @@ export function Scene3D({
   windPeriod,
   windAnimateStreaks,
   onExportReady,
-  onBuildingPick,
-  onClearBuildingPick,
+  onSceneInspectPick,
+  onClearSceneInspect,
+  inspectAnchor,
+  onInspectHudScreen,
   heightEditBuildingId,
   selectedBuildingIds,
   cameraMemory,
@@ -2085,6 +2107,7 @@ export function Scene3D({
   onScenePoint = null,
   sectionKnife = null,
   onSectionKnifePoseChange = undefined,
+  onCompassNeedle = undefined,
   quality = "high",
 }: {
   model: CityModel;
@@ -2101,8 +2124,10 @@ export function Scene3D({
   windPeriod: WindPeriodId;
   windAnimateStreaks: boolean;
   onExportReady: (exporter: SceneExporter | null) => void;
-  onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
-  onClearBuildingPick?: () => void;
+  onSceneInspectPick: (selection: SceneSelection) => void;
+  onClearSceneInspect?: () => void;
+  inspectAnchor: SceneInspectWorld | null;
+  onInspectHudScreen: (screen: InspectHudScreen | null) => void;
   heightEditBuildingId: number | null;
   selectedBuildingIds?: readonly number[];
   cameraMemory?: CameraMemoryRef;
@@ -2116,6 +2141,7 @@ export function Scene3D({
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
   sectionKnife?: SectionKnifeToolState | null;
   onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
+  onCompassNeedle?: (deg: number) => void;
   quality?: RenderQuality;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
@@ -2157,13 +2183,13 @@ export function Scene3D({
     setGlEpoch((value) => value + 1);
   }, []);
   const viewportLight = sunStudyViewportLighting({
-    showPath: solar.showPath && !display.whiteCard,
+    showPath: solar.showPath && !display.primaryView,
     castShadows: solar.castShadows,
   });
-  const cardLight = whiteCardViewportLighting(display.whiteCard);
-  const fillKeyLight = display.whiteCard ? cardLight.fillKeyLight : viewportLight.fillKeyLight;
-  const fillAmbient = display.whiteCard ? cardLight.fillAmbient : viewportLight.fillAmbient;
-  const fillHemi = display.whiteCard ? cardLight.fillHemi : viewportLight.fillHemi;
+  const primaryLight = primaryViewportLighting(display.primaryView);
+  const fillKeyLight = display.primaryView ? primaryLight.fillKeyLight : viewportLight.fillKeyLight;
+  const fillAmbient = display.primaryView ? primaryLight.fillAmbient : viewportLight.fillAmbient;
+  const fillHemi = display.primaryView ? primaryLight.fillHemi : viewportLight.fillHemi;
   const { sunIntensity, noToneMapping } = viewportLight;
   const heliodonRadius = heliodonRadiusM(model.sideM, solar.radiusFactor);
   const shadowTargetY = groundY;
@@ -2216,9 +2242,6 @@ export function Scene3D({
         <RendererShadows enabled={solar.castShadows} />
       <SunStudyToneMapping noToneMapping={noToneMapping} />
       <StudioSky colourTick={colourTick} fallback={modelBg} />
-      {projection !== "plan" && !sectionKnife?.active && (
-        <GroundGrid sideM={model.sideM} groundY={plinthBottomY} colourTick={colourTick} />
-      )}
       <hemisphereLight args={[sky, groundLight, fillHemi]} />
       <ambientLight intensity={fillAmbient} />
       <directionalLight position={[model.sideM * 0.4, model.sideM, model.sideM * 0.2]} intensity={fillKeyLight} />
@@ -2235,6 +2258,7 @@ export function Scene3D({
         showShadow={projection !== "plan"}
         frameShape={model.frameShape ?? "square"}
         colourTick={colourTick}
+        primaryView={display.primaryView}
       />
       <SolarLight
         sample={sunSample}
@@ -2255,8 +2279,8 @@ export function Scene3D({
         solarDiagramOn={solar.showPath}
         solarNeutralFill={solarNeutralFill}
         onBounds={onBounds}
-        onBuildingPick={onBuildingPick}
-        onClearBuildingPick={onClearBuildingPick}
+        onSceneInspectPick={onSceneInspectPick}
+        onClearSceneInspect={onClearSceneInspect}
         pickBuildings={model.layers.buildings && !onScenePoint}
         heightEditBuildingId={heightEditBuildingId}
         selectedBuildingIds={selectedBuildingIds}
@@ -2280,9 +2304,14 @@ export function Scene3D({
         terrain={model.terrain ?? undefined}
         settings={solar}
       />
+      <InspectHudProjector
+        world={inspectAnchor}
+        enabled={inspectAnchor != null}
+        onScreen={onInspectHudScreen}
+      />
+      {onCompassNeedle ? <StudioCompassTracker onNeedle={onCompassNeedle} /> : null}
       <WindLayer
-        sideM={model.sideM}
-        terrain={model.terrain}
+        model={model}
         table={windTable}
         period={windPeriod}
         enabled={windEnabled}

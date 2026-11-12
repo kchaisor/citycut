@@ -26,7 +26,7 @@
 .app { background: var(--sidebar-grey); }
 .model .viewport { background: var(--viewport-bg); }
 .model .viewport:not(.is-drawing):not(.is-satellite) {
-  background: linear-gradient(180deg, var(--viewport-studio-top) 0%, var(--viewport-bg) 55%, var(--viewport-studio-bottom) 100%);
+  background: var(--viewport-bg);
 }
 .sidebar { --muted-text: var(--sidebar-text); color: var(--sidebar-text); }
 @media (min-width: 641px) {
