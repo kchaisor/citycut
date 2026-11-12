@@ -109,10 +109,23 @@ export function applyPrimaryViewportTint(root: THREE.Object3D, primaryOn: boolea
     if (!mesh.isMesh) return;
     if (mesh.name === "Terrain") {
       applyTerrainPrimary(mesh, primaryOn);
+      forEachStandardMaterial(mesh, (material) => {
+        material.color.setStyle(primaryOn ? getColour("--primary-surface") : getColour("--primary-building"));
+        applyMatteFinish(material);
+      });
       return;
     }
     if (mesh.name === "BasePlinth") {
       applyPlinthPrimary(mesh, primaryOn);
+      forEachStandardMaterial(mesh, (material) => {
+        const rest = material.userData.primaryRestHex as string | undefined;
+        if (primaryOn) {
+          material.color.setStyle(getColour("--plinth-wall"));
+        } else if (rest) {
+          material.color.setStyle(rest);
+        }
+        applyMatteFinish(material);
+      });
       return;
     }
     if (mesh.name === "Roads") {

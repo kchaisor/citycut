@@ -1966,7 +1966,7 @@ export function ModelPage({
         id: "roads" as const,
         label: "Roads",
         meta: `${formatLengthKm(model.roadKm)} km`,
-        color: getColour("--road-local"),
+        color: view3dDisplay.primaryView ? getColour("--primary-road") : getColour("--road-local"),
         available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade !== "path"),
         onPick: (value: string) => {
           commitColour("--road-local", value);
@@ -1982,7 +1982,7 @@ export function ModelPage({
         id: "footpaths" as const,
         label: "Footpaths",
         meta: model.roads.filter((r) => r.kind === "road" && r.grade === "path").length.toLocaleString(),
-        color: getColour("--road-path"),
+        color: view3dDisplay.primaryView ? getColour("--primary-footpath") : getColour("--road-path"),
         available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade === "path"),
         onPick: (value: string) => {
           commitColour("--road-path", value);

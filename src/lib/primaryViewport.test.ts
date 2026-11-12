@@ -54,5 +54,7 @@ describe("primary viewport", () => {
     expect(attr.getX(0)).toBeCloseTo(1, 3);
     expect(attr.getY(0)).toBeCloseTo(1, 3);
     expect(attr.getZ(0)).toBeCloseTo(1, 3);
+    const mat = plinth.material as THREE.MeshStandardMaterial;
+    expect(`#${mat.color.getHexString()}`.toLowerCase()).toBe(getColour("--plinth-wall").toLowerCase());
   });
 });

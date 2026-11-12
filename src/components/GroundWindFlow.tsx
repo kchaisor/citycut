@@ -1,7 +1,6 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { getColour } from "../lib/colours";
 import type { CityModel } from "../types";
 import {
   buildGroundWindParticles,
@@ -13,6 +12,7 @@ import {
   type GroundWindParticle,
 } from "../lib/groundWindField";
 import { buildingBlocks } from "../lib/groundWindField";
+import { bakeGroundWindGlyphTexture } from "../lib/groundWindGlyph";
 import type { WindPeriodStats } from "../lib/windRose";
 
 function reducedMotionPreferred(): boolean {
@@ -24,12 +24,11 @@ export function GroundWindFlow({
   model,
   stats,
   animate,
-  primaryView,
 }: {
   model: CityModel;
   stats: WindPeriodStats | null;
   animate: boolean;
-  primaryView: boolean;
+  primaryView?: boolean;
 }) {
   const particles = useMemo(() => buildGroundWindParticles(model, stats), [model, stats]);
   const blocks = useMemo(() => buildingBlocks(model), [model]);
@@ -38,40 +37,35 @@ export function GroundWindFlow({
   const scratch = useMemo(() => new THREE.Object3D(), []);
   const phase = useRef(0);
   const { length, width } = useMemo(() => groundWindGlyphScaleM(model.sideM), [model.sideM]);
+  const map = useMemo(() => bakeGroundWindGlyphTexture(), []);
   const geometry = useMemo(() => new THREE.PlaneGeometry(length, width), [length, width]);
-  const color = useMemo(
-    () => new THREE.Color(primaryView ? getColour("--primary-road") : getColour("--ground-wind-glyph")),
-    [primaryView],
-  );
   const material = useMemo(
     () =>
       new THREE.MeshBasicMaterial({
-        color,
+        map,
         transparent: true,
-        opacity: 0.88,
+        opacity: 0.94,
         depthWrite: false,
         side: THREE.DoubleSide,
         toneMapped: false,
       }),
-    [color],
+    [map],
   );
   const reduced = reducedMotionPreferred();
   const active = animate && !reduced;
   const invalidate = useThree((state) => state.invalidate);
   const camera = useThree((state) => state.camera);
   const flowAxis = useMemo(() => new THREE.Vector3(), []);
+  const viewDir = useMemo(() => new THREE.Vector3(), []);
 
   useEffect(
     () => () => {
       geometry.dispose();
       material.dispose();
+      map.dispose();
     },
-    [geometry, material],
+    [geometry, material, map],
   );
-
-  useEffect(() => {
-    material.color.setStyle(primaryView ? getColour("--primary-road") : getColour("--ground-wind-glyph"));
-  }, [material, primaryView]);
 
   useFrame((_, delta) => {
     const mesh = meshRef.current;
@@ -93,16 +87,22 @@ export function GroundWindFlow({
       const yaw = Math.atan2(flowAxis.x, flowAxis.z);
       scratch.position.set(wrappedE, y, -wrappedN);
       scratch.rotation.set(-Math.PI / 2, 0, yaw);
+      viewDir.copy(camera.position).sub(scratch.position);
+      viewDir.y = 0;
+      if (viewDir.lengthSq() > 1e-6) {
+        const tilt = Math.atan2(viewDir.x, viewDir.z) - yaw;
+        scratch.rotation.z = THREE.MathUtils.clamp(tilt * 0.22, -0.35, 0.35);
+      }
       const dist = camera.position.distanceTo(scratch.position);
-      const lift = Math.max(1, dist / (model.sideM * 0.55));
-      const pulse = 0.55 + 0.45 * Math.sin((t + particle.phase) * Math.PI * 2);
-      const along = pulse * (0.85 + 0.3 * Math.min(1, Math.max(0, flow.speed)));
+      const lift = Math.max(1.15, Math.min(2.8, dist / (model.sideM * 0.42)));
+      const pulse = 0.62 + 0.38 * Math.sin((t + particle.phase) * Math.PI * 2);
+      const along = pulse * (0.9 + 0.25 * Math.min(1, Math.max(0, flow.speed)));
       scratch.scale.set(along * lift, lift, 1);
       scratch.updateMatrix();
       mesh.setMatrixAt(index, scratch.matrix);
     });
     mesh.instanceMatrix.needsUpdate = true;
-    material.opacity = active ? 0.88 : 0.62;
+    material.opacity = active ? 0.94 : 0.72;
     invalidate();
   });
 

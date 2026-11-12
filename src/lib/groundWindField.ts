@@ -4,7 +4,7 @@ import { sampleTerrain } from "./terrain";
 
 export const GROUND_WIND_DEFAULT_SECTOR = 0;
 export const GROUND_WIND_LOOP_SEC = 5.2;
-export const GROUND_WIND_PARTICLE_COUNT = 1024;
+export const GROUND_WIND_PARTICLE_COUNT = 1320;
 export const GROUND_WIND_GRID = 72;
 
 export type GroundWindParticle = {
@@ -16,8 +16,8 @@ export type GroundWindParticle = {
 };
 
 export function groundWindGlyphScaleM(sideM: number): { length: number; width: number } {
-  const length = Math.max(11, sideM * 0.024);
-  return { length, width: Math.max(1.8, length * 0.16) };
+  const length = Math.max(14, sideM * 0.028);
+  return { length, width: Math.max(2.2, length * 0.14) };
 }
 
 function hash01(seed: number): number {
