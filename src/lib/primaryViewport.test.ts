@@ -37,7 +37,7 @@ describe("primary viewport", () => {
     expect(road.material).toBeInstanceOf(THREE.MeshStandardMaterial);
   });
 
-  it("whitens BasePlinth cut faces in Primary view", () => {
+  it("blacks BasePlinth cut faces in Primary view", () => {
     const geometry = new THREE.BufferGeometry();
     const colors = new Float32Array([0.5, 0.5, 0.5, 0.6, 0.6, 0.6]);
     geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
@@ -52,9 +52,9 @@ describe("primary viewport", () => {
     snapshotPrimaryViewportColors(root, { colourByUse: false, uniformBuildings: true, colourBySource: false });
     applyPrimaryViewportTint(root, true);
     const attr = geometry.getAttribute("color");
-    expect(attr.getX(0)).toBeCloseTo(1, 3);
-    expect(attr.getY(0)).toBeCloseTo(1, 3);
-    expect(attr.getZ(0)).toBeCloseTo(1, 3);
+    expect(attr.getX(0)).toBeCloseTo(0, 3);
+    expect(attr.getY(0)).toBeCloseTo(0, 3);
+    expect(attr.getZ(0)).toBeCloseTo(0, 3);
     expect(plinth.material).toBeInstanceOf(THREE.MeshBasicMaterial);
     expect(primaryPlinthReadsOnCanvas(plinth.material)).toBe(true);
     expect(plinth.userData.cannotReceiveAO).toBe(true);

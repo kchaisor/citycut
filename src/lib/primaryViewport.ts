@@ -49,7 +49,7 @@ function applyTerrainPrimary(mesh: THREE.Mesh, primaryOn: boolean): void {
 }
 
 function applyPlinthPrimary(mesh: THREE.Mesh, primaryOn: boolean): void {
-  applyVertexPrimary(mesh, primaryOn, "primaryPlinthVertexColors", getColour("--plinth-wall"));
+  applyVertexPrimary(mesh, primaryOn, "primaryPlinthVertexColors", getColour("--primary-plinth-wall"));
 }
 
 function restorePrimaryRoadMaterial(mesh: THREE.Mesh): void {
@@ -79,7 +79,7 @@ function applyPrimaryPlinthMaterial(mesh: THREE.Mesh, primaryOn: boolean): void 
   if (!(mesh.material instanceof THREE.MeshBasicMaterial)) {
     mesh.userData.primaryPlinthRestMaterial = mesh.material;
     mesh.material = new THREE.MeshBasicMaterial({
-      color: getColour("--plinth-wall"),
+      color: getColour("--primary-plinth-wall"),
       toneMapped: false,
       vertexColors: false,
       side: THREE.DoubleSide,
@@ -169,7 +169,7 @@ export function applyPrimaryViewportTint(root: THREE.Object3D, primaryOn: boolea
 export function primaryPlinthReadsOnCanvas(material: THREE.Material): boolean {
   if (!(material instanceof THREE.MeshBasicMaterial)) return false;
   const hex = `#${material.color.getHexString()}`.toLowerCase();
-  return hex === getColour("--plinth-wall").toLowerCase();
+  return hex === getColour("--primary-plinth-wall").toLowerCase();
 }
 
 export function primaryRoadReadsOnCanvas(material: THREE.Material): boolean {

@@ -199,6 +199,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--light-fill` | `#e4e8ee` | Soft studio fill light, from the side opposite the key light in the 3D view. Off while sun shadows are on. |
 | `--viewport-studio-top` | `#f6f6f5` | Top of the studio gradient behind the 3D model. It runs top, then `--viewport-bg`, then bottom. |
 | `--viewport-studio-bottom` | `#d9d9d6` | Bottom of the studio gradient behind the 3D model. |
+| `--primary-plinth-wall` | `#000000` | Vertical plinth faces in Primary 3D only (`MeshBasic`); `--plinth-wall` stays for other modes and geometry defaults. |
 | `--plinth-shadow` | `#1a1916` | Soft contact shadow under the 3D plinth. Baked once per cut, screen only (not in the PNG). |
 | `--cut-line` | `#f7f4ee` | Frame drawn around the cut on the satellite preview. |
 | `--sun-arc-summer` | `#1a1916` | Dec 21 sun path in the 3D heliodon, solid line (screen only). Black or grey only. |
