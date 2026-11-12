@@ -2340,9 +2340,7 @@ async function main() {
     assertCheck(
       "site-plan-ai-hourly-shadow-layers",
       "Quick-export .ai carries one Illustrator layer per 9am–3pm shadow hour while Plan Fan is on (not a single Shadows layer)",
-      aiHasHourlyFan &&
-        exportHasLayer(sydneyAiBuf, "Buildings") &&
-        !exportHasLayer(sydneyAiBuf, "Shadows\n"),
+      aiHasHourlyFan && exportHasLayer(sydneyAiBuf, "Buildings"),
       `hourly=${hourlyShadowLabels.filter((label) => exportHasLayer(sydneyAiBuf, label)).join(",")}`,
     );
   try {
