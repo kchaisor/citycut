@@ -2321,11 +2321,29 @@ async function main() {
     const sydneyAiPath = path.join(cursorArtifacts, "site-plan-button-download.ai");
     await sydneyAiDownload.saveAs(sydneyAiPath);
     const sydneyAiBuf = fs.readFileSync(sydneyAiPath);
+    const hourlyShadowLabels = [
+      "Shadow 09:00",
+      "Shadow 10:00",
+      "Shadow 11:00",
+      "Shadow 12:00",
+      "Shadow 13:00",
+      "Shadow 14:00",
+      "Shadow 15:00",
+    ];
+    const aiHasHourlyFan = hourlyShadowLabels.every((label) => exportHasLayer(sydneyAiBuf, label));
     assertCheck(
       "site-plan-ai-heliodon-layer",
       "Quick-export .ai includes the Sun path heliodon layer while 9–3pm Plan Fan is on without 3D Sun Dome",
       exportHasLayer(sydneyAiBuf, "Sun path") && sydneyAiBuf.length > 2000,
       `bytes=${sydneyAiBuf.length}`,
+    );
+    assertCheck(
+      "site-plan-ai-hourly-shadow-layers",
+      "Quick-export .ai carries one Illustrator layer per 9am–3pm shadow hour while Plan Fan is on (not a single Shadows layer)",
+      aiHasHourlyFan &&
+        exportHasLayer(sydneyAiBuf, "Buildings") &&
+        !exportHasLayer(sydneyAiBuf, "Shadows\n"),
+      `hourly=${hourlyShadowLabels.filter((label) => exportHasLayer(sydneyAiBuf, label)).join(",")}`,
     );
   try {
     execFileSync(
