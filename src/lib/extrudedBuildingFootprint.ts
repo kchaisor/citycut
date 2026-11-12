@@ -1,3 +1,4 @@
+import { extrudePart } from "./buildCity";
 import { openRing } from "./geo";
 import { pointInPolygon } from "./useCascade";
 import type { BuildingFeat, Pt, Ring } from "../types";
@@ -19,8 +20,12 @@ export function extrudedFootprintsForBuilding(building: BuildingFeat): ExtrudedF
   const footprints: ExtrudedFootprint[] = [];
   for (const part of parts) {
     if (part.height < MIN_EXTRUSION_HEIGHT_M) continue;
+    const holes = part.holes ?? [];
     if (openRing(part.ring).length < 3) continue;
-    footprints.push({ ring: part.ring, holes: part.holes ?? [], height: part.height });
+    const geometry = extrudePart(part.ring, holes, part.height, 0);
+    if (!geometry) continue;
+    geometry.dispose();
+    footprints.push({ ring: part.ring, holes, height: part.height });
   }
   return footprints;
 }

@@ -2527,6 +2527,10 @@ async function main() {
         await mapPage.waitForTimeout(1200);
         const shotPlan = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-mont-albert-3d-plan.png");
         await sceneViewportScreenshot(mapPage, { path: shotPlan });
+        await mapPage.evaluate(() => window.__citycutQaModel?.frameSunHoursGroundPlanCloseup?.());
+        await mapPage.waitForTimeout(800);
+        const shotPlanCloseup = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-mont-albert-3d-plan-closeup.png");
+        await sceneViewportScreenshot(mapPage, { path: shotPlanCloseup });
         const planMeshes = await mapPage.evaluate(() => ({
           planView: document.documentElement.dataset.sunHoursDirectPlanView === "1",
           walls: document.documentElement.dataset.sunHoursDirectWallsVisible === "1",
