@@ -2179,15 +2179,16 @@ export function Scene3D({
         targetY={shadowTargetY}
         topY={siteTopY}
       />
-      {solar.sunHours && sunHoursGroundGrid && (
+      {solar.sunHours && sunHoursGroundGrid ? (
         <SunHoursLayer
           grid={sunHoursGroundGrid}
-          overlay={sunHoursDirectOverlay}
+          overlay={null}
           scaleMaxHours={sunHoursScaleMax || sunHoursGroundGrid.maxSunHours}
           model={model}
           planView={projection === "plan"}
+          groundOnly
         />
-      )}
+      ) : null}
       <City
         model={model}
         uniformBuildings={uniformBuildings}
@@ -2206,6 +2207,16 @@ export function Scene3D({
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
       />
+      {solar.sunHours && sunHoursGroundGrid && sunHoursDirectOverlay ? (
+        <SunHoursLayer
+          grid={sunHoursGroundGrid}
+          overlay={sunHoursDirectOverlay}
+          scaleMaxHours={sunHoursScaleMax || sunHoursGroundGrid.maxSunHours}
+          model={model}
+          planView={projection === "plan"}
+          surfacesOnly
+        />
+      ) : null}
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
       {walkRippleLayer ? <primitive object={walkRippleLayer} /> : null}

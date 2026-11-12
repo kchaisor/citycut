@@ -2458,9 +2458,11 @@ async function main() {
         const paletteBlue = { r: 49, g: 54, b: 149 };
         const paletteYellow = { r: 254, g: 232, b: 37 };
         const planPng = PNG.sync.read(fs.readFileSync(shotDrawing));
+        const plan3dCleanPng = PNG.sync.read(fs.readFileSync(shotPlanClean));
         const obliquePng = PNG.sync.read(fs.readFileSync(shotOblique));
         const blueHits = countPixelsNearRgb(planPng, paletteBlue, 80);
         const yellowHits = countPixelsNearRgb(obliquePng, paletteYellow, 72);
+        const plan3dRoofYellow = countPixelsNearRgb(plan3dCleanPng, paletteYellow, 68);
 
         assertCheck(
           "solar-sun-hours-ground-heatmap",
@@ -2478,8 +2480,9 @@ async function main() {
             overlayCount === 1 &&
             rasterCells > 100 &&
             blueHits > 80 &&
-            yellowHits > 40,
-          `enabled=${JSON.stringify(enabled)}, overlay=${overlayCount}, raster=${rasterCells}, blueHits=${blueHits}, yellowHits=${yellowHits}, drawing=${shotDrawing}, plan3d=${shotPlan}, oblique=${shotOblique}`,
+            yellowHits > 40 &&
+            plan3dRoofYellow > 800,
+          `enabled=${JSON.stringify(enabled)}, overlay=${overlayCount}, raster=${rasterCells}, blueHits=${blueHits}, yellowHits=${yellowHits}, plan3dRoofYellow=${plan3dRoofYellow}, drawing=${shotDrawing}, plan3d=${shotPlan}, oblique=${shotOblique}`,
         );
       };
 
@@ -2530,7 +2533,10 @@ async function main() {
           roofs: document.documentElement.dataset.sunHoursDirectRoofsVisible === "1",
         }));
         const obliquePng = PNG.sync.read(fs.readFileSync(shotOblique));
-        const yellowHits = countPixelsNearRgb(obliquePng, { r: 254, g: 232, b: 37 }, 72);
+        const planPng = PNG.sync.read(fs.readFileSync(shotPlan));
+        const paletteYellow = { r: 254, g: 232, b: 37 };
+        const yellowHits = countPixelsNearRgb(obliquePng, paletteYellow, 72);
+        const planRoofYellow = countPixelsNearRgb(planPng, paletteYellow, 68);
         assertCheck(
           "solar-sun-hours-mont-albert-drape",
           "Mont Albert North sun-hours ground mesh drapes on terrain with relief and sloped edge visible",
@@ -2540,8 +2546,8 @@ async function main() {
         assertCheck(
           "solar-sun-hours-mont-albert-plan-roofs-only",
           "Mont Albert 3D Plan shows roof fills without wall-hour rims",
-          planMeshes.planView && !planMeshes.walls && planMeshes.roofs,
-          `meshes=${JSON.stringify(planMeshes)}`,
+          planMeshes.planView && !planMeshes.walls && planMeshes.roofs && planRoofYellow > 600,
+          `meshes=${JSON.stringify(planMeshes)}, planRoofYellow=${planRoofYellow}`,
         );
         await mapPage.close();
       };

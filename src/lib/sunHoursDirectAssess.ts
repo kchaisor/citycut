@@ -12,6 +12,7 @@ const FACING_DOT_MIN = 0.04;
 const RAY_MAX_M = 4000;
 const SELF_SKIP_M = 0.05;
 const WALL_OFFSET_M = 0.08;
+const ROOF_OVERLAY_LIFT_M = 0.2;
 
 export type SunHoursDirectOverlay = {
   positions: Float32Array;
@@ -128,16 +129,16 @@ function buildOverlayMesh(
         roofColors,
         rgb,
         cx - half,
-        cy + 0.14,
+        cy + ROOF_OVERLAY_LIFT_M,
         cz - half,
         cx + half,
-        cy + 0.14,
+        cy + ROOF_OVERLAY_LIFT_M,
         cz - half,
         cx + half,
-        cy + 0.14,
+        cy + ROOF_OVERLAY_LIFT_M,
         cz + half,
         cx - half,
-        cy + 0.14,
+        cy + ROOF_OVERLAY_LIFT_M,
         cz + half,
       );
       pushQuad(
@@ -145,16 +146,16 @@ function buildOverlayMesh(
         colors,
         rgb,
         cx - half,
-        cy + 0.14,
+        cy + ROOF_OVERLAY_LIFT_M,
         cz - half,
         cx + half,
-        cy + 0.14,
+        cy + ROOF_OVERLAY_LIFT_M,
         cz - half,
         cx + half,
-        cy + 0.14,
+        cy + ROOF_OVERLAY_LIFT_M,
         cz + half,
         cx - half,
-        cy + 0.14,
+        cy + ROOF_OVERLAY_LIFT_M,
         cz + half,
       );
     }

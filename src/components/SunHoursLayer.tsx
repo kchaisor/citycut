@@ -6,6 +6,8 @@ import type { SunHoursDirectOverlay } from "../lib/sunHoursDirectAssess";
 import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
 import type { CityModel } from "../types";
 
+const SUN_HOURS_ROOF_RENDER_ORDER = 1600;
+
 function meshFromBuffers(positions: Float32Array, colors: Float32Array) {
   if (positions.length === 0) return null;
   const geometry = new THREE.BufferGeometry();
@@ -21,18 +23,25 @@ export function SunHoursLayer({
   scaleMaxHours,
   model,
   planView,
+  groundOnly = false,
+  surfacesOnly = false,
 }: {
   grid: SunHoursGroundGrid;
   overlay: SunHoursDirectOverlay | null;
   scaleMaxHours: number;
   model: CityModel;
   planView: boolean;
+  groundOnly?: boolean;
+  surfacesOnly?: boolean;
 }) {
+  const showGround = !surfacesOnly;
+  const showSurfaces = !groundOnly;
+
   const overlayRef = useRef(overlay);
   overlayRef.current = overlay;
 
   useEffect(() => {
-    if (typeof document === "undefined") return;
+    if (typeof document === "undefined" || !showSurfaces) return;
     const next = overlayRef.current;
     const roofOn = Boolean(next && next.roofPositions.length > 0);
     const wallsOn = Boolean(!planView && next && next.wallPositions.length > 0);
@@ -44,9 +53,10 @@ export function SunHoursLayer({
       delete document.documentElement.dataset.sunHoursDirectRoofsVisible;
       delete document.documentElement.dataset.sunHoursDirectWallsVisible;
     };
-  }, [overlay, planView]);
+  }, [overlay, planView, showSurfaces]);
 
   const texture = useMemo(() => {
+    if (!showGround) return null;
     const scaledGrid = { ...grid, maxSunHours: scaleMaxHours };
     const canvas = rasterizeSunHoursGroundGridFor3d(scaledGrid);
     if (!canvas) return null;
@@ -55,28 +65,31 @@ export function SunHoursLayer({
     tex.magFilter = THREE.LinearFilter;
     tex.minFilter = THREE.LinearFilter;
     return tex;
-  }, [grid, scaleMaxHours]);
+  }, [grid, scaleMaxHours, showGround]);
   useEffect(() => () => texture?.dispose(), [texture]);
 
-  const groundGeometry = useMemo(() => buildSunHoursGroundDrapeGeometry(grid, model), [grid, model]);
+  const groundGeometry = useMemo(
+    () => (showGround ? buildSunHoursGroundDrapeGeometry(grid, model) : null),
+    [grid, model, showGround],
+  );
 
-  useEffect(() => () => groundGeometry.dispose(), [groundGeometry]);
+  useEffect(() => () => groundGeometry?.dispose(), [groundGeometry]);
 
   const roofGeometry = useMemo(
-    () => (overlay ? meshFromBuffers(overlay.roofPositions, overlay.roofColors) : null),
-    [overlay],
+    () => (showSurfaces && overlay ? meshFromBuffers(overlay.roofPositions, overlay.roofColors) : null),
+    [overlay, showSurfaces],
   );
   const wallGeometry = useMemo(
-    () => (!planView && overlay ? meshFromBuffers(overlay.wallPositions, overlay.wallColors) : null),
-    [overlay, planView],
+    () => (showSurfaces && !planView && overlay ? meshFromBuffers(overlay.wallPositions, overlay.wallColors) : null),
+    [overlay, planView, showSurfaces],
   );
 
   useEffect(() => () => roofGeometry?.dispose(), [roofGeometry]);
   useEffect(() => () => wallGeometry?.dispose(), [wallGeometry]);
 
   return (
-    <>
-      {texture ? (
+  <>
+      {texture && groundGeometry ? (
         <mesh geometry={groundGeometry} renderOrder={900} data-sun-hours-direct-ground>
           <meshBasicMaterial
             map={texture}
@@ -92,21 +105,21 @@ export function SunHoursLayer({
         </mesh>
       ) : null}
       {roofGeometry ? (
-        <mesh geometry={roofGeometry} renderOrder={1500} data-sun-hours-direct-roofs>
+        <mesh geometry={roofGeometry} renderOrder={SUN_HOURS_ROOF_RENDER_ORDER} data-sun-hours-direct-roofs>
           <meshBasicMaterial
             vertexColors
             toneMapped={false}
             depthTest
             depthWrite={false}
-            side={THREE.FrontSide}
+            side={THREE.DoubleSide}
             polygonOffset
-            polygonOffsetFactor={-2}
-            polygonOffsetUnits={-2}
+            polygonOffsetFactor={-4}
+            polygonOffsetUnits={-4}
           />
         </mesh>
       ) : null}
       {wallGeometry ? (
-        <mesh geometry={wallGeometry} renderOrder={1500} data-sun-hours-direct-walls>
+        <mesh geometry={wallGeometry} renderOrder={SUN_HOURS_ROOF_RENDER_ORDER} data-sun-hours-direct-walls>
           <meshBasicMaterial
             vertexColors
             toneMapped={false}
