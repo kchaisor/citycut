@@ -57,7 +57,9 @@ describe("primary viewport", () => {
     expect(attr.getZ(0)).toBeCloseTo(1, 3);
     expect(plinth.material).toBeInstanceOf(THREE.MeshBasicMaterial);
     expect(primaryPlinthReadsOnCanvas(plinth.material)).toBe(true);
+    expect(plinth.userData.cannotReceiveAO).toBe(true);
     applyPrimaryViewportTint(root, false);
+    expect(plinth.userData.cannotReceiveAO).toBeUndefined();
     expect(plinth.material).toBeInstanceOf(THREE.MeshStandardMaterial);
   });
 });

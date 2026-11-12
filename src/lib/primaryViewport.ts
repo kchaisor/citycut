@@ -73,13 +73,16 @@ function restorePrimaryPlinthMaterial(mesh: THREE.Mesh): void {
 function applyPrimaryPlinthMaterial(mesh: THREE.Mesh, primaryOn: boolean): void {
   if (!primaryOn) {
     restorePrimaryPlinthMaterial(mesh);
+    delete mesh.userData.cannotReceiveAO;
     return;
   }
+  mesh.userData.cannotReceiveAO = true;
   if (!(mesh.material instanceof THREE.MeshBasicMaterial)) {
     mesh.userData.primaryPlinthRestMaterial = mesh.material;
     mesh.material = new THREE.MeshBasicMaterial({
       color: getColour("--plinth-wall"),
       toneMapped: false,
+      vertexColors: false,
       side: THREE.DoubleSide,
     });
   }
