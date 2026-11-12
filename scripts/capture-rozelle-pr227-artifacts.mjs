@@ -7,7 +7,7 @@ mkdirSync(OUT_DIR, { recursive: true });
 
 const CANONICAL =
   process.env.PREVIEW_URL ??
-  "https://citycut-5nhxp7flv-kchai.vercel.app/citycut/?lat=-33.8677&lon=151.1832&km=1";
+  "https://citycut-git-cursor-rozelle-site-layer-kchai.vercel.app/?lat=-33.8677&lon=151.1832&km=1";
 
 const WIDTHS = [1280, 1440];
 
