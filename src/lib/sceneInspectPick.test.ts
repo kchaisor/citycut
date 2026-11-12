@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
+import type { TreeFeat } from "../types";
 import { nearestTreeIdAt, sceneSelectionBuildingId, type SceneSelection } from "./sceneInspectPick";
+
+const tree = (id: number, east: number, north: number): TreeFeat => ({
+  id,
+  at: [east, north],
+  height_m: 10,
+  crown_diameter_m: 4,
+  trunk_diameter_m: 0.4,
+  sizeSource: "default",
+});
 
 describe("scene inspect pick helpers", () => {
   it("reads building id from building selections only", () => {
@@ -16,10 +26,7 @@ describe("scene inspect pick helpers", () => {
   });
 
   it("picks the nearest tree within search radius", () => {
-    const trees = [
-      { id: 1, at: [0, 0] as [number, number], crown_diameter_m: 4 },
-      { id: 2, at: [20, 0] as [number, number], crown_diameter_m: 4 },
-    ];
+    const trees = [tree(1, 0, 0), tree(2, 20, 0)];
     expect(nearestTreeIdAt(1, 0, trees, 8)).toBe(1);
     expect(nearestTreeIdAt(18, 0, trees, 8)).toBe(2);
     expect(nearestTreeIdAt(100, 100, trees, 8)).toBeNull();
