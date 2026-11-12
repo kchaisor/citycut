@@ -249,6 +249,47 @@ function unionCacheLookup(model: CityModel, input: PlanShadowInput, castShadows:
   ].join("|");
 }
 
+function shadowGroupsAreaM2(groups: Ring[][]): number {
+  let total = 0;
+  for (const rings of groups) {
+    if (rings.length === 0) continue;
+    const outer = closeRing(openRing(rings[0]!));
+    if (outer.length < 4) continue;
+    let area = Math.abs(ringArea(outer));
+    for (let index = 1; index < rings.length; index++) {
+      const hole = closeRing(openRing(rings[index]!));
+      if (hole.length >= 4) area -= Math.abs(ringArea(hole));
+    }
+    total += Math.max(0, area);
+  }
+  return total;
+}
+
+function siteFrameAreaM2(sideM: number, frameShape: import("./siteFrame").SiteFrameShape = "square"): number {
+  const frame = framePolygon(sideM, frameShape);
+  const outer = frame[0];
+  if (!outer || outer.length < 4) return sideM * sideM;
+  return Math.abs(ringArea(outer));
+}
+
+export function sitePlanShadePercent(model: CityModel, input: PlanShadowInput, castShadows: boolean): number | null {
+  if (!castShadows || model.buildings.length === 0) return null;
+  const sample = sunAtMelbourneLocal(
+    input.lat,
+    input.lon,
+    input.year,
+    input.month,
+    input.day,
+    input.hour,
+    input.minute,
+  );
+  if (!sample.aboveHorizon) return null;
+  const siteArea = siteFrameAreaM2(model.sideM, model.frameShape ?? "square");
+  if (siteArea <= 0) return null;
+  const shadowArea = shadowGroupsAreaM2(planShadowRings(model, input, castShadows));
+  return Math.round(Math.min(100, Math.max(0, (shadowArea / siteArea) * 100)));
+}
+
 export function planShadowRings(
   model: CityModel,
   input: PlanShadowInput,

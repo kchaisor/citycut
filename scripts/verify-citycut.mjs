@@ -1710,57 +1710,79 @@ async function main() {
         const r = el.getBoundingClientRect();
         return cs.display !== "none" && cs.visibility !== "hidden" && cs.opacity !== "0" && r.width > 0 && r.height > 0;
       });
-      const envConsole = document.querySelector(".model .env-console");
-      const envRect = envConsole?.getBoundingClientRect();
-      const topRow = envConsole?.querySelector(".env-top-row");
-      const bottomRow = envConsole?.querySelector(".env-bottom-row");
+      const siteIsland = document.querySelector(".model .site-island");
+      const islandRect = siteIsland?.getBoundingClientRect();
+      const topBarCenter = document.querySelector(".model .top-bar-center")?.getBoundingClientRect();
+      const bottomRow = siteIsland?.querySelector(".env-bottom-row");
       const hasBottomCompass = Boolean(document.querySelector(".model .bottom-bar .compass-mini"));
       const hasBottomReset = Boolean(document.querySelector(".model .bottom-bar .cam-reset"));
       const hasTopCenterReset = Boolean(document.querySelector(".model .top-bar-center .cam-reset"));
-      const envText = envConsole?.textContent ?? "";
+      const capText = siteIsland?.querySelector(".site-island-cap")?.textContent ?? "";
       const noHorizontalOverflow = Boolean(
-        envConsole &&
-          topRow &&
+        siteIsland &&
           bottomRow &&
-          envConsole.scrollWidth <= envConsole.clientWidth + 1 &&
-          topRow.scrollWidth <= topRow.clientWidth + 1 &&
+          siteIsland.scrollWidth <= siteIsland.clientWidth + 1 &&
           bottomRow.scrollWidth <= bottomRow.clientWidth + 1,
       );
+      const clearsTopBar =
+        Boolean(islandRect && topBarCenter) &&
+        islandRect.top >= topBarCenter.bottom - 2 &&
+        Math.abs(islandRect.left + islandRect.width / 2 - (topBarCenter.left + topBarCenter.width / 2)) < 80;
       return {
         visibleLeftDrawerCount: visibleLeftDrawers.length,
-        hasEnvConsole: Boolean(envConsole && envRect && envRect.width > 400 && envRect.height > 50),
-        hasTwoRows: Boolean(topRow && bottomRow),
+        hasSiteIsland: Boolean(siteIsland && islandRect && islandRect.width > 120 && islandRect.height > 24),
         hasBottomCompass,
         hasBottomReset,
         hasTopCenterReset,
         noHorizontalOverflow,
-        has3dSunDomeIn3d: envText.includes("3D Sun Dome"),
-        hasPlanFanIn3d: envText.includes("9–3pm Plan Fan"),
-        hasDuplicateResCodeInRow2: envText.includes("ResCode 9–3"),
-        envConsoleRect: envRect
-          ? { width: Math.round(envRect.width), height: Math.round(envRect.height) }
+        clearsTopBar,
+        capHasTime: /\d{2}:\d{2}/.test(capText),
+        hasBottomEnvConsole: Boolean(document.querySelector(".model .env-console")),
+        islandRect: islandRect
+          ? { top: Math.round(islandRect.top), width: Math.round(islandRect.width), height: Math.round(islandRect.height) }
           : null,
       };
     });
 
     assertCheck(
       "site-analysis-direction-a",
-      "Clicking Analysis hides the left drawer completely (0 visible left drawer), opens the non-overflowing 2-row bottom environmental console without N ▲ or Reset view, places Reset view in .top-bar-center, and shows 3D Sun Dome (not 9–3pm Plan Fan) in 3D view",
+      "Clicking Analysis hides the left drawer completely (0 visible left drawer), shows the top-centre Site Island capsule below the view switcher (not overlapping), removes the bottom environmental console, and places Reset view in .top-bar-center",
       analysisInfo.visibleLeftDrawerCount === 0 &&
-        analysisInfo.hasEnvConsole &&
-        analysisInfo.hasTwoRows &&
+        analysisInfo.hasSiteIsland &&
+        !analysisInfo.hasBottomEnvConsole &&
         !analysisInfo.hasBottomCompass &&
         !analysisInfo.hasBottomReset &&
         analysisInfo.hasTopCenterReset &&
-        analysisInfo.noHorizontalOverflow &&
-        analysisInfo.has3dSunDomeIn3d &&
-        !analysisInfo.hasPlanFanIn3d &&
-        !analysisInfo.hasDuplicateResCodeInRow2,
-      `visibleLeftDrawers=${analysisInfo.visibleLeftDrawerCount}, noOverflow=${analysisInfo.noHorizontalOverflow}, topReset=${analysisInfo.hasTopCenterReset}, bottomCompass=${analysisInfo.hasBottomCompass}, 3dDome=${analysisInfo.has3dSunDomeIn3d}, planFanIn3d=${analysisInfo.hasPlanFanIn3d}, rect=${JSON.stringify(analysisInfo.envConsoleRect)}`,
+        analysisInfo.clearsTopBar &&
+        analysisInfo.capHasTime,
+      `visibleLeftDrawers=${analysisInfo.visibleLeftDrawerCount}, topReset=${analysisInfo.hasTopCenterReset}, clearsTopBar=${analysisInfo.clearsTopBar}, capTime=${analysisInfo.capHasTime}, rect=${JSON.stringify(analysisInfo.islandRect)}`,
     );
+
+    const siteIslandLocator = page.locator(".model .site-island").first();
+    await siteIslandLocator.hover();
+    await page.waitForTimeout(280);
+    const has3dSunDome = await page.locator(".model .site-island .overlay-chips button", { hasText: "3D Sun Dome" }).count();
+    assertCheck(
+      "site-island-solar-expand",
+      "Hovering Site Island expands overlay controls with 3D Sun Dome in 3D view",
+      has3dSunDome > 0,
+      `sunDomeButtons=${has3dSunDome}`,
+    );
+    const solarScrub = page.locator('.model .site-island input[aria-label="Solar time of day"]');
+    if (await solarScrub.count()) {
+      const box = await solarScrub.first().boundingBox();
+      if (box) {
+        await page.mouse.click(box.x + box.width * 0.55, box.y + box.height * 0.5);
+        await page.waitForTimeout(200);
+      }
+    }
+    await page.mouse.move(400, 400);
+    await page.waitForTimeout(260);
 
     await page.getByRole("tab", { name: /Walk Ripple/i }).click();
     await page.waitForTimeout(250);
+    await siteIslandLocator.hover();
+    await page.waitForTimeout(200);
     await page.getByRole("button", { name: /Pick origin/i }).first().click();
     const rippleCanvas = page.locator(".model canvas").first();
     const rippleCanvasBox = await rippleCanvas.boundingBox();
@@ -1810,19 +1832,19 @@ async function main() {
     const atHigh = await readScrubState();
 
     const rippleOverflow = await page.evaluate(() => {
-      const envConsole = document.querySelector(".model .env-console");
-      const bottomRow = envConsole?.querySelector(".env-bottom-row");
+      const siteIsland = document.querySelector(".model .site-island");
+      const bottomRow = siteIsland?.querySelector(".env-bottom-row");
       return Boolean(
-        envConsole &&
+        siteIsland &&
           bottomRow &&
-          envConsole.scrollWidth <= envConsole.clientWidth + 1 &&
+          siteIsland.scrollWidth <= siteIsland.clientWidth + 1 &&
           bottomRow.scrollWidth <= bottomRow.clientWidth + 1,
       );
     });
 
     assertCheck(
       "walk-ripple-time-scrubber",
-      "Walk Ripple scrubber accepts Playwright mouse drags, updates minute readout and uRippleTime, increases reached-building count, and keeps the env console row without horizontal overflow",
+      "Walk Ripple scrubber accepts Playwright mouse drags, updates minute readout and uRippleTime, increases reached-building count, and keeps the Site Island row without horizontal overflow",
       rippleOverflow &&
         atLow.minutes >= 0.5 &&
         atLow.minutes <= 4.5 &&
@@ -1843,7 +1865,7 @@ async function main() {
       `minutesAfterReplayClick=${replayStart.minutes}`,
     );
 
-    await page.getByRole("tab", { name: /Solar Study/i }).click();
+    await page.locator('.model .site-island .env-mode-btn', { hasText: "Solar Study" }).click();
     await page.waitForTimeout(200);
 
     // DRAWING -> DISPLAY OUTLINER CLEANUP & RESET COLOURS INVARIANT
@@ -1905,13 +1927,15 @@ async function main() {
     await analysisBtn.click();
     await page.waitForTimeout(300);
 
-    const planFanBtn = page.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
+    await siteIslandLocator.hover();
+    await page.waitForTimeout(200);
+    const planFanBtn = page.locator(".model .site-island .overlay-chips button", { hasText: "9–3pm Plan Fan" });
     await planFanBtn.click();
     await page.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 10000 });
     await page.waitForTimeout(300);
 
     const beforeSelectInfo = await page.evaluate(() => {
-      const envText = document.querySelector(".model .env-console")?.textContent ?? "";
+      const envText = document.querySelector(".model .site-island")?.textContent ?? "";
       const shadowPathEls = Array.from(document.querySelectorAll("svg.plan [data-shadow-hour] path"));
       const shadowPaths = shadowPathEls.length;
       const shadowDLength = shadowPathEls.reduce((acc, p) => acc + (p.getAttribute("d")?.length ?? 0), 0);

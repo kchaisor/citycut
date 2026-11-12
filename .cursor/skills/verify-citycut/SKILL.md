@@ -26,6 +26,6 @@ npm run verify:ui
    - **Beat 4 (Settled + HUD Slide-In)**: Camera reaches final isometric perspective (`polar >= 0.95`), buildings reach `scale === 1.000`, and Top Bar, Left Outliner, Right `SITE INTELLIGENCE`, and Bottom Bar slide in from their respective edges to `opacity === "1"`.
 
 3. **Site Analysis Direction A Invariant**
-   - Clicking `Analysis` on the left tool rail completely hides the left outliner drawer (`0` visible left drawer on screen) and opens the 2-row bottom environmental console (`.bottom-bar.env-console`) with zero card overlap.
+   - Clicking `Analysis` on the left tool rail completely hides the left outliner drawer (`0` visible left drawer on screen) and shows the top-centre Site Island (`.site-island`) below the view switcher, with no bottom `.env-console`.
 
 See [`features/README.md`](features/README.md) for the feature invariant index.
