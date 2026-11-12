@@ -1269,6 +1269,11 @@ export function ModelPage({
         }));
         return true;
       },
+      readSunHoursTerrainRelief() {
+        const cut = drawingModelRef.current;
+        if (!cut.terrain) return { relief: 0, min: 0, max: 0 };
+        return { relief: cut.terrain.max - cut.terrain.min, min: cut.terrain.min, max: cut.terrain.max };
+      },
       readSunHoursGround() {
         const { grid, overlay, scaleMaxHours } = sunHoursGroundRef.current;
         const endpoints = sunHoursGroundPaletteEndpointKeys();
@@ -1308,6 +1313,19 @@ export function ModelPage({
         window.__citycutQa.setCamera({
           eye: { x: -span, y: groundY + span * 0.55, z: span * 0.75 },
           target: { x: 0, y: lift, z: 0 },
+        });
+        return true;
+      },
+      frameSunHoursTerrainEdge() {
+        if (!window.__citycutQa?.setCamera) return false;
+        const cut = drawingModelRef.current;
+        const side = cut.sideM;
+        const groundY = cut.terrain ? cut.terrain.min : 0;
+        const terrainMax = cut.terrain ? cut.terrain.max : groundY;
+        const span = side * 0.48;
+        window.__citycutQa.setCamera({
+          eye: { x: -span * 0.35, y: groundY + span * 0.42, z: span * 0.92 },
+          target: { x: 0, y: terrainMax * 0.65, z: 0 },
         });
         return true;
       },

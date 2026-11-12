@@ -2185,7 +2185,7 @@ export function Scene3D({
           overlay={sunHoursDirectOverlay}
           scaleMaxHours={sunHoursScaleMax || sunHoursGroundGrid.maxSunHours}
           model={model}
-          groundY={groundY}
+          planView={projection === "plan"}
         />
       )}
       <City

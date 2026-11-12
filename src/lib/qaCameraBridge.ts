@@ -128,6 +128,8 @@ declare global {
       };
       frameSunHoursGroundPlan?: () => boolean;
       frameSunHoursGroundOblique?: () => boolean;
+      frameSunHoursTerrainEdge?: () => boolean;
+      readSunHoursTerrainRelief?: () => { relief: number; min: number; max: number };
       enableFacadeSolar?: () => boolean;
       readFacadeSolarAssess?: () => import("./facadeSolarTypes").FacadeAssessBundle | null;
       readFacadeOverlayNormals?: () => import("./facadeSolarAssess").FacadeOverlayCellNormal[];

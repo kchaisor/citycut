@@ -16,6 +16,10 @@ const WALL_OFFSET_M = 0.08;
 export type SunHoursDirectOverlay = {
   positions: Float32Array;
   colors: Float32Array;
+  roofPositions: Float32Array;
+  roofColors: Float32Array;
+  wallPositions: Float32Array;
+  wallColors: Float32Array;
   cellCount: number;
   maxSunHours: number;
   roofPlanRaster: SunHoursGroundRaster | null;
@@ -93,6 +97,10 @@ function buildOverlayMesh(
 ): SunHoursDirectOverlay {
   const positions: number[] = [];
   const colors: number[] = [];
+  const roofPositions: number[] = [];
+  const roofColors: number[] = [];
+  const wallPositions: number[] = [];
+  const wallColors: number[] = [];
   for (let index = 0; index < samples.length; index++) {
     const sample = samples[index]!;
     const half = sample.spanM * 0.5;
@@ -112,8 +120,26 @@ function buildOverlayMesh(
       const [b0, b1, b2] = corner(half, -half);
       const [c0, c1, c2] = corner(half, half);
       const [d0, d1, d2] = corner(-half, half);
+      pushQuad(wallPositions, wallColors, rgb, a0, a1, a2, b0, b1, b2, c0, c1, c2, d0, d1, d2);
       pushQuad(positions, colors, rgb, a0, a1, a2, b0, b1, b2, c0, c1, c2, d0, d1, d2);
     } else {
+      pushQuad(
+        roofPositions,
+        roofColors,
+        rgb,
+        cx - half,
+        cy + 0.14,
+        cz - half,
+        cx + half,
+        cy + 0.14,
+        cz - half,
+        cx + half,
+        cy + 0.14,
+        cz + half,
+        cx - half,
+        cy + 0.14,
+        cz + half,
+      );
       pushQuad(
         positions,
         colors,
@@ -136,6 +162,10 @@ function buildOverlayMesh(
   return {
     positions: new Float32Array(positions),
     colors: new Float32Array(colors),
+    roofPositions: new Float32Array(roofPositions),
+    roofColors: new Float32Array(roofColors),
+    wallPositions: new Float32Array(wallPositions),
+    wallColors: new Float32Array(wallColors),
     cellCount: samples.length,
     maxSunHours,
     roofPlanRaster: null,

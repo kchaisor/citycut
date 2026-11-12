@@ -2430,6 +2430,20 @@ async function main() {
         await shadowPage.waitForTimeout(1200);
         const shotPlan = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-3d-plan.png");
         await sceneViewportScreenshot(shadowPage, { path: shotPlan });
+        await shadowPage.getByRole("button", { name: /^Plan$/i }).click();
+        await shadowPage.waitForTimeout(900);
+        const planWallMesh = await shadowPage.locator("[data-sun-hours-direct-walls]").count();
+        const planRoofMesh = await shadowPage.locator("[data-sun-hours-direct-roofs]").count();
+        const shotPlanClean = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-3d-plan-clean.png");
+        await sceneViewportScreenshot(shadowPage, { path: shotPlanClean });
+        assertCheck(
+          "solar-sun-hours-plan-hide-walls",
+          "3D Plan projection hides wall-hour quads but keeps roof-hour meshes",
+          planWallMesh === 0 && planRoofMesh === 1,
+          `walls=${planWallMesh}, roofs=${planRoofMesh}, shot=${shotPlanClean}`,
+        );
+        await shadowPage.getByRole("button", { name: /^Persp$/i }).click();
+        await shadowPage.waitForTimeout(400);
         await shadowPage.evaluate(() => window.__citycutQaModel?.frameSunHoursGroundOblique?.());
         await shadowPage.waitForTimeout(1200);
         const shotOblique = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-3d-oblique.png");
@@ -2464,6 +2478,61 @@ async function main() {
       };
 
       await boxHillSunHoursGround();
+
+      const montAlbertSunHoursDrape = async () => {
+        const mapPage = await shadowCtx.newPage();
+        const mapUrl = `${baseUrl}/?qa=1&lat=-37.8045&lon=145.10658&km=1&label=Mont%20Albert%20North&view=persp`;
+        await mapPage.goto(mapUrl, { waitUntil: "domcontentloaded", timeout: 120000 });
+        await mapPage.waitForSelector("button.create-fab", { timeout: 60000 });
+        await mapPage.click("button.create-fab");
+        await mapPage.waitForSelector(".model", { timeout: 300000 });
+        await mapPage.waitForFunction(
+          () => Boolean(window.__citycutQaModel?.frameSunHoursTerrainEdge),
+          null,
+          { timeout: 300000 },
+        );
+        await mapPage.locator('.model button[data-section="analysis"]').first().click();
+        await mapPage.evaluate(() =>
+          document.querySelector("[data-sun-hours-ground-chip]")?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+        );
+        await mapPage.waitForFunction(() => document.documentElement.dataset.sunHoursDirectSurfacesReady === "1", null, {
+          timeout: 600000,
+        });
+        const terrainStats = await mapPage.evaluate(
+          () => window.__citycutQaModel?.readSunHoursTerrainRelief?.() ?? { relief: 0, min: 0, max: 0 },
+        );
+        await mapPage.getByRole("tab", { name: /3D model/i }).click();
+        await mapPage.waitForTimeout(800);
+        await mapPage.evaluate(() => window.__citycutQaModel?.frameSunHoursTerrainEdge?.());
+        await mapPage.waitForTimeout(1500);
+        const shotOblique = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-mont-albert-3d-oblique.png");
+        await sceneViewportScreenshot(mapPage, { path: shotOblique });
+        await mapPage.getByRole("button", { name: /^Plan$/i }).click();
+        await mapPage.waitForTimeout(900);
+        await mapPage.evaluate(() => window.__citycutQaModel?.frameSunHoursGroundPlan?.());
+        await mapPage.waitForTimeout(1200);
+        const shotPlan = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-mont-albert-3d-plan.png");
+        await sceneViewportScreenshot(mapPage, { path: shotPlan });
+        const planWallMesh = await mapPage.locator("[data-sun-hours-direct-walls]").count();
+        const planRoofMesh = await mapPage.locator("[data-sun-hours-direct-roofs]").count();
+        const obliquePng = PNG.sync.read(fs.readFileSync(shotOblique));
+        const yellowHits = countPixelsNearRgb(obliquePng, { r: 254, g: 232, b: 37 }, 72);
+        assertCheck(
+          "solar-sun-hours-mont-albert-drape",
+          "Mont Albert North sun-hours ground mesh drapes on terrain with relief and sloped edge visible",
+          terrainStats.relief > 1.5 && yellowHits > 30,
+          JSON.stringify({ terrainStats, yellowHits, oblique: shotOblique, plan: shotPlan }),
+        );
+        assertCheck(
+          "solar-sun-hours-mont-albert-plan-roofs-only",
+          "Mont Albert 3D Plan shows roof fills without wall-hour rims",
+          planWallMesh === 0 && planRoofMesh === 1,
+          `walls=${planWallMesh}, roofs=${planRoofMesh}`,
+        );
+        await mapPage.close();
+      };
+
+      await montAlbertSunHoursDrape();
 
       const measurePlanZoomLongTasks = async (page) =>
         page.evaluate(async () => {

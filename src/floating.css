@@ -282,7 +282,7 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 .sun-hours-direct-dock-stack {
   position: absolute;
   left: 12px;
-  bottom: 12px;
+  bottom: 212px;
   z-index: 4;
   display: flex;
   flex-direction: column;
