@@ -88,6 +88,7 @@ import {
 } from "./lib/comBuildingHeights";
 import { applyDevelopmentFloorsToBuildings, fetchDevelopmentFloorRecords } from "./lib/comDevelopmentFloors";
 import { resolveBuildingHeightsAfterCom } from "./lib/buildingHeightPipeline";
+import { applyStoredSiteLayerToCut } from "./lib/storedSiteLayers/apply";
 import { runComBuildingHeightsInWorker } from "./lib/comBuildingHeightsWorkerClient";
 import { buildHeightSourceLoadWarnings } from "./lib/buildHeightSourceLoadWarnings";
 import { buildEnrichmentUseTierFailures } from "./lib/enrichmentUseTierFailures";
@@ -957,6 +958,21 @@ export default function App() {
       }
       const nswUse = nswMode && modelLayers.buildings ? nswApplyBuildingUse(buildings, nswResult) : null;
       if (nswUse) buildings = nswUse.buildings;
+      const storedSite = modelLayers.buildings
+        ? await applyStoredSiteLayerToCut({
+            center,
+            sideM,
+            frameShape: frameShapeRef.current,
+            frameSize,
+            buildings,
+            signal: controller.signal,
+          })
+        : { buildings, layer: null, structures: [] };
+      if (controller.signal.aborted) return;
+      buildings = storedSite.buildings;
+      if (storedSite.layer) {
+        sourceNote = `${sourceNote} ${storedSite.layer.label}: ${storedSite.layer.sourceCredit}. ${storedSite.layer.meshBuildingCount.toLocaleString()} mesh buildings; ${storedSite.layer.hiddenOvertureCount.toLocaleString()} Overture buildings hidden in overlap.`;
+      }
       const draftModel: CityModel = {
         center,
         sideM,
@@ -1022,6 +1038,8 @@ export default function App() {
         heightSourceLoadWarnings:
           heightSourceLoadWarnings.length > 0 ? heightSourceLoadWarnings : undefined,
         ...(nswMode ? { region: "nsw" as const, nsw: nswResult, nswWaterNote: nswWater?.note ?? null, nswUseMatched: nswUse?.matched ?? 0 } : {}),
+        storedSiteLayer: storedSite.layer ?? undefined,
+        storedSiteStructures: storedSite.structures.length > 0 ? storedSite.structures : undefined,
       };
       if (modelLayers.roads) {
         await yieldToBrowserFrame(isDomTestStart);

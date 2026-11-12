@@ -2077,6 +2077,7 @@ export function Scene3D({
   cameraMemory,
   display,
   importedMassing = null,
+  storedSiteMeshes = null,
   walkLayer = null,
   walkRippleLayer = null,
   walkRippleTint = null,
@@ -2108,6 +2109,7 @@ export function Scene3D({
   cameraMemory?: CameraMemoryRef;
   display: View3dDisplaySettings;
   importedMassing?: THREE.Object3D | null;
+  storedSiteMeshes?: THREE.Object3D | null;
   walkLayer?: THREE.Object3D | null;
   walkRippleLayer?: THREE.Object3D | null;
   walkRippleTint?: WalkRippleBuildingTint | null;
@@ -2269,6 +2271,17 @@ export function Scene3D({
         walkRippleArrivals={walkRippleArrivals}
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
+      {storedSiteMeshes ? (
+        <>
+          <primitive object={storedSiteMeshes} />
+          <BuildingPickLayer
+            root={storedSiteMeshes}
+            enabled={model.layers.buildings && !onScenePoint}
+            onBuildingPick={onBuildingPick}
+            onClearPick={onClearBuildingPick}
+          />
+        </>
+      ) : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
       {walkRippleLayer ? <primitive object={walkRippleLayer} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}

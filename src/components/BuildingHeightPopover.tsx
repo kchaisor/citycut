@@ -98,7 +98,8 @@ export function BuildingHeightPopover({
   const source = buildingHeightSourceLabelForBuilding(building);
   const at = interiorPoint(building.ring, building.holes);
   const { lat, lon } = fromLocal(at, center);
-  const showCom = isCityOfMelbourne(lat, lon);
+  const showCom = isCityOfMelbourne(lat, lon) && !building.storedSiteMesh;
+  const meshInspect = Boolean(building.storedSiteMesh);
 
   function commit() {
     const parsed = Number(value.replace(/,/g, "").trim());
@@ -142,6 +143,7 @@ export function BuildingHeightPopover({
           <Field label="Lot / site" value={details.lotLine} />
           {showCom && <Field label="Year built" value={details.yearLine} />}
           {showCom && <Field label="Development" value={details.developmentLine} />}
+          {!meshInspect && (
           <div className="height-editor-block">
             <p className="meta">
               Height editor · Current: {building.height.toFixed(1)} m · {source}
@@ -172,6 +174,7 @@ export function BuildingHeightPopover({
               </button>
             </div>
           </div>
+          )}
           {onHideSelected && (
             <div className="hide-buildings-block">
               <p className="meta">Visibility · shift-click to add buildings</p>

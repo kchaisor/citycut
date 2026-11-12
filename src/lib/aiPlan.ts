@@ -30,7 +30,12 @@ import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { SINGLE_SHADOW_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "./sunStudyPlan";
 import { planPaths } from "./svgPlan";
 import { regionCredit } from "./sources/registry";
-import { importedMassingStrokeStyle, importedMassingUpperStrokeStyle, planBuildingStrokeStyle } from "./planBuildingFill";
+import {
+  importedMassingStrokeStyle,
+  importedMassingUpperStrokeStyle,
+  planBuildingStrokeStyle,
+  storedSiteStructureStrokeStyle,
+} from "./planBuildingFill";
 import { windPlanPdfChunk } from "./windExport";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { comTreesCreditLine } from "./comTreesCredit";
@@ -522,6 +527,17 @@ export function sitePlanChunks(
         evenOdd: true,
         close: true,
         ...(importedPen ?? buildingPen ?? {}),
+      })),
+    });
+  }
+  if (plan.storedStructures.length > 0) {
+    const structurePen = pen(storedSiteStructureStrokeStyle(), "miter");
+    chunks.push({
+      name: "Structures",
+      paths: plan.storedStructures.map((rings) => ({
+        rings: mapRings(rings, model.sideM, layout),
+        close: true,
+        ...(structurePen ?? {}),
       })),
     });
   }

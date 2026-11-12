@@ -132,6 +132,8 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--imported-massing` | `#FFFFFF` | Default colour of imported .3dm massing in 3D, Drawing (site plan, figure-ground, exploded axo), .ai and .3dm. Each imported model can override it with the Colour picker in Import (stored with the model). |
 | `--imported-massing-upper-stroke` | `#6E6E6E` | Solid linework for upper roof/setback outlines inside imported footprints. |
 | `--imported-massing-upper-tone` | `#E6E6E6` | Light plan fill behind upper-level outlines on screen. |
+| `--stored-site-structure` | `#B8BFC8` | Stored site layer structures (e.g. Anzac Bridge deck mesh) in 3D. |
+| `--stored-site-structure-stroke` | `#4A4F57` | Structure deck outline on the site plan (.svg, .ai, screen). |
 | `--switch-knob` | `#000000` | Knob of every sidebar switch, on and off, so an off switch reads on its pale `--control-off` track. On = `--accent` track, knob right. |
 | `--site-building-edge` | `#3D3010` | Darker outline on site-building massing in the 3D viewport so they read against retail (`--use-retail`) and civic (`--use-civic`) yellows. |
 | `--site-boundary` | `#D7263D` | Searched-property parcel boundary on the site plan, the 3D ground line, Rhino `Site::Boundary`, and Illustrator/PDF Site boundary layer. |

@@ -3,6 +3,7 @@ import { interiorPoint, pointInPolygon } from "./useCascade";
 import { vicmapWfsGetFeatureUrl } from "./vicmapWfs";
 import { VICMAP_PROPERTY_URL } from "./vicmapSiteParcel";
 import type { BuildingFeat, LonLat, Pt } from "../types";
+import { storedSiteMeshPopupLines } from "./storedSiteLayers/popup";
 import { buildingDisplayHeightM, buildingHeightSourceLabelForBuilding } from "./heightOverrides";
 import { inferHeightTier } from "./buildingHeightResolve";
 import {
@@ -329,6 +330,19 @@ export async function loadBuildingPopupDetails(
   signal?: AbortSignal,
   context: BuildingPopupContext = {},
 ): Promise<BuildingPopupDetails> {
+  const mesh = storedSiteMeshPopupLines(building);
+  if (mesh) {
+    return {
+      useLine: mesh.useLine,
+      nameLine: building.storedSiteMeshKey ?? "—",
+      heightStoreysLine: mesh.heightStoreysLine,
+      zoneLine: "—",
+      lotLine: `${mesh.footprintM2.toFixed(0)} m² footprint`,
+      yearLine: "",
+      developmentLine: "",
+      credits: [],
+    };
+  }
   const at = pointFromBuilding(building);
   const { lon, lat } = fromLocal(at, center);
   const inCom = isCityOfMelbourne(lat, lon);
@@ -412,6 +426,18 @@ export async function loadBuildingPopupDetails(
 }
 
 export function emptyBuildingPopupDetails(building: BuildingFeat): BuildingPopupDetails {
+  const mesh = storedSiteMeshPopupLines(building);
+  if (mesh) {
+    return {
+      ...EMPTY,
+      useLine: mesh.useLine,
+      nameLine: building.storedSiteMeshKey ?? "—",
+      heightStoreysLine: mesh.heightStoreysLine,
+      lotLine: `${mesh.footprintM2.toFixed(0)} m² footprint`,
+      yearLine: "",
+      developmentLine: "",
+    };
+  }
   return {
     ...EMPTY,
     useLine: useLineFor(building),

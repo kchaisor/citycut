@@ -56,6 +56,7 @@ export type PlanPaths = {
   rails: Pt[][];
   trams: Pt[][];
   buildings: { rings: Pt[][]; fill: string; site: boolean; imported?: boolean }[];
+  storedStructures: Pt[][][];
   trees: { east: number; north: number; r: number }[];
   contours: Pt[][];
   contourIndex: boolean[];
@@ -276,6 +277,10 @@ export function planPaths(
       : clipped;
   const drawn = layer && visible.length > 0 ? drawContours(visible, drawnInterval, contourIndexEvery) : null;
 
+  const storedStructures = (model.storedSiteStructures ?? [])
+    .map((structure) => clipRings(structure.ring, structure.holes, model.sideM, frameShape, frameSize))
+    .filter((rings): rings is Pt[][] => rings != null);
+
   const importedUpperLevels = (model.importedMassingUpperLevels ?? [])
     .map((level) => {
       const lines = level.lines
@@ -297,6 +302,7 @@ export function planPaths(
     rails,
     trams,
     buildings,
+    storedStructures,
     trees,
     contours: drawn ? drawn.lines.map((line) => line.points) : [],
     contourIndex: drawn ? drawn.lines.map((line) => line.index) : [],

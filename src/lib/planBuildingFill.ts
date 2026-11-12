@@ -44,3 +44,11 @@ export function importedMassingUpperStrokeStyle(
   const base = importedMassingStrokeStyle(style);
   return { mm: base.mm, color: base.color, dash: "none" };
 }
+
+export function storedSiteStructureStrokeStyle(): import("./drawingStyle").StrokeStyle {
+  return {
+    mm: 0.18,
+    color: getColour("--stored-site-structure-stroke"),
+    dash: "none",
+  };
+}

@@ -162,6 +162,7 @@ import {
 } from "../lib/hiddenBuildings";
 import { ImportMassingPanel } from "./ImportMassingPanel";
 import { useImportedMassing } from "./useImportedMassing";
+import { useStoredSiteLayer } from "./useStoredSiteLayer";
 import { drawingMassingCount } from "../lib/massingFootprint";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
@@ -667,6 +668,11 @@ export function ModelPage({
   );
 
   const massing = useImportedMassing(model);
+  const storedSiteMeshes = useStoredSiteLayer(model, {
+    colourByUse,
+    uniformBuildings: !colourByUse && !showSource,
+    colourBySource: showSource,
+  });
 
   const qaSummaryRef = useRef({ treeCrowns: 0, buildingCount: 0, roadCount: 0, triangleCount: 0 });
   const qaDisplayBuildingsRef = useRef(model.buildings);
@@ -2117,6 +2123,7 @@ export function ModelPage({
                 cameraMemory={cameraMemory}
                 display={view3dDisplay}
                 importedMassing={massing.group}
+                storedSiteMeshes={storedSiteMeshes.group}
                 walkLayer={walk.layer.root}
                 walkRippleLayer={rippleAnalysisOpen ? walkRipple.layer.root : null}
                 walkRippleTint={rippleAnalysisOpen ? walkRipple.tint : null}
@@ -2723,6 +2730,11 @@ export function ModelPage({
                     ))}
                   </ul>
                 </section>
+                {model.storedSiteLayer ? (
+                  <p className="legend-note" role="status">
+                    This cut includes {model.storedSiteLayer.label} ({model.storedSiteLayer.sourceCredit}).
+                  </p>
+                ) : null}
                 <section className="sidebar-group">
                   <h3 className="sidebar-gh">Source</h3>
                   <ul>

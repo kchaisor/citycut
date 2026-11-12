@@ -15,6 +15,7 @@ import {
   importedMassingStrokeStyle,
   importedMassingUpperStrokeStyle,
   planBuildingStrokeStyle,
+  storedSiteStructureStrokeStyle,
 } from "../lib/planBuildingFill";
 import { planPaths, svgPolyline, svgRings } from "../lib/svgPlan";
 import { getColour } from "../lib/colours";
@@ -524,6 +525,15 @@ export function DrawingPlan({
                 fillOpacity={SINGLE_SHADOW_OPACITY}
                 fillRule="evenodd"
                 stroke="none"
+              />
+            ))}
+            {plan.storedStructures.map((rings, index) => (
+              <path
+                key={`ss${index}`}
+                data-stored-structure="true"
+                d={svgRings(rings)}
+                fill="none"
+                {...screenPenAttrs(storedSiteStructureStrokeStyle(), "miter")}
               />
             ))}
             {plan.buildings.map((building, index) => (
