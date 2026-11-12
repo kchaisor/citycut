@@ -1438,19 +1438,19 @@ body,
 }
 
 .model .left-outliner .style-seg.seg-mini {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   background: var(--bg-sub);
-  padding: 2.5px;
+  padding: 4px;
   border-radius: 8px;
-  gap: 2px;
+  gap: 4px;
+  margin: 0 0 10px;
 }
 
 .model .left-outliner .style-btn {
-  flex: 1 1 0;
-  min-width: 0;
-  height: 25px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 28px;
   border-radius: 5.5px;
   border: 1px solid transparent;
   background: transparent;
@@ -1460,7 +1460,7 @@ body,
   line-height: 1;
   white-space: nowrap;
   color: var(--ink-2);
-  padding: 0 3px;
+  padding: 0 12px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -2597,25 +2597,23 @@ body,
 
 .model .left-outliner .style-seg,
 .model .left-outliner .style-seg.seg-mini {
-  display: flex !important;
-  flex-wrap: nowrap !important;
-  align-items: center !important;
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
   background: var(--hud-track-bg) !important;
-  padding: 2px !important;
+  padding: 4px !important;
   border-radius: 7px !important;
   border: 1px solid rgb(20 20 19 / 7%) !important;
-  gap: 2px !important;
-  margin: 0 0 7px !important;
-  overflow: hidden !important;
+  gap: 4px !important;
+  margin: 0 0 10px !important;
 }
 
 .model .left-outliner .style-seg .style-btn {
-  flex: 1 1 0 !important;
-  min-width: 0 !important;
-  height: 24px !important;
-  min-height: 24px !important;
-  max-height: 24px !important;
-  padding: 0 3px !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
+  padding: 0 12px !important;
   margin: 0 !important;
   border-radius: 5px !important;
   border: 0 !important;

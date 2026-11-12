@@ -589,10 +589,14 @@ describe("Display panel controls by view tab", () => {
     expect(floatingCss).toMatch(/\.select\.is-loading\s+\.omnibox-stack/);
   });
 
-  it("keeps left outliner view style segmented control options on one line", () => {
+  it("lays out view style control as a 2×2 grid with equal-height cells", () => {
     const floatingCss = readFileSync(resolve(__dirname, "../floating.css"), "utf8");
-    expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg[\s\S]*flex-wrap:\s*nowrap/);
-    expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg \.style-btn[\s\S]*white-space:\s*nowrap/);
+    expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg[\s\S]*grid-template-columns:\s*1fr 1fr/);
+    expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg[\s\S]*padding:\s*4px/);
+    expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg[\s\S]*gap:\s*4px/);
+    expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg \.style-btn[\s\S]*width:\s*100%/);
+    expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg \.style-btn[\s\S]*height:\s*28px/);
+    expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg \.style-btn[\s\S]*padding:\s*0 12px/);
   });
 
   it("renders View Style heading in Display and expands the 2-row Environmental Console with zero left drawer on Analysis", async () => {
