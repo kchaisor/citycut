@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cutSpecFromSquare } from "../lib/cutSpec";
 import { SelectChrome } from "./SelectChrome";
 import { SEARCH_HISTORY_KEY } from "../lib/searchHistory";
 
@@ -24,6 +25,8 @@ function renderChrome(onPlace = vi.fn()) {
       onPlace={onPlace}
       onCreate={() => undefined}
       onHome={() => undefined}
+      cut={cutSpecFromSquare(1000)}
+      onCut={() => undefined}
     />,
   );
   return onPlace;

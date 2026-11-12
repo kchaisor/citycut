@@ -6,15 +6,20 @@ export type PlanViewport = {
 };
 
 export function planViewportExtent(sideM: number): PlanViewport {
-  const half = sideM / 2;
-  const padX = sideM * 0.06;
-  const padTop = sideM * 0.09;
-  const padBottom = sideM * 0.11;
+  return planViewportExtentRect(sideM, sideM);
+}
+
+export function planViewportExtentRect(widthM: number, heightM: number): PlanViewport {
+  const halfW = widthM / 2;
+  const halfH = heightM / 2;
+  const padX = widthM * 0.06;
+  const padTop = heightM * 0.09;
+  const padBottom = heightM * 0.11;
   return {
-    x: -half - padX,
-    y: -half - padTop,
-    w: sideM + padX * 2,
-    h: sideM + padTop + padBottom,
+    x: -halfW - padX,
+    y: -halfH - padTop,
+    w: widthM + padX * 2,
+    h: heightM + padTop + padBottom,
   };
 }
 

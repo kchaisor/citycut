@@ -29,7 +29,8 @@ import { NSW_PLAN_LABEL_SHARE, nswPlanItems } from "../lib/nswPlan";
 import { readNswPlanStyle } from "../lib/nswPlanStyle";
 import { importedPlanShadowRings, planShadowRings, type PlanShadowInput } from "../lib/buildingShadows";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
-import { planViewportExtent, type PlanViewport } from "../lib/planViewport";
+import { modelFrameSize } from "../lib/modelFrame";
+import { planViewportExtentRect, type PlanViewport } from "../lib/planViewport";
 import {
   SINGLE_SHADOW_OPACITY,
   SUN_STUDY_SHADOW_OPACITY,
@@ -155,7 +156,11 @@ export function DrawingPlan({
     () => (figure ? figureGroundModelPaths(model.buildings, model.sideM, frameShape) : []),
     [figure, model, frameShape],
   );
-  const fitted = useMemo(() => planViewportExtent(model.sideM), [model.sideM]);
+  const frameSize = useMemo(() => modelFrameSize(model), [model.sideM, model.widthM, model.heightM]);
+  const fitted = useMemo(
+    () => planViewportExtentRect(frameSize.widthM, frameSize.heightM),
+    [frameSize.widthM, frameSize.heightM],
+  );
   const [internalView, setInternalView] = useState<PlanViewport>(fitted);
   const view = viewport ?? internalView;
   const applyView = (next: PlanViewport | ((current: PlanViewport) => PlanViewport)) => {
@@ -203,12 +208,13 @@ export function DrawingPlan({
     return () => svg.removeEventListener("wheel", onWheel);
   }, [model.sideM, view, internalView, onViewportChange]);
 
-  const half = model.sideM / 2;
+  const halfW = frameSize.widthM / 2;
+  const halfH = frameSize.heightM / 2;
+  const half = Math.max(halfW, halfH);
   const framePathD = useMemo(() => {
-    const half = model.sideM / 2;
-    if (frameShape === "circle") return svgPolyline(openRing(circleRing(half)), true);
-    return `M ${-half} ${-half} L ${half} ${-half} L ${half} ${half} L ${-half} ${half} Z`;
-  }, [frameShape, model.sideM]);
+    if (frameShape === "circle") return svgPolyline(openRing(circleRing(model.sideM / 2)), true);
+    return `M ${-halfW} ${-halfH} L ${halfW} ${-halfH} L ${halfW} ${halfH} L ${-halfW} ${halfH} Z`;
+  }, [frameShape, frameSize.widthM, frameSize.heightM, model.sideM]);
 
   const empty = figure
     ? figurePaths.length === 0
@@ -416,7 +422,14 @@ export function DrawingPlan({
       }}
     >
       <rect x={view.x} y={view.y} width={view.w} height={view.h} fill={canvas} />
-      <rect x={-half} y={-half} width={model.sideM} height={model.sideM} fill={canvas} />
+      <rect
+        data-cut-frame="1"
+        x={-halfW}
+        y={-halfH}
+        width={frameSize.widthM}
+        height={frameSize.heightM}
+        fill={canvas}
+      />
       {figure ? (
         <>
           {figurePaths.map((d, index) => (

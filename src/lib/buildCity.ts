@@ -4,7 +4,8 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { BUILDING_EDGE_COLOR, BUILDING_EDGE_THRESHOLD_DEG } from "./buildingEdges";
 import { BUILDING_USE_META, SOURCE_META, buildingLayerName, uniformBuildingColor } from "./buildingUse";
 import { getColour } from "./colours";
-import { DEFAULT_SITE_FRAME_SHAPE, SITE_FRAME_CIRCLE_SEGMENTS } from "./siteFrame";
+import { DEFAULT_SITE_FRAME_SHAPE, SITE_FRAME_CIRCLE_SEGMENTS, type FrameGroundSize } from "./siteFrame";
+import { modelFrameSize } from "./modelFrame";
 import { buildTreeGroup } from "./treeMassing";
 import { openRing, signedArea } from "./geo";
 import { carriagewaysOf, unionCarriageways, unionPathRoads } from "./roadFill";
@@ -227,7 +228,7 @@ function roadFillGeometry(
   return drapedMultiPolygonGeometry(multi, heightAt, lift, step, grid);
 }
 
-export type TerrainGrid = { field: TerrainField; sideM: number };
+export type TerrainGrid = { field: TerrainField; sideM: number; frameSize?: FrameGroundSize };
 
 export function drapedAreaGeometry(
   area: AreaFeat,
@@ -245,7 +246,7 @@ export function drapedAreaGeometry(
     return null;
   }
   const fine = grid
-    ? clipTrianglesToTerrainGrid(trianglesFromShape(flat), grid.field, grid.sideM)
+    ? clipTrianglesToTerrainGrid(trianglesFromShape(flat), grid.field, grid.sideM, grid.frameSize)
     : subdivideToSpacing(trianglesFromShape(flat), Math.max(spacing, 4));
   flat.dispose();
   const heightAt = grid
@@ -382,8 +383,9 @@ function basePlinthMesh(
   sideM: number,
   terrain: TerrainField | null | undefined,
   frameShape = DEFAULT_SITE_FRAME_SHAPE,
+  frameSize?: FrameGroundSize,
 ): THREE.Mesh {
-  const buffers = basePlinthBuffers(sideM, terrain, frameShape);
+  const buffers = basePlinthBuffers(sideM, terrain, frameShape, frameSize);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(buffers.positions, 3));
   geometry.setAttribute("normal", new THREE.BufferAttribute(buffers.normals, 3));
@@ -407,8 +409,13 @@ function basePlinthMesh(
   return mesh;
 }
 
-function terrainMesh(field: TerrainField, sideM: number, frameShape = DEFAULT_SITE_FRAME_SHAPE): THREE.Mesh {
-  const buffers = terrainBuffers(field, sideM, frameShape);
+function terrainMesh(
+  field: TerrainField,
+  sideM: number,
+  frameShape = DEFAULT_SITE_FRAME_SHAPE,
+  frameSize?: FrameGroundSize,
+): THREE.Mesh {
+  const buffers = terrainBuffers(field, sideM, frameShape, frameSize);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(buffers.positions, 3));
   geometry.setAttribute("color", new THREE.BufferAttribute(buffers.colors, 3));
@@ -443,8 +450,11 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   };
 
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
+  const frameSize = modelFrameSize(model);
   const sample = elevationAt(model);
-  const terrainGrid: TerrainGrid | null = model.terrain ? { field: model.terrain, sideM: model.sideM } : null;
+  const terrainGrid: TerrainGrid | null = model.terrain
+    ? { field: model.terrain, sideM: model.sideM, frameSize }
+    : null;
   const groundSplit = model.terrain && frameShape === "square" ? groundRoadPartition(model) : null;
   if (model.terrain && groundSplit) {
     const field = model.terrain;
@@ -461,12 +471,14 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
       group.add(mesh);
     }
   } else if (model.terrain) {
-    group.add(terrainMesh(model.terrain, model.sideM, frameShape));
+    group.add(terrainMesh(model.terrain, model.sideM, frameShape, frameSize));
   } else {
+    const widthM = model.widthM ?? model.sideM;
+    const heightM = model.heightM ?? model.sideM;
     const groundGeo =
       frameShape === "circle"
         ? new THREE.CircleGeometry(model.sideM / 2, SITE_FRAME_CIRCLE_SEGMENTS)
-        : new THREE.PlaneGeometry(model.sideM, model.sideM);
+        : new THREE.PlaneGeometry(widthM, heightM);
     groundGeo.rotateX(-Math.PI / 2);
     const groundMat = paint(
       matteStandardMaterial({
@@ -480,7 +492,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     order(ground, SURFACE.ground.renderOrder);
     group.add(ground);
   }
-  group.add(basePlinthMesh(model.sideM, model.terrain, frameShape));
+  group.add(basePlinthMesh(model.sideM, model.terrain, frameShape, frameSize));
 
   const onTerrain = Boolean(sample && model.terrain);
   const blockMat = paint(

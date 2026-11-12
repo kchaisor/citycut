@@ -4,12 +4,15 @@ import {
   A3_LONG_MM,
   A3_SHORT_MM,
   figureGround,
+  layoutA3CutSheet,
+  layoutForModel,
   layoutSheet,
   maxFrameMm,
   paperMillimetres,
   preferredFigureScale,
   scaleBarMetres,
   sheetFitMessage,
+  sheetFitMessageForModel,
 } from "./figureGround";
 import { mmToPt } from "./lineweights";
 import type { BuildingFeat, Pt } from "../types";
@@ -201,6 +204,37 @@ describe("figure-ground scale", () => {
     expect(taller.orientation).toBe("portrait");
     expect(taller.pageWidthMm).toBe(A3_SHORT_MM);
     expect(taller.pageHeightMm).toBe(A3_LONG_MM);
+  });
+
+  it("lays out an A3 cut at 1:2500 as a full A3 sheet in landscape and portrait", () => {
+    const landscape = { widthM: 1050, heightM: 742.5 };
+    const land = layoutA3CutSheet(landscape.widthM, landscape.heightM, 2500, "landscape");
+    expect(land.pageWidthMm).toBe(A3_LONG_MM);
+    expect(land.pageHeightMm).toBe(A3_SHORT_MM);
+    expect(land.frameWidthMm).toBeCloseTo(A3_LONG_MM, 1);
+    expect(land.frameHeightMm).toBeCloseTo(A3_SHORT_MM, 1);
+    expect(land.fitsOnA3).toBe(true);
+    const portrait = { widthM: 742.5, heightM: 1050 };
+    const port = layoutA3CutSheet(portrait.widthM, portrait.heightM, 2500, "portrait");
+    expect(port.pageWidthMm).toBe(A3_SHORT_MM);
+    expect(port.pageHeightMm).toBe(A3_LONG_MM);
+    expect(port.frameWidthMm).toBeCloseTo(A3_SHORT_MM, 1);
+    expect(port.frameHeightMm).toBeCloseTo(A3_LONG_MM, 1);
+    expect(port.fitsOnA3).toBe(true);
+  });
+
+  it("uses layoutForModel for A3 cuts and warns when a smaller plan scale oversizes the sheet", () => {
+    const model = {
+      frameShape: "a3" as const,
+      sideM: 1050,
+      widthM: 1050,
+      heightM: 742.5,
+      cutOrientation: "landscape" as const,
+    };
+    expect(sheetFitMessageForModel(model, 2500)).toBeNull();
+    expect(layoutForModel(model, 2500).pageWidthMm).toBe(A3_LONG_MM);
+    expect(sheetFitMessageForModel(model, 1000)).toMatch(/larger than an A3 sheet/i);
+    expect(sheetFitMessageForModel(model, 5000)).toBeNull();
   });
 
   it("says when a 1 km frame does not fit A3 at 1:1000 or 1:2500", () => {

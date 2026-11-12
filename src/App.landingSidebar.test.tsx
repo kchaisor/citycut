@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppRoot } from "./AppRoot";
+import { cutSpecFromSquare } from "./lib/cutSpec";
 import { SelectChrome } from "./components/SelectChrome";
 import {
   getSidebarCollapsed,
@@ -119,6 +120,8 @@ describe("landing perimeter HUD (Variation B)", () => {
         onBasemap={() => undefined}
         center={{ lat: -37.8127, lon: 144.98061 }}
         onHome={() => undefined}
+        cut={cutSpecFromSquare(1000)}
+        onCut={() => undefined}
       />,
     );
     const foot = container.querySelector(".sidebar-foot")!;

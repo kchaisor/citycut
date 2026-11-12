@@ -67,7 +67,8 @@ import {
   planViewportForBounds,
   type PlanViewport,
 } from "../lib/planViewport";
-import { FIGURE_SCALES, preferredFigureScale, sheetFitMessage } from "../lib/figureGround";
+import { FIGURE_SCALES, preferredFigureScale, sheetFitMessageForModel } from "../lib/figureGround";
+import { A3_DRAWING_SCALES, a3GroundMetres } from "../lib/cutSpec";
 import {
   fetchComBuildingFootprints,
   intersectsComCity,
@@ -299,7 +300,28 @@ export function ModelPage({
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
   useColourRevision();
   const uniform = uniformBuildingColor();
-  const [figureScale, setFigureScale] = useState<number>(() => preferredFigureScale(model.sideM));
+  const planScaleOptions = useMemo(
+    () => (model.frameShape === "a3" ? [...A3_DRAWING_SCALES] : [...FIGURE_SCALES]),
+    [model.frameShape],
+  );
+  const [figureScale, setFigureScale] = useState<number>(() => {
+    if (model.frameShape === "a3") {
+      if (model.cutScale) return model.cutScale;
+      const widthM = model.widthM ?? model.sideM;
+      const heightM = model.heightM ?? model.sideM;
+      const orientation = model.cutOrientation ?? "landscape";
+      for (const scale of A3_DRAWING_SCALES) {
+        const ground = a3GroundMetres(scale, orientation);
+        if (
+          Math.abs(ground.widthM - widthM) < 0.5 &&
+          Math.abs(ground.heightM - heightM) < 0.5
+        ) {
+          return scale;
+        }
+      }
+    }
+    return preferredFigureScale(model.sideM);
+  });
   const [exportError, setExportError] = useState<string | null>(null);
   const [busy, setBusy] = useState<ExportBusy>(null);
   const [sunStudyProgress, setSunStudyProgress] = useState<string | null>(null);
@@ -1774,7 +1796,7 @@ export function ModelPage({
     }
   }
 
-  const figureFit = sheetFitMessage(model.sideM, figureScale);
+  const figureFit = sheetFitMessageForModel(model, figureScale);
   const useCounts = countUses(model.buildings);
   const sourceCounts = countSourcesGrouped(displayModel.buildings);
   const heightTierCounts = countBuildingHeightTiers(displayModel.buildings);
@@ -2240,7 +2262,12 @@ export function ModelPage({
                   {model.placeLabel}
                 </span>
                 <span className="dim-chip studio-cut-pill mono">
-                  {cutSizeLabel(model.sideM, model.frameShape ?? "square")}
+                  {cutSizeLabel(model.sideM, model.frameShape ?? "square", {
+                    widthM: model.widthM,
+                    heightM: model.heightM,
+                    scale: model.cutScale as import("../lib/cutSpec").A3DrawingScale | undefined,
+                    orientation: model.cutOrientation,
+                  })}
                 </span>
               </>
             }
@@ -3150,7 +3177,7 @@ export function ModelPage({
                         aria-label="Plan scale"
                         onChange={(event) => setFigureScale(Number(event.target.value))}
                       >
-                        {FIGURE_SCALES.map((scale) => (
+                        {planScaleOptions.map((scale) => (
                           <option key={scale} value={scale}>
                             1:{scale}
                           </option>
@@ -3512,7 +3539,7 @@ export function ModelPage({
                     aria-label="Export plan scale"
                     onChange={(event) => setFigureScale(Number(event.target.value))}
                   >
-                    {FIGURE_SCALES.map((scale) => (
+                    {planScaleOptions.map((scale) => (
                       <option key={scale} value={scale}>
                         1:{scale}
                       </option>
