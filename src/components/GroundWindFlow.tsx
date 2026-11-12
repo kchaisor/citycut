@@ -1,63 +1,108 @@
 import { useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { CityModel } from "../types";
+import { getColour } from "../lib/colours";
 import {
-  buildGroundWindParticles,
+  createGroundWindFieldBuilder,
   groundWindBaseVector,
-  groundWindGlyphScaleM,
   groundWindHeightAt,
-  GROUND_WIND_LOOP_SEC,
-  groundWindVectorAt,
-  type GroundWindParticle,
+  type GroundWindField,
+  type GroundWindFieldBuilder,
 } from "../lib/groundWindField";
-import { buildingBlocks } from "../lib/groundWindField";
-import { bakeGroundWindGlyphTexture, bakeGroundWindHaloTexture } from "../lib/groundWindGlyph";
+import {
+  createGroundWindParticles,
+  GROUND_WIND_PARTICLES_MAX,
+  GROUND_WIND_POINT_STRIDE,
+  GROUND_WIND_POINTS_PER_PARTICLE,
+  groundWindMetresPerSecond,
+  groundWindPointsLength,
+  stepGroundWindParticles,
+  warmGroundWindParticles,
+  type GroundWindParticles,
+} from "../lib/groundWindParticles";
+import { qaModeFromSearch } from "../lib/qaCameraBridge";
+import { useColourRevision } from "../lib/useColourRevision";
 import type { WindPeriodStats } from "../lib/windRose";
+
+const FIELD_BUDGET_MS = 5;
+const WARM_LIVE_S = 0.9;
+const WARM_FROZEN_S = 2.4;
+const MAX_FRAME_DT = 0.05;
+
+const VERTEX_SHADER = `
+attribute vec3 p0;
+attribute vec3 p1;
+attribute float a0;
+attribute float a1;
+attribute float along0;
+attribute float along1;
+uniform float widthM;
+varying float vAlpha;
+varying float vSide;
+void main() {
+  float end = position.y;
+  float side = position.x;
+  vec3 d = p1 - p0;
+  float len = length(d.xz);
+  vec2 perp = len > 1e-4 ? vec2(-d.z, d.x) / len : vec2(0.0);
+  float along = mix(along0, along1, end);
+  float w = widthM * mix(0.3, 1.0, along) * step(1e-4, len);
+  vec3 centre = mix(p0, p1, end);
+  vec3 worldPos = centre + vec3(perp.x, 0.0, perp.y) * side * w;
+  vAlpha = mix(a0, a1, end);
+  vSide = abs(side);
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(worldPos, 1.0);
+}
+`;
+
+const FRAGMENT_SHADER = `
+uniform vec3 edgeColour;
+uniform vec3 coreColour;
+uniform float opacity;
+varying float vAlpha;
+varying float vSide;
+void main() {
+  float core = 1.0 - vSide * vSide;
+  vec3 colour = mix(edgeColour, coreColour, core * 0.6);
+  float alpha = vAlpha * opacity * mix(1.0, 0.4, vSide);
+  gl_FragColor = vec4(colour, alpha);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}
+`;
 
 function reducedMotionPreferred(): boolean {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-function animateParticles(
-  particles: GroundWindParticle[],
-  model: CityModel,
-  blocks: boolean[][],
-  base: { east: number; north: number },
-  mesh: THREE.InstancedMesh,
-  scratch: THREE.Object3D,
-  t: number,
-  camera: THREE.Camera,
-  scaleMul: number,
-  opacityMul: number,
-) {
-  const half = model.sideM / 2;
-  const flowAxis = new THREE.Vector3();
-  particles.forEach((particle, index) => {
-    const travel = ((t + particle.phase) % 1) * model.sideM * particle.lane;
-    const flow = groundWindVectorAt(particle.east, particle.north, model, blocks, base);
-    const east = particle.east + flow.east * travel * particle.speed;
-    const north = particle.north + flow.north * travel * particle.speed;
-    const wrappedE = east > half ? east - model.sideM : east < -half ? east + model.sideM : east;
-    const wrappedN = north > half ? north - model.sideM : north < -half ? north + model.sideM : north;
-    const y = groundWindHeightAt(model, wrappedE, wrappedN);
-    flowAxis.set(flow.east, 0, -flow.north).normalize();
-    const yaw = Math.atan2(flowAxis.x, flowAxis.z);
-    scratch.position.set(wrappedE, y, -wrappedN);
-    scratch.rotation.set(-Math.PI / 2, 0, yaw);
-    const dist = camera.position.distanceTo(scratch.position);
-    const lift = Math.max(1.2, Math.min(3.2, dist / (model.sideM * 0.38)));
-    const pulse = 0.5 + 0.5 * Math.sin((t + particle.phase) * Math.PI * 2);
-    const along = pulse * (0.88 + 0.32 * Math.min(1, Math.max(0, flow.speed)));
-    const s = along * lift * scaleMul;
-    scratch.scale.set(s, s * 0.92, 1);
-    scratch.updateMatrix();
-    mesh.setMatrixAt(index, scratch.matrix);
-  });
-  mesh.instanceMatrix.needsUpdate = true;
-  const mat = mesh.material as THREE.MeshBasicMaterial;
-  mat.opacity = (mat.userData.baseOpacity as number) * opacityMul;
+function qaFrozen(): boolean {
+  return typeof window !== "undefined" && qaModeFromSearch(window.location.search);
+}
+
+function ribbonWidthM(sideM: number, cameraDistance: number): number {
+  const base = Math.max(0.5, sideM * 0.0026);
+  const lift = Math.min(3, Math.max(1, cameraDistance / (sideM * 0.45)));
+  return base * lift;
+}
+
+function createRibbonGeometry(points: Float32Array): { geometry: THREE.InstancedBufferGeometry; data: THREE.InstancedInterleavedBuffer } {
+  const geometry = new THREE.InstancedBufferGeometry();
+  const corners = new Float32Array([-1, 0, 0, 0, 0, 0, 1, 0, 0, -1, 1, 0, 0, 1, 0, 1, 1, 0]);
+  geometry.setAttribute("position", new THREE.BufferAttribute(corners, 3));
+  geometry.setIndex([0, 3, 1, 1, 3, 4, 1, 4, 2, 2, 4, 5]);
+  const data = new THREE.InstancedInterleavedBuffer(points, GROUND_WIND_POINT_STRIDE, 1);
+  data.setUsage(THREE.DynamicDrawUsage);
+  geometry.setAttribute("p0", new THREE.InterleavedBufferAttribute(data, 3, 0));
+  geometry.setAttribute("a0", new THREE.InterleavedBufferAttribute(data, 1, 3));
+  geometry.setAttribute("along0", new THREE.InterleavedBufferAttribute(data, 1, 4));
+  geometry.setAttribute("p1", new THREE.InterleavedBufferAttribute(data, 3, GROUND_WIND_POINT_STRIDE));
+  geometry.setAttribute("a1", new THREE.InterleavedBufferAttribute(data, 1, GROUND_WIND_POINT_STRIDE + 3));
+  geometry.setAttribute("along1", new THREE.InterleavedBufferAttribute(data, 1, GROUND_WIND_POINT_STRIDE + 4));
+  geometry.instanceCount = 0;
+  geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), Number.POSITIVE_INFINITY);
+  return { geometry, data };
 }
 
 export function GroundWindFlow({
@@ -69,86 +114,95 @@ export function GroundWindFlow({
   stats: WindPeriodStats | null;
   animate: boolean;
 }) {
-  const particles = useMemo(() => buildGroundWindParticles(model, stats), [model, stats]);
-  const blocks = useMemo(() => buildingBlocks(model), [model]);
-  const base = useMemo(() => groundWindBaseVector(stats), [stats]);
-  const coreRef = useRef<THREE.InstancedMesh>(null);
-  const haloRef = useRef<THREE.InstancedMesh>(null);
-  const scratch = useMemo(() => new THREE.Object3D(), []);
-  const phase = useRef(0);
-  const { length, width } = useMemo(() => groundWindGlyphScaleM(model.sideM), [model.sideM]);
-  const glyphMap = useMemo(() => bakeGroundWindGlyphTexture(), []);
-  const haloMap = useMemo(() => bakeGroundWindHaloTexture(), []);
-  const coreGeometry = useMemo(() => new THREE.PlaneGeometry(length, width), [length, width]);
-  const haloGeometry = useMemo(() => new THREE.PlaneGeometry(length * 1.35, width * 1.45), [length, width]);
-  const coreMaterial = useMemo(() => {
-    const material = new THREE.MeshBasicMaterial({
-      map: glyphMap,
-      transparent: true,
-      opacity: 0.82,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-      toneMapped: false,
-    });
-    material.userData.baseOpacity = 0.82;
-    return material;
-  }, [glyphMap]);
-  const haloMaterial = useMemo(() => {
-    const material = new THREE.MeshBasicMaterial({
-      map: haloMap,
-      transparent: true,
-      opacity: 0.55,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-      toneMapped: false,
-      blending: THREE.NormalBlending,
-    });
-    material.userData.baseOpacity = 0.55;
-    return material;
-  }, [haloMap]);
-  const reduced = reducedMotionPreferred();
-  const active = animate && !reduced;
-  const invalidate = useThree((state) => state.invalidate);
-  const camera = useThree((state) => state.camera);
+  const sector = stats?.prevailingSector;
+  const base = useMemo(() => groundWindBaseVector(sector), [sector]);
+  const metresPerSecond = groundWindMetresPerSecond(model.sideM, stats?.prevailingMedianKmh);
+  const heightAt = useCallback((east: number, north: number) => groundWindHeightAt(model, east, north), [model]);
+  const frozen = !animate || reducedMotionPreferred() || qaFrozen();
+  const frozenRef = useRef(frozen);
+  frozenRef.current = frozen;
+
+  const points = useMemo(() => new Float32Array(groundWindPointsLength(GROUND_WIND_PARTICLES_MAX)), []);
+  const { geometry, data } = useMemo(() => createRibbonGeometry(points), [points]);
+  const material = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        vertexShader: VERTEX_SHADER,
+        fragmentShader: FRAGMENT_SHADER,
+        uniforms: {
+          widthM: { value: 1 },
+          opacity: { value: 0.92 },
+          edgeColour: { value: new THREE.Color() },
+          coreColour: { value: new THREE.Color() },
+        },
+        transparent: true,
+        depthWrite: false,
+        depthTest: true,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+      }),
+    [],
+  );
+
+  const colourRevision = useColourRevision();
+  useEffect(() => {
+    (material.uniforms.edgeColour!.value as THREE.Color).set(getColour("--ground-wind-flow"));
+    (material.uniforms.coreColour!.value as THREE.Color).set(getColour("--ground-wind-core"));
+  }, [material, colourRevision]);
 
   useEffect(
     () => () => {
-      coreGeometry.dispose();
-      haloGeometry.dispose();
-      coreMaterial.dispose();
-      haloMaterial.dispose();
-      glyphMap.dispose();
-      haloMap.dispose();
+      geometry.dispose();
+      material.dispose();
     },
-    [coreGeometry, haloGeometry, coreMaterial, haloMaterial, glyphMap, haloMap],
+    [geometry, material],
   );
 
+  const builderRef = useRef<GroundWindFieldBuilder | null>(null);
+  const fieldRef = useRef<GroundWindField | null>(null);
+  const particlesRef = useRef<GroundWindParticles | null>(null);
+  const invalidate = useThree((state) => state.invalidate);
+  const camera = useThree((state) => state.camera);
+
+  useEffect(() => {
+    builderRef.current = createGroundWindFieldBuilder(model, base);
+    fieldRef.current = null;
+    particlesRef.current = null;
+    geometry.instanceCount = 0;
+    invalidate();
+  }, [model, base, geometry, invalidate]);
+
+  useEffect(() => {
+    if (!frozen) invalidate();
+  }, [frozen, invalidate]);
+
   useFrame((_, delta) => {
-    const core = coreRef.current;
-    const halo = haloRef.current;
-    if (!core || !halo) return;
-    if (active) phase.current = (phase.current + delta) % GROUND_WIND_LOOP_SEC;
-    const t = phase.current / GROUND_WIND_LOOP_SEC;
-    const opacityMul = active ? 1 : 0.72;
-    animateParticles(particles, model, blocks, base, halo, scratch, t, camera, 1.18, opacityMul);
-    animateParticles(particles, model, blocks, base, core, scratch, t, camera, 1, opacityMul);
+    const builder = builderRef.current;
+    if (!fieldRef.current && builder) {
+      if (!builder.step(FIELD_BUDGET_MS)) {
+        invalidate();
+        return;
+      }
+      const field = builder.finish();
+      fieldRef.current = field;
+      builderRef.current = null;
+      const particles = createGroundWindParticles(field, heightAt, 7, points);
+      particlesRef.current = particles;
+      geometry.instanceCount = particles.count * GROUND_WIND_POINTS_PER_PARTICLE - 1;
+      warmGroundWindParticles(particles, field, heightAt, metresPerSecond, frozenRef.current ? WARM_FROZEN_S : WARM_LIVE_S);
+      data.needsUpdate = true;
+      invalidate();
+      return;
+    }
+    const field = fieldRef.current;
+    const particles = particlesRef.current;
+    if (!field || !particles) return;
+    material.uniforms.widthM!.value = ribbonWidthM(model.sideM, camera.position.length());
+    if (frozenRef.current) return;
+    stepGroundWindParticles(particles, field, heightAt, Math.min(delta, MAX_FRAME_DT), metresPerSecond);
+    data.needsUpdate = true;
     invalidate();
   });
 
-  return (
-    <>
-      <instancedMesh
-        ref={haloRef}
-        args={[haloGeometry, haloMaterial, particles.length]}
-        frustumCulled={false}
-        renderOrder={877}
-      />
-      <instancedMesh
-        ref={coreRef}
-        args={[coreGeometry, coreMaterial, particles.length]}
-        frustumCulled={false}
-        renderOrder={878}
-      />
-    </>
-  );
+  return <mesh geometry={geometry} material={material} frustumCulled={false} renderOrder={878} />;
 }
