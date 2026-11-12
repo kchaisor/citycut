@@ -69,9 +69,9 @@ try {
   await page.waitForSelector(".model", { timeout: 420_000 });
   await waitSettled(page, 26_000);
 
-  await dragOrbit(page, 640, 420, 520, 380);
-  await dragOrbit(page, 520, 380, 700, 560);
-  await dragOrbit(page, 700, 560, 860, 620);
+  await dragOrbit(page, 720, 650, 720, 250);
+  await dragOrbit(page, 900, 450, 300, 450);
+  await dragOrbit(page, 300, 450, 300, 650);
 
   const frontal = await page.screenshot({ path: `${outDir}/proof-plinth-frontal-live.png` });
   manifests.push(["proof-plinth-frontal-live.png", sha(frontal)]);
