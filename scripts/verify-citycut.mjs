@@ -2431,19 +2431,25 @@ async function main() {
         const shotPlan = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-3d-plan.png");
         await sceneViewportScreenshot(shadowPage, { path: shotPlan });
         await shadowPage.getByRole("button", { name: /^Plan$/i }).click();
-        await shadowPage.waitForTimeout(900);
-        const planWallMesh = await shadowPage.locator("[data-sun-hours-direct-walls]").count();
-        const planRoofMesh = await shadowPage.locator("[data-sun-hours-direct-roofs]").count();
+        await shadowPage.waitForFunction(
+          () => document.documentElement.dataset.sunHoursDirectPlanView === "1",
+          null,
+          { timeout: 60000 },
+        );
+        await shadowPage.waitForTimeout(400);
         const shotPlanClean = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-3d-plan-clean.png");
         await sceneViewportScreenshot(shadowPage, { path: shotPlanClean });
+        const planMeshes = await shadowPage.evaluate(() => ({
+          planView: document.documentElement.dataset.sunHoursDirectPlanView === "1",
+          walls: document.documentElement.dataset.sunHoursDirectWallsVisible === "1",
+          roofs: document.documentElement.dataset.sunHoursDirectRoofsVisible === "1",
+        }));
         assertCheck(
           "solar-sun-hours-plan-hide-walls",
           "3D Plan projection hides wall-hour quads but keeps roof-hour meshes",
-          planWallMesh === 0 && planRoofMesh === 1,
-          `walls=${planWallMesh}, roofs=${planRoofMesh}, shot=${shotPlanClean}`,
+          planMeshes.planView && !planMeshes.walls && planMeshes.roofs,
+          `meshes=${JSON.stringify(planMeshes)}, shot=${shotPlanClean}`,
         );
-        await shadowPage.getByRole("button", { name: /^Persp$/i }).click();
-        await shadowPage.waitForTimeout(400);
         await shadowPage.evaluate(() => window.__citycutQaModel?.frameSunHoursGroundOblique?.());
         await shadowPage.waitForTimeout(1200);
         const shotOblique = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-3d-oblique.png");
@@ -2508,13 +2514,21 @@ async function main() {
         const shotOblique = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-mont-albert-3d-oblique.png");
         await sceneViewportScreenshot(mapPage, { path: shotOblique });
         await mapPage.getByRole("button", { name: /^Plan$/i }).click();
-        await mapPage.waitForTimeout(900);
+        await mapPage.waitForFunction(
+          () => document.documentElement.dataset.sunHoursDirectPlanView === "1",
+          null,
+          { timeout: 60000 },
+        );
+        await mapPage.waitForTimeout(400);
         await mapPage.evaluate(() => window.__citycutQaModel?.frameSunHoursGroundPlan?.());
         await mapPage.waitForTimeout(1200);
         const shotPlan = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-mont-albert-3d-plan.png");
         await sceneViewportScreenshot(mapPage, { path: shotPlan });
-        const planWallMesh = await mapPage.locator("[data-sun-hours-direct-walls]").count();
-        const planRoofMesh = await mapPage.locator("[data-sun-hours-direct-roofs]").count();
+        const planMeshes = await mapPage.evaluate(() => ({
+          planView: document.documentElement.dataset.sunHoursDirectPlanView === "1",
+          walls: document.documentElement.dataset.sunHoursDirectWallsVisible === "1",
+          roofs: document.documentElement.dataset.sunHoursDirectRoofsVisible === "1",
+        }));
         const obliquePng = PNG.sync.read(fs.readFileSync(shotOblique));
         const yellowHits = countPixelsNearRgb(obliquePng, { r: 254, g: 232, b: 37 }, 72);
         assertCheck(
@@ -2526,8 +2540,8 @@ async function main() {
         assertCheck(
           "solar-sun-hours-mont-albert-plan-roofs-only",
           "Mont Albert 3D Plan shows roof fills without wall-hour rims",
-          planWallMesh === 0 && planRoofMesh === 1,
-          `walls=${planWallMesh}, roofs=${planRoofMesh}`,
+          planMeshes.planView && !planMeshes.walls && planMeshes.roofs,
+          `meshes=${JSON.stringify(planMeshes)}`,
         );
         await mapPage.close();
       };

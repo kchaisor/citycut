@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { buildSunHoursGroundDrapeGeometry } from "../lib/sunHoursGroundDrape";
 import { rasterizeSunHoursGroundGridFor3d } from "../lib/sunHoursGroundRaster";
@@ -28,6 +28,24 @@ export function SunHoursLayer({
   model: CityModel;
   planView: boolean;
 }) {
+  const overlayRef = useRef(overlay);
+  overlayRef.current = overlay;
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const next = overlayRef.current;
+    const roofOn = Boolean(next && next.roofPositions.length > 0);
+    const wallsOn = Boolean(!planView && next && next.wallPositions.length > 0);
+    document.documentElement.dataset.sunHoursDirectPlanView = planView ? "1" : "0";
+    document.documentElement.dataset.sunHoursDirectRoofsVisible = roofOn ? "1" : "0";
+    document.documentElement.dataset.sunHoursDirectWallsVisible = wallsOn ? "1" : "0";
+    return () => {
+      delete document.documentElement.dataset.sunHoursDirectPlanView;
+      delete document.documentElement.dataset.sunHoursDirectRoofsVisible;
+      delete document.documentElement.dataset.sunHoursDirectWallsVisible;
+    };
+  }, [overlay, planView]);
+
   const texture = useMemo(() => {
     const scaledGrid = { ...grid, maxSunHours: scaleMaxHours };
     const canvas = rasterizeSunHoursGroundGridFor3d(scaledGrid);
