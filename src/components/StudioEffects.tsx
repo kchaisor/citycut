@@ -25,7 +25,10 @@ export const INTRO_ACTIVE_KEY = "citycutIntroActive";
 
 const REST_FRAMES = 8;
 
-type AoPass = { enabled: boolean; configuration: { gammaCorrection: boolean } };
+type AoPass = {
+  enabled: boolean;
+  configuration: { gammaCorrection: boolean; transparencyAware?: boolean };
+};
 
 export function useIntroSettled(): boolean {
   const scene = useThree((state) => state.scene);
@@ -84,6 +87,7 @@ function StudioComposer({
     aoRef.current = pass;
     if (pass) {
       pass.configuration.gammaCorrection = false;
+      pass.configuration.transparencyAware = true;
       pass.enabled = false;
     }
   }, []);

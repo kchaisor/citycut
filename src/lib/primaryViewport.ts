@@ -73,7 +73,6 @@ function restorePrimaryPlinthMaterial(mesh: THREE.Mesh): void {
 function applyPrimaryPlinthMaterial(mesh: THREE.Mesh, primaryOn: boolean): void {
   if (!primaryOn) {
     restorePrimaryPlinthMaterial(mesh);
-    delete mesh.userData.cannotReceiveAO;
     return;
   }
   mesh.userData.cannotReceiveAO = true;

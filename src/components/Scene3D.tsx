@@ -2192,7 +2192,8 @@ export function Scene3D({
   const fillKeyLight = display.primaryView ? primaryLight.fillKeyLight : viewportLight.fillKeyLight;
   const fillAmbient = display.primaryView ? primaryLight.fillAmbient : viewportLight.fillAmbient;
   const fillHemi = display.primaryView ? primaryLight.fillHemi : viewportLight.fillHemi;
-  const { sunIntensity, noToneMapping } = viewportLight;
+  const { sunIntensity, noToneMapping: sunStudyNoToneMapping } = viewportLight;
+  const noToneMapping = sunStudyNoToneMapping || display.primaryView;
   const heliodonRadius = heliodonRadiusM(model.sideM, solar.radiusFactor);
   const shadowTargetY = groundY;
   const siteTopY = useMemo(() => {

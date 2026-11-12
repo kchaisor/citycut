@@ -400,6 +400,7 @@ function basePlinthMesh(
   );
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = "BasePlinth";
+  mesh.userData.cannotReceiveAO = true;
   mesh.userData.skipRhinoExport = true;
   mesh.userData.noScenePick = true;
   mesh.userData.plinthBottomY = buffers.bottomY;
