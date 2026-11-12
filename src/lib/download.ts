@@ -111,6 +111,21 @@ export function svgFilename(model: CityModel, kind: "site" | "figure" | "isometr
   return aiFilename(model, kind, scale).replace(/\.ai$/, ".svg");
 }
 
+export function sitePlan3dmFilename(model: CityModel, scale: number): string {
+  return aiFilename(model, "site", scale).replace(/\.ai$/, ".3dm");
+}
+
+export async function downloadSite3dm(
+  model: CityModel,
+  scale: number,
+  style?: LineStyles,
+  exportOptions?: SitePlanExportOptions | null,
+): Promise<void> {
+  const { sitePlanTo3dm } = await import("./planRhinoExport");
+  const bytes = await sitePlanTo3dm(model, scale, style, exportOptions);
+  downloadBytes(sitePlan3dmFilename(model, scale), bytes, "application/octet-stream");
+}
+
 export async function downloadSiteSvg(
   model: CityModel,
   scale: number,

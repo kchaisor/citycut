@@ -26,6 +26,7 @@ import {
 import { commitColour, getColour, resetStoredColours } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
 import { CRS_NOTE, mgaCrs } from "../lib/crsZone";
+import { planHeliodonForExport } from "../lib/planHeliodonExport";
 import {
   applyOverrides,
   readDrawingStyle,
@@ -40,6 +41,7 @@ import {
   downloadIsometricAi,
   downloadIsometricSvg,
   downloadSiteAi,
+  downloadSite3dm,
   downloadSiteSvg,
   downloadSectionDrawing,
   downloadFigureSvg,
@@ -479,10 +481,7 @@ export function ModelPage({
     };
   }
 
-  function planHeliodonForExport(): HeliodonDiagramExportOptions | null {
-    const direct = heliodonDiagramExport();
-    if (direct) return direct;
-    if (!sunStudyDate) return null;
+  function heliodonPlanDiagramBase(): HeliodonDiagramExportOptions {
     return {
       ...planShadowInput(),
       sideM: model.sideM,
@@ -490,9 +489,19 @@ export function ModelPage({
     };
   }
 
+  function planHeliodonForSiteExport(): HeliodonDiagramExportOptions | null {
+    const direct = heliodonDiagramExport();
+    if (direct) return direct;
+    return planHeliodonForExport({
+      showPath: solar.showPath,
+      sunStudyDate,
+      diagram: heliodonPlanDiagramBase(),
+    });
+  }
+
   function sitePlanExportOptions(): SitePlanExportOptions {
     return {
-      heliodon: planHeliodonForExport(),
+      heliodon: planHeliodonForSiteExport(),
       shadows: planShadowInput(),
       castShadows: solar.castShadows,
       uniformBuildings: !colourByUse && !showSource,
@@ -1654,6 +1663,21 @@ export function ModelPage({
     }
   }
 
+  async function saveSite3dm() {
+    setExportError(null);
+    setBusy("3dm-site");
+    try {
+      await downloadSite3dm(drawingModel, figureScale, lineStyles, {
+        ...sitePlanExportOptions(),
+        sunStudy: await sunStudyExportLayers(),
+      });
+    } catch {
+      setExportError("The site plan .3dm could not be written.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function saveSunStudyAi() {
     setExportError(null);
     setBusy("ai-sun");
@@ -2182,11 +2206,7 @@ export function ModelPage({
                 onScale={onScale}
                 lineStyle={lineStyles}
                 planScale={figureScale}
-                heliodon={
-                  sunStudyDate
-                    ? (heliodonDiagramExport() ?? { ...planShadowInput(), sideM: model.sideM, radiusFactor: solar.radiusFactor })
-                    : heliodonDiagramExport()
-                }
+                heliodon={planHeliodonForSiteExport()}
                 castShadows={solar.castShadows}
                 shadowInput={planShadowInput()}
                 sunStudy={sunStudyDate}
@@ -2415,6 +2435,15 @@ export function ModelPage({
                         }}
                       >
                         .svg
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-export-3dm studio-export-btn"
+                        aria-label="Quick export 3dm"
+                        disabled={busy !== null || drawing !== "site"}
+                        onClick={() => void saveSite3dm()}
+                      >
+                        .3dm
                       </button>
                     </>
                   ) : (

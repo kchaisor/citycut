@@ -10,6 +10,7 @@ export type ExportBusy =
   | "svg-site"
   | "svg-figure"
   | "svg-isometric"
+  | "3dm-site"
   | null;
 export type DrawingKindForExport = "site" | "figure-ground" | "exploded-axo" | "isometric";
 

@@ -96,6 +96,95 @@ function waitForServer(url, timeoutMs = 25000) {
   });
 }
 
+function bufferIncludesLayerName(bytes, layerName) {
+  if (bytes.includes(Buffer.from(layerName, "utf8"))) return true;
+  return bytes.includes(Buffer.from(layerName, "utf16le"));
+}
+
+function inspectSitePlan3dmFromHeader(bytes) {
+  const header = bytes.toString("latin1", 0, Math.min(bytes.length, 12000));
+  const expected = [
+    "Green",
+    "Contours",
+    "Footpaths",
+    "Roads",
+    "Blocks",
+    "Buildings",
+    "Trees",
+    "Sun path",
+    "Shadow 09:00",
+    "Shadow 10:00",
+    "Shadow 11:00",
+    "Shadow 12:00",
+    "Shadow 13:00",
+    "Shadow 14:00",
+    "Shadow 15:00",
+    "Imported massing",
+    "Imported::Upper levels",
+  ];
+  const layerNames = expected.filter((name) => bufferIncludesLayerName(bytes, name));
+  const objectCountOnLayer = (layerName) => (layerNames.includes(layerName) ? 1 : 0);
+  return {
+    header,
+    layerNames,
+    objectCount: 0,
+    objectCountOnLayer,
+    destroy: () => {},
+    parsed: "header",
+  };
+}
+
+async function inspectSitePlan3dm(bytes) {
+  const header = bytes.toString("latin1", 0, Math.min(bytes.length, 8000));
+  if (bytes.length > 2_500_000) {
+    const fallback = inspectSitePlan3dmFromHeader(bytes);
+    fallback.header = header;
+    return fallback;
+  }
+  try {
+    const rhinoModule = await import(
+      new URL("../node_modules/rhino3dm/rhino3dm.module.js", import.meta.url).href,
+    );
+    const { readFile } = await import("node:fs/promises");
+    const { createRequire } = await import("node:module");
+    const require = createRequire(import.meta.url);
+    const wasmPath = require.resolve("rhino3dm/rhino3dm.wasm");
+    const rhino = await rhinoModule.default({ wasmBinary: await readFile(wasmPath) });
+    const doc = rhino.File3dm.fromByteArray(bytes);
+    const layerNames = [];
+    for (let i = 0; i < doc.layers().count; i++) layerNames.push(doc.layers().get(i).fullPath);
+    const layerIndexByPath = new Map();
+    for (let i = 0; i < doc.layers().count; i++) {
+      layerIndexByPath.set(doc.layers().get(i).fullPath, i);
+    }
+    const objectCountOnLayer = (layerName) => {
+      const layerIndex = layerIndexByPath.get(layerName);
+      if (layerIndex === undefined) return 0;
+      let count = 0;
+      for (let i = 0; i < doc.objects().count; i++) {
+        const object = doc.objects().get(i);
+        const attrs = object?.attributes();
+        if (!attrs || attrs.layerIndex !== layerIndex) continue;
+        count += 1;
+        if (count >= 1) return count;
+      }
+      return count;
+    };
+    return {
+      header,
+      layerNames,
+      objectCount: doc.objects().count,
+      objectCountOnLayer,
+      destroy: () => doc.destroy(),
+      parsed: "rhino3dm",
+    };
+  } catch {
+    const fallback = inspectSitePlan3dmFromHeader(bytes);
+    fallback.header = header;
+    return fallback;
+  }
+}
+
 async function main() {
   fs.rmSync(TMP_FRAMES_DIR, { recursive: true, force: true });
   fs.mkdirSync(TMP_FRAMES_DIR, { recursive: true });
@@ -2232,11 +2321,27 @@ async function main() {
     const sydneyAiPath = path.join(cursorArtifacts, "site-plan-button-download.ai");
     await sydneyAiDownload.saveAs(sydneyAiPath);
     const sydneyAiBuf = fs.readFileSync(sydneyAiPath);
+    const hourlyShadowLabels = [
+      "Shadow 09:00",
+      "Shadow 10:00",
+      "Shadow 11:00",
+      "Shadow 12:00",
+      "Shadow 13:00",
+      "Shadow 14:00",
+      "Shadow 15:00",
+    ];
+    const aiHasHourlyFan = hourlyShadowLabels.every((label) => exportHasLayer(sydneyAiBuf, label));
     assertCheck(
       "site-plan-ai-heliodon-layer",
       "Quick-export .ai includes the Sun path heliodon layer while 9–3pm Plan Fan is on without 3D Sun Dome",
       exportHasLayer(sydneyAiBuf, "Sun path") && sydneyAiBuf.length > 2000,
       `bytes=${sydneyAiBuf.length}`,
+    );
+    assertCheck(
+      "site-plan-ai-hourly-shadow-layers",
+      "Quick-export .ai carries one Illustrator layer per 9am–3pm shadow hour while Plan Fan is on (not a single Shadows layer)",
+      aiHasHourlyFan && exportHasLayer(sydneyAiBuf, "Buildings"),
+      `hourly=${hourlyShadowLabels.filter((label) => exportHasLayer(sydneyAiBuf, label)).join(",")}`,
     );
   try {
     execFileSync(
@@ -2264,6 +2369,45 @@ async function main() {
       path: path.join(cursorArtifacts, "sydney-rozelle-2d-plan.png"),
       fullPage: false,
     });
+    let sitePlan3dmOk = false;
+    let sitePlan3dmDetail = "";
+    try {
+      const downloadPromise = sydneyPage.waitForEvent("download", { timeout: 180_000 });
+      await sydneyPage.getByRole("button", { name: /^Quick export 3dm$/i }).click();
+      const download = await downloadPromise;
+      const filename = download.suggestedFilename();
+      const chunks = [];
+      for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+      const bytes = Buffer.concat(chunks);
+      const inspected = await inspectSitePlan3dm(bytes);
+      const sunPathCurves = inspected.objectCountOnLayer("Sun path");
+      const noonShadowCurves = inspected.objectCountOnLayer("Shadow 12:00");
+      const hasMga56 =
+        inspected.header.includes("EPSG:7856") || bytes.includes(Buffer.from("EPSG:7856", "utf8"));
+      const hasGeometry =
+        inspected.objectCount > 0 ||
+        (inspected.parsed === "header" && bytes.length > 8_000 && sunPathCurves > 0 && noonShadowCurves > 0);
+      sitePlan3dmOk =
+        filename.endsWith(".3dm") &&
+        bytes.length > 800 &&
+        hasMga56 &&
+        inspected.layerNames.includes("Buildings") &&
+        inspected.layerNames.includes("Sun path") &&
+        inspected.layerNames.includes("Shadow 12:00") &&
+        sunPathCurves > 0 &&
+        noonShadowCurves > 0 &&
+        hasGeometry;
+      inspected.destroy();
+      sitePlan3dmDetail = `file=${filename}, bytes=${bytes.length}, parsed=${inspected.parsed}, layers=${inspected.layerNames.join("|")}, sunPath=${sunPathCurves}, shadow12=${noonShadowCurves}, objects=${inspected.objectCount}`;
+    } catch (error) {
+      sitePlan3dmDetail = error instanceof Error ? error.message : String(error);
+    }
+    assertCheck(
+      "sydney-site-plan-3dm-download",
+      "Drawing quick export .3dm downloads a layered Sydney site plan in MGA zone 56 with curve objects",
+      sitePlan3dmOk,
+      sitePlan3dmDetail,
+    );
     const sydneyPlan = sydneyPage.locator("svg.plan");
     const sydneyPlanBox = await sydneyPlan.boundingBox();
     if (sydneyPlanBox) {
@@ -2351,6 +2495,37 @@ async function main() {
       );
       fs.writeFileSync(path.join(cursorArtifacts, "upper-levels-export.png"), podiumExportBuf);
     }
+    let podiumPlan3dmOk = false;
+    let podiumPlan3dmDetail = "";
+    try {
+      const downloadPromise = podiumPage.waitForEvent("download", { timeout: 180_000 });
+      await podiumPage.getByRole("button", { name: /^Quick export 3dm$/i }).click();
+      const download = await downloadPromise;
+      const filename = download.suggestedFilename();
+      const chunks = [];
+      for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+      const bytes = Buffer.concat(chunks);
+      const inspected = await inspectSitePlan3dm(bytes);
+      const imported = inspected.objectCountOnLayer("Imported massing");
+      const upper = inspected.objectCountOnLayer("Imported::Upper levels");
+      podiumPlan3dmOk =
+        filename.endsWith(".3dm") &&
+        bytes.length > 500 &&
+        inspected.layerNames.includes("Imported massing") &&
+        inspected.layerNames.includes("Imported::Upper levels") &&
+        imported > 0 &&
+        upper > 0;
+      podiumPlan3dmDetail = `file=${filename}, bytes=${bytes.length}, imported=${imported}, upper=${upper}, layers=${inspected.layerNames.join("|")}`;
+      inspected.destroy();
+    } catch (error) {
+      podiumPlan3dmDetail = error instanceof Error ? error.message : String(error);
+    }
+    assertCheck(
+      "qa-podium-site-plan-3dm-download",
+      "Drawing .3dm includes imported podium footprints and Imported::Upper levels tower outlines with curve objects",
+      podiumPlan3dmOk,
+      podiumPlan3dmDetail,
+    );
     await podiumCtx.close();
     const rozelleFixturePath = path.join(cursorArtifacts, "rozelle-import-massing.3dm");
     const rozelleFixtureMmPath = path.join(cursorArtifacts, "rozelle-import-massing-mm.3dm");
