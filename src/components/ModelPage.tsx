@@ -2573,6 +2573,17 @@ export function ModelPage({
                   />
                 </div>
               )}
+              {tab === "3d" && solar.sunHours && sunHoursGround.grid ? (
+                <div className="sun-hours-direct-dock-stack">
+                  <div className="plan-solar-legend-dock hud-card" data-sun-hours-ground-legend-dock>
+                    <SunHoursGroundLegendList
+                      compact
+                      maxHours={sunHoursGround.scaleMaxHours || sunHoursGround.grid.maxSunHours}
+                      pending={sunHoursGround.pending || sunHoursGround.pendingSurfaces}
+                    />
+                  </div>
+                </div>
+              ) : null}
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
                   table={windTable}
@@ -2662,6 +2673,9 @@ export function ModelPage({
                 sunHoursLostGrid={solar.sunHoursLost ? sunHoursLostPlan.grid : null}
                 sunHoursGroundGrid={solar.sunHours ? sunHoursGround.grid : null}
                 sunHoursGroundScaleMax={solar.sunHours ? sunHoursGround.scaleMaxHours : 0}
+                sunHoursRoofPlanRaster={
+                  solar.sunHours ? sunHoursGround.overlay?.roofPlanRaster ?? null : null
+                }
                 treesCastShadow={Boolean(solar.treesCastShadow)}
                 receptorDraw={Boolean(
                   (solar.solarAccess && solar.receptorDraw) || (solar.solarParkAccess && solar.parkReceptorDraw),

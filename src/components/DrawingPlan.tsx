@@ -42,6 +42,8 @@ import { heliodonLabelFontMetres } from "../lib/heliodonDiagram";
 import { useSunStudyShadows } from "./useSunStudyShadows";
 import { rasterizePlanShadowRings, rasterizeSunStudyLayers } from "../lib/sunStudyShadowRaster";
 import { SunHoursGroundPlanOverlay } from "./SunHoursGroundPlanOverlay";
+import { SunHoursRoofPlanOverlay } from "./SunHoursRoofPlanOverlay";
+import type { SunHoursGroundRaster } from "../lib/sunHoursGroundRaster";
 import { SunHoursLostPlanOverlay } from "./SunHoursLostPlanOverlay";
 import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
 import type { SunHoursLostGrid } from "../lib/sunHoursLostPlan";
@@ -101,6 +103,7 @@ export function DrawingPlan({
   sunHoursLostGrid = null,
   sunHoursGroundGrid = null,
   sunHoursGroundScaleMax = 0,
+  sunHoursRoofPlanRaster = null,
   treesCastShadow = false,
 }: {
   model: CityModel;
@@ -129,6 +132,7 @@ export function DrawingPlan({
   sunHoursLostGrid?: SunHoursLostGrid | null;
   sunHoursGroundGrid?: SunHoursGroundGrid | null;
   sunHoursGroundScaleMax?: number;
+  sunHoursRoofPlanRaster?: SunHoursGroundRaster | null;
   treesCastShadow?: boolean;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -736,11 +740,20 @@ export function DrawingPlan({
                 preserveAspectRatio="none"
               />
             )}
+            {sunHoursGroundGrid && (
+              <SunHoursGroundPlanOverlay grid={sunHoursGroundGrid} scaleMaxHours={sunHoursGroundScaleMax || sunHoursGroundGrid.maxSunHours} />
+            )}
             {plan.buildings.map((building, index) => (
               <path
                 key={`b${index}`}
                 d={svgRings(building.rings)}
-                fill={muted && !building.site ? getColour("--sun-study-building") : building.fill}
+                fill={
+                  sunHoursRoofPlanRaster
+                    ? "none"
+                    : muted && !building.site
+                      ? getColour("--sun-study-building")
+                      : building.fill
+                }
                 fillRule="evenodd"
                 {...screenPenAttrs(
                   building.imported
@@ -752,6 +765,7 @@ export function DrawingPlan({
                 )}
               />
             ))}
+            {sunHoursRoofPlanRaster ? <SunHoursRoofPlanOverlay raster={sunHoursRoofPlanRaster} /> : null}
             {study &&
               model.buildings
                 .filter((building) => selectedIds.has(building.id))
@@ -787,9 +801,6 @@ export function DrawingPlan({
                 {...screenPenAttrs(style.tree)}
               />
             ))}
-            {sunHoursGroundGrid && (
-              <SunHoursGroundPlanOverlay grid={sunHoursGroundGrid} scaleMaxHours={sunHoursGroundScaleMax || sunHoursGroundGrid.maxSunHours} />
-            )}
             {sunHoursLostGrid && <SunHoursLostPlanOverlay grid={sunHoursLostGrid} />}
             {parkPlanOverlays.map((overlay) =>
               overlay.hatch.length > 0 ? (

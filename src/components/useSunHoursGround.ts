@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SunHoursDirectOverlay } from "../lib/sunHoursDirectAssess";
+import { rasterizeSunHoursRoofFromPacked } from "../lib/sunHoursRoofPlanRaster";
 import type { SunHoursDirectWorkerMessage, SunHoursDirectWorkerRequest } from "../lib/sunHoursDirectAssess.worker";
 import type { SunHoursGroundWorkerMessage, SunHoursGroundWorkerRequest } from "../lib/sunHoursGround.worker";
 import type { PlanShadowTreeMode } from "../lib/buildingShadows";
@@ -102,8 +103,19 @@ export function useSunHoursGround(
       setPendingSurfaces(true);
       const scaleHint = nextGrid.maxSunHours;
       const settleSurfaces = (nextOverlay: SunHoursDirectOverlay | null) => {
-        setOverlay(nextOverlay);
-        publishReady(nextGrid, nextOverlay);
+        let overlay = nextOverlay;
+        if (overlay?.roofRasterSource && typeof document !== "undefined") {
+          overlay = {
+            ...overlay,
+            roofPlanRaster: rasterizeSunHoursRoofFromPacked(
+              currentModel,
+              overlay.roofRasterSource,
+              scaleHint || overlay.maxSunHours,
+            ),
+          };
+        }
+        setOverlay(overlay);
+        publishReady(nextGrid, overlay);
         setPendingSurfaces(false);
       };
       const directWorker = startDirectWorker();

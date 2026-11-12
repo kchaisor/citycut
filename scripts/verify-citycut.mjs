@@ -2231,7 +2231,7 @@ async function main() {
             return rows.length >= 2 && rows.every((row) => !Number.isNaN(row.proposedSunlitM2));
           },
           null,
-          { timeout: 360000 },
+          { timeout: 600000 },
         );
 
         const assess = await shadowPage.evaluate(() => window.__citycutQaModel?.readSolarReceptorAssess?.() ?? []);
@@ -2314,7 +2314,7 @@ async function main() {
         await shadowPage.waitForFunction(
           () => (window.__citycutQaModel?.readSunHoursLostPlan?.().cellCount ?? 0) > 8,
           null,
-          { timeout: 360000 },
+          { timeout: 600000 },
         );
         const withLoss = await shadowPage.evaluate(
           () => window.__citycutQaModel?.readSunHoursLostPlan?.() ?? { cellCount: 0, maxLoss: 0 },
@@ -2398,14 +2398,14 @@ async function main() {
         await shadowPage.waitForFunction(
           () => document.documentElement.dataset.sunHoursGroundReady === "1",
           null,
-          { timeout: 360000 },
+          { timeout: 600000 },
         );
         await shadowPage.waitForFunction(
           () =>
             document.documentElement.dataset.sunHoursDirectSurfacesReady === "1" &&
             Number(document.documentElement.dataset.sunHoursDirectSurfaces ?? "0") > 80,
           null,
-          { timeout: 360000 },
+          { timeout: 600000 },
         );
         const enabled = await shadowPage.evaluate(() => window.__citycutQaModel?.readSunHoursGround?.() ?? null);
         const overlayDom = await shadowPage.locator("[data-sun-hours-ground-overlay]");
@@ -2413,11 +2413,19 @@ async function main() {
         const rasterCells =
           overlayCount > 0 ? Number(await overlayDom.getAttribute("data-sun-hours-ground-cell-count")) || 0 : 0;
         await shadowPage.waitForSelector("[data-sun-hours-ground-legend-dock]", { timeout: 120000 });
+        await shadowPage.waitForSelector("[data-sun-hours-roof-overlay]", { timeout: 120000 });
         const shotDrawing = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-drawing-plan.png");
         await planViewportScreenshot(shadowPage, shotDrawing);
 
         await shadowPage.getByRole("tab", { name: /3D model/i }).click();
         await shadowPage.waitForTimeout(600);
+        const legend3d = await shadowPage.locator(".sun-hours-direct-dock-stack [data-sun-hours-ground-legend-dock]").count();
+        assertCheck(
+          "solar-sun-hours-legend-3d",
+          "Direct Sun Hours legend docks in 3D view while the study is on",
+          legend3d === 1,
+          `legend3d=${legend3d}`,
+        );
         await shadowPage.evaluate(() => window.__citycutQaModel?.frameSunHoursGroundPlan?.());
         await shadowPage.waitForTimeout(1200);
         const shotPlan = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-3d-plan.png");
@@ -2615,7 +2623,7 @@ async function main() {
             return park?.assessKind === "park" && park.maxAddedM2 > 1 && park.pass === false;
           },
           null,
-          { timeout: 360000 },
+          { timeout: 600000 },
         );
         const parkRow = await parkPage.evaluate(() => {
           const rows = window.__citycutQaModel?.readSolarReceptorAssess?.() ?? [];

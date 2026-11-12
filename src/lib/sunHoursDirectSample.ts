@@ -1,5 +1,4 @@
 import { openRing } from "./geo";
-import { MASSING_FLOOR_HEIGHT_M } from "./massingBlock";
 import { SUN_HOURS_GROUND_CELL_M } from "./sunHoursGround";
 import { gridPointsInRing } from "./solarPlanShadowSteps";
 import { footprintBase } from "./terrain";
@@ -7,6 +6,7 @@ import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
 
 const BUILDING_SURFACE_LIFT_M = 0.05;
 const WALL_OFFSET_M = 0.08;
+const DIRECT_SUN_HOURS_MAX_WALL_SAMPLES = 48000;
 
 export type DirectSunHoursSample = {
   id: string;
@@ -17,6 +17,7 @@ export type DirectSunHoursSample = {
   yM: number;
   outwardEast: number;
   outwardNorth: number;
+  spanM: number;
 };
 
 function ringSignedArea(ring: Ring): number {
@@ -40,64 +41,14 @@ function footprintBaseY(model: CityModel, ring: Ring): number {
   return (model.terrain ? footprintBase(model.terrain, ring, model.sideM) : 0) + BUILDING_SURFACE_LIFT_M;
 }
 
-const DIRECT_SUN_HOURS_MAX_SAMPLES = 9000;
-
-function wallSamplesOnEdge(
-  a: Pt,
-  b: Pt,
-  outward: Pt,
-  baseYM: number,
-  floor: number,
-  buildingId: number,
-  edgeIndex: number,
-  alongCellM = SUN_HOURS_GROUND_CELL_M,
-  midBandOnly = false,
-): DirectSunHoursSample[] {
-  const dx = b[0] - a[0];
-  const dy = b[1] - a[1];
-  const length = Math.hypot(dx, dy);
-  if (length < 0.35) return [];
-  const bayCount = Math.max(1, Math.ceil(length / alongCellM));
-  const bandCount = Math.max(1, Math.ceil(MASSING_FLOOR_HEIGHT_M / SUN_HOURS_GROUND_CELL_M));
-  const bandStart = midBandOnly ? Math.floor(bandCount / 2) : 0;
-  const bandEnd = midBandOnly ? bandStart + 1 : bandCount;
-  const out: DirectSunHoursSample[] = [];
-  for (let bay = 0; bay < bayCount; bay++) {
-    const along = Math.min(length, (bay + 0.5) * alongCellM);
-    const t = along / length;
-    for (let band = bandStart; band < bandEnd; band++) {
-      const yM = baseYM + floor * MASSING_FLOOR_HEIGHT_M + (band + 0.5) * SUN_HOURS_GROUND_CELL_M;
-      out.push({
-        id: `direct-${buildingId}-f${floor}-e${edgeIndex}-b${bay}-u${band}`,
-        kind: "facade-bay",
-        buildingId,
-        east: a[0] + dx * t + outward[0] * WALL_OFFSET_M,
-        north: a[1] + dy * t + outward[1] * WALL_OFFSET_M,
-        yM,
-        outwardEast: outward[0],
-        outwardNorth: outward[1],
-      });
-    }
-  }
-  return out;
-}
-
-function samplesForBuilding(model: CityModel, building: BuildingFeat): DirectSunHoursSample[] {
+function roofSamplesForBuilding(model: CityModel, building: BuildingFeat): DirectSunHoursSample[] {
   const open = openRing(building.ring);
   if (open.length < 3) return [];
-  const closed = [...open, open[0]!];
-  const outwardSign = ringSignedArea(building.ring) >= 0 ? 1 : -1;
   const baseYM = footprintBaseY(model, building.ring);
-  const floors = Math.max(1, Math.ceil(building.height / MASSING_FLOOR_HEIGHT_M));
-  const units: DirectSunHoursSample[] = [];
-  for (let floor = 0; floor < floors; floor++) {
-    for (let edge = 0; edge < closed.length - 1; edge++) {
-      const outward = edgeOutwardNormal(closed[edge]!, closed[edge + 1]!, outwardSign);
-      units.push(...wallSamplesOnEdge(closed[edge]!, closed[edge + 1]!, outward, baseYM, floor, building.id, edge));
-    }
-  }
   const roofY = baseYM + building.height - 0.04;
-  const roofPoints = gridPointsInRing(building.ring, SUN_HOURS_GROUND_CELL_M);
+  const cellM = SUN_HOURS_GROUND_CELL_M;
+  const roofPoints = gridPointsInRing(building.ring, cellM);
+  const units: DirectSunHoursSample[] = [];
   let roofIndex = 0;
   for (const [east, north] of roofPoints) {
     units.push({
@@ -109,76 +60,75 @@ function samplesForBuilding(model: CityModel, building: BuildingFeat): DirectSun
       yM: roofY,
       outwardEast: 0,
       outwardNorth: 0,
+      spanM: cellM,
     });
   }
   return units;
 }
 
-function samplesForBuildingCoarse(
-  model: CityModel,
-  building: BuildingFeat,
-  alongCellM = SUN_HOURS_GROUND_CELL_M,
-): DirectSunHoursSample[] {
+function wallSamplesForBuilding(model: CityModel, building: BuildingFeat, cellM: number): DirectSunHoursSample[] {
   const open = openRing(building.ring);
   if (open.length < 3) return [];
   const closed = [...open, open[0]!];
   const outwardSign = ringSignedArea(building.ring) >= 0 ? 1 : -1;
   const baseYM = footprintBaseY(model, building.ring);
-  const floors = Math.max(1, Math.ceil(building.height / MASSING_FLOOR_HEIGHT_M));
+  const heightM = Math.max(0.5, building.height);
   const units: DirectSunHoursSample[] = [];
-  const midFloor = Math.floor(floors / 2);
   for (let edge = 0; edge < closed.length - 1; edge++) {
-    const outward = edgeOutwardNormal(closed[edge]!, closed[edge + 1]!, outwardSign);
-    units.push(
-      ...wallSamplesOnEdge(
-        closed[edge]!,
-        closed[edge + 1]!,
-        outward,
-        baseYM,
-        midFloor,
-        building.id,
-        edge,
-        alongCellM,
-        true,
-      ),
-    );
-  }
-  const roofY = baseYM + building.height - 0.04;
-  const roofPoints = gridPointsInRing(building.ring, alongCellM);
-  let roofIndex = 0;
-  for (const [east, north] of roofPoints) {
-    units.push({
-      id: `direct-roof-${building.id}-${roofIndex++}`,
-      kind: "roof-cell",
-      buildingId: building.id,
-      east,
-      north,
-      yM: roofY,
-      outwardEast: 0,
-      outwardNorth: 0,
-    });
+    const a = closed[edge]!;
+    const b = closed[edge + 1]!;
+    const outward = edgeOutwardNormal(a, b, outwardSign);
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const length = Math.hypot(dx, dy);
+    if (length < 0.35) continue;
+    const bayCount = Math.max(1, Math.ceil(length / cellM));
+    const bandCount = Math.max(1, Math.ceil(heightM / cellM));
+    for (let bay = 0; bay < bayCount; bay++) {
+      const along = Math.min(length, (bay + 0.5) * cellM);
+      const t = along / length;
+      for (let band = 0; band < bandCount; band++) {
+        const yM = Math.min(baseYM + (band + 0.5) * cellM, baseYM + heightM - 0.02);
+        units.push({
+          id: `direct-wall-${building.id}-e${edge}-b${bay}-u${band}`,
+          kind: "facade-bay",
+          buildingId: building.id,
+          east: a[0] + dx * t + outward[0] * WALL_OFFSET_M,
+          north: a[1] + dy * t + outward[1] * WALL_OFFSET_M,
+          yM,
+          outwardEast: outward[0],
+          outwardNorth: outward[1],
+          spanM: cellM,
+        });
+      }
+    }
   }
   return units;
 }
 
-function directSunHoursSamples(model: CityModel, alongCellM: number): DirectSunHoursSample[] {
-  const coarse = model.buildings.length > 120;
+function wallSamplesAll(model: CityModel, wallCellM: number): DirectSunHoursSample[] {
   const units: DirectSunHoursSample[] = [];
   for (const building of model.buildings) {
-    units.push(
-      ...(coarse ? samplesForBuildingCoarse(model, building, alongCellM) : samplesForBuilding(model, building)),
-    );
+    units.push(...wallSamplesForBuilding(model, building, wallCellM));
+  }
+  return units;
+}
+
+function roofSamplesAll(model: CityModel): DirectSunHoursSample[] {
+  const units: DirectSunHoursSample[] = [];
+  for (const building of model.buildings) {
+    units.push(...roofSamplesForBuilding(model, building));
   }
   return units;
 }
 
 export function directSunHoursSamplesForModel(model: CityModel): DirectSunHoursSample[] {
-  const coarse = model.buildings.length > 120;
-  let alongCellM = coarse ? SUN_HOURS_GROUND_CELL_M * 2 : SUN_HOURS_GROUND_CELL_M;
-  let units = directSunHoursSamples(model, alongCellM);
-  while (units.length > DIRECT_SUN_HOURS_MAX_SAMPLES && alongCellM < SUN_HOURS_GROUND_CELL_M * 4) {
-    alongCellM *= 2;
-    units = directSunHoursSamples(model, alongCellM);
+  const roofs = roofSamplesAll(model);
+  let wallCellM = model.buildings.length > 120 ? 6 : SUN_HOURS_GROUND_CELL_M;
+  let walls = wallSamplesAll(model, wallCellM);
+  while (walls.length > DIRECT_SUN_HOURS_MAX_WALL_SAMPLES && wallCellM < SUN_HOURS_GROUND_CELL_M * 4) {
+    wallCellM *= 2;
+    walls = wallSamplesAll(model, wallCellM);
   }
-  return units;
+  return [...roofs, ...walls];
 }
