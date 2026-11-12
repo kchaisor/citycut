@@ -22,6 +22,10 @@ import {
   squareCutFromCornerDrag,
   type CutFrameHandle,
 } from "../lib/cutFrameDrag";
+import {
+  frameCadTagPlacement,
+  readLandingDockRect,
+} from "../lib/frameCadTagPlacement";
 import { formatCutReadout, type CutOrientation } from "../lib/cutSpec";
 import type { Basemap, LonLat, ViewState } from "../types";
 
@@ -142,9 +146,16 @@ export function MapStage({
       labelEl.style.top = `${Math.max(next.top, 16)}px`;
     }
     const cadEl = frameCadRef.current;
-    if (cadEl) {
-      cadEl.style.left = `${labelLeft}px`;
-      cadEl.style.top = `${next.top + next.height + 14}px`;
+    const mapWrap = frameBoxRef.current?.parentElement;
+    if (cadEl && mapWrap) {
+      const chip = {
+        width: cadEl.offsetWidth > 0 ? cadEl.offsetWidth : 240,
+        height: cadEl.offsetHeight > 0 ? cadEl.offsetHeight : 22,
+      };
+      const placement = frameCadTagPlacement(next, readLandingDockRect(mapWrap), chip, clientW);
+      cadEl.style.left = `${placement.centerX}px`;
+      cadEl.style.top = `${placement.top}px`;
+      cadEl.dataset.placement = placement.mode;
     }
   };
 
@@ -531,9 +542,18 @@ export function MapStage({
   const cadReadout = `${dimMeters} | ${areaKm2} km² · MGA${zone}`;
   const currentFrame = frameRef.current;
   const clientW = containerRef.current?.clientWidth ?? 800;
-  const initialLabelLeft = currentFrame
-    ? Math.min(Math.max(currentFrame.left + currentFrame.width / 2, 88), clientW - 150)
-    : 400;
+  const initialCadPlacement =
+    currentFrame != null
+      ? frameCadTagPlacement(
+          currentFrame,
+          null,
+          { width: 240, height: 22 },
+          clientW,
+        )
+      : null;
+  const initialLabelLeft = initialCadPlacement?.centerX ?? 400;
+  const initialCadTop =
+    initialCadPlacement?.top ?? (currentFrame ? currentFrame.top + currentFrame.height + 14 : 0);
 
   const mapWrapClass = [
     "map-wrap",
@@ -644,7 +664,7 @@ export function MapStage({
             className="frame-cad-tag"
             style={{
               left: initialLabelLeft,
-              top: currentFrame.top + currentFrame.height + 14,
+              top: initialCadTop,
             }}
           >
             {cadReadout}

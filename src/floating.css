@@ -2271,7 +2271,7 @@ body,
 
 .select .map-wrap .frame-cad-tag {
   position: absolute;
-  z-index: 30 !important;
+  z-index: 20 !important;
   transform: translateX(-50%);
   pointer-events: none;
   white-space: nowrap;
