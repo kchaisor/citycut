@@ -27,7 +27,7 @@ import {
 } from "./vicmapContours";
 import { modelFrameSize } from "./modelFrame";
 import type { CityModel, Pt } from "../types";
-import { deckPlanStrokePaths } from "./storedSiteLayers/structurePlan";
+import { deckPlanStrokePaths, type DeckPlanStroke } from "./storedSiteLayers/structurePlan";
 
 const round = (value: number) => Math.round(value * 10) / 10;
 
@@ -57,7 +57,7 @@ export type PlanPaths = {
   rails: Pt[][];
   trams: Pt[][];
   buildings: { rings: Pt[][]; fill: string; site: boolean; imported?: boolean }[];
-  storedStructures: Pt[][];
+  storedStructures: DeckPlanStroke[];
   trees: { east: number; north: number; r: number }[];
   contours: Pt[][];
   contourIndex: boolean[];
@@ -278,11 +278,13 @@ export function planPaths(
       : clipped;
   const drawn = layer && visible.length > 0 ? drawContours(visible, drawnInterval, contourIndexEvery) : null;
 
-  const storedStructures: Pt[][] = (model.storedSiteStructures ?? []).flatMap((structure) => {
+  const storedStructures: DeckPlanStroke[] = (model.storedSiteStructures ?? []).flatMap((structure) => {
     const paths = deckPlanStrokePaths(structure.ring);
-    return paths
-      .flatMap((path) => clipPolylineSiteFrame(path, model.sideM, frameShape, frameSize))
-      .filter((part) => part.length >= 2);
+    return paths.flatMap((stroke) =>
+      clipPolylineSiteFrame(stroke.line, model.sideM, frameShape, frameSize)
+        .filter((part) => part.length >= 2)
+        .map((line) => ({ kind: stroke.kind, line })),
+    );
   });
 
   const importedUpperLevels = (model.importedMassingUpperLevels ?? [])

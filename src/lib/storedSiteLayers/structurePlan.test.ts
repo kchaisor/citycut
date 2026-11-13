@@ -18,7 +18,8 @@ describe("Anzac bridge deck plan outline", () => {
     const deck = structures.find((s) => s.id.includes("deck"));
     expect(deck).toBeTruthy();
     const raw = ringChordCount(deck!.ring);
-    const paths = deckPlanStrokePaths(deck!.ring);
+    const strokes = deckPlanStrokePaths(deck!.ring);
+    const paths = strokes.map((stroke) => stroke.line);
     const maxEdge = Math.max(
       ...paths.flatMap((path) => {
         const out: number[] = [];
@@ -29,7 +30,7 @@ describe("Anzac bridge deck plan outline", () => {
       }),
     );
     expect(raw).toBeGreaterThan(0);
-    expect(paths.length).toBeGreaterThanOrEqual(2);
+    expect(strokes.length).toBeGreaterThanOrEqual(2);
     expect(maxEdge).toBeLessThan(120);
     for (const path of paths) {
       for (let i = 0; i < path.length - 1; i++) {

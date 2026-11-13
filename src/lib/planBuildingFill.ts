@@ -61,3 +61,9 @@ export function storedSiteStructureScreenStroke(
   const base = storedSiteStructureStrokeStyle(style);
   return { ...base, mm: style.kerb.mm };
 }
+
+export function storedSiteDeckCapStrokeStyle(
+  style: import("./drawingStyle").LineStyles,
+): import("./drawingStyle").StrokeStyle {
+  return style.kerb;
+}

@@ -34,6 +34,7 @@ import {
   importedMassingStrokeStyle,
   importedMassingUpperStrokeStyle,
   planBuildingStrokeStyle,
+  storedSiteDeckCapStrokeStyle,
   storedSiteStructureStrokeStyle,
 } from "./planBuildingFill";
 import { windPlanPdfChunk } from "./windExport";
@@ -532,12 +533,13 @@ export function sitePlanChunks(
   }
   if (plan.storedStructures.length > 0) {
     const structurePen = pen(storedSiteStructureStrokeStyle(style), "miter");
+    const capPen = pen(storedSiteDeckCapStrokeStyle(style), "miter");
     chunks.push({
       name: "Structures",
-      paths: plan.storedStructures.map((line) => ({
-        rings: [mapRing(line, model.sideM, layout)],
+      paths: plan.storedStructures.map((stroke) => ({
+        rings: [mapRing(stroke.line, model.sideM, layout)],
         close: false,
-        ...(structurePen ?? {}),
+        ...(stroke.kind === "cap" ? capPen : structurePen ?? {}),
       })),
     });
   }

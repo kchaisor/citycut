@@ -4,6 +4,13 @@ import type { Pt, Ring } from "../../types";
 
 const DECK_CHORD_M = 120;
 
+export type DeckPlanStrokeKind = "rail" | "cap";
+
+export type DeckPlanStroke = {
+  kind: DeckPlanStrokeKind;
+  line: Pt[];
+};
+
 export function orderDeckBoundaryRing(ring: Ring): Ring {
   const pts = openRing(ring);
   if (pts.length < 4) return ring;
@@ -119,19 +126,19 @@ function westAbutmentCap(railA: Pt[], railB: Pt[]): Pt[] | null {
   return [westA, westB];
 }
 
-export function deckPlanStrokePaths(ring: Ring): Pt[][] {
+export function deckPlanStrokePaths(ring: Ring): DeckPlanStroke[] {
   const pts = openRing(ring);
-  if (pts.length < 4) return [pts];
+  if (pts.length < 4) return [{ kind: "rail", line: pts }];
   const chains = mergeShortEastSpur(splitDeckRingAtBowties(pts));
   const ranked = chains.sort((a, b) => polylineLength(b) - polylineLength(a));
   const railA = ranked[0] ?? [];
   const railB = ranked[1] ?? [];
-  const paths: Pt[][] = [];
-  if (railA.length >= 2) paths.push(railA);
-  if (railB.length >= 2) paths.push(railB);
+  const strokes: DeckPlanStroke[] = [];
+  if (railA.length >= 2) strokes.push({ kind: "rail", line: railA });
+  if (railB.length >= 2) strokes.push({ kind: "rail", line: railB });
   const cap = railA.length >= 2 && railB.length >= 2 ? westAbutmentCap(railA, railB) : null;
-  if (cap) paths.push(cap);
-  return paths.length > 0 ? paths : [pts];
+  if (cap) strokes.push({ kind: "cap", line: cap });
+  return strokes.length > 0 ? strokes : [{ kind: "rail", line: pts }];
 }
 
 function deckFillRingFromPaths(paths: Pt[][]): Pt[] {
