@@ -124,6 +124,17 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
       }
     }
 
+    const chipNotClipped = (el: HTMLElement, name: string) => {
+      if (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1) {
+        errors.push(
+          `"${name}" content clipped (${el.scrollWidth}×${el.scrollHeight} > ${el.clientWidth}×${el.clientHeight})`,
+        );
+      }
+      for (const child of el.children) {
+        chipNotClipped(child as HTMLElement, `${name} child`);
+      }
+    };
+
     const modelEl = document.querySelector(".model") as HTMLElement | null;
     const expectedDim = modelEl?.getAttribute("data-cut-size-label")?.trim() ?? "";
     const dim = document.querySelector(".model .top-bar-left .dim-chip") as HTMLElement | null;
@@ -132,6 +143,7 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
       if (expectedDim.length > 0 && actual !== expectedDim) {
         errors.push(`size chip text "${actual}" != expected "${expectedDim}"`);
       }
+      chipNotClipped(dim, "size chip");
       const dr = dim.getBoundingClientRect();
       let ancestor: HTMLElement | null = dim.parentElement;
       while (ancestor) {
@@ -145,13 +157,6 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
         }
         if (ancestor.classList.contains("top-bar-left")) break;
         ancestor = ancestor.parentElement;
-      }
-      const leftGroup = document.querySelector(".model .top-bar-left") as HTMLElement | null;
-      if (leftGroup) {
-        const lr = leftGroup.getBoundingClientRect();
-        if (dr.right > lr.right + 0.5 || dr.left < lr.left - 0.5) {
-          errors.push("size chip clips outside left group");
-        }
       }
     }
 

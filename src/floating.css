@@ -4886,6 +4886,7 @@ body,
 @media (min-width: 1360px) {
   .model:not([data-view-tab="drawing"]) .top-bar-left.studio-header-left {
     max-width: min(24rem, calc(50vw - 16rem));
+    min-width: 0;
     overflow: visible;
   }
 
@@ -4894,7 +4895,7 @@ body,
   }
 
   .model:not([data-view-tab="drawing"]) .top-bar-left .dim-chip.studio-cut-pill {
-    flex-shrink: 0;
+    display: none !important;
   }
 
   .model[data-view-tab="drawing"] .sidebar-brand-bar {
