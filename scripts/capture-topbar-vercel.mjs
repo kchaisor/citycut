@@ -4,7 +4,8 @@ import { chromium } from "playwright";
 
 const ARTIFACTS = "/opt/cursor/artifacts";
 const PREVIEW_BASE =
-  process.env.CITYCUT_PREVIEW_URL ?? "https://citycut-git-cursor-topbar-fit-1280-kchai.vercel.app/citycut/";
+  process.env.CITYCUT_PREVIEW_URL ??
+  "https://citycut-git-cursor-topbar-fit-1280-kchai.vercel.app/?_vercel_share=8znXr1hc6cH04uvSotxvn9CDv3LQvnZh";
 
 const DANDENONG = {
   lat: -37.98382,
@@ -22,14 +23,13 @@ const browser = await chromium.launch();
 const page = await browser.newPage();
 page.setDefaultTimeout(360_000);
 
-const q = new URLSearchParams({
-  lat: String(DANDENONG.lat),
-  lon: String(DANDENONG.lon),
-  label: DANDENONG.label,
-  km: String(DANDENONG.km),
-});
+const landingUrl = new URL(PREVIEW_BASE);
+landingUrl.searchParams.set("lat", String(DANDENONG.lat));
+landingUrl.searchParams.set("lon", String(DANDENONG.lon));
+landingUrl.searchParams.set("label", DANDENONG.label);
+landingUrl.searchParams.set("km", String(DANDENONG.km));
 
-await page.goto(`${PREVIEW_BASE}?${q.toString()}`, { waitUntil: "domcontentloaded", timeout: 120_000 });
+await page.goto(landingUrl.toString(), { waitUntil: "domcontentloaded", timeout: 120_000 });
 await page.waitForSelector("button.create-fab", { timeout: 60_000 });
 await page.locator("button.create-fab").click({ timeout: 30_000 });
 await page.waitForSelector(".model", { timeout: 360_000 });
