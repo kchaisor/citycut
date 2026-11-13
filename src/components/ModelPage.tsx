@@ -13,7 +13,7 @@ import { viewportIsNarrow } from "../lib/panelCollapse";
 import { ShortcutCheatsheet } from "./ShortcutCheatsheet";
 import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
-import { Building2, Copy, Download, DraftingCompass, Eye, Footprints, GripVertical, Info, Radar, Sun, Trees, Upload, Wind } from "lucide-react";
+import { Building2, Copy, Download, DraftingCompass, Eye, Footprints, GripVertical, Info, Radar, RotateCcw, Sun, Trees, Upload, Wind } from "lucide-react";
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -2056,6 +2056,7 @@ export function ModelPage({
     <div
       ref={modelRootRef}
       className="model"
+      data-view-tab={tab}
       data-intro-hold={!introHoldReleasedRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
       data-intro-webgl-wait={!introWebglReadyRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
     >
@@ -2370,7 +2371,9 @@ export function ModelPage({
                 <span className="v-sep" aria-hidden="true" />
                 <button
                   type="button"
-                  className="cam-reset studio-reset-btn"
+                  className="cam-reset studio-reset-btn topbar-compact-icon-btn"
+                  aria-label="Reset view"
+                  title="Reset view"
                   onClick={() => {
                     if (tab === "3d") {
                       setSnapId((id) => id + 1);
@@ -2390,7 +2393,8 @@ export function ModelPage({
                     }
                   }}
                 >
-                  Reset view
+                  <RotateCcw size={15} strokeWidth={2.1} className="topbar-compact-icon" aria-hidden="true" />
+                  <span className="topbar-compact-label">Reset view</span>
                 </button>
               </>
             }

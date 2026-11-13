@@ -4593,3 +4593,130 @@ body,
     text-align: center;
   }
 }
+
+.model .topbar-compact-icon-btn .topbar-compact-icon {
+  display: none;
+}
+
+.model .topbar-compact-icon-btn .topbar-compact-label {
+  display: inline;
+}
+
+@media (max-width: 1359px) {
+  .model .sidebar-brand-bar {
+    position: fixed !important;
+    top: 14px !important;
+    left: 14px !important;
+    right: 14px !important;
+    width: auto !important;
+    height: auto !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 8px !important;
+    pointer-events: none !important;
+    z-index: 30 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  .model .top-bar-left.studio-header-left,
+  .model .top-bar-center.studio-header-center,
+  .model .top-bar-right.studio-header-right {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    transform: none !important;
+    flex: 0 1 auto;
+    min-width: 0;
+    pointer-events: auto !important;
+  }
+
+  .model .top-bar-center.studio-header-center {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    justify-content: center;
+  }
+
+  .model .top-bar-right.studio-header-right {
+    flex: 0 0 auto;
+  }
+
+  .model .top-bar-left .place-chip.studio-breadcrumb-place {
+    max-width: 160px;
+  }
+
+  .model .topbar-compact-icon-btn {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+    padding: 0 !important;
+    gap: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 7px !important;
+  }
+
+  .model .topbar-compact-icon-btn .topbar-compact-icon {
+    display: block;
+  }
+
+  .model .topbar-compact-icon-btn .topbar-compact-label {
+    display: none;
+  }
+}
+
+@media (max-width: 1199px) {
+  .model .top-bar-left .dim-chip.studio-cut-pill {
+    display: none !important;
+  }
+}
+
+@media (min-width: 1360px) {
+  .model[data-view-tab="drawing"] .sidebar-brand-bar {
+    position: fixed !important;
+    top: 14px !important;
+    left: 14px !important;
+    right: 14px !important;
+    width: auto !important;
+    height: auto !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 8px !important;
+    pointer-events: none !important;
+    z-index: 30 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  .model[data-view-tab="drawing"] .top-bar-left.studio-header-left,
+  .model[data-view-tab="drawing"] .top-bar-center.studio-header-center,
+  .model[data-view-tab="drawing"] .top-bar-right.studio-header-right {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    transform: none !important;
+    flex: 0 1 auto;
+    min-width: 0;
+    pointer-events: auto !important;
+  }
+
+  .model[data-view-tab="drawing"] .top-bar-center.studio-header-center {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    justify-content: center;
+  }
+
+  .model[data-view-tab="drawing"] .top-bar-right.studio-header-right {
+    flex: 0 0 auto;
+  }
+}
