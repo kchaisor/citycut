@@ -2273,7 +2273,17 @@ export function ModelPage({
               </>
             }
             headerCenter={
-              <>
+              <div className="header-center-cluster">
+                <select
+                  className="topbar-view-select"
+                  aria-label="Model view"
+                  value={tab}
+                  onChange={(event) => setTab(event.target.value as Tab)}
+                >
+                  <option value="3d">3D model</option>
+                  <option value="drawing">Drawing</option>
+                  <option value="satellite">Satellite</option>
+                </select>
                 <div className="tabs mode-group studio-view-tabs" role="tablist" aria-label="Model views">
                   {(
                     [
@@ -2316,57 +2326,92 @@ export function ModelPage({
                 </div>
                 <span className="v-sep" aria-hidden="true" />
                 {tab === "3d" ? (
-                  <div className="proj-group studio-submode-pills" role="group" aria-label="3D projection">
-                    <button
-                      type="button"
-                      className={view.projection === "perspective" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
-                      aria-pressed={view.projection === "perspective"}
-                      onClick={() => commitView({ ...view, projection: "perspective" }, false)}
+                  <>
+                    <select
+                      className="topbar-3d-select"
+                      aria-label="3D projection"
+                      value={view.projection}
+                      onChange={(event) => {
+                        const projection = event.target.value as "perspective" | "iso" | "plan";
+                        if (projection === "plan") {
+                          commitView({ projection: "plan", corner: view.corner, freeRotate: false }, true);
+                        } else {
+                          commitView({ ...view, projection }, false);
+                        }
+                      }}
                     >
-                      Perspective
-                    </button>
-                    <button
-                      type="button"
-                      className={view.projection === "iso" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
-                      aria-pressed={view.projection === "iso"}
-                      onClick={() => commitView({ ...view, projection: "iso" }, false)}
-                    >
-                      Isometric
-                    </button>
-                    <button
-                      type="button"
-                      className={view.projection === "plan" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
-                      aria-pressed={view.projection === "plan"}
-                      onClick={() => commitView({ projection: "plan", corner: view.corner, freeRotate: false }, true)}
-                    >
-                      Plan
-                    </button>
-                  </div>
-                ) : (
-                  <div className="proj-group studio-submode-pills" aria-label="Quick drawing modes">
-                    {(
-                      [
-                        ["site", "Site plan"],
-                        ["figure-ground", "Figure-ground"],
-                        ["exploded-axo", "Exploded axo"],
-                        ["isometric", "Isometric"],
-                      ] as const
-                    ).map(([kind, label]) => (
+                      <option value="perspective">Perspective</option>
+                      <option value="iso">Isometric</option>
+                      <option value="plan">Plan</option>
+                    </select>
+                    <div className="proj-group studio-submode-pills topbar-3d-modes" role="group" aria-label="3D projection">
                       <button
-                        key={kind}
                         type="button"
-                        className={tab === "drawing" && drawing === kind ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
-                        aria-label={`Quick ${label}`}
-                        aria-pressed={tab === "drawing" && drawing === kind}
-                        onClick={() => {
-                          setDrawing(kind);
-                          setTab("drawing");
-                        }}
+                        className={view.projection === "perspective" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                        aria-pressed={view.projection === "perspective"}
+                        onClick={() => commitView({ ...view, projection: "perspective" }, false)}
                       >
-                        {label}
+                        Perspective
                       </button>
-                    ))}
-                  </div>
+                      <button
+                        type="button"
+                        className={view.projection === "iso" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                        aria-pressed={view.projection === "iso"}
+                        onClick={() => commitView({ ...view, projection: "iso" }, false)}
+                      >
+                        Isometric
+                      </button>
+                      <button
+                        type="button"
+                        className={view.projection === "plan" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                        aria-pressed={view.projection === "plan"}
+                        onClick={() => commitView({ projection: "plan", corner: view.corner, freeRotate: false }, true)}
+                      >
+                        Plan
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <select
+                      className="topbar-drawing-select"
+                      aria-label="Drawing mode"
+                      value={drawing}
+                      onChange={(event) => {
+                        setDrawing(event.target.value as DrawingKind);
+                        setTab("drawing");
+                      }}
+                    >
+                      <option value="site">Site plan</option>
+                      <option value="figure-ground">Figure-ground</option>
+                      <option value="exploded-axo">Exploded axo</option>
+                      <option value="isometric">Isometric</option>
+                    </select>
+                    <div className="proj-group studio-submode-pills topbar-drawing-modes" aria-label="Quick drawing modes">
+                      {(
+                        [
+                          ["site", "Site plan"],
+                          ["figure-ground", "Figure-ground"],
+                          ["exploded-axo", "Exploded axo"],
+                          ["isometric", "Isometric"],
+                        ] as const
+                      ).map(([kind, label]) => (
+                        <button
+                          key={kind}
+                          type="button"
+                          className={tab === "drawing" && drawing === kind ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                          aria-label={`Quick ${label}`}
+                          aria-pressed={tab === "drawing" && drawing === kind}
+                          onClick={() => {
+                            setDrawing(kind);
+                            setTab("drawing");
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
                 )}
                 <span className="v-sep" aria-hidden="true" />
                 <button
@@ -2396,7 +2441,7 @@ export function ModelPage({
                   <RotateCcw size={15} strokeWidth={2.1} className="topbar-compact-icon" aria-hidden="true" />
                   <span className="topbar-compact-label">Reset view</span>
                 </button>
-              </>
+              </div>
             }
             headerRight={
               <>

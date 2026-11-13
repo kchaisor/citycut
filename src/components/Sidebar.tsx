@@ -178,7 +178,7 @@ export function Sidebar({
             </span>
             <span className="sidebar-brand-name brand-name-sm">CityCut</span>
           </button>
-          {brandMeta}
+          {brandMeta ? <div className="top-bar-left-meta">{brandMeta}</div> : null}
           {showNewCut && onNewCut && !collapsed ? (
             <button
               className="sidebar-new-cut new-cut-pill topbar-compact-icon-btn"
