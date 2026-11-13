@@ -14,7 +14,7 @@ const DANDENONG = {
   km: 1,
 };
 
-const VIEWPORTS = [1024, 1280, 1440] as const;
+const VIEWPORTS = [1024, 1280, 1360, 1440] as const;
 const HEIGHT = 800;
 
 type TopBarAudit = {
@@ -61,6 +61,20 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
+    const isVisible = (el: HTMLElement) => {
+      const cs = getComputedStyle(el);
+      if (cs.display === "none" || cs.visibility === "hidden" || Number(cs.opacity) < 0.05) return false;
+      const rect = el.getBoundingClientRect();
+      return rect.width > 0.5 && rect.height > 0.5;
+    };
+
+    const boxNotClipped = (el: HTMLElement, name: string) => {
+      if (!isVisible(el)) return;
+      if (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1) {
+        errors.push(`"${name}" clips inside its box (${el.scrollWidth}×${el.scrollHeight} > ${el.clientWidth}×${el.clientHeight})`);
+      }
+    };
+
     const groupSels = [".model .top-bar-left", ".model .top-bar-center", ".model .top-bar-right"] as const;
     const groupEls = groupSels.map((sel) => document.querySelector(sel) as HTMLElement | null);
     if (groupEls.some((el) => !el)) {
@@ -71,12 +85,6 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
       const r = el!.getBoundingClientRect();
       return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
     });
-
-    const overlap = (a: { left: number; right: number; top: number; bottom: number }, b: typeof a) => {
-      const xOverlap = Math.min(a.right, b.right) - Math.max(a.left, b.left);
-      const yOverlap = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
-      return xOverlap > 0.5 && yOverlap > 0.5;
-    };
 
     const names = ["left", "center", "right"] as const;
     for (let i = 0; i < rects.length; i++) {
@@ -89,15 +97,38 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
       }
     }
 
-    for (let i = 0; i < groupEls.length; i++) {
-      const el = groupEls[i]!;
-      const inner =
-        names[i] === "center"
-          ? (el.querySelector(".header-center-cluster") as HTMLElement | null)
-          : null;
-      const overflowEl = inner ?? el;
-      if (overflowEl.scrollWidth > overflowEl.clientWidth + 1) {
-        errors.push(`group ${names[i]} overflows (${overflowEl.scrollWidth} > ${overflowEl.clientWidth})`);
+    const chips = document.querySelectorAll(
+      ".model .top-bar-left .dim-chip, .model .top-bar-left .sidebar-brand-name, .model .top-bar-right .ready-text",
+    );
+    for (const chip of chips) {
+      const el = chip as HTMLElement;
+      const label = el.textContent?.trim() || el.className;
+      boxNotClipped(el, label);
+    }
+
+    const place = document.querySelector(".model .top-bar-left .place-chip") as HTMLElement | null;
+    if (place) {
+      const full = place.textContent?.trim() ?? "";
+      if (full.length === 0) {
+        errors.push("place name missing");
+      } else if (!isVisible(place)) {
+        errors.push("place name not visible");
+      } else {
+        const approxVisible =
+          place.scrollWidth <= place.clientWidth + 1
+            ? full.length
+            : Math.floor(full.length * (place.clientWidth / Math.max(place.scrollWidth, 1)));
+        if (full.length >= 10 && approxVisible < 10) {
+          errors.push(`place name shows only ~${approxVisible} visible characters (need ≥10)`);
+        }
+      }
+    }
+
+    const dim = document.querySelector(".model .top-bar-left .dim-chip") as HTMLElement | null;
+    if (dim && isVisible(dim)) {
+      const t = dim.textContent?.trim() ?? "";
+      if (t.length > 0 && (t.length < 4 || !/\d/.test(t) || !/[×m]/.test(t))) {
+        errors.push(`size chip looks fragmented: "${t}"`);
       }
     }
 
@@ -106,10 +137,7 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
     );
     for (const control of controls) {
       const html = control as HTMLElement;
-      const cs = getComputedStyle(html);
-      if (cs.display === "none" || cs.visibility === "hidden" || Number(cs.opacity) < 0.05) continue;
-      const cr = html.getBoundingClientRect();
-      if (cr.width < 1 || cr.height < 1) continue;
+      if (!isVisible(html)) continue;
       let ancestor: HTMLElement | null = html.parentElement;
       let hiddenAncestor = false;
       while (ancestor) {
@@ -128,9 +156,12 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
         ancestor = ancestor.parentElement;
       }
       if (hiddenAncestor) continue;
+
       const label = html.getAttribute("aria-label") ?? html.textContent?.trim() ?? control.tagName;
-      let parent: HTMLElement | null = html;
+      boxNotClipped(html, label);
+
       let group: HTMLElement | null = null;
+      let parent: HTMLElement | null = html;
       while (parent) {
         if (
           parent.classList.contains("top-bar-left") ||
@@ -143,6 +174,7 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
         parent = parent.parentElement;
       }
       if (!group) continue;
+      const cr = html.getBoundingClientRect();
       const gr = group.getBoundingClientRect();
       if (cr.left < gr.left - 0.5 || cr.right > gr.right + 0.5 || cr.top < gr.top - 0.5 || cr.bottom > gr.bottom + 0.5) {
         errors.push(`control "${label}" clips outside its group`);
@@ -152,17 +184,13 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
       }
     }
 
-    const brand = document.querySelector(".model .top-bar-left .sidebar-brand-name");
-    const place = document.querySelector(".model .top-bar-left .place-chip");
-    if (brand && place) {
+    const brand = document.querySelector(".model .top-bar-left .sidebar-brand-name") as HTMLElement | null;
+    if (brand && place && isVisible(brand) && isVisible(place)) {
       const br = brand.getBoundingClientRect();
       const pr = place.getBoundingClientRect();
-      if (
-        overlap(
-          { left: br.left, top: br.top, right: br.right, bottom: br.bottom },
-          { left: pr.left, top: pr.top, right: pr.right, bottom: pr.bottom },
-        )
-      ) {
+      const xOverlap = Math.min(br.right, pr.right) - Math.max(br.left, pr.left);
+      const yOverlap = Math.min(br.bottom, pr.bottom) - Math.max(br.top, pr.top);
+      if (xOverlap > 0.5 && yOverlap > 0.5) {
         errors.push("place name overlaps CityCut wordmark");
       }
       if (pr.left < br.right - 0.5) {
@@ -170,7 +198,7 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
       }
     }
 
-    return { ok: errors.length === 0, errors };
+  return { ok: errors.length === 0, errors };
   });
 }
 
@@ -212,7 +240,7 @@ describe("model top bar group layout", () => {
   });
 
   it(
-    "keeps top bar groups separate, unclipped, and wordmark-safe at 1024, 1280, and 1440",
+    "keeps top bar groups separate with unclipped controls at 1024–1440",
     async () => {
       const browser = await chromium.launch();
       const page = await browser.newPage();
@@ -257,6 +285,6 @@ describe("model top bar group layout", () => {
         await browser.close();
       }
     },
-    480_000,
+    520_000,
   );
 });

@@ -2280,7 +2280,7 @@ export function ModelPage({
                   value={tab}
                   onChange={(event) => setTab(event.target.value as Tab)}
                 >
-                  <option value="3d">3D model</option>
+                  <option value="3d">3D</option>
                   <option value="drawing">Drawing</option>
                   <option value="satellite">Satellite</option>
                 </select>
@@ -2341,7 +2341,7 @@ export function ModelPage({
                       }}
                     >
                       <option value="perspective">Perspective</option>
-                      <option value="iso">Isometric</option>
+                      <option value="iso">Iso</option>
                       <option value="plan">Plan</option>
                     </select>
                     <div className="proj-group studio-submode-pills topbar-3d-modes" role="group" aria-label="3D projection">
@@ -2383,9 +2383,9 @@ export function ModelPage({
                       }}
                     >
                       <option value="site">Site plan</option>
-                      <option value="figure-ground">Figure-ground</option>
-                      <option value="exploded-axo">Exploded axo</option>
-                      <option value="isometric">Isometric</option>
+                      <option value="figure-ground">Fig-grnd</option>
+                      <option value="exploded-axo">Expl axo</option>
+                      <option value="isometric">Iso</option>
                     </select>
                     <div className="proj-group studio-submode-pills topbar-drawing-modes" aria-label="Quick drawing modes">
                       {(

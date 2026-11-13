@@ -1987,6 +1987,8 @@ body,
   font-size: 12.5px;
   font-weight: 600;
   color: var(--ink);
+  flex: 0 1 auto;
+  min-width: 5.5rem;
   max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4598,33 +4600,15 @@ body,
   display: flex;
   align-items: center;
   gap: 7px;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: calc(100% - 7.5rem);
   overflow: hidden;
 }
 
 .model .top-bar-left .sidebar-brand {
   flex: 0 0 auto;
   min-width: 6.75rem;
-}
-
-.model .top-bar-left.studio-header-left {
-  max-width: 18rem;
-  overflow: hidden;
-}
-
-.model .top-bar-left .place-chip.studio-breadcrumb-place {
-  max-width: 9rem;
-}
-
-@media (min-width: 1360px) {
-  .model:not([data-view-tab="drawing"]) .top-bar-left.studio-header-left {
-    max-width: 16.5rem;
-  }
-
-  .model:not([data-view-tab="drawing"]) .top-bar-left .place-chip.studio-breadcrumb-place {
-    max-width: 7.25rem;
-  }
 }
 
 .model .top-bar-center .header-center-cluster {
@@ -4651,8 +4635,10 @@ body,
   color: var(--ink);
   padding: 0 8px;
   cursor: pointer;
-  flex: 0 1 auto;
-  min-width: 0;
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: none;
+  field-sizing: content;
 }
 
 .model .top-bar-center .cam-reset,
@@ -4701,8 +4687,8 @@ body,
 
   .model .top-bar-left.studio-header-left {
     flex: 0 1 auto;
-    max-width: 30%;
-    min-width: 10.5rem;
+    max-width: min(38%, 22rem);
+    min-width: 14rem;
     display: flex !important;
     align-items: center !important;
     gap: 7px !important;
@@ -4717,12 +4703,22 @@ body,
 
   .model .top-bar-right.studio-header-right {
     flex: 0 0 auto;
-    max-width: 28%;
+    max-width: 34%;
     overflow: visible;
   }
 
+  .model .top-bar-right .studio-quick-exports {
+    display: none !important;
+  }
+
   .model .top-bar-left .place-chip.studio-breadcrumb-place {
-    max-width: 160px;
+    flex: 1 1 auto;
+    min-width: 5.5rem;
+    max-width: 10rem;
+  }
+
+  .model .top-bar-left .dim-chip.studio-cut-pill {
+    flex-shrink: 0;
   }
 
   .model .top-bar-center .studio-view-tabs,
@@ -4745,8 +4741,6 @@ body,
 
   .model .top-bar-center .topbar-view-select {
     display: block;
-    flex: 0 0 auto;
-    max-width: 5.25rem;
   }
 
   .model .top-bar-center .proj-btn {
@@ -4775,11 +4769,6 @@ body,
     display: none;
   }
 
-  .model .top-bar-right .ready-text.studio-status-pill {
-    max-width: 9.5rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
 }
 
 @media (max-width: 1279px) {
@@ -4791,8 +4780,6 @@ body,
   .model .top-bar-center .topbar-drawing-select,
   .model .top-bar-center .topbar-3d-select {
     display: block;
-    flex: 0 0 auto;
-    max-width: 5.5rem;
   }
 }
 
@@ -4802,7 +4789,27 @@ body,
   }
 }
 
+@media (min-width: 1200px) and (max-width: 1359px) {
+  .model .top-bar-left .dim-chip.studio-cut-pill {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+}
+
 @media (min-width: 1360px) {
+  .model:not([data-view-tab="drawing"]) .top-bar-left.studio-header-left {
+    max-width: min(21rem, calc(50vw - 18rem));
+    overflow: hidden;
+  }
+
+  .model:not([data-view-tab="drawing"]) .top-bar-left .place-chip.studio-breadcrumb-place {
+    max-width: 11rem;
+  }
+
+  .model:not([data-view-tab="drawing"]) .top-bar-left .dim-chip.studio-cut-pill {
+    flex-shrink: 0;
+  }
+
   .model[data-view-tab="drawing"] .sidebar-brand-bar {
     position: fixed !important;
     top: 14px !important;
@@ -4835,7 +4842,7 @@ body,
 
   .model[data-view-tab="drawing"] .top-bar-left.studio-header-left {
     flex: 0 1 auto;
-    max-width: 34%;
+    max-width: 26%;
     min-width: 10.5rem;
     display: flex !important;
     align-items: center !important;
@@ -4845,34 +4852,44 @@ body,
   .model[data-view-tab="drawing"] .top-bar-center.studio-header-center {
     flex: 1 1 0;
     min-width: 0;
-    justify-content: flex-start;
+    justify-content: center;
     overflow: visible;
   }
 
   .model[data-view-tab="drawing"] .top-bar-right.studio-header-right {
     flex: 0 0 auto;
-    max-width: 32%;
+    max-width: 28%;
     overflow: visible;
   }
 
-  .model[data-view-tab="drawing"] .top-bar-center .studio-view-tabs,
-  .model[data-view-tab="drawing"] .top-bar-center .studio-view-tabs + .v-sep {
-    display: none !important;
+  .model[data-view-tab="drawing"] .top-bar-left .place-chip.studio-breadcrumb-place {
+    max-width: 11rem;
   }
 
-  .model[data-view-tab="drawing"] .top-bar-center .topbar-view-select {
+  .model[data-view-tab="drawing"] .top-bar-center .mode-btn,
+  .model[data-view-tab="drawing"] .top-bar-center .proj-btn {
+    padding: 0 7px !important;
+    font-size: 10.5px !important;
+  }
+
+  .model[data-view-tab="drawing"] .topbar-compact-icon-btn {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+    padding: 0 !important;
+    gap: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 7px !important;
+  }
+
+  .model[data-view-tab="drawing"] .topbar-compact-icon-btn .topbar-compact-icon {
     display: block;
-    flex: 0 0 auto;
-    max-width: 7.5rem;
   }
 
-  .model[data-view-tab="drawing"] .top-bar-center .topbar-drawing-modes {
-    display: none !important;
-  }
-
-  .model[data-view-tab="drawing"] .top-bar-center .topbar-drawing-select {
-    display: block;
-    flex: 0 0 auto;
-    max-width: 8.5rem;
+  .model[data-view-tab="drawing"] .topbar-compact-icon-btn .topbar-compact-label {
+    display: none;
   }
 }

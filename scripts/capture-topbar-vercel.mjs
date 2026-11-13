@@ -14,8 +14,9 @@ const DANDENONG = {
   km: 1,
 };
 
-const WIDTHS = [1024, 1280, 1440];
+const WIDTHS = [1024, 1280, 1360, 1440];
 const HEIGHT = 800;
+const CROP_HEIGHT = 80;
 
 fs.mkdirSync(ARTIFACTS, { recursive: true });
 
@@ -35,12 +36,16 @@ await page.locator("button.create-fab").click({ timeout: 30_000 });
 await page.waitForSelector(".model", { timeout: 360_000 });
 await page.waitForFunction(
   () => {
+    const ready = document.querySelector(".model .top-bar-right .ready-text");
     const left = document.querySelector(".model .top-bar-left");
-    return left && Number(getComputedStyle(left).opacity) > 0.9;
+    if (!left || !ready) return false;
+    const opacity = Number(getComputedStyle(left).opacity);
+    const text = ready.textContent?.trim() ?? "";
+    return opacity > 0.9 && /Ready/.test(text) && !/loading/i.test(text);
   },
   { timeout: 240_000 },
 );
-await page.waitForTimeout(1500);
+await page.waitForTimeout(800);
 
 async function switchView(name) {
   const tab = page.getByRole("tab", { name });
@@ -54,19 +59,19 @@ async function switchView(name) {
 
 for (const width of WIDTHS) {
   await page.setViewportSize({ width, height: HEIGHT });
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(500);
   await switchView("3D model");
-  await page.waitForTimeout(250);
+  await page.waitForTimeout(300);
   await page.screenshot({
     path: path.join(ARTIFACTS, `vercel-topbar-3d-${width}.png`),
-    clip: { x: 0, y: 0, width, height: 120 },
+    clip: { x: 0, y: 0, width, height: CROP_HEIGHT },
   });
   await switchView("Drawing");
   await page.waitForSelector("svg.plan", { timeout: 120_000 });
-  await page.waitForTimeout(250);
+  await page.waitForTimeout(300);
   await page.screenshot({
     path: path.join(ARTIFACTS, `vercel-topbar-drawing-${width}.png`),
-    clip: { x: 0, y: 0, width, height: 120 },
+    clip: { x: 0, y: 0, width, height: CROP_HEIGHT },
   });
 }
 
