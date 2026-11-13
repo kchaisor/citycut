@@ -124,11 +124,78 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
       }
     }
 
+    const modelEl = document.querySelector(".model") as HTMLElement | null;
+    const expectedDim = modelEl?.getAttribute("data-cut-size-label")?.trim() ?? "";
     const dim = document.querySelector(".model .top-bar-left .dim-chip") as HTMLElement | null;
     if (dim && isVisible(dim)) {
-      const t = dim.textContent?.trim() ?? "";
-      if (t.length > 0 && (t.length < 4 || !/\d/.test(t) || !/[×m]/.test(t))) {
-        errors.push(`size chip looks fragmented: "${t}"`);
+      const actual = dim.textContent?.trim() ?? "";
+      if (expectedDim.length > 0 && actual !== expectedDim) {
+        errors.push(`size chip text "${actual}" != expected "${expectedDim}"`);
+      }
+      const dr = dim.getBoundingClientRect();
+      let ancestor: HTMLElement | null = dim.parentElement;
+      while (ancestor) {
+        const acs = getComputedStyle(ancestor);
+        if (acs.overflow === "hidden" || acs.overflowX === "hidden") {
+          const pr = ancestor.getBoundingClientRect();
+          if (dr.right > pr.right + 0.5 || dr.left < pr.left - 0.5) {
+            errors.push("size chip clipped by overflow:hidden ancestor");
+            break;
+          }
+        }
+        if (ancestor.classList.contains("top-bar-left")) break;
+        ancestor = ancestor.parentElement;
+      }
+      const leftGroup = document.querySelector(".model .top-bar-left") as HTMLElement | null;
+      if (leftGroup) {
+        const lr = leftGroup.getBoundingClientRect();
+        if (dr.right > lr.right + 0.5 || dr.left < lr.left - 0.5) {
+          errors.push("size chip clips outside left group");
+        }
+      }
+    }
+
+    const tab = modelEl?.getAttribute("data-view-tab") ?? "";
+    const isDrawing = tab === "drawing";
+    const exportLabels = isDrawing
+      ? ["Quick export Adobe Illustrator .ai", "Quick export SVG", "Quick export 3dm"]
+      : ["Quick export Rhino .3dm", "Quick export 2x PNG"];
+
+    if (vw >= 1360) {
+      const compact = document.querySelector(".model .topbar-export-compact") as HTMLElement | null;
+      const compactCs = compact ? getComputedStyle(compact) : null;
+      if (compactCs && compactCs.display !== "none") {
+        errors.push("compact export group visible at 1360+");
+      }
+      for (const label of exportLabels) {
+        const btn = document.querySelector(`[aria-label="${label}"]`) as HTMLElement | null;
+        if (!btn || !isVisible(btn)) {
+          errors.push(`export "${label}" not visible`);
+        }
+      }
+    } else {
+      const wide = document.querySelector(".model .topbar-export-wide") as HTMLElement | null;
+      const wideCs = wide ? getComputedStyle(wide) : null;
+      if (wideCs && wideCs.display !== "none") {
+        errors.push("wide export buttons visible below 1360");
+      }
+      const trigger = document.querySelector(".model .topbar-export-trigger") as HTMLElement | null;
+      if (!trigger || !isVisible(trigger)) {
+        errors.push("Export trigger not visible");
+      } else {
+        const menu = document.querySelector(".model .topbar-export-menu") as HTMLElement | null;
+        if (!menu) {
+          errors.push("export menu missing");
+        } else {
+          for (const label of exportLabels) {
+            const item = Array.from(menu.querySelectorAll("[aria-label]")).find(
+              (el) => el.getAttribute("aria-label") === label,
+            ) as HTMLElement | undefined;
+            if (!item) {
+              errors.push(`export menu item "${label}" missing`);
+            }
+          }
+        }
       }
     }
 

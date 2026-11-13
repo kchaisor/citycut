@@ -324,6 +324,34 @@ export function ModelPage({
   });
   const [exportError, setExportError] = useState<string | null>(null);
   const [busy, setBusy] = useState<ExportBusy>(null);
+  const [topbarExportOpen, setTopbarExportOpen] = useState(false);
+  const topbarExportRef = useRef<HTMLDivElement>(null);
+  const cutDimLabel = useMemo(
+    () =>
+      cutSizeLabel(model.sideM, model.frameShape ?? "square", {
+        widthM: model.widthM,
+        heightM: model.heightM,
+        scale: model.cutScale as import("../lib/cutSpec").A3DrawingScale | undefined,
+        orientation: model.cutOrientation,
+      }),
+    [model.sideM, model.frameShape, model.widthM, model.heightM, model.cutScale, model.cutOrientation],
+  );
+  useEffect(() => {
+    if (!topbarExportOpen) return;
+    const onPointer = (event: PointerEvent) => {
+      if (topbarExportRef.current?.contains(event.target as Node)) return;
+      setTopbarExportOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setTopbarExportOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [topbarExportOpen]);
   const [sunStudyProgress, setSunStudyProgress] = useState<string | null>(null);
   const [colourByUse, setColourByUse] = useState(
     () => !capturePresetFromSearch(window.location.search).uniformBuildings,
@@ -2057,6 +2085,7 @@ export function ModelPage({
       ref={modelRootRef}
       className="model"
       data-view-tab={tab}
+      data-cut-size-label={cutDimLabel}
       data-intro-hold={!introHoldReleasedRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
       data-intro-webgl-wait={!introWebglReadyRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
     >
@@ -2262,14 +2291,7 @@ export function ModelPage({
                 <span className="place-chip studio-breadcrumb-place" title={model.placeLabel}>
                   {model.placeLabel}
                 </span>
-                <span className="dim-chip studio-cut-pill mono">
-                  {cutSizeLabel(model.sideM, model.frameShape ?? "square", {
-                    widthM: model.widthM,
-                    heightM: model.heightM,
-                    scale: model.cutScale as import("../lib/cutSpec").A3DrawingScale | undefined,
-                    orientation: model.cutOrientation,
-                  })}
-                </span>
+                <span className="dim-chip studio-cut-pill mono">{cutDimLabel}</span>
               </>
             }
             headerCenter={
@@ -2450,7 +2472,7 @@ export function ModelPage({
                   Ready · {sourcesLoaded.loaded}/{sourcesLoaded.total} sources
                 </span>
                 <span className="v-sep" aria-hidden="true" />
-                <div className="studio-quick-exports">
+                <div className="topbar-export-wide studio-quick-exports">
                   {tab === "drawing" ? (
                     <>
                       <button
@@ -2522,6 +2544,102 @@ export function ModelPage({
                       </button>
                     </>
                   )}
+                </div>
+                <div className="topbar-export-compact" ref={topbarExportRef}>
+                  <button
+                    type="button"
+                    className="topbar-export-trigger studio-export-btn"
+                    aria-label="Export"
+                    aria-haspopup="menu"
+                    aria-expanded={topbarExportOpen}
+                    onClick={() => setTopbarExportOpen((open) => !open)}
+                  >
+                    <Download size={15} strokeWidth={2.1} aria-hidden="true" />
+                    <span className="topbar-export-trigger-label">Export</span>
+                  </button>
+                  <div
+                    className="topbar-export-menu hud-card"
+                    role="menu"
+                    hidden={!topbarExportOpen}
+                  >
+                    {tab === "drawing" ? (
+                      <>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="topbar-export-menu-item"
+                          aria-label="Quick export Adobe Illustrator .ai"
+                          disabled={busy !== null}
+                          onClick={() => {
+                            setTopbarExportOpen(false);
+                            if (drawing === "site") void saveSiteAi();
+                            else if (drawing === "figure-ground") void saveFigureAi();
+                            else if (drawing === "isometric") void saveIsometricAi();
+                            else void saveExplodedAxoAi();
+                          }}
+                        >
+                          Adobe Illustrator (.ai)
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="topbar-export-menu-item"
+                          aria-label="Quick export SVG"
+                          disabled={busy !== null || drawing === "exploded-axo"}
+                          onClick={() => {
+                            setTopbarExportOpen(false);
+                            if (drawing === "figure-ground") void saveFigureSvg();
+                            else if (drawing === "isometric") void saveIsometricSvg();
+                            else void saveSiteSvg();
+                          }}
+                        >
+                          SVG
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="topbar-export-menu-item"
+                          aria-label="Quick export 3dm"
+                          disabled={busy !== null || drawing !== "site"}
+                          onClick={() => {
+                            setTopbarExportOpen(false);
+                            void saveSite3dm();
+                          }}
+                        >
+                          Rhino (.3dm)
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="topbar-export-menu-item"
+                          aria-label="Quick export Rhino .3dm"
+                          disabled={busy !== null}
+                          onClick={() => {
+                            setTopbarExportOpen(false);
+                            void save3dm();
+                          }}
+                        >
+                          Rhino (.3dm)
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="topbar-export-menu-item"
+                          aria-label="Quick export 2x PNG"
+                          disabled={busy !== null}
+                          onClick={() => {
+                            setTopbarExportOpen(false);
+                            void savePng();
+                          }}
+                        >
+                          2× PNG
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </>
             }

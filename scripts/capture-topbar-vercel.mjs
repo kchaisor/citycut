@@ -66,6 +66,16 @@ for (const width of WIDTHS) {
     path: path.join(ARTIFACTS, `vercel-topbar-3d-${width}.png`),
     clip: { x: 0, y: 0, width, height: CROP_HEIGHT },
   });
+  if (width === 1280) {
+    await page.getByRole("button", { name: "Export" }).click();
+    await page.waitForTimeout(200);
+    await page.screenshot({
+      path: path.join(ARTIFACTS, `vercel-topbar-3d-1280-export-menu.png`),
+      clip: { x: 0, y: 0, width, height: CROP_HEIGHT + 120 },
+    });
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(150);
+  }
   await switchView("Drawing");
   await page.waitForSelector("svg.plan", { timeout: 120_000 });
   await page.waitForTimeout(300);
