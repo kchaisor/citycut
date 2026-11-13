@@ -531,14 +531,13 @@ export function DrawingPlan({
               .filter((stroke) => stroke.kind === "rail")
               .map((stroke, index) => {
                 const line = stroke.line;
-                const closed = line.length > 2 && line[0]![0] === line[line.length - 1]![0];
                 const strokeStyle = storedSiteStructureStrokeStyle(style);
                 return (
                   <path
                     key={`ss-rail${index}`}
                     data-stored-structure="true"
                     data-deck-stroke="rail"
-                    d={svgPolyline(openRing(line), closed)}
+                    d={svgPolyline(openRing(line), false)}
                     fill="none"
                     {...screenPenAttrs(strokeStyle, "miter")}
                     strokeWidth={Math.max(

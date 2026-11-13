@@ -997,6 +997,25 @@ body,
   margin: 0;
   border: 0;
   background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  flex-shrink: 0;
+  min-width: 152px;
+  max-width: min(220px, 32vw);
+}
+
+.select-chrome .bottom-workbench .sidebar-foot-error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.3;
+  text-align: left;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .select-chrome .bottom-workbench .wb-cta.create-fab {

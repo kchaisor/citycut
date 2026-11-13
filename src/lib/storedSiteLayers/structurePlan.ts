@@ -118,26 +118,121 @@ function mergeShortEastSpur(chains: Pt[][]): Pt[][] {
   return rails;
 }
 
-function westAbutmentCap(railA: Pt[], railB: Pt[]): Pt[] | null {
-  const westA = railA.reduce((pick, p) => (p[0] < pick[0] ? p : pick));
-  const westB = railB.reduce((pick, p) => (p[0] < pick[0] ? p : pick));
-  const dist = Math.hypot(westB[0] - westA[0], westB[1] - westA[1]);
-  if (dist < 0.5 || dist > 90) return null;
-  return [westA, westB];
+const DECK_ABUTMENT_MAX_M = 95;
+const DECK_END_BAND_RATIO = 0.22;
+
+function deckExtentX(paths: Pt[][]): { minX: number; maxX: number; width: number } {
+  const xs = paths.flat().map((p) => p[0]);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  return { minX, maxX, width: Math.max(maxX - minX, 1) };
+}
+
+function abutmentBand(extent: { minX: number; maxX: number; width: number }) {
+  return {
+    west: extent.minX + extent.width * DECK_END_BAND_RATIO,
+    east: extent.maxX - extent.width * DECK_END_BAND_RATIO,
+  };
+}
+
+export function isDeckEndCapSegment(a: Pt, b: Pt, paths: Pt[][]): boolean {
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (len < 0.5 || len > DECK_ABUTMENT_MAX_M) return false;
+  const extent = deckExtentX(paths);
+  const band = abutmentBand(extent);
+  const midX = (a[0] + b[0]) / 2;
+  const transverse = Math.abs(b[0] - a[0]) > 6 && Math.abs(b[1] - a[1]) > 6;
+  if (!transverse) return false;
+  const atWest = a[0] <= band.west && b[0] <= band.west && midX <= band.west;
+  const atEast = a[0] >= band.east && b[0] >= band.east && midX >= band.east;
+  return atWest || atEast;
+}
+
+function peelAbutmentEdges(paths: Pt[][]): { rails: Pt[][]; caps: Pt[][] } {
+  const extent = deckExtentX(paths);
+  const band = abutmentBand(extent);
+  const rails: Pt[][] = [];
+  const caps: Pt[][] = [];
+  for (const path of paths) {
+    let run: Pt[] = [];
+    for (let i = 0; i < path.length - 1; i++) {
+      const a = path[i]!;
+      const b = path[i + 1]!;
+      if (isDeckEndCapSegment(a, b, paths)) {
+        if (run.length >= 2) rails.push(run);
+        run = [];
+        caps.push([a, b]);
+        continue;
+      }
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      const midX = (a[0] + b[0]) / 2;
+      const atWest = a[0] <= band.west && b[0] <= band.west && midX <= band.west;
+      const atEast = a[0] >= band.east && b[0] >= band.east && midX >= band.east;
+      if (len <= DECK_ABUTMENT_MAX_M && (atWest || atEast) && len > 20) {
+        if (run.length >= 2) rails.push(run);
+        run = [];
+        caps.push([a, b]);
+        continue;
+      }
+      if (run.length === 0) run.push(a);
+      run.push(b);
+    }
+    if (run.length >= 2) rails.push(run);
+  }
+  return { rails, caps };
+}
+
+function railExtremePoint(rail: Pt[], side: "west" | "east"): Pt {
+  return rail.reduce(
+    (pick, p) => (side === "west" ? (p[0] < pick[0] ? p : pick) : p[0] > pick[0] ? p : pick),
+    rail[0]!,
+  );
+}
+
+function abutmentCapsBetweenRails(rails: Pt[][]): Pt[][] {
+  const long = [...rails].sort((a, b) => polylineLength(b) - polylineLength(a)).slice(0, 2);
+  if (long.length < 2) return [];
+  const [railA, railB] = long;
+  const caps: Pt[][] = [];
+  for (const side of ["west", "east"] as const) {
+    const a = railExtremePoint(railA, side);
+    const b = railExtremePoint(railB, side);
+    const dist = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (dist >= 0.5 && dist <= DECK_ABUTMENT_MAX_M) caps.push([a, b]);
+  }
+  return caps;
+}
+
+function capSegmentKey(line: Pt[]): string {
+  const a = line[0]!;
+  const b = line[1]!;
+  const keys = [
+    `${a[0].toFixed(2)},${a[1].toFixed(2)}`,
+    `${b[0].toFixed(2)},${b[1].toFixed(2)}`,
+  ].sort();
+  return keys.join("|");
 }
 
 export function deckPlanStrokePaths(ring: Ring): DeckPlanStroke[] {
-  const pts = openRing(ring);
+  const pts = openRing(orderDeckBoundaryRing(ring));
   if (pts.length < 4) return [{ kind: "rail", line: pts }];
-  const chains = mergeShortEastSpur(splitDeckRingAtBowties(pts));
-  const ranked = chains.sort((a, b) => polylineLength(b) - polylineLength(a));
-  const railA = ranked[0] ?? [];
-  const railB = ranked[1] ?? [];
+  const chains = mergeShortEastSpur(splitDeckRingAtBowties(pts)).filter((c) => c.length >= 2);
+  const { rails, caps: peeledCaps } = peelAbutmentEdges(chains);
+  const pairedCaps = abutmentCapsBetweenRails(rails);
+  const capKeys = new Set<string>();
+  const capLines: Pt[][] = [];
+  for (const line of [...peeledCaps, ...pairedCaps]) {
+    if (line.length < 2) continue;
+    const key = capSegmentKey(line);
+    if (capKeys.has(key)) continue;
+    capKeys.add(key);
+    capLines.push(line);
+  }
   const strokes: DeckPlanStroke[] = [];
-  if (railA.length >= 2) strokes.push({ kind: "rail", line: railA });
-  if (railB.length >= 2) strokes.push({ kind: "rail", line: railB });
-  const cap = railA.length >= 2 && railB.length >= 2 ? westAbutmentCap(railA, railB) : null;
-  if (cap) strokes.push({ kind: "cap", line: cap });
+  for (const line of rails) {
+    if (line.length >= 2) strokes.push({ kind: "rail", line });
+  }
+  for (const line of capLines) strokes.push({ kind: "cap", line });
   return strokes.length > 0 ? strokes : [{ kind: "rail", line: pts }];
 }
 

@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseStoredSiteFootprints } from "./footprints";
-import { deckPlanStrokePaths, deckStrokeSegmentInsideDeck, ringChordCount } from "./structurePlan";
+import {
+  deckPlanStrokePaths,
+  deckStrokeSegmentInsideDeck,
+  isDeckEndCapSegment,
+  ringChordCount,
+} from "./structurePlan";
 
 describe("Anzac bridge deck plan outline", () => {
   it("removes bowtie chords from the stored deck ring", () => {
@@ -19,7 +24,9 @@ describe("Anzac bridge deck plan outline", () => {
     expect(deck).toBeTruthy();
     const raw = ringChordCount(deck!.ring);
     const strokes = deckPlanStrokePaths(deck!.ring);
-    const paths = strokes.map((stroke) => stroke.line);
+    const paths = strokes.filter((stroke) => stroke.kind === "rail").map((stroke) => stroke.line);
+    const capStrokes = strokes.filter((stroke) => stroke.kind === "cap");
+    expect(capStrokes.length).toBeGreaterThan(0);
     const maxEdge = Math.max(
       ...paths.flatMap((path) => {
         const out: number[] = [];
@@ -35,6 +42,12 @@ describe("Anzac bridge deck plan outline", () => {
     for (const path of paths) {
       for (let i = 0; i < path.length - 1; i++) {
         expect(deckStrokeSegmentInsideDeck(path[i]!, path[i + 1]!, deck!.ring, paths)).toBe(true);
+      }
+    }
+    const allChains = paths;
+    for (const stroke of strokes.filter((s) => s.kind === "rail")) {
+      for (let i = 0; i < stroke.line.length - 1; i++) {
+        expect(isDeckEndCapSegment(stroke.line[i]!, stroke.line[i + 1]!, allChains)).toBe(false);
       }
     }
   });
