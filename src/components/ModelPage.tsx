@@ -13,7 +13,7 @@ import { viewportIsNarrow } from "../lib/panelCollapse";
 import { ShortcutCheatsheet } from "./ShortcutCheatsheet";
 import * as THREE from "three";
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../lib/explodedAxoTerrain";
-import { Building2, Copy, Download, DraftingCompass, Eye, Footprints, GripVertical, Info, Radar, Sun, Trees, Upload, Wind } from "lucide-react";
+import { Building2, Copy, Download, DraftingCompass, Eye, Footprints, GripVertical, Info, Radar, RotateCcw, Sun, Trees, Upload, Wind } from "lucide-react";
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -324,6 +324,34 @@ export function ModelPage({
   });
   const [exportError, setExportError] = useState<string | null>(null);
   const [busy, setBusy] = useState<ExportBusy>(null);
+  const [topbarExportOpen, setTopbarExportOpen] = useState(false);
+  const topbarExportRef = useRef<HTMLDivElement>(null);
+  const cutDimLabel = useMemo(
+    () =>
+      cutSizeLabel(model.sideM, model.frameShape ?? "square", {
+        widthM: model.widthM,
+        heightM: model.heightM,
+        scale: model.cutScale as import("../lib/cutSpec").A3DrawingScale | undefined,
+        orientation: model.cutOrientation,
+      }),
+    [model.sideM, model.frameShape, model.widthM, model.heightM, model.cutScale, model.cutOrientation],
+  );
+  useEffect(() => {
+    if (!topbarExportOpen) return;
+    const onPointer = (event: PointerEvent) => {
+      if (topbarExportRef.current?.contains(event.target as Node)) return;
+      setTopbarExportOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setTopbarExportOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [topbarExportOpen]);
   const [sunStudyProgress, setSunStudyProgress] = useState<string | null>(null);
   const [colourByUse, setColourByUse] = useState(
     () => !capturePresetFromSearch(window.location.search).uniformBuildings,
@@ -2056,6 +2084,8 @@ export function ModelPage({
     <div
       ref={modelRootRef}
       className="model"
+      data-view-tab={tab}
+      data-cut-size-label={cutDimLabel}
       data-intro-hold={!introHoldReleasedRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
       data-intro-webgl-wait={!introWebglReadyRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
     >
@@ -2261,18 +2291,21 @@ export function ModelPage({
                 <span className="place-chip studio-breadcrumb-place" title={model.placeLabel}>
                   {model.placeLabel}
                 </span>
-                <span className="dim-chip studio-cut-pill mono">
-                  {cutSizeLabel(model.sideM, model.frameShape ?? "square", {
-                    widthM: model.widthM,
-                    heightM: model.heightM,
-                    scale: model.cutScale as import("../lib/cutSpec").A3DrawingScale | undefined,
-                    orientation: model.cutOrientation,
-                  })}
-                </span>
+                <span className="dim-chip studio-cut-pill mono">{cutDimLabel}</span>
               </>
             }
             headerCenter={
-              <>
+              <div className="header-center-cluster">
+                <select
+                  className="topbar-view-select"
+                  aria-label="Model view"
+                  value={tab}
+                  onChange={(event) => setTab(event.target.value as Tab)}
+                >
+                  <option value="3d">3D</option>
+                  <option value="drawing">Drawing</option>
+                  <option value="satellite">Satellite</option>
+                </select>
                 <div className="tabs mode-group studio-view-tabs" role="tablist" aria-label="Model views">
                   {(
                     [
@@ -2315,62 +2348,99 @@ export function ModelPage({
                 </div>
                 <span className="v-sep" aria-hidden="true" />
                 {tab === "3d" ? (
-                  <div className="proj-group studio-submode-pills" role="group" aria-label="3D projection">
-                    <button
-                      type="button"
-                      className={view.projection === "perspective" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
-                      aria-pressed={view.projection === "perspective"}
-                      onClick={() => commitView({ ...view, projection: "perspective" }, false)}
+                  <>
+                    <select
+                      className="topbar-3d-select"
+                      aria-label="3D projection"
+                      value={view.projection}
+                      onChange={(event) => {
+                        const projection = event.target.value as "perspective" | "iso" | "plan";
+                        if (projection === "plan") {
+                          commitView({ projection: "plan", corner: view.corner, freeRotate: false }, true);
+                        } else {
+                          commitView({ ...view, projection }, false);
+                        }
+                      }}
                     >
-                      Perspective
-                    </button>
-                    <button
-                      type="button"
-                      className={view.projection === "iso" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
-                      aria-pressed={view.projection === "iso"}
-                      onClick={() => commitView({ ...view, projection: "iso" }, false)}
-                    >
-                      Isometric
-                    </button>
-                    <button
-                      type="button"
-                      className={view.projection === "plan" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
-                      aria-pressed={view.projection === "plan"}
-                      onClick={() => commitView({ projection: "plan", corner: view.corner, freeRotate: false }, true)}
-                    >
-                      Plan
-                    </button>
-                  </div>
-                ) : (
-                  <div className="proj-group studio-submode-pills" aria-label="Quick drawing modes">
-                    {(
-                      [
-                        ["site", "Site plan"],
-                        ["figure-ground", "Figure-ground"],
-                        ["exploded-axo", "Exploded axo"],
-                        ["isometric", "Isometric"],
-                      ] as const
-                    ).map(([kind, label]) => (
+                      <option value="perspective">Perspective</option>
+                      <option value="iso">Iso</option>
+                      <option value="plan">Plan</option>
+                    </select>
+                    <div className="proj-group studio-submode-pills topbar-3d-modes" role="group" aria-label="3D projection">
                       <button
-                        key={kind}
                         type="button"
-                        className={tab === "drawing" && drawing === kind ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
-                        aria-label={`Quick ${label}`}
-                        aria-pressed={tab === "drawing" && drawing === kind}
-                        onClick={() => {
-                          setDrawing(kind);
-                          setTab("drawing");
-                        }}
+                        className={view.projection === "perspective" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                        aria-pressed={view.projection === "perspective"}
+                        onClick={() => commitView({ ...view, projection: "perspective" }, false)}
                       >
-                        {label}
+                        Perspective
                       </button>
-                    ))}
-                  </div>
+                      <button
+                        type="button"
+                        className={view.projection === "iso" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                        aria-pressed={view.projection === "iso"}
+                        onClick={() => commitView({ ...view, projection: "iso" }, false)}
+                      >
+                        Isometric
+                      </button>
+                      <button
+                        type="button"
+                        className={view.projection === "plan" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                        aria-pressed={view.projection === "plan"}
+                        onClick={() => commitView({ projection: "plan", corner: view.corner, freeRotate: false }, true)}
+                      >
+                        Plan
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <select
+                      className="topbar-drawing-select"
+                      aria-label="Drawing mode"
+                      value={drawing}
+                      onChange={(event) => {
+                        setDrawing(event.target.value as DrawingKind);
+                        setTab("drawing");
+                      }}
+                    >
+                      <option value="site">Site plan</option>
+                      <option value="figure-ground">Fig-grnd</option>
+                      <option value="exploded-axo">Expl axo</option>
+                      <option value="isometric">Iso</option>
+                    </select>
+                    <div className="proj-group studio-submode-pills topbar-drawing-modes" aria-label="Quick drawing modes">
+                      {(
+                        [
+                          ["site", "Site plan"],
+                          ["figure-ground", "Figure-ground"],
+                          ["exploded-axo", "Exploded axo"],
+                          ["isometric", "Isometric"],
+                        ] as const
+                      ).map(([kind, label]) => (
+                        <button
+                          key={kind}
+                          type="button"
+                          className={tab === "drawing" && drawing === kind ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                          aria-label={`Quick ${label}`}
+                          aria-pressed={tab === "drawing" && drawing === kind}
+                          onClick={() => {
+                            setDrawing(kind);
+                            setTab("drawing");
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
                 )}
                 <span className="v-sep" aria-hidden="true" />
                 <button
                   type="button"
-                  className="cam-reset studio-reset-btn"
+                  className="cam-reset studio-reset-btn topbar-compact-icon-btn"
+                  aria-label="Reset view"
+                  title="Reset view"
                   onClick={() => {
                     if (tab === "3d") {
                       setSnapId((id) => id + 1);
@@ -2390,9 +2460,10 @@ export function ModelPage({
                     }
                   }}
                 >
-                  Reset view
+                  <RotateCcw size={15} strokeWidth={2.1} className="topbar-compact-icon" aria-hidden="true" />
+                  <span className="topbar-compact-label">Reset view</span>
                 </button>
-              </>
+              </div>
             }
             headerRight={
               <>
@@ -2401,7 +2472,7 @@ export function ModelPage({
                   Ready · {sourcesLoaded.loaded}/{sourcesLoaded.total} sources
                 </span>
                 <span className="v-sep" aria-hidden="true" />
-                <div className="studio-quick-exports">
+                <div className="topbar-export-wide studio-quick-exports">
                   {tab === "drawing" ? (
                     <>
                       <button
@@ -2473,6 +2544,102 @@ export function ModelPage({
                       </button>
                     </>
                   )}
+                </div>
+                <div className="topbar-export-compact" ref={topbarExportRef}>
+                  <button
+                    type="button"
+                    className="topbar-export-trigger studio-export-btn"
+                    aria-label="Export"
+                    aria-haspopup="menu"
+                    aria-expanded={topbarExportOpen}
+                    onClick={() => setTopbarExportOpen((open) => !open)}
+                  >
+                    <Download size={15} strokeWidth={2.1} aria-hidden="true" />
+                    <span className="topbar-export-trigger-label">Export</span>
+                  </button>
+                  <div
+                    className="topbar-export-menu hud-card"
+                    role="menu"
+                    hidden={!topbarExportOpen}
+                  >
+                    {tab === "drawing" ? (
+                      <>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="topbar-export-menu-item"
+                          aria-label="Quick export Adobe Illustrator .ai"
+                          disabled={busy !== null}
+                          onClick={() => {
+                            setTopbarExportOpen(false);
+                            if (drawing === "site") void saveSiteAi();
+                            else if (drawing === "figure-ground") void saveFigureAi();
+                            else if (drawing === "isometric") void saveIsometricAi();
+                            else void saveExplodedAxoAi();
+                          }}
+                        >
+                          Adobe Illustrator (.ai)
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="topbar-export-menu-item"
+                          aria-label="Quick export SVG"
+                          disabled={busy !== null || drawing === "exploded-axo"}
+                          onClick={() => {
+                            setTopbarExportOpen(false);
+                            if (drawing === "figure-ground") void saveFigureSvg();
+                            else if (drawing === "isometric") void saveIsometricSvg();
+                            else void saveSiteSvg();
+                          }}
+                        >
+                          SVG
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="topbar-export-menu-item"
+                          aria-label="Quick export 3dm"
+                          disabled={busy !== null || drawing !== "site"}
+                          onClick={() => {
+                            setTopbarExportOpen(false);
+                            void saveSite3dm();
+                          }}
+                        >
+                          Rhino (.3dm)
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="topbar-export-menu-item"
+                          aria-label="Quick export Rhino .3dm"
+                          disabled={busy !== null}
+                          onClick={() => {
+                            setTopbarExportOpen(false);
+                            void save3dm();
+                          }}
+                        >
+                          Rhino (.3dm)
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="topbar-export-menu-item"
+                          aria-label="Quick export 2x PNG"
+                          disabled={busy !== null}
+                          onClick={() => {
+                            setTopbarExportOpen(false);
+                            void savePng();
+                          }}
+                        >
+                          2× PNG
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </>
             }
