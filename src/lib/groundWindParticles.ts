@@ -90,6 +90,8 @@ export type GroundWindParticles = {
   trailLenScale: Float32Array;
   slotSx: Float32Array;
   slotSy: Float32Array;
+  layoutCount: number;
+  maxCount: number;
 };
 
 export type GroundWindScreenSlot = {
@@ -187,6 +189,9 @@ function minGapToOtherStreamlines(
       for (let b = 0; b < bucket.length; b++) {
         const j = bucket[b]!;
         if (j === index) continue;
+        const dci = Math.abs(particles.gridCol[index]! - particles.gridCol[j]!);
+        const dcj = Math.abs(particles.gridRow[index]! - particles.gridRow[j]!);
+        if (dci <= 1 && dcj <= 1) continue;
         const d = Math.hypot(particles.screenX[j]! - sx, particles.screenY[j]! - sy);
         if (d < min) min = d;
       }
@@ -488,7 +493,7 @@ function spawnParticleAtSlot(
   const north = slot.north;
   particles.east[i] = east;
   particles.north[i] = north;
-  particles.age[i] = 0;
+  particles.age[i] = GROUND_WIND_FADE_IN_S * 1.2;
   particles.life[i] = GROUND_WIND_LIFE_MIN_S + rng() * (GROUND_WIND_LIFE_MAX_S - GROUND_WIND_LIFE_MIN_S);
   particles.seed[i] = rng() * Math.PI * 2;
   particles.speed[i] = groundWindSpeedAt(field, east, north);
@@ -530,11 +535,13 @@ export function layoutGroundWindScreenSeeds(
   const cap = particles.east.length;
   const slots = prioritizeGroundSlots(balanced, seed, cap);
   particles.count = Math.max(GROUND_WIND_PARTICLES_MIN, slots.length);
+  particles.layoutCount = particles.count;
   for (let i = 0; i < particles.count; i++) {
     const slot = slots[i]!;
     particles.trailLenScale[i] = 1 - GROUND_WIND_TRAIL_LEN_JITTER + particles.rng() * GROUND_WIND_TRAIL_LEN_JITTER * 2;
     spawnParticleAtSlot(particles, field, heightAt, i, slot);
-    particles.age[i] = ((i + particles.rng()) / Math.max(1, particles.count)) * GROUND_WIND_LIFE_MAX_S * 0.97;
+    const stagger = ((i + particles.rng()) / Math.max(1, particles.count)) * GROUND_WIND_LIFE_MAX_S * 0.97;
+    particles.age[i] = Math.max(GROUND_WIND_FADE_IN_S * 1.2, stagger);
   }
   return particles.count;
 }
@@ -583,6 +590,8 @@ export function createGroundWindParticles(
     trailLenScale: new Float32Array(count),
     slotSx: new Float32Array(count),
     slotSy: new Float32Array(count),
+    layoutCount: 0,
+    maxCount: count,
   };
   for (let i = 0; i < count; i++) {
     particles.trailLenScale[i] = 1;
@@ -605,6 +614,68 @@ function updateScreenSlot(particles: GroundWindParticles, i: number, east: numbe
   if (!screen) return;
   particles.screenX[i] = screen.x;
   particles.screenY[i] = screen.y;
+}
+
+function applySpawnPlacement(
+  particles: GroundWindParticles,
+  field: GroundWindField,
+  heightAt: HeightAt,
+  i: number,
+  east: number,
+  north: number,
+  sx: number,
+  sy: number,
+) {
+  const { rng } = particles;
+  particles.east[i] = east;
+  particles.north[i] = north;
+  particles.age[i] = GROUND_WIND_FADE_IN_S * 1.2;
+  particles.life[i] = GROUND_WIND_LIFE_MIN_S + rng() * (GROUND_WIND_LIFE_MAX_S - GROUND_WIND_LIFE_MIN_S);
+  particles.seed[i] = rng() * Math.PI * 2;
+  particles.speed[i] = groundWindSpeedAt(field, east, north);
+  particles.head[i] = 0;
+  particles.screenX[i] = sx;
+  particles.screenY[i] = sy;
+  const y = heightAt(east, north);
+  const base = i * GROUND_WIND_TRAIL_POINTS * 3;
+  for (let k = 0; k < GROUND_WIND_TRAIL_POINTS; k++) {
+    particles.history[base + k * 3] = east;
+    particles.history[base + k * 3 + 1] = north;
+    particles.history[base + k * 3 + 2] = y;
+  }
+}
+
+export function respawnGroundWindParticle(
+  particles: GroundWindParticles,
+  field: GroundWindField,
+  heightAt: HeightAt,
+  i: number,
+) {
+  const model = particles.cityModel;
+  const { rng } = particles;
+  if (model != null) {
+    const placed = pickSpawnWorld(field, rng, i, particles, heightAt, model);
+    if (placed) {
+      applySpawnPlacement(particles, field, heightAt, i, placed.east, placed.north, placed.sx, placed.sy);
+      return;
+    }
+    const unproject = particles.screenUnproject;
+    const sx = particles.slotSx[i]!;
+    const sy = particles.slotSy[i]!;
+    if (unproject && sx > 0 && sy > 0) {
+      const world = unproject(sx, sy);
+      if (world) {
+        const idx = groundWindCellIndex(field, world.east, world.north);
+        const inFoot = groundWindInsideFootprint(model, world.east, world.north);
+        if (idx >= 0 && field.solid[idx] === 0 && !inFoot) {
+          applySpawnPlacement(particles, field, heightAt, i, world.east, world.north, sx, sy);
+          return;
+        }
+      }
+    }
+  }
+  spawnParticle(particles, field, heightAt, i);
+  particles.age[i] = Math.max(particles.age[i]!, GROUND_WIND_FADE_IN_S * 1.2);
 }
 
 export function spawnParticle(particles: GroundWindParticles, field: GroundWindField, heightAt: HeightAt, i: number) {
@@ -871,7 +942,7 @@ export function stepGroundWindParticles(
     const cell = groundWindCellIndex(field, east, north);
     const inFoot = model != null && groundWindInsideFootprint(model, east, north);
     if (cell < 0 || field.solid[cell] === 1 || inFoot || offScreen || age >= particles.life[i]!) {
-      spawnParticle(particles, field, heightAt, i);
+      respawnGroundWindParticle(particles, field, heightAt, i);
       continue;
     }
     particles.east[i] = east;
@@ -908,6 +979,9 @@ function writePoints(particles: GroundWindParticles, heightAt: HeightAt, field: 
     const north = particles.north[i]!;
     const yHead = heightAt(east, north);
     if (project && headGrid && visible > 2) {
+      let trailPx = 0;
+      let prevX = NaN;
+      let prevY = NaN;
       for (let k = 2; k < visible; k++) {
         const slot = (head + GROUND_WIND_TRAIL_POINTS - visible + k + 1) % GROUND_WIND_TRAIL_POINTS;
         const h = (i * GROUND_WIND_TRAIL_POINTS + slot) * 3;
@@ -916,7 +990,11 @@ function writePoints(particles: GroundWindParticles, heightAt: HeightAt, field: 
         const hy = history[h + 2]!;
         const screen = project(he, hn, hy);
         if (!screen) continue;
+        if (!Number.isNaN(prevX)) trailPx += Math.hypot(screen.x - prevX, screen.y - prevY);
+        prevX = screen.x;
+        prevY = screen.y;
         if (
+          trailPx >= GROUND_WIND_TRAIL_MIN_LEN_PX &&
           minGapToOtherStreamlines(
             particles,
             i,

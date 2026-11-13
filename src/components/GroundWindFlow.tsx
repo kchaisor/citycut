@@ -25,6 +25,7 @@ import {
   type GroundWindParticles,
 } from "../lib/groundWindParticles";
 import { useColourRevision } from "../lib/useColourRevision";
+import { groundWindDebugEnabled, groundWindRenderStats } from "../lib/groundWindDebug";
 import type { WindPeriodStats } from "../lib/windRose";
 
 const FIELD_BUDGET_MS = 5;
@@ -182,6 +183,7 @@ export function GroundWindFlow({
   const frozen = !animate || reducedMotionPreferred();
   const frozenRef = useRef(frozen);
   frozenRef.current = frozen;
+  const debugWind = groundWindDebugEnabled();
 
   const points = useMemo(() => new Float32Array(groundWindPointsLength(GROUND_WIND_PARTICLES_MAX)), []);
   const { geometry, data } = useMemo(() => createRibbonGeometry(points), [points]);
@@ -290,6 +292,9 @@ export function GroundWindFlow({
       geometry.instanceCount = activeCount * GROUND_WIND_POINTS_PER_PARTICLE - 1;
       warmGroundWindParticles(particles, field, heightAt, metresPerSecond, frozenRef.current ? WARM_FROZEN_S : WARM_LIVE_S);
       data.needsUpdate = true;
+      if (debugWind && typeof window !== "undefined") {
+        window.__citycutGroundWind = groundWindRenderStats(particles, size.width);
+      }
       invalidate();
       return;
     }
@@ -309,6 +314,9 @@ export function GroundWindFlow({
     if (frozenRef.current) return;
     stepGroundWindParticles(particles, field, heightAt, Math.min(delta, MAX_FRAME_DT), metresPerSecond);
     data.needsUpdate = true;
+    if (debugWind && typeof window !== "undefined") {
+      window.__citycutGroundWind = groundWindRenderStats(particles, size.width);
+    }
     invalidate();
   });
 

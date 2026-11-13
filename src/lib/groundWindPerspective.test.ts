@@ -5,9 +5,11 @@ import {
   GROUND_WIND_PARTICLES_MAX,
   groundWindMetresPerSecond,
   layoutGroundWindScreenSeeds,
+  stepGroundWindParticles,
   warmGroundWindParticles,
 } from "./groundWindParticles";
 import { createGroundWindPerspectiveScreen } from "./groundWindPerspective";
+import { groundWindRenderStats } from "./groundWindDebug";
 import { groundWindFarNearBandBalance, groundWindTargetParticleCount } from "./groundWindScreen";
 import type { CityModel, Pt } from "../types";
 
@@ -81,5 +83,11 @@ describe("groundWindPerspective", () => {
     const { ratio } = groundWindFarNearBandBalance(particles.screenX, particles.screenY, particles.count, viewW);
     expect(ratio).toBeGreaterThanOrEqual(0.6);
     warmGroundWindParticles(particles, field, heightAt, mps, 2);
+    for (let step = 0; step < 90; step++) {
+      stepGroundWindParticles(particles, field, heightAt, 1 / 60, mps);
+    }
+    const stats = groundWindRenderStats(particles, viewW);
+    expect(stats.active).toBeGreaterThanOrEqual(active);
+    expect(stats.drawable).toBeGreaterThanOrEqual(active * 0.88);
   }, 25_000);
 });
