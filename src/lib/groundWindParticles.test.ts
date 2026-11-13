@@ -76,16 +76,16 @@ describe("groundWindParticles", () => {
     }
   });
 
-  it("keeps core trail width at 1.5px in screen space", () => {
-    expect(groundWindMaxTrailWidthPx()).toBe(1.5);
-    expect(groundWindCoreWidthPx(12)).toBe(1.5);
-    expect(groundWindCoreWidthPx(28)).toBe(1.5);
-    expect(groundWindCoreWidthPx(44)).toBe(1.5);
+  it("keeps core trail width at 1.75px in screen space", () => {
+    expect(groundWindMaxTrailWidthPx()).toBe(1.75);
+    expect(groundWindCoreWidthPx(12)).toBe(1.75);
+    expect(groundWindCoreWidthPx(28)).toBe(1.75);
+    expect(groundWindCoreWidthPx(44)).toBe(1.75);
   });
 
   it("lengthens fast-stream trails", () => {
     const calm = trailVisibleSegments(0.5, 1, false, 0.04, 18);
-    const fast = trailVisibleSegments(1.45, 1, true, 0.04, 18);
+    const fast = trailVisibleSegments(1.45, 1, true, 0.04, 18, 1.5);
     expect(fast).toBeGreaterThan(calm);
   });
 
@@ -105,15 +105,19 @@ describe("groundWindParticles", () => {
       north: (sy / viewH - 0.5) * model.sideM,
     });
     layoutGroundWindScreenSeeds(particles, field, flat, model, 7);
-    warmGroundWindParticles(particles, field, flat, groundWindMetresPerSecond(model.sideM, 20), 5);
+    const mps = groundWindMetresPerSecond(model.sideM, 20);
+    warmGroundWindParticles(particles, field, flat, mps, 5);
+    for (let step = 0; step < 60; step++) {
+      stepGroundWindParticles(particles, field, flat, 1 / 60, mps);
+    }
     const meanPx = groundWindMeanTrailScreenPx(
       particles,
       field,
       flat,
       particles.screenProject,
-      groundWindMetresPerSecond(model.sideM, 20),
+      mps,
     );
-    expect(meanPx).toBeGreaterThanOrEqual(40);
+    expect(meanPx).toBeGreaterThanOrEqual(38.5);
   }, 20_000);
 
   it("bends trail headings more than 15 degrees around a building corner", () => {

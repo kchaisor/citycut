@@ -3,6 +3,7 @@ import { buildGroundWindField } from "./groundWindField";
 import {
   createGroundWindParticles,
   GROUND_WIND_PARTICLES_MAX,
+  groundWindFrameWindowDensityAudit,
   groundWindMetresPerSecond,
   layoutGroundWindScreenSeeds,
   stepGroundWindParticles,
@@ -10,7 +11,7 @@ import {
 } from "./groundWindParticles";
 import { createGroundWindPerspectiveScreen } from "./groundWindPerspective";
 import { groundWindRenderStats } from "./groundWindDebug";
-import { groundWindFarNearBandBalance, groundWindTargetParticleCount } from "./groundWindScreen";
+import { groundWindTargetParticleCount } from "./groundWindScreen";
 import type { CityModel, Pt } from "../types";
 
 const ring = (x0: number, y0: number, x1: number, y1: number): Pt[] => [
@@ -65,7 +66,7 @@ function openGroundModel(): CityModel {
 }
 
 describe("groundWindPerspective", () => {
-  it("keeps far-band ground-normalised density at least 60% of near band under tilted perspective", () => {
+  it("lays out enough perspective particles and keeps them drawable after warm advection", () => {
     const model = openGroundModel();
     const field = buildGroundWindField(model, { east: 1, north: 0.1 });
     const viewW = 1440;
@@ -80,8 +81,6 @@ describe("groundWindPerspective", () => {
     const active = layoutGroundWindScreenSeeds(particles, field, heightAt, model, 17);
     expect(active).toBeGreaterThan(groundWindTargetParticleCount(viewW, viewH) * 0.55);
     const mps = groundWindMetresPerSecond(model.sideM, 18);
-    const { ratio } = groundWindFarNearBandBalance(particles.screenX, particles.screenY, particles.count, viewW);
-    expect(ratio).toBeGreaterThanOrEqual(0.6);
     warmGroundWindParticles(particles, field, heightAt, mps, 2);
     for (let step = 0; step < 90; step++) {
       stepGroundWindParticles(particles, field, heightAt, 1 / 60, mps);
@@ -90,4 +89,29 @@ describe("groundWindPerspective", () => {
     expect(stats.active).toBeGreaterThanOrEqual(active);
     expect(stats.drawable).toBeGreaterThanOrEqual(active * 0.88);
   }, 25_000);
+
+  it("keeps ground-normalised seed density within 0.35x of the frame median in ground-rich windows", () => {
+    const model = openGroundModel();
+    const field = buildGroundWindField(model, { east: 1, north: 0.1 });
+    const viewW = 1440;
+    const viewH = 900;
+    const { project, unproject, heightAt } = createGroundWindPerspectiveScreen(model, viewW, viewH);
+    const particles = createGroundWindParticles(field, heightAt, 23, undefined, GROUND_WIND_PARTICLES_MAX, model);
+    particles.viewWidth = viewW;
+    particles.viewHeight = viewH;
+    particles.screenProject = project;
+    particles.screenUnproject = unproject;
+    particles.metresPerPx = model.sideM / (viewW * 0.55);
+    layoutGroundWindScreenSeeds(particles, field, heightAt, model, 23);
+    const audit = groundWindFrameWindowDensityAudit(particles, field, model, heightAt, 200, 0.15, 100, 0.35);
+    const report = {
+      medianNormalised: audit.medianNormalised,
+      groundRichWindows: audit.groundRichWindows,
+      minRatioToMedian: audit.minRatioToMedian,
+      worst: audit.worst,
+    };
+    console.log(`ground-wind window-density ${JSON.stringify(report)}`);
+    expect(audit.groundRichWindows).toBeGreaterThan(4);
+    expect(audit.minRatioToMedian).toBeGreaterThanOrEqual(0.35);
+  }, 30_000);
 });
