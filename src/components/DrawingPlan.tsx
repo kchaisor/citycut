@@ -540,10 +540,7 @@ export function DrawingPlan({
                     d={svgPolyline(openRing(line), false)}
                     fill="none"
                     {...screenPenAttrs(strokeStyle, "miter")}
-                    strokeWidth={Math.max(
-                      screenPx(strokeStyle.mm),
-                      Math.max(screenPx(style.water.mm), 1),
-                    )}
+                    strokeWidth={screenPx(strokeStyle.mm)}
                     strokeLinecap="square"
                     strokeLinejoin="miter"
                   />

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { parseStoredSiteFootprints } from "./footprints";
 import {
   deckPlanStrokePaths,
+  deckStrokeMaxInteriorM,
   deckStrokeMidpointInteriorM,
   isConsecutiveRingEdge,
   isDeckBoundaryRailSegment,
@@ -47,6 +48,7 @@ describe("Anzac bridge deck plan outline", () => {
         const a = stroke.line[i]!;
         const b = stroke.line[i + 1]!;
         expect(deckStrokeMidpointInteriorM(a, b, deck!.ring)).toBeLessThanOrEqual(0.5);
+        expect(deckStrokeMaxInteriorM(a, b, deck!.ring)).toBeLessThanOrEqual(0.5);
         if (stroke.kind === "rail") {
           expect(isDeckBoundaryRailSegment(a, b, deck!.ring)).toBe(true);
           expect(isConsecutiveRingEdge(a, b, deck!.ring)).toBe(true);

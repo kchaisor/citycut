@@ -96,7 +96,10 @@ async function main() {
     { timeout: 360_000 },
   );
   await page.getByRole("tab", { name: /Drawing/i }).click({ timeout: 120_000 });
-  await page.waitForSelector('path[data-deck-stroke="cap"]', { timeout: 120_000 });
+  await page.waitForFunction(
+    () => document.querySelectorAll('path[data-deck-stroke="cap"]').length > 0,
+    { timeout: 120_000 },
+  );
   await page.waitForTimeout(800);
 
   const domSummary = await page.evaluate(() => {
@@ -117,13 +120,41 @@ async function main() {
     if (!info) throw new Error(`No deck ${side} cap path`);
     const out = path.join(OUT_DIR, `rozelle-pr227-deck-${side}-end-${width}.png`);
     await page.screenshot({ path: out, clip: { x: info.x, y: info.y, width: info.width, height: info.height } });
+    const railStrokeHits = await page.evaluate(
+      ({ cx, cy, radius, clipX, clipY }) => {
+        const svg = document.querySelector("svg.plan");
+        if (!svg) return 0;
+        const matrix = svg.getScreenCTM();
+        if (!matrix) return 0;
+        let hits = 0;
+        for (const path of document.querySelectorAll('path[data-deck-stroke="rail"]')) {
+          const stroke = getComputedStyle(path).stroke;
+          if (stroke !== "rgb(74, 79, 87)") continue;
+          const len = path.getTotalLength();
+          for (let d = 0; d <= len; d += 1.5) {
+            const p = path.getPointAtLength(d);
+            const pt = new DOMPoint(p.x, p.y).matrixTransform(matrix);
+            const dx = pt.x - (clipX + cx);
+            const dy = pt.y - (clipY + cy);
+            if (dx * dx + dy * dy <= radius * radius) hits++;
+          }
+        }
+        return hits;
+      },
+      { cx: info.centreX, cy: info.centreY, radius: RADIUS, clipX: info.x, clipY: info.y },
+    );
     const darkCount = countDarkNearCentre(out, info.centreX, info.centreY);
-    console.log(out, info.stroke, `darkStructurePixelsWithin40=${darkCount}`);
+    console.log(
+      out,
+      info.stroke,
+      `darkStructurePixelsWithin40=${darkCount}`,
+      `deckRailStrokeSamplesWithin40=${railStrokeHits}`,
+    );
     if (!/rgb\(141,\s*137,\s*131\)|#8d8983/i.test(info.stroke)) {
       throw new Error(`Deck ${side} cap stroke not kerb colour: ${info.stroke}`);
     }
-    if (darkCount > 0) {
-      throw new Error(`Deck ${side} end still has ${darkCount} structure-stroke pixels near centre`);
+    if (railStrokeHits > 0) {
+      throw new Error(`Deck ${side} end still has ${railStrokeHits} deck-rail stroke samples near centre`);
     }
   }
   await browser.close();

@@ -102,6 +102,18 @@ export function deckStrokeMidpointInteriorM(a: Pt, b: Pt, ring: Ring): number {
   return worst;
 }
 
+export function deckStrokeMaxInteriorM(a: Pt, b: Pt, ring: Ring): number {
+  const holes: Ring[] = [];
+  let worst = 0;
+  for (let k = 0; k <= 10; k++) {
+    const t = k / 10;
+    const p: Pt = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    if (!pointInPolygon(p, ring, holes)) continue;
+    worst = Math.max(worst, distToRingBoundary(p, ring));
+  }
+  return worst;
+}
+
 export function isConsecutiveRingEdge(a: Pt, b: Pt, ring: Ring, tol = RING_VERTEX_TOL_M): boolean {
   const ia = ringVertexIndex(a, ring, tol);
   const ib = ringVertexIndex(b, ring, tol);
@@ -159,6 +171,82 @@ function peelBandCapSegment(a: Pt, b: Pt, paths: Pt[][]): boolean {
 
 type BoundaryEdge = { a: Pt; b: Pt; index: number };
 
+function capEndpointSet(capLines: Pt[][]): Set<string> {
+  const keys = new Set<string>();
+  for (const line of capLines) {
+    for (const p of line) keys.add(`${p[0].toFixed(3)},${p[1].toFixed(3)}`);
+  }
+  return keys;
+}
+
+function railEdgeCrossesCapJunction(
+  a: Pt,
+  b: Pt,
+  capKeys: Set<string>,
+  ring: Ring,
+  pathsCtx: Pt[][],
+): boolean {
+  if (!isCapEndpoint(a, capKeys) && !isCapEndpoint(b, capKeys)) return false;
+  if (isDeckEndCapSegment(a, b, pathsCtx) || peelBandCapSegment(a, b, pathsCtx)) return true;
+  if (deckStrokeMaxInteriorM(a, b, ring) > DECK_INTERIOR_TOL_M) return true;
+  const extent = deckExtentX(pathsCtx);
+  const band = abutmentBand(extent);
+  const midX = (a[0] + b[0]) / 2;
+  return midX <= band.west || midX >= band.east;
+}
+
+function isCapEndpoint(p: Pt, capKeys: Set<string>): boolean {
+  const key = `${p[0].toFixed(3)},${p[1].toFixed(3)}`;
+  if (capKeys.has(key)) return true;
+  for (const k of capKeys) {
+    const [sx, sy] = k.split(",").map(Number);
+    if (pointsNear(p, [sx!, sy!], 0.2)) return true;
+  }
+  return false;
+}
+
+function trimRailChainsAtCaps(
+  chains: Pt[][],
+  capLines: Pt[][],
+  pathsCtx: Pt[][],
+): Pt[][] {
+  const capKeys = capEndpointSet(capLines);
+  const trimmed: Pt[][] = [];
+  for (const chain of chains) {
+    let pts = [...chain];
+    while (pts.length >= 2) {
+      const a = pts[pts.length - 2]!;
+      const b = pts[pts.length - 1]!;
+      if (!isCapEndpoint(b, capKeys)) break;
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (
+        len > 20 &&
+        !isDeckEndCapSegment(a, b, pathsCtx) &&
+        !peelBandCapSegment(a, b, pathsCtx)
+      ) {
+        break;
+      }
+      pts.pop();
+    }
+    while (pts.length >= 2) {
+      const a = pts[0]!;
+      const b = pts[1]!;
+      if (!isCapEndpoint(a, capKeys)) break;
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (
+        len > 20 &&
+        !isDeckEndCapSegment(a, b, pathsCtx) &&
+        !peelBandCapSegment(a, b, pathsCtx)
+      ) {
+        break;
+      }
+      pts.shift();
+    }
+    if (pts.length >= 2) trimmed.push(pts);
+  }
+  return trimmed;
+}
+
 function chainBoundaryEdges(edges: BoundaryEdge[]): Pt[][] {
   if (edges.length === 0) return [];
   const sorted = [...edges].sort((x, y) => x.index - y.index);
@@ -188,12 +276,70 @@ function capSegmentKey(line: Pt[]): string {
   return keys.join("|");
 }
 
-function classifyRingEdge(a: Pt, b: Pt, ring: Ring, chordLimit: number, paths: Pt[][]): DeckPlanStrokeKind | null {
+const DECK_RAIL_CHAIN_MIN_M = 80;
+const DECK_RAIL_EDGE_MIN_M = 3;
+
+function buildBowtieRailIndexSet(
+  pts: Pt[],
+  edgeLengths: number[],
+  chordLimit: number,
+  ring: Ring,
+  pathsCtx: Pt[][],
+  capVertKeys: Set<string>,
+): Set<number> {
+  const chains: BoundaryEdge[][] = [];
+  let current: BoundaryEdge[] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const len = edgeLengths[i]!;
+    if (len > chordLimit) {
+      if (current.length > 0) {
+        chains.push(current);
+        current = [];
+      }
+      continue;
+    }
+    current.push({ a: pts[i]!, b: pts[i + 1]!, index: i });
+  }
+  if (current.length > 0) chains.push(current);
+  const ranked = chains
+    .map((chain) => ({
+      chain,
+      len: chain.reduce((sum, e) => sum + Math.hypot(e.b[0] - e.a[0], e.b[1] - e.a[1]), 0),
+    }))
+    .sort((a, b) => b.len - a.len);
+  const eligible = ranked.filter((row) => row.len >= DECK_RAIL_CHAIN_MIN_M);
+  const pick = eligible.length >= 2 ? eligible.slice(0, 2) : ranked.slice(0, 2);
+  const railIndex = new Set<number>();
+  for (const row of pick) {
+    for (const edge of row.chain) {
+      const len = Math.hypot(edge.b[0] - edge.a[0], edge.b[1] - edge.a[1]);
+      if (len < DECK_RAIL_EDGE_MIN_M) continue;
+      if (isDeckEndCapSegment(edge.a, edge.b, pathsCtx) || peelBandCapSegment(edge.a, edge.b, pathsCtx)) continue;
+      if (deckStrokeMaxInteriorM(edge.a, edge.b, ring) > DECK_INTERIOR_TOL_M) continue;
+      if (railEdgeCrossesCapJunction(edge.a, edge.b, capVertKeys, ring, pathsCtx)) continue;
+      railIndex.add(edge.index);
+    }
+  }
+  return railIndex;
+}
+
+function classifyRingEdge(
+  a: Pt,
+  b: Pt,
+  ring: Ring,
+  chordLimit: number,
+  paths: Pt[][],
+  railIndex: Set<number>,
+  index: number,
+  capVertKeys: Set<string>,
+): DeckPlanStrokeKind | null {
   const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
   if (len > chordLimit) return null;
   if (isDeckEndCapSegment(a, b, paths) || peelBandCapSegment(a, b, paths)) return "cap";
   if (!isConsecutiveRingEdge(a, b, ring)) return null;
-  if (deckStrokeMidpointInteriorM(a, b, ring) > DECK_INTERIOR_TOL_M) return null;
+  if (!railIndex.has(index)) return null;
+  if (railEdgeCrossesCapJunction(a, b, capVertKeys, ring, paths)) return null;
+  if (deckStrokeMaxInteriorM(a, b, ring) > DECK_INTERIOR_TOL_M) return null;
   return "rail";
 }
 
@@ -206,25 +352,30 @@ export function deckPlanStrokePaths(ring: Ring): DeckPlanStroke[] {
   }
   const chordLimit = deckChordLimit(edgeLengths);
   const pathsCtx: Pt[][] = [pts];
-  const railEdges: BoundaryEdge[] = [];
   const capLines: Pt[][] = [];
   const capKeys = new Set<string>();
   for (let i = 0; i < pts.length - 1; i++) {
     const a = pts[i]!;
     const b = pts[i + 1]!;
-    const kind = classifyRingEdge(a, b, ring, chordLimit, pathsCtx);
-    if (!kind) continue;
-    if (kind === "rail") railEdges.push({ a, b, index: i });
-    if (kind === "cap") {
-      const line = [a, b] as Pt[];
-      const key = capSegmentKey(line);
-      if (!capKeys.has(key)) {
-        capKeys.add(key);
-        capLines.push(line);
-      }
-    }
+    const len = edgeLengths[i]!;
+    if (len > chordLimit) continue;
+    if (!isDeckEndCapSegment(a, b, pathsCtx) && !peelBandCapSegment(a, b, pathsCtx)) continue;
+    const line = [a, b] as Pt[];
+    const key = capSegmentKey(line);
+    if (capKeys.has(key)) continue;
+    capKeys.add(key);
+    capLines.push(line);
   }
-  const rails = chainBoundaryEdges(railEdges);
+  const capVertKeys = capEndpointSet(capLines);
+  const railIndex = buildBowtieRailIndexSet(pts, edgeLengths, chordLimit, ring, pathsCtx, capVertKeys);
+  const railEdges: BoundaryEdge[] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i]!;
+    const b = pts[i + 1]!;
+    const kind = classifyRingEdge(a, b, ring, chordLimit, pathsCtx, railIndex, i, capVertKeys);
+    if (kind === "rail") railEdges.push({ a, b, index: i });
+  }
+  const rails = trimRailChainsAtCaps(chainBoundaryEdges(railEdges), capLines, pathsCtx);
   const strokes: DeckPlanStroke[] = [];
   for (const line of rails) {
     if (line.length >= 2) strokes.push({ kind: "rail", line });
