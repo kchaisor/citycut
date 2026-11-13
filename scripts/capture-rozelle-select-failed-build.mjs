@@ -14,30 +14,41 @@ const WIDTH = Number(process.env.WIDTH ?? 1280);
 async function main() {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: WIDTH, height: 800 } });
-  page.setDefaultTimeout(120_000);
+  page.setDefaultTimeout(180_000);
 
-  await page.addInitScript(() => {
-    const nativeFetch = window.fetch.bind(window);
-    window.fetch = async (input, init) => {
-      const url = typeof input === "string" ? input : input instanceof Request ? input.url : String(input);
-      if (/pmtiles|overture|building-enrichment/i.test(url)) {
-        throw new TypeError("network down");
-      }
-      return nativeFetch(input, init);
-    };
+  await page.route("**/*", async (route) => {
+    const url = route.request().url();
+    if (
+      /overture|pmtiles|building-enrichment|parquet|s3\.amazonaws\.com\/overture/i.test(url) &&
+      route.request().resourceType() !== "document"
+    ) {
+      await route.abort("failed");
+      return;
+    }
+    await route.continue();
   });
 
-  await page.goto(CANONICAL, { waitUntil: "networkidle", timeout: 120_000 });
-  await page.getByRole("button", { name: /^Create model$/i }).click();
+  await page.goto(CANONICAL, { waitUntil: "domcontentloaded", timeout: 120_000 });
+  const create =
+    (await page.locator("button.create-fab").count()) > 0
+      ? page.locator("button.create-fab")
+      : page.getByRole("button", { name: /^Create model$/i });
+  await create.click({ timeout: 60_000 });
+  await page.waitForSelector('[role="alert"]', { timeout: 180_000 });
+  await page.waitForFunction(
+    () => document.querySelector(".app")?.getAttribute("data-site-build-active") == null,
+    { timeout: 60_000 },
+  );
   await page.waitForFunction(
     () => {
-      const app = document.querySelector(".app");
-      const active = app?.getAttribute("data-site-build-active");
-      const create = document.querySelector(".select button")?.textContent ?? "";
-      const alert = document.querySelector('[role="alert"]');
-      return active == null && /create model/i.test(create) && alert != null;
+      const btn =
+        document.querySelector("button.create-fab") ??
+        Array.from(document.querySelectorAll("button")).find((b) => /create model/i.test(b.textContent ?? ""));
+      if (!btn) return false;
+      const style = getComputedStyle(btn);
+      return style.visibility !== "hidden" && Number(style.opacity) > 0.05;
     },
-    { timeout: 180_000 },
+    { timeout: 30_000 },
   );
 
   const out = path.join(OUT_DIR, `rozelle-pr227-select-after-failed-build-${WIDTH}.png`);
