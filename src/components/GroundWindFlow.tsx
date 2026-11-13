@@ -13,7 +13,7 @@ import {
 import {
   createGroundWindParticles,
   GROUND_WIND_CASING_WIDTH_PX,
-  GROUND_WIND_CORE_WIDTH_SLOW_PX,
+  GROUND_WIND_CORE_WIDTH_PX,
   GROUND_WIND_PARTICLES_MAX,
   GROUND_WIND_POINTS_PER_PARTICLE,
   GROUND_WIND_POINT_STRIDE,
@@ -27,6 +27,8 @@ import {
 } from "../lib/groundWindParticles";
 import { useColourRevision } from "../lib/useColourRevision";
 import { groundWindDebugEnabled, groundWindRenderStats } from "../lib/groundWindDebug";
+import { groundWindHudMask } from "../lib/groundWindHudMask";
+import { SURFACE } from "../lib/surfaceLayers";
 import type { WindPeriodStats } from "../lib/windRose";
 
 const FIELD_BUDGET_MS = 5;
@@ -49,7 +51,10 @@ attribute float casing0;
 attribute float casing1;
 uniform vec2 resolution;
 uniform float passRole;
+uniform vec4 maskRight;
+uniform vec4 maskBottom;
 varying float vAlpha;
+varying vec2 vScreenPx;
 varying float vSide;
 varying float vAlong;
 varying float vBand;
@@ -68,11 +73,10 @@ void main() {
   vec2 tangent = dirLen > 1e-5 ? dir / dirLen : vec2(1.0, 0.0);
   vec2 perp = vec2(-tangent.y, tangent.x);
   float along = mix(along0, along1, end);
-  float wPx = passRole < 0.5
-    ? mix(0.5, ${GROUND_WIND_CASING_WIDTH_PX.toFixed(2)}, along)
-    : mix(0.4, ${GROUND_WIND_CORE_WIDTH_SLOW_PX.toFixed(2)}, along);
+  float wPx = passRole < 0.5 ? ${GROUND_WIND_CASING_WIDTH_PX.toFixed(2)} : ${GROUND_WIND_CORE_WIDTH_PX.toFixed(2)};
   float ndcHalf = (wPx / resolution.y) * 2.0;
   vec2 ndc = clipC.xy / max(1e-5, clipC.w) + perp * side * ndcHalf;
+  vScreenPx = (ndc * 0.5 + 0.5) * resolution;
   vAlpha = mix(a0, a1, end);
   vSide = abs(side);
   vAlong = along;
@@ -84,24 +88,27 @@ void main() {
 
 const FRAGMENT_SHADER = `
 uniform vec3 coreColour;
-uniform vec3 fastColour;
 uniform float passRole;
 uniform float opacity;
 varying float vAlpha;
+varying vec2 vScreenPx;
 varying float vSide;
 varying float vAlong;
 varying float vBand;
 varying float vCasing;
+uniform vec4 maskRight;
+uniform vec4 maskBottom;
 void main() {
+  if (vScreenPx.x >= maskRight.x && vScreenPx.x <= maskRight.z && vScreenPx.y >= maskRight.y && vScreenPx.y <= maskRight.w) discard;
+  if (vScreenPx.x >= maskBottom.x && vScreenPx.x <= maskBottom.z && vScreenPx.y >= maskBottom.y && vScreenPx.y <= maskBottom.w) discard;
   float edge = 1.0 - smoothstep(0.72, 1.0, vSide);
   float alpha = vAlpha * opacity * edge;
   if (alpha < 0.004) discard;
   if (passRole < 0.5) {
     if (vCasing < 0.5) discard;
-    gl_FragColor = vec4(1.0, 1.0, 1.0, alpha * 0.9);
+    gl_FragColor = vec4(1.0, 1.0, 1.0, alpha * 0.6);
   } else {
-    vec3 colour = vBand > 1.5 ? fastColour : coreColour;
-    gl_FragColor = vec4(colour, alpha);
+    gl_FragColor = vec4(coreColour, alpha);
   }
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -149,6 +156,7 @@ function createRibbonGeometry(points: Float32Array): { geometry: THREE.Instanced
 }
 
 function makeWindMaterial(passRole: number, width: number, height: number) {
+  const mask = groundWindHudMask(width, height);
   return new THREE.ShaderMaterial({
     vertexShader: VERTEX_SHADER,
     fragmentShader: FRAGMENT_SHADER,
@@ -157,7 +165,8 @@ function makeWindMaterial(passRole: number, width: number, height: number) {
       passRole: { value: passRole },
       opacity: { value: 1 },
       coreColour: { value: new THREE.Color() },
-      fastColour: { value: new THREE.Color() },
+      maskRight: { value: new THREE.Vector4(mask.rightMin[0], mask.rightMin[1], mask.rightMax[0], mask.rightMax[1]) },
+      maskBottom: { value: new THREE.Vector4(mask.bottomMin[0], mask.bottomMin[1], mask.bottomMax[0], mask.bottomMax[1]) },
     },
     transparent: true,
     depthWrite: false,
@@ -199,15 +208,20 @@ export function GroundWindFlow({
   const colourRevision = useColourRevision();
   useEffect(() => {
     (casingMaterial.uniforms.coreColour!.value as THREE.Color).set(getColour("--ground-wind-core"));
-    (casingMaterial.uniforms.fastColour!.value as THREE.Color).set(getColour("--ground-wind-flow"));
     (coreMaterial.uniforms.coreColour!.value as THREE.Color).set(getColour("--ground-wind-core"));
-    (coreMaterial.uniforms.fastColour!.value as THREE.Color).set(getColour("--ground-wind-flow"));
   }, [casingMaterial, coreMaterial, colourRevision]);
 
   useEffect(() => {
     const res = casingMaterial.uniforms.resolution!.value as THREE.Vector2;
     res.set(size.width, size.height);
     (coreMaterial.uniforms.resolution!.value as THREE.Vector2).copy(res);
+    const mask = groundWindHudMask(size.width, size.height);
+    const right = new THREE.Vector4(mask.rightMin[0], mask.rightMin[1], mask.rightMax[0], mask.rightMax[1]);
+    const bottom = new THREE.Vector4(mask.bottomMin[0], mask.bottomMin[1], mask.bottomMax[0], mask.bottomMax[1]);
+  for (const mat of [casingMaterial, coreMaterial]) {
+      (mat.uniforms.maskRight!.value as THREE.Vector4).copy(right);
+      (mat.uniforms.maskBottom!.value as THREE.Vector4).copy(bottom);
+    }
   }, [casingMaterial, coreMaterial, size.height, size.width]);
 
   useEffect(
@@ -342,8 +356,8 @@ export function GroundWindFlow({
 
   return (
     <>
-      <mesh geometry={geometry} material={casingMaterial} frustumCulled={false} renderOrder={877} />
-      <mesh geometry={geometry} material={coreMaterial} frustumCulled={false} renderOrder={878} />
+      <mesh geometry={geometry} material={casingMaterial} frustumCulled={false} renderOrder={SURFACE.building.renderOrder - 0.55} />
+      <mesh geometry={geometry} material={coreMaterial} frustumCulled={false} renderOrder={SURFACE.building.renderOrder - 0.5} />
     </>
   );
 }

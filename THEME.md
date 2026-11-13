@@ -288,8 +288,8 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--axo-tree-trunk` | `#7a6a55` | Exploded axo tree trunk. |
 | `--wind-streak` | `#2B6CB0` | Animated wind streaks in the 3D viewport (~70% opacity). |
 | `--wind-rose` | `#3d5a73` | On-screen wind rose overlay and Wind export layer. |
-| `--ground-wind-flow` | `#0b2e8a` | Ground-wind core for 40+ km/h streams (2.5px). |
-| `--ground-wind-core` | `#1d4ed8` | Ground-wind polyline core (1.5–2px) with white road casing. |
+| `--ground-wind-flow` | `#0b2e8a` | Reserve fast-stream token (unused by ground shader). |
+| `--ground-wind-core` | `#1d4ed8` | Ground-wind trail core at constant 1.5px screen width. |
 | `--ground-wind-glow` | `#2f6fd6` | Reserve token paired with ground-wind trail fills. |
 | `--wind-band-0` | `#9ec5e8` | Wind console swatch: 2–10 km/h. |
 | `--wind-band-1` | `#5b9bd5` | Wind console swatch: 10–20 km/h. |

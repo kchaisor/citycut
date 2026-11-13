@@ -181,8 +181,10 @@ describe("groundWindParticles", () => {
     expect(speedRamp(0)).toBeLessThan(speedRamp(0.5));
     expect(speedRamp(0.5)).toBeLessThan(speedRamp(1.3));
     expect(lifeEnvelope(0, 5)).toBe(0);
-    expect(lifeEnvelope(2.5, 5)).toBeGreaterThan(0.75);
-    expect(lifeEnvelope(5, 5)).toBeLessThan(0.05);
+    expect(lifeEnvelope(0.25, 5)).toBeCloseTo(0.5, 1);
+    expect(lifeEnvelope(2.5, 5)).toBe(1);
+    expect(lifeEnvelope(4.85, 5)).toBeLessThan(0.2);
+    expect(lifeEnvelope(5, 5)).toBe(0);
   });
 
   it("spreads screen seeds with jittered poisson spacing", () => {

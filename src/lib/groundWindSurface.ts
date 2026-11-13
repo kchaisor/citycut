@@ -11,8 +11,7 @@ function distToSegment(px: number, py: number, ax: number, ay: number, bx: numbe
   return Math.hypot(px - (ax + abx * t), py - (ay + aby * t));
 }
 
-export function groundWindWantsCasing(model: CityModel, east: number, north: number): boolean {
-  let onRoad = false;
+export function groundWindOnAsphalt(model: CityModel, east: number, north: number): boolean {
   for (let r = 0; r < model.roads.length; r++) {
     const road = model.roads[r]!;
     if (road.kind === "rail") continue;
@@ -21,28 +20,12 @@ export function groundWindWantsCasing(model: CityModel, east: number, north: num
     for (let k = 0; k < line.length - 1; k++) {
       const a = line[k]!;
       const b = line[k + 1]!;
-      if (distToSegment(east, north, a[0], a[1], b[0], b[1]) <= half) {
-        onRoad = true;
-        break;
-      }
+      if (distToSegment(east, north, a[0], a[1], b[0], b[1]) <= half) return true;
     }
-    if (onRoad) break;
-  }
-  if (onRoad) return true;
-  for (let a = 0; a < model.areas.length; a++) {
-    const area = model.areas[a]!;
-    if (area.kind !== "water") continue;
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minY = Infinity;
-    let maxY = -Infinity;
-    for (const pt of area.ring) {
-      minX = Math.min(minX, pt[0]);
-      maxX = Math.max(maxX, pt[0]);
-      minY = Math.min(minY, pt[1]);
-      maxY = Math.max(maxY, pt[1]);
-    }
-    if (east >= minX && east <= maxX && north >= minY && north <= maxY) return true;
   }
   return false;
+}
+
+export function groundWindWantsCasing(model: CityModel, east: number, north: number): boolean {
+  return groundWindOnAsphalt(model, east, north);
 }

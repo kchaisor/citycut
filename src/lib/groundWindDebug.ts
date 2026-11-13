@@ -9,6 +9,7 @@ import {
   GROUND_WIND_POINT_STRIDE,
   GROUND_WIND_POINTS_PER_PARTICLE,
   GROUND_WIND_TRAIL_POINTS,
+  groundWindFrameCoverageProxy,
   lifeEnvelope,
   type GroundWindParticles,
 } from "./groundWindParticles";
@@ -20,6 +21,7 @@ export type GroundWindDebugSnapshot = {
   drawable: number;
   farCount: number;
   nearCount: number;
+  coverageRatio: number;
 };
 
 declare global {
@@ -50,6 +52,9 @@ export function groundWindRenderStats(particles: GroundWindParticles, _viewW: nu
     if (sx < GROUND_WIND_FAR_X_MAX && sy >= GROUND_WIND_FAR_Y_MIN && sy <= GROUND_WIND_FAR_Y_MAX) farCount++;
     if (sy >= GROUND_WIND_NEAR_Y_MIN && sy <= GROUND_WIND_NEAR_Y_MAX) nearCount++;
   }
+  const viewW = _viewW > 0 ? _viewW : particles.viewWidth;
+  const viewH = particles.viewHeight > 0 ? particles.viewHeight : 900;
+  const coverageRatio = groundWindFrameCoverageProxy(particles, viewW, viewH);
   return {
     active: particles.count,
     max: particles.maxCount,
@@ -57,5 +62,6 @@ export function groundWindRenderStats(particles: GroundWindParticles, _viewW: nu
     drawable,
     farCount,
     nearCount,
+    coverageRatio,
   };
 }

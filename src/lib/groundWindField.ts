@@ -2,7 +2,7 @@ import type { CityModel, Pt, Ring } from "../types";
 import { downwindFromSector } from "./windRose";
 import { sampleTerrain } from "./terrain";
 import { pointInPolygon } from "./useCascade";
-import { groundWindWantsCasing } from "./groundWindSurface";
+import { groundWindOnAsphalt } from "./groundWindSurface";
 
 export const GROUND_WIND_DEFAULT_SECTOR = 0;
 export const GROUND_WIND_CELL_MIN_M = 2;
@@ -27,7 +27,7 @@ export type GroundWindField = {
   originE: number;
   originN: number;
   solid: Uint8Array;
-  casing: Uint8Array;
+  road: Uint8Array;
   fluidCells: Int32Array;
   faceU: Float32Array;
   faceV: Float32Array;
@@ -109,16 +109,16 @@ export type GroundWindRaster = {
   heights: Float32Array;
 };
 
-function rasterCasingMask(model: CityModel, cols: number, rows: number, cellM: number, originE: number, originN: number): Uint8Array {
-  const casing = new Uint8Array(cols * rows);
+function rasterRoadMask(model: CityModel, cols: number, rows: number, cellM: number, originE: number, originN: number): Uint8Array {
+  const road = new Uint8Array(cols * rows);
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < cols; i++) {
       const east = originE + (i + 0.5) * cellM;
       const north = originN + (j + 0.5) * cellM;
-      if (groundWindWantsCasing(model, east, north)) casing[j * cols + i] = 1;
+      if (groundWindOnAsphalt(model, east, north)) road[j * cols + i] = 1;
     }
   }
-  return casing;
+  return road;
 }
 
 export function rasterSolids(model: CityModel): GroundWindRaster {
@@ -360,7 +360,7 @@ export function createGroundWindFieldBuilder(model: CityModel, base: WindVector)
     }
     const { faceU, faceV } = faceVelocities(fineGrid, cellM, base);
     const shelter = shelterField(solid, heights, cols, rows, cellM, base);
-    const casing = rasterCasingMask(model, cols, rows, cellM, originE, originN);
+    const road = rasterRoadMask(model, cols, rows, cellM, originE, originN);
     const fluid: number[] = [];
     for (let idx = 0; idx < solid.length; idx++) if (!solid[idx]) fluid.push(idx);
     result = {
@@ -370,7 +370,7 @@ export function createGroundWindFieldBuilder(model: CityModel, base: WindVector)
       originE,
       originN,
       solid,
-      casing,
+      road,
       fluidCells: Int32Array.from(fluid),
       faceU,
       faceV,
@@ -417,7 +417,7 @@ export function groundWindIsSolid(field: GroundWindField, east: number, north: n
 
 export function groundWindCasingAt(field: GroundWindField, east: number, north: number): boolean {
   const idx = groundWindCellIndex(field, east, north);
-  return idx >= 0 && field.casing[idx] === 1;
+  return idx >= 0 && field.road[idx] === 1;
 }
 
 function bilinear(values: Float32Array, cols: number, rows: number, x: number, y: number): number {
