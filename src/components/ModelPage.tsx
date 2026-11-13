@@ -2024,6 +2024,41 @@ export function ModelPage({
   const [bridgePillHudSuppressed, setBridgePillHudSuppressed] = useState(
     () => tab === "3d" && shouldShowIntroBridgePill(),
   );
+  const [showHeightSourceNotices, setShowHeightSourceNotices] = useState(
+    () => !(tab === "3d" && shouldShowIntroBridgePill()),
+  );
+  useEffect(() => {
+    if (tab !== "3d" || !shouldShowIntroBridgePill()) {
+      setShowHeightSourceNotices(true);
+      return;
+    }
+    setShowHeightSourceNotices(false);
+    let alive = true;
+    let frame = 0;
+    const waitPillGone = () => {
+      if (!alive) return;
+      const pill = document.querySelector(".model .loading-hud-pill.is-model-bridge");
+      if (!pill) {
+        setShowHeightSourceNotices(true);
+        return;
+      }
+      const style = getComputedStyle(pill);
+      if (style.display === "none" || Number(style.opacity) <= 0.05) {
+        setShowHeightSourceNotices(true);
+        return;
+      }
+      frame = window.requestAnimationFrame(waitPillGone);
+    };
+    const onDone = () => window.setTimeout(() => {
+      frame = window.requestAnimationFrame(waitPillGone);
+    }, 80);
+    window.addEventListener("citycut:intro-done", onDone);
+    return () => {
+      alive = false;
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("citycut:intro-done", onDone);
+    };
+  }, [tab]);
   useEffect(() => {
     if (tab !== "3d" || !shouldShowIntroBridgePill()) {
       setBridgePillHudSuppressed(false);
@@ -2086,7 +2121,7 @@ export function ModelPage({
                 </div>
               );
             })()}
-            {!bridgePillHudSuppressed &&
+            {showHeightSourceNotices &&
               model.heightSourceLoadWarnings?.map((line) => (
                 <p key={line} className="height-source-notice" role="status">
                   {line}
