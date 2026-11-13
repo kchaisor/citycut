@@ -2081,11 +2081,13 @@ export function ModelPage({
     window.addEventListener("citycut:intro-webgl-ready", onWebglReady);
     window.addEventListener("citycut:intro-start", revealModel);
     const webglTimer = window.setTimeout(revealModel, 25000);
+    const hudReleaseTimer = window.setTimeout(() => setBridgePillHudSuppressed(false), 45000);
     return () => {
       window.removeEventListener("citycut:intro-done", onDone);
       window.removeEventListener("citycut:intro-webgl-ready", onWebglReady);
       window.removeEventListener("citycut:intro-start", revealModel);
       window.clearTimeout(webglTimer);
+      window.clearTimeout(hudReleaseTimer);
     };
   }, [tab]);
 

@@ -15,7 +15,6 @@ import {
   importedMassingStrokeStyle,
   importedMassingUpperStrokeStyle,
   planBuildingStrokeStyle,
-  storedSiteDeckCapStrokeStyle,
   storedSiteStructureStrokeStyle,
 } from "../lib/planBuildingFill";
 import { planPaths, svgPolyline, svgRings } from "../lib/svgPlan";
@@ -528,33 +527,47 @@ export function DrawingPlan({
                 stroke="none"
               />
             ))}
-            {plan.storedStructures.map((stroke, index) => {
-              const line = stroke.line;
-              const closed = line.length > 2 && line[0]![0] === line[line.length - 1]![0];
-              const isCap = stroke.kind === "cap";
-              const strokeStyle = isCap ? storedSiteDeckCapStrokeStyle(style) : storedSiteStructureStrokeStyle(style);
-              if (isCap && !style.kerbOn) return null;
-              return (
-                <path
-                  key={`ss${index}`}
-                  data-stored-structure="true"
-                  data-deck-stroke={stroke.kind}
-                  d={svgPolyline(openRing(line), closed)}
-                  fill="none"
-                  {...screenPenAttrs(strokeStyle, "miter")}
-                  strokeWidth={
-                    isCap
-                      ? screenPx(strokeStyle.mm)
-                      : Math.max(
-                          screenPx(strokeStyle.mm),
-                          Math.max(screenPx(style.water.mm), 1),
-                        )
-                  }
-                  strokeLinecap={isCap ? "butt" : "square"}
-                  strokeLinejoin="miter"
-                />
-              );
-            })}
+            {plan.storedStructures
+              .filter((stroke) => stroke.kind === "rail")
+              .map((stroke, index) => {
+                const line = stroke.line;
+                const closed = line.length > 2 && line[0]![0] === line[line.length - 1]![0];
+                const strokeStyle = storedSiteStructureStrokeStyle(style);
+                return (
+                  <path
+                    key={`ss-rail${index}`}
+                    data-stored-structure="true"
+                    data-deck-stroke="rail"
+                    d={svgPolyline(openRing(line), closed)}
+                    fill="none"
+                    {...screenPenAttrs(strokeStyle, "miter")}
+                    strokeWidth={Math.max(
+                      screenPx(strokeStyle.mm),
+                      Math.max(screenPx(style.water.mm), 1),
+                    )}
+                    strokeLinecap="square"
+                    strokeLinejoin="miter"
+                  />
+                );
+              })}
+            {style.kerbOn &&
+              plan.storedStructures
+                .filter((stroke) => stroke.kind === "cap")
+                .map((stroke, index) => {
+                  const line = stroke.line;
+                  return (
+                    <path
+                      key={`ss-cap${index}`}
+                      data-stored-structure="true"
+                      data-deck-stroke="cap"
+                      d={svgPolyline(openRing(line), false)}
+                      fill="none"
+                      {...screenPenAttrs(style.kerb, "miter")}
+                      strokeLinecap="butt"
+                      strokeLinejoin="miter"
+                    />
+                  );
+                })}
             {plan.buildings.map((building, index) => (
               <path
                 key={`b${index}`}
