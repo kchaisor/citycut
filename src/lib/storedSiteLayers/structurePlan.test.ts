@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 import { parseStoredSiteFootprints } from "./footprints";
 import {
   deckPlanStrokePaths,
-  deckStrokeSegmentInsideDeck,
+  deckStrokeMidpointInteriorM,
+  isConsecutiveRingEdge,
+  isDeckBoundaryRailSegment,
   isDeckEndCapSegment,
   ringChordCount,
 } from "./structurePlan";
@@ -28,10 +30,10 @@ describe("Anzac bridge deck plan outline", () => {
     const capStrokes = strokes.filter((stroke) => stroke.kind === "cap");
     expect(capStrokes.length).toBeGreaterThan(0);
     const maxEdge = Math.max(
-      ...paths.flatMap((path) => {
+      ...paths.flatMap((rail) => {
         const out: number[] = [];
-        for (let i = 0; i < path.length - 1; i++) {
-          out.push(Math.hypot(path[i + 1]![0] - path[i]![0], path[i + 1]![1] - path[i]![1]));
+        for (let i = 0; i < rail.length - 1; i++) {
+          out.push(Math.hypot(rail[i + 1]![0] - rail[i]![0], rail[i + 1]![1] - rail[i]![1]));
         }
         return out;
       }),
@@ -39,15 +41,17 @@ describe("Anzac bridge deck plan outline", () => {
     expect(raw).toBeGreaterThan(0);
     expect(strokes.length).toBeGreaterThanOrEqual(2);
     expect(maxEdge).toBeLessThan(120);
-    for (const path of paths) {
-      for (let i = 0; i < path.length - 1; i++) {
-        expect(deckStrokeSegmentInsideDeck(path[i]!, path[i + 1]!, deck!.ring, paths)).toBe(true);
-      }
-    }
     const allChains = paths;
-    for (const stroke of strokes.filter((s) => s.kind === "rail")) {
+    for (const stroke of strokes) {
       for (let i = 0; i < stroke.line.length - 1; i++) {
-        expect(isDeckEndCapSegment(stroke.line[i]!, stroke.line[i + 1]!, allChains)).toBe(false);
+        const a = stroke.line[i]!;
+        const b = stroke.line[i + 1]!;
+        expect(deckStrokeMidpointInteriorM(a, b, deck!.ring)).toBeLessThanOrEqual(0.5);
+        if (stroke.kind === "rail") {
+          expect(isDeckBoundaryRailSegment(a, b, deck!.ring)).toBe(true);
+          expect(isConsecutiveRingEdge(a, b, deck!.ring)).toBe(true);
+          expect(isDeckEndCapSegment(a, b, allChains)).toBe(false);
+        }
       }
     }
   });

@@ -3,6 +3,10 @@ import { pointInPolygon } from "../useCascade";
 import type { Pt, Ring } from "../../types";
 
 const DECK_CHORD_M = 120;
+const DECK_ABUTMENT_MAX_M = 95;
+const DECK_END_BAND_RATIO = 0.22;
+const DECK_INTERIOR_TOL_M = 0.5;
+const RING_VERTEX_TOL_M = 0.12;
 
 export type DeckPlanStrokeKind = "rail" | "cap";
 
@@ -54,72 +58,66 @@ function deckChordLimit(edgeLengths: number[]): number {
   return Math.max(DECK_CHORD_M, median * 3);
 }
 
-function polylineLength(pts: Pt[]): number {
-  let len = 0;
-  for (let i = 0; i < pts.length - 1; i++) {
-    len += Math.hypot(pts[i + 1]![0] - pts[i]![0], pts[i + 1]![1] - pts[i]![1]);
-  }
-  return len;
+function pointsNear(a: Pt, b: Pt, tol = RING_VERTEX_TOL_M): boolean {
+  return Math.hypot(b[0] - a[0], b[1] - a[1]) <= tol;
 }
 
-function splitDeckRingAtBowties(pts: Pt[]): Pt[][] {
-  const edgeLengths: number[] = [];
-  for (let i = 0; i < pts.length - 1; i++) {
-    edgeLengths.push(Math.hypot(pts[i + 1]![0] - pts[i]![0], pts[i + 1]![1] - pts[i]![1]));
+function ringVertexIndex(p: Pt, ring: Ring, tol = RING_VERTEX_TOL_M): number | null {
+  const pts = openRing(ring);
+  for (let i = 0; i < pts.length; i++) {
+    if (pointsNear(p, pts[i]!, tol)) return i;
   }
-  const chordLimit = deckChordLimit(edgeLengths);
-  const chains: Pt[][] = [];
-  let run: Pt[] = [pts[0]!];
-  for (let i = 0; i < pts.length - 1; i++) {
-    const next = pts[i + 1]!;
-    if (edgeLengths[i]! > chordLimit) {
-      if (run.length >= 2) chains.push(run);
-      run = [next];
-    } else {
-      run.push(next);
-    }
-  }
-  if (run.length >= 2) chains.push(run);
-  return chains;
+  return null;
 }
 
-function mergeShortEastSpur(chains: Pt[][]): Pt[][] {
-  if (chains.length <= 2) return chains;
-  const ranked = chains
-    .map((chain, index) => ({ chain, index, len: polylineLength(chain) }))
-    .sort((a, b) => b.len - a.len);
-  const keep = ranked.slice(0, 2);
-  const drop = ranked.slice(2);
-  const rails = keep.map((row) => [...row.chain]);
-  for (const spur of drop) {
-    let bestRail = 0;
-    let bestDist = Infinity;
-    for (const end of [spur.chain[0]!, spur.chain[spur.chain.length - 1]!]) {
-      for (let r = 0; r < rails.length; r++) {
-        const rail = rails[r]!;
-        for (const tip of [rail[0]!, rail[rail.length - 1]!]) {
-          const d = Math.hypot(end[0] - tip[0], end[1] - tip[1]);
-          if (d < bestDist) {
-            bestDist = d;
-            bestRail = r;
-          }
-        }
-      }
+export function distToRingBoundary(p: Pt, ring: Ring): number {
+  const pts = openRing(ring);
+  let best = Infinity;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i]!;
+    const b = pts[i + 1]!;
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const len2 = dx * dx + dy * dy;
+    if (len2 < 1e-9) {
+      best = Math.min(best, Math.hypot(p[0] - a[0], p[1] - a[1]));
+      continue;
     }
-    if (bestDist < 80) {
-      const rail = rails[bestRail]!;
-      const a = spur.chain[0]!;
-      const d0 = Math.hypot(a[0] - rail[0]![0], a[1] - rail[0]![1]);
-      const d1 = Math.hypot(a[0] - rail[rail.length - 1]![0], a[1] - rail[rail.length - 1]![1]);
-      if (d0 < d1) rails[bestRail] = [...spur.chain, ...rail];
-      else rails[bestRail] = [...rail, ...spur.chain];
-    }
+    const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2));
+    const qx = a[0] + dx * t;
+    const qy = a[1] + dy * t;
+    best = Math.min(best, Math.hypot(p[0] - qx, p[1] - qy));
   }
-  return rails;
+  return best;
 }
 
-const DECK_ABUTMENT_MAX_M = 95;
-const DECK_END_BAND_RATIO = 0.22;
+export function deckStrokeMidpointInteriorM(a: Pt, b: Pt, ring: Ring): number {
+  const holes: Ring[] = [];
+  let worst = 0;
+  for (const t of [0.25, 0.5, 0.75]) {
+    const p: Pt = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    if (!pointInPolygon(p, ring, holes)) continue;
+    worst = Math.max(worst, distToRingBoundary(p, ring));
+  }
+  return worst;
+}
+
+export function isConsecutiveRingEdge(a: Pt, b: Pt, ring: Ring, tol = RING_VERTEX_TOL_M): boolean {
+  const ia = ringVertexIndex(a, ring, tol);
+  const ib = ringVertexIndex(b, ring, tol);
+  if (ia === null || ib === null) return false;
+  const pts = openRing(ring);
+  const last = pts.length - 1;
+  if (Math.abs(ia - ib) === 1) return true;
+  if (ia === 0 && ib === last) return true;
+  if (ib === 0 && ia === last) return true;
+  return false;
+}
+
+export function isDeckBoundaryRailSegment(a: Pt, b: Pt, ring: Ring): boolean {
+  if (!isConsecutiveRingEdge(a, b, ring)) return false;
+  return deckStrokeMidpointInteriorM(a, b, ring) <= DECK_INTERIOR_TOL_M;
+}
 
 function deckExtentX(paths: Pt[][]): { minX: number; maxX: number; width: number } {
   const xs = paths.flat().map((p) => p[0]);
@@ -148,59 +146,36 @@ export function isDeckEndCapSegment(a: Pt, b: Pt, paths: Pt[][]): boolean {
   return atWest || atEast;
 }
 
-function peelAbutmentEdges(paths: Pt[][]): { rails: Pt[][]; caps: Pt[][] } {
+function peelBandCapSegment(a: Pt, b: Pt, paths: Pt[][]): boolean {
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (len < 0.5 || len > DECK_ABUTMENT_MAX_M || len <= 20) return false;
   const extent = deckExtentX(paths);
   const band = abutmentBand(extent);
-  const rails: Pt[][] = [];
-  const caps: Pt[][] = [];
-  for (const path of paths) {
-    let run: Pt[] = [];
-    for (let i = 0; i < path.length - 1; i++) {
-      const a = path[i]!;
-      const b = path[i + 1]!;
-      if (isDeckEndCapSegment(a, b, paths)) {
-        if (run.length >= 2) rails.push(run);
-        run = [];
-        caps.push([a, b]);
-        continue;
-      }
-      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-      const midX = (a[0] + b[0]) / 2;
-      const atWest = a[0] <= band.west && b[0] <= band.west && midX <= band.west;
-      const atEast = a[0] >= band.east && b[0] >= band.east && midX >= band.east;
-      if (len <= DECK_ABUTMENT_MAX_M && (atWest || atEast) && len > 20) {
-        if (run.length >= 2) rails.push(run);
-        run = [];
-        caps.push([a, b]);
-        continue;
-      }
-      if (run.length === 0) run.push(a);
-      run.push(b);
+  const midX = (a[0] + b[0]) / 2;
+  const atWest = a[0] <= band.west && b[0] <= band.west && midX <= band.west;
+  const atEast = a[0] >= band.east && b[0] >= band.east && midX >= band.east;
+  return atWest || atEast;
+}
+
+type BoundaryEdge = { a: Pt; b: Pt; index: number };
+
+function chainBoundaryEdges(edges: BoundaryEdge[]): Pt[][] {
+  if (edges.length === 0) return [];
+  const sorted = [...edges].sort((x, y) => x.index - y.index);
+  const chains: Pt[][] = [];
+  let chain: Pt[] = [sorted[0]!.a, sorted[0]!.b];
+  for (let k = 1; k < sorted.length; k++) {
+    const e = sorted[k]!;
+    const prev = sorted[k - 1]!;
+  if (e.index === prev.index + 1 && pointsNear(e.a, prev.b)) {
+      chain.push(e.b);
+    } else {
+      if (chain.length >= 2) chains.push(chain);
+      chain = [e.a, e.b];
     }
-    if (run.length >= 2) rails.push(run);
   }
-  return { rails, caps };
-}
-
-function railExtremePoint(rail: Pt[], side: "west" | "east"): Pt {
-  return rail.reduce(
-    (pick, p) => (side === "west" ? (p[0] < pick[0] ? p : pick) : p[0] > pick[0] ? p : pick),
-    rail[0]!,
-  );
-}
-
-function abutmentCapsBetweenRails(rails: Pt[][]): Pt[][] {
-  const long = [...rails].sort((a, b) => polylineLength(b) - polylineLength(a)).slice(0, 2);
-  if (long.length < 2) return [];
-  const [railA, railB] = long;
-  const caps: Pt[][] = [];
-  for (const side of ["west", "east"] as const) {
-    const a = railExtremePoint(railA, side);
-    const b = railExtremePoint(railB, side);
-    const dist = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    if (dist >= 0.5 && dist <= DECK_ABUTMENT_MAX_M) caps.push([a, b]);
-  }
-  return caps;
+  if (chain.length >= 2) chains.push(chain);
+  return chains;
 }
 
 function capSegmentKey(line: Pt[]): string {
@@ -213,21 +188,43 @@ function capSegmentKey(line: Pt[]): string {
   return keys.join("|");
 }
 
+function classifyRingEdge(a: Pt, b: Pt, ring: Ring, chordLimit: number, paths: Pt[][]): DeckPlanStrokeKind | null {
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (len > chordLimit) return null;
+  if (isDeckEndCapSegment(a, b, paths) || peelBandCapSegment(a, b, paths)) return "cap";
+  if (!isConsecutiveRingEdge(a, b, ring)) return null;
+  if (deckStrokeMidpointInteriorM(a, b, ring) > DECK_INTERIOR_TOL_M) return null;
+  return "rail";
+}
+
 export function deckPlanStrokePaths(ring: Ring): DeckPlanStroke[] {
-  const pts = openRing(orderDeckBoundaryRing(ring));
+  const pts = openRing(ring);
   if (pts.length < 4) return [{ kind: "rail", line: pts }];
-  const chains = mergeShortEastSpur(splitDeckRingAtBowties(pts)).filter((c) => c.length >= 2);
-  const { rails, caps: peeledCaps } = peelAbutmentEdges(chains);
-  const pairedCaps = abutmentCapsBetweenRails(rails);
-  const capKeys = new Set<string>();
-  const capLines: Pt[][] = [];
-  for (const line of [...peeledCaps, ...pairedCaps]) {
-    if (line.length < 2) continue;
-    const key = capSegmentKey(line);
-    if (capKeys.has(key)) continue;
-    capKeys.add(key);
-    capLines.push(line);
+  const edgeLengths: number[] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    edgeLengths.push(Math.hypot(pts[i + 1]![0] - pts[i]![0], pts[i + 1]![1] - pts[i]![1]));
   }
+  const chordLimit = deckChordLimit(edgeLengths);
+  const pathsCtx: Pt[][] = [pts];
+  const railEdges: BoundaryEdge[] = [];
+  const capLines: Pt[][] = [];
+  const capKeys = new Set<string>();
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i]!;
+    const b = pts[i + 1]!;
+    const kind = classifyRingEdge(a, b, ring, chordLimit, pathsCtx);
+    if (!kind) continue;
+    if (kind === "rail") railEdges.push({ a, b, index: i });
+    if (kind === "cap") {
+      const line = [a, b] as Pt[];
+      const key = capSegmentKey(line);
+      if (!capKeys.has(key)) {
+        capKeys.add(key);
+        capLines.push(line);
+      }
+    }
+  }
+  const rails = chainBoundaryEdges(railEdges);
   const strokes: DeckPlanStroke[] = [];
   for (const line of rails) {
     if (line.length >= 2) strokes.push({ kind: "rail", line });
