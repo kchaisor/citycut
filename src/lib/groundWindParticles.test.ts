@@ -10,9 +10,8 @@ import {
   groundWindMeanTrailScreenPx,
   groundWindMetresPerSecond,
   groundWindOrthographicProject,
-  groundWindSeedRowScore,
+  groundWindCoreWidthPx,
   groundWindTrailHistorySlots,
-  groundWindTrailWidthPx,
   lifeEnvelope,
   speedRamp,
   stepGroundWindParticles,
@@ -76,10 +75,11 @@ describe("groundWindParticles", () => {
     }
   });
 
-  it("caps rendered trail width at 2px and tapers toward the tail", () => {
-    expect(groundWindMaxTrailWidthPx()).toBeLessThanOrEqual(2);
-    expect(groundWindTrailWidthPx(0)).toBeLessThan(groundWindTrailWidthPx(1));
-    expect(groundWindTrailWidthPx(1)).toBeLessThanOrEqual(2);
+  it("caps core trail width at 2.5px with band steps", () => {
+    expect(groundWindMaxTrailWidthPx()).toBeLessThanOrEqual(2.5);
+    expect(groundWindCoreWidthPx(12)).toBe(1.5);
+    expect(groundWindCoreWidthPx(28)).toBe(2);
+    expect(groundWindCoreWidthPx(44)).toBe(2.5);
   });
 
   it("lengthens fast-stream trails", () => {
@@ -91,11 +91,18 @@ describe("groundWindParticles", () => {
   it("keeps mean on-screen trail length at least 40px after advection", () => {
     const model = denseModel();
     const field = buildGroundWindField(model, { east: 1, north: 0.2 });
-    const particles = createGroundWindParticles(field, flat);
+    const particles = createGroundWindParticles(field, flat, 7, undefined, 1800, model);
     const viewW = 1440;
     const viewH = 900;
     particles.metresPerPx = model.sideM / viewW;
+    particles.viewWidth = viewW;
+    particles.viewHeight = viewH;
+    particles.cityModel = model;
     particles.screenProject = (east, north, y) => groundWindOrthographicProject(east, north, y, viewW, viewH, model.sideM);
+    particles.screenUnproject = (sx, sy) => ({
+      east: (sx / viewW - 0.5) * model.sideM,
+      north: (sy / viewH - 0.5) * model.sideM,
+    });
     warmGroundWindParticles(particles, field, flat, groundWindMetresPerSecond(model.sideM, 20), 5);
     const meanPx = groundWindMeanTrailScreenPx(
       particles,
@@ -176,12 +183,36 @@ describe("groundWindParticles", () => {
     expect(lifeEnvelope(5, 5)).toBeLessThan(0.05);
   });
 
-  it("keeps seeding off regular row bands", () => {
+  it("spreads screen seeds with jittered poisson spacing", () => {
     const model = denseModel();
     const field = buildGroundWindField(model, { east: 1, north: 0.15 });
-    const particles = createGroundWindParticles(field, flat);
-    const score = groundWindSeedRowScore(particles.east, particles.north, particles.count, field.cellM);
-    expect(score).toBeLessThan(7);
+    const viewW = 1440;
+    const viewH = 900;
+    const particles = createGroundWindParticles(field, flat, 9, undefined, 600, model);
+    particles.viewWidth = viewW;
+    particles.viewHeight = viewH;
+    particles.cityModel = model;
+    particles.screenProject = (east, north, y) => groundWindOrthographicProject(east, north, y, viewW, viewH, model.sideM);
+    particles.screenUnproject = (sx, sy) => ({
+      east: (sx / viewW - 0.5) * model.sideM,
+      north: (sy / viewH - 0.5) * model.sideM,
+    });
+    for (let i = 0; i < particles.count; i++) {
+      const screen = particles.screenProject(particles.east[i]!, particles.north[i]!, 1);
+      if (screen) {
+        particles.screenX[i] = screen.x;
+        particles.screenY[i] = screen.y;
+      }
+    }
+    let minDist = Number.POSITIVE_INFINITY;
+    const sample = Math.min(particles.count, 80);
+    for (let i = 0; i < sample; i++) {
+      for (let j = i + 1; j < sample; j++) {
+        const d = Math.hypot(particles.screenX[i]! - particles.screenX[j]!, particles.screenY[i]! - particles.screenY[j]!);
+        if (d > 0 && d < minDist) minDist = d;
+      }
+    }
+    expect(minDist).toBeGreaterThanOrEqual(10);
   });
 
   it("advects particles along the flow", () => {
