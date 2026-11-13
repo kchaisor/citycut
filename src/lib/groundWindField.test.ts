@@ -98,7 +98,8 @@ describe("groundWindField", () => {
     const wake = groundWindSpeedAt(field, 32, 0);
     const beside = groundWindSpeedAt(field, 0, 48);
     const free = groundWindSpeedAt(field, -100, -100);
-    expect(wake).toBeLessThan(free * 0.6);
+    expect(wake).toBeGreaterThanOrEqual(0.24);
+    expect(wake).toBeLessThan(free * 0.85);
     expect(wake).toBeLessThan(beside);
     expect(groundWindSpeedAt(field, 110, 0)).toBeGreaterThan(wake);
   });

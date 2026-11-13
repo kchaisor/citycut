@@ -3,6 +3,7 @@ import { buildGroundWindField } from "./groundWindField";
 import {
   createGroundWindParticles,
   GROUND_WIND_PARTICLES_MAX,
+  groundWindDrawnSeQuarterBands,
   groundWindFrameWindowDensityAudit,
   groundWindMetresPerSecond,
   layoutGroundWindScreenSeeds,
@@ -90,7 +91,7 @@ describe("groundWindPerspective", () => {
     expect(stats.drawable).toBeGreaterThanOrEqual(active * 0.88);
   }, 25_000);
 
-  it("keeps ground-normalised seed density within 0.35x of the frame median in ground-rich windows", () => {
+  it("keeps ground-normalised drawn length within 0.35x of the frame median in ground-rich windows", () => {
     const model = openGroundModel();
     const field = buildGroundWindField(model, { east: 1, north: 0.1 });
     const viewW = 1440;
@@ -103,6 +104,11 @@ describe("groundWindPerspective", () => {
     particles.screenUnproject = unproject;
     particles.metresPerPx = model.sideM / (viewW * 0.55);
     layoutGroundWindScreenSeeds(particles, field, heightAt, model, 23);
+    const mps = groundWindMetresPerSecond(model.sideM, 18);
+    warmGroundWindParticles(particles, field, heightAt, mps, 2);
+    for (let step = 0; step < 160; step++) {
+      stepGroundWindParticles(particles, field, heightAt, 1 / 60, mps);
+    }
     const audit = groundWindFrameWindowDensityAudit(particles, field, model, heightAt, 200, 0.15, 100, 0.35);
     const report = {
       medianNormalised: audit.medianNormalised,
@@ -110,8 +116,12 @@ describe("groundWindPerspective", () => {
       minRatioToMedian: audit.minRatioToMedian,
       worst: audit.worst,
     };
+    const seBands = groundWindDrawnSeQuarterBands(particles, field, model, heightAt);
+    console.log(`ground-wind se-drawn ${JSON.stringify(seBands)}`);
     console.log(`ground-wind window-density ${JSON.stringify(report)}`);
+    expect(seBands.left.groundNormalisedLength).toBeGreaterThan(0);
+    expect(seBands.right.groundNormalisedLength).toBeGreaterThan(seBands.left.groundNormalisedLength * 0.35);
     expect(audit.groundRichWindows).toBeGreaterThan(4);
     expect(audit.minRatioToMedian).toBeGreaterThanOrEqual(0.35);
-  }, 30_000);
+  }, 45_000);
 });

@@ -17,6 +17,7 @@ export const GROUND_WIND_WAKE_HEIGHT_MULTIPLE = 3;
 export const GROUND_WIND_WAKE_MIN_M = 12;
 export const GROUND_WIND_WAKE_MAX_M = 90;
 export const GROUND_WIND_SPEED_MIN = 0.08;
+export const GROUND_WIND_AMBIENT_DRIFT_FRAC = 0.25;
 
 export type WindVector = { east: number; north: number };
 
@@ -439,16 +440,35 @@ function bilinear(values: Float32Array, cols: number, rows: number, x: number, y
 export function groundWindVelocityAt(field: GroundWindField, east: number, north: number, out: WindVector): WindVector {
   const gx = (east - field.originE) / field.cellM;
   const gy = (north - field.originN) / field.cellM;
-  const u = bilinear(field.faceU, field.cols + 1, field.rows, gx, gy - 0.5);
-  const v = bilinear(field.faceV, field.cols, field.rows + 1, gx - 0.5, gy);
-  const shelter = bilinear(field.shelter, field.cols, field.rows, gx - 0.5, gy - 0.5);
+  let u = bilinear(field.faceU, field.cols + 1, field.rows, gx, gy - 0.5);
+  let v = bilinear(field.faceV, field.cols, field.rows + 1, gx - 0.5, gy);
+  let shelter = bilinear(field.shelter, field.cols, field.rows, gx - 0.5, gy - 0.5);
+  if (!Number.isFinite(u)) u = 0;
+  if (!Number.isFinite(v)) v = 0;
+  if (!Number.isFinite(shelter)) shelter = GROUND_WIND_SPEED_MIN;
   const mag = Math.hypot(u, v);
   const stream = Math.hypot(field.base.east, field.base.north) || 1;
   const gapBoost =
     shelter > 0.88 && mag > stream * 1.02 ? 1 + Math.min(0.38, (mag / stream - 1.02) * 5) : 1;
   const scale = Math.max(GROUND_WIND_SPEED_MIN, shelter) * gapBoost;
-  out.east = u * scale;
-  out.north = v * scale;
+  let outEast = u * scale;
+  let outNorth = v * scale;
+  if (!Number.isFinite(outEast)) outEast = 0;
+  if (!Number.isFinite(outNorth)) outNorth = 0;
+  const ambientMin = stream * GROUND_WIND_AMBIENT_DRIFT_FRAC;
+  let outMag = Math.hypot(outEast, outNorth);
+  if (outMag < ambientMin) {
+    if (outMag > 1e-9) {
+      const k = ambientMin / outMag;
+      outEast *= k;
+      outNorth *= k;
+    } else {
+      outEast = (field.base.east / stream) * ambientMin;
+      outNorth = (field.base.north / stream) * ambientMin;
+    }
+  }
+  out.east = outEast;
+  out.north = outNorth;
   return out;
 }
 

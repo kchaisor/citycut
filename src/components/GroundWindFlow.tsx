@@ -26,7 +26,7 @@ import {
   type GroundWindParticles,
 } from "../lib/groundWindParticles";
 import { useColourRevision } from "../lib/useColourRevision";
-import { groundWindDebugEnabled, groundWindRenderStats } from "../lib/groundWindDebug";
+import { groundWindDebugEnabled, groundWindDebugSnapshot } from "../lib/groundWindDebug";
 import { groundWindHudMask } from "../lib/groundWindHudMask";
 import { SURFACE } from "../lib/surfaceLayers";
 import type { WindPeriodStats } from "../lib/windRose";
@@ -311,7 +311,7 @@ export function GroundWindFlow({
       warmGroundWindParticles(particles, field, heightAt, metresPerSecond, frozenRef.current ? WARM_FROZEN_S : WARM_LIVE_S);
       data.needsUpdate = true;
       if (debugWind && typeof window !== "undefined") {
-        window.__citycutGroundWind = groundWindRenderStats(particles, size.width);
+        window.__citycutGroundWind = groundWindDebugSnapshot(particles, field, model, heightAt);
       }
       invalidate();
       return;
@@ -347,7 +347,7 @@ export function GroundWindFlow({
     if (debugWind && typeof window !== "undefined") {
       debugFrameRef.current += 1;
       if (debugFrameRef.current % 8 === 0) {
-        window.__citycutGroundWind = groundWindRenderStats(particles, size.width);
+        window.__citycutGroundWind = groundWindDebugSnapshot(particles, field, model, heightAt);
       }
     }
     invalidate();

@@ -259,9 +259,21 @@ export type GroundWindWindowDensitySample = {
   x0: number;
   y0: number;
   groundFrac: number;
-  seedCount: number;
+  drawnSegments: number;
+  drawnLengthPx: number;
   normalised: number;
   ratioToMedian: number;
+};
+
+export type GroundWindDrawnWindowRect = {
+  x0: number;
+  y0: number;
+  width: number;
+  height: number;
+  groundFrac: number;
+  drawnSegments: number;
+  drawnLengthPx: number;
+  groundNormalisedLength: number;
 };
 
 export type GroundWindWindowDensityAudit = {
@@ -274,6 +286,37 @@ export type GroundWindWindowDensityAudit = {
   samples: GroundWindWindowDensitySample[];
 };
 
+export function groundWindVisibleGroundFractionInRect(
+  field: GroundWindField,
+  model: CityModel,
+  heightAt: HeightAt,
+  unproject: GroundWindScreenUnproject,
+  project: GroundWindScreenProject,
+  x0: number,
+  y0: number,
+  width: number,
+  height: number,
+  stepPx = 12,
+): number {
+  let ground = 0;
+  let total = 0;
+  for (let sy = y0 + stepPx * 0.5; sy < y0 + height; sy += stepPx) {
+    for (let sx = x0 + stepPx * 0.5; sx < x0 + width; sx += stepPx) {
+      total++;
+      const world = unproject(sx, sy);
+      if (!world) continue;
+      if (groundWindInsideFootprint(model, world.east, world.north)) continue;
+      const idx = groundWindCellIndex(field, world.east, world.north);
+      if (idx < 0 || field.solid[idx] === 1) continue;
+      const y = heightAt(world.east, world.north);
+      const screen = project(world.east, world.north, y);
+      if (!screen || screen.x < x0 || screen.x >= x0 + width || screen.y < y0 || screen.y >= y0 + height) continue;
+      ground++;
+    }
+  }
+  return total > 0 ? ground / total : 0;
+}
+
 export function groundWindVisibleGroundFractionInWindow(
   field: GroundWindField,
   model: CityModel,
@@ -285,33 +328,92 @@ export function groundWindVisibleGroundFractionInWindow(
   size: number,
   stepPx = 12,
 ): number {
-  let ground = 0;
-  let total = 0;
-  for (let sy = y0 + stepPx * 0.5; sy < y0 + size; sy += stepPx) {
-    for (let sx = x0 + stepPx * 0.5; sx < x0 + size; sx += stepPx) {
-      total++;
-      const world = unproject(sx, sy);
-      if (!world) continue;
-      if (groundWindInsideFootprint(model, world.east, world.north)) continue;
-      const idx = groundWindCellIndex(field, world.east, world.north);
-      if (idx < 0 || field.solid[idx] === 1) continue;
-      const y = heightAt(world.east, world.north);
-      const screen = project(world.east, world.north, y);
-      if (!screen || screen.x < x0 || screen.x >= x0 + size || screen.y < y0 || screen.y >= y0 + size) continue;
-      ground++;
-    }
-  }
-  return total > 0 ? ground / total : 0;
+  return groundWindVisibleGroundFractionInRect(field, model, heightAt, unproject, project, x0, y0, size, size, stepPx);
 }
 
-export function groundWindSeedCountInWindow(particles: GroundWindParticles, x0: number, y0: number, size: number): number {
-  let n = 0;
+export function groundWindDrawnScreenStatsInRect(
+  particles: GroundWindParticles,
+  _heightAt: HeightAt,
+  x0: number,
+  y0: number,
+  width: number,
+  height: number,
+): { segments: number; lengthPx: number } {
+  const project = particles.screenProject;
+  if (!project || particles.count <= 0) return { segments: 0, lengthPx: 0 };
+  const x1 = x0 + width;
+  const y1 = y0 + height;
+  const inRect = (sx: number, sy: number) => sx >= x0 && sx < x1 && sy >= y0 && sy < y1;
+  const { points } = particles;
+  const stride = GROUND_WIND_POINT_STRIDE;
+  const particleStride = GROUND_WIND_POINTS_PER_PARTICLE * stride;
+  let segments = 0;
+  let lengthPx = 0;
   for (let i = 0; i < particles.count; i++) {
-    const sx = particles.screenX[i]!;
-    const sy = particles.screenY[i]!;
-    if (sx >= x0 && sx < x0 + size && sy >= y0 && sy < y0 + size) n++;
+    const particleBase = i * particleStride;
+    let prev: { x: number; y: number } | null = null;
+    for (let k = GROUND_WIND_TRAIL_POINTS - 1; k >= 0; k--) {
+      const off = particleBase + k * stride;
+      const alpha = points[off + 3]!;
+      if (alpha < 0.01) continue;
+      const east = points[off]!;
+      const north = -points[off + 2]!;
+      const y = points[off + 1]!;
+      const screen = project(east, north, y);
+      if (!screen) continue;
+      if (prev) {
+        const mx = (prev.x + screen.x) * 0.5;
+        const my = (prev.y + screen.y) * 0.5;
+        if (inRect(prev.x, prev.y) || inRect(screen.x, screen.y) || inRect(mx, my)) {
+          const d = Math.hypot(screen.x - prev.x, screen.y - prev.y);
+          if (d > 0.35) {
+            segments++;
+            lengthPx += d;
+          }
+        }
+      }
+      prev = screen;
+    }
   }
-  return n;
+  return { segments, lengthPx };
+}
+
+export function groundWindDrawnSeQuarterBands(
+  particles: GroundWindParticles,
+  field: GroundWindField,
+  model: CityModel,
+  heightAt: HeightAt,
+  y0 = 330,
+  y1 = 570,
+): { left: GroundWindDrawnWindowRect; right: GroundWindDrawnWindowRect } {
+  const unproject = particles.screenUnproject;
+  const project = particles.screenProject;
+  const bandH = y1 - y0;
+  const bands: Array<{ key: "left" | "right"; x0: number; width: number }> = [
+    { key: "left", x0: 600, width: 200 },
+    { key: "right", x0: 800, width: 200 },
+  ];
+  const out = {} as { left: GroundWindDrawnWindowRect; right: GroundWindDrawnWindowRect };
+  for (let b = 0; b < bands.length; b++) {
+    const band = bands[b]!;
+    const groundFrac =
+      unproject && project
+        ? groundWindVisibleGroundFractionInRect(field, model, heightAt, unproject, project, band.x0, y0, band.width, bandH, 12)
+        : 0;
+    const drawn = groundWindDrawnScreenStatsInRect(particles, heightAt, band.x0, y0, band.width, bandH);
+    const area = Math.max(1, band.width * bandH);
+    out[band.key] = {
+      x0: band.x0,
+      y0,
+      width: band.width,
+      height: bandH,
+      groundFrac,
+      drawnSegments: drawn.segments,
+      drawnLengthPx: drawn.lengthPx,
+      groundNormalisedLength: drawn.lengthPx / (area * Math.max(0.05, groundFrac)),
+    };
+  }
+  return out;
 }
 
 export function groundWindFrameWindowDensityAudit(
@@ -344,9 +446,17 @@ export function groundWindFrameWindowDensityAudit(
     for (let x0 = 0; x0 <= viewW - windowSize; x0 += step) {
       const groundFrac = groundWindVisibleGroundFractionInWindow(field, model, heightAt, unproject, project, x0, y0, windowSize);
       if (groundFrac < minGroundFrac) continue;
-      const seedCount = groundWindSeedCountInWindow(particles, x0, y0, windowSize);
-      const normalised = seedCount / (windowSize * windowSize * Math.max(0.05, groundFrac));
-      samples.push({ x0, y0, groundFrac, seedCount, normalised, ratioToMedian: 0 });
+      const drawn = groundWindDrawnScreenStatsInRect(particles, heightAt, x0, y0, windowSize, windowSize);
+      const normalised = drawn.lengthPx / (windowSize * windowSize * Math.max(0.05, groundFrac));
+      samples.push({
+        x0,
+        y0,
+        groundFrac,
+        drawnSegments: drawn.segments,
+        drawnLengthPx: drawn.lengthPx,
+        normalised,
+        ratioToMedian: 0,
+      });
     }
   }
   const normalised = samples.map((s) => s.normalised).sort((a, b) => a - b);

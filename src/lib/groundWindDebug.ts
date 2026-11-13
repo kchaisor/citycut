@@ -5,14 +5,31 @@ import {
   GROUND_WIND_NEAR_Y_MAX,
   GROUND_WIND_NEAR_Y_MIN,
 } from "./groundWindScreen";
+import type { GroundWindField } from "./groundWindField";
+import type { CityModel } from "../types";
 import {
   GROUND_WIND_POINT_STRIDE,
   GROUND_WIND_POINTS_PER_PARTICLE,
   GROUND_WIND_TRAIL_POINTS,
+  type GroundWindDrawnWindowRect,
+  groundWindDrawnSeQuarterBands,
   groundWindFrameCoverageProxy,
+  groundWindFrameWindowDensityAudit,
   lifeEnvelope,
   type GroundWindParticles,
+  type GroundWindWindowDensitySample,
+  type HeightAt,
 } from "./groundWindParticles";
+
+export type GroundWindDebugWindow = {
+  x0: number;
+  y0: number;
+  size: number;
+  groundFrac: number;
+  drawnSegments: number;
+  drawnLengthPx: number;
+  groundNormalisedLength: number;
+};
 
 export type GroundWindDebugSnapshot = {
   active: number;
@@ -22,6 +39,11 @@ export type GroundWindDebugSnapshot = {
   farCount: number;
   nearCount: number;
   coverageRatio: number;
+  windows: GroundWindDebugWindow[];
+  seDrawn: {
+    x600_800: GroundWindDrawnWindowRect;
+    x800_1000: GroundWindDrawnWindowRect;
+  } | null;
 };
 
 declare global {
@@ -33,6 +55,18 @@ declare global {
 export function groundWindDebugEnabled(): boolean {
   if (typeof window === "undefined") return false;
   return new URLSearchParams(window.location.search).get("debug") === "wind";
+}
+
+function toDebugWindow(sample: GroundWindWindowDensitySample, size: number): GroundWindDebugWindow {
+  return {
+    x0: sample.x0,
+    y0: sample.y0,
+    size,
+    groundFrac: sample.groundFrac,
+    drawnSegments: sample.drawnSegments,
+    drawnLengthPx: sample.drawnLengthPx,
+    groundNormalisedLength: sample.normalised,
+  };
 }
 
 export function groundWindRenderStats(particles: GroundWindParticles, _viewW: number): GroundWindDebugSnapshot {
@@ -61,5 +95,28 @@ export function groundWindRenderStats(particles: GroundWindParticles, _viewW: nu
     farCount,
     nearCount,
     coverageRatio,
+    windows: [],
+    seDrawn: null,
+  };
+}
+
+export function groundWindDebugSnapshot(
+  particles: GroundWindParticles,
+  field: GroundWindField,
+  model: CityModel,
+  heightAt: HeightAt,
+): GroundWindDebugSnapshot {
+  const base = groundWindRenderStats(particles, particles.viewWidth);
+  const windowSize = 200;
+  const audit = groundWindFrameWindowDensityAudit(particles, field, model, heightAt, windowSize, 0.15, 100, 0);
+  const windows = audit.samples.map((sample) => toDebugWindow(sample, windowSize));
+  const bands = groundWindDrawnSeQuarterBands(particles, field, model, heightAt);
+  return {
+    ...base,
+    windows,
+    seDrawn: {
+      x600_800: bands.left,
+      x800_1000: bands.right,
+    },
   };
 }
