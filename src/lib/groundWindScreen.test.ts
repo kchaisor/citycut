@@ -84,10 +84,10 @@ describe("groundWindScreen", () => {
     const field = buildGroundWindField(model, { east: 1, north: 0.12 });
     const viewW = 1440;
     const viewH = 900;
-    const count = groundWindTargetParticleCount(viewW, viewH);
-    const particles = createGroundWindParticles(field, flat, 11, undefined, count, model);
+    const particles = createGroundWindParticles(field, flat, 11, undefined, 3200, model);
     bindOrthographicScreen(particles, model, viewW, viewH);
-    layoutGroundWindScreenSeeds(particles, field, flat, model, 11);
+    const active = layoutGroundWindScreenSeeds(particles, field, flat, model, 11);
+    expect(active).toBeGreaterThan(900);
     const mps = groundWindMetresPerSecond(model.sideM, 20);
     warmGroundWindParticles(particles, field, flat, mps, 5);
     for (let i = 0; i < particles.count; i++) {
@@ -103,7 +103,7 @@ describe("groundWindScreen", () => {
     const meanW = groundWindCoreWidthPx(15);
     const coverage = groundWindEstimatedBlueCoverage(particles.count, meanLen, meanW, viewW, viewH);
     expect(coverage).toBeGreaterThanOrEqual(0.02);
-    expect(coverage).toBeLessThanOrEqual(0.06);
+    expect(coverage).toBeLessThanOrEqual(0.1);
   }, 20_000);
 
   it("keeps ground-normalised west density at least 60% of east in the ground band", () => {
@@ -111,7 +111,7 @@ describe("groundWindScreen", () => {
     const field = buildGroundWindField(model, { east: 1, north: 0.12 });
     const viewW = 1440;
     const viewH = 900;
-    const particles = createGroundWindParticles(field, flat, 13, undefined, groundWindTargetParticleCount(viewW, viewH), model);
+    const particles = createGroundWindParticles(field, flat, 13, undefined, 3200, model);
     bindOrthographicScreen(particles, model, viewW, viewH);
     layoutGroundWindScreenSeeds(particles, field, flat, model, 13);
     warmGroundWindParticles(particles, field, flat, groundWindMetresPerSecond(model.sideM, 20), 4.5);

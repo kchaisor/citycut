@@ -8,10 +8,18 @@ import {
   type WindVector,
 } from "./groundWindField";
 import {
+  GROUND_WIND_FAR_X_MAX,
+  GROUND_WIND_FAR_Y_MAX,
+  GROUND_WIND_FAR_Y_MIN,
+  GROUND_WIND_GROUND_Y_MAX,
+  GROUND_WIND_GROUND_Y_MIN,
+  GROUND_WIND_NEAR_Y_MAX,
+  GROUND_WIND_NEAR_Y_MIN,
   GROUND_WIND_REFERENCE_VIEW_H,
   GROUND_WIND_REFERENCE_VIEW_W,
   GROUND_WIND_STREAMLINE_CELL_PX,
   groundWindActiveOnScreen,
+  groundWindFarNearBandBalance,
   groundWindTargetParticleCount,
 } from "./groundWindScreen";
 import { groundWindWantsCasing } from "./groundWindSurface";
@@ -80,6 +88,18 @@ export type GroundWindParticles = {
   gridCols: number;
   gridRows: number;
   trailLenScale: Float32Array;
+  slotSx: Float32Array;
+  slotSy: Float32Array;
+};
+
+export type GroundWindScreenSlot = {
+  ci: number;
+  cj: number;
+  sx: number;
+  sy: number;
+  east: number;
+  north: number;
+  far: boolean;
 };
 
 export function seededRandom(seed: number): () => number {
@@ -175,16 +195,6 @@ function minGapToOtherStreamlines(
   return min;
 }
 
-function shuffleCellIds(ids: number[], seed: number) {
-  const rng = seededRandom(seed);
-  for (let i = ids.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    const tmp = ids[i]!;
-    ids[i] = ids[j]!;
-    ids[j] = tmp;
-  }
-}
-
 export function groundWindTrailAlpha(along: number): number {
   const t = Math.min(1, Math.max(0, along));
   return GROUND_WIND_TRAIL_HEAD_ALPHA * Math.pow(t, 1.5);
@@ -266,11 +276,20 @@ function pickSpawnWorld(
   if (particles.screenUnproject && particles.viewWidth > 0 && particles.viewHeight > 0 && particles.gridCols > 0) {
     const ci = particles.gridCol[index]!;
     const cj = particles.gridRow[index]!;
-    for (let attempt = 0; attempt < 56; attempt++) {
-      const jx = hash2D(ci, cj, index + attempt * 5);
-      const jy = hash2D(cj, ci, index + attempt * 11);
-      const sx = Math.min(particles.viewWidth - 6, Math.max(6, (ci + 0.12 + jx * 0.76) * cell));
-      const sy = Math.min(particles.viewHeight - 6, Math.max(6, (cj + 0.12 + jy * 0.76) * cell));
+    const anchorSx = particles.slotSx[index]!;
+    const anchorSy = particles.slotSy[index]!;
+  for (let attempt = 0; attempt < 56; attempt++) {
+      let sx: number;
+      let sy: number;
+      if (attempt === 0 && anchorSx > 0 && anchorSy > 0) {
+        sx = anchorSx;
+        sy = anchorSy;
+      } else {
+        const jx = hash2D(ci, cj, index + attempt * 5);
+        const jy = hash2D(cj, ci, index + attempt * 11);
+        sx = Math.min(particles.viewWidth - 6, Math.max(6, (ci + 0.12 + jx * 0.76) * cell));
+        sy = Math.min(particles.viewHeight - 6, Math.max(6, (cj + 0.12 + jy * 0.76) * cell));
+      }
       const world = particles.screenUnproject(sx, sy);
       if (!world) continue;
       const east = world.east;
@@ -278,8 +297,6 @@ function pickSpawnWorld(
       const idx = groundWindCellIndex(field, east, north);
       if (idx < 0 || field.solid[idx] === 1) continue;
       if (groundWindInsideFootprint(model, east, north)) continue;
-      const low = groundWindLowGradient(field, east, north);
-      if (low && rng() > 0.42) continue;
       const y = heightAt(east, north);
       const screen = particles.screenProject?.(east, north, y);
       if (!screen) continue;
@@ -323,39 +340,203 @@ function pickSpawnWorld(
   return null;
 }
 
+export function collectVisibleGroundScreenSlots(
+  particles: GroundWindParticles,
+  field: GroundWindField,
+  heightAt: HeightAt,
+  model: CityModel,
+  yMin = GROUND_WIND_GROUND_Y_MIN,
+  yMax = GROUND_WIND_GROUND_Y_MAX,
+): GroundWindScreenSlot[] {
+  const cell = GROUND_WIND_STREAMLINE_CELL_PX;
+  const w = particles.viewWidth;
+  const unproject = particles.screenUnproject;
+  const project = particles.screenProject;
+  if (!unproject || !project || w <= 0) return [];
+  const cols = Math.ceil(w / cell);
+  const row0 = Math.max(0, Math.floor(yMin / cell));
+  const row1 = Math.min(Math.ceil(particles.viewHeight / cell) - 1, Math.floor(yMax / cell));
+  const slots: GroundWindScreenSlot[] = [];
+  for (let cj = row0; cj <= row1; cj++) {
+    for (let ci = 0; ci < cols; ci++) {
+      const sx = (ci + 0.5) * cell;
+      const sy = (cj + 0.5) * cell;
+      const world = unproject(sx, sy);
+      if (!world) continue;
+      const east = world.east;
+      const north = world.north;
+      if (groundWindInsideFootprint(model, east, north)) continue;
+      const idx = groundWindCellIndex(field, east, north);
+      if (idx < 0 || field.solid[idx] === 1) continue;
+      const y = heightAt(east, north);
+      const screen = project(east, north, y);
+      if (!screen) continue;
+      if (screen.y < yMin - 10 || screen.y > yMax + 10) continue;
+      const far = screen.x < GROUND_WIND_FAR_X_MAX && screen.y >= GROUND_WIND_FAR_Y_MIN && screen.y <= GROUND_WIND_FAR_Y_MAX;
+      slots.push({ ci, cj, sx: screen.x, sy: screen.y, east, north, far });
+    }
+  }
+  return slots;
+}
+
+function mergeScreenSlots(primary: GroundWindScreenSlot[]): GroundWindScreenSlot[] {
+  const min2 = (GROUND_WIND_STREAMLINE_CELL_PX - 1) ** 2;
+  const kept: GroundWindScreenSlot[] = [];
+  for (let i = 0; i < primary.length; i++) {
+    const slot = primary[i]!;
+    let ok = true;
+    for (let j = 0; j < kept.length; j++) {
+      const other = kept[j]!;
+      const dx = slot.sx - other.sx;
+      const dy = slot.sy - other.sy;
+      if (dx * dx + dy * dy < min2) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) kept.push(slot);
+  }
+  return kept;
+}
+
+function augmentFarGroundSlots(
+  particles: GroundWindParticles,
+  field: GroundWindField,
+  heightAt: HeightAt,
+  model: CityModel,
+  slots: GroundWindScreenSlot[],
+  viewW: number,
+): GroundWindScreenSlot[] {
+  const balance = groundWindFarNearBandBalance(
+    Float32Array.from(slots.map((s) => s.sx)),
+    Float32Array.from(slots.map((s) => s.sy)),
+    slots.length,
+    viewW,
+  );
+  if (balance.ratio >= 0.6) return slots;
+  const cell = GROUND_WIND_STREAMLINE_CELL_PX;
+  const extra: GroundWindScreenSlot[] = [];
+  const row0 = Math.max(0, Math.floor(GROUND_WIND_FAR_Y_MIN / cell));
+  const row1 = Math.min(Math.ceil(particles.viewHeight / cell) - 1, Math.floor(GROUND_WIND_FAR_Y_MAX / cell));
+  const unproject = particles.screenUnproject!;
+  const project = particles.screenProject!;
+  const cols = Math.ceil(particles.viewWidth / cell);
+  const offsets = [cell * 0.28, -cell * 0.28];
+  for (let cj = row0; cj <= row1; cj++) {
+    for (let ci = 0; ci < cols; ci++) {
+      for (let o = 0; o < offsets.length; o++) {
+        const sx = (ci + 0.5) * cell + offsets[o]!;
+        if (sx < 4 || sx > GROUND_WIND_FAR_X_MAX) continue;
+        const sy = (cj + 0.5) * cell + offsets[o]! * 0.35;
+        const world = unproject(sx, sy);
+        if (!world) continue;
+        const east = world.east;
+        const north = world.north;
+        if (groundWindInsideFootprint(model, east, north)) continue;
+        const idx = groundWindCellIndex(field, east, north);
+        if (idx < 0 || field.solid[idx] === 1) continue;
+        const y = heightAt(east, north);
+        const screen = project(east, north, y);
+        if (!screen) continue;
+        const far =
+          screen.x < GROUND_WIND_FAR_X_MAX && screen.y >= GROUND_WIND_FAR_Y_MIN && screen.y <= GROUND_WIND_FAR_Y_MAX;
+        if (!far) continue;
+        extra.push({ ci, cj, sx: screen.x, sy: screen.y, east, north, far: true });
+      }
+    }
+  }
+  const nearRow0 = Math.floor(GROUND_WIND_NEAR_Y_MIN / cell);
+  const nearRow1 = Math.floor(GROUND_WIND_NEAR_Y_MAX / cell);
+  const trimmed = slots.filter((s) => {
+    const cjRow = s.cj;
+    return cjRow < nearRow0 || cjRow > nearRow1;
+  });
+  return mergeScreenSlots([...trimmed, ...slots.filter((s) => s.sy >= GROUND_WIND_NEAR_Y_MIN && s.sy <= GROUND_WIND_NEAR_Y_MAX), ...extra]);
+}
+
+function capSlotsForFarNearBalance(slots: GroundWindScreenSlot[], viewW: number): GroundWindScreenSlot[] {
+  const farArea = Math.max(1, GROUND_WIND_FAR_X_MAX * (GROUND_WIND_FAR_Y_MAX - GROUND_WIND_FAR_Y_MIN));
+  const nearArea = Math.max(1, viewW * (GROUND_WIND_NEAR_Y_MAX - GROUND_WIND_NEAR_Y_MIN));
+  const far = slots.filter((s) => s.far);
+  const near = slots.filter((s) => s.sy >= GROUND_WIND_NEAR_Y_MIN && s.sy <= GROUND_WIND_NEAR_Y_MAX);
+  const other = slots.filter((s) => !s.far && (s.sy < GROUND_WIND_NEAR_Y_MIN || s.sy > GROUND_WIND_NEAR_Y_MAX));
+  const maxNear = Math.ceil((far.length * nearArea) / (0.6 * farArea));
+  const nearPick = near.length > maxNear ? near.slice(0, maxNear) : near;
+  return mergeScreenSlots([...far, ...nearPick, ...other]);
+}
+
+function prioritizeGroundSlots(slots: GroundWindScreenSlot[], seed: number, cap: number): GroundWindScreenSlot[] {
+  if (slots.length <= cap) return slots;
+  const rng = seededRandom(seed);
+  const ranked = slots.map((slot) => ({
+    slot,
+    key: rng() * (slot.far ? 0.38 : 1),
+  }));
+  ranked.sort((a, b) => a.key - b.key);
+  return ranked.slice(0, cap).map((row) => row.slot);
+}
+
+function spawnParticleAtSlot(
+  particles: GroundWindParticles,
+  field: GroundWindField,
+  heightAt: HeightAt,
+  i: number,
+  slot: GroundWindScreenSlot,
+) {
+  const { rng } = particles;
+  const east = slot.east;
+  const north = slot.north;
+  particles.east[i] = east;
+  particles.north[i] = north;
+  particles.age[i] = 0;
+  particles.life[i] = GROUND_WIND_LIFE_MIN_S + rng() * (GROUND_WIND_LIFE_MAX_S - GROUND_WIND_LIFE_MIN_S);
+  particles.seed[i] = rng() * Math.PI * 2;
+  particles.speed[i] = groundWindSpeedAt(field, east, north);
+  particles.head[i] = 0;
+  particles.gridCol[i] = slot.ci;
+  particles.gridRow[i] = slot.cj;
+  particles.slotSx[i] = slot.sx;
+  particles.slotSy[i] = slot.sy;
+  particles.screenX[i] = slot.sx;
+  particles.screenY[i] = slot.sy;
+  const y = heightAt(east, north);
+  const base = i * GROUND_WIND_TRAIL_POINTS * 3;
+  for (let k = 0; k < GROUND_WIND_TRAIL_POINTS; k++) {
+    particles.history[base + k * 3] = east;
+    particles.history[base + k * 3 + 1] = north;
+    particles.history[base + k * 3 + 2] = y;
+  }
+}
+
 export function layoutGroundWindScreenSeeds(
   particles: GroundWindParticles,
   field: GroundWindField,
   heightAt: HeightAt,
   model: CityModel,
   seed = 19,
-) {
+): number {
   particles.cityModel = model;
   const w = particles.viewWidth;
-  const h = particles.viewHeight;
-  if (!particles.screenUnproject || w <= 0 || h <= 0) {
+  if (!particles.screenUnproject || w <= 0 || particles.viewHeight <= 0) {
     for (let i = 0; i < particles.count; i++) spawnParticle(particles, field, heightAt, i);
-    return;
+    return particles.count;
   }
   const cell = GROUND_WIND_STREAMLINE_CELL_PX;
-  const cols = Math.ceil(w / cell);
-  const rows = Math.ceil(h / cell);
-  particles.gridCols = cols;
-  particles.gridRows = rows;
-  const cellIds: number[] = [];
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) cellIds.push(r * cols + c);
-  }
-  shuffleCellIds(cellIds, seed);
+  particles.gridCols = Math.ceil(w / cell);
+  particles.gridRows = Math.ceil(particles.viewHeight / cell);
+  const gathered = collectVisibleGroundScreenSlots(particles, field, heightAt, model);
+  const augmented = augmentFarGroundSlots(particles, field, heightAt, model, gathered, w);
+  const balanced = capSlotsForFarNearBalance(augmented, w);
+  const cap = particles.east.length;
+  const slots = prioritizeGroundSlots(balanced, seed, cap);
+  particles.count = Math.max(GROUND_WIND_PARTICLES_MIN, slots.length);
   for (let i = 0; i < particles.count; i++) {
-    const id = cellIds[i % cellIds.length]!;
-    particles.gridCol[i] = id % cols;
-    particles.gridRow[i] = Math.floor(id / cols);
+    const slot = slots[i]!;
     particles.trailLenScale[i] = 1 - GROUND_WIND_TRAIL_LEN_JITTER + particles.rng() * GROUND_WIND_TRAIL_LEN_JITTER * 2;
-    particles.life[i] = GROUND_WIND_LIFE_MIN_S + particles.rng() * (GROUND_WIND_LIFE_MAX_S - GROUND_WIND_LIFE_MIN_S);
-    spawnParticle(particles, field, heightAt, i);
+    spawnParticleAtSlot(particles, field, heightAt, i, slot);
     particles.age[i] = ((i + particles.rng()) / Math.max(1, particles.count)) * GROUND_WIND_LIFE_MAX_S * 0.97;
   }
+  return particles.count;
 }
 
 export function createGroundWindParticles(
@@ -400,6 +581,8 @@ export function createGroundWindParticles(
     gridCols: 0,
     gridRows: 0,
     trailLenScale: new Float32Array(count),
+    slotSx: new Float32Array(count),
+    slotSy: new Float32Array(count),
   };
   for (let i = 0; i < count; i++) {
     particles.trailLenScale[i] = 1;

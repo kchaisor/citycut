@@ -6,6 +6,11 @@ export const GROUND_WIND_REFERENCE_VIEW_H = 900;
 export const GROUND_WIND_STREAMLINE_CELL_PX = 14;
 export const GROUND_WIND_GROUND_Y_MIN = 70;
 export const GROUND_WIND_GROUND_Y_MAX = 800;
+export const GROUND_WIND_FAR_Y_MIN = 70;
+export const GROUND_WIND_FAR_Y_MAX = 300;
+export const GROUND_WIND_FAR_X_MAX = 820;
+export const GROUND_WIND_NEAR_Y_MIN = 330;
+export const GROUND_WIND_NEAR_Y_MAX = 560;
 
 export function groundWindGridCellCount(viewW: number, viewH: number, cellPx = GROUND_WIND_STREAMLINE_CELL_PX): number {
   const cols = Math.max(1, Math.ceil(viewW / cellPx));
@@ -13,11 +18,35 @@ export function groundWindGridCellCount(viewW: number, viewH: number, cellPx = G
   return cols * rows;
 }
 
-export function groundWindTargetParticleCount(viewW: number, viewH: number): number {
-  const cells = groundWindGridCellCount(viewW, viewH);
-  const refCells = groundWindGridCellCount(GROUND_WIND_REFERENCE_VIEW_W, GROUND_WIND_REFERENCE_VIEW_H);
-  const target = Math.round(cells * (GROUND_WIND_SCREEN_TARGET_1440 / refCells));
-  return Math.max(900, Math.min(3200, target));
+export function groundWindTargetParticleCount(viewW: number, _viewH: number): number {
+  const bandRows = Math.max(1, Math.ceil((GROUND_WIND_GROUND_Y_MAX - GROUND_WIND_GROUND_Y_MIN) / GROUND_WIND_STREAMLINE_CELL_PX));
+  const bandCells = Math.ceil(viewW / GROUND_WIND_STREAMLINE_CELL_PX) * bandRows;
+  const refBandRows = Math.ceil((GROUND_WIND_GROUND_Y_MAX - GROUND_WIND_GROUND_Y_MIN) / GROUND_WIND_STREAMLINE_CELL_PX);
+  const refBandCells = Math.ceil(GROUND_WIND_REFERENCE_VIEW_W / GROUND_WIND_STREAMLINE_CELL_PX) * refBandRows;
+  const target = Math.round(bandCells * (GROUND_WIND_SCREEN_TARGET_1440 / refBandCells));
+  return Math.max(1200, Math.min(3200, target));
+}
+
+export function groundWindFarNearBandBalance(
+  screenX: Float32Array,
+  screenY: Float32Array,
+  count: number,
+  viewW: number,
+): { far: number; near: number; ratio: number } {
+  let far = 0;
+  let near = 0;
+  const farArea = Math.max(1, GROUND_WIND_FAR_X_MAX * (GROUND_WIND_FAR_Y_MAX - GROUND_WIND_FAR_Y_MIN));
+  const nearArea = Math.max(1, viewW * (GROUND_WIND_NEAR_Y_MAX - GROUND_WIND_NEAR_Y_MIN));
+  for (let i = 0; i < count; i++) {
+    const sx = screenX[i]!;
+    const sy = screenY[i]!;
+    if (sx < GROUND_WIND_FAR_X_MAX && sy >= GROUND_WIND_FAR_Y_MIN && sy <= GROUND_WIND_FAR_Y_MAX) far++;
+    if (sy >= GROUND_WIND_NEAR_Y_MIN && sy <= GROUND_WIND_NEAR_Y_MAX) near++;
+  }
+  const farDensity = far / farArea;
+  const nearDensity = near / nearArea;
+  const ratio = nearDensity > 0 ? farDensity / nearDensity : 0;
+  return { far: farDensity, near: nearDensity, ratio };
 }
 
 export function groundWindEstimatedBlueCoverage(

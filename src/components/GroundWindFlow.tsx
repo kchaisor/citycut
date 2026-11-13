@@ -15,11 +15,10 @@ import {
   GROUND_WIND_CASING_WIDTH_PX,
   GROUND_WIND_CORE_WIDTH_SLOW_PX,
   GROUND_WIND_PARTICLES_MAX,
-  GROUND_WIND_POINT_STRIDE,
   GROUND_WIND_POINTS_PER_PARTICLE,
+  GROUND_WIND_POINT_STRIDE,
   groundWindMetresPerSecond,
   groundWindPointsLength,
-  groundWindTargetParticleCount,
   layoutGroundWindScreenSeeds,
   stepGroundWindParticles,
   warmGroundWindParticles,
@@ -278,8 +277,7 @@ export function GroundWindFlow({
       const field = builder.finish();
       fieldRef.current = field;
       builderRef.current = null;
-      const targetCount = groundWindTargetParticleCount(size.width, size.height);
-      const particles = createGroundWindParticles(field, heightAt, 7, points, targetCount, model);
+      const particles = createGroundWindParticles(field, heightAt, 7, points, GROUND_WIND_PARTICLES_MAX, model);
       particles.screenProject = screenProject;
       particles.screenUnproject = screenUnproject;
       particles.viewWidth = size.width;
@@ -287,9 +285,9 @@ export function GroundWindFlow({
       particles.medianKmh = medianKmh;
       particles.cityModel = model;
       particlesRef.current = particles;
-      geometry.instanceCount = particles.count * GROUND_WIND_POINTS_PER_PARTICLE - 1;
       particles.metresPerPx = metresPerPixel(camera, projScratch.set(0, heightAt(0, 0), 0), size.height);
-      layoutGroundWindScreenSeeds(particles, field, heightAt, model, 7);
+      const activeCount = layoutGroundWindScreenSeeds(particles, field, heightAt, model, 7);
+      geometry.instanceCount = activeCount * GROUND_WIND_POINTS_PER_PARTICLE - 1;
       warmGroundWindParticles(particles, field, heightAt, metresPerSecond, frozenRef.current ? WARM_FROZEN_S : WARM_LIVE_S);
       data.needsUpdate = true;
       invalidate();
