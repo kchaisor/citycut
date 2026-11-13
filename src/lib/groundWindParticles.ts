@@ -10,13 +10,15 @@ import {
 import {
   GROUND_WIND_REFERENCE_VIEW_H,
   GROUND_WIND_REFERENCE_VIEW_W,
+  GROUND_WIND_STREAMLINE_CELL_PX,
   groundWindActiveOnScreen,
   groundWindTargetParticleCount,
 } from "./groundWindScreen";
+import { groundWindWantsCasing } from "./groundWindSurface";
 
 export const GROUND_WIND_TRAIL_POINTS = 28;
 export const GROUND_WIND_POINTS_PER_PARTICLE = GROUND_WIND_TRAIL_POINTS + 1;
-export const GROUND_WIND_POINT_STRIDE = 7;
+export const GROUND_WIND_POINT_STRIDE = 8;
 export const GROUND_WIND_TRAIL_SAMPLE_S = 1 / 40;
 export const GROUND_WIND_PARTICLES_MIN = 520;
 export const GROUND_WIND_PARTICLES_MAX = 3200;
@@ -37,7 +39,11 @@ export const GROUND_WIND_TRAIL_MIN_LEN_PX = 40;
 export const GROUND_WIND_TRAIL_MAX_LEN_PX = 80;
 export const GROUND_WIND_TRAIL_FAST_MIN_LEN_PX = 60;
 export const GROUND_WIND_TRAIL_FAST_MAX_LEN_PX = 110;
-export const GROUND_WIND_SCREEN_MIN_SPACING_PX = 18;
+export const GROUND_WIND_SCREEN_MIN_SPACING_PX = GROUND_WIND_STREAMLINE_CELL_PX;
+export const GROUND_WIND_STREAMLINE_STOP_PX = 7;
+export const GROUND_WIND_TRAIL_LEN_JITTER = 0.35;
+export const GROUND_WIND_CURL_NOISE_SCALE_PX = 120;
+export const GROUND_WIND_CURL_NOISE_DEG = 4;
 export const GROUND_WIND_FAST_SPEED_RATIO = 1.3;
 
 export type HeightAt = (east: number, north: number) => number;
@@ -69,6 +75,11 @@ export type GroundWindParticles = {
   medianKmh: number;
   modelSideM: number;
   cityModel: CityModel | null;
+  gridCol: Int16Array;
+  gridRow: Int16Array;
+  gridCols: number;
+  gridRows: number;
+  trailLenScale: Float32Array;
 };
 
 export function seededRandom(seed: number): () => number {
@@ -99,15 +110,79 @@ export function groundWindSpeedBand(localKmh: number): 0 | 1 | 2 {
   return 0;
 }
 
-export function groundWindCoreWidthPx(localKmh: number): number {
-  const band = groundWindSpeedBand(localKmh);
-  if (band === 2) return GROUND_WIND_CORE_WIDTH_FAST_PX;
-  if (band === 1) return GROUND_WIND_CORE_WIDTH_MID_PX;
+export function groundWindCoreWidthPx(_localKmh: number): number {
   return GROUND_WIND_CORE_WIDTH_SLOW_PX;
 }
 
 export function groundWindMaxTrailWidthPx(): number {
-  return GROUND_WIND_CORE_WIDTH_FAST_PX;
+  return GROUND_WIND_CORE_WIDTH_SLOW_PX;
+}
+
+function curlNoiseDeg(sx: number, sy: number, age: number, seed: number): number {
+  const s = GROUND_WIND_CURL_NOISE_SCALE_PX;
+  const u = sx / s;
+  const v = sy / s;
+  const t = age * 0.22 + seed;
+  const n =
+    Math.sin(u * 1.7 + t * 1.3) * Math.cos(v * 1.4 - t * 0.9) +
+    Math.sin(u * 0.55 - v * 0.62 + seed) * 0.55;
+  return n * GROUND_WIND_CURL_NOISE_DEG;
+}
+
+type ScreenHeadGrid = Map<number, number[]>;
+
+function screenHeadGridKey(cx: number, cy: number): number {
+  return cy * 4099 + cx;
+}
+
+function buildScreenHeadGrid(particles: GroundWindParticles, cellPx: number): ScreenHeadGrid {
+  const grid: ScreenHeadGrid = new Map();
+  for (let j = 0; j < particles.count; j++) {
+    const cx = Math.floor(particles.screenX[j]! / cellPx);
+    const cy = Math.floor(particles.screenY[j]! / cellPx);
+    const key = screenHeadGridKey(cx, cy);
+    const bucket = grid.get(key);
+    if (bucket) bucket.push(j);
+    else grid.set(key, [j]);
+  }
+  return grid;
+}
+
+function minGapToOtherStreamlines(
+  particles: GroundWindParticles,
+  index: number,
+  sx: number,
+  sy: number,
+  grid: ScreenHeadGrid,
+  cellPx: number,
+): number {
+  const cx = Math.floor(sx / cellPx);
+  const cy = Math.floor(sy / cellPx);
+  const reach = Math.ceil(GROUND_WIND_STREAMLINE_STOP_PX / cellPx) + 1;
+  let min = Number.POSITIVE_INFINITY;
+  for (let dy = -reach; dy <= reach; dy++) {
+    for (let dx = -reach; dx <= reach; dx++) {
+      const bucket = grid.get(screenHeadGridKey(cx + dx, cy + dy));
+      if (!bucket) continue;
+      for (let b = 0; b < bucket.length; b++) {
+        const j = bucket[b]!;
+        if (j === index) continue;
+        const d = Math.hypot(particles.screenX[j]! - sx, particles.screenY[j]! - sy);
+        if (d < min) min = d;
+      }
+    }
+  }
+  return min;
+}
+
+function shuffleCellIds(ids: number[], seed: number) {
+  const rng = seededRandom(seed);
+  for (let i = ids.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    const tmp = ids[i]!;
+    ids[i] = ids[j]!;
+    ids[j] = tmp;
+  }
 }
 
 export function groundWindTrailAlpha(along: number): number {
@@ -186,7 +261,34 @@ function pickSpawnWorld(
   particles: GroundWindParticles,
   heightAt: HeightAt,
   model: CityModel,
-): { east: number; north: number } | null {
+): { east: number; north: number; sx: number; sy: number } | null {
+  const cell = GROUND_WIND_STREAMLINE_CELL_PX;
+  if (particles.screenUnproject && particles.viewWidth > 0 && particles.viewHeight > 0 && particles.gridCols > 0) {
+    const ci = particles.gridCol[index]!;
+    const cj = particles.gridRow[index]!;
+    for (let attempt = 0; attempt < 56; attempt++) {
+      const jx = hash2D(ci, cj, index + attempt * 5);
+      const jy = hash2D(cj, ci, index + attempt * 11);
+      const sx = Math.min(particles.viewWidth - 6, Math.max(6, (ci + 0.12 + jx * 0.76) * cell));
+      const sy = Math.min(particles.viewHeight - 6, Math.max(6, (cj + 0.12 + jy * 0.76) * cell));
+      const world = particles.screenUnproject(sx, sy);
+      if (!world) continue;
+      const east = world.east;
+      const north = world.north;
+      const idx = groundWindCellIndex(field, east, north);
+      if (idx < 0 || field.solid[idx] === 1) continue;
+      if (groundWindInsideFootprint(model, east, north)) continue;
+      const low = groundWindLowGradient(field, east, north);
+      if (low && rng() > 0.42) continue;
+      const y = heightAt(east, north);
+      const screen = particles.screenProject?.(east, north, y);
+      if (!screen) continue;
+      const uniqueCell = particles.count <= particles.gridCols * particles.gridRows;
+      if (!uniqueCell && !groundWindScreenSpacingOk(particles, index, screen.x, screen.y, GROUND_WIND_SCREEN_MIN_SPACING_PX)) continue;
+      return { east, north, sx: screen.x, sy: screen.y };
+    }
+    return null;
+  }
   const margin = 28;
   for (let attempt = 0; attempt < 72; attempt++) {
     let east: number;
@@ -216,9 +318,44 @@ function pickSpawnWorld(
     const screen = particles.screenProject?.(east, north, y);
     if (!screen) continue;
     if (!groundWindScreenSpacingOk(particles, index, screen.x, screen.y, GROUND_WIND_SCREEN_MIN_SPACING_PX)) continue;
-    return { east, north };
+    return { east, north, sx: screen.x, sy: screen.y };
   }
   return null;
+}
+
+export function layoutGroundWindScreenSeeds(
+  particles: GroundWindParticles,
+  field: GroundWindField,
+  heightAt: HeightAt,
+  model: CityModel,
+  seed = 19,
+) {
+  particles.cityModel = model;
+  const w = particles.viewWidth;
+  const h = particles.viewHeight;
+  if (!particles.screenUnproject || w <= 0 || h <= 0) {
+    for (let i = 0; i < particles.count; i++) spawnParticle(particles, field, heightAt, i);
+    return;
+  }
+  const cell = GROUND_WIND_STREAMLINE_CELL_PX;
+  const cols = Math.ceil(w / cell);
+  const rows = Math.ceil(h / cell);
+  particles.gridCols = cols;
+  particles.gridRows = rows;
+  const cellIds: number[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) cellIds.push(r * cols + c);
+  }
+  shuffleCellIds(cellIds, seed);
+  for (let i = 0; i < particles.count; i++) {
+    const id = cellIds[i % cellIds.length]!;
+    particles.gridCol[i] = id % cols;
+    particles.gridRow[i] = Math.floor(id / cols);
+    particles.trailLenScale[i] = 1 - GROUND_WIND_TRAIL_LEN_JITTER + particles.rng() * GROUND_WIND_TRAIL_LEN_JITTER * 2;
+    particles.life[i] = GROUND_WIND_LIFE_MIN_S + particles.rng() * (GROUND_WIND_LIFE_MAX_S - GROUND_WIND_LIFE_MIN_S);
+    spawnParticle(particles, field, heightAt, i);
+    particles.age[i] = ((i + particles.rng()) / Math.max(1, particles.count)) * GROUND_WIND_LIFE_MAX_S * 0.97;
+  }
 }
 
 export function createGroundWindParticles(
@@ -258,10 +395,22 @@ export function createGroundWindParticles(
     medianKmh: 18,
     modelSideM: cityModel?.sideM ?? 320,
     cityModel,
+    gridCol: new Int16Array(count),
+    gridRow: new Int16Array(count),
+    gridCols: 0,
+    gridRows: 0,
+    trailLenScale: new Float32Array(count),
   };
   for (let i = 0; i < count; i++) {
-    spawnParticle(particles, field, heightAt, i);
-    particles.age[i] = particles.rng() * particles.life[i]! * 0.98;
+    particles.trailLenScale[i] = 1;
+    particles.life[i] = GROUND_WIND_LIFE_MIN_S + particles.rng() * (GROUND_WIND_LIFE_MAX_S - GROUND_WIND_LIFE_MIN_S);
+    particles.age[i] = ((i + particles.rng()) / Math.max(1, count)) * GROUND_WIND_LIFE_MAX_S * 0.4;
+  }
+  if (!particles.screenUnproject) {
+    for (let i = 0; i < count; i++) {
+      spawnParticle(particles, field, heightAt, i);
+      particles.age[i] = ((i + particles.rng()) / Math.max(1, count)) * particles.life[i]! * 0.98;
+    }
   }
   return particles;
 }
@@ -285,6 +434,8 @@ export function spawnParticle(particles: GroundWindParticles, field: GroundWindF
   if (placed) {
     east = placed.east;
     north = placed.north;
+    particles.screenX[i] = placed.sx;
+    particles.screenY[i] = placed.sy;
   } else {
     const cell = field.fluidCells[Math.floor(hash2D(i, 0, 3) * field.fluidCells.length)]!;
     const ci = cell % field.cols;
@@ -302,7 +453,7 @@ export function spawnParticle(particles: GroundWindParticles, field: GroundWindF
   particles.speed[i] = groundWindSpeedAt(field, east, north);
   particles.head[i] = 0;
   const y = heightAt(east, north);
-  updateScreenSlot(particles, i, east, north, y);
+  if (!placed) updateScreenSlot(particles, i, east, north, y);
   const base = i * GROUND_WIND_TRAIL_POINTS * 3;
   for (let k = 0; k < GROUND_WIND_TRAIL_POINTS; k++) {
     particles.history[base + k * 3] = east;
@@ -331,13 +482,15 @@ export function trailVisibleSegments(
   fast: boolean,
   metresPerPx = 0.04,
   metresPerSecond = 12,
+  lenScale = 1,
 ): number {
   const ramp = speedRamp(speed);
   let visible = Math.round(GROUND_WIND_TRAIL_LEN_MIN + ramp * (GROUND_WIND_TRAIL_LEN_MAX - GROUND_WIND_TRAIL_LEN_MIN));
   const fastStream = fast && speed > streamMag * GROUND_WIND_FAST_SPEED_RATIO;
-  const targetPx = fastStream
+  let targetPx = fastStream
     ? 0.5 * (GROUND_WIND_TRAIL_FAST_MIN_LEN_PX + GROUND_WIND_TRAIL_FAST_MAX_LEN_PX)
     : 0.5 * (GROUND_WIND_TRAIL_MIN_LEN_PX + GROUND_WIND_TRAIL_MAX_LEN_PX);
+  targetPx *= Math.max(0.5, Math.min(1.5, lenScale));
   const stepM = Math.max(0.12, metresPerSecond * GROUND_WIND_TRAIL_SAMPLE_S * 1.27);
   const need = Math.ceil((targetPx * Math.max(0.002, metresPerPx)) / stepM);
   visible = Math.max(visible, need);
@@ -389,7 +542,14 @@ export function groundWindMeanTrailScreenPx(
   for (let i = 0; i < particles.count; i++) {
     const speed = particles.speed[i]!;
     const fast = speed > streamMag * GROUND_WIND_FAST_SPEED_RATIO;
-    const visible = trailVisibleSegments(speed, streamMag, fast, particles.metresPerPx, metresPerSecond);
+    const visible = trailVisibleSegments(
+      speed,
+      streamMag,
+      fast,
+      particles.metresPerPx,
+      metresPerSecond,
+      particles.trailLenScale[i] ?? 1,
+    );
     const pts = groundWindTrailHistorySlots(particles, i, visible);
     if (pts.length < 2) continue;
     let len = 0;
@@ -511,9 +671,16 @@ export function stepGroundWindParticles(
     const shelterT = Math.min(1, Math.max(0, 1 - speed / (baseMag * 1.1)));
     const wobble =
       Math.sin(particles.age[i]! * 2.7 + particles.seed[i]!) * GROUND_WIND_WOBBLE * (0.35 + shelterT * 1.9) * speed;
+    const sx = particles.screenX[i]!;
+    const sy = particles.screenY[i]!;
+    const curl = (curlNoiseDeg(sx, sy, particles.age[i]!, particles.seed[i]!) * Math.PI) / 180;
+    const cosC = Math.cos(curl);
+    const sinC = Math.sin(curl);
+    const ve = v2.east * cosC - v2.north * sinC;
+    const vn = v2.east * sinC + v2.north * cosC;
     const stepM = metresPerSecond * dt * (0.92 + speedRamp(speed) * 0.35);
-    const east = e0 + (v2.east - v2.north * wobble) * stepM;
-    const north = n0 + (v2.north + v2.east * wobble) * stepM;
+    const east = e0 + (ve - vn * wobble) * stepM;
+    const north = n0 + (vn + ve * wobble) * stepM;
     const age = particles.age[i]! + dt;
     const yCheck = heightAt(east, north);
     const model = particles.cityModel;
@@ -540,6 +707,10 @@ export function stepGroundWindParticles(
 function writePoints(particles: GroundWindParticles, heightAt: HeightAt, field: GroundWindField, metresPerSecond: number) {
   const { points, history } = particles;
   const streamMag = Math.hypot(field.base.east, field.base.north) || 1;
+  const project = particles.screenProject;
+  const model = particles.cityModel;
+  const headGrid =
+    project != null ? buildScreenHeadGrid(particles, GROUND_WIND_STREAMLINE_CELL_PX) : null;
   for (let i = 0; i < particles.count; i++) {
     const speed = particles.speed[i]!;
     const env = lifeEnvelope(particles.age[i]!, particles.life[i]!);
@@ -547,13 +718,38 @@ function writePoints(particles: GroundWindParticles, heightAt: HeightAt, field: 
     const localKmh = groundWindLocalSpeedKmh(speed, streamMag, particles.medianKmh);
     const band = groundWindSpeedBand(localKmh);
     const corePx = groundWindCoreWidthPx(localKmh);
-    const visible = trailVisibleSegments(speed, streamMag, fast, particles.metresPerPx, metresPerSecond);
+    const lenScale = particles.trailLenScale[i] ?? 1;
+    let visible = trailVisibleSegments(speed, streamMag, fast, particles.metresPerPx, metresPerSecond, lenScale);
     const head = particles.head[i]!;
-    const particleBase = i * GROUND_WIND_POINTS_PER_PARTICLE * GROUND_WIND_POINT_STRIDE;
-    const maxAlong = Math.max(1, visible - 1);
     const east = particles.east[i]!;
     const north = particles.north[i]!;
     const yHead = heightAt(east, north);
+    if (project && headGrid && visible > 2) {
+      for (let k = 2; k < visible; k++) {
+        const slot = (head + GROUND_WIND_TRAIL_POINTS - visible + k + 1) % GROUND_WIND_TRAIL_POINTS;
+        const h = (i * GROUND_WIND_TRAIL_POINTS + slot) * 3;
+        const he = history[h]!;
+        const hn = history[h + 1]!;
+        const hy = history[h + 2]!;
+        const screen = project(he, hn, hy);
+        if (!screen) continue;
+        if (
+          minGapToOtherStreamlines(
+            particles,
+            i,
+            screen.x,
+            screen.y,
+            headGrid,
+            GROUND_WIND_STREAMLINE_CELL_PX,
+          ) < GROUND_WIND_STREAMLINE_STOP_PX
+        ) {
+          visible = Math.max(2, k);
+          break;
+        }
+      }
+    }
+    const particleBase = i * GROUND_WIND_POINTS_PER_PARTICLE * GROUND_WIND_POINT_STRIDE;
+    const maxAlong = Math.max(1, visible - 1);
     for (let k = 0; k < GROUND_WIND_TRAIL_POINTS - 1; k++) {
       const out = particleBase + k * GROUND_WIND_POINT_STRIDE;
       if (k >= visible) {
@@ -564,18 +760,24 @@ function writePoints(particles: GroundWindParticles, heightAt: HeightAt, field: 
         points[out + 4] = 0;
         points[out + 5] = 0;
         points[out + 6] = corePx;
+        points[out + 7] = 0;
         continue;
       }
       const slot = (head + GROUND_WIND_TRAIL_POINTS - visible + k + 1) % GROUND_WIND_TRAIL_POINTS;
       const h = (i * GROUND_WIND_TRAIL_POINTS + slot) * 3;
-      points[out] = history[h]!;
-      points[out + 1] = history[h + 2]!;
-      points[out + 2] = -history[h + 1]!;
+      const segE = history[h]!;
+      const segN = history[h + 1]!;
+      const segY = history[h + 2]!;
+      points[out] = segE;
+      points[out + 1] = segY;
+      points[out + 2] = -segN;
       const along = alongProfile(k, maxAlong);
       points[out + 3] = env * groundWindTrailAlpha(along);
       points[out + 4] = along;
       points[out + 5] = band;
       points[out + 6] = corePx;
+      const casing = model != null && groundWindWantsCasing(model, segE, segN) ? 1 : 0;
+      points[out + 7] = casing;
     }
     const live = particleBase + (GROUND_WIND_TRAIL_POINTS - 1) * GROUND_WIND_POINT_STRIDE;
     points[live] = east;
@@ -585,6 +787,7 @@ function writePoints(particles: GroundWindParticles, heightAt: HeightAt, field: 
     points[live + 4] = 1;
     points[live + 5] = band;
     points[live + 6] = corePx;
+    points[live + 7] = model != null && groundWindWantsCasing(model, east, north) ? 1 : 0;
     const pad = live + GROUND_WIND_POINT_STRIDE;
     points[pad] = east;
     points[pad + 1] = yHead;
@@ -593,6 +796,7 @@ function writePoints(particles: GroundWindParticles, heightAt: HeightAt, field: 
     points[pad + 4] = 1;
     points[pad + 5] = band;
     points[pad + 6] = corePx;
+    points[pad + 7] = 0;
   }
 }
 

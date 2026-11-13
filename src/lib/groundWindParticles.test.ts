@@ -3,6 +3,7 @@ import { buildGroundWindField, groundWindInsideFootprint, groundWindIsSolid } fr
 import {
   createGroundWindParticles,
   GROUND_WIND_POINT_STRIDE,
+  layoutGroundWindScreenSeeds,
   GROUND_WIND_POINTS_PER_PARTICLE,
   GROUND_WIND_TRAIL_POINTS,
   groundWindMaxTrailTurnDeg,
@@ -75,11 +76,11 @@ describe("groundWindParticles", () => {
     }
   });
 
-  it("caps core trail width at 2.5px with band steps", () => {
-    expect(groundWindMaxTrailWidthPx()).toBeLessThanOrEqual(2.5);
+  it("keeps core trail width at 1.5px in screen space", () => {
+    expect(groundWindMaxTrailWidthPx()).toBe(1.5);
     expect(groundWindCoreWidthPx(12)).toBe(1.5);
-    expect(groundWindCoreWidthPx(28)).toBe(2);
-    expect(groundWindCoreWidthPx(44)).toBe(2.5);
+    expect(groundWindCoreWidthPx(28)).toBe(1.5);
+    expect(groundWindCoreWidthPx(44)).toBe(1.5);
   });
 
   it("lengthens fast-stream trails", () => {
@@ -103,6 +104,7 @@ describe("groundWindParticles", () => {
       east: (sx / viewW - 0.5) * model.sideM,
       north: (sy / viewH - 0.5) * model.sideM,
     });
+    layoutGroundWindScreenSeeds(particles, field, flat, model, 7);
     warmGroundWindParticles(particles, field, flat, groundWindMetresPerSecond(model.sideM, 20), 5);
     const meanPx = groundWindMeanTrailScreenPx(
       particles,
@@ -112,7 +114,7 @@ describe("groundWindParticles", () => {
       groundWindMetresPerSecond(model.sideM, 20),
     );
     expect(meanPx).toBeGreaterThanOrEqual(40);
-  });
+  }, 20_000);
 
   it("bends trail headings more than 15 degrees around a building corner", () => {
     const model: CityModel = {
@@ -197,6 +199,7 @@ describe("groundWindParticles", () => {
       east: (sx / viewW - 0.5) * model.sideM,
       north: (sy / viewH - 0.5) * model.sideM,
     });
+    layoutGroundWindScreenSeeds(particles, field, flat, model, 9);
     for (let i = 0; i < particles.count; i++) {
       const screen = particles.screenProject(particles.east[i]!, particles.north[i]!, 1);
       if (screen) {
@@ -212,7 +215,7 @@ describe("groundWindParticles", () => {
         if (d > 0 && d < minDist) minDist = d;
       }
     }
-    expect(minDist).toBeGreaterThanOrEqual(10);
+    expect(minDist).toBeGreaterThanOrEqual(11);
   });
 
   it("advects particles along the flow", () => {

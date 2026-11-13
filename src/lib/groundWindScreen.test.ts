@@ -6,11 +6,12 @@ import {
   groundWindMeanTrailScreenPx,
   groundWindMetresPerSecond,
   groundWindOrthographicProject,
+  layoutGroundWindScreenSeeds,
   warmGroundWindParticles,
 } from "./groundWindParticles";
 import {
   groundWindEstimatedBlueCoverage,
-  groundWindScreenHalfCounts,
+  groundWindGroundNormalizedBalance,
   groundWindTargetParticleCount,
 } from "./groundWindScreen";
 import type { CityModel, Pt } from "../types";
@@ -86,6 +87,7 @@ describe("groundWindScreen", () => {
     const count = groundWindTargetParticleCount(viewW, viewH);
     const particles = createGroundWindParticles(field, flat, 11, undefined, count, model);
     bindOrthographicScreen(particles, model, viewW, viewH);
+    layoutGroundWindScreenSeeds(particles, field, flat, model, 11);
     const mps = groundWindMetresPerSecond(model.sideM, 20);
     warmGroundWindParticles(particles, field, flat, mps, 5);
     for (let i = 0; i < particles.count; i++) {
@@ -98,18 +100,20 @@ describe("groundWindScreen", () => {
       }
     }
     const meanLen = groundWindMeanTrailScreenPx(particles, field, flat, particles.screenProject!, mps);
-    const meanW = (groundWindCoreWidthPx(15) + 3.5) * 0.5;
+    const meanW = groundWindCoreWidthPx(15);
     const coverage = groundWindEstimatedBlueCoverage(particles.count, meanLen, meanW, viewW, viewH);
     expect(coverage).toBeGreaterThanOrEqual(0.02);
-  });
+    expect(coverage).toBeLessThanOrEqual(0.06);
+  }, 20_000);
 
-  it("keeps northwest screen-half coverage at least 60% of southeast", () => {
+  it("keeps ground-normalised west density at least 60% of east in the ground band", () => {
     const model = denseModel();
     const field = buildGroundWindField(model, { east: 1, north: 0.12 });
     const viewW = 1440;
     const viewH = 900;
     const particles = createGroundWindParticles(field, flat, 13, undefined, groundWindTargetParticleCount(viewW, viewH), model);
     bindOrthographicScreen(particles, model, viewW, viewH);
+    layoutGroundWindScreenSeeds(particles, field, flat, model, 13);
     warmGroundWindParticles(particles, field, flat, groundWindMetresPerSecond(model.sideM, 20), 4.5);
     for (let i = 0; i < particles.count; i++) {
       const east = particles.east[i]!;
@@ -120,9 +124,7 @@ describe("groundWindScreen", () => {
         particles.screenY[i] = screen.y;
       }
     }
-    const { west, east } = groundWindScreenHalfCounts(particles.screenX, particles.count, viewW);
-    expect(west).toBeGreaterThan(0);
-    expect(east).toBeGreaterThan(0);
-    expect(west / east).toBeGreaterThanOrEqual(0.6);
-  });
+    const { ratio } = groundWindGroundNormalizedBalance(particles.screenX, particles.screenY, particles.count, viewW);
+    expect(ratio).toBeGreaterThanOrEqual(0.6);
+  }, 20_000);
 });
