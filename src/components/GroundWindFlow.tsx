@@ -74,8 +74,9 @@ void main() {
   vec2 perp = vec2(-tangent.y, tangent.x);
   float along = mix(along0, along1, end);
   float wPx = passRole < 0.5 ? ${GROUND_WIND_CASING_WIDTH_PX.toFixed(2)} : ${GROUND_WIND_CORE_WIDTH_PX.toFixed(2)};
-  float ndcHalf = (wPx / resolution.y) * 2.0;
-  vec2 ndc = clipC.xy / max(1e-5, clipC.w) + perp * side * ndcHalf;
+  vec2 pxOffset = perp * side * wPx;
+  vec2 ndcOffset = vec2(pxOffset.x * 2.0 / resolution.x, pxOffset.y * 2.0 / resolution.y);
+  vec2 ndc = clipC.xy / max(1e-5, clipC.w) + ndcOffset;
   vScreenPx = (ndc * 0.5 + 0.5) * resolution;
   vAlpha = mix(a0, a1, end);
   vSide = abs(side);
@@ -101,7 +102,7 @@ uniform vec4 maskBottom;
 void main() {
   if (vScreenPx.x >= maskRight.x && vScreenPx.x <= maskRight.z && vScreenPx.y >= maskRight.y && vScreenPx.y <= maskRight.w) discard;
   if (vScreenPx.x >= maskBottom.x && vScreenPx.x <= maskBottom.z && vScreenPx.y >= maskBottom.y && vScreenPx.y <= maskBottom.w) discard;
-  float edge = 1.0 - smoothstep(0.72, 1.0, vSide);
+  float edge = 1.0 - smoothstep(0.86, 1.0, vSide);
   float alpha = vAlpha * opacity * edge;
   if (alpha < 0.004) discard;
   if (passRole < 0.5) {
@@ -110,8 +111,6 @@ void main() {
   } else {
     gl_FragColor = vec4(coreColour, alpha);
   }
-  #include <tonemapping_fragment>
-  #include <colorspace_fragment>
 }
 `;
 

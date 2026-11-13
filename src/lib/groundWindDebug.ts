@@ -52,9 +52,7 @@ export function groundWindRenderStats(particles: GroundWindParticles, _viewW: nu
     if (sx < GROUND_WIND_FAR_X_MAX && sy >= GROUND_WIND_FAR_Y_MIN && sy <= GROUND_WIND_FAR_Y_MAX) farCount++;
     if (sy >= GROUND_WIND_NEAR_Y_MIN && sy <= GROUND_WIND_NEAR_Y_MAX) nearCount++;
   }
-  const viewW = _viewW > 0 ? _viewW : particles.viewWidth;
-  const viewH = particles.viewHeight > 0 ? particles.viewHeight : 900;
-  const coverageRatio = groundWindFrameCoverageProxy(particles, viewW, viewH);
+  const coverageRatio = groundWindFrameCoverageProxy(particles);
   return {
     active: particles.count,
     max: particles.maxCount,
