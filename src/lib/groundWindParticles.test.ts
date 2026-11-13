@@ -5,9 +5,13 @@ import {
   GROUND_WIND_POINT_STRIDE,
   GROUND_WIND_POINTS_PER_PARTICLE,
   GROUND_WIND_TRAIL_POINTS,
+  groundWindMaxTrailTurnDeg,
   groundWindMaxTrailWidthPx,
+  groundWindMeanTrailScreenPx,
   groundWindMetresPerSecond,
+  groundWindOrthographicProject,
   groundWindSeedRowScore,
+  groundWindTrailHistorySlots,
   groundWindTrailWidthPx,
   lifeEnvelope,
   speedRamp,
@@ -79,9 +83,70 @@ describe("groundWindParticles", () => {
   });
 
   it("lengthens fast-stream trails", () => {
-    const calm = trailVisibleSegments(0.5, 1, false);
-    const fast = trailVisibleSegments(1.45, 1, true);
+    const calm = trailVisibleSegments(0.5, 1, false, 0.04, 18);
+    const fast = trailVisibleSegments(1.45, 1, true, 0.04, 18);
     expect(fast).toBeGreaterThan(calm);
+  });
+
+  it("keeps mean on-screen trail length at least 40px after advection", () => {
+    const model = denseModel();
+    const field = buildGroundWindField(model, { east: 1, north: 0.2 });
+    const particles = createGroundWindParticles(field, flat);
+    const viewW = 1440;
+    const viewH = 900;
+    particles.metresPerPx = model.sideM / viewW;
+    particles.screenProject = (east, north, y) => groundWindOrthographicProject(east, north, y, viewW, viewH, model.sideM);
+    warmGroundWindParticles(particles, field, flat, groundWindMetresPerSecond(model.sideM, 20), 5);
+    const meanPx = groundWindMeanTrailScreenPx(
+      particles,
+      field,
+      flat,
+      particles.screenProject,
+      groundWindMetresPerSecond(model.sideM, 20),
+    );
+    expect(meanPx).toBeGreaterThanOrEqual(40);
+  });
+
+  it("bends trail headings more than 15 degrees around a building corner", () => {
+    const model: CityModel = {
+      placeLabel: "Corner",
+      center: { lon: 145, lat: -38 },
+      sideM: 240,
+      layers: { buildings: true, roads: true, waterGreen: true, trees: true },
+      buildings: [
+        {
+          id: 1,
+          ring: ring(-24, -24, 24, 24),
+          holes: [],
+          height: 18,
+          use: "residential",
+          source: "osm_tag",
+        },
+      ],
+      roads: [],
+      areas: [],
+      trees: [],
+      roadKm: 0,
+      buildingCapHit: false,
+      sourceNote: "",
+    };
+    const field = buildGroundWindField(model, { east: 1, north: 0.05 });
+    const particles = createGroundWindParticles(field, flat, 19);
+    warmGroundWindParticles(particles, field, flat, groundWindMetresPerSecond(model.sideM, 22), 6);
+    const streamMag = Math.hypot(field.base.east, field.base.north);
+    let bestTurn = 0;
+    for (let i = 0; i < particles.count; i++) {
+      const e = particles.east[i]!;
+      const n = particles.north[i]!;
+      if (Math.abs(e - 26) > 18 || Math.abs(n) > 22) continue;
+      const speed = particles.speed[i]!;
+      const fast = speed > streamMag * 1.3;
+      const visible = trailVisibleSegments(speed, streamMag, fast, 0.04, groundWindMetresPerSecond(model.sideM, 22));
+      const pts = groundWindTrailHistorySlots(particles, i, visible);
+      const turn = groundWindMaxTrailTurnDeg(pts);
+      if (turn > bestTurn) bestTurn = turn;
+    }
+    expect(bestTurn).toBeGreaterThan(15);
   });
 
   it("staggers lifetimes and keeps trail alpha fading to the tail", () => {

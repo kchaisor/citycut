@@ -19,7 +19,6 @@ import {
   GROUND_WIND_TRAIL_TAIL_WIDTH_PX,
   groundWindMetresPerSecond,
   groundWindPointsLength,
-  scatterGroundWindScreen,
   stepGroundWindParticles,
   warmGroundWindParticles,
   type GroundWindParticles,
@@ -28,7 +27,7 @@ import { useColourRevision } from "../lib/useColourRevision";
 import type { WindPeriodStats } from "../lib/windRose";
 
 const FIELD_BUDGET_MS = 5;
-const WARM_LIVE_S = 1.4;
+const WARM_LIVE_S = 2.6;
 const WARM_FROZEN_S = 2.4;
 const MAX_FRAME_DT = 0.05;
 
@@ -177,7 +176,6 @@ export function GroundWindFlow({
   const builderRef = useRef<GroundWindFieldBuilder | null>(null);
   const fieldRef = useRef<GroundWindField | null>(null);
   const particlesRef = useRef<GroundWindParticles | null>(null);
-  const screenSeededRef = useRef(false);
   const invalidate = useThree((state) => state.invalidate);
   const camera = useThree((state) => state.camera);
   const size = useThree((state) => state.size);
@@ -200,7 +198,6 @@ export function GroundWindFlow({
     builderRef.current = createGroundWindFieldBuilder(model, base);
     fieldRef.current = null;
     particlesRef.current = null;
-    screenSeededRef.current = false;
     geometry.instanceCount = 0;
     invalidate();
   }, [model, base, geometry, invalidate]);
@@ -223,9 +220,8 @@ export function GroundWindFlow({
       particles.screenProject = screenProject;
       particlesRef.current = particles;
       geometry.instanceCount = particles.count * GROUND_WIND_POINTS_PER_PARTICLE - 1;
+      particles.metresPerPx = metresPerPixel(camera, projScratch.set(0, heightAt(0, 0), 0), size.height);
       warmGroundWindParticles(particles, field, heightAt, metresPerSecond, frozenRef.current ? WARM_FROZEN_S : WARM_LIVE_S);
-      scatterGroundWindScreen(particles, field, heightAt);
-      screenSeededRef.current = true;
       data.needsUpdate = true;
       invalidate();
       return;
@@ -238,13 +234,11 @@ export function GroundWindFlow({
     const headNorth = particles.north[0] ?? 0;
     const headY = heightAt(headEast, headNorth);
     projScratch.set(headEast, headY, -headNorth);
-    material.uniforms.metresPerPx!.value = metresPerPixel(camera, projScratch, size.height);
+    const metresPerPx = metresPerPixel(camera, projScratch, size.height);
+    particles.metresPerPx = metresPerPx;
+    material.uniforms.metresPerPx!.value = metresPerPx;
     if (frozenRef.current) return;
     stepGroundWindParticles(particles, field, heightAt, Math.min(delta, MAX_FRAME_DT), metresPerSecond);
-    if (!screenSeededRef.current) {
-      scatterGroundWindScreen(particles, field, heightAt);
-      screenSeededRef.current = true;
-    }
     data.needsUpdate = true;
     invalidate();
   });
