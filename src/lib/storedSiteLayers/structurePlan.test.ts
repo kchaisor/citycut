@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseStoredSiteFootprints } from "./footprints";
-import { deckPlanStrokePaths, ringChordCount } from "./structurePlan";
+import { deckPlanStrokePaths, deckStrokeSegmentInsideDeck, ringChordCount } from "./structurePlan";
 
 describe("Anzac bridge deck plan outline", () => {
   it("removes bowtie chords from the stored deck ring", () => {
@@ -29,7 +29,12 @@ describe("Anzac bridge deck plan outline", () => {
       }),
     );
     expect(raw).toBeGreaterThan(0);
-    expect(paths.length).toBeGreaterThanOrEqual(3);
+    expect(paths.length).toBeGreaterThanOrEqual(2);
     expect(maxEdge).toBeLessThan(120);
+    for (const path of paths) {
+      for (let i = 0; i < path.length - 1; i++) {
+        expect(deckStrokeSegmentInsideDeck(path[i]!, path[i + 1]!, deck!.ring, paths)).toBe(true);
+      }
+    }
   });
 });

@@ -11,11 +11,51 @@ const CANONICAL =
 
 const WIDTHS = [1280, 1440];
 
-function rectsIntersect(a, b, gapPx) {
-  if (a.right <= a.left || a.bottom <= a.top) return false;
-  if (b.right <= b.left || b.bottom <= b.top) return false;
-  if (a.top >= b.bottom + gapPx) return false;
-  return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
+async function overlapSample(page, gapPx = 8) {
+  return page.evaluate((gap) => {
+    const pill = document.querySelector(".model .loading-hud-pill.is-model-bridge");
+    const cards = [
+      ...document.querySelectorAll(".model .studio-header-center"),
+      ...document.querySelectorAll(".model .studio-header-right"),
+      ...document.querySelectorAll(".model .right-inspector"),
+      ...document.querySelectorAll(".select .hud-card"),
+      ...document.querySelectorAll(".select .omnibox-stack"),
+    ];
+    if (!pill) return { phase: "no-pill", overlap: false };
+    const pillStyle = getComputedStyle(pill);
+    if (pillStyle.display === "none" || Number(pillStyle.opacity) <= 0.05) {
+      return { phase: "pill-hidden", overlap: false };
+    }
+    const p = pill.getBoundingClientRect();
+    for (const card of cards) {
+      const cardStyle = getComputedStyle(card);
+      if (cardStyle.visibility === "hidden" || Number(cardStyle.opacity) <= 0.05) continue;
+      const c = card.getBoundingClientRect();
+      if (c.width <= 0 || c.height <= 0) continue;
+      const hits =
+        !(p.right < c.left || p.left > c.right || p.bottom < c.top || p.top > c.bottom) &&
+        !(p.top >= c.bottom + gap);
+      if (hits) {
+        return {
+          phase: "overlap",
+          overlap: true,
+          pillPct: pill.dataset.progressPct ?? null,
+          pill,
+          card: { className: card.className, ...c },
+        };
+      }
+    }
+    const pct = pill.dataset.progressPct ?? null;
+    return { phase: pct !== null ? `pct-${pct}` : "pill-visible", overlap: false, pillPct: pct };
+  }, gapPx);
+}
+
+async function pollPillLayout(page, label, samples) {
+  const sample = await overlapSample(page);
+  samples.push({ at: label, ...sample });
+  if (sample.overlap) {
+    throw new Error(`Bridge pill overlaps HUD at ${label}: ${JSON.stringify(sample)}`);
+  }
 }
 
 async function waitForBuildDone(page) {
@@ -31,50 +71,48 @@ async function waitForBuildDone(page) {
   );
 }
 
-async function assertPillLayoutWhileVisible(page) {
-  const bad = await page.evaluate((gapPx) => {
-    const pill = document.querySelector(".model .loading-hud-pill.is-model-bridge");
-    const card = document.querySelector(".model .studio-header-center");
-    if (!pill || !card) return null;
-    const pillStyle = getComputedStyle(pill);
-    if (pillStyle.display === "none" || Number(pillStyle.opacity) <= 0.05) return null;
-    const cardStyle = getComputedStyle(card);
-    if (cardStyle.visibility === "hidden" || Number(cardStyle.opacity) <= 0.05) return null;
-    const p = pill.getBoundingClientRect();
-    const c = card.getBoundingClientRect();
-    const hits =
-      !(p.right < c.left || p.left > c.right || p.bottom < c.top || p.top > c.bottom) &&
-      !(p.top >= c.bottom + gapPx);
-    return hits ? { pill: { ...p }, card: { ...c } } : null;
-  }, 8);
-  if (bad) {
-    throw new Error(`Bridge pill overlaps header card: ${JSON.stringify(bad)}`);
-  }
-}
-
 async function captureAtWidth(browser, width) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
   page.setDefaultTimeout(360_000);
+  const layoutSamples = [];
   await page.goto(CANONICAL, { waitUntil: "networkidle", timeout: 120_000 });
   await page.waitForSelector(".select .frame", { timeout: 60_000 });
+  await pollPillLayout(page, "before-create", layoutSamples);
+  const createClickAt = Date.now();
   await page.locator("button.create-fab").click({ timeout: 30_000 });
+  await pollPillLayout(page, "just-after-create", layoutSamples);
   await page.waitForSelector(".model", { timeout: 360_000 });
+  await pollPillLayout(page, "model-mounted", layoutSamples);
 
-  const pollEnd = Date.now() + 120_000;
-  while (Date.now() < pollEnd) {
-    await assertPillLayoutWhileVisible(page);
-    const pillVisible = await page.evaluate(() => {
+  const deadline = Date.now() + 120_000;
+  let sawMid = false;
+  while (Date.now() < deadline) {
+    await pollPillLayout(page, `poll-${Date.now() - createClickAt}ms`, layoutSamples);
+    const meta = await page.evaluate(() => {
       const pill = document.querySelector(".model .loading-hud-pill.is-model-bridge");
-      if (!pill) return false;
+      if (!pill) return { visible: false, pct: null };
       const style = getComputedStyle(pill);
-      return style.display !== "none" && Number(style.opacity) > 0.05;
+      const visible = style.display !== "none" && Number(style.opacity) > 0.05;
+      return { visible, pct: Number(pill.dataset.progressPct ?? 0) };
     });
-    if (!pillVisible) break;
-    await page.waitForTimeout(400);
+    if (meta.visible && meta.pct >= 3 && meta.pct <= 12) {
+      await pollPillLayout(page, "early-fetch-5pct", layoutSamples);
+      await page.screenshot({
+        path: path.join(OUT_DIR, `rozelle-pr227-pill-early-${width}.png`),
+        fullPage: false,
+      });
+    }
+    if (meta.visible && meta.pct >= 40 && meta.pct <= 60 && !sawMid) {
+      sawMid = true;
+      await pollPillLayout(page, "mid-build", layoutSamples);
+    }
+    if (!meta.visible) break;
+    await page.waitForTimeout(350);
   }
 
   await waitForBuildDone(page);
   await page.waitForTimeout(1500);
+  await pollPillLayout(page, "after-build", layoutSamples);
 
   const shot3d = path.join(OUT_DIR, `rozelle-pr227-3d-${width}.png`);
   await page.screenshot({ path: shot3d, fullPage: false });
@@ -87,7 +125,7 @@ async function captureAtWidth(browser, width) {
   await page.screenshot({ path: shotDrawing, fullPage: false });
 
   await page.close();
-  return { shot3d, shotDrawing };
+  return { shot3d, shotDrawing, layoutSamples };
 }
 
 const browser = await chromium.launch({

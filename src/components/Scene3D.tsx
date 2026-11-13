@@ -818,7 +818,6 @@ function City({
     if (clampedElapsed >= INTRO_HOLD_RELEASE_SEC || done) {
       const modelRoot = state.gl.domElement.closest(".model");
       if (modelRoot?.hasAttribute("data-intro-hold")) {
-        modelRoot.removeAttribute("data-intro-hold");
         modelRoot.dispatchEvent(new CustomEvent("citycut:intro-hold-release"));
       }
     }

@@ -1,4 +1,5 @@
 import { openRing } from "../geo";
+import { pointInPolygon } from "../useCascade";
 import type { Pt, Ring } from "../../types";
 
 const DECK_CHORD_M = 120;
@@ -46,52 +47,136 @@ function deckChordLimit(edgeLengths: number[]): number {
   return Math.max(DECK_CHORD_M, median * 3);
 }
 
-function westDeckCap(ring: Pt[], chordAt: number): Pt[] | null {
-  const a = ring[chordAt]!;
-  const b = ring[chordAt + 1]!;
-  if (Math.hypot(b[0] - a[0], b[1] - a[1]) <= DECK_CHORD_M) return null;
-  const westMidX = (a[0] + b[0]) / 2;
-  const westPoints = ring.filter((p) => p[0] < westMidX);
-  if (westPoints.length < 2) return null;
-  const north = westPoints.reduce((pick, p) => (p[1] < pick[1] ? p : pick));
-  const south = westPoints.reduce((pick, p) => (p[1] > pick[1] ? p : pick));
-  if (Math.hypot(south[0] - north[0], south[1] - north[1]) > DECK_CHORD_M) return null;
-  return [north, south];
+function polylineLength(pts: Pt[]): number {
+  let len = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    len += Math.hypot(pts[i + 1]![0] - pts[i]![0], pts[i + 1]![1] - pts[i]![1]);
+  }
+  return len;
 }
 
-export function deckPlanStrokePaths(ring: Ring): Pt[][] {
-  const pts = openRing(ring);
-  if (pts.length < 4) return [pts];
+function splitDeckRingAtBowties(pts: Pt[]): Pt[][] {
   const edgeLengths: number[] = [];
   for (let i = 0; i < pts.length - 1; i++) {
     edgeLengths.push(Math.hypot(pts[i + 1]![0] - pts[i]![0], pts[i + 1]![1] - pts[i]![1]));
   }
   const chordLimit = deckChordLimit(edgeLengths);
-  const paths: Pt[][] = [];
+  const chains: Pt[][] = [];
   let run: Pt[] = [pts[0]!];
-  let westChordAt = -1;
-  let westChordX = Infinity;
   for (let i = 0; i < pts.length - 1; i++) {
     const next = pts[i + 1]!;
-    const len = edgeLengths[i]!;
-    if (len > chordLimit) {
-      if (run.length >= 2) paths.push(run);
+    if (edgeLengths[i]! > chordLimit) {
+      if (run.length >= 2) chains.push(run);
       run = [next];
-      const midX = (pts[i]![0] + next[0]) / 2;
-      if (midX < westChordX) {
-        westChordX = midX;
-        westChordAt = i;
-      }
     } else {
       run.push(next);
     }
   }
-  if (run.length >= 2) paths.push(run);
-  if (westChordAt >= 0) {
-    const cap = westDeckCap(pts, westChordAt);
-    if (cap) paths.push(cap);
+  if (run.length >= 2) chains.push(run);
+  return chains;
+}
+
+function mergeShortEastSpur(chains: Pt[][]): Pt[][] {
+  if (chains.length <= 2) return chains;
+  const ranked = chains
+    .map((chain, index) => ({ chain, index, len: polylineLength(chain) }))
+    .sort((a, b) => b.len - a.len);
+  const keep = ranked.slice(0, 2);
+  const drop = ranked.slice(2);
+  const rails = keep.map((row) => [...row.chain]);
+  for (const spur of drop) {
+    let bestRail = 0;
+    let bestDist = Infinity;
+    for (const end of [spur.chain[0]!, spur.chain[spur.chain.length - 1]!]) {
+      for (let r = 0; r < rails.length; r++) {
+        const rail = rails[r]!;
+        for (const tip of [rail[0]!, rail[rail.length - 1]!]) {
+          const d = Math.hypot(end[0] - tip[0], end[1] - tip[1]);
+          if (d < bestDist) {
+            bestDist = d;
+            bestRail = r;
+          }
+        }
+      }
+    }
+    if (bestDist < 80) {
+      const rail = rails[bestRail]!;
+      const a = spur.chain[0]!;
+      const d0 = Math.hypot(a[0] - rail[0]![0], a[1] - rail[0]![1]);
+      const d1 = Math.hypot(a[0] - rail[rail.length - 1]![0], a[1] - rail[rail.length - 1]![1]);
+      if (d0 < d1) rails[bestRail] = [...spur.chain, ...rail];
+      else rails[bestRail] = [...rail, ...spur.chain];
+    }
   }
+  return rails;
+}
+
+function westAbutmentCap(railA: Pt[], railB: Pt[]): Pt[] | null {
+  const westA = railA.reduce((pick, p) => (p[0] < pick[0] ? p : pick));
+  const westB = railB.reduce((pick, p) => (p[0] < pick[0] ? p : pick));
+  const dist = Math.hypot(westB[0] - westA[0], westB[1] - westA[1]);
+  if (dist < 0.5 || dist > 90) return null;
+  return [westA, westB];
+}
+
+export function deckPlanStrokePaths(ring: Ring): Pt[][] {
+  const pts = openRing(ring);
+  if (pts.length < 4) return [pts];
+  const chains = mergeShortEastSpur(splitDeckRingAtBowties(pts));
+  const ranked = chains.sort((a, b) => polylineLength(b) - polylineLength(a));
+  const railA = ranked[0] ?? [];
+  const railB = ranked[1] ?? [];
+  const paths: Pt[][] = [];
+  if (railA.length >= 2) paths.push(railA);
+  if (railB.length >= 2) paths.push(railB);
+  const cap = railA.length >= 2 && railB.length >= 2 ? westAbutmentCap(railA, railB) : null;
+  if (cap) paths.push(cap);
   return paths.length > 0 ? paths : [pts];
+}
+
+function deckFillRingFromPaths(paths: Pt[][]): Pt[] {
+  if (paths.length < 2) return paths[0] ?? [];
+  const outer = [...paths[0]!];
+  const inner = [...paths[1]!].reverse();
+  return [...outer, ...inner];
+}
+
+function distToSegments(p: Pt, paths: Pt[][], tol: number): number {
+  let best = Infinity;
+  for (const path of paths) {
+    for (let i = 0; i < path.length - 1; i++) {
+      const a = path[i]!;
+      const b = path[i + 1]!;
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      const len2 = dx * dx + dy * dy;
+      if (len2 < 1e-9) continue;
+      const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2));
+      const qx = a[0] + dx * t;
+      const qy = a[1] + dy * t;
+      best = Math.min(best, Math.hypot(p[0] - qx, p[1] - qy));
+    }
+  }
+  return best <= tol ? 0 : best;
+}
+
+export function deckStrokeSegmentInsideDeck(
+  a: Pt,
+  b: Pt,
+  _ring: Ring,
+  paths: Pt[][],
+  toleranceM = 2.5,
+): boolean {
+  const fill = deckFillRingFromPaths(paths);
+  if (fill.length < 4) return true;
+  for (const t of [0.25, 0.5, 0.75]) {
+    const p: Pt = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    if (pointInPolygon(p, fill, [])) continue;
+    if (distToSegments(p, paths, toleranceM) > toleranceM) return false;
+  }
+  const span = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (span > DECK_CHORD_M) return false;
+  return true;
 }
 
 export function ringChordCount(ring: Ring): number {

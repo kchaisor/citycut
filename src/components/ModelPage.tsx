@@ -2018,42 +2018,38 @@ export function ModelPage({
   ];
 
   const modelRootRef = useRef<HTMLDivElement | null>(null);
-  const introHoldReleasedRef = useRef(false);
-  const introWebglReadyRef = useRef(false);
+  const [introWebglWait, setIntroWebglWait] = useState(
+    () => tab === "3d" && shouldShowIntroBridgePill(),
+  );
+  const [bridgePillHudSuppressed, setBridgePillHudSuppressed] = useState(
+    () => tab === "3d" && shouldShowIntroBridgePill(),
+  );
   useEffect(() => {
-    const el = modelRootRef.current;
-    if (!el) return;
-    const release = () => {
-      introHoldReleasedRef.current = true;
-      el.removeAttribute("data-intro-hold");
-    };
-    const revealModel = () => {
-      introWebglReadyRef.current = true;
-      el.removeAttribute("data-intro-webgl-wait");
-    };
+    if (tab !== "3d" || !shouldShowIntroBridgePill()) {
+      setBridgePillHudSuppressed(false);
+      setIntroWebglWait(false);
+      return;
+    }
+    setBridgePillHudSuppressed(true);
+    setIntroWebglWait(true);
+    const onDone = () => setBridgePillHudSuppressed(false);
+    const revealModel = () => setIntroWebglWait(false);
     const onWebglReady = () => {
       if (typeof window === "undefined" || !window.__citycutAwaitIntroStart || window.__citycutIntroStarted) {
         revealModel();
       }
     };
-    if (tab !== "3d" || !shouldShowIntroBridgePill()) {
-      release();
-      revealModel();
-      return;
-    }
     if (typeof window !== "undefined" && window.__citycutIntroStarted) {
       revealModel();
     }
-    el.addEventListener("citycut:intro-hold-release", release);
+    window.addEventListener("citycut:intro-done", onDone);
     window.addEventListener("citycut:intro-webgl-ready", onWebglReady);
     window.addEventListener("citycut:intro-start", revealModel);
-    const timer = window.setTimeout(release, 45000);
     const webglTimer = window.setTimeout(revealModel, 25000);
     return () => {
-      el.removeEventListener("citycut:intro-hold-release", release);
+      window.removeEventListener("citycut:intro-done", onDone);
       window.removeEventListener("citycut:intro-webgl-ready", onWebglReady);
       window.removeEventListener("citycut:intro-start", revealModel);
-      window.clearTimeout(timer);
       window.clearTimeout(webglTimer);
     };
   }, [tab]);
@@ -2062,8 +2058,9 @@ export function ModelPage({
     <div
       ref={modelRootRef}
       className="model"
-      data-intro-hold={!introHoldReleasedRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
-      data-intro-webgl-wait={!introWebglReadyRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
+      data-bridge-pill-hud-suppressed={bridgePillHudSuppressed ? "true" : undefined}
+      data-intro-hold={bridgePillHudSuppressed ? "true" : undefined}
+      data-intro-webgl-wait={bridgePillHudSuppressed && introWebglWait && tab === "3d" ? "true" : undefined}
     >
       <h1 className="sr-only">Your model is ready.</h1>
       <div

@@ -174,6 +174,7 @@ export default function App() {
   const [phase, setPhase] = useState<"select" | "model">("select");
   const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [handoffUnderlay, setHandoffUnderlay] = useState<"none" | "holding" | "fading">("none");
+  const [siteBuildActive, setSiteBuildActive] = useState(false);
   const selectRootRef = useRef<HTMLDivElement>(null);
   const [model, setModel] = useState<CityModel | null>(null);
   const [loading, setLoading] = useState(false);
@@ -369,6 +370,7 @@ export default function App() {
   function commandBarGoToPlace(place: PlaceHit, sideKmOverride: number | null) {
     if (phase === "model") {
       setHandoffUnderlay("none");
+      setSiteBuildActive(false);
       setPhase("select");
     }
     if (sideKmOverride != null) onSideKmChange(sideKmOverride);
@@ -391,6 +393,7 @@ export default function App() {
 
   function onHome() {
     if (phase === "model") {
+      setSiteBuildActive(false);
       setPhase("select");
       return;
     }
@@ -444,7 +447,15 @@ export default function App() {
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const isQaStart = typeof window !== "undefined" && qaModeFromSearch(window.location.search);
-    if (!isDomTestStart && !prefersReducedStart && !isQaStart && typeof window !== "undefined") {
+    const bridgeIntro =
+      !isDomTestStart &&
+      !prefersReducedStart &&
+      !isQaStart &&
+      typeof window !== "undefined";
+    if (bridgeIntro) {
+      setSiteBuildActive(true);
+    }
+    if (bridgeIntro) {
       window.__citycutAwaitIntroStart = true;
       window.__citycutIntroStarted = false;
       window.__citycutIntroReadyToFire = false;
@@ -1123,6 +1134,7 @@ export default function App() {
     };
     const onIntroDone = () => {
       setHandoffUnderlay("none");
+      setSiteBuildActive(false);
     };
     if (typeof window !== "undefined" && window.__citycutIntroStarted) {
       triggerFade();
@@ -1140,6 +1152,7 @@ export default function App() {
         window.dispatchEvent(new CustomEvent("citycut:intro-start"));
       }
       setHandoffUnderlay("none");
+      setSiteBuildActive(false);
     };
     window.addEventListener("citycut:intro-start", triggerFade);
     window.addEventListener("citycut:intro-done", onIntroDone);
@@ -1157,7 +1170,7 @@ export default function App() {
   const selectProcessingPhaseA = selectBusy && !selectTransitionActive;
 
   return (
-    <div className="app">
+    <div className="app" data-site-build-active={siteBuildActive ? "true" : undefined}>
       <CommandBar
         open={commandBarOpen}
         onOpenChange={setCommandBarOpen}
