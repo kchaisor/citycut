@@ -18,6 +18,8 @@ async function overlapSample(page, gapPx = 8) {
       ...document.querySelectorAll(".model .studio-header-center"),
       ...document.querySelectorAll(".model .studio-header-right"),
       ...document.querySelectorAll(".model .right-inspector"),
+      ...document.querySelectorAll(".model .height-source-notice"),
+      ...document.querySelectorAll(".height-source-notice"),
       ...document.querySelectorAll(".select .hud-card"),
       ...document.querySelectorAll(".select .omnibox-stack"),
     ];
@@ -72,7 +74,7 @@ async function waitForBuildDone(page) {
 }
 
 async function captureAtWidth(browser, width) {
-  const page = await browser.newPage({ viewport: { width, height: 900 } });
+  const page = await browser.newPage({ viewport: { width, height: 800 } });
   page.setDefaultTimeout(360_000);
   const layoutSamples = [];
   await page.goto(CANONICAL, { waitUntil: "networkidle", timeout: 120_000 });
@@ -86,6 +88,7 @@ async function captureAtWidth(browser, width) {
 
   const deadline = Date.now() + 120_000;
   let sawMid = false;
+  let sawEarlyShot = false;
   while (Date.now() < deadline) {
     await pollPillLayout(page, `poll-${Date.now() - createClickAt}ms`, layoutSamples);
     const meta = await page.evaluate(() => {
@@ -95,8 +98,9 @@ async function captureAtWidth(browser, width) {
       const visible = style.display !== "none" && Number(style.opacity) > 0.05;
       return { visible, pct: Number(pill.dataset.progressPct ?? 0) };
     });
-    if (meta.visible && meta.pct >= 3 && meta.pct <= 12) {
-      await pollPillLayout(page, "early-fetch-5pct", layoutSamples);
+    if (meta.visible && meta.pct >= 1 && meta.pct <= 10 && !sawEarlyShot) {
+      sawEarlyShot = true;
+      await pollPillLayout(page, `early-build-pct-${meta.pct}`, layoutSamples);
       await page.screenshot({
         path: path.join(OUT_DIR, `rozelle-pr227-pill-early-${width}.png`),
         fullPage: false,

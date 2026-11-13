@@ -4234,6 +4234,13 @@ body,
   transition: none !important;
 }
 
+.model[data-bridge-pill-hud-suppressed="true"] .height-source-notice,
+.app[data-site-build-active="true"] .model .height-source-notice {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 .model[data-bridge-pill-hud-suppressed="true"] .bottom-bar,
 .model[data-bridge-pill-hud-suppressed="true"] .command-bar,
 .model[data-intro-hold="true"] .bottom-bar {

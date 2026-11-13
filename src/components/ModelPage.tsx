@@ -2086,11 +2086,12 @@ export function ModelPage({
                 </div>
               );
             })()}
-            {model.heightSourceLoadWarnings?.map((line) => (
-              <p key={line} className="height-source-notice" role="status">
-                {line}
-              </p>
-            ))}
+            {!bridgePillHudSuppressed &&
+              model.heightSourceLoadWarnings?.map((line) => (
+                <p key={line} className="height-source-notice" role="status">
+                  {line}
+                </p>
+              ))}
             <SceneBoundary>
               <Scene3D
                 model={displayModel}
