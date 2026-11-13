@@ -20,6 +20,7 @@ import {
   groundWindMetresPerSecond,
   groundWindPointsLength,
   layoutGroundWindScreenSeeds,
+  refreshGroundWindSlotAnchors,
   stepGroundWindParticles,
   warmGroundWindParticles,
   type GroundWindParticles,
@@ -184,6 +185,10 @@ export function GroundWindFlow({
   const frozenRef = useRef(frozen);
   frozenRef.current = frozen;
   const debugWind = groundWindDebugEnabled();
+  const debugFrameRef = useRef(0);
+  const cameraDigestRef = useRef("");
+  const cameraSettleRef = useRef(0);
+  const cameraAnchorsForRef = useRef("");
 
   const points = useMemo(() => new Float32Array(groundWindPointsLength(GROUND_WIND_PARTICLES_MAX)), []);
   const { geometry, data } = useMemo(() => createRibbonGeometry(points), [points]);
@@ -311,11 +316,26 @@ export function GroundWindFlow({
     const headY = heightAt(headEast, headNorth);
     projScratch.set(headEast, headY, -headNorth);
     particles.metresPerPx = metresPerPixel(camera, projScratch, size.height);
+    const digest = `${camera.position.x.toFixed(2)}:${camera.position.y.toFixed(2)}:${camera.position.z.toFixed(2)}:${(camera as THREE.PerspectiveCamera).zoom?.toFixed(3) ?? "1"}`;
+    if (digest !== cameraDigestRef.current) {
+      cameraDigestRef.current = digest;
+      cameraSettleRef.current = 0;
+    } else {
+      cameraSettleRef.current += delta;
+    }
+    if (cameraSettleRef.current > 0.4 && cameraAnchorsForRef.current !== digest) {
+      cameraAnchorsForRef.current = digest;
+      refreshGroundWindSlotAnchors(particles, field, heightAt, model);
+      cameraSettleRef.current = 0;
+    }
     if (frozenRef.current) return;
     stepGroundWindParticles(particles, field, heightAt, Math.min(delta, MAX_FRAME_DT), metresPerSecond);
     data.needsUpdate = true;
     if (debugWind && typeof window !== "undefined") {
-      window.__citycutGroundWind = groundWindRenderStats(particles, size.width);
+      debugFrameRef.current += 1;
+      if (debugFrameRef.current % 8 === 0) {
+        window.__citycutGroundWind = groundWindRenderStats(particles, size.width);
+      }
     }
     invalidate();
   });

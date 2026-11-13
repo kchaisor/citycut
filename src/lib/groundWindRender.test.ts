@@ -8,6 +8,8 @@ import {
   groundWindOrthographicProject,
   layoutGroundWindScreenSeeds,
   stepGroundWindParticles,
+  GROUND_WIND_RESPAWN_MAX_TRIES,
+  type GroundWindStepBench,
 } from "./groundWindParticles";
 import type { CityModel, Pt } from "../types";
 
@@ -77,4 +79,40 @@ describe("groundWindRender", () => {
     expect(stats.layoutActive).toBe(layoutCount);
     expect(stats.drawable).toBeGreaterThanOrEqual(layoutCount * 0.88);
   }, 30_000);
+
+  it("keeps wind updates under 4ms mean with no respawn raycasts after layout", () => {
+    const model = denseModel();
+    const field = buildGroundWindField(model, { east: 1, north: 0.12 });
+    const viewW = 1440;
+    const viewH = 900;
+    const flat = () => 1;
+    const particles = createGroundWindParticles(field, flat, 31, undefined, GROUND_WIND_PARTICLES_MAX, model);
+    particles.viewWidth = viewW;
+    particles.viewHeight = viewH;
+    particles.cityModel = model;
+    particles.metresPerPx = model.sideM / viewW;
+    particles.screenProject = (east, north, y) => groundWindOrthographicProject(east, north, y, viewW, viewH, model.sideM);
+    particles.screenUnproject = (sx, sy) => ({
+      east: (sx / viewW - 0.5) * model.sideM,
+      north: (sy / viewH - 0.5) * model.sideM,
+    });
+    layoutGroundWindScreenSeeds(particles, field, flat, model, 31);
+    const mps = groundWindMetresPerSecond(model.sideM, 20);
+  const bench: GroundWindStepBench = { respawns: 0, respawnRaycasts: 0, respawnLoopMax: 0 };
+    const times: number[] = [];
+    for (let step = 0; step < 180; step++) {
+      const frameBench: GroundWindStepBench = { respawns: 0, respawnRaycasts: 0, respawnLoopMax: 0 };
+      const t0 = performance.now();
+      stepGroundWindParticles(particles, field, flat, 1 / 60, mps, frameBench);
+      const elapsed = performance.now() - t0;
+      if (step >= 20) times.push(elapsed);
+      expect(frameBench.respawnRaycasts).toBe(0);
+      expect(frameBench.respawnLoopMax).toBeLessThanOrEqual(GROUND_WIND_RESPAWN_MAX_TRIES);
+      bench.respawnLoopMax = Math.max(bench.respawnLoopMax, frameBench.respawnLoopMax);
+    }
+    expect(particles.count).toBeGreaterThan(2000);
+    const meanMs = times.reduce((sum, t) => sum + t, 0) / times.length;
+    expect(meanMs).toBeLessThan(4);
+    expect(bench.respawnRaycasts).toBe(0);
+  }, 60_000);
 });
