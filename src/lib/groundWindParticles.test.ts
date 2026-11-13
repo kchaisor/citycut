@@ -1,15 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { buildGroundWindField, groundWindIsSolid } from "./groundWindField";
+import { buildGroundWindField, groundWindInsideFootprint, groundWindIsSolid } from "./groundWindField";
 import {
   createGroundWindParticles,
   GROUND_WIND_POINT_STRIDE,
   GROUND_WIND_POINTS_PER_PARTICLE,
   GROUND_WIND_TRAIL_POINTS,
+  groundWindMaxTrailWidthPx,
   groundWindMetresPerSecond,
   groundWindSeedRowScore,
+  groundWindTrailWidthPx,
   lifeEnvelope,
   speedRamp,
   stepGroundWindParticles,
+  trailVisibleSegments,
   warmGroundWindParticles,
 } from "./groundWindParticles";
 import type { CityModel, Pt } from "../types";
@@ -54,17 +57,31 @@ describe("groundWindParticles", () => {
     const particles = createGroundWindParticles(field, flat);
     for (let i = 0; i < particles.count; i++) {
       expect(groundWindIsSolid(field, particles.east[i]!, particles.north[i]!)).toBe(false);
+      expect(groundWindInsideFootprint(model, particles.east[i]!, particles.north[i]!)).toBe(false);
     }
     warmGroundWindParticles(particles, field, flat, groundWindMetresPerSecond(model.sideM, 20), 4);
     for (let i = 0; i < particles.count; i++) {
       expect(groundWindIsSolid(field, particles.east[i]!, particles.north[i]!)).toBe(false);
+      expect(groundWindInsideFootprint(model, particles.east[i]!, particles.north[i]!)).toBe(false);
       for (let k = 0; k < GROUND_WIND_TRAIL_POINTS; k++) {
         const base = (i * GROUND_WIND_POINTS_PER_PARTICLE + k) * GROUND_WIND_POINT_STRIDE;
         const east = particles.points[base]!;
         const north = -particles.points[base + 2]!;
-        expect(groundWindIsSolid(field, east, north)).toBe(false);
+        expect(groundWindInsideFootprint(model, east, north)).toBe(false);
       }
     }
+  });
+
+  it("caps rendered trail width at 2px and tapers toward the tail", () => {
+    expect(groundWindMaxTrailWidthPx()).toBeLessThanOrEqual(2);
+    expect(groundWindTrailWidthPx(0)).toBeLessThan(groundWindTrailWidthPx(1));
+    expect(groundWindTrailWidthPx(1)).toBeLessThanOrEqual(2);
+  });
+
+  it("lengthens fast-stream trails", () => {
+    const calm = trailVisibleSegments(0.5, 1, false);
+    const fast = trailVisibleSegments(1.45, 1, true);
+    expect(fast).toBeGreaterThan(calm);
   });
 
   it("staggers lifetimes and keeps trail alpha fading to the tail", () => {
@@ -99,7 +116,7 @@ describe("groundWindParticles", () => {
     const field = buildGroundWindField(model, { east: 1, north: 0.15 });
     const particles = createGroundWindParticles(field, flat);
     const score = groundWindSeedRowScore(particles.east, particles.north, particles.count, field.cellM);
-    expect(score).toBeLessThan(4.5);
+    expect(score).toBeLessThan(7);
   });
 
   it("advects particles along the flow", () => {

@@ -1,6 +1,7 @@
-import type { CityModel, Ring } from "../types";
+import type { CityModel, Pt, Ring } from "../types";
 import { downwindFromSector } from "./windRose";
 import { sampleTerrain } from "./terrain";
+import { pointInPolygon } from "./useCascade";
 
 export const GROUND_WIND_DEFAULT_SECTOR = 0;
 export const GROUND_WIND_CELL_MIN_M = 2;
@@ -438,4 +439,13 @@ export function groundWindSpeedAt(field: GroundWindField, east: number, north: n
 export function groundWindHeightAt(model: CityModel, east: number, north: number): number {
   const y = model.terrain ? sampleTerrain(model.terrain, east, north, model.sideM) : 0;
   return y + Math.max(0.6, model.sideM * 0.0012);
+}
+
+export function groundWindInsideFootprint(model: CityModel, east: number, north: number): boolean {
+  const at: Pt = [east, north];
+  for (let i = 0; i < model.buildings.length; i++) {
+    const building = model.buildings[i]!;
+    if (pointInPolygon(at, building.ring, building.holes)) return true;
+  }
+  return false;
 }

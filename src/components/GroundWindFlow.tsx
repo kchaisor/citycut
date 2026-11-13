@@ -15,8 +15,11 @@ import {
   GROUND_WIND_PARTICLES_MAX,
   GROUND_WIND_POINT_STRIDE,
   GROUND_WIND_POINTS_PER_PARTICLE,
+  GROUND_WIND_TRAIL_HEAD_WIDTH_PX,
+  GROUND_WIND_TRAIL_TAIL_WIDTH_PX,
   groundWindMetresPerSecond,
   groundWindPointsLength,
+  scatterGroundWindScreen,
   stepGroundWindParticles,
   warmGroundWindParticles,
   type GroundWindParticles,
@@ -36,10 +39,13 @@ attribute float a0;
 attribute float a1;
 attribute float along0;
 attribute float along1;
-uniform float widthM;
+attribute float fast0;
+attribute float fast1;
+uniform float metresPerPx;
 varying float vAlpha;
 varying float vSide;
 varying float vAlong;
+varying float vFast;
 void main() {
   float end = position.y;
   float side = position.x;
@@ -47,29 +53,32 @@ void main() {
   float len = length(d.xz);
   vec2 perp = len > 1e-4 ? vec2(-d.z, d.x) / len : vec2(0.0);
   float along = mix(along0, along1, end);
-  float w = widthM * mix(0.22, 1.0, along) * step(1e-4, len);
+  float fast = mix(fast0, fast1, end);
+  float wPx = mix(${GROUND_WIND_TRAIL_TAIL_WIDTH_PX.toFixed(2)}, ${GROUND_WIND_TRAIL_HEAD_WIDTH_PX.toFixed(2)}, along);
+  float w = metresPerPx * wPx * step(1e-4, len);
   vec3 centre = mix(p0, p1, end);
   vec3 worldPos = centre + vec3(perp.x, 0.0, perp.y) * side * w;
   vAlpha = mix(a0, a1, end);
   vSide = abs(side);
   vAlong = along;
+  vFast = fast;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(worldPos, 1.0);
 }
 `;
 
 const FRAGMENT_SHADER = `
-uniform vec3 edgeColour;
-uniform vec3 coreColour;
-uniform vec3 glowColour;
+uniform vec3 headColour;
+uniform vec3 fastColour;
 uniform float opacity;
 varying float vAlpha;
 varying float vSide;
 varying float vAlong;
+varying float vFast;
 void main() {
-  float core = 1.0 - pow(vSide, 1.6);
-  vec3 colour = mix(edgeColour, coreColour, core * 0.82 + vAlong * 0.08);
-  colour = mix(colour, glowColour, core * core * 0.55);
-  float alpha = vAlpha * opacity * mix(0.65, 1.0, core);
+  vec3 colour = mix(headColour, fastColour, clamp(vFast, 0.0, 1.0));
+  float edge = 1.0 - smoothstep(0.72, 1.0, vSide);
+  float alpha = vAlpha * opacity * edge;
+  if (alpha < 0.004) discard;
   gl_FragColor = vec4(colour, alpha);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -81,10 +90,15 @@ function reducedMotionPreferred(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-function ribbonWidthM(sideM: number, cameraDistance: number): number {
-  const base = Math.max(0.55, sideM * 0.0029);
-  const lift = Math.min(3.2, Math.max(1, cameraDistance / (sideM * 0.42)));
-  return base * lift;
+function metresPerPixel(camera: THREE.Camera, point: THREE.Vector3, heightPx: number): number {
+  if (camera instanceof THREE.OrthographicCamera) {
+    const span = (camera.top - camera.bottom) / Math.max(1, camera.zoom);
+    return span / heightPx;
+  }
+  const persp = camera as THREE.PerspectiveCamera;
+  const dist = Math.max(0.1, camera.position.distanceTo(point));
+  const worldHeight = 2 * Math.tan((persp.fov * Math.PI) / 360) * dist;
+  return worldHeight / heightPx;
 }
 
 function createRibbonGeometry(points: Float32Array): { geometry: THREE.InstancedBufferGeometry; data: THREE.InstancedInterleavedBuffer } {
@@ -97,9 +111,11 @@ function createRibbonGeometry(points: Float32Array): { geometry: THREE.Instanced
   geometry.setAttribute("p0", new THREE.InterleavedBufferAttribute(data, 3, 0));
   geometry.setAttribute("a0", new THREE.InterleavedBufferAttribute(data, 1, 3));
   geometry.setAttribute("along0", new THREE.InterleavedBufferAttribute(data, 1, 4));
+  geometry.setAttribute("fast0", new THREE.InterleavedBufferAttribute(data, 1, 5));
   geometry.setAttribute("p1", new THREE.InterleavedBufferAttribute(data, 3, GROUND_WIND_POINT_STRIDE));
   geometry.setAttribute("a1", new THREE.InterleavedBufferAttribute(data, 1, GROUND_WIND_POINT_STRIDE + 3));
   geometry.setAttribute("along1", new THREE.InterleavedBufferAttribute(data, 1, GROUND_WIND_POINT_STRIDE + 4));
+  geometry.setAttribute("fast1", new THREE.InterleavedBufferAttribute(data, 1, GROUND_WIND_POINT_STRIDE + 5));
   geometry.instanceCount = 0;
   geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), Number.POSITIVE_INFINITY);
   return { geometry, data };
@@ -130,33 +146,24 @@ export function GroundWindFlow({
         vertexShader: VERTEX_SHADER,
         fragmentShader: FRAGMENT_SHADER,
         uniforms: {
-          widthM: { value: 1 },
-          opacity: { value: 1.08 },
-          edgeColour: { value: new THREE.Color() },
-          coreColour: { value: new THREE.Color() },
-          glowColour: { value: new THREE.Color() },
+          metresPerPx: { value: 0.01 },
+          opacity: { value: 1 },
+          headColour: { value: new THREE.Color() },
+          fastColour: { value: new THREE.Color() },
         },
         transparent: true,
         depthWrite: false,
         depthTest: true,
         side: THREE.DoubleSide,
         toneMapped: false,
-        blending: THREE.CustomBlending,
-        blendSrc: THREE.SrcAlphaFactor,
-        blendDst: THREE.OneMinusSrcAlphaFactor,
-        blendEquation: THREE.AddEquation,
-        blendSrcAlpha: THREE.OneFactor,
-        blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
-        blendEquationAlpha: THREE.AddEquation,
       }),
     [],
   );
 
   const colourRevision = useColourRevision();
   useEffect(() => {
-    (material.uniforms.edgeColour!.value as THREE.Color).set(getColour("--ground-wind-flow"));
-    (material.uniforms.coreColour!.value as THREE.Color).set(getColour("--ground-wind-core"));
-    (material.uniforms.glowColour!.value as THREE.Color).set(getColour("--ground-wind-glow"));
+    (material.uniforms.headColour!.value as THREE.Color).set(getColour("--ground-wind-core"));
+    (material.uniforms.fastColour!.value as THREE.Color).set(getColour("--ground-wind-flow"));
   }, [material, colourRevision]);
 
   useEffect(
@@ -170,13 +177,30 @@ export function GroundWindFlow({
   const builderRef = useRef<GroundWindFieldBuilder | null>(null);
   const fieldRef = useRef<GroundWindField | null>(null);
   const particlesRef = useRef<GroundWindParticles | null>(null);
+  const screenSeededRef = useRef(false);
   const invalidate = useThree((state) => state.invalidate);
   const camera = useThree((state) => state.camera);
+  const size = useThree((state) => state.size);
+  const projScratch = useMemo(() => new THREE.Vector3(), []);
+
+  const screenProject = useCallback(
+    (east: number, north: number, y: number) => {
+      projScratch.set(east, y, -north);
+      projScratch.project(camera);
+      if (projScratch.z > 1) return null;
+      return {
+        x: ((projScratch.x + 1) / 2) * size.width,
+        y: ((1 - projScratch.y) / 2) * size.height,
+      };
+    },
+    [camera, size.width, size.height, projScratch],
+  );
 
   useEffect(() => {
     builderRef.current = createGroundWindFieldBuilder(model, base);
     fieldRef.current = null;
     particlesRef.current = null;
+    screenSeededRef.current = false;
     geometry.instanceCount = 0;
     invalidate();
   }, [model, base, geometry, invalidate]);
@@ -196,9 +220,12 @@ export function GroundWindFlow({
       fieldRef.current = field;
       builderRef.current = null;
       const particles = createGroundWindParticles(field, heightAt, 7, points);
+      particles.screenProject = screenProject;
       particlesRef.current = particles;
       geometry.instanceCount = particles.count * GROUND_WIND_POINTS_PER_PARTICLE - 1;
       warmGroundWindParticles(particles, field, heightAt, metresPerSecond, frozenRef.current ? WARM_FROZEN_S : WARM_LIVE_S);
+      scatterGroundWindScreen(particles, field, heightAt);
+      screenSeededRef.current = true;
       data.needsUpdate = true;
       invalidate();
       return;
@@ -206,9 +233,18 @@ export function GroundWindFlow({
     const field = fieldRef.current;
     const particles = particlesRef.current;
     if (!field || !particles) return;
-    material.uniforms.widthM!.value = ribbonWidthM(model.sideM, camera.position.length());
+    particles.screenProject = screenProject;
+    const headEast = particles.east[0] ?? 0;
+    const headNorth = particles.north[0] ?? 0;
+    const headY = heightAt(headEast, headNorth);
+    projScratch.set(headEast, headY, -headNorth);
+    material.uniforms.metresPerPx!.value = metresPerPixel(camera, projScratch, size.height);
     if (frozenRef.current) return;
     stepGroundWindParticles(particles, field, heightAt, Math.min(delta, MAX_FRAME_DT), metresPerSecond);
+    if (!screenSeededRef.current) {
+      scatterGroundWindScreen(particles, field, heightAt);
+      screenSeededRef.current = true;
+    }
     data.needsUpdate = true;
     invalidate();
   });

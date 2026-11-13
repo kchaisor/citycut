@@ -288,9 +288,14 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--axo-tree-trunk` | `#7a6a55` | Exploded axo tree trunk. |
 | `--wind-streak` | `#2B6CB0` | Animated wind streaks in the 3D viewport (~70% opacity). |
 | `--wind-rose` | `#3d5a73` | On-screen wind rose overlay and Wind export layer. |
-| `--ground-wind-flow` | `#1e4f7a` | Darker edge of the 3D ground-level wind ribbons so they hold contrast on pale ground. |
-| `--ground-wind-core` | `#4a9ae8` | Mid-blue centre of the 3D ground-level wind ribbons. |
-| `--ground-wind-glow` | `#7ec4ff` | Soft additive highlight on the ribbon core so trails still read on dark roads. |
+| `--ground-wind-flow` | `#0b3d91` | Fast-stream ground-wind trail heads (>1.3× free stream). |
+| `--ground-wind-core` | `#2f6fd6` | Ground-wind trail heads on open ground (≥3:1 on pale ground). |
+| `--ground-wind-glow` | `#2f6fd6` | Reserve token paired with ground-wind trail fills. |
+| `--wind-band-0` | `#9ec5e8` | Wind console swatch: 2–10 km/h. |
+| `--wind-band-1` | `#5b9bd5` | Wind console swatch: 10–20 km/h. |
+| `--wind-band-2` | `#2f6fd6` | Wind console swatch: 20–30 km/h. |
+| `--wind-band-3` | `#1b4f9c` | Wind console swatch: 30–40 km/h. |
+| `--wind-band-4` | `#0b3d91` | Wind console swatch: 40+ km/h. |
 | `--view-visible` | `#FFF500` | View tab: ground visible from the walker right now (3D overlay, ~86% opacity) and its legend swatch. |
 | `--view-seen` | `#FFF9AA` | View tab: ground seen earlier on the walk (lighter tint, ~47% opacity). |
 | `--view-blocked` | `#28282E` | View tab: ground inside the radius that is not visible (~27% opacity). |
