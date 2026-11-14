@@ -18,6 +18,7 @@ import { attachScenePointPick } from "../lib/buildingPick";
 import { attachSceneInspectPick, type SceneInspectWorld, type SceneSelection } from "../lib/sceneInspectPick";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { basePlinthBottomY } from "../lib/terrain";
+import { siteFrameFromModel } from "../lib/modelFrame";
 import { auditBuildingSelection, mountSelectedBuildingsVisual } from "../lib/buildingSelectionVisual";
 import { CAMERA_FIT_INCLUDES_HELIODON } from "../lib/sceneCameraFit";
 import { shotFromCamera, type CameraShot } from "../lib/cameraShot";
@@ -2295,7 +2296,7 @@ export function Scene3D({
         sideM={model.sideM}
         plinthBottomY={plinthBottomY}
         showShadow={projection !== "plan"}
-        frameShape={model.frameShape ?? "square"}
+        frame={siteFrameFromModel(model)}
         colourTick={colourTick}
         primaryView={display.primaryView}
       />

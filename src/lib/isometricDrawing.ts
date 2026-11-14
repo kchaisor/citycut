@@ -16,12 +16,13 @@ import { carParkWays } from "./planCarParks";
 import { isSiteBuilding } from "./siteBuildings";
 import {
   circleRing,
-  clipAreaToSiteFrame,
-  clipPolylineSiteFrame,
+  clipLine,
+  clipPolygonWithHoles,
+  containsPoint,
   DEFAULT_SITE_FRAME_SHAPE,
-  pointInSiteFrame,
-  type SiteFrameShape,
+  outline,
 } from "./siteFrame";
+import { modelFrameSize, siteFrameFromModel } from "./modelFrame";
 import { footprintBase, sampleTerrain } from "./terrain";
 import {
   altitudeOnInterval,
@@ -113,16 +114,10 @@ function dedupe(line: Pt[]): Pt[] {
   return out;
 }
 
-function frameRing(sideM: number, shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE): Pt[] {
-  const half = sideM / 2;
-  if (shape === "circle") return circleRing(half, 64);
-  return [
-    [-half, -half],
-    [half, -half],
-    [half, half],
-    [-half, half],
-    [-half, -half],
-  ];
+function frameRing(model: Pick<CityModel, "sideM" | "widthM" | "heightM" | "frameShape">): Pt[] {
+  const frame = siteFrameFromModel(model);
+  const ring = outline(frame)[0]!;
+  return ring.slice(0, -1).map(([x, y]) => [x, y] as Pt);
 }
 
 export type IsoPlinthWall = {
@@ -379,7 +374,6 @@ function buildBuildingSolids(
   colors: IsometricDrawingColors,
   baseElevation: number,
 ): IsoSolidItem[] {
-  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const items: IsoSolidItem[] = [];
 
   for (const building of model.buildings) {
@@ -419,7 +413,7 @@ function buildBuildingSolids(
       const base = part.base;
       if (!(top > base)) continue;
 
-      const clipped = clipAreaToSiteFrame(part.ring as Pt[], part.holes as Pt[][], model.sideM, shape);
+      const clipped = clipPolygonWithHoles(siteFrameFromModel(model), part.ring as Pt[], part.holes as Pt[][]);
       if (!clipped || clipped.length === 0) continue;
       const outer = openRing(clipped[0]!);
       if (outer.length < 3) continue;
@@ -493,13 +487,12 @@ function buildTreeSolids(
   colors: IsometricDrawingColors,
   elevationAt: (east: number, north: number) => number,
 ): IsoSolidItem[] {
-  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const canopyFill = colors.trees;
   const stroke = colors.buildingEdge;
   const items: IsoSolidItem[] = [];
 
   for (const tree of model.trees) {
-    if (!pointInSiteFrame(tree.at, model.sideM, shape)) continue;
+    if (!containsPoint(siteFrameFromModel(model), tree.at)) continue;
     const [east, north] = tree.at;
     const groundZ = elevationAt(east, north);
     const r = Math.max(0.6, tree.crown_diameter_m / 2);
@@ -544,6 +537,7 @@ export function buildIsometricDrawing(
   const colors = options?.colors ?? readIsometricDrawingColors();
   const planScale = options?.planScale ?? 1000;
   const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
+  const frameSize = modelFrameSize(model);
 
   const layersVisible: Record<Layer3dId, boolean> = {
     buildings: isLayer3dVisible(display, "buildings"),
@@ -573,7 +567,7 @@ export function buildIsometricDrawing(
     if (area.kind === "block") continue;
     if (area.kind === "water" && !layersVisible.water) continue;
     if (area.kind === "green" && !layersVisible.landscape) continue;
-    const clipped = clipAreaToSiteFrame(area.ring, area.holes, model.sideM, shape);
+    const clipped = clipPolygonWithHoles(siteFrameFromModel(model), area.ring, area.holes);
     if (!clipped) continue;
     const d = projectRingsToPath(clipped, corner, elevationAt);
     if (!d) continue;
@@ -588,7 +582,7 @@ export function buildIsometricDrawing(
   if (layersVisible.roads || layersVisible.footpaths) {
     const carPark = carParkWays(model.roads, model.carParks);
     const planRoads = carPark.size > 0 ? model.roads.filter((road) => !carPark.has(road)) : model.roads;
-    const carriageway = unionRoadSurface(planRoads, model.tramLines, model.sideM, shape);
+    const carriageway = unionRoadSurface(planRoads, model.tramLines, model.sideM, shape, frameSize);
 
     if (layersVisible.footpaths) {
       const footpaths = unionFootpathStrips(
@@ -596,6 +590,8 @@ export function buildIsometricDrawing(
         model.sideM,
         shape,
         DEFAULT_PATH_FILLET_M,
+        1.2,
+        frameSize,
       );
       let pathMulti = footpaths.polygons;
       if (carriageway.polygons.length > 0) {
@@ -609,7 +605,7 @@ export function buildIsometricDrawing(
       }
       for (const road of model.roads) {
         if (road.kind !== "road" || road.grade !== "path") continue;
-        for (const part of clipPolylineSiteFrame(dedupe(road.line), model.sideM, shape)) {
+        for (const part of clipLine(siteFrameFromModel(model), dedupe(road.line))) {
           if (part.length < 2) continue;
           const d = isoSvgPolylinePoints(
             part.map(([e, n]) => projectIsoPoint(e, n, elevationAt(e, n), corner)),
@@ -642,6 +638,7 @@ export function buildIsometricDrawing(
             .map((r) => ({ line: r.line, width: r.width })),
           model.sideM,
           shape,
+          frameSize,
         );
         for (const poly of fallbackCarriageways.polygons) {
           const rings = poly.map((r) => r.map((p): Pt => [p[0], p[1]]));
@@ -651,7 +648,7 @@ export function buildIsometricDrawing(
       }
       for (const road of model.roads) {
         if (!isVehicularRoad(road)) continue;
-        for (const part of clipPolylineSiteFrame(dedupe(road.line), model.sideM, shape)) {
+        for (const part of clipLine(siteFrameFromModel(model), dedupe(road.line))) {
           if (part.length < 2) continue;
           const d = isoSvgPolylinePoints(
             part.map(([e, n]) => projectIsoPoint(e, n, elevationAt(e, n), corner)),
@@ -668,7 +665,7 @@ export function buildIsometricDrawing(
   if (layersVisible.rail) {
     for (const road of model.roads) {
       if (road.kind !== "rail") continue;
-      for (const part of clipPolylineSiteFrame(dedupe(road.line), model.sideM, shape)) {
+      for (const part of clipLine(siteFrameFromModel(model), dedupe(road.line))) {
         if (part.length < 2) continue;
         const d = isoSvgPolylinePoints(
           part.map(([e, n]) => projectIsoPoint(e, n, elevationAt(e, n), corner)),
@@ -678,7 +675,7 @@ export function buildIsometricDrawing(
       }
     }
     for (const line of model.tramLines ?? []) {
-      for (const part of clipPolylineSiteFrame(dedupe(line), model.sideM, shape)) {
+      for (const part of clipLine(siteFrameFromModel(model), dedupe(line))) {
         if (part.length < 2) continue;
         const d = isoSvgPolylinePoints(
           part.map(([e, n]) => projectIsoPoint(e, n, elevationAt(e, n), corner)),
@@ -700,7 +697,7 @@ export function buildIsometricDrawing(
       const minZ = layer.lines.reduce((m, l) => Math.min(m, l.z), model.terrain?.min ?? Infinity);
       const contourBaseZ = Number.isFinite(minZ) ? minZ : baseElevation;
       const clipped = layer.lines.flatMap((line) =>
-        clipPolylineSiteFrame(dedupe(line.points), model.sideM, shape)
+        clipLine(siteFrameFromModel(model), dedupe(line.points))
           .map(dedupe)
           .filter((pts) => pts.length >= 2)
           .map((points) => ({ points, z: line.z })),
@@ -764,8 +761,7 @@ export function isometricDrawingBounds(
   model: CityModel,
   corner: IsoCorner = DEFAULT_ISO_CORNER,
 ): { minX: number; minY: number; maxX: number; maxY: number } {
-  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
-  const ring = frameRing(model.sideM, shape);
+  const ring = frameRing(model);
   let maxBuildingH = 20;
   for (const b of model.buildings) {
     if (b.height > maxBuildingH) maxBuildingH = b.height;

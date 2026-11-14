@@ -1,5 +1,6 @@
 import { signedArea, squareBBox } from "./geo";
-import { clipAreaToSiteFrame, clipPolylineSiteFrame, DEFAULT_SITE_FRAME_SHAPE } from "./siteFrame";
+import { clipLine, clipPolygonWithHoles } from "./siteFrame";
+import { siteFrameFromModel } from "./modelFrame";
 import { fetchTierJson, type FrameBBox } from "./useCascade";
 import {
   linesFromGeometry,
@@ -46,10 +47,9 @@ function frameBBox(model: CityModel): FrameBBox {
 }
 
 function clipPolygons(polygons: VicmapPolygon[], model: CityModel): VicmapPolygon[] {
-  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const out: VicmapPolygon[] = [];
   for (const poly of polygons) {
-    const clipped = clipAreaToSiteFrame(poly.outer, poly.holes, model.sideM, shape);
+    const clipped = clipPolygonWithHoles(siteFrameFromModel(model), poly.outer, poly.holes);
     if (!clipped) continue;
     out.push({ outer: clipped[0]!, holes: clipped.slice(1) });
   }
@@ -57,10 +57,9 @@ function clipPolygons(polygons: VicmapPolygon[], model: CityModel): VicmapPolygo
 }
 
 function clipLines(lines: Pt[][], model: CityModel): Pt[][] {
-  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const out: Pt[][] = [];
   for (const line of lines) {
-    for (const part of clipPolylineSiteFrame(line, model.sideM, shape)) {
+    for (const part of clipLine(siteFrameFromModel(model), line)) {
       if (part.length >= 2) out.push(part);
     }
   }
@@ -114,8 +113,7 @@ export async function fetchPlanningOverlays(
   }
   const clipped: PlanningOverlayPolygon[] = [];
   for (const poly of polygons) {
-    const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
-    const rings = clipAreaToSiteFrame(poly.outer, poly.holes, model.sideM, shape);
+    const rings = clipPolygonWithHoles(siteFrameFromModel(model), poly.outer, poly.holes);
     if (!rings) continue;
     clipped.push({ outer: rings[0]!, holes: rings.slice(1), kind: poly.kind });
   }

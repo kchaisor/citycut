@@ -1,6 +1,7 @@
 import type { Pt } from "../../types";
 import type { CityModel } from "../../types";
-import { clipPolylineSiteFrame, DEFAULT_SITE_FRAME_SHAPE } from "../siteFrame";
+import { siteFrameFromModel } from "../modelFrame";
+import { clipLine } from "../siteFrame";
 import { knifeNormalXZ, type SectionKnifePose } from "./plane";
 import { sectionAxis } from "./profiles";
 export type SectionPlanMarkerGeometry = {
@@ -56,7 +57,6 @@ export function sectionPlanMarkerGeometry(model: CityModel, pose: SectionKnifePo
 }
 
 export function sectionPlanMarkerClip(model: CityModel, geom: SectionPlanMarkerGeometry): SectionPlanMarkerClip {
-  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const midE = (geom.east0 + geom.east1) * 0.5;
   const midN = (geom.north0 + geom.north1) * 0.5;
   const ext = model.sideM * 2;
@@ -64,7 +64,7 @@ export function sectionPlanMarkerClip(model: CityModel, geom: SectionPlanMarkerG
     [midE - geom.tangentEast * ext, midN - geom.tangentNorth * ext],
     [midE + geom.tangentEast * ext, midN + geom.tangentNorth * ext],
   ];
-  const parts = clipPolylineSiteFrame(line, model.sideM, shape);
+  const parts = clipLine(siteFrameFromModel(model), line);
   if (!parts[0] || parts[0].length < 2) {
     return { east0: geom.east0, north0: geom.north0, east1: geom.east1, north1: geom.north1 };
   }

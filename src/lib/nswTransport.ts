@@ -1,5 +1,6 @@
 import { squareBBox, toLocal } from "./geo";
-import { DEFAULT_SITE_FRAME_SHAPE, pointInSiteFrame } from "./siteFrame";
+import { siteFrameFromModel } from "./modelFrame";
+import { containsPoint } from "./siteFrame";
 import type { PublicTransportStop, TransportRailStation } from "./explodedAxoOverlayFetch";
 import type { CityModel, Pt } from "../types";
 
@@ -45,14 +46,13 @@ export async function fetchOsmBusStops(
     if (response.status === 429) return { stops: [], note: "OpenStreetMap bus stops: Overpass is rate limiting (HTTP 429); not retried." };
     if (response.status < 200 || response.status >= 300) return { stops: [], note: `OpenStreetMap bus stops: Overpass answered HTTP ${response.status}.` };
     const body = (await response.json()) as { elements?: { lat?: number; lon?: number; id?: number }[] };
-    const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
     const seen = new Set<number>();
     const stops: Pt[] = [];
     for (const el of body.elements ?? []) {
       if (typeof el.lat !== "number" || typeof el.lon !== "number" || (el.id != null && seen.has(el.id))) continue;
       if (el.id != null) seen.add(el.id);
       const p = toLocal(el.lat, el.lon, model.center);
-      if (pointInSiteFrame(p, model.sideM, shape)) stops.push(p);
+      if (containsPoint(siteFrameFromModel(model), p)) stops.push(p);
     }
     return { stops, note: null };
   } catch (error) {

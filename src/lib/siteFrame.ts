@@ -14,6 +14,65 @@ export type FrameGroundSize = {
   heightM: number;
 };
 
+export type SiteFrame = {
+  sideM: number;
+  shape: SiteFrameShape;
+  widthM: number;
+  heightM: number;
+};
+
+export const PLINTH_SHADOW_SPREAD = 1.5;
+
+export function makeSiteFrame(
+  sideM: number,
+  shape: SiteFrameShape,
+  size?: FrameGroundSize,
+): SiteFrame {
+  const ground = frameGroundSize(sideM, size?.widthM, size?.heightM);
+  return { sideM, shape, widthM: ground.widthM, heightM: ground.heightM };
+}
+
+export function siteFrameGround(frame: SiteFrame): FrameGroundSize {
+  return { widthM: frame.widthM, heightM: frame.heightM };
+}
+
+export function containsPoint(frame: SiteFrame, point: Pt, margin = 0): boolean {
+  if (margin > 0) return pointInSiteFrameWithMargin(frame, point, margin);
+  return pointInSiteFrame(point, frame.sideM, frame.shape, siteFrameGround(frame));
+}
+
+function pointInSiteFrameWithMargin(frame: SiteFrame, point: Pt, margin: number): boolean {
+  const { halfW, halfH } = frameHalfExtents(frame.sideM, frame.shape, siteFrameGround(frame));
+  if (frame.shape === "circle") {
+    const r = halfW + margin;
+    return point[0] * point[0] + point[1] * point[1] <= r * r + 0.001;
+  }
+  return Math.abs(point[0]) <= halfW + margin + 0.001 && Math.abs(point[1]) <= halfH + margin + 0.001;
+}
+
+export function clipLine(frame: SiteFrame, points: Pt[]): Pt[][] {
+  return clipPolylineSiteFrame(points, frame.sideM, frame.shape, siteFrameGround(frame));
+}
+
+export function clipPolygon(frame: SiteFrame, ring: Pt[]): Pt[] {
+  return clipPolygonSiteFrame(ring, frame.sideM, frame.shape, siteFrameGround(frame));
+}
+
+export function clipPolygonWithHoles(frame: SiteFrame, outer: Pt[], holes: Pt[][]): Pt[][] | null {
+  return clipAreaToSiteFrame(outer, holes, frame.sideM, frame.shape, siteFrameGround(frame));
+}
+
+export function outline(frame: SiteFrame): Polygon {
+  return siteFramePolygon(frame.sideM, frame.shape, siteFrameGround(frame));
+}
+
+export function plinthShadowExtents(frame: SiteFrame, spread = PLINTH_SHADOW_SPREAD): {
+  widthM: number;
+  heightM: number;
+} {
+  return { widthM: frame.widthM * spread, heightM: frame.heightM * spread };
+}
+
 export function frameGroundSize(sideM: number, widthM?: number, heightM?: number): FrameGroundSize {
   const width = widthM ?? sideM;
   const height = heightM ?? sideM;

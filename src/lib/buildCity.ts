@@ -4,8 +4,8 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { BUILDING_EDGE_COLOR, BUILDING_EDGE_THRESHOLD_DEG } from "./buildingEdges";
 import { BUILDING_USE_META, SOURCE_META, buildingLayerName, uniformBuildingColor } from "./buildingUse";
 import { getColour } from "./colours";
-import { DEFAULT_SITE_FRAME_SHAPE, SITE_FRAME_CIRCLE_SEGMENTS, type FrameGroundSize } from "./siteFrame";
-import { modelFrameSize } from "./modelFrame";
+import { containsPoint, DEFAULT_SITE_FRAME_SHAPE, SITE_FRAME_CIRCLE_SEGMENTS, type FrameGroundSize } from "./siteFrame";
+import { modelFrameSize, siteFrameFromModel } from "./modelFrame";
 import { buildTreeGroup } from "./treeMassing";
 import { openRing, signedArea } from "./geo";
 import { carriagewaysOf, unionCarriageways, unionPathRoads } from "./roadFill";
@@ -728,8 +728,10 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   }
 
   if (model.layers.trees) {
+    const frame = siteFrameFromModel(model);
+    const inFrameTrees = model.trees.filter((tree) => containsPoint(frame, tree.at));
     const trees = buildTreeGroup(
-      model.trees,
+      inFrameTrees,
       sample ?? undefined,
       options.introStagger ? { introStagger: true, sideM: model.sideM } : undefined,
     );

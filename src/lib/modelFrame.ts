@@ -1,5 +1,12 @@
 import type { CityModel } from "../types";
-import { DEFAULT_SITE_FRAME_SHAPE, frameGroundSize, type FrameGroundSize, type SiteFrameShape } from "./siteFrame";
+import {
+  DEFAULT_SITE_FRAME_SHAPE,
+  frameGroundSize,
+  makeSiteFrame,
+  type FrameGroundSize,
+  type SiteFrame,
+  type SiteFrameShape,
+} from "./siteFrame";
 
 export function modelFrameSize(model: Pick<CityModel, "sideM" | "widthM" | "heightM">): FrameGroundSize {
   return {
@@ -27,4 +34,10 @@ export function modelSiteFrame(
 ): { sideM: number; shape: SiteFrameShape; size: FrameGroundSize } {
   const size = modelFrameSize(model);
   return { sideM: model.sideM, shape: model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE, size };
+}
+
+export function siteFrameFromModel(
+  model: Pick<CityModel, "sideM" | "widthM" | "heightM" | "frameShape">,
+): SiteFrame {
+  return makeSiteFrame(model.sideM, model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE, modelFrameSize(model));
 }
