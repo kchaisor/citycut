@@ -76,4 +76,10 @@
 
   --sidebar-rail-w: 56px;
   --sidebar-panel-w: 320px;
+
+  --z-studio-inspector: 30;
+  --z-studio-topbar: 40;
+
+  --studio-intelligence-meta: #5F5E5A;
+  --studio-submode-select-edge: #D9D8D3;
 }

@@ -340,7 +340,9 @@ export function ModelPage({
   const [exportError, setExportError] = useState<string | null>(null);
   const [busy, setBusy] = useState<ExportBusy>(null);
   const [topbarExportOpen, setTopbarExportOpen] = useState(false);
+  const [topbarLayout, setTopbarLayout] = useState<"centered" | "flow">("flow");
   const topbarExportRef = useRef<HTMLDivElement>(null);
+  const topbarExportTriggerRef = useRef<HTMLButtonElement>(null);
   const cutDimLabel = useMemo(
     () =>
       cutSizeLabel(model.sideM, model.frameShape ?? "square", {
@@ -358,7 +360,9 @@ export function ModelPage({
       setTopbarExportOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setTopbarExportOpen(false);
+      if (event.key !== "Escape") return;
+      setTopbarExportOpen(false);
+      topbarExportTriggerRef.current?.focus();
     };
     document.addEventListener("pointerdown", onPointer);
     document.addEventListener("keydown", onKey);
@@ -2172,11 +2176,37 @@ export function ModelPage({
     };
   }, [tab]);
 
+  useEffect(() => {
+    const root = modelRootRef.current;
+    if (!root) return;
+    const barGap = 16;
+    const measure = () => {
+      const left = root.querySelector(".top-bar-left");
+      const center = root.querySelector(".top-bar-center");
+      const right = root.querySelector(".top-bar-right");
+      if (!(left instanceof HTMLElement) || !(center instanceof HTMLElement) || !(right instanceof HTMLElement)) {
+        return;
+      }
+      const inner = window.innerWidth - 28;
+      const bundle = left.offsetWidth + center.offsetWidth + right.offsetWidth + barGap * 2;
+      setTopbarLayout(bundle <= inner + 0.5 ? "centered" : "flow");
+    };
+    measure();
+    const observer = new ResizeObserver(() => measure());
+    observer.observe(root);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [tab, drawing, view.projection, cutDimLabel, topbarExportOpen, busy, sourcesLoaded.loaded]);
+
   return (
     <div
       ref={modelRootRef}
       className="model"
       data-view-tab={tab}
+      data-topbar-layout={topbarLayout}
       data-cut-size-label={cutDimLabel}
       data-intro-hold={!introHoldReleasedRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
       data-intro-webgl-wait={!introWebglReadyRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
@@ -2419,14 +2449,22 @@ export function ModelPage({
             showNewCut
             onSelect={selectSection}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-            rightMeta={`MGA${mgaCrs(model.center.lon).zone}`}
+            rightMeta={
+              <>
+                MGA{mgaCrs(model.center.lon).zone}
+                <span className="card-meta-sep" aria-hidden="true">
+                  {" "}
+                  ·{" "}
+                </span>
+                {cutDimLabel}
+              </>
+            }
             brandMeta={
               <>
                 <span className="v-sep hud-sep" aria-hidden="true" />
                 <span className="place-chip studio-breadcrumb-place" title={model.placeLabel}>
                   {model.placeLabel}
                 </span>
-                <span className="dim-chip studio-cut-pill mono">{cutDimLabel}</span>
               </>
             }
             headerCenter={
@@ -2682,6 +2720,7 @@ export function ModelPage({
                 </div>
                 <div className="topbar-export-compact" ref={topbarExportRef}>
                   <button
+                    ref={topbarExportTriggerRef}
                     type="button"
                     className="topbar-export-trigger studio-export-btn"
                     aria-label="Export"
@@ -2728,7 +2767,7 @@ export function ModelPage({
                             else void saveSiteSvg();
                           }}
                         >
-                          SVG
+                          SVG (.svg)
                         </button>
                         <button
                           type="button"
