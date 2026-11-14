@@ -4,7 +4,12 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { BUILDING_EDGE_COLOR, BUILDING_EDGE_THRESHOLD_DEG } from "./buildingEdges";
 import { BUILDING_USE_META, SOURCE_META, buildingLayerName, uniformBuildingColor } from "./buildingUse";
 import { getColour } from "./colours";
-import { DEFAULT_SITE_FRAME_SHAPE, SITE_FRAME_CIRCLE_SEGMENTS, type FrameGroundSize } from "./siteFrame";
+import {
+  clipAreaToSiteFrame,
+  DEFAULT_SITE_FRAME_SHAPE,
+  SITE_FRAME_CIRCLE_SEGMENTS,
+  type FrameGroundSize,
+} from "./siteFrame";
 import { clipBufferGeometryToSiteFrame } from "./siteFrameMesh";
 import { modelFrameSize } from "./modelFrame";
 import { buildTreeGroup } from "./treeMassing";
@@ -536,8 +541,13 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     group.add(blockMesh);
   }
   for (let index = 0; index < model.areas.length; index++) {
-    const area = model.areas[index];
+    let area = model.areas[index];
     if (area.kind === "block") continue;
+    if (area.kind === "water") {
+      const clippedRings = clipAreaToSiteFrame(area.ring, area.holes, model.sideM, frameShape, frameSize);
+      if (!clippedRings?.[0]) continue;
+      area = { ...area, ring: clippedRings[0], holes: clippedRings.slice(1) };
+    }
     const lift =
       (area.kind === "water" ? waterLayer.lift : SURFACE.green.lift) + overlapLift(index);
     if (sample && model.terrain) {

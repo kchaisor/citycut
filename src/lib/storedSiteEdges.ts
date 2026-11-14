@@ -20,6 +20,13 @@ function forEachStandardMaterial(mesh: THREE.Mesh, fn: (material: THREE.MeshStan
   }
 }
 
+function meshReliefM(mesh: THREE.Mesh): number {
+  if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+  const box = mesh.geometry.boundingBox;
+  if (!box) return 0;
+  return box.max.y - box.min.y;
+}
+
 function meshIsMostlyGround(mesh: THREE.Mesh): boolean {
   const normal = mesh.geometry.getAttribute("normal");
   if (!normal || normal.count < 3) return false;
@@ -89,6 +96,7 @@ export function addStoredSiteEdges(root: THREE.Object3D): StoredSiteEdgeStats {
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh) return;
     if (mesh.name !== "Buildings-stored-mesh" && mesh.name !== "StoredSiteStructure") return;
+    if (mesh.name === "Buildings-stored-mesh" && meshReliefM(mesh) < 1.2) return;
     forEachStandardMaterial(mesh, (material) => {
       material.polygonOffset = true;
       material.polygonOffsetFactor = 1;
