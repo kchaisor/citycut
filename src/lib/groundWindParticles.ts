@@ -1388,6 +1388,8 @@ function writePoints(particles: GroundWindParticles, _heightAt: HeightAt, field:
     const band = 0;
     const corePx = GROUND_WIND_CORE_WIDTH_PX;
     const lenScale = particles.trailLenScale[i] ?? 1;
+    const head = particles.head[i]!;
+    const headSy = particles.screenY[i]!;
     let visible = trailVisibleSegments(
       speed,
       streamMag,
@@ -1397,12 +1399,10 @@ function writePoints(particles: GroundWindParticles, _heightAt: HeightAt, field:
       lenScale,
       headSy,
     );
-    const head = particles.head[i]!;
     const east = particles.east[i]!;
     const north = particles.north[i]!;
     const headSlot = (head + GROUND_WIND_TRAIL_POINTS - 1) % GROUND_WIND_TRAIL_POINTS;
     const yHead = history[(i * GROUND_WIND_TRAIL_POINTS + headSlot) * 3 + 2]!;
-    const headSy = particles.screenY[i]!;
     const allowCasing = headSy < GROUND_WIND_NEAR_Y_MIN || headSy > GROUND_WIND_NEAR_Y_MAX;
     const mpp = Math.max(1e-4, particles.metresPerPx);
     const stepM = Math.max(0.12, metresPerSecond * GROUND_WIND_TRAIL_SAMPLE_S * 1.27);
