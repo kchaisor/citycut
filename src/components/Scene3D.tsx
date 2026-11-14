@@ -2087,6 +2087,7 @@ export function Cameras({
             ortho={ortho}
             perspControls={perspControls}
             orthoControls={orthoControls}
+            touchedRef={touchedRef}
           />
           <ExportBridge onExportReady={onExportReady} solarDiagramOn={solarDiagramOn} />
         </>

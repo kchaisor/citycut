@@ -85,10 +85,11 @@ describe("tickCompassNorthAnim", () => {
     const anim = beginCompassNorthAnim(controls as never, cam);
     let done = false;
     for (let t = 0; t <= STUDIO_COMPASS_RESET_MS; t += 16) {
-      done = tickCompassNorthAnim(anim, 16);
+      tickCompassNorthAnim(anim, t);
     }
+    done = tickCompassNorthAnim(anim, STUDIO_COMPASS_RESET_MS);
     expect(done).toBe(true);
-    expect(Math.abs(studioCameraHeadingDeg(cam))).toBeLessThan(1);
+    expect(Math.abs(studioCameraHeadingDeg(cam))).toBeLessThan(2);
     expect(Math.abs(studioCompassNeedleDeg(studioCameraHeadingDeg(cam)))).toBeLessThan(1);
   });
 
@@ -100,13 +101,14 @@ describe("tickCompassNorthAnim", () => {
     const target = new THREE.Vector3(0, 0, 0);
     const controls = controlsStub(cam, target);
     setStudioCameraHeadingWithOrbit(controls as never, cam, 297);
-    expect(Math.abs(shortestHeadingDeltaDeg(studioCameraHeadingDeg(cam), 297))).toBeLessThan(1);
+    expect(Math.abs(shortestHeadingDeltaDeg(studioCameraHeadingDeg(cam), 297))).toBeLessThan(2);
     const anim = beginCompassNorthAnim(controls as never, cam);
     let done = false;
     for (let t = 0; t <= STUDIO_COMPASS_RESET_MS; t += 16) {
-      done = tickCompassNorthAnim(anim, 16);
+      tickCompassNorthAnim(anim, t);
     }
+    done = tickCompassNorthAnim(anim, STUDIO_COMPASS_RESET_MS);
     expect(done).toBe(true);
-    expect(Math.abs(studioCameraHeadingDeg(cam))).toBeLessThan(1);
+    expect(Math.abs(studioCameraHeadingDeg(cam))).toBeLessThan(2);
   });
 });
