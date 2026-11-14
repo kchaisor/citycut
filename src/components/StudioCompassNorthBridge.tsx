@@ -12,12 +12,13 @@ import {
   STUDIO_COMPASS_FACE_NORTH_EVENT,
   STUDIO_COMPASS_RESET_MS,
   beginCompassNorthAnim,
+  clearOrbitControlInertia,
+  setCompassNorthTweenActive,
   setStudioCameraHeadingWithOrbit,
   syncOrbitControlsFromCamera,
   tickCompassNorthAnim,
   type CompassNorthAnim,
 } from "../lib/studioCompassNorth";
-import { flushControlInertia } from "../lib/controlInertia";
 
 export function StudioCompassNorthBridge({
   projection,
@@ -37,7 +38,6 @@ export function StudioCompassNorthBridge({
   const set = useThree((state) => state.set);
   const invalidate = useThree((state) => state.invalidate);
   const animRef = useRef<CompassNorthAnim | null>(null);
-  const rafRef = useRef(0);
   const controlsGateRef = useRef({
     enabled: true,
     enableRotate: true,
@@ -66,6 +66,7 @@ export function StudioCompassNorthBridge({
     anim.controls.enablePan = gate.enablePan;
     anim.controls.enableZoom = gate.enableZoom;
     anim.controls.enableDamping = gate.enableDamping;
+    setCompassNorthTweenActive(false);
     animRef.current = null;
     set({ frameloop: frameloopDemand() });
     invalidate();
@@ -76,9 +77,9 @@ export function StudioCompassNorthBridge({
       const { controls, camera } = activePair();
       if (!controls) return;
       if (Math.abs(studioCameraHeadingDeg(camera)) < 0.5) return;
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
       if (animRef.current) endAnim(animRef.current);
       touchedRef.current = true;
+      setCompassNorthTweenActive(true);
       controlsGateRef.current = {
         enabled: controls.enabled,
         enableRotate: controls.enableRotate,
@@ -90,31 +91,24 @@ export function StudioCompassNorthBridge({
       controls.enablePan = false;
       controls.enableZoom = false;
       controls.enableDamping = false;
-      flushControlInertia(controls);
+      clearOrbitControlInertia(controls);
       const anim = beginCompassNorthAnim(controls, camera);
       animRef.current = anim;
       set({ frameloop: "always" });
       const startMs = performance.now();
-      invalidate();
-
-      const step = (now: number) => {
-        const active = animRef.current;
-        if (!active) return;
-        const done = tickCompassNorthAnim(active, now - startMs);
+      while (performance.now() - startMs < STUDIO_COMPASS_RESET_MS) {
+        const elapsed = performance.now() - startMs;
+        tickCompassNorthAnim(anim, elapsed);
         invalidate();
-        if (done || now - startMs >= STUDIO_COMPASS_RESET_MS + 48) {
-          rafRef.current = 0;
-          endAnim(active);
-          return;
-        }
-        rafRef.current = requestAnimationFrame(step);
-      };
-      rafRef.current = requestAnimationFrame(step);
+      }
+      tickCompassNorthAnim(anim, STUDIO_COMPASS_RESET_MS);
+      invalidate();
+      endAnim(anim);
     };
     window.addEventListener(STUDIO_COMPASS_FACE_NORTH_EVENT, onFaceNorth);
     return () => {
       window.removeEventListener(STUDIO_COMPASS_FACE_NORTH_EVENT, onFaceNorth);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      setCompassNorthTweenActive(false);
     };
   }, [invalidate, ortho, orthoControls, persp, perspControls, projection, set, touchedRef]);
 

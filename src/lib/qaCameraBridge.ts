@@ -74,6 +74,7 @@ declare global {
     __citycutProgressSamples?: number[];
     __citycutLoadProgress?: number;
     __citycutIntroReadyToFire?: boolean;
+    __citycutCompassNorthTween?: boolean;
     __citycutCompassQa?: {
       getCameraHeadingDeg: () => number;
       getNeedleDeg: () => number;

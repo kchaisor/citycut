@@ -1172,6 +1172,7 @@ function PerspectiveFit({
     [camera, gl],
   );
   const place = useCallback(() => {
+    if (typeof window !== "undefined" && window.__citycutCompassNorthTween === true) return;
     const controls = controlsRef.current;
     if (!controls || !active || size.width < 2 || size.height < 2) return;
     const key = `${fitId}:${size.width}x${size.height}`;
@@ -1615,6 +1616,9 @@ function CameraReadout({
     const controls = orthoView ? orthoControls.current : perspControls.current;
     if (!controls) return;
     publishCamera(camera, controls.target, gl.domElement);
+    gl.domElement.dataset.camBearing = studioCameraHeadingDeg(camera).toFixed(4);
+    const dist = camera.position.distanceTo(controls.target);
+    gl.domElement.dataset.camDistance = dist.toFixed(4);
   });
   return null;
 }

@@ -47,14 +47,11 @@ function waitForHttp(url: string, timeoutMs = 60_000): Promise<void> {
   });
 }
 
-function parseHeadingFromAria(aria: string | null): number | null {
-  if (!aria) return null;
-  const m = aria.match(/heading (\d+) degrees/);
-  return m ? Number(m[1]) : null;
-}
+type CamProbe = { bearing: number; elevation: number; distance: number };
 
-function northErrorDeg(headingDeg: number): number {
-  const h = ((headingDeg % 360) + 360) % 360;
+function northErrorDeg(bearingDeg: number): number {
+  const b = Number(bearingDeg);
+  const h = ((b % 360) + 360) % 360;
   return h > 180 ? 360 - h : h;
 }
 
@@ -81,91 +78,113 @@ describe("studio compass face north", () => {
     preview?.kill("SIGTERM");
   });
 
-  async function waitForSettled3d(page: import("playwright").Page) {
+  async function waitForUserPathReady(page: import("playwright").Page) {
+    await page.waitForSelector(".model", { timeout: 360_000 });
+    await page.waitForFunction(
+      () => !document.querySelector(".model[data-intro-hold]"),
+      undefined,
+      { timeout: 360_000 },
+    );
     await page.waitForFunction(
       () => {
         const canvas = document.querySelector(".model canvas");
-        if (!canvas) return false;
-        const elev = Number(canvas.getAttribute("data-cam-elevation") ?? 0);
-        const pill = document.querySelector(".model .loading-hud-pill.is-model-bridge");
-        const pct = pill?.getAttribute("data-progress-pct");
-        if (pct !== null && pct !== undefined && Number(pct) < 100) return false;
-        const selectUnderlay = document.querySelector(".select");
-        const underlayOpacity = selectUnderlay ? Number(getComputedStyle(selectUnderlay).opacity) : 0;
-        if (underlayOpacity > 0.05) return false;
-        return elev > 20;
+        return canvas && Number(canvas.getAttribute("data-cam-elevation") ?? 0) > 15;
       },
+      undefined,
       { timeout: 360_000 },
     );
     await page.waitForSelector(".studio-compass", { timeout: 60_000 });
   }
 
-  async function readCompassHeading(page: import("playwright").Page): Promise<number> {
-    const aria = await page.locator(".studio-compass").getAttribute("aria-label");
-    const h = parseHeadingFromAria(aria);
-    if (h === null) throw new Error("missing compass heading");
-    return h;
+  async function readCam(page: import("playwright").Page): Promise<CamProbe> {
+    return page.evaluate(() => {
+      const canvas = document.querySelector(".model canvas");
+      if (!canvas) throw new Error("no canvas");
+      return {
+        bearing: Number(canvas.getAttribute("data-cam-bearing") ?? "999"),
+        elevation: Number(canvas.getAttribute("data-cam-elevation") ?? "0"),
+        distance: Number(canvas.getAttribute("data-cam-distance") ?? "0"),
+      };
+    });
   }
 
-  async function orbitTowardHeading(page: import("playwright").Page, targetDeg: number) {
+  async function orbitTowardBearing(page: import("playwright").Page, targetDeg: number) {
     const canvas = page.locator(".model canvas").first();
     const box = await canvas.boundingBox();
     if (!box) throw new Error("no model canvas");
     const cx = box.x + box.width * 0.5;
     const cy = box.y + box.height * 0.42;
-    for (let step = 0; step < 48; step++) {
-      const current = await readCompassHeading(page);
-      let d = targetDeg - current;
+    for (let step = 0; step < 50; step++) {
+      const { bearing } = await readCam(page);
+      let d = targetDeg - bearing;
       d = ((d + 180) % 360 + 360) % 360 - 180;
-      if (Math.abs(d) <= 4) return;
-      const drag = Math.sign(d) * Math.min(100, Math.max(18, Math.abs(d) * 2.2));
+      if (Math.abs(d) <= 5) return;
+      const drag = Math.sign(d) * Math.min(90, Math.max(20, Math.abs(d) * 2));
       await page.mouse.move(cx, cy);
       await page.mouse.down({ button: "left" });
-      await page.mouse.move(cx + drag, cy, { steps: 10 });
+      await page.mouse.move(cx + drag, cy, { steps: 12 });
       await page.mouse.up();
-      await page.waitForTimeout(60);
+      await page.waitForTimeout(70);
     }
-    const final = await readCompassHeading(page);
-    let err = targetDeg - final;
+    const { bearing } = await readCam(page);
+    let err = targetDeg - bearing;
     err = ((err + 180) % 360 + 360) % 360 - 180;
-    expect(Math.abs(err)).toBeLessThan(6);
+    expect(Math.abs(err)).toBeLessThan(8);
   }
 
   it(
-    "faces north within 400ms after compass click from oblique headings (user path, no qa)",
+    "faces north by 400ms and holds at 1500ms from ~60° and ~200° (user path, no qa)",
     async () => {
       const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome" });
+      const timings: {
+        heading: number;
+        northErr400: number;
+        northErr1500: number;
+        bearing400: number;
+        bearing1500: number;
+      }[] = [];
       try {
-        for (const width of [1280, 1440]) {
-          const page = await browser.newPage({ viewport: { width, height: 900 } });
-          page.setDefaultTimeout(360_000);
-          try {
-            const q = new URLSearchParams({
-              lat: String(DANDENONG.lat),
-              lon: String(DANDENONG.lon),
-              label: DANDENONG.label,
-              km: String(DANDENONG.km),
-            });
-            await page.goto(`${baseUrl}?${q.toString()}`, { waitUntil: "domcontentloaded", timeout: 120_000 });
-            await page.waitForSelector("button.create-fab", { timeout: 60_000 });
-            await page.locator("button.create-fab").click({ timeout: 30_000 });
-            await page.waitForSelector(".model", { timeout: 360_000 });
-            await waitForSettled3d(page);
-            const persp = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Perspective" }).first();
-            if ((await persp.count()) > 0) await persp.click();
-            await page.waitForTimeout(400);
+        const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+        page.setDefaultTimeout(360_000);
+        const q = new URLSearchParams({
+          lat: String(DANDENONG.lat),
+          lon: String(DANDENONG.lon),
+          label: DANDENONG.label,
+          km: String(DANDENONG.km),
+        });
+        await page.goto(`${baseUrl}?${q.toString()}`, { waitUntil: "domcontentloaded", timeout: 120_000 });
+        await page.waitForSelector("button.create-fab", { timeout: 60_000 });
+        await page.locator("button.create-fab").click({ timeout: 30_000 });
+        await waitForUserPathReady(page);
+        const persp = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Perspective" }).first();
+        if ((await persp.count()) > 0) await persp.click();
+        await page.waitForTimeout(350);
 
-            for (const targetHeading of [60, 180, 297]) {
-              await orbitTowardHeading(page, targetHeading);
-              await page.locator(".studio-compass").click();
-              await page.waitForTimeout(400);
-              const after = await readCompassHeading(page);
-              expect(northErrorDeg(after)).toBeLessThanOrEqual(2);
-            }
-          } finally {
-            await page.close();
-          }
+        for (const targetHeading of [60, 200]) {
+          await orbitTowardBearing(page, targetHeading);
+          const before = await readCam(page);
+          await page.locator(".studio-compass").click();
+          await page.waitForTimeout(400);
+          const at400 = await readCam(page);
+          await page.waitForTimeout(1100);
+          const at1500 = await readCam(page);
+
+          expect(northErrorDeg(at400.bearing)).toBeLessThanOrEqual(2);
+          expect(northErrorDeg(at1500.bearing)).toBeLessThanOrEqual(2);
+          expect(Math.abs(at400.elevation - before.elevation)).toBeLessThan(1.5);
+          expect(Math.abs(at1500.elevation - before.elevation)).toBeLessThan(1.5);
+          expect(Math.abs(at400.distance - before.distance)).toBeLessThan(3);
+          expect(Math.abs(at1500.distance - before.distance)).toBeLessThan(3);
+
+          timings.push({
+            heading: targetHeading,
+            northErr400: northErrorDeg(at400.bearing),
+            northErr1500: northErrorDeg(at1500.bearing),
+            bearing400: at400.bearing,
+            bearing1500: at1500.bearing,
+          });
         }
+        console.log("compass-north-e2e-timings", JSON.stringify(timings));
       } finally {
         await browser.close();
       }

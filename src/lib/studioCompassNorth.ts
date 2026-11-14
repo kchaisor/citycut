@@ -6,7 +6,16 @@ import { studioCameraHeadingDeg } from "./studioCompass";
 export const STUDIO_COMPASS_FACE_NORTH_EVENT = "citycut:compass-face-north";
 export const STUDIO_COMPASS_RESET_MS = 250;
 
-const AZIMUTH_PROBE_RAD = THREE.MathUtils.degToRad(1);
+export const STUDIO_COMPASS_NORTH_TWEEN_KEY = "__citycutCompassNorthTween";
+
+export function setCompassNorthTweenActive(active: boolean): void {
+  if (typeof window === "undefined") return;
+  if (active) {
+    (window as Window & { [STUDIO_COMPASS_NORTH_TWEEN_KEY]?: boolean })[STUDIO_COMPASS_NORTH_TWEEN_KEY] = true;
+  } else {
+    delete (window as Window & { [STUDIO_COMPASS_NORTH_TWEEN_KEY]?: boolean })[STUDIO_COMPASS_NORTH_TWEEN_KEY];
+  }
+}
 
 export function studioCompassEaseOut(t: number): number {
   const u = Math.min(1, Math.max(0, t));
@@ -39,6 +48,19 @@ export function syncOrbitControlsFromCamera(controls: OrbitControlsImpl): void {
   controls.update();
 }
 
+export function clearOrbitControlInertia(controls: OrbitControlsImpl): void {
+  const damp = controls.enableDamping;
+  controls.enableDamping = false;
+  try {
+    flushControlInertia(controls);
+    controls.update();
+    flushControlInertia(controls);
+    controls.update();
+  } finally {
+    controls.enableDamping = damp;
+  }
+}
+
 export function setOrbitAzimuthRad(controls: OrbitControlsImpl, azimuthRad: number): void {
   const damp = controls.enableDamping;
   controls.enableDamping = false;
@@ -51,53 +73,48 @@ export function setOrbitAzimuthRad(controls: OrbitControlsImpl, azimuthRad: numb
   }
 }
 
-function headingPerAzimuthRad(
-  controls: OrbitControlsImpl,
-  camera: THREE.Camera,
-  baseAzimuth: number,
-): number {
-  const h0 = studioCameraHeadingDeg(camera);
-  setOrbitAzimuthRad(controls, baseAzimuth + AZIMUTH_PROBE_RAD);
-  const h1 = studioCameraHeadingDeg(camera);
-  setOrbitAzimuthRad(controls, baseAzimuth);
-  const dh = shortestHeadingDeltaDeg(h0, h1);
-  if (Math.abs(dh) < 1e-5) return dh >= 0 ? 1e-4 / AZIMUTH_PROBE_RAD : -1e-4 / AZIMUTH_PROBE_RAD;
-  return dh / AZIMUTH_PROBE_RAD;
+function scoreHeadingError(camera: THREE.Camera, desiredHeadingDeg: number): number {
+  return Math.abs(shortestHeadingDeltaDeg(studioCameraHeadingDeg(camera), desiredHeadingDeg));
 }
 
-function applyHeadingDegWithOrbitStep(
-  controls: OrbitControlsImpl,
-  camera: THREE.Camera,
-  desiredHeadingDeg: number,
-): void {
-  for (let i = 0; i < 4; i++) {
-    const err = shortestHeadingDeltaDeg(studioCameraHeadingDeg(camera), desiredHeadingDeg);
-    if (Math.abs(err) < 0.2) return;
-    const base = controls.getAzimuthalAngle();
-    const sens = headingPerAzimuthRad(controls, camera, base);
-    if (Math.abs(sens) < 1e-6) return;
-    setOrbitAzimuthRad(controls, base + THREE.MathUtils.degToRad(err) / sens);
-  }
-}
-
-export function resolveAzimuthRadForHeadingDeg(
+export function computeAzimuthRadForHeadingDeg(
   controls: OrbitControlsImpl,
   camera: THREE.Camera,
   desiredHeadingDeg: number,
 ): number {
-  const baseAzimuth = controls.getAzimuthalAngle();
-  let target = baseAzimuth;
-  for (let iter = 0; iter < 8; iter++) {
-    setOrbitAzimuthRad(controls, target);
-    const err = shortestHeadingDeltaDeg(studioCameraHeadingDeg(camera), desiredHeadingDeg);
-    if (Math.abs(err) < 0.1) break;
-    const sens = headingPerAzimuthRad(controls, camera, target);
-    if (Math.abs(sens) < 1e-6) break;
-    target += THREE.MathUtils.degToRad(err) / sens;
+  const base = controls.getAzimuthalAngle();
+  if (scoreHeadingError(camera, desiredHeadingDeg) < 0.08) return base;
+  let best = base;
+  let bestErr = Infinity;
+  for (let deg = -180; deg < 180; deg += 12) {
+    const trial = base + THREE.MathUtils.degToRad(deg);
+    setOrbitAzimuthRad(controls, trial);
+    const err = scoreHeadingError(camera, desiredHeadingDeg);
+    if (err < bestErr) {
+      bestErr = err;
+      best = trial;
+    }
+    if (err < 0.08) break;
   }
-  const resolved = target;
-  setOrbitAzimuthRad(controls, baseAzimuth);
-  return resolved;
+  for (let deg = -12; deg <= 12; deg += 2) {
+    const trial = best + THREE.MathUtils.degToRad(deg);
+    setOrbitAzimuthRad(controls, trial);
+    const err = scoreHeadingError(camera, desiredHeadingDeg);
+    if (err < bestErr) {
+      bestErr = err;
+      best = trial;
+    }
+    if (err < 0.05) break;
+  }
+  setOrbitAzimuthRad(controls, base);
+  return best;
+}
+
+export function computeNorthAzimuthRadFromGeometry(
+  controls: OrbitControlsImpl,
+  camera: THREE.Camera,
+): number {
+  return computeAzimuthRadForHeadingDeg(controls, camera, 0);
 }
 
 export function setStudioCameraHeadingWithOrbit(
@@ -105,8 +122,7 @@ export function setStudioCameraHeadingWithOrbit(
   camera: THREE.Camera,
   desiredHeadingDeg: number,
 ): void {
-  const azimuth = resolveAzimuthRadForHeadingDeg(controls, camera, desiredHeadingDeg);
-  setOrbitAzimuthRad(controls, azimuth);
+  setOrbitAzimuthRad(controls, computeAzimuthRadForHeadingDeg(controls, camera, desiredHeadingDeg));
 }
 
 export type CompassNorthAnim = {
@@ -119,10 +135,9 @@ export type CompassNorthAnim = {
 };
 
 export function beginCompassNorthAnim(controls: OrbitControlsImpl, camera: THREE.Camera): CompassNorthAnim {
-  const startAzimuthRad = controls.getAzimuthalAngle();
   return {
-    startAzimuthRad,
-    targetAzimuthRad: startAzimuthRad,
+    startAzimuthRad: controls.getAzimuthalAngle(),
+    targetAzimuthRad: controls.getAzimuthalAngle(),
     targetReady: false,
     elapsedMs: 0,
     controls,
@@ -132,14 +147,9 @@ export function beginCompassNorthAnim(controls: OrbitControlsImpl, camera: THREE
 
 export function tickCompassNorthAnim(anim: CompassNorthAnim, elapsedMs: number): boolean {
   if (!anim.targetReady) {
-    const base = anim.startAzimuthRad;
-    const h0 = studioCameraHeadingDeg(anim.camera);
-    const sens = headingPerAzimuthRad(anim.controls, anim.camera, base);
-    if (Math.abs(sens) > 1e-6) {
-      anim.targetAzimuthRad =
-        base + THREE.MathUtils.degToRad(shortestHeadingDeltaDeg(h0, 0)) / sens;
-    }
+    anim.targetAzimuthRad = computeNorthAzimuthRadFromGeometry(anim.controls, anim.camera);
     anim.targetReady = true;
+    clearOrbitControlInertia(anim.controls);
   }
   anim.elapsedMs = elapsedMs;
   const progress = studioCompassNorthProgress(anim.elapsedMs);
@@ -147,8 +157,6 @@ export function tickCompassNorthAnim(anim: CompassNorthAnim, elapsedMs: number):
   setOrbitAzimuthRad(anim.controls, anim.startAzimuthRad + delta * progress);
   if (progress >= 1) {
     setOrbitAzimuthRad(anim.controls, anim.startAzimuthRad + delta);
-    applyHeadingDegWithOrbitStep(anim.controls, anim.camera, 0);
-    applyHeadingDegWithOrbitStep(anim.controls, anim.camera, 0);
     return true;
   }
   return false;
