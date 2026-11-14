@@ -118,7 +118,7 @@ const VIEWPORT_SCENE_CLIP = { x: 180, y: 100, width: 1080, height: 720 };
 async function sceneViewportScreenshot(page, extra = {}) {
   return page.screenshot({
     clip: VIEWPORT_SCENE_CLIP,
-    timeout: 60_000,
+    timeout: 120_000,
     animations: "disabled",
     scale: "css",
     ...extra,
