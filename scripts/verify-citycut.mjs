@@ -1759,6 +1759,95 @@ async function main() {
       `visibleLeftDrawers=${analysisInfo.visibleLeftDrawerCount}, noOverflow=${analysisInfo.noHorizontalOverflow}, topReset=${analysisInfo.hasTopCenterReset}, bottomCompass=${analysisInfo.hasBottomCompass}, 3dDome=${analysisInfo.has3dSunDomeIn3d}, planFanIn3d=${analysisInfo.hasPlanFanIn3d}, rect=${JSON.stringify(analysisInfo.envConsoleRect)}`,
     );
 
+    await page.locator(".mode-btn", { hasText: "3D model" }).click();
+    await page.waitForTimeout(220);
+    const perspBtn = page
+      .locator(".model .proj-btn.studio-submode-pill", { hasText: "Perspective" })
+      .first();
+    if ((await perspBtn.count()) > 0) {
+      await perspBtn.click();
+      await page.waitForTimeout(280);
+    }
+
+    const measureStudioCompassClearance = () =>
+      page.evaluate(() => {
+        const compass = document.querySelector(".studio-compass");
+        const envConsole = document.querySelector(".model .bottom-bar.env-console");
+        const rightPanel =
+          document.querySelector(".model .right-inspector") ??
+          document.querySelector(".model .right-rail");
+        if (!compass) return { hasCompass: false };
+        const c = compass.getBoundingClientRect();
+        const gapBottomBar = envConsole ? envConsole.getBoundingClientRect().top - c.bottom : null;
+        const gapRightPanel = rightPanel ? rightPanel.getBoundingClientRect().left - c.right : null;
+        const aria = compass.getAttribute("aria-label") ?? "";
+        return {
+          hasCompass: true,
+          hasNeedle: Boolean(document.querySelector(".studio-compass-needle")),
+          ariaStartsNorth: aria.startsWith("North."),
+          viewportW: window.innerWidth,
+          gapBottomBar,
+          gapRightPanel,
+        };
+      });
+
+    for (const compassWidth of [1280, 1366, 1440]) {
+      await page.setViewportSize({ width: compassWidth, height: 900 });
+      await page.waitForTimeout(220);
+      const compassLayout = await measureStudioCompassClearance();
+      assertCheck(
+        `studio-compass-clearance-${compassWidth}`,
+        `At ${compassWidth}x900 the Designbot C studio compass has >=16px clearance from the env console and right panel`,
+        compassLayout.hasCompass &&
+          compassLayout.hasNeedle &&
+          compassLayout.ariaStartsNorth &&
+          (compassLayout.gapBottomBar == null || compassLayout.gapBottomBar >= 15.5) &&
+          (compassLayout.gapRightPanel == null || compassLayout.gapRightPanel >= 15.5),
+        JSON.stringify(compassLayout),
+      );
+    }
+    const captureCompassArtifacts = async (width) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.waitForTimeout(240);
+      const canvas = page.locator(".model canvas").first();
+      const box = await canvas.boundingBox();
+      if (box) {
+        const cx = box.x + box.width * 0.52;
+        const cy = box.y + box.height * 0.48;
+        await page.mouse.move(cx, cy);
+        await page.mouse.down({ button: "right" });
+        await page.mouse.move(cx + box.width * 0.12, cy - box.height * 0.04, { steps: 14 });
+        await page.mouse.up({ button: "right" });
+        await page.waitForTimeout(500);
+      }
+      if (fs.existsSync(ARTIFACTS_DIR)) {
+        await page.screenshot({
+          path: path.join(ARTIFACTS_DIR, `studio-compass-rotated-${width}.png`),
+        });
+      }
+      const compass = page.locator(".studio-compass").first();
+      await compass.focus();
+      await page.waitForTimeout(120);
+      if (fs.existsSync(ARTIFACTS_DIR)) {
+        await page.screenshot({
+          path: path.join(ARTIFACTS_DIR, `studio-compass-focus-${width}.png`),
+        });
+      }
+      await compass.click();
+      await page.waitForTimeout(320);
+      if (fs.existsSync(ARTIFACTS_DIR)) {
+        await page.screenshot({
+          path: path.join(ARTIFACTS_DIR, `studio-compass-north-${width}.png`),
+        });
+      }
+    };
+
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      await captureCompassArtifacts(1440);
+      await captureCompassArtifacts(1280);
+    }
+    await page.setViewportSize(VIEWPORT);
+
     await page.getByRole("tab", { name: /Walk Ripple/i }).click();
     await page.waitForTimeout(250);
     await page.getByRole("button", { name: /Pick origin/i }).first().click();

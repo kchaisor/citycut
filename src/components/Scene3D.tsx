@@ -87,7 +87,8 @@ import {
   primaryViewportLighting,
 } from "../lib/primaryViewport";
 import { applyWhiteCardGroundTint, snapshotWhiteCardTerrainColors } from "../lib/whiteCardViewport";
-import { studioNorthNeedleDeg } from "../lib/studioCompass";
+import { studioCameraHeadingDeg } from "../lib/studioCompass";
+import { StudioCompassNorthBridge } from "./StudioCompassNorthBridge";
 import {
   DEFAULT_PERSPECTIVE_OFFSET,
   heliodonSceneBounds,
@@ -303,10 +304,10 @@ function SceneFrameloopGate() {
   return null;
 }
 
-function StudioCompassTracker({ onNeedle }: { onNeedle: (deg: number) => void }) {
+function StudioCompassTracker({ onHeading }: { onHeading: (deg: number) => void }) {
   const camera = useThree((state) => state.camera);
   useFrame(() => {
-    onNeedle(studioNorthNeedleDeg(camera));
+    onHeading(studioCameraHeadingDeg(camera));
   });
   return null;
 }
@@ -2081,6 +2082,13 @@ export function Cameras({
             perspControls={perspControls}
             orthoControls={orthoControls}
           />
+          <StudioCompassNorthBridge
+            projection={projection}
+            persp={persp}
+            ortho={ortho}
+            perspControls={perspControls}
+            orthoControls={orthoControls}
+          />
           <ExportBridge onExportReady={onExportReady} solarDiagramOn={solarDiagramOn} />
         </>
       )}
@@ -2146,7 +2154,7 @@ export function Scene3D({
   onScenePoint = null,
   sectionKnife = null,
   onSectionKnifePoseChange = undefined,
-  onCompassNeedle = undefined,
+  onCompassHeading = undefined,
   quality = "high",
 }: {
   model: CityModel;
@@ -2180,7 +2188,7 @@ export function Scene3D({
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
   sectionKnife?: SectionKnifeToolState | null;
   onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
-  onCompassNeedle?: (deg: number) => void;
+  onCompassHeading?: (deg: number) => void;
   quality?: RenderQuality;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
@@ -2354,7 +2362,7 @@ export function Scene3D({
         enabled={inspectAnchor != null}
         onScreen={onInspectHudScreen}
       />
-      {onCompassNeedle ? <StudioCompassTracker onNeedle={onCompassNeedle} /> : null}
+      {onCompassHeading ? <StudioCompassTracker onHeading={onCompassHeading} /> : null}
       <WindLayer
         model={model}
         table={windTable}

@@ -1,51 +1,42 @@
 import { getColour } from "../lib/colours";
+import {
+  studioCompassAriaLabel,
+  studioCompassNeedleDeg,
+} from "../lib/studioCompass";
+import { dispatchStudioCompassFaceNorth } from "../lib/studioCompassNorth";
 
-export function StudioCompassRose({ needleDeg }: { needleDeg: number }) {
-  const ink = getColour("--sun-compass-label");
-  const paper = getColour("--primary-surface");
-  const r = 18;
-  const tick = 6;
-  const wingW = 9;
-  const apexY = 6;
-  const wingY = 20;
-  const notchY = 25;
+export function StudioCompassNeedle({ headingDeg }: { headingDeg: number }) {
+  const chip = getColour("--studio-compass-chip");
+  const ring = getColour("--studio-compass-chip-ring");
+  const north = getColour("--studio-compass-needle-north");
+  const south = getColour("--studio-compass-needle-south");
+  const needleDeg = studioCompassNeedleDeg(headingDeg);
   return (
     <svg
-      className="studio-compass-rose"
-      width="44"
-      height="44"
-      viewBox="0 0 44 44"
+      className="studio-compass-needle"
+      viewBox="0 0 56 56"
+      width="56"
+      height="56"
       aria-hidden="true"
-      style={{ transform: `rotate(${needleDeg}deg)` }}
     >
-      <g transform="translate(22 24)">
-        <circle cx={0} cy={0} r={r} fill="none" stroke={ink} strokeWidth={1.2} />
-        <line x1={-r - tick} y1={0} x2={-r * 0.55} y2={0} stroke={ink} strokeWidth={1} />
-        <line x1={r * 0.55} y1={0} x2={r + tick} y2={0} stroke={ink} strokeWidth={1} />
-        <line x1={0} y1={r * 0.45} x2={0} y2={r + tick} stroke={ink} strokeWidth={1} />
-        <polygon points={`0,${-apexY} ${-wingW},${wingY} 0,${notchY}`} fill={ink} stroke={ink} strokeWidth={1} />
-        <polygon points={`0,${-apexY} ${wingW},${wingY} 0,${notchY}`} fill={paper} stroke={ink} strokeWidth={1} />
-        <text
-          x={0}
-          y={-apexY - 5}
-          textAnchor="middle"
-          fontSize="9"
-          fontWeight={700}
-          letterSpacing="0.08em"
-          fill={ink}
-          fontFamily="Inter, Helvetica, Arial, sans-serif"
-        >
-          N
-        </text>
+      <circle cx="28" cy="28" r="27.5" fill={chip} stroke={ring} strokeWidth="1" />
+      <g transform={`rotate(${needleDeg} 28 28)`}>
+        <path d="M28 7.84 L33.6 26.88 L28 29.12 L22.4 26.88 Z" fill={north} />
+        <path d="M28 48.16 L33.6 26.88 L28 29.12 L22.4 26.88 Z" fill={south} />
       </g>
     </svg>
   );
 }
 
-export function StudioCompass({ needleDeg }: { needleDeg: number }) {
+export function StudioCompass({ headingDeg }: { headingDeg: number }) {
   return (
-    <div className="studio-compass" aria-hidden="true">
-      <StudioCompassRose needleDeg={needleDeg} />
-    </div>
+    <button
+      type="button"
+      className="studio-compass"
+      aria-label={studioCompassAriaLabel(headingDeg)}
+      onClick={() => dispatchStudioCompassFaceNorth()}
+    >
+      <StudioCompassNeedle headingDeg={headingDeg} />
+    </button>
   );
 }

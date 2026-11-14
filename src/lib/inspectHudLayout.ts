@@ -4,8 +4,9 @@ export const INSPECT_HUD_DEFAULT_WIDTH = 280;
 export const INSPECT_HUD_DEFAULT_HEIGHT = 320;
 const MARGIN = 12;
 const PICK_OFFSET = 18;
-const COMPASS_SAFE_W = 88;
-const COMPASS_SAFE_H = 88;
+const COMPASS_SAFE_W = 80;
+const COMPASS_SAFE_H = 148;
+const STUDIO_RIGHT_PANEL_W = 320;
 
 export type ClampInspectHudInput = {
   anchorX: number;
@@ -34,7 +35,7 @@ export function inspectHudAvoidCompass(
 ): { x: number; y: number } {
   const hudW = INSPECT_HUD_DEFAULT_WIDTH;
   const hudH = INSPECT_HUD_DEFAULT_HEIGHT;
-  const compassLeft = viewport.width - COMPASS_SAFE_W;
+  const compassLeft = viewport.width - STUDIO_RIGHT_PANEL_W - COMPASS_SAFE_W;
   const compassTop = viewport.height - COMPASS_SAFE_H;
   let { x, y } = anchor;
   if (x + hudW > compassLeft - 8 && y + hudH > compassTop - 8) {

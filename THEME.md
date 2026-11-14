@@ -208,6 +208,11 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-marker` | `#ffcc1a` | Sun icon at the current time in the 3D heliodon (screen only). The only yellow in the heliodon. |
 | `--sun-compass` | `#45423c` | Dark grey of the 3D heliodon dial: 10° altitude rings, azimuth radials, 1° ticks, degree numbers and hour lines (screen only). |
 | `--sun-compass-label` | `#1a1916` | Ink of the 3D heliodon dial: horizon ring, 5° and 10° ticks, cardinal ticks, dashed axes, N/E/S/W, hour labels, arc labels and hour-dot outlines (screen only). |
+| `--studio-compass-chip` | `#111111` | 3D view compass (Designbot C): dark disc behind the north/south needle. |
+| `--studio-compass-chip-ring` | `#000000` | 3D view compass: 1px outer ring on the chip. |
+| `--studio-compass-needle-north` | `#ffe500` | 3D view compass: north half of the needle. |
+| `--studio-compass-needle-south` | `#6b6b6b` | 3D view compass: south half of the needle. |
+| `--studio-compass-focus` | `#ffe500` | 3D view compass: keyboard focus ring. |
 | `--building-solar-neutral` | `#ffffff` | Single neutral building fill in the 3D viewport while the sun path and compass are on (screen only). |
 | `--heliodon-dial-disc` | `#e8e2d8` | Faint ground disc under the heliodon dial at about 35% opacity (screen only). |
 | `--shadow-fill` | `#4a5a70` | Site-plan building shadows on the site plan (20% opacity). |
