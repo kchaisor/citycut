@@ -337,12 +337,14 @@ function drapeLayer(layer: { lift: number; polygonOffsetFactor: number; polygonO
   return { ...layer, polygonOffsetFactor: 0, polygonOffsetUnits: 0 };
 }
 
-function drapedWaterLayer() {
+function drapedWaterLayer(storedSiteDrape: boolean) {
+  const extraLift = storedSiteDrape ? 0.14 : 0.035;
   return {
     ...SURFACE.water,
-    lift: SURFACE.water.lift + 0.035,
-    polygonOffsetFactor: SURFACE.water.polygonOffsetFactor,
-    polygonOffsetUnits: SURFACE.water.polygonOffsetUnits,
+    lift: SURFACE.water.lift + extraLift,
+    polygonOffsetFactor: storedSiteDrape ? -4 : SURFACE.water.polygonOffsetFactor,
+    polygonOffsetUnits: storedSiteDrape ? -6 : SURFACE.water.polygonOffsetUnits,
+    renderOrder: storedSiteDrape ? SURFACE.water.renderOrder + 3 : SURFACE.water.renderOrder,
   };
 }
 
@@ -515,6 +517,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   group.add(basePlinthMesh(model.sideM, model.terrain, frameShape, frameSize));
 
   const onTerrain = Boolean(sample && model.terrain);
+  const storedSiteDrape = Boolean(model.storedSiteLayer);
   const blockMat = paint(
     matteStandardMaterial({ color: getColour("--block-fill") }),
     onTerrain ? drapeLayer(SURFACE.block) : SURFACE.block,
@@ -523,7 +526,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     matteStandardMaterial({ color: getColour("--green-3d") }),
     onTerrain ? drapeLayer(SURFACE.green) : SURFACE.green,
   );
-  const waterLayer = onTerrain ? drapedWaterLayer() : SURFACE.water;
+  const waterLayer = onTerrain ? drapedWaterLayer(storedSiteDrape) : storedSiteDrape ? drapedWaterLayer(true) : SURFACE.water;
   const waterMat = paint(
     matteStandardMaterial({ color: getColour("--water-3d"), side: THREE.DoubleSide }),
     waterLayer,

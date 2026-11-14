@@ -24,6 +24,14 @@ export type StoredSiteFootprintProps = {
   role: StoredSiteFootprintRole;
 };
 
+export type StoredSiteMeshPart = {
+  positions: Float32Array;
+  indices: Uint32Array;
+  buildingId: number | null;
+  structure: boolean;
+  partId?: string | null;
+};
+
 export type StoredSiteFootprint = {
   id: string;
   ring: Ring;

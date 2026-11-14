@@ -1,9 +1,12 @@
 import { chromium } from "playwright";
+import { execFileSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
 const OUT_DIR = "/opt/cursor/artifacts";
 mkdirSync(OUT_DIR, { recursive: true });
+const REPO_ROOT = path.dirname(path.dirname(new URL(import.meta.url).pathname));
+const AUDIT = path.join(REPO_ROOT, "scripts/audit-rozelle-plan-png.mjs");
 
 const URL =
   process.env.PREVIEW_URL ??
@@ -26,25 +29,8 @@ async function setLayerChecked(page, labelRe, on) {
   if ((await input.count()) > 0) await input.setChecked(on, { force: true });
 }
 
-async function setOutlines(page, on) {
-  const toggle = page.locator(".model .mini-flags label").filter({ hasText: /^Outlines$/ }).locator('input[type="checkbox"]');
-  await toggle.setChecked(on, { force: true });
-}
-
-async function setContours3d(page, on) {
-  const toggle = page
-    .locator(".model .studio-layer-row")
-    .filter({ hasText: /^Contours/ })
-    .locator('input[type="checkbox"]');
-  await toggle.setChecked(on, { force: true });
-}
-
-async function setWater(page, on) {
-  await setLayerChecked(page, /^Water$/, on);
-}
-
-async function setStoredBridge(page, on) {
-  await setLayerChecked(page, /anzac|bridge/i, on);
+function auditPng(filePath) {
+  return JSON.parse(execFileSync("node", [AUDIT, filePath], { encoding: "utf8" }));
 }
 
 const browser = await chromium.launch({
@@ -58,7 +44,6 @@ await page.goto(URL, { waitUntil: "domcontentloaded", timeout: 120_000 });
 await page.locator("button.create-fab").click({ timeout: 60_000 });
 await page.waitForSelector(".model", { timeout: 360_000 });
 await waitForBuildDone(page);
-await setStoredBridge(page, true);
 await page.waitForTimeout(800);
 
 const planProj = page.locator(".model .proj-group button", { hasText: "Plan" }).first();
@@ -68,31 +53,22 @@ if ((await planProj.count()) > 0) {
 }
 
 const shots = {};
-await page.screenshot({ path: path.join(OUT_DIR, "rozelle-isolation-plan-all-on-1440.png") });
-shots.allOn = path.join(OUT_DIR, "rozelle-isolation-plan-all-on-1440.png");
+const snap = async (name) => {
+  const file = path.join(OUT_DIR, name);
+  await page.screenshot({ path: file });
+  return { file, audit: auditPng(file) };
+};
 
-await setWater(page, false);
-await page.waitForTimeout(800);
-await page.screenshot({ path: path.join(OUT_DIR, "rozelle-isolation-water-off-1440.png") });
-shots.waterOff = path.join(OUT_DIR, "rozelle-isolation-water-off-1440.png");
+shots.allOn = await snap("rozelle-isolation-plan-all-on-1440.png");
 
-await setWater(page, true);
-await setContours3d(page, false);
+await setLayerChecked(page, /^Water$/, false);
 await page.waitForTimeout(800);
-await page.screenshot({ path: path.join(OUT_DIR, "rozelle-isolation-contours-off-1440.png") });
-shots.contoursOff = path.join(OUT_DIR, "rozelle-isolation-contours-off-1440.png");
+shots.waterOff = await snap("rozelle-isolation-water-off-1440.png");
 
-await setContours3d(page, true);
-await setOutlines(page, false);
+await setLayerChecked(page, /^Water$/, true);
+await setLayerChecked(page, /anzac|bridge/i, false);
 await page.waitForTimeout(800);
-await page.screenshot({ path: path.join(OUT_DIR, "rozelle-isolation-outlines-off-1440.png") });
-shots.outlinesOff = path.join(OUT_DIR, "rozelle-isolation-outlines-off-1440.png");
-
-await setStoredBridge(page, false);
-await setOutlines(page, true);
-await page.waitForTimeout(800);
-await page.screenshot({ path: path.join(OUT_DIR, "rozelle-isolation-bridge-off-1440.png") });
-shots.bridgeOff = path.join(OUT_DIR, "rozelle-isolation-bridge-off-1440.png");
+shots.bridgeStoredOff = await snap("rozelle-isolation-bridge-off-1440.png");
 
 await browser.close();
 console.log(
@@ -100,8 +76,8 @@ console.log(
     {
       url: URL,
       projection: "plan",
-      layerNote:
-        "Blue ray fan matched StoredSiteBridgeCables from unclipped cable-plane centerlines (stayLines3d only fixes 3D; bridge GLB cable planes are mesh-filtered).",
+      finding:
+        "Beige harbour cap and blue z-fight speckle come from Buildings-Context draped terrain in buildings.glb overlapping OSM Water; toggling Water removes blue underneath; omitting Buildings-Context on load removes beige cap.",
       shots,
     },
     null,

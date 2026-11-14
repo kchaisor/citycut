@@ -582,18 +582,20 @@ function StoredSiteEdgesLayer({
   root,
   showOutlines,
   buildingsVisible,
+  projection,
 }: {
   root: THREE.Object3D;
   showOutlines: boolean;
   buildingsVisible: boolean;
+  projection: ProjectionMode;
 }) {
   const { invalidate } = useThree();
   useLayoutEffect(() => {
     addStoredSiteEdges(root);
     const edges = root.getObjectByName("StoredSiteEdges");
-    if (edges) edges.visible = showOutlines && buildingsVisible;
+    if (edges) edges.visible = showOutlines && buildingsVisible && projection !== "plan";
     invalidate();
-  }, [root, showOutlines, buildingsVisible, invalidate]);
+  }, [root, showOutlines, buildingsVisible, projection, invalidate]);
   return null;
 }
 
@@ -1060,6 +1062,31 @@ function City({
     waterVisible,
     railVisible,
   ]);
+  useLayoutEffect(() => {
+    const planView = projection === "plan";
+    const suppressGroundDepth = new Set(["Terrain", "Ground", "BasePlinth"]);
+    group.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const material of materials) {
+        if (!(material instanceof THREE.MeshStandardMaterial)) continue;
+        if (material.userData.planDepthWriteRest == null) {
+          material.userData.planDepthWriteRest = material.depthWrite;
+        }
+        if (mesh.name === "Water" && planView) {
+          material.depthWrite = true;
+          material.depthTest = true;
+          mesh.renderOrder = 12;
+          return;
+        }
+        if (suppressGroundDepth.has(mesh.name)) {
+          material.depthWrite = planView ? false : material.userData.planDepthWriteRest;
+        }
+      }
+    });
+    invalidate();
+  }, [group, projection, invalidate]);
   useLayoutEffect(() => {
     const trees = group.getObjectByName("Trees");
     if (trees) trees.visible = treesVisibleIn3d(model.layers, display);
@@ -2490,6 +2517,7 @@ export function Scene3D({
             root={storedSiteMeshes}
             showOutlines={display.showOutlines}
             buildingsVisible={isLayer3dVisible(display, "buildings")}
+            projection={projection}
           />
           <BuildingPickLayer
             root={storedSiteMeshes}

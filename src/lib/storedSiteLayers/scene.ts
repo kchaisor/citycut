@@ -8,7 +8,7 @@ import { storedSiteAssetUrl } from "./registry";
 import { storedSiteRelativeToScene } from "./transform";
 import type { LonLat } from "../../types";
 import { bridgePartRole, type BridgeBuildingMeta } from "./bridgePlan";
-import type { StoredSiteLayerManifest, StoredSiteLayerState } from "./types";
+import type { StoredSiteLayerManifest, StoredSiteLayerState, StoredSiteMeshPart } from "./types";
 import {
   DEFAULT_SITE_FRAME_SHAPE,
   frameGroundSize,
@@ -16,14 +16,9 @@ import {
   type FrameGroundSize,
   type SiteFrameShape,
 } from "../siteFrame";
+import { storedSitePartIsTerrainDrapeSurface } from "./storedSiteGroundMesh";
 
-export type StoredSiteMeshPart = {
-  positions: Float32Array;
-  indices: Uint32Array;
-  buildingId: number | null;
-  structure: boolean;
-  partId?: string | null;
-};
+export type { StoredSiteMeshPart } from "./types";
 
 export function clipStoredSiteMeshPartToFrame(
   part: StoredSiteMeshPart,
@@ -216,6 +211,8 @@ async function loadGlbParts(
   gltf.scene.traverse((node) => {
     const mesh = node as THREE.Mesh;
     if (!mesh.isMesh || !(mesh.geometry instanceof THREE.BufferGeometry)) return;
+    const meshName = mesh.name ?? "";
+    if (meshName.startsWith("Buildings-Context")) return;
     const geometry = mesh.geometry.clone();
     geometry.applyMatrix4(mesh.matrixWorld);
     (geometry.userData as { buildingIds?: string[] }).buildingIds = rootIds;
@@ -281,6 +278,7 @@ export async function buildStoredSiteLayerGroup(
   const allParts = [...buildingParts, ...bridgeParts]
     .map((part) => clipStoredSiteMeshPartToFrame(part, sideM, frameShape, frameSize))
     .filter((part): part is StoredSiteMeshPart => part != null)
+    .filter((part) => !storedSitePartIsTerrainDrapeSurface(part))
     .filter((part) => {
       if (!part.partId || !bridgePlan) return true;
       const role = bridgePartRole(part.partId, bridgePlan);

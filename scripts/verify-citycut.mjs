@@ -24,8 +24,15 @@ import path from "node:path";
 import net from "node:net";
 import { chromium } from "playwright";
 import { PNG } from "pngjs";
+import { fileURLToPath } from "node:url";
 
 const CHROME_PATH = "/usr/bin/google-chrome";
+const REPO_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const ROZELLE_PLAN_AUDIT_SCRIPT = path.join(REPO_ROOT, "scripts/audit-rozelle-plan-png.mjs");
+
+function auditRozellePlanPngFile(filePath) {
+  return JSON.parse(execFileSync("node", [ROZELLE_PLAN_AUDIT_SCRIPT, filePath], { encoding: "utf8" }));
+}
 const VIEWPORT = { width: 1440, height: 900 };
 const DEVICE_SCALE_FACTOR = 2;
 const ARTIFACTS_DIR = "/workspace";
@@ -2246,6 +2253,14 @@ async function main() {
         { timeout: 360_000 },
       );
       await rozelleKmPage.waitForTimeout(1200);
+      const brokenFixture = path.join(REPO_ROOT, "scripts/fixtures/rozelle-1km-3d-plan-broken-dac3d62.png");
+      const brokenAudit = auditRozellePlanPngFile(brokenFixture);
+      assertCheck(
+        "rozelle-plan-audit-broken-fixture",
+        "Known-broken dac3d62 3D Plan PNG fails the Rozelle harbour pixel audit",
+        !brokenAudit.passes.ok,
+        brokenAudit.passes.detail,
+      );
       await rozelleKmPage.screenshot({
         path: path.join(cursorArtifacts, "rozelle-1km-3d-default.png"),
         clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
@@ -2300,80 +2315,13 @@ async function main() {
         Boolean(qaAudit.cablesOk),
         qaAudit.audit ? JSON.stringify(qaAudit.audit) : "missing audit",
       );
-      const canvasRect = await rozelleKmPage.evaluate(() => {
-        const canvas = document.querySelector(".scene-viewport canvas");
-        return canvas?.getBoundingClientRect() ?? null;
-      });
-      const samplePlanPixels = async () => {
-        if (!canvasRect || canvasRect.width < 40) {
-          return { harbourBlue: 0, harbourTotal: 0, landStrayBlue: 0, landTotal: 0, harbourFracBest: 0 };
-        }
-        const isWaterFill = (r, g, b) => r >= 85 && g >= 130 && b >= 165 && b >= r + 8;
-        const isStrayCableBlue = (r, g, b) => b >= 135 && r <= 115 && g <= 135 && b - r >= 30;
-        const tally = (png, fn) => {
-          let hits = 0;
-          let total = 0;
-          for (let i = 0; i < png.data.length; i += 4) {
-            const a = png.data[i + 3];
-            if (a < 12) continue;
-            total++;
-            if (fn(png.data[i], png.data[i + 1], png.data[i + 2])) hits++;
-          }
-          return { hits, total };
-        };
-        let harbourFracBest = 0;
-        let harbourBlue = 0;
-        let harbourTotal = 0;
-        const tileW = Math.round(canvasRect.width / 4);
-        const tileH = Math.round(canvasRect.height / 4);
-        for (let row = 0; row < 4; row++) {
-          for (let col = 0; col < 4; col++) {
-            const clip = {
-              x: Math.round(canvasRect.x + col * tileW),
-              y: Math.round(canvasRect.y + row * tileH),
-              width: tileW,
-              height: tileH,
-            };
-            const harbourPng = PNG.sync.read(await rozelleKmPage.screenshot({ clip }));
-            const harbour = tally(harbourPng, isWaterFill);
-            const frac = harbour.total > 0 ? harbour.hits / harbour.total : 0;
-            if (frac > harbourFracBest) {
-              harbourFracBest = frac;
-              harbourBlue = harbour.hits;
-              harbourTotal = harbour.total;
-            }
-          }
-        }
-        const clipLand = {
-          x: Math.round(canvasRect.x + canvasRect.width * 0.62),
-          y: Math.round(canvasRect.y + canvasRect.height * 0.34),
-          width: Math.round(canvasRect.width * 0.28),
-          height: Math.round(canvasRect.height * 0.4),
-        };
-        const landPng = PNG.sync.read(await rozelleKmPage.screenshot({ clip: clipLand }));
-        const land = tally(landPng, isStrayCableBlue);
-        return {
-          harbourBlue,
-          harbourTotal,
-          harbourFracBest,
-          landStrayBlue: land.hits,
-          landTotal: land.total,
-        };
-      };
-      const pixels = await samplePlanPixels();
-      const harbourFrac = pixels.harbourFracBest;
-      const landStrayFrac = pixels.landTotal > 0 ? pixels.landStrayBlue / pixels.landTotal : 0;
+      const planShot = path.join(cursorArtifacts, "rozelle-1km-3d-plan.png");
+      const liveAudit = auditRozellePlanPngFile(planShot);
       assertCheck(
-        "rozelle-1km-3d-plan-harbour-blue",
-        "Rozelle 1 km 3D Plan harbour sample is mostly blue water fill",
-        harbourFrac >= 0.04,
-        `harbourBlue=${pixels.harbourBlue}/${pixels.harbourTotal} bestFrac=${harbourFrac.toFixed(3)}`,
-      );
-      assertCheck(
-        "rozelle-1km-3d-plan-no-stray-blue-lines",
-        "Rozelle 1 km 3D Plan has no bright blue line pixels on inland ground (cable-plane rays)",
-        landStrayFrac <= 0.012,
-        `landStray=${pixels.landStrayBlue}/${pixels.landTotal} frac=${landStrayFrac.toFixed(4)}`,
+        "rozelle-1km-3d-plan-pixel-audit",
+        "Rozelle 1 km 3D Plan passes harbour blue / low beige / low blue-speckle pixel audit",
+        liveAudit.passes.ok,
+        liveAudit.passes.detail,
       );
       await rozelleKmPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 120_000 });
       await rozelleKmPage.getByRole("button", { name: "Site plan" }).click({ timeout: 60_000 });
