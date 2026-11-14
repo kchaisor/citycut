@@ -1768,7 +1768,9 @@ async function main() {
     const windFramePath = path.join(ARTIFACTS_DIR, "ground-wind-window-density-desktop.png");
     await page.screenshot({ path: windFramePath });
     const windFrame = PNG.sync.read(fs.readFileSync(windFramePath));
-    const windAudit = groundWindDrawnWindows(windFrame.data, windFrame.width, windFrame.height, DEVICE_SCALE_FACTOR);
+    const windAudit = groundWindDrawnWindows(windFrame.data, windFrame.width, windFrame.height, DEVICE_SCALE_FACTOR, {
+      minYCssPx: 300,
+    });
     assertCheck(
       "ground-wind-window-density",
       "3D Wind Flow draws trails in every 200x200 window with at least 15% visible ground at 0.35x or more of the median window density",

@@ -14,6 +14,8 @@ export function groundWindDrawnWindows(rgba, width, height, scale = 1, opts = {}
   const step = Math.round((opts.stepCssPx ?? GROUND_WIND_WINDOW_STEP_CSS_PX) * scale);
   const minGround = opts.minGround ?? GROUND_WIND_WINDOW_MIN_GROUND;
   const minRatio = opts.minRatio ?? GROUND_WIND_WINDOW_MIN_RATIO;
+  const minYCss = opts.minYCssPx ?? 0;
+  const minYBuf = Math.round(minYCss * scale);
   const trail = new Uint8Array(width * height);
   const ground = new Uint8Array(width * height);
   for (let i = 0, p = 0; i < width * height; i++, p += 4) {
@@ -23,6 +25,7 @@ export function groundWindDrawnWindows(rgba, width, height, scale = 1, opts = {}
   }
   const windows = [];
   for (let y0 = 0; y0 + win <= height; y0 += step) {
+    if (y0 < minYBuf) continue;
     for (let x0 = 0; x0 + win <= width; x0 += step) {
       let g = 0;
       let t = 0;

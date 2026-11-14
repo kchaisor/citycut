@@ -767,22 +767,31 @@ export function layoutGroundWindScreenSeeds(
   return particles.count;
 }
 
-export function refreshGroundWindSlotAnchors(
+function groundWindSlotAnchorFromScreen(
   particles: GroundWindParticles,
   field: GroundWindField,
   heightAt: HeightAt,
   model: CityModel,
-  bench?: GroundWindStepBench,
-) {
+  sx: number,
+  sy: number,
+): { east: number; north: number; sx: number; sy: number } | null {
   const unproject = particles.screenUnproject;
   const project = particles.screenProject;
-  if (!unproject || !project) return;
-  for (let i = 0; i < particles.count; i++) {
-    const sx = particles.slotSx[i]!;
-    const sy = particles.slotSy[i]!;
-    if (sx <= 0 || sy <= 0) continue;
-    if (bench) bench.respawnRaycasts++;
-    const world = unproject(sx, sy);
+  if (!unproject || !project) return null;
+  const cell = GROUND_WIND_STREAMLINE_CELL_PX;
+  const offsets = [
+    [0, 0],
+    [cell * 0.34, 0],
+    [-cell * 0.34, 0],
+    [0, cell * 0.34],
+    [0, -cell * 0.34],
+    [cell * 0.24, cell * 0.24],
+    [-cell * 0.24, cell * 0.24],
+  ];
+  for (let o = 0; o < offsets.length; o++) {
+    const ox = offsets[o]![0]!;
+    const oy = offsets[o]![1]!;
+    const world = unproject(sx + ox, sy + oy);
     if (!world) continue;
     if (groundWindInsideFootprint(model, world.east, world.north)) continue;
     const idx = groundWindCellIndex(field, world.east, world.north);
@@ -790,10 +799,34 @@ export function refreshGroundWindSlotAnchors(
     const y = heightAt(world.east, world.north);
     const screen = project(world.east, world.north, y);
     if (!screen) continue;
-    particles.slotEast[i] = world.east;
-    particles.slotNorth[i] = world.north;
-    particles.slotSx[i] = screen.x;
-    particles.slotSy[i] = screen.y;
+    return { east: world.east, north: world.north, sx: screen.x, sy: screen.y };
+  }
+  return null;
+}
+
+export function refreshGroundWindSlotAnchors(
+  particles: GroundWindParticles,
+  field: GroundWindField,
+  heightAt: HeightAt,
+  model: CityModel,
+  bench?: GroundWindStepBench,
+) {
+  if (!particles.screenUnproject || !particles.screenProject) return;
+  for (let i = 0; i < particles.count; i++) {
+    const sx = particles.slotSx[i]!;
+    const sy = particles.slotSy[i]!;
+    if (sx <= 0 || sy <= 0) continue;
+    if (bench) bench.respawnRaycasts++;
+    const anchored = groundWindSlotAnchorFromScreen(particles, field, heightAt, model, sx, sy);
+    if (!anchored) {
+      particles.slotEast[i] = 0;
+      particles.slotNorth[i] = 0;
+      continue;
+    }
+    particles.slotEast[i] = anchored.east;
+    particles.slotNorth[i] = anchored.north;
+    particles.slotSx[i] = anchored.sx;
+    particles.slotSy[i] = anchored.sy;
   }
 }
 

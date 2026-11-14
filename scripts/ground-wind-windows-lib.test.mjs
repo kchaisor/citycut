@@ -48,6 +48,13 @@ describe("groundWindDrawnWindows", () => {
     expect(audit.ok).toBe(true);
   });
 
+  it("skips windows above minYCssPx", () => {
+    const rgba = frame(1440, 900, (x, y) => (y < 300 ? GROUND : y % 12 === 0 ? TRAIL : GROUND));
+    const scoped = groundWindDrawnWindows(rgba, 1440, 900, 1, { minYCssPx: 300 });
+    expect(scoped.windows.every((w) => w.y0 >= 300)).toBe(true);
+    expect(scoped.ok).toBe(true);
+  });
+
   it("reports window origins in CSS pixels when the frame is scaled", () => {
     const rgba = frame(720, 450, striped((x) => x >= 579));
     const audit = groundWindDrawnWindows(rgba, 720, 450, 0.5);

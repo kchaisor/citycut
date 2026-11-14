@@ -20,11 +20,14 @@ import {
   groundWindMetresPerSecond,
   groundWindPointsLength,
   layoutGroundWindScreenSeeds,
-  refreshGroundWindSlotAnchors,
   stepGroundWindParticles,
   warmGroundWindParticles,
   type GroundWindParticles,
 } from "../lib/groundWindParticles";
+import {
+  GROUND_WIND_GROUND_Y_MIN,
+  GROUND_WIND_NEAR_Y_MAX,
+} from "../lib/groundWindScreen";
 import { useColourRevision } from "../lib/useColourRevision";
 import { groundWindDebugEnabled, groundWindDebugSnapshot, groundWindRenderStats } from "../lib/groundWindDebug";
 import { GROUND_WIND_EMPTY_MASK_RECT, groundWindHudMaskFromDom, type GroundWindMaskRect } from "../lib/groundWindHudMask";
@@ -133,6 +136,42 @@ function metresPerPixel(camera: THREE.Camera, point: THREE.Vector3, heightPx: nu
   return worldHeight / heightPx;
 }
 
+function groundWindMedianMetresPerPixel(
+  camera: THREE.Camera,
+  particles: GroundWindParticles,
+  heightAt: (east: number, north: number) => number,
+  heightPx: number,
+  scratch: THREE.Vector3,
+): number {
+  scratch.set(0, heightAt(0, 0), 0);
+  if (particles.count <= 0) return metresPerPixel(camera, scratch, heightPx);
+  const distances: number[] = [];
+  const stride = Math.max(1, Math.floor(particles.count / 220));
+  for (let i = 0; i < particles.count; i += stride) {
+    const sy = particles.screenY[i]!;
+    if (sy < GROUND_WIND_GROUND_Y_MIN || sy > GROUND_WIND_NEAR_Y_MAX) continue;
+    const east = particles.east[i]!;
+    const north = particles.north[i]!;
+    scratch.set(east, heightAt(east, north), -north);
+    distances.push(Math.max(0.1, camera.position.distanceTo(scratch)));
+  }
+  if (distances.length === 0) {
+    scratch.set(0, heightAt(0, 0), 0);
+    return metresPerPixel(camera, scratch, heightPx);
+  }
+  distances.sort((a, b) => a - b);
+  const mid = distances[Math.floor((distances.length - 1) / 2)]!;
+  scratch.set(0, heightAt(0, 0), 0);
+  const centreDist = Math.max(0.1, camera.position.distanceTo(scratch));
+  const blendDist = mid * 0.72 + centreDist * 0.28;
+  if (camera instanceof THREE.OrthographicCamera) {
+    return metresPerPixel(camera, scratch, heightPx);
+  }
+  const persp = camera as THREE.PerspectiveCamera;
+  const worldHeight = 2 * Math.tan((persp.fov * Math.PI) / 360) * blendDist;
+  return worldHeight / heightPx;
+}
+
 function createRibbonGeometry(points: Float32Array): { geometry: THREE.InstancedBufferGeometry; data: THREE.InstancedInterleavedBuffer } {
   const geometry = new THREE.InstancedBufferGeometry();
   const corners = new Float32Array([-1, 0, 0, 0, 0, 0, 1, 0, 0, -1, 1, 0, 0, 1, 0, 1, 1, 0]);
@@ -199,7 +238,8 @@ export function GroundWindFlow({
   const debugFrameRef = useRef(0);
   const cameraDigestRef = useRef("");
   const cameraSettleRef = useRef(0);
-  const cameraAnchorsForRef = useRef("");
+  const layoutDigestRef = useRef("");
+  const layoutPendingRef = useRef(false);
 
   const points = useMemo(() => new Float32Array(groundWindPointsLength(GROUND_WIND_PARTICLES_MAX)), []);
   const { geometry, data } = useMemo(() => createRibbonGeometry(points), [points]);
@@ -322,13 +362,10 @@ export function GroundWindFlow({
       particles.medianKmh = medianKmh;
       particles.cityModel = model;
       particlesRef.current = particles;
-      particles.metresPerPx = metresPerPixel(camera, projScratch.set(0, heightAt(0, 0), 0), size.height);
-      const activeCount = layoutGroundWindScreenSeeds(particles, field, heightAt, model, 7);
-      geometry.instanceCount = activeCount * GROUND_WIND_POINTS_PER_PARTICLE - 1;
-      warmGroundWindParticles(particles, field, heightAt, metresPerSecond, frozenRef.current ? WARM_FROZEN_S : WARM_LIVE_S);
-      data.needsUpdate = true;
+      layoutPendingRef.current = true;
+      layoutDigestRef.current = "";
+      geometry.instanceCount = 0;
       if (debugWind && typeof window !== "undefined") {
-        window.__citycutGroundWind = groundWindRenderStats(particles, size.width);
         window.__citycutGroundWindAudit = () => groundWindDebugSnapshot(particles, field, model, heightAt);
       }
       invalidate();
@@ -342,11 +379,6 @@ export function GroundWindFlow({
     particles.viewWidth = size.width;
     particles.viewHeight = size.height;
     particles.medianKmh = medianKmh;
-    const headEast = particles.east[0] ?? 0;
-    const headNorth = particles.north[0] ?? 0;
-    const headY = heightAt(headEast, headNorth);
-    projScratch.set(headEast, headY, -headNorth);
-    particles.metresPerPx = metresPerPixel(camera, projScratch, size.height);
     const digest = `${camera.position.x.toFixed(2)}:${camera.position.y.toFixed(2)}:${camera.position.z.toFixed(2)}:${(camera as THREE.PerspectiveCamera).zoom?.toFixed(3) ?? "1"}`;
     if (digest !== cameraDigestRef.current) {
       cameraDigestRef.current = digest;
@@ -354,10 +386,31 @@ export function GroundWindFlow({
     } else {
       cameraSettleRef.current += delta;
     }
-    if (cameraSettleRef.current > 0.4 && cameraAnchorsForRef.current !== digest) {
-      cameraAnchorsForRef.current = digest;
-      refreshGroundWindSlotAnchors(particles, field, heightAt, model);
+    const cameraSettled = cameraSettleRef.current > 0.4;
+    const needsInitialLayout = layoutPendingRef.current && cameraSettled;
+    const needsCameraRelayout = !layoutPendingRef.current && cameraSettled && layoutDigestRef.current !== digest;
+    if (needsInitialLayout || needsCameraRelayout) {
+      layoutDigestRef.current = digest;
+      layoutPendingRef.current = false;
       cameraSettleRef.current = 0;
+      particles.metresPerPx = groundWindMedianMetresPerPixel(camera, particles, heightAt, size.height, projScratch);
+      if (typeof window !== "undefined") {
+        (window as Window & { __citycutGroundWindMpp?: number }).__citycutGroundWindMpp = particles.metresPerPx;
+      }
+      const activeCount = layoutGroundWindScreenSeeds(particles, field, heightAt, model, 7);
+      geometry.instanceCount = activeCount * GROUND_WIND_POINTS_PER_PARTICLE - 1;
+      const warmS = needsInitialLayout
+        ? frozenRef.current
+          ? WARM_FROZEN_S
+          : WARM_LIVE_S
+        : 1.1;
+      warmGroundWindParticles(particles, field, heightAt, metresPerSecond, warmS);
+      data.needsUpdate = true;
+      if (debugWind && typeof window !== "undefined") {
+        window.__citycutGroundWind = groundWindRenderStats(particles, size.width);
+      }
+      invalidate();
+      return;
     }
     if (frozenRef.current) return;
     stepGroundWindParticles(particles, field, heightAt, Math.min(delta, MAX_FRAME_DT), metresPerSecond);
