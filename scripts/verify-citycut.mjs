@@ -148,7 +148,7 @@ async function readSunHoursLegendConsoleClearance(page) {
   });
 }
 
-async function assertSunHoursLegendAboveConsole(page, siteSlug, viewportWidth) {
+async function assertSunHoursLegendAboveConsole(page, siteSlug, viewportWidth, assertCheck) {
   const height = 900;
   await page.setViewportSize({ width: viewportWidth, height });
   await page.waitForTimeout(300);
@@ -3274,8 +3274,8 @@ async function main() {
           overlayCount > 0 ? Number(await overlayDom.getAttribute("data-sun-hours-ground-cell-count")) || 0 : 0;
         await shadowPage.waitForSelector("[data-sun-hours-ground-legend-dock]", { timeout: 120000 });
         await shadowPage.waitForSelector("[data-sun-hours-roof-overlay]", { timeout: 120000 });
-        await assertSunHoursLegendAboveConsole(shadowPage, "box-hill", 1440);
-        await assertSunHoursLegendAboveConsole(shadowPage, "box-hill", 1280);
+        await assertSunHoursLegendAboveConsole(shadowPage, "box-hill", 1440, assertCheck);
+        await assertSunHoursLegendAboveConsole(shadowPage, "box-hill", 1280, assertCheck);
         const shotDrawingLegend = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-box-hill-drawing-legend-1440x900.png");
         await shadowPage.getByRole("tab", { name: /Drawing/i }).click();
         await shadowPage.waitForTimeout(450);
@@ -3395,8 +3395,8 @@ async function main() {
         await mapPage.waitForFunction(() => document.documentElement.dataset.sunHoursDirectSurfacesReady === "1", null, {
           timeout: 600000,
         });
-        await assertSunHoursLegendAboveConsole(mapPage, "mont-albert", 1440);
-        await assertSunHoursLegendAboveConsole(mapPage, "mont-albert", 1280);
+        await assertSunHoursLegendAboveConsole(mapPage, "mont-albert", 1440, assertCheck);
+        await assertSunHoursLegendAboveConsole(mapPage, "mont-albert", 1280, assertCheck);
         await mapPage.getByRole("tab", { name: /Drawing/i }).click();
         await mapPage.waitForTimeout(450);
         const shotDrawingLegend = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-mont-albert-drawing-legend-1440x900.png");
