@@ -756,7 +756,13 @@ export function layoutGroundWindScreenSeeds(
   const roadThinned = thinRoadSlots(merged, seed);
   const cap = Math.min(particles.east.length, slotBudget ?? particles.east.length);
   const slots = capGroundWindSlotsUniform(roadThinned, cap, seed);
+  if (slots.length === 0) {
+    particles.count = 0;
+    particles.layoutCount = 0;
+    return 0;
+  }
   particles.count = Math.max(GROUND_WIND_PARTICLES_MIN, slots.length);
+  if (particles.count > slots.length) particles.count = slots.length;
   particles.layoutCount = particles.count;
   for (let i = 0; i < particles.count; i++) {
     const slot = slots[i]!;
