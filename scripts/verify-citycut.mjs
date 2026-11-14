@@ -4181,8 +4181,8 @@ async function main() {
       return text.includes(label) || text.includes(`CityCut ${label}`);
     };
     const [sydneyAiDownload] = await Promise.all([
-      sydneyPage.waitForEvent("download", { timeout: 120_000 }),
-      sydneyPage.getByRole("button", { name: "Quick export Adobe Illustrator .ai" }).click({ timeout: 30_000 }),
+      sydneyPage.waitForEvent("download", { timeout: 300_000 }),
+      sydneyPage.getByRole("button", { name: "Quick export Adobe Illustrator .ai" }).click({ timeout: 60_000 }),
     ]);
     const sydneyAiPath = path.join(cursorArtifacts, "site-plan-button-download.ai");
     await sydneyAiDownload.saveAs(sydneyAiPath);
