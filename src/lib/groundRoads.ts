@@ -8,7 +8,8 @@ import {
   preparePolygonForClip,
 } from "./safePolygonClip";
 import { carriagewaysOf, unionCarriageways, unionPathRoads } from "./roadFill";
-import { DEFAULT_SITE_FRAME_SHAPE, siteFramePolygon } from "./siteFrame";
+import { DEFAULT_SITE_FRAME_SHAPE, outline } from "./siteFrame";
+import { siteFrameFromModel } from "./modelFrame";
 import { clipTrianglesToTerrainGrid, terrainMeshHeight, type Tri } from "./terrainDrape";
 import { pointInPolygon, type NswCentreline, type NswCorridor } from "./nswLayers";
 import type { CityModel, Pt, RoadGrade, TerrainField } from "../types";
@@ -57,16 +58,31 @@ export function multiArea(multi: MultiPolygon): number {
   return total;
 }
 
-export function groundRoadPartition(model: Pick<CityModel, "roads" | "sideM" | "frameShape" | "nsw">): GroundRoadPartition {
+export function groundRoadPartition(
+  model: Pick<CityModel, "roads" | "sideM" | "widthM" | "heightM" | "frameShape" | "nsw">,
+): GroundRoadPartition {
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
-  const frame = siteFramePolygon(model.sideM, frameShape) as Polygon;
+  const cutFrame = siteFrameFromModel(model);
+  const frameSize = { widthM: cutFrame.widthM, heightM: cutFrame.heightM };
+  const frame = outline(cutFrame) as Polygon;
   const raw: Record<RoadGrade, MultiPolygon> = {
-    arterial: unionCarriageways(carriagewaysOf(model.roads.filter((r) => r.grade === "arterial")), model.sideM, frameShape).polygons,
-    local: unionCarriageways(carriagewaysOf(model.roads.filter((r) => (r.grade ?? "local") === "local")), model.sideM, frameShape).polygons,
+    arterial: unionCarriageways(
+      carriagewaysOf(model.roads.filter((r) => r.grade === "arterial")),
+      model.sideM,
+      frameShape,
+      frameSize,
+    ).polygons,
+    local: unionCarriageways(
+      carriagewaysOf(model.roads.filter((r) => (r.grade ?? "local") === "local")),
+      model.sideM,
+      frameShape,
+      frameSize,
+    ).polygons,
     path: unionPathRoads(
       model.roads.filter((r) => r.kind === "road" && r.grade === "path").map((r) => ({ line: r.line, width: r.width })),
       model.sideM,
       frameShape,
+      frameSize,
     ).polygons,
   };
   const corridors = model.nsw?.roadCorridors ?? [];

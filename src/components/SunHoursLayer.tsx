@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { sunHoursColour, sunHoursGrid } from "../lib/sunHours";
 import type { CityModel } from "../types";
+import { siteFrameFromModel } from "../lib/modelFrame";
 
 export function SunHoursLayer({
   model,
@@ -36,9 +37,10 @@ export function SunHoursLayer({
   }, [model, year, month, day]);
   useEffect(() => () => texture?.dispose(), [texture]);
   if (!texture) return null;
+  const { widthM, heightM } = siteFrameFromModel(model);
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, groundY + 0.15, 0]} renderOrder={900}>
-      <planeGeometry args={[model.sideM, model.sideM]} />
+      <planeGeometry args={[widthM, heightM]} />
       <meshBasicMaterial map={texture} transparent depthWrite={false} depthTest={false} toneMapped={false} />
     </mesh>
   );

@@ -15,13 +15,14 @@ import { isVehicularRoad } from "./roadFill";
 import { sampleTerrain } from "./terrain";
 import { demContourLayer } from "./vicmapContours";
 import {
-  clipAreaToSiteFrame,
-  clipPolylineSiteFrame,
   circleRing,
+  clipLine,
+  clipPolygonWithHoles,
+  containsPoint,
   DEFAULT_SITE_FRAME_SHAPE,
-  pointInSiteFrame,
-  type SiteFrameShape,
+    type SiteFrameShape,
 } from "./siteFrame";
+import { siteFrameFromModel } from "./modelFrame";
 import type {
   HydroOverlay,
   PlanningOverlayPolygon,
@@ -534,7 +535,6 @@ export function buildAxoGroundTopoContours(
   exaggeration = DEFAULT_AXO_TERRAIN_EXAGGERATION,
   topoOverlay?: TopographyOverlay | "unavailable",
 ): string[] {
-  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const hasFieldRelief = Boolean(field && field.max - field.min > 1e-3 && exaggeration > 0);
   const rawPolylines: Pt[][] = [];
   if (hasFieldRelief && field) {
@@ -555,7 +555,7 @@ export function buildAxoGroundTopoContours(
       : 0;
   const out: string[] = [];
   for (const poly of rawPolylines) {
-    for (const part of clipPolylineSiteFrame(dedupe(poly), model.sideM, shape)) {
+    for (const part of clipLine(siteFrameFromModel(model), dedupe(poly))) {
       if (part.length < 2) continue;
       const dense: Pt[] = [part[0]!];
       for (let i = 0; i < part.length - 1; i += 1) {
@@ -621,11 +621,10 @@ function simplifyLine(line: Pt[], maxPoints: number): Pt[] {
 }
 
 function clipRoadLines(model: CityModel): Pt[][] {
-  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const lines: Pt[][] = [];
   for (const road of model.roads) {
     if (!isVehicularRoad(road)) continue;
-    for (const part of clipPolylineSiteFrame(dedupe(road.line), model.sideM, shape)) {
+    for (const part of clipLine(siteFrameFromModel(model), dedupe(road.line))) {
       const simplified = simplifyLine(part, 120);
       if (simplified.length >= 2) lines.push(simplified);
     }
@@ -639,12 +638,12 @@ export function modelHasClippedWaterInFrame(model: CityModel): boolean {
 
 const HYDRO_COURSE_BUFFER_HALF_M = 38;
 
-function hydroCourseFillRings(courses: Pt[][], sideM: number, shape: SiteFrameShape): Pt[][][] {
+function hydroCourseFillRings(courses: Pt[][], frame: ReturnType<typeof siteFrameFromModel>): Pt[][][] {
   const out: Pt[][][] = [];
   for (const line of courses) {
     const ring = bufferOpenLine(line, HYDRO_COURSE_BUFFER_HALF_M);
     if (!ring) continue;
-    const clipped = clipAreaToSiteFrame(ring, [], sideM, shape);
+    const clipped = clipPolygonWithHoles(frame, ring, []);
     if (!clipped || Math.abs(signedArea(clipped[0]!)) < 80) continue;
     out.push(clipped);
   }
@@ -654,23 +653,21 @@ function hydroCourseFillRings(courses: Pt[][], sideM: number, shape: SiteFrameSh
 function waterAreaRings(model: CityModel, overlays: ExplodedAxoOverlayBundle): Pt[][][] {
   const fromModel = areaRings(model, "water");
   if (fromModel.length > 0) return fromModel;
-  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const extra = overlays.overtureWater ?? [];
   const out: Pt[][][] = [];
   for (const area of extra) {
     if (area.kind !== "water") continue;
-    const rings = clipAreaToSiteFrame(area.ring, area.holes, model.sideM, shape);
+    const rings = clipPolygonWithHoles(siteFrameFromModel(model), area.ring, area.holes);
     if (rings) out.push(rings);
   }
   return out;
 }
 
 function areaRings(model: CityModel, kind: "water" | "green"): Pt[][][] {
-  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const out: Pt[][][] = [];
   for (const area of model.areas) {
     if (area.kind !== kind) continue;
-    const rings = clipAreaToSiteFrame(area.ring, area.holes, model.sideM, shape);
+    const rings = clipPolygonWithHoles(siteFrameFromModel(model), area.ring, area.holes);
     if (rings) out.push(rings);
   }
   return out;
@@ -788,7 +785,7 @@ export function buildExplodedAxoLayers(
         unavailableNote = "unavailable";
       } else if (overlays.planning?.length) {
         for (const poly of overlays.planning) {
-          const rings = clipAreaToSiteFrame(poly.outer, poly.holes, model.sideM, shape);
+          const rings = clipPolygonWithHoles(siteFrameFromModel(model), poly.outer, poly.holes);
           if (!rings) continue;
           const d = areaToPath(rings);
           if (d) {
@@ -814,7 +811,7 @@ export function buildExplodedAxoLayers(
       if (hydro?.courses.length) {
         if (fills.length === 0) {
           pushAreaPaths(
-            hydroCourseFillRings(hydro.courses, model.sideM, shape),
+            hydroCourseFillRings(hydro.courses, siteFrameFromModel(model)),
             fills,
             fillPaints,
             id === "water" ? "water" : "hydro-area",
@@ -905,7 +902,7 @@ export function buildExplodedAxoLayers(
       sourceNote = axoCanopyNote(canopies.counts) || undefined;
     } else if (id === "trees") {
       for (const tree of model.trees) {
-        if (!pointInSiteFrame(tree.at, model.sideM, shape)) continue;
+        if (!containsPoint(siteFrameFromModel(model), tree.at)) continue;
         const [x, y] = planToIsoBase(tree.at[0], tree.at[1]);
         markers.push({
           x,
@@ -916,7 +913,11 @@ export function buildExplodedAxoLayers(
       }
     } else if (id === "buildings") {
       if (settings.buildingMassing === false) {
-        const ground = figureGround(model.buildings, model.sideM, shape);
+        const cutFrame = siteFrameFromModel(model);
+        const ground = figureGround(model.buildings, model.sideM, shape, {
+          widthM: cutFrame.widthM,
+          heightM: cutFrame.heightM,
+        });
         for (const polygon of ground.polygons) {
           const parts = polygon
             .map((ring) => isoPathFromPlanRingBase(openRing(ring), true))

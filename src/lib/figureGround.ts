@@ -1,7 +1,7 @@
 import type { MultiPolygon, Pair, Polygon, Ring } from "./safePolygonClip";
 import { clipIntersection as intersection, clipUnion as union } from "./safePolygonClip";
 import { signedArea } from "./geo";
-import { DEFAULT_SITE_FRAME_SHAPE, siteFramePolygon, type SiteFrameShape } from "./siteFrame";
+import { DEFAULT_SITE_FRAME_SHAPE, outline, makeSiteFrame, type FrameGroundSize, type SiteFrameShape } from "./siteFrame";
 import type { BuildingFeat, CityModel, Pt } from "../types";
 
 export const FIGURE_SCALES = [500, 1000, 2500, 5000] as const;
@@ -321,8 +321,12 @@ function buildingPolygon(building: BuildingFeat): Polygon | null {
   return [orient(outer, true), ...holes];
 }
 
-function framePolygon(sideM: number, frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE): Polygon {
-  return siteFramePolygon(sideM, frameShape);
+function framePolygon(
+  sideM: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  frameSize?: FrameGroundSize,
+): Polygon {
+  return outline(makeSiteFrame(sideM, frameShape, frameSize));
 }
 
 function clipPolygonToFrame(polygon: Polygon, frame: Polygon): Polygon[] {
@@ -466,10 +470,11 @@ export function figureGround(
   buildings: BuildingFeat[],
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  frameSize?: FrameGroundSize,
 ): FigureGround {
   const before = buildings.length;
   if (before === 0 || !(sideM > 0)) return { polygons: [], before, after: 0 };
-  const frame = framePolygon(sideM, frameShape);
+  const frame = framePolygon(sideM, frameShape, frameSize);
   const clipped: Polygon[] = [];
   for (const building of buildings) {
     if (building.importedMassingShadowCaster) continue;

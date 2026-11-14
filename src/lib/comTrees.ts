@@ -1,6 +1,7 @@
 import { toLocal } from "./geo";
 import { ageFactor, logDroppedTreeValues, treeSize, type ComMeasure } from "./trees";
 import type { LonLat, TreeFeat } from "../types";
+import { containsPoint, type SiteFrame } from "./siteFrame";
 import {
   errorText,
   fetchTreePage,
@@ -160,18 +161,13 @@ export async function fetchComTrees(bounds: BBox, signal?: AbortSignal): Promise
 export function comRecordsToTrees(
   records: ComTree[],
   origin: LonLat,
-  sideM: number,
-  frameShape: import("./siteFrame").SiteFrameShape = "square",
+  frame: SiteFrame,
 ): TreeFeat[] {
-  const half = sideM / 2;
   const trees: TreeFeat[] = [];
   records.forEach((record, index) => {
     if (!Number.isFinite(record.lat) || !Number.isFinite(record.lon)) return;
     const at = toLocal(record.lat, record.lon, origin);
-    const margin = 0.2;
-    if (frameShape === "square") {
-      if (Math.abs(at[0]) > half + margin || Math.abs(at[1]) > half + margin) return;
-    } else if (at[0] * at[0] + at[1] * at[1] > (half + margin) ** 2) return;
+    if (!containsPoint(frame, at, 0.2)) return;
     const genus = record.genus ?? undefined;
     const species = record.scientific ?? undefined;
     const sized = treeSize(
