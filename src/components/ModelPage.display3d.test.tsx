@@ -214,7 +214,7 @@ describe("Display panel controls by view tab", () => {
     expect(viewModesSection.compareDocumentPosition(projectionSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(projectionSection.compareDocumentPosition(layersSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    expect(within(viewModesSection).getByLabelText("White card")).toBeTruthy();
+    expect(within(viewModesSection).getByLabelText("Primary view")).toBeTruthy();
     expect(within(viewModesSection).getByLabelText("Outlines")).toBeTruthy();
 
     expect(within(projectionSection).getByRole("group", { name: "Projection" })).toBeTruthy();
@@ -338,13 +338,14 @@ describe("Display panel controls by view tab", () => {
 
     const hex = (six: string) => `${String.fromCharCode(35)}${six}`;
 
-    const whiteCardCheckbox = within(viewModesSection).getByLabelText("White card") as HTMLInputElement;
+    const primaryViewCheckbox = within(viewModesSection).getByLabelText("Primary view") as HTMLInputElement;
     const treesCheckbox = within(layersSection).getByLabelText("Trees") as HTMLInputElement;
     const contoursCheckbox = within(layersSection).getByLabelText("Contours") as HTMLInputElement;
-    await user.click(whiteCardCheckbox);
+    expect(primaryViewCheckbox.checked).toBe(true);
+    await user.click(primaryViewCheckbox);
     await user.click(treesCheckbox);
     await user.click(contoursCheckbox);
-    expect(whiteCardCheckbox.checked).toBe(true);
+    expect(primaryViewCheckbox.checked).toBe(false);
     expect(treesCheckbox.checked).toBe(false);
     expect(contoursCheckbox.checked).toBe(false);
 
@@ -359,7 +360,7 @@ describe("Display panel controls by view tab", () => {
       target: { value: hex("d48855") },
     });
     expect(getColour("--use-residential").toLowerCase()).toBe(hex("d48855"));
-    expect(whiteCardCheckbox.checked).toBe(false);
+    expect(primaryViewCheckbox.checked).toBe(false);
 
     fireEvent.change(within(colorsSection).getByLabelText("Roads colour"), {
       target: { value: hex("556677") },
@@ -586,6 +587,16 @@ describe("Display panel controls by view tab", () => {
     );
     expect(floatingCss).toMatch(/\.model\s+\.right-inspector\s+\.kpi-cell\s*\{[\s\S]*?border:\s*0\s*!important;/);
     expect(floatingCss).toMatch(/\.select\.is-loading\s+\.omnibox-stack/);
+  });
+
+  it("lays out view style control as one row of equal segments", () => {
+    const floatingCss = readFileSync(resolve(__dirname, "../floating.css"), "utf8");
+    expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg[\s\S]*flex-wrap:\s*nowrap/);
+    expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg[\s\S]*padding:\s*3px/);
+    expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg \.style-btn[\s\S]*flex:\s*1 1 0/);
+    expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg \.style-btn[\s\S]*height:\s*28px/);
+    expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg \.style-btn[\s\S]*padding:\s*0 12px/);
+    expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg \.style-btn[\s\S]*white-space:\s*nowrap/);
   });
 
   it("renders View Style heading in Display and expands the 2-row Environmental Console with zero left drawer on Analysis", async () => {

@@ -109,7 +109,12 @@ export function refreshSceneSurfaceColors(root: THREE.Object3D): void {
     const mesh = object as THREE.Mesh;
     if (mesh.isMesh) {
       const name = mesh.name || mesh.parent?.name || "";
-      if (name === "Ground" || name === "BasePlinth") {
+      if (name === "BasePlinth") {
+        forEachStandardMaterial(mesh, (mat) => {
+          mat.color.setStyle(getColour("--plinth-wall"));
+          applyMatteFinish(mat);
+        });
+      } else if (name === "Ground") {
         forEachStandardMaterial(mesh, (mat) => {
           mat.color.setStyle(groundFill);
           applyMatteFinish(mat);

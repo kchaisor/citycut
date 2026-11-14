@@ -889,7 +889,6 @@ export function basePlinthBuffers(
 } {
   const thicknessM = basePlinthThicknessM(sideM);
   const bottomY = basePlinthBottomY(sideM, terrain);
-  const relief = terrain ? Math.max(terrain.max - terrain.min, 0.001) : 1;
 
   const rawRing: Pt[] =
     frameShape === "circle"
@@ -901,11 +900,12 @@ export function basePlinthBuffers(
   const colors: number[] = [];
   const edgePositions: number[] = [];
 
-  const topColorAt = (yTop: number): [number, number, number] =>
-    terrain ? shadeHeight((yTop - terrain.min) / relief, 0.94) : flatGroundRgb(0.95);
-  const bottomWallColor: [number, number, number] = terrain
-    ? shadeHeight(0, 0.86)
-    : flatGroundRgb(0.88);
+  const plinthWall = getColour("--plinth-wall");
+  const bottomWallColor: [number, number, number] = [
+    parseInt(plinthWall.slice(1, 3), 16) / 255,
+    parseInt(plinthWall.slice(3, 5), 16) / 255,
+    parseInt(plinthWall.slice(5, 7), 16) / 255,
+  ];
   const bottomCapColor: [number, number, number] = terrain
     ? shadeHeight(0, 0.82)
     : flatGroundRgb(0.84);
@@ -940,8 +940,6 @@ export function basePlinthBuffers(
       const p1 = subPts[j + 1]!;
       const yTop0 = terrain ? terrainMeshHeight(terrain, sideM, p0[0], p0[1]) : 0;
       const yTop1 = terrain ? terrainMeshHeight(terrain, sideM, p1[0], p1[1]) : 0;
-      const cTop0 = topColorAt(yTop0);
-      const cTop1 = topColorAt(yTop1);
 
       const x0 = p0[0];
       const z0 = -p0[1];
@@ -950,11 +948,11 @@ export function basePlinthBuffers(
 
       pushVertex(x0, bottomY, z0, nx, ny, nz, bottomWallColor);
       pushVertex(x1, bottomY, z1, nx, ny, nz, bottomWallColor);
-      pushVertex(x1, yTop1, z1, nx, ny, nz, cTop1);
+      pushVertex(x1, yTop1, z1, nx, ny, nz, bottomWallColor);
 
       pushVertex(x0, bottomY, z0, nx, ny, nz, bottomWallColor);
-      pushVertex(x1, yTop1, z1, nx, ny, nz, cTop1);
-      pushVertex(x0, yTop0, z0, nx, ny, nz, cTop0);
+      pushVertex(x1, yTop1, z1, nx, ny, nz, bottomWallColor);
+      pushVertex(x0, yTop0, z0, nx, ny, nz, bottomWallColor);
 
       edgePositions.push(x0, yTop0, z0, x1, yTop1, z1);
     }

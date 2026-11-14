@@ -4,6 +4,7 @@ import {
   readStoredRenderQuality,
   RENDER_QUALITY_KEY,
   studioAoActive,
+  studioN8AoParams,
   studioSmaaActive,
   writeStoredRenderQuality,
 } from "./renderQuality";
@@ -47,5 +48,13 @@ describe("render quality", () => {
     expect(studioSmaaActive("fast")).toBe(false);
     expect(studioAoActive("high")).toBe(true);
     expect(studioAoActive("fast")).toBe(false);
+  });
+
+  it("uses softer N8AO in Primary view and keeps AO on while the camera moves", () => {
+    const primary = studioN8AoParams(1000, true);
+    const standard = studioN8AoParams(1000, false);
+    expect(primary.intensity).toBeLessThan(standard.intensity);
+    expect(primary.distanceFalloff).toBeLessThan(standard.distanceFalloff);
+    expect(ambientOcclusionActive("high", true)).toBe(true);
   });
 });

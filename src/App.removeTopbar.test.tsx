@@ -58,7 +58,7 @@ describe("remove top bar", () => {
     for (const body of mapOverride) {
       expect(body).not.toMatch(/(^|;)\s*top\s*:/);
     }
-    expect(css).toMatch(/\.building-detail-panel\s*\{[^}]*top:\s*0;/);
+    expect(css).toMatch(/\.building-detail-panel\.is-floating/);
   });
 
   it("does not ship TopBar.tsx", () => {

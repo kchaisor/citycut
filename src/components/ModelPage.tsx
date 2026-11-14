@@ -24,6 +24,7 @@ import {
   uniformBuildingColor,
 } from "../lib/buildingUse";
 import { commitColour, getColour, resetStoredColours } from "../lib/colours";
+import { viewStyleFootpathChipColor, viewStyleRoadChipColor } from "../lib/viewStyle3d";
 import { useColourRevision } from "../lib/useColourRevision";
 import { CRS_NOTE, mgaCrs } from "../lib/crsZone";
 import { planHeliodonForExport } from "../lib/planHeliodonExport";
@@ -147,9 +148,21 @@ import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { VICMAP_ATTRIBUTION } from "../lib/vicmapTrees";
 import { COM_TREES_CREDIT, COM_TREES_DATASET_URL } from "../lib/comTreesCredit";
 import { openRing, toLocal } from "../lib/geo";
-import { pointInPolygon } from "../lib/useCascade";
+import { interiorPoint, pointInPolygon } from "../lib/useCascade";
 import type { BuildingUse, CityModel } from "../types";
 import { BuildingHeightPopover, HeightOverridePanel, HiddenBuildingsPanel } from "./BuildingHeightPopover";
+import { TreeInspectHud, TerrainInspectHud } from "./SceneInspectHud";
+import type { InspectHudScreen } from "./InspectHudProjector";
+import {
+  clampInspectHudPosition,
+  INSPECT_HUD_DEFAULT_HEIGHT,
+  INSPECT_HUD_DEFAULT_WIDTH,
+} from "../lib/inspectHudLayout";
+import {
+  sceneSelectionBuildingId,
+  type SceneInspectWorld,
+  type SceneSelection,
+} from "../lib/sceneInspectPick";
 import {
   filterHiddenBuildings,
   hideBuildings,
@@ -171,6 +184,8 @@ import { isometricDrawingBounds } from "../lib/isometricDrawing";
 import { Sidebar, type SidebarItem } from "./Sidebar";
 import { SatellitePane } from "./SatellitePane";
 import { Scene3D, type SceneExporter } from "./Scene3D";
+import { StudioCompass } from "./StudioCompass";
+import { studioCompassVisible } from "../lib/studioCompass";
 
 function shouldShowIntroBridgePill(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") return false;
@@ -353,9 +368,11 @@ export function ModelPage({
     };
   }, [topbarExportOpen]);
   const [sunStudyProgress, setSunStudyProgress] = useState<string | null>(null);
-  const [colourByUse, setColourByUse] = useState(
-    () => !capturePresetFromSearch(window.location.search).uniformBuildings,
-  );
+  const [colourByUse, setColourByUse] = useState(() => {
+    const preset = capturePresetFromSearch(window.location.search);
+    if (preset.uniformBuildings) return false;
+    return false;
+  });
   const [showSource, setShowSource] = useState(false);
   const [buildingsAsMesh, setBuildingsAsMesh] = useState(false);
   const [comFootprints, setComFootprints] = useState<ComBuildingFootprint[]>(
@@ -690,9 +707,9 @@ export function ModelPage({
     readStoredHiddenBuildings(window.localStorage),
   );
   const [hideSelection, setHideSelection] = useState<number[]>([]);
-  const [heightPick, setHeightPick] = useState<{ buildingId: number; clientX: number; clientY: number } | null>(
-    null,
-  );
+  const [sceneSelection, setSceneSelection] = useState<SceneSelection | null>(null);
+  const [inspectHudScreen, setInspectHudScreen] = useState<InspectHudScreen | null>(null);
+  const [compassNeedleDeg, setCompassNeedleDeg] = useState(0);
 
   const massing = useImportedMassing(model);
 
@@ -754,7 +771,13 @@ export function ModelPage({
         });
       },
       selectHeightEditBuilding(buildingId: number) {
-        setHeightPick({ buildingId, clientX: 640, clientY: 400 });
+        setSceneSelection({
+          kind: "building",
+          buildingId,
+          clientX: 640,
+          clientY: 400,
+          world: { east: 0, north: 0, up: 10 },
+        });
         return buildingId;
       },
       pickForegroundBuildingForSelectionQa() {
@@ -782,11 +805,18 @@ export function ModelPage({
           );
         const pick = candidates[0]?.building;
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 640, clientY: 400 });
+        setSceneSelection({
+          kind: "building",
+          buildingId: pick.id,
+          clientX: 640,
+          clientY: 400,
+          world: { east: 0, north: 0, up: pick.height * 0.5 },
+        });
         return pick.id;
       },
       clearHeightSelection() {
-        setHeightPick(null);
+        setSceneSelection(null);
+        setInspectHudScreen(null);
       },
       pickTallTowerForSelectionQa() {
         const candidates = model.buildings
@@ -799,7 +829,14 @@ export function ModelPage({
           .sort((a, b) => b.building.height - a.building.height || a.dist - b.dist);
         const pick = candidates[0]?.building;
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 24, clientY: 72 });
+        const at = interiorPoint(pick.ring, pick.holes);
+        setSceneSelection({
+          kind: "building",
+          buildingId: pick.id,
+          clientX: 24,
+          clientY: 72,
+          world: { east: at[0], north: at[1], up: pick.height * 0.5 },
+        });
         return pick.id;
       },
       frameAerialSelectionBuilding(buildingId: number) {
@@ -878,7 +915,14 @@ export function ModelPage({
           .sort((a, b) => b.height - a.height);
         const pick = midrise[0] ?? fallback[0];
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 72, clientY: 88 });
+        const at = interiorPoint(pick.ring, pick.holes);
+        setSceneSelection({
+          kind: "building",
+          buildingId: pick.id,
+          clientX: 72,
+          clientY: 88,
+          world: { east: at[0], north: at[1], up: pick.height * 0.5 },
+        });
         return pick.id;
       },
       pickBuildingNearGeoQa(lat: number, lon: number) {
@@ -896,7 +940,14 @@ export function ModelPage({
           }
         }
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 640, clientY: 420 });
+        const centroid = interiorPoint(pick.ring, pick.holes);
+        setSceneSelection({
+          kind: "building",
+          buildingId: pick.id,
+          clientX: 640,
+          clientY: 420,
+          world: { east: centroid[0], north: centroid[1], up: pick.height * 0.5 },
+        });
         return pick.id;
       },
       exportPlanSnapshot: () => model,
@@ -905,7 +956,14 @@ export function ModelPage({
         const pick =
           rows.find((b) => b.zoneDefaultNote?.includes("estimate, no measured height")) ?? rows[0];
         if (!pick) return null;
-        setHeightPick({ buildingId: pick.id, clientX: 480, clientY: 420 });
+        const at = interiorPoint(pick.ring, pick.holes);
+        setSceneSelection({
+          kind: "building",
+          buildingId: pick.id,
+          clientX: 480,
+          clientY: 420,
+          world: { east: at[0], north: at[1], up: pick.height * 0.5 },
+        });
         return { id: pick.id, height: pick.height, note: pick.zoneDefaultNote ?? "" };
       },
       getHeightPerfTimings: () => ({ ...heightPerfRef.current }),
@@ -1216,9 +1274,37 @@ export function ModelPage({
   }, [model]);
 
   const pickedBuilding =
-    heightPick === null
-      ? null
-      : (displayModel.buildings.find((building) => building.id === heightPick.buildingId) ?? null);
+    sceneSelection?.kind === "building"
+      ? (displayModel.buildings.find((building) => building.id === sceneSelection.buildingId) ?? null)
+      : null;
+
+  const pickedTree =
+    sceneSelection?.kind === "tree"
+      ? (displayModel.trees.find((tree) => tree.id === sceneSelection.treeId) ?? null)
+      : null;
+
+  const inspectAnchor = useMemo((): SceneInspectWorld | null => {
+    if (!sceneSelection) return null;
+    if (sceneSelection.kind === "terrain" || sceneSelection.kind === "tree") return sceneSelection.world;
+    const building = displayModel.buildings.find((item) => item.id === sceneSelection.buildingId);
+    if (!building) return sceneSelection.world;
+    const at = interiorPoint(building.ring, building.holes);
+    const base = sceneSelection.world.up;
+    return { east: at[0], north: at[1], up: base + building.height * 0.55 };
+  }, [displayModel.buildings, sceneSelection]);
+
+  const inspectHudPosition = useMemo(() => {
+    const anchor = inspectHudScreen;
+    if (!anchor || !anchor.inView) return null;
+    return clampInspectHudPosition({
+      anchorX: anchor.clientX,
+      anchorY: anchor.clientY,
+      hudWidth: INSPECT_HUD_DEFAULT_WIDTH,
+      hudHeight: INSPECT_HUD_DEFAULT_HEIGHT,
+      viewportWidth: typeof window !== "undefined" ? window.innerWidth : 1440,
+      viewportHeight: typeof window !== "undefined" ? window.innerHeight : 900,
+    });
+  }, [inspectHudScreen]);
 
   function persistHidden(next: HiddenBuildingStore) {
     setHiddenStore(next);
@@ -1226,12 +1312,15 @@ export function ModelPage({
   }
 
   function hideSelectedBuildings() {
-    const ids = new Set(hideSelection.length ? hideSelection : heightPick ? [heightPick.buildingId] : []);
+    const ids = new Set(
+      hideSelection.length ? hideSelection : sceneSelectionBuildingId(sceneSelection) != null ? [sceneSelectionBuildingId(sceneSelection)!] : [],
+    );
     const picked = overrideResult.buildings.filter((building) => ids.has(building.id));
     if (picked.length === 0) return;
     persistHidden(hideBuildings(hiddenStore, picked, model.center));
     setHideSelection([]);
-    setHeightPick(null);
+    setSceneSelection(null);
+    setInspectHudScreen(null);
   }
 
   function selectForHide(buildingId: number, additive?: boolean) {
@@ -1250,20 +1339,23 @@ export function ModelPage({
     const building = baseBuildings.find((item) => item.id === buildingId);
     if (!building) return;
     persistOverrides(upsertOverrideForBuilding(heightOverrideStore, building, model.center, heightM));
-    setHeightPick(null);
+    setSceneSelection(null);
+    setInspectHudScreen(null);
   }
 
   function resetBuildingHeight(buildingId: number) {
     const building = baseBuildings.find((item) => item.id === buildingId);
     if (!building) return;
     persistOverrides(removeOverrideForBuilding(heightOverrideStore, building, model.center));
-    setHeightPick(null);
+    setSceneSelection(null);
+    setInspectHudScreen(null);
   }
 
   function resetAllHeights() {
     if (!window.confirm("Reset every manual building height in storage?")) return;
     persistOverrides(clearAllHeightOverrides());
-    setHeightPick(null);
+    setSceneSelection(null);
+    setInspectHudScreen(null);
   }
 
   function exportHeightEdits() {
@@ -1443,8 +1535,8 @@ export function ModelPage({
       setShowSource(false);
       setColourByUse(true);
     }
-    if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "buildings")) {
-      commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "buildings", true));
+    if (view3dDisplay.primaryView || !isLayer3dVisible(view3dDisplay, "buildings")) {
+      commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, primaryView: false }, "buildings", true));
     }
     setHiddenBuildingUses((prev) => {
       if (!prev.has(use)) return prev;
@@ -1893,8 +1985,8 @@ export function ModelPage({
           commitColour("--tree-crown-edge", value);
           commitColour("--tree-fill", value);
           commitColour("--tree-layer", value);
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "trees")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "trees", true));
+          if (view3dDisplay.primaryView || !isLayer3dVisible(view3dDisplay, "trees")) {
+            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, primaryView: false }, "trees", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -1903,14 +1995,14 @@ export function ModelPage({
         id: "roads" as const,
         label: "Roads",
         meta: `${formatLengthKm(model.roadKm)} km`,
-        color: getColour("--road-local"),
+        color: viewStyleRoadChipColor(view3dDisplay.primaryView, colourByUse, showSource),
         available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade !== "path"),
         onPick: (value: string) => {
           commitColour("--road-local", value);
           commitColour("--road-arterial", value);
           commitColour("--road-fill", value);
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "roads")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "roads", true));
+          if (view3dDisplay.primaryView || !isLayer3dVisible(view3dDisplay, "roads")) {
+            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, primaryView: false }, "roads", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -1919,13 +2011,13 @@ export function ModelPage({
         id: "footpaths" as const,
         label: "Footpaths",
         meta: model.roads.filter((r) => r.kind === "road" && r.grade === "path").length.toLocaleString(),
-        color: getColour("--road-path"),
+        color: viewStyleFootpathChipColor(view3dDisplay.primaryView, colourByUse, showSource),
         available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade === "path"),
         onPick: (value: string) => {
           commitColour("--road-path", value);
           commitColour("--path-fill", value);
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "footpaths")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "footpaths", true));
+          if (view3dDisplay.primaryView || !isLayer3dVisible(view3dDisplay, "footpaths")) {
+            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, primaryView: false }, "footpaths", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -1939,8 +2031,8 @@ export function ModelPage({
         onPick: (value: string) => {
           commitColour("--green-3d", value);
           commitColour("--green-fill", value);
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "landscape")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "landscape", true));
+          if (view3dDisplay.primaryView || !isLayer3dVisible(view3dDisplay, "landscape")) {
+            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, primaryView: false }, "landscape", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -1954,8 +2046,8 @@ export function ModelPage({
         onPick: (value: string) => {
           commitColour("--water-3d", value);
           commitColour("--water-fill", value);
-          if (view3dDisplay.whiteCard || !isLayer3dVisible(view3dDisplay, "water")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, whiteCard: false }, "water", true));
+          if (view3dDisplay.primaryView || !isLayer3dVisible(view3dDisplay, "water")) {
+            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, primaryView: false }, "water", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -2134,16 +2226,31 @@ export function ModelPage({
                 windPeriod={windSettings.period}
                 windAnimateStreaks={windMotion.animateStreaks}
                 onExportReady={onExportReady}
-                onBuildingPick={(buildingId, clientX, clientY, additive) => {
-                  setHeightPick({ buildingId, clientX, clientY });
-                  selectForHide(buildingId, additive);
+                onSceneInspectPick={(selection) => {
+                  setSceneSelection(selection);
+                  setInspectHudScreen({ clientX: selection.clientX, clientY: selection.clientY, inView: true });
+                  if (selection.kind === "building") {
+                    selectForHide(selection.buildingId, selection.additive);
+                  } else {
+                    setHideSelection([]);
+                  }
                 }}
-                onClearBuildingPick={() => {
-                  setHeightPick(null);
+                onClearSceneInspect={() => {
+                  setSceneSelection(null);
+                  setInspectHudScreen(null);
                   setHideSelection([]);
                 }}
-                heightEditBuildingId={heightPick?.buildingId ?? null}
-                selectedBuildingIds={hideSelection.length > 0 ? hideSelection : heightPick ? [heightPick.buildingId] : []}
+                inspectAnchor={inspectAnchor}
+                onInspectHudScreen={setInspectHudScreen}
+                onCompassNeedle={setCompassNeedleDeg}
+                heightEditBuildingId={sceneSelectionBuildingId(sceneSelection)}
+                selectedBuildingIds={
+                  hideSelection.length > 0
+                    ? hideSelection
+                    : sceneSelectionBuildingId(sceneSelection) != null
+                      ? [sceneSelectionBuildingId(sceneSelection)!]
+                      : []
+                }
                 cameraMemory={cameraMemory}
                 display={view3dDisplay}
                 importedMassing={massing.group}
@@ -2173,6 +2280,9 @@ export function ModelPage({
                   {walkRippleToast}
                 </p>
               ) : null}
+              {tab === "3d" && studioCompassVisible(view.projection, view.freeRotate) && (
+                <StudioCompass needleDeg={compassNeedleDeg} />
+              )}
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
                   table={windTable}
@@ -2182,9 +2292,7 @@ export function ModelPage({
                   onAnimateAnyway={windMotion.setAnimateAnyway}
                 />
               )}
-              {pickedBuilding &&
-                heightPick &&
-                !qaHideHeightPopoverFromSearch(window.location.search) && (
+              {pickedBuilding && !qaHideHeightPopoverFromSearch(window.location.search) && (
                 <BuildingHeightPopover
                   building={pickedBuilding}
                   center={displayModel.center}
@@ -2193,13 +2301,40 @@ export function ModelPage({
                   onSave={(heightM) => saveBuildingHeight(pickedBuilding.id, heightM)}
                   onReset={() => resetBuildingHeight(pickedBuilding.id)}
                   onClose={() => {
-                    setHeightPick(null);
+                    setSceneSelection(null);
+                    setInspectHudScreen(null);
                     setHideSelection([]);
                   }}
                   selectedCount={Math.max(1, hideSelection.length)}
                   hiddenCount={hiddenMatch.size}
                   onHideSelected={hideSelectedBuildings}
                   onShowAll={() => persistHidden(showAllInCut(hiddenStore, hiddenMatch.values()))}
+                  floatingScreen={inspectHudPosition}
+                />
+              )}
+              {pickedTree && (
+                <TreeInspectHud
+                  tree={pickedTree}
+                  model={displayModel}
+                  screen={inspectHudPosition}
+                  onClose={() => {
+                    setSceneSelection(null);
+                    setInspectHudScreen(null);
+                  }}
+                />
+              )}
+              {sceneSelection?.kind === "terrain" && (
+                <TerrainInspectHud
+                  east={sceneSelection.world.east}
+                  north={sceneSelection.world.north}
+                  terrain={displayModel.terrain}
+                  sideM={displayModel.sideM}
+                  center={displayModel.center}
+                  screen={inspectHudPosition}
+                  onClose={() => {
+                    setSceneSelection(null);
+                    setInspectHudScreen(null);
+                  }}
                 />
               )}
             </SceneBoundary>
@@ -3044,21 +3179,25 @@ export function ModelPage({
                     <div className="style-seg seg-mini" role="group" aria-label="Building style">
                       <button
                         type="button"
-                        className={view3dDisplay.whiteCard ? "style-btn active" : "style-btn"}
-                        aria-pressed={view3dDisplay.whiteCard}
-                        onClick={() => commitView3dDisplay({ ...view3dDisplay, whiteCard: !view3dDisplay.whiteCard })}
+                        className={view3dDisplay.primaryView ? "style-btn active" : "style-btn"}
+                        aria-pressed={view3dDisplay.primaryView}
+                        onClick={() => {
+                          setShowSource(false);
+                          setColourByUse(false);
+                          commitView3dDisplay({ ...view3dDisplay, primaryView: true });
+                        }}
                       >
-                        Card
+                        Primary
                       </button>
                       <button
                         type="button"
-                        className={!view3dDisplay.whiteCard && colourByUse && !showSource ? "style-btn active" : "style-btn"}
-                        aria-pressed={!view3dDisplay.whiteCard && colourByUse && !showSource}
+                        className={!view3dDisplay.primaryView && colourByUse && !showSource ? "style-btn active" : "style-btn"}
+                        aria-pressed={!view3dDisplay.primaryView && colourByUse && !showSource}
                         onClick={() => {
                           setShowSource(false);
                           setColourByUse(true);
-                          if (view3dDisplay.whiteCard) {
-                            commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+                          if (view3dDisplay.primaryView) {
+                            commitView3dDisplay({ ...view3dDisplay, primaryView: false });
                           }
                         }}
                       >
@@ -3066,12 +3205,12 @@ export function ModelPage({
                       </button>
                       <button
                         type="button"
-                        className={!view3dDisplay.whiteCard && showSource ? "style-btn active" : "style-btn"}
-                        aria-pressed={!view3dDisplay.whiteCard && showSource}
+                        className={!view3dDisplay.primaryView && showSource ? "style-btn active" : "style-btn"}
+                        aria-pressed={!view3dDisplay.primaryView && showSource}
                         onClick={() => {
                           setShowSource(true);
-                          if (view3dDisplay.whiteCard) {
-                            commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+                          if (view3dDisplay.primaryView) {
+                            commitView3dDisplay({ ...view3dDisplay, primaryView: false });
                           }
                         }}
                       >
@@ -3079,26 +3218,26 @@ export function ModelPage({
                       </button>
                       <button
                         type="button"
-                        className={!view3dDisplay.whiteCard && !colourByUse && !showSource ? "style-btn active" : "style-btn"}
-                        aria-pressed={!view3dDisplay.whiteCard && !colourByUse && !showSource}
+                        className={!view3dDisplay.primaryView && !colourByUse && !showSource ? "style-btn active" : "style-btn"}
+                        aria-pressed={!view3dDisplay.primaryView && !colourByUse && !showSource}
                         onClick={() => {
                           setShowSource(false);
                           setColourByUse(false);
-                          if (view3dDisplay.whiteCard) {
-                            commitView3dDisplay({ ...view3dDisplay, whiteCard: false });
+                          if (view3dDisplay.primaryView) {
+                            commitView3dDisplay({ ...view3dDisplay, primaryView: false });
                           }
                         }}
                       >
-                        Uniform
+                        Card
                       </button>
                     </div>
                     <label className="check-field sr-only">
                       <input
                         type="checkbox"
-                        checked={view3dDisplay.whiteCard}
-                        onChange={(event) => commitView3dDisplay({ ...view3dDisplay, whiteCard: event.target.checked })}
+                        checked={view3dDisplay.primaryView}
+                        onChange={(event) => commitView3dDisplay({ ...view3dDisplay, primaryView: event.target.checked })}
                       />
-                      White card
+                      Primary view
                     </label>
                     <SectionKnifeToolPanel
                       sideM={displayModel.sideM}
