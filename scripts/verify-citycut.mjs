@@ -155,7 +155,18 @@ async function readSunHoursLegendConsoleClearance(page) {
 }
 
 async function clickStudioModeTab(page, label) {
-  await page.locator(".mode-btn").filter({ hasText: label }).click({ timeout: 90_000, force: true });
+  await page.waitForSelector("button.mode-btn", { timeout: 120_000 });
+  const clicked = await page.evaluate((text) => {
+    const buttons = [...document.querySelectorAll("button.mode-btn")];
+    const btn = buttons.find((el) => (el.textContent ?? "").includes(text));
+    if (!btn) return false;
+    btn.click();
+    return true;
+  }, label);
+  if (!clicked) {
+    await page.locator(".mode-btn").filter({ hasText: label }).click({ timeout: 90_000, force: true });
+  }
+  await page.waitForTimeout(250);
 }
 
 async function assertSunHoursLegendAboveConsole(page, siteSlug, viewportWidth, assertCheck) {
