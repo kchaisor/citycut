@@ -638,7 +638,7 @@ export function modelHasClippedWaterInFrame(model: CityModel): boolean {
 
 const HYDRO_COURSE_BUFFER_HALF_M = 38;
 
-function hydroCourseFillRings(courses: Pt[][], frame: import("./siteFrame").SiteFrame): Pt[][][] {
+function hydroCourseFillRings(courses: Pt[][], frame: ReturnType<typeof siteFrameFromModel>): Pt[][][] {
   const out: Pt[][][] = [];
   for (const line of courses) {
     const ring = bufferOpenLine(line, HYDRO_COURSE_BUFFER_HALF_M);
