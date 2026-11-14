@@ -1,5 +1,7 @@
 import { explicitLengthUnit, parseLooseNumber, parseMeters } from "./height";
-import type { TreeDimensions, TreeSizeSource, TreeTier } from "../types";
+import { modelFrameSize } from "./modelFrame";
+import { DEFAULT_SITE_FRAME_SHAPE, pointInSiteFrame } from "./siteFrame";
+import type { CityModel, TreeDimensions, TreeFeat, TreeSizeSource, TreeTier } from "../types";
 
 export const DEFAULT_TREE_HEIGHT = 10;
 export const DEFAULT_CROWN_DIAMETER = 6;
@@ -234,6 +236,16 @@ export function replaceTreeNote(note: string, trees: { sizeSource: TreeSizeSourc
 export function describeTrees(trees: { sizeSource: TreeSizeSource; tier?: TreeTier }[]): string {
   const tiers = treeTierCounts(trees);
   return `Trees: ${treeSizeSummary(trees)} (${tiers.com} City of Melbourne, ${tiers.osm} Overture base points, ${tiers.vicmap} Vicmap, ${tiers.canopy} canopy infill). City of Melbourne inventory trees use surveyed species, diameter at breast height, and age; that dataset has no crown or height field. Overture base land points carry OSM tree tags when present. Vicmap Vegetation Tree Urban fills gaps beyond 3 m using height_m and canopy diameter. Wood, forest, and scrub are filled at about 7 m. Otherwise 10 m tall and 6 m across.`;
+}
+
+export function treesInSiteFrame(model: CityModel): TreeFeat[] {
+  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
+  const size = modelFrameSize(model);
+  return model.trees.filter((tree) => pointInSiteFrame(tree.at, model.sideM, shape, size));
+}
+
+export function treesInSiteFrameCount(model: CityModel): number {
+  return treesInSiteFrame(model).length;
 }
 
 export function treeSourceLoadNotes(errors: {

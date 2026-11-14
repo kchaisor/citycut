@@ -4,11 +4,21 @@ import { readDrawingStyle } from "./drawingStyle";
 import { planPaths } from "./svgPlan";
 import { SURFACE } from "./surfaceLayers";
 import { sampleTerrain } from "./terrain";
+import { clipPolylinesMinLength } from "./siteFrameMesh";
 import type { CityModel, Pt } from "../types";
 
 const CONTOUR_LIFT = 0.35;
-export const CONTOUR_3D_DASH_M = 6;
-export const CONTOUR_3D_GAP_M = 3;
+export const CONTOUR_3D_MIN_LENGTH_M = 3;
+
+export function filterContourPolylinesFor3d(lines: Pt[][], minM = CONTOUR_3D_MIN_LENGTH_M): Pt[][] {
+  return clipPolylinesMinLength(lines, minM);
+}
+
+export function contour3dSegmentCount(lines: Pt[][]): number {
+  let segments = 0;
+  for (const line of lines) segments += Math.max(0, line.length - 1);
+  return segments;
+}
 
 export function contourPolylinesForModel(model: CityModel, planScale = 1000): Pt[][] {
   const style = readDrawingStyle();
@@ -76,7 +86,7 @@ export function buildContourLineGeometry(
   model: CityModel,
   planScale = 1000,
 ): THREE.BufferGeometry | null {
-  const lines = contourPolylinesForModel(model, planScale);
+  const lines = filterContourPolylinesFor3d(contourPolylinesForModel(model, planScale));
   if (lines.length === 0) return null;
   const sample =
     model.terrain != null
@@ -98,11 +108,10 @@ export function buildContourLineGeometry(
 export function buildContourLineObject(model: CityModel, planScale = 1000): THREE.LineSegments | null {
   const geometry = buildContourLineGeometry(model, planScale);
   if (!geometry) return null;
-  const material = new THREE.LineDashedMaterial({
-    color: getColour("--outline-contour"),
-    dashSize: CONTOUR_3D_DASH_M,
-    gapSize: CONTOUR_3D_GAP_M,
-    scale: 1,
+  const material = new THREE.LineBasicMaterial({
+    color: getColour("--contour-3d-stroke"),
+    transparent: true,
+    opacity: 0.72,
     toneMapped: false,
     depthTest: true,
   });

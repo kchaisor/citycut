@@ -56,6 +56,27 @@ async function captureWidth(browser, width) {
   });
   const shot3d = path.join(OUT_DIR, `rozelle-pr227-3d-primary-${width}.png`);
   await page.screenshot({ path: shot3d, fullPage: false });
+  const shotGround = path.join(OUT_DIR, `rozelle-pr227-3d-ground-outlines-${width}.png`);
+  await page.evaluate(() => {
+    const labels = Array.from(document.querySelectorAll(".model .mini-flags label"));
+    const outlines = labels.find((el) => /^Outlines$/i.test(el.textContent?.trim() ?? ""));
+    const input = outlines?.querySelector('input[type="checkbox"]');
+    if (input instanceof HTMLInputElement && !input.checked) input.click();
+    const contourRow = document.querySelector(".model .studio-layer-row");
+    const rows = Array.from(document.querySelectorAll(".model .studio-layer-row"));
+    const contour = rows.find((row) => /contours/i.test(row.textContent ?? ""));
+    const contourInput = contour?.querySelector('input[type="checkbox"]');
+    if (contourInput instanceof HTMLInputElement && contourInput.checked) contourInput.click();
+  });
+  await page.waitForTimeout(600);
+  const groundClip = await page.evaluate(() => {
+    const canvas = document.querySelector(".model canvas");
+    if (!(canvas instanceof HTMLCanvasElement)) return null;
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    return { x: Math.round(w * 0.34), y: Math.round(h * 0.28), width: Math.round(w * 0.34), height: Math.round(h * 0.38) };
+  });
+  if (groundClip) await page.screenshot({ path: shotGround, clip: groundClip });
   await page.evaluate(() => {
   const qa = window.__citycutQa;
     if (qa?.setCamera) {
@@ -85,7 +106,7 @@ async function captureWidth(browser, width) {
   const shotDrawing = path.join(OUT_DIR, `rozelle-pr227-drawing-${width}.png`);
   await page.screenshot({ path: shotDrawing, fullPage: false });
   await page.close();
-  return { shot3d, shotBridge, shotDrawing, primaryOn };
+  return { shot3d, shotGround, shotBridge, shotDrawing, primaryOn };
 }
 
 const browser = await chromium.launch({

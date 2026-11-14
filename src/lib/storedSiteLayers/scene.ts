@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { getColour } from "../colours";
 import { matteStandardMaterial } from "../matteMaterial";
 import { buildingViewportFill, type BuildingColourMode } from "../buildingViewportColor";
@@ -222,9 +223,12 @@ export async function buildStoredSiteLayerGroup(
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.BufferAttribute(part.positions, 3));
     geometry.setIndex(new THREE.BufferAttribute(part.indices, 1));
-    geometry.computeVertexNormals();
+    const welded = mergeVertices(geometry, 0.08);
+    geometry.dispose();
+    welded.computeVertexNormals();
     const material = part.structure ? structureMaterial.clone() : buildingMaterial.clone();
-    const mesh = new THREE.Mesh(geometry, material);
+    material.flatShading = true;
+    const mesh = new THREE.Mesh(welded, material);
     mesh.name = part.structure ? "StoredSiteStructure" : "Buildings-stored-mesh";
     mesh.castShadow = true;
     mesh.receiveShadow = true;

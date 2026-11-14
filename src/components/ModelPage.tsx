@@ -120,7 +120,7 @@ import {
   writeViewSearch,
   type ViewMemory,
 } from "../lib/viewMemory";
-import { treeSizeSummary, treeTierCounts } from "../lib/trees";
+import { treeSizeSummary, treeTierCounts, treesInSiteFrame, treesInSiteFrameCount } from "../lib/trees";
 import { contourDrawerLabel } from "../lib/vicmapContours";
 import { clearPlanShadowCache } from "../lib/buildingShadows";
 import {
@@ -1191,7 +1191,7 @@ export function ModelPage({
       ...displayModel,
       buildings: baseBuildings,
       importedMassingUpperLevels: massing.drawingUpperLevels,
-      trees: treesVisible ? displayModel.trees : [],
+      trees: treesVisible ? treesInSiteFrame(displayModel) : [],
       roads: displayModel.roads.filter((r) => {
         if (r.kind === "rail") return railVisible;
         if (r.grade === "path") return footpathsVisible;
@@ -1983,7 +1983,7 @@ export function ModelPage({
       {
         id: "trees" as const,
         label: "Trees",
-        meta: model.trees.length.toLocaleString(),
+        meta: treesInSiteFrameCount(model).toLocaleString(),
         color: getColour("--tree-crown"),
         available: model.layers.trees && model.trees.length > 0,
         onPick: (value: string) => {
@@ -2883,7 +2883,7 @@ export function ModelPage({
                 </div>
                 <div className="kpi-cell">
                   <div className="kpi-lbl k-lbl">Trees</div>
-                  <div className="kpi-num k-val">{model.trees.length.toLocaleString()}</div>
+                  <div className="kpi-num k-val">{treesInSiteFrameCount(model).toLocaleString()}</div>
                 </div>
                 <div className="kpi-cell">
                   <div className="kpi-lbl k-lbl">Roads</div>

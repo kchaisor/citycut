@@ -239,6 +239,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--outline-rail` | `#000000` | Thin outline on rail lines on the site plan and in exports. |
 | `--outline-tram` | `#000000` | Thin outline on tram lines on the site plan and in exports. |
 | `--outline-contour` | `#000000` | Thin outline on contour lines on the site plan and in exports. |
+| `--contour-3d-stroke` | `#B8B2A7` | Terrain contours draped in the 3D viewport (quiet grey, not plan black). |
 | `--axo-label` | `#6e685e` | Exploded axo layer labels. |
 | `--axo-plan-flood` | `#5a9fd4` | Exploded axo planning flood overlay (LSIO/SBO/FO hatch base). |
 | `--axo-plan-heritage` | `#c4a574` | Exploded axo heritage overlay (HO hatch base). |

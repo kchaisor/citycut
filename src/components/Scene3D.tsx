@@ -87,6 +87,7 @@ import {
 } from "../lib/primaryViewport";
 import { applyWhiteCardGroundTint, snapshotWhiteCardTerrainColors } from "../lib/whiteCardViewport";
 import { syncStoredSiteViewport } from "../lib/storedSiteViewport";
+import { addStoredSiteEdges } from "../lib/storedSiteEdges";
 import { studioNorthNeedleDeg } from "../lib/studioCompass";
 import {
   DEFAULT_PERSPECTIVE_OFFSET,
@@ -548,6 +549,25 @@ function StoredSiteMeshesViewport({
     colourTick,
     invalidate,
   ]);
+  return null;
+}
+
+function StoredSiteEdgesLayer({
+  root,
+  showOutlines,
+  buildingsVisible,
+}: {
+  root: THREE.Object3D;
+  showOutlines: boolean;
+  buildingsVisible: boolean;
+}) {
+  const { invalidate } = useThree();
+  useLayoutEffect(() => {
+    addStoredSiteEdges(root);
+    const edges = root.getObjectByName("StoredSiteEdges");
+    if (edges) edges.visible = showOutlines && buildingsVisible;
+    invalidate();
+  }, [root, showOutlines, buildingsVisible, invalidate]);
   return null;
 }
 
@@ -1024,9 +1044,9 @@ function City({
   );
   useLayoutEffect(() => {
     if (!contours) return;
-    const mat = contours.material as THREE.LineDashedMaterial | undefined;
+    const mat = contours.material as THREE.LineBasicMaterial | undefined;
     if (mat?.color) {
-      mat.color.setStyle(getColour("--outline-contour"));
+      mat.color.setStyle(getColour("--contour-3d-stroke"));
       invalidate();
     }
   }, [contours, colourTick, invalidate]);
@@ -2412,6 +2432,11 @@ export function Scene3D({
             solarDiagramOn={solar.showPath}
             solarNeutralFill={solarNeutralFill}
             colourTick={colourTick}
+          />
+          <StoredSiteEdgesLayer
+            root={storedSiteMeshes}
+            showOutlines={display.showOutlines}
+            buildingsVisible={isLayer3dVisible(display, "buildings")}
           />
           <BuildingPickLayer
             root={storedSiteMeshes}

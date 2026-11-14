@@ -5,8 +5,10 @@ import { BUILDING_EDGE_COLOR, BUILDING_EDGE_THRESHOLD_DEG } from "./buildingEdge
 import { BUILDING_USE_META, SOURCE_META, buildingLayerName, uniformBuildingColor } from "./buildingUse";
 import { getColour } from "./colours";
 import { DEFAULT_SITE_FRAME_SHAPE, SITE_FRAME_CIRCLE_SEGMENTS, type FrameGroundSize } from "./siteFrame";
+import { clipBufferGeometryToSiteFrame } from "./siteFrameMesh";
 import { modelFrameSize } from "./modelFrame";
 import { buildTreeGroup } from "./treeMassing";
+import { treesInSiteFrame } from "./trees";
 import { openRing, signedArea } from "./geo";
 import { carriagewaysOf, unionCarriageways, unionPathRoads } from "./roadFill";
 import { hexRgb, overlapLift, ROAD_COLOR, ROAD_RGB, roadGradeLayer, SURFACE } from "./surfaceLayers";
@@ -542,7 +544,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
       try {
         const drapeSpacing =
           area.kind === "water" ? Math.min(model.terrain.spacingM, 3) : model.terrain.spacingM;
-        const geometry = drapedAreaGeometry(
+        let geometry = drapedAreaGeometry(
           area,
           sample,
           lift,
@@ -550,8 +552,20 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
           terrainGrid,
         );
         if (!geometry) continue;
-        if (area.kind === "water") waterGeos.push(geometry);
-        else greenGeos.push(geometry);
+        if (area.kind === "water") {
+          const clipped = clipBufferGeometryToSiteFrame(
+            geometry,
+            model.sideM,
+            frameShape,
+            frameSize.widthM,
+            frameSize.heightM,
+          );
+          geometry.dispose();
+          if (!clipped) continue;
+          waterGeos.push(clipped);
+        } else {
+          greenGeos.push(geometry);
+        }
       } catch {
       }
       continue;
@@ -560,8 +574,20 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     if (!shape) continue;
     try {
       const geometry = layFlat(new THREE.ShapeGeometry(shape), lift);
-      if (area.kind === "water") waterGeos.push(geometry);
-      else greenGeos.push(geometry);
+      if (area.kind === "water") {
+        const clipped = clipBufferGeometryToSiteFrame(
+          geometry,
+          model.sideM,
+          frameShape,
+          frameSize.widthM,
+          frameSize.heightM,
+        );
+        geometry.dispose();
+        if (!clipped) continue;
+        waterGeos.push(clipped);
+      } else {
+        greenGeos.push(geometry);
+      }
     } catch {
     }
   }
@@ -729,7 +755,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
 
   if (model.layers.trees) {
     const trees = buildTreeGroup(
-      model.trees,
+      treesInSiteFrame(model),
       sample ?? undefined,
       options.introStagger ? { introStagger: true, sideM: model.sideM } : undefined,
     );
