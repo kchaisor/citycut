@@ -15,11 +15,13 @@ describe("a3GroundMetres", () => {
     expect(a3GroundMetres(2000, "landscape")).toEqual({ widthM: 840, heightM: 594 });
     expect(a3GroundMetres(2500, "landscape")).toEqual({ widthM: 1050, heightM: 742.5 });
     expect(a3GroundMetres(3000, "landscape")).toEqual({ widthM: 1260, heightM: 891 });
+    expect(a3GroundMetres(3500, "landscape")).toEqual({ widthM: 1470, heightM: 1039.5 });
     expect(a3GroundMetres(5000, "landscape")).toEqual({ widthM: 2100, heightM: 1485 });
   });
 
   it("swaps width and height for portrait", () => {
     expect(a3GroundMetres(2500, "portrait")).toEqual({ widthM: 742.5, heightM: 1050 });
+    expect(a3GroundMetres(3500, "portrait")).toEqual({ widthM: 1039.5, heightM: 1470 });
   });
 });
 
@@ -27,6 +29,7 @@ describe("formatCutReadout", () => {
   it("formats A3 scale readout", () => {
     const spec = cutSpecFromA3(3000, "landscape");
     expect(formatCutReadout(spec)).toBe("1,260 × 891 m · A3 @ 1:3000");
+    expect(formatCutReadout(cutSpecFromA3(3500, "landscape"))).toBe("1,470 × 1,040 m · A3 @ 1:3500");
   });
 });
 
@@ -40,6 +43,20 @@ describe("a3RatioLockedDrag", () => {
 });
 
 describe("A3 URL round-trip", () => {
+  it("round-trips shape=a3 at 1:3500", () => {
+    const spec = cutSpecFromA3(3500, "landscape");
+    const search = writeFrameSearch("?lat=-37.81&lon=144.96&km=1&label=Test", {
+      lat: -37.81,
+      lon: 144.96,
+      sideKm: 1.47,
+      label: "Test",
+      cut: spec,
+    });
+    const parsed = frameFromSearch(search);
+    expect(parsed.cut).toEqual(spec);
+    expect(new URLSearchParams(search.slice(1)).get("a3scale")).toBe("3500");
+  });
+
   it("round-trips shape=a3 with scale and orientation", () => {
     const spec = cutSpecFromA3(2500, "landscape");
     const search = writeFrameSearch("?lat=-37.81&lon=144.96&km=1&label=Test", {

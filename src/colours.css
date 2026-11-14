@@ -3,7 +3,7 @@
 
   --sidebar-grey: #EBEBEB;
 
-  --viewport-bg: #EBEBEB;
+  --viewport-bg: #ffffff;
 
   --sidebar-text: #000000;
 
@@ -165,8 +165,18 @@
   --light-ground: #c9c0b2;
 
   --light-fill: #e4e8ee;
-  --viewport-studio-top: #f6f6f5;
-  --viewport-studio-bottom: #d9d9d6;
+  --viewport-studio-top: #ffffff;
+  --viewport-studio-bottom: #ffffff;
+
+  --primary-surface: #ffffff;
+  --primary-building: #ffffff;
+  --primary-road: #525252;
+  --primary-footpath: #b9b9b9;
+  --primary-plinth-wall: #000000;
+  --uniform-road: #555555;
+  --plinth-wall: #ffffff;
+  --ground-wind-glyph: #525252;
+  --ground-wind-flow: #5c7f9c;
   --plinth-shadow: #1a1916;
 
   --cut-line: #f7f4ee;

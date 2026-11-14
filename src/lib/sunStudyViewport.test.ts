@@ -4,7 +4,7 @@ import { applyBuildingSolarNeutral } from "./buildingViewportColor";
 import { getColour } from "./colours";
 import { applySunStudySurfaceTint } from "./sunStudySurfaceViewport";
 import { sunStudyViewportLighting } from "./sunStudyViewport";
-import { applyWhiteCardTint } from "./whiteCardViewport";
+import { applyPrimaryViewportTint } from "./primaryViewport";
 
 describe("sunStudyViewportLighting", () => {
   it("uses pure white for the solar neutral building fill token", () => {
@@ -58,7 +58,7 @@ describe("sunStudyViewportLighting", () => {
 
     applySunStudySurfaceTint(root, false);
     applyBuildingSolarNeutral(root, false, "#ffffff");
-    applyWhiteCardTint(root, false);
+    applyPrimaryViewportTint(root, false);
 
     expect(buildingMat.color.getHexString()).toBe("b35c44");
     expect(buildingMat.emissive.getHex()).toBe(0x000000);

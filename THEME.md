@@ -127,6 +127,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--plan-empty` | `#6d675e` | The sentence shown when a plan has nothing in the frame. |
 | `--contour-label` | `#6A6A6A` | Elevation numbers on the site plan, on screen and in the Illustrator file. |
 | `--building-uniform` | `#FFFFFF` | Buildings when colour-by-use is off, that legend swatch, and the Rhino Buildings layer. |
+| `--uniform-road` | `#555555` | Road fill in Drawing when the plan building style is uniform (3D Card view uses `--primary-surface` on canvas instead). |
 | `--building-manual` | `#D4A017` | 3D viewport tint for buildings with a manual height override when “Show manual edits” is on. |
 | `--site-building` | `#F2C230` | Buildings on the searched property: site plan, 3D, Rhino `Buildings::Site`, and Illustrator Site buildings layer. Manual-height amber and uniform colour apply to non-site buildings only; site buildings stay yellow unless manual-height tint is on for that building (manual wins in 3D). |
 | `--imported-massing` | `#FFFFFF` | Default colour of imported .3dm massing in 3D, Drawing (site plan, figure-ground, exploded axo), .ai and .3dm. Each imported model can override it with the Colour picker in Import (stored with the model). |
@@ -200,6 +201,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--light-fill` | `#e4e8ee` | Soft studio fill light, from the side opposite the key light in the 3D view. Off while sun shadows are on. |
 | `--viewport-studio-top` | `#f6f6f5` | Top of the studio gradient behind the 3D model. It runs top, then `--viewport-bg`, then bottom. |
 | `--viewport-studio-bottom` | `#d9d9d6` | Bottom of the studio gradient behind the 3D model. |
+| `--primary-plinth-wall` | `#000000` | Vertical plinth faces in Primary 3D only (`MeshBasic`); `--plinth-wall` stays for other modes and geometry defaults. |
 | `--plinth-shadow` | `#1a1916` | Soft contact shadow under the 3D plinth. Baked once per cut, screen only (not in the PNG). |
 | `--cut-line` | `#f7f4ee` | Frame drawn around the cut on the satellite preview. |
 | `--sun-arc-summer` | `#1a1916` | Dec 21 sun path in the 3D heliodon, solid line (screen only). Black or grey only. |

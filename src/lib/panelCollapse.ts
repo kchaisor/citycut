@@ -2,6 +2,8 @@ export const BUILDINGS_LEGEND_COLLAPSED_KEY = "citycut.legend.buildings.collapse
 export const TREES_LEGEND_COLLAPSED_KEY = "citycut.legend.trees.collapsed";
 
 export const NARROW_PANEL_QUERY = "(max-width: 640px)";
+export const TOPBAR_VIEW_SELECT_QUERY = "(max-width: 1359px)";
+export const TOPBAR_DRAWING_SELECT_QUERY = "(max-width: 1279px)";
 
 export function resolvePanelCollapsed(stored: string | null, isNarrow: boolean): boolean {
   if (stored === "1" || stored === "true") return true;

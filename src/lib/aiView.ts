@@ -13,6 +13,7 @@ import { getColour, type ColourKey } from "./colours";
 import { formatCoord, openRing, signedArea } from "./geo";
 import { hexRgb } from "./lineweights";
 import { ROAD_COLOR, SURFACE } from "./surfaceLayers";
+import { uniformRoadColor } from "./uniformViewport";
 import { footprintBase, sampleTerrain, terrainTint } from "./terrain";
 import { drapeTriangles, GROUND_REMAINING_LAYER, GROUND_ROADS_LAYER, groundRoadPartition, groundTriangles, ROAD_GRADES_BY_PRIORITY } from "./groundRoads";
 import type { TerrainField } from "../types";
@@ -184,6 +185,12 @@ function cardWhite(): Rgb {
 
 function cardGround(): Rgb {
   return hexRgb(getColour("--card-ground"));
+}
+
+function roadFillRgb(grade: (typeof ROAD_GRADES_BY_PRIORITY)[number], style: ViewStyle): Rgb {
+  if (style.whiteCard) return cardWhite();
+  if (style.uniformBuildings && grade !== "path") return hexRgb(uniformRoadColor());
+  return hexRgb(ROAD_COLOR[grade]);
 }
 
 function buildingColor(building: BuildingFeat, style: ViewStyle): Rgb {
@@ -487,7 +494,7 @@ function collect(
       pushTri(fills, edges, occ, nextId++, toWorld(tri), color, GROUND_REMAINING_LAYER, 0, false, shot, pageW, pageH, forward);
     }
     for (const grade of ROAD_GRADES_BY_PRIORITY) {
-      const color = style.whiteCard ? cardWhite() : hexRgb(ROAD_COLOR[grade]);
+      const color = roadFillRgb(grade, style);
       for (const tri of drapeTriangles(groundTriangles(groundSplit.roads[grade], coarse, model.sideM), coarse, model.sideM)) {
         pushTri(fills, edges, occ, nextId++, toWorld(tri), color, GROUND_ROADS_LAYER, 1, false, shot, pageW, pageH, forward);
       }
@@ -600,7 +607,7 @@ function collect(
   for (const road of groundSplit ? [] : model.roads) {
     if (road.kind === "rail") continue;
     const grade = road.grade ?? "local";
-    const color = style.whiteCard ? cardWhite() : hexRgb(ROAD_COLOR[grade]);
+    const color = roadFillRgb(grade, style);
     const lift = grade === "arterial" ? SURFACE.arterial.lift : grade === "path" ? SURFACE.path.lift : SURFACE.local.lift;
     const line = openRing(road.line);
     for (let i = 0; i < line.length - 1; i++) {
