@@ -3456,13 +3456,15 @@ async function main() {
           for await (const chunk of await download.createReadStream()) chunks.push(chunk);
           const bytes = Buffer.concat(chunks);
           const text = bytes.toString("utf8");
+          const hasAddedLayer = text.includes('inkscape:label="Added shadow 12:00"');
+          const hasProposedMassing = text.includes('inkscape:label="Proposed massing"');
           exportOk =
             filename.endsWith(".svg") &&
             bytes.length > 2000 &&
             text.includes('inkscape:label="Existing shadow 12:00"') &&
-            text.includes('inkscape:label="Added shadow 12:00"') &&
-            text.includes('inkscape:label="Proposed massing"');
-          detail = `file=${filename}, bytes=${bytes.length}, hasExisting=${text.includes("Existing shadow 12:00")}, hasAdded=${text.includes("Added shadow 12:00")}`;
+            hasProposedMassing &&
+            (!hasProposedMassing || hasAddedLayer);
+          detail = `file=${filename}, bytes=${bytes.length}, hasExisting=${text.includes("Existing shadow 12:00")}, hasAdded=${hasAddedLayer}, hasProposedMassing=${hasProposedMassing}`;
           if (exportOk) {
             fs.mkdirSync(CURSOR_ARTIFACTS_DIR, { recursive: true });
             fs.writeFileSync(path.join(CURSOR_ARTIFACTS_DIR, "solar-layered-export-box-hill-download.svg"), text);

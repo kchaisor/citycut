@@ -3142,6 +3142,7 @@ export function ModelPage({
               <div className="plan-viewport-stack">
                 <DrawingPlan
                   model={drawingModel}
+                  sectionKnife={sectionKnifeTool}
                   kind={drawing}
                   onScale={onScale}
                   lineStyle={lineStyles}
