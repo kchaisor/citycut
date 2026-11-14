@@ -154,6 +154,10 @@ async function readSunHoursLegendConsoleClearance(page) {
   });
 }
 
+async function clickStudioModeTab(page, label) {
+  await page.locator(".mode-btn").filter({ hasText: label }).click({ timeout: 90_000, force: true });
+}
+
 async function assertSunHoursLegendAboveConsole(page, siteSlug, viewportWidth, assertCheck) {
   const height = 900;
   await page.setViewportSize({ width: viewportWidth, height });
@@ -163,7 +167,7 @@ async function assertSunHoursLegendAboveConsole(page, siteSlug, viewportWidth, a
       slug: "drawing",
       label: "Drawing (Site plan)",
       async go() {
-        await page.getByRole("tab", { name: /Drawing/i }).click();
+        await clickStudioModeTab(page, "Drawing");
         await page.waitForSelector("[data-sun-hours-ground-legend-dock]", { timeout: 120000 });
         await page.waitForTimeout(450);
       },
@@ -172,9 +176,9 @@ async function assertSunHoursLegendAboveConsole(page, siteSlug, viewportWidth, a
       slug: "3d-persp",
       label: "3D Perspective",
       async go() {
-        await page.getByRole("tab", { name: /3D model/i }).click();
+        await clickStudioModeTab(page, "3D model");
         const persp = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Perspective" }).first();
-        if ((await persp.count()) > 0) await persp.click();
+        if ((await persp.count()) > 0) await persp.click({ force: true });
         await page.waitForSelector(".sun-hours-direct-dock-stack [data-sun-hours-ground-legend-dock]", {
           timeout: 120000,
         });
@@ -185,8 +189,8 @@ async function assertSunHoursLegendAboveConsole(page, siteSlug, viewportWidth, a
       slug: "3d-plan",
       label: "3D Plan",
       async go() {
-        await page.getByRole("tab", { name: /3D model/i }).click();
-        await page.getByRole("button", { name: /^Plan$/i }).click();
+        await clickStudioModeTab(page, "3D model");
+        await page.locator(".model .proj-btn.studio-submode-pill", { hasText: /^Plan$/ }).click({ force: true });
         await page.waitForFunction(() => document.documentElement.dataset.sunHoursDirectPlanView === "1", null, {
           timeout: 60000,
         });
