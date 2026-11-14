@@ -40,6 +40,7 @@ export const GROUND_WIND_TRAIL_LEN_MAX = GROUND_WIND_TRAIL_POINTS - 1;
 export const GROUND_WIND_CASING_WIDTH_PX = 3;
 export const GROUND_WIND_CORE_WIDTH_PX = 1.75;
 export const GROUND_WIND_TRAIL_HEAD_ALPHA = 0.9;
+export const GROUND_WIND_TRAIL_FAR_MIN_LEN_PX = 24;
 export const GROUND_WIND_TRAIL_SCREEN_CAP_PX = 90;
 export const GROUND_WIND_TRAIL_MIN_LEN_PX = 36;
 export const GROUND_WIND_TRAIL_MAX_LEN_PX = GROUND_WIND_TRAIL_SCREEN_CAP_PX;
@@ -697,7 +698,10 @@ function thinRoadSlots(slots: GroundWindScreenSlot[], seed: number): GroundWindS
 
 function capGroundWindSlotsUniform(slots: GroundWindScreenSlot[], cap: number, seed: number): GroundWindScreenSlot[] {
   if (slots.length <= cap) return slots;
-  const ranked = slots.map((slot) => ({ slot, key: hash2D(slot.ci, slot.cj, seed) }));
+  const ranked = slots.map((slot) => ({
+    slot,
+    key: hash2D(slot.ci, slot.cj, seed) - (slot.far ? 0.24 : 0),
+  }));
   ranked.sort((a, b) => a.key - b.key);
   return ranked.slice(0, cap).map((row) => row.slot);
 }
@@ -1067,12 +1071,20 @@ export function trailVisibleSegments(
   metresPerPx = 0.04,
   metresPerSecond = 12,
   lenScale = 1,
+  headScreenY?: number,
 ): number {
   const fastStream = fast && speed > streamMag * GROUND_WIND_FAST_SPEED_RATIO;
   let targetPx = fastStream
     ? GROUND_WIND_TRAIL_FAST_MAX_LEN_PX
     : 0.66 * (GROUND_WIND_TRAIL_MIN_LEN_PX + GROUND_WIND_TRAIL_MAX_LEN_PX);
   targetPx = Math.min(GROUND_WIND_TRAIL_SCREEN_CAP_PX, targetPx * Math.max(0.5, Math.min(1.5, lenScale)));
+  if (
+    headScreenY !== undefined &&
+    headScreenY >= GROUND_WIND_FAR_Y_MIN &&
+    headScreenY <= GROUND_WIND_FAR_Y_MAX
+  ) {
+    targetPx = Math.max(targetPx, GROUND_WIND_TRAIL_FAR_MIN_LEN_PX);
+  }
   const stepM = Math.max(0.12, metresPerSecond * GROUND_WIND_TRAIL_SAMPLE_S * 1.27);
   const need = Math.ceil((targetPx * Math.max(0.002, metresPerPx)) / stepM);
   const capSeg = Math.max(2, Math.ceil((GROUND_WIND_TRAIL_SCREEN_CAP_PX * Math.max(0.002, metresPerPx)) / stepM));
@@ -1376,7 +1388,15 @@ function writePoints(particles: GroundWindParticles, _heightAt: HeightAt, field:
     const band = 0;
     const corePx = GROUND_WIND_CORE_WIDTH_PX;
     const lenScale = particles.trailLenScale[i] ?? 1;
-    let visible = trailVisibleSegments(speed, streamMag, fast, particles.metresPerPx, metresPerSecond, lenScale);
+    let visible = trailVisibleSegments(
+      speed,
+      streamMag,
+      fast,
+      particles.metresPerPx,
+      metresPerSecond,
+      lenScale,
+      headSy,
+    );
     const head = particles.head[i]!;
     const east = particles.east[i]!;
     const north = particles.north[i]!;

@@ -109,7 +109,7 @@ void main() {
   if (css.x >= maskRight.x && css.x <= maskRight.z && css.y >= maskRight.y && css.y <= maskRight.w) discard;
   if (css.x >= maskBottom.x && css.x <= maskBottom.z && css.y >= maskBottom.y && css.y <= maskBottom.w) discard;
   float edge = 1.0 - smoothstep(0.86, 1.0, vSide);
-  float alpha = vAlpha * opacity * edge;
+  float alpha = min(0.9, vAlpha * opacity * edge);
   if (alpha < 0.004) discard;
   if (passRole < 0.5) {
     if (vCasing < 0.5) discard;

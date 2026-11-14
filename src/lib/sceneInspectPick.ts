@@ -61,7 +61,96 @@ export type SceneInspectPickContext = {
   trees: TreeFeat[];
   terrain?: import("../types").TerrainField | null;
   sideM: number;
+  buildingsPickable?: boolean;
+  treesPickable?: boolean;
 };
+
+function isHeightEditOverlayObject(object: THREE.Object3D): boolean {
+  let node: THREE.Object3D | null = object;
+  while (node) {
+    if (node.name === "HeightEditOverlay") return true;
+    node = node.parent;
+  }
+  return false;
+}
+
+export function pickSceneSelectionFromHits(
+  hits: THREE.Intersection[],
+  context: SceneInspectPickContext,
+  clientX: number,
+  clientY: number,
+  additive: boolean,
+): SceneSelection | null {
+  const { trees, terrain, sideM } = context;
+  const buildingsPickable = context.buildingsPickable !== false;
+  const treesPickable = context.treesPickable !== false;
+  for (const hit of hits) {
+    if (isHeightEditOverlayObject(hit.object)) {
+      const overlayId = buildingIdFromIntersection(hit);
+      if (overlayId != null && buildingsPickable) {
+        return {
+          kind: "building",
+          buildingId: overlayId,
+          clientX,
+          clientY,
+          world: { east: hit.point.x, north: -hit.point.z, up: hit.point.y },
+          additive,
+        };
+      }
+      continue;
+    }
+    const buildingId = buildingIdFromIntersection(hit);
+    if (buildingId != null && buildingsPickable) {
+      return {
+        kind: "building",
+        buildingId,
+        clientX,
+        clientY,
+        world: { east: hit.point.x, north: -hit.point.z, up: hit.point.y },
+        additive,
+      };
+    }
+    let object: THREE.Object3D | null = hit.object;
+    let onTrees = false;
+    while (object) {
+      if (object.name === "Trees") {
+        onTrees = true;
+        break;
+      }
+      if (object.userData.noScenePick) break;
+      object = object.parent;
+    }
+    if (onTrees && treesPickable && trees.length > 0) {
+      const east = hit.point.x;
+      const north = -hit.point.z;
+      const treeId = nearestTreeIdAt(east, north, trees, 8);
+      if (treeId != null) {
+        const tree = trees.find((item) => item.id === treeId)!;
+        return {
+          kind: "tree",
+          treeId,
+          clientX,
+          clientY,
+          world: { east: tree.at[0], north: tree.at[1], up: hit.point.y },
+        };
+      }
+    }
+    const meshName = hit.object.name || hit.object.parent?.name || "";
+    if (meshName === "Terrain" || meshName === "Ground") {
+      const east = hit.point.x;
+      const north = -hit.point.z;
+      const elevation = terrain != null ? sampleTerrain(terrain, east, north, sideM) : hit.point.y;
+      return {
+        kind: "terrain",
+        clientX,
+        clientY,
+        world: { east, north, up: hit.point.y },
+        elevation,
+      };
+    }
+  }
+  return null;
+}
 
 export function attachSceneInspectPick(
   canvas: HTMLCanvasElement,
@@ -70,7 +159,6 @@ export function attachSceneInspectPick(
   context: SceneInspectPickContext,
   handlers: SceneInspectPickHandlers,
 ): () => void {
-  const { trees, terrain, sideM } = context;
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   let downX = 0;
@@ -97,67 +185,18 @@ export function attachSceneInspectPick(
     setPointer(event);
     raycaster.setFromCamera(pointer, camera);
     const hits = raycaster.intersectObject(root, true);
-    for (const hit of hits) {
-      const buildingId = buildingIdFromIntersection(hit);
-      if (buildingId != null) {
-        handlers.onPick({
-          kind: "building",
-          buildingId,
-          clientX: event.clientX,
-          clientY: event.clientY,
-          world: { east: hit.point.x, north: -hit.point.z, up: hit.point.y },
-          additive: event.shiftKey,
-        });
-        return;
-      }
-      let object: THREE.Object3D | null = hit.object;
-      let onTrees = false;
-      while (object) {
-        if (object.name === "Trees") {
-          onTrees = true;
-          break;
-        }
-        if (object.userData.noScenePick) break;
-        object = object.parent;
-      }
-      if (onTrees && trees.length > 0) {
-        const east = hit.point.x;
-        const north = -hit.point.z;
-        const treeId = nearestTreeIdAt(east, north, trees, 8);
-        if (treeId != null) {
-          const tree = trees.find((item) => item.id === treeId)!;
-          handlers.onPick({
-            kind: "tree",
-            treeId,
-            clientX: event.clientX,
-            clientY: event.clientY,
-            world: { east: tree.at[0], north: tree.at[1], up: hit.point.y },
-          });
-          return;
-        }
-      }
-      const meshName = hit.object.name || hit.object.parent?.name || "";
-      if (meshName === "Terrain" || meshName === "Ground") {
-        const east = hit.point.x;
-        const north = -hit.point.z;
-        const elevation = terrain != null ? sampleTerrain(terrain, east, north, sideM) : hit.point.y;
-        handlers.onPick({
-          kind: "terrain",
-          clientX: event.clientX,
-          clientY: event.clientY,
-          world: { east, north, up: hit.point.y },
-          elevation,
-        });
-        return;
-      }
+    const selection = pickSceneSelectionFromHits(hits, context, event.clientX, event.clientY, event.shiftKey);
+    if (selection) {
+      handlers.onPick(selection);
+      return;
     }
     handlers.onClear?.();
   }
 
-  canvas.addEventListener("pointerdown", onPointerDown);
-  canvas.addEventListener("pointerup", onPointerUp);
+  canvas.addEventListener("pointerdown", onPointerDown, true);
+  canvas.addEventListener("pointerup", onPointerUp, true);
   return () => {
-    canvas.removeEventListener("pointerdown", onPointerDown);
-    canvas.removeEventListener("pointerup", onPointerUp);
+    canvas.removeEventListener("pointerdown", onPointerDown, true);
+    canvas.removeEventListener("pointerup", onPointerUp, true);
   };
 }

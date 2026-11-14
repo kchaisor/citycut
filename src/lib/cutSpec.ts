@@ -5,7 +5,7 @@ export type CutShape = "square" | "circle" | "a3";
 
 export type CutOrientation = SheetOrientation;
 
-export const A3_DRAWING_SCALES = [1000, 2000, 2500, 3000, 5000] as const;
+export const A3_DRAWING_SCALES = [1000, 2000, 2500, 3000, 3500, 5000] as const;
 
 export type A3DrawingScale = (typeof A3_DRAWING_SCALES)[number];
 

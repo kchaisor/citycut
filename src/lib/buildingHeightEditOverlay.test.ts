@@ -42,6 +42,7 @@ describe("buildHeightEditOverlay", () => {
     expect(mat.transparent).toBe(true);
     expect(mat.opacity).toBeCloseTo(0.5, 2);
     expect(overlay!.name).toBe("HeightEditOverlay");
+    expect(fill.userData.buildingId).toBe(42);
     disposeObject(city);
   });
 });

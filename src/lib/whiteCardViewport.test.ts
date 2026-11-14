@@ -5,7 +5,7 @@ import { applyCanvasRoadTint, snapshotPrimaryViewportColors } from "./primaryVie
 import { applyWhiteCardGroundTint } from "./whiteCardViewport";
 
 describe("whiteCardViewport", () => {
-  it("whitens ground and uses MeshBasic white roads in White Card mode", () => {
+  it("whitens ground and uses MeshBasic white roads in Card mode", () => {
     const root = new THREE.Group();
     const ground = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#cccccc" }));
     ground.name = "Ground";

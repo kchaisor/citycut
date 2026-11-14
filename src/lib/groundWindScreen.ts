@@ -18,12 +18,14 @@ export function groundWindGridCellCount(viewW: number, viewH: number, cellPx = G
   return cols * rows;
 }
 
-export function groundWindTargetParticleCount(viewW: number, _viewH: number): number {
+export function groundWindTargetParticleCount(viewW: number, viewH: number): number {
   const bandRows = Math.max(1, Math.ceil((GROUND_WIND_GROUND_Y_MAX - GROUND_WIND_GROUND_Y_MIN) / GROUND_WIND_STREAMLINE_CELL_PX));
   const bandCells = Math.ceil(viewW / GROUND_WIND_STREAMLINE_CELL_PX) * bandRows;
   const refBandRows = Math.ceil((GROUND_WIND_GROUND_Y_MAX - GROUND_WIND_GROUND_Y_MIN) / GROUND_WIND_STREAMLINE_CELL_PX);
   const refBandCells = Math.ceil(GROUND_WIND_REFERENCE_VIEW_W / GROUND_WIND_STREAMLINE_CELL_PX) * refBandRows;
-  const target = Math.round(bandCells * (GROUND_WIND_SCREEN_TARGET_1440 / refBandCells));
+  const refArea = GROUND_WIND_REFERENCE_VIEW_W * GROUND_WIND_REFERENCE_VIEW_H;
+  const areaScale = Math.sqrt(Math.max(0.5, (viewW * Math.max(1, viewH)) / refArea));
+  const target = Math.round(bandCells * (GROUND_WIND_SCREEN_TARGET_1440 / refBandCells) * areaScale);
   return Math.max(1200, Math.min(3200, target));
 }
 
