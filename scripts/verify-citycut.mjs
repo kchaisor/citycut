@@ -145,8 +145,34 @@ async function readSunHoursLegendConsoleClearance(page) {
     const barBox = bar?.getBoundingClientRect();
     const barW = barBox?.width ?? 0;
     const barH = barBox?.height ?? 0;
-    const barOk = barW >= 180 && barW <= 220 && barH >= 6 && barH <= 10 && barW > barH;
-    const compactOk = tickCount === 5 && endUnitsOk && barOk;
+    const barOk = barW >= 180 && barW <= 216 && barH >= 6 && barH <= 10 && barW > barH;
+    const compactRoot = document.querySelector(".sun-hours-direct-legend.is-compact");
+  const insetMin = 10;
+  let paddingInsetOk = true;
+  const insetFails = [];
+  if (compactRoot) {
+    const parts = [
+      compactRoot,
+      ...compactRoot.querySelectorAll(
+        ".sun-hours-direct-legend-title, .sun-hours-direct-legend-scale, .sun-hours-direct-legend-bar, .sun-hours-direct-legend-ticks, .sun-hours-direct-legend-footnote, .sun-hours-direct-legend-ticks li",
+      ),
+    ];
+    for (const el of parts) {
+      const r = el.getBoundingClientRect();
+      if (r.width < 0.5 && r.height < 0.5) continue;
+      if (r.right > legendBox.right - insetMin + 0.5) {
+        paddingInsetOk = false;
+        insetFails.push({ tag: el.className, right: r.right, limit: legendBox.right - insetMin });
+      }
+      if (r.left < legendBox.left + insetMin - 0.5) {
+        paddingInsetOk = false;
+        insetFails.push({ tag: el.className, left: r.left, limit: legendBox.left + insetMin });
+      }
+    }
+  } else {
+    paddingInsetOk = false;
+  }
+    const compactOk = tickCount === 5 && endUnitsOk && barOk && paddingInsetOk;
     return {
       ok: gap >= 4 && noteOk && compactOk,
       gap,
@@ -157,6 +183,9 @@ async function readSunHoursLegendConsoleClearance(page) {
       barW,
       barH,
       endUnitsOk,
+      paddingInsetOk,
+      insetFails: insetFails.slice(0, 4),
+      cardW: legendBox.width,
       firstTick,
       lastTick,
       noteText: noteText.slice(0, 96),

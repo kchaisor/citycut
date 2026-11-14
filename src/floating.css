@@ -263,8 +263,10 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
   margin: 0;
   display: grid;
   gap: 8px;
-  width: 100%;
-  max-width: 200px;
+  width: 216px;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   font-size: 11px;
 }
 .sun-hours-direct-legend-title { margin: 0; font-weight: 600; font-size: inherit; }
@@ -284,20 +286,38 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 }
 .sun-hours-direct-legend-ticks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: var(--muted-text); font-variant-numeric: tabular-nums; }
 .sun-hours-direct-legend.is-compact .sun-hours-direct-legend-ticks {
-  flex-direction: row;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   align-items: baseline;
   width: 100%;
   min-height: 0;
+  min-width: 0;
   font-size: 11px;
   line-height: 1;
   color: var(--muted-text);
 }
+.sun-hours-direct-legend.is-compact .sun-hours-direct-legend-ticks li:nth-child(1) {
+  justify-self: start;
+  text-align: left;
+}
+.sun-hours-direct-legend.is-compact .sun-hours-direct-legend-ticks li:nth-child(5) {
+  justify-self: end;
+  text-align: right;
+}
+.sun-hours-direct-legend.is-compact .sun-hours-direct-legend-ticks li:nth-child(2),
+.sun-hours-direct-legend.is-compact .sun-hours-direct-legend-ticks li:nth-child(3),
+.sun-hours-direct-legend.is-compact .sun-hours-direct-legend-ticks li:nth-child(4) {
+  justify-self: center;
+  text-align: center;
+}
 .sun-hours-direct-legend.is-compact .sun-hours-direct-legend-footnote {
   margin: 0;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.2;
   white-space: nowrap;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
   color: var(--sun-hours-direct-dock-footnote);
 }
 .plan-viewport-stack { position: relative; width: 100%; height: 100%; min-height: 0; }
@@ -329,8 +349,10 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 }
 .plan-solar-legend-dock:has([data-sun-hours-direct-legend]) {
   padding: 12px;
-  width: max-content;
+  box-sizing: border-box;
+  width: fit-content;
   max-width: min(240px, calc(100vw - 24px));
+  min-width: 0;
 }
 .facade-solar-dock-stack {
   position: absolute;
