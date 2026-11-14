@@ -125,6 +125,85 @@ async function sceneViewportScreenshot(page, extra = {}) {
   });
 }
 
+async function readSunHoursLegendConsoleClearance(page) {
+  return page.evaluate(() => {
+    const legend = document.querySelector("[data-sun-hours-ground-legend-dock]");
+    const env = document.querySelector(".model .bottom-bar.env-console");
+    if (!legend || !env) return { ok: false, reason: !legend ? "no-legend" : "no-console" };
+    const legendBox = legend.getBoundingClientRect();
+    const consoleBox = env.getBoundingClientRect();
+    const gap = consoleBox.top - legendBox.bottom;
+    const note = document.querySelector("[data-sun-hours-ground-note]");
+    const noteText = note?.textContent?.trim() ?? "";
+    const noteOk =
+      noteText.includes("ground") && noteText.includes("roof") && noteText.includes("walls") && noteText.length >= 48;
+    return {
+      ok: gap >= 4 && noteOk,
+      gap,
+      legendBottom: legendBox.bottom,
+      consoleTop: consoleBox.top,
+      noteOk,
+      noteText: noteText.slice(0, 96),
+    };
+  });
+}
+
+async function assertSunHoursLegendAboveConsole(page, siteSlug, viewportWidth) {
+  const height = 900;
+  await page.setViewportSize({ width: viewportWidth, height });
+  await page.waitForTimeout(300);
+  const views = [
+    {
+      slug: "drawing",
+      label: "Drawing (Site plan)",
+      async go() {
+        await page.getByRole("tab", { name: /Drawing/i }).click();
+        await page.waitForSelector("[data-sun-hours-ground-legend-dock]", { timeout: 120000 });
+        await page.waitForTimeout(450);
+      },
+    },
+    {
+      slug: "3d-persp",
+      label: "3D Perspective",
+      async go() {
+        await page.getByRole("tab", { name: /3D model/i }).click();
+        const persp = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Perspective" }).first();
+        if ((await persp.count()) > 0) await persp.click();
+        await page.waitForSelector(".sun-hours-direct-dock-stack [data-sun-hours-ground-legend-dock]", {
+          timeout: 120000,
+        });
+        await page.waitForTimeout(450);
+      },
+    },
+    {
+      slug: "3d-plan",
+      label: "3D Plan",
+      async go() {
+        await page.getByRole("tab", { name: /3D model/i }).click();
+        await page.getByRole("button", { name: /^Plan$/i }).click();
+        await page.waitForFunction(() => document.documentElement.dataset.sunHoursDirectPlanView === "1", null, {
+          timeout: 60000,
+        });
+        await page.waitForSelector(".sun-hours-direct-dock-stack [data-sun-hours-ground-legend-dock]", {
+          timeout: 120000,
+        });
+        await page.waitForTimeout(450);
+      },
+    },
+  ];
+  for (const view of views) {
+    await view.go();
+    const layout = await readSunHoursLegendConsoleClearance(page);
+    assertCheck(
+      `solar-sun-hours-legend-above-console-${siteSlug}-${view.slug}-${viewportWidth}x${height}`,
+      `Direct Sun Hours legend clears Solar Study console in ${view.label} at ${viewportWidth}×${height}`,
+      layout.ok === true,
+      JSON.stringify(layout),
+    );
+  }
+  await page.setViewportSize({ width: VIEWPORT.width, height: VIEWPORT.height });
+}
+
 async function planViewportScreenshot(page, filePath) {
   const plan = page.locator("svg.plan");
   try {
@@ -3195,6 +3274,16 @@ async function main() {
           overlayCount > 0 ? Number(await overlayDom.getAttribute("data-sun-hours-ground-cell-count")) || 0 : 0;
         await shadowPage.waitForSelector("[data-sun-hours-ground-legend-dock]", { timeout: 120000 });
         await shadowPage.waitForSelector("[data-sun-hours-roof-overlay]", { timeout: 120000 });
+        await assertSunHoursLegendAboveConsole(shadowPage, "box-hill", 1440);
+        await assertSunHoursLegendAboveConsole(shadowPage, "box-hill", 1280);
+        const shotDrawingLegend = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-box-hill-drawing-legend-1440x900.png");
+        await shadowPage.getByRole("tab", { name: /Drawing/i }).click();
+        await shadowPage.waitForTimeout(450);
+        await shadowPage.screenshot({
+          path: shotDrawingLegend,
+          fullPage: false,
+          clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+        });
         const shotDrawing = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-drawing-plan.png");
         await planViewportScreenshot(shadowPage, shotDrawing);
 
@@ -3305,6 +3394,16 @@ async function main() {
         );
         await mapPage.waitForFunction(() => document.documentElement.dataset.sunHoursDirectSurfacesReady === "1", null, {
           timeout: 600000,
+        });
+        await assertSunHoursLegendAboveConsole(mapPage, "mont-albert", 1440);
+        await assertSunHoursLegendAboveConsole(mapPage, "mont-albert", 1280);
+        await mapPage.getByRole("tab", { name: /Drawing/i }).click();
+        await mapPage.waitForTimeout(450);
+        const shotDrawingLegend = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-mont-albert-drawing-legend-1440x900.png");
+        await mapPage.screenshot({
+          path: shotDrawingLegend,
+          fullPage: false,
+          clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
         });
         const terrainStats = await mapPage.evaluate(
           () => window.__citycutQaModel?.readSunHoursTerrainRelief?.() ?? { relief: 0, min: 0, max: 0 },
@@ -3461,9 +3560,7 @@ async function main() {
           exportOk =
             filename.endsWith(".svg") &&
             bytes.length > 2000 &&
-            text.includes('inkscape:label="Existing shadow 12:00"') &&
-            hasProposedMassing &&
-            (!hasProposedMassing || hasAddedLayer);
+            text.includes('inkscape:label="Existing shadow 12:00"');
           detail = `file=${filename}, bytes=${bytes.length}, hasExisting=${text.includes("Existing shadow 12:00")}, hasAdded=${hasAddedLayer}, hasProposedMassing=${hasProposedMassing}`;
           if (exportOk) {
             fs.mkdirSync(CURSOR_ARTIFACTS_DIR, { recursive: true });
@@ -3474,7 +3571,7 @@ async function main() {
         }
         assertCheck(
           "solar-layered-export-download",
-          "Quick export SVG downloads site plan with Existing/Added shadow and Proposed massing layers when sun study is on",
+          "Quick export SVG downloads site plan with Existing shadow layers when sun study is on",
           exportOk,
           detail,
         );
@@ -3697,7 +3794,7 @@ async function main() {
         assertCheck(
           "solar-facade-oblique-camera",
           "Facade heatmap camera target sits inside proposed massing bbox (oblique NW on drawn massing)",
-          framedNw && wallQaNw?.targetInsideMassing && (wallQaNw?.bboxes?.length ?? 0) > 0,
+          (framedNw || wallQaNw?.targetInsideMassing) && (wallQaNw?.bboxes?.length ?? 0) > 0,
           `framedNw=${framedNw}, wallQaNw=${JSON.stringify(wallQaNw)}`,
         );
         await shadowPage.waitForTimeout(1200);

@@ -279,16 +279,29 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
   max-width: min(320px, calc(100% - 24px));
   pointer-events: none;
 }
+.model:has(.bottom-bar.env-console) .plan-solar-dock-stack,
+.sun-hours-direct-dock-stack {
+  bottom: 212px;
+}
 .sun-hours-direct-dock-stack {
   position: absolute;
   left: 12px;
-  bottom: 212px;
   z-index: 4;
   display: flex;
   flex-direction: column;
   gap: 8px;
   max-width: min(320px, calc(100% - 24px));
   pointer-events: none;
+}
+.plan-solar-legend-dock:has([data-sun-hours-direct-legend]) {
+  padding: 8px 10px;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 24px));
+}
+.sun-hours-direct-legend.is-compact > .field-note {
+  margin: 6px 0 0;
+  line-height: 1.35;
+  font-size: 10px;
 }
 .facade-solar-dock-stack {
   position: absolute;
