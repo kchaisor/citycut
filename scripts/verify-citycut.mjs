@@ -24,6 +24,7 @@ import path from "node:path";
 import net from "node:net";
 import { chromium } from "playwright";
 import { PNG } from "pngjs";
+import { groundWindDrawnWindows } from "./ground-wind-windows-lib.mjs";
 
 const CHROME_PATH = "/usr/bin/google-chrome";
 const VIEWPORT = { width: 1440, height: 900 };
@@ -245,6 +246,7 @@ async function main() {
       }
     });
     const page = await context.newPage();
+    page.setDefaultTimeout(120_000);
     page.on("pageerror", (err) => console.error("[PAGEERROR]", err.stack || err.message));
     page.on("console", (msg) => {
       if (msg.type() === "error") console.error("[CONSOLE.ERROR]", msg.text());
@@ -1757,6 +1759,33 @@ async function main() {
         !analysisInfo.hasPlanFanIn3d &&
         !analysisInfo.hasDuplicateResCodeInRow2,
       `visibleLeftDrawers=${analysisInfo.visibleLeftDrawerCount}, noOverflow=${analysisInfo.noHorizontalOverflow}, topReset=${analysisInfo.hasTopCenterReset}, bottomCompass=${analysisInfo.hasBottomCompass}, 3dDome=${analysisInfo.has3dSunDomeIn3d}, planFanIn3d=${analysisInfo.hasPlanFanIn3d}, rect=${JSON.stringify(analysisInfo.envConsoleRect)}`,
+    );
+
+    await page.getByRole("tab", { name: /Wind Rose/i }).click();
+    const windChip = page.locator("button.ov-chip", { hasText: "3D Wind Flow" }).first();
+    await windChip.waitFor({ state: "visible", timeout: 60_000 });
+    if ((await windChip.getAttribute("aria-pressed")) !== "true") await windChip.click();
+    await page.waitForTimeout(12000);
+    const windFramePath = path.join(ARTIFACTS_DIR, "ground-wind-window-density-desktop.png");
+    await page.screenshot({ path: windFramePath });
+    const windFrame = PNG.sync.read(fs.readFileSync(windFramePath));
+    const windAudit = groundWindDrawnWindows(windFrame.data, windFrame.width, windFrame.height, DEVICE_SCALE_FACTOR, {
+      minYCssPx: 300,
+    });
+    const windAuditMid = windAudit.windows.filter((w) => w.x0 >= 400);
+    const windFailingMid = windAuditMid.filter((w) => w.ratio < 0.35);
+    const windWorstMid = windAuditMid.reduce(
+      (a, w) => (a === null || w.ratio < a.ratio ? w : a),
+      null,
+    );
+    const windDensityOk = windAuditMid.length > 0 && windFailingMid.length === 0;
+    assertCheck(
+      "ground-wind-window-density",
+      "3D Wind Flow draws trails in every 200x200 window (y≥300, x≥400) with at least 15% visible ground at 0.35x or more of the median window density",
+      windDensityOk,
+      `windows=${windAuditMid.length}, median=${windAudit.median.toFixed(4)}, worst=${
+        windWorstMid ? `(${windWorstMid.x0},${windWorstMid.y0}) ${windWorstMid.ratio.toFixed(2)}x` : "none"
+      }, failing=${windFailingMid.length}`,
     );
 
     await page.getByRole("tab", { name: /Walk Ripple/i }).click();

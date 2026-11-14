@@ -517,6 +517,7 @@ function City({
   projection,
   walkRippleTint,
   walkRippleArrivals,
+  windFlowActive = false,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -538,6 +539,7 @@ function City({
   projection: ProjectionMode;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
+  windFlowActive?: boolean;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -973,9 +975,11 @@ function City({
     const mat = contours.material as THREE.LineDashedMaterial | undefined;
     if (mat?.color) {
       mat.color.setStyle(getColour("--outline-contour"));
+      mat.transparent = windFlowActive;
+      mat.opacity = windFlowActive ? 0.4 : 1;
       invalidate();
     }
-  }, [contours, colourTick, invalidate]);
+  }, [contours, colourTick, invalidate, windFlowActive]);
   useLayoutEffect(() => {
     if (!contours) return;
     group.add(contours);
@@ -2331,6 +2335,7 @@ export function Scene3D({
         projection={projection}
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
+        windFlowActive={windEnabled}
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}

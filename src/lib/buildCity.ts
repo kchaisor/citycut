@@ -733,7 +733,10 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
       sample ?? undefined,
       options.introStagger ? { introStagger: true, sideM: model.sideM } : undefined,
     );
-    if (trees) group.add(trees);
+    if (trees) {
+      group.add(trees);
+      order(trees, SURFACE.building.renderOrder - 0.2);
+    }
   }
 
   const { rails, trams } = clipTransportLines(model);
