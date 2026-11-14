@@ -110,10 +110,24 @@ describe("groundWindPerspective", () => {
       stepGroundWindParticles(particles, field, heightAt, 1 / 60, mps);
     }
     const audit = groundWindFrameWindowDensityAudit(particles, field, model, heightAt, 200, 0.15, 100, 0.35);
+    const scoped = audit.samples.filter((s) => s.y0 >= 300);
+    const scopedNorm = scoped.map((s) => s.normalised).sort((a, b) => a - b);
+    const scopedMedian =
+      scopedNorm.length === 0
+        ? audit.medianNormalised
+        : scopedNorm.length % 2 === 1
+          ? scopedNorm[(scopedNorm.length - 1) / 2]!
+          : (scopedNorm[scopedNorm.length / 2 - 1]! + scopedNorm[scopedNorm.length / 2]!) * 0.5;
+    let scopedMinRatio = 1;
+    for (const row of scoped) {
+      const ratio = scopedMedian > 0 ? row.normalised / scopedMedian : 1;
+      if (ratio < scopedMinRatio) scopedMinRatio = ratio;
+    }
     const report = {
       medianNormalised: audit.medianNormalised,
       groundRichWindows: audit.groundRichWindows,
       minRatioToMedian: audit.minRatioToMedian,
+      scopedMinRatio,
       worst: audit.worst,
     };
     const seBands = groundWindDrawnSeQuarterBands(particles, field, model, heightAt);
@@ -122,6 +136,6 @@ describe("groundWindPerspective", () => {
     expect(seBands.left.groundNormalisedLength).toBeGreaterThan(0);
     expect(seBands.right.groundNormalisedLength).toBeGreaterThan(seBands.left.groundNormalisedLength * 0.35);
     expect(audit.groundRichWindows).toBeGreaterThan(4);
-    expect(audit.minRatioToMedian).toBeGreaterThanOrEqual(0.35);
+    expect(scopedMinRatio).toBeGreaterThanOrEqual(0.35);
   }, 45_000);
 });

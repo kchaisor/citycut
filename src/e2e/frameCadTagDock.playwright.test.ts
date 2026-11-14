@@ -67,7 +67,11 @@ describe("frame CAD tag vs landing dock", () => {
   });
 
   async function assertCadTagClearsDock(viewport: { width: number; height: number }) {
-    const browser = await chromium.launch();
+    const browser = await chromium.launch({
+      headless: true,
+      executablePath: "/usr/bin/google-chrome",
+      args: ["--no-sandbox", "--disable-gpu"],
+    });
     const page = await browser.newPage();
     try {
       await page.setViewportSize(viewport);

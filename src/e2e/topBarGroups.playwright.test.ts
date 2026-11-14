@@ -314,7 +314,11 @@ describe("model top bar group layout", () => {
   it(
     "keeps top bar groups separate with unclipped controls at 1024–1440",
     async () => {
-      const browser = await chromium.launch();
+      const browser = await chromium.launch({
+        headless: true,
+        executablePath: "/usr/bin/google-chrome",
+        args: ["--no-sandbox", "--disable-gpu"],
+      });
       const page = await browser.newPage();
       page.setDefaultTimeout(360_000);
       try {
