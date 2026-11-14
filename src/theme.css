@@ -76,4 +76,7 @@
 
   --sidebar-rail-w: 56px;
   --sidebar-panel-w: 320px;
+
+  --z-studio-inspector: 30;
+  --z-studio-topbar: 40;
 }

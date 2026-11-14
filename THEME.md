@@ -65,6 +65,8 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--height-manual` | Manual height edits in that bar and key. | `#D4A017` |
 | `--sidebar-rail-w` | Width of the icon rail. The model view starts to its right when the sidebar is collapsed. | `56px` |
 | `--sidebar-panel-w` | Width of the sidebar panel next to the rail. | `320px` |
+| `--z-studio-inspector` | Stacking order of the fixed Site Intelligence panel. | `30` |
+| `--z-studio-topbar` | Stacking order of the floating top-bar HUD (menus paint above the inspector). | `40` |
 
 `var(--background)` means “use whatever `--background` is set to”. That is why one edit recolours the page, the model, and the drawing together.
 
