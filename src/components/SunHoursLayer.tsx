@@ -1,45 +1,137 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { sunHoursColour, sunHoursGrid } from "../lib/sunHours";
+import { buildSunHoursGroundDrapeGeometry } from "../lib/sunHoursGroundDrape";
+import { rasterizeSunHoursGroundGridFor3d } from "../lib/sunHoursGroundRaster";
+import type { SunHoursDirectOverlay } from "../lib/sunHoursDirectAssess";
+import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
 import type { CityModel } from "../types";
 
+const SUN_HOURS_ROOF_RENDER_ORDER = 1600;
+
+function meshFromBuffers(positions: Float32Array, colors: Float32Array) {
+  if (positions.length === 0) return null;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 export function SunHoursLayer({
+  grid,
+  overlay,
+  scaleMaxHours,
   model,
-  year,
-  month,
-  day,
-  groundY,
+  planView,
+  groundOnly = false,
+  surfacesOnly = false,
 }: {
+  grid: SunHoursGroundGrid;
+  overlay: SunHoursDirectOverlay | null;
+  scaleMaxHours: number;
   model: CityModel;
-  year: number;
-  month: number;
-  day: number;
-  groundY: number;
+  planView: boolean;
+  groundOnly?: boolean;
+  surfacesOnly?: boolean;
 }) {
+  const showGround = !surfacesOnly;
+  const showSurfaces = !groundOnly;
+
+  const overlayRef = useRef(overlay);
+  overlayRef.current = overlay;
+
+  useEffect(() => {
+    if (typeof document === "undefined" || !showSurfaces) return;
+    const next = overlayRef.current;
+    const roofOn = Boolean(next && next.roofPositions.length > 0);
+    const wallsOn = Boolean(!planView && next && next.wallPositions.length > 0);
+    document.documentElement.dataset.sunHoursDirectPlanView = planView ? "1" : "0";
+    document.documentElement.dataset.sunHoursDirectRoofsVisible = roofOn ? "1" : "0";
+    document.documentElement.dataset.sunHoursDirectWallsVisible = wallsOn ? "1" : "0";
+    return () => {
+      delete document.documentElement.dataset.sunHoursDirectPlanView;
+      delete document.documentElement.dataset.sunHoursDirectRoofsVisible;
+      delete document.documentElement.dataset.sunHoursDirectWallsVisible;
+    };
+  }, [overlay, planView, showSurfaces]);
+
   const texture = useMemo(() => {
-    const grid = sunHoursGrid(model, { year, month, day });
-    if (!grid) return null;
-    const canvas = document.createElement("canvas");
-    canvas.width = grid.res;
-    canvas.height = grid.res;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-    const image = ctx.createImageData(grid.res, grid.res);
-    for (let i = 0; i < grid.hours.length; i++) image.data.set(sunHoursColour(grid.hours[i]!, grid.maxHours), i * 4);
-    ctx.putImageData(image, 0, 0);
-    document.documentElement.dataset.sunHoursMs = String(Math.round(grid.ms));
-    document.documentElement.dataset.sunHoursSteps = `${grid.steps}+${grid.skipped} skipped`;
+    if (!showGround) return null;
+    const scaledGrid = { ...grid, maxSunHours: scaleMaxHours };
+    const canvas = rasterizeSunHoursGroundGridFor3d(scaledGrid, scaleMaxHours);
+    if (!canvas) return null;
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearFilter;
     return tex;
-  }, [model, year, month, day]);
+  }, [grid, scaleMaxHours, showGround]);
   useEffect(() => () => texture?.dispose(), [texture]);
-  if (!texture) return null;
+
+  const groundGeometry = useMemo(
+    () => (showGround ? buildSunHoursGroundDrapeGeometry(grid, model) : null),
+    [grid, model, showGround],
+  );
+
+  useEffect(() => () => groundGeometry?.dispose(), [groundGeometry]);
+
+  const roofGeometry = useMemo(
+    () => (showSurfaces && overlay ? meshFromBuffers(overlay.roofPositions, overlay.roofColors) : null),
+    [overlay, showSurfaces],
+  );
+  const wallGeometry = useMemo(
+    () => (showSurfaces && !planView && overlay ? meshFromBuffers(overlay.wallPositions, overlay.wallColors) : null),
+    [overlay, planView, showSurfaces],
+  );
+
+  useEffect(() => () => roofGeometry?.dispose(), [roofGeometry]);
+  useEffect(() => () => wallGeometry?.dispose(), [wallGeometry]);
+
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, groundY + 0.15, 0]} renderOrder={900}>
-      <planeGeometry args={[model.sideM, model.sideM]} />
-      <meshBasicMaterial map={texture} transparent depthWrite={false} depthTest={false} toneMapped={false} />
-    </mesh>
+  <>
+      {texture && groundGeometry ? (
+        <mesh geometry={groundGeometry} renderOrder={900} data-sun-hours-direct-ground>
+          <meshBasicMaterial
+            map={texture}
+            transparent
+            alphaTest={0.04}
+            depthTest
+            depthWrite={false}
+            toneMapped={false}
+            polygonOffset
+            polygonOffsetFactor={-1}
+            polygonOffsetUnits={-1}
+          />
+        </mesh>
+      ) : null}
+      {roofGeometry ? (
+        <mesh geometry={roofGeometry} renderOrder={SUN_HOURS_ROOF_RENDER_ORDER} data-sun-hours-direct-roofs>
+          <meshBasicMaterial
+            vertexColors
+            toneMapped={false}
+            depthTest
+            depthWrite={false}
+            side={THREE.DoubleSide}
+            polygonOffset
+            polygonOffsetFactor={-4}
+            polygonOffsetUnits={-4}
+          />
+        </mesh>
+      ) : null}
+      {wallGeometry ? (
+        <mesh geometry={wallGeometry} renderOrder={SUN_HOURS_ROOF_RENDER_ORDER} data-sun-hours-direct-walls>
+          <meshBasicMaterial
+            vertexColors
+            toneMapped={false}
+            depthTest
+            depthWrite={false}
+            side={THREE.DoubleSide}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
+          />
+        </mesh>
+      ) : null}
+    </>
   );
 }

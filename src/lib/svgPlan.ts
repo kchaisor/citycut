@@ -4,7 +4,7 @@ import { isSiteBuilding } from "./siteBuildings";
 import { clipAreaToSiteFrame, clipPolylineSiteFrame, pointInSiteFrame, DEFAULT_SITE_FRAME_SHAPE } from "./siteFrame";
 import { openRing } from "./geo";
 import { PATH_WIDTH_M } from "./lineweights";
-import type { MultiPolygon } from "polygon-clipping";
+import type { MultiPolygon } from "./safePolygonClip";
 import {
   DEFAULT_PATH_FILLET_M,
   footpathStrips,
@@ -14,7 +14,7 @@ import {
   unionFootpathStrips,
   unionRoadSurface,
 } from "./roadFill";
-import * as polygonClipping from "polygon-clipping";
+import { clipDifference } from "./safePolygonClip";
 import { fillRoadMedianGaps } from "./roadMedianFill";
 import { carParkWays } from "./planCarParks";
 import {
@@ -25,12 +25,8 @@ import {
   drawContours,
   drawnContourInterval,
 } from "./vicmapContours";
+import { modelFrameSize } from "./modelFrame";
 import type { CityModel, Pt } from "../types";
-
-type ClipDifference = (geom: MultiPolygon, ...more: MultiPolygon[]) => MultiPolygon;
-const clipModule = polygonClipping as unknown as { difference?: ClipDifference; default?: { difference: ClipDifference } };
-const clipDifference: ClipDifference =
-  typeof clipModule.difference === "function" ? clipModule.difference : clipModule.default!.difference;
 
 const round = (value: number) => Math.round(value * 10) / 10;
 
@@ -66,6 +62,7 @@ export type PlanPaths = {
   contourLabels: { east: number; north: number; text: string }[];
   contourInterval: number | null;
   contourSource: import("../types").ContourSourceId | null;
+  importedUpperLevels: { z: number; lines: Pt[][] }[];
 };
 
 function dedupe(line: Pt[]): Pt[] {
@@ -125,12 +122,25 @@ export function offsetPolyline(line: Pt[], distance: number): Pt[] {
   return out;
 }
 
-function clipRings(outer: Pt[], holes: Pt[][], sideM: number, frameShape: import("../types").SiteFrameShape): Pt[][] | null {
-  return clipAreaToSiteFrame(outer, holes, sideM, frameShape);
+function clipRings(
+  outer: Pt[],
+  holes: Pt[][],
+  sideM: number,
+  frameShape: import("../types").SiteFrameShape,
+  size?: { widthM: number; heightM: number },
+): Pt[][] | null {
+  return clipAreaToSiteFrame(outer, holes, sideM, frameShape, size);
 }
 
-function clipLines(line: Pt[], sideM: number, frameShape: import("../types").SiteFrameShape): Pt[][] {
-  return clipPolylineSiteFrame(dedupe(line), sideM, frameShape).map(dedupe).filter((part) => part.length >= 2);
+function clipLines(
+  line: Pt[],
+  sideM: number,
+  frameShape: import("../types").SiteFrameShape,
+  size?: { widthM: number; heightM: number },
+): Pt[][] {
+  return clipPolylineSiteFrame(dedupe(line), sideM, frameShape, size)
+    .map(dedupe)
+    .filter((part) => part.length >= 2);
 }
 
 export type PlanPathOptions = {
@@ -149,16 +159,17 @@ export function planPaths(
   planOptions: PlanPathOptions = {},
 ): PlanPaths {
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
+  const frameSize = modelFrameSize(model);
   const blocks: Pt[][][] = [];
   const green: Pt[][][] = [];
   const water: Pt[][][] = [];
   for (const area of model.blocks ?? []) {
-    const rings = clipRings(area.ring, area.holes, model.sideM, frameShape);
+    const rings = clipRings(area.ring, area.holes, model.sideM, frameShape, frameSize);
     if (rings) blocks.push(rings);
   }
   for (const area of model.areas) {
     if (area.kind === "block") continue;
-    const rings = clipRings(area.ring, area.holes, model.sideM, frameShape);
+    const rings = clipRings(area.ring, area.holes, model.sideM, frameShape, frameSize);
     if (!rings) continue;
     if (area.kind === "water") water.push(rings);
     else green.push(rings);
@@ -167,12 +178,12 @@ export function planPaths(
   const rails: PlanPaths["rails"] = [];
   for (const road of model.roads) {
     if (road.kind === "rail") {
-      for (const line of clipLines(road.line, model.sideM, frameShape)) rails.push(line);
+      for (const line of clipLines(road.line, model.sideM, frameShape, frameSize)) rails.push(line);
     }
   }
   const trams: PlanPaths["trams"] = [];
   for (const line of model.tramLines ?? []) {
-    for (const part of clipLines(line, model.sideM, frameShape)) trams.push(part);
+    for (const part of clipLines(line, model.sideM, frameShape, frameSize)) trams.push(part);
   }
   const pathFilletM =
     planOptions.pathFilletM !== undefined ? planOptions.pathFilletM : DEFAULT_PATH_FILLET_M;
@@ -182,10 +193,11 @@ export function planPaths(
     frameShape,
     pathFilletM,
     pathWidthM,
+    frameSize,
   );
   const carPark = carParkWays(model.roads, model.carParks);
   const planRoads = carPark.size > 0 ? model.roads.filter((road) => !carPark.has(road)) : model.roads;
-  const carriageway = unionRoadSurface(planRoads, model.tramLines, model.sideM, frameShape);
+  const carriageway = unionRoadSurface(planRoads, model.tramLines, model.sideM, frameShape, frameSize);
 
   const colourMode: BuildingColourMode = planOptions.buildingColour ?? {
     colourByUse: true,
@@ -195,7 +207,8 @@ export function planPaths(
   const highlightManual = Boolean(planOptions.highlightManual);
   const buildings: PlanPaths["buildings"] = [];
   for (const building of model.buildings) {
-    const rings = clipRings(building.ring, building.holes, model.sideM, frameShape);
+    if (building.importedMassingShadowCaster) continue;
+    const rings = clipRings(building.ring, building.holes, model.sideM, frameShape, frameSize);
     if (!rings) continue;
     const site = isSiteBuilding(model, building.id);
     const fill = planBuildingFill(model, building, colourMode, highlightManual);
@@ -216,6 +229,7 @@ export function planPaths(
       aisles.map((road) => ({ line: road.line, width: road.width })),
       model.sideM,
       frameShape,
+      frameSize,
     ).polygons;
     const ground = carriageway.polygons.length > 0 ? clipDifference(strips, carriageway.polygons) : strips;
     for (const polygon of ground) blocks.push(polygon.map((ring) => ring.map((p): Pt => [p[0], p[1]])));
@@ -232,7 +246,7 @@ export function planPaths(
   );
 
   const trees = model.trees
-    .filter((tree) => pointInSiteFrame(tree.at, model.sideM, frameShape))
+    .filter((tree) => pointInSiteFrame(tree.at, model.sideM, frameShape, frameSize))
     .map((tree) => ({
       east: tree.at[0],
       north: tree.at[1],
@@ -249,7 +263,7 @@ export function planPaths(
           : null;
   const clipped = layer
     ? layer.lines.flatMap((line) =>
-        clipLines(line.points, model.sideM, frameShape).map((points) => ({ points, z: line.z })),
+        clipLines(line.points, model.sideM, frameShape, frameSize).map((points) => ({ points, z: line.z })),
       )
     : [];
   const drawnInterval = layer
@@ -260,6 +274,16 @@ export function planPaths(
       ? clipped.filter((line) => altitudeOnInterval(line.z, drawnInterval))
       : clipped;
   const drawn = layer && visible.length > 0 ? drawContours(visible, drawnInterval, contourIndexEvery) : null;
+
+  const importedUpperLevels = (model.importedMassingUpperLevels ?? [])
+    .map((level) => {
+      const lines = level.lines
+        .flatMap((line) => clipPolylineSiteFrame(line, model.sideM, frameShape, frameSize))
+        .map(dedupe)
+        .filter((part) => part.length >= 3);
+      return lines.length > 0 ? { z: level.z, lines: lines.map((part) => closeOpen(part)) } : null;
+    })
+    .filter((level): level is { z: number; lines: Pt[][] } => level !== null);
 
   return {
     blocks,
@@ -278,5 +302,14 @@ export function planPaths(
     contourLabels: [],
     contourInterval: drawn && layer ? drawnInterval : null,
     contourSource: drawn && layer ? layer.source : null,
+    importedUpperLevels,
   };
+}
+
+function closeOpen(line: Pt[]): Pt[] {
+  if (line.length < 3) return line;
+  const first = line[0]!;
+  const last = line[line.length - 1]!;
+  if (first[0] === last[0] && first[1] === last[1]) return line;
+  return [...line, first];
 }

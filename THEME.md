@@ -127,9 +127,12 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--plan-empty` | `#6d675e` | The sentence shown when a plan has nothing in the frame. |
 | `--contour-label` | `#6A6A6A` | Elevation numbers on the site plan, on screen and in the Illustrator file. |
 | `--building-uniform` | `#FFFFFF` | Buildings when colour-by-use is off, that legend swatch, and the Rhino Buildings layer. |
+| `--uniform-road` | `#555555` | Road fill in Drawing when the plan building style is uniform (3D Card view uses `--primary-surface` on canvas instead). |
 | `--building-manual` | `#D4A017` | 3D viewport tint for buildings with a manual height override when “Show manual edits” is on. |
 | `--site-building` | `#F2C230` | Buildings on the searched property: site plan, 3D, Rhino `Buildings::Site`, and Illustrator Site buildings layer. Manual-height amber and uniform colour apply to non-site buildings only; site buildings stay yellow unless manual-height tint is on for that building (manual wins in 3D). |
 | `--imported-massing` | `#FFFFFF` | Default colour of imported .3dm massing in 3D, Drawing (site plan, figure-ground, exploded axo), .ai and .3dm. Each imported model can override it with the Colour picker in Import (stored with the model). |
+| `--imported-massing-upper-stroke` | `#6E6E6E` | Solid linework for upper roof/setback outlines inside imported footprints. |
+| `--imported-massing-upper-tone` | `#E6E6E6` | Light plan fill behind upper-level outlines on screen. |
 | `--switch-knob` | `#000000` | Knob of every sidebar switch, on and off, so an off switch reads on its pale `--control-off` track. On = `--accent` track, knob right. |
 | `--site-building-edge` | `#3D3010` | Darker outline on site-building massing in the 3D viewport so they read against retail (`--use-retail`) and civic (`--use-civic`) yellows. |
 | `--site-boundary` | `#D7263D` | Searched-property parcel boundary on the site plan, the 3D ground line, Rhino `Site::Boundary`, and Illustrator/PDF Site boundary layer. |
@@ -205,6 +208,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--light-fill` | `#e4e8ee` | Soft studio fill light, from the side opposite the key light in the 3D view. Off while sun shadows are on. |
 | `--viewport-studio-top` | `#f6f6f5` | Top of the studio gradient behind the 3D model. It runs top, then `--viewport-bg`, then bottom. |
 | `--viewport-studio-bottom` | `#d9d9d6` | Bottom of the studio gradient behind the 3D model. |
+| `--primary-plinth-wall` | `#000000` | Vertical plinth faces in Primary 3D only (`MeshBasic`); `--plinth-wall` stays for other modes and geometry defaults. |
 | `--plinth-shadow` | `#1a1916` | Soft contact shadow under the 3D plinth. Baked once per cut, screen only (not in the PNG). |
 | `--cut-line` | `#f7f4ee` | Frame drawn around the cut on the satellite preview. |
 | `--sun-arc-summer` | `#1a1916` | Dec 21 sun path in the 3D heliodon, solid line (screen only). Black or grey only. |
@@ -239,6 +243,13 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-hours-lost-3` | `#ff9a4a` | Hours-lost heatmap 2–3 h. |
 | `--sun-hours-lost-4` | `#e85c3a` | Hours-lost heatmap 3–4 h. |
 | `--sun-hours-lost-5plus` | `#8b2e1a` | Hours-lost heatmap 5+ h. |
+| `--sun-hours-direct-0` | `#313695` | Direct sun hours 0 h (blue). |
+| `--sun-hours-direct-15` | `#4575b4` | Direct sun hours low blue. |
+| `--sun-hours-direct-30` | `#a5006a` | Direct sun hours purple. |
+| `--sun-hours-direct-50` | `#d73027` | Direct sun hours red mid. |
+| `--sun-hours-direct-70` | `#f46d43` | Direct sun hours orange. |
+| `--sun-hours-direct-90` | `#fdae61` | Direct sun hours light orange. |
+| `--sun-hours-direct-max` | `#fee825` | Direct sun hours max (yellow). |
 | `--facade-hours-ok` | `#3d8f5a` | 3D facade sample meets ADG threshold hours. |
 | `--facade-hours-warn` | `#e8a820` | 3D facade sample just below threshold. |
 | `--facade-hours-low` | `#e07030` | 3D facade sample low direct-sun hours. |
@@ -315,6 +326,18 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--view-blocked` | `#28282E` | View tab: ground inside the radius that is not visible (~27% opacity). |
 | `--view-path` | `#000000` | View tab: drawn walk path ribbon and its clicked points. |
 | `--view-walker` | `#FFF500` | View tab: walker marker (eye ball on a black pole). |
+| `--section-knife-cut-edge` | `#FFF500` | Section Knife: live cut edge outline in the 3D view (same yellow as `--accent`). |
+| `--section-knife-handle-hover` | `#FFFFA8` | Section Knife: gizmo handle and rotate ring hover highlight. |
+| `--section-knife-poche` | `#000000` | Section Knife: solid poché on clipped cap faces. |
+| `--section-knife-floor-line` | `#FFFFFF` | Section Knife: floor-slab lines on cap faces. |
+| `--section-knife-plane` | `#FFFFFF` | Section Knife: translucent cutting plane gizmo. |
+| `--section-knife-elevation-fill` | `#C8C8C8` | Section Knife: terrain fill in the live section panel. |
+| `--section-knife-elevation-sky` | `#F5F5F2` | Section Knife: background of the live section panel chart. |
+| `--section-knife-elevation-ground` | `#1E1D1B` | Section Knife: ground poché in the live section panel. |
+| `--section-knife-elevation-beyond` | `#D9D5CD` | Section Knife: beyond-cut building elevation in the section panel. |
+| `--section-knife-elevation-grid` | `#1A1916` | Section Knife: grid and axis ink in the section panel. |
+| `--section-knife-marker-gold` | `#E1B157` | Section Knife: knife marker accent (JT gold). |
+| `--section-knife-plan-marker-ink` | `#1a1a1a` | Section Knife: plan section mark ink (bubbles, dash, arrows). |
 | `--walk-ripple-accent` | `#FFF500` | Walk ripple: origin marker, network wave, and straight-line rings. |
 | `--walk-ripple-band-0` | `#FFF500` | Walk ripple: buildings within 0–5 minutes walk. |
 | `--walk-ripple-band-1` | `#FF8C00` | Walk ripple: buildings within 5–10 minutes walk. |

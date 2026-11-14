@@ -5,6 +5,16 @@ import { CRS_NOTE, mgaCrs } from "../lib/crs";
 import { formatCoord, formatKmSide } from "../lib/geo";
 import { searchPlaces } from "../lib/nominatim";
 import { addSearchHistory, clearSearchHistory, readSearchHistory } from "../lib/searchHistory";
+import {
+  A3_DRAWING_SCALES,
+  cutSpecFromA3,
+  cutSpecFromCircle,
+  cutSpecFromSquare,
+  formatCutReadout,
+  type A3DrawingScale,
+  type CutOrientation,
+  type CutSpec,
+} from "../lib/cutSpec";
 import type { PlaceHit, SiteFrameShape, UiLayers } from "../types";
 import { Mark } from "./Mark";
 
@@ -79,6 +89,8 @@ export function SelectChrome({
   onSideKm,
   frameShape,
   onFrameShape,
+  cut,
+  onCut,
   onLayer,
   onPlace,
   onCreate,
@@ -98,6 +110,8 @@ export function SelectChrome({
   onSideKm: (km: number) => void;
   frameShape: SiteFrameShape;
   onFrameShape: (shape: SiteFrameShape) => void;
+  cut: CutSpec;
+  onCut: (cut: CutSpec) => void;
   onLayer: (key: keyof UiLayers, on: boolean) => void;
   onPlace: (place: PlaceHit) => void;
   onCreate: () => void;
@@ -114,9 +128,8 @@ export function SelectChrome({
   const [dismissedPresets, setDismissedPresets] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
 
-  const area =
-    frameShape === "circle" ? Math.PI * (sideKm / 2) ** 2 : sideKm * sideKm;
-  const sideM = Math.round(sideKm * 1000);
+  const a3Mode = cut.shape === "a3";
+  const readout = formatCutReadout(cut);
   const crs = mgaCrs(center.lon);
   const crsStatePrefix = crs.zone === 56 ? "NSW" : "VIC";
   const crsTagText =
@@ -384,27 +397,39 @@ export function SelectChrome({
             <label className="wb-label dock-group-label" htmlFor={sliderId}>
               Cut Size
             </label>
-            <span className="wb-val dock-readout mono">
-              {sideM.toLocaleString()} m · {area.toFixed(2)} km²
-            </span>
+            <span className="wb-val dock-readout mono">{readout}</span>
           </div>
           <div className="wb-controls">
             <div className="seg-track shape-toggle dock-seg mono" role="group" aria-label="Cut size presets">
-              {SIDE_PRESETS_KM.map((km) => {
-                const active = Math.abs(sideKm - km) < 0.001;
-                return (
-                  <button
-                    key={km}
-                    type="button"
-                    className={active ? "seg-item on-yellow shape-btn on" : "seg-item shape-btn"}
-                    onClick={() => onSideKm(km)}
-                  >
-                    {formatPresetKm(km)}
-                  </button>
-                );
-              })}
+              {a3Mode
+                ? A3_DRAWING_SCALES.map((scale) => {
+                    const active = cut.scale === scale;
+                    return (
+                      <button
+                        key={scale}
+                        type="button"
+                        className={active ? "seg-item on-yellow shape-btn on" : "seg-item shape-btn"}
+                        onClick={() => onCut(cutSpecFromA3(scale, cut.orientation))}
+                      >
+                        1:{scale}
+                      </button>
+                    );
+                  })
+                : SIDE_PRESETS_KM.map((km) => {
+                    const active = Math.abs(sideKm - km) < 0.001;
+                    return (
+                      <button
+                        key={km}
+                        type="button"
+                        className={active ? "seg-item on-yellow shape-btn on" : "seg-item shape-btn"}
+                        onClick={() => onSideKm(km)}
+                      >
+                        {formatPresetKm(km)}
+                      </button>
+                    );
+                  })}
             </div>
-            <div className="mini-scrubber" title="Fine-tune cut size (200m – 2,000m)">
+            <div className="mini-scrubber" title="Fine-tune cut size (200m – 2,000m)" hidden={a3Mode}>
               <div className="scrubber-line" aria-hidden="true">
                 <div className="scrubber-fill" style={{ width: `${sliderPct}%` }} />
                 <div className="scrubber-knob" style={{ left: `${sliderPct}%` }} />
@@ -423,8 +448,24 @@ export function SelectChrome({
                 aria-valuenow={sideKm}
                 aria-valuetext={`${formatKmSide(sideKm)} kilometres per side`}
                 onChange={(event) => onSideKm(Number(event.target.value))}
+                disabled={a3Mode}
               />
             </div>
+            {a3Mode ? (
+              <div className="seg-track shape-toggle dock-seg" role="group" aria-label="A3 orientation">
+                {(["landscape", "portrait"] as CutOrientation[]).map((orientation) => (
+                  <button
+                    key={orientation}
+                    type="button"
+                    className={cut.orientation === orientation ? "seg-item on-white shape-btn on" : "seg-item shape-btn"}
+                    aria-pressed={cut.orientation === orientation}
+                    onClick={() => onCut(cutSpecFromA3((cut.scale ?? 2500) as A3DrawingScale, orientation))}
+                  >
+                    {orientation === "landscape" ? "Landscape" : "Portrait"}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -441,7 +482,10 @@ export function SelectChrome({
                 className={frameShape === "square" ? "seg-item on-white shape-btn on" : "seg-item shape-btn"}
                 aria-pressed={frameShape === "square"}
                 aria-label="Square"
-                onClick={() => onFrameShape("square")}
+                onClick={() => {
+                  onFrameShape("square");
+                  onCut(cutSpecFromSquare(sideKm * 1000));
+                }}
               >
                 □ Square
               </button>
@@ -450,9 +494,24 @@ export function SelectChrome({
                 className={frameShape === "circle" ? "seg-item on-white shape-btn on" : "seg-item shape-btn"}
                 aria-pressed={frameShape === "circle"}
                 aria-label="Circle"
-                onClick={() => onFrameShape("circle")}
+                onClick={() => {
+                  onFrameShape("circle");
+                  onCut(cutSpecFromCircle(sideKm * 1000));
+                }}
               >
                 ○ Circle
+              </button>
+              <button
+                type="button"
+                className={frameShape === "a3" ? "seg-item on-white shape-btn on" : "seg-item shape-btn"}
+                aria-pressed={frameShape === "a3"}
+                aria-label="A3"
+                onClick={() => {
+                  onFrameShape("a3");
+                  onCut(cutSpecFromA3(2500, "landscape"));
+                }}
+              >
+                A3
               </button>
             </div>
           </div>

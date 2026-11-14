@@ -1,5 +1,9 @@
-import * as polygonClipping from "polygon-clipping";
-import type { MultiPolygon, Pair, Polygon } from "polygon-clipping";
+import type { MultiPolygon, Pair, Polygon } from "./safePolygonClip";
+import {
+  clipDifference as difference,
+  clipIntersection as intersection,
+  clipUnion as union,
+} from "./safePolygonClip";
 import { openRing } from "./geo";
 import { siteFramePolygon } from "./siteFrame";
 import { sunAtMelbourneLocal, type SolarSample } from "./solar";
@@ -9,21 +13,6 @@ import { planTreeShadowMulti } from "./solarTreePlanShadow";
 import type { BuildingFeat, CityModel, Pt, Ring, TreeFeat } from "../types";
 
 export type PlanShadowTreeMode = "off" | "both" | "proposed-only";
-
-type ClipFns = {
-  union: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
-  intersection: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
-  difference: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
-};
-
-function clippingFns(): ClipFns {
-  const loaded = polygonClipping as unknown as ClipFns & { default?: ClipFns };
-  if (typeof loaded.union === "function") return loaded;
-  if (loaded.default && typeof loaded.default.union === "function") return loaded.default;
-  throw new Error("polygon-clipping did not load.");
-}
-
-const { union, intersection, difference } = clippingFns();
 
 export function isProposedMassingBuilding(building: BuildingFeat): boolean {
   return Boolean(building.importedMassing || building.proposedMassing);
@@ -302,6 +291,7 @@ function planShadowMultiForBuildings(
   const terrainKey = field ? `${field.cols}x${field.rows}:${field.min}:${field.max}:${model.sideM}` : "";
   let merged: MultiPolygon = [];
   for (const building of buildings) {
+    if (building.importedMassingSkipShadow) continue;
     const offset = planShadowOffset(sample, building.height);
     if (!offset) continue;
     const topZ = ground
@@ -394,4 +384,18 @@ export function clearPlanShadowCache(): void {
   buildingShadowCache.clear();
   unionCacheKey = "";
   unionCache = [];
+}
+
+export function importedMassingShadowCasters(buildings: BuildingFeat[]): BuildingFeat[] {
+  return buildings.filter((building) => building.importedMassingShadowCaster);
+}
+
+export function importedPlanShadowRings(
+  model: CityModel,
+  input: PlanShadowInput,
+  castShadows: boolean,
+): Ring[][] {
+  const casters = importedMassingShadowCasters(model.buildings);
+  if (!castShadows || casters.length === 0) return [];
+  return planShadowRings({ ...model, buildings: casters }, input, true);
 }

@@ -104,6 +104,24 @@ export function SolarAccessConsole({
           <span className="ov-dot" aria-hidden="true" />
           Facade hours (ADG)
         </button>
+        <button
+          type="button"
+          data-sun-hours-ground-chip
+          className={settings.sunHours ? "ov-chip on" : "ov-chip"}
+          aria-pressed={Boolean(settings.sunHours)}
+          onClick={() => {
+            const on = !settings.sunHours;
+            patch({
+              sunHours: on,
+              month: on ? 6 : settings.month,
+              day: on ? 21 : settings.day,
+              castShadows: on ? true : settings.castShadows,
+            });
+          }}
+        >
+          <span className="ov-dot" aria-hidden="true" />
+          Direct Sun Hours
+        </button>
         {canMarkReceptors && settings.solarAccess && (
           <button
             type="button"

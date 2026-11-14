@@ -207,7 +207,9 @@ describe("registry and plan styling", () => {
 });
 
 describe("NSW layers reach the site plan and the ground", async () => {
-  const { sitePlanChunks, sitePlanLayerOrder } = await import("./aiPlan");
+  const { sitePlanAi8 } = await import("./aiPlan");
+  const { parseNativeAiLayers } = await import("./aiNative");
+  const { NSW_SITE_LAYERS } = await import("./nswPlanExport");
   const { DEFAULT_LINE_STYLES, cloneLineStyles } = await import("./drawingStyle");
   const { groundRoadPartition } = await import("./groundRoads");
   const ring = [[151.1934, -33.8705], [151.1934, -33.8695], [151.1946, -33.8695], [151.1946, -33.8705], [151.1934, -33.8705]];
@@ -238,12 +240,9 @@ describe("NSW layers reach the site plan and the ground", async () => {
     roadKm: 0.4, buildingCapHit: false, sourceNote: "test",
   } as unknown as import("../types").CityModel;
 
-  it("adds NSW layers to the .ai site plan, with the RL label spelled out", () => {
-    const chunks = sitePlanChunks(model, 1000, cloneLineStyles(DEFAULT_LINE_STYLES));
-    const order = sitePlanLayerOrder(chunks);
-    for (const name of ["NSW zoning", "NSW road corridors", "NSW lots", "NSW planning labels"]) expect(order).toContain(name);
-    expect(order.indexOf("NSW zoning")).toBeGreaterThan(order.indexOf("Blocks"));
-    expect(JSON.stringify(chunks)).toContain("HOB RL 109 m AHD");
+  it("omits NSW planning overlay layers from the site-plan .ai export", () => {
+    const layers = parseNativeAiLayers(sitePlanAi8(model, 1000, cloneLineStyles(DEFAULT_LINE_STYLES)));
+    for (const name of NSW_SITE_LAYERS) expect(layers).not.toContain(name);
   });
   it("builds Ground::Roads from NSW road corridors and reports the source split", () => {
     const split = groundRoadPartition(model);

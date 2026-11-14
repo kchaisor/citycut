@@ -10,6 +10,7 @@ import {
 import { interiorPoint } from "../lib/useCascade";
 import { fromLocal } from "../lib/geo";
 import type { DamFloorRecord } from "../lib/comDevelopmentFloors";
+import { footprintArea } from "../lib/useCascade";
 import type { BuildingFeat, LonLat } from "../types";
 
 type Props = {
@@ -24,6 +25,7 @@ type Props = {
   hiddenCount?: number;
   onHideSelected?: () => void;
   onShowAll?: () => void;
+  floatingScreen?: { left: number; top: number } | null;
 };
 
 function formatHeightM(height: number): string {
@@ -52,6 +54,7 @@ export function BuildingHeightPopover({
   hiddenCount = 0,
   onHideSelected,
   onShowAll,
+  floatingScreen = null,
 }: Props) {
   const [value, setValue] = useState(() => formatHeightM(building.height));
   const [details, setDetails] = useState<BuildingPopupDetails>(() => emptyBuildingPopupDetails(building));
@@ -99,6 +102,15 @@ export function BuildingHeightPopover({
   const at = interiorPoint(building.ring, building.holes);
   const { lat, lon } = fromLocal(at, center);
   const showCom = isCityOfMelbourne(lat, lon);
+  const levelsValue =
+    building.numFloors != null
+      ? `${building.numFloors}`
+      : building.developmentFloors != null
+        ? `${building.developmentFloors}`
+        : "";
+  const footprintM2 = footprintArea(building.ring, building.holes);
+  const footprintValue = footprintM2 >= 4 ? `${Math.round(footprintM2)} m²` : "";
+  const heightReadout = `${building.height.toFixed(1)} m`;
 
   function commit() {
     const parsed = Number(value.replace(/,/g, "").trim());
@@ -106,11 +118,24 @@ export function BuildingHeightPopover({
     onSave(parsed);
   }
 
+  const panelClass = [
+    "building-detail-panel",
+    floatingScreen ? "is-floating inspect-hud" : "",
+    minimised ? "is-minimised" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <aside
-      className={minimised ? "building-detail-panel is-minimised" : "building-detail-panel"}
+      className={panelClass}
       role="dialog"
       aria-label="Building details"
+      style={
+        floatingScreen
+          ? { left: floatingScreen.left, top: floatingScreen.top, right: "auto", bottom: "auto" }
+          : undefined
+      }
     >
       <header>
         <strong>
@@ -135,13 +160,20 @@ export function BuildingHeightPopover({
       </header>
       {!minimised && (
         <div className="building-detail-panel-body">
-          <Field label="Use" value={details.useLine} />
-          <Field label="Name / address" value={details.nameLine} />
-          <Field label="Height & storeys" value={details.heightStoreysLine} />
-          <Field label="Zone & overlays" value={details.zoneLine} />
-          <Field label="Lot / site" value={details.lotLine} />
-          {showCom && <Field label="Year built" value={details.yearLine} />}
-          {showCom && <Field label="Development" value={details.developmentLine} />}
+          <Field label="Use" value={details.useLine !== "—" ? details.useLine : building.use.replace(/_/g, " ")} />
+          <Field label="Name / address" value={details.nameLine !== "—" ? details.nameLine : building.overtureName ?? ""} />
+          <Field label="Height" value={heightReadout} />
+          <Field
+            label="Levels"
+            value={
+              levelsValue ||
+              (details.heightStoreysLine.match(/(\d+)\s*storeys/)?.[1] ?? "")
+            }
+          />
+          <Field label="Footprint" value={footprintValue} />
+          <Field label="Zone & overlays" value={details.zoneLine !== "—" ? details.zoneLine : building.zoneCode ?? ""} />
+          {showCom && details.yearLine !== "—" ? <Field label="Year built" value={details.yearLine} /> : null}
+          {showCom && details.developmentLine !== "—" ? <Field label="Development" value={details.developmentLine} /> : null}
           <div className="height-editor-block">
             <p className="meta">
               Height editor · Current: {building.height.toFixed(1)} m · {source}

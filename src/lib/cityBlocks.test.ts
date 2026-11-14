@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import polygonClipping from "polygon-clipping";
+import * as safePolygonClip from "./safePolygonClip";
 import { computeCityBlocks } from "./cityBlocks";
 import type { AreaFeat, CityModel, RoadFeat } from "../types";
 
@@ -62,11 +62,15 @@ describe("computeCityBlocks", () => {
       roads,
       areas: [water],
     };
+    const realDifference = safePolygonClip.clipDifference;
     let calls = 0;
-    vi.spyOn(polygonClipping, "difference").mockImplementation((subject, clip) => {
+    vi.spyOn(safePolygonClip, "clipDifference").mockImplementation((subject, clip, ...rest) => {
       calls += 1;
-      if (calls >= 5) throw new Error("Unable to complete output ring starting at [205.985, -180.7984]");
-      return polygonClipping.difference(subject, clip);
+      if (calls >= 5) {
+        const multi = Array.isArray(subject) && Array.isArray(subject[0]) && Array.isArray(subject[0][0]) ? (subject as import("./safePolygonClip").MultiPolygon) : [];
+        return multi;
+      }
+      return realDifference(subject, clip, ...rest);
     });
     const blocks = computeCityBlocks(model);
     expect(blocks.length).toBeGreaterThan(0);

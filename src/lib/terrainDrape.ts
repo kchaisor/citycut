@@ -1,3 +1,5 @@
+import { clipPolygonRect } from "./clip";
+import { frameHalfExtents, type FrameGroundSize } from "./siteFrame";
 import type { Pt, TerrainField } from "../types";
 
 export type Tri = [Pt, Pt, Pt];
@@ -52,7 +54,13 @@ function area2(poly: Poly): number {
   return sum;
 }
 
-export function clipTrianglesToTerrainGrid(tris: Tri[], field: TerrainField, sideM: number): Tri[] {
+export function clipTrianglesToTerrainGrid(
+  tris: Tri[],
+  field: TerrainField,
+  sideM: number,
+  frameSize?: FrameGroundSize,
+): Tri[] {
+  const { halfW, halfH } = frameHalfExtents(sideM, "square", frameSize);
   const half = sideM / 2;
   const s = field.spacingM;
   const maxCol = field.cols - 2;
@@ -60,7 +68,9 @@ export function clipTrianglesToTerrainGrid(tris: Tri[], field: TerrainField, sid
   const cellOf = (v: number, max: number) => Math.min(max, Math.max(0, Math.floor((v + half) / s)));
   const out: Tri[] = [];
   const emit = (poly: Poly) => {
-    if (poly.length < 3 || Math.abs(area2(poly)) < 1e-6) return;
+    const clipped = halfW < half - 0.01 || halfH < half - 0.01 ? clipPolygonRect(poly, halfW, halfH) : poly;
+    if (clipped.length < 3 || Math.abs(area2(clipped)) < 1e-6) return;
+    poly = clipped;
     const winding = area2(poly) > 0;
     for (let i = 1; i + 1 < poly.length; i++) {
       const tri: Tri = winding ? [poly[0]!, poly[i]!, poly[i + 1]!] : [poly[0]!, poly[i + 1]!, poly[i]!];

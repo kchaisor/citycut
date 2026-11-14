@@ -10,7 +10,12 @@ import { CRS_NOTE, mgaCrs, projectLocal, projectLonLat } from "./crs";
 import { readDrawingStyle } from "./drawingStyle";
 import { figureGround, figureGroundDatum } from "./figureGround";
 import { isProposedMassingBuilding, planShadowRings, type PlanShadowInput } from "./buildingShadows";
-import type { SunStudyExportLayer, SolarReceptorExport } from "./aiPlan";
+import {
+  normalizeSunStudyExportLayer,
+  type SitePlanExportOptions,
+  type SunStudyExportLayer,
+  type SolarReceptorExport,
+} from "./aiPlan";
 import {
   addedShadowLayerName,
   existingShadowLayerName,
@@ -985,7 +990,7 @@ export type CityModelTo3dmOptions = {
   uniformBuildings?: boolean;
   colourBySource?: boolean;
   wind?: { table: WindRoseTable; period: WindPeriodId } | null;
-  sunStudy?: { layers: SunStudyExportLayer[] } | null;
+  sunStudy?: SitePlanExportOptions["sunStudy"];
   solarReceptors?: SolarReceptorExport[] | null;
   facadeSolarPoints?: FacadePointExport[] | null;
   hideTrees?: boolean;
@@ -1103,6 +1108,50 @@ function normalize3dmOptions(
   return { heliodon: options as HeliodonGroundExportOptions };
 }
 
+export function applyRhinoMgaDocumentSettings(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  model: CityModel,
+  options?: { windOn?: boolean; applicationDetails?: string },
+): { crs: ReturnType<typeof mgaCrs>; zone: number } {
+  const crs = mgaCrs(model.center.lon);
+  doc.applicationName = "CityCut";
+  doc.applicationUrl = "https://kchaisor.github.io/citycut/";
+  doc.applicationDetails = options?.applicationDetails ?? `${model.placeLabel}; ${crs.name}`;
+  const comCredit = comBuildingHeightCreditLine(model);
+  const buildingCredit = plainDataCredit({
+    prefix: `CityCut. ${crs.name}. Metres, Z-up. ${CRS_NOTE}`,
+    windOn: Boolean(options?.windOn),
+    ...(model.region === "nsw" ? { nsw: true } : {}),
+  });
+  const treesCredit = comTreesCreditLine(model);
+  doc.startSectionComments = [buildingCredit, comCredit, treesCredit, regionCredit(model.region)].filter(Boolean).join(" ");
+  doc.settings().modelUnitSystem = rhino.UnitSystem.Meters;
+  doc.settings().pageUnitSystem = rhino.UnitSystem.Meters;
+  doc.strings().set("CRS", crs.name);
+  doc.strings().set("CRS note", CRS_NOTE);
+  if (comCredit) doc.strings().set("Building heights", comCredit);
+  if (treesCredit) doc.strings().set("Trees", treesCredit);
+  if (model.terrain) {
+    doc.strings().set(
+      "Vertical",
+      `DEM metres from Mapterhorn zoom ${model.terrain.zoom}. The Terrain mesh is the surface only, ${model.terrain.min.toFixed(2)} to ${model.terrain.max.toFixed(2)} m, with no skirt or thickness.`,
+    );
+  }
+  const [easting, northing] = projectLonLat(model.center.lon, model.center.lat, crs.zone);
+  const anchor = doc.settings().earthAnchorPoint;
+  anchor.earthBasepointLatitude = model.center.lat;
+  anchor.earthBasepointLongitude = model.center.lon;
+  anchor.earthBasepointElevation = 0;
+  anchor.modelBasePoint = [easting, northing, 0];
+  anchor.modelEast = [1, 0, 0];
+  anchor.modelNorth = [0, 1, 0];
+  anchor.name = crs.name;
+  anchor.description = CRS_NOTE;
+  doc.settings().earthAnchorPoint = anchor;
+  return { crs, zone: crs.zone };
+}
+
 export async function cityModelTo3dm(
   model: CityModel,
   options?: HeliodonGroundExportOptions | CityModelTo3dmOptions | null,
@@ -1127,7 +1176,6 @@ export async function cityModelTo3dm(
     model = { ...model, layers: { ...model.layers, trees: false }, trees: [] };
   }
   const rhino = await loadRhino();
-  const crs = mgaCrs(model.center.lon);
   const group = buildCityGroup(model, {
     splitBuildings: !uniformBuildings,
     uniformBuildings: Boolean(uniformBuildings),
@@ -1136,41 +1184,7 @@ export async function cityModelTo3dm(
   const doc = new rhino.File3dm();
   try {
     group.updateMatrixWorld(true);
-    doc.applicationName = "CityCut";
-    doc.applicationUrl = "https://kchaisor.github.io/citycut/";
-    doc.applicationDetails = `${model.placeLabel}; ${crs.name}`;
-    const comCredit = comBuildingHeightCreditLine(model);
-    const buildingCredit = plainDataCredit({
-      prefix: `CityCut. ${crs.name}. Metres, Z-up. ${CRS_NOTE}`,
-      windOn: Boolean(wind?.table),
-      ...(model.region === "nsw" ? { nsw: true } : {}),
-    });
-    const treesCredit = comTreesCreditLine(model);
-    doc.startSectionComments = [buildingCredit, comCredit, treesCredit, regionCredit(model.region)].filter(Boolean).join(" ");
-    doc.settings().modelUnitSystem = rhino.UnitSystem.Meters;
-    doc.settings().pageUnitSystem = rhino.UnitSystem.Meters;
-    doc.strings().set("CRS", crs.name);
-    doc.strings().set("CRS note", CRS_NOTE);
-    if (comCredit) doc.strings().set("Building heights", comCredit);
-    if (treesCredit) doc.strings().set("Trees", treesCredit);
-    if (model.terrain) {
-      doc.strings().set(
-        "Vertical",
-        `DEM metres from Mapterhorn zoom ${model.terrain.zoom}. The Terrain mesh is the surface only, ${model.terrain.min.toFixed(2)} to ${model.terrain.max.toFixed(2)} m, with no skirt or thickness.`,
-      );
-    }
-
-    const [easting, northing] = projectLonLat(model.center.lon, model.center.lat, crs.zone);
-    const anchor = doc.settings().earthAnchorPoint;
-    anchor.earthBasepointLatitude = model.center.lat;
-    anchor.earthBasepointLongitude = model.center.lon;
-    anchor.earthBasepointElevation = 0;
-    anchor.modelBasePoint = [easting, northing, 0];
-    anchor.modelEast = [1, 0, 0];
-    anchor.modelNorth = [0, 1, 0];
-    anchor.name = crs.name;
-    anchor.description = CRS_NOTE;
-    doc.settings().earthAnchorPoint = anchor;
+    const { zone: crsZone } = applyRhinoMgaDocumentSettings(rhino, doc, model, { windOn: Boolean(wind?.table) });
 
     const layers = new Map<string, number>();
     const materials = new Map<string, number>();
@@ -1180,18 +1194,28 @@ export async function cityModelTo3dm(
       if (mesh.isMesh && !mesh.userData?.skipRhinoExport) meshes.push(mesh);
     });
     const tally: ExtrusionTally = extrusionTally ?? { extrusions: 0, meshFallback: 0 };
-    addMeshesInTraverseLayerOrder(rhino, doc, layers, materials, meshes, model, crs.zone, buildingsAsMesh ? null : tally);
-    addFigureGround(rhino, doc, layers, materials, model, crs.zone);
-    addSiteBoundary(rhino, doc, layers, materials, model, crs.zone);
-    addRailTramPolylines(rhino, doc, layers, materials, model, crs.zone);
-    addContours(rhino, doc, layers, materials, model, crs.zone);
-    if (heliodon) addHeliodonPlan(rhino, doc, layers, materials, model, crs.zone, heliodon);
-    if (shadows) addPlanShadows(rhino, doc, layers, materials, model, crs.zone, shadows, Boolean(castShadows));
-    if (sunStudy?.layers?.length) addSunStudyPlanShadows(rhino, doc, layers, materials, model, crs.zone, sunStudy.layers);
-    if (solarReceptors?.length) addSolarReceptorPlan(rhino, doc, layers, materials, model, crs.zone, solarReceptors);
-    if (facadeSolarPoints?.length) addFacadeSolarPoints(rhino, doc, layers, materials, model, crs.zone, facadeSolarPoints);
-    addProposedMassingFootprints(rhino, doc, layers, materials, model, crs.zone);
-    if (wind?.table) addWindRose(rhino, doc, layers, materials, model, crs.zone, wind.table, wind.period);
+    addMeshesInTraverseLayerOrder(rhino, doc, layers, materials, meshes, model, crsZone, buildingsAsMesh ? null : tally);
+    addFigureGround(rhino, doc, layers, materials, model, crsZone);
+    addSiteBoundary(rhino, doc, layers, materials, model, crsZone);
+    addRailTramPolylines(rhino, doc, layers, materials, model, crsZone);
+    addContours(rhino, doc, layers, materials, model, crsZone);
+    if (heliodon) addHeliodonPlan(rhino, doc, layers, materials, model, crsZone, heliodon);
+    if (shadows) addPlanShadows(rhino, doc, layers, materials, model, crsZone, shadows, Boolean(castShadows));
+    if (sunStudy?.layers?.length) {
+      addSunStudyPlanShadows(
+        rhino,
+        doc,
+        layers,
+        materials,
+        model,
+        crsZone,
+        sunStudy.layers.map(normalizeSunStudyExportLayer),
+      );
+    }
+    if (solarReceptors?.length) addSolarReceptorPlan(rhino, doc, layers, materials, model, crsZone, solarReceptors);
+    if (facadeSolarPoints?.length) addFacadeSolarPoints(rhino, doc, layers, materials, model, crsZone, facadeSolarPoints);
+    addProposedMassingFootprints(rhino, doc, layers, materials, model, crsZone);
+    if (wind?.table) addWindRose(rhino, doc, layers, materials, model, crsZone, wind.table, wind.period);
     if (importedMassing?.length) addImportedMassing(rhino, doc, layers, materials, importedMassing);
 
     return doc.toByteArray();

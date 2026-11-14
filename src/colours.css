@@ -3,7 +3,7 @@
 
   --sidebar-grey: #EBEBEB;
 
-  --viewport-bg: #EBEBEB;
+  --viewport-bg: #ffffff;
 
   --sidebar-text: #000000;
 
@@ -42,6 +42,8 @@
   --parcel-boundary-active: #FFFFFF;
   --parcel-fill-selected: #E1B157;
   --parcel-fill-boundary: #C89F3D;
+  --imported-massing-upper-stroke: #6E6E6E;
+  --imported-massing-upper-tone: #E6E6E6;
   --switch-knob: #000000;
 
   --site-building-edge: #3D3010;
@@ -56,6 +58,19 @@
   --view-path: #000000;
   --view-walker: #FFF500;
 
+  --section-knife-cut-edge: #FFF500;
+  --section-knife-handle-hover: #FFFFA8;
+  --section-knife-poche: #000000;
+  --section-knife-floor-line: #FFFFFF;
+  --section-knife-plane: #FFFFFF;
+  --section-knife-elevation-fill: #C8C8C8;
+  --section-knife-elevation-sky: #F5F5F2;
+  --section-knife-elevation-ground: #1E1D1B;
+  --section-knife-elevation-beyond: #D9D5CD;
+  --section-knife-elevation-grid: #1A1916;
+  --section-knife-marker-gold: #E1B157;
+  --section-knife-plan-marker-ink: #1a1a1a;
+
   --walk-ripple-accent: #FFF500;
   --walk-ripple-band-0: #FFF500;
   --walk-ripple-band-1: #FF8C00;
@@ -63,6 +78,7 @@
   --walk-ripple-label-bg: #1C1C22;
   --walk-ripple-label-text: #FFFFFF;
 
+  /* Residential footprints, legend swatch, and the Residential Rhino layer. */
   --use-residential: #CECBC6;
 
   --use-commercial: #89533D;
@@ -157,8 +173,18 @@
   --light-ground: #c9c0b2;
 
   --light-fill: #e4e8ee;
-  --viewport-studio-top: #f6f6f5;
-  --viewport-studio-bottom: #d9d9d6;
+  --viewport-studio-top: #ffffff;
+  --viewport-studio-bottom: #ffffff;
+
+  --primary-surface: #ffffff;
+  --primary-building: #ffffff;
+  --primary-road: #525252;
+  --primary-footpath: #b9b9b9;
+  --primary-plinth-wall: #000000;
+  --uniform-road: #555555;
+  --plinth-wall: #ffffff;
+  --ground-wind-glyph: #525252;
+  --ground-wind-flow: #5c7f9c;
   --plinth-shadow: #1a1916;
 
   --cut-line: #f7f4ee;
@@ -207,6 +233,13 @@
   --sun-hours-lost-3: #ff9a4a;
   --sun-hours-lost-4: #e85c3a;
   --sun-hours-lost-5plus: #8b2e1a;
+  --sun-hours-direct-0: #313695;
+  --sun-hours-direct-15: #4575b4;
+  --sun-hours-direct-30: #a5006a;
+  --sun-hours-direct-50: #d73027;
+  --sun-hours-direct-70: #f46d43;
+  --sun-hours-direct-90: #fdae61;
+  --sun-hours-direct-max: #fee825;
   --facade-hours-ok: #3d8f5a;
   --facade-hours-warn: #e8a820;
   --facade-hours-low: #e07030;

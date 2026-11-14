@@ -1,9 +1,10 @@
 import { terrainMeshHeight } from "./terrainDrape";
-import * as polygonClipping from "polygon-clipping";
-import type { MultiPolygon, Polygon } from "polygon-clipping";
+import type { MultiPolygon } from "./safePolygonClip";
+import { clipIntersection as clipIntersectionSafe } from "./safePolygonClip";
 import { COLOUR_FALLBACK, getColour } from "./colours";
 import { fromLocal, squareBBox } from "./geo";
-import { siteFramePolygon, type SiteFrameShape } from "./siteFrame";
+import { clipPolygonRect } from "./clip";
+import { frameHalfExtents, siteFramePolygon, type FrameGroundSize, type SiteFrameShape } from "./siteFrame";
 import type { LonLat, Pt, Ring, TerrainField } from "../types";
 
 /**
@@ -520,18 +521,6 @@ function shadeHeight(t: number, darken: number): [number, number, number] {
 
 type TerrainTri = [Pt, Pt, Pt];
 
-type ClipFns = {
-  intersection: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
-};
-
-function terrainClipFns(): ClipFns {
-  const loaded = polygonClipping as unknown as ClipFns & { default?: ClipFns };
-  if (typeof loaded.intersection === "function") return loaded;
-  if (loaded.default && typeof loaded.default.intersection === "function") return loaded.default;
-  throw new Error("polygon-clipping did not load.");
-}
-
-const { intersection: clipIntersection } = terrainClipFns();
 
 function barycentric(p: Pt, a: Pt, b: Pt, c: Pt): [number, number, number] | null {
   const denom = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
@@ -556,7 +545,7 @@ function clipTriangleToCircle(tri: TerrainTri, sideM: number): Pt[][] {
   const frame = siteFramePolygon(sideM, "circle");
   let result: MultiPolygon;
   try {
-    result = clipIntersection([closeTriangleRing(tri)], frame);
+    result = clipIntersectionSafe([closeTriangleRing(tri)], frame, { layer: "terrain", operation: "intersection" });
   } catch {
     return [];
   }
@@ -620,6 +609,42 @@ function appendGridTriangleClippedToCircle(
   }
 }
 
+function clipTriangleToRect(tri: TerrainTri, halfW: number, halfH: number): Pt[][] {
+  const clipped = clipPolygonRect([tri[0], tri[1], tri[2]], halfW, halfH);
+  if (clipped.length < 3) return [];
+  return [clipped];
+}
+
+function appendGridTriangleClippedToRect(
+  positions: number[],
+  colors: number[],
+  indexList: number[],
+  tri: TerrainTri,
+  heights: [number, number, number],
+  halfW: number,
+  halfH: number,
+  field: TerrainField,
+  relief: number,
+): void {
+  for (const ring of clipTriangleToRect(tri, halfW, halfH)) {
+    for (const part of fanTriangulate(ring)) {
+      pushClippedTriangle(positions, colors, indexList, tri, heights, part, field, relief);
+    }
+  }
+}
+
+function rectCoversTriangle(tri: TerrainTri, halfW: number, halfH: number): boolean {
+  return tri.every(([x, y]) => Math.abs(x) <= halfW + 0.001 && Math.abs(y) <= halfH + 0.001);
+}
+
+function rectTouchesTriangle(tri: TerrainTri, halfW: number, halfH: number): boolean {
+  const xs = tri.map((p) => p[0]);
+  const ys = tri.map((p) => p[1]);
+  if (Math.max(...xs) < -halfW - 0.001 || Math.min(...xs) > halfW + 0.001) return false;
+  if (Math.max(...ys) < -halfH - 0.001 || Math.min(...ys) > halfH + 0.001) return false;
+  return true;
+}
+
 function terrainBuffersSquare(field: TerrainField, sideM: number) {
   const { cols, rows } = field;
   const half = sideM / 2;
@@ -652,6 +677,69 @@ function terrainBuffersSquare(field: TerrainField, sideM: number) {
     }
   }
   return { positions, indices: Uint32Array.from(indexList), colors };
+}
+
+function terrainBuffersRect(field: TerrainField, sideM: number, halfW: number, halfH: number) {
+  const { cols, rows } = field;
+  const half = sideM / 2;
+  const relief = Math.max(field.max - field.min, 0.001);
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const indexList: number[] = [];
+
+  for (let row = 0; row < rows - 1; row++) {
+    for (let col = 0; col < cols - 1; col++) {
+      const swH = field.heights[row * cols + col]!;
+      const seH = field.heights[row * cols + col + 1]!;
+      const nwH = field.heights[(row + 1) * cols + col]!;
+      const neH = field.heights[(row + 1) * cols + col + 1]!;
+      const sw: Pt = [-half + col * field.spacingM, -half + row * field.spacingM];
+      const se: Pt = [-half + (col + 1) * field.spacingM, -half + row * field.spacingM];
+      const nw: Pt = [-half + col * field.spacingM, -half + (row + 1) * field.spacingM];
+      const ne: Pt = [-half + (col + 1) * field.spacingM, -half + (row + 1) * field.spacingM];
+      const triA: TerrainTri = [sw, se, ne];
+      const triB: TerrainTri = [sw, ne, nw];
+      if (rectTouchesTriangle(triA, halfW, halfH)) {
+        if (rectCoversTriangle(triA, halfW, halfH)) {
+          const base = positions.length / 3;
+          for (const [point, y] of [
+            [sw, swH],
+            [se, seH],
+            [ne, neH],
+          ] as const) {
+            positions.push(point[0], y, -point[1]);
+            const tint = shadeHeight((y - field.min) / relief, 1);
+            colors.push(tint[0], tint[1], tint[2]);
+          }
+          indexList.push(base, base + 1, base + 2);
+        } else {
+          appendGridTriangleClippedToRect(positions, colors, indexList, triA, [swH, seH, neH], halfW, halfH, field, relief);
+        }
+      }
+      if (rectTouchesTriangle(triB, halfW, halfH)) {
+        if (rectCoversTriangle(triB, halfW, halfH)) {
+          const base = positions.length / 3;
+          for (const [point, y] of [
+            [sw, swH],
+            [ne, neH],
+            [nw, nwH],
+          ] as const) {
+            positions.push(point[0], y, -point[1]);
+            const tint = shadeHeight((y - field.min) / relief, 1);
+            colors.push(tint[0], tint[1], tint[2]);
+          }
+          indexList.push(base, base + 1, base + 2);
+        } else {
+          appendGridTriangleClippedToRect(positions, colors, indexList, triB, [swH, neH, nwH], halfW, halfH, field, relief);
+        }
+      }
+    }
+  }
+  return {
+    positions: Float32Array.from(positions),
+    colors: Float32Array.from(colors),
+    indices: Uint32Array.from(indexList),
+  };
 }
 
 function terrainBuffersCircle(field: TerrainField, sideM: number) {
@@ -710,12 +798,17 @@ export function terrainBuffers(
   field: TerrainField,
   sideM: number,
   frameShape: SiteFrameShape = "square",
+  frameSize?: FrameGroundSize,
 ): {
   positions: Float32Array;
   indices: Uint32Array;
   colors: Float32Array;
 } {
   if (frameShape === "circle") return terrainBuffersCircle(field, sideM);
+  const { halfW, halfH } = frameHalfExtents(sideM, frameShape, frameSize);
+  if (frameShape === "a3" || Math.abs(halfW - halfH) > 0.01) {
+    return terrainBuffersRect(field, sideM, halfW, halfH);
+  }
   return terrainBuffersSquare(field, sideM);
 }
 
@@ -785,6 +878,7 @@ export function basePlinthBuffers(
   sideM: number,
   terrain?: TerrainField | null,
   frameShape: SiteFrameShape = "square",
+  frameSize?: FrameGroundSize,
 ): {
   positions: Float32Array;
   normals: Float32Array;
@@ -793,31 +887,25 @@ export function basePlinthBuffers(
   bottomY: number;
   thicknessM: number;
 } {
-  const half = sideM / 2;
   const thicknessM = basePlinthThicknessM(sideM);
   const bottomY = basePlinthBottomY(sideM, terrain);
-  const relief = terrain ? Math.max(terrain.max - terrain.min, 0.001) : 1;
 
   const rawRing: Pt[] =
     frameShape === "circle"
       ? siteFramePolygon(sideM, "circle")[0]!.slice(0, -1).map(([x, y]) => [x, y] as Pt)
-      : [
-          [-half, -half],
-          [half, -half],
-          [half, half],
-          [-half, half],
-        ];
+      : siteFramePolygon(sideM, frameShape, frameSize)[0]!.slice(0, -1).map(([x, y]) => [x, y] as Pt);
 
   const positions: number[] = [];
   const normals: number[] = [];
   const colors: number[] = [];
   const edgePositions: number[] = [];
 
-  const topColorAt = (yTop: number): [number, number, number] =>
-    terrain ? shadeHeight((yTop - terrain.min) / relief, 0.94) : flatGroundRgb(0.95);
-  const bottomWallColor: [number, number, number] = terrain
-    ? shadeHeight(0, 0.86)
-    : flatGroundRgb(0.88);
+  const plinthWall = getColour("--plinth-wall");
+  const bottomWallColor: [number, number, number] = [
+    parseInt(plinthWall.slice(1, 3), 16) / 255,
+    parseInt(plinthWall.slice(3, 5), 16) / 255,
+    parseInt(plinthWall.slice(5, 7), 16) / 255,
+  ];
   const bottomCapColor: [number, number, number] = terrain
     ? shadeHeight(0, 0.82)
     : flatGroundRgb(0.84);
@@ -852,8 +940,6 @@ export function basePlinthBuffers(
       const p1 = subPts[j + 1]!;
       const yTop0 = terrain ? terrainMeshHeight(terrain, sideM, p0[0], p0[1]) : 0;
       const yTop1 = terrain ? terrainMeshHeight(terrain, sideM, p1[0], p1[1]) : 0;
-      const cTop0 = topColorAt(yTop0);
-      const cTop1 = topColorAt(yTop1);
 
       const x0 = p0[0];
       const z0 = -p0[1];
@@ -862,11 +948,11 @@ export function basePlinthBuffers(
 
       pushVertex(x0, bottomY, z0, nx, ny, nz, bottomWallColor);
       pushVertex(x1, bottomY, z1, nx, ny, nz, bottomWallColor);
-      pushVertex(x1, yTop1, z1, nx, ny, nz, cTop1);
+      pushVertex(x1, yTop1, z1, nx, ny, nz, bottomWallColor);
 
       pushVertex(x0, bottomY, z0, nx, ny, nz, bottomWallColor);
-      pushVertex(x1, yTop1, z1, nx, ny, nz, cTop1);
-      pushVertex(x0, yTop0, z0, nx, ny, nz, cTop0);
+      pushVertex(x1, yTop1, z1, nx, ny, nz, bottomWallColor);
+      pushVertex(x0, yTop0, z0, nx, ny, nz, bottomWallColor);
 
       edgePositions.push(x0, yTop0, z0, x1, yTop1, z1);
     }

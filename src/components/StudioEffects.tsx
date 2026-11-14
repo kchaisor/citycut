@@ -7,7 +7,13 @@ import { getColour } from "../lib/colours";
 import { markScreenOnly } from "../lib/screenOnly";
 import type { SiteFrameShape } from "../lib/siteFrame";
 import { qaModeFromSearch } from "../lib/qaCameraBridge";
-import { ambientOcclusionActive, studioAoActive, studioSmaaActive, type RenderQuality } from "../lib/renderQuality";
+import {
+  ambientOcclusionActive,
+  studioAoActive,
+  studioN8AoParams,
+  studioSmaaActive,
+  type RenderQuality,
+} from "../lib/renderQuality";
 
 function studioPostEnabled(): boolean {
   if (typeof window === "undefined") return true;
@@ -19,7 +25,10 @@ export const INTRO_ACTIVE_KEY = "citycutIntroActive";
 
 const REST_FRAMES = 8;
 
-type AoPass = { enabled: boolean; configuration: { gammaCorrection: boolean } };
+type AoPass = {
+  enabled: boolean;
+  configuration: { gammaCorrection: boolean; transparencyAware?: boolean };
+};
 
 export function useIntroSettled(): boolean {
   const scene = useThree((state) => state.scene);
@@ -76,7 +85,17 @@ class PostFxBoundary extends Component<{ children: ReactNode }, { failed: boolea
   }
 }
 
-function StudioComposer({ quality, noToneMapping, sideM }: { quality: RenderQuality; noToneMapping: boolean; sideM: number }) {
+function StudioComposer({
+  quality,
+  noToneMapping,
+  sideM,
+  primaryView,
+}: {
+  quality: RenderQuality;
+  noToneMapping: boolean;
+  sideM: number;
+  primaryView: boolean;
+}) {
   const aoRef = useRef<AoPass | null>(null);
   const moving = useCameraMoving();
   const qualityRef = useRef(quality);
@@ -85,6 +104,7 @@ function StudioComposer({ quality, noToneMapping, sideM }: { quality: RenderQual
     aoRef.current = pass;
     if (pass) {
       pass.configuration.gammaCorrection = false;
+      pass.configuration.transparencyAware = true;
       pass.enabled = false;
     }
   }, []);
@@ -94,7 +114,7 @@ function StudioComposer({ quality, noToneMapping, sideM }: { quality: RenderQual
     const on = ambientOcclusionActive(qualityRef.current, moving.current);
     if (pass.enabled !== on) pass.enabled = on;
   });
-  const aoRadius = Math.max(4, sideM * 0.012);
+  const ao = studioN8AoParams(sideM, primaryView);
   return (
     <EffectComposer multisampling={0} renderPriority={1}>
       {studioAoActive(quality) ? (
@@ -103,13 +123,13 @@ function StudioComposer({ quality, noToneMapping, sideM }: { quality: RenderQual
           enabled={quality === "high"}
           quality="performance"
           halfRes
-          aoSamples={14}
-          denoiseSamples={4}
-          denoiseRadius={10}
+          aoSamples={ao.aoSamples}
+          denoiseSamples={ao.denoiseSamples}
+          denoiseRadius={ao.denoiseRadius}
           depthAwareUpsampling
-          aoRadius={aoRadius}
-          distanceFalloff={1}
-          intensity={3.15}
+          aoRadius={ao.aoRadius}
+          distanceFalloff={ao.distanceFalloff}
+          intensity={ao.intensity}
         />
       ) : null}
       <ToneMapping mode={noToneMapping ? ToneMappingMode.LINEAR : ToneMappingMode.ACES_FILMIC} />
@@ -187,6 +207,7 @@ export function StudioEffects({
   showShadow,
   frameShape,
   colourTick,
+  primaryView,
 }: {
   quality: RenderQuality;
   noToneMapping: boolean;
@@ -195,6 +216,7 @@ export function StudioEffects({
   showShadow: boolean;
   frameShape: SiteFrameShape;
   colourTick: number;
+  primaryView: boolean;
 }) {
   const settled = useIntroSettled();
   if (!settled) return null;
@@ -203,7 +225,12 @@ export function StudioEffects({
       {showShadow ? <PlinthContactShadow sideM={sideM} plinthBottomY={plinthBottomY} frameShape={frameShape} colourTick={colourTick} /> : null}
       {studioPostEnabled() ? (
         <PostFxBoundary>
-          <StudioComposer quality={quality} noToneMapping={noToneMapping} sideM={sideM} />
+          <StudioComposer
+            quality={quality}
+            noToneMapping={noToneMapping}
+            sideM={sideM}
+            primaryView={primaryView}
+          />
         </PostFxBoundary>
       ) : null}
     </>

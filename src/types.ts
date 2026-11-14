@@ -76,6 +76,8 @@ export type BuildingFeat = {
   comMatchOverlapRatio?: number;
   importedMassing?: true;
   proposedMassing?: true;
+  importedMassingShadowCaster?: true;
+  importedMassingSkipShadow?: true;
   importedTopZ?: number;
   importedColour?: string;
   heightManual?: true;
@@ -186,7 +188,7 @@ export type TerrainField = {
   source: string;
 };
 
-export type SiteFrameShape = "square" | "circle";
+export type SiteFrameShape = "square" | "circle" | "a3";
 
 export type ModelRegion = "vic" | "nsw";
 
@@ -194,6 +196,10 @@ export type CityModel = {
   placeLabel: string;
   center: LonLat;
   sideM: number;
+  widthM?: number;
+  heightM?: number;
+  cutScale?: number;
+  cutOrientation?: "landscape" | "portrait";
   frameShape?: SiteFrameShape;
   layers: ModelLayers;
   buildings: BuildingFeat[];
@@ -242,6 +248,7 @@ export type CityModel = {
   nswWaterNote?: string | null;
   nswRoadSurface?: { nswCorridorM2: number; overtureM2: number } | null;
   nswUseMatched?: number;
+  importedMassingUpperLevels?: { z: number; lines: Pt[][] }[];
 };
 
 export type ViewState = {

@@ -9,6 +9,8 @@ import {
 } from "../lib/heliodonRadius";
 import { RESCODE_B43_STEP_MINUTES } from "../lib/solarAccessB43";
 import { SUN_HOURS_LOST_CELL_M } from "../lib/sunHoursLost";
+import { SUN_HOURS_GROUND_CELL_M } from "../lib/sunHoursGround";
+import { SunHoursGroundLegendList } from "./SunHoursGroundLegendList";
 import { SunHoursLostLegendList } from "./SunHoursLostLegendList";
 import { SUN_STUDY_SHADOW_ADDED_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "../lib/sunStudyPlan";
 import { PARK_NO_ADDITIONAL_TOLERANCE_M2, PARK_SOLAR_RULE_IDS, defaultParkRuleId, solarRuleDefinition } from "../lib/solarRuleRegistry";
@@ -37,6 +39,8 @@ export function SolarPanel({
   receptorAssessPending = false,
   onClearReceptors,
   sunHoursLostPending = false,
+  sunHoursGroundPending = false,
+  sunHoursGroundMaxHours = 0,
   parkGreenAreas = [],
   onAddParkFromArea,
   parkReceptorCount = 0,
@@ -55,6 +59,8 @@ export function SolarPanel({
   receptorAssessPending?: boolean;
   onClearReceptors?: () => void;
   sunHoursLostPending?: boolean;
+  sunHoursGroundPending?: boolean;
+  sunHoursGroundMaxHours?: number;
   parkGreenAreas?: { areaId: number; label: string }[];
   onAddParkFromArea?: (areaId: number) => void;
   parkReceptorCount?: number;
@@ -92,6 +98,7 @@ export function SolarPanel({
           <li>Draw proposed <strong>massing</strong> on 3D or plan first (shadows need a proposal).</li>
           <li>Turn on <strong>B4-3</strong>, tick <strong>Mark receptor areas</strong>, drag yard rectangles on the site plan.</li>
           <li>Optional: <strong>Park / public realm</strong> — pick a rule, add from green areas or draw a park receptor; gold hatch shows added shadow on the park.</li>
+          <li>Optional: <strong>Ground sun-hours heatmap</strong> (full daylight, site-wide). Separate from hours-lost impact.</li>
           <li>Optional: <strong>Hours lost heatmap</strong> (22 Sep, needs massing). Results stack in the plan dock.</li>
           <li>Optional: <strong>Sun study</strong> (9am–3pm layers). <strong>Trees cast shadow</strong> is visual only (compliance ignores trees).</li>
           <li><strong>Quick export SVG</strong> in Drawing downloads shadow, receptor, and park layers.</li>
@@ -266,6 +273,34 @@ export function SolarPanel({
           />
           Trees cast shadow (visual only)
         </label>
+        <label className="check-field">
+          <input
+            type="checkbox"
+            data-sun-hours-ground-toggle
+            checked={Boolean(settings.sunHours)}
+            onChange={(event) => {
+              const on = event.target.checked;
+              patch({
+                sunHours: on,
+                month: on ? 6 : settings.month,
+                day: on ? 21 : settings.day,
+                castShadows: on ? true : settings.castShadows,
+              });
+            }}
+          />
+          Direct Sun Hours (ground, roofs, walls)
+        </label>
+        {settings.sunHours && (
+          <SunHoursGroundLegendList
+            maxHours={sunHoursGroundMaxHours}
+            pending={sunHoursGroundPending}
+          />
+        )}
+        {settings.sunHours && (
+          <p className="field-note" data-sun-hours-ground-panel-note>
+            Full sunrise–sunset at 15-minute steps · {SUN_HOURS_GROUND_CELL_M} m site grid · uses Solar study date (default 21 Jun winter).
+          </p>
+        )}
         <label className="check-field">
           <input
             type="checkbox"
