@@ -54,6 +54,36 @@ function waitForHttp(url: string, timeoutMs = 60_000): Promise<void> {
   });
 }
 
+async function switchView(page: Page, name: "3D model" | "Drawing") {
+  const tab = page.getByRole("tab", { name });
+  if (await tab.isVisible().catch(() => false)) {
+    await tab.evaluate((el) => (el as HTMLButtonElement).click());
+    return;
+  }
+  await page.locator(".model .topbar-view-select").selectOption(name === "3D model" ? "3d" : "drawing");
+}
+
+async function assertMontAlbertPlaceUnclipped(page: Page) {
+  const place = await page.evaluate(() => {
+    const chip = document.querySelector(".model .top-bar-left .place-chip.studio-breadcrumb-place");
+    if (!(chip instanceof HTMLElement)) return { ok: false, reason: "missing place chip" };
+    const text = chip.textContent?.trim() ?? "";
+    const full = "Mont Albert North";
+    const notClipped = chip.scrollWidth <= chip.clientWidth + 1;
+    return {
+      ok: text === full && notClipped,
+      text,
+      notClipped,
+      scrollWidth: chip.scrollWidth,
+      clientWidth: chip.clientWidth,
+    };
+  });
+  expect(
+    place.ok,
+    `${place.text} clipped=${place.notClipped} (${place.scrollWidth}>${place.clientWidth})`,
+  ).toBe(true);
+}
+
 async function openModel(page: Page, baseUrl: string, cut: typeof DANDENONG) {
   const q = new URLSearchParams({
     lat: String(cut.lat),
@@ -132,30 +162,30 @@ describe("top bar design polish", () => {
     520_000,
   );
 
-  it(
-    "shows the full Mont Albert North place label at 1440 in 3D",
-    async () => {
-      const browser = await chromium.launch();
-      const page = await browser.newPage();
-      page.setDefaultTimeout(360_000);
-      try {
-        await openModel(page, baseUrl, MONT_ALBERT);
-        await page.setViewportSize({ width: 1440, height: 800 });
-        await page.waitForTimeout(400);
-
-        const place = await page.evaluate(() => {
-          const chip = document.querySelector(".model .top-bar-left .place-chip.studio-breadcrumb-place");
-          if (!(chip instanceof HTMLElement)) return { ok: false, reason: "missing place chip" };
-          const text = chip.textContent?.trim() ?? "";
-          const full = "Mont Albert North";
-          const notClipped = chip.scrollWidth <= chip.clientWidth + 1;
-          return { ok: text === full && notClipped, text, notClipped };
-        });
-        expect(place.ok, `${place.text} clipped=${place.notClipped}`).toBe(true);
-      } finally {
-        await browser.close();
-      }
-    },
-    520_000,
-  );
+  for (const width of [1360, 1440] as const) {
+    for (const view of ["3D model", "Drawing"] as const) {
+      it(
+        `shows full Mont Albert North place chip at ${width} in ${view}`,
+        async () => {
+          const browser = await chromium.launch();
+          const page = await browser.newPage();
+          page.setDefaultTimeout(360_000);
+          try {
+            await openModel(page, baseUrl, MONT_ALBERT);
+            await page.setViewportSize({ width, height: 800 });
+            await page.waitForTimeout(400);
+            if (view === "Drawing") {
+              await switchView(page, "Drawing");
+              await page.waitForSelector("svg.plan", { timeout: 120_000 });
+              await page.waitForTimeout(300);
+            }
+            await assertMontAlbertPlaceUnclipped(page);
+          } finally {
+            await browser.close();
+          }
+        },
+        520_000,
+      );
+    }
+  }
 });
