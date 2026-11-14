@@ -886,6 +886,62 @@ input[type="range"]::-moz-range-thumb {
   line-height: 1.35;
   color: var(--muted-text);
 }
+.wind-rose-meta-note {
+  font-size: 11px;
+  opacity: 0.92;
+}
+.wind-rose-analysis-card {
+  position: absolute;
+  left: 16px;
+  bottom: 148px;
+  z-index: 6;
+  width: min(280px, calc(100vw - 32px));
+  padding: 10px 12px 12px;
+  border-radius: 10px;
+  background: rgba(255, 252, 248, 0.94);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+.model[data-env-console="1"] .wind-rose-analysis-card {
+  bottom: max(148px, calc(var(--env-console-height, 148px) + 12px));
+}
+.wind-rose-panel {
+  margin: 0;
+}
+.wind-rose-panel-svg {
+  display: block;
+  width: min(220px, 100%);
+  height: auto;
+  margin: 0 auto;
+}
+.wind-rose-legend {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 10px;
+  font-size: 11px;
+  color: var(--muted-text);
+}
+.wind-rose-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wind-rose-legend .wind-band-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.wind-rose-meta {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted-text);
+}
 .wind-reduced-motion-note {
   margin-top: 6px;
   padding-top: 6px;

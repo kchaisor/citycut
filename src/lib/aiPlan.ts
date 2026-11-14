@@ -258,7 +258,7 @@ export type SitePlanExportOptions = {
   uniformBuildings?: boolean;
   highlightManual?: boolean;
   colourBySource?: boolean;
-  wind?: { table: import("./windRose").WindRoseTable; period: import("./windRose").WindPeriodId } | null;
+  wind?: { selection: import("./windRoseData").SiteWindSelection; period: import("./windRose").WindPeriodId } | null;
   sunStudy?: { layers: { hour: number; rings: Ring[][] }[] } | null;
   sectionKnife?: import("./sectionKnife/state").SectionKnifeToolState | null;
   sunStudyDate?: SunStudyDate | null;
@@ -561,7 +561,9 @@ export function sitePlanChunks(
       }),
     });
   }
-  if (resolved.wind?.table) chunks.push(windPlanPdfChunk(resolved.wind.table, resolved.wind.period, layout, model.sideM));
+  if (resolved.wind?.selection) {
+    chunks.push(windPlanPdfChunk(resolved.wind.selection, resolved.wind.period, layout, model.sideM));
+  }
   chunks.push(frameStroke(layout, style.frame));
   if (heliodon) {
     const studyDate =
@@ -585,7 +587,7 @@ export function sitePlanChunks(
       plan.contourInterval,
       style.annotation,
       plan.contourSource,
-      Boolean(resolved.wind?.table),
+      Boolean(resolved.wind?.selection),
     ),
   );
   return chunks;

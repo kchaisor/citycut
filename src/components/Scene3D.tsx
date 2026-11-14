@@ -113,7 +113,9 @@ const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
 import { GroundWindFlow } from "./GroundWindFlow";
 import { InspectHudProjector, type InspectHudScreen } from "./InspectHudProjector";
-import { analyzeWindPeriod, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
+import type { WindPeriodId } from "../lib/windRose";
+import type { SiteWindSelection } from "../lib/windRoseData";
+import { analyzeSiteWind } from "../lib/windRoseStats";
 import type { CityModel } from "../types";
 
 export type SceneExporter = {
@@ -2093,13 +2095,13 @@ export function Cameras({
 
 function WindLayer({
   model,
-  table,
+  siteWind,
   period,
   enabled,
   animateStreaks,
 }: {
   model: CityModel;
-  table: WindRoseTable | null;
+  siteWind: SiteWindSelection | null;
   period: WindPeriodId;
   enabled: boolean;
   animateStreaks: boolean;
@@ -2111,7 +2113,7 @@ function WindLayer({
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
   if (!enabled) return null;
-  const stats = table ? analyzeWindPeriod(table, period) : null;
+  const stats = siteWind ? analyzeSiteWind(siteWind, period) : null;
   return (
     <GroundWindFlow model={model} stats={stats} animate={visible && animateStreaks} />
   );
@@ -2128,7 +2130,7 @@ export function Scene3D({
   snapId,
   solar,
   windEnabled,
-  windTable,
+  siteWind,
   windPeriod,
   windAnimateStreaks,
   onExportReady,
@@ -2162,7 +2164,7 @@ export function Scene3D({
   snapId: number;
   solar: SolarViewSettings;
   windEnabled: boolean;
-  windTable: WindRoseTable | null;
+  siteWind: SiteWindSelection | null;
   windPeriod: WindPeriodId;
   windAnimateStreaks: boolean;
   onExportReady: (exporter: SceneExporter | null) => void;
@@ -2357,7 +2359,7 @@ export function Scene3D({
       {onCompassNeedle ? <StudioCompassTracker onNeedle={onCompassNeedle} /> : null}
       <WindLayer
         model={model}
-        table={windTable}
+        siteWind={siteWind}
         period={windPeriod}
         enabled={windEnabled}
         animateStreaks={windAnimateStreaks}

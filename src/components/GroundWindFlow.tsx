@@ -226,10 +226,13 @@ export function GroundWindFlow({
   stats: WindPeriodStats | null;
   animate: boolean;
 }) {
-  const sector = stats?.prevailingSector;
-  const base = useMemo(() => groundWindBaseVector(sector), [sector]);
+  const targetBase = useMemo(() => groundWindBaseVector(stats?.prevailingSector), [stats?.prevailingSector]);
+  const baseRef = useRef(targetBase);
   const medianKmh = stats?.prevailingMedianKmh && stats.prevailingMedianKmh > 0 ? stats.prevailingMedianKmh : 18;
-  const metresPerSecond = groundWindMetresPerSecond(model.sideM, stats?.prevailingMedianKmh);
+  const metresPerSecond = groundWindMetresPerSecond(
+    model.sideM,
+    stats?.prevailingMeanSpeedMs ? stats.prevailingMeanSpeedMs * 3.6 : stats?.prevailingMedianKmh,
+  );
   const heightAt = useCallback((east: number, north: number) => groundWindHeightAt(model, east, north), [model]);
   const frozen = !animate || reducedMotionPreferred();
   const frozenRef = useRef(frozen);
@@ -333,18 +336,37 @@ export function GroundWindFlow({
   );
 
   useEffect(() => {
-    builderRef.current = createGroundWindFieldBuilder(model, base);
+    builderRef.current = createGroundWindFieldBuilder(model, baseRef.current);
     fieldRef.current = null;
     particlesRef.current = null;
     geometry.instanceCount = 0;
     invalidate();
-  }, [model, base, geometry, invalidate]);
+  }, [model, geometry, invalidate]);
 
   useEffect(() => {
     if (!frozen) invalidate();
   }, [frozen, invalidate]);
 
   useFrame((_, delta) => {
+    const cur = baseRef.current;
+    const dot = cur.east * targetBase.east + cur.north * targetBase.north;
+    const cross = cur.east * targetBase.north - cur.north * targetBase.east;
+    const angle = Math.atan2(cross, dot);
+    if (Math.abs(angle) > 0.001) {
+      const step = Math.sign(angle) * Math.min(Math.abs(angle), delta * 1.6);
+      const cos = Math.cos(step);
+      const sin = Math.sin(step);
+      const next = {
+        east: cur.east * cos - cur.north * sin,
+        north: cur.east * sin + cur.north * cos,
+      };
+      baseRef.current = next;
+      if (fieldRef.current) fieldRef.current.base = next;
+    } else if (cur.east !== targetBase.east || cur.north !== targetBase.north) {
+      baseRef.current = targetBase;
+      if (fieldRef.current) fieldRef.current.base = targetBase;
+    }
+
     const builder = builderRef.current;
     if (!fieldRef.current && builder) {
       if (!builder.step(FIELD_BUDGET_MS)) {

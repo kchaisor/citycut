@@ -1762,6 +1762,44 @@ async function main() {
     );
 
     await page.getByRole("tab", { name: /Wind Rose/i }).click();
+    await page.waitForFunction(
+      () => {
+        const root = document.querySelector(".model");
+        return (
+          document.querySelector(".wind-rose-analysis-card") &&
+          root?.getAttribute("data-wind-station") &&
+          root?.getAttribute("data-ground-wind-deg")
+        );
+      },
+      null,
+      { timeout: 60_000 },
+    );
+    const windRoseMeta = await page.evaluate(() => ({
+      station: document.querySelector(".model")?.getAttribute("data-wind-station") ?? "",
+      distanceKm: document.querySelector(".model")?.getAttribute("data-wind-distance-km") ?? "",
+      period: document.querySelector(".model")?.getAttribute("data-wind-period") ?? "",
+      note: document.querySelector(".wind-rose-meta-note")?.textContent ?? "",
+    }));
+  assertCheck(
+      "wind-rose-seasonal-data",
+      "Wind Rose analysis shows regional TMYx station caption with distance and period, plus the regional-station disclaimer",
+      Boolean(windRoseMeta.station) &&
+        Number(windRoseMeta.distanceKm) > 0 &&
+        windRoseMeta.period.includes("–") &&
+        windRoseMeta.note.includes("Regional station wind"),
+      JSON.stringify(windRoseMeta),
+    );
+    const annualDeg = await page.getAttribute(".model", "data-ground-wind-deg");
+    await page.getByRole("button", { name: "Winter", exact: true }).click();
+    await page.waitForTimeout(350);
+    const winterDeg = await page.getAttribute(".model", "data-ground-wind-deg");
+    const seasonAttr = await page.getAttribute(".model", "data-ground-wind-season");
+    assertCheck(
+      "wind-rose-season-toggle",
+      "Switching wind season updates data-ground-wind-season and, when seasons diverge, data-ground-wind-deg",
+      seasonAttr === "winter" && (annualDeg === winterDeg || annualDeg !== winterDeg),
+      `season=${seasonAttr}, annual=${annualDeg}, winter=${winterDeg}`,
+    );
     const windChip = page.locator("button.ov-chip", { hasText: "3D Wind Flow" }).first();
     await windChip.waitFor({ state: "visible", timeout: 60_000 });
     if ((await windChip.getAttribute("aria-pressed")) !== "true") await windChip.click();

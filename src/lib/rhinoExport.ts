@@ -14,7 +14,9 @@ import { buildHeliodonGroundOverlay, type HeliodonGroundExportOptions } from "./
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { comTreesCreditLine } from "./comTreesCredit";
 import { contourIsIndex, demContourLayer } from "./vicmapContours";
-import { analyzeWindPeriod, sectorCenterDeg, type WindPeriodId, type WindRoseTable } from "./windRose";
+import { sectorCenterDeg, type WindPeriodId } from "./windRose";
+import type { SiteWindSelection } from "./windRoseData";
+import { analyzeSiteWind, stackedSectorArmLength } from "./windRoseStats";
 import { plainDataCredit } from "./dataCredits";
 import { windFlowArrowPolylines } from "./windArrowGeometry";
 import { dashSegments } from "./drawingStyle";
@@ -666,22 +668,24 @@ function addWindRose(
   materials: Map<string, number>,
   model: CityModel,
   zone: number,
-  table: WindRoseTable,
+  selection: SiteWindSelection,
   period: WindPeriodId,
 ) {
-  const stats = analyzeWindPeriod(table, period);
+  const stats = analyzeSiteWind(selection, period);
+  if (!stats) return;
   const z = (model.terrain ? model.terrain.min : 0) + 0.2;
   const layerIndex = ensureLayer(rhino, doc, layers, materials, "Wind", layerColors().Wind);
   const half = model.sideM / 2;
   const radius = model.sideM * 0.08;
   const cx = half * 0.72;
   const cy = -half * 0.72;
-  const maxFreq = Math.max(...stats.sectorFrequency, 0.001);
+  const arms = stats.sectorSpeedBins?.map((_, s) => stackedSectorArmLength(stats, s)) ?? stats.sectorFrequency;
+  const maxArm = Math.max(...arms, 0.001);
 
-  for (let sector = 0; sector < stats.sectorFrequency.length; sector++) {
-    const freq = stats.sectorFrequency[sector] ?? 0;
+  for (let sector = 0; sector < arms.length; sector++) {
+    const freq = arms[sector] ?? 0;
     if (freq <= 0) continue;
-    const r = (freq / maxFreq) * radius;
+    const r = (freq / maxArm) * radius;
     const centre = sectorCenterDeg(sector);
     const halfAngle = 22.5 / 2;
     const points: number[][] = [[cx, cy, z]];
@@ -858,7 +862,7 @@ export type CityModelTo3dmOptions = {
   castShadows?: boolean;
   uniformBuildings?: boolean;
   colourBySource?: boolean;
-  wind?: { table: WindRoseTable; period: WindPeriodId } | null;
+  wind?: { selection: SiteWindSelection; period: WindPeriodId } | null;
   hideTrees?: boolean;
   importedMassing?: ImportedMassingExport[] | null;
   /**
@@ -1008,7 +1012,7 @@ export async function cityModelTo3dm(
   const doc = new rhino.File3dm();
   try {
     group.updateMatrixWorld(true);
-    const { zone: crsZone } = applyRhinoMgaDocumentSettings(rhino, doc, model, { windOn: Boolean(wind?.table) });
+    const { zone: crsZone } = applyRhinoMgaDocumentSettings(rhino, doc, model, { windOn: Boolean(wind?.selection) });
 
     const layers = new Map<string, number>();
     const materials = new Map<string, number>();
@@ -1025,7 +1029,7 @@ export async function cityModelTo3dm(
     addContours(rhino, doc, layers, materials, model, crsZone);
     if (heliodon) addHeliodonPlan(rhino, doc, layers, materials, model, crsZone, heliodon);
     if (shadows) addPlanShadows(rhino, doc, layers, materials, model, crsZone, shadows, Boolean(castShadows));
-    if (wind?.table) addWindRose(rhino, doc, layers, materials, model, crsZone, wind.table, wind.period);
+    if (wind?.selection) addWindRose(rhino, doc, layers, materials, model, crsZone, wind.selection, wind.period);
     if (importedMassing?.length) addImportedMassing(rhino, doc, layers, materials, importedMassing);
 
     return doc.toByteArray();

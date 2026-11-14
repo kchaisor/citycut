@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { WIND_PERIOD_LABELS, monthPeriodLabel, type WindPeriodId } from "../lib/windRose";
+import { WIND_PERIOD_LABELS, type WindPeriodId } from "../lib/windRose";
 import type { WindViewSettings } from "../lib/windState";
 import { WindReducedMotionNote } from "./WindReducedMotionNote";
 
@@ -9,10 +9,6 @@ const PERIOD_OPTIONS: { id: WindPeriodId; label: string }[] = [
   { id: "autumn", label: WIND_PERIOD_LABELS.autumn },
   { id: "winter", label: WIND_PERIOD_LABELS.winter },
   { id: "spring", label: WIND_PERIOD_LABELS.spring },
-  ...([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const).map((m) => ({
-    id: `month-${m}` as WindPeriodId,
-    label: monthPeriodLabel(m),
-  })),
 ];
 
 export function WindPanel({
