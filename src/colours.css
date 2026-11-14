@@ -34,6 +34,11 @@
   --imported-massing: #FFFFFF;
   --imported-massing-upper-stroke: #6E6E6E;
   --imported-massing-upper-tone: #E6E6E6;
+  --stored-site-structure: #B8BFC8;
+  --stored-site-structure-stroke: #4A4F57;
+  --stored-site-bridge-pylon: #1C1B17;
+  --stored-site-bridge-cable: #4A4F57;
+  --stored-site-bridge-cable-stroke: #4A4F57;
   --switch-knob: #000000;
 
   --site-building-edge: #3D3010;
@@ -133,6 +138,7 @@
   --outline-rail: #000000;
   --outline-tram: #000000;
   --outline-contour: #000000;
+  --contour-3d-stroke: #B8B2A7;
 
   --tram-line-stroke: #000000;
 

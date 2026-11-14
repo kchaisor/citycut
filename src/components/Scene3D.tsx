@@ -14,7 +14,7 @@ import * as THREE from "three";
 import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
-import { attachScenePointPick } from "../lib/buildingPick";
+import { attachBuildingPick, attachScenePointPick } from "../lib/buildingPick";
 import { attachSceneInspectPick, type SceneInspectWorld, type SceneSelection } from "../lib/sceneInspectPick";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { basePlinthBottomY } from "../lib/terrain";
@@ -70,6 +70,7 @@ import {
   sitePlanBounds,
 } from "../lib/planCamera";
 import { qaModeFromSearch, registerQaCameraBridge, type QaCameraPose } from "../lib/qaCameraBridge";
+import { auditRozelleViewportQa } from "../lib/rozelleViewportQa";
 import { createQaPerfBridge, registerQaPerfBridge, tickPerfSample } from "../lib/qaPerfBridge";
 import {
   patchSceneContinuousFlags,
@@ -86,6 +87,9 @@ import {
   primaryViewportLighting,
 } from "../lib/primaryViewport";
 import { applyWhiteCardGroundTint, snapshotWhiteCardTerrainColors } from "../lib/whiteCardViewport";
+import { syncStoredSiteViewport } from "../lib/storedSiteViewport";
+import { addStoredSiteEdges } from "../lib/storedSiteEdges";
+import { StoredSiteBridgeCables } from "../lib/storedSiteLayers/StoredSiteBridgeCables";
 import { studioNorthNeedleDeg } from "../lib/studioCompass";
 import {
   DEFAULT_PERSPECTIVE_OFFSET,
@@ -191,6 +195,16 @@ function computeIntroTreeWaveScale(elapsedSec: number): number {
 const scratch = new THREE.Vector3();
 
 const STUDIO_FILL_RATIO = 0.28;
+
+function viewportBoundsFromCityAndStored(city: Aabb, stored: THREE.Object3D | null | undefined): Aabb {
+  if (!stored) return city;
+  return unionAabb(city, measureCity(stored));
+}
+
+function boundsMeaningfullyChanged(a: Aabb, b: Aabb): boolean {
+  const d = (i: number) => Math.abs(a.max[i]! - b.max[i]!) + Math.abs(a.min[i]! - b.min[i]!);
+  return d(0) > 0.5 || d(1) > 0.5 || d(2) > 0.5;
+}
 
 function measureCity(group: THREE.Object3D): Aabb {
   const box = new THREE.Box3().setFromObject(group);
@@ -330,6 +344,26 @@ function SceneContinuousBridge({
       state.invalidate();
     }
   });
+  return null;
+}
+
+function BuildingPickLayer({
+  root,
+  enabled,
+  onBuildingPick,
+  onClearPick,
+}: {
+  root: THREE.Object3D;
+  enabled: boolean;
+  onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
+  onClearPick?: () => void;
+}) {
+  const camera = useThree((state) => state.camera);
+  const gl = useThree((state) => state.gl);
+  useLayoutEffect(() => {
+    if (!enabled) return;
+    return attachBuildingPick(gl.domElement, camera, root, { onBuildingPick, onClearPick });
+  }, [camera, enabled, gl.domElement, onBuildingPick, onClearPick, root]);
   return null;
 }
 
@@ -496,6 +530,75 @@ function WalkRippleTreeDim({ city, active }: { city: THREE.Group; active: boolea
   return null;
 }
 
+function StoredSiteMeshesViewport({
+  root,
+  model,
+  colourMode,
+  display,
+  solarDiagramOn,
+  solarNeutralFill,
+  colourTick,
+}: {
+  root: THREE.Object3D;
+  model: CityModel;
+  colourMode: BuildingColourMode;
+  display: View3dDisplaySettings;
+  solarDiagramOn: boolean;
+  solarNeutralFill: string;
+  colourTick: number;
+}) {
+  const { invalidate } = useThree();
+  useLayoutEffect(() => {
+    syncStoredSiteViewport(root, model.buildings, colourMode, display.primaryView, solarDiagramOn, solarNeutralFill);
+    invalidate();
+  }, [
+    root,
+    model.buildings,
+    colourMode,
+    display.primaryView,
+    solarDiagramOn,
+    solarNeutralFill,
+    colourTick,
+    invalidate,
+  ]);
+  return null;
+}
+
+function RozelleViewportQaPublisher({ sideM, projection }: { sideM: number; projection: ProjectionMode }) {
+  const scene = useThree((state) => state.scene);
+  useLayoutEffect(() => {
+    if (typeof window === "undefined" || !qaModeFromSearch(window.location.search)) return;
+    const publish = () => {
+      window.__citycutRozelleViewportQa = auditRozelleViewportQa(scene, sideM / 2, projection);
+    };
+    publish();
+    const frame = requestAnimationFrame(publish);
+    return () => cancelAnimationFrame(frame);
+  }, [scene, sideM, projection]);
+  return null;
+}
+
+function StoredSiteEdgesLayer({
+  root,
+  showOutlines,
+  buildingsVisible,
+  projection,
+}: {
+  root: THREE.Object3D;
+  showOutlines: boolean;
+  buildingsVisible: boolean;
+  projection: ProjectionMode;
+}) {
+  const { invalidate } = useThree();
+  useLayoutEffect(() => {
+    addStoredSiteEdges(root);
+    const edges = root.getObjectByName("StoredSiteEdges");
+    if (edges) edges.visible = showOutlines && buildingsVisible && projection !== "plan";
+    invalidate();
+  }, [root, showOutlines, buildingsVisible, projection, invalidate]);
+  return null;
+}
+
 function City({
   model,
   uniformBuildings,
@@ -611,6 +714,7 @@ function City({
     model.siteBuildingIds,
     model.blocks,
     model.nswRoadSurface,
+    model.storedSiteLayer,
     uniformBuildings,
     colourBySource,
     highlightManual,
@@ -860,7 +964,6 @@ function City({
     if (clampedElapsed >= INTRO_HOLD_RELEASE_SEC || done) {
       const modelRoot = state.gl.domElement.closest(".model");
       if (modelRoot?.hasAttribute("data-intro-hold")) {
-        modelRoot.removeAttribute("data-intro-hold");
         modelRoot.dispatchEvent(new CustomEvent("citycut:intro-hold-release"));
       }
     }
@@ -970,9 +1073,9 @@ function City({
   );
   useLayoutEffect(() => {
     if (!contours) return;
-    const mat = contours.material as THREE.LineDashedMaterial | undefined;
+    const mat = contours.material as THREE.LineBasicMaterial | undefined;
     if (mat?.color) {
-      mat.color.setStyle(getColour("--outline-contour"));
+      mat.color.setStyle(getColour("--contour-3d-stroke"));
       invalidate();
     }
   }, [contours, colourTick, invalidate]);
@@ -1866,6 +1969,7 @@ export function Cameras({
   gizmoOrbitLock = false,
   frameWidthM,
   frameHeightM,
+  boundsFitEpoch = 0,
 }: {
   side: number;
   lift: number;
@@ -1887,6 +1991,7 @@ export function Cameras({
   gizmoOrbitLock?: boolean;
   frameWidthM: number;
   frameHeightM: number;
+  boundsFitEpoch?: number;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
@@ -1898,6 +2003,12 @@ export function Cameras({
   const planFitKey = useRef<string | null>(null);
   const fittedKeys = useMemo(() => ({ persp: perspFitKey, iso: isoFitKey, plan: planFitKey }), []);
   const [ready, setReady] = useState(false);
+  useLayoutEffect(() => {
+    if (boundsFitEpoch < 1) return;
+    isoFitKey.current = null;
+    planFitKey.current = null;
+    perspFitKey.current = null;
+  }, [boundsFitEpoch]);
   useLayoutEffect(() => {
     const persp = perspRef.current;
     const ortho = orthoRef.current;
@@ -2128,6 +2239,8 @@ export function Scene3D({
   windPeriod,
   windAnimateStreaks,
   onExportReady,
+  onBuildingPick,
+  onClearBuildingPick,
   onSceneInspectPick,
   onClearSceneInspect,
   inspectAnchor,
@@ -2137,6 +2250,7 @@ export function Scene3D({
   cameraMemory,
   display,
   importedMassing = null,
+  storedSiteMeshes = null,
   walkLayer = null,
   walkRippleLayer = null,
   walkRippleTint = null,
@@ -2162,6 +2276,8 @@ export function Scene3D({
   windPeriod: WindPeriodId;
   windAnimateStreaks: boolean;
   onExportReady: (exporter: SceneExporter | null) => void;
+  onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
+  onClearBuildingPick?: () => void;
   onSceneInspectPick: (selection: SceneSelection) => void;
   onClearSceneInspect?: () => void;
   inspectAnchor: SceneInspectWorld | null;
@@ -2171,6 +2287,7 @@ export function Scene3D({
   cameraMemory?: CameraMemoryRef;
   display: View3dDisplaySettings;
   importedMassing?: THREE.Object3D | null;
+  storedSiteMeshes?: THREE.Object3D | null;
   walkLayer?: THREE.Object3D | null;
   walkRippleLayer?: THREE.Object3D | null;
   walkRippleTint?: WalkRippleBuildingTint | null;
@@ -2183,16 +2300,34 @@ export function Scene3D({
   quality?: RenderQuality;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
-  const onBounds = useCallback((bounds: Aabb) => {
-    boundsRef.current = bounds;
-    if (typeof document === "undefined") return;
-    const canvas = document.querySelector(".scene-viewport canvas");
-    if (!(canvas instanceof HTMLElement)) return;
-    const spanX = bounds.max[0] - bounds.min[0];
-    const spanZ = bounds.max[2] - bounds.min[2];
-    canvas.dataset.citycutGroundSpanX = spanX.toFixed(3);
-    canvas.dataset.citycutGroundSpanZ = spanZ.toFixed(3);
-  }, []);
+  const cityBoundsRef = useRef<Aabb | null>(null);
+  const [boundsFitEpoch, setBoundsFitEpoch] = useState(0);
+  const publishViewportBounds = useCallback(
+    (cityBounds: Aabb) => {
+      cityBoundsRef.current = cityBounds;
+      const merged = viewportBoundsFromCityAndStored(cityBounds, storedSiteMeshes);
+      const prev = boundsRef.current;
+      boundsRef.current = merged;
+      if (prev && boundsMeaningfullyChanged(prev, merged)) {
+        setBoundsFitEpoch((epoch) => epoch + 1);
+      }
+      if (typeof document === "undefined") return;
+      const canvas = document.querySelector(".scene-viewport canvas");
+      if (!(canvas instanceof HTMLElement)) return;
+      const city = cityBoundsRef.current ?? cityBounds;
+      const spanX = city.max[0] - city.min[0];
+      const spanZ = city.max[2] - city.min[2];
+      canvas.dataset.citycutGroundSpanX = spanX.toFixed(3);
+      canvas.dataset.citycutGroundSpanZ = spanZ.toFixed(3);
+    },
+    [storedSiteMeshes],
+  );
+  const onBounds = publishViewportBounds;
+  useLayoutEffect(() => {
+    const city = cityBoundsRef.current;
+    if (!city || !storedSiteMeshes) return;
+    publishViewportBounds(city);
+  }, [storedSiteMeshes, publishViewportBounds]);
   const [sectionKnifeGizmoInteraction, setSectionKnifeGizmoInteraction] = useState<SectionKnifeGizmoInteraction>(
     () => idleSectionKnifeGizmoInteraction,
   );
@@ -2208,6 +2343,14 @@ export function Scene3D({
   const groundY = model.terrain ? model.terrain.min : 0;
   const plinthBottomY = basePlinthBottomY(model.sideM, model.terrain);
   const solarNeutralFill = useMemo(() => getColour("--building-solar-neutral"), [colourTick]);
+  const colourMode = useMemo<BuildingColourMode>(
+    () => ({
+      colourByUse: !uniformBuildings && !colourBySource,
+      uniformBuildings,
+      colourBySource,
+    }),
+    [uniformBuildings, colourBySource],
+  );
   const sunSample = useMelbourneSunSample(model.center.lat, model.center.lon, solar);
   const [glEpoch, setGlEpoch] = useState(0);
   const [glContextLost, setGlContextLost] = useState(false);
@@ -2236,8 +2379,9 @@ export function Scene3D({
     let top = model.terrain ? model.terrain.max : 0;
     const base = model.terrain ? model.terrain.max : 0;
     for (const building of model.buildings) top = Math.max(top, base + building.height);
+    if (storedSiteMeshes) top = Math.max(top, measureCity(storedSiteMeshes).max[1]!);
     return top;
-  }, [model]);
+  }, [model, storedSiteMeshes]);
   const gizmoCursorClass =
     sectionKnifeGizmoInteraction.cursor === "grabbing"
       ? " section-knife-gizmo-grabbing"
@@ -2333,6 +2477,33 @@ export function Scene3D({
         walkRippleArrivals={walkRippleArrivals}
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
+      {storedSiteMeshes ? (
+        <>
+          <primitive object={storedSiteMeshes} />
+          <StoredSiteMeshesViewport
+            root={storedSiteMeshes}
+            model={model}
+            colourMode={colourMode}
+            display={display}
+            solarDiagramOn={solar.showPath}
+            solarNeutralFill={solarNeutralFill}
+            colourTick={colourTick}
+          />
+          <StoredSiteEdgesLayer
+            root={storedSiteMeshes}
+            showOutlines={display.showOutlines}
+            buildingsVisible={isLayer3dVisible(display, "buildings")}
+            projection={projection}
+          />
+          <BuildingPickLayer
+            root={storedSiteMeshes}
+            enabled={model.layers.buildings && !onScenePoint}
+            onBuildingPick={onBuildingPick}
+            onClearPick={onClearBuildingPick}
+          />
+          <StoredSiteBridgeCables model={model} projection={projection} />
+        </>
+      ) : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
       {walkRippleLayer ? <primitive object={walkRippleLayer} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
@@ -2349,6 +2520,9 @@ export function Scene3D({
         enabled={inspectAnchor != null}
         onScreen={onInspectHudScreen}
       />
+      {qaModeFromSearch(typeof window === "undefined" ? "" : window.location.search) ? (
+        <RozelleViewportQaPublisher sideM={model.sideM} projection={projection} />
+      ) : null}
       {onCompassNeedle ? <StudioCompassTracker onNeedle={onCompassNeedle} /> : null}
       <WindLayer
         model={model}
@@ -2378,6 +2552,7 @@ export function Scene3D({
         cameraMemory={cameraMemory}
         introEnabled
         gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock}
+        boundsFitEpoch={boundsFitEpoch}
       />
       </Canvas>
     </div>

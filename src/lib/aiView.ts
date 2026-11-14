@@ -639,7 +639,7 @@ function collect(
   }
 
   for (const building of model.buildings) {
-    if (building.meshDrawnBy != null) continue;
+    if (building.meshDrawnBy != null || building.storedSiteMesh) continue;
     const footBase = (field ? footprintBase(field, building.ring, model.sideM) : 0) + SURFACE.building.lift;
     const color = buildingColor(building, style);
     const parts =

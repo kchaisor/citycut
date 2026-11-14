@@ -1,5 +1,12 @@
 import { clipPolygonRect } from "./clip";
-import { frameHalfExtents, type FrameGroundSize } from "./siteFrame";
+import {
+  clipAreaToSiteFrame,
+  DEFAULT_SITE_FRAME_SHAPE,
+  frameGroundSize,
+  frameHalfExtents,
+  type FrameGroundSize,
+  type SiteFrameShape,
+} from "./siteFrame";
 import type { Pt, TerrainField } from "../types";
 
 export type Tri = [Pt, Pt, Pt];
@@ -54,13 +61,31 @@ function area2(poly: Poly): number {
   return sum;
 }
 
+function clipPolyToSiteFrame(
+  poly: Poly,
+  sideM: number,
+  frameShape: SiteFrameShape,
+  frameSize: FrameGroundSize,
+): Poly | null {
+  if (frameShape === DEFAULT_SITE_FRAME_SHAPE || frameShape === "a3") {
+    const { halfW, halfH } = frameHalfExtents(sideM, frameShape, frameSize);
+    const half = sideM / 2;
+    const clipped = halfW < half - 0.01 || halfH < half - 0.01 ? clipPolygonRect(poly, halfW, halfH) : poly;
+    return clipped.length >= 3 ? clipped : null;
+  }
+  const rings = clipAreaToSiteFrame(poly, [], sideM, frameShape, frameSize);
+  const outer = rings?.[0];
+  return outer && outer.length >= 3 ? outer : null;
+}
+
 export function clipTrianglesToTerrainGrid(
   tris: Tri[],
   field: TerrainField,
   sideM: number,
   frameSize?: FrameGroundSize,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
 ): Tri[] {
-  const { halfW, halfH } = frameHalfExtents(sideM, "square", frameSize);
+  const ground = frameSize ?? frameGroundSize(sideM);
   const half = sideM / 2;
   const s = field.spacingM;
   const maxCol = field.cols - 2;
@@ -68,8 +93,8 @@ export function clipTrianglesToTerrainGrid(
   const cellOf = (v: number, max: number) => Math.min(max, Math.max(0, Math.floor((v + half) / s)));
   const out: Tri[] = [];
   const emit = (poly: Poly) => {
-    const clipped = halfW < half - 0.01 || halfH < half - 0.01 ? clipPolygonRect(poly, halfW, halfH) : poly;
-    if (clipped.length < 3 || Math.abs(area2(clipped)) < 1e-6) return;
+    const clipped = clipPolyToSiteFrame(poly, sideM, frameShape, ground);
+    if (!clipped || Math.abs(area2(clipped)) < 1e-6) return;
     poly = clipped;
     const winding = area2(poly) > 0;
     for (let i = 1; i + 1 < poly.length; i++) {

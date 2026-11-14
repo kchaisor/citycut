@@ -120,7 +120,7 @@ import {
   writeViewSearch,
   type ViewMemory,
 } from "../lib/viewMemory";
-import { treeSizeSummary, treeTierCounts } from "../lib/trees";
+import { treeSizeSummary, treeTierCounts, treesInSiteFrame, treesInSiteFrameCount } from "../lib/trees";
 import { contourDrawerLabel } from "../lib/vicmapContours";
 import { clearPlanShadowCache } from "../lib/buildingShadows";
 import {
@@ -175,6 +175,8 @@ import {
 } from "../lib/hiddenBuildings";
 import { ImportMassingPanel } from "./ImportMassingPanel";
 import { useImportedMassing } from "./useImportedMassing";
+import { useStoredSiteLayer } from "./useStoredSiteLayer";
+import { clippedWaterRingsFromModel } from "../lib/waterMesh3d";
 import { drawingMassingCount } from "../lib/massingFootprint";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
@@ -712,6 +714,11 @@ export function ModelPage({
   const [compassNeedleDeg, setCompassNeedleDeg] = useState(0);
 
   const massing = useImportedMassing(model);
+  const storedSiteMeshes = useStoredSiteLayer(model, {
+    colourByUse,
+    uniformBuildings: !colourByUse && !showSource,
+    colourBySource: showSource,
+  });
 
   const qaSummaryRef = useRef({ treeCrowns: 0, buildingCount: 0, roadCount: 0, triangleCount: 0 });
   const qaDisplayBuildingsRef = useRef(model.buildings);
@@ -951,6 +958,7 @@ export function ModelPage({
         return pick.id;
       },
       exportPlanSnapshot: () => model,
+      getClippedWaterRings: () => clippedWaterRingsFromModel(model),
       pickZoneDefaultPanelQa() {
         const rows = qaDisplayBuildingsRef.current.filter((b) => b.heightFromFallback);
         const pick =
@@ -1185,7 +1193,7 @@ export function ModelPage({
       ...displayModel,
       buildings: baseBuildings,
       importedMassingUpperLevels: massing.drawingUpperLevels,
-      trees: treesVisible ? displayModel.trees : [],
+      trees: treesVisible ? treesInSiteFrame(displayModel) : [],
       roads: displayModel.roads.filter((r) => {
         if (r.kind === "rail") return railVisible;
         if (r.grade === "path") return footpathsVisible;
@@ -1977,7 +1985,7 @@ export function ModelPage({
       {
         id: "trees" as const,
         label: "Trees",
-        meta: model.trees.length.toLocaleString(),
+        meta: treesInSiteFrameCount(model).toLocaleString(),
         color: getColour("--tree-crown"),
         available: model.layers.trees && model.trees.length > 0,
         onPick: (value: string) => {
@@ -2132,43 +2140,85 @@ export function ModelPage({
   ];
 
   const modelRootRef = useRef<HTMLDivElement | null>(null);
-  const introHoldReleasedRef = useRef(false);
-  const introWebglReadyRef = useRef(false);
+  const introBridgeDoneRef = useRef(false);
+  const [introWebglWait, setIntroWebglWait] = useState(
+    () => tab === "3d" && shouldShowIntroBridgePill(),
+  );
+  const [bridgePillHudSuppressed, setBridgePillHudSuppressed] = useState(
+    () => tab === "3d" && shouldShowIntroBridgePill(),
+  );
+  const [showHeightSourceNotices, setShowHeightSourceNotices] = useState(
+    () => !(tab === "3d" && shouldShowIntroBridgePill()),
+  );
   useEffect(() => {
-    const el = modelRootRef.current;
-    if (!el) return;
-    const release = () => {
-      introHoldReleasedRef.current = true;
-      el.removeAttribute("data-intro-hold");
+    if (tab !== "3d" || !shouldShowIntroBridgePill()) {
+      setShowHeightSourceNotices(true);
+      return;
+    }
+    setShowHeightSourceNotices(false);
+    let alive = true;
+    let frame = 0;
+    const waitPillGone = () => {
+      if (!alive) return;
+      const pill = document.querySelector(".model .loading-hud-pill.is-model-bridge");
+      if (!pill) {
+        setShowHeightSourceNotices(true);
+        return;
+      }
+      const style = getComputedStyle(pill);
+      if (style.display === "none" || Number(style.opacity) <= 0.05) {
+        setShowHeightSourceNotices(true);
+        return;
+      }
+      frame = window.requestAnimationFrame(waitPillGone);
     };
-    const revealModel = () => {
-      introWebglReadyRef.current = true;
-      el.removeAttribute("data-intro-webgl-wait");
+    const onDone = () => window.setTimeout(() => {
+      frame = window.requestAnimationFrame(waitPillGone);
+    }, 80);
+    window.addEventListener("citycut:intro-done", onDone);
+    return () => {
+      alive = false;
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("citycut:intro-done", onDone);
     };
+  }, [tab]);
+  useEffect(() => {
+    if (tab !== "3d" || !shouldShowIntroBridgePill()) {
+      setBridgePillHudSuppressed(false);
+      setIntroWebglWait(false);
+      return;
+    }
+    if (introBridgeDoneRef.current) {
+      setBridgePillHudSuppressed(false);
+      setIntroWebglWait(false);
+      return;
+    }
+    setBridgePillHudSuppressed(true);
+    setIntroWebglWait(true);
+    const onDone = () => {
+      introBridgeDoneRef.current = true;
+      setBridgePillHudSuppressed(false);
+    };
+    const revealModel = () => setIntroWebglWait(false);
     const onWebglReady = () => {
       if (typeof window === "undefined" || !window.__citycutAwaitIntroStart || window.__citycutIntroStarted) {
         revealModel();
       }
     };
-    if (tab !== "3d" || !shouldShowIntroBridgePill()) {
-      release();
-      revealModel();
-      return;
-    }
     if (typeof window !== "undefined" && window.__citycutIntroStarted) {
       revealModel();
     }
-    el.addEventListener("citycut:intro-hold-release", release);
+    window.addEventListener("citycut:intro-done", onDone);
     window.addEventListener("citycut:intro-webgl-ready", onWebglReady);
     window.addEventListener("citycut:intro-start", revealModel);
-    const timer = window.setTimeout(release, 45000);
     const webglTimer = window.setTimeout(revealModel, 25000);
+    const hudReleaseTimer = window.setTimeout(() => setBridgePillHudSuppressed(false), 45000);
     return () => {
-      el.removeEventListener("citycut:intro-hold-release", release);
+      window.removeEventListener("citycut:intro-done", onDone);
       window.removeEventListener("citycut:intro-webgl-ready", onWebglReady);
       window.removeEventListener("citycut:intro-start", revealModel);
-      window.clearTimeout(timer);
       window.clearTimeout(webglTimer);
+      window.clearTimeout(hudReleaseTimer);
     };
   }, [tab]);
 
@@ -2178,8 +2228,9 @@ export function ModelPage({
       className="model"
       data-view-tab={tab}
       data-cut-size-label={cutDimLabel}
-      data-intro-hold={!introHoldReleasedRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
-      data-intro-webgl-wait={!introWebglReadyRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
+      data-bridge-pill-hud-suppressed={bridgePillHudSuppressed ? "true" : undefined}
+      data-intro-hold={bridgePillHudSuppressed ? "true" : undefined}
+      data-intro-webgl-wait={bridgePillHudSuppressed && introWebglWait && tab === "3d" ? "true" : undefined}
     >
       <h1 className="sr-only">Your model is ready.</h1>
       <div
@@ -2193,7 +2244,7 @@ export function ModelPage({
               const samples = typeof window !== "undefined" ? window.__citycutProgressSamples : undefined;
               const currentPct = Array.isArray(samples) && samples.length > 0 ? (samples[samples.length - 1] ?? 0) : 0;
               return (
-                <div className="loading-card loading-hud-pill is-model-bridge hud-card" aria-hidden="true" data-progress-pct={currentPct}>
+                <div className="loading-hud-pill is-model-bridge" aria-hidden="true" data-progress-pct={currentPct}>
                   <div className="loading-hud-row">
                     <span className="loading-pulse-dot" />
                     <strong>Building 3D site cut · LiDAR + Vicmap…</strong>
@@ -2205,11 +2256,12 @@ export function ModelPage({
                 </div>
               );
             })()}
-            {model.heightSourceLoadWarnings?.map((line) => (
-              <p key={line} className="height-source-notice" role="status">
-                {line}
-              </p>
-            ))}
+            {showHeightSourceNotices &&
+              model.heightSourceLoadWarnings?.map((line) => (
+                <p key={line} className="height-source-notice" role="status">
+                  {line}
+                </p>
+              ))}
             <SceneBoundary>
               <Scene3D
                 model={displayModel}
@@ -2226,6 +2278,23 @@ export function ModelPage({
                 windPeriod={windSettings.period}
                 windAnimateStreaks={windMotion.animateStreaks}
                 onExportReady={onExportReady}
+                onBuildingPick={(buildingId, clientX, clientY, additive) => {
+                  setSceneSelection({
+                    kind: "building",
+                    buildingId,
+                    clientX,
+                    clientY,
+                    world: { east: 0, north: 0, up: 0 },
+                    additive,
+                  });
+                  setInspectHudScreen({ clientX, clientY, inView: true });
+                  selectForHide(buildingId, additive);
+                }}
+                onClearBuildingPick={() => {
+                  setSceneSelection(null);
+                  setInspectHudScreen(null);
+                  setHideSelection([]);
+                }}
                 onSceneInspectPick={(selection) => {
                   setSceneSelection(selection);
                   setInspectHudScreen({ clientX: selection.clientX, clientY: selection.clientY, inView: true });
@@ -2254,6 +2323,7 @@ export function ModelPage({
                 cameraMemory={cameraMemory}
                 display={view3dDisplay}
                 importedMassing={massing.group}
+                storedSiteMeshes={storedSiteMeshes.group}
                 walkLayer={walk.layer.root}
                 walkRippleLayer={rippleAnalysisOpen ? walkRipple.layer.root : null}
                 walkRippleTint={rippleAnalysisOpen ? walkRipple.tint : null}
@@ -2815,7 +2885,7 @@ export function ModelPage({
                 </div>
                 <div className="kpi-cell">
                   <div className="kpi-lbl k-lbl">Trees</div>
-                  <div className="kpi-num k-val">{model.trees.length.toLocaleString()}</div>
+                  <div className="kpi-num k-val">{treesInSiteFrameCount(model).toLocaleString()}</div>
                 </div>
                 <div className="kpi-cell">
                   <div className="kpi-lbl k-lbl">Roads</div>
@@ -3025,6 +3095,11 @@ export function ModelPage({
                     ))}
                   </ul>
                 </section>
+                {model.storedSiteLayer ? (
+                  <p className="legend-note" role="status">
+                    This cut includes {model.storedSiteLayer.label} ({model.storedSiteLayer.sourceCredit}).
+                  </p>
+                ) : null}
                 <section className="sidebar-group">
                   <h3 className="sidebar-gh">Source</h3>
                   <ul>

@@ -67,6 +67,18 @@ export function buildDataSources({ model, comHeights, comMeasuredCount, comError
     notes: baseNotes,
   });
 
+  if (model.storedSiteLayer) {
+    rows.push({
+      id: "stored-site-layer",
+      label: model.storedSiteLayer.label,
+      status: "ok",
+      detail: `${model.storedSiteLayer.sourceCredit} · ${count(model.storedSiteLayer.meshBuildingCount, "mesh building")}`,
+      notes: [
+        `${model.storedSiteLayer.hiddenOvertureCount.toLocaleString()} Overture buildings hidden where footprints overlap.`,
+      ],
+    });
+  }
+
   if (model.layers.buildings && comHeights !== "outside") {
     const row: DataSourceRow = {
       id: "com-heights",

@@ -44,3 +44,40 @@ export function importedMassingUpperStrokeStyle(
   const base = importedMassingStrokeStyle(style);
   return { mm: base.mm, color: base.color, dash: "none" };
 }
+
+export function storedSiteStructureStrokeStyle(
+  style: import("./drawingStyle").LineStyles,
+): import("./drawingStyle").StrokeStyle {
+  return {
+    mm: style.kerb.mm,
+    color: getColour("--stored-site-structure-stroke"),
+    dash: "none",
+  };
+}
+
+export function storedSiteStructureScreenStroke(
+  style: import("./drawingStyle").LineStyles,
+): import("./drawingStyle").StrokeStyle {
+  const base = storedSiteStructureStrokeStyle(style);
+  return { ...base, mm: style.kerb.mm };
+}
+
+export function storedSiteDeckCapStrokeStyle(
+  style: import("./drawingStyle").LineStyles,
+): import("./drawingStyle").StrokeStyle {
+  return style.kerb;
+}
+
+export function storedSiteBridgePylonFill(): string {
+  return getColour("--stored-site-bridge-pylon");
+}
+
+export function storedSiteBridgeCableStrokeStyle(
+  style: import("./drawingStyle").LineStyles,
+): import("./drawingStyle").StrokeStyle {
+  return {
+    mm: Math.max(style.kerb.mm * 0.55, 0.15),
+    color: getColour("--stored-site-bridge-cable-stroke"),
+    dash: "1.2 0.6",
+  };
+}

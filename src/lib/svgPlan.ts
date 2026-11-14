@@ -1,7 +1,13 @@
 import type { BuildingColourMode } from "./buildingViewportColor";
 import { planBuildingFill } from "./planBuildingFill";
 import { isSiteBuilding } from "./siteBuildings";
-import { clipAreaToSiteFrame, clipPolylineSiteFrame, pointInSiteFrame, DEFAULT_SITE_FRAME_SHAPE } from "./siteFrame";
+import {
+  clipAreaToSiteFrame,
+  clipPolygonSiteFrame,
+  clipPolylineSiteFrame,
+  pointInSiteFrame,
+  DEFAULT_SITE_FRAME_SHAPE,
+} from "./siteFrame";
 import { openRing } from "./geo";
 import { PATH_WIDTH_M } from "./lineweights";
 import type { MultiPolygon } from "./safePolygonClip";
@@ -26,7 +32,8 @@ import {
   drawnContourInterval,
 } from "./vicmapContours";
 import { modelFrameSize } from "./modelFrame";
-import type { CityModel, Pt } from "../types";
+import type { CityModel, Pt, Ring } from "../types";
+import { deckRoadOutlines } from "./storedSiteLayers/bridgePlan";
 
 const round = (value: number) => Math.round(value * 10) / 10;
 
@@ -56,6 +63,9 @@ export type PlanPaths = {
   rails: Pt[][];
   trams: Pt[][];
   buildings: { rings: Pt[][]; fill: string; site: boolean; imported?: boolean }[];
+  storedBridgeDeck: Pt[][];
+  storedBridgePylons: Ring[];
+  storedBridgeCables: Pt[][];
   trees: { east: number; north: number; r: number }[];
   contours: Pt[][];
   contourIndex: boolean[];
@@ -276,6 +286,21 @@ export function planPaths(
       : clipped;
   const drawn = layer && visible.length > 0 ? drawContours(visible, drawnInterval, contourIndexEvery) : null;
 
+  const storedBridgeDeck: Pt[][] = (model.storedSiteStructures ?? []).flatMap((structure) =>
+    deckRoadOutlines(structure.ring).flatMap((line) =>
+      clipPolylineSiteFrame(line, model.sideM, frameShape, frameSize).filter((part) => part.length >= 2),
+    ),
+  );
+  const bridgePlan = model.storedSiteBridgePlan;
+  const storedBridgePylons: Ring[] = (bridgePlan?.pylonFootprints ?? [])
+    .map((ring) => clipPolygonSiteFrame(ring, model.sideM, frameShape, frameSize))
+    .filter((ring) => ring.length >= 3);
+  const bridgeCableSource =
+    bridgePlan && bridgePlan.stayLines3d.length > 0 ? bridgePlan.stayLines3d : (bridgePlan?.cableLines ?? []);
+  const storedBridgeCables: Pt[][] = bridgeCableSource.flatMap((line) =>
+    clipPolylineSiteFrame(line, model.sideM, frameShape, frameSize).filter((part) => part.length >= 2),
+  );
+
   const importedUpperLevels = (model.importedMassingUpperLevels ?? [])
     .map((level) => {
       const lines = level.lines
@@ -297,6 +322,9 @@ export function planPaths(
     rails,
     trams,
     buildings,
+    storedBridgeDeck,
+    storedBridgePylons,
+    storedBridgeCables,
     trees,
     contours: drawn ? drawn.lines.map((line) => line.points) : [],
     contourIndex: drawn ? drawn.lines.map((line) => line.index) : [],

@@ -1,7 +1,7 @@
 import { clipPolyline } from "./clip";
 import { FIGURE_SCALES } from "./figureGround";
 import { polylineLength, toLocal } from "./geo";
-import { contourInterval, leveledContourLines } from "./terrain";
+import { contourInterval, leveledContourLines, smoothTerrainField } from "./terrain";
 import type { ContourLayer, ContourSourceId, LonLat, Pt, StoredContour, TerrainField } from "../types";
 
 /**
@@ -247,13 +247,14 @@ function productLabel(source: ContourSourceId, interval: number): string {
 }
 
 export function demContourLayer(field: TerrainField, sideM: number): ContourLayer {
-  const interval = contourInterval(field.max - field.min);
+  const smoothed = smoothTerrainField(field, 2);
+  const interval = contourInterval(smoothed.max - smoothed.min);
   const half = sideM / 2;
   const lines: StoredContour[] = [];
-  for (const item of leveledContourLines(field, sideM, interval)) {
+  for (const item of leveledContourLines(smoothed, sideM, interval)) {
     for (const part of clipPolyline(dedupe(item.line), -half, half)) {
       const points = dedupe(part);
-      if (points.length >= 2) lines.push({ points, z: item.z });
+      if (points.length >= 2 && polylineLength(points) >= 3) lines.push({ points, z: item.z });
     }
   }
   return {

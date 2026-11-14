@@ -74,7 +74,7 @@ export function buildAxoMassingFaces(
   const counts: Record<AxoHeightSource, number> = { com: 0, dam: 0, overture_osm: 0, estimate: 0 };
   const prisms: Prism[] = [];
   for (const building of model.buildings) {
-    if (building.meshDrawnBy != null || building.importedMassingShadowCaster) continue;
+    if (building.meshDrawnBy != null || building.storedSiteMesh || building.importedMassingShadowCaster) continue;
     const list = prismsFor(building, model.sideM, shape);
     if (list.length === 0) continue;
     counts[axoHeightSource(building.heightTier, building.heightFromFallback)] += 1;

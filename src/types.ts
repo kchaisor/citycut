@@ -93,6 +93,11 @@ export type BuildingFeat = {
   osmWayIds?: number[];
   extrusionParts?: BuildingExtrusionPart[];
   meshDrawnBy?: number;
+  storedSiteMesh?: true;
+  storedSiteMeshKey?: string;
+  storedSiteBaseZ?: number;
+  storedSiteTopZ?: number;
+  storedSiteLayer?: string;
 };
 
 export type RoadGrade = "arterial" | "local" | "path";
@@ -248,6 +253,9 @@ export type CityModel = {
   nswRoadSurface?: { nswCorridorM2: number; overtureM2: number } | null;
   nswUseMatched?: number;
   importedMassingUpperLevels?: { z: number; lines: Pt[][] }[];
+  storedSiteLayer?: import("./lib/storedSiteLayers/types").StoredSiteLayerState;
+  storedSiteStructures?: import("./lib/storedSiteLayers/types").StoredSiteStructureOutline[];
+  storedSiteBridgePlan?: import("./lib/storedSiteLayers/bridgePlan").StoredSiteBridgePlan;
 };
 
 export type ViewState = {

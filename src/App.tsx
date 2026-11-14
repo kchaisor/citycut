@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapStage, type FlyRequest } from "./components/MapStage";
 import { SelectChrome } from "./components/SelectChrome";
 import { CommandBar } from "./components/CommandBar";
@@ -71,6 +71,12 @@ import { groundRoadPartition } from "./lib/groundRoads";
 import { NSW_BUILDING_ESTIMATE_NOTE } from "./lib/sources/registry";
 import { fetchOvertureBuildingsForCut } from "./lib/overtureBuildings";
 import { qaForcedCrashFromSearch, qaModeFromSearch } from "./lib/qaCameraBridge";
+import {
+  dispatchIntroBridgeDone,
+  finishIntroBridgeHandoff as completeIntroBridgeHandoff,
+  releaseSiteBuildChrome as clearSiteBuildChrome,
+  type SiteBuildChromeSink,
+} from "./lib/siteBuildChrome";
 import { siteBuildingOverlaps } from "./lib/siteBuildings";
 import {
   applyLidarHeightsFromEnrichment,
@@ -88,6 +94,7 @@ import {
 } from "./lib/comBuildingHeights";
 import { applyDevelopmentFloorsToBuildings, fetchDevelopmentFloorRecords } from "./lib/comDevelopmentFloors";
 import { resolveBuildingHeightsAfterCom } from "./lib/buildingHeightPipeline";
+import { applyStoredSiteLayerToCut } from "./lib/storedSiteLayers/apply";
 import { runComBuildingHeightsInWorker } from "./lib/comBuildingHeightsWorkerClient";
 import { buildHeightSourceLoadWarnings } from "./lib/buildHeightSourceLoadWarnings";
 import { buildEnrichmentUseTierFailures } from "./lib/enrichmentUseTierFailures";
@@ -173,6 +180,7 @@ export default function App() {
   const [phase, setPhase] = useState<"select" | "model">("select");
   const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [handoffUnderlay, setHandoffUnderlay] = useState<"none" | "holding" | "fading">("none");
+  const [siteBuildActive, setSiteBuildActive] = useState(false);
   const selectRootRef = useRef<HTMLDivElement>(null);
   const [model, setModel] = useState<CityModel | null>(null);
   const [loading, setLoading] = useState(false);
@@ -187,6 +195,22 @@ export default function App() {
   sideRef.current = sideKm;
   phaseRef.current = phase;
   placeLabelRef.current = placeLabel;
+
+  const siteBuildChromeSink = useMemo<SiteBuildChromeSink>(
+    () => ({
+      setSiteBuildActive,
+      setHandoffUnderlay,
+    }),
+    [],
+  );
+
+  const releaseSiteBuildChrome = useCallback(() => {
+    clearSiteBuildChrome(siteBuildChromeSink);
+  }, [siteBuildChromeSink]);
+
+  const finishIntroBridgeHandoff = useCallback(() => {
+    completeIntroBridgeHandoff(siteBuildChromeSink);
+  }, [siteBuildChromeSink]);
 
   function writeUrl(siteAnchor: LonLat | null = null) {
     const view = viewRef.current;
@@ -367,7 +391,8 @@ export default function App() {
 
   function commandBarGoToPlace(place: PlaceHit, sideKmOverride: number | null) {
     if (phase === "model") {
-      setHandoffUnderlay("none");
+      releaseSiteBuildChrome();
+      dispatchIntroBridgeDone();
       setPhase("select");
     }
     if (sideKmOverride != null) onSideKmChange(sideKmOverride);
@@ -390,17 +415,31 @@ export default function App() {
 
   function onHome() {
     if (phase === "model") {
+      releaseSiteBuildChrome();
+      dispatchIntroBridgeDone();
       setPhase("select");
       return;
     }
     focusMelbourne();
   }
 
-  function cancel() {
+  const cancel = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
     setLoading(false);
-  }
+    releaseSiteBuildChrome();
+  }, [releaseSiteBuildChrome]);
+
+  useEffect(() => {
+    if (!loading) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      cancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [loading, cancel]);
 
   async function createModel() {
     const view = viewRef.current;
@@ -443,7 +482,12 @@ export default function App() {
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const isQaStart = typeof window !== "undefined" && qaModeFromSearch(window.location.search);
-    if (!isDomTestStart && !prefersReducedStart && !isQaStart && typeof window !== "undefined") {
+    const bridgeIntro =
+      !isDomTestStart &&
+      !prefersReducedStart &&
+      !isQaStart &&
+      typeof window !== "undefined";
+    if (bridgeIntro) {
       window.__citycutAwaitIntroStart = true;
       window.__citycutIntroStarted = false;
       window.__citycutIntroReadyToFire = false;
@@ -957,6 +1001,21 @@ export default function App() {
       }
       const nswUse = nswMode && modelLayers.buildings ? nswApplyBuildingUse(buildings, nswResult) : null;
       if (nswUse) buildings = nswUse.buildings;
+      const storedSite = modelLayers.buildings
+        ? await applyStoredSiteLayerToCut({
+            center,
+            sideM,
+            frameShape: frameShapeRef.current,
+            frameSize,
+            buildings,
+            signal: controller.signal,
+          })
+        : { buildings, layer: null, structures: [] };
+      if (controller.signal.aborted) return;
+      buildings = storedSite.buildings;
+      if (storedSite.layer) {
+        sourceNote = `${sourceNote} ${storedSite.layer.label}: ${storedSite.layer.sourceCredit}. ${storedSite.layer.meshBuildingCount.toLocaleString()} mesh buildings; ${storedSite.layer.hiddenOvertureCount.toLocaleString()} Overture buildings hidden in overlap.`;
+      }
       const draftModel: CityModel = {
         center,
         sideM,
@@ -1022,6 +1081,9 @@ export default function App() {
         heightSourceLoadWarnings:
           heightSourceLoadWarnings.length > 0 ? heightSourceLoadWarnings : undefined,
         ...(nswMode ? { region: "nsw" as const, nsw: nswResult, nswWaterNote: nswWater?.note ?? null, nswUseMatched: nswUse?.matched ?? 0 } : {}),
+        storedSiteLayer: storedSite.layer ?? undefined,
+        storedSiteStructures: storedSite.structures.length > 0 ? storedSite.structures : undefined,
+        storedSiteBridgePlan: storedSite.layer?.bridgePlan ?? undefined,
       };
       if (modelLayers.roads) {
         await yieldToBrowserFrame(isDomTestStart);
@@ -1056,13 +1118,18 @@ export default function App() {
           window.__citycutModelPrewarmMounted = true;
         }
         setHandoffUnderlay("holding");
+        setSiteBuildActive(true);
       }
       await yieldToBrowserFrame(isDomTestStart);
       if (controller.signal.aborted) return;
       setModel(draftModel);
       setPhase("model");
     } catch (err) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) {
+        releaseSiteBuildChrome();
+        return;
+      }
+      releaseSiteBuildChrome();
       setError(err instanceof Error ? err.message : "Could not build the model.");
     } finally {
       if (abortRef.current === controller) {
@@ -1098,13 +1165,18 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const onIntroDone = () => {
+      releaseSiteBuildChrome();
+    };
+    window.addEventListener("citycut:intro-done", onIntroDone);
+    return () => window.removeEventListener("citycut:intro-done", onIntroDone);
+  }, [releaseSiteBuildChrome]);
+
+  useEffect(() => {
     if (phase !== "model" || handoffUnderlay === "none") return;
     const triggerFade = () => {
       setHandoffUnderlay((prev) => (prev === "holding" ? "fading" : prev));
       selectRootRef.current?.classList.add("is-loading", "is-fading-out");
-    };
-    const onIntroDone = () => {
-      setHandoffUnderlay("none");
     };
     if (typeof window !== "undefined" && window.__citycutIntroStarted) {
       triggerFade();
@@ -1121,17 +1193,15 @@ export default function App() {
         window.__citycutIntroStartMs = performance.now();
         window.dispatchEvent(new CustomEvent("citycut:intro-start"));
       }
-      setHandoffUnderlay("none");
+      finishIntroBridgeHandoff();
     };
     window.addEventListener("citycut:intro-start", triggerFade);
-    window.addEventListener("citycut:intro-done", onIntroDone);
     const safetyTimer = window.setTimeout(onSafetyTimeout, 45000);
     return () => {
       window.removeEventListener("citycut:intro-start", triggerFade);
-      window.removeEventListener("citycut:intro-done", onIntroDone);
       window.clearTimeout(safetyTimer);
     };
-  }, [phase, handoffUnderlay]);
+  }, [phase, handoffUnderlay, finishIntroBridgeHandoff]);
 
   const showSelectLayer = phase === "select" || handoffUnderlay !== "none";
   const selectTransitionActive = phase === "model" && handoffUnderlay === "fading";
@@ -1139,7 +1209,7 @@ export default function App() {
   const selectProcessingPhaseA = selectBusy && !selectTransitionActive;
 
   return (
-    <div className="app">
+    <div className="app" data-site-build-active={siteBuildActive ? "true" : undefined}>
       <CommandBar
         open={commandBarOpen}
         onOpenChange={setCommandBarOpen}
@@ -1228,7 +1298,8 @@ export default function App() {
               onHome();
             }}
             onNewCut={() => {
-              setHandoffUnderlay("none");
+              releaseSiteBuildChrome();
+              dispatchIntroBridgeDone();
               setPhase("select");
             }}
           />

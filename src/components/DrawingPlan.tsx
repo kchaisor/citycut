@@ -15,6 +15,9 @@ import {
   importedMassingStrokeStyle,
   importedMassingUpperStrokeStyle,
   planBuildingStrokeStyle,
+  storedSiteBridgeCableStrokeStyle,
+  storedSiteBridgePylonFill,
+  storedSiteStructureStrokeStyle,
 } from "../lib/planBuildingFill";
 import { planPaths, svgPolyline, svgRings } from "../lib/svgPlan";
 import { getColour } from "../lib/colours";
@@ -532,6 +535,49 @@ export function DrawingPlan({
                 stroke="none"
               />
             ))}
+            {plan.storedBridgeDeck.map((line, index) => {
+              const deckStroke = storedSiteStructureStrokeStyle(style);
+              return (
+                <path
+                  key={`ss-deck${index}`}
+                  data-stored-structure="true"
+                  data-deck-stroke="deck"
+                  d={svgPolyline(openRing(line), false)}
+                  fill="none"
+                  {...screenPenAttrs(deckStroke, "miter")}
+                  strokeLinecap="square"
+                  strokeLinejoin="miter"
+                />
+              );
+            })}
+            {plan.storedBridgePylons.map((ring, index) => (
+              <path
+                key={`ss-pylon${index}`}
+                data-stored-structure="true"
+                data-bridge-pylon="true"
+                d={svgRings([ring])}
+                fill={storedSiteBridgePylonFill()}
+                fillRule="evenodd"
+                stroke="none"
+              />
+            ))}
+            {plan.storedBridgeCables.map((line, index) => {
+              const cableStroke = storedSiteBridgeCableStrokeStyle(style);
+              const cablePen = screenPenAttrs(cableStroke, "miter");
+              return (
+                <path
+                  key={`ss-cable${index}`}
+                  data-stored-structure="true"
+                  data-bridge-cable="true"
+                  d={svgPolyline(openRing(line), false)}
+                  fill="none"
+                  {...cablePen}
+                  strokeWidth={Math.max(cablePen.strokeWidth as number, 0.6)}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              );
+            })}
             {plan.buildings.map((building, index) => (
               <path
                 key={`b${index}`}

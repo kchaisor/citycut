@@ -434,6 +434,38 @@ function stitchContours(segments: { a: Pt; b: Pt }[]): Pt[][] {
 
 export type LeveledContour = { line: Pt[]; z: number };
 
+export function smoothTerrainField(field: TerrainField, radiusM = 2): TerrainField {
+  const { cols, rows, spacingM } = field;
+  const r = Math.max(1, Math.round(radiusM / spacingM));
+  const out = new Float32Array(field.heights.length);
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      let sum = 0;
+      let weight = 0;
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const rr = Math.hypot(dx, dy);
+          if (rr > r + 0.001) continue;
+          const kr = row + dy;
+          const kc = col + dx;
+          if (kr < 0 || kc < 0 || kr >= rows || kc >= cols) continue;
+          const w = Math.exp(-(rr * rr) / Math.max(0.25, r * r * 0.5));
+          sum += field.heights[kr * cols + kc]! * w;
+          weight += w;
+        }
+      }
+      out[row * cols + col] = weight > 0 ? sum / weight : field.heights[row * cols + col]!;
+    }
+  }
+  let min = Infinity;
+  let max = -Infinity;
+  for (const h of out) {
+    if (h < min) min = h;
+    if (h > max) max = h;
+  }
+  return { ...field, heights: out, min, max };
+}
+
 export function leveledContourLines(
   field: TerrainField,
   sideM: number,

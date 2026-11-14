@@ -1,0 +1,164 @@
+{
+  "name": "Sydney \u00b7 Rozelle",
+  "id": "sydney-rozelle",
+  "source": "Kelvin-supplied 3dm, Nov 2026",
+  "created": "2026-11-13",
+  "epsg": 7856,
+  "crs": "EPSG:7856 GDA2020 / MGA zone 56",
+  "units": "metres",
+  "upAxis": "Z",
+  "verticalDatum": "AHD, as stored in the source 3dm (not recentred)",
+  "translationFromLocal": {
+    "description": "Loose meshes in the source 3dm are in local metres. MGA = local + translation. Block instances were ignored so geometry is not duplicated.",
+    "metres": [
+      332851.4010434145,
+      6251931.363072085,
+      0.0
+    ]
+  },
+  "origin": {
+    "description": "GLB vertex positions are relative to this origin so float32/int16 precision holds. XY is the MGA bounding-box centre of the buildings file (the bridge sits inside that box). Z is 0, so vertex Z stays in AHD metres.",
+    "mga": [
+      331950.49378204346,
+      6251028.15032959,
+      0.0
+    ],
+    "lonLat": [
+      151.1831833,
+      -33.86769802
+    ]
+  },
+  "bbox": {
+    "mga": {
+      "min": [
+        331035.5052642823,
+        6250118.281494141,
+        -13.000000000000002
+      ],
+      "max": [
+        332865.4822998047,
+        6251938.019165039,
+        126.6698379516602
+      ]
+    },
+    "lonLatWSEN": [
+      151.17312078,
+      -33.87575384,
+      151.19324393,
+      -33.85964131
+    ]
+  },
+  "files": [
+    {
+      "path": "buildings.glb",
+      "bytes": 5685940,
+      "format": "glTF 2.0 binary",
+      "compression": "none (no Draco, no meshopt). Positions use KHR_mesh_quantization int16 with a uniform node scale. three.js GLTFLoader decodes this natively without an extra decoder. CityCut has no DRACOLoader or MeshoptDecoder wired up.",
+      "positionQuantizationScale": 0.027924085777648825,
+      "maxAbsQuantizationErrorM": 0.013962042888824413,
+      "layers": [
+        {
+          "name": "Buildings-Context",
+          "vertices": 428111,
+          "triangles": 219171,
+          "buildings": 3777,
+          "primitives": 7
+        },
+        {
+          "name": "Buildings-Concrete Silos",
+          "vertices": 45828,
+          "triangles": 15276,
+          "buildings": 32,
+          "primitives": 1
+        },
+        {
+          "name": "Buildings-WBPS",
+          "vertices": 5262,
+          "triangles": 1754,
+          "buildings": 7,
+          "primitives": 1
+        },
+        {
+          "name": "Buildings-Metro",
+          "vertices": 262,
+          "triangles": 130,
+          "buildings": 3,
+          "primitives": 1
+        },
+        {
+          "name": "Buildings-WBPS Aux",
+          "vertices": 537,
+          "triangles": 179,
+          "buildings": 2,
+          "primitives": 1
+        },
+        {
+          "name": "Layer0",
+          "vertices": 14,
+          "triangles": 10,
+          "buildings": 2,
+          "primitives": 1
+        }
+      ],
+      "buildingIdAttribute": "_BUILDING_ID (UNSIGNED_SHORT, index into root extras.buildingIds; also extras.buildings vertex/index ranges on each mesh)",
+      "normals": "omitted; compute on load if lighting needs them"
+    },
+    {
+      "path": "anzac-bridge.glb",
+      "bytes": 85040,
+      "format": "glTF 2.0 binary",
+      "compression": "none (no Draco, no meshopt). Same KHR_mesh_quantization encoding, same origin as buildings.glb (scale is file-specific).",
+      "positionQuantizationScale": 0.02758821825530326,
+      "maxAbsQuantizationErrorM": 0.01379410912765163,
+      "layers": [
+        {
+          "name": "Buildings-Bridge",
+          "vertices": 6427,
+          "triangles": 2815,
+          "buildings": 131,
+          "primitives": 1
+        }
+      ],
+      "structureId": "anzac-bridge",
+      "deckId": "anzac-bridge-deck",
+      "deckPartId": "anzac-bridge-057",
+      "normals": "omitted; compute on load if lighting needs them"
+    },
+    {
+      "path": "footprints.geojson",
+      "bytes": 2388439,
+      "format": "GeoJSON FeatureCollection",
+      "crs": "EPSG:4326 (lon, lat)",
+      "description": "One feature per building (true 2D union of projected triangles, not a convex hull) plus one feature for the Anzac Bridge deck. Properties: id, layer, baseZ, topZ, role (building | slab | structure)."
+    }
+  ],
+  "counts": {
+    "buildings": 3823,
+    "buildingsEmitted": 3822,
+    "slabs": 5,
+    "bridgeParts": 131,
+    "bridgeDeckFeatures": 1,
+    "footprintFeatures": 3823,
+    "buildingTriangles": 236520,
+    "buildingVertices": 480014,
+    "bridgeTriangles": 2815,
+    "bridgeVertices": 6427,
+    "emptyFootprints": [
+      "rozelle-3822"
+    ],
+    "slabIds": [
+      "rozelle-0276",
+      "rozelle-1158",
+      "rozelle-1313",
+      "rozelle-2870",
+      "rozelle-3031"
+    ]
+  },
+  "notes": [
+    "Do not instantiate the source 3dm block instances; they reference the same meshes.",
+    "Layer0 contains two junk slivers. rozelle-3823 has a ~0.00005 m\u00b2 footprint; rozelle-3822 is a nearly vertical sliver with no polygonal projection and is omitted from footprints.geojson.",
+    "Slabs are marked where the true (non-hull) footprint is \u22651 ha: five context meshes (a basin at z=-13..5.5, plus podia / plates). A sixth mesh (rozelle-1795) has a 53,897 m\u00b2 convex hull but only an 8,860 m\u00b2 true outline, so it is tagged role=building.",
+    "The bridge is a structure over water and the Western Distributor, not a building. Use the true deck projection (anzac-bridge-deck), not a convex hull, when testing overlaps.",
+    "Source .3dm files are not part of this pack."
+  ]
+}

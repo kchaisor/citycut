@@ -30,7 +30,14 @@ import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { SINGLE_SHADOW_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "./sunStudyPlan";
 import { planPaths } from "./svgPlan";
 import { regionCredit } from "./sources/registry";
-import { importedMassingStrokeStyle, importedMassingUpperStrokeStyle, planBuildingStrokeStyle } from "./planBuildingFill";
+import {
+  importedMassingStrokeStyle,
+  importedMassingUpperStrokeStyle,
+  planBuildingStrokeStyle,
+  storedSiteBridgeCableStrokeStyle,
+  storedSiteBridgePylonFill,
+  storedSiteStructureStrokeStyle,
+} from "./planBuildingFill";
 import { windPlanPdfChunk } from "./windExport";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { comTreesCreditLine } from "./comTreesCredit";
@@ -524,6 +531,25 @@ export function sitePlanChunks(
         ...(importedPen ?? buildingPen ?? {}),
       })),
     });
+  }
+  if (plan.storedBridgeDeck.length > 0 || plan.storedBridgePylons.length > 0 || plan.storedBridgeCables.length > 0) {
+    const structurePen = pen(storedSiteStructureStrokeStyle(style), "miter");
+    const cablePen = pen(storedSiteBridgeCableStrokeStyle(style), "miter");
+    const paths: PdfPath[] = [];
+    for (const line of plan.storedBridgeDeck) {
+      paths.push({ rings: [mapRing(line, model.sideM, layout)], close: false, ...(structurePen ?? {}) });
+    }
+    for (const ring of plan.storedBridgePylons) {
+      paths.push({
+        rings: [mapRing(ring, model.sideM, layout)],
+        close: true,
+        fill: hexRgb(storedSiteBridgePylonFill()),
+      });
+    }
+    for (const line of plan.storedBridgeCables) {
+      paths.push({ rings: [mapRing(line, model.sideM, layout)], close: false, ...(cablePen ?? {}) });
+    }
+    chunks.push({ name: "Structures", paths });
   }
   const upperPen = pen(importedMassingUpperStrokeStyle(style), "miter");
   if (plan.importedUpperLevels.length > 0 && upperPen) {

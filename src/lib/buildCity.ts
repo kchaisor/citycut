@@ -4,9 +4,16 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { BUILDING_EDGE_COLOR, BUILDING_EDGE_THRESHOLD_DEG } from "./buildingEdges";
 import { BUILDING_USE_META, SOURCE_META, buildingLayerName, uniformBuildingColor } from "./buildingUse";
 import { getColour } from "./colours";
-import { DEFAULT_SITE_FRAME_SHAPE, SITE_FRAME_CIRCLE_SEGMENTS, type FrameGroundSize } from "./siteFrame";
+import {
+  DEFAULT_SITE_FRAME_SHAPE,
+  SITE_FRAME_CIRCLE_SEGMENTS,
+  type FrameGroundSize,
+  type SiteFrameShape,
+} from "./siteFrame";
+import { clipBufferGeometryToSiteFrame } from "./siteFrameMesh";
 import { modelFrameSize } from "./modelFrame";
 import { buildTreeGroup } from "./treeMassing";
+import { treesInSiteFrame } from "./trees";
 import { openRing, signedArea } from "./geo";
 import { carriagewaysOf, unionCarriageways, unionPathRoads } from "./roadFill";
 import { hexRgb, overlapLift, ROAD_COLOR, ROAD_RGB, roadGradeLayer, SURFACE } from "./surfaceLayers";
@@ -18,6 +25,15 @@ import { readDrawingStyle } from "./drawingStyle";
 import { basePlinthBuffers, footprintBase, sampleTerrain, terrainBuffers, terrainTint } from "./terrain";
 import { drapeTriangles, GROUND_REMAINING_LAYER, GROUND_ROADS_LAYER, groundGeometry, groundRoadPartition, groundTriangles } from "./groundRoads";
 import { clipTrianglesToTerrainGrid, terrainMeshHeight } from "./terrainDrape";
+import { buildWaterMeshGeometry } from "./waterMesh3d";
+import {
+  cutWaterFromBufferGeometry,
+  filterTrisOutsideWater,
+  subtractWaterFromGroundRemaining,
+  waterAreaLiftM,
+  waterAreasFromModel,
+  type WaterArea2D,
+} from "./waterSurfaceCut";
 import type { AreaFeat, BuildingFeat, BuildingUse, CityModel, Pt, Ring, RoadGrade, TerrainField } from "../types";
 
 export type CityBuildOptions = {
@@ -228,7 +244,12 @@ function roadFillGeometry(
   return drapedMultiPolygonGeometry(multi, heightAt, lift, step, grid);
 }
 
-export type TerrainGrid = { field: TerrainField; sideM: number; frameSize?: FrameGroundSize };
+export type TerrainGrid = {
+  field: TerrainField;
+  sideM: number;
+  frameSize?: FrameGroundSize;
+  frameShape?: SiteFrameShape;
+};
 
 export function drapedAreaGeometry(
   area: AreaFeat,
@@ -246,7 +267,13 @@ export function drapedAreaGeometry(
     return null;
   }
   const fine = grid
-    ? clipTrianglesToTerrainGrid(trianglesFromShape(flat), grid.field, grid.sideM, grid.frameSize)
+    ? clipTrianglesToTerrainGrid(
+        trianglesFromShape(flat),
+        grid.field,
+        grid.sideM,
+        grid.frameSize,
+        grid.frameShape ?? DEFAULT_SITE_FRAME_SHAPE,
+      )
     : subdivideToSpacing(trianglesFromShape(flat), Math.max(spacing, 4));
   flat.dispose();
   const heightAt = grid
@@ -359,7 +386,7 @@ export function extrudePart(ring: Ring, holes: Ring[], height: number, base: num
 }
 
 function extrudeFootprint(building: BuildingFeat, base: number): THREE.BufferGeometry[] {
-  if (building.meshDrawnBy != null) return [];
+  if (building.meshDrawnBy != null || building.storedSiteMesh) return [];
   const parts =
     building.extrusionParts && building.extrusionParts.length > 0
       ? building.extrusionParts
@@ -384,6 +411,7 @@ function basePlinthMesh(
   terrain: TerrainField | null | undefined,
   frameShape = DEFAULT_SITE_FRAME_SHAPE,
   frameSize?: FrameGroundSize,
+  waterAreas: WaterArea2D[] = [],
 ): THREE.Mesh {
   const buffers = basePlinthBuffers(sideM, terrain, frameShape, frameSize);
   const geometry = new THREE.BufferGeometry();
@@ -407,6 +435,13 @@ function basePlinthMesh(
   mesh.userData.plinthThicknessM = buffers.thicknessM;
   mesh.userData.plinthEdgePositions = buffers.edgePositions;
   order(mesh, surfaceLayer.renderOrder);
+  if (waterAreas.length > 0) {
+    const cut = cutWaterFromBufferGeometry(geometry, waterAreas, { horizontalMinY: 0 });
+    if (cut) {
+      geometry.dispose();
+      mesh.geometry = cut;
+    }
+  }
   return mesh;
 }
 
@@ -415,6 +450,7 @@ function terrainMesh(
   sideM: number,
   frameShape = DEFAULT_SITE_FRAME_SHAPE,
   frameSize?: FrameGroundSize,
+  waterAreas: WaterArea2D[] = [],
 ): THREE.Mesh {
   const buffers = terrainBuffers(field, sideM, frameShape, frameSize);
   const geometry = new THREE.BufferGeometry();
@@ -432,6 +468,13 @@ function terrainMesh(
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = "Terrain";
   order(mesh, SURFACE.terrain.renderOrder);
+  if (waterAreas.length > 0) {
+    const cut = cutWaterFromBufferGeometry(geometry, waterAreas, { horizontalMinY: 0 });
+    if (cut) {
+      geometry.dispose();
+      mesh.geometry = cut;
+    }
+  }
   return mesh;
 }
 
@@ -452,15 +495,24 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
 
   const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const frameSize = modelFrameSize(model);
+  const waterAreas = model.storedSiteLayer ? waterAreasFromModel(model) : [];
+  const cutHarbour = waterAreas.length > 0;
+  let harbourTerrainTrisBefore = 0;
+  let harbourTerrainTrisAfter = 0;
   const sample = elevationAt(model);
   const terrainGrid: TerrainGrid | null = model.terrain
-    ? { field: model.terrain, sideM: model.sideM, frameSize }
+    ? { field: model.terrain, sideM: model.sideM, frameSize, frameShape }
     : null;
   const groundSplit = model.terrain && frameShape === "square" ? groundRoadPartition(model) : null;
   if (model.terrain && groundSplit) {
     const field = model.terrain;
+    const remainingFootprint = cutHarbour
+      ? subtractWaterFromGroundRemaining(groundSplit.remaining, waterAreas)
+      : groundSplit.remaining;
+    const remainingGroundTris = groundTriangles(remainingFootprint, field, model.sideM);
+    const siteGroundTris = cutHarbour ? filterTrisOutsideWater(remainingGroundTris, waterAreas) : remainingGroundTris;
     const remaining = groundGeometry(
-      drapeTriangles(groundTriangles(groundSplit.remaining, field, model.sideM), field, model.sideM),
+      drapeTriangles(siteGroundTris, field, model.sideM),
       (z) => terrainTint(field, z),
     );
     if (remaining) {
@@ -469,10 +521,23 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
       mesh.name = "Terrain";
       mesh.userData.exportLayer = GROUND_REMAINING_LAYER;
       order(mesh, SURFACE.terrain.renderOrder);
+      if (cutHarbour) {
+        const index = mesh.geometry.getIndex();
+        harbourTerrainTrisBefore =
+          (index ? index.count : mesh.geometry.getAttribute("position")!.count) / 3;
+        const cut = cutWaterFromBufferGeometry(mesh.geometry, waterAreas, { horizontalMinY: 0 });
+        if (cut) {
+          mesh.geometry.dispose();
+          mesh.geometry = cut;
+        }
+        const cutIndex = mesh.geometry.getIndex();
+        harbourTerrainTrisAfter =
+          (cutIndex ? cutIndex.count : mesh.geometry.getAttribute("position")!.count) / 3;
+      }
       group.add(mesh);
     }
   } else if (model.terrain) {
-    group.add(terrainMesh(model.terrain, model.sideM, frameShape, frameSize));
+    group.add(terrainMesh(model.terrain, model.sideM, frameShape, frameSize, waterAreas));
   } else {
     const widthM = model.widthM ?? model.sideM;
     const heightM = model.heightM ?? model.sideM;
@@ -493,7 +558,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     order(ground, SURFACE.ground.renderOrder);
     group.add(ground);
   }
-  group.add(basePlinthMesh(model.sideM, model.terrain, frameShape, frameSize));
+  group.add(basePlinthMesh(model.sideM, model.terrain, frameShape, frameSize, waterAreas));
 
   const onTerrain = Boolean(sample && model.terrain);
   const blockMat = paint(
@@ -505,7 +570,10 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     onTerrain ? drapeLayer(SURFACE.green) : SURFACE.green,
   );
   const waterLayer = onTerrain ? drapedWaterLayer() : SURFACE.water;
-  const waterMat = paint(matteStandardMaterial({ color: getColour("--water-3d") }), waterLayer);
+  const waterMat = paint(
+    matteStandardMaterial({ color: getColour("--water-3d"), side: THREE.DoubleSide }),
+    waterLayer,
+  );
   const blockGeos: THREE.BufferGeometry[] = [];
   const greenGeos: THREE.BufferGeometry[] = [];
   const waterGeos: THREE.BufferGeometry[] = [];
@@ -533,25 +601,34 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     order(blockMesh, SURFACE.block.renderOrder);
     group.add(blockMesh);
   }
+  const waterAreaIndex = model.areas.findIndex((area) => area.kind === "water");
+  if (waterAreaIndex >= 0) {
+    const waterLift =
+      cutHarbour && model.storedSiteLayer
+        ? waterAreaLiftM(waterAreaIndex)
+        : (onTerrain ? waterLayer.lift : SURFACE.water.lift) + overlapLift(waterAreaIndex);
+    const heightAt = sample ?? (() => 0);
+    const built = buildWaterMeshGeometry(model, heightAt, waterLift, sample && model.terrain ? terrainGrid : null);
+    if (built) {
+      const clipped = clipBufferGeometryToSiteFrame(
+        built,
+        model.sideM,
+        frameShape,
+        frameSize.widthM,
+        frameSize.heightM,
+      );
+      built.dispose();
+      if (clipped) waterGeos.push(clipped);
+    }
+  }
   for (let index = 0; index < model.areas.length; index++) {
     const area = model.areas[index];
-    if (area.kind === "block") continue;
-    const lift =
-      (area.kind === "water" ? waterLayer.lift : SURFACE.green.lift) + overlapLift(index);
+    if (area.kind === "block" || area.kind === "water") continue;
+    const lift = SURFACE.green.lift + overlapLift(index);
     if (sample && model.terrain) {
       try {
-        const drapeSpacing =
-          area.kind === "water" ? Math.min(model.terrain.spacingM, 3) : model.terrain.spacingM;
-        const geometry = drapedAreaGeometry(
-          area,
-          sample,
-          lift,
-          drapeSpacing,
-          terrainGrid,
-        );
-        if (!geometry) continue;
-        if (area.kind === "water") waterGeos.push(geometry);
-        else greenGeos.push(geometry);
+        const geometry = drapedAreaGeometry(area, sample, lift, model.terrain.spacingM, terrainGrid);
+        if (geometry) greenGeos.push(geometry);
       } catch {
       }
       continue;
@@ -559,9 +636,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     const shape = shapeFromRing(area.ring, area.holes);
     if (!shape) continue;
     try {
-      const geometry = layFlat(new THREE.ShapeGeometry(shape), lift);
-      if (area.kind === "water") waterGeos.push(geometry);
-      else greenGeos.push(geometry);
+      greenGeos.push(layFlat(new THREE.ShapeGeometry(shape), lift));
     } catch {
     }
   }
@@ -729,7 +804,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
 
   if (model.layers.trees) {
     const trees = buildTreeGroup(
-      model.trees,
+      treesInSiteFrame(model),
       sample ?? undefined,
       options.introStagger ? { introStagger: true, sideM: model.sideM } : undefined,
     );
@@ -777,6 +852,30 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     mesh.castShadow = building || tree;
     mesh.receiveShadow = !tree;
   });
+
+  if (cutHarbour) {
+    let waterRingEastMin = Infinity;
+    let waterRingEastMax = -Infinity;
+    let waterRingNorthMin = Infinity;
+    let waterRingNorthMax = -Infinity;
+    for (const area of waterAreas) {
+      for (const [east, north] of area.ring) {
+        waterRingEastMin = Math.min(waterRingEastMin, east);
+        waterRingEastMax = Math.max(waterRingEastMax, east);
+        waterRingNorthMin = Math.min(waterRingNorthMin, north);
+        waterRingNorthMax = Math.max(waterRingNorthMax, north);
+      }
+    }
+    group.userData.rozelleHarbourCut = {
+      waterZoneCount: waterAreas.length,
+      terrainTrisBefore: harbourTerrainTrisBefore,
+      terrainTrisAfter: harbourTerrainTrisAfter,
+      waterRingEastMin,
+      waterRingEastMax,
+      waterRingNorthMin,
+      waterRingNorthMax,
+    };
+  }
 
   return group;
 }

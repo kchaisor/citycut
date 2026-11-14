@@ -24,8 +24,15 @@ import path from "node:path";
 import net from "node:net";
 import { chromium } from "playwright";
 import { PNG } from "pngjs";
+import { fileURLToPath } from "node:url";
 
 const CHROME_PATH = "/usr/bin/google-chrome";
+const REPO_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const ROZELLE_PLAN_AUDIT_SCRIPT = path.join(REPO_ROOT, "scripts/audit-rozelle-plan-png.mjs");
+
+function auditRozellePlanPngFile(filePath) {
+  return JSON.parse(execFileSync("node", [ROZELLE_PLAN_AUDIT_SCRIPT, filePath], { encoding: "utf8" }));
+}
 const VIEWPORT = { width: 1440, height: 900 };
 const DEVICE_SCALE_FACTOR = 2;
 const ARTIFACTS_DIR = "/workspace";
@@ -2218,6 +2225,175 @@ async function main() {
       console.log(`[ARTIFACT] Contact sheet saved to ${contactSheetOut}`);
     }
     fs.mkdirSync(cursorArtifacts, { recursive: true });
+    {
+      const rozelleKmCtx = await browser.newContext({
+        viewport: VIEWPORT,
+        deviceScaleFactor: 1,
+        reducedMotion: "reduce",
+      });
+      await rozelleKmCtx.addInitScript(() => {
+        window.__citycutMinSilentLoadMs = 0;
+      });
+      const rozelleKmPage = await rozelleKmCtx.newPage();
+      const rozelleKmQuery = "qa=1&lat=-33.8677&lon=151.1832&km=1&label=Rozelle%20NSW";
+      await rozelleKmPage.goto(`${baseUrl}/?${rozelleKmQuery}`, { waitUntil: "domcontentloaded", timeout: 120_000 });
+      await rozelleKmPage.waitForSelector("button.create-fab", { timeout: 30_000 });
+      await rozelleKmPage.click("button.create-fab");
+      await rozelleKmPage.waitForFunction(
+        () => {
+          const err = document.querySelector(".sidebar-foot-error")?.textContent?.trim();
+          if (err) return true;
+          const canvas = document.querySelector(".scene-viewport canvas");
+          if (!canvas) return false;
+          const spanX = Number(canvas.dataset.citycutGroundSpanX ?? 0);
+          const ready = /Ready ·\s*\d+\/\d+ sources/.test(document.body.innerText);
+          return ready && spanX > 100;
+        },
+        null,
+        { timeout: 360_000 },
+      );
+      await rozelleKmPage.waitForTimeout(1200);
+      const brokenFixture = path.join(REPO_ROOT, "scripts/fixtures/rozelle-1km-3d-plan-broken-dac3d62.png");
+      const brokenAudit = auditRozellePlanPngFile(brokenFixture);
+      assertCheck(
+        "rozelle-plan-audit-broken-fixture",
+        "Known-broken dac3d62 3D Plan PNG fails the Rozelle harbour pixel audit",
+        !brokenAudit.passes.ok,
+        brokenAudit.passes.detail,
+      );
+      const brokenHeadFixture = path.join(REPO_ROOT, "scripts/fixtures/rozelle-1km-3d-plan-broken-2f1ab01.png");
+      if (fs.existsSync(brokenHeadFixture)) {
+        const brokenHeadAudit = auditRozellePlanPngFile(brokenHeadFixture);
+        assertCheck(
+          "rozelle-plan-audit-broken-2f1ab01-fixture",
+          "Known-broken 2f1ab01 3D Plan PNG fails the Rozelle harbour pixel audit",
+          !brokenHeadAudit.passes.ok,
+          brokenHeadAudit.passes.detail,
+        );
+      }
+      const broken82bc92aFixture = path.join(REPO_ROOT, "scripts/fixtures/rozelle-1km-3d-plan-broken-82bc92a.png");
+      if (fs.existsSync(broken82bc92aFixture)) {
+        const broken82bc92aAudit = auditRozellePlanPngFile(broken82bc92aFixture);
+        assertCheck(
+          "rozelle-plan-audit-broken-82bc92a-fixture",
+          "Known-broken 82bc92a 3D Plan PNG fails the Rozelle harbour pixel audit",
+          !broken82bc92aAudit.passes.ok,
+          broken82bc92aAudit.passes.detail,
+        );
+      }
+      await rozelleKmPage.screenshot({
+        path: path.join(cursorArtifacts, "rozelle-1km-3d-default.png"),
+        clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+      });
+      const planProj = rozelleKmPage.locator(".model .proj-group button", { hasText: "Plan" }).first();
+      if ((await planProj.count()) > 0) {
+        await planProj.click({ timeout: 30_000 });
+        await rozelleKmPage.waitForTimeout(1200);
+      }
+      await rozelleKmPage.screenshot({
+        path: path.join(cursorArtifacts, "rozelle-1km-3d-plan.png"),
+        clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+      });
+      const qaAudit = await rozelleKmPage.evaluate(() => {
+        const audit = window.__citycutRozelleViewportQa ?? null;
+        const waterHex = "#7fBfff".toLowerCase();
+        const waterOk =
+          audit &&
+          audit.waterVisible &&
+          audit.waterTriangleCount > 80 &&
+          audit.waterColorHex.toLowerCase() === waterHex;
+        const half = audit?.frameHalfM ?? 500;
+        const frameOk =
+          audit &&
+          audit.storedEastMin >= -half - 2 &&
+          audit.storedEastMax <= half + 2 &&
+          audit.storedNorthMin >= -half - 2 &&
+          audit.storedNorthMax <= half + 2;
+        const cablesOk = audit && audit.projection === "plan" ? !audit.bridgeCablesVisible : true;
+        return {
+          audit,
+          waterOk,
+          frameOk,
+          cablesOk,
+        };
+      });
+      assertCheck(
+        "rozelle-1km-3d-plan-water-mesh",
+        "Rozelle 1 km 3D Plan keeps a visible clipped water mesh tinted --water-3d",
+        Boolean(qaAudit.waterOk),
+        qaAudit.audit ? JSON.stringify(qaAudit.audit) : "missing audit",
+      );
+      assertCheck(
+        "rozelle-1km-stored-mesh-in-frame",
+        "Rozelle 1 km stored GLB stays inside the cut square after clipping",
+        Boolean(qaAudit.frameOk),
+        qaAudit.audit ? JSON.stringify(qaAudit.audit) : "missing audit",
+      );
+      assertCheck(
+        "rozelle-1km-plan-bridge-cables-hidden",
+        "Rozelle 1 km 3D Plan hides bridge stay cables (no deck smear)",
+        Boolean(qaAudit.cablesOk),
+        qaAudit.audit ? JSON.stringify(qaAudit.audit) : "missing audit",
+      );
+      let contextKeptMin = 5200;
+      try {
+        const keptFixture = JSON.parse(
+          fs.readFileSync(path.join(REPO_ROOT, "src/lib/__fixtures__/rozelle-context-kept-tris-v3.json"), "utf8"),
+        );
+        contextKeptMin = Number(keptFixture.contextTrianglesKeptMin ?? contextKeptMin);
+      } catch {
+      }
+      const contextKept = Number(qaAudit.audit?.contextTrianglesKept ?? 0);
+      assertCheck(
+        "rozelle-1km-context-mesh-kept",
+        "Rozelle stored-site Context refine keeps at least the v3 triangle count north of the harbour",
+        contextKept >= contextKeptMin,
+        `contextTrianglesKept=${contextKept} min=${contextKeptMin}`,
+      );
+      const planShot = path.join(cursorArtifacts, "rozelle-1km-3d-plan.png");
+      const liveAudit = auditRozellePlanPngFile(planShot);
+      assertCheck(
+        "rozelle-1km-3d-plan-pixel-audit",
+        "Rozelle 1 km 3D Plan passes harbour blue / low beige / low blue-speckle pixel audit",
+        liveAudit.passes.ok,
+        liveAudit.passes.detail,
+      );
+      await rozelleKmPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 120_000 });
+      await rozelleKmPage.getByRole("button", { name: "Site plan" }).click({ timeout: 60_000 });
+      await rozelleKmPage.waitForSelector("svg.plan", { timeout: 120_000 });
+      const scale5000 = rozelleKmPage.locator(".studio-scale-row select");
+      if ((await scale5000.count()) > 0) await scale5000.selectOption("5000");
+      await rozelleKmPage.waitForTimeout(800);
+      await rozelleKmPage.waitForFunction(
+        () => document.querySelectorAll('svg.plan path[data-bridge-cable="true"]').length > 0,
+        null,
+        { timeout: 60_000 },
+      );
+      const cableMetrics = await rozelleKmPage.evaluate(() => {
+        const paths = Array.from(document.querySelectorAll('svg.plan path[data-bridge-cable="true"]'));
+        const widths = paths.flatMap((path) => {
+          const attr = Number(path.getAttribute("stroke-width"));
+          const computed = Number(getComputedStyle(path).strokeWidth);
+          const hinted = Number((path.outerHTML.match(/\bstroke-width="([0-9.]+)"/) ?? [])[1]);
+          return [attr, computed, hinted].filter((value) => Number.isFinite(value) && value > 0);
+        });
+        return {
+          count: paths.length,
+          strokeWidth: widths.length > 0 ? Math.max(...widths) : null,
+        };
+      });
+      await rozelleKmPage.screenshot({
+        path: path.join(cursorArtifacts, "rozelle-1km-drawing-5000.png"),
+        clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+      });
+      assertCheck(
+        "rozelle-1km-drawing-cable-stroke",
+        "Rozelle 1 km Drawing at 1:5000 renders bridge cables at least 0.6px",
+        cableMetrics.count > 0 && cableMetrics.strokeWidth != null && cableMetrics.strokeWidth >= 0.59,
+        `count=${cableMetrics.count} strokeWidth=${cableMetrics.strokeWidth}`,
+      );
+      await rozelleKmCtx.close();
+    }
   const sydneyCtx = await browser.newContext({
       viewport: VIEWPORT,
       deviceScaleFactor: 1,
