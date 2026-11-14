@@ -1,9 +1,7 @@
 # PR handoff
 
-- **What changed:** Deferred ground-wind screen layout and warm-up until the 3D camera has settled (~0.4s stable), with a full re-layout when the camera digest changes after that. `refreshGroundWindSlotAnchors` jitters blocked screen rays and clears dead slot anchors instead of keeping stale world positions. Trail `metresPerPx` is a blend of median particle camera distance and scene centre, updated only on settle (no particle-0 sampling). `ground-wind-window-density` verify and audit windows use `minYCssPx: 300`. Added `scripts/ground-wind-se-loop.mjs` (five-run Cleeland audit).
-- **Why:** SE quarter wind could be empty in ~3/5 preview runs although the HUD mask y-flip fix removed the masked strip; layout was racing the intro camera and anchors could stick on footprint-blocked rays. Global trail length pulsed because `metresPerPx` tracked particle 0 each frame.
-- **How verified:** `npm run typecheck`, `npm test` (incl. `ground-wind-windows-lib`), `npm run build`. Local preview `GROUND_WIND_RUNS=5 node scripts/ground-wind-se-loop.mjs` after fix: SE band worst pixel ratio 0.66–0.71, SE quarter 0.52–0.72, `seRight` drawn normalised ~0.08–0.10 all runs, mpp ~0.73. Root causes: (1) HUD mask CSS y flip (`b767d73`); (2) pre-settle layout + stale anchors (`dc77b6c`); (3) particle-0 mpp (`dc77b6c`).
-- **Blast radius:** skipped (ground wind + verify scripts only)
-- **Risks:** Brief wind re-seed when the camera stops after user orbit; relayout warm ~1.1s.
-- **Preview:** https://citycut-git-claude-ground-wind-v2-kchai.vercel.app/?lat=-37.983826&lon=145.21555&label=40+Cleeland+St%2C+Dandenong+VIC+3175&km=1&debug=wind
+- **What changed:** Merged `origin/main` (top-bar fit #228, inspect pick, Card view). Wind: `#1e40af` core capped at 0.9 alpha; far-field seed budget scales with viewport area, far slots prioritized, 24px min trail in far band. ≤1280: env console inset for ≥16px gap to compass; 40+ legend drops `km/h` below 1360. E2e top bar audit 1024–1440 uses system Chrome.
+- **Why:** Designbot review — top bar clip at 1280, contrast/far-field density, analysis/compass overlap.
+- **How verified:** `npm run typecheck`, `npm run build`, `npm test` (incl. `groundWindPerspective`, `topBarGroups` e2e). Live 5/5 Cleeland wind at `23d0e68`; `npm run verify:ui` on follow-up commit (in progress).
+- **Preview:** https://citycut-git-claude-ground-wind-v2-kchai.vercel.app/?lat=-37.983826&lon=145.21555&km=1&debug=wind
 - **Next step:** needs Kelvin's go to merge.
