@@ -1,5 +1,5 @@
-import * as polygonClipping from "polygon-clipping";
-import type { MultiPolygon, Pair } from "polygon-clipping";
+import type { MultiPolygon, Pair } from "./safePolygonClip";
+import { clipDifference, clipIntersection } from "./safePolygonClip";
 import { shadowRingsFromMulti } from "./buildingShadows";
 import { pointInLocalMulti } from "./massingParcelBoundary";
 import {
@@ -75,8 +75,8 @@ export function parkAddedShadowRings(
 ): Ring[][] {
   if (addedPoints.length === 0) return [];
   try {
-    const added = polygonClipping.difference(stepShadow.proposed, stepShadow.existing);
-    const clipped = polygonClipping.intersection(added, [[closedPairs(parkRing)]]);
+    const added = clipDifference(stepShadow.proposed, stepShadow.existing);
+    const clipped = clipIntersection(added, [[closedPairs(parkRing)]]);
     const rings = shadowRingsFromMulti(clipped);
     if (rings.length > 0) return rings;
   } catch {

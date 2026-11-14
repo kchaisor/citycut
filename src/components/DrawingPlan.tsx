@@ -25,7 +25,7 @@ import type { SectionKnifeToolState } from "../lib/sectionKnife/state";
 import { SectionKnifePlanMarkers } from "./SectionKnifePlanMarkers";
 import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
 import { NswPlanLabels, NswPlanLines, NswPlanUnder } from "./NswPlanLayers";
-import { NSW_PLAN_LABEL_SHARE, nswPlanItems } from "../lib/nswPlan";
+import { NSW_PLAN_LABEL_SHARE, nswPlanHasDrawableContent, nswPlanItems } from "../lib/nswPlan";
 import { readNswPlanStyle } from "../lib/nswPlanStyle";
 import {
   importedPlanShadowRings,
@@ -306,7 +306,11 @@ export function DrawingPlan({
   const planEmpty = getColour("--plan-empty");
   const shadowFill = getColour("--shadow-fill");
   const nswStyle = useMemo(() => (model.nsw ? readNswPlanStyle() : null), [model.nsw, colourTick]);
-  const nswItems = useMemo(() => (nswStyle ? nswPlanItems(model, nswStyle.hatchM) : null), [model, nswStyle]);
+  const nswItems = useMemo(() => {
+    if (!nswStyle) return null;
+    const items = nswPlanItems(model, nswStyle.hatchM);
+    return items && nswPlanHasDrawableContent(items) ? items : null;
+  }, [model, nswStyle]);
   const study = figure ? null : sunStudy;
   const casterModel = useMemo(
     () => sunStudyCasterModel(model, sunStudyCasters, sunStudySelected),

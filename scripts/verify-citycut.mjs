@@ -43,6 +43,63 @@ function countPixelsNearRgb(png, target, tolerance = 48) {
   return hits;
 }
 
+const SUN_HOURS_PALETTE_STOPS = [
+  { r: 49, g: 54, b: 149 },
+  { r: 59, g: 81, b: 139 },
+  { r: 116, g: 184, b: 185 },
+  { r: 171, g: 221, b: 164 },
+  { r: 254, g: 232, b: 37 },
+  { r: 255, g: 249, b: 196 },
+  { r: 253, g: 174, b: 97 },
+  { r: 215, g: 48, b: 39 },
+];
+
+function isSunHoursPalettePixel(r, g, b) {
+  if (r > 246 && g > 246 && b > 246) return false;
+  if (r > 235 && g > 235 && b > 235 && Math.max(r, g, b) - Math.min(r, g, b) < 12) return false;
+  const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+  if (chroma < 28) return false;
+  for (const stop of SUN_HOURS_PALETTE_STOPS) {
+    const dr = Math.abs(r - stop.r);
+    const dg = Math.abs(g - stop.g);
+    const db = Math.abs(b - stop.b);
+    if (dr <= 72 && dg <= 72 && db <= 72) return true;
+  }
+  return false;
+}
+
+function countSunHoursRoofPalettePixels(png, crop = null) {
+  const { width, height, data } = png;
+  const x0 = crop?.x ?? 0;
+  const y0 = crop?.y ?? 0;
+  const x1 = crop ? x0 + crop.width : width;
+  const y1 = crop ? y0 + crop.height : height;
+  let palette = 0;
+  let neutral = 0;
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const i = (width * y + x) * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      if (isSunHoursPalettePixel(r, g, b)) palette += 1;
+      else if (r > 232 && g > 232 && b > 232) neutral += 1;
+    }
+  }
+  return { palette, neutral };
+}
+
+function buildingFootprintCrop(png) {
+  const w = png.width;
+  const h = png.height;
+  return {
+    x: Math.floor(w * 0.38),
+    y: Math.floor(h * 0.32),
+    width: Math.floor(w * 0.38),
+    height: Math.floor(h * 0.36),
+  };
+}
+
 function countWarmBrightenDelta(beforePng, afterPng, minSumDelta = 22) {
   let hits = 0;
   for (let i = 0; i < beforePng.data.length; i += 4) {
@@ -760,7 +817,9 @@ async function main() {
     await page.waitForTimeout(1200);
     const rozelleDrawing = await page.evaluate(() => {
       const planScale = document.querySelector(".studio-scale-row select")?.value ?? "";
-      const nswLayerCount = document.querySelectorAll('[data-layer^="nsw-"]').length;
+      const nswLayerCount = document.querySelectorAll(
+        '[data-layer^="nsw-"] path[fill]:not([fill="none"]):not([fill="transparent"]), [data-layer^="nsw-"] text',
+      ).length;
       return { planScale, nswLayerCount };
     });
     await page.screenshot({
@@ -1863,11 +1922,22 @@ async function main() {
 
     await page.evaluate(() => window.__citycutQaMassing?.disableTool());
 
-    // -------------------------------------------------------------------------
-    // SECTION KNIFE: real mouse gizmo drag (no ?qa=1)
-    // -------------------------------------------------------------------------
-    {
-      const isoBtn = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Isometric" }).first();
+    await page.waitForFunction(
+      () => {
+        const canvas = document.querySelector(".model canvas");
+        const introDone = document.querySelector(".model")?.getAttribute("data-intro-done") === "true";
+        const polar = Number(canvas?.dataset.introPolar ?? canvas?.dataset.camElevation ?? 0);
+        return introDone || polar >= 0.95;
+      },
+      null,
+      { timeout: 120_000 },
+    );
+
+  // -------------------------------------------------------------------------
+  // SECTION KNIFE: real mouse gizmo drag (no ?qa=1)
+  // -------------------------------------------------------------------------
+  {
+    const isoBtn = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Isometric" }).first();
       if ((await isoBtn.count()) === 0) {
         assertCheck(
           "section-knife-handle-drag",
@@ -3174,6 +3244,24 @@ async function main() {
         const blueHits = countPixelsNearRgb(planPng, paletteBlue, 80);
         const yellowHits = countPixelsNearRgb(obliquePng, paletteYellow, 72);
         const plan3dRoofYellow = countPixelsNearRgb(plan3dCleanPng, paletteYellow, 68);
+        const obliqueRoofCrop = buildingFootprintCrop(obliquePng);
+        const planRoofCrop = buildingFootprintCrop(plan3dCleanPng);
+        const obliqueRoofStats = countSunHoursRoofPalettePixels(obliquePng, obliqueRoofCrop);
+        const planRoofStats = countSunHoursRoofPalettePixels(plan3dCleanPng, planRoofCrop);
+        assertCheck(
+          "solar-sun-hours-roof-palette-box-hill",
+          "Box Hill 3D roof overlays use Ladybug palette fills, not solar-neutral white/grey building tops",
+          obliqueRoofStats.palette > 1200 &&
+            planRoofStats.palette > 900 &&
+            obliqueRoofStats.palette > obliqueRoofStats.neutral * 4 &&
+            planRoofStats.palette > planRoofStats.neutral * 4,
+          JSON.stringify({
+            oblique: obliqueRoofStats,
+            plan: planRoofStats,
+            obliqueRoofYellow: countPixelsNearRgb(obliquePng, paletteYellow, 68),
+            plan3dRoofYellow,
+          }),
+        );
 
         assertCheck(
           "solar-sun-hours-ground-heatmap",
@@ -3248,6 +3336,23 @@ async function main() {
         const paletteYellow = { r: 254, g: 232, b: 37 };
         const yellowHits = countPixelsNearRgb(obliquePng, paletteYellow, 72);
         const planRoofYellow = countPixelsNearRgb(planPng, paletteYellow, 68);
+        const montObliqueCrop = buildingFootprintCrop(obliquePng);
+        const montPlanCrop = buildingFootprintCrop(planPng);
+        const montObliqueRoofStats = countSunHoursRoofPalettePixels(obliquePng, montObliqueCrop);
+        const montPlanRoofStats = countSunHoursRoofPalettePixels(planPng, montPlanCrop);
+        assertCheck(
+          "solar-sun-hours-roof-palette-mont-albert",
+          "Mont Albert 3D roof overlays use Ladybug palette fills, not solar-neutral white/grey building tops",
+          montObliqueRoofStats.palette > 800 &&
+            montPlanRoofStats.palette > 500 &&
+            montObliqueRoofStats.palette > montObliqueRoofStats.neutral * 3 &&
+            montPlanRoofStats.palette > montPlanRoofStats.neutral * 3,
+          JSON.stringify({
+            oblique: montObliqueRoofStats,
+            plan: montPlanRoofStats,
+            planRoofYellow,
+          }),
+        );
         assertCheck(
           "solar-sun-hours-mont-albert-drape",
           "Mont Albert North sun-hours ground mesh drapes on terrain with relief and sloped edge visible",

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { parseNativeAiLayers } from "./aiNative";
-import { sitePlanAi8, sunStudyLayerName } from "./aiPlan";
-import { planShadowRings } from "./buildingShadows";
+import { sitePlanAi8 } from "./aiPlan";
+import { existingShadowLayerName } from "./solarStudyLayers";
+import { planShadowSplitRings } from "./buildingShadows";
 import { projectLocal, mgaCrs } from "./crs";
 import { model } from "./aiExport.test";
 import { cityModelTo3dm, loadRhino } from "./rhinoExport";
@@ -170,10 +171,10 @@ describe("site plan .3dm", () => {
 
   it("includes sun-study shadow and Sun path layers matching the .ai export", async () => {
     const date = { lat: melbourne.lat, lon: melbourne.lon, year: 2026, month: 9, day: 22 };
-    const studyLayers = SUN_STUDY_HOURS.map((hour) => ({
-      hour,
-      rings: [...planShadowRings(melbourneModel, { ...date, hour, minute: 0 }, true)],
-    }));
+    const studyLayers = SUN_STUDY_HOURS.map((hour) => {
+      const split = planShadowSplitRings(melbourneModel, { ...date, hour, minute: 0 }, true);
+      return { hour, minute: 0, existingRings: split.existing, addedRings: split.added };
+    });
     const diagram = {
       ...date,
       hour: 12,
@@ -198,19 +199,19 @@ describe("site plan .3dm", () => {
     const rhinoLayers = sitePlanRhinoLayerNames(melbourneModel, 1000, undefined, exportOpts);
     expect(rhinoLayers.sort()).toEqual(aiLayers.sort());
     expect(rhinoLayers).toContain("Sun path");
-    expect(rhinoLayers).toContain(sunStudyLayerName(12));
+    expect(rhinoLayers).toContain(existingShadowLayerName(12, 0));
     const bytes = await sitePlanTo3dm(melbourneModel, 1000, undefined, exportOpts);
     const buf = Buffer.from(bytes);
     const layerLabelInFile = (label: string) =>
       buf.includes(Buffer.from(label, "utf8")) || buf.includes(Buffer.from(label, "utf16le"));
     expect(layerLabelInFile("Sun path")).toBe(true);
-    expect(layerLabelInFile(sunStudyLayerName(12))).toBe(true);
+    expect(layerLabelInFile(existingShadowLayerName(12, 0))).toBe(true);
     const rhino = await loadRhino();
     const doc = rhino.File3dm.fromByteArray(bytes);
     try {
       expect(curveCountOnLayer(rhino, doc, "Sun path")).toBeGreaterThan(0);
-      expect(curveCountOnLayer(rhino, doc, sunStudyLayerName(12))).toBeGreaterThan(0);
-      const noon = curvePointsOnLayer(rhino, doc, sunStudyLayerName(12));
+      expect(curveCountOnLayer(rhino, doc, existingShadowLayerName(12, 0))).toBeGreaterThan(0);
+      const noon = curvePointsOnLayer(rhino, doc, existingShadowLayerName(12, 0));
       expect(noon.some((point) => Math.abs(point[2]!) < 0.01)).toBe(true);
     } finally {
       doc.destroy();

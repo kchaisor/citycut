@@ -1,25 +1,11 @@
-import type { MultiPolygon, Pair } from "polygon-clipping";
-import * as polygonClipping from "polygon-clipping";
+import type { MultiPolygon, Pair } from "./safePolygonClip";
+import { clipIntersection, clipUnion } from "./safePolygonClip";
 import { planShadowOffset } from "./buildingShadows";
 import { openRing } from "./geo";
 import { treeCrownSphereLayout } from "./treeMassing";
 import { sunAtMelbourneLocal } from "./solar";
 import type { PlanShadowInput } from "./buildingShadows";
 import type { CityModel, Pt, Ring, TreeFeat } from "../types";
-
-function clipLoaded(): {
-  union: (a: MultiPolygon, b: MultiPolygon) => MultiPolygon;
-} {
-  const loaded = polygonClipping as unknown as {
-    union: (a: MultiPolygon, b: MultiPolygon) => MultiPolygon;
-    default?: { union: (a: MultiPolygon, b: MultiPolygon) => MultiPolygon };
-  };
-  if (typeof loaded.union === "function") return loaded;
-  if (loaded.default) return loaded.default;
-  throw new Error("polygon-clipping did not load.");
-}
-
-const { union } = clipLoaded();
 
 function ellipseRing(centerEast: number, centerNorth: number, radiusM: number, segments = 14): Ring {
   const ring: Pt[] = [];
@@ -68,7 +54,7 @@ export function planTreeShadowMulti(model: CityModel, input: PlanShadowInput, tr
     const multi = ringToMulti(ring);
     if (multi.length === 0) continue;
     try {
-      merged = merged.length === 0 ? multi : union(merged, multi);
+      merged = merged.length === 0 ? multi : clipUnion(merged, multi);
     } catch {
       continue;
     }
@@ -87,7 +73,7 @@ export function planTreeShadowMulti(model: CityModel, input: PlanShadowInput, tr
     ],
   ];
   try {
-    return polygonClipping.intersection(merged, frame) as MultiPolygon;
+    return clipIntersection(merged, frame);
   } catch {
     return merged;
   }

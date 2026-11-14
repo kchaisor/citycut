@@ -237,16 +237,28 @@ function clipOperation(
   operands: Array<Polygon | MultiPolygon>,
   context?: ClipContext,
 ): MultiPolygon {
-  const rawMultis = operands.map((geom) => coerceToMulti(geom)).filter((multi) => multi.length > 0);
+  const coerced = operands.map((geom) => coerceToMulti(geom));
+  if (op === "intersection" && coerced.some((multi) => multi.length === 0)) return [];
+  if (op === "difference" && coerced[0]!.length === 0) return [];
+  const rawMultis = coerced.filter((multi) => multi.length > 0);
   if (rawMultis.length === 0) return [];
   let result = tryRawOp(op, rawMultis);
-  if (result && result.length > 0) return result;
+  if (result !== null) {
+    if (result.length === 0) return [];
+    return result;
+  }
   const prepared = operands.map((geom) => normalizeToMulti(geom)).filter((multi) => multi.length > 0);
   result = tryRawOp(op, prepared);
-  if (result && result.length > 0) return prepareMultiPolygonForClip(result);
+  if (result !== null) {
+    if (result.length === 0) return [];
+    return prepareMultiPolygonForClip(result);
+  }
   const repaired = prepared.map((multi) => repairMulti(multi)).filter((multi) => multi.length > 0);
   result = tryRawOp(op, repaired);
-  if (result && result.length > 0) return prepareMultiPolygonForClip(result);
+  if (result !== null) {
+    if (result.length === 0) return [];
+    return prepareMultiPolygonForClip(result);
+  }
   if (op === "union") {
     const pieces: MultiPolygon = [];
     for (const multi of repaired) {
@@ -353,6 +365,10 @@ export function clipUnionEach(polygons: Polygon[], context?: ClipContext): Multi
     acc = next;
   }
   return acc;
+}
+
+export function isPolygonClipTopologyError(message: string): boolean {
+  return /Unable to complete output ring/i.test(message) || /Last matching segment found ends at/i.test(message);
 }
 
 export function cleanRingForFrame(points: Pt[]): Pt[] {

@@ -1,19 +1,10 @@
-import * as polygonClipping from "polygon-clipping";
-import type { MultiPolygon, Polygon } from "polygon-clipping";
+import type { MultiPolygon, Polygon } from "./safePolygonClip";
+import { clipUnion } from "./safePolygonClip";
 import RBush from "rbush";
 import { fromLocal, openRing, toLocal } from "./geo";
 import { pointInPolygon } from "./useCascade";
 import type { LonLat, Pt } from "../types";
 import type { IndexedParcel, ParcelOutline } from "./parcelOutlines";
-
-type UnionFn = (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
-
-function unionFn(): UnionFn {
-  const loaded = polygonClipping as unknown as { union?: UnionFn; default?: { union?: UnionFn } };
-  if (typeof loaded.union === "function") return loaded.union;
-  if (typeof loaded.default?.union === "function") return loaded.default.union;
-  throw new Error("polygon-clipping did not load.");
-}
 
 function parcelToLocalPolygon(parcel: ParcelOutline, origin: LonLat): Polygon {
   const ring = openRing(parcel.ring.map(([lon, lat]) => toLocal(lat, lon, origin)));
@@ -25,11 +16,10 @@ function parcelToLocalPolygon(parcel: ParcelOutline, origin: LonLat): Polygon {
 
 export function unionParcelsLocal(parcels: ParcelOutline[], origin: LonLat): MultiPolygon {
   if (parcels.length === 0) return [];
-  const union = unionFn();
   let merged: MultiPolygon = [];
   for (const parcel of parcels) {
     const poly = parcelToLocalPolygon(parcel, origin);
-    merged = merged.length ? union(merged, poly) : [poly];
+    merged = merged.length ? clipUnion(merged, poly) : [poly];
   }
   return merged;
 }
