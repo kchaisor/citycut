@@ -1063,28 +1063,17 @@ function City({
     railVisible,
   ]);
   useLayoutEffect(() => {
-    const planView = projection === "plan";
-    const suppressGroundDepth = new Set(["Terrain", "Ground", "BasePlinth"]);
-    group.traverse((object) => {
-      const mesh = object as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      for (const material of materials) {
-        if (!(material instanceof THREE.MeshStandardMaterial)) continue;
-        if (material.userData.planDepthWriteRest == null) {
-          material.userData.planDepthWriteRest = material.depthWrite;
-        }
-        if (mesh.name === "Water" && planView) {
-          material.depthWrite = true;
-          material.depthTest = true;
-          mesh.renderOrder = 12;
-          return;
-        }
-        if (suppressGroundDepth.has(mesh.name)) {
-          material.depthWrite = planView ? false : material.userData.planDepthWriteRest;
-        }
+    if (projection !== "plan") return;
+    const water = group.getObjectByName("Water");
+    if (!(water instanceof THREE.Mesh)) return;
+    water.renderOrder = 12;
+    const materials = Array.isArray(water.material) ? water.material : [water.material];
+    for (const material of materials) {
+      if (material instanceof THREE.MeshStandardMaterial) {
+        material.depthWrite = true;
+        material.depthTest = true;
       }
-    });
+    }
     invalidate();
   }, [group, projection, invalidate]);
   useLayoutEffect(() => {

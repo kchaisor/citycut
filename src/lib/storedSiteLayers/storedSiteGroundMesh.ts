@@ -76,3 +76,84 @@ export function storedSitePartIsTerrainDrapeSurface(part: StoredSiteMeshPart): b
   if (groundLikeVertexFrac < 0.72) return false;
   return true;
 }
+
+function triangleNormalY(positions: Float32Array, ia: number, ib: number, ic: number): number {
+  const ax = positions[ia * 3]!;
+  const ay = positions[ia * 3 + 1]!;
+  const az = positions[ia * 3 + 2]!;
+  const bx = positions[ib * 3]!;
+  const by = positions[ib * 3 + 1]!;
+  const bz = positions[ib * 3 + 2]!;
+  const cx = positions[ic * 3]!;
+  const cy = positions[ic * 3 + 1]!;
+  const cz = positions[ic * 3 + 2]!;
+  const abx = bx - ax;
+  const aby = by - ay;
+  const abz = bz - az;
+  const acx = cx - ax;
+  const acy = cy - ay;
+  const acz = cz - az;
+  let nx = aby * acz - abz * acy;
+  let ny = abz * acx - abx * acz;
+  let nz = abx * acy - aby * acx;
+  const len = Math.hypot(nx, ny, nz);
+  if (!(len > 1e-8)) return 0;
+  return ny / len;
+}
+
+const WATER_COVER_MAX_Y_M = 6.5;
+
+export function stripStoredSiteWaterCoverTriangles(part: StoredSiteMeshPart): StoredSiteMeshPart | null {
+  const positions = part.positions;
+  const triCount = part.indices.length / 3;
+  const remap = new Map<number, number>();
+  const outPos: number[] = [];
+  const outIdx: number[] = [];
+  for (let t = 0; t < triCount; t++) {
+    const ia = part.indices[t * 3]!;
+    const ib = part.indices[t * 3 + 1]!;
+    const ic = part.indices[t * 3 + 2]!;
+    const ay = positions[ia * 3 + 1]!;
+    const by = positions[ib * 3 + 1]!;
+    const cy = positions[ic * 3 + 1]!;
+    const ny = triangleNormalY(positions, ia, ib, ic);
+    const groundLike = Math.abs(ny) >= GROUND_NORMAL_MIN_Y;
+    const low = Math.max(ay, by, cy) <= WATER_COVER_MAX_Y_M;
+    if (groundLike && low) continue;
+    for (const old of [ia, ib, ic]) {
+      let neu = remap.get(old);
+      if (neu === undefined) {
+        neu = outPos.length / 3;
+        remap.set(old, neu);
+        outPos.push(positions[old * 3]!, positions[old * 3 + 1]!, positions[old * 3 + 2]!);
+      }
+      outIdx.push(neu);
+    }
+  }
+  if (outIdx.length < 3) return null;
+  return {
+    buildingId: part.buildingId,
+    structure: part.structure,
+    partId: part.partId,
+    positions: new Float32Array(outPos),
+    indices: new Uint32Array(outIdx),
+  };
+}
+
+export function refineStoredSiteMeshPart(part: StoredSiteMeshPart): StoredSiteMeshPart | null {
+  if (storedSitePartIsTerrainDrapeSurface(part)) return null;
+  return stripStoredSiteWaterCoverTriangles(part);
+}
+
+export function refineStoredSiteContextPart(part: StoredSiteMeshPart): StoredSiteMeshPart | null {
+  if (storedSitePartIsTerrainDrapeSurface(part)) return null;
+  const stripped = stripStoredSiteWaterCoverTriangles(part);
+  if (!stripped) return null;
+  const origTris = part.indices.length / 3;
+  const keptTris = stripped.indices.length / 3;
+  if (keptTris / Math.max(origTris, 1) < 0.06) return null;
+  const stats = storedSitePartStats(stripped);
+  if (stats.groundLikeVertexFrac > 0.52) return null;
+  if (stats.spanM > 120 && stats.reliefM < 35) return null;
+  return stripped;
+}

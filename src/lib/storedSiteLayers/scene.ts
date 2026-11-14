@@ -16,7 +16,10 @@ import {
   type FrameGroundSize,
   type SiteFrameShape,
 } from "../siteFrame";
-import { storedSitePartIsTerrainDrapeSurface } from "./storedSiteGroundMesh";
+import {
+  refineStoredSiteContextPart,
+  storedSitePartIsTerrainDrapeSurface,
+} from "./storedSiteGroundMesh";
 
 export type { StoredSiteMeshPart } from "./types";
 
@@ -192,6 +195,32 @@ function splitBridgeMeshByMeta(
   return parts;
 }
 
+function storedSiteMeshToPart(
+  geometry: THREE.BufferGeometry,
+  manifest: StoredSiteLayerManifest,
+  origin: LonLat,
+  zone: number,
+  structure: boolean,
+): StoredSiteMeshPart | null {
+  const position = geometry.getAttribute("position");
+  if (!position) return null;
+  const positions = remapPositions(position, manifest, origin, zone);
+  const index = geometry.getIndex();
+  const indices: number[] = [];
+  if (index) {
+    for (let i = 0; i < index.count; i++) indices.push(index.getX(i)!);
+  } else {
+    for (let i = 0; i < position.count; i++) indices.push(i);
+  }
+  if (indices.length < 3) return null;
+  return {
+    positions,
+    indices: new Uint32Array(indices),
+    buildingId: null,
+    structure,
+  };
+}
+
 async function loadGlbParts(
   url: string,
   manifest: StoredSiteLayerManifest,
@@ -212,7 +241,15 @@ async function loadGlbParts(
     const mesh = node as THREE.Mesh;
     if (!mesh.isMesh || !(mesh.geometry instanceof THREE.BufferGeometry)) return;
     const meshName = mesh.name ?? "";
-    if (meshName.startsWith("Buildings-Context")) return;
+    if (meshName.startsWith("Buildings-Context")) {
+      const geometry = mesh.geometry.clone();
+      geometry.applyMatrix4(mesh.matrixWorld);
+      const whole = storedSiteMeshToPart(geometry, manifest, origin, zone, true);
+      geometry.dispose();
+      const refined = whole ? refineStoredSiteContextPart(whole) : null;
+      if (refined) parts.push(refined);
+      return;
+    }
     const geometry = mesh.geometry.clone();
     geometry.applyMatrix4(mesh.matrixWorld);
     (geometry.userData as { buildingIds?: string[] }).buildingIds = rootIds;

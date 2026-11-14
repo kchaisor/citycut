@@ -2261,6 +2261,16 @@ async function main() {
         !brokenAudit.passes.ok,
         brokenAudit.passes.detail,
       );
+      const brokenHeadFixture = path.join(REPO_ROOT, "scripts/fixtures/rozelle-1km-3d-plan-broken-2f1ab01.png");
+      if (fs.existsSync(brokenHeadFixture)) {
+        const brokenHeadAudit = auditRozellePlanPngFile(brokenHeadFixture);
+        assertCheck(
+          "rozelle-plan-audit-broken-2f1ab01-fixture",
+          "Known-broken 2f1ab01 3D Plan PNG fails the Rozelle harbour pixel audit",
+          !brokenHeadAudit.passes.ok,
+          brokenHeadAudit.passes.detail,
+        );
+      }
       await rozelleKmPage.screenshot({
         path: path.join(cursorArtifacts, "rozelle-1km-3d-default.png"),
         clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },

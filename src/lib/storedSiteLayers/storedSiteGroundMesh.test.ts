@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { storedSitePartIsTerrainDrapeSurface } from "./storedSiteGroundMesh";
+import { refineStoredSiteContextPart, storedSitePartIsTerrainDrapeSurface } from "./storedSiteGroundMesh";
 import type { StoredSiteMeshPart } from "./types";
 
 function flatGroundPart(span: number): StoredSiteMeshPart {
@@ -31,5 +31,9 @@ describe("storedSitePartIsTerrainDrapeSurface", () => {
     part.structure = false;
     part.buildingId = 42;
     expect(storedSitePartIsTerrainDrapeSurface(part)).toBe(false);
+  });
+
+  it("drops rozelle-scale context slabs", () => {
+    expect(refineStoredSiteContextPart(flatGroundPart(900))).toBeNull();
   });
 });

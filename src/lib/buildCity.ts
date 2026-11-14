@@ -342,9 +342,9 @@ function drapedWaterLayer(storedSiteDrape: boolean) {
   return {
     ...SURFACE.water,
     lift: SURFACE.water.lift + extraLift,
-    polygonOffsetFactor: storedSiteDrape ? -4 : SURFACE.water.polygonOffsetFactor,
-    polygonOffsetUnits: storedSiteDrape ? -6 : SURFACE.water.polygonOffsetUnits,
-    renderOrder: storedSiteDrape ? SURFACE.water.renderOrder + 3 : SURFACE.water.renderOrder,
+    polygonOffsetFactor: storedSiteDrape ? -8 : SURFACE.water.polygonOffsetFactor,
+    polygonOffsetUnits: storedSiteDrape ? -12 : SURFACE.water.polygonOffsetUnits,
+    renderOrder: storedSiteDrape ? SURFACE.water.renderOrder + 8 : SURFACE.water.renderOrder,
   };
 }
 
