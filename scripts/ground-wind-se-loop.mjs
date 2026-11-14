@@ -62,7 +62,7 @@ async function runWindAudit(page, baseURL) {
   const windChip = page.locator("button.ov-chip", { hasText: "3D Wind Flow" }).first();
   await windChip.waitFor({ state: "visible", timeout: 60000 });
   if ((await windChip.getAttribute("aria-pressed")) !== "true") await windChip.click();
-  await page.waitForTimeout(7000);
+  await page.waitForTimeout(12000);
   const jsAudit = await page.evaluate(() => {
     const fn = window.__citycutGroundWindAudit;
     if (!fn) return null;

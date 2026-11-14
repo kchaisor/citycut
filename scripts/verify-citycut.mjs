@@ -246,6 +246,7 @@ async function main() {
       }
     });
     const page = await context.newPage();
+    page.setDefaultTimeout(120_000);
     page.on("pageerror", (err) => console.error("[PAGEERROR]", err.stack || err.message));
     page.on("console", (msg) => {
       if (msg.type() === "error") console.error("[CONSOLE.ERROR]", msg.text());
@@ -1764,7 +1765,7 @@ async function main() {
     const windChip = page.locator("button.ov-chip", { hasText: "3D Wind Flow" }).first();
     await windChip.waitFor({ state: "visible", timeout: 60_000 });
     if ((await windChip.getAttribute("aria-pressed")) !== "true") await windChip.click();
-    await page.waitForTimeout(6000);
+    await page.waitForTimeout(12000);
     const windFramePath = path.join(ARTIFACTS_DIR, "ground-wind-window-density-desktop.png");
     await page.screenshot({ path: windFramePath });
     const windFrame = PNG.sync.read(fs.readFileSync(windFramePath));
