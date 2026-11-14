@@ -14,7 +14,7 @@ import * as THREE from "three";
 import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
-import { attachScenePointPick } from "../lib/buildingPick";
+import { attachBuildingPick, attachScenePointPick } from "../lib/buildingPick";
 import { attachSceneInspectPick, type SceneInspectWorld, type SceneSelection } from "../lib/sceneInspectPick";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { basePlinthBottomY } from "../lib/terrain";
@@ -330,6 +330,26 @@ function SceneContinuousBridge({
       state.invalidate();
     }
   });
+  return null;
+}
+
+function BuildingPickLayer({
+  root,
+  enabled,
+  onBuildingPick,
+  onClearPick,
+}: {
+  root: THREE.Object3D;
+  enabled: boolean;
+  onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
+  onClearPick?: () => void;
+}) {
+  const camera = useThree((state) => state.camera);
+  const gl = useThree((state) => state.gl);
+  useLayoutEffect(() => {
+    if (!enabled) return;
+    return attachBuildingPick(gl.domElement, camera, root, { onBuildingPick, onClearPick });
+  }, [camera, enabled, gl.domElement, onBuildingPick, onClearPick, root]);
   return null;
 }
 
@@ -2127,6 +2147,8 @@ export function Scene3D({
   windPeriod,
   windAnimateStreaks,
   onExportReady,
+  onBuildingPick,
+  onClearBuildingPick,
   onSceneInspectPick,
   onClearSceneInspect,
   inspectAnchor,
@@ -2162,6 +2184,8 @@ export function Scene3D({
   windPeriod: WindPeriodId;
   windAnimateStreaks: boolean;
   onExportReady: (exporter: SceneExporter | null) => void;
+  onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
+  onClearBuildingPick?: () => void;
   onSceneInspectPick: (selection: SceneSelection) => void;
   onClearSceneInspect?: () => void;
   inspectAnchor: SceneInspectWorld | null;

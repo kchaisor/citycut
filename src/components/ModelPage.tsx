@@ -2138,6 +2138,7 @@ export function ModelPage({
   ];
 
   const modelRootRef = useRef<HTMLDivElement | null>(null);
+  const introBridgeDoneRef = useRef(false);
   const [introWebglWait, setIntroWebglWait] = useState(
     () => tab === "3d" && shouldShowIntroBridgePill(),
   );
@@ -2185,9 +2186,17 @@ export function ModelPage({
       setIntroWebglWait(false);
       return;
     }
+    if (introBridgeDoneRef.current) {
+      setBridgePillHudSuppressed(false);
+      setIntroWebglWait(false);
+      return;
+    }
     setBridgePillHudSuppressed(true);
     setIntroWebglWait(true);
-    const onDone = () => setBridgePillHudSuppressed(false);
+    const onDone = () => {
+      introBridgeDoneRef.current = true;
+      setBridgePillHudSuppressed(false);
+    };
     const revealModel = () => setIntroWebglWait(false);
     const onWebglReady = () => {
       if (typeof window === "undefined" || !window.__citycutAwaitIntroStart || window.__citycutIntroStarted) {
@@ -2267,6 +2276,23 @@ export function ModelPage({
                 windPeriod={windSettings.period}
                 windAnimateStreaks={windMotion.animateStreaks}
                 onExportReady={onExportReady}
+                onBuildingPick={(buildingId, clientX, clientY, additive) => {
+                  setSceneSelection({
+                    kind: "building",
+                    buildingId,
+                    clientX,
+                    clientY,
+                    world: { east: 0, north: 0, up: 0 },
+                    additive,
+                  });
+                  setInspectHudScreen({ clientX, clientY, inView: true });
+                  selectForHide(buildingId, additive);
+                }}
+                onClearBuildingPick={() => {
+                  setSceneSelection(null);
+                  setInspectHudScreen(null);
+                  setHideSelection([]);
+                }}
                 onSceneInspectPick={(selection) => {
                   setSceneSelection(selection);
                   setInspectHudScreen({ clientX: selection.clientX, clientY: selection.clientY, inView: true });
