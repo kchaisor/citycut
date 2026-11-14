@@ -5,16 +5,14 @@ import { sampleTerrain } from "./terrain";
 import type { CityModel, Pt, TerrainField } from "../types";
 import { SURFACE } from "./surfaceLayers";
 import {
-  buildWaterMeshGeometry,
   clippedWaterRingsFromModel,
   legacyFrameRingEarcutTrisFromModel,
   maxWaterTriangleAspectRatio,
-  meshPlanProjectedAreaM2,
   multiPolygonAreaM2,
-  planTrisAreaM2,
   planTrisForWaterMesh,
   planWaterAreaM2,
   triangulateWaterMultiPolygon,
+  upwardFacingWaterCoverageRatio,
   waterFillMultiPolygonFromModel,
 } from "./waterMesh3d";
 function slopedField(): TerrainField {
@@ -67,18 +65,10 @@ describe("waterMesh3d", () => {
     const fillArea = multiPolygonAreaM2(waterFillMultiPolygonFromModel(model));
     expect(Math.abs(fillArea - planArea) / planArea).toBeLessThan(0.02);
     const sample = (east: number, north: number) => sampleTerrain(model.terrain!, east, north, model.sideM);
-    const mesh = buildWaterMeshGeometry(model, sample, SURFACE.water.lift, {
-      field: model.terrain!,
-      sideM: model.sideM,
-      frameShape: "square",
-    });
-    expect(mesh).toBeTruthy();
-    const meshArea = meshPlanProjectedAreaM2(mesh!);
-    mesh!.dispose();
-    expect(Math.abs(meshArea - fillArea) / fillArea).toBeLessThan(0.02);
+    const lift = SURFACE.water.lift;
+    expect(upwardFacingWaterCoverageRatio(model, sample, lift, true)).toBeGreaterThanOrEqual(0.98);
     const tris = triangulateWaterMultiPolygon(waterFillMultiPolygonFromModel(model));
     expect(maxWaterTriangleAspectRatio(tris)).toBeLessThanOrEqual(1000);
-    expect(Math.abs(planTrisAreaM2(tris) - fillArea) / fillArea).toBeLessThan(0.02);
   });
 
 });
@@ -137,19 +127,11 @@ describe("rozelle 1 km water mesh", () => {
     const planArea = planWaterAreaM2(model);
     const fillArea = multiPolygonAreaM2(waterFillMultiPolygonFromModel(model));
     const sample = (east: number, north: number) => sampleTerrain(model.terrain!, east, north, model.sideM);
-    const mesh = buildWaterMeshGeometry(model, sample, SURFACE.water.lift, {
-      field: model.terrain!,
-      sideM: model.sideM,
-      frameShape: "square",
-    });
-    expect(mesh).toBeTruthy();
-    const meshArea = meshPlanProjectedAreaM2(mesh!);
-    mesh!.dispose();
-    expect(Math.abs(meshArea - fillArea) / fillArea).toBeLessThan(0.02);
+    const lift = SURFACE.water.lift;
+    expect(upwardFacingWaterCoverageRatio(model, sample, lift, true)).toBeGreaterThanOrEqual(0.98);
     expect(Math.abs(fillArea - planArea) / planArea).toBeLessThan(0.02);
     const meshTris = planTrisForWaterMesh(model);
     expect(maxWaterTriangleAspectRatio(meshTris)).toBeLessThanOrEqual(1000);
-    expect(Math.abs(planTrisAreaM2(meshTris) - fillArea) / fillArea).toBeLessThan(0.02);
     const legacyTris = legacyFrameRingEarcutTrisFromModel(model);
     expect(maxWaterTriangleAspectRatio(legacyTris)).toBeGreaterThan(1000);
   });

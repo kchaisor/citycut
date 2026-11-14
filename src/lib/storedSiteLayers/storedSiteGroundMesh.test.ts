@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { refineStoredSiteContextPart, storedSitePartIsTerrainDrapeSurface } from "./storedSiteGroundMesh";
+import { refineStoredSiteContextPart, storedSitePartIsTerrainDrapeSurface, stripStoredSiteContextWaterTriangles } from "./storedSiteGroundMesh";
 import type { StoredSiteMeshPart } from "./types";
+import type { WaterCutContext } from "../waterSurfaceCut";
 
 function flatGroundPart(span: number): StoredSiteMeshPart {
   const positions = new Float32Array([
@@ -34,6 +35,19 @@ describe("storedSitePartIsTerrainDrapeSurface", () => {
   });
 
   it("drops rozelle-scale context slabs without water context", () => {
-    expect(refineStoredSiteContextPart(flatGroundPart(900), null)).toBeNull();
+    expect(refineStoredSiteContextPart(flatGroundPart(900), null).part).toBeNull();
+  });
+
+  it("keeps vertical context triangles even when the centroid sits in water", () => {
+    const positions = new Float32Array([0, 0, 0, 4, 0, 0, 0, 12, 0]);
+    const indices = new Uint32Array([0, 1, 2]);
+    const part: StoredSiteMeshPart = { positions, indices, buildingId: null, structure: true };
+    const waterCut: WaterCutContext = {
+      areas: [{ ring: [[-10, -10], [10, -10], [10, 10], [-10, 10], [-10, -10]], holes: [] }],
+      heightAt: () => 0,
+    };
+    const { part: kept, dropped } = stripStoredSiteContextWaterTriangles(part, waterCut);
+    expect(dropped).toBe(0);
+    expect(kept?.indices.length).toBe(indices.length);
   });
 });

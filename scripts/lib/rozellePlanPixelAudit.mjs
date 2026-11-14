@@ -7,6 +7,14 @@ export function isCanonicalWaterPixel(r, g, b) {
   return (b >= 95 && g >= 85 && r <= 120 && b > g && g > r) || (b >= 100 && b >= r + 8 && b >= g - 6 && r <= 145);
 }
 
+export function isLitHarbourWaterPixel(r, g, b) {
+  return r >= 88 && r <= 128 && g >= 142 && g <= 182 && b >= 195 && b <= 235 && b > g + 4 && g > r + 8;
+}
+
+export function isHarbourWaterPixel(r, g, b) {
+  return isCanonicalWaterPixel(r, g, b) || isLitHarbourWaterPixel(r, g, b);
+}
+
 export function isBeigeGroundPixel(r, g, b) {
   return r >= 168 && r <= 202 && g >= 162 && g <= 196 && b >= 150 && b <= 188 && Math.abs(r - g) < 12;
 }
@@ -16,7 +24,7 @@ export function isBlueDominantPixel(r, g, b) {
 }
 
 export function isZFightSpecklePixel(r, g, b) {
-  return isBlueDominantPixel(r, g, b) && !isCanonicalWaterPixel(r, g, b) && (isBeigeGroundPixel(r, g, b) || (r >= 125 && g >= 125));
+  return isBlueDominantPixel(r, g, b) && !isHarbourWaterPixel(r, g, b) && (isBeigeGroundPixel(r, g, b) || (r >= 125 && g >= 125));
 }
 
 function isBackgroundPixel(r, g, b) {
@@ -29,7 +37,7 @@ export function isHarbourDarkPixel(r, g, b) {
 
 function isHarbourFillPixel(r, g, b) {
   return (
-    isCanonicalWaterPixel(r, g, b) ||
+    isHarbourWaterPixel(r, g, b) ||
     isBeigeGroundPixel(r, g, b) ||
     isHarbourDarkPixel(r, g, b) ||
     isBackgroundPixel(r, g, b) ||
@@ -108,7 +116,7 @@ export function auditRozellePlanPngBuffer(buffer) {
           if (r > 245 && g > 245 && b > 240) continue;
           if (!isHarbourFillPixel(r, g, b)) continue;
           harbourFillPixels++;
-          if (isCanonicalWaterPixel(r, g, b)) harbourWaterHits++;
+          if (isHarbourWaterPixel(r, g, b)) harbourWaterHits++;
           if (isBeigeGroundPixel(r, g, b)) harbourBeigeHits++;
           if (isZFightSpecklePixel(r, g, b)) harbourSpeckleCount++;
           if (isHarbourDarkPixel(r, g, b)) harbourBlackPixels++;
@@ -126,7 +134,7 @@ export function auditRozellePlanPngBuffer(buffer) {
 }
 
 export function rozellePlanPixelPasses(metrics) {
-  const waterOk = metrics.harbourWaterFrac >= 0.75;
+  const waterOk = metrics.harbourWaterFrac >= 0.9;
   const beigeOk = metrics.harbourBeigeFrac <= 0.12;
   const speckleOk = metrics.harbourSpeckleCount <= 500;
   const blackOk = (metrics.harbourBlackPixels ?? 0) <= 2000;

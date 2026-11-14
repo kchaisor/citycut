@@ -1,19 +1,11 @@
 import earcut from "earcut";
 import * as THREE from "three";
 import { openRing, signedArea } from "./geo";
-import {
-  cleanOpenRing,
-  clipDifference,
-  clipUnionEach,
-  prepareMultiPolygonForClip,
-  preparePolygonForClip,
-  type MultiPolygon,
-} from "./safePolygonClip";
+import { cleanOpenRing, prepareMultiPolygonForClip, preparePolygonForClip, type MultiPolygon } from "./safePolygonClip";
 import {
   clipAreaToSiteFrame,
   DEFAULT_SITE_FRAME_SHAPE,
   frameGroundSize,
-  siteFramePolygon,
   type FrameGroundSize,
   type SiteFrameShape,
 } from "./siteFrame";
@@ -46,47 +38,13 @@ function orientOpenRing(open: Pt[], ccw: boolean): Pt[] {
   return positive === ccw ? open : open.slice().reverse();
 }
 
-function ringsToFillMultiPolygon(
-  rings: ClippedWaterRings,
-  sideM: number,
-  frameShape: SiteFrameShape,
-  frameSize: FrameGroundSize,
-): MultiPolygon {
-  const prepared = preparePolygonForClip([rings[0] as Ring, ...(rings.slice(1) as Ring[])]);
-  if (!prepared) return [];
-  if (prepared.length > 1) {
-    const halfW = frameSize.widthM / 2;
-    const halfH = frameSize.heightM / 2;
-    const outerOpen = cleanOpenRing(openRing(prepared[0]!));
-    const frameLike =
-      outerOpen != null &&
-      outerOpen.length >= 3 &&
-      outerOpen.every((p) => Math.abs(p[0]) <= halfW + 2 && Math.abs(p[1]) <= halfH + 2);
-    if (frameLike) {
-      const frame = siteFramePolygon(sideM, frameShape, frameSize);
-      const landPolys = prepared.slice(1).map((hole) => [hole] as import("./safePolygonClip").Polygon);
-      const land = clipUnionEach(landPolys, { layer: "Water", operation: "union", featureId: "land-holes" });
-      if (land.length > 0) {
-        const water = clipDifference(frame, land, {
-          layer: "Water",
-          operation: "difference",
-          featureId: "frame-minus-land",
-        });
-        if (water.length > 0) return prepareMultiPolygonForClip(water);
-      }
-    }
-  }
-  return [prepared];
-}
-
 export function waterFillMultiPolygonFromModel(model: CityModel): MultiPolygon {
-  const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
-  const frameSize = frameGroundSize(model.sideM);
   const multi: MultiPolygon = [];
   for (const rings of clippedWaterRingsFromModel(model)) {
-    multi.push(...ringsToFillMultiPolygon(rings, model.sideM, frameShape, frameSize));
+    const prepared = preparePolygonForClip([rings[0] as Ring, ...(rings.slice(1) as Ring[])]);
+    if (prepared) multi.push(prepared);
   }
-  return multi;
+  return prepareMultiPolygonForClip(multi);
 }
 
 export function polygonWithHolesAreaM2(rings: ClippedWaterRings): number {
@@ -172,13 +130,77 @@ function triangleAspectRatio2d(tri: Tri): number {
   return max / min;
 }
 
+export function signedPlanTriAreaM2(tri: Tri): number {
+  const [a, b, c] = tri;
+  return ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) * 0.5;
+}
+
 export function planTrisAreaM2(tris: Tri[]): number {
   let area = 0;
-  for (const [a, b, c] of tris) {
-    const cross = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-    area += Math.abs(cross) * 0.5;
+  for (const tri of tris) area += Math.abs(signedPlanTriAreaM2(tri));
+  return area;
+}
+
+export function waterTriNormalY(
+  tri: Tri,
+  heightAt: (east: number, north: number) => number,
+  lift: number,
+): number {
+  const to3 = ([east, north]: Pt) => {
+    const y = heightAt(east, north) + lift;
+    return [east, y, -north] as const;
+  };
+  const [a, b, c] = tri.map(to3);
+  const abx = b[0] - a[0];
+  const aby = b[1] - a[1];
+  const abz = b[2] - a[2];
+  const acx = c[0] - a[0];
+  const acy = c[1] - a[1];
+  const acz = c[2] - a[2];
+  const nx = aby * acz - abz * acy;
+  const ny = abz * acx - abx * acz;
+  const nz = abx * acy - aby * acx;
+  const len = Math.hypot(nx, ny, nz);
+  if (!(len > 1e-9)) return 0;
+  return ny / len;
+}
+
+export function orientWaterTriUpward(
+  tri: Tri,
+  heightAt: (east: number, north: number) => number,
+  lift: number,
+): Tri {
+  if (waterTriNormalY(tri, heightAt, lift) >= 0) return tri;
+  return [tri[0]!, tri[2]!, tri[1]!];
+}
+
+export function upwardFacingWaterTrisAreaM2(
+  tris: Tri[],
+  heightAt: (east: number, north: number) => number,
+  lift: number,
+  orientUp = true,
+): number {
+  let area = 0;
+  for (const raw of tris) {
+    const tri = orientUp ? orientWaterTriUpward(raw, heightAt, lift) : raw;
+    const ny = waterTriNormalY(tri, heightAt, lift);
+    if (ny <= 1e-6) continue;
+    area += signedPlanTriAreaM2(tri);
   }
   return area;
+}
+
+export function upwardFacingWaterCoverageRatio(
+  model: CityModel,
+  heightAt: (east: number, north: number) => number,
+  lift: number,
+  orientUp = true,
+): number {
+  const fillArea = multiPolygonAreaM2(waterFillMultiPolygonFromModel(model));
+  if (!(fillArea > 0)) return 0;
+  const tris = planTrisForWaterMesh(model);
+  const upArea = upwardFacingWaterTrisAreaM2(tris, heightAt, lift, orientUp);
+  return upArea / fillArea;
 }
 
 export function maxWaterTriangleAspectRatio(tris: Tri[]): number {
@@ -244,7 +266,8 @@ function trisToBufferGeometry(
 ): THREE.BufferGeometry | null {
   if (tris.length === 0) return null;
   const positions: number[] = [];
-  for (const [a, b, c] of tris) {
+  for (const raw of tris) {
+    const [a, b, c] = orientWaterTriUpward(raw, heightAt, lift);
     for (const [east, north] of [a, b, c]) {
       positions.push(east, heightAt(east, north) + lift, -north);
     }

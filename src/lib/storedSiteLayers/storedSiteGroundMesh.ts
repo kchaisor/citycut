@@ -150,6 +150,7 @@ export function refineStoredSiteMeshPart(part: StoredSiteMeshPart): StoredSiteMe
 
 const CONTEXT_WATER_NORMAL_MIN_Y = 0.9;
 const CONTEXT_WATER_LIP_M = 2;
+const CONTEXT_KEEP_ABOVE_Y_M = 2;
 
 export function stripStoredSiteContextWaterTriangles(
   part: StoredSiteMeshPart,
@@ -180,9 +181,14 @@ export function stripStoredSiteContextWaterTriangles(
     const ny = triangleNormalY(positions, ia, ib, ic);
     const maxY = Math.max(ay, by, cy);
     const lip = waterCut.heightAt(east, north) + SURFACE.water.lift + CONTEXT_WATER_LIP_M;
-    const horizontal = ny > CONTEXT_WATER_NORMAL_MIN_Y || ny < -CONTEXT_WATER_NORMAL_MIN_Y;
-    const drop = pointInWaterAreas(east, north, waterCut.areas) && horizontal && maxY <= lip;
-    if (drop) {
+    const nonHorizontal = Math.abs(ny) < CONTEXT_WATER_NORMAL_MIN_Y;
+    const above2m = maxY > CONTEXT_KEEP_ABOVE_Y_M;
+    const horizontalInWaterLip =
+      pointInWaterAreas(east, north, waterCut.areas) &&
+      !nonHorizontal &&
+      !above2m &&
+      maxY <= lip;
+    if (horizontalInWaterLip) {
       dropped++;
       continue;
     }
@@ -214,12 +220,17 @@ export function stripStoredSiteContextWaterTriangles(
 export function refineStoredSiteContextPart(
   part: StoredSiteMeshPart,
   waterCut: WaterCutContext | null,
-): StoredSiteMeshPart | null {
-  if (storedSitePartIsTerrainDrapeSurface(part)) return null;
-  if (!waterCut) return stripStoredSiteWaterCoverTriangles(part);
+): { part: StoredSiteMeshPart | null; kept: number; dropped: number } {
+  if (storedSitePartIsTerrainDrapeSurface(part)) return { part: null, kept: 0, dropped: 0 };
+  if (!waterCut) {
+    const stripped = stripStoredSiteWaterCoverTriangles(part);
+    const kept = stripped ? stripped.indices.length / 3 : 0;
+    const dropped = Math.max(0, part.indices.length / 3 - kept);
+    return { part: stripped, kept, dropped };
+  }
   const { part: stripped, dropped, kept } = stripStoredSiteContextWaterTriangles(part, waterCut);
   if (typeof console !== "undefined" && console.info) {
     console.info("[rozelle-context-water]", { dropped, kept });
   }
-  return stripped;
+  return { part: stripped, kept, dropped };
 }

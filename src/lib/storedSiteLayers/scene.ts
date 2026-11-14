@@ -227,7 +227,7 @@ async function loadGlbParts(
   layer: StoredSiteLayerState,
   structure: boolean,
   waterCut: WaterCutContext | null,
-): Promise<StoredSiteMeshPart[]> {
+): Promise<{ parts: StoredSiteMeshPart[]; contextTrianglesKept: number }> {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(url);
   const rootIds =
@@ -235,6 +235,7 @@ async function loadGlbParts(
     (gltf.parser.json as { extras?: { buildingIds?: string[] } }).extras?.buildingIds ??
     [];
   const parts: StoredSiteMeshPart[] = [];
+  let contextTrianglesKept = 0;
   gltf.scene.updateMatrixWorld(true);
   gltf.scene.traverse((node) => {
     const mesh = node as THREE.Mesh;
@@ -245,8 +246,11 @@ async function loadGlbParts(
       geometry.applyMatrix4(mesh.matrixWorld);
       const whole = storedSiteMeshToPart(geometry, manifest, origin, zone, true);
       geometry.dispose();
-      const refined = whole ? refineStoredSiteContextPart(whole, waterCut) : null;
-      if (refined) parts.push(refined);
+      if (whole) {
+        const refined = refineStoredSiteContextPart(whole, waterCut);
+        contextTrianglesKept += refined.kept;
+        if (refined.part) parts.push(refined.part);
+      }
       return;
     }
     const geometry = mesh.geometry.clone();
@@ -255,7 +259,7 @@ async function loadGlbParts(
     parts.push(...splitMeshByBuildingId(geometry, manifest, origin, zone, layer, structure));
     geometry.dispose();
   });
-  return parts;
+  return { parts, contextTrianglesKept };
 }
 
 async function loadBridgeGlbParts(
@@ -296,7 +300,7 @@ export async function buildStoredSiteLayerGroup(
   buildingMaterial.name = "Buildings-stored-mesh";
   const structureMaterial = matteStandardMaterial({ color: structureColour });
   structureMaterial.name = "StoredSiteStructure";
-  const buildingParts = await loadGlbParts(
+  const { parts: buildingParts, contextTrianglesKept } = await loadGlbParts(
     storedSiteAssetUrl(layer.id, "buildings.glb"),
     manifest,
     origin,
@@ -325,6 +329,7 @@ export async function buildStoredSiteLayerGroup(
   if (allParts.length === 0) return null;
   const group = new THREE.Group();
   group.name = "StoredSiteLayer";
+  group.userData.rozelleContextTrianglesKept = contextTrianglesKept;
   for (const part of allParts) {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.BufferAttribute(part.positions, 3));

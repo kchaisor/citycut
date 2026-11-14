@@ -18,6 +18,7 @@ export type RozelleViewportQa = {
   terrainTrisBeforeCut: number;
   terrainTrisAfterCut: number;
   storedSiteTriangleCount: number;
+  contextTrianglesKept: number;
   waterEastMin: number;
   waterEastMax: number;
   waterNorthMin: number;
@@ -58,6 +59,7 @@ export function auditRozelleViewportQa(root: THREE.Object3D, frameHalfM: number,
   let terrainTrisBeforeCut = 0;
   let terrainTrisAfterCut = 0;
   let storedSiteTriangleCount = 0;
+  let contextTrianglesKept = 0;
   let waterEastMin = Infinity;
   let waterEastMax = -Infinity;
   let waterNorthMin = Infinity;
@@ -114,6 +116,10 @@ export function auditRozelleViewportQa(root: THREE.Object3D, frameHalfM: number,
       bridgeCableSegmentCount = position ? Math.floor(position.count / 2) : 0;
       return;
     }
+    if (object.name === "StoredSiteLayer" && object instanceof THREE.Group) {
+      const kept = Number(object.userData.rozelleContextTrianglesKept ?? 0);
+      if (Number.isFinite(kept) && kept > 0) contextTrianglesKept = kept;
+    }
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh || mesh.parent?.name !== "StoredSiteLayer") return;
     storedSiteTriangleCount += meshTriangleCount(mesh);
@@ -153,6 +159,7 @@ export function auditRozelleViewportQa(root: THREE.Object3D, frameHalfM: number,
     terrainTrisBeforeCut,
     terrainTrisAfterCut,
     storedSiteTriangleCount,
+    contextTrianglesKept,
     waterEastMin: Number.isFinite(waterEastMin) ? waterEastMin : 0,
     waterEastMax: Number.isFinite(waterEastMax) ? waterEastMax : 0,
     waterNorthMin: Number.isFinite(waterNorthMin) ? waterNorthMin : 0,

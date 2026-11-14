@@ -57,18 +57,13 @@ export function subtractWaterFromGroundRemaining(remaining: MultiPolygon, areas:
   });
 }
 
-function triIntersectsWater(tri: Tri, areas: WaterArea2D[]): boolean {
-  for (const [east, north] of tri) {
-    if (pointInWaterAreas(east, north, areas)) return true;
-  }
-  const east = (tri[0][0] + tri[1][0] + tri[2][0]) / 3;
-  const north = (tri[0][1] + tri[1][1] + tri[2][1]) / 3;
-  return pointInWaterAreas(east, north, areas);
-}
-
 export function filterTrisOutsideWater(tris: Tri[], areas: WaterArea2D[]): Tri[] {
   if (areas.length === 0) return tris;
-  return tris.filter((tri) => !triIntersectsWater(tri, areas));
+  return tris.filter((tri) => {
+    const east = (tri[0][0] + tri[1][0] + tri[2][0]) / 3;
+    const north = (tri[0][1] + tri[1][1] + tri[2][1]) / 3;
+    return !pointInWaterAreas(east, north, areas);
+  });
 }
 
 function triangleNormalY(
@@ -137,14 +132,9 @@ export function cutWaterFromBufferGeometry(
     const cx = position.getX(ic)!;
     const cy = position.getY(ic)!;
     const cz = position.getZ(ic)!;
-    const planA: Pt = [ax, -az];
-    const planB: Pt = [bx, -bz];
-    const planC: Pt = [cx, -cz];
-    const inWater =
-      pointInWaterAreas(planA[0], planA[1], areas) ||
-      pointInWaterAreas(planB[0], planB[1], areas) ||
-      pointInWaterAreas(planC[0], planC[1], areas) ||
-      pointInWaterAreas((planA[0] + planB[0] + planC[0]) / 3, (planA[1] + planB[1] + planC[1]) / 3, areas);
+    const east = (ax + bx + cx) / 3;
+    const north = (-(az + bz + cz)) / 3;
+    const inWater = pointInWaterAreas(east, north, areas);
     if (!inWater) {
       keepIdx.push(pushVertex(ia), pushVertex(ib), pushVertex(ic));
       continue;

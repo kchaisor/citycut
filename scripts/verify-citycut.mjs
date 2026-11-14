@@ -2335,6 +2335,21 @@ async function main() {
         Boolean(qaAudit.cablesOk),
         qaAudit.audit ? JSON.stringify(qaAudit.audit) : "missing audit",
       );
+      let contextKeptMin = 5200;
+      try {
+        const keptFixture = JSON.parse(
+          fs.readFileSync(path.join(REPO_ROOT, "src/lib/__fixtures__/rozelle-context-kept-tris-v3.json"), "utf8"),
+        );
+        contextKeptMin = Number(keptFixture.contextTrianglesKeptMin ?? contextKeptMin);
+      } catch {
+      }
+      const contextKept = Number(qaAudit.audit?.contextTrianglesKept ?? 0);
+      assertCheck(
+        "rozelle-1km-context-mesh-kept",
+        "Rozelle stored-site Context refine keeps at least the v3 triangle count north of the harbour",
+        contextKept >= contextKeptMin,
+        `contextTrianglesKept=${contextKept} min=${contextKeptMin}`,
+      );
       const planShot = path.join(cursorArtifacts, "rozelle-1km-3d-plan.png");
       const liveAudit = auditRozellePlanPngFile(planShot);
       assertCheck(

@@ -21,6 +21,7 @@ describe("rozelleViewportQaPasses", () => {
       terrainTrisBeforeCut: 1200,
       terrainTrisAfterCut: 1000,
       storedSiteTriangleCount: 800,
+      contextTrianglesKept: 6000,
       waterEastMin: -200,
       waterEastMax: 100,
       waterNorthMin: 50,
