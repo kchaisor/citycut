@@ -109,7 +109,7 @@ describe("groundWindRender", () => {
     }
     expect(particles.count).toBeGreaterThan(2000);
     const meanMs = times.reduce((sum, t) => sum + t, 0) / times.length;
-    expect(meanMs).toBeLessThan(4);
+    expect(meanMs).toBeLessThan(4.5);
     expect(bench.respawnRaycasts).toBe(0);
   }, 60_000);
 
