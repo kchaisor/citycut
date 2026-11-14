@@ -74,6 +74,11 @@ declare global {
     __citycutProgressSamples?: number[];
     __citycutLoadProgress?: number;
     __citycutIntroReadyToFire?: boolean;
+    __citycutCompassQa?: {
+      getCameraHeadingDeg: () => number;
+      getNeedleDeg: () => number;
+      setCameraHeadingDeg: (deg: number) => void;
+    };
     __citycutQaPlan?: {
       upperLevelGroupCount: () => number;
       exportSitePlanFrameSvg: () => Promise<string>;
