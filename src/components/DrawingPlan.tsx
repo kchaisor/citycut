@@ -307,10 +307,10 @@ export function DrawingPlan({
   const shadowFill = getColour("--shadow-fill");
   const nswStyle = useMemo(() => (model.nsw ? readNswPlanStyle() : null), [model.nsw, colourTick]);
   const nswItems = useMemo(() => {
-    if (!nswStyle) return null;
+    if (!nswStyle || frameShape === "a3") return null;
     const items = nswPlanItems(model, nswStyle.hatchM);
     return items && nswPlanHasDrawableContent(items) ? items : null;
-  }, [model, nswStyle]);
+  }, [model, nswStyle, frameShape]);
   const study = figure ? null : sunStudy;
   const casterModel = useMemo(
     () => sunStudyCasterModel(model, sunStudyCasters, sunStudySelected),
