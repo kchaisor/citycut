@@ -827,18 +827,51 @@ input[type="range"]::-moz-range-thumb {
 
 .studio-compass {
   position: absolute;
-  right: 18px;
-  bottom: 18px;
-  z-index: 6;
-  pointer-events: none;
-  padding: 6px;
+  right: calc(var(--sidebar-r, 0px) + 16px);
+  bottom: 16px;
+  z-index: 7;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 2px;
+  width: 44px;
+  height: 44px;
+  border: 0;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  background: transparent;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
 }
-.studio-compass-rose {
+.studio-compass:focus {
+  outline: none;
+}
+.studio-compass:focus-visible {
+  outline: 2px solid var(--studio-compass-focus);
+  outline-offset: 2px;
+}
+.studio-compass-needle {
   display: block;
-  transform-origin: 50% 55%;
+  width: 40px;
+  height: 40px;
+}
+@media (min-width: 1440px) {
+  .studio-compass {
+    width: 56px;
+    height: 56px;
+    padding: 0;
+  }
+  .studio-compass-needle {
+    width: 56px;
+    height: 56px;
+  }
+}
+.model:has(.bottom-bar.env-console) .studio-compass {
+  bottom: calc(12px + 96px + 16px + 16px);
+}
+@media (max-width: 1359px) {
+  .model:has(.bottom-bar.env-console) .studio-compass {
+    bottom: calc(12px + 96px + 16px + 16px);
+  }
 }
 
 .viewport-hint,

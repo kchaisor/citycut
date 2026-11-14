@@ -191,6 +191,12 @@
 
   --sun-compass-label: #1a1916;
 
+  --studio-compass-chip: #111111;
+  --studio-compass-chip-ring: #000000;
+  --studio-compass-needle-north: #ffe500;
+  --studio-compass-needle-south: #6b6b6b;
+  --studio-compass-focus: #ffe500;
+
   --building-solar-neutral: #ffffff;
 
   --heliodon-dial-disc: #e8e2d8;

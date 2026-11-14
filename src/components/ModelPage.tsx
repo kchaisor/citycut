@@ -709,7 +709,7 @@ export function ModelPage({
   const [hideSelection, setHideSelection] = useState<number[]>([]);
   const [sceneSelection, setSceneSelection] = useState<SceneSelection | null>(null);
   const [inspectHudScreen, setInspectHudScreen] = useState<InspectHudScreen | null>(null);
-  const [compassNeedleDeg, setCompassNeedleDeg] = useState(0);
+  const [compassHeadingDeg, setCompassHeadingDeg] = useState(0);
 
   const massing = useImportedMassing(model);
 
@@ -2242,7 +2242,7 @@ export function ModelPage({
                 }}
                 inspectAnchor={inspectAnchor}
                 onInspectHudScreen={setInspectHudScreen}
-                onCompassNeedle={setCompassNeedleDeg}
+                onCompassHeading={setCompassHeadingDeg}
                 heightEditBuildingId={sceneSelectionBuildingId(sceneSelection)}
                 selectedBuildingIds={
                   hideSelection.length > 0
@@ -2281,7 +2281,7 @@ export function ModelPage({
                 </p>
               ) : null}
               {tab === "3d" && studioCompassVisible(view.projection, view.freeRotate) && (
-                <StudioCompass needleDeg={compassNeedleDeg} />
+                <StudioCompass headingDeg={compassHeadingDeg} />
               )}
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
