@@ -98,7 +98,7 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
     }
 
     const chips = document.querySelectorAll(
-      ".model .top-bar-left .dim-chip, .model .top-bar-left .sidebar-brand-name, .model .top-bar-right .ready-text",
+      ".model .top-bar-left .sidebar-brand-name, .model .top-bar-right .ready-text, .model .right-inspector .card-meta",
     );
     for (const chip of chips) {
       const el = chip as HTMLElement;
@@ -137,27 +137,24 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
 
     const modelEl = document.querySelector(".model") as HTMLElement | null;
     const expectedDim = modelEl?.getAttribute("data-cut-size-label")?.trim() ?? "";
-    const dim = document.querySelector(".model .top-bar-left .dim-chip") as HTMLElement | null;
-    if (dim && isVisible(dim)) {
-      const actual = dim.textContent?.trim() ?? "";
-      if (expectedDim.length > 0 && actual !== expectedDim) {
-        errors.push(`size chip text "${actual}" != expected "${expectedDim}"`);
+    const topDim = document.querySelector(".model .top-bar-left .dim-chip") as HTMLElement | null;
+    if (topDim && isVisible(topDim)) {
+      errors.push("size chip must not appear in the top bar");
+    }
+
+    const meta = document.querySelector(".model .right-inspector .card-meta") as HTMLElement | null;
+    if (meta && expectedDim.length > 0) {
+      const actual = meta.textContent?.replace(/\s+/g, " ").trim() ?? "";
+      if (!actual.includes(expectedDim)) {
+        errors.push(`Site Intelligence meta "${actual}" missing cut size "${expectedDim}"`);
       }
-      chipNotClipped(dim, "size chip");
-      const dr = dim.getBoundingClientRect();
-      let ancestor: HTMLElement | null = dim.parentElement;
-      while (ancestor) {
-        const acs = getComputedStyle(ancestor);
-        if (acs.overflow === "hidden" || acs.overflowX === "hidden") {
-          const pr = ancestor.getBoundingClientRect();
-          if (dr.right > pr.right + 0.5 || dr.left < pr.left - 0.5) {
-            errors.push("size chip clipped by overflow:hidden ancestor");
-            break;
-          }
-        }
-        if (ancestor.classList.contains("top-bar-left")) break;
-        ancestor = ancestor.parentElement;
-      }
+      chipNotClipped(meta, "Site Intelligence meta");
+    }
+
+    const placeTitle = document.querySelector(".model .top-bar-left .place-chip")?.getAttribute("title")?.trim() ?? "";
+    const placeText = document.querySelector(".model .top-bar-left .place-chip")?.textContent?.trim() ?? "";
+    if (placeText.length > 0 && placeTitle.length === 0) {
+      errors.push("place chip missing title tooltip");
     }
 
     const tab = modelEl?.getAttribute("data-view-tab") ?? "";
@@ -253,6 +250,21 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
       }
       if (cr.right > vw + 0.5 || cr.left < -0.5 || cr.bottom > vh + 0.5 || cr.top < -0.5) {
         errors.push(`control "${label}" clips outside viewport`);
+      }
+    }
+
+    const leftGroup = groupEls[0];
+    const centerGroup = groupEls[1];
+    const rightGroup = groupEls[2];
+    if (leftGroup && centerGroup && rightGroup) {
+      const leftGap = centerGroup.getBoundingClientRect().left - leftGroup.getBoundingClientRect().right;
+      const rightGap = rightGroup.getBoundingClientRect().left - centerGroup.getBoundingClientRect().right;
+      const gapDelta = Math.abs(leftGap - rightGap);
+      const flowGap = Math.abs(leftGap - 8) <= 1.5 && Math.abs(rightGap - 8) <= 1.5;
+      if (gapDelta > 2 && !flowGap) {
+        errors.push(
+          `top bar side gaps uneven (${leftGap.toFixed(1)}px left, ${rightGap.toFixed(1)}px right; need within 2px or both ~8px)`,
+        );
       }
     }
 
