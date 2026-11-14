@@ -1064,7 +1064,7 @@ function City({
   ]);
   useLayoutEffect(() => {
     const planView = projection === "plan";
-  const planStoredSite = planView && Boolean(model.storedSiteLayer);
+    const planStoredSite = planView && Boolean(model.storedSiteLayer);
     if (!planStoredSite) return;
     const suppressGroundDepth = new Set(["Terrain", "Ground", "BasePlinth"]);
     group.traverse((object) => {
