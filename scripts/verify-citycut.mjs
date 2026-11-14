@@ -137,12 +137,18 @@ async function readSunHoursLegendConsoleClearance(page) {
     const noteText = note?.textContent?.trim() ?? "";
     const noteOk =
       noteText.includes("ground") && noteText.includes("roof") && noteText.includes("walls") && noteText.length >= 48;
+    const tickCount = document.querySelectorAll(".sun-hours-direct-legend.is-compact .sun-hours-direct-legend-ticks li").length;
+    const bar = document.querySelector(".sun-hours-direct-legend.is-compact .sun-hours-direct-legend-bar");
+    const barH = bar ? bar.getBoundingClientRect().height : 0;
+    const compactOk = tickCount === 5 && barH >= 48 && barH <= 72;
     return {
-      ok: gap >= 4 && noteOk,
+      ok: gap >= 4 && noteOk && compactOk,
       gap,
       legendBottom: legendBox.bottom,
       consoleTop: consoleBox.top,
       noteOk,
+      tickCount,
+      barH,
       noteText: noteText.slice(0, 96),
     };
   });

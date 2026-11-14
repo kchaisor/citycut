@@ -259,13 +259,16 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 .sun-hours-lost-legend.is-compact { display: grid; gap: 4px; margin: 0; font-size: 10px; }
 .sun-hours-lost-legend li { display: flex; align-items: center; gap: 4px; }
 .sun-hours-direct-legend { display: grid; gap: 6px; margin: 6px 0 10px; font-size: 11px; }
-.sun-hours-direct-legend.is-compact { margin: 0; font-size: 10px; gap: 4px; }
+.sun-hours-direct-legend.is-compact { margin: 0; font-size: 10px; gap: 3px; width: max-content; }
 .sun-hours-direct-legend-title { margin: 0; font-weight: 600; font-size: inherit; }
 .sun-hours-direct-legend-body { display: grid; grid-template-columns: auto 16px 3.2em; align-items: stretch; gap: 8px; }
+.sun-hours-direct-legend.is-compact .sun-hours-direct-legend-body { grid-template-columns: 12px 2.65em; gap: 6px; }
+.sun-hours-direct-legend.is-compact .sun-hours-direct-legend-unit { display: none; }
 .sun-hours-direct-legend-unit { font-size: 10px; color: var(--text-muted); align-self: start; padding-top: 2px; }
 .sun-hours-direct-legend-bar { width: 16px; min-height: 120px; border-radius: 3px; border: 1px solid var(--sun-card-border); }
-.sun-hours-direct-legend.is-compact .sun-hours-direct-legend-bar { min-height: 96px; }
+.sun-hours-direct-legend.is-compact .sun-hours-direct-legend-bar { width: 12px; min-height: 58px; height: 58px; }
 .sun-hours-direct-legend-ticks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.sun-hours-direct-legend.is-compact .sun-hours-direct-legend-ticks { font-size: 9px; line-height: 1.1; min-height: 58px; }
 .plan-viewport-stack { position: relative; width: 100%; height: 100%; min-height: 0; }
 .plan-viewport-stack > svg.plan { display: block; width: 100%; height: 100%; }
 .plan-solar-dock-stack {
@@ -294,14 +297,15 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
   pointer-events: none;
 }
 .plan-solar-legend-dock:has([data-sun-hours-direct-legend]) {
-  padding: 8px 10px;
+  padding: 6px 8px;
   width: max-content;
-  max-width: min(320px, calc(100vw - 24px));
+  max-width: min(240px, calc(100vw - 24px));
 }
 .sun-hours-direct-legend.is-compact > .field-note {
-  margin: 6px 0 0;
-  line-height: 1.35;
-  font-size: 10px;
+  margin: 4px 0 0;
+  line-height: 1.3;
+  font-size: 9px;
+  max-width: 20em;
 }
 .facade-solar-dock-stack {
   position: absolute;
