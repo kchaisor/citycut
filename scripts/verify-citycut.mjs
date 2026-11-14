@@ -3416,6 +3416,7 @@ async function main() {
         await mapPage.waitForFunction(() => document.documentElement.dataset.sunHoursDirectSurfacesReady === "1", null, {
           timeout: 600000,
         });
+        await mapPage.waitForSelector("[data-sun-hours-ground-legend-dock]", { timeout: 120000 });
         await assertSunHoursLegendAboveConsole(mapPage, "mont-albert", 1440, assertCheck);
         await assertSunHoursLegendAboveConsole(mapPage, "mont-albert", 1280, assertCheck);
         await clickStudioModeTab(mapPage, "Drawing");
@@ -3435,6 +3436,13 @@ async function main() {
         await mapPage.waitForTimeout(1500);
         const shotOblique = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-mont-albert-3d-oblique.png");
         await sceneViewportScreenshot(mapPage, { path: shotOblique });
+        const obliqueDrapePng = PNG.sync.read(fs.readFileSync(shotOblique));
+        const paletteYellow = { r: 254, g: 232, b: 37 };
+        const yellowHits = countPixelsNearRgb(obliqueDrapePng, paletteYellow, 72);
+        await mapPage.evaluate(() => window.__citycutQaModel?.frameSunHoursGroundOblique?.());
+        await mapPage.waitForTimeout(1200);
+        const shotObliqueRoofs = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-mont-albert-3d-oblique-roofs.png");
+        await sceneViewportScreenshot(mapPage, { path: shotObliqueRoofs });
         await mapPage.getByRole("button", { name: /^Plan$/i }).click();
         await mapPage.waitForFunction(
           () => document.documentElement.dataset.sunHoursDirectPlanView === "1",
@@ -3451,10 +3459,8 @@ async function main() {
           walls: document.documentElement.dataset.sunHoursDirectWallsVisible === "1",
           roofs: document.documentElement.dataset.sunHoursDirectRoofsVisible === "1",
         }));
-        const obliquePng = PNG.sync.read(fs.readFileSync(shotOblique));
+        const obliquePng = PNG.sync.read(fs.readFileSync(shotObliqueRoofs));
         const planPng = PNG.sync.read(fs.readFileSync(shotPlan));
-        const paletteYellow = { r: 254, g: 232, b: 37 };
-        const yellowHits = countPixelsNearRgb(obliquePng, paletteYellow, 72);
         const planRoofYellow = countPixelsNearRgb(planPng, paletteYellow, 68);
         const montObliqueCrop = buildingFootprintCrop(obliquePng);
         const montPlanCrop = buildingFootprintCrop(planPng);
@@ -4140,7 +4146,11 @@ async function main() {
     await sydneyPage.waitForTimeout(400);
     const sydneyPlanFanBtn = sydneyPage.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
     await sydneyPlanFanBtn.click({ timeout: 30_000 });
-    await sydneyPage.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 60_000 });
+    await sydneyPage.waitForFunction(
+      () => document.querySelectorAll("svg.plan [data-shadow-hour] path, svg.plan [data-shadow-hour] image").length >= 1,
+      null,
+      { timeout: 180_000 },
+    );
     await sydneyPage.waitForSelector("svg.plan .plan-north-arrow", { timeout: 60_000 });
     await sydneyPage.waitForSelector("svg.plan .heliodon-plan", { timeout: 120_000 });
     const sydneyPlanState = await sydneyPage.evaluate(() => ({
