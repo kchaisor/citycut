@@ -8,6 +8,11 @@ import {
   WALK_RIPPLE_TIMELINE_MAX_MIN,
   type RippleTimes,
 } from "../lib/walkRippleNetwork";
+import {
+  WALK_RIPPLE_TRAIL_DEFAULT,
+  WALK_RIPPLE_TRAIL_MAX,
+  WALK_RIPPLE_TRAIL_MIN,
+} from "../lib/walkRippleShader";
 import { qaModeFromSearch } from "../lib/qaCameraBridge";
 import type { CityModel } from "../types";
 
@@ -31,10 +36,17 @@ export type WalkRipple = {
   setRippleMinutes: (minutes: number) => void;
   ripplePlaying: boolean;
   toggleRipplePlay: () => void;
+  trailLengthMin: number;
+  setTrailLengthMin: (minutes: number) => void;
+  setRippleScrubActive: (active: boolean) => void;
 };
 
 export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "buildings" | "roads" | "terrain" | "sideM">): WalkRipple {
-  const layer = useMemo(() => new WalkRippleLayer(model), [model]);
+  const layer = useMemo(() => {
+    const created = new WalkRippleLayer(model);
+    created.setTrailLengthMinutes(WALK_RIPPLE_TRAIL_DEFAULT);
+    return created;
+  }, [model]);
   const tint = useMemo(() => new WalkRippleBuildingTint(), []);
   useEffect(() => () => layer.dispose(), [layer]);
 
@@ -46,6 +58,8 @@ export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "
   const [buildingArrivals, setBuildingArrivals] = useState<Map<number, number> | null>(null);
   const [rippleMinutes, setRippleMinutesState] = useState(0);
   const [ripplePlaying, setRipplePlaying] = useState(false);
+  const [trailLengthMin, setTrailLengthMinState] = useState(WALK_RIPPLE_TRAIL_DEFAULT);
+  const [rippleScrubActive, setRippleScrubActive] = useState(false);
   const rafRef = useRef<number | null>(null);
   const networkRef = useRef(buildWalkNetwork(model.roads));
   const buildingArrivalsRef = useRef<Map<number, number> | null>(null);
@@ -64,6 +78,10 @@ export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "
     setBuildingArrivals(null);
     setRippleMinutesState(0);
     setRipplePlaying(false);
+    setRippleScrubActive(false);
+    setTrailLengthMinState(WALK_RIPPLE_TRAIL_DEFAULT);
+    tint.setBandMixStrength(1);
+    layer.uniforms.uTrailLengthMin.value = WALK_RIPPLE_TRAIL_DEFAULT;
     layer.clear();
     tint.detach();
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
@@ -74,6 +92,26 @@ export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "
     rafRef.current = null;
     setRipplePlaying(false);
   }, []);
+
+  const applyWaveFocus = useCallback(
+    (focused: boolean) => {
+      tint.setBandMixStrength(focused ? 0.28 : 1);
+    },
+    [tint],
+  );
+
+  useEffect(() => {
+    applyWaveFocus(ripplePlaying || rippleScrubActive);
+  }, [applyWaveFocus, ripplePlaying, rippleScrubActive]);
+
+  const applyTrailLength = useCallback(
+    (minutes: number) => {
+      const clamped = Math.max(WALK_RIPPLE_TRAIL_MIN, Math.min(WALK_RIPPLE_TRAIL_MAX, minutes));
+      layer.setTrailLengthMinutes(clamped);
+      setTrailLengthMinState(clamped);
+    },
+    [layer],
+  );
 
   const applyRippleMinutes = useCallback(
     (minutes: number, opts?: { keepPlaying?: boolean }) => {
@@ -95,6 +133,14 @@ export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "
       setMinutes: (minutes: number) => {
         applyRippleMinutes(minutes);
       },
+      setBandMixStrength: (strength: number) => {
+        tint.setBandMixStrength(strength);
+      },
+      setOriginMarkerVisible: (visible: boolean) => {
+        layer.setOriginMarkerVisible(visible);
+      },
+      getSpatialDiagnostics: () => layer.getSpatialDiagnostics(),
+      getCityWorldBBox: () => window.__citycutQa?.getCityWorldBBox?.() ?? null,
       getMinutes: () => rippleMinutes,
       getUniformMinutes: () => layer.uniforms.uRippleTime.value,
       countReachedBuildings: (minuteCutoff: number) => {
@@ -106,6 +152,7 @@ export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "
         }
         return n;
       },
+      getRibbonDiagnostics: () => layer.getRibbonDiagnostics(),
     };
     return () => {
       delete window.__citycutWalkRippleQa;
@@ -203,5 +250,8 @@ export function useWalkRipple(model: CityModel, analysisModel: Pick<CityModel, "
     setRippleMinutes: (minutes: number) => applyRippleMinutes(minutes),
     ripplePlaying,
     toggleRipplePlay,
+    trailLengthMin,
+    setTrailLengthMin: applyTrailLength,
+    setRippleScrubActive,
   };
 }

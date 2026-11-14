@@ -67,6 +67,10 @@
   --walk-ripple-band-2: #E85D04;
   --walk-ripple-label-bg: #1C1C22;
   --walk-ripple-label-text: #FFFFFF;
+  --walk-ripple-comet-head: #FFF4A8;
+  --walk-ripple-comet-core: #FFFFFF;
+  --walk-ripple-comet-tail: #FFB020;
+  --walk-ripple-comet-ember: #6B3820;
 
   /* Residential footprints, legend swatch, and the Residential Rhino layer. */
   --use-residential: #CECBC6;

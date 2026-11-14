@@ -108,6 +108,7 @@ import {
   type SectionKnifeGizmoInteraction,
 } from "../lib/sectionKnife/gizmoHit";
 import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
+import type { WalkRippleLayer } from "../lib/walkRippleLayer";
 
 const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
@@ -468,6 +469,29 @@ function WalkRippleBuildingBinder({
   return null;
 }
 
+function WalkRippleCityAttach({ city, layer }: { city: THREE.Group; layer: WalkRippleLayer | null }) {
+  useLayoutEffect(() => {
+    if (!layer) return;
+    layer.root.position.set(0, 0, 0);
+    layer.root.rotation.set(0, 0, 0);
+    layer.root.scale.set(1, 1, 1);
+    city.add(layer.root);
+    return () => {
+      city.remove(layer.root);
+    };
+  }, [city, layer]);
+  return null;
+}
+
+function WalkRippleVisualSync({ layer }: { layer: WalkRippleLayer | null }) {
+  const invalidate = useThree((state) => state.invalidate);
+  useFrame(() => {
+    if (!layer || layer.uniforms.uRippleTime.value < 0) return;
+    invalidate();
+  });
+  return null;
+}
+
 function WalkRippleTreeDim({ city, active }: { city: THREE.Group; active: boolean }) {
   useLayoutEffect(() => {
     if (!active) return;
@@ -517,6 +541,7 @@ function City({
   projection,
   walkRippleTint,
   walkRippleArrivals,
+  walkRippleLayer,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -538,6 +563,7 @@ function City({
   projection: ProjectionMode;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
+  walkRippleLayer?: WalkRippleLayer | null;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -997,6 +1023,8 @@ function City({
         city={group}
         active={Boolean(walkRippleArrivals && walkRippleArrivals.size > 0)}
       />
+      <WalkRippleCityAttach city={group} layer={walkRippleLayer ?? null} />
+      <WalkRippleVisualSync layer={walkRippleLayer ?? null} />
       {contours ? <primitive object={contours} /> : null}
       <HeightEditOverlayLayer
         model={model}
@@ -1662,6 +1690,7 @@ function QaCameraBridgeRegister({
   lon: number;
 }) {
   const gl = useThree((state) => state.gl);
+  const scene = useThree((state) => state.scene);
   const size = useThree((state) => state.size);
   const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
@@ -1738,12 +1767,20 @@ function QaCameraBridgeRegister({
           y: rect.top + (-vec.y * 0.5 + 0.5) * rect.height,
         };
       },
+      getCityWorldBBox() {
+        const city = scene.getObjectByName("CityCut");
+        if (!city) return null;
+        city.updateWorldMatrix(true, true);
+        const box = new THREE.Box3().setFromObject(city);
+        return { min: box.min.toArray(), max: box.max.toArray() };
+      },
     });
     return () => registerQaCameraBridge(null);
   }, [
     active,
     controlsRef,
     gl,
+    scene,
     groundY,
     heliodonRadius,
     invalidate,
@@ -2172,7 +2209,7 @@ export function Scene3D({
   display: View3dDisplaySettings;
   importedMassing?: THREE.Object3D | null;
   walkLayer?: THREE.Object3D | null;
-  walkRippleLayer?: THREE.Object3D | null;
+  walkRippleLayer?: WalkRippleLayer | null;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
   walkRipplePlaying?: boolean;
@@ -2331,10 +2368,10 @@ export function Scene3D({
         projection={projection}
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
+        walkRippleLayer={walkRippleLayer}
       />
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
-      {walkRippleLayer ? <primitive object={walkRippleLayer} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
       <SolarHeliodon
         lat={model.center.lat}
