@@ -1063,19 +1063,30 @@ function City({
     railVisible,
   ]);
   useLayoutEffect(() => {
-    if (projection !== "plan") return;
-    const water = group.getObjectByName("Water");
-    if (!(water instanceof THREE.Mesh)) return;
-    water.renderOrder = 12;
-    const materials = Array.isArray(water.material) ? water.material : [water.material];
-    for (const material of materials) {
-      if (material instanceof THREE.MeshStandardMaterial) {
-        material.depthWrite = true;
-        material.depthTest = true;
+    const planView = projection === "plan";
+  const planStoredSite = planView && Boolean(model.storedSiteLayer);
+    if (!planStoredSite) return;
+    const suppressGroundDepth = new Set(["Terrain", "Ground", "BasePlinth"]);
+    group.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const material of materials) {
+        if (!(material instanceof THREE.MeshStandardMaterial)) continue;
+        if (material.userData.planDepthWriteRest == null) {
+          material.userData.planDepthWriteRest = material.depthWrite;
+        }
+        if (mesh.name === "Water") {
+          material.depthWrite = true;
+          material.depthTest = true;
+          mesh.renderOrder = 12;
+          continue;
+        }
+        if (suppressGroundDepth.has(mesh.name)) material.depthWrite = false;
       }
-    }
+    });
     invalidate();
-  }, [group, projection, invalidate]);
+  }, [group, model.storedSiteLayer, projection, invalidate]);
   useLayoutEffect(() => {
     const trees = group.getObjectByName("Trees");
     if (trees) trees.visible = treesVisibleIn3d(model.layers, display);
