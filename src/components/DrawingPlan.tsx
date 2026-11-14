@@ -563,6 +563,7 @@ export function DrawingPlan({
             ))}
             {plan.storedBridgeCables.map((line, index) => {
               const cableStroke = storedSiteBridgeCableStrokeStyle(style);
+              const cablePen = screenPenAttrs(cableStroke, "miter");
               return (
                 <path
                   key={`ss-cable${index}`}
@@ -570,7 +571,8 @@ export function DrawingPlan({
                   data-bridge-cable="true"
                   d={svgPolyline(openRing(line), false)}
                   fill="none"
-                  {...screenPenAttrs(cableStroke, "miter")}
+                  {...cablePen}
+                  strokeWidth={Math.max(cablePen.strokeWidth as number, 0.6)}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />

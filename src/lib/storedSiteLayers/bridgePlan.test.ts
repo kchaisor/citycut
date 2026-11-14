@@ -44,8 +44,18 @@ describe("Anzac bridge plan", () => {
       manifest,
       { lon: manifest.origin.lonLat[0], lat: manifest.origin.lonLat[1] },
       56,
+      1000,
+      "square",
     );
     expect(plan.cablePartIds.length).toBeGreaterThan(0);
+    expect(plan.stayPartIds.length).toBeGreaterThan(0);
     expect(plan.pylonPartIds.length).toBeGreaterThan(0);
+    expect(plan.stayLines3d.length).toBeGreaterThan(0);
+    for (const line of [...plan.cableLines, ...plan.stayLines3d]) {
+      for (const [e, n] of line) {
+        expect(Math.abs(e)).toBeLessThanOrEqual(500.5);
+        expect(Math.abs(n)).toBeLessThanOrEqual(500.5);
+      }
+    }
   });
 });

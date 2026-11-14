@@ -70,6 +70,7 @@ import {
   sitePlanBounds,
 } from "../lib/planCamera";
 import { qaModeFromSearch, registerQaCameraBridge, type QaCameraPose } from "../lib/qaCameraBridge";
+import { auditRozelleViewportQa } from "../lib/rozelleViewportQa";
 import { createQaPerfBridge, registerQaPerfBridge, tickPerfSample } from "../lib/qaPerfBridge";
 import {
   patchSceneContinuousFlags,
@@ -560,6 +561,20 @@ function StoredSiteMeshesViewport({
     colourTick,
     invalidate,
   ]);
+  return null;
+}
+
+function RozelleViewportQaPublisher({ sideM, projection }: { sideM: number; projection: ProjectionMode }) {
+  const scene = useThree((state) => state.scene);
+  useLayoutEffect(() => {
+    if (typeof window === "undefined" || !qaModeFromSearch(window.location.search)) return;
+    const publish = () => {
+      window.__citycutRozelleViewportQa = auditRozelleViewportQa(scene, sideM / 2, projection);
+    };
+    publish();
+    const frame = requestAnimationFrame(publish);
+    return () => cancelAnimationFrame(frame);
+  }, [scene, sideM, projection]);
   return null;
 }
 
@@ -2501,6 +2516,9 @@ export function Scene3D({
         enabled={inspectAnchor != null}
         onScreen={onInspectHudScreen}
       />
+      {qaModeFromSearch(typeof window === "undefined" ? "" : window.location.search) ? (
+        <RozelleViewportQaPublisher sideM={model.sideM} projection={projection} />
+      ) : null}
       {onCompassNeedle ? <StudioCompassTracker onNeedle={onCompassNeedle} /> : null}
       <WindLayer
         model={model}

@@ -2,9 +2,19 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { Pt, Ring } from "../../types";
 import type { LonLat } from "../../types";
+import {
+  clipPolylineSiteFrame,
+  DEFAULT_SITE_FRAME_SHAPE,
+  frameGroundSize,
+  pointInSiteFrame,
+  type FrameGroundSize,
+  type SiteFrameShape,
+} from "../siteFrame";
 import { deckPlanStrokePaths } from "./structurePlan";
 import { storedSiteRelativeToScene } from "./transform";
 import type { StoredSiteLayerManifest } from "./types";
+
+export const BRIDGE_STAY_3D_MAX_M = 85;
 
 export const BRIDGE_DECK_PART_ID = "anzac-bridge-057";
 
@@ -20,9 +30,11 @@ export type StoredSiteBridgePlan = {
   version: 1;
   deckPartId: string;
   cablePartIds: string[];
+  stayPartIds: string[];
   pylonPartIds: string[];
   pylonFootprints: Ring[];
   cableLines: Pt[][];
+  stayLines3d: Pt[][];
 };
 
 export function deckRoadOutlines(ring: Ring): Pt[][] {
@@ -74,15 +86,37 @@ function classifyBridgePart(stats: {
   wN: number;
   span: number;
   id: string;
-}): "deck" | "pylon" | "cable" {
+}): "deck" | "pylon" | "stay" | "cablePlane" {
   if (stats.id === BRIDGE_DECK_PART_ID) return "deck";
   const minSide = Math.min(stats.wE, stats.wN);
   const maxSide = Math.max(stats.wE, stats.wN);
   const aspect = maxSide / Math.max(0.05, minSide);
-  if (aspect >= 8 && maxSide >= 20) return "cable";
+  if (aspect >= 8 && maxSide >= 20) return "stay";
   if (aspect < 2.35 && stats.span >= 12 && stats.span <= 32) return "pylon";
-  if (aspect >= 3 && stats.wE * stats.wN >= 80) return "cable";
-  return "cable";
+  if (aspect >= 3 && stats.wE * stats.wN >= 80) return "cablePlane";
+  return "cablePlane";
+}
+
+function clipBridgeLines(
+  lines: Pt[][],
+  sideM: number,
+  frameShape: SiteFrameShape,
+  frameSize: FrameGroundSize,
+): Pt[][] {
+  const out: Pt[][] = [];
+  for (const line of lines) {
+    if (line.length < 2) continue;
+    for (const part of clipPolylineSiteFrame(line, sideM, frameShape, frameSize)) {
+      if (part.length < 2) continue;
+      const a = part[0]!;
+      const b = part[part.length - 1]!;
+      if (!pointInSiteFrame(a, sideM, frameShape, frameSize) || !pointInSiteFrame(b, sideM, frameShape, frameSize)) {
+        continue;
+      }
+      out.push(part);
+    }
+  }
+  return out;
 }
 
 function aabbRing(minE: number, minN: number, maxE: number, maxN: number): Ring {
@@ -127,16 +161,22 @@ function cableCenterline(positions: Float32Array, indices: Uint32Array, meta: Br
 export function buildBridgePlanFromBridgeGlb(
   geometry: THREE.BufferGeometry,
   buildingMeta: BridgeBuildingMeta[],
+  sideM: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  frameSize?: FrameGroundSize,
 ): StoredSiteBridgePlan {
+  const ground = frameSize ?? frameGroundSize(sideM);
   const positions = geometry.getAttribute("position");
   if (!positions || !geometry.index) {
     return {
       version: 1,
       deckPartId: BRIDGE_DECK_PART_ID,
       cablePartIds: [],
+      stayPartIds: [],
       pylonPartIds: [],
       pylonFootprints: [],
       cableLines: [],
+      stayLines3d: [],
     };
   }
   const scenePos = new Float32Array(positions.count * 3);
@@ -147,9 +187,11 @@ export function buildBridgePlanFromBridgeGlb(
   }
   const indices = geometry.index.array as Uint32Array;
   const cablePartIds: string[] = [];
+  const stayPartIds: string[] = [];
   const pylonPartIds: string[] = [];
   const pylonFootprints: Ring[] = [];
   const cableLines: Pt[][] = [];
+  const stayLines3d: Pt[][] = [];
   for (const meta of buildingMeta) {
     const stats = partEastNorthStats(scenePos, indices, meta);
     const wE = stats.maxE - stats.minE;
@@ -162,17 +204,26 @@ export function buildBridgePlanFromBridgeGlb(
       pylonFootprints.push(aabbRing(stats.minE, stats.minN, stats.maxE, stats.maxN));
       continue;
     }
-    cablePartIds.push(meta.id);
     const line = cableCenterline(scenePos, indices, meta);
-    if (line) cableLines.push(line);
+    if (!line) continue;
+    if (role === "stay") {
+      stayPartIds.push(meta.id);
+      const len = Math.hypot(line[1]![0] - line[0]![0], line[1]![1] - line[0]![1]);
+      if (len <= BRIDGE_STAY_3D_MAX_M) stayLines3d.push(line);
+      continue;
+    }
+    cablePartIds.push(meta.id);
+    cableLines.push(line);
   }
   return {
     version: 1,
     deckPartId: BRIDGE_DECK_PART_ID,
     cablePartIds,
+    stayPartIds,
     pylonPartIds,
     pylonFootprints,
-    cableLines,
+    cableLines: clipBridgeLines(cableLines, sideM, frameShape, ground),
+    stayLines3d: clipBridgeLines(stayLines3d, sideM, frameShape, ground),
   };
 }
 
@@ -183,7 +234,11 @@ export function parseStoredSiteBridgePlan(raw: unknown): StoredSiteBridgePlan | 
   if (!Array.isArray(data.cablePartIds) || !Array.isArray(data.pylonPartIds) || !Array.isArray(data.cableLines)) {
     return null;
   }
-  return data;
+  return {
+    ...data,
+    stayPartIds: Array.isArray(data.stayPartIds) ? data.stayPartIds : [],
+    stayLines3d: Array.isArray(data.stayLines3d) ? data.stayLines3d : [],
+  };
 }
 
 async function loadBridgeGltfFromBuffer(buffer: ArrayBuffer): Promise<{
@@ -205,6 +260,9 @@ export async function buildBridgePlanFromGlbBuffer(
   manifest: StoredSiteLayerManifest,
   origin: LonLat,
   zone: number,
+  sideM: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  frameSize?: FrameGroundSize,
 ): Promise<StoredSiteBridgePlan> {
   const { scene, buildingMeta } = await loadBridgeGltfFromBuffer(buffer);
   const mesh = scene.getObjectByName("Buildings-Bridge") as THREE.Mesh | undefined;
@@ -213,9 +271,11 @@ export async function buildBridgePlanFromGlbBuffer(
       version: 1,
       deckPartId: BRIDGE_DECK_PART_ID,
       cablePartIds: [],
+      stayPartIds: [],
       pylonPartIds: [],
       pylonFootprints: [],
       cableLines: [],
+      stayLines3d: [],
     };
   }
   const geometry = mesh.geometry.clone();
@@ -238,7 +298,7 @@ export async function buildBridgePlanFromGlbBuffer(
   }
   const sceneGeo = geometry.clone();
   sceneGeo.setAttribute("position", new THREE.BufferAttribute(out, 3));
-  const plan = buildBridgePlanFromBridgeGlb(sceneGeo, buildingMeta);
+  const plan = buildBridgePlanFromBridgeGlb(sceneGeo, buildingMeta, sideM, frameShape, frameSize);
   geometry.dispose();
   sceneGeo.dispose();
   return plan;
@@ -247,10 +307,11 @@ export async function buildBridgePlanFromGlbBuffer(
 export function bridgePartRole(
   partId: string | null | undefined,
   plan: StoredSiteBridgePlan | null | undefined,
-): "deck" | "pylon" | "cable" | "unknown" {
+): "deck" | "pylon" | "stay" | "cablePlane" | "unknown" {
   if (!plan || !partId) return "unknown";
   if (partId === plan.deckPartId) return "deck";
   if (plan.pylonPartIds.includes(partId)) return "pylon";
-  if (plan.cablePartIds.includes(partId)) return "cable";
-  return "cable";
+  if (plan.stayPartIds.includes(partId)) return "stay";
+  if (plan.cablePartIds.includes(partId)) return "cablePlane";
+  return "unknown";
 }

@@ -2218,6 +2218,199 @@ async function main() {
       console.log(`[ARTIFACT] Contact sheet saved to ${contactSheetOut}`);
     }
     fs.mkdirSync(cursorArtifacts, { recursive: true });
+    {
+      const rozelleKmCtx = await browser.newContext({
+        viewport: VIEWPORT,
+        deviceScaleFactor: 1,
+        reducedMotion: "reduce",
+      });
+      await rozelleKmCtx.addInitScript(() => {
+        window.__citycutMinSilentLoadMs = 0;
+      });
+      const rozelleKmPage = await rozelleKmCtx.newPage();
+      const rozelleKmQuery = "qa=1&lat=-33.8677&lon=151.1832&km=1&label=Rozelle%20NSW";
+      await rozelleKmPage.goto(`${baseUrl}/?${rozelleKmQuery}`, { waitUntil: "domcontentloaded", timeout: 120_000 });
+      await rozelleKmPage.waitForSelector("button.create-fab", { timeout: 30_000 });
+      await rozelleKmPage.click("button.create-fab");
+      await rozelleKmPage.waitForFunction(
+        () => {
+          const err = document.querySelector(".sidebar-foot-error")?.textContent?.trim();
+          if (err) return true;
+          const canvas = document.querySelector(".scene-viewport canvas");
+          if (!canvas) return false;
+          const spanX = Number(canvas.dataset.citycutGroundSpanX ?? 0);
+          const ready = /Ready ·\s*\d+\/\d+ sources/.test(document.body.innerText);
+          return ready && spanX > 100;
+        },
+        null,
+        { timeout: 360_000 },
+      );
+      await rozelleKmPage.waitForTimeout(1200);
+      await rozelleKmPage.screenshot({
+        path: path.join(cursorArtifacts, "rozelle-1km-3d-default.png"),
+        clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+      });
+      const planProj = rozelleKmPage.locator(".model .proj-group button", { hasText: "Plan" }).first();
+      if ((await planProj.count()) > 0) {
+        await planProj.click({ timeout: 30_000 });
+        await rozelleKmPage.waitForTimeout(1200);
+      }
+      await rozelleKmPage.screenshot({
+        path: path.join(cursorArtifacts, "rozelle-1km-3d-plan.png"),
+        clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+      });
+      const qaAudit = await rozelleKmPage.evaluate(() => {
+        const audit = window.__citycutRozelleViewportQa ?? null;
+        const waterHex = "#7fBfff".toLowerCase();
+        const waterOk =
+          audit &&
+          audit.waterVisible &&
+          audit.waterTriangleCount > 80 &&
+          audit.waterColorHex.toLowerCase() === waterHex;
+        const half = audit?.frameHalfM ?? 500;
+        const frameOk =
+          audit &&
+          audit.storedEastMin >= -half - 2 &&
+          audit.storedEastMax <= half + 2 &&
+          audit.storedNorthMin >= -half - 2 &&
+          audit.storedNorthMax <= half + 2;
+        const cablesOk = audit && audit.projection === "plan" ? !audit.bridgeCablesVisible : true;
+        return {
+          audit,
+          waterOk,
+          frameOk,
+          cablesOk,
+        };
+      });
+      assertCheck(
+        "rozelle-1km-3d-plan-water-mesh",
+        "Rozelle 1 km 3D Plan keeps a visible clipped water mesh tinted --water-3d",
+        Boolean(qaAudit.waterOk),
+        qaAudit.audit ? JSON.stringify(qaAudit.audit) : "missing audit",
+      );
+      assertCheck(
+        "rozelle-1km-stored-mesh-in-frame",
+        "Rozelle 1 km stored GLB stays inside the cut square after clipping",
+        Boolean(qaAudit.frameOk),
+        qaAudit.audit ? JSON.stringify(qaAudit.audit) : "missing audit",
+      );
+      assertCheck(
+        "rozelle-1km-plan-bridge-cables-hidden",
+        "Rozelle 1 km 3D Plan hides bridge stay cables (no deck smear)",
+        Boolean(qaAudit.cablesOk),
+        qaAudit.audit ? JSON.stringify(qaAudit.audit) : "missing audit",
+      );
+      const canvasRect = await rozelleKmPage.evaluate(() => {
+        const canvas = document.querySelector(".scene-viewport canvas");
+        return canvas?.getBoundingClientRect() ?? null;
+      });
+      const samplePlanPixels = async () => {
+        if (!canvasRect || canvasRect.width < 40) {
+          return { harbourBlue: 0, harbourTotal: 0, landStrayBlue: 0, landTotal: 0, harbourFracBest: 0 };
+        }
+        const isWaterFill = (r, g, b) => r >= 85 && g >= 130 && b >= 165 && b >= r + 8;
+        const isStrayCableBlue = (r, g, b) => b >= 135 && r <= 115 && g <= 135 && b - r >= 30;
+        const tally = (png, fn) => {
+          let hits = 0;
+          let total = 0;
+          for (let i = 0; i < png.data.length; i += 4) {
+            const a = png.data[i + 3];
+            if (a < 12) continue;
+            total++;
+            if (fn(png.data[i], png.data[i + 1], png.data[i + 2])) hits++;
+          }
+          return { hits, total };
+        };
+        let harbourFracBest = 0;
+        let harbourBlue = 0;
+        let harbourTotal = 0;
+        const tileW = Math.round(canvasRect.width / 4);
+        const tileH = Math.round(canvasRect.height / 4);
+        for (let row = 0; row < 4; row++) {
+          for (let col = 0; col < 4; col++) {
+            const clip = {
+              x: Math.round(canvasRect.x + col * tileW),
+              y: Math.round(canvasRect.y + row * tileH),
+              width: tileW,
+              height: tileH,
+            };
+            const harbourPng = PNG.sync.read(await rozelleKmPage.screenshot({ clip }));
+            const harbour = tally(harbourPng, isWaterFill);
+            const frac = harbour.total > 0 ? harbour.hits / harbour.total : 0;
+            if (frac > harbourFracBest) {
+              harbourFracBest = frac;
+              harbourBlue = harbour.hits;
+              harbourTotal = harbour.total;
+            }
+          }
+        }
+        const clipLand = {
+          x: Math.round(canvasRect.x + canvasRect.width * 0.62),
+          y: Math.round(canvasRect.y + canvasRect.height * 0.34),
+          width: Math.round(canvasRect.width * 0.28),
+          height: Math.round(canvasRect.height * 0.4),
+        };
+        const landPng = PNG.sync.read(await rozelleKmPage.screenshot({ clip: clipLand }));
+        const land = tally(landPng, isStrayCableBlue);
+        return {
+          harbourBlue,
+          harbourTotal,
+          harbourFracBest,
+          landStrayBlue: land.hits,
+          landTotal: land.total,
+        };
+      };
+      const pixels = await samplePlanPixels();
+      const harbourFrac = pixels.harbourFracBest;
+      const landStrayFrac = pixels.landTotal > 0 ? pixels.landStrayBlue / pixels.landTotal : 0;
+      assertCheck(
+        "rozelle-1km-3d-plan-harbour-blue",
+        "Rozelle 1 km 3D Plan harbour sample is mostly blue water fill",
+        harbourFrac >= 0.04,
+        `harbourBlue=${pixels.harbourBlue}/${pixels.harbourTotal} bestFrac=${harbourFrac.toFixed(3)}`,
+      );
+      assertCheck(
+        "rozelle-1km-3d-plan-no-stray-blue-lines",
+        "Rozelle 1 km 3D Plan has no bright blue line pixels on inland ground (cable-plane rays)",
+        landStrayFrac <= 0.012,
+        `landStray=${pixels.landStrayBlue}/${pixels.landTotal} frac=${landStrayFrac.toFixed(4)}`,
+      );
+      await rozelleKmPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 120_000 });
+      await rozelleKmPage.getByRole("button", { name: "Site plan" }).click({ timeout: 60_000 });
+      await rozelleKmPage.waitForSelector("svg.plan", { timeout: 120_000 });
+      const scale5000 = rozelleKmPage.locator(".studio-scale-row select");
+      if ((await scale5000.count()) > 0) await scale5000.selectOption("5000");
+      await rozelleKmPage.waitForTimeout(800);
+      await rozelleKmPage.waitForFunction(
+        () => document.querySelectorAll('svg.plan path[data-bridge-cable="true"]').length > 0,
+        null,
+        { timeout: 60_000 },
+      );
+      const cableMetrics = await rozelleKmPage.evaluate(() => {
+        const paths = Array.from(document.querySelectorAll('svg.plan path[data-bridge-cable="true"]'));
+        const widths = paths.flatMap((path) => {
+          const attr = Number(path.getAttribute("stroke-width"));
+          const computed = Number(getComputedStyle(path).strokeWidth);
+          const hinted = Number((path.outerHTML.match(/\bstroke-width="([0-9.]+)"/) ?? [])[1]);
+          return [attr, computed, hinted].filter((value) => Number.isFinite(value) && value > 0);
+        });
+        return {
+          count: paths.length,
+          strokeWidth: widths.length > 0 ? Math.max(...widths) : null,
+        };
+      });
+      await rozelleKmPage.screenshot({
+        path: path.join(cursorArtifacts, "rozelle-1km-drawing-5000.png"),
+        clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+      });
+      assertCheck(
+        "rozelle-1km-drawing-cable-stroke",
+        "Rozelle 1 km Drawing at 1:5000 renders bridge cables at least 0.6px",
+        cableMetrics.count > 0 && cableMetrics.strokeWidth != null && cableMetrics.strokeWidth >= 0.59,
+        `count=${cableMetrics.count} strokeWidth=${cableMetrics.strokeWidth}`,
+      );
+      await rozelleKmCtx.close();
+    }
   const sydneyCtx = await browser.newContext({
       viewport: VIEWPORT,
       deviceScaleFactor: 1,

@@ -295,7 +295,9 @@ export function planPaths(
   const storedBridgePylons: Ring[] = (bridgePlan?.pylonFootprints ?? [])
     .map((ring) => clipPolygonSiteFrame(ring, model.sideM, frameShape, frameSize))
     .filter((ring) => ring.length >= 3);
-  const storedBridgeCables: Pt[][] = (bridgePlan?.cableLines ?? []).flatMap((line) =>
+  const bridgeCableSource =
+    bridgePlan && bridgePlan.stayLines3d.length > 0 ? bridgePlan.stayLines3d : (bridgePlan?.cableLines ?? []);
+  const storedBridgeCables: Pt[][] = bridgeCableSource.flatMap((line) =>
     clipPolylineSiteFrame(line, model.sideM, frameShape, frameSize).filter((part) => part.length >= 2),
   );
 

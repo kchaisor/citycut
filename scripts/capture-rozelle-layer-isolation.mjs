@@ -20,14 +20,31 @@ async function waitForBuildDone(page) {
   );
 }
 
+async function setLayerChecked(page, labelRe, on) {
+  const label = page.locator(".model label, .model .studio-layer-row").filter({ hasText: labelRe });
+  const input = label.first().locator('input[type="checkbox"]');
+  if ((await input.count()) > 0) await input.setChecked(on, { force: true });
+}
+
 async function setOutlines(page, on) {
   const toggle = page.locator(".model .mini-flags label").filter({ hasText: /^Outlines$/ }).locator('input[type="checkbox"]');
   await toggle.setChecked(on, { force: true });
 }
 
 async function setContours3d(page, on) {
-  const toggle = page.locator(".model .studio-layer-row").filter({ hasText: /^Contours/ }).locator('input[type="checkbox"]');
+  const toggle = page
+    .locator(".model .studio-layer-row")
+    .filter({ hasText: /^Contours/ })
+    .locator('input[type="checkbox"]');
   await toggle.setChecked(on, { force: true });
+}
+
+async function setWater(page, on) {
+  await setLayerChecked(page, /^Water$/, on);
+}
+
+async function setStoredBridge(page, on) {
+  await setLayerChecked(page, /anzac|bridge/i, on);
 }
 
 const browser = await chromium.launch({
@@ -41,12 +58,25 @@ await page.goto(URL, { waitUntil: "domcontentloaded", timeout: 120_000 });
 await page.locator("button.create-fab").click({ timeout: 60_000 });
 await page.waitForSelector(".model", { timeout: 360_000 });
 await waitForBuildDone(page);
-await page.waitForTimeout(2000);
+await setStoredBridge(page, true);
+await page.waitForTimeout(800);
+
+const planProj = page.locator(".model .proj-group button", { hasText: "Plan" }).first();
+if ((await planProj.count()) > 0) {
+  await planProj.click({ timeout: 30_000 });
+  await page.waitForTimeout(900);
+}
 
 const shots = {};
-await page.screenshot({ path: path.join(OUT_DIR, "rozelle-isolation-both-on-1440.png") });
-shots.bothOn = path.join(OUT_DIR, "rozelle-isolation-both-on-1440.png");
+await page.screenshot({ path: path.join(OUT_DIR, "rozelle-isolation-plan-all-on-1440.png") });
+shots.allOn = path.join(OUT_DIR, "rozelle-isolation-plan-all-on-1440.png");
 
+await setWater(page, false);
+await page.waitForTimeout(800);
+await page.screenshot({ path: path.join(OUT_DIR, "rozelle-isolation-water-off-1440.png") });
+shots.waterOff = path.join(OUT_DIR, "rozelle-isolation-water-off-1440.png");
+
+await setWater(page, true);
 await setContours3d(page, false);
 await page.waitForTimeout(800);
 await page.screenshot({ path: path.join(OUT_DIR, "rozelle-isolation-contours-off-1440.png") });
@@ -58,12 +88,23 @@ await page.waitForTimeout(800);
 await page.screenshot({ path: path.join(OUT_DIR, "rozelle-isolation-outlines-off-1440.png") });
 shots.outlinesOff = path.join(OUT_DIR, "rozelle-isolation-outlines-off-1440.png");
 
+await setStoredBridge(page, false);
 await setOutlines(page, true);
-await setContours3d(page, false);
-await setOutlines(page, false);
 await page.waitForTimeout(800);
-await page.screenshot({ path: path.join(OUT_DIR, "rozelle-isolation-both-off-1440.png") });
-shots.bothOff = path.join(OUT_DIR, "rozelle-isolation-both-off-1440.png");
+await page.screenshot({ path: path.join(OUT_DIR, "rozelle-isolation-bridge-off-1440.png") });
+shots.bridgeOff = path.join(OUT_DIR, "rozelle-isolation-bridge-off-1440.png");
 
 await browser.close();
-console.log(JSON.stringify({ url: URL, shots }, null, 2));
+console.log(
+  JSON.stringify(
+    {
+      url: URL,
+      projection: "plan",
+      layerNote:
+        "Blue ray fan matched StoredSiteBridgeCables from unclipped cable-plane centerlines (stayLines3d only fixes 3D; bridge GLB cable planes are mesh-filtered).",
+      shots,
+    },
+    null,
+    2,
+  ),
+);

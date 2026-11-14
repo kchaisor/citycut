@@ -44,7 +44,15 @@ export async function loadStoredSiteLayerPack(
     const bridgeGlbRes = await fetch(storedSiteAssetUrl(entry.id, "anzac-bridge.glb"), { signal });
     if (bridgeGlbRes.ok) {
       const buffer = await bridgeGlbRes.arrayBuffer();
-      bridgePlan = await buildBridgePlanFromGlbBuffer(buffer, manifest, center, zone);
+      bridgePlan = await buildBridgePlanFromGlbBuffer(
+        buffer,
+        manifest,
+        center,
+        zone,
+        sideM,
+        frameShape,
+        frameSize,
+      );
     }
   }
   return { manifest, footprints, structures, bridgePlan, center, zone };

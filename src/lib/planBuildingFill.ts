@@ -76,7 +76,7 @@ export function storedSiteBridgeCableStrokeStyle(
   style: import("./drawingStyle").LineStyles,
 ): import("./drawingStyle").StrokeStyle {
   return {
-    mm: style.kerb.mm * 0.36,
+    mm: Math.max(style.kerb.mm * 0.55, 0.15),
     color: getColour("--stored-site-bridge-cable-stroke"),
     dash: "1.2 0.6",
   };

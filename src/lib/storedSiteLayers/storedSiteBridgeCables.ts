@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { getColour } from "../colours";
 import type { StoredSiteBridgePlan } from "./bridgePlan";
 
-export const STORED_SITE_CABLE_MIN_ZOOM = 0.35;
+export const STORED_SITE_CABLE_MIN_ZOOM = 0.45;
 export const STORED_SITE_CABLE_LINE_OPACITY = 0.6;
 
 export function buildStoredSiteBridgeCableObject(
@@ -11,7 +11,8 @@ export function buildStoredSiteBridgeCableObject(
   lift = 2,
 ): THREE.LineSegments | null {
   const positions: number[] = [];
-  for (const line of plan.cableLines) {
+  const lines = plan.stayLines3d.length > 0 ? plan.stayLines3d : [];
+  for (const line of lines) {
     if (line.length < 2) continue;
     for (let i = 0; i < line.length - 1; i++) {
       const a = line[i]!;
@@ -32,8 +33,8 @@ export function buildStoredSiteBridgeCableObject(
     linewidth: 1,
   });
   material.name = "StoredSiteBridgeCables";
-  const lines = new THREE.LineSegments(geometry, material);
-  lines.name = "StoredSiteBridgeCables";
-  lines.frustumCulled = false;
-  return lines;
+  const object = new THREE.LineSegments(geometry, material);
+  object.name = "StoredSiteBridgeCables";
+  object.frustumCulled = false;
+  return object;
 }

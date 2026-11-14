@@ -42,7 +42,7 @@ export function clipStoredSiteMeshPartToFrame(
     const inside = (index: number) => {
       const x = part.positions[index * 3]!;
       const z = part.positions[index * 3 + 2]!;
-      return pointInSiteFrame([x, z], sideM, shape, size);
+      return pointInSiteFrame([x, -z], sideM, shape, size);
     };
     if (!inside(ia) || !inside(ib) || !inside(ic)) continue;
     for (const old of [ia, ib, ic]) {
@@ -74,7 +74,7 @@ export function storedSiteMeshVerticesInsideFrame(
   for (let i = 0; i < count; i++) {
     const x = part.positions[i * 3]!;
     const z = part.positions[i * 3 + 2]!;
-    if (!pointInSiteFrame([x, z], sideM, shape, size)) return false;
+    if (!pointInSiteFrame([x, -z], sideM, shape, size)) return false;
   }
   return true;
 }

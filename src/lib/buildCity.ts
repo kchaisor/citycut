@@ -524,7 +524,10 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     onTerrain ? drapeLayer(SURFACE.green) : SURFACE.green,
   );
   const waterLayer = onTerrain ? drapedWaterLayer() : SURFACE.water;
-  const waterMat = paint(matteStandardMaterial({ color: getColour("--water-3d") }), waterLayer);
+  const waterMat = paint(
+    matteStandardMaterial({ color: getColour("--water-3d"), side: THREE.DoubleSide }),
+    waterLayer,
+  );
   const blockGeos: THREE.BufferGeometry[] = [];
   const greenGeos: THREE.BufferGeometry[] = [];
   const waterGeos: THREE.BufferGeometry[] = [];

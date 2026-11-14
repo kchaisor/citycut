@@ -74,6 +74,7 @@ declare global {
     __citycutProgressSamples?: number[];
     __citycutLoadProgress?: number;
     __citycutIntroReadyToFire?: boolean;
+    __citycutRozelleViewportQa?: import("./rozelleViewportQa").RozelleViewportQa;
     __citycutQaPlan?: {
       upperLevelGroupCount: () => number;
       exportSitePlanFrameSvg: () => Promise<string>;

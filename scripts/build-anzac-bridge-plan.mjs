@@ -9,9 +9,9 @@ const manifest = JSON.parse(
 const origin = { lon: manifest.origin.lonLat[0], lat: manifest.origin.lonLat[1] };
 const buffer = fs.readFileSync(path.join(root, "public/site-layers/sydney-rozelle/anzac-bridge.glb")).buffer;
 const zone = 56;
-const plan = await buildBridgePlanFromGlbBuffer(buffer, manifest, origin, zone);
+const plan = await buildBridgePlanFromGlbBuffer(buffer, manifest, origin, zone, 1000, "square");
 const outPath = path.join(root, "public/site-layers/sydney-rozelle/bridge-plan.json");
 fs.writeFileSync(outPath, JSON.stringify(plan));
 console.log(
-  `wrote ${outPath} cables=${plan.cablePartIds.length} pylons=${plan.pylonPartIds.length} lines=${plan.cableLines.length}`,
+  `wrote ${outPath} cables=${plan.cablePartIds.length} stays=${plan.stayPartIds.length} pylons=${plan.pylonPartIds.length} lines=${plan.cableLines.length} stay3d=${plan.stayLines3d.length}`,
 );

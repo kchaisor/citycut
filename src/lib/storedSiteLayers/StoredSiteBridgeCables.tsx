@@ -30,6 +30,10 @@ export function StoredSiteBridgeCables({
   const visibleRef = useRef(true);
   useFrame(() => {
     if (!object) return;
+    if (projection === "plan") {
+      object.visible = false;
+      return;
+    }
     if (projection === "perspective") {
       object.visible = true;
       return;
