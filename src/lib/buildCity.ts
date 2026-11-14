@@ -9,6 +9,7 @@ import {
   DEFAULT_SITE_FRAME_SHAPE,
   SITE_FRAME_CIRCLE_SEGMENTS,
   type FrameGroundSize,
+  type SiteFrameShape,
 } from "./siteFrame";
 import { clipBufferGeometryToSiteFrame } from "./siteFrameMesh";
 import { modelFrameSize } from "./modelFrame";
@@ -235,7 +236,12 @@ function roadFillGeometry(
   return drapedMultiPolygonGeometry(multi, heightAt, lift, step, grid);
 }
 
-export type TerrainGrid = { field: TerrainField; sideM: number; frameSize?: FrameGroundSize };
+export type TerrainGrid = {
+  field: TerrainField;
+  sideM: number;
+  frameSize?: FrameGroundSize;
+  frameShape?: SiteFrameShape;
+};
 
 export function drapedAreaGeometry(
   area: AreaFeat,
@@ -253,7 +259,13 @@ export function drapedAreaGeometry(
     return null;
   }
   const fine = grid
-    ? clipTrianglesToTerrainGrid(trianglesFromShape(flat), grid.field, grid.sideM, grid.frameSize)
+    ? clipTrianglesToTerrainGrid(
+        trianglesFromShape(flat),
+        grid.field,
+        grid.sideM,
+        grid.frameSize,
+        grid.frameShape ?? DEFAULT_SITE_FRAME_SHAPE,
+      )
     : subdivideToSpacing(trianglesFromShape(flat), Math.max(spacing, 4));
   flat.dispose();
   const heightAt = grid
@@ -461,7 +473,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   const frameSize = modelFrameSize(model);
   const sample = elevationAt(model);
   const terrainGrid: TerrainGrid | null = model.terrain
-    ? { field: model.terrain, sideM: model.sideM, frameSize }
+    ? { field: model.terrain, sideM: model.sideM, frameSize, frameShape }
     : null;
   const groundSplit = model.terrain && frameShape === "square" ? groundRoadPartition(model) : null;
   if (model.terrain && groundSplit) {

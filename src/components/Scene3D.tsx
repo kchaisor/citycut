@@ -194,6 +194,16 @@ const scratch = new THREE.Vector3();
 
 const STUDIO_FILL_RATIO = 0.28;
 
+function viewportBoundsFromCityAndStored(city: Aabb, stored: THREE.Object3D | null | undefined): Aabb {
+  if (!stored) return city;
+  return unionAabb(city, measureCity(stored));
+}
+
+function boundsMeaningfullyChanged(a: Aabb, b: Aabb): boolean {
+  const d = (i: number) => Math.abs(a.max[i]! - b.max[i]!) + Math.abs(a.min[i]! - b.min[i]!);
+  return d(0) > 0.5 || d(1) > 0.5 || d(2) > 0.5;
+}
+
 function measureCity(group: THREE.Object3D): Aabb {
   const box = new THREE.Box3().setFromObject(group);
   const instanceBox = new THREE.Box3();
@@ -1940,6 +1950,7 @@ export function Cameras({
   gizmoOrbitLock = false,
   frameWidthM,
   frameHeightM,
+  boundsFitEpoch = 0,
 }: {
   side: number;
   lift: number;
@@ -1961,6 +1972,7 @@ export function Cameras({
   gizmoOrbitLock?: boolean;
   frameWidthM: number;
   frameHeightM: number;
+  boundsFitEpoch?: number;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
@@ -1972,6 +1984,12 @@ export function Cameras({
   const planFitKey = useRef<string | null>(null);
   const fittedKeys = useMemo(() => ({ persp: perspFitKey, iso: isoFitKey, plan: planFitKey }), []);
   const [ready, setReady] = useState(false);
+  useLayoutEffect(() => {
+    if (boundsFitEpoch < 1) return;
+    isoFitKey.current = null;
+    planFitKey.current = null;
+    perspFitKey.current = null;
+  }, [boundsFitEpoch]);
   useLayoutEffect(() => {
     const persp = perspRef.current;
     const ortho = orthoRef.current;
@@ -2263,16 +2281,33 @@ export function Scene3D({
   quality?: RenderQuality;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
-  const onBounds = useCallback((bounds: Aabb) => {
-    boundsRef.current = bounds;
-    if (typeof document === "undefined") return;
-    const canvas = document.querySelector(".scene-viewport canvas");
-    if (!(canvas instanceof HTMLElement)) return;
-    const spanX = bounds.max[0] - bounds.min[0];
-    const spanZ = bounds.max[2] - bounds.min[2];
-    canvas.dataset.citycutGroundSpanX = spanX.toFixed(3);
-    canvas.dataset.citycutGroundSpanZ = spanZ.toFixed(3);
-  }, []);
+  const cityBoundsRef = useRef<Aabb | null>(null);
+  const [boundsFitEpoch, setBoundsFitEpoch] = useState(0);
+  const publishViewportBounds = useCallback(
+    (cityBounds: Aabb) => {
+      cityBoundsRef.current = cityBounds;
+      const merged = viewportBoundsFromCityAndStored(cityBounds, storedSiteMeshes);
+      const prev = boundsRef.current;
+      boundsRef.current = merged;
+      if (prev && boundsMeaningfullyChanged(prev, merged)) {
+        setBoundsFitEpoch((epoch) => epoch + 1);
+      }
+      if (typeof document === "undefined") return;
+      const canvas = document.querySelector(".scene-viewport canvas");
+      if (!(canvas instanceof HTMLElement)) return;
+      const spanX = merged.max[0] - merged.min[0];
+      const spanZ = merged.max[2] - merged.min[2];
+      canvas.dataset.citycutGroundSpanX = spanX.toFixed(3);
+      canvas.dataset.citycutGroundSpanZ = spanZ.toFixed(3);
+    },
+    [storedSiteMeshes],
+  );
+  const onBounds = publishViewportBounds;
+  useLayoutEffect(() => {
+    const city = cityBoundsRef.current;
+    if (!city || !storedSiteMeshes) return;
+    publishViewportBounds(city);
+  }, [storedSiteMeshes, publishViewportBounds]);
   const [sectionKnifeGizmoInteraction, setSectionKnifeGizmoInteraction] = useState<SectionKnifeGizmoInteraction>(
     () => idleSectionKnifeGizmoInteraction,
   );
@@ -2324,8 +2359,9 @@ export function Scene3D({
     let top = model.terrain ? model.terrain.max : 0;
     const base = model.terrain ? model.terrain.max : 0;
     for (const building of model.buildings) top = Math.max(top, base + building.height);
+    if (storedSiteMeshes) top = Math.max(top, measureCity(storedSiteMeshes).max[1]!);
     return top;
-  }, [model]);
+  }, [model, storedSiteMeshes]);
   const gizmoCursorClass =
     sectionKnifeGizmoInteraction.cursor === "grabbing"
       ? " section-knife-gizmo-grabbing"
@@ -2491,6 +2527,7 @@ export function Scene3D({
         cameraMemory={cameraMemory}
         introEnabled
         gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock}
+        boundsFitEpoch={boundsFitEpoch}
       />
       </Canvas>
     </div>
