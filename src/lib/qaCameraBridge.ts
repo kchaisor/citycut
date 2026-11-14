@@ -51,6 +51,7 @@ declare global {
       getToolPhase: () => string;
       drawArmed: () => boolean;
     };
+    __citycutSectionExportAudit?: () => { ok: boolean; layers: string[]; svg?: string };
     __citycutQaModel?: {
       openMidriseHeightEdit: () => number | null;
       pickBuildingNearGeoQa?: (lat: number, lon: number) => number | null;
@@ -135,6 +136,9 @@ declare global {
       readFacadeOverlayNormals?: () => import("./facadeSolarAssess").FacadeOverlayCellNormal[];
       frameProposedMassingOblique?: (side: "nw" | "se") => boolean;
       readFacadeOverlayWallQa?: () => import("./facadeSolarQa").FacadeOverlayWallQa | null;
+      setSectionKnifeActive?: (active: boolean) => void;
+      setSectionKnifePose?: (pose: import("./sectionKnife/plane").SectionKnifePose) => void;
+      auditSectionExport?: () => { ok: boolean; layers: string[] };
     };
     __citycutWalkRippleQa?: {
       setMinutes: (minutes: number) => void;
@@ -156,12 +160,31 @@ declare global {
     __citycutProgressSamples?: number[];
     __citycutLoadProgress?: number;
     __citycutIntroReadyToFire?: boolean;
+    __citycutQaPlan?: {
+      upperLevelGroupCount: () => number;
+      exportSitePlanFrameSvg: () => Promise<string>;
+      zoomPlanToImportedMassing: () => boolean;
+      zoom3dToImportedMassing: () => boolean;
+      setPlanSunMode: (hour: number, castShadows: boolean, sunStudy: boolean) => boolean;
+      selectSunStudyBuilding: (id: number) => boolean;
+      clearSunStudySelection: () => boolean;
+      sunStudyPickBuildingId: () => number | null;
+      firstImportedDisplayBuildingId: () => number | null;
+      sunStudyCasterStats: () => { total: number; podiumLevel: number; shadowPathChars: number };
+    };
   }
 }
 
 export function qaModeFromSearch(search: string): boolean {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   return params.get("qa") === "1";
+}
+
+export function qaMassingFromSearch(search: string): string | null {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  const value = params.get("qaMassing");
+  if (!value) return null;
+  return value === "podium" ? "podium" : null;
 }
 
 export function qaForcedCrashFromSearch(search: string): boolean {

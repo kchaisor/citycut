@@ -4,7 +4,7 @@ import { COLOUR_FALLBACK } from "./colours";
 import * as THREE from "three";
 import { applyBuildingSolarNeutral, buildingViewportFill, parseBuildingBucketName, snapshotBuildingViewportColors } from "./buildingViewportColor";
 import { applySunStudySurfaceTint, refreshSceneSurfaceColors, snapshotSunStudySurfaceColors } from "./sunStudySurfaceViewport";
-import { applyWhiteCardTint, snapshotWhiteCardColors } from "./whiteCardViewport";
+import { applyPrimaryViewportTint, snapshotPrimaryViewportColors } from "./primaryViewport";
 import { uniformBuildingColor } from "./buildingUse";
 
 describe("buildingViewportColor", () => {
@@ -49,7 +49,7 @@ describe("buildingViewportColor", () => {
     const mode = { colourByUse: true, uniformBuildings: false, colourBySource: false };
     snapshotBuildingViewportColors(group, mode);
     snapshotSunStudySurfaceColors(group);
-    snapshotWhiteCardColors(group, mode);
+    snapshotPrimaryViewportColors(group, mode);
 
     const origRes = COLOUR_FALLBACK["--use-residential"];
     const origTree = COLOUR_FALLBACK["--tree-crown"];
@@ -59,10 +59,10 @@ describe("buildingViewportColor", () => {
       refreshSceneSurfaceColors(group);
       snapshotBuildingViewportColors(group, mode);
       snapshotSunStudySurfaceColors(group);
-      snapshotWhiteCardColors(group, mode);
+      snapshotPrimaryViewportColors(group, mode);
       applySunStudySurfaceTint(group, false);
       applyBuildingSolarNeutral(group, false, "#cccccc");
-      applyWhiteCardTint(group, false);
+      applyPrimaryViewportTint(group, false);
 
       expect(`#${bldgMat.color.getHexString()}`).toBe("#ff3366");
       expect(`#${treeMat.color.getHexString()}`).toBe("#11aaee");

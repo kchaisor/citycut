@@ -76,6 +76,8 @@ async function mount3d(memory: CameraMemoryRef | undefined, opts: MountOpts = {}
   const element = (o: MountOpts) => (
     <Cameras
       side={SIDE}
+      frameWidthM={SIDE}
+      frameHeightM={SIDE}
       lift={0}
       groundY={0}
       siteTopY={60}

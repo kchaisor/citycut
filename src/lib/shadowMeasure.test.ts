@@ -76,11 +76,16 @@ describe("2D plan shadows land where the 3D shadows do, in metres (real Dandenon
     const g1 = ground(-40, 0), g2 = ground(40, 0);
     const item = await importFile([[-40, 0, 20, g1 - 2, g1 + 20], [40, 0, 20, g2 - 2, g2 + 4]]);
     const drawn = massingDrawingBuildings([item], origin, zone, ground);
-    expect(drawn).toHaveLength(2);
+    const casters = drawn.filter((b) => b.importedMassingShadowCaster);
+    expect(casters.length).toBeGreaterThanOrEqual(2);
     const local = placedLocal(item, item.placement, origin, zone);
     const pts: [number, number, number][] = [];
     for (let i = 0; i < local.length; i += 3) pts.push([local[i]!, local[i + 1]!, local[i + 2]!]);
-    for (const b of drawn) {
+    const tallestBySide = (sign: number) =>
+      casters
+        .filter((b) => Math.sign(b.ring[0]![0]!) === sign)
+        .sort((a, b) => (b.importedTopZ ?? 0) - (a.importedTopZ ?? 0))[0]!;
+    for (const b of [-1, 1].map(tallestBySide)) {
       const cx = b.ring.reduce((s, p) => s + p[0], 0) / b.ring.length;
       const mine = pts.filter(([e]) => Math.sign(e) === Math.sign(cx));
       const d3 = reach3d(mine), d2 = reach2d(b);

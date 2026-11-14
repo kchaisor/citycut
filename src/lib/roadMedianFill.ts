@@ -1,11 +1,9 @@
-import * as polygonClipping from "polygon-clipping";
-import type { MultiPolygon, Pair, Polygon, Ring } from "polygon-clipping";
+import type { MultiPolygon, Pair, Polygon, Ring } from "./safePolygonClip";
+import { clipIntersection, clipUnion } from "./safePolygonClip";
 import { signedArea } from "./geo";
 import type { Pt } from "../types";
 
-type ClipFns = Pick<typeof import("polygon-clipping"), "intersection" | "union">;
-const loaded = polygonClipping as unknown as ClipFns & { default?: ClipFns };
-const clip: ClipFns = typeof loaded.intersection === "function" ? loaded : loaded.default!;
+const clip = { intersection: clipIntersection, union: clipUnion };
 
 export const ROAD_MEDIAN_HOLE_MAX_M2 = 1200;
 

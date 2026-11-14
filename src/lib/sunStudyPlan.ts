@@ -108,7 +108,7 @@ function inRing(point: Pt, ring: Ring): boolean {
   return inside;
 }
 
-export function pickBuilding(buildings: BuildingFeat[], point: Pt): BuildingFeat | null {
+function pickSmallestAtPoint(buildings: BuildingFeat[], point: Pt): BuildingFeat | null {
   let best: BuildingFeat | null = null;
   let bestArea = Infinity;
   for (const building of buildings) {
@@ -120,6 +120,59 @@ export function pickBuilding(buildings: BuildingFeat[], point: Pt): BuildingFeat
     }
   }
   return best;
+}
+
+export function pickBuilding(buildings: BuildingFeat[], point: Pt): BuildingFeat | null {
+  const visible = buildings.filter((building) => !building.importedMassingShadowCaster);
+  const onVisible = pickSmallestAtPoint(visible, point);
+  if (onVisible) return onVisible;
+  return pickSmallestAtPoint(buildings, point);
+}
+
+type StudyFootprint = { ring: Ring; holes: Ring[] };
+
+function ringCentroid(ring: Ring): Pt {
+  const pts =
+    ring.length > 1 && ring[0]![0] === ring[ring.length - 1]![0] && ring[0]![1] === ring[ring.length - 1]![1]
+      ? ring.slice(0, -1)
+      : ring;
+  let east = 0;
+  let north = 0;
+  for (const [x, y] of pts) {
+    east += x;
+    north += y;
+  }
+  const count = pts.length || 1;
+  return [east / count, north / count];
+}
+
+function casterUnderFootprint(centroid: Pt, footprint: StudyFootprint): boolean {
+  return inRing(centroid, footprint.ring) && !footprint.holes.some((hole) => inRing(centroid, hole));
+}
+
+export function sunStudySelectionFootprints(buildings: BuildingFeat[], selected: readonly number[]): StudyFootprint[] {
+  const ids = new Set(selected);
+  const displays = buildings.filter((building) => building.importedMassingSkipShadow);
+  const footprints: StudyFootprint[] = [];
+  for (const building of buildings) {
+    if (!ids.has(building.id)) continue;
+    if (building.importedMassingSkipShadow) {
+      footprints.push({ ring: building.ring, holes: building.holes });
+      continue;
+    }
+    if (building.importedMassingShadowCaster) {
+      const centroid = ringCentroid(building.ring);
+      const host = displays.find(
+        (display) =>
+          inRing(centroid, display.ring) && !display.holes.some((hole) => inRing(centroid, hole)),
+      );
+      if (host) footprints.push({ ring: host.ring, holes: host.holes });
+      else footprints.push({ ring: building.ring, holes: building.holes });
+      continue;
+    }
+    footprints.push({ ring: building.ring, holes: building.holes });
+  }
+  return footprints;
 }
 
 function ringArea(ring: Ring): number {
@@ -134,10 +187,27 @@ export function toggleSelection(selected: readonly number[], id: number): number
 
 export type SunStudyCasters = "all" | "selected";
 
+export function sunStudyShadowCasters(
+  buildings: BuildingFeat[],
+  casters: SunStudyCasters,
+  selected: readonly number[],
+): BuildingFeat[] {
+  if (casters === "all") return buildings;
+  const ids = new Set(selected);
+  const footprints = sunStudySelectionFootprints(buildings, selected);
+  return buildings.filter((building) => {
+    if (building.importedMassingSkipShadow) return false;
+    if (!building.importedMassing) return ids.has(building.id);
+    if (ids.has(building.id)) return true;
+    if (!building.importedMassingShadowCaster) return false;
+    const centroid = ringCentroid(building.ring);
+    return footprints.some((footprint) => casterUnderFootprint(centroid, footprint));
+  });
+}
+
 export function sunStudyCasterModel(model: CityModel, casters: SunStudyCasters, selected: readonly number[]): CityModel {
   if (casters === "all") return model;
-  const ids = new Set(selected);
-  return { ...model, buildings: model.buildings.filter((building) => ids.has(building.id)) };
+  return { ...model, buildings: sunStudyShadowCasters(model.buildings, casters, selected) };
 }
 
 export function isEstimatedHeight(building: BuildingFeat): boolean {

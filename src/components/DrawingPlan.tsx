@@ -11,21 +11,34 @@ import { figureGroundModelPaths, scaleBarMetres } from "../lib/figureGround";
 import { circleRing, DEFAULT_SITE_FRAME_SHAPE } from "../lib/siteFrame";
 import { openRing } from "../lib/geo";
 import { LINE_MM, screenPx } from "../lib/lineweights";
-import { importedMassingStrokeStyle, planBuildingStrokeStyle } from "../lib/planBuildingFill";
+import {
+  importedMassingStrokeStyle,
+  importedMassingUpperStrokeStyle,
+  planBuildingStrokeStyle,
+} from "../lib/planBuildingFill";
 import { planPaths, svgPolyline, svgRings } from "../lib/svgPlan";
 import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
 import type { CityModel, Pt } from "../types";
+import type { SectionKnifeToolState } from "../lib/sectionKnife/state";
+import { SectionKnifePlanMarkers } from "./SectionKnifePlanMarkers";
 import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
 import { NswPlanLabels, NswPlanLines, NswPlanUnder } from "./NswPlanLayers";
 import { NSW_PLAN_LABEL_SHARE, nswPlanItems } from "../lib/nswPlan";
 import { readNswPlanStyle } from "../lib/nswPlanStyle";
-import { planShadowSplitRings, proposedMassingInModel, shadowRingsFromMulti, type PlanShadowInput } from "../lib/buildingShadows";
+import {
+  importedPlanShadowRings,
+  planShadowSplitRings,
+  proposedMassingInModel,
+  shadowRingsFromMulti,
+  type PlanShadowInput,
+} from "../lib/buildingShadows";
 import { planTreeShadowMulti } from "../lib/solarTreePlanShadow";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
 import { createThrottledViewportSink } from "../lib/planViewportThrottle";
-import { planViewportExtent, type PlanViewport } from "../lib/planViewport";
+import { modelFrameSize } from "../lib/modelFrame";
+import { planViewportExtentRect, type PlanViewport } from "../lib/planViewport";
 import {
   SINGLE_SHADOW_OPACITY,
   SUN_STUDY_SHADOW_ADDED_OPACITY,
@@ -105,6 +118,7 @@ export function DrawingPlan({
   sunHoursGroundScaleMax = 0,
   sunHoursRoofPlanRaster = null,
   treesCastShadow = false,
+  sectionKnife,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -134,6 +148,7 @@ export function DrawingPlan({
   sunHoursGroundScaleMax?: number;
   sunHoursRoofPlanRaster?: SunHoursGroundRaster | null;
   treesCastShadow?: boolean;
+  sectionKnife?: SectionKnifeToolState | null;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
@@ -180,7 +195,11 @@ export function DrawingPlan({
     () => (figure ? figureGroundModelPaths(model.buildings, model.sideM, frameShape) : []),
     [figure, model, frameShape],
   );
-  const fitted = useMemo(() => planViewportExtent(model.sideM), [model.sideM]);
+  const frameSize = useMemo(() => modelFrameSize(model), [model.sideM, model.widthM, model.heightM]);
+  const fitted = useMemo(
+    () => planViewportExtentRect(frameSize.widthM, frameSize.heightM),
+    [frameSize.widthM, frameSize.heightM],
+  );
   const [internalView, setInternalView] = useState<PlanViewport>(fitted);
   const [liveView, setLiveView] = useState<PlanViewport | null>(null);
   const viewportSinkRef = useRef<ReturnType<typeof createThrottledViewportSink> | null>(null);
@@ -250,12 +269,13 @@ export function DrawingPlan({
     return () => svg.removeEventListener("wheel", onWheel);
   }, []);
 
-  const half = model.sideM / 2;
+  const halfW = frameSize.widthM / 2;
+  const halfH = frameSize.heightM / 2;
+  const half = Math.max(halfW, halfH);
   const framePathD = useMemo(() => {
-    const half = model.sideM / 2;
-    if (frameShape === "circle") return svgPolyline(openRing(circleRing(half)), true);
-    return `M ${-half} ${-half} L ${half} ${-half} L ${half} ${half} L ${-half} ${half} Z`;
-  }, [frameShape, model.sideM]);
+    if (frameShape === "circle") return svgPolyline(openRing(circleRing(model.sideM / 2)), true);
+    return `M ${-halfW} ${-halfH} L ${halfW} ${-halfH} L ${halfW} ${halfH} L ${-halfW} ${halfH} Z`;
+  }, [frameShape, frameSize.widthM, frameSize.heightM, model.sideM]);
 
   const empty = figure
     ? figurePaths.length === 0
@@ -303,6 +323,7 @@ export function DrawingPlan({
   const studyShadowAddedFill = getColour("--sun-study-shadow-added");
   const studyIsolateCasters = sunStudySelected.length > 0;
   const treeCrownShadowFill = getColour("--sun-study-tree-shadow");
+  const upperStroke = useMemo(() => importedMassingUpperStrokeStyle(style), [style]);
   const studySunFill = getColour("--sun-study-sun");
   const muted = Boolean(study) && sunStudyMuted;
   const mutedFill = (key: Parameters<typeof getColour>[0], normal: string) => (muted ? getColour(key) : normal);
@@ -390,6 +411,10 @@ export function DrawingPlan({
     [scrubbedTreeCrownShadows, model.sideM, treeCrownShadowFill],
   );
   const addedHatchSize = Math.max(3.5, model.sideM * 0.008);
+  const importedShadowReady = useMemo(() => {
+    if (!shadowInput) return false;
+    return importedPlanShadowRings(casterModel, shadowInput, true).length > 0;
+  }, [casterModel, shadowInput]);
   const annotations = (
     <>
       <g aria-hidden="true" className="plan-north-arrow">
@@ -556,7 +581,6 @@ export function DrawingPlan({
       }}
     >
       <rect x={view.x} y={view.y} width={view.w} height={view.h} fill={canvas} />
-      <rect x={-half} y={-half} width={model.sideM} height={model.sideM} fill={canvas} />
       {(splitShadow || parkPlanOverlays.some((overlay) => overlay.hatch.length > 0)) && (
         <defs>
           <pattern
@@ -598,10 +622,32 @@ export function DrawingPlan({
           )}
         </defs>
       )}
+      <rect
+        data-cut-frame="1"
+        x={-halfW}
+        y={-halfH}
+        width={frameSize.widthM}
+        height={frameSize.heightM}
+        fill={canvas}
+      />
       {figure ? (
         <>
           {figurePaths.map((d, index) => (
             <path key={`f${index}`} d={d} fill={figureFill} fillRule="evenodd" />
+          ))}
+          {plan.importedUpperLevels.map((level, levelIndex) => (
+            <g key={`fig-imu${levelIndex}`} aria-hidden="true">
+              {level.lines.map((line, lineIndex) => (
+                <path
+                  key={`fig-imul${lineIndex}`}
+                  d={svgPolyline(openRing(line), true)}
+                  fill="none"
+                  stroke={getColour("--imported-massing-upper-stroke")}
+                  strokeWidth={screenPx(upperStroke.mm)}
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+            </g>
           ))}
           <path
             d={framePathD}
@@ -648,7 +694,13 @@ export function DrawingPlan({
             {plan.roadFill.length > 0 && (
               <path
                 d={plan.roadFill.map((polygon) => svgRings(polygon)).join(" ")}
-                fill={mutedFill("--sun-study-road", style.roadFill)}
+                fill={
+                  muted
+                    ? mutedFill("--sun-study-road", style.roadFill)
+                    : uniformBuildings
+                      ? getColour("--uniform-road")
+                      : style.roadFill
+                }
                 fillRule="evenodd"
                 {...(style.kerbOn ? screenPenAttrs(style.kerb) : { stroke: "none" })}
               />
@@ -659,6 +711,7 @@ export function DrawingPlan({
             {plan.trams.map((tram, index) => (
               <path key={`tr${index}`} d={svgPolyline(tram, false)} fill="none" {...screenPenAttrs(style.tram)} strokeLinecap="round" strokeLinejoin="round" />
             ))}
+            {importedShadowReady ? <g aria-hidden="true" data-imported-shadow="true" /> : null}
             {nswItems && nswStyle && <NswPlanLines items={nswItems} style={nswStyle} />}
             {studyIsolateCasters &&
               studyShadows.layers.map((layer) => (
@@ -711,6 +764,7 @@ export function DrawingPlan({
             {shadowSplit.existing.map((rings, index) => (
               <path
                 key={`sh${index}`}
+                data-plan-shadow="single"
                 d={svgRings(rings)}
                 fill={shadowFill}
                 fillOpacity={SINGLE_SHADOW_OPACITY}
@@ -746,6 +800,7 @@ export function DrawingPlan({
             {plan.buildings.map((building, index) => (
               <path
                 key={`b${index}`}
+                {...(building.imported ? { "data-imported-podium": true } : {})}
                 d={svgRings(building.rings)}
                 fill={
                   sunHoursRoofPlanRaster
@@ -766,6 +821,19 @@ export function DrawingPlan({
               />
             ))}
             {sunHoursRoofPlanRaster ? <SunHoursRoofPlanOverlay raster={sunHoursRoofPlanRaster} /> : null}
+            {plan.importedUpperLevels.map((level, levelIndex) => (
+              <g key={`imu${levelIndex}`} data-upper-z={level.z} aria-hidden="true">
+                {level.lines.map((line, lineIndex) => (
+                  <path
+                    key={`imul${lineIndex}`}
+                    data-imported-upper-outline="true"
+                    d={svgPolyline(openRing(line), true)}
+                    fill="none"
+                    {...screenPenAttrs(upperStroke, "miter")}
+                  />
+                ))}
+              </g>
+            ))}
             {study &&
               model.buildings
                 .filter((building) => selectedIds.has(building.id))
@@ -885,6 +953,14 @@ export function DrawingPlan({
               />
             )}
             {nswItems && nswStyle && <NswPlanLabels items={nswItems} style={nswStyle} sizeM={model.sideM * NSW_PLAN_LABEL_SHARE} />}
+            {sectionKnife?.active ? (
+              <SectionKnifePlanMarkers
+                model={model}
+                tool={sectionKnife}
+                svgRef={svgRef}
+                viewWidthM={view.w}
+              />
+            ) : null}
             <path d={framePathD} fill="none" {...screenPenAttrs(style.frame, "miter")} />
             {heliodon && (
               <HeliodonPlanOverlay input={heliodon} planScale={planScale} sideM={model.sideM} sunStudy={study} />

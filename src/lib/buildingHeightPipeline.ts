@@ -1,5 +1,5 @@
-import * as polygonClipping from "polygon-clipping";
-import type { MultiPolygon, Polygon } from "polygon-clipping";
+import type { Polygon } from "./safePolygonClip";
+import { clipDifference } from "./safePolygonClip";
 import { annotateUnresolvedZoneDefaults } from "./buildingHeightResolve";
 import { applyComBuildingHeights, intersectionAreaM2, ringBBox } from "./comBuildingHeightsMatch";
 import { openRing, signedArea } from "./geo";
@@ -17,10 +17,6 @@ export function resolveBuildingHeightsAfterCom(
   const annotated = annotateUnresolvedZoneDefaults(withDam, center, footprints, damRecords);
   return carveNestedBuildings(annotated);
 }
-
-type ClipFns = { difference: (a: Polygon | MultiPolygon, ...b: Array<Polygon | MultiPolygon>) => MultiPolygon };
-const clip = ((polygonClipping as unknown as { default?: ClipFns }).default ??
-  (polygonClipping as unknown as ClipFns)) as ClipFns;
 
 function closed(ring: Ring): [number, number][] {
   const pts = ring.map(([x, y]) => [x, y] as [number, number]);
@@ -60,7 +56,7 @@ function tallestOver(building: BuildingFeat, region: { ring: Ring; holes: Ring[]
 function subtractFootprints(parts: BuildingExtrusionPart[], cutters: Polygon[]): BuildingExtrusionPart[] {
   const next: BuildingExtrusionPart[] = [];
   for (const part of parts) {
-    const rest = clip.difference(asPolygon(part), ...cutters);
+    const rest = clipDifference(asPolygon(part), ...cutters, { layer: "building height", operation: "difference" });
     for (const poly of rest) {
       if (!poly[0]?.length) continue;
       const ring = openRing(poly[0] as Ring);

@@ -1,3 +1,4 @@
+import { formatCutReadout, type A3DrawingScale } from "./cutSpec";
 import { M_PER_DEG_LAT, formatKmSide, mPerDegLon } from "./geo";
 import type { LonLat } from "../types";
 
@@ -178,9 +179,22 @@ export function coordinateLabel(lat: number, lon: number): string {
   return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
 }
 
-export function cutSizeLabel(sideM: number, frameShape: "square" | "circle" = "square"): string {
+export function cutSizeLabel(
+  sideM: number,
+  frameShape: "square" | "circle" | "a3" = "square",
+  options?: { widthM?: number; heightM?: number; scale?: A3DrawingScale; orientation?: "landscape" | "portrait" },
+): string {
   const metres = Math.round(sideM);
   if (frameShape === "circle") return `${metres} m diameter`;
+  if (frameShape === "a3") {
+    return formatCutReadout({
+      shape: "a3",
+      orientation: options?.orientation ?? "landscape",
+      scale: options?.scale,
+      widthM: options?.widthM ?? sideM,
+      heightM: options?.heightM ?? sideM,
+    });
+  }
   return `${metres} × ${metres} m`;
 }
 

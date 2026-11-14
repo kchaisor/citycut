@@ -1,4 +1,5 @@
 import type { Pt } from "../types";
+import { cleanRingForFrame } from "./safePolygonClip";
 
 const INSIDE = 0;
 const LEFT = 1;
@@ -199,8 +200,23 @@ function clipHalf(
   return output;
 }
 
+export function clipPolygonRect(ring: Pt[], halfW: number, halfH: number): Pt[] {
+  let output = cleanRingForFrame(ring.slice());
+  if (output.length >= 2) {
+    const a = output[0];
+    const b = output[output.length - 1];
+    if (Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.05) output = output.slice(0, -1);
+  }
+  const slack = 1e-6;
+  output = clipHalf(output, (p) => p[0] >= -halfW - slack, (a, b) => hitX(a, b, -halfW));
+  output = clipHalf(output, (p) => p[0] <= halfW + slack, (a, b) => hitX(a, b, halfW));
+  output = clipHalf(output, (p) => p[1] >= -halfH - slack, (a, b) => hitY(a, b, -halfH));
+  output = clipHalf(output, (p) => p[1] <= halfH + slack, (a, b) => hitY(a, b, halfH));
+  return output;
+}
+
 export function clipPolygon(ring: Pt[], min: number, max: number): Pt[] {
-  let output = ring.slice();
+  let output = cleanRingForFrame(ring.slice());
   if (output.length >= 2) {
     const a = output[0];
     const b = output[output.length - 1];

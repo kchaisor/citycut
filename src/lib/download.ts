@@ -54,7 +54,7 @@ function downloadBytes(filename: string, bytes: Uint8Array, type: string) {
   downloadBlob(filename, new Blob([copy], { type }));
 }
 
-import type { SunStudyExportLayer, SolarReceptorExport } from "./aiPlan";
+import type { SolarReceptorExport } from "./aiPlan";
 
 export type RhinoDownloadOptions = {
   heliodon?: HeliodonGroundExportOptions | null;
@@ -66,10 +66,31 @@ export type RhinoDownloadOptions = {
   hideTrees?: boolean;
   importedMassing?: import("./rhinoExport").ImportedMassingExport[] | null;
   buildingsAsMesh?: boolean;
-  sunStudy?: { layers: SunStudyExportLayer[] } | null;
+  sunStudy?: SitePlanExportOptions["sunStudy"];
   solarReceptors?: SolarReceptorExport[] | null;
   facadeSolarPoints?: import("./facadeSolarExport").FacadePointExport[] | null;
 };
+
+export async function downloadSectionDrawing(
+  model: CityModel,
+  knife: import("./sectionKnife/state").SectionKnifeEntry,
+  applyVerticalExaggeration: boolean,
+): Promise<{ svg: string; layers: string[] }> {
+  const { buildSectionExportSvg, buildSectionExport3dm, sectionExportLayerNames } = await import(
+    "./sectionKnife/sectionExport"
+  );
+  const svg = buildSectionExportSvg(model, knife.pose, { applyVerticalExaggeration, knife });
+  const layers = sectionExportLayerNames(svg);
+  const bytes = await buildSectionExport3dm(model, knife.pose, { applyVerticalExaggeration, knife });
+  const stem = fileStem(model);
+  downloadBlob(`${stem}-section-${knife.id}.svg`, new Blob([svg], { type: "image/svg+xml" }));
+  downloadBytes(`${stem}-section-${knife.id}.3dm`, bytes, "application/octet-stream");
+  if (typeof document !== "undefined") {
+    document.body.dataset.sectionExportLayers = layers.join("|");
+    document.body.dataset.sectionExportHasGround = layers.includes("Section::Ground") ? "1" : "0";
+  }
+  return { svg, layers };
+}
 
 export async function download3dm(
   model: CityModel,
@@ -93,6 +114,21 @@ export async function downloadSiteAi(
 
 export function svgFilename(model: CityModel, kind: "site" | "figure" | "isometric", scale: number): string {
   return aiFilename(model, kind, scale).replace(/\.ai$/, ".svg");
+}
+
+export function sitePlan3dmFilename(model: CityModel, scale: number): string {
+  return aiFilename(model, "site", scale).replace(/\.ai$/, ".3dm");
+}
+
+export async function downloadSite3dm(
+  model: CityModel,
+  scale: number,
+  style?: LineStyles,
+  exportOptions?: SitePlanExportOptions | null,
+): Promise<void> {
+  const { sitePlanTo3dm } = await import("./planRhinoExport");
+  const bytes = await sitePlanTo3dm(model, scale, style, exportOptions);
+  downloadBytes(sitePlan3dmFilename(model, scale), bytes, "application/octet-stream");
 }
 
 export async function downloadSiteSvg(

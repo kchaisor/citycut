@@ -38,3 +38,34 @@ export function studioSmaaActive(quality: RenderQuality): boolean {
 export function studioAoActive(quality: RenderQuality): boolean {
   return quality === "high";
 }
+
+export type StudioN8AoParams = {
+  aoRadius: number;
+  distanceFalloff: number;
+  intensity: number;
+  aoSamples: number;
+  denoiseSamples: number;
+  denoiseRadius: number;
+};
+
+export function studioN8AoParams(sideM: number, primaryView: boolean): StudioN8AoParams {
+  const baseRadius = Math.max(4, sideM * 0.012);
+  if (primaryView) {
+    return {
+      aoRadius: Math.max(3, baseRadius * 0.82),
+      distanceFalloff: 0.68,
+      intensity: 1.38,
+      aoSamples: 16,
+      denoiseSamples: 6,
+      denoiseRadius: 12,
+    };
+  }
+  return {
+    aoRadius: baseRadius,
+    distanceFalloff: 1,
+    intensity: 3.15,
+    aoSamples: 14,
+    denoiseSamples: 4,
+    denoiseRadius: 10,
+  };
+}

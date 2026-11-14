@@ -1,4 +1,5 @@
-export const VIEW3D_WHITE_CARD_KEY = "citycut.view3d.whiteCard";
+export const VIEW3D_PRIMARY_KEY = "citycut.view3d.primary";
+export const VIEW3D_LEGACY_CARD_KEY = "citycut.view3d.whiteCard";
 export const VIEW3D_OUTLINES_KEY = "citycut.view3d.outlines";
 export const VIEW3D_CONTOURS_KEY = "citycut.view3d.contours.v2";
 export const VIEW3D_HIDE_TREES_KEY = "citycut.view3d.hideTrees";
@@ -31,7 +32,7 @@ export const DEFAULT_VIEW3D_LAYERS_VISIBLE: View3dLayerVisibility = {
 };
 
 export type View3dDisplaySettings = {
-  whiteCard: boolean;
+  primaryView: boolean;
   showOutlines: boolean;
   showContours3d: boolean;
   hideTrees: boolean;
@@ -39,7 +40,7 @@ export type View3dDisplaySettings = {
 };
 
 export const DEFAULT_VIEW3D_DISPLAY: View3dDisplaySettings = {
-  whiteCard: false,
+  primaryView: true,
   showOutlines: true,
   showContours3d: true,
   hideTrees: false,
@@ -95,6 +96,14 @@ function readFlag(storage: KeyValueStore, key: string, fallback: boolean): boole
   }
 }
 
+function readPrimaryFlag(storage: KeyValueStore): boolean {
+  const primary = storage.getItem(VIEW3D_PRIMARY_KEY);
+  if (primary !== null) return primary === "1";
+  const legacy = storage.getItem(VIEW3D_LEGACY_CARD_KEY);
+  if (legacy !== null) return legacy === "1";
+  return DEFAULT_VIEW3D_DISPLAY.primaryView;
+}
+
 function readStoredLayers(
   storage: KeyValueStore,
   showContours3d: boolean,
@@ -125,7 +134,7 @@ export function readStoredView3dDisplay(storage: KeyValueStore): View3dDisplaySe
   const showContours3d = readFlag(storage, VIEW3D_CONTOURS_KEY, DEFAULT_VIEW3D_DISPLAY.showContours3d);
   const hideTrees = readFlag(storage, VIEW3D_HIDE_TREES_KEY, DEFAULT_VIEW3D_DISPLAY.hideTrees);
   return {
-    whiteCard: readFlag(storage, VIEW3D_WHITE_CARD_KEY, DEFAULT_VIEW3D_DISPLAY.whiteCard),
+    primaryView: readPrimaryFlag(storage),
     showOutlines: readFlag(storage, VIEW3D_OUTLINES_KEY, DEFAULT_VIEW3D_DISPLAY.showOutlines),
     showContours3d,
     hideTrees,
@@ -137,6 +146,7 @@ export function view3dDisplayForModelOpen(storage: KeyValueStore): View3dDisplay
   const stored = readStoredView3dDisplay(storage);
   return {
     ...stored,
+    primaryView: true,
     showContours3d: true,
     hideTrees: false,
     layersVisible: { ...DEFAULT_VIEW3D_LAYERS_VISIBLE },
@@ -151,7 +161,7 @@ export function writeStoredView3dDisplay(storage: KeyValueStore, settings: View3
     trees: !settings.hideTrees,
   };
   try {
-    storage.setItem(VIEW3D_WHITE_CARD_KEY, settings.whiteCard ? "1" : "0");
+    storage.setItem(VIEW3D_PRIMARY_KEY, settings.primaryView ? "1" : "0");
     storage.setItem(VIEW3D_OUTLINES_KEY, settings.showOutlines ? "1" : "0");
     storage.setItem(VIEW3D_CONTOURS_KEY, settings.showContours3d ? "1" : "0");
     storage.setItem(VIEW3D_HIDE_TREES_KEY, settings.hideTrees ? "1" : "0");
@@ -163,3 +173,10 @@ export function writeStoredView3dDisplay(storage: KeyValueStore, settings: View3
 export function snapWhenTogglingView3dDisplay(): boolean {
   return false;
 }
+
+export const activeViewStyle = (display: View3dDisplaySettings, colourByUse: boolean, showSource: boolean): string => {
+  if (display.primaryView) return "primary";
+  if (showSource) return "source";
+  if (colourByUse) return "use";
+  return "uniform";
+};

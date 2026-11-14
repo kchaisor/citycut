@@ -10,11 +10,18 @@ export function planEye(centre: Vec3, distance: number): Vec3 {
   return [centre[0], centre[1] + distance, centre[2] + 0.01];
 }
 
-export function sitePlanBounds(sideM: number, groundY: number, topY: number): Aabb {
-  const half = sideM / 2;
+export function sitePlanBounds(
+  sideM: number,
+  groundY: number,
+  topY: number,
+  widthM = sideM,
+  heightM = sideM,
+): Aabb {
+  const halfW = widthM / 2;
+  const halfH = heightM / 2;
   return {
-    min: [-half, groundY, -half],
-    max: [half, Math.max(topY, groundY + 1), half],
+    min: [-halfW, groundY, -halfH],
+    max: [halfW, Math.max(topY, groundY + 1), halfH],
   };
 }
 

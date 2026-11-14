@@ -6,6 +6,7 @@ import {
   clipPolylineSiteFrame,
   DEFAULT_SITE_FRAME_SHAPE,
   pointInSiteFrame,
+  type FrameGroundSize,
   type SiteFrameShape,
 } from "./siteFrame";
 import { waterFallbackFromCenterlines, type WaterCenterline } from "./waterRibbonFallback";
@@ -72,6 +73,7 @@ function ringFromGeoJson(
   origin: LonLat,
   sideM: number,
   frameShape: SiteFrameShape,
+  frameSize?: FrameGroundSize,
 ) {
   const toRing = (loop: number[][]): Ring =>
     dedupeConsecutive(
@@ -80,7 +82,7 @@ function ringFromGeoJson(
     );
   const outerRaw = toRing(coordinates[0]);
   const holeRaws = coordinates.slice(1).map((loop) => toRing(loop));
-  const clipped = clipAreaToSiteFrame(outerRaw, holeRaws, sideM, frameShape);
+  const clipped = clipAreaToSiteFrame(outerRaw, holeRaws, sideM, frameShape, frameSize);
   if (!clipped || clipped[0]!.length < 3 || Math.abs(signedArea(clipped[0]!)) < MIN_AREA) return null;
   const outer = clipped[0]!;
   const holes = clipped
@@ -98,6 +100,7 @@ function polysFromLayer(
   origin: LonLat,
   sideM: number,
   frameShape: SiteFrameShape,
+  frameSize?: FrameGroundSize,
 ): PolyFragment[] {
   const vt = new VectorTile(new PbfReader(data));
   const layer = vt.layers[layerName];
@@ -116,7 +119,7 @@ function polysFromLayer(
           ? geo.geometry.coordinates
           : [];
     for (const coordinates of polys) {
-      const converted = ringFromGeoJson(coordinates, origin, sideM, frameShape);
+      const converted = ringFromGeoJson(coordinates, origin, sideM, frameShape, frameSize);
       if (!converted) continue;
       out.push({
         id,
@@ -138,8 +141,9 @@ function pushTree(
   tags: Record<string, string>,
   sideM: number,
   frameShape: SiteFrameShape,
+  frameSize?: FrameGroundSize,
 ) {
-  if (!pointInSiteFrame(at, sideM, frameShape)) return;
+  if (!pointInSiteFrame(at, sideM, frameShape, frameSize)) return;
   const size = treeSize(tags);
   trees.push({
     id,
@@ -166,10 +170,19 @@ export function overtureTreesFromPoints(
   origin: LonLat,
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  frameSize?: FrameGroundSize,
 ): TreeFeat[] {
   const trees: TreeFeat[] = [];
   for (const point of points) {
-    pushTree(trees, point.sid, toLocal(point.lat, point.lon, origin), parseSourceTags(point.tags), sideM, frameShape);
+    pushTree(
+      trees,
+      point.sid,
+      toLocal(point.lat, point.lon, origin),
+      parseSourceTags(point.tags),
+      sideM,
+      frameShape,
+      frameSize,
+    );
   }
   return trees;
 }
@@ -182,6 +195,7 @@ function waterCenterlinesFromLayer(
   origin: LonLat,
   sideM: number,
   frameShape: SiteFrameShape,
+  frameSize?: FrameGroundSize,
 ): WaterCenterline[] {
   const vt = new VectorTile(new PbfReader(data));
   const layer = vt.layers.water;
@@ -198,7 +212,7 @@ function waterCenterlinesFromLayer(
       geo.geometry.coordinates.map(([lon, lat]) => toLocal(lat, lon, origin)),
       0.08,
     );
-    for (const part of clipPolylineSiteFrame(raw, sideM, frameShape)) {
+    for (const part of clipPolylineSiteFrame(raw, sideM, frameShape, frameSize)) {
       if (polylineLength(part) < 2) continue;
       out.push({ id: `${id}:${out.length}`, line: part, props });
     }
@@ -214,6 +228,7 @@ function treesFromLandTile(
   origin: LonLat,
   sideM: number,
   frameShape: SiteFrameShape,
+  frameSize?: FrameGroundSize,
 ): TreeFeat[] {
   const vt = new VectorTile(new PbfReader(data));
   const layer = vt.layers.land;
@@ -228,7 +243,7 @@ function treesFromLandTile(
     const [lon, lat] = geo.geometry.coordinates;
     const at = toLocal(lat, lon, origin);
     const id = typeof props.id === "string" ? props.id : String(props.id ?? "");
-    pushTree(trees, stableNumericId(id), at, treeTagsFromLand(props), sideM, frameShape);
+    pushTree(trees, stableNumericId(id), at, treeTagsFromLand(props), sideM, frameShape, frameSize);
   }
   return trees;
 }
@@ -237,7 +252,7 @@ export async function fetchOvertureBaseForCut(
   bounds: { south: number; west: number; north: number; east: number },
   origin: LonLat,
   sideM: number,
-  options: { waterGreen: boolean; trees: boolean; frameShape?: SiteFrameShape },
+  options: { waterGreen: boolean; trees: boolean; frameShape?: SiteFrameShape; frameSize?: FrameGroundSize },
   signal?: AbortSignal,
 ): Promise<{
   areas: AreaFeat[];
@@ -247,6 +262,7 @@ export async function fetchOvertureBaseForCut(
   stats: OvertureBaseStats;
 }> {
   const frameShape = options.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
+  const frameSize = options.frameSize;
   const t0 = performance.now();
   const release = await resolveOvertureRelease(signal);
   const pmtiles = new PMTiles(new EnrichmentPmtilesSource(overtureBaseUrl(release)));
@@ -263,15 +279,15 @@ export async function fetchOvertureBaseForCut(
     if (signal?.aborted) throw signal.reason ?? new DOMException("Aborted", "AbortError");
     const tile = await pmtiles.getZxy(z, x, y, signal);
     if (!tile?.data) continue;
-    if (options.trees) overtureTrees.push(...treesFromLandTile(tile.data, z, x, y, origin, sideM, frameShape));
+    if (options.trees) overtureTrees.push(...treesFromLandTile(tile.data, z, x, y, origin, sideM, frameShape, frameSize));
     if (!options.waterGreen) continue;
-    waterFrags.push(...polysFromLayer("water", tile.data, z, x, y, origin, sideM, frameShape));
-    waterCenterlines.push(...waterCenterlinesFromLayer(tile.data, z, x, y, origin, sideM, frameShape));
-    greenFrags.push(...polysFromLayer("land_use", tile.data, z, x, y, origin, sideM, frameShape));
-    for (const frag of polysFromLayer("infrastructure", tile.data, z, x, y, origin, sideM, frameShape)) {
+    waterFrags.push(...polysFromLayer("water", tile.data, z, x, y, origin, sideM, frameShape, frameSize));
+    waterCenterlines.push(...waterCenterlinesFromLayer(tile.data, z, x, y, origin, sideM, frameShape, frameSize));
+    greenFrags.push(...polysFromLayer("land_use", tile.data, z, x, y, origin, sideM, frameShape, frameSize));
+    for (const frag of polysFromLayer("infrastructure", tile.data, z, x, y, origin, sideM, frameShape, frameSize)) {
       if (isOvertureCarPark(frag.props)) carParkFrags.push(frag);
     }
-    const cover = polysFromLayer("land_cover", tile.data, z, x, y, origin, sideM, frameShape);
+    const cover = polysFromLayer("land_cover", tile.data, z, x, y, origin, sideM, frameShape, frameSize);
     for (const frag of cover) {
       const kind = canopyKindFromLandCover(String(frag.props.subtype ?? ""));
       if (kind) {

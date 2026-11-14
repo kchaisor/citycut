@@ -18,6 +18,7 @@
  */
 
 import { spawn, execFileSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import net from "node:net";
@@ -358,6 +359,36 @@ function countGoldishPixels(pngBuffer) {
   return gold;
 }
 
+async function rasterizeSvgPng(browser, svg, width, height) {
+  const page = await browser.newPage();
+  await page.setViewportSize({
+    width: Math.max(1, Math.round(width)),
+    height: Math.max(1, Math.round(height)),
+  });
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;width:100%;height:100%;background:#fff}svg{display:block;width:100%;height:100%}</style></head><body>${svg}</body></html>`;
+  await page.setContent(html, { waitUntil: "load", timeout: 60_000 });
+  const buf = await page.screenshot({ type: "png" });
+  await page.close();
+  return buf;
+}
+
+function hstackPngBuffers(leftBuf, rightBuf, gap = 6) {
+  const left = PNG.sync.read(leftBuf);
+  const right = PNG.sync.read(rightBuf);
+  const height = Math.max(left.height, right.height);
+  const width = left.width + gap + right.width;
+  const out = new PNG({ width, height });
+  for (let i = 0; i < out.data.length; i += 4) {
+    out.data[i] = 255;
+    out.data[i + 1] = 255;
+    out.data[i + 2] = 255;
+    out.data[i + 3] = 255;
+  }
+  PNG.bitblt(left, out, 0, 0, left.width, left.height, 0, 0);
+  PNG.bitblt(right, out, 0, 0, right.width, right.height, left.width + gap, 0);
+  return PNG.sync.write(out);
+}
+
 function waitForServer(url, timeoutMs = 25000) {
   const start = Date.now();
   return new Promise((resolve, reject) => {
@@ -378,6 +409,95 @@ function waitForServer(url, timeoutMs = 25000) {
     };
     check();
   });
+}
+
+function bufferIncludesLayerName(bytes, layerName) {
+  if (bytes.includes(Buffer.from(layerName, "utf8"))) return true;
+  return bytes.includes(Buffer.from(layerName, "utf16le"));
+}
+
+function inspectSitePlan3dmFromHeader(bytes) {
+  const header = bytes.toString("latin1", 0, Math.min(bytes.length, 12000));
+  const expected = [
+    "Green",
+    "Contours",
+    "Footpaths",
+    "Roads",
+    "Blocks",
+    "Buildings",
+    "Trees",
+    "Sun path",
+    "Shadow 09:00",
+    "Shadow 10:00",
+    "Shadow 11:00",
+    "Shadow 12:00",
+    "Shadow 13:00",
+    "Shadow 14:00",
+    "Shadow 15:00",
+    "Imported massing",
+    "Imported::Upper levels",
+  ];
+  const layerNames = expected.filter((name) => bufferIncludesLayerName(bytes, name));
+  const objectCountOnLayer = (layerName) => (layerNames.includes(layerName) ? 1 : 0);
+  return {
+    header,
+    layerNames,
+    objectCount: 0,
+    objectCountOnLayer,
+    destroy: () => {},
+    parsed: "header",
+  };
+}
+
+async function inspectSitePlan3dm(bytes) {
+  const header = bytes.toString("latin1", 0, Math.min(bytes.length, 8000));
+  if (bytes.length > 2_500_000) {
+    const fallback = inspectSitePlan3dmFromHeader(bytes);
+    fallback.header = header;
+    return fallback;
+  }
+  try {
+    const rhinoModule = await import(
+      new URL("../node_modules/rhino3dm/rhino3dm.module.js", import.meta.url).href,
+    );
+    const { readFile } = await import("node:fs/promises");
+    const { createRequire } = await import("node:module");
+    const require = createRequire(import.meta.url);
+    const wasmPath = require.resolve("rhino3dm/rhino3dm.wasm");
+    const rhino = await rhinoModule.default({ wasmBinary: await readFile(wasmPath) });
+    const doc = rhino.File3dm.fromByteArray(bytes);
+    const layerNames = [];
+    for (let i = 0; i < doc.layers().count; i++) layerNames.push(doc.layers().get(i).fullPath);
+    const layerIndexByPath = new Map();
+    for (let i = 0; i < doc.layers().count; i++) {
+      layerIndexByPath.set(doc.layers().get(i).fullPath, i);
+    }
+    const objectCountOnLayer = (layerName) => {
+      const layerIndex = layerIndexByPath.get(layerName);
+      if (layerIndex === undefined) return 0;
+      let count = 0;
+      for (let i = 0; i < doc.objects().count; i++) {
+        const object = doc.objects().get(i);
+        const attrs = object?.attributes();
+        if (!attrs || attrs.layerIndex !== layerIndex) continue;
+        count += 1;
+        if (count >= 1) return count;
+      }
+      return count;
+    };
+    return {
+      header,
+      layerNames,
+      objectCount: doc.objects().count,
+      objectCountOnLayer,
+      destroy: () => doc.destroy(),
+      parsed: "rhino3dm",
+    };
+  } catch {
+    const fallback = inspectSitePlan3dmFromHeader(bytes);
+    fallback.header = header;
+    return fallback;
+  }
 }
 
 async function main() {
@@ -487,6 +607,181 @@ async function main() {
         beat1Info.frameCadTagVisible,
       `cta="${beat1Info.ctaText}", frame=${JSON.stringify(beat1Info.frameRect)}, ratio=${beat1Info.frameRatio?.toFixed(3)}, singlePill=${beat1Info.frameLabelDisplay === "none" && beat1Info.frameCadTagVisible}`,
     );
+
+    const cursorArtifacts = "/opt/cursor/artifacts";
+    fs.mkdirSync(cursorArtifacts, { recursive: true });
+  const a3Url = `${baseUrl}/citycut/?lat=-37.8136&lon=144.9631&shape=a3&a3scale=2500&a3ori=landscape&km=1.05&label=Melbourne%20CBD`;
+    await page.goto(a3Url, { waitUntil: "networkidle", timeout: 60_000 });
+    await page.waitForSelector('.select .frame[data-shape="a3"]', { timeout: 20_000 });
+    await page.waitForTimeout(600);
+    const a3Landing = await page.evaluate(() => {
+      const frame = document.querySelector(".select .frame[data-shape='a3']");
+      const rect = frame?.getBoundingClientRect();
+      const a3On = document.querySelector('.shape-btn.on[aria-label="A3"]');
+      return {
+        width: rect?.width ?? 0,
+        height: rect?.height ?? 0,
+        a3Selected: Boolean(a3On),
+        readout: document.querySelector(".dock-readout")?.textContent?.trim() ?? "",
+      };
+    });
+    const a3AspectExpected = 420 / 297;
+    const a3Aspect = a3Landing.width / Math.max(a3Landing.height, 1);
+    await page.screenshot({ path: path.join(cursorArtifacts, "a3-landing-map-selection.png"), fullPage: false });
+    assertCheck(
+      "a3-landing-aspect",
+      "A3 1:2500 landscape cut on the landing map keeps the √2 frame aspect and shows the scale readout",
+      a3Landing.a3Selected &&
+        a3Landing.readout.includes("1:2500") &&
+        Math.abs(a3Aspect - a3AspectExpected) < 0.08,
+      `aspect=${a3Aspect.toFixed(3)} expected≈${a3AspectExpected.toFixed(3)} readout="${a3Landing.readout}"`,
+    );
+    await page.locator("button.create-fab").click({ timeout: 30_000 });
+    await page.waitForSelector(".model", { timeout: 240_000 });
+    await page.getByRole("tab", { name: /Drawing/i }).click({ timeout: 120_000 });
+    await page.waitForSelector("svg.plan", { timeout: 120_000 });
+    await page.waitForTimeout(800);
+    const drawingAspect = await page.evaluate(() => {
+      const canvas = document.querySelector('svg.plan rect[data-cut-frame="1"]');
+      if (!canvas) return null;
+      const w = Number(canvas.getAttribute("width"));
+      const h = Number(canvas.getAttribute("height"));
+      if (!Number.isFinite(w) || !Number.isFinite(h) || h === 0) return null;
+      return w / h;
+    });
+    const drawingChrome = await page.evaluate(() => ({
+      fitNote: document.querySelector(".fit-note")?.textContent?.trim() ?? "",
+      planScale: document.querySelector(".studio-scale-row select")?.value ?? "",
+    }));
+    assertCheck(
+      "a3-drawing-fit-note",
+      "An A3 cut at its 1:2500 plan scale shows no 'does not fit on A3' warning",
+      !/does not fit on A3/i.test(drawingChrome.fitNote) && drawingChrome.planScale === "2500",
+      `fitNote="${drawingChrome.fitNote}", planScale=${drawingChrome.planScale}`,
+    );
+    const [a3AiDownload] = await Promise.all([
+      page.waitForEvent("download", { timeout: 120_000 }),
+      page.getByRole("button", { name: "Quick export Adobe Illustrator .ai" }).click({ timeout: 30_000 }),
+    ]);
+    const a3AiPath = path.join(cursorArtifacts, "a3-cut-site-plan.ai");
+    await a3AiDownload.saveAs(a3AiPath);
+    const a3AiText = fs.readFileSync(a3AiPath, "latin1");
+    const media = a3AiText.match(/\/MediaBox\s*\[\s*0(?:\s+0)?\s+([\d.]+)\s+([\d.]+)\s*\]/);
+    const pageWidthMm = media ? (Number(media[1]) * 25.4) / 72 : 0;
+    const pageHeightMm = media ? (Number(media[2]) * 25.4) / 72 : 0;
+    const [a3SvgDownload] = await Promise.all([
+      page.waitForEvent("download", { timeout: 120_000 }),
+      page.getByRole("button", { name: "Quick export SVG" }).click({ timeout: 30_000 }),
+    ]);
+    const a3SvgPath = path.join(cursorArtifacts, "a3-cut-site-plan.svg");
+    await a3SvgDownload.saveAs(a3SvgPath);
+    const a3SvgText = fs.readFileSync(a3SvgPath, "utf8");
+    const svgWidthMm = Number((a3SvgText.match(/width="([\d.]+)mm"/) ?? [])[1] ?? 0);
+    const svgHeightMm = Number((a3SvgText.match(/height="([\d.]+)mm"/) ?? [])[1] ?? 0);
+    await page.screenshot({ path: path.join(cursorArtifacts, "a3-drawing-view.png"), fullPage: false });
+    assertCheck(
+      "a3-drawing-aspect",
+      "Drawing view for an A3 1:2500 landscape cut keeps the cut rectangle aspect on the plan canvas",
+      drawingAspect != null && Math.abs(drawingAspect - a3AspectExpected) < 0.02,
+      `planAspect=${drawingAspect?.toFixed(4) ?? "null"}`,
+    );
+    assertCheck(
+      "a3-export-sheet-size",
+      "A3 1:2500 .ai and .svg exports use a 420 × 297 mm page with no 'does not fit' note in the PDF",
+      Math.abs(pageWidthMm - 420) <= 1 &&
+        Math.abs(pageHeightMm - 297) <= 1 &&
+        Math.abs(svgWidthMm - 420) <= 1 &&
+        Math.abs(svgHeightMm - 297) <= 1 &&
+        !/does not fit on A3/i.test(a3AiText),
+      `ai=${pageWidthMm.toFixed(1)}×${pageHeightMm.toFixed(1)} mm svg=${svgWidthMm.toFixed(1)}×${svgHeightMm.toFixed(1)} mm`,
+    );
+
+    const rozelleA3Url =
+      `${baseUrl}/citycut/?lat=-33.86721&lon=151.18163&shape=a3&a3scale=3000&a3ori=landscape&label=Rozelle%20NSW`;
+    await page.goto(rozelleA3Url, { waitUntil: "networkidle", timeout: 60_000 });
+    await page.waitForSelector('.select .frame[data-shape="a3"]', { timeout: 20_000 });
+    await page.locator("button.create-fab").click({ timeout: 30_000 });
+    await page.waitForSelector(".model", { timeout: 360_000 });
+    await page.waitForFunction(
+      () => {
+        const sceneCanvas = document.querySelector(".scene-viewport canvas");
+        const modelCanvas = document.querySelector(".model canvas");
+        const canvas = sceneCanvas ?? modelCanvas;
+        if (!canvas) return false;
+        const spanX = Number(sceneCanvas?.dataset.citycutGroundSpanX ?? 0);
+        const spanZ = Number(sceneCanvas?.dataset.citycutGroundSpanZ ?? 0);
+        const polar = Number(modelCanvas?.dataset.introPolar ?? canvas.dataset.introPolar ?? 0);
+        const underlay = document.querySelector(".select.is-handoff-underlay");
+        const bridgePill = document.querySelector(".model .loading-hud-pill.is-model-bridge");
+        const bridgeOpacity = bridgePill ? Number(getComputedStyle(bridgePill).opacity) : 0;
+        const ready = /Ready ·\s*\d+\/\d+ sources/.test(document.body.innerText);
+        return (
+          ready &&
+          spanX > 100 &&
+          spanZ > 100 &&
+          polar >= 0.95 &&
+          !underlay &&
+          bridgeOpacity <= 0.05
+        );
+      },
+      { timeout: 360_000 },
+    );
+    await page.locator(".mode-btn", { hasText: "3D model" }).click({ timeout: 30_000 });
+    await page.waitForTimeout(400);
+    const rozelle3d = await page.evaluate(() => {
+      const sceneCanvas = document.querySelector(".scene-viewport canvas");
+      const spanX = Number(sceneCanvas?.dataset.citycutGroundSpanX ?? 0);
+      const spanZ = Number(sceneCanvas?.dataset.citycutGroundSpanZ ?? 0);
+      return { spanX, spanZ, aspect: spanZ > 0 ? spanX / spanZ : 0 };
+    });
+    await page.screenshot({
+      path: path.join(cursorArtifacts, "rozelle-a3-3000-3d.png"),
+      fullPage: false,
+      clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+    });
+    const planProj = page.locator(".model .proj-group button", { hasText: "Plan" }).first();
+    if ((await planProj.count()) > 0) {
+      await planProj.click({ timeout: 30_000 });
+      await page.waitForTimeout(600);
+    }
+    await page.screenshot({
+      path: path.join(cursorArtifacts, "rozelle-a3-3000-3d-plan.png"),
+      fullPage: false,
+      clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+    });
+    assertCheck(
+      "rozelle-a3-3d-ground-aspect",
+      "Rozelle A3 1:3000 landscape cut clips 3D ground to the rectangular frame (~1.41:1)",
+      Math.abs(rozelle3d.aspect - 420 / 297) <= 0.02,
+      `spanX=${rozelle3d.spanX.toFixed(1)} spanZ=${rozelle3d.spanZ.toFixed(1)} aspect=${rozelle3d.aspect.toFixed(4)}`,
+    );
+    await page.getByRole("tab", { name: /Drawing/i }).click({ timeout: 120_000 });
+    await page.waitForSelector("svg.plan", { timeout: 120_000 });
+    await page.waitForTimeout(1200);
+    const rozelleDrawing = await page.evaluate(() => {
+      const planScale = document.querySelector(".studio-scale-row select")?.value ?? "";
+      const nswLayerCount = document.querySelectorAll('[data-layer^="nsw-"]').length;
+      return { planScale, nswLayerCount };
+    });
+    await page.screenshot({
+      path: path.join(cursorArtifacts, "rozelle-a3-3000-drawing.png"),
+      fullPage: false,
+    });
+    assertCheck(
+      "rozelle-a3-drawing-scale",
+      "Rozelle A3 1:3000 cut defaults Drawing plan scale to 1:3000",
+      rozelleDrawing.planScale === "3000",
+      `planScale=${rozelleDrawing.planScale}`,
+    );
+    assertCheck(
+      "rozelle-a3-no-nsw-overlays",
+      "Rozelle A3 Drawing view omits NSW planning overlay layers",
+      rozelleDrawing.nswLayerCount === 0,
+      `nswLayerCount=${rozelleDrawing.nswLayerCount}`,
+    );
+
+    await page.goto(`${baseUrl}/citycut/`, { waitUntil: "networkidle", timeout: 60_000 });
+    await page.waitForSelector(".select .frame", { timeout: 20_000 });
 
     await page.evaluate(() => {
       window.__citycutHandoffMonitor = {
@@ -1568,6 +1863,422 @@ async function main() {
 
     await page.evaluate(() => window.__citycutQaMassing?.disableTool());
 
+    // -------------------------------------------------------------------------
+    // SECTION KNIFE: real mouse gizmo drag (no ?qa=1)
+    // -------------------------------------------------------------------------
+    {
+      const isoBtn = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Isometric" }).first();
+      if ((await isoBtn.count()) === 0) {
+        assertCheck(
+          "section-knife-handle-drag",
+          "Isometric view + real mouse drag on Section Knife handle changes offset without camera orbit",
+          false,
+          "Isometric pill missing",
+        );
+        assertCheck(
+          "section-knife-ring-rotate",
+          "Real mouse drag on Section Knife base ring changes angle without camera orbit",
+          false,
+          "Isometric pill missing",
+        );
+      } else {
+        await isoBtn.click();
+        await page.waitForTimeout(450);
+        await page.locator(".section-knife-toggle").click();
+        await page.waitForSelector(".section-knife-elevation", { timeout: 15000 });
+        await page.waitForTimeout(1400);
+
+        const readClipAudit = () =>
+          page.evaluate(() => {
+            const canvas = document.querySelector(".model canvas");
+            const scaleX = canvas ? canvas.width / (canvas.clientWidth || 1) : 1;
+            const scaleY = canvas ? canvas.height / (canvas.clientHeight || 1) : 1;
+            const farClientX = Number(canvas?.dataset.sectionKnifeFarSampleX ?? "NaN");
+            const farClientY = Number(canvas?.dataset.sectionKnifeFarSampleY ?? "NaN");
+            return {
+              lineClipOk: canvas?.dataset.sectionKnifeLineClipOk === "1",
+              contourPresent: canvas?.dataset.sectionKnifeContourPresent === "1",
+              contourClipped: canvas?.dataset.sectionKnifeContourClipped === "1",
+              farX: Number.isFinite(farClientX) ? farClientX * scaleX : Number.NaN,
+              farY: Number.isFinite(farClientY) ? farClientY * scaleY : Number.NaN,
+            };
+          });
+        let clipAudit = await readClipAudit();
+        for (let attempt = 0; attempt < 10 && !clipAudit.lineClipOk; attempt += 1) {
+          await page.waitForTimeout(250);
+          clipAudit = await readClipAudit();
+        }
+        const clipOk = clipAudit.lineClipOk && (!clipAudit.contourPresent || clipAudit.contourClipped);
+        assertCheck(
+          "section-knife-line-clip",
+          "Section Knife clips 3D contour and line layers so they do not render on the cut-away side (dataset audit)",
+          clipOk,
+          `lineClipOk=${clipAudit.lineClipOk}, contourPresent=${clipAudit.contourPresent}, contourClipped=${clipAudit.contourClipped}`,
+        );
+
+        const measureFarDarkRatio = (pngPath, farX, farY) => {
+          const png = PNG.sync.read(fs.readFileSync(pngPath));
+          const { width, height, data } = png;
+          const cx = Number.isFinite(farX) ? Math.round(farX) : Math.floor(width * 0.22);
+          const cy = Number.isFinite(farY) ? Math.round(farY) : Math.floor(height * 0.45);
+          const half = 48;
+          let inkPx = 0;
+          let samples = 0;
+          for (let y = Math.max(0, cy - half); y < Math.min(height, cy + half); y++) {
+            for (let x = Math.max(0, cx - half); x < Math.min(width, cx + half); x++) {
+              const i = (width * y + x) * 4;
+              const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+              samples += 1;
+              if (lum < 55) inkPx += 1;
+            }
+          }
+          return samples > 0 ? inkPx / samples : 0;
+        };
+        const cutawayShotOn = path.join(TMP_FRAMES_DIR, "section-knife-cutaway-contours-on.png");
+        await page.locator(".model canvas").screenshot({ path: cutawayShotOn });
+        const ratioContoursOn = measureFarDarkRatio(cutawayShotOn, clipAudit.farX, clipAudit.farY);
+        const contoursRow = page.locator(".model .left-outliner .layer-row", { hasText: /^Contours/ }).first();
+        if ((await contoursRow.count()) > 0) {
+          await contoursRow.click();
+          await page.waitForTimeout(350);
+        }
+        const cutawayShotOff = path.join(TMP_FRAMES_DIR, "section-knife-cutaway-contours-off.png");
+        await page.locator(".model canvas").screenshot({ path: cutawayShotOff });
+        const ratioContoursOff = measureFarDarkRatio(cutawayShotOff, clipAudit.farX, clipAudit.farY);
+        if ((await contoursRow.count()) > 0) {
+          await contoursRow.click();
+          await page.waitForTimeout(250);
+        }
+        const contourDelta = Math.abs(ratioContoursOn - ratioContoursOff);
+        assertCheck(
+          "section-knife-cutaway-contour-leak",
+          "Contours on the cut-away side are clipped (toggling contours off does not change far-side ink)",
+          contourDelta < 0.035,
+          `contoursOn=${ratioContoursOn.toFixed(3)}, contoursOff=${ratioContoursOff.toFixed(3)}, delta=${contourDelta.toFixed(3)}`,
+        );
+
+        const hudAudit = await page.evaluate(() => {
+          const chart = document.querySelector(".section-knife-elevation-chart");
+          if (!chart) return { ok: false, detail: "chart missing" };
+          const text = chart.textContent ?? "";
+          const hasRl = text.includes("RL ");
+          const hasScale = text.includes("250") && text.includes("500");
+          const rects = chart.querySelectorAll("rect");
+          const hasGroundFill = rects.length > 0;
+          const endLabels = Array.from(chart.querySelectorAll(".section-knife-end-label"));
+          const labelTexts = endLabels.map((el) => el.textContent?.trim() ?? "");
+          const endLabelRects = endLabels.map((el) => el.getBoundingClientRect());
+          const endLabelsVisible =
+            endLabelRects.length === 2 &&
+            endLabelRects.every((r) => r.width > 2 && r.height > 2 && r.bottom > 0);
+          const endLabelsOk =
+            labelTexts.length === 2 &&
+            labelTexts[0] === "A" &&
+            labelTexts[1] === "A′" &&
+            endLabelsVisible;
+          const rlEls = Array.from(chart.querySelectorAll(".section-knife-rl"));
+          const rlCountOk = rlEls.length >= 2 && rlEls.length <= 5;
+          const rlRects = rlEls.map((el) => el.getBoundingClientRect());
+          let rlOverlap = false;
+          for (let i = 0; i < rlRects.length; i++) {
+            for (let j = i + 1; j < rlRects.length; j++) {
+              const a = rlRects[i];
+              const b = rlRects[j];
+              const xOverlap = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+              const yOverlap = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+              if (xOverlap > 1 && yOverlap > 1) rlOverlap = true;
+            }
+          }
+          const ok = hasRl && hasScale && hasGroundFill && endLabelsOk && rlCountOk && !rlOverlap;
+          return {
+            ok,
+            hasRl,
+            hasScale,
+            hasGroundFill,
+            endLabelsOk,
+            rlCount: rlEls.length,
+            rlOverlap,
+            labelTexts,
+          };
+        });
+        assertCheck(
+          "section-knife-hud-drawing",
+          "Section HUD reads as an architectural section (RL grid, distance scale, A/A′ labels, filled ground mass)",
+          hudAudit.ok,
+          `end=${hudAudit.labelTexts?.join("/")}, rlCount=${hudAudit.rlCount}, rlOverlap=${hudAudit.rlOverlap}`,
+        );
+        assertCheck(
+          "section-knife-hud-axis-labels",
+          "Section HUD RL labels do not overlap and A/A′ are not duplicated",
+          hudAudit.endLabelsOk && hudAudit.rlCount >= 2 && hudAudit.rlCount <= 5 && !hudAudit.rlOverlap,
+          `end=${hudAudit.labelTexts?.join("/")}, rlCount=${hudAudit.rlCount}, rlOverlap=${hudAudit.rlOverlap}`,
+        );
+
+        await page.locator(".mode-btn", { hasText: "Drawing" }).click();
+        await page.waitForTimeout(900);
+        await page
+          .waitForFunction(
+            () => {
+              const bubble = document
+                .querySelector('[data-section-knife-marker-end-label="A"]')
+                ?.parentElement?.querySelector(".section-knife-marker-bubble");
+              return bubble && bubble.getBoundingClientRect().width >= 16;
+            },
+            { timeout: 20000 },
+          )
+          .catch(() => undefined);
+        const planMarkerCount = await page.locator("[data-section-knife-plan-markers='1']").count();
+        assertCheck(
+          "section-knife-plan-marker",
+          "Site plan shows a live section marker while Section Knife is on",
+          planMarkerCount > 0,
+          `markerGroups=${planMarkerCount}`,
+        );
+        const measurePlanMarkerRendered = () =>
+          page.evaluate(() => {
+            const measureOne = (key) => {
+              const bubble = document
+                .querySelector(`[data-section-knife-marker-end-label="${key}"]`)
+                ?.parentElement?.querySelector(".section-knife-marker-bubble");
+              const label = document.querySelector(`[data-section-knife-marker-end-label="${key}"]`);
+              const arrow = document
+                .querySelector(`[data-section-knife-marker-end-label="${key}"]`)
+                ?.parentElement?.querySelector(".section-knife-marker-arrow");
+              const br = bubble?.getBoundingClientRect();
+              const lr = label?.getBoundingClientRect();
+              const ar = arrow?.getBoundingClientRect();
+              return {
+                key,
+                bubbleDiam: br?.width ?? 0,
+                labelH: lr?.height ?? 0,
+                arrowMax: ar ? Math.max(ar.width, ar.height) : 0,
+                center: br ? { x: br.left + br.width / 2, y: br.top + br.height / 2 } : null,
+                text: label?.textContent?.trim() ?? "",
+              };
+            };
+            const a = measureOne("A");
+            const aprime = measureOne("Aprime");
+            const okOne = (m) => m.bubbleDiam >= 16 && m.bubbleDiam <= 18 && m.labelH >= 8 && m.arrowMax >= 8;
+            const sep =
+              a.center && aprime.center
+                ? Math.hypot(a.center.x - aprime.center.x, a.center.y - aprime.center.y)
+                : 0;
+            return { a, aprime, ok: okOne(a) && okOne(aprime) && sep > 80 };
+          });
+        const planWheelSteps = async (stepsIn) => {
+          const deltaY = stepsIn < 0 ? -200 : 200;
+          for (let i = 0; i < Math.abs(stepsIn); i++) {
+            await page.evaluate((dy) => {
+              const svg = document.querySelector("svg.plan");
+              if (!svg) return;
+              const rect = svg.getBoundingClientRect();
+              svg.dispatchEvent(
+                new WheelEvent("wheel", {
+                  deltaY: dy,
+                  deltaMode: 0,
+                  clientX: rect.left + rect.width / 2,
+                  clientY: rect.top + rect.height / 2,
+                  bubbles: true,
+                  cancelable: true,
+                }),
+              );
+            }, deltaY);
+            await page.waitForTimeout(150);
+          }
+        };
+        const baseRender = await measurePlanMarkerRendered();
+        await planWheelSteps(-2);
+        await page.waitForTimeout(300);
+        const zoomInRender = await measurePlanMarkerRendered();
+        await planWheelSteps(2);
+        await page.waitForTimeout(300);
+        const zoomBackRender = await measurePlanMarkerRendered();
+        await planWheelSteps(2);
+        await page.waitForTimeout(300);
+        const zoomOutRender = await measurePlanMarkerRendered();
+        const cropClipForKey = async (key) =>
+          page.evaluate((k) => {
+            const bubble = document
+              .querySelector(`[data-section-knife-marker-end-label="${k}"]`)
+              ?.parentElement?.querySelector(".section-knife-marker-bubble");
+            const br = bubble?.getBoundingClientRect();
+            if (!br) return null;
+            const cx = br.left + br.width / 2;
+            const cy = br.top + br.height / 2;
+            return {
+              x: Math.max(0, Math.floor(cx - 150)),
+              y: Math.max(0, Math.floor(cy - 150)),
+              width: 300,
+              height: 300,
+            };
+          }, key);
+        const clipA = await cropClipForKey("A");
+        const clipAprime = await cropClipForKey("Aprime");
+        let cropHashOk = false;
+        let cropHashDetail = "no-clips";
+        if (clipA && clipAprime) {
+          const dist = Math.hypot(clipA.x - clipAprime.x, clipA.y - clipAprime.y);
+          const hA = crypto.createHash("md5").update(await page.screenshot({ clip: clipA, type: "png" })).digest("hex");
+          const hAprime = crypto
+            .createHash("md5")
+            .update(await page.screenshot({ clip: clipAprime, type: "png" }))
+            .digest("hex");
+          cropHashOk = hA !== hAprime && dist > 40;
+          cropHashDetail = `dist=${dist.toFixed(0)}, hA=${hA.slice(0, 8)}, hAprime=${hAprime.slice(0, 8)}`;
+        }
+        const zoomOk = zoomInRender.ok && zoomBackRender.ok && zoomOutRender.ok;
+        const planMarkerOk = baseRender.ok && zoomOk && cropHashOk;
+        const fmtEnd = (m) =>
+          `${m.key}:d=${m.bubbleDiam.toFixed(1)},textH=${m.labelH.toFixed(1)},arrow=${m.arrowMax.toFixed(1)}(${m.text})`;
+        assertCheck(
+          "section-drawing-set-plan-marker",
+          "Plan section mark: rendered 17±1 px bubbles, ≥8 px A/A′ text and arrows (getBoundingClientRect), stable across plan zoom, distinct A/A′ crops",
+          planMarkerOk,
+          `base=[${fmtEnd(baseRender.a)}|${fmtEnd(baseRender.aprime)}], zoomIn=${zoomInRender.ok}, back=${zoomBackRender.ok}, out=${zoomOutRender.ok}, crops=${cropHashDetail}`,
+        );
+        await page.locator(".mode-btn", { hasText: "3D model" }).click();
+        await page.waitForTimeout(400);
+        const isoRestore = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Isometric" }).first();
+        if ((await isoRestore.count()) > 0) await isoRestore.click();
+        await page.waitForTimeout(450);
+        const snapToggle = page.locator(".section-knife-tools label.check-field input[type=checkbox]").first();
+        if (await snapToggle.isChecked()) await snapToggle.click();
+        await page.waitForTimeout(200);
+
+        const exportAudit = await page.evaluate(() => {
+          const audit = window.__citycutSectionExportAudit?.();
+          if (!audit) return { ok: false, detail: "audit missing" };
+          return audit;
+        });
+        assertCheck(
+          "section-knife-export-layers",
+          "Section export SVG contains Section:: layers and a ground profile",
+          exportAudit.ok,
+          `layers=${exportAudit.layers?.join(",") ?? exportAudit.detail}`,
+        );
+
+        if (fs.existsSync(ARTIFACTS_DIR)) {
+          await page.locator(".model canvas").screenshot({
+            path: path.join(ARTIFACTS_DIR, "section-knife-3d-no-contour-leak-1440x900.png"),
+          });
+          await page.locator(".section-knife-elevation").screenshot({
+            path: path.join(ARTIFACTS_DIR, "section-knife-hud-1440x900.png"),
+          });
+        }
+
+        const readKnifeState = () =>
+          page.evaluate(() => {
+            const canvas = document.querySelector(".model canvas");
+            const note = document.querySelector("[data-section-knife-offset-m]");
+            return {
+              offset: Number(note?.getAttribute("data-section-knife-offset-m") ?? "0"),
+              angle: Number(note?.getAttribute("data-section-knife-angle-rad") ?? "0"),
+              camPos: canvas?.dataset.camPosition ?? "",
+              camTarget: canvas?.dataset.camTarget ?? "",
+              handleX: Number(canvas?.dataset.sectionKnifeHandleX ?? "NaN"),
+              handleY: Number(canvas?.dataset.sectionKnifeHandleY ?? "NaN"),
+              ringX: Number(canvas?.dataset.sectionKnifeRingX ?? "NaN"),
+              ringY: Number(canvas?.dataset.sectionKnifeRingY ?? "NaN"),
+            };
+          });
+
+        let beforeHandle = await readKnifeState();
+        for (let attempt = 0; attempt < 8 && !Number.isFinite(beforeHandle.handleX); attempt += 1) {
+          await page.waitForTimeout(250);
+          beforeHandle = await readKnifeState();
+        }
+
+        const canvasBox = await page.locator(".model canvas").boundingBox();
+        if (!canvasBox || !Number.isFinite(beforeHandle.handleX)) {
+          assertCheck(
+            "section-knife-handle-drag",
+            "Isometric view + real mouse drag on Section Knife handle changes offset without camera orbit",
+            false,
+            `handle screen coords unavailable (handle=${beforeHandle.handleX},${beforeHandle.handleY})`,
+          );
+        } else {
+          const hx = canvasBox.x + beforeHandle.handleX;
+          const hy = canvasBox.y + beforeHandle.handleY;
+          await page.mouse.move(hx, hy);
+          await page.waitForTimeout(60);
+          await page.mouse.down();
+          for (let i = 0; i < 14; i++) {
+            await page.mouse.move(hx - 10 * (i + 1), hy + 5 * (i + 1), { steps: 2 });
+            await page.waitForTimeout(35);
+          }
+          await page.mouse.up();
+          await page.waitForTimeout(220);
+          const afterHandle = await readKnifeState();
+          const offsetDelta = Math.abs(afterHandle.offset - beforeHandle.offset);
+          const camStable =
+            afterHandle.camPos === beforeHandle.camPos && afterHandle.camTarget === beforeHandle.camTarget;
+          assertCheck(
+            "section-knife-handle-drag",
+            "Isometric view + real mouse drag on Section Knife handle changes offset without camera orbit",
+            offsetDelta > 0.04 && camStable,
+            `offset ${beforeHandle.offset.toFixed(3)} -> ${afterHandle.offset.toFixed(3)}, camPosStable=${camStable}`,
+          );
+
+          let beforeRing = await readKnifeState();
+          for (let attempt = 0; attempt < 8 && !Number.isFinite(beforeRing.ringX); attempt += 1) {
+            await page.waitForTimeout(250);
+            beforeRing = await readKnifeState();
+          }
+          const ringBox = await page.locator(".model canvas").boundingBox();
+          if (!ringBox || !Number.isFinite(beforeRing.ringX)) {
+            assertCheck(
+              "section-knife-ring-rotate",
+              "Real mouse drag on Section Knife base ring changes angle without camera orbit",
+              false,
+              `ring screen coords unavailable (ring=${beforeRing.ringX},${beforeRing.ringY})`,
+            );
+          } else {
+            const rx = ringBox.x + beforeRing.ringX;
+            const ry = ringBox.y + beforeRing.ringY;
+            await page.mouse.move(rx, ry);
+            await page.waitForTimeout(60);
+            await page.mouse.down();
+            for (let i = 0; i < 16; i++) {
+              await page.mouse.move(rx + 12 * (i + 1), ry, { steps: 2 });
+              await page.waitForTimeout(35);
+            }
+            await page.mouse.up();
+            await page.waitForTimeout(220);
+            const afterRing = await readKnifeState();
+            const angleDelta = Math.abs(afterRing.angle - beforeRing.angle);
+            const camStableRing =
+              afterRing.camPos === beforeRing.camPos && afterRing.camTarget === beforeRing.camTarget;
+            assertCheck(
+              "section-knife-ring-rotate",
+              "Real mouse drag on Section Knife base ring changes angle without camera orbit",
+              angleDelta > 0.015 && camStableRing,
+              `angle ${beforeRing.angle.toFixed(4)} -> ${afterRing.angle.toFixed(4)}, camPosStable=${camStableRing}`,
+            );
+          }
+        }
+
+        const offsetBefore = await page.evaluate(() =>
+          Number(document.querySelector("[data-section-knife-offset-m]")?.getAttribute("data-section-knife-offset-m") ?? "0"),
+        );
+        const offsetInput = page.locator(".section-knife-offset-input");
+        if ((await offsetInput.count()) > 0) {
+          await offsetInput.fill("6");
+          await offsetInput.dispatchEvent("change");
+        }
+        await page.waitForTimeout(350);
+        const offsetAfter = await page.evaluate(() =>
+          Number(document.querySelector("[data-section-knife-offset-m]")?.getAttribute("data-section-knife-offset-m") ?? "0"),
+        );
+        assertCheck(
+          "section-knife-numeric-offset",
+          "Section Knife offset input moves the active plane",
+          Math.abs(offsetAfter - 6) < 0.6 && Math.abs(offsetAfter - offsetBefore) > 0.4,
+          `before=${offsetBefore.toFixed(2)}, after=${offsetAfter.toFixed(2)}`,
+        );
+      }
+    }
+
+    // -------------------------------------------------------------------------
     // TYPOGRAPHY & CSS SURFACE INVARIANTS
     const uiInvariants = await page.evaluate(() => {
       const bodyFont = getComputedStyle(document.body).fontFamily;
@@ -3159,6 +3870,611 @@ async function main() {
       console.log(`[ARTIFACT] Video saved to ${mp4Out}`);
       console.log(`[ARTIFACT] Contact sheet saved to ${contactSheetOut}`);
     }
+    fs.mkdirSync(cursorArtifacts, { recursive: true });
+  const sydneyCtx = await browser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: 1,
+      reducedMotion: "reduce",
+    });
+    await sydneyCtx.addInitScript(() => {
+      window.__citycutMinSilentLoadMs = 0;
+    });
+    const sydneyPage = await sydneyCtx.newPage();
+    const sydneyQuery = "qa=1&lat=-33.861&lon=151.171&km=1.3";
+    await sydneyPage.goto(`${baseUrl}/?${sydneyQuery}`, { waitUntil: "domcontentloaded", timeout: 120_000 });
+    await sydneyPage.waitForSelector("button.create-fab", { timeout: 30_000 });
+    await sydneyPage.click("button.create-fab");
+    await sydneyPage.waitForFunction(
+      () => {
+        const err = document.querySelector(".sidebar-foot-error")?.textContent?.trim();
+        if (err) return true;
+        return Boolean(document.querySelector(".model canvas"));
+      },
+      null,
+      { timeout: 300_000 },
+    );
+    const sydneyBuildState = await sydneyPage.evaluate(() => ({
+      buildError: document.querySelector(".sidebar-foot-error")?.textContent?.trim() ?? null,
+      has3d: Boolean(document.querySelector(".model canvas")),
+    }));
+    assertCheck(
+      "sydney-harbour-create-model",
+      "Sydney Rozelle 1.3 km square (all layers) builds without a footer error and opens the model viewport",
+      !sydneyBuildState.buildError && sydneyBuildState.has3d,
+      `error=${sydneyBuildState.buildError ?? "none"}, has3d=${sydneyBuildState.has3d}`,
+    );
+    await sydneyPage.screenshot({
+      path: path.join(cursorArtifacts, "sydney-rozelle-3d-model.png"),
+      clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+    });
+    await sydneyPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
+    await sydneyPage.getByRole("button", { name: "Site plan" }).click({ timeout: 60_000 });
+    await sydneyPage.waitForSelector("svg.plan", { timeout: 120_000 });
+    const sydneyAnalysis = sydneyPage.getByRole("button", { name: "Analysis" }).first();
+    await sydneyAnalysis.click({ timeout: 60_000 });
+    await sydneyPage.waitForTimeout(400);
+    const sydneyPlanFanBtn = sydneyPage.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
+    await sydneyPlanFanBtn.click({ timeout: 30_000 });
+    await sydneyPage.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 60_000 });
+    await sydneyPage.waitForSelector("svg.plan .plan-north-arrow", { timeout: 60_000 });
+    await sydneyPage.waitForSelector("svg.plan .heliodon-plan", { timeout: 120_000 });
+    const sydneyPlanState = await sydneyPage.evaluate(() => ({
+      buildError: document.querySelector(".sidebar-foot-error")?.textContent?.trim() ?? null,
+      hasPlan: Boolean(document.querySelector("svg.plan")),
+    }));
+    assertCheck(
+      "sydney-harbour-site-plan",
+      "Sydney Rozelle cut renders a 2D site plan after Create model",
+      !sydneyPlanState.buildError && sydneyPlanState.hasPlan,
+      `error=${sydneyPlanState.buildError ?? "none"}, hasPlan=${sydneyPlanState.hasPlan}`,
+    );
+    assertCheck(
+      "sydney-harbour-sun-study-plan-chrome",
+      "Sun study on the site plan shows the on-frame north arrow and heliodon overlay",
+      await sydneyPage.locator("svg.plan .plan-north-arrow").count() > 0 &&
+        (await sydneyPage.locator("svg.plan .heliodon-plan").count()) > 0,
+      "north arrow and heliodon layer present",
+    );
+    const sydneySunDome = sydneyPage.locator(".model .env-console .overlay-chips button", {
+      hasText: "3D Sun Dome",
+    });
+    if ((await sydneySunDome.count()) > 0 && (await sydneySunDome.getAttribute("aria-pressed")) === "true") {
+      await sydneySunDome.click({ timeout: 30_000 });
+    }
+    const exportHasLayer = (bytes, label) => {
+      const text = Buffer.from(bytes).toString("latin1");
+      return text.includes(label) || text.includes(`CityCut ${label}`);
+    };
+    const [sydneyAiDownload] = await Promise.all([
+      sydneyPage.waitForEvent("download", { timeout: 120_000 }),
+      sydneyPage.getByRole("button", { name: "Quick export Adobe Illustrator .ai" }).click({ timeout: 30_000 }),
+    ]);
+    const sydneyAiPath = path.join(cursorArtifacts, "site-plan-button-download.ai");
+    await sydneyAiDownload.saveAs(sydneyAiPath);
+    const sydneyAiBuf = fs.readFileSync(sydneyAiPath);
+    const hourlyShadowLabels = [
+      "Shadow 09:00",
+      "Shadow 10:00",
+      "Shadow 11:00",
+      "Shadow 12:00",
+      "Shadow 13:00",
+      "Shadow 14:00",
+      "Shadow 15:00",
+    ];
+    const aiHasHourlyFan = hourlyShadowLabels.every((label) => exportHasLayer(sydneyAiBuf, label));
+    assertCheck(
+      "site-plan-ai-heliodon-layer",
+      "Quick-export .ai includes the Sun path heliodon layer while 9–3pm Plan Fan is on without 3D Sun Dome",
+      exportHasLayer(sydneyAiBuf, "Sun path") && sydneyAiBuf.length > 2000,
+      `bytes=${sydneyAiBuf.length}`,
+    );
+    assertCheck(
+      "site-plan-ai-hourly-shadow-layers",
+      "Quick-export .ai carries one Illustrator layer per 9am–3pm shadow hour while Plan Fan is on (not a single Shadows layer)",
+      aiHasHourlyFan && exportHasLayer(sydneyAiBuf, "Buildings"),
+      `hourly=${hourlyShadowLabels.filter((label) => exportHasLayer(sydneyAiBuf, label)).join(",")}`,
+    );
+  try {
+    execFileSync(
+      "pdftoppm",
+      ["-png", "-singlefile", "-f", "1", "-l", "1", sydneyAiPath, path.join(cursorArtifacts, "ai-export-render")],
+      { stdio: "pipe" },
+    );
+  } catch {
+  }
+    const [sydneySvgDownload] = await Promise.all([
+      sydneyPage.waitForEvent("download", { timeout: 120_000 }),
+      sydneyPage.getByRole("button", { name: "Quick export SVG" }).click({ timeout: 30_000 }),
+    ]);
+    const sydneySvgPath = path.join(cursorArtifacts, "site-plan-button-download.svg");
+    await sydneySvgDownload.saveAs(sydneySvgPath);
+    const sydneySvgText = fs.readFileSync(sydneySvgPath, "utf8");
+    assertCheck(
+      "site-plan-svg-heliodon-layer",
+      "Quick-export .svg includes the Sun path diagram while plan fan is on",
+      sydneySvgText.includes('inkscape:label="Sun path"') &&
+        (sydneySvgText.match(/<ellipse /g) ?? []).length >= 7,
+      `bytes=${sydneySvgText.length}`,
+    );
+    await sydneyPage.screenshot({
+      path: path.join(cursorArtifacts, "sydney-rozelle-2d-plan.png"),
+      fullPage: false,
+    });
+    let sitePlan3dmOk = false;
+    let sitePlan3dmDetail = "";
+    try {
+      const downloadPromise = sydneyPage.waitForEvent("download", { timeout: 180_000 });
+      await sydneyPage.getByRole("button", { name: /^Quick export 3dm$/i }).click();
+      const download = await downloadPromise;
+      const filename = download.suggestedFilename();
+      const chunks = [];
+      for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+      const bytes = Buffer.concat(chunks);
+      const inspected = await inspectSitePlan3dm(bytes);
+      const sunPathCurves = inspected.objectCountOnLayer("Sun path");
+      const noonShadowCurves = inspected.objectCountOnLayer("Shadow 12:00");
+      const hasMga56 =
+        inspected.header.includes("EPSG:7856") || bytes.includes(Buffer.from("EPSG:7856", "utf8"));
+      const hasGeometry =
+        inspected.objectCount > 0 ||
+        (inspected.parsed === "header" && bytes.length > 8_000 && sunPathCurves > 0 && noonShadowCurves > 0);
+      sitePlan3dmOk =
+        filename.endsWith(".3dm") &&
+        bytes.length > 800 &&
+        hasMga56 &&
+        inspected.layerNames.includes("Buildings") &&
+        inspected.layerNames.includes("Sun path") &&
+        inspected.layerNames.includes("Shadow 12:00") &&
+        sunPathCurves > 0 &&
+        noonShadowCurves > 0 &&
+        hasGeometry;
+      inspected.destroy();
+      sitePlan3dmDetail = `file=${filename}, bytes=${bytes.length}, parsed=${inspected.parsed}, layers=${inspected.layerNames.join("|")}, sunPath=${sunPathCurves}, shadow12=${noonShadowCurves}, objects=${inspected.objectCount}`;
+    } catch (error) {
+      sitePlan3dmDetail = error instanceof Error ? error.message : String(error);
+    }
+    assertCheck(
+      "sydney-site-plan-3dm-download",
+      "Drawing quick export .3dm downloads a layered Sydney site plan in MGA zone 56 with curve objects",
+      sitePlan3dmOk,
+      sitePlan3dmDetail,
+    );
+    const sydneyPlan = sydneyPage.locator("svg.plan");
+    const sydneyPlanBox = await sydneyPlan.boundingBox();
+    if (sydneyPlanBox) {
+      const screenPlanBuf = await sydneyPlan.screenshot({ type: "png" });
+      const frameSvg = await sydneyPage.evaluate(async () => {
+        if (!window.__citycutQaPlan) throw new Error("missing __citycutQaPlan");
+        return window.__citycutQaPlan.exportSitePlanFrameSvg();
+      });
+      fs.writeFileSync(path.join(cursorArtifacts, "parity-export-frame.svg"), frameSvg);
+      const exportPlanBuf = await rasterizeSvgPng(
+        browser,
+        frameSvg,
+        sydneyPlanBox.width,
+        sydneyPlanBox.height,
+      );
+      fs.writeFileSync(path.join(cursorArtifacts, "parity-export-plan.png"), exportPlanBuf);
+      fs.writeFileSync(path.join(cursorArtifacts, "parity-screen-plan.png"), screenPlanBuf);
+      fs.writeFileSync(
+        path.join(cursorArtifacts, "parity-side-by-side.png"),
+        hstackPngBuffers(screenPlanBuf, exportPlanBuf),
+      );
+      assertCheck(
+        "site-plan-export-frame-svg",
+        "QA bridge exports a frame-clipped site plan SVG for parity checks",
+        frameSvg.includes('viewBox="') && frameSvg.includes("<path"),
+        `bytes=${frameSvg.length}`,
+      );
+    } else {
+      assertCheck(
+        "site-plan-export-frame-svg",
+        "QA bridge exports a frame-clipped site plan SVG for parity checks",
+        false,
+        "svg.plan bounding box missing",
+      );
+    }
+    const podiumCtx = await browser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: 1,
+      reducedMotion: "reduce",
+    });
+    await podiumCtx.addInitScript(() => {
+      window.__citycutMinSilentLoadMs = 0;
+    });
+    const podiumPage = await podiumCtx.newPage();
+    const podiumQuery = "qa=1&lat=-37.8045&lon=145.1065&km=0.65&qaMassing=podium";
+    await podiumPage.goto(`${baseUrl}/?${podiumQuery}`, { waitUntil: "domcontentloaded", timeout: 120_000 });
+    await podiumPage.waitForSelector("button.create-fab", { timeout: 30_000 });
+    await podiumPage.click("button.create-fab");
+    await podiumPage.waitForFunction(
+      () => Boolean(document.querySelector(".model canvas")),
+      null,
+      { timeout: 300_000 },
+    );
+    await podiumPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
+    await podiumPage.getByRole("button", { name: "Site plan" }).click({ timeout: 60_000 });
+    await podiumPage.waitForSelector("svg.plan", { timeout: 120_000 });
+    await podiumPage.waitForFunction(
+      () => document.querySelectorAll("svg.plan [data-upper-z]").length >= 2,
+      null,
+      { timeout: 180_000 },
+    );
+    const podiumUpper = await podiumPage.locator("svg.plan [data-upper-z]").count();
+    assertCheck(
+      "qa-podium-upper-level-outlines",
+      "qaMassing=podium shows inner tower outlines (data-upper-z) on the Drawing site plan",
+      podiumUpper >= 2,
+      `upperGroups=${podiumUpper}`,
+    );
+    await podiumPage.screenshot({
+      path: path.join(cursorArtifacts, "upper-levels-drawing.png"),
+      clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+    });
+    const podiumPlan = podiumPage.locator("svg.plan");
+    const podiumPlanBox = await podiumPlan.boundingBox();
+    if (podiumPlanBox) {
+      const podiumSvg = await podiumPage.evaluate(async () => {
+        if (!window.__citycutQaPlan) throw new Error("missing __citycutQaPlan");
+        return window.__citycutQaPlan.exportSitePlanFrameSvg();
+      });
+      const podiumExportBuf = await rasterizeSvgPng(
+        browser,
+        podiumSvg,
+        podiumPlanBox.width,
+        podiumPlanBox.height,
+      );
+      fs.writeFileSync(path.join(cursorArtifacts, "upper-levels-export.png"), podiumExportBuf);
+    }
+    let podiumPlan3dmOk = false;
+    let podiumPlan3dmDetail = "";
+    try {
+      const downloadPromise = podiumPage.waitForEvent("download", { timeout: 180_000 });
+      await podiumPage.getByRole("button", { name: /^Quick export 3dm$/i }).click();
+      const download = await downloadPromise;
+      const filename = download.suggestedFilename();
+      const chunks = [];
+      for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+      const bytes = Buffer.concat(chunks);
+      const inspected = await inspectSitePlan3dm(bytes);
+      const imported = inspected.objectCountOnLayer("Imported massing");
+      const upper = inspected.objectCountOnLayer("Imported::Upper levels");
+      podiumPlan3dmOk =
+        filename.endsWith(".3dm") &&
+        bytes.length > 500 &&
+        inspected.layerNames.includes("Imported massing") &&
+        inspected.layerNames.includes("Imported::Upper levels") &&
+        imported > 0 &&
+        upper > 0;
+      podiumPlan3dmDetail = `file=${filename}, bytes=${bytes.length}, imported=${imported}, upper=${upper}, layers=${inspected.layerNames.join("|")}`;
+      inspected.destroy();
+    } catch (error) {
+      podiumPlan3dmDetail = error instanceof Error ? error.message : String(error);
+    }
+    assertCheck(
+      "qa-podium-site-plan-3dm-download",
+      "Drawing .3dm includes imported podium footprints and Imported::Upper levels tower outlines with curve objects",
+      podiumPlan3dmOk,
+      podiumPlan3dmDetail,
+    );
+    await podiumCtx.close();
+    const rozelleFixturePath = path.join(cursorArtifacts, "rozelle-import-massing.3dm");
+    const rozelleFixtureMmPath = path.join(cursorArtifacts, "rozelle-import-massing-mm.3dm");
+    execFileSync(
+      path.join(process.cwd(), "node_modules/.bin/vitest"),
+      ["run", "scripts/writeRozelleMassingFixture.test.ts"],
+      {
+        cwd: process.cwd(),
+        stdio: "inherit",
+        env: {
+          ...process.env,
+          ROZELLE_FIXTURE_PATH: rozelleFixturePath,
+          ROZELLE_FIXTURE_MM_PATH: rozelleFixtureMmPath,
+        },
+      },
+    );
+    const importCtx = await browser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: 1,
+      reducedMotion: "reduce",
+    });
+    await importCtx.addInitScript(() => {
+      window.__citycutMinSilentLoadMs = 0;
+    });
+    const importPage = await importCtx.newPage();
+    const rozelleQuery =
+      "qa=1&lat=-33.8572&lon=151.21512&km=0.55&label=Rozelle+NSW&siteLat=-33.8572&siteLon=151.21512";
+    try {
+      await importPage.goto(`${baseUrl}/?${rozelleQuery}`, { waitUntil: "domcontentloaded", timeout: 120_000 });
+      await importPage.waitForSelector("button.create-fab", { timeout: 30_000 });
+      await importPage.click("button.create-fab");
+      await importPage.waitForFunction(
+        () => Boolean(document.querySelector(".model canvas")),
+        null,
+        { timeout: 300_000 },
+      );
+      await importPage.locator('button[data-section="import"]').click({ timeout: 30_000 });
+      await importPage.waitForSelector('input[type="file"][accept=".3dm"]', {
+        state: "attached",
+        timeout: 30_000,
+      });
+      await importPage.locator('input[type="file"][accept=".3dm"]').setInputFiles(rozelleFixturePath);
+      await importPage.waitForFunction(
+        () => document.querySelectorAll(".massing-item").length >= 1,
+        null,
+        { timeout: 300_000 },
+      );
+      await importPage.getByRole("tab", { name: "3D" }).click({ timeout: 60_000 });
+      await importPage.locator('button[data-section="analysis"]').click({ timeout: 30_000 });
+      const importShadowsOn = importPage.locator(".model .env-console .overlay-chips button", { hasText: "Shadows" });
+      if ((await importShadowsOn.getAttribute("aria-pressed")) !== "true") {
+        await importShadowsOn.click({ timeout: 30_000 });
+      }
+      await importPage.waitForFunction(
+        () => Boolean(window.__citycutQaPlan?.zoom3dToImportedMassing?.()),
+        null,
+        { timeout: 60_000 },
+      );
+      await importPage.waitForTimeout(2000);
+      await importPage.screenshot({
+        path: path.join(cursorArtifacts, "3d-imported.png"),
+        clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+      });
+      await importPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
+      await importPage.getByRole("button", { name: "Site plan" }).click({ timeout: 60_000 });
+      await importPage.waitForSelector("svg.plan", { timeout: 120_000 });
+      await importPage.locator('button[data-section="analysis"]').click({ timeout: 60_000 });
+      await importPage.waitForTimeout(300);
+      const shadowsChip = importPage.locator(".model .env-console .overlay-chips button", { hasText: "Shadows" });
+      await shadowsChip.click({ timeout: 30_000 });
+      const importPlanFanBtn = importPage.locator(".model .env-console .overlay-chips button", {
+        hasText: "9–3pm Plan Fan",
+      });
+      await importPlanFanBtn.click({ timeout: 30_000 });
+      await importPage.waitForFunction(
+        () =>
+          document.querySelectorAll("svg.plan [data-upper-z]").length >= 1 &&
+          document.querySelectorAll("svg.plan [data-imported-podium]").length >= 1,
+        null,
+        { timeout: 300_000 },
+      );
+      await importPage.waitForFunction(
+        () => document.querySelector("svg.plan [data-imported-shadow]") !== null,
+        null,
+        { timeout: 300_000 },
+      );
+      await importPage.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 300_000 });
+      const importPlanState = await importPage.evaluate(() => ({
+        upperGroups: document.querySelectorAll("svg.plan [data-upper-z]").length,
+        podiumPaths: document.querySelectorAll("svg.plan [data-imported-podium]").length,
+        importedShadow: document.querySelectorAll("svg.plan [data-imported-shadow]").length,
+        shadowPaths: document.querySelectorAll("svg.plan [data-shadow-hour] path").length,
+      }));
+      assertCheck(
+        "rozelle-import-podium-outlines",
+        "Real multi-object .3dm import shows podium outlines (data-imported-podium) on Rozelle Drawing site plan",
+        importPlanState.podiumPaths >= 3,
+        `podiumPaths=${importPlanState.podiumPaths}`,
+      );
+      assertCheck(
+        "rozelle-import-upper-level-outlines",
+        "Real .3dm import shows inner tower outlines (data-upper-z) on Rozelle Drawing site plan",
+        importPlanState.upperGroups >= 5,
+        `upperGroups=${importPlanState.upperGroups}`,
+      );
+      assertCheck(
+        "rozelle-import-plan-shadows",
+        "Real .3dm import casts sun-study plan shadows on Rozelle Drawing site plan",
+        importPlanState.shadowPaths >= 6,
+        `shadowPaths=${importPlanState.shadowPaths}`,
+      );
+      assertCheck(
+        "rozelle-import-massing-shadows",
+        "Imported massing casters produce plan shadows (data-imported-shadow)",
+        importPlanState.importedShadow >= 1,
+        `importedShadow=${importPlanState.importedShadow}`,
+      );
+      const fanShadowLength = async () =>
+        importPage.evaluate(() =>
+          [...document.querySelectorAll("svg.plan [data-shadow-hour] path")].reduce(
+            (n, p) => n + (p.getAttribute("d")?.length ?? 0),
+            0,
+          ),
+        );
+      await importPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
+      await importPage.waitForTimeout(300);
+      const fanLenBeforeHourScrub = await fanShadowLength();
+      async function clickSolarHour(hour) {
+        const label = String(hour).padStart(2, "0");
+        const tick = importPage.locator(".h-tick.studio-solar-tick", { hasText: label });
+        if ((await tick.count()) > 0) await tick.first().click({ timeout: 30_000 });
+        else await importPage.getByRole("button", { name: `Solar time ${label}:00` }).click({ timeout: 30_000 });
+      }
+      await clickSolarHour(9);
+      await importPage.waitForTimeout(600);
+      const fanLenHour9 = await fanShadowLength();
+      await clickSolarHour(15);
+      await importPage.waitForTimeout(600);
+      const fanLenHour15 = await fanShadowLength();
+      assertCheck(
+        "plan-fan-stacks-all-hours",
+        "9–3pm Plan Fan paints every hour at once, so scrubbing solar time does not change stacked shadow geometry (yellow massing and imported use the same layers)",
+        fanLenBeforeHourScrub === fanLenHour9 && fanLenHour9 === fanLenHour15 && fanLenHour15 > 1000,
+        `shadowDLength=${fanLenBeforeHourScrub}/${fanLenHour9}/${fanLenHour15}`,
+      );
+      const jun21Btn = importPage.getByRole("button", { name: "21 Jun" });
+      if ((await jun21Btn.count()) > 0) await jun21Btn.click({ timeout: 30_000 });
+      await importPage.waitForTimeout(600);
+      const fanAllStats = await importPage.evaluate(() => window.__citycutQaPlan?.sunStudyCasterStats?.());
+      const importPickId = await importPage.evaluate(() =>
+        window.__citycutQaPlan?.firstImportedDisplayBuildingId?.(),
+      );
+      assertCheck(
+        "rozelle-import-sun-study-caster-stats",
+        "Rozelle plan fan exposes caster stats for QA",
+        Boolean(fanAllStats && fanAllStats.shadowPathChars > 500 && fanAllStats.total >= 8),
+        JSON.stringify(fanAllStats ?? null),
+      );
+      if (importPickId != null) {
+        await importPage.evaluate((id) => {
+          if (!window.__citycutQaPlan?.selectSunStudyBuilding) throw new Error("missing selectSunStudyBuilding");
+          window.__citycutQaPlan.selectSunStudyBuilding(id);
+        }, importPickId);
+        await importPage.waitForFunction(
+          () => document.querySelectorAll("svg.plan [data-selected-building]").length >= 1,
+          null,
+          { timeout: 30_000 },
+        );
+        await importPage.waitForFunction(
+          () => (window.__citycutQaPlan?.sunStudyCasterStats?.().shadowPathChars ?? 0) > 200,
+          null,
+          { timeout: 180_000 },
+        );
+        await importPage.waitForTimeout(500);
+        const fanSelectedStats = await importPage.evaluate(() => window.__citycutQaPlan?.sunStudyCasterStats?.());
+        await importPage.screenshot({
+          path: path.join(cursorArtifacts, "selected-shadows-fan.png"),
+          clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+        });
+        assertCheck(
+          "rozelle-import-selected-fan-shadows",
+          "One selected imported podium keeps plan-fan shadows from podium-height casters, not tower tops only",
+          Boolean(
+            fanSelectedStats &&
+              fanSelectedStats.podiumLevel >= 1 &&
+              fanSelectedStats.total >= 2 &&
+              fanSelectedStats.shadowPathChars > Math.min(400, fanAllStats.shadowPathChars * 0.12),
+          ),
+          `all=${JSON.stringify(fanAllStats)}, selected=${JSON.stringify(fanSelectedStats)}`,
+        );
+      } else {
+        assertCheck(
+          "rozelle-import-selected-fan-shadows",
+          "One selected imported podium keeps plan-fan shadows from podium-height casters, not tower tops only",
+          false,
+          "no imported display building id",
+        );
+      }
+      await importPage.locator('button[data-section="drawing"]').click({ timeout: 30_000 });
+      await importPage.waitForTimeout(200);
+      await importPage.waitForFunction(
+        () =>
+          typeof window.__citycutQaPlan?.zoomPlanToImportedMassing === "function" &&
+          window.__citycutQaPlan.zoomPlanToImportedMassing(),
+        null,
+        { timeout: 60_000 },
+      );
+      await importPage.waitForTimeout(400);
+      await importPage.locator('button[data-section="analysis"]').click({ timeout: 30_000 });
+      await importPage.waitForTimeout(250);
+      const envFanBtn = importPage.locator(".model .env-console .overlay-chips button", {
+        hasText: "9–3pm Plan Fan",
+      });
+      const envShadowsBtn = importPage.locator(".model .env-console .overlay-chips button", { hasText: "Shadows" });
+      if ((await envFanBtn.count()) > 0 && (await envFanBtn.getAttribute("aria-pressed")) === "true") {
+        await envFanBtn.click({ timeout: 30_000 });
+      }
+      if ((await envShadowsBtn.count()) > 0 && (await envShadowsBtn.getAttribute("aria-pressed")) === "true") {
+        await envShadowsBtn.click({ timeout: 30_000 });
+      }
+      await importPage.locator('button[data-section="drawing"]').click({ timeout: 30_000 });
+      await importPage.waitForTimeout(300);
+      await importPage.waitForTimeout(400);
+      const upperStrokeWidths = await importPage.evaluate(() => {
+        const upper = document.querySelector("svg.plan [data-imported-upper-outline]");
+        const podium = document.querySelector("svg.plan [data-imported-podium]");
+        if (!upper || !podium) return null;
+        return {
+          upper: Number.parseFloat(getComputedStyle(upper).strokeWidth),
+          podium: Number.parseFloat(getComputedStyle(podium).strokeWidth),
+        };
+      });
+      assertCheck(
+        "rozelle-import-upper-stroke-weight",
+        "Imported tower-top outlines use the same on-screen stroke weight as podium massing outlines",
+        upperStrokeWidths &&
+          Math.abs(upperStrokeWidths.upper - upperStrokeWidths.podium) < 0.05 &&
+          upperStrokeWidths.upper >= 0.9,
+        `upper=${upperStrokeWidths?.upper}, podium=${upperStrokeWidths?.podium}`,
+      );
+      await importPage.screenshot({
+        path: path.join(cursorArtifacts, "drawing-podium-tower-outlines.png"),
+        clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+      });
+      await importPage.locator('button[data-section="analysis"]').click({ timeout: 30_000 });
+      await importPage.waitForTimeout(250);
+      if ((await envFanBtn.count()) > 0 && (await envFanBtn.getAttribute("aria-pressed")) !== "true") {
+        await envFanBtn.click({ timeout: 30_000 });
+      }
+      await importPage.locator('button[data-section="drawing"]').click({ timeout: 30_000 });
+      await importPage.waitForTimeout(400);
+      await importPage.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 180_000 });
+      const planImportSvgPath = path.join(cursorArtifacts, "rozelle-import-plan.svg");
+      const frameSvg = await importPage.evaluate(async () => {
+        if (!window.__citycutQaPlan) throw new Error("missing __citycutQaPlan");
+        return window.__citycutQaPlan.exportSitePlanFrameSvg();
+      });
+      fs.writeFileSync(planImportSvgPath, frameSvg);
+      assertCheck(
+        "rozelle-import-plan-svg-outlines",
+        "Exported frame SVG contains imported podium strokes and upper tower outlines",
+        frameSvg.includes('stroke-dasharray="1.2 0.6"') &&
+          frameSvg.includes('inkscape:label="Imported::Upper levels"'),
+        `bytes=${frameSvg.length}`,
+      );
+      assertCheck(
+        "rozelle-import-plan-svg-shadows",
+        "Exported frame SVG contains sun-study shadow fills for plan fan",
+        /inkscape:label="Shadow (09|15):00"/.test(frameSvg),
+        "per-hour shadow layers present",
+      );
+      await importPage.evaluate(() => {
+        if (!window.__citycutQaPlan?.clearSunStudySelection) throw new Error("missing clearSunStudySelection");
+        window.__citycutQaPlan.clearSunStudySelection();
+      });
+      await importPage.waitForTimeout(400);
+      const singleShadowSignature = () =>
+        importPage.evaluate(() =>
+          [...document.querySelectorAll('svg.plan [data-plan-shadow="single"]')]
+            .map((p) => p.getAttribute("d") ?? "")
+            .join("\n"),
+        );
+      async function captureSingleShadowHour(hour, filename) {
+        await importPage.evaluate((h) => {
+          if (!window.__citycutQaPlan?.setPlanSunMode) throw new Error("missing setPlanSunMode");
+          window.__citycutQaPlan.setPlanSunMode(h, true, false);
+        }, hour);
+        await importPage.waitForFunction(
+          () => document.querySelectorAll('svg.plan [data-plan-shadow="single"]').length >= 1,
+          null,
+          { timeout: 180_000 },
+        );
+        await importPage.waitForTimeout(800);
+        await importPage.screenshot({
+          path: path.join(cursorArtifacts, filename),
+          clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+        });
+      }
+      await captureSingleShadowHour(9, "drawing-imported-shadows-9am.png");
+      const sig9 = await singleShadowSignature();
+      await captureSingleShadowHour(15, "drawing-imported-shadows-3pm.png");
+      const sig15 = await singleShadowSignature();
+      assertCheck(
+        "rozelle-single-shadow-hour-scrub",
+        "With Plan Fan off, imported casters use the same single-shadow path as yellow massing and shadow geometry changes between 09:00 and 15:00",
+        sig9.length > 200 && sig15.length > 200 && sig9 !== sig15,
+        `sigLen9=${sig9.length}, sigLen15=${sig15.length}`,
+      );
+    } catch (err) {
+      assertCheck(
+        "rozelle-import-flow",
+        "Rozelle multi-object .3dm import (file input) reaches Drawing plan with outlines and shadows",
+        false,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+    await importCtx.close();
+    await sydneyCtx.close();
   } catch (err) {
     console.error("Fatal error in verify-citycut:", err);
     const message = err instanceof Error ? err.message : String(err);

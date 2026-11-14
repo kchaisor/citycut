@@ -1,6 +1,6 @@
 import ClipperLib from "clipper-lib";
-import * as polygonClipping from "polygon-clipping";
-import type { MultiPolygon, Polygon, Ring } from "polygon-clipping";
+import type { MultiPolygon, Ring } from "./safePolygonClip";
+import { clipIntersection as intersection } from "./safePolygonClip";
 import { signedArea } from "./geo";
 
 export const CLIPPER_SCALE = 1000;
@@ -9,19 +9,6 @@ export const CLIPPER_ARC_TOLERANCE_M = 0.05;
 
 type ClipperPoint = { X: number; Y: number };
 type ClipperPath = ClipperPoint[];
-
-type ClipFns = {
-  intersection: (geom: Polygon | MultiPolygon, ...more: Array<Polygon | MultiPolygon>) => MultiPolygon;
-};
-
-function clippingFns(): ClipFns {
-  const loaded = polygonClipping as unknown as ClipFns & { default?: ClipFns };
-  if (typeof loaded.intersection === "function") return loaded;
-  if (loaded.default && typeof loaded.default.intersection === "function") return loaded.default;
-  throw new Error("polygon-clipping did not load.");
-}
-
-const { intersection } = clippingFns();
 
 function toClipperPath(open: Ring): ClipperPath {
   return open.map(([x, y]) => ({

@@ -16,13 +16,15 @@ import {
 } from "./drawingStyle";
 import {
   figureGround,
-  layoutSheet,
+  layoutForModel,
   paperMillimetres,
   type SheetLayout,
 } from "./figureGround";
 import { formatCoord, openRing } from "./geo";
 import { LINE_MM, hexRgb } from "./lineweights";
 import { heliodonPlanPdfChunk } from "./heliodonPlanExport";
+import { planFrameAnnotationChunks } from "./planFrameAnnotations";
+import type { SunStudyDate } from "./sunStudyPlan";
 import type { HeliodonDiagramExportOptions } from "./heliodonDiagram";
 import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { SINGLE_SHADOW_OPACITY, SUN_STUDY_SHADOW_ADDED_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "./sunStudyPlan";
@@ -34,8 +36,7 @@ import {
 } from "./solarStudyLayers";
 import { planPaths } from "./svgPlan";
 import { regionCredit } from "./sources/registry";
-import { NSW_SITE_LAYERS, nswPlanChunks } from "./nswPlanExport";
-import { importedMassingStrokeStyle, planBuildingStrokeStyle } from "./planBuildingFill";
+import { importedMassingStrokeStyle, importedMassingUpperStrokeStyle, planBuildingStrokeStyle } from "./planBuildingFill";
 import { windPlanPdfChunk } from "./windExport";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { comTreesCreditLine } from "./comTreesCredit";
@@ -47,6 +48,7 @@ import {
 } from "./explodedAxoExport";
 import { defaultExplodedAxoSettings, type ExplodedAxoSettings } from "./explodedAxo";
 import { stableExportModel } from "./exportStableOrder";
+import { sectionMarkerPlanChunk } from "./sectionKnife/sectionMarkerPlanChunk";
 import type { CityModel, ContourSourceId, Pt, Ring } from "../types";
 
 export const SITE_LAYER_ORDER = [
@@ -60,14 +62,18 @@ export const SITE_LAYER_ORDER = [
   "Blocks",
   "Rail",
   "Trams",
+  "Shadows",
   "Buildings",
   "Site buildings",
   "Imported massing",
   "Proposed massing",
+  "Imported::Upper levels",
   "Site boundary",
+  "Section markers",
   "Trees",
-  "Shadows",
   "Sun path",
+  "North arrow",
+  "Scale bar",
   "Wind",
   "Annotation",
 ] as const;
@@ -92,9 +98,14 @@ function pen(style: StrokeStyle, join: "miter" | "round" = "round"): Partial<Pdf
 }
 
 function sheetPoint(east: number, north: number, sideM: number, layout: SheetLayout): [number, number] {
-  const half = sideM / 2;
-  const x = layout.frameX + ((east + half) / sideM) * layout.frameMm;
-  const yDown = layout.frameY + ((half - north) / sideM) * layout.frameMm;
+  const widthM = layout.widthM ?? sideM;
+  const heightM = layout.heightM ?? sideM;
+  const halfW = widthM / 2;
+  const halfH = heightM / 2;
+  const frameW = layout.frameWidthMm ?? layout.frameMm;
+  const frameH = layout.frameHeightMm ?? layout.frameMm;
+  const x = layout.frameX + ((east + halfW) / widthM) * frameW;
+  const yDown = layout.frameY + ((halfH - north) / heightM) * frameH;
   return [x, layout.pageHeightMm - yDown];
 }
 
@@ -254,6 +265,24 @@ export type SunStudyExportLayer = {
   addedRings: Ring[][];
 };
 
+type SunStudyExportLayerLegacy = {
+  hour: number;
+  minute?: number;
+  rings: Ring[][];
+};
+
+export function normalizeSunStudyExportLayer(
+  layer: SunStudyExportLayer | SunStudyExportLayerLegacy,
+): SunStudyExportLayer {
+  if ("existingRings" in layer) return layer;
+  return {
+    hour: layer.hour,
+    minute: layer.minute,
+    existingRings: layer.rings,
+    addedRings: [],
+  };
+}
+
 export type SolarReceptorExport = {
   id: string;
   ring: Ring;
@@ -269,8 +298,10 @@ export type SitePlanExportOptions = {
   highlightManual?: boolean;
   colourBySource?: boolean;
   wind?: { table: import("./windRose").WindRoseTable; period: import("./windRose").WindPeriodId } | null;
-  sunStudy?: { layers: SunStudyExportLayer[] } | null;
+  sunStudy?: { layers: Array<SunStudyExportLayer | SunStudyExportLayerLegacy> } | null;
   solarReceptors?: SolarReceptorExport[] | null;
+  sectionKnife?: import("./sectionKnife/state").SectionKnifeToolState | null;
+  sunStudyDate?: SunStudyDate | null;
 };
 
 export function sunStudyLayerName(hour: number): string {
@@ -312,7 +343,8 @@ function resolveSitePlanExport(
     "wind" in exportOptions ||
     "sunStudy" in exportOptions ||
     "solarReceptors" in exportOptions ||
-    "uniformBuildings" in exportOptions
+    "uniformBuildings" in exportOptions ||
+    "sectionKnife" in exportOptions
   ) {
     return exportOptions as SitePlanExportOptions;
   }
@@ -330,7 +362,7 @@ export function sitePlanChunks(
   const heliodon = resolved.heliodon ?? null;
   const shadowInput = resolved.shadows ?? null;
   const castShadows = Boolean(resolved.castShadows);
-  const layout = layoutSheet(model.sideM, scale);
+  const layout = layoutForModel(model, scale);
   const uniformBuildings = Boolean(resolved.uniformBuildings);
   const colourBySource = Boolean(resolved.colourBySource);
   const highlightManual = Boolean(resolved.highlightManual);
@@ -414,7 +446,6 @@ export function sitePlanChunks(
       })),
     });
   }
-  const nswChunks = nswPlanChunks(model, layout);
   const roadRings = plan.roadFill.flatMap((polygon) => mapRings(polygon, model.sideM, layout));
   const blockFill = plan.blocks
     .map((rings) => mapRings(rings, model.sideM, layout))
@@ -430,7 +461,6 @@ export function sitePlanChunks(
       })),
     });
   }
-  chunks.push(...nswChunks.under);
   if (roadRings.length > 0) {
     const kerb = style.kerbOn ? pen(style.kerb) : null;
     chunks.push({
@@ -467,28 +497,9 @@ export function sitePlanChunks(
       })),
     });
   }
-  chunks.push(...nswChunks.lines);
-  const treePen = pen(style.tree);
-  if (plan.trees.length > 0) {
-    chunks.push({
-      name: "Trees",
-      ellipses: plan.trees.map((tree) => {
-        const [cx, cy] = sheetPoint(tree.east, tree.north, model.sideM, layout);
-        const radius = paperMillimetres(tree.r, scale);
-        return {
-          kind: "ellipse" as const,
-          cx,
-          cy,
-          rx: radius,
-          ry: radius,
-          fill: fillOf("--tree-fill"),
-          ...(treePen ?? {}),
-        };
-      }),
-    });
-  }
   const studyLayers = resolved.sunStudy?.layers ?? null;
-  for (const layer of studyLayers ?? []) {
+  for (const raw of studyLayers ?? []) {
+    const layer = normalizeSunStudyExportLayer(raw);
     const minute = layer.minute ?? 0;
     if (layer.existingRings.length > 0) {
       chunks.push({
@@ -584,6 +595,19 @@ export function sitePlanChunks(
       })),
     });
   }
+  const upperPen = pen(importedMassingUpperStrokeStyle(style), "miter");
+  if (plan.importedUpperLevels.length > 0 && upperPen) {
+    chunks.push({
+      name: "Imported::Upper levels",
+      paths: plan.importedUpperLevels.flatMap((level) =>
+        level.lines.map((line) => ({
+          rings: [mapRing(line, model.sideM, layout)],
+          close: true,
+          ...(upperPen ?? {}),
+        })),
+      ),
+    });
+  }
   for (const receptor of resolved.solarReceptors ?? []) {
     chunks.push({
       name: receptor.layerName ?? receptorLayerName(receptor.id, receptor.statusTone),
@@ -607,10 +631,44 @@ export function sitePlanChunks(
   }
   const siteBoundary = siteBoundaryChunk(model.siteBoundaryLines ?? [], model, layout, style);
   if (siteBoundary) chunks.push(siteBoundary);
+  const sectionMarkers = sectionMarkerPlanChunk(model, layout, resolved.sectionKnife);
+  if (sectionMarkers) chunks.push(sectionMarkers);
+  const treePen = pen(style.tree);
+  if (plan.trees.length > 0) {
+    chunks.push({
+      name: "Trees",
+      ellipses: plan.trees.map((tree) => {
+        const [cx, cy] = sheetPoint(tree.east, tree.north, model.sideM, layout);
+        const radius = paperMillimetres(tree.r, scale);
+        return {
+          kind: "ellipse" as const,
+          cx,
+          cy,
+          rx: radius,
+          ry: radius,
+          fill: fillOf("--tree-fill"),
+          ...(treePen ?? {}),
+        };
+      }),
+    });
+  }
   if (resolved.wind?.table) chunks.push(windPlanPdfChunk(resolved.wind.table, resolved.wind.period, layout, model.sideM));
-  chunks.push(...nswChunks.labels);
   chunks.push(frameStroke(layout, style.frame));
-  if (heliodon) chunks.push(heliodonPlanPdfChunk(model.sideM, layout, heliodon, scale));
+  if (heliodon) {
+    const studyDate =
+      resolved.sunStudyDate ??
+      (studyLayers && shadowInput
+        ? {
+            lat: shadowInput.lat,
+            lon: shadowInput.lon,
+            year: shadowInput.year,
+            month: shadowInput.month,
+            day: shadowInput.day,
+          }
+        : null);
+    chunks.push(heliodonPlanPdfChunk(model.sideM, layout, heliodon, scale, studyDate));
+  }
+  if (studyLayers) chunks.push(...planFrameAnnotationChunks(layout, model.sideM));
   chunks.push(
     annotation(
       model,
@@ -645,7 +703,7 @@ export function figureGroundChunks(
   heliodon?: HeliodonDiagramExportOptions | null,
 ): PdfChunk[] {
   model = stableExportModel(model);
-  const layout = layoutSheet(model.sideM, scale);
+  const layout = layoutForModel(model, scale);
   const frameShape = model.frameShape ?? "square";
   const ground = figureGround(model.buildings, model.sideM, frameShape);
   const chunks: PdfChunk[] = [];
@@ -679,14 +737,6 @@ export function sitePlanLayerOrder(chunks: PdfChunk[]): string[] {
     const at = order.indexOf("Contours");
     order.splice(at + 1, 0, "Contour labels");
   }
-  const nsw = NSW_SITE_LAYERS.filter((name) => chunks.some((chunk) => chunk.name === name));
-  if (nsw.length > 0) {
-    const under = nsw.filter((name) => name === "NSW zoning" || name === "NSW road corridors");
-    const lines = nsw.filter((name) => name !== "NSW zoning" && name !== "NSW road corridors" && name !== "NSW planning labels");
-    order.splice(order.indexOf("Blocks") + 1, 0, ...under);
-    order.splice(order.indexOf("Trams") + 1, 0, ...lines);
-    if (nsw.includes("NSW planning labels")) order.splice(order.indexOf("Wind") + 1, 0, "NSW planning labels");
-  }
   return order;
 }
 
@@ -696,7 +746,7 @@ export async function sitePlanPdf(
   style?: LineStyles,
   exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): Promise<Uint8Array> {
-  const layout = layoutSheet(model.sideM, scale);
+  const layout = layoutForModel(model, scale);
   const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions);
   return buildLayeredPdf(layout.pageWidthMm, layout.pageHeightMm, chunks, sitePlanLayerOrder(chunks));
 }
@@ -707,7 +757,7 @@ export async function figureGroundPdf(
   style?: LineStyles,
   heliodon?: HeliodonDiagramExportOptions | null,
 ): Promise<Uint8Array> {
-  const layout = layoutSheet(model.sideM, scale);
+  const layout = layoutForModel(model, scale);
   return buildLayeredPdf(
     layout.pageWidthMm,
     layout.pageHeightMm,
@@ -723,9 +773,31 @@ export async function sitePlanSvg(
   exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): Promise<string> {
   const { buildLayeredSvg } = await import("./svgDocument");
-  const layout = layoutSheet(model.sideM, scale);
+  const layout = layoutForModel(model, scale);
   const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions);
   return buildLayeredSvg(layout.pageWidthMm, layout.pageHeightMm, chunks, sitePlanLayerOrder(chunks));
+}
+
+export async function sitePlanFrameSvg(
+  model: CityModel,
+  scale: number,
+  style?: LineStyles,
+  exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
+): Promise<string> {
+  const layout = layoutForModel(model, scale);
+  const full = await sitePlanSvg(model, scale, style, exportOptions);
+  const n = (value: number) => {
+    const rounded = Math.round(value * 1000) / 1000;
+    return Object.is(rounded, -0) ? "0" : String(rounded);
+  };
+  const x = layout.frameX;
+  const y = layout.pageHeightMm - layout.frameY - layout.frameMm;
+  const w = layout.frameMm;
+  const h = layout.frameMm;
+  return full.replace(
+    /(<svg[^>]*?)width="[\d.]+mm" height="[\d.]+mm" viewBox="[\d.]+ [\d.]+ [\d.]+ [\d.]+"/,
+    `$1width="${n(w)}mm" height="${n(h)}mm" viewBox="${n(x)} ${n(y)} ${n(w)} ${n(h)}"`,
+  );
 }
 
 export async function figureGroundSvg(
@@ -735,7 +807,7 @@ export async function figureGroundSvg(
   heliodon?: HeliodonDiagramExportOptions | null,
 ): Promise<string> {
   const { buildLayeredSvg } = await import("./svgDocument");
-  const layout = layoutSheet(model.sideM, scale);
+  const layout = layoutForModel(model, scale);
   return buildLayeredSvg(
     layout.pageWidthMm,
     layout.pageHeightMm,
@@ -750,7 +822,7 @@ export function sitePlanAi8(
   style?: LineStyles,
   exportOptions?: SitePlanExportOptions | HeliodonDiagramExportOptions | null,
 ): Uint8Array {
-  const layout = layoutSheet(model.sideM, scale);
+  const layout = layoutForModel(model, scale);
   const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions);
   return buildLayeredNativeAi(
     layout.pageWidthMm,
@@ -767,7 +839,7 @@ export function figureGroundAi8(
   style?: LineStyles,
   heliodon?: HeliodonDiagramExportOptions | null,
 ): Uint8Array {
-  const layout = layoutSheet(model.sideM, scale);
+  const layout = layoutForModel(model, scale);
   return buildLayeredNativeAi(
     layout.pageWidthMm,
     layout.pageHeightMm,
@@ -785,7 +857,7 @@ export async function sitePlanAi(
 ): Promise<Uint8Array> {
   if (useNativeAi8Export()) return sitePlanAi8(model, scale, style, exportOptions);
   if (import.meta.env.VITE_CITYCUT_AI_PDF_OPS === "true") {
-    const layout = layoutSheet(model.sideM, scale);
+    const layout = layoutForModel(model, scale);
     const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions);
     return buildLayeredNativeAiPdfOps(
       layout.pageWidthMm,
@@ -806,7 +878,7 @@ export async function figureGroundAi(
 ): Promise<Uint8Array> {
   if (useNativeAi8Export()) return figureGroundAi8(model, scale, style, heliodon);
   if (import.meta.env.VITE_CITYCUT_AI_PDF_OPS === "true") {
-    const layout = layoutSheet(model.sideM, scale);
+    const layout = layoutForModel(model, scale);
     return buildLayeredNativeAiPdfOps(
       layout.pageWidthMm,
       layout.pageHeightMm,

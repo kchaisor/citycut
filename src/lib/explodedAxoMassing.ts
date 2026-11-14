@@ -74,7 +74,7 @@ export function buildAxoMassingFaces(
   const counts: Record<AxoHeightSource, number> = { com: 0, dam: 0, overture_osm: 0, estimate: 0 };
   const prisms: Prism[] = [];
   for (const building of model.buildings) {
-    if (building.meshDrawnBy != null) continue;
+    if (building.meshDrawnBy != null || building.importedMassingShadowCaster) continue;
     const list = prismsFor(building, model.sideM, shape);
     if (list.length === 0) continue;
     counts[axoHeightSource(building.heightTier, building.heightFromFallback)] += 1;
@@ -115,6 +115,15 @@ export function buildAxoMassingFaces(
     }
     const roof = rings.map((ring) => pathOf(ring.map(([e, n]) => iso(e, n, top)))).join(" ");
     faces.push(prism.fill ? { d: roof, paint: "building-roof", fill: prism.fill } : { d: roof, paint: "building-roof" });
+  }
+  for (const level of model.importedMassingUpperLevels ?? []) {
+    const tone = getColour("--imported-massing-upper-tone");
+    for (const line of level.lines) {
+      const ring = openRing(line);
+      if (ring.length < 3) continue;
+      const d = pathOf(ring.map(([e, n]) => iso(e, n, level.z)));
+      faces.push({ d, paint: "building-roof", fill: tone });
+    }
   }
   return { faces, counts };
 }

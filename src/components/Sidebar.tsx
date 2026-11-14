@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type KeyboardEvent, type ReactNode } from "react";
-import { Crop, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Crop, PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
 import { NARROW_PANEL_QUERY } from "../lib/panelCollapse";
 import { Mark } from "./Mark";
 
@@ -178,15 +178,17 @@ export function Sidebar({
             </span>
             <span className="sidebar-brand-name brand-name-sm">CityCut</span>
           </button>
-          {brandMeta}
+          {brandMeta ? <div className="top-bar-left-meta">{brandMeta}</div> : null}
           {showNewCut && onNewCut && !collapsed ? (
             <button
-              className="sidebar-new-cut new-cut-pill"
+              className="sidebar-new-cut new-cut-pill topbar-compact-icon-btn"
               type="button"
               aria-label="New cut"
+              title="New cut"
               onClick={onNewCut}
             >
-              + New cut
+              <Plus size={16} strokeWidth={2.25} className="topbar-compact-icon" aria-hidden="true" />
+              <span className="topbar-compact-label">+ New cut</span>
             </button>
           ) : null}
         </div>

@@ -15,7 +15,8 @@ import * as THREE from "three";
 import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { addBuildingEdges } from "../lib/buildingEdges";
-import { attachScenePointPick, attachBuildingPick } from "../lib/buildingPick";
+import { attachScenePointPick } from "../lib/buildingPick";
+import { attachSceneInspectPick, type SceneInspectWorld, type SceneSelection } from "../lib/sceneInspectPick";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { basePlinthBottomY } from "../lib/terrain";
 import { auditBuildingSelection, mountSelectedBuildingsVisual } from "../lib/buildingSelectionVisual";
@@ -80,10 +81,13 @@ import type { ProjectionMode } from "../lib/viewMemory";
 import { isLayer3dVisible, treesVisibleIn3d, type View3dDisplaySettings } from "../lib/view3dDisplay";
 import { buildContourLineObject } from "../lib/contourLines3d";
 import {
-  applyWhiteCardTint,
-  snapshotWhiteCardColors,
-  whiteCardViewportLighting,
-} from "../lib/whiteCardViewport";
+  applyPrimaryViewportTint,
+  snapshotPrimaryViewportColors,
+  applyCanvasRoadTint,
+  primaryViewportLighting,
+} from "../lib/primaryViewport";
+import { applyWhiteCardGroundTint, snapshotWhiteCardTerrainColors } from "../lib/whiteCardViewport";
+import { studioNorthNeedleDeg } from "../lib/studioCompass";
 import {
   DEFAULT_PERSPECTIVE_OFFSET,
   heliodonSceneBounds,
@@ -99,13 +103,21 @@ import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
 import { SunHoursLayer } from "./SunHoursLayer";
 import type { SunHoursDirectOverlay } from "../lib/sunHoursDirectAssess";
 import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
+import { SectionKnifeScene } from "./SectionKnifeScene";
+import { selectedKnife, type SectionKnifeToolState } from "../lib/sectionKnife/state";
+import type { SectionKnifePose } from "../lib/sectionKnife/plane";
+import {
+  idleSectionKnifeGizmoInteraction,
+  type SectionKnifeGizmoInteraction,
+} from "../lib/sectionKnife/gizmoHit";
 import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
 import { DrawnMassingBlocksVisual } from "./DrawnMassingBlocksVisual";
 import { FacadeSolarPointsLayer } from "./FacadeSolarPointsLayer";
 import type { MassingBlock } from "../lib/massingBlock";
 import type { FacadeAssessBundle } from "../lib/facadeSolarTypes";
-import { WindStaticArrows, WindStreaks } from "./WindStreaks";
+import { GroundWindFlow } from "./GroundWindFlow";
+import { InspectHudProjector, type InspectHudScreen } from "./InspectHudProjector";
 import { analyzeWindPeriod, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
 import type { CityModel } from "../types";
 
@@ -295,6 +307,14 @@ function SceneFrameloopGate() {
   return null;
 }
 
+function StudioCompassTracker({ onNeedle }: { onNeedle: (deg: number) => void }) {
+  const camera = useThree((state) => state.camera);
+  useFrame(() => {
+    onNeedle(studioNorthNeedleDeg(camera));
+  });
+  return null;
+}
+
 function SceneContinuousBridge({
   windAnimate,
   walkRippleActive,
@@ -318,23 +338,53 @@ function SceneContinuousBridge({
   return null;
 }
 
-function BuildingPickLayer({
+function SceneInspectPickLayer({
   root,
+  model,
   enabled,
-  onBuildingPick,
-  onClearPick,
+  buildingsPickable,
+  treesPickable,
+  onPick,
+  onClear,
 }: {
   root: THREE.Object3D;
+  model: CityModel;
   enabled: boolean;
-  onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
-  onClearPick?: () => void;
+  buildingsPickable: boolean;
+  treesPickable: boolean;
+  onPick: (selection: SceneSelection) => void;
+  onClear?: () => void;
 }) {
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
   useLayoutEffect(() => {
     if (!enabled) return;
-    return attachBuildingPick(gl.domElement, camera, root, { onBuildingPick, onClearPick });
-  }, [camera, enabled, gl.domElement, onBuildingPick, onClearPick, root]);
+    return attachSceneInspectPick(
+      gl.domElement,
+      camera,
+      root,
+      {
+        trees: model.trees,
+        terrain: model.terrain,
+        sideM: model.sideM,
+        buildingsPickable,
+        treesPickable,
+      },
+      { onPick, onClear },
+    );
+  }, [
+    buildingsPickable,
+    camera,
+    enabled,
+    gl.domElement,
+    model.sideM,
+    model.terrain,
+    model.trees,
+    onClear,
+    onPick,
+    root,
+    treesPickable,
+  ]);
   return null;
 }
 
@@ -361,22 +411,19 @@ function HeightEditOverlayLayer({
   cityRoot: THREE.Object3D;
   colourMode: BuildingColourMode;
 }) {
-  const [overlay, setOverlay] = useState<THREE.Group | null>(null);
   const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
     if (buildingIds.length === 0) {
-      setOverlay(null);
       if (typeof window !== "undefined") delete window.__citycutQaSelectionAudit;
       invalidate();
       return;
     }
     const mounted = mountSelectedBuildingsVisual(cityRoot, model, buildingIds, colourMode);
     if (!mounted) {
-      setOverlay(null);
       if (typeof window !== "undefined") delete window.__citycutQaSelectionAudit;
       return;
     }
-    setOverlay(mounted.overlay);
+    cityRoot.add(mounted.overlay);
     invalidate();
     if (typeof window !== "undefined" && qaModeFromSearch(window.location.search)) {
       const publishAudit = () => {
@@ -387,17 +434,17 @@ function HeightEditOverlayLayer({
       const frame = window.requestAnimationFrame(publishAudit);
       return () => {
         window.cancelAnimationFrame(frame);
+        cityRoot.remove(mounted.overlay);
         mounted.restore();
-        setOverlay(null);
         delete window.__citycutQaSelectionAudit;
       };
     }
     return () => {
+      cityRoot.remove(mounted.overlay);
       mounted.restore();
-      setOverlay(null);
     };
   }, [buildingIds, cityRoot, colourMode, model, invalidate]);
-  return overlay ? <primitive object={overlay} /> : null;
+  return null;
 }
 
 function WalkRippleBuildingBinder({
@@ -466,9 +513,14 @@ function City({
   selectedBuildingIds,
   display,
   onBounds,
-  onBuildingPick,
-  onClearBuildingPick,
+  onSceneInspectPick,
+  onClearSceneInspect,
   pickBuildings,
+  onScenePoint,
+  sectionKnife,
+  onSectionKnifePoseChange,
+  onSectionKnifeGizmoInteractionChange,
+  projection,
   walkRippleTint,
   walkRippleArrivals,
 }: {
@@ -483,9 +535,14 @@ function City({
   selectedBuildingIds?: readonly number[];
   display: View3dDisplaySettings;
   onBounds: (bounds: Aabb) => void;
-  onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
-  onClearBuildingPick?: () => void;
+  onSceneInspectPick: (selection: SceneSelection) => void;
+  onClearSceneInspect?: () => void;
   pickBuildings: boolean;
+  onScenePoint?: ((east: number, north: number, up: number) => void) | null;
+  sectionKnife?: SectionKnifeToolState | null;
+  onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
+  onSectionKnifeGizmoInteractionChange?: (state: SectionKnifeGizmoInteraction) => void;
+  projection: ProjectionMode;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
 }) {
@@ -528,7 +585,9 @@ function City({
     } catch {
     }
     if (introStagger) {
-      const ringGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(model.sideM, 1.2, model.sideM));
+      const cutW = model.widthM ?? model.sideM;
+      const cutH = model.heightM ?? model.sideM;
+      const ringGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(cutW, 1.2, cutH));
       const ringMat = new THREE.LineBasicMaterial({
         color: 0xfff500,
         transparent: true,
@@ -836,12 +895,25 @@ function City({
     refreshSceneSurfaceColors(group);
     snapshotBuildingViewportColors(group, colourMode);
     snapshotSunStudySurfaceColors(group);
-    snapshotWhiteCardColors(group, colourMode);
+    snapshotPrimaryViewportColors(group, colourMode);
+    snapshotWhiteCardTerrainColors(group);
     applySunStudySurfaceTint(group, false);
     applyBuildingSolarNeutral(group, solarDiagramOn || directSunHoursOn, solarNeutralFill);
-    applyWhiteCardTint(group, display.whiteCard);
+    applyPrimaryViewportTint(group, display.primaryView);
+    if (display.primaryView) {
+      applyWhiteCardGroundTint(group, false);
+    } else if (colourMode.colourByUse || colourMode.colourBySource) {
+      applyCanvasRoadTint(group, "primary");
+      applyWhiteCardGroundTint(group, false);
+    } else if (colourMode.uniformBuildings) {
+      applyCanvasRoadTint(group, "white");
+      applyWhiteCardGroundTint(group, true);
+    } else {
+      applyCanvasRoadTint(group, "off");
+      applyWhiteCardGroundTint(group, false);
+    }
     invalidate();
-  }, [group, colourMode, solarDiagramOn, directSunHoursOn, solarNeutralFill, colourTick, display.whiteCard, invalidate]);
+  }, [group, colourMode, solarDiagramOn, directSunHoursOn, solarNeutralFill, colourTick, display.primaryView, invalidate]);
   const buildingsVisible = isLayer3dVisible(display, "buildings");
   const roadsVisible = isLayer3dVisible(display, "roads");
   const footpathsVisible = isLayer3dVisible(display, "footpaths");
@@ -849,6 +921,7 @@ function City({
   const waterVisible = isLayer3dVisible(display, "water");
   const railVisible = isLayer3dVisible(display, "rail");
   const contoursVisible = isLayer3dVisible(display, "contours");
+  const treesVisible = treesVisibleIn3d(model.layers, display);
   useLayoutEffect(() => {
     group.traverse((object) => {
       const name = object.name;
@@ -913,6 +986,13 @@ function City({
       invalidate();
     }
   }, [contours, colourTick, invalidate]);
+  useLayoutEffect(() => {
+    if (!contours) return;
+    group.add(contours);
+    return () => {
+      contours.removeFromParent();
+    };
+  }, [contours, group, invalidate]);
   useLayoutEffect(() => () => disposeObject(group), [group]);
   return (
     <>
@@ -942,12 +1022,27 @@ function City({
         cityRoot={group}
         colourMode={colourMode}
       />
-      <BuildingPickLayer
+      <SceneInspectPickLayer
         root={group}
-        enabled={pickBuildings && buildingsVisible}
-        onBuildingPick={onBuildingPick}
-        onClearPick={onClearBuildingPick}
+        model={model}
+        enabled={!sectionKnife?.active && !onScenePoint}
+        buildingsPickable={pickBuildings && buildingsVisible}
+        treesPickable={Boolean(model.layers.trees) && treesVisible}
+        onPick={onSceneInspectPick}
+        onClear={onClearSceneInspect}
       />
+      {sectionKnife?.active && onSectionKnifePoseChange ? (
+        <SectionKnifeScene
+          city={group}
+          model={model}
+          active
+          pose={selectedKnife(sectionKnife).pose}
+          onPoseChange={onSectionKnifePoseChange}
+          onGizmoInteractionChange={onSectionKnifeGizmoInteractionChange}
+          planView={projection === "plan"}
+          snapWhileDrag={sectionKnife.snap}
+        />
+      ) : null}
     </>
   );
 }
@@ -1387,6 +1482,8 @@ function PlanSnap({
   controlsRef,
   boundsRef,
   sideM,
+  frameWidthM,
+  frameHeightM,
   groundY,
   siteTopY,
   snapId,
@@ -1400,6 +1497,8 @@ function PlanSnap({
   controlsRef: RefObject<OrbitControlsImpl | null>;
   boundsRef: RefObject<Aabb | null>;
   sideM: number;
+  frameWidthM: number;
+  frameHeightM: number;
   groundY: number;
   siteTopY: number;
   snapId: number;
@@ -1419,8 +1518,12 @@ function PlanSnap({
     const sameSnap = fittedKey.current?.startsWith(`${snapId}:`) ?? false;
     if (sameSnap) return;
     const measured = boundsRef.current;
-    const fitBounds = sitePlanBounds(sideM, groundY, siteTopY);
+    const fitBounds = sitePlanBounds(sideM, groundY, siteTopY, frameWidthM, frameHeightM);
     if (measured) {
+      fitBounds.min[0] = Math.max(fitBounds.min[0], measured.min[0]);
+      fitBounds.max[0] = Math.min(fitBounds.max[0], measured.max[0]);
+      fitBounds.min[2] = Math.max(fitBounds.min[2], measured.min[2]);
+      fitBounds.max[2] = Math.min(fitBounds.max[2], measured.max[2]);
       fitBounds.min[1] = Math.min(fitBounds.min[1], measured.min[1]);
       fitBounds.max[1] = Math.max(fitBounds.max[1], measured.max[1]);
     }
@@ -1443,7 +1546,23 @@ function PlanSnap({
     fittedKey.current = key;
     if (otherOrthoFittedKey) otherOrthoFittedKey.current = null;
     touchedRef.current = false;
-  }, [active, camera, controlsRef, boundsRef, extraBounds, groundY, otherOrthoFittedKey, sideM, siteTopY, snapId, size.width, size.height, touchedRef]);
+  }, [
+    active,
+    camera,
+    controlsRef,
+    boundsRef,
+    extraBounds,
+    frameHeightM,
+    frameWidthM,
+    groundY,
+    otherOrthoFittedKey,
+    sideM,
+    siteTopY,
+    snapId,
+    size.width,
+    size.height,
+    touchedRef,
+  ]);
   useLayoutEffect(() => {
     place();
   }, [place]);
@@ -1757,6 +1876,9 @@ export function Cameras({
   lon,
   cameraMemory,
   introEnabled = false,
+  gizmoOrbitLock = false,
+  frameWidthM,
+  frameHeightM,
   orbitLocked = false,
 }: {
   side: number;
@@ -1776,6 +1898,9 @@ export function Cameras({
   lon: number;
   cameraMemory?: CameraMemoryRef;
   introEnabled?: boolean;
+  gizmoOrbitLock?: boolean;
+  frameWidthM: number;
+  frameHeightM: number;
   orbitLocked?: boolean;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
@@ -1897,6 +2022,8 @@ export function Cameras({
             controlsRef={orthoControls}
             boundsRef={boundsRef}
             sideM={side}
+            frameWidthM={frameWidthM}
+            frameHeightM={frameHeightM}
             groundY={groundY}
             siteTopY={siteTopY}
             snapId={snapId}
@@ -1914,7 +2041,7 @@ export function Cameras({
             ref={perspControls}
             camera={persp}
             makeDefault={!orthoView}
-            enabled={!orthoView && !orbitLocked}
+            enabled={!orthoView && !gizmoOrbitLock && !orbitLocked}
             enableDamping
             dampingFactor={0.08}
             maxPolarAngle={Math.PI / 2.02}
@@ -1929,7 +2056,7 @@ export function Cameras({
             ref={orthoControls}
             camera={ortho}
             makeDefault={orthoView}
-            enabled={orthoView && !orbitLocked}
+            enabled={orthoView && !gizmoOrbitLock && !orbitLocked}
             enableDamping
             dampingFactor={0.08}
             enableRotate={iso && freeRotate}
@@ -1976,15 +2103,13 @@ export function Cameras({
 }
 
 function WindLayer({
-  sideM,
-  terrain,
+  model,
   table,
   period,
   enabled,
   animateStreaks,
 }: {
-  sideM: number;
-  terrain?: import("../types").TerrainField | null;
+  model: CityModel;
   table: WindRoseTable | null;
   period: WindPeriodId;
   enabled: boolean;
@@ -1996,10 +2121,11 @@ function WindLayer({
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
-  if (!enabled || !table) return null;
-  const stats = analyzeWindPeriod(table, period);
-  if (!animateStreaks) return <WindStaticArrows sideM={sideM} stats={stats} terrain={terrain} />;
-  return <WindStreaks sideM={sideM} stats={stats} animate={visible} terrain={terrain} />;
+  if (!enabled) return null;
+  const stats = table ? analyzeWindPeriod(table, period) : null;
+  return (
+    <GroundWindFlow model={model} stats={stats} animate={visible && animateStreaks} />
+  );
 }
 
 export function Scene3D({
@@ -2017,8 +2143,10 @@ export function Scene3D({
   windPeriod,
   windAnimateStreaks,
   onExportReady,
-  onBuildingPick,
-  onClearBuildingPick,
+  onSceneInspectPick,
+  onClearSceneInspect,
+  inspectAnchor,
+  onInspectHudScreen,
   heightEditBuildingId,
   selectedBuildingIds,
   cameraMemory,
@@ -2032,6 +2160,9 @@ export function Scene3D({
   onScenePoint = null,
   massingToolLayer = null,
   orbitLocked = false,
+  sectionKnife = null,
+  onSectionKnifePoseChange = undefined,
+  onCompassNeedle = undefined,
   quality = "high",
   facadeSolarBundle = null,
   drawnMassingBlocksForFacade = null,
@@ -2053,8 +2184,10 @@ export function Scene3D({
   windPeriod: WindPeriodId;
   windAnimateStreaks: boolean;
   onExportReady: (exporter: SceneExporter | null) => void;
-  onBuildingPick: (buildingId: number, clientX: number, clientY: number, additive?: boolean) => void;
-  onClearBuildingPick?: () => void;
+  onSceneInspectPick: (selection: SceneSelection) => void;
+  onClearSceneInspect?: () => void;
+  inspectAnchor: SceneInspectWorld | null;
+  onInspectHudScreen: (screen: InspectHudScreen | null) => void;
   heightEditBuildingId: number | null;
   selectedBuildingIds?: readonly number[];
   cameraMemory?: CameraMemoryRef;
@@ -2068,6 +2201,9 @@ export function Scene3D({
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
   massingToolLayer?: ReactNode;
   orbitLocked?: boolean;
+  sectionKnife?: SectionKnifeToolState | null;
+  onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
+  onCompassNeedle?: (deg: number) => void;
   quality?: RenderQuality;
   facadeSolarBundle?: FacadeAssessBundle | null;
   drawnMassingBlocksForFacade?: readonly MassingBlock[] | null;
@@ -2078,6 +2214,19 @@ export function Scene3D({
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
     boundsRef.current = bounds;
+    if (typeof document === "undefined") return;
+    const canvas = document.querySelector(".scene-viewport canvas");
+    if (!(canvas instanceof HTMLElement)) return;
+    const spanX = bounds.max[0] - bounds.min[0];
+    const spanZ = bounds.max[2] - bounds.min[2];
+    canvas.dataset.citycutGroundSpanX = spanX.toFixed(3);
+    canvas.dataset.citycutGroundSpanZ = spanZ.toFixed(3);
+  }, []);
+  const [sectionKnifeGizmoInteraction, setSectionKnifeGizmoInteraction] = useState<SectionKnifeGizmoInteraction>(
+    () => idleSectionKnifeGizmoInteraction,
+  );
+  const onSectionKnifeGizmoInteractionChange = useCallback((state: SectionKnifeGizmoInteraction) => {
+    setSectionKnifeGizmoInteraction(state);
   }, []);
   const lift = model.terrain ? (model.terrain.min + model.terrain.max) / 2 : 0;
   const colourTick = useColourRevision();
@@ -2101,14 +2250,15 @@ export function Scene3D({
     setGlEpoch((value) => value + 1);
   }, []);
   const viewportLight = sunStudyViewportLighting({
-    showPath: solar.showPath && !display.whiteCard,
+    showPath: solar.showPath && !display.primaryView,
     castShadows: solar.castShadows,
   });
-  const cardLight = whiteCardViewportLighting(display.whiteCard);
-  const fillKeyLight = display.whiteCard ? cardLight.fillKeyLight : viewportLight.fillKeyLight;
-  const fillAmbient = display.whiteCard ? cardLight.fillAmbient : viewportLight.fillAmbient;
-  const fillHemi = display.whiteCard ? cardLight.fillHemi : viewportLight.fillHemi;
-  const { sunIntensity, noToneMapping } = viewportLight;
+  const primaryLight = primaryViewportLighting(display.primaryView);
+  const fillKeyLight = display.primaryView ? primaryLight.fillKeyLight : viewportLight.fillKeyLight;
+  const fillAmbient = display.primaryView ? primaryLight.fillAmbient : viewportLight.fillAmbient;
+  const fillHemi = display.primaryView ? primaryLight.fillHemi : viewportLight.fillHemi;
+  const { sunIntensity, noToneMapping: sunStudyNoToneMapping } = viewportLight;
+  const noToneMapping = sunStudyNoToneMapping || display.primaryView;
   const heliodonRadius = heliodonRadiusM(model.sideM, solar.radiusFactor);
   const shadowTargetY = groundY;
   const siteTopY = useMemo(() => {
@@ -2117,8 +2267,14 @@ export function Scene3D({
     for (const building of model.buildings) top = Math.max(top, base + building.height);
     return top;
   }, [model]);
+  const gizmoCursorClass =
+    sectionKnifeGizmoInteraction.cursor === "grabbing"
+      ? " section-knife-gizmo-grabbing"
+      : sectionKnifeGizmoInteraction.cursor === "grab"
+        ? " section-knife-gizmo-grab"
+        : "";
   return (
-    <div className="scene-viewport">
+    <div className={`scene-viewport${gizmoCursorClass}`}>
       {glContextLost ? (
         <div className="webgl-lost-overlay" role="alert">
           <p>3D view lost (GPU memory)</p>
@@ -2170,6 +2326,7 @@ export function Scene3D({
         showShadow={projection !== "plan"}
         frameShape={model.frameShape ?? "square"}
         colourTick={colourTick}
+        primaryView={display.primaryView}
       />
       <SolarLight
         sample={sunSample}
@@ -2198,12 +2355,17 @@ export function Scene3D({
         directSunHoursOn={Boolean(solar.sunHours && sunHoursDirectOverlay)}
         solarNeutralFill={solarNeutralFill}
         onBounds={onBounds}
-        onBuildingPick={onBuildingPick}
-        onClearBuildingPick={onClearBuildingPick}
+        onSceneInspectPick={onSceneInspectPick}
+        onClearSceneInspect={onClearSceneInspect}
         pickBuildings={model.layers.buildings && !onScenePoint && !massingToolLayer}
+        onScenePoint={onScenePoint}
         heightEditBuildingId={heightEditBuildingId}
         selectedBuildingIds={selectedBuildingIds}
         display={display}
+        sectionKnife={sectionKnife}
+        onSectionKnifePoseChange={onSectionKnifePoseChange}
+        onSectionKnifeGizmoInteractionChange={onSectionKnifeGizmoInteractionChange}
+        projection={projection}
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
       />
@@ -2236,9 +2398,14 @@ export function Scene3D({
         terrain={model.terrain ?? undefined}
         settings={solar}
       />
+      <InspectHudProjector
+        world={inspectAnchor}
+        enabled={inspectAnchor != null}
+        onScreen={onInspectHudScreen}
+      />
+      {onCompassNeedle ? <StudioCompassTracker onNeedle={onCompassNeedle} /> : null}
       <WindLayer
-        sideM={model.sideM}
-        terrain={model.terrain}
+        model={model}
         table={windTable}
         period={windPeriod}
         enabled={windEnabled}
@@ -2246,6 +2413,8 @@ export function Scene3D({
       />
       <Cameras
         side={model.sideM}
+        frameWidthM={model.widthM ?? model.sideM}
+        frameHeightM={model.heightM ?? model.sideM}
         lift={lift}
         groundY={groundY}
         siteTopY={siteTopY}
@@ -2262,7 +2431,7 @@ export function Scene3D({
         lon={model.center.lon}
         cameraMemory={cameraMemory}
         introEnabled
-        orbitLocked={orbitLocked}
+        gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock || orbitLocked}
       />
       </Canvas>
     </div>
