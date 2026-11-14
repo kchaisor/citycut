@@ -176,6 +176,7 @@ import {
 import { ImportMassingPanel } from "./ImportMassingPanel";
 import { useImportedMassing } from "./useImportedMassing";
 import { useStoredSiteLayer } from "./useStoredSiteLayer";
+import { clippedWaterRingsFromModel } from "../lib/waterMesh3d";
 import { drawingMassingCount } from "../lib/massingFootprint";
 import { snapWhenTogglingIsoFreeRotate } from "../lib/isoFreeRotate";
 import { DrawingPlan, type DrawingKind } from "./DrawingPlan";
@@ -957,6 +958,7 @@ export function ModelPage({
         return pick.id;
       },
       exportPlanSnapshot: () => model,
+      getClippedWaterRings: () => clippedWaterRingsFromModel(model),
       pickZoneDefaultPanelQa() {
         const rows = qaDisplayBuildingsRef.current.filter((b) => b.heightFromFallback);
         const pick =

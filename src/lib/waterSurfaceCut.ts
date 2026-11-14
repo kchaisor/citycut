@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { CityModel, Pt } from "../types";
 import { pointInPolygon } from "./useCascade";
 import { SURFACE } from "./surfaceLayers";
-import { clipAreaToSiteFrame, DEFAULT_SITE_FRAME_SHAPE, frameGroundSize } from "./siteFrame";
+import { waterAreasForCutFromModel } from "./waterMesh3d";
 import { sampleTerrain } from "./terrain";
 import { clipDifference, clipUnionEach, preparePolygonForClip, type MultiPolygon } from "./safePolygonClip";
 import type { Tri } from "./terrainDrape";
@@ -15,16 +15,7 @@ export type WaterCutContext = {
 };
 
 export function waterAreasFromModel(model: CityModel): WaterArea2D[] {
-  const frameShape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
-  const frameSize = frameGroundSize(model.sideM);
-  const out: WaterArea2D[] = [];
-  for (const area of model.areas) {
-    if (area.kind !== "water") continue;
-    const clipped = clipAreaToSiteFrame(area.ring, area.holes, model.sideM, frameShape, frameSize);
-    if (!clipped?.[0] || clipped[0].length < 3) continue;
-    out.push({ ring: clipped[0], holes: clipped.slice(1) });
-  }
-  return out;
+  return waterAreasForCutFromModel(model);
 }
 
 export function waterCutContextFromModel(model: CityModel): WaterCutContext | null {
@@ -66,13 +57,18 @@ export function subtractWaterFromGroundRemaining(remaining: MultiPolygon, areas:
   });
 }
 
+function triIntersectsWater(tri: Tri, areas: WaterArea2D[]): boolean {
+  for (const [east, north] of tri) {
+    if (pointInWaterAreas(east, north, areas)) return true;
+  }
+  const east = (tri[0][0] + tri[1][0] + tri[2][0]) / 3;
+  const north = (tri[0][1] + tri[1][1] + tri[2][1]) / 3;
+  return pointInWaterAreas(east, north, areas);
+}
+
 export function filterTrisOutsideWater(tris: Tri[], areas: WaterArea2D[]): Tri[] {
   if (areas.length === 0) return tris;
-  return tris.filter((tri) => {
-    const east = (tri[0][0] + tri[1][0] + tri[2][0]) / 3;
-    const north = (tri[0][1] + tri[1][1] + tri[2][1]) / 3;
-    return !pointInWaterAreas(east, north, areas);
-  });
+  return tris.filter((tri) => !triIntersectsWater(tri, areas));
 }
 
 function triangleNormalY(
@@ -141,9 +137,15 @@ export function cutWaterFromBufferGeometry(
     const cx = position.getX(ic)!;
     const cy = position.getY(ic)!;
     const cz = position.getZ(ic)!;
-    const east = (ax + bx + cx) / 3;
-    const north = (-(az + bz + cz)) / 3;
-    if (!pointInWaterAreas(east, north, areas)) {
+    const planA: Pt = [ax, -az];
+    const planB: Pt = [bx, -bz];
+    const planC: Pt = [cx, -cz];
+    const inWater =
+      pointInWaterAreas(planA[0], planA[1], areas) ||
+      pointInWaterAreas(planB[0], planB[1], areas) ||
+      pointInWaterAreas(planC[0], planC[1], areas) ||
+      pointInWaterAreas((planA[0] + planB[0] + planC[0]) / 3, (planA[1] + planB[1] + planC[1]) / 3, areas);
+    if (!inWater) {
       keepIdx.push(pushVertex(ia), pushVertex(ib), pushVertex(ic));
       continue;
     }

@@ -39,6 +39,7 @@ declare global {
       ) => { x: number; y: number; width: number; height: number } | null;
       listBuildings?: () => { id: number; height: number; east: number; north: number }[];
       exportPlanSnapshot?: () => import("../types").CityModel;
+      getClippedWaterRings?: () => import("./waterMesh3d").ClippedWaterRings[];
       pickZoneDefaultPanelQa?: () => { id: number; height: number; note: string } | null;
       getHeightPerfTimings?: () => {
         modelOpenMs: number;

@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 const AUDIT_SCRIPT = path.join(process.cwd(), "scripts/audit-rozelle-plan-png.mjs");
 const BROKEN_DAC = path.join(process.cwd(), "scripts/fixtures/rozelle-1km-3d-plan-broken-dac3d62.png");
 const BROKEN_HEAD = path.join(process.cwd(), "scripts/fixtures/rozelle-1km-3d-plan-broken-2f1ab01.png");
+const BROKEN_82BC92A = path.join(process.cwd(), "scripts/fixtures/rozelle-1km-3d-plan-broken-82bc92a.png");
 
 function auditFile(filePath: string) {
   const stdout = execFileSync("node", [AUDIT_SCRIPT, filePath], { encoding: "utf8" });
@@ -26,5 +27,13 @@ describe("rozellePlanPixelAudit", () => {
     const result = auditFile(BROKEN_HEAD);
     expect(result.passes.ok).toBe(false);
     expect(result.metrics.harbourWaterFrac).toBeLessThan(0.75);
+  });
+
+  it("fails the known-broken 82bc92a 3D Plan capture", () => {
+    if (!fs.existsSync(BROKEN_82BC92A)) return;
+    const result = auditFile(BROKEN_82BC92A);
+    expect(result.passes.ok).toBe(false);
+    expect(result.metrics.harbourWaterFrac).toBeLessThan(0.75);
+    expect(result.metrics.harbourSpeckleCount).toBeGreaterThan(500);
   });
 });

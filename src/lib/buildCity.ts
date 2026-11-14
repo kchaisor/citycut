@@ -5,7 +5,6 @@ import { BUILDING_EDGE_COLOR, BUILDING_EDGE_THRESHOLD_DEG } from "./buildingEdge
 import { BUILDING_USE_META, SOURCE_META, buildingLayerName, uniformBuildingColor } from "./buildingUse";
 import { getColour } from "./colours";
 import {
-  clipAreaToSiteFrame,
   DEFAULT_SITE_FRAME_SHAPE,
   SITE_FRAME_CIRCLE_SEGMENTS,
   type FrameGroundSize,
@@ -26,6 +25,7 @@ import { readDrawingStyle } from "./drawingStyle";
 import { basePlinthBuffers, footprintBase, sampleTerrain, terrainBuffers, terrainTint } from "./terrain";
 import { drapeTriangles, GROUND_REMAINING_LAYER, GROUND_ROADS_LAYER, groundGeometry, groundRoadPartition, groundTriangles } from "./groundRoads";
 import { clipTrianglesToTerrainGrid, terrainMeshHeight } from "./terrainDrape";
+import { buildWaterMeshGeometry } from "./waterMesh3d";
 import {
   cutWaterFromBufferGeometry,
   filterTrisOutsideWater,
@@ -601,44 +601,34 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     order(blockMesh, SURFACE.block.renderOrder);
     group.add(blockMesh);
   }
-  for (let index = 0; index < model.areas.length; index++) {
-    let area = model.areas[index];
-    if (area.kind === "block") continue;
-    if (area.kind === "water") {
-      const clippedRings = clipAreaToSiteFrame(area.ring, area.holes, model.sideM, frameShape, frameSize);
-      if (!clippedRings?.[0]) continue;
-      area = { ...area, ring: clippedRings[0], holes: clippedRings.slice(1) };
+  const waterAreaIndex = model.areas.findIndex((area) => area.kind === "water");
+  if (waterAreaIndex >= 0) {
+    const waterLift =
+      cutHarbour && model.storedSiteLayer
+        ? waterAreaLiftM(waterAreaIndex)
+        : (onTerrain ? waterLayer.lift : SURFACE.water.lift) + overlapLift(waterAreaIndex);
+    const heightAt = sample ?? (() => 0);
+    const built = buildWaterMeshGeometry(model, heightAt, waterLift, sample && model.terrain ? terrainGrid : null);
+    if (built) {
+      const clipped = clipBufferGeometryToSiteFrame(
+        built,
+        model.sideM,
+        frameShape,
+        frameSize.widthM,
+        frameSize.heightM,
+      );
+      built.dispose();
+      if (clipped) waterGeos.push(clipped);
     }
-    const lift =
-      area.kind === "water" && cutHarbour
-        ? waterAreaLiftM(index)
-        : (area.kind === "water" ? waterLayer.lift : SURFACE.green.lift) + overlapLift(index);
+  }
+  for (let index = 0; index < model.areas.length; index++) {
+    const area = model.areas[index];
+    if (area.kind === "block" || area.kind === "water") continue;
+    const lift = SURFACE.green.lift + overlapLift(index);
     if (sample && model.terrain) {
       try {
-        const drapeSpacing =
-          area.kind === "water" ? Math.min(model.terrain.spacingM, 3) : model.terrain.spacingM;
-        let geometry = drapedAreaGeometry(
-          area,
-          sample,
-          lift,
-          drapeSpacing,
-          terrainGrid,
-        );
-        if (!geometry) continue;
-        if (area.kind === "water") {
-          const clipped = clipBufferGeometryToSiteFrame(
-            geometry,
-            model.sideM,
-            frameShape,
-            frameSize.widthM,
-            frameSize.heightM,
-          );
-          geometry.dispose();
-          if (!clipped) continue;
-          waterGeos.push(clipped);
-        } else {
-          greenGeos.push(geometry);
-        }
+        const geometry = drapedAreaGeometry(area, sample, lift, model.terrain.spacingM, terrainGrid);
+        if (geometry) greenGeos.push(geometry);
       } catch {
       }
       continue;
@@ -646,21 +636,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     const shape = shapeFromRing(area.ring, area.holes);
     if (!shape) continue;
     try {
-      const geometry = layFlat(new THREE.ShapeGeometry(shape), lift);
-      if (area.kind === "water") {
-        const clipped = clipBufferGeometryToSiteFrame(
-          geometry,
-          model.sideM,
-          frameShape,
-          frameSize.widthM,
-          frameSize.heightM,
-        );
-        geometry.dispose();
-        if (!clipped) continue;
-        waterGeos.push(clipped);
-      } else {
-        greenGeos.push(geometry);
-      }
+      greenGeos.push(layFlat(new THREE.ShapeGeometry(shape), lift));
     } catch {
     }
   }
