@@ -4318,17 +4318,6 @@ export function ModelPage({
                     ))}
                   </div>
                   <div className="daylight-scrubber wind-console-bar mono">
-                    <div className="wind-band-pills" aria-label="Wind speed scale (km/h)">
-                      <span className="wind-band-chip band-0"><i className="wind-band-swatch" aria-hidden="true" />2–10 km/h</span>
-                      <span className="wind-band-chip band-1"><i className="wind-band-swatch" aria-hidden="true" />10–20</span>
-                      <span className="wind-band-chip band-2"><i className="wind-band-swatch" aria-hidden="true" />20–30</span>
-                      <span className="wind-band-chip band-3"><i className="wind-band-swatch" aria-hidden="true" />30–40</span>
-                      <span className="wind-band-chip band-4">
-                        <i className="wind-band-swatch" aria-hidden="true" />
-                        40+
-                        <span className="wind-band-unit"> km/h</span>
-                      </span>
-                    </div>
                     <span className="time-readout-pill">
                       🌬 {consoleWindStats ? `${consoleWindStats.prevailingLabel} · ${Math.round(consoleWindStats.prevailingMedianKmh)} km/h` : "TMYx station wind"}
                     </span>

@@ -1,8 +1,8 @@
 import type { WindPeriodId } from "./windRose";
+import { CALM_SPEED_MS, WIND_SPEED_BIN_EDGES_MS } from "./windBins";
 
 export const WIND_ROSE_ASSET_VERSION = 1;
-export const CALM_SPEED_MS = 0.5;
-export const WIND_SPEED_BIN_EDGES_MS = [0.5, 10 / 3.6, 20 / 3.6, 30 / 3.6, 40 / 3.6, 100] as const;
+export { CALM_SPEED_MS, WIND_SPEED_BIN_EDGES_MS };
 export const WIND_ROSE_SOURCE = "climate.onebuilding.org TMYx EPW";
 
 export type WindRoseSeasonId = Exclude<WindPeriodId, `month-${number}`>;

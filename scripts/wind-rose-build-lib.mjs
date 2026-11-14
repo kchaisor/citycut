@@ -1,6 +1,9 @@
 export const WIND_ROSE_SOURCE = "climate.onebuilding.org TMYx EPW";
-export const CALM_SPEED_MS = 0.5;
-export const WIND_SPEED_BIN_EDGES_MS = [0.5, 10 / 3.6, 20 / 3.6, 30 / 3.6, 40 / 3.6, 100];
+export const CALM_SPEED_KMH = 2;
+export const CALM_SPEED_MS = CALM_SPEED_KMH / 3.6;
+export const EPW_WIND_SPEED_MISSING = 999;
+export const EPW_WIND_DIR_MISSING = 999;
+export const WIND_SPEED_BIN_EDGES_MS = [CALM_SPEED_MS, 10 / 3.6, 20 / 3.6, 30 / 3.6, 40 / 3.6, 100];
 export const WIND_SECTOR_COUNT = 16;
 
 export const SOUTHERN_SEASON_MONTHS = {
@@ -53,6 +56,8 @@ export function parseEpwDataRow(line) {
   const dirDeg = Number(parts[20]);
   if (month < 1 || month > 12) return null;
   if (!Number.isFinite(speedMs) || !Number.isFinite(dirDeg)) return null;
+  if (speedMs >= EPW_WIND_SPEED_MISSING || dirDeg >= EPW_WIND_DIR_MISSING) return null;
+  if (speedMs < 0) return null;
   return { month, speedMs, dirDeg };
 }
 

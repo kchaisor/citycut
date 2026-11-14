@@ -898,9 +898,17 @@ input[type="range"]::-moz-range-thumb {
   width: min(280px, calc(100vw - 32px));
   padding: 10px 12px 12px;
   border-radius: 10px;
-  background: rgba(255, 252, 248, 0.94);
+  background: color-mix(in srgb, var(--wind-rose-card-surface) 94%, transparent);
   box-shadow: var(--shadow);
   pointer-events: none;
+}
+@media (max-width: 1279px) {
+  .wind-rose-analysis-card {
+    width: min(240px, calc(100vw - 32px));
+  }
+  .wind-rose-panel-svg {
+    width: min(160px, 100%);
+  }
 }
 .model[data-env-console="1"] .wind-rose-analysis-card {
   bottom: max(148px, calc(var(--env-console-height, 148px) + 12px));
@@ -914,27 +922,35 @@ input[type="range"]::-moz-range-thumb {
   height: auto;
   margin: 0 auto;
 }
-.wind-rose-legend {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px 10px;
-  font-size: 11px;
-  color: var(--muted-text);
+.wind-rose-calm-caption {
+  margin: 6px 0 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--wind-calm-caption);
 }
-.wind-rose-legend li {
+.wind-speed-step-legend {
+  margin-top: 10px;
+  width: 100%;
+}
+.wind-speed-step-bar {
   display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.wind-rose-legend .wind-band-swatch {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
   border-radius: 2px;
-  flex-shrink: 0;
+}
+.wind-speed-step-bar span {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.wind-speed-step-ticks {
+  margin: 4px 0 0;
+  font-size: 10px;
+  line-height: 1.25;
+  color: var(--muted-text);
+  text-align: center;
 }
 .wind-rose-meta {
   margin: 8px 0 0;

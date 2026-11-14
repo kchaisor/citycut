@@ -61,12 +61,15 @@ async function assertRose(page) {
       station: root?.getAttribute("data-wind-station") ?? "",
       distanceKm: root?.getAttribute("data-wind-distance-km") ?? "",
       period: root?.getAttribute("data-wind-period") ?? "",
+      calmCaption: document.querySelector(".wind-rose-calm-caption")?.textContent ?? "",
       caption: document.querySelector(".wind-rose-meta")?.textContent ?? "",
       note: document.querySelector(".wind-rose-meta-note")?.textContent ?? "",
     };
   });
   if (!meta.station || !meta.distanceKm || !meta.period) throw new Error(`missing station meta: ${JSON.stringify(meta)}`);
   if (!meta.note.includes("Regional station wind")) throw new Error("missing regional note");
+  if (!/^Calm \d+\.\d%/.test(meta.calmCaption)) throw new Error(`missing calm caption: ${meta.calmCaption}`);
+  if (meta.caption.includes("N,") || meta.caption.includes("NNE")) throw new Error("prevailing should not be in card caption");
   return meta;
 }
 
@@ -91,7 +94,7 @@ try {
   });
 
   for (const site of SITES) {
-    for (const width of [1280, 1440]) {
+    for (const width of [1024, 1280, 1440]) {
       for (const season of ["annual", "winter"]) {
         const page = await context.newPage({ viewport: { width, height: 900 } });
         page.setDefaultTimeout(180_000);
@@ -104,14 +107,14 @@ try {
         if (season === "winter") {
           await page.getByRole("button", { name: "Annual", exact: true }).click();
           await page.waitForTimeout(300);
-          const annualDeg = await page.getAttribute(".model", "data-ground-wind-deg");
+          const annualCalm = await page.locator(".wind-rose-calm-caption").textContent();
           await page.getByRole("button", { name: "Winter", exact: true }).click();
           await page.waitForTimeout(350);
-          const winterDeg = await page.getAttribute(".model", "data-ground-wind-deg");
+          const winterCalm = await page.locator(".wind-rose-calm-caption").textContent();
           const seasonAttr = await page.getAttribute(".model", "data-ground-wind-season");
           if (seasonAttr !== "winter") throw new Error(`season attr not winter: ${seasonAttr}`);
-          if (site.name === "melbourne-cbd" && (!annualDeg || !winterDeg || annualDeg === winterDeg)) {
-            throw new Error(`season toggle failed at ${site.name}: annual=${annualDeg} winter=${winterDeg}`);
+          if (site.name === "melbourne-cbd" && (!annualCalm || !winterCalm || annualCalm === winterCalm)) {
+            throw new Error(`season toggle failed at ${site.name}: annual=${annualCalm} winter=${winterCalm}`);
           }
         }
         const meta = await assertRose(page);

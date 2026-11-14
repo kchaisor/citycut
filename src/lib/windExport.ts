@@ -6,7 +6,7 @@ import { windFlowArrowPolylines } from "./windArrowGeometry";
 import { sectorCenterDeg, type WindPeriodId, type WindPeriodStats } from "./windRose";
 import type { SiteWindSelection } from "./windRoseData";
 import { analyzeSiteWind, stackedSectorArmLength } from "./windRoseStats";
-import { windRoseStationCaption } from "./windRoseSvg";
+import { windRoseStationCaption } from "./windRoseCaptions";
 
 const BAND_VARS = ["--wind-band-0", "--wind-band-1", "--wind-band-2", "--wind-band-3", "--wind-band-4"] as const;
 

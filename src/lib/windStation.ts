@@ -1,5 +1,6 @@
 import type { WindRoseAsset, WindRoseStationRecord, SiteWindSelection } from "./windRoseData";
 import { WIND_ROSE_SOURCE } from "./windRoseData";
+import { readableWindStationName } from "./windStationNames";
 
 const EARTH_RADIUS_KM = 6371;
 
@@ -13,23 +14,30 @@ export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: numb
   return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
+export const WIND_STATION_SANE_MAX_WINTER_CALM_PCT = 30;
+export const WIND_STATION_SANE_MAX_ANNUAL_CALM_PCT = 35;
+export const WIND_STATION_SEARCH_MAX_KM = 28;
+
+export function isWindStationSane(station: WindRoseStationRecord): boolean {
+  const winter = station.seasons.winter.calmPct;
+  const annual = station.seasons.annual.calmPct;
+  return winter <= WIND_STATION_SANE_MAX_WINTER_CALM_PCT && annual <= WIND_STATION_SANE_MAX_ANNUAL_CALM_PCT;
+}
+
 export function nearestWindStation(
   asset: WindRoseAsset,
   siteLat: number,
   siteLon: number,
 ): { station: WindRoseStationRecord; distanceKm: number } | null {
   if (!asset.stations.length) return null;
-  let best: WindRoseStationRecord | null = null;
-  let bestKm = Infinity;
-  for (const station of asset.stations) {
-    const km = haversineKm(siteLat, siteLon, station.lat, station.lon);
-    if (km < bestKm) {
-      bestKm = km;
-      best = station;
-    }
-  }
-  if (!best) return null;
-  return { station: best, distanceKm: bestKm };
+  const ranked = asset.stations
+    .map((station) => ({ station, distanceKm: haversineKm(siteLat, siteLon, station.lat, station.lon) }))
+    .sort((a, b) => a.distanceKm - b.distanceKm);
+  const sane = ranked.find((r) => r.distanceKm <= WIND_STATION_SEARCH_MAX_KM && isWindStationSane(r.station));
+  if (sane) return sane;
+  const nearest = ranked[0];
+  if (!nearest) return null;
+  return nearest;
 }
 
 export function siteWindSelection(
@@ -43,7 +51,7 @@ export function siteWindSelection(
   return {
     asset,
     station: {
-      name: station.name,
+      name: readableWindStationName(station.name, station.id),
       id: station.id,
       lat: station.lat,
       lon: station.lon,

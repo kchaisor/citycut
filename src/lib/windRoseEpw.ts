@@ -1,10 +1,11 @@
 import { sectorCenterDeg, sectorIndex, WIND_SECTOR_COUNT } from "./windRose";
 import {
   CALM_SPEED_MS,
-  type WindRoseSeasonId,
-  type WindRoseSeasonRecord,
+  EPW_WIND_DIR_MISSING,
+  EPW_WIND_SPEED_MISSING,
   WIND_SPEED_BIN_EDGES_MS,
-} from "./windRoseData";
+} from "./windBins";
+import { type WindRoseSeasonId, type WindRoseSeasonRecord } from "./windRoseData";
 
 export type EpwHourRow = {
   month: number;
@@ -63,8 +64,9 @@ export function parseEpwDataRow(line: string): EpwHourRow | null {
   const speedMs = Number(parts[21]);
   const dirDeg = Number(parts[20]);
   if (month < 1 || month > 12) return null;
-  if (!Number.isFinite(speedMs)) return null;
-  if (!Number.isFinite(dirDeg)) return null;
+  if (!Number.isFinite(speedMs) || !Number.isFinite(dirDeg)) return null;
+  if (speedMs >= EPW_WIND_SPEED_MISSING || dirDeg >= EPW_WIND_DIR_MISSING) return null;
+  if (speedMs < 0) return null;
   return { month, speedMs, dirDeg };
 }
 

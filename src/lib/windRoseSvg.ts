@@ -1,6 +1,5 @@
 import { getColour } from "./colours";
 import {
-  SECTOR_LABELS,
   WIND_SECTOR_COUNT,
   analyzeWindPeriod,
   sectorCenterDeg,
@@ -111,23 +110,15 @@ export function renderWindRoseSvgMarkupFromStats(
   options: WindRoseSvgOptions & { caption: string },
 ): string {
   const stroke = getColour("--wind-rose");
-  const wedges = windRoseStackedWedges(stats, 0.5, 0.5, 0.06, 0.46);
-  const arrows = windRoseArrowLines(stats);
+  const hub = getColour("--wind-rose-card-surface");
+  const wedges = windRoseStackedWedges(stats, 0.5, 0.5, 0.06, 0.46 * 0.92);
   const size = options.sizePx;
   const wedgePaths = wedges.map((w) => `<path d="${w.d}" fill="${w.fill}" fill-opacity="${w.opacity.toFixed(2)}" />`).join("");
-  const arrowPaths = arrows
-    .map(
-      (a) =>
-        `<line x1="${a.x1}" y1="${a.y1}" x2="${a.x2}" y2="${a.y2}" stroke="${stroke}" stroke-width="0.02" stroke-linecap="round" />`,
-    )
-    .join("");
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1" width="${size}" height="${size}" role="img" aria-label="${options.caption}">
   <circle cx="0.5" cy="0.5" r="0.48" fill="none" stroke="${stroke}" stroke-width="0.012" opacity="0.5"/>
   ${wedgePaths}
-  ${arrowPaths}
-  <text x="0.5" y="0.52" text-anchor="middle" font-size="0.09" fill="${stroke}" font-weight="700">${stats.calmPercent.toFixed(0)}%</text>
-  <text x="0.5" y="0.58" text-anchor="middle" font-size="0.05" fill="${stroke}">calm</text>
-  <text x="0.5" y="0.96" text-anchor="middle" font-size="0.055" fill="${stroke}" font-family="Helvetica, Arial, sans-serif">${SECTOR_LABELS[stats.prevailingSector]}</text>
+  <circle cx="0.5" cy="0.5" r="0.05" fill="${hub}"/>
+  <text x="0.5" y="0.96" text-anchor="middle" font-size="0.055" fill="${stroke}" font-family="Helvetica, Arial, sans-serif">${options.caption}</text>
 </svg>`;
 }
 

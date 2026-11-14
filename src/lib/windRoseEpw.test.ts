@@ -6,7 +6,7 @@ import {
   SOUTHERN_SEASON_MONTHS,
   speedBinIndexMs,
 } from "./windRoseEpw";
-import { CALM_SPEED_MS } from "./windRoseData";
+import { CALM_SPEED_MS, EPW_WIND_DIR_MISSING, EPW_WIND_SPEED_MISSING } from "./windBins";
 
 const SAMPLE_EPW = `LOCATION,Test,VIC,AUS,TMYx,948700,-37.98,145.10,10.0,15.0
 COMMENTS 1,"Period of Record=2009-2023"
@@ -22,9 +22,20 @@ describe("windRoseEpw", () => {
     expect(SOUTHERN_SEASON_MONTHS.summer).toEqual([12, 1, 2]);
   });
 
-  it("treats speeds below 0.5 m/s as calm", () => {
-    expect(speedBinIndexMs(0.2)).toBe(-1);
+  it("treats speeds below the calm threshold as calm", () => {
+    expect(speedBinIndexMs(CALM_SPEED_MS - 0.01)).toBe(-1);
     expect(parseEpwDataRow("2023,1,1,1,0,?9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.49,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0")?.speedMs).toBe(0.49);
+  });
+
+  it("drops EPW missing wind speed and direction codes", () => {
+    const missingSpeed = parseEpwDataRow(
+      `2023,1,1,1,0,?9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,180,${EPW_WIND_SPEED_MISSING},0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0`,
+    );
+    const missingDir = parseEpwDataRow(
+      `2023,1,1,1,0,?9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,${EPW_WIND_DIR_MISSING},4.0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0`,
+    );
+    expect(missingSpeed).toBeNull();
+    expect(missingDir).toBeNull();
   });
 
   it("aggregates winter hours separately from summer", () => {

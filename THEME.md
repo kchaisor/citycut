@@ -288,6 +288,12 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--axo-tree-trunk` | `#7a6a55` | Exploded axo tree trunk. |
 | `--wind-streak` | `#2B6CB0` | Animated wind streaks in the 3D viewport (~70% opacity). |
 | `--wind-rose` | `#3d5a73` | On-screen wind rose overlay and Wind export layer. |
+| `--wind-rose-card-surface` | `#fffcf8` | Wind analysis card background and rose hub disc. |
+| `--wind-rose-ring` | `#c9d2da` | Wind rose outer ring stroke. |
+| `--wind-rose-guide` | `#c9d2da` | Wind rose frequency guide rings and % labels. |
+| `--wind-rose-n-label` | `#111111` | Wind rose north label. |
+| `--wind-rose-h-label` | `#5f5f5f` | Wind rose E/S/W labels. |
+| `--wind-calm-caption` | `#1f2a33` | Calm caption under the on-card wind rose. |
 | `--ground-wind-flow` | `#0b2e8a` | Reserve fast-stream token (unused by ground shader). |
 | `--ground-wind-core` | `#1e40af` | Ground-wind trail core at constant 1.75px screen width. |
 | `--ground-wind-glow` | `#2f6fd6` | Reserve token paired with ground-wind trail fills. |
