@@ -26,8 +26,8 @@ import {
   type GroundWindParticles,
 } from "../lib/groundWindParticles";
 import { useColourRevision } from "../lib/useColourRevision";
-import { groundWindDebugEnabled, groundWindDebugSnapshot } from "../lib/groundWindDebug";
-import { groundWindHudMask } from "../lib/groundWindHudMask";
+import { groundWindDebugEnabled, groundWindDebugSnapshot, groundWindRenderStats } from "../lib/groundWindDebug";
+import { GROUND_WIND_EMPTY_MASK_RECT, groundWindHudMaskFromDom, type GroundWindMaskRect } from "../lib/groundWindHudMask";
 import { SURFACE } from "../lib/surfaceLayers";
 import type { WindPeriodStats } from "../lib/windRose";
 
@@ -35,6 +35,7 @@ const FIELD_BUDGET_MS = 5;
 const WARM_LIVE_S = 2.6;
 const WARM_FROZEN_S = 2.4;
 const MAX_FRAME_DT = 0.05;
+const HUD_MASK_POLL_MS = 500;
 
 const VERTEX_SHADER = `
 attribute vec3 p0;
@@ -88,6 +89,7 @@ void main() {
 `;
 
 const FRAGMENT_SHADER = `
+uniform vec2 resolution;
 uniform vec3 coreColour;
 uniform float passRole;
 uniform float opacity;
@@ -100,8 +102,9 @@ varying float vCasing;
 uniform vec4 maskRight;
 uniform vec4 maskBottom;
 void main() {
-  if (vScreenPx.x >= maskRight.x && vScreenPx.x <= maskRight.z && vScreenPx.y >= maskRight.y && vScreenPx.y <= maskRight.w) discard;
-  if (vScreenPx.x >= maskBottom.x && vScreenPx.x <= maskBottom.z && vScreenPx.y >= maskBottom.y && vScreenPx.y <= maskBottom.w) discard;
+  vec2 css = vec2(vScreenPx.x, resolution.y - vScreenPx.y);
+  if (css.x >= maskRight.x && css.x <= maskRight.z && css.y >= maskRight.y && css.y <= maskRight.w) discard;
+  if (css.x >= maskBottom.x && css.x <= maskBottom.z && css.y >= maskBottom.y && css.y <= maskBottom.w) discard;
   float edge = 1.0 - smoothstep(0.86, 1.0, vSide);
   float alpha = vAlpha * opacity * edge;
   if (alpha < 0.004) discard;
@@ -155,7 +158,7 @@ function createRibbonGeometry(points: Float32Array): { geometry: THREE.Instanced
 }
 
 function makeWindMaterial(passRole: number, width: number, height: number) {
-  const mask = groundWindHudMask(width, height);
+  const empty = GROUND_WIND_EMPTY_MASK_RECT;
   return new THREE.ShaderMaterial({
     vertexShader: VERTEX_SHADER,
     fragmentShader: FRAGMENT_SHADER,
@@ -164,8 +167,8 @@ function makeWindMaterial(passRole: number, width: number, height: number) {
       passRole: { value: passRole },
       opacity: { value: 1 },
       coreColour: { value: new THREE.Color() },
-      maskRight: { value: new THREE.Vector4(mask.rightMin[0], mask.rightMin[1], mask.rightMax[0], mask.rightMax[1]) },
-      maskBottom: { value: new THREE.Vector4(mask.bottomMin[0], mask.bottomMin[1], mask.bottomMax[0], mask.bottomMax[1]) },
+      maskRight: { value: new THREE.Vector4(empty.x0, empty.y0, empty.x1, empty.y1) },
+      maskBottom: { value: new THREE.Vector4(empty.x0, empty.y0, empty.x1, empty.y1) },
     },
     transparent: true,
     depthWrite: false,
@@ -214,13 +217,6 @@ export function GroundWindFlow({
     const res = casingMaterial.uniforms.resolution!.value as THREE.Vector2;
     res.set(size.width, size.height);
     (coreMaterial.uniforms.resolution!.value as THREE.Vector2).copy(res);
-    const mask = groundWindHudMask(size.width, size.height);
-    const right = new THREE.Vector4(mask.rightMin[0], mask.rightMin[1], mask.rightMax[0], mask.rightMax[1]);
-    const bottom = new THREE.Vector4(mask.bottomMin[0], mask.bottomMin[1], mask.bottomMax[0], mask.bottomMax[1]);
-  for (const mat of [casingMaterial, coreMaterial]) {
-      (mat.uniforms.maskRight!.value as THREE.Vector4).copy(right);
-      (mat.uniforms.maskBottom!.value as THREE.Vector4).copy(bottom);
-    }
   }, [casingMaterial, coreMaterial, size.height, size.width]);
 
   useEffect(
@@ -236,6 +232,27 @@ export function GroundWindFlow({
   const fieldRef = useRef<GroundWindField | null>(null);
   const particlesRef = useRef<GroundWindParticles | null>(null);
   const invalidate = useThree((state) => state.invalidate);
+  const canvasElement = useThree((state) => state.gl.domElement);
+  useEffect(() => {
+    const apply = (uniform: THREE.IUniform, rect: GroundWindMaskRect): boolean => {
+      const v = uniform.value as THREE.Vector4;
+      if (v.x === rect.x0 && v.y === rect.y0 && v.z === rect.x1 && v.w === rect.y1) return false;
+      v.set(rect.x0, rect.y0, rect.x1, rect.y1);
+      return true;
+    };
+    const sync = () => {
+      const mask = groundWindHudMaskFromDom(canvasElement);
+      let changed = false;
+      for (const mat of [casingMaterial, coreMaterial]) {
+        changed = apply(mat.uniforms.maskRight!, mask.right) || changed;
+        changed = apply(mat.uniforms.maskBottom!, mask.bottom) || changed;
+      }
+      if (changed) invalidate();
+    };
+    sync();
+    const id = window.setInterval(sync, HUD_MASK_POLL_MS);
+    return () => window.clearInterval(id);
+  }, [canvasElement, casingMaterial, coreMaterial, invalidate]);
   const camera = useThree((state) => state.camera);
   const projScratch = useMemo(() => new THREE.Vector3(), []);
   const hitScratch = useMemo(() => new THREE.Vector3(), []);
@@ -311,7 +328,8 @@ export function GroundWindFlow({
       warmGroundWindParticles(particles, field, heightAt, metresPerSecond, frozenRef.current ? WARM_FROZEN_S : WARM_LIVE_S);
       data.needsUpdate = true;
       if (debugWind && typeof window !== "undefined") {
-        window.__citycutGroundWind = groundWindDebugSnapshot(particles, field, model, heightAt);
+        window.__citycutGroundWind = groundWindRenderStats(particles, size.width);
+        window.__citycutGroundWindAudit = () => groundWindDebugSnapshot(particles, field, model, heightAt);
       }
       invalidate();
       return;
@@ -347,7 +365,7 @@ export function GroundWindFlow({
     if (debugWind && typeof window !== "undefined") {
       debugFrameRef.current += 1;
       if (debugFrameRef.current % 8 === 0) {
-        window.__citycutGroundWind = groundWindDebugSnapshot(particles, field, model, heightAt);
+        window.__citycutGroundWind = groundWindRenderStats(particles, size.width);
       }
     }
     invalidate();

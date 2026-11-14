@@ -49,6 +49,7 @@ export type GroundWindDebugSnapshot = {
 declare global {
   interface Window {
     __citycutGroundWind?: GroundWindDebugSnapshot;
+    __citycutGroundWindAudit?: () => GroundWindDebugSnapshot;
   }
 }
 
