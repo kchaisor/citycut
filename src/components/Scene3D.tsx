@@ -87,7 +87,6 @@ import {
 } from "../lib/primaryViewport";
 import { applyWhiteCardGroundTint, snapshotWhiteCardTerrainColors } from "../lib/whiteCardViewport";
 import { studioCameraHeadingDeg } from "../lib/studioCompass";
-import { StudioCompassNorthBridge } from "./StudioCompassNorthBridge";
 import {
   DEFAULT_PERSPECTIVE_OFFSET,
   heliodonSceneBounds,
@@ -1172,7 +1171,6 @@ function PerspectiveFit({
     [camera, gl],
   );
   const place = useCallback(() => {
-    if (typeof window !== "undefined" && window.__citycutCompassNorthTween === true) return;
     const controls = controlsRef.current;
     if (!controls || !active || size.width < 2 || size.height < 2) return;
     const key = `${fitId}:${size.width}x${size.height}`;
@@ -2084,14 +2082,6 @@ export function Cameras({
             ortho={ortho}
             perspControls={perspControls}
             orthoControls={orthoControls}
-          />
-          <StudioCompassNorthBridge
-            projection={projection}
-            persp={persp}
-            ortho={ortho}
-            perspControls={perspControls}
-            orthoControls={orthoControls}
-            touchedRef={touchedRef}
           />
           <ExportBridge onExportReady={onExportReady} solarDiagramOn={solarDiagramOn} />
         </>

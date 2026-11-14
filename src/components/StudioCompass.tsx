@@ -3,7 +3,6 @@ import {
   studioCompassAriaLabel,
   studioCompassNeedleDeg,
 } from "../lib/studioCompass";
-import { dispatchStudioCompassFaceNorth } from "../lib/studioCompassNorth";
 
 export function StudioCompassNeedle({ headingDeg }: { headingDeg: number }) {
   const chip = getColour("--studio-compass-chip");
@@ -30,13 +29,8 @@ export function StudioCompassNeedle({ headingDeg }: { headingDeg: number }) {
 
 export function StudioCompass({ headingDeg }: { headingDeg: number }) {
   return (
-    <button
-      type="button"
-      className="studio-compass"
-      aria-label={studioCompassAriaLabel(headingDeg)}
-      onClick={() => dispatchStudioCompassFaceNorth()}
-    >
+    <div className="studio-compass" role="img" aria-label={studioCompassAriaLabel(headingDeg)}>
       <StudioCompassNeedle headingDeg={headingDeg} />
-    </button>
+    </div>
   );
 }

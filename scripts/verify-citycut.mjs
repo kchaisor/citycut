@@ -1784,7 +1784,7 @@ async function main() {
         return {
           hasCompass: true,
           hasNeedle: Boolean(document.querySelector(".studio-compass-needle")),
-          ariaStartsNorth: aria.startsWith("North."),
+          ariaStartsNorth: aria.startsWith("North,"),
           viewportW: window.innerWidth,
           gapBottomBar,
           gapRightPanel,
@@ -1825,19 +1825,9 @@ async function main() {
           path: path.join(ARTIFACTS_DIR, `studio-compass-rotated-${width}.png`),
         });
       }
-      const compass = page.locator(".studio-compass").first();
-      await compass.focus();
-      await page.waitForTimeout(120);
       if (fs.existsSync(ARTIFACTS_DIR)) {
         await page.screenshot({
-          path: path.join(ARTIFACTS_DIR, `studio-compass-focus-${width}.png`),
-        });
-      }
-      await compass.click();
-      await page.waitForTimeout(320);
-      if (fs.existsSync(ARTIFACTS_DIR)) {
-        await page.screenshot({
-          path: path.join(ARTIFACTS_DIR, `studio-compass-north-${width}.png`),
+          path: path.join(ARTIFACTS_DIR, `studio-compass-needle-${width}.png`),
         });
       }
     };

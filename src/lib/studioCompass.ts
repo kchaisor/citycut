@@ -23,7 +23,7 @@ export function studioCompassNeedleDeg(cameraHeadingDeg: number): number {
 
 export function studioCompassAriaLabel(cameraHeadingDeg: number): string {
   const deg = Math.round(((cameraHeadingDeg % 360) + 360) % 360);
-  return `North. View heading ${deg} degrees. Activate to face north.`;
+  return `North, heading ${deg}°`;
 }
 
 export const STUDIO_COMPASS_INSET_PX = 16;

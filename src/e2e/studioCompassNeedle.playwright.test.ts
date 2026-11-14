@@ -47,15 +47,7 @@ function waitForHttp(url: string, timeoutMs = 60_000): Promise<void> {
   });
 }
 
-type CamProbe = { bearing: number; elevation: number; distance: number };
-
-function northErrorDeg(bearingDeg: number): number {
-  const b = Number(bearingDeg);
-  const h = ((b % 360) + 360) % 360;
-  return h > 180 ? 360 - h : h;
-}
-
-describe("studio compass face north", () => {
+describe("studio compass needle", () => {
   let preview: ChildProcess;
   let baseUrl: string;
 
@@ -96,53 +88,47 @@ describe("studio compass face north", () => {
     await page.waitForSelector(".studio-compass", { timeout: 60_000 });
   }
 
-  async function readCam(page: import("playwright").Page): Promise<CamProbe> {
+  function northErrorDeg(bearingDeg: number): number {
+    const h = ((bearingDeg % 360) + 360) % 360;
+    return h > 180 ? 360 - h : h;
+  }
+
+  function readNeedleAndBearing(page: import("playwright").Page) {
     return page.evaluate(() => {
       const canvas = document.querySelector(".model canvas");
-      if (!canvas) throw new Error("no canvas");
-      return {
-        bearing: Number(canvas.getAttribute("data-cam-bearing") ?? "999"),
-        elevation: Number(canvas.getAttribute("data-cam-elevation") ?? "0"),
-        distance: Number(canvas.getAttribute("data-cam-distance") ?? "0"),
-      };
+      const needleG = document.querySelector(".studio-compass-needle g");
+      if (!canvas || !needleG) throw new Error("missing compass or canvas");
+      const transform = needleG.getAttribute("transform") ?? "";
+      const match = /rotate\(([-\d.]+)/.exec(transform);
+      const needleDeg = match ? Number(match[1]) : NaN;
+      const bearing = Number(canvas.getAttribute("data-cam-bearing") ?? "999");
+      return { needleDeg, bearing };
     });
   }
 
-  async function orbitTowardBearing(page: import("playwright").Page, targetDeg: number) {
+  async function orbitDrag(page: import("playwright").Page) {
     const canvas = page.locator(".model canvas").first();
     const box = await canvas.boundingBox();
     if (!box) throw new Error("no model canvas");
     const cx = box.x + box.width * 0.5;
     const cy = box.y + box.height * 0.42;
-    for (let step = 0; step < 50; step++) {
-      const { bearing } = await readCam(page);
-      let d = targetDeg - bearing;
-      d = ((d + 180) % 360 + 360) % 360 - 180;
-      if (Math.abs(d) <= 5) return;
-      const drag = Math.sign(d) * Math.min(90, Math.max(20, Math.abs(d) * 2));
+    for (let pass = 0; pass < 3; pass++) {
       await page.mouse.move(cx, cy);
       await page.mouse.down({ button: "left" });
-      await page.mouse.move(cx + drag, cy, { steps: 12 });
+      await page.mouse.move(cx + 160, cy + 25, { steps: 18 });
       await page.mouse.up();
-      await page.waitForTimeout(70);
+      await page.waitForTimeout(200);
+      const { bearing } = await readNeedleAndBearing(page);
+      if (northErrorDeg(bearing) > 15) return;
     }
-    const { bearing } = await readCam(page);
-    let err = targetDeg - bearing;
-    err = ((err + 180) % 360 + 360) % 360 - 180;
-    expect(Math.abs(err)).toBeLessThan(8);
+    const { bearing } = await readNeedleAndBearing(page);
+    expect(northErrorDeg(bearing)).toBeGreaterThan(15);
   }
 
   it(
-    "faces north by 400ms and holds at 1500ms from ~60° and ~200° (user path, no qa)",
+    "tracks -heading within 1° after orbit; tapping the compass chip does not move the camera",
     async () => {
       const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome" });
-      const timings: {
-        heading: number;
-        northErr400: number;
-        northErr1500: number;
-        bearing400: number;
-        bearing1500: number;
-      }[] = [];
       try {
         const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
         page.setDefaultTimeout(360_000);
@@ -160,31 +146,33 @@ describe("studio compass face north", () => {
         if ((await persp.count()) > 0) await persp.click();
         await page.waitForTimeout(350);
 
-        for (const targetHeading of [60, 200]) {
-          await orbitTowardBearing(page, targetHeading);
-          const before = await readCam(page);
-          await page.locator(".studio-compass").click();
-          await page.waitForTimeout(400);
-          const at400 = await readCam(page);
-          await page.waitForTimeout(1100);
-          const at1500 = await readCam(page);
+        await orbitDrag(page);
+        const afterOrbit = await readNeedleAndBearing(page);
+        expect(Math.abs(afterOrbit.needleDeg + afterOrbit.bearing)).toBeLessThanOrEqual(1);
 
-          expect(northErrorDeg(at400.bearing)).toBeLessThanOrEqual(2);
-          expect(northErrorDeg(at1500.bearing)).toBeLessThanOrEqual(2);
-          expect(Math.abs(at400.elevation - before.elevation)).toBeLessThan(1.5);
-          expect(Math.abs(at1500.elevation - before.elevation)).toBeLessThan(1.5);
-          expect(Math.abs(at400.distance - before.distance)).toBeLessThan(3);
-          expect(Math.abs(at1500.distance - before.distance)).toBeLessThan(3);
+        const compass = page.locator(".studio-compass").first();
+        const chipBox = await compass.boundingBox();
+        expect(chipBox).toBeTruthy();
+        const beforeClick = await readNeedleAndBearing(page);
+        const northErrBefore = northErrorDeg(beforeClick.bearing);
+        expect(northErrBefore).toBeGreaterThan(15);
 
-          timings.push({
-            heading: targetHeading,
-            northErr400: northErrorDeg(at400.bearing),
-            northErr1500: northErrorDeg(at1500.bearing),
-            bearing400: at400.bearing,
-            bearing1500: at1500.bearing,
-          });
-        }
-        console.log("compass-north-e2e-timings", JSON.stringify(timings));
+        await page.mouse.click(chipBox!.x + chipBox!.width / 2, chipBox!.y + chipBox!.height / 2);
+        await page.waitForTimeout(400);
+        const afterClick = await readNeedleAndBearing(page);
+        const northErrAfter = northErrorDeg(afterClick.bearing);
+        expect(northErrAfter).toBeGreaterThan(10);
+        expect(Math.abs(northErrAfter - northErrBefore)).toBeLessThan(5);
+        expect(Math.abs(afterClick.needleDeg + afterClick.bearing)).toBeLessThanOrEqual(1);
+
+        console.log(
+          "compass-needle-e2e",
+          JSON.stringify({
+            bearingAfterOrbit: afterOrbit.bearing,
+            needleAfterOrbit: afterOrbit.needleDeg,
+            bearingAfterClick: afterClick.bearing,
+          }),
+        );
       } finally {
         await browser.close();
       }

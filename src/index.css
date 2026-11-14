@@ -838,16 +838,10 @@ input[type="range"]::-moz-range-thumb {
   border: 0;
   border-radius: 999px;
   background: transparent;
-  cursor: pointer;
+  pointer-events: none;
+  cursor: default;
   display: grid;
   place-items: center;
-}
-.studio-compass:focus {
-  outline: none;
-}
-.studio-compass:focus-visible {
-  outline: 2px solid var(--studio-compass-focus);
-  outline-offset: 2px;
 }
 .studio-compass-needle {
   display: block;
