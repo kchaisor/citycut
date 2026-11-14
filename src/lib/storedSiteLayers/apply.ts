@@ -50,6 +50,7 @@ export async function applyStoredSiteLayerToCut(input: {
       buildingIdByMeshKey: mesh.buildingIdByMeshKey,
       zone: pack.zone,
       manifest: pack.manifest,
+      bridgePlan: pack.bridgePlan,
     },
   };
 }

@@ -67,3 +67,17 @@ export function storedSiteDeckCapStrokeStyle(
 ): import("./drawingStyle").StrokeStyle {
   return style.kerb;
 }
+
+export function storedSiteBridgePylonFill(): string {
+  return getColour("--stored-site-bridge-pylon");
+}
+
+export function storedSiteBridgeCableStrokeStyle(
+  style: import("./drawingStyle").LineStyles,
+): import("./drawingStyle").StrokeStyle {
+  return {
+    mm: style.kerb.mm * 0.36,
+    color: getColour("--stored-site-bridge-cable-stroke"),
+    dash: "1.2 0.6",
+  };
+}

@@ -34,7 +34,8 @@ import {
   importedMassingStrokeStyle,
   importedMassingUpperStrokeStyle,
   planBuildingStrokeStyle,
-  storedSiteDeckCapStrokeStyle,
+  storedSiteBridgeCableStrokeStyle,
+  storedSiteBridgePylonFill,
   storedSiteStructureStrokeStyle,
 } from "./planBuildingFill";
 import { windPlanPdfChunk } from "./windExport";
@@ -531,17 +532,24 @@ export function sitePlanChunks(
       })),
     });
   }
-  if (plan.storedStructures.length > 0) {
+  if (plan.storedBridgeDeck.length > 0 || plan.storedBridgePylons.length > 0 || plan.storedBridgeCables.length > 0) {
     const structurePen = pen(storedSiteStructureStrokeStyle(style), "miter");
-    const capPen = pen(storedSiteDeckCapStrokeStyle(style), "miter");
-    chunks.push({
-      name: "Structures",
-      paths: plan.storedStructures.map((stroke) => ({
-        rings: [mapRing(stroke.line, model.sideM, layout)],
-        close: false,
-        ...(stroke.kind === "cap" ? capPen : structurePen ?? {}),
-      })),
-    });
+    const cablePen = pen(storedSiteBridgeCableStrokeStyle(style), "miter");
+    const paths: PdfPath[] = [];
+    for (const line of plan.storedBridgeDeck) {
+      paths.push({ rings: [mapRing(line, model.sideM, layout)], close: false, ...(structurePen ?? {}) });
+    }
+    for (const ring of plan.storedBridgePylons) {
+      paths.push({
+        rings: [mapRing(ring, model.sideM, layout)],
+        close: true,
+        fill: hexRgb(storedSiteBridgePylonFill()),
+      });
+    }
+    for (const line of plan.storedBridgeCables) {
+      paths.push({ rings: [mapRing(line, model.sideM, layout)], close: false, ...(cablePen ?? {}) });
+    }
+    chunks.push({ name: "Structures", paths });
   }
   const upperPen = pen(importedMassingUpperStrokeStyle(style), "miter");
   if (plan.importedUpperLevels.length > 0 && upperPen) {

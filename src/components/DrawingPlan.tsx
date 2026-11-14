@@ -15,6 +15,8 @@ import {
   importedMassingStrokeStyle,
   importedMassingUpperStrokeStyle,
   planBuildingStrokeStyle,
+  storedSiteBridgeCableStrokeStyle,
+  storedSiteBridgePylonFill,
   storedSiteStructureStrokeStyle,
 } from "../lib/planBuildingFill";
 import { planPaths, svgPolyline, svgRings } from "../lib/svgPlan";
@@ -533,43 +535,47 @@ export function DrawingPlan({
                 stroke="none"
               />
             ))}
-            {plan.storedStructures
-              .filter((stroke) => stroke.kind === "rail")
-              .map((stroke, index) => {
-                const line = stroke.line;
-                const strokeStyle = storedSiteStructureStrokeStyle(style);
-                return (
-                  <path
-                    key={`ss-rail${index}`}
-                    data-stored-structure="true"
-                    data-deck-stroke="rail"
-                    d={svgPolyline(openRing(line), false)}
-                    fill="none"
-                    {...screenPenAttrs(strokeStyle, "miter")}
-                    strokeWidth={screenPx(strokeStyle.mm)}
-                    strokeLinecap="square"
-                    strokeLinejoin="miter"
-                  />
-                );
-              })}
-            {style.kerbOn &&
-              plan.storedStructures
-                .filter((stroke) => stroke.kind === "cap")
-                .map((stroke, index) => {
-                  const line = stroke.line;
-                  return (
-                    <path
-                      key={`ss-cap${index}`}
-                      data-stored-structure="true"
-                      data-deck-stroke="cap"
-                      d={svgPolyline(openRing(line), false)}
-                      fill="none"
-                      {...screenPenAttrs(style.kerb, "miter")}
-                      strokeLinecap="butt"
-                      strokeLinejoin="miter"
-                    />
-                  );
-                })}
+            {plan.storedBridgeDeck.map((line, index) => {
+              const deckStroke = storedSiteStructureStrokeStyle(style);
+              return (
+                <path
+                  key={`ss-deck${index}`}
+                  data-stored-structure="true"
+                  data-deck-stroke="deck"
+                  d={svgPolyline(openRing(line), false)}
+                  fill="none"
+                  {...screenPenAttrs(deckStroke, "miter")}
+                  strokeLinecap="square"
+                  strokeLinejoin="miter"
+                />
+              );
+            })}
+            {plan.storedBridgePylons.map((ring, index) => (
+              <path
+                key={`ss-pylon${index}`}
+                data-stored-structure="true"
+                data-bridge-pylon="true"
+                d={svgRings([ring])}
+                fill={storedSiteBridgePylonFill()}
+                fillRule="evenodd"
+                stroke="none"
+              />
+            ))}
+            {plan.storedBridgeCables.map((line, index) => {
+              const cableStroke = storedSiteBridgeCableStrokeStyle(style);
+              return (
+                <path
+                  key={`ss-cable${index}`}
+                  data-stored-structure="true"
+                  data-bridge-cable="true"
+                  d={svgPolyline(openRing(line), false)}
+                  fill="none"
+                  {...screenPenAttrs(cableStroke, "miter")}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              );
+            })}
             {plan.buildings.map((building, index) => (
               <path
                 key={`b${index}`}

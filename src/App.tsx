@@ -1083,6 +1083,7 @@ export default function App() {
         ...(nswMode ? { region: "nsw" as const, nsw: nswResult, nswWaterNote: nswWater?.note ?? null, nswUseMatched: nswUse?.matched ?? 0 } : {}),
         storedSiteLayer: storedSite.layer ?? undefined,
         storedSiteStructures: storedSite.structures.length > 0 ? storedSite.structures : undefined,
+        storedSiteBridgePlan: storedSite.layer?.bridgePlan ?? undefined,
       };
       if (modelLayers.roads) {
         await yieldToBrowserFrame(isDomTestStart);

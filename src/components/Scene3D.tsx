@@ -88,6 +88,7 @@ import {
 import { applyWhiteCardGroundTint, snapshotWhiteCardTerrainColors } from "../lib/whiteCardViewport";
 import { syncStoredSiteViewport } from "../lib/storedSiteViewport";
 import { addStoredSiteEdges } from "../lib/storedSiteEdges";
+import { StoredSiteBridgeCables } from "../lib/storedSiteLayers/StoredSiteBridgeCables";
 import { studioNorthNeedleDeg } from "../lib/studioCompass";
 import {
   DEFAULT_PERSPECTIVE_OFFSET,
@@ -2295,8 +2296,9 @@ export function Scene3D({
       if (typeof document === "undefined") return;
       const canvas = document.querySelector(".scene-viewport canvas");
       if (!(canvas instanceof HTMLElement)) return;
-      const spanX = merged.max[0] - merged.min[0];
-      const spanZ = merged.max[2] - merged.min[2];
+      const city = cityBoundsRef.current ?? cityBounds;
+      const spanX = city.max[0] - city.min[0];
+      const spanZ = city.max[2] - city.min[2];
       canvas.dataset.citycutGroundSpanX = spanX.toFixed(3);
       canvas.dataset.citycutGroundSpanZ = spanZ.toFixed(3);
     },
@@ -2480,6 +2482,7 @@ export function Scene3D({
             onBuildingPick={onBuildingPick}
             onClearPick={onClearBuildingPick}
           />
+          <StoredSiteBridgeCables model={model} projection={projection} />
         </>
       ) : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}

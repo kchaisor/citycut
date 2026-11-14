@@ -1,4 +1,5 @@
 import type { LonLat, Ring } from "../../types";
+import type { StoredSiteBridgePlan } from "./bridgePlan";
 
 export type StoredSiteLayerManifest = {
   id: string;
@@ -47,12 +48,14 @@ export type StoredSiteLayerState = {
   buildingIdByMeshKey: Record<string, number>;
   zone: number;
   manifest: StoredSiteLayerManifest;
+  bridgePlan: StoredSiteBridgePlan | null;
 };
 
 export type StoredSiteLayerPack = {
   manifest: StoredSiteLayerManifest;
   footprints: StoredSiteFootprint[];
   structures: StoredSiteStructureOutline[];
+  bridgePlan: StoredSiteBridgePlan | null;
   center: LonLat;
   zone: number;
 };

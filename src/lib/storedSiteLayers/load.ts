@@ -7,6 +7,7 @@ import {
   storedSiteManifestUrl,
   storedSiteAssetUrl,
 } from "./registry";
+import { buildBridgePlanFromGlbBuffer, parseStoredSiteBridgePlan } from "./bridgePlan";
 import { parseStoredSiteFootprints } from "./footprints";
 import type { StoredSiteLayerPack } from "./types";
 
@@ -34,5 +35,17 @@ export async function loadStoredSiteLayerPack(
     frameSize,
   );
   const zone = mgaCrs(center.lon).zone;
-  return { manifest, footprints, structures, center, zone };
+  let bridgePlan = null;
+  const bridgePlanRes = await fetch(storedSiteAssetUrl(entry.id, "bridge-plan.json"), { signal });
+  if (bridgePlanRes.ok) {
+    bridgePlan = parseStoredSiteBridgePlan(await bridgePlanRes.json());
+  }
+  if (!bridgePlan) {
+    const bridgeGlbRes = await fetch(storedSiteAssetUrl(entry.id, "anzac-bridge.glb"), { signal });
+    if (bridgeGlbRes.ok) {
+      const buffer = await bridgeGlbRes.arrayBuffer();
+      bridgePlan = await buildBridgePlanFromGlbBuffer(buffer, manifest, center, zone);
+    }
+  }
+  return { manifest, footprints, structures, bridgePlan, center, zone };
 }

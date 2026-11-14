@@ -7,6 +7,7 @@ import { buildingViewportFill, type BuildingColourMode } from "../buildingViewpo
 import { storedSiteAssetUrl } from "./registry";
 import { storedSiteRelativeToScene } from "./transform";
 import type { LonLat } from "../../types";
+import { bridgePartRole, type BridgeBuildingMeta } from "./bridgePlan";
 import type { StoredSiteLayerManifest, StoredSiteLayerState } from "./types";
 import {
   DEFAULT_SITE_FRAME_SHAPE,
@@ -21,6 +22,7 @@ export type StoredSiteMeshPart = {
   indices: Uint32Array;
   buildingId: number | null;
   structure: boolean;
+  partId?: string | null;
 };
 
 export function clipStoredSiteMeshPartToFrame(
@@ -153,6 +155,48 @@ function splitMeshByBuildingId(
   return parts;
 }
 
+function splitBridgeMeshByMeta(
+  geometry: THREE.BufferGeometry,
+  manifest: StoredSiteLayerManifest,
+  origin: LonLat,
+  zone: number,
+  buildingMeta: BridgeBuildingMeta[],
+): StoredSiteMeshPart[] {
+  const position = geometry.getAttribute("position");
+  const index = geometry.getIndex();
+  if (!position || !index) return [];
+  const positions = remapPositions(position, manifest, origin, zone);
+  const parts: StoredSiteMeshPart[] = [];
+  for (const meta of buildingMeta) {
+    const remap = new Map<number, number>();
+    const outPos: number[] = [];
+    const outIdx: number[] = [];
+    for (let t = meta.indexStart / 3; t < (meta.indexStart + meta.indexCount) / 3; t++) {
+      const ia = index.getX(t * 3)!;
+      const ib = index.getX(t * 3 + 1)!;
+      const ic = index.getX(t * 3 + 2)!;
+      for (const old of [ia, ib, ic]) {
+        let neu = remap.get(old);
+        if (neu === undefined) {
+          neu = outPos.length / 3;
+          remap.set(old, neu);
+          outPos.push(positions[old * 3]!, positions[old * 3 + 1]!, positions[old * 3 + 2]!);
+        }
+        outIdx.push(neu);
+      }
+    }
+    if (outIdx.length < 3) continue;
+    parts.push({
+      positions: new Float32Array(outPos),
+      indices: new Uint32Array(outIdx),
+      buildingId: null,
+      structure: true,
+      partId: meta.id,
+    });
+  }
+  return parts;
+}
+
 async function loadGlbParts(
   url: string,
   manifest: StoredSiteLayerManifest,
@@ -181,6 +225,28 @@ async function loadGlbParts(
   return parts;
 }
 
+async function loadBridgeGlbParts(
+  url: string,
+  manifest: StoredSiteLayerManifest,
+  origin: LonLat,
+  zone: number,
+): Promise<StoredSiteMeshPart[]> {
+  const loader = new GLTFLoader();
+  const gltf = await loader.loadAsync(url);
+  gltf.scene.updateMatrixWorld(true);
+  const mesh = gltf.scene.getObjectByName("Buildings-Bridge") as THREE.Mesh | undefined;
+  if (!mesh?.geometry) return [];
+  const geometry = mesh.geometry.clone();
+  geometry.applyMatrix4(mesh.matrixWorld);
+  const json = gltf.parser.json as {
+    meshes?: { primitives?: { extras?: { buildings?: BridgeBuildingMeta[] } }[] }[];
+  };
+  const buildingMeta = json.meshes?.[0]?.primitives?.[0]?.extras?.buildings ?? [];
+  const parts = splitBridgeMeshByMeta(geometry, manifest, origin, zone, buildingMeta);
+  geometry.dispose();
+  return parts;
+}
+
 export async function buildStoredSiteLayerGroup(
   layer: StoredSiteLayerState,
   manifest: StoredSiteLayerManifest,
@@ -204,18 +270,22 @@ export async function buildStoredSiteLayerGroup(
     layer,
     false,
   );
-  const bridgeParts = await loadGlbParts(
+  const bridgeParts = await loadBridgeGlbParts(
     storedSiteAssetUrl(layer.id, "anzac-bridge.glb"),
     manifest,
     origin,
     zone,
-    layer,
-    true,
   );
+  const bridgePlan = layer.bridgePlan;
   const frameSize = frameGroundSize(sideM);
   const allParts = [...buildingParts, ...bridgeParts]
     .map((part) => clipStoredSiteMeshPartToFrame(part, sideM, frameShape, frameSize))
-    .filter((part): part is StoredSiteMeshPart => part != null);
+    .filter((part): part is StoredSiteMeshPart => part != null)
+    .filter((part) => {
+      if (!part.partId || !bridgePlan) return true;
+      const role = bridgePartRole(part.partId, bridgePlan);
+      return role === "deck" || role === "pylon";
+    });
   if (allParts.length === 0) return null;
   const group = new THREE.Group();
   group.name = "StoredSiteLayer";
