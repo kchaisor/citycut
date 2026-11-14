@@ -16,6 +16,19 @@ describe("rozelleViewportQaPasses", () => {
       storedNorthMin: -500,
       storedNorthMax: 480,
       frameHalfM: 500,
+      harbourCutWaterZones: 2,
+      terrainTriangleCount: 1000,
+      terrainTrisBeforeCut: 1200,
+      terrainTrisAfterCut: 1000,
+      storedSiteTriangleCount: 800,
+      waterEastMin: -200,
+      waterEastMax: 100,
+      waterNorthMin: 50,
+      waterNorthMax: 300,
+      osmWaterRingEastMin: -180,
+      osmWaterRingEastMax: 120,
+      osmWaterRingNorthMin: -80,
+      osmWaterRingNorthMax: 220,
     };
     expect(rozelleViewportQaPasses(audit).ok).toBe(true);
   });

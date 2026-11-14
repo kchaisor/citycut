@@ -33,7 +33,7 @@ describe("storedSitePartIsTerrainDrapeSurface", () => {
     expect(storedSitePartIsTerrainDrapeSurface(part)).toBe(false);
   });
 
-  it("drops rozelle-scale context slabs", () => {
-    expect(refineStoredSiteContextPart(flatGroundPart(900))).toBeNull();
+  it("drops rozelle-scale context slabs without water context", () => {
+    expect(refineStoredSiteContextPart(flatGroundPart(900), null)).toBeNull();
   });
 });

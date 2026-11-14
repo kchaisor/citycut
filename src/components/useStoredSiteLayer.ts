@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
 import { disposeObject } from "../lib/buildCity";
 import { buildStoredSiteLayerGroup } from "../lib/storedSiteLayers/scene";
+import { waterCutContextFromModel } from "../lib/waterSurfaceCut";
 import type { BuildingColourMode } from "../lib/buildingViewportColor";
 import type { CityModel } from "../types";
 
@@ -17,6 +18,14 @@ export function useStoredSiteLayer(
     () =>
       `${colourMode.colourByUse}:${colourMode.uniformBuildings}:${colourMode.colourBySource}`,
     [colourMode.colourBySource, colourMode.colourByUse, colourMode.uniformBuildings],
+  );
+  const waterAreaKey = useMemo(
+    () =>
+      model.areas
+        .filter((area) => area.kind === "water")
+        .map((area) => `${area.id}:${area.ring.length}`)
+        .join("|"),
+    [model.areas],
   );
   useEffect(() => {
     if (!layer) {
@@ -36,6 +45,7 @@ export function useStoredSiteLayer(
       colourMode,
       model.sideM,
       model.frameShape,
+      waterCutContextFromModel(model),
     )
       .then((built) => {
         if (cancelled) {
@@ -63,7 +73,7 @@ export function useStoredSiteLayer(
     return () => {
       cancelled = true;
     };
-  }, [layer, model.center.lat, model.center.lon, model.sideM, colourKey]);
+  }, [layer, model, model.center.lat, model.center.lon, model.sideM, model.frameShape, waterAreaKey, colourKey]);
   useEffect(
     () => () => {
       setGroup((prev) => {

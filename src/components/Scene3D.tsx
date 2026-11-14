@@ -714,6 +714,7 @@ function City({
     model.siteBuildingIds,
     model.blocks,
     model.nswRoadSurface,
+    model.storedSiteLayer,
     uniformBuildings,
     colourBySource,
     highlightManual,
@@ -1062,31 +1063,6 @@ function City({
     waterVisible,
     railVisible,
   ]);
-  useLayoutEffect(() => {
-    const planView = projection === "plan";
-    const planStoredSite = planView && Boolean(model.storedSiteLayer);
-    if (!planStoredSite) return;
-    const suppressGroundDepth = new Set(["Terrain", "Ground", "BasePlinth"]);
-    group.traverse((object) => {
-      const mesh = object as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      for (const material of materials) {
-        if (!(material instanceof THREE.MeshStandardMaterial)) continue;
-        if (material.userData.planDepthWriteRest == null) {
-          material.userData.planDepthWriteRest = material.depthWrite;
-        }
-        if (mesh.name === "Water") {
-          material.depthWrite = true;
-          material.depthTest = true;
-          mesh.renderOrder = 12;
-          continue;
-        }
-        if (suppressGroundDepth.has(mesh.name)) material.depthWrite = false;
-      }
-    });
-    invalidate();
-  }, [group, model.storedSiteLayer, projection, invalidate]);
   useLayoutEffect(() => {
     const trees = group.getObjectByName("Trees");
     if (trees) trees.visible = treesVisibleIn3d(model.layers, display);

@@ -13,6 +13,19 @@ export type RozelleViewportQa = {
   storedNorthMin: number;
   storedNorthMax: number;
   frameHalfM: number;
+  harbourCutWaterZones: number;
+  terrainTriangleCount: number;
+  terrainTrisBeforeCut: number;
+  terrainTrisAfterCut: number;
+  storedSiteTriangleCount: number;
+  waterEastMin: number;
+  waterEastMax: number;
+  waterNorthMin: number;
+  waterNorthMax: number;
+  osmWaterRingEastMin: number;
+  osmWaterRingEastMax: number;
+  osmWaterRingNorthMin: number;
+  osmWaterRingNorthMax: number;
 };
 
 function meshTriangleCount(mesh: THREE.Mesh): number {
@@ -40,12 +53,59 @@ export function auditRozelleViewportQa(root: THREE.Object3D, frameHalfM: number,
   let storedEastMax = -Infinity;
   let storedNorthMin = Infinity;
   let storedNorthMax = -Infinity;
+  let harbourCutWaterZones = 0;
+  let terrainTriangleCount = 0;
+  let terrainTrisBeforeCut = 0;
+  let terrainTrisAfterCut = 0;
+  let storedSiteTriangleCount = 0;
+  let waterEastMin = Infinity;
+  let waterEastMax = -Infinity;
+  let waterNorthMin = Infinity;
+  let waterNorthMax = -Infinity;
+  let osmWaterRingEastMin = 0;
+  let osmWaterRingEastMax = 0;
+  let osmWaterRingNorthMin = 0;
+  let osmWaterRingNorthMax = 0;
 
   root.traverse((object) => {
+    if (object.name === "CityCut" && object.userData.rozelleHarbourCut) {
+      const cut = object.userData.rozelleHarbourCut as {
+        waterZoneCount?: number;
+        terrainTrisBefore?: number;
+        terrainTrisAfter?: number;
+        waterRingEastMin?: number;
+        waterRingEastMax?: number;
+        waterRingNorthMin?: number;
+        waterRingNorthMax?: number;
+      };
+      harbourCutWaterZones = Number(cut.waterZoneCount ?? 0);
+      terrainTrisBeforeCut = Number(cut.terrainTrisBefore ?? 0);
+      terrainTrisAfterCut = Number(cut.terrainTrisAfter ?? 0);
+      if (Number.isFinite(cut.waterRingEastMin)) {
+        osmWaterRingEastMin = cut.waterRingEastMin!;
+        osmWaterRingEastMax = cut.waterRingEastMax!;
+        osmWaterRingNorthMin = cut.waterRingNorthMin!;
+        osmWaterRingNorthMax = cut.waterRingNorthMax!;
+      }
+    }
+    if (object.name === "Terrain" && object instanceof THREE.Mesh) {
+      terrainTriangleCount = meshTriangleCount(object);
+    }
     if (object.name === "Water" && object instanceof THREE.Mesh) {
       waterVisible = object.visible;
       waterTriangleCount = meshTriangleCount(object);
       waterColorHex = materialHex(object);
+      const position = object.geometry.getAttribute("position");
+      if (position) {
+        for (let i = 0; i < position.count; i++) {
+          const east = position.getX(i)!;
+          const north = -position.getZ(i)!;
+          waterEastMin = Math.min(waterEastMin, east);
+          waterEastMax = Math.max(waterEastMax, east);
+          waterNorthMin = Math.min(waterNorthMin, north);
+          waterNorthMax = Math.max(waterNorthMax, north);
+        }
+      }
       return;
     }
     if (object.name === "StoredSiteBridgeCables" && object instanceof THREE.LineSegments) {
@@ -56,6 +116,7 @@ export function auditRozelleViewportQa(root: THREE.Object3D, frameHalfM: number,
     }
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh || mesh.parent?.name !== "StoredSiteLayer") return;
+    storedSiteTriangleCount += meshTriangleCount(mesh);
     const position = mesh.geometry.getAttribute("position");
     if (!position) return;
     for (let i = 0; i < position.count; i++) {
@@ -87,6 +148,19 @@ export function auditRozelleViewportQa(root: THREE.Object3D, frameHalfM: number,
     storedNorthMin,
     storedNorthMax,
     frameHalfM,
+    harbourCutWaterZones,
+    terrainTriangleCount,
+    terrainTrisBeforeCut,
+    terrainTrisAfterCut,
+    storedSiteTriangleCount,
+    waterEastMin: Number.isFinite(waterEastMin) ? waterEastMin : 0,
+    waterEastMax: Number.isFinite(waterEastMax) ? waterEastMax : 0,
+    waterNorthMin: Number.isFinite(waterNorthMin) ? waterNorthMin : 0,
+    waterNorthMax: Number.isFinite(waterNorthMax) ? waterNorthMax : 0,
+    osmWaterRingEastMin,
+    osmWaterRingEastMax,
+    osmWaterRingNorthMin,
+    osmWaterRingNorthMax,
   };
 }
 

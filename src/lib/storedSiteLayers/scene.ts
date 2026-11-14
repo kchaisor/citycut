@@ -16,10 +16,8 @@ import {
   type FrameGroundSize,
   type SiteFrameShape,
 } from "../siteFrame";
-import {
-  refineStoredSiteContextPart,
-  storedSitePartIsTerrainDrapeSurface,
-} from "./storedSiteGroundMesh";
+import { refineStoredSiteContextPart, storedSitePartIsTerrainDrapeSurface } from "./storedSiteGroundMesh";
+import type { WaterCutContext } from "../waterSurfaceCut";
 
 export type { StoredSiteMeshPart } from "./types";
 
@@ -228,6 +226,7 @@ async function loadGlbParts(
   zone: number,
   layer: StoredSiteLayerState,
   structure: boolean,
+  waterCut: WaterCutContext | null,
 ): Promise<StoredSiteMeshPart[]> {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(url);
@@ -246,7 +245,7 @@ async function loadGlbParts(
       geometry.applyMatrix4(mesh.matrixWorld);
       const whole = storedSiteMeshToPart(geometry, manifest, origin, zone, true);
       geometry.dispose();
-      const refined = whole ? refineStoredSiteContextPart(whole) : null;
+      const refined = whole ? refineStoredSiteContextPart(whole, waterCut) : null;
       if (refined) parts.push(refined);
       return;
     }
@@ -289,6 +288,7 @@ export async function buildStoredSiteLayerGroup(
   colourMode: BuildingColourMode,
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  waterCut: WaterCutContext | null = null,
 ): Promise<THREE.Group | null> {
   const buildingColour = buildingViewportFill(colourMode, "unclassified", "none");
   const structureColour = getColour("--stored-site-structure");
@@ -303,6 +303,7 @@ export async function buildStoredSiteLayerGroup(
     zone,
     layer,
     false,
+    waterCut,
   );
   const bridgeParts = await loadBridgeGlbParts(
     storedSiteAssetUrl(layer.id, "anzac-bridge.glb"),
