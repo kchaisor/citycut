@@ -3287,7 +3287,7 @@ async function main() {
         await assertSunHoursLegendAboveConsole(shadowPage, "box-hill", 1440, assertCheck);
         await assertSunHoursLegendAboveConsole(shadowPage, "box-hill", 1280, assertCheck);
         const shotDrawingLegend = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-box-hill-drawing-legend-1440x900.png");
-        await shadowPage.getByRole("tab", { name: /Drawing/i }).click();
+        await clickStudioModeTab(shadowPage, "Drawing");
         await shadowPage.waitForTimeout(450);
         await shadowPage.screenshot({
           path: shotDrawingLegend,
@@ -3297,7 +3297,7 @@ async function main() {
         const shotDrawing = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-drawing-plan.png");
         await planViewportScreenshot(shadowPage, shotDrawing);
 
-        await shadowPage.getByRole("tab", { name: /3D model/i }).click();
+        await clickStudioModeTab(shadowPage, "3D model");
         await shadowPage.waitForTimeout(600);
         const legend3d = await shadowPage.locator(".sun-hours-direct-dock-stack [data-sun-hours-ground-legend-dock]").count();
         assertCheck(
@@ -3407,7 +3407,7 @@ async function main() {
         });
         await assertSunHoursLegendAboveConsole(mapPage, "mont-albert", 1440, assertCheck);
         await assertSunHoursLegendAboveConsole(mapPage, "mont-albert", 1280, assertCheck);
-        await mapPage.getByRole("tab", { name: /Drawing/i }).click();
+        await clickStudioModeTab(mapPage, "Drawing");
         await mapPage.waitForTimeout(450);
         const shotDrawingLegend = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-mont-albert-drawing-legend-1440x900.png");
         await mapPage.screenshot({
@@ -3418,7 +3418,7 @@ async function main() {
         const terrainStats = await mapPage.evaluate(
           () => window.__citycutQaModel?.readSunHoursTerrainRelief?.() ?? { relief: 0, min: 0, max: 0 },
         );
-        await mapPage.getByRole("tab", { name: /3D model/i }).click();
+        await clickStudioModeTab(mapPage, "3D model");
         await mapPage.waitForTimeout(800);
         await mapPage.evaluate(() => window.__citycutQaModel?.frameSunHoursTerrainEdge?.());
         await mapPage.waitForTimeout(1500);
