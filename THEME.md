@@ -34,6 +34,7 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--panel-border` | The line around panels, cards, and inputs. | `#C8C8C8` |
 | `--text` | Main text, icons, and the Create model button. | `#1A1916` |
 | `--muted-text` | Notes, credits, and other secondary text. | `#6E685E` |
+| `--sun-hours-direct-dock-footnote` | Compact Direct Sun Hours dock legend footnote. | `#5F5F5F` |
 | `--font-sans` | The font for buttons, labels, and ordinary text. | `"Outfit", "Avenir Next", "Segoe UI", sans-serif` |
 | `--font-serif` | The font for the large “Your model is ready” title. | `"Fraunces", "Iowan Old Style", Georgia, serif` |
 | `--font-size` | The size of ordinary text. | `15px` |

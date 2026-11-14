@@ -135,12 +135,18 @@ async function readSunHoursLegendConsoleClearance(page) {
     const gap = consoleBox.top - legendBox.bottom;
     const note = document.querySelector("[data-sun-hours-ground-note]");
     const noteText = note?.textContent?.trim() ?? "";
-    const noteOk =
-      noteText.includes("ground") && noteText.includes("roof") && noteText.includes("walls") && noteText.length >= 48;
-    const tickCount = document.querySelectorAll(".sun-hours-direct-legend.is-compact .sun-hours-direct-legend-ticks li").length;
+    const noteOk = noteText === "3 m grid · ground, roofs, walls · full daylight";
+    const tickEls = [...document.querySelectorAll(".sun-hours-direct-legend.is-compact .sun-hours-direct-legend-ticks li")];
+    const tickCount = tickEls.length;
+    const firstTick = tickEls[0]?.textContent?.trim() ?? "";
+    const lastTick = tickEls[tickCount - 1]?.textContent?.trim() ?? "";
+    const endUnitsOk = firstTick === "0 h" && /^\d+(\.\d+)?\s+h$/.test(lastTick);
     const bar = document.querySelector(".sun-hours-direct-legend.is-compact .sun-hours-direct-legend-bar");
-    const barH = bar ? bar.getBoundingClientRect().height : 0;
-    const compactOk = tickCount === 5 && barH >= 48 && barH <= 72;
+    const barBox = bar?.getBoundingClientRect();
+    const barW = barBox?.width ?? 0;
+    const barH = barBox?.height ?? 0;
+    const barOk = barW >= 180 && barW <= 220 && barH >= 6 && barH <= 10 && barW > barH;
+    const compactOk = tickCount === 5 && endUnitsOk && barOk;
     return {
       ok: gap >= 4 && noteOk && compactOk,
       gap,
@@ -148,10 +154,50 @@ async function readSunHoursLegendConsoleClearance(page) {
       consoleTop: consoleBox.top,
       noteOk,
       tickCount,
+      barW,
       barH,
+      endUnitsOk,
+      firstTick,
+      lastTick,
       noteText: noteText.slice(0, 96),
     };
   });
+}
+
+async function captureSunHoursLegendViewportShots(page, siteSlug) {
+  const height = 900;
+  const widths = [1440, 1280];
+  for (const width of widths) {
+    await page.setViewportSize({ width, height });
+    await page.waitForTimeout(350);
+    await clickStudioModeTab(page, "Drawing");
+    await page.waitForSelector("[data-sun-hours-ground-legend-dock]", { timeout: 120000 });
+    await page.waitForTimeout(400);
+    const drawingPath = path.join(
+      CURSOR_ARTIFACTS_DIR,
+      `sun-hours-${siteSlug}-legend-drawing-${width}x${height}.png`,
+    );
+    await page.screenshot({
+      path: drawingPath,
+      fullPage: false,
+      clip: { x: 0, y: 0, width, height },
+    });
+    await clickStudioModeTab(page, "3D model");
+    const persp = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Perspective" }).first();
+    if ((await persp.count()) > 0) await persp.click({ force: true });
+    await page.waitForSelector(".sun-hours-direct-dock-stack [data-sun-hours-ground-legend-dock]", {
+      timeout: 120000,
+    });
+    await page.waitForTimeout(400);
+    const perspPath = path.join(CURSOR_ARTIFACTS_DIR, `sun-hours-${siteSlug}-legend-3d-persp-${width}x${height}.png`);
+    await page.screenshot({
+      path: perspPath,
+      fullPage: false,
+      clip: { x: 0, y: 0, width, height },
+    });
+  }
+  await page.setViewportSize({ width: VIEWPORT.width, height: VIEWPORT.height });
+  await page.waitForTimeout(200);
 }
 
 async function clickStudioModeTab(page, label) {
@@ -3297,6 +3343,7 @@ async function main() {
         await shadowPage.waitForSelector("[data-sun-hours-roof-overlay]", { timeout: 120000 });
         await assertSunHoursLegendAboveConsole(shadowPage, "box-hill", 1440, assertCheck);
         await assertSunHoursLegendAboveConsole(shadowPage, "box-hill", 1280, assertCheck);
+        await captureSunHoursLegendViewportShots(shadowPage, "box-hill");
         const shotDrawingLegend = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-box-hill-drawing-legend-1440x900.png");
         await clickStudioModeTab(shadowPage, "Drawing");
         await shadowPage.waitForTimeout(450);
