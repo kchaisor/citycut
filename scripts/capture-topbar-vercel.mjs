@@ -47,6 +47,13 @@ await page.waitForFunction(
 );
 await page.waitForTimeout(800);
 
+async function blurFocus(page) {
+  await page.evaluate(() => {
+    const el = document.activeElement;
+    if (el instanceof HTMLElement) el.blur();
+  });
+}
+
 async function switchView(name) {
   const tab = page.getByRole("tab", { name });
   if (await tab.isVisible().catch(() => false)) {
@@ -62,6 +69,7 @@ for (const width of WIDTHS) {
   await page.waitForTimeout(500);
   await switchView("3D model");
   await page.waitForTimeout(300);
+  await blurFocus(page);
   await page.screenshot({
     path: path.join(ARTIFACTS, `vercel-topbar-3d-${width}.png`),
     clip: { x: 0, y: 0, width, height: CROP_HEIGHT },
@@ -69,6 +77,7 @@ for (const width of WIDTHS) {
   await switchView("Drawing");
   await page.waitForSelector("svg.plan", { timeout: 120_000 });
   await page.waitForTimeout(300);
+  await blurFocus(page);
   await page.screenshot({
     path: path.join(ARTIFACTS, `vercel-topbar-drawing-${width}.png`),
     clip: { x: 0, y: 0, width, height: CROP_HEIGHT },
@@ -76,6 +85,7 @@ for (const width of WIDTHS) {
   if (width === 1280) {
     await page.getByRole("button", { name: "Export" }).click();
     await page.waitForTimeout(200);
+    await blurFocus(page);
     await page.screenshot({
       path: path.join(ARTIFACTS, `vercel-topbar-drawing-1280-export-menu.png`),
       clip: { x: 0, y: 0, width, height: CROP_HEIGHT + 120 },

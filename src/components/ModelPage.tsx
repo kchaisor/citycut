@@ -2767,7 +2767,7 @@ export function ModelPage({
                             else void saveSiteSvg();
                           }}
                         >
-                          SVG
+                          SVG (.svg)
                         </button>
                         <button
                           type="button"

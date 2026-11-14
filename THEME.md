@@ -67,6 +67,8 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--sidebar-panel-w` | Width of the sidebar panel next to the rail. | `320px` |
 | `--z-studio-inspector` | Stacking order of the fixed Site Intelligence panel. | `30` |
 | `--z-studio-topbar` | Stacking order of the floating top-bar HUD (menus paint above the inspector). | `40` |
+| `--studio-intelligence-meta` | MGA / cut-size line in the Site Intelligence header (`~6.3:1` on `--bg-card`). | `#5F5E5A` |
+| `--studio-submode-select-edge` | 1 px outline on the collapsed Perspective / Site plan submode `<select>` below 1280. | `#D9D8D3` |
 
 `var(--background)` means “use whatever `--background` is set to”. That is why one edit recolours the page, the model, and the drawing together.
 

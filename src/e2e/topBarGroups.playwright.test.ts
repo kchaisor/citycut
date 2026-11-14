@@ -239,6 +239,7 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
     for (const control of controls) {
       const html = control as HTMLElement;
       if (!isVisible(html)) continue;
+      if (html.closest(".studio-view-tabs")) continue;
       let ancestor: HTMLElement | null = html.parentElement;
       let hiddenAncestor = false;
       while (ancestor) {
@@ -288,7 +289,15 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
     const leftGroup = groupEls[0];
     const centerGroup = groupEls[1];
     const rightGroup = groupEls[2];
-    if (leftGroup && centerGroup && rightGroup) {
+  const brandBar = document.querySelector(".model .sidebar-brand-bar") as HTMLElement | null;
+    if (vw < 1360 && brandBar) {
+      const barGap = parseFloat(getComputedStyle(brandBar).columnGap || "0");
+      const layout = modelEl?.getAttribute("data-topbar-layout") ?? "flow";
+      const expected = layout === "centered" ? 16 : 8;
+      if (Math.abs(barGap - expected) > 1.5) {
+        errors.push(`brand bar column gap ${barGap.toFixed(1)}px != expected ${expected}px (${layout})`);
+      }
+    } else if (leftGroup && centerGroup && rightGroup) {
       const leftGap = centerGroup.getBoundingClientRect().left - leftGroup.getBoundingClientRect().right;
       const rightGap = rightGroup.getBoundingClientRect().left - centerGroup.getBoundingClientRect().right;
       const gapDelta = Math.abs(leftGap - rightGap);

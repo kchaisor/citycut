@@ -1707,11 +1707,11 @@ body,
 .model .right-inspector .card-meta {
   font-family: var(--mono);
   font-size: 10.5px;
-  color: var(--ink-3);
+  color: var(--studio-intelligence-meta);
 }
 
 .model .right-inspector .card-meta-sep {
-  color: var(--ink-3);
+  color: var(--studio-intelligence-meta);
 }
 
 .model .right-inspector .insp-tabs.is-right-rail {
@@ -4786,6 +4786,9 @@ body,
 .model[data-topbar-layout="centered"] .top-bar-center.studio-header-center {
   justify-self: center;
   justify-content: center !important;
+  width: max-content;
+  max-width: none;
+  flex: none;
 }
 
 .model[data-topbar-layout="centered"] .top-bar-right.studio-header-right {
@@ -4808,15 +4811,20 @@ body,
     right: 14px !important;
     width: auto !important;
     height: auto !important;
-    display: flex !important;
-    flex-direction: row !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) !important;
+    column-gap: 16px !important;
+    row-gap: 0 !important;
     align-items: center !important;
-    gap: 8px !important;
     pointer-events: none !important;
     z-index: var(--z-studio-topbar) !important;
     padding: 0 !important;
     margin: 0 !important;
     overflow: visible !important;
+  }
+
+  .model[data-topbar-layout="flow"] .sidebar-brand-bar {
+    column-gap: 8px !important;
   }
 
   .model .top-bar-left.studio-header-left,
@@ -4832,7 +4840,7 @@ body,
   }
 
   .model .top-bar-left.studio-header-left {
-    flex: 0 1 auto;
+    justify-self: start;
     max-width: min(38%, 22rem);
     min-width: 14rem;
     display: flex !important;
@@ -4841,14 +4849,21 @@ body,
   }
 
   .model .top-bar-center.studio-header-center {
-    flex: 1 1 0;
+    justify-self: center;
+    width: max-content;
+    max-width: none;
     min-width: 0;
-    justify-content: flex-start;
+    justify-content: center;
     overflow: visible;
   }
 
+  .model .top-bar-center .header-center-cluster {
+    width: max-content;
+    max-width: none;
+  }
+
   .model .top-bar-right.studio-header-right {
-    flex: 0 0 auto;
+    justify-self: end;
     max-width: 34%;
     overflow: visible;
   }
@@ -4942,10 +4957,11 @@ body,
   .model .top-bar-center .topbar-drawing-select,
   .model .top-bar-center .topbar-3d-select {
     display: block;
-    background: var(--accent) !important;
+    background: var(--bg-elev) !important;
     color: var(--ink) !important;
-    border-color: var(--ink) !important;
-    font-weight: 700 !important;
+    border: 1px solid var(--studio-submode-select-edge) !important;
+    font-weight: 600 !important;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
   }
 }
 
@@ -5012,7 +5028,7 @@ body,
   }
 
   .model:not([data-view-tab="drawing"]) .top-bar-left .place-chip.studio-breadcrumb-place {
-    max-width: 11rem;
+    max-width: 200px;
   }
 
   .model[data-topbar-layout="flow"]:not([data-view-tab="drawing"]) .sidebar-brand-bar {
@@ -5072,7 +5088,11 @@ body,
   }
 
   .model[data-view-tab="drawing"] .top-bar-left .place-chip.studio-breadcrumb-place {
-    max-width: 11rem;
+    max-width: 200px;
+  }
+
+  .model .top-bar-left .place-chip.studio-breadcrumb-place {
+    max-width: 200px;
   }
 
   .model .topbar-export-compact {
