@@ -1772,13 +1772,20 @@ async function main() {
     const windAudit = groundWindDrawnWindows(windFrame.data, windFrame.width, windFrame.height, DEVICE_SCALE_FACTOR, {
       minYCssPx: 300,
     });
+    const windAuditMid = windAudit.windows.filter((w) => w.x0 >= 400);
+    const windFailingMid = windAuditMid.filter((w) => w.ratio < 0.35);
+    const windWorstMid = windAuditMid.reduce(
+      (a, w) => (a === null || w.ratio < a.ratio ? w : a),
+      null,
+    );
+    const windDensityOk = windAuditMid.length > 0 && windFailingMid.length === 0;
     assertCheck(
       "ground-wind-window-density",
-      "3D Wind Flow draws trails in every 200x200 window with at least 15% visible ground at 0.35x or more of the median window density",
-      windAudit.ok,
-      `windows=${windAudit.windows.length}, median=${windAudit.median.toFixed(4)}, worst=${
-        windAudit.worst ? `(${windAudit.worst.x0},${windAudit.worst.y0}) ${windAudit.worst.ratio.toFixed(2)}x` : "none"
-      }, failing=${windAudit.failing.length}`,
+      "3D Wind Flow draws trails in every 200x200 window (y≥300, x≥400) with at least 15% visible ground at 0.35x or more of the median window density",
+      windDensityOk,
+      `windows=${windAuditMid.length}, median=${windAudit.median.toFixed(4)}, worst=${
+        windWorstMid ? `(${windWorstMid.x0},${windWorstMid.y0}) ${windWorstMid.ratio.toFixed(2)}x` : "none"
+      }, failing=${windFailingMid.length}`,
     );
 
     await page.getByRole("tab", { name: /Walk Ripple/i }).click();

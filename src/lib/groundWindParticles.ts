@@ -40,7 +40,7 @@ export const GROUND_WIND_TRAIL_LEN_MAX = GROUND_WIND_TRAIL_POINTS - 1;
 export const GROUND_WIND_CASING_WIDTH_PX = 3;
 export const GROUND_WIND_CORE_WIDTH_PX = 1.75;
 export const GROUND_WIND_TRAIL_HEAD_ALPHA = 0.9;
-export const GROUND_WIND_TRAIL_FAR_MIN_LEN_PX = 24;
+export const GROUND_WIND_TRAIL_FAR_MIN_LEN_PX = 32;
 export const GROUND_WIND_TRAIL_SCREEN_CAP_PX = 90;
 export const GROUND_WIND_TRAIL_MIN_LEN_PX = 36;
 export const GROUND_WIND_TRAIL_MAX_LEN_PX = GROUND_WIND_TRAIL_SCREEN_CAP_PX;
@@ -700,7 +700,7 @@ function capGroundWindSlotsUniform(slots: GroundWindScreenSlot[], cap: number, s
   if (slots.length <= cap) return slots;
   const ranked = slots.map((slot) => ({
     slot,
-    key: hash2D(slot.ci, slot.cj, seed) - (slot.far ? 0.24 : 0),
+    key: hash2D(slot.ci, slot.cj, seed) - (slot.far ? 0.34 : 0),
   }));
   ranked.sort((a, b) => a.key - b.key);
   return ranked.slice(0, cap).map((row) => row.slot);

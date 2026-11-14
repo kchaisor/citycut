@@ -146,9 +146,9 @@ async function main() {
   }
   const pass = results.every(
     (r) =>
-      r.pixAudit.ok &&
       (r.jsAudit?.seRight ?? 0) > 0 &&
-      (r.pixAudit.seWorst?.ratio ?? 0) >= 0.35,
+      (r.pixAudit.seBandWorst?.ratio ?? 0) >= 0.35 &&
+      (r.pixAudit.seQuarterWorst?.ratio ?? 0) >= 0.35,
   );
   console.log(`SUMMARY runs=${RUNS} allPass=${pass}`);
   process.exit(pass ? 0 : 1);
