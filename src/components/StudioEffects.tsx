@@ -5,11 +5,8 @@ import { ToneMappingMode } from "postprocessing";
 import * as THREE from "three";
 import { getColour } from "../lib/colours";
 import { markScreenOnly } from "../lib/screenOnly";
-import {
-  PLINTH_SHADOW_SPREAD,
-  plinthShadowExtents,
-  type SiteFrame,
-} from "../lib/siteFrame";
+import { getPlinthShadowTexture, plinthShadowTextureCacheKey } from "../lib/plinthContactShadow";
+import { plinthShadowExtents, type SiteFrame } from "../lib/siteFrame";
 import { qaModeFromSearch } from "../lib/qaCameraBridge";
 import {
   ambientOcclusionActive,
@@ -125,45 +122,6 @@ function StudioComposer({
   );
 }
 
-const SHADOW_TEXTURE_PX = 512;
-
-function bakePlinthShadow(colour: string, frame: SiteFrame): THREE.CanvasTexture | null {
-  if (typeof document === "undefined") return null;
-  const canvas = document.createElement("canvas");
-  canvas.width = SHADOW_TEXTURE_PX;
-  canvas.height = SHADOW_TEXTURE_PX;
-  const context = canvas.getContext("2d");
-  if (!context) return null;
-  const size = SHADOW_TEXTURE_PX / PLINTH_SHADOW_SPREAD;
-  const centre = SHADOW_TEXTURE_PX / 2;
-  const away = SHADOW_TEXTURE_PX * 4;
-  const aspect = frame.widthM / Math.max(frame.heightM, 1e-6);
-  const drawW = aspect >= 1 ? size : size * aspect;
-  const drawH = aspect >= 1 ? size / aspect : size;
-  const footprint = (inset: number) => {
-    context.beginPath();
-    if (frame.shape === "circle") context.arc(centre - away, centre, Math.min(drawW, drawH) / 2 - inset, 0, Math.PI * 2);
-    else {
-      const w = drawW - inset * 2;
-      const h = drawH - inset * 2;
-      context.rect(centre - away - drawW / 2 + inset, centre - drawH / 2 + inset, w, h);
-    }
-    context.fill();
-  };
-  context.fillStyle = colour;
-  context.shadowColor = colour;
-  context.shadowOffsetX = away;
-  context.globalAlpha = 0.55;
-  context.shadowBlur = size * 0.11;
-  footprint(-size * 0.015);
-  context.globalAlpha = 0.9;
-  context.shadowBlur = size * 0.025;
-  footprint(0);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
 function PlinthContactShadow({
   frame,
   plinthBottomY,
@@ -173,8 +131,12 @@ function PlinthContactShadow({
   plinthBottomY: number;
   colourTick: number;
 }) {
-  const texture = useMemo(() => bakePlinthShadow(getColour("--plinth-shadow"), frame), [frame, colourTick]);
-  useEffect(() => () => texture?.dispose(), [texture]);
+  const shadowColour = getColour("--plinth-shadow");
+  const cacheKey = plinthShadowTextureCacheKey(frame, shadowColour);
+  const texture = useMemo(
+    () => getPlinthShadowTexture(frame, shadowColour),
+    [cacheKey, colourTick],
+  );
   const setMesh = useCallback((mesh: THREE.Mesh | null) => {
     if (!mesh) return;
     markScreenOnly(mesh);

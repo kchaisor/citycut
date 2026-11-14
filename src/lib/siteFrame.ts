@@ -73,6 +73,10 @@ export function plinthShadowExtents(frame: SiteFrame, spread = PLINTH_SHADOW_SPR
   return { widthM: frame.widthM * spread, heightM: frame.heightM * spread };
 }
 
+export function siteFrameShadowCacheKey(frame: SiteFrame): string {
+  return `${frame.shape}:${frame.sideM}:${frame.widthM}:${frame.heightM}`;
+}
+
 export function frameGroundSize(sideM: number, widthM?: number, heightM?: number): FrameGroundSize {
   const width = widthM ?? sideM;
   const height = heightM ?? sideM;

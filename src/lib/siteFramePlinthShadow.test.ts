@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cutSpecFromA3 } from "./cutSpec";
+import { plinthShadowCoreExtentsM } from "./plinthContactShadow";
 import { makeSiteFrame, PLINTH_SHADOW_SPREAD, plinthShadowExtents } from "./siteFrame";
 
 describe("plinth contact shadow extents", () => {
@@ -19,5 +20,16 @@ describe("plinth contact shadow extents", () => {
     const frame = makeSiteFrame(500, "square");
     const extents = plinthShadowExtents(frame);
     expect(extents.widthM).toBeCloseTo(extents.heightM);
+  });
+
+  it("core footprints match frame width and height on A3 landscape", () => {
+    const spec = cutSpecFromA3(3000, "landscape");
+    const frame = makeSiteFrame(Math.max(spec.widthM, spec.heightM), "a3", {
+      widthM: spec.widthM,
+      heightM: spec.heightM,
+    });
+    const core = plinthShadowCoreExtentsM(frame);
+    expect(core.widthM).toBeCloseTo(spec.widthM, 1);
+    expect(core.heightM).toBeCloseTo(spec.heightM, 1);
   });
 });

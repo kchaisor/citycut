@@ -2208,6 +2208,10 @@ export function Scene3D({
   const studioFill = getColour("--light-fill");
   const groundY = model.terrain ? model.terrain.min : 0;
   const plinthBottomY = basePlinthBottomY(model.sideM, model.terrain);
+  const cutFrame = useMemo(
+    () => siteFrameFromModel(model),
+    [model.sideM, model.widthM, model.heightM, model.frameShape],
+  );
   const solarNeutralFill = useMemo(() => getColour("--building-solar-neutral"), [colourTick]);
   const sunSample = useMelbourneSunSample(model.center.lat, model.center.lon, solar);
   const [glEpoch, setGlEpoch] = useState(0);
@@ -2296,7 +2300,7 @@ export function Scene3D({
         sideM={model.sideM}
         plinthBottomY={plinthBottomY}
         showShadow={projection !== "plan"}
-        frame={siteFrameFromModel(model)}
+        frame={cutFrame}
         colourTick={colourTick}
         primaryView={display.primaryView}
       />
