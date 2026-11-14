@@ -488,9 +488,6 @@ export default function App() {
       !isQaStart &&
       typeof window !== "undefined";
     if (bridgeIntro) {
-      setSiteBuildActive(true);
-    }
-    if (bridgeIntro) {
       window.__citycutAwaitIntroStart = true;
       window.__citycutIntroStarted = false;
       window.__citycutIntroReadyToFire = false;
@@ -1120,6 +1117,7 @@ export default function App() {
           window.__citycutModelPrewarmMounted = true;
         }
         setHandoffUnderlay("holding");
+        setSiteBuildActive(true);
       }
       await yieldToBrowserFrame(isDomTestStart);
       if (controller.signal.aborted) return;
