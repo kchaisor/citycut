@@ -86,6 +86,7 @@ import {
   primaryViewportLighting,
 } from "../lib/primaryViewport";
 import { applyWhiteCardGroundTint, snapshotWhiteCardTerrainColors } from "../lib/whiteCardViewport";
+import { syncStoredSiteViewport } from "../lib/storedSiteViewport";
 import { studioNorthNeedleDeg } from "../lib/studioCompass";
 import {
   DEFAULT_PERSPECTIVE_OFFSET,
@@ -513,6 +514,40 @@ function WalkRippleTreeDim({ city, active }: { city: THREE.Group; active: boolea
       }
     };
   }, [active, city]);
+  return null;
+}
+
+function StoredSiteMeshesViewport({
+  root,
+  model,
+  colourMode,
+  display,
+  solarDiagramOn,
+  solarNeutralFill,
+  colourTick,
+}: {
+  root: THREE.Object3D;
+  model: CityModel;
+  colourMode: BuildingColourMode;
+  display: View3dDisplaySettings;
+  solarDiagramOn: boolean;
+  solarNeutralFill: string;
+  colourTick: number;
+}) {
+  const { invalidate } = useThree();
+  useLayoutEffect(() => {
+    syncStoredSiteViewport(root, model.buildings, colourMode, display.primaryView, solarDiagramOn, solarNeutralFill);
+    invalidate();
+  }, [
+    root,
+    model.buildings,
+    colourMode,
+    display.primaryView,
+    solarDiagramOn,
+    solarNeutralFill,
+    colourTick,
+    invalidate,
+  ]);
   return null;
 }
 
@@ -2233,6 +2268,14 @@ export function Scene3D({
   const groundY = model.terrain ? model.terrain.min : 0;
   const plinthBottomY = basePlinthBottomY(model.sideM, model.terrain);
   const solarNeutralFill = useMemo(() => getColour("--building-solar-neutral"), [colourTick]);
+  const colourMode = useMemo<BuildingColourMode>(
+    () => ({
+      colourByUse: !uniformBuildings && !colourBySource,
+      uniformBuildings,
+      colourBySource,
+    }),
+    [uniformBuildings, colourBySource],
+  );
   const sunSample = useMelbourneSunSample(model.center.lat, model.center.lon, solar);
   const [glEpoch, setGlEpoch] = useState(0);
   const [glContextLost, setGlContextLost] = useState(false);
@@ -2361,6 +2404,15 @@ export function Scene3D({
       {storedSiteMeshes ? (
         <>
           <primitive object={storedSiteMeshes} />
+          <StoredSiteMeshesViewport
+            root={storedSiteMeshes}
+            model={model}
+            colourMode={colourMode}
+            display={display}
+            solarDiagramOn={solar.showPath}
+            solarNeutralFill={solarNeutralFill}
+            colourTick={colourTick}
+          />
           <BuildingPickLayer
             root={storedSiteMeshes}
             enabled={model.layers.buildings && !onScenePoint}

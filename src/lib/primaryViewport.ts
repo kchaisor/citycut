@@ -141,13 +141,14 @@ export function snapshotPrimaryViewportColors(root: THREE.Object3D, colourMode: 
 }
 
 function primaryFillForMesh(mesh: THREE.Mesh): string {
-  if (mesh.name === "Ground" || mesh.name === "Terrain") return getColour("--primary-surface");
-  if (mesh.name === "Roads") {
-    const grade = mesh.userData.roadGrade as string | undefined;
-    if (grade === "path") return getColour("--primary-footpath");
-    return getColour("--primary-road");
-  }
-  return getColour("--primary-building");
+    if (mesh.name === "Ground" || mesh.name === "Terrain") return getColour("--primary-surface");
+    if (mesh.name === "Roads") {
+      const grade = mesh.userData.roadGrade as string | undefined;
+      if (grade === "path") return getColour("--primary-footpath");
+      return getColour("--primary-road");
+    }
+    if (mesh.name === "StoredSiteStructure") return getColour("--primary-building");
+    return getColour("--primary-building");
 }
 
 export function applyPrimaryViewportTint(root: THREE.Object3D, primaryOn: boolean): void {
@@ -176,6 +177,7 @@ export function applyPrimaryViewportTint(root: THREE.Object3D, primaryOn: boolea
       BUILDING_NAMES.test(name) ||
       name === "Buildings-manual" ||
       name === "Buildings-site" ||
+      name === "StoredSiteStructure" ||
       name === "Ground";
     if (!surface) return;
     forEachStandardMaterial(mesh, (material) => {

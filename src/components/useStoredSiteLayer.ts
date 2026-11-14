@@ -35,6 +35,7 @@ export function useStoredSiteLayer(
       layer.zone,
       colourMode,
       model.sideM,
+      model.frameShape,
     )
       .then((built) => {
         if (cancelled) {

@@ -9,7 +9,7 @@ const CANONICAL =
   process.env.PREVIEW_URL ??
   "https://citycut-git-cursor-rozelle-site-layer-kchai.vercel.app/?lat=-33.8677&lon=151.1832&km=1";
 
-const WIDTHS = [1280, 1440];
+const WIDTHS = [1440];
 
 async function waitForBuildDone(page) {
   await page.waitForFunction(
@@ -38,6 +38,14 @@ async function captureWidth(browser, width) {
     { timeout: 120_000 },
   );
   await page.waitForTimeout(1500);
+  await page.evaluate(() => {
+    const bridge = Array.from(document.querySelectorAll(".model .studio-layer-list label")).find((el) =>
+      /anzac|bridge/i.test(el.textContent ?? ""),
+    );
+    const cb = bridge?.querySelector('input[type="checkbox"]');
+    if (cb instanceof HTMLInputElement && !cb.checked) cb.click();
+  });
+  await page.waitForTimeout(400);
   const primaryOn = await page.evaluate(() => {
     const root = document.querySelector(".model");
     const display = root?.getAttribute("data-view-tab");
@@ -48,6 +56,18 @@ async function captureWidth(browser, width) {
   });
   const shot3d = path.join(OUT_DIR, `rozelle-pr227-3d-primary-${width}.png`);
   await page.screenshot({ path: shot3d, fullPage: false });
+  await page.evaluate(() => {
+  const qa = window.__citycutQa;
+    if (qa?.setCamera) {
+      qa.setCamera({
+        eye: { x: -120, y: 220, z: 420 },
+        target: { x: -280, y: 70, z: 40 },
+      });
+    }
+  });
+  await page.waitForTimeout(900);
+  const shotBridge = path.join(OUT_DIR, `rozelle-pr227-3d-bridge-${width}.png`);
+  await page.screenshot({ path: shotBridge, fullPage: false });
   await page.evaluate(() => {
     const select = document.querySelector(".model .topbar-view-select");
     if (select instanceof HTMLSelectElement) {
@@ -65,7 +85,7 @@ async function captureWidth(browser, width) {
   const shotDrawing = path.join(OUT_DIR, `rozelle-pr227-drawing-${width}.png`);
   await page.screenshot({ path: shotDrawing, fullPage: false });
   await page.close();
-  return { shot3d, shotDrawing, primaryOn };
+  return { shot3d, shotBridge, shotDrawing, primaryOn };
 }
 
 const browser = await chromium.launch({

@@ -7,13 +7,74 @@ import { storedSiteAssetUrl } from "./registry";
 import { storedSiteRelativeToScene } from "./transform";
 import type { LonLat } from "../../types";
 import type { StoredSiteLayerManifest, StoredSiteLayerState } from "./types";
+import {
+  DEFAULT_SITE_FRAME_SHAPE,
+  frameGroundSize,
+  pointInSiteFrame,
+  type FrameGroundSize,
+  type SiteFrameShape,
+} from "../siteFrame";
 
-type LoadedMeshPart = {
+export type StoredSiteMeshPart = {
   positions: Float32Array;
   indices: Uint32Array;
   buildingId: number | null;
   structure: boolean;
 };
+
+export function clipStoredSiteMeshPartToFrame(
+  part: StoredSiteMeshPart,
+  sideM: number,
+  shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  size?: FrameGroundSize,
+): StoredSiteMeshPart | null {
+  const triCount = part.indices.length / 3;
+  const remap = new Map<number, number>();
+  const outPos: number[] = [];
+  const outIdx: number[] = [];
+  for (let t = 0; t < triCount; t++) {
+    const ia = part.indices[t * 3]!;
+    const ib = part.indices[t * 3 + 1]!;
+    const ic = part.indices[t * 3 + 2]!;
+    const inside = (index: number) => {
+      const x = part.positions[index * 3]!;
+      const z = part.positions[index * 3 + 2]!;
+      return pointInSiteFrame([x, z], sideM, shape, size);
+    };
+    if (!inside(ia) || !inside(ib) || !inside(ic)) continue;
+    for (const old of [ia, ib, ic]) {
+      let neu = remap.get(old);
+      if (neu === undefined) {
+        neu = outPos.length / 3;
+        remap.set(old, neu);
+        outPos.push(part.positions[old * 3]!, part.positions[old * 3 + 1]!, part.positions[old * 3 + 2]!);
+      }
+      outIdx.push(neu);
+    }
+  }
+  if (outIdx.length < 3) return null;
+  return {
+    buildingId: part.buildingId,
+    structure: part.structure,
+    positions: new Float32Array(outPos),
+    indices: new Uint32Array(outIdx),
+  };
+}
+
+export function storedSiteMeshVerticesInsideFrame(
+  part: StoredSiteMeshPart,
+  sideM: number,
+  shape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
+  size?: FrameGroundSize,
+): boolean {
+  const count = part.positions.length / 3;
+  for (let i = 0; i < count; i++) {
+    const x = part.positions[i * 3]!;
+    const z = part.positions[i * 3 + 2]!;
+    if (!pointInSiteFrame([x, z], sideM, shape, size)) return false;
+  }
+  return true;
+}
 
 function remapPositions(
   array: THREE.BufferAttribute | THREE.InterleavedBufferAttribute,
@@ -40,7 +101,7 @@ function splitMeshByBuildingId(
   zone: number,
   layer: StoredSiteLayerState,
   structure: boolean,
-): LoadedMeshPart[] {
+): StoredSiteMeshPart[] {
   const position = geometry.getAttribute("position");
   if (!position) return [];
   const positions = remapPositions(position, manifest, origin, zone);
@@ -65,7 +126,7 @@ function splitMeshByBuildingId(
     list.push(ia, ib, ic);
     buckets.set(key, list);
   }
-  const parts: LoadedMeshPart[] = [];
+  const parts: StoredSiteMeshPart[] = [];
   for (const [key, flat] of buckets) {
     if (flat.length < 3) continue;
     const remap = new Map<number, number>();
@@ -98,14 +159,14 @@ async function loadGlbParts(
   zone: number,
   layer: StoredSiteLayerState,
   structure: boolean,
-): Promise<LoadedMeshPart[]> {
+): Promise<StoredSiteMeshPart[]> {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(url);
   const rootIds =
     (gltf.scene.userData as { buildingIds?: string[] }).buildingIds ??
     (gltf.parser.json as { extras?: { buildingIds?: string[] } }).extras?.buildingIds ??
     [];
-  const parts: LoadedMeshPart[] = [];
+  const parts: StoredSiteMeshPart[] = [];
   gltf.scene.updateMatrixWorld(true);
   gltf.scene.traverse((node) => {
     const mesh = node as THREE.Mesh;
@@ -126,6 +187,7 @@ export async function buildStoredSiteLayerGroup(
   zone: number,
   colourMode: BuildingColourMode,
   sideM: number,
+  frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
 ): Promise<THREE.Group | null> {
   const buildingColour = buildingViewportFill(colourMode, "unclassified", "none");
   const structureColour = getColour("--stored-site-structure");
@@ -149,16 +211,10 @@ export async function buildStoredSiteLayerGroup(
     layer,
     true,
   );
-  const half = sideM / 2;
-  const allParts = [...buildingParts, ...bridgeParts].filter((part) => {
-    const count = part.positions.length / 3;
-    for (let i = 0; i < count; i++) {
-      const x = part.positions[i * 3]!;
-      const z = part.positions[i * 3 + 2]!;
-      if (Math.abs(x) <= half + 2 && Math.abs(z) <= half + 2) return true;
-    }
-    return false;
-  });
+  const frameSize = frameGroundSize(sideM);
+  const allParts = [...buildingParts, ...bridgeParts]
+    .map((part) => clipStoredSiteMeshPartToFrame(part, sideM, frameShape, frameSize))
+    .filter((part): part is StoredSiteMeshPart => part != null);
   if (allParts.length === 0) return null;
   const group = new THREE.Group();
   group.name = "StoredSiteLayer";
