@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readModelPageSource } from "./modelPageSource";
 
 const srcRoot = fileURLToPath(new URL("..", import.meta.url));
 
@@ -12,7 +13,7 @@ describe("building detail panel camera unchanged", () => {
   });
 
   it("updates selection state without moving the camera on pick or clear", () => {
-    const page = readFileSync(`${srcRoot}/components/ModelPage.tsx`, "utf8");
+    const page = readModelPageSource();
     const pick = page.match(/onSceneInspectPick=\{[\s\S]*?\}/)?.[0] ?? "";
     const clear = page.match(/onClearSceneInspect=\{[\s\S]*?\}/)?.[0] ?? "";
     expect(pick).toContain("setSceneSelection");
@@ -23,7 +24,7 @@ describe("building detail panel camera unchanged", () => {
   });
 
   it("renders the inspect HUD as a floating panel positioned with inspectHudLayout", () => {
-    const page = readFileSync(`${srcRoot}/components/ModelPage.tsx`, "utf8");
+    const page = readModelPageSource();
     expect(page).toContain("clampInspectHudPosition");
     expect(page).toContain("InspectHudProjector");
     const css = readFileSync(`${srcRoot}/index.css`, "utf8");

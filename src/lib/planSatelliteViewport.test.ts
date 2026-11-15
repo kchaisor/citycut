@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { readModelPageSource } from "./modelPageSource";
 import { planViewportExtent } from "./planViewport";
 import { planViewportFromLngLatBounds, planViewportLngLatBounds } from "./planSatelliteViewport";
 import { toLocal } from "./geo";
 
-const srcRoot = fileURLToPath(new URL("..", import.meta.url));
 const center = { lat: -37.8136, lon: 144.9631 };
 
 describe("plan satellite viewport mapping", () => {
@@ -42,14 +40,14 @@ describe("plan satellite viewport mapping", () => {
 
 describe("satellite tab viewport unchanged", () => {
   it("does not refit the 3D camera when switching model tabs", () => {
-    const page = readFileSync(`${srcRoot}/components/ModelPage.tsx`, "utf8");
+    const page = readModelPageSource();
     expect(page).not.toMatch(/setTab\([\s\S]{0,120}setSnapId/);
     const setTabHandler = page.match(/onClick=\{\(\) => setTab\(id\)\}/)?.[0] ?? "";
     expect(setTabHandler).not.toContain("setSnapId");
   });
 
   it("does not change plan viewport when toggling site plan vs figure ground", () => {
-    const page = readFileSync(`${srcRoot}/components/ModelPage.tsx`, "utf8");
+    const page = readModelPageSource();
     const siteBtn = page.match(/setDrawing\("site"\)[\s\S]{0,80}/)?.[0] ?? "";
     const fgBtn = page.match(/setDrawing\("figure-ground"\)[\s\S]{0,80}/)?.[0] ?? "";
     expect(siteBtn).not.toContain("setPlanViewport");
