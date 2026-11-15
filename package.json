@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
     "test": "vitest run",
     "build:pt": "node scripts/build-pt-pmtiles.mjs",
     "build:enrichment": "node scripts/build-building-enrichment-pmtiles.mjs",
@@ -40,6 +41,7 @@
     "three": "^0.180.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
@@ -50,10 +52,14 @@
     "@types/suncalc": "^1.9.2",
     "@types/three": "^0.180.0",
     "@vitejs/plugin-react": "^5.0.2",
+    "eslint": "^10.15.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
     "happy-dom": "^20.14.5",
     "playwright": "^1.63.0",
     "pngjs": "^7.0.0",
     "typescript": "^5.9.2",
+    "typescript-eslint": "^8.72.2",
     "vite": "^7.1.5",
     "vitest": "^3.2.4"
   }

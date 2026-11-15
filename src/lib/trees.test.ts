@@ -19,6 +19,7 @@ import { fromLocal } from "./geo";
 import { parseCity } from "./parseOsm";
 import { planPaths } from "./svgPlan";
 import { applyComTreeSizes, comRecordsToTrees } from "./comTrees";
+import { makeSiteFrame } from "./siteFrame";
 import {
   CROWN_HEIGHT_FLOOR,
   DEFAULT_CROWN_DIAMETER,
@@ -208,7 +209,7 @@ describe("City of Melbourne match", () => {
         },
       ],
       origin,
-      100,
+      makeSiteFrame(100, "square"),
     );
     expect(trees).toHaveLength(1);
     expect(trees[0].tier).toBe("com");

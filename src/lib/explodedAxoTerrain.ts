@@ -1,4 +1,5 @@
-import { DEFAULT_SITE_FRAME_SHAPE, clipPolylineSiteFrame } from "./siteFrame";
+import { clipLine, frameHalfExtents, siteFrameGround } from "./siteFrame";
+import { siteFrameFromModel } from "./modelFrame";
 import { isoSvgPolyline, planPointToIso } from "./explodedAxo";
 import { sampleTerrain } from "./terrain";
 import type { CityModel, Pt, TerrainField } from "../types";
@@ -18,21 +19,19 @@ export function buildAxoTerrainMesh(
   divisions = MESH_DIVISIONS,
 ): string[] {
   const sideM = model.sideM;
-  const half = sideM / 2;
-  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
+  const frame = siteFrameFromModel(model);
+  const { halfW, halfH } = frameHalfExtents(frame.sideM, frame.shape, siteFrameGround(frame));
   const base = field.min;
   const ex = Math.max(0, exaggeration);
-  const step = sideM / divisions;
   const subDivisions = divisions * 2;
-  const subStep = sideM / subDivisions;
 
   const lines: Pt[][] = [];
   for (let i = 0; i <= divisions; i += 1) {
-    const c = -half + i * step;
+    const c = -halfW + (i * (halfW * 2)) / divisions;
     const eastLine: Pt[] = [];
     const northLine: Pt[] = [];
     for (let j = 0; j <= subDivisions; j += 1) {
-      const t = -half + j * subStep;
+      const t = -halfH + (j * (halfH * 2)) / subDivisions;
       eastLine.push([c, t]);
       northLine.push([t, c]);
     }
@@ -41,7 +40,7 @@ export function buildAxoTerrainMesh(
 
   const out: string[] = [];
   for (const line of lines) {
-    for (const part of clipPolylineSiteFrame(line, sideM, shape)) {
+    for (const part of clipLine(frame, line)) {
       if (part.length < 2) continue;
       const iso = part.map((pt) => {
         const lift = Math.max(0, (sampleTerrain(field, pt[0], pt[1], sideM) - base) * ex);

@@ -3,6 +3,7 @@ import { comRecordsToTrees, fetchComTrees } from "./comTrees";
 import { fetchOvertureBaseForCut } from "./overtureBase";
 import { fetchVicmapTrees, vicmapPointsToTrees } from "./vicmapTrees";
 import { assembleTreeTiers } from "./treeTiers";
+import { makeSiteFrame } from "./siteFrame";
 
 const ORIGIN = { lat: -37.81313, lon: 144.98122 };
 const SIDE_M = 1000;
@@ -31,9 +32,9 @@ describe.skipIf(!runNetworkTests)("Fitzroy Gardens tree merge", () => {
         fetchOvertureBaseForCut(bounds, ORIGIN, SIDE_M, { waterGreen: true, trees: true, frameShape: "square" }),
       ]);
       const assembled = assembleTreeTiers({
-        com: comRecordsToTrees(comResult, ORIGIN, SIDE_M, "square"),
+        com: comRecordsToTrees(comResult, ORIGIN, makeSiteFrame(SIDE_M, "square")),
         osm: base.overtureTrees,
-        vicmap: vicmapPointsToTrees(vicmapResult, ORIGIN, SIDE_M, "square"),
+        vicmap: vicmapPointsToTrees(vicmapResult, ORIGIN, makeSiteFrame(SIDE_M, "square")),
         canopy: base.treeContext.canopy,
         buildings: base.treeContext.buildings,
         water: base.treeContext.water,

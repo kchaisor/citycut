@@ -41,7 +41,7 @@ import {
 import { resolveSiteFrame, shouldResolveSite, siteAttributionNote } from "./lib/site";
 import { squareBBox } from "./lib/geo";
 import { cutFrameSize } from "./lib/modelFrame";
-import { siteFrameAreaM2, type SiteFrameShape } from "./lib/siteFrame";
+import { makeSiteFrame, siteFrameAreaM2, type SiteFrameShape } from "./lib/siteFrame";
 import { localityCacheKey, reverseLocality } from "./lib/nominatim";
 import { FLAT_GROUND_NOTE } from "./lib/parseOsm";
 import { fetchOvertureBaseForCut, overtureTreesFromPoints } from "./lib/overtureBase";
@@ -626,7 +626,22 @@ export default function App() {
         : Promise.resolve(null);
       const tramTask = modelLayers.roads && !nswMode
         ? fetchTramLinesForCut(
-            { center, sideM, frameShape: frameShapeRef.current, placeLabel: label, layers: modelLayers, buildings: [], roads: [], areas: [], trees: [], roadKm: 0, buildingCapHit: false, sourceNote: "" },
+            {
+              center,
+              sideM,
+              widthM,
+              heightM,
+              frameShape: frameShapeRef.current,
+              placeLabel: label,
+              layers: modelLayers,
+              buildings: [],
+              roads: [],
+              areas: [],
+              trees: [],
+              roadKm: 0,
+              buildingCapHit: false,
+              sourceNote: "",
+            },
             bounds,
             controller.signal,
           )
@@ -777,11 +792,12 @@ export default function App() {
           holes: building.holes,
         })),
       };
+      const siteFrame = makeSiteFrame(sideM, frameShapeRef.current, frameSize);
       const assembled = loadTreeTiers
         ? assembleTreeTiers({
-            com: comRecordsToTrees(comResult.rows, center, sideM, frameShapeRef.current),
+            com: comRecordsToTrees(comResult.rows, center, siteFrame),
             osm: prebakeOsm ?? baseResult.overtureTrees,
-            vicmap: vicmapPointsToTrees(vicmapResult.rows, center, sideM, frameShapeRef.current),
+            vicmap: vicmapPointsToTrees(vicmapResult.rows, center, siteFrame),
             ...treeContext,
           })
         : null;

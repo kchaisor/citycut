@@ -19,6 +19,7 @@ import { plainDataCredit } from "./dataCredits";
 import { windFlowArrowPolylines } from "./windArrowGeometry";
 import { dashSegments } from "./drawingStyle";
 import { stableExportModel } from "./exportStableOrder";
+import { modelFrameSize } from "./modelFrame";
 import { treesVisibleIn3d } from "./view3dDisplay";
 import { clipTransportLines } from "./dashedTransportLines";
 import { SURFACE } from "./surfaceLayers";
@@ -517,7 +518,12 @@ function addFigureGround(
   model: CityModel,
   zone: number,
 ) {
-  const ground = figureGround(model.buildings, model.sideM, model.frameShape ?? "square");
+  const ground = figureGround(
+    model.buildings,
+    model.sideM,
+    model.frameShape ?? "square",
+    modelFrameSize(model),
+  );
   if (ground.polygons.length === 0) return;
   const z = figureGroundDatum(model);
   const layerIndex = ensureLayer(rhino, doc, layers, materials, "FigureGround", layerColors().FigureGround);
