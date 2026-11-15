@@ -1,35 +1,23 @@
-// @ts-nocheck
-import { Building2, Copy, Download, DraftingCompass, Eye, Footprints, GripVertical, Info, Radar, RotateCcw, Sun, Trees, Upload, Wind } from "lucide-react";
-import { BuildingHeightPopover, HeightOverridePanel, HiddenBuildingsPanel } from "../BuildingHeightPopover";
-import { TreeInspectHud, TerrainInspectHud } from "../SceneInspectHud";
-import { DrawingPlan, type DrawingKind } from "../DrawingPlan";
+import { BuildingHeightPopover } from "../BuildingHeightPopover";
+
+import { TreeInspectHud, TerrainInspectHud } from "../SceneInspectHud";import { DrawingPlan } from "../DrawingPlan";
+
 import { DrawingExplodedAxo } from "../DrawingExplodedAxo";
 import { DrawingIsometric } from "../DrawingIsometric";
-import { SatellitePane } from "../SatellitePane";
-import { Scene3D, type SceneExporter } from "../Scene3D";
+import { SatellitePane } from "../SatellitePane";import { Scene3D } from "../Scene3D";
+
 import { StudioCompass } from "../StudioCompass";
 import { studioCompassVisible } from "../../lib/studioCompass";
 import { sceneSelectionBuildingId } from "../../lib/sceneInspectPick";
 import { qaHideHeightPopoverFromSearch } from "../../lib/qaCameraBridge";
-import { showAllInCut } from "../../lib/hiddenBuildings";
 import { sunStudyMutedOn, toggleSelection } from "../../lib/sunStudyPlan";
 import { SceneBoundary } from "../SceneBoundary";
-import { WindRoseOverlay } from "../WindRoseOverlay";
-import { ViewLegend, ViewPanel } from "../ViewPanel";
-import { SectionKnifeElevationPanel } from "../SectionKnifeElevationPanel";
-import { WalkRippleLegend, WalkRipplePanel } from "../WalkRipplePanel";
+import { WindRoseOverlay } from "../WindRoseOverlay";import { ViewLegend } from "../ViewPanel";
+
+import { SectionKnifeElevationPanel } from "../SectionKnifeElevationPanel";import { WalkRippleLegend } from "../WalkRipplePanel";
+
 
 import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
-import {
-  ANALYSIS_ICONS,
-  CORNER_LABEL,
-  SECTION_ICONS,
-  SIDEBAR_PANEL_ID,
-  RIGHT_SIDEBAR_PANEL_ID,
-  iconProps,
-} from "./modelPageConstants";
-
-import type { ModelPageViewModel } from "./useModelPage";
 
 export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
@@ -59,6 +47,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     onSectionKnifePoseChange,
     overrideResult,
     persistHidden,
+    showAllInCut,
     planHeliodonForSiteExport,
     planShadowInput,
     pickedBuilding,
@@ -88,7 +77,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     sunStudyDate,
     sunStudySelected,
     tab,
-    uniform,
     view,
     view3dDisplay,
     viewAnalysisOpen,

@@ -1,12 +1,12 @@
-// @ts-nocheck
-import { Building2, Copy, Download, DraftingCompass, Eye, Footprints, GripVertical, Info, Radar, RotateCcw, Sun, Trees, Upload, Wind } from "lucide-react";
-import { BuildingHeightPopover, HeightOverridePanel, HiddenBuildingsPanel } from "../BuildingHeightPopover";
+import { Copy } from "lucide-react";
+import { HeightOverridePanel, HiddenBuildingsPanel } from "../BuildingHeightPopover";
+
 import { OSM_TREES_ODBL_CREDIT } from "../../lib/treesPrebake";
 import { COM_TREES_CREDIT, COM_TREES_DATASET_URL } from "../../lib/comTreesCredit";
 import { VICMAP_ATTRIBUTION } from "../../lib/vicmapTrees";
-import { formatCoord, formatLengthKm } from "../../lib/geo";
-import { buildDataSources, countLoaded, dataSourceStatusWord } from "../../lib/dataSources";
-import { treeSizeSummary, treeTierCounts } from "../../lib/trees";
+import { formatCoord, formatLengthKm } from "../../lib/geo";import { dataSourceStatusWord } from "../../lib/dataSources";
+import { treeSizeSummary } from "../../lib/trees";
+
 import {
   BUILDING_USES,
   BUILDING_USE_META,
@@ -16,20 +16,8 @@ import {
 import {
   COM_BUILDING_HEIGHTS_CREDIT,
   COM_BUILDING_HEIGHTS_DATASET_URL,
-} from "../../lib/comBuildingHeightCredit";
+} from "../../lib/comBuildingHeightCredit";import { HEIGHT_TIER_BAR } from "./modelPageConstants";
 
-import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
-import {
-  ANALYSIS_ICONS,
-  CORNER_LABEL,
-  HEIGHT_TIER_BAR,
-  SECTION_ICONS,
-  SIDEBAR_PANEL_ID,
-  RIGHT_SIDEBAR_PANEL_ID,
-  iconProps,
-} from "./modelPageConstants";
-
-import type { ModelPageViewModel } from "./useModelPage";
 
 export function ModelPageSidebarRight({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
@@ -52,6 +40,8 @@ export function ModelPageSidebarRight({ vm }: { vm: import("./useModelPage").Mod
     overrideResult,
     persistHidden,
     pickBuildingUseColour,
+    showAllInCut,
+    showHiddenEntry,
     resetAllHeights,
     retryComHeights,
     rightOpen,
@@ -61,13 +51,13 @@ export function ModelPageSidebarRight({ vm }: { vm: import("./useModelPage").Mod
     showBuildings,
     showManualEdits,
     showSource,
-    sidebar,
     sourceCounts,
     sourcesLoaded,
     tierCounts,
     uniform,
     unmatchedEdits,
     useCounts,
+    writeStoredShowManualHeights,
   } = vm;
 
   return (

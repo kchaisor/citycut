@@ -1,44 +1,39 @@
-// @ts-nocheck
 import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../../lib/explodedAxoTerrain";
-import { Building2, Copy, Download, DraftingCompass, Eye, Footprints, GripVertical, Info, Radar, RotateCcw, Sun, Trees, Upload, Wind } from "lucide-react";
-import { ISO_CORNERS, type IsoCorner } from "../../lib/isoCamera";
+import { GripVertical } from "lucide-react";
+import type { AxoLayerId } from "../../lib/explodedAxo";
+import { ISO_CORNERS } from "../../lib/isoCamera";
 import { snapWhenTogglingIsoFreeRotate } from "../../lib/isoFreeRotate";
 import { SectionKnifeToolPanel } from "../SectionKnifeToolPanel";
 import { contourDrawerLabel } from "../../lib/vicmapContours";
 import { drawingMassingCount } from "../../lib/massingFootprint";
-
-import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
-import {
-  ANALYSIS_ICONS,
-  CORNER_LABEL,
-  SECTION_ICONS,
-  SIDEBAR_PANEL_ID,
-  RIGHT_SIDEBAR_PANEL_ID,
-  iconProps,
-} from "./modelPageConstants";
-
-import type { ModelPageViewModel } from "./useModelPage";
+import { CORNER_LABEL } from "./modelPageConstants";
 
 export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
+    AXO_LAYER_LABELS,
     axoSettings,
     colourByUse,
     commitView,
     commitView3dDisplay,
+    defaultExplodedAxoGapM,
+    defaultExplodedAxoSettings,
     displayModel,
     dragReorderAxoLayer,
     draggedAxoLayer,
     drawing,
     drawingModel,
+    explodedAxoBounds,
+    explodedAxoViewportExtent,
     exportSectionDrawing,
     figureFit,
     figureScale,
+    isometricDrawingBounds,
     leftOpen,
     lineStyles,
-    massing,
     model,
     planScaleOptions,
     planWidth,
+    referenceExplodedAxoSettings,
     resetSceneLayerColours,
     sceneLayerRows,
     sectionKnifeTool,
@@ -52,10 +47,10 @@ export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").Mod
     setShowSource,
     showManualEdits,
     showSource,
-    sidebar,
     tab,
     view,
     view3dDisplay,
+    writeStoredShowManualHeights,
   } = vm;
 
   return (

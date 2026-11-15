@@ -1,33 +1,16 @@
-// @ts-nocheck
-import {
-  sunStudyCasterModel,
-  sunStudyMutedOn,
-  sunStudyShadowCasters,
-  toggleSelection,
-  type SunStudyDate,
-} from "../../lib/sunStudyPlan";
+import { sunStudyCasterModel, sunStudyShadowCasters, SunStudyDate } from "../../lib/sunStudyPlan";
+
 import { sunStudyLayersFor } from "../useSunStudyShadows";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { handleModelKeyDown, type ModelShortcutAction } from "../../lib/modelKeyboard";
 import { registerModelKeyboardBridge } from "../../lib/modelKeyboardBridge";
 import { viewportIsNarrow } from "../../lib/panelCollapse";
-import { ShortcutCheatsheet } from "../ShortcutCheatsheet";
-import * as THREE from "three";
-import { AXO_TERRAIN_EXAGGERATION_RANGE, DEFAULT_AXO_TERRAIN_EXAGGERATION } from "../../lib/explodedAxoTerrain";
-import { Building2, Copy, Download, DraftingCompass, Eye, Footprints, GripVertical, Info, Radar, RotateCcw, Sun, Trees, Upload, Wind } from "lucide-react";
-import {
-  BUILDING_USES,
-  BUILDING_USE_META,
-  SOURCE_COUNT_KEYS,
-  SOURCE_META,
-  countSourcesGrouped,
-  countUses,
-  uniformBuildingColor,
-} from "../../lib/buildingUse";
+import * as THREE from "three";import { BUILDING_USES, BUILDING_USE_META, countSourcesGrouped, countUses, uniformBuildingColor } from "../../lib/buildingUse";
+
 import { commitColour, getColour, resetStoredColours } from "../../lib/colours";
 import { viewStyleFootpathChipColor, viewStyleRoadChipColor } from "../../lib/viewStyle3d";
-import { useColourRevision } from "../../lib/useColourRevision";
-import { CRS_NOTE, mgaCrs } from "../../lib/crsZone";
+import { useColourRevision } from "../../lib/useColourRevision";import { mgaCrs } from "../../lib/crsZone";
+
 import { planHeliodonForExport } from "../../lib/planHeliodonExport";
 import {
   applyOverrides,
@@ -50,7 +33,6 @@ import {
   downloadSunStudyZip,
   pngFilename,
 } from "../../lib/download";
-import { sunStudyDateText } from "../../lib/sunStudyExport";
 import {
   AXO_LAYER_LABELS,
   defaultExplodedAxoGapM,
@@ -80,47 +62,21 @@ import {
 import { countBuildingsWithComHeightTier } from "../../lib/comBuildingHeightsCount";
 import { runComBuildingHeightsInWorker } from "../../lib/comBuildingHeightsWorkerClient";
 import {
-  COM_BUILDING_HEIGHTS_CREDIT,
-  COM_BUILDING_HEIGHTS_DATASET_URL,
-} from "../../lib/comBuildingHeightCredit";
-import {
   clearLegacyComBuildingHeightsPreference,
   comBuildingHeightsStatus,
   comBuildingHeightsStatusNote,
 } from "../../lib/comBuildingHeightsStatus";
-import { resolveBuildingHeightsAfterCom } from "../../lib/buildingHeightPipeline";
-import { formatCoord, formatLengthKm } from "../../lib/geo";
+import { resolveBuildingHeightsAfterCom } from "../../lib/buildingHeightPipeline";import { formatLengthKm } from "../../lib/geo";
+
 import { useSidebarCollapsed } from "../../lib/sidebarCollapse";
-import { cutSizeLabel } from "../../lib/placeLabel";
-import { ISO_CORNERS, type IsoCorner } from "../../lib/isoCamera";
-import {
-  SIDEBAR_SECTION_LABELS,
-  SITE_ANALYSIS_KINDS,
-  SITE_ANALYSIS_LABELS,
-  availableSidebarSections,
-  initialSidebarState,
-  isRightSidebarSection,
-  reduceSidebar,
-  resolveLeftSidebarSection,
-  resolveRightSidebarSection,
-  resolveSidebarSection,
-  type LeftSidebarSectionId,
-  type RightSidebarSectionId,  type SiteAnalysisKind,
-} from "../../lib/sidebarSections";
-import { buildDataSources, countLoaded, dataSourceStatusWord } from "../../lib/dataSources";
-import { OSM_TREES_ODBL_CREDIT } from "../../lib/treesPrebake";
+import { cutSizeLabel } from "../../lib/placeLabel";import { SIDEBAR_SECTION_LABELS, availableSidebarSections, initialSidebarState, isRightSidebarSection, reduceSidebar, resolveLeftSidebarSection, resolveRightSidebarSection, resolveSidebarSection, LeftSidebarSectionId, RightSidebarSectionId, SiteAnalysisKind } from "../../lib/sidebarSections";
+import { buildDataSources, countLoaded } from "../../lib/dataSources";
+
 import { countTreeCrowns } from "../../lib/treeMassing";
-import { capturePresetFromSearch } from "../../lib/captureQuery";
-import { qaHideHeightPopoverFromSearch, qaModeFromSearch } from "../../lib/qaCameraBridge";
-import {
-  resolveView,
-  VIEW_STORAGE_KEY,
-  writeStoredView,
-  writeViewSearch,
-  type ViewMemory,
-} from "../../lib/viewMemory";
-import { treeSizeSummary, treeTierCounts } from "../../lib/trees";
-import { contourDrawerLabel } from "../../lib/vicmapContours";
+import { capturePresetFromSearch } from "../../lib/captureQuery";import { qaModeFromSearch } from "../../lib/qaCameraBridge";
+import { writeStoredView, writeViewSearch, ViewMemory } from "../../lib/viewMemory";
+import { treeTierCounts } from "../../lib/trees";
+
 import { clearPlanShadowCache } from "../../lib/buildingShadows";
 import {
   appendManualHeightCredit,
@@ -144,13 +100,9 @@ import {
 } from "../../lib/buildingHeightResolve";
 import { countBuildingHeightTiers, LIDAR_NO_DATA_LINE } from "../../lib/lidarTierStatus";
 import { buildCityGroup, disposeObject } from "../../lib/buildCity";
-import { VICMAP_ATTRIBUTION } from "../../lib/vicmapTrees";
-import { COM_TREES_CREDIT, COM_TREES_DATASET_URL } from "../../lib/comTreesCredit";
 import { openRing, toLocal } from "../../lib/geo";
 import { interiorPoint, pointInPolygon } from "../../lib/useCascade";
 import type { BuildingUse, CityModel } from "../../types";
-import { BuildingHeightPopover, HeightOverridePanel, HiddenBuildingsPanel } from "../BuildingHeightPopover";
-import { TreeInspectHud, TerrainInspectHud } from "../SceneInspectHud";
 import type { InspectHudScreen } from "../InspectHudProjector";
 import {
   clampInspectHudPosition,
@@ -172,41 +124,23 @@ import {
   writeStoredHiddenBuildings,
   type HiddenBuildingStore,
 } from "../../lib/hiddenBuildings";
-import { ImportMassingPanel } from "../ImportMassingPanel";
-import { useImportedMassing } from "../useImportedMassing";
-import { drawingMassingCount } from "../../lib/massingFootprint";
-import { snapWhenTogglingIsoFreeRotate } from "../../lib/isoFreeRotate";
-import { DrawingPlan, type DrawingKind } from "../DrawingPlan";
-import { DrawingExplodedAxo } from "../DrawingExplodedAxo";
-import { DrawingIsometric } from "../DrawingIsometric";
-import { isometricDrawingBounds } from "../../lib/isometricDrawing";
-import { Sidebar, type SidebarItem } from "../Sidebar";
-import { SatellitePane } from "../SatellitePane";
-import { Scene3D, type SceneExporter } from "../Scene3D";
-import { StudioCompass } from "../StudioCompass";
-import { studioCompassVisible } from "../../lib/studioCompass";
+import { useImportedMassing } from "../useImportedMassing";import { DrawingKind } from "../DrawingPlan";
 
-import type { CameraMemoryRef } from "../../lib/cameraMemory";
-import { SceneBoundary } from "../SceneBoundary";
-import { SolarPanel } from "../SolarPanel";
-import { WindPanel } from "../WindPanel";
-import { WindRoseOverlay } from "../WindRoseOverlay";
-import { ExportTiles } from "../ExportTiles";
-import { exportTiles, type ExportBusy } from "../../lib/exportTiles";
-import { ViewLegend, ViewPanel } from "../ViewPanel";
-import { SectionKnifeToolPanel } from "../SectionKnifeToolPanel";
-import { SectionKnifeElevationPanel } from "../SectionKnifeElevationPanel";
+import { isometricDrawingBounds } from "../../lib/isometricDrawing";import { SidebarItem } from "../Sidebar";
+import { SceneExporter } from "../Scene3D";
+
+
+import type { CameraMemoryRef } from "../../lib/cameraMemory";import { ExportBusy } from "../../lib/exportTiles";
+
 import { initialSectionKnifeToolState, type SectionKnifeToolState } from "../../lib/sectionKnife/state";
 import type { SectionKnifePose } from "../../lib/sectionKnife/plane";
 import { snapPoseToModel } from "../../lib/sectionKnife/snap";
 import { selectedKnife } from "../../lib/sectionKnife/state";
 import { buildSectionExportSvg, sectionExportLayerNames } from "../../lib/sectionKnife/sectionExport";
-import { WalkRippleLegend, WalkRipplePanel } from "../WalkRipplePanel";
-import { WalkRippleTimeScrubber } from "../WalkRippleTimeScrubber";
-import { useWalkRipple } from "../useWalkRipple";
-import { useWalkPlayback, useWalkViewshed, WALK_SPEEDS } from "../useWalkViewshed";
-import { fetchWindRoseTable } from "../../lib/windFetch";
-import { analyzeWindPeriod, WIND_PERIOD_LABELS, type WindPeriodId, type WindRoseTable } from "../../lib/windRose";
+import { useWalkRipple } from "../useWalkRipple";import { useWalkPlayback, useWalkViewshed } from "../useWalkViewshed";
+
+import { fetchWindRoseTable } from "../../lib/windFetch";import { analyzeWindPeriod, WindRoseTable } from "../../lib/windRose";
+
 import { daylightWindowMinutes, sunAtMelbourneLocal } from "../../lib/solar";
 import {
   windSettingsForModelOpen,
@@ -238,6 +172,7 @@ import { loadView } from "./loadModelView";
 import {
   SECTION_ICONS,
   iconProps,
+  type Tab,
 } from "./modelPageConstants";
 
 export type ModelPageProps = {
@@ -2153,12 +2088,17 @@ export function useModelPage({
     cutDimLabel,
     dataSources,
     dispatchSidebar,
+    defaultExplodedAxoGapM,
+    defaultExplodedAxoSettings,
     displayModel,
     dragReorderAxoLayer,
     draggedAxoLayer,
     drawing,
     drawingModel,
     drawingViewportsInitializedRef,
+    effectiveSunStudyCasters,
+    explodedAxoBounds,
+    explodedAxoViewportExtent,
     explodedViewport,
     exportError,
     exportHeightEdits,
@@ -2190,6 +2130,8 @@ export function useModelPage({
     introHoldReleasedRef,
     introWebglReadyRef,
     isoDrawingViewport,
+    isometricDrawingBounds,
+    AXO_LAYER_LABELS,
     items,
     layerBits,
     leftOpen,
@@ -2222,6 +2164,7 @@ export function useModelPage({
     renderQuality,
     resetAllHeights,
     resetBuildingHeight,
+    referenceExplodedAxoSettings,
     resetSceneLayerColours,
     retryComHeights,
     rightItems,
@@ -2295,7 +2238,9 @@ export function useModelPage({
     setWindSettings,
     setWindTable,
     shortcutCheatsheetOpen,
+    showAllInCut,
     showBuildings,
+    showHiddenEntry,
     showManualEdits,
     showSource,
     showTrees,
@@ -2333,6 +2278,7 @@ export function useModelPage({
     windNote,
     windSettings,
     windTable,
+    writeStoredShowManualHeights,
   };
 }
 

@@ -1,21 +1,8 @@
-// @ts-nocheck
-import { Building2, Copy, Download, DraftingCompass, Eye, Footprints, GripVertical, Info, Radar, RotateCcw, Sun, Trees, Upload, Wind } from "lucide-react";
-import { WalkRippleTimeScrubber } from "../WalkRippleTimeScrubber";
-import { useWalkPlayback, useWalkViewshed, WALK_SPEEDS } from "../useWalkViewshed";
-import { analyzeWindPeriod, WIND_PERIOD_LABELS, type WindPeriodId, type WindRoseTable } from "../../lib/windRose";
-import { WALK_SPEEDS } from "../useWalkViewshed";
-import { WIND_PERIOD_LABELS } from "../../lib/windRose";
-import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
-import {
-  ANALYSIS_ICONS,
-  CORNER_LABEL,
-  SECTION_ICONS,
-  SIDEBAR_PANEL_ID,
-  RIGHT_SIDEBAR_PANEL_ID,
-  iconProps,
-} from "./modelPageConstants";
+import { Eye, Footprints, Sun, Wind } from "lucide-react";
 
-import type { ModelPageViewModel } from "./useModelPage";
+import { WalkRippleTimeScrubber } from "../WalkRippleTimeScrubber";import { WALK_SPEEDS } from "../useWalkViewshed";
+import { WIND_PERIOD_LABELS, WindPeriodId } from "../../lib/windRose";
+
 
 export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
@@ -33,12 +20,10 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
     renderQuality,
     setAnalysisKind,
     setConsolePlaying,
-    setDrawing,
     setSunStudySelected,
     solar,
     sunStudySelected,
     tab,
-    view,
     walk,
     walkAt,
     walkRipple,

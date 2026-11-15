@@ -1,29 +1,14 @@
-// @ts-nocheck
-import { Building2, Copy, Download, DraftingCompass, Eye, Footprints, GripVertical, Info, Radar, RotateCcw, Sun, Trees, Upload, Wind } from "lucide-react";
 import { sunStudyDateText } from "../../lib/sunStudyExport";
 import { ImportMassingPanel } from "../ImportMassingPanel";
 import { SolarPanel } from "../SolarPanel";
 import { WindPanel } from "../WindPanel";
 import { ExportTiles } from "../ExportTiles";
-import { ViewLegend, ViewPanel } from "../ViewPanel";
-import { WalkRippleLegend, WalkRipplePanel } from "../WalkRipplePanel";
-import { CRS_NOTE, mgaCrs } from "../../lib/crsZone";
-import { exportTiles, type ExportBusy } from "../../lib/exportTiles";
-import { CRS_NOTE, mgaCrs } from "../../lib/crsZone";
-import { SITE_ANALYSIS_KINDS, SITE_ANALYSIS_LABELS } from "../../lib/sidebarSections";
+import { ViewPanel } from "../ViewPanel";
+import { WalkRipplePanel } from "../WalkRipplePanel";
+import { CRS_NOTE } from "../../lib/crsZone";
 import { exportTiles } from "../../lib/exportTiles";
-import { sunStudyDateText } from "../../lib/sunStudyExport";
-import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
-import {
-  ANALYSIS_ICONS,
-  CORNER_LABEL,
-  SECTION_ICONS,
-  SIDEBAR_PANEL_ID,
-  RIGHT_SIDEBAR_PANEL_ID,
-  iconProps,
-} from "./modelPageConstants";
-
-import type { ModelPageViewModel } from "./useModelPage";
+import { SITE_ANALYSIS_KINDS, SITE_ANALYSIS_LABELS } from "../../lib/sidebarSections";
+import { ANALYSIS_ICONS } from "./modelPageConstants";
 
 export function ModelPageSidebarLeftB({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
@@ -57,11 +42,9 @@ export function ModelPageSidebarLeftB({ vm }: { vm: import("./useModelPage").Mod
     setFigureScale,
     setSunStudySelected,
     solar,
-    sunStudyDate,
     sunStudyProgress,
     sunStudySelected,
     tab,
-    view,
     walk,
     walkRipple,
     windMotion,

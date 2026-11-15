@@ -31,11 +31,21 @@ export default [
       },
     },
     plugins: {
+      "@typescript-eslint": tseslint.plugin,
       "react-hooks": reactHooks,
     },
     rules: {
       "max-lines": ["error", maxLines],
       "react-hooks/exhaustive-deps": "off",
+      "@typescript-eslint/ban-ts-comment": [
+        "error",
+        {
+          "ts-nocheck": true,
+          "ts-ignore": true,
+          "ts-expect-error": "allow-with-description",
+          "minimumDescriptionLength": 8,
+        },
+      ],
     },
   },
   {

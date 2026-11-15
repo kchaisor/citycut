@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Download, RotateCcw } from "lucide-react";
 import { Sidebar } from "../Sidebar";
 import { type DrawingKind } from "../DrawingPlan";
@@ -6,7 +5,6 @@ import { mgaCrs } from "../../lib/crsZone";
 import { explodedAxoBounds } from "../../lib/explodedAxo";
 import { explodedAxoViewportExtent, planViewportExtent } from "../../lib/planViewport";
 import { isometricDrawingBounds } from "../../lib/isometricDrawing";
-import { snapWhenTogglingIsoFreeRotate } from "../../lib/isoFreeRotate";
 import {
   SIDEBAR_PANEL_ID,
   RIGHT_SIDEBAR_PANEL_ID,
@@ -33,7 +31,6 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
     onHome,
     onNewCut,
     overrideResult,
-    planViewport,
     rightItems,
     rightOpen,
     save3dm,
@@ -56,7 +53,6 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
     setSnapId,
     setTab,
     setTopbarExportOpen,
-    sidebar,
     sidebarCollapsed,
     sourcesLoaded,
     tab,
