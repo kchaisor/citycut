@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { dashSegments, type StrokeStyle } from "./drawingStyle";
-import { clipPolylineSiteFrame, DEFAULT_SITE_FRAME_SHAPE } from "./siteFrame";
+import { clipLine } from "./siteFrame";
+import { siteFrameFromModel } from "./modelFrame";
 import type { CityModel, Pt } from "../types";
 
 export function strokeDashMetres(stroke: StrokeStyle, sideM: number, scaleDenominator = 1000): number[] {
@@ -81,15 +82,15 @@ function solidSegments(
 }
 
 export function clipTransportLines(model: CityModel): { rails: Pt[][]; trams: Pt[][] } {
-  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
+  const frame = siteFrameFromModel(model);
   const rails: Pt[][] = [];
   for (const road of model.roads) {
     if (road.kind !== "rail") continue;
-    for (const part of clipPolylineSiteFrame(road.line, model.sideM, shape)) rails.push(part);
+    for (const part of clipLine(frame, road.line)) rails.push(part);
   }
   const trams: Pt[][] = [];
   for (const line of model.tramLines ?? []) {
-    for (const part of clipPolylineSiteFrame(line, model.sideM, shape)) trams.push(part);
+    for (const part of clipLine(frame, line)) trams.push(part);
   }
   return { rails, trams };
 }

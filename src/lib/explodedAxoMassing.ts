@@ -1,4 +1,5 @@
-import { clipAreaToSiteFrame, DEFAULT_SITE_FRAME_SHAPE, type SiteFrameShape } from "./siteFrame";
+import { clipPolygonWithHoles, DEFAULT_SITE_FRAME_SHAPE, makeSiteFrame, type SiteFrameShape } from "./siteFrame";
+import { modelFrameSize } from "./modelFrame";
 import { openRing, signedArea } from "./geo";
 import { getColour } from "./colours";
 import type { BuildingFeat, BuildingHeightTier, CityModel, Pt } from "../types";
@@ -48,14 +49,20 @@ export function axoHeightSource(tier: BuildingHeightTier | undefined, fallback?:
 
 type Prism = { outer: Pt[]; holes: Pt[][]; base: number; top: number; depth: number; fill?: string };
 
-function prismsFor(building: BuildingFeat, sideM: number, shape: SiteFrameShape): Prism[] {
+function prismsFor(
+  building: BuildingFeat,
+  sideM: number,
+  shape: SiteFrameShape,
+  frameSize?: import("./siteFrame").FrameGroundSize,
+): Prism[] {
+  const frame = makeSiteFrame(sideM, shape, frameSize);
   const parts = building.extrusionParts?.length
     ? building.extrusionParts.map((p) => ({ ring: p.ring, holes: p.holes, height: p.height, base: p.base ?? 0 }))
     : [{ ring: building.ring, holes: building.holes, height: building.height, base: 0 }];
   const out: Prism[] = [];
   for (const part of parts) {
     if (!(part.height > part.base)) continue;
-    const clipped = clipAreaToSiteFrame(part.ring as Pt[], part.holes as Pt[][], sideM, shape);
+    const clipped = clipPolygonWithHoles(frame, part.ring as Pt[], part.holes as Pt[][]);
     if (!clipped || clipped.length === 0) continue;
     const outer = openRing(clipped[0]!);
     if (outer.length < 3) continue;
@@ -75,7 +82,7 @@ export function buildAxoMassingFaces(
   const prisms: Prism[] = [];
   for (const building of model.buildings) {
     if (building.meshDrawnBy != null || building.importedMassingShadowCaster) continue;
-    const list = prismsFor(building, model.sideM, shape);
+    const list = prismsFor(building, model.sideM, shape, modelFrameSize(model));
     if (list.length === 0) continue;
     counts[axoHeightSource(building.heightTier, building.heightFromFallback)] += 1;
     const fill = building.importedMassing ? (building.importedColour ?? getColour("--imported-massing")) : undefined;

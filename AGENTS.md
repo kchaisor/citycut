@@ -31,3 +31,14 @@ Vite, React, MapLibre, and three.js. Vite `base` is `/citycut/`. Use `npm run de
 - Batch related work into one run and one PR.
 - Run `npm test` and `npm run typecheck` on every PR.
 - Desktop only (1440x900). Screenshots only for a visual change: one desktop shot by default, adding a 3D shot when relevant. Docs-only PRs need no screenshots.
+
+## Working rules
+
+Approved by Kelvin on 15 Nov 2026 to cut usage.
+
+1. One draft per feature. No alternative versions unless Kelvin asks.
+2. At most 2–3 polish rounds, then send Kelvin one screenshot and stop for his call (good enough, or named fixes).
+3. Anything bigger than a small fix: send Kelvin a one-line plan plus an estimated number of runs, and wait for his yes.
+4. One desktop-size visual check per draft. Multi-width checks only right before merge. No checker-then-recode loops.
+
+5. Before starting any new draft, check which screens and features it will touch against every open draft. If nothing overlaps, go ahead. If something overlaps, stop and send Kelvin one plain-English line naming the clashing screen or feature and the draft (e.g. "This touches the same sun panel as #231. Finish #231 first, or go anyway?"), suggest which to do first, and wait for his call. Use no file names.

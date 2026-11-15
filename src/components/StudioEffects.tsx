@@ -5,7 +5,8 @@ import { ToneMappingMode } from "postprocessing";
 import * as THREE from "three";
 import { getColour } from "../lib/colours";
 import { markScreenOnly } from "../lib/screenOnly";
-import type { SiteFrameShape } from "../lib/siteFrame";
+import { getPlinthShadowTexture, plinthShadowTextureCacheKey } from "../lib/plinthContactShadow";
+import { plinthShadowExtents, type SiteFrame } from "../lib/siteFrame";
 import { qaModeFromSearch } from "../lib/qaCameraBridge";
 import {
   ambientOcclusionActive,
@@ -121,62 +122,31 @@ function StudioComposer({
   );
 }
 
-const SHADOW_TEXTURE_PX = 512;
-const SHADOW_SPREAD = 1.5;
-
-function bakePlinthShadow(colour: string, shape: SiteFrameShape): THREE.CanvasTexture | null {
-  if (typeof document === "undefined") return null;
-  const canvas = document.createElement("canvas");
-  canvas.width = SHADOW_TEXTURE_PX;
-  canvas.height = SHADOW_TEXTURE_PX;
-  const context = canvas.getContext("2d");
-  if (!context) return null;
-  const size = SHADOW_TEXTURE_PX / SHADOW_SPREAD;
-  const centre = SHADOW_TEXTURE_PX / 2;
-  const away = SHADOW_TEXTURE_PX * 4;
-  const footprint = (inset: number) => {
-    context.beginPath();
-    if (shape === "circle") context.arc(centre - away, centre, size / 2 - inset, 0, Math.PI * 2);
-    else context.rect(centre - away - size / 2 + inset, centre - size / 2 + inset, size - inset * 2, size - inset * 2);
-    context.fill();
-  };
-  context.fillStyle = colour;
-  context.shadowColor = colour;
-  context.shadowOffsetX = away;
-  context.globalAlpha = 0.55;
-  context.shadowBlur = size * 0.11;
-  footprint(-size * 0.015);
-  context.globalAlpha = 0.9;
-  context.shadowBlur = size * 0.025;
-  footprint(0);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
 function PlinthContactShadow({
-  sideM,
+  frame,
   plinthBottomY,
-  frameShape,
   colourTick,
 }: {
-  sideM: number;
+  frame: SiteFrame;
   plinthBottomY: number;
-  frameShape: SiteFrameShape;
   colourTick: number;
 }) {
-  const texture = useMemo(() => bakePlinthShadow(getColour("--plinth-shadow"), frameShape), [frameShape, colourTick]);
-  useEffect(() => () => texture?.dispose(), [texture]);
+  const shadowColour = getColour("--plinth-shadow");
+  const cacheKey = plinthShadowTextureCacheKey(frame, shadowColour);
+  const texture = useMemo(
+    () => getPlinthShadowTexture(frame, shadowColour),
+    [cacheKey, colourTick],
+  );
   const setMesh = useCallback((mesh: THREE.Mesh | null) => {
     if (!mesh) return;
     markScreenOnly(mesh);
     mesh.raycast = () => {};
   }, []);
   if (!texture) return null;
-  const extent = sideM * SHADOW_SPREAD;
+  const { widthM, heightM } = plinthShadowExtents(frame);
   return (
     <mesh ref={setMesh} position={[0, plinthBottomY - 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={-1}>
-      <planeGeometry args={[extent, extent]} />
+      <planeGeometry args={[widthM, heightM]} />
       <meshBasicMaterial map={texture} transparent opacity={0.5} depthWrite={false} toneMapped={false} />
     </mesh>
   );
@@ -188,7 +158,7 @@ export function StudioEffects({
   sideM,
   plinthBottomY,
   showShadow,
-  frameShape,
+  frame,
   colourTick,
   primaryView,
 }: {
@@ -197,7 +167,7 @@ export function StudioEffects({
   sideM: number;
   plinthBottomY: number;
   showShadow: boolean;
-  frameShape: SiteFrameShape;
+  frame: SiteFrame;
   colourTick: number;
   primaryView: boolean;
 }) {
@@ -205,7 +175,7 @@ export function StudioEffects({
   if (!settled) return null;
   return (
     <>
-      {showShadow ? <PlinthContactShadow sideM={sideM} plinthBottomY={plinthBottomY} frameShape={frameShape} colourTick={colourTick} /> : null}
+      {showShadow ? <PlinthContactShadow frame={frame} plinthBottomY={plinthBottomY} colourTick={colourTick} /> : null}
       {studioPostEnabled() ? (
         <StudioComposer quality={quality} noToneMapping={noToneMapping} sideM={sideM} primaryView={primaryView} />
       ) : null}

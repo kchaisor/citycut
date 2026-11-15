@@ -42,6 +42,17 @@ CityCut (github.com/kchaisor/citycut) cuts a square out of a city and exports a 
 - Only one tool, Cursor or Claude Code, works on a branch at a time. Do not commit, push, or switch branches in a checkout another agent is using.
 - On handoff, fill in `.github/HANDOFF.md` in the PR description.
 
+## Working rules
+
+Approved by Kelvin on 15 Nov 2026 to cut usage.
+
+1. One draft per feature. No alternative versions unless Kelvin asks.
+2. At most 2–3 polish rounds, then send Kelvin one screenshot and stop for his call (good enough, or named fixes).
+3. Anything bigger than a small fix: send Kelvin a one-line plan plus an estimated number of runs, and wait for his yes.
+4. One desktop-size visual check per draft. Multi-width checks only right before merge. No checker-then-recode loops.
+
+5. Before starting any new draft, check which screens and features it will touch against every open draft. If nothing overlaps, go ahead. If something overlaps, stop and send Kelvin one plain-English line naming the clashing screen or feature and the draft (e.g. "This touches the same sun panel as #231. Finish #231 first, or go anyway?"), suggest which to do first, and wait for his call. Use no file names.
+
 ## Secrets
 
 - Never print, log, or commit secrets or tokens. Do not read or edit `.env*` files.
