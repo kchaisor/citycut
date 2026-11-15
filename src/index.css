@@ -902,17 +902,6 @@ input[type="range"]::-moz-range-thumb {
   box-shadow: var(--shadow);
   pointer-events: none;
 }
-@media (max-width: 1279px) {
-  .wind-rose-analysis-card {
-    width: min(240px, calc(100vw - 32px));
-  }
-  .wind-rose-panel-svg {
-    width: min(160px, 100%);
-  }
-}
-.model[data-env-console="1"] .wind-rose-analysis-card {
-  bottom: max(148px, calc(var(--env-console-height, 148px) + 12px));
-}
 .wind-rose-panel {
   margin: 0;
 }
@@ -921,6 +910,20 @@ input[type="range"]::-moz-range-thumb {
   width: min(220px, 100%);
   height: auto;
   margin: 0 auto;
+}
+@media (max-width: 1279px) {
+  .wind-rose-analysis-card {
+    width: min(240px, calc(100vw - 32px));
+  }
+  .wind-rose-panel-svg {
+    width: min(160px, 100%);
+  }
+  .wind-rose-analysis-card .wind-rose-meta:not(.wind-rose-meta-source):not(.wind-rose-meta-note) {
+    white-space: nowrap;
+  }
+}
+.model[data-env-console="1"] .wind-rose-analysis-card {
+  bottom: max(148px, calc(var(--env-console-height, 148px) + 12px));
 }
 .wind-rose-calm-caption {
   margin: 6px 0 0;

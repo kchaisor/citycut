@@ -1,11 +1,14 @@
 import { chromium } from "playwright";
+import { execSync } from "node:child_process";
 import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
+const PREVIEW_PORT = 4173;
+
 const ARTIFACTS = "/opt/cursor/artifacts";
 mkdirSync(ARTIFACTS, { recursive: true });
-const BASE = "http://127.0.0.1:4173";
+const BASE = `http://127.0.0.1:${PREVIEW_PORT}`;
 
 const SITES = [
   {
@@ -73,10 +76,56 @@ async function assertRose(page) {
   return meta;
 }
 
-const preview = spawn("npm", ["run", "preview", "--", "--host", "127.0.0.1", "--port", "4173"], {
-  cwd: "/agent/repos/citycut",
-  stdio: "ignore",
-});
+async function assertRoseLayout(page, viewportWidth) {
+  const layout = await page.evaluate((expectedViewport) => {
+    if (window.innerWidth !== expectedViewport) {
+      return { ok: false, reason: `innerWidth ${window.innerWidth} !== requested ${expectedViewport}` };
+    }
+    const svg = document.querySelector(".wind-rose-panel-svg");
+    const caption = document.querySelector(
+      ".wind-rose-analysis-card .wind-rose-meta:not(.wind-rose-meta-source):not(.wind-rose-meta-note)",
+    );
+    if (!svg || !caption) {
+      return { ok: false, reason: "missing svg or caption line 1" };
+    }
+    const svgWidth = svg.getBoundingClientRect().width;
+    const lineHeight = parseFloat(getComputedStyle(caption).lineHeight) || 14;
+    const wraps = caption.scrollHeight > lineHeight + 1;
+    return { ok: true, svgWidth, wraps, lineHeight, scrollHeight: caption.scrollHeight };
+  }, viewportWidth);
+  if (!layout.ok) throw new Error(layout.reason);
+  const expectedSvg = viewportWidth < 1280 ? 160 : 220;
+  if (Math.abs(layout.svgWidth - expectedSvg) > 1.5) {
+    const debug = await page.evaluate(() => ({
+      innerWidth: window.innerWidth,
+      computed: document.querySelector(".wind-rose-panel-svg") &&
+        getComputedStyle(document.querySelector(".wind-rose-panel-svg")).width,
+    }));
+    throw new Error(
+      `rose svg width ${layout.svgWidth}px, expected ${expectedSvg}px at viewport ${viewportWidth} (${JSON.stringify(debug)})`,
+    );
+  }
+  if (viewportWidth === 1024 && layout.wraps) {
+    throw new Error(
+      `caption line 1 wrapped at 1024 (scrollHeight=${layout.scrollHeight}, lineHeight=${layout.lineHeight})`,
+    );
+  }
+}
+
+try {
+  execSync(`fuser -k ${PREVIEW_PORT}/tcp`, { stdio: "ignore" });
+} catch {
+}
+await new Promise((r) => setTimeout(r, 500));
+
+const preview = spawn(
+  "npm",
+  ["run", "preview", "--", "--host", "127.0.0.1", "--port", String(PREVIEW_PORT), "--strictPort"],
+  {
+    cwd: "/agent/repos/citycut",
+    stdio: "ignore",
+  },
+);
 await waitForPreview();
 
 const browser = await chromium.launch();
@@ -96,10 +145,12 @@ try {
   for (const site of SITES) {
     for (const width of [1024, 1280, 1440]) {
       for (const season of ["annual", "winter"]) {
-        const page = await context.newPage({ viewport: { width, height: 900 } });
+        const page = await context.newPage();
+        await page.setViewportSize({ width, height: 900 });
         page.setDefaultTimeout(180_000);
         await openModel(page, site.url);
         await openAnalysisWind(page);
+        await page.setViewportSize({ width, height: 900 });
         if (season === "winter") {
           await page.getByRole("button", { name: "Winter", exact: true }).click();
           await page.waitForTimeout(400);
@@ -118,6 +169,7 @@ try {
           }
         }
         const meta = await assertRose(page);
+        await assertRoseLayout(page, width);
         const shot = path.join(ARTIFACTS, `wind-rose-${site.name}-${season}-${width}.png`);
         await page.screenshot({ path: shot, fullPage: false });
         console.log(JSON.stringify({ site: site.name, season, width, shot, meta }));
